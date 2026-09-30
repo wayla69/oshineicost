@@ -4,17 +4,17 @@
 <div id="tab-menu" class="hidden">
   <!-- Sales-direction narrative: do menu movements line up with what's actually selling? -->
   <div class="card p-4 mb-4">
-    <h2 class="section-title mb-2">📝 วิเคราะห์กับยอดขาย — เมนูที่ขยับ ไปทางเดียวกับยอดไหม <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· บุฟเฟต์ (รายได้หลัก) · ชุดราคา · à-la-carte · เทรนด์เมื่อวาน</span></h2>
+    <h2 class="section-title mb-2">วิเคราะห์กับยอดขาย — เมนูที่ขยับ ไปทางเดียวกับยอดไหม <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· บุฟเฟต์ (รายได้หลัก) · ชุดราคา · à-la-carte · เทรนด์เมื่อวาน</span></h2>
     <div id="menuSalesNarrative"></div>
   </div>
 
-  <!-- 🔍 Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
+  <!-- Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
   <div class="card p-4 mb-4">
     <h2 class="section-title mb-3">ค้นหาเมนูรายตัว</h2>
     <div class="flex items-center gap-2 flex-wrap mb-3">
       <div class="flex-1 min-w-[220px]">
         <input id="menuFindSearch" oninput="renderMenuFinder()" autocomplete="off"
-               placeholder="🔍 พิมพ์ชื่อเมนูหรือรหัส SKU เพื่อค้นหา…"
+               placeholder="พิมพ์ชื่อเมนูหรือรหัส SKU เพื่อค้นหา…"
                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none">
       </div>
       <select id="menuFindCat" onchange="renderMenuFinder()" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
@@ -41,7 +41,7 @@
   <div class="subtab-bar">
     <button class="subtab-btn active" onclick="switchSubtab('mostOrdered')">สั่งบ่อยที่สุด</button>
     <button class="subtab-btn" onclick="switchSubtab('mostCost')">Most Revenue</button>
-    <button class="subtab-btn" onclick="switchSubtab('engineering')">🔬 Menu Engineering</button>
+    <button class="subtab-btn" onclick="switchSubtab('engineering')">Menu Engineering</button>
     <button class="subtab-btn" onclick="switchSubtab('persona')">ลักษณะลูกค้า</button>
   </div>
 
@@ -51,7 +51,7 @@
     <div class="card p-5 mb-5">
       <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
         <h2 class="section-title mb-0">Top 60 เมนู — ยอดขาย <span class="text-xs font-normal text-slate-400">· % เทียบยอดรวม · <span id="orderedMomNote">MoM เทียบเดือนก่อน</span></span></h2>
-        <button onclick="exportTable('orderedTable','top60_sales.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="exportTable('orderedTable','top60_sales.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
       <p id="orderedCoverNote" class="text-[11px] text-slate-400 mb-2"></p>
       <div class="overflow-auto" style="max-height:560px">
@@ -75,7 +75,7 @@
     <div class="card p-5">
       <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
         <h2 class="section-title mb-0">Top 60 เมนู — เทียบต้นทุนต่อหัว <span class="text-xs font-normal text-slate-400">· <span id="costHeadMomNote">เทียบเดือนก่อน</span></span></h2>
-        <button onclick="exportTable('costHeadTable','top60_costhead.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="exportTable('costHeadTable','top60_costhead.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
       <p id="costHeadNote" class="text-[11px] text-slate-400 mb-2"></p>
       <div class="overflow-auto" style="max-height:560px">
@@ -99,8 +99,8 @@
 
   <!-- Sub: Most Revenue (à la carte only) -->
   <div id="sub-mostCost" class="hidden">
-    <div class="card p-4 mb-4" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
-      <h2 class="text-base font-bold text-slate-800 mb-1">🍣 à la carte · รายได้ & กำไรขั้นต้น</h2>
+    <div class="card p-4 mb-4" style="background:#e8eef7;border:1px solid var(--accent)">
+      <h2 class="text-base font-bold text-slate-800 mb-1">à la carte · รายได้ & กำไรขั้นต้น</h2>
       <p class="text-xs text-slate-600">เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -142,22 +142,22 @@
   <div id="sub-engineering" class="hidden">
 
     <!-- What is this page? -->
-    <div class="card p-4 mb-5" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
-      <h2 class="text-base font-bold text-slate-800 mb-1">⭐ วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
+    <div class="card p-4 mb-5" style="background:#e8eef7;border:1px solid var(--accent)">
+      <h2 class="text-base font-bold text-slate-800 mb-1">วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
       <p class="text-xs text-slate-600">จัดเมนูเป็น <b>4 กลุ่ม</b> ตาม <b>ความนิยม (จำนวนขาย)</b> และ <b>กำไรต่อจาน</b> พร้อมบอกว่าควรทำอะไรกับแต่ละกลุ่ม · ดูตารางเต็มและกราฟ BCG ด้านล่างได้</p>
     </div>
 
     <!-- Summary KPIs (Thai) -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5" id="menuEngKpis">
-      <div class="card p-4 kpi-card"><p class="kpi-label">⭐ ดาวเด่น</p><p id="meStars" class="kpi-value" style="color:#10b981">—</p><p class="kpi-sub">ขายดี + กำไรดี → รักษาไว้</p></div>
-      <div class="card p-4 kpi-card"><p class="kpi-label">🐴 ม้างาน</p><p id="mePlow" class="kpi-value" style="color:#f59e0b">—</p><p class="kpi-sub">ขายดีแต่กำไรน้อย → แก้ต้นทุน</p></div>
-      <div class="card p-4 kpi-card"><p class="kpi-label">🔮 เพชรในตม</p><p id="mePuzzle" class="kpi-value" style="color:#4f46e5">—</p><p class="kpi-sub">กำไรดีแต่ขายน้อย → โปรโมท</p></div>
-      <div class="card p-4 kpi-card"><p class="kpi-label">🐕 ตัวถ่วง</p><p id="meDogs" class="kpi-value" style="color:#ef4444">—</p><p class="kpi-sub">ขายน้อย+กำไรน้อย → พิจารณาถอด</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">ดาวเด่น</p><p id="meStars" class="kpi-value" style="color:#10b981">—</p><p class="kpi-sub">ขายดี + กำไรดี → รักษาไว้</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">ม้างาน</p><p id="mePlow" class="kpi-value" style="color:#f59e0b">—</p><p class="kpi-sub">ขายดีแต่กำไรน้อย → แก้ต้นทุน</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">เพชรในตม</p><p id="mePuzzle" class="kpi-value" style="color:var(--accent)">—</p><p class="kpi-sub">กำไรดีแต่ขายน้อย → โปรโมท</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">ตัวถ่วง</p><p id="meDogs" class="kpi-value" style="color:#ef4444">—</p><p class="kpi-sub">ขายน้อย+กำไรน้อย → พิจารณาถอด</p></div>
     </div>
 
     <!-- Action board: 4 quadrant cards (the easy-to-read primary view) -->
     <div class="mb-2 flex items-baseline justify-between flex-wrap gap-2">
-      <h2 class="section-title mb-0">🎯 เมนูแต่ละกลุ่ม ควรทำอะไร</h2>
+      <h2 class="section-title mb-0">เมนูแต่ละกลุ่ม ควรทำอะไร</h2>
       <span id="meBoardNote" class="text-xs text-slate-400"></span>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6" id="meActionBoard"></div>
@@ -165,25 +165,25 @@
     <!-- BCG matrix (advanced / collapsible) -->
     <details class="card p-5 mb-5" ontoggle="if(this.open){setTimeout(()=>{try{chartInstances['chartMenuBcg'].resize()}catch(e){}},60)}">
       <summary class="cursor-pointer select-none flex items-center justify-between">
-        <span class="section-title mb-0">📈 กราฟ BCG (สำหรับวิเคราะห์ลึก) — คลิกเพื่อเปิด</span>
+        <span class="section-title mb-0">กราฟ BCG (สำหรับวิเคราะห์ลึก) — คลิกเพื่อเปิด</span>
         <span id="meBranchTag" class="text-xs text-slate-400"></span>
       </summary>
       <p class="text-xs text-slate-400 mt-2 mb-2">แกน X = จำนวนขาย (log) · แกน Y = % กำไร · ขนาดวงกลม = ยอดขาย · เส้นประ = ค่ามัธยฐาน (เส้นแบ่งกลุ่ม) · จุดที่ค่าเกินกรอบจะถูกดึงมาที่ขอบเพื่อให้อ่านง่าย (ดูค่าจริงตอน hover)</p>
       <div style="height:460px;position:relative"><canvas id="chartMenuBcg"></canvas></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
-        <div class="rounded p-2" style="background:#dcfce7;border-left:3px solid #10b981"><b>⭐ ดาวเด่น</b> — ขายดี+กำไรดี รักษาไว้และคุมต้นทุน</div>
-        <div class="rounded p-2" style="background:#dbeafe;border-left:3px solid #4f46e5"><b>🔮 เพชรในตม</b> — กำไรดีแต่ขายน้อย ดันให้แรงขึ้น</div>
-        <div class="rounded p-2" style="background:#fef3c7;border-left:3px solid #f59e0b"><b>🐴 ม้างาน</b> — ขายดีแต่กำไรบาง ขึ้นราคา/ลดต้นทุน</div>
-        <div class="rounded p-2" style="background:#fee2e2;border-left:3px solid #ef4444"><b>🐕 ตัวถ่วง</b> — ขายน้อย+กำไรน้อย พิจารณาถอด/ปรับ</div>
+        <div class="rounded p-2" style="background:#dcfce7;border:1px solid #10b981"><b>ดาวเด่น</b> — ขายดี+กำไรดี รักษาไว้และคุมต้นทุน</div>
+        <div class="rounded p-2" style="background:#dbeafe;border:1px solid var(--accent)"><b>เพชรในตม</b> — กำไรดีแต่ขายน้อย ดันให้แรงขึ้น</div>
+        <div class="rounded p-2" style="background:#fef3c7;border:1px solid #f59e0b"><b>ม้างาน</b> — ขายดีแต่กำไรบาง ขึ้นราคา/ลดต้นทุน</div>
+        <div class="rounded p-2" style="background:#fee2e2;border:1px solid #ef4444"><b>ตัวถ่วง</b> — ขายน้อย+กำไรน้อย พิจารณาถอด/ปรับ</div>
       </div>
     </details>
 
     <!-- Contribution-margin table (sortable) -->
     <div class="card p-5 mb-5">
       <div class="flex items-center gap-3 mb-3 flex-wrap">
-        <h2 class="section-title mb-0">📋 ตารางเมนูทั้งหมด (เรียง/ค้นได้)</h2>
+        <h2 class="section-title mb-0">ตารางเมนูทั้งหมด (เรียง/ค้นได้)</h2>
         <span id="meTableCount" class="text-xs text-slate-400 ml-auto"></span>
-        <button onclick="exportMenuEngTable()" class="text-xs border border-slate-200 hover:border-indigo-500 text-slate-600 hover:text-indigo-600 rounded px-2 py-1 transition-colors">⬇ Export CSV</button>
+        <button onclick="exportMenuEngTable()" class="text-xs border border-slate-200 hover:border-indigo-500 text-slate-600 hover:text-indigo-600 rounded px-2 py-1 transition-colors">Export CSV</button>
       </div>
       <div class="overflow-auto" style="max-height:500px">
         <table class="text-xs w-full">
@@ -207,15 +207,15 @@
     <!-- Velocity bands breakdown -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div class="card p-4">
-        <h3 class="text-sm font-bold text-emerald-700 mb-2">🚀 ขายดีที่สุด (top 10%)</h3>
+        <h3 class="text-sm font-bold text-emerald-700 mb-2">ขายดีที่สุด (top 10%)</h3>
         <ul id="meFastList" class="space-y-1 text-xs text-slate-600"></ul>
       </div>
       <div class="card p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">⚙️ ขายปานกลาง (กลาง 65%)</h3>
+        <h3 class="text-sm font-bold text-slate-700 mb-2">ขายปานกลาง (กลาง 65%)</h3>
         <ul id="meSteadyList" class="space-y-1 text-xs text-slate-600"></ul>
       </div>
       <div class="card p-4">
-        <h3 class="text-sm font-bold text-red-600 mb-2">🐢 ขายช้า (ล่าง 25%)</h3>
+        <h3 class="text-sm font-bold text-red-600 mb-2">ขายช้า (ล่าง 25%)</h3>
         <ul id="meSlowList" class="space-y-1 text-xs text-slate-600"></ul>
       </div>
     </div>

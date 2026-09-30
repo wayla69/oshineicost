@@ -4,9 +4,9 @@
 <div id="tab-branchbom" class="tab-content" style="display:none">
 
   <!-- Header strip -->
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fef3c7 0%,#fce7f3 100%);border-left:4px solid #d946ef">
+  <div class="card p-4 mb-4" style="background:#fef3c7;border:1px solid #d946ef">
     <div class="flex items-start gap-3">
-      <span style="font-size:28px">🔬</span>
+      <span style="font-size:28px"></span>
       <div class="flex-1">
         <h2 class="text-base font-bold" style="color:#86198f">BoM วิเคราะห์รายสาขา (Per-Branch Cost Deep-Dive)</h2>
         <p class="text-xs text-slate-600 mt-1">
@@ -19,8 +19,8 @@
 
   <!-- Phase 16: View mode toggle (per-branch vs chain-wide) -->
   <div class="subtab-bar mb-3" id="bbomViewModeBar">
-    <button class="subtab-btn active" data-bbom-mode="branch" onclick="setBbomViewMode('branch')">🏪 รายสาขา</button>
-    <button class="subtab-btn"        data-bbom-mode="chain"  onclick="setBbomViewMode('chain')">🌐 รวมเครือ (ทุกสาขา)</button>
+    <button class="subtab-btn active" data-bbom-mode="branch" onclick="setBbomViewMode('branch')">รายสาขา</button>
+    <button class="subtab-btn"        data-bbom-mode="chain"  onclick="setBbomViewMode('chain')">รวมเครือ (ทุกสาขา)</button>
   </div>
 
   <!-- Filters -->
@@ -47,7 +47,7 @@
   <!-- Per-branch summary table (chain mode only) -->
   <div id="bbomBranchSummary" class="card p-5 mb-4" style="display:none">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">🌐 สรุปภาพรวมทุกสาขา — รายได้ · ต้นทุน · กำไรขั้นต้น · Food Cost%</h2>
+      <h2 class="section-title mb-0">สรุปภาพรวมทุกสาขา — รายได้ · ต้นทุน · กำไรขั้นต้น · Food Cost%</h2>
       <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียง · เป้า Food Cost 55-70%</span>
     </div>
     <div style="max-height:480px;overflow:auto">
@@ -67,13 +67,13 @@
   </div>
 
   <!-- Concentration callout -->
-  <div id="bbomConcentration" class="card p-3 mb-4" style="display:none;background:#f0f9ff;border-left:3px solid #0284c7">
+  <div id="bbomConcentration" class="card p-3 mb-4" style="display:none;background:#f0f9ff;border:1px solid #0284c7">
     <p class="text-sm" style="color:#075985"></p>
   </div>
 
   <!-- Monthly trend chart -->
   <div class="card p-5 mb-4">
-    <h2 class="section-title mb-1">📈 แนวโน้มรายเดือน — รายได้ · ต้นทุน · GP</h2>
+    <h2 class="section-title mb-1">แนวโน้มรายเดือน — รายได้ · ต้นทุน · GP</h2>
     <p class="text-xs text-slate-400 mb-3">เส้นเขียว = GP · เส้นแดง = COGS · เส้นน้ำเงิน = รายได้</p>
     <div style="position:relative;height:320px"><canvas id="bbomTrendChart"></canvas></div>
   </div>
@@ -81,8 +81,8 @@
   <!-- Top menus table -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-2">
-      <h2 class="section-title mb-0">🍽️ Top 60 เมนูที่ใช้ต้นทุนมากที่สุด</h2>
-      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียงข้อมูล · 🔬 = มีสูตร BoM</span>
+      <h2 class="section-title mb-0">Top 60 เมนูที่ใช้ต้นทุนมากที่สุด</h2>
+      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียงข้อมูล · = มีสูตร BoM</span>
     </div>
     <div class="overflow-x-auto">
       <table id="bbomMenuTable" class="min-w-full text-sm" style="border-collapse:collapse">
@@ -106,28 +106,28 @@
   <!-- Top ingredients bar chart -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="card p-5 lg:col-span-2">
-      <h2 class="section-title mb-1">🧪 Top 25 วัตถุดิบที่มีต้นทุนมากที่สุด</h2>
+      <h2 class="section-title mb-1">Top 25 วัตถุดิบที่มีต้นทุนมากที่สุด</h2>
       <p class="text-xs text-slate-400 mb-3">เรียงตามต้นทุนรวม · สีแถบ = ชนิดวัตถุดิบ · ความยาวแถบ = สัดส่วนต้นทุน</p>
       <div class="overflow-y-auto" style="max-height:560px"><div id="bbomIngList"></div></div>
     </div>
     <div class="card p-5">
-      <h2 class="section-title mb-1">🥩 ต้นทุนตามชนิดวัตถุดิบ</h2>
+      <h2 class="section-title mb-1">ต้นทุนตามชนิดวัตถุดิบ</h2>
       <p class="text-xs text-slate-400 mb-3">โปรตีน · คาร์บ · ผัก · ซอส · น้ำมัน · เครื่องปรุง · อื่นๆ</p>
       <div style="position:relative;height:280px"><canvas id="bbomTypeChart"></canvas></div>
       <div id="bbomTypeLegend" class="mt-3 text-xs space-y-1"></div>
     </div>
   </div>
 
-  <!-- 📦 Requisitions vs recipes: what the branches DREW vs what the recipes say -->
+  <!-- Requisitions vs recipes: what the branches DREW vs what the recipes say -->
   <div class="card p-4 mt-5" style="border:1px solid #fed7aa">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <div class="text-sm font-semibold text-slate-700">📦 เบิกจริง vs ต้นทุนตามสูตร — ช่องว่างที่บริหารได้</div>
+      <div class="text-sm font-semibold text-slate-700">เบิกจริง vs ต้นทุนตามสูตร — ช่องว่างที่บริหารได้</div>
       <div class="flex items-center gap-2 text-xs">
         <select id="reqMonthFrom" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
         <span class="text-slate-400">ถึง</span>
         <select id="reqMonthTo" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
         <label class="px-3 py-1.5 rounded-lg font-semibold cursor-pointer" style="background:#ea580c;color:#fff">
-          ⬆ อัปโหลดใบเบิก (.xlsx)
+          อัปโหลดใบเบิก (.xlsx)
           <input id="reqFile" type="file" accept=".xlsx" style="display:none" onchange="uploadRequisition(this)">
         </label>
       </div>

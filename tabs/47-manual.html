@@ -2,100 +2,100 @@
      TAB: USER MANUAL (Phase 18b) — in-app help for all tabs + workflows
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-manual" class="hidden tab-content">
-  <div class="card p-5 mb-4" style="background:linear-gradient(135deg,#dbeafe 0%,#ede9fe 100%);border-left:4px solid #4f46e5">
+  <div class="card p-5 mb-4" style="background:#dbeafe;border:1px solid var(--accent)">
     <div class="flex items-start gap-3">
-      <span style="font-size:32px">📖</span>
+      <span style="font-size:32px"></span>
       <div class="flex-1">
         <h2 class="text-lg font-bold text-indigo-900">คู่มือการใช้งาน Oshinei Dashboard</h2>
         <p class="text-xs text-slate-600 mt-1">รวมวิธีใช้งานแต่ละ tab · กฎสำคัญ · workflow ที่ใช้บ่อย · troubleshooting</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-07-20 (Lean Overhaul):</b> ⭐ เมนูซ้ายยุบเหลือ <b>12 รายการ</b> — ทุกแท็บเดิมยังอยู่ครบ เข้าผ่าน<b>แถบมุมมองย่อย</b>ด้านบนของแต่ละหน้า (📊 ภาพรวม · 🍱 บุฟเฟ่ต์ · 🍣 เมนู · ⚡ ปรับเมนู · 💰 ต้นทุน · 💵 กำไร · 🛒 ปฏิบัติการ) · "🔔 ต้องดูวันนี้" ย้ายไปปุ่มในหน้าแรก · Forecast รวมเป็น <code>/api/forecast</code> เส้นเดียว (mode=month/branches/trend/buffet) · ดูสถิติการใช้งานจริงที่ <b>Settings → 📈 การใช้งานจริง</b></p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (Kill list — พักไว้):</b> จากสถิติ 47 วัน มี 17 แท็บที่ยังไม่มีใครเปิด แต่<b>ทุกแท็บยังแสดงและใช้งานได้ตามเดิม</b> — เจ้าของตัดสินให้รอจนทุกคนใช้งานครบก่อน จึงยังไม่ซ่อนหรือลบแท็บใด · รายชื่อที่เฝ้าดูและตัวเลขล่าสุดอยู่ที่ Settings → 📈 การใช้งานจริง และรายงาน <code>docs/LEAN_KILL_LIST_2026-09.html</code> · หน้าเดียวกันมีตาราง <b>👥 การเข้าใช้รายคน</b>: ทุกบัญชีพร้อมสถานะ ใช้งานอยู่ / เคยเข้าแต่เงียบ / ยังไม่เคยเข้าใช้ (ยังใช้รหัสเริ่มต้น), login ล่าสุด, วันที่ใช้ และแท็บที่ใช้บ่อย — ใช้ตามว่าใครยังไม่ได้เริ่มใช้แอป · <b>ทุกวันจันทร์</b>ระบบสรุปเอง (ใครยังไม่เคยเข้า / ใครหายไปเกิน 14 วัน) เป็นแบนเนอร์บนหน้าแรกของผู้ดูแล และส่งเข้า Telegram เมื่อตั้งค่า bot แล้ว</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (เริ่มต้นใช้งาน + เป้ารายสาขา):</b> คน<b>ที่ login ครั้งแรก</b>จะเห็นการ์ด "🚀 เริ่มต้นใช้งาน" บนหน้าแรก — สามหน้าที่บทบาทนั้นใช้บ่อยที่สุด กดเปิดได้เลย (กด "เข้าใจแล้ว" เพื่อซ่อน) · <b>เป้ารายสาขา</b>ตั้งเองอัตโนมัติ = <b>ยอดจริงของสาขานั้นในเดือนเดียวกันของปีก่อน</b> (รายได้สุทธิ + จำนวนลูกค้า) เลื่อนไปทุกปี — Settings → Monthly Targets แสดงที่มาของเป้าทุกแถว พิมพ์ตัวเลขเองได้ถ้าต้องการ (เว้นว่างหรือ 0 = กลับไปอัตโนมัติ) สาขาที่ยังไม่มีข้อมูลปีก่อนจะไม่มีเป้า</p>
-        <p class="text-xs text-slate-500 mt-2">📌 Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร BoM ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
+        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-07-20 (Lean Overhaul):</b> เมนูซ้ายยุบเหลือ <b>12 รายการ</b> — ทุกแท็บเดิมยังอยู่ครบ เข้าผ่าน<b>แถบมุมมองย่อย</b>ด้านบนของแต่ละหน้า (ภาพรวม · บุฟเฟ่ต์ · เมนู · ปรับเมนู · ต้นทุน · กำไร · ปฏิบัติการ) · "ต้องดูวันนี้" ย้ายไปปุ่มในหน้าแรก · Forecast รวมเป็น <code>/api/forecast</code> เส้นเดียว (mode=month/branches/trend/buffet) · ดูสถิติการใช้งานจริงที่ <b>Settings → การใช้งานจริง</b></p>
+        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (Kill list — พักไว้):</b> จากสถิติ 47 วัน มี 17 แท็บที่ยังไม่มีใครเปิด แต่<b>ทุกแท็บยังแสดงและใช้งานได้ตามเดิม</b> — เจ้าของตัดสินให้รอจนทุกคนใช้งานครบก่อน จึงยังไม่ซ่อนหรือลบแท็บใด · รายชื่อที่เฝ้าดูและตัวเลขล่าสุดอยู่ที่ Settings → การใช้งานจริง และรายงาน <code>docs/LEAN_KILL_LIST_2026-09.html</code> · หน้าเดียวกันมีตาราง <b>การเข้าใช้รายคน</b>: ทุกบัญชีพร้อมสถานะ ใช้งานอยู่ / เคยเข้าแต่เงียบ / ยังไม่เคยเข้าใช้ (ยังใช้รหัสเริ่มต้น), login ล่าสุด, วันที่ใช้ และแท็บที่ใช้บ่อย — ใช้ตามว่าใครยังไม่ได้เริ่มใช้แอป · <b>ทุกวันจันทร์</b>ระบบสรุปเอง (ใครยังไม่เคยเข้า / ใครหายไปเกิน 14 วัน) เป็นแบนเนอร์บนหน้าแรกของผู้ดูแล และส่งเข้า Telegram เมื่อตั้งค่า bot แล้ว</p>
+        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (เริ่มต้นใช้งาน + เป้ารายสาขา):</b> คน<b>ที่ login ครั้งแรก</b>จะเห็นการ์ด "เริ่มต้นใช้งาน" บนหน้าแรก — สามหน้าที่บทบาทนั้นใช้บ่อยที่สุด กดเปิดได้เลย (กด "เข้าใจแล้ว" เพื่อซ่อน) · <b>เป้ารายสาขา</b>ตั้งเองอัตโนมัติ = <b>ยอดจริงของสาขานั้นในเดือนเดียวกันของปีก่อน</b> (รายได้สุทธิ + จำนวนลูกค้า) เลื่อนไปทุกปี — Settings → Monthly Targets แสดงที่มาของเป้าทุกแถว พิมพ์ตัวเลขเองได้ถ้าต้องการ (เว้นว่างหรือ 0 = กลับไปอัตโนมัติ) สาขาที่ยังไม่มีข้อมูลปีก่อนจะไม่มีเป้า</p>
+        <p class="text-xs text-slate-500 mt-2">Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร BoM ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
-        <p class="text-[11px] mt-1" style="color:#7c3aed"><b>อัปเดต 2026-06-05 (Prime Cost):</b> ⭐ <b>🏭 Prime Cost = Food% + Labor%</b> ในแท็บ <b>P&amp;L รายสาขา</b> — ต้นทุนควบคุมได้ที่ใหญ่สุด 2 ตัว · ใส่ <b>ค่าแรงแยกจากค่าเช่า</b> ที่ <b>Settings → ค่าแรง + ค่าใช้จ่ายคงที่</b> (กรอกครั้งเดียว/สาขา) → ปลดล็อก Prime% เทียบเกณฑ์ AYCE (ดี &lt;70% · สูง &gt;78%). Food% แสดงจริงทันทีแม้ยังไม่ใส่ค่าแรง</p>
-        <p class="text-[11px] mt-1" style="color:#9d174d"><b>อัปเดต 2026-06-05:</b> ⭐ <b>🍖 Heavy-Eater Margin Tail</b> + <b>⏱️ Turn-Time & Table Throughput</b> (ใน Buffet Performance → กำไร & P&L) · <b>เมนูฝั่งซ้ายกระชับขึ้น</b> — แท็บ <b>ต้นทุน</b> และ <b>กำไร & P&L</b> รวมเป็นแถบ "มุมมองที่เกี่ยวข้อง" ด้านบนของหน้า (คลิกสลับได้) · <b>⏰ เวลาปิดร้าน/ความสดข้อมูล</b> (เลือกวันที่ได้) · <b>ต้นทุน/หัว รายสาขา</b> = เครื่องมือวัดประสิทธิภาพ (รายได้/หัว, ต้นทุน%, GP/หัว, เทียบเฉลี่ยเครือ) · <b>ต้นทุน → เปรียบเทียบ ต้นทุน/หัว รายสาขา</b> · <b>P&L ต่อบิล</b> เพิ่ม margin รายสาขา · <b>รายงาน §2/§3</b> เทียบเดือนเต็มจริง (กันเดือนไม่จบ) · Extra: <b>คลิกสาขาเพื่อเจาะลึกรายวัน/รายบิล</b> (เงินสด/บิลยกเลิก) + <b>ประเภทลูกค้าแยกสาขา</b> (ยอด ex-VAT แล้ว) + ธงเตือน<b>อัตรายกเลิก</b>สูง</p>
+        <p class="text-[11px] mt-1" style="color:var(--accent)"><b>อัปเดต 2026-06-05 (Prime Cost):</b> ★ <b>Prime Cost = Food% + Labor%</b> ในแท็บ <b>P&amp;L รายสาขา</b> — ต้นทุนควบคุมได้ที่ใหญ่สุด 2 ตัว · ใส่ <b>ค่าแรงแยกจากค่าเช่า</b> ที่ <b>Settings → ค่าแรง + ค่าใช้จ่ายคงที่</b> (กรอกครั้งเดียว/สาขา) → ปลดล็อก Prime% เทียบเกณฑ์ AYCE (ดี &lt;70% · สูง &gt;78%). Food% แสดงจริงทันทีแม้ยังไม่ใส่ค่าแรง</p>
+        <p class="text-[11px] mt-1" style="color:#9d174d"><b>อัปเดต 2026-06-05:</b> ★ <b>Heavy-Eater Margin Tail</b> + <b>Turn-Time & Table Throughput</b> (ใน Buffet Performance → กำไร & P&L) · <b>เมนูฝั่งซ้ายกระชับขึ้น</b> — แท็บ <b>ต้นทุน</b> และ <b>กำไร & P&L</b> รวมเป็นแถบ "มุมมองที่เกี่ยวข้อง" ด้านบนของหน้า (คลิกสลับได้) · <b>เวลาปิดร้าน/ความสดข้อมูล</b> (เลือกวันที่ได้) · <b>ต้นทุน/หัว รายสาขา</b> = เครื่องมือวัดประสิทธิภาพ (รายได้/หัว, ต้นทุน%, GP/หัว, เทียบเฉลี่ยเครือ) · <b>ต้นทุน → เปรียบเทียบ ต้นทุน/หัว รายสาขา</b> · <b>P&L ต่อบิล</b> เพิ่ม margin รายสาขา · <b>รายงาน §2/§3</b> เทียบเดือนเต็มจริง (กันเดือนไม่จบ) · Extra: <b>คลิกสาขาเพื่อเจาะลึกรายวัน/รายบิล</b> (เงินสด/บิลยกเลิก) + <b>ประเภทลูกค้าแยกสาขา</b> (ยอด ex-VAT แล้ว) + ธงเตือน<b>อัตรายกเลิก</b>สูง</p>
       </div>
     </div>
   </div>
 
   <!-- What's new — 2026-06-04 feature drop -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #4f46e5">
-    <h3 class="font-bold text-base mb-1 text-slate-800">🆕 อัปเดต 2026-06-04 — เชื่อม POS real-time + รายงานใหม่</h3>
+  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
+    <h3 class="font-bold text-base mb-1 text-slate-800">อัปเดต 2026-06-04 — เชื่อม POS real-time + รายงานใหม่</h3>
     <p class="text-xs text-slate-500 mb-3">เชื่อมฐานข้อมูล Easy POS โดยตรง (อัปเดตอัตโนมัติทุก 30 นาที) + หน้า P&L ต่อบิล/ปฏิบัติการ + เทียบเดือนแบบแฟร์</p>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-      <div class="border border-indigo-200 rounded-lg p-3" style="background:#eef2ff">
-        <p class="font-bold text-slate-700 mb-1">🔗 ข้อมูล Real-time</p>
+      <div class="border border-indigo-200 rounded-lg p-3" style="background:var(--accent-soft)">
+        <p class="font-bold text-slate-700 mb-1">ข้อมูล Real-time</p>
         เชื่อม Easy POS (MS SQL) → Dashboard ตรง · ข้อมูลสดถึงวันล่าสุด อัปเดตทุก 30 นาที. <b>กฎเหล็ก: ต้นทุน/COGS ใช้สูตร BoM ของเราเท่านั้น</b> — POS ไม่มีข้อมูลต้นทุนวัตถุดิบ.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">📅 เทียบเดือนแบบแฟร์ (MTD)</p>
-        <b>📊 ภาพรวม</b> + กล่อง <b>Insights</b> — เมื่อเดือนยังไม่จบ จะเทียบ <b>ช่วงวันเท่ากัน</b> (เช่น 1–3 มิ.ย. เทียบ 1–3 พ.ค.) ไม่ใช่เดือนเต็มเทียบเดือนไม่เต็ม.
+        <p class="font-bold text-slate-700 mb-1">เทียบเดือนแบบแฟร์ (MTD)</p>
+        <b>ภาพรวม</b> + กล่อง <b>Insights</b> — เมื่อเดือนยังไม่จบ จะเทียบ <b>ช่วงวันเท่ากัน</b> (เช่น 1–3 มิ.ย. เทียบ 1–3 พ.ค.) ไม่ใช่เดือนเต็มเทียบเดือนไม่เต็ม.
       </div>
       <div class="border border-emerald-200 rounded-lg p-3" style="background:#ecfdf5">
-        <p class="font-bold text-slate-700 mb-1">🧾 P&L ต่อบิล (ใหม่)</p>
-        <b>💵 สาขา & กำไร → P&L ต่อบิล</b> — กำไร/บิล, กำไร/หัว · <b>ปุ่มสลับ GM ⇄ COGS</b> · การกระจาย gross margin <b>ละเอียด</b> (ช่วงละ 5% ใน 0–50%, 10% เหนือนั้น) — <b>คลิกแถบเพื่อเจาะลึก</b> เห็นสรุป + บิลรายใบในช่วงนั้น · <b>บิลขาดทุนทั้งหมด</b> + export CSV. (COGS = BoM)
+        <p class="font-bold text-slate-700 mb-1">P&L ต่อบิล (ใหม่)</p>
+        <b>สาขา & กำไร → P&L ต่อบิล</b> — กำไร/บิล, กำไร/หัว · <b>ปุ่มสลับ GM ⇄ COGS</b> · การกระจาย gross margin <b>ละเอียด</b> (ช่วงละ 5% ใน 0–50%, 10% เหนือนั้น) — <b>คลิกแถบเพื่อเจาะลึก</b> เห็นสรุป + บิลรายใบในช่วงนั้น · <b>บิลขาดทุนทั้งหมด</b> + export CSV. (COGS = BoM)
       </div>
-      <div class="border border-indigo-200 rounded-lg p-3" style="background:#eef2ff">
-        <p class="font-bold text-slate-700 mb-1">🛒 รายงานปฏิบัติการ (ใหม่)</p>
-        <b>🧾 ปฏิบัติการ → รายงานปฏิบัติการ</b> — สัดส่วนการชำระเงิน · ช่องทางขาย · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือน).
+      <div class="border border-indigo-200 rounded-lg p-3" style="background:var(--accent-soft)">
+        <p class="font-bold text-slate-700 mb-1">รายงานปฏิบัติการ (ใหม่)</p>
+        <b>ปฏิบัติการ → รายงานปฏิบัติการ</b> — สัดส่วนการชำระเงิน · ช่องทางขาย · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือน).
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">🗂️ จัดเมนูใหม่ (6 กลุ่ม)</p>
+        <p class="font-bold text-slate-700 mb-1">จัดเมนูใหม่ (6 กลุ่ม)</p>
         แถบซ้ายจัดใหม่ให้สมดุล + ชื่อไทยทั้งหมด · ย้าย <b>ยอดขายรายวัน → ภาพรวม</b>, <b>บุฟเฟ่ต์เด็ก & ลูกค้า → กลุ่มบุฟเฟ่ต์</b>. ดูตารางครบด้านล่าง.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">⚡ Optimize ฐานข้อมูล</p>
+        <p class="font-bold text-slate-700 mb-1">Optimize ฐานข้อมูล</p>
         VACUUM + ANALYZE อัตโนมัติทุกครั้งที่ sync — query เร็วขึ้น, ไฟล์เล็กลง.
       </div>
     </div>
   </div>
 
   <!-- What's new — 2026-06-02 feature drop -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #059669">
-    <h3 class="font-bold text-base mb-1 text-slate-800">🆕 อัปเดต 2026-06-02 — ฟีเจอร์ใหม่</h3>
+  <div class="card p-5 mb-4" style="border:1px solid #059669">
+    <h3 class="font-bold text-base mb-1 text-slate-800">อัปเดต 2026-06-02 — ฟีเจอร์ใหม่</h3>
     <p class="text-xs text-slate-500 mb-3">เพิ่ม drill-down บิล/ชั่วโมง, แยกแคชเชียร์รายสาขา, Forecast มือโปร, รื้อ Analysis Report เป็นรายเดือน, P&amp;L waterfall, โปรไฟล์รายสาขา</p>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">🔍 Drill-down บิลส่วนลด</p>
+        <p class="font-bold text-slate-700 mb-1">Drill-down บิลส่วนลด</p>
         แท็บ <b>พนักงาน (Staff)</b> · <b>Discounts</b> · รายงาน §9 — คลิกการ์ด/แถว/แท่งกราฟ/กลุ่ม%/ค่าลดยอดฮิต เพื่อเปิดบิลรายใบจริง (ไฮไลต์แดง = ส่วนลดเกิน p95 ผิดปกติ). ใน Discounts คลิกได้ <b>ทุกตัวเลข</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">👤 แคชเชียร์ — แยก/รวมสาขา</p>
+        <p class="font-bold text-slate-700 mb-1">แคชเชียร์ — แยก/รวมสาขา</p>
         แท็บ <b>พนักงาน</b> มีปุ่ม <b>แยกสาขา / รวมทุกสาขา</b> (ดีฟอลต์แยก) — บัญชี POS ที่ใช้ร่วม (เช่น Manager) แตกเป็นรายสาขา. คลิกแถวดูบิลส่วนลดของบัญชีนั้น.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">⏰ เจาะชั่วโมง (Time &amp; Flow)</p>
+        <p class="font-bold text-slate-700 mb-1">เจาะชั่วโมง (Time &amp; Flow)</p>
         การ์ด "สรุปชั่วโมงพีค" และแท่ง "Revenue by Hour" — <b>คลิกเพื่อเจาะ</b>ดูชั่วโมงนั้นแยกรายสาขา + รายวันในสัปดาห์. มีปุ่ม <b>เฉลี่ย/วัน ↔ รวมทั้งช่วง</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">💵 P&amp;L รายสาขา — Waterfall</p>
+        <p class="font-bold text-slate-700 mb-1">P&amp;L รายสาขา — Waterfall</p>
         แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">📊 Management Report — Daily | Weekly | Monthly</p>
-        รายงานสรุปผู้บริหารหน้าเดียว (พิมพ์/PDF ได้) สลับได้ 3 โหมดจากปุ่มบนหัวรายงาน: <b>Daily</b> = วันล่าสุดที่จบแล้ว (เลือกวันย้อนหลังได้ เทียบวันเดียวกันสัปดาห์ก่อน), <b>Weekly</b> = สัปดาห์เต็ม จ.–อา. ล่าสุด (เลือกสัปดาห์ได้ เทียบสัปดาห์ก่อน), <b>Monthly</b> = <b>เดือนที่จบแล้ว</b>เท่านั้น (เลือกเดือนย้อนหลังได้ เทียบ<b>เดือนก่อน MoM</b> + <b>เดือนเดียวกันปีก่อน YoY</b>). ทุกโหมดมี TL;DR + บทสรุปผู้บริหาร, KPI, Action Items, จังหวะเดือน, แนวโน้ม 8 ช่วง, อันดับสาขา, เรดาร์จุดรั่ว, ต้นทุนเมนู/หัว, ชั่วโมงพีค, โต๊ะหมุนเวียน, ช่องทางชำระเงิน, Buffet Tiers + สลับ <b>EN ⇄ ไทย</b> + <b>📊 Export Excel</b> / <b>🖨️ Print PDF</b>. ใช้ filter สาขา/กลุ่มจากแถบบนได้ (ช่วงเวลา global ไม่มีผล — รายงานมี picker ของตัวเอง).
+        <p class="font-bold text-slate-700 mb-1">Management Report — Daily | Weekly | Monthly</p>
+        รายงานสรุปผู้บริหารหน้าเดียว (พิมพ์/PDF ได้) สลับได้ 3 โหมดจากปุ่มบนหัวรายงาน: <b>Daily</b> = วันล่าสุดที่จบแล้ว (เลือกวันย้อนหลังได้ เทียบวันเดียวกันสัปดาห์ก่อน), <b>Weekly</b> = สัปดาห์เต็ม จ.–อา. ล่าสุด (เลือกสัปดาห์ได้ เทียบสัปดาห์ก่อน), <b>Monthly</b> = <b>เดือนที่จบแล้ว</b>เท่านั้น (เลือกเดือนย้อนหลังได้ เทียบ<b>เดือนก่อน MoM</b> + <b>เดือนเดียวกันปีก่อน YoY</b>). ทุกโหมดมี TL;DR + บทสรุปผู้บริหาร, KPI, Action Items, จังหวะเดือน, แนวโน้ม 8 ช่วง, อันดับสาขา, เรดาร์จุดรั่ว, ต้นทุนเมนู/หัว, ชั่วโมงพีค, โต๊ะหมุนเวียน, ช่องทางชำระเงิน, Buffet Tiers + สลับ <b>EN ⇄ ไทย</b> + <b>Export Excel</b> / <b>Print PDF</b>. ใช้ filter สาขา/กลุ่มจากแถบบนได้ (ช่วงเวลา global ไม่มีผล — รายงานมี picker ของตัวเอง).
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
-        รายงานรายเดือน<b>ยุบรวมเข้ากับ 📊 Management Report แล้ว</b> (เมนูเดียว ไม่ซ้ำ): เปิด <b>📊 Management Report → กดปุ่ม Monthly</b> — แบบสรุปง่ายสไตล์เดียวกับ Daily/Weekly, เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ที่โชว์เฉพาะโหมด Monthly (และหน้าเดิมมีปุ่ม 📊 แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠️ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "กรุณาเข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
+        <p class="font-bold text-slate-700 mb-1">Monthly Report (เดิม Analysis Report) — รายเดือน</p>
+        รายงานรายเดือน<b>ยุบรวมเข้ากับ Management Report แล้ว</b> (เมนูเดียว ไม่ซ้ำ): เปิด <b>Management Report → กดปุ่ม Monthly</b> — แบบสรุปง่ายสไตล์เดียวกับ Daily/Weekly, เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>ฉบับเต็ม (แบบเดิม)</b> ที่โชว์เฉพาะโหมด Monthly (และหน้าเดิมมีปุ่ม แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "กรุณาเข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">🔮 Forecast &amp; Action Items (§10)</p>
-        พยากรณ์<b>รายสาขา</b> + scorecard (MoM/YoY/เทียบเป้า) + Scenario (ดีสุด/ฐาน/แย่สุด) + Action items ผูก<b>เงิน + เจ้าภาพ</b>. สาขาที่เพิ่งเปิดขึ้น 🆕; โคราช2 ปิดตั้งแต่ 2025-12 (ดูได้ที่ footnote).
+        <p class="font-bold text-slate-700 mb-1">Forecast &amp; Action Items (§10)</p>
+        พยากรณ์<b>รายสาขา</b> + scorecard (MoM/YoY/เทียบเป้า) + Scenario (ดีสุด/ฐาน/แย่สุด) + Action items ผูก<b>เงิน + เจ้าภาพ</b>. สาขาที่เพิ่งเปิดขึ้น ; โคราช2 ปิดตั้งแต่ 2025-12 (ดูได้ที่ footnote).
       </div>
     </div>
     <p class="text-[11px] text-slate-400 mt-2">หมายเหตุ: ชื่อ "แคชเชียร์" เป็นบัญชี POS (บางอันเป็น role กลาง) · เป้ายอดขายยังไม่ได้ตั้ง (ตั้งที่ Settings → Targets) · YTD ปีก่อนเทียบไม่ได้เพราะข้อมูลเริ่ม พ.ค. 2025</p>
   </div>
 
   <!-- Business Analysis Report link -->
-  <a href="/docs/BUSINESS_ANALYSIS_2026-06.html" target="_blank" class="card p-4 mb-4" style="display:block;text-decoration:none;background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff">
+  <a href="/docs/BUSINESS_ANALYSIS_2026-06.html" target="_blank" class="card p-4 mb-4" style="display:block;text-decoration:none;background:#16294d;color:#fff">
     <div class="flex items-center gap-3">
-      <span style="font-size:30px">📑</span>
+      <span style="font-size:30px"></span>
       <div class="flex-1">
         <div class="font-bold text-base">รายงานวิเคราะห์ธุรกิจ (Business Analysis Report) →</div>
-        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้ · 🔒 ต้อง login (เอกสารใต้ /docs ทุกไฟล์)</div>
+        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้ · ต้อง login (เอกสารใต้ /docs ทุกไฟล์)</div>
         <div class="text-[11px] mt-1" style="opacity:.8">สร้างใหม่ทุกเดือน: <code style="background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px">python backend/gen_analysis_report.py</code></div>
       </div>
     </div>
@@ -103,97 +103,97 @@
 
   <!-- Quick start -->
   <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">🚀 Quick Start (เริ่มต้นใช้งาน)</h3>
+    <h3 class="font-bold text-base mb-3 text-slate-800">Quick Start (เริ่มต้นใช้งาน)</h3>
     <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700">
       <li><b>เลือกช่วงเวลา</b> ที่ topbar — month from/to หรือกด <b>YTD / ปีก่อน / YoY</b></li>
       <li><b>เลือกสาขา</b> ที่ topbar — หรือเลือก "ทุกสาขา" สำหรับภาพรวม</li>
-      <li>ดูข้อมูลภาพรวมที่ <b>📊 ภาพรวม → ภาพรวม & KPI</b> (เดือนไม่เต็มเทียบแบบ MTD อัตโนมัติ)</li>
+      <li>ดูข้อมูลภาพรวมที่ <b>ภาพรวม → ภาพรวม & KPI</b> (เดือนไม่เต็มเทียบแบบ MTD อัตโนมัติ)</li>
       <li>วิเคราะห์ลึก (เมนูจัดเป็น 6 กลุ่มในแถบซ้าย):
         <ul class="list-disc list-inside ml-6 mt-1 space-y-1 text-xs text-slate-600">
-          <li><b>กำไร/ขาดทุนรายสาขา:</b> 💵 สาขา & กำไร → 📊 GP รายสาขา / 💵 P&L รายสาขา</li>
-          <li><b>กำไร/ขาดทุนรายบิล + บิลขาดทุน:</b> 💵 สาขา & กำไร → 🧾 P&L ต่อบิล</li>
-          <li><b>เมนูเสิร์ฟเยอะ vs ต้นทุน (หาเป้าลดต้นทุน):</b> 🍱 บุฟเฟ่ต์ & ลูกค้า → 🥘 ผลงานบุฟเฟ่ต์</li>
-          <li><b>ต้นทุนรายเมนู + จำลอง:</b> 🍣 เมนู & ต้นทุน → 🎮 BoM + Simulator</li>
+          <li><b>กำไร/ขาดทุนรายสาขา:</b> สาขา & กำไร → GP รายสาขา / P&L รายสาขา</li>
+          <li><b>กำไร/ขาดทุนรายบิล + บิลขาดทุน:</b> สาขา & กำไร → P&L ต่อบิล</li>
+          <li><b>เมนูเสิร์ฟเยอะ vs ต้นทุน (หาเป้าลดต้นทุน):</b> บุฟเฟ่ต์ & ลูกค้า → ผลงานบุฟเฟ่ต์</li>
+          <li><b>ต้นทุนรายเมนู + จำลอง:</b> เมนู & ต้นทุน → BoM + Simulator</li>
         </ul>
       </li>
-      <li>แก้ unit_cost: <b>⚙️ เครื่องมือ → ตั้งค่า → Cost Management → 🎯 Cost Recalibration</b></li>
+      <li>แก้ unit_cost: <b>เครื่องมือ → ตั้งค่า → Cost Management → Cost Recalibration</b></li>
     </ol>
   </div>
 
   <!-- Tabs reference — 6 groups (2026-06-04 restructure) -->
   <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-1 text-slate-800">📋 เมนู 6 กลุ่ม — แต่ละ Tab ทำอะไร</h3>
+    <h3 class="font-bold text-base mb-1 text-slate-800">เมนู 6 กลุ่ม — แต่ละ Tab ทำอะไร</h3>
     <p class="text-xs text-slate-500 mb-3">จัดกลุ่มใหม่ (2026-06-04) ให้สมดุล + ชื่อภาษาไทยทั้งหมด · ย้าย ยอดขายรายวัน→ภาพรวม, บุฟเฟ่ต์เด็ก & ลูกค้า→กลุ่มบุฟเฟ่ต์</p>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">📊 ภาพรวม</p>
+      <p class="text-sm font-bold text-slate-700 mb-1.5">ภาพรวม</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 ภาพรวม & KPI</b> — <b>ภาพรวมเดือนล่าสุด + MoM</b> (รายได้/GP ฿/Pax/บิล/ยอดต่อหัว/%ส่วนลด). <b>เดือนที่ยังไม่จบ เทียบแบบ MTD</b> (1→วันล่าสุด เทียบช่วงวันเท่ากันเดือนก่อน) · กล่อง Insights ก็ใช้ MTD · ยอดรวมช่วง · สาขาเด่น/ต้องดู · category mix · Top 60 เมนู · heatmap · พยากรณ์</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📅 ยอดขายรายวัน</b> — รายสาขา + รวม วัน/สัปดาห์/เดือน · เทียบเดือนก่อน/ปีก่อน (มี partial-guard) · ผิดปกติ + เมนูพุ่งรายสาขา</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📈 แนวโน้ม</b> — รายได้/ลูกค้า/GP รายเดือน, MoM%, sparklines</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚖️ เปรียบเทียบ A/B</b> — เทียบ 2 ช่วงเวลา side-by-side</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 Insight เพิ่มเติม</b> — daypart 5 ช่วง, category mix, table turnover ทุกสาขา, forecast</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ภาพรวม & KPI</b> — <b>ภาพรวมเดือนล่าสุด + MoM</b> (รายได้/GP ฿/Pax/บิล/ยอดต่อหัว/%ส่วนลด). <b>เดือนที่ยังไม่จบ เทียบแบบ MTD</b> (1→วันล่าสุด เทียบช่วงวันเท่ากันเดือนก่อน) · กล่อง Insights ก็ใช้ MTD · ยอดรวมช่วง · สาขาเด่น/ต้องดู · category mix · Top 60 เมนู · heatmap · พยากรณ์</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ยอดขายรายวัน</b> — รายสาขา + รวม วัน/สัปดาห์/เดือน · เทียบเดือนก่อน/ปีก่อน (มี partial-guard) · ผิดปกติ + เมนูพุ่งรายสาขา</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>แนวโน้ม</b> — รายได้/ลูกค้า/GP รายเดือน, MoM%, sparklines</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>เปรียบเทียบ A/B</b> — เทียบ 2 ช่วงเวลา side-by-side</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>Insight เพิ่มเติม</b> — daypart 5 ช่วง, category mix, table turnover ทุกสาขา, forecast</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-amber-800 mb-1.5">🍱 บุฟเฟ่ต์ & ลูกค้า</p>
+      <p class="text-sm font-bold text-amber-800 mb-1.5">บุฟเฟ่ต์ & ลูกค้า</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 ผลงานบุฟเฟ่ต์</b> — pax จริง (2.70/บิล), food cost จริง, ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×ต้นทุน</b><br>กลุ่ม <b>💰 กำไร & P&L</b>: <b>🍖 Heavy-Eater Margin Tail ⭐ใหม่</b> = กำไรต่อหัว<b>จริง</b> (จ่าย−กินจริง จาก BoM ต่อบิล) → หาลูกค้าที่กินจนขาดทุน แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (พบ: โต๊ะ 1 คนขาดทุน 9.5%) · <b>⏱️ Turn-Time & Table Throughput ⭐ใหม่</b> = GP ต่อนาที-โต๊ะ, ธงสาขานั่งนาน+กำไรต่ำ</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>🧒 บุฟเฟ่ต์เด็ก</b> — covers/รายได้/%/MoM/YTD รายสาขา <span style="color:#92400e">(ย้ายมาจากกลุ่มพนักงาน)</span></div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👥 ลูกค้า & ยอด/หัว</b> — spend per head, party size, daypart <span style="color:#92400e">(ย้ายมาจากกลุ่มเมนู)</span></div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⏰ ช่วงเวลา & การไหล</b> — daypart heatmap, peak hours</div>
+        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>ผลงานบุฟเฟ่ต์</b> — pax จริง (2.70/บิล), food cost จริง, ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>เมนูเสิร์ฟเยอะ×ต้นทุน</b><br>กลุ่ม <b>กำไร & P&L</b>: <b>Heavy-Eater Margin Tail ★ใหม่</b> = กำไรต่อหัว<b>จริง</b> (จ่าย−กินจริง จาก BoM ต่อบิล) → หาลูกค้าที่กินจนขาดทุน แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (พบ: โต๊ะ 1 คนขาดทุน 9.5%) · <b>Turn-Time & Table Throughput ★ใหม่</b> = GP ต่อนาที-โต๊ะ, ธงสาขานั่งนาน+กำไรต่ำ</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>บุฟเฟ่ต์เด็ก</b> — covers/รายได้/%/MoM/YTD รายสาขา <span style="color:#92400e">(ย้ายมาจากกลุ่มพนักงาน)</span></div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ลูกค้า & ยอด/หัว</b> — spend per head, party size, daypart <span style="color:#92400e">(ย้ายมาจากกลุ่มเมนู)</span></div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ช่วงเวลา & การไหล</b> — daypart heatmap, peak hours</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-rose-800 mb-1.5">🍣 เมนู & ต้นทุน</p>
+      <p class="text-sm font-bold text-rose-800 mb-1.5">เมนู & ต้นทุน</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📋 วิเคราะห์เมนู</b> — most ordered (เมนูจริง, ตัด junk), persona, affinity</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⭐ เมนูทำเงิน</b> — 4 กลุ่ม: ⭐ดาวเด่น · 🐴ม้างาน · 🔮เพชรในตม · 🐕ตัวถ่วง + ตารางเต็ม + กราฟ BCG</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>💰 ต้นทุน</b> — margin by category, ABC, Pareto</div>
-        <div class="border-2 border-fuchsia-500 rounded-lg p-2.5" style="background:#fdf4ff"><b>🎮 BoM + Simulator ⭐</b> — ภาพรวม/รายสาขา/เปรียบเทียบ/Simulator (what-if)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>💸 ต้นทุน/หัว</b> — BoM cost ต่อหัว รายสาขา วัน/สัปดาห์/เดือน + เทียบช่วงก่อน</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>วิเคราะห์เมนู</b> — most ordered (เมนูจริง, ตัด junk), persona, affinity</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>เมนูทำเงิน</b> — 4 กลุ่ม: ★ดาวเด่น · ม้างาน · เพชรในตม · ตัวถ่วง + ตารางเต็ม + กราฟ BCG</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ต้นทุน</b> — margin by category, ABC, Pareto</div>
+        <div class="border-2 border-fuchsia-500 rounded-lg p-2.5" style="background:#fdf4ff"><b>BoM + Simulator ★</b> — ภาพรวม/รายสาขา/เปรียบเทียบ/Simulator (what-if)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ต้นทุน/หัว</b> — BoM cost ต่อหัว รายสาขา วัน/สัปดาห์/เดือน + เทียบช่วงก่อน</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-emerald-800 mb-1.5">💵 สาขา & กำไร</p>
+      <p class="text-sm font-bold text-emerald-800 mb-1.5">สาขา & กำไร</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>📊 GP รายสาขา</b> — GP/Food%/Status รายสาขา (COGS แบบ BoM), heatmap</div>
-        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>💵 P&L รายสาขา</b> — Revenue→COGS→GP→fixed→Operating Profit + <b>🏭 Prime Cost (Food%+Labor%) ⭐ใหม่</b> + 60 เมนูขับต้นทุน + top ingredients</div>
-        <div class="border-2 border-emerald-400 rounded-lg p-2.5" style="background:#ecfdf5"><b>🧾 P&L ต่อบิล ⭐ใหม่</b> — กำไร/บิล, กำไร/หัว · <b>toggle GM ⇄ COGS</b> · การกระจาย gross margin ละเอียด (5% ใน 0–50%, 10% เหนือนั้น) <b>คลิกแถบเพื่อเจาะลึก</b> (สรุป+บิลรายใบ) · <b>บิลขาดทุนทั้งหมด</b> (COGS&gt;รายได้) + CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>🏆 Benchmark สาขา</b> — KPI ข้ามสาขา, health score</div>
+        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>GP รายสาขา</b> — GP/Food%/Status รายสาขา (COGS แบบ BoM), heatmap</div>
+        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>P&L รายสาขา</b> — Revenue→COGS→GP→fixed→Operating Profit + <b>Prime Cost (Food%+Labor%) ★ใหม่</b> + 60 เมนูขับต้นทุน + top ingredients</div>
+        <div class="border-2 border-emerald-400 rounded-lg p-2.5" style="background:#ecfdf5"><b>P&L ต่อบิล ★ใหม่</b> — กำไร/บิล, กำไร/หัว · <b>toggle GM ⇄ COGS</b> · การกระจาย gross margin ละเอียด (5% ใน 0–50%, 10% เหนือนั้น) <b>คลิกแถบเพื่อเจาะลึก</b> (สรุป+บิลรายใบ) · <b>บิลขาดทุนทั้งหมด</b> (COGS&gt;รายได้) + CSV</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>Benchmark สาขา</b> — KPI ข้ามสาขา, health score</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">🧾 ปฏิบัติการ & ส่วนลด</p>
+      <p class="text-sm font-bold text-slate-700 mb-1.5">ปฏิบัติการ & ส่วนลด</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border-2 border-indigo-300 rounded-lg p-2.5" style="background:#eef2ff"><b>🛒 รายงานปฏิบัติการ ⭐ใหม่</b> — การชำระเงิน · ช่องทางขาย (ทานที่ร้าน/เดลิเวอรี/กลับบ้าน) · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือนได้)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> — Cohort ลูกค้ารายเดือน (กราฟ+MoM/YoY+ลูกค้า/สาขา ตัดผลขยายสาขา+มุมมองฤดูกาล; เดือนไม่ครบติดป้ายและไม่ถูกเทียบ) / Affinity / What-If</div>
+        <div class="border-2 border-indigo-300 rounded-lg p-2.5" style="background:var(--accent-soft)"><b>รายงานปฏิบัติการ ★ใหม่</b> — การชำระเงิน · ช่องทางขาย (ทานที่ร้าน/เดลิเวอรี/กลับบ้าน) · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือนได้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>พนักงาน</b> (cashier scorecard) · <b>ส่วนลด</b> (leakage) · <b>วิเคราะห์เชิงลึก</b> — Cohort ลูกค้ารายเดือน (กราฟ+MoM/YoY+ลูกค้า/สาขา ตัดผลขยายสาขา+มุมมองฤดูกาล; เดือนไม่ครบติดป้ายและไม่ถูกเทียบ) / Affinity / What-If</div>
       </div>
     </div>
 
     <div class="mb-1">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
+      <p class="text-sm font-bold text-slate-700 mb-1.5">เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 Management Report</b> (Daily · Weekly · Monthly ในเมนูเดียว — โหมด Monthly = รายงานประจำเดือน, ฉบับเต็มกดปุ่มในหน้ารายงาน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>Management Report</b> (Daily · Weekly · Monthly ในเมนูเดียว — โหมด Monthly = รายงานประจำเดือน, ฉบับเต็มกดปุ่มในหน้ารายงาน) · <b>คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
 
   <!-- Common workflows -->
   <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">🔧 Workflow ที่ใช้บ่อย</h3>
+    <h3 class="font-bold text-base mb-3 text-slate-800">Workflow ที่ใช้บ่อย</h3>
     <div class="space-y-3">
       <div class="p-3 rounded-lg bg-emerald-50 border-l-4 border-emerald-500">
         <p class="font-semibold text-emerald-900 text-sm">A. ลด Food Cost % ของเครือ</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>ไป <b>🍱 บุฟเฟ่ต์ → 🥘 Buffet Performance → 🎯 เมนูเสิร์ฟเยอะ×ต้นทุน</b> หาเมนูที่เสิร์ฟเยอะ+แพง (เป้าหลัก)</li>
-          <li>หรือดูที่ <b>🍣 เมนู&ต้นทุน → 🎮 BoM Cost → 📊 ภาพรวม</b> ดู food cost % ตอนนี้</li>
-          <li>ไป <b>⚙️ เครื่องมือ → Settings → Cost Management → 🎯 Recalibration</b></li>
+          <li>ไป <b>บุฟเฟ่ต์ → Buffet Performance → เมนูเสิร์ฟเยอะ×ต้นทุน</b> หาเมนูที่เสิร์ฟเยอะ+แพง (เป้าหลัก)</li>
+          <li>หรือดูที่ <b>เมนู&ต้นทุน → BoM Cost → ภาพรวม</b> ดู food cost % ตอนนี้</li>
+          <li>ไป <b>เครื่องมือ → Settings → Cost Management → Recalibration</b></li>
           <li>ตั้ง Target food cost % = 65 → กด Refresh → ดู Suggested unit_cost</li>
           <li>กด "Use all suggested" หรือแก้ทีละตัว → Save</li>
           <li>กลับมาเช็คผลที่ <b>BoM Cost Analysis</b></li>
@@ -202,34 +202,34 @@
       <div class="p-3 rounded-lg bg-sky-50 border-l-4 border-sky-500">
         <p class="font-semibold text-sky-900 text-sm">B. หา root cause ทำไมสาขาขาดทุน</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>💵 สาขา&P&L → 📊 GP รายสาขา</b> → ดู Food Cost % vs target 55-70%</li>
-          <li>เลือกสาขาที่ topbar → <b>💵 P&L รายสาขา</b> → ดู 60 เมนูขับต้นทุน + top ingredients ของสาขานั้น</li>
-          <li>เทียบกับสาขาอื่น ที่ <b>🍣 เมนู&ต้นทุน → 🎮 BoM Cost → ⚖️ เปรียบเทียบ</b></li>
+          <li><b>สาขา&P&L → GP รายสาขา</b> → ดู Food Cost % vs target 55-70%</li>
+          <li>เลือกสาขาที่ topbar → <b>P&L รายสาขา</b> → ดู 60 เมนูขับต้นทุน + top ingredients ของสาขานั้น</li>
+          <li>เทียบกับสาขาอื่น ที่ <b>เมนู&ต้นทุน → BoM Cost → เปรียบเทียบ</b></li>
         </ol>
       </div>
       <div class="p-3 rounded-lg bg-fuchsia-50 border-l-4 border-fuchsia-500">
         <p class="font-semibold text-fuchsia-900 text-sm">C. จำลอง "ถ้าลดราคาวัตถุดิบจะกำไรเพิ่มเท่าไร"</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>🎮 BoM Cost → 🎮 Simulator</b></li>
+          <li><b>BoM Cost → Simulator</b></li>
           <li>เลือก SKU ที่อยากปรับ (เช่น แซลมอน A0033)</li>
           <li>แก้ "Scenario cost" → ดูตัวเลข KPI panel ขวาเปลี่ยนทันที (Live preview)</li>
-          <li>ใช้ปุ่ม "−10%" หรือ "🎯 ตั้งเป้า Food% = 60" เพื่อ bulk ปรับ</li>
-          <li>กด "💾 Save scenario" ตั้งชื่อเก็บไว้ → เอาไปคุยกับซัพพลายเออร์</li>
+          <li>ใช้ปุ่ม "−10%" หรือ "ตั้งเป้า Food% = 60" เพื่อ bulk ปรับ</li>
+          <li>กด "Save scenario" ตั้งชื่อเก็บไว้ → เอาไปคุยกับซัพพลายเออร์</li>
         </ol>
       </div>
       <div class="p-3 rounded-lg bg-rose-50 border-l-4 border-rose-500">
         <p class="font-semibold text-rose-900 text-sm">D. หาลูกค้าที่ "กินจนขาดทุน" + คุมการหมุนโต๊ะ (ใหม่)</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>🍱 บุฟเฟ่ต์ → 🥘 ผลงานบุฟเฟ่ต์ → 💰 กำไร & P&L</b> เลื่อนลงหา <b>🍖 Heavy-Eater Margin Tail</b></li>
+          <li><b>บุฟเฟ่ต์ → ผลงานบุฟเฟ่ต์ → กำไร & P&L</b> เลื่อนลงหา <b>Heavy-Eater Margin Tail</b></li>
           <li>ดู <b>% หัวที่ขาดทุน</b> และ <b>มูลค่าที่เสียไป</b> — ตารางขนาดโต๊ะบอกว่ากลุ่มไหนเสี่ยง (เช่น โต๊ะ 1 คน ขาดทุนสูงสุด)</li>
           <li>เลือกสาขาที่ topbar เพื่อเจาะเฉพาะสาขา → ดูสาขาที่ % ขาดทุนสูง</li>
-          <li>ที่ <b>⏱️ Turn-Time & Table Throughput</b> หาสาขาธงแดง (นั่งนาน+กำไรต่ำ) → พิจารณาคุม portion วัตถุดิบแพง หรือกำหนดเวลานั่ง</li>
+          <li>ที่ <b>Turn-Time & Table Throughput</b> หาสาขาธงแดง (นั่งนาน+กำไรต่ำ) → พิจารณาคุม portion วัตถุดิบแพง หรือกำหนดเวลานั่ง</li>
         </ol>
       </div>
       <div class="p-3 rounded-lg bg-amber-50 border-l-4 border-amber-500">
         <p class="font-semibold text-amber-900 text-sm">E. Export รายงาน Monthly Pack ส่งผู้บริหาร</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>กด <b>📥 Export Monthly Pack</b> ที่ topbar (ข้าง 🖨️ Print)</li>
+          <li>กด <b>Export Monthly Pack</b> ที่ topbar (ข้าง Print)</li>
           <li>เลือกเดือน + รูปแบบ (Excel หรือ PDF)</li>
           <li>Excel: 6 sheets (Summary / P&L per Branch / Top 50 Cost Drivers / BoM Ingredients / Alerts / Action Items)</li>
           <li>PDF: 10 หน้า มี charts embedded</li>
@@ -239,19 +239,19 @@
   </div>
 
   <!-- Cost-data status (updated 2026-06) -->
-  <div class="card p-5 mb-4" style="background:#ecfdf5;border-left:4px solid #10b981">
-    <h3 class="font-bold text-base mb-2 text-emerald-900">✅ สถานะข้อมูลต้นทุน (อัปเดต 2026-06)</h3>
+  <div class="card p-5 mb-4" style="background:#ecfdf5;border:1px solid #10b981">
+    <h3 class="font-bold text-base mb-2 text-emerald-900">สถานะข้อมูลต้นทุน (อัปเดต 2026-06)</h3>
     <p class="text-sm text-emerald-800 mb-2">แก้ปัญหา price-as-cost แล้ว (เคยพบ 98.6% ของ unit_cost = ราคาขาย×1.07). นำเข้าสูตร BoM จริงจาก workbook → ครอบคลุม ~71% ของจำนวนเสิร์ฟ.</p>
     <p class="text-sm text-emerald-800 mb-2"><b>COGS เป็นสูตรเดียวทั้งแอป:</b> BoM recipe ก่อน → ถ้าไม่มีรีซิปีใช้ sku_cost → buffet tier นับ 0. ทุกหน้าแสดง GP ตรงกัน (~40%, food cost ~60%).</p>
-    <p class="text-sm text-emerald-800"><b>ยังเหลือ:</b> ~29% ของเมนู (ส่วนใหญ่เครื่องดื่ม/à-la-carte) ยังไม่มีรีซิปี — เติมได้ที่ <b>Settings → Cost Management</b> (แก้ในหน้า auto-save) หรือดูเป้าที่ <b>🎯 ความครอบคลุมต้นทุน</b></p>
-    <p class="text-sm text-amber-800 mt-2" style="background:#fffbeb;border-left:3px solid #f59e0b;padding:6px 10px;border-radius:4px"><b>⚠️ จุดที่ต้องระวัง:</b> (1) <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → margin เครื่องดื่มในหน้า Menu Engineering ขึ้น ~100% (ปลอม) — ควรเติม unit_cost เครื่องดื่มก่อน. (2) à-la-carte บางตัว unit_cost ≈ ราคาขาย → margin อาจติดลบ/แปลก เป็นปัญหา<b>คุณภาพข้อมูล</b> ไม่ใช่บั๊ก. (3) Over-consumption Rate = 0 เพราะข้อมูล Easy ไม่มีรหัสค่าปรับ OT</p>
+    <p class="text-sm text-emerald-800"><b>ยังเหลือ:</b> ~29% ของเมนู (ส่วนใหญ่เครื่องดื่ม/à-la-carte) ยังไม่มีรีซิปี — เติมได้ที่ <b>Settings → Cost Management</b> (แก้ในหน้า auto-save) หรือดูเป้าที่ <b>ความครอบคลุมต้นทุน</b></p>
+    <p class="text-sm text-amber-800 mt-2" style="background:#fffbeb;border:1px solid #f59e0b;padding:6px 10px;border-radius:4px"><b>⚠ จุดที่ต้องระวัง:</b> (1) <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → margin เครื่องดื่มในหน้า Menu Engineering ขึ้น ~100% (ปลอม) — ควรเติม unit_cost เครื่องดื่มก่อน. (2) à-la-carte บางตัว unit_cost ≈ ราคาขาย → margin อาจติดลบ/แปลก เป็นปัญหา<b>คุณภาพข้อมูล</b> ไม่ใช่บั๊ก. (3) Over-consumption Rate = 0 เพราะข้อมูล Easy ไม่มีรหัสค่าปรับ OT</p>
   </div>
 
   <!-- Hard rules -->
-  <div class="card p-5 mb-4" style="background:#fef2f2;border-left:4px solid #ef4444">
-    <h3 class="font-bold text-base mb-2 text-red-900">⚠️ กฎสำคัญ (Hard Rules)</h3>
+  <div class="card p-5 mb-4" style="background:#fef2f2;border:1px solid #ef4444">
+    <h3 class="font-bold text-base mb-2 text-red-900">⚠ กฎสำคัญ (Hard Rules)</h3>
     <ul class="list-disc list-inside text-sm text-slate-700 space-y-1.5">
-      <li><b>🔴 COGS ใช้ BoM ของเราเท่านั้น (กฎเหล็ก)</b> — ทุกการคำนวณต้นทุน/กำไรใช้สูตร BoM ของเรา <b>ห้ามใช้ต้นทุนจาก POS</b> เพราะ Easy POS ไม่ได้บันทึกต้นทุนวัตถุดิบ (ตรวจแล้ว = 0 ทุกรายการ). ใช้ทั้งหน้า P&L ต่อบิล, ต้นทุน/หัว, GP/P&L รายสาขา</li>
+      <li><b>COGS ใช้ BoM ของเราเท่านั้น (กฎเหล็ก)</b> — ทุกการคำนวณต้นทุน/กำไรใช้สูตร BoM ของเรา <b>ห้ามใช้ต้นทุนจาก POS</b> เพราะ Easy POS ไม่ได้บันทึกต้นทุนวัตถุดิบ (ตรวจแล้ว = 0 ทุกรายการ). ใช้ทั้งหน้า P&L ต่อบิล, ต้นทุน/หัว, GP/P&L รายสาขา</li>
       <li><b>VAT ไม่ใช่รายได้</b> — ตัวเลข "รายได้" ทุกที่ในแอปใช้ <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> (ก่อน VAT) เท่านั้น. <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">total_inc_vat</code> ใช้สำหรับ reconcile กับใบเสร็จ POS เท่านั้น</li>
       <li><b>เดือนไม่เต็มเทียบแบบ MTD</b> — เมื่อเดือนล่าสุดยังไม่จบ การเทียบ MoM ในภาพรวม + Insights จะใช้ช่วงวันเท่ากัน (1→วันล่าสุด) ของทั้งสองเดือน ไม่เอาเดือนเต็มมาเทียบเดือนไม่เต็ม</li>
       <li><b>วิเคราะห์ต้องเป็น time-series</b> — ตัวเลขสะสมอย่างเดียวไม่มีประโยชน์ ทุก analytics ต้องดูได้รายวัน/สัปดาห์/เดือน</li>
@@ -263,7 +263,7 @@
 
   <!-- Troubleshooting -->
   <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">🛠️ Troubleshooting</h3>
+    <h3 class="font-bold text-base mb-3 text-slate-800">Troubleshooting</h3>
     <div class="space-y-2 text-sm">
       <details class="border border-slate-200 rounded-lg p-3">
         <summary class="font-semibold cursor-pointer text-slate-800">ตัวเลขไม่อัปเดต/ยังเห็นข้อมูลเก่า</summary>
@@ -271,7 +271,7 @@
       </details>
       <details class="border border-slate-200 rounded-lg p-3">
         <summary class="font-semibold cursor-pointer text-slate-800">Food cost % ดูแปลก (สูง/ต่ำผิดปกติ)</summary>
-        <p class="text-xs text-slate-600 mt-2"><b>ค่าปกติ ~57-68%/เดือน, GP ~40%.</b> ถ้าหน้าไหนแสดง GP ไม่ตรงหน้าอื่น = bug (COGS ต้องเป็นสูตรเดียวกันทุกหน้า).<br><b>สูงเกิน 100%:</b> unit_cost ตัวไหนตั้งสูงเกิน (cost > ราคาขาย) — ตรวจที่ <b>Settings → Cost Recalibration</b> หรือ <b>BoM Cost Audit</b><br><b>เมนูยังไม่มีต้นทุน:</b> ดูที่ <b>🎯 ความครอบคลุมต้นทุน</b> ว่าเหลือ SKU ไหนต้องเติม</p>
+        <p class="text-xs text-slate-600 mt-2"><b>ค่าปกติ ~57-68%/เดือน, GP ~40%.</b> ถ้าหน้าไหนแสดง GP ไม่ตรงหน้าอื่น = bug (COGS ต้องเป็นสูตรเดียวกันทุกหน้า).<br><b>สูงเกิน 100%:</b> unit_cost ตัวไหนตั้งสูงเกิน (cost > ราคาขาย) — ตรวจที่ <b>Settings → Cost Recalibration</b> หรือ <b>BoM Cost Audit</b><br><b>เมนูยังไม่มีต้นทุน:</b> ดูที่ <b>ความครอบคลุมต้นทุน</b> ว่าเหลือ SKU ไหนต้องเติม</p>
       </details>
       <details class="border border-slate-200 rounded-lg p-3">
         <summary class="font-semibold cursor-pointer text-slate-800">มี SKU ใหม่จาก POS แต่ไม่มี unit_cost</summary>
@@ -279,7 +279,7 @@
       </details>
       <details class="border border-slate-200 rounded-lg p-3">
         <summary class="font-semibold cursor-pointer text-slate-800">เปรียบเทียบสาขา 2-5 แห่งพร้อมกัน</summary>
-        <p class="text-xs text-slate-600 mt-2">ไป <b>🍣 เมนู&ต้นทุน → 🎮 BoM Cost → ⚖️ เปรียบเทียบ</b> → Ctrl+click เลือกหลายสาขา (2-5) → ดู side-by-side พร้อม variance highlight (cell ที่ off &gt; 10% จาก mean)</p>
+        <p class="text-xs text-slate-600 mt-2">ไป <b>เมนู&ต้นทุน → BoM Cost → เปรียบเทียบ</b> → Ctrl+click เลือกหลายสาขา (2-5) → ดู side-by-side พร้อม variance highlight (cell ที่ off &gt; 10% จาก mean)</p>
       </details>
     </div>
   </div>

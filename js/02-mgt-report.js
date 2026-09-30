@@ -96,7 +96,7 @@ function onMgtMonthChange(v) {
   loadMgtReport();
 }
 
-// Sidebar "📄 Monthly Report" → the Management Report in monthly mode (the simple
+// Sidebar "Monthly Report" → the Management Report in monthly mode (the simple
 // Daily/Weekly-style presentation). The legacy full pack stays reachable via the
 // ฉบับเต็ม button (monthly mode only) → switchTab('report').
 function openMonthlyReport() {
@@ -261,8 +261,8 @@ const MGT_I18N = {
     dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', monthlyReport:'Monthly report · ',
     wtd:'  (week-to-date)', dtd:'  (so far today — partial)', mtdTag:'  (month-to-date — partial)',
     scope:'Scope: ', comparedWith:'   ·   compared with ', allBranches:'All branches', groupPfx:'Group: ',
-    title:'Management Summary Report', generated:'Generated:', exportExcel:'📊 Export Excel',
-    printPdf:'🖨️ Print / Export PDF', daily:'Daily', weekly:'Weekly', monthly:'Monthly', loading:'Loading…',
+    title:'Management Summary Report', generated:'Generated:', exportExcel:'Export Excel',
+    printPdf:'Print / Export PDF', daily:'Daily', weekly:'Weekly', monthly:'Monthly', loading:'Loading…',
     compDaily:'vs last week', compWeekly:'vs prev week', compMonthly:'vs prev month',
     masterFranchise:'Master · Franchise breakdown', master:'Master', franchise:'Franchise',
     netSales:'Net Sales', netSalesVat:'Net Sales (ex-VAT)', grossProfit:'Gross Profit',
@@ -319,7 +319,7 @@ const MGT_I18N = {
     masterBranches:'Master Branches', allBranchesCap:'All Branches', thisDay:'this day', thisWeek:'this week', thisMonth:'this month',
     payBranch:'Branch', paySum:'Total', payAll:'All',
     // exec summary header + pills
-    execSummary:'📋 Executive Summary', tldr:'TL;DR — at a glance', thisDayP:'This Day', thisWeekP:'This Week', thisMonthP:'This Month',
+    execSummary:'Executive Summary', tldr:'TL;DR — at a glance', thisDayP:'This Day', thisWeekP:'This Week', thisMonthP:'This Month',
     avg8d:'8-Day Avg', avg8w:'8-Wk Avg', avg8m:'8-Mo Avg', bestDayP:'Best Day', bestWeekP:'Best Week', bestMonthP:'Best Month',
     weakDayP:'Weakest Day', weakWeekP:'Weakest Week', weakMonthP:'Weakest Month', vsAvgP:' vs avg', dod:' DoD', wow:' WoW', mom:' MoM',
     trendAnalysis:'Trend analysis',
@@ -330,11 +330,11 @@ const MGT_I18N = {
     s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
     s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
     s11:'11. Buffet Price Tiers — Guests & Cost/Head',
-    s12v:'12. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the 💬 tab.',
+    s12v:'12. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the tab.',
     vVoices:'Voices', vNeg:'Negative', vStars:'Avg ★', vResp:'Answered', vWait:'Awaiting reply now', vSla:'past SLA', vThemes:'Top themes',
     vWatch:'Branches to watch', vPraised:'Most praised', vSurvey:'QR survey', vAnswers:'answers', vActions:'Fix loop', vOpen:'open', vOverdue:'overdue',
     vDone:'done this period', vBetter:'better', vSame:'same', vWorse:'worse', vPending:'window still running', vRate:'neg / 100 voices',
-    vNoActions:'No fixes recorded yet — create one from a theme in the 💬 tab, and this section will show whether it worked.',
+    vNoActions:'No fixes recorded yet — create one from a theme in the tab, and this section will show whether it worked.',
     vRespBranch:'Answered by branch', vMedian:'median',
     tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
     tierTrendTitle:'Trend by tier — mix of guests & cost/head',
@@ -384,8 +384,8 @@ const MGT_I18N = {
     dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', monthlyReport:'รายงานรายเดือน · ',
     wtd:'  (ถึงปัจจุบันในสัปดาห์)', dtd:'  (เฉพาะวันนี้ — ยังไม่ครบวัน)', mtdTag:'  (ถึงปัจจุบันในเดือน — ยังไม่ครบเดือน)',
     scope:'ขอบเขต: ', comparedWith:'   ·   เทียบกับ ', allBranches:'ทุกสาขา', groupPfx:'กลุ่ม: ',
-    title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'📊 ส่งออก Excel',
-    printPdf:'🖨️ พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', loading:'กำลังโหลด…',
+    title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'ส่งออก Excel',
+    printPdf:'พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', loading:'กำลังโหลด…',
     compDaily:'เทียบสัปดาห์ก่อน', compWeekly:'เทียบสัปดาห์ก่อน', compMonthly:'เทียบเดือนก่อน',
     masterFranchise:'แยกตามบริษัท · แฟรนไชส์', master:'บริษัท', franchise:'แฟรนไชส์',
     netSales:'ยอดขายสุทธิ', netSalesVat:'ยอดขายสุทธิ (ไม่รวม VAT)', grossProfit:'กำไรขั้นต้น',
@@ -432,7 +432,7 @@ const MGT_I18N = {
     branchesWord:'สาขา', channels:'ช่องทาง', payCaption2:'% = สัดส่วนของแต่ละสาขา (ตัวหนา = ช่องทางหลัก · เลขเล็กในแถวรวม = ',
     masterBranches:'สาขาบริษัท', allBranchesCap:'ทุกสาขา', thisDay:'วันนี้', thisWeek:'สัปดาห์นี้', thisMonth:'เดือนนี้',
     payBranch:'สาขา', paySum:'รวม', payAll:'ทั้งหมด',
-    execSummary:'📋 บทสรุปผู้บริหาร', tldr:'TL;DR — สรุปเร็ว', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้', thisMonthP:'เดือนนี้',
+    execSummary:'บทสรุปผู้บริหาร', tldr:'TL;DR — สรุปเร็ว', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้', thisMonthP:'เดือนนี้',
     avg8d:'เฉลี่ย 8 วัน', avg8w:'เฉลี่ย 8 สัปดาห์', avg8m:'เฉลี่ย 8 เดือน', bestDayP:'วันดีสุด', bestWeekP:'สัปดาห์ดีสุด', bestMonthP:'เดือนดีสุด',
     weakDayP:'วันต่ำสุด', weakWeekP:'สัปดาห์ต่ำสุด', weakMonthP:'เดือนต่ำสุด', vsAvgP:' เทียบเฉลี่ย', dod:' DoD', wow:' WoW', mom:' MoM',
     trendAnalysis:'บทวิเคราะห์แนวโน้ม',
@@ -442,11 +442,11 @@ const MGT_I18N = {
     s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
     s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
-    s12v:'12. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ 💬',
+    s12v:'12. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ',
     vVoices:'เสียง', vNeg:'เชิงลบ', vStars:'★ เฉลี่ย', vResp:'ตอบกลับ', vWait:'รอสาขาตอบตอนนี้', vSla:'เกิน SLA', vThemes:'หัวข้อที่พูดถึงมากสุด',
     vWatch:'สาขาที่ต้องดู', vPraised:'ชมมากสุด', vSurvey:'แบบสอบถาม QR', vAnswers:'คำตอบ', vActions:'วงจรการแก้', vOpen:'ค้าง', vOverdue:'เกินกำหนด',
     vDone:'เสร็จในช่วงนี้', vBetter:'ดีขึ้น', vSame:'เท่าเดิม', vWorse:'แย่ลง', vPending:'รอครบ 28 วัน', vRate:'ลบ / 100 เสียง',
-    vNoActions:'ยังไม่มีงานแก้ที่บันทึกไว้ — สร้างจากหัวข้อในแท็บ 💬 แล้วส่วนนี้จะบอกว่าแก้แล้วได้ผลไหม',
+    vNoActions:'ยังไม่มีงานแก้ที่บันทึกไว้ — สร้างจากหัวข้อในแท็บ แล้วส่วนนี้จะบอกว่าแก้แล้วได้ผลไหม',
     vRespBranch:'ตอบกลับรายสาขา', vMedian:'กลาง',
     tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
     tierTrendTitle:'เทรนด์รายกลุ่มราคา — สัดส่วนคนทาน & ต้นทุน/หัว',
@@ -539,9 +539,9 @@ function renderMgtReport(j, jM, jF) {
        <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">${T.masterFranchise}</p>
        <div class="grid grid-cols-2 gap-3">
          <div class="rounded-xl p-3" style="background:#f0fdfa;border:1px solid #5eead4">
-           <p class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mb-2">🏢 ${T.master}</p>${mkKv(mKv)}</div>
-         <div class="rounded-xl p-3" style="background:#faf5ff;border:1px solid #c4b5fd">
-           <p class="text-[10px] font-bold uppercase tracking-wide text-violet-700 mb-2">🔗 ${T.franchise}</p>${mkKv(fKv)}</div>
+           <p class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mb-2">${T.master}</p>${mkKv(mKv)}</div>
+         <div class="rounded-xl p-3" style="background:#faf5ff;border:1px solid var(--border)">
+           <p class="text-[10px] font-bold uppercase tracking-wide text-violet-700 mb-2">${T.franchise}</p>${mkKv(fKv)}</div>
        </div></div>`;
   const isDaily = j.period === 'daily';
   const isMonthly = j.period === 'monthly';
@@ -660,8 +660,8 @@ function renderMgtReport(j, jM, jF) {
       grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#e8edf3" stroke-width="0.6"/>`;
       ylab += `<text x="${padL - 4}" y="${(yy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${_fmtMc(vv).replace('฿', '')}</text>`; }
     const bars = vals.map((v, i) => { const by = yc(v), bh = Math.max(0.6, padT + plotH - by);
-      return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i === li ? '#4f46e5' : '#c7d2fe'}"/>`; }).join('');
-    const vlab = vals.map((v, i) => `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? '#4f46e5' : '#64748b'}">${_fmtMc(v)}</text>`).join('');
+      return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i === li ? '#4a70b0' : '#c9d5e8'}"/>`; }).join('');
+    const vlab = vals.map((v, i) => `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? '#4a70b0' : '#64748b'}">${_fmtMc(v)}</text>`).join('');
     const xlab = wk.map((w, i) => `<text x="${xc(i).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#475569">${w.label}</text>`).join('');
     // One amber tick per bar, at THAT bar's own fair-comparison height, instead of a
     // single flat line spanning the whole chart.
@@ -736,7 +736,7 @@ function renderMgtReport(j, jM, jF) {
        </div>`;
   // One mini-card per series in split mode (title + latest value + its own canvas).
   const _trendCard = (id, title, color) =>
-    `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:12px;padding:10px 12px 6px">
+    `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:10px 12px 6px">
        <div class="flex items-center justify-between mb-1">
          <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${_sw(color)} ${title}</span>
          <span id="${id}Latest" class="text-xs font-extrabold" style="color:${color}"></span>
@@ -756,7 +756,7 @@ function renderMgtReport(j, jM, jF) {
     + `<div id="mgtTrendAnalysis"></div>`;
 
   // §4 — Branch league table
-  const medals = ['🥇','🥈','🥉'];
+  const medals = ['1.','2.','3.'];
   const mvBadge = rc => {
     if (rc == null) return '<span class="text-slate-300 text-xs">—</span>';
     if (rc === 0)   return '<span class="text-slate-400 text-xs font-bold">●</span>';
@@ -772,7 +772,7 @@ function renderMgtReport(j, jM, jF) {
       <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}${_watch(b) ? ` <span class="text-[10px] px-1 rounded whitespace-nowrap" style="background:#fee2e2;color:var(--bad-ink)">${T.watch}</span>` : ''}</td>
       <td class="py-2 text-right" style="min-width:96px">
         <span class="font-semibold" title="${baht(b.revenue)}">${bigBaht(b.revenue)}</span>
-        <span style="display:inline-block;height:4px;border-radius:2px;background:#7c3aed;vertical-align:middle;margin-left:6px;width:${Math.max(4, Math.round((b.revenue || 0) / _brMax * 48))}px"></span>
+        <span style="display:inline-block;height:4px;border-radius:2px;background:var(--accent);vertical-align:middle;margin-left:6px;width:${Math.max(4, Math.round((b.revenue || 0) / _brMax * 48))}px"></span>
       </td>
       <td class="py-2 text-right">${num(b.customers)}</td>
       <td class="py-2 text-right">${baht(b.rev_per_head)}</td>
@@ -784,7 +784,7 @@ function renderMgtReport(j, jM, jF) {
   const _brDecl = _brs.filter(b => b.wow_pct != null).slice().sort((a, b) => a.wow_pct - b.wow_pct)[0];
   const branchVerdict = _brs.length ? `<p class="text-xs mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="text-slate-500">${_brs.length} ${T.branchesWord}</span>
-      ${_brTop ? `<span>🥇 <b>${esc(_brTop.branch)}</b> <span class="text-slate-400" title="${baht(_brTop.revenue)}">${bigBaht(_brTop.revenue)}</span></span>` : ''}
+      ${_brTop ? `<span>1. <b>${esc(_brTop.branch)}</b> <span class="text-slate-400" title="${baht(_brTop.revenue)}">${bigBaht(_brTop.revenue)}</span></span>` : ''}
       ${(_brDecl && _brDecl.wow_pct != null && _brDecl.wow_pct < 0) ? `<span style="color:var(--bad-ink)">${T.watch}: <b>${esc(_brDecl.branch)}</b> ${wow(_brDecl.wow_pct)}</span>` : ''}
     </p>` : '';
   const branchTbl = branchVerdict + `<div class="overflow-x-auto"><table class="w-full text-sm">
@@ -809,7 +809,7 @@ function renderMgtReport(j, jM, jF) {
     const cmp = (o.prev_bills != null)
       ? `<p class="text-[10px] mt-1 text-slate-400 flex items-center gap-1 flex-wrap"><span>${compShort}:</span><span class="text-slate-500">${num(o.prev_bills)} ${T.bills}</span>${wow(o.bills_wow)}<span class="text-slate-300">·</span><span class="text-slate-500">${baht(o.prev_baht)}</span>${wow(o.baht_wow)}</p>`
       : '';
-    return `<div class="rounded-xl p-4" style="border:1px solid var(--border);border-left:3px solid ${bad ? '#dc2626' : '#10b981'}">
+    return `<div class="rounded-xl p-4" style="border:1px solid var(--border);border:1px solid ${bad ? '#dc2626' : '#10b981'}">
         <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
         <p class="text-xl font-bold ${bad ? 'text-rose-600' : 'text-slate-700'}">${num(o.bills || 0)} <span class="text-xs font-normal text-slate-400">${T.bills}</span></p>
         <p class="text-xs text-slate-500">${baht(o.baht || 0)}${top ? ' · ' + top : ''}</p>
@@ -835,7 +835,7 @@ function renderMgtReport(j, jM, jF) {
     ? (isTH ? `เด่นสุด: <b>${esc(_worst.lbl)}</b> ${num(_worst.o.bills)} บิล (${bigBaht(_worst.o.baht)})${_wBr}`
             : `Biggest: <b>${esc(_worst.lbl)}</b> ${num(_worst.o.bills)} bills (${bigBaht(_worst.o.baht)})${_wBr}`)
     : (isTH ? 'ไม่พบบิลผิดปกติในช่วงนี้' : 'No abnormal bills flagged this period');
-  const leakTotalBanner = `<div class="rounded-xl p-4 mb-3" style="border:1px solid var(--border);border-left:3px solid ${_sevCol};background:#f8fafc">
+  const leakTotalBanner = `<div class="rounded-xl p-4 mb-3" style="border:1px solid var(--border);border:1px solid ${_sevCol};background:#f8fafc">
       <div class="flex items-end justify-between flex-wrap gap-2">
         <div>
           <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : isMonthly ? T.monthWord : T.weekWord}</p>
@@ -906,8 +906,8 @@ function renderMgtReport(j, jM, jF) {
       </li>`).join('');
     return `<div class="mt-4 pt-3 border-t border-slate-100">
         <p class="text-xs font-semibold mb-1" style="color:#d97706">${isTH
-          ? `⚠️ เมนูที่ยังไม่มีต้นทุน — ${num(cc.uncosted_plates)} จาน (${cc.skus_uncosted} รายการ) ทำให้ต้นทุนอาหารต่ำกว่าจริงราว ฿${num(cc.est_missing_cost)}`
-          : `⚠️ Dishes with no unit cost — ${num(cc.uncosted_plates)} plates (${cc.skus_uncosted} SKUs) understate food cost by about ฿${num(cc.est_missing_cost)}`}</p>
+          ? `⚠ เมนูที่ยังไม่มีต้นทุน — ${num(cc.uncosted_plates)} จาน (${cc.skus_uncosted} รายการ) ทำให้ต้นทุนอาหารต่ำกว่าจริงราว ฿${num(cc.est_missing_cost)}`
+          : `⚠ Dishes with no unit cost — ${num(cc.uncosted_plates)} plates (${cc.skus_uncosted} SKUs) understate food cost by about ฿${num(cc.est_missing_cost)}`}</p>
         <p class="text-[10px] text-slate-400 mb-2">${isTH
           ? 'เรียงตามจำนวนจาน (ไม่ใช่ยอดขาย — เมนูบุฟเฟ่ต์ไม่มีรายได้รายบรรทัด) · เติมต้นทุนที่ ตั้งค่า → Cost Management'
           : 'ranked by plates, not revenue (buffet dishes carry no line revenue) · add costs in Settings → Cost Management'}</p>
@@ -922,7 +922,7 @@ function renderMgtReport(j, jM, jF) {
 
   // §8 — Peak Hours & Dayparts
   const PK = j.peak || {};
-  const dpColor = { Lunch: '#f59e0b', Dinner: '#6366f1', Other: '#94a3b8' };
+  const dpColor = { Lunch: '#f59e0b', Dinner: '#4a70b0', Other: '#94a3b8' };
   const hh = n => String(n).padStart(2, '0') + ':00';
   const miniBars = (items, valKey, lblKey, hi) => {
     const mx = Math.max(...items.map(i => i[valKey] || 0), 1);
@@ -1010,9 +1010,9 @@ function renderMgtReport(j, jM, jF) {
       <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">${T.mfPriority}</p>
       <div class="grid grid-cols-2 gap-3">
         <div class="rounded-xl p-3" style="background:#f0fdfa;border:1px solid #5eead4">
-          <p class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mb-2">🏢 ${T.master}</p>${fmtActs(jM)}</div>
-        <div class="rounded-xl p-3" style="background:#faf5ff;border:1px solid #c4b5fd">
-          <p class="text-[10px] font-bold uppercase tracking-wide text-violet-700 mb-2">🔗 ${T.franchise}</p>${fmtActs(jF)}</div>
+          <p class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mb-2">${T.master}</p>${fmtActs(jM)}</div>
+        <div class="rounded-xl p-3" style="background:#faf5ff;border:1px solid var(--border)">
+          <p class="text-[10px] font-bold uppercase tracking-wide text-violet-700 mb-2">${T.franchise}</p>${fmtActs(jF)}</div>
       </div></div>`;
   })();
 
@@ -1087,13 +1087,13 @@ function renderMgtReport(j, jM, jF) {
       const mv  = (j.has_prev && mvs.length) ? ' โดยสาขาที่เปลี่ยนแปลงมากสุดคือ <b>' + esc(mvs[0].branch) +'</b> ที่ ' + signed(mvs[0].wow_pct) : '';
       const sh  = best.share_pct != null ? ' (' + best.share_pct.toFixed(0) + '% ของทั้งเครือ)' : '';
       const cmp = j.has_prev ? ' ' + upN + ' สาขาเติบโตและ ' + dnN + ' สาขาลดลงเทียบ' + compW + mv : '';
-      ex.push({c:'#7c3aed', lead:'สาขา', body:'จาก ' + brs.length + ' สาขา <b>' + esc(best.branch) +'</b> นำด้วย ' +
+      ex.push({c:'#7a66b8', lead:'สาขา', body:'จาก ' + brs.length + ' สาขา <b>' + esc(best.branch) +'</b> นำด้วย ' +
               baht(best.revenue) + sh + ' ขณะที่ <b>' + esc(worst.branch) +'</b> ต่ำสุดที่ ' + baht(worst.revenue) + cmp});
     } else {
       const mv  = (j.has_prev && mvs.length) ? '; the biggest swing was <b>' + esc(mvs[0].branch) +'</b> at ' + signed(mvs[0].wow_pct) : '';
       const sh  = best.share_pct != null ? ' (' + best.share_pct.toFixed(0) + '% of the chain)' : '';
       const cmp = j.has_prev ? ' ' + upN + ' grew and ' + dnN + ' declined vs ' + compW + mv + '.' : '';
-      ex.push({c:'#7c3aed', lead:'Branches.', body:'Of ' + brs.length + ' branch' + (brs.length > 1 ? 'es' : '') + ', <b>' + esc(best.branch) +'</b> led with ' +
+      ex.push({c:'#7a66b8', lead:'Branches.', body:'Of ' + brs.length + ' branch' + (brs.length > 1 ? 'es' : '') + ', <b>' + esc(best.branch) +'</b> led with ' +
               baht(best.revenue) + sh + ', while <b>' + esc(worst.branch) +'</b> trailed at ' + baht(worst.revenue) + '.' + cmp});
     }
   }
@@ -1106,14 +1106,14 @@ function renderMgtReport(j, jM, jF) {
         : ' (ยังไม่ตั้งเป้ายอดขาย)';
       const proj = mc ? ' เป็นยอดรวมสุดท้ายของ ' + P.month : ' ที่จังหวะปัจจุบัน' + (P.proj_method === 'dow' ? ' (ถ่วงตามวันในสัปดาห์)' : '') + ' คาดว่าทั้งเดือนจะปิดที่ราว <b>' + baht(P.projected) + '</b>';
       const lead2 = mc ? 'ทั้งเดือน' : 'สะสมเดือนนี้ (' + P.month + ')';
-      ex.push({c:'#4f46e5', lead:'จังหวะทั้งเดือน', body:lead2 + 'อยู่ที่ <b>' + baht(P.mtd_revenue) + '</b> จาก ' + (P.mtd_days || 0) + ' วัน' + proj + tgt});
+      ex.push({c:'#4a70b0', lead:'จังหวะทั้งเดือน', body:lead2 + 'อยู่ที่ <b>' + baht(P.mtd_revenue) + '</b> จาก ' + (P.mtd_days || 0) + ' วัน' + proj + tgt});
     } else {
       const tgt  = P.target
         ? ' — ' + (P.proj_vs_target_pct != null ? '<b>' + P.proj_vs_target_pct.toFixed(0) + '%</b> of the ' + baht(P.target) + ' target' : 'against a ' + baht(P.target) + ' target')
         : ' (no revenue target set)';
       const proj = mc ? 'That is the final total for ' + P.month : 'At the current pace' + (P.proj_method === 'dow' ? ' (day-of-week weighted)' : '') + ' the month should close near <b>' + baht(P.projected) + '</b>';
       const lead2 = mc ? 'The month' : 'Month-to-date (' + P.month + ')';
-      ex.push({c:'#4f46e5', lead:'Month pace.', body:lead2 + ' stands at <b>' + baht(P.mtd_revenue) + '</b> over ' + (P.mtd_days || 0) +
+      ex.push({c:'#4a70b0', lead:'Month pace.', body:lead2 + ' stands at <b>' + baht(P.mtd_revenue) + '</b> over ' + (P.mtd_days || 0) +
               ' day' + ((P.mtd_days || 0) === 1 ? '' : 's') + '. ' + proj + tgt + '.'});
     }
   }
@@ -1240,7 +1240,7 @@ function renderMgtReport(j, jM, jF) {
       : `Top branch <b>${esc(_sorted[0].branch)}</b> · lagging <b>${esc(_sorted[_sorted.length - 1].branch)}</b>`);
   }
   const _head = `${isTH ? 'ยอดขาย' : 'Sales'} <b>${bigBaht(H.revenue)}</b> · ${dLbl} ${wow(H.rev_wow_pct)} · GP <b>${G.gp_pct != null ? G.gp_pct.toFixed(0) + '%' : '—'}</b>${_fc != null ? ` · Food <b>${_fc.toFixed(1)}%</b>` : ''}`;
-  const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border-left:3px solid ${_tone}">
+  const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border:1px solid ${_tone}">
       <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${textInk(_tone)}">${T.tldr}</p>
       <p class="text-sm text-slate-700 mb-2">${_head}</p>
       <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${_tone}">•</span><span>${b}</span></li>`).join('')}</ul>
@@ -1326,7 +1326,7 @@ function renderMgtReport(j, jM, jF) {
   // split view, else the current scope. Matrix: rows = branches, columns = channels
   // (colour-keyed), each cell = that channel's % of the branch total (dominant bold);
   // last column = branch total; footer = the whole-scope mix.
-  const _payColors = ['#0891b2','#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#0d9488','#64748b'];
+  const _payColors = ['#0891b2','#4a70b0','#f59e0b','#10b981','#ef4444','#7a66b8','#ec4899','#0d9488','#64748b'];
   const _payPD = (hasSplit && jM && jM.payment && jM.payment.available) ? jM.payment
                : (j.payment && j.payment.available ? j.payment : null);
   const _payScope = (hasSplit && jM && jM.payment && jM.payment.available) ? T.masterBranches
@@ -1435,7 +1435,7 @@ function renderMgtReport(j, jM, jF) {
       }
       if (!bits.length) return '';
       const shareTxt = TD.pax ? ` <span style="color:#92400e">(${(totPax / TD.pax * 100).toFixed(1)}% ${isTH ? 'ของคนทานทั้งหมด' : 'of all covers'})</span>` : '';
-      return `<div class="mt-4 rounded-xl mgt-atom" style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d97706;padding:11px 14px">
+      return `<div class="mt-4 rounded-xl mgt-atom" style="background:#fffbeb;border:1px solid #fde68a;border:1px solid #d97706;padding:11px 14px">
           <p class="text-[12px] font-extrabold mb-2" style="color:#92400e">${T.promoTitle}${shareTxt}</p>
           <ul class="space-y-1.5" style="font-size:12.5px;color:#1f2937">${bits.map(([k, b]) =>
             `<li class="flex gap-2"><span style="color:${C[k]};font-weight:700">•</span><span>${b}</span></li>`).join('')}</ul>
@@ -1463,7 +1463,7 @@ function renderMgtReport(j, jM, jF) {
   const _hh = h => String(h).padStart(2, '0') + ':00';
   const v3 = (() => {
     const parts = [];
-    let col = '#4f46e5';
+    let col = '#4a70b0';
     if (P.proj_vs_target_pct != null) {
       const p = P.proj_vs_target_pct;
       col = p >= 100 ? '#059669' : p >= 90 ? '#d97706' : '#dc2626';
@@ -1543,7 +1543,7 @@ function renderMgtReport(j, jM, jF) {
     const R = V.response || {}, A = V.actions || {}, S = V.survey || {};
     const tile = (l, v, d, sub) => `<div class="rounded-lg p-3" style="background:var(--bg-card);border:1px solid var(--border)"><p class="text-[10px] uppercase tracking-wide text-slate-400">${l}</p><p class="text-lg font-bold text-slate-800 leading-tight">${v} ${d}</p>${sub ? `<p class="text-[10px] text-slate-500 mt-0.5">${sub}</p>` : ''}</div>`;
     const tiles = `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">` +
-      tile(T.vVoices, V.voices, delta(V.voices, V.prev_voices, 0), `${V.positives || 0} 😊 · ${V.negatives || 0} 😟`) +
+      tile(T.vVoices, V.voices, delta(V.voices, V.prev_voices, 0), `${V.positives || 0} · ${V.negatives || 0}`) +
       tile(T.vNeg, V.neg_pct != null ? V.neg_pct + '%' : '—', delta(V.neg_pct, V.prev_neg_pct, 1, ' pt', true), '') +
       tile(T.vStars, V.avg_rating != null ? V.avg_rating.toFixed(2) : '—', delta(V.avg_rating, V.prev_avg_rating, 2), '') +
       tile(T.vResp, R.answerable ? R.rate + '%' : '—', delta(R.rate, V.prev_response_rate, 0, ' pt'), R.answerable ? `${R.answered}/${R.answerable}${R.median_days != null ? ' · ' + R.median_days + 'd' : ''}` : '') +
@@ -1573,14 +1573,14 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s0',  c:'#0f172a', brk:true, t:T.execSummary, h:execInner },
     { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
     { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
-    { id:'mgt-s3',  c:'#4f46e5', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
+    { id:'mgt-s3',  c:'#4a70b0', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
     { id:'mgt-s4',  c:'#0891b2', land:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
     // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
     // page of its own anyway, and letting it begin at the foot of §4's page
     // stranded four rows there and carried the other twenty-four over — a table
     // split 4/24 for no reason. Short tables (a single-branch report) still flow
     // inline rather than burning a sheet on six rows.
-    { id:'mgt-s5',  c:'#7c3aed', land:true, brk: _brs.length >= 12, t:T.s5, h:branchTbl },
+    { id:'mgt-s5',  c:'#7a66b8', land:true, brk: _brs.length >= 12, t:T.s5, h:branchTbl },
     { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
     { id:'mgt-s7',  c:'#059669', land:true, t:T.s7, h:menu },
     { id:'mgt-s8',  c:'#0284c7', land:true, t:T.s8, h:v8 + peakWithSplit },
@@ -1628,7 +1628,7 @@ function renderMgtReport(j, jM, jF) {
   // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
   // Rendered here (after innerHTML so #mgtTierDrivers exists); the tier buttons
   // call window._mgtRenderDrivers to re-render in place without a refetch.
-  // §11 trend sub-block — the same monthly/weekly series the 🧪 tab draws, so a
+  // §11 trend sub-block — the same monthly/weekly series the tab draws, so a
   // tier drifting over time is visible without leaving the report. Rendered after
   // innerHTML so #mgtTierTrend exists. The report is a white island in dark mode
   // (body.dark #mgtRptBody re-declares the tokens), so the charts are forced light.
@@ -1638,7 +1638,7 @@ function renderMgtReport(j, jM, jF) {
     if (!slot || !(TD.trend_month || []).length) return;
     const WM = TD.trend_week_meta || {};
     const OLD = WM.old_suffix || '@old';
-    const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
+    const PAL = ['#b0472d', '#0e7490', '#7a66b8', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
     const colOf = {};
     (TD.rows || []).forEach((r, i) => { colOf[r.tier] = PAL[i % PAL.length]; });
     let gran = 'month';
@@ -1659,7 +1659,7 @@ function renderMgtReport(j, jM, jF) {
           <div class="text-[12px] font-bold" style="color:#334155">${esc(T.tierTrendTitle)}</div>
           <div class="flex gap-1">
             ${['month', 'week'].map(g => `<button data-g="${g}" class="text-[11px] rounded px-2 py-0.5 border"
-               style="${gran === g ? 'background:#eef2ff;font-weight:700;border-color:#6366f1'
+               style="${gran === g ? 'background:var(--accent-soft);font-weight:700;border-color:var(--accent)'
                                    : 'border-color:#e2e8f0;color:#64748b'}">${g === 'month' ? T.tierGranMonth : T.tierGranWeek}</button>`).join('')}
           </div>
         </div>
@@ -1678,7 +1678,7 @@ function renderMgtReport(j, jM, jF) {
 
       const tip = i => (rows[i] && rows[i].partial)
         ? `⚠ ${T.tierTrendPartialTip.replace('{n}', rows[i].days)}` : '';
-      // The 🔍 dive-in reads this (see _diveMgtTierMix below) — the generic
+      // The dive-in reads this (see _diveMgtTierMix below) — the generic
       // analyzer would treat a 100%-stacked share chart as a revenue trend.
       window._mgtTierDive = { TD, weekly, rows, keys, label };
       _mgtRegisterTierDives();
@@ -1749,7 +1749,7 @@ function renderMgtReport(j, jM, jF) {
         <td class="py-1 px-2 tabular-nums whitespace-nowrap">${bar(m.cogs_head, mmax)}${shareCell(m.share_pct)}</td>
         <td class="py-1 pl-2 text-right tabular-nums text-slate-500">${num(m.qty_100)}</td></tr>`).join('');
       const topg = (cur.groups || [])[0];
-      const insight = topg ? `<p class="text-[11.5px] mt-1 mb-2" style="color:#b45309">💡 ${isTH
+      const insight = topg ? `<p class="text-[11.5px] mt-1 mb-2" style="color:#b45309">${isTH
         ? `${clean(topg.label)} คิดเป็น <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> ของต้นทุนอาหาร tier ${esc(cur.focus_label)} — จุดคุมต้นทุนสำคัญที่สุด`
         : `${clean(topg.label)} is <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> of this tier's food cost (${esc(cur.focus_label)}) — the single biggest lever`}</p>` : '';
       slot.innerHTML = `<div class="pt-3 border-t border-slate-200">
@@ -1905,7 +1905,7 @@ function renderMgtReport(j, jM, jF) {
     const ac     = d => d == null ? '#64748b' : d >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     const af     = d => d == null ? '—' : (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d).toFixed(1) + '%';
     const pill   = (lbl, val, sub = '', sc = '#64748b') =>
-      `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+      `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
          <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px">${lbl}</div>
          <div style="font-size:13px;font-weight:800;color:#1e293b;white-space:nowrap">${val}</div>
          ${sub ? `<div style="font-size:10px;font-weight:600;color:${sc};margin-top:2px">${sub}</div>` : ''}
@@ -1980,7 +1980,7 @@ function renderMgtReport(j, jM, jF) {
           s3 = ` Master is running <b style="color:${(mVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(mVs)} its average</b> and franchise <b style="color:${(fVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(fVs)} its average</b>.`;
         }
       }
-      analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border-left:3px solid ${dirCol};border-radius:8px">
+      analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border:1px solid ${dirCol};border-radius:4px">
         <p style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:700;margin-bottom:3px">${T.trendAnalysis}</p>
         <p style="font-size:11.5px;line-height:1.55;color:#334155">${s1}${s2}${s3}</p></div>`;
     }
@@ -2033,7 +2033,7 @@ function renderMgtReport(j, jM, jF) {
              <span style="font-size:8px;font-weight:800;color:#475569">${title}</span>
              <span style="font-size:8px;font-weight:800;color:${currC}">${fmtM(vals[li] || 0)}</span></div>`
         : '';
-      return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:8px;padding:6px 8px">
+      return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:6px 8px">
           ${hdr}
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">
             ${grid}${ylab}${bars}${maLine}${vlab}${xlab}
@@ -2049,7 +2049,7 @@ function renderMgtReport(j, jM, jF) {
 
 // loadActiveTab() now lives in 01-core.js and dispatches through TABS.
 
-// ── 🔍 dive-in for §11 Buffet Price Tiers ────────────────────────────────────
+// ── dive-in for §11 Buffet Price Tiers ────────────────────────────────────
 // The generic analyzer reads dataset[0] only and treats every chart as revenue
 // over time — on the 100%-stacked tier mix it reported "Total 2" (the ฿1,299
 // band's 1.8%) and promo-calendar advice. These read the report's own tier
@@ -2082,35 +2082,35 @@ async function _diveMgtTierMix() {
   const unit = D.weekly ? 'สัปดาห์' : 'เดือน';
   const paxChg = (TD.pax != null && TD.pax_prev) ? (TD.pax - TD.pax_prev) / TD.pax_prev * 100 : null;
 
-  return _diveSection('อ่านกราฟนี้ยังไง', '📖',
-      _diveBullet('📊', `แต่ละแท่ง = ลูกค้าบุฟเฟ่ต์ <b>100%</b> ของ${unit}นั้น แบ่งตามราคาที่จ่าย — ` +
+  return _diveSection('อ่านกราฟนี้ยังไง', '',
+      _diveBullet('', `แต่ละแท่ง = ลูกค้าบุฟเฟ่ต์ <b>100%</b> ของ${unit}นั้น แบ่งตามราคาที่จ่าย — ` +
         'แถบราคาสูงหนาขึ้น = รายได้/หัวสูงขึ้น โดยไม่ต้องขึ้นราคา') +
-      (nPeriods <= 1 ? _diveBullet('🗓️', `ตอนนี้มีข้อมูลแค่ <b>${nPeriods} ${unit}</b> — ` +
+      (nPeriods <= 1 ? _diveBullet('', `ตอนนี้มีข้อมูลแค่ <b>${nPeriods} ${unit}</b> — ` +
         'กดปุ่ม <b>รายสัปดาห์</b> เหนือกราฟเพื่อดูว่าสัดส่วนกำลังขยับไปทางไหน', 'info') : '')) +
-    _diveSection('สัดส่วนคนทาน · ช่วงรายงาน', '👥',
+    _diveSection('สัดส่วนคนทาน · ช่วงรายงาน', '',
       rows.map(r => _diveMetric(esc(r.label),
         `${(r.share || 0).toFixed(1)}%` +
         (r.share_prev != null ? ` <span style="font-weight:400;color:var(--text-muted)">${_mtPP((r.share || 0) - r.share_prev)}</span>` : '') +
         (r.gp_head != null ? ` <span style="font-weight:400;color:var(--text-muted)">· GP ${_mtB(r.gp_head)}/หัว</span>` : ''))).join('') +
       (TD.pax != null ? _diveMetric('ลูกค้าบุฟเฟ่ต์ทั้งหมด', Number(TD.pax).toLocaleString('en-US') + ' คน' +
         (paxChg != null ? ` <span style="font-weight:400;color:var(--text-muted)">(${paxChg >= 0 ? '+' : ''}${paxChg.toFixed(1)}% vs ช่วงก่อน)</span>` : '')) : '')) +
-    _diveSection('แปลว่าอะไร', '💡', [
-      top ? _diveBullet('🥇', `ลูกค้าส่วนใหญ่ <b>${(top.share || 0).toFixed(0)}%</b> เลือก <b>${esc(top.label)}</b>` +
+    _diveSection('แปลว่าอะไร', '', [
+      top ? _diveBullet('1.', `ลูกค้าส่วนใหญ่ <b>${(top.share || 0).toFixed(0)}%</b> เลือก <b>${esc(top.label)}</b>` +
         (top.rev_head != null ? ` (รายได้ ${_mtB(top.rev_head)}/หัว · ต้นทุนอาหาร ${_mtB(top.cogs_head)}/หัว)` : '') +
         ' — ตัวเลขรวมของบุฟเฟ่ต์จะขยับตาม tier นี้เป็นหลัก') : '',
-      premium.length ? _diveBullet(premShare < 20 ? '⚠️' : '✅',
+      premium.length ? _diveBullet(premShare < 20 ? '⚠' : '✓',
         `สองราคาบนสุด (${premium.map(r => esc(r.label)).join(' + ')}) รวมกัน <b>${premShare.toFixed(1)}%</b> ของคนทาน` +
         (premShare < 20 ? ' — ยังเป็นส่วนน้อย มีช่องให้ upsell' : ''), premShare < 20 ? 'warn' : 'good') : '',
-      upGp != null ? _diveBullet('💰',
+      upGp != null ? _diveBullet('',
         `ถ้าลูกค้า <b>100 คน</b> ขยับจาก ${esc(from.label)} ขึ้นไป ${esc(to.label)} = GP เพิ่มราว <b>${_mtB(upGp * 100)}</b> ` +
         `(${_mtB(from.gp_head)} → ${_mtB(to.gp_head)}/หัว) — ใช้ตั้งเป้าเชียร์ขายของพนักงานได้`, upGp > 0 ? 'good' : 'warn') : '',
-      shift && Math.abs(shift.dv) >= 0.5 ? _diveBullet(shift.dv > 0 ? '📈' : '📉',
+      shift && Math.abs(shift.dv) >= 0.5 ? _diveBullet(shift.dv > 0 ? '▲' : '▼',
         `เทียบช่วงก่อน ขยับมากสุดคือ <b>${esc(shift.r.label)}</b> ${_mtPP(shift.dv)}`, 'info')
-        : (hasPrev ? _diveBullet('➡️', 'สัดส่วนแทบไม่เปลี่ยนจากช่วงก่อน (ไม่มี tier ไหนขยับเกิน 0.5 pp)') : ''),
-      TD.mix_effect != null ? _diveBullet(TD.mix_effect < 0 ? '🔻' : '🔺',
+        : (hasPrev ? _diveBullet('→', 'สัดส่วนแทบไม่เปลี่ยนจากช่วงก่อน (ไม่มี tier ไหนขยับเกิน 0.5 pp)') : ''),
+      TD.mix_effect != null ? _diveBullet(TD.mix_effect < 0 ? '▼' : '▲',
         `ผลจากการเปลี่ยน mix อย่างเดียว ${TD.mix_effect < 0 ? 'กด' : 'ดัน'}รายได้/หัว <b>${_mtB(Math.abs(TD.mix_effect))}</b> เทียบช่วงก่อน`,
         TD.mix_effect < 0 ? 'bad' : 'good') : '',
-      promo && (promo.share || 0) >= 3 ? _diveBullet('🏷️',
+      promo && (promo.share || 0) >= 3 ? _diveBullet('',
         `<b>${esc(promo.label)}</b> ${(promo.share || 0).toFixed(1)}% = ลูกค้าที่ไม่ได้จ่ายราคาป้าย (โปรฯ คูปอง ราคาพิเศษ) — ` +
         'ถ้าก้อนนี้โตขึ้นเรื่อย ๆ ให้ดูหัวข้อส่วนลดคู่กัน', (promo.share || 0) >= 10 ? 'warn' : 'info') : '',
     ].filter(Boolean).join(''));
@@ -2125,21 +2125,21 @@ async function _diveMgtTierCogs() {
     .map(r => ({ r, dv: r.cogs_head - r.cogs_head_prev }))
     .sort((a, b) => Math.abs(b.dv) - Math.abs(a.dv))[0];
   const best = priced.filter(r => r.gp_head != null).sort((a, b) => b.gp_head - a.gp_head)[0];
-  return _diveSection('อ่านกราฟนี้ยังไง', '📖',
-      _diveBullet('📈', 'แต่ละเส้น = <b>ต้นทุนอาหารต่อหัว</b> ของลูกค้าแต่ละราคา · ปกติเส้นราคาแพงอยู่บน — ' +
+  return _diveSection('อ่านกราฟนี้ยังไง', '',
+      _diveBullet('▲', 'แต่ละเส้น = <b>ต้นทุนอาหารต่อหัว</b> ของลูกค้าแต่ละราคา · ปกติเส้นราคาแพงอยู่บน — ' +
         'ถ้าเส้นราคาถูกไต่ขึ้นมาใกล้เส้นราคาแพง แปลว่าลูกค้าราคาถูกกำลังกินเมนูแพงเยอะ')) +
-    _diveSection('ต่อหัว · ช่วงรายงาน', '💸',
+    _diveSection('ต่อหัว · ช่วงรายงาน', '',
       priced.map(r => _diveMetric(esc(r.label),
         `${_mtB(r.cogs_head)} <span style="font-weight:400;color:var(--text-muted)">· food ${r.food_pct != null ? r.food_pct + '%' : '—'}</span>`,
         r.food_pct >= 40 ? 'bad' : '')).join('')) +
-    _diveSection('แปลว่าอะไร', '💡', [
-      hot.length ? _diveBullet('🔥', `food cost ≥ 40%: ${hot.map(r => `<b>${esc(r.label)}</b> (${r.food_pct}%)`).join(', ')} — ` +
+    _diveSection('แปลว่าอะไร', '', [
+      hot.length ? _diveBullet('', `food cost ≥ 40%: ${hot.map(r => `<b>${esc(r.label)}</b> (${r.food_pct}%)`).join(', ')} — ` +
         'ดูเมนูที่ดันต้นทุนในตาราง "ตัวขับต้นทุน" ใต้กราฟ แล้วเลือกลดปริมาณหรือปรับสูตร', 'bad')
-        : _diveBullet('✅', 'ไม่มีราคาไหน food cost แตะ 40% ในช่วงนี้', 'good'),
-      moved && Math.abs(moved.dv) >= 1 ? _diveBullet(moved.dv > 0 ? '📈' : '📉',
+        : _diveBullet('✓', 'ไม่มีราคาไหน food cost แตะ 40% ในช่วงนี้', 'good'),
+      moved && Math.abs(moved.dv) >= 1 ? _diveBullet(moved.dv > 0 ? '▲' : '▼',
         `เทียบช่วงก่อน ต้นทุน/หัวขยับมากสุดที่ <b>${esc(moved.r.label)}</b> ${moved.dv > 0 ? '+' : '−'}${_mtB(Math.abs(moved.dv))}/หัว`,
         moved.dv > 0 ? 'bad' : 'good') : '',
-      best ? _diveBullet('💰', `GP ต่อหัวสูงสุดคือ <b>${esc(best.label)}</b> ${_mtB(best.gp_head)}/หัว — ราคาที่ควรเชียร์ขาย`, 'good') : '',
+      best ? _diveBullet('', `GP ต่อหัวสูงสุดคือ <b>${esc(best.label)}</b> ${_mtB(best.gp_head)}/หัว — ราคาที่ควรเชียร์ขาย`, 'good') : '',
     ].filter(Boolean).join(''));
 }
 

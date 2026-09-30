@@ -3,8 +3,8 @@
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-engineering" style="display:none">
   <!-- What is this page? -->
-  <div class="card p-4 mb-5" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
-    <h2 class="text-base font-bold text-slate-800 mb-1">⭐ วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
+  <div class="card p-4 mb-5" style="background:#e8eef7;border:1px solid var(--accent)">
+    <h2 class="text-base font-bold text-slate-800 mb-1">วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
     <p class="text-xs text-slate-600">จัดเมนูเป็น <b>4 กลุ่ม</b> ตาม <b>ความนิยม (จำนวนขาย)</b> และ <b>กำไรต่อจาน</b> พร้อมบอกว่าควรทำอะไรกับแต่ละกลุ่ม · ดูตารางเต็มและกราฟด้านล่างได้</p>
   </div>
 
@@ -18,20 +18,20 @@
 
   <!-- Action board: 4 quadrant cards (the easy-to-read primary view) -->
   <div class="mb-2 flex items-baseline justify-between flex-wrap gap-2">
-    <h2 class="section-title mb-0">🎯 เมนูแต่ละกลุ่ม ควรทำอะไร</h2>
+    <h2 class="section-title mb-0">เมนูแต่ละกลุ่ม ควรทำอะไร</h2>
     <span id="engBoardNote" class="text-xs text-slate-400"></span>
   </div>
   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6" id="engActionBoard"></div>
 
   <!-- Scatter chart (advanced / collapsible) -->
   <details class="card p-5 mb-5" ontoggle="if(this.open){setTimeout(()=>{try{chartInstances['chartEngMatrix'].resize()}catch(e){}},60)}">
-    <summary class="cursor-pointer select-none section-title mb-0">📈 กราฟวิเคราะห์เมนู (สำหรับวิเคราะห์ลึก) — คลิกเพื่อเปิด</summary>
+    <summary class="cursor-pointer select-none section-title mb-0">กราฟวิเคราะห์เมนู (สำหรับวิเคราะห์ลึก) — คลิกเพื่อเปิด</summary>
     <p class="text-xs text-slate-400 mt-2 mb-3">แกน X = ความนิยม (% ของจำนวนขายรวม) · แกน Y = กำไรต่อหน่วย · เส้นแบ่งกลุ่มที่ค่ามัธยฐาน</p>
     <div class="flex flex-wrap gap-3 mb-3 text-xs font-medium">
-      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>⭐ ดาวเด่น — ขายดี กำไรสูง</span>
-      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>🐴 ม้างาน — ขายดี กำไรน้อย</span>
-      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6366f1"></span>🔮 เพชรในตม — ขายน้อย กำไรสูง</span>
-      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>🐕 ตัวถ่วง — ขายน้อย กำไรน้อย</span>
+      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981"></span>ดาวเด่น — ขายดี กำไรสูง</span>
+      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>ม้างาน — ขายดี กำไรน้อย</span>
+      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent)"></span>เพชรในตม — ขายน้อย กำไรสูง</span>
+      <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span>ตัวถ่วง — ขายน้อย กำไรน้อย</span>
       <span class="flex items-center gap-1.5"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#94a3b8"></span>— ไม่มีข้อมูลต้นทุน</span>
     </div>
     <div style="height:340px"><canvas id="chartEngMatrix"></canvas></div>
@@ -42,13 +42,13 @@
   <!-- Detail table -->
   <div class="card p-5 overflow-x-auto">
     <div class="flex items-center gap-3 mb-3 flex-wrap">
-      <h2 class="section-title mb-0">📋 รายละเอียดเมนู</h2>
+      <h2 class="section-title mb-0">รายละเอียดเมนู</h2>
       <div class="flex gap-1 ml-auto">
         <button onclick="filterEng('all')"  id="engFilter-all"  class="subtab-btn active text-xs px-3 py-1">ทั้งหมด</button>
-        <button onclick="filterEng('star')" id="engFilter-star" class="subtab-btn text-xs px-3 py-1">⭐ ดาวเด่น</button>
-        <button onclick="filterEng('plowhorse')" id="engFilter-plowhorse" class="subtab-btn text-xs px-3 py-1">🐴 ม้างาน</button>
-        <button onclick="filterEng('puzzle')" id="engFilter-puzzle" class="subtab-btn text-xs px-3 py-1">🔮 เพชรในตม</button>
-        <button onclick="filterEng('dog')"  id="engFilter-dog"  class="subtab-btn text-xs px-3 py-1">🐕 ตัวถ่วง</button>
+        <button onclick="filterEng('star')" id="engFilter-star" class="subtab-btn text-xs px-3 py-1">ดาวเด่น</button>
+        <button onclick="filterEng('plowhorse')" id="engFilter-plowhorse" class="subtab-btn text-xs px-3 py-1">ม้างาน</button>
+        <button onclick="filterEng('puzzle')" id="engFilter-puzzle" class="subtab-btn text-xs px-3 py-1">เพชรในตม</button>
+        <button onclick="filterEng('dog')"  id="engFilter-dog"  class="subtab-btn text-xs px-3 py-1">ตัวถ่วง</button>
       </div>
     </div>
     <table class="text-xs w-full">

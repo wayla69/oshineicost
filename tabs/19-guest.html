@@ -3,10 +3,10 @@
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-2" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">มุมมอง:</span>
     <select id="guestMonthPicker" onchange="loadGuest(true)"
-      style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:160px">
+      style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:160px">
       <option value="">ทั้งช่วง (ตามฟิลเตอร์ด้านบน)</option>
     </select>
-    <span id="guestRangeBadge" class="text-[11px] px-2 py-0.5 rounded-full" style="background:#eef2ff;color:#4f46e5"></span>
+    <span id="guestRangeBadge" class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--accent-soft);color:var(--accent)"></span>
     <span class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกเดือนเดียวเพื่อโฟกัส หรือเลื่อนเมาส์/ลากเพื่อซูมกราฟแนวโน้ม</span>
   </div>
 
@@ -55,7 +55,7 @@
       <h2 class="section-title">แนวโน้ม SPH รายเดือน</h2>
       <div class="flex items-center gap-2">
         <span class="text-[11px]" style="color:var(--text-muted)">ลาก/สกอร์ลเพื่อซูม · ดับเบิลคลิกเพื่อรีเซ็ต</span>
-        <button onclick="resetSphTrendZoom()" class="text-[11px] px-2 py-1 rounded" style="background:#eef2ff;color:#4f46e5;border:1px solid #c7d2fe">รีเซ็ตซูม</button>
+        <button onclick="resetSphTrendZoom()" class="text-[11px] px-2 py-1 rounded" style="background:var(--accent-soft);color:var(--accent);border:1px solid var(--border)">รีเซ็ตซูม</button>
       </div>
     </div>
     <div style="height:160px"><canvas id="chartSphTrend"></canvas></div>

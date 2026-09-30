@@ -1,10 +1,10 @@
 <div id="tab-ordersetup" style="display:none">
 
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #4f46e5">
+  <div class="card p-4 mb-4" style="background:#e8eef7;border:1px solid var(--accent)">
     <div class="flex items-start gap-3">
-      <span style="font-size:28px">⚙️</span>
+      <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold" style="color:#3730a3">ตั้งค่าการสั่งซื้อ (Order Setup)</h2>
+        <h2 class="text-base font-bold" style="color:var(--accent)">ตั้งค่าการสั่งซื้อ (Order Setup)</h2>
         <p class="text-xs text-slate-600 mt-1">
           <b>ขนาดบรรจุ</b> = 1 หน่วยสั่ง เท่ากับกี่หน่วยนับ (ใช้ปัดปริมาณขึ้นเป็นจำนวนเต็มหน่วยสั่ง) ·
           <b>ปฏิทินเทศกาล</b> = ช่วงที่ต้องสั่งเพิ่ม เช่น สงกรานต์ ปีใหม่ โปรโมชัน
@@ -14,8 +14,8 @@
   </div>
 
   <div class="subtab-bar mb-3">
-    <button class="subtab-btn active" data-osub="pack" onclick="osSetSub('pack')">📦 ขนาดบรรจุ</button>
-    <button class="subtab-btn"        data-osub="cal"  onclick="osSetSub('cal')">🎉 ปฏิทินเทศกาล/โปรโมชัน</button>
+    <button class="subtab-btn active" data-osub="pack" onclick="osSetSub('pack')">ขนาดบรรจุ</button>
+    <button class="subtab-btn"        data-osub="cal"  onclick="osSetSub('cal')">ปฏิทินเทศกาล/โปรโมชัน</button>
   </div>
 
   <!-- ── pack sizes ─────────────────────────────────────────────────── -->
@@ -27,25 +27,25 @@
         <input type="checkbox" id="osPackOnlyMissing" checked onchange="osRenderPacks()"> แสดงเฉพาะที่ยังไม่ตั้ง
       </label>
       <span id="osPackSummary" class="text-xs" style="color:var(--text-muted)"></span>
-      <button onclick="osSavePacks()" class="ml-auto" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">💾 บันทึกที่แก้ไข</button>
+      <button onclick="osSavePacks()" class="ml-auto" style="background:var(--accent);color:#fff;border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกที่แก้ไข</button>
     </div>
 
     <!-- ตั้งค่าทีละมากๆ ทำในหน้าจอไม่ไหว — โหลดออกไปกรอกใน Excel แล้วนำเข้ากลับ -->
     <div class="flex flex-wrap items-center gap-2 mb-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
-      <span class="text-[11px] font-semibold" style="color:var(--text-primary)">📄 ตั้งค่าเป็นชุดด้วย Excel:</span>
-      <button onclick="osPackTemplate(false)" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-              title="ไฟล์นี้มีค่าที่ตั้งไว้แล้วอยู่ครบ — แก้เฉพาะแถวที่ต้องการ แถวที่ไม่แก้จะไม่เปลี่ยน">⬇️ โหลด template (ทั้งหมด)</button>
+      <span class="text-[11px] font-semibold" style="color:var(--text-primary)">ตั้งค่าเป็นชุดด้วย Excel:</span>
+      <button onclick="osPackTemplate(false)" style="background:var(--accent);color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
+              title="ไฟล์นี้มีค่าที่ตั้งไว้แล้วอยู่ครบ — แก้เฉพาะแถวที่ต้องการ แถวที่ไม่แก้จะไม่เปลี่ยน">โหลด template (ทั้งหมด)</button>
       <button onclick="osPackTemplate(true)" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-              title="เฉพาะวัตถุดิบที่ยังไม่ได้ตั้งขนาดบรรจุ">⬇️ เฉพาะที่ยังไม่ตั้ง</button>
-      <label style="background:#7c3aed;color:#fff;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">
-        ⬆️ นำเข้าไฟล์ที่กรอกแล้ว
+              title="เฉพาะวัตถุดิบที่ยังไม่ได้ตั้งขนาดบรรจุ">เฉพาะที่ยังไม่ตั้ง</button>
+      <label style="background:var(--accent);color:#fff;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">
+        นำเข้าไฟล์ที่กรอกแล้ว
         <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="osImportPacks(this)">
       </label>
       <span class="text-[11px]" style="color:var(--text-muted)">ห้ามแก้คอลัมน์ "รหัส" · ลบแถวที่ไม่ต้องการเปลี่ยนออกได้</span>
       <span id="osImportStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="osImportReport" class="mb-3"></div>
-    <div class="card p-3 mb-4 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+    <div class="card p-3 mb-4 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
       กรอก <b>ขนาดบรรจุ</b> = จำนวนหน่วยนับต่อ 1 หน่วยสั่ง (เช่น แซลมอน 1 แพ็ค = 1,000 กรัม ให้กรอก 1000) ·
       <b>ยกลัง</b> = สั่งเป็นจำนวนเท่าของกี่หน่วย (สั่งยกลัง 6 ให้กรอก 6) · <b>ขั้นต่ำ</b> = จำนวนหน่วยสั่งขั้นต่ำของผู้ขาย ·
       รายการที่ยังไม่ตั้งจะใช้หน่วยมาตรฐาน กก./ลิตร ไปก่อน ไม่ได้พังแต่จะสั่งเป็นกิโลแทนแพ็ค
@@ -79,7 +79,7 @@
         <div><label class="text-[11px] block" style="color:var(--text-muted)">ตัวคูณ (เว้นว่าง = คิดจากปีก่อน)</label>
           <input type="number" id="osCalFactor" step="0.05" min="0.5" max="3" placeholder="อัตโนมัติ"
                  style="width:120px;border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
-        <button onclick="osAddEvent()" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">+ เพิ่ม</button>
+        <button onclick="osAddEvent()" style="background:var(--accent);color:#fff;border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">+ เพิ่ม</button>
         <span id="osCalStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>
       <p class="text-[11px] mt-2" style="color:var(--text-muted)">

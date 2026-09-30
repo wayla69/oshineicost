@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   ✅ Go-live checklist (feedback rollout) — a working screen:
+   Go-live checklist (feedback rollout) — a working screen:
    • header: progress ring, phase chips (state-coloured), the Complete button
      (enabled only at 100 %; the server re-checks), start date, who you are
    • rail: one phase at a time (default = the first phase with open steps),
@@ -126,7 +126,7 @@ function _clRender() {
   // header
   document.getElementById('clPct').textContent = prog.pct + '%';
   document.getElementById('clRingArc').setAttribute('stroke-dasharray', `${(prog.pct * 97.4 / 100).toFixed(1)} 100`);
-  const t = document.getElementById('clTitle'); if (t && _clPlan.title) t.textContent = '✅ ' + _clPlan.title;
+  const t = document.getElementById('clTitle'); if (t && _clPlan.title) t.textContent = '✓ ' + _clPlan.title;
   const log = st.log || [];
   const doneCount = _clPlan.phases.filter(ph => _clPhaseStats(ph).complete).length;
   document.getElementById('clLine').textContent = `${prog.done}/${prog.total} ขั้นตอน · เฟสเสร็จ ${doneCount}/${_clPlan.phases.length}` + (log.length ? ` · ล่าสุด ${log[0].by || ''} ${_clFmt(log[0].at)}: ${log[0].detail || log[0].action}` : ' · ยังไม่มีใครเริ่ม');
@@ -140,18 +140,18 @@ function _clRender() {
   document.getElementById('clPhaseChips').innerHTML = chips;
   document.getElementById('clNav').innerHTML = _clPlan.phases.map(ph => { const ps = _clPhaseStats(ph), mode = _clPhaseMode(ph, di);
     const cur = (_clView === 'auto' ? _clCurrentPhase() : _clView) === ph.id;
-    return `<button type="button" class="${cur ? 'active' : ''}" onclick="clSelectPhase('${ph.id}')" title="${_clEsc(ph.name)}"><span>${_clEsc(ph.name.split(' · ')[0])} <small>${_clEsc(_clShort(ph))}</small></span><small>${ps.done}/${ps.total}${mode === 'blocked' ? ' ⚠' : mode === 'waiting' ? ' ⏳' : mode === 'done' ? ' ✓' : ''}</small><span class="bar ${mode}"><i style="width:${ps.pct}%"></i></span></button>`; }).join('');
+    return `<button type="button" class="${cur ? 'active' : ''}" onclick="clSelectPhase('${ph.id}')" title="${_clEsc(ph.name)}"><span>${_clEsc(ph.name.split(' · ')[0])} <small>${_clEsc(_clShort(ph))}</small></span><small>${ps.done}/${ps.total}${mode === 'blocked' ? ' ⚠' : mode === 'waiting' ? '' : mode === 'done' ? ' ✓' : ''}</small><span class="bar ${mode}"><i style="width:${ps.pct}%"></i></span></button>`; }).join('');
   document.getElementById('clViews').innerHTML = [['all', 'ทุกเฟส (ยาว)'], ['open', 'เฉพาะที่ยังค้าง']].map(([k, l]) => `<button type="button" class="${_clView === k ? 'active' : ''}" onclick="clSelectPhase('${k}')"><span>${l}</span></button>`).join('');
   // sign-off banner + button
   const done = document.getElementById('clDone');
   const canReopen = !(_clMe && _clMe.username) || _clMe.role === 'management';
   if (locked) {
     done.style.display = '';
-    done.innerHTML = `<div class="flex flex-wrap items-center gap-3"><span class="text-2xl">🎉</span><div class="flex-1"><b>ปิดสมบูรณ์แล้ว</b> โดย ${_clEsc(st.complete.by || '-')} เมื่อ ${_clEsc(_clFmt(st.complete.at || st.complete.value))} · ทุกขั้นตอน ${prog.total} รายการเสร็จครบ — รายการถูกล็อก แก้ไขไม่ได้</div>${canReopen ? `<button class="cl-ghost" onclick="reopenChecklist()">เปิดแก้ไขอีกครั้ง</button>` : '<span class="text-[11px]" style="color:var(--text-muted)">เปิดแก้ไขอีกครั้งได้เฉพาะผู้บริหาร</span>'}</div>`;
+    done.innerHTML = `<div class="flex flex-wrap items-center gap-3"><span class="text-2xl"></span><div class="flex-1"><b>ปิดสมบูรณ์แล้ว</b> โดย ${_clEsc(st.complete.by || '-')} เมื่อ ${_clEsc(_clFmt(st.complete.at || st.complete.value))} · ทุกขั้นตอน ${prog.total} รายการเสร็จครบ — รายการถูกล็อก แก้ไขไม่ได้</div>${canReopen ? `<button class="cl-ghost" onclick="reopenChecklist()">เปิดแก้ไขอีกครั้ง</button>` : '<span class="text-[11px]" style="color:var(--text-muted)">เปิดแก้ไขอีกครั้งได้เฉพาะผู้บริหาร</span>'}</div>`;
   } else { done.style.display = 'none'; done.innerHTML = ''; }
   const btn = document.getElementById('clComplete');
   btn.disabled = locked || prog.pct !== 100;
-  btn.textContent = locked ? '✅ ปิดสมบูรณ์แล้ว' : (prog.pct === 100 ? '✅ ปิดสมบูรณ์ — ครบทุกขั้นตอน' : `✅ ปิดสมบูรณ์ · เหลืออีก ${prog.total - prog.done}`);
+  btn.textContent = locked ? 'ปิดสมบูรณ์แล้ว' : (prog.pct === 100 ? 'ปิดสมบูรณ์ — ครบทุกขั้นตอน' : `ปิดสมบูรณ์ · เหลืออีก ${prog.total - prog.done}`);
   btn.title = locked ? 'ปิดสมบูรณ์แล้ว' : (prog.pct === 100 ? 'ครบทุกขั้นตอน กดเพื่อปิดสมบูรณ์' : 'ต้องติ๊กครบทุกขั้นตอนก่อน — กด "เฉพาะที่ยังค้าง" เพื่อดูรายการ');
   _clRenderNext(di, locked);
   _clRenderPhases(di, locked);
@@ -172,7 +172,7 @@ function _clRenderNext(di, locked) {
   host.innerHTML = `<div class="flex items-baseline justify-between flex-wrap gap-2"><h3 class="text-sm font-semibold">ทำต่อเลย</h3><span class="text-[11px]" style="color:var(--text-muted)">ขั้นตอนถัดไปตามลำดับแผน${next.length ? ` · เฟสปัจจุบัน ${_clEsc(next[0].ph.name.split(' · ')[0])}` : ''}</span></div>` +
     (next.length ? next.map(n => `<div class="cl-next-item"><span class="k">${_clEsc(n.ph.name.split(' · ')[0])}</span><span><b>${_clEsc(n.s.t)}</b><br><span class="k">${_clEsc(n.tk.name)} · ${_clEsc(n.ph.owner)}</span></span><button class="cl-ghost" onclick="clJump('${n.ph.id}','${n.s.id}')">ไปทำ →</button></div>`).join('') : '<p class="cl-empty mt-1">ติ๊กครบทุกขั้นตอนแล้ว — กดปิดสมบูรณ์ได้</p>') +
     (blocked.length ? `<p class="text-xs mt-2" style="color:#991b1b"><b>ติดปัญหา ${blocked.length} งาน:</b> ${blocked.map(b => `<a href="#" onclick="clJump('${b.ph.id}','${b.tk.steps[0] ? b.tk.steps[0].id : ''}');return false;" style="color:#991b1b;text-decoration:underline">${_clEsc(b.tk.name)}</a>${b.ts.note ? ' (' + _clEsc(b.ts.note.slice(0, 60)) + ')' : ''}`).join(' · ')}</p>` : '') +
-    (waiting.length ? `<p class="text-xs mt-2" style="color:#92400e">⏳ รอฝ่ายภายนอกอนุมัติ: ${waiting.map(ph => _clEsc(_clShort(ph))).join(', ')} — ทำเฟสอื่นระหว่างรอ</p>` : '');
+    (waiting.length ? `<p class="text-xs mt-2" style="color:#92400e">รอฝ่ายภายนอกอนุมัติ: ${waiting.map(ph => _clEsc(_clShort(ph))).join(', ')} — ทำเฟสอื่นระหว่างรอ</p>` : '');
 }
 
 function _clRenderPhases(di, locked) {
@@ -192,7 +192,7 @@ function _clRenderPhases(di, locked) {
     if (onlyOpen && !tasks.length) return '';
     return `<section class="card p-4 mt-4" id="cl-${ph.id}" style="border-top:3px solid ${ps.complete ? '#047857' : mode === 'blocked' ? '#b91c1c' : '#0f766e'}">
       <div class="cl-phase-head"><h3 class="text-base font-bold">${_clEsc(ph.name)}</h3><span class="text-sm font-bold" style="color:#0f766e">${ps.done}/${ps.total}</span>
-        <span class="text-xs" style="color:var(--text-muted)">ผู้รับผิดชอบ: ${_clEsc(ph.owner)} · วันที่ ${ph.days[0] + 1}–${ph.days[1]} ของโครงการ${mode === 'waiting' ? ' · <b style="color:#92400e">⏳ อยู่ในช่วงรออนุมัติ</b>' : ''}</span></div>
+        <span class="text-xs" style="color:var(--text-muted)">ผู้รับผิดชอบ: ${_clEsc(ph.owner)} · วันที่ ${ph.days[0] + 1}–${ph.days[1]} ของโครงการ${mode === 'waiting' ? ' · <b style="color:#92400e">อยู่ในช่วงรออนุมัติ</b>' : ''}</span></div>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">${_clHl(ph.why)}</p>
       ${tasks.map(tk => {
         const ts = _clTaskState(tk);
@@ -254,7 +254,7 @@ async function completeChecklist() {
   try {
     const r = await _clPost(`/api/checklist/${CL_NAME}/complete`, _clBody({}));
     _clState = await getJSON(`/api/checklist/${CL_NAME}`); _clRender();
-    if (typeof notifySuccess === 'function') notifySuccess(r.already ? 'ปิดสมบูรณ์อยู่แล้ว' : 'ปิดสมบูรณ์แล้ว 🎉');
+    if (typeof notifySuccess === 'function') notifySuccess(r.already ? 'ปิดสมบูรณ์อยู่แล้ว' : 'ปิดสมบูรณ์แล้ว');
   } catch (e) {
     const d = e.detail || {}, missing = d.missing || [];
     notifyError((d.message || e.message) + (missing.length ? ' — ' + missing.slice(0, 3).map(m => m.title).join(' · ') + (missing.length > 3 ? ' …' : '') : ''));

@@ -2,6 +2,21 @@
 // Sequential load order matters: index.html loads 01→09; classic scripts
 // share one global scope, so this equals the original single file.
 
+// Stroke icons for icon-only buttons (24 grid, 1.75 stroke, the nav icons' style). Formal theme:
+// no emoji as icons. Style: .ui-icon in docs/ui-kit/theme-formal.css.
+const _svgIcon = d => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  search: _svgIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
+  moon: _svgIcon('<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>'),
+  sun: _svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  key: _svgIcon('<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/>'),
+  trash: _svgIcon('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>'),
+  save: _svgIcon('<path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>'),
+  phone: _svgIcon('<rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>'),
+  print: _svgIcon('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
+  download: _svgIcon('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+};
+
 // Oshinei Dashboard — application JS (split out of index.html,
 // lean-overhaul Phase 4, 2026-07-20). Served at /app.js with
 // Cache-Control: no-cache so deploys can never leave stale JS cached.
@@ -44,7 +59,7 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
     };
     return send(localStorage.getItem(TOK_KEY) || '').then(res => {
       if (res.status !== 403) return observe(url, res);
-      const tok = (window.prompt('🔒 ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
+      const tok = (window.prompt('ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
       if (!tok) return res;                       // cancelled → surface the 403
       localStorage.setItem(TOK_KEY, tok);
       return send(tok).then(res2 => {
@@ -116,12 +131,12 @@ function showStartCard(role) {
   if (!card) { card = document.createElement('div'); card.id = 'homeStartCard'; host.insertBefore(card, host.firstChild); }
   card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
   card.innerHTML = `<div class="flex items-start justify-between gap-3"><div>
-      <div class="text-base font-bold" style="color:var(--text-primary)">🚀 เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
+      <div class="text-base font-bold" style="color:var(--text-primary)">เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
       <div class="text-xs mt-1" style="color:var(--text-muted)">สามหน้าที่บทบาทนี้ใช้บ่อยที่สุด กดเปิดได้เลย — การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
       <button onclick="dismissStartCard()" class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary)">เข้าใจแล้ว ✕</button></div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why], i) => `<button onclick="switchTab('${t}')" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
       <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(PAGE_TITLES[t] || t)}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
-    <div class="text-xs mt-3" style="color:var(--text-muted)">คู่มือฉบับเต็ม: <a href="#" onclick="switchTab('manual');return false" class="underline">📖 คู่มือการใช้งาน</a></div>`;
+    <div class="text-xs mt-3" style="color:var(--text-muted)">คู่มือฉบับเต็ม: <a href="#" onclick="switchTab('manual');return false" class="underline">คู่มือการใช้งาน</a></div>`;
   card.hidden = false;
 }
 function dismissStartCard() {
@@ -372,9 +387,9 @@ async function loadUsers() {
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ปิด</span>'}</td>
       <td class="py-2 pr-4 text-xs" style="color:var(--text-muted)">${(u.created_at||'').slice(0,10)}</td>
       <td class="py-2 text-right whitespace-nowrap">
-        <button onclick="resetUserPassword('${u.username}')" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)" title="ตั้งรหัสผ่านใหม่">🔑</button>
+        <button onclick="resetUserPassword('${u.username}')" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)" title="ตั้งรหัสผ่านใหม่">${ICON.key}</button>
         ${me ? '' : `<button onclick="toggleUserActive('${u.username}', ${u.active?0:1})" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)">${u.active?'ปิดใช้':'เปิดใช้'}</button>`}
-        ${me ? '' : `<button onclick="deleteUser('${u.username}')" class="text-xs px-2 py-1 rounded border text-rose-600" style="border-color:var(--border)" title="ลบผู้ใช้">🗑️</button>`}
+        ${me ? '' : `<button onclick="deleteUser('${u.username}')" class="text-xs px-2 py-1 rounded border text-rose-600" style="border-color:var(--border)" title="ลบผู้ใช้">${ICON.trash}</button>`}
       </td></tr>`;
   }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
 }
@@ -435,7 +450,7 @@ function _renderPermMatrix(canEdit) {
       const inp = canEdit
         ? `<input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''} ${dis}
              onchange="_permToggle(this)" class="w-3.5 h-3.5 accent-indigo-600">`
-        : `<span style="color:${checked?'#4f46e5':'#e2e8f0'};font-size:14px">${checked?'✓':'–'}</span>`;
+        : `<span style="color:${checked?'#4a70b0':'#e2e8f0'};font-size:14px">${checked?'✓':'–'}</span>`;
       return `<td class="py-1.5 px-2 text-center">${inp}</td>`;
     }).join('');
     return `<tr class="border-b" style="border-color:var(--border)">
@@ -481,7 +496,7 @@ async function saveRolePermissions() {
   } catch(e) {
     if (status) { status.textContent = 'เชื่อมต่อไม่ได้'; status.className = 'text-xs text-rose-600'; }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึกสิทธิ์'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'บันทึกสิทธิ์'; }
   }
 }
 
@@ -542,7 +557,7 @@ const PALETTE = ['#4a70b0','#2f8a74','#c08a1e','#c2413b','#7a66b8','#2b86b8','#c
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
-  revenue:    '#4f46e5',  // indigo
+  revenue:    '#4a70b0',  // indigo
   customers:  '#10b981',  // emerald
   avgTicket:  '#06b6d4',  // cyan
   margin:     '#14b8a6',  // teal
@@ -556,12 +571,12 @@ const SEMANTIC = {
   morning:    '#f59e0b',
   lunch:      '#10b981',
   afternoon:  '#fbbf24',
-  dinner:     '#4f46e5',
-  late:       '#8b5cf6',
+  dinner:     '#4a70b0',
+  late:       '#7a66b8',
   // Branch group
-  master:     '#4f46e5',
+  master:     '#4a70b0',
   franchise:  '#f59e0b',
-  easy:       '#4f46e5',
+  easy:       '#4a70b0',
 };
 
 // Thai day-of-week color palette
@@ -572,24 +587,24 @@ const DOW_COLORS = {
   3: '#10b981',  // Wed = green
   4: '#f97316',  // Thu = orange
   5: '#3b82f6',  // Fri = blue
-  6: '#8b5cf6',  // Sat = purple
+  6: '#7a66b8',  // Sat = purple
 };
 const DOW_LABELS_TH_SHORT = ['จ','อ','พ','พฤ','ศ','ส','อา'];
 const DOW_LABELS_TH = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 
 // Deterministic, category-specific palette (anchored to common Thai-restaurant categories)
 const CATEGORY_COLOR_MAP = {
-  'BUFFET': '#4f46e5', 'BUFFET 350': '#4338ca', 'BUFFET 450': '#6366f1',
+  'BUFFET': '#4a70b0', 'BUFFET 350': '#1f3a6b', 'BUFFET 450': '#4a70b0',
   'A LA CARTE': '#10b981', 'FOOD': '#10b981',
   'DRINK': '#06b6d4', 'BEVERAGE': '#06b6d4', 'SOFT DRINK': '#0891b2',
-  'ALCOHOL': '#9333ea', 'BEER': '#a855f7', 'WINE': '#7c3aed',
+  'ALCOHOL': '#9333ea', 'BEER': '#a855f7', 'WINE': '#7a66b8',
   'DESSERT': '#ec4899', 'SWEETS': '#f472b6',
   'APPETIZER': '#f59e0b', 'SIDE': '#fbbf24',
   'YAKINIKU': '#dc2626', 'BBQ': '#ef4444', 'GRILL': '#dc2626',
   'SUSHI': '#0d9488', 'SASHIMI': '#14b8a6',
   'NOODLE': '#f97316', 'RAMEN': '#ea580c', 'PASTA': '#fb923c',
   'RICE': '#84cc16', 'CURRY': '#fbbf24',
-  'SET MENU': '#8b5cf6',
+  'SET MENU': '#7a66b8',
   'OTHER': '#64748b', 'OTHERS': '#94a3b8',
   'SERVICE': '#94a3b8', 'SERVICECHARGE': '#94a3b8', 'SP': '#94a3b8',
 };
@@ -782,7 +797,7 @@ function notifyError(msg) {
     el = document.createElement('div');
     el.id = 'globalErrToast';
     el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;' +
+      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:4px;font-size:12px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
     el.onclick = () => el.remove();
     document.body.appendChild(el);
@@ -799,7 +814,7 @@ function notifySuccess(msg) {
     el = document.createElement('div');
     el.id = 'globalOkToast';
     el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#065f46;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;' +
+      'background:#065f46;color:#fff;padding:10px 14px;border-radius:4px;font-size:12px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
     el.onclick = () => el.remove();
     document.body.appendChild(el);
@@ -835,7 +850,7 @@ function mkChart(id, config) {
   const ctx = document.getElementById(id);
   if (!ctx) return null;
   // Charts are static by default — no mouse-wheel zoom (avoids accidental zoom while scrolling page).
-  // Users who want zoom can click the dive-in 🔍 button to open the full analysis modal.
+  // Users who want zoom can click the dive-in button to open the full analysis modal.
   if (['line','bar','scatter'].includes(config.type)) {
     config.options = config.options || {};
     config.options.plugins = config.options.plugins || {};
@@ -879,7 +894,7 @@ function injectDiveBtn(chartId, canvas) {
   btn.className = 'dive-btn';
   btn.dataset.for = chartId;
   btn.title = 'Dive in (zoom + analysis)';
-  btn.innerHTML = '🔍';
+  btn.innerHTML = ICON.search;
   btn.onclick = () => diveInChart(chartId);
   wrap.appendChild(btn);
 }
@@ -1105,7 +1120,7 @@ function drillIntoBranch(branchName) {
   if (!sel) return;
   sel.value = (sel.value === branchName) ? '' : branchName;
   sel.style.transition = 'box-shadow 0.5s';
-  sel.style.boxShadow = sel.value ? '0 0 0 3px rgba(99,102,241,0.45)' : '';
+  sel.style.boxShadow = sel.value ? '0 0 0 3px rgba(31,58,107,0.45)' : '';
   setTimeout(() => { sel.style.boxShadow = ''; }, 700);
   if (typeof onFilterChange === 'function') onFilterChange();
 }
@@ -1172,7 +1187,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', buffetperf:'🍱 ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', feedback:'💬 เสียงลูกค้า (Customer Feedback)', checklist:'✅ Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -1328,17 +1343,17 @@ function switchTab(name) {
 // bar of related views on the page itself. tabs[0] of each cluster is its
 // sidebar entry (applyPermissions' safety net relies on that ordering).
 const TAB_CLUSTERS = [
-  { key: 'overview', label: '📊 ภาพรวม',       tabs: [['overall','ภาพรวม & KPI'],['dailysales','📅 ยอดขายรายวัน'],['trend','📈 แนวโน้ม'],['compare','⚖️ เทียบ A/B'],['more','📈 Insight เพิ่มเติม']] },
-  { key: 'buffet',   label: '🍱 บุฟเฟ่ต์',      tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['childbuffet','🧒 บุฟเฟ่ต์เด็ก'],['guest','👥 ลูกค้า & ยอด/หัว'],['timeflow','⏰ ช่วงเวลา & การไหล'],['custtype','👥 ประเภทลูกค้า']] },
-  { key: 'menu',     label: '🍣 เมนู',          tabs: [['menu','วิเคราะห์เมนู'],['engineering','⭐ เมนูทำเงิน'],['menucompare','🆚 เทียบเมนู A/B'],['menuimpact','🧪 วิเคราะห์วัตถุดิบ']] },
-  { key: 'menufix',  label: '⚡ ปรับเมนู',       tabs: [['menuactionboard','ปรับเมนู'],['menuopportunities','💡 โอกาสเมนู'],['menuefficiency','🎯 เป้าลดต้นทุน']] },
-  { key: 'cost',     label: '💰 ต้นทุน',         tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','🎮 Simulators'],['costhead','ต้นทุน/หัว'],['costheadtop60','🏅 Top60/หัว'],['heavyeater','🍽️ นักกินหนัก'],['coverage','ความครอบคลุม'],['branchbom','🔬 BoM รายสาขา']] },
-  { key: 'profit',   label: '💵 กำไร & P&L',     tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
-  { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ingpurchase','🧾 ยอดซื้อ vs ยอดขาย'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
-  { key: 'ops',      label: '🛒 ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','🏷️ ส่วนลด'],['ops','🔬 เชิงลึก'],['staff','👤 พนักงาน'],['cashctl','💵 เงินสด'],['cancelbill','🗑️ บิลยกเลิก'],['modifiers','🍽️ Modifiers'],['pricezone','🏷️ ราคา/โซน'],['closetime','⏰ ปิดร้าน/ข้อมูล']] },
+  { key: 'overview', label: 'ภาพรวม',       tabs: [['overall','ภาพรวม & KPI'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['compare','เทียบ A/B'],['more','Insight เพิ่มเติม']] },
+  { key: 'buffet',   label: 'บุฟเฟ่ต์',      tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['childbuffet','บุฟเฟ่ต์เด็ก'],['guest','ลูกค้า & ยอด/หัว'],['timeflow','ช่วงเวลา & การไหล'],['custtype','ประเภทลูกค้า']] },
+  { key: 'menu',     label: 'เมนู',          tabs: [['menu','วิเคราะห์เมนู'],['engineering','เมนูทำเงิน'],['menucompare','เทียบเมนู A/B'],['menuimpact','วิเคราะห์วัตถุดิบ']] },
+  { key: 'menufix',  label: 'ปรับเมนู',       tabs: [['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menuefficiency','เป้าลดต้นทุน']] },
+  { key: 'cost',     label: 'ต้นทุน',         tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','Simulators'],['costhead','ต้นทุน/หัว'],['costheadtop60','Top60/หัว'],['heavyeater','นักกินหนัก'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา']] },
+  { key: 'profit',   label: 'กำไร & P&L',     tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
+  { key: 'supply',   label: 'จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
+  { key: 'ops',      label: 'ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','ส่วนลด'],['ops','เชิงลึก'],['staff','พนักงาน'],['cashctl','เงินสด'],['cancelbill','บิลยกเลิก'],['modifiers','Modifiers'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
 ];
 // ── Kill list — ON HOLD (owner's call, 2026-09-05) ─────────────────────────
-// 47 days of usage telemetry (2026-07-20 → 09-05, Settings → 📈 การใช้งานจริง)
+// 47 days of usage telemetry (2026-07-20 → 09-05, Settings → การใช้งานจริง)
 // found 17 tabs nobody opened (docs/LEAN_KILL_LIST_2026-09.html). The app is
 // not yet used by everyone, so NOTHING is hidden or deleted: every tab shows in
 // its cluster bar as before and the counters keep running. KILL_CANDIDATES is
@@ -1353,7 +1368,7 @@ const SOFT_KILL = new Set([]);          // on hold — nothing folded
 const KILL_REVIEW_DATE = '';            // no deletion date while on hold
 // Formal theme: no emoji in the chrome (page title, cluster tabs). The labels in
 // PAGE_TITLES / TAB_CLUSTERS still carry them; strip at render so the data stays put.
-const _EMOJI_RE = /(?:[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿⌀-⏿←-⇿ℹ〰〽][️‍]*)+/gu;
+const _EMOJI_RE = /(?:[\u{1F000}-\u{1FAFF}\u2600-\u27BF\u2B00-\u2BFF\u2300-\u23FF\u2190-\u21FF\u2139\u3030\u303D][\uFE0F\u200D]*)+/gu;
 function _noEmoji(s) { return String(s).replace(_EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim(); }
 
 let _clusterMoreOpen = false;
@@ -1502,7 +1517,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'downtime') loadDowntime();
 }
 
-// ── Settings → 🚧 วันที่สาขาปิด ────────────────────────────────────────────
+// ── Settings → วันที่สาขาปิด ────────────────────────────────────────────
 // Recorded closures / pre-opening runs. The data-health check cannot tell these
 // from a sync that lost a day (the POS has no "closed today" field), so without
 // them it cries wolf for ever and a real gap drowns in the noise. Days recorded
@@ -1576,7 +1591,7 @@ async function deleteDowntime(id) {
   } catch (e) { st.textContent = 'ลบไม่สำเร็จ'; st.style.color = '#b91c1c'; }
 }
 
-// ── Usage telemetry (Settings → 📈 การใช้งานจริง · lean-overhaul Phase 0) ──
+// ── Usage telemetry (Settings → การใช้งานจริง · lean-overhaul Phase 0) ──
 async function loadUsageStats() {
   const el = document.getElementById('usageStatsBody');
   if (!el) return;
@@ -1601,8 +1616,8 @@ async function loadUsageStats() {
   const byName = Object.fromEntries(tabs.map(t => [t.name, t]));
   const killRows = [...watched].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:#b45309' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
   const killHead = onHold
-    ? `🗑️ Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
-    : `🗑️ Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
+    ? `Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
+    : `Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
   // ── who uses it: the adoption view (the owner's question — who has and hasn't started) ──
   const STATUS = { active: ['ใช้งานอยู่', '#15803d', '#dcfce7'], idle: ['ไม่ได้ใช้ในช่วงนี้', '#b45309', '#fef3c7'],
                    never: ['ยังไม่เคยเข้าใช้ (รหัสเริ่มต้น)', '#b91c1c', '#fee2e2'], anonymous: ['ไม่มี login', '#6b7280', '#e5e7eb'] };
@@ -1619,10 +1634,10 @@ async function loadUsageStats() {
   const ps = people && people.summary ? people.summary : null;
   const peopleHtml = people ? `
     <div class="mb-6">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">👥 การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
       <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
-      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">📣 สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
-        <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">📣 สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
+      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
+        <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
       <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">login ล่าสุด</th><th class="py-1 pr-3 text-right">login</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
       <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
     </div>` : '';
@@ -1636,7 +1651,7 @@ async function loadUsageStats() {
         <div class="text-xs font-semibold mb-2" style="color:${onHold ? '#b45309' : 'var(--bad-ink)'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
         <table class="text-xs w-full mb-5"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง (${esc(days)} วัน)</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${killRows}</tbody></table>
         <div class="text-xs font-semibold mb-2" style="color:var(--bad-ink)">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
-        <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว 🎉</span>'}</div>
+        <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว</span>'}</div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 API endpoints</div>
         <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
       </div>
@@ -1654,16 +1669,16 @@ async function sendAdoptionDigest() {
 
 
 // ══════════════════════════════════════════════════════════════════════════
-// ⚡ Menu Action Board — Menu Engineering + lifecycle → 4 ranked action lists
+// Menu Action Board — Menu Engineering + lifecycle → 4 ranked action lists
 // ══════════════════════════════════════════════════════════════════════════
 const _MAB_META = {
-  feature:    { icon:'🚀', title:'ดันต่อ / จัดโปรโมชัน', sub:'ขายดี+กำไรดี → ฟีเจอร์ในโปร',           color:'#10b981', bg:'#ecfdf5' },
-  market:     { icon:'🔍', title:'ผลักดันยอด',          sub:'กำไรดีแต่ยังขายน้อย → โปรโมต/วางตำแหน่ง', color:'#0ea5e9', bg:'#eff6ff' },
-  fix_margin: { icon:'💰', title:'ปรับราคา / ลดต้นทุน',  sub:'ขายดีแต่กำไรบาง',                        color:'#f59e0b', bg:'#fffbeb' },
-  review_cut: { icon:'✂️', title:'ทบทวน / พิจารณาตัด',   sub:'ขายน้อย กำไรบาง และกำลังลด/ตาย',          color:'#ef4444', bg:'#fef2f2' },
+  feature:    { icon:'▲', title:'ดันต่อ / จัดโปรโมชัน', sub:'ขายดี+กำไรดี → ฟีเจอร์ในโปร',           color:'#10b981', bg:'#ecfdf5' },
+  market:     { icon:'', title:'ผลักดันยอด',          sub:'กำไรดีแต่ยังขายน้อย → โปรโมต/วางตำแหน่ง', color:'#0ea5e9', bg:'#eff6ff' },
+  fix_margin: { icon:'', title:'ปรับราคา / ลดต้นทุน',  sub:'ขายดีแต่กำไรบาง',                        color:'#f59e0b', bg:'#fffbeb' },
+  review_cut: { icon:'', title:'ทบทวน / พิจารณาตัด',   sub:'ขายน้อย กำไรบาง และกำลังลด/ตาย',          color:'#ef4444', bg:'#fef2f2' },
 };
-const _MAB_QUAD  = { star:'⭐ดาว', plowhorse:'🐴ม้าแบก', puzzle:'🧩ปริศนา', dog:'🐶หมา' };
-const _MAB_STAGE = { growing:'📈โต', stable:'➖ทรงตัว', declining:'📉ลด', dead:'💀ตาย', new:'🆕ใหม่' };
+const _MAB_QUAD  = { star:'★ดาว', plowhorse:'ม้าแบก', puzzle:'ปริศนา', dog:'หมา' };
+const _MAB_STAGE = { growing:'▲โต', stable:'ทรงตัว', declining:'▼ลด', dead:'ตาย', new:'ใหม่' };
 
 async function loadMenuActionBoard() {
   const fk = _filterKey();
@@ -1687,7 +1702,7 @@ function _mabCard(r) {
     <div class="text-xs font-semibold" style="color:var(--text-primary)">${esc(r.description)}</div>
     <div class="text-[10.5px] mt-0.5" style="color:var(--text-muted)">${esc(r.category || '')}</div>
     <div class="flex flex-wrap gap-1 mt-1 text-[10px]">
-      ${quad ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,.1);color:#4f46e5">${quad}</span>` : ''}
+      ${quad ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(31,58,107,.1);color:var(--accent)">${quad}</span>` : ''}
       ${stage ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.1);color:var(--good-ink)">${stage}</span>` : ''}
       <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">มาร์จิ้น ${fmtP(r.margin_pct)}</span>
       <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">ส่วนแบ่ง ${fmtP(r.popularity_pct)}</span>
@@ -1729,7 +1744,7 @@ function renderActionBoard(d) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 💡 Menu Opportunities — cross-branch gaps · category whitespace · revive · AI
+// Menu Opportunities — cross-branch gaps · category whitespace · revive · AI
 // ══════════════════════════════════════════════════════════════════════════
 async function loadMenuOpportunities() {
   const fk = _filterKey();
@@ -1801,7 +1816,7 @@ async function genMenuIdeas() {
   const btn = document.getElementById('oppAiBtn'), host = document.getElementById('oppAiIdeas');
   if (!host) return;
   const old = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ กำลังสร้าง…';
+  btn.disabled = true; btn.textContent = 'กำลังสร้าง…';
   host.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังให้ AI ช่วยคิด…</div>';
   const body = {};
   if (getBranch())    body.branch = getBranch();
@@ -1820,7 +1835,7 @@ async function genMenuIdeas() {
   const src = d.generated_by === 'claude' ? 'AI (Claude)' : 'สร้างจากข้อมูล (ยังไม่ได้ตั้งค่า AI key)';
   host.dataset.generated = '1';
   host.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ที่มา: ${esc(src)}</div>` + (ideas.length ? ideas.map((it, i) => `
-    <div class="rounded p-3" style="background:var(--bg-subtle);border-left:3px solid #ec4899">
+    <div class="rounded p-3" style="background:var(--bg-subtle);border:1px solid #ec4899">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">${i + 1}. ${esc(it.title)}</div>
       <div class="text-xs mt-1" style="color:var(--text-secondary)">${esc(it.rationale || '')}</div>
       ${it.builds_on && it.builds_on !== 'none' ? `<div class="text-[10px] mt-1" style="color:var(--text-muted)">อิงสัญญาณ: ${esc(it.builds_on)}</div>` : ''}

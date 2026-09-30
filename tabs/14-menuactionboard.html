@@ -1,13 +1,13 @@
-<!-- ══ ⚡ ปรับเมนู (Menu Action Board) ══ -->
+<!-- ══ ปรับเมนู (Menu Action Board) ══ -->
 <div id="tab-menuactionboard" style="display:none">
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #6366f1">
-    <h2 class="text-base font-bold" style="color:#4338ca">⚡ ปรับเมนู — สิ่งที่ควรทำกับแต่ละเมนู</h2>
-    <p class="text-xs text-slate-500 mt-1">รวม Menu Engineering (ดาว/ม้าแบก/ปริศนา/หมา) + วงจรชีวิตเมนู (โต/ทรงตัว/ลด/ตาย) เป็น 4 กลุ่มการตัดสินใจ — ตัวเลข quadrant ตรงกับแท็บ 🔬 Menu Engineering. <b>กลุ่ม “ทบทวน/ตัด” เป็นเพียงรายการที่ควรพิจารณา ไม่ได้ลบเมนูให้อัตโนมัติ</b></p>
+  <div class="card p-4 mb-4" style="background:#e8eef7;border:1px solid var(--accent)">
+    <h2 class="text-base font-bold" style="color:var(--accent)">ปรับเมนู — สิ่งที่ควรทำกับแต่ละเมนู</h2>
+    <p class="text-xs text-slate-500 mt-1">รวม Menu Engineering (ดาว/ม้าแบก/ปริศนา/หมา) + วงจรชีวิตเมนู (โต/ทรงตัว/ลด/ตาย) เป็น 4 กลุ่มการตัดสินใจ — ตัวเลข quadrant ตรงกับแท็บ Menu Engineering. <b>กลุ่ม “ทบทวน/ตัด” เป็นเพียงรายการที่ควรพิจารณา ไม่ได้ลบเมนูให้อัตโนมัติ</b></p>
   </div>
   <div id="mabStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
   <div id="mabKpis" class="flex flex-wrap gap-2 mb-4"></div>
   <div id="mabBoard" class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))"></div>
-  <div id="mabNeedsWrap" class="card p-4 mt-4" style="display:none;border-left:4px solid #94a3b8">
+  <div id="mabNeedsWrap" class="card p-4 mt-4" style="display:none;border:1px solid #94a3b8">
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-bold" style="color:var(--text-primary)">ℹ️ ยังไม่มีข้อมูลต้นทุน (<span id="mabNeedsCount">0</span>)</h3>
       <button onclick="document.getElementById('mabNeedsBody').classList.toggle('hidden')" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">แสดง/ซ่อน</button>

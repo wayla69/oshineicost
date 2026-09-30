@@ -4,8 +4,8 @@
 <div id="tab-dailysales" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
-    <input type="date" id="dsDate" onchange="loadDailySales(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
-    <div id="dsGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+    <input type="date" id="dsDate" onchange="loadDailySales(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <div id="dsGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
       <button class="gran-btn"             data-g="day"   onclick="dsSetGran('day')">วัน</button>
       <button class="gran-btn"             data-g="week"  onclick="dsSetGran('week')">สัปดาห์</button>
       <button class="gran-btn gran-active" data-g="month" onclick="dsSetGran('month')">เดือน</button>
@@ -31,11 +31,11 @@
   </div>
   <div class="card p-5 mb-5">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">🔼 เมนูพุ่งผิดปกติ (วันที่เลือก) <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· qty เทียบค่าเฉลี่ย 21 วัน · สูงกว่า ≥1.5×</span></h2>
+      <h2 class="section-title mb-0">เมนูพุ่งผิดปกติ (วันที่เลือก) <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· qty เทียบค่าเฉลี่ย 21 วัน · สูงกว่า ≥1.5×</span></h2>
       <div class="flex items-center gap-2">
-        <select id="spikeBranch" onchange="renderMenuSpike()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">ทุกสาขา</option></select>
+        <select id="spikeBranch" onchange="renderMenuSpike()" style="border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">ทุกสาขา</option></select>
         <span id="spikeCount" class="text-[11px]" style="color:var(--text-muted)"></span>
-        <button onclick="exportTable('spikeTable','menu_spike.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="exportTable('spikeTable','menu_spike.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
     </div>
     <div id="dsSpike" class="overflow-x-auto" style="max-height:420px;overflow-y:auto"></div>
