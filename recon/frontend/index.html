@@ -6,22 +6,22 @@
 <title>กระทบยอด — Oshinei</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap"></noscript>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap"></noscript>
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <style>
 /* เขียวแบรนด์ recon + โทนอุ่นโปร่ง (rebrand 2026-06-19: ทิศทาง A + airiness) */
 :root{
-  --brand:#0F6E56;--brand-deep:#0a523f;--brand-soft:#eaf5f0;
+  --brand:#1f3a6b;--brand-deep:#16294d;--brand-soft:#e8eef7;
   --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fdf6ea;
   --err:#b91c1c;--err-bg:#fdf0ef;--info:#1d4ed8;--info-bg:#eef4fb;
-  --bg:#f3f6f4;--card:#fff;--line:#e7ece9;--line-soft:#f1f5f2;
-  --txt:#0f1f1a;--sub:#4b5a54;--mut:#97a39d;
-  --radius:14px;--radius-sm:10px;
-  --shadow:0 1px 2px rgba(16,40,32,.03),0 6px 22px rgba(16,40,32,.05)}
+  --bg:#f0f4f8;--card:#fff;--line:#d5dbe3;--line-soft:#e6eaf0;
+  --txt:#0f172a;--sub:#475569;--mut:#5f6c80;
+  --radius:4px;--radius-sm:3px;
+  --shadow:none}
 *{box-sizing:border-box;margin:0}
-body{font-family:'Inter','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
+body{font-family:'Prompt','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
   background:var(--bg);color:var(--txt);font-size:14.5px;line-height:1.6;
   -webkit-font-smoothing:antialiased}
 .ti{vertical-align:-.125em;line-height:1}
@@ -42,7 +42,7 @@ a:hover{text-decoration:underline}
 
 /* status chips — พื้นอ่อน ตัวอักษรเข้ม อ่านชัดไม่แสบตา */
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
-  padding:3px 10px;border-radius:999px;white-space:nowrap;border:none;line-height:1.5;
+  padding:3px 10px;border-radius:3px;white-space:nowrap;border:none;line-height:1.5;
   font-family:inherit}
 .c-ok{background:var(--ok-bg);color:var(--ok)}
 .c-warn{background:var(--warn-bg);color:var(--warn)}
@@ -72,15 +72,15 @@ button.chip:hover{filter:brightness(.95)}
 
 /* ปฏิทินวัน */
 .daygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;padding:14px 18px}
-.daycell{border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:12px;
+.daycell{border:1px solid var(--line);border-radius:4px;padding:7px 9px;font-size:12px;
   cursor:pointer;background:#fff;transition:border-color .12s,box-shadow .12s}
 .daycell:hover{border-color:var(--brand);box-shadow:var(--shadow)}
 .daycell b{font-size:13.5px}
-.d-ok{border-left:4px solid #10b981}.d-diff{border-left:4px solid #ef4444}
+.d-ok{border:1px solid #10b981}.d-diff{border-left:4px solid #ef4444}
 .d-waiting{border-left:4px solid #f59e0b}.d-setup{border-left:4px solid #3b82f6}
 
-.prog{height:9px;background:var(--line);border-radius:5px;overflow:hidden;flex:1;min-width:90px}
-.prog>div{height:100%;background:#10b981;border-radius:5px;transition:width .3s}
+.prog{height:9px;background:var(--line);border-radius:4px;overflow:hidden;flex:1;min-width:90px}
+.prog>div{height:100%;background:#10b981;border-radius:4px;transition:width .3s}
 .prog.p-warn>div{background:#f59e0b}.prog.p-err>div{background:#ef4444}
 
 table{border-collapse:collapse;width:100%}
@@ -90,23 +90,23 @@ td:first-child,th:first-child{text-align:left}
 td.mono{font-variant-numeric:tabular-nums}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0f172a;
-  color:#fff;padding:11px 20px;border-radius:10px;font-size:13.5px;opacity:0;
+  color:#fff;padding:11px 20px;border-radius:4px;font-size:13.5px;opacity:0;
   transition:opacity .3s;pointer-events:none;z-index:50;box-shadow:0 8px 24px rgba(15,23,42,.25)}
 .toast.show{opacity:1}
 
 .todo-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
 .todo-item:last-child{border-bottom:none}
-.sugg{background:var(--ok-bg);border:1px solid #a7f3d0;border-radius:10px;padding:11px 15px;margin-bottom:8px;font-size:13.5px}
-.hero-rc{background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid var(--warn)}
+.sugg{background:var(--ok-bg);border:1px solid #a7f3d0;border-radius:4px;padding:11px 15px;margin-bottom:8px;font-size:13.5px}
+.hero-rc{background:#fff7ed;border:1px solid #fed7aa;border:1px solid var(--warn)}
 .rc-head{font-weight:700;font-size:14px;margin-bottom:4px}
 .rc-story{font-size:14.5px;line-height:1.55}
 .rc-ev{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
-.rc-chip{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:13px}
+.rc-chip{background:#fff;border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:13px}
 .rc-arrow{color:var(--mut);font-weight:700}
 .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;justify-content:center;z-index:60}
-.sheet-box{background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:18px 18px 22px;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
+.sheet-box{background:#fff;width:100%;max-width:520px;border-radius:4px 16px 0 0;padding:18px 18px 22px;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
 .sheet-h{font-weight:700;font-size:15px;margin-bottom:4px}
-.sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box}
+.sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:4px;font:inherit;box-sizing:border-box}
 .rc-reasons{display:flex;flex-direction:column;gap:7px}
 .rc-reason{justify-content:flex-start;text-align:left;background:#f8fafc;border:1px solid var(--line)}
 /* Phase 2: branch inbox drawers + problem/coin cards */
@@ -114,10 +114,10 @@ td.mono{font-variant-numeric:tabular-nums}
 .drawer-h:hover{text-decoration:none;filter:brightness(.95)}
 .drawer .grid-ch{padding:9px 14px;border-bottom:1px solid var(--line)}
 .drawer .grid-ch:last-of-type{border-bottom:none}
-.coin-card{background:var(--line-soft);border-left:4px solid var(--mut)}
+.coin-card{background:var(--line-soft);border:1px solid var(--mut)}
 .coin-name{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
 .ch-prob .grid-ch{padding-left:0}
-.fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
+.fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;
   font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;text-align:right}
 .fee-in:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
 input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size:13.5px;color:var(--txt)}
@@ -127,7 +127,7 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 /* ── หน้าแรก: กล่องงานทั้งเครือ (Phase 3 inbox) ── */
 .ov-hero{padding:14px 18px}
 .ov-hero-line{font-size:15.5px;line-height:1.5}
-.ov-reclass{background:var(--ok-bg);border:1px solid #a7f3d0;border-left:4px solid var(--ok);font-size:14px;padding:12px 16px}
+.ov-reclass{background:var(--ok-bg);border:1px solid #a7f3d0;border:1px solid var(--ok);font-size:14px;padding:12px 16px}
 .ov-row{display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;border-bottom:1px solid var(--line-soft);transition:background .12s}
 .ov-row:hover{background:#f8fafc}
 .ov-row:last-child{border-bottom:none}
@@ -141,12 +141,12 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .ov-done-toggle{display:block;padding:12px 18px;font-size:13.5px;color:var(--sub);font-weight:500}
 .ov-done-toggle:hover{text-decoration:none;background:#f8fafc}
 /* Phase 4 #1: overview manager attention bar */
-.review-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-left:4px solid var(--warn);background:var(--warn-bg)}
+.review-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--warn);background:var(--warn-bg)}
 .review-bar .rb-link{font-size:13px;font-weight:600}
 .review-bar .rb-link:not(:last-child)::after{content:'·';color:var(--mut);margin-left:8px;font-weight:400}
 /* Phase 4 #2: "เพิ่มเติม" bottom-sheet menu rows */
 .more-menu{display:flex;flex-direction:column;gap:2px;margin-top:8px}
-.more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:14px;font-weight:600;background:#fff;transition:background .12s}
+.more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:4px;color:var(--txt);font-size:14px;font-weight:600;background:#fff;transition:background .12s}
 .more-item:hover{background:var(--line-soft);text-decoration:none}
 .more-item .lbl{font-weight:400}
 /* <i class="ti ti-calendar" aria-hidden="true"></i> สรุปบัญชีรายวัน (รายใบ) — daybook cards, 1 วัน = 1 ใบ */
@@ -188,7 +188,7 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .loading{padding:38px 0;text-align:center;color:var(--mut);font-size:13px}
 .spin{display:inline-block;width:17px;height:17px;border:2.5px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+.mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit}
 .mv-tbl{width:100%;border-collapse:collapse;font-size:13px}
 .mv-tbl td{padding:5px 6px;border-top:1px solid var(--line-soft)}
 @media (max-width:640px){
@@ -226,7 +226,7 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 /* reports hub grid */
 .rpt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:6px}
 .rpt-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
-  border:1px solid var(--line);border-radius:10px;background:#fff;
+  border:1px solid var(--line);border-radius:4px;background:#fff;
   color:var(--txt);text-decoration:none;transition:background .12s,border-color .12s}
 .rpt-item:hover{background:var(--line-soft);border-color:#cbd5e1;text-decoration:none}
 .rpt-icon{font-size:20px;flex:none;line-height:1.3}
@@ -352,7 +352,7 @@ function header(extra){
         <div class="lbl">Oshinei · POS ↔ เงินเข้าบัญชีจริง</div></div>
     </div>
     <input type="month" value="${MONTH}" onchange="setMonth(this.value)"
-      style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
     <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)"><i class="ti ti-key" aria-hidden="true"></i> รหัส</button>
   </div>
@@ -491,7 +491,7 @@ async function checkReclassPattern(){
   if(!d||!d.warning)return;
   const app=$('app');if(!app)return;
   const bar=document.createElement('div');
-  bar.className='card c-warn';bar.style.cssText='margin-bottom:12px;border-left:4px solid var(--warn)';
+  bar.className='card c-warn';bar.style.cssText='margin-bottom:12px;border:1px solid var(--warn)';
   bar.innerHTML=`<div class="row" style="align-items:flex-start;gap:8px">
     <span style="font-size:18px"><i class="ti ti-search" aria-hidden="true"></i></span>
     <div><b>รูปแบบน่าสงสัย — อาจไม่ใช่คนกดผิด</b>
@@ -517,7 +517,7 @@ async function loadErrorReport(){
   catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-chart-bar" aria-hidden="true"></i> รายงานข้อผิดพลาดการบันทึก — รายสาขา</h2>
-    <a class="btn btn-sm" style="margin-left:auto" href="/api/reports/branch-errors.xlsx">⬇ ดาวน์โหลด Excel</a></div>
+    <a class="btn btn-sm" style="margin-left:auto" href="/api/reports/branch-errors.xlsx">ดาวน์โหลด Excel</a></div>
   <div class="muted" style="margin-bottom:10px">นับจากรายการ <b>"รับทราบผลต่าง"</b> ที่บันทึกไว้ (มีเหตุผล + ผู้บันทึก) — ใช้ดูว่าสาขาไหนกระทบยอดไม่ตรงบ่อย เพื่อประเมิน/โค้ชพนักงาน · ยอดผลต่าง = มูลค่าที่ยอมรับไว้</div>`;
   if(!r.summary.length){ $('app').innerHTML=html+emptyState('checklist','ยังไม่มีรายการ “รับทราบผลต่าง”','รายงานจะขึ้นเมื่อมีการกดรับทราบผลต่างในการกระทบยอด'); return; }
   html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
@@ -569,9 +569,9 @@ function renderWrongChannel(){
   const errAmt=errs.reduce((a,e)=>a+Math.abs(e.amount||0),0);
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> รายงานข้อผิดพลาดประจำเดือน — ${esc(monthTh(MONTH))}</h2>
-    <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
+    <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/reports/wrong-channel.print${pm}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">ข้อผิดพลาดทุกประเภทที่พบในเดือนนี้ — ยอดต่าง, ขาดเอกสาร, เงินเข้าเกิน, เงินโอนไม่ครบ, รหัสยังไม่ตั้งธนาคาร และการบันทึกผิดช่อง · <b>ค้าง</b> = ยังต้องจัดการก่อนปิดเดือน</div>`;
   if(!errs.length && !items.length){ $('app').innerHTML=html+`<div class="card c-ok"><i class="ti ti-confetti" aria-hidden="true"></i> ไม่พบข้อผิดพลาด${all?'ในเดือนนี้':'ของสาขานี้'} — ทุกช่องทางตรง เอกสารครบ</div>`; return; }
 
@@ -696,7 +696,7 @@ function renderDaybook(){
   const brOpts=(r.branches||[]).map(b=>`<option value="${b.branch_id}" ${b.branch_id===r.branch_id?'selected':''}>${esc(b.name)}</option>`).join('');
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-calendar" aria-hidden="true"></i> สรุปบัญชีรายวัน (รายใบ) — ${esc(monthTh(MONTH))}</h2>
-    <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
+    <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/daily-accounts.print${pm}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
   <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="#setup"><i class="ti ti-settings" aria-hidden="true"></i> ตั้งค่าระบบ</a></div>`;
   if(!(r.days||[]).length){ $('app').innerHTML=html+emptyState('calendar-off','ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้','ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน'); return; }
@@ -713,7 +713,7 @@ function renderDaybook(){
 
 /* ── <i class="ti ti-chart-bar" aria-hidden="true"></i> Dashboard รายได้ตามช่องทางรายวัน (ทุกสาขาในวันเดียว · เลือกวันจากปฏิทิน) ── */
 let DASH=null, DASH_DAY=(new Date()).toISOString().slice(0,10), DASH_MODE='acct';  // acct | pos | cmp
-const CH_COLOR={CASH:'#0f6e56',QR:'#2563eb',TRANSFER:'#0891b2',CREDIT:'#7c3aed',
+const CH_COLOR={CASH:'#1f3a6b',QR:'#2563eb',TRANSFER:'#0891b2',CREDIT:'#7c3aed',
                 GRAB:'#16a34a',LINEMAN:'#ea580c',COUPON:'#ca8a04',DISCOUNT:'#dc2626'};
 const _dvarCol=v=>(Math.abs(+v||0)<=1?'var(--mut)':(+v<0?'var(--err)':'var(--brand-deep)'));
 const _dvar=v=>{const n=+v||0; return Math.abs(n)<=1?'<span class="lbl">✓</span>':`<span style="color:${_dvarCol(n)}">${n>0?'+':''}${fmt2(n)}</span>`;};
@@ -779,7 +779,7 @@ function renderDashboard(){
   let html=header()+`<div class="row" style="margin-bottom:6px;align-items:center">
     <h2 style="font-size:16px"><i class="ti ti-chart-bar" aria-hidden="true"></i> รายได้ตามช่องทาง — รายวัน (ทุกสาขา)</h2>
     <input type="date" value="${esc(DASH_DAY)}" onchange="setDashDay(this.value)" title="เลือกวันจากปฏิทิน"
-      style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+      style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
   </div>
   <div class="row" style="gap:6px;margin-bottom:10px">${seg('acct','เงินเข้าจริง (บัญชี)')}${seg('pos','ยอด POS')}${seg('cmp','ประกบ POS ↔ เงินเข้า')}</div>
   <div class="muted" style="margin-bottom:12px">${acct
@@ -841,7 +841,7 @@ async function loadBranch(bid){
     <div><div class="lbl">สาขา</div><h2>${esc(r.branch_name)} · ${MONTH}</h2></div>
     <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${SES_ST[st]}</span>
     ${closed?`<span class="lbl">โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))}</span>`:''}
-    ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
+    ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">Excel</a>`:''}
     ${closed?`<a class="btn btn-sm" href="/api/reports/recon-certificate.print?period_month=${MONTH}&branch_id=${bid}" target="_blank"><i class="ti ti-certificate" aria-hidden="true"></i> ใบรับรอง</a>`:''}
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}" target="_blank" title="รายงานการจับคู่ทุกช่องทาง ไล่รายวันทั้งเดือน — ตรวจว่าจับคู่ถูกครบ · พิมพ์ PDF ได้"><i class="ti ti-printer" aria-hidden="true"></i> ตรวจการจับคู่รายวัน</a>
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}&detail=1" target="_blank" title="ฉบับละเอียดสำหรับผู้ตรวจสอบ — เพิ่มหลักฐานระดับบรรทัด: รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, ค่าธรรมเนียม, การจับคู่มือ"><i class="ti ti-files" aria-hidden="true"></i> ฉบับตรวจสอบ (ละเอียด)</a>
@@ -877,12 +877,12 @@ async function loadBranch(bid){
     if(d.status==='uploaded'||closed)
       html+=`<span class="chip ${cls}" title="${tip}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}${cov}</span>`;
     else
-      html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${cov||(d.detail?' · '+esc(d.detail):'')}</button>`;
+      html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>↑ ${esc(d.label)}${cov||(d.detail?' · '+esc(d.detail):'')}</button>`;
   }
   if(!closed) html+=`
     <input type="file" id="bulk-input" multiple style="display:none" onchange="bulkUpload('bulk-input')">
     <input type="file" id="bulk-folder-input" webkitdirectory multiple style="display:none" onchange="bulkUpload('bulk-folder-input')">
-    <button class="btn btn-sm" style="margin-left:auto" title="เลือกหลายไฟล์พร้อมกัน — ระบบแยกประเภทให้เอง (zip แตกอัตโนมัติ)" onclick="$('bulk-input').click()">⬆ หลายไฟล์</button>
+    <button class="btn btn-sm" style="margin-left:auto" title="เลือกหลายไฟล์พร้อมกัน — ระบบแยกประเภทให้เอง (zip แตกอัตโนมัติ)" onclick="$('bulk-input').click()">หลายไฟล์</button>
     <button class="btn btn-sm" title="เลือกทั้งโฟลเดอร์ของสาขานี้" onclick="$('bulk-folder-input').click()"><i class="ti ti-folder" aria-hidden="true"></i> ทั้งโฟลเดอร์</button>`;
   html+=`<a href="#" class="lbl"${closed?' style="margin-left:auto"':''} onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
   </div><div id="up-panel"></div><div id="docs-panel" style="display:none"></div></div>`;
@@ -895,10 +895,10 @@ async function loadBranch(bid){
         ${closed?'':`<button class="btn btn-sm" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`}`:''}
       ${closed?'':`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleMapper(${qi});return false">ตั้งค่าเอง ▾</a>`}</div>
       <div id="mapper-${qi}" style="display:none;margin-top:8px" class="row">
-        <select id="map-cat-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:6px">
+        <select id="map-cat-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:4px">
           ${['QR','TRANSFER','CREDIT','CASH','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'].map(c=>`<option>${c}</option>`).join('')}
         </select>
-        <select id="map-bank-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:6px">
+        <select id="map-bank-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:4px">
           ${['KTB','KBANK','KTC','BAY','SCB','BBL','NONE'].map(b=>`<option>${b}</option>`).join('')}
         </select>
         <button class="btn btn-sm btn-pri" onclick="applyMapper(${qi},'${esc(q.code)}')">บันทึก</button>
@@ -910,7 +910,7 @@ async function loadBranch(bid){
   const xfers=r.internal_transfer_suggestions||[];
   if(!closed&&xfers.length){
     const sum=xfers.reduce((a,x)=>a+x.amount,0);
-    html+=`<div class="card" style="margin-bottom:12px;background:#fffbeb;border-left:4px solid var(--warn)">
+    html+=`<div class="card" style="margin-bottom:12px;background:#fffbeb;border:1px solid var(--warn)">
       <div class="row"><b style="font-size:13.5px">⇄ พบยอดโอนเข้าที่น่าจะเป็น "การโอนกันเอง" ${xfers.length} รายการ (รวม ${fmt(sum)})</b>
         ${xfers.length>1?`<button class="btn btn-sm" style="margin-left:auto" onclick="excludeAllXfers()">ตัดออกทั้งหมด</button>`:''}</div>
       <div class="muted" style="margin:2px 0 8px">ยอดก้อนใหญ่ + เลขกลม + ไม่มีคำว่า "ขาย" ในรายละเอียด — ตัดออกแล้วจะไม่ถูกนำมากระทบยอด (ย้ายไปกล่อง "โอนภายใน" · ย้อนกลับได้)</div>
@@ -979,7 +979,7 @@ async function loadBranch(bid){
 
   // จอสรุปผู้จัดการ — เห็นทุกอย่างที่ staff ทำ/รับทราบ ก่อนใส่รหัสปิดเดือน
   if(st==='in_review'&&!closed){
-    html+=`<div class="card" style="margin-bottom:12px;border-left:4px solid var(--brand)">
+    html+=`<div class="card" style="margin-bottom:12px;border:1px solid var(--brand)">
       <b style="font-size:13.5px"><i class="ti ti-clipboard-list" aria-hidden="true"></i> สรุปสำหรับผู้จัดการ — ตรวจก่อนปิดเดือน</b>
       <table style="margin-top:8px">
         <tr><th>ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th><th>ต่าง</th><th style="text-align:left">สถานะ / เหตุผลที่ staff รับทราบ</th></tr>
@@ -1015,7 +1015,7 @@ async function loadBranch(bid){
       const drillable=t.channel && r.channels.some(c=>c.key===t.channel);
       html+=`<div class="todo-item"><span style="flex:1">• ${esc(t.label)}</span>
         ${drillable?`<button class="btn btn-sm" title="กางช่องทางนี้ดูรายวัน + บรรทัด statement ที่ยังจับคู่ไม่ได้" onclick="drillTodo('${esc(t.channel)}')"><i class="ti ti-zoom-in" aria-hidden="true"></i> ดูรายการ</button>`:''}
-        ${t.type==='upload'&&!closed?`<button class="btn btn-sm" onclick='pickFile(${JSON.stringify(DATA.documents.find(d=>d.key===t.doc)||null)})'>⬆ อัปโหลด</button>`:''}
+        ${t.type==='upload'&&!closed?`<button class="btn btn-sm" onclick='pickFile(${JSON.stringify(DATA.documents.find(d=>d.key===t.doc)||null)})'>อัปโหลด</button>`:''}
         ${acceptable?`<button class="btn btn-sm" onclick="acceptTodo('${esc(t.channel)}','${esc(t.label)}')">✓ รับทราบ + เหตุผล</button>`:''}
       </div>`;
     });
@@ -1048,7 +1048,7 @@ function chProblemCard(ch,i,closed){
   // suppress the POS·ext subline for COUPON (its variance is points, pos/ext are gross — misleading)
   const sub=ch.key==='COUPON'?'' :
     `<div class="lbl mono">POS ${fmt(ch.pos)} · เงินเข้าจริง ${ch.ext?fmt(ch.ext):'—'}${ch.days_total?` · ${ch.days_done}/${ch.days_total} วัน ✓`:''}</div>`;
-  return `<div class="card ch-prob" style="margin-bottom:12px;background:${bg};border-left:4px solid ${side}">
+  return `<div class="card ch-prob" style="margin-bottom:12px;background:${bg};border:1px solid ${side}">
     <div class="row" style="cursor:pointer" onclick="toggleDays(${i})">
       <div style="flex:1"><b style="font-size:14px">${esc(ch.label)}</b>
         <div class="muted">${dirTxt}</div>${sub}</div>
@@ -1468,7 +1468,7 @@ function toggleDays(i){
   const cash3=cashThreeWayHtml(ch, i);
   const cpCards=couponCardsHtml(ch);
   const feeBtn=FEE_SOURCE[ch.key]&&!DATA.closed?
-    `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
+    `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">ค่าธรรมเนียม & VAT</button>`:'';
   const mmBtn=!DATA.closed&&ch.key!=='COUPON'?
     `<button class="btn btn-sm" onclick="event.stopPropagation();openMatcher(${i})"><i class="ti ti-tool" aria-hidden="true"></i> จับคู่ละเอียด</button>`:'';
   // คูปอง: แต้ม KTC/BAY ตรวจอัตโนมัติแล้ว — ลิงก์วิเคราะห์คูปองซีรีส์ (in-app #coupon)
@@ -1860,7 +1860,7 @@ async function openMatcher(i,bank){
     </div>
     <div class="row" style="margin-top:8px">
       <span class="lbl" id="mm-sum">เลือกทั้งสองฝั่งเพื่อจับคู่</span>
-      <input id="mm-note" placeholder="หมายเหตุ" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+      <input id="mm-note" placeholder="หมายเหตุ" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px">
       <button class="btn btn-sm btn-pri" id="mm-go" disabled onclick="mmSubmit()"><i class="ti ti-link" aria-hidden="true"></i> จับคู่</button>
     </div></div>`;
 }
@@ -2000,7 +2000,7 @@ function _diagBranchPicker(branches, currentBid, onchangeExpr){
     `<option value="${b.branch_id}" ${b.branch_id==currentBid?'selected':''}>${esc(b.name)}</option>`
   ).join('');
   return `<select onchange="${onchangeExpr}" title="เลือกสาขา"
-    style="padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${opts}</select>`;
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${opts}</select>`;
 }
 
 /* ── #audit — Audit log (global, read-only) ─────────────────────────────── */
@@ -2040,7 +2040,7 @@ async function loadAudit(){
     <div class="row" style="margin-bottom:10px">
       <h2 style="font-size:16px"><i class="ti ti-clipboard-list" aria-hidden="true"></i> Audit Log — ประวัติการแก้ไข</h2>
       <select onchange="_AUDIT_ENTITY=this.value;loadAudit()" title="กรอง entity"
-        style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${entityOpts}</select>
+        style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${entityOpts}</select>
     </div>
     <div class="muted" style="margin-bottom:10px">ทุกการเปลี่ยนแปลงในระบบ — บันทึกอัตโนมัติ · แสดงล่าสุด 200 รายการ · กรองด้วย entity ด้านขวา</div>
     <div class="card" style="padding:0;overflow:auto">
@@ -2326,7 +2326,7 @@ function _renderBoard(d){
       const cm = meta[c]||{};
       const tip = `${esc(b.branch_name)} · ${esc(lbl(c))}\nPOS ${fmt(cell.pos)} / เงินเข้า ${fmt(cell.ext)}\nต่าง ${varTxt2(cell.variance)} (${cell.status})`;
       return `<td style="text-align:right"><span title="${tip}"
-        style="display:inline-block;min-width:60px;padding:2px 7px;border-radius:6px;cursor:default;
+        style="display:inline-block;min-width:60px;padding:2px 7px;border-radius:4px;cursor:default;
                font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;
                background:${_BOARD_CELL[cell.status]||'#f1f5f9'};color:${_BOARD_FG[cell.status]||'#475569'}"
         >${fmt(cell.pos)}</span></td>`;
@@ -2368,7 +2368,7 @@ function _renderBoard(d){
           min="${esc(_BOARD_DATES&&_BOARD_DATES.min_day||'')}"
           max="${esc(_BOARD_DATES&&_BOARD_DATES.max_day||'')}"
           onchange="_boardPickDate(this.value)"
-          style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+          style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
         <button class="btn btn-sm" onclick="_boardStep(1)">▶</button>
         <a class="btn btn-sm" href="/api/daily-report?day=${esc(_BOARD_DATE)}" target="_blank" title="รายงาน PDF ทุกสาขา"><i class="ti ti-printer" aria-hidden="true"></i> PDF ทุกสาขา</a>
       </div>
@@ -2455,7 +2455,7 @@ async function loadCoupon(){
   const dateInput = _CP_GRAN !== 'month'
     ? `<input type="date" value="${esc(_CP_DATE||MONTH+'-01')}"
          onchange="_CP_DATE=this.value;loadCoupon()"
-         style="padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">`
+         style="padding:5px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">`
     : '';
 
   // Branch picker
@@ -2465,7 +2465,7 @@ async function loadCoupon(){
   ].join('');
   const branchPicker = `<select onchange="_CP_BID=this.value;loadCoupon()"
     title="เลือกสาขา"
-    style="padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${branchOpts}</select>`;
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${branchOpts}</select>`;
 
   const tot = d.total || 0;
   const series = d.series || [];
@@ -2775,7 +2775,7 @@ function _discRender(){
   const rows=sorted.length?sorted.map(d=>{
     const isPending=d.resolution==='pending';
     const resSelect=isPending
-      ?`<select style="font-size:12px;padding:2px 5px;border:1px solid var(--line);border-radius:6px;background:#fff"
+      ?`<select style="font-size:12px;padding:2px 5px;border:1px solid var(--line);border-radius:4px;background:#fff"
            onchange="_discResolve(${d.id},this.value)">
            <option value="">แก้ไข…</option>
            <option value="accepted">✓ ยอมรับ</option>
@@ -2794,7 +2794,7 @@ function _discRender(){
           onclick="_discDrillDays(${d.id},this)" title="คลิกดูแยกรายวัน">▾ ${d.variance>0?'+':''}${fmt(d.variance||0)}</td>
       <td class="mono" style="text-align:right;color:var(--sub)">${fmt(d.amount_external||0)}</td>
       <td class="mono" style="text-align:right">${fmt(d.amount_pos||0)}</td>
-      <td><input style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;width:90px"
+      <td><input style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:#fff;width:90px"
            placeholder="มอบหมาย…" value="${esc(d.assigned_to||'')}"
            onchange="_discAssign(${d.id},this.value)"></td>
       <td>${resSelect}</td>
@@ -2813,7 +2813,7 @@ function _discRender(){
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
         <span class="lbl">แสดง:</span>
-        <select style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit"
+        <select style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit"
           onchange="_DISC_FLT.resolution=this.value;_discFetch()">
           <option value="pending" ${_DISC_FLT.resolution==='pending'?'selected':''}>รอแก้ไข</option>
           <option value="accepted" ${_DISC_FLT.resolution==='accepted'?'selected':''}>ยอมรับแล้ว</option>
@@ -2821,11 +2821,11 @@ function _discRender(){
           <option value="rejected" ${_DISC_FLT.resolution==='rejected'?'selected':''}>ปฏิเสธ</option>
           <option value="all" ${_DISC_FLT.resolution==='all'?'selected':''}>ทุกสถานะ</option>
         </select>
-        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;width:110px"
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;width:110px"
           placeholder="ช่องทาง…" value="${esc(_DISC_FLT.category)}"
           oninput="_DISC_FLT.category=this.value"
           onkeydown="if(event.key==='Enter')_discFetch()">
-        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;width:90px"
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;width:90px"
           placeholder="ธนาคาร…" value="${esc(_DISC_FLT.bank)}"
           oninput="_DISC_FLT.bank=this.value"
           onkeydown="if(event.key==='Enter')_discFetch()">
@@ -3163,7 +3163,7 @@ function loadReports(){
 function _icBranchSel(brs,sel,fn,includeAll){
   const all=includeAll===false?'':`<option value="">ทุกสาขา</option>`;
   return `<select onchange="${fn}(this.value)" title="เลือกสาขา"
-    style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+    style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
     ${all}${brs.map(b=>`<option value="${b.branch_id}" ${String(sel)===String(b.branch_id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`;
 }
 
@@ -3180,7 +3180,7 @@ async function loadOverrideRegister(){
     <h2 style="font-size:16px"><i class="ti ti-writing" aria-hidden="true"></i> ทะเบียนการปรับปรุงด้วยมือ — ${esc(monthTh(MONTH))}</h2>
     ${_icBranchSel(brs,_OVR_BR,'setOvrBranch')}
     <a class="btn btn-sm btn-pri" href="/api/reports/override-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/override-register.xlsx${q}">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/override-register.xlsx${q}">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">ทุกการแก้ไขด้วยมือในเดือนนี้ (จับคู่เอง · ย้ายช่อง · รับทราบผลต่าง · ปรับ lane) พร้อมผู้ทำ · เวลา · เหตุผล — รายการแรกที่ผู้สอบบัญชีขอดู · รายการไม่มีเหตุผลถูกเน้นแดง</div>`;
   if(!r.rows.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีการปรับปรุงด้วยมือ','ระบบจับคู่อัตโนมัติทั้งหมดในเดือนนี้');return;}
   const warn=r.missing_reason?`<span class="chip c-err">${r.missing_reason} รายการไม่มีเหตุผล</span>`:`<span class="chip c-ok">ทุกรายการมีเหตุผล ✓</span>`;
@@ -3216,7 +3216,7 @@ async function loadAging(){
     <h2 style="font-size:16px"><i class="ti ti-hourglass-high" aria-hidden="true"></i> อายุรายการค้าง — ณ ${esc(r.as_of)}</h2>
     ${_icBranchSel(brs,_AGE_BR,'setAgeBranch')}
     <a class="btn btn-sm btn-pri" href="/api/reports/open-items-aging.print${q}&lookback=2" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/open-items-aging.xlsx${q}&lookback=2">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/open-items-aging.xlsx${q}&lookback=2">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">รายการกระทบยอดที่ยังไม่ปิด นับอายุจากสิ้นงวด · ตรวจ ${esc(MONTH)} ย้อนหลัง 2 เดือน (ไม่รวมงวดที่อนุมัติ/ปิดแล้ว) — ของค้างเกิน 30 วันต้องมีคำอธิบาย</div>
   <div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:32px;flex-wrap:wrap">
     <div><div class="lbl">0–7 วัน</div><div style="font-size:20px;font-weight:700;color:var(--ok)">${b['0-7']}</div></div>
@@ -3315,7 +3315,7 @@ async function loadCloseRegister(){
     <h2 style="font-size:16px"><i class="ti ti-calendar-check" aria-hidden="true"></i> ทะเบียนการปิดเดือน — 6 เดือนล่าสุด</h2>
     ${_icBranchSel(brs,_CLR_BR,'setClrBranch')}
     <a class="btn btn-sm btn-pri" href="/api/reports/close-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/close-register.xlsx${q}">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/close-register.xlsx${q}">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">สถานะการปิดงวดของทุกสาขาหลัก · ใครอนุมัติ · เมื่อไหร่ · กระทบยอดแล้วกี่ % · มีหลักฐานแช่แข็งหรือยัง — <b>ยังไม่ปิดรวม ${r.open_total} สาขา-เดือน</b></div>`;
   if(!r.rows.length){$('app').innerHTML=html+emptyState('calendar','ไม่มีข้อมูลช่วงนี้','');return;}
   for(const mth of r.months){
@@ -3353,10 +3353,10 @@ async function loadAcceptedVariance(){
     <h2 style="font-size:16px"><i class="ti ti-receipt-off" aria-hidden="true"></i> สรุปผลต่างที่รับทราบ (Write-off) — ${esc(monthTh(MONTH))}</h2>
     ${_icBranchSel(brs,_AV_BR,'setAvBranch')}
     <a class="btn btn-sm btn-pri" href="/api/reports/accepted-variance.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/accepted-variance.xlsx${q}">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/accepted-variance.xlsx${q}">Excel</a></div>
   <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
     <span class="muted">ยอดผลต่างที่ “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · เกณฑ์เน้นต่อรายการ</span>
-    <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;font:inherit" title="เกณฑ์ (บาท/รายการ)">
+    <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;font:inherit" title="เกณฑ์ (บาท/รายการ)">
     <span class="muted">บาท</span></div>`;
   if(!s.items.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีผลต่างที่รับทราบในงวดนี้','ทุกช่องทางตรงตามจริง');return;}
   const over=s.over_count?`<span class="chip c-err">เกินเกณฑ์ ${s.over_count} รายการ</span>`:`<span class="chip c-ok">ไม่มีรายการเกินเกณฑ์ ✓</span>`;
@@ -3399,7 +3399,7 @@ async function loadAuditTrail(){
     <h2 style="font-size:16px"><i class="ti ti-history" aria-hidden="true"></i> ประวัติการแก้ไข — ${esc(monthTh(MONTH))}</h2>
     ${_icBranchSel(brs,_AT_BR,'setAtBranch')}
     <a class="btn btn-sm btn-pri" href="/api/reports/audit-trail.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
-    <a class="btn btn-sm" href="/api/reports/audit-trail.xlsx${q}">⬇ Excel</a></div>
+    <a class="btn btn-sm" href="/api/reports/audit-trail.xlsx${q}">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">ทุกการเปลี่ยนแปลงที่ระบบบันทึก (ใคร·เมื่อ·แก้อะไร) — บันทึกแบบเพิ่มอย่างเดียว แก้/ลบไม่ได้ · แสดง ${r.shown} จาก ${r.count} รายการ</div>`;
   if(!r.rows.length){$('app').innerHTML=html+emptyState('history','ไม่มีการเปลี่ยนแปลงที่บันทึกไว้','ยังไม่มีการแก้ไขในงวดนี้');return;}
   html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
@@ -3447,7 +3447,7 @@ function _setupDocChips(r){
   for(const k of ['doc1','doc2']){
     if(!m[k])continue;
     const up=ds[k]==='uploaded';
-    chips.push(`<span style="font-size:11px;padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px 1px 0;background:${up?'var(--ok-bg)':'var(--warn-bg)'};color:${up?'var(--ok)':'var(--warn)'}">${up?'✓':'…'} ${esc(_SETUP_DOC_TH[m[k]]||m[k])}</span>`);
+    chips.push(`<span style="font-size:11px;padding:1px 7px;border-radius:4px;display:inline-block;margin:1px 2px 1px 0;background:${up?'var(--ok-bg)':'var(--warn-bg)'};color:${up?'var(--ok)':'var(--warn)'}">${up?'✓':'…'} ${esc(_SETUP_DOC_TH[m[k]]||m[k])}</span>`);
   }
   return chips.join('')||'<span class="lbl">—</span>';
 }
@@ -3472,12 +3472,12 @@ function _setupRender(){
   let html=header();
   // page title card
   html+=`<div class="card" style="margin-bottom:12px"><div class="row">
-    <div style="width:32px;height:32px;border-radius:8px;background:var(--brand);color:#fff;
+    <div style="width:32px;height:32px;border-radius:4px;background:var(--brand);color:#fff;
       display:flex;align-items:center;justify-content:center;font-size:16px;flex:none"><i class="ti ti-settings" aria-hidden="true"></i></div>
     <div><h2 style="margin:0;font-size:16px">ตั้งค่าระบบกระทบยอด</h2>
       <div class="lbl">ตารางจับคู่รหัสรับเงิน · วิธีกระทบยอด · บัญชีธนาคาร · MID · รหัสสเตทเมนต์</div></div>
     <input type="month" value="${MONTH}" onchange="_setupChangeMonth(this.value)"
-      style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;margin-left:auto">
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;margin-left:auto">
     <a href="#" onclick="location.hash='';return false" class="btn btn-sm">← กลับ</a>
   </div></div>`;
 
@@ -3580,7 +3580,7 @@ function _setupRender(){
   html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
     <h2 style="margin:0;font-size:15px">⑤ รหัสในสเตทเมนต์ → ช่องทาง</h2>
     <a href="/api/statement-codes.html" target="_blank" class="lbl" style="margin-left:auto"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์ใบให้ทีมตรวจ</a>
-    <a href="/api/statement-codes.xlsx" class="lbl" style="margin-left:12px">⬇ Excel</a></div>
+    <a href="/api/statement-codes.xlsx" class="lbl" style="margin-left:12px">Excel</a></div>
   <div class="muted" style="margin-bottom:8px;font-size:12px">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้รหัสผู้จัดการ</div>
   <div id="setup-codes-body" class="muted">กำลังโหลด…</div></div>`;
 
@@ -3598,7 +3598,7 @@ async function _setupLoadCodes(){
     <tr><th>รหัส / คำ</th><th>ความหมาย</th><th>ระบบจัดเป็น</th><th>แก้เป็น</th><th></th></tr>
     ${_SETUP_CODES.map((c,i)=>{
       const eff=c.effective_channel;
-      const badge=c.overridden?'<span class="chip c-ok" style="font-size:11px">✏️ ทีมแก้แล้ว</span>'
+      const badge=c.overridden?'<span class="chip c-ok" style="font-size:11px">ทีมแก้แล้ว</span>'
         :c.status==='review'?'<span class="chip c-warn" style="font-size:11px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> รอตรวจ</span>':'<span class="chip c-mut" style="font-size:11px">✓</span>';
       return `<tr>
         <td style="font-family:monospace;font-size:12px">${esc(c.code)}<br>${badge}</td>
@@ -3666,7 +3666,7 @@ function _setupEditLane(cfgId){
     </div>
     <div class="row" style="margin-top:10px">
       <input type="text" id="sle-notes" value="${esc(c.notes||'')}" placeholder="หมายเหตุ"
-        style="flex:1;min-width:200px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--txt)">
+        style="flex:1;min-width:200px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--txt)">
       <button class="btn btn-pri btn-sm" onclick="_setupSaveLane(${c.id})">บันทึก (ผู้จัดการ)</button>
     </div></div>`;
   box.scrollIntoView({behavior:'smooth',block:'center'});
