@@ -211,6 +211,10 @@ tr.mi-outlier-good { background: var(--row-outlier-good); }
 .ms-kpi .sub { font-size: 12px; margin-top: 4px; }
 .ms-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; border: 1px solid var(--border); }
 
+/* ── Up/down inks follow the nearest light/dark ground ── */
+[data-theme="dark"] :where(.on-light, .pill-up, .pill-down, .badge-up) { --good-ink: #047857; --bad-ink: #b91c1c; }
+@media print { :root, [data-theme="dark"] { --good-ink: #047857; --bad-ink: #b91c1c; } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
