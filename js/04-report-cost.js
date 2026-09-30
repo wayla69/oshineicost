@@ -520,7 +520,7 @@ async function loadReport() {
   const _momChipS = p => p == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const _rankMove = b => {
-    if (b.isNew) return '<span style="color:#0891b2"></span>';
+    if (b.isNew) return '<span style="color:var(--cyan-ink)"></span>';
     if (b.dRank == null || b.dRank === 0) return '<span class="text-slate-400">—</span>';
     return b.dRank > 0
       ? `<span style="color:var(--good-ink)">▲ ${b.dRank}</span>`
@@ -536,7 +536,7 @@ async function loadReport() {
           <td class="py-2 pr-4">${medal}</td>
           <td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
           <td class="py-2 pr-4 text-right font-semibold">${fmtN(b.last)}</td>
-          <td class="py-2 pr-4 text-right">${b.ramp?'<span style="color:#0891b2">พุ่ง</span>':_momChipS(b.mom)}</td>
+          <td class="py-2 pr-4 text-right">${b.ramp?'<span style="color:var(--cyan-ink)">พุ่ง</span>':_momChipS(b.mom)}</td>
           <td class="py-2 pr-4 text-center">${_rankMove(b)}</td>
           <td class="py-2 pr-4 text-right">${b.share.toFixed(1)}%</td>
           <td class="py-2 pr-4 text-right">${fmtN(b.avg_ticket||0)}</td>
@@ -1096,7 +1096,7 @@ async function loadReport() {
     // A branch whose prior month is <5% of its projection barely operated last
     // month (newly opened) — its MoM% would be a meaningless 5-digit number.
     const momBranchCell = b => (b.prior_actual != null && b.prior_actual < b.projected * 0.05)
-      ? '<span style="color:#0891b2">ใหม่</span>'
+      ? '<span style="color:var(--cyan-ink)">ใหม่</span>'
       : momCell(b.mom_pct);
     document.getElementById('rptForecastBranchBody').innerHTML = forecastBranches.branches.map(b =>
       `<tr class="border-b border-slate-100">

@@ -47,7 +47,7 @@ function _fbReplyChip(r, big) {
   const s = r.reply_status;
   if (r.kind === 'mention' && !s && !r.reply_text) return '';   // a mention has nowhere to reply to
   const chip = (t, fg, bg, title) => `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:${bg};color:${fg}" title="${_fbEsc(title || '')}">${t}</span>`;
-  const link = (t, fn) => `<a href="#" class="text-[11px]" style="color:#0369a1" onclick="${fn}(${r.id});return false;">${t}</a>`;
+  const link = (t, fn) => `<a href="#" class="text-[11px]" style="color:var(--sky-ink)" onclick="${fn}(${r.id});return false;">${t}</a>`;
   if (s === 'pending') return chip('รอส่ง (รอบ 09:00)', '#92400e', '#fef3c7') + ' ' + link('ยกเลิก', 'cancelFeedbackReply');
   if (s === 'sent' || r.reply_text || r.replied) return chip('ตอบแล้ว ✓', '#047857', '#ecfdf5');
   if (s === 'failed') return chip('ส่งไม่สำเร็จ', '#b91c1c', '#fef2f2', r.reply_error) + ' ' + link('ลองใหม่', 'openFeedbackReply');
@@ -204,7 +204,7 @@ function _fbBranches(d) {
   let rows = (d.branches || []).slice();
   const key = _fbBranchSort;
   rows.sort((a, b) => key === 'branch' ? String(a.branch).localeCompare(String(b.branch), 'th') : ((b[key] == null ? -1e9 : b[key]) - (a[key] == null ? -1e9 : a[key])));
-  const th = (k, label, align) => `<th style="text-align:${align || 'left'}${key === k ? ';color:#0369a1' : ''}" onclick="_fbBranchSort='${k}';_fbBranches(_fbSummary)">${label}${key === k ? ' ▾' : ''}</th>`;
+  const th = (k, label, align) => `<th style="text-align:${align || 'left'}${key === k ? ';color:var(--sky-ink)' : ''}" onclick="_fbBranchSort='${k}';_fbBranches(_fbSummary)">${label}${key === k ? ' ▾' : ''}</th>`;
   document.getElementById('fbBranches').innerHTML = rows.length ?
     `<table class="fb-t"><thead><tr>${th('branch', 'สาขา')}${th('n', 'เสียง', 'right')}${th('avg_rating', '★', 'right')}${th('neg_pct', 'ลบ %', 'right')}${th('unreplied', 'รอตอบ', 'right')}${th('flagged', '⚑', 'right')}<th>ปัญหาหลัก</th></tr></thead><tbody>` +
     rows.map(b => { const p = prev[b.branch] || null;
@@ -277,7 +277,7 @@ async function loadFeedbackItems(qp, extra, replace) {
   document.getElementById('fbItemsHint').textContent = `(${(d.items || []).length}${(d.items || []).length >= 150 ? '+' : ''} รายการ)`;
   el.innerHTML = (d.items || []).length ?
     `<table class="fb-t"><thead><tr><th>วันที่</th><th>สาขา</th><th>ช่องทาง</th><th>★</th><th>ความรู้สึก</th><th>ข้อความ</th><th>ตอบกลับ</th><th></th></tr></thead><tbody>` +
-    d.items.map(r => `<tr class="align-top"><td class="whitespace-nowrap">${_fbEsc(r.rated_at || '')}${r.flag ? ' ⚑' : ''}</td><td>${_fbEsc(r.branch_name || '')}</td><td class="whitespace-nowrap">${_fbEsc(r.source || '')}<span class="text-[10px]" style="color:var(--text-muted)"> ${_FB_KIND_LABEL[r.kind] || ''}</span>${r.url ? ` <a href="${_fbEsc(r.url)}" target="_blank" rel="noopener" title="เปิดต้นทาง" style="color:#0369a1">↗</a>` : ''}</td><td>${r.rating != null ? r.rating : ''}</td><td>${_fbSentChip(r.sentiment)}</td><td>${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}<div>${(r.themes || []).map(t => `<span class="fb-tag">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="fb-tag menu">${_fbEsc(m)}</span> `).join('')}</div></td>
+    d.items.map(r => `<tr class="align-top"><td class="whitespace-nowrap">${_fbEsc(r.rated_at || '')}${r.flag ? ' ⚑' : ''}</td><td>${_fbEsc(r.branch_name || '')}</td><td class="whitespace-nowrap">${_fbEsc(r.source || '')}<span class="text-[10px]" style="color:var(--text-muted)"> ${_FB_KIND_LABEL[r.kind] || ''}</span>${r.url ? ` <a href="${_fbEsc(r.url)}" target="_blank" rel="noopener" title="เปิดต้นทาง" style="color:var(--sky-ink)">↗</a>` : ''}</td><td>${r.rating != null ? r.rating : ''}</td><td>${_fbSentChip(r.sentiment)}</td><td>${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}<div>${(r.themes || []).map(t => `<span class="fb-tag">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="fb-tag menu">${_fbEsc(m)}</span> `).join('')}</div></td>
       <td>${r.reply_text ? `<span title="${_fbEsc(r.replied_at || '')}" style="color:var(--good-ink)">✓ ${_fbEsc(r.reply_text.slice(0, 80))}</span>` : `${r.needs_reply ? '<span style="color:var(--bad-ink)">รอสาขาตอบ</span> ' : ''}${_fbReplyChip(r)}`}</td>
       <td><button class="text-[11px]" style="color:var(--bad-ink)" title="ลบรายการนี้" onclick="deleteFeedback(${r.id})">✕</button></td></tr>`).join('') + '</tbody></table>' :
     '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการ</p>';
@@ -300,7 +300,7 @@ async function loadFeedbackSources() {
   let d;
   try { d = await api(`${API}/api/feedback/sources`); } catch (e) { el.textContent = 'โหลดแหล่งข้อมูลไม่สำเร็จ'; return; }
   const rows = d.sources || [];
-  if (!rows.length) { el.innerHTML = 'ยังไม่มีรีวิวจากแหล่งใด — ตั้งค่าการดึงอัตโนมัติตาม <a href="#" onclick="switchTab(\'checklist\');return false;" style="color:#0369a1;text-decoration:underline">Checklist เปิดใช้</a> หรืออัปโหลด/วางรีวิวด้านบน'; return; }
+  if (!rows.length) { el.innerHTML = 'ยังไม่มีรีวิวจากแหล่งใด — ตั้งค่าการดึงอัตโนมัติตาม <a href="#" onclick="switchTab(\'checklist\');return false;" style="color:var(--sky-ink);text-decoration:underline">Checklist เปิดใช้</a> หรืออัปโหลด/วางรีวิวด้านบน'; return; }
   el.innerHTML = `<table class="fb-t"><thead><tr><th>แหล่ง</th><th style="text-align:right">รีวิว</th><th style="text-align:right">ดึงอัตโนมัติ</th><th>รีวิวล่าสุด</th><th style="text-align:right">รอสาขาตอบ</th><th>ดึงล่าสุด</th><th>ผล</th></tr></thead><tbody>` +
     rows.map(s => { const lr = s.last_run, ok = lr && lr.status === 'ok';
       const result = lr ? (ok ? `✓ ใหม่ ${lr.inserted} · อัปเดต ${lr.updated}${lr.message ? ' · ' + _fbEsc(lr.message) : ''}` : '✗ ' + _fbEsc(lr.message || 'ล้มเหลว')) : '';
@@ -354,7 +354,7 @@ async function openFeedbackReply(id) {
   catch (e) { p.innerHTML = `<p class="text-xs" style="color:var(--bad-ink)">ร่างคำตอบไม่สำเร็จ: ${_fbEsc(e.message)}</p>`; return; }
   const manual = d.channel === 'manual';
   p.innerHTML = `<div class="flex items-start justify-between gap-2">
-      <h3 class="text-sm font-semibold">ตอบรีวิว · ${_fbEsc(d.branch || '-')} · ${_fbEsc(d.source || '')}${d.rating != null ? ' · ' + d.rating + '★' : ''}${d.date ? ' · ' + _fbEsc(d.date) : ''}${d.url ? ` · <a href="${_fbEsc(d.url)}" target="_blank" rel="noopener" style="color:#0369a1;font-weight:400">เปิดรีวิว ↗</a>` : ''}</h3>
+      <h3 class="text-sm font-semibold">ตอบรีวิว · ${_fbEsc(d.branch || '-')} · ${_fbEsc(d.source || '')}${d.rating != null ? ' · ' + d.rating + '★' : ''}${d.date ? ' · ' + _fbEsc(d.date) : ''}${d.url ? ` · <a href="${_fbEsc(d.url)}" target="_blank" rel="noopener" style="color:var(--sky-ink);font-weight:400">เปิดรีวิว ↗</a>` : ''}</h3>
       <a href="#" onclick="closeFeedbackReply();return false;" style="color:var(--text-muted)">✕</a></div>
     <p class="text-xs my-1 px-2 py-1 rounded" style="background:var(--bg-input);color:var(--text-secondary)">${d.text ? _fbEsc(d.text) : '<i>(ให้ดาวอย่างเดียว)</i>'}</p>
     ${d.reply_status === 'failed' ? `<p class="text-xs" style="color:var(--bad-ink)">ครั้งก่อนส่งไม่สำเร็จ: ${_fbEsc(d.reply_error || '')}</p>` : ''}
@@ -587,7 +587,7 @@ async function loadFeedbackCompetitors(branch) {
         <td style="text-align:right;font-weight:600">${me.rating != null ? me.rating.toFixed(1) : '—'} ${dl(me.rating, pv.rating, 1)}</td><td style="text-align:right">${(me.ratings_total || 0).toLocaleString()} ${dl(me.ratings_total, pv.ratings_total, 0)}</td>
         <td style="text-align:right">${r.median_rating != null ? r.median_rating.toFixed(1) : '—'} <span style="color:var(--text-muted)">(${r.rated_competitors})</span></td>
         <td style="text-align:right;color:${r.gap == null ? 'inherit' : r.gap >= 0.2 ? 'var(--good-ink)' : r.gap <= -0.2 ? 'var(--bad-ink)' : 'inherit'}">${r.gap != null ? (r.gap > 0 ? '+' : '') + r.gap.toFixed(2) : '—'}</td>
-        <td style="text-align:right">${r.rank ? `#${r.rank}/${r.of}` : '—'}</td><td class="text-[11px]">${r.best ? `${_fbEsc(r.best.name)} ★${r.best.rating.toFixed(1)} (${r.best.ratings_total.toLocaleString()}) · ${(r.best.distance_m / 1000).toFixed(1)} กม.` : '—'}</td><td class="text-[11px]" style="color:#0369a1">${(r.list || []).length ? '' : 'ดูรายชื่อ →'}</td></tr>` +
+        <td style="text-align:right">${r.rank ? `#${r.rank}/${r.of}` : '—'}</td><td class="text-[11px]">${r.best ? `${_fbEsc(r.best.name)} ★${r.best.rating.toFixed(1)} (${r.best.ratings_total.toLocaleString()}) · ${(r.best.distance_m / 1000).toFixed(1)} กม.` : '—'}</td><td class="text-[11px]" style="color:var(--sky-ink)">${(r.list || []).length ? '' : 'ดูรายชื่อ →'}</td></tr>` +
         ((r.list || []).length ? `<tr><td colspan="9"><div class="pl-3" style="color:var(--text-secondary)">${r.list.map(c => `${_fbEsc(c.name)} ★${c.rating != null ? c.rating.toFixed(1) : '—'} (${(c.ratings_total || 0).toLocaleString()}) · ${(c.distance_m / 1000).toFixed(1)} กม.${c.price_level != null ? ' · ' + '฿'.repeat(Math.max(1, c.price_level)) : ''}`).join('<br>')}</div></td></tr>` : ''); }).join('') + '</tbody></table>' +
     `<div class="mt-1" style="color:var(--text-muted)">★ กลางคู่แข่ง = ค่ากลางของร้านที่มีรีวิว ≥ 20 ในรัศมี · ห่าง = ★ เรา − ★ กลางคู่แข่ง · อันดับนับเฉพาะร้านที่มีรีวิว ≥ 20 · คลิกสาขาเพื่อดูรายชื่อ</div>` :
     '<p style="color:var(--text-muted)">ไม่มีข้อมูลสำหรับสาขาที่เลือก</p>';

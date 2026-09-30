@@ -1422,7 +1422,7 @@ function renderTfBranchCards() {
       class="rounded-xl p-3 cursor-pointer transition-all border"
       style="background:${isActive ? '#e8eef7' : 'var(--bg-card)'};border-color:${isActive ? '#4a70b0' : 'var(--border)'}">
       <p class="text-[11px] font-semibold truncate mb-1" style="color:${isActive?'#4a70b0':'var(--text-primary)'}">${esc(b.branch)}</p>
-      <p class="text-xs" style="color:var(--text-muted)">พีค <span class="font-bold" style="color:var(--accent)">${peakH}</span> · <span class="font-bold" style="color:#0891b2">${peakD}</span></p>
+      <p class="text-xs" style="color:var(--text-muted)">พีค <span class="font-bold" style="color:var(--accent)">${peakH}</span> · <span class="font-bold" style="color:var(--cyan-ink)">${peakD}</span></p>
       <div class="flex gap-px items-end mt-2" style="height:20px">${bars}</div>
     </div>`;
   }).join('');

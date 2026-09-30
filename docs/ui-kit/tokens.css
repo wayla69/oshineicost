@@ -39,6 +39,10 @@
      #0d9488 3.74:1 and #f43f5e 3.67:1 on white are fills only. */
   --teal-ink:   #0f766e;   /* 5.47:1 on white */
   --rose-ink:   #be123c;   /* 6.29:1 on white */
+  /* Cyan and sky as TEXT (margin %, delivery, links, info). #0891b2 3.68,
+     #06b6d4 2.43 and #0ea5e9 2.77:1 on white are fills only. */
+  --cyan-ink:   #0e7490;   /* 5.36:1 on white */
+  --sky-ink:    #0369a1;   /* 5.93:1 on white */
 
   /* Elevation: resting surfaces are flat; only floating things cast a shadow. */
   --shadow-xs:  none;
@@ -77,6 +81,8 @@ body.dark {
   --bad-ink:    #f87171;   /* 6.29:1 on the dark card */
   --teal-ink:   #2dd4bf;   /* 9.34:1 on the dark card */
   --rose-ink:   #fb7185;   /* 6.46:1 on the dark card */
+  --cyan-ink:   #22d3ee;   /* 9.62:1 on the dark card */
+  --sky-ink:    #38bdf8;   /* 8.12:1 on the dark card */
 }
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */
