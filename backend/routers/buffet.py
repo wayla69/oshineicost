@@ -2432,7 +2432,7 @@ def buffet_menu_cost_coverage(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/portion-velocity   🟡3
+# GET /api/buffet/portion-velocity   ●3
 # qty / cover per SKU per month — detect over-ordering trends
 # ---------------------------------------------------------------------------
 @router.get("/api/buffet/portion-velocity")
@@ -2546,7 +2546,7 @@ def buffet_portion_velocity(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/plate-cost-dist   🟡4
+# GET /api/buffet/plate-cost-dist   ●4
 # Pro-rate monthly BoM cost to per-bill, return distribution
 # ---------------------------------------------------------------------------
 @router.get("/api/buffet/plate-cost-dist")
@@ -2791,7 +2791,7 @@ def buffet_turn_efficiency(branch: Optional[str] = Query(None), group: Optional[
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/cost-sensitivity   🟡5
+# GET /api/buffet/cost-sensitivity   ●5
 # Top cost-driver SKUs for JS-side simulation
 # ---------------------------------------------------------------------------
 @router.get("/api/buffet/cost-sensitivity")
@@ -2870,7 +2870,7 @@ def buffet_cost_sensitivity(
 
 
 # ---------------------------------------------------------------------------
-# GET + POST /api/branches/fixed-costs   🟡6
+# GET + POST /api/branches/fixed-costs   ●6
 # Per-branch monthly fixed costs (stored in app_settings as JSON)
 # ---------------------------------------------------------------------------
 import json as _json
@@ -2879,7 +2879,7 @@ import json as _json
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/pnl   🟡6 (part 2)
+# GET /api/buffet/pnl   ●6 (part 2)
 # Net P&L = GP - Fixed Costs per branch
 # ---------------------------------------------------------------------------
 @router.get("/api/buffet/pnl")

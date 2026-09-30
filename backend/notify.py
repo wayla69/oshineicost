@@ -47,17 +47,17 @@ def send_telegram(text: str, token: str = None, chat_id: str = None, http=None, 
 
 def negative_digest(items: list, source: str, app_url: str = "") -> str:
     """The alert text for newly collected negative reviews."""
-    lines = [f"⚠️ <b>รีวิวเชิงลบใหม่ {len(items)} รายการ</b> ({html.escape(source or '')})"]
+    lines = [f"⚠ <b>รีวิวเชิงลบใหม่ {len(items)} รายการ</b> ({html.escape(source or '')})"]
     for it in sorted(items, key=lambda x: x.get("severity") != "high")[:15]:
         stars = f"{it['rating']:g}★ · " if it.get("rating") is not None else ""
-        fire = f"🔥 <b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
+        fire = f"<b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
         lines.append(f"• {fire}<b>{html.escape(str(it.get('branch') or '-'))}</b> · {stars}{html.escape((it.get('text') or '')[:160])}")
         if it.get("url"):
             lines.append(f"  {html.escape(it['url'])}")
     if len(items) > 15:
         lines.append(f"… และอีก {len(items) - 15} รายการ")
     if app_url:
-        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+        lines.append(f"เปิดแท็บ เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
     return "\n".join(lines)
 
 
@@ -76,7 +76,7 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
     before, what waits now, and whether the fixes moved the voices
     (routers/feedback_actions.compute_digest shape)."""
     r = d.get("range") or ["", ""]
-    lines = [f"📊 <b>สรุปเสียงลูกค้า {d.get('days', 7)} วัน</b> ({html.escape(r[0])} → {html.escape(r[1])})"]
+    lines = [f"<b>สรุปเสียงลูกค้า {d.get('days', 7)} วัน</b> ({html.escape(r[0])} → {html.escape(r[1])})"]
     v, pv = d.get("voices") or 0, d.get("prev_voices")
     line = f"เสียง <b>{v}</b>{_arrow(v, pv)}"
     if d.get("neg_pct") is not None and v:
@@ -93,11 +93,11 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
     if d.get("unreplied"):
         waiting.append(f"รอสาขาตอบตอนนี้ <b>{d['unreplied']}</b>")
     if d.get("sla_breached"):
-        waiting.append(f"เกิน SLA <b>{d['sla_breached']}</b> ⚠️")
+        waiting.append(f"เกิน SLA <b>{d['sla_breached']}</b> ⚠")
     if d.get("severe"):
-        waiting.append(f"🔥 ร้ายแรง <b>{d['severe']}</b>")
+        waiting.append(f"ร้ายแรง <b>{d['severe']}</b>")
     if d.get("flagged"):
-        waiting.append(f"🚩 {d['flagged']}")
+        waiting.append(f"{d['flagged']}")
     if waiting:
         lines.append(" · ".join(waiting))
     th = d.get("themes") or []
@@ -124,7 +124,7 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
         if a.get("done"):
             bits.append(f"เสร็จสัปดาห์นี้ {a['done']}")
         ver = [f"ดีขึ้น {a['better']}" if a.get("better") else "", f"เท่าเดิม {a['same']}" if a.get("same") else "",
-               f"แย่ลง {a['worse']} ⚠️" if a.get("worse") else ""]
+               f"แย่ลง {a['worse']} ⚠" if a.get("worse") else ""]
         ver = [x for x in ver if x]
         if ver:
             bits.append("พิสูจน์ผล: " + " / ".join(ver))
@@ -135,7 +135,7 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
             left = f" (อีก {it['days_left']} วัน)" if it.get("days_left") else ""
             lines.append(f"  • {html.escape(it['title'])}{' · ' + html.escape(it['branch']) if it.get('branch') else ''}: {res or 'รอครบ 28 วัน'}{rate}{left}")
     if app_url:
-        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+        lines.append(f"เปิดแท็บ เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
     return "\n".join(lines)
 
 
@@ -143,10 +143,10 @@ def sla_alert_digest(items: list, app_url: str = "") -> str:
     """The alert text for cases that just crossed the SLA — same shape as
     negative_digest() but framed around "still waiting", since these can be
     old cases from earlier fetches, not necessarily today's new reviews."""
-    lines = [f"⏰ <b>เกิน SLA {len(items)} รายการ</b> (ยังไม่มีคนตอบ)"]
+    lines = [f"<b>เกิน SLA {len(items)} รายการ</b> (ยังไม่มีคนตอบ)"]
     for it in sorted(items, key=lambda x: -(x.get("age_days") or 0))[:15]:
         stars = f"{it['rating']:g}★ · " if it.get("rating") is not None else ""
-        fire = f"🔥 <b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
+        fire = f"<b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
         age = f"{it.get('age_days', 0)} วัน · " if it.get("age_days") is not None else ""
         lines.append(f"• {fire}<b>{html.escape(str(it.get('branch') or '-'))}</b> · {age}{stars}{html.escape((it.get('text') or '')[:160])}")
         if it.get("url"):
@@ -154,43 +154,43 @@ def sla_alert_digest(items: list, app_url: str = "") -> str:
     if len(items) > 15:
         lines.append(f"… และอีก {len(items) - 15} รายการ")
     if app_url:
-        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+        lines.append(f"เปิดแท็บ เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
     return "\n".join(lines)
 
 
 def daily_report_digest(d: dict, app_url: str = "") -> str:
-    """One day's (or period's) 📰 report, compact for a daily Telegram push —
+    """One day's (or period's) report, compact for a daily Telegram push —
     complements weekly_digest() (the week-over-week numbers + action verdicts,
     Mondays only) with the brand-new / recurring problems the report surfaces,
     so marketing doesn't have to open the app and click "สร้างรายงาน" to see
     them (routers/feedback_daily_report.compute_daily_report shape)."""
     label = d["date_from"] if d.get("date_from") == d.get("date_to") else f"{d.get('date_from')} – {d.get('date_to')}"
     branch_bit = f" · {html.escape(d['branch'])}" if d.get("branch") else ""
-    lines = [f"📰 <b>รายงานเสียงลูกค้า {html.escape(label)}</b>{branch_bit}"]
+    lines = [f"<b>รายงานเสียงลูกค้า {html.escape(label)}</b>{branch_bit}"]
     lines.append(html.escape(d.get("headline") or ""))
     if d.get("total"):
         new_i, open_i, done_i, chronic = d.get("new_issues") or [], d.get("open_issues") or [], d.get("resolved_issues") or [], d.get("chronic_branches") or []
         bits = []
         if new_i:
-            bits.append(f"🆕 ใหม่ {len(new_i)}")
+            bits.append(f"ใหม่ {len(new_i)}")
         if open_i:
-            bits.append(f"🔧 ค้าง {len(open_i)}")
+            bits.append(f"ค้าง {len(open_i)}")
         if done_i:
-            bits.append(f"✅ ปิดแล้ว {len(done_i)}")
+            bits.append(f"ปิดแล้ว {len(done_i)}")
         if chronic:
-            bits.append(f"🔁 ซ้ำซาก {len(chronic)}")
+            bits.append(f"ซ้ำซาก {len(chronic)}")
         if bits:
             lines.append(" · ".join(bits))
         if new_i:
-            lines.append("🆕 ปัญหาใหม่ยังไม่มีคนตาม:")
+            lines.append("ปัญหาใหม่ยังไม่มีคนตาม:")
             for it in new_i[:3]:
                 lines.append(f"• {html.escape(it.get('branch') or '-')}: {html.escape(it['theme'])} ({it['n']})")
         if chronic:
-            lines.append("🔁 สาขาที่ปัญหาเดิมวนซ้ำ:")
+            lines.append("สาขาที่ปัญหาเดิมวนซ้ำ:")
             for it in chronic[:3]:
                 lines.append(f"• {html.escape(it.get('branch') or '-')}: {html.escape(it['theme'])} ({it['periods']}/{it['of_periods']} ช่วง)")
     if app_url:
-        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+        lines.append(f"เปิดแท็บ เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
     return "\n".join(lines)
 
 

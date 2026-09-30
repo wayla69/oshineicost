@@ -175,9 +175,9 @@ def test_print_groups_by_branch_only_on_the_all_branches_view(client):
                 ("BranchB", f"{DAY} 11:00:00", 2, "แย่ที่ B", "neg", [], [], None, "low")])
     con.commit(); con.close()
     all_body = client.get("/api/feedback/daily-report.print", params={"date": DAY}).text
-    assert "🏪 BranchA" in all_body and "🏪 BranchB" in all_body      # grouped: a branch header per branch
+    assert 'class="branch-h">BranchA' in all_body and 'class="branch-h">BranchB' in all_body      # grouped: a branch header per branch
     one_body = client.get("/api/feedback/daily-report.print", params={"date": DAY, "branch": "BranchA"}).text
-    assert "🏪 BranchA" not in one_body and "🏪 BranchB" not in one_body and "แย่ที่ A" in one_body   # scoped: no grouping needed
+    assert 'class="branch-h">' not in one_body and "แย่ที่ A" in one_body   # scoped: no grouping needed
     # detail sections added alongside branch grouping
     assert "ช่องทางที่มาวันนี้" in all_body and "อัตราตอบกลับ" in all_body and "พนักงานที่ถูกพูดถึง" in all_body
 

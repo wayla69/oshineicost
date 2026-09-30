@@ -102,29 +102,29 @@ body{margin:0;font-family:'IBM Plex Sans Thai',Sarabun,sans-serif;color:#1f2937;
 .page{width:210mm;min-height:296mm;margin:0 auto 8mm;background:#fff;padding:16mm 16mm 14mm;position:relative;page-break-after:always;break-after:page}
 .page:last-child{break-after:auto;page-break-after:auto}
 @media print{body{background:#fff}.page{margin:0}}
-h1{font-size:26px;margin:0 0 6px;color:#0f766e}
-h2{font-size:17px;margin:0 0 10px;color:#0f766e;border-bottom:2px solid #0f766e;padding-bottom:4px}
+h1{font-size:26px;margin:0 0 6px;color:#1f3a6b}
+h2{font-size:17px;margin:0 0 10px;color:#1f3a6b;border-bottom:2px solid #1f3a6b;padding-bottom:4px}
 h3{font-size:13.5px;margin:14px 0 6px;color:#374151}
 .muted{color:#6b7280}.small{font-size:11px}
-.cover{display:flex;flex-direction:column;justify-content:center;min-height:120mm;border-left:6px solid #0f766e;padding-left:14mm}
-.kicker{letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:#0f766e;font-weight:600}
+.cover{display:flex;flex-direction:column;justify-content:center;min-height:120mm;border-top:4px solid #1f3a6b;padding-top:10mm}
+.kicker{letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:#1f3a6b;font-weight:600}
 .cover .big{font-size:32px;font-weight:700;line-height:1.2;margin:8px 0}
 .figs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 14px}
-.fig{border:1px solid #e5e7eb;border-radius:8px;padding:9px 10px;background:#f9fafb}
+.fig{border:1px solid #e5e7eb;border-radius:4px;padding:9px 10px;background:#f9fafb}
 .fig .l{font-size:10.5px;color:#6b7280}.fig .v{font-size:18px;font-weight:700;color:#111827;margin-top:2px}.fig .s{font-size:10.5px;color:#374151}
 .up{color:#b91c1c}.down{color:#047857}.neutral{color:#374151}
 table{width:100%;border-collapse:collapse;font-size:11.5px}
 th{background:#f3f4f6;text-align:left;padding:6px 7px;border-bottom:1px solid #d1d5db;font-weight:600}
 td{padding:5px 7px;border-bottom:1px solid #eef0f2;vertical-align:top}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.callout{background:#ecfdf5;border-left:4px solid #0f766e;padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0}
-.warn{background:#fffbeb;border-left-color:#d97706}
+.callout{background:#e8eef7;border:1px solid #1f3a6b;padding:8px 12px;border-radius:4px;margin:10px 0}
+.warn{background:#fffbeb;border-color:#d97706}
 .danger{background:#fef2f2;border-left-color:#b91c1c}
 ul.f{padding-left:18px;margin:6px 0}ul.f li{margin:5px 0}
 ol.f{padding-left:18px;margin:6px 0}ol.f li{margin:6px 0}
 .foot{position:absolute;left:16mm;right:16mm;bottom:8mm;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:4px}
 table.tight{font-size:10.5px}table.tight td{padding:3px 6px}table.tight th{padding:5px 6px}
-.badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.badge{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600}
 .badge.hi{background:#fef2f2;color:#b91c1c}.badge.lo{background:#ecfdf5;color:#047857}
 """
 
@@ -271,7 +271,7 @@ def build_html(d: dict, gen_dt: str) -> str:
                         if len(branch_pages) == 0 else '')
         pg_a = f'''
         {section_head}
-        <div style="border-left:6px solid #0f766e;padding-left:10mm;margin-bottom:14px">
+        <div style="border-left:6px solid #1f3a6b;padding-left:10mm;margin-bottom:14px">
           <div class="kicker">ส่วนที่ 3 · รายละเอียดรายสาขา</div>
           <div style="font-size:24px;font-weight:700;color:#111827;margin-top:2px">{esc(name)}</div>
           <div class="muted small" style="margin-top:2px">อันดับต้นทุนอาหาร #{fc_rank[name]}/{n_branches} (1=สูงสุด) · อันดับมูลค่าสั่งซื้อ #{op_rank.get(name,"—")}/{n_branches} (1=สูงสุด)</div>
@@ -305,7 +305,7 @@ def build_html(d: dict, gen_dt: str) -> str:
         for ci, chunk in enumerate(chunks, start=1):
             page_note = f" (หน้า {ci}/{len(chunks)})" if len(chunks) > 1 else ""
             pg_b = f'''
-            <div style="border-left:6px solid #0f766e;padding-left:10mm;margin-bottom:14px">
+            <div style="border-left:6px solid #1f3a6b;padding-left:10mm;margin-bottom:14px">
               <div class="kicker">ส่วนที่ 3 · รายละเอียดรายสาขา</div>
               <div style="font-size:20px;font-weight:700;color:#111827;margin-top:2px">{esc(name)} — วัตถุดิบทั้งหมดที่ควรสั่งซื้อ ({len(opb_rows_all)} รายการ){page_note}</div>
             </div>

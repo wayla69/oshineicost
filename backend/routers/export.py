@@ -315,9 +315,9 @@ def _mpack_render_xlsx(pack: dict) -> bytes:
     PCT_FMT   = '0.0"%"'
 
     STATUS_COLOR = {
-        "in":         ("E8F5E9", "1B5E20", "✅ ในเป้า"),
-        "borderline": ("FFF3E0", "E65100", "⚠️ ใกล้ขอบ"),
-        "out":        ("FFEBEE", "B71C1C", "🔴 เกินเป้า"),
+        "in":         ("E8F5E9", "1B5E20", "ในเป้า"),
+        "borderline": ("FFF3E0", "E65100", "⚠ ใกล้ขอบ"),
+        "out":        ("FFEBEE", "B71C1C", "เกินเป้า"),
         "low":        ("E3F2FD", "0D47A1", "ℹ️ ต่ำผิดปกติ"),
         "no-data":    ("ECEFF1", "455A64", "— ไม่มีข้อมูล"),
     }
@@ -534,7 +534,7 @@ def _mpack_render_pdf(pack: dict) -> bytes:
         tbl_data.append([
             b["branch"], fmt_n(b["revenue"]), fmt_n(b["cogs"]), fmt_n(b["gp"]),
             fmt_p(b["gp_pct"]), fmt_p(b["food_cost_pct"]),
-            {"in":"✅","borderline":"⚠️","out":"🔴","low":"ℹ️","no-data":"—"}.get(b["status"],"—"),
+            {"in":"✓","borderline":"⚠","out":"●","low":"ℹ️","no-data":"—"}.get(b["status"],"—"),
         ])
     branch_tbl = Table(tbl_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 1.8*cm, 1.8*cm, 1.4*cm])
     branch_tbl.setStyle(TableStyle([

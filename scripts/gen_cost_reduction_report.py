@@ -111,7 +111,7 @@ hr{border:none;border-top:1px solid var(--line);margin:1.5em 0}
 .cover .wm{font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--ink)}
 .cover .kicker{color:var(--muted)}
 .pdfbtn{position:fixed;top:14px;right:14px;z-index:9999;background:var(--ink);color:#fff;border:none;
-  padding:9px 16px;border-radius:5px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
+  padding:9px 16px;border-radius:4px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
   box-shadow:0 2px 10px rgba(0,0,0,.22);letter-spacing:.3px}
 .pdfbtn:hover{background:#000}
 @media print{.pdfbtn{display:none!important}}
@@ -139,7 +139,7 @@ hr{border:none;border-top:1px solid var(--line);margin:1.5em 0}
 .fig .h{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.4}
 
 /* callouts: white, left rule, coloured title */
-.callout{border-left:3px solid var(--teal);padding:10px 14px;margin:1.05em 0}
+.callout{border:1px solid var(--teal);padding:10px 14px;margin:1.05em 0}
 .callout.s{border-left-color:var(--accent)} .callout.green{border-left-color:var(--green)}
 .callout.red{border-left-color:var(--red)} .callout.g{border-left-color:var(--gold)}
 .callout .ct{font-weight:700;font-size:13.5px;margin-bottom:.25em;color:var(--ink)}
@@ -154,7 +154,7 @@ th{color:var(--ink);font-weight:700;font-size:11.5px;letter-spacing:.2px;
 th.r,td.r{text-align:right;font-variant-numeric:tabular-nums} th.c,td.c{text-align:center}
 tbody tr:last-child td{border-bottom:1px solid var(--line)}
 tr.hl td{font-weight:700}
-tr.hl td:first-child{border-left:2px solid var(--accent);padding-left:7px}
+tr.hl td:first-child{border:1px solid var(--accent);padding-left:7px}
 tr.tot td{border-top:2px solid var(--ink);font-weight:700}
 td.pos{color:var(--green);font-weight:700} td.neg{color:var(--red);font-weight:700}
 .tbl-cap{font-size:11px;color:var(--muted);margin:-.4em 0 1.3em}
@@ -214,7 +214,7 @@ td.pos{color:var(--green);font-weight:700} td.neg{color:var(--red);font-weight:7
 .legend{font-size:12px}
 .legend .li{display:flex;align-items:center;gap:8px;margin:4px 0}
 .legend .sw{width:11px;height:11px;border-radius:2px;flex:none}
-.q-quote{border-left:3px solid var(--faint);padding:6px 14px;margin:.6em 0;font-size:12.5px;color:var(--ink2);font-style:italic}
+.q-quote{border:1px solid var(--faint);padding:6px 14px;margin:.6em 0;font-size:12.5px;color:var(--ink2);font-style:italic}
 .q-quote .who{display:block;font-style:normal;font-size:10.5px;color:var(--muted);margin-top:3px}
 .checkbox,.warn-list{list-style:none;padding-left:0}
 .checkbox li,.warn-list li{padding-left:22px;position:relative;margin:.35em 0}

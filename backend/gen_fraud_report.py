@@ -192,26 +192,26 @@ def main():
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oshinei Enterprise — รายงานตรวจสอบการทุจริต · {period}</title>
 <style>
-:root{{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#4f46e5;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}}
+:root{{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#1f3a6b;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}}
 *{{box-sizing:border-box}}
 body{{font-family:"Sarabun","Segoe UI",-apple-system,Roboto,sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.55;font-size:15px}}
 .wrap{{max-width:1080px;margin:0 auto;padding:0 24px 80px}}
-.cover{{background:linear-gradient(135deg,#7f1d1d 0%,#b91c1c 55%,#ef4444 100%);color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}}
+.cover{{background:#7f1d1d;color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}}
 .cover .eyebrow{{text-transform:uppercase;letter-spacing:3px;font-size:12px;opacity:.85;font-weight:600}}
 .cover h1{{font-size:34px;margin:8px 0 4px;font-weight:800;line-height:1.15}}
 .cover .sub{{opacity:.92;font-size:16px}}
 .cover .meta{{margin-top:20px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px;opacity:.95}}
 .cover .meta b{{display:block;font-size:20px;font-weight:700;opacity:1}}
-section{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px 32px;margin-bottom:24px;box-shadow:0 1px 3px rgba(15,23,42,.04)}}
+section{{background:#fff;border:1px solid var(--line);border-radius:4px;padding:30px 32px;margin-bottom:24px;box-shadow:0 1px 3px rgba(15,23,42,.04)}}
 h2.sec{{font-size:22px;margin:0 0 4px;font-weight:800}}
 h2.sec .num{{color:var(--rd);font-weight:800;margin-right:10px}}
 .sec-sub{{color:var(--mut);font-size:13px;margin:0 0 20px}}
 .kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}}
-.kpi{{border:1px solid var(--line);border-radius:12px;padding:16px;background:linear-gradient(180deg,#fff,#fffafa)}}
+.kpi{{border:1px solid var(--line);border-radius:4px;padding:16px;background:linear-gradient(180deg,#fff,#fffafa)}}
 .kpi .lbl{{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}}
 .kpi .val{{font-size:25px;font-weight:800;margin:4px 0 2px}}
 .kpi .sub{{font-size:12px;color:var(--mut)}}
-.flag{{display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line);border-left:4px solid var(--rd);border-radius:0 10px 10px 0;padding:14px 18px;margin:12px 0;background:#fef2f2}}
+.flag{{display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line);border:1px solid var(--rd);border-radius:0 10px 10px 0;padding:14px 18px;margin:12px 0;background:#fef2f2}}
 .flag.med{{border-left-color:var(--am);background:#fffbeb}}
 .flag .ftxt b{{font-weight:700}}
 .flag .fnum{{margin-left:auto;font-size:18px;font-weight:800;white-space:nowrap}}
@@ -222,14 +222,14 @@ td.l,th.l{{text-align:left}}
 th{{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);font-weight:700;border-bottom:2px solid var(--line)}}
 tbody tr:hover{{background:#fafbff}}
 tfoot td{{font-weight:800;border-top:2px solid var(--line);background:#f8fafc}}
-.bar{{height:9px;border-radius:5px;display:inline-block;vertical-align:middle}}
+.bar{{height:9px;border-radius:4px;display:inline-block;vertical-align:middle}}
 .pill{{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:700}}
-.tag{{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:700;background:#eef2ff;color:#4f46e5}}
+.tag{{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#e8eef7;color:#1f3a6b}}
 .tag.f{{background:#f1f5f9;color:#64748b}}
-.callout{{border-left:4px solid var(--indigo);background:#eef2ff;border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0;font-size:14px}}
+.callout{{border:1px solid var(--indigo);background:#e8eef7;border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0;font-size:14px}}
 .callout.warn{{border-color:var(--am);background:#fffbeb}}
 .callout.risk{{border-color:var(--rd);background:#fef2f2}}
-.rec{{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}}
+.rec{{border:1px solid var(--line);border-radius:4px;padding:16px 18px;margin-bottom:12px}}
 .rec h4{{margin:0 0 6px;font-size:15px}}
 .muted{{color:var(--mut);font-size:12px}}
 .toc{{columns:2;font-size:13px;gap:30px}}
@@ -316,7 +316,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     <table><thead><tr><th class="l">ผู้ใช้</th><th>จำนวนครั้ง</th><th>มูลค่า</th><th>สัดส่วน</th></tr></thead><tbody>{rows}</tbody></table>
     <h4 style="margin:22px 0 2px">ยอดวอยด์ตามสาขา (Top 10)</h4>
     <table><thead><tr><th class="l">สาขา</th><th>จำนวนครั้ง</th><th>มูลค่า</th><th>สัดส่วน</th></tr></thead><tbody>{brows}</tbody></table>
-    <h4 style="margin:22px 0 2px">⚠️ วอยด์ยอด "เท่ากันเป๊ะ" ซ้ำโดยผู้ใช้เดียวกัน (≥25 ครั้ง)</h4>
+    <h4 style="margin:22px 0 2px">⚠ วอยด์ยอด "เท่ากันเป๊ะ" ซ้ำโดยผู้ใช้เดียวกัน (≥25 ครั้ง)</h4>
     <p class="muted">ยอดที่ซ้ำเป๊ะหลายสิบครั้งอาจเป็นราคาแพ็กเกจบุฟเฟ่ต์ที่ยกเลิกจริง แต่ก็เป็นรูปแบบที่ควรสุ่มตรวจใบเสร็จจริง</p>
     <table><thead><tr><th class="l">ผู้ใช้</th><th class="l">สาขา</th><th>ยอดต่อครั้ง</th><th>จำนวนครั้ง</th><th>รวม</th></tr></thead><tbody>{reprows or '<tr><td colspan=5 class=l>—</td></tr>'}</tbody></table>
     <h4 style="margin:22px 0 2px">วอยด์มูลค่าสูงสุดรายบิล (Top 12)</h4>

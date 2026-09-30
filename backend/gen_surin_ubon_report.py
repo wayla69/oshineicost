@@ -174,12 +174,12 @@ def fmt(n, pre="฿"):
     return f"{pre}{n:.0f}"
 
 
-def badge(lbl, color="#0f766e"):
+def badge(lbl, color="#1f3a6b"):
     return (f'<span style="background:{color};color:#fff;padding:2px 8px;border-radius:4px;'
             f'font-size:11px;font-weight:700">{lbl}</span>')
 
 
-def bar_row(label, val, max_val, color="#0f766e", val_fmt=None):
+def bar_row(label, val, max_val, color="#1f3a6b", val_fmt=None):
     pct = min(100, 100 * val / max_val) if max_val > 0 else 0
     vstr = val_fmt if val_fmt else fmt(val)
     return (f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
@@ -198,16 +198,16 @@ MONTH_SHORT = {"2026-01": "ม.ค.", "2026-02": "ก.พ.", "2026-03": "มี.
 CSS = """
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1e293b;background:#e2e8f0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
-:root{--teal:#0f766e;--rd:#dc2626;--am:#d97706;--em:#16a34a}
-.cover{width:100%;min-height:100vh;background:linear-gradient(135deg,#134e4a 0%,#115e59 40%,#0f766e 75%,#0e7490 100%);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:70px 80px;color:#fff;page-break-after:always}
-.cover-tag{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);padding:5px 14px;border-radius:20px;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px;display:inline-block}
+:root{--teal:#1f3a6b;--rd:#dc2626;--am:#d97706;--em:#16a34a}
+.cover{width:100%;min-height:100vh;background:#134e4a;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:70px 80px;color:#fff;page-break-after:always}
+.cover-tag{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);padding:5px 14px;border-radius:4px;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px;display:inline-block}
 .cover-title{font-size:46px;font-weight:800;line-height:1.12;margin-bottom:14px}
 .cover-sub{font-size:19px;font-weight:300;color:rgba(255,255,255,.85);margin-bottom:40px}
 .cover-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:36px;width:100%}
-.ckpi{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:20px}
+.ckpi{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:20px}
 .ckpi-val{font-size:28px;font-weight:800;color:#fbbf24}
 .ckpi-lbl{font-size:12px;color:rgba(255,255,255,.75);margin-top:4px}
-.cover-note{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);padding:8px 14px;border-radius:7px;font-size:13px;margin-top:8px}
+.cover-note{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);padding:8px 14px;border-radius:4px;font-size:13px;margin-top:8px}
 .cover-foot{font-size:11px;color:rgba(255,255,255,.6);border-top:1px solid rgba(255,255,255,.15);padding-top:20px;width:100%;display:flex;justify-content:space-between;margin-top:36px}
 .page{width:210mm;min-height:297mm;margin:0 auto 24px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.1);page-break-after:always}
 .page-last{page-break-after:auto}
@@ -220,7 +220,7 @@ body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1e293b;background:#e
 .sec-desc{font-size:12px;color:#64748b;margin-bottom:18px}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
 .kpi3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
-.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px}
+.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:14px}
 .kpi-val{font-size:24px;font-weight:800;color:var(--teal)}
 .kpi-val.red{color:var(--rd)}
 .kpi-val.am{color:var(--am)}
@@ -232,12 +232,12 @@ td{padding:7px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .center{text-align:center}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px}
-.alert{border-radius:7px;padding:12px 16px;margin-bottom:14px;border-left:4px solid;font-size:12px;line-height:1.7}
+.alert{border-radius:4px;padding:12px 16px;margin-bottom:14px;border-left:4px solid;font-size:12px;line-height:1.7}
 .alert-red{background:#fef2f2;border-color:#dc2626;color:#991b1b}
 .alert-am{background:#fffbeb;border-color:#d97706;color:#92400e}
 .alert-em{background:#f0fdf4;border-color:#16a34a;color:#14532d}
 .alert-blue{background:#eff6ff;border-color:#3b82f6;color:#1e40af}
-.alert-teal{background:#f0fdfa;border-color:#0f766e;color:#115e59}
+.alert-teal{background:#f0fdfa;border-color:#1f3a6b;color:#115e59}
 .toc-item{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #e2e8f0;font-size:12px}
 @media print{body{background:#fff}.page{box-shadow:none;margin:0}.cover{page-break-after:always}}
 @page{margin:0;size:A4}
@@ -303,7 +303,7 @@ def generate(db_data):
         ("8", "อุบลฯ — บิลส่วนลดสูงสุด", "9"),
         ("9", "ข้อเสนอแนะด้านการควบคุม (Control Recommendations)", "10"),
     ]
-    toc_html = '<div style="background:#f8fafc;border-radius:8px;padding:16px">'
+    toc_html = '<div style="background:#f8fafc;border-radius:4px;padding:16px">'
     for num, title, pg in toc_items:
         toc_html += (f'<div class="toc-item"><span style="font-weight:700;display:flex;gap:8px">'
                      f'<span style="color:var(--teal);font-weight:700;min-width:30px">{num}</span>'
@@ -338,7 +338,7 @@ def generate(db_data):
 </ul>
 </div>
 <div>
-<strong style="color:#0f766e;font-size:14px">สาขาอุบลราชธานี — เป็นเรื่องนโยบายโปรโมชัน ไม่ใช่การทุจริต</strong>
+<strong style="color:#1f3a6b;font-size:14px">สาขาอุบลราชธานี — เป็นเรื่องนโยบายโปรโมชัน ไม่ใช่การทุจริต</strong>
 <ul style="margin-top:8px;padding-left:18px;line-height:2.0;font-size:12px">
 <li>ส่วนลดรวม <strong>{fmt(ud['disc_total'])}</strong> จาก {ud['disc_bills']:,} บิล</li>
 <li><strong>ทั้งหมด (100%)</strong> ผูกกับคูปองโปรโมชันที่นิยามไว้ในระบบ</li>
@@ -362,7 +362,7 @@ def generate(db_data):
         tot = b["disc_total"] or 1
         rows = [
             ("คูปองโปรโมชันที่นิยามไว้", b["ch_coupon"], "#16a34a", "ถูกต้อง — เป็นโปรฯ ที่ตั้งค่าในระบบ"),
-            ("มีรหัสเหตุผลกำกับ", b["ch_reason"], "#0f766e", "มีการระบุเหตุผลไว้"),
+            ("มีรหัสเหตุผลกำกับ", b["ch_reason"], "#1f3a6b", "มีการระบุเหตุผลไว้"),
             ("ยังไม่มีที่มา (ไม่มีคูปอง/เหตุผล)", b["ch_unexp"], "#d97706", "ควรทบทวนการควบคุมการอนุมัติ"),
         ]
         h = (f'<strong>{name}</strong> — ส่วนลดรวม {fmt(b["disc_total"])} ({b["disc_bills"]:,} บิล)'
@@ -405,7 +405,7 @@ def generate(db_data):
             pct = round(100 * (d or 0) / coup_tot, 1)
             add(f'<tr><td style="font-family:monospace;color:#64748b">#{sid}</td>'
                 f'<td>{label}</td><td class="num">{n:,}</td>'
-                f'<td class="num" style="color:#0f766e;font-weight:700">{fmt(d)}</td>'
+                f'<td class="num" style="color:#1f3a6b;font-weight:700">{fmt(d)}</td>'
                 f'<td class="num">{pct}%</td></tr>')
         add('</tbody></table>')
         # Unexplained callout
@@ -442,7 +442,7 @@ def generate(db_data):
         max_hr = max((r[2] for r in b["by_hour"]), default=1)
         add('<div class="two-col"><div><strong>ส่วนลดตามวันในสัปดาห์</strong><div style="height:8px"></div>')
         for dow, n, disc in b["by_dow"]:
-            add(bar_row(dow, disc, max_dow, "#0f766e"))
+            add(bar_row(dow, disc, max_dow, "#1f3a6b"))
         add('</div><div><strong>ส่วนลดตามช่วงเวลา (ชั่วโมง)</strong><div style="height:8px"></div>')
         for hr, n, disc in b["by_hour"]:
             add(bar_row(f"{hr}:00", disc, max_hr, "#0e7490"))
@@ -472,7 +472,7 @@ def generate(db_data):
             if cs_name:
                 origin = f'<span style="color:#16a34a">คูปอง: {cs_name}</span>'
             elif reason_id:
-                origin = f'<span style="color:#0f766e">รหัสเหตุผล #{reason_id}</span>'
+                origin = f'<span style="color:#1f3a6b">รหัสเหตุผล #{reason_id}</span>'
             else:
                 origin = '<span style="color:#d97706">ยังไม่มีที่มา</span>'
             add(f'<tr><td style="font-size:11px">{d}</td><td style="font-size:11px">{t}</td>'
@@ -505,11 +505,11 @@ def generate(db_data):
 <tr><td>2</td><td><strong>กำหนดสิทธิ์อนุมัติส่วนลด</strong> ให้ชัดเจน — ส่วนลดเกินเกณฑ์ที่ตั้งไว้ต้องผ่านหัวหน้า</td>
 <td>ควบคุมการอนุมัติส่วนลดมูลค่าสูง</td><td class="center">""" + badge("สูง", "#d97706") + """</td></tr>
 <tr><td>3</td><td><strong>ทบทวนบัญชี POS login ที่ใช้ร่วมกัน</strong> (Manager/admin/Take Order) — พิจารณาบัญชีรายบุคคล</td>
-<td>ให้มี audit trail ที่ระบุผู้ทำรายการได้</td><td class="center">""" + badge("กลาง", "#0f766e") + """</td></tr>
+<td>ให้มี audit trail ที่ระบุผู้ทำรายการได้</td><td class="center">""" + badge("กลาง", "#1f3a6b") + """</td></tr>
 <tr><td>4</td><td><strong>ทบทวนนโยบายโปรโมชัน/มาร์จิน</strong> ของคูปองส่วนลดที่มีมูลค่าสูง (เช่น ส่วนลดตามอายุ/ส่วนสูง, วันเกิด)</td>
-<td>ประเมินความคุ้มค่าของโปรโมชัน (โดยเฉพาะอุบลฯ)</td><td class="center">""" + badge("กลาง", "#0f766e") + """</td></tr>
+<td>ประเมินความคุ้มค่าของโปรโมชัน (โดยเฉพาะอุบลฯ)</td><td class="center">""" + badge("กลาง", "#1f3a6b") + """</td></tr>
 <tr><td>5</td><td><strong>รายงานส่วนลดรายเดือนต่อผู้บริหาร</strong> พร้อมสัดส่วนช่องทาง (คูปอง/เหตุผล/ยังไม่มีที่มา)</td>
-<td>เฝ้าระวังแนวโน้มต่อเนื่อง</td><td class="center">""" + badge("กลาง", "#0f766e") + """</td></tr>
+<td>เฝ้าระวังแนวโน้มต่อเนื่อง</td><td class="center">""" + badge("กลาง", "#1f3a6b") + """</td></tr>
 </tbody></table>""")
     add(f"""<div class="alert alert-am" style="margin-top:6px">
 <strong>ประเด็นสำคัญที่ต้องติดตาม — สุรินทร์:</strong> ส่วนลด {fmt(sd['ch_unexp']['d'])} จาก {sd['ch_unexp']['n']:,} บิล
@@ -537,7 +537,7 @@ if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    print("🗄  ดึงข้อมูล DB (read-only)...")
+    print(" ดึงข้อมูล DB (read-only)...")
     db_data = load_db(resolve_db(args.db))
     for bkey in ("surin", "ubon"):
         b = db_data[bkey]
@@ -546,10 +546,10 @@ if __name__ == "__main__":
               f"· เหตุผล {b['ch_reason']['n']:,}/{b['ch_reason']['d']:,.0f}฿ "
               f"· ยังไม่มีที่มา {b['ch_unexp']['n']:,}/{b['ch_unexp']['d']:,.0f}฿")
 
-    print("📊 สร้างรายงาน HTML...")
+    print("สร้างรายงาน HTML...")
     html = generate(db_data)
     out = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"✅ สร้างสำเร็จ: {out} ({os.path.getsize(out):,} bytes)")
+    print(f"สร้างสำเร็จ: {out} ({os.path.getsize(out):,} bytes)")

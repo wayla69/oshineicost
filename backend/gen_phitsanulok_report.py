@@ -96,7 +96,7 @@ def load(db_path):
 DOW_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสฯ", "ศุกร์", "เสาร์"]
 
 
-def bar(label, val, mx, color="#0f766e", suffix=""):
+def bar(label, val, mx, color="#1f3a6b", suffix=""):
     w = (val / mx * 100) if mx else 0
     return (f'<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12px">'
             f'<span style="min-width:96px;color:#475569">{label}</span>'
@@ -196,10 +196,10 @@ def generate(d):
 <div><div style="font-weight:700;font-size:13px;color:#b91c1c;margin-bottom:4px">บิลที่ยกทั้งใบ (จ่าย ฿0)</div>""")
     for r in d["band_comp"]:
         add(bar(f"฿{r['band']:,}/หัว", r["n"], mxc, "#dc2626", " ใบ"))
-    add('</div><div><div style="font-weight:700;font-size:13px;color:#0f766e;margin-bottom:4px">'
+    add('</div><div><div style="font-weight:700;font-size:13px;color:#1f3a6b;margin-bottom:4px">'
         'บิลคูปองเดียวกันที่ยังเก็บเงิน</div>')
     for r in d["band_paid"]:
-        add(bar(f"฿{r['band']:,}/หัว", r["n"], mxp, "#0f766e", " ใบ"))
+        add(bar(f"฿{r['band']:,}/หัว", r["n"], mxp, "#1f3a6b", " ใบ"))
     add("""</div></div>
 <div class="alert alert-teal" style="margin-top:12px">บิลที่ยังเก็บเงินกระจุกที่ <strong>฿100–300/หัว</strong>
 ซึ่งคือ “ลดบางส่วนให้ผู้สูงอายุ” ตามที่คูปองตั้งใจ · ส่วนบิลที่ยกทั้งใบกระจุกที่ <strong>฿600–649/หัว</strong>
@@ -224,7 +224,7 @@ def generate(d):
     mxd = max((r["n"] for r in d["by_dow"]), default=1)
     for r in d["by_dow"]:
         wk = r["dow"] in (0, 6)
-        add(bar(DOW_TH[r["dow"]], r["n"], mxd, "#7c3aed" if wk else "#64748b", " ใบ"))
+        add(bar(DOW_TH[r["dow"]], r["n"], mxd, "#5f4d99" if wk else "#64748b", " ใบ"))
     add('</div></div>')
 
     # ── 5. LOGIN SPREAD + TOP BILLS ─────────────────────────────────────────
@@ -263,7 +263,7 @@ def generate(d):
     ไม่ควรลดเกินราคา 1 ที่ต่อการใช้ 1 ครั้ง ถ้า POS ตั้งเพดานได้ จะปิดช่องนี้ที่ต้นทางโดยไม่ต้องพึ่งวินัยหน้างาน</li>
 <li><strong>ทำให้ “บิลจ่ายจริง ฿0” ต้องมีผู้อนุมัติเสมอ</strong> — ปัจจุบัน login เป็นแบบใช้ร่วมกัน
     ทำให้ตรวจสอบย้อนหลังไม่ได้ว่าใครอนุมัติ ควรแยก login รายบุคคลอย่างน้อยสำหรับสิทธิ์ยกยอดบิล</li>
-<li><strong>เฝ้าสัญญาณนี้ต่อเนื่อง</strong> — แท็บ ⏰ เวลาปิดร้าน → 🩺 ตรวจสุขภาพข้อมูล
+<li><strong>เฝ้าสัญญาณนี้ต่อเนื่อง</strong> — แท็บ เวลาปิดร้าน → ตรวจสุขภาพข้อมูล
     รายงาน “บิลที่ส่วนลดมากกว่ายอดบิล” อยู่แล้วทุกวัน ใช้เป็นตัวเฝ้าระวังได้เลยโดยไม่ต้องทำรายงานใหม่</li>
 </ol>
 <div class="alert alert-teal" style="margin-top:12px"><strong>บริบทเชิงมูลค่า</strong> —

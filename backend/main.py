@@ -413,7 +413,7 @@ _MACHINE_API = ("/api/_admin/", "/api/usage", "/api/auth/", "/api/feedback/webho
 
 
 def _usage_people(days: int) -> dict:
-    """The adoption view (Settings → 📈 การใช้งานจริง → การเข้าใช้รายคน): every
+    """The adoption view (Settings → การใช้งานจริง → การเข้าใช้รายคน): every
     account with its last login, logins and failures in the window, the days it
     opened the dashboard, tab opens and its three most-opened tabs. Status:
     'never' = no successful login on record (still on the shared default
@@ -620,16 +620,16 @@ def _adoption_lists(people: dict, now=None, away_days: int = ADOPTION_AWAY_DAYS)
 
 def _adoption_digest_text(people: dict, lists: dict, week: str) -> str:
     s = people["summary"]
-    L = [f"📣 <b>สรุปการเข้าใช้แดชบอร์ด</b> สัปดาห์ {week} (นับ {people['days']} วัน)",
+    L = [f"<b>สรุปการเข้าใช้แดชบอร์ด</b> สัปดาห์ {week} (นับ {people['days']} วัน)",
          f"ใช้งานอยู่ {s['active']} · ไม่ได้ใช้ในช่วงนี้ {s['idle']} · ยังไม่เคยเข้า {s['never']} · จาก {s['accounts']} บัญชี"]
     if lists["never"]:
-        L.append(f"🚫 <b>ยังไม่เคยเข้าใช้</b> ({len(lists['never'])}): " + ", ".join(f"{u['username']} ({u['role']})" for u in lists["never"]))
+        L.append(f"✗ <b>ยังไม่เคยเข้าใช้</b> ({len(lists['never'])}): " + ", ".join(f"{u['username']} ({u['role']})" for u in lists["never"]))
     if lists["away"]:
-        L.append(f"💤 <b>หายไปเกิน {ADOPTION_AWAY_DAYS} วัน</b> ({len(lists['away'])}): "
+        L.append(f"<b>หายไปเกิน {ADOPTION_AWAY_DAYS} วัน</b> ({len(lists['away'])}): "
                  + ", ".join(f"{u['username']} — ล่าสุด {(u.get('last_login') or '')[:10] or '—'}" for u in lists["away"]))
     if lists["active"]:
-        L.append("✅ ใช้งานอยู่: " + ", ".join(f"{u['username']} ({u['days_seen']} วัน)" for u in lists["active"]))
-    L.append(f"รายละเอียด: {APP_URL} → Settings → 📈 การใช้งานจริง")
+        L.append("ใช้งานอยู่: " + ", ".join(f"{u['username']} ({u['days_seen']} วัน)" for u in lists["active"]))
+    L.append(f"รายละเอียด: {APP_URL} → Settings → การใช้งานจริง")
     return "\n".join(L)
 
 
@@ -2142,7 +2142,7 @@ except ImportError:
 app.include_router(_requisition_router)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Ingredient ordering — per-branch purchase planning (🧺 แผนสั่งวัตถุดิบรายสาขา)
+# Ingredient ordering — per-branch purchase planning (แผนสั่งวัตถุดิบรายสาขา)
 # ═══════════════════════════════════════════════════════════════════════════
 # Consumption is DERIVED, never counted: qty sold per SKU (sales_sku_daily)
 # × qty_per_serving of that SKU's recipe (bom_ingredients), resolved through the

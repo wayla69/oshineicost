@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""✅ Go-live checklists — a plan the server owns (backend/checklists/<name>.json:
+"""Go-live checklists — a plan the server owns (backend/checklists/<name>.json:
 phases → tasks → steps, each step with how / why / done-when / if-stuck) and a
 shared state that everyone holding the module ticks from the dashboard. Who and
 when come from the login session, never from the client. Completion is a

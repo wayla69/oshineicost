@@ -191,7 +191,7 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #   stock_count        the site (routers/requisition.py) — the sync has never seen either
 #   ingredient_sourcing, ingredient_order_issue(+_line), ingredient_order_actual,
 #   ingredient_purchase_week, demand_calendar
-#                      everything typed in the two 🧺 ordering tabs: which ingredients a branch
+#                      everything typed in the two ordering tabs: which ingredients a branch
 #                      must order centrally, the issued (frozen) order cycles and what branches
 #                      actually ordered against them, weekly purchases, the festival calendar.
 #                      They are created lazily ON THE SITE and the sync's base DB has never held
@@ -210,7 +210,7 @@ _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped
 # Tables BOTH sides write, where neither copy may simply win:
 #   ingredient_order_unit   pack sizes. seed_order_units.py fills it on the PC from the supplier
 #                           sheet (source='supplier-sheet') and that must keep reaching the site
-#                           with the base DB; the ⚙️ tab and its Excel import write
+#                           with the base DB; the tab and its Excel import write
 #                           source='manual' ON the site. The seeder has always refused to
 #                           overwrite a manual row - the swap did not, so a pack size corrected
 #                           in the app lasted until the next sync (owner, 2026-09-21). The rule

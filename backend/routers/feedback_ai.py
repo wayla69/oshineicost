@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🧠 AI เชิงลึก — E5 of the expansion plan: the weekly narrative and "ask the
+"""AI เชิงลึก — E5 of the expansion plan: the weekly narrative and "ask the
 data" over the voices. Both work without ANTHROPIC_API_KEY (a rule-based Thai
 narrative; a keyword search) and get Claude when the key is set; every answer
 says which engine wrote it.

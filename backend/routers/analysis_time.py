@@ -738,7 +738,7 @@ def table_turnover_branches(   # distinct __name__ — was 'table_turnover', whi
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/gp/export   🟢7
+# GET /api/buffet/gp/export   ●7
 # Download GP analysis as formatted Excel
 # ---------------------------------------------------------------------------
 
@@ -755,7 +755,7 @@ def table_turnover_unified(
 ):
     """view=branches → per-branch POS turn-time feed (default; same shape the
     path always returned). view=dwell → bill-gap dwell/turns estimate (the old
-    /api/analysis/table_turnover, used by the ⏰ Time & Flow tab)."""
+    /api/analysis/table_turnover, used by the Time & Flow tab)."""
     if view == "dwell":
         return table_turnover(month=month, month_from=month_from,
                               month_to=month_to, branch=branch)

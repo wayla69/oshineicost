@@ -179,26 +179,26 @@ def build(api, gen_date, group, scope_label, out_name):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oshinei Enterprise — Business Analysis Report · {period}</title>
 <style>
-:root{{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#4f46e5;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}}
+:root{{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#1f3a6b;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}}
 *{{box-sizing:border-box}}
 body{{font-family:"Sarabun","Segoe UI",-apple-system,Roboto,sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.55;font-size:15px}}
 .wrap{{max-width:1080px;margin:0 auto;padding:0 24px 80px}}
-.cover{{background:linear-gradient(135deg,#312e81 0%,#4f46e5 55%,#7c3aed 100%);color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}}
+.cover{{background:#16294d;color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}}
 .cover .eyebrow{{text-transform:uppercase;letter-spacing:3px;font-size:12px;opacity:.85;font-weight:600}}
 .cover h1{{font-size:36px;margin:8px 0 4px;font-weight:800;line-height:1.15}}
 .cover .sub{{opacity:.9;font-size:16px}}
 .cover .meta{{margin-top:20px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px;opacity:.92}}
 .cover .meta b{{display:block;font-size:20px;font-weight:700;opacity:1}}
-section{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px 32px;margin-bottom:24px;box-shadow:0 1px 3px rgba(15,23,42,.04)}}
+section{{background:#fff;border:1px solid var(--line);border-radius:4px;padding:30px 32px;margin-bottom:24px;box-shadow:0 1px 3px rgba(15,23,42,.04)}}
 h2.sec{{font-size:22px;margin:0 0 4px;font-weight:800}}
 h2.sec .num{{color:var(--indigo);font-weight:800;margin-right:10px}}
 .sec-sub{{color:var(--mut);font-size:13px;margin:0 0 20px}}
 .kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}}
-.kpi{{border:1px solid var(--line);border-radius:12px;padding:16px;background:linear-gradient(180deg,#fff,#fcfcff)}}
+.kpi{{border:1px solid var(--line);border-radius:4px;padding:16px;background:linear-gradient(180deg,#fff,#fcfcff)}}
 .kpi .lbl{{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}}
 .kpi .val{{font-size:26px;font-weight:800;margin:4px 0 2px}}
 .kpi .sub{{font-size:12px;color:var(--mut)}}
-.callout{{border-left:4px solid var(--indigo);background:#eef2ff;border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0;font-size:14px}}
+.callout{{border:1px solid var(--indigo);background:#e8eef7;border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0;font-size:14px}}
 .callout.warn{{border-color:var(--am);background:#fffbeb}}
 .callout.good{{border-color:var(--em);background:#ecfdf5}}
 .callout.risk{{border-color:var(--rd);background:#fef2f2}}
@@ -210,7 +210,7 @@ th{{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut)
 tbody tr:hover{{background:#fafbff}}
 tfoot td{{font-weight:800;border-top:2px solid var(--line);background:#f8fafc}}
 .bar-wrap{{display:flex;align-items:center;gap:8px;justify-content:flex-end}}
-.bar{{height:9px;border-radius:5px}}
+.bar{{height:9px;border-radius:4px}}
 .bar-lbl{{font-variant-numeric:tabular-nums;min-width:54px;text-align:right}}
 .pill{{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:700}}
 .chart{{width:100%;height:auto;display:block;margin:6px 0}}
@@ -220,7 +220,7 @@ tfoot td{{font-weight:800;border-top:2px solid var(--line);background:#f8fafc}}
 .chart .tlbl{{fill:var(--em);font-size:11px;text-anchor:end;font-weight:700}}
 .chart .xtick{{fill:#94a3b8;font-size:10px;text-anchor:middle}}
 .grid2{{display:grid;grid-template-columns:1fr 1fr;gap:22px}}
-.rec{{border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px;position:relative}}
+.rec{{border:1px solid var(--line);border-radius:4px;padding:18px;margin-bottom:14px;position:relative}}
 .rec .tag{{position:absolute;top:-10px;left:16px;font-size:11px;font-weight:800;padding:2px 10px;border-radius:999px;color:#fff}}
 .rec h4{{margin:6px 0 6px;font-size:16px}}
 .rec .impact{{font-size:13px;color:var(--em);font-weight:700}}
@@ -276,10 +276,10 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     ที่มาร์จิ้น <b>{pct(last_mt['margin_pct'])}</b> {mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}
     (food cost {pct(last_fc)} {mom(last_fc, prev_fc, good_up=False, as_pts=True)}) จาก {len(active)} สาขาที่เปิดขายในเดือนนี้ ·
     ค่าเฉลี่ย 3 เดือนล่าสุด ~<b>{thb_m(last3_avg)}</b>/เดือน</p>
-    <div class="callout good">📈 <b>โมเมนตัมรายเดือน</b> — รายได้ {thb_m(prev_mt['revenue']) if prev_mt else '—'} → {thb_m(last_mt['revenue'])} ({mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}); จุดสูงสุดอยู่เดือน <b>{peak['period_month']}</b> ที่ {thb_m(peak['revenue'])}</div>
-    <div class="callout">🍱 <b>บุฟเฟ่ต์คือหัวใจ ({pct(buffet_share)} ของรายได้)</b> — food cost บุฟเฟ่ต์เดือนล่าสุด {pct(bf_cur)} {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} (เทรนด์รายเดือนในข้อ 5)</div>
-    <div class="callout risk">🐟 <b>ความเสี่ยงกระจุกตัว: ปลาแซลมอน = {pct(salmon_pct)} ของต้นทุนวัตถุดิบ</b> ({thb_m(salmon_cost)}, รวมทั้งช่วง) — วัตถุดิบเดียวกำหนดกำไรของทั้งธุรกิจ ราคาผันผวน = ความเสี่ยงสูงสุด</div>
-    <div class="callout warn">🏪 <b>ช่องว่างระหว่างสาขาเดือน {latest_month} กว้าง {gp_gap:.1f} จุด</b> (GP {min(b['_cur']['gp_pct'] for b in active):.1f}% – {max(b['_cur']['gp_pct'] for b in active):.1f}%) — ยกสาขาล่างขึ้นสู่ค่ากลาง {TARGET_GP:.0f}% = โอกาสกำไรเพิ่ม ~{thb_m(equal_uplift_mo)}/เดือน (~{thb_m(equal_uplift)}/ปี)</div>
+    <div class="callout good">▲ <b>โมเมนตัมรายเดือน</b> — รายได้ {thb_m(prev_mt['revenue']) if prev_mt else '—'} → {thb_m(last_mt['revenue'])} ({mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}); จุดสูงสุดอยู่เดือน <b>{peak['period_month']}</b> ที่ {thb_m(peak['revenue'])}</div>
+    <div class="callout"><b>บุฟเฟ่ต์คือหัวใจ ({pct(buffet_share)} ของรายได้)</b> — food cost บุฟเฟ่ต์เดือนล่าสุด {pct(bf_cur)} {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} (เทรนด์รายเดือนในข้อ 5)</div>
+    <div class="callout risk"><b>ความเสี่ยงกระจุกตัว: ปลาแซลมอน = {pct(salmon_pct)} ของต้นทุนวัตถุดิบ</b> ({thb_m(salmon_cost)}, รวมทั้งช่วง) — วัตถุดิบเดียวกำหนดกำไรของทั้งธุรกิจ ราคาผันผวน = ความเสี่ยงสูงสุด</div>
+    <div class="callout warn"><b>ช่องว่างระหว่างสาขาเดือน {latest_month} กว้าง {gp_gap:.1f} จุด</b> (GP {min(b['_cur']['gp_pct'] for b in active):.1f}% – {max(b['_cur']['gp_pct'] for b in active):.1f}%) — ยกสาขาล่างขึ้นสู่ค่ากลาง {TARGET_GP:.0f}% = โอกาสกำไรเพิ่ม ~{thb_m(equal_uplift_mo)}/เดือน (~{thb_m(equal_uplift)}/ปี)</div>
     </section>""")
 
     # §2 scorecard  (latest month + MoM; period-only metrics shown as /เดือน average)
@@ -304,7 +304,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     gp_series  = [(m['period_month'], m['margin_pct']) for m in mt if m['margin_pct'] is not None]
     A(f"""<section id="s3"><h2 class="sec"><span class="num">3</span>รายได้และกำไรรายเดือน (MoM)</h2>
     <p class="sec-sub">รายได้รายเดือน (ex-VAT) · {period}</p>
-    {svg_line(rev_series, "#4f46e5", "rgba(79,70,229,.10)")}
+    {svg_line(rev_series, "#1f3a6b", "rgba(31,58,107,.10)")}
     <p>เดือนล่าสุด <b>{latest_month}</b> รายได้ <b>{thb_m(last_mt['revenue'])}</b>
     {mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)} เทียบเดือนก่อน ({thb_m(prev_mt['revenue']) if prev_mt else '—'});
     จุดสูงสุดอยู่เดือน <b>{peak['period_month']}</b> ที่ {thb_m(peak['revenue'])} · ค่าเฉลี่ย 3 เดือนล่าสุด ~{thb_m(last3_avg)}/เดือน</p>
@@ -321,7 +321,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
         fc = cur["food_cost_pct"]
         fccol = "var(--em)" if 40 <= fc <= 62 else ("var(--rd)" if fc > 67 else "var(--am)")
         rows_html += (f"<tr><td>{b['branch']}</td>"
-                      f"<td>{bar(cur['revenue'],max_rev,'#4f46e5',thb_m(cur['revenue']))}</td>"
+                      f"<td>{bar(cur['revenue'],max_rev,'#1f3a6b',thb_m(cur['revenue']))}</td>"
                       f"<td>{thb_m(cur['gp'])}</td>"
                       f"<td><b>{cur['gp_pct']:.1f}%</b></td>"
                       f"<td style='color:{fccol};font-weight:700'>{fc:.1f}%</td>"
@@ -329,14 +329,14 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     A(f"""<section id="s4"><h2 class="sec"><span class="num">4</span>ผลการดำเนินงานรายสาขา — เดือนล่าสุด ({latest_month})</h2>
     <p class="sec-sub">เรียงตามรายได้เดือนล่าสุด · {len(active)} สาขาที่เปิดขายเดือนนี้ · MoM = เทียบ {prev_month or '—'} · COGS แบบ BoM</p>
     <div class="grid2" style="margin-bottom:16px">
-      <div class="callout good">🏆 <b>GP สูงสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in best)}</div>
-      <div class="callout warn">⚠️ <b>GP ต่ำสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in worst)}</div>
+      <div class="callout good"><b>GP สูงสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in best)}</div>
+      <div class="callout warn">⚠ <b>GP ต่ำสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in worst)}</div>
     </div>
     <table><thead><tr><th>สาขา</th><th>รายได้ (เดือน)</th><th>กำไรขั้นต้น</th><th>GP%</th><th>Food%</th><th>รายได้ MoM</th></tr></thead>
     <tbody>{rows_html}</tbody>
     <tfoot><tr><td>รวมเดือน {latest_month} ({len(active)} สาขา)</td><td style="text-align:right">{thb_m(last_mt['revenue'])}</td><td>{thb_m(last_mt['gross_profit'])}</td><td>{last_mt['margin_pct']:.1f}%</td><td>{pct(last_fc)}</td><td>{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</td></tr></tfoot>
     </table>
-    <div class="callout">💡 <b>โอกาสจากการยกระดับสาขา (ฐานเดือนล่าสุด):</b> หากทุกสาขาที่ GP ต่ำกว่า {TARGET_GP:.0f}% ขยับขึ้นถึง {TARGET_GP:.0f}%
+    <div class="callout"><b>โอกาสจากการยกระดับสาขา (ฐานเดือนล่าสุด):</b> หากทุกสาขาที่ GP ต่ำกว่า {TARGET_GP:.0f}% ขยับขึ้นถึง {TARGET_GP:.0f}%
     จะเพิ่มกำไรขั้นต้น ~<b>{thb_m(equal_uplift_mo)}/เดือน</b> (~{thb_m(equal_uplift)}/ปี) โดยไม่ต้องเพิ่มยอดขาย — ถ่ายทอด best practice จากสาขาเก่งเดือนนี้ ({', '.join(x['branch'] for x in best[:2])}) สู่สาขาอ่อน</div>
     </section>""")
 
@@ -352,8 +352,8 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     </div>
     <p class="sec-sub" style="margin-bottom:2px">แนวโน้ม Food Cost บุฟเฟ่ต์รายเดือน (เป้า 55–70%)</p>
     {svg_line(bf_series, "#ec4899", "rgba(236,72,153,.10)", y_is_pct=True, y_suffix="%", target=65)}
-    <div class="callout good">✅ ต้นทุนอาหารบุฟเฟ่ต์รายเดือนปรับลดจาก <b>{pct(bf_series[0][1])} ({bf_series[0][0]}) → {pct(bf_cur)} ({bf_vals[-1]['period']})</b> · เดือนล่าสุด {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
-    <div class="callout warn">🥤 <b>เครื่องดื่มเป็นโอกาสที่ยังไม่ถูกใช้เต็มที่</b> — ~80% ของบิลสั่งเครื่องดื่ม แต่คิดเป็นเพียง {pct(buf['beverage_attach_pct'])} ของรายได้ การดันเครื่องดื่มมาร์จิ้นสูง (เครื่องดื่มพิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</div>
+    <div class="callout good">ต้นทุนอาหารบุฟเฟ่ต์รายเดือนปรับลดจาก <b>{pct(bf_series[0][1])} ({bf_series[0][0]}) → {pct(bf_cur)} ({bf_vals[-1]['period']})</b> · เดือนล่าสุด {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
+    <div class="callout warn"><b>เครื่องดื่มเป็นโอกาสที่ยังไม่ถูกใช้เต็มที่</b> — ~80% ของบิลสั่งเครื่องดื่ม แต่คิดเป็นเพียง {pct(buf['beverage_attach_pct'])} ของรายได้ การดันเครื่องดื่มมาร์จิ้นสูง (เครื่องดื่มพิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</div>
     </section>""")
 
     # §6 menu engineering
@@ -365,35 +365,35 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     <p class="sec-sub">à-la-carte {s['total_skus']} เมนู · จัดกลุ่มได้ {qc['star']+qc['plowhorse']+qc['puzzle']+qc['dog']} เมนูที่มีข้อมูลต้นทุน
     · <b>ข้อมูลรวมทั้งช่วง {period}</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
     <div class="kpis" style="margin-bottom:18px">
-      <div class="kpi"><div class="lbl">⭐ ดาวเด่น</div><div class="val" style="color:var(--em)">{qc['star']}</div><div class="sub">ขายดี+กำไรดี</div></div>
-      <div class="kpi"><div class="lbl">🐴 ม้างาน</div><div class="val" style="color:var(--am)">{qc['plowhorse']}</div><div class="sub">ขายดี กำไรบาง</div></div>
-      <div class="kpi"><div class="lbl">🔮 เพชรในตม</div><div class="val" style="color:var(--indigo)">{qc['puzzle']}</div><div class="sub">กำไรดี ขายน้อย</div></div>
-      <div class="kpi"><div class="lbl">🐕 ตัวถ่วง</div><div class="val" style="color:var(--rd)">{qc['dog']}</div><div class="sub">พิจารณาถอด</div></div>
+      <div class="kpi"><div class="lbl">ดาวเด่น</div><div class="val" style="color:var(--em)">{qc['star']}</div><div class="sub">ขายดี+กำไรดี</div></div>
+      <div class="kpi"><div class="lbl">ม้างาน</div><div class="val" style="color:var(--am)">{qc['plowhorse']}</div><div class="sub">ขายดี กำไรบาง</div></div>
+      <div class="kpi"><div class="lbl">เพชรในตม</div><div class="val" style="color:var(--indigo)">{qc['puzzle']}</div><div class="sub">กำไรดี ขายน้อย</div></div>
+      <div class="kpi"><div class="lbl">ตัวถ่วง</div><div class="val" style="color:var(--rd)">{qc['dog']}</div><div class="sub">พิจารณาถอด</div></div>
     </div>
     <p class="sec-sub" style="margin-bottom:2px">เมนูดาวเด่น (à-la-carte) — รายได้สูงสุด</p>
     <table><thead><tr><th>เมนู</th><th>จำนวนขาย</th><th>รายได้</th><th>มาร์จิ้น</th></tr></thead><tbody>{stars_html}</tbody></table>
-    <div class="callout">🍣 เมนู à-la-carte ที่ทำกำไรล้วนเป็น<b>กลุ่มแซลมอน/ซีฟู้ด</b> — สอดคล้องกับจุดขายของแบรนด์ ควรชู เมนูเหล่านี้ให้เด่นและขยายเป็นเซ็ต/โปรโมชัน</div>
+    <div class="callout">เมนู à-la-carte ที่ทำกำไรล้วนเป็น<b>กลุ่มแซลมอน/ซีฟู้ด</b> — สอดคล้องกับจุดขายของแบรนด์ ควรชู เมนูเหล่านี้ให้เด่นและขยายเป็นเซ็ต/โปรโมชัน</div>
     </section>""")
 
     # §7 ingredient risk
     imax = max(i["total_cost"] for i in ings)
     ing_html = "".join(f"<tr><td>{i['ingredient_name']}</td>"
-                       f"<td><span class='pill' style='background:#eef2ff;color:#4f46e5'>{i['ingredient_type']}</span></td>"
+                       f"<td><span class='pill' style='background:#e8eef7;color:#1f3a6b'>{i['ingredient_type']}</span></td>"
                        f"<td>{bar(i['total_cost'],imax,'#ef4444' if 'แซลมอน' in (i['ingredient_name'] or '') else '#94a3b8',thb_m(i['total_cost']))}</td>"
                        f"<td><b>{i['pct_of_chain_cogs']:.1f}%</b></td></tr>" for i in ings)
     A(f"""<section id="s7"><h2 class="sec"><span class="num">7</span>ความเสี่ยงด้านวัตถุดิบ (Supply Concentration)</h2>
     <p class="sec-sub">วัตถุดิบ 12 อันดับแรกตามสัดส่วนต้นทุน · <b>ข้อมูลรวมทั้งช่วง {period}</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
     <table><thead><tr><th>วัตถุดิบ</th><th>ประเภท</th><th>ต้นทุนรวม</th><th>% ของ COGS</th></tr></thead><tbody>{ing_html}</tbody></table>
-    <div class="callout risk">🐟 <b>ปลาแซลมอนคิดเป็น {pct(salmon_pct)} ของต้นทุนวัตถุดิบทั้งเครือ</b> ({thb_m(salmon_cost)} ตลอดช่วง {period})
+    <div class="callout risk"><b>ปลาแซลมอนคิดเป็น {pct(salmon_pct)} ของต้นทุนวัตถุดิบทั้งเครือ</b> ({thb_m(salmon_cost)} ตลอดช่วง {period})
     — วัตถุดิบเดียวที่กำหนดความอยู่รอดของกำไร หากราคาแซลมอนขึ้น 10% กำไรขั้นต้นหายไป ~{thb_m(salmon_cost*0.10)} ต่อช่วงข้อมูลทันที</div>
-    <div class="callout good">💰 <b>โอกาส:</b> ลดต้นทุนแซลมอนเพียง 5% (เจรจาสัญญาระยะยาว / dual-source / คุม yield การขูดเนื้อ) = กำไรเพิ่ม ~<b>{thb_m(salmon_save)} ต่อช่วงข้อมูล</b></div>
+    <div class="callout good"><b>โอกาส:</b> ลดต้นทุนแซลมอนเพียง 5% (เจรจาสัญญาระยะยาว / dual-source / คุม yield การขูดเนื้อ) = กำไรเพิ่ม ~<b>{thb_m(salmon_save)} ต่อช่วงข้อมูล</b></div>
     </section>""")
 
     # §8 recommendations
     def rec(color, tag, title, impact, steps):
         li = "".join(f"<li>{x}</li>" for x in steps)
         return (f'<div class="rec"><span class="tag" style="background:{color}">{tag}</span>'
-                f'<h4>{title}</h4><div class="impact">💵 {impact}</div><ol>{li}</ol></div>')
+                f'<h4>{title}</h4><div class="impact">{impact}</div><ol>{li}</ol></div>')
     A(f"""<section id="s8"><h2 class="sec"><span class="num">8</span>ข้อเสนอเชิงกลยุทธ์</h2>
     <p class="sec-sub">เรียงตามผลกระทบต่อกำไร · ตัวเลขโอกาสคำนวณจากข้อมูลจริง</p>
     {rec('#ef4444','ลำดับ 1 · เร่งด่วน','บริหารความเสี่ยงปลาแซลมอน (40% ของต้นทุน)',
@@ -411,7 +411,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
          ['ฝึกพนักงานเสนอเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) ทุกโต๊ะ',
           'ออกเซ็ตเครื่องดื่ม + โปรโมชันคู่บุฟเฟ่ต์',
           'เติมต้นทุนเครื่องดื่มในระบบเพื่อวัดกำไรจริง (ดูข้อ 9)'])}
-    {rec('#4f46e5','ลำดับ 4 · เสริมความแม่นยำ','ปิดช่องว่างข้อมูลต้นทุน',
+    {rec('#1f3a6b','ลำดับ 4 · เสริมความแม่นยำ','ปิดช่องว่างข้อมูลต้นทุน',
          f'ความครอบคลุมปัจจุบัน {pct(cov)} → เป้า 90%+',
          ['เติมต้นทุนเครื่องดื่ม (เกือบทั้งหมดยังไม่มี cost → มาร์จิ้นโชว์ 100% ปลอม)',
           'แก้ข้อมูล à-la-carte ที่ unit_cost ≈ ราคาขาย (ทำให้บางเมนูมาร์จิ้นติดลบ)',

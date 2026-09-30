@@ -253,7 +253,7 @@
        "id": "m3101",
        "t": "สลับบัญชี TikTok ของร้านเป็น Business Account",
        "how": [
-        "แอป TikTok (บัญชีร้าน) → Profile → ☰ → Settings and privacy → Account → Switch to Business Account → เลือกหมวด Restaurant"
+        "แอป TikTok (บัญชีร้าน) → Profile → → Settings and privacy → Account → Switch to Business Account → เลือกหมวด Restaurant"
        ],
        "why": "API สำหรับธุรกิจใช้ได้กับ Business account เท่านั้น",
        "check": "เมนูโปรไฟล์มี 'Business Suite' ปรากฏ"

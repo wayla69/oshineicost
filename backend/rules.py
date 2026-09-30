@@ -17,7 +17,7 @@ from typing import Optional
 # ─── VAT ─────────────────────────────────────────────────────────────────────
 # Thai VAT. total_inc_vat is what the guest paid; revenue is stated ex-VAT.
 VAT_RATE = 0.07
-VAT_DIVISOR = 1.0 + VAT_RATE          # 1.07 — inc-VAT ➜ ex-VAT divisor
+VAT_DIVISOR = 1.0 + VAT_RATE          # 1.07 — inc-VAT ex-VAT divisor
 
 
 def ex_vat(amount_inc_vat: float) -> float:

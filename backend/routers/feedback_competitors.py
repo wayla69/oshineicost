@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🏁 เทียบคู่แข่งรอบสาขา — E6 of the expansion plan. The monthly Google Places
+"""เทียบคู่แข่งรอบสาขา — E6 of the expansion plan. The monthly Google Places
 snapshot (feedback_sources/places.py, posted by the fetcher) and where each
 branch stands among the restaurants around it: its own rating and count, the
 competitors' median and best, its rank, and the move since the last snapshot.

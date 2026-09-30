@@ -360,8 +360,8 @@ _TH_LEVEL = {"fail": "ล้มเหลว", "stale": "ไม่ได้รั
 def telegram_text(rep: dict) -> str:
     import html
     if rep["ok"]:
-        return "✅ <b>งานอัตโนมัติ Oshinei กลับมาปกติทุกงานแล้ว</b>"
-    lines = [f"🛠️ <b>งานอัตโนมัติ Oshinei มีปัญหา {rep['problems']} งาน</b> ({html.escape(rep['host'])})"]
+        return "✓ <b>งานอัตโนมัติ Oshinei กลับมาปกติทุกงานแล้ว</b>"
+    lines = [f"<b>งานอัตโนมัติ Oshinei มีปัญหา {rep['problems']} งาน</b> ({html.escape(rep['host'])})"]
     for f in rep["tasks"]:
         if f["level"] not in PROBLEM_LEVELS:
             continue

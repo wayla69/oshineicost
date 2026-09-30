@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""💬 เสียงลูกค้า — customer feedback (pillar 3 of the menu programme, 2026-09).
+"""เสียงลูกค้า — customer feedback (pillar 3 of the menu programme, 2026-09).
 
 Reviews reach `customer_feedback` three ways — pasted or uploaded in the tab
 (CSV/TSV/TXT, XLSX, a Google Takeout zip or reviews.json), or posted by the

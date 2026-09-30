@@ -30,7 +30,7 @@ router = APIRouter()
 
 
 # ── Top-60 menu cost-per-head · MASTER branches (overview → per-branch → variance) ──
-# Powers the "💸 Top 60 ต้นทุน/หัว · สาขา Master" report tab. COGS via the LIVE
+# Powers the "Top 60 ต้นทุน/หัว · สาขา Master" report tab. COGS via the LIVE
 # _unified_cogs_expr (same source of truth as the rest of the app), so the in-app
 # tab, the printable HTML, and the Excel all tie out. Master-only by design — the
 # whole point is cross-branch benchmarking against the combined overview.
@@ -199,7 +199,7 @@ def _ch_resolve_month(con, month):
 
 
 # ---------------------------------------------------------------------------
-# 🧪 Menu Impact (วิเคราะห์วัตถุดิบ) — with/without per-head analysis of one menu
+# Menu Impact (วิเคราะห์วัตถุดิบ) — with/without per-head analysis of one menu
 # SKU or ingredient group over a chosen date range. Powered by the pre-aggregated
 # menu_fact_day / menu_fact_total tables (built from live MSSQL bill-level data
 # by backend/build_menu_fact.py — run it after each sync to keep coverage fresh).
@@ -265,7 +265,7 @@ _MI_TIER_ORDER = tier_codes_between(None, None)
 
 def _mi_tiers_for(date_from=None, date_to=None) -> tuple:
     """The tier codes on sale in [date_from, date_to] — what the tier picker on
-    the 🧪 tab offers, and the only values the filter accepts for that window."""
+    the tab offers, and the only values the filter accepts for that window."""
     return tier_codes_between(date_from, date_to)
 
 
@@ -476,7 +476,7 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 
 
 # ---------------------------------------------------------------------------
-# 🏷️ Price-tier analysis (วิเคราะห์ Tier ราคาขายบุฟเฟ่ต์) — section of the 🧪 tab.
+# Price-tier analysis (วิเคราะห์ Tier ราคาขายบุฟเฟ่ต์) — section of the tab.
 # Reads the tier-dimensioned menu_fact_total / menu_fact_day fact tables
 # (schema v2, build_menu_fact.py): every buffet bill carries tier = canonical
 # adult-buffet price ex-VAT ('350'…'999'), 'promo' (non-canonical price) or
@@ -2132,7 +2132,7 @@ def _mgt_tier_promo(*, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
 
 
 def _mgt_tier_trend(*, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
-    """§11's trend charts — the same monthly/weekly series the 🧪 tab draws.
+    """§11's trend charts — the same monthly/weekly series the tab draws.
 
     The tier TABLE only ever shows one period, so a tier drifting month after
     month is invisible in it; the reader has to leave the report to see whether

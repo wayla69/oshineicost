@@ -166,7 +166,7 @@ def test_fetcher_sends_the_daily_report_every_run_unless_opted_out(tmp_path):
     sink.upload([{"branch": "ขอนแก่น", "date": "2026-09-03", "source": "Google", "rating": 1,
                  "text": "รอคิวนานมาก", "external_id": "d2", "themes_extra": ["รอนาน"], "sentiment_hint": "neg"}], by="t")
     assert FF._daily_report_step(_args(no_daily_report=False, date="2026-09-03"), sink, notifier, lines.append) is True
-    assert "🆕 ปัญหาใหม่ยังไม่มีคนตาม" in sent[-1] and "รอนาน" in sent[-1]
+    assert "ปัญหาใหม่ยังไม่มีคนตาม" in sent[-1] and "รอนาน" in sent[-1]
 
 
 def test_fetcher_sla_alert_pings_once_per_case(tmp_path):
