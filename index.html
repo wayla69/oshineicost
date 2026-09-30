@@ -706,6 +706,8 @@ body.dark .text-sky-800, body.dark .text-sky-900 { color: var(--sky-ink) !import
 .text-white.bg-sky-600:hover { background-color: #075985 !important; }
 .text-white:is(.bg-cyan-500, .bg-cyan-600) { background-color: #0e7490 !important; }
 .text-white:is(.bg-cyan-500, .bg-cyan-600):hover { background-color: #155e75 !important; }
+.text-white.bg-pink-600 { background-color: #be185d !important; }   /* #db2777 is 4.13:1 under white */
+.text-white.bg-pink-600:hover { background-color: #9d174d !important; }
 /* Dark mode leaves some backgrounds light: the pale dark inks drop to ~1.9:1 on them and
    the dark text tokens (--text-primary #f1f5f9 ...) to ~1:1. Tokens inherit, so whichever
    of these is the NEAREST ancestor wins (:where keeps every layer at one specificity; the
