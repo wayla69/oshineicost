@@ -1,23 +1,23 @@
 <!-- ══════════════════════════════════════════════════════════════════════════
-     TAB: 🎮 UNIFIED SIMULATORS HUB — every simulator in one place
+     TAB: UNIFIED SIMULATORS HUB — every simulator in one place
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-simhub" style="display:none">
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#faf5ff 0%,#eff6ff 100%);border-left:4px solid #8b5cf6">
+  <div class="card p-4 mb-4" style="background:#faf5ff;border:1px solid var(--accent)">
     <div class="flex items-start gap-3">
-      <span style="font-size:26px">🎮</span>
+      <span style="font-size:26px"></span>
       <div>
-        <h2 class="text-base font-bold" style="color:#6d28d9">Simulators — รวมตัวจำลองทั้งหมดไว้ที่เดียว</h2>
+        <h2 class="text-base font-bold" style="color:var(--accent)">Simulators — รวมตัวจำลองทั้งหมดไว้ที่เดียว</h2>
         <p class="text-xs text-slate-500 mt-1">BoM Cost · Cost Sensitivity · Tier Upgrade · What-If — ทุกตัวใช้ตัวกรองสาขา/ช่วงเดือนด้านบนร่วมกัน</p>
       </div>
     </div>
   </div>
 
   <!-- Mode switcher -->
-  <div class="flex flex-wrap gap-1 mb-5" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:4px;width:fit-content">
-    <button onclick="simhubSetMode('bomcost')"     id="sh-mode-bomcost"     class="subtab-btn active text-sm px-4 py-1.5">🎮 BoM Cost</button>
-    <button onclick="simhubSetMode('sensitivity')" id="sh-mode-sensitivity" class="subtab-btn text-sm px-4 py-1.5">🎛️ Cost Sensitivity</button>
-    <button onclick="simhubSetMode('tier')"        id="sh-mode-tier"        class="subtab-btn text-sm px-4 py-1.5">🍣 Tier Upgrade</button>
-    <button onclick="simhubSetMode('whatif')"      id="sh-mode-whatif"      class="subtab-btn text-sm px-4 py-1.5">📈 What-If</button>
+  <div class="flex flex-wrap gap-1 mb-5" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:4px;width:fit-content">
+    <button onclick="simhubSetMode('bomcost')"     id="sh-mode-bomcost"     class="subtab-btn active text-sm px-4 py-1.5">BoM Cost</button>
+    <button onclick="simhubSetMode('sensitivity')" id="sh-mode-sensitivity" class="subtab-btn text-sm px-4 py-1.5">Cost Sensitivity</button>
+    <button onclick="simhubSetMode('tier')"        id="sh-mode-tier"        class="subtab-btn text-sm px-4 py-1.5">Tier Upgrade</button>
+    <button onclick="simhubSetMode('whatif')"      id="sh-mode-whatif"      class="subtab-btn text-sm px-4 py-1.5">What-If</button>
   </div>
 
   <!-- Mode hosts (live simulators are moved in here on first view) -->

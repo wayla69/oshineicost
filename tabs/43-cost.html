@@ -15,7 +15,7 @@
     <div id="costKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
 
     <!-- No-cost banner -->
-    <div id="costNoBanner" class="hidden mb-5 card p-4 flex items-start gap-3" style="border-left:4px solid #f59e0b;background:#fffbeb">
+    <div id="costNoBanner" class="hidden mb-5 card p-4 flex items-start gap-3" style="border:1px solid #f59e0b;background:#fffbeb">
       <svg class="flex-shrink-0 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       <div>
         <p id="costNoBannerText" class="text-sm font-semibold text-amber-800"></p>
@@ -51,7 +51,7 @@
       <!-- Stars -->
       <div class="card p-4" style="border-top:3px solid #10b981">
         <div class="flex items-center gap-1.5 mb-2">
-          <span class="text-base">⭐</span>
+          <span class="text-base">★</span>
           <span class="text-xs font-bold text-emerald-700">Stars</span>
           <span id="starCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
@@ -59,9 +59,9 @@
         <ul id="starList" class="space-y-1"></ul>
       </div>
       <!-- Puzzles -->
-      <div class="card p-4" style="border-top:3px solid #4f46e5">
+      <div class="card p-4" style="border-top:3px solid var(--accent)">
         <div class="flex items-center gap-1.5 mb-2">
-          <span class="text-base">🔮</span>
+          <span class="text-base"></span>
           <span class="text-xs font-bold text-indigo-700">Puzzles</span>
           <span id="puzzleCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
@@ -71,7 +71,7 @@
       <!-- Plowhorses -->
       <div class="card p-4" style="border-top:3px solid #f59e0b">
         <div class="flex items-center gap-1.5 mb-2">
-          <span class="text-base">🐴</span>
+          <span class="text-base"></span>
           <span class="text-xs font-bold text-amber-700">Plowhorses</span>
           <span id="plowhorseCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
@@ -81,7 +81,7 @@
       <!-- Dogs -->
       <div class="card p-4" style="border-top:3px solid #ef4444">
         <div class="flex items-center gap-1.5 mb-2">
-          <span class="text-base">🐕</span>
+          <span class="text-base"></span>
           <span class="text-xs font-bold text-red-600">Dogs</span>
           <span id="dogCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
@@ -117,11 +117,11 @@
         <select id="costItemQuadrant" onchange="filterCostDetail()"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
           <option value="">All Quadrants</option>
-          <option value="star">⭐ Stars</option>
-          <option value="puzzle">🔮 Puzzles</option>
-          <option value="plowhorse">🐴 Plowhorses</option>
-          <option value="dog">🐕 Dogs</option>
-          <option value="uncosted">⚪ Uncosted</option>
+          <option value="star">Stars</option>
+          <option value="puzzle">Puzzles</option>
+          <option value="plowhorse">Plowhorses</option>
+          <option value="dog">Dogs</option>
+          <option value="uncosted">Uncosted</option>
         </select>
         <span id="costItemCount" class="text-xs text-slate-400 ml-auto"></span>
       </div>

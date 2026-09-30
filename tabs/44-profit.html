@@ -4,17 +4,17 @@
 <div id="tab-profit" class="hidden">
 
   <!-- Cost-coverage status banner -->
-  <div id="profitCoverageBanner" class="card p-3 mb-4 hidden" style="border-left:4px solid #f59e0b;background:#fffbeb">
+  <div id="profitCoverageBanner" class="card p-3 mb-4 hidden" style="border:1px solid #f59e0b;background:#fffbeb">
     <p class="text-xs text-amber-800">⚠ <span id="profitCoverageMsg">Cost coverage:</span></p>
   </div>
 
   <!-- KPI strip -->
   <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5" id="profitKpis">
-    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Revenue (ex-VAT)</p><p id="pftRev" class="text-2xl font-bold mt-1" style="color:#4f46e5">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Revenue (ex-VAT)</p><p id="pftRev" class="text-2xl font-bold mt-1" style="color:var(--accent)">—</p></div>
     <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">COGS</p><p id="pftCogs" class="text-2xl font-bold mt-1" style="color:#ef4444">—</p></div>
     <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Gross Profit</p><p id="pftGp" class="text-2xl font-bold mt-1" style="color:#10b981">—</p></div>
     <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Margin %</p><p id="pftMargin" class="text-2xl font-bold mt-1" style="color:#06b6d4">—</p></div>
-    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Profit / Bill</p><p id="pftPerBill" class="text-2xl font-bold mt-1" style="color:#8b5cf6">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Profit / Bill</p><p id="pftPerBill" class="text-2xl font-bold mt-1" style="color:var(--accent)">—</p></div>
   </div>
 
   <!-- Profit trend + per-bill distribution side by side -->
@@ -40,10 +40,10 @@
        unreliable for buffet items (revenue logged on the tier, not the dish). -->
 
   <!-- ── Buffet Per-Bill Deep-Dive ──────────────────────────────────────────── -->
-  <div class="card p-5 mt-5" style="border-left:4px solid #ec4899;background:linear-gradient(to right,#fdf2f8 0%,#ffffff 50%)">
+  <div class="card p-5 mt-5" style="border:1px solid #ec4899;background:#fdf2f8">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <div>
-        <h2 class="section-title mb-0">🥘 เจาะลึกกำไรต่อบิล — บุฟเฟ่ต์</h2>
+        <h2 class="section-title mb-0">เจาะลึกกำไรต่อบิล — บุฟเฟ่ต์</h2>
         <p class="text-xs text-slate-500 mt-1">แต่ละบิลกินเท่าไร · BoM เท่าไร · กำไรเท่าไร · วิเคราะห์ตามช่วงเวลา</p>
       </div>
       <div class="flex items-center gap-2">

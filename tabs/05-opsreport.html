@@ -1,21 +1,21 @@
 <div id="tab-opsreport" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
-    <select id="opMonth" onchange="loadOpsReport(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <select id="opMonth" onchange="loadOpsReport(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
     <span id="opRange" class="text-[11px]" style="color:var(--text-muted)"></span>
     <span class="text-[11px] ml-auto" style="color:var(--text-muted)">การชำระเงิน · ช่องทางขาย · Void · โต๊ะหมุนเวียน · โปรโมชัน</span>
   </div>
   <div id="opKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
-    <div class="card p-5"><h2 class="section-title mb-3">💳 สัดส่วนการชำระเงิน</h2><div id="opPayment"></div></div>
-    <div class="card p-5"><h2 class="section-title mb-3">🚚 ช่องทางขาย</h2><div id="opChannel"></div></div>
+    <div class="card p-5"><h2 class="section-title mb-3">สัดส่วนการชำระเงิน</h2><div id="opPayment"></div></div>
+    <div class="card p-5"><h2 class="section-title mb-3">ช่องทางขาย</h2><div id="opChannel"></div></div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-    <div class="card p-5 overflow-x-auto"><h2 class="section-title mb-3">🗑️ รายการยกเลิก/Void สูงสุด <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· มูลค่าของเสียตามต้นทุน BoM</span></h2>
+    <div class="card p-5 overflow-x-auto"><h2 class="section-title mb-3">รายการยกเลิก/Void สูงสุด <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· มูลค่าของเสียตามต้นทุน BoM</span></h2>
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2 text-right">จำนวน</th><th class="py-1.5 pr-2 text-right">มูลค่าขาย</th><th class="py-1.5 text-right">ต้นทุน BoM</th>
       </tr></thead><tbody id="opVoid"></tbody></table></div>
-    <div class="card p-5 overflow-x-auto"><h2 class="section-title mb-3">🎟️ โปรโมชัน/คูปอง ที่ใช้มากสุด</h2>
+    <div class="card p-5 overflow-x-auto"><h2 class="section-title mb-3">โปรโมชัน/คูปอง ที่ใช้มากสุด</h2>
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">คูปอง (series)</th><th class="py-1.5 pr-2 text-right">ครั้งที่ใช้</th><th class="py-1.5 text-right">ส่วนลดรวม</th>
       </tr></thead><tbody id="opPromo"></tbody></table></div>

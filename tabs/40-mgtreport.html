@@ -7,7 +7,7 @@
        the reader wants the report, not the chrome): .collapsed hides the two
        .mgt-full rows and shows the slim one-line bar; print always expands. -->
   <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
-       style="background:linear-gradient(135deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)">
+       style="background:#0f766e">
     <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
       <span class="text-sm font-semibold truncate" id="mgtSlimLabel">Management Summary Report</span>
       <button onclick="toggleMgtCover(false)" class="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0"
@@ -22,8 +22,8 @@
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
-        <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
-        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">Export Excel</button>
+        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">Print / Export PDF</button>
         <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
                 style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
       </div>
@@ -46,7 +46,7 @@
       <!-- monthly-only escape hatch back to the legacy full Monthly Report pack -->
       <button id="mgtLegacyBtn" onclick="switchTab('report')"
               class="hidden text-sm rounded-lg px-3 py-2 font-medium"
-              style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">📑 ฉบับเต็ม (แบบเดิม)</button>
+              style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">ฉบับเต็ม (แบบเดิม)</button>
       <div class="inline-flex rounded-lg overflow-hidden ml-auto" style="background:rgba(255,255,255,0.12)" title="Language / ภาษา">
         <button id="mgtLangEn" onclick="setMgtLang('en')" class="px-4 py-2 text-sm font-semibold transition">EN</button>
         <button id="mgtLangTh" onclick="setMgtLang('th')" class="px-4 py-2 text-sm font-semibold transition">ไทย</button>

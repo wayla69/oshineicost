@@ -57,9 +57,9 @@ async function loadGuest(force) {
   // KPI row
   const o = sph.overall || {};
   document.getElementById('guest-kpi-row').innerHTML = [
-    { label: 'SPH เฉลี่ย', value: `${fmt(o.avg_sph||0)}`, sub: 'spend per head', color: '#4f46e5' },
+    { label: 'SPH เฉลี่ย', value: `${fmt(o.avg_sph||0)}`, sub: 'spend per head', color: '#4a70b0' },
     { label: 'Median SPH', value: `${fmt(o.median_sph||0)}`, sub: 'P50', color: '#0891b2' },
-    { label: 'Avg Party Size', value: (persona.overall?.avg_party_size||0).toFixed(1), sub: 'pax / receipt', color: '#7c3aed' },
+    { label: 'Avg Party Size', value: (persona.overall?.avg_party_size||0).toFixed(1), sub: 'pax / receipt', color: '#7a66b8' },
     { label: 'ยอดบิลเฉลี่ย', value: `${fmt(persona.overall?.avg_ticket||0)}`, sub: 'ต่อใบเสร็จ', color: 'var(--good-ink)' },
   ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
@@ -161,7 +161,7 @@ async function loadGuest(force) {
       plugins: {
         legend: { display: false }, datalabels: { display: false },
         zoom: {
-          zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, drag: { enabled: true, backgroundColor: 'rgba(79,70,229,0.12)' }, mode: 'x', onZoomComplete: ({chart}) => _renderSphInsights(chart) },
+          zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, drag: { enabled: true, backgroundColor: 'rgba(31,58,107,0.12)' }, mode: 'x', onZoomComplete: ({chart}) => _renderSphInsights(chart) },
           pan:  { enabled: true, mode: 'x', onPanComplete: ({chart}) => _renderSphInsights(chart) },
           limits: { x: { min: 'original', max: 'original' } },
         }
@@ -232,7 +232,7 @@ function _renderSphInsights(chart) {
   insEl.innerHTML = [
     card('ค่าเฉลี่ยในช่วง', fmt(avg.toFixed(0)),
          `${n} เดือน · ${slLabels[0] ? fmtMonth(slLabels[0]) : ''}${n>1?' – '+fmtMonth(slLabels[n-1]):''}`,
-         '#4f46e5'),
+         '#4a70b0'),
     card('เทียบค่าเฉลี่ยทั้งช่วง',
          (vsFullPct >= 0 ? '+' : '') + vsFullPct.toFixed(1) + '%',
          `ค่าเฉลี่ยรวม ${fmt(fullAvg.toFixed(0))}`,
@@ -266,7 +266,7 @@ function _renderSphInsights(chart) {
     obs.push(`ทิศทาง: ${trendPct>0?'ขาขึ้น':'ขาลง'} ${Math.abs(trendPct).toFixed(1)}% จากต้นช่วงถึงปลายช่วง`);
 
   obsEl.innerHTML = obs.length
-    ? '<div class="rounded-md p-2.5" style="background:#fefce8;border-left:3px solid #eab308"><span class="font-semibold">ข้อสังเกต:</span> ' + obs.join(' · ') + '</div>'
+    ? '<div class="rounded-md p-2.5" style="background:#fefce8;border:1px solid #eab308"><span class="font-semibold">ข้อสังเกต:</span> ' + obs.join(' · ') + '</div>'
     : '<div class="text-[11px]" style="color:var(--text-muted)">SPH ค่อนข้างนิ่งในช่วงนี้ — ไม่มีการเปลี่ยนแปลงที่ชัดเจน</div>';
 }
 
@@ -286,7 +286,7 @@ async function loadBuffetMix() {
 
   // Graduated premium palette: entry tier (blue) → premium (rose); à-la-carte violet.
   const TIER_COLORS = { '350': '#60a5fa', '500': '#22d3ee', '590': '#34d399', '799': '#fb7185',
-    'เด็ก (Child)': '#f472b6', 'à la carte': '#a78bfa', 'buffet (unknown tier)': '#6366f1', 'other': '#cbd5e1' };
+    'เด็ก (Child)': '#f472b6', 'à la carte': '#9a8bc9', 'buffet (unknown tier)': '#4a70b0', 'other': '#cbd5e1' };
   const colors = d.summary.map(s => TIER_COLORS[s.tier] || '#94a3b8');
 
   const _doughnut = (canvasId, field, unitFmt) => mkChart(canvasId, {
@@ -378,8 +378,8 @@ async function loadMCE() {
   if (kpiEl) kpiEl.innerHTML = [
     ['ต้นทุนรวม',           fmt(d.total_cost),             '#ef4444'],
     ['Top 5 เมนู = % ต้นทุน', top5cost.toFixed(0) + '%',   '#f59e0b'],
-    ['เมนูเสิร์ฟเยอะ+แพง',  hotCount + ' เมนู 🎯',         '#dc2626'],
-    ['ต้นทุน/จาน เฉลี่ย',   fmt(avgCps),                   '#8b5cf6'],
+    ['เมนูเสิร์ฟเยอะ+แพง',  hotCount + ' เมนู',         '#dc2626'],
+    ['ต้นทุน/จาน เฉลี่ย',   fmt(avgCps),                   '#7a66b8'],
   ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
 
   // Quadrant scatter
@@ -403,7 +403,7 @@ async function loadMCE() {
       plugins: { legend: { display: false }, datalabels: { display: false },
         tooltip: { callbacks: { label: ctx => {
           const it = ctx.raw.item;
-          return [`📌 ${it.description}`,
+          return [`${it.description}`,
                   `เสิร์ฟ ${it.serving_pct.toFixed(1)}% · ต้นทุน ${it.cost_pct.toFixed(1)}% · ฿${fmtN(it.cost_per_serving)}/จาน`];
         } } },
       },
@@ -504,7 +504,7 @@ function renderMce2Table(col, dir) {
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-1">${abcBadge}</td>
       <td class="py-1.5 pr-2 font-medium">
-        ${hot ? '🎯 ' : warn ? '⚠️ ' : ''}${descClean}
+        ${hot ? '' : warn ? '⚠ ' : ''}${descClean}
         <span class="inline-flex gap-1 ml-1">
           <button class="drill-branch-btn" onclick="event.stopPropagation();gpbSkuDrill('${jsAttr(r.sku_code)}')" title="ดูสูตร BoM">BoM</button>
           <button class="drill-branch-btn" onclick="event.stopPropagation();loadMce2BranchCompare('${jsAttr(r.sku_code)}','${jsAttr(r.description)}')" title="เปรียบเทียบสาขา">สาขา →</button>
@@ -549,9 +549,9 @@ async function loadMce2Ingredients() {
   const grand = ing.reduce((a, r) => a + (r.total_cost || 0), 0);
   const top3pct = ing.slice(0, 3).reduce((a, r) => a + (r.pct || 0), 0);
   if (kpiEl) kpiEl.innerHTML = [
-    ['ต้นทุนวัตถุดิบรวม', fmt(grand), '#8b5cf6'],
+    ['ต้นทุนวัตถุดิบรวม', fmt(grand), '#7a66b8'],
     ['Top 3 = % ต้นทุน',  top3pct.toFixed(0) + '%', '#f59e0b'],
-    ['จำนวนวัตถุดิบ', String(ing.length), '#4f46e5'],
+    ['จำนวนวัตถุดิบ', String(ing.length), '#4a70b0'],
   ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
 
   const top20 = ing.slice(0, 20);
@@ -560,7 +560,7 @@ async function loadMce2Ingredients() {
     data: {
       labels: top20.map(r => (r.name || r.code || '').substring(0, 22)),
       datasets: [{ label: 'ต้นทุน', data: top20.map(r => Math.round(r.total_cost || 0)),
-        backgroundColor: top20.map((_, i) => i < 3 ? 'rgba(139,92,246,0.80)' : 'rgba(139,92,246,0.45)'),
+        backgroundColor: top20.map((_, i) => i < 3 ? 'rgba(122,102,184,0.80)' : 'rgba(122,102,184,0.45)'),
         borderRadius: 3 }],
     },
     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -572,12 +572,12 @@ async function loadMce2Ingredients() {
 
   const bodyEl = document.getElementById('mce2IngBody');
   if (bodyEl) bodyEl.innerHTML = ing.slice(0, 40).map((r, i) => `
-    <tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(139,92,246,0.05)' : ''}">
+    <tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(122,102,184,0.05)' : ''}">
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
-      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '⚡ ' : ''}${esc(r.name || r.code || '')}</td>
+      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '' : ''}${esc(r.name || r.code || '')}</td>
       <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.type || '')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.total_cost)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.pct >= 10 ? '#8b5cf6' : 'inherit'}">${(r.pct || 0).toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.pct >= 10 ? '#7a66b8' : 'inherit'}">${(r.pct || 0).toFixed(1)}%</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${r.n_menus || 0}</td>
     </tr>`).join('');
 }
@@ -609,7 +609,7 @@ function renderMce2Pareto() {
           backgroundColor: barData.map((_, i) => i <= (idx80 >= 0 ? idx80 : 999) ? 'rgba(245,158,11,0.75)' : 'rgba(148,163,184,0.45)'),
           borderRadius: 2, order: 2 },
         { type: 'line', label: '% ต้นทุนสะสม', data: cumData, yAxisID: 'y2',
-          borderColor: '#4f46e5', borderWidth: 2, pointRadius: 0, tension: 0.3, order: 1,
+          borderColor: '#4a70b0', borderWidth: 2, pointRadius: 0, tension: 0.3, order: 1,
           fill: false },
       ],
     },
@@ -651,7 +651,7 @@ function renderMce2Whatif() {
   if (resEl) resEl.innerHTML = [
     [`ประหยัดได้ (ช่วงนี้)`, `฿${fmt(saving)}`, '#10b981'],
     [`% ต้นทุนลดลง`, `${savingPct.toFixed(1)}%`, '#059669'],
-    [`ต้นทุนรวมใหม่`, `฿${fmt(newTotalCost)}`, '#4f46e5'],
+    [`ต้นทุนรวมใหม่`, `฿${fmt(newTotalCost)}`, '#4a70b0'],
   ].map(([l, v, c]) => `<div class="rounded-xl p-3 text-center" style="background:${c}12;border:1px solid ${c}30">
     <div class="text-lg font-bold" style="color:${textInk(c)}">${v}</div>
     <div class="text-[11px] mt-0.5" style="color:var(--text-muted)">${l}</div>
@@ -702,7 +702,7 @@ async function loadMce2Trend() {
     return;
   }
 
-  const PALETTE = ['#ef4444','#f59e0b','#10b981','#4f46e5','#0ea5e9','#8b5cf6','#ec4899','#14b8a6'];
+  const PALETTE = ['#ef4444','#f59e0b','#10b981','#4a70b0','#0ea5e9','#7a66b8','#ec4899','#14b8a6'];
   const datasets = d.dishes.map((dish, i) => {
     const vals = d.months.map(m => {
       const mo = dish.monthly.find(x => x.month === m);
@@ -716,7 +716,7 @@ async function loadMce2Trend() {
     const rising = avgNew > avgOld * 1.05;
     const name   = (dish.description || dish.sku_code || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 20);
     return {
-      label: (rising ? '📈 ' : '') + name,
+      label: (rising ? '▲ ' : '') + name,
       data: vals, borderColor: PALETTE[i % PALETTE.length],
       backgroundColor: PALETTE[i % PALETTE.length] + '20',
       borderWidth: rising ? 2.5 : 1.5,
@@ -744,8 +744,8 @@ async function loadMce2Trend() {
   });
 
   // Count rising dishes for status label
-  const rising = datasets.filter(ds => ds.label.startsWith('📈')).length;
-  if (statusEl) statusEl.textContent = rising ? `⚠️ ${rising} เมนูมีต้นทุนสูงขึ้น` : '✓ ไม่มีเมนูที่ต้นทุนพุ่งผิดปกติ';
+  const rising = datasets.filter(ds => ds.label.startsWith('▲')).length;
+  if (statusEl) statusEl.textContent = rising ? `⚠ ${rising} เมนูมีต้นทุนสูงขึ้น` : '✓ ไม่มีเมนูที่ต้นทุนพุ่งผิดปกติ';
 }
 
 // ── Per-branch efficiency for one dish ───────────────────────────────────
@@ -755,7 +755,7 @@ async function loadMce2BranchCompare(skuCode, description) {
   const tblEl   = document.getElementById('mce2BranchTable');
   if (!panel) return;
 
-  titleEl.textContent = `🏪 เปรียบเทียบสาขา · ${description || skuCode}`;
+  titleEl.textContent = `เปรียบเทียบสาขา · ${description || skuCode}`;
   tblEl.innerHTML = '<p class="text-xs py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</p>';
   panel.classList.remove('hidden');
 
@@ -781,7 +781,7 @@ async function loadMce2BranchCompare(skuCode, description) {
         label: 'ต้นทุน/จาน (฿)', data: branches.map(b => b.cost_per_serving),
         backgroundColor: branches.map(b =>
           b.branch === bestBr.branch ? 'rgba(16,185,129,0.75)' :
-          b.cost_per_serving > avgCps * 1.15 ? 'rgba(239,68,68,0.65)' : 'rgba(79,70,229,0.55)'),
+          b.cost_per_serving > avgCps * 1.15 ? 'rgba(239,68,68,0.65)' : 'rgba(31,58,107,0.55)'),
         borderRadius: 3,
       }],
     },
@@ -805,14 +805,14 @@ async function loadMce2BranchCompare(skuCode, description) {
       const isBest = b.branch === bestBr.branch;
       const isHigh = b.cost_per_serving > avgCps * 1.15;
       return `<tr class="border-b" style="border-color:var(--border);background:${isBest?'rgba(16,185,129,0.05)':isHigh?'rgba(239,68,68,0.04)':''}">
-        <td class="py-1.5 pr-2 font-medium">${isBest?'✅ ':isHigh?'⚠️ ':''}${esc(b.branch)}</td>
+        <td class="py-1.5 pr-2 font-medium">${isBest?'✓ ':isHigh?'⚠ ':''}${esc(b.branch)}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(b.servings)}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${isHigh?'#ef4444':isBest?'#10b981':'inherit'}">฿${fmtN(b.cost_per_serving)}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${b.cost_pct_of_total.toFixed(1)}%</td>
         <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${b.food_cost_rate != null ? b.food_cost_rate.toFixed(1)+'%' : '—'}</td>
       </tr>`;
     }).join('')}</tbody></table>
-    <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">✅ Best practice · ⚠️ สูงกว่าเฉลี่ย 15%+ · ค่าเฉลี่ยระบบ ฿${fmtN(Math.round(avgCps))}/จาน</p>`;
+    <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">Best practice · ⚠ สูงกว่าเฉลี่ย 15%+ · ค่าเฉลี่ยระบบ ฿${fmtN(Math.round(avgCps))}/จาน</p>`;
 
   // Scroll to panel
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -884,7 +884,7 @@ function renderMce2CategoryRollup() {
     const fcColor = c.fc_rate == null ? 'var(--text-muted)' : c.fc_rate > 60 ? 'var(--bad-ink)' : c.fc_rate > 40 ? '#f59e0b' : '#10b981';
     return `<tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(14,165,233,0.04)' : ''}">
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
-      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '⭐ ' : ''}${esc(c.name)}</td>
+      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '★ ' : ''}${esc(c.name)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${c.count}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(c.cost)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${c.cost_pct >= 20 ? 'var(--bad-ink)' : c.cost_pct >= 10 ? '#f59e0b' : 'inherit'}">${c.cost_pct.toFixed(1)}%</td>
@@ -923,7 +923,7 @@ async function loadMce2Coverage() {
 
   // KPI chips
   if (covKpiEl) covKpiEl.innerHTML = [
-    ['เมนูทั้งหมด',        String(total),                            '#4f46e5'],
+    ['เมนูทั้งหมด',        String(total),                            '#4a70b0'],
     ['มีสูตร BoM',         `${bomCount} (${(bomCount/total*100).toFixed(0)}%)`, '#10b981'],
     ['Cost เท่านั้น',      `${scCount} เมนู`,                       '#f59e0b'],
     ['ไม่มีข้อมูลต้นทุน', `${noneCount} เมนู · ฿${fmt(noneCost)}`, '#ef4444'],
@@ -961,7 +961,7 @@ async function loadMce2Coverage() {
   if (covBodyEl) covBodyEl.innerHTML = rows.map(r => {
     const isAmber = r._badge === 'amber';
     const badgeColor = isAmber ? '#f59e0b' : '#ef4444';
-    const badgeLabel = isAmber ? '⚠️ Cost' : '❌ ไม่มี';
+    const badgeLabel = isAmber ? '⚠ Cost' : 'ไม่มี';
     return `<tr class="border-b" style="border-color:var(--border);background:${isAmber ? 'rgba(245,158,11,0.03)' : 'rgba(239,68,68,0.04)'}">
       <td class="py-1.5 pr-2"><span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${badgeColor}20;color:${badgeColor}">${badgeLabel}</span></td>
       <td class="py-1.5 pr-2 font-medium">${esc((r.description || '').replace(/^\((?:A|B)\)\s*/, ''))}</td>
@@ -993,7 +993,7 @@ function renderMce2Actions() {
     const impact = redDishes.reduce((s, r) => s + (r.cost || 0), 0);
     actions.push({
       priority: 1, color: '#ef4444',
-      icon: '🎯',
+      icon: '',
       title: `ลดต้นทุน ${redDishes.length} เมนูนี้ก่อน (เสิร์ฟเยอะ + ต้นทุนสูง)`,
       detail: names,
       impact: `ผลกระทบ: ฿${fmt(impact)} ต้นทุน`,
@@ -1008,7 +1008,7 @@ function renderMce2Actions() {
       const names = noRecipe.map(r => esc((r.description || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 18))).join(', ');
       actions.push({
         priority: 2, color: '#f59e0b',
-        icon: '🔬',
+        icon: '',
         title: `เพิ่มสูตร BoM ให้ ${n} เมนูที่ไม่มีสูตร (ปรับต้นทุนได้ทันที)`,
         detail: `เริ่มจาก: ${names}`,
         impact: `ต้นทุนที่ยังควบคุมไม่ได้: ฿${fmt((covData.summary?.sku_cost?.cost || 0) + (covData.summary?.none?.cost || 0))}`,
@@ -1021,10 +1021,10 @@ function renderMce2Actions() {
   if (ingBody) {
     const firstRow = ingBody.querySelector('tr:first-child td:nth-child(2)');
     if (firstRow && firstRow.textContent.trim()) {
-      const ingName = firstRow.textContent.replace(/^⚡\s*/, '').trim().substring(0, 30);
+      const ingName = firstRow.textContent.replace(/^\s*/, '').trim().substring(0, 30);
       actions.push({
-        priority: 3, color: '#8b5cf6',
-        icon: '💰',
+        priority: 3, color: '#7a66b8',
+        icon: '',
         title: `ต่อรองราคาวัตถุดิบนี้ก่อน`,
         detail: esc(ingName),
         impact: 'วัตถุดิบที่ใช้สูงสุดในทุกสูตร',
@@ -1035,7 +1035,7 @@ function renderMce2Actions() {
   // Action 4: Branch with anomaly (static suggestion if branch panel has data)
   actions.push({
     priority: 4, color: '#0ea5e9',
-    icon: '🏪',
+    icon: '',
     title: `ตรวจสอบสาขาที่ต้นทุน/จานสูงผิดปกติ`,
     detail: 'คลิก "สาขา →" ในตารางด้านบนเพื่อเปรียบเทียบ',
     impact: 'สาขาที่แพงกว่าค่าเฉลี่ย 15%+ = โอกาสประหยัด',
@@ -1059,7 +1059,7 @@ function renderMce2Actions() {
         .map(d => esc((d.description || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 18))).join(', ');
       actions.push({
         priority: 5, color: '#ec4899',
-        icon: '📈',
+        icon: '▲',
         title: `เฝ้าระวัง ${risingDishes.length} เมนูที่ต้นทุนพุ่งขึ้น`,
         detail: names,
         impact: 'ต้นทุนสูงขึ้น >5% เทียบกับช่วงก่อนหน้า',
@@ -1102,7 +1102,7 @@ async function loadMenuCostEfficiency() {
   const top5cost = d.items.slice(0,5).reduce((a,r)=>a+r.cost_pct,0);
   document.getElementById('mceKpis').innerHTML = [
     ['ต้นทุนรวม', ''+fmt(d.total_cost), '#ef4444'],
-    ['จำนวนเสิร์ฟรวม', fmtN(d.total_servings), '#4f46e5'],
+    ['จำนวนเสิร์ฟรวม', fmtN(d.total_servings), '#4a70b0'],
     ['Top 5 เมนู = % ต้นทุน', top5cost.toFixed(0)+'%', '#f59e0b'],
   ].map(([l,v,c])=>`<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span class="text-slate-500">${l}</span></span>`).join('');
   // Scatter: x=serving%, y=cost%, r=cost/serving. Top-right = reduce target.
@@ -1110,8 +1110,8 @@ async function loadMenuCostEfficiency() {
     r: 4 + Math.min(20, Math.sqrt(r.cost_per_serving)), item:r }));
   mkChart('mceScatter', { type:'bubble',
     data:{ datasets:[{ data:pts,
-      backgroundColor: pts.map(p=> (p.x>=2 && p.y>=2) ? 'rgba(239,68,68,0.65)' : 'rgba(79,70,229,0.45)'),
-      borderColor: pts.map(p=> (p.x>=2 && p.y>=2) ? '#ef4444' : '#4f46e5'), borderWidth:1 }] },
+      backgroundColor: pts.map(p=> (p.x>=2 && p.y>=2) ? 'rgba(239,68,68,0.65)' : 'rgba(31,58,107,0.45)'),
+      borderColor: pts.map(p=> (p.x>=2 && p.y>=2) ? '#ef4444' : '#4a70b0'), borderWidth:1 }] },
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{display:false}, datalabels:{display:false},
         tooltip:{callbacks:{label:ctx=>{const it=ctx.raw.item; return [it.description, `เสิร์ฟ ${it.serving_pct}% · ต้นทุน ${it.cost_pct}% · ${it.cost_per_serving}/จาน`];}}} },
@@ -1122,7 +1122,7 @@ async function loadMenuCostEfficiency() {
     const hot = (r.serving_pct>=2 && r.cost_pct>=2);
     return `<tr class="border-b border-slate-50 ${hot?'bg-rose-50':''}">
       <td class="py-1.5 pr-2 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-2">${hot?'🎯 ':''}${esc((r.description||'').replace(/^\((?:A|B)\)\s*/,''))}</td>
+      <td class="py-1.5 pr-2">${hot?'':''}${esc((r.description||'').replace(/^\((?:A|B)\)\s*/,''))}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(r.servings)}</td>
       <td class="py-1.5 pr-2 text-right text-slate-500">${r.serving_pct.toFixed(1)}%</td>
       <td class="py-1.5 pr-2 text-right text-red-500 font-semibold">${r.cost_pct.toFixed(1)}%</td>
@@ -1181,19 +1181,19 @@ async function loadBuffetPerformance() {
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   document.getElementById('bperfKpiRow').innerHTML = [
-    kpiCard('รายได้รวม',         _fmtBaht(cRev),                            `รวมทุก SKU (บุฟเฟ่ต์ + อลาคาท)`,                '#4f46e5'),
+    kpiCard('รายได้รวม',         _fmtBaht(cRev),                            `รวมทุก SKU (บุฟเฟ่ต์ + อลาคาท)`,                '#4a70b0'),
     kpiCard('ต้นทุน (COGS)',      _fmtBaht(cCogs),                           `ทั้งร้าน · ใช้สูตร BoM`,                       '#0891b2'),
-    kpiCard('💰 Food Cost รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${k.food_cost_target_lo}-${k.food_cost_target_hi}% · ภาพรวม`, fcColor),
-    kpiCard('📈 GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${_fmtBaht(cGp)} · ทั้งร้าน`,                    gpColor),
-    kpiCard('👥 Pax / บิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `${(Number(k.total_pax)||0).toLocaleString()} pax · เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#8b5cf6'),
-    kpiCard('🥤 บิลที่สั่งดื่ม',  (Number(k.beverage_bill_attach_pct)||0).toFixed(0) + '%',  `เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้`, (k.beverage_bill_attach_pct>=60?'#10b981':k.beverage_bill_attach_pct>=40?'#f59e0b':'#ef4444')),
+    kpiCard('Food Cost รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${k.food_cost_target_lo}-${k.food_cost_target_hi}% · ภาพรวม`, fcColor),
+    kpiCard('GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${_fmtBaht(cGp)} · ทั้งร้าน`,                    gpColor),
+    kpiCard('Pax / บิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `${(Number(k.total_pax)||0).toLocaleString()} pax · เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#7a66b8'),
+    kpiCard('บิลที่สั่งดื่ม',  (Number(k.beverage_bill_attach_pct)||0).toFixed(0) + '%',  `เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้`, (k.beverage_bill_attach_pct>=60?'#10b981':k.beverage_bill_attach_pct>=40?'#f59e0b':'#ef4444')),
   ].join('');
 
   // ── Tier mix trend (100% stacked bar) ────────────────────────────────
   const tt = d.tier_trend;
   const TIER_COLORS = {
-    BUFFET350: '#eab308', BUFFET500: '#10b981', BUFFET590: '#4f46e5',
-    BUFFET799: '#f97316', BUFFETCHILD: '#8b5cf6',
+    BUFFET350: '#eab308', BUFFET500: '#10b981', BUFFET590: '#4a70b0',
+    BUFFET799: '#f97316', BUFFETCHILD: '#7a66b8',
   };
   const TIER_LABELS = {
     BUFFET350: 'Buffet 350', BUFFET500: 'Buffet 500', BUFFET590: 'Buffet 590',
@@ -1237,7 +1237,7 @@ async function loadBuffetPerformance() {
   const donutMeta = [
     { code:'BUFFET350',   label:'350',   color:'#94a3b8' },
     { code:'BUFFET500',   label:'500',   color:'#60a5fa' },
-    { code:'BUFFET590',   label:'590',   color:'#4f46e5' },
+    { code:'BUFFET590',   label:'590',   color:'#4a70b0' },
     { code:'BUFFET799',   label:'799',   color:'#db2777' },
     { code:'BUFFETCHILD', label:'Child', color:'#fbbf24' },
   ];
@@ -1294,7 +1294,7 @@ async function loadBuffetPerformance() {
   const tierMeta = [
     { code:'BUFFET350',   label:'350',   color:'#94a3b8', desc:'Standard' },
     { code:'BUFFET500',   label:'500',   color:'#60a5fa', desc:'Mid' },
-    { code:'BUFFET590',   label:'590',   color:'#4f46e5', desc:'Premium' },
+    { code:'BUFFET590',   label:'590',   color:'#4a70b0', desc:'Premium' },
     { code:'BUFFET799',   label:'799',   color:'#db2777', desc:'Top' },
     { code:'BUFFETCHILD', label:'Child', color:'#fbbf24', desc:'เด็ก' },
   ];
@@ -1430,7 +1430,7 @@ async function loadBuffetPerformance() {
   mkChart('bperfDaypartTier', {
     type: 'bar',
     data: {
-      labels: dp.map(r => r.daypart === 'lunch' ? '🍱 Lunch' : r.daypart === 'dinner' ? '🍽️ Dinner' : '⏰ อื่นๆ'),
+      labels: dp.map(r => r.daypart === 'lunch' ? 'Lunch' : r.daypart === 'dinner' ? 'Dinner' : 'อื่นๆ'),
       datasets: tierKeys.map(t => ({
         label: TIER_LABELS[t],
         data: dp.map(r => r[t] || 0),
@@ -1452,7 +1452,7 @@ async function loadBuffetPerformance() {
     data: {
       labels: co.map(r => `M+${r.months_since_open}`),
       datasets: [
-        { type:'line', label:'รายได้เฉลี่ย/สาขา', data: co.map(r => r.avg_revenue), borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.10)', tension:0.3, fill:true, pointRadius:3, yAxisID:'y' },
+        { type:'line', label:'รายได้เฉลี่ย/สาขา', data: co.map(r => r.avg_revenue), borderColor:'#4a70b0', backgroundColor:'rgba(31,58,107,0.10)', tension:0.3, fill:true, pointRadius:3, yAxisID:'y' },
         { type:'line', label:'Pax เฉลี่ย/สาขา',   data: co.map(r => r.avg_pax),     borderColor:'#10b981', backgroundColor:'transparent', tension:0.3, pointRadius:3, borderWidth:2, borderDash:[5,3], yAxisID:'y1' },
       ]
     },
@@ -1519,26 +1519,26 @@ async function loadBuffetPerformance() {
           <p class="text-xs text-amber-800">ยังประเมินเป็นตัวเงินไม่ได้ในช่วงนี้ — ตั้งแต่ <b>1 ก.ย. 2026</b> ใช้ราคาเมนูใหม่ (Grand Menu) ราคาเก่า 350/500/590/799 <b>ไม่มีขายแล้ว</b> จึงไม่นำมาคิดรายได้</p>
         </div>`}
         <p class="text-xs text-slate-500 bg-slate-50 rounded p-2 border border-slate-200">
-          📌 <b>สมมุติฐาน:</b> ${pr.assumption}<br>
-          💡 <b>กลยุทธ์ที่ได้ผล:</b> Up-sell ที่หน้าจอ POS · เมนูแนะนำ "ขายดี" บน tier ฿${pr.upsell_from || '590'} · staff training · combo set ที่รวม tier ฿${pr.upsell_from || '590'}+ กับ premium add-on เพื่อดันขึ้น ฿${pr.upsell_to || '799'}</p>
+          <b>สมมุติฐาน:</b> ${pr.assumption}<br>
+          <b>กลยุทธ์ที่ได้ผล:</b> Up-sell ที่หน้าจอ POS · เมนูแนะนำ "ขายดี" บน tier ฿${pr.upsell_from || '590'} · staff training · combo set ที่รวม tier ฿${pr.upsell_from || '590'}+ กับ premium add-on เพื่อดันขึ้น ฿${pr.upsell_to || '799'}</p>
       </div>
     </div>`;
 
   // ── Auto-generated action items ─────────────────────────────────────
   const actions = [];
   if (k.food_cost_pct > k.food_cost_target_hi) {
-    actions.push({ icon:'🚨', tone:'red', html:`<b>Food Cost ${k.food_cost_pct.toFixed(1)}% เกินเป้าสูงสุด ${k.food_cost_target_hi}%</b> — ตรวจสอบ BoM, เจรจาซัพพลายเออร์, ปรับ portion control` });
+    actions.push({ icon:'⚠', tone:'red', html:`<b>Food Cost ${k.food_cost_pct.toFixed(1)}% เกินเป้าสูงสุด ${k.food_cost_target_hi}%</b> — ตรวจสอบ BoM, เจรจาซัพพลายเออร์, ปรับ portion control` });
   } else if (k.food_cost_pct < k.food_cost_target_lo) {
-    actions.push({ icon:'✅', tone:'green', html:`<b>Food Cost ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> — อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ` });
+    actions.push({ icon:'✓', tone:'green', html:`<b>Food Cost ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> — อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ` });
   }
   if (k.beverage_attach_pct < 10) {
-    actions.push({ icon:'🥤', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> — แม้ ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร` });
+    actions.push({ icon:'', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> — แม้ ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร` });
   }
   // Top vs bottom utilization
   if (d.seat_util.length >= 2) {
     const top = d.seat_util[0], bot = d.seat_util[d.seat_util.length - 1];
     if (top.utilization_pct > bot.utilization_pct * 2) {
-      actions.push({ icon:'🪑', tone:'info', html:`<b>${top.branch}</b> มี utilization ${top.utilization_pct}% (สูงกว่า ${bot.branch} ที่ ${bot.utilization_pct}% เกือบ ${(top.utilization_pct/bot.utilization_pct).toFixed(1)} เท่า) — ดูเป็น case study เพื่อปรับสาขาที่ต่ำ` });
+      actions.push({ icon:'', tone:'info', html:`<b>${top.branch}</b> มี utilization ${top.utilization_pct}% (สูงกว่า ${bot.branch} ที่ ${bot.utilization_pct}% เกือบ ${(top.utilization_pct/bot.utilization_pct).toFixed(1)} เท่า) — ดูเป็น case study เพื่อปรับสาขาที่ต่ำ` });
     }
   }
   // Render
@@ -1706,7 +1706,7 @@ async function loadCoverEconomics() {
       data: {
         labels: ps.map(r => r.party_size + ' คน'),
         datasets: [
-          { label: 'จำนวนบิล', data: ps.map(r => r.tx_count), backgroundColor: 'rgba(79,70,229,0.7)', borderRadius: 4, yAxisID: 'yTx' },
+          { label: 'จำนวนบิล', data: ps.map(r => r.tx_count), backgroundColor: 'rgba(31,58,107,0.7)', borderRadius: 4, yAxisID: 'yTx' },
           { label: 'Rev/Cover ()', type: 'line', data: ps.map(r => r.avg_revenue_per_cover), borderColor: '#10b981', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 4, yAxisID: 'yRpc', tension: 0.3 },
         ]
       },
@@ -1765,7 +1765,7 @@ async function loadRevPASH() {
   const peak = data.peak_hour;
   const dead = data.dead_hour;
   document.getElementById('revpashKpis').innerHTML = [
-    { label: 'Peak Hour',   value: peak != null ? peak + ':00' : '—',  sub: peak != null ? fmt((data.hourly.find(h=>h.hour===peak)||{}).revpash||0) + '/seat/hr' : '', color: '#4f46e5' },
+    { label: 'Peak Hour',   value: peak != null ? peak + ':00' : '—',  sub: peak != null ? fmt((data.hourly.find(h=>h.hour===peak)||{}).revpash||0) + '/seat/hr' : '', color: '#4a70b0' },
     { label: 'Avg RevPASH', value: data.hourly ? fmt(data.hourly.reduce((s,h)=>s+(h.revpash||0),0)/Math.max(data.hourly.filter(h=>h.revpash>0).length,1)) : '—', sub: 'เฉลี่ยชั่วโมงที่มีลูกค้า', color: 'var(--good-ink)' },
     { label: 'Dead Zone',   value: dead != null ? dead + ':00' : '—',  sub: 'ชั่วโมงที่ RevPASH ต่ำสุด', color: '#f59e0b' },
     { label: 'ที่นั่งที่ใช้', value: fmtN(seats), sub: 'กรอกแก้ได้ด้านบน', color: '#64748b' },
@@ -1780,7 +1780,7 @@ async function loadRevPASH() {
       datasets: [{
         label: 'RevPASH (/seat/hr)',
         data: hrly.map(r => r.revpash || 0),
-        backgroundColor: hrly.map(r => r.hour === peak ? 'rgba(79,70,229,0.9)' : 'rgba(79,70,229,0.45)'),
+        backgroundColor: hrly.map(r => r.hour === peak ? 'rgba(31,58,107,0.9)' : 'rgba(31,58,107,0.45)'),
         borderRadius: 3,
       }]
     },
@@ -1804,7 +1804,7 @@ async function loadRevPASH() {
       datasets: [{
         label: 'Avg RevPASH',
         data: dows.map(r => r.avg_revpash || 0),
-        backgroundColor: dows.map((r,i) => ['#f97316','#4f46e5','#0891b2','#10b981','#8b5cf6','#ec4899','#f59e0b'][i % 7] + 'cc'),
+        backgroundColor: dows.map((r,i) => ['#f97316','#4a70b0','#0891b2','#10b981','#7a66b8','#ec4899','#f59e0b'][i % 7] + 'cc'),
         borderRadius: 4,
       }]
     },
@@ -1886,7 +1886,7 @@ async function loadUpgradeSimulator() {
       datasets: [
         { label: 'Revenue ปัจจุบัน',  data: (cur.tiers||[]).map(t=>t.revenue||0), backgroundColor:'rgba(100,116,139,0.6)', borderRadius:3 },
         { label: 'GP ปัจจุบัน',       data: (cur.tiers||[]).map(t=>t.gp||0),      backgroundColor:'rgba(16,185,129,0.6)',  borderRadius:3 },
-        { label: 'GP Simulated',       data: (sim.tiers||[]).map(t=>t.gp||0),      backgroundColor:'rgba(79,70,229,0.75)',  borderRadius:3, borderDash:[4,2] },
+        { label: 'GP Simulated',       data: (sim.tiers||[]).map(t=>t.gp||0),      backgroundColor:'rgba(31,58,107,0.75)',  borderRadius:3, borderDash:[4,2] },
       ]
     },
     options: {
@@ -1968,7 +1968,7 @@ async function loadGpCalendar() {
         + `\nGross Profit: ${gp != null ? fmt(gp) : '—'}${pct != null ? '  ('+pct.toFixed(1)+'%)' : ''}`
         + `\nPax: ${fmtN(r.customer_count)} · บิล: ${fmtN(r.tx_count)}`
       : '';
-    html += `<div title="${tip}" style="background:${bg};color:${tc};border-radius:6px;padding:6px 4px;text-align:center;cursor:default">
+    html += `<div title="${tip}" style="background:${bg};color:${tc};border-radius:4px;padding:6px 4px;text-align:center;cursor:default">
       <div style="font-size:11px;font-weight:700">${day}</div>
       <div style="font-size:9px">${gp != null ? fmt(gp) : (r ? fmt(r.revenue_ex||0) : '')}</div>
     </div>`;
@@ -1984,7 +1984,7 @@ async function loadGpCalendar() {
   const totalRev = days.reduce((s,r)=>s+(r.revenue_inc||0),0);
   const totalGp  = withGp.reduce((s,r)=>s+(r.gp||0),0);
   document.getElementById('gpCalKpis').innerHTML = [
-    { label:'Revenue รวม (inc VAT)', value: fmt(totalRev),                                                       color:'#4f46e5' },
+    { label:'Revenue รวม (inc VAT)', value: fmt(totalRev),                                                       color:'#4a70b0' },
     { label:'GP รวม / Margin',       value: `${fmt(totalGp)} · ${d.monthly_margin_pct != null ? d.monthly_margin_pct.toFixed(1)+'%' : '—'}`, color: (d.monthly_margin_pct||0) >= 40 ? 'var(--good-ink)' : '#f59e0b' },
     { label:'วัน GP สูงสุด',         value: bestDay  ? bestDay.date.slice(8)+' ('+fmt(bestDay.gp)+')'  : '—',     color:'var(--good-ink)' },
     { label:'วัน GP ต่ำสุด',         value: worstDay ? worstDay.date.slice(8)+' ('+fmt(worstDay.gp)+')': '—',     color:'#ef4444' },
@@ -2007,7 +2007,7 @@ async function loadChildTrend() {
     data: {
       labels: rows.map(r=>r.period_month),
       datasets: [
-        { label:'ผู้ใหญ่', data:rows.map(r=>r.adult_pax||0), backgroundColor:'rgba(79,70,229,0.7)', borderRadius:3, stack:'pax' },
+        { label:'ผู้ใหญ่', data:rows.map(r=>r.adult_pax||0), backgroundColor:'rgba(31,58,107,0.7)', borderRadius:3, stack:'pax' },
         { label:'เด็ก',   data:rows.map(r=>r.child_pax||0), backgroundColor:'rgba(236,72,153,0.7)', borderRadius:3, stack:'pax' },
         { label:'GP %',   type:'line', data:rows.map(r=>r.gp_pct), borderColor:'#10b981', backgroundColor:'transparent',
           borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'yGp',
@@ -2046,7 +2046,7 @@ async function loadDrinkAttach() {
           backgroundColor: rows.map(r=>(r.attach_rate_pct>=40?'rgba(16,185,129,0.8)':'rgba(245,158,11,0.7)')),
           borderRadius:4, yAxisID:'yPct' },
         { label:'Drink Rev %', type:'line', data:rows.map(r=>r.drink_revenue_pct||0),
-          borderColor:'#4f46e5', backgroundColor:'transparent', borderWidth:2, pointRadius:4, yAxisID:'yPct' },
+          borderColor:'#4a70b0', backgroundColor:'transparent', borderWidth:2, pointRadius:4, yAxisID:'yPct' },
       ]
     },
     options:{
@@ -2087,7 +2087,7 @@ async function loadBreakeven() {
   const beUtil = d.breakeven_utilization_pct;
   const utilColor = beUtil==null ? '#94a3b8' : beUtil<70?'#10b981':beUtil<90?'#f59e0b':'#ef4444';
   document.getElementById('beKpis').innerHTML = [
-    { label:'GP/Cover (avg)',          value: d.avg_gp_per_cover  != null ? fmt(d.avg_gp_per_cover)  : 'ไม่มีต้นทุน', color:'#4f46e5' },
+    { label:'GP/Cover (avg)',          value: d.avg_gp_per_cover  != null ? fmt(d.avg_gp_per_cover)  : 'ไม่มีต้นทุน', color:'#4a70b0' },
     { label:'ต้องขาย/เดือน',           value: d.required_covers_per_month != null ? fmtN(Math.ceil(d.required_covers_per_month)) + ' cover' : '—', color:'#f59e0b' },
     { label:'ต้องขาย/วัน',             value: d.required_covers_per_day   != null ? fmtN(Math.ceil(d.required_covers_per_day))   + ' cover' : '—', color:'#f97316' },
     { label:'Breakeven Utilization',   value: beUtil != null ? beUtil.toFixed(1)+'%' : '—', color: utilColor },
@@ -2117,8 +2117,8 @@ async function loadBreakeven() {
         annotation:{ annotations:{
           fixed:{ type:'line', yMin:fixedCost, yMax:fixedCost, borderColor:'#f59e0b', borderWidth:2, borderDash:[5,4],
             label:{content:'Fixed Cost '+fmtN(fixedCost), display:true, position:'end', font:{size:10}, color:'#92400e', backgroundColor:'#fef3c7'} },
-          actual:{ type:'line', xMin:actual/required-0.5, xMax:actual/required-0.5, borderColor:'#4f46e5', borderWidth:2, borderDash:[4,3],
-            label:{content:'Actual avg', display:true, position:'start', font:{size:9}, color:'#4f46e5'} }
+          actual:{ type:'line', xMin:actual/required-0.5, xMax:actual/required-0.5, borderColor:'#4a70b0', borderWidth:2, borderDash:[4,3],
+            label:{content:'Actual avg', display:true, position:'start', font:{size:9}, color:'#4a70b0'} }
         }}
       },
       scales:{
@@ -2145,7 +2145,7 @@ async function loadForecast() {
   const trendColor = d.trend==='up' ? '#10b981' : d.trend==='down' ? '#ef4444' : '#94a3b8';
   const confColor  = d.forecast?.[0]?.confidence==='high'?'var(--good-ink)':d.forecast?.[0]?.confidence==='med'?'#f59e0b':'#ef4444';
   document.getElementById('forecastKpis').innerHTML = [
-    { label:'Trend',           value: d.trend==='up'?'📈 ขึ้น':d.trend==='down'?'📉 ลง':'➡️ คงที่', color:trendColor },
+    { label:'Trend',           value: d.trend==='up'?'ขึ้น':d.trend==='down'?'ลง':'คงที่', color:trendColor },
     { label:'R²',              value: d.r_squared!=null ? d.r_squared.toFixed(3) : '—',              color: d.r_squared>0.7?'var(--good-ink)':d.r_squared>0.4?'#f59e0b':'#ef4444' },
     { label:'เติบโต/เดือน %', value: d.monthly_growth_rate!=null ? (d.monthly_growth_rate>0?'+':'')+d.monthly_growth_rate.toFixed(1)+'%' : '—', color:trendColor },
     { label:'Confidence',      value: d.forecast?.[0]?.confidence?.toUpperCase() || '—',             color:confColor },
@@ -2160,18 +2160,18 @@ async function loadForecast() {
     const labels = [...hist.map(r=>r.period), ...fore.map(r=>r.period)];
     const histData = hist.map(r=>r[field]||0);
     const foreData = fore.map(r=>r[field]||0);
-    const foreColors = fore.map(r => '#4f46e5'+(confAlpha[r.confidence]||'88'));
+    const foreColors = fore.map(r => '#4a70b0'+(confAlpha[r.confidence]||'88'));
     mkChart('chartForecast'+key, {
       type:'line',
       data:{
         labels,
         datasets:[
-          { label:'Historical', data:[...histData,...fore.map(()=>null)], borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.08)',
+          { label:'Historical', data:[...histData,...fore.map(()=>null)], borderColor:'#4a70b0', backgroundColor:'rgba(31,58,107,0.08)',
             borderWidth:2, pointRadius:3, fill:true, tension:0.3, spanGaps:false },
           { label:'Forecast',   data:[...hist.map(()=>null), histData[histData.length-1], ...foreData],
             borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)',
             borderWidth:2, borderDash:[6,4], pointRadius:4,
-            pointBackgroundColor:['#4f46e5',...foreColors], fill:true, tension:0.3, spanGaps:true },
+            pointBackgroundColor:['#4a70b0',...foreColors], fill:true, tension:0.3, spanGaps:true },
         ]
       },
       options:{
@@ -2204,7 +2204,7 @@ function setBgpGran(g) {
 }
 
 let _lastGpKey = null;
-// 🍖 Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate).
+// Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate).
 let _hetKey = null;
 async function loadHeavyEaterTail() {
   const _fk = (getBranch() || '') + '|' + (getGroup() || '');
@@ -2220,15 +2220,15 @@ async function loadHeavyEaterTail() {
     _extKpi('หัวที่ขาดทุน', (s.loss_cover_pct != null ? s.loss_cover_pct : 0) + '%', fmtN(s.loss_covers || 0) + ' หัว', s.loss_cover_pct > 2 ? '#ef4444' : '#f59e0b'),
     _extKpi('มูลค่าที่เสียไป', fmt(s.loss_amount || 0), 'ต้นทุน > เงินที่จ่าย', '#ef4444'),
     _extKpi('กำไร/หัว เฉลี่ย', fmt(s.gp_per_head || 0), 'ทั้งช่วง', '#10b981'),
-    _extKpi('บิลขาดทุน', fmtN(s.loss_bills || 0), (s.loss_bill_pct || 0) + '% ของบิล', '#7c3aed'),
+    _extKpi('บิลขาดทุน', fmtN(s.loss_bills || 0), (s.loss_bill_pct || 0) + '% ของบิล', '#7a66b8'),
   ].join('');
   // Auto insight: worst party-size band (the heavy-eater signal)
   const parties = (d.by_party_size || []).filter(r => r.covers > 50).sort((a, b) => b.loss_cover_pct - a.loss_cover_pct);
   const ins = document.getElementById('hetInsight');
   if (ins && parties.length) {
     const w = parties[0], best = parties[parties.length - 1];
-    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border-left:3px solid #f59e0b">
-      🍽️ <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:#ef4444">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
+    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">
+      <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:#ef4444">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
       ยิ่งคนน้อย ความเสี่ยง "คนกินเยอะคนเดียว" ยิ่งสูง → จุดที่ควรคุม portion/ราคา tier</div>`;
   } else if (ins) { ins.innerHTML = ''; }
   // distribution bars
@@ -2251,7 +2251,7 @@ async function loadHeavyEaterTail() {
     <td class="py-1 text-right tabular-nums" style="color:#ef4444">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
 }
 
-// ⏱️ Turn-Time & Table Throughput Efficiency
+// Turn-Time & Table Throughput Efficiency
 let _turnKey = null;
 async function loadTurnEfficiency() {
   const _fk = (getBranch() || '') + '|' + (getGroup() || '');
@@ -2267,10 +2267,10 @@ async function loadTurnEfficiency() {
   const ins = document.getElementById('turnInsight');
   if (ins && ineff.length) {
     const names = ineff.slice(0, 4).map(r => esc(r.branch)).join(', ');
-    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fef2f2;border-left:3px solid #ef4444">🔴 <b>${ineff.length} สาขา</b> นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (${names}${ineff.length > 4 ? ', …' : ''}) — โต๊ะถูกครองนานเพื่อกำไรที่น้อยกว่า เป็นเป้าหมายคุม dwell/portion อันดับแรก</div>`;
+    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fef2f2;border:1px solid #ef4444">● <b>${ineff.length} สาขา</b> นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (${names}${ineff.length > 4 ? ', …' : ''}) — โต๊ะถูกครองนานเพื่อกำไรที่น้อยกว่า เป็นเป้าหมายคุม dwell/portion อันดับแรก</div>`;
   } else if (ins) { ins.innerHTML = ''; }
   document.getElementById('turnBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-amber-50/40" style="${r.inefficient ? 'background:rgba(239,68,68,0.05)' : ''}">
-    <td class="py-1.5 pr-2 font-medium">${r.inefficient ? '🔴 ' : ''}${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 font-medium">${r.inefficient ? '● ' : ''}${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.turn_min && r.turn_min > ch.turn_min) ? '#ef4444' : 'var(--text-secondary)'}">${r.turn_min != null ? r.turn_min : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.cov_per_tab != null ? r.cov_per_tab : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.gp_cover && r.gp_cover < ch.gp_cover) ? '#ef4444' : '#10b981'}">${r.gp_cover != null ? fmt(r.gp_cover) : '—'}</td>
@@ -2309,7 +2309,7 @@ async function loadBuffetGP() {
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   document.getElementById('gpBomKpis').innerHTML = [
-    kpi('Revenue (period)',    fmt(pt.revenue),                       'ex-VAT · ช่วงที่เลือก',          '#4f46e5'),
+    kpi('Revenue (period)',    fmt(pt.revenue),                       'ex-VAT · ช่วงที่เลือก',          '#4a70b0'),
     kpi('BoM Cost',            noC ? 'ไม่มีต้นทุน' : fmt(pt.bom_cost), 'ต้นทุนตามรายการกดสั่ง',           '#f97316'),
     kpi('Gross Profit',        noC ? '—' : fmt(pt.gp),               'Revenue − BoM Cost',              gpColor),
     kpi('GP Margin %',         noC ? '—' : pt.margin_pct.toFixed(1)+'%', 'เป้า 55-65%',                gpColor),
@@ -2325,7 +2325,7 @@ async function loadBuffetGP() {
     data: {
       labels,
       datasets: [
-        { label: 'Revenue',   data: series.map(s => s.revenue),  backgroundColor: 'rgba(79,70,229,0.65)',  borderRadius: 3, order: 2 },
+        { label: 'Revenue',   data: series.map(s => s.revenue),  backgroundColor: 'rgba(31,58,107,0.65)',  borderRadius: 3, order: 2 },
         { label: 'BoM Cost',  data: series.map(s => s.bom_cost), backgroundColor: 'rgba(249,115,22,0.65)', borderRadius: 3, order: 2 },
         { label: 'Gross Profit', data: series.map(s => s.gp), type: 'line',
           borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)',
@@ -2413,7 +2413,7 @@ async function loadBuffetGP() {
   // Waterfall segments: [Revenue, −BufCost, −FoodCost, −BevCost, =GP]
   const wfLabels = ['Revenue', 'Buffet Tier\n(BoM Cost)', 'Food Items\n(BoM Cost)', 'Beverages\n(BoM Cost)', 'Gross\nProfit'];
   const wfData   = [rev, -(wf.bom_buffet||0), -(wf.bom_food||0), -(wf.bom_bev||0), wf.gp||0];
-  const wfColors = ['#4f46e5', '#f97316', '#ef4444', '#f59e0b', '#10b981'];
+  const wfColors = ['#4a70b0', '#f97316', '#ef4444', '#f59e0b', '#10b981'];
   // Floating bar: [start, end] pairs
   const wfFloat = [];
   let running = rev;
@@ -2508,7 +2508,7 @@ async function loadBomPnl() {
   const totNp  = rows.reduce((s,r) => s+(r.net_profit||0), 0);
   const npColor = c => c == null ? '#94a3b8' : c >= 0 ? '#10b981' : '#ef4444';
   document.getElementById('pnlKpis').innerHTML = [
-    { label: 'Revenue รวม',      value: fmt(totRev), color: '#4f46e5' },
+    { label: 'Revenue รวม',      value: fmt(totRev), color: '#4a70b0' },
     { label: 'Gross Profit รวม', value: fmt(totGp),  color: '#10b981' },
     { label: 'Fixed Costs รวม',  value: fmt(totFc),  color: '#f97316' },
     { label: 'Net Profit รวม',   value: fmt(totNp),  color: npColor(totNp) },
@@ -2568,7 +2568,7 @@ function _renderPv() {
       <td class="py-1.5 pr-3 text-slate-600 max-w-[120px] truncate" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${r.avg_ratio != null ? r.avg_ratio.toFixed(3) : '—'}</td>
-      <td class="py-1.5 pr-3 text-right">${up ? '📈' : '📉'}</td>
+      <td class="py-1.5 pr-3 text-right">${up ? '▲' : '▼'}</td>
       <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${clr}">${r.trend_pct != null ? (r.trend_pct >= 0 ? '+' : '') + r.trend_pct.toFixed(1)+'%' : '—'}</td>
     </tr>`;
   }).join('');
@@ -2691,7 +2691,7 @@ function _updateSimResult() {
     ['Adjusted Cost',  fmt(adjCost),   '#f97316'],
     ['Base GP',        fmt(baseGp),    '#10b981'],
     ['Simulated GP',   fmt(adjGp),     '#10b981'],
-    ['Base Margin',    baseMgn.toFixed(1)+'%', '#4f46e5'],
+    ['Base Margin',    baseMgn.toFixed(1)+'%', '#4a70b0'],
     ['Sim Margin',     adjMgn.toFixed(1)+'%',  clr],
     ['Δ Margin',       (delta >= 0 ? '+' : '') + delta.toFixed(1)+'pp', clr],
   ].map(([lbl, val, c]) => `<div class="flex justify-between py-1.5 border-b border-slate-100">
@@ -2705,7 +2705,7 @@ let _lcData = [];
 let _lcFilter = 'all';
 let _lastLcKey = null;
 const _lcColors = { new:'#3b82f6', growing:'#10b981', stable:'#64748b', declining:'#f59e0b', dead:'#ef4444' };
-const _lcEmoji  = { new:'🌱', growing:'📈', stable:'➡️', declining:'📉', dead:'💀' };
+const _lcEmoji  = { new:'', growing:'▲', stable:'→', declining:'▼', dead:'' };
 function setLcFilter(f) {
   _lcFilter = f;
   const base = 'px-3 py-1.5 rounded-lg font-medium';
@@ -2767,7 +2767,7 @@ async function loadBomAudit(force) {
     return;
   }
   const allItems = d.all || d.flagged || [];
-  const kColors = { error:'#ef4444', warning:'#f59e0b', high_z:'#8b5cf6', tier:'#0891b2', ok:'#10b981' };
+  const kColors = { error:'#ef4444', warning:'#f59e0b', high_z:'#7a66b8', tier:'#0891b2', ok:'#10b981' };
   // KPI chips from summary
   const s = d.summary || {};
   const okCount = (s.total_with_cost||0) - (s.error_count||0) - (s.warning_count||0) - (s.high_z_count||0) - (s.tier_count||0);
@@ -2784,7 +2784,7 @@ async function loadBomAudit(force) {
     document.getElementById('bomAuditBody').innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-400">ดี — ไม่พบปัญหา unit_cost</td></tr>';
     return;
   }
-  const flagLabel = { error:'🔴 Error', warning:'🟡 Warning', high_z:'🟣 High Z', tier:'🔵 Tier', ok:'✅ OK' };
+  const flagLabel = { error:'Error', warning:'Warning', high_z:'High Z', tier:'Tier', ok:'OK' };
   document.getElementById('bomAuditBody').innerHTML = allItems.map(r => {
     const clr = kColors[r.flag] || '#64748b';
     const sp = r.implied_selling_price;
@@ -2820,8 +2820,8 @@ async function loadFixedCosts() {
   document.getElementById('fixedCostRows').innerHTML =
     `<div class="flex items-center gap-3 mb-1 text-[11px] font-semibold" style="color:var(--text-muted)">
       <span class="w-36 flex-shrink-0">สาขา</span>
-      <span class="flex-1">💼 ค่าแรง/เดือน (labor)</span>
-      <span class="flex-1">🏠 ค่าใช้จ่ายคงที่/เดือน (เช่า/น้ำไฟ)</span>
+      <span class="flex-1">ค่าแรง/เดือน (labor)</span>
+      <span class="flex-1">ค่าใช้จ่ายคงที่/เดือน (เช่า/น้ำไฟ)</span>
     </div>` +
     branches.map(b => {
       const k = b.name.replace(/\s/g, '_');
@@ -2848,8 +2848,8 @@ async function saveFixedCosts() {
     api(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).catch(() => null),
     api(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).catch(() => null),
   ]);
-  if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = '✅ บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = '#10b981'; }
-  else { st.textContent = '❌ บันทึกไม่ได้'; st.style.color = '#ef4444'; }
+  if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = 'บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = '#10b981'; }
+  else { st.textContent = 'บันทึกไม่ได้'; st.style.color = '#ef4444'; }
   setTimeout(() => { st.textContent = ''; }, 3000);
   _lastPnlKey = null; _primeKey = null;   // force P&L + Prime-cost reload
 }
@@ -2885,7 +2885,7 @@ async function renderBenchFoodCost(params) {
       <div style="width:60px" class="text-right tabular-nums ${vs<=0?'text-emerald-600':'text-rose-500'}" title="เทียบค่ากลางเครือ">${vs>0?'+':''}${vs.toFixed(1)}</div>
     </div>`;
   }).join('') + `<div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-400">
-      <span>🟩 quartile บน (ดีกว่าเพื่อน)</span><span>🟨 กลาง</span><span>🟥 quartile ล่าง (ต้องแก้ก่อน)</span>
+      <span>quartile บน (ดีกว่าเพื่อน)</span><span>กลาง</span><span>quartile ล่าง (ต้องแก้ก่อน)</span>
       <span>┊ ค่ากลางเครือ ${median.toFixed(1)}%</span><span>▮ แถบเขียวจาง = ช่วงเป้า ${lo}-${hi}%</span>
       <span>คอลัมน์ขวา = เทียบค่ากลาง (− ดีกว่า)</span></div>`;
 }
@@ -2910,7 +2910,7 @@ async function loadBenchmark() {
   const avgTick = branches.length ? branches.reduce((s, b) => s + (b.avg_ticket || 0), 0) / branches.length : 0;
   const avgDisc = branches.length ? branches.reduce((s, b) => s + (b.discount_rate || 0), 0) / branches.length : 0;
   document.getElementById('benchmark-kpi-row').innerHTML = [
-    { label: 'รายได้รวมเครือข่าย', value: fmt(totalRev), sub: `จาก ${branches.length} สาขา`, color: '#4f46e5' },
+    { label: 'รายได้รวมเครือข่าย', value: fmt(totalRev), sub: `จาก ${branches.length} สาขา`, color: '#4a70b0' },
     { label: 'สาขาที่ทำได้สูงสุด', value: branches[0]?.branch || '—', sub: fmt(branches[0]?.revenue || 0), color: 'var(--good-ink)' },
     { label: 'ยอดบิลเฉลี่ยเครือข่าย', value: fmt(avgTick), sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: '% ส่วนลดเครือข่าย', value: `${avgDisc.toFixed(1)}%`, sub: 'ของยอดบิล', color: '#f59e0b' },
@@ -3049,7 +3049,7 @@ function renderBenchTable() {
       ${cell(fmt(r.avg_ticket), _benchMom(r.avg_ticket, r.prev_avg_ticket, { hb: true }))}
       ${cell(`<span class="${discCls}">${(r.discount_rate || 0).toFixed(1)}%</span>`, _benchMom(r.discount_rate, r.prev_discount_rate, { hb: false, pp: true }))}
       ${cell(cpt, _benchMom(r.cust_per_tx, r.prev_cust_per_tx, { hb: true }))}
-      ${_benchScoreCell(r.revenue_score, '#4f46e5')}
+      ${_benchScoreCell(r.revenue_score, '#4a70b0')}
       ${_benchScoreCell(r.growth_score, '#10b981')}
       ${_benchScoreCell(r.consistency_score, '#06b6d4')}
       ${_benchScoreCell(r.momentum_score, '#f59e0b')}

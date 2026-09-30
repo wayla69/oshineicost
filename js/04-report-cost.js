@@ -39,7 +39,7 @@ async function renderReportCost(branch) {
   kpis.innerHTML = [
     { label:'Total COGS (เดือนนี้)', value:fmtN(Math.round(totalCogsAll)), color:'#dc2626' },
     { label:`Top 60 = ${totalCogsAll ? (totalCogsTop/totalCogsAll*100).toFixed(1) : '—'}% ของต้นทุน`, value:fmtN(Math.round(totalCogsTop)), color:'#f59e0b' },
-    { label:'จำนวนเมนูมีต้นทุน', value:fmtN(costItems.length), color:'#6366f1' },
+    { label:'จำนวนเมนูมีต้นทุน', value:fmtN(costItems.length), color:'#4a70b0' },
     { label:'Costed SKUs', value:`${cur.summary?.costed_skus||0}/${cur.summary?.total_skus||0}`, color:'#64748b' },
   ].map(k=>`<div class="rounded-lg p-3 text-center" style="background:${k.color}0f;border:1px solid ${k.color}33">
     <p class="text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted)">${k.label}</p>
@@ -121,7 +121,7 @@ async function renderReportTier(month) {
     <td class="py-2 text-right">${x.a.food_pct ?? '—'}%</td></tr>`).join('');
   const mix = (d.mix_effect != null && Math.abs(d.mix_effect) >= 1)
     ? `<p class="text-xs mt-2 font-medium" style="color:${d.mix_effect < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${d.mix_effect < 0 ? 'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix กดรายได้/หัวลง ฿' + Math.abs(d.mix_effect).toFixed(2) : 'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix เพิ่มรายได้/หัว ฿' + d.mix_effect.toFixed(2)}</p>` : '';
-  const bullets = (d.insights || []).slice(0, 4).map(t => `<li>💡 ${esc(t)}</li>`).join('');
+  const bullets = (d.insights || []).slice(0, 4).map(t => `<li>${esc(t)}</li>`).join('');
   block.innerHTML = `<table class="text-sm text-slate-700 w-full">
       <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
         <th class="py-2 pr-4">Tier</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
@@ -131,7 +131,7 @@ async function renderReportTier(month) {
         <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
       </tr></thead><tbody>${rows}</tbody></table>
     ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
-    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
+    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ วิเคราะห์วัตถุดิบ → วิเคราะห์ Tier ราคาขาย</p>`;
 }
 
 // Run async thunks with bounded concurrency, preserving input order. Used by the
@@ -158,7 +158,7 @@ async function _poolAll(thunks, limit = 4) {
 //
 // Two guards keep this robust on the small (512 MB) host:
 //   • _printing re-entrancy lock — when the host is slow the dialog doesn't open
-//     instantly, so users click 🖨️ repeatedly; without this each click re-fired
+//     instantly, so users click repeatedly; without this each click re-fired
 //     the whole ~17-query report load and the stacked batches thrashed/OOM'd the
 //     host (a request storm seen in the logs). The lock collapses repeat clicks.
 //   • Promise.race timeout — fetches have no per-request timeout, so one hung
@@ -191,8 +191,8 @@ async function printReport() {
 // filter) so the user can flip all/master/franchise from inside the report.
 let reportScope = '';
 function _rptScopeLabel(sc) {
-  return sc === 'master' ? '🏢 เฉพาะสาขา Master'
-       : sc === 'franchise' ? '🤝 เฉพาะแฟรนไชส์'
+  return sc === 'master' ? 'เฉพาะสาขา Master'
+       : sc === 'franchise' ? 'เฉพาะแฟรนไชส์'
        : 'ภาพรวมทุกกลุ่ม (Master + Franchise)';
 }
 // Force `group` on a query string to the current report scope (overriding any
@@ -207,7 +207,7 @@ function _rptScopeHighlight() {
   document.querySelectorAll('#rptScopeSel button').forEach(b => {
     const on = (b.dataset.scope || '') === reportScope;
     b.style.background = on ? 'rgba(255,255,255,0.95)' : 'transparent';
-    b.style.color      = on ? '#4338ca' : '#fff';
+    b.style.color      = on ? '#1f3a6b' : '#fff';
   });
 }
 function setReportScope(sc) {
@@ -358,10 +358,10 @@ async function loadReport() {
 
   // ── KPI hero band — latest month at-a-glance (+ period margin)
   const heroCards = [
-    { label:`รายได้ · ${mLastLabel}`, value:fmt(mLast.revenue||0), accent:'#4f46e5', mom:pctDelta(mLast.revenue, mPrev?.revenue) },
+    { label:`รายได้ · ${mLastLabel}`, value:fmt(mLast.revenue||0), accent:'#4a70b0', mom:pctDelta(mLast.revenue, mPrev?.revenue) },
     { label:'Gross Margin', value:_cs0.overall_margin_pct!=null?_cs0.overall_margin_pct.toFixed(1)+'%':'—', accent:'#059669' },
     { label:`บิล · ${mLastLabel}`, value:fmtN(mLast.tx_count||0), accent:'#0891b2', mom:pctDelta(mLast.tx_count, mPrev?.tx_count) },
-    { label:`ลูกค้า · ${mLastLabel}`, value:fmtN(mLast.customer_count||0), accent:'#7c3aed', mom:pctDelta(mLast.customer_count, mPrev?.customer_count) },
+    { label:`ลูกค้า · ${mLastLabel}`, value:fmtN(mLast.customer_count||0), accent:'#7a66b8', mom:pctDelta(mLast.customer_count, mPrev?.customer_count) },
     { label:`ยอดบิลเฉลี่ย · ${mLastLabel}`, value:fmtN(lastAov), accent:'#d97706', mom:pctDelta(lastAov, prevAov) },
   ];
   document.getElementById('rptHero').innerHTML = heroCards.map(h =>
@@ -374,23 +374,23 @@ async function loadReport() {
   // Alerts
   const alerts = [];
   const periodTotalRev = trend.reduce((a,r)=>a+(r.revenue||0),0);
-  alerts.push(`🗓️ <b>เดือนล่าสุดที่จบแล้ว:</b> ${mLastLabel} · สรุปด้านบนเป็น<b>รายเดือนเต็ม</b> (MoM/YoY เทียบเดือนเต็มต่อเดือนเต็ม)${(partialMonth && mPartial) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) แสดงเป็น MTD ใน §2 ไม่นำมาเทียบ` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
+  alerts.push(`<b>เดือนล่าสุดที่จบแล้ว:</b> ${mLastLabel} · สรุปด้านบนเป็น<b>รายเดือนเต็ม</b> (MoM/YoY เทียบเดือนเต็มต่อเดือนเต็ม)${(partialMonth && mPartial) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) แสดงเป็น MTD ใน §2 ไม่นำมาเทียบ` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
   const latestYoy = yoy[yoy.length-1];
   if (latestYoy && latestYoy.yoy_pct != null) {
     // Prefer the like-for-like figure when the raw one is structurally unfair
     // (branch roll-out / partial month) — see the guard in /api/analysis/yoy.
     alerts.push(
       (!latestYoy.comparable && latestYoy.same_store_pct != null)
-        ? `📊 <b>YoY ${latestYoy.period_month} (เทียบสาขาเดิม):</b> ${latestYoy.same_store_pct>=0?'+':''}${latestYoy.same_store_pct.toFixed(1)}% vs ${latestYoy.ly_period} · <span style="color:#d97706">ตัวเลขดิบ ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% รวมผลขยายสาขา (${latestYoy.ly_branches}→${latestYoy.cur_branches} สาขา)</span>`
-        : `📊 <b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
+        ? `<b>YoY ${latestYoy.period_month} (เทียบสาขาเดิม):</b> ${latestYoy.same_store_pct>=0?'+':''}${latestYoy.same_store_pct.toFixed(1)}% vs ${latestYoy.ly_period} · <span style="color:#d97706">ตัวเลขดิบ ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% รวมผลขยายสาขา (${latestYoy.ly_branches}→${latestYoy.cur_branches} สาขา)</span>`
+        : `<b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
   }
   const cs = costAnalysis.summary || {};
   if (cs.overall_margin_pct != null) {
-    alerts.push(`💰 <b>Gross margin:</b> ${cs.overall_margin_pct.toFixed(1)}% (on ${cs.costed_skus||0}/${cs.total_skus||0} costed SKUs)`);
+    alerts.push(`<b>Gross margin:</b> ${cs.overall_margin_pct.toFixed(1)}% (on ${cs.costed_skus||0}/${cs.total_skus||0} costed SKUs)`);
   } else {
     alerts.push(`⚠ <b>No SKU costs uploaded.</b> Profit & margin analysis are unavailable.`);
   }
-  if (anomalies.length) alerts.push(`🚨 <b>${anomalies.length} anomalies</b> detected in the last 90 days (see §10).`);
+  if (anomalies.length) alerts.push(`⚠ <b>${anomalies.length} anomalies</b> detected in the last 90 days (see §10).`);
   document.getElementById('rptExecAlerts').innerHTML = alerts.map(a=>`<div class="px-3 py-2 bg-slate-50 rounded">${a}</div>`).join('');
 
   // ── §2 Revenue Performance & Growth — monthly + YTD movement (not a big sum)
@@ -520,7 +520,7 @@ async function loadReport() {
   const _momChipS = p => p == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const _rankMove = b => {
-    if (b.isNew) return '<span style="color:#0891b2">🆕</span>';
+    if (b.isNew) return '<span style="color:#0891b2"></span>';
     if (b.dRank == null || b.dRank === 0) return '<span class="text-slate-400">—</span>';
     return b.dRank > 0
       ? `<span style="color:var(--good-ink)">▲ ${b.dRank}</span>`
@@ -531,12 +531,12 @@ async function loadReport() {
 
   document.getElementById('rptBranchBody').innerHTML = branchesByLast.length
     ? branchesByLast.map((b, i) => {
-        const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+        const medal = i===0?'1.':i===1?'2.':i===2?'3.':(i+1);
         return `<tr class="border-t border-slate-100">
           <td class="py-2 pr-4">${medal}</td>
           <td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
           <td class="py-2 pr-4 text-right font-semibold">${fmtN(b.last)}</td>
-          <td class="py-2 pr-4 text-right">${b.ramp?'<span style="color:#0891b2">🆕 พุ่ง</span>':_momChipS(b.mom)}</td>
+          <td class="py-2 pr-4 text-right">${b.ramp?'<span style="color:#0891b2">พุ่ง</span>':_momChipS(b.mom)}</td>
           <td class="py-2 pr-4 text-center">${_rankMove(b)}</td>
           <td class="py-2 pr-4 text-right">${b.share.toFixed(1)}%</td>
           <td class="py-2 pr-4 text-right">${fmtN(b.avg_ticket||0)}</td>
@@ -622,7 +622,7 @@ async function loadReport() {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <p class="text-[11px] text-slate-400 mt-2">แถบ = ระยะห่างจากค่ากลาง (median) ของเครือ ณ ค่ากลาง (เส้นแบ่งกลาง) · 🟢เขียว = ทิศทางดี · 🔴แดง = ทิศทางแย่ · เทา = ต่างกันแต่ไม่มีทิศทางดี/แย่ชัดเจน</p>`;
+      <p class="text-[11px] text-slate-400 mt-2">แถบ = ระยะห่างจากค่ากลาง (median) ของเครือ ณ ค่ากลาง (เส้นแบ่งกลาง) · ●เขียว = ทิศทางดี · ●แดง = ทิศทางแย่ · เทา = ต่างกันแต่ไม่มีทิศทางดี/แย่ชัดเจน</p>`;
   })();
 
   // ── §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (reuses the Menu tab's renderer so the
@@ -668,7 +668,7 @@ async function loadReport() {
     const fdAbs = persona.food_drink_split || {};
     const fdTot = (fdAbs.food_abs||0)+(fdAbs.drink_abs||0)+(fdAbs.other_abs||0);
     const fdSeg = (lbl,val,color)=>{ const p = fdTot? val/fdTot*100:0; return p<0.5?'':`<div style="width:${p}%;background:${color}" class="h-full flex items-center justify-center text-[10px] text-white font-semibold" title="${lbl} ${p.toFixed(1)}%">${p>=8?p.toFixed(0)+'%':''}</div>`; };
-    const PS_COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#a855f7','#14b8a6','#f97316'];
+    const PS_COLORS = ['#4a70b0','#0ea5e9','#10b981','#f59e0b','#ef4444','#a855f7','#14b8a6','#f97316'];
     const psSorted = [...ps].sort((a,b)=>(a.size||0)-(b.size||0));
     const rows = psSorted.map((p,i)=>{
       const sharePct = p.tx_count/totTx*100, w = p.tx_count/maxTx*100;
@@ -689,7 +689,7 @@ async function loadReport() {
     el.innerHTML = `
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
         ${[
-          ['คู่/2 คน = กลุ่มหลัก', couplesPct!=null?couplesPct.toFixed(0)+'%':'—', 'ของบิลทั้งหมดเป็นโต๊ะ 2 คน', '#6366f1'],
+          ['คู่/2 คน = กลุ่มหลัก', couplesPct!=null?couplesPct.toFixed(0)+'%':'—', 'ของบิลทั้งหมดเป็นโต๊ะ 2 คน', '#4a70b0'],
           ['ยอด/หัวเกือบคงที่', phVals.length?`${fmtN(phMin)}–${fmtN(phMax)}`:'—', `ต่างแค่ ${phSpread.toFixed(0)}% ทุกขนาดกลุ่ม — บุฟเฟ่ต์คุมต่อหัวได้แม่น`, '#059669'],
           ['ชั่วโมงพีค', peakH?`${peakH.hour}:00 น.`:'—', peakH?`${fmtN(peakH.tx_count)} บิล/ชม.`:'', '#d97706'],
         ].map(([l,v,s,c])=>`<div class="p-3 rounded-lg border" style="border-color:${c}33;background:${c}0a">
@@ -712,11 +712,11 @@ async function loadReport() {
       </div>
       <p class="text-xs font-semibold text-slate-600 mb-1">โครงสร้างยอดขาย</p>
       <div class="rounded-lg overflow-hidden border border-slate-200 flex" style="height:30px">
-        ${fdSeg('บุฟเฟ่ต์ & อื่นๆ', fdAbs.other_abs||0, '#6366f1')}
+        ${fdSeg('บุฟเฟ่ต์ & อื่นๆ', fdAbs.other_abs||0, '#4a70b0')}
         ${fdSeg('Food à la carte', fdAbs.food_abs||0, '#10b981')}
         ${fdSeg('Drink', fdAbs.drink_abs||0, '#f59e0b')}
       </div>
-      <p class="text-[11px] text-slate-400 mt-1">🟦 บุฟเฟ่ต์&อื่นๆ ${fdTot?((fdAbs.other_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟩 Food ${fdTot?((fdAbs.food_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟧 Drink ${fdTot?((fdAbs.drink_abs||0)/fdTot*100).toFixed(1):'—'}%</p>`;
+      <p class="text-[11px] text-slate-400 mt-1">บุฟเฟ่ต์&อื่นๆ ${fdTot?((fdAbs.other_abs||0)/fdTot*100).toFixed(1):'—'}% · Food ${fdTot?((fdAbs.food_abs||0)/fdTot*100).toFixed(1):'—'}% · Drink ${fdTot?((fdAbs.drink_abs||0)/fdTot*100).toFixed(1):'—'}%</p>`;
     if (typeof Chart !== 'undefined') {
       const donutCanvas = document.getElementById('rptPartyDonut');
       if (chartInstances.rptPartyDonut) { try { chartInstances.rptPartyDonut.destroy(); } catch(e){} }
@@ -801,7 +801,7 @@ async function loadReport() {
           <table class="text-xs w-full">
             <tbody>${dpRows.map(d=>`<tr class="border-t border-slate-50">
               <td class="py-1 font-medium">${d.label}</td>
-              <td class="py-1"><div class="bg-slate-100 rounded-full h-2"><div style="width:${d.share.toFixed(0)}%;background:#6366f1;height:100%;border-radius:9999px"></div></div></td>
+              <td class="py-1"><div class="bg-slate-100 rounded-full h-2"><div style="width:${d.share.toFixed(0)}%;background:var(--accent);height:100%;border-radius:9999px"></div></div></td>
               <td class="py-1 text-right text-slate-500 w-12">${d.share.toFixed(0)}%</td>
               <td class="py-1 text-right text-slate-400 w-16">${fmtN(d.tx)} บิล</td>
             </tr>`).join('')}</tbody>
@@ -854,7 +854,7 @@ async function loadReport() {
             const dd = avgOfWk ? ((d.avg_revenue||0)-avgOfWk)/avgOfWk*100 : 0;
             return `
             <tr class="border-t border-slate-50 ${d.dow===peakDow?.dow?'bg-cyan-50':''}">
-              <td class="py-1 font-medium">${d.dow===peakDow?.dow?'🔥 ':''}${DOW_LABELS_RPT[d.dow]||'—'}</td>
+              <td class="py-1 font-medium">${d.dow===peakDow?.dow?'':''}${DOW_LABELS_RPT[d.dow]||'—'}</td>
               <td class="py-1 text-right font-medium">${fmtN(d.avg_revenue||0)}</td>
               <td class="py-1 text-right text-slate-500">${((d.avg_revenue||0)/dowTotal*100).toFixed(1)}%</td>
               <td class="py-1 text-right" style="color:${dd>=0?'var(--good-ink)':'var(--bad-ink)'}">${dd>=0?'▲':'▼'}${Math.abs(dd).toFixed(0)}%</td>
@@ -872,7 +872,7 @@ async function loadReport() {
           labels: dowSorted.map(d => DOW_LABELS_RPT[d.dow] || '—'),
           datasets: [{
             data: dowSorted.map(d => d.avg_revenue || 0),
-            backgroundColor: dowSorted.map(d => d.dow === peakDow?.dow ? '#0891b2' : '#c7d2fe'),
+            backgroundColor: dowSorted.map(d => d.dow === peakDow?.dow ? '#0891b2' : '#c9d5e8'),
             borderRadius: 4,
           }],
         },
@@ -994,9 +994,9 @@ async function loadReport() {
     const sumProj = branchProj.reduce((a,b)=>a+b.proj,0);
     const chip = p => p==null ? '' : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
     el.innerHTML = `
-      <div class="rounded-xl border-2 p-4 mb-3 on-light" style="border-color:#4f46e533;background:linear-gradient(135deg,#eef2ff 0%,#ffffff 70%)">
+      <div class="rounded-xl border-2 p-4 mb-3 on-light" style="border-color:var(--accent)33;background:#e8eef7">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-          <h3 class="text-sm font-bold text-indigo-900">🔮 พยากรณ์เดือนถัดไป — ${fmtMonth(nextMo)}</h3>
+          <h3 class="text-sm font-bold text-indigo-900">พยากรณ์เดือนถัดไป — ${fmtMonth(nextMo)}</h3>
           <span class="text-[11px] text-slate-500">linear trend จาก ${series.length} เดือน · สิ้นเดือนนำ actual มาเทียบช่องนี้เพื่อติดตาม</span>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1047,14 +1047,14 @@ async function loadReport() {
       <p class="text-lg font-bold" style="color:${color||'#1e293b'}">${valHtml}</p>
       <p class="text-[11px] text-slate-400">${sub}</p></div>`;
     scEl.innerHTML =
-      card('คาดสิ้นเดือน', fmtN(proj), 'run-rate projection', '#4f46e5') +
+      card('คาดสิ้นเดือน', fmtN(proj), 'run-rate projection', '#4a70b0') +
       card('vs เดือนก่อน (MoM)', pctChip(momPct), 'projected vs last month', '#1e293b') +
       card('vs ปีก่อน (YoY)', yoyPct==null?'—':(yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%',
            latestYoy?`${latestYoy.period_month} vs ${latestYoy.ly_period}`:'ไม่มีข้อมูล',
            yoyPct==null?'#94a3b8':yoyPct>=0?'var(--good-ink)':'var(--bad-ink)') +
       (attainPct!=null
         ? card('เทียบเป้า', attainPct.toFixed(0)+'%', `เป้า ${fmtN(targetTotal)}`, attainPct>=100?'var(--good-ink)':attainPct>=90?'#d97706':'var(--bad-ink)')
-        : card('เทียบเป้า', 'ตั้งเป้า →', 'ยังไม่ได้ตั้งเป้าเดือนนี้', '#6366f1', "switchTab('settings')"));
+        : card('เทียบเป้า', 'ตั้งเป้า →', 'ยังไม่ได้ตั้งเป้าเดือนนี้', '#4a70b0', "switchTab('settings')"));
     // Scenario best / base / worst from the confidence band
     const vsPrior = v => prior ? `${v>=prior?'+':''}${((v-prior)/prior*100).toFixed(1)}% vs เดือนก่อน` : '';
     const scLo = forecast.lo, scHi = forecast.hi, scBase = forecast.projected;
@@ -1064,9 +1064,9 @@ async function loadReport() {
     scenEl.innerHTML = `<h3 class="text-sm font-bold text-slate-600 mb-2">สถานการณ์จำลอง (Scenario)</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         ${[
-          ['🟢 ดีสุด (Best)',  forecast.hi,        '#059669', 'วันหยุด/โปรช่วยดันยอด · +1SD'],
-          ['🔵 ฐาน (Base)',    forecast.projected, '#4f46e5', 'คงอัตราปัจจุบัน (run-rate)'],
-          ['🔴 แย่สุด (Worst)', forecast.lo,        '#dc2626', 'สาขาขาช้า/สภาพอากาศ · −1SD'],
+          ['ดีสุด (Best)',  forecast.hi,        '#059669', 'วันหยุด/โปรช่วยดันยอด · +1SD'],
+          ['ฐาน (Base)',    forecast.projected, '#4a70b0', 'คงอัตราปัจจุบัน (run-rate)'],
+          ['แย่สุด (Worst)', forecast.lo,        '#dc2626', 'สาขาขาช้า/สภาพอากาศ · −1SD'],
         ].map(([t,v,c,assume]) => `<div class="p-4 rounded-xl border" style="border-color:${c}33;background:${c}0a">
           <p class="text-xs font-semibold mb-1" style="color:${textInk(c)}">${t}</p>
           <p class="text-xl font-bold text-slate-800">${fmtN(v)}</p>
@@ -1075,14 +1075,14 @@ async function loadReport() {
       </div>
       <div class="mt-4 px-1">
         <p class="text-[11px] text-slate-400 mb-2">ตำแหน่งของคาดการณ์ฐาน (Base) ภายในช่วงความเชื่อมั่น</p>
-        <div class="relative h-2.5 rounded-full" style="background:linear-gradient(90deg,#dc262633,#4f46e533,#05966933)">
+        <div class="relative h-2.5 rounded-full" style="background:#dc262633">
           ${scPriorPct != null ? `<div class="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-slate-500" style="left:${scPriorPct.toFixed(1)}%" title="เดือนก่อน ${fmtN(prior)}"></div>` : ''}
-          <div class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow" style="left:calc(${scBasePct.toFixed(1)}% - 7px);background:#4f46e5" title="ฐาน ${fmtN(scBase)}"></div>
+          <div class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow" style="left:calc(${scBasePct.toFixed(1)}% - 7px);background:var(--accent)" title="ฐาน ${fmtN(scBase)}"></div>
         </div>
         <div class="flex justify-between text-[10px] text-slate-400 mt-1">
-          <span>🔴 แย่สุด ${fmtN(scLo)}</span>
+          <span>แย่สุด ${fmtN(scLo)}</span>
           ${scPriorPct != null ? `<span>| เดือนก่อน ${fmtN(prior)}</span>` : ''}
-          <span>🟢 ดีสุด ${fmtN(scHi)}</span>
+          <span>ดีสุด ${fmtN(scHi)}</span>
         </div>
       </div>`;
   } else { scEl.innerHTML = ''; scenEl.innerHTML = ''; }
@@ -1096,7 +1096,7 @@ async function loadReport() {
     // A branch whose prior month is <5% of its projection barely operated last
     // month (newly opened) — its MoM% would be a meaningless 5-digit number.
     const momBranchCell = b => (b.prior_actual != null && b.prior_actual < b.projected * 0.05)
-      ? '<span style="color:#0891b2">🆕 ใหม่</span>'
+      ? '<span style="color:#0891b2">ใหม่</span>'
       : momCell(b.mom_pct);
     document.getElementById('rptForecastBranchBody').innerHTML = forecastBranches.branches.map(b =>
       `<tr class="border-b border-slate-100">
@@ -1121,7 +1121,7 @@ async function loadReport() {
     if (noteEl) {
       noteEl.innerHTML = `แสดง <b>${forecastBranches.active_branches}</b> สาขาที่มียอดในเดือน ${fmtMonth(forecastBranches.period)}`
         + (forecastBranches.total_branches ? ` จากทั้งหมด <b>${forecastBranches.total_branches}</b> สาขา` : '')
-        + (inact.length ? ` · ⚠️ ไม่มียอด: ${inact.map(b=>`${esc(b.branch)} (ล่าสุด ${b.last_sale||'—'})`).join(', ')}` : '');
+        + (inact.length ? ` · ⚠ ไม่มียอด: ${inact.map(b=>`${esc(b.branch)} (ล่าสุด ${b.last_sale||'—'})`).join(', ')}` : '');
     }
     fbWrap.classList.remove('hidden');
   } else { fbWrap.classList.add('hidden'); }
@@ -1184,7 +1184,7 @@ async function loadReport() {
     `Gross margin รวม ${cs.overall_margin_pct.toFixed(1)}% — ต่ำกว่าเกณฑ์ร้านอาหารทั่วไป (~65–70%). ทบทวนต้นทุนวัตถุดิบ/สูตร.`,
     `ทุก 1% margin = ${fmtN((totalRevTrend||0)*0.01)} บาท/ช่วง`);
 
-  const PRI = { high:{o:0,b:'🔴',label:'เร่งด่วน',bg:'#fef2f2'}, med:{o:1,b:'🟡',label:'ควรทำ',bg:'#fffbeb'}, info:{o:2,b:'🟢',label:'ข้อมูล',bg:'#f0fdf4'} };
+  const PRI = { high:{o:0,b:'●',label:'เร่งด่วน',bg:'#fef2f2'}, med:{o:1,b:'●',label:'ควรทำ',bg:'#fffbeb'}, info:{o:2,b:'●',label:'ข้อมูล',bg:'#f0fdf4'} };
   actions.sort((a,b)=>PRI[a.pri].o - PRI[b.pri].o);
   document.getElementById('rptActions').innerHTML = actions.length
     ? actions.map(a => `<li class="flex gap-2 items-start rounded-lg px-3 py-2" style="background:${PRI[a.pri].bg}">
@@ -1192,8 +1192,8 @@ async function loadReport() {
         <div class="flex-1">
           <div>${a.text}</div>
           <div class="flex items-center gap-2 mt-1 text-[11px]">
-            <span class="px-1.5 py-0.5 rounded font-medium" style="background:#e0e7ff;color:#4338ca">👤 ${esc(a.owner)}</span>
-            ${a.impact?`<span class="text-slate-500">💰 ${a.impact}</span>`:''}
+            <span class="px-1.5 py-0.5 rounded font-medium" style="background:var(--accent-soft);color:var(--accent)">${esc(a.owner)}</span>
+            ${a.impact?`<span class="text-slate-500">${a.impact}</span>`:''}
           </div>
         </div></li>`).join('')
     : '<li class="italic text-slate-400">Operations look healthy — no urgent flags.</li>';
@@ -1295,7 +1295,7 @@ async function saveCosts() {
 async function downloadCostTemplate() {
   const btn = event?.target?.closest('button');
   const origText = btn?.innerHTML;
-  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
   try {
     const data = await api(`${API}/api/cost/template`);
     const headers = [
@@ -1420,7 +1420,7 @@ function renderMonthlyCostTable() {
                class="w-32 border border-slate-200 rounded px-1.5 py-0.5 text-xs" placeholder="—">
       </td>
       <td class="py-1.5 pr-3 text-right">
-        ${r.source==='monthly' ? `<button onclick="deleteMcRow('${r.sku_code.replace(/'/g,"\\'")}')" class="text-red-500 hover:text-red-700 text-xs" title="ลบ override เดือนนี้">🗑</button>` : ''}
+        ${r.source==='monthly' ? `<button onclick="deleteMcRow('${r.sku_code.replace(/'/g,"\\'")}')" class="text-red-500 hover:text-red-700 text-xs" title="ลบ override เดือนนี้">${ICON.trash}</button>` : ''}
       </td>
     </tr>`;
   }).join('');
@@ -1616,8 +1616,8 @@ async function openMcHistory(sku) {
           datasets: [{
             label: 'unit_cost',
             data: values,
-            borderColor: '#6366f1',
-            backgroundColor: 'rgba(99,102,241,.1)',
+            borderColor: '#4a70b0',
+            backgroundColor: 'rgba(31,58,107,.1)',
             tension: 0.25,
             fill: true,
           }, def ? {
@@ -1700,7 +1700,7 @@ async function loadBuffetPerBill() {
     </div>`;
   document.getElementById('bpbKpiStrip').innerHTML = [
     kpi('บิลทั้งหมด',          fmtN(ov.bills),               `${fmtN(ov.pax)} pax`,        '#ec4899'),
-    kpi('รายได้ ex-VAT',        fmt(ov.revenue_ex),           `เฉลี่ย/บิล ${fmt(ov.avg_per_bill_rev)}`,    '#4f46e5'),
+    kpi('รายได้ ex-VAT',        fmt(ov.revenue_ex),           `เฉลี่ย/บิล ${fmt(ov.avg_per_bill_rev)}`,    '#4a70b0'),
     kpi('BoM (ต้นทุน)',         fmt(ov.cost),                 `เฉลี่ย/บิล ${fmt(ov.avg_per_bill_cost)}`,   '#dc2626'),
     kpi('กำไรขั้นต้น',          fmt(ov.profit),               `เฉลี่ย/บิล ${fmt(ov.avg_per_bill_profit)}`, '#10b981'),
     kpi('% Margin',             `${(ov.margin_pct||0).toFixed(1)}%`, `BoM ${(100-(ov.margin_pct||0)).toFixed(1)}% ของรายได้`, ov.margin_pct >= 40 ? '#10b981' : ov.margin_pct >= 25 ? '#f59e0b' : '#ef4444'),
@@ -1714,7 +1714,7 @@ async function loadBuffetPerBill() {
     data: {
       labels: rows.map(r => r.period),
       datasets: [
-        { type:'bar',  label:'เฉลี่ย/บิล: รายได้', data: rows.map(r => r.avg_per_bill_rev),    backgroundColor:'rgba(79,70,229,0.55)', borderRadius:3, yAxisID:'y' },
+        { type:'bar',  label:'เฉลี่ย/บิล: รายได้', data: rows.map(r => r.avg_per_bill_rev),    backgroundColor:'rgba(31,58,107,0.55)', borderRadius:3, yAxisID:'y' },
         { type:'bar',  label:'เฉลี่ย/บิล: BoM',     data: rows.map(r => r.avg_per_bill_cost),   backgroundColor:'rgba(220,38,38,0.65)', borderRadius:3, yAxisID:'y' },
         { type:'line', label:'เฉลี่ย/บิล: กำไร',    data: rows.map(r => r.avg_per_bill_profit), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.15)', tension:0.3, fill:true, yAxisID:'y' },
         { type:'line', label:'% Margin',            data: rows.map(r => r.margin_pct),          borderColor:'#f59e0b', borderDash:[4,3], backgroundColor:'transparent', tension:0.25, yAxisID:'y1', pointRadius:3 },
@@ -1737,7 +1737,7 @@ async function loadBuffetPerBill() {
 
   // Cost mix doughnut — concentration of BoM cost by per-head spend bracket
   const tierMix = ov.tier_cost_mix || {};
-  const TIER_COLORS = { '≤450': '#eab308', '450-600': '#10b981', '600-720': '#4f46e5', '>720': '#f97316' };
+  const TIER_COLORS = { '≤450': '#eab308', '450-600': '#10b981', '600-720': '#4a70b0', '>720': '#f97316' };
   const tierKeys = Object.keys(tierMix);
   mkChart('chartBuffetCostMix', {
     type: 'doughnut',
@@ -1793,7 +1793,7 @@ async function loadBuffetPerBill() {
     const dRev  = last.avg_per_bill_rev - prev.avg_per_bill_rev;
     const arrow = dM >= 0 ? '▲' : '▼';
     const trend = dM >= 0 ? 'text-emerald-600' : 'text-red-600';
-    insightEl.innerHTML = `💡 <b>เทียบ ${last.period} กับ ${prev.period}:</b>
+    insightEl.innerHTML = `<b>เทียบ ${last.period} กับ ${prev.period}:</b>
       Margin <span class="${trend}">${arrow} ${Math.abs(dM).toFixed(1)} percentage points</span>
       · รายได้เฉลี่ย/บิล ${dRev >= 0 ? '▲' : '▼'} ${fmt(Math.abs(dRev))}
       · ช่วงใช้จ่าย/หัวที่พบบ่อยสุด <b>${last.dominant_tier || '—'}</b> บาท`;
@@ -1869,7 +1869,7 @@ async function loadProfitAnalysis() {
     type: 'bar',
     data: {
       labels: dist.buckets.map(b=>b.label),
-      datasets: [{ label:'Bills', data: dist.buckets.map(b=>b.count), backgroundColor:'#8b5cf6' }],
+      datasets: [{ label:'Bills', data: dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8' }],
     },
     options: {
       responsive:true, maintainAspectRatio:false,
@@ -1888,7 +1888,7 @@ async function loadProfitAnalysis() {
     data: {
       labels: byBranch.map(b=>b.branch),
       datasets: [
-        { label:'Revenue (ex-VAT)', data: byBranch.map(b=>b.revenue_ex_vat||0), backgroundColor:'rgba(79,70,229,0.6)' },
+        { label:'Revenue (ex-VAT)', data: byBranch.map(b=>b.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.6)' },
         { label:'COGS',             data: byBranch.map(b=>b.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)' },
         { label:'Gross Profit',     data: byBranch.map(b=>b.gross_profit||0),   backgroundColor:'rgba(16,185,129,0.6)' },
       ],

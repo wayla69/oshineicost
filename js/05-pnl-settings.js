@@ -76,7 +76,7 @@ function renderPnlTrend(monthly) {
     data: {
       labels: monthly.map(m => fmtPeriod(m.period_month)),
       datasets: [
-        { type:'bar',  label:'รายได้ (ก่อน VAT)', data: monthly.map(m => m.revenue_ex_vat||0), backgroundColor:'rgba(79,70,229,0.45)', order:3 },
+        { type:'bar',  label:'รายได้ (ก่อน VAT)', data: monthly.map(m => m.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.45)', order:3 },
         { type:'bar',  label:'ต้นทุน (COGS)',     data: monthly.map(m => m.cogs||0),           backgroundColor:'rgba(239,68,68,0.65)', order:3 },
         { type:'line', label:'กำไรขั้นต้น',       data: monthly.map(m => m.gross_profit||0),   borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.12)', tension:0.3, fill:true, order:1 },
         { type:'line', label:'% กำไรขั้นต้น',     data: monthly.map(m => m.margin_pct),        borderColor:'#f59e0b', borderDash:[4,3], backgroundColor:'transparent', tension:0.25, yAxisID:'y1', order:0, fill:false },
@@ -109,7 +109,7 @@ function renderPnlBillDistChain(dist) {
   if (note) note.textContent = `Est. GP/bill · Margin rate used: ${dist.margin_pct_used}% · ${fmtN(dist.total_tx)} bills`;
   mkChart('chartPnlBillDist', {
     type:'bar',
-    data:{ labels: dist.buckets.map(b=>b.label), datasets:[{ label:'Bills', data:dist.buckets.map(b=>b.count), backgroundColor:'#8b5cf6', borderRadius:3, borderWidth:0 }] },
+    data:{ labels: dist.buckets.map(b=>b.label), datasets:[{ label:'Bills', data:dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8', borderRadius:3, borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
       scales:{x:{ticks:{color:chartTheme().text}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
@@ -126,7 +126,7 @@ function renderPnlBillDist(stats, isRevenue) {
   if (note) note.textContent = `${fmtN(stats.tx_count)} bills · Avg ${fmtN(stats.avg)} · Median ${fmtN(stats.p50)}${stats.margin_pct_used > 0 ? ' · Margin: '+stats.margin_pct_used+'%' : ''}`;
   mkChart('chartPnlBillDist', {
     type:'bar',
-    data:{ labels: buckets.map(b=>b.label+' '), datasets:[{ label, data:buckets.map(b=>b.count), backgroundColor:'#4f46e5', borderRadius:3, borderWidth:0 }] },
+    data:{ labels: buckets.map(b=>b.label+' '), datasets:[{ label, data:buckets.map(b=>b.count), backgroundColor:'#4a70b0', borderRadius:3, borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
       scales:{x:{ticks:{color:chartTheme().text,font:{size:9}}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
@@ -166,7 +166,7 @@ function renderPnlBranchTable() {
       <td class="py-1.5 pr-3 text-right font-bold" style="color:${mColor}">${r.margin_pct != null ? r.margin_pct.toFixed(1)+'%' : '—'}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.tx_count||0)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.avg_ticket||0)}</td>
-      <td class="py-1.5 text-right font-medium" style="color:#8b5cf6">${r.profit_per_bill != null ? fmtN(r.profit_per_bill) : '—'}</td>
+      <td class="py-1.5 text-right font-medium" style="color:var(--accent)">${r.profit_per_bill != null ? fmtN(r.profit_per_bill) : '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -232,10 +232,10 @@ function renderPnlDeepTrend(monthly) {
     data:{
       labels: monthly.map(m => fmtPeriod(m.period_month)),
       datasets:[
-        { type:'bar',  label:'รายได้',      data:monthly.map(m=>m.revenue_ex_vat||0), backgroundColor:'rgba(79,70,229,0.35)', order:2 },
+        { type:'bar',  label:'รายได้',      data:monthly.map(m=>m.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.35)', order:2 },
         { type:'bar',  label:'COGS',         data:monthly.map(m=>m.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)',  order:2 },
         { type:'line', label:'Gross Profit', data:monthly.map(m=>m.gross_profit||0),   borderColor:'#10b981', tension:0.3, fill:false, order:1, pointRadius:3 },
-        { type:'line', label:'GP/Bill',      data:monthly.map(m=>m.profit_per_bill),   borderColor:'#8b5cf6', borderDash:[4,2], tension:0.3, fill:false, order:0, yAxisID:'y1', pointRadius:2 },
+        { type:'line', label:'GP/Bill',      data:monthly.map(m=>m.profit_per_bill),   borderColor:'#7a66b8', borderDash:[4,2], tension:0.3, fill:false, order:0, yAxisID:'y1', pointRadius:2 },
       ],
     },
     options:{
@@ -245,7 +245,7 @@ function renderPnlDeepTrend(monthly) {
       scales:{
         x:{ ticks:{color:chartTheme().text,font:{size:9}} },
         y:{ ticks:{color:chartTheme().text, callback:v=>fmt(v)} },
-        y1:{ position:'right', grid:{display:false}, ticks:{color:'#8b5cf6', callback:v=>fmt(v)} },
+        y1:{ position:'right', grid:{display:false}, ticks:{color:'#7a66b8', callback:v=>fmt(v)} },
       },
     },
   });
@@ -292,7 +292,7 @@ function renderPnlDeepBillStats(stats) {
   // Revenue histogram
   mkChart('chartPnlDeepBillDist', {
     type:'bar',
-    data:{ labels:stats.buckets.map(b=>b.label+' '), datasets:[{ label:'Bills', data:stats.buckets.map(b=>b.count), backgroundColor:'#4f46e5', borderRadius:3, borderWidth:0 }] },
+    data:{ labels:stats.buckets.map(b=>b.label+' '), datasets:[{ label:'Bills', data:stats.buckets.map(b=>b.count), backgroundColor:'#4a70b0', borderRadius:3, borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
       scales:{x:{ticks:{color:chartTheme().text,font:{size:9}}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
@@ -425,8 +425,8 @@ async function renderCphCompare() {
   if (ins && branches.length >= 2 && avg != null) {
     const hi = branches[0], lo = branches[branches.length-1];
     ins.innerHTML = `<div class="text-xs flex flex-wrap gap-x-6 gap-y-1 p-2 rounded-lg" style="background:var(--bg-subtle)">
-      <span>🔴 สูงสุด <b>${esc(hi.branch)}</b> ${fmt(hi.cost_per_head)}/หัว (ต้นทุน ${hi.cost_pct}% · รายได้/หัว ${fmt(hi.rev_per_head)})</span>
-      <span>🟢 ต่ำสุด <b>${esc(lo.branch)}</b> ${fmt(lo.cost_per_head)}/หัว (ต้นทุน ${lo.cost_pct}%)</span>
+      <span>สูงสุด <b>${esc(hi.branch)}</b> ${fmt(hi.cost_per_head)}/หัว (ต้นทุน ${hi.cost_pct}% · รายได้/หัว ${fmt(hi.rev_per_head)})</span>
+      <span>ต่ำสุด <b>${esc(lo.branch)}</b> ${fmt(lo.cost_per_head)}/หัว (ต้นทุน ${lo.cost_pct}%)</span>
       <span style="color:var(--text-muted)">ช่วงห่าง ${fmt(hi.cost_per_head - lo.cost_per_head)}/หัว</span></div>`;
   } else if (ins) { ins.innerHTML = ''; }
   if (!branches.length) { if (chartInstances['chartCphCompare']) chartInstances['chartCphCompare'].destroy(); return; }
@@ -479,7 +479,7 @@ async function loadFoodCostTrend() {
   const overall = d.overall;
   mkChart('chartFoodCostTrend', {
     data: { labels: d.months, datasets: [
-      { type:'bar',  label:'รายได้ (ex-VAT)',  data: overall.map(o => o.revenue),  backgroundColor:'rgba(79,70,229,0.55)',  borderRadius:3, order:3, yAxisID:'y'  },
+      { type:'bar',  label:'รายได้ (ex-VAT)',  data: overall.map(o => o.revenue),  backgroundColor:'rgba(31,58,107,0.55)',  borderRadius:3, order:3, yAxisID:'y'  },
       { type:'bar',  label:'CoGS (BoM)',        data: overall.map(o => o.cost),     backgroundColor:'rgba(220,38,38,0.7)',   borderRadius:3, order:3, yAxisID:'y'  },
       { type:'line', label:'จำนวนเสิร์ฟ',       data: overall.map(o => o.servings), borderColor:'#0891b2', backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.3, order:1, yAxisID:'y2' },
       { type:'line', label:'% Food Cost',       data: overall.map(o => o.cost_pct), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.10)', borderWidth:2, borderDash:[4,3], pointRadius:3, tension:0.25, fill:true, order:0, yAxisID:'y1' },
@@ -517,7 +517,7 @@ async function loadFoodCostTrend() {
   const insightEl = document.getElementById('foodCostInsight');
   if (insightEl && last) {
     const dPct  = (prev && last.cost_pct != null && prev.cost_pct != null) ? (last.cost_pct - prev.cost_pct) : null;
-    const trendIcon = dPct == null ? '➡️' : dPct > 0 ? '▲' : '▼';
+    const trendIcon = dPct == null ? '→' : dPct > 0 ? '▲' : '▼';
     const trendColor = dPct == null ? '#64748b' : dPct > 0 ? '#ef4444' : '#10b981';
     insightEl.innerHTML = `
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -558,7 +558,7 @@ function renderCostOverview() {
     : s.overall_margin_pct >= 40 ? '#f59e0b' : '#ef4444';
 
   document.getElementById('costKpis').innerHTML = [
-    { label:'รายได้รวม',  value:fmt(s.total_revenue),      sub: fmtN(s.total_skus)+' items sold',     color:'#4f46e5' },
+    { label:'รายได้รวม',  value:fmt(s.total_revenue),      sub: fmtN(s.total_skus)+' items sold',     color:'#4a70b0' },
     { label:'Total COGS',     value: hasCosts ? fmt(s.total_cogs) : '—',
                                sub: hasCosts ? s.costed_skus+' SKUs costed' : 'no costs entered', color:'#ef4444' },
     { label:'Gross Profit',   value: hasCosts ? fmt(s.total_gross_profit) : '—',
@@ -585,7 +585,7 @@ function renderCostOverview() {
   // ── Scatter chart ──
   // Mode A (no costs): Qty vs Revenue — Revenue on Y, Qty on X, colour by category
   // Mode B (costs):    Qty vs Margin% with quadrant colouring
-  const QCOLORS = { star:'#10b981', puzzle:'#4f46e5', plowhorse:'#f59e0b', dog:'#ef4444', uncosted:'#94a3b8' };
+  const QCOLORS = { star:'#10b981', puzzle:'#4a70b0', plowhorse:'#f59e0b', dog:'#ef4444', uncosted:'#94a3b8' };
   let scatterDatasets;
 
   if (hasCosts) {
@@ -594,7 +594,7 @@ function renderCostOverview() {
     document.getElementById('scatterMode').className       = 'pill pill-up';
     document.getElementById('scatterSubtitle').textContent = 'X = orders (popularity)  ·  Y = gross margin %  ·  Colour = quadrant';
     const quadGroups = ['star','puzzle','plowhorse','dog','uncosted'];
-    const qlabels    = { star:'⭐ Stars', puzzle:'🔮 Puzzles', plowhorse:'🐴 Plowhorses', dog:'🐕 Dogs', uncosted:'⚪ Uncosted' };
+    const qlabels    = { star:'Stars', puzzle:'Puzzles', plowhorse:'Plowhorses', dog:'Dogs', uncosted:'Uncosted' };
     scatterDatasets = quadGroups.map(q => ({
       label: qlabels[q],
       data: items.filter(r => r.quadrant === q && r.margin_pct != null)
@@ -762,7 +762,7 @@ function renderCostOverview() {
       data: {
         labels: revPoints.map((r, i) => '#' + (i+1)),
         datasets: [
-          { type:'bar',  label:'Revenue %', data: revPoints.map(r => r.revenue_mix_pct || 0), backgroundColor:'rgba(79,70,229,0.7)', order:2 },
+          { type:'bar',  label:'Revenue %', data: revPoints.map(r => r.revenue_mix_pct || 0), backgroundColor:'rgba(31,58,107,0.7)', order:2 },
           { type:'line', label:'Cumulative %', data: revPoints.map(r => r.cum_revenue_pct || 0), borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.25, yAxisID:'y1', order:1 },
         ],
       },
@@ -861,7 +861,7 @@ function renderAbcAnalysis() {
       </div>
       <p class="text-xl font-bold" style="color:${border}">${valFmt(val)}</p>
       <p class="text-xs text-slate-400 mt-0.5">${pct.toFixed(1)}% ของ${metricLabel}</p>
-      <p class="text-[11px] font-semibold mt-0.5" style="color:${border}">🧾 ${cogsPct.toFixed(1)}% ของต้นทุน BoM รวม</p>
+      <p class="text-[11px] font-semibold mt-0.5" style="color:${border}">${cogsPct.toFixed(1)}% ของต้นทุน BoM รวม</p>
       <div class="mt-2 space-y-0.5 overflow-auto" style="max-height:240px">
         ${items2.slice(0,TOPN).map((r,i)=>`<div class="flex items-baseline justify-between gap-2 text-xs">
           <span class="text-slate-600 truncate" title="${esc(r.description)}">${i+1}. ${esc(r.description)}</span>
@@ -911,7 +911,7 @@ function renderAbcAnalysis() {
         <span class="text-xs text-slate-500">C: ${groupC.length} SKUs = ${pC}%</span>
       </div>
     </div>
-    <p class="text-xs text-slate-500 leading-relaxed">📌 <b>ABC Analysis ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100%
+    <p class="text-xs text-slate-500 leading-relaxed"><b>ABC Analysis ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100%
       <br>${insight}</p>`;
 }
 
@@ -944,7 +944,7 @@ function renderCostAnalysisBar() {
     </div>`;
 
   el.innerHTML = [
-    stat('Active SKUs',    fmtN(s.total_skus), '#4f46e5'),
+    stat('Active SKUs',    fmtN(s.total_skus), '#4a70b0'),
     hasCosts ? stat('Avg Margin',    (s.overall_margin_pct?.toFixed(1)||'—')+'%', s.overall_margin_pct>=60?'#10b981':s.overall_margin_pct>=40?'#f59e0b':'#ef4444') : stat('Costed SKUs', '0 / '+s.total_skus, '#f59e0b'),
     p20 >= 0 ? stat('80% Rev in',    (p20+1)+' SKUs', '#0f172a') : '',
     '<hr class="border-slate-100">',
@@ -986,7 +986,7 @@ function renderCostDetail() {
     `${rows.length.toLocaleString()} items` +
     (_leak ? ` · ตัดเมนูบุฟเฟ่ต์ (ราคา/หน่วย≈0) ${_leak.toLocaleString()} รายการ` : '');
 
-  const QLABELS = { star:'⭐', puzzle:'🔮', plowhorse:'🐴', dog:'🐕', uncosted:'⚪' };
+  const QLABELS = { star:'★', puzzle:'', plowhorse:'', dog:'', uncosted:'○' };
   const QPILLS  = { star:'pill-up', puzzle:'pill-neu', plowhorse:'pill-warn', dog:'pill-down', uncosted:'' };
 
   document.getElementById('costItemBody').innerHTML = rows.map((r, i) => {
@@ -1017,7 +1017,7 @@ function renderCostDetail() {
       <td class="py-2 text-center">
         ${priced
           ? `<span class="pill ${QPILLS[r.quadrant]||''} text-xs">${QLABELS[r.quadrant]||''} ${r.quadrant !== 'uncosted' ? r.quadrant : '—'}</span>`
-          : '<span class="pill text-xs" style="background:#fef3c7;color:#92400e">🍽️ บุฟเฟต์</span>'}
+          : '<span class="pill text-xs" style="background:#fef3c7;color:#92400e">บุฟเฟต์</span>'}
       </td>
     </tr>`;
   }).join('');
@@ -1042,9 +1042,9 @@ function renderSuggestions() {
     : s.overall_margin_pct >= 60 ? 'กำไรแข็งแรง'
     : s.overall_margin_pct >= 40 ? 'มีโอกาสปรับปรุง' : 'น่าเป็นห่วง';
   cards.push(`
-    <div class="card p-5" style="border-left:4px solid ${healthColor}">
+    <div class="card p-5" style="border:1px solid ${healthColor}">
       <div class="flex items-center gap-3 mb-3">
-        <span class="text-xl">${!hasCosts ? '📋' : s.overall_margin_pct >= 60 ? '✅' : s.overall_margin_pct >= 40 ? '⚠️' : '🚨'}</span>
+        <span class="text-xl">${!hasCosts ? '' : s.overall_margin_pct >= 60 ? '✓' : s.overall_margin_pct >= 40 ? '⚠' : '⚠'}</span>
         <div>
           <h3 class="font-bold text-slate-800">สุขภาพเมนู: ${healthLabel}</h3>
           <p class="text-xs text-slate-400">กำไรขั้นต้นรวม · ${s.total_skus} SKUs · ${s.costed_skus} ตัวที่มีต้นทุน</p>
@@ -1073,9 +1073,9 @@ function renderSuggestions() {
   const buffetMargin  = buffetRev > 0 && buffetCost > 0 ? ((buffetRev - buffetCost) / buffetRev * 100).toFixed(1) : null;
   cards.push(`
     <div class="card p-5">
-      <div class="flex items-center gap-2 mb-3"><span class="text-xl">🍽️</span><h3 class="font-bold text-slate-800">กระจุกตัวรายได้ + บุฟเฟ่ต์</h3></div>
+      <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-800">กระจุกตัวรายได้ + บุฟเฟ่ต์</h3></div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-        <div class="rounded-lg p-3 border border-indigo-100" style="background:#eef2ff">
+        <div class="rounded-lg p-3 border border-indigo-100" style="background:var(--accent-soft)">
           <p class="text-xs text-indigo-600 font-semibold mb-1">Pareto 80/20</p>
           <p class="text-sm text-slate-700">SKU เพียง <b>${topPct}%</b> ทำรายได้ 80% — ${Number(topPct) <= 20 ? 'กระจุกตัวสมเหตุสมผล' : 'กระจายเกินไป (ปกติ ≤20%)'}</p>
           <p class="text-xs text-slate-500 mt-1">Top 5 รวม <b>${top5Pct}%</b> ของยอดทั้งหมด</p>
@@ -1086,7 +1086,7 @@ function renderSuggestions() {
           ${buffetMargin ? `<p class="text-xs text-slate-500 mt-1">อัตรากำไรขั้นต้นของบุฟเฟ่ต์ <b>${buffetMargin}%</b></p>` : ''}
         </div>
       </div>
-      <p class="text-xs text-slate-500">💡 หาก buffet > 70% ของยอดขาย → ธุรกิจพึ่งพา volume สูง · เน้นควบคุม BoM และ portion control · พิจารณาเพิ่มเมนู à la carte กำไรสูงเพื่อกระจายความเสี่ยง</p>
+      <p class="text-xs text-slate-500">หาก buffet > 70% ของยอดขาย → ธุรกิจพึ่งพา volume สูง · เน้นควบคุม BoM และ portion control · พิจารณาเพิ่มเมนู à la carte กำไรสูงเพื่อกระจายความเสี่ยง</p>
     </div>`);
 
   // ── 3 & 4 — quadrant recommendations (only if costs exist) ──
@@ -1107,8 +1107,8 @@ function renderSuggestions() {
     if (highCostItems.length) {
       const topCostBurden = highCostItems.slice(0,3).reduce((s,r)=>s+r.cogs,0);
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #dc2626;background:#fef2f2">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">💰</span><h3 class="font-bold text-red-800">SKU ต้นทุนสูง — เป้าหมายลด BoM (${highCostItems.length} รายการ)</h3></div>
+        <div class="card p-5" style="border:1px solid #dc2626;background:#fef2f2">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-red-800">SKU ต้นทุนสูง — เป้าหมายลด BoM (${highCostItems.length} รายการ)</h3></div>
           <p class="text-sm text-slate-700 mb-3">รายการที่มีต้นทุน <b>เกิน 50%</b> ของยอดขาย ex-VAT แสดงว่า margin ต่ำ พร้อมถูกปรับ:</p>
           <div class="space-y-1 text-xs mb-3">
             ${highCostItems.map(r => `
@@ -1120,7 +1120,7 @@ function renderSuggestions() {
             `).join('')}
           </div>
           <p class="text-xs text-slate-600 bg-white rounded p-2 border border-red-200">
-            💡 <b>แนวทาง:</b> Top 3 รายการสูงสุดมีต้นทุนรวม <b>${fmt(topCostBurden)}</b> — ลดได้ 10% = ประหยัด <b>${fmt(topCostBurden * 0.1)}</b>/เดือน
+            <b>แนวทาง:</b> Top 3 รายการสูงสุดมีต้นทุนรวม <b>${fmt(topCostBurden)}</b> — ลดได้ 10% = ประหยัด <b>${fmt(topCostBurden * 0.1)}</b>/เดือน
             <br>• <b>เจรจาซัพพลายเออร์</b> สำหรับวัตถุดิบที่ใช้บ่อย (ปริมาณมากต่อรองได้มากกว่า)
             <br>• <b>ลด portion size 5-10%</b> ในรายการที่ลูกค้ามักทานเหลือ (ดูจาก feedback)
             <br>• <b>ปรับสูตรหลัก</b> สลับวัตถุดิบราคาแพงด้วยทางเลือกราคาดีคุณภาพใกล้เคียง
@@ -1132,8 +1132,8 @@ function renderSuggestions() {
       const starsRev = stars.reduce((sum,r)=>sum+r.revenue,0);
       const starsPct = s.total_revenue ? (starsRev/s.total_revenue*100).toFixed(1) : 0;
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #10b981">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">⭐</span><h3 class="font-bold text-emerald-800">⭐ ดาวเด่น Stars (${stars.length} รายการ · ${starsPct}% ของรายได้)</h3></div>
+        <div class="card p-5" style="border:1px solid #10b981">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl">★</span><h3 class="font-bold text-emerald-800">ดาวเด่น Stars (${stars.length} รายการ · ${starsPct}% ของรายได้)</h3></div>
           <p class="text-sm text-slate-600 mb-3">เป็นทั้ง <b>ขายดี + กำไรสูง</b> — เป็นเครื่องจักรทำเงินของร้าน ต้องดูแลพิเศษ</p>
           <ul class="space-y-1 text-sm text-slate-600 mb-3">
             <li>• <b>การันตี supply chain</b> — สต็อกขาดสาขาเสียหายมากที่สุด ตั้ง safety stock 1.5 เท่า</li>
@@ -1151,8 +1151,8 @@ function renderSuggestions() {
       // Estimate the gain from a 5% price increase (assume 90% retention)
       const priceUpGain = phRev * 0.05 * 0.9;
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #f59e0b">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">🐴</span><h3 class="font-bold text-amber-800">🐴 ม้างาน Plowhorses (${plowhorses.length} รายการ · กำไรเฉลี่ย ${avgMar.toFixed(1)}%)</h3></div>
+        <div class="card p-5" style="border:1px solid #f59e0b">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-amber-800">ม้างาน Plowhorses (${plowhorses.length} รายการ · กำไรเฉลี่ย ${avgMar.toFixed(1)}%)</h3></div>
           <p class="text-sm text-slate-600 mb-3">ขายดีแต่กำไรต่ำ — ลูกค้ารัก แต่เราเสียโอกาส re-engineer เพื่อทำกำไรเพิ่ม</p>
           <ul class="space-y-1 text-sm text-slate-600 mb-3">
             <li>• <b>ตรวจต้นทุนวัตถุดิบรายตัว</b> — ประหยัด 1 บาท × volume สูง = ผลกระทบใหญ่</li>
@@ -1168,8 +1168,8 @@ function renderSuggestions() {
     if (puzzles.length) {
       const avgRev = puzzles.reduce((sum,r)=>sum+r.revenue_mix_pct,0)/puzzles.length;
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #4f46e5">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">🔮</span><h3 class="font-bold text-indigo-800">🔮 ปริศนา Puzzles (${puzzles.length} รายการ · revenue mix เฉลี่ย ${avgRev.toFixed(2)}%)</h3></div>
+        <div class="card p-5" style="border:1px solid var(--accent)">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-indigo-800">ปริศนา Puzzles (${puzzles.length} รายการ · revenue mix เฉลี่ย ${avgRev.toFixed(2)}%)</h3></div>
           <p class="text-sm text-slate-600 mb-3">กำไรดีแต่ขายน้อย — เพชรในตม ที่ลูกค้ายังไม่เห็น เป้าหมายคือเพิ่มยอดขาย</p>
           <ul class="space-y-1 text-sm text-slate-600 mb-3">
             <li>• <b>Training พนักงาน upselling</b> — front-of-house แนะนำได้ ยอดขายขยับเร็ว 30-50%</li>
@@ -1186,8 +1186,8 @@ function renderSuggestions() {
       const dogsRev = dogs.reduce((sum,r)=>sum+r.revenue,0);
       const dogsPct = s.total_revenue ? (dogsRev/s.total_revenue*100).toFixed(1) : 0;
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #ef4444">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">🐕</span><h3 class="font-bold text-red-700">🐕 ตัวถ่วง Dogs (${dogs.length} รายการ · ${dogsPct}% ของรายได้)</h3></div>
+        <div class="card p-5" style="border:1px solid #ef4444">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-red-700">ตัวถ่วง Dogs (${dogs.length} รายการ · ${dogsPct}% ของรายได้)</h3></div>
           <p class="text-sm text-slate-600 mb-3">ขายน้อย <em>และ</em> กำไรต่ำ — เปลืองพื้นที่เมนู เปลือง training พนักงาน เปลืองสต็อก</p>
           <ul class="space-y-1 text-sm text-slate-600 mb-3">
             <li>• <b>ตัดออกจากเมนูเลย</b> — สั้นกระชับดีกว่า ลูกค้าตัดสินใจเร็วขึ้น</li>
@@ -1205,8 +1205,8 @@ function renderSuggestions() {
     const potentiallyUnderpriced = items.filter(r => r.qty > 0 && r.revenue/r.qty < avgRevPerQty * 0.65).sort((a,b)=>b.qty-a.qty);
     if (potentiallyUnderpriced.length) {
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #f59e0b">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">💡</span><h3 class="font-bold text-amber-800">Potential Pricing Opportunity (${potentiallyUnderpriced.length} items)</h3></div>
+        <div class="card p-5" style="border:1px solid #f59e0b">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-amber-800">Potential Pricing Opportunity (${potentiallyUnderpriced.length} items)</h3></div>
           <p class="text-sm text-slate-600 mb-3">These items are ordered frequently but generate below-average revenue per portion — they may be underpriced relative to their popularity.</p>
           <div class="flex flex-wrap gap-2 mb-3">${potentiallyUnderpriced.slice(0,8).map(r=>`<span class="pill pill-warn">${esc(r.description.slice(0,22))} · ${fmtN(Math.round(r.revenue/r.qty))}/pc</span>`).join('')}</div>
           <p class="text-xs text-slate-400">Enter unit costs in Settings to confirm whether these items also have low margins.</p>
@@ -1217,8 +1217,8 @@ function renderSuggestions() {
     const longTailCount = items.filter(r => r.cum_revenue_pct > 90).length;
     if (longTailCount > 20) {
       cards.push(`
-        <div class="card p-5" style="border-left:4px solid #94a3b8">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl">✂️</span><h3 class="font-bold text-slate-700">Menu Simplification Opportunity</h3></div>
+        <div class="card p-5" style="border:1px solid #94a3b8">
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-700">Menu Simplification Opportunity</h3></div>
           <p class="text-sm text-slate-600 mb-2"><strong>${longTailCount} items</strong> (${(longTailCount/items.length*100).toFixed(0)}% of your menu) together contribute only 10% of revenue. A focused menu improves kitchen speed, reduces waste, and sharpens your brand.</p>
           <ul class="space-y-1 text-sm text-slate-600">
             <li>• Industry research shows menus with 50–80 items outperform larger menus on execution quality</li>
@@ -1239,23 +1239,23 @@ function renderSuggestions() {
     const highest_price = sorted.reduce((mx, r) => (r.revenue/r.qty > mx.revenue/mx.qty) ? r : mx, sorted[0]);
     const highest_margin = sorted.reduce((mx, r) => (r.margin_pct || 0) > (mx.margin_pct || 0) ? r : mx, sorted[0]);
     cards.push(`
-      <div class="card p-5" style="border-left:4px solid #ec4899;background:linear-gradient(to right, #fdf2f8, #ffffff)">
-        <div class="flex items-center gap-2 mb-3"><span class="text-xl">🥘</span><h3 class="font-bold text-pink-800">เจาะลึกบุฟเฟ่ต์ — Core Business Analysis</h3></div>
+      <div class="card p-5" style="border:1px solid #ec4899;background:#fdf2f8">
+        <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-pink-800">เจาะลึกบุฟเฟ่ต์ — Core Business Analysis</h3></div>
         <p class="text-sm text-slate-700 mb-3">บุฟเฟ่ต์เป็น <b>${buffetPct}%</b> ของยอดขาย แต่ใช้ <b>${buffetCostPct}%</b> ของต้นทุนรวม — อัตรากำไรขั้นต้น <b>${buffetGPPct}%</b></p>
         <div class="space-y-2 text-sm">
           <div class="bg-white rounded-lg p-3 border border-pink-100">
-            <p class="font-semibold text-pink-700 mb-1">🎯 Tier ทำเงินสูงสุด</p>
+            <p class="font-semibold text-pink-700 mb-1">Tier ทำเงินสูงสุด</p>
             <p class="text-slate-700">${topTier.description} — ยอดขาย <b>${fmt(topTier.revenue)}</b> (${topTier.qty.toLocaleString()} pax) · margin <b>${topTier.margin_pct?.toFixed(1)}%</b></p>
           </div>
           ${highest_price.sku_code !== highest_margin.sku_code ? `
           <div class="bg-amber-50 rounded-lg p-3 border border-amber-200">
-            <p class="font-semibold text-amber-800 mb-1">⚠️ Pricing imbalance</p>
+            <p class="font-semibold text-amber-800 mb-1">⚠ Pricing imbalance</p>
             <p class="text-xs text-slate-700">Tier ราคาสูงสุด (<b>${highest_price.description}</b>) ทำกำไร <b>${highest_price.margin_pct?.toFixed(1)}%</b><br>
             แต่ Tier กำไรสูงสุดจริงคือ <b>${highest_margin.description}</b> ที่ <b>${highest_margin.margin_pct?.toFixed(1)}%</b><br>
             → พิจารณาขึ้นราคา Tier บน หรือ ลดต้นทุนวัตถุดิบ premium</p>
           </div>` : ''}
           <div class="bg-rose-50 rounded-lg p-3 border border-rose-200">
-            <p class="font-semibold text-rose-800 mb-1">💡 Action items บุฟเฟ่ต์</p>
+            <p class="font-semibold text-rose-800 mb-1">Action items บุฟเฟ่ต์</p>
             <ul class="text-xs text-slate-700 space-y-1">
               <li>• <b>BoM Tracking</b> — บันทึกต้นทุนวัตถุดิบบุฟเฟ่ต์รายเดือน (เนื้อแซลมอน เนื้อวากิว ของหวาน) → ตอบโจทย์ว่า margin ตกหรือไม่</li>
               <li>• <b>Portion Control</b> — บุฟเฟ่ต์ที่ "all-you-can-eat" ต้องมีระบบ <b>ค่าปรับเหลือ</b> (มี SKU OT0012/0013/0016 อยู่แล้ว) เก็บอย่างเข้มงวด</li>
@@ -1273,8 +1273,8 @@ function renderSuggestions() {
     const coverageRev = costData.items.filter(r=>r.unit_cost!=null).reduce((a,r)=>a+r.revenue,0);
     const coveragePct = s.total_revenue ? (coverageRev/s.total_revenue*100).toFixed(1) : 0;
     cards.push(`
-      <div class="card p-5" style="border-left:4px solid #06b6d4">
-        <div class="flex items-center gap-2 mb-3"><span class="text-xl">📝</span><h3 class="font-bold text-cyan-800">เติมข้อมูลต้นทุนให้ครบ</h3></div>
+      <div class="card p-5" style="border:1px solid #06b6d4">
+        <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-cyan-800">เติมข้อมูลต้นทุนให้ครบ</h3></div>
         <p class="text-sm text-slate-600 mb-3">ยังขาดต้นทุน <strong>${s.uncosted_skus} SKUs</strong> · ครอบคลุมรายได้ปัจจุบัน <strong>${coveragePct}%</strong> · เติมให้ครบเพื่อปลดล็อก menu engineering เต็มรูปแบบ</p>
         <button onclick="switchTab('settings');switchSettingsTab('costs')"
           class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors">
@@ -1450,7 +1450,7 @@ async function loadCosts() {
           <span id="cost-stat-${r.sku_id}" class="text-sm w-5 text-center font-bold" title="บันทึกอัตโนมัติ · auto-saves"></span>
         </div>
         ${r.unit_cost == null && r.effective_cost > 0
-          ? `<div class="text-[10px] text-emerald-600 mt-0.5" title="ต้นทุนจากสูตร BoM — ใช้คำนวณ COGS อยู่แล้ว; พิมพ์ทับได้ถ้าต้องการแก้">🧮 BoM ฿${fmtN(r.effective_cost)}</div>`
+          ? `<div class="text-[10px] text-emerald-600 mt-0.5" title="ต้นทุนจากสูตร BoM — ใช้คำนวณ COGS อยู่แล้ว; พิมพ์ทับได้ถ้าต้องการแก้">BoM ฿${fmtN(r.effective_cost)}</div>`
           : ''}
       </td>
       <td class="py-2 pr-3 text-right text-slate-500">${r.total_revenue != null ? fmtN(r.total_revenue) : '—'}</td>
@@ -1526,8 +1526,8 @@ function renderMenuPresetSelect() {
   if (!sel) return;
   const presets = JSON.parse(localStorage.getItem('oshinei_menu_presets') || '[]');
   sel.innerHTML = '<option value="">— Load saved filter —</option>' +
-    presets.map((p, i) => `<option value="${i}">⭐ ${p.name}</option>`).join('') +
-    (presets.length ? '<option disabled>──────</option><option value="__delete">🗑 Delete a preset…</option>' : '');
+    presets.map((p, i) => `<option value="${i}">★ ${p.name}</option>`).join('') +
+    (presets.length ? '<option disabled>──────</option><option value="__delete">Delete a preset…</option>' : '');
   sel.onchange = (e) => {
     if (e.target.value === '__delete') {
       const names = presets.map((p, i) => `${i+1}. ${p.name}`).join('\n');
@@ -1615,8 +1615,8 @@ async function loadBranchConfig() {
       <td class="py-2.5 pr-4">
         <select id="branch-type-${b.id}"
           class="border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="master"    ${b.branch_type === 'master'    ? 'selected' : ''}>🏢 Master</option>
-          <option value="franchise" ${b.branch_type === 'franchise' ? 'selected' : ''}>🤝 Franchise</option>
+          <option value="master"    ${b.branch_type === 'master'    ? 'selected' : ''}>Master</option>
+          <option value="franchise" ${b.branch_type === 'franchise' ? 'selected' : ''}>Franchise</option>
         </select>
       </td>
       <td class="py-2.5 text-right">
@@ -1876,7 +1876,7 @@ function initCompare() {
 
 // Period colours: A=indigo, B=amber, C=emerald, D=rose
 const CMP_COLORS = {
-  A: { hex:'#4f46e5', badge:'text-indigo-700', bg:'#eef2ff' },
+  A: { hex:'#4a70b0', badge:'text-indigo-700', bg:'#e8eef7' },
   B: { hex:'#f59e0b', badge:'text-amber-700',  bg:'#fef3c7' },
   C: { hex:'#10b981', badge:'text-emerald-700',bg:'#ecfdf5' },
   D: { hex:'#f43f5e', badge:'text-rose-700',   bg:'#fff1f2' },
@@ -1926,7 +1926,7 @@ async function runComparison() {
     document.getElementById('cmpStatus').textContent = '';
     renderComparison(data);
   } catch(e) {
-    document.getElementById('cmpStatus').textContent = '❌ ' + e.message;
+    document.getElementById('cmpStatus').textContent = '✗ ' + e.message;
   }
 }
 
@@ -2117,7 +2117,7 @@ async function loadAnomalyBanner() {
     }
     banner.className = 'anomaly-banner';
     banner.innerHTML = `
-      <span class="text-base">💡</span>
+      <span class="text-base"></span>
       <div class="flex-1 flex flex-wrap items-center gap-2">
         <span class="font-semibold text-amber-800" style="color:inherit">Insights:</span>
         ${data.insights.map(ins => `
@@ -2131,7 +2131,7 @@ async function loadAnomalyBanner() {
   } catch(e) { banner.classList.add('hidden'); }
 }
 
-// 🔔 Action Center — consolidate anomalies + branch-pace (MTD-fair) into one
+// Action Center — consolidate anomalies + branch-pace (MTD-fair) into one
 // prioritized "watch today" panel with drill-through. Reuses existing endpoints.
 async function loadHeavyEaters(force) {
   const fromEl = document.getElementById('heFrom'), toEl = document.getElementById('heTo'),
@@ -2161,13 +2161,13 @@ async function loadHeavyEaters(force) {
 
   const H = d.heavy || {}, L = d.loss || {};
   document.getElementById('heCallouts').innerHTML = `
-    <div class="card p-4" style="background:linear-gradient(135deg,#fffbeb,#fff7ed);border-left:4px solid #f59e0b">
-      <p class="text-sm font-bold" style="color:#b45309">🍖 นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
+    <div class="card p-4" style="background:#fffbeb;border:1px solid #f59e0b">
+      <p class="text-sm font-bold" style="color:#b45309">นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
       <p class="text-2xl font-bold mt-1" style="color:#b45309">${fmtN(H.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${H.pct_bills || 0}% ของบิล)</span></p>
       <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? '#ef4444' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
     </div>
-    <div class="card p-4" style="background:linear-gradient(135deg,#fef2f2,#fff1f2);border-left:4px solid #ef4444">
-      <p class="text-sm font-bold" style="color:#b91c1c">🩸 บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
+    <div class="card p-4" style="background:#fef2f2;border:1px solid #ef4444">
+      <p class="text-sm font-bold" style="color:#b91c1c">บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
       <p class="text-2xl font-bold mt-1" style="color:#b91c1c">${fmtN(L.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${L.pct_bills || 0}% ของบิล)</span></p>
       <p class="text-xs text-slate-600 mt-1">ขาดทุนเฉลี่ย/หัว <b style="color:#ef4444">${fmt(L.avg_margin_head || 0)}</b> · รวมต้นทุน ${fmt(L.cogs || 0)} (${L.pct_cogs || 0}% ของต้นทุน)</p>
     </div>`;
@@ -2237,7 +2237,7 @@ async function loadActionCenter() {
   const items = [];
   // discount-risk flags (high severity) → action items, click → Discounts tab Alert Center
   (al.flags || []).filter(f => f.severity === 'high').slice(0, 6).forEach(f => items.push({
-    sev: 'bad', msg: '🚩 ' + f.text, drill: 'discounts',
+    sev: 'bad', msg: '⚑ ' + f.text, drill: 'discounts',
   }));
   (an.insights || []).forEach(ins => items.push({
     sev: ins.severity === 'good' ? 'good' : 'bad',
@@ -2248,19 +2248,19 @@ async function loadActionCenter() {
   const mtdLbl = dy.mom_basis === 'dow' ? 'MTD เทียบฐานวันในสัปดาห์เดือนก่อน' : 'MTD เทียบเดือนก่อน';
   const br = (dy.branches || []).filter(b => b.mom_pct != null);
   br.slice().sort((a, b) => a.mom_pct - b.mom_pct).slice(0, 3).forEach(b => {
-    if (b.mom_pct <= -10) items.push({ sev: 'bad', msg: `📉 ${b.branch} ยอดตก ${Math.abs(b.mom_pct).toFixed(0)}%${isMtd ? ` (${mtdLbl})` : ''} — รายได้ ${fmt(b.revenue)}`, drill: 'dailysales' });
+    if (b.mom_pct <= -10) items.push({ sev: 'bad', msg: `▼ ${b.branch} ยอดตก ${Math.abs(b.mom_pct).toFixed(0)}%${isMtd ? ` (${mtdLbl})` : ''} — รายได้ ${fmt(b.revenue)}`, drill: 'dailysales' });
   });
   br.slice().sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 2).forEach(b => {
-    if (b.mom_pct >= 10) items.push({ sev: 'good', msg: `📈 ${b.branch} ยอดโต ${b.mom_pct.toFixed(0)}%${isMtd ? ' (MTD)' : ''}`, drill: 'dailysales' });
+    if (b.mom_pct >= 10) items.push({ sev: 'good', msg: `▲ ${b.branch} ยอดโต ${b.mom_pct.toFixed(0)}%${isMtd ? ' (MTD)' : ''}`, drill: 'dailysales' });
   });
   const bad = items.filter(i => i.sev === 'bad'), good = items.filter(i => i.sev === 'good');
-  const card = (i, color) => `<div class="card p-3 mb-2 flex items-center justify-between gap-3 cursor-pointer hover:shadow-md transition-shadow" style="border-left:4px solid ${color}" onclick="switchTab('${i.drill}')">
+  const card = (i, color) => `<div class="card p-3 mb-2 flex items-center justify-between gap-3 cursor-pointer hover:shadow-md transition-shadow" style="border:1px solid ${color}" onclick="switchTab('${i.drill}')">
     <span class="text-sm" style="color:var(--text-primary)">${esc(i.msg)}</span>
     <span class="text-[11px] text-indigo-500 whitespace-nowrap">ดู ›</span></div>`;
   body.innerHTML =
-    `<div class="mb-5"><h3 class="text-sm font-bold mb-2" style="color:var(--bad-ink)">🔴 ต้องดู / แก้ (${bad.length})</h3>` +
-    (bad.length ? bad.map(i => card(i, '#ef4444')).join('') : '<p class="text-xs text-slate-400">ไม่มีสัญญาณเตือน 👍</p>') + '</div>' +
-    `<div><h3 class="text-sm font-bold mb-2" style="color:var(--good-ink)">🟢 ไปได้ดี (${good.length})</h3>` +
+    `<div class="mb-5"><h3 class="text-sm font-bold mb-2" style="color:var(--bad-ink)">ต้องดู / แก้ (${bad.length})</h3>` +
+    (bad.length ? bad.map(i => card(i, '#ef4444')).join('') : '<p class="text-xs text-slate-400">ไม่มีสัญญาณเตือน</p>') + '</div>' +
+    `<div><h3 class="text-sm font-bold mb-2" style="color:var(--good-ink)">ไปได้ดี (${good.length})</h3>` +
     (good.length ? good.map(i => card(i, '#10b981')).join('') : '<p class="text-xs text-slate-400">—</p>') + '</div>';
   const st = document.getElementById('acStatus'); if (st) st.textContent = `รวม ${items.length} สัญญาณ · อัปเดตตามตัวกรองด้านบน`;
 }

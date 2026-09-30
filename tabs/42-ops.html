@@ -6,9 +6,9 @@
   <div class="subtab-bar mb-5" style="max-width:500px">
     <button class="subtab-btn active" onclick="switchOpsSubtab('cohort')">Cohort</button>
     <button class="subtab-btn" onclick="switchOpsSubtab('affinity')">Affinity</button>
-    <button class="subtab-btn" onclick="switchTab('simhub'); simhubSetMode('whatif')" title="ย้ายไปที่หน้า 🎮 Simulators แล้ว">What-If ↗</button>
+    <button class="subtab-btn" onclick="switchTab('simhub'); simhubSetMode('whatif')" title="ย้ายไปที่หน้า Simulators แล้ว">What-If ↗</button>
   </div>
-  <p class="text-xs text-slate-400 mb-4 -mt-3">เปรียบเทียบสาขา/แคชเชียร์/ส่วนลด ดูได้ที่แท็บ <b>🏆 Benchmark สาขา</b> · <b>👤 Staff</b> · <b>🏷️ Discounts</b> และ <b>รายงาน §3</b></p>
+  <p class="text-xs text-slate-400 mb-4 -mt-3">เปรียบเทียบสาขา/แคชเชียร์/ส่วนลด ดูได้ที่แท็บ <b>Benchmark สาขา</b> · <b>Staff</b> · <b>Discounts</b> และ <b>รายงาน §3</b></p>
 
 
   <!-- Time Analysis removed — use Time & Flow tab -->
@@ -18,7 +18,7 @@
     <div class="card p-5">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
         <h2 class="section-title mb-0">ลูกค้ารายเดือน (Cohort · customer-volume signal)</h2>
-        <button onclick="exportTable('cohortTable','cohort.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">⬇ CSV</button>
+        <button onclick="exportTable('cohortTable','cohort.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">CSV</button>
       </div>
       <p id="cohortNote" class="text-xs text-slate-400 mb-3"></p>
       <div id="cohortVerdict"></div>

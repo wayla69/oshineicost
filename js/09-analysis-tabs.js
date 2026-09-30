@@ -33,16 +33,16 @@ async function loadEngineering() {
 
   // Quadrant summary cards
   const QUADS = [
-    { key: 'star',      label: '⭐ Stars',      color: '#10b981', bg: '#f0fdf4', advice: 'Maintain & promote' },
-    { key: 'plowhorse', label: '🐴 Plowhorses', color: '#f59e0b', bg: '#fffbeb', advice: 'Reprice or reduce cost' },
-    { key: 'puzzle',    label: '❓ Puzzles',    color: '#6366f1', bg: '#eef2ff', advice: 'Reposition or bundle' },
-    { key: 'dog',       label: '🐕 Dogs',       color: '#ef4444', bg: '#fef2f2', advice: 'Review or discontinue' },
+    { key: 'star',      label: 'Stars',      color: '#10b981', bg: '#f0fdf4', advice: 'Maintain & promote' },
+    { key: 'plowhorse', label: 'Plowhorses', color: '#f59e0b', bg: '#fffbeb', advice: 'Reprice or reduce cost' },
+    { key: 'puzzle',    label: 'Puzzles',    color: '#4a70b0', bg: '#e8eef7', advice: 'Reposition or bundle' },
+    { key: 'dog',       label: 'Dogs',       color: '#ef4444', bg: '#fef2f2', advice: 'Review or discontinue' },
   ];
   const costedItems = _engData.filter(i => i.has_cost);
   document.getElementById('engSummaryCards').innerHTML = QUADS.map(q => {
     const items = costedItems.filter(i => i.quadrant === q.key);
     const rev = items.reduce((s, i) => s + (i.revenue || 0), 0);
-    return `<div style="background:${q.bg};border-radius:8px;padding:10px 12px">
+    return `<div style="background:${q.bg};border-radius:4px;padding:10px 12px">
       <div class="flex justify-between items-center">
         <span style="font-weight:600;color:${q.color}">${q.label}</span>
         <span style="font-size:18px;font-weight:700;color:${q.color}">${items.length}</span>
@@ -60,10 +60,10 @@ async function loadEngineering() {
 
   // Scatter chart
   const QUADS_MAP = [
-    { key: 'star',      label: '⭐ Stars',      color: '#10b981' },
-    { key: 'plowhorse', label: '🐴 Plowhorses', color: '#f59e0b' },
-    { key: 'puzzle',    label: '❓ Puzzles',    color: '#6366f1' },
-    { key: 'dog',       label: '🐕 Dogs',       color: '#ef4444' },
+    { key: 'star',      label: 'Stars',      color: '#10b981' },
+    { key: 'plowhorse', label: 'Plowhorses', color: '#f59e0b' },
+    { key: 'puzzle',    label: 'Puzzles',    color: '#4a70b0' },
+    { key: 'dog',       label: 'Dogs',       color: '#ef4444' },
   ];
   const datasets = [
     ...QUADS_MAP.map(q => ({
@@ -128,9 +128,9 @@ function renderEngTable() {
   const items = _engFilter === 'all' ? _engData
     : _engData.filter(i => i.quadrant === _engFilter);
   const QUAD_BADGE = {
-    star: '⭐ ดาวเด่น', plowhorse: '🐴 ม้างาน', puzzle: '🔮 เพชรในตม', dog: '🐕 ตัวถ่วง', null: '—', undefined: '—'
+    star: 'ดาวเด่น', plowhorse: 'ม้างาน', puzzle: 'เพชรในตม', dog: 'ตัวถ่วง', null: '—', undefined: '—'
   };
-  const QUAD_COLORS = { star: 'var(--good-ink)', plowhorse: '#d97706', puzzle: '#4f46e5', dog: 'var(--bad-ink)' };
+  const QUAD_COLORS = { star: 'var(--good-ink)', plowhorse: '#d97706', puzzle: '#4a70b0', dog: 'var(--bad-ink)' };
   document.getElementById('engTableBody').innerHTML = [...items]
     .sort((a, b) => (b.revenue || 0) - (a.revenue || 0))
     .map(i => `
@@ -177,7 +177,7 @@ async function openBillItems(row = {}) {
   const title = document.getElementById('billItemsTitle');
   const sumEl = document.getElementById('billItemsSummary');
   const body  = document.getElementById('billItemsBody');
-  title.textContent = '🧾 เมนูที่สั่ง · ' + (row.receipt || '');
+  title.textContent = 'เมนูที่สั่ง · ' + (row.receipt || '');
   const renderSummary = (rw) => {
     // rw.rev = total_inc_vat / 1.07. Sale.Total is POST-discount, so this is ALREADY the
     // NET ex-VAT revenue actually received — not the pre-discount value. Pre-discount =
@@ -193,7 +193,7 @@ async function openBillItems(row = {}) {
       ['ลูกค้า', fmtN(rw.cust || 0)],
       ['รายได้ก่อนลด', fmt(gross)],
       ['ส่วนลดบิล', disc ? `<span style="color:#f59e0b">−${fmt(disc)}</span>` : '—'],
-      ['รายได้สุทธิ', `<span style="color:#4f46e5">${fmt(net)}</span>`],
+      ['รายได้สุทธิ', `<span style="color:var(--accent)">${fmt(net)}</span>`],
       ['COGS (BoM)', fmt(cogs)],
       [gp >= 0 ? 'กำไรขั้นต้น' : 'ขาดทุนสุทธิ',
        `<span style="color:${gp >= 0 ? '#10b981' : '#ef4444'}">${fmt(Math.abs(gp))}</span>`],
@@ -281,7 +281,7 @@ async function openDiscountBills(opts = {}) {
                     amount: opts.amount, min_pct: opts.min_pct, max_pct: opts.max_pct,
                     gross_zero: opts.gross_zero, min_discount: opts.min_discount, title: opts.title,
                     payment: opts.payment, reprinted_only: opts.reprinted_only };
-  title.textContent = '🔍 ' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
+  title.textContent = '' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
   sumEl.innerHTML = '';
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.style.display = 'flex';
@@ -294,9 +294,9 @@ async function openDiscountBills(opts = {}) {
   const s = d.summary || {};
   const codes = d.payment_codes || [];
   const reprintBadge = (s.reprinted_bills||0) > 0
-    ? `<span class="ml-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">🖨️ Reprint ${fmtN(s.reprinted_bills)} บิล</span>` : '';
+    ? `<span class="ml-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">Reprint ${fmtN(s.reprinted_bills)} บิล</span>` : '';
   const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-2 flex-wrap">
-      <span class="text-xs font-medium text-slate-500">💳 วิธีจ่าย:</span>
+      <span class="text-xs font-medium text-slate-500">วิธีจ่าย:</span>
       <select onchange="discBillsSetPayment(this.value)" class="text-xs border border-slate-300 rounded-lg px-2 py-1" style="max-width:220px">
         <option value="">ทั้งหมด (${fmtN(codes.length)} วิธี)</option>
         ${codes.map(c=>`<option value="${esc(c)}" ${opts.payment===c?'selected':''}>${esc(c)}</option>`).join('')}
@@ -304,13 +304,13 @@ async function openDiscountBills(opts = {}) {
       ${opts.payment?`<button onclick="discBillsSetPayment('')" class="text-xs text-red-600 underline">ล้างตัวกรอง</button>`:''}
       <button onclick="openDiscountBills({..._discBillsCtx, reprinted_only:${!opts.reprinted_only}, sort:'reprints', title:'บิลที่พิมพ์ซ้ำ + มีส่วนลด'})"
         class="text-xs px-2 py-1 rounded-lg border ${opts.reprinted_only?'bg-orange-100 border-orange-400 text-orange-700 font-bold':'border-slate-300 text-slate-500 hover:bg-slate-50'}">
-        🖨️ ${opts.reprinted_only?'ดูทั้งหมด':'เฉพาะ Reprint'}
+        ${opts.reprinted_only?'ดูทั้งหมด':'เฉพาะ Reprint'}
       </button>
     </div>` : '';
   const curSort = opts.sort || 'discount';
   const sortBar = `<div class="flex items-center gap-1 mb-2 flex-wrap">
     <span class="text-xs text-slate-400 mr-1">เรียงโดย:</span>
-    ${[['date','📅 วันที่'],['discount','฿ ส่วนลด'],['pct','% ของบิล'],['total','ยอดบิล']].map(([k,lbl])=>
+    ${[['date','วันที่'],['discount','฿ ส่วนลด'],['pct','% ของบิล'],['total','ยอดบิล']].map(([k,lbl])=>
       `<button onclick="openDiscountBills({..._discBillsCtx, sort:'${k}'})"
         class="text-xs px-2.5 py-1 rounded-lg border ${curSort===k?'font-bold text-white':'text-slate-600 hover:bg-slate-50'}"
         style="${curSort===k?'background:var(--color-primary);border-color:var(--color-primary)':'border-color:#e2e8f0'}">${lbl}</button>`
@@ -337,13 +337,13 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3 text-right" title="กำไร/ขาดทุนขั้นต้นรายบิล = รายได้สุทธิ (จ่ายจริง ÷ 1.07) − ทุนอาหาร BoM · เขียว = กำไร · แดง = ขาดทุน · — = ยังไม่มีต้นทุนรายบิล (รอ sync)">กำไร/ขาดทุน</th>
     <th class="py-2 pr-3">วิธีจ่าย</th>
     <th class="py-2 pr-3 text-right">% ของบิล</th>
-    <th class="py-2 text-right" title="จำนวนครั้งที่พิมพ์ใบเสร็จ (Easy POS PrintTimes)">🖨️ พิมพ์</th>
+    <th class="py-2 text-right" title="จำนวนครั้งที่พิมพ์ใบเสร็จ (Easy POS PrintTimes)">พิมพ์</th>
     </tr></thead><tbody>`;
   const rows = bills.map(b => {
     const hot = (b.discount||0) >= p95 && p95 > 0;
     const base = b.bill_base != null ? b.bill_base : (b.total_inc_vat||0) + (b.discount||0);
     const dtype = b.coupon_name
-      ? `<span class="text-indigo-600">🎟️ ${esc(b.coupon_name)}</span>`
+      ? `<span class="text-indigo-600">${esc(b.coupon_name)}</span>`
       : (b.reason_desc ? esc(b.reason_desc)
         : '<span class="text-slate-400">ไม่ระบุประเภท</span>');
     const payCell = b.payment_code
@@ -351,7 +351,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       : '<span class="text-slate-300">—</span>';
     const pt = b.print_times || 0;
     const printCell = pt > 1
-      ? `<span class="font-bold text-red-600" title="พิมพ์ซ้ำ ${pt} ครั้ง — ตรวจสอบ">${pt}x 🚩</span>`
+      ? `<span class="font-bold text-red-600" title="พิมพ์ซ้ำ ${pt} ครั้ง — ตรวจสอบ">${pt}x ⚑</span>`
       : (pt === 1 ? `<span class="text-slate-400">1x</span>` : `<span class="text-slate-300">—</span>`);
     // Per-bill P&L cell. Net ex-VAT revenue = จ่ายจริง ÷ 1.07 (total_inc_vat is already
     // post-discount), so gross profit = net − BoM COGS — identical to the drill's tile and
@@ -454,7 +454,7 @@ async function loadStaff() {
   const totalRev = d.reduce((s, r) => s + (r.revenue || 0), 0);
   const avgDisc = d.length ? d.reduce((s, r) => s + (r.discount_rate || 0), 0) / d.length : 0;
   document.getElementById('staff-kpi-row').innerHTML = [
-    { label: 'Total Staff Revenue', value: `${fmt(totalRev)}`, sub: _staffByBranch ? `${d.length} บัญชี×สาขา` : `${d.length} บัญชีแคชเชียร์`, color: '#4f46e5' },
+    { label: 'Total Staff Revenue', value: `${fmt(totalRev)}`, sub: _staffByBranch ? `${d.length} บัญชี×สาขา` : `${d.length} บัญชีแคชเชียร์`, color: '#4a70b0' },
     { label: 'Top Cashier', value: top.cashier || '—', sub: `${fmt(top.revenue || 0)}`, color: 'var(--good-ink)' },
     { label: 'Network Avg Ticket', value: `${fmt(d.length ? d.reduce((s,r)=>s+(r.avg_ticket||0),0)/d.length : 0)}`, sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: 'Network Discount Rate', value: `${avgDisc.toFixed(1)}%`, sub: 'of transactions with discount', color: avgDisc > 15 ? '#ef4444' : '#f59e0b' },
@@ -503,7 +503,7 @@ async function loadStaff() {
         onclick="openDiscountBills({cashier:'${jsAttr(r.cashier)}'${drillBranch}, title:'บิลส่วนลด · ${jsAttr(r.cashier)}${_staffByBranch&&r.primary_branch?' @ '+jsAttr(r.primary_branch):''}'})"
         title="คลิกเพื่อดูบิลส่วนลดของ ${esc(r.cashier)}">
       <td class="py-2 pr-3 text-slate-400 font-medium">${i + 1}</td>
-      <td class="py-2 pr-3 font-medium text-indigo-700">${esc(r.cashier)} 🔍</td>
+      <td class="py-2 pr-3 font-medium text-indigo-700">${esc(r.cashier)}</td>
       <td class="py-2 pr-3 text-slate-600" title="${esc(branchTitle)}">${branchLabel}</td>
       <td class="py-2 pr-3 text-right">${fmt(r.revenue)}</td>
       <td class="py-2 pr-3 text-right">${fmtN(r.tx_count)}</td>
@@ -543,7 +543,7 @@ async function loadChildBuffet() {
       <p class="text-[11px] text-slate-400">${sub||''}</p></div>`;
   document.getElementById('childKpiRow').innerHTML =
     kpi('covers เด็ก (เดือนล่าสุด)', fmtN(totCovers), momChip(momCovers), '#ec4899', `${d.latest_month||''} · เทียบ ${d.prev_month||'—'}`) +
-    kpi('รายได้บุฟเฟ่ต์เด็ก', fmt(totRev), momChip(momRev), '#8b5cf6', 'เดือนล่าสุด (ex-VAT)') +
+    kpi('รายได้บุฟเฟ่ต์เด็ก', fmt(totRev), momChip(momRev), '#7a66b8', 'เดือนล่าสุด (ex-VAT)') +
     kpi('% ของบุฟเฟ่ต์', wPct.toFixed(1) + '%', '', '#0891b2', 'covers เด็ก ÷ covers บุฟเฟ่ต์รวม') +
     kpi('สาขาที่มีเด็กมากสุด', bb[0] ? esc(bb[0].branch) : '—', '', '#f59e0b', bb[0] ? fmtN(bb[0].covers) + ' covers' : '');
 
@@ -559,7 +559,7 @@ async function loadChildBuffet() {
       datasets: [
         { label: 'covers เด็ก', data: ytd.map(t => t.covers), borderColor: '#ec4899',
           backgroundColor: 'rgba(236,72,153,0.10)', borderWidth: 2.5, pointRadius: 3, fill: true, tension: 0.3, yAxisID: 'y' },
-        { label: 'รายได้', data: ytd.map(t => t.revenue), borderColor: '#8b5cf6',
+        { label: 'รายได้', data: ytd.map(t => t.revenue), borderColor: '#7a66b8',
           borderWidth: 2, borderDash: [5, 4], pointRadius: 2, fill: false, tension: 0.3, yAxisID: 'yRev' },
       ]
     },
@@ -634,16 +634,16 @@ async function loadDiscountReasons(params, gen) {
   const typedAmt = (d.total_amount || 0) - ((untyped && untyped.amount) || 0);
   cards.innerHTML = [
     { l: 'มูลค่าลดทั้งหมด', v: fmt(d.total_amount || 0), s: `${fmtN(d.total_bills || 0)} บิล`, c: '#ef4444' },
-    { l: '⚠️ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
+    { l: '⚠ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
     { l: '✓ ระบุเหตุผล', v: (d.total_amount ? (100 - (d.untyped_pct || 0)).toFixed(1) + '%' : '—'), s: fmt(typedAmt), c: '#10b981' },
-  ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+  ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
   // typed-vs-untyped split bar — instant read of the policy gap
   const splitEl = document.getElementById('disc-reason-split');
   if (splitEl) {
     const up = d.untyped_pct || 0, tp = Math.max(0, 100 - up);
     splitEl.innerHTML = (d.total_amount ? `
       <div class="flex items-center justify-between text-[11px] mb-1">
-        <span style="color:#f59e0b;font-weight:700">⚠️ ไม่ระบุเหตุผล ${up.toFixed(0)}%</span>
+        <span style="color:#f59e0b;font-weight:700">⚠ ไม่ระบุเหตุผล ${up.toFixed(0)}%</span>
         <span style="color:#10b981;font-weight:700">ระบุเหตุผล ${tp.toFixed(0)}% ✓</span>
       </div>
       <div class="flex w-full rounded-full overflow-hidden" style="height:14px;background:#e2e8f0">
@@ -656,11 +656,11 @@ async function loadDiscountReasons(params, gen) {
     const unty = r.reason_id === 0;
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     return `<tr class="border-t border-slate-100">
-      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:#f59e0b' : ''}">${unty ? '⚠️ ' : ''}${esc(r.reason)}</td>
+      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:#f59e0b' : ''}">${unty ? '⚠ ' : ''}${esc(r.reason)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.amount)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.pct}%</td>
-      <td class="py-1.5 pr-2" style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${unty ? '#f59e0b' : '#6366f1'}"></div></div></td>
+      <td class="py-1.5 pr-2" style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${unty ? '#f59e0b' : '#4a70b0'}"></div></div></td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
 }
@@ -699,10 +699,10 @@ async function loadCouponSeries(params, gen) {
   const top = s[0];
   cards.innerHTML = [
     { l: 'มูลค่าคูปองรวม', v: fmt(d.total_amount || 0), s2: `${fmtN(d.total_uses || 0)} ครั้ง`, c: '#f59e0b' },
-    { l: 'จำนวนชุดที่ใช้', v: fmtN(d.series_count || 0), s2: 'series', c: '#6366f1' },
+    { l: 'จำนวนชุดที่ใช้', v: fmtN(d.series_count || 0), s2: 'series', c: '#4a70b0' },
     { l: 'ชุดที่ลดมากสุด', v: top ? top.pct + '%' : '—', s2: top ? esc(top.name) : '—', c: '#ef4444' },
     { l: 'เฉลี่ย/ครั้ง', v: fmt(d.total_uses ? Math.round(d.total_amount / d.total_uses) : 0), s2: 'ต่อการใช้ 1 ครั้ง', c: '#10b981' },
-  ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
+  ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
   const momCell = v => v == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${v === 0 ? '#94a3b8' : (v > 0 ? '#ef4444' : '#10b981')};font-weight:600">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
@@ -812,7 +812,7 @@ async function loadDiscountAlerts(params, gen) {
   if (gen != null && gen !== loadGen) return;
   if (!d) { el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; if (meta) meta.textContent = ''; return; }
   const flags = d.flags || [];
-  if (meta) meta.textContent = flags.length ? `🔴 ${d.counts.high} ด่วน · 🟠 ${d.counts.med} เฝ้าระวัง` : '';
+  if (meta) meta.textContent = flags.length ? `● ${d.counts.high} ด่วน · ● ${d.counts.med} เฝ้าระวัง` : '';
   // threshold config form (populated from the current/effective thresholds)
   const cfgEl = document.getElementById('disc-alert-config');
   if (cfgEl && d.thresholds) {
@@ -820,21 +820,21 @@ async function loadDiscountAlerts(params, gen) {
     const F = [['cash_pct','เงินสด+ลดหนัก ≥ (%)'],['cash_min','เตือนเมื่อรวม ≥ (฿)'],
                ['untyped_pct','ไม่ระบุเหตุผล ≥ (%)'],['cashier_floor','แคชเชียร์ลด ≥ (%)'],
                ['repeat_min','ลดซ้ำ ≥ (ครั้ง)'],['late_from','ลดหลังเวลา (ชม.)']];
-    cfgEl.innerHTML = `<p class="text-xs font-semibold text-slate-600 mb-2">⚙ เกณฑ์เตือน (ปรับแล้วมีผลทุกสาขา)</p>
+    cfgEl.innerHTML = `<p class="text-xs font-semibold text-slate-600 mb-2">เกณฑ์เตือน (ปรับแล้วมีผลทุกสาขา)</p>
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
         ${F.map(([k,lbl])=>`<label class="text-[11px] text-slate-500">${lbl}<input id="th_${k}" type="number" step="any" value="${T[k]}" class="w-full text-xs border border-slate-300 rounded px-2 py-1 mt-0.5"></label>`).join('')}
       </div>
       <div class="flex items-center gap-2 mt-2">
-        <button onclick="discAlertSaveThresholds()" class="text-xs text-white rounded px-3 py-1" style="background:#4f46e5">บันทึกเกณฑ์</button>
+        <button onclick="discAlertSaveThresholds()" class="text-xs text-white rounded px-3 py-1" style="background:var(--accent)">บันทึกเกณฑ์</button>
         <span id="th_saved" class="text-[11px] text-green-600"></span>
-        <a href="/docs/POS_DISCOUNT_CONTROLS.html" target="_blank" class="text-[11px] text-indigo-600 underline" style="margin-left:auto">📋 แนวทางตั้งค่า POS เพื่อป้องกัน</a>
+        <a href="/docs/POS_DISCOUNT_CONTROLS.html" target="_blank" class="text-[11px] text-indigo-600 underline" style="margin-left:auto">แนวทางตั้งค่า POS เพื่อป้องกัน</a>
       </div>`;
   }
   if (!flags.length) {
-    el.innerHTML = '<div class="px-3 py-2 rounded-lg text-sm" style="background:#f0fdf4;border-left:4px solid #22c55e;color:#166534">✓ ไม่พบสัญญาณส่วนลดผิดปกติในช่วงนี้</div>';
+    el.innerHTML = '<div class="px-3 py-2 rounded-lg text-sm" style="background:#f0fdf4;border:1px solid #22c55e;color:#166534">✓ ไม่พบสัญญาณส่วนลดผิดปกติในช่วงนี้</div>';
     return;
   }
-  const ICON = { cash_heavy: '💵', untyped: '🏷️', cashier: '🧑‍💼', repeat: '🔁', late: '🌙', drift: '📈', void: '🚫' };
+  const ICON = { cash_heavy: '', untyped: '', cashier: '', repeat: '', late: '', drift: '▲', void: '✗' };
   el.innerHTML = flags.map(f => {
     const dot = f.severity === 'high' ? '#dc2626' : '#f59e0b';
     const opts = Object.assign({ sort: 'discount' }, f.drill || {});
@@ -845,7 +845,7 @@ async function loadDiscountAlerts(params, gen) {
       <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none;margin-top:5px"></span>
       <span style="flex:none">${ICON[f.type] || '•'}</span>
       <span class="text-sm text-slate-700" style="flex:1">${esc(f.text)}</span>
-      ${f.drill ? '<span class="text-[10px] text-slate-300" style="margin-top:3px">🔍</span>' : ''}
+      ${f.drill ? '<span class="text-[10px] text-slate-300" style="margin-top:3px"></span>' : ''}
     </div>`;
   }).join('');
 }
@@ -862,7 +862,7 @@ async function loadPaymentDiscount(params, gen) {
   if (!d) { chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; return; }
   if (!d.available) {
     sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
-    sumEl.style.cssText = 'background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e';
+    sumEl.style.cssText = 'background:#fffbeb;border:1px solid #f59e0b;color:#92400e';
     sumEl.textContent = 'ยังไม่มีข้อมูลวิธีจ่ายรายบิล (sale_payment) — รัน sync รอบใหม่';
     chEl.innerHTML = mixEl.innerHTML = '';
     return;
@@ -870,10 +870,10 @@ async function loadPaymentDiscount(params, gen) {
   const ch = d.cash_heavy || {};
   sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
   sumEl.style.cssText = ch.bills
-    ? 'background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b'
-    : 'background:#f0fdf4;border-left:4px solid #22c55e;color:#166534';
+    ? 'background:#fef2f2;border:1px solid #ef4444;color:#991b1b'
+    : 'background:#f0fdf4;border:1px solid #22c55e;color:#166534';
   sumEl.innerHTML = ch.bills
-    ? `🚩 <b>เงินสด + ลดหนัก ≥${d.heavy_pct}%</b>: ${fmtN(ch.bills)} บิล · <b>${fmt(ch.discount)}</b> (${ch.share_of_discount}% ของเงินลดทั้งหมด) — กระจุกที่ <b>${esc(ch.top_branch||'—')}</b> ${fmt(ch.top_branch_discount||0)}`
+    ? `⚑ <b>เงินสด + ลดหนัก ≥${d.heavy_pct}%</b>: ${fmtN(ch.bills)} บิล · <b>${fmt(ch.discount)}</b> (${ch.share_of_discount}% ของเงินลดทั้งหมด) — กระจุกที่ <b>${esc(ch.top_branch||'—')}</b> ${fmt(ch.top_branch_discount||0)}`
     : `✓ ไม่พบบิลเงินสด + ลดหนัก ≥${d.heavy_pct}%`;
 
   const chb = ch.branches || [];
@@ -896,7 +896,7 @@ async function loadPaymentDiscount(params, gen) {
     const heavy = (m.disc_pct || 0) >= 20;
     return `<div class="flex items-center gap-2 py-1">
       <span class="text-xs truncate ${isCash?'font-semibold text-red-600':'text-slate-600'}" style="width:108px" title="${esc(m.code)}">${esc(m.code)}</span>
-      <div class="flex-1" style="background:#eef2ff;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#6366f1'};border-radius:4px"></div></div>
+      <div class="flex-1" style="background:var(--accent-soft);border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#4a70b0'};border-radius:4px"></div></div>
       <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'var(--bad-ink)':'#64748b'}">${m.disc_pct}%</b></span>
     </div>`;
   }).join('');
@@ -923,8 +923,8 @@ async function loadDiscountLeakage(params, gen) {
   const hasAbn = (d.abnormal_branches || []).length > 0;
   sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
   sumEl.style.cssText = hasAbn
-    ? 'background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b'
-    : 'background:#f0fdf4;border-left:4px solid #22c55e;color:#166534';
+    ? 'background:#fef2f2;border:1px solid #ef4444;color:#991b1b'
+    : 'background:#f0fdf4;border:1px solid #22c55e;color:#166534';
   sumEl.textContent = d.summary || '';
 
   meta.textContent = `ค่าเฉลี่ยทุกสาขา ${avg.toFixed(2)}% · กลาง ${(chain.median_branch_pct||0).toFixed(2)}% · เกณฑ์ผิดปกติ ≥ ${(chain.threshold_pct||0).toFixed(2)}% · ${chain.branch_count||0} สาขา`
@@ -945,8 +945,8 @@ async function loadDiscountLeakage(params, gen) {
         ${abn ? 'style="background:#fff7f7"' : ''}
         onclick="openDiscountBills({branch:'${jsAttr(b.branch)}', title:'บิลส่วนลด · ${jsAttr(b.branch)}'})" title="คลิกดูบิลส่วนลดของสาขานี้">
       <div class="flex items-center justify-between">
-        <span class="font-semibold text-sm truncate">${abn ? '🚩 ' : ''}${esc(b.branch)}</span>
-        <span class="text-[10px] text-slate-300">🔍</span>
+        <span class="font-semibold text-sm truncate">${abn ? '⚑ ' : ''}${esc(b.branch)}</span>
+        <span class="text-[10px] text-slate-300"></span>
       </div>
       <p class="mt-1 font-bold" style="color:${pctColor};font-size:1.4rem;line-height:1.1">${pct.toFixed(2)}<span style="font-size:.8rem">%</span></p>
       <p class="text-xs text-slate-500">ส่วนลดรวม <b>${fmt(b.total_discount||0)}</b> · ${fmtN(b.discount_tx||0)} บิล</p>
@@ -1030,10 +1030,10 @@ async function loadDiscountsTab() {
   document.getElementById('disc-kpi-row').innerHTML = [
     { label: 'Total Discounted', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% of all transactions`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
     { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
-    { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7c3aed' },
+    { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7a66b8' },
     { label: `เกินเพดานส่วนลด ${o.policy_pct != null ? o.policy_pct : (d.policy_pct != null ? d.policy_pct : 2.5)}%`, value: `${fmt(o.excess_baht||0)}`,
       sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' },
-  ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?' 🔍':''}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?'':''}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   // Trend chart
   const trend = d.trend || [];
@@ -1095,7 +1095,7 @@ async function loadDiscountsTab() {
     const heavyBaht = rows.filter(r => (META[r.grp]||{}).heavy).reduce((s,r)=>s+(r.baht||0),0);
     const heavyPct = heavyBaht/tot*100;
     const hc = heavyPct>=40 ? '#b91c1c' : heavyPct>=20 ? '#d97706' : '#047857';
-    const hi = heavyPct>=40 ? '🔻' : heavyPct>=20 ? '⚠️' : '✓';
+    const hi = heavyPct>=40 ? '▼' : heavyPct>=20 ? '⚠' : '✓';
     const seg = rows.map(r => { const w=(r.baht||0)/tot*100, m=META[r.grp]||{c:'#94a3b8'};
       return w<=0 ? '' : `<div title="${esc(r.grp)}: ${fmt(r.baht)} (${w.toFixed(0)}%)" style="width:${w}%;background:${m.c}"></div>`; }).join('');
     el.innerHTML =
@@ -1122,12 +1122,12 @@ async function loadDiscountsTab() {
     const t = amts[0];
     el.innerHTML =
       `<div class="px-3 py-2 rounded-lg text-sm mb-3" style="background:#eff6ff;color:#1e40af;font-weight:600;line-height:1.4">
-        💡 ส่วนลด <b>${fmtN(t.amount)} ฿</b> ใช้บ่อยสุด <b>${fmtN(t.bills)} ครั้ง</b> — น่าจะเป็นคูปอง/โปรมาตรฐาน</div>`
+        ส่วนลด <b>${fmtN(t.amount)} ฿</b> ใช้บ่อยสุด <b>${fmtN(t.bills)} ครั้ง</b> — น่าจะเป็นคูปอง/โปรมาตรฐาน</div>`
       + amts.map(r => { const w=Math.max(3, Math.round(100*(r.bills||0)/maxB));
         return `<div class="flex items-center gap-2 py-1 px-1 rounded cursor-pointer hover:bg-indigo-50/60"
             onclick="openDiscountBills({amount:${r.amount}, title:'บิลส่วนลด ${fmtN(r.amount)} ฿ พอดี'})">
           <span class="text-sm font-semibold text-indigo-700 tabular-nums" style="width:62px">${fmtN(r.amount)} ฿</span>
-          <div class="flex-1" style="background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:18px;background:#6366f1;border-radius:4px"></div></div>
+          <div class="flex-1" style="background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:18px;background:var(--accent);border-radius:4px"></div></div>
           <span class="text-xs text-slate-600 tabular-nums" style="width:118px;text-align:right">${fmtN(r.bills)} ครั้ง · ${fmt(r.baht)}</span>
         </div>`; }).join('');
   })();
@@ -1138,7 +1138,7 @@ async function loadDiscountsTab() {
   const note = document.getElementById('disc-outlier-note');
   if (outliers.length) {
     note.classList.remove('hidden');
-    note.innerHTML = `🚩 <b>${outliers.length} แคชเชียร์</b>ให้ส่วนลดเกิน <b>${d.outlier_threshold_pct}%</b> ของยอดขาย (เกณฑ์ = 2× ค่ากลาง) — ` +
+    note.innerHTML = `⚑ <b>${outliers.length} แคชเชียร์</b>ให้ส่วนลดเกิน <b>${d.outlier_threshold_pct}%</b> ของยอดขาย (เกณฑ์ = 2× ค่ากลาง) — ` +
       outliers.slice(0,5).map(c=>`${esc(c.cashier)} (${esc(c.branch)}) ${(c.disc_pct_of_sales||0).toFixed(1)}%`).join(' · ');
   } else { note.classList.add('hidden'); }
 
@@ -1162,7 +1162,7 @@ function _discCashierRow(r) {
     ? `onclick="openDiscountBills({cashier:'${jsAttr(r.cashier)}', branch:'${jsAttr(r.branch||'')}', title:'บิลส่วนลด · ${jsAttr(r.cashier)}'})" title="คลิกดูบิลส่วนลด"`
     : '';
   return `<tr class="border-t border-slate-100 hover:bg-indigo-50 ${r.cashier?'cursor-pointer':''} ${r.is_outlier?'bg-red-50':''}" ${drill}>
-      <td class="py-2 pr-3 font-medium ${r.cashier?'text-indigo-700':''}">${r.is_outlier?'🚩 ':''}${esc(r.cashier || '—')}${r.cashier?' 🔍':''}</td>
+      <td class="py-2 pr-3 font-medium ${r.cashier?'text-indigo-700':''}">${r.is_outlier?'⚑ ':''}${esc(r.cashier || '—')}${r.cashier?'':''}</td>
       <td class="py-2 pr-3 text-xs text-slate-500">${esc(r.branch || '—')}</td>
       <td class="py-2 pr-3 text-right">${fmtN(r.total_tx)}</td>
       <td class="py-2 pr-3 text-right">${fmtN(r.discount_tx)}</td>
@@ -1198,8 +1198,8 @@ function renderDiscCashiers() {
     const rows = groups[br].sort((x,y)=>(y.total_discount||0)-(x.total_discount||0));
     const over = !!bt.over_policy;
     const flag = over || (bt.disc_pct_of_sales != null && bt.disc_pct_of_sales >= (_discData.outlier_threshold_pct||99));
-    const header = `<tr style="background:#eef2ff"><td colspan="5" class="py-1.5 pr-3 font-bold text-indigo-800">
-        ${flag?'🚩 ':'📍 '}${esc(br)} <span class="font-normal text-slate-500">· ${rows.length} แคชเชียร์</span></td>
+    const header = `<tr style="background:var(--accent-soft)"><td colspan="5" class="py-1.5 pr-3 font-bold text-indigo-800">
+        ${flag?'⚑ ':''}${esc(br)} <span class="font-normal text-slate-500">· ${rows.length} แคชเชียร์</span></td>
       <td class="py-1.5 pr-3 text-right font-bold ${flag?'text-red-600':'text-indigo-800'}">${bt.disc_pct_of_sales!=null?bt.disc_pct_of_sales.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right font-bold text-indigo-800">${fmt(bt.total_discount||0)}</td>
       <td class="py-1.5 text-right text-xs ${over?'text-red-600 font-semibold':'text-slate-400'}" title="ส่วนลดที่ให้เกินเพดานนโยบาย ${_discData.policy_pct != null ? _discData.policy_pct : ''}% ของยอดขายก่อนลด">${over ? 'เกินเพดาน ' + fmt(bt.excess_baht||0) : ''}</td></tr>`;
@@ -1267,7 +1267,7 @@ async function openHourDetail(hour) {
   if (getBranch())    p.set('branch', getBranch());
   if (getMonthFrom()) p.set('month_from', getMonthFrom());
   if (getMonthTo())   p.set('month_to', getMonthTo());
-  title.textContent = `🔍 ชั่วโมง ${hour}:00–${(hour+1)%24}:00`;
+  title.textContent = `ชั่วโมง ${hour}:00–${(hour+1)%24}:00`;
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.style.display = 'flex';
   let d;
@@ -1293,7 +1293,7 @@ async function openHourDetail(hour) {
         <th class="py-2 pr-3">สาขา</th><th class="py-2 pr-3 text-right">รายได้รวม</th>
         <th class="py-2 pr-3 text-right">เฉลี่ย/วัน</th><th class="py-2 pr-3 text-right">บิล</th><th class="py-2 text-right">ลูกค้า</th></tr></thead>
       <tbody>${(d.by_branch||[]).map(r => `<tr class="border-b border-slate-50">
-        <td class="py-1.5 pr-3 font-medium">${esc(r.branch)}<div style="height:3px;background:#6366f1;border-radius:2px;margin-top:2px;width:${Math.round((r.revenue||0)/branchMax*100)}%"></div></td>
+        <td class="py-1.5 pr-3 font-medium">${esc(r.branch)}<div style="height:3px;background:var(--accent);border-radius:2px;margin-top:2px;width:${Math.round((r.revenue||0)/branchMax*100)}%"></div></td>
         <td class="py-1.5 pr-3 text-right">${fmtN(r.revenue||0)}</td>
         <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(Math.round((r.revenue||0)/days))}</td>
         <td class="py-1.5 pr-3 text-right">${fmtN(r.tx_count||0)}</td>
@@ -1302,7 +1302,7 @@ async function openHourDetail(hour) {
     <h4 class="text-sm font-bold text-slate-600 mb-2 mt-4">รายได้ชั่วโมงนี้ · รายวันในสัปดาห์</h4>
     <div class="grid grid-cols-7 gap-1.5">${[1,2,3,4,5,6,0].map(dw => { const r = dowMap[dw]||{revenue:0,tx_count:0}; const h = Math.round((r.revenue||0)/dowMax*60); return `
       <div class="text-center">
-        <div style="height:64px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${Math.max(2,h)}px;background:${DOW_COLORS?.[dw]||'#6366f1'};border-radius:3px 3px 0 0"></div></div>
+        <div style="height:64px;display:flex;align-items:flex-end;justify-content:center"><div style="width:60%;height:${Math.max(2,h)}px;background:${DOW_COLORS?.[dw]||'#4a70b0'};border-radius:3px 3px 0 0"></div></div>
         <p class="text-[10px] text-slate-500 mt-1">${dowTh[dw]}</p>
         <p class="text-[10px] font-semibold">${fmt(r.revenue||0)}</p>
       </div>`; }).join('')}</div>`;
@@ -1382,7 +1382,7 @@ async function loadTimeflow() {
         <p class="text-xs text-slate-500">Peak #${i+1}</p>
         <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">${share.toFixed(0)}% ของวัน</span>
       </div>
-      <p class="text-xl font-bold" style="color:var(--indigo)">${h.hour}:00–${(h.hour+1)%24}:00 🔍</p>
+      <p class="text-xl font-bold" style="color:var(--indigo)">${h.hour}:00–${(h.hour+1)%24}:00</p>
       <p class="text-sm font-semibold">${fmt(rev)}<span class="font-normal text-slate-400 text-xs">/วัน</span></p>
       <div class="text-[11px] text-slate-400 mt-1 space-y-0.5">
         <div>${fmtN(Math.round(h.avg_daily_tx ?? h.tx_count))} บิล/วัน · ${fmtN(custDay)} ลูกค้า/วัน</div>
@@ -1416,13 +1416,13 @@ function renderTfBranchCards() {
     const bars   = hSlice.map((v, i) => {
       const pct = Math.round(v / hMax * 100);
       const isPeak = (i + 10) === b.peak_hour;
-      return `<div title="${i+10}:00 ${fmtN(v)}" style="flex:1;height:${Math.max(2, pct * 0.32)}px;background:${isPeak ? '#4f46e5' : '#c7d2fe'};border-radius:1px;align-self:flex-end"></div>`;
+      return `<div title="${i+10}:00 ${fmtN(v)}" style="flex:1;height:${Math.max(2, pct * 0.32)}px;background:${isPeak ? '#4a70b0' : '#c9d5e8'};border-radius:1px;align-self:flex-end"></div>`;
     }).join('');
     return `<div onclick="tfDrillBranch('${jsAttr(b.branch)}', this)"
       class="rounded-xl p-3 cursor-pointer transition-all border"
-      style="background:${isActive ? '#eef2ff' : 'var(--bg-card)'};border-color:${isActive ? '#6366f1' : 'var(--border)'}">
-      <p class="text-[11px] font-semibold truncate mb-1" style="color:${isActive?'#4f46e5':'var(--text-primary)'}">${esc(b.branch)}</p>
-      <p class="text-xs" style="color:var(--text-muted)">พีค <span class="font-bold" style="color:#4f46e5">${peakH}</span> · <span class="font-bold" style="color:#0891b2">${peakD}</span></p>
+      style="background:${isActive ? '#e8eef7' : 'var(--bg-card)'};border-color:${isActive ? '#4a70b0' : 'var(--border)'}">
+      <p class="text-[11px] font-semibold truncate mb-1" style="color:${isActive?'#4a70b0':'var(--text-primary)'}">${esc(b.branch)}</p>
+      <p class="text-xs" style="color:var(--text-muted)">พีค <span class="font-bold" style="color:var(--accent)">${peakH}</span> · <span class="font-bold" style="color:#0891b2">${peakD}</span></p>
       <div class="flex gap-px items-end mt-2" style="height:20px">${bars}</div>
     </div>`;
   }).join('');
@@ -1450,7 +1450,7 @@ async function tfDrillBranch(branchName, cardEl) {
     data: {
       labels: hours.map(h => `${h}:00`),
       datasets: [{ label: 'Avg/day', data: hourVals,
-        backgroundColor: hours.map(h => h === peakHour ? '#4f46e5' : '#c7d2fe'),
+        backgroundColor: hours.map(h => h === peakHour ? '#4a70b0' : '#c9d5e8'),
         borderRadius: 3 }]
     },
     options: { responsive:true, maintainAspectRatio:false,
@@ -1486,7 +1486,7 @@ async function tfDrillBranch(branchName, cardEl) {
     tvEl.innerHTML = br
       ? `<div class="flex gap-4 flex-wrap">
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#047857">Turn time ≈ <b>${br.avg_turn_min ?? '—'} min</b></span>
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#eef2ff;color:#4f46e5">รอบโต๊ะ <b>${br.turns?.toLocaleString()||'—'}</b> ครั้ง</span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:var(--accent-soft);color:var(--accent)">รอบโต๊ะ <b>${br.turns?.toLocaleString()||'—'}</b> ครั้ง</span>
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#d97706">เฉลี่ย <b>${br.avg_covers_per_turn ?? '—'}</b> คน/รอบ</span>
          </div>`
       : '<p style="color:var(--text-muted)">ไม่มีข้อมูลหมุนเวียนโต๊ะสำหรับสาขานี้</p>';
@@ -1520,7 +1520,7 @@ async function loadTableTurnover() {
   const fastest = validTurn.slice().sort((a, b) => a.avg_turn_min - b.avg_turn_min)[0];
   document.getElementById('tableTurnoverKpis').innerHTML = [
     { label: 'Avg Turn Time', value: avgTurnMin != null ? `${avgTurnMin.toFixed(0)} min` : '—', sub: 'network avg, POS-measured', color: '#0891b2' },
-    { label: 'Total Table Occasions', value: totalTurns.toLocaleString(), sub: 'across selected branches', color: '#4f46e5' },
+    { label: 'Total Table Occasions', value: totalTurns.toLocaleString(), sub: 'across selected branches', color: '#4a70b0' },
     { label: 'Fastest Turnover', value: fastest?.branch || '—', sub: fastest ? `${fastest.avg_turn_min} min/turn` : '—', color: 'var(--good-ink)' },
     { label: 'Branches Tracked', value: byBranch.length, sub: 'with table data', color: '#64748b' },
   ].map(k => `<div class="card p-3 text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p><p class="text-xs text-slate-400 mt-0.5">${k.sub}</p></div>`).join('');
@@ -1600,7 +1600,7 @@ function renderTimeflowGrid() {
       html += `<td
         onclick="tfCellClick(${dow},${h},${v},${rank})"
         title="${DOW_LABELS[dow]} ${h}:00 · ${v > 0 ? (isMoney ? '' + v.toLocaleString() : v.toLocaleString()) : '—'} · Rank #${rank}"
-        style="background:${bg};color:${fg};height:36px;min-width:${cellW}px;text-align:center;cursor:pointer;border-radius:5px;font-size:10px;font-weight:${v>0?600:400};transition:transform .12s;vertical-align:middle"
+        style="background:${bg};color:${fg};height:36px;min-width:${cellW}px;text-align:center;cursor:pointer;border-radius:4px;font-size:10px;font-weight:${v>0?600:400};transition:transform .12s;vertical-align:middle"
         onmouseover="this.style.transform='scale(1.1)';this.style.zIndex=10;this.style.position='relative'"
         onmouseout="this.style.transform='';this.style.zIndex='';this.style.position=''">
         ${fmtCell(v)}
@@ -1688,7 +1688,7 @@ function tfDiveIn() {
         return `<div class="flex items-center gap-3 text-xs">
           <span class="text-slate-400 w-4">#${i+1}</span>
           <span class="font-medium text-slate-700 w-20">${DOW_LABELS[c.dow]} ${c.hour}:00</span>
-          <div class="flex-1 bg-slate-100 rounded-full h-2"><div style="width:${pct}%;background:#4f46e5" class="h-2 rounded-full"></div></div>
+          <div class="flex-1 bg-slate-100 rounded-full h-2"><div style="width:${pct}%;background:var(--accent)" class="h-2 rounded-full"></div></div>
           <span class="text-slate-600 font-semibold w-20 text-right">${fmtV(c.value)}</span>
           <span class="text-slate-400 w-10 text-right">${pct}%</span>
         </div>`;
