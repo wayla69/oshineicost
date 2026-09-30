@@ -213,7 +213,7 @@ async function loadCostReview() {
   _covReview = d.items || [];
   const s = d.summary || {};
   const sum = document.getElementById('cov-review-sum');
-  if (sum) sum.innerHTML = `รอตรวจ <b style="color:#b45309">${s.pending || 0}</b> เมนู (฿${fmtN(s.pending_cogs_month || 0)}/เดือน) · ยืนยันแล้ว <b style="color:#047857">${s.confirmed || 0}</b> · เดือน ${esc(d.month || '-')}`;
+  if (sum) sum.innerHTML = `รอตรวจ <b style="color:#b45309">${s.pending || 0}</b> เมนู (฿${fmtN(s.pending_cogs_month || 0)}/เดือน) · ยืนยันแล้ว <b style="color:var(--good-ink)">${s.confirmed || 0}</b> · เดือน ${esc(d.month || '-')}`;
   body.innerHTML = _covReview.map((r, i) => {
     const [lab, fg, bg] = _CR_BADGE[r.source] || [r.source, '#475569', '#e2e8f0'];
     return `<tr class="border-b border-slate-50 cursor-pointer hover:bg-slate-50" onclick="toggleCostReview(${i})">
@@ -412,7 +412,7 @@ async function loadPnlBranch() {
       <td class="py-1.5 pr-3 font-medium"><a onclick="openPnlDrill('${jsAttr(b.branch)}')" class="text-indigo-600 hover:underline cursor-pointer">${esc(b.branch)}</a></td>
       <td class="py-1.5 pr-3 text-right">${fmt(b.revenue)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmt(b.cogs)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:#047857">${fmt(b.gross_profit)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmt(b.gross_profit)}</td>
       <td class="py-1.5 pr-3 text-right">${b.gp_margin_pct!=null?b.gp_margin_pct+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${b.fixed_cost_period?fmt(b.fixed_cost_period):'—'}</td>
       <td class="py-1.5 pr-3 text-right font-semibold" style="color:${opCol}">${fmt(b.operating_profit)}</td>

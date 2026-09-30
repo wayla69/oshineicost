@@ -735,8 +735,8 @@ const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\
 // A helper whose colour feeds both a mark and a figure keeps the hex for the
 // mark and passes the text use through here (tokens.css --good-ink / --bad-ink).
 // #1f7a4d / #b0472d are the menu-impact pair in 07-home: 5.3:1 on white but
-// only 3.1-3.3 on the dark card.
-const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d'], _BAD_HEX = ['#dc2626', '#b0472d'];
+// only 3.1-3.3 on the dark card. #047857 / #b91c1c are the light inks themselves.
+const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c'];
 const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)' : c;
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
@@ -1552,7 +1552,7 @@ async function loadDowntime() {
     <td class="py-2 pr-3 text-xs" style="color:var(--text-muted)">${esc(r.note || '')}</td>
     <td class="py-2 pr-3 text-xs" style="color:var(--text-muted)">${esc((r.created_at || '').slice(0, 10))}</td>
     <td class="py-2 text-right"><button onclick="deleteDowntime(${r.id})"
-      class="text-xs px-2 py-1 rounded border" style="border-color:var(--border);color:#b91c1c">ลบ</button></td></tr>`).join('')
+      class="text-xs px-2 py-1 rounded border" style="border-color:var(--border);color:var(--bad-ink)">ลบ</button></td></tr>`).join('')
     : '<tr><td colspan="8" class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีการบันทึกช่วงปิดร้าน</td></tr>';
 }
 
@@ -1570,12 +1570,12 @@ async function addDowntime() {
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
-      st.textContent = j.detail || `บันทึกไม่สำเร็จ (${r.status})`; st.style.color = '#b91c1c'; return;
+      st.textContent = j.detail || `บันทึกไม่สำเร็จ (${r.status})`; st.style.color = 'var(--bad-ink)'; return;
     }
     st.textContent = '✓ บันทึกแล้ว'; st.style.color = '#15803d';
     document.getElementById('dtNote').value = '';
     loadDowntime();
-  } catch (e) { st.textContent = 'บันทึกไม่สำเร็จ'; st.style.color = '#b91c1c'; }
+  } catch (e) { st.textContent = 'บันทึกไม่สำเร็จ'; st.style.color = 'var(--bad-ink)'; }
 }
 
 async function deleteDowntime(id) {
@@ -1585,10 +1585,10 @@ async function deleteDowntime(id) {
   const st = document.getElementById('dtStatus');
   try {
     const r = await fetch(`${API}/api/branch-downtime/${id}`, { method: 'DELETE' });
-    if (!r.ok) { st.textContent = `ลบไม่สำเร็จ (${r.status})`; st.style.color = '#b91c1c'; return; }
+    if (!r.ok) { st.textContent = `ลบไม่สำเร็จ (${r.status})`; st.style.color = 'var(--bad-ink)'; return; }
     st.textContent = '✓ ลบแล้ว'; st.style.color = '#15803d';
     loadDowntime();
-  } catch (e) { st.textContent = 'ลบไม่สำเร็จ'; st.style.color = '#b91c1c'; }
+  } catch (e) { st.textContent = 'ลบไม่สำเร็จ'; st.style.color = 'var(--bad-ink)'; }
 }
 
 // ── Usage telemetry (Settings → การใช้งานจริง · lean-overhaul Phase 0) ──
@@ -1627,14 +1627,14 @@ async function loadUsageStats() {
       <td class="py-1.5 pr-3">${esc(u.role || '')}${u.branch ? '<br><span class="text-[10px]" style="color:var(--text-muted)">' + esc(u.branch) + '</span>' : ''}</td>
       <td class="py-1.5 pr-3"><span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:${st[1]};background:${st[2]}">${st[0]}</span></td>
       <td class="py-1.5 pr-3" style="color:var(--text-muted)">${fmtTs(u.last_login)}</td>
-      <td class="py-1.5 pr-3 text-right">${(+u.logins).toLocaleString()}${u.failed ? ` <span title="login ไม่สำเร็จ" style="color:#b91c1c">(✗${u.failed})</span>` : ''}</td>
+      <td class="py-1.5 pr-3 text-right">${(+u.logins).toLocaleString()}${u.failed ? ` <span title="login ไม่สำเร็จ" style="color:var(--bad-ink)">(✗${u.failed})</span>` : ''}</td>
       <td class="py-1.5 pr-3 text-right">${(+u.days_seen).toLocaleString()}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${(+u.tab_hits).toLocaleString()}</td>
       <td class="py-1.5 text-[11px]" style="color:var(--text-secondary)">${(u.top_tabs || []).map(t => esc(PAGE_TITLES[t.tab] || t.tab) + ' (' + t.hits + ')').join(' · ') || '—'}</td></tr>`; };
   const ps = people && people.summary ? people.summary : null;
   const peopleHtml = people ? `
     <div class="mb-6">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
       <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
       ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
         <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}

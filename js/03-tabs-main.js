@@ -1778,7 +1778,7 @@ function renderMenuEngTable() {
   if (!_meData) return;
   const items = _meData.items || [];
   const QUAD_BADGE = {
-    star:      '<span class="pill" style="background:#10b98122;color:#047857">ดาวเด่น</span>',
+    star:      '<span class="pill" style="background:#10b98122;color:var(--good-ink)">ดาวเด่น</span>',
     puzzle:    '<span class="pill" style="background:var(--accent)22;color:var(--accent)">เพชรในตม</span>',
     plowhorse: '<span class="pill" style="background:#f59e0b22;color:#92400e">ม้างาน</span>',
     dog:       '<span class="pill" style="background:#ef444422;color:#991b1b">ตัวถ่วง</span>',

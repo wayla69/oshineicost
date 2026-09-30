@@ -285,6 +285,6 @@ function _clDrawGantt(di) {
     if (late) g += `<rect x="${x1 - 1}" y="${y + 6}" width="${w + 2}" height="20" rx="5" fill="none" stroke="#b45309" stroke-width="2"/>`;
     g += `<text x="${x1 + w + 6}" y="${y + 21}" font-size="11.5" fill="var(--text-secondary)">${ps.done}/${ps.total}${ps.blocked ? ' ⚠' : ''}</text>`;
   });
-  if (di.todayDay >= 0 && di.todayDay <= HOR) { const tx = left + di.todayDay * dayW; g += `<line x1="${tx}" y1="${top - 8}" x2="${tx}" y2="${H - 6}" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${tx + 4}" y="${H - 8}" font-size="11" fill="#b91c1c">วันนี้</text>`; }
+  if (di.todayDay >= 0 && di.todayDay <= HOR) { const tx = left + di.todayDay * dayW; g += `<line x1="${tx}" y1="${top - 8}" x2="${tx}" y2="${H - 6}" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${tx + 4}" y="${H - 8}" font-size="11" fill="var(--bad-ink)">วันนี้</text>`; }
   host.innerHTML = g + '</svg>';
 }
