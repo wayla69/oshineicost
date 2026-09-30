@@ -40,3 +40,22 @@ def test_garbage_state_is_ignored(tmp_path):
 
 def test_default_host_is_not_the_renamed_one():
     assert "api-production-bffdb" not in pi.DEFAULT_URL
+
+
+# The mark is the newest day PUSHED, not the run date (2026-09-30: two pushes from a
+# DB still at 09-26 sent 0 rows, stamped 09-30, and 09-27 would never have been sent).
+def test_mark_is_the_newest_pushed_day():
+    rows = [{"day": "2026-09-27", "location_code": "A"}, {"day": "2026-09-29", "location_code": "A"},
+            {"day": "2026-09-28", "location_code": "B"}]
+    assert pi.pushed_through(rows) == "2026-09-29"
+
+
+def test_an_empty_push_leaves_the_mark_alone():
+    assert pi.pushed_through([]) is None
+
+
+def test_stale_db_push_then_next_run_still_reaches_back(tmp_path):
+    # the last good push covered through 09-26; a run on 09-30 pushed nothing, so the
+    # file still says 09-26 and the next run (10-01, --days 3) starts there, not at 09-28
+    state = _state(tmp_path, "2026-09-26")
+    assert pi.since_day(3, date(2026, 10, 1), state) == "2026-09-26"

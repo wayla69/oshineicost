@@ -13,11 +13,15 @@ sync and pushes the last few days (idempotent upserts, so re-runs are safe).
 Config: INVISIBLE_API_URL (default: the Railway api domain) and the API key in
 INVISIBLE_API_KEY or backend/.invisible_key.txt (gitignored; scope sales:write).
 
-Self-healing: a successful run records its day in backend/.invisible_last_ok.txt,
-and the next run reaches back to that day if it is further than --days. The
-window used to be a flat 3 days, so the 15 days this failed silently
-(2026-09-06 -> 09-21: the api domain was renamed and the old host answers
-404 "Application not found") would have stayed a hole forever.
+Self-healing: a successful run records the newest DAY IT PUSHED in
+backend/.invisible_last_ok.txt, and the next run reaches back to that day if it is
+further than --days. The window used to be a flat 3 days, so the 15 days this
+failed silently (2026-09-06 -> 09-21: the api domain was renamed and the old host
+answers 404 "Application not found") would have stayed a hole forever.
+It records the pushed day, not the run date: on 2026-09-30 the local DB was still
+at 09-26 when both pushes ran (Auto Sync had failed), each pushed 0 rows and
+stamped "09-30", and the next run would have started at 09-28 - 09-27 never sent.
+A run that pushes nothing leaves the mark where it was.
 Revenue is the dashboard's rule (rules.net_revenue_sum: inc-VAT ÷ 1.07 minus
 service charge) — the same figure the P&L shows.
 """
@@ -92,6 +96,14 @@ def since_day(days: int, today, state_file: Path = STATE_FILE) -> str:
     return max(min(since, last_ok), today - timedelta(days=MAX_CATCHUP_DAYS)).isoformat()
 
 
+def pushed_through(rows: list[dict]) -> str | None:
+    """The newest day these sales rows cover, or None when there are none.
+
+    This, not the run date, is what .invisible_last_ok.txt records: a push from a
+    stale local DB must not move the mark past days it never sent."""
+    return max((r["day"] for r in rows), default=None)
+
+
 def location_rows(con: sqlite3.Connection) -> list[dict]:
     return [{"code": location_code(bid), "name": name, "active": bool(active)}
             for bid, name, active in con.execute("SELECT branch_id, name, active FROM branches ORDER BY branch_id")]
@@ -147,8 +159,9 @@ def main(argv=None) -> int:
         since = a.since or since_day(a.days, today)
         rows = sales_rows(con, since)
         out["sales"] = {"since": since, "rows": len(rows), "results": push_chunked("/api/v1/adapters/sales", rows, **kw)}
-        if not a.dry_run and a.db == str(DB_FILE):      # post() exits on any HTTP error, so this is a success
-            STATE_FILE.write_text(today.isoformat(), encoding="utf-8")
+        last_day = pushed_through(rows)
+        if last_day and not a.dry_run and a.db == str(DB_FILE):   # post() exits on any HTTP error, so this is a success
+            STATE_FILE.write_text(last_day, encoding="utf-8")
     if a.menu:
         rows = menu_rows(con)
         out["menu"] = {"rows": len(rows), "results": push_chunked("/api/v1/adapters/menu", rows, **kw)}
