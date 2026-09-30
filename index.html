@@ -678,6 +678,9 @@ body.dark .bg-white        { background: var(--bg-card) !important; }
    but as fixed hexes they drop to 3.2 / 2.7:1 on the dark card. */
 .text-emerald-700 { color: var(--good-ink) !important; }
 .text-red-700     { color: var(--bad-ink) !important; }
+/* emerald-500 / red-500 ARE #10b981 / #ef4444: 2.5 / 3.8:1 on white. */
+.text-emerald-500 { color: var(--good-ink) !important; }
+.text-red-500     { color: var(--bad-ink) !important; }
 /* Dark mode leaves some backgrounds light, and the pale dark inks drop to ~1.9:1 on
    them. The inks inherit, so whichever of these is the NEAREST ancestor wins
    (:where keeps every layer at one specificity; the row rule outranks them).

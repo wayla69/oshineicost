@@ -57,7 +57,7 @@ async function loadCostCoverage() {
     ['% ยังไม่มีต้นทุน',     (ch.pct_uncosted != null ? ch.pct_uncosted.toFixed(1)+'%' : '—'), '#f59e0b'],
   ].map(([l,v,c]) => `<div class="card p-4" style="border-top:3px solid ${c}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
-      <div class="text-2xl font-bold" style="color:${c}">${v}</div></div>`).join('');
+      <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div></div>`).join('');
   const tr = d.monthly_trend || [];
   mkChart('cov-trend', {
     type:'line',
@@ -355,10 +355,10 @@ async function loadPrimeCost() {
   document.getElementById('primeBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.rev)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? '#ef4444' : r.food_pct > 50 ? '#f59e0b' : '#10b981'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? 'var(--bad-ink)' : r.food_pct > 50 ? '#f59e0b' : 'var(--good-ink)'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.labor_pct != null ? r.labor_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${pcCol(r.prime_pct)}">${r.prime_pct != null ? r.prime_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? '#94a3b8' : r.operating_pct < 0 ? '#ef4444' : '#10b981'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(pcCol(r.prime_pct))}">${r.prime_pct != null ? r.prime_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? '#94a3b8' : r.operating_pct < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
@@ -399,7 +399,7 @@ async function loadPnlBranch() {
     ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444')],
   ].map(([l,v,col]) => `<div class="card p-4" style="border-top:3px solid ${col}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
-      <div class="text-xl font-bold" style="color:${col}">${v}</div></div>`).join('');
+      <div class="text-xl font-bold" style="color:${textInk(col)}">${v}</div></div>`).join('');
   const note = document.getElementById('pnl-note');
   if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
     note.classList.remove('hidden');
@@ -415,8 +415,8 @@ async function loadPnlBranch() {
       <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmt(b.gross_profit)}</td>
       <td class="py-1.5 pr-3 text-right">${b.gp_margin_pct!=null?b.gp_margin_pct+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${b.fixed_cost_period?fmt(b.fixed_cost_period):'—'}</td>
-      <td class="py-1.5 pr-3 text-right font-semibold" style="color:${opCol}">${fmt(b.operating_profit)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:${opCol}">${b.op_margin_pct!=null?b.op_margin_pct+'%':'—'}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold" style="color:${textInk(opCol)}">${fmt(b.operating_profit)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:${textInk(opCol)}">${b.op_margin_pct!=null?b.op_margin_pct+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.covers)}</td>
       <td class="py-1.5 text-right text-slate-500">${b.breakeven_covers?fmtN(b.breakeven_covers):'—'}</td>
     </tr>`;
@@ -439,7 +439,7 @@ function _pnlWaterfallHtml(b, scopeLabel) {
     return `<div class="flex items-center gap-2 py-1 ${opts.bold?'font-bold':''}">
       <span class="w-28 text-xs ${opts.bold?'text-slate-800':'text-slate-500'}">${sign} ${label}</span>
       <div class="flex-1 bg-slate-100 rounded-full h-3"><div style="width:${w}%;background:${color};height:100%;border-radius:9999px"></div></div>
-      <span class="w-28 text-right text-sm" style="color:${color}">${fmtN(val)}</span>
+      <span class="w-28 text-right text-sm" style="color:${textInk(color)}">${fmtN(val)}</span>
       <span class="w-12 text-right text-xs text-slate-400">${pct(val).toFixed(0)}%</span>
     </div>`;
   };
@@ -484,8 +484,8 @@ async function openPnlDrill(branch) {
   const s = d.summary || {};
   const revDelta = s.rev_delta_pct;
   const deltaChip = revDelta==null ? '' :
-    `<span style="color:${revDelta>=0?'#10b981':'#ef4444'}">${revDelta>=0?'▲':'▼'} ${Math.abs(revDelta)}% vs ${fmtPeriod(d.prev_month)}</span>`;
-  const kpi = (l,v,c)=>`<div class="card p-3" style="border-top:3px solid ${c}"><div class="text-[11px] text-slate-500">${l}</div><div class="text-lg font-bold" style="color:${c}">${v}</div></div>`;
+    `<span style="color:${revDelta>=0?'var(--good-ink)':'var(--bad-ink)'}">${revDelta>=0?'▲':'▼'} ${Math.abs(revDelta)}% vs ${fmtPeriod(d.prev_month)}</span>`;
+  const kpi = (l,v,c)=>`<div class="card p-3" style="border-top:3px solid ${c}"><div class="text-[11px] text-slate-500">${l}</div><div class="text-lg font-bold" style="color:${textInk(c)}">${v}</div></div>`;
   const costRows = (d.cost_breakdown||[]).slice(0,40).map((r,i)=>`
     <tr class="border-b border-slate-50">
       <td class="py-1 pr-2 text-slate-400">${i+1}</td>
@@ -502,7 +502,7 @@ async function openPnlDrill(branch) {
     const pct = m.is_new?'ใหม่':(m.delta_pct==null?'—':(m.delta_pct>0?'+':'')+m.delta_pct+'%');
     return `<div class="flex justify-between gap-2 py-0.5">
       <span class="truncate">${esc((m.description||'').replace(/^\((?:A|B)\)\s*/,''))}</span>
-      <span class="flex-shrink-0 font-semibold" style="color:${up?'#10b981':'#ef4444'}">${up?'▲':'▼'}${fmtN(Math.abs(m.delta))} (${pct})</span>
+      <span class="flex-shrink-0 font-semibold" style="color:${up?'var(--good-ink)':'var(--bad-ink)'}">${up?'▲':'▼'}${fmtN(Math.abs(m.delta))} (${pct})</span>
     </div>`;
   };
   body.innerHTML = `

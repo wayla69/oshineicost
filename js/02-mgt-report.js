@@ -739,7 +739,7 @@ function renderMgtReport(j, jM, jF) {
     `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:10px 12px 6px">
        <div class="flex items-center justify-between mb-1">
          <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${_sw(color)} ${title}</span>
-         <span id="${id}Latest" class="text-xs font-extrabold" style="color:${color}"></span>
+         <span id="${id}Latest" class="text-xs font-extrabold" style="color:${textInk(color)}"></span>
        </div>
        <div style="height:170px"><canvas id="${id}"></canvas></div>
      </div>`;
@@ -846,7 +846,7 @@ function renderMgtReport(j, jM, jF) {
           <p>${num(lt.bills || 0)} ${T.bills}${lt.prev_baht != null ? ` · ${compShort} ${wow(lt.baht_wow)}` : ''}</p>
         </div>
       </div>
-      <p class="text-[12px] text-slate-600 mt-2 pt-2 border-t border-slate-100"><span style="color:${_sevCol}">●</span> ${_leakVerdict}</p>
+      <p class="text-[12px] text-slate-600 mt-2 pt-2 border-t border-slate-100"><span style="color:${textInk(_sevCol)}">●</span> ${_leakVerdict}</p>
       <p class="text-[10px] text-slate-300 mt-1">${T.allDiscTie}</p>
     </div>`;
   const leak = leakTotalBanner + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -995,7 +995,7 @@ function renderMgtReport(j, jM, jF) {
   // §7 — Action items
   const sevColor = { high: '#dc2626', med: '#d97706', low: '#10b981' };
   const acts = (j.actions || []).map(a => `<li class="flex items-start gap-2 text-sm py-1">
-      <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${esc(a.text)}</span></li>`).join('');
+      <span class="mt-0.5" style="color:${textInk(sevColor[a.sev] || '#64748b')}">●</span><span>${esc(a.text)}</span></li>`).join('');
   const actsWithSplit = `<ul class="space-y-0.5">${acts}</ul>` + (() => {
     if (!hasSplit) return '';
     const fmtActs = jx => {
@@ -1003,7 +1003,7 @@ function renderMgtReport(j, jM, jF) {
       if (!items.length) return `<p class="text-xs text-slate-400 py-1">${T.noCritical}</p>`;
       return `<ul class="space-y-0.5">${items.map(a =>
         `<li class="flex items-start gap-1.5 text-xs py-0.5">
-           <span style="color:${sevColor[a.sev]||'#64748b'}">●</span><span>${esc(a.text)}</span></li>`
+           <span style="color:${textInk(sevColor[a.sev]||'#64748b')}">●</span><span>${esc(a.text)}</span></li>`
       ).join('')}</ul>`;
     };
     return `<div class="mt-4 pt-3 border-t border-slate-100">
@@ -1019,8 +1019,8 @@ function renderMgtReport(j, jM, jF) {
   // ── Executive Summary — auto-written ~10-paragraph overview of everything ──
   // Each paragraph is colour-tagged ({c, lead, body}) so the EN ⇄ TH lead labels
   // never need to be reverse-matched; lead + bold figures are tinted with that colour.
-  const para   = p => '<p class="mb-2"><b style="color:' + p.c + '">' + p.lead + '</b> '
-                    + (p.body || '').replace(/<b>/g, '<b style="color:' + p.c + '">') + '</p>';
+  const para   = p => '<p class="mb-2"><b style="color:' + textInk(p.c) + '">' + p.lead + '</b> '
+                    + (p.body || '').replace(/<b>/g, '<b style="color:' + textInk(p.c) + '">') + '</p>';
   const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
   const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
@@ -1127,13 +1127,13 @@ function renderMgtReport(j, jM, jF) {
                : fc <= 47 ? 'อยู่ในเกณฑ์ ~50% อย่างสบายๆ — อัตรากำไรแข็งแรง'
                : 'อยู่ราวเกณฑ์ ~50%';
       ex.push({c:'#d97706', lead:'ต้นทุนอาหาร', body:'ต้นทุนอาหารอยู่ที่ <b>' + fc.toFixed(1) + '%</b> ของยอดขาย (อิงสูตร BoM) สำหรับ ' + P.month +
-              ' <span style="color:' + fcCol + ';font-weight:600">' + v + '</span>'});
+              ' <span style="color:' + textInk(fcCol) + ';font-weight:600">' + v + '</span>'});
     } else {
       const v  = fc >= 53 ? 'above the ~50% benchmark — margins are under pressure'
                : fc <= 47 ? 'comfortably within the ~50% benchmark — healthy margins'
                : 'around the ~50% benchmark';
       ex.push({c:'#d97706', lead:'Food cost.', body:'Food cost is running at <b>' + fc.toFixed(1) + '%</b> of sales (BoM basis) for ' + P.month +
-              ', <span style="color:' + fcCol + ';font-weight:600">' + v + '</span>.'});
+              ', <span style="color:' + textInk(fcCol) + ';font-weight:600">' + v + '</span>.'});
     }
   }
 
@@ -1223,8 +1223,8 @@ function renderMgtReport(j, jM, jF) {
   if (_fc != null) {
     const fCol = _fc >= 53 ? 'var(--bad-ink)' : _fc <= 47 ? 'var(--good-ink)' : '#d97706';
     _bul.push(isTH
-      ? `ต้นทุนอาหาร <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'สูงกว่าเป้า ~50%' : _fc <= 47 ? 'ต่ำกว่าเป้า ~50% (ดี)' : 'ใกล้เป้า ~50%'}`
-      : `Food cost <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'above the ~50% target' : _fc <= 47 ? 'below ~50% (good)' : 'near the ~50% target'}`);
+      ? `ต้นทุนอาหาร <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'สูงกว่าเป้า ~50%' : _fc <= 47 ? 'ต่ำกว่าเป้า ~50% (ดี)' : 'ใกล้เป้า ~50%'}`
+      : `Food cost <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'above the ~50% target' : _fc <= 47 ? 'below ~50% (good)' : 'near the ~50% target'}`);
   }
   const _hv = L.heavy_discount || {};
   if ((_hv.bills || 0) > 0) {
@@ -1243,7 +1243,7 @@ function renderMgtReport(j, jM, jF) {
   const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border:1px solid ${_tone}">
       <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${textInk(_tone)}">${T.tldr}</p>
       <p class="text-sm text-slate-700 mb-2">${_head}</p>
-      <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${_tone}">•</span><span>${b}</span></li>`).join('')}</ul>
+      <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${textInk(_tone)}">•</span><span>${b}</span></li>`).join('')}</ul>
     </div>`;
   const execInner = tldr
     + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div>';
@@ -1260,7 +1260,7 @@ function renderMgtReport(j, jM, jF) {
     const rows = MB.map(b => `<tr class="border-b border-slate-50">
         <td class="py-1.5 pr-3">${esc(b.branch)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums font-semibold">${baht(b.disc)}</td>
-        <td class="py-1.5 pr-3 text-right tabular-nums font-bold" style="color:${pctCol(b.pct)}">${pctTxt(b.pct)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums font-bold" style="color:${textInk(pctCol(b.pct))}">${pctTxt(b.pct)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums text-slate-400">${num(b.sales)}</td>
         <td class="py-1.5 text-right tabular-nums text-slate-400">${num(b.bills)}</td></tr>`).join('');
     return `<div class="mt-4 pt-3 border-t border-slate-100">
@@ -1273,7 +1273,7 @@ function renderMgtReport(j, jM, jF) {
       <tfoot><tr class="border-t-2 border-slate-200 font-bold">
         <td class="py-1.5 pr-3">${T.allMaster}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums">${baht(tot.disc)}</td>
-        <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${pctCol(totPct)}">${pctTxt(totPct)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${textInk(pctCol(totPct))}">${pctTxt(totPct)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${num(tot.sales)}</td>
         <td class="py-1.5 text-right tabular-nums text-slate-500">${num(tot.bills)}</td></tr></tfoot></table></div>`;
   })();
@@ -1337,7 +1337,7 @@ function renderMgtReport(j, jM, jF) {
     const byB = _payPD.by_branch || [];
     const colColor = {}; cols.forEach((c, i) => colColor[c.code] = _payColors[i % _payColors.length]);
     const th = `<th class="text-left py-1.5 pr-3">${T.payBranch}</th>`
-      + cols.map(c => `<th class="text-right py-1.5 px-2 whitespace-nowrap" style="color:${colColor[c.code]}" title="${esc(c.code)}">${esc(c.code)}</th>`).join('')
+      + cols.map(c => `<th class="text-right py-1.5 px-2 whitespace-nowrap" style="color:${textInk(colColor[c.code])}" title="${esc(c.code)}">${esc(c.code)}</th>`).join('')
       + `<th class="text-right py-1.5 pl-2">${T.paySum}</th>`;
     const rows = byB.map(br => {
       const dom = Math.max(0, ...cols.map(c => (br.channels[c.code] || {}).pct || 0));
@@ -1345,7 +1345,7 @@ function renderMgtReport(j, jM, jF) {
         const x = br.channels[c.code];
         if (!x || !x.pct) return `<td class="text-right py-1.5 px-2 text-slate-300">—</td>`;
         const isDom = x.pct >= dom;
-        return `<td class="text-right py-1.5 px-2 tabular-nums ${isDom ? 'font-bold' : ''}" style="color:${colColor[c.code]}" title="${esc(c.code)}: ${baht(x.amount)}">${x.pct.toFixed(1)}%</td>`;
+        return `<td class="text-right py-1.5 px-2 tabular-nums ${isDom ? 'font-bold' : ''}" style="color:${textInk(colColor[c.code])}" title="${esc(c.code)}: ${baht(x.amount)}">${x.pct.toFixed(1)}%</td>`;
       }).join('');
       return `<tr class="border-t border-slate-100">
         <td class="py-1.5 pr-3 font-medium text-slate-700">${esc(br.branch)}</td>${cells}
@@ -1357,7 +1357,7 @@ function renderMgtReport(j, jM, jF) {
     const foot = `<tr class="border-t-2 border-slate-200">
       <td class="py-1.5 pr-3 font-bold text-slate-500">${T.payAll}</td>
       ${cols.map(c => { const pv = (_prevCh[c.code] || {}).amount;
-        return `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${colColor[c.code]}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%${pv != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(c.amount, pv)}</div>` : ''}</td>`; }).join('')}
+        return `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${textInk(colColor[c.code])}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%${pv != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(c.amount, pv)}</div>` : ''}</td>`; }).join('')}
       <td class="py-1.5 pl-2 text-right tabular-nums font-bold text-slate-800">${baht(_payPD.total)}${_payPrev.total != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(_payPD.total, _payPrev.total)}</div>` : ''}</td></tr>`;
     return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} ${T.branchesWord} · ${cols.length} ${T.channels} · ${T.total} <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? T.thisDay : isMonthly ? T.thisMonth : T.thisWeek} · ${T.payCaption2}${compShort})</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">${th}</tr></thead>
@@ -1407,7 +1407,7 @@ function renderMgtReport(j, jM, jF) {
       //   disc  = teal    an ordinary, intended discount
       const C = { free: '#dc2626', mixed: '#b45309', disc: '#0f766e' };
       const chip = (k, txt) => `<span style="display:inline-block;padding:1px 7px;border-radius:999px;`
-        + `background:${C[k]}18;color:${C[k]};font-weight:700;font-size:11px;white-space:nowrap">${txt}</span>`;
+        + `background:${C[k]}18;color:${textInk(C[k])};font-weight:700;font-size:11px;white-space:nowrap">${txt}</span>`;
       const paxOf = k => (K[k] && K[k].pax) || 0;
       const billsOf = k => (K[k] && K[k].bills) || 0;
       const totPax = paxOf('disc') + paxOf('mixed') + paxOf('free');
@@ -1438,7 +1438,7 @@ function renderMgtReport(j, jM, jF) {
       return `<div class="mt-4 rounded-xl mgt-atom" style="background:#fffbeb;border:1px solid #fde68a;border:1px solid #d97706;padding:11px 14px">
           <p class="text-[12px] font-extrabold mb-2" style="color:#92400e">${T.promoTitle}${shareTxt}</p>
           <ul class="space-y-1.5" style="font-size:12.5px;color:#1f2937">${bits.map(([k, b]) =>
-            `<li class="flex gap-2"><span style="color:${C[k]};font-weight:700">•</span><span>${b}</span></li>`).join('')}</ul>
+            `<li class="flex gap-2"><span style="color:${textInk(C[k])};font-weight:700">•</span><span>${b}</span></li>`).join('')}</ul>
           <p class="text-[10.5px] mt-2" style="color:#a16207">${T.promoNote}</p></div>`;
     })();
     return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
@@ -1458,7 +1458,7 @@ function renderMgtReport(j, jM, jF) {
     : `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
   // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
   // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.
-  const vLine = (col, txt) => `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2"><span style="color:${col};line-height:1.5">●</span><span class="text-slate-600">${txt}</span></p>`;
+  const vLine = (col, txt) => `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2"><span style="color:${textInk(col)};line-height:1.5">●</span><span class="text-slate-600">${txt}</span></p>`;
   const _sg = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const _hh = h => String(h).padStart(2, '0') + ':00';
   const v3 = (() => {
@@ -1561,7 +1561,7 @@ function renderMgtReport(j, jM, jF) {
     const loop = `<p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">${T.vActions}</p>` +
       `<p class="text-[12px] text-slate-700">${T.vOpen} <b>${(A.open || 0) + (A.doing || 0)}</b>${A.overdue ? ` <span style="color:var(--bad-ink)">(${A.overdue} ${T.vOverdue})</span>` : ''} · ${T.vDone} <b>${A.done || 0}</b>` +
       ((A.better || A.same || A.worse) ? ` · <span style="color:var(--good-ink)">${T.vBetter} ${A.better || 0}</span> / ${T.vSame} ${A.same || 0} / <span style="color:var(--bad-ink)">${T.vWorse} ${A.worse || 0}</span>` : '') + `</p>` +
-      ((A.items || []).length ? `<table class="w-full text-[12px] mt-1"><tbody>` + A.items.map(it => { const [c, l] = resTag(it.result); return `<tr class="border-t border-slate-100"><td class="py-1 text-slate-700">${esc(it.title)}${it.branch ? ` <span class="text-slate-400">· ${esc(it.branch)}</span>` : ''}${it.theme ? ` <span class="text-slate-400">· ${esc(it.theme)}</span>` : ''}</td><td class="py-1 text-right tabular-nums whitespace-nowrap">${it.before_rate != null && it.after_rate != null ? `${it.before_rate} → ${it.after_rate} <span class="text-slate-400 text-[10px]">${T.vRate}</span>` : (it.days_left ? `<span class="text-slate-400 text-[10px]">${T.vPending} (${it.days_left})</span>` : '')}</td><td class="py-1 pl-2 text-right"><span class="text-[10px] font-semibold" style="color:${c}">${l}</span></td></tr>`; }).join('') + '</tbody></table>' : `<p class="text-[11px] text-slate-400 mt-1">${T.vNoActions}</p>`);
+      ((A.items || []).length ? `<table class="w-full text-[12px] mt-1"><tbody>` + A.items.map(it => { const [c, l] = resTag(it.result); return `<tr class="border-t border-slate-100"><td class="py-1 text-slate-700">${esc(it.title)}${it.branch ? ` <span class="text-slate-400">· ${esc(it.branch)}</span>` : ''}${it.theme ? ` <span class="text-slate-400">· ${esc(it.theme)}</span>` : ''}</td><td class="py-1 text-right tabular-nums whitespace-nowrap">${it.before_rate != null && it.after_rate != null ? `${it.before_rate} → ${it.after_rate} <span class="text-slate-400 text-[10px]">${T.vRate}</span>` : (it.days_left ? `<span class="text-slate-400 text-[10px]">${T.vPending} (${it.days_left})</span>` : '')}</td><td class="py-1 pl-2 text-right"><span class="text-[10px] font-semibold" style="color:${textInk(c)}">${l}</span></td></tr>`; }).join('') + '</tbody></table>' : `<p class="text-[11px] text-slate-400 mt-1">${T.vNoActions}</p>`);
     return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}${respB}</div></div><div class="mt-4">${loop}</div>`;
   })();
 
@@ -1908,7 +1908,7 @@ function renderMgtReport(j, jM, jF) {
       `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
          <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px">${lbl}</div>
          <div style="font-size:13px;font-weight:800;color:#1e293b;white-space:nowrap">${val}</div>
-         ${sub ? `<div style="font-size:10px;font-weight:600;color:${sc};margin-top:2px">${sub}</div>` : ''}
+         ${sub ? `<div style="font-size:10px;font-weight:600;color:${textInk(sc)};margin-top:2px">${sub}</div>` : ''}
        </div>`;
     const splitRow = hasSplit && trDataM.length
       ? pill(T.master, fmtM(trDataM[lastIdx]?.revenue || 0))
@@ -1951,7 +1951,7 @@ function renderMgtReport(j, jM, jF) {
         const noun = isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด';
         const dir = vsAvg == null ? 'ทรงตัว' : vsAvg > 5 ? 'กำลังเพิ่มขึ้น' : vsAvg < -5 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'ขาขึ้น' : maNow < maPrev * 0.98 ? 'ขาลง' : 'ทรงตัว') : 'ทรงตัว';
-        s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${textInk(dirCol)}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
+        s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${textInk(dirCol)}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${textInk(ac(vsAvg))}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
         const streakTxt = streak >= 2 ? ` ล่าสุด <b style="color:${sdir > 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${sdir > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}ติดต่อกัน ${streak} ${noun}</b>;` : '';
         const maClause = `แนวโน้มค่าเฉลี่ยเคลื่อนที่ 3 ${noun}เป็น <b>${maTrend}</b> (${rises} จาก ${vals.length - 1} ${noun}ที่เพิ่มขึ้นเทียบ${noun}ก่อน)`;
         s2 = ` ${streakTxt}${maClause}`;
@@ -1967,7 +1967,7 @@ function renderMgtReport(j, jM, jF) {
         const noun = isDaily ? 'day' : isMonthly ? 'month' : 'week', nounP = isDaily ? 'days' : isMonthly ? 'months' : 'weeks';
         const dir = vsAvg == null ? 'holding steady' : vsAvg > 5 ? 'rising' : vsAvg < -5 ? 'softening' : 'holding steady';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'upward' : maNow < maPrev * 0.98 ? 'downward' : 'flat') : 'flat';
-        s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${textInk(dirCol)}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
+        s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${textInk(dirCol)}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${textInk(ac(vsAvg))}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
         const streakTxt = streak >= 2 ? ` The latest run is <b style="color:${sdir > 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${streak} ${nounP} ${sdir > 0 ? 'up' : 'down'}</b> in a row;` : '';
         const maClause = `the 3-${noun} moving-average trend is <b>${maTrend}</b> (${rises} of ${vals.length - 1} ${nounP} rose ${noun}-over-${noun}).`;
         s2 = streakTxt ? `${streakTxt} ${maClause}` : ` ${maClause.charAt(0).toUpperCase()}${maClause.slice(1)}`;
@@ -2031,7 +2031,7 @@ function renderMgtReport(j, jM, jF) {
       const hdr = title
         ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
              <span style="font-size:8px;font-weight:800;color:#475569">${title}</span>
-             <span style="font-size:8px;font-weight:800;color:${currC}">${fmtM(vals[li] || 0)}</span></div>`
+             <span style="font-size:8px;font-weight:800;color:${textInk(currC)}">${fmtM(vals[li] || 0)}</span></div>`
         : '';
       return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:6px 8px">
           ${hdr}

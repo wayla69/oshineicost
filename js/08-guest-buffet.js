@@ -61,7 +61,7 @@ async function loadGuest(force) {
     { label: 'Median SPH', value: `${fmt(o.median_sph||0)}`, sub: 'P50', color: '#0891b2' },
     { label: 'Avg Party Size', value: (persona.overall?.avg_party_size||0).toFixed(1), sub: 'pax / receipt', color: '#7a66b8' },
     { label: 'ยอดบิลเฉลี่ย', value: `${fmt(persona.overall?.avg_ticket||0)}`, sub: 'ต่อใบเสร็จ', color: 'var(--good-ink)' },
-  ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${textInk(k.color)}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   // SPH distribution — tier-based 100% stacked bar with percentile ruler
   renderSphDistribution(sph);
@@ -487,18 +487,18 @@ function renderMce2Table(col, dir) {
     // ABC badge
     const abc = abcMap[r.sku_code] || 'C';
     const abcColor = abc === 'A' ? '#ef4444' : abc === 'B' ? '#f59e0b' : '#94a3b8';
-    const abcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${abcColor}20;color:${abcColor}">${abc}</span>`;
+    const abcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${abcColor}20;color:${textInk(abcColor)}">${abc}</span>`;
 
     // Source badge
     const src = r.cost_source || 'none';
     const srcLabel = src === 'bom' ? 'BoM' : src === 'sku_cost' ? 'Cost' : '?';
     const srcColor = src === 'bom' ? '#10b981' : src === 'sku_cost' ? '#f59e0b' : '#ef4444';
-    const srcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${srcColor}20;color:${srcColor}">${srcLabel}</span>`;
+    const srcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${srcColor}20;color:${textInk(srcColor)}">${srcLabel}</span>`;
 
     // FC% = cost / revenue * 100
     const fcPct = r.revenue > 0 ? (r.cost / r.revenue * 100) : null;
     const fcColor = fcPct == null ? 'var(--text-muted)' : fcPct > 60 ? 'var(--bad-ink)' : fcPct > 40 ? '#f59e0b' : '#10b981';
-    const fcCell = fcPct != null ? `<span style="color:${fcColor}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
+    const fcCell = fcPct != null ? `<span style="color:${textInk(fcColor)}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
 
     return `<tr class="border-b hover:bg-indigo-50/30" style="border-color:var(--border);${rowBg}">
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
@@ -663,7 +663,7 @@ function renderMce2Whatif() {
       <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th>
       <th class="py-1.5 pr-2 text-right">ต้นทุนปัจจุบัน</th>
       <th class="py-1.5 pr-2 text-right">ลด ${(pct*100).toFixed(0)}%</th>
-      <th class="py-1.5 text-right font-semibold" style="color:#10b981">ประหยัดได้</th>
+      <th class="py-1.5 text-right font-semibold" style="color:var(--good-ink)">ประหยัดได้</th>
     </tr></thead>
     <tbody>${topN.map((r, i) => {
       const s = (r.cost || 0) * pct;
@@ -672,12 +672,12 @@ function renderMce2Whatif() {
         <td class="py-1.5 pr-2 font-medium">${esc((r.description||'').replace(/^\((?:A|B)\)\s*/,''))}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)} (${r.cost_pct.toFixed(1)}%)</td>
         <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmt(r.cost*(1-pct))}</td>
-        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#10b981">${fmt(s)}</td>
+        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:var(--good-ink)">${fmt(s)}</td>
       </tr>`;
     }).join('')}
     <tr class="border-t-2 font-bold" style="border-color:var(--border)">
       <td colspan="4" class="py-1.5 pr-2 text-right">รวมประหยัดได้</td>
-      <td class="py-1.5 text-right" style="color:#10b981">${fmt(saving)}</td>
+      <td class="py-1.5 text-right" style="color:var(--good-ink)">${fmt(saving)}</td>
     </tr></tbody></table>`;
 }
 
@@ -807,7 +807,7 @@ async function loadMce2BranchCompare(skuCode, description) {
       return `<tr class="border-b" style="border-color:var(--border);background:${isBest?'rgba(16,185,129,0.05)':isHigh?'rgba(239,68,68,0.04)':''}">
         <td class="py-1.5 pr-2 font-medium">${isBest?'✓ ':isHigh?'⚠ ':''}${esc(b.branch)}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(b.servings)}</td>
-        <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${isHigh?'#ef4444':isBest?'#10b981':'inherit'}">฿${fmtN(b.cost_per_serving)}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${isHigh?'var(--bad-ink)':isBest?'var(--good-ink)':'inherit'}">฿${fmtN(b.cost_per_serving)}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${b.cost_pct_of_total.toFixed(1)}%</td>
         <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${b.food_cost_rate != null ? b.food_cost_rate.toFixed(1)+'%' : '—'}</td>
       </tr>`;
@@ -888,7 +888,7 @@ function renderMce2CategoryRollup() {
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${c.count}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(c.cost)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${c.cost_pct >= 20 ? 'var(--bad-ink)' : c.cost_pct >= 10 ? '#f59e0b' : 'inherit'}">${c.cost_pct.toFixed(1)}%</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${fcColor}">${c.fc_rate != null ? c.fc_rate.toFixed(1) + '%' : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${textInk(fcColor)}">${c.fc_rate != null ? c.fc_rate.toFixed(1) + '%' : '—'}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(Math.round(c.avg_cps))}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
@@ -963,7 +963,7 @@ async function loadMce2Coverage() {
     const badgeColor = isAmber ? '#f59e0b' : '#ef4444';
     const badgeLabel = isAmber ? '⚠ Cost' : 'ไม่มี';
     return `<tr class="border-b" style="border-color:var(--border);background:${isAmber ? 'rgba(245,158,11,0.03)' : 'rgba(239,68,68,0.04)'}">
-      <td class="py-1.5 pr-2"><span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${badgeColor}20;color:${badgeColor}">${badgeLabel}</span></td>
+      <td class="py-1.5 pr-2"><span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${badgeColor}20;color:${textInk(badgeColor)}">${badgeLabel}</span></td>
       <td class="py-1.5 pr-2 font-medium">${esc((r.description || '').replace(/^\((?:A|B)\)\s*/, ''))}</td>
       <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.category || '')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)}</td>
@@ -1081,7 +1081,7 @@ function renderMce2Actions() {
           <span class="text-sm font-semibold" style="color:var(--text-primary)">${a.title}</span>
         </div>
         ${a.detail ? `<p class="text-[11px] mt-1" style="color:var(--text-secondary)">${a.detail}</p>` : ''}
-        ${a.impact ? `<p class="text-[11px] mt-0.5 font-medium" style="color:${a.color}">${a.impact}</p>` : ''}
+        ${a.impact ? `<p class="text-[11px] mt-0.5 font-medium" style="color:${textInk(a.color)}">${a.impact}</p>` : ''}
       </div>
     </div>`).join('');
 }
@@ -1177,7 +1177,7 @@ async function loadBuffetPerformance() {
   const kpiCard = (label, value, sub, color) =>
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${label}</p>
-      <p class="text-lg font-bold" style="color:${color}">${value}</p>
+      <p class="text-lg font-bold" style="color:${textInk(color)}">${value}</p>
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   document.getElementById('bperfKpiRow').innerHTML = [
@@ -1304,7 +1304,7 @@ async function loadBuffetPerformance() {
       const pct = tps[t.code] || 0;
       return `<div class="rounded-lg border border-slate-200 p-3 text-center" style="border-top:3px solid ${t.color}">
         <div class="text-[10px] text-slate-500">${t.desc}</div>
-        <div class="text-base font-bold" style="color:${t.color}">${t.label}</div>
+        <div class="text-base font-bold" style="color:${textInk(t.color)}">${t.label}</div>
         <div class="text-xl font-bold mt-1">${pct.toFixed(1)}%</div>
       </div>`;
     }).join('');
@@ -1646,8 +1646,8 @@ async function loadTierGp() {
       <td class="py-2 pr-4 text-right tabular-nums">${t.rev_per_cover  != null ? fmt(t.rev_per_cover)  : '—'}</td>
       <td class="py-2 pr-4 text-right tabular-nums">${t.unit_cost      != null ? fmt(t.unit_cost)      : '<span class="text-amber-500">ยังไม่ใส่</span>'}</td>
       <td class="py-2 pr-4 text-right tabular-nums">${t.cogs_per_cover != null ? fmt(t.cogs_per_cover) : '—'}</td>
-      <td class="py-2 pr-4 text-right font-bold tabular-nums" style="color:${gpColor}">${t.gp_per_cover != null ? fmt(t.gp_per_cover) : '—'}</td>
-      <td class="py-2 text-right font-semibold tabular-nums" style="color:${pctColor}">${t.margin_pct != null ? t.margin_pct.toFixed(1)+'%' : '—'}</td>
+      <td class="py-2 pr-4 text-right font-bold tabular-nums" style="color:${textInk(gpColor)}">${t.gp_per_cover != null ? fmt(t.gp_per_cover) : '—'}</td>
+      <td class="py-2 text-right font-semibold tabular-nums" style="color:${textInk(pctColor)}">${t.margin_pct != null ? t.margin_pct.toFixed(1)+'%' : '—'}</td>
     </tr>`;
   }).join('');
   document.getElementById('tierGpBody').innerHTML = bodyHtml || '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
@@ -1769,7 +1769,7 @@ async function loadRevPASH() {
     { label: 'Avg RevPASH', value: data.hourly ? fmt(data.hourly.reduce((s,h)=>s+(h.revpash||0),0)/Math.max(data.hourly.filter(h=>h.revpash>0).length,1)) : '—', sub: 'เฉลี่ยชั่วโมงที่มีลูกค้า', color: 'var(--good-ink)' },
     { label: 'Dead Zone',   value: dead != null ? dead + ':00' : '—',  sub: 'ชั่วโมงที่ RevPASH ต่ำสุด', color: '#f59e0b' },
     { label: 'ที่นั่งที่ใช้', value: fmtN(seats), sub: 'กรอกแก้ได้ด้านบน', color: '#64748b' },
-  ].map(k => `<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-lg font-bold" style="color:${k.color}">${k.value}</p><p class="text-[10px] text-slate-400">${k.sub}</p></div>`).join('');
+  ].map(k => `<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-lg font-bold" style="color:${textInk(k.color)}">${k.value}</p><p class="text-[10px] text-slate-400">${k.sub}</p></div>`).join('');
 
   // Hourly RevPASH
   const hrly = data.hourly || [];
@@ -1851,7 +1851,7 @@ async function loadUpgradeSimulator() {
     { label: 'GP หลัง Simulate', value: fmt(sim.total_gp),  color: '#10b981' },
     { label: 'เพิ่มขึ้น',       value: fmt(deltaGp),       color: deltaGp >= 0 ? '#10b981' : '#ef4444' },
     { label: '% เพิ่ม',         value: (deltaPct >= 0 ? '+' : '') + deltaPct.toFixed(1) + '%', color: deltaPct >= 0 ? '#10b981' : '#ef4444' },
-  ].map(k => `<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-xl font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
+  ].map(k => `<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-xl font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
 
   // Tier table
   const TIER_LABEL = { BUFFET350:'350', BUFFET500:'500', BUFFET590:'590', BUFFET799:'799', BUFFETCHILD:'Child' };
@@ -1988,7 +1988,7 @@ async function loadGpCalendar() {
     { label:'GP รวม / Margin',       value: `${fmt(totalGp)} · ${d.monthly_margin_pct != null ? d.monthly_margin_pct.toFixed(1)+'%' : '—'}`, color: (d.monthly_margin_pct||0) >= 40 ? 'var(--good-ink)' : '#f59e0b' },
     { label:'วัน GP สูงสุด',         value: bestDay  ? bestDay.date.slice(8)+' ('+fmt(bestDay.gp)+')'  : '—',     color:'var(--good-ink)' },
     { label:'วัน GP ต่ำสุด',         value: worstDay ? worstDay.date.slice(8)+' ('+fmt(worstDay.gp)+')': '—',     color:'#ef4444' },
-  ].map(k=>`<div class="rounded p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
+  ].map(k=>`<div class="rounded p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-base font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
 }
 
 // ── 2. Branch × Tier Matrix ──────────────────────────────────────────────
@@ -2067,7 +2067,7 @@ async function loadDrinkAttach() {
     const c = r.attach_rate_pct>=40 ? 'var(--good-ink)' : r.attach_rate_pct>=25 ? '#f59e0b' : '#ef4444';
     return `<tr class="border-b border-slate-100 hover:bg-slate-50">
       <td class="py-2 pr-3 font-medium text-xs">${esc(r.branch)}</td>
-      <td class="py-2 pr-3 text-right text-xs font-bold tabular-nums" style="color:${c}">${(r.attach_rate_pct||0).toFixed(1)}%</td>
+      <td class="py-2 pr-3 text-right text-xs font-bold tabular-nums" style="color:${textInk(c)}">${(r.attach_rate_pct||0).toFixed(1)}%</td>
       <td class="py-2 pr-3 text-right text-xs tabular-nums">${(r.drink_revenue_pct||0).toFixed(1)}%</td>
       <td class="py-2 text-right text-xs tabular-nums">${fmt(r.avg_drink_per_bill||0)}</td>
     </tr>`;
@@ -2091,7 +2091,7 @@ async function loadBreakeven() {
     { label:'ต้องขาย/เดือน',           value: d.required_covers_per_month != null ? fmtN(Math.ceil(d.required_covers_per_month)) + ' cover' : '—', color:'#f59e0b' },
     { label:'ต้องขาย/วัน',             value: d.required_covers_per_day   != null ? fmtN(Math.ceil(d.required_covers_per_day))   + ' cover' : '—', color:'#f97316' },
     { label:'Breakeven Utilization',   value: beUtil != null ? beUtil.toFixed(1)+'%' : '—', color: utilColor },
-  ].map(k=>`<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-lg font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
+  ].map(k=>`<div class="rounded-lg p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-lg font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
 
   // Chart: actual vs required covers (scenario analysis)
   const actual = d.actual_avg_covers_per_day || 0;
@@ -2149,7 +2149,7 @@ async function loadForecast() {
     { label:'R²',              value: d.r_squared!=null ? d.r_squared.toFixed(3) : '—',              color: d.r_squared>0.7?'var(--good-ink)':d.r_squared>0.4?'#f59e0b':'#ef4444' },
     { label:'เติบโต/เดือน %', value: d.monthly_growth_rate!=null ? (d.monthly_growth_rate>0?'+':'')+d.monthly_growth_rate.toFixed(1)+'%' : '—', color:trendColor },
     { label:'Confidence',      value: d.forecast?.[0]?.confidence?.toUpperCase() || '—',             color:confColor },
-  ].map(k=>`<div class="rounded p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
+  ].map(k=>`<div class="rounded p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-base font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
 
   const hist = d.historical || [];
   const fore = d.forecast   || [];
@@ -2228,7 +2228,7 @@ async function loadHeavyEaterTail() {
   if (ins && parties.length) {
     const w = parties[0], best = parties[parties.length - 1];
     ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">
-      <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:#ef4444">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
+      <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:var(--bad-ink)">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
       ยิ่งคนน้อย ความเสี่ยง "คนกินเยอะคนเดียว" ยิ่งสูง → จุดที่ควรคุม portion/ราคา tier</div>`;
   } else if (ins) { ins.innerHTML = ''; }
   // distribution bars
@@ -2243,12 +2243,12 @@ async function loadHeavyEaterTail() {
     </div>`).join('') || '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>';
   document.getElementById('hetParty').innerHTML = (d.by_party_size || []).map(r => `<tr class="border-t border-slate-100">
     <td class="py-1 pr-2 font-medium">${esc(r.k)}</td>
-    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 5 ? '#ef4444' : r.loss_cover_pct > 2 ? '#f59e0b' : '#10b981'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 5 ? 'var(--bad-ink)' : r.loss_cover_pct > 2 ? '#f59e0b' : 'var(--good-ink)'}">${r.loss_cover_pct}%</td>
     <td class="py-1 text-right tabular-nums">${fmt(r.avg_margin_head)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
   document.getElementById('hetBranch').innerHTML = (d.by_branch || []).slice(0, 8).map(r => `<tr class="border-t border-slate-100">
     <td class="py-1 pr-2 font-medium">${esc(r.branch)}</td>
-    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 3 ? '#ef4444' : '#f59e0b'}">${r.loss_cover_pct}%</td>
-    <td class="py-1 text-right tabular-nums" style="color:#ef4444">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 3 ? 'var(--bad-ink)' : '#f59e0b'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
 }
 
 // Turn-Time & Table Throughput Efficiency
@@ -2271,11 +2271,11 @@ async function loadTurnEfficiency() {
   } else if (ins) { ins.innerHTML = ''; }
   document.getElementById('turnBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-amber-50/40" style="${r.inefficient ? 'background:rgba(239,68,68,0.05)' : ''}">
     <td class="py-1.5 pr-2 font-medium">${r.inefficient ? '● ' : ''}${esc(r.branch)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.turn_min && r.turn_min > ch.turn_min) ? '#ef4444' : 'var(--text-secondary)'}">${r.turn_min != null ? r.turn_min : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.turn_min && r.turn_min > ch.turn_min) ? 'var(--bad-ink)' : 'var(--text-secondary)'}">${r.turn_min != null ? r.turn_min : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.cov_per_tab != null ? r.cov_per_tab : '—'}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.gp_cover && r.gp_cover < ch.gp_cover) ? '#ef4444' : '#10b981'}">${r.gp_cover != null ? fmt(r.gp_cover) : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.gp_cover && r.gp_cover < ch.gp_cover) ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.gp_cover != null ? fmt(r.gp_cover) : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.gp_per_table_occasion != null ? fmt(r.gp_per_table_occasion) : '—'}</td>
-    <td class="py-1.5 text-right tabular-nums font-bold" style="color:${r.gp_per_table_min == null ? '#94a3b8' : r.gp_per_table_min >= (ch.gp_per_table_min || 0) ? '#10b981' : '#f59e0b'}">${r.gp_per_table_min != null ? r.gp_per_table_min : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums font-bold" style="color:${r.gp_per_table_min == null ? '#94a3b8' : r.gp_per_table_min >= (ch.gp_per_table_min || 0) ? 'var(--good-ink)' : '#f59e0b'}">${r.gp_per_table_min != null ? r.gp_per_table_min : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูลการหมุนโต๊ะ</td></tr>';
 }
 
@@ -2305,7 +2305,7 @@ async function loadBuffetGP() {
   const kpi = (lbl, val, sub, clr) =>
     `<div class="rounded-lg p-3 border" style="background:${clr}10;border-color:${clr}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${lbl}</p>
-      <p class="text-lg font-bold" style="color:${clr}">${val}</p>
+      <p class="text-lg font-bold" style="color:${textInk(clr)}">${val}</p>
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   document.getElementById('gpBomKpis').innerHTML = [
@@ -2367,15 +2367,15 @@ async function loadBuffetGP() {
       const mClr = b.margin_pct == null ? '#94a3b8' : b.margin_pct >= 55 ? '#10b981' : b.margin_pct >= 45 ? '#f59e0b' : '#ef4444';
       const vsPP = b.vs_network_pp;
       const vsHtml = vsPP == null ? '<td class="py-2 text-right text-slate-300">—</td>'
-        : `<td class="py-2 text-right font-semibold" style="color:${vsPP >= 0 ? '#10b981' : '#ef4444'}">${vsPP >= 0 ? '+' : ''}${vsPP.toFixed(1)}pp</td>`;
+        : `<td class="py-2 text-right font-semibold" style="color:${vsPP >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${vsPP >= 0 ? '+' : ''}${vsPP.toFixed(1)}pp</td>`;
       return `<tr class="border-t border-slate-100 hover:bg-slate-50">
         <td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
         <td class="py-2 pr-4 text-right tabular-nums">${fmtN(b.covers)}</td>
         <td class="py-2 pr-4 text-right tabular-nums">${fmt(b.revenue)}</td>
         <td class="py-2 pr-4 text-right tabular-nums">${b.bom_cost ? fmt(b.bom_cost) : '—'}</td>
-        <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${mClr}">${b.gp != null ? fmt(b.gp) : '—'}</td>
+        <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${textInk(mClr)}">${b.gp != null ? fmt(b.gp) : '—'}</td>
         <td class="py-2 pr-4 text-right tabular-nums">${b.gp_per_cover != null ? fmt(b.gp_per_cover) : '—'}</td>
-        <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${mClr}">${b.margin_pct != null ? b.margin_pct.toFixed(1)+'%' : '—'}</td>
+        <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${textInk(mClr)}">${b.margin_pct != null ? b.margin_pct.toFixed(1)+'%' : '—'}</td>
         ${vsHtml}
       </tr>`;
     }).join('');
@@ -2514,7 +2514,7 @@ async function loadBomPnl() {
     { label: 'Net Profit รวม',   value: fmt(totNp),  color: npColor(totNp) },
   ].map(k => `<div class="rounded-lg p-3 border" style="background:${k.color}10;border-color:${k.color}33">
     <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${k.label}</p>
-    <p class="text-base font-bold" style="color:${k.color}">${k.value}</p>
+    <p class="text-base font-bold" style="color:${textInk(k.color)}">${k.value}</p>
   </div>`).join('');
 
   if (!rows.length) {
@@ -2529,10 +2529,10 @@ async function loadBomPnl() {
       <td class="py-2 pr-4 font-medium">${esc(r.branch)}</td>
       <td class="py-2 pr-4 text-right tabular-nums">${fmt(r.revenue||0)}</td>
       <td class="py-2 pr-4 text-right tabular-nums text-orange-600">${r.bom_cost ? fmt(r.bom_cost) : '—'}</td>
-      <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${mClr}">${r.gross_profit != null ? fmt(r.gross_profit) : '—'}${r.gp_margin_pct != null ? ` <span class="text-[10px]">(${r.gp_margin_pct.toFixed(1)}%)</span>` : ''}</td>
+      <td class="py-2 pr-4 text-right tabular-nums font-semibold" style="color:${textInk(mClr)}">${r.gross_profit != null ? fmt(r.gross_profit) : '—'}${r.gp_margin_pct != null ? ` <span class="text-[10px]">(${r.gp_margin_pct.toFixed(1)}%)</span>` : ''}</td>
       <td class="py-2 pr-4 text-right tabular-nums text-slate-500">${r.fixed_cost_period ? fmt(r.fixed_cost_period) : '<span class="text-slate-300">ไม่ได้ตั้ง</span>'}</td>
-      <td class="py-2 pr-4 text-right tabular-nums font-bold" style="color:${npc}">${r.net_profit != null ? fmt(r.net_profit) : '—'}</td>
-      <td class="py-2 text-right tabular-nums font-semibold" style="color:${nmClr}">${r.np_margin_pct != null ? r.np_margin_pct.toFixed(1)+'%' : '—'}</td>
+      <td class="py-2 pr-4 text-right tabular-nums font-bold" style="color:${textInk(npc)}">${r.net_profit != null ? fmt(r.net_profit) : '—'}</td>
+      <td class="py-2 text-right tabular-nums font-semibold" style="color:${textInk(nmClr)}">${r.np_margin_pct != null ? r.np_margin_pct.toFixed(1)+'%' : '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -2569,7 +2569,7 @@ function _renderPv() {
       <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${r.avg_ratio != null ? r.avg_ratio.toFixed(3) : '—'}</td>
       <td class="py-1.5 pr-3 text-right">${up ? '▲' : '▼'}</td>
-      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${clr}">${r.trend_pct != null ? (r.trend_pct >= 0 ? '+' : '') + r.trend_pct.toFixed(1)+'%' : '—'}</td>
+      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${textInk(clr)}">${r.trend_pct != null ? (r.trend_pct >= 0 ? '+' : '') + r.trend_pct.toFixed(1)+'%' : '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -2631,7 +2631,7 @@ async function loadPlateCostDist() {
     ['Count (bills)',     fmtN(d.count||0), '#94a3b8'],
   ].map(([lbl, val, clr]) => `<div class="flex justify-between items-center py-2 border-b border-slate-100">
     <span class="text-xs text-slate-500">${lbl}</span>
-    <span class="text-sm font-bold" style="color:${clr}">${val}</span>
+    <span class="text-sm font-bold" style="color:${textInk(clr)}">${val}</span>
   </div>`).join('');
 }
 
@@ -2696,7 +2696,7 @@ function _updateSimResult() {
     ['Δ Margin',       (delta >= 0 ? '+' : '') + delta.toFixed(1)+'pp', clr],
   ].map(([lbl, val, c]) => `<div class="flex justify-between py-1.5 border-b border-slate-100">
     <span class="text-xs text-slate-500">${lbl}</span>
-    <span class="text-sm font-bold" style="color:${c}">${val}</span>
+    <span class="text-sm font-bold" style="color:${textInk(c)}">${val}</span>
   </div>`).join('');
 }
 
@@ -2731,8 +2731,8 @@ function _renderLc() {
       <td class="py-1.5 pr-3 text-slate-600 max-w-[120px] truncate" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${r.avg_monthly != null ? fmtN(Math.round(r.avg_monthly)) : '—'}</td>
-      <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${clr}">${r.slope_pct != null ? (r.slope_pct >= 0 ? '+' : '') + r.slope_pct.toFixed(1)+'%' : '—'}</td>
-      <td class="py-1.5 text-right"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${clr}18;color:${clr}">${emoji} ${r.stage}</span></td>
+      <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${textInk(clr)}">${r.slope_pct != null ? (r.slope_pct >= 0 ? '+' : '') + r.slope_pct.toFixed(1)+'%' : '—'}</td>
+      <td class="py-1.5 text-right"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${clr}18;color:${textInk(clr)}">${emoji} ${r.stage}</span></td>
     </tr>`;
   }).join('');
 }
@@ -2750,7 +2750,7 @@ async function loadSkuLifecycle(force) {
   const counts = d.summary || {};
   document.getElementById('lcKpis').innerHTML = Object.entries(counts).map(([st, cnt]) => {
     const clr = _lcColors[st] || '#64748b';
-    return `<span class="px-3 py-1.5 rounded-full text-xs font-semibold" style="background:${clr}18;color:${clr}">${_lcEmoji[st]||''} ${st}: ${cnt}</span>`;
+    return `<span class="px-3 py-1.5 rounded-full text-xs font-semibold" style="background:${clr}18;color:${textInk(clr)}">${_lcEmoji[st]||''} ${st}: ${cnt}</span>`;
   }).join('');
   _renderLc();
 }
@@ -2778,7 +2778,7 @@ async function loadBomAudit(force) {
     ['tier',    s.tier_count,    'Tier/Buffet'],
     ['ok',      okCount,         'OK'],
   ].filter(([,v]) => v > 0).map(([k, v, lbl]) =>
-    `<span class="px-3 py-1.5 rounded-full text-xs font-semibold" style="background:${kColors[k]}18;color:${kColors[k]}">${lbl}: ${v}</span>`
+    `<span class="px-3 py-1.5 rounded-full text-xs font-semibold" style="background:${kColors[k]}18;color:${textInk(kColors[k])}">${lbl}: ${v}</span>`
   ).join('');
   if (!allItems.length) {
     document.getElementById('bomAuditBody').innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-400">ดี — ไม่พบปัญหา unit_cost</td></tr>';
@@ -2795,8 +2795,8 @@ async function loadBomAudit(force) {
       <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums font-medium">${r.unit_cost != null ? ''+r.unit_cost.toFixed(2) : '—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums text-slate-400">${sp != null ? ''+sp.toFixed(2) : '—'}</td>
-      <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${clr};font-weight:600">${costPct}</td>
-      <td class="py-1.5 text-right"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${clr}18;color:${clr}">${flagLabel[r.flag]||r.flag}</span></td>
+      <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${textInk(clr)};font-weight:600">${costPct}</td>
+      <td class="py-1.5 text-right"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${clr}18;color:${textInk(clr)}">${flagLabel[r.flag]||r.flag}</span></td>
     </tr>`;
   }).join('');
 }
@@ -2848,8 +2848,8 @@ async function saveFixedCosts() {
     api(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).catch(() => null),
     api(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).catch(() => null),
   ]);
-  if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = 'บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = '#10b981'; }
-  else { st.textContent = 'บันทึกไม่ได้'; st.style.color = '#ef4444'; }
+  if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = 'บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = 'var(--good-ink)'; }
+  else { st.textContent = 'บันทึกไม่ได้'; st.style.color = 'var(--bad-ink)'; }
   setTimeout(() => { st.textContent = ''; }, 3000);
   _lastPnlKey = null; _primeKey = null;   // force P&L + Prime-cost reload
 }
@@ -2914,7 +2914,7 @@ async function loadBenchmark() {
     { label: 'สาขาที่ทำได้สูงสุด', value: branches[0]?.branch || '—', sub: fmt(branches[0]?.revenue || 0), color: 'var(--good-ink)' },
     { label: 'ยอดบิลเฉลี่ยเครือข่าย', value: fmt(avgTick), sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: '% ส่วนลดเครือข่าย', value: `${avgDisc.toFixed(1)}%`, sub: 'ของยอดบิล', color: '#f59e0b' },
-  ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${textInk(k.color)}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   renderBenchFoodCost(params);
 
@@ -3009,14 +3009,14 @@ function _benchMom(cur, prev, opt) {
   const good = hb ? d >= 0 : d <= 0;
   const col = Math.abs(d) < 0.05 ? '#94a3b8' : (good ? '#10b981' : '#ef4444');
   const ar = d > 0 ? '▲' : (d < 0 ? '▼' : '▬');
-  return `<div class="text-[10px] tabular-nums" style="color:${col}">${ar} ${Math.abs(d).toFixed(1)}${pp ? 'pp' : '%'}</div>`;
+  return `<div class="text-[10px] tabular-nums" style="color:${textInk(col)}">${ar} ${Math.abs(d).toFixed(1)}${pp ? 'pp' : '%'}</div>`;
 }
 function _benchScoreCell(v, accent) {
   if (v == null) return '<td class="py-2 pr-3 text-right text-slate-300">—</td>';
   const pct = Math.max(0, Math.min(100, v));
   return `<td class="py-2 pr-3 text-right"><div class="inline-flex items-center justify-end gap-1.5">
     <div class="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div style="width:${pct}%;height:100%;background:${accent}"></div></div>
-    <span class="text-[11px] tabular-nums" style="color:${accent};font-weight:600">${v.toFixed(0)}</span></div></td>`;
+    <span class="text-[11px] tabular-nums" style="color:${textInk(accent)};font-weight:600">${v.toFixed(0)}</span></div></td>`;
 }
 function sortBench(key) {
   if (_benchSort.key === key) _benchSort.dir *= -1;
@@ -3053,7 +3053,7 @@ function renderBenchTable() {
       ${_benchScoreCell(r.growth_score, '#10b981')}
       ${_benchScoreCell(r.consistency_score, '#06b6d4')}
       ${_benchScoreCell(r.momentum_score, '#f59e0b')}
-      <td class="py-2 text-right" title="${r.breakdown || ''}"><span style="color:${scoreColor};font-weight:700;font-size:13px">${r.score != null ? r.score.toFixed(0) : '—'}</span></td>
+      <td class="py-2 text-right" title="${r.breakdown || ''}"><span style="color:${textInk(scoreColor)};font-weight:700;font-size:13px">${r.score != null ? r.score.toFixed(0) : '—'}</span></td>
     </tr>`;
   }).join('');
 }

@@ -310,7 +310,7 @@ function _renderRecalibSummary() {
     </div>
     <div class="bg-white rounded-lg p-2.5 border border-amber-200 text-center">
       <p class="text-[10px] text-slate-500">Food cost %</p>
-      <p class="text-base font-bold" style="color:${curColor}">${cur.toFixed(1)}%</p>
+      <p class="text-base font-bold" style="color:${textInk(curColor)}">${cur.toFixed(1)}%</p>
     </div>
     <div class="bg-white rounded-lg p-2.5 border border-amber-200 text-center">
       <p class="text-[10px] text-slate-500">Target COGS</p>

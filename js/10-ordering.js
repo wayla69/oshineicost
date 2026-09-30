@@ -723,7 +723,7 @@ async function opOpenCycle(issueId) {
               border-radius:4px;padding:3px 6px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)"></td>
           <td class="py-1 pr-2 text-right">${r.act_units ? r.pct_of_rec + '%' : '0%'}</td>
           <td class="py-1 pr-2 text-right">${r.status === 'ok' ? '—' : esc(r.gap_disp)}</td>
-          <td class="py-1" style="color:${cls[r.status]};font-weight:600">${lab[r.status]}</td>
+          <td class="py-1" style="color:${textInk(cls[r.status])};font-weight:600">${lab[r.status]}</td>
         </tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -916,10 +916,10 @@ async function opLoadAccuracy() {
       <td class="py-1 pr-2">${esc(e.name)}</td>
       <td class="py-1 pr-2 text-right">${esc(e.rec_disp)}</td>
       <td class="py-1 pr-2 text-right">${esc(e.used_disp)}</td>
-      <td class="py-1 pr-2 text-right font-semibold" style="color:${col}">×${e.ratio_median ?? '—'}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:${textInk(col)}">×${e.ratio_median ?? '—'}</td>
       <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${fmtN(e.n)}</td>
       <td class="py-1 pr-2 text-right">${e.suggested_buffer_pct == null ? '<span style="color:var(--text-muted)">รอบยังน้อย</span>' : e.suggested_buffer_pct + '%'}</td>
-      <td class="py-1" style="color:${col};font-weight:600">${txt}</td></tr>`;
+      <td class="py-1" style="color:${textInk(col)};font-weight:600">${txt}</td></tr>`;
   }).join('') || '<tr><td colspan="8" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีรอบที่ปิดแล้ว</td></tr>';
 }
 

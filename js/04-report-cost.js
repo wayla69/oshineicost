@@ -959,7 +959,7 @@ async function loadReport() {
           <td class="py-1.5 pr-3 text-right text-red-500">${fmtN(tot)}</td>
           <td class="py-1.5 pr-3 text-right">${mom==null?'<span class="text-slate-300">—</span>':momChip(mom)}</td>
           <td class="py-1.5 pr-3"><div class="flex h-3 rounded overflow-hidden" style="min-width:120px">${seg}</div></td>
-          <td class="py-1.5 pr-3">${dom?`<span style="color:${dom.color};font-weight:600">${dom.label}</span>`:'—'}</td>
+          <td class="py-1.5 pr-3">${dom?`<span style="color:${textInk(dom.color)};font-weight:600">${dom.label}</span>`:'—'}</td>
         </tr>`;
       }).join('')}</tbody></table>
       <div class="flex flex-wrap gap-3 mt-2 text-[11px] text-slate-500">${BK.map(bk=>`<span class="flex items-center gap-1"><span style="width:10px;height:10px;background:${bk.color};border-radius:2px;display:inline-block"></span>${bk.label}</span>`).join('')}</div>`;
@@ -1044,7 +1044,7 @@ async function loadReport() {
       : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
     const card = (label, valHtml, sub, color, onclick) => `<div class="p-3 rounded-lg bg-slate-50 ${onclick?'cursor-pointer hover:bg-slate-100':''}" ${onclick?`onclick="${onclick}"`:''}>
       <p class="text-xs text-slate-500 mb-0.5">${label}</p>
-      <p class="text-lg font-bold" style="color:${color||'#1e293b'}">${valHtml}</p>
+      <p class="text-lg font-bold" style="color:${textInk(color||'#1e293b')}">${valHtml}</p>
       <p class="text-[11px] text-slate-400">${sub}</p></div>`;
     scEl.innerHTML =
       card('คาดสิ้นเดือน', fmtN(proj), 'run-rate projection', '#4a70b0') +
