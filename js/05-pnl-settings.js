@@ -2167,8 +2167,8 @@ async function loadHeavyEaters(force) {
       <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? '#ef4444' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
     </div>
     <div class="card p-4" style="background:#fef2f2;border:1px solid #ef4444">
-      <p class="text-sm font-bold" style="color:#b91c1c">บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
-      <p class="text-2xl font-bold mt-1" style="color:#b91c1c">${fmtN(L.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${L.pct_bills || 0}% ของบิล)</span></p>
+      <p class="text-sm font-bold" style="color:var(--bad-ink)">บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
+      <p class="text-2xl font-bold mt-1" style="color:var(--bad-ink)">${fmtN(L.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${L.pct_bills || 0}% ของบิล)</span></p>
       <p class="text-xs text-slate-600 mt-1">ขาดทุนเฉลี่ย/หัว <b style="color:#ef4444">${fmt(L.avg_margin_head || 0)}</b> · รวมต้นทุน ${fmt(L.cogs || 0)} (${L.pct_cogs || 0}% ของต้นทุน)</p>
     </div>`;
 

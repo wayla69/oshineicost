@@ -595,7 +595,7 @@ async function osLoadCalendar() {
       <td class="py-1.5 pr-2">${esc(r.branch || 'ทุกสาขา')}</td>
       <td class="py-1.5 pr-2 text-right">${r.factor ? '×' + r.factor : '<span style="color:var(--text-muted)">คิดจากปีก่อน</span>'}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(r.note || '')}</td>
-      <td class="py-1.5 text-right"><a href="#" onclick="osDelEvent(${r.event_id});return false" style="color:#b91c1c">ลบ</a></td>
+      <td class="py-1.5 text-right"><a href="#" onclick="osDelEvent(${r.event_id});return false" style="color:var(--bad-ink)">ลบ</a></td>
     </tr>`).join('') ||
     '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีช่วงเทศกาล/โปรโมชัน</td></tr>';
 }
@@ -670,13 +670,13 @@ async function opLoadCycles() {
     const c = r.compliance || {};
     const badge = c.compliant
       ? '<span style="color:var(--good-ink);font-weight:600">✓ ครบตามแผน</span>'
-      : `<span style="color:#b91c1c;font-weight:600">⚠ ต้องแจ้งเตือน</span>`;
+      : `<span style="color:var(--bad-ink);font-weight:600">⚠ ต้องแจ้งเตือน</span>`;
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:#0f766e;font-weight:600">${esc(r.branch)}</a></td>
       <td class="py-1.5 pr-2">${esc(r.period_start)} → ${esc(r.period_end)}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(String(r.issued_at || '').slice(0, 16))}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(c.lines)}</td>
-      <td class="py-1.5 pr-2 text-right" style="color:${c.not_ordered ? '#b91c1c' : 'var(--text-muted)'}">${fmtN(c.not_ordered)}</td>
+      <td class="py-1.5 pr-2 text-right" style="color:${c.not_ordered ? 'var(--bad-ink)' : 'var(--text-muted)'}">${fmtN(c.not_ordered)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:${c.under ? '#b45309' : 'var(--text-muted)'}">${fmtN(c.under)}</td>
       <td class="py-1.5 pr-2 text-right">${c.gap_value ? '฿' + fmtN(c.gap_value) : '—'}</td>
       <td class="py-1.5">${badge}</td></tr>`;
@@ -691,7 +691,7 @@ async function opOpenCycle(issueId) {
   el.style.display = ''; el.innerHTML = '<p class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</p>';
   let d;
   try { d = await api(`${API}/api/ingredients/order-compliance?issue_id=${issueId}&tolerance_pct=${tol}`); }
-  catch (e) { el.innerHTML = '<p class="text-xs" style="color:#b91c1c">โหลดไม่สำเร็จ</p>'; return; }
+  catch (e) { el.innerHTML = '<p class="text-xs" style="color:var(--bad-ink)">โหลดไม่สำเร็จ</p>'; return; }
   const i = d.issue || {}, s = d.summary || {};
   const cls = { not_ordered: 'var(--bad-ink)', under: '#b45309', ok: 'var(--good-ink)' };
   const lab = { not_ordered: 'ไม่ได้สั่ง', under: 'ต่ำกว่าแผน', ok: 'ครบ' };
@@ -830,7 +830,7 @@ async function _opImportFile(input, url, statusId, reportId, after) {
     const errs = pre.errors || [];
     if (rep) rep.innerHTML = _opImportReportHtml(pre, true);
     if (!n) {
-      show(`ไม่มีแถวที่นำเข้าได้ (อ่านได้ ${pre.rows_read || 0} แถว)`, '#b91c1c');
+      show(`ไม่มีแถวที่นำเข้าได้ (อ่านได้ ${pre.rows_read || 0} แถว)`, 'var(--bad-ink)');
       input.value = '';
       return;
     }
@@ -847,7 +847,7 @@ async function _opImportFile(input, url, statusId, reportId, after) {
     show(`✓ นำเข้าแล้ว ${res.saved || 0} แถว` + (res.blank ? ` · เว้นว่าง ${res.blank}` : ''), 'var(--good-ink)');
     if (typeof after === 'function') after();
   } catch (e) {
-    show('นำเข้าไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), '#b91c1c');
+    show('นำเข้าไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
   } finally {
     input.value = '';        // let the same file be picked again after a fix
   }
@@ -1126,6 +1126,6 @@ async function ipSaveOne(el) {
     if (st) st.textContent = `✓ บันทึก ${el.dataset.ipbranch} สัปดาห์ ${el.dataset.ipweek} แล้ว`;
   } catch (e) {
     el.value = was;
-    if (st) { st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e.message || e).slice(0, 140); st.style.color = '#b91c1c'; }
+    if (st) { st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e.message || e).slice(0, 140); st.style.color = 'var(--bad-ink)'; }
   }
 }

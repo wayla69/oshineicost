@@ -674,22 +674,29 @@ body.dark .bg-white        { background: var(--bg-card) !important; }
    (3.4-4.4:1 on the page, same in both themes), so they take the theme inks. */
 .text-emerald-600 { color: var(--good-ink) !important; }
 .text-red-600     { color: var(--bad-ink) !important; }
+/* emerald-700 / red-700 ARE the light inks (#047857 / #b91c1c): no change in light,
+   but as fixed hexes they drop to 3.2 / 2.7:1 on the dark card. */
+.text-emerald-700 { color: var(--good-ink) !important; }
+.text-red-700     { color: var(--bad-ink) !important; }
 /* Dark mode leaves some backgrounds light, and the pale dark inks drop to ~1.9:1 on
    them. The inks inherit, so whichever of these is the NEAREST ancestor wins
    (:where keeps every layer at one specificity; the row rule outranks them).
-   1. Fixed light in both themes: the *-50 tints (nothing re-maps them; the /NN
-      translucent variants sit over the dark card and are excluded by name),
-      .on-light, and every hero .card with an inline gradient (all light stops, bar
-      the manual tab's indigo link card, which carries no up/down figures). */
-body.dark :where(.on-light, .card[style*="linear-gradient"], .bg-emerald-50, .bg-green-50,
+   1. Fixed light in both themes: the *-50 tints and the emerald/green/red/rose-100
+      chips (nothing re-maps them; the /NN translucent variants are rule 4),
+      .on-light, and every .card with an inline gradient or an inline pastel
+      background (#d../#e../#f.. — #227 turned the hero gradients into these; the
+      only dark inline card fills are #16294d and var(--bg-subtle), which don't match). */
+body.dark :where(.on-light, .card[style*="linear-gradient"], .card[style*="background:#d"],
+              .card[style*="background:#e"], .card[style*="background:#f"], .bg-emerald-50, .bg-green-50,
               .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50,
-              .bg-pink-50, .bg-fuchsia-50) {
+              .bg-pink-50, .bg-fuchsia-50, .bg-emerald-100, .bg-green-100, .bg-red-100,
+              .bg-rose-100) {
   --good-ink: #047857; --bad-ink: #b91c1c; }
 /* 2. Repainted dark by dark mode, even inside a light scope: back to the dark inks.
       (indigo/violet-50 are --accent-soft in theme-formal.css; hovered rows are
       --bg-hover; theme-formal.css clears even rows to transparent, tint or not.) */
 body.dark :where(.bg-white, .bg-slate-50, .bg-indigo-50, .bg-violet-50,
-              .card:not(.on-light):not([style*="linear-gradient"])),
+              .card:not(.on-light, [style*="linear-gradient"], [style*="background:#d"], [style*="background:#e"], [style*="background:#f"])),
 body.dark tbody tr:hover,
 body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50,
               .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50) {
@@ -698,6 +705,22 @@ body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, 
       everything in it is light again. */
 body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr) {
   --good-ink: #047857; --bad-ink: #b91c1c; }
+/* 4. The /NN translucent -50 tints composite over the dark card to a mid-grey
+      (bg-red-50/50 -> ~#878690) where neither ink nor the body text clears 4.5:1.
+      On screen in dark mode they become the same hue at ~12% (indigo: --accent-soft,
+      as theme-formal.css does for .bg-indigo-50): still a tint, dark enough for the
+      dark inks. Paper keeps Tailwind's light tints. */
+@media screen {
+  body.dark .bg-red-50\/30, body.dark .bg-red-50\/50, body.dark .bg-red-50\/60,
+  body.dark .hover\:bg-red-50\/60:hover { background-color: rgba(248,113,113,.12); }
+  body.dark .bg-rose-50\/40, body.dark .hover\:bg-rose-50\/40:hover { background-color: rgba(251,113,133,.12); }
+  body.dark .bg-cyan-50\/50 { background-color: rgba(34,211,238,.10); }
+  body.dark .hover\:bg-amber-50\/40:hover, body.dark .hover\:bg-amber-50\/50:hover { background-color: rgba(251,191,36,.10); }
+  body.dark .hover\:bg-orange-50\/40:hover, body.dark .hover\:bg-orange-50\/50:hover { background-color: rgba(251,146,60,.10); }
+  body.dark .hover\:bg-pink-50\/40:hover { background-color: rgba(244,114,182,.10); }
+  body.dark .bg-indigo-50\/50, body.dark .hover\:bg-indigo-50\/30:hover, body.dark .hover\:bg-indigo-50\/40:hover,
+  body.dark .hover\:bg-indigo-50\/50:hover, body.dark .hover\:bg-indigo-50\/60:hover { background-color: var(--accent-soft); }
+}
 
 /* Primary indigo action buttons used inline throughout cards */
 .bg-indigo-600 { background: var(--indigo) !important; }

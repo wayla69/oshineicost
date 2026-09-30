@@ -2177,7 +2177,7 @@ function _bbomRenderBranchSummary() {
       <td class="py-1.5 pr-3 font-medium">${esc(b.branch)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(b.total_revenue)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmtN(b.total_cogs)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:#047857">${fmtN(b.total_gp)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmtN(b.total_gp)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${b.total_gp_pct!=null?b.total_gp_pct.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 text-right font-semibold" style="color:${fcColor(b.total_food_cost_pct)}">${b.total_food_cost_pct!=null?b.total_food_cost_pct.toFixed(1)+'%':'—'}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">—</td></tr>';
@@ -2186,7 +2186,7 @@ function _bbomRenderBranchSummary() {
     <tr><td class="py-2 pr-3">รวมทุกสาขา (${rows.length})</td>
       <td class="py-2 pr-3 text-right">${fmtN(g.revenue)}</td>
       <td class="py-2 pr-3 text-right" style="color:#b45309">${fmtN(g.cogs)}</td>
-      <td class="py-2 pr-3 text-right" style="color:#047857">${fmtN(g.gp)}</td>
+      <td class="py-2 pr-3 text-right" style="color:var(--good-ink)">${fmtN(g.gp)}</td>
       <td class="py-2 pr-3 text-right">${g.gp_pct}%</td>
       <td class="py-2 text-right" style="color:${fcColor(g.food_cost_pct)}">${g.food_cost_pct}%</td>
     </tr>` : '';
