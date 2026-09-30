@@ -582,7 +582,7 @@ async function loadChildBuffet() {
     const c = (b.mom_pct == null) ? '#94a3b8' : b.mom_pct >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     return `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
-      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:#db2777">${fmtN(b.covers)}</p>
+      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:var(--pink-ink)">${fmtN(b.covers)}</p>
       <p class="text-[11px] text-slate-400 mt-0.5">covers เด็ก · ${b.pct_of_buffet != null ? b.pct_of_buffet.toFixed(1) + '% ของบุฟเฟ่ต์' : '—'}</p>
       <p class="text-xs font-semibold mt-1" style="color:${textInk(c)}">${b.mom_pct == null ? '<span class="text-slate-400">ไม่มีเดือนก่อน</span>' : (b.mom_pct >= 0 ? '▲' : '▼') + ' ' + Math.abs(b.mom_pct).toFixed(1) + '% MoM'}</p>
       <p class="text-[11px] text-slate-400 mt-0.5">รายได้ ${fmt(b.revenue)}</p>
