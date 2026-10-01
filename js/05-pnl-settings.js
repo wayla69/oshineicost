@@ -2296,6 +2296,15 @@ function downloadCSV(text, filename) {
 // ════════════════════════════════════════════════════════════════
 // FEATURE 4: BRANCH × PERIOD HEATMAP
 // ════════════════════════════════════════════════════════════════
+// Branch × period heatmap. Two readings of the same cells:
+//  'value'  - revenue on one navy scale (darker = more), 5 steps with a legend;
+//  'vsnorm' - each cell vs THAT branch's own average of complete periods
+//             (red below / grey around / green above), so a weak month shows
+//             whatever the branch's size.
+// Rows run by the latest complete period; the period still in progress is
+// marked MTD and kept out of every average and comparison.
+let _heatMode = 'value', _heatData = null;
+function setHeatMode(m) { _heatMode = m; _renderBranchHeatmap(); }
 async function loadBranchHeatmap() {
   const wrap = document.getElementById('heatmapWrap');
   if (!wrap) return;
@@ -2303,44 +2312,100 @@ async function loadBranchHeatmap() {
   const params = new URLSearchParams({ granularity });
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const data = await api(`${API}/api/analysis/heatmap_branch?${params}`);
+  _heatData = await api(`${API}/api/analysis/heatmap_branch?${params}`);
+  _renderBranchHeatmap();
+}
+function _renderBranchHeatmap() {
+  const wrap = document.getElementById('heatmapWrap');
+  const data = _heatData || [];
+  if (!wrap) return;
   if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">No data.</p>'; return; }
 
-  // Build pivot: branch -> {period -> revenue}
   const periods = [...new Set(data.map(r => r.period))].sort();
-  const branches = [...new Set(data.map(r => r.branch))].sort();
   const map = {};
   data.forEach(r => { (map[r.branch] = map[r.branch] || {})[r.period] = r; });
+  const rev = (br, p) => (map[br] && map[br][p] && map[br][p].revenue) || 0;
+  const pi = glancePeriods(periods).partial;                 // the period still in progress, or -1
+  const done = periods.filter((p, i) => i !== pi);
+  const L = done[done.length - 1], Pv = done[done.length - 2];
+  const branches = [...new Set(data.map(r => r.branch))]
+    .sort((a, b) => (rev(b, L) - rev(a, L)) || a.localeCompare(b, 'th'));
+  // A branch's opening month is a part-month (อยุธยา opened on 51K): it is kept
+  // out of the branch's normal and not scored. A normal needs >= 3 full periods.
+  const opening = {};
+  branches.forEach(br => {
+    const live = done.filter(p => rev(br, p) > 0);
+    if (live.length < 2) return;
+    const rest = live.slice(1).map(p => rev(br, p)).sort((a, b) => a - b), med = rest[Math.floor(rest.length / 2)];
+    if (rev(br, live[0]) < 0.3 * med) opening[br] = live[0];
+  });
+  const avgOf = br => { const v = done.filter(p => p !== opening[br]).map(p => rev(br, p)).filter(x => x > 0); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
+  const avg = Object.fromEntries(branches.map(b => [b, avgOf(b)]));
+  const maxRev = Math.max(1, ...branches.flatMap(b => done.map(p => rev(b, p))));
+  const fmtPer = p => fmtPeriod(p);
+  const vs = (br, p) => { const a = avg[br], v = rev(br, p); return a > 0 && v > 0 && p !== opening[br] ? (v / a - 1) * 100 : null; };
+  const pctTxt = x => `${x > 0 ? '+' : ''}${x.toFixed(0)}%`;
 
-  const maxRev = Math.max(...data.map(r => r.revenue || 0));
-  const colorFor = (rev) => {
-    if (!rev || maxRev === 0) return '#f1f5f9';
-    return heatColor(rev / maxRev, false);  // green = high revenue, red = low
+  // One sentence on the latest complete period, in the active reading.
+  let sentence = '';
+  if (L) {
+    if (_heatMode === 'vsnorm') {
+      const rows = branches.map(b => [b, vs(b, L)]).filter(r => r[1] != null);
+      const below = rows.filter(r => r[1] < -5).length, above = rows.filter(r => r[1] > 5).length;
+      const worst = rows.slice().sort((a, b) => a[1] - b[1])[0], best = rows.slice().sort((a, b) => b[1] - a[1])[0];
+      sentence = rows.length ? `<b style="color:var(--text-primary)">${esc(fmtPer(L))}</b> · ต่ำกว่าค่าปกติ ${below} สาขา · สูงกว่า ${above} สาขา`
+        + (worst && worst[1] < -5 ? ` · แย่สุด <b style="color:var(--text-primary)">${esc(worst[0])} ${pctTxt(worst[1])}</b>` : '')
+        + (best && best[1] > 5 ? ` · ดีสุด <b style="color:var(--text-primary)">${esc(best[0])} ${pctTxt(best[1])}</b>` : '') : '';
+    } else {
+      const s2 = glanceRangeSentence(branches, branches.map(b => rev(b, L) || null), { fmt, below: true });
+      sentence = s2 ? `<b style="color:var(--text-primary)">${esc(fmtPer(L))}</b> · ${s2}` : '';
+    }
+  }
+  const step = maxRev / 5;
+  const legend = _heatMode === 'vsnorm'
+    ? heatLegend('div', ['ต่ำกว่า 20%+', 'ต่ำกว่า 5–20%', 'ปกติ ±5%', 'สูงกว่า 5–20%', 'สูงกว่า 20%+'])
+    : heatLegend('seq', [0, 1, 2, 3, 4].map(i => `${fmt(step * i)}–${fmt(step * (i + 1))}`));
+  const seg = (m, label) => `<button onclick="setHeatMode('${m}')" class="text-xs px-2.5 py-1" style="border:1px solid ${_heatMode === m ? 'var(--accent)' : 'var(--border)'};background:${_heatMode === m ? 'var(--accent)' : 'transparent'};color:${_heatMode === m ? 'var(--on-accent)' : 'var(--text-secondary)'};border-radius:3px">${label}</button>`;
+
+  const cell = (br, p, i) => {
+    const r = map[br] && map[br][p], v = rev(br, p), inProg = i === pi;
+    const tip = `${br} · ${fmtPer(p)}${inProg ? ' (ยังไม่ครบ)' : ''} — ${fmtN(v)} · ${r?.tx_count || 0} tx` + (avg[br] ? ` · ค่าปกติ ${fmt(avg[br])}` : '');
+    if (!v) return `<td><div class="heatmap-cell" style="background:transparent;color:var(--text-muted);font-weight:400" title="${esc(tip)}">–</div></td>`;
+    if (inProg) return `<td><div class="heatmap-cell" style="background:transparent;border:1px dashed var(--border-control,#7d8aa0);color:var(--text-secondary);font-weight:500" title="${esc(tip)}">${fmt(v)}</div></td>`;
+    if (p === opening[br]) return `<td><div class="heatmap-cell" style="background:transparent;color:var(--text-muted);font-weight:500" title="${esc(tip)} · เดือนเปิดสาขา (ไม่ครบเดือน)">เปิด</div></td>`;
+    const x = vs(br, p);
+    const bg = _heatMode === 'vsnorm' ? (heatDiv(x) || 'transparent') : heatSeq(v / maxRev);
+    const txt = _heatMode === 'vsnorm' ? (x == null ? '–' : pctTxt(x)) : fmt(v);
+    return `<td><div class="heatmap-cell" style="background:${bg};color:${inkOn(bg)};font-weight:500" title="${esc(tip)}">${txt}</div></td>`;
+  };
+  const momChip = br => {
+    const a = rev(br, L), b = rev(br, Pv);
+    if (!a || !b) return '<td></td>';
+    const d = (a / b - 1) * 100;
+    return `<td style="padding-left:8px;white-space:nowrap;font-size:11px;font-weight:600;color:${d >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}%</td>`;
   };
 
-  const fmtPer = p => fmtPeriod(p);
   wrap.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="display:inline-flex;gap:4px">${seg('value', 'ยอดขาย')}${seg('vsnorm', 'เทียบค่าปกติของสาขา')}</div>
+      ${legend}
+    </div>
+    ${sentence ? `<p style="font-size:12px;line-height:1.45;color:var(--text-secondary);margin:0 0 8px">${sentence}</p>` : ''}
     <table id="heatmapTable" class="heatmap-table">
       <thead><tr>
         <th></th>
-        ${periods.map(p => `<th>${fmtPer(p)}</th>`).join('')}
+        ${periods.map((p, i) => `<th>${fmtPer(p)}${i === pi ? '<br><span style="font-weight:600">MTD</span>' : ''}</th>`).join('')}
+        ${L && Pv ? `<th style="text-align:left;padding-left:8px">${esc(fmtPer(L))}<br>vs ก่อนหน้า</th>` : ''}
       </tr></thead>
       <tbody>
         ${branches.map(br => `<tr>
-          <td class="heatmap-branch-label branch-drillable" onclick="drillIntoBranch('${jsAttr(br)}')" title="คลิกเพื่อดูเฉพาะ ${jsAttr(br)}">${br}</td>
-          ${periods.map(p => {
-            const cell = map[br][p];
-            const rev = cell?.revenue || 0;
-            return `<td>
-              <div class="heatmap-cell" style="background:${colorFor(rev)}"
-                title="${br} · ${fmtPer(p)} — ${fmtN(rev)} · ${cell?.tx_count||0} tx">
-                ${rev ? fmt(rev) : ''}
-              </div>
-            </td>`;
-          }).join('')}
+          <td class="heatmap-branch-label branch-drillable" onclick="drillIntoBranch('${jsAttr(br)}')" title="คลิกเพื่อดูเฉพาะ ${jsAttr(br)}">${esc(br)}</td>
+          ${periods.map((p, i) => cell(br, p, i)).join('')}
+          ${L && Pv ? momChip(br) : ''}
         </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table>
+    <p style="font-size:10.5px;color:var(--text-muted);margin-top:6px">เรียงตามยอด${L ? ' ' + esc(fmtPer(L)) : ''} · ${_heatMode === 'vsnorm' ? 'ค่าปกติ = ค่าเฉลี่ยของสาขานั้นเองในช่วงที่เลือก (ไม่รวมช่วงที่ยังไม่ครบ)' : 'สีเข้ม = ยอดมาก'}${pi >= 0 ? ' · MTD = ยังไม่ครบ ไม่นำมาเทียบ' : ''} · – = ไม่มียอด${Object.keys(opening).length ? ' · เปิด = เดือนที่เปิดสาขา (ไม่ครบเดือน)' : ''}</p>`;
 }
 
 function closeDrill() {}  // legacy no-op (old cached callers)

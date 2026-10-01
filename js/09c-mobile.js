@@ -538,7 +538,7 @@ function setupChartDefaults() {
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
 
   // Rounded, cleaner bars
-  Chart.defaults.elements.bar.borderRadius = 3;      // formal theme: near-square tip...
+  Chart.defaults.elements.bar.borderRadius = 4;      // formal theme: a firm, lightly rounded tip...
   Chart.defaults.elements.bar.borderSkipped = 'start'; // ...sitting flush on the baseline
   Chart.defaults.elements.bar.maxBarThickness = 46;
 

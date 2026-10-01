@@ -639,23 +639,38 @@ function colorForRank(idx, total) {
   if (t < 0.66) return SEMANTIC.revenue;     // middle third
   return SEMANTIC.discount;                  // bottom third
 }
-// Continuous heat scale: t∈[0,1] → red (low) ▸ amber ▸ green (high).
-// Pass invert=true for "lower is better" metrics (cost) so green=low, red=high.
-function heatColor(t, invert) {
-  if (t == null || isNaN(t)) return '#f1f5f9';
-  let x = Math.max(0, Math.min(1, t));
-  if (invert) x = 1 - x;
-  const stops = [[239,68,68], [245,158,11], [22,163,74]]; // red → amber → green
-  const seg = x < 0.5 ? 0 : 1;
-  const f   = x < 0.5 ? x / 0.5 : (x - 0.5) / 0.5;
-  const a = stops[seg], b = stops[seg + 1];
-  const mix = i => Math.round(a[i] + (b[i] - a[i]) * f);
-  return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+// ── Heat scales (heatmaps) ──
+// The old red→amber→green scale painted VOLUME as good/bad: a small branch or a
+// quiet hour came out "red" though nothing was wrong. Two scales instead:
+//  - sequential = "how much": one navy hue, light → dark, in 5 steps so a cell
+//    reads as a band rather than a shade to squint at;
+//  - diverging  = "vs normal": red below, grey around, green above - only where
+//    a baseline makes good/bad true (a cell vs its own branch's average).
+// The fills are theme TOKENS (--heat-s1..5 / --heat-d1..5 with matching -ink
+// label colours, index.html), so a heatmap follows the theme toggle without a
+// re-render; inkOn() maps a token fill to its ink token.
+// % vs normal edges: <=-20 | -20..-5 | ±5 | 5..20 | >=20
+// t = value / max, in (0, 1]
+function heatSeq(t) {
+  if (t == null || !isFinite(t) || t <= 0) return null;
+  return `var(--heat-s${Math.min(4, Math.floor(Math.min(1, t) * 5 - 1e-9)) + 1})`;
+}
+function heatDiv(pct) {
+  if (pct == null || !isFinite(pct)) return null;
+  return `var(--heat-d${(pct <= -20 ? 0 : pct < -5 ? 1 : pct <= 5 ? 2 : pct < 20 ? 3 : 4) + 1})`;
+}
+// A legend row: 5 swatches with their labels.
+function heatLegend(kind, labels) {
+  const cols = [1, 2, 3, 4, 5].map(i => `var(--heat-${kind === 'div' ? 'd' : 's'}${i})`);
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text-muted)">${cols.map((c, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:${c};border:1px solid var(--border)"></span>${labels[i] || ''}</span>`).join('')}</div>`;
 }
 // Label colour for text ON a data-driven fill (heat cells, bar segments, badges): white or
 // the light-theme primary ink, whichever contrasts more. Fixed hex both themes, like the fill.
 // White fails on the whole heat scale (#ef4444 3.76, #f59e0b 2.15, #16a34a 3.30); #0f172a clears it.
 function inkOn(bg) {
+  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5])\)$/);
+  if (tok) return `var(--heat-${tok[1]}-ink)`;   // heat fills are theme tokens with their own ink
   const m = String(bg || '').trim().match(/^#(?:([0-9a-f]{6})(?:[0-9a-f]{2})?|([0-9a-f]{3}))(?![0-9a-f])|^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
   if (!m) return '#fff';
   let rgb;
@@ -880,21 +895,29 @@ function _glanceDot(ctx, x, y, color, surface) {
   ctx.stroke();
 }
 
-// Gradient along the value axis, cached per chart area + colour. Bars fade from
-// full at the tip to `lo` at the zero line (both ways when negatives exist).
-function _glanceGrad(chart, rgba, vs, horizontal, lo, hi) {
+// Bar fill, cached per chart area + colour. Two rules make bars read as solid,
+// even colour instead of milky:
+//  - a see-through colour (many charts fade their non-highlighted bars) is
+//    flattened onto the card surface first, so it keeps its tone but gridlines
+//    no longer show through it;
+//  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
+//    colour mixed 22% toward the surface at the zero line (both ways when
+//    negatives exist), so a short bar is still clearly its colour.
+const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
+function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   const a = chart.chartArea, g = chart.$glance || (chart.$glance = {});
   const zero = vs && typeof vs.getPixelForValue === 'function' ? vs.getPixelForValue(0) : (horizontal ? a.left : a.bottom);
-  const key = `${rgba.join()}|${horizontal}|${lo}|${hi}|${a.left}|${a.top}|${a.right}|${a.bottom}|${Math.round(zero)}`;
+  const key = `${rgba.join()}|${surf.join()}|${horizontal}|${a.left}|${a.top}|${a.right}|${a.bottom}|${Math.round(zero)}`;
   g.grads = g.grads || new Map();
   if (g.grads.has(key)) return g.grads.get(key);
+  const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
+  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.22), 1);
   const ctx = chart.ctx;
   const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
                           : ctx.createLinearGradient(0, a.top, 0, a.bottom);
   const span = horizontal ? a.right - a.left : a.bottom - a.top;
   const z = Math.max(0, Math.min(1, ((horizontal ? zero - a.left : zero - a.top) / (span || 1))));
-  const strong = _glanceCss(rgba, rgba[3] * hi), weak = _glanceCss(rgba, rgba[3] * lo);
-  // Strong at both far edges, weakest at the zero line (a baseline at an edge
+  // Strong at both far edges, lightest at the zero line (a baseline at an edge
   // simply drops that edge's stop, so the bar never ends in a hard 1px band).
   if (z > 0.001) grad.addColorStop(0, strong);
   grad.addColorStop(z, weak);
@@ -938,10 +961,14 @@ function _glanceParseLabel(l, ref) {
 
 // { grain:'day'|'month'|null, dates, partial: index of the period still in progress (-1), note }
 function _glanceInfo(chart) {
+  return glancePeriods((chart.config.data && chart.config.data.labels) || [], _glanceCfg(chart));
+}
+// The same, for any list of period labels (heatmaps, tables): which one is still in progress.
+function glancePeriods(labels, go) {
+  go = go || {};
   const none = { grain: null, dates: null, partial: -1, note: '' };
-  const labels = (chart.config.data && chart.config.data.labels) || [];
   if (labels.length < 2) return none;
-  const ref = _glanceLastDate(), go = _glanceCfg(chart);
+  const ref = _glanceLastDate();
   let dates = null;
   if (Array.isArray(go.dates) && go.dates.length === labels.length) dates = go.dates.map(x => _glanceParseLabel(String(x), ref));
   if (!dates || !dates.every(Boolean)) dates = labels.map(l => _glanceParseLabel(Array.isArray(l) ? l.join(' ') : String(l ?? ''), ref));
@@ -1033,7 +1060,8 @@ function glanceRangeSentence(labels, vals, o) {
   if (vals[hi] === vals[lo]) return '';
   const parts = [`สูงสุด ${_glanceB(`${lab(hi)} ${f(vals[hi])}`)}`, `ต่ำสุด ${_glanceB(`${lab(lo)} ${f(vals[lo])}`)}`];
   if (o.pct) parts.push(`ห่างกัน ${(vals[hi] - vals[lo]).toFixed(1)} pp`);
-  else if (vals[lo] > 0 && vals[hi] / vals[lo] >= 1.5) parts.push(`ต่างกัน ${(vals[hi] / vals[lo]).toFixed(1)} เท่า`);
+  // a ratio reads only in a sane range ("1913 เท่า" against a near-empty bucket says nothing)
+  else if (vals[lo] > 0 && vals[hi] / vals[lo] >= 1.5 && vals[hi] / vals[lo] <= 20) parts.push(`ต่างกัน ${(vals[hi] / vals[lo]).toFixed(1)} เท่า`);
   if (o.below) {
     const avg = idx.reduce((a, i) => a + vals[i], 0) / idx.length;
     parts.push(`${idx.filter(i => vals[i] < avg).length} จาก ${idx.length} ต่ำกว่าค่าเฉลี่ย ${f(avg)}`);
@@ -1223,6 +1251,7 @@ const GLANCE_PLUGIN = {
         opts[prop] = val;
       };
       const depth = _glanceOpt(chart, 'depth');
+      const surf = _glanceRgba(_glanceTheme(chart).surface) || [255, 255, 255, 1];
       chart.getSortedVisibleDatasetMetas().forEach(m => {
         const stacked = m.vScale && m.vScale.options && m.vScale.options.stacked;
         if (m.type === 'bar') {
@@ -1239,7 +1268,7 @@ const GLANCE_PLUGIN = {
               el.options = Object.assign(Object.create(Object.getPrototypeOf(own)), own, { backgroundColor: _glanceCss(rgba, rgba[3] * 0.18) });
               chart.$glanceHollow.push({ el, color: _glanceCss(rgba, Math.max(rgba[3], 0.7)) });
             } else if (depth && !stacked) {
-              swap(el.options, 'backgroundColor', _glanceGrad(chart, rgba, m.vScale, horizontal, 0.58, 1));
+              swap(el.options, 'backgroundColor', _glanceGrad(chart, rgba, surf, m.vScale, horizontal));
             }
           });
         } else if (depth && m.type === 'line' && m.dataset && m.dataset.options) {

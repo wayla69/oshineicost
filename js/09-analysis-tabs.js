@@ -1568,10 +1568,10 @@ function renderTimeflowGrid() {
     return v >= 1000 ? (v/1000).toFixed(1)+'k' : Math.round(v);
   };
 
-  // Red (quiet) → amber → green (busiest); the label takes whichever of white / navy reads
+  // One navy scale, darker = busier (a quiet hour is not "bad"); the label takes white / navy
   const cellColor = intensity => {
-    if (!intensity || intensity < 0.01) return { bg: '#f8fafc', fg: 'var(--text-muted)' };
-    const bg = heatColor(intensity, false); return { bg, fg: inkOn(bg) };
+    if (!intensity || intensity < 0.01) return { bg: 'var(--bg-subtle)', fg: 'var(--text-muted)' };
+    const bg = heatSeq(intensity); return { bg, fg: inkOn(bg) };
   };
 
   const cellW = Math.max(38, Math.floor((gridEl.offsetWidth - 50) / openHours.length));
@@ -1612,7 +1612,7 @@ function renderTimeflowGrid() {
   html += `</tbody></table>
   <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10px;color:var(--text-muted)">
     <span style="opacity:.7">น้อย</span>
-    ${[0,0.25,0.5,0.75,1].map(t=>`<div style="width:28px;height:8px;background:${heatColor(t,false)};border-radius:3px"></div>`).join('')}
+    ${[0.1,0.3,0.5,0.7,0.9].map(t=>`<div style="width:28px;height:8px;background:${heatSeq(t)};border-radius:2px"></div>`).join('')}
     <span style="opacity:.7">มาก</span>
     <span style="margin-left:auto;opacity:.6">Open hours: ${_tfOpenFrom}:00–${_tfOpenTo}:00 · configurable in Settings → Hours</span>
   </div>`;

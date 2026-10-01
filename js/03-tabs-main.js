@@ -160,8 +160,8 @@ function renderTimeHeatmap(hourly) {
   if (!el) return;
   const maxRev = Math.max(...hourly.map(r => r.revenue || 0));
   const getColor = (rev) => {
-    if (!rev || maxRev === 0) return '#f1f5f9';
-    return heatColor(rev / maxRev, false);  // green = busiest hours, red = quiet
+    if (!rev || maxRev === 0) return 'var(--bg-subtle)';
+    return heatSeq(rev / maxRev);  // darker = busier (volume is not good/bad)
   };
   el.innerHTML = hourly.map(r => `
     <div class="flex flex-col items-center" style="width:calc((100% - ${23*4}px) / 24);min-width:28px">
