@@ -2045,7 +2045,16 @@ async function _followGlobal(tabKey, f) {
   if (f.monthRange) _syncExtraMonthRange(f.monthRange[0], f.monthRange[1], tabKey);
 }
 
-function switchTab(name) {
+function switchTab(name, direct) {
+  // เมนูทำเงิน = the menu tab's Menu Engineering view (owner, 2026-10-01). The
+  // standalone page (it adds a category filter) stays one click away from that
+  // view: switchTab('engineering', true).
+  if (name === 'engineering' && !direct && tabAllowed('menu')) {
+    activeSubtab = 'engineering';
+    switchTab('menu');
+    switchSubtab('engineering');
+    return;
+  }
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
@@ -2106,16 +2115,31 @@ function switchTab(name) {
 // Lean-overhaul Phase 2: every analysis area is ONE sidebar entry + a cluster
 // bar of related views on the page itself. tabs[0] of each cluster is its
 // sidebar entry (applyPermissions' safety net relies on that ordering).
+// Regrouped 2026-10-01 (owner): one entry per question - ยอดขาย / ลูกค้า &
+// บุฟเฟ่ต์ / เมนู / ต้นทุน / กำไร / ส่วนลด & เงิน / ปฏิบัติการ / จัดซื้อ - and
+// each group sits inside one permission area as far as it can, so a role sees
+// whole groups instead of half-locked ones. A third element lists alias tabs
+// that light the same chip (a sub-view of that page, not a chip of its own).
 const TAB_CLUSTERS = [
-  { key: 'overview', label: 'ภาพรวม',       tabs: [['overall','ภาพรวม & KPI'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['compare','เทียบ A/B'],['more','Insight เพิ่มเติม']] },
-  { key: 'buffet',   label: 'บุฟเฟ่ต์',      tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['childbuffet','บุฟเฟ่ต์เด็ก'],['guest','ลูกค้า & ยอด/หัว'],['timeflow','ช่วงเวลา & การไหล'],['custtype','ประเภทลูกค้า']] },
-  { key: 'menu',     label: 'เมนู',          tabs: [['menu','วิเคราะห์เมนู'],['engineering','เมนูทำเงิน'],['menucompare','เทียบเมนู A/B'],['menuimpact','วิเคราะห์วัตถุดิบ']] },
-  { key: 'menufix',  label: 'ปรับเมนู',       tabs: [['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menuefficiency','เป้าลดต้นทุน']] },
-  { key: 'cost',     label: 'ต้นทุน',         tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','Simulators'],['costhead','ต้นทุน/หัว'],['costheadtop60','Top60/หัว'],['heavyeater','นักกินหนัก'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา']] },
-  { key: 'profit',   label: 'กำไร & P&L',     tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
-  { key: 'supply',   label: 'จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
-  { key: 'ops',      label: 'ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','ส่วนลด'],['ops','เชิงลึก'],['staff','พนักงาน'],['cashctl','เงินสด'],['cancelbill','บิลยกเลิก'],['modifiers','Modifiers'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
+  { key: 'sales',  label: 'ยอดขาย',          tabs: [['overall','ภาพรวม & KPI'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['timeflow','ช่วงเวลา'],['custtype','ช่องทาง & ประเภทลูกค้า'],['compare','เทียบ A/B'],['more','Insight เพิ่มเติม']] },
+  { key: 'buffet', label: 'ลูกค้า & บุฟเฟ่ต์', tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['guest','ลูกค้า & ยอด/หัว'],['childbuffet','บุฟเฟ่ต์เด็ก']] },
+  { key: 'menu',   label: 'เมนู',            tabs: [['menu','วิเคราะห์เมนู',['engineering']],['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menucompare','เทียบเมนู A/B']] },
+  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['costhead','ต้นทุน/หัว',['costheadtop60']],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','Simulators']] },
+  { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','Benchmark']] },
+  { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
+  { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
+  { key: 'supply', label: 'จัดซื้อ',          tabs: [['ordering','แผนสั่งวัตถุดิบ'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
 ];
+const _inChip = (t, name) => t[0] === name || (t[2] || []).includes(name);
+const clusterOf = name => TAB_CLUSTERS.find(c => c.tabs.some(t => _inChip(t, name)));
+// Group colours (docs/ui-kit/theme-groups.css): the group a tab belongs to -
+// its cluster's key, else one of the stand-alone entries below.
+const _GROUP_OF_LOOSE = { feedback: 'feedback', checklist: 'feedback', pnl: 'profit' };
+function _groupOf(name) { const cl = clusterOf(name); return cl ? cl.key : (_GROUP_OF_LOOSE[name] || 'home'); }
+// Tag every sidebar item with its group once (the scripts load after the markup).
+try {
+  document.querySelectorAll('#sidebar .nav-item[id^="nav-"]').forEach(el => { el.dataset.g = _groupOf(el.id.slice(4)); });
+} catch (e) { /* no sidebar on this page */ }
 // ── Kill list — ON HOLD (owner's call, 2026-09-05) ─────────────────────────
 // 47 days of usage telemetry (2026-07-20 → 09-05, Settings → การใช้งานจริง)
 // found 17 tabs nobody opened (docs/LEAN_KILL_LIST_2026-09.html). The app is
@@ -2140,25 +2164,34 @@ let _clusterMoreOpen = false;
 function _updateClusterBar(name) {
   const bar = document.getElementById('clusterBar');
   if (!bar) return;
-  const cl = TAB_CLUSTERS.find(c => c.tabs.some(t => t[0] === name));
+  const cl = clusterOf(name);
+  document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
+  // The group you are in stays lit in the sidebar, whichever of its views is open
+  // (its entry is tabs[0], or the first member the role can open - applyPermissions).
+  if (cl) {
+    const entry = cl.tabs.map(([t]) => document.getElementById('nav-' + t))
+      .find(el => el && getComputedStyle(el).display !== 'none');
+    if (entry) entry.classList.add('active');
+  }
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
   const allowed = cl.tabs.filter(([t]) => tabAllowed(t));
   const shown = allowed.filter(([t]) => !SOFT_KILL.has(t));
   const folded = allowed.filter(([t]) => SOFT_KILL.has(t));
   const open = _clusterMoreOpen || folded.some(([t]) => t === name);   // the active tab is never hidden
-  const chip = ([t, lbl], dim) => {
-    const on = t === name;
+  const chip = ([t, lbl, alias], dim) => {
+    const on = t === name || (alias || []).includes(name);
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
+    // the active chip wears the group colour (theme-groups.css); without that sheet the fallbacks are the old navy
     return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
-      ? 'background:var(--indigo);color:var(--on-indigo);font-weight:600'
+      ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
       : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${_noEmoji(lbl)}</button>`;
   };
   const more = !folded.length ? '' : open
     ? folded.map(c => chip(c, true)).join('') +
       `<button id="clusterFold" onclick="_clusterMoreOpen=false;_updateClusterBar('${name}')" title="ซ่อนแท็บที่ไม่ได้ใช้" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">‹</button>`
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
-  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${_noEmoji(cl.label)}:</span>` +
+  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
 }
 
