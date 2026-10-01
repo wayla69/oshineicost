@@ -717,7 +717,7 @@ def buffet_gp_calendar(
     # revenue, leaving the calendar near-empty and margins nonsensical. Using
     # all Easy receipts keeps the revenue base consistent with the all-SKU BoM
     # COGS below (both reconcile to ~120M ex-VAT / 54% food cost for 2026-05).
-    day_filters = ["st.source = 'Easy'",
+    day_filters = ["st.source = 'Easy'", "b.name != 'ALL'",
                    "SUBSTR(st.sold_at, 1, 7) = :month"]
     if branch:
         day_filters.append("b.name = :branch")
@@ -727,6 +727,7 @@ def buffet_gp_calendar(
         SELECT
             DATE(st.sold_at)          AS day,
             SUM(st.total_inc_vat)     AS revenue_inc,
+            SUM(COALESCE(st.service_charge, 0)) AS service_charge,
             COUNT(*)                  AS tx_count,
             SUM(st.customer_count)    AS customer_count
         FROM sales_transaction st
@@ -761,14 +762,18 @@ def buffet_gp_calendar(
     monthly_cogs = (mon_row["cogs"] or None) if mon_row else None
 
     total_rev_inc = sum(r["revenue_inc"] or 0.0 for r in day_rows)
-    total_rev_ex  = round(ex_vat(total_rev_inc), 2)
+    # net of VAT AND service charge, as the comment above (and net_revenue_sum)
+    # says — it used to be ex_vat() alone, which left the 5% service charge in
+    # revenue and read GP% ~1-1.5 pts high against the P&L (fixed 2026-10-01)
+    total_rev_ex  = round(ex_vat(total_rev_inc)
+                          - sum(r["service_charge"] or 0.0 for r in day_rows), 2)
 
     days_out = []
     for r in day_rows:
         day_rev = r["revenue_inc"] or 0.0
         weight  = day_rev / total_rev_inc if total_rev_inc else 0.0
 
-        day_rev_ex = round(ex_vat(day_rev), 2)
+        day_rev_ex = round(ex_vat(day_rev) - (r["service_charge"] or 0.0), 2)
         day_cogs   = round(monthly_cogs * weight, 2) if monthly_cogs is not None else None
 
         if day_cogs is not None and day_rev_ex:
@@ -843,7 +848,7 @@ def buffet_child_trend(
         FROM v_sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
-        JOIN categories c  ON c.category_id = sk.category_id
+        LEFT JOIN categories c ON c.category_id = sk.category_id
         {where}
         GROUP BY sm.period_month, sk.sku_code, sk.description, c.name
         ORDER BY sm.period_month
@@ -875,7 +880,6 @@ def buffet_child_trend(
         code = (r["sku_code"] or "").upper()
         desc = (r["description"] or "").lower()
         qty  = r["qty"] or 0.0
-        cat  = r["category"] or ""
 
         is_child = (code in _BUFFET_CHILD_CODES or
                     "child" in desc or "เด็ก" in desc)
@@ -886,8 +890,10 @@ def buffet_child_trend(
         elif is_adult:
             monthly[mo]["adult"] += qty
 
-        if cat == "BUFFET":
-            monthly[mo]["rev_ex"] += r["rev_ex"] or 0.0
+        # GP% on the P&L definition: all revenue against all COGS (cogs_sql is
+        # all-SKU). Until 2026-10-01 only category 'BUFFET' revenue counted, so
+        # drink and à-la-carte cost was subtracted from revenue that excluded them.
+        monthly[mo]["rev_ex"] += r["rev_ex"] or 0.0
 
     result = []
     for mo in sorted(monthly):

@@ -3,21 +3,21 @@
   "adult_pax": 160.0,
   "child_pax": 0.0,
   "child_pct": 0.0,
-  "gp_pct": 55.0,
+  "gp_pct": 70.0,
   "period_month": "2026-06"
  },
  {
   "adult_pax": 200.0,
   "child_pax": 0.0,
   "child_pct": 0.0,
-  "gp_pct": 55.0,
+  "gp_pct": 70.0,
   "period_month": "2026-04"
  },
  {
   "adult_pax": 200.0,
   "child_pax": 0.0,
   "child_pct": 0.0,
-  "gp_pct": 55.0,
+  "gp_pct": 70.0,
   "period_month": "2026-05"
  }
 ]

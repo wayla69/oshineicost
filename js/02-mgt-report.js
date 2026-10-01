@@ -305,7 +305,7 @@ const MGT_I18N = {
     // §8 peak
     daypartSplit:'Daypart split (revenue)', smallPct:'· small % = ', noData2:'No data.',
     totalC:'Total', busiestHour:'Busiest hour', busiestDay:'Busiest day',
-    byHour:'By hour', byDow:'By day of week', peakHour:'Peak Hour', bestDay:'Best Day', dayparts:'Dayparts',
+    byHour:'By hour', byDow:'By day of week (avg per day)', peakHour:'Peak Hour', bestDay:'Best Day', dayparts:'Dayparts',
     Lunch:'Lunch', Dinner:'Dinner', Other:'Other',
     // §9 table
     coversTable:'Covers / Table', turnsPerTable:'turns per table', avgTurnTime:'Avg Turn Time',
@@ -422,7 +422,7 @@ const MGT_I18N = {
     costHeadRising:'ต้นทุนต่อหัวเพิ่มขึ้น ', costHeadFalling:'ต้นทุนต่อหัวลดลง ', noData:'ไม่มีข้อมูล',
     daypartSplit:'แบ่งตามช่วงเวลา (รายได้)', smallPct:'· เลขเล็ก = ', noData2:'ไม่มีข้อมูล',
     totalC:'รวม', busiestHour:'ชั่วโมงพีค', busiestDay:'วันพีค',
-    byHour:'ตามชั่วโมง', byDow:'ตามวันในสัปดาห์', peakHour:'ชั่วโมงพีค', bestDay:'วันพีค', dayparts:'ช่วงเวลา',
+    byHour:'ตามชั่วโมง', byDow:'ตามวันในสัปดาห์ (เฉลี่ยต่อวัน)', peakHour:'ชั่วโมงพีค', bestDay:'วันพีค', dayparts:'ช่วงเวลา',
     Lunch:'มื้อกลางวัน', Dinner:'มื้อเย็น', Other:'อื่นๆ',
     coversTable:'หัว/โต๊ะ', turnsPerTable:'รอบต่อโต๊ะ', avgTurnTime:'เวลาเฉลี่ย/รอบ',
     perSession:'ต่อรอบโต๊ะ · เร็ว = ดี', min:'นาที', tablesUsed:'โต๊ะที่ใช้',
@@ -957,7 +957,7 @@ function renderMgtReport(j, jM, jF) {
   // Weekly keeps its extra day-of-week insight, shown as a full-width row BENEATH the
   // daily-style 2-column grid so the core Peak-Hours layout still matches the Daily report.
   const byDayRow = (!isDaily && (PK.by_day || []).length)
-    ? `<div class="mt-4 pt-3 border-t border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">${T.byDow}</p>${miniBars(PK.by_day.map(d => ({...d, dowL: dowLabel(d.dow)})), 'revenue', 'dowL', d => d.dow === PK.best_day)}</div>`
+    ? `<div class="mt-4 pt-3 border-t border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">${T.byDow}</p>${miniBars(PK.by_day.map(d => ({...d, dowL: dowLabel(d.dow)})), 'avg_revenue', 'dowL', d => d.dow === PK.best_day)}</div>`
     : '';
   const peakHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div><p class="text-xs font-semibold text-slate-500 mb-2">${T.daypartSplit} <span class="font-normal text-slate-400">${T.smallPct}${compShort}</span></p>${dpBars || `<p class="text-sm text-slate-400">${T.noData2}</p>`}

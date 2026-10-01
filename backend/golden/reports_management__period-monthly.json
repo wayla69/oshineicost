@@ -241,37 +241,58 @@
   "best_day": "Fri",
   "by_day": [
    {
+    "avg_covers": 0,
+    "avg_revenue": 0,
     "covers": 0,
+    "days": 0,
     "dow": "Mon",
     "revenue": 0
    },
    {
+    "avg_covers": 0,
+    "avg_revenue": 0,
     "covers": 0,
+    "days": 0,
     "dow": "Thu",
     "revenue": 0
    },
    {
+    "avg_covers": 0,
+    "avg_revenue": 0,
     "covers": 0,
+    "days": 0,
     "dow": "Tue",
     "revenue": 0
    },
    {
+    "avg_covers": 0,
+    "avg_revenue": 0,
     "covers": 0,
+    "days": 0,
     "dow": "Wed",
     "revenue": 0
    },
    {
+    "avg_covers": 8.0,
+    "avg_revenue": 1900,
     "covers": 8,
+    "days": 1,
     "dow": "Fri",
     "revenue": 1900
    },
    {
+    "avg_covers": 8.0,
+    "avg_revenue": 1900,
     "covers": 8,
+    "days": 1,
     "dow": "Sat",
     "revenue": 1900
    },
    {
+    "avg_covers": 8.0,
+    "avg_revenue": 1900,
     "covers": 8,
+    "days": 1,
     "dow": "Sun",
     "revenue": 1900
    }

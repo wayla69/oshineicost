@@ -2677,7 +2677,8 @@ def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, pe
     if period != "daily":      # which day of the week drove the week
         dow_rows = con.execute(f"""
             SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
-                   ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust
+                   ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust,
+                   COUNT(DISTINCT date(st.sold_at)) days
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
             GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
@@ -2685,11 +2686,17 @@ def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, pe
         by_day = []
         for i, nm in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
             r = dm.get((i + 1) % 7)      # %w: 0=Sun..6=Sat → Mon-first
+            days = (r["days"] or 0) if r else 0
+            # per trading day, like วิเคราะห์ตามวัน (/api/analysis/dow): a month holds
+            # four or five of each weekday, and totals made the five-times days look
+            # ~25% bigger (Sep 2026: Tue/Wed totals over Mon/Thu, per day all equal)
             by_day.append({"dow": nm, "revenue": round(r["rev"] or 0) if r else 0,
-                           "covers": (r["cust"] or 0) if r else 0})
-        bd = max(by_day, key=lambda d: d["revenue"], default=None)
+                           "covers": (r["cust"] or 0) if r else 0, "days": days,
+                           "avg_revenue": round((r["rev"] or 0) / days) if days else 0,
+                           "avg_covers": round((r["cust"] or 0) / days, 1) if days else 0})
+        bd = max(by_day, key=lambda d: d["avg_revenue"], default=None)
         peak["by_day"] = by_day
-        peak["best_day"] = bd["dow"] if bd and bd["revenue"] else None
+        peak["best_day"] = bd["dow"] if bd and bd["avg_revenue"] else None
 
     # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
     table = {"available": False}

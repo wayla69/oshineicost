@@ -141,7 +141,7 @@ A4	'Busiest hour'
 B4	'12:00'			
 C4	58900	#,##0		
 A5	'Busiest day'			
-B5	'Fri'			
+B5	'Mon'			
 A7	'Day of week'		bc	0F766E
 B7	'Revenue'		bc	0F766E
 C7	'Covers'		bc	0F766E

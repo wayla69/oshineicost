@@ -129,3 +129,41 @@ def test_backfill_ignores_non_easy_source():
     con.commit()
     assert month_summary.backfill(con) == 0, "only Easy transactions are rolled up"
     assert con.execute("SELECT COUNT(*) FROM sales_month_summary").fetchone()[0] == 0
+
+
+def test_backfill_catches_up_a_frozen_closed_month():
+    """A live row frozen by the last sync inside its month (fewer bills than the
+    month really had) is rebuilt; an Excel row that is not behind is left alone.
+    August 2026 sat 18.8% short on bills until this existed."""
+    con = _db()
+    _add_tx(con, 1, "2026-08", [(4, 900, 100, 0, 0, 20, 1070.0)] * 200)
+    con.execute("INSERT INTO sales_month_summary(branch_id,period_month,gross_sales,"
+                "refunds,discounts,voided,net_sales,customer_count,transaction_count,source)"
+                " VALUES(1,'2026-08', 1, 0, 0, 0, 1, 650, 162, 'Easy')")      # frozen: 162 of 200 bills
+    _add_tx(con, 2, "2026-05", [(2, 500, 0, 0, 0, 0, 535.0)] * 100)
+    con.execute("INSERT INTO sales_month_summary(branch_id,period_month,gross_sales,"
+                "refunds,discounts,voided,net_sales,customer_count,transaction_count,source)"
+                " VALUES(2,'2026-05', 9999, 0, 0, 0, 8888, 199, 100, 'Easy')")  # Excel, in step
+    con.commit()
+    month_summary.backfill(con); con.commit()
+    aug = con.execute("SELECT customer_count, transaction_count FROM sales_month_summary"
+                      " WHERE branch_id=1 AND period_month='2026-08'").fetchall()
+    assert aug == [(800, 200)]
+    may = con.execute("SELECT gross_sales, net_sales, customer_count FROM sales_month_summary"
+                      " WHERE branch_id=2 AND period_month='2026-05'").fetchone()
+    assert may == (9999, 8888, 199)
+
+
+def test_backfill_rebuilds_the_previous_month():
+    """Bills for the last day of a month land after the rollover; the previous
+    month is rebuilt every run so they are counted."""
+    con = _db()
+    prev_ym = con.execute("SELECT strftime('%Y-%m','now','+7 hours','start of month','-1 month')").fetchone()[0]
+    _add_tx(con, 1, prev_ym, [(4, 900, 100, 0, 0, 20, 1070.0)] * 100)
+    con.execute("INSERT INTO sales_month_summary(branch_id,period_month,gross_sales,"
+                "refunds,discounts,voided,net_sales,customer_count,transaction_count,source)"
+                f" VALUES(1,'{prev_ym}', 1, 0, 0, 0, 1, 398, 100, 'Easy')")     # in step on bills, stale on covers
+    con.commit()
+    month_summary.backfill(con); con.commit()
+    assert con.execute("SELECT customer_count FROM sales_month_summary"
+                       f" WHERE period_month='{prev_ym}'").fetchone()[0] == 400

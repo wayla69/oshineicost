@@ -857,8 +857,15 @@ async function loadSummaryKpis() {
   renderKpiHero(trendData);
   // Hero extras (GP, discount, best/worst branch) — load async so they don't
   // block the core KPIs; augment the hero when ready.
+  // GP / COGS tiles on the same scope as the revenue tiles beside them: the
+  // endpoint takes group=, and a selected branch keeps only its own rows
+  const gpP = new URLSearchParams();
+  if (getGroup()) gpP.set('group', getGroup());
   Promise.all([
-    api(`${API}/api/gp/by-branch-month`).catch(() => null),
+    api(`${API}/api/gp/by-branch-month?${gpP}`).then(g => {
+      if (g && g.rows && getBranch()) g = { ...g, rows: g.rows.filter(r => r.branch === getBranch()) };
+      return g;
+    }).catch(() => null),
     api(`${API}/api/analysis/discounts`).catch(() => null),
   ]).then(([gpb, disc]) => { if (loadGen === gen) renderKpiHero(trendData, gpb, disc); });
 
