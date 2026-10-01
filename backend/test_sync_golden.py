@@ -9,6 +9,8 @@ gives the endpoints: identical output, or a diff to look at.
 
   regenerate:  GOLDEN_UPDATE=1 python -m pytest backend/test_sync_golden.py
 """
+import datetime
+import functools
 import hashlib
 import json
 import os
@@ -16,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from test_sync_staging import staged  # noqa: F401  (the fixture that runs stage_reports)
+from test_sync_staging import staged, sync  # noqa: F401  (the fixture that runs stage_reports)
 
 GOLDEN = Path(__file__).parent / "golden" / "sync_stage_reports.json"
 UPDATE = os.environ.get("GOLDEN_UPDATE") == "1"
@@ -44,8 +46,22 @@ def _c(v):
     return round(v, 6) if isinstance(v, float) else v
 
 
-def test_stage_reports_output_is_pinned(staged):  # noqa: F811
-    got = _snapshot(staged)
+# The staging runs one query per calendar month from its start date up to TODAY,
+# and the canned MSSQL answers every query, so the output grew by a row on the 1st
+# of each month (red CI on 2026-10-01 with no code change). Stage as of the day
+# the golden was recorded instead - Feb..Sep 2026 = 8 month windows.
+GOLDEN_TODAY = datetime.date(2026, 9, 15)
+
+
+@pytest.fixture
+def staged_on_golden_day(request):
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(sync, "_month_windows", functools.partial(sync._month_windows, today=GOLDEN_TODAY))
+        yield request.getfixturevalue("staged")
+
+
+def test_stage_reports_output_is_pinned(staged_on_golden_day):
+    got = _snapshot(staged_on_golden_day)
     if UPDATE or not GOLDEN.exists():
         GOLDEN.parent.mkdir(exist_ok=True)
         GOLDEN.write_text(json.dumps(got, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")

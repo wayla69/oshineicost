@@ -453,14 +453,16 @@ def publish_staging(stage) -> bool:
     return False
 
 
-def _month_windows(since):
+def _month_windows(since, today=None):
     """Calendar-month [lo, hi) windows from `since` up to and including the current
     month. The first window honours the exact `since` day; the rest start on the
-    1st. Each window's `hi` is the first day of the next month (exclusive)."""
+    1st. Each window's `hi` is the first day of the next month (exclusive).
+    `today` exists for the tests (the window count grows every month); the sync
+    never passes it."""
     import datetime
     parts = since[:10].split("-")
     start = datetime.date(int(parts[0]), int(parts[1]), 1)
-    today = datetime.date.today()
+    today = today or datetime.date.today()
     last = datetime.date(today.year, today.month, 1)
     wins, cur = [], start
     while cur <= last:
