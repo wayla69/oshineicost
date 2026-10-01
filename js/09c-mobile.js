@@ -410,6 +410,7 @@ function ensureChartSetup() {
   if (_chartSetupDone || typeof Chart === 'undefined') return;
   if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
   if (typeof ChartAnnotation !== 'undefined') Chart.register(ChartAnnotation);
+  Chart.register(GLANCE_PLUGIN);   // js/01-core.js: depth + latest/peak/avg labels on every chart
   setupChartDefaults();
   _chartSetupDone = true;
 }
@@ -426,8 +427,8 @@ function setupChartDefaults() {
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
 
   // Rounded, cleaner bars
-  Chart.defaults.elements.bar.borderRadius = 2;      // formal theme: square bars
-  Chart.defaults.elements.bar.borderSkipped = false;
+  Chart.defaults.elements.bar.borderRadius = 3;      // formal theme: near-square tip...
+  Chart.defaults.elements.bar.borderSkipped = 'start'; // ...sitting flush on the baseline
   Chart.defaults.elements.bar.maxBarThickness = 46;
 
   // Smoother lines, smaller resting points that grow on hover (less clutter)
