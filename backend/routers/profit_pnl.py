@@ -215,7 +215,6 @@ def profit_summary(
     revenue        = row["revenue"]                or 0   # ex-VAT (Rule 1)
     revenue_ex     = row["revenue_ex_vat"]         or 0
     cogs           = row["cogs"]                   or 0   # BoM recipe COGS (real)
-    qty_sold       = row["qty_sold"]               or 0
     gross_profit   = revenue_ex - cogs
     # Margin over TOTAL revenue (honest) — not just costed revenue, which inflated
     # GP to ~72%. With BoM coverage ~70-92%, this reflects the real ~42% margin.
