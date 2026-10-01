@@ -89,6 +89,7 @@
 - **RBAC safety net** ใน applyPermissions: ถ้า role เปิด entry ของ cluster ไม่ได้แต่เปิดสมาชิกอื่นได้ → โชว์ nav ของสมาชิกตัวแรกที่มีสิทธิ์แทน (เช่น accounting ไม่มี ops.report แต่มี ops.discounts)
 - คู่มือ (📖) เพิ่มย่อหน้าอัปเดต 2026-07-20 อธิบาย nav ใหม่
 - หมายเหตุ: แท็บ `pnl` (P&L Deep Dive) ไม่มี nav item มาแต่เดิม (unreachable อยู่แล้ว) — คงสถานะเดิม รอ checklist ตัดสินว่าจะฟื้นหรือลบ
+  → **ตัดสินแล้ว 2026-10-01: ฟื้น** — เจ้าของเลือกนำกลับ เป็นชิป "P&L เชิงลึก" ท้ายแถบ กำไร (TAB_CLUSTERS) + TAB_MODULE `profit.pnl`
 
 ### แผนเดิม (เก็บไว้อ้างอิง — ส่วน "ลบจริง" ยังรอ kill list)
 

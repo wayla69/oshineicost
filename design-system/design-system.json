@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T08:25:40Z",
-    "via": "GitHub · wayla69/oshineicost@8c19443",
-    "note": "Synced to main 8c19443 (#247): yellows join the amber ink family; script-set light fills need .on-light; near-zero heat cells use text-muted."
+    "at": "2026-10-01T04:06:09Z",
+    "via": "GitHub · wayla69/oshineicost@20e14c4",
+    "note": "Visual sync: bundle.css gains the group-hue layer ([data-group], nav data-g, .cluster-bar); new ClusterBar card; Sidebar preview shows the regrouped nav with group-tinted icons; TopBar, SubtabBar and KpiCard previews render inside a group."
   },
   "layout": "files",
   "libraries": [],
