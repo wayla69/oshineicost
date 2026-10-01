@@ -535,7 +535,7 @@ function renderMgtReport(j, jM, jF) {
   ).join('')}</div>`;
   // Two-panel (master=teal, franchise=violet) split block appended to a section's content
   const splitPanel = (mKv, fKv) => !hasSplit ? '' :
-    `<div class="mt-4 pt-3 border-t border-slate-100">
+    `<div class="mt-4 pt-3 border-t border-slate-100 mgt-atom">
        <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">${T.masterFranchise}</p>
        <div class="grid grid-cols-2 gap-3">
          <div class="rounded-xl p-3" style="background:#f0fdfa;border:1px solid #5eead4">
@@ -588,12 +588,13 @@ function renderMgtReport(j, jM, jF) {
   // as a professional, colourful template on screen AND in PDF.
   // `o` carries the print plan for the section (see the SECTIONS list below):
   //   o.id   -> anchor id, used by the table of contents
-  //   o.land -> print on a LANDSCAPE sheet (wide tables / side-by-side charts);
-  //             everything else gets the named PORTRAIT page. Chrome starts a new
-  //             sheet whenever the @page name changes, so orientation IS the break.
-  //   o.brk  -> force a page break before the section (same-orientation boundaries)
+  //   o.brk  -> force a page break before the section
+  //   o.keep -> never split the section across sheets (it moves whole instead);
+  //             only for sections that are always shorter than one sheet
+  // Every sheet is A4 landscape (index.html @media print, 2026-10-01): the old
+  // per-section portrait/landscape switch made the PDF turn at every other page.
   const sec = (title, inner, accent = '#0f766e', o = {}) =>
-    `<section class="card p-6 mgt-sec ${o.land ? 'pg-land' : 'pg-port'}${o.brk ? ' pg-break' : ''}"${o.id ? ` id="${o.id}"` : ''} style="border-top:3px solid ${accent}">
+    `<section class="card p-6 mgt-sec${o.brk ? ' pg-break' : ''}${o.keep ? ' mgt-keep' : ''}"${o.id ? ` id="${o.id}"` : ''} style="border-top:3px solid ${accent}">
        <h2 class="text-base font-bold mb-4 pb-2" style="color:${textInk(accent)};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</section>`;
   // w = WoW delta, y = YoY delta (both optional). When given, a second line shows
   // "WoW ▲x% · YoY ▲y%" so management sees week-over-week AND year-over-year at a glance.
@@ -607,7 +608,7 @@ function renderMgtReport(j, jM, jF) {
 
   // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
   const G = j.gp || {};
-  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mgt-atom">
       ${kpi(T.netSalesVat, bigCell(H.revenue),   compShort,  H.rev_wow_pct, yoyOk ? H.rev_yoy_pct : null)}
       ${kpi(T.grossProfit, bigCell(G.gp),
             G.cost_basis === 'unavailable'
@@ -904,7 +905,7 @@ function renderMgtReport(j, jM, jF) {
         <span class="truncate flex-1">${esc(x.menu)}</span>
         <span class="text-slate-400 text-[11px] tabular-nums">${num(x.plates)} ${isTH ? 'จาน' : 'plates'}</span>
       </li>`).join('');
-    return `<div class="mt-4 pt-3 border-t border-slate-100">
+    return `<div class="mt-4 pt-3 border-t border-slate-100 mgt-atom">
         <p class="text-xs font-semibold mb-1" style="color:var(--amber-ink)">${isTH
           ? `⚠ เมนูที่ยังไม่มีต้นทุน — ${num(cc.uncosted_plates)} จาน (${cc.skus_uncosted} รายการ) ทำให้ต้นทุนอาหารต่ำกว่าจริงราว ฿${num(cc.est_missing_cost)}`
           : `⚠ Dishes with no unit cost — ${num(cc.uncosted_plates)} plates (${cc.skus_uncosted} SKUs) understate food cost by about ฿${num(cc.est_missing_cost)}`}</p>
@@ -957,7 +958,7 @@ function renderMgtReport(j, jM, jF) {
   // Weekly keeps its extra day-of-week insight, shown as a full-width row BENEATH the
   // daily-style 2-column grid so the core Peak-Hours layout still matches the Daily report.
   const byDayRow = (!isDaily && (PK.by_day || []).length)
-    ? `<div class="mt-4 pt-3 border-t border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">${T.byDow}</p>${miniBars(PK.by_day.map(d => ({...d, dowL: dowLabel(d.dow)})), 'avg_revenue', 'dowL', d => d.dow === PK.best_day)}</div>`
+    ? `<div class="mt-4 pt-3 border-t border-slate-100 mgt-atom"><p class="text-xs font-semibold text-slate-500 mb-1">${T.byDow}</p>${miniBars(PK.by_day.map(d => ({...d, dowL: dowLabel(d.dow)})), 'avg_revenue', 'dowL', d => d.dow === PK.best_day)}</div>`
     : '';
   const peakHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div><p class="text-xs font-semibold text-slate-500 mb-2">${T.daypartSplit} <span class="font-normal text-slate-400">${T.smallPct}${compShort}</span></p>${dpBars || `<p class="text-sm text-slate-400">${T.noData2}</p>`}
@@ -1006,7 +1007,7 @@ function renderMgtReport(j, jM, jF) {
            <span style="color:${textInk(sevColor[a.sev]||'#64748b')}">●</span><span>${esc(a.text)}</span></li>`
       ).join('')}</ul>`;
     };
-    return `<div class="mt-4 pt-3 border-t border-slate-100">
+    return `<div class="mt-4 pt-3 border-t border-slate-100 mgt-atom">
       <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">${T.mfPriority}</p>
       <div class="grid grid-cols-2 gap-3">
         <div class="rounded-xl p-3" style="background:#f0fdfa;border:1px solid #5eead4">
@@ -1246,7 +1247,7 @@ function renderMgtReport(j, jM, jF) {
       <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${textInk(_tone)}">•</span><span>${b}</span></li>`).join('')}</ul>
     </div>`;
   const execInner = tldr
-    + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div>';
+    + '<div class="text-sm leading-relaxed text-slate-700 mgt-exec-body">' + ex.map(para).join('') + '</div>';
 
   // §6 — per-MASTER-branch discount + % of sales (the company-owned follow-up line).
   // Independent of the master/franchise split; shows whenever master branches are in scope.
@@ -1263,7 +1264,7 @@ function renderMgtReport(j, jM, jF) {
         <td class="py-1.5 pr-3 text-right tabular-nums font-bold" style="color:${textInk(pctCol(b.pct))}">${pctTxt(b.pct)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums text-slate-400">${num(b.sales)}</td>
         <td class="py-1.5 text-right tabular-nums text-slate-400">${num(b.bills)}</td></tr>`).join('');
-    return `<div class="mt-4 pt-3 border-t border-slate-100">
+    return `<div class="mt-4 pt-3 border-t border-slate-100 mgt-atom">
       <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">${T.discByMaster} <span class="normal-case text-slate-300">${T.companyFollow}</span></p>
       <table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b border-slate-200">
         <th class="py-1.5 pr-3">${T.branch}</th><th class="py-1.5 pr-3 text-right">${T.discount}</th>
@@ -1568,25 +1569,25 @@ function renderMgtReport(j, jM, jF) {
   // -- The report plan ------------------------------------------------------
   // ONE declarative list drives three things that used to drift apart: the
   // on-screen order, the table of contents, and the printed page plan.
-  //   land -> landscape sheet (wide tables, chart rows) - brk -> forced break
+  //   brk -> forced page break before the section
   const SECTIONS = [
     { id:'mgt-s0',  c:'#0f172a', brk:true, t:T.execSummary, h:execInner },
     { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
     { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
     { id:'mgt-s3',  c:'#4a70b0', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
-    { id:'mgt-s4',  c:'#0891b2', land:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
+    { id:'mgt-s4',  c:'#0891b2', keep:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
     // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
     // page of its own anyway, and letting it begin at the foot of §4's page
     // stranded four rows there and carried the other twenty-four over — a table
     // split 4/24 for no reason. Short tables (a single-branch report) still flow
     // inline rather than burning a sheet on six rows.
-    { id:'mgt-s5',  c:'#7a66b8', land:true, brk: _brs.length >= 12, t:T.s5, h:branchTbl },
+    { id:'mgt-s5',  c:'#7a66b8', brk: _brs.length >= 12, t:T.s5, h:branchTbl },
     { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
-    { id:'mgt-s7',  c:'#059669', land:true, t:T.s7, h:menu },
-    { id:'mgt-s8',  c:'#0284c7', land:true, t:T.s8, h:v8 + peakWithSplit },
+    { id:'mgt-s7',  c:'#059669', t:T.s7, h:menu },
+    { id:'mgt-s8',  c:'#0284c7', t:T.s8, h:v8 + peakWithSplit },
     { id:'mgt-s9',  c:'#9333ea', t:T.s9,  h:tableHtml ? (v9 + tableWithSplit) : naBox(T.naTable) },
-    { id:'mgt-s10', c:'#0d9488', land:!!payHtml,  t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
-    { id:'mgt-s11', c:'#b45309', land:!!tierHtml, t:T.s11, h:tierHtml || naBox(T.naTier) },
+    { id:'mgt-s10', c:'#0d9488', keep:true, t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
+    { id:'mgt-s11', c:'#b45309', t:T.s11, h:tierHtml || naBox(T.naTier) },
     { id:'mgt-s12', c:'#0f766e', t:T.s12v, h:voiceHtml || naBox(T.naVoice) },
     { id:'mgt-s13', c:'#475569', t:T.s12, h:appendix },
   ];
@@ -1605,7 +1606,7 @@ function renderMgtReport(j, jM, jF) {
     [T.riRev,   T.riRevV],
     [T.riCost,  T.riCostV + (P.month ? ' &middot; ' + P.month : '')],
   ];
-  const toc = `<section class="card p-6 mgt-sec pg-port" style="border-top:3px solid #0f172a">
+  const toc = `<section class="card p-6 mgt-sec" style="border-top:3px solid #0f172a">
       <h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">${T.tocTitle}</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 mb-4">
         ${SECTIONS.map(sx => `<a href="#${sx.id}" onclick="_mgtGo('${sx.id}');return false"
@@ -1622,7 +1623,7 @@ function renderMgtReport(j, jM, jF) {
 
   body.innerHTML = toc
     + SECTIONS.map(sx => sec(sx.t, sx.h, sx.c, sx)).join('')
-    + `<div class="pg-port">${footnote}</div>`;
+    + `<div>${footnote}</div>`;
 
   // §11 cost-driver sub-block — interactive: tier picker (compare tiers), rank
   // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
