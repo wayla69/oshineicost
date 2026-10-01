@@ -1,6 +1,6 @@
 > **About this folder.** A repo copy of the Oshinei design system published at
-> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-10-01 (formal theme, KIRA UI + Noto symbols, text inks, group hues, heat scales, chart glance rules;
-> app at `20e14c4`; navy accent in `docs/ui-kit/theme-formal.css`, group hues in `docs/ui-kit/theme-groups.css`). The app itself never loads these files: its colours come from
+> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-10-01, v18 (formal theme, KIRA UI + Noto symbols, text inks, group hues, heat scales, chart glance rules,
+> the generated UI kit; app at `67b3bf4`; navy accent in `docs/ui-kit/theme-formal.css`, group hues in `docs/ui-kit/theme-groups.css`). The app itself never loads these files: its colours come from
 > `docs/ui-kit/tokens.css`. When a colour changes, change it there first, then update
 > `tokens.json` here (and republish the system) so the two stay in step.
 > Fonts are the app's own `vendor/fonts/KIRA-UI-*.woff2` and `vendor/fonts/symbols/*.subset.woff2` (`tokens.json` names them as `fonts/...`; the OFL licences sit beside them).
@@ -17,6 +17,8 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 - The app still calls the accent `--indigo` / `--indigo-mid` / `--indigo-soft`. Those are legacy aliases of `accent` / `accent-hover` / `accent-soft`; new code uses the accent names.
 - There is no JavaScript component library. Components are CSS classes on plain HTML; charts are Chart.js 4 with the defaults under **Charts**.
 - Style through tokens. Never type a hex that has a token.
+- **The UI kit is generated from this system.** `docs/ui-kit/colors_and_type.css` = the app's `tokens.css` + this system's `tokens.json` (the tokens the app keeps elsewhere) + `components/bundle.css` (dark rules rewritten to `body.dark`) + layout helpers, built by `py -3.12 scripts/build_ui_kit_css.py`. Change a token or component here and in the app, then regenerate; never hand-edit the kit's stylesheet. Static pages draw charts through `docs/ui-kit/kit.js` (`kitChart`, `kitToggleTheme`), which carries the defaults under **Charts**.
+- A token whose value is another token (`{accent-soft}`) becomes `var(--accent-soft)` and must be declared on `:root, body.dark`. Declared on `:root` alone it is resolved there once and keeps its light value in dark mode.
 
 ## Content fundamentals
 
@@ -26,6 +28,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 - **Money is Thai baht with a ฿ prefix and thousand separators**, no decimals above ฿100 (`฿1,284,560`). In a table column whose header names the unit, drop the ฿. Percentages carry one decimal (`66.3%`); deltas carry an arrow and sign (`▲ 12.4%`).
 - **Revenue is ex-VAT.** Never show VAT as revenue; a figure labelled ยอดขาย is net of VAT and service charge unless the label says otherwise.
 - **Headlines are the latest period plus movement** (vs last month, vs same month last year, year-to-date change), never an accumulated all-time total. Partial months compare against a weekday-fair baseline and say so ("เทียบวันเดียวกันสัปดาห์ก่อน").
+- **Public pages show sample data and say so.** The UI kit (`/docs/ui-kit/`) is served without a login (the app loads its tokens from there), so every figure on it is invented and each page carries a `sample-note` saying so. Real figures live only behind the login.
 - **Recommendations are imperative and specific**: name the branch, the menu item and the baht at stake. "ลดขนาดชิ้นปลาไหล 20% — ประหยัดราว ฿41,000/เดือน", not "consider optimising portions".
 
 ## Visual foundations
@@ -100,3 +103,4 @@ Chart.js 4 defaults, set once in `setupChartDefaults()` and themed per chart by 
 
 - **App mark:** the hiragana お in navy KIRA UI 700 on a 32px white tile with a 3px corner, beside "OSHINEI" (14px/700, tracked 0.08em, `sidebar-title`) and "Sales & Cost Analysis". It is CSS, not an image; see the LogoMark card.
 - **Deck roundel:** `assets/Logos/oshinei-roundel.svg`, a `navy` disc with a white hairline ring, OSHINEI over おしねい and a rising sparkline. Use it on white for decks, printed reports and document corners. Its text is live SVG text set in Prompt (the deck face), so it needs that font on the page when inlined; otherwise it falls back to a system sans.
+- **Decks** (`docs/ui-kit/deck/`, HTML and the .pptx built by `gen_deck.js`): Prompt is the deck face (the HTML deck loads `/vendor/prompt-font.css`). The interface rules hold on slides: no emoji; a feature list marks its items with numbered navy-outlined square tiles (01 … 04), never pictograms; the palette slide shows Navy `#1f3a6b`, Sidebar `#16294d`, Good, Bad and Warn; edge rules are solid `navy`.
