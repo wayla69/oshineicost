@@ -158,7 +158,9 @@ const ROLE_LABEL_TH = {
   salessupport:'Sales Support (จัดซื้อ/วัตถุดิบ)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
-// so the owner can see what each role unlocks before assigning it.
+// so the owner can see what each role unlocks before assigning it. Only a FALLBACK:
+// the matrix loads the live (owner-customised) permissions from /api/auth/role-permissions;
+// test_role_modules_mirror.py keeps this copy equal to auth.ROLE_MODULES.
 const MODULE_LABEL_TH = {
   'sales.overview':'ยอดขายภาพรวม', 'customer.buffet':'บุฟเฟ่ต์/ลูกค้า',
   'menu.analysis':'วิเคราะห์เมนู', 'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลองต้นทุน',
@@ -166,15 +168,15 @@ const MODULE_LABEL_TH = {
   'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
   'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
-  'supply.ordering':'จัดซื้อ/วัตถุดิบ',
+  'supply.ordering':'จัดซื้อ/วัตถุดิบ', 'customer.feedback':'เสียงลูกค้า',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
-  marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export'],
-  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export'],
-  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export'],
+  marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
+  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
-  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings'],
+  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
 };
 
