@@ -3,117 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — Oshinei UI Kit</title>
+<title>ตั้งค่า · Settings — Oshinei UI Kit</title>
 <link rel="stylesheet" href="../colors_and_type.css">
-<link rel="stylesheet" href="../theme-groups.css"><!-- group hues, as in the app -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="../kit.js"></script>
 <style>
-  .seg { display:grid; grid-template-columns: 200px 1fr; gap:24px; }
-  .seg-nav .seg-item { padding:9px 12px; border-radius:var(--r-sm); font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; margin-bottom:2px; }
-  .seg-nav .seg-item.active { background:var(--indigo-soft); color:var(--indigo); font-weight:600; }
-  .seg-nav .seg-item:hover:not(.active){ background:var(--bg-subtle); }
-  .field-row { display:grid; grid-template-columns: 1fr 140px; gap:12px; align-items:center; padding:9px 0; border-bottom:1px solid var(--border-soft); }
-  .field-row:last-child{ border-bottom:none; }
-  .switch { position:relative; width:40px; height:22px; }
-  .switch input { display:none; }
-  .switch .track { position:absolute; inset:0; background:var(--border); border-radius:999px; transition:.2s; cursor:pointer; }
-  .switch .track::before { content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; top:3px; left:3px; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
-  .switch input:checked + .track { background:var(--indigo); }
-  .switch input:checked + .track::before { transform:translateX(18px); }
-  .save-bar { position:sticky; bottom:0; background:var(--bg-card); border-top:1px solid var(--border); padding:14px 28px; display:flex; justify-content:flex-end; gap:10px; margin:24px -28px -28px; }
-  .btn-primary { background:var(--indigo); color:#fff; border:none; border-radius:var(--r-sm); padding:9px 20px; font-size:13px; font-weight:600; cursor:pointer; }
-  .btn-ghost { background:var(--bg-subtle); color:var(--text-secondary); border:1px solid var(--border); border-radius:var(--r-sm); padding:9px 18px; font-size:13px; cursor:pointer; }
+  /* layout only */
+  .settings-wrap { max-width: 960px; }
+  .table-wrap { overflow-x: auto; }
+  .search-box { width: 180px; }
+  .cell-input { width: 110px; text-align: right; }
+  .cell-input-sm { width: 84px; text-align: right; padding: 4px 8px; }
+  .hours-input { width: 120px; }
+  .mono { font-family: var(--font-mono); font-size: 12px; }
+  .col-ctl { width: 200px; }
+  .pref-sub { font-size: 11.5px; }
+  .pane-note { font-size: 11.5px; }
+  .save-row { justify-content: flex-end; }
 </style>
 </head>
 <body data-group="home">
 <div class="app-layout">
 
   <aside class="sidebar">
-    <div class="sidebar-logo"><div class="logo-mark">OS</div><div><div class="name">OSHINEI</div><div class="sub">Cost Analysis</div></div></div>
+    <div class="sidebar-logo">
+      <div class="logo-mark">お</div>
+      <div><div class="name">OSHINEI</div><div class="sub">Sales &amp; Cost Analysis</div></div>
+    </div>
     <nav class="sidebar-nav">
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> หน้าแรก</div>
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg> รายงานผู้บริหาร</div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg><span class="nav-label">รายงานผู้บริหาร</span></div>
       <div class="nav-section">วิเคราะห์</div>
-      <div class="nav-item" data-g="sales"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> ยอดขาย</div>
-      <div class="nav-item" data-g="buffet"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg> ลูกค้า &amp; บุฟเฟ่ต์</div>
-      <div class="nav-item" data-g="feedback"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z"/></svg> เสียงลูกค้า</div>
-      <div class="nav-item" data-g="menu"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg> เมนู</div>
-      <div class="nav-item" data-g="cost"><svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> ต้นทุน</div>
-      <div class="nav-item" data-g="profit"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg> กำไร</div>
+      <div class="nav-item" data-g="sales"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="nav-label">ยอดขาย</span></div>
+      <div class="nav-item" data-g="buffet"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg><span class="nav-label">ลูกค้า &amp; บุฟเฟ่ต์</span></div>
+      <div class="nav-item" data-g="feedback"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z"/></svg><span class="nav-label">เสียงลูกค้า</span></div>
+      <div class="nav-item" data-g="menu"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span class="nav-label">เมนู</span></div>
+      <div class="nav-item" data-g="cost"><svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span class="nav-label">ต้นทุน</span></div>
+      <div class="nav-item" data-g="profit"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg><span class="nav-label">กำไร</span></div>
       <div class="nav-section">ควบคุม &amp; ปฏิบัติการ</div>
-      <div class="nav-item" data-g="money"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg> ส่วนลด &amp; เงิน</div>
-      <div class="nav-item" data-g="ops"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> ปฏิบัติการ</div>
-      <div class="nav-item" data-g="supply"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg> จัดซื้อ</div>
+      <div class="nav-item" data-g="money"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg><span class="nav-label">ส่วนลด &amp; เงิน</span></div>
+      <div class="nav-item" data-g="ops"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span class="nav-label">ปฏิบัติการ</span></div>
+      <div class="nav-item" data-g="supply"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg><span class="nav-label">จัดซื้อ</span></div>
       <div class="nav-section">เครื่องมือ</div>
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> คู่มือ</div>
-      <div class="nav-item active" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> ตั้งค่า</div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg><span class="nav-label">คู่มือ</span></div>
+      <div class="nav-item active" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="nav-label">ตั้งค่า</span></div>
     </nav>
   </aside>
 
   <div class="main-wrapper">
+    <!-- ── Top bar: title left; connection, tools right ── -->
     <div class="top-bar">
-      <div class="page-title">Settings</div>
+      <div class="page-title">ตั้งค่า · Settings</div>
       <div class="controls">
-        <button onclick="document.body.classList.toggle('dark')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;cursor:pointer">🌓</button>
+        <span class="db-status online"><span class="db-dot"></span>อัปเดต 08:05</span>
+        <button class="topbar-icon-btn" onclick="kitToggleTheme(); syncTheme()" aria-label="สลับโหมดมืด"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
       </div>
     </div>
 
-    <div class="content-area tab-active">
-      <div class="seg">
-        <!-- section nav -->
-        <div class="seg-nav">
-          <div class="seg-item active" onclick="seg('cost',this)">💰 Cost Management</div>
-          <div class="seg-item" onclick="seg('targets',this)">🎯 Branch Targets</div>
-          <div class="seg-item" onclick="seg('fixed',this)">🏢 Fixed Costs</div>
-          <div class="seg-item" onclick="seg('prefs',this)">🎛️ Preferences</div>
+    <div class="content-area">
+      <p class="sample-note mb-4">ตัวอย่างหน้าจอ · ตัวเลขทั้งหมดเป็นข้อมูลสมมติ (sample data)</p>
+
+      <div class="settings-wrap">
+        <!-- ── Section tabs: underline subtabs ── -->
+        <div class="subtab-bar mb-4" role="tablist">
+          <button class="subtab-btn active" data-pane="cost" onclick="seg('cost')">ต้นทุนต่อหน่วย</button>
+          <button class="subtab-btn" data-pane="targets" onclick="seg('targets')">เป้ารายสาขา</button>
+          <button class="subtab-btn" data-pane="fixed" onclick="seg('fixed')">ค่าใช้จ่ายคงที่</button>
+          <button class="subtab-btn" data-pane="prefs" onclick="seg('prefs')">การแสดงผล</button>
         </div>
 
-        <!-- panes -->
-        <div>
-          <!-- Cost Management -->
-          <div id="pane-cost" class="card pad seg-pane">
-            <div class="flex between center mb-3">
-              <div class="section-title mb-0">Cost Management · ต้นทุนต่อหน่วย (unit_cost)</div>
-              <div class="flex center" style="gap:8px">
-                <input type="text" placeholder="🔍 ค้นหา SKU…" style="max-width:180px">
-                <button class="btn-ghost">⬆ นำเข้า CSV</button>
-              </div>
-            </div>
-            <div class="anomaly-banner mb-4" style="font-size:12.5px"><span>⚠️</span><span><b>เตือน:</b> ถ้า margin ติดลบมาก ตรวจว่า unit_cost ใส่เป็น <b>ราคาต้นทุน</b> ไม่ใช่ราคาขาย</span></div>
-            <div style="overflow:hidden;border:1px solid var(--border);border-radius:var(--r-md)">
-              <table>
-                <thead><tr><th>SKU</th><th>เมนู</th><th>หมวด</th><th class="num">ราคาขาย</th><th class="num">ต้นทุน/หน่วย</th><th class="num">margin %</th></tr></thead>
-                <tbody id="costRows"></tbody>
-              </table>
+        <!-- ── Cost management: unit_cost per SKU ── -->
+        <div id="pane-cost" class="card pad seg-pane">
+          <div class="flex between center mb-3">
+            <div class="section-title mb-0">ต้นทุนต่อหน่วย · unit_cost</div>
+            <div class="flex center gap-2">
+              <input type="text" class="search-box" placeholder="ค้นหา SKU…" aria-label="ค้นหา SKU">
+              <button class="upload-btn"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>นำเข้า CSV</button>
             </div>
           </div>
-
-          <!-- Branch Targets -->
-          <div id="pane-targets" class="card pad seg-pane" style="display:none">
-            <div class="section-title">Branch Targets · เป้ารายเดือน (฿)</div>
-            <div id="targetRows"></div>
+          <div class="anomaly-banner mb-4"><span class="lead">เตือน</span><span>ถ้า % กำไรติดลบมาก ให้ตรวจว่า unit_cost เป็น <b>ราคาต้นทุน</b> ไม่ใช่ราคาขาย</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>SKU</th><th>เมนู</th><th>หมวด</th><th class="num">ราคาขาย</th><th class="num">ต้นทุน/หน่วย</th><th class="num">% กำไร</th></tr></thead>
+              <tbody id="costRows"></tbody>
+            </table>
           </div>
+        </div>
 
-          <!-- Fixed Costs -->
-          <div id="pane-fixed" class="card pad seg-pane" style="display:none">
-            <div class="section-title">Fixed Costs · ค่าใช้จ่ายคงที่ต่อเดือน</div>
-            <div class="field-row"><span>ค่าเช่า (รวมทุกสาขา)</span><input type="number" value="1180000"></div>
-            <div class="field-row"><span>เงินเดือนพนักงาน</span><input type="number" value="980000"></div>
-            <div class="field-row"><span>ค่าน้ำ/ไฟ/แก๊ส</span><input type="number" value="210000"></div>
-            <div class="field-row"><span>การตลาด</span><input type="number" value="95000"></div>
-            <div class="field-row"><span>อื่น ๆ</span><input type="number" value="65000"></div>
-            <p class="muted mt-3" style="font-size:11.5px">GP − Fixed Costs = Net Profit · รวม ฿2.53M/เดือน</p>
+        <!-- ── Branch targets: monthly ฿ per branch ── -->
+        <div id="pane-targets" class="card pad seg-pane" hidden>
+          <div class="section-title">เป้ารายสาขา · ต่อเดือน (฿)</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>สาขา</th><th class="num col-ctl">เป้าต่อเดือน (฿)</th></tr></thead>
+              <tbody id="targetRows"></tbody>
+            </table>
           </div>
+          <p class="muted mt-3 pane-note">หมายเหตุ: โคราช2 ปิดตั้งแต่ ธ.ค. 2025 — ไม่รวมในเป้า</p>
+        </div>
 
-          <!-- Preferences -->
-          <div id="pane-prefs" class="card pad seg-pane" style="display:none">
-            <div class="section-title">Preferences</div>
-            <div class="field-row"><div><b style="font-size:13px">รวมค่าบริการในรายได้</b><div class="muted" style="font-size:11.5px">incl_service · service charge เป็นรายได้แยก (ex-VAT)</div></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-            <div class="field-row"><div><b style="font-size:13px">ฐานรายได้ ex-VAT</b><div class="muted" style="font-size:11.5px">VAT ไม่นับเป็นรายได้ (ใช้ subtotal_ex_vat)</div></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-            <div class="field-row"><div><b style="font-size:13px">โหมดมืด</b><div class="muted" style="font-size:11.5px">Dark theme เริ่มต้น</div></div><label class="switch"><input type="checkbox" onchange="document.body.classList.toggle('dark')"><span class="track"></span></label></div>
-            <div class="field-row"><div><b style="font-size:13px">เวลาเปิดร้านเริ่มต้น</b><div class="muted" style="font-size:11.5px">หน้าต่างเปิด-ปิด</div></div><span style="font-size:13px;font-weight:600">10:00–21:00</span></div>
+        <!-- ── Fixed costs: monthly, all branches ── -->
+        <div id="pane-fixed" class="card pad seg-pane" hidden>
+          <div class="section-title">ค่าใช้จ่ายคงที่ · ต่อเดือน</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>รายการ</th><th class="num col-ctl">฿ ต่อเดือน</th></tr></thead>
+              <tbody>
+                <tr><td>ค่าเช่า (รวมทุกสาขา)</td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="1,180,000" aria-label="ค่าเช่า"></td></tr>
+                <tr><td>เงินเดือนพนักงาน</td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="980,000" aria-label="เงินเดือนพนักงาน"></td></tr>
+                <tr><td>ค่าน้ำ / ไฟ / แก๊ส</td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="210,000" aria-label="ค่าน้ำไฟแก๊ส"></td></tr>
+                <tr><td>การตลาด</td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="95,000" aria-label="การตลาด"></td></tr>
+                <tr><td>อื่น ๆ</td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="65,000" aria-label="อื่น ๆ"></td></tr>
+                <tr><td><b>รวม</b></td><td class="num"><b>฿2,530,000</b></td></tr>
+              </tbody>
+            </table>
           </div>
+          <p class="muted mt-3 pane-note">GP − ค่าใช้จ่ายคงที่ = กำไรสุทธิ (Net Profit)</p>
+        </div>
 
-          <div class="save-bar"><button class="btn-ghost">ยกเลิก</button><button class="btn-primary">💾 บันทึก</button></div>
+        <!-- ── Preferences: on/off as segmented toggles ── -->
+        <div id="pane-prefs" class="card pad seg-pane" hidden>
+          <div class="section-title">การแสดงผล · Preferences</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>การตั้งค่า</th><th class="col-ctl">ค่า</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><b>รวมค่าบริการในรายได้</b><div class="muted pref-sub">incl_service · service charge เป็นรายได้แยก (ex-VAT)</div></td>
+                  <td><div class="gran-track"><button class="gran-btn gran-active" onclick="pick(this)">เปิด</button><button class="gran-btn" onclick="pick(this)">ปิด</button></div></td>
+                </tr>
+                <tr>
+                  <td><b>ฐานรายได้ ex-VAT</b><div class="muted pref-sub">VAT ไม่นับเป็นรายได้ (ใช้ subtotal_ex_vat)</div></td>
+                  <td><div class="gran-track"><button class="gran-btn gran-active" onclick="pick(this)">เปิด</button><button class="gran-btn" onclick="pick(this)">ปิด</button></div></td>
+                </tr>
+                <tr>
+                  <td><b>ธีม</b><div class="muted pref-sub">โหมดสว่าง / มืด เริ่มต้น</div></td>
+                  <td><div class="gran-track" id="themeTrack"><button class="gran-btn gran-active" data-dark="0" onclick="setTheme(this)">สว่าง</button><button class="gran-btn" data-dark="1" onclick="setTheme(this)">มืด</button></div></td>
+                </tr>
+                <tr>
+                  <td><b>เวลาเปิดร้านเริ่มต้น</b><div class="muted pref-sub">หน้าต่างเปิด–ปิด</div></td>
+                  <td><input type="text" class="hours-input" value="10:00–21:00" aria-label="เวลาเปิดร้าน"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── Save row: secondary bordered, primary navy ── -->
+        <div class="flex center gap-2 mt-3 save-row">
+          <button class="upload-btn">ยกเลิก</button>
+          <button class="retry-btn">บันทึก</button>
         </div>
       </div>
     </div>
@@ -121,33 +160,44 @@
 </div>
 
 <script>
-const GOOD='#10b981', WARN='#f59e0b', BAD='#ef4444';
-// cost rows
-const skus=[
-  ['SK-1042','แซลมอนซาชิมิ','ซาชิมิ',520,118],
-  ['SK-2210','ชุดแซลมอนดอน','ข้าวหน้า',389,165],
-  ['SK-3301','ข้าวหน้าไก่','ข้าวหน้า',249,158],
-  ['SK-5520','ชุดอูนิ','พรีเมียม',880,520],
-  ['SK-7781','สลัดสาหร่าย','สลัด',95,58],
+// ── Unit cost per SKU (sample): price, cost → GP% with one decimal ──
+const skus = [
+  ['SK-1042', 'แซลมอนซาชิมิ', 'ซาชิมิ',   520, 118],
+  ['SK-2210', 'ชุดแซลมอนดอน', 'ข้าวหน้า', 389, 165],
+  ['SK-3301', 'ข้าวหน้าไก่',   'ข้าวหน้า', 249, 158],
+  ['SK-5520', 'ชุดอูนิ',       'พรีเมียม', 880, 520],
+  ['SK-7781', 'สลัดสาหร่าย',  'สลัด',      95,  58],
 ];
-document.getElementById('costRows').innerHTML = skus.map(([sku,name,cat,price,cost])=>{
-  const m=(price-cost)/price*100;
-  return `<tr><td class="secondary" style="font-family:monospace;font-size:12px">${sku}</td><td><b>${name}</b></td><td class="secondary">${cat}</td>
-    <td class="num">฿${price}</td><td class="num"><input type="number" value="${cost}" style="width:84px;text-align:right;padding:4px 8px"></td>
-    <td class="num"><b style="color:${m>=45?GOOD:m>=30?WARN:BAD}">${m.toFixed(0)}%</b></td></tr>`;
+document.getElementById('costRows').innerHTML = skus.map(([sku, name, cat, price, cost]) => {
+  const m = (price - cost) / price * 100;
+  const ink = m >= 45 ? 'class="up"' : m >= 30 ? 'style="color:var(--warn-ink)"' : 'class="down"';
+  return `<tr><td class="secondary mono">${sku}</td><td><b>${name}</b></td><td class="secondary">${cat}</td>
+    <td class="num">฿${price.toLocaleString('en-US')}</td>
+    <td class="num"><input type="number" class="cell-input-sm" value="${cost}" aria-label="ต้นทุน ${name}"></td>
+    <td class="num"><b ${ink}>${m.toFixed(1)}%</b></td></tr>`;
 }).join('');
 
-// branch targets
-const tg=[['เซ็นทรัล',396000],['ขอนแก่น',358000],['โคราช',436000],['อุดรธานี',306000],['หาดใหญ่',291000],['เชียงใหม่',288000]];
-document.getElementById('targetRows').innerHTML = tg.map(([n,v])=>`
-  <div class="field-row"><span><b style="font-size:13px">${n}</b></span><input type="number" value="${v}"></div>`).join('')
-  + `<p class="muted mt-3" style="font-size:11.5px">หมายเหตุ: โคราช2 ปิดตั้งแต่ 2025-12 — ไม่รวมในเป้า</p>`;
+// ── Branch targets (sample) ──
+const tg = [['เซ็นทรัล', 396000], ['ขอนแก่น', 358000], ['โคราช', 436000], ['อุดรธานี', 306000], ['หาดใหญ่', 291000], ['เชียงใหม่', 288000]];
+document.getElementById('targetRows').innerHTML = tg.map(([n, v]) =>
+  `<tr><td><b>${n}</b></td><td class="num"><input type="text" inputmode="numeric" class="cell-input" value="${v.toLocaleString('en-US')}" aria-label="เป้า ${n}"></td></tr>`).join('');
 
-function seg(id, el){
-  document.querySelectorAll('.seg-item').forEach(s=>s.classList.remove('active'));
-  el.classList.add('active');
-  document.querySelectorAll('.seg-pane').forEach(p=>p.style.display='none');
-  document.getElementById('pane-'+id).style.display='';
+// ── Tabs, segmented toggles, theme ──
+function seg(id) {
+  document.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.pane === id));
+  document.querySelectorAll('.seg-pane').forEach(p => { p.hidden = p.id !== 'pane-' + id; });
+}
+function pick(btn) {
+  btn.parentElement.querySelectorAll('.gran-btn').forEach(b => b.classList.toggle('gran-active', b === btn));
+}
+function setTheme(btn) {
+  const wantDark = btn.dataset.dark === '1';
+  if (document.body.classList.contains('dark') !== wantDark) kitToggleTheme();
+  pick(btn);
+}
+function syncTheme() {
+  const dark = document.body.classList.contains('dark');
+  pick(document.querySelector('#themeTrack [data-dark="' + (dark ? 1 : 0) + '"]'));
 }
 </script>
 </body>

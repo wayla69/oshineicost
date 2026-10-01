@@ -74,16 +74,17 @@ eyebrow(s, "Overview", 0.95, 1.15, 4, "left");
 s.addText("One dashboard, every cost question answered", { x: 0.9, y: 1.45, w: 9.5, h: 0.8,
   fontFace: HEAD, bold: true, color: INK, fontSize: 30, margin: 0 });
 const feats = [
-  ["📈", "Revenue & GP", "Ex-VAT revenue, gross profit and net profit across 26 active branches — daily to yearly."],
-  ["⭐", "Menu Engineering", "BCG analysis sorts every dish into Stars, Plowhorses, Puzzles and Dogs with clear actions."],
-  ["🎮", "BoM Cost + Simulator", "Bill-of-materials costing with a live what-if simulator for ingredient and price changes."],
-  ["⚖️", "Compare & Forecast", "A/B period comparison and month-end projection with on-track branch indicators."],
+  ["01", "Revenue & GP", "Ex-VAT revenue, gross profit and net profit across 26 active branches — daily to yearly."],
+  ["02", "Menu Engineering", "BCG analysis sorts every dish into Stars, Plowhorses, Puzzles and Dogs with clear actions."],
+  ["03", "BoM Cost + Simulator", "Bill-of-materials costing with a live what-if simulator for ingredient and price changes."],
+  ["04", "Compare & Forecast", "A/B period comparison and month-end projection with on-track branch indicators."],
 ];
 feats.forEach((f, i) => {
   const col = i % 2, row = Math.floor(i / 2);
   const x = 0.95 + col * 6.0, y = 2.9 + row * 1.85;
-  s.addShape(pres.shapes.OVAL, { x, y, w: 0.62, h: 0.62, fill: { color: "EEF2FF" } });
-  s.addText(f[0], { x, y, w: 0.62, h: 0.62, align: "center", valign: "middle", fontSize: 20, margin: 0 });
+  // formal: a square navy-outlined number tile, no emoji
+  s.addShape(pres.shapes.RECTANGLE, { x, y, w: 0.62, h: 0.62, fill: { color: "FFFFFF" }, line: { color: NAVY, width: 1.25 } });
+  s.addText(f[0], { x, y, w: 0.62, h: 0.62, align: "center", valign: "middle", fontFace: HEAD, bold: true, color: NAVY, fontSize: 14, margin: 0 });
   s.addText(f[1], { x: x + 0.85, y: y - 0.02, w: 4.8, h: 0.4, fontFace: HEAD, bold: true, color: INK, fontSize: 17, margin: 0 });
   s.addText(f[2], { x: x + 0.85, y: y + 0.42, w: 4.85, h: 1.1, fontFace: BODY, color: MUTED, fontSize: 13, margin: 0 });
 });
@@ -110,9 +111,9 @@ statRow(stats2, 4.85);
 s = pres.addSlide(); s.background = { color: "FFFFFF" }; edges(s); cornerLogo(s);
 eyebrow(s, "Brand", 0.95, 1.15, 4, "left");
 s.addText("A tight, purposeful palette", { x: 0.9, y: 1.45, w: 9.5, h: 0.7, fontFace: HEAD, bold: true, color: INK, fontSize: 30, margin: 0 });
-s.addText("Indigo accent with semantic green / red / amber — built for clarity in a B2B analytics tool.",
+s.addText("Navy accent with semantic green / red / amber, and one hue per area of the app — built for clarity in a B2B analytics tool.",
   { x: 0.95, y: 2.25, w: 9, h: 0.5, fontFace: BODY, color: MUTED, fontSize: 14, margin: 0 });
-const core = [["4F46E5", "Indigo"], ["10B981", "Good"], ["EF4444", "Bad"], ["F59E0B", "Warn"], ["06B6D4", "Cyan"]];
+const core = [["1F3A6B", "Navy"], ["16294D", "Sidebar"], ["10B981", "Good"], ["EF4444", "Bad"], ["F59E0B", "Warn"]];
 const ext = [["F97066", "Salmon"], ["E8685A", "Salmon-deep"], ["0D9488", "Teal"]];
 function swatchRow(arr, y) {
   arr.forEach((c, i) => {

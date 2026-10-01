@@ -3,161 +3,209 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BoM Cost + Simulator — Oshinei UI Kit</title>
+<title>ต้นทุน · BoM Cost — Oshinei UI Kit</title>
 <link rel="stylesheet" href="../colors_and_type.css">
-<link rel="stylesheet" href="../theme-groups.css"><!-- group hues, as in the app -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="../kit.js"></script>
 <style>
-  .bc-chart { height: 300px; }
-  .slider-row { display:grid; grid-template-columns: 140px 1fr 64px; align-items:center; gap:12px; padding:8px 0; }
-  input[type=range]{ -webkit-appearance:none; height:5px; border-radius:999px; background:var(--border); }
-  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--indigo); cursor:pointer; box-shadow:0 1px 4px rgba(79,70,229,.4); }
-  .sim-out { text-align:center; padding:14px; border-radius:var(--r-md); }
+  /* layout only — colours come from the stylesheet's classes and tokens */
+  .slider-row { display: grid; grid-template-columns: 140px 1fr 56px; align-items: center; gap: 12px; padding: 8px 0; font-size: 12.5px; }
+  .slider-row input[type=range] { width: 100%; margin: 0; }
+  .sim-val { font-size: 22px; margin-bottom: 4px; }
+  .split { grid-template-columns: 1.2fr 1fr; }
+  .split.solo { grid-template-columns: 1fr; }
+  .split > * { min-width: 0; }
+  .table-wrap { overflow-x: auto; }
+  @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body data-group="cost">
 <div class="app-layout">
 
+  <!-- ── Sidebar (the app's, regrouped 2026-10-01; each item wears its group hue) ── -->
   <aside class="sidebar">
-    <div class="sidebar-logo"><div class="logo-mark">OS</div><div><div class="name">OSHINEI</div><div class="sub">Cost Analysis</div></div></div>
+    <div class="sidebar-logo">
+      <div class="logo-mark">お</div>
+      <div><div class="name">OSHINEI</div><div class="sub">Sales &amp; Cost Analysis</div></div>
+    </div>
     <nav class="sidebar-nav">
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> หน้าแรก</div>
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg> รายงานผู้บริหาร</div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg><span class="nav-label">รายงานผู้บริหาร</span></div>
       <div class="nav-section">วิเคราะห์</div>
-      <div class="nav-item" data-g="sales"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> ยอดขาย</div>
-      <div class="nav-item" data-g="buffet"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg> ลูกค้า &amp; บุฟเฟ่ต์</div>
-      <div class="nav-item" data-g="feedback"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z"/></svg> เสียงลูกค้า</div>
-      <div class="nav-item" data-g="menu"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg> เมนู</div>
-      <div class="nav-item active" data-g="cost"><svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> ต้นทุน</div>
-      <div class="nav-item" data-g="profit"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg> กำไร</div>
+      <div class="nav-item" data-g="sales"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="nav-label">ยอดขาย</span></div>
+      <div class="nav-item" data-g="buffet"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg><span class="nav-label">ลูกค้า &amp; บุฟเฟ่ต์</span></div>
+      <div class="nav-item" data-g="feedback"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z"/></svg><span class="nav-label">เสียงลูกค้า</span></div>
+      <div class="nav-item" data-g="menu"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><span class="nav-label">เมนู</span></div>
+      <div class="nav-item active" data-g="cost"><svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span class="nav-label">ต้นทุน</span></div>
+      <div class="nav-item" data-g="profit"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg><span class="nav-label">กำไร</span></div>
       <div class="nav-section">ควบคุม &amp; ปฏิบัติการ</div>
-      <div class="nav-item" data-g="money"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg> ส่วนลด &amp; เงิน</div>
-      <div class="nav-item" data-g="ops"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> ปฏิบัติการ</div>
-      <div class="nav-item" data-g="supply"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg> จัดซื้อ</div>
+      <div class="nav-item" data-g="money"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg><span class="nav-label">ส่วนลด &amp; เงิน</span></div>
+      <div class="nav-item" data-g="ops"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span class="nav-label">ปฏิบัติการ</span></div>
+      <div class="nav-item" data-g="supply"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg><span class="nav-label">จัดซื้อ</span></div>
       <div class="nav-section">เครื่องมือ</div>
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> คู่มือ</div>
-      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> ตั้งค่า</div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg><span class="nav-label">คู่มือ</span></div>
+      <div class="nav-item" data-g="home"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span class="nav-label">ตั้งค่า</span></div>
     </nav>
   </aside>
 
   <div class="main-wrapper">
+    <!-- ── Top bar: title left; scope, connection, tools right ── -->
     <div class="top-bar">
-      <div class="page-title">BoM Cost Analysis + Simulator</div>
+      <div class="page-title">ต้นทุน · BoM Cost</div>
       <div class="controls">
-        <select><option>🏬 ทุกสาขา</option></select>
-        <button onclick="document.body.classList.toggle('dark')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;cursor:pointer">🌓</button>
+        <select aria-label="สาขา"><option>ทุกสาขา</option></select>
+        <select aria-label="เดือน"><option>พฤษภาคม 2026</option></select>
+        <span class="db-status online"><span class="db-dot"></span>อัปเดต 08:05</span>
+        <button class="topbar-icon-btn" onclick="kitToggleTheme()" aria-label="สลับโหมดมืด"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
       </div>
     </div>
 
-    <div class="content-area tab-active">
+    <div class="content-area">
+      <p class="sample-note mb-4">ตัวอย่างหน้าจอ · ตัวเลขทั้งหมดเป็นข้อมูลสมมติ (sample data)</p>
 
-      <!-- mode subtabs -->
-      <div class="flex mb-5" style="gap:8px">
-        <div class="subtab-bar">
-          <button class="subtab-btn active">📊 ภาพรวมเชน</button>
-          <button class="subtab-btn">🏬 ต่อสาขา</button>
-          <button class="subtab-btn">⚖️ เปรียบเทียบ</button>
-          <button class="subtab-btn">🎮 Simulator</button>
-        </div>
+      <!-- ── Mode subtabs: each shows the sections tagged with its key ── -->
+      <div class="subtab-bar mb-5" id="bcTabs">
+        <button class="subtab-btn active" data-tab="chain">ภาพรวมเชน</button>
+        <button class="subtab-btn" data-tab="branch">ต่อสาขา</button>
+        <button class="subtab-btn" data-tab="compare">เปรียบเทียบ</button>
+        <button class="subtab-btn" data-tab="sim">Simulator</button>
       </div>
 
-      <!-- chain KPIs -->
-      <div class="grid g-4 mb-5">
-        <div class="kpi-card card kpi-neu"><div class="kpi-card-top"><span class="kpi-label">รายได้ (ex-VAT)</span></div><div class="kpi-value">฿9.42M</div><div class="kpi-sub">พฤษภาคม 2026</div></div>
-        <div class="kpi-card card kpi-down"><div class="kpi-card-top"><span class="kpi-label">BoM Cost</span></div><div class="kpi-value">฿5.68M</div><div class="kpi-sub">60.3% ของรายได้</div></div>
-        <div class="kpi-card card kpi-up"><div class="kpi-card-top"><span class="kpi-label">Gross Profit</span><span class="pill pill-up">▲ 0.6pp</span></div><div class="kpi-value">฿3.74M</div><div class="kpi-sub">GP 39.7%</div></div>
-        <div class="kpi-card card kpi-neu"><div class="kpi-card-top"><span class="kpi-label">Net Profit</span></div><div class="kpi-value">฿1.21M</div><div class="kpi-sub">หลังหักคงที่ ฿2.53M</div></div>
-      </div>
-
-      <div class="grid g-2 mb-5" style="grid-template-columns: 1.2fr 1fr">
-        <!-- Revenue vs BoM Cost bars + GP line -->
-        <div class="card pad">
-          <div class="section-title">Revenue vs BoM Cost (แท่ง) · Gross Profit (เส้น)</div>
-          <div class="bc-chart"><canvas id="bcCombo"></canvas></div>
-        </div>
-
-        <!-- per-branch BoM table -->
-        <div class="card pad">
-          <div class="section-title">ต้นทุน BoM ต่อสาขา</div>
-          <div style="overflow:hidden;border:1px solid var(--border);border-radius:var(--r-md)">
-            <table>
-              <thead><tr><th>สาขา</th><th class="num">รายได้</th><th class="num">BoM Cost</th><th class="num">GP %</th></tr></thead>
-              <tbody id="branchBom"></tbody>
-            </table>
+      <!-- ── Chain KPIs: the latest month, never a running total ── -->
+      <section data-tabs="chain">
+        <div class="section-title">ภาพรวมเชน · พฤษภาคม 2026</div>
+        <div class="grid g-4 mb-5">
+          <div class="card kpi-card kpi-neu">
+            <div class="kpi-card-top"><span class="kpi-label">รายได้ (ex-VAT)</span><span class="pill pill-up">▲ +3.5%</span></div>
+            <div class="kpi-value">฿9.42M</div>
+            <div class="kpi-card-bottom"><span class="kpi-sub">MoM · เม.ย. ฿9.10M</span></div>
+          </div>
+          <div class="card kpi-card kpi-down">
+            <div class="kpi-card-top"><span class="kpi-label">BoM Cost</span><span class="pill pill-down">▲ +3.3%</span></div>
+            <div class="kpi-value">฿5.68M</div>
+            <div class="kpi-card-bottom"><span class="kpi-sub">60.3% ของรายได้</span></div>
+          </div>
+          <div class="card kpi-card kpi-up">
+            <div class="kpi-card-top"><span class="kpi-label">Gross Profit</span><span class="pill pill-up">▲ +0.6 pt</span></div>
+            <div class="kpi-value">฿3.74M</div>
+            <div class="kpi-card-bottom"><span class="kpi-sub">GP 39.7%</span></div>
+          </div>
+          <div class="card kpi-card kpi-neu">
+            <div class="kpi-card-top"><span class="kpi-label">Net Profit</span></div>
+            <div class="kpi-value">฿1.21M</div>
+            <div class="kpi-card-bottom"><span class="kpi-sub">หลังหักต้นทุนคงที่ ฿2.53M</span></div>
           </div>
         </div>
+      </section>
+
+      <div class="grid g-2 split mb-5" id="bcPair">
+        <!-- ── Revenue vs BoM cost (bars) with GP (line) ── -->
+        <section class="card pad" data-tabs="chain compare">
+          <div class="section-title">รายได้เทียบ BoM Cost (แท่ง) · Gross Profit (เส้น)</div>
+          <div class="chart-box" style="height:280px"><canvas id="bcCombo"></canvas></div>
+        </section>
+
+        <!-- ── Per-branch BoM ── -->
+        <section class="card pad" data-tabs="chain branch">
+          <div class="flex between center mb-3">
+            <div class="section-title mb-0">ต้นทุน BoM ต่อสาขา</div>
+            <span class="muted" style="font-size:11px">GP เป้า ≥ 40.0%</span>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>สาขา</th><th class="num">รายได้</th><th class="num">BoM Cost</th><th class="num">GP %</th><th>สถานะ</th></tr></thead>
+            <tbody id="branchBom"></tbody>
+          </table></div>
+        </section>
       </div>
 
-      <!-- ── Cost Sensitivity Simulator ── -->
-      <div class="card pad" style="border:1.5px solid var(--warn);background:linear-gradient(135deg, rgba(254,243,199,.35), transparent)">
+      <!-- ── Cost sensitivity simulator: what-if on the same BoM formula ── -->
+      <section class="card pad" data-tabs="chain sim">
         <div class="flex between center mb-3">
-          <h2 style="font:var(--t-h2);color:#92400e">🎛️ Cost Sensitivity Simulator — What-If</h2>
-          <button onclick="resetSim()" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:12px;cursor:pointer">รีเซ็ต</button>
+          <div class="section-title mb-0">จำลองความอ่อนไหวต้นทุน · What-If</div>
+          <button class="upload-btn" onclick="resetSim()">รีเซ็ต</button>
         </div>
-        <div class="grid g-2" style="grid-template-columns: 1.2fr 1fr; align-items:start">
+        <div class="grid g-2 split" style="align-items:start">
           <div>
-            <div class="slider-row"><span class="secondary" style="font-size:12.5px">ราคาวัตถุดิบเนื้อ</span><input type="range" id="sMeat" min="-20" max="30" value="0" oninput="recalc()"><span class="num" id="vMeat">0%</span></div>
-            <div class="slider-row"><span class="secondary" style="font-size:12.5px">ราคาแซลมอน</span><input type="range" id="sSalmon" min="-20" max="30" value="0" oninput="recalc()"><span class="num" id="vSalmon">0%</span></div>
-            <div class="slider-row"><span class="secondary" style="font-size:12.5px">ราคาขายเฉลี่ย</span><input type="range" id="sPrice" min="-10" max="20" value="0" oninput="recalc()"><span class="num" id="vPrice">0%</span></div>
-            <div class="slider-row"><span class="secondary" style="font-size:12.5px">ปริมาณขาย</span><input type="range" id="sVol" min="-20" max="25" value="0" oninput="recalc()"><span class="num" id="vVol">0%</span></div>
-            <p class="muted" style="font-size:11px;margin-top:10px">ปรับสมมติฐานเพื่อดูผลต่อ GP — สูตร BoM เดียวกับทุกหน้า</p>
+            <div class="slider-row"><span class="secondary">ราคาวัตถุดิบเนื้อ</span><input type="range" style="accent-color:var(--accent)" id="sMeat" min="-20" max="30" value="0" oninput="recalc()"><span class="num" id="vMeat">0%</span></div>
+            <div class="slider-row"><span class="secondary">ราคาแซลมอน</span><input type="range" style="accent-color:var(--accent)" id="sSalmon" min="-20" max="30" value="0" oninput="recalc()"><span class="num" id="vSalmon">0%</span></div>
+            <div class="slider-row"><span class="secondary">ราคาขายเฉลี่ย</span><input type="range" style="accent-color:var(--accent)" id="sPrice" min="-10" max="20" value="0" oninput="recalc()"><span class="num" id="vPrice">0%</span></div>
+            <div class="slider-row"><span class="secondary">ปริมาณขาย</span><input type="range" style="accent-color:var(--accent)" id="sVol" min="-20" max="25" value="0" oninput="recalc()"><span class="num" id="vVol">0%</span></div>
+            <p class="muted mt-2" style="font-size:11px">ปรับสมมติฐานเพื่อดูผลต่อ GP — สูตร BoM เดียวกับทุกหน้า · ฐาน = พฤษภาคม 2026</p>
           </div>
           <div class="grid g-2" style="gap:12px">
-            <div class="sim-out" style="background:rgba(79,70,229,.08)"><div class="kpi-label">รายได้ที่ปรับ</div><div class="kpi-value" id="oRev" style="font-size:22px">฿9.42M</div></div>
-            <div class="sim-out" style="background:rgba(239,68,68,.07)"><div class="kpi-label">BoM Cost</div><div class="kpi-value" id="oCost" style="font-size:22px">฿5.68M</div></div>
-            <div class="sim-out" style="background:rgba(16,185,129,.08)"><div class="kpi-label">Gross Profit</div><div class="kpi-value up" id="oGp" style="font-size:22px">฿3.74M</div></div>
-            <div class="sim-out" style="background:var(--bg-subtle)"><div class="kpi-label">GP %</div><div class="kpi-value" id="oGpPct" style="font-size:22px">39.7%</div><div class="kpi-sub" id="oDelta">ฐาน</div></div>
+            <div class="card pad"><div class="kpi-label mb-2">รายได้ที่ปรับ</div><div class="kpi-value sim-val" id="oRev">฿9.42M</div></div>
+            <div class="card pad"><div class="kpi-label mb-2">BoM Cost</div><div class="kpi-value sim-val" id="oCost">฿5.68M</div></div>
+            <div class="card pad"><div class="kpi-label mb-2">Gross Profit</div><div class="kpi-value sim-val" id="oGp">฿3.74M</div></div>
+            <div class="card pad"><div class="kpi-label mb-2">GP %</div><div class="kpi-value sim-val" id="oGpPct">39.7%</div><div id="oDelta"><span class="pill pill-neu">ฐาน</span></div></div>
           </div>
         </div>
-      </div>
-
+      </section>
     </div>
   </div>
 </div>
 
 <script>
-const INDIGO='#4f46e5', GOOD='#10b981', BAD='#ef4444';
-const fmtM = v => '฿'+(v/1e6).toFixed(2)+'M';
+const fmtM = v => '฿' + (v / 1e6).toFixed(2) + 'M';
+const fmtB = v => '฿' + Math.round(v).toLocaleString('en-US');
+const signed = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(d);
 
-// per-branch table
-const bb = [
-  ['เซ็นทรัล',1480000,876000], ['ขอนแก่น',1240000,748000], ['โคราช',1130000,712000],
-  ['อุดรธานี',980000,602000], ['หาดใหญ่',760000,479000], ['เชียงใหม่',940000,556000],
-];
-document.getElementById('branchBom').innerHTML = bb.map(([n,rev,cost])=>{
-  const gp = (rev-cost)/rev*100;
-  return `<tr><td><b>${n}</b></td><td class="num">${fmtM(rev)}</td><td class="num">${fmtM(cost)}</td>
-    <td class="num"><b style="color:${gp>=40?GOOD:gp>=36?'#f59e0b':BAD}">${gp.toFixed(1)}%</b></td></tr>`;
-}).join('');
-
-// combo chart
-new Chart(document.getElementById('bcCombo'), {
-  data:{ labels:['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.'],
-    datasets:[
-      { type:'bar', label:'รายได้', data:[8.1,8.4,8.9,9.1,9.42], backgroundColor:'rgba(79,70,229,0.55)', borderRadius:3, order:3 },
-      { type:'bar', label:'BoM Cost', data:[4.95,5.1,5.38,5.5,5.68], backgroundColor:'rgba(239,68,68,0.45)', borderRadius:3, order:2 },
-      { type:'line', label:'GP', data:[3.15,3.3,3.52,3.6,3.74], borderColor:GOOD, backgroundColor:'rgba(16,185,129,.1)', tension:0.3, pointRadius:3, order:1, yAxisID:'y' },
-    ] },
-  options:{ responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ position:'bottom', labels:{boxWidth:10,font:{size:11}} } },
-    scales:{ y:{ ticks:{ callback:v=>'฿'+v+'M', font:{size:10} }, grid:{color:'rgba(148,163,184,0.1)'} }, x:{ grid:{display:false}, ticks:{font:{size:11}} } } }
+// ── Subtabs: show the sections tagged with the chosen key ──
+document.getElementById('bcTabs').addEventListener('click', e => {
+  const b = e.target.closest('.subtab-btn'); if (!b) return;
+  document.querySelectorAll('#bcTabs .subtab-btn').forEach(x => x.classList.toggle('active', x === b));
+  const key = b.dataset.tab;
+  const off = s => !s.dataset.tabs.split(' ').includes(key);
+  document.querySelectorAll('[data-tabs]').forEach(s => { s.style.display = off(s) ? 'none' : ''; });
+  const pair = document.getElementById('bcPair'), kids = [...pair.children];
+  pair.style.display = kids.every(off) ? 'none' : '';
+  pair.classList.toggle('solo', kids.some(off));
 });
 
-// simulator
-const BASE = { rev:9.42e6, meatShare:0.28, salmonShare:0.34, otherShare:0.38, cost:5.68e6 };
-function recalc(){
-  const meat=+sMeat.value, salmon=+sSalmon.value, price=+sPrice.value, vol=+sVol.value;
-  vMeat.textContent=meat+'%'; vSalmon.textContent=salmon+'%'; vPrice.textContent=price+'%'; vVol.textContent=vol+'%';
-  const volF=1+vol/100;
-  const rev = BASE.rev*(1+price/100)*volF;
-  const cost = BASE.cost*volF*(BASE.meatShare*(1+meat/100)+BASE.salmonShare*(1+salmon/100)+BASE.otherShare);
-  const gp = rev-cost, gpPct = gp/rev*100, baseGpPct = (BASE.rev-BASE.cost)/BASE.rev*100;
-  oRev.textContent=fmtM(rev); oCost.textContent=fmtM(cost); oGp.textContent=fmtM(gp); oGpPct.textContent=gpPct.toFixed(1)+'%';
-  const d = gpPct-baseGpPct;
-  oGp.className='kpi-value '+(gp>=BASE.rev-BASE.cost?'up':'down');
-  oDelta.innerHTML = Math.abs(d)<0.05 ? 'ฐาน' : `<span class="${d>0?'up':'down'}">${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)}pp</span> vs ฐาน`;
+// ── Per-branch table (sample): GP status is a word, not a colour alone ──
+const bb = [
+  ['เซ็นทรัล', 1480000, 876000], ['ขอนแก่น', 1240000, 748000], ['โคราช', 1130000, 712000],
+  ['อุดรธานี', 980000, 602000], ['หาดใหญ่', 760000, 479000], ['เชียงใหม่', 940000, 556000],
+];
+document.getElementById('branchBom').innerHTML = bb.map(([n, rev, cost]) => {
+  const gp = (rev - cost) / rev * 100;
+  const st = gp >= 40 ? ['pill-up', 'ดี'] : gp >= 36 ? ['pill-warn', 'เฝ้าดู'] : ['pill-down', 'ต้องแก้'];
+  return `<tr><td><b>${n}</b></td><td class="num">${fmtB(rev)}</td><td class="num">${fmtB(cost)}</td>
+    <td class="num"><b>${gp.toFixed(1)}%</b></td><td><span class="pill ${st[0]}">${st[1]}</span></td></tr>`;
+}).join('');
+
+// ── Revenue vs BoM cost bars + GP line (฿M) ──
+kitChart('bcCombo', c => ({
+  data: { labels: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.'],
+    datasets: [
+      { type: 'bar', label: 'รายได้', data: [8.1, 8.4, 8.9, 9.1, 9.42], backgroundColor: c.s(1) },
+      { type: 'bar', label: 'BoM Cost', data: [4.95, 5.1, 5.38, 5.5, 5.68], backgroundColor: c.v('--group') },
+      { type: 'line', label: 'Gross Profit', data: [3.15, 3.3, 3.52, 3.6, 3.74], borderColor: c.s(2), backgroundColor: c.s(2), pointRadius: 3, order: -1 },
+    ] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' },
+      tooltip: { callbacks: { label: t => t.dataset.label + ': ฿' + t.raw.toFixed(2) + 'M' } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: v => '฿' + v + 'M' } }, x: { grid: { display: false } } } },
+}));
+
+// ── Simulator ──
+const BASE = { rev: 9.42e6, cost: 5.68e6, meatShare: 0.28, salmonShare: 0.34, otherShare: 0.38 };
+const $ = id => document.getElementById(id);
+function recalc() {
+  const meat = +$('sMeat').value, salmon = +$('sSalmon').value, price = +$('sPrice').value, vol = +$('sVol').value;
+  [['vMeat', meat], ['vSalmon', salmon], ['vPrice', price], ['vVol', vol]].forEach(([id, v]) => { $(id).textContent = (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%'; });
+  const volF = 1 + vol / 100;
+  const rev = BASE.rev * (1 + price / 100) * volF;
+  const cost = BASE.cost * volF * (BASE.meatShare * (1 + meat / 100) + BASE.salmonShare * (1 + salmon / 100) + BASE.otherShare);
+  const gp = rev - cost, gpPct = gp / rev * 100, baseGpPct = (BASE.rev - BASE.cost) / BASE.rev * 100;
+  $('oRev').textContent = fmtM(rev); $('oCost').textContent = fmtM(cost);
+  const gpMove = gp - (BASE.rev - BASE.cost);   // .up/.down on an inner span: .kpi-value sets its own ink
+  $('oGp').innerHTML = `<span class="${Math.abs(gpMove) < 500 ? '' : gpMove > 0 ? 'up' : 'down'}">${fmtM(gp)}</span>`;
+  $('oGpPct').textContent = gpPct.toFixed(1) + '%';
+  const d = gpPct - baseGpPct;
+  $('oDelta').innerHTML = Math.abs(d) < 0.05 ? '<span class="pill pill-neu">ฐาน</span>'
+    : `<span class="pill ${d > 0 ? 'pill-up' : 'pill-down'}">${d > 0 ? '▲' : '▼'} ${signed(d)} pt</span> <span class="kpi-sub">เทียบฐาน</span>`;
 }
-function resetSim(){ ['sMeat','sSalmon','sPrice','sVol'].forEach(id=>document.getElementById(id).value=0); recalc(); }
+function resetSim() { ['sMeat', 'sSalmon', 'sPrice', 'sVol'].forEach(id => { $(id).value = 0; }); recalc(); }
 recalc();
 </script>
 </body>
