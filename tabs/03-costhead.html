@@ -1,4 +1,9 @@
 <div id="tab-costhead" style="display:none">
+  <!-- one sidebar/cluster entry, two views (2026-10-01) -->
+  <div class="subtab-bar mb-3">
+    <button class="subtab-btn active" onclick="switchTab('costhead')">ต้นทุน/หัว รายสาขา</button>
+    <button class="subtab-btn" onclick="switchTab('costheadtop60')">Top 60 เมนู ต้นทุน/หัว</button>
+  </div>
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
     <input type="date" id="chDate" onchange="loadCostHead(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
