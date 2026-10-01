@@ -17,7 +17,11 @@
    "rev_per_head": 237.5,
    "revenue": 950.0,
    "share_pct": 100.0,
-   "wow_pct": null
+   "target": null,
+   "target_source": null,
+   "vs_target_pct": null,
+   "wow_pct": null,
+   "yoy_pct": null
   }
  ],
  "comp_label": "same weekday last week",
@@ -79,6 +83,8 @@
  },
  "focus": "2026-06-03",
  "gp": {
+  "bridge": null,
+  "bridge_yoy": null,
   "cost_basis": "daily",
   "food_cost": 450,
   "gp": 500.0,

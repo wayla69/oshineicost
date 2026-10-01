@@ -18,7 +18,7 @@ import json as _json
 import io as _io
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
-from targets import target_revenue_total
+from targets import target_revenue_total, targets_for_month
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _iso_week_sql, _unified_cogs_expr,
@@ -1737,7 +1737,7 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where,
     return {"cur": cur, "headline": headline, "prev": prev}
 
 
-def _mgt_branches(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
+def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, params, pct, pe, period, ps, where, ye, ys):
     # names this section hands on; None where a period path never assigns one
     branches = None
     # ---- branch league table -----------------------------------------
@@ -1753,16 +1753,32 @@ def _mgt_branches(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
         return {r["branch"]: r for r in rows}
     cur_b  = by_branch(cs, ce)
     prev_b = by_branch(ps, pe) if has_prev else {}
+    # Owner request 2026-10-01: the league answers "which branch is behind", not
+    # only "is the chain behind" — so each row carries its own YoY (the same
+    # year-ago window as the headline) and, on the monthly report, its own
+    # target (targets.py: typed figure, else its actual of the same month last
+    # year) with the achievement %. Daily/weekly rows have no target: targets
+    # are monthly figures.
+    yoy_b = by_branch(ys, ye) if has_yoy else {}
+    tgt_b = ({t["branch"]: t for t in targets_for_month(con, cs.strftime("%Y-%m"), branch, group)}
+             if period == "monthly" else {})
     tot_rev = sum((r["rev"] or 0) for r in cur_b.values()) or 0
     branches = []
     for nm, r in cur_b.items():
         rev = r["rev"] or 0; cust = r["cust"] or 0
         p = prev_b.get(nm)
+        y = yoy_b.get(nm)
+        t = tgt_b.get(nm)
+        has_t = bool(t and t["source"] != "none" and t["revenue_target"])
         branches.append({
             "branch": nm, "revenue": rev, "customers": cust, "bills": r["bills"],
             "rev_per_head": round(rev/cust, 1) if cust else None,
             "share_pct": round(rev/tot_rev*100, 1) if tot_rev else None,
             "wow_pct": pct(rev, p["rev"] or 0) if p else None,
+            "yoy_pct": pct(rev, y["rev"] or 0) if (y and (y["rev"] or 0) > 0) else None,
+            "target": round(t["revenue_target"]) if has_t else None,
+            "target_source": (t["source"] if t else None) if period == "monthly" else None,
+            "vs_target_pct": round(rev / t["revenue_target"] * 100, 1) if has_t else None,
         })
     branches.sort(key=lambda x: -x["revenue"])
     prev_rank_map = {nm: i + 1 for i, (nm, _) in
@@ -1860,9 +1876,11 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
     return {"cash_heavy": cash_heavy, "heavy": heavy, "leak": leak, "reprint": reprint}
 
 
-def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, params, pct, pe, prev, ps, where):
+def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, leak, params, pct, pe, prev, ps, where, ye, ys):
     # names this section hands on; None where a period path never assigns one
     cmp_ok = None
+    prev_cost_available = None
+    tot_yoy_cost = None
     cost_available = None
     cost_src = None
     cost_up = None
@@ -1963,10 +1981,24 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
     covers_prev = (prev["customers"] or 0) if prev else 0
     try:
         cur_m,  cost_src, all_cur = menu_cost_map(cs, ce)
-        prev_m, _,        all_prev = menu_cost_map(ps, pe) if has_prev else ({}, None, 0.0)
+        prev_m, prev_src, all_prev = menu_cost_map(ps, pe) if has_prev else ({}, None, 0.0)
     except Exception:
-        cur_m, prev_m, cost_src, all_cur, all_prev = {}, {}, "unavailable", 0.0, 0.0
+        cur_m, prev_m, cost_src, prev_src, all_cur, all_prev = {}, {}, "unavailable", None, 0.0, 0.0
     cost_available = cost_src != "unavailable"
+    # the comparison window's cost source — a window before the cost tables
+    # (prev_src 'unavailable') returns ฿0, which must never read as "no cost"
+    prev_cost_available = bool(has_prev and prev_src and prev_src != "unavailable")
+    # year-ago window's total COGS for the GP bridge (§4): whole months come from
+    # sales_sku_monthly, so the monthly report can bridge YoY; a daily/weekly
+    # window 364 days back predates sales_sku_daily and stays None
+    tot_yoy_cost = None
+    if has_yoy:
+        try:
+            _, yoy_src, all_yoy = menu_cost_map(ys, ye)
+            if yoy_src != "unavailable":
+                tot_yoy_cost = all_yoy
+        except Exception:
+            tot_yoy_cost = None
     def cph(cost, covers): return round(cost / covers, 2) if covers else None
     cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
     menu_rows = []
@@ -2023,7 +2055,7 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
         # predates sales_sku_daily and isn't whole calendar months
         "cost_basis": cost_src, "cost_from": daily_min,
     }
-    return {"clean": clean, "cmp_ok": cmp_ok, "cost_available": cost_available, "cost_src": cost_src, "cost_up": cost_up, "daily_min": daily_min, "food_sub": food_sub, "menu_out": menu_out, "sp": sp, "sw": sw, "tot_cur_cost": tot_cur_cost, "tot_prev_cost": tot_prev_cost}
+    return {"clean": clean, "cmp_ok": cmp_ok, "cost_available": cost_available, "cost_src": cost_src, "cost_up": cost_up, "daily_min": daily_min, "food_sub": food_sub, "menu_out": menu_out, "prev_cost_available": prev_cost_available, "sp": sp, "sw": sw, "tot_cur_cost": tot_cur_cost, "tot_prev_cost": tot_prev_cost, "tot_yoy_cost": tot_yoy_cost}
 
 
 def _mgt_tier_rows(*, TC, TP, has_prev, pax_c, pax_p, pct, th):
@@ -2322,7 +2354,44 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
     return {"tier_out": tier_out}
 
 
-def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, prev, tot_cur_cost, tot_prev_cost):
+def _gp_bridge(c, p, cost_c, cost_p):
+    """Decompose GP(c) − GP(p) into three exact, additive effects (price/volume/cost
+    variance — the standard management-accounting bridge):
+
+        volume     = (covers_c − covers_p) × GP/head_p      more or fewer guests at last period's margin
+        spend_head = (spend/head_c − spend/head_p) × covers_c   what the guests of THIS period paid, per head
+        cost_head  = −(cost/head_c − cost/head_p) × covers_c    what feeding them cost, per head
+
+    volume + spend_head + cost_head == GP_c − GP_p to the baht (no residual), so
+    the printed waterfall always closes. None when either side has no covers or
+    no cost figure — a ฿0 cost would make a missing cost table look like a saving."""
+    if not (c and p) or cost_c is None or cost_p is None:
+        return None
+    n_c, n_p = c.get("customers") or 0, p.get("customers") or 0
+    if not (n_c and n_p):
+        return None
+    rev_c, rev_p = c.get("revenue") or 0, p.get("revenue") or 0
+    s_c, s_p = rev_c / n_c, rev_p / n_p
+    k_c, k_p = cost_c / n_c, cost_p / n_p
+    g_c, g_p = s_c - k_c, s_p - k_p
+    gp_c, gp_p = rev_c - cost_c, rev_p - cost_p
+    return {
+        "gp_prev": round(gp_p), "gp_cur": round(gp_c), "delta": round(gp_c - gp_p),
+        "volume": round((n_c - n_p) * g_p),
+        "spend_head": round((s_c - s_p) * n_c),
+        # the residual of the rounding lands here so the three printed bars
+        # always sum to the printed delta (the exact value is -(k_c - k_p) * n_c)
+        "cost_head": round(gp_c - gp_p) - round((n_c - n_p) * g_p) - round((s_c - s_p) * n_c),
+        "covers_prev": n_p, "covers_cur": n_c,
+        "spend_head_prev": round(s_p, 1), "spend_head_cur": round(s_c, 1),
+        "cost_head_prev": round(k_p, 1), "cost_head_cur": round(k_c, 1),
+        "gp_head_prev": round(g_p, 1), "gp_head_cur": round(g_c, 1),
+        "gp_pct_prev": round(gp_p / rev_p * 100, 1) if rev_p else None,
+        "gp_pct_cur": round(gp_c / rev_c * 100, 1) if rev_c else None,
+    }
+
+
+def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, headline, prev, prev_cost_available, tot_cur_cost, tot_prev_cost, tot_yoy_cost):
     # names this section hands on; None where a period path never assigns one
     gp = None
     # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
@@ -2337,7 +2406,7 @@ def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, prev, tot_
         gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
         gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
         gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
-                       if (cmp_ok and prev and prev["revenue"]) else None)
+                       if (cmp_ok and prev and prev["revenue"] and prev_cost_available) else None)
         gp = {
             "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
             "gp": gp_cur, "gp_pct": gp_pct,
@@ -2345,6 +2414,10 @@ def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, prev, tot_
             "gp_pct_prev": gp_prev_pct,
             "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
             "cost_basis": cost_src,
+            # §4 GP bridge (owner request 2026-10-01): vs the comparison period and,
+            # when the year-ago window has cost data (monthly), vs last year
+            "bridge": _gp_bridge(cur, prev, tot_cur_cost, tot_prev_cost) if (cmp_ok and prev_cost_available) else None,
+            "bridge_yoy": _gp_bridge(cur, (headline or {}).get("yoy"), tot_cur_cost, tot_yoy_cost),
         }
     return {"gp": gp}
 
@@ -2871,15 +2944,15 @@ def report_management(
         ctx.update(out)
         out = _mgt_headline(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
-        out = _mgt_branches(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
+        out = _mgt_branches(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), period=ctx.get("period"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
         out = _mgt_leak(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
         ctx.update(out)
-        out = _mgt_menu(con, _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), cur=ctx.get("cur"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), leak=ctx.get("leak"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), prev=ctx.get("prev"), ps=ctx.get("ps"), where=ctx.get("where"))
+        out = _mgt_menu(con, _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), cur=ctx.get("cur"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), leak=ctx.get("leak"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), prev=ctx.get("prev"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
         out = _mgt_tier(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), sp=ctx.get("sp"), sw=ctx.get("sw"), th=ctx.get("th"))
         ctx.update(out)
-        out = _mgt_gp(con, cmp_ok=ctx.get("cmp_ok"), cost_available=ctx.get("cost_available"), cost_src=ctx.get("cost_src"), cur=ctx.get("cur"), daily_min=ctx.get("daily_min"), prev=ctx.get("prev"), tot_cur_cost=ctx.get("tot_cur_cost"), tot_prev_cost=ctx.get("tot_prev_cost"))
+        out = _mgt_gp(con, cmp_ok=ctx.get("cmp_ok"), cost_available=ctx.get("cost_available"), cost_src=ctx.get("cost_src"), cur=ctx.get("cur"), daily_min=ctx.get("daily_min"), headline=ctx.get("headline"), prev=ctx.get("prev"), prev_cost_available=ctx.get("prev_cost_available"), tot_cur_cost=ctx.get("tot_cur_cost"), tot_prev_cost=ctx.get("tot_prev_cost"), tot_yoy_cost=ctx.get("tot_yoy_cost"))
         ctx.update(out)
         out = _mgt_pace(con, _cal=ctx.get("_cal"), branch=ctx.get("branch"), clean=ctx.get("clean"), food_sub=ctx.get("food_sub"), group=ctx.get("group"), latest_day=ctx.get("latest_day"), maxd=ctx.get("maxd"), params=ctx.get("params"), ref_anchor=ctx.get("ref_anchor"), where=ctx.get("where"))
         ctx.update(out)
@@ -2977,6 +3050,15 @@ def report_management(
             word = "Month total" if month_complete else "Month-end projection"
             actions.append({"sev": "med",
                 "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
+    _behind = [r for r in branches if r.get("vs_target_pct") is not None and r["vs_target_pct"] < 90]
+    if _behind:
+        _behind.sort(key=lambda r: r["vs_target_pct"])
+        _names = ", ".join(f"{r['branch']} {r['vs_target_pct']:.0f}%" for r in _behind[:4])
+        _more = (f" +{len(_behind) - 4}" if len(_behind) > 4 else "")
+        actions.append({"sev": "med",
+            "text": (f"{len(_behind)} สาขาต่ำกว่า 90% ของเป้าเดือนนี้: {_names}{_more}"
+                     if th else
+                     f"{len(_behind)} branches under 90% of this month's target: {_names}{_more}.")})
     if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
         m0 = cost_up[0]
         actions.append({"sev": "low",
@@ -3161,6 +3243,16 @@ def _xlsx_summary(*, Font, H, NUM, P, PCT, autofit, header, j, pdelta, wb):
         ("Gross margin % (this period)", pdelta(G.get("gp_pct")), PCT),
     ]:
         ws.append([name, val]); ws.cell(ws.max_row, 2).number_format = fmt
+    for key, title in (("bridge", "GP bridge vs " + str(j.get("comp_label", "prev"))), ("bridge_yoy", "GP bridge vs same period last year")):
+        B = G.get(key)
+        if not B:
+            continue
+        ws.append([])
+        header(ws, [title, "THB"])
+        for name, val in [("GP previous", B["gp_prev"]), ("Volume (covers) effect", B["volume"]),
+                          ("Spend/head effect", B["spend_head"]), ("Cost/head effect", B["cost_head"]),
+                          ("GP this period", B["gp_cur"])]:
+            ws.append([name, val]); ws.cell(ws.max_row, 2).number_format = NUM
     autofit(ws)
     return {}
 
@@ -3168,13 +3260,14 @@ def _xlsx_summary(*, Font, H, NUM, P, PCT, autofit, header, j, pdelta, wb):
 def _xlsx_branches(*, NUM, PCT, autofit, header, j, pdelta, wb):
     # Sheet 2 — Branch League
     ws = wb.create_sheet("Branch League")
-    header(ws, ["Branch", "Net Sales", "Covers", "Spend/Head", "Share %", "vs prev %"])
+    header(ws, ["Branch", "Net Sales", "Covers", "Spend/Head", "Share %", "vs prev %", "YoY %", "Target", "% of target"])
     for b in j.get("branches", []):
         ws.append([b["branch"], b["revenue"], b["customers"], b["rev_per_head"],
-                   pdelta(b["share_pct"]), pdelta(b["wow_pct"])])
+                   pdelta(b["share_pct"]), pdelta(b["wow_pct"]), pdelta(b.get("yoy_pct")),
+                   b.get("target"), pdelta(b.get("vs_target_pct"))])
         r = ws.max_row
-        for c in (2, 3, 4): ws.cell(r, c).number_format = NUM
-        ws.cell(r, 5).number_format = PCT; ws.cell(r, 6).number_format = PCT
+        for c in (2, 3, 4, 8): ws.cell(r, c).number_format = NUM
+        for c in (5, 6, 7, 9): ws.cell(r, c).number_format = PCT
     autofit(ws)
     return {}
 
