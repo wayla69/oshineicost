@@ -59,7 +59,7 @@
 
   <!-- Day-of-week chart -->
   <div class="card p-5">
-    <h2 class="section-title">Day-of-Week Pattern <span class="font-normal text-slate-400 normal-case">(selected month)</span></h2>
+    <h2 class="section-title">Day-of-Week Pattern <span class="font-normal text-slate-400 normal-case">(selected month)</span> <a class="see-full no-print" onclick="switchTab('timeflow')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ Time &amp; Flow →</a></h2>
     <div style="height:200px"><canvas id="chartDow"></canvas></div>
   </div>
 
@@ -67,7 +67,7 @@
   <div class="card p-5 mt-5">
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <div>
-        <h2 class="section-title mb-0">กำไรขั้นต้น <span class="font-normal text-slate-400 normal-case">(Revenue − COGS)</span></h2>
+        <h2 class="section-title mb-0">กำไรขั้นต้น <span class="font-normal text-slate-400 normal-case">(Revenue − COGS)</span> <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
         <p class="text-xs text-slate-400 mt-0.5">รายวัน/สัปดาห์เกลี่ย COGS รายเดือนตามสัดส่วนยอดขาย · รายเดือนใช้ qty × unit_cost ตรง</p>
       </div>
       <div class="inline-flex rounded-md border border-slate-200 text-xs overflow-hidden" id="gpGranBar">

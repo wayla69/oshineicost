@@ -43,6 +43,7 @@
  "mom_basis": "mtd",
  "mtd_cutoff_day": 3,
  "prev_month": "2026-05",
+ "scope": "food",
  "spark_months": [
   "2026-04",
   "2026-05",

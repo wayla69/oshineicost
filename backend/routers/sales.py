@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -463,9 +463,19 @@ def top_ordered(
     """Most-ordered food SKUs with share-of-total quantity and month-over-month
     change. Share = SKU qty ÷ total food qty in the selected window. MoM compares
     the two most recent months present (≤ month_to) so it stays meaningful even
-    when the ranking window is a single month or a wide range."""
+    when the ranking window is a single month or a wide range.
+
+    sort = qty | revenue | cogs. A COST ranking (sort=cogs) covers everything that
+    carries a cost (rules.needs_cost_sql — desserts, drinks and delivery dishes
+    included), so its total is the COGS of the P&L and ต้นทุน/หัว and it ranks the
+    same lines as the Top-60 cost/head page, BoM รายสาขา and the P&L drill. The
+    qty/revenue rankings stay dine-in food (_FOOD_CATEGORY_FILTER). 2026-10-01."""
+    order = {"qty": "qty", "cogs": "cogs", "revenue": "revenue"}.get(sort, "revenue")
+    by_cost = order == "cogs"
+    scope_sql = needs_cost_sql() if by_cost else _FOOD_CATEGORY_FILTER
+    cat_join = "LEFT JOIN" if by_cost else "JOIN"
     base = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1", "COALESCE(sk.active,1) = 1",
-            _FOOD_CATEGORY_FILTER]
+            scope_sql]
     params: dict = {}
     if branch:
         base.append("b.name = :branch")
@@ -473,7 +483,6 @@ def top_ordered(
     _group_filter(base, params, group)
     _month_range_filter(base, params, month_from, month_to, month, col="sm.period_month")
     where = "WHERE " + " AND ".join(base)
-    order = {"qty": "qty", "cogs": "cogs", "revenue": "revenue"}.get(sort, "revenue")
     cogs_expr = _unified_cogs_expr("sm")   # per-row BoM COGS (qty × recipe cost; tier=0)
 
     with get_db() as con:
@@ -485,9 +494,10 @@ def top_ordered(
             FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
-            JOIN categories c  ON c.category_id = sk.category_id
+            {cat_join} categories c ON c.category_id = sk.category_id
             {where}
             GROUP BY sk.sku_id
+            {"HAVING SUM(" + cogs_expr + ") > 0" if by_cost else ""}
             ORDER BY {order} DESC
             LIMIT :limit
         """, {**params, "limit": limit}).fetchall()
@@ -499,14 +509,14 @@ def top_ordered(
             FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
-            JOIN categories c  ON c.category_id = sk.category_id
+            {cat_join} categories c ON c.category_id = sk.category_id
             {where}
         """, params).fetchone()
 
         # Total covers (heads) in the same window — for cost-per-head normalization.
         # All paying customers, not food-only: cost/head spreads a dish's ingredient
         # cost across every cover served that period.
-        cov_filt = ["b.name != 'ALL'", "t.source = 'Easy'"]
+        cov_filt = ["b.name != 'ALL'", "t.source = 'Easy'", "COALESCE(b.active,1) = 1"]
         cov_params: dict = {}
         if branch:
             cov_filt.append("b.name = :cbranch"); cov_params["cbranch"] = branch
@@ -699,7 +709,7 @@ def top_ordered(
             "spark":         spark_map.get(r["sku_id"]) or [],
         })
     return {"total_qty": total_qty, "total_rev": total_rev, "total_cogs": total_cogs,
-            "total_covers": total_covers,
+            "total_covers": total_covers, "scope": "costed" if by_cost else "food",
             "cmp_covers_cur": cmp_covers_cur, "cmp_covers_prev": cmp_covers_prev,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,

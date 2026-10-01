@@ -21,26 +21,30 @@ async function renderReportCost(branch) {
   if (note) note.textContent = `เดือน ${fmtMonth(month)} · ${branch||'ทุกสาขา'} · MoM Δ เทียบ ${fmtMonth(prevM)} · % = สัดส่วนต้นทุนรวม · สะสม% = ขนาดรวม Top 60`;
   body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400 text-xs">กำลังโหลด…</td></tr>';
   if (foot) foot.innerHTML = '';
-  const qpf = mm => { const p = new URLSearchParams(); if (branch) p.set('branch', branch); p.set('month_from', mm); p.set('month_to', mm); return p.toString(); };
+  // The shared cost ranking (/api/sales/top_ordered?sort=cogs) — the same list as
+  // §4 above, the Menu tab and the Top-60 cost/head page; its total is the COGS of
+  // the P&L. Until 2026-10-01 this section read /api/cost/analysis, which drops
+  // buffet dishes, so §8 ranked à-la-carte only and disagreed with §4 on one page.
+  const qpf = mm => { const p = new URLSearchParams(); if (branch) p.set('branch', branch); p.set('month', mm); p.set('sort', 'cogs'); p.set('limit', '100'); return p.toString(); };
   let cur, prev;
   try {
     [cur, prev] = await Promise.all([
-      api(`${API}/api/cost/analysis?${qpf(month)}`),
-      api(`${API}/api/cost/analysis?${qpf(prevM)}`).catch(() => ({ items: [] })),
+      api(`${API}/api/sales/top_ordered?${qpf(month)}`),
+      api(`${API}/api/sales/top_ordered?${qpf(prevM)}`).catch(() => ({ items: [] })),
     ]);
   } catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-red-500 text-xs">โหลดไม่ได้</td></tr>'; return; }
   const costItems = (cur.items || []).filter(r => r.cogs != null && r.cogs > 0);
   const priorMap  = new Map((prev.items || []).map(r => [r.sku_code, r]));
-  const top60 = [...costItems].sort((a,b)=>(b.cogs||0)-(a.cogs||0)).slice(0,60);
-  const totalCogsAll = costItems.reduce((s,r)=>s+(r.cogs||0),0);
+  const top60 = costItems.slice(0, 60);
+  const totalCogsAll = cur.total_cogs || 0;
   const totalCogsTop = top60.reduce((s,r)=>s+(r.cogs||0),0);
   const totalQtyTop  = top60.reduce((s,r)=>s+(r.qty||0),0);
 
   kpis.innerHTML = [
     { label:'Total COGS (เดือนนี้)', value:fmtN(Math.round(totalCogsAll)), color:'#dc2626' },
     { label:`Top 60 = ${totalCogsAll ? (totalCogsTop/totalCogsAll*100).toFixed(1) : '—'}% ของต้นทุน`, value:fmtN(Math.round(totalCogsTop)), color:'#f59e0b' },
-    { label:'จำนวนเมนูมีต้นทุน', value:fmtN(costItems.length), color:'#4a70b0' },
-    { label:'Costed SKUs', value:`${cur.summary?.costed_skus||0}/${cur.summary?.total_skus||0}`, color:'#64748b' },
+    { label:'ลูกค้า (หัว)', value:fmtN(cur.total_covers||0), color:'#4a70b0' },
+    { label:'ต้นทุน/หัว', value:cur.total_covers ? fmtN(Math.round(totalCogsAll/cur.total_covers)) : '—', color:'#64748b' },
   ].map(k=>`<div class="rounded-lg p-3 text-center" style="background:${k.color}0f;border:1px solid ${k.color}33">
     <p class="text-[10px] uppercase tracking-wide font-semibold" style="color:var(--text-muted)">${k.label}</p>
     <p class="text-lg font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
