@@ -251,6 +251,42 @@ async function loadMgtReport() {
   renderMgtReport(j,
     jM && jM.available ? jM : null,
     jF && jF.available ? jF : null);
+  // Cover-sheet market box (owner request 2026-10-01): the same curated figures
+  // as the home page's Industry & Economy block. Fetched beside the report and
+  // filled in when it lands, so a slow news/quote feed never delays the report.
+  if (_mgtMarket) renderMgtMarket(_mgtMarket, j);
+  else api(`${API}/api/market`).then(m => { _mgtMarket = m; if (_gen === _mgtGen) renderMgtMarket(m, j); }).catch(() => {});
+}
+
+let _mgtMarket = null;   // last /api/market payload — curated figures change monthly, so one fetch per page load
+
+function renderMgtMarket(m, j) {
+  const slot = document.getElementById('mgtMarket');
+  if (!slot || !m) return;
+  const T = MGT_I18N[mgtLang] || MGT_I18N.en;
+  const trIco = t => t === 'up' ? '▲' : t === 'down' ? '▼' : '▬';
+  const trCol = t => t === 'up' ? 'var(--good-ink)' : t === 'down' ? 'var(--bad-ink)' : 'var(--text-muted)';
+  const macro = (m.macro || []).map(x => `<div class="rounded-lg p-2 mgt-atom" style="background:#f8fafc;border:1px solid #e2e8f0">
+      <p class="text-[10px] uppercase tracking-wide text-slate-400">${esc(x.label)}</p>
+      <p class="text-[15px] font-bold text-slate-800" style="line-height:1.2">${esc(x.value)} <span style="font-size:10px;color:${trCol(x.trend)}">${trIco(x.trend)}</span></p>
+      <p class="text-[10px] text-slate-500">${esc(x.sub || '')} <span class="text-slate-400">· ${esc(x.year || '')}</span></p>
+    </div>`).join('');
+  const ind = (m.industry || []).map(x => `<b>${esc(x.label)}</b> ${esc(x.value)}`).join(' · ');
+  // the chain's own YoY against the industry line — the same guard as §1 (YoY is
+  // hidden on months before mid-May 2026, when the year-ago window is incomplete)
+  const H = j.headline || {};
+  const yoyOk = j.period !== 'monthly' || !(j.range && j.range[1]) || j.range[1] >= '2026-05-15';
+  const B = m.benchmark || {};
+  let bench = B.label ? `${T.mktBench}: ${esc(B.label)}` : '';
+  if (bench && yoyOk && H.rev_yoy_pct != null && B.industry_growth_pct != null) {
+    const good = H.rev_yoy_pct >= B.industry_growth_pct;
+    bench += ` · ${T.mktChain} <b style="color:${good ? 'var(--good-ink)' : 'var(--bad-ink)'}">${H.rev_yoy_pct >= 0 ? '+' : '−'}${Math.abs(H.rev_yoy_pct).toFixed(1)}%</b> ${good ? T.mktAhead : T.mktBehind}`;
+  }
+  const fx = (m.quotes || []).filter(q => /USD|JPY/.test(q.label)).map(q => `${esc(q.label)} <b>${esc(q.value)}</b>${q.change_pct != null ? ` <span style="color:${q.change_pct > 0 ? 'var(--amber-ink)' : q.change_pct < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${q.change_pct > 0 ? '▲' : q.change_pct < 0 ? '▼' : '▬'}${Math.abs(q.change_pct).toFixed(1)}%</span>` : ''}`).join(' · ');
+  slot.innerHTML = `<p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1 mt-3">${T.mktTitle} <span class="font-normal normal-case tracking-normal">· ${T.mktAsOf} ${esc(m.as_of || '—')}</span></p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mgt-mkt">${macro}</div>
+    <p class="text-[11px] text-slate-500 mt-1.5 mgt-atom">${ind}</p>
+    <p class="text-[11px] text-slate-500 mgt-atom">${bench}${fx ? `${bench ? ' · ' : ''}${T.mktFx}: ${fx}` : ''}</p>`;
 }
 
 // Bilingual string table for the Management Summary report (EN default / TH).
@@ -326,11 +362,18 @@ const MGT_I18N = {
     // section titles
     s1:'1. Headline — ', s1d:'Latest Day', s1w:'Selected Week', s1m:'Selected Month', s2:'2. Action Items',
     s3pre:'3. ', s3mc:'Month', s3mtd:'Month-to-Date', s3post:' Pacing & Cost',
-    s4pre:'4. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4m:'months', s4post:')',
-    s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
-    s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
-    s11:'11. Buffet Price Tiers — Guests & Cost/Head',
-    s12v:'12. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the tab.',
+    s4b:'4. Gross Profit Bridge — What Moved GP',
+    brVolume:'Volume (covers)', brSpend:'Spend / head', brCost:'Cost / head', brGp:'GP', brPrev:'prev', brThis:'this', brLy:'last year',
+    brVsLy:'vs the same period last year', brDrivers:'Driver', brCovers:'Covers', brSpendHead:'Spend / head', brCostHead:'Food cost / head', brGpHead:'GP / head', brGpPct:'GP %',
+    brNote:'Volume = change in covers × last period’s GP/head · Spend/head = change in spend per head × this period’s covers · Cost/head = change in food cost per head × this period’s covers (a rise in cost/head is negative). The three bars sum exactly to the change in GP. GP = net sales − food COGS (BoM basis).',
+    naBridge:'The GP bridge needs food-cost data for both periods — not available for this window.',
+    lgYoy:'YoY', lgTarget:'Target', lgVsTarget:'% target', lgOnTarget:'on target', lgNoTarget:'no target: new branch (no same month last year)',
+    mktTitle:'Market context', mktAsOf:'data as of', mktBench:'Industry benchmark', mktChain:'this chain YoY', mktAhead:'— ahead of the industry', mktBehind:'— behind the industry', mktFx:'FX today',
+    s4pre:'5. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4m:'months', s4post:')',
+    s5:'6. Branch League Table', s6:'7. Money-Leak Radar', s7:'8. Menu Cost / Head (by dish)',
+    s8:'9. Peak Hours & Dayparts', s9:'10. Table Turnover & Occupancy', s10:'11. Payment Channels — ',
+    s11:'12. Buffet Price Tiers — Guests & Cost/Head',
+    s12v:'13. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the tab.',
     vVoices:'Voices', vNeg:'Negative', vStars:'Avg ★', vResp:'Answered', vWait:'Awaiting reply now', vSla:'past SLA', vThemes:'Top themes',
     vWatch:'Branches to watch', vPraised:'Most praised', vSurvey:'QR survey', vAnswers:'answers', vActions:'Fix loop', vOpen:'open', vOverdue:'overdue',
     vDone:'done this period', vBetter:'better', vSame:'same', vWorse:'worse', vPending:'window still running', vRate:'neg / 100 voices',
@@ -360,9 +403,9 @@ const MGT_I18N = {
     naTable:'Table-turnover data is not available for this period — no table sessions were recorded.',
     naPay:'Payment-channel detail is not available for this period.',
     naTier:'Buffet price-tier data is not available for this period.',
-    s12:'14. Appendix B — Definitions & Method',
-    s14:'13. Appendix A — Top 60 menus by price tier (cost/head)',
-    top60Note:'Every tier that sold in the period · ranked by food cost per buffet head · % = share of that tier’s food cost/head · Qty/100 = pieces per 100 guests · same basis as §11.',
+    s12:'15. Appendix B — Definitions & Method',
+    s14:'14. Appendix A — Top 60 menus by price tier (cost/head)',
+    top60Note:'Every tier that sold in the period · ranked by food cost per buffet head · % = share of that tier’s food cost/head · Qty/100 = pieces per 100 guests · same basis as §12.',
     defs:[
       ['Net sales','bill total including VAT ÷ 1.07. VAT is never counted as revenue.'],
       ['Gross profit (GP)','net sales − food COGS. Labour, rent and utilities are NOT deducted here.'],
@@ -440,11 +483,18 @@ const MGT_I18N = {
     trendAnalysis:'บทวิเคราะห์แนวโน้ม',
     s1:'1. สรุปภาพรวม — ', s1d:'วันล่าสุด', s1w:'สัปดาห์ที่เลือก', s1m:'เดือนที่เลือก', s2:'2. สิ่งที่ต้องทำ',
     s3pre:'3. ', s3mc:'ทั้งเดือน', s3mtd:'สะสมเดือนนี้', s3post:' — จังหวะยอดขาย & ต้นทุน',
-    s4pre:'4. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4m:'เดือนล่าสุด', s4post:')',
-    s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
-    s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
-    s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
-    s12v:'12. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ',
+    s4b:'4. สะพานกำไรขั้นต้น — อะไรทำให้ GP เปลี่ยน',
+    brVolume:'จำนวนลูกค้า', brSpend:'ยอดต่อหัว', brCost:'ต้นทุนต่อหัว', brGp:'GP', brPrev:'ช่วงก่อน', brThis:'ช่วงนี้', brLy:'ปีก่อน',
+    brVsLy:'เทียบช่วงเดียวกันปีก่อน', brDrivers:'ตัวขับ', brCovers:'จำนวนหัว', brSpendHead:'ยอดต่อหัว', brCostHead:'ต้นทุนอาหารต่อหัว', brGpHead:'GP ต่อหัว', brGpPct:'GP %',
+    brNote:'จำนวนลูกค้า = หัวที่เปลี่ยน × GP/หัวของช่วงก่อน · ยอดต่อหัว = ยอดต่อหัวที่เปลี่ยน × หัวของช่วงนี้ · ต้นทุนต่อหัว = ต้นทุนอาหารต่อหัวที่เปลี่ยน × หัวของช่วงนี้ (ต้นทุนขึ้น = ติดลบ) · สามแท่งรวมกันเท่ากับ GP ที่เปลี่ยนพอดี · GP = ยอดขายสุทธิ − ต้นทุนอาหาร (อิงสูตร BoM)',
+    naBridge:'สะพาน GP ต้องมีข้อมูลต้นทุนอาหารทั้งสองช่วง — ช่วงนี้ยังไม่มี',
+    lgYoy:'YoY', lgTarget:'เป้า', lgVsTarget:'% เป้า', lgOnTarget:'ถึงเป้า', lgNoTarget:'ไม่มีเป้า: สาขาใหม่ (ยังไม่มีเดือนเดียวกันปีก่อน)',
+    mktTitle:'บริบทตลาด', mktAsOf:'ข้อมูล ณ', mktBench:'เกณฑ์อุตสาหกรรม', mktChain:'เครือเรา YoY', mktAhead:'— โตกว่าอุตสาหกรรม', mktBehind:'— โตช้ากว่าอุตสาหกรรม', mktFx:'ค่าเงินวันนี้',
+    s4pre:'5. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4m:'เดือนล่าสุด', s4post:')',
+    s5:'6. ตารางจัดอันดับสาขา', s6:'7. เรดาร์จุดรั่วไหล', s7:'8. ต้นทุนเมนูต่อหัว (รายเมนู)',
+    s8:'9. ชั่วโมงพีค & ช่วงเวลา', s9:'10. รอบหมุนเวียนโต๊ะ', s10:'11. ช่องทางการชำระเงิน — ',
+    s11:'12. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
+    s12v:'13. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ',
     vVoices:'เสียง', vNeg:'เชิงลบ', vStars:'★ เฉลี่ย', vResp:'ตอบกลับ', vWait:'รอสาขาตอบตอนนี้', vSla:'เกิน SLA', vThemes:'หัวข้อที่พูดถึงมากสุด',
     vWatch:'สาขาที่ต้องดู', vPraised:'ชมมากสุด', vSurvey:'แบบสอบถาม QR', vAnswers:'คำตอบ', vActions:'วงจรการแก้', vOpen:'ค้าง', vOverdue:'เกินกำหนด',
     vDone:'เสร็จในช่วงนี้', vBetter:'ดีขึ้น', vSame:'เท่าเดิม', vWorse:'แย่ลง', vPending:'รอครบ 28 วัน', vRate:'ลบ / 100 เสียง',
@@ -473,9 +523,9 @@ const MGT_I18N = {
     naTable:'ไม่มีข้อมูลรอบหมุนเวียนโต๊ะในช่วงนี้',
     naPay:'ไม่มีรายละเอียดช่องทางการชำระเงินในช่วงนี้',
     naTier:'ไม่มีข้อมูล tier ราคาบุฟเฟ่ต์ในช่วงนี้',
-    s12:'14. ภาคผนวก ข — นิยามและวิธีคำนวณ',
-    s14:'13. ภาคผนวก ก — Top 60 เมนูต่อกลุ่มราคา (ต้นทุน/หัว)',
-    top60Note:'ทุกกลุ่มราคาที่มียอดขายในช่วงนี้ · เรียงตามต้นทุนอาหารต่อหัวบุฟเฟ่ต์ · % = สัดส่วนของต้นทุน/หัวของกลุ่มราคานั้น · จำนวน/100หัว = จำนวนชิ้นต่อลูกค้า 100 คน · ฐานเดียวกับข้อ 11',
+    s12:'15. ภาคผนวก ข — นิยามและวิธีคำนวณ',
+    s14:'14. ภาคผนวก ก — Top 60 เมนูต่อกลุ่มราคา (ต้นทุน/หัว)',
+    top60Note:'ทุกกลุ่มราคาที่มียอดขายในช่วงนี้ · เรียงตามต้นทุนอาหารต่อหัวบุฟเฟ่ต์ · % = สัดส่วนของต้นทุน/หัวของกลุ่มราคานั้น · จำนวน/100หัว = จำนวนชิ้นต่อลูกค้า 100 คน · ฐานเดียวกับข้อ 12',
     defs:[
       ['ยอดขายสุทธิ','ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้'],
       ['กำไรขั้นต้น (GP)','ยอดขายสุทธิ − ต้นทุนอาหาร ยังไม่หักค่าแรง ค่าเช่า ค่าสาธารณูปโภค'],
@@ -771,6 +821,15 @@ function renderMgtReport(j, jM, jF) {
   const _brs = j.branches || [];
   const _brMax = Math.max(1, ..._brs.map(b => b.revenue || 0));
   const _watch = b => (b.wow_pct != null && b.wow_pct <= -10);   // sharp weekly drop
+  // Owner request 2026-10-01: each branch's own YoY, and on the monthly report its
+  // own target (typed, else its actual of the same month last year) and achievement
+  const _lgYoy = !!(j.has_yoy && yoyOk && _brs.some(b => b.yoy_pct != null));
+  const _lgTgt = isMonthly && _brs.some(b => b.target != null);
+  const _tgtBadge = p => p == null ? '<span class="text-slate-300 text-xs">—</span>'
+    : `<span class="text-xs font-bold" style="color:${p >= 100 ? 'var(--good-ink)' : p >= 90 ? 'var(--amber-ink)' : 'var(--bad-ink)'}">${p.toFixed(0)}%</span>`;
+  const _lgExtra = b => (_lgYoy ? `<td class="py-2 text-right">${wow(b.yoy_pct)}</td>` : '')
+    + (_lgTgt ? `<td class="py-2 text-right text-slate-500" title="${b.target != null ? baht(b.target) : T.lgNoTarget}">${b.target != null ? bigBaht(b.target) : '—'}</td><td class="py-2 text-right pr-1">${_tgtBadge(b.vs_target_pct)}</td>` : '');
+  const _lgCols = 8 + (_lgYoy ? 1 : 0) + (_lgTgt ? 2 : 0);
   const brRows = _brs.map((b, i) => `<tr class="border-b border-slate-50" ${_watch(b) ? 'style="background:#fef2f2"' : ''}>
       <td class="py-2 pl-1 text-slate-400 font-mono text-xs w-5 text-center">${b.rank || (i+1)}</td>
       <td class="py-2 w-7 text-center">${mvBadge(b.rank_change)}</td>
@@ -782,13 +841,15 @@ function renderMgtReport(j, jM, jF) {
       <td class="py-2 text-right">${num(b.customers)}</td>
       <td class="py-2 text-right">${baht(b.rev_per_head)}</td>
       <td class="py-2 text-right">${b.share_pct != null ? b.share_pct.toFixed(1) + '%' : '—'}</td>
-      <td class="py-2 text-right pr-1">${wow(b.wow_pct)}</td>
+      <td class="py-2 text-right${(_lgYoy || _lgTgt) ? '' : ' pr-1'}">${wow(b.wow_pct)}</td>${_lgExtra(b)}
     </tr>`).join('');
   // Verdict line: leader + the sharpest decliner to watch (if any)
   const _brTop = _brs.find(b => (b.rank || 99) === 1) || _brs[0];
   const _brDecl = _brs.filter(b => b.wow_pct != null).slice().sort((a, b) => a.wow_pct - b.wow_pct)[0];
+  const _tgtN = _brs.filter(b => b.vs_target_pct != null), _tgtOn = _tgtN.filter(b => b.vs_target_pct >= 100).length;
   const branchVerdict = _brs.length ? `<p class="text-xs mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="text-slate-500">${_brs.length} ${T.branchesWord}</span>
+      ${_lgTgt && _tgtN.length ? `<span style="color:${_tgtOn >= _tgtN.length / 2 ? 'var(--good-ink)' : 'var(--amber-ink)'}"><b>${_tgtOn}</b>/${_tgtN.length} ${T.lgOnTarget}</span>` : ''}
       ${_brTop ? `<span>1. <b>${esc(_brTop.branch)}</b> <span class="text-slate-400" title="${baht(_brTop.revenue)}">${bigBaht(_brTop.revenue)}</span></span>` : ''}
       ${(_brDecl && _brDecl.wow_pct != null && _brDecl.wow_pct < 0) ? `<span style="color:var(--bad-ink)">${T.watch}: <b>${esc(_brDecl.branch)}</b> ${wow(_brDecl.wow_pct)}</span>` : ''}
     </p>` : '';
@@ -797,8 +858,9 @@ function renderMgtReport(j, jM, jF) {
         <th class="text-left py-2 pl-1 w-5">#</th><th class="py-2 w-7"></th>
         <th class="text-left py-2">${T.branch}</th><th class="text-right py-2">${T.netSales}</th>
         <th class="text-right py-2">${T.covers}</th><th class="text-right py-2">${T.spendHeadShort}</th>
-        <th class="text-right py-2">${T.share}</th><th class="text-right py-2 pr-1">${compShort}</th>
-      </tr></thead><tbody>${brRows || `<tr><td class="py-3 text-slate-400" colspan="8">${T.noBranchData}</td></tr>`}</tbody>
+        <th class="text-right py-2">${T.share}</th><th class="text-right py-2${(_lgYoy || _lgTgt) ? '' : ' pr-1'}">${compShort}</th>
+        ${_lgYoy ? `<th class="text-right py-2">${T.lgYoy}</th>` : ''}${_lgTgt ? `<th class="text-right py-2">${T.lgTarget}</th><th class="text-right py-2 pr-1">${T.lgVsTarget}</th>` : ''}
+      </tr></thead><tbody>${brRows || `<tr><td class="py-3 text-slate-400" colspan="${_lgCols}">${T.noBranchData}</td></tr>`}</tbody>
     </table></div>`;
 
   // §5 — Money-leak radar
@@ -1055,6 +1117,19 @@ function renderMgtReport(j, jM, jF) {
       : 'There is no comparable prior ' + pNoun + ' in the data yet.' + ovYoY;
     ex.push({c:'#0f766e', lead:'Overview.', body:'For ' + j.label + ', ' + scopeTxt + ' booked net sales of <b>' + baht(H.revenue) +
             '</b> (ex-VAT) from <b>' + num(H.customers) + '</b> covers across <b>' + num(H.bills) + '</b> bills' + gpClause + '. ' + ovVs});
+  }
+
+  // 1b — GP bridge: where the change in gross profit came from (§4)
+  if (Gx.bridge) {
+    const Bx = Gx.bridge;
+    const sM = v => (v >= 0 ? '+' : '−') + _fmtMc(Math.abs(v || 0));
+    if (isTH) {
+      ex.push({c:'#1f7a4d', lead:'สะพาน GP', body:'กำไรขั้นต้น' + moved(Bx.delta, 'เพิ่มขึ้น', 'ลดลง', 'ทรงตัว') + ' <b>' + sM(Bx.delta) + '</b> เทียบ' + compW +
+              ' — จำนวนลูกค้า <b>' + sM(Bx.volume) + '</b> (' + num(Bx.covers_prev) + ' → ' + num(Bx.covers_cur) + ' หัว) · ยอดต่อหัว <b>' + sM(Bx.spend_head) + '</b> (฿' + Bx.spend_head_prev.toFixed(0) + ' → ฿' + Bx.spend_head_cur.toFixed(0) + ') · ต้นทุนต่อหัว <b>' + sM(Bx.cost_head) + '</b> (฿' + Bx.cost_head_prev.toFixed(0) + ' → ฿' + Bx.cost_head_cur.toFixed(0) + ')'});
+    } else {
+      ex.push({c:'#1f7a4d', lead:'GP bridge.', body:'Gross profit ' + moved(Bx.delta, 'rose', 'fell', 'was flat') + ' <b>' + sM(Bx.delta) + '</b> versus ' + compW +
+              ': covers <b>' + sM(Bx.volume) + '</b> (' + num(Bx.covers_prev) + ' → ' + num(Bx.covers_cur) + '), spend/head <b>' + sM(Bx.spend_head) + '</b> (฿' + Bx.spend_head_prev.toFixed(0) + ' → ฿' + Bx.spend_head_cur.toFixed(0) + '), cost/head <b>' + sM(Bx.cost_head) + '</b> (฿' + Bx.cost_head_prev.toFixed(0) + ' → ฿' + Bx.cost_head_cur.toFixed(0) + ').'});
+    }
   }
 
   // 2 — Revenue quality (+ peak / dayparts / table turnover)
@@ -1520,6 +1595,85 @@ function renderMgtReport(j, jM, jF) {
       ? `ช่องทางหลัก <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} จาก ${_payPD.channels.length} ช่องทาง`
       : `Top channel <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} of ${_payPD.channels.length}`);
   })();
+  // §4 — Gross Profit Bridge (owner request 2026-10-01): GP(prev) → volume →
+  // spend/head → cost/head → GP(this), as a waterfall plus the driver table, vs the
+  // comparison period and (monthly, when last year has cost data) vs last year.
+  const bridgeHtml = (() => {
+    const B = G.bridge, BY = G.bridge_yoy;
+    if (!B && !BY) return '';
+    const sM = v => (v >= 0 ? '+' : '−') + _fmtMc(Math.abs(v || 0));
+    const sgn = v => (v >= 0 ? '+' : '−');
+    const waterfall = (b) => {
+      // five columns: two totals (slate / navy) and three floating effect bars
+      const lv0 = b.gp_prev, lv1 = lv0 + b.volume, lv2 = lv1 + b.spend_head, lv3 = b.gp_cur;
+      const bars = [
+        { l: T.brGp + ' ' + T.brPrev, a: 0, z: lv0, tot: true, c: '#64748b', v: lv0 },
+        { l: T.brVolume, a: lv0, z: lv1, c: b.volume >= 0 ? '#059669' : '#dc2626', v: b.volume },
+        { l: T.brSpend, a: lv1, z: lv2, c: b.spend_head >= 0 ? '#059669' : '#dc2626', v: b.spend_head },
+        { l: T.brCost, a: lv2, z: lv3, c: b.cost_head >= 0 ? '#059669' : '#dc2626', v: b.cost_head },
+        { l: T.brGp + ' ' + T.brThis, a: 0, z: lv3, tot: true, c: '#1e3a5f', v: lv3 },
+      ];
+      const lo = Math.min(0, ...bars.map(x => Math.min(x.a, x.z))), hi = Math.max(0, ...bars.map(x => Math.max(x.a, x.z)));
+      const W = 520, H = 210, padL = 8, padR = 8, padT = 22, padB = 30, n = bars.length;
+      const plotW = W - padL - padR, plotH = H - padT - padB, span = (hi - lo) || 1;
+      const yc = v => padT + plotH * (1 - (v - lo) / span);
+      const xc = i => padL + (i + 0.5) * (plotW / n), bw = Math.min(78, (plotW / n) * 0.62);
+      const zero = yc(0);
+      const rects = bars.map((x, i) => {
+        const y0 = yc(Math.max(x.a, x.z)), y1 = yc(Math.min(x.a, x.z)), h = Math.max(1, y1 - y0);
+        const top = x.tot ? x.v : x.v;
+        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${x.c}"${x.tot ? '' : ' opacity="0.9"'}/>`
+          + `<text x="${xc(i).toFixed(1)}" y="${(y0 - 5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${x.c}">${x.tot ? _fmtMc(top) : sM(top)}</text>`
+          + `<text x="${xc(i).toFixed(1)}" y="${(H - 10).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="#475569">${esc(x.l)}</text>`;
+      }).join('');
+      // connectors between the running levels
+      const links = bars.slice(0, -1).map((x, i) => {
+        const y = yc(x.z);
+        return `<line x1="${(xc(i) + bw / 2).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(xc(i + 1) - bw / 2).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3 2"/>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">
+          <line x1="${padL}" y1="${zero.toFixed(1)}" x2="${W - padR}" y2="${zero.toFixed(1)}" stroke="#cbd5e1" stroke-width="0.8"/>${links}${rects}</svg>`;
+    };
+    const drivers = (b, prevLbl) => {
+      const row = (lbl, p, c, fmt, inv, dfmt) => {
+        const d = (c || 0) - (p || 0);
+        const col = d === 0 ? 'var(--text-muted)' : ((d > 0) !== !!inv) ? 'var(--good-ink)' : 'var(--bad-ink)';
+        return `<tr class="border-b border-slate-50"><td class="py-1 text-slate-600">${lbl}</td><td class="py-1 text-right tabular-nums text-slate-500">${fmt(p)}</td><td class="py-1 text-right tabular-nums font-semibold">${fmt(c)}</td><td class="py-1 text-right tabular-nums" style="color:${col}">${d === 0 ? '—' : sgn(d) + (dfmt || fmt)(Math.abs(d))}</td></tr>`;
+      };
+      // a margin moves in percentage POINTS, not percent
+      const f0 = v => num(Math.round(v || 0)), f1 = v => '฿' + (v || 0).toFixed(1), fp = v => (v == null ? '—' : v.toFixed(1) + '%'), fpp = v => v.toFixed(1) + 'pp';
+      return `<table class="w-full text-[11px] mt-1"><thead><tr class="text-left text-slate-400 border-b border-slate-200">
+          <th class="py-1">${T.brDrivers}</th><th class="py-1 text-right">${prevLbl}</th><th class="py-1 text-right">${T.brThis}</th><th class="py-1 text-right">Δ</th></tr></thead><tbody>
+          ${row(T.brCovers, b.covers_prev, b.covers_cur, f0)}
+          ${row(T.brSpendHead, b.spend_head_prev, b.spend_head_cur, f1)}
+          ${row(T.brCostHead, b.cost_head_prev, b.cost_head_cur, f1, true)}
+          ${row(T.brGpHead, b.gp_head_prev, b.gp_head_cur, f1)}
+          ${row(T.brGpPct, b.gp_pct_prev, b.gp_pct_cur, fp, false, fpp)}
+        </tbody></table>`;
+    };
+    const panel = (b, title, prevLbl) => `<div class="mgt-atom">
+        <p class="text-[12px] font-bold text-slate-600 mb-1">${title} <span class="font-normal" style="color:${b.delta >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${sM(b.delta)}</span>${b.gp_pct_prev != null && b.gp_pct_cur != null ? ` <span class="font-normal text-slate-400">· ${b.gp_pct_prev.toFixed(1)}% → ${b.gp_pct_cur.toFixed(1)}%</span>` : ''}</p>
+        ${waterfall(b)}${drivers(b, prevLbl)}</div>`;
+    const panels = [B ? panel(B, compShort, T.brPrev) : '', BY ? panel(BY, T.brVsLy, T.brLy) : ''].filter(Boolean);
+    const vb = (() => {
+      const b = B || BY;
+      const col = b.delta >= 0 ? '#059669' : '#dc2626';
+      const parts = [[T.brVolume, b.volume], [T.brSpend, b.spend_head], [T.brCost, b.cost_head]]
+        .sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]));
+      return vLine(col, (isTH ? `GP <b style="color:${textInk(col)}">${sM(b.delta)}</b> ${B ? compShort : T.brVsLy} — ตัวขับหลัก` : `GP <b style="color:${textInk(col)}">${sM(b.delta)}</b> ${B ? compShort : T.brVsLy} — main driver`)
+        + ` <b>${parts[0][0]} ${sM(parts[0][1])}</b> · ${parts[1][0]} ${sM(parts[1][1])} · ${parts[2][0]} ${sM(parts[2][1])}`);
+    })();
+    const split = (() => {
+      if (!hasSplit) return '';
+      const BM = (jM.gp || {}).bridge, BF = (jF.gp || {}).bridge;
+      if (!BM && !BF) return '';
+      const kv = b => b ? [[T.brGp + ' Δ', sM(b.delta)], [T.brVolume, sM(b.volume)], [T.brSpend, sM(b.spend_head)], [T.brCost, sM(b.cost_head)]] : [['—', '']];
+      return splitPanel(kv(BM), kv(BF));
+    })();
+    return vb + `<div class="grid grid-cols-1 ${panels.length > 1 ? 'md:grid-cols-2' : ''} gap-x-6 gap-y-3">${panels.join('')}</div>`
+      + `<p class="text-[10px] text-slate-400 mt-2 mgt-atom">${T.brNote}</p>` + split;
+  })();
+
   // A section with no data used to VANISH, so the reader could not tell an empty
   // section from a missing one. Print the placeholder instead - a management pack
   // has to account for every numbered section its contents page promises.
@@ -1608,6 +1762,7 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
     { id:'mgt-s2',  c:'#d97706', keep:true, t:T.s2, h:actsWithSplit },   // short; split it left its panels alone overleaf
     { id:'mgt-s3',  c:'#4a70b0', keep:true, t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
+    { id:'mgt-s4b', c:'#1f7a4d', keep:true, t:T.s4b, h:bridgeHtml || naBox(T.naBridge) },
     { id:'mgt-s4',  c:'#0891b2', keep:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
     // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
     // page of its own anyway, and letting it begin at the foot of §4's page
@@ -1660,7 +1815,7 @@ function renderMgtReport(j, jM, jF) {
         ${_ri.map(([k, v]) => `<div class="flex justify-between gap-3 text-[12px] py-1 border-b border-slate-100 mgt-atom">
             <span class="text-slate-400" style="flex:none">${k}</span>
             <span class="text-slate-700 font-medium text-right">${v}</span></div>`).join('')}
-      </div></section>`;
+      </div><div id="mgtMarket"></div></section>`;
 
   body.innerHTML = toc
     + SECTIONS.map(sx => sec(sx.t, sx.h, sx.c, sx)).join('')

@@ -40,13 +40,16 @@ A21	'Food cost % (BoM, MTD)'
 B21	1.579	0.0%		
 A22	'Gross margin % (this period)'			
 B22	0.526	0.0%		
-## Branch League 2x6 widths={'A': 9.0, 'B': 11.0, 'C': 8.0, 'D': 12.0, 'E': 9.0, 'F': 11.0}
+## Branch League 2x9 widths={'A': 9.0, 'B': 11.0, 'C': 8.0, 'D': 12.0, 'E': 9.0, 'F': 11.0, 'G': 7.0, 'H': 8.0, 'I': 13.0}
 A1	'Branch'		bc	0F766E
 B1	'Net Sales'		bc	0F766E
 C1	'Covers'		bc	0F766E
 D1	'Spend/Head'		bc	0F766E
 E1	'Share %'		bc	0F766E
 F1	'vs prev %'		bc	0F766E
+G1	'YoY %'		bc	0F766E
+H1	'Target'		bc	0F766E
+I1	'% of target'		bc	0F766E
 A2	'BranchB'			
 B2	2850	#,##0		
 C2	12	#,##0		

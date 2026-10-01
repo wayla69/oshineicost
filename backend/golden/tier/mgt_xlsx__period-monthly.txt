@@ -1,5 +1,5 @@
 attachment; filename=management_monthly_2026-05.xlsx
-## Summary 22x4 widths={'A': 37.0, 'B': 16.0, 'C': 11.0, 'D': 7.0}
+## Summary 29x4 widths={'A': 37.0, 'B': 16.0, 'C': 11.0, 'D': 7.0}
 A1	'Oshinei — Management Summary Report'		b	
 A2	'Report'			
 B2	'Monthly'			
@@ -45,13 +45,28 @@ A21	'Food cost % (BoM, MTD)'
 B21	0.153	0.0%		
 A22	'Gross margin % (this period)'			
 B22	0.526	0.0%		
-## Branch League 3x6 widths={'A': 9.0, 'B': 11.0, 'C': 8.0, 'D': 12.0, 'E': 9.0, 'F': 11.0}
+A24	'GP bridge vs previous month'		bc	0F766E
+B24	'THB'		bc	0F766E
+A25	'GP previous'			
+B25	30000	#,##0		
+A26	'Volume (covers) effect'			
+B26	1000	#,##0		
+A27	'Spend/head effect'			
+B27	0	#,##0		
+A28	'Cost/head effect'			
+B28	0	#,##0		
+A29	'GP this period'			
+B29	31000	#,##0		
+## Branch League 3x9 widths={'A': 9.0, 'B': 11.0, 'C': 8.0, 'D': 12.0, 'E': 9.0, 'F': 11.0, 'G': 7.0, 'H': 8.0, 'I': 13.0}
 A1	'Branch'		bc	0F766E
 B1	'Net Sales'		bc	0F766E
 C1	'Covers'		bc	0F766E
 D1	'Spend/Head'		bc	0F766E
 E1	'Share %'		bc	0F766E
 F1	'vs prev %'		bc	0F766E
+G1	'YoY %'		bc	0F766E
+H1	'Target'		bc	0F766E
+I1	'% of target'		bc	0F766E
 A2	'BranchA'			
 B2	29450	#,##0		
 C2	124	#,##0		

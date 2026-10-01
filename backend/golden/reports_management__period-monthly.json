@@ -17,7 +17,11 @@
    "rev_per_head": 237.5,
    "revenue": 2850.0,
    "share_pct": 50.0,
-   "wow_pct": null
+   "target": null,
+   "target_source": "none",
+   "vs_target_pct": null,
+   "wow_pct": null,
+   "yoy_pct": null
   },
   {
    "bills": 3,
@@ -28,7 +32,11 @@
    "rev_per_head": 237.5,
    "revenue": 2850.0,
    "share_pct": 50.0,
-   "wow_pct": null
+   "target": null,
+   "target_source": "none",
+   "vs_target_pct": null,
+   "wow_pct": null,
+   "yoy_pct": null
   }
  ],
  "comp_label": "previous month",
@@ -87,6 +95,8 @@
  },
  "focus": "2026-06-03",
  "gp": {
+  "bridge": null,
+  "bridge_yoy": null,
   "cost_basis": "daily",
   "food_cost": 2700,
   "gp": 3000.0,
