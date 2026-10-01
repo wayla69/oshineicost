@@ -22,7 +22,7 @@ primary_region = "sin"
 
 # ── Dashboard service (default process group) ──────────────────────────────────
 # min_machines_running = 1 → eliminates ~7s cold-start on first hit after idle.
-# Costs ~$3/mo for the always-on shared-cpu-1x. Both services point at the same
+# Always-on; both services point at the same
 # single machine, so this keeps recon warm too.
 [[services]]
   internal_port        = 8080
@@ -51,5 +51,8 @@ primary_region = "sin"
     port     = 8443
 
 [[vm]]
-  size   = "shared-cpu-1x"
-  memory = "1024mb"   # two apps share one machine (dashboard matplotlib + recon openpyxl)
+# 2026-10-01: 2 shared cores + 2 GB (was 1x / 1 GB, ~+$7/mo list in sin). 2 GB keeps the
+# 1.26 GB SQLite file mostly in page cache; the 2nd core keeps recon and light requests
+# quick while core.ttl_cache runs its one heavy report (OSHINEI_HEAVY_CONCURRENCY=1).
+  size   = "shared-cpu-2x"
+  memory = "2048mb"   # two apps share one machine (dashboard matplotlib + recon openpyxl)
