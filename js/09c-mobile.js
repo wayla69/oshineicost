@@ -27,8 +27,99 @@ function msPchip(v, goodUp = true) {
   const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
   return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
 }
-function msBar(w, col) {
-  return `<div style="flex:1;background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div>`;
+// avgW (0-100, optional): a tick at the list's average, so above/below reads at a glance.
+function msBar(w, col, avgW) {
+  const tick = avgW == null ? '' : `<span style="position:absolute;top:0;bottom:0;left:${Math.max(0, Math.min(99, avgW))}%;width:2px;background:var(--text-primary,#1e293b);opacity:.55"></span>`;
+  return `<div style="flex:1;position:relative;background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div>${tick}</div>`;
+}
+
+// ── at-a-glance pieces for the phone. The dashboard's charts get the same from
+// the glance layer in js/01-core.js; the sentences come from the same builders
+// (glanceTrendSentence / glanceRangeSentence), so both say things one way. ──
+const _MS_TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const _MS_TH_DOW = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+const _msYmd = iso => String(iso || '').slice(0, 10).split('-').map(Number);
+function msPeriodLabel(iso, gran) {
+  const [y, m, d] = _msYmd(iso);
+  return gran === 'month' ? `${_MS_TH_MON[m - 1]} ${String(y + 543).slice(2)}` : `${d} ${_MS_TH_MON[m - 1]}`;
+}
+const msDow = iso => { const [y, m, d] = _msYmd(iso); return new Date(y, m - 1, d).getDay(); };
+// Index (oldest→newest) of the period still in progress, plus "12/30 วัน".
+function msPartial(trend, gran) {
+  const last = trend.length - 1;
+  if (last < 0) return { i: -1, note: '' };
+  const [y, m, d] = _msYmd(trend[last].start);
+  if (gran === 'month') {
+    const ref = _glanceLastDate(), dim = new Date(y, m, 0).getDate();
+    return (y === ref.y && m === ref.m && ref.d < dim) ? { i: last, note: `${ref.d}/${dim} วัน` } : { i: -1, note: '' };
+  }
+  const t = new Date(Date.now() + 7 * 3600e3);   // a day still trading = today, Bangkok
+  return (y === t.getUTCFullYear() && m === t.getUTCMonth() + 1 && d === t.getUTCDate()) ? { i: last, note: '' } : { i: -1, note: '' };
+}
+const msGlanceLine = html => html ? `<p style="font-size:12px;line-height:1.45;color:var(--text-secondary,#475569);margin:2px 0 8px">${html}</p>` : '';
+
+// A small column chart in SVG (no Chart.js on the phone): oldest→newest, the
+// latest complete period in the accent, the period in progress hollow + dashed,
+// weekends tinted, a dashed average line, value labels on the latest and the peak.
+function msColumns(vals, o) {
+  const n = vals.length;
+  if (n < 2) return '';
+  const W = 320, H = o.height || 100, top = 16, bottom = 14, plotH = H - top - bottom;
+  const P = o.partial == null ? -1 : o.partial;
+  const max = Math.max(1, ...vals.filter(v => v != null));
+  const step = W / n, bw = Math.max(3, Math.min(22, step * 0.64));
+  const yOf = v => top + plotH * (1 - Math.max(0, v) / max);
+  const comp = vals.map((v, i) => i).filter(i => vals[i] != null && i !== P);
+  const last = comp.length ? comp[comp.length - 1] : -1;
+  const hi = comp.reduce((b, i) => (b < 0 || vals[i] > vals[b]) ? i : b, -1);
+  const avg = comp.length >= 3 ? comp.reduce((a, i) => a + vals[i], 0) / comp.length : null;
+  const cx = i => i * step + step / 2;
+  const placed = [];
+  const txt = (t, x, y, size, weight, color, check) => {
+    const w = t.length * size * 0.56;
+    x = Math.max(w / 2 + 1, Math.min(W - w / 2 - 1, x));
+    if (check) {
+      if (placed.some(p => Math.abs(p.x - x) < (p.w + w) / 2 + 3 && Math.abs(p.y - y) < size + 2)) return '';
+      placed.push({ x, y, w });
+    }
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${weight}" style="fill:${color}">${esc(t)}</text>`;
+  };
+  let g = '';
+  (o.weekend || []).forEach((w, i) => { if (w) g += `<rect x="${(i * step).toFixed(1)}" y="${top - 4}" width="${step.toFixed(1)}" height="${plotH + 4}" style="fill:var(--bg-subtle,#f1f5f9)"/>`; });
+  if (avg != null) {
+    const ya = yOf(avg).toFixed(1);
+    g += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke-width="1" stroke-dasharray="3 3" style="stroke:var(--text-muted,#94a3b8)"/>`;
+  }
+  vals.forEach((v, i) => {
+    if (v == null) return;
+    const x = (cx(i) - bw / 2).toFixed(1), y = yOf(v), h = Math.max(1, top + plotH - y);
+    if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--accent,#1f3a6b)"/>`;
+    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" style="fill:var(--accent,#1f3a6b);opacity:${i === last ? 1 : 0.38}"/>`;
+  });
+  const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 10, 600, 'var(--text-primary,#1e293b)', true);
+  // priority: the latest complete value, then the period in progress (just its
+  // tag - the figure is in the list/tile), then the peak
+  if (last >= 0) g += lab(last);
+  if (P >= 0 && vals[P] != null) g += lab(P, o.grain === 'day' ? 'วันนี้' : 'MTD');
+  if (hi >= 0 && hi !== last) g += lab(hi);
+  if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="9" style="fill:var(--text-muted,#94a3b8)">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
+  if (o.labels) {
+    g += txt(o.labels[0], cx(0), H - 2, 9, 400, 'var(--text-muted,#94a3b8)');
+    g += txt(o.labels[n - 1], cx(n - 1), H - 2, 9, 400, 'var(--text-muted,#94a3b8)');
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="${esc(o.aria || '')}">${g}</svg>`;
+}
+// Trend block = sentence + columns, for a trend array oldest→newest from /api/sales/daily.
+function msTrendBlock(trend, gran, height) {
+  const vals = trend.map(x => x.revenue ?? null);
+  const labels = trend.map(x => msPeriodLabel(x.start, gran));
+  const part = msPartial(trend, gran);
+  const sentence = glanceTrendSentence(labels, vals, { partial: part.i, note: part.note, unit: gran === 'month' ? 'เดือน' : 'วัน', fmt });
+  return msGlanceLine(sentence) + msColumns(vals, {
+    partial: part.i, labels, fmt, grain: gran, height,
+    weekend: gran === 'day' ? trend.map(x => [0, 6].includes(msDow(x.start))) : null,
+    aria: 'รายได้ ' + (gran === 'month' ? 'รายเดือน' : 'รายวัน'),
+  });
 }
 
 function msSwitchView(v) {
@@ -110,12 +201,13 @@ function msRenderSummary() {
   const m = _msMonth; if (!m) return;
   const t = m.total || {}, branches = m.branches || [];
   document.getElementById('msKpis').innerHTML = [
-    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: msPchip(t.mom_pct), span: true, c: '#1f3a6b' },
+    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: msPchip(t.mom_pct), span: true, c: '#4a70b0' },   // -> --navy-ink, readable in both themes
     { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: msPchip(t.cust_mom_pct), c: '#0891b2' },
     { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: msPchip(t.rph_mom_pct), c: '#7a66b8' },
   ].map(k => `<div class="ms-kpi" style="${k.span ? 'grid-column:1/-1;' : ''}">
       <p class="lbl">${k.l}</p><p class="val" style="color:${textInk(k.c)}">${k.v}</p>
       <p class="sub">${k.chip} <span style="color:var(--text-muted,#94a3b8);font-size:11px">vs เดือนก่อน</span></p>
+      ${k.span && (m.trend || []).length >= 3 ? `<div style="margin-top:10px">${msTrendBlock(m.trend, 'month', 92)}</div>` : ''}
     </div>`).join('');
 
   const sig = m.anomalies || [];
@@ -152,13 +244,19 @@ function msRenderBranches() {
   else if (_msBranchSort === 'mom') branches.sort((a, b) => (b.mom_pct ?? -1e9) - (a.mom_pct ?? -1e9));
   else if (_msBranchSort === 'rph') branches.sort((a, b) => (b.rev_per_head ?? -1e9) - (a.rev_per_head ?? -1e9));
   const maxRev = Math.max(1, ...branches.map(b => b.revenue || 0));
-  document.getElementById('msBranches').innerHTML = branches.map(b => {
+  const revs = branches.map(b => b.revenue).filter(v => v != null);
+  const avgW = revs.length >= 3 ? Math.round(100 * revs.reduce((a, v) => a + v, 0) / revs.length / maxRev) : null;
+  const metric = _msBranchSort === 'mom' ? { v: b => b.mom_pct, o: { pct: true, fmt: v => `${v > 0 ? '+' : ''}${v}%` } }
+               : _msBranchSort === 'rph' ? { v: b => b.rev_per_head || null, o: { fmt: v => fmt(v) + '/หัว', below: true } }
+               : { v: b => b.revenue || null, o: { fmt, below: true } };   // 0 = not trading (e.g. a closed branch), not "the lowest"
+  const sentence = glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o);
+  document.getElementById('msBranches').innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(sentence)}</div>` : '') + branches.map(b => {
     const right = _msBranchSort === 'rph'
       ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
       : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.mom_pct)}`;
     return `<div class="ms-row">
       <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}</span>
-      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (b.revenue || 0) / maxRev), '#4a70b0')}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (b.revenue || 0) / maxRev), '#4a70b0', avgW)}</span></span>
       <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${right}</span>
     </div>`;
   }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
@@ -179,18 +277,29 @@ async function msLoadSales() {
   let d; try { d = await api(`${API}/api/sales/daily?${q}`); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
   // latest day/month FIRST (owner request 2026-07-20) — the API returns the
   // trend oldest→newest; reverse for display so index 0 = the newest period.
-  const tr = (d.trend || []).slice().reverse();
+  const gran = _msSalesGran, asc = d.trend || [];
+  const part = msPartial(asc, gran);
+  const tr = asc.slice().reverse();
   const maxV = Math.max(1, ...tr.map(x => x.revenue || 0));
-  const lblOf = x => _msSalesGran === 'month' ? (x.start || '').slice(0, 7) : (x.start || '').slice(5, 10);
-  wrap.innerHTML = tr.map((x, i) => {
+  const done = asc.filter((x, i) => i !== part.i && x.revenue != null);
+  const avgW = done.length >= 3 ? Math.round(100 * done.reduce((a, x) => a + x.revenue, 0) / done.length / maxV) : null;
+  const lblOf = x => gran === 'month' ? msPeriodLabel(x.start, 'month') : `${msPeriodLabel(x.start, 'day')} ${_MS_TH_DOW[msDow(x.start)]}`;
+  const rows = tr.map((x, i) => {
     const w = Math.round(100 * (x.revenue || 0) / maxV);
-    const latest = i === 0;
-    return `<div class="ms-row">
-      <span style="width:58px;font-size:11px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
-      ${msBar(w, latest ? '#1f3a6b' : '#a9bddb')}
-      <span style="width:64px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}</span>
+    const ai = asc.length - 1 - i, inProg = ai === part.i;
+    const latest = i === (part.i >= 0 ? 1 : 0);   // the newest complete period
+    const wkend = gran === 'day' && [0, 6].includes(msDow(x.start));
+    const tag = inProg ? ` <span class="ms-chip" style="padding:1px 6px;font-size:10px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">${gran === 'day' ? 'วันนี้' : 'MTD'}</span>` : '';
+    return `<div class="ms-row" style="${wkend ? 'background:var(--bg-subtle);margin:0 -16px;padding-left:16px;padding-right:16px' : ''}">
+      <span style="width:${gran === 'day' ? 76 : 58}px;font-size:11px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
+      ${msBar(w, inProg ? 'var(--border,#cbd5e1)' : latest ? 'var(--accent,#1f3a6b)' : 'color-mix(in srgb, var(--accent,#1f3a6b) 38%, transparent)', avgW)}
+      <span style="width:${inProg ? 98 : 64}px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}${tag}</span>
     </div>`;
-  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+  }).join('');
+  wrap.innerHTML = rows
+    ? `<div style="padding:10px 0 8px">${msTrendBlock(asc, gran, 110)}</div>
+       <p style="font-size:10px;color:var(--text-muted,#64748b);margin:0 0 2px">ขีดในแถบ = ค่าเฉลี่ย${gran === 'day' ? ' · แถบเทา = เสาร์-อาทิตย์' : ''}</p>${rows}`
+    : '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
 
 // ── VIEW: เมนู ──
@@ -262,8 +371,10 @@ async function msLoadProfit() {
     { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', c: '#10b981' },
     { l: 'Food cost %', v: t.cost_pct != null ? t.cost_pct + '%' : '—', c: cpColor(t.cost_pct) },
   ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p></div>`).join('');
-  const branches = (d.branches || []).filter(r => r.cost_pct != null);
-  br.innerHTML = branches.map(r => `<div class="ms-row">
+  const branches = (d.branches || []).filter(r => r.cost_pct != null).sort((a, b) => b.cost_pct - a.cost_pct);   // worst first
+  const over = branches.filter(r => r.cost_pct >= 55).length;
+  const sentence = glanceRangeSentence(branches.map(r => r.branch), branches.map(r => r.cost_pct), { pct: true, fmt: v => v + '%' });
+  br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`Food cost ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขา ≥ 55%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row">
       <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
       <span style="font-size:12px;color:var(--text-muted,#64748b);font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
       <span class="ms-chip" style="background:${cpColor(r.cost_pct)}22;color:${textInk(cpColor(r.cost_pct))}">${r.cost_pct}%</span>

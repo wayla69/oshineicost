@@ -973,6 +973,74 @@ const _glanceLab = (chart, i) => {
 };
 const _glanceB = t => `<b style="color:var(--text-primary);font-weight:600">${t}</b>`;
 
+// The sentence itself, shared by the chart headlines and the phone views
+// (js/09c-mobile.js). labels[i] are display strings, vals[i] numbers or null.
+// o: { partial: index still in progress (-1), unit: 'เดือน'|'วัน'|'ช่วง', note,
+//      pct: values are percentages (compare in pp), fmt: v => string }
+function glanceTrendSentence(labels, vals, o) {
+  const P = o.partial == null ? -1 : o.partial, f = v => esc(o.fmt(v)), lab = i => esc(labels[i] ?? '');
+  const unit = o.unit || 'ช่วง', pct = !!o.pct;
+  const idx = vals.map((v, i) => i).filter(i => vals[i] != null && i !== P);
+  if (idx.length < 3) return '';
+  const parts = [];
+  const L = idx[idx.length - 1], Pv = idx[idx.length - 2], v = vals[L], pv = vals[Pv];
+  parts.push(_glanceB(`${lab(L)} ${f(v)}`));
+  if (pct) {
+    const d = v - pv;
+    parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} pp จาก ${lab(Pv)}`);
+  } else if (pv > 0) {
+    const d = (v / pv - 1) * 100;
+    parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}% จาก ${lab(Pv)}`);
+  }
+  const cv = idx.map(i => vals[i]), hi = Math.max(...cv), lo = Math.min(...cv);
+  if (v === hi) parts.push(_glanceB('สูงสุดในช่วงที่แสดง'));
+  else if (v === lo) parts.push(_glanceB('ต่ำสุดในช่วงที่แสดง'));
+  else {
+    // "highest since X": the last earlier point at least as high, if >= 3 periods back
+    const k = idx.length - 1;
+    for (let j = k - 1; j >= 0; j--) {
+      const w = vals[idx[j]];
+      if (v > pv ? w >= v : w <= v) {
+        if (k - j >= 3) parts.push(`${v > pv ? 'สูงสุด' : 'ต่ำสุด'}ตั้งแต่ ${lab(idx[j])}`);
+        break;
+      }
+    }
+  }
+  let run = 0;
+  for (let j = idx.length - 1; j > 0 && v !== pv && Math.sign(vals[idx[j]] - vals[idx[j - 1]]) === Math.sign(v - pv); j--) run++;
+  if (run >= 3) parts.push(`${v > pv ? 'เพิ่มขึ้น' : 'ลดลง'} ${run} ${unit}ติดกัน`);
+  if (idx.length >= 4 && parts.length < 4) {
+    const avg = cv.reduce((a, b) => a + b, 0) / cv.length;
+    if (pct && Math.abs(v - avg) >= 0.5) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs(v - avg).toFixed(1)} pp`);
+    else if (!pct && avg > 0 && Math.abs(v / avg - 1) >= 0.05) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs((v / avg - 1) * 100).toFixed(0)}%`);
+    else if (!pct && avg > 0) parts.push('ใกล้ค่าเฉลี่ย');
+  }
+  parts.splice(4);
+  if (P >= 0 && vals[P] != null) {
+    parts.push(`<span style="color:var(--text-muted)">${lab(P)} ยังไม่ครบ${unit}${o.note ? ` (${esc(o.note)})` : ''} · ไม่นำมาเทียบ</span>`);
+  }
+  return parts.join(' · ');
+}
+
+// Best / worst + spread for a category list (branches, dayparts, menu items).
+// o: { pct, fmt, below: true adds "n of N below the average" }
+function glanceRangeSentence(labels, vals, o) {
+  const f = v => esc(o.fmt(v)), lab = i => esc(labels[i] ?? '');
+  const idx = vals.map((v, i) => i).filter(i => vals[i] != null);
+  if (idx.length < 3) return '';
+  let hi = idx[0], lo = idx[0];
+  idx.forEach(i => { if (vals[i] > vals[hi]) hi = i; if (vals[i] < vals[lo]) lo = i; });
+  if (vals[hi] === vals[lo]) return '';
+  const parts = [`สูงสุด ${_glanceB(`${lab(hi)} ${f(vals[hi])}`)}`, `ต่ำสุด ${_glanceB(`${lab(lo)} ${f(vals[lo])}`)}`];
+  if (o.pct) parts.push(`ห่างกัน ${(vals[hi] - vals[lo]).toFixed(1)} pp`);
+  else if (vals[lo] > 0 && vals[hi] / vals[lo] >= 1.5) parts.push(`ต่างกัน ${(vals[hi] / vals[lo]).toFixed(1)} เท่า`);
+  if (o.below) {
+    const avg = idx.reduce((a, i) => a + vals[i], 0) / idx.length;
+    parts.push(`${idx.filter(i => vals[i] < avg).length} จาก ${idx.length} ต่ำกว่าค่าเฉลี่ย ${f(avg)}`);
+  }
+  return parts.join(' · ');
+}
+
 function _glanceHeadline(chart) {
   if (!_glanceOpt(chart, 'headline')) return '';
   const id = chart.canvas.id || '';
@@ -981,61 +1049,14 @@ function _glanceHeadline(chart) {
   if (!plan || !plan.primary) return '';
   const pm = plan.primary, ds = chart.data.datasets[pm.index];
   const vals = (ds.data || []).map(_glanceFinite);
-  const sc = pm.vScale, f = v => esc(_glanceFmt(sc, v));
-  const pct = _glanceFmt(sc, 1).endsWith('%');
-  const P = _glancePartial(chart);
-  const idx = vals.map((v, i) => i).filter(i => vals[i] != null && i !== P);
-  if (idx.length < 3) return '';
-  const parts = [];
-  if (plan.timeLike) {
-    const L = idx[idx.length - 1], Pv = idx[idx.length - 2], v = vals[L], pv = vals[Pv];
-    const grain = chart.$gi && chart.$gi.grain;
-    const unit = grain === 'month' ? 'เดือน' : grain === 'day' ? 'วัน' : 'ช่วง';
-    parts.push(_glanceB(`${esc(_glanceLab(chart, L))} ${f(v)}`));
-    if (pct) {
-      const d = v - pv;
-      parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} pp จาก ${esc(_glanceLab(chart, Pv))}`);
-    } else if (pv > 0) {
-      const d = (v / pv - 1) * 100;
-      parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}% จาก ${esc(_glanceLab(chart, Pv))}`);
-    }
-    const cv = idx.map(i => vals[i]), hi = Math.max(...cv), lo = Math.min(...cv);
-    if (v === hi) parts.push(_glanceB('สูงสุดในช่วงที่แสดง'));
-    else if (v === lo) parts.push(_glanceB('ต่ำสุดในช่วงที่แสดง'));
-    else {
-      // "highest since X": the last earlier point at least as high, if >= 3 periods back
-      const k = idx.length - 1;
-      for (let j = k - 1; j >= 0; j--) {
-        const w = vals[idx[j]];
-        if (v > pv ? w >= v : w <= v) {
-          if (k - j >= 3) parts.push(`${v > pv ? 'สูงสุด' : 'ต่ำสุด'}ตั้งแต่ ${esc(_glanceLab(chart, idx[j]))}`);
-          break;
-        }
-      }
-    }
-    let run = 0;
-    for (let j = idx.length - 1; j > 0 && v !== pv && Math.sign(vals[idx[j]] - vals[idx[j - 1]]) === Math.sign(v - pv); j--) run++;
-    if (run >= 3) parts.push(`${v > pv ? 'เพิ่มขึ้น' : 'ลดลง'} ${run} ${unit}ติดกัน`);
-    if (idx.length >= 4 && parts.length < 4) {
-      const avg = cv.reduce((a, b) => a + b, 0) / cv.length;
-      if (pct && Math.abs(v - avg) >= 0.5) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs(v - avg).toFixed(1)} pp`);
-      else if (!pct && avg > 0 && Math.abs(v / avg - 1) >= 0.05) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs((v / avg - 1) * 100).toFixed(0)}%`);
-      else if (!pct && avg > 0) parts.push('ใกล้ค่าเฉลี่ย');
-    }
-    parts.splice(4);
-    if (P >= 0 && vals[P] != null) {
-      parts.push(`<span style="color:var(--text-muted)">${esc(_glanceLab(chart, P))} ยังไม่ครบ${unit}${chart.$gi.note ? ` (${chart.$gi.note})` : ''} · ไม่นำมาเทียบ</span>`);
-    }
-  } else {
-    let hi = idx[0], lo = idx[0];
-    idx.forEach(i => { if (vals[i] > vals[hi]) hi = i; if (vals[i] < vals[lo]) lo = i; });
-    if (vals[hi] === vals[lo]) return '';
-    parts.push(`สูงสุด ${_glanceB(`${esc(_glanceLab(chart, hi))} ${f(vals[hi])}`)}`);
-    parts.push(`ต่ำสุด ${_glanceB(`${esc(_glanceLab(chart, lo))} ${f(vals[lo])}`)}`);
-    if (pct) parts.push(`ห่างกัน ${(vals[hi] - vals[lo]).toFixed(1)} pp`);
-    else if (vals[lo] > 0 && vals[hi] / vals[lo] >= 1.5) parts.push(`ต่างกัน ${(vals[hi] / vals[lo]).toFixed(1)} เท่า`);
-  }
-  return parts.join(' · ');
+  const labels = vals.map((v, i) => _glanceLab(chart, i));
+  const o = { fmt: v => _glanceFmt(pm.vScale, v), pct: _glanceFmt(pm.vScale, 1).endsWith('%') };
+  if (!plan.timeLike) return glanceRangeSentence(labels, vals, o);
+  const grain = chart.$gi && chart.$gi.grain;
+  return glanceTrendSentence(labels, vals, Object.assign(o, {
+    partial: _glancePartial(chart), note: chart.$gi && chart.$gi.note,
+    unit: grain === 'month' ? 'เดือน' : grain === 'day' ? 'วัน' : 'ช่วง',
+  }));
 }
 
 // Does the card already state numbers above this chart (a hand-written summary,
@@ -1114,13 +1135,14 @@ const GLANCE_PLUGIN = {
     const ends = sets.filter(ds => _glanceIsLine(chart, ds) && !ds.hidden && !_GLANCE_SKIP_RE.test(ds.label || '')
                                    && !_glanceLabelled(chart, ds));
     if (!ends.length || ends.length > 4) return;
+    const narrow = ((chart.canvas.parentElement && chart.canvas.parentElement.clientWidth) || 999) < 520;
     const n = (cfg.data.labels || []).length;
     const tag = _glanceInfo(chart).partial >= 0 ? ' MTD' : '';
     let need = 0;
     const ctx = chart.ctx;
     ctx.save();
-    ctx.font = `600 11px ${Chart.defaults.font.family}`;
-    ends.forEach(ds => {
+    ctx.font = `600 ${narrow ? 10 : 11}px ${Chart.defaults.font.family}`;
+    (narrow ? ends.slice(0, 1) : ends).forEach(ds => {
       const d = ds.data || [];
       let i = d.length - 1;
       while (i >= 0 && _glanceFinite(d[i]) == null) i--;
@@ -1288,6 +1310,9 @@ const GLANCE_PLUGIN = {
       _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 10, 500);
     }
     const plan = _glanceOpt(chart, 'labels') ? _glancePlan(chart) : null;
+    // A narrow chart (tablet, the full dashboard on a phone) keeps one series'
+    // labels and smaller type, so the end labels do not pile up.
+    const narrow = chart.width < 520, fs = narrow ? 10 : 11;
     {
       const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 13 && Math.abs(p.x - x) < (p.w + w) / 2 + 4)
                               && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 12 && x - w < a.left + 90);
@@ -1304,7 +1329,9 @@ const GLANCE_PLUGIN = {
       };
       const n = (chart.data.labels || []).length;
       // 1) latest value at the end of each line
-      (plan ? plan.lines : []).forEach(m => {
+      let ends = plan ? plan.lines : [];
+      if (narrow && ends.length > 1) ends = ends.filter(m => m === plan.primary).concat(plan.primary ? [] : ends.slice(0, 1));
+      ends.forEach(m => {
         const ds = chart.data.datasets[m.index];
         if (_glanceLabelled(chart, ds)) return;
         let i = m.data.length - 1;
@@ -1314,8 +1341,8 @@ const GLANCE_PLUGIN = {
         const color = typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text;
         const text = _glanceFmt(m.vScale, v) + (i === _glancePartial(chart) && _glanceActual(ds) ? _glanceTag(chart) : '');
         const atEnd = !n || i >= n - 1;
-        const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, 11, 600)
-                         : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, 11, 600);
+        const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 600)
+                         : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600);
         if (ok) _glanceDot(ctx, el.x, el.y, color, g.surface);
       });
       // 2) the primary series' peak (+ the latest bar on a time axis)
@@ -1346,8 +1373,8 @@ const GLANCE_PLUGIN = {
             const fill = _glanceRgba(Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor);
             const lum = fill ? (0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]) / 255 : 0;
             put(text, el.x, inside ? el.y + 11 : up ? el.y - 8 : el.y + 9, 'center',
-                inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : g.theme.labelStrong, 11, 600, !inside);
-          } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, 11, 600)) {
+                inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : g.theme.labelStrong, fs, 600, !inside);
+          } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600)) {
             _glanceDot(ctx, el.x, el.y, typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text, g.surface);
           }
         });

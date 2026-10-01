@@ -303,11 +303,11 @@ async function startApp() {
     // Land on the Daily Brief (home) tab, not Overall (handles tab display +
     // hides the period controls home doesn't use).
     switchTab('home');
-    initDataCoverageNote();
+    const _coverage = initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date
     // First login of a person: the role's three tabs, on top of the home page
     try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }
     // Phone-first: load the mobile owner summary when on a small screen
-    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) loadMobileSummary(); } catch(e) {}
+    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) { await _coverage; loadMobileSummary(); } } catch(e) {}
     // Periodic health check every 30 s (silent badge update only)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
