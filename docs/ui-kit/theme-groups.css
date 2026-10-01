@@ -1,0 +1,99 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Group colours (2026-10-01, owner: "the app looks too bland").
+   Each sidebar group owns one hue, carried through everything that says
+   "where am I": the sidebar icon + active marker, a stripe under the top bar,
+   the page-title marker, the active tab chip / subtab underline, section-title
+   markers and the default KPI top edge. Shapes stay formal (theme-formal.css):
+   no gradients, no shadows - colour only. Linked LAST in index.html; drop the
+   <link> to go back to all-navy.
+
+   body[data-group] is set by switchTab() (js/01-core.js, _groupOf); sidebar
+   items carry data-g. Per hue: --g-X fill (marks, >= 3:1 on both cards),
+   -ink text (>= 4.5:1 on its -soft chip and the card), -soft chip background,
+   -side icon on the navy rail (>= 5:1). Status colours (good/bad, kpi-up/down)
+   are untouched - a group hue never means good or bad.
+   ════════════════════════════════════════════════════════════════════════ */
+:root {
+  --g-home: #4a70b0;     --g-home-ink: #476ca9;     --g-home-soft: #e9eef6;     --g-home-side: #7e99c7;
+  --g-sales: #2b86b8;    --g-sales-ink: #25729c;    --g-sales-soft: #e6f0f6;    --g-sales-side: #5aa1c8;
+  --g-buffet: #3a9a9a;   --g-buffet-ink: #2d7878;   --g-buffet-soft: #e7f3f3;   --g-buffet-side: #52a6a6;
+  --g-feedback: #b0457a; --g-feedback-ink: #ae4479; --g-feedback-soft: #f6e9ef; --g-feedback-side: #cb84a7;
+  --g-menu: #c08a1e;     --g-menu-ink: #8e6616;     --g-menu-soft: #f7f1e4;     --g-menu-side: #c39029;
+  --g-cost: #c8672a;     --g-cost-ink: #a85723;     --g-cost-soft: #f8ede5;     --g-cost-side: #d48757;
+  --g-profit: #2f8a74;   --g-profit-ink: #297865;   --g-profit-soft: #e6f1ee;   --g-profit-side: #61a695;
+  --g-money: #c2413b;    --g-money-ink: #bc3f39;    --g-money-soft: #f8e8e7;    --g-money-side: #d7827e;
+  --g-ops: #7a66b8;      --g-ops-ink: #7360ad;      --g-ops-soft: #efedf6;      --g-ops-side: #9f91cc;
+  --g-supply: #6f9a2e;   --g-supply-ink: #577824;   --g-supply-soft: #eef3e6;   --g-supply-side: #7fa545;
+}
+body.dark {
+  --g-home-ink: #7995c5;     --g-home-soft: #1c2d4b;
+  --g-sales-ink: #589fc7;    --g-sales-soft: #15324c;
+  --g-buffet-ink: #54a7a7;   --g-buffet-soft: #183646;
+  --g-feedback-ink: #c5779e; --g-feedback-soft: #32233f;
+  --g-menu-ink: #c4922e;     --g-menu-soft: #36332a;
+  --g-cost-ink: #d28250;     --g-cost-soft: #382b2d;
+  --g-profit-ink: #5da493;   --g-profit-soft: #16333d;
+  --g-money-ink: #d27470;    --g-money-soft: #362331;
+  --g-ops-ink: #9b8cca;      --g-ops-soft: #272b4c;
+  --g-supply-ink: #80a647;   --g-supply-soft: #24362e;
+}
+
+/* the active group → three working variables */
+body { --group: var(--g-home); --group-ink: var(--g-home-ink); --group-soft: var(--g-home-soft); }
+body[data-group="sales"]    { --group: var(--g-sales);    --group-ink: var(--g-sales-ink);    --group-soft: var(--g-sales-soft); }
+body[data-group="buffet"]   { --group: var(--g-buffet);   --group-ink: var(--g-buffet-ink);   --group-soft: var(--g-buffet-soft); }
+body[data-group="feedback"] { --group: var(--g-feedback); --group-ink: var(--g-feedback-ink); --group-soft: var(--g-feedback-soft); }
+body[data-group="menu"]     { --group: var(--g-menu);     --group-ink: var(--g-menu-ink);     --group-soft: var(--g-menu-soft); }
+body[data-group="cost"]     { --group: var(--g-cost);     --group-ink: var(--g-cost-ink);     --group-soft: var(--g-cost-soft); }
+body[data-group="profit"]   { --group: var(--g-profit);   --group-ink: var(--g-profit-ink);   --group-soft: var(--g-profit-soft); }
+body[data-group="money"]    { --group: var(--g-money);    --group-ink: var(--g-money-ink);    --group-soft: var(--g-money-soft); }
+body[data-group="ops"]      { --group: var(--g-ops);      --group-ink: var(--g-ops-ink);      --group-soft: var(--g-ops-soft); }
+body[data-group="supply"]   { --group: var(--g-supply);   --group-ink: var(--g-supply-ink);   --group-soft: var(--g-supply-soft); }
+
+/* ── sidebar: every entry wears its group's hue; the active one gets the marker ── */
+body .nav-item[data-g="home"]     { --gs: var(--g-home-side); }
+body .nav-item[data-g="sales"]    { --gs: var(--g-sales-side); }
+body .nav-item[data-g="buffet"]   { --gs: var(--g-buffet-side); }
+body .nav-item[data-g="feedback"] { --gs: var(--g-feedback-side); }
+body .nav-item[data-g="menu"]     { --gs: var(--g-menu-side); }
+body .nav-item[data-g="cost"]     { --gs: var(--g-cost-side); }
+body .nav-item[data-g="profit"]   { --gs: var(--g-profit-side); }
+body .nav-item[data-g="money"]    { --gs: var(--g-money-side); }
+body .nav-item[data-g="ops"]      { --gs: var(--g-ops-side); }
+body .nav-item[data-g="supply"]   { --gs: var(--g-supply-side); }
+body .nav-item[data-g] .nav-icon,
+body .nav-item[data-g]:hover .nav-icon,
+body .nav-item[data-g].active .nav-icon { color: var(--gs); }
+body .nav-item[data-g].active::before { background: var(--gs); width: 4px; }
+body .nav-item[data-g].active { background: color-mix(in srgb, var(--gs) 22%, transparent); }
+
+/* ── where am I: a stripe under the top bar + the page-title marker ── */
+body .top-bar { box-shadow: inset 0 -3px 0 var(--group); }
+body .page-title::before { content: ''; display: inline-block; width: 4px; height: 0.95em; margin-right: 9px;
+  vertical-align: -0.1em; background: var(--group); border-radius: 1px; }
+body.mgt-reading .top-bar { box-shadow: none; }
+
+/* ── on the page ── */
+body .section-title::before { background: var(--group); }
+body .subtab-btn.active, body.dark .subtab-btn.active { color: var(--group-ink); border-bottom-color: var(--group); }
+body .kpi-card.card { border-top-color: var(--group); }
+body .kpi-neu { border-top-color: var(--group) !important; }
+/* the active cluster chip + its label take --group-soft / --group-ink inline (js/01-core.js _updateClusterBar) */
+/* the group's own row of views sits on a soft band of its colour */
+body #clusterBar { background: var(--group-soft); border-left: 3px solid var(--group); padding: 8px 10px; border-radius: 3px; }
+body #clusterBar button[style*="--bg-input"] { background: var(--bg-card) !important; }
+
+/* ── phone app: the bottom-nav view wears its group hue ── */
+#msNav button[data-g="home"].active   { color: var(--g-home-ink); }
+#msNav button[data-g="sales"].active  { color: var(--g-sales-ink); }
+#msNav button[data-g="buffet"].active { color: var(--g-buffet-ink); }
+#msNav button[data-g="menu"].active   { color: var(--g-menu-ink); }
+#msNav button[data-g="profit"].active { color: var(--g-profit-ink); }
+#mobileSummary .ms-section-title::before { content: ''; display: inline-block; width: 3px; height: 0.9em; margin-right: 7px;
+  vertical-align: -0.1em; background: var(--group); border-radius: 1px; }
+
+/* printing stays plain */
+@media print {
+  body .top-bar { box-shadow: none; }
+  body .page-title::before { display: none; }
+}

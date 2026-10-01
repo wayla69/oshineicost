@@ -1486,6 +1486,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 </style>
 <!-- Formal theme: loaded last so it restyles the classes above (see the file header). -->
 <link rel="stylesheet" href="/docs/ui-kit/theme-formal.css">
+<link rel="stylesheet" href="/docs/ui-kit/theme-groups.css"><!-- group colours (2026-10-01); drop to go back to all-navy -->
 </head>
 <body>
 
@@ -1643,11 +1644,11 @@ body.mgt-reading .content-area { padding-top: 10px; }
   </div>
 </div>
 <nav id="msNav">
-  <button id="msnav-summary"  class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
-  <button id="msnav-sales"    onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
-  <button id="msnav-branches" onclick="msSwitchView('branches')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>สาขา</button>
-  <button id="msnav-menu"     onclick="msSwitchView('menu')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>เมนู</button>
-  <button id="msnav-profit"   onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
+  <button id="msnav-summary"  data-g="home" class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
+  <button id="msnav-sales"    data-g="sales" onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
+  <button id="msnav-branches" data-g="buffet" onclick="msSwitchView('branches')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>สาขา</button>
+  <button id="msnav-menu"     data-g="menu" onclick="msSwitchView('menu')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>เมนู</button>
+  <button id="msnav-profit"   data-g="profit" onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
 </nav>
 <button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></button>
 

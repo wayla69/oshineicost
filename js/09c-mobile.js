@@ -93,8 +93,8 @@ function msColumns(vals, o) {
   vals.forEach((v, i) => {
     if (v == null) return;
     const x = (cx(i) - bw / 2).toFixed(1), y = yOf(v), h = Math.max(1, top + plotH - y);
-    if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--accent,#1f3a6b)"/>`;
-    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" style="fill:var(--accent,#1f3a6b);opacity:${i === last ? 1 : 0.38}"/>`;
+    if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--group, var(--accent,#1f3a6b))"/>`;
+    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" style="fill:var(--group, var(--accent,#1f3a6b));opacity:${i === last ? 1 : 0.38}"/>`;
   });
   const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 10, 600, 'var(--text-primary,#1e293b)', true);
   // priority: the latest complete value, then the period in progress (just its
@@ -122,8 +122,11 @@ function msTrendBlock(trend, gran, height) {
   });
 }
 
+// phone views → group colours (theme-groups.css): the section markers follow the view
+const _MS_GROUP = { summary: 'home', sales: 'sales', branches: 'buffet', menu: 'menu', profit: 'profit' };
 function msSwitchView(v) {
   _msView = v;
+  document.body.dataset.group = _MS_GROUP[v] || 'home';
   ['summary', 'sales', 'branches', 'menu', 'profit'].forEach(x => {
     const el = document.getElementById('msv-' + x); if (el) el.style.display = x === v ? '' : 'none';
     document.getElementById('msnav-' + x)?.classList.toggle('active', x === v);
@@ -292,7 +295,7 @@ async function msLoadSales() {
     const tag = inProg ? ` <span class="ms-chip" style="padding:1px 6px;font-size:10px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">${gran === 'day' ? 'วันนี้' : 'MTD'}</span>` : '';
     return `<div class="ms-row" style="${wkend ? 'background:var(--bg-subtle);margin:0 -16px;padding-left:16px;padding-right:16px' : ''}">
       <span style="width:${gran === 'day' ? 76 : 58}px;font-size:11px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
-      ${msBar(w, inProg ? 'var(--border,#cbd5e1)' : latest ? 'var(--accent,#1f3a6b)' : 'color-mix(in srgb, var(--accent,#1f3a6b) 38%, transparent)', avgW)}
+      ${msBar(w, inProg ? 'var(--border,#cbd5e1)' : latest ? 'var(--group, var(--accent,#1f3a6b))' : 'color-mix(in srgb, var(--group, var(--accent,#1f3a6b)) 38%, transparent)', avgW)}
       <span style="width:${inProg ? 98 : 64}px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}${tag}</span>
     </div>`;
   }).join('');

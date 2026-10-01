@@ -2132,6 +2132,14 @@ const TAB_CLUSTERS = [
 ];
 const _inChip = (t, name) => t[0] === name || (t[2] || []).includes(name);
 const clusterOf = name => TAB_CLUSTERS.find(c => c.tabs.some(t => _inChip(t, name)));
+// Group colours (docs/ui-kit/theme-groups.css): the group a tab belongs to -
+// its cluster's key, else one of the stand-alone entries below.
+const _GROUP_OF_LOOSE = { feedback: 'feedback', checklist: 'feedback', pnl: 'profit' };
+function _groupOf(name) { const cl = clusterOf(name); return cl ? cl.key : (_GROUP_OF_LOOSE[name] || 'home'); }
+// Tag every sidebar item with its group once (the scripts load after the markup).
+try {
+  document.querySelectorAll('#sidebar .nav-item[id^="nav-"]').forEach(el => { el.dataset.g = _groupOf(el.id.slice(4)); });
+} catch (e) { /* no sidebar on this page */ }
 // ── Kill list — ON HOLD (owner's call, 2026-09-05) ─────────────────────────
 // 47 days of usage telemetry (2026-07-20 → 09-05, Settings → การใช้งานจริง)
 // found 17 tabs nobody opened (docs/LEAN_KILL_LIST_2026-09.html). The app is
@@ -2157,6 +2165,7 @@ function _updateClusterBar(name) {
   const bar = document.getElementById('clusterBar');
   if (!bar) return;
   const cl = clusterOf(name);
+  document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
   // The group you are in stays lit in the sidebar, whichever of its views is open
   // (its entry is tabs[0], or the first member the role can open - applyPermissions).
   if (cl) {
@@ -2173,15 +2182,16 @@ function _updateClusterBar(name) {
   const chip = ([t, lbl, alias], dim) => {
     const on = t === name || (alias || []).includes(name);
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
+    // the active chip wears the group colour (theme-groups.css); without that sheet the fallbacks are the old navy
     return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
-      ? 'background:var(--indigo);color:var(--on-indigo);font-weight:600'
+      ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
       : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${_noEmoji(lbl)}</button>`;
   };
   const more = !folded.length ? '' : open
     ? folded.map(c => chip(c, true)).join('') +
       `<button id="clusterFold" onclick="_clusterMoreOpen=false;_updateClusterBar('${name}')" title="ซ่อนแท็บที่ไม่ได้ใช้" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">‹</button>`
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
-  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${_noEmoji(cl.label)}:</span>` +
+  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
 }
 
