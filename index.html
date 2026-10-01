@@ -1385,6 +1385,12 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 #msNav button.active { color: var(--accent); font-weight: 700; }
 @media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
 #mobileSummary { padding-bottom: 80px; }
+#msSheet { display: none; position: fixed; inset: 0; z-index: 45; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
+@media (max-width: 700px) {
+  body:not(.force-desktop) #msSheet.open { display: block; }
+  body:not(.force-desktop).ms-sheet-open { overflow: hidden; }
+}
 .ms-seg { flex: 1; padding: 7px 6px; border-radius:4px; border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
 .ms-seg-on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
@@ -1459,7 +1465,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 @media print {
   /* the phone-only overlay must never reach paper, and the desktop shell has to
      be visible even when the phone was not in force-desktop mode */
-  #mobileSummary, #msNav, #backToMobile { display: none !important; }
+  #mobileSummary, #msNav, #backToMobile, #msSheet { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
   body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d; }
@@ -1590,26 +1596,33 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <p style="font-weight:700;font-size:15px;line-height:1.1">Oshinei</p>
       <p id="msSubtitle" style="font-size:11px">สรุปสำหรับเจ้าของ</p>
     </div>
-    <button class="ms-toggle" onclick="loadMobileSummary(true)" aria-label="รีเฟรช">↻</button>
+    <button class="ms-toggle" onclick="msRefresh()" aria-label="รีเฟรช">↻</button>
     <button class="ms-toggle" onclick="showFullDashboard()">เต็ม →</button>
   </div>
 
-  <div class="ms-section" style="margin-top:12px">
-    <select id="msBranch" onchange="loadMobileSummary(true)" style="width:100%;padding:9px 12px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+  <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
+    <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;padding:9px 12px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>
+    </select>
+    <select id="msMonthSel" onchange="loadMobileSummary(true)" aria-label="เลือกเดือน" style="width:140px;flex-shrink:0;padding:9px 10px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+      <option value="">เดือนล่าสุด</option>
     </select>
   </div>
 
   <div id="msStatus" class="ms-section" style="margin-top:8px;font-size:11px;color:var(--text-muted,#64748b)"></div>
 
-  <!-- VIEW: สรุป -->
+  <!-- VIEW: สรุป — headline, target, action items, voice queue, best/worst -->
   <div id="msv-summary" class="ms-view">
     <div class="ms-section">
       <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
     </div>
-    <div class="ms-section" id="msSignalsWrap" style="display:none">
-      <div class="ms-section-title">ต้องดู</div>
-      <div id="msSignals" class="ms-card"></div>
+    <div class="ms-section">
+      <div class="ms-section-title">เป้าเดือนนี้</div>
+      <div id="msTarget" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">สิ่งที่ต้องทำ</div>
+      <div id="msActions" class="ms-card"></div>
     </div>
     <div class="ms-section" id="msVoiceWrap" style="display:none">
       <div class="ms-section-title">เสียงลูกค้า — รอตอบ <span id="msVoiceCount" style="font-weight:400;color:var(--text-muted,#64748b)"></span></div>
@@ -1621,24 +1634,34 @@ body.mgt-reading .content-area { padding-top: 10px; }
     </div>
   </div>
 
-  <!-- VIEW: ยอดขาย -->
+  <!-- VIEW: ยอดขาย — trend by day / week / month, peak hours, tender mix -->
   <div id="msv-sales" class="ms-view" style="display:none">
     <div class="ms-section">
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <button id="msGranDay" class="ms-seg" onclick="msSetSalesGran('day')">รายวัน</button>
+        <button id="msGranWeek" class="ms-seg" onclick="msSetSalesGran('week')">รายสัปดาห์</button>
         <button id="msGranMonth" class="ms-seg ms-seg-on" onclick="msSetSalesGran('month')">รายเดือน</button>
       </div>
       <div id="msSalesTrend" class="ms-card"></div>
     </div>
+    <div class="ms-section">
+      <div class="ms-section-title">ชั่วโมงพีค & ช่วงเวลา</div>
+      <div id="msPeak" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">ช่องทางชำระเงิน</div>
+      <div id="msPayment" class="ms-card"></div>
+    </div>
   </div>
 
-  <!-- VIEW: สาขา -->
+  <!-- VIEW: สาขา — tap a row for the branch sheet -->
   <div id="msv-branches" class="ms-view" style="display:none">
     <div class="ms-section">
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button id="msSortRev" class="ms-seg ms-seg-on" onclick="msSetBranchSort('rev')">ยอดสูงสุด</button>
-        <button id="msSortMom" class="ms-seg" onclick="msSetBranchSort('mom')">โต/ตก %</button>
+        <button id="msSortRev" class="ms-seg ms-seg-on" onclick="msSetBranchSort('rev')">ยอด</button>
+        <button id="msSortMom" class="ms-seg" onclick="msSetBranchSort('mom')">โต/ตก</button>
         <button id="msSortRph" class="ms-seg" onclick="msSetBranchSort('rph')">/หัว</button>
+        <button id="msSortTgt" class="ms-seg" onclick="msSetBranchSort('tgt')">% เป้า</button>
       </div>
       <div id="msBranches" class="ms-card"></div>
     </div>
@@ -1649,17 +1672,43 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <div class="ms-section">
       <div class="ms-section-title">มาแรงเดือนนี้ (คนกินเพิ่มขึ้น)</div>
       <div id="msMenuRisers" class="ms-card"></div>
-      <div class="ms-section-title">เมนูขายดี (ตามจำนวน)</div>
+      <div class="ms-section-title" style="margin-top:16px">เมนูขายดี (ตามจำนวน)</div>
       <div id="msMenu" class="ms-card"></div>
     </div>
   </div>
 
-  <!-- VIEW: กำไร/ต้นทุน -->
+  <!-- VIEW: กำไร/ต้นทุน — GP, the bridge, price tiers, cost/head by branch -->
   <div id="msv-profit" class="ms-view" style="display:none">
     <div class="ms-section">
-      <div id="msProfitKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"></div>
+      <div id="msProfitKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+      <div id="msProfitNote"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">สะพาน GP — อะไรทำให้กำไรเปลี่ยน</div>
+      <div id="msBridge" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">กลุ่มราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว</div>
+      <div id="msTiers" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
       <div class="ms-section-title">ต้นทุน/หัว รายสาขา</div>
       <div id="msProfitBranches" class="ms-card"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: ส่วนลด & เงิน — the money-leak radar -->
+  <div id="msv-discounts" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div id="msDiscKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">จุดรั่วไหล</div>
+      <div id="msDiscCards" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">ส่วนลดรายสาขา (บริษัท)</div>
+      <div id="msDiscBranches" class="ms-card"></div>
     </div>
   </div>
 
@@ -1667,12 +1716,24 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <button onclick="showFullDashboard()" style="font-size:12px;color:var(--text-muted,#64748b);background:none;border:0;text-decoration:underline">เปิดแดชบอร์ดเต็ม (เดสก์ท็อป) →</button>
   </div>
 </div>
+<!-- Branch sheet: everything about one branch for the month, opened from any branch name -->
+<div id="msSheet" role="dialog" aria-modal="true" aria-labelledby="msSheetTitle">
+  <div class="ms-header">
+    <button class="ms-toggle" onclick="msCloseSheet()" aria-label="กลับ">←</button>
+    <div style="flex:1;min-width:0">
+      <p id="msSheetTitle" style="font-weight:700;font-size:15px;line-height:1.1">สาขา</p>
+      <p id="msSheetSub" style="font-size:11px"></p>
+    </div>
+  </div>
+  <div id="msSheetBody"></div>
+</div>
 <nav id="msNav">
-  <button id="msnav-summary"  data-g="home" class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
-  <button id="msnav-sales"    data-g="sales" onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
-  <button id="msnav-branches" data-g="buffet" onclick="msSwitchView('branches')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>สาขา</button>
-  <button id="msnav-menu"     data-g="menu" onclick="msSwitchView('menu')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>เมนู</button>
-  <button id="msnav-profit"   data-g="profit" onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
+  <button id="msnav-summary"   data-g="home"   class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
+  <button id="msnav-sales"     data-g="sales"  onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
+  <button id="msnav-branches"  data-g="buffet" onclick="msSwitchView('branches')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>สาขา</button>
+  <button id="msnav-menu"      data-g="menu"   onclick="msSwitchView('menu')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h12"/></svg></span>เมนู</button>
+  <button id="msnav-profit"    data-g="profit" onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
+  <button id="msnav-discounts" data-g="money"  onclick="msSwitchView('discounts')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>ส่วนลด</button>
 </nav>
 <button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></button>
 
