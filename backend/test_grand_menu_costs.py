@@ -363,7 +363,9 @@ def test_the_shipped_recipe_file_is_well_formed():
     assert len(rows) >= 30
     seen = set()
     for r in rows:
-        assert r["sku_code"].startswith("OTH"), r
+        # mostly Grand Menu OTH* codes, but older delivery codes (DEL*, TA*, P-TW*)
+        # still sell and carry weight-based platters (2026-10-01)
+        assert r["sku_code"] and r["sku_code"] == r["sku_code"].strip() and " " not in r["sku_code"], r
         assert float(r["qty_per_serving"]) > 0 and float(r["price_per_unit"]) > 0, r
         assert r["ingredient_code"] and r["ingredient_name"], r
         key = (r["sku_code"], int(r["seq"]))
