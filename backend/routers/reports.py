@@ -1526,7 +1526,7 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
 # ---------------------------------------------------------------------------
 # /api/reports/management — Daily, Weekly & Monthly Management Summary (printable)
 # ---------------------------------------------------------------------------
-def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, params, period, th, week, where):
+def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, period, th, week, where):
     # names this section hands on; None where a period path never assigns one
     ce = None
     comp_label = None
@@ -1610,6 +1610,19 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, params, period
         # Default = latest complete month; fall back to the latest data month
         # (flagged partial) only when no month has completed yet.
         sel = months[0]["month"] if months else maxd[:7]
+        # mtd=1 (the phone, 2026-10-01): the in-progress month is selectable too,
+        # as MONTH-TO-DATE through the latest COMPLETE day, and every comparison
+        # is clamped to the same elapsed days (previous month 1..d, same month
+        # last year 1..d) so a part month is never judged against a full one.
+        # The printed report never asks for it: a pack is for a closed month.
+        mtd_month = None
+        if mtd:
+            _lc = min(latest_day, _dt.date.fromisoformat(today_th) - _dt.timedelta(days=1))
+            if _lc.strftime("%Y-%m") == maxd[:7] and not any(x["month"] == maxd[:7] for x in months) and _lc.day >= 1:
+                mtd_month = maxd[:7]
+                months.insert(0, {"month": mtd_month, "mtd": True, "through": _lc.isoformat(),
+                                  "label": f"{MON[_lc.month-1]} {_lc.year}" + (" (สะสม)" if th else " (MTD)")})
+                sel = mtd_month
         if month:
             m10 = month[:7]
             if any(x["month"] == m10 for x in months):
@@ -1617,19 +1630,21 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, params, period
         sy, sm = int(sel[:4]), int(sel[5:7])
         cs = _dt.date(sy, sm, 1)
         ce = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
+        if sel == mtd_month:
+            ce = min(ce, _lc)
         days_in_period = (ce - cs).days + 1
-        partial = ce > latest_day
+        partial = ce > latest_day or sel == mtd_month
         ref_anchor = ce
         pm_l = cs - _dt.timedelta(days=1)          # previous calendar month
         ps = pm_l.replace(day=1)
-        pe = pm_l
+        pe = pm_l if sel != mtd_month else ps.replace(day=min(ce.day, pm_l.day))
         selected_month = sel
         if th:
-            label = f"เดือน {MON[sm-1]} {sy}"
-            comp_label = "เดือนก่อนหน้า"
+            label = f"เดือน {MON[sm-1]} {sy}" + (f" (1–{ce.day})" if sel == mtd_month else "")
+            comp_label = "เดือนก่อนหน้า" + (f" (วันที่ 1–{ce.day})" if sel == mtd_month else "")
         else:
-            label = f"{MON[sm-1]} {sy}"
-            comp_label = "previous month"
+            label = f"{MON[sm-1]} {sy}" + (f" (1–{ce.day})" if sel == mtd_month else "")
+            comp_label = "previous month" + (f" (days 1–{ce.day})" if sel == mtd_month else "")
     else:
         # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
         # have data — most recent first, cap 26 — so the picker and the default
@@ -1685,7 +1700,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, params, period
         ys = ye = fdate - _dt.timedelta(days=364)
     elif period == "monthly":
         ys = cs.replace(year=cs.year - 1)
-        ye = ys.replace(day=_cal.monthrange(ys.year, ys.month)[1])
+        ye = ys.replace(day=min(ce.day, _cal.monthrange(ys.year, ys.month)[1]))
     else:
         ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
     has_yoy = ys.isoformat() >= mind
@@ -2897,6 +2912,7 @@ def report_management(
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),               # 'en' | 'th' — language for labels, comp_label & action items
+    mtd:    Optional[str] = Query(None),     # monthly: '1' also offers the in-progress month, month-to-date (the phone)
 ):
     """One-glance management summary for a day, a COMPLETE week or a COMPLETE month.
 
@@ -2936,9 +2952,9 @@ def report_management(
     # which is passed straight back to the caller. The sections are the same
     # statements this function used to hold inline, so their output is
     # unchanged — backend/test_golden.py pins that for all three periods.
-    ctx = {"DOW": DOW, "MON": MON, "_cal": _cal, "_dt": _dt, "base": base, "branch": branch, "date": date, "dlabel": dlabel, "group": group, "lang": lang, "month": month, "params": params, "pct": pct, "period": period, "th": th, "week": week, "where": where}
+    ctx = {"DOW": DOW, "MON": MON, "_cal": _cal, "_dt": _dt, "base": base, "branch": branch, "date": date, "dlabel": dlabel, "group": group, "lang": lang, "month": month, "mtd": (mtd in ("1", "true", "yes")), "params": params, "pct": pct, "period": period, "th": th, "week": week, "where": where}
     with get_db() as con:
-        out = _mgt_window(con, DOW=ctx.get("DOW"), MON=ctx.get("MON"), _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), date=ctx.get("date"), dlabel=ctx.get("dlabel"), month=ctx.get("month"), params=ctx.get("params"), period=ctx.get("period"), th=ctx.get("th"), week=ctx.get("week"), where=ctx.get("where"))
+        out = _mgt_window(con, DOW=ctx.get("DOW"), MON=ctx.get("MON"), _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), date=ctx.get("date"), dlabel=ctx.get("dlabel"), month=ctx.get("month"), mtd=ctx.get("mtd"), params=ctx.get("params"), period=ctx.get("period"), th=ctx.get("th"), week=ctx.get("week"), where=ctx.get("where"))
         if out.get("available") is False:
             return out
         ctx.update(out)
