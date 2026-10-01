@@ -54,7 +54,7 @@ from core import (  # noqa: F401
     _month_range_filter, _new_conn, _next_period_month, _ols_regression, _partial_months, _preserved_counts,
     _profit_filters, _resp_cache, _service_charge_map, _tls, _token_accepted, _tx_filters,
     _txn_fallback_counts, _unified_cogs_expr, _variant_filter, _ym_parts, ex_vat, get_db,
-    invalidate_cache, is_price_as_cost, require_write_token, ttl_cache,
+    invalidate_cache, is_price_as_cost, require_write_token, ttl_cache, warm_cache_async,
 )
 # DB location is overridable so the database can live on a mounted persistent
 # volume in hosted deployments (e.g. Fly.io: OSHINEI_DB=/data/oshinei.db).
@@ -771,6 +771,9 @@ def _autoswap_poller():
                     # response cache AND force-rebuild the effective-cost lookup
                     # so post-swap COGS reflects the current sku_cost/BoM chain.
                     invalidate_cache()
+                    # then recompute the most-requested reports in the background,
+                    # one at a time, so nobody pays the cold query after a sync
+                    warm_cache_async()
         except Exception as e:
             print(f"[hot-swap] poller error: {e}")
 

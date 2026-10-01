@@ -165,6 +165,7 @@ def coupon_series_drill(series_id: int, by: str = Query("branch"),
 # /api/analysis/cashiers   -  cashier leaderboard
 # ---------------------------------------------------------------------------
 @router.get("/api/analysis/cashiers")
+@ttl_cache   # 1.0 s cold - was recomputed on every request
 def analysis_cashiers(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
@@ -252,6 +253,7 @@ def analysis_cashiers(
 # /api/analysis/discounts   -  discount monitor
 # ---------------------------------------------------------------------------
 @router.get("/api/analysis/discounts")
+@ttl_cache   # 1.6 s cold; PUT /api/settings already invalidates "analysis_discounts"
 def analysis_discounts(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),

@@ -2674,6 +2674,7 @@ def buffet_plate_cost_dist(
 
 
 @router.get("/api/buffet/heavy-eater-tail")
+@ttl_cache   # 2.4 s cold - was recomputed on every request (2026-10-01 profile)
 def buffet_heavy_eater_tail(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """The defining AYCE question — REAL per-cover margin (what they paid − what they
     actually ate), not revenue pro-rata. Joins sale_bill_cogs (per-bill BoM COGS)
