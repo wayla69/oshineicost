@@ -1240,6 +1240,12 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      too long to read. Two newspaper columns, a paragraph never split. */
   #tab-mgtreport .mgt-exec-body { column-count: 2; column-gap: 22px; }
   #tab-mgtreport .mgt-exec-body > * { break-inside: avoid; page-break-inside: avoid; }
+  /* บริษัท · แฟรนไชส์ panels: each is half a sheet wide and a single column of
+     label/value rows (~180px for five rows). Two columns of rows halve that, which
+     is what lets a §6/§9 with its panel fit one sheet instead of leaving the panel
+     alone on the next. */
+  #tab-mgtreport .rounded-xl > .space-y-0\.5 { column-count: 2; column-gap: 16px; }
+  #tab-mgtreport .rounded-xl > .space-y-0\.5 > * { break-inside: avoid; margin-top: 0 !important; }
 
   /* Revenue Trend: canvas doesn't print reliably → show the SVG fallback chart(s),
      which carry the y-axis, bars and amber moving-average curve. The SVGs are sized
@@ -1466,7 +1472,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
      grid collapsed to a single column on paper. §11's two driver tables stacked
      instead of sitting side by side, and five tiers of them ran to five sheets.
      Every sheet is landscape (273mm); give it the layout the screen would use. */
-  #tab-mgtreport [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #tab-mgtreport [class*="md:grid-cols-2"],
+  #tab-mgtreport [class*="lg:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   #tab-mgtreport [class*="md:grid-cols-3"],
   #tab-mgtreport [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
   #tab-mgtreport [class*="md:grid-cols-4"],

@@ -1582,10 +1582,17 @@ function renderMgtReport(j, jM, jF) {
     // split 4/24 for no reason. Short tables (a single-branch report) still flow
     // inline rather than burning a sheet on six rows.
     { id:'mgt-s5',  c:'#7a66b8', brk: _brs.length >= 12, t:T.s5, h:branchTbl },
-    { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
-    { id:'mgt-s7',  c:'#059669', t:T.s7, h:menu },
-    { id:'mgt-s8',  c:'#0284c7', t:T.s8, h:v8 + peakWithSplit },
-    { id:'mgt-s9',  c:'#9333ea', t:T.s9,  h:tableHtml ? (v9 + tableWithSplit) : naBox(T.naTable) },
+    // §7-§8 are bounded (3 x 12 menu rows; dayparts + weekday bars) and always
+    // shorter than a sheet. Split at a sheet foot they cut a menu row in half; kept
+    // whole they move to the next sheet instead. §6 can run a little over a sheet on
+    // a weekly/daily pack, so it STARTS a sheet and lets its last panel flow — kept
+    // whole it left that panel alone on a page of its own.
+    { id:'mgt-s6',  c:'#dc2626', brk:true, t:T.s6, h:leakWithSplit },
+    { id:'mgt-s7',  c:'#059669', keep:true, t:T.s7, h:menu },
+    { id:'mgt-s8',  c:'#0284c7', keep:true, t:T.s8, h:v8 + peakWithSplit },
+    // §9 kept whole while its branch table fits a sheet (KPI row + ≤30 rows + split);
+    // a longer table flows on (header repeated, rows never split) — kept whole it would clip.
+    { id:'mgt-s9',  c:'#9333ea', keep: ((TB.by_branch || []).length <= 30), t:T.s9,  h:tableHtml ? (v9 + tableWithSplit) : naBox(T.naTable) },
     { id:'mgt-s10', c:'#0d9488', keep:true, t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
     { id:'mgt-s11', c:'#b45309', t:T.s11, h:tierHtml || naBox(T.naTier) },
     { id:'mgt-s12', c:'#0f766e', t:T.s12v, h:voiceHtml || naBox(T.naVoice) },
@@ -1655,7 +1662,8 @@ function renderMgtReport(j, jM, jF) {
       const labels = rows.map(r => weekly ? r.wk.replace('-W', ' W') : r.ym);
       const short = rows.filter(r => r.partial).map(r => r.wk.replace('-W', ' W'));
 
-      slot.innerHTML = `
+      // one atom in print: the title used to sit at a sheet foot, its charts overleaf
+      slot.innerHTML = `<div class="mgt-atom">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <div class="text-[12px] font-bold" style="color:#334155">${esc(T.tierTrendTitle)}</div>
           <div class="flex gap-1">
@@ -1672,7 +1680,7 @@ function renderMgtReport(j, jM, jF) {
           weekly ? T.tierTrendWeekNote.replace('{n}', rows.length)
                    + (WM.era_from ? ' · ' + T.tierTrendEra.replace('{d}', WM.era_from) : '')
                    + (short.length ? ' · ⚠ ' + T.tierTrendPartial.replace('{w}', short.join(', ')) : '')
-                 : T.tierTrendMonthNote)}</p>`;
+                 : T.tierTrendMonthNote)}</p></div>`;
 
       slot.querySelectorAll('button[data-g]').forEach(b =>
         b.addEventListener('click', () => { gran = b.dataset.g; draw(); }));
