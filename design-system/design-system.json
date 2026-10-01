@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T08:25:40Z",
-    "via": "GitHub · wayla69/oshineicost@8c19443",
-    "note": "Synced to main 8c19443 (#247): yellows join the amber ink family; script-set light fills need .on-light; near-zero heat cells use text-muted."
+    "at": "2026-10-01T03:55:20Z",
+    "via": "GitHub · wayla69/oshineicost@20e14c4",
+    "note": "Synced to main 20e14c4 (#251, #252): group hues (group-* tokens, theme-groups.css), heat scales (heat-s*/heat-d*), chart glance rules (labels, headline, honest MTD, weekend bands, shaded bars), regrouped sidebar."
   },
   "layout": "files",
   "libraries": [],

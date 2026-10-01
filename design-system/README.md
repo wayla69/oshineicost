@@ -1,6 +1,6 @@
 > **About this folder.** A repo copy of the Oshinei design system published at
-> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 (formal theme, KIRA UI + Noto symbols, text inks; app at `8c19443`;
-> navy accent in `docs/ui-kit/theme-formal.css`). The app itself never loads these files: its colours come from
+> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-10-01 (formal theme, KIRA UI + Noto symbols, text inks, group hues, heat scales, chart glance rules;
+> app at `20e14c4`; navy accent in `docs/ui-kit/theme-formal.css`, group hues in `docs/ui-kit/theme-groups.css`). The app itself never loads these files: its colours come from
 > `docs/ui-kit/tokens.css`. When a colour changes, change it there first, then update
 > `tokens.json` here (and republish the system) so the two stay in step.
 > Fonts are the app's own `vendor/fonts/KIRA-UI-*.woff2` and `vendor/fonts/symbols/*.subset.woff2` (`tokens.json` names them as `fonts/...`; the OFL licences sit beside them).
@@ -8,7 +8,7 @@
 > generates `tokens.css` from `tokens.json`. This folder sits outside `docs/` on purpose:
 > `docs/` is copied into the Fly image, and parts of it are served without a login.
 
-Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 branches, one owner, branch managers, accounting and kitchen staff. People open it to answer "how did yesterday go, what is leaking money, and what do I order". It should read like a well-kept management report: navy, ruled, exact. Numbers first, one accent, nothing decorative.
+Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 branches, one owner, branch managers, accounting and kitchen staff. People open it to answer "how did yesterday go, what is leaking money, and what do I order". It should read like a well-kept management report: navy, ruled, exact. Numbers first, a navy frame with one colour per area of the app, nothing decorative.
 
 ## Using this system
 
@@ -34,12 +34,13 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 - **Borders, not shadows.** Surfaces separate with a 1px `border` and the grid gap. Only floating things (menus, the modal) cast a shadow.
 - **Square, not soft.** Corners are 2–4px (`r-xs`, `r-sm`, `r-md`). `r-pill` is only for dots and progress tracks; tags and chips are square-cornered.
-- **Flat colour.** No gradients: fills, rules, bars and the logo are solid.
+- **Flat colour.** No decorative gradients: fills, rules and the logo are solid. The one exception is data: a chart bar or filled line area is shaded along its value axis (full colour at the tip, 22% toward the card at zero), which reads as magnitude, not decoration.
 - **Still.** No hover lifts, no shimmer, no slide-ins. Hover changes colour or border only, in 0.12s.
 
 ### Color
 
-- `accent` (navy `#1f3a6b`; `#93b4e6` in dark) is the only accent: the active tab underline, the active nav marker, the focus ring, links, the primary button and the default KPI rule. `accent-soft` is its tinted ground; `accent-hover` its hover. Label an accent fill with `on-accent`, never a literal white.
+- `accent` (navy `#1f3a6b`; `#93b4e6` in dark) is the interface accent: the focus ring, links, the primary button, and the tab underline, KPI rule and chips of any page outside a group. `accent-soft` is its tinted ground; `accent-hover` its hover. Label an accent fill with `on-accent`, never a literal white.
+- **Group hues say where you are.** Each sidebar group owns a hue: `group-home` (หน้าแรก, รายงานผู้บริหาร, เครื่องมือ), `group-sales` ยอดขาย, `group-buffet` ลูกค้า & บุฟเฟ่ต์, `group-feedback` เสียงลูกค้า, `group-menu` เมนู, `group-cost` ต้นทุน, `group-profit` กำไร, `group-money` ส่วนลด & เงิน, `group-ops` ปฏิบัติการ, `group-supply` จัดซื้อ. The open page's group (`body[data-group]`, set by `switchTab`) colours only what marks place: a 3px stripe under the top bar, the page-title marker, the soft band (`-soft`) behind the page's tab bar with the active chip in `-ink` on it, the subtab underline, section-title markers and the default KPI rule. Every sidebar icon wears its group's `-side` tint. Text in a group hue is always the `-ink` (4.5:1 on the card and on its `-soft`). A group hue never means good or bad and never replaces `accent` on controls. The layer is `docs/ui-kit/theme-groups.css`, linked last; removing it restores all-navy.
 - `good`, `bad` and `warn` carry direction only (up/on-track, down/off-track, needs a look), as the KPI top rule, a progress fill or a status dot. For coloured text use `good-ink`, `bad-ink`, `warn-ink`, `teal-ink` / `rose-ink` for teal and rose, `cyan-ink` / `sky-ink` for cyan and sky, `navy-ink` / `violet-ink` / `fuchsia-ink` / `pink-ink` for chart-series colours used as figures, and `amber-ink` / `orange-ink` for warnings and mid bands; tags use the `pill-*` pairs. Status always comes with a word or ▲ ▼, never colour alone.
 - Up/down figures are TEXT in `good-ink` / `bad-ink`, never in the mark colours. In markup use `.up` / `.down` (Tailwind `.text-emerald-500/600/700` and `.text-red-500/600/700` are remapped to the inks too, as are `.text-rose-500/600/700`, `.text-teal-700`, `.text-cyan-600/700` and `.text-sky-600/700` to their inks, and `.text-blue-600/700` to `navy-ink` in dark mode); in scripts, a colour that feeds both a mark and a figure keeps its hex for the mark and passes the figure through `textInk(hex)`, which returns the matching ink for the known greens, reds, teals, roses, cyans, skies, navies (blue-600/700 included), violets, fuchsias, pinks, ambers (the yellows included: `#facc15` is 1.53:1 on white) and oranges, and `text-muted` for the inline greys.
 - The inks follow the nearest light or dark ground. In dark mode, anything that stays light keeps the light inks: add `.on-light` to such a box; the `-50` tints, the emerald/green/red/rose `-100` chips and pastel inline card fills (`background:#d…/#e…/#f…`) are scoped the same way. Anything dark mode repaints (`.bg-white`, `.bg-slate-50`, plain cards, hovered rows) takes the dark inks again. Paper is white, so print always uses the light inks. The text tokens (`text-primary` / `-secondary` / `-muted`), the accent and the input/border tokens follow the same scoping, so body text inside a light box stays dark in dark mode; an inline pastel fill counts as a light box when its hex is in the list in index.html (add new pastels there, or use `.on-light`). A fill set from script (`el.style.cssText` / `style.background`) is serialised as `rgb(…)`, so the hex list never matches it: give that box `.on-light`.
@@ -49,6 +50,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 - Text runs `text-primary` → `text-secondary` → `text-muted`. Every text token clears 4.5:1 on the surfaces its note names, in both themes.
 - Grey text is a text token, never a slate hex: Tailwind `.text-slate-300/400` map to `text-muted` and `.text-slate-500` to `text-secondary` (outside the sidebar), because slate-400 is 2.56:1 and slate-300 1.5:1 on white.
 - A label ON a coloured fill (heatmap cells, bar segments, priority chips) takes `inkOn(fill)`: white or `#0f172a`, whichever contrasts more; an empty or near-zero cell on the pale `#f8fafc` ground uses `text-muted`. A filled button or active segment with white text uses the hue's `-700` shade (`-800` on hover); the `-500`/`-600` hues are marks, 2.1–4.1:1 under white.
+- **Heatmaps use two scales, never red → amber → green for volume** (a small branch or a quiet hour is not "bad"). `heat-s1` … `heat-s5`, one navy hue, show how much: revenue by branch × month, traffic by hour. `heat-d1` … `heat-d5` (red, pale red, grey ±5%, pale green, green) show a cell against a real baseline, such as its branch's own average of complete months. Five steps with a legend, not a continuous ramp; each fill has its `-ink` label (all ≥ 4.8:1). They are theme tokens, so a heatmap follows the theme toggle without a re-render. A period still in progress is outlined dashed, tagged MTD and left out of every average; a branch's opening part-month shows เปิด and is not scored.
 - Charts cycle `chart-1` … `chart-12`: muted, deep hues that each reach 3:1 on both the light and the dark card. A branch hashes to a fixed slot and keeps its colour across charts.
 - `navy` / `navy-deep` belong to decks and printed reports. `salmon`, `salmon-deep` and `teal` are an optional marketing extension, never used in the dashboard.
 
@@ -79,15 +81,18 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 Chart.js 4 defaults, set once in `setupChartDefaults()` and themed per chart by `applyChartTheme()`:
 
 - Font KIRA UI 11.5px. Legends and titles use `chart-ink`, axis ticks `chart-tick`, gridlines `chart-grid`, all per theme; toggling the theme rebuilds every chart. Don't rely on the global `Chart.defaults.color`. Legend, title and axis-title colours hard-coded to a light-mode slate are rewritten to the theme ink, so a chart written for light mode still reads in dark.
-- Bars: 2px corners (`r-xs`), max 46px thick. Lines: width 2, tension 0.25; points 2px at rest (scatter charts need them), 6px on hover.
+- Bars: 4px tip corners, flush on the baseline (`borderSkipped: 'start'`), max 46px thick. A see-through bar colour is flattened onto the card first, so gridlines never show through it. Lines: width 2, tension 0.25; points 2px at rest (scatter charts need them), 6px on hover.
 - Legends: square markers, 8px, 14px padding.
 - Tooltip: `tooltip-bg` card with a 3px corner and no border glow; title 12.5px/600 in `tooltip-title`, body 12px in `tooltip-body`; values thousand-separated, 2 decimals only under 100.
 - On-chart data labels are rounded to 4 decimals so float dust never prints.
+- **Every chart answers at a glance** (the `glance` plugin in `js/01-core.js`, registered globally; opt out per chart with `plugins.glance: false` or one part of it): the latest value at the end of each line (up to 4), the primary series' peak, the latest bar on a time axis, a dashed `เฉลี่ย` line at the mean of a single series over time, and a doughnut's total (or its top share) in the hole. Values print compact in the axis's unit (`87.33M`, `52%`) in `chart-ink` with a card-coloured halo; labels never collide or leave the plot. A dataset its datalabels already number is not labelled again; sparkline-sized plots keep the shading only; a chart under 520px wide labels one series at 10px.
+- **A one-line headline sits above a single-series chart**: the latest complete period, its move vs the previous one, "สูงสุด/ต่ำสุดตั้งแต่ …", a run of 3+ rises or falls and the distance from the average; a category chart gives best, worst and the spread. It is left out when the card already states figures above the chart.
+- **The period in progress is honest**: the month of the latest data on a monthly axis, today on a daily one, is hollow with a dashed outline (a dashed last segment on a line), tagged MTD / วันนี้, and kept out of the peak, the average and every comparison. Target, forecast and last-year overlays are full-period figures and are never tagged. Daily axes shade Saturday–Sunday.
 
 ## Iconography
 
 - 49 stroke icons in `assets/Icons/`, one per page (named by page id: `home`, `dailysales`, `pnlbill` …): a 24 grid, 1.75 stroke, round caps and joins, no fill. Shown at 16px in the nav and inside 32px icon buttons.
-- In the app they are inline `<svg class="nav-icon">` using `currentColor`: `nav-ink` at rest, `nav-active-icon` when hovered or active. The files here are stroked in navy so they show as images; drop the stroke attribute when inlining.
+- In the app they are inline `<svg class="nav-icon">` using `currentColor`, coloured with the item's group `-side` tint (see Group hues); the label text stays `nav-ink`, `nav-active-ink` when hovered or active. The files here are stroked in navy so they show as images; drop the stroke attribute when inlining.
 - Top-bar tools (theme, refresh, search) use stroke icons in the same style, never emoji.
 - Table sort state uses ⇅ ▲ ▼; direction in figures uses ▲ ▼.
 
