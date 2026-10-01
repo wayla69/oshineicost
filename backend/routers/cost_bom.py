@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import auth as _auth
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, tier_code_sql
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, tier_code_sql, costed_sql, coverage_from_sums, coverage_sums_sql, needs_cost_sql
 from core import (
     BOM_TYPE_BENCHMARKS, CostEntry, DB_PATH, HERE, _FOOD_CATEGORY_FILTER,
     _bom_cost_period_filters, _build_sku_effective_cost, _cogs_case, _costed_rev_case, _effective_cost_subquery,
@@ -66,8 +66,16 @@ def get_cost():
 
 
 @router.post("/api/cost", dependencies=[Depends(require_write_token)])
-def post_cost(entries: List[CostEntry]):
+def post_cost(entries: List[CostEntry], request: Request):
     """Upsert unit costs by sku_code. Returns count of rows updated.
+
+    DURABLE (2026-10-01): sku_cost arrives with every daily swap from the sync's
+    base DB, so a plain write on the live site lasted until the next swap — the
+    cost upload, Settings -> Cost Management and the coverage tab's fixer all
+    lost their entries that way. Each cost > 0 is now also stored as a
+    cost_override intent (the table the swap preserves, which apply_all re-applies
+    and the sync mirrors into staging), exactly like a confirmation in the review
+    card. A 0 withdraws that intent.
 
     GUARD (2026-06-01): rejects any non-tier entry whose unit_cost lands in the
     price-as-cost band vs the SKU's ex-VAT selling price (ratio 1.03–1.12 ≈ the
@@ -77,11 +85,14 @@ def post_cost(entries: List[CostEntry]):
     every margin number. Tier SKUs (BUFFET*) are exempt — their cost is ignored
     by _cogs_case anyway.
     """
+    import cost_sources as _cs
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    who = (_auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}).get("u") or "-"
     updated = 0
     skipped: list = []
     with get_db() as con:
         cur = con.cursor()
+        cur.execute(_cs.OVERRIDE_DDL)
         # Pre-compute ex-VAT avg selling price for the incoming SKUs (one query).
         codes = [e.sku_code for e in entries]
         price_by_code: dict = {}
@@ -118,8 +129,17 @@ def post_cost(entries: List[CostEntry]):
                    VALUES(?, ?, ?, ?)""",
                 (sku_id, entry.unit_cost, now[:10], now),
             )
+            if not is_tier and entry.unit_cost > 0:
+                cur.execute(
+                    "INSERT OR REPLACE INTO cost_override(sku_code, kind, unit_cost, lines, note,"
+                    " confirmed_by, confirmed_at) VALUES(?, 'cost', ?, NULL, ?, ?, ?)",
+                    (entry.sku_code, round(float(entry.unit_cost), 4), "Cost Management", who, now))
+            else:
+                cur.execute("DELETE FROM cost_override WHERE sku_code = ? AND kind = 'cost'",
+                            (entry.sku_code,))
             updated += 1
         con.commit()
+        _cs.apply_overrides(con)     # tags provenance 'confirmed', same as the review card
     invalidate_cache()   # cost data changed — clear all cached analytics responses
     resp = {"updated": updated}
     if skipped:
@@ -1150,100 +1170,107 @@ def cost_uncosted_coverage(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
 ):
-    """How much revenue rests on costed vs uncosted SKUs. 'Costed' = the SKU has an
-    effective unit cost OR is a buffet tier (costed via item-level BoM). Returns
-    per-branch coverage, a monthly trend, and the top uncosted SKUs by revenue —
-    a prioritised worklist for filling in missing costs."""
+    """How much of what was sold carries a cost, on the app-wide definition
+    (rules.needs_cost_sql / costed_sql — the same one the home page and the P&L
+    use). Two measures: PLATES (the buffet's dishes carry ฿0 revenue, so only a
+    plate count sees them) and REVENUE of the lines that should carry a cost
+    (à-la-carte, delivery, drinks; buffet packages are costed through the dishes
+    eaten). Per branch, a monthly trend, and the uncosted lines ranked as a
+    worklist: by revenue, and separately the buffet dishes by plates."""
     filters = ["b.name != 'ALL'"]
     params: dict = {}
     if branch:
         filters.append("b.name = :branch"); params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
     where = "WHERE " + " AND ".join(filters)
-    costed = _costed_rev_case()            # tier rev + costed-sku rev, else 0
-    eff    = _effective_cost_subquery()
-    uncosted_pred = (f"({eff}) IS NULL AND ssm.subtotal_ex_vat > 0 "
-                     f"AND sk.sku_code NOT IN {_EASY_TIER_CODES_SQL}")
+    sums = coverage_sums_sql("ssm")
+    gap = f"{needs_cost_sql()} AND NOT {costed_sql('ssm')}"
+    base = f"""FROM v_sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            {where}"""
 
     with get_db() as con:
         brows = con.execute(f"""
-            SELECT b.name AS branch,
-                   SUM(ssm.subtotal_ex_vat) AS total_rev,
-                   SUM({costed})            AS costed_rev,
+            SELECT b.name AS branch, SUM(ssm.subtotal_ex_vat) AS total_rev, {sums},
                    COUNT(DISTINCT ssm.sku_id) AS skus,
-                   COUNT(DISTINCT CASE WHEN {uncosted_pred} THEN ssm.sku_id END) AS uncosted_skus
-            FROM v_sales_sku_monthly ssm
-            JOIN branches b ON b.branch_id = ssm.branch_id
-            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
-            {where}
-            GROUP BY b.name
-        """, params).fetchall()
+                   COUNT(DISTINCT CASE WHEN {gap} AND (ssm.qty > 0 OR ssm.subtotal_ex_vat > 0)
+                                       THEN ssm.sku_id END) AS uncosted_skus
+            {base} GROUP BY b.name""", params).fetchall()
         trows = con.execute(f"""
-            SELECT ssm.period_month AS m,
-                   SUM(ssm.subtotal_ex_vat) AS total_rev,
-                   SUM({costed})            AS costed_rev
-            FROM v_sales_sku_monthly ssm
-            JOIN branches b ON b.branch_id = ssm.branch_id
-            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
-            {where}
-            GROUP BY ssm.period_month ORDER BY ssm.period_month
-        """, params).fetchall()
-        urows = con.execute(f"""
-            SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
-                   c.name AS category,
-                   SUM(ssm.subtotal_ex_vat) AS rev, ROUND(SUM(ssm.qty),0) AS qty
-            FROM v_sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id  = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
-            JOIN categories c ON c.category_id = sk.category_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
-            {where} AND {uncosted_pred}
-            GROUP BY sk.sku_id
-            ORDER BY rev DESC LIMIT 25
-        """, params).fetchall()
+            SELECT ssm.period_month AS m, SUM(ssm.subtotal_ex_vat) AS total_rev, {sums}
+            {base} GROUP BY ssm.period_month ORDER BY ssm.period_month""", params).fetchall()
+        def worklist(order, extra):
+            return con.execute(f"""
+                SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
+                       c.name AS category,
+                       SUM(ssm.subtotal_ex_vat) AS rev, ROUND(SUM(ssm.qty),0) AS qty
+                FROM v_sales_sku_monthly ssm
+                JOIN branches b   ON b.branch_id  = ssm.branch_id
+                JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+                LEFT JOIN categories c ON c.category_id = sk.category_id
+                {where} AND {gap}
+                GROUP BY sk.sku_id HAVING {extra}
+                ORDER BY {order} LIMIT 25""", params).fetchall()
+        urows = worklist("rev DESC", "SUM(ssm.subtotal_ex_vat) > 0")
+        prows = worklist("qty DESC", "SUM(ssm.subtotal_ex_vat) <= 0 AND SUM(ssm.qty) > 0")
+
+    def block(r):
+        cov = coverage_from_sums(r)
+        total = float(r["total_rev"] or 0)
+        unc = cov["uncosted_revenue"]
+        scope = float(r["cov_rev"] or 0)
+        return total, unc, scope, cov
 
     branches = []
-    tot_rev = tot_costed = 0.0
-    for r in sorted(brows, key=lambda x: -((x["total_rev"] or 0) - (x["costed_rev"] or 0))):
-        total = r["total_rev"] or 0.0
-        costed_v = r["costed_rev"] or 0.0
-        unc = total - costed_v
-        tot_rev += total; tot_costed += costed_v
+    tot_rev = tot_unc = tot_scope = 0.0
+    tp = tpc = 0.0
+    for r in brows:
+        total, unc, scope, cov = block(r)
+        tot_rev += total; tot_unc += unc; tot_scope += scope
+        tp += float(r["cov_plates"] or 0); tpc += float(r["cov_plates_costed"] or 0)
         branches.append({
-            "branch":          r["branch"],
-            "total_revenue":   round(total, 2),
-            "costed_revenue":  round(costed_v, 2),
+            "branch":           r["branch"],
+            "total_revenue":    round(total, 2),
+            "costed_revenue":   round(total - unc, 2),
             "uncosted_revenue": round(unc, 2),
-            "pct_uncosted":    round(unc / total * 100, 1) if total else 0.0,
-            "skus":            r["skus"] or 0,
-            "uncosted_skus":   r["uncosted_skus"] or 0,
+            "pct_uncosted":     round(100 - cov["revenue_pct"], 1) if cov["revenue_pct"] is not None else 0.0,
+            "pct_uncosted_plates": round(100 - cov["plates_pct"], 1) if cov["plates_pct"] is not None else 0.0,
+            "uncosted_plates":  cov["uncosted_plates"],
+            "skus":             r["skus"] or 0,
+            "uncosted_skus":    r["uncosted_skus"] or 0,
         })
+    branches.sort(key=lambda x: -x["uncosted_revenue"])
     trend = []
     for r in trows:
-        total = r["total_rev"] or 0.0
-        costed_v = r["costed_rev"] or 0.0
+        total, unc, scope, cov = block(r)
         trend.append({
             "period": r["m"],
-            "pct_uncosted": round((total - costed_v) / total * 100, 1) if total else 0.0,
-            "uncosted_revenue": round(total - costed_v, 2),
+            "pct_uncosted": round(100 - cov["revenue_pct"], 1) if cov["revenue_pct"] is not None else 0.0,
+            "pct_uncosted_plates": round(100 - cov["plates_pct"], 1) if cov["plates_pct"] is not None else 0.0,
+            "uncosted_revenue": round(unc, 2),
         })
-    top_uncosted = [{
-        "sku_code": r["sku_code"], "description": r["description"], "category": r["category"],
-        "revenue": round(r["rev"] or 0, 2), "qty": r["qty"] or 0,
-    } for r in urows]
+    def items(rows):
+        return [{"sku_code": r["sku_code"], "description": r["description"], "category": r["category"],
+                 "revenue": round(r["rev"] or 0, 2), "qty": r["qty"] or 0} for r in rows]
 
     return {
         "chain": {
             "total_revenue":    round(tot_rev, 2),
-            "costed_revenue":   round(tot_costed, 2),
-            "uncosted_revenue": round(tot_rev - tot_costed, 2),
-            "pct_uncosted":     round((tot_rev - tot_costed) / tot_rev * 100, 1) if tot_rev else 0.0,
+            "scope_revenue":    round(tot_scope, 2),
+            "costed_revenue":   round(tot_rev - tot_unc, 2),
+            "uncosted_revenue": round(tot_unc, 2),
+            # share of the revenue that SHOULD carry a cost, not of all revenue
+            "pct_uncosted":     round(tot_unc / tot_scope * 100, 1) if tot_scope else 0.0,
+            "pct_uncosted_plates": round((tp - tpc) / tp * 100, 1) if tp else 0.0,
+            "uncosted_plates":  round(tp - tpc),
         },
-        "branches":     branches,
+        "definition": ("มีต้นทุน = ระบบคำนวณต้นทุนต่อหน่วยได้มากกว่า ฿0 · ไม่นับแพ็กเกจบุฟเฟ่ต์ (คิดจากจานที่ทาน), "
+                       "ค่าบริการ, ค่าปรับ/ค่าห้อง และซอสที่รวมในต้นทุนจานแล้ว"),
+        "branches":      branches,
         "monthly_trend": trend,
-        "top_uncosted": top_uncosted,
+        "top_uncosted":  items(urows),
+        "top_uncosted_plates": items(prows),
     }
 
 

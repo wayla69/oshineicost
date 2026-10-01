@@ -2,10 +2,11 @@
      TAB: COST COVERAGE  (how much revenue still sits on uncosted SKUs)
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-coverage" style="display:none">
-  <p class="text-sm text-slate-500 mb-4">รายได้ที่มี/ไม่มีข้อมูลต้นทุน · ใช้จัดลำดับ SKU ที่ต้องใส่ต้นทุน (บุฟเฟ่ต์นับว่ามีต้นทุนผ่าน BoM)</p>
+  <p class="text-sm text-slate-500 mb-1">จานและรายได้ที่มี/ไม่มีข้อมูลต้นทุน · ใช้จัดลำดับ SKU ที่ต้องใส่ต้นทุน</p>
+  <p id="cov-definition" class="text-xs text-slate-400 mb-4"></p>
   <div id="cov-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
   <div class="card p-4 mb-5">
-    <div class="text-sm font-semibold text-slate-700 mb-2">แนวโน้ม % รายได้ที่ยังไม่มีต้นทุน</div>
+    <div class="text-sm font-semibold text-slate-700 mb-2">แนวโน้ม % ที่ยังไม่มีต้นทุน (รายได้ · จาน)</div>
     <div style="position:relative;height:240px"><canvas id="cov-trend"></canvas></div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -37,10 +38,10 @@
   <!-- No-cost fixer: editable worklist — fill unit_cost right here -->
   <div class="card p-4 mt-5" style="border:1px solid var(--accent-soft)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <div class="text-sm font-semibold text-slate-700">เติมต้นทุนที่ขาด — แก้ได้เลย (SKU รายได้สูงสุดที่ยังไม่มีต้นทุน)</div>
+      <div class="text-sm font-semibold text-slate-700">เติมต้นทุนที่ขาด — แก้ได้เลย (รายได้สูงสุด แล้วตามด้วยจานบุฟเฟ่ต์ที่เสิร์ฟมากสุด)</div>
       <button id="cov-fixer-saveall" onclick="saveAllUncosted()" class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:var(--accent);color:var(--on-accent)">บันทึกทั้งหมดที่กรอก</button>
     </div>
-    <p class="text-xs text-slate-400 mb-3">กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าธรรมเนียม เช่น Service Charge ใส่ <b>0</b> ได้ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · แสดง Top 25 (ครอบคลุมช่องว่างส่วนใหญ่)</p>
+    <p class="text-xs text-slate-400 mb-3">กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าที่บันทึกที่นี่ถือเป็นต้นทุนยืนยันแล้ว ไม่หายเมื่อซิงก์ข้อมูลรอบถัดไป · ใส่ <b>0</b> เพื่อถอนค่าที่เคยใส่ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · ค่าบริการ ค่าปรับ และแพ็กเกจบุฟเฟ่ต์ไม่ต้องใส่ (ไม่นับเป็นช่องว่าง)</p>
     <div style="max-height:440px;overflow:auto">
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
