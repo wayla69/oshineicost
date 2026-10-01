@@ -6,6 +6,7 @@
 <title>Oshinei — Design System & Component Gallery</title>
 <!-- Design tokens — shared single source of truth (same file index.html & the UI kit use) -->
 <link rel="stylesheet" href="ui-kit/tokens.css">
+<link rel="stylesheet" href="ui-kit/theme-groups.css"><!-- group hue tokens for the sidebar demo -->
 <style>
 /* Tokens (:root + body.dark) come from the shared ui-kit/tokens.css linked in
    <head> above — single source of truth with index.html and the UI kit. */
@@ -317,17 +318,26 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <!-- ════════ SIDEBAR NAV ════════ -->
   <div class="sec-head">Sidebar Navigation</div>
-  <p class="sec-desc">Active items get a left rail via <code>::before { left: -8px }</code>. In the live app the rail sits flush to the sidebar edge; this gallery sets <code>overflow: visible</code> on the parent so the rail is never clipped in the small preview.</p>
+  <p class="sec-desc">The sidebar as regrouped 2026-10-01: one entry per area of the app, each marked in its group hue (<code>--g-*-side</code>, docs/ui-kit/theme-groups.css); the active entry's group colours the page. Active items get a left rail via <code>::before { left: -8px }</code>. In the live app the rail sits flush to the sidebar edge; this gallery sets <code>overflow: visible</code> on the parent so the rail is never clipped in the small preview.</p>
   <div class="preview" style="display:flex;justify-content:center">
     <div class="sidebar-demo">
       <div class="sidebar-nav">
-        <div class="nav-section">Overview</div>
-        <div class="nav-item active"><span class="nav-dot"></span> Dashboard</div>
-        <div class="nav-item"><span class="nav-dot"></span> Sales Trend</div>
-        <div class="nav-section">Cost</div>
-        <div class="nav-item"><span class="nav-dot"></span> Food Cost</div>
-        <div class="nav-item"><span class="nav-dot"></span> Branch BoM</div>
-      </div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-home-side)"></span> หน้าแรก</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-home-side)"></span> รายงานผู้บริหาร</div>
+        <div class="nav-section">วิเคราะห์</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-sales-side)"></span> ยอดขาย</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-buffet-side)"></span> ลูกค้า &amp; บุฟเฟ่ต์</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-feedback-side)"></span> เสียงลูกค้า</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-menu-side)"></span> เมนู</div>
+        <div class="nav-item active"><span class="nav-dot" style="background:var(--g-cost-side)"></span> ต้นทุน</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-profit-side)"></span> กำไร</div>
+        <div class="nav-section">ควบคุม &amp; ปฏิบัติการ</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-money-side)"></span> ส่วนลด &amp; เงิน</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-ops-side)"></span> ปฏิบัติการ</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-supply-side)"></span> จัดซื้อ</div>
+        <div class="nav-section">เครื่องมือ</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-home-side)"></span> คู่มือ</div>
+        <div class="nav-item"><span class="nav-dot" style="background:var(--g-home-side)"></span> ตั้งค่า</div>
     </div>
   </div>
 
@@ -438,9 +448,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="sidebar-demo" style="margin:0 auto">
         <div class="sidebar-nav">
-          <div class="nav-section">Overview</div>
-          <div class="nav-item active"><span class="nav-dot"></span> Dashboard</div>
-          <div class="nav-item"><span class="nav-dot"></span> Sales Trend</div>
+          <div class="nav-section">วิเคราะห์</div>
+          <div class="nav-item active"><span class="nav-dot" style="background:var(--g-sales-side)"></span> ยอดขาย</div>
+          <div class="nav-item"><span class="nav-dot" style="background:var(--g-cost-side)"></span> ต้นทุน</div>
         </div>
       </div>
     </div>

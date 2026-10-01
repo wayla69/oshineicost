@@ -215,6 +215,49 @@ tr.mi-outlier-good { background: var(--row-outlier-good); }
 [data-theme="dark"] :where(.on-light, .pill-up, .pill-down, .badge-up) { --good-ink: #047857; --bad-ink: #b91c1c; }
 @media print { :root, [data-theme="dark"] { --good-ink: #047857; --bad-ink: #b91c1c; } }
 
+/* ── Group hues (2026-10-01; the app's docs/ui-kit/theme-groups.css) ──
+   Each sidebar group owns a hue (tokens group-*). The open page's group,
+   [data-group] (body in the app, any wrapper here), colours what marks place:
+   top-bar stripe, page-title marker, cluster-bar band + active chip, subtab
+   underline, section-title marker, default KPI rule. Sidebar items carry
+   data-g and wear their group's -side tint. Never good/bad, never controls. */
+:root { --group: var(--accent); --group-ink: var(--accent); --group-soft: var(--accent-soft); }
+[data-group="home"] { --group: var(--group-home); --group-ink: var(--group-home-ink); --group-soft: var(--group-home-soft); }
+[data-group="sales"] { --group: var(--group-sales); --group-ink: var(--group-sales-ink); --group-soft: var(--group-sales-soft); }
+[data-group="buffet"] { --group: var(--group-buffet); --group-ink: var(--group-buffet-ink); --group-soft: var(--group-buffet-soft); }
+[data-group="feedback"] { --group: var(--group-feedback); --group-ink: var(--group-feedback-ink); --group-soft: var(--group-feedback-soft); }
+[data-group="menu"] { --group: var(--group-menu); --group-ink: var(--group-menu-ink); --group-soft: var(--group-menu-soft); }
+[data-group="cost"] { --group: var(--group-cost); --group-ink: var(--group-cost-ink); --group-soft: var(--group-cost-soft); }
+[data-group="profit"] { --group: var(--group-profit); --group-ink: var(--group-profit-ink); --group-soft: var(--group-profit-soft); }
+[data-group="money"] { --group: var(--group-money); --group-ink: var(--group-money-ink); --group-soft: var(--group-money-soft); }
+[data-group="ops"] { --group: var(--group-ops); --group-ink: var(--group-ops-ink); --group-soft: var(--group-ops-soft); }
+[data-group="supply"] { --group: var(--group-supply); --group-ink: var(--group-supply-ink); --group-soft: var(--group-supply-soft); }
+.nav-item[data-g="home"] { --gs: var(--group-home-side); }
+.nav-item[data-g="sales"] { --gs: var(--group-sales-side); }
+.nav-item[data-g="buffet"] { --gs: var(--group-buffet-side); }
+.nav-item[data-g="feedback"] { --gs: var(--group-feedback-side); }
+.nav-item[data-g="menu"] { --gs: var(--group-menu-side); }
+.nav-item[data-g="cost"] { --gs: var(--group-cost-side); }
+.nav-item[data-g="profit"] { --gs: var(--group-profit-side); }
+.nav-item[data-g="money"] { --gs: var(--group-money-side); }
+.nav-item[data-g="ops"] { --gs: var(--group-ops-side); }
+.nav-item[data-g="supply"] { --gs: var(--group-supply-side); }
+.nav-item[data-g] .nav-icon, .nav-item[data-g]:hover .nav-icon, .nav-item[data-g].active .nav-icon { color: var(--gs); }
+.nav-item[data-g].active::before { background: var(--gs); width: 4px; }
+.nav-item[data-g].active { background: color-mix(in srgb, var(--gs) 22%, transparent); }
+[data-group] .top-bar { box-shadow: inset 0 -3px 0 var(--group); }
+[data-group] .page-title::before { content: ''; display: inline-block; width: 4px; height: 0.95em; margin-right: 9px; vertical-align: -0.1em; background: var(--group); border-radius: 1px; }
+[data-group] .section-title::before { background: var(--group); }
+[data-group] .subtab-btn.active { color: var(--group-ink); border-bottom-color: var(--group); }
+[data-group] .kpi-card.card { border-top-color: var(--group); }
+[data-group] .kpi-neu { border-top-color: var(--group) !important; }
+/* Cluster bar: a page group's row of views on a soft band of its hue */
+.cluster-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--group-soft); border-left: 3px solid var(--group); padding: 8px 10px; border-radius: 3px; }
+.cluster-bar .cluster-label { font-size: 12px; font-weight: 600; color: var(--group-ink); margin-right: 4px; }
+.cluster-bar .cluster-chip { font-size: 12px; padding: 4px 12px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-family: inherit; cursor: pointer; }
+.cluster-bar .cluster-chip.on { background: var(--group-soft); color: var(--group-ink); border-color: var(--group); font-weight: 600; }
+@media print { [data-group] .top-bar { box-shadow: none; } [data-group] .page-title::before { display: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

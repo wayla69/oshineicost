@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-10-01T03:55:20Z",
+    "at": "2026-10-01T04:06:09Z",
     "via": "GitHub · wayla69/oshineicost@20e14c4",
-    "note": "Synced to main 20e14c4 (#251, #252): group hues (group-* tokens, theme-groups.css), heat scales (heat-s*/heat-d*), chart glance rules (labels, headline, honest MTD, weekend bands, shaded bars), regrouped sidebar."
+    "note": "Visual sync: bundle.css gains the group-hue layer ([data-group], nav data-g, .cluster-bar); new ClusterBar card; Sidebar preview shows the regrouped nav with group-tinted icons; TopBar, SubtabBar and KpiCard previews render inside a group."
   },
   "layout": "files",
   "libraries": [],
