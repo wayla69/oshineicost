@@ -360,7 +360,9 @@ const MGT_I18N = {
     naTable:'Table-turnover data is not available for this period — no table sessions were recorded.',
     naPay:'Payment-channel detail is not available for this period.',
     naTier:'Buffet price-tier data is not available for this period.',
-    s12:'13. Appendix — Definitions & Method',
+    s12:'14. Appendix B — Definitions & Method',
+    s14:'13. Appendix A — Top 60 menus by price tier (cost/head)',
+    top60Note:'Every tier that sold in the period · ranked by food cost per buffet head · % = share of that tier’s food cost/head · Qty/100 = pieces per 100 guests · same basis as §11.',
     defs:[
       ['Net sales','bill total including VAT ÷ 1.07. VAT is never counted as revenue.'],
       ['Gross profit (GP)','net sales − food COGS. Labour, rent and utilities are NOT deducted here.'],
@@ -471,7 +473,9 @@ const MGT_I18N = {
     naTable:'ไม่มีข้อมูลรอบหมุนเวียนโต๊ะในช่วงนี้',
     naPay:'ไม่มีรายละเอียดช่องทางการชำระเงินในช่วงนี้',
     naTier:'ไม่มีข้อมูล tier ราคาบุฟเฟ่ต์ในช่วงนี้',
-    s12:'13. ภาคผนวก — นิยามและวิธีคำนวณ',
+    s12:'14. ภาคผนวก ข — นิยามและวิธีคำนวณ',
+    s14:'13. ภาคผนวก ก — Top 60 เมนูต่อกลุ่มราคา (ต้นทุน/หัว)',
+    top60Note:'ทุกกลุ่มราคาที่มียอดขายในช่วงนี้ · เรียงตามต้นทุนอาหารต่อหัวบุฟเฟ่ต์ · % = สัดส่วนของต้นทุน/หัวของกลุ่มราคานั้น · จำนวน/100หัว = จำนวนชิ้นต่อลูกค้า 100 คน · ฐานเดียวกับข้อ 11',
     defs:[
       ['ยอดขายสุทธิ','ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้'],
       ['กำไรขั้นต้น (GP)','ยอดขายสุทธิ − ต้นทุนอาหาร ยังไม่หักค่าแรง ค่าเช่า ค่าสาธารณูปโภค'],
@@ -1566,15 +1570,44 @@ function renderMgtReport(j, jM, jF) {
     return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}${respB}</div></div><div class="mt-4">${loop}</div>`;
   })();
 
+  // Appendix B — Top 60 menus per price tier (owner request 2026-10-01). Reads the
+  // same per-tier ranking as §11's cost drivers (menus_top60 beside menus).
+  const top60Appendix = (() => {
+    const DR = ((j.tier || {}).drivers) || {};
+    const order = DR.tier_order || Object.keys(DR.by_tier || {});
+    const blocks = order.map(t => DR.by_tier[t]).filter(x => x && (x.menus_top60 || []).length);
+    if (!blocks.length) return '';
+    // one line per dish: fixed column widths, the name truncated with an ellipsis
+    // (a wrapped Thai name made rows three lines tall and a tier ran over a sheet)
+    const strip = s => (s || '').replace(/^\((?:A|B|BF|AL|DL|TW)\)\s*/, '');
+    const col = (rows, from) => `<table class="w-full text-[10.5px] mgt-top60" style="table-layout:fixed;line-height:1.15"><colgroup><col style="width:22px"><col><col style="width:54px"><col style="width:38px"><col style="width:40px"></colgroup>
+        <thead><tr class="text-left text-slate-400 border-b border-slate-200" style="white-space:nowrap">
+        <th class="py-1 pr-1">#</th><th class="py-1 pr-2">${T.tierDrvMenu}</th>
+        <th class="py-1 pr-1 text-right">฿/${isTH ? 'หัว' : 'head'}</th><th class="py-1 pr-1 text-right">%</th>
+        <th class="py-1 text-right">/100</th></tr></thead><tbody>${rows.map((m, i) => `
+        <tr class="border-b border-slate-50" style="white-space:nowrap"><td class="pr-1 text-slate-400 tabular-nums">${from + i + 1}</td>
+        <td class="pr-2" style="overflow:hidden;text-overflow:ellipsis" title="${esc(m.label)}">${esc(strip(m.label))}</td>
+        <td class="pr-2 text-right tabular-nums font-semibold">฿${(m.cogs_head || 0).toFixed(2)}</td>
+        <td class="pr-2 text-right tabular-nums text-slate-500">${m.share_pct != null ? m.share_pct.toFixed(1) + '%' : '—'}</td>
+        <td class="text-right tabular-nums text-slate-500">${m.qty_100 != null ? m.qty_100.toFixed(1) : '—'}</td></tr>`).join('')}</tbody></table>`;
+    return `<p class="text-[11px] text-slate-400 mb-3">${T.top60Note}</p>` + blocks.map(x => {
+      const rows = x.menus_top60.slice(0, 60), per = Math.ceil(rows.length / 3) || 1;
+      const cols = [0, 1, 2].map(k => rows.slice(k * per, (k + 1) * per)).filter(c => c.length);
+      return `<div class="mgt-atom mb-3">
+        <h3 class="text-[12px] font-bold mb-1" style="color:#b45309;margin-top:0">${esc(x.focus_label)} <span class="font-normal text-slate-400">· ${num(x.focus_pax)} ${isTH ? 'หัว' : 'guests'} · ${T.tierDrvCostHead} ${baht(x.focus_cogs_head)} · Food ${x.focus_food_pct != null ? x.focus_food_pct.toFixed(1) + '%' : '—'}</span></h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-1">${cols.map((c, k) => col(c, k * per)).join('')}</div></div>`;
+    }).join('');
+  })();
+
   // -- The report plan ------------------------------------------------------
   // ONE declarative list drives three things that used to drift apart: the
   // on-screen order, the table of contents, and the printed page plan.
   //   brk -> forced page break before the section
   const SECTIONS = [
-    { id:'mgt-s0',  c:'#0f172a', brk:true, t:T.execSummary, h:execInner },
+    { id:'mgt-s0',  c:'#0f172a', t:T.execSummary, h:execInner },   // shares the cover sheet; prose may flow
     { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
-    { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
-    { id:'mgt-s3',  c:'#4a70b0', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
+    { id:'mgt-s2',  c:'#d97706', keep:true, t:T.s2, h:actsWithSplit },   // short; split it left its panels alone overleaf
+    { id:'mgt-s3',  c:'#4a70b0', keep:true, t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
     { id:'mgt-s4',  c:'#0891b2', keep:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
     // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
     // page of its own anyway, and letting it begin at the foot of §4's page
@@ -1596,7 +1629,8 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s10', c:'#0d9488', keep:true, t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
     { id:'mgt-s11', c:'#b45309', t:T.s11, h:tierHtml || naBox(T.naTier) },
     { id:'mgt-s12', c:'#0f766e', t:T.s12v, h:voiceHtml || naBox(T.naVoice) },
-    { id:'mgt-s13', c:'#475569', t:T.s12, h:appendix },
+    { id:'mgt-s14', c:'#b45309', t:T.s14, h:top60Appendix || naBox(T.naTier) },
+    { id:'mgt-s13', c:'#475569', keep:true, t:T.s12, h:appendix + `<div class="mgt-foot mt-3">${footnote}</div>` },
   ];
 
   // Cover page: contents + the report-information block (period, comparison basis,
@@ -1615,14 +1649,14 @@ function renderMgtReport(j, jM, jF) {
   ];
   const toc = `<section class="card p-6 mgt-sec" style="border-top:3px solid #0f172a">
       <h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">${T.tocTitle}</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 mb-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 mb-4 mgt-toc">
         ${SECTIONS.map(sx => `<a href="#${sx.id}" onclick="_mgtGo('${sx.id}');return false"
              class="flex items-baseline gap-2 text-[13px] py-1.5 border-b border-slate-100 mgt-atom" style="text-decoration:none">
             <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${sx.c};flex:none"></span>
             <span class="text-slate-600">${sx.t}</span></a>`).join('')}
       </div>
       <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">${T.repInfo}</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 mgt-ri">
         ${_ri.map(([k, v]) => `<div class="flex justify-between gap-3 text-[12px] py-1 border-b border-slate-100 mgt-atom">
             <span class="text-slate-400" style="flex:none">${k}</span>
             <span class="text-slate-700 font-medium text-right">${v}</span></div>`).join('')}
@@ -1630,7 +1664,7 @@ function renderMgtReport(j, jM, jF) {
 
   body.innerHTML = toc
     + SECTIONS.map(sx => sec(sx.t, sx.h, sx.c, sx)).join('')
-    + `<div>${footnote}</div>`;
+    ;
 
   // §11 cost-driver sub-block — interactive: tier picker (compare tiers), rank
   // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
