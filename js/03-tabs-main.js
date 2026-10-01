@@ -160,8 +160,8 @@ function renderTimeHeatmap(hourly) {
   if (!el) return;
   const maxRev = Math.max(...hourly.map(r => r.revenue || 0));
   const getColor = (rev) => {
-    if (!rev || maxRev === 0) return '#f1f5f9';
-    return heatColor(rev / maxRev, false);  // green = busiest hours, red = quiet
+    if (!rev || maxRev === 0) return 'var(--bg-subtle)';
+    return heatSeq(rev / maxRev);  // darker = busier (volume is not good/bad)
   };
   el.innerHTML = hourly.map(r => `
     <div class="flex flex-col items-center" style="width:calc((100% - ${23*4}px) / 24);min-width:28px">
@@ -303,11 +303,11 @@ async function startApp() {
     // Land on the Daily Brief (home) tab, not Overall (handles tab display +
     // hides the period controls home doesn't use).
     switchTab('home');
-    initDataCoverageNote();
+    const _coverage = initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date
     // First login of a person: the role's three tabs, on top of the home page
     try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }
     // Phone-first: load the mobile owner summary when on a small screen
-    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) loadMobileSummary(); } catch(e) {}
+    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) { await _coverage; loadMobileSummary(); } } catch(e) {}
     // Periodic health check every 30 s (silent badge update only)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
@@ -330,6 +330,12 @@ async function initDataCoverageNote() {
   try {
     const c = await api(`${API}/api/data-coverage`);
     if (!c || !c.last_date) return;
+    // The chart glance layer (js/01-core.js) reads this to tell a month still in
+    // progress (drawn hollow, tagged MTD); charts drawn before it arrived re-check.
+    if (window.__dataLastDate !== c.last_date) {
+      window.__dataLastDate = c.last_date;
+      Object.values(chartInstances).forEach(ch => { try { if (ch && ch.$gi && ch.$gi.grain) ch.update('none'); } catch (e) { /* stale chart */ } });
+    }
     const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
     const [y, m, d] = c.last_date.split('-').map(Number);
     const human = `${d} ${TH_MON[m-1]} ${y+543}`;   // พ.ศ.
@@ -2382,7 +2388,8 @@ async function loadTrend() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{labels:{color:'#64748b',font:{size:11}}}, datalabels:{display:false} },
+      plugins: { legend:{labels:{color:'#64748b',font:{size:11}}}, datalabels:{display:false},
+                 glance: { dates: daily.map(d => d.day) } },   // bare "01".."31" labels: real dates for weekend bands
       scales: {
         x: { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
         yRev:  { position:'left',  grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10},callback:v=>fmt(v)} },

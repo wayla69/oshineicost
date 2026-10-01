@@ -639,23 +639,38 @@ function colorForRank(idx, total) {
   if (t < 0.66) return SEMANTIC.revenue;     // middle third
   return SEMANTIC.discount;                  // bottom third
 }
-// Continuous heat scale: t∈[0,1] → red (low) ▸ amber ▸ green (high).
-// Pass invert=true for "lower is better" metrics (cost) so green=low, red=high.
-function heatColor(t, invert) {
-  if (t == null || isNaN(t)) return '#f1f5f9';
-  let x = Math.max(0, Math.min(1, t));
-  if (invert) x = 1 - x;
-  const stops = [[239,68,68], [245,158,11], [22,163,74]]; // red → amber → green
-  const seg = x < 0.5 ? 0 : 1;
-  const f   = x < 0.5 ? x / 0.5 : (x - 0.5) / 0.5;
-  const a = stops[seg], b = stops[seg + 1];
-  const mix = i => Math.round(a[i] + (b[i] - a[i]) * f);
-  return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+// ── Heat scales (heatmaps) ──
+// The old red→amber→green scale painted VOLUME as good/bad: a small branch or a
+// quiet hour came out "red" though nothing was wrong. Two scales instead:
+//  - sequential = "how much": one navy hue, light → dark, in 5 steps so a cell
+//    reads as a band rather than a shade to squint at;
+//  - diverging  = "vs normal": red below, grey around, green above - only where
+//    a baseline makes good/bad true (a cell vs its own branch's average).
+// The fills are theme TOKENS (--heat-s1..5 / --heat-d1..5 with matching -ink
+// label colours, index.html), so a heatmap follows the theme toggle without a
+// re-render; inkOn() maps a token fill to its ink token.
+// % vs normal edges: <=-20 | -20..-5 | ±5 | 5..20 | >=20
+// t = value / max, in (0, 1]
+function heatSeq(t) {
+  if (t == null || !isFinite(t) || t <= 0) return null;
+  return `var(--heat-s${Math.min(4, Math.floor(Math.min(1, t) * 5 - 1e-9)) + 1})`;
+}
+function heatDiv(pct) {
+  if (pct == null || !isFinite(pct)) return null;
+  return `var(--heat-d${(pct <= -20 ? 0 : pct < -5 ? 1 : pct <= 5 ? 2 : pct < 20 ? 3 : 4) + 1})`;
+}
+// A legend row: 5 swatches with their labels.
+function heatLegend(kind, labels) {
+  const cols = [1, 2, 3, 4, 5].map(i => `var(--heat-${kind === 'div' ? 'd' : 's'}${i})`);
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text-muted)">${cols.map((c, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:${c};border:1px solid var(--border)"></span>${labels[i] || ''}</span>`).join('')}</div>`;
 }
 // Label colour for text ON a data-driven fill (heat cells, bar segments, badges): white or
 // the light-theme primary ink, whichever contrasts more. Fixed hex both themes, like the fill.
 // White fails on the whole heat scale (#ef4444 3.76, #f59e0b 2.15, #16a34a 3.30); #0f172a clears it.
 function inkOn(bg) {
+  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5])\)$/);
+  if (tok) return `var(--heat-${tok[1]}-ink)`;   // heat fills are theme tokens with their own ink
   const m = String(bg || '').trim().match(/^#(?:([0-9a-f]{6})(?:[0-9a-f]{2})?|([0-9a-f]{3}))(?![0-9a-f])|^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
   if (!m) return '#fff';
   let rgb;
@@ -717,6 +732,718 @@ function applyChartTheme(cfg, force) {
     cfg.options.plugins.datalabels.color = t.labelStrong;
   }
 }
+// ── At-a-glance layer (every chart) ───────────────────────────────────────────
+// The formal theme (#223) left every chart a flat block the reader had to hover
+// to read. This one plugin, registered globally in ensureChartSetup(), puts the
+// answer back on the chart with no per-chart code:
+//   depth   bars + filled line areas get a gradient along the value axis (strong
+//           at the tip, fading to the baseline), and a lone solid line gets a wash
+//   labels  the latest value at the end of each line (<= 4 lines) and the peak of
+//           the primary series; time-series bars also label the latest bar
+//   avg     a hairline at the mean of a single primary series (>= 4 points)
+//   centre  a doughnut shows its total (or its top share, when values are %)
+//   headline one sentence above the chart: latest vs previous, highest/lowest
+//           since, a run of rises/falls, vs the average (or best/worst + spread
+//           for a category chart). Skipped when the card already states numbers.
+//   MTD     the period still in progress (this month on a monthly axis, today on
+//           a daily one) is drawn hollow/dashed, tagged MTD, and left out of the
+//           peak, the average and every headline comparison.
+//   weekend Sat-Sun bands behind a daily axis.
+// Dates come from the x labels (2026-09-24, 09-24, Sep 2026, ก.ย. 69, ...) or
+// from options.plugins.glance.dates (ISO strings) when the labels are bare days.
+// A dataset the datalabels plugin already numbers is never labelled again.
+// Opt out per chart with options.plugins.glance = false, or one part with
+// glance: { depth:false, labels:false, avg:false, centre:false, headline:false,
+// mtd:false, weekend:false }.
+const _GLANCE_TIME_RE = /^\d{4}(-\d{2})?|^\d{1,2}[-\/]\d{1,2}|^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|^(ม\.?ค|ก\.?พ|มี\.?ค|เม\.?ย|พ\.?ค|มิ\.?ย|ก\.?ค|ส\.?ค|ก\.?ย|ต\.?ค|พ\.?ย|ธ\.?ค)|^(w|wk)\s?\d|^สัปดาห์|^q[1-4]/i;
+const _GLANCE_SKIP_RE = /band|\blo\b|\bhi\b|bound|range|ช่วง/i;
+const _GLANCE_REF_RE  = /เฉลี่ย|avg|average|mean|เป้า|target/i;
+
+function _glanceRgba(c) {
+  if (typeof c !== 'string') return null;
+  let m = c.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (m) {
+    let h = m[1];
+    if (h.length === 3) h = h.split('').map(x => x + x).join('');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16),
+            m[2] ? parseInt(m[2], 16) / 255 : 1];
+  }
+  m = c.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,\/]+([\d.]+%?))?\s*\)$/i);
+  if (m) return [+m[1], +m[2], +m[3], m[4] == null ? 1 : (m[4].endsWith('%') ? parseFloat(m[4]) / 100 : +m[4])];
+  return null;
+}
+const _glanceCss = (r, a) => `rgba(${r[0]},${r[1]},${r[2]},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+
+function _glanceCompact(v) {
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1e6) return s + (a / 1e6).toFixed(2) + 'M';
+  if (a >= 1e4) return s + (a / 1e3).toFixed(1) + 'K';
+  if (a >= 100) return s + Math.round(a).toLocaleString('en-US');
+  if (a >= 1 || a === 0) return s + parseFloat(a.toFixed(1));
+  return s + parseFloat(a.toFixed(2));
+}
+
+// A label in the axis's own unit: '%' and a '฿' prefix are read off the scale's
+// tick callback; the number itself is always the compact form (a tick callback
+// may round to the axis step, which is too coarse for the one value we print).
+function _glanceFmt(scale, v) {
+  let pre = '', suf = '';
+  const cb = scale && scale.options && scale.options.ticks && scale.options.ticks.callback;
+  if (typeof cb === 'function') {
+    try {
+      const s = String(cb.call(scale, v, 0, [{ value: v }]) ?? '');
+      if (/%\s*$/.test(s)) suf = '%';
+      if (/^\s*฿/.test(s)) pre = '฿';
+    } catch (e) { /* keep the bare number */ }
+  }
+  return pre + _glanceCompact(v) + suf;
+}
+
+function _glanceTheme(chart) {
+  const body = document.body.className;
+  const g = chart.$glance || (chart.$glance = {});
+  if (g.key !== body) {
+    g.key = body;
+    g.theme = chartTheme(chart.canvas.closest('[data-force-light]') ? 'light' : undefined);
+    g.surface = g.theme.bg;
+    for (let el = chart.canvas.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+      const bg = getComputedStyle(el).backgroundColor;
+      const rgba = _glanceRgba(bg);
+      if (rgba && rgba[3] > 0.9) { g.surface = bg; break; }
+    }
+  }
+  return g;
+}
+
+function _glanceOpt(chart, part) {
+  const o = chart.options.plugins && chart.options.plugins.glance;
+  return !(o && o[part] === false);
+}
+
+function _glanceLabelled(chart, ds) {
+  if (!Chart.registry.plugins.get('datalabels')) return false;
+  if (ds.datalabels === false) return false;
+  let d = ds.datalabels && ds.datalabels.display;
+  if (d === undefined) {
+    const po = chart.config.options && chart.config.options.plugins && chart.config.options.plugins.datalabels;
+    if (po === false) return false;
+    d = po && po.display;
+  }
+  if (d === undefined) d = Chart.defaults.plugins.datalabels && Chart.defaults.plugins.datalabels.display;
+  return d !== false;
+}
+
+const _glanceIsLine = (chart, ds) => (ds.type || chart.config.type) === 'line';
+const _glanceIsBar  = (chart, ds) => (ds.type || chart.config.type) === 'bar';
+const _glanceFinite = v => {
+  const n = (v && typeof v === 'object') ? v.y : v;
+  return (typeof n === 'number' && isFinite(n)) ? n : null;
+};
+
+// Which visible datasets get labels, and which one is "the" series (peak + avg).
+// `loose` (the headline) also takes small and horizontal charts.
+function _glancePlan(chart, loose) {
+  const type = chart.config.type;
+  if (type !== 'line' && type !== 'bar') return null;
+  const horizontal = chart.options.indexAxis === 'y';
+  const area = chart.chartArea;
+  if (!loose && (!area || area.bottom - area.top < 90)) return null;   // sparklines: depth only
+  const metas = chart.getSortedVisibleDatasetMetas();
+  const stacked = metas.some(m => m.vScale && m.vScale.options && m.vScale.options.stacked);
+  if (stacked || (horizontal && !loose)) return null;
+  const lines = [], bars = [];
+  metas.forEach(m => {
+    const ds = chart.data.datasets[m.index];
+    if (!ds || _GLANCE_SKIP_RE.test(ds.label || '')) return;
+    if (!(ds.data || []).some(v => _glanceFinite(v))) return;   // an empty / all-zero overlay is not a series
+    if (m.type === 'line' && (ds.borderWidth == null || ds.borderWidth >= 1)) lines.push(m);
+    else if (m.type === 'bar') bars.push(m);
+  });
+  let primary = null;
+  if (bars.length === 1) primary = bars[0];
+  else if (!bars.length) {
+    const solid = lines.filter(m => !(chart.data.datasets[m.index].borderDash || []).length);
+    if (solid.length === 1) primary = solid[0];
+  }
+  const labels = (chart.data.labels || []).map(l => Array.isArray(l) ? l.join(' ') : String(l ?? ''));
+  const timeLike = !horizontal && labels.length > 1 && (labels.filter(l => _GLANCE_TIME_RE.test(l.trim())).length >= labels.length * 0.6
+                                          || labels.every(l => /^\d{1,2}$/.test(l.trim())));   // day-of-month axis
+  return { lines: lines.length <= 4 ? lines : [], primary, timeLike };
+}
+
+function _glanceText(ctx, text, x, y, align, color, surface, size, weight) {
+  ctx.font = `${weight} ${size}px ${Chart.defaults.font.family}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  if (surface) {   // a surface-coloured halo keeps the text clear of grid + lines
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = surface;
+    ctx.strokeText(text, x, y);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function _glanceDot(ctx, x, y, color, surface) {
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = surface;
+  ctx.stroke();
+}
+
+// Bar fill, cached per chart area + colour. Two rules make bars read as solid,
+// even colour instead of milky:
+//  - a see-through colour (many charts fade their non-highlighted bars) is
+//    flattened onto the card surface first, so it keeps its tone but gridlines
+//    no longer show through it;
+//  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
+//    colour mixed 22% toward the surface at the zero line (both ways when
+//    negatives exist), so a short bar is still clearly its colour.
+const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
+function _glanceGrad(chart, rgba, surf, vs, horizontal) {
+  const a = chart.chartArea, g = chart.$glance || (chart.$glance = {});
+  const zero = vs && typeof vs.getPixelForValue === 'function' ? vs.getPixelForValue(0) : (horizontal ? a.left : a.bottom);
+  const key = `${rgba.join()}|${surf.join()}|${horizontal}|${a.left}|${a.top}|${a.right}|${a.bottom}|${Math.round(zero)}`;
+  g.grads = g.grads || new Map();
+  if (g.grads.has(key)) return g.grads.get(key);
+  const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
+  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.22), 1);
+  const ctx = chart.ctx;
+  const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
+                          : ctx.createLinearGradient(0, a.top, 0, a.bottom);
+  const span = horizontal ? a.right - a.left : a.bottom - a.top;
+  const z = Math.max(0, Math.min(1, ((horizontal ? zero - a.left : zero - a.top) / (span || 1))));
+  // Strong at both far edges, lightest at the zero line (a baseline at an edge
+  // simply drops that edge's stop, so the bar never ends in a hard 1px band).
+  if (z > 0.001) grad.addColorStop(0, strong);
+  grad.addColorStop(z, weak);
+  if (z < 0.999) grad.addColorStop(1, strong);
+  if (g.grads.size > 64) g.grads.clear();
+  g.grads.set(key, grad);
+  return grad;
+}
+
+// ── Dates behind the x labels ──
+const _GLANCE_EN_MON = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const _GLANCE_TH_MON = ['ม.ค','ก.พ','มี.ค','เม.ย','พ.ค','มิ.ย','ก.ค','ส.ค','ก.ย','ต.ค','พ.ย','ธ.ค'];
+const _glanceCfg = chart => (chart.config.options && chart.config.options.plugins && chart.config.options.plugins.glance) || {};
+
+// The last day with data (set by initDataCoverageNote); until it arrives, yesterday.
+function _glanceLastDate() {
+  const s = window.__dataLastDate;
+  if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+    return { y, m, d };
+  }
+  const t = new Date(Date.now() + 7 * 3600e3 - 864e5);   // Bangkok yesterday
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+}
+// 2-digit years: <= 50 is 20xx (CE), above is 25xx (BE, as in "ก.ย. 69").
+function _glanceYear(s) { const n = +s; return s.length <= 2 ? (n > 50 ? 2500 + n - 543 : 2000 + n) : (n > 2400 ? n - 543 : n); }
+function _glanceParseLabel(l, ref) {
+  l = l.trim();
+  let m, mo;
+  if ((m = l.match(/^(\d{4})-(\d{2})-(\d{2})/))) return { y: +m[1], m: +m[2], d: +m[3] };
+  if ((m = l.match(/^(\d{4})-(\d{2})$/))) return { y: +m[1], m: +m[2], d: null };
+  if ((m = l.match(/^(\d{2})-(\d{2})$/))) { mo = +m[1]; return { y: mo > ref.m ? ref.y - 1 : ref.y, m: mo, d: +m[2] }; }
+  if ((m = l.match(/^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{2,4})$/)) && (mo = _GLANCE_EN_MON.indexOf(m[2].toLowerCase()) + 1))
+    return { y: _glanceYear(m[3]), m: mo, d: +m[1] };
+  if ((m = l.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{2,4})$/)) && (mo = _GLANCE_EN_MON.indexOf(m[1].toLowerCase()) + 1))
+    return { y: _glanceYear(m[2]), m: mo, d: null };
+  if ((m = l.match(/^(?:(\d{1,2})\s*)?([ก-๙]{1,3}\.[ก-๙]{1,2})\.?\s*(\d{2,4})?$/)) && (mo = _GLANCE_TH_MON.indexOf(m[2]) + 1))
+    return { y: m[3] ? _glanceYear(m[3]) : (mo > ref.m ? ref.y - 1 : ref.y), m: mo, d: m[1] ? +m[1] : null };
+  return null;
+}
+
+// { grain:'day'|'month'|null, dates, partial: index of the period still in progress (-1), note }
+function _glanceInfo(chart) {
+  return glancePeriods((chart.config.data && chart.config.data.labels) || [], _glanceCfg(chart));
+}
+// The same, for any list of period labels (heatmaps, tables): which one is still in progress.
+function glancePeriods(labels, go) {
+  go = go || {};
+  const none = { grain: null, dates: null, partial: -1, note: '' };
+  if (labels.length < 2) return none;
+  const ref = _glanceLastDate();
+  let dates = null;
+  if (Array.isArray(go.dates) && go.dates.length === labels.length) dates = go.dates.map(x => _glanceParseLabel(String(x), ref));
+  if (!dates || !dates.every(Boolean)) dates = labels.map(l => _glanceParseLabel(Array.isArray(l) ? l.join(' ') : String(l ?? ''), ref));
+  if (!dates.every(Boolean)) return none;
+  const grain = dates.every(d => d.d != null) ? 'day' : dates.every(d => d.d == null) ? 'month' : null;
+  let partial = -1, note = '';
+  if (grain === 'month') {
+    const dim = new Date(ref.y, ref.m, 0).getDate();
+    const i = dates.findIndex(d => d.y === ref.y && d.m === ref.m);
+    if (i >= 0 && ref.d < dim) { partial = i; note = `${ref.d}/${dim} วัน`; }
+  } else if (grain === 'day') {
+    const t = new Date(Date.now() + 7 * 3600e3);   // a day still trading = today, Bangkok
+    partial = dates.findIndex(d => d.y === t.getUTCFullYear() && d.m === t.getUTCMonth() + 1 && d.d === t.getUTCDate());
+  }
+  if (go.mtd === false) partial = -1;
+  return { grain, dates, partial, note };
+}
+const _glancePartial = chart => (chart.$gi && chart.$gi.partial >= 0) ? chart.$gi.partial : -1;
+const _glanceActual = ds => !(ds.borderDash || []).length && !_GLANCE_REF_RE.test(ds.label || '');
+const _glanceTag = chart => (chart.$gi && chart.$gi.grain === 'day') ? ' วันนี้' : ' MTD';
+
+// ── Headline (one sentence above the chart) ──
+const _glanceLab = (chart, i) => {
+  const l = (chart.data.labels || [])[i];
+  let s = Array.isArray(l) ? l.join(' ') : String(l ?? '');
+  const d = chart.$gi && chart.$gi.dates && chart.$gi.dates[i];
+  if (d && d.d != null && /^\d{1,2}$/.test(s.trim())) s = `${d.d} ${_GLANCE_TH_MON[d.m - 1]}.`;
+  return s.length > 24 ? s.slice(0, 23) + '…' : s;
+};
+const _glanceB = t => `<b style="color:var(--text-primary);font-weight:600">${t}</b>`;
+
+// The sentence itself, shared by the chart headlines and the phone views
+// (js/09c-mobile.js). labels[i] are display strings, vals[i] numbers or null.
+// o: { partial: index still in progress (-1), unit: 'เดือน'|'วัน'|'ช่วง', note,
+//      pct: values are percentages (compare in pp), fmt: v => string }
+function glanceTrendSentence(labels, vals, o) {
+  const P = o.partial == null ? -1 : o.partial, f = v => esc(o.fmt(v)), lab = i => esc(labels[i] ?? '');
+  const unit = o.unit || 'ช่วง', pct = !!o.pct;
+  const idx = vals.map((v, i) => i).filter(i => vals[i] != null && i !== P);
+  if (idx.length < 3) return '';
+  const parts = [];
+  const L = idx[idx.length - 1], Pv = idx[idx.length - 2], v = vals[L], pv = vals[Pv];
+  parts.push(_glanceB(`${lab(L)} ${f(v)}`));
+  if (pct) {
+    const d = v - pv;
+    parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} pp จาก ${lab(Pv)}`);
+  } else if (pv > 0) {
+    const d = (v / pv - 1) * 100;
+    parts.push(`${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}% จาก ${lab(Pv)}`);
+  }
+  const cv = idx.map(i => vals[i]), hi = Math.max(...cv), lo = Math.min(...cv);
+  if (v === hi) parts.push(_glanceB('สูงสุดในช่วงที่แสดง'));
+  else if (v === lo) parts.push(_glanceB('ต่ำสุดในช่วงที่แสดง'));
+  else {
+    // "highest since X": the last earlier point at least as high, if >= 3 periods back
+    const k = idx.length - 1;
+    for (let j = k - 1; j >= 0; j--) {
+      const w = vals[idx[j]];
+      if (v > pv ? w >= v : w <= v) {
+        if (k - j >= 3) parts.push(`${v > pv ? 'สูงสุด' : 'ต่ำสุด'}ตั้งแต่ ${lab(idx[j])}`);
+        break;
+      }
+    }
+  }
+  let run = 0;
+  for (let j = idx.length - 1; j > 0 && v !== pv && Math.sign(vals[idx[j]] - vals[idx[j - 1]]) === Math.sign(v - pv); j--) run++;
+  if (run >= 3) parts.push(`${v > pv ? 'เพิ่มขึ้น' : 'ลดลง'} ${run} ${unit}ติดกัน`);
+  if (idx.length >= 4 && parts.length < 4) {
+    const avg = cv.reduce((a, b) => a + b, 0) / cv.length;
+    if (pct && Math.abs(v - avg) >= 0.5) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs(v - avg).toFixed(1)} pp`);
+    else if (!pct && avg > 0 && Math.abs(v / avg - 1) >= 0.05) parts.push(`${v > avg ? 'สูงกว่า' : 'ต่ำกว่า'}ค่าเฉลี่ย ${Math.abs((v / avg - 1) * 100).toFixed(0)}%`);
+    else if (!pct && avg > 0) parts.push('ใกล้ค่าเฉลี่ย');
+  }
+  parts.splice(4);
+  if (P >= 0 && vals[P] != null) {
+    parts.push(`<span style="color:var(--text-muted)">${lab(P)} ยังไม่ครบ${unit}${o.note ? ` (${esc(o.note)})` : ''} · ไม่นำมาเทียบ</span>`);
+  }
+  return parts.join(' · ');
+}
+
+// Best / worst + spread for a category list (branches, dayparts, menu items).
+// o: { pct, fmt, below: true adds "n of N below the average" }
+function glanceRangeSentence(labels, vals, o) {
+  const f = v => esc(o.fmt(v)), lab = i => esc(labels[i] ?? '');
+  const idx = vals.map((v, i) => i).filter(i => vals[i] != null);
+  if (idx.length < 3) return '';
+  let hi = idx[0], lo = idx[0];
+  idx.forEach(i => { if (vals[i] > vals[hi]) hi = i; if (vals[i] < vals[lo]) lo = i; });
+  if (vals[hi] === vals[lo]) return '';
+  const parts = [`สูงสุด ${_glanceB(`${lab(hi)} ${f(vals[hi])}`)}`, `ต่ำสุด ${_glanceB(`${lab(lo)} ${f(vals[lo])}`)}`];
+  if (o.pct) parts.push(`ห่างกัน ${(vals[hi] - vals[lo]).toFixed(1)} pp`);
+  // a ratio reads only in a sane range ("1913 เท่า" against a near-empty bucket says nothing)
+  else if (vals[lo] > 0 && vals[hi] / vals[lo] >= 1.5 && vals[hi] / vals[lo] <= 20) parts.push(`ต่างกัน ${(vals[hi] / vals[lo]).toFixed(1)} เท่า`);
+  if (o.below) {
+    const avg = idx.reduce((a, i) => a + vals[i], 0) / idx.length;
+    parts.push(`${idx.filter(i => vals[i] < avg).length} จาก ${idx.length} ต่ำกว่าค่าเฉลี่ย ${f(avg)}`);
+  }
+  return parts.join(' · ');
+}
+
+function _glanceHeadline(chart) {
+  if (!_glanceOpt(chart, 'headline')) return '';
+  const id = chart.canvas.id || '';
+  if (/^(zoom|drill|mgt)/i.test(id) || chart.canvas.closest('[data-force-light]')) return '';
+  const plan = _glancePlan(chart, true);
+  if (!plan || !plan.primary) return '';
+  const pm = plan.primary, ds = chart.data.datasets[pm.index];
+  const vals = (ds.data || []).map(_glanceFinite);
+  const labels = vals.map((v, i) => _glanceLab(chart, i));
+  const o = { fmt: v => _glanceFmt(pm.vScale, v), pct: _glanceFmt(pm.vScale, 1).endsWith('%') };
+  if (!plan.timeLike) return glanceRangeSentence(labels, vals, o);
+  const grain = chart.$gi && chart.$gi.grain;
+  return glanceTrendSentence(labels, vals, Object.assign(o, {
+    partial: _glancePartial(chart), note: chart.$gi && chart.$gi.note,
+    unit: grain === 'month' ? 'เดือน' : grain === 'day' ? 'วัน' : 'ช่วง',
+  }));
+}
+
+// Does the card already state numbers above this chart (a hand-written summary,
+// KPI tiles)? Then a headline would only repeat it.
+function _glanceHasSummary(canvas, card) {
+  const scope = card || (canvas.parentElement && canvas.parentElement.parentElement);
+  if (!scope) return false;
+  const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+  let txt = '';
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!(n.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING)) break;   // past the canvas
+    const p = n.parentElement;
+    if (p && p.closest('.glance-line, button, select, option, script, style')) continue;
+    txt += n.nodeValue + ' ';
+  }
+  return /[▲▼]|\d[\d.,]*\s*(%|K\b|M\b)|฿\s?\d/.test(txt);
+}
+
+const _glanceIsRow = el => {
+  if (!el) return false;
+  const cs = getComputedStyle(el);
+  if (cs.display.includes('flex')) return !cs.flexDirection.startsWith('column');
+  if (cs.display.includes('grid')) return cs.gridTemplateColumns.trim().split(/\s+/).length > 1;
+  return false;
+};
+
+function _glanceSetHeadline(chart, html) {
+  const cv = chart.canvas, id = cv.id;
+  let el = chart.$glanceLine && chart.$glanceLine.isConnected ? chart.$glanceLine
+         : (id ? document.querySelector(`.glance-line[data-for="${CSS.escape(id)}"]`) : null);
+  if (html && !el) {
+    const card = cv.closest('.card');
+    if (_glanceHasSummary(cv, card)) html = '';
+    else {
+      // Above the canvas wrapper, never as a new column of a flex/grid row.
+      let anchor = cv.parentElement && cv.parentElement !== card ? cv.parentElement : cv;
+      while (anchor.parentElement && anchor.parentElement !== card && _glanceIsRow(anchor.parentElement)) anchor = anchor.parentElement;
+      if (!anchor.parentElement || _glanceIsRow(anchor.parentElement)) html = '';
+      else {
+        el = document.createElement('div');
+        el.className = 'glance-line';
+        if (id) el.dataset.for = id;
+        el.style.cssText = 'font-size:12px;line-height:1.45;color:var(--text-secondary);margin:0 0 6px';
+        anchor.parentElement.insertBefore(el, anchor);
+      }
+    }
+  }
+  chart.$glanceLine = el || null;
+  if (!el) return;
+  if (!html) { el.remove(); chart.$glanceLine = null; return; }
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+
+const GLANCE_PLUGIN = {
+  id: 'glance',
+
+  // Config-time: give a lone solid, unfilled line a wash (Filler needs `fill`
+  // set before the first layout), and room on the right for end labels.
+  beforeInit(chart) {
+    const cfg = chart.config, o = cfg.options || {};
+    const go = o.plugins && o.plugins.glance;
+    if (go === false || (cfg.type !== 'line' && cfg.type !== 'bar') || o.indexAxis === 'y') return;
+    const sets = (cfg.data && cfg.data.datasets) || [];
+    const yStacked = o.scales && o.scales.y && o.scales.y.stacked;
+    if (cfg.type === 'line' && !(go && go.depth === false) && !yStacked) {
+      const solid = sets.filter(ds => _glanceIsLine(chart, ds) && !ds.hidden && !(ds.borderDash || []).length
+                                     && !_GLANCE_SKIP_RE.test(ds.label || ''));
+      if (solid.length === 1 && solid[0].fill === undefined && typeof solid[0].borderColor === 'string') {
+        const ds = solid[0];
+        ds.fill = 'origin';
+        if (ds.pointBackgroundColor === undefined) ds.pointBackgroundColor = ds.borderColor;
+        if (ds.backgroundColor === undefined) ds.backgroundColor = ds.borderColor;
+      }
+    }
+    if (go && go.labels === false) return;
+    const ends = sets.filter(ds => _glanceIsLine(chart, ds) && !ds.hidden && !_GLANCE_SKIP_RE.test(ds.label || '')
+                                   && !_glanceLabelled(chart, ds));
+    if (!ends.length || ends.length > 4) return;
+    const narrow = ((chart.canvas.parentElement && chart.canvas.parentElement.clientWidth) || 999) < 520;
+    const n = (cfg.data.labels || []).length;
+    const tag = _glanceInfo(chart).partial >= 0 ? ' MTD' : '';
+    let need = 0;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = `600 ${narrow ? 10 : 11}px ${Chart.defaults.font.family}`;
+    (narrow ? ends.slice(0, 1) : ends).forEach(ds => {
+      const d = ds.data || [];
+      let i = d.length - 1;
+      while (i >= 0 && _glanceFinite(d[i]) == null) i--;
+      if (i < 0 || (n && i < n - 1)) return;   // ends before the last x: label sits above, no room needed
+      need = Math.max(need, ctx.measureText(_glanceCompact(_glanceFinite(d[i])) + '%' + tag).width + 14);
+    });
+    ctx.restore();
+    if (!need) return;
+    o.layout = o.layout || {};
+    const p = o.layout.padding;
+    if (typeof p === 'number') o.layout.padding = { top: p, bottom: p, left: p, right: Math.max(p, need) };
+    else if (p && typeof p === 'object') p.right = Math.max(p.right || 0, need);
+    else o.layout.padding = { right: need };
+  },
+
+  // Dates + the period in progress; a line's segment into that point is dashed.
+  beforeUpdate(chart) {
+    chart.$gi = _glanceInfo(chart);
+    const p = chart.$gi.partial;
+    ((chart.config.data && chart.config.data.datasets) || []).forEach(ds => {
+      if (!_glanceIsLine(chart, ds)) return;
+      if (!('$glanceSeg' in ds)) Object.defineProperty(ds, '$glanceSeg', { value: ds.segment, enumerable: false });
+      const own = ds.$glanceSeg;
+      if (p < 1 || !_glanceActual(ds) || _glanceFinite((ds.data || [])[p]) == null) { ds.segment = own; return; }
+      ds.segment = Object.assign({}, own, {
+        borderDash: c => c.p1DataIndex === p ? [4, 3]
+                       : (own && typeof own.borderDash === 'function' ? own.borderDash(c) : own && own.borderDash),
+      });
+    });
+  },
+
+  afterUpdate(chart) {
+    try { _glanceSetHeadline(chart, _glanceHeadline(chart)); } catch (e) { /* the chart matters more than its caption */ }
+  },
+
+  afterDestroy(chart) {
+    if (chart.$glanceLine) chart.$glanceLine.remove();
+    chart.$glanceLine = null;
+  },
+
+  // Depth: swap flat fills for gradients for this frame only (restored after
+  // the datasets draw, so tooltips/legends/hover keep the real colours).
+  beforeDatasetsDraw(chart) {
+    const restore = [];
+    chart.$glanceRestore = restore;
+    chart.$glanceHollow = [];
+    chart.$glanceWeekend = [];
+    const gi = chart.$gi || {};
+    // Weekend bands behind a daily axis.
+    if (gi.grain === 'day' && gi.dates.length >= 7 && chart.options.indexAxis !== 'y' && _glanceOpt(chart, 'weekend')) {
+      const xs = Object.values(chart.scales).find(s => s.axis === 'x');
+      if (xs && xs.type === 'category') {
+        const a = chart.chartArea, g = _glanceTheme(chart), ctx = chart.ctx;
+        const step = Math.abs(xs.getPixelForValue(1) - xs.getPixelForValue(0));
+        const wk = gi.dates.map(d => { const w = new Date(d.y, d.m - 1, d.d).getDay(); return w === 0 || w === 6; });
+        ctx.save();
+        for (let i = 0; i < wk.length; i++) {
+          if (!wk[i]) continue;
+          let j = i;
+          while (j + 1 < wk.length && wk[j + 1]) j++;
+          const x0 = Math.max(a.left, xs.getPixelForValue(i) - step / 2), x1 = Math.min(a.right, xs.getPixelForValue(j) + step / 2);
+          ctx.fillStyle = g.key.includes('dark') ? 'rgba(148,163,184,0.09)' : 'rgba(100,116,139,0.07)';
+          ctx.fillRect(x0, a.top, x1 - x0, a.bottom - a.top);
+          if (x1 - x0 >= 22) chart.$glanceWeekend.push((x0 + x1) / 2);
+          i = j;
+        }
+        ctx.restore();
+      }
+    }
+    const P = _glancePartial(chart);
+    if (_glanceOpt(chart, 'depth') || P >= 0) {
+      const horizontal = chart.options.indexAxis === 'y';
+      const seen = new Map();
+      const swap = (opts, prop, val) => {
+        if (!seen.has(opts)) seen.set(opts, new Map());
+        const m = seen.get(opts);
+        if (!m.has(prop)) { m.set(prop, opts[prop]); restore.push([opts, prop, opts[prop]]); }
+        opts[prop] = val;
+      };
+      const depth = _glanceOpt(chart, 'depth');
+      const surf = _glanceRgba(_glanceTheme(chart).surface) || [255, 255, 255, 1];
+      chart.getSortedVisibleDatasetMetas().forEach(m => {
+        const stacked = m.vScale && m.vScale.options && m.vScale.options.stacked;
+        if (m.type === 'bar') {
+          m.data.forEach((el, i) => {
+            if (!el || el.active || !el.options) return;
+            const orig = seen.get(el.options)?.get('backgroundColor') ?? el.options.backgroundColor;
+            const rgba = _glanceRgba(orig);
+            if (!rgba || !(rgba[3] > 0)) return;
+            if (i === P) {
+              // The period in progress: a pale fill + dashed outline (drawn after the bars).
+              // A per-bar copy of the options, so a shared object does not hollow every bar.
+              const own = el.options;
+              restore.push([el, 'options', own]);
+              el.options = Object.assign(Object.create(Object.getPrototypeOf(own)), own, { backgroundColor: _glanceCss(rgba, rgba[3] * 0.18) });
+              chart.$glanceHollow.push({ el, color: _glanceCss(rgba, Math.max(rgba[3], 0.7)) });
+            } else if (depth && !stacked) {
+              swap(el.options, 'backgroundColor', _glanceGrad(chart, rgba, surf, m.vScale, horizontal));
+            }
+          });
+        } else if (depth && m.type === 'line' && m.dataset && m.dataset.options) {
+          const lo = m.dataset.options;
+          if (lo.fill !== true && lo.fill !== 'origin' && lo.fill !== 'start') return;
+          const rgba = _glanceRgba(lo.borderColor);
+          if (!rgba) return;
+          const grad = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
+          grad.addColorStop(0, _glanceCss(rgba, 0.24));
+          grad.addColorStop(1, _glanceCss(rgba, 0.01));
+          swap(lo, 'backgroundColor', grad);
+        }
+      });
+    }
+    // Average hairline sits under the marks.
+    const plan = _glanceOpt(chart, 'avg') ? _glancePlan(chart) : null;
+    chart.$glanceAvg = null;
+    // Only on a time axis: the mean of histogram buckets or day-of-week slots says nothing.
+    if (plan && plan.primary && plan.timeLike && !(chart.options.plugins.annotation && Object.keys(chart.options.plugins.annotation.annotations || {}).length)
+        && !chart.data.datasets.some(ds => _GLANCE_REF_RE.test(ds.label || ''))) {
+      const P = _glancePartial(chart);
+      const vals = (chart.data.datasets[plan.primary.index].data || []).map(_glanceFinite).filter((v, i) => v != null && i !== P);
+      if (vals.length >= 4) {
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const sc = plan.primary.vScale, y = sc.getPixelForValue(avg);
+        const a = chart.chartArea;
+        if (y > a.top + 2 && y < a.bottom - 2) {
+          const g = _glanceTheme(chart), ctx = chart.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([4, 4]);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = g.theme.textDim;
+          ctx.moveTo(a.left, Math.round(y) + 0.5);
+          ctx.lineTo(a.right, Math.round(y) + 0.5);
+          ctx.stroke();
+          ctx.restore();
+          chart.$glanceAvg = { y, text: 'เฉลี่ย ' + _glanceFmt(sc, avg) };
+        }
+      }
+    }
+  },
+
+  afterDatasetsDraw(chart) {
+    const hollow = chart.$glanceHollow || [];
+    if (hollow.length) {
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1.25;
+      hollow.forEach(({ el, color }) => {
+        const p = el.getProps(['x', 'y', 'base', 'width', 'height', 'horizontal'], true);
+        ctx.strokeStyle = color;
+        if (p.horizontal) ctx.strokeRect(Math.min(p.base, p.x) + 0.5, p.y - p.height / 2 + 0.5, Math.abs(p.x - p.base) - 1, p.height - 1);
+        else ctx.strokeRect(p.x - p.width / 2 + 0.5, Math.min(p.y, p.base) + 0.5, p.width - 1, Math.abs(p.base - p.y) - 1);
+      });
+      ctx.restore();
+    }
+    chart.$glanceHollow = null;
+    (chart.$glanceRestore || []).forEach(([o, p, v]) => { o[p] = v; });
+    chart.$glanceRestore = null;
+    const wkCaps = chart.$glanceWeekend || [];
+    if (!_glanceOpt(chart, 'labels') && !chart.$glanceAvg && !wkCaps.length) return;
+    const g = _glanceTheme(chart), ctx = chart.ctx, a = chart.chartArea;
+    ctx.save();
+    const placed = [];
+    if (chart.$glanceAvg) {
+      _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 10, 500);
+    }
+    const plan = _glanceOpt(chart, 'labels') ? _glancePlan(chart) : null;
+    // A narrow chart (tablet, the full dashboard on a phone) keeps one series'
+    // labels and smaller type, so the end labels do not pile up.
+    const narrow = chart.width < 520, fs = narrow ? 10 : 11;
+    {
+      const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 13 && Math.abs(p.x - x) < (p.w + w) / 2 + 4)
+                              && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 12 && x - w < a.left + 90);
+      const put = (text, x, y, align, color, size, weight, halo = true) => {
+        ctx.font = `${weight} ${size}px ${Chart.defaults.font.family}`;
+        const w = ctx.measureText(text).width;
+        // A centred label never spills over the y-axis ticks or off the canvas edge.
+        if (align === 'center') x = Math.max(a.left + w / 2 + 2, Math.min(chart.width - w / 2 - 2, x));
+        const cx = align === 'left' ? x + w / 2 : align === 'right' ? x - w / 2 : x;
+        if (!free(cx, y, w)) return false;
+        placed.push({ x: cx, y, w });
+        _glanceText(ctx, text, x, y, align, color, halo ? g.surface : null, size, weight);
+        return true;
+      };
+      const n = (chart.data.labels || []).length;
+      // 1) latest value at the end of each line
+      let ends = plan ? plan.lines : [];
+      if (narrow && ends.length > 1) ends = ends.filter(m => m === plan.primary).concat(plan.primary ? [] : ends.slice(0, 1));
+      ends.forEach(m => {
+        const ds = chart.data.datasets[m.index];
+        if (_glanceLabelled(chart, ds)) return;
+        let i = m.data.length - 1;
+        while (i >= 0 && (_glanceFinite(ds.data[i]) == null || !m.data[i] || m.data[i].skip)) i--;
+        if (i < 1) return;
+        const el = m.data[i], v = _glanceFinite(ds.data[i]);
+        const color = typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text;
+        const text = _glanceFmt(m.vScale, v) + (i === _glancePartial(chart) && _glanceActual(ds) ? _glanceTag(chart) : '');
+        const atEnd = !n || i >= n - 1;
+        const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 600)
+                         : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600);
+        if (ok) _glanceDot(ctx, el.x, el.y, color, g.surface);
+      });
+      // 2) the primary series' peak (+ the latest bar on a time axis)
+      const pm = plan && plan.primary;
+      if (pm && !_glanceLabelled(chart, chart.data.datasets[pm.index])) {
+        const ds = chart.data.datasets[pm.index];
+        const vals = (ds.data || []).map(_glanceFinite);
+        let hi = -1;
+        const P = _glancePartial(chart);
+        vals.forEach((v, i) => { if (v != null && i !== P && (hi < 0 || v > vals[hi])) hi = i; });
+        const marks = [];
+        if (pm.type === 'bar' && plan.timeLike) {
+          let last = vals.length - 1;
+          while (last >= 0 && vals[last] == null) last--;
+          if (last >= 0) marks.push(last);
+        }
+        let lastLine = vals.length - 1;
+        while (lastLine >= 0 && vals[lastLine] == null) lastLine--;
+        if (hi >= 0 && vals[hi] > 0 && !(pm.type === 'line' && hi === lastLine) && !marks.includes(hi)) marks.push(hi);
+        marks.forEach(i => {
+          const el = pm.data[i];
+          if (!el || el.skip) return;
+          const v = vals[i], text = _glanceFmt(pm.vScale, v) + (i === P ? _glanceTag(chart) : '');
+          const up = v >= 0;
+          if (pm.type === 'bar') {
+            // A bar that reaches the canvas top carries its label inside the tip.
+            const inside = up && el.y - 8 < 9;
+            const fill = _glanceRgba(Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor);
+            const lum = fill ? (0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]) / 255 : 0;
+            put(text, el.x, inside ? el.y + 11 : up ? el.y - 8 : el.y + 9, 'center',
+                inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : g.theme.labelStrong, fs, 600, !inside);
+          } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600)) {
+            _glanceDot(ctx, el.x, el.y, typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text, g.surface);
+          }
+        });
+      }
+      // 3) name the weekend bands once, wherever the caption does not cover a label
+      for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 9, 500, false)) break;
+    }
+    ctx.restore();
+  },
+
+  // Doughnut centre: the total, or the top slice's share when the values are
+  // already percentages (they sum to ~100, so a "total" would say nothing).
+  afterDraw(chart) {
+    if (chart.config.type !== 'doughnut' || !_glanceOpt(chart, 'centre')) return;
+    if ((chart.config.plugins || []).length) return;   // a chart with its own inline plugin draws its own centre
+    const meta = chart.getDatasetMeta(0), arc = meta && meta.data && meta.data[0];
+    if (!arc || !arc.innerRadius || arc.innerRadius < 30) return;
+    const ds = chart.data.datasets[0], vals = (ds.data || []).map(_glanceFinite);
+    let sum = 0, top = -1;
+    vals.forEach((v, i) => {
+      if (v == null || v <= 0 || !chart.getDataVisibility(i)) return;
+      sum += v;
+      if (top < 0 || v > vals[top]) top = i;
+    });
+    if (top < 0 || sum <= 0) return;
+    const pctData = Math.abs(sum - 100) < 1.5 && vals.every(v => v == null || v <= 100);
+    const big = pctData ? `${parseFloat((vals[top] / sum * 100).toFixed(1))}%` : _glanceCompact(sum);
+    let sub = pctData ? String((chart.data.labels || [])[top] ?? '') : 'รวม';
+    if (sub.length > 14) sub = sub.slice(0, 13) + '…';
+    const g = _glanceTheme(chart), ctx = chart.ctx;
+    const r = arc.innerRadius, size = Math.max(12, Math.min(22, Math.round(r * 0.38)));
+    ctx.save();
+    ctx.font = `700 ${size}px ${Chart.defaults.font.family}`;
+    if (ctx.measureText(big).width > r * 1.7) { ctx.restore(); return; }
+    _glanceText(ctx, big, arc.x, arc.y - (sub ? size * 0.32 : 0), 'center', g.theme.labelStrong, g.surface, size, 700);
+    if (sub) _glanceText(ctx, sub, arc.x, arc.y + size * 0.62, 'center', g.theme.text, g.surface, Math.max(10, Math.round(size * 0.5)), 500);
+    ctx.restore();
+  },
+};
+
 let activeTab       = 'home';
 let activeSubtab    = 'mostOrdered';
 let activeOpsSubtab = 'cohort';
