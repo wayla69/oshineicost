@@ -25,6 +25,8 @@
    "revenue": 500.0
   }
  ],
+ "cost_from": "2026-05-01",
+ "cost_known": true,
  "cur_range": [
   "2026-06-03",
   "2026-06-03"

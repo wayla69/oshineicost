@@ -755,10 +755,11 @@ async function loadCostHead(force) {
     : `<span class="text-xs font-semibold" style="color:${v <= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
   const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
   document.getElementById('chKpis').innerHTML = [
-    { l: 'ต้นทุน/หัว (BoM)', v: fmt(t.cost_per_head || 0), s: 'เทียบช่วงก่อน ' + (t.delta_pct != null ? (t.delta_pct > 0 ? '+' : '') + t.delta_pct + '%' : '—'), c: '#ef4444' },
+    // a period before the cost data starts comes back null — "—", never a fake ฿0
+    { l: 'ต้นทุน/หัว (BoM)', v: t.cost_per_head != null ? fmt(t.cost_per_head) : '—', s: d.cost_known === false ? `ไม่มีข้อมูลต้นทุนรายวันก่อน ${d.cost_from || ''}` : 'เทียบช่วงก่อน ' + (t.delta_pct != null ? (t.delta_pct > 0 ? '+' : '') + t.delta_pct + '%' : '—'), c: '#ef4444' },
     { l: 'ต้นทุน% (food cost)', v: t.cost_pct != null ? t.cost_pct + '%' : '—', s: 'COGS ÷ รายได้', c: cpColor(t.cost_pct) },
-    { l: 'รายได้/หัว', v: fmt(t.rev_per_head || 0), s: 'ยอดขายต่อลูกค้า', c: '#0891b2' },
-    { l: 'GP/หัว', v: fmt(t.gp_per_head || 0), s: 'กำไรขั้นต้นต่อหัว', c: '#10b981' },
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', s: 'ยอดขายต่อลูกค้า', c: '#0891b2' },
+    { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', s: 'กำไรขั้นต้นต่อหัว', c: '#10b981' },
     { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: lbl + 'นี้', c: '#7a66b8' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
 
@@ -1366,7 +1367,7 @@ function _ptRender(d) {
   const kpis =
     kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${B.pax_b == null ? '-' : n0(B.pax_b)} คน)`, false) +
     kpi('รายได้/หัว (ex-VAT)', b1(B.rev_head_a), dd(B.rev_head_a, B.rev_head_b), `B: ${b1(B.rev_head_b)} · Δ ${sg(dd(B.rev_head_a, B.rev_head_b))}`, false) +
-    kpi('ต้นทุนอาหาร/หัว', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
+    kpi('ต้นทุนอาหาร/หัวบุฟเฟ่ต์', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
     kpi('Food cost %', (B.food_pct_a ?? '-') + '%', dd(B.food_pct_a, B.food_pct_b), `B: ${B.food_pct_b ?? '-'}% · Δ ${sg(dd(B.food_pct_a, B.food_pct_b), ' pp')}`, true);
 
   // Two things earn a flag on this table: a food cost the business itself calls
@@ -1482,7 +1483,7 @@ function _ptRender(d) {
         <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">คนทาน A</th><th class="py-1.5 pr-2 text-right">คนทาน B</th>
         <th class="py-1.5 pr-2 text-right">Δ คนทาน</th><th class="py-1.5 pr-2 text-right">สัดส่วน (Δpp)</th>
         <th class="py-1.5 pr-2 text-right">คน/บิล</th><th class="py-1.5 pr-2 text-right">รายได้/หัว</th>
-        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
+        <th class="py-1.5 pr-2 text-right" title="นับเฉพาะบิลบุฟเฟ่ต์ (หาร pax บุฟเฟ่ต์) — ไม่ใช่ต้นทุน/หัวทั้งเครือในหน้า ต้นทุน/หัว ซึ่งหารลูกค้าทุกบิลรวมเดลิเวอรี/กลับบ้าน">ต้นทุน/หัวบุฟเฟ่ต์ (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">COGS%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
       <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
@@ -1514,7 +1515,7 @@ function _ptRender(d) {
       </div>
       <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-1" data-nosort style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
-        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">${qUnit} รวม (Δ%)</th>${tierTh}
+        <th class="py-1.5 pr-2 text-right" title="นับเฉพาะบิลบุฟเฟ่ต์ (หาร pax บุฟเฟ่ต์) — ไม่ใช่ต้นทุน/หัวทั้งเครือในหน้า ต้นทุน/หัว ซึ่งหารลูกค้าทุกบิลรวมเดลิเวอรี/กลับบ้าน">ต้นทุน/หัวบุฟเฟ่ต์</th><th class="py-1.5 pr-2 text-right">${qUnit} รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
       <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ${qUnit} = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น${_ptQtyPer100 ? ' × 100' : ''} · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>
     </div>
@@ -1769,7 +1770,7 @@ async function _divePtCogs(_cfg) {
   }).join('');
   return _diveSection('ช่วงที่กำลังดู', '',
       _diveMetric('A', `${d.a_range[0]} → ${d.a_range[1]}`) +
-      _diveMetric('ต้นทุนอาหาร/หัว (รวมทุก tier)', _MI_D2(d.blend.cogs_head_a), 'bad') +
+      _diveMetric('ต้นทุนอาหาร/หัวบุฟเฟ่ต์ (รวมทุก tier)', _MI_D2(d.blend.cogs_head_a), 'bad') +
       _diveMetric('Food cost %', (d.blend.food_pct_a ?? '-') + '%',
                   (d.blend.food_pct_a || 0) >= 40 ? 'bad' : 'good') +
       _diveMetric('รายได้/หัว', _MI_D2(d.blend.rev_head_a), 'good')) +

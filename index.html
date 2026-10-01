@@ -474,6 +474,12 @@ body.dark .subtab-bar { background: rgba(11,18,34,0.8); border-color: var(--bord
   box-shadow: 0 1px 4px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
 }
 body.dark .subtab-btn.active { background: rgba(20,32,56,0.95); }
+/* "ดูเต็ม →" — a repeated figure links to the ONE main page that answers its
+   question (week 4, 2026-10-01). Same numbers there; this is a shortcut, not a
+   second answer. */
+.see-full { margin-left: 8px; font-size: 11.5px; font-weight: 500; color: var(--indigo);
+  cursor: pointer; white-space: nowrap; text-decoration: none; text-transform: none; letter-spacing: 0; }
+.see-full:hover { text-decoration: underline; }
 .revsort-btn { cursor: pointer; color: var(--text-secondary); background: none; transition: all 0.15s ease; white-space: nowrap; }
 .revsort-btn:hover:not(.active) { color: var(--indigo); background: rgba(31,58,107,0.06); }
 .revsort-btn.active { background: var(--indigo); color: var(--on-indigo); border-color: var(--indigo) !important; font-weight: 600; }

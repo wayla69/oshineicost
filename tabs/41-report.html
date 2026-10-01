@@ -128,14 +128,14 @@
 
     <!-- §7 รายได้ตามวันและเวลา -->
     <div class="card p-6" id="rpt7">
-      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">7. รายได้ตามวันและเวลา</h2>
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">7. รายได้ตามวันและเวลา <a class="see-full no-print" onclick="switchTab('timeflow')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ Time &amp; Flow →</a></h2>
       <div id="rptDayTimeBlock" class="space-y-4 text-sm"></div>
     </div>
 
     <!-- §8 Cost Contribution — top 40 เมนูที่ทำให้ต้นทุนสูง -->
     <div class="card p-6" id="rpt8">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1 pb-2 border-b border-slate-100">
-        <h2 class="text-base font-bold text-slate-700">8. Cost Contribution — เมนูต้นทุนสูง 60 อันดับ</h2>
+        <h2 class="text-base font-bold text-slate-700">8. Cost Contribution — เมนูต้นทุนสูง 60 อันดับ <a class="see-full no-print" onclick="switchTab('menu')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ วิเคราะห์เมนู →</a></h2>
         <div class="flex items-center gap-2 no-print">
           <span class="text-xs text-slate-500">สาขา:</span>
           <select id="rptCostBranch" onchange="renderReportCost(this.value)" class="border border-slate-200 rounded px-2 py-1 text-xs bg-white"></select>

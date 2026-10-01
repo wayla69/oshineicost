@@ -32,6 +32,20 @@ first sync of the month saw). The current month is always a live-synced month �
 never an Excel-ingested one (Excel covers only historical months) — so this
 never disturbs the manually-ingested history.
 
+Closed months must not freeze either (fixed 2026-10-01)
+------------------------------------------------------
+Rebuilding only the CURRENT month froze each month at the last sync that ran
+inside it; bills that land after the month rolls over (the last evening, a late
+or failed sync) were never added. By 2026-10-01 July read 7%, August 18.8% and
+September 2.9% short on bills — every monthly bill/customer count, spend per
+head and the Top-60 cost/head (฿494 vs ฿401 for August) were off. So a run also
+rebuilds:
+  • the PREVIOUS Thai month, always — it is live-synced and its last day's bills
+    arrive after the rollover;
+  • any (branch, month) whose summary carries FEWER bills than sales_transaction
+    by more than 1% — a frozen live row. An Excel row is never 1% behind the
+    bills (2025-05..2026-06 agree to a few bills), so it stays untouched.
+
 Column definitions mirror ingest_easy.load_es_typeb EXACTLY so the two
 ingestion paths stay identical (until 2026-09-05 the Excel path did not subtract
 the service charge from net_sales — rows ingested before then carry it; a
@@ -76,15 +90,32 @@ GROUP BY st.branch_id, strftime('%Y-%m', st.sold_at)
 """
 
 
+# a (branch, month) summary that fell more than 1% behind its own bills
+STALE_SQL = """
+SELECT sms.branch_id, sms.period_month
+FROM sales_month_summary sms
+JOIN (SELECT branch_id, strftime('%Y-%m', sold_at) AS m, COUNT(*) AS tx
+        FROM sales_transaction WHERE source = 'Easy'
+       GROUP BY branch_id, strftime('%Y-%m', sold_at)) st
+  ON st.branch_id = sms.branch_id AND st.m = sms.period_month
+WHERE sms.source = 'Easy' AND COALESCE(sms.transaction_count, 0) < st.tx * 0.99
+"""
+
+
 def backfill(con) -> int:
-    """Run the roll-up on an open sqlite3 connection. Returns rows inserted.
+    """Run the roll-up on an open sqlite3 connection. Returns rows (re)written.
     The caller commits.
 
-    Drops the current Thai calendar month's Easy summary first so it is rebuilt
-    fresh (it is never an Excel month), then fills every other missing month.
-    Idempotent in effect: re-running only ever refreshes the current month to the
-    same values and adds nothing else once every past month has a row."""
-    cur_ym = con.execute("SELECT strftime('%Y-%m','now','+7 hours')").fetchone()[0]
-    con.execute("DELETE FROM sales_month_summary WHERE source='Easy' AND period_month=?",
-                (cur_ym,))
+    Drops the current and previous Thai months' Easy summary, and any (branch,
+    month) that fell more than 1% behind its bills, then fills every missing
+    (branch, month). Idempotent in effect: a re-run rewrites the same two months
+    to the same values and touches nothing else once every month has caught up."""
+    cur_ym, prev_ym = con.execute(
+        "SELECT strftime('%Y-%m','now','+7 hours'),"
+        " strftime('%Y-%m','now','+7 hours','start of month','-1 month')").fetchone()
+    con.execute("DELETE FROM sales_month_summary WHERE source='Easy' AND period_month IN (?, ?)",
+                (cur_ym, prev_ym))
+    stale = con.execute(STALE_SQL).fetchall()
+    con.executemany("DELETE FROM sales_month_summary WHERE source='Easy'"
+                    " AND branch_id=? AND period_month=?", stale)
     return con.execute(BACKFILL_SQL).rowcount

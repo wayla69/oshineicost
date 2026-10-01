@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -463,9 +463,19 @@ def top_ordered(
     """Most-ordered food SKUs with share-of-total quantity and month-over-month
     change. Share = SKU qty ÷ total food qty in the selected window. MoM compares
     the two most recent months present (≤ month_to) so it stays meaningful even
-    when the ranking window is a single month or a wide range."""
+    when the ranking window is a single month or a wide range.
+
+    sort = qty | revenue | cogs. A COST ranking (sort=cogs) covers everything that
+    carries a cost (rules.needs_cost_sql — desserts, drinks and delivery dishes
+    included), so its total is the COGS of the P&L and ต้นทุน/หัว and it ranks the
+    same lines as the Top-60 cost/head page, BoM รายสาขา and the P&L drill. The
+    qty/revenue rankings stay dine-in food (_FOOD_CATEGORY_FILTER). 2026-10-01."""
+    order = {"qty": "qty", "cogs": "cogs", "revenue": "revenue"}.get(sort, "revenue")
+    by_cost = order == "cogs"
+    scope_sql = needs_cost_sql() if by_cost else _FOOD_CATEGORY_FILTER
+    cat_join = "LEFT JOIN" if by_cost else "JOIN"
     base = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1", "COALESCE(sk.active,1) = 1",
-            _FOOD_CATEGORY_FILTER]
+            scope_sql]
     params: dict = {}
     if branch:
         base.append("b.name = :branch")
@@ -473,7 +483,6 @@ def top_ordered(
     _group_filter(base, params, group)
     _month_range_filter(base, params, month_from, month_to, month, col="sm.period_month")
     where = "WHERE " + " AND ".join(base)
-    order = {"qty": "qty", "cogs": "cogs", "revenue": "revenue"}.get(sort, "revenue")
     cogs_expr = _unified_cogs_expr("sm")   # per-row BoM COGS (qty × recipe cost; tier=0)
 
     with get_db() as con:
@@ -485,9 +494,10 @@ def top_ordered(
             FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
-            JOIN categories c  ON c.category_id = sk.category_id
+            {cat_join} categories c ON c.category_id = sk.category_id
             {where}
             GROUP BY sk.sku_id
+            {"HAVING SUM(" + cogs_expr + ") > 0" if by_cost else ""}
             ORDER BY {order} DESC
             LIMIT :limit
         """, {**params, "limit": limit}).fetchall()
@@ -499,14 +509,14 @@ def top_ordered(
             FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
-            JOIN categories c  ON c.category_id = sk.category_id
+            {cat_join} categories c ON c.category_id = sk.category_id
             {where}
         """, params).fetchone()
 
         # Total covers (heads) in the same window — for cost-per-head normalization.
         # All paying customers, not food-only: cost/head spreads a dish's ingredient
         # cost across every cover served that period.
-        cov_filt = ["b.name != 'ALL'", "t.source = 'Easy'"]
+        cov_filt = ["b.name != 'ALL'", "t.source = 'Easy'", "COALESCE(b.active,1) = 1"]
         cov_params: dict = {}
         if branch:
             cov_filt.append("b.name = :cbranch"); cov_params["cbranch"] = branch
@@ -558,6 +568,12 @@ def top_ordered(
             if branch:
                 branch_clause = "AND b.name = :branch"
                 mom_params["branch"] = branch
+            # the ranking honours group= (master|franchise); MoM must too, or a
+            # franchise view compared franchise ranks against chain-wide MoM
+            _gl: list = []
+            _group_filter(_gl, mom_params, group)
+            if _gl:
+                branch_clause += " AND " + " AND ".join(_gl)
             mrows = con.execute(f"""
                 SELECT sm.sku_id, sm.period_month AS m,
                        SUM(sm.qty) AS q, SUM(sm.subtotal_ex_vat) AS rev
@@ -650,6 +666,10 @@ def top_ordered(
                 sbranch = ""
                 if branch:
                     sbranch = "AND b.name = :sbranch"; sp_params["sbranch"] = branch
+                _gs: list = []
+                _group_filter(_gs, sp_params, group)        # same scope as the ranking
+                if _gs:
+                    sbranch += " AND " + " AND ".join(_gs)
                 srows = con.execute(f"""
                     SELECT sm.sku_id, sm.period_month AS m, SUM(sm.qty) AS q
                     FROM v_sales_sku_monthly sm
@@ -689,7 +709,7 @@ def top_ordered(
             "spark":         spark_map.get(r["sku_id"]) or [],
         })
     return {"total_qty": total_qty, "total_rev": total_rev, "total_cogs": total_cogs,
-            "total_covers": total_covers,
+            "total_covers": total_covers, "scope": "costed" if by_cost else "food",
             "cmp_covers_cur": cmp_covers_cur, "cmp_covers_prev": cmp_covers_prev,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
@@ -1309,56 +1329,77 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
         focus = (date or maxd)[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
+        # sales_sku_daily is a rolling window. A period that starts before it used
+        # to read cost ฿0 against real covers — "฿0.0/head" instead of "no data".
+        # A whole month falls back to the monthly table (same COGS expression, as
+        # the management report does); a day or week before the window has no
+        # cost source at all and says so (cost None -> "—").
+        daily_min = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0] or "9999-99-99"
 
         def fetch(d):
             s, e = bounds(d)
+            if s.isoformat() >= daily_min:
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source"
+                       " FROM v_sales_sku_daily WHERE day BETWEEN :s AND :e)")
+                sp_ = {"s": s.isoformat(), "e": e.isoformat()}
+            elif gran == "month":
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source"
+                       " FROM v_sales_sku_monthly WHERE period_month = :m)")
+                sp_ = {"m": s.strftime("%Y-%m")}
+            else:
+                src = None
             cust = {r["branch"]: r["cust"] or 0 for r in con.execute(
                 f"""SELECT b.name branch, SUM(t.customer_count) cust
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                     WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e
                     GROUP BY b.name""", {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()}
+            if src is None:
+                return cust, None, None, (s, e)
             cogs, rev = {}, {}
             for r in con.execute(
                 f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs,
                            ROUND(SUM(ssm.subtotal_ex_vat),2) rev
-                    FROM (SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source
-                          FROM v_sales_sku_daily WHERE day BETWEEN :s AND :e) ssm
+                    FROM {src} ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{dbf}{gcond} GROUP BY b.name""",
-                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {}), **_gcond_params}).fetchall():
+                {**sp_, **({"branch": branch} if branch else {}), **_gcond_params}).fetchall():
                 cogs[r["branch"]] = r["cogs"] or 0
                 rev[r["branch"]]  = r["rev"] or 0
             return cust, cogs, rev, (s, e)
 
         cust, cogs, rev, (cs, ce) = fetch(fdate)
         pcust, pcogs, _prev_rev, (ps, pe) = fetch(prev_focus(fdate))
+        cost_known, prev_known = cogs is not None, pcogs is not None
+        cogs, rev, pcogs = cogs or {}, rev or {}, pcogs or {}
 
         def pct(c, p): return round((c - p) / p * 100, 1) if p else None
         out = []
         for nm in sorted(set(cust) | set(cogs)):
             cu, co, re = cust.get(nm, 0), cogs.get(nm, 0), rev.get(nm, 0)
             pcu, pco = pcust.get(nm, 0), pcogs.get(nm, 0)
-            ch  = round(co / cu, 1) if cu else None          # cost / head
-            pch = round(pco / pcu, 1) if pcu else None       # prev cost / head
-            rph = round(re / cu, 1) if cu else None          # revenue / head (spend)
+            ch  = round(co / cu, 1) if (cu and cost_known) else None    # cost / head
+            pch = round(pco / pcu, 1) if (pcu and prev_known) else None # prev cost / head
+            rph = round(re / cu, 1) if (cu and cost_known) else None    # revenue / head (spend)
             cost_pct = round(co / re * 100, 1) if re else None   # food-cost ratio
-            gph = round((re - co) / cu, 1) if cu else None       # GP / head
+            gph = round((re - co) / cu, 1) if (cu and cost_known) else None   # GP / head
             out.append({"branch": nm, "customers": cu, "cogs": round(co, 2),
                         "revenue": round(re, 2), "cost_per_head": ch, "prev_cost_per_head": pch,
-                        "delta_pct": pct(ch or 0, pch or 0) if pch else None,
+                        "delta_pct": pct(ch or 0, pch or 0) if (pch and ch is not None) else None,
                         "rev_per_head": rph, "cost_pct": cost_pct, "gp_per_head": gph})
         out.sort(key=lambda r: -(r["cost_pct"] if r["cost_pct"] is not None else -1))
         tcu = sum(cust.values()); tco = sum(cogs.values()); tre = sum(rev.values())
         ptcu = sum(pcust.values()); ptco = sum(pcogs.values())
-        tch = round(tco / tcu, 1) if tcu else None
-        ptch = round(ptco / ptcu, 1) if ptcu else None
-        total = {"customers": tcu, "cogs": round(tco, 2), "revenue": round(tre, 2),
+        tch = round(tco / tcu, 1) if (tcu and cost_known) else None
+        ptch = round(ptco / ptcu, 1) if (ptcu and prev_known) else None
+        total = {"customers": tcu, "cogs": round(tco, 2) if cost_known else None,
+                 "revenue": round(tre, 2) if cost_known else None,
                  "cost_per_head": tch, "prev_cost_per_head": ptch,
-                 "delta_pct": pct(tch or 0, ptch or 0) if ptch else None,
-                 "rev_per_head": round(tre / tcu, 1) if tcu else None,
+                 "delta_pct": pct(tch or 0, ptch or 0) if (ptch and tch is not None) else None,
+                 "rev_per_head": round(tre / tcu, 1) if (tcu and cost_known) else None,
                  "cost_pct": round(tco / tre * 100, 1) if tre else None,
-                 "gp_per_head": round((tre - tco) / tcu, 1) if tcu else None}
-    return {"gran": gran, "focus": focus, "cur_range": [cs.isoformat(), ce.isoformat()],
+                 "gp_per_head": round((tre - tco) / tcu, 1) if (tcu and cost_known) else None}
+    return {"gran": gran, "focus": focus, "cost_known": cost_known, "cost_from": daily_min,
+            "cur_range": [cs.isoformat(), ce.isoformat()],
             "prev_range": [ps.isoformat(), pe.isoformat()], "branches": out, "total": total}
 
 

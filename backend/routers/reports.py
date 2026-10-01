@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
 from targets import target_revenue_total
 from core import (
@@ -2420,16 +2420,21 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
     _eff_cost_m = effective_unit_cost_sql('s')
     cost_coverage = None
     try:
+        # the app-wide coverage scope (rules.needs_cost_sql — what home, P&L and the
+        # coverage tab count), and the PLATE-weighted average cost of the costed
+        # plates. Until 2026-10-01 this counted dine-in food only (uncosted drinks,
+        # desserts and delivery never estimated) and took a plain average of unit
+        # costs across SKUs, so its estimate disagreed with the home page's.
         cc = con.execute(f"""
             SELECT ROUND(SUM(s.qty)) plates,
                    ROUND(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty ELSE 0 END)) plates_costed,
-                   ROUND(AVG(CASE WHEN {_eff_cost_m} > 0 THEN {_eff_cost_m} END), 2) avg_unit_cost,
+                   ROUND(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty * {_eff_cost_m} ELSE 0 END)
+                         / NULLIF(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty ELSE 0 END), 0), 2) avg_unit_cost,
                    COUNT(DISTINCT s.sku_id) skus,
                    COUNT(DISTINCT CASE WHEN {_eff_cost_m} = 0 THEN s.sku_id END) skus_uncosted
             FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id
-            WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
-              AND s.sku_id IN {food_sub}""", mp).fetchone()
+            WHERE {mw} AND s.qty > 0 AND {needs_cost_sql()}""", mp).fetchone()
         plates = (cc["plates"] or 0) if cc else 0
         if plates:
             costed = cc["plates_costed"] or 0
@@ -2454,8 +2459,7 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
                     SELECT sk.sku_code, sk.description, SUM(s.qty) qty
                     FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
                     JOIN branches b ON b.branch_id=s.branch_id
-                    WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
-                      AND s.sku_id IN {food_sub} AND {_eff_cost_m} = 0
+                    WHERE {mw} AND s.qty > 0 AND {needs_cost_sql()} AND {_eff_cost_m} = 0
                     GROUP BY sk.sku_id ORDER BY qty DESC LIMIT 8""", mp).fetchall()]
     except Exception:
         cost_coverage = None
@@ -2677,7 +2681,8 @@ def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, pe
     if period != "daily":      # which day of the week drove the week
         dow_rows = con.execute(f"""
             SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
-                   ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust
+                   ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust,
+                   COUNT(DISTINCT date(st.sold_at)) days
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
             GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
@@ -2685,11 +2690,17 @@ def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, pe
         by_day = []
         for i, nm in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
             r = dm.get((i + 1) % 7)      # %w: 0=Sun..6=Sat → Mon-first
+            days = (r["days"] or 0) if r else 0
+            # per trading day, like วิเคราะห์ตามวัน (/api/analysis/dow): a month holds
+            # four or five of each weekday, and totals made the five-times days look
+            # ~25% bigger (Sep 2026: Tue/Wed totals over Mon/Thu, per day all equal)
             by_day.append({"dow": nm, "revenue": round(r["rev"] or 0) if r else 0,
-                           "covers": (r["cust"] or 0) if r else 0})
-        bd = max(by_day, key=lambda d: d["revenue"], default=None)
+                           "covers": (r["cust"] or 0) if r else 0, "days": days,
+                           "avg_revenue": round((r["rev"] or 0) / days) if days else 0,
+                           "avg_covers": round((r["cust"] or 0) / days, 1) if days else 0})
+        bd = max(by_day, key=lambda d: d["avg_revenue"], default=None)
         peak["by_day"] = by_day
-        peak["best_day"] = bd["dow"] if bd and bd["revenue"] else None
+        peak["best_day"] = bd["dow"] if bd and bd["avg_revenue"] else None
 
     # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
     table = {"available": False}
