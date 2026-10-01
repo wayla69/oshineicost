@@ -611,8 +611,11 @@ _FOOD_CATEGORY_FILTER = (
         f"UPPER(c.name) NOT LIKE '%{kw}%'" for kw in _NONFOOD_CATEGORY_KEYWORDS
     ) + ")"
     # Code-level guards: OT* = penalty / room-opening charges, SERVICECHARGE/SP =
-    # service, DEL* = delivery — these can sit inside food categories but are not
-    # dishes, so exclude by code too.
+    # service — these can sit inside food categories but are not dishes, so exclude
+    # by code too. DEL* are delivery DISHES (salmon sashimi by weight, dons, bentos;
+    # ~฿12.5M May 2025-Sep 2026), not a delivery fee: like the Grand Menu (DL)/(TW)
+    # lines they are out of this DINE-IN food scope on purpose, and still counted in
+    # every P&L, GP and cost-coverage figure, which do not use this filter.
     " AND sk.sku_code NOT GLOB 'OT[0-9]*'"
     # The Grand Menu (2026-09) re-coded those charges as OTHOT* — ค่าปรับบุฟเฟ่ต์
     # (food-waste penalty) and ค่าเปิดห้อง, which the OT[0-9] pattern does not match. They
