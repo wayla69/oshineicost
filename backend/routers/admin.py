@@ -365,6 +365,7 @@ def save_branch_fixed_costs(body: BranchFixedCostBody):
             {"v": value},
         )
         con.commit()
+    invalidate_cache("buffet_pnl", "pnl_branch")   # cached P&L reads fixed costs
     return {"saved": len(body.costs)}
 
 
@@ -391,6 +392,7 @@ def save_branch_labor_costs(body: BranchLaborCostBody):
         _assert_known_branch_keys(con, body.costs, "branch_labor_costs")
         con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('branch_labor_costs', :v)", {"v": value})
         con.commit()
+    invalidate_cache("buffet_pnl", "pnl_branch")   # cached P&L reads labor costs
     return {"saved": len(body.costs)}
 
 

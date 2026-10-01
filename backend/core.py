@@ -60,28 +60,107 @@ import time as _time
 
 # ---------------------------------------------------------------------------
 # Response cache  (TTL-based, keyed on function name + query-param values)
+#
+# Why it is more than a dict (2026-10-01): production is ONE shared vCPU with
+# 1 GB for two apps and a 1.26 GB SQLite file. Cached reports answer in ~10 ms,
+# but a cold one costs 1-4 s locally (several times that on Fly), and on
+# 2026-09-30 a burst of cold reports - up to 40 at once on the thread pool -
+# starved every other request. So:
+#   * single flight   identical misses compute ONCE; the rest wait for it
+#   * heavy cap       at most _HEAVY_MAX (1) computations at a time (light, uncached
+#                     requests never queue behind it)
+#   * stale-while-    for _STALE_WINDOW after the TTL the old bytes are served at
+#     refresh         once and one background refresh runs. Data only changes on
+#                     a sync swap / upload / edit, and those invalidate outright.
+#   * generation      invalidate_cache() bumps _cache_gen; a computation that
+#                     started before it never stores its (old-data) result
+#   * demand + warm   keys are counted; warm_cache_async() recomputes the most
+#                     requested ones in the background after a data swap
+#   * size cap        _CACHE_MAX_BYTES, oldest entries evicted first
 # ---------------------------------------------------------------------------
-_resp_cache: dict = {}
+_resp_cache: dict = {}          # key -> (monotonic ts of computation, json bytes)
 
 
 _CACHE_TTL  = 300   # 5 minutes — safe for an analytics dashboard
+_STALE_WINDOW = int(_os_db.environ.get("OSHINEI_CACHE_STALE_SECS", "1500"))   # serve-stale window after the TTL
+# 1, measured: on one pinned core a 24-report cold burst kept a light request at
+# p95 79 ms / max 3.6 s with 1, vs 576 ms / 6.5 s with 2 (burst 33 s vs 29 s).
+_HEAVY_MAX = max(1, int(_os_db.environ.get("OSHINEI_HEAVY_CONCURRENCY", "1")))
+_CACHE_MAX_BYTES = int(_os_db.environ.get("OSHINEI_CACHE_MAX_MB", "120")) * 1024 * 1024
 
 
 _cache_lock = threading.Lock()
+_heavy_sem = threading.BoundedSemaphore(_HEAVY_MAX)
+_inflight: dict = {}            # key -> threading.Event set when its computation ends
+_refreshing: set = set()        # keys with a background refresh running
+_demand: dict = {}              # key -> [count, last monotonic ts, fn, args, kwargs]
+_DEMAND_MAX = 600
+_cache_gen = 0
+_cache_bytes = 0
 
 
 def _cache_key(fn_name: str, kwargs: dict) -> str:
     return fn_name + "|" + "|".join(f"{k}={v}" for k, v in sorted(kwargs.items()))
 
 
-_cache_stats: dict = {"hits": 0, "misses": 0}
+_cache_stats: dict = {"hits": 0, "misses": 0, "stale": 0, "waited": 0, "warmed": 0, "evicted": 0}
 
 
 _cached_fn_names: set = set()
 
 
+def _store(key: str, gen: int, ts: float, data: bytes) -> bool:
+    """Store a computed result unless the cache was invalidated meanwhile. Caller holds no lock."""
+    global _cache_bytes
+    with _cache_lock:
+        if gen != _cache_gen:
+            return False
+        old = _resp_cache.get(key)
+        if old:
+            _cache_bytes -= len(old[1])
+        _resp_cache[key] = (ts, data)
+        _cache_bytes += len(data)
+        if _cache_bytes > _CACHE_MAX_BYTES:
+            for k, (_, b) in sorted(_resp_cache.items(), key=lambda kv: kv[1][0]):
+                if _cache_bytes <= _CACHE_MAX_BYTES * 0.8:
+                    break
+                if k == key:
+                    continue
+                del _resp_cache[k]
+                _cache_bytes -= len(b)
+                _cache_stats["evicted"] += 1
+        return True
+
+
+def _compute(fn, args, kwargs, key: str):
+    """Run fn under the heavy-work cap; store JSON bytes. Returns (bytes | None, raw result)."""
+    with _cache_lock:
+        gen = _cache_gen
+    with _heavy_sem:
+        started = _time.monotonic()
+        result = fn(*args, **kwargs)
+    try:
+        data = _json.dumps(result, ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return None, result          # non-serializable (e.g. FileResponse): never cached
+    _store(key, gen, started, data)
+    return data, result
+
+
+def _refresh_in_background(fn, args, kwargs, key: str):
+    def run():
+        try:
+            _compute(fn, args, kwargs, key)
+        except Exception as e:   # a failed refresh leaves the stale entry to expire on its own
+            print(f"[cache] background refresh of {key[:80]} failed: {e}")
+        finally:
+            with _cache_lock:
+                _refreshing.discard(key)
+    threading.Thread(target=run, daemon=True, name="cache-refresh").start()
+
+
 def ttl_cache(fn):
-    """Decorator: caches the pre-serialized JSON bytes for 5 min.
+    """Decorator: caches the pre-serialized JSON bytes for 5 min (+ a serve-stale window).
 
     Returning a ``Response(content=bytes)`` skips FastAPI's jsonable_encoder,
     which matters for large responses (e.g. lifecycle = 270 KB).
@@ -111,25 +190,82 @@ def ttl_cache(fn):
         key = _cache_key(fn.__name__, bound_kwargs)
         now = _time.monotonic()
         with _cache_lock:
+            d = _demand.get(key)
+            if d:
+                d[0] += 1
+                d[1] = now
+            else:
+                if len(_demand) >= _DEMAND_MAX:   # forget the least recently asked key
+                    del _demand[min(_demand, key=lambda k: _demand[k][1])]
+                _demand[key] = [1, now, fn, args, kwargs]
             entry = _resp_cache.get(key)
-            if entry and now - entry[0] < _CACHE_TTL:
-                _cache_stats["hits"] += 1
-                return _Response(content=entry[1], media_type="application/json")
-            _cache_stats["misses"] += 1
-
-        result = fn(*args, **kwargs)
+            if entry:
+                age = now - entry[0]
+                if age < _CACHE_TTL:
+                    _cache_stats["hits"] += 1
+                    return _Response(content=entry[1], media_type="application/json")
+                if age < _CACHE_TTL + _STALE_WINDOW:
+                    _cache_stats["stale"] += 1
+                    if key not in _refreshing and key not in _inflight:
+                        _refreshing.add(key)
+                        _refresh_in_background(fn, args, kwargs, key)
+                    return _Response(content=entry[1], media_type="application/json")
+            ev = _inflight.get(key)
+            if ev is None:            # this request leads the computation
+                ev = threading.Event()
+                _inflight[key] = ev
+                _cache_stats["misses"] += 1
+                leader = True
+            else:
+                _cache_stats["waited"] += 1
+                leader = False
+        if not leader:
+            # Same report already computing: wait for it and use its result. If the
+            # leader failed, could not store (invalidated meanwhile) or overran the
+            # wait, compute once ourselves - still under the heavy cap.
+            ev.wait(timeout=120)
+            with _cache_lock:
+                entry = _resp_cache.get(key)
+                if entry and _time.monotonic() - entry[0] < _CACHE_TTL + _STALE_WINDOW:
+                    _cache_stats["hits"] += 1
+                    return _Response(content=entry[1], media_type="application/json")
+            data, result = _compute(fn, args, kwargs, key)
+            return result if data is None else _Response(content=data, media_type="application/json")
         try:
-            result_bytes = _json.dumps(result, ensure_ascii=False).encode("utf-8")
-        except (TypeError, ValueError):
-            # Non-serializable (e.g. FileResponse) — skip cache, return raw
-            return result
-        with _cache_lock:
-            _resp_cache[key] = (now, result_bytes)
-        return _Response(content=result_bytes, media_type="application/json")
+            data, result = _compute(fn, args, kwargs, key)
+        finally:
+            with _cache_lock:
+                _inflight.pop(key, None)
+            ev.set()
+        return result if data is None else _Response(content=data, media_type="application/json")
 
     # Expose original signature so FastAPI injects the right query params
     wrapper.__signature__ = sig
     return wrapper
+
+
+def warm_cache_async(top: int = 40, max_age_hours: float = 24.0):
+    """After a data swap: recompute the most requested cached reports in the background,
+    one at a time under the heavy cap, so the first person to open them after the sync
+    does not pay for the cold query. Returns the thread (tests join it)."""
+    horizon = _time.monotonic() - max_age_hours * 3600
+    with _cache_lock:
+        picks = sorted(((k, d) for k, d in _demand.items() if d[1] >= horizon),
+                       key=lambda kd: -kd[1][0])[:top]
+
+    def run():
+        for key, (_, _, fn, args, kwargs) in picks:
+            with _cache_lock:
+                if key in _resp_cache or key in _inflight:
+                    continue
+            try:
+                if _compute(fn, args, kwargs, key)[0] is not None:
+                    _cache_stats["warmed"] += 1
+            except Exception as e:
+                print(f"[cache] warm {key[:80]} failed: {e}")
+    t = threading.Thread(target=run, daemon=True, name="cache-warm")
+    t.start()
+    return t
 
 
 def invalidate_cache(*prefixes: str):
@@ -137,13 +273,19 @@ def invalidate_cache(*prefixes: str):
 
     Called with no arguments → flush the entire cache (used after bulk data writes
     where it's hard to know which derived endpoints depend on the change).
+    Either way the generation moves on, so a computation already running on the
+    old data cannot store its result afterwards.
     """
+    global _cache_gen, _cache_bytes
     with _cache_lock:
+        _cache_gen += 1
         if not prefixes:
             _resp_cache.clear()
+            _cache_bytes = 0
         else:
             drop = [k for k in _resp_cache if any(k.startswith(p) for p in prefixes)]
             for k in drop:
+                _cache_bytes -= len(_resp_cache[k][1])
                 del _resp_cache[k]
     # A full clear (no prefixes) signals "cost / bom / sales data changed". Rebuild
     # the per-SKU effective-cost lookup so _unified_cogs_expr reflects the new costs
@@ -155,6 +297,12 @@ def invalidate_cache(*prefixes: str):
                 _build_sku_effective_cost(con, force=True)
         except Exception as e:
             print(f"[sku_effective_cost] rebuild after cache flush failed: {e}")
+        # A report computed DURING the rebuild read half-updated costs: move the
+        # generation on again (and drop anything stored meanwhile).
+        with _cache_lock:
+            _cache_gen += 1
+            _resp_cache.clear()
+            _cache_bytes = 0
 
 
 # ---------------------------------------------------------------------------

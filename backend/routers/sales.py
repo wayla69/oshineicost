@@ -450,6 +450,7 @@ def _mtd_window(con):
 
 
 @router.get("/api/sales/top_ordered")
+@ttl_cache   # 1.2 s cold - was recomputed on every request
 def top_ordered(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
