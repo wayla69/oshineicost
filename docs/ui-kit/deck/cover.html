@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei — Business Deck</title>
+<link rel="stylesheet" href="/vendor/prompt-font.css"><!-- the deck face; served without a login -->
 <style>
   :root{ --navy:#1f3a6b; --navy-deep:#16294d; --ink:#0f172a; --muted:#64748b; --line:#1f3a6b; }
   *{ box-sizing:border-box; margin:0; font-family:'Prompt',system-ui,-apple-system,'Segoe UI',sans-serif; }
@@ -26,7 +27,7 @@
   .corner.bl{ bottom:20px; left:20px; border-right:none; border-top:none; }
   .corner.br{ bottom:20px; right:20px; border-left:none; border-top:none; }
   .edge-line{ position:absolute; background:var(--line); }
-  .edge-line.top{ top:0; left:0; right:0; height:5px; background:linear-gradient(90deg,var(--navy),var(--navy-deep)); }
+  .edge-line.top{ top:0; left:0; right:0; height:5px; background:var(--navy); }
 
   /* ── logo ── */
   .logo{ width:120px; height:120px; }
@@ -45,7 +46,7 @@
 
   .feat{ display:grid; grid-template-columns:repeat(2,1fr); gap:22px 40px; margin-top:38px; width:100%; max-width:880px; }
   .feat .item{ display:flex; gap:14px; align-items:flex-start; }
-  .feat .ico{ font-size:26px; flex-shrink:0; }
+  .feat .ico{ flex-shrink:0; width:40px; height:40px; border:1.5px solid var(--navy); border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:var(--navy); }
   .feat h3{ font-size:18px; font-weight:700; color:var(--ink); }
   .feat p{ font-size:14px; color:var(--muted); line-height:1.55; margin-top:3px; }
 
@@ -102,10 +103,10 @@
   <h2>One dashboard, every cost question answered</h2>
   <div class="rule" style="margin:20px 0 0"></div>
   <div class="feat">
-    <div class="item"><span class="ico">📈</span><div><h3>Revenue &amp; GP</h3><p>Ex-VAT revenue, gross profit, and net profit across 26 active branches — daily to yearly.</p></div></div>
-    <div class="item"><span class="ico">⭐</span><div><h3>Menu Engineering</h3><p>BCG analysis sorts every dish into Stars, Plowhorses, Puzzles, and Dogs with clear actions.</p></div></div>
-    <div class="item"><span class="ico">🎮</span><div><h3>BoM Cost + Simulator</h3><p>Bill-of-materials costing with a live what-if simulator for ingredient and price changes.</p></div></div>
-    <div class="item"><span class="ico">⚖️</span><div><h3>Compare &amp; Forecast</h3><p>A/B period comparison and month-end projection with on-track branch indicators.</p></div></div>
+    <div class="item"><span class="ico">01</span><div><h3>Revenue &amp; GP</h3><p>Ex-VAT revenue, gross profit, and net profit across 26 active branches — daily to yearly.</p></div></div>
+    <div class="item"><span class="ico">02</span><div><h3>Menu Engineering</h3><p>BCG analysis sorts every dish into Stars, Plowhorses, Puzzles, and Dogs with clear actions.</p></div></div>
+    <div class="item"><span class="ico">03</span><div><h3>BoM Cost + Simulator</h3><p>Bill-of-materials costing with a live what-if simulator for ingredient and price changes.</p></div></div>
+    <div class="item"><span class="ico">04</span><div><h3>Compare &amp; Forecast</h3><p>A/B period comparison and month-end projection with on-track branch indicators.</p></div></div>
   </div>
   <div class="pagenum">02</div>
 </section>
@@ -137,13 +138,13 @@
   <div class="eyebrow" style="margin-bottom:12px">Brand</div>
   <h2>A tight, purposeful palette</h2>
   <div class="rule" style="margin:20px 0 0"></div>
-  <p class="sub" style="margin-top:18px">Indigo accent with semantic green / red / amber — built for clarity in a B2B analytics tool.</p>
+  <p class="sub" style="margin-top:18px">Navy accent with semantic green / red / amber, and one hue per area of the app — built for clarity in a B2B analytics tool.</p>
   <div class="swatch-row">
-    <div class="sw"><div class="c" style="background:#4f46e5"></div>Indigo<div class="hex">#4F46E5</div></div>
+    <div class="sw"><div class="c" style="background:#1f3a6b"></div>Navy<div class="hex">#1F3A6B</div></div>
     <div class="sw"><div class="c" style="background:#10b981"></div>Good<div class="hex">#10B981</div></div>
     <div class="sw"><div class="c" style="background:#ef4444"></div>Bad<div class="hex">#EF4444</div></div>
     <div class="sw"><div class="c" style="background:#f59e0b"></div>Warn<div class="hex">#F59E0B</div></div>
-    <div class="sw"><div class="c" style="background:#06b6d4"></div>Cyan<div class="hex">#06B6D4</div></div>
+    <div class="sw"><div class="c" style="background:#16294d"></div>Sidebar<div class="hex">#16294D</div></div>
   </div>
   <div style="margin-top:30px"><span class="ext">OPTIONAL EXTENSION · NOT IN SOURCE PRODUCT</span></div>
   <div class="swatch-row" style="margin-top:14px">

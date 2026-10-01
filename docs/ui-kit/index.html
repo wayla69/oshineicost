@@ -1,71 +1,111 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei UI Kit</title>
 <link rel="stylesheet" href="colors_and_type.css">
+<script src="kit.js"></script>
 <style>
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 32px; }
-  .hero { display:flex; align-items:center; gap:18px; margin-bottom: 8px; }
-  .hero .logo-mark { width:52px; height:52px; font-size:20px; border-radius:14px; }
-  .hero h1 { font:var(--t-h1); font-size:24px; }
-  .lead { color: var(--text-secondary); font-size:14px; max-width:680px; line-height:1.6; margin: 14px 0 40px; }
-  .grp-title { font-size:11px; font-weight:800; color:var(--indigo); text-transform:uppercase; letter-spacing:.12em; margin:36px 0 14px; }
-  .tiles { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; }
-  @media(max-width:760px){ .tiles{grid-template-columns:1fr} }
-  .tile { display:block; text-decoration:none; color:inherit; padding:18px; }
-  .tile .ico { font-size:24px; }
-  .tile h3 { font-size:14.5px; font-weight:700; margin:10px 0 4px; }
-  .tile p { font-size:12px; color:var(--text-muted); line-height:1.5; }
-  .swatches { display:flex; gap:10px; flex-wrap:wrap; }
-  .sw { width:64px; text-align:center; font-size:10px; color:var(--text-muted); }
-  .sw .chip { height:48px; border-radius:10px; border:1px solid var(--border); margin-bottom:5px; }
-  .ext-tag { display:inline-block; font-size:9px; font-weight:800; color:#b45309; background:#fef3c7; padding:1px 7px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+  /* layout only — every colour is a token */
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 56px; }
+  .hero { display: flex; align-items: center; gap: 14px; }
+  .hero .logo-mark { width: 40px; height: 40px; font-size: 19px; background: var(--bg-sidebar); color: #ffffff; }
+  .hero h1 { font-size: 20px; font-weight: 700; letter-spacing: 0; }
+  .lead { color: var(--text-secondary); font-size: 13.5px; max-width: 720px; line-height: 1.6; margin: 14px 0 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 760px) { .tiles { grid-template-columns: 1fr; } }
+  .tile { display: block; text-decoration: none; color: inherit; padding: 16px; border-top: 3px solid var(--tile-hue, var(--accent)); }
+  .tile:hover { border-color: var(--border-control); border-top-color: var(--tile-hue, var(--accent)); }
+  .tile .ico-svg { width: 20px; height: 20px; color: var(--tile-ink, var(--accent)); }
+  .tile h3 { font-size: 14px; font-weight: 700; margin: 10px 0 4px; }
+  .tile p { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .block { margin-top: 32px; }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { width: 76px; font-size: 10.5px; color: var(--text-muted); line-height: 1.3; }
+  .sw .chip { height: 40px; border-radius: var(--r-sm); border: 1px solid var(--border); margin-bottom: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+  .sw b { color: var(--text-secondary); font-weight: 600; display: block; }
+  .rules li { margin: 4px 0 4px 18px; font-size: 12.5px; color: var(--text-secondary); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="hero">
-    <div class="logo-mark">OS</div>
-    <div><h1>Oshinei UI Kit</h1><div class="muted" style="font-size:12.5px">Design system &amp; screen gallery · mirrors the live Cost Analysis dashboard</div></div>
-    <button onclick="document.body.classList.toggle('dark')" style="margin-left:auto;background:var(--indigo);color:#fff;border:none;border-radius:var(--r-sm);padding:8px 16px;font-weight:600;cursor:pointer">🌓 Dark</button>
+    <div class="logo-mark">お</div>
+    <div><h1>Oshinei UI Kit</h1><div class="muted" style="font-size:12.5px">หน้าจอตัวอย่างและคอมโพเนนต์ · ธีม formal เดียวกับแดชบอร์ดจริง</div></div>
+    <button class="topbar-icon-btn" style="margin-left:auto" onclick="kitToggleTheme()" aria-label="สลับโหมดมืด"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
   </div>
-  <p class="lead">Every screen and component below is built on the shared <code style="background:var(--bg-subtle);padding:1px 5px;border-radius:4px">colors_and_type.css</code> tokens, copied verbatim from <code style="background:var(--bg-subtle);padding:1px 5px;border-radius:4px">index.html</code>. Vanilla HTML — no build step. Open any tile to preview.</p>
+  <p class="lead">ทุกหน้าใช้ <code>colors_and_type.css</code> ไฟล์เดียว: tokens ของแอป (<code>tokens.css</code>) + คอมโพเนนต์ formal จาก design system (ชื่อคลาสเดียวกับ <code>index.html</code>) + สีประจำกลุ่มเมนู · HTML ล้วน ไม่มี build step · ตัวเลขในทุกหน้าเป็นข้อมูลสมมติ</p>
+  <p class="sample-note">ตัวอย่างเท่านั้น (sample data) — หน้านี้เปิดได้โดยไม่ต้องเข้าสู่ระบบ</p>
 
-  <div class="grp-title">Screens</div>
-  <div class="tiles">
-    <a class="tile card" href="screens/home-brief.html"><div class="ico">🏠</div><h3>หน้าแรก · Home Brief</h3><p>Yesterday KPIs, MTD branch progress, by-branch bars, month-end forecast, alert bullets.</p></a>
-    <a class="tile card" href="screens/menu-engineering.html"><div class="ico">⭐</div><h3>Menu Engineering</h3><p>BCG quadrant tiles, scatter w/ median axes, action board, sortable contribution table.</p></a>
-    <a class="tile card" href="screens/bom-cost.html"><div class="ico">🎮</div><h3>BoM Cost + Simulator</h3><p>Chain KPIs, Revenue vs BoM combo, per-branch table, what-if cost sliders.</p></a>
-    <a class="tile card" href="screens/compare.html"><div class="ico">⚖️</div><h3>Compare A/B</h3><p>Period selectors, KPI delta cards, paired index bars, side-by-side detail.</p></a>
-    <a class="tile card" href="screens/settings.html"><div class="ico">⚙️</div><h3>Settings</h3><p>Cost Management, branch targets, fixed costs, preferences (toggles).</p></a>
-    <a class="tile card" href="../COMPONENTS.html"><div class="ico">🧩</div><h3>Component Gallery</h3><p>KPI cards, pills, tables, modal, skeletons, focus states, animation reference.</p></a>
-  </div>
-
-  <div class="grp-title">Brand Palette</div>
-  <div class="card pad">
-    <div class="swatches mb-4">
-      <div class="sw"><div class="chip" style="background:#4f46e5"></div>indigo</div>
-      <div class="sw"><div class="chip" style="background:#6366f1"></div>indigo-mid</div>
-      <div class="sw"><div class="chip" style="background:#10b981"></div>good</div>
-      <div class="sw"><div class="chip" style="background:#ef4444"></div>bad</div>
-      <div class="sw"><div class="chip" style="background:#f59e0b"></div>warn</div>
-      <div class="sw"><div class="chip" style="background:#06b6d4"></div>cyan</div>
+  <div class="block">
+    <div class="section-title">หน้าจอ (Screens)</div>
+    <div class="tiles">
+      <a class="tile card" href="screens/home-brief.html" style="--tile-hue:var(--group-home);--tile-ink:var(--group-home-ink)"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><h3>หน้าแรก · Daily Brief</h3><p>KPI เมื่อวาน, MTD เทียบเป้ารายสาขา, รายได้รายสาขา, พยากรณ์สิ้นเดือน, สิ่งที่ต้องดู</p></a>
+      <a class="tile card" href="screens/compare.html" style="--tile-hue:var(--group-sales);--tile-ink:var(--group-sales-ink)"><svg class="ico-svg" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="6 9 3 12 6 15"/><polyline points="18 9 21 12 18 15"/></svg><h3>ยอดขาย · เปรียบเทียบ A/B</h3><p>เลือกสองช่วงเวลา, KPI พร้อมส่วนต่าง, กราฟเทียบ, ตารางรายละเอียด</p></a>
+      <a class="tile card" href="screens/menu-engineering.html" style="--tile-hue:var(--group-menu);--tile-ink:var(--group-menu-ink)"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg><h3>เมนู · Menu Engineering</h3><p>4 กลุ่มเมนู (ดาวเด่น · ม้างาน · เพชรในตม · ตัวถ่วง), กราฟ BCG, ตาราง</p></a>
+      <a class="tile card" href="screens/bom-cost.html" style="--tile-hue:var(--group-cost);--tile-ink:var(--group-cost-ink)"><svg class="ico-svg" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><h3>ต้นทุน · BoM Cost</h3><p>KPI ทั้งเครือ, รายได้ vs ต้นทุน BoM, ตารางรายสาขา, ตัวจำลองต้นทุน</p></a>
+      <a class="tile card" href="screens/settings.html" style="--tile-hue:var(--group-home);--tile-ink:var(--group-home-ink)"><svg class="ico-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><h3>ตั้งค่า · Settings</h3><p>จัดการต้นทุน, เป้ารายสาขา, ค่าใช้จ่ายคงที่, การตั้งค่าส่วนตัว</p></a>
+      <a class="tile card" href="../COMPONENTS.html"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><h3>คอมโพเนนต์ (Gallery)</h3><p>KPI, แท็ก, ตาราง, แถบมุมมอง, sidebar, สีประจำกลุ่ม, สเกล heatmap</p></a>
     </div>
-    <div class="grp-title" style="margin:6px 0 12px">Optional Extension <span class="ext-tag">NOT IN SOURCE PRODUCT</span></div>
-    <div class="swatches">
-      <div class="sw"><div class="chip" style="background:#F97066"></div>salmon</div>
-      <div class="sw"><div class="chip" style="background:#E8685A"></div>salmon-deep</div>
-      <div class="sw"><div class="chip" style="background:#0D9488"></div>teal</div>
-    </div>
-    <p class="muted" style="font-size:11.5px;margin-top:14px"><b>--salmon</b> (product-literal, salmon buffet) and <b>--teal</b> (data-viz secondary) are defined in colors_and_type.css for consumer/marketing surfaces only. Keep the dashboard on the core palette.</p>
   </div>
 
-  <div class="grp-title">Deck</div>
-  <div class="tiles">
-    <a class="tile card" href="deck/cover.html"><div class="ico">🖼️</div><h3>Business Deck (HTML)</h3><p>Minimal slides — logo on white, navy edge decoration. Arrow keys to navigate.</p></a>
-    <a class="tile card" href="deck/Oshinei-Business-Deck.pptx"><div class="ico">📊</div><h3>Business Deck (.pptx)</h3><p>Editable PowerPoint version of the same deck.</p></a>
+  <div class="block">
+    <div class="section-title">สีหลัก (Core)</div>
+    <div class="card pad">
+      <div class="swatches mb-4">
+        <div class="sw"><div class="chip" style="background:var(--accent);color:var(--on-accent)">Aa</div><b>accent</b>ปุ่มหลัก, ลิงก์, focus</div>
+        <div class="sw"><div class="chip" style="background:var(--bg-sidebar);color:#ffffff">Aa</div><b>bg-sidebar</b>แถบเมนู</div>
+        <div class="sw"><div class="chip" style="background:var(--good)"></div><b>good</b>ขึ้น / ถึงเป้า</div>
+        <div class="sw"><div class="chip" style="background:var(--bad)"></div><b>bad</b>ลง / ต่ำกว่าเป้า</div>
+        <div class="sw"><div class="chip" style="background:var(--warn)"></div><b>warn</b>ต้องเฝ้าดู</div>
+        <div class="sw"><div class="chip" style="background:var(--bg-card);color:var(--good-ink)">▲ 6.4%</div><b>good-ink</b>ตัวเลขขึ้น</div>
+        <div class="sw"><div class="chip" style="background:var(--bg-card);color:var(--bad-ink)">▼ 7.2%</div><b>bad-ink</b>ตัวเลขลง</div>
+      </div>
+      <ul class="rules">
+        <li>สีบอกทิศทางใช้คู่กับคำหรือ ▲ ▼ เสมอ ไม่ใช้สีอย่างเดียว · ตัวเลขที่เป็นข้อความใช้ <code>-ink</code> ไม่ใช้สี fill</li>
+        <li>ไม่มี gradient, ไม่มีเงาบนพื้นผิวปกติ, มุม 2–4px, เส้นขอบ 1px · ไม่มีอีโมจิในอินเทอร์เฟซ</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="section-title">สีประจำกลุ่มเมนู (Group hues)</div>
+    <div class="card pad">
+      <div class="swatches mb-3">
+        <div class="sw"><div class="chip" style="background:var(--group-home)"></div><b>home</b>หน้าแรก, รายงาน</div>
+        <div class="sw"><div class="chip" style="background:var(--group-sales)"></div><b>sales</b>ยอดขาย</div>
+        <div class="sw"><div class="chip" style="background:var(--group-buffet)"></div><b>buffet</b>ลูกค้า &amp; บุฟเฟ่ต์</div>
+        <div class="sw"><div class="chip" style="background:var(--group-feedback)"></div><b>feedback</b>เสียงลูกค้า</div>
+        <div class="sw"><div class="chip" style="background:var(--group-menu)"></div><b>menu</b>เมนู</div>
+        <div class="sw"><div class="chip" style="background:var(--group-cost)"></div><b>cost</b>ต้นทุน</div>
+        <div class="sw"><div class="chip" style="background:var(--group-profit)"></div><b>profit</b>กำไร</div>
+        <div class="sw"><div class="chip" style="background:var(--group-money)"></div><b>money</b>ส่วนลด &amp; เงิน</div>
+        <div class="sw"><div class="chip" style="background:var(--group-ops)"></div><b>ops</b>ปฏิบัติการ</div>
+        <div class="sw"><div class="chip" style="background:var(--group-supply)"></div><b>supply</b>จัดซื้อ</div>
+      </div>
+      <p class="muted" style="font-size:12px">บอกว่าอยู่ส่วนไหนของแอป: ไอคอนในเมนู, เส้นใต้แถบบน, เครื่องหมายหน้าชื่อหน้า, แถบมุมมอง, ขอบบน KPI · ไม่ใช่สีดี/แย่ และไม่ใช้กับปุ่มควบคุม</p>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="section-title">ส่วนขยายแบรนด์ (นอกแดชบอร์ด)</div>
+    <div class="card pad">
+      <div class="swatches mb-3">
+        <div class="sw"><div class="chip" style="background:var(--salmon)"></div><b>salmon</b></div>
+        <div class="sw"><div class="chip" style="background:var(--salmon-deep)"></div><b>salmon-deep</b></div>
+        <div class="sw"><div class="chip" style="background:var(--teal)"></div><b>teal</b></div>
+      </div>
+      <p class="muted" style="font-size:12px">สำหรับงานการตลาด/ปกสไลด์เท่านั้น — ไม่ใช้ในแดชบอร์ด</p>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="section-title">สไลด์ (Deck)</div>
+    <div class="tiles">
+      <a class="tile card" href="deck/cover.html"><svg class="ico-svg" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="1"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg><h3>Business Deck (HTML)</h3><p>สไลด์เรียบ โลโก้บนพื้นขาว ขอบ navy · ใช้ลูกศรเลื่อน</p></a>
+      <a class="tile card" href="deck/Oshinei-Business-Deck.pptx"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><h3>Business Deck (.pptx)</h3><p>ไฟล์ PowerPoint ที่แก้ไขได้ของสไลด์ชุดเดียวกัน</p></a>
+    </div>
   </div>
 </div>
 </body>
