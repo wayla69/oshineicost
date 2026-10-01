@@ -330,6 +330,12 @@ async function initDataCoverageNote() {
   try {
     const c = await api(`${API}/api/data-coverage`);
     if (!c || !c.last_date) return;
+    // The chart glance layer (js/01-core.js) reads this to tell a month still in
+    // progress (drawn hollow, tagged MTD); charts drawn before it arrived re-check.
+    if (window.__dataLastDate !== c.last_date) {
+      window.__dataLastDate = c.last_date;
+      Object.values(chartInstances).forEach(ch => { try { if (ch && ch.$gi && ch.$gi.grain) ch.update('none'); } catch (e) { /* stale chart */ } });
+    }
     const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
     const [y, m, d] = c.last_date.split('-').map(Number);
     const human = `${d} ${TH_MON[m-1]} ${y+543}`;   // พ.ศ.
@@ -2382,7 +2388,8 @@ async function loadTrend() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{labels:{color:'#64748b',font:{size:11}}}, datalabels:{display:false} },
+      plugins: { legend:{labels:{color:'#64748b',font:{size:11}}}, datalabels:{display:false},
+                 glance: { dates: daily.map(d => d.day) } },   // bare "01".."31" labels: real dates for weekend bands
       scales: {
         x: { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
         yRev:  { position:'left',  grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10},callback:v=>fmt(v)} },
