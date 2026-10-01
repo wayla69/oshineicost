@@ -36,6 +36,20 @@
       "share_pct": 1.1
      }
     ],
+    "menus_top60": [
+     {
+      "cogs_head": 12.0,
+      "label": "(B) แซลมอน",
+      "qty_100": 150.0,
+      "share_pct": 6.7
+     },
+     {
+      "cogs_head": 2.0,
+      "label": "(A) สเต๊ก",
+      "qty_100": 20.0,
+      "share_pct": 1.1
+     }
+    ],
     "ref_label": null,
     "ref_tier": null
    },
@@ -61,6 +75,20 @@
      }
     ],
     "menus": [
+     {
+      "cogs_head": 12.0,
+      "label": "(B) แซลมอน",
+      "qty_100": 150.0,
+      "share_pct": 5.7
+     },
+     {
+      "cogs_head": 2.0,
+      "label": "(A) สเต๊ก",
+      "qty_100": 20.0,
+      "share_pct": 1.0
+     }
+    ],
+    "menus_top60": [
      {
       "cogs_head": 12.0,
       "label": "(B) แซลมอน",

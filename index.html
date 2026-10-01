@@ -1172,6 +1172,10 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      on end, one letter per line. break-word still splits a word that cannot fit a
      line, but leaves the column sizing intact. */
   #tab-mgtreport th, #tab-mgtreport td { overflow-wrap: break-word; }
+  /* the closing footnote never opens a sheet of its own */
+  #tab-mgtreport .mgt-foot { break-before: avoid; page-break-before: avoid; break-inside: avoid; }
+  /* Appendix B: 60 one-line rows in three columns -> two tiers per sheet */
+  #tab-mgtreport .mgt-top60 td, #tab-mgtreport .mgt-top60 th { padding-top: 1px !important; padding-bottom: 1px !important; }
   /* ...but NUMBERS must never break: a rank of "10" split over two lines reads as
      1 and 0. Only the free-text columns get the aggressive wrapping. */
   #tab-mgtreport .tabular-nums, #tab-mgtreport .font-mono,
@@ -1198,20 +1202,22 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      on its own sheet and left half of every page blank. Compact them so 2–3
      sections pack onto a sheet. */
   .content-area { padding: 0 !important; }                    /* @page margin already insets the report */
-  #tab-mgtreport { font-size: 10px !important; line-height: 1.3 !important; }
+  /* 11px body / 10.5px tables (was 10 / 9.5): read round a table, not only on a
+     screen — owner asked for larger print text, 2026-10-01 */
+  #tab-mgtreport { font-size: 11px !important; line-height: 1.32 !important; }
   #tab-mgtreport .space-y-5 > * + * { margin-top: 6px !important; }   /* gap between sections */
   #tab-mgtreport .card { padding: 9px 11px !important; margin-bottom: 0 !important; }
   #tab-mgtreport h1 { font-size: 18px !important; }
-  #tab-mgtreport h2 { font-size: 12px !important; margin-bottom: 6px !important; padding-bottom: 3px !important; }
-  #tab-mgtreport h3 { font-size: 11px !important; margin-top: 8px !important; }
+  #tab-mgtreport h2 { font-size: 13px !important; margin-bottom: 6px !important; padding-bottom: 3px !important; }
+  #tab-mgtreport h3 { font-size: 12px !important; margin-top: 8px !important; }
   /* Cover band: shrink so page 1 also carries the contents + report information. */
   #tab-mgtreport > div:first-child { padding: 14px 20px !important; margin-bottom: 9px !important; }
   #tab-mgtreport .text-3xl { font-size: 18px !important; }
-  #tab-mgtreport .text-2xl { font-size: 15px !important; }
-  #tab-mgtreport .text-xl  { font-size: 13px !important; }
+  #tab-mgtreport .text-2xl { font-size: 16px !important; }
+  #tab-mgtreport .text-xl  { font-size: 14px !important; }
   #tab-mgtreport .rounded-xl { padding: 6px 8px !important; }        /* KPI / stat tiles */
   #tab-mgtreport .p-4 { padding: 7px 9px !important; }
-  #tab-mgtreport table { font-size: 9.5px !important; }
+  #tab-mgtreport table { font-size: 10.5px !important; }
   #tab-mgtreport table th, #tab-mgtreport table td { padding-top: 2px !important; padding-bottom: 2px !important; }
   #tab-mgtreport ul li { padding-top: 1px !important; padding-bottom: 1px !important; }
 
@@ -1220,7 +1226,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      row onto the page after, alone above §8. Both are cheaper to fix by making
      the rows themselves slightly shorter than by spending another sheet.
      §5 must fit all 28 branches on one landscape page: it cleared 25 before. */
-  #tab-mgtreport #mgt-s5 table { font-size: 9px !important; }
+  #tab-mgtreport #mgt-s5 table { font-size: 10px !important; }
   #tab-mgtreport #mgt-s5 th,
   #tab-mgtreport #mgt-s5 td { padding-top: 0 !important; padding-bottom: 0 !important;
                               line-height: 1.25 !important; }
@@ -1237,9 +1243,18 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   #tab-mgtreport #mgt-s8 > div:not(.mgt-atom) { break-inside: avoid; page-break-inside: avoid; }
 
   /* Executive summary: a full landscape line of body text runs ~200 characters,
-     too long to read. Two newspaper columns, a paragraph never split. */
-  #tab-mgtreport .mgt-exec-body { column-count: 2; column-gap: 22px; }
-  #tab-mgtreport .mgt-exec-body > * { break-inside: avoid; page-break-inside: avoid; }
+     too long to read. Two columns of paragraphs as a GRID (not CSS multicol): Chrome
+     does not fragment a multicol block across a page boundary, so the summary
+     jumped to a sheet of its own whenever it did not fit under the contents. A grid
+     breaks between rows, so the summary starts on the cover sheet and carries on
+     overleaf; a paragraph is never split. */
+  /* Cover sheet: contents in 3 columns and report information in 4, so the
+     executive summary's at-a-glance box and first paragraphs start on page 1
+     (the 2-column cover block was 399px of a 710px sheet). */
+  #tab-mgtreport .mgt-sec .mgt-toc { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .mgt-sec .mgt-ri  { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .mgt-exec-body { display: grid; grid-template-columns: 1fr 1fr; column-gap: 22px; row-gap: 2px; align-items: start; }
+  #tab-mgtreport .mgt-exec-body > * { break-inside: avoid; page-break-inside: avoid; margin: 0 0 6px !important; }
   /* บริษัท · แฟรนไชส์ panels: each is half a sheet wide and a single column of
      label/value rows (~180px for five rows). Two columns of rows halve that, which
      is what lets a §6/§9 with its panel fit one sheet instead of leaving the panel
