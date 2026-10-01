@@ -1115,19 +1115,15 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   #reportContent > .card, #rptHero, #rptCover { break-inside: avoid; page-break-inside: avoid; }
 
   /* ── Management Report → boardroom-ready PDF ───────────────────
-     PAGE MODEL — the pack is a MIXED-ORIENTATION document:
-       · the default @page stays A4 LANDSCAPE: wide tables, chart rows, AND the
-         safe fallback for engines without named-page support (Chrome/Edge 110+
-         honour `page:`; anything older simply prints all-landscape, i.e. exactly
-         the previous behaviour, so nothing regresses).
-       · narrative sections opt into the named PORTRAIT page via .pg-port.
-     Chrome starts a fresh sheet whenever the page NAME changes, so the
-     orientation switch IS the page break — no section straddles two sheets in
-     two orientations. The plan itself lives in the SECTIONS list in
-     js/02-mgt-report.js (`land: true` → landscape). */
+     PAGE MODEL — ONE orientation, A4 LANDSCAPE, like a board deck (2026-10-01).
+     Until then narrative sections switched to a named PORTRAIT page: a monthly
+     pack read P P P P L L P L L P L L L L P, the reader turned the paper at every
+     other sheet, and a short portrait section left most of its sheet empty. Now
+     sections flow onto shared sheets, multi-column grids keep their screen
+     layout, and long narrative sets in two columns. Forced breaks (.pg-break)
+     stay where a section needs a sheet of its own (SECTIONS list in
+     js/02-mgt-report.js). */
   @page         { size: A4 landscape; margin: 10mm 11mm 12mm; }
-  @page mgtport { size: A4 portrait;  margin: 12mm 13mm 14mm; }
-  #tab-mgtreport .pg-port, #mgtCover { page: mgtport; }
   #tab-mgtreport .pg-break { break-before: page; page-break-before: always; }
 
   /* Browsers DROP background colours/gradients in print to save ink unless you
@@ -1152,6 +1148,9 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      Let a section FLOW across sheets and protect only the atoms inside it. */
   #tab-mgtreport .mgt-sec { break-inside: auto !important; page-break-inside: auto !important; }
   #tab-mgtreport .mgt-sec > h2 { break-after: avoid; page-break-after: avoid; }
+  /* …except a section the plan marks keep (SECTIONS `keep: true`): always shorter
+     than a sheet, so it moves whole instead of leaving its title at a page foot. */
+  #tab-mgtreport .mgt-sec.mgt-keep { break-inside: avoid !important; page-break-inside: avoid !important; }
   /* …and the one-line verdict that follows most headings travels with them. Without
      this the heading and its verdict were a legal pair to leave at the foot of a
      page while the section's actual content went overleaf — a title stranded above
@@ -1237,15 +1236,16 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      be clipped rather than moved, which is the trap `break-inside: avoid` sets. */
   #tab-mgtreport #mgt-s8 > div:not(.mgt-atom) { break-inside: avoid; page-break-inside: avoid; }
 
-  /* Portrait sheets are ~90 mm narrower than landscape ones: the multi-column
-     grids inside them (KPI tiles, leak cards, split panels, the contents list)
-     would otherwise squeeze to unreadable slivers. Cap them at two columns. */
-  #tab-mgtreport .pg-port [class*="grid-cols-3"],
-  #tab-mgtreport .pg-port [class*="grid-cols-4"],
-  #tab-mgtreport .pg-port [class*="grid-cols-5"],
-  #tab-mgtreport .pg-port [class*="grid-cols-6"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
+  /* Executive summary: a full landscape line of body text runs ~200 characters,
+     too long to read. Two newspaper columns, a paragraph never split. */
+  #tab-mgtreport .mgt-exec-body { column-count: 2; column-gap: 22px; }
+  #tab-mgtreport .mgt-exec-body > * { break-inside: avoid; page-break-inside: avoid; }
+  /* บริษัท · แฟรนไชส์ panels: each is half a sheet wide and a single column of
+     label/value rows (~180px for five rows). Two columns of rows halve that, which
+     is what lets a §6/§9 with its panel fit one sheet instead of leaving the panel
+     alone on the next. */
+  #tab-mgtreport .rounded-xl > .space-y-0\.5 { column-count: 2; column-gap: 16px; }
+  #tab-mgtreport .rounded-xl > .space-y-0\.5 > * { break-inside: avoid; margin-top: 0 !important; }
 
   /* Revenue Trend: canvas doesn't print reliably → show the SVG fallback chart(s),
      which carry the y-axis, bars and amber moving-average curve. The SVGs are sized
@@ -1457,31 +1457,33 @@ body.mgt-reading .content-area { padding-top: 10px; }
   #tab-mgtreport .card,
   .content-area .card { overflow: visible !important; }
   #tab-mgtreport [class*="grid-cols-"] { grid-template-columns: revert !important; }
+  /* `revert` also drops Tailwind's OWN fixed column counts, so every plain
+     grid-cols-2/3/4 (the บริษัท · แฟรนไชส์ panels, KPI rows) printed as ONE
+     column — each panel a full-width strip with its figures at the far margin.
+     Put the fixed counts back; the responsive md:/lg: ones follow below. */
+  #tab-mgtreport .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
   /* Tailwind's md:/lg: column counts are keyed to the VIEWPORT, and a print
      viewport is ~700px — narrower than the md breakpoint — so every responsive
      grid collapsed to a single column on paper. §11's two driver tables stacked
      instead of sitting side by side, and five tiers of them ran to five sheets.
-     A landscape sheet is 273mm wide; give it the layout the screen would use. */
-  #tab-mgtreport .pg-land [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-  #tab-mgtreport .pg-land [class*="md:grid-cols-3"],
-  #tab-mgtreport .pg-land [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-  #tab-mgtreport .pg-land [class*="md:grid-cols-4"],
-  #tab-mgtreport .pg-land [class*="lg:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
-  /* portrait keeps the two-column cap set below */
-  #tab-mgtreport .pg-port [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-  /* … then re-apply the ONE clamp print actually wants: portrait sheets are
-     ~90mm narrower than landscape, so their multi-column grids drop to two. */
-  #tab-mgtreport .pg-port [class*="grid-cols-3"],
-  #tab-mgtreport .pg-port [class*="grid-cols-4"],
-  #tab-mgtreport .pg-port [class*="grid-cols-5"],
-  #tab-mgtreport .pg-port [class*="grid-cols-6"] {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
+     Every sheet is landscape (273mm); give it the layout the screen would use. */
+  #tab-mgtreport [class*="md:grid-cols-2"],
+  #tab-mgtreport [class*="lg:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #tab-mgtreport [class*="md:grid-cols-3"],
+  #tab-mgtreport [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  #tab-mgtreport [class*="md:grid-cols-4"],
+  #tab-mgtreport [class*="lg:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
   /* a long table that spills onto a second sheet takes its header with it */
   #tab-mgtreport thead { display: table-header-group !important; }
   #tab-mgtreport tfoot { display: table-footer-group !important; }
   #tab-mgtreport tr, #tab-mgtreport .mgt-atom { break-inside: avoid; page-break-inside: avoid; }
   #tab-mgtreport .mgt-sec { break-inside: auto !important; page-break-inside: auto !important; }
+  #tab-mgtreport .mgt-sec.mgt-keep { break-inside: avoid !important; page-break-inside: avoid !important; }
 
   /* §11 cost drivers: on screen it is a tier PICKER showing one tier at a time,
      so paper was getting whichever tier happened to be selected and silently
