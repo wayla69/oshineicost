@@ -8,7 +8,7 @@ routers/reports.py.
 from fastapi import Query
 from typing import Optional
 import json as _json
-from rules import avg_ticket_sql, net_revenue_row
+from rules import avg_ticket_sql, coverage_from_sums, coverage_sums_sql, net_revenue_row
 from core import (
     _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
     _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,
@@ -204,11 +204,7 @@ def profit_summary(
               ROUND(SUM(ssm.subtotal_ex_vat), 2)               AS revenue_ex_vat,
               ROUND(SUM(ssm.total_inc_vat), 2)                 AS pos_total_inc_vat_diagnostic,
               ROUND(SUM({_bom_cogs_expr()}), 2)                AS cogs,
-              SUM(CASE WHEN COALESCE(
-                    (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
-                    (SELECT 1 FROM bom_sku_alias a JOIN skus s2 ON s2.sku_id = ssm.sku_id
-                       WHERE a.bom_sku_code = s2.sku_code LIMIT 1)) IS NOT NULL
-                   THEN ssm.qty ELSE 0 END)                    AS costed_qty,
+              {coverage_sums_sql('ssm')},
               SUM(ssm.qty) AS qty_sold
             FROM v_sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
@@ -219,15 +215,14 @@ def profit_summary(
     revenue        = row["revenue"]                or 0   # ex-VAT (Rule 1)
     revenue_ex     = row["revenue_ex_vat"]         or 0
     cogs           = row["cogs"]                   or 0   # BoM recipe COGS (real)
-    qty_sold       = row["qty_sold"]               or 0
-    costed_qty     = row["costed_qty"]             or 0
     gross_profit   = revenue_ex - cogs
     # Margin over TOTAL revenue (honest) — not just costed revenue, which inflated
     # GP to ~72%. With BoM coverage ~70-92%, this reflects the real ~42% margin.
     margin_pct     = round(gross_profit / revenue_ex * 100, 2) if revenue_ex > 0 else None
-    # Coverage = % of QTY SOLD that has a BoM recipe. (Revenue-based coverage is
-    # meaningless for buffet: dishes are costed but their revenue is on the tier.)
-    coverage_pct   = round(costed_qty / qty_sold * 100, 1) if qty_sold > 0 else 0
+    # Coverage by PLATES on the app-wide definition (rules.needs_cost_sql /
+    # costed_sql) — revenue alone says "fine" for a buffet whose dishes carry ฿0.
+    cov            = coverage_from_sums(row)
+    coverage_pct   = cov["plates_pct"] if cov["plates_pct"] is not None else 0
 
     # tx count from sales_transaction (bills only — total_inc_vat is diagnostic, not revenue)
     tx_where, tx_params = _tx_filters(branch, group, month_from, month_to, month)
@@ -278,6 +273,8 @@ def profit_summary(
         "avg_ticket":        avg_ticket,
         "profit_per_bill":   profit_per_bill,
         "cost_coverage_pct": coverage_pct,
+        "cost_coverage_revenue_pct": cov["revenue_pct"],
+        "uncosted_plates":   cov["uncosted_plates"],
         "qty_sold":          row["qty_sold"] or 0,
         "monthly_trend":     monthly_trend,
         "pos_total_inc_vat_diagnostic": row["pos_total_inc_vat_diagnostic"] or 0,

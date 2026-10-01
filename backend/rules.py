@@ -189,6 +189,69 @@ def cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
     )
 
 
+# ─── Cost coverage: how much of what was sold carries a cost ─────────────────
+# Until 2026-10 the app had three answers: the home page asked the cost engine
+# (99.1% of September plates), the P&L counted only lines with a recipe and
+# counted buffet packages as gaps (86.3%), and the coverage tab counted any
+# sku_cost row, even a ฿0 one, and ignored recipes and aliases. One definition now:
+#   costed    = the engine's unit cost is above ฿0 (same number COGS multiplies)
+#   in scope  = the line SHOULD carry a cost; these are ฿0 on purpose:
+#               buffet packages (the dishes eaten are costed instead), service
+#               charge / discount / deposit lines, penalty and room fees, and
+#               sauces whose cost is already inside the dishes they come with.
+# Plates are the measure for the buffet (its dishes carry ฿0 revenue); revenue
+# for à-la-carte, delivery and drinks. Report both from the same predicates.
+
+# Owner ruling 2026-09-17: these sauces are booked inside the dishes they are
+# served with, so costing the line too would count them twice.
+ZERO_COST_BY_DESIGN = (
+    'OTHBFAPP00015', 'SV0007', 'AS-ALL-007',      # สเต็กซอส
+    'OTHBFAPP00019', 'SV0012', 'AS-ALL-012',      # ซอส มายองเนส
+    'OTHBFSPC00068',                              # ซอสมะเขือเทศ
+)
+NOT_COSTED_CODES = ('SERVICECHARGE', 'SP', 'SERVICE', 'DISCOUNT', 'DEPOSIT')
+
+
+def needs_cost_sql(code: str = "sk.sku_code") -> str:
+    """True when a sold line should carry a cost (see the block comment above)."""
+    excluded = "(" + ",".join(f"'{c}'" for c in ZERO_COST_BY_DESIGN) + ")"
+    return (f"(NOT {tier_code_sql(code)}"
+            f" AND UPPER({code}) NOT IN (" + ",".join(f"'{c}'" for c in NOT_COSTED_CODES) + ")"
+            f" AND {code} NOT GLOB 'OT[0-9]*' AND {code} NOT GLOB 'OTHOTOTH*'"
+            f" AND {code} NOT IN {excluded})")
+
+
+def costed_sql(row: str = "ssm") -> str:
+    """True when the engine has a unit cost above ฿0 for the sales row `row`."""
+    return f"({effective_unit_cost_sql(row)} > 0)"
+
+
+def coverage_sums_sql(row: str = "ssm", code: str = "sk.sku_code") -> str:
+    """Four SELECT columns: plates/revenue in scope, and the part of each that is
+    costed. Divide with coverage_from_sums()."""
+    need, ok = needs_cost_sql(code), costed_sql(row)
+    return (f"SUM(CASE WHEN {need} AND {row}.qty > 0 THEN {row}.qty ELSE 0 END) AS cov_plates, "
+            f"SUM(CASE WHEN {need} AND {row}.qty > 0 AND {ok} THEN {row}.qty ELSE 0 END) AS cov_plates_costed, "
+            f"SUM(CASE WHEN {need} THEN {row}.subtotal_ex_vat ELSE 0 END) AS cov_rev, "
+            f"SUM(CASE WHEN {need} AND {ok} THEN {row}.subtotal_ex_vat ELSE 0 END) AS cov_rev_costed")
+
+
+def coverage_from_sums(r) -> dict:
+    """Turn a row carrying coverage_sums_sql's columns into percentages."""
+    def g(k):
+        try:
+            return float(r[k] or 0)
+        except (KeyError, IndexError, TypeError):
+            return 0.0
+    p, pc, v, vc = g("cov_plates"), g("cov_plates_costed"), g("cov_rev"), g("cov_rev_costed")
+    return {
+        "plates_pct":       round(pc / p * 100, 1) if p else None,
+        "uncosted_plates":  round(p - pc),
+        "revenue_pct":      round(vc / v * 100, 1) if v else None,
+        "uncosted_revenue": round(v - vc, 2),
+    }
+
+
 # ─── Scope: branch and branch group ──────────────────────────────────────────
 # Every report narrows to one branch and/or one group (master | franchise).
 # The caller has already `JOIN branches b`; this appends the predicates and

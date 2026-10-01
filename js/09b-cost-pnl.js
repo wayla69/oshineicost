@@ -50,22 +50,29 @@ async function loadCostCoverage() {
   catch(e){ if (e === STALE) return; throw e; }
   if (gen !== loadGen) return;
   const ch = d.chain || {};
+  const pct = v => v != null ? v.toFixed(1) + '%' : '—';
   document.getElementById('cov-kpis').innerHTML = [
-    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0'],
-    ['มีต้นทุนแล้ว',        fmt(ch.costed_revenue), '#10b981'],
-    ['ยังไม่มีต้นทุน',       fmt(ch.uncosted_revenue), '#ef4444'],
-    ['% ยังไม่มีต้นทุน',     (ch.pct_uncosted != null ? ch.pct_uncosted.toFixed(1)+'%' : '—'), '#f59e0b'],
-  ].map(([l,v,c]) => `<div class="card p-4" style="border-top:3px solid ${c}">
+    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0', ''],
+    ['รายได้ที่ยังไม่มีต้นทุน', fmt(ch.uncosted_revenue), '#ef4444', `${pct(ch.pct_uncosted)} ของรายได้อาหารตามสั่ง/เดลิเวอรี/เครื่องดื่ม`],
+    ['จานที่ยังไม่มีต้นทุน', fmtN(ch.uncosted_plates || 0), '#f59e0b', `${pct(ch.pct_uncosted_plates)} ของจานที่เสิร์ฟ (รวมบุฟเฟ่ต์)`],
+    ['ต้นทุนครบ (จาน)', ch.pct_uncosted_plates != null ? (100 - ch.pct_uncosted_plates).toFixed(1) + '%' : '—', '#10b981', 'ตัวเลขเดียวกับหน้าแรกและ P&L'],
+  ].map(([l,v,c,sub]) => `<div class="card p-4" style="border-top:3px solid ${c}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
-      <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div></div>`).join('');
+      <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div>
+      ${sub ? `<div class="text-xs text-slate-400 mt-1">${esc(sub)}</div>` : ''}</div>`).join('');
+  const defEl = document.getElementById('cov-definition');
+  if (defEl) defEl.textContent = d.definition || '';
   const tr = d.monthly_trend || [];
   mkChart('cov-trend', {
     type:'line',
-    data:{ labels: tr.map(r=>r.period), datasets:[{
-      label:'% ไม่มีต้นทุน', data: tr.map(r=>r.pct_uncosted),
-      borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.12)', fill:true }]},
+    data:{ labels: tr.map(r=>r.period), datasets:[
+      { label:'% รายได้ไม่มีต้นทุน', data: tr.map(r=>r.pct_uncosted),
+        borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.12)', fill:true },
+      { label:'% จานไม่มีต้นทุน', data: tr.map(r=>r.pct_uncosted_plates),
+        borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.10)', fill:false },
+    ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, datalabels:{display:false} },
+      plugins:{ legend:{display:true, position:'bottom'}, datalabels:{display:false} },
       scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>v+'%' } } } }
   });
   document.getElementById('cov-branches').innerHTML = (d.branches||[]).map(b=>`
@@ -76,8 +83,9 @@ async function loadCostCoverage() {
       <td class="py-1.5 pr-3 text-right font-semibold">${(b.pct_uncosted??0).toFixed(1)}%</td>
       <td class="py-1.5 text-right">${b.uncosted_skus}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-slate-400 text-center">—</td></tr>';
-  // No-cost fixer worklist — editable unit_cost inputs
-  renderUncostedFixer(d.top_uncosted || []);
+  // No-cost fixer worklist — editable unit_cost inputs: revenue lines, then the
+  // buffet dishes (฿0 revenue, so only a plate count ranks them)
+  renderUncostedFixer((d.top_uncosted || []).concat(d.top_uncosted_plates || []));
   // Top cost-driver ingredients (grouped families) + peak hours
   loadCoverageExtras();
   loadCostReview();

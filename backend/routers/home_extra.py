@@ -7,7 +7,8 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import VAT_DIVISOR, food_cost_band, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql
+from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_band,
+                   needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
@@ -711,24 +712,24 @@ def _cost_health(con, month, branch, food_pct, mtd_rev):
         pass
     try:
         # coverage by PLATES (buffet dishes carry ~฿0 revenue, so a revenue-weighted
-        # figure always says "fine"); package lines and the service charge are ฿0 on
-        # purpose and are not a gap
+        # figure always says "fine"), on the app-wide definition in rules.py
         r = con.execute(f"""
-            SELECT SUM(s.qty) AS plates,
-                   SUM(CASE WHEN COALESCE(e.recipe_cost, 0) > 0 THEN s.qty ELSE 0 END) AS costed,
-                   SUM(s.qty * COALESCE(e.recipe_cost, 0)) AS cg
+            SELECT {coverage_sums_sql('s')},
+                   SUM(CASE WHEN {needs_cost_sql()} AND s.qty > 0
+                            THEN s.qty * {effective_unit_cost_sql('s')} ELSE 0 END) AS cg
               FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
-              LEFT JOIN sku_effective_cost e ON e.sku_id = s.sku_id
               JOIN branches b ON b.branch_id = s.branch_id
-             WHERE s.period_month = :m AND b.name != 'ALL' {bf} AND s.qty > 0
-               AND NOT {tier_code_sql('sk.sku_code')} AND sk.sku_code != 'SERVICECHARGE'
+             WHERE s.period_month = :m AND b.name != 'ALL' {bf}
             """, p).fetchone()
-        if r and r["plates"]:
-            gap = (r["plates"] or 0) - (r["costed"] or 0)
-            out["coverage_pct"] = round((r["costed"] or 0) / r["plates"] * 100, 1)
-            out["uncosted_plates"] = round(gap)
-            if food_pct is not None and r["costed"] and mtd_rev:
-                out["est_food_pct"] = round(food_pct + gap * (r["cg"] / r["costed"]) / mtd_rev * 100, 1)
+        if r and r["cov_plates"]:
+            cov = coverage_from_sums(r)
+            out["coverage_pct"] = cov["plates_pct"]
+            out["uncosted_plates"] = cov["uncosted_plates"]
+            out["revenue_coverage_pct"] = cov["revenue_pct"]
+            costed = r["cov_plates_costed"] or 0
+            if food_pct is not None and costed and mtd_rev:
+                out["est_food_pct"] = round(
+                    food_pct + cov["uncosted_plates"] * (r["cg"] / costed) / mtd_rev * 100, 1)
     except Exception:
         pass
     try:

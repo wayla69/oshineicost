@@ -1918,8 +1918,19 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
                                             _cal.monthrange(e.year, e.month)[1])
 
     def menu_cost_map(s, e):
-        """→ (rows_by_sku_id, source) where source ∈ daily|monthly|unavailable."""
+        """→ (rows_by_sku_id, source, all_cost) where source ∈ daily|monthly|unavailable.
+
+        rows are the dine-in FOOD dishes (the cost/head list); all_cost is the COGS of
+        EVERYTHING sold in the window (drinks, desserts, delivery included, packages
+        at 0), which is what gross profit must subtract — the revenue it comes off is
+        every bill. Until 2026-10-01 GP subtracted the food dishes only, so GP% read
+        high and disagreed with the same report's food cost %."""
         if s.isoformat() >= daily_min:
+            all_cost = con.execute(f"""
+                SELECT SUM(d.qty * {_eff_cost}) FROM v_sales_sku_daily d
+                JOIN branches b ON b.branch_id=d.branch_id
+                WHERE {sw} AND d.day BETWEEN :s AND :e""",
+                {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()[0] or 0.0
             rows = con.execute(f"""
                 SELECT d.sku_id, s.description, s.sku_code,
                        SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
@@ -1928,8 +1939,13 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
                 WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
                 GROUP BY d.sku_id""",
                 {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-            return {r["sku_id"]: r for r in rows}, "daily"
+            return {r["sku_id"]: r for r in rows}, "daily", all_cost
         if _whole_months(s, e):
+            all_cost = con.execute(f"""
+                SELECT SUM(d.qty * {_eff_cost}) FROM v_sales_sku_monthly d
+                JOIN branches b ON b.branch_id=d.branch_id
+                WHERE {sw} AND d.period_month BETWEEN :s AND :e""",
+                {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchone()[0] or 0.0
             rows = con.execute(f"""
                 SELECT d.sku_id, s.description, s.sku_code,
                        SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
@@ -1939,17 +1955,17 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
                   AND d.sku_id IN {food_sub}
                 GROUP BY d.sku_id""",
                 {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchall()
-            return {r["sku_id"]: r for r in rows}, "monthly"
-        return {}, "unavailable"
+            return {r["sku_id"]: r for r in rows}, "monthly", all_cost
+        return {}, "unavailable", 0.0
     def clean(nm):
         return (nm or "").replace("(A) ", "").replace("(B) ", "").strip()
     covers_cur  = cur["customers"] or 0
     covers_prev = (prev["customers"] or 0) if prev else 0
     try:
-        cur_m,  cost_src = menu_cost_map(cs, ce)
-        prev_m, _        = menu_cost_map(ps, pe) if has_prev else ({}, None)
+        cur_m,  cost_src, all_cur = menu_cost_map(cs, ce)
+        prev_m, _,        all_prev = menu_cost_map(ps, pe) if has_prev else ({}, None, 0.0)
     except Exception:
-        cur_m, prev_m, cost_src = {}, {}, "unavailable"
+        cur_m, prev_m, cost_src, all_cur, all_prev = {}, {}, "unavailable", 0.0, 0.0
     cost_available = cost_src != "unavailable"
     def cph(cost, covers): return round(cost / covers, 2) if covers else None
     cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
@@ -1989,10 +2005,13 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
                         key=lambda x: -x["delta"])[:12]
     cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
                         key=lambda x: x["delta"])[:12]
-    tot_cur_cost  = sum((r["cost"] or 0) for r in cur_m.values())
-    tot_prev_cost = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
-    total_cph      = cph(tot_cur_cost, covers_cur)
-    total_cph_prev = cph(tot_prev_cost, covers_prev) if cmp_ok else None
+    food_cur  = sum((r["cost"] or 0) for r in cur_m.values())
+    food_prev = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
+    total_cph      = cph(food_cur, covers_cur)
+    total_cph_prev = cph(food_prev, covers_prev) if cmp_ok else None
+    # gross profit subtracts the cost of everything sold (see menu_cost_map)
+    tot_cur_cost  = all_cur
+    tot_prev_cost = all_prev if has_prev else 0
     menu_out = {
         "basis": "cost_per_head",
         "covers": covers_cur, "covers_prev": covers_prev if has_prev else None,

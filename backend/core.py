@@ -46,7 +46,7 @@ if str(_P(__file__).parent.resolve()) not in _sys_path_fix.path:
 
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
 from rules import VAT_DIVISOR
-from rules import cogs_expr as _rules_cogs_expr
+from rules import cogs_expr as _rules_cogs_expr, costed_sql as _rules_costed_sql
 from rules import raw_unit_cost_sql as _raw_unit_cost_sql
 from rules import tier_code_sql as _tier_code_sql
 from typing import Optional
@@ -611,8 +611,11 @@ _FOOD_CATEGORY_FILTER = (
         f"UPPER(c.name) NOT LIKE '%{kw}%'" for kw in _NONFOOD_CATEGORY_KEYWORDS
     ) + ")"
     # Code-level guards: OT* = penalty / room-opening charges, SERVICECHARGE/SP =
-    # service, DEL* = delivery — these can sit inside food categories but are not
-    # dishes, so exclude by code too.
+    # service — these can sit inside food categories but are not dishes, so exclude
+    # by code too. DEL* are delivery DISHES (salmon sashimi by weight, dons, bentos;
+    # ~฿12.5M May 2025-Sep 2026), not a delivery fee: like the Grand Menu (DL)/(TW)
+    # lines they are out of this DINE-IN food scope on purpose, and still counted in
+    # every P&L, GP and cost-coverage figure, which do not use this filter.
     " AND sk.sku_code NOT GLOB 'OT[0-9]*'"
     # The Grand Menu (2026-09) re-coded those charges as OTHOT* — ค่าปรับบุฟเฟ่ต์
     # (food-waste penalty) and ค่าเปิดห้อง, which the OT[0-9] pattern does not match. They
@@ -1106,14 +1109,13 @@ def _bom_cogs_expr(ssm: str = "ssm") -> str:
 
 
 def _bom_costed_rev_expr(ssm: str = "ssm") -> str:
-    """Revenue portion that has a BoM recipe (pairs with _bom_cogs_expr)."""
-    return (
-        f"CASE WHEN COALESCE("
-        f"(SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id LIMIT 1), "
-        f"(SELECT 1 FROM bom_sku_alias a JOIN skus s_al ON s_al.sku_id = {ssm}.sku_id "
-        f"   WHERE a.bom_sku_code = s_al.sku_code LIMIT 1)) IS NOT NULL "
-        f"THEN {ssm}.subtotal_ex_vat ELSE 0 END"
-    )
+    """Revenue portion that carries a cost (pairs with _bom_cogs_expr).
+
+    2026-10-01: "carries a cost" = the engine's unit cost is above ฿0 — the same
+    number _bom_cogs_expr multiplies. It used to mean "has a recipe", which left
+    estimate- and cost-table-priced lines (drinks, condiments) out of the base
+    their own COGS was already in. See rules.costed_sql."""
+    return f"CASE WHEN {_rules_costed_sql(ssm)} THEN {ssm}.subtotal_ex_vat ELSE 0 END"
 
 
 def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
@@ -1195,13 +1197,16 @@ def _build_sku_effective_cost(con, force: bool = True):
 def _costed_rev_case(ssm: str = "ssm", sk: str = "sk", sc: str = "sc") -> str:
     """SQL CASE expression for the revenue portion that aligns with COGS.
 
-    "Has effective cost" now considers the monthly fallback chain (Phase 8).
+    Tier (package) revenue counts: its cost is the dishes eaten, costed on their
+    own rows. Any other line counts when the engine's unit cost is above ฿0 —
+    the number COGS multiplies (rules.costed_sql). Until 2026-10-01 this asked
+    "is there a sku_cost row", which counted a ฿0 row as costed and ignored
+    recipes and aliases. `sc` is kept for signature compatibility.
     """
-    eff = _effective_cost_subquery(ssm, sc)
     return (
         f"CASE WHEN {ssm}.source = 'Easy' AND {sk}.sku_code IN {_EASY_TIER_CODES_SQL} "
         f"          THEN {ssm}.subtotal_ex_vat "
-        f"     WHEN {eff} IS NOT NULL THEN {ssm}.subtotal_ex_vat "
+        f"     WHEN {_rules_costed_sql(ssm)} THEN {ssm}.subtotal_ex_vat "
         f"     ELSE 0 END"
     )
 
