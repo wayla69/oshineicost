@@ -42,7 +42,7 @@ async function loadEngineering() {
   document.getElementById('engSummaryCards').innerHTML = QUADS.map(q => {
     const items = costedItems.filter(i => i.quadrant === q.key);
     const rev = items.reduce((s, i) => s + (i.revenue || 0), 0);
-    return `<div class="on-light" style="background:${q.bg};border-radius:4px;padding:10px 12px">
+    return `<div class="on-light" style="background:${q.bg};border-radius:var(--r-md);padding:10px 12px">
       <div class="flex justify-between items-center">
         <span style="font-weight:600;color:${textInk(q.color)}">${q.label}</span>
         <span style="font-size:18px;font-weight:700;color:${textInk(q.color)}">${items.length}</span>
@@ -883,7 +883,7 @@ async function loadPaymentDiscount(params, gen) {
     return `<div class="flex items-center gap-2 py-1 px-1 rounded cursor-pointer hover:bg-red-50/60"
         onclick="openDiscountBills({branch:'${jsAttr(b.branch)}', payment:'Cash', sort:'discount', title:'บิลส่วนลด · เงินสด · ${jsAttr(b.branch)}'})" title="คลิกดูบิล (เฉพาะเงินสด)">
       <span class="text-xs truncate" style="width:80px">${esc(b.branch)}</span>
-      <div class="flex-1" style="background:#fee2e2;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:#ef4444;border-radius:4px"></div></div>
+      <div class="flex-1" style="background:#fee2e2;border-radius:var(--r-md);overflow:hidden"><div style="width:${w}%;height:16px;background:#ef4444;border-radius:var(--r-md)"></div></div>
       <span class="text-xs text-slate-600 tabular-nums" style="width:104px;text-align:right">${fmtN(b.bills)} บิล · ${fmt(b.discount)}</span>
     </div>`;
   }).join('') : '<p class="text-sm text-slate-400 py-3 text-center">— ไม่พบ —</p>';
@@ -896,7 +896,7 @@ async function loadPaymentDiscount(params, gen) {
     const heavy = (m.disc_pct || 0) >= 20;
     return `<div class="flex items-center gap-2 py-1">
       <span class="text-xs truncate ${isCash?'font-semibold text-red-600':'text-slate-600'}" style="width:108px" title="${esc(m.code)}">${esc(m.code)}</span>
-      <div class="flex-1" style="background:var(--accent-soft);border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#4a70b0'};border-radius:4px"></div></div>
+      <div class="flex-1" style="background:var(--accent-soft);border-radius:var(--r-md);overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#4a70b0'};border-radius:var(--r-md)"></div></div>
       <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'var(--bad-ink)':'var(--text-muted)'}">${m.disc_pct}%</b></span>
     </div>`;
   }).join('');
@@ -1127,7 +1127,7 @@ async function loadDiscountsTab() {
         return `<div class="flex items-center gap-2 py-1 px-1 rounded cursor-pointer hover:bg-indigo-50/60"
             onclick="openDiscountBills({amount:${r.amount}, title:'บิลส่วนลด ${fmtN(r.amount)} ฿ พอดี'})">
           <span class="text-sm font-semibold text-indigo-700 tabular-nums" style="width:62px">${fmtN(r.amount)} ฿</span>
-          <div class="flex-1" style="background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:18px;background:var(--accent);border-radius:4px"></div></div>
+          <div class="flex-1" style="background:#f1f5f9;border-radius:var(--r-md);overflow:hidden"><div style="width:${w}%;height:18px;background:var(--accent);border-radius:var(--r-md)"></div></div>
           <span class="text-xs text-slate-600 tabular-nums" style="width:118px;text-align:right">${fmtN(r.bills)} ครั้ง · ${fmt(r.baht)}</span>
         </div>`; }).join('');
   })();
@@ -1600,7 +1600,7 @@ function renderTimeflowGrid() {
       html += `<td
         onclick="tfCellClick(${dow},${h},${v},${rank})"
         title="${DOW_LABELS[dow]} ${h}:00 · ${v > 0 ? (isMoney ? '' + v.toLocaleString() : v.toLocaleString()) : '—'} · Rank #${rank}"
-        style="background:${bg};color:${fg};height:36px;min-width:${cellW}px;text-align:center;cursor:pointer;border-radius:4px;font-size:10px;font-weight:${v>0?600:400};transition:transform .12s;vertical-align:middle"
+        style="background:${bg};color:${fg};height:36px;min-width:${cellW}px;text-align:center;cursor:pointer;border-radius:var(--r-md);font-size:10px;font-weight:${v>0?600:400};transition:transform .12s;vertical-align:middle"
         onmouseover="this.style.transform='scale(1.1)';this.style.zIndex=10;this.style.position='relative'"
         onmouseout="this.style.transform='';this.style.zIndex='';this.style.position=''">
         ${fmtCell(v)}

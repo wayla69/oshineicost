@@ -3,9 +3,9 @@
 <style>
   #tab-feedback .fb-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
   #tab-feedback .fb-head h2 { font-size: 1.05rem; font-weight: 800; margin: 0; }
-  #tab-feedback .fb-btn { background: #0f766e; color: #fff; border: 1px solid #0f766e; border-radius:4px; padding: .35rem .8rem; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  #tab-feedback .fb-btn { background: #0f766e; color: #fff; border: 1px solid #0f766e; border-radius:var(--r-md); padding: .35rem .8rem; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   #tab-feedback .fb-btn:hover { filter: brightness(1.08); }
-  #tab-feedback .fb-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius:4px; padding: .3rem .6rem; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  #tab-feedback .fb-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius:var(--r-md); padding: .3rem .6rem; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
   #tab-feedback .fb-ghost.on { border-color: #0f766e; color: #065f46; background: #ecfdf5; }
   #tab-feedback .fb-chip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .55rem; font-size: 11px; color: var(--text-secondary); background: var(--bg-input); cursor: pointer; }
   #tab-feedback .fb-chip.on { border-color: #0369a1; background: #eff6ff; color: #0369a1; font-weight: 600; }
@@ -15,7 +15,7 @@
   #tab-feedback .fb-kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
   #tab-feedback .fb-kpi .v { font-size: 1.55rem; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
   #tab-feedback .fb-kpi .d { font-size: 11px; color: var(--text-muted); margin-top: .15rem; }
-  #tab-feedback .fb-delta { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 .35rem; border-radius: 4px; margin-right: .3rem; }
+  #tab-feedback .fb-delta { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 .35rem; border-radius:var(--r-md); margin-right: .3rem; }
   #tab-feedback .fb-delta.good { background: #d1fae5; color: #065f46; } #tab-feedback .fb-delta.bad { background: #fee2e2; color: #991b1b; } #tab-feedback .fb-delta.flat { background: var(--bg-input); color: var(--text-muted); }
   #tab-feedback .fb-queue-item { display: grid; grid-template-columns: 1fr auto; gap: .35rem .8rem; padding: .65rem .2rem; border-bottom: 1px solid var(--border); }
   #tab-feedback .fb-queue-item.hot { background: #fffbeb; }
@@ -26,9 +26,9 @@
   #tab-feedback .fb-age { font-weight: 600; } #tab-feedback .fb-age.late { color: var(--bad-ink); }
   #tab-feedback .fb-tag { font-size: 10px; padding: .05rem .35rem; border-radius: 3px; background: #f3f4f6; color: #374151; }
   #tab-feedback .fb-tag.neg { background: #fef2f2; color: #b91c1c; } #tab-feedback .fb-tag.menu { background: #eff6ff; color: #0369a1; } #tab-feedback .fb-tag.flag { background: #fef3c7; color: #92400e; }
-  #tab-feedback .fb-theme { display: grid; grid-template-columns: 7.5rem 1fr auto auto; gap: .5rem; align-items: center; font-size: 12px; padding: .3rem .2rem; border-radius:4px; cursor: pointer; }
+  #tab-feedback .fb-theme { display: grid; grid-template-columns: 7.5rem 1fr auto auto; gap: .5rem; align-items: center; font-size: 12px; padding: .3rem .2rem; border-radius:var(--r-md); cursor: pointer; }
   #tab-feedback .fb-theme:hover, #tab-feedback .fb-theme.on { background: var(--bg-input); }
-  #tab-feedback .fb-bar { height: 9px; background: #e5e7eb; border-radius:4px; overflow: hidden; }
+  #tab-feedback .fb-bar { height: 9px; background: #e5e7eb; border-radius:var(--r-md); overflow: hidden; }
   #tab-feedback .fb-bar > i { display: block; height: 100%; background:#047857; }
   #tab-feedback table.fb-t { width: 100%; font-size: 12px; border-collapse: collapse; }
   #tab-feedback table.fb-t th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; padding: .3rem .4rem; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
@@ -131,7 +131,7 @@
 
   <details class="card p-4 mt-4" id="fbComp" ontoggle="if(this.open) loadFeedbackCompetitors()">
     <summary class="text-sm font-semibold cursor-pointer">เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span> <a href="#" class="fb-ghost" style="font-size:10px;padding:0 .4rem" onclick="event.preventDefault();event.stopPropagation();toggleCompSettings()">ตั้งค่า</a></summary>
-    <div id="fbCompSettings" class="mt-2 text-xs" style="display:none;border:1px solid var(--border);border-radius:4px;padding:.7rem;background:var(--bg-input)"></div>
+    <div id="fbCompSettings" class="mt-2 text-xs" style="display:none;border:1px solid var(--border);border-radius:var(--r-md);padding:.7rem;background:var(--bg-input)"></div>
     <div id="fbCompBody" class="mt-2 text-xs"></div>
   </details>
 

@@ -507,7 +507,7 @@ function osRenderPacks() {
     (!q || r.code.toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q)));
   const inp = (code, f, v, w) =>
     `<input value="${v == null ? '' : esc(v)}" data-osf="${f}" data-oscode="${jsAttr(code)}"
-       oninput="osEdit(this)" style="width:${w}px;border:1px solid var(--border);border-radius:4px;
+       oninput="osEdit(this)" style="width:${w}px;border:1px solid var(--border);border-radius:var(--r-md);
        padding:3px 6px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);text-align:right">`;
   document.getElementById('osPackBody').innerHTML = rows.map(r => `
     <tr class="border-b" style="border-color:var(--border)">
@@ -516,7 +516,7 @@ function osRenderPacks() {
       <td class="py-1 pr-2" style="color:var(--text-muted)">${esc(r.base_unit)}</td>
       <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${fmtN(r.n_lines)}</td>
       <td class="py-1 pr-2"><input value="${esc(r.order_unit)}" data-osf="order_unit" data-oscode="${jsAttr(r.code)}"
-          oninput="osEdit(this)" style="width:120px;border:1px solid var(--border);border-radius:4px;padding:3px 6px;
+          oninput="osEdit(this)" style="width:120px;border:1px solid var(--border);border-radius:var(--r-md);padding:3px 6px;
           font-size:11.5px;background:var(--bg-input);color:var(--text-primary)"></td>
       <td class="py-1 pr-2 text-right">${inp(r.code, 'qty_per_order', r.qty_per_order, 80)}</td>
       <td class="py-1 pr-2 text-right">${inp(r.code, 'price_per_order', r.price_per_order, 80)}</td>
@@ -720,7 +720,7 @@ async function opOpenCycle(issueId) {
           <td class="py-1 pr-2 text-right">${r.rec_units.toLocaleString()} ${esc(r.order_unit)}</td>
           <td class="py-1 pr-2 text-right"><input type="number" min="0" step="any" value="${r.act_units || 0}"
               data-opcode="${jsAttr(r.ingredient_code)}" style="width:80px;border:1px solid var(--border);
-              border-radius:4px;padding:3px 6px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)"></td>
+              border-radius:var(--r-md);padding:3px 6px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)"></td>
           <td class="py-1 pr-2 text-right">${r.act_units ? r.pct_of_rec + '%' : '0%'}</td>
           <td class="py-1 pr-2 text-right">${r.status === 'ok' ? '—' : esc(r.gap_disp)}</td>
           <td class="py-1" style="color:${textInk(cls[r.status])};font-weight:600">${lab[r.status]}</td>

@@ -98,7 +98,7 @@ function msColumns(vals, o) {
     if (v == null) return;
     const x = (cx(i) - bw / 2).toFixed(1), y = yOf(v), h = Math.max(1, top + plotH - y);
     if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--group, var(--accent,#1f3a6b))"/>`;
-    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" style="fill:var(--group, var(--accent,#1f3a6b));opacity:${i === last ? 1 : 0.38}"/>`;
+    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" style="fill:var(--group, var(--accent,#1f3a6b));opacity:${i === last ? 1 : 0.38}"/>`;
   });
   const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 10, 600, 'var(--text-primary,#1e293b)', true);
   // priority: the latest complete value, then the period in progress (just its
@@ -230,7 +230,7 @@ async function msLoadVoice() {
   box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
       <div style="font-size:11px;color:var(--text-muted,#64748b)">${esc(r.source)} · <b style="color:var(--text-primary,#1e293b)">${esc(r.branch_name || '')}</b>${r.rating != null ? ` · ${r.rating}★` : ''} · ${r.age_days === 0 ? 'วันนี้' : (r.age_days || 0) + ' วัน'}${r.sla_breached ? ' <span style="color:var(--bad-ink);font-weight:600">เกิน SLA</span>' : ''}${r.contact ? ` · ${esc(r.contact)}` : ''}</div>
       <div style="font-size:13px;margin:3px 0">${r.text ? esc(r.text.slice(0, 160)) : '<i style="color:var(--text-muted,#64748b)">(ให้ดาวอย่างเดียว)</i>'}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard(); switchTab('feedback')" style="font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard(); switchTab('feedback')" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
     </div>`).join('') : `<div style="font-size:12px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ</div>`;
 }
 async function msVoiceHandled(id) {
@@ -773,7 +773,7 @@ function setupChartDefaults() {
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
 
   // Rounded, cleaner bars
-  Chart.defaults.elements.bar.borderRadius = 4;      // formal theme: a firm, lightly rounded tip...
+  Chart.defaults.elements.bar.borderRadius = 7;      // rounded tip (owner 2026-10-01: softer, livelier bars)...
   Chart.defaults.elements.bar.borderSkipped = 'start'; // ...sitting flush on the baseline
   Chart.defaults.elements.bar.maxBarThickness = 46;
 
@@ -800,7 +800,7 @@ function setupChartDefaults() {
   tt.titleFont = { family: FONT, size: 12.5, weight: '600' };
   tt.bodyFont = { family: FONT, size: 12 };
   tt.padding = 11;
-  tt.cornerRadius = 3;
+  tt.cornerRadius = 8;
   tt.boxPadding = 5;
   tt.usePointStyle = true;
   tt.pointStyle = 'rect';

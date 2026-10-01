@@ -715,7 +715,7 @@ function renderMgtReport(j, jM, jF) {
       grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#e8edf3" stroke-width="0.6"/>`;
       ylab += `<text x="${padL - 4}" y="${(yy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${_fmtMc(vv).replace('฿', '')}</text>`; }
     const bars = vals.map((v, i) => { const by = yc(v), bh = Math.max(0.6, padT + plotH - by);
-      return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i === li ? '#4a70b0' : '#c9d5e8'}"/>`; }).join('');
+      return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${i === li ? '#4a70b0' : '#c9d5e8'}"/>`; }).join('');
     const vlab = vals.map((v, i) => `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? '#4a70b0' : '#64748b'}">${_fmtMc(v)}</text>`).join('');
     const xlab = wk.map((w, i) => `<text x="${xc(i).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#475569">${w.label}</text>`).join('');
     // One amber tick per bar, at THAT bar's own fair-comparison height, instead of a
@@ -791,7 +791,7 @@ function renderMgtReport(j, jM, jF) {
        </div>`;
   // One mini-card per series in split mode (title + latest value + its own canvas).
   const _trendCard = (id, title, color) =>
-    `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:10px 12px 6px">
+    `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:var(--r-md);padding:10px 12px 6px">
        <div class="flex items-center justify-between mb-1">
          <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${_sw(color)} ${title}</span>
          <span id="${id}Latest" class="text-xs font-extrabold" style="color:${textInk(color)}"></span>
@@ -1622,7 +1622,7 @@ function renderMgtReport(j, jM, jF) {
       const rects = bars.map((x, i) => {
         const y0 = yc(Math.max(x.a, x.z)), y1 = yc(Math.min(x.a, x.z)), h = Math.max(1, y1 - y0);
         const top = x.tot ? x.v : x.v;
-        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${x.c}"${x.tot ? '' : ' opacity="0.9"'}/>`
+        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${x.c}"${x.tot ? '' : ' opacity="0.9"'}/>`
           + `<text x="${xc(i).toFixed(1)}" y="${(y0 - 5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${x.c}">${x.tot ? _fmtMc(top) : sM(top)}</text>`
           + `<text x="${xc(i).toFixed(1)}" y="${(H - 10).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="#475569">${esc(x.l)}</text>`;
       }).join('');
@@ -2103,7 +2103,7 @@ function renderMgtReport(j, jM, jF) {
     const ac     = d => d == null ? '#64748b' : d >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     const af     = d => d == null ? '—' : (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d).toFixed(1) + '%';
     const pill   = (lbl, val, sub = '', sc = '#64748b') =>
-      `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+      `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:var(--r-md)">
          <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px">${lbl}</div>
          <div style="font-size:13px;font-weight:800;color:#1e293b;white-space:nowrap">${val}</div>
          ${sub ? `<div style="font-size:10px;font-weight:600;color:${textInk(sc)};margin-top:2px">${sub}</div>` : ''}
@@ -2178,7 +2178,7 @@ function renderMgtReport(j, jM, jF) {
           s3 = ` Master is running <b style="color:${(mVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(mVs)} its average</b> and franchise <b style="color:${(fVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(fVs)} its average</b>.`;
         }
       }
-      analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border:1px solid ${dirCol};border-radius:4px">
+      analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border:1px solid ${dirCol};border-radius:var(--r-md)">
         <p style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;margin-bottom:3px">${T.trendAnalysis}</p>
         <p style="font-size:11.5px;line-height:1.55;color:#334155">${s1}${s2}${s3}</p></div>`;
     }
@@ -2217,7 +2217,7 @@ function renderMgtReport(j, jM, jF) {
       }
       const bars = vals.map((v, i) => {
         const by = yc(v), bh = Math.max(0.6, padT + plotH - by);
-        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${i === li ? currC : histC}"/>`;
+        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="${i === li ? currC : histC}"/>`;
       }).join('');
       // Per-bar value labels only in the roomy wide chart (matches on-screen datalabels);
       // the compact split charts show the latest value in the header instead.
@@ -2231,7 +2231,7 @@ function renderMgtReport(j, jM, jF) {
              <span style="font-size:8px;font-weight:800;color:#475569">${title}</span>
              <span style="font-size:8px;font-weight:800;color:${textInk(currC)}">${fmtM(vals[li] || 0)}</span></div>`
         : '';
-      return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:4px;padding:6px 8px">
+      return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:var(--r-md);padding:6px 8px">
           ${hdr}
           <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">
             ${grid}${ylab}${bars}${maLine}${vlab}${xlab}

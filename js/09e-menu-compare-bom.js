@@ -167,9 +167,9 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
   const nM = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
   const dp = (a, b) => a != null ? _cmpPctSafe(a, b) : null;
   const badge = r => r.only_in_b
-    ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">ใหม่</span>'
+    ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:var(--r-md);margin-left:5px;font-weight:700">ใหม่</span>'
     : r.only_in_a
-      ? '<span style="font-size:9px;background:#fef3c7;color:#a44a08;padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">หาย</span>' : '';
+      ? '<span style="font-size:9px;background:#fef3c7;color:#a44a08;padding:1px 5px;border-radius:var(--r-md);margin-left:5px;font-weight:700">หาย</span>' : '';
   body.innerHTML = items.map((r, i) => {
     const qa = vD(r.qty_a, Ca), qb = vD(r.qty_b, Cb);
     const ca = vD(r.cogs_a, Ca), cb = vD(r.cogs_b, Cb);
@@ -297,7 +297,7 @@ function mcRenderBranch() {
   const el = document.getElementById('mcDrillBranch'); if (!el || !_mcDrillData) return;
   const br = _mcDrillData.branches || [], ph = _mcDrillPerHead;
   const toggle = `<div class="flex items-center gap-2 mb-3 flex-wrap"><span class="text-xs text-slate-500">มุมมอง:</span>
-    <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+    <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
       <button class="gran-btn ${ph?'':'gran-active'}" onclick="mcSetBranchMode(false)">รวม</button>
       <button class="gran-btn ${ph?'gran-active':''}" onclick="mcSetBranchMode(true)">ต่อคน</button>
     </div>${ph?'<span class="text-[11px] text-slate-400">จำนวน/คน = จำนวนเมนู ÷ ลูกค้าของสาขา · ต้นทุน/คน = COGS ÷ ลูกค้า</span>':''}</div>`;
@@ -1280,7 +1280,7 @@ function bcRenderRoi(d, id) {
         <div class="text-lg font-semibold text-slate-500">${fmt(t.potential_saving)}</div></div>
       <div class="flex-1 min-w-[160px]">
         <div class="text-[11px] text-slate-400 mb-1">ความคืบหน้า ${t.progress_pct==null?'—':t.progress_pct.toFixed(0)+'%'}</div>
-        <div style="height:10px;background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+        <div style="height:10px;background:var(--bg-subtle);border-radius:var(--r-md);overflow:hidden">
           <div style="height:100%;width:${prog}%;background:#7a66b8"></div></div>
       </div>
     </div>

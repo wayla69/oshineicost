@@ -1450,7 +1450,7 @@ function showToast(msg, type = 'info', duration = 4500) {
   const t = document.createElement('div');
   t.style.cssText = [
     'position:fixed','bottom:24px','right:24px','z-index:9999',
-    'padding:12px 16px 12px 14px','border-radius:4px',
+    'padding:12px 16px 12px 14px','border-radius:var(--r-md)',
     `background:${colors[type]||colors.info}`,
     'color:#fff','font-size:13px','font-weight:500',
     'max-width:380px','line-height:1.4',
@@ -2370,7 +2370,7 @@ function _bbomRenderIngredients(d) {
           <span style="flex:none;width:9px;height:9px;border-radius:2px;background:${color}"></span>
           <span class="text-xs font-medium truncate" title="${esc(i.ingredient_name||'')}">${esc(i.ingredient_name||'')}</span>
           ${i.ingredient_code ? `<span class="text-xs font-mono text-slate-400" style="flex:none">${esc(i.ingredient_code)}</span>` : ''}
-          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:4px;background:${color}22;color:${textInk(color)};font-weight:600">${esc(typeLbl)}</span>
+          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:var(--r-md);background:${color}22;color:${textInk(color)};font-weight:600">${esc(typeLbl)}</span>
         </div>
         <div class="text-right" style="flex:none">
           <span class="text-xs font-semibold">${_bbomFmtB(i.total_cost)}</span>
@@ -2378,8 +2378,8 @@ function _bbomRenderIngredients(d) {
         </div>
       </div>
       <div class="flex items-center" style="gap:8px;margin-top:4px;padding-left:30px">
-        <div style="flex:1;height:7px;border-radius:4px;background:var(--bg-subtle);overflow:hidden">
-          <div style="width:${barW.toFixed(1)}%;height:100%;background:${color};border-radius:4px"></div>
+        <div style="flex:1;height:7px;border-radius:var(--r-md);background:var(--bg-subtle);overflow:hidden">
+          <div style="width:${barW.toFixed(1)}%;height:100%;background:${color};border-radius:var(--r-md)"></div>
         </div>
         <span class="text-slate-400" style="flex:none;font-size:10px">${qtyTxt} · ใช้ใน ${i.n_menus_using||0} เมนู${menus}</span>
       </div>

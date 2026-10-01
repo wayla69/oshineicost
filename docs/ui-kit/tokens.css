@@ -59,14 +59,14 @@
   /* Elevation: resting surfaces are flat; only floating things cast a shadow. */
   --shadow-xs:  none;
   --shadow-sm:  none;
-  --shadow-card: none;
+  --shadow-card: 0 1px 2px rgba(15,23,42,0.04), 0 6px 18px rgba(15,23,42,0.05);
   --shadow-md:  0 4px 12px rgba(15,23,42,0.12);   /* menus, dropdowns */
   --shadow-lg:  0 12px 32px rgba(15,23,42,0.24);  /* the modal */
 
   /* Radii */
-  --r-sm: 3px;
-  --r-md: 4px;
-  --r-lg: 4px;
+  --r-sm: 8px;    /* inputs, buttons, chips  (owner 2026-10-01: softer corners app-wide) */
+  --r-md: 12px;   /* tiles, panels, menus */
+  --r-lg: 16px;   /* cards */
 }
 body.dark {
   --bg-page:    #080e1c;

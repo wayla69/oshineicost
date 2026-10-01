@@ -10,7 +10,7 @@
     if (!b) {
       b = document.createElement('div');
       b.id = '_errBanner';
-      b.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:10px 14px;font-size:12px;color:#991b1b;max-height:140px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+      b.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--r-md);padding:10px 14px;font-size:12px;color:#991b1b;max-height:140px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)';
       document.body.appendChild(b);
     }
     _errors.push(msg);

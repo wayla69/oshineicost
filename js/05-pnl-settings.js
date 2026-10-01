@@ -2181,7 +2181,7 @@ async function loadHeavyEaters(force) {
     const col = isHeavy ? '#f59e0b' : '#38bdf8';
     return `<div class="flex items-center gap-2 mb-1">
       <span class="text-[10px] text-slate-400 text-right" style="width:104px">${lbl}</span>
-      <div class="flex-1" style="background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+      <div class="flex-1" style="background:var(--bg-subtle);border-radius:var(--r-md);overflow:hidden">
         <div style="width:${w}%;min-width:2px;height:16px;background:${col}"></div>
       </div>
       <span class="text-[10px] tabular-nums text-slate-500" style="width:54px">${fmtN(h.count || 0)}</span>

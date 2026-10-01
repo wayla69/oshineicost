@@ -78,7 +78,7 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d9e6; border-radius:4px; }
+::-webkit-scrollbar-thumb { background: #d1d9e6; border-radius:var(--r-md); }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 body.dark ::-webkit-scrollbar-thumb { background: #2a3a55; }
 body.dark ::-webkit-scrollbar-thumb:hover { background: #3d5175; }
@@ -87,7 +87,7 @@ body.dark ::-webkit-scrollbar-thumb:hover { background: #3d5175; }
 .anomaly-banner {
   background:#fef3c7;
   border:1px solid #f59e0b;
-  border-radius:4px;
+  border-radius:var(--r-md);
   padding: 12px 16px;
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 16px;
@@ -120,7 +120,7 @@ body.dark {
 .heatmap-table { border-collapse: separate; border-spacing: 2px; }
 .heatmap-table th { background: transparent; font-size: 10px; color: var(--text-muted); font-weight: 500; padding: 4px 6px; position: static; }
 .heatmap-table td { padding: 0; }
-.heatmap-cell { width: 52px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #0f172a;   /* white fails on the whole heat scale (2.2-3.8:1); navy clears it */ cursor: pointer; transition: transform 0.1s; }
+.heatmap-cell { width: 52px; height: 28px; border-radius:var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #0f172a;   /* white fails on the whole heat scale (2.2-3.8:1); navy clears it */ cursor: pointer; transition: transform 0.1s; }
 .heatmap-cell:hover { transform: scale(1.15); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .heatmap-branch-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); padding-right: 8px; text-align: right; white-space: nowrap;
   position: sticky; left: 0; background: var(--bg-card); z-index: 1; }   /* stays put while the months scroll */
@@ -133,7 +133,7 @@ body.dark {
   width: 26px; height: 26px;
   background: rgba(255,255,255,0.85);
   border: 1px solid var(--border);
-  border-radius:4px;
+  border-radius:var(--r-md);
   font-size: 12px; line-height: 1;
   cursor: pointer; z-index: 5;
   transition: all 0.15s; padding: 0;
@@ -161,7 +161,7 @@ body.dark .dive-btn { background: rgba(30,41,59,0.8); }
 @keyframes backdropIn { from { opacity:0; backdrop-filter: blur(0); } to { opacity:1; backdrop-filter: blur(8px); } }
 .drill-panel {
   background: var(--bg-card); color: var(--text-primary);
-  border-radius:4px;
+  border-radius:var(--r-md);
   width: min(1400px, 96vw);
   max-height: 94vh; overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
@@ -206,7 +206,7 @@ body.dark .dive-btn { background: rgba(30,41,59,0.8); }
   .dive-side { height: auto; max-height: none; }
 }
 /* P&L per-bill gross-margin distribution bands (clickable drill-in) */
-.pb-band { padding: 2px 4px; border-radius:4px; transition: background .12s; }
+.pb-band { padding: 2px 4px; border-radius:var(--r-md); transition: background .12s; }
 .pb-band:hover { background: var(--bg-subtle); }
 .pb-band-active { background: rgba(31,58,107,.10); outline: 1px solid var(--indigo); }
 
@@ -233,7 +233,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 
 .dive-bullet {
   display: flex; gap: 8px; align-items: flex-start;
-  padding: 9px 10px; border-radius:4px;
+  padding: 9px 10px; border-radius:var(--r-md);
   margin-bottom: 6px; font-size: 12px; line-height: 1.5;
   background: var(--bg-subtle);
   border:1px solid transparent;
@@ -251,7 +251,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   padding: 8px 10px; margin-top: 6px;
   font-size: 11.5px; font-weight: 500;
   background: var(--bg-subtle); color: var(--text-secondary);
-  border: 1px solid var(--border-soft); border-radius:4px;
+  border: 1px solid var(--border-soft); border-radius:var(--r-md);
   cursor: pointer; transition: all 0.15s;
 }
 .dive-action-btn:hover { background: var(--indigo); color: var(--on-indigo); border-color: var(--indigo); transform: translateX(2px); }
@@ -274,19 +274,19 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 .search-results {
   position: absolute; top: 100%; left: 0; right: 0;
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius:4px; margin-top: 4px; padding: 6px;
+  border-radius:var(--r-md); margin-top: 4px; padding: 6px;
   box-shadow: 0 10px 30px rgba(15,23,42,0.15);
   z-index: 60; max-height: 360px; overflow-y: auto;
 }
 .search-item {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius:4px; cursor: pointer;
+  padding: 7px 10px; border-radius:var(--r-md); cursor: pointer;
   font-size: 13px;
 }
 .search-item:hover { background: var(--bg-hover); }
 .search-item .badge {
   font-size: 9px; font-weight: 700;
-  padding: 1px 6px; border-radius: 4px;
+  padding: 1px 6px; border-radius:var(--r-md);
   background: var(--accent-soft); color: var(--accent);
 }
 .search-item .badge-sku { background: #d1fae5; color: #065f46; }
@@ -335,7 +335,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   flex-shrink: 0; overflow: hidden;
 }
 .logo-mark {
-  width: 36px; height: 36px; border-radius:4px;
+  width: 36px; height: 36px; border-radius:var(--r-md);
   background:#4a70b0;
   box-shadow: 0 4px 14px rgba(31,58,107,0.5);
   flex-shrink: 0;
@@ -359,7 +359,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   position: relative;
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; color: #8093b0;   /* 5.84:1 on the rail (was #4a6080, 2.85) */
-  cursor: pointer; border-radius:4px; margin-bottom: 1px;
+  cursor: pointer; border-radius:var(--r-md); margin-bottom: 1px;
   transition: all 0.15s ease; white-space: nowrap; user-select: none;
   border: 1px solid transparent;
 }
@@ -398,7 +398,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 .toggle-btn {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; color: #74879f; cursor: pointer;
-  border-radius:4px; background: none; border: none;
+  border-radius:var(--r-md); background: none; border: none;
   font: inherit; font-size: 12px; font-weight: 500;
   transition: all 0.15s; white-space: nowrap;
 }
@@ -459,14 +459,14 @@ body.dark .top-bar { background: rgba(15,26,46,0.97); border-bottom-color: var(-
   display: flex; gap: 2px;
   background: rgba(241,245,249,0.9);
   border: 1px solid rgba(226,232,240,0.7);
-  border-radius:4px; padding: 4px; margin-bottom: 22px;
+  border-radius:var(--r-md); padding: 4px; margin-bottom: 22px;
 }
 body.dark .subtab-bar { background: rgba(11,18,34,0.8); border-color: var(--border); }
 .subtab-btn {
   flex: 1; padding: 7px 16px;
   font-size: 12.5px; font-weight: 500; color: var(--text-secondary);
   border: none; background: none; cursor: pointer;
-  border-radius:4px; transition: all 0.18s ease; white-space: nowrap;
+  border-radius:var(--r-md); transition: all 0.18s ease; white-space: nowrap;
 }
 .subtab-btn:hover:not(.active) { color: var(--indigo); background: rgba(31,58,107,0.06); }
 .subtab-btn.active {
@@ -597,12 +597,12 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
    .gran-btn renders as a tidy pill even when it lacks inline Tailwind size classes. */
 .gran-btn {
   padding: 5px 12px; font-size: 12px; font-weight: 500;
-  border: none; border-radius:4px; cursor: pointer; white-space: nowrap;
+  border: none; border-radius:var(--r-md); cursor: pointer; white-space: nowrap;
   color: var(--text-secondary); background: transparent; transition: all 0.15s ease;
 }
 .gran-btn:hover:not(.gran-active) { color: var(--text-primary); background: rgba(31,58,107,0.07); }
 .period-preset {
-  padding: 4px 9px; font-size: 11px; font-weight: 500; border-radius:4px; cursor: pointer;
+  padding: 4px 9px; font-size: 11px; font-weight: 500; border-radius:var(--r-md); cursor: pointer;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--text-secondary);
   white-space: nowrap; transition: all 0.15s ease; line-height: 1.4;
 }
@@ -615,7 +615,7 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
 .branch-drillable:hover { color: var(--indigo); text-decoration: underline; }
 .drill-branch-btn {
   display: inline-block; margin-left: 5px; padding: 1px 6px; font-size: 10px;
-  font-weight: 500; border-radius: 4px; background: rgba(31,58,107,0.1);
+  font-weight: 500; border-radius:var(--r-md); background: rgba(31,58,107,0.1);
   color: var(--indigo); border: none; cursor: pointer; opacity: 0;
   transition: opacity 0.15s; vertical-align: middle; line-height: 1.5;
 }
@@ -635,14 +635,14 @@ body.dark .gran-active { background: rgba(20,32,56,0.95) !important; }
 
 button { transition: all 0.15s ease; }
 button:active:not(:disabled) { transform: scale(0.97); }
-:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius:var(--r-md); }
 
 @keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 .tab-active { animation: tabFadeIn 0.22s cubic-bezier(.16,1,.3,1); }
 
 .kbd {
   display: inline-block; padding: 2px 6px; font-family: monospace; font-size: 11px;
-  background: #f1f5f9; border: 1px solid #cbd5e1; border-radius:4px; box-shadow: 0 1px 0 #94a3b8;
+  background: #f1f5f9; border: 1px solid #cbd5e1; border-radius:var(--r-md); box-shadow: 0 1px 0 #94a3b8;
 }
 body.dark .kbd { background: #1a2d47; border-color: #273c58; box-shadow: 0 1px 0 #0e1c2e; color: #cbd5e1; }
 
@@ -658,7 +658,7 @@ button.border.border-slate-300 {
   border-color: var(--border) !important;
   color: var(--text-secondary) !important;
   background: var(--bg-card) !important;
-  border-radius:4px;
+  border-radius:var(--r-md);
   transition: all 0.15s;
 }
 .text-xs.border.border-slate-200:hover,
@@ -919,7 +919,7 @@ body.dark .db-status.checking { background: #1e293b; color: #94a3b8; border-colo
   background:var(--bg-subtle);
   background-size: 200% 100%;
   animation: skeletonShimmer 1.4s ease infinite;
-  border-radius:4px;
+  border-radius:var(--r-md);
 }
 @keyframes skeletonShimmer {
   0%   { background-position: 200% 0; }
@@ -948,7 +948,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 #offlineOverlay p  { font-size: 14px; color: var(--text-secondary); max-width: 380px; margin: 0; }
 #offlineOverlay .retry-btn {
   padding: 10px 24px; background: var(--indigo); color: var(--on-indigo);
-  border: none; border-radius:4px; font-size: 14px; font-weight: 600;
+  border: none; border-radius:var(--r-md); font-size: 14px; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
 }
 #offlineOverlay .retry-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(31,58,107,0.35); }
@@ -1354,11 +1354,11 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-header { position: sticky; top: 0; z-index: 20; background: var(--accent);
   background:#1f3a6b; color: #fff;   /* white >= 6.29:1 end to end (#4a70b0 was 4.47) */
   padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
-.ms-header .ms-logo { width: 34px; height: 34px; border-radius:4px; background: rgba(255,255,255,.18);
+.ms-header .ms-logo { width: 34px; height: 34px; border-radius:var(--r-md); background: rgba(255,255,255,.18);
   display: flex; align-items: center; justify-content: center; font-size: 18px; }
 .ms-section { padding: 0 14px; margin-top: 16px; }
 .ms-section-title { font-size: 13px; font-weight: 700; color: var(--text-primary,#1e293b); margin-bottom: 8px; }
-.ms-kpi { background: var(--bg-card,#fff); border-radius:4px; padding: 14px 16px;
+.ms-kpi { background: var(--bg-card,#fff); border-radius:var(--r-md); padding: 14px 16px;
   box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
 .ms-kpi .lbl { font-size: 11px; color: var(--text-muted,#64748b); }
 .ms-kpi .val { font-size: 26px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
@@ -1367,9 +1367,9 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-row:first-child { border-top: 0; }
 .ms-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
   font-size: 12px; font-weight: 600; }
-.ms-card { background: var(--bg-card,#fff); border-radius:4px; padding: 6px 16px;
+.ms-card { background: var(--bg-card,#fff); border-radius:var(--r-md); padding: 6px 16px;
   box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
-.ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius:4px;
+.ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius:var(--r-md);
   padding: 6px 10px; font-size: 12px; font-weight: 600; }
 #backToMobile { position: fixed; bottom: 84px; right: 16px; z-index: 60;
   width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent);
@@ -1391,7 +1391,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body:not(.force-desktop) #msSheet.open { display: block; }
   body:not(.force-desktop).ms-sheet-open { overflow: hidden; }
 }
-.ms-seg { flex: 1; padding: 7px 6px; border-radius:4px; border: 1px solid var(--border,#e2e8f0);
+.ms-seg { flex: 1; padding: 7px 6px; border-radius:var(--r-md); border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
 .ms-seg-on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
@@ -1524,22 +1524,22 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;
      background:#16294d;align-items:center;justify-content:center">
   <form id="loginForm" onsubmit="doLogin(event)"
-        style="width:min(380px,92vw);background:#fff;border-radius:4px;padding:34px 30px;
+        style="width:min(380px,92vw);background:#fff;border-radius:var(--r-md);padding:34px 30px;
                box-shadow:0 30px 80px rgba(0,0,0,.5)">
     <div style="text-align:center;margin-bottom:6px;font-size:30px"></div>
     <h2 style="text-align:center;margin:0 0 2px;font-size:20px;font-weight:800;color:#1e293b">Oshinei Dashboard</h2>
     <p style="text-align:center;margin:0 0 22px;font-size:13px;color:#64748b">เข้าสู่ระบบเพื่อใช้งาน</p>
     <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">ชื่อผู้ใช้</label>
     <input id="loginUser" autocomplete="username" required
-           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);
                   padding:10px 12px;font-size:14px;margin-bottom:14px">
     <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">รหัสผ่าน</label>
     <input id="loginPass" type="password" autocomplete="current-password" required
-           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);
                   padding:10px 12px;font-size:14px;margin-bottom:8px">
     <div id="loginError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
     <button type="submit" id="loginBtn"
-            style="width:100%;margin-top:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:4px;
+            style="width:100%;margin-top:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r-md);
                    padding:11px;font-size:14px;font-weight:700;cursor:pointer">เข้าสู่ระบบ</button>
   </form>
 </div>
@@ -1548,22 +1548,22 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <div id="pwOverlay" style="display:none;position:fixed;inset:0;z-index:10000;
      background:rgba(15,23,42,.72);align-items:center;justify-content:center">
   <form id="pwForm" onsubmit="submitPasswordChange(event)"
-        style="width:min(380px,92vw);background:#fff;border-radius:4px;padding:30px 28px;
+        style="width:min(380px,92vw);background:#fff;border-radius:var(--r-md);padding:30px 28px;
                box-shadow:0 30px 80px rgba(0,0,0,.5)">
     <h2 style="margin:0 0 4px;font-size:18px;font-weight:800;color:#1e293b">เปลี่ยนรหัสผ่าน</h2>
     <p id="pwHint" style="margin:0 0 18px;font-size:12.5px;color:#64748b">ตั้งรหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)</p>
     <input id="pwCurrent" type="password" autocomplete="current-password" placeholder="รหัสผ่านปัจจุบัน" required
-           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:10px 12px;font-size:14px;margin-bottom:12px">
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);padding:10px 12px;font-size:14px;margin-bottom:12px">
     <input id="pwNew" type="password" autocomplete="new-password" placeholder="รหัสผ่านใหม่" required
-           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:10px 12px;font-size:14px;margin-bottom:12px">
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);padding:10px 12px;font-size:14px;margin-bottom:12px">
     <input id="pwConfirm" type="password" autocomplete="new-password" placeholder="ยืนยันรหัสผ่านใหม่" required
-           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:10px 12px;font-size:14px;margin-bottom:8px">
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);padding:10px 12px;font-size:14px;margin-bottom:8px">
     <div id="pwError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button type="button" id="pwCancel" onclick="closePasswordChange()"
-              style="flex:0 0 auto;background:#f1f5f9;color:#475569;border:none;border-radius:4px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer">ยกเลิก</button>
+              style="flex:0 0 auto;background:#f1f5f9;color:#475569;border:none;border-radius:var(--r-md);padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer">ยกเลิก</button>
       <button type="submit" id="pwSubmit"
-              style="flex:1;background:var(--accent);color:var(--on-accent);border:none;border-radius:4px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">บันทึกรหัสผ่านใหม่</button>
+              style="flex:1;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r-md);padding:11px;font-size:14px;font-weight:700;cursor:pointer">บันทึกรหัสผ่านใหม่</button>
     </div>
   </form>
 </div>
@@ -1575,8 +1575,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <div id="offlineOverlay" style="display:none">
   <div class="offline-icon"></div>
   <h2>Cannot reach the database server</h2>
-  <p>The backend must be running at <code style="font-size:12px;background:var(--bg-subtle);padding:1px 6px;border-radius:4px">localhost:8000</code> for charts and data to load.</p>
-  <div style="background:var(--bg-subtle);border-radius:4px;padding:16px 20px;text-align:left;max-width:380px;font-size:13px;color:var(--text-secondary);line-height:1.8">
+  <p>The backend must be running at <code style="font-size:12px;background:var(--bg-subtle);padding:1px 6px;border-radius:var(--r-md)">localhost:8000</code> for charts and data to load.</p>
+  <div style="background:var(--bg-subtle);border-radius:var(--r-md);padding:16px 20px;text-align:left;max-width:380px;font-size:13px;color:var(--text-secondary);line-height:1.8">
     <strong style="color:var(--text-primary)">Start the server:</strong><br>
     Double-click <strong>เปิด Oshinei Dashboard.bat</strong><br>
     then refresh this page.
@@ -1601,10 +1601,10 @@ body.mgt-reading .content-area { padding-top: 10px; }
   </div>
 
   <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
-    <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;padding:9px 12px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+    <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;padding:9px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>
     </select>
-    <select id="msMonthSel" onchange="loadMobileSummary(true)" aria-label="เลือกเดือน" style="width:140px;flex-shrink:0;padding:9px 10px;border-radius:4px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+    <select id="msMonthSel" onchange="loadMobileSummary(true)" aria-label="เลือกเดือน" style="width:140px;flex-shrink:0;padding:9px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">เดือนล่าสุด</option>
     </select>
   </div>
@@ -1981,7 +1981,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
         <option value="">ทุกสาขา</option>
       </select>
       <!-- Granularity toggle -->
-      <div class="flex flex-shrink-0" role="group" aria-label="ความถี่ข้อมูล (Day / Week / Month / Qtr / Year)" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+      <div class="flex flex-shrink-0" role="group" aria-label="ความถี่ข้อมูล (Day / Week / Month / Qtr / Year)" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
         <button id="gran-daily"     onclick="setGranularity('daily')"     aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)">Day</button>
         <button id="gran-weekly"    onclick="setGranularity('weekly')"    aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)">Week</button>
         <button id="gran-monthly"   onclick="setGranularity('monthly')"   aria-pressed="true"  class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all gran-active">Month</button>
@@ -2033,7 +2033,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
           class="topbar-icon-btn whitespace-nowrap" style="width:auto;padding:0 10px;font-size:12px;gap:4px" title="ตัวกรองเพิ่มเติม">
           <span aria-hidden="true"></span> <span style="color:var(--text-secondary);font-weight:500">ตัวกรอง</span> ▾
         </button>
-        <div id="moreFiltersMenu" class="hidden" style="position:absolute;right:0;top:38px;z-index:60;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;box-shadow:0 8px 28px rgba(15,23,42,0.16);padding:14px;width:230px">
+        <div id="moreFiltersMenu" class="hidden" style="position:absolute;right:0;top:38px;z-index:60;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:0 8px 28px rgba(15,23,42,0.16);padding:14px;width:230px">
           <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">กลุ่มสาขา</p>
           <select id="selGroup" onchange="onGroupChange()" aria-label="กลุ่มสาขา (Master / Franchise)" class="w-full mb-3"
             style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">

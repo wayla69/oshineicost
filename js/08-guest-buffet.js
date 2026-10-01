@@ -1968,7 +1968,7 @@ async function loadGpCalendar() {
         + `\nGross Profit: ${gp != null ? fmt(gp) : '—'}${pct != null ? '  ('+pct.toFixed(1)+'%)' : ''}`
         + `\nPax: ${fmtN(r.customer_count)} · บิล: ${fmtN(r.tx_count)}`
       : '';
-    html += `<div title="${tip}" style="background:${bg};color:${tc};border-radius:4px;padding:6px 4px;text-align:center;cursor:default">
+    html += `<div title="${tip}" style="background:${bg};color:${tc};border-radius:var(--r-md);padding:6px 4px;text-align:center;cursor:default">
       <div style="font-size:11px;font-weight:700">${day}</div>
       <div style="font-size:9px">${gp != null ? fmt(gp) : (r ? fmt(r.revenue_ex||0) : '')}</div>
     </div>`;
@@ -2876,7 +2876,7 @@ async function renderBenchFoodCost(params) {
     const fc = b.total_food_cost_pct, w = fc / maxFc * 100, c = color(fc), vs = fc - median;
     return `<div class="flex items-center gap-2 mb-1.5 text-xs">
       <div style="width:130px" class="truncate font-medium" title="${esc(b.branch)}">${esc(b.branch)}</div>
-      <div style="flex:1;position:relative;height:18px;background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+      <div style="flex:1;position:relative;height:18px;background:var(--bg-subtle);border-radius:var(--r-md);overflow:hidden">
         <div style="position:absolute;left:${loPct}%;width:${Math.max(0,hiPct-loPct)}%;height:100%;background:rgba(16,185,129,0.12)"></div>
         <div style="height:100%;width:${w}%;background:${c};opacity:.85"></div>
         <div style="position:absolute;left:${medPct}%;top:0;bottom:0;border-left:2px dashed #475569"></div>
