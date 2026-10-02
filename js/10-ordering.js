@@ -938,7 +938,7 @@ function opApplySuggestedBuffer() {
 // recipes should have consumed, this says what was bought — buying runs ahead
 // of selling, so a single week swings and the period average is the honest read.
 // ═══════════════════════════════════════════════════════════════════════════
-let _ipReady = false, _ipLast = null, _ipChartPct = null, _ipChartAmt = null;
+let _ipReady = false, _ipLast = null, _ipChartPct = null, _ipChartAmt = null, _ipChartBranch = null;
 
 async function _ipInitFilters() {
   if (_ipReady) return;
@@ -1046,48 +1046,94 @@ async function loadIngPurchase(force) {
 
 function _ipRenderCharts(d) {
   const weeks = (d.meta || {}).weeks || [];
-  if (!weeks.length) {
+  const kill = () => {
     if (_ipChartPct) { _ipChartPct.destroy(); _ipChartPct = null; }
     if (_ipChartAmt) { _ipChartAmt.destroy(); _ipChartAmt = null; }
-    return;
-  }
-  const PAL = ['#7a66b8', '#0891b2', '#b0472d', '#1f7a4d', '#d97706', '#be185d', '#64748b'];
-  const names = [...new Set((d.rows || []).map(r => r.branch))].sort();
-  const at = {};
-  (d.rows || []).forEach(r => { at[r.branch + '|' + r.week_start] = r; });
+    if (_ipChartBranch) { _ipChartBranch.destroy(); _ipChartBranch = null; }
+  };
+  const heat = document.getElementById('ipHeat');
+  if (!weeks.length) { kill(); if (heat) heat.innerHTML = ''; return; }
+  const rows = d.rows || [];
+  const PCT_COL = v => v == null ? '#94a3b8' : v >= 40 ? '#dc2626' : v >= 33 ? '#f59e0b' : '#059669';
+  const PCT_BG  = v => v == null ? 'var(--bg-subtle)' : v >= 40 ? '#fee2e2' : v >= 33 ? '#fef3c7' : '#dcfce7';
+  const wkLbl = w => { const [y, m, dd] = String(w).split('-').map(Number); return `${dd}/${m}`; };
+  const imported = rows.filter(r => r.amount != null);
+  const empty = !imported.length;
 
-  // % per branch per week — one line each, outlier weeks called out on the line.
-  const dsPct = names.map((b, i) => {
-    const series = weeks.map(w => at[b + '|' + w]?.pct ?? null);
-    const out = _miOutlierSet(series);
-    return { label: b, data: series, spanGaps: true, tension: .25,
-             borderColor: PAL[i % PAL.length], backgroundColor: PAL[i % PAL.length],
-             pointRadius: series.map((_, k) => out.has(k) ? 6 : 3),
-             pointBackgroundColor: series.map((_, k) => out.has(k) ? '#dc2626' : PAL[i % PAL.length]),
-             pointBorderColor: series.map((_, k) => out.has(k) ? '#dc2626' : PAL[i % PAL.length]) };
-  });
+  // ── A: which branch buys heavy — one bar per branch, whole period ──
+  const brs = (d.branches || []).filter(b => b.pct != null).sort((x, y) => y.pct - x.pct);
+  const wrap = document.getElementById('ipChartBranchWrap');
+  if (wrap) wrap.style.height = Math.max(200, 24 * brs.length + 70) + 'px';
+  const chainPct = (d.totals || {}).pct;
+  if (_ipChartBranch) { _ipChartBranch.destroy(); _ipChartBranch = null; }
+  _ipChartBranch = mkChart('ipChartBranch', {
+    type: 'bar',
+    data: { labels: brs.map(b => b.branch), datasets: [{
+      label: '% ยอดซื้อต่อยอดขาย', data: brs.map(b => b.pct), backgroundColor: brs.map(b => PCT_COL(b.pct)),
+      maxBarThickness: 18,
+      datalabels: { anchor: 'end', align: 'end', color: '#334155', font: { weight: '700', size: 11 }, formatter: v => v == null ? '' : v.toFixed(1) + '%' } }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: { x: { title: { display: true, text: '% ของยอดขาย' }, grace: '14%', beginAtZero: true } },
+      plugins: { legend: { display: false }, glance: { depth: false },
+        tooltip: { callbacks: { label: c => { const b = brs[c.dataIndex];
+          return `${c.parsed.x}% · ซื้อ ฿${fmt(b.amount)} / ขาย ฿${fmt(b.revenue)} · ${fmtN(b.weeks)} สัปดาห์${b.weeks_missing ? ` (ขาดไฟล์ ${fmtN(b.weeks_missing)})` : ''}`; } } } } },
+    plugins: [{ id: 'ipChainLine', afterDatasetsDraw(ch) {   // dashed line = the chain's own %
+      if (chainPct == null) return;
+      const xs = ch.scales.x, a = ch.chartArea, x = xs.getPixelForValue(chainPct);
+      if (!(x >= a.left && x <= a.right)) return;
+      const ctx = ch.ctx; ctx.save(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#1f3a6b'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x, a.top); ctx.lineTo(x, a.bottom); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = '#1f3a6b'; ctx.font = '700 10px ' + Chart.defaults.font.family; ctx.textAlign = 'left';
+      ctx.fillText(`เฉลี่ย ${chainPct}%`, x + 4, a.top + 10); ctx.restore(); } }] });
+
+  // ── B: the chain week by week — ONE series, coloured by the same bands ──
+  const wkAmt = weeks.map(w => imported.filter(r => r.week_start === w).reduce((s2, r) => s2 + r.amount, 0));
+  const wkRevImp = weeks.map(w => imported.filter(r => r.week_start === w).reduce((s2, r) => s2 + (r.revenue || 0), 0));
+  const wkRevAll = weeks.map(w => rows.filter(r => r.week_start === w).reduce((s2, r) => s2 + (r.revenue || 0), 0));
+  const wkN = weeks.map(w => imported.filter(r => r.week_start === w).length);
+  const wkAll = weeks.map(w => rows.filter(r => r.week_start === w).length);
+  const wkPct = weeks.map((w, i) => wkRevImp[i] ? Math.round(wkAmt[i] / wkRevImp[i] * 1000) / 10 : null);
+  if (_ipChartPct) { _ipChartPct.destroy(); _ipChartPct = null; }
   _ipChartPct = mkChart('ipChartPct', {
-    type: 'line', data: { labels: weeks, datasets: dsPct },
+    type: 'bar',
+    data: { labels: weeks.map(wkLbl), datasets: [{ label: '% ยอดซื้อต่อยอดขาย', data: wkPct,
+      backgroundColor: wkPct.map(PCT_COL), maxBarThickness: 40,
+      datalabels: { anchor: 'end', align: 'end', color: '#334155', font: { weight: '700', size: 10.5 }, formatter: v => v == null ? '' : v.toFixed(0) + '%' } }] },
     options: { responsive: true, maintainAspectRatio: false,
-      scales: { y: { title: { display: true, text: '% ของยอดขาย' } } },
-      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
+      scales: { y: { title: { display: true, text: '% ของยอดขาย' }, beginAtZero: true, grace: '18%' } },
+      plugins: { legend: { display: false }, glance: { depth: false },
+        tooltip: { callbacks: { label: c => { const i = c.dataIndex;
+          return `${c.parsed.y}% · ซื้อ ฿${fmt(wkAmt[i])} / ขาย ฿${fmt(wkRevImp[i])} · นำเข้าแล้ว ${wkN[i]}/${wkAll[i]} สาขา`; } } } } } });
 
-  // Chain totals: sales as bars, imported spend as a line over them. A week with
-  // nothing imported leaves a visible hole rather than dropping to zero.
-  const rev = weeks.map(w => (d.rows || []).filter(r => r.week_start === w)
-                                           .reduce((a, r) => a + (r.revenue || 0), 0));
-  const amt = weeks.map(w => {
-    const rs = (d.rows || []).filter(r => r.week_start === w && r.amount != null);
-    return rs.length ? rs.reduce((a, r) => a + r.amount, 0) : null;
-  });
+  // ── C: baht — sales beside purchases, same scale, a missing bar is a missing file ──
+  if (_ipChartAmt) { _ipChartAmt.destroy(); _ipChartAmt = null; }
   _ipChartAmt = mkChart('ipChartAmt', {
     type: 'bar',
-    data: { labels: weeks, datasets: [
-      { type: 'bar', label: 'ยอดขาย (ex-VAT)', data: rev, backgroundColor: 'rgba(8,145,178,.45)' },
-      { type: 'line', label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: amt, borderColor: '#7a66b8',
-        backgroundColor: '#7a66b8', tension: .25, spanGaps: false }] },
+    data: { labels: weeks.map(wkLbl), datasets: [
+      { label: 'ยอดขาย (ex-VAT)', data: wkRevAll, backgroundColor: '#0891b2', maxBarThickness: 26 },
+      { label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: weeks.map((w, i) => wkN[i] ? wkAmt[i] : null), backgroundColor: '#7a66b8', maxBarThickness: 26 }] },
     options: { responsive: true, maintainAspectRatio: false,
-      scales: { y: { title: { display: true, text: '฿' } } } } });
+      scales: { y: { title: { display: true, text: '฿' }, beginAtZero: true, ticks: { callback: v => fmt(v) } } },
+      plugins: { datalabels: { display: false }, legend: { labels: { boxWidth: 10 } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ฿${fmt(c.parsed.y)}` } } } } });
+
+  // ── D: heatmap — the only honest way to show 28 branches × N weeks at once ──
+  if (heat) {
+    if (empty) {
+      heat.innerHTML = `<p class="text-sm py-6 text-center" style="color:var(--text-muted)">ยังไม่มียอดซื้อที่นำเข้าในช่วงนี้ — กด <b>โหลด template</b> กรอกยอดซื้อรายสัปดาห์ แล้ว <b>นำเข้าไฟล์</b> กราฟและแผนที่ความร้อนจะขึ้นทันที</p>`;
+    } else {
+      const at = {}; rows.forEach(r => { at[r.branch + '|' + r.week_start] = r; });
+      const order = (d.branches || []).slice().sort((x, y) => (y.pct ?? -1) - (x.pct ?? -1));
+      const cell = r => (!r || r.amount == null)
+        ? `<td class="text-center" style="background:var(--bg-subtle);color:var(--text-muted);font-size:10px">—</td>`
+        : `<td class="text-center tabular-nums" style="background:${PCT_BG(r.pct)};color:#0f172a;font-weight:${r.pct >= 40 ? 700 : 500}" title="${esc(r.branch)} ${esc(r.week_start)} · ซื้อ ฿${fmtN(r.amount)} / ขาย ฿${fmtN(r.revenue)}">${r.pct == null ? '—' : r.pct.toFixed(0)}</td>`;
+      heat.innerHTML = `<table class="text-[11px]" style="border-collapse:separate;border-spacing:2px;min-width:100%"><thead><tr style="color:var(--text-muted)">
+          <th class="text-left pr-2" style="position:sticky;left:0;background:var(--bg-card)">สาขา</th>${weeks.map(w => `<th class="text-center px-1 font-normal">${wkLbl(w)}</th>`).join('')}<th class="text-center pl-2">ทั้งช่วง</th></tr></thead><tbody>${
+        order.map(b => `<tr><td class="text-left pr-2 font-medium whitespace-nowrap" style="position:sticky;left:0;background:var(--bg-card)">${esc(b.branch)}</td>${
+          weeks.map(w => cell(at[b.branch + '|' + w])).join('')}<td class="text-center tabular-nums font-bold" style="background:${PCT_BG(b.pct)};color:${textInk(PCT_COL(b.pct))}">${b.pct == null ? '—' : b.pct.toFixed(1) + '%'}</td></tr>`).join('')}
+        </tbody></table>`;
+    }
+  }
 }
 
 function ipTemplate() {

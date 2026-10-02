@@ -42,17 +42,33 @@
   <div id="ipKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div id="ipGaps" class="mb-4"></div>
 
+  <!-- Charts (owner 2026-10-02: the 28-line "% per branch per week" spaghetti read as
+       nothing). One question per chart: WHICH branch buys heavy (bars, whole period) ·
+       is the CHAIN drifting week by week (one series) · where exactly (branch × week heatmap). -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
     <div class="card p-5">
-      <h2 class="section-title mb-3">แนวโน้มรายสัปดาห์ — % ยอดซื้อวัตถุดิบต่อยอดขาย</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุป · จุดใหญ่สีแดง = สัปดาห์ที่หลุดกรอบของสาขานั้น</p>
-      <div style="height:280px"><canvas id="ipChartPct"></canvas></div>
+      <h2 class="section-title mb-1">สาขาไหนซื้อหนัก — % ยอดซื้อต่อยอดขาย (ทั้งช่วง)</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">เรียงจากมากไปน้อย · <span style="color:var(--good-ink)">เขียว</span> &lt; 33% · <span style="color:var(--amber-ink)">เหลือง</span> 33–40% · <span style="color:var(--bad-ink)">แดง</span> ≥ 40% · เส้นประ = เฉลี่ยทั้งเครือ</p>
+      <div id="ipChartBranchWrap" style="height:320px"><canvas id="ipChartBranch"></canvas></div>
     </div>
-    <div class="card p-5">
-      <h2 class="section-title mb-3">ยอดซื้อ เทียบ ยอดขาย (รวมทุกสาขาในช่วง)</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">แท่ง = ยอดขาย · เส้น = ยอดซื้อวัตถุดิบที่นำเข้า — ช่องว่างคือสัปดาห์ที่ยังไม่ได้นำเข้าไฟล์</p>
-      <div style="height:280px"><canvas id="ipChartAmt"></canvas></div>
+    <div class="flex flex-col gap-5">
+      <div class="card p-5">
+        <h2 class="section-title mb-1">ทั้งเครือ รายสัปดาห์ — % ยอดซื้อต่อยอดขาย</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">นับเฉพาะสาขาที่นำเข้ายอดซื้อของสัปดาห์นั้นแล้ว · สีตามกรอบเดียวกับซ้าย</p>
+        <div style="height:190px"><canvas id="ipChartPct"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title mb-1">ยอดซื้อ เทียบ ยอดขาย รายสัปดาห์ (฿ รวมทุกสาขา)</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">แท่งฟ้า = ยอดขาย · แท่งม่วง = ยอดซื้อที่นำเข้า — สัปดาห์ที่ไม่มีแท่งม่วงคือยังไม่ได้นำเข้าไฟล์</p>
+        <div style="height:190px"><canvas id="ipChartAmt"></canvas></div>
+      </div>
     </div>
+  </div>
+
+  <div class="card p-5 mb-4 overflow-x-auto">
+    <h2 class="section-title mb-1">แผนที่ความร้อน — สาขา × สัปดาห์ (% ยอดซื้อต่อยอดขาย)</h2>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)">อ่านตามแถว = สาขาหนึ่งผ่านไปทีละสัปดาห์ · อ่านตามคอลัมน์ = ทุกสาขาในสัปดาห์เดียวกัน · ช่องว่าง = ยังไม่นำเข้า · คอลัมน์ท้าย = ทั้งช่วง</p>
+    <div id="ipHeat"></div>
   </div>
 
   <div class="card p-5 mb-4 overflow-x-auto">
