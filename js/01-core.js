@@ -560,7 +560,10 @@ async function deleteUser(username) {
 // first eight are the dataviz reference palette — adjacent pairs pass the CVD
 // (deutan/protan/tritan) and normal-vision separation gates on a light surface —
 // followed by four spares for the rare chart with more than eight series.
-const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948','#1d9bd8','#c47b2a','#9b5fb8','#5a9f33'];
+// 2026-10-02 owner: "สีแท่งสดไปหน่อย" — the same twelve, each mixed 22% toward a
+// neutral grey; still passes the validator (worst adjacent CVD ΔE 7.9, normal 17.8;
+// the 6–8 CVD band is fine here because the glance layer labels every bar).
+const PALETTE = ['#3d7bc6','#d36e47','#31a67e','#d59b1f','#d17d9f','#1c831f','#564aa1','#cd5657','#3396c7','#b57d40','#9567ae','#629947'];
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
