@@ -383,6 +383,9 @@ const MGT_I18N = {
     tierTrendTitle:'Trend by tier — mix of guests & cost/head',
     tierGranMonth:'Monthly', tierGranWeek:'Weekly',
     tierTrendMonthNote:'Monthly · the newest month may still be in progress',
+    tierMixTitle:'Who sat at which price — share of guests', tierCogsTitle:'What each price costs us — food cost per head (฿)',
+    tierReadNote:'Left: of all buffet guests, how many chose each price · Right: the food cost of one guest at that price · a tier that climbs on the right while flat on the left is eating more for the same money',
+    tierShowAll:'Show all {n}', tierShowLess:'Show fewer', tierTrendOnePeriod:'one period only — the Grand Menu started 1 Sep 2026, so the monthly series begins there; switch to Weekly to see the weeks',
     tierTrendWeekNote:'Weekly (Mon-Sun, ISO) · last {n} weeks',
     tierTrendEra:'dashed / faded = the price list retired on {d}, kept as its own series because ฿999 is a different price on each menu',
     tierTrendPartial:'short week: {w}', tierTrendPartialTip:'part week — {n} days of data',
@@ -504,6 +507,9 @@ const MGT_I18N = {
     tierTrendTitle:'เทรนด์รายกลุ่มราคา — สัดส่วนคนทาน & ต้นทุน/หัว',
     tierGranMonth:'รายเดือน', tierGranWeek:'รายสัปดาห์',
     tierTrendMonthNote:'รายเดือน · เดือนล่าสุดอาจยังไม่ครบเดือน',
+    tierMixTitle:'ลูกค้าเลือกราคาไหน — สัดส่วนคนทาน', tierCogsTitle:'แต่ละราคาต้นทุนเท่าไร — ต้นทุนอาหารต่อหัว (฿)',
+    tierReadNote:'ซ้าย: จากลูกค้าบุฟเฟ่ต์ทั้งหมด กี่ % เลือกแต่ละราคา · ขวา: ต้นทุนอาหารของลูกค้า 1 คนในราคานั้น · กลุ่มที่ฝั่งขวาสูงขึ้นแต่ฝั่งซ้ายเท่าเดิม = กินมากขึ้นในราคาเท่าเดิม',
+    tierShowAll:'ดูทั้งหมด {n} รายการ', tierShowLess:'ย่อ', tierTrendOnePeriod:'มีข้อมูลช่วงเดียว — Grand Menu เริ่ม 1 ก.ย. 2026 ซีรีส์รายเดือนจึงเริ่มที่นั่น กดรายสัปดาห์เพื่อดูเป็นสัปดาห์',
     tierTrendWeekNote:'รายสัปดาห์ (จ.–อา. ตามมาตรฐาน ISO) {n} สัปดาห์ล่าสุด',
     tierTrendEra:'เส้นประ/สีจาง = ราคาเมนูเก่าก่อน {d} แยกเส้นไว้เพราะ ฿999 ของสองเมนูคนละราคากัน',
     tierTrendPartial:'สัปดาห์ไม่เต็ม: {w}', tierTrendPartialTip:'สัปดาห์ไม่เต็ม — มีข้อมูล {n} วัน',
@@ -1843,7 +1849,9 @@ function renderMgtReport(j, jM, jF) {
     const PAL = ['#b0472d', '#0e7490', '#7a66b8', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
     const colOf = {};
     (TD.rows || []).forEach((r, i) => { colOf[r.tier] = PAL[i % PAL.length]; });
-    let gran = 'month';
+    // Owner 2026-10-02: a one-bar "trend" (the Grand Menu era is one month old)
+    // reads as nothing. Open on weeks until the monthly series has three points.
+    let gran = ((TD.trend_month || []).length >= 3) ? 'month' : 'week';
 
     const draw = () => {
       const weekly = gran === 'week';
@@ -1870,11 +1878,12 @@ function renderMgtReport(j, jM, jF) {
           <div style="height:230px"><canvas id="mgtTierTrendMix"></canvas></div>
           <div style="height:230px"><canvas id="mgtTierTrendCogs"></canvas></div>
         </div>
-        <p class="text-[10px] text-slate-400 mt-2">${esc(
+        <p class="text-[10px] text-slate-500 mt-2">${esc(T.tierReadNote)}</p>
+        <p class="text-[10px] text-slate-400 mt-1">${esc(
           weekly ? T.tierTrendWeekNote.replace('{n}', rows.length)
                    + (WM.era_from ? ' · ' + T.tierTrendEra.replace('{d}', WM.era_from) : '')
                    + (short.length ? ' · ⚠ ' + T.tierTrendPartial.replace('{w}', short.join(', ')) : '')
-                 : T.tierTrendMonthNote)}</p></div>`;
+                 : T.tierTrendMonthNote + (rows.length < 2 ? ' · ' + T.tierTrendOnePeriod : ''))}</p></div>`;
 
       slot.querySelectorAll('button[data-g]').forEach(b =>
         b.addEventListener('click', () => { gran = b.dataset.g; draw(); }));
@@ -1902,19 +1911,36 @@ function renderMgtReport(j, jM, jF) {
           scales: { x: { stacked: true },
                     y: { stacked: true, max: 100, ticks: { callback: v => v + '%' } } },
           plugins: {
+            title: { display: true, text: T.tierMixTitle, font: { size: 12, weight: '700' }, color: '#334155', padding: { bottom: 6 } },
             legend: { labels: { boxWidth: 10, font: { size: 11 } } },
             tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%`,
                                     afterBody: ci => tip(ci[0].dataIndex) } } } } });
-      mkChart('mgtTierTrendCogs', {
-        type: 'line',
-        data: { labels, datasets: keys.filter(t => t.replace(OLD, '') !== 'child').map(t => ({
-          label: label(t), data: rows.map(r => (r.tiers[t] || {}).cogs_head ?? null),
-          borderColor: colour(t), backgroundColor: colour(t), tension: .25, spanGaps: true,
-          borderDash: isOld(t) ? [5, 3] : undefined, pointRadius: 3 })) },
-        options: { responsive: true, maintainAspectRatio: false,
-          scales: { y: { title: { display: true, text: T.tierCostHead } } },
-          plugins: { datalabels: { display: false },
-                     tooltip: { callbacks: { afterBody: ci => tip(ci[0].dataIndex) } } } } });
+      const cogKeys = keys.filter(t => t.replace(OLD, '') !== 'child');
+      const cogTitle = { display: true, text: T.tierCogsTitle, font: { size: 12, weight: '700' }, color: '#334155', padding: { bottom: 6 } };
+      if (rows.length < 2) {
+        // one period = no line to draw: one labelled bar per tier says it plainly
+        mkChart('mgtTierTrendCogs', {
+          type: 'bar',
+          data: { labels: cogKeys.map(label), datasets: [{ label: T.tierCostHead,
+            data: cogKeys.map(t => (rows[0].tiers[t] || {}).cogs_head ?? null),
+            backgroundColor: cogKeys.map(colour), maxBarThickness: 26,
+            datalabels: { anchor: 'end', align: 'end', color: '#334155', font: { weight: '700', size: 11 }, formatter: v => v == null ? '' : '฿' + Math.round(v) } }] },
+          options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            scales: { x: { title: { display: true, text: T.tierCostHead }, grace: '18%' } },
+            plugins: { title: cogTitle, legend: { display: false },
+                       tooltip: { callbacks: { label: c => `${c.label}: ฿${c.parsed.x}` } } } } });
+      } else {
+        mkChart('mgtTierTrendCogs', {
+          type: 'line',
+          data: { labels, datasets: cogKeys.map(t => ({
+            label: label(t), data: rows.map(r => (r.tiers[t] || {}).cogs_head ?? null),
+            borderColor: colour(t), backgroundColor: colour(t), tension: .25, spanGaps: true,
+            borderDash: isOld(t) ? [5, 3] : undefined, pointRadius: 3 })) },
+          options: { responsive: true, maintainAspectRatio: false,
+            scales: { y: { title: { display: true, text: T.tierCostHead } } },
+            plugins: { title: cogTitle, datalabels: { display: false },
+                       tooltip: { callbacks: { afterBody: ci => tip(ci[0].dataIndex) } } } } });
+      }
     };
     draw();
   })();
@@ -1929,7 +1955,12 @@ function renderMgtReport(j, jM, jF) {
     const bar = (v, max) => `<span style="display:inline-block;height:6px;border-radius:3px;background:#f59e0b;width:${Math.max(3, Math.round((v / max) * 52))}px;vertical-align:middle;margin-right:5px"></span>`;
     const heat = (v, max) => `background:rgba(220,38,38,${(0.06 + 0.5 * (v / max)).toFixed(2)})`;
     const shareCell = p => p == null ? '' : `<span class="text-slate-500">${p.toFixed(0)}%</span>`;
-    function render(tier) {
+    // Owner 2026-10-02 ("ใน app ทำให้ดูได้เยอะกว่านี้"): the screen opens on 12 groups and
+    // 15 dishes and can expand to every group / the Top 60; the printed block keeps six.
+    let more = false;
+    const SHOW_G = 12, SHOW_M = 15;
+    function render(tier, expand) {
+      if (expand !== undefined) more = !!expand;
       const cur = DR.by_tier[tier] || DR.by_tier[DR.default_tier];
       if (!cur) { slot.innerHTML = ''; return; }
       const sel = cur.focus_tier, order = DR.tier_order || [sel], showVs = !!cur.ref_label;
@@ -1937,21 +1968,25 @@ function renderMgtReport(j, jM, jF) {
         const on = t === sel;
         return `<button type="button" onclick="window._mgtRenderDrivers('${t}')" class="px-2 py-0.5 rounded text-[11px] font-semibold" style="border:1px solid ${on ? '#b45309' : 'var(--border,#e2e8f0)'};${on ? 'background:#b45309;color:#fff' : 'background:transparent;color:var(--text-muted)'}">฿${t}</button>`;
       }).join(' ');
-      const gmax = Math.max(1, ...(cur.groups || []).map(g => g.cogs_head));
-      const mmax = Math.max(1, ...(cur.menus || []).map(m => m.cogs_head));
-      const grp = (cur.groups || []).map((g, i) => `<tr class="border-t border-slate-100">
+      const gAll = cur.groups_all || cur.groups || [], mAll = cur.menus_top60 || cur.menus || [];
+      const gRows = more ? gAll : gAll.slice(0, SHOW_G), mRows = more ? mAll : mAll.slice(0, SHOW_M);
+      const canMore = gAll.length > SHOW_G || mAll.length > SHOW_M;
+      const moreBtn = canMore ? `<button type="button" onclick="window._mgtRenderDrivers('${sel}', ${!more})" class="px-2 py-0.5 rounded text-[11px] font-semibold ml-auto" style="border:1px solid var(--border,#e2e8f0);color:var(--accent)">${more ? T.tierShowLess : T.tierShowAll.replace('{n}', Math.max(gAll.length, mAll.length))}</button>` : '';
+      const gmax = Math.max(1, ...gRows.map(g => g.cogs_head));
+      const mmax = Math.max(1, ...mRows.map(m => m.cogs_head));
+      const grp = gRows.map((g, i) => `<tr class="border-t border-slate-100">
         <td class="py-1 pr-1 text-right text-slate-400 tabular-nums" style="width:1.3em">${i + 1}</td>
         <td class="py-1 pr-3 text-slate-700">${clean(g.label)}</td>
         <td class="py-1 px-2 text-right tabular-nums font-semibold rounded" style="${heat(g.cogs_head, gmax)}">${baht(g.cogs_head)}</td>
         <td class="py-1 px-2 tabular-nums whitespace-nowrap">${bar(g.cogs_head, gmax)}${shareCell(g.share_pct)}</td>
         ${showVs ? `<td class="py-1 pl-2 text-right tabular-nums">${vsCell(g.vs_ref)}</td>` : ''}</tr>`).join('');
-      const mnu = (cur.menus || []).map((m, i) => `<tr class="border-t border-slate-100">
+      const mnu = mRows.map((m, i) => `<tr class="border-t border-slate-100">
         <td class="py-1 pr-1 text-right text-slate-400 tabular-nums" style="width:1.3em">${i + 1}</td>
         <td class="py-1 pr-3 text-slate-700">${clean(m.label)}</td>
         <td class="py-1 px-2 text-right tabular-nums font-semibold rounded" style="${heat(m.cogs_head, mmax)}">${baht(m.cogs_head)}</td>
         <td class="py-1 px-2 tabular-nums whitespace-nowrap">${bar(m.cogs_head, mmax)}${shareCell(m.share_pct)}</td>
         <td class="py-1 pl-2 text-right tabular-nums text-slate-500">${num(m.qty_100)}</td></tr>`).join('');
-      const topg = (cur.groups || [])[0];
+      const topg = gAll[0];
       const insight = topg ? `<p class="text-[11.5px] mt-1 mb-2" style="color:var(--amber-ink)">${isTH
         ? `${clean(topg.label)} คิดเป็น <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> ของต้นทุนอาหาร tier ${esc(cur.focus_label)} — จุดคุมต้นทุนสำคัญที่สุด`
         : `${clean(topg.label)} is <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> of this tier's food cost (${esc(cur.focus_label)}) — the single biggest lever`}</p>` : '';
@@ -1965,6 +2000,7 @@ function renderMgtReport(j, jM, jF) {
                   ? `· ${num(cur.focus_pax)} คน (${cur.focus_share.toFixed(1)}%) — กลุ่มเล็ก ตัวเลขแกว่ง`
                   : `· ${num(cur.focus_pax)} covers (${cur.focus_share.toFixed(1)}%) — small sample, figures swing`}</span>`
               : ''}</span>
+          ${moreBtn}
         </div>
         ${insight}
         <div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
