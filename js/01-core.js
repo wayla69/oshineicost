@@ -560,6 +560,11 @@ async function deleteUser(username) {
 // first eight are the dataviz reference palette — adjacent pairs pass the CVD
 // (deutan/protan/tritan) and normal-vision separation gates on a light surface —
 // followed by four spares for the rare chart with more than eight series.
+// 2026-10-02 owner: "สีแท่งสดไปหน่อย … อยากได้ความพาสเทล" — the pastel is applied to EVERY
+// bar by the glance layer's shade (see _glanceGrad: tip 25% / base 50% toward the
+// surface), so status-coloured bars (good/bad amber-green-red) soften with the
+// series ones. The palette itself stays the validated reference set; legends and
+// tooltips keep these true colours.
 const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948','#1d9bd8','#c47b2a','#9b5fb8','#5a9f33'];
 
 // ── World-class semantic color system ─────────────────────────
@@ -908,9 +913,27 @@ function _glanceDot(ctx, x, y, color, surface) {
 //    flattened onto the card surface first, so it keeps its tone but gridlines
 //    no longer show through it;
 //  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
-//    colour mixed 46% toward the surface at the zero line (both ways when
+//    colour mixed 50% toward the surface at the zero line (both ways when
 //    negatives exist), so a short bar is still clearly its colour.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
+// Lift a colour in HSL: +dl lightness (clamped to 0.86 so it never turns white) and
+// saturation × ks (clamped to 1) — the pastel that keeps its hue.
+function _glanceLift(c, dl, ks) {
+  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h = 0, sat = 0, l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  l = Math.min(0.86, l + dl); sat = Math.min(1, sat * ks);
+  const f = (p, q, t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  if (sat === 0) { const v = Math.round(l * 255); return [v, v, v, 1]; }
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, pp = 2 * l - q;
+  return [Math.round(f(pp, q, h + 1 / 3) * 255), Math.round(f(pp, q, h) * 255), Math.round(f(pp, q, h - 1 / 3) * 255), 1];
+}
 function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   const a = chart.chartArea, g = chart.$glance || (chart.$glance = {});
   const zero = vs && typeof vs.getPixelForValue === 'function' ? vs.getPixelForValue(0) : (horizontal ? a.left : a.bottom);
@@ -918,7 +941,12 @@ function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   g.grads = g.grads || new Map();
   if (g.grads.has(key)) return g.grads.get(key);
   const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.46), 1);   // 0.22 read as flat (owner 2026-10-01)
+  // Pastel bars (owner 2026-10-02, "พาสเทลได้แล้ว แต่อยากให้สีเด่นขึ้น"): lighter, not
+  // washed — the hue keeps (even gains) its saturation while lightness rises, so
+  // a bar reads as a clear candy colour instead of a grey tint. Tip = L+0.10,
+  // S×1.25; base = L+0.24, S×1.15 (clamped). Applies to every bar chart whatever
+  // colour it was given; legends/tooltips keep the true colour.
+  const strong = _glanceCss(_glanceLift(solid, 0.11, 1.10), 1), weak = _glanceCss(_glanceLift(solid, 0.25, 1.05), 1);
   const ctx = chart.ctx;
   const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
                           : ctx.createLinearGradient(0, a.top, 0, a.bottom);
