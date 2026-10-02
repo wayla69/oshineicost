@@ -94,16 +94,34 @@ def test_without_a_list_everything_is_monitored_as_before(client):
 
 def test_the_list_decides_what_is_monitored(client, sheet):
     p = _plan(client)
-    assert _modes(p) == {"ING-SAL": "central", "ING-BEEF": "central", "ING-RICE": "local"}
+    # WH-SOY: on the sheet, used by no recipe — still on the plan, as a zero row (owner 2026-10-02)
+    assert _modes(p) == {"ING-SAL": "central", "ING-BEEF": "central", "ING-RICE": "local", "WH-SOY": "central"}
     assert p["meta"]["forced"] == {"file": "forced_order_2026-09.csv", "items": 3}
     rows = {r["code"]: r for r in p["rows"]}
     assert rows["ING-BEEF"]["forced"] and rows["ING-BEEF"]["forced_group"] == "top40" and rows["ING-BEEF"]["forced_as"] == ""
+    assert rows["ING-BEEF"]["forced_name"] == "เนื้อวัวสันใน Beef" and rows["ING-BEEF"]["no_usage"] is False
     # salmon is listed under the WAREHOUSE's code; the recipe code inherits it and says so
     assert rows["ING-SAL"]["forced"] and rows["ING-SAL"]["forced_group"] == "import" and rows["ING-SAL"]["forced_as"] == "WH-SALMON"
+    assert rows["ING-SAL"]["forced_name"] == "ปลาแซลมอนแช่แข็ง Salmon Frozen"
     assert not rows["ING-RICE"]["forced"]
-    # the letter / an issued cycle read include=central: rice is simply not in them
-    assert set(_modes(_plan(client, include="central"))) == {"ING-SAL", "ING-BEEF"}
+    soy = rows["WH-SOY"]
+    assert soy["no_usage"] is True and soy["forced"] and soy["name"] == "ซอสถั่วเหลือง 18L" and soy["unit"] == "Boxx1"
+    assert soy["order_week"] == 0 and soy["value_month"] == 0 and soy["n_menus"] == 0
+    assert p["rows"][-1]["code"] == "WH-SOY"          # zero rows sort to the bottom
+    # the letter / an issued cycle read include=central: every sheet line is there, rice is not
+    assert set(_modes(_plan(client, include="central"))) == {"ING-SAL", "ING-BEEF", "WH-SOY"}
     assert set(_modes(_plan(client, include="local"))) == {"ING-RICE"}
+
+
+def test_every_sheet_line_is_on_every_branch_and_a_search_still_narrows(client, sheet):
+    for br in ("BranchA", "BranchB"):
+        codes = {r["code"]: r for r in _plan(client, branch=br, include="central")["rows"]}
+        assert "WH-SOY" in codes and codes["WH-SOY"]["no_usage"]
+    # the chain view's per-branch roll-up does not count a sheet line nobody used
+    p = _plan(client, include="central")
+    assert all(b["ingredients"] <= 2 for b in p["branches"])
+    assert [r["code"] for r in _plan(client, q="ซอส")["rows"]] == ["WH-SOY"]
+    assert "WH-SOY" not in _modes(_plan(client, type="protein"))
 
 
 def test_a_tick_made_in_the_app_still_wins_both_ways(client, sheet, monkeypatch):

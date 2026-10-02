@@ -390,7 +390,8 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
     # tag sourcing BEFORE the family rollup — the rollup keys on it so a
     # central item never merges into the same line as a branch-sourced one
     src_def, src_branch = _ing_sourcing(con)
-    forced = _forced_order()["codes"]
+    fo = _forced_order()
+    forced = fo["codes"]
     for r in out:
         r["sourcing"] = _ing_mode(r["code"], r.get("branch") or branch or "",
                                   src_def, src_branch)
@@ -398,10 +399,41 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
         r["forced"] = bool(item)
         r["forced_group"] = item["group"] if item else ""
         r["forced_as"] = item["code"] if item and item["code"] != r["code"] else ""   # listed under this warehouse code
+        r["forced_name"] = item["name"] if item else ""                                # the sheet's own wording
+        r["no_usage"] = False
     if include == "central":
         out = [r for r in out if r["sourcing"] == "central"]
     elif include == "local":
         out = [r for r in out if r["sourcing"] == "local"]
+
+    # Owner 2026-10-02 ("แสดง 48 รายการตามใบคลังเสมอ"): every line of the warehouse
+    # sheet is on the plan even when nothing used it in the window — a zero row
+    # under the sheet's own code, name and unit, flagged no_usage — so the list
+    # the branches are told to order from is always the list on screen (chain
+    # and per branch alike; the letters read include=central). A type filter
+    # cannot be answered for a sheet line, so that stays a real-usage view.
+    if include != "local" and fo["items"] and not ing_type:
+        present = {(r.get("branch") or "", r["code"]) for r in out}
+        scopes = sorted({r.get("branch") or "" for r in out}) if per_branch else [""]
+        ql = (q or "").lower()
+        for bname in scopes:
+            for item in fo["items"]:
+                if any((bname, k) in present for k in [item["code"]] + item["recipe_codes"]):
+                    continue
+                if ql and ql not in (item["name"] + " " + item["code"]).lower():
+                    continue
+                mode = _ing_mode(item["code"], bname or branch or "", src_def, src_branch)
+                if include == "central" and mode != "central":
+                    continue
+                row = {"code": item["code"], "name": item["name"], "type": "", "unit": item["unit"] or "",
+                       "qty_used": 0.0, "per_day": 0.0, "per_week": 0.0, "per_month": 0.0,
+                       "order_week": 0.0, "order_month": 0.0, "unit_cost": 0.0, "cost_used": 0.0,
+                       "value_week": 0.0, "value_month": 0.0, "n_menus": 0, "trend_pct": None,
+                       "sourcing": mode, "forced": True, "forced_group": item["group"], "forced_as": "",
+                       "forced_name": item["name"], "no_usage": True}
+                if per_branch:
+                    row["branch"] = bname
+                out.append(row)
 
     if group_family:
         fam: Dict[str, dict] = {}
@@ -595,6 +627,8 @@ def ingredients_order_plan(
             for r in per_b:
                 a = agg.setdefault(r["branch"], {"branch": r["branch"], "ingredients": 0,
                                                  "value_week": 0.0, "value_month": 0.0})
+                if r.get("no_usage"):
+                    continue          # a sheet line nobody used is not an ingredient the branch consumed
                 a["ingredients"] += 1
                 a["value_week"] += r["value_week"]
                 a["value_month"] += r["value_month"]
@@ -830,6 +864,8 @@ def ingredients_order_plan_by_branch_xlsx(
                 remark.append("สาขาซื้อเอง")
             if r.get("forced_as"):
                 remark.append(f"รหัสในใบคลัง {r['forced_as']}")
+            if r.get("no_usage"):
+                remark.append("ไม่มีการใช้ในช่วงนี้ — รายการบังคับสั่ง ติดตามต่อ")
             s.append([i, r["code"], r["name"], forced, r["unit"], round(float(r["per_day"]), 2),
                       r.get("order_unit") or r["unit"], r.get("qty_per_order"),
                       int(r.get("order_week_units") or 0), int(r.get("order_month_units") or 0),
