@@ -257,6 +257,21 @@ def coverage_from_sums(r) -> dict:
 # The caller has already `JOIN branches b`; this appends the predicates and
 # binds the parameters, so the two never drift apart.
 
+# ---------------------------------------------------------------------------
+# The day a "daily" page describes (owner rule 2026-10-02): the latest day that
+# has FINISHED, never the day still trading. The live sync runs at 06:00 / 12:00 /
+# 16:00, so from noon the newest day in the database is today with a few hours
+# of bills — shown as "yesterday" it read as a chain-wide collapse (-99.9%).
+# Thai calendar day = UTC+7, the same clock the management report anchors on.
+# ---------------------------------------------------------------------------
+TH_TODAY_SQL = "date('now','+7 hours')"
+
+
+def closed_day_clause(col: str = "t.sold_at") -> str:
+    """SQL predicate: `col` falls on a day strictly before Thai today."""
+    return f"date({col}) < {TH_TODAY_SQL}"
+
+
 def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
                  group: Optional[str] = None, alias: str = "b") -> None:
     if branch:

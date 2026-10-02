@@ -7,6 +7,7 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
+from rules import closed_day_clause
 from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_band,
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
@@ -31,8 +32,9 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
     _group_filter(base, params, group)
     where = " AND ".join(base)
     with get_db() as con:
+        # the latest FINISHED day (rules.closed_day_clause) — never the day still trading
         maxd = con.execute(f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
-                           f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
+                           f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where} AND {closed_day_clause('t.sold_at')}", params).fetchone()[0]
         if not maxd:
             return {"date": None, "days": [], "branches": []}
         focus = (date or maxd)[:10]
@@ -513,9 +515,11 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
 def home_brief(branch: Optional[str] = Query(None)):
     """Yesterday vs target + MTD + recent anomalies + top/bottom branch."""
     with get_db() as con:
-        # Get yesterday's date from MAX(sold_at)
+        # "Yesterday" = the latest FINISHED day (rules.closed_day_clause). Plain
+        # MAX(sold_at) became today after the noon sync — a few hours of bills shown
+        # as a -99.9% day (owner 2026-10-02).
         max_row = con.execute(
-            "SELECT DATE(MAX(sold_at)) AS max_date FROM sales_transaction WHERE source='Easy'"
+            f"SELECT DATE(MAX(sold_at)) AS max_date FROM sales_transaction WHERE source='Easy' AND {closed_day_clause('sold_at')}"
         ).fetchone()
         yesterday = max_row["max_date"] if max_row else None
         if not yesterday:
@@ -806,7 +810,7 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
     base = f"(({net_revenue_row('st')}) + st.discount)"
     with get_db() as con:
         maxd = con.execute(
-            "SELECT DATE(MAX(sold_at)) FROM sales_transaction WHERE source='Easy'"
+            f"SELECT DATE(MAX(sold_at)) FROM sales_transaction WHERE source='Easy' AND {closed_day_clause('sold_at')}"
         ).fetchone()[0]
         if not maxd:
             return {"date": None}
@@ -880,7 +884,7 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
     Qty only from sales_sku_daily; customers from sales_transaction (no cost — iron rule)."""
     import datetime as _dt
     with get_db() as con:
-        maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        maxd = con.execute(f"SELECT MAX(day) FROM sales_sku_daily WHERE {closed_day_clause('day')}").fetchone()[0]
         if not maxd:
             return {"date": None, "up": [], "down": []}
         focus = (date or maxd)[:10]
