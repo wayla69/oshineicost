@@ -938,14 +938,13 @@ function renderMgtReport(j, jM, jF) {
       <span class="font-semibold whitespace-nowrap rounded px-1" style="${_mHeat(x.cost_per_head || 0)}">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-500">${T.perHead}</span></span>
     </li>`;
   // rising food cost/head = margin risk (red); falling = good (green)
+  // one line per dish (was two): 20 rows × 3 columns must still fit one landscape sheet
   const liMove = x => {
     const up = x.delta >= 0;
-    return `<li class="py-1.5 border-b border-slate-50 text-sm">
-      <div class="flex items-center justify-between gap-3">
-        <span class="truncate">${esc(x.menu)}</span>
-        <span class="font-semibold whitespace-nowrap" style="color:${up ? 'var(--bad-ink)' : 'var(--good-ink)'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}<span class="text-[11px]">${T.perHead}</span></span>
-      </div>
-      <div class="text-[11px] text-slate-400">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct.toFixed(0)}%` : ''}</div>
+    return `<li class="flex items-center gap-2 py-1.5 border-b border-slate-50 text-sm">
+      <span class="truncate flex-1" title="${esc(x.menu)}">${esc(x.menu)}</span>
+      <span class="text-[11px] text-slate-400 whitespace-nowrap tabular-nums">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}</span>
+      <span class="font-semibold whitespace-nowrap tabular-nums" style="color:${up ? 'var(--bad-ink)' : 'var(--good-ink)'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}</span>
     </li>`;
   };
   const listT = (arr, empty) => (arr && arr.length) ? `<ul>${arr.map(liTop).join('')}</ul>` : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
@@ -958,7 +957,10 @@ function renderMgtReport(j, jM, jF) {
         ? `ไม่มีข้อมูลต้นทุนรายเมนูสำหรับช่วงนี้ — รายละเอียดรายวันเริ่ม ${M.cost_from || ''} (เลือกโหมด Monthly เพื่อดูเดือนเก่ากว่านั้น)`
         : `No per-dish cost data for this window — daily detail starts ${M.cost_from || ''} (use Monthly mode for older periods)`}</p>`
     : (M.total_cph != null)
-    ? `<p class="text-xs text-slate-500 mb-3">${T.totFoodHead}<b>${cph(M.total_cph)}</b>${M.total_cph_prev != null ? ` (${T.was} ${cph(M.total_cph_prev)}${M.total_cph_delta != null ? `, ${M.total_cph_delta >= 0 ? '+' : '−'}฿${cnum(Math.abs(M.total_cph_delta))}` : ''})` : ''} · ${num(M.covers)}${T.overCovers}</p>`
+    ? `<p class="text-xs text-slate-500 mb-3">${T.totFoodHead}<b>${cph(M.total_cph)}</b>${M.total_cph_prev != null ? ` (${T.was} ${cph(M.total_cph_prev)}${M.total_cph_delta != null ? `, ${M.total_cph_delta >= 0 ? '+' : '−'}฿${cnum(Math.abs(M.total_cph_delta))}` : ''})` : ''} · ${num(M.covers)}${T.overCovers}${
+        (M.top_share_pct != null && M.dishes_costed) ? `<br><span class="font-semibold text-slate-600">${isTH
+          ? `${(M.top || []).length} รายการที่แสดง = ${M.top_share_pct.toFixed(0)}% ของต้นทุนอาหาร/หัว · อีก ${num(Math.max(0, M.dishes_costed - (M.top || []).length))} เมนู = ${(100 - M.top_share_pct).toFixed(0)}%</span> · รายการเต็มแยกตามกลุ่มราคาอยู่ในภาคผนวก ก`
+          : `the ${(M.top || []).length} dishes listed = ${M.top_share_pct.toFixed(0)}% of food cost/head · the other ${num(Math.max(0, M.dishes_costed - (M.top || []).length))} dishes = ${(100 - M.top_share_pct).toFixed(0)}%</span> · full list by price tier in Appendix A`}` : ''}</p>`
     : '';
   // Actionable worklist: the biggest dishes with NO unit cost, ranked by plates.
   // Ranking these by revenue (the old coverage view) hid them entirely — buffet

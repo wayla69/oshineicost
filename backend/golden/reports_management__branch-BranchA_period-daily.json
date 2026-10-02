@@ -184,6 +184,7 @@
   "cost_from": "2026-05-01",
   "covers": 4,
   "covers_prev": 0,
+  "dishes_costed": 2,
   "risers": [],
   "savers": [],
   "top": [
@@ -206,6 +207,8 @@
     "qty": 5
    }
   ],
+  "top_n": 20,
+  "top_share_pct": 100.0,
   "total_cph": 112.5,
   "total_cph_delta": null,
   "total_cph_prev": null

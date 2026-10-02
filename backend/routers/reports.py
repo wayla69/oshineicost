@@ -2046,13 +2046,21 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
                 "cost_per_head_prev": c_prev,
                 "delta": round(-c_prev, 2), "pct": -100.0,
             })
+    # 20 per column (owner 2026-10-02; 12 covered only 53% of Sep 2026 food
+    # cost/head, 20 covers 63%) — still one landscape sheet with single-line rows
+    MENU_TOP_N = 20
     cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
-                        key=lambda x: -(x["cost_per_head"] or 0))[:12]
+                        key=lambda x: -(x["cost_per_head"] or 0))[:MENU_TOP_N]
     cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
-                        key=lambda x: -x["delta"])[:12]
+                        key=lambda x: -x["delta"])[:MENU_TOP_N]
     cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
-                        key=lambda x: x["delta"])[:12]
+                        key=lambda x: x["delta"])[:MENU_TOP_N]
     food_cur  = sum((r["cost"] or 0) for r in cur_m.values())
+    # how much of the period's food cost the listed dishes carry — printed on the
+    # section so the reader knows the list is the head of a long tail, not all of it
+    dishes_costed = sum(1 for r in cur_m.values() if (r["cost"] or 0) > 0)
+    top_cost = sum((m["cost"] or 0) for m in cost_top)
+    top_share_pct = round(top_cost / food_cur * 100, 1) if food_cur else None
     food_prev = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
     total_cph      = cph(food_cur, covers_cur)
     total_cph_prev = cph(food_prev, covers_prev) if cmp_ok else None
@@ -2066,6 +2074,7 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
         "total_cph_delta": (round((total_cph or 0) - (total_cph_prev or 0), 2)
                             if (total_cph is not None and total_cph_prev is not None) else None),
         "top": cost_top, "risers": cost_up, "savers": cost_down,
+        "top_n": MENU_TOP_N, "top_share_pct": top_share_pct, "dishes_costed": dishes_costed,
         # which table the dish costs came from — 'unavailable' means the window
         # predates sales_sku_daily and isn't whole calendar months
         "cost_basis": cost_src, "cost_from": daily_min,
