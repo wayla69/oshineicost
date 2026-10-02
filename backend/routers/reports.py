@@ -2046,9 +2046,10 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
                 "cost_per_head_prev": c_prev,
                 "delta": round(-c_prev, 2), "pct": -100.0,
             })
-    # 20 per column (owner 2026-10-02; 12 covered only 53% of Sep 2026 food
-    # cost/head, 20 covers 63%) — still one landscape sheet with single-line rows
-    MENU_TOP_N = 20
+    # 36 per column (owner 2026-10-02: "เพิ่มให้เต็ม … เท่ากันทุกเรื่อง"; 12 covered only
+    # 53% of Sep 2026 food cost/head, 36 covers ~74%) — fills one landscape sheet
+    # with single-line rows (print: names ellipsise, portion suffix shortened)
+    MENU_TOP_N = 36
     cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
                         key=lambda x: -(x["cost_per_head"] or 0))[:MENU_TOP_N]
     cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],

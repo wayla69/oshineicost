@@ -1234,6 +1234,10 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      was spilling. */
   #tab-mgtreport #mgt-s7 li { line-height: 1.2 !important; }
   #tab-mgtreport #mgt-s7 ul li { padding-top: 0 !important; padding-bottom: 0 !important; }
+  /* §8 is 30 single-line rows × 3 columns on ONE sheet (keep: true clips what
+     overflows), so here the dish name ellipsises instead of wrapping — the portion
+     boilerplate is already stripped, so the cut is rare and the short tail is noise. */
+  #tab-mgtreport #mgt-s7 li .truncate { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
 
   /* §8's dayparts-and-hours block is half a page and was being cut wherever the
      previous section happened to end — one daypart row left behind, the rest

@@ -927,13 +927,16 @@ function renderMgtReport(j, jM, jF) {
   const M = j.menu || {};
   const cnum = v => (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cph  = v => (v == null) ? '—' : '฿' + cnum(v);
+  // "(1 ชิ้น ต่อ 1 เสิร์ฟ)" → "(1 ชิ้น)": the portion stays, the boilerplate goes, so
+  // 30 single-line rows fit a column (the full name is in the title attribute)
+  const shortDish = s => String(s || '').replace(/\s*\((\d+\s*[^()]*?)\s*ต่อ\s*1\s*เสิร์ฟ\)/u, ' ($1)').replace(/\s+/g, ' ').trim();
   // Highest-cost list adopts the §11 treatment: rank number + proportion bar +
   // amber heat on the value, so the priciest dishes jump out at a glance.
   const _mMax = Math.max(1, ...((M.top || []).map(x => x.cost_per_head || 0)));
   const _mHeat = v => `background:rgba(202,138,4,${(0.08 + 0.42 * (v / _mMax)).toFixed(2)})`;
   const liTop = (x, i) => `<li class="flex items-center gap-2 py-1.5 border-b border-slate-50 text-sm">
       <span class="text-slate-400 tabular-nums w-4 text-right">${i + 1}</span>
-      <span class="truncate flex-1">${esc(x.menu)}</span>
+      <span class="truncate flex-1" title="${esc(x.menu)}">${esc(shortDish(x.menu))}</span>
       <span style="display:inline-block;height:5px;border-radius:3px;background:#ca8a04;width:${Math.max(3, Math.round((x.cost_per_head || 0) / _mMax * 38))}px"></span>
       <span class="font-semibold whitespace-nowrap rounded px-1" style="${_mHeat(x.cost_per_head || 0)}">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-500">${T.perHead}</span></span>
     </li>`;
@@ -942,7 +945,7 @@ function renderMgtReport(j, jM, jF) {
   const liMove = x => {
     const up = x.delta >= 0;
     return `<li class="flex items-center gap-2 py-1.5 border-b border-slate-50 text-sm">
-      <span class="truncate flex-1" title="${esc(x.menu)}">${esc(x.menu)}</span>
+      <span class="truncate flex-1" title="${esc(x.menu)}">${esc(shortDish(x.menu))}</span>
       <span class="text-[11px] text-slate-400 whitespace-nowrap tabular-nums">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}</span>
       <span class="font-semibold whitespace-nowrap tabular-nums" style="color:${up ? 'var(--bad-ink)' : 'var(--good-ink)'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}</span>
     </li>`;
