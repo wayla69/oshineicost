@@ -210,12 +210,13 @@ async function loadOrderPlan(force) {
           onchange="opSetSourcing('${jsAttr(r.code)}', this.checked)"
           title="${central ? 'แนะนำให้สั่งผ่านส่วนกลาง' : 'สาขาซื้อเอง — ไม่อยู่ในจดหมาย'}"></td>
       <td class="py-1.5 pr-2" style="font-family:monospace;font-size:10.5px;color:var(--text-muted)">${esc(r.code)}</td>
-      <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}${opForcedBadge(r)}</td>
+      <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}${opForcedBadge(r)}${r.no_usage ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:var(--bg-subtle);color:var(--text-muted);white-space:nowrap">ไม่มีการใช้ในช่วงนี้</span>' : ''}${
+        (r.forced_name && r.forced_name !== r.name) ? `<div style="font-size:10px;color:var(--text-muted)">ใบคลัง: ${esc(r.forced_name)}${r.forced_as ? ` (${esc(r.forced_as)})` : ''}</div>` : ''}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(OP_TYPE_TH[r.type] || r.type)}</td>
-      <td class="py-1.5 pr-2 text-right">${esc(r.per_day_disp)}</td>
-      <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${r.pack_known ? '' : '<span style="color:var(--amber-ink)">◇</span> '}${esc(r.order_unit || r.unit)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold" title="ใช้จริง ${esc(r.order_week_disp)}">${esc(r.order_week_units_disp || r.order_week_disp)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold" style="color:var(--teal-ink)" title="ใช้จริง ${esc(r.order_month_disp)}">${esc(r.order_month_units_disp || r.order_month_disp)}</td>
+      <td class="py-1.5 pr-2 text-right">${r.no_usage ? '<span style="color:var(--text-muted)">—</span>' : esc(r.per_day_disp)}</td>
+      <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${(r.pack_known || r.no_usage) ? '' : '<span style="color:var(--amber-ink)">◇</span> '}${esc(r.order_unit || r.unit)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold" title="ใช้จริง ${esc(r.order_week_disp)}">${r.no_usage ? '<span style="color:var(--text-muted)">0</span>' : esc(r.order_week_units_disp || r.order_week_disp)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold" style="color:var(--teal-ink)" title="ใช้จริง ${esc(r.order_month_disp)}">${r.no_usage ? '<span style="color:var(--text-muted)">0</span>' : esc(r.order_month_units_disp || r.order_month_disp)}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(r.value_month)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${fmtN(r.n_menus)}</td>
       <td class="py-1.5 text-right">${trHtml}</td>
@@ -331,7 +332,7 @@ function opForcedBadge(r) {
   if (!r.forced) return '';
   const imp = r.forced_group === 'import';
   const tip = (imp ? 'ซื้อต่างประเทศ — ส่วนกลางสั่งล็อตใหญ่ สาขาต้องสั่งจากส่วนกลาง' : 'รายการบังคับสั่งจากส่วนกลาง')
-    + (r.forced_as ? ` · ในใบคลังใช้รหัส ${r.forced_as}` : '');
+    + (r.forced_name ? ` · ในใบคลัง: ${r.forced_name}` : '') + (r.forced_as ? ` (รหัส ${r.forced_as})` : '');
   return ` <span title="${esc(tip)}" style="font-size:10px;padding:1px 6px;border-radius:999px;white-space:nowrap;${imp
     ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' : 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'}">บังคับสั่ง${imp ? ' · ตปท.' : ''}</span>`;
 }
