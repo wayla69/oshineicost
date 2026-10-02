@@ -946,7 +946,7 @@ function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   // a bar reads as a clear candy colour instead of a grey tint. Tip = L+0.10,
   // S×1.25; base = L+0.24, S×1.15 (clamped). Applies to every bar chart whatever
   // colour it was given; legends/tooltips keep the true colour.
-  const strong = _glanceCss(_glanceLift(solid, 0.10, 1.25), 1), weak = _glanceCss(_glanceLift(solid, 0.24, 1.15), 1);
+  const strong = _glanceCss(_glanceLift(solid, 0.11, 1.10), 1), weak = _glanceCss(_glanceLift(solid, 0.25, 1.05), 1);
   const ctx = chart.ctx;
   const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
                           : ctx.createLinearGradient(0, a.top, 0, a.bottom);
