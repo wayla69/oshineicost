@@ -2279,11 +2279,12 @@ def _mgt_tier_drivers(*, TC, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
                 gF = _drv("g:%", ft, ftpax)
                 gR = _drv("g:%", rt, rtpax) if rt else {}
                 sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
-                grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                        "share_pct": sh(v[0]),
-                        "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
-                       for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
-                       if v[0] >= 1]
+                grp_all = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                            "share_pct": sh(v[0]),
+                            "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
+                           for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:24]
+                           if v[0] >= 1]
+                grp = grp_all[:6]          # the printed six; the screen may show groups_all (owner 2026-10-02)
                 mF = _drv("s:%", ft, ftpax)
                 ranked = sorted(mF.items(), key=lambda kv: -kv[1][0])
                 mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
@@ -2304,7 +2305,7 @@ def _mgt_tier_drivers(*, TC, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
                         # cost/head drawn from 45 covers swings hard.
                         "focus_pax": round(frow["pax"] or 0),
                         "focus_share": frow["share"],
-                        "groups": grp, "menus": mnu, "menus_top60": top60}
+                        "groups": grp, "groups_all": grp_all, "menus": mnu, "menus_top60": top60}
 
             by_tier = {}
             for frow in sorted(cand, key=lambda r: int(r["tier"])):

@@ -22,6 +22,20 @@
       "vs_ref": null
      }
     ],
+    "groups_all": [
+     {
+      "cogs_head": 60.0,
+      "label": "เนื้อ",
+      "share_pct": 33.3,
+      "vs_ref": null
+     },
+     {
+      "cogs_head": 90.0,
+      "label": "แซลมอน",
+      "share_pct": 50.0,
+      "vs_ref": null
+     }
+    ],
     "menus": [
      {
       "cogs_head": 12.0,
@@ -61,6 +75,20 @@
     "focus_share": 52.6,
     "focus_tier": "789",
     "groups": [
+     {
+      "cogs_head": 60.0,
+      "label": "เนื้อ",
+      "share_pct": 28.6,
+      "vs_ref": 0.0
+     },
+     {
+      "cogs_head": 90.0,
+      "label": "แซลมอน",
+      "share_pct": 42.9,
+      "vs_ref": 0.0
+     }
+    ],
+    "groups_all": [
      {
       "cogs_head": 60.0,
       "label": "เนื้อ",
