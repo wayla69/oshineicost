@@ -560,10 +560,12 @@ async function deleteUser(username) {
 // first eight are the dataviz reference palette — adjacent pairs pass the CVD
 // (deutan/protan/tritan) and normal-vision separation gates on a light surface —
 // followed by four spares for the rare chart with more than eight series.
-// 2026-10-02 owner: "สีแท่งสดไปหน่อย" — the same twelve, each mixed 22% toward a
-// neutral grey; still passes the validator (worst adjacent CVD ΔE 7.9, normal 17.8;
-// the 6–8 CVD band is fine here because the glance layer labels every bar).
-const PALETTE = ['#3d7bc6','#d36e47','#31a67e','#d59b1f','#d17d9f','#1c831f','#564aa1','#cd5657','#3396c7','#b57d40','#9567ae','#629947'];
+// 2026-10-02 owner: "สีแท่งสดไปหน่อย … อยากได้ความพาสเทล" — the same twelve hues, each
+// mixed 32% toward white. A deliberate pastel: it sits above the validator's
+// lightness band and under 3:1 on white, which is fine here because the glance
+// layer labels every bar; adjacent pairs still separate for normal vision (ΔE 16.4)
+// and sit in the labelled-OK band for CVD (7.2).
+const PALETTE = ['#6ea3e3','#f19875','#64c9a5','#f3bf52','#efa5c1','#52ab52','#8479c3','#ec8383','#65bbe4','#d7a56e','#bb92cf','#8fbe74'];
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
@@ -911,7 +913,7 @@ function _glanceDot(ctx, x, y, color, surface) {
 //    flattened onto the card surface first, so it keeps its tone but gridlines
 //    no longer show through it;
 //  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
-//    colour mixed 46% toward the surface at the zero line (both ways when
+//    colour mixed 30% toward the surface at the zero line (both ways when
 //    negatives exist), so a short bar is still clearly its colour.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
 function _glanceGrad(chart, rgba, surf, vs, horizontal) {
@@ -921,7 +923,7 @@ function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   g.grads = g.grads || new Map();
   if (g.grads.has(key)) return g.grads.get(key);
   const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.46), 1);   // 0.22 read as flat (owner 2026-10-01)
+  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.30), 1);   // 0.22 read as flat; 0.46 washed the pastels out (owner 2026-10-01/02)
   const ctx = chart.ctx;
   const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
                           : ctx.createLinearGradient(0, a.top, 0, a.bottom);
