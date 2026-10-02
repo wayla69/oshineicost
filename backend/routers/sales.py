@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, closed_day_clause, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -1058,9 +1058,15 @@ def sales_daily(
         return round((c - p) / p * 100, 1) if p else None
 
     with get_db() as con:
+        # The default focus is the latest FINISHED day (rules.closed_day_clause): from
+        # the noon sync the newest day is today with a few hours of bills, and a
+        # day/MTD tile built on it read as -99.9% (owner 2026-10-02). An explicit
+        # `date` still reaches today.
         maxd = con.execute(
             f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
-            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
+            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where} AND {closed_day_clause('t.sold_at')}", params).fetchone()[0]
+        if not maxd and date:
+            maxd = date[:10]
         if not maxd:
             return {"gran": gran, "focus": None, "branches": [], "total": {}, "trend": [], "anomalies": []}
         # Default focus must skip a not-yet-fully-synced trailing month, else the
