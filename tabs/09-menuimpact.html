@@ -1,13 +1,13 @@
 <div id="tab-menuimpact" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วัตถุดิบ/เมนู:</span>
-    <input id="miSearch" placeholder="ค้นหาเมนู…" oninput="miFilterOptions()" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);width:130px">
-    <select id="miEnt" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:290px"></select>
+    <input id="miSearch" placeholder="ค้นหาเมนู…" oninput="miFilterOptions()" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);width:130px">
+    <select id="miEnt" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:290px"></select>
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">ช่วง:</span>
-    <input type="date" id="miFrom" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <input type="date" id="miFrom" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
     <span class="text-xs" style="color:var(--text-muted)">→</span>
-    <input type="date" id="miTo" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
-    <select id="miScope" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <input type="date" id="miTo" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="miScope" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <option value="all">ทุกสาขา</option>
       <option value="master">Master (เจ้าของเอง)</option>
       <option value="franchise">แฟรนไชส์</option>
@@ -16,7 +16,7 @@
          chosen date range: only prices actually on sale in that window. The old menu
          (350/590/649/689/799/999) was withdrawn on 1 Sep 2026, so a September range
          offers the Grand Menu's net prices (459/629/789/999/1299) and nothing else. -->
-    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ตามเมนูที่ขายจริงในช่วงที่เลือก" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ตามเมนูที่ขายจริงในช่วงที่เลือก" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <option value="all">ทุก Tier ราคา</option>
     </select>
     <span id="miCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>

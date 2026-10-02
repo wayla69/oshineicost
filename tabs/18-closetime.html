@@ -3,9 +3,9 @@
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เลือกวันที่:</span>
     <input type="date" id="ctmDate" onchange="loadCloseTime(true)"
-      style="border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      style="border:1px solid var(--border);border-radius:var(--r-md);padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
     <button onclick="document.getElementById('ctmDate').value='';loadCloseTime(true)"
-      style="border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
+      style="border:1px solid var(--border);border-radius:var(--r-md);padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
     <span id="ctmFresh" class="text-xs font-semibold" style="color:var(--text-secondary)"></span>
     <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
   </div>

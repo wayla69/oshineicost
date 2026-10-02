@@ -6,8 +6,8 @@
   </div>
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
-    <input type="date" id="chDate" onchange="loadCostHead(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
-    <div id="chGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+    <input type="date" id="chDate" onchange="loadCostHead(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <div id="chGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
       <button class="gran-btn gran-active" data-g="day"   onclick="chSetGran('day')">วัน</button>
       <button class="gran-btn"             data-g="week"  onclick="chSetGran('week')">สัปดาห์</button>
       <button class="gran-btn"             data-g="month" onclick="chSetGran('month')">เดือน</button>

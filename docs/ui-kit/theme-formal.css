@@ -1,19 +1,20 @@
 /* ════════════════════════════════════════════════════════════════════════
    Oshinei — formal theme (2026-09-30)
    Loaded by index.html AFTER its own <style>, so these rules restyle the app's
-   existing classes without touching the markup: navy accent, 1px borders
-   instead of shadows, 3–4px corners, no gradients, no hover lifts.
+   existing classes without touching the markup: navy accent, 1px borders,
+   a soft card shadow and rounded corners (tokens --r-sm/md/lg: 8/12/16px since
+   2026-10-01 — the owner found the 3–4px version stiff), no hover lifts.
    Colours come from tokens.css. `body …` prefixes win over the Tailwind
    utilities (which the play CDN injects after this file) by specificity.
    Mirrors the design system in design-system/ (README "Visual foundations").
    ════════════════════════════════════════════════════════════════════════ */
 
 /* ── Flat, bordered surfaces ─────────────────────────────────────────────── */
-body .card { border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: none; }
+body .card { border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
 body .card:hover, body .kpi-card:hover, body .cmp-card:hover, body .gpb-box-drill:hover { box-shadow: none; transform: none; }
 body .kpi-card.card { border-top-width: 3px; }
 body .kpi-value, body .mi-kpi-value { font-weight: 700; letter-spacing: -0.01em; }
-body .skeleton-kpi { border: 1px solid var(--border); border-top: 3px solid var(--border); border-radius: var(--r-md); box-shadow: none; }
+body .skeleton-kpi { border: 1px solid var(--border); border-top: 3px solid var(--border); border-radius: var(--r-lg); box-shadow: none; }
 
 /* Tailwind utilities used across the tabs: square the corners, drop the shadows */
 body .rounded, body .rounded-md, body .rounded-lg { border-radius: var(--r-sm); }
@@ -71,7 +72,7 @@ body .subtab-btn.active, body.dark .subtab-btn.active { background: none; box-sh
 body .revsort-btn { border-radius: var(--r-sm); }
 
 /* Granularity toggle → bordered segments, active filled */
-body .gran-btn { border-radius: 0; }
+body .gran-btn { border-radius: calc(var(--r-sm) - 2px); }
 body .gran-btn:hover:not(.gran-active) { background: var(--bg-hover); }
 body .gran-active, body.dark .gran-active { background: var(--accent) !important; color: var(--on-accent) !important; box-shadow: none; }
 

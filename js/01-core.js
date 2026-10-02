@@ -12,7 +12,7 @@ const ICON = {
   key: _svgIcon('<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/>'),
   trash: _svgIcon('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>'),
   save: _svgIcon('<path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>'),
-  phone: _svgIcon('<rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>'),
+  phone: _svgIcon('<rect x="6" y="2" width="12" height="20" rx="3"/><line x1="11" y1="18" x2="13" y2="18"/>'),
   print: _svgIcon('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
   download: _svgIcon('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
 };
@@ -556,7 +556,11 @@ async function deleteUser(username) {
 
 // Formal theme: muted, deep hues that each reach 3:1 on BOTH the light and the dark card,
 // so one palette serves both themes (design-system/tokens.json chart-1..12).
-const PALETTE = ['#4a70b0','#2f8a74','#c08a1e','#c2413b','#7a66b8','#2b86b8','#c8672a','#6f9a2e','#b0457a','#3a9a9a','#8a93ad','#c4862f'];
+// Categorical series colours (owner 2026-10-01: the muted set read as dull). The
+// first eight are the dataviz reference palette — adjacent pairs pass the CVD
+// (deutan/protan/tritan) and normal-vision separation gates on a light surface —
+// followed by four spares for the rare chart with more than eight series.
+const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948','#1d9bd8','#c47b2a','#9b5fb8','#5a9f33'];
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
@@ -904,7 +908,7 @@ function _glanceDot(ctx, x, y, color, surface) {
 //    flattened onto the card surface first, so it keeps its tone but gridlines
 //    no longer show through it;
 //  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
-//    colour mixed 22% toward the surface at the zero line (both ways when
+//    colour mixed 46% toward the surface at the zero line (both ways when
 //    negatives exist), so a short bar is still clearly its colour.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
 function _glanceGrad(chart, rgba, surf, vs, horizontal) {
@@ -914,7 +918,7 @@ function _glanceGrad(chart, rgba, surf, vs, horizontal) {
   g.grads = g.grads || new Map();
   if (g.grads.has(key)) return g.grads.get(key);
   const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.22), 1);
+  const strong = _glanceCss(solid, 1), weak = _glanceCss(_glanceMix(solid, surf, 0.46), 1);   // 0.22 read as flat (owner 2026-10-01)
   const ctx = chart.ctx;
   const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
                           : ctx.createLinearGradient(0, a.top, 0, a.bottom);
@@ -1564,7 +1568,7 @@ function notifyError(msg) {
     el = document.createElement('div');
     el.id = 'globalErrToast';
     el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:4px;font-size:12px;' +
+      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:12px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
     el.onclick = () => el.remove();
     document.body.appendChild(el);
@@ -1581,7 +1585,7 @@ function notifySuccess(msg) {
     el = document.createElement('div');
     el.id = 'globalOkToast';
     el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#065f46;color:#fff;padding:10px 14px;border-radius:4px;font-size:12px;' +
+      'background:#065f46;color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:12px;' +
       'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
     el.onclick = () => el.remove();
     document.body.appendChild(el);

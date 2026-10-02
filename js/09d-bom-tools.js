@@ -422,26 +422,26 @@ function openMonthlyPackDialog() {
   dlg.id = 'monthlyPackDlg';
   dlg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
   dlg.innerHTML = `
-    <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:4px;padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
+    <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:var(--r-md);padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
       <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">Export Monthly Review Pack</h3>
       <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px">รายงานสรุปรายเดือน — ภาพรวม, P&L รายสาขา, Top SKU, วัตถุดิบ, alerts, action items</p>
       <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px">เดือน (YYYY-MM)</label>
       <input id="mpackMonth" type="month" value="${defMonth}"
-             style="width:100%;padding:8px 10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:13px;background:var(--bg-input,#fff);color:inherit;margin-bottom:14px">
+             style="width:100%;padding:8px 10px;border:1px solid var(--border,#cbd5e1);border-radius:var(--r-md);font-size:13px;background:var(--bg-input,#fff);color:inherit;margin-bottom:14px">
       <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px">รูปแบบไฟล์</label>
       <div style="display:flex;gap:10px;margin-bottom:18px">
-        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;cursor:pointer">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:var(--r-md);cursor:pointer">
           <input type="radio" name="mpackFmt" value="xlsx" checked> <span style="font-size:13px">Excel (.xlsx)</span>
         </label>
-        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;cursor:pointer">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:var(--r-md);cursor:pointer">
           <input type="radio" name="mpackFmt" value="pdf"> <span style="font-size:13px">PDF</span>
         </label>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button onclick="document.getElementById('monthlyPackDlg').remove()"
-                style="padding:8px 16px;border:1px solid var(--border,#cbd5e1);background:transparent;color:inherit;border-radius:4px;font-size:13px;cursor:pointer">ยกเลิก</button>
+                style="padding:8px 16px;border:1px solid var(--border,#cbd5e1);background:transparent;color:inherit;border-radius:var(--r-md);font-size:13px;cursor:pointer">ยกเลิก</button>
         <button onclick="downloadMonthlyPack()"
-                style="padding:8px 18px;border:none;background:#1F4E79;color:white;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด</button>
+                style="padding:8px 18px;border:none;background:#1F4E79;color:white;border-radius:var(--r-md);font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด</button>
       </div>
     </div>`;
   document.body.appendChild(dlg);

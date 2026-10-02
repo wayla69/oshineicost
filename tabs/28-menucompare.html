@@ -32,7 +32,7 @@
       <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวนชิ้นรวม · สัดส่วน · ต้นทุน ของแต่ละช่วง · คลิกหัวคอลัมน์เพื่อเรียง)</span></h3>
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
-      <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+      <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
         <button class="gran-btn gran-active" id="mcModeTotal" onclick="mcSetCostMode(false)">ต้นทุนรวม</button>
         <button class="gran-btn" id="mcModeHead" onclick="mcSetCostMode(true)">ต้นทุน/หัว</button>
       </div>
@@ -71,7 +71,7 @@
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <h3 class="text-sm font-bold" style="color:var(--text-primary)">Pareto สะสม — การกระจุกตัวของต้นทุน (A vs B)</h3>
       <div class="flex items-center gap-2 flex-wrap">
-        <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+        <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
           <button class="gran-btn gran-active" id="mcParetoModeConc" onclick="mcSetParetoMode('concentration')" title="แต่ละช่วงเรียงต้นทุนของตัวเอง — ดูการกระจุกตัว">การกระจุกตัว</button>
           <button class="gran-btn" id="mcParetoModeAlign" onclick="mcSetParetoMode('aligned')" title="ใช้ลำดับเมนูชุดเดียวกันทั้ง A/B — เทียบเมนูตัวต่อตัว">เทียบตัวต่อตัว</button>
         </div>
@@ -89,7 +89,7 @@
         <h3 id="mcDrillTitle" class="text-base font-bold text-slate-800"></h3>
         <button onclick="mcCloseDrill()" class="topbar-icon-btn" aria-label="ปิด">✕</button>
       </div>
-      <div class="flex flex-wrap gap-1 mb-4" id="mcDrillTabs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;width:fit-content">
+      <div class="flex flex-wrap gap-1 mb-4" id="mcDrillTabs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;width:fit-content">
         <button class="gran-btn gran-active" onclick="mcDrillTab('branch')">รายสาขา (A vs B)</button>
         <button class="gran-btn" onclick="mcDrillTab('trend')">เทรนด์รายเดือน</button>
         <button class="gran-btn" onclick="mcDrillTab('bom')">BoM/วัตถุดิบ</button>
