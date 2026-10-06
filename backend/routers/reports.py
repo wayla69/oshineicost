@@ -2495,7 +2495,7 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
                     + " AND s.day <= :mtd_cut")
         bom_row = con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-            FROM (SELECT *, 'Easy' AS source FROM v_sales_sku_daily) s
+            FROM (SELECT *, 'Easy' AS source, substr(day, 1, 7) AS period_month FROM v_sales_sku_daily) s
             JOIN skus sk ON sk.sku_id=s.sku_id
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id

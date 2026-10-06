@@ -76,6 +76,7 @@ def costs_in_force(con, month: str, exclude_release: int = None) -> dict:
     that holds a recipe for it; otherwise the baseline (v0); otherwise the legacy
     engine table. `exclude_release` leaves one release out (the draft under review)."""
     ensure(con)
+    from .dated import CUTOVER_MONTH
     out = {}
     if con.execute("SELECT 1 FROM sqlite_master WHERE name='sku_effective_cost'").fetchone():
         for code, v in con.execute("SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e JOIN skus s USING(sku_id)"):
@@ -85,6 +86,8 @@ def costs_in_force(con, month: str, exclude_release: int = None) -> dict:
     if base:
         for code, v in con.execute("SELECT sku_code, unit_cost FROM bcd_cost_cache WHERE release_id=?", (base[0],)):
             out[code] = (float(v or 0.0), "v0")
+    if month < CUTOVER_MONTH:                    # before the Grand Menu: the old engine, always
+        return out
     rels = con.execute("SELECT release_id, label FROM bc_release WHERE kind='monthly' AND status='released'"
                        " AND effective_month <= ? AND release_id IS NOT ? ORDER BY effective_month, release_id",
                        (month, exclude_release)).fetchall()
@@ -299,20 +302,40 @@ def compare(con, release_id: int, month: str = None) -> dict:
 
 
 # ── actions ──────────────────────────────────────────────────────────────────
-def do_release(con, release_id: int, who: str) -> dict:
+def check_effective_month(month: str):
+    """Owner 2026-10-06: the center applies from the Grand Menu month on, never before."""
+    from .dated import CUTOVER_MONTH
+    if month < CUTOVER_MONTH:
+        raise ValueError(f"เวอร์ชันต้องมีผลตั้งแต่ {CUTOVER_MONTH} (เริ่มเมนูใหม่) — เดือนก่อนหน้าใช้ต้นทุนระบบเดิมเสมอ")
+
+
+def do_release(con, release_id: int, who: str, backdate_reason: str = None, today: date = None) -> dict:
+    """Release. A version effective for a month that has already started (the very
+    first one, effective 2026-09, released in October) RE-COSTS sales already made,
+    so it needs an explicit backdate reason, recorded in the audit trail."""
+    from . import dated
     rel = release_row(con, release_id)
     if not rel or rel["kind"] != "monthly":
         raise ValueError("ไม่พบ release")
     if rel["status"] not in ("draft", "review"):
         raise ValueError(f"release นี้สถานะ {rel['status']} — ปล่อยซ้ำไม่ได้")
+    check_effective_month(rel["effective_month"])
+    today = today or date.today()
+    eff = rel["effective_month"]
+    cur = f"{today.year:04d}-{today.month:02d}"
+    backdated = eff <= cur
+    if backdated and not (backdate_reason or "").strip():
+        raise ValueError(f"เวอร์ชันนี้มีผลเดือน {eff} ซึ่งเริ่มไปแล้ว — การปล่อยจะคิดต้นทุนยอดขายที่เกิดไปแล้วใหม่ "
+                         "ต้องระบุเหตุผลการย้อนหลัง")
     summary = run_checks(con, release_id)
     if not summary["can_release"]:
         raise ValueError(f"ยังมีข้อที่ต้องแก้ {summary['open_blocks']} รายการ — ดูที่รายการตรวจ")
     late = None
-    eff = rel["effective_month"]
     y, m = int(eff[:4]), int(eff[5:7])
     deadline = date(y - (m == 1), 12 if m == 1 else m - 1, 25)
-    if date.today() > deadline:
+    if backdated:
+        late = f"ย้อนหลัง: มีผล {eff} — คิดต้นทุนยอดขายตั้งแต่ {eff} ใหม่ ({backdate_reason.strip()})"
+    elif today > deadline:
         late = f"ปล่อยหลังกำหนด (ควรปล่อยภายใน {deadline.isoformat()} สำหรับเดือนที่มีผล {eff})"
     # an earlier release of the same month steps aside
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE kind='monthly' AND"
@@ -322,8 +345,11 @@ def do_release(con, release_id: int, who: str) -> dict:
                 " acknowledged_at=NULL WHERE release_id=?", (who, now(), release_id))
     from .engine import rebuild_cost_cache
     rebuild_cost_cache(con, release_id)
-    audit(con, who, "release", "bc_release", str(release_id), rel["status"], json.dumps({"late": late}, ensure_ascii=False))
-    return {"released": True, "late": late, "warnings": summary["warnings"]}
+    d = dated.rebuild(con, today)
+    audit(con, who, "release", "bc_release", str(release_id), rel["status"],
+          json.dumps({"late": late, "backdated": backdated, "dated_rows": d["rows"]}, ensure_ascii=False))
+    return {"released": True, "late": late, "backdated": backdated, "warnings": summary["warnings"],
+            "dated_rows": d["rows"]}
 
 
 def acknowledge(con, release_id: int, who: str, note: str = ""):
@@ -347,6 +373,8 @@ def retire(con, release_id: int, who: str, reason: str):
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE release_id=?",
                 (f" · ย้อนกลับโดย {who}: {reason.strip()}", release_id))
     con.execute("DELETE FROM bcd_cost_cache WHERE release_id=?", (release_id,))
+    from . import dated
+    dated.rebuild(con)
     audit(con, who, "retire", "bc_release", str(release_id), "released", reason)
 
 
@@ -355,6 +383,7 @@ def new_draft_from(con, src_id: int, label: str, effective_month: str, price_mon
     src = release_row(con, src_id)
     if not src or src["kind"] != "monthly":
         raise ValueError("คัดลอกได้จาก release รายเดือนเท่านั้น")
+    check_effective_month(effective_month)
     if con.execute("SELECT 1 FROM bc_release WHERE label=?", (label,)).fetchone():
         raise ValueError(f"มีชื่อ {label} แล้ว")
     con.execute("INSERT INTO bc_release(label, kind, effective_month, status, scope, created_by, created_at,"

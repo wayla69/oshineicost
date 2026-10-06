@@ -109,6 +109,11 @@ CREATE INDEX IF NOT EXISTS idx_tx_ym_dow_cov    ON sales_transaction(strftime('%
 
 -- Per-SKU effective COGS lookup (backs _unified_cogs_expr; populated by _build_sku_effective_cost).
 CREATE TABLE IF NOT EXISTS sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);
+-- BoM Center cut-over (backend/bom_center/dated.py): a RELEASED version's cost per SKU per
+-- month from the Grand Menu month on. Every COGS expression may read it (rules.dated_cost_sql),
+-- so it is part of the base schema; empty = the old engine everywhere.
+CREATE TABLE IF NOT EXISTS bc_sku_cost_month(sku_id INTEGER NOT NULL, month TEXT NOT NULL,
+  unit_cost REAL NOT NULL, release_id INTEGER, built_at TEXT, PRIMARY KEY (sku_id, month));
 
 -- ── sales_sku_monthly indexes ──────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sku_period       ON sales_sku_monthly(period_month);

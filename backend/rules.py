@@ -158,10 +158,27 @@ def raw_unit_cost_sql(s: str = "s") -> str:
     )
 
 
-def effective_unit_cost_sql(row: str = "ssm") -> str:
-    """Effective unit cost for a sales row whose alias is `row` (needs {row}.sku_id)."""
+def dated_cost_sql(row: str, month: str) -> str:
+    """The BoM Center cut-over (backend/bom_center/dated.py): from the Grand Menu
+    month on, a RELEASED version's cost for that SKU and month; NULL otherwise —
+    and NULL without even looking for any month before the cut-over, so August
+    2026 and earlier keep the old engine's numbers byte for byte."""
+    # the latest month on or before the row's (a version stays in force until the
+    # next one) — so a new month needs no new row to keep its released cost
+    return (f"(CASE WHEN {month} >= '{GRAND_MENU_FROM[:7]}' THEN "
+            f"(SELECT bcm.unit_cost FROM bc_sku_cost_month bcm WHERE bcm.sku_id = {row}.sku_id"
+            f" AND bcm.month <= {month} ORDER BY bcm.month DESC LIMIT 1) "
+            f"END)")
+
+
+def effective_unit_cost_sql(row: str = "ssm", month: str = None) -> str:
+    """Effective unit cost for a sales row whose alias is `row` (needs {row}.sku_id).
+    `month` — an SQL expression for the row's 'YYYY-MM' — turns on the dated
+    (released) cost for months on/after the Grand Menu cut-over."""
+    dated = f"    {dated_cost_sql(row, month)}, " if month else ""
     return (
         "COALESCE("
+        + dated +
         f"    (SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id = {row}.sku_id), "
         f"    (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = {row}.sku_id), "
         f"    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = {row}.sku_id), "
@@ -172,19 +189,24 @@ def effective_unit_cost_sql(row: str = "ssm") -> str:
     )
 
 
-def cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
+def cogs_expr(ssm: str = "ssm", sk: str = "sk", month: str = None) -> str:
     """THE COGS expression: qty × effective unit cost, with Easy tier rows at 0.
 
     Self-contained — resolves sku_code, recipe and unit cost through correlated
     subqueries, so it drops into any query that exposes the sales row alias.
     `sk` is accepted for signature compatibility with the older call sites and
     is not needed.
+
+    The row is a monthly roll-up (it has `source`), so it has `period_month`:
+    that is the month the dated (released) cost is looked up for — September
+    2026 on, a released version's cost; earlier months, the old chain untouched.
     """
+    month = month or f"{ssm}.period_month"
     return (
         f"CASE "
         f"  WHEN {ssm}.source = 'Easy' AND "
         f"       {tier_code_sql(f'(SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id)')} THEN 0 "
-        f"  ELSE {ssm}.qty * {effective_unit_cost_sql(ssm)} "
+        f"  ELSE {ssm}.qty * {effective_unit_cost_sql(ssm, month)} "
         f"END"
     )
 

@@ -2477,7 +2477,7 @@ def bom_cost_drivers(
                     SELECT ssm.sku_id,
                       SUM(CASE WHEN ssm.day BETWEEN :cs AND :ce THEN ({ucx}) ELSE 0 END) cur,
                       SUM(CASE WHEN ssm.day BETWEEN :ps AND :pe THEN ({ucx}) ELSE 0 END) prev
-                    FROM (SELECT branch_id, sku_id, qty, day, 'Easy' AS source FROM v_sales_sku_daily
+                    FROM (SELECT branch_id, sku_id, qty, day, 'Easy' AS source, substr(day, 1, 7) AS period_month FROM v_sales_sku_daily
                           WHERE sku_id IN ({phd}) AND (day BETWEEN :cs AND :ce OR day BETWEEN :ps AND :pe)) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{bclause} GROUP BY ssm.sku_id""", kp).fetchall()

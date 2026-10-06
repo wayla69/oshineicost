@@ -823,12 +823,17 @@ def bc_release_accept(body: AcceptBody, request: Request):
         return _rl.checks_summary(con, body.release_id)
 
 
+class ReleaseBody(BaseModel):
+    backdate_reason: Optional[str] = None
+
+
 @router.post("/api/bom-center/release-act/release", dependencies=[Depends(require_write_token)])
-def bc_release_do(request: Request, release_id: int = Query(...)):
+def bc_release_do(request: Request, release_id: int = Query(...), body: Optional[ReleaseBody] = None):
     with get_db() as con:
         _ensure(con)
-        out = _write(con, lambda: _rl.do_release(con, release_id, _who(request)))
-    invalidate_cache("bc_")
+        out = _write(con, lambda: _rl.do_release(con, release_id, _who(request),
+                                                  backdate_reason=(body.backdate_reason if body else None)))
+    invalidate_cache()          # a release changes COGS from its month on: every cached report is stale
     return out
 
 
@@ -850,7 +855,7 @@ def bc_release_retire(body: NoteBody, request: Request):
     with get_db() as con:
         _ensure(con)
         _write(con, lambda: _rl.retire(con, body.release_id, _who(request), body.note or ""))
-    invalidate_cache("bc_")
+    invalidate_cache()          # the previous version's costs are back in every report
     return {"ok": True}
 
 
