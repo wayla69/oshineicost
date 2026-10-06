@@ -23,10 +23,44 @@ from datetime import datetime as _dt
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi.responses import Response
+import contextvars
 import json
 import sqlite3
 
 router = APIRouter()
+
+
+# Request-scoped reuse of reconcile_month while ONE Auditor Pack is built: its six
+# reports ask for the same branch-months over and over. Set only inside
+# auditor_pack_zip (a ContextVar, so concurrent requests never share it); everywhere
+# else _reconcile is a plain reconcile_month call. Not a cache across requests.
+_PACK_RM: contextvars.ContextVar = contextvars.ContextVar("recon_pack_rm", default=None)
+
+
+def _reconcile(conn, branch_id, period_month):
+    memo = _PACK_RM.get()
+    if memo is None:
+        return reconcile_month(conn, branch_id, period_month)
+    key = (branch_id, period_month)
+    if key not in memo:
+        memo[key] = reconcile_month(conn, branch_id, period_month)
+    return memo[key]
+
+
+# Text a spreadsheet would read as a formula (OWASP CSV/formula injection). Notes and
+# reasons are typed by staff and reach the Auditor Pack, so a cell starting with one
+# of these is forced to plain text (quote-prefixed) — strings only, numbers untouched.
+_XL_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _xl_append(ws, row):
+    """ws.append(row), then neutralise any str cell that would act as a formula."""
+    ws.append(row)
+    for c in ws[ws.max_row]:
+        v = c.value
+        if isinstance(v, str) and v.startswith(_XL_FORMULA_LEAD):
+            c.data_type = "s"
+            c.quotePrefix = True
 
 
 def _branch_error_report(conn, period_month: str | None = None) -> dict:
@@ -98,14 +132,14 @@ def branch_error_report_xlsx(period_month: str | None = None):
     for c in ws[1]:
         c.font = bold
     for s in rep["summary"]:
-        ws.append([s["branch_name"], s["count"], s["months"], s["total_abs_variance"]])
+        _xl_append(ws, [s["branch_name"], s["count"], s["months"], s["total_abs_variance"]])
     ws2 = wb.create_sheet("รายการ")
     ws2.append(["สาขา", "เดือน", "ช่องทาง", "ผลต่าง", "เหตุผล", "รับทราบโดย", "เมื่อ"])
     for c in ws2[1]:
         c.font = bold
     for it in rep["items"]:
-        ws2.append([it["branch_name"], it["period_month"], it["category"],
-                    it["variance"], it["reason"], it["by"], it["at"]])
+        _xl_append(ws2, [it["branch_name"], it["period_month"], it["category"],
+                         it["variance"], it["reason"], it["by"], it["at"]])
     for w in (ws, ws2):
         for i, _h in enumerate(w[1], 1):
             w.column_dimensions[chr(64 + i)].width = 22
@@ -275,7 +309,12 @@ def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
     cat_pairs = Counter((it["from_cat"], it["to_cat"]) for it in scope)
 
     cur = len(scope)
-    prev = trend[-2]["count"] if len(trend) >= 2 and trend[-1]["month"] == period_month else None
+    # baseline = the previous CALENDAR month (0 when it had none), not the last month
+    # that happened to have errors (that skipped a clean month and read worse as better)
+    prev = None
+    if period_month:
+        pm_prev = _ic_prev_month(period_month, 1)
+        prev = by_m[pm_prev]["count"] if pm_prev in by_m else 0
     if prev is None:
         direction = "flat"
     elif cur < prev:
@@ -369,17 +408,21 @@ def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> 
             acc = ch.get("accepted")
             ext_only = ch.get("pos", 0) <= 0.5 and ch.get("ext", 0) > 0.5
             typ = "ext_only" if ext_only else "variance"
-            if ch["status"] == "diff":
-                add(bid, bn, typ, ch["key"], ch_th, ch.get("detail", ""),
-                    ch.get("residual", ch.get("variance", 0)), "open")
-            elif acc:
+            # accepted first: an accepted channel keeps status 'diff' in the engine
+            # (the accept only clears its todo), so it must not be listed as open
+            if acc:
                 add(bid, bn, "variance", ch["key"], ch_th, "รับทราบทั้งช่องทาง",
                     ch.get("variance", 0), "acknowledged", acc.get("note", ""), acc.get("by", ""))
+            elif ch["status"] == "diff":
+                add(bid, bn, typ, ch["key"], ch_th, ch.get("detail", ""),
+                    ch.get("residual", ch.get("variance", 0)), "open")
             elif ch.get("acked_days"):
                 add(bid, bn, "variance", ch["key"], ch_th,
                     f"รับทราบรายวัน {ch['acked_days']} วัน", ch.get("acked_var", 0), "acknowledged")
+        accepted_keys = {c["key"] for c in rm.get("channels", []) if c.get("accepted")}
         for d in rm.get("documents", []):
-            if d["status"] == "missing":
+            # same rule as the engine's todo: a missing doc of an accepted channel is not open
+            if d["status"] == "missing" and d.get("channel") not in accepted_keys:
                 add(bid, bn, "missing_doc", d.get("channel"), d["label"],
                     d.get("detail", "ยังไม่อัปโหลด"), 0, "open")
         for q in rm.get("setup_questions", []):
@@ -457,9 +500,9 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
             cc.font = bold
         _st_th = {"open": "ค้าง", "acknowledged": "รับทราบแล้ว", "resolved": "แก้ไขแล้ว"}
         for e in all_err["errors"]:
-            wse.append([e["branch_name"], e["type_th"], e["channel_th"] or "—", e["detail"],
-                        e["amount"], _st_th.get(e["status"], e["status"]),
-                        e["reason"], e["by"]])
+            _xl_append(wse, [e["branch_name"], e["type_th"], e["channel_th"] or "—", e["detail"],
+                             e["amount"], _st_th.get(e["status"], e["status"]),
+                             e["reason"], e["by"]])
         for col, w in zip("ABCDEFGH", (20, 22, 18, 34, 14, 14, 38, 14)):
             wse.column_dimensions[col].width = w
         ws = wb.create_sheet("บันทึกผิดช่อง — สรุปรายสาขา")
@@ -469,7 +512,7 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
     for c in ws[1]:
         c.font = bold
     for s in rep["summary"]:
-        ws.append([s["branch_name"], s["count"], s["months"], s["total"]])
+        _xl_append(ws, [s["branch_name"], s["count"], s["months"], s["total"]])
     ws2 = wb.create_sheet("รายการ")
     ws2.append(["สาขา", "เดือน", "วันที่", "บันทึกผิดเป็น", "ที่จริงเข้า", "ยอด (บาท)",
                 "เหตุผล / หมายเหตุ", "ยืนยันโดย", "เมื่อ"])
@@ -477,9 +520,9 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
         c.font = bold
     for it in rep["items"]:
         to_th = it["to_th"] + (f" ({it['to_bank_th']})" if it["to_bank_th"] else "")
-        ws2.append([it["branch_name"], it["period_month"], ", ".join(it["days"]),
-                    it["from_th"], to_th, it["amount"], it["reason"], it["by"],
-                    (it["at"] or "")[:16]])
+        _xl_append(ws2, [it["branch_name"], it["period_month"], ", ".join(str(d) for d in it["days"]),
+                         it["from_th"], to_th, it["amount"], it["reason"], it["by"],
+                         (it["at"] or "")[:16]])
     ws.column_dimensions["A"].width = 22
     for col, w in zip("ABCDEFGHI", (22, 10, 22, 16, 18, 14, 40, 16, 18)):
         ws2.column_dimensions[col].width = w
@@ -621,7 +664,7 @@ def wrong_channel_report_print(period_month: str | None = None,
                      "<th>เหตุผล / หมายเหตุ</th><th>ยืนยันโดย</th></tr></thead><tbody>")
         for r in rows:
             to_th = _esc(r["to_th"]) + (f" ({_esc(r['to_bank_th'])})" if r["to_bank_th"] else "")
-            days = ", ".join(d[8:].lstrip("0") for d in r["days"]) or "—"
+            days = ", ".join(_esc(str(d)[8:].lstrip("0")) for d in r["days"]) or "—"
             parts.append(
                 f"<tr><td>{days}</td><td>{_esc(r['from_th'])}</td>"
                 f"<td><span class='arr'>→</span> {to_th}</td>"
@@ -888,13 +931,42 @@ def _ic_lane_th(cat, bank):
     return base
 
 
-def _override_register(conn, period_month, branch_id=None):
+def _live_channels(conn, live, branch_id, period_month):
+    """{channel key: engine channel} for one branch-month, memoised in `live`
+    (branch_id → map). None when the engine fails for that branch."""
+    if branch_id not in live:
+        try:
+            live[branch_id] = {c["key"]: c for c in
+                               _reconcile(conn, branch_id, period_month)["channels"]}
+        except Exception as e:
+            print(f"[recon-report] reconcile_month branch={branch_id} {period_month} failed: {e}")
+            live[branch_id] = None
+    return live[branch_id]
+
+
+def _live_day_variance(chmap, category, day, typed):
+    """(variance, note) for an acknowledged day: the engine's live day variance — what
+    the ack actually clears — with a note when the stored (client-sent) figure differs.
+    The stored figure is only the fallback when the engine has no such day (or failed)."""
+    typed = float(typed or 0)
+    for d in ((chmap or {}).get(category) or {}).get("days", []):
+        if d["day"] == day:
+            v = float(d["variance"] or 0)
+            return v, (f" (ตอนรับทราบบันทึกไว้ {typed:+,.0f})" if abs(v - typed) > 0.5 else "")
+    return typed, " (ไม่พบยอดวันนี้ในข้อมูลปัจจุบัน — ใช้ยอดตอนรับทราบ)"
+
+
+def _override_register(conn, period_month, branch_id=None, live=None):
     """Every manual intervention (management override) in the month across master
     branches: manual tick-to-match, cross-channel move, lane adjustment, and per-day
     acknowledged variance — the four reversible tables. One normalized row each:
-    branch · when · who · kind · lane · amount · reason. Read-only."""
+    branch · when · who · kind · lane · amount · reason. Read-only.
+    Acknowledgements are valued at the engine's live variance (a whole-channel accept
+    at the channel's residual, a day-ack at that day's variance); `live` can carry
+    branch_id → channel maps the caller already computed."""
     bmap = {r["branch_id"]: r["name"] for r in conn.execute(
         f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
+    live = {} if live is None else live
 
     def keep(bid):
         return (bid in bmap) and (branch_id is None or bid == branch_id)
@@ -934,6 +1006,12 @@ def _override_register(conn, period_month, branch_id=None):
         amt = float(r["adj_pos"] or 0) + float(r["adj_ext"] or 0)
         det = ((f"POS +{float(r['adj_pos'] or 0):,.0f}" if r["adj_pos"] else "")
                + (f" เงินเข้า +{float(r['adj_ext'] or 0):,.0f}" if r["adj_ext"] else "")).strip()
+        if r["adj_type"] == "accept":
+            # an accept is a zero-amount marker: what it writes off is the channel's
+            # residual (variance left after day-acks), not adj_pos+adj_ext (= ฿0)
+            ch = (_live_channels(conn, live, r["branch_id"], period_month) or {}).get(r["category"])
+            if ch:
+                amt = float(ch.get("residual", ch.get("variance", 0)) or 0)
         rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
             "at": r["created_at"], "by": r["created_by"] or "—",
             "kind": _adj_kind.get(r["adj_type"], "ปรับปรุง"), "kind_key": "lane_adj",
@@ -945,12 +1023,14 @@ def _override_register(conn, period_month, branch_id=None):
                           (period_month,)):
         if not keep(r["branch_id"]):
             continue
+        v, vnote = _live_day_variance(_live_channels(conn, live, r["branch_id"], period_month),
+                                      r["category"], r["day"], r["variance"])
         rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
             "at": r["created_at"], "by": r["created_by"] or "—",
             "kind": "รับทราบผลต่างรายวัน", "kind_key": "day_ack",
             "lane": f"{_CH_LABEL.get(r['category'], r['category'])} · {r['day']}",
-            "amount": round(float(r["variance"] or 0), 2),
-            "detail": f"วันที่ {r['day']} ต่าง {float(r['variance'] or 0):+,.0f} บาท",
+            "amount": round(v, 2),
+            "detail": f"วันที่ {r['day']} ต่าง {v:+,.0f} บาท{vnote}",
             "reason": r["note"] or ""})
     rows.sort(key=lambda x: (x["at"] or ""), reverse=True)
     for r in rows:
@@ -1003,7 +1083,7 @@ def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
             if sess and sess["status"] in ("approved", "closed"):
                 continue
             try:
-                r = reconcile_month(conn, bid, m)
+                r = _reconcile(conn, bid, m)
             except Exception as e:
                 print(f"[recon-report] reconcile_month branch={bid} {m} failed, month skipped: {e}")
                 continue
@@ -1025,18 +1105,22 @@ def _recon_certificate(conn, branch_id, period_month):
     """Sign-off certificate data for one branch-month: per-channel POS vs money-in
     with residual after acknowledgements, preparer/reviewer + approval date, the
     frozen working-paper snapshot hash, and the count of manual overrides. Read-only."""
-    r = reconcile_month(conn, branch_id, period_month)
+    r = _reconcile(conn, branch_id, period_month)
     chs = r["channels"]
-    rows, resid_total = [], 0.0
+    rows, resid_total, resid_net = [], 0.0, 0.0
     for c in chs:
         resid = c.get("residual", c.get("variance", 0)) or 0
-        if c["key"] != "COUPON":          # COUPON variance is loyalty points, not baht
-            resid_total += resid
+        # COUPON variance is loyalty points, not baht; an accepted channel is signed
+        # off. Sum ABS so a short QR can't cancel an over CASH into a green ฿0.
+        if c["key"] != "COUPON" and not c.get("accepted"):
+            resid_total += abs(resid)
+            resid_net += resid
         rows.append({"key": c["key"], "label": c["label"],
             "pos": c["pos"], "ext": c["ext"], "variance": c.get("variance", 0),
             "residual": resid, "status": c["status"],
             "accepted": bool(c.get("accepted")), "detail": c.get("detail", "")})
-    reg = _override_register(conn, period_month, branch_id)
+    reg = _override_register(conn, period_month, branch_id,
+                             live={branch_id: {c["key"]: c for c in chs}})
     ack_rows = [x for x in reg["rows"] if x["kind_key"] in ("day_ack", "lane_adj")]
     snap = conn.execute(
         "SELECT status, sha256, created_at, file_name, source_manifest FROM recon_close_snapshot "
@@ -1056,6 +1140,7 @@ def _recon_certificate(conn, branch_id, period_month):
         "pos_total": round(sum(c["pos"] for c in chs), 2),
         "ext_total": round(sum(c["ext"] for c in chs), 2),
         "residual_total": round(resid_total, 2),
+        "residual_net": round(resid_net, 2),
         "ack_count": len(ack_rows),
         "ack_amount": round(sum(abs(x["amount"]) for x in ack_rows), 2),
         "override_count": reg["count"], "override_missing_reason": reg["missing_reason"],
@@ -1319,7 +1404,9 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None,
             f"<div>POS รวม: <b>฿{m(c['pos_total'])}</b></div>"
             f"<div>เงินเข้าจริงรวม: <b>฿{m(c['ext_total'])}</b></div>"
             f"<div>ผลต่างคงเหลือ (หลังรับทราบ): <b class='{'big' if abs(c['residual_total'])>100 else 'ok'}'>"
-            f"฿{m(c['residual_total'])}</b></div>"
+            f"฿{m(c['residual_total'])}</b>"
+            + (f" <span class='muted'>(สุทธิ {c['residual_net']:+,.0f})</span>"
+               if abs(c['residual_total'] - abs(c['residual_net'])) > 0.5 else "") + "</div>"
             f"<div>รายการรับทราบ: <b>{c['ack_count']}</b> (฿{m(c['ack_amount'])})</div>"
             f"<div>แก้ด้วยมือทั้งหมด: <b>{c['override_count']}</b> รายการ</div></div>",
             "<table><thead><tr><th class='l'>ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th>"
@@ -1338,7 +1425,7 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None,
                 f"<td class='l'><span class='chip {stx}'>{esc(stl)}</span></td></tr>")
         out.append(f"</tbody><tfoot><tr><td class='l'>รวม</td>"
             f"<td class='mono'>{m(c['pos_total'])}</td><td class='mono'>{m(c['ext_total'])}</td>"
-            f"<td></td><td class='mono'>{c['residual_total']:+,.0f}</td><td></td></tr></tfoot></table>")
+            f"<td></td><td class='mono'>{m(c['residual_total'])}</td><td></td></tr></tfoot></table>")
         out.append("<div class='lead'>" + snap_line + "</div>")
         out.append("<div class='sub' style='margin-top:14px'>ข้าพเจ้าขอรับรองว่าการกระทบยอด"
             "รายได้และเงินรับของสาขา/งวดข้างต้นถูกต้องและครบถ้วน ผลต่างที่คงเหลือได้รับการ"
@@ -1407,22 +1494,16 @@ def _accepted_variance_summary(conn, period_month, branch_id=None, threshold=100
     def keep(bid):
         return bid in bmap and (branch_id is None or bid == branch_id)
 
-    items, var_cache = [], {}
+    items, live = [], {}             # live: branch_id → engine channel map (one reconcile each)
     for a in conn.execute(
             "SELECT branch_id, period_month, category, bank, note, created_by, created_at "
             "FROM recon_lane_adj WHERE adj_type='accept' AND period_month=?", (period_month,)):
         if not keep(a["branch_id"]):
             continue
-        key = (a["branch_id"], a["period_month"])
-        if key not in var_cache:
-            try:
-                var_cache[key] = {c["key"]: c.get("residual", c["variance"])
-                                  for c in reconcile_month(conn, a["branch_id"], a["period_month"])["channels"]}
-            except Exception:
-                var_cache[key] = {}
+        ch = (_live_channels(conn, live, a["branch_id"], period_month) or {}).get(a["category"])
         items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
             "scope": _ic_lane_th(a["category"], a["bank"]), "channel": a["category"],
-            "amount": round(var_cache[key].get(a["category"], 0.0), 2),
+            "amount": round(float(ch.get("residual", ch["variance"]) or 0) if ch else 0.0, 2),
             "reason": a["note"] or "", "by": a["created_by"] or "—",
             "at": a["created_at"] or "", "source": "channel"})
     for a in conn.execute(
@@ -1430,9 +1511,14 @@ def _accepted_variance_summary(conn, period_month, branch_id=None, threshold=100
             "FROM recon_day_ack WHERE period_month=?", (period_month,)):
         if not keep(a["branch_id"]):
             continue
+        # value the ack at the engine's live day variance (what it actually clears);
+        # the stored figure is client-typed and only shown when it differs
+        v, vnote = _live_day_variance(_live_channels(conn, live, a["branch_id"], period_month),
+                                      a["category"], a["day"], a["variance"])
         items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
-            "scope": f"{_CH_LABEL.get(a['category'], a['category'])} · {a['day']}",
-            "channel": a["category"], "amount": round(float(a["variance"] or 0), 2),
+            "scope": f"{_CH_LABEL.get(a['category'], a['category'])} · {a['day']}{vnote}",
+            "channel": a["category"], "amount": round(v, 2),
+            "acked_amount": round(float(a["variance"] or 0), 2),
             "reason": a["note"] or "", "by": a["created_by"] or "—",
             "at": a["created_at"] or "", "source": "day"})
     items.sort(key=lambda x: -abs(x["amount"]))
@@ -1608,8 +1694,9 @@ _AUDIT_ACTION_TH = {"create": "สร้าง", "update": "แก้ไข", "d
 
 
 # entity → (parent table, primary-key column) so an audit row can be resolved to a
-# branch+period. Deleted parents drop out (their row is gone); the append-only audit
-# log itself is never mutated.
+# branch+period. When the parent row was deleted, branch+period are recovered from
+# the entity's own audit rows (see _audit_orphan_scope) so the change history keeps
+# it; the append-only audit log itself is never mutated.
 _AUDIT_SRC = [("session", "recon_sessions", "session_id"),
               ("manual_match", "recon_manual_match", "match_id"),
               ("channel_move", "recon_channel_move", "id"),
@@ -1619,9 +1706,49 @@ _AUDIT_SRC = [("session", "recon_sessions", "session_id"),
               ("close_snapshot", "recon_close_snapshot", "id")]
 
 
+_AUDIT_UNKNOWN_BRANCH = "ไม่ทราบสาขา (รายการถูกลบ)"
+
+
+def _audit_orphan_scope(arows):
+    """(branch_id, period_month) for an audited entity whose parent row is gone,
+    recovered from its own audit rows: a branch_id / period_month / day field, or a
+    dict (JSON or Python repr — _audit str()s values) in old/new carrying them.
+    Either part may be None when nothing recorded it."""
+    import ast
+    bid = pm = None
+    for r in arows:
+        f = (r["field"] or "").lower()
+        for raw in (r["old_val"], r["new_val"]):
+            if raw is None:
+                continue
+            vals = {f: raw} if f in ("branch_id", "period_month", "day") else None
+            if vals is None:
+                for parse in (json.loads, ast.literal_eval):
+                    try:
+                        vals = parse(raw)
+                        break
+                    except Exception:
+                        vals = None
+            if not isinstance(vals, dict):
+                continue
+            if bid is None and vals.get("branch_id") not in (None, ""):
+                try:
+                    bid = int(vals["branch_id"])
+                except (TypeError, ValueError):
+                    pass
+            cand = str(vals.get("period_month") or str(vals.get("day") or "")[:7])
+            if pm is None and _PERIOD_RE.match(cand):
+                pm = cand
+    return bid, pm
+
+
 def _audit_trail(conn, period_month, branch_id=None, limit=400):
     """Branch+month-scoped change history from the append-only audit log: who changed
-    what, when, across sessions/overrides/uploads/snapshots. Read-only."""
+    what, when, across sessions/overrides/uploads/snapshots. Read-only.
+    Rows of a DELETED record are kept (LEFT JOIN): branch+period come from the audit
+    rows themselves; with no recoverable period the month of the first audit row is
+    used, with no recoverable branch the row is listed under an unknown-branch bucket
+    (left out only when a branch filter is applied)."""
     bmap = {r["branch_id"]: r["name"] for r in conn.execute(
         f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
     rows = []
@@ -1629,23 +1756,49 @@ def _audit_trail(conn, period_month, branch_id=None, limit=400):
         try:
             cur = conn.execute(
                 f"SELECT a.ts, a.action, a.field, a.old_val, a.new_val, a.\"by\" AS by_, "
-                f"p.branch_id AS bid, p.period_month AS pm "
-                f"FROM recon_audit_log a JOIN {tbl} p ON p.{pk}=a.entity_id "
-                f"WHERE a.entity=? AND p.period_month=?", (entity, period_month))
+                f"a.entity_id AS eid, p.{pk} AS pid, p.branch_id AS bid, p.period_month AS pm "
+                f"FROM recon_audit_log a LEFT JOIN {tbl} p ON p.{pk}=a.entity_id "
+                f"WHERE a.entity=? AND (p.period_month=? OR p.{pk} IS NULL)",
+                (entity, period_month))
+            fetched = cur.fetchall()
         except sqlite3.OperationalError:
             continue
-        for r in cur:
-            bid = r["bid"]
-            if bid not in bmap or (branch_id is not None and bid != branch_id):
+        orphans: dict = {}
+        for r in fetched:
+            if r["pid"] is None:
+                orphans.setdefault(r["eid"], []).append(r)
+        scope = {}                                  # eid → (bid, pm, period inferred?)
+        for eid, arows in orphans.items():
+            bid, pm = _audit_orphan_scope(arows)
+            inferred = pm is None
+            if inferred:
+                pm = min((a["ts"] or "") for a in arows)[:7]
+            scope[eid] = (bid, pm, inferred)
+        for r in fetched:
+            inferred = False
+            if r["pid"] is None:
+                bid, pm, inferred = scope[r["eid"]]
+                if pm != period_month:
+                    continue
+            else:
+                bid = r["bid"]
+            if branch_id is not None and bid != branch_id:
+                continue
+            if bid is not None and bid not in bmap:
                 continue
             if r["action"] == "update" and (r["old_val"] is not None or r["new_val"] is not None):
                 detail = f"{r['field'] or ''} {r['old_val'] or '—'} → {r['new_val'] or '—'}".strip()
+            elif r["action"] == "delete" and r["old_val"] is not None:
+                detail = f"{r['field'] or ''} {r['old_val']}".strip()
             else:
                 detail = r["new_val"] or r["field"] or ""
+            if inferred:
+                detail = (detail + " (ไม่ทราบงวด — แสดงตามวันที่บันทึก)").strip()
             rows.append({"ts": r["ts"], "by": r["by_"] or "—", "entity": entity,
                 "entity_th": _AUDIT_ENTITY_TH.get(entity, entity),
                 "action": r["action"], "action_th": _AUDIT_ACTION_TH.get(r["action"], r["action"]),
-                "detail": detail, "branch_id": bid, "branch_name": bmap.get(bid, str(bid))})
+                "detail": detail, "branch_id": bid,
+                "branch_name": bmap[bid] if bid is not None else _AUDIT_UNKNOWN_BRANCH})
     rows.sort(key=lambda x: (x["ts"] or ""), reverse=True)
     return {"period_month": period_month, "branch_id": branch_id,
             "count": len(rows), "rows": rows[:limit], "shown": min(len(rows), limit)}
@@ -1718,7 +1871,7 @@ def _xlsx_response(sheets, fname):
         for c in ws[1]:
             c.font = bold
         for row in body:
-            ws.append(row)
+            _xl_append(ws, row)
         for i in range(1, len(headers) + 1):
             ws.column_dimensions[chr(64 + i)].width = 22
     buf = io.BytesIO()
@@ -1856,15 +2009,19 @@ def auditor_pack_zip(period_month: str, branch_id: int | None = None):
         "  06 ประวัติการแก้ไข (audit trail — เพิ่มอย่างเดียว แก้ไม่ได้)\n")
     buf = io.BytesIO()
     failed = []
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, thunk in parts:
-            try:
-                z.writestr(name, _body(thunk()))
-            except Exception as e:                       # never let one report sink the pack
-                failed.append(f"{name}: {e}")
-        if failed:
-            readme += "\nหมายเหตุ — รายงานที่สร้างไม่สำเร็จ:\n  " + "\n  ".join(failed) + "\n"
-        z.writestr("00_README.txt", readme)
+    memo_token = _PACK_RM.set({})        # one reconcile per branch-month for the whole pack
+    try:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, thunk in parts:
+                try:
+                    z.writestr(name, _body(thunk()))
+                except Exception as e:                       # never let one report sink the pack
+                    failed.append(f"{name}: {e}")
+            if failed:
+                readme += "\nหมายเหตุ — รายงานที่สร้างไม่สำเร็จ:\n  " + "\n  ".join(failed) + "\n"
+            z.writestr("00_README.txt", readme)
+    finally:
+        _PACK_RM.reset(memo_token)
     return Response(
         content=buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=\"auditor_pack_{pm}{bsuf}.zip\""})

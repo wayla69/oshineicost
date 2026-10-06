@@ -704,7 +704,7 @@ def get_audit_log(
     """Field-level change log.
     Pass session_id to get all events scoped to one session (session-level + its discrepancies).
     Pass entity + entity_id for a specific record's history."""
-    cap = min(limit, 500)
+    cap = max(1, min(limit, 500))          # LIMIT -1 would mean "no limit" in SQLite
     with get_db() as conn:
         if session_id and not entity and not entity_id:
             rows = conn.execute("""
@@ -792,10 +792,10 @@ def diag_excel_payment_cols(period_month: str, branch_id: int | None = None):
         if not _has_table(conn, "sales_month_summary"):
             return {"period_month": period_month, "rows": [], "available": False,
                     "reason": "ยังไม่มี sales_month_summary ในฐานข้อมูลนี้ — ปรากฏหลัง sync ครั้งแรก"}
-        filters = ["period_month=?", "source='Easy'"]
+        filters = ["s.period_month=?", "s.source='Easy'"]   # qualified: branches has branch_id too
         params: list = [period_month]
         if branch_id:
-            filters.append("branch_id=?"); params.append(branch_id)
+            filters.append("s.branch_id=?"); params.append(branch_id)
         rows = conn.execute(f"""
             SELECT b.name branch, s.cash, s.credit_card, s.transfer, s.qr, s.coupon, s.net_sales
             FROM sales_month_summary s
