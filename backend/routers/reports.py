@@ -3119,6 +3119,23 @@ def report_management(
     except Exception as e:      # pragma: no cover — degraded, not broken
         print(f"[mgt] §12 customer voice unavailable: {e}")
 
+    # §13A — stock-count usage variance (BoM Center Phase 2), complete months only and only
+    # once a branch counts. Never lets a variance problem take the whole report down.
+    stock_variance = None
+    if period == "monthly" and not partial:
+        try:
+            from bom_center.hub import monthly as _sv_monthly
+            from bom_center.schema import ensure as _bc_ensure
+            with get_db() as _scon:
+                _bc_ensure(_scon)
+                _sv = _sv_monthly(_scon, cs.isoformat()[:7])
+                if branch:
+                    _sv["branches"] = [b for b in _sv["branches"] if b["branch"] == branch]
+                if _sv["branches"]:
+                    stock_variance = _sv
+        except Exception as e:      # pragma: no cover — degraded, not broken
+            print(f"[mgt] §13A stock variance unavailable: {e}")
+
     return {
         "available": True,
         "period": period,
@@ -3153,6 +3170,7 @@ def report_management(
         "trend": trend,
         "actions": actions,
         "feedback": voice,
+        "stock_variance": stock_variance,
     }
 
 
