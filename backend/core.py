@@ -1275,6 +1275,10 @@ def _ensure_rev_views(con):
     unconditional: CREATE VIEW IF NOT EXISTS on an existing view is a no-op."""
     for ddl in _REV_VIEWS:
         con.execute(ddl)
+    # every COGS expression may look up a released month's cost (rules.dated_cost_sql),
+    # so the table must exist on any DB that goes live — startup AND hot-swap
+    from bom_center.dated import DDL as _BC_DATED_DDL
+    con.execute(_BC_DATED_DDL)
 
 
 # Benchmarks for ingredient-type mix (used by UI)

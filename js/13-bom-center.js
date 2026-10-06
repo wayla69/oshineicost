@@ -790,7 +790,7 @@ function bmcRenderRelHead(checks) {
     </div>
     <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
       ลำดับงาน: analyst ตรวจ → แก้ข้อที่ต้องแก้ (หรือยืนยันพร้อมเหตุผลสำหรับข้อที่ยอมรับได้) → ปล่อยภายในวันที่ 25 ของเดือนก่อนมีผล → management อ่านผลกระทบด้านล่างแล้วรับทราบ หรือย้อนกลับ ·
-      ขณะนี้การปล่อยยังไม่เปลี่ยนต้นทุนในรายงาน (สลับเครื่องคำนวณใน Sprint S4)</div>`;
+      เมื่อปล่อยแล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลจะเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อน ก.ย. 2569 ใช้ต้นทุนระบบเดิมเสมอ)</div>`;
 }
 async function bmcLoadChecks() {
   try {
@@ -843,9 +843,17 @@ async function bmcAccept(i) {
 }
 async function bmcDoRelease() {
   const r = _bmcRlRel;
-  if (!confirm(`ปล่อย “${r.label}” มีผลเดือน ${r.effective_month}?\n\nหลังปล่อยแก้สูตรในเวอร์ชันนี้ไม่ได้ (สร้าง draft ใหม่แทน) · management จะได้เห็นผลกระทบและรับทราบ`)) return;
+  const now = new Date(), cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  let backdate_reason = null;
+  if (r.effective_month <= cur) {
+    // the month has started: releasing RE-COSTS sales already made (from ${r.effective_month} on)
+    backdate_reason = prompt(`เวอร์ชันนี้มีผลเดือน ${r.effective_month} ซึ่งเริ่มไปแล้ว\nการปล่อยจะคิดต้นทุนยอดขายตั้งแต่ ${r.effective_month} ใหม่ทั้งหมด`
+      + ` (เดือนก่อน ก.ย. 2569 ไม่เปลี่ยนเด็ดขาด)\n\nเหตุผลการย้อนหลัง (จำเป็น):`);
+    if (!backdate_reason) return;
+  } else if (!confirm(`ปล่อย “${r.label}” มีผลเดือน ${r.effective_month}?\n\nหลังปล่อยแก้สูตรในเวอร์ชันนี้ไม่ได้ (สร้าง draft ใหม่แทน) · management จะได้เห็นผลกระทบและรับทราบ`)) return;
   try {
-    const d = await _bmcJson(`${API}/api/bom-center/release-act/release?release_id=${r.release_id}`, { method: 'POST' });
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/release?release_id=${r.release_id}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backdate_reason }) });
     _bmcStatus('bmcRlStatus', '✓ ปล่อยแล้ว' + (d.late ? ' — ' + d.late : '') + (d.warnings ? ` · ข้อสังเกต ${d.warnings}` : ''), d.late ? 'var(--amber-ink)' : 'var(--good-ink)');
     bmcLoadReleasePane(r.release_id);
   } catch (e) { _bmcStatus('bmcRlStatus', 'ปล่อยไม่ได้ — ' + String(e.message || e), 'var(--bad-ink)'); }

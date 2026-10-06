@@ -1345,11 +1345,12 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
         def fetch(d):
             s, e = bounds(d)
             if s.isoformat() >= daily_min:
-                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source"
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source,"
+                       " substr(day, 1, 7) AS period_month"
                        " FROM v_sales_sku_daily WHERE day BETWEEN :s AND :e)")
                 sp_ = {"s": s.isoformat(), "e": e.isoformat()}
             elif gran == "month":
-                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source"
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source, period_month"
                        " FROM v_sales_sku_monthly WHERE period_month = :m)")
                 sp_ = {"m": s.strftime("%Y-%m")}
             else:
@@ -1448,7 +1449,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
                 {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
             co = con.execute(
                 f"""SELECT ROUND(SUM({cogs_expr}),2) cogs
-                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM v_sales_sku_daily
+                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source, substr(day, 1, 7) AS period_month FROM v_sales_sku_daily
                           WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{dbf}{gcond2}""",

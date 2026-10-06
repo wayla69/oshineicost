@@ -256,6 +256,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db") \
             or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
+            or path.startswith("/api/_admin/bc-sku-cost-month") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
         # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
@@ -952,6 +953,17 @@ def _cost_overrides(_tok: str = Depends(_seed_token_or_404)):
         cols = [r[1] for r in con.execute("PRAGMA table_info(cost_override)")]
         rows = [list(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM cost_override")]
     return {"columns": cols, "rows": rows}
+
+
+@app.get("/api/_admin/bc-sku-cost-month", include_in_schema=False)
+def _bc_sku_cost_month(_tok: str = Depends(_seed_token_or_404)):
+    """The released costs per SKU per month (BoM Center cut-over), for the SYNC to
+    price per-bill COGS and the tier fact tables the way the app prices COGS.
+    Keyed by sku_code: sku ids are local to each database."""
+    from bom_center import dated as _bcd
+    with get_db() as con:
+        rows = _bcd.export_rows(con)
+    return {"columns": ["sku_code", "month", "unit_cost", "release_id", "built_at"], "rows": rows}
 
 
 @app.get("/api/_admin/export-state", include_in_schema=False)
@@ -1873,8 +1885,13 @@ def _bom_startup():
     # where the nightly fly_state backup and the swap's carry-forward see them.
     try:
         from bom_center import schema as _bc_schema
+        from bom_center import dated as _bc_dated
         with get_db() as con:
             _bc_schema.ensure(con, commit=True)
+            # the released costs per month: rebuilt from the (preserved) releases on every
+            # start, so a new month gets its row the first time the app boots in it
+            print(f"[bom-center] dated costs: {_bc_dated.rebuild(con)}")
+            con.commit()
     except Exception as e:
         print(f"[bom-center] ensure failed: {e}")
     # Every file-borne cost source, in precedence order, through the SAME entry

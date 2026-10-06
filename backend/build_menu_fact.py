@@ -208,6 +208,8 @@ def main():
         import cost_sources
         _pull_confirmed_costs(sq, cost_sources)
         print(f"[0/4] cost sources applied: {cost_sources.apply_all(sq)}")
+        from bom_center import dated as _bc_dated
+        _bc_dated.pull_from_live(sq)
     except Exception as e:                      # never block the fact build
         print(f"[0/4] ⚠ cost sources NOT applied ({e}) — using the DB's costs as-is")
     cost_by_code = {c: rc for c, rc in sq.execute(
@@ -264,6 +266,33 @@ def main():
 
     def inlist(ids): return "(" + ",".join(str(int(i)) for i in ids) + ")"
     cost_sql = ",".join(f"({i},{rc:.6f})" for i, rc in cost_vals)
+
+    # BoM Center cut-over (bom_center/dated.py): from the Grand Menu month on, each
+    # month's bills are priced with that month's RELEASED costs; earlier months keep
+    # cost_sql exactly. The windows below are calendar months, so one list per month.
+    try:
+        from bom_center import dated as _bc_dated
+        dated_costs = _bc_dated.month_map(sq)
+        cutover_month = _bc_dated.CUTOVER_MONTH
+    except Exception as e:                      # never block the fact build
+        print(f"      dated costs unavailable ({e}) — every month on the base costs")
+        dated_costs, cutover_month = {}, "9999-99"
+    sid2code = {s: c for c, s in code2sid.items()}
+
+    def month_cost_sql(month: str) -> str:
+        over = _bc_dated.costs_for(dated_costs, month) if (dated_costs and month >= cutover_month) else None
+        if not over:
+            return cost_sql
+        by_code = dict(cost_by_code)
+        for sid, c in over.items():
+            code = sid2code.get(sid)
+            if code and code not in TIER_CODES:
+                if c and c > 0:
+                    by_code[code] = c
+                else:
+                    by_code.pop(code, None)
+        vals = [(i, rc) for c, rc in by_code.items() for i in code2iids.get(c, [])]
+        return ",".join(f"({i},{rc:.6f})" for i, rc in vals)
     grp_sql = ",".join(f"({i},'{slug}')" for i, slug in grp_vals)
     adult_ids = code2iids.get("BUFFET", [])
     # `nf` (computed per bill in bill0) lifts the stored base price back to what the
@@ -375,11 +404,17 @@ GROUP BY x.grp, b.bid, b.d, b.tier"""
                 mc = connect_mssql().cursor()
         sys.exit(f"giving up: {tag}")
 
+    Q_TOTAL0, Q_ITEM0, Q_PROMO0, Q_GROUP0 = Q_TOTAL, Q_ITEM, Q_PROMO, Q_GROUP
     print(f"[2/4] pull {len(month_windows(args.d_from, args.d_to))} month chunk(s) "
           f"(items costed={len(cost_vals)}, groups={len(GROUPS)}, tier ids={len(tier_ids)})")
     tot_rows, ent_rows = [], []
     for lo, hi in month_windows(args.d_from, args.d_to):
         print(f"    {lo} → {hi}")
+        msql = month_cost_sql(lo[:7])
+        if msql is not cost_sql:                 # this month runs on its released costs
+            print(f"      released costs for {lo[:7]}: {len(_bc_dated.costs_for(dated_costs, lo[:7]))} SKUs")
+        Q_TOTAL, Q_ITEM, Q_PROMO, Q_GROUP = (q.replace(f"(VALUES {cost_sql})", f"(VALUES {msql})")
+                                             for q in (Q_TOTAL0, Q_ITEM0, Q_PROMO0, Q_GROUP0))
         for r in run_retry(Q_TOTAL, (lo, hi), "totals"):
             b = bid_map.get(int(r[0]))
             if b:

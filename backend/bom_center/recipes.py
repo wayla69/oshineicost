@@ -154,6 +154,9 @@ def match_blocks(con, blocks: list) -> list:
 # ── release rows ─────────────────────────────────────────────────────────────
 def get_or_create_draft(con, label: str, effective_month: str, price_month: str, who: str) -> int:
     ensure(con)
+    from .dated import CUTOVER_MONTH
+    if effective_month < CUTOVER_MONTH:
+        raise ValueError(f"เวอร์ชันต้องมีผลตั้งแต่ {CUTOVER_MONTH} (เริ่มเมนูใหม่) — เดือนก่อนหน้าใช้ต้นทุนระบบเดิมเสมอ")
     r = con.execute("SELECT release_id, status FROM bc_release WHERE label=?", (label,)).fetchone()
     if r:
         if r[1] not in ("draft", "review"):

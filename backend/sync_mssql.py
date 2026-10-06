@@ -98,6 +98,8 @@ def refresh_sku_effective_cost(sq):
     flip-flopped by last writer (BUFFET recipe_cost=679.08 after a nightly sync,
     0 after an app restart — observed live 2026-08-10). test_invariants.py
     asserts sync output == main output row-for-row."""
+    from bom_center.dated import DDL as _BC_DATED_DDL      # COGS SQL may read it (rules.dated_cost_sql)
+    sq.execute(_BC_DATED_DDL)
     sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
                      "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
                      "DELETE FROM sku_effective_cost;")
@@ -1232,6 +1234,13 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
     # DB never serves stale costs (main only force-rebuilds it at startup, not on
     # hot-swap pre-2026-06-11). Shared helper = same tier-code zeroing as main.
     refresh_sku_effective_cost(sq)
+    # BoM Center cut-over: from the Grand Menu month on, a RELEASED version's cost
+    # for the bill's month (pulled from the live site, where releases are made);
+    # earlier bills keep costmap. Same rule as rules.dated_cost_sql in the app.
+    from bom_center import dated as _bc_dated
+    _bc_dated.pull_from_live(sq)
+    dated_costs = _bc_dated.month_map(sq)
+    dated_by_month = {}                      # month -> {sku_id: cost}, resolved once per month
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     bill_rows = _chunk(mc, f"""
@@ -1250,6 +1259,11 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
             continue
         sid_local = item_map.get(r["iid"])
         c = costmap.get(sid_local, 0.0)
+        if r["d"] and r["d"][:7] >= _bc_dated.CUTOVER_MONTH:
+            mc_ = dated_by_month.get(r["d"][:7])
+            if mc_ is None:
+                mc_ = dated_by_month[r["d"][:7]] = _bc_dated.costs_for(dated_costs, r["d"][:7])
+            c = mc_.get(sid_local, c)
         qty = r["qty"] or 0
         rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
         b = bills.get(rcpt)
