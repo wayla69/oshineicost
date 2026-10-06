@@ -505,3 +505,26 @@ CREATE TABLE IF NOT EXISTS recon_statement_code_map (
     updated_by  TEXT,
     updated_at  TEXT DEFAULT (datetime('now'))
 );
+
+-- ─── Recon login accounts (recon/auth.py — SEPARATE from the dashboard's app_user) ──
+-- Owner decision 2026-10-06: recon has its own users, roles and session. Enforcement
+-- is off until RECON_LOGIN=1 (see recon/LOGIN_ROLLOUT.md). pw_hash = scrypt with a
+-- per-user salt (never the password). pw_version is stamped into every session
+-- cookie: a reset / password change / deactivation bumps it, which kills the old
+-- sessions. The recon_ prefix is what makes the dashboard's DB swap carry this table
+-- forward (backend/core.py _PRESERVED_PREFIXES) — never rename it outside recon_.
+CREATE TABLE IF NOT EXISTS recon_users (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    username       TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    display_name   TEXT    NOT NULL DEFAULT '',
+    role           TEXT    NOT NULL CHECK(role IN ('manager','accountant','viewer')),
+    pw_hash        TEXT    NOT NULL,
+    pw_version     INTEGER NOT NULL DEFAULT 1,
+    active         INTEGER NOT NULL DEFAULT 1,
+    must_change_pw INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    created_by     TEXT,
+    last_login_at  TEXT,
+    failed_count   INTEGER NOT NULL DEFAULT 0,
+    locked_until   TEXT
+);
