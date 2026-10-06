@@ -27,6 +27,7 @@ from bom_center import prices as _p
 from bom_center import recipes as _r
 from bom_center import release as _rl
 from bom_center import stock as _st
+from bom_center import variance as _va
 from bom_center.schema import ensure as _ensure
 from bom_center.units import Converter
 
@@ -1304,3 +1305,100 @@ def bc_stock_layout(rows: List[LayoutRow], request: Request):
         _ensure(con)
         n = _write(con, lambda: _st.set_layout(con, [r.dict() for r in rows], _who(request)))
     return {"ok": True, "updated": n}
+
+
+# ── Phase 2 · S7: goods received + usage variance (variance.py) ─────────────
+class ReceiptLine(BaseModel):
+    code: str
+    qty: float
+    unit: Optional[str] = None
+
+
+class ReceiptBody(BaseModel):
+    receipt_date: str
+    lines: List[ReceiptLine]
+    ref: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.get("/api/bom-center/stock/receipts")
+def bc_receipts(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(30)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"branch_id": bid, "receipts": _va.receipts(con, bid, max(1, min(limit, 200)))}
+
+
+@router.post("/api/bom-center/stock/receipt", dependencies=[Depends(require_write_token)])
+def bc_receipt_add(body: ReceiptBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _write(con, lambda: _va.add_receipt(con, bid, body.receipt_date, [ln.dict() for ln in body.lines],
+                                                   _who(request), ref=body.ref, note=body.note))
+
+
+@router.delete("/api/bom-center/stock/receipt/{receipt_id}", dependencies=[Depends(require_write_token)])
+def bc_receipt_delete(receipt_id: int, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"deleted": _write(con, lambda: _va.delete_receipt(con, bid, receipt_id, _who(request)))}
+
+
+@router.get("/api/bom-center/variance/periods")
+def bc_variance_periods(request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"branch_id": bid, "periods": _va.periods(con, bid)}
+
+
+@router.get("/api/bom-center/variance/period")
+def bc_variance_period(request: Request, branch_id: Optional[int] = Query(None),
+                       end_count_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return _va.period(con, bid, end_count_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+
+@router.get("/api/bom-center/variance/overview")
+def bc_variance_overview():
+    """The centre's list: every counting branch's latest period."""
+    with get_db() as con:
+        _ensure(con)
+        return {"branches": _va.overview(con)}
+
+
+class ReasonBody(BaseModel):
+    end_count_id: int
+    code: str
+    reason: str
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/variance/reason", dependencies=[Depends(require_write_token)])
+def bc_variance_reason(body: ReasonBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        _write(con, lambda: _va.set_reason(con, bid, body.end_count_id, body.code, body.reason, body.note, _who(request)))
+    return {"ok": True}
+
+
+class ConfirmBody(BaseModel):
+    end_count_id: int
+    undo: bool = False
+
+
+@router.post("/api/bom-center/variance/confirm-receipts", dependencies=[Depends(require_write_token)])
+def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        _write(con, lambda: _va.confirm_receipts(con, bid, body.end_count_id, _who(request), undo=body.undo))
+    return {"ok": True}

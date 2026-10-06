@@ -1,43 +1,96 @@
 <div id="tab-branchstock" style="display:none">
 
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">สาขาของฉัน — นับสต๊อก</h2>
-    <p class="text-xs mt-1" style="color:var(--text-secondary)">
-      นับของที่อยู่ในร้านทีละโซน ใส่เป็นหน่วยที่หยิบจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรให้เอง ·
-      ครั้งแรกคือ <b>ต้นงวด</b> หลังจากนั้นทุกครั้งที่ส่งคือ <b>ปลายงวด</b> และเป็นต้นงวดของรอบถัดไปอัตโนมัติ ไม่ต้องกรอกซ้ำ ·
-      บันทึกร่างไว้ได้ (สัญญาณหลุดก็ไม่หาย) แล้วกด “ส่งผลนับ” ครั้งเดียว
-    </p>
+    <h2 class="text-base font-bold" style="color:var(--accent)">สาขาของฉัน</h2>
     <div class="flex flex-wrap items-center gap-2 mt-2">
-      <select id="brnBranch" onchange="brnLoadSheet()" style="display:none;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select>
+      <select id="brnBranch" onchange="brnBranchChanged()" style="display:none;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select>
       <span id="brnBranchName" class="text-sm font-semibold" style="color:var(--text-primary)"></span>
       <span id="brnKind" class="text-xs"></span>
     </div>
-    <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
-  </div>
-
-  <div class="card p-3 mb-3" style="position:sticky;top:0;z-index:5">
-    <div id="brnZones" class="flex flex-wrap gap-1"></div>
-    <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-      <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> เฉพาะรายการบังคับ</label>
-      <input type="search" id="brnQ" placeholder="ค้นหา…" oninput="brnRender()"
-             style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
-      <span id="brnProgress"></span>
+    <div class="subtab-bar mt-3">
+      <button class="subtab-btn active" data-brnsub="count" onclick="brnSetSub('count')">นับสต๊อก</button>
+      <button class="subtab-btn" data-brnsub="recv" onclick="brnSetSub('recv')">รับของ</button>
+      <button class="subtab-btn" data-brnsub="var" onclick="brnSetSub('var')">ผลต่างของฉัน</button>
     </div>
   </div>
 
-  <div id="brnList" class="card p-3 mb-3"></div>
+  <!-- ── นับสต๊อก ── -->
+  <div id="brn-pane-count">
+    <div class="card p-3 mb-3">
+      <p class="text-xs" style="color:var(--text-secondary)">
+        นับของที่อยู่ในร้านทีละโซน <b>ก่อนเปิดร้าน/ก่อนของเข้า</b> ใส่เป็นหน่วยที่หยิบจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรให้เอง ·
+        ครั้งแรกคือ <b>ต้นงวด</b> หลังจากนั้นทุกครั้งที่ส่งคือ <b>ปลายงวด</b> และเป็นต้นงวดของรอบถัดไปอัตโนมัติ ไม่ต้องกรอกซ้ำ ·
+        บันทึกร่างไว้ได้ (สัญญาณหลุดก็ไม่หาย) แล้วกด “ส่งผลนับ” ครั้งเดียว
+      </p>
+      <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
+    </div>
 
-  <div class="card p-3 mb-3" style="position:sticky;bottom:0;z-index:5">
-    <div class="flex flex-wrap items-center gap-2">
-      <button onclick="brnSave(false)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
-      <button onclick="brnSave(true)" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลนับ</button>
-      <button onclick="brnDiscard()" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ล้างร่าง</button>
-      <span id="brnStatus" class="text-xs"></span>
+    <div class="card p-3 mb-3" style="position:sticky;top:0;z-index:5">
+      <div id="brnZones" class="flex flex-wrap gap-1"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> เฉพาะรายการบังคับ</label>
+        <input type="search" id="brnQ" placeholder="ค้นหา…" oninput="brnRender()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
+        <span id="brnProgress"></span>
+      </div>
+    </div>
+
+    <div id="brnList" class="card p-3 mb-3"></div>
+
+    <div class="card p-3 mb-3" style="position:sticky;bottom:0;z-index:5">
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="brnSave(false)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
+        <button onclick="brnSave(true)" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลนับ</button>
+        <button onclick="brnDiscard()" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ล้างร่าง</button>
+        <span id="brnStatus" class="text-xs"></span>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการนับ</div>
+      <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
   </div>
 
-  <div class="card p-3 mb-3">
-    <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการนับ</div>
-    <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+  <!-- ── รับของ ── -->
+  <div id="brn-pane-recv" style="display:none">
+    <div class="card p-3 mb-3">
+      <p class="text-xs mb-2" style="color:var(--text-secondary)">บันทึกของที่เข้าร้านทุกครั้ง (จากส่วนกลางหรือซื้อเอง) — ผลต่างการใช้คิดจาก ต้นงวด + <b>รับเข้า</b> − ปลายงวด
+        ถ้าไม่บันทึก ระบบจะเห็นว่าใช้ “น้อยกว่าสูตร” · ของที่เข้าก่อนนับปลายงวด ให้ลงวันที่ก่อนวันนับ</p>
+      <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
+        <label>วันที่รับ<br><input type="date" id="brnRecvDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>เลขที่ใบส่งของ (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
+      </div>
+      <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
+        <label style="flex:1 1 200px">วัตถุดิบ<br><input id="brnRecvItem" list="brnItemList" placeholder="พิมพ์ชื่อหรือรหัส" onchange="brnRecvPicked()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:100%;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>จำนวน<br><input id="brnRecvQty" inputmode="decimal" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <span id="brnRecvUnit" style="padding-bottom:8px;color:var(--text-secondary)"></span>
+        <button onclick="brnRecvAdd()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">+ เพิ่ม</button>
+      </div>
+      <datalist id="brnItemList"></datalist>
+      <div id="brnRecvLines" class="text-sm mt-2"></div>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <button onclick="brnRecvSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับของ</button>
+        <span id="brnRecvStatus" class="text-xs"></span>
+      </div>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับของล่าสุด</div>
+      <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- ── ผลต่างของฉัน ── -->
+  <div id="brn-pane-var" style="display:none">
+    <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
+        รอบ <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnVarAll" onchange="brnRenderVariance()"> แสดงทุกรายการ</label>
+      </div>
+      <div id="brnVarHead" class="text-xs mt-2"></div>
+    </div>
+    <div id="brnVarList" class="card p-3 mb-3"></div>
   </div>
 </div>
