@@ -4,15 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>คู่มือการใช้งาน — กระทบยอด Oshinei</title>
+<!-- Same design kit as the app (docs/ui-kit at /app/ui-kit): colours for light and body.dark -->
+<link rel="stylesheet" href="ui-kit/tokens.css">
 <link rel="stylesheet" href="vendor/kira-ui.css">
 <style>
-:root{
-  --brand:#1f3a6b;--brand-deep:#16294d;--brand-soft:#e6f4ef;
-  --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;
-  --err:#b91c1c;--err-bg:#fef2f2;--info:#1d4ed8;--info-bg:#eff6ff;
-  --bg:#f0f4f8;--card:#fff;--line:#e2e8f0;--line-soft:#f1f5f9;
-  --txt:#0f172a;--sub:#475569;--mut:#94a3b8;
-  --shadow:none}
+:root,body.dark{
+  /* aliases of the kit tokens (ui-kit/tokens.css), like the app's index.html; fallbacks = light */
+  --brand:var(--accent,#1f3a6b);--brand-deep:var(--accent-hover,#16294d);--brand-soft:var(--accent-soft,#e8eef7);
+  --on-brand:var(--on-accent,#fff);
+  --ok:var(--good-ink,#047857);--warn:var(--amber-ink,#a44a08);--err:var(--bad-ink,#b91c1c);--info:var(--sky-ink,#0369a1);
+  --bg:var(--bg-page,#f0f4f8);--card:var(--bg-card,#fff);--subtle:var(--bg-subtle,#f8fafc);
+  --line:var(--border,#d5dbe3);--line-soft:var(--border-soft,#e6eaf0);
+  --txt:var(--text-primary,#0f172a);--sub:var(--text-secondary,#475569);--mut:var(--text-muted,#5f6c80);
+  --shadow:var(--shadow-card,none)}
+:root{--ok-bg:#ecfdf5;--warn-bg:#fdf6ea;--err-bg:#fdf0ef;--info-bg:#eef4fb;
+  --mark-ok:#10b981;--mark-err:#ef4444;--mark-warn:#f59e0b;--mark-info:#3b82f6}
+body.dark{--ok-bg:#0f2f29;--warn-bg:#33270f;--err-bg:#3a1b20;--info-bg:#132a47;color-scheme:dark}
 *{box-sizing:border-box;margin:0}
 body{font-family:'KIRA UI','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
   background:var(--bg);color:var(--txt);font-size:14.5px;line-height:1.65;
@@ -33,7 +40,7 @@ li{margin-bottom:4px}
 code,.code{font-family:'JetBrains Mono','Consolas',monospace;font-size:12.5px;
   background:var(--line-soft);padding:1px 6px;border-radius:4px;color:var(--brand-deep)}
 a{color:var(--brand)}
-.note{background:var(--warn-bg,#fffbeb);border:1px solid #f59e0b;padding:6px 11px;border-radius:4px;font-size:13px;color:var(--sub);margin:6px 0}
+.note{background:var(--warn-bg);border:1px solid var(--mark-warn);padding:6px 11px;border-radius:4px;font-size:13px;color:var(--sub);margin:6px 0}
 .muted{color:var(--sub);font-size:13px}
 .lbl{font-size:11.5px;color:var(--mut);font-weight:500}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;
@@ -43,26 +50,26 @@ a{color:var(--brand)}
 .c-err{background:var(--err-bg);color:var(--err)}
 .c-mut{background:var(--line-soft);color:var(--sub)}
 .c-info{background:var(--info-bg);color:var(--info)}
-.btn{border:1px solid var(--line);background:#fff;border-radius:4px;padding:8px 15px;
+.btn{border:1px solid var(--line);background:var(--card);border-radius:4px;padding:8px 15px;
   cursor:pointer;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--txt)}
 .btn:hover{background:var(--line-soft)}
-.btn-pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-pri{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 .btn-pri:hover{background:var(--brand-deep)}
 table{border-collapse:collapse;width:100%;margin:6px 0}
 td,th{padding:8px 10px;font-size:13px;border-bottom:1px solid var(--line-soft);
   text-align:left;vertical-align:top}
-th{font-size:11.5px;font-weight:700;color:var(--sub);background:#fafbfc;
+th{font-size:11.5px;font-weight:700;color:var(--sub);background:var(--subtle);
   text-transform:uppercase;letter-spacing:.04em}
 .callout{background:var(--warn-bg);border:1px solid var(--warn);
-  padding:10px 14px;border-radius:4px;margin:8px 0;font-size:13.5px;color:#78350f}
-.callout.tip{background:var(--ok-bg);border-left-color:var(--ok);color:#064e3b}
-.callout.info{background:var(--info-bg);border-left-color:var(--info);color:#1e3a8a}
+  padding:10px 14px;border-radius:4px;margin:8px 0;font-size:13.5px;color:var(--txt)}
+.callout.tip{background:var(--ok-bg);border-left-color:var(--ok);color:var(--txt)}
+.callout.info{background:var(--info-bg);border-left-color:var(--info);color:var(--txt)}
 .toc{column-count:2;column-gap:24px}
 .toc a{display:block;padding:3px 0;font-size:13.5px;text-decoration:none}
 .toc a:hover{text-decoration:underline}
 .toc .n{display:inline-block;width:22px;color:var(--mut);font-weight:600}
 .ch-flow{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;
-  background:#fafbfc;border:1px solid var(--line);border-radius:4px;
+  background:var(--subtle);border:1px solid var(--line);border-radius:4px;
   padding:10px 14px;margin:8px 0;font-size:13px}
 .ch-flow .k{color:var(--sub);font-weight:600;white-space:nowrap}
 .qa{border-bottom:1px solid var(--line-soft);padding:12px 0}
@@ -73,7 +80,7 @@ th{font-size:11.5px;font-weight:700;color:var(--sub);background:#fafbfc;
   margin:0 0 14px;border-bottom:1px solid var(--line)}
 section{scroll-margin-top:80px}
 .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;
-  border-radius:4px;padding:0 5px;font-size:11.5px;font-family:monospace;background:#fff}
+  border-radius:4px;padding:0 5px;font-size:11.5px;font-family:monospace;background:var(--card)}
 
 @media (max-width:640px){
   .toc{column-count:1}
@@ -103,11 +110,19 @@ section{scroll-margin-top:80px}
 </style>
 </head>
 <body>
+<script>
+/* โหมดมืด/สว่างตามที่เลือกไว้ในหน้ากระทบยอด (คีย์ 'oshinei_dark') — ยังไม่เคยเลือก = ตามเครื่อง */
+(function(){
+  let d=null;try{d=localStorage.getItem('oshinei_dark');}catch(e){}
+  if(d!=='1'&&d!=='0')d=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'1':'0';
+  if(d==='1')document.body.classList.add('dark');
+})();
+</script>
 <div class="wrap">
 
 <div class="toolbar no-print row">
   <div class="row" style="gap:9px">
-    <div style="width:34px;height:34px;border-radius:4px;background:var(--brand);color:#fff;
+    <div style="width:34px;height:34px;border-radius:4px;background:var(--brand);color:var(--on-brand);
       display:flex;align-items:center;justify-content:center;font-size:17px;flex:none"></div>
     <div><h1 style="line-height:1.2">คู่มือการใช้งาน — กระทบยอด</h1>
       <div class="lbl">วิธีปิดเดือนรายได้ POS ↔ เงินเข้าบัญชีจริง</div></div>
@@ -196,8 +211,10 @@ section{scroll-margin-top:80px}
     <tr><th style="width:160px">ปุ่ม/เมนู</th><th>หน้าที่</th></tr>
     <tr><td>โลโก้ "กระทบยอดรายเดือน"</td><td>กดกลับหน้าภาพรวมทุกสาขา</td></tr>
     <tr><td>ช่องเลือกเดือน <span class="code">YYYY-MM</span></td><td>เปลี่ยนเดือนที่กำลังตรวจ — ระบบจำค่าให้ครั้งหน้า</td></tr>
+    <tr><td>ปุ่มพระจันทร์ / ดวงอาทิตย์</td><td>สลับ<b>โหมดมืด/สว่าง</b> — ระบบจำค่าไว้ในเครื่องนี้ (คีย์เดียวกับแดชบอร์ด) และคู่มือนี้ใช้ตามด้วย · ถ้ายังไม่เคยกด จะตามธีมของเครื่อง/มือถือ</td></tr>
     <tr><td>รหัส</td><td>ใส่รหัส <b>Write Token</b> สำหรับบันทึก/อัปโหลด (จำเป็นเฉพาะเซิร์ฟเวอร์จริงบน Fly)</td></tr>
   </table>
+  <p class="muted">หน้าตา (สี ขอบมน เงาการ์ด) ใช้ชุดเดียวกับแดชบอร์ดหลัก · <b>แถบสีแดงใต้เมนู</b> (บนมือถือ: ขอบบนของเมนูล่าง) = กลุ่มงาน "เงิน" แบบเดียวกับแถบสีของแดชบอร์ด — ตำแหน่งปุ่มและขั้นตอนทุกอย่างเหมือนเดิม</p>
 
   <h3>3.1.1 แถบนำทาง 4 โซน (เฟส 5 — nav ใหม่)</h3>
   <p>แถบนำทางปรากฏเป็น <b>top-tab บนจอกว้าง (≥641px)</b> และ <b>bottom-nav ตรึงด้านล่างบนมือถือ</b></p>
@@ -507,10 +524,10 @@ section{scroll-margin-top:80px}
   <h3>สีขอบเซลล์รายวัน</h3>
   <table>
     <tr><th style="width:90px">สี</th><th>ความหมาย</th></tr>
-    <tr><td><span style="border:1px solid #10b981;padding-left:8px">เขียว</span></td><td>วันที่ตรงทั้งหมด</td></tr>
-    <tr><td><span style="border:1px solid #ef4444;padding-left:8px">แดง</span></td><td>วันที่ต่าง — กดดู</td></tr>
-    <tr><td><span style="border:1px solid #f59e0b;padding-left:8px">ส้ม</span></td><td>รอเอกสาร / รอ payout</td></tr>
-    <tr><td><span style="border:1px solid #3b82f6;padding-left:8px">น้ำเงิน</span></td><td>มีรหัสที่ยังไม่ตั้งค่า</td></tr>
+    <tr><td><span style="border:1px solid var(--mark-ok);padding-left:8px">เขียว</span></td><td>วันที่ตรงทั้งหมด</td></tr>
+    <tr><td><span style="border:1px solid var(--mark-err);padding-left:8px">แดง</span></td><td>วันที่ต่าง — กดดู</td></tr>
+    <tr><td><span style="border:1px solid var(--mark-warn);padding-left:8px">ส้ม</span></td><td>รอเอกสาร / รอ payout</td></tr>
+    <tr><td><span style="border:1px solid var(--mark-info);padding-left:8px">น้ำเงิน</span></td><td>มีรหัสที่ยังไม่ตั้งค่า</td></tr>
   </table>
 
   <h3>สถานะ session (เดือน)</h3>
