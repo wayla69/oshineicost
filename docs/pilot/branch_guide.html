@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือสาขา 1 หน้า</title>
+<style>
+  :root { --ink:#0f172a; --muted:#475569; --line:#cbd5e1; --accent:#1f3a6b; --soft:#eef2f8; --warn:#b45309; --bg:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e2e8f0; --muted:#94a3b8; --line:#334155; --accent:#93b4e8; --soft:#1e293b; --warn:#fbbf24; --bg:#0f172a; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 "Noto Sans Thai","Sarabun",system-ui,sans-serif; }
+  .page { max-width:780px; margin:0 auto; padding:20px 16px; }
+  h1 { font-size:20px; margin:0 0 2px; color:var(--accent); }
+  .sub { color:var(--muted); font-size:12.5px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
+  .box { border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .box h2 { font-size:15px; margin:0 0 6px; color:var(--accent); }
+  .when { display:inline-block; font-size:11.5px; background:var(--soft); border-radius:999px; padding:1px 8px; margin-left:4px; color:var(--muted); }
+  ol, ul { margin:0; padding-left:18px; } li { margin:2px 0; }
+  .warn { color:var(--warn); }
+  .tips { margin-top:10px; }
+  @media print { body { font-size:12px; } .page { padding:0; max-width:none; } @page { size:A4; margin:12mm; } }
+</style>
+</head>
+<body><div class="page">
+  <h1>สาขาของฉัน — คู่มือ 1 หน้า</h1>
+  <div class="sub">เข้าระบบด้วยบัญชีสาขา (1 บัญชีต่อสาขา) บนมือถือ → เมนู “สาขาของฉัน” มี 4 แท็บ: นับสต๊อก · สั่งของ · รับของ · ผลต่างของฉัน</div>
+  <div class="grid">
+    <div class="box"><h2>1. นับสต๊อก <span class="when">ทุกวันสั่ง ก่อนเปิดร้าน</span></h2>
+      <ol>
+        <li>เลือกโซน: แช่แข็ง · แช่เย็น · ของแห้ง · บาร์น้ำ</li>
+        <li>ใส่จำนวนเป็น<b>หน่วยที่หยิบจริง</b> (แพ็ค / ขวด / ถุง) — กด − / + หรือพิมพ์ เศษแพ็คใส่ทศนิยมได้ (0.5)</li>
+        <li>ตัวเลขจาง ๆ คือครั้งก่อน · ติ๊ก “เฉพาะรายการบังคับ” ถ้ารีบ</li>
+        <li>ระบบบันทึกร่างให้เอง สัญญาณหลุดไม่หาย → นับครบแล้วกด <b>ส่งผลนับ</b> (ส่งแล้วแก้ไม่ได้ — นับใหม่ได้)</li>
+      </ol>
+      <div class="sub" style="margin:6px 0 0">ครั้งแรก = ต้นงวด · ครั้งต่อไป = ปลายงวดและต้นงวดใหม่อัตโนมัติ</div></div>
+    <div class="box"><h2>2. สั่งของ <span class="when">วันสั่งรอบ 1 · รอบ 2 · แซลมอน</span></h2>
+      <ol>
+        <li>เลือกรอบ → ระบบแนะนำยอด = พยากรณ์ + สำรอง − ของที่คาดว่าเหลือ (จากที่นับ) ปัดเป็นแพ็ค</li>
+        <li>ช่องขวาคือยอดที่จะสั่ง แก้ได้ — <span class="warn">ถ้าต่างจากแนะนำเกิน 20% ต้องเลือกเหตุผล</span> (มีงาน/จองกลุ่ม, ของเหลือมากกว่าที่ระบบเห็น …)</li>
+        <li>กด <b>ส่งให้ส่วนกลาง</b> → Sales Support ดำเนินการต่อ · แก้ได้ (เปิดแก้) จนกว่าส่วนกลางกดดำเนินการ</li>
+        <li>ยังไม่ได้นับ = สั่งได้ แต่ยอดไม่หักสต๊อก (ขึ้นป้ายเหลือง)</li>
+      </ol></div>
+    <div class="box"><h2>3. รับของ <span class="when">ทุกครั้งที่ของเข้าร้าน</span></h2>
+      <ul>
+        <li>ของจากออเดอร์: แท็บสั่งของ → <b>ของมาถึงแล้ว — รับของ</b> → ใส่จำนวนที่ได้จริง → บันทึก</li>
+        <li>ของที่ซื้อเอง/นอกออเดอร์: แท็บ <b>รับของ</b> → วันที่ → เลือกวัตถุดิบ + จำนวน → บันทึกรับของ</li>
+        <li class="warn">ไม่บันทึกรับของ = ผลต่างจะเห็นว่า “ใช้น้อยกว่าสูตร” ผิดความจริง</li>
+      </ul></div>
+    <div class="box"><h2>4. ผลต่างของฉัน <span class="when">หลังส่งผลนับปลายงวด</span></h2>
+      <ul>
+        <li>ใช้จริง = ต้น + รับเข้า − ปลาย เทียบ “ตามสูตร” จากยอดขายช่วงเดียวกัน</li>
+        <li>รายการที่ต่างเกินเกณฑ์เรียงตาม ฿ — <b>เลือกเหตุผลทุกรายการ</b> (ของเสีย, หมดอายุ, ชิม/อาหารพนักงาน, ตักเกินสูตร, โอนสาขา, นับผิด …)</li>
+        <li>บันทึกรับของครบแล้วกด <b>ยืนยันว่ารับของรอบนี้บันทึกครบแล้ว</b> — ก่อนนั้นรอบจะขึ้น “ยังไม่สมบูรณ์”</li>
+      </ul></div>
+  </div>
+  <div class="box tips"><h2>เคล็ดลับ</h2>
+    <ul>
+      <li>นับ<b>ก่อนเปิดร้านและก่อนของเข้า</b> — ระบบถือว่าตัวเลขที่นับคือของก่อนขายวันนั้น</li>
+      <li>เป้าเวลานับ ≤ 20 นาที · นับรายการบังคับก่อน แล้วค่อยรายการอื่น</li>
+      <li>ขึ้น “แปลงหน่วยไม่ได้” = หน่วยนั้นยังไม่มีในระบบ แจ้ง Sales Support / BoM Center เพิ่มกฎหน่วย</li>
+      <li>สงสัยยอดแนะนำ: ดูบรรทัดเล็กใต้ชื่อ (พยากรณ์ + สำรอง − คงเหลือคาด) ก่อนแก้</li>
+    </ul></div>
+</div></body>
+</html>

@@ -27,6 +27,7 @@ reads sku_effective_cost. costs_in_force() is the function S4 will switch to.
 import json
 from datetime import date, datetime, timezone
 
+from .clock import today as bkk_today
 from .master import audit
 from .recipes import Coster, cost_recipe, recipe_lines, release_row, release_costs, write_recipe
 from .schema import ensure
@@ -67,7 +68,7 @@ def _sales(con) -> str:
 
 def last_full_month(con) -> str:
     """The newest month of sales that is over (the current calendar month never is)."""
-    today = date.today()
+    today = bkk_today()
     cur = f"{today.year:04d}-{today.month:02d}"
     r = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly WHERE period_month < ?", (cur,)).fetchone()
     return r[0] if r and r[0] else cur
@@ -344,7 +345,7 @@ def do_release(con, release_id: int, who: str, backdate_reason: str = None, toda
     if rel["status"] not in ("draft", "review"):
         raise ValueError(f"release นี้สถานะ {rel['status']} — ปล่อยซ้ำไม่ได้")
     check_effective_month(rel["effective_month"])
-    today = today or date.today()
+    today = today or bkk_today()
     eff = rel["effective_month"]
     cur = f"{today.year:04d}-{today.month:02d}"
     backdated = eff <= cur

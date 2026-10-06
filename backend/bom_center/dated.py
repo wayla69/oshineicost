@@ -28,6 +28,8 @@ from datetime import date, datetime, timezone
 
 import rules
 
+from .clock import today as bkk_today
+
 CUTOVER = rules.GRAND_MENU_FROM            # '2026-09-01'
 CUTOVER_MONTH = CUTOVER[:7]                # '2026-09'
 
@@ -59,7 +61,7 @@ def rebuild(con, today: date = None) -> dict:
     Months run from the cut-over to next month (or the latest effective month)."""
     from .recipes import release_costs
     ensure(con)
-    today = today or date.today()
+    today = today or bkk_today()
     rels = con.execute("SELECT release_id, effective_month FROM bc_release WHERE kind='monthly' AND status='released'"
                        " AND effective_month >= ? ORDER BY effective_month, release_id", (CUTOVER_MONTH,)).fetchall()
     last = _next(f"{today.year:04d}-{today.month:02d}")

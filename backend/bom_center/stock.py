@@ -17,6 +17,7 @@ once. Submitted counts are never edited; a recount is a new count.
 """
 from datetime import date, datetime, timedelta, timezone
 
+from .clock import today as bkk_today
 from .master import audit
 from .units import Converter
 
@@ -90,7 +91,7 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     from .prices import price_for
     bname = _branch_name(con, branch_id)
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
-    as_of = as_of or (date.fromisoformat(last) if last else date.today())
+    as_of = as_of or (date.fromisoformat(last) if last else bkk_today())
     month = f"{as_of.year:04d}-{as_of.month:02d}"
     per_day = _usage(con, branch_id, as_of)
     spend = {}
@@ -151,7 +152,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     conv = Converter(con)
     dr = draft_of(con, branch_id)
     kind = "end" if last_submitted(con, branch_id) else "begin"
-    cdate = count_date or date.today().isoformat()
+    cdate = count_date or bkk_today().isoformat()
     try:
         date.fromisoformat(cdate)
     except ValueError:

@@ -14,6 +14,7 @@
 """
 from datetime import date, datetime, timedelta, timezone
 
+from .clock import today as bkk_today
 from .master import audit
 
 SS_REASONS = (("short", "ซัพพลายเออร์ของขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
@@ -189,7 +190,7 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None) -> dict
     """Every cycle the calendar expects between the dates, for every branch already on Phase 2."""
     from .forecast import calendar, _wd
     d0, d1 = date.fromisoformat(date_from), date.fromisoformat(date_to)
-    today = date.today()
+    today = bkk_today()
     names = dict(con.execute("SELECT branch_id, name FROM branches"))
     rows = []
     for bid in ([branch_id] if branch_id else _phase2_branches(con)):

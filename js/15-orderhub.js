@@ -28,10 +28,11 @@ function loadOrderHub() {
 function ohbSetSub(k) {
   _ohbSub = k;
   document.querySelectorAll('#tab-orderhub [data-ohbsub]').forEach(b => b.classList.toggle('active', b.dataset.ohbsub === k));
-  ['queue', 'comp', 'month'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
   if (k === 'month') ohbLoadMonth();
+  if (k === 'pilot') ohbLoadPilot();
 }
 
 // ── queue ────────────────────────────────────────────────────────────────────
@@ -179,4 +180,37 @@ async function ohbLoadMonth() {
       (m.top_reasons.length ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">เหตุผลหลัก</div>` + m.top_reasons.map(r => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0">${esc(r.label)} · ${r.items} รายการ · ฿${_bmcNum(r.value, 0)}</div>`).join('') : '')
       : `<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบนับสต๊อกที่ปิดในเดือน ${esc(m.month)}</span>`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── pilot (S10) ──────────────────────────────────────────────────────────────
+async function ohbLoadPilot() {
+  const rb = document.getElementById('ohbPilotReady'), sb = document.getElementById('ohbPilotScore');
+  rb.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังตรวจ…</span>';
+  sb.innerHTML = '';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/hub/pilot`);
+    const R = d.readiness;
+    const step = s => `<div class="text-xs py-0.5" style="color:${s.done ? 'var(--good-ink)' : 'var(--amber-ink)'}">${s.done ? '✓' : '•'} ${esc(s.todo)}</div>`;
+    rb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ความพร้อม</div>
+      <div class="text-xs mb-1" style="color:var(--text-muted)">ส่วนกลาง: ทะเบียน ${_bmcNum(R.centre.ingredients, 0)} รายการ · ราคาเดือน ${esc((R.centre.price_months || []).join(', ') || '—')} · สูตรกึ่งสำเร็จ ${R.centre.sub_recipes} · release ที่ปล่อยแล้ว ${R.centre.releases}</div>
+      ${R.centre_steps.map(step).join('')}
+      ${R.branches.map(b => `<div style="border-top:1px solid var(--border);padding:6px 0;margin-top:4px">
+        <div class="text-sm"><b>${esc(b.branch)}</b> ${b.ready ? _bmcChip('พร้อม', 'var(--good-ink)') : _bmcChip('ยังไม่พร้อม', 'var(--amber-ink)')}
+          <span class="text-xs" style="color:var(--text-muted)">${b.accounts.length ? 'บัญชี: ' + b.accounts.map(a => esc(a.username)).join(', ') : ''}${b.first_count ? ` · นับครั้งแรก ${esc(b.first_count)} · ล่าสุด ${esc(b.last_count)} (${b.counts} ครั้ง)` : ''}${b.last_order ? ` · ออเดอร์ล่าสุด ${esc(b.last_order)}` : ''}</span></div>
+        ${b.steps.map(step).join('')}</div>`).join('')}
+      ${R.missing_branches.length ? `<div class="text-xs mt-1" style="color:var(--bad-ink)">ไม่พบสาขาในระบบ: ${R.missing_branches.map(esc).join(', ')}</div>` : ''}`;
+    const T = d.scorecard.targets;
+    const cell = (v, ok, unit) => v == null ? '<span style="color:var(--text-muted)">—</span>'
+      : `<b style="color:${ok === false ? 'var(--bad-ink)' : ok ? 'var(--good-ink)' : 'var(--text-primary)'}">${_bmcNum(v, 1)}${unit}</b>`;
+    const vd = { pass: ['ผ่าน', 'var(--good-ink)'], fail: ['ยังไม่ผ่าน', 'var(--bad-ink)'], pending: ['รอข้อมูล', 'var(--text-muted)'], not_started: ['ยังไม่เริ่ม', 'var(--text-muted)'] };
+    sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผลระหว่าง pilot — ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
+      <div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+        <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">นับครบวันสั่ง (≥${T.count_coverage}%)</th><th class="py-1 pr-2 text-right">เวลานับ (≤${T.count_minutes} นาที)</th>
+        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์ชั้น A (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">ส่งออเดอร์</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
+      d.scorecard.branches.map(s => { const m = s.metrics, p = s.passes, [vt, vi] = vd[s.verdict];
+        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(s.from)} → ${esc(s.to)} · ${s.cycles} วันสั่ง · นับ ${s.counts} ครั้ง</div></td>
+          <td class="py-1 pr-2 text-right">${cell(m.count_coverage, p.count_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.count_minutes, p.count_minutes, '')}</td>
+          <td class="py-1 pr-2 text-right">${cell(m.reason_coverage, p.reason_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.mape_a, p.mape_a, '%')}</td>
+          <td class="py-1 pr-2 text-right">${cell(m.order_submission, null, '%')}</td><td class="py-1">${_bmcChip(vt, vi)}</td></tr>`; }).join('') + '</tbody></table></div>';
+  } catch (e) { rb.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือ Sales Support</title>
+<style>
+  :root { --ink:#0f172a; --muted:#475569; --line:#cbd5e1; --accent:#1f3a6b; --soft:#eef2f8; --warn:#b45309; --bg:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e2e8f0; --muted:#94a3b8; --line:#334155; --accent:#93b4e8; --soft:#1e293b; --warn:#fbbf24; --bg:#0f172a; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 "Noto Sans Thai","Sarabun",system-ui,sans-serif; }
+  .page { max-width:820px; margin:0 auto; padding:20px 16px; }
+  h1 { font-size:20px; margin:0 0 2px; color:var(--accent); }
+  h2 { font-size:16px; color:var(--accent); margin:16px 0 6px; }
+  .sub { color:var(--muted); font-size:12.5px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; } td, th { border-top:1px solid var(--line); padding:5px 6px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  ol, ul { margin:0; padding-left:20px; } li { margin:3px 0; }
+  .warn { color:var(--warn); }
+  @media print { .page { padding:0; max-width:none; } @page { size:A4; margin:12mm; } }
+</style>
+</head>
+<body><div class="page">
+  <h1>ศูนย์สั่งของ — คู่มือ Sales Support</h1>
+  <div class="sub">สาขาส่งออเดอร์ให้ส่วนกลาง Sales Support เป็นผู้ดำเนินการต่อ (การตัดสินใจของเจ้าของ §10-6) · เข้าเมนู “ศูนย์สั่งของ” → แท็บ “คิวออเดอร์”</div>
+
+  <h2>งานประจำวัน</h2>
+  <ol>
+    <li><b>ดูคิว “รอดำเนินการ”</b> — จัดตามวันส่ง แต่ละออเดอร์บอกสาขา รอบ ยอด ฿ และป้าย:
+      <ul><li>“สาขาแก้ N” = สาขาสั่งต่างจากแนะนำ (มีเหตุผลกำกับ)</li><li>“ไม่หักสต๊อก” = สาขายังไม่ได้นับ ยอดอาจสูงเกิน</li>
+          <li>“ส่งหลัง 10:00” / “ดำเนินการเกิน 14:00” = เลยเวลาเป้า</li></ul></li>
+    <li><b>เปิดออเดอร์</b> → ดู แนะนำ · สาขายืนยัน (+ เหตุผลของสาขา) · ช่อง “ส่งจริง” (ตั้งต้น = ที่สาขายืนยัน)</li>
+    <li><b>ถ้าส่งไม่ได้ตามที่สาขายืนยัน</b> แก้ช่อง “ส่งจริง” และ<span class="warn">เลือกเหตุผล</span>: ซัพพลายเออร์ของขาด · สินค้าทดแทน · ขนาดแพ็ค/ขั้นต่ำ · รวมกับรอบอื่น · ส่วนกลางมีของให้แทน · อื่น ๆ (ต้องเขียน)</li>
+    <li>ใส่ <b>เลขที่ PO</b> แล้วกด <b>ดำเนินการแล้ว</b> — สาขาจะเปิดแก้ออเดอร์นั้นไม่ได้อีก และเห็นสถานะ “ส่วนกลางดำเนินการแล้ว”</li>
+    <li><b>รวมต่อซัพพลายเออร์ × วันส่ง</b> → ดูยอดรวมแต่ละวัตถุดิบพร้อมแยกสาขา · <b>ดาวน์โหลด Excel</b> (แผ่น “รวมต่อซัพพลายเออร์” และ “ต่อสาขา”) ใช้เปิด PO / ส่งซัพพลายเออร์</li>
+  </ol>
+
+  <h2>เวลาเป้า (SLA)</h2>
+  <table><tr><th>สาขาส่งออเดอร์</th><th>Sales Support ดำเนินการภายใน</th></tr>
+    <tr><td>ก่อน 10:00 ของวันสั่ง</td><td>14:00 วันเดียวกัน</td></tr>
+    <tr><td>หลัง 10:00</td><td>ทำให้เร็วที่สุด (ระบบติดป้าย “ส่งหลัง 10:00” ให้สาขาเห็นในรายงาน Ops)</td></tr></table>
+
+  <h2>ตั้งค่ารอบสั่ง (ฝ่ายขาย)</h2>
+  <ul><li>BoM Center → แนะนำยอดสั่ง → ตารางรอบสั่ง: ต่อสาขาเลือก รอบ 1 (อังคาร/พุธ) · รอบ 2 (ศุกร์/เสาร์) · วันสั่งแซลมอน · วันส่งถึง — มีผลรอบถัดไปทันที</li>
+      <li>ยังไม่ตั้ง = ใช้ค่าเริ่มต้น (อังคาร / ศุกร์ / แซลมอนวันจันทร์) และหน้าสาขาจะเตือน</li></ul>
+
+  <h2>Ops อ่านอะไรจากงานนี้</h2>
+  <ul><li>แท็บ “ตรวจการสั่ง”: แนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง เป็น ฿ ต่อรอบ — แยกได้ว่าผลต่างเกิดที่สาขา ส่วนกลาง หรือการส่ง</li>
+      <li>แท็บ “สรุปผลต่างรายเดือน” และ Management Report รายเดือน ข้อ 13A</li></ul>
+
+  <h2>อบรม 1 ชั่วโมง (Sales Support)</h2>
+  <table>
+    <tr><th>นาที</th><th>หัวข้อ</th></tr>
+    <tr><td>0–10</td><td>ภาพรวม: สาขานับ → ระบบแนะนำ → สาขายืนยัน/ส่ง → ส่วนกลางดำเนินการ → สาขารับ → ผลต่าง</td></tr>
+    <tr><td>10–25</td><td>ฝึกในคิว: เปิดออเดอร์ตัวอย่าง แก้ยอดพร้อมเหตุผล ใส่ PO กดดำเนินการแล้ว</td></tr>
+    <tr><td>25–35</td><td>รวมต่อซัพพลายเออร์ + Excel → เทียบกับรูปแบบใบสั่งซื้อที่ใช้อยู่วันนี้</td></tr>
+    <tr><td>35–45</td><td>ตารางรอบสั่งของ 4 สาขา pilot (ให้ฝ่ายขายกรอกจริง)</td></tr>
+    <tr><td>45–60</td><td>กรณียาก: สาขาไม่นับ (ไม่หักสต๊อก) · ของขาด · ส่งช้า · ถาม-ตอบ</td></tr>
+  </table>
+</div></body>
+</html>
