@@ -1604,14 +1604,14 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     wb = Workbook()
     ws = wb.active
     br = c["branches"]
-    _sheet(ws, "รวมต่อซัพพลายเออร์", ["วันส่ง", "ซัพพลายเออร์", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
+    _sheet(ws, "รวมตามผู้จำหน่าย", ["วันส่ง", "ผู้จำหน่าย", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
            "ใบสั่งซื้อของสาขาที่ส่งแล้ว สรุปรวมตามผู้จำหน่าย × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:
             ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
                       [it["by_branch"].get(b) for b in br])
     ws2 = wb.create_sheet()
-    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันสั่ง", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ออเดอร์"],
+    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันสั่ง", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
