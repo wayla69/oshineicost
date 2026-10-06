@@ -1,0 +1,565 @@
+# -*- coding: utf-8 -*-
+"""BoM Calculation Center API — /api/bom-center/* (docs/BOM_CENTER_PLAN.md, Sprint S1).
+
+S1 surfaces: the ingredient master (M1), the Material Converter (M2) and the
+monthly actual-purchase prices (M4). Every write is write-token gated and
+recorded in bc_audit; every import is dry-run first (dry_run=true returns what
+WOULD change, nothing is written).
+
+Reads need any of cost.analysis / supply.ordering / bom.center / bom.edit;
+writes need bom.center or bom.edit (auth.MODULE_RULES).
+"""
+import io
+import re
+from datetime import date
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+import auth as _auth
+from core import get_db, invalidate_cache, require_write_token
+from bom_center import master as _m
+from bom_center import prices as _p
+from bom_center.schema import ensure as _ensure
+from bom_center.units import Converter
+
+router = APIRouter()
+_MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _who(request: Request) -> str:
+    try:
+        return (_auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}).get("u") or "-"
+    except Exception:
+        return "-"
+
+
+def _month_or_400(m: Optional[str]) -> str:
+    if not m or not _MONTH.match(m):
+        raise HTTPException(400, "เดือนต้องอยู่ในรูป YYYY-MM")
+    return m
+
+
+def _this_month() -> str:
+    d = date.today()
+    return f"{d.year:04d}-{d.month:02d}"
+
+
+def _forced():
+    try:
+        from routers.ingredients import _forced_order
+        return _forced_order()
+    except Exception:
+        return None
+
+
+def _xlsx(wb, filename: str):
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _sheet(ws, title: str, headers: list, note: str):
+    from openpyxl.styles import Font, PatternFill
+    ws.title = title
+    ws.append([note])
+    ws["A1"].font = Font(italic=True, color="5F6C80")
+    ws.append(headers)
+    for c in ws[2]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1F3A6B")
+    for i, h in enumerate(headers):
+        ws.column_dimensions[chr(65 + i) if i < 26 else "A"].width = max(12, min(40, len(str(h)) + 6))
+
+
+# ── summary ──────────────────────────────────────────────────────────────────
+@router.get("/api/bom-center/summary")
+def bc_summary(month: Optional[str] = Query(None)):
+    """Health of the master and the prices for `month` (default: this month)."""
+    month = month if month and _MONTH.match(month) else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        kinds = dict(con.execute("SELECT kind, COUNT(*) FROM bc_ingredient WHERE active=1 GROUP BY kind"))
+        n = sum(kinds.values())
+        conv = Converter(con)
+        table = _p.month_table(con, month)
+        act = [r for r in table if r["active"]]
+        no_base = sum(1 for r in act if not r["base_unit"])
+        no_pack = con.execute("SELECT COUNT(*) FROM bc_ingredient WHERE active=1 AND kind='raw'"
+                              " AND (qty_per_recv IS NULL OR qty_per_recv<=0)").fetchone()[0]
+        used = {c for (c,) in con.execute("SELECT DISTINCT ingredient_code FROM bom_ingredients")}
+        months = [r[0] for r in con.execute("SELECT DISTINCT month FROM bc_ingredient_price ORDER BY month DESC")]
+        last_import = con.execute("SELECT at, who, row_key FROM bc_audit WHERE action='price_import'"
+                                  " ORDER BY id DESC LIMIT 1").fetchone()
+        missing_in_master = sorted(c for c in used if c and c not in conv.master and c != "#N/A")
+    by_src = {}
+    for r in act:
+        by_src[r["source"] or "none"] = by_src.get(r["source"] or "none", 0) + 1
+    return {
+        "month": month, "ingredients": n, "kinds": kinds,
+        "monitored": sum(1 for r in act if r["monitored"]),
+        "priced": sum(1 for r in act if r["price_per_base"] is not None),
+        "unpriced": sum(1 for r in act if r["price_per_base"] is None),
+        "stale": sum(1 for r in act if (r["age_months"] or 0) > 2),
+        "price_sources": by_src, "no_base_unit": no_base, "raw_without_pack": no_pack,
+        "recipe_codes_missing": len(missing_in_master), "recipe_codes_missing_list": missing_in_master[:100],
+        "price_months": months,
+        "last_import": dict(zip(("at", "who", "month"), last_import)) if last_import else None,
+    }
+
+
+# ── M1 ingredient master ─────────────────────────────────────────────────────
+@router.get("/api/bom-center/ingredients")
+def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(None),
+                   kind: Optional[str] = Query(None), issues: bool = Query(False)):
+    month = month if month and _MONTH.match(month) else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        price = {r["code"]: r for r in _p.month_table(con, month)}
+        rules = {}
+        for code, unit, f, label in con.execute("SELECT ingredient_code, unit, factor_to_base, label FROM bc_unit_rule"):
+            rules.setdefault(code, []).append({"unit": unit, "factor": f, "label": label})
+        aliases = {}
+        for a, c, s in con.execute("SELECT alias_code, ingredient_code, system FROM bc_ingredient_alias"):
+            aliases.setdefault(c, []).append({"alias": a, "system": s})
+        used = dict(con.execute("SELECT ingredient_code, COUNT(DISTINCT sku_id) FROM bom_ingredients"
+                                " GROUP BY ingredient_code"))
+        cols = ["code", "name_th", "name_en", "family", "kind", "category", "supplier", "base_unit", "recv_unit",
+                "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored", "sourcing_default",
+                "active", "note", "updated_at", "updated_by"]
+        rows = [dict(zip(cols, r)) for r in con.execute(f"SELECT {', '.join(cols)} FROM bc_ingredient ORDER BY code")]
+    ql = (q or "").strip().lower()
+    out = []
+    for r in rows:
+        if kind and r["kind"] != kind:
+            continue
+        if ql and ql not in f"{r['code']} {r['name_th'] or ''} {r['name_en'] or ''}".lower():
+            continue
+        p = price.get(r["code"]) or {}
+        r.update({"price_per_base": p.get("price_per_base"), "price_source": p.get("source"),
+                  "priced_month": p.get("priced_month"), "price_age_months": p.get("age_months"),
+                  "unit_rules": rules.get(r["code"], []), "aliases": aliases.get(r["code"], []),
+                  "used_in_menus": used.get(r["code"], 0)})
+        r["price_per_recv"] = (round(r["price_per_base"] * r["qty_per_recv"], 2)
+                               if r["price_per_base"] and r["qty_per_recv"] else None)
+        problems = []
+        if not r["base_unit"]:
+            problems.append("ไม่มีหน่วยฐาน")
+        if r["kind"] == "raw" and not r["qty_per_recv"]:
+            problems.append("ไม่มีขนาดบรรจุ")
+        if r["price_per_base"] is None and r["kind"] != "zero_by_design":
+            problems.append("ไม่มีราคา")
+        elif (r["price_age_months"] or 0) > 2:
+            problems.append(f"ราคาเก่า {r['price_age_months']} เดือน")
+        r["problems"] = problems
+        if issues and not problems:
+            continue
+        out.append(r)
+    out.sort(key=lambda r: (-(r["used_in_menus"] or 0), r["code"]))
+    return {"month": month, "rows": out}
+
+
+class IngredientEdit(BaseModel):
+    code: str
+    name_th: Optional[str] = None
+    name_en: Optional[str] = None
+    kind: Optional[str] = None
+    category: Optional[str] = None
+    supplier: Optional[str] = None
+    base_unit: Optional[str] = None
+    recv_unit: Optional[str] = None
+    qty_per_recv: Optional[float] = None
+    loss_pct: Optional[float] = None
+    moq: Optional[float] = None
+    lead_days: Optional[float] = None
+    shelf_days: Optional[float] = None
+    monitored: Optional[int] = None
+    sourcing_default: Optional[str] = None
+    active: Optional[int] = None
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/ingredients", dependencies=[Depends(require_write_token)])
+def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
+    if not rows:
+        raise HTTPException(400, "ไม่มีรายการ")
+    for r in rows:
+        if r.kind and r.kind not in ("raw", "prepared", "consumable", "zero_by_design"):
+            raise HTTPException(400, f"{r.code}: ชนิดไม่ถูกต้อง")
+        if r.sourcing_default and r.sourcing_default not in ("central", "local"):
+            raise HTTPException(400, f"{r.code}: ช่องทางสั่งไม่ถูกต้อง")
+    with get_db() as con:
+        _ensure(con)
+        try:
+            stats = _m.update_rows(con, [r.dict(exclude_unset=True) for r in rows], _who(request))
+            con.commit()
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        except Exception:
+            con.rollback()
+            raise
+    invalidate_cache("bc_")
+    return {"ok": True, **stats}
+
+
+@router.post("/api/bom-center/ingredients/seed", dependencies=[Depends(require_write_token)])
+def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
+    """Build the master from pack sizes, recipe codes and the warehouse list.
+    Inserts and fills blanks only; never overwrites what a person set."""
+    with get_db() as con:
+        _ensure(con)
+        before = con.execute("SELECT COUNT(*) FROM bc_ingredient").fetchone()[0]
+        try:
+            stats = _m.seed_from_db(con, forced=_forced(), who=_m.SEED)
+            after = con.execute("SELECT COUNT(*) FROM bc_ingredient").fetchone()[0]
+            if dry_run:
+                con.rollback()
+            else:
+                _m.audit(con, _who(request), "seed", "bc_ingredient", "-", before, after)
+                con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    return {"dry_run": dry_run, "before": before, "after": after, **stats}
+
+
+@router.get("/api/bom-center/ingredients/template.xlsx")
+def bc_ingredients_template():
+    """The whole master as a sheet: edit in Excel, import back (a row you delete is left alone)."""
+    from openpyxl import Workbook
+    heads = ["รหัส", "ชื่อวัตถุดิบ", "ชนิด", "หมวด", "ผู้ขาย", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ",
+             "สูญเสีย (%)", "ขั้นต่ำ", "Lead time", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง"]
+    kind_th = {"raw": "ดิบ", "prepared": "กึ่งสำเร็จ", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น0"}
+    wb = Workbook()
+    _sheet(wb.active, "ทะเบียนวัตถุดิบ", heads,
+           "ห้ามแก้คอลัมน์ รหัส · ขนาดบรรจุ = 1 หน่วยรับ เท่ากับกี่หน่วยฐาน (แซลมอน 1 กก. = 1000 กรัม) · "
+           "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น0 · ช่องทางสั่ง: ส่วนกลาง / สาขาซื้อเอง")
+    ws = wb.active
+    with get_db() as con:
+        _ensure(con)
+        for r in con.execute("SELECT code, name_th, kind, category, supplier, base_unit, recv_unit, qty_per_recv,"
+                             " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default"
+                             " FROM bc_ingredient WHERE active=1 ORDER BY code"):
+            r = list(r)
+            r[2] = kind_th.get(r[2], r[2])
+            r[12] = "ใช่" if r[12] else ""
+            r[13] = "สาขาซื้อเอง" if r[13] == "local" else "ส่วนกลาง"
+            ws.append(r)
+    return _xlsx(wb, f"BOM_CENTER_INGREDIENTS_{date.today().isoformat()}.xlsx")
+
+
+async def _read_master_file(file: UploadFile):
+    """The center's template, or a DATAP sheet (also inside the 80 MB Cost-RW workbook)."""
+    from routers.ingredients import _norm_head
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    if len(raw) > 120 * 1024 * 1024:
+        raise HTTPException(400, "ไฟล์ใหญ่เกิน 120 MB")
+    name = (file.filename or "").lower()
+    if name.endswith(".csv"):
+        import csv
+        text = raw.decode("utf-8-sig", errors="replace")
+        grid = list(csv.reader(io.StringIO(text)))
+        sheet = "CSV"
+    else:
+        from openpyxl import load_workbook
+        try:
+            wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        except Exception as e:
+            raise HTTPException(400, f"อ่านไฟล์ Excel ไม่ได้: {e}")
+        sheet = "DATAP" if "DATAP" in wb.sheetnames else wb.sheetnames[0]
+        grid = [list(r) for r in wb[sheet].iter_rows(values_only=True)]
+    want = {k: tuple(_norm_head(a) for a in al) for k, al in _m.IMPORT_ALIASES.items()}
+    head_at, hmap = -1, {}
+    for i, row in enumerate(grid[:20]):
+        cells = [_norm_head(c) for c in row]
+        m = {}
+        for k, al in want.items():
+            for j, c in enumerate(cells):
+                if c and c in al and j not in m.values():
+                    m[k] = j
+                    break
+        if "code" in m and len(m) >= 3:
+            head_at, hmap = i, m
+            break
+    if head_at < 0:
+        raise HTTPException(400, "ไม่พบหัวตาราง (ต้องมีคอลัมน์รหัส) — ใช้ template ของระบบ หรือ sheet DATAP")
+    rows = []
+    for row in grid[head_at + 1:]:
+        if not any(str(c or "").strip() for c in row):
+            continue
+        rows.append({k: (row[j] if j < len(row) else None) for k, j in hmap.items()})
+    return rows, sheet, sorted(hmap)
+
+
+@router.post("/api/bom-center/ingredients/import", dependencies=[Depends(require_write_token)])
+async def bc_ingredients_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
+                                month: Optional[str] = Query(None)):
+    """Import the master template or a DATAP sheet. Values in the file overwrite."""
+    rows, sheet, cols = await _read_master_file(file)
+    with get_db() as con:
+        _ensure(con)
+        try:
+            stats = _m.import_rows(con, rows, _who(request),
+                                   default_month=month if month and _MONTH.match(month) else None)
+            if dry_run:
+                con.rollback()
+            else:
+                _m.audit(con, _who(request), "import", "bc_ingredient", file.filename,
+                         None, f"{stats['inserted']} new / {stats['updated']} updated")
+                con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    return {"dry_run": dry_run, "sheet": sheet, "columns": cols, "rows": len(rows),
+            **{k: v for k, v in stats.items() if k != "skipped"}, "skipped": stats["skipped"][:200]}
+
+
+# ── M2 Material Converter ────────────────────────────────────────────────────
+class UnitRule(BaseModel):
+    code: str
+    unit: str
+    factor_to_base: Optional[float] = None       # None deletes the rule
+    label: Optional[str] = None
+
+
+@router.post("/api/bom-center/units", dependencies=[Depends(require_write_token)])
+def bc_units_save(rules: List[UnitRule], request: Request):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            for r in rules:
+                _m.set_unit_rule(con, r.code.strip(), r.unit, r.factor_to_base, r.label, _who(request))
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        con.commit()
+    invalidate_cache("bc_")
+    return {"ok": True, "rules": len(rules)}
+
+
+@router.get("/api/bom-center/convert")
+def bc_convert(code: str = Query(...), qty: float = Query(1.0), unit: str = Query(...),
+               month: Optional[str] = Query(None)):
+    """'3 แท่ง of 13-01-009' -> base units, and what it costs at `month`'s price."""
+    month = month if month and _MONTH.match(month) else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        conv = Converter(con)
+        qb, how = conv.to_base(code, qty, unit)
+        p = _p.price_for(con, code, month)
+    return {"code": code, "qty": qty, "unit": unit, "qty_base": qb, "base_unit": conv.base_unit(code),
+            "how": how, "price_per_base": p[0] if p else None,
+            "cost": round(qb * p[0], 4) if (qb is not None and p) else None, "month": month}
+
+
+# ── M4 monthly prices ────────────────────────────────────────────────────────
+@router.get("/api/bom-center/prices")
+def bc_prices(month: Optional[str] = Query(None)):
+    month = month if month and _MONTH.match(month) else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        return {"month": month, "rows": _p.month_table(con, month)}
+
+
+@router.get("/api/bom-center/prices/history")
+def bc_price_history(code: str = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        names = dict(con.execute("SELECT branch_id, name FROM branches"))
+        h = _p.history(con, code)
+    for r in h:
+        for b in r["branches"]:
+            b["branch"] = names.get(b["branch_id"], str(b["branch_id"]))
+    return {"code": code, "rows": h}
+
+
+_PRICE_ALIASES = {
+    "code":       ("รหัส", "รหัสสินค้า", "รหัสวัตถุดิบ", "itemcode", "code"),
+    "name":       ("รายละเอียด", "ชื่อสินค้า", "ชื่อวัตถุดิบ", "name", "description"),
+    "qty":        ("จำนวน", "ปริมาณ", "qty", "quantity"),
+    "unit":       ("หน่วยนับ", "หน่วย", "unit", "uom"),
+    "unit_price": ("ราคาต่อหน่วย", "ราคา/หน่วย", "unitprice", "price"),
+    "value":      ("มูลค่ารวม", "มูลค่า", "จำนวนเงิน", "value", "amount", "total"),
+    "branch":     ("สาขา", "branch", "คลัง"),
+    "month":      ("เดือน", "month", "วันที่", "date"),
+}
+
+
+@router.get("/api/bom-center/prices/template.xlsx")
+def bc_prices_template():
+    from openpyxl import Workbook
+    wb = Workbook()
+    _sheet(wb.active, "ยอดซื้อรายบรรทัด", ["รหัส", "ชื่อสินค้า", "จำนวน", "หน่วย", "มูลค่ารวม", "สาขา", "เดือน"],
+           "1 แถว = 1 บรรทัดซื้อ/รับเข้า · มูลค่ารวม ไม่รวม VAT · หน่วย: กิโลกรัม / กรัม / แพ็ค / ลิตร … (ระบบแปลงให้) · "
+           "เดือน YYYY-MM · หรืออัปโหลดไฟล์ 'รายงานจ่ายสินค้าภายใน' ของบัญชีได้ตรง ๆ")
+    wb.active.append(["02-01-001", "ปลาแซลมอนเทร้านอร์เวย์ (ตัวอย่าง — ลบแถวนี้)", 785.46, "กิโลกรัม", 294332.5,
+                      "ขอนแก่น", "2026-09"])
+    return _xlsx(wb, "BOM_CENTER_PURCHASE_LINES_TEMPLATE.xlsx")
+
+
+async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
+    """-> (lines, info, month). Accounting issue workbook (sheets 'Use XXX') or the template."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    name = (file.filename or "").lower()
+    if not name.endswith(".csv"):
+        from openpyxl import load_workbook
+        try:
+            sheets = load_workbook(io.BytesIO(raw), read_only=True).sheetnames
+        except Exception as e:
+            raise HTTPException(400, f"อ่านไฟล์ Excel ไม่ได้: {e}")
+        if any(s.replace("-", " ").upper().startswith("USE ") for s in sheets):
+            from routers.requisition import parse_workbook
+            lines, info = parse_workbook(raw)
+            months = sorted({ln["period_month"] for ln in lines})
+            if not lines:
+                raise HTTPException(400, "ไม่พบรายการในรายงานจ่ายสินค้าภายใน")
+            if month and month not in months:
+                raise HTTPException(400, f"ไฟล์นี้เป็นเดือน {', '.join(months)} ไม่ใช่ {month}")
+            month = month or months[-1]
+            lines = [{"code": ln["item_code"], "name": ln["item_name"], "qty": ln["qty"], "unit": ln["unit"],
+                      "value": ln["value"], "unit_price": ln["unit_price"], "branch_id": ln["branch_id"]}
+                     for ln in lines if ln["period_month"] == month]
+            return lines, {"format": "รายงานจ่ายสินค้าภายใน", **info}, month
+
+    class _F:                                       # re-wrap the bytes for the shared reader
+        filename = file.filename
+
+        async def read(self):
+            return raw
+    from routers.ingredients import _read_upload_table
+    rows, hmap, sheet = await _read_upload_table(_F(), _PRICE_ALIASES,
+                                                 optional=("name", "unit_price", "value", "branch", "month"))
+    if "value" not in hmap and "unit_price" not in hmap:
+        raise HTTPException(400, "ต้องมีคอลัมน์ มูลค่ารวม หรือ ราคาต่อหน่วย")
+    with get_db() as con:
+        bmap = {str(n).strip(): b for b, n in con.execute("SELECT branch_id, name FROM branches")}
+    lines, months = [], set()
+    for r in rows:
+        m = r.get("month")
+        mm = _m._month_of(m) if m not in (None, "") else None
+        if mm:
+            months.add(mm)
+        if month and mm and mm != month:
+            continue
+        b = r.get("branch")
+        bid = bmap.get(str(b).strip()) if b not in (None, "") else None
+        if bid is None and b not in (None, ""):
+            try:
+                bid = int(float(b))
+            except (TypeError, ValueError):
+                bid = None
+        lines.append({"code": r.get("code"), "name": r.get("name"), "qty": r.get("qty"), "unit": r.get("unit"),
+                      "value": r.get("value"), "unit_price": r.get("unit_price"), "branch_id": bid})
+    if not month:
+        if len(months) != 1:
+            raise HTTPException(400, "ระบุเดือนที่จะนำเข้า (ไฟล์มีหลายเดือนหรือไม่มีคอลัมน์เดือน)")
+        month = months.pop()
+    return lines, {"format": "template", "sheet": sheet, "columns": sorted(hmap)}, month
+
+
+def _import(lines, info, month, dry_run, who, note, add_unknown=False):
+    """Preview, and unless dry_run, write. get_db() hands out a long-lived
+    per-thread connection, so a dry run must ROLL BACK explicitly — otherwise the
+    codes add_unknown registered would ride along with the next request's commit."""
+    with get_db() as con:
+        _ensure(con)
+        try:
+            agg = _p.aggregate(con, lines, add_unknown=add_unknown, who=who, month=month)
+            pv = _p.preview(con, month, agg)
+            result = None
+            if dry_run:
+                con.rollback()
+            else:
+                if not agg["codes"]:
+                    raise HTTPException(400, "ไม่มีรายการที่ใช้ได้ — ตรวจรายการที่แปลงไม่ได้ด้านล่าง")
+                result = _p.apply(con, month, agg, who, note)
+                con.commit()
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    pv["issues"] = pv["issues"][:300]
+    return {"dry_run": dry_run, "source": info, "lines": len(lines), **pv, "applied": result}
+
+
+@router.post("/api/bom-center/prices/import", dependencies=[Depends(require_write_token)])
+async def bc_prices_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
+                           dry_run: bool = Query(True), add_unknown: bool = Query(False)):
+    """A month of purchase lines -> weighted-average actual price per ingredient."""
+    if month:
+        _month_or_400(month)
+    lines, info, month = await _price_lines_from_file(file, month)
+    return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown)
+
+
+@router.post("/api/bom-center/prices/from-requisition", dependencies=[Depends(require_write_token)])
+def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_run: bool = Query(True),
+                               add_unknown: bool = Query(False)):
+    """The same, from the รายงานจ่ายสินค้าภายใน rows already uploaded to the site."""
+    _month_or_400(month)
+    with get_db() as con:
+        has = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='requisition_line'").fetchone()
+        rows = con.execute("SELECT item_code, item_name, qty, unit, value, unit_price, branch_id FROM requisition_line"
+                           " WHERE period_month=?", (month,)).fetchall() if has else []
+    if not rows:
+        raise HTTPException(404, f"ยังไม่มีรายงานจ่ายสินค้าภายในเดือน {month} ในระบบ")
+    lines = [dict(zip(("code", "name", "qty", "unit", "value", "unit_price", "branch_id"), r)) for r in rows]
+    return _import(lines, {"format": "requisition_line ในระบบ"}, month, dry_run, _who(request),
+                   "จากรายงานจ่ายสินค้าภายในที่อัปโหลดไว้", add_unknown)
+
+
+@router.get("/api/bom-center/prices/requisition-months")
+def bc_requisition_months():
+    with get_db() as con:
+        has = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='requisition_line'").fetchone()
+        return {"months": [r[0] for r in con.execute(
+            "SELECT DISTINCT period_month FROM requisition_line ORDER BY 1 DESC")] if has else []}
+
+
+class ManualPrice(BaseModel):
+    code: str
+    month: str
+    price_per_base: Optional[float] = None       # None withdraws the manual price
+    note: Optional[str] = ""
+
+
+@router.post("/api/bom-center/prices/manual", dependencies=[Depends(require_write_token)])
+def bc_price_manual(body: ManualPrice, request: Request):
+    _month_or_400(body.month)
+    with get_db() as con:
+        _ensure(con)
+        if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (body.code,)).fetchone():
+            raise HTTPException(404, "ไม่มีรหัสนี้ในทะเบียนวัตถุดิบ")
+        try:
+            _p.set_manual(con, body.code, body.month, body.price_per_base, body.note or "", _who(request))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        con.commit()
+    invalidate_cache("bc_")
+    return {"ok": True}
+
+
+@router.post("/api/bom-center/prices/carry-forward", dependencies=[Depends(require_write_token)])
+def bc_price_carry(request: Request, month: str = Query(...)):
+    """Fill a month nobody imported yet with each ingredient's latest price."""
+    _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        n = _p.carry_forward(con, month, _who(request))
+        con.commit()
+    invalidate_cache("bc_")
+    return {"ok": True, "month": month, "carried_forward": n}

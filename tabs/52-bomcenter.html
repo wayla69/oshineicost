@@ -1,0 +1,151 @@
+<div id="tab-bomcenter" style="display:none">
+
+  <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
+    <h2 class="text-base font-bold" style="color:var(--accent)">BoM Center — ทะเบียนวัตถุดิบ · ราคารายเดือน · แปลงหน่วย</h2>
+    <p class="text-xs mt-1" style="color:var(--text-secondary)">
+      ศูนย์ต้นทุนวัตถุดิบที่ทุกหน้าจะเรียกใช้ · <b>ราคา</b> = ราคาซื้อจริงถัวเฉลี่ยจากบัญชีต่อเดือน (มูลค่ารวม ÷ ปริมาณ) ·
+      <b>หน่วยฐาน</b> = หน่วยที่สูตรนับ (กรัม / มิลลิลิตร / ชิ้น) ระบบแปลง กิโลกรัม แพ็ค ลิตร ให้เอง ·
+      ทุกการนำเข้าแสดงผลให้ตรวจก่อนบันทึก · สูตร BoM ตาม Tier จะมาใน Sprint ถัดไป
+    </p>
+  </div>
+
+  <div class="subtab-bar mb-3">
+    <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
+    <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
+    <button class="subtab-btn" data-bmcsub="price" onclick="bmcSetSub('price')">ราคารายเดือน</button>
+    <button class="subtab-btn" data-bmcsub="conv" onclick="bmcSetSub('conv')">แปลงหน่วย</button>
+  </div>
+
+  <!-- ── overview ──────────────────────────────────────────────────────── -->
+  <div id="bmc-pane-overview">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">เดือน
+        <input type="month" id="bmcMonth" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      </label>
+      <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcKpis" class="grid gap-3 mb-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
+    <div id="bmcSetupCard" class="card p-4 mb-3"></div>
+    <div id="bmcIssuesCard" class="card p-4 mb-3"></div>
+  </div>
+
+  <!-- ── ingredient master ─────────────────────────────────────────────── -->
+  <div id="bmc-pane-ing" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <input type="search" id="bmcIngQ" placeholder="ค้นหารหัส/ชื่อวัตถุดิบ…" oninput="bmcRenderIng()"
+             style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
+      <select id="bmcIngKind" onchange="bmcRenderIng()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+        <option value="">ทุกชนิด</option><option value="raw">ดิบ</option><option value="prepared">กึ่งสำเร็จ</option>
+        <option value="consumable">วัสดุสิ้นเปลือง</option><option value="zero_by_design">ตั้งใจเป็น ฿0</option>
+      </select>
+      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)">
+        <input type="checkbox" id="bmcIngIssues" onchange="bmcRenderIng()"> เฉพาะที่มีปัญหา
+      </label>
+      <span id="bmcIngSummary" class="text-xs" style="color:var(--text-muted)"></span>
+      <button onclick="bmcSaveIng()" class="ml-auto bc-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกที่แก้ไข</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mb-3 p-2 bc-write" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
+      <span class="text-[11px] font-semibold" style="color:var(--text-primary)">แก้เป็นชุดด้วย Excel:</span>
+      <button onclick="window.open(API + '/api/bom-center/ingredients/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">โหลดทะเบียนเป็น Excel</button>
+      <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
+             title="ไฟล์ template ของระบบ หรือไฟล์ที่มี sheet DATAP (เช่น COST-RW) — ตรวจก่อนบันทึกทุกครั้ง">
+        นำเข้าทะเบียน / DATAP
+        <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcImportIng(this)">
+      </label>
+      <button onclick="bmcSeed()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
+              title="เติมรหัสใหม่จากสูตร ขนาดบรรจุ และใบคลังบังคับสั่ง — ไม่ทับค่าที่มีคนตั้งไว้">เติมจากข้อมูลในระบบ</button>
+      <span id="bmcIngStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcIngReport" class="mb-3"></div>
+    <div class="card p-4 overflow-x-auto">
+      <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2">ชนิด</th>
+          <th class="py-1.5 pr-2">หน่วยฐาน</th><th class="py-1.5 pr-2">หน่วยรับ</th>
+          <th class="py-1.5 pr-2 text-right">ขนาดบรรจุ</th><th class="py-1.5 pr-2 text-right">สูญเสีย %</th>
+          <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2 text-right">ราคา/หน่วยรับ</th>
+          <th class="py-1.5 pr-2 text-right">ใช้ในเมนู</th><th class="py-1.5 pr-2">บังคับสั่ง</th><th class="py-1.5">สถานะ</th>
+        </tr></thead>
+        <tbody id="bmcIngBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── monthly prices ────────────────────────────────────────────────── -->
+  <div id="bmc-pane-price" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <span class="text-xs" style="color:var(--text-muted)">เดือน <b id="bmcPriceMonthLbl"></b> (เปลี่ยนได้ที่ ภาพรวม)</span>
+      <input type="search" id="bmcPriceQ" placeholder="ค้นหา…" oninput="bmcRenderPrices()"
+             style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:180px">
+      <select id="bmcPriceSrc" onchange="bmcRenderPrices()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+        <option value="">ทุกแหล่ง</option><option value="purchase_avg">ซื้อจริงเดือนนี้</option>
+        <option value="carry_forward">ยกมา</option><option value="manual">แก้เอง</option>
+        <option value="list_ref">ราคาใบเสนอ</option><option value="none">ไม่มีราคา</option>
+      </select>
+      <span id="bmcPriceSummary" class="text-xs" style="color:var(--text-muted)"></span>
+    </div>
+    <div class="card p-3 mb-3 bc-write">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">นำเข้าราคาซื้อจริงของเดือน</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
+               title="ไฟล์รายงานจ่ายสินค้าภายในจากบัญชี (sheet Use KR1, Use CNX …) หรือ template ยอดซื้อรายบรรทัด">
+          อัปโหลดไฟล์บัญชี / template
+          <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcImportPrices(this)">
+        </label>
+        <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานจ่ายสินค้าที่อัปโหลดไว้</button>
+        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">โหลด template</button>
+        <button onclick="bmcCarry()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
+                title="เดือนที่ยังไม่มีไฟล์ — ยกราคาล่าสุดของแต่ละวัตถุดิบมาใช้ พร้อมบอกอายุราคา">ยกราคาล่าสุดมาใช้</button>
+        <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"
+               title="รหัสที่บัญชีจ่ายออกแต่ยังไม่อยู่ในทะเบียน (เช่น ทุเรียน FV00043) จะถูกเพิ่มพร้อมหน่วยฐานที่เดาจากหน่วยที่ซื้อ — ตรวจที่แท็บทะเบียน">
+          <input type="checkbox" id="bmcAddUnknown" checked> เพิ่มรหัสที่ยังไม่มีในทะเบียน</label>
+        <span id="bmcPriceStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+      </div>
+    </div>
+    <div id="bmcPricePreview" class="mb-3"></div>
+    <div class="card p-4 overflow-x-auto">
+      <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2">หน่วยฐาน</th>
+          <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2">แหล่ง</th>
+          <th class="py-1.5 pr-2">ราคาของเดือน</th><th class="py-1.5 pr-2 text-right">อายุ (เดือน)</th>
+          <th class="py-1.5 pr-2 text-right">สาขาที่ซื้อ</th><th class="py-1.5"></th>
+        </tr></thead>
+        <tbody id="bmcPriceBody"></tbody>
+      </table>
+    </div>
+    <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
+  </div>
+
+  <!-- ── unit converter ────────────────────────────────────────────────── -->
+  <div id="bmc-pane-conv" style="display:none">
+    <div class="card p-4 mb-3">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">เครื่องคิดแปลงหน่วย</div>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-xs" style="color:var(--text-muted)">รหัสวัตถุดิบ<br>
+          <input id="bmcConvCode" list="bmcCodeList" placeholder="เช่น 13-01-009" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:160px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">ปริมาณ<br>
+          <input id="bmcConvQty" type="number" step="any" value="1" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:90px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
+          <input id="bmcConvUnit" placeholder="แท่ง / กิโลกรัม / แพ็ค" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:140px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <button onclick="bmcConvert()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">คำนวณ</button>
+      </div>
+      <datalist id="bmcCodeList"></datalist>
+      <div id="bmcConvOut" class="text-sm mt-3" style="color:var(--text-primary)"></div>
+    </div>
+    <div class="card p-4 bc-write">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">กฎหน่วยครัวของวัตถุดิบ</div>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">ใช้เมื่อครัวนับเป็นหน่วยที่ไม่ใช่น้ำหนัก เช่น ปูอัด 1 แท่ง = 15 กรัม · สาหร่าย 1 แผ่นเล็ก = 0.125 แผ่น ·
+        กิโลกรัม→กรัม และ ลิตร→มิลลิลิตร ระบบรู้อยู่แล้ว · หน่วยรับ (แพ็ค/ถุง/กล่อง) ใช้ขนาดบรรจุในทะเบียน</p>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
+          <input id="bmcRuleUnit" placeholder="แท่ง" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">= กี่หน่วยฐาน<br>
+          <input id="bmcRuleFactor" type="number" step="any" placeholder="15" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <button onclick="bmcSaveRule()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกกฎให้รหัสด้านบน</button>
+        <span id="bmcRuleStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <div id="bmcRuleList" class="mt-3 text-xs"></div>
+    </div>
+  </div>
+</div>

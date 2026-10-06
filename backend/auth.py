@@ -59,6 +59,7 @@ MODULES: List[str] = [
     "data.upload",         # อัปโหลด/seed ข้อมูล
     "customer.feedback",   # เสียงลูกค้า: รีวิว/ความรู้สึก/เมนูที่ถูกพูดถึง
     "supply.ordering",     # จัดซื้อ/วัตถุดิบ: แผนสั่ง, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ
+    "bom.center",          # BoM Center: ทะเบียนวัตถุดิบ, หน่วย, ราคารายเดือน (แก้ไข/นำเข้า)
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -81,16 +82,18 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
         "cost.simulator", "profit.pnl", "ops.discounts", "ops.posextra",
         "report.export", "customer.feedback",
+        "bom.center",          # owner 2026-10-06: the analyst maintains prices/recipes and RELEASES
     },
     "accounting": {
         # Brief = "งานบัญชี". ops.cash (เงินขาด/เกิน) + ops.discounts are
         # INTENTIONAL: both feed the books / month-end reconciliation.
         "sales.overview", "profit.pnl", "cost.analysis", "ops.cash",
         "ops.discounts", "report.export",
+        "bom.center",          # the monthly price is accounting's actual purchase average (§10-1)
     },
     "innovation": {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
-        "bom.edit", "system.settings", "customer.feedback",
+        "bom.edit", "system.settings", "customer.feedback", "bom.center",
     },
     "salessupport": {
         # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
@@ -249,6 +252,8 @@ MODULE_RULES = [
     ("GET", "/api/analysis/persona",         {"menu.analysis", "customer.buffet"}),
     # ── writes (also write-token gated in main.py — defense in depth) ───────
     ("W",   "/api/cost",                     {"bom.edit"}),
+    ("GET", "/api/bom-center",               {"cost.analysis", "supply.ordering", "bom.center", "bom.edit"}),
+    ("W",   "/api/bom-center",               {"bom.center", "bom.edit"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),

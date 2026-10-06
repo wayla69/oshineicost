@@ -2153,6 +2153,11 @@ try:
 except ImportError:
     from routers.requisition import router as _requisition_router
 app.include_router(_requisition_router)
+try:
+    from .routers.bom_center import router as _bom_center_router
+except ImportError:
+    from routers.bom_center import router as _bom_center_router
+app.include_router(_bom_center_router)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Ingredient ordering — per-branch purchase planning (แผนสั่งวัตถุดิบรายสาขา)

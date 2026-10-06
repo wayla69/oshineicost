@@ -7,7 +7,8 @@ served no-cache so deploys can never leave stale JS in browser caches."""
 _SLICES = ["01-core.js", "02-mgt-report.js", "03-tabs-main.js", "04-report-cost.js",
            "05-pnl-settings.js", "06-features.js", "07-home.js", "08-guest-buffet.js",
            "09-analysis-tabs.js", "09b-cost-pnl.js", "09c-mobile.js", "09d-bom-tools.js",
-           "09e-menu-compare-bom.js", "10-ordering.js", "11-feedback.js", "12-checklist.js"]
+           "09e-menu-compare-bom.js", "10-ordering.js", "11-feedback.js", "12-checklist.js",
+           "13-bom-center.js"]
 
 
 def test_root_references_all_slices_in_order_with_hashes(client):
