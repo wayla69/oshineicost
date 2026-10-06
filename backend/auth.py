@@ -282,6 +282,9 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/variance",                {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/variance",                {"branch.stock", "bom.center"}),
     ("GET", "/api/bom-center/variance/overview",       {"supply.ordering", "bom.center", "ops.report"}),
+    # S8 the branch order: the branch suggests/confirms/submits/receives its own; the centre may too
+    ("GET", "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
+    ("W",   "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),

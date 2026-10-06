@@ -221,8 +221,12 @@ def _abc(values: dict) -> dict:
 
 
 def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, season: str = "auto",
-            as_of: date = None) -> dict:
-    """The suggestion for one branch, one round, one order day (nothing saved)."""
+            as_of: date = None, stock: dict = None) -> dict:
+    """The suggestion for one branch, one round, one order day (nothing saved).
+
+    `stock` (orders.stock_position, Phase 2): on hand at the last count, net of what
+    arrived and what the sales used since, plus what is on order — deducted per item
+    after projecting the use between now and the first covered day."""
     from .prices import price_for
     order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
     last_data = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
@@ -247,6 +251,10 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         if has_round_col else set()
     salmon = salmon or set(SALMON_DEFAULT)
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
+    # the days between the stock figure and the first covered day still eat into it
+    basis = ((stock or {}).get("basis") or {}).get("date")
+    pre_from = max(as_of + timedelta(days=1), date.fromisoformat(basis)) if basis else as_of + timedelta(days=1)
+    pre_days = [pre_from + timedelta(days=i) for i in range(max((c_from - pre_from).days, 0))]
     # spend over the window for ABC
     spend = {}
     for code, s in use.items():
@@ -268,7 +276,16 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         if shelf:
             days_n = min(days_n, int(shelf))
         safety = Z[k] * m["sigma"] * math.sqrt(max(days_n, 1))
-        need = fc + safety                                  # − on hand − on order: Phase 2
+        need = fc + safety
+        oh = (stock or {}).get("qty", {}).get(code)
+        onord = (stock or {}).get("on_order", {}).get(code, 0.0)
+        pre = projected = None
+        if oh is not None:                                  # counted: deduct what will still be there
+            pre = sum(m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in pre_days)
+            projected = oh - pre + onord
+            need = max(0.0, need - max(projected, 0.0))
+        elif onord:
+            need = max(0.0, need - onord)
         units = to_order_units(need, per, moq or 1) if per else None
         p = price_for(con, code, month)
         ppb = p[0] if p else None
@@ -276,6 +293,9 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "monitored": bool(mon), "sourcing": src or "central",
                      "per_day": round(fc / len(cover), 3) if cover else 0, "forecast": round(fc, 2),
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
+                     "on_hand": None if oh is None else round(oh, 2), "on_order": round(onord, 2),
+                     "pre_cover_use": None if pre is None else round(pre, 2),
+                     "projected": None if projected is None else round(projected, 2), "moq": moq,
                      "sigma": round(m["sigma"], 3), "recv_unit": recv, "qty_per_recv": per,
                      "suggested_units": units, "pack_known": bool(per),
                      "price_per_base": ppb, "via": stats.get("via", {}).get(code, []),
@@ -287,7 +307,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             "order_weekday": WD_TH[_wd(order_day)], "delivery": dlv.isoformat(),
             "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "cover_days": len(cover),
             "calendar_filled": cal["filled"], "history_from": start.isoformat(), "history_to": as_of.isoformat(),
-            "trading_days": len(days), "season": sf, "stats": stats, "on_hand_included": False,
+            "trading_days": len(days), "season": sf, "stats": stats,
+            "on_hand_included": bool((stock or {}).get("basis")),
             "rows": rows, "value_total": round(sum(r["value"] or 0 for r in rows), 2),
             "salmon_codes": sorted(salmon)}
 

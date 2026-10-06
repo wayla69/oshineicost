@@ -1,4 +1,4 @@
-// 14-branch.js — สาขาของฉัน (BoM Center Phase 2: S6 นับสต๊อก · S7 รับของ + ผลต่างของฉัน).
+// 14-branch.js — สาขาของฉัน (BoM Center Phase 2: S6 นับสต๊อก · S7 รับของ + ผลต่างของฉัน · S8 สั่งของ).
 // Mobile first (375 px). Shares the global scope of slices 01-13; every name here
 // starts with `brn`. A branch login is pinned to its own branch by the server
 // (auth.scope_branch); central roles pick a branch from the list.
@@ -186,14 +186,17 @@ let _brnVar = null;           // /api/bom-center/variance/period
 function brnSetSub(k) {
   _brnSub = k;
   document.querySelectorAll('#tab-branchstock [data-brnsub]').forEach(b => b.classList.toggle('active', b.dataset.brnsub === k));
-  ['count', 'recv', 'var'].forEach(p => { const el = document.getElementById('brn-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['count', 'order', 'recv', 'var'].forEach(p => { const el = document.getElementById('brn-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  if (k === 'order') brnLoadOrder();
   if (k === 'recv') brnLoadRecv();
   if (k === 'var') brnLoadVarPane();
 }
 async function brnBranchChanged() {
   _brnVar = null;
   _brnRecv = [];
+  _brnPlan = null;
   await brnLoadSheet();
+  if (_brnSub === 'order') brnLoadOrder();
   if (_brnSub === 'recv') brnLoadRecv();
   if (_brnSub === 'var') brnLoadVarPane();
 }
@@ -371,4 +374,153 @@ async function brnConfirmRecv(undo) {
       body: JSON.stringify({ end_count_id: _brnVar.end_count_id, undo: !!undo }) });
     await brnLoadVariance(_brnVar.end_count_id);
   } catch (e) { _bmcStatus('brnVarStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+
+// ── สั่งของ (S8) ─────────────────────────────────────────────────────────────
+let _brnRound = '1';
+let _brnPlan = null;          // /api/bom-center/order/plan
+let _brnOrdQty = {};          // code -> confirmed units (string)
+let _brnOrdReason = {};       // code -> {reason_code, note}
+let _brnRecvMode = false;     // receiving an order that arrived
+const _BRN_ROUNDS = [['1', 'รอบ 1 (อ./พ.)'], ['2', 'รอบ 2 (ศ./ส.)'], ['salmon', 'แซลมอนสด']];
+
+async function brnLoadOrder() {
+  document.getElementById('brnOrdRounds').innerHTML = _BRN_ROUNDS.map(([k, t]) => {
+    const on = k === _brnRound;
+    return `<button onclick="brnSetRound('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t}</button>`;
+  }).join('');
+  if (_brnNeedBranch('brnOrdList')) { document.getElementById('brnOrdHead').innerHTML = ''; return; }
+  document.getElementById('brnOrdList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณยอดแนะนำ…</span>';
+  _bmcStatus('brnOrdStatus', '');
+  try {
+    _brnPlan = await _bmcJson(`${API}/api/bom-center/order/plan?round=${_brnRound}${_brnQS() ? '&' + _brnQS() : ''}`);
+    _brnOrdQty = {}; _brnOrdReason = {}; _brnRecvMode = false;
+    const o = _brnPlan.order;
+    _brnPlan.rows.forEach(r => { _brnOrdQty[r.code] = String(r.order_units); });
+    if (o) o.lines.forEach(l => {
+      _brnOrdQty[l.code] = l.confirmed_units == null ? '' : String(l.confirmed_units);
+      if (l.reason_code) _brnOrdReason[l.code] = { reason_code: l.reason_code, note: l.note || '' };
+    });
+    brnRenderOrder();
+    brnLoadOrderHistory();
+  } catch (e) { document.getElementById('brnOrdList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnSetRound(k) { _brnRound = k; brnLoadOrder(); }
+function _brnOrdNeedsReason(sugg, conf) {
+  const s = Number(sugg || 0), c = Number(conf || 0);
+  if (s === c) return false;
+  if (s === 0) return c > 0;
+  return Math.abs(c - s) > Math.max(1, s * (_brnPlan.deviation_pct || 20) / 100);
+}
+function _brnUnitLabel(r) { return r.order_unit === 'pack' ? (r.recv_unit || 'แพ็ค') : (r.base_unit || ''); }
+
+function brnRenderOrder() {
+  const p = _brnPlan;
+  if (!p) return;
+  const o = p.order;
+  const editable = !o || ['suggested', 'confirmed'].includes(o.status);
+  const stockLine = p.stock.deducted
+    ? `${_bmcChip('หักสต๊อกแล้ว', 'var(--good-ink)')} จากนับวันที่ ${esc(p.stock.basis.date)} (+ รับเข้า − ใช้ไปตามยอดขาย)`
+    : `${_bmcChip('ไม่หักสต๊อก', 'var(--amber-ink)')} ยังไม่ได้นับ — ยอดแนะนำคือพยากรณ์ทั้งหมด <a href="#" onclick="brnSetSub('count');return false" style="color:var(--accent)">นับก่อนสั่ง →</a>`;
+  const byCode = {};
+  p.rows.forEach(r => { byCode[r.code] = r; });
+  const extra = o ? o.lines.filter(l => !byCode[l.code]) : [];
+  const total = Object.entries(_brnOrdQty).reduce((a, [c, v]) => {
+    const r = byCode[c];
+    if (!r || !r.price_per_base || !(Number(v) > 0)) return a;
+    return a + Number(v) * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) * r.price_per_base;
+  }, 0);
+  document.getElementById('brnOrdHead').innerHTML = `<div style="color:var(--text-primary)" class="text-sm">วันสั่ง <b>${esc(p.order_day)}</b> (${esc(p.order_weekday)}) · ส่งถึง ${esc(p.delivery)} ·
+      พอใช้ ${esc(p.cover_from)} → ${esc(p.cover_to)} (${p.cover_days} วัน)</div>
+    <div class="mt-1" style="color:var(--text-secondary)">${stockLine}</div>
+    <div class="mt-1" style="color:var(--text-secondary)">${o ? `ออเดอร์ #${o.order_id} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}` : _bmcChip('ยังไม่เริ่มออเดอร์รอบนี้', 'var(--text-muted)')}
+      · มูลค่าที่สั่ง ≈ <b>฿${_bmcNum(total, 0)}</b>${p.calendar_filled ? '' : ' · <span style="color:var(--amber-ink)">ยังใช้วันสั่งค่าเริ่มต้น — ฝ่ายขายตั้งวันได้ที่ BoM Center</span>'}</div>`;
+  const q = (document.getElementById('brnOrdQ').value || '').trim().toLowerCase();
+  const only = document.getElementById('brnOrdOnly').checked;
+  const rows = p.rows.filter(r => (!only || r.order_units > 0 || Number(_brnOrdQty[r.code] || 0) > 0)
+    && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
+  const line = o ? Object.fromEntries(o.lines.map(l => [l.code, l])) : {};
+  const reasonSel = (code) => {
+    const cur = _brnOrdReason[code] || {};
+    return `<div class="flex flex-wrap gap-2 mt-1 text-xs"><select onchange="_brnOrdReason[${_bmcQ(code)}]=Object.assign(_brnOrdReason[${_bmcQ(code)}]||{}, {reason_code:this.value})" ${editable ? '' : 'disabled'}
+        style="border:1px solid var(--amber-ink);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผลที่สั่งต่างจากแนะนำ —</option>${p.reasons.map(x => `<option value="${x.code}"${cur.reason_code === x.code ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
+      <input value="${esc(cur.note || '')}" placeholder="หมายเหตุ" oninput="_brnOrdReason[${_bmcQ(code)}]=Object.assign(_brnOrdReason[${_bmcQ(code)}]||{}, {note:this.value})" ${editable ? '' : 'disabled'}
+        style="flex:1 1 120px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></div>`;
+  };
+  const html = rows.map(r => {
+    const sugg = line[r.code] ? line[r.code].suggested_units : r.order_units;
+    const v = _brnOrdQty[r.code] ?? '';
+    const dev = _brnOrdNeedsReason(sugg, v);
+    const detail = `พยากรณ์ ${_bmcNum(r.forecast, 0)} + สำรอง ${_bmcNum(r.safety, 0)}` +
+      (r.on_hand != null ? ` − คงเหลือคาด ${_bmcNum(Math.max(r.projected, 0), 0)}` : ' (ไม่ได้นับ — ไม่หัก)') +
+      (r.on_order ? ` (รวมค้างส่ง ${_bmcNum(r.on_order, 0)})` : '') + ` = ${_bmcNum(r.need, 0)} ${esc(r.base_unit || '')}`;
+    const recvCell = _brnRecvMode ? `<input inputmode="decimal" id="brnRcv_${esc(r.code)}" value="${esc(String(line[r.code] ? (line[r.code].processed_units ?? line[r.code].confirmed_units ?? '') : ''))}"
+        style="width:68px;height:36px;text-align:center;font-size:16px;border:1px solid var(--good-ink);border-radius:10px;background:var(--bg-input);color:var(--text-primary)" title="รับจริง">` : '';
+    return `<div style="border-top:1px solid var(--border);padding:8px 0">
+      <div style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center">
+        <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(r.name)}
+          ${r.monitored ? _bmcChip('บังคับ', 'var(--amber-ink)') : ''} ${(r.via || []).length ? _bmcChip('ใช้ใน ' + r.via.slice(0, 2).join(', '), 'var(--text-muted)') : ''}</div>
+          <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} · ${detail}</div></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+          <span class="text-xs" style="color:var(--text-muted)">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b></span>
+          <input inputmode="decimal" value="${esc(v)}" ${editable ? '' : 'disabled'} oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;brnRenderOrderDeferred()"
+            style="width:68px;height:36px;text-align:center;font-size:16px;border:1px solid ${dev ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)">
+          ${recvCell}
+          <span class="text-xs" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(_brnUnitLabel(r))}</span></div></div>
+      ${dev ? reasonSel(r.code) : ''}</div>`;
+  }).join('') + extra.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0" class="text-sm">${esc(l.name || l.code)} · สั่งเพิ่มนอกแนะนำ ${_bmcNum(l.confirmed_units)} ${esc(l.order_unit === 'base' ? '' : 'แพ็ค')} ${l.reason_th ? '· ' + esc(l.reason_th) : ''}</div>`).join('');
+  document.getElementById('brnOrdList').innerHTML = html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีอะไรต้องสั่ง (ของพอ)</span>';
+  const btn = (label, on, primary) => `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
+  let acts = '';
+  if (editable) acts = btn('บันทึกร่าง', 'brnOrderSave(false)') + btn('ส่งให้ส่วนกลาง', 'brnOrderSave(true)', true) + (o ? btn('ยกเลิกออเดอร์', 'brnOrderAct("cancel")') : '');
+  else if (o.status === 'submitted') acts = btn('เปิดแก้', 'brnOrderAct("reopen")') + (_brnRecvMode ? btn('บันทึกรับของ', 'brnOrderReceive()', true) : btn('ของมาถึงแล้ว — รับของ', 'brnStartReceive()', true));
+  else if (o.status === 'processed') acts = _brnRecvMode ? btn('บันทึกรับของ', 'brnOrderReceive()', true) : btn('ของมาถึงแล้ว — รับของ', 'brnStartReceive()', true);
+  document.getElementById('brnOrdActions').innerHTML = acts;
+}
+let _brnOrdTimer = null;
+function brnRenderOrderDeferred() { clearTimeout(_brnOrdTimer); _brnOrdTimer = setTimeout(brnRenderOrder, 700); }
+
+function _brnOrdLines() {
+  return Object.entries(_brnOrdQty).map(([code, v]) => ({ code, confirmed_units: v === '' ? null : Number(v),
+    reason_code: (_brnOrdReason[code] || {}).reason_code || null, note: (_brnOrdReason[code] || {}).note || null }))
+    .filter(l => l.confirmed_units === null || !isNaN(l.confirmed_units));
+}
+async function brnOrderSave(submit) {
+  if (submit && !confirm('ส่งออเดอร์ให้ส่วนกลาง (Sales Support)? ส่งแล้วแก้ได้จนกว่าส่วนกลางจะดำเนินการ')) return;
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/order/save${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ round: _brnRound, order_day: _brnPlan.order_day, lines: _brnOrdLines(), submit }) });
+    await brnLoadOrder();
+    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งออเดอร์ #${r.order_id} แล้ว · ฿${_bmcNum(r.value, 0)}` :
+      `✓ บันทึกร่าง${r.needs_reason.length ? ` · ต้องใส่เหตุผล ${r.needs_reason.length} รายการก่อนส่ง` : ''}`, r.needs_reason.length && !submit ? 'var(--amber-ink)' : 'var(--good-ink)');
+  } catch (e) { _bmcStatus('brnOrdStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+}
+async function brnOrderAct(what) {
+  const o = _brnPlan && _brnPlan.order;
+  if (!o) return;
+  if (what === 'cancel' && !confirm('ยกเลิกออเดอร์นี้?')) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/${what}${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST' });
+    await brnLoadOrder();
+  } catch (e) { _bmcStatus('brnOrdStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+function brnStartReceive() { _brnRecvMode = true; document.getElementById('brnOrdOnly').checked = true; brnRenderOrder(); _bmcStatus('brnOrdStatus', 'ใส่จำนวนที่รับจริง (ช่องขอบเขียว) แล้วกด “บันทึกรับของ”', 'var(--text-muted)'); }
+async function brnOrderReceive() {
+  const o = _brnPlan.order;
+  const lines = o.lines.map(l => { const el = document.getElementById('brnRcv_' + l.code);
+    return { code: l.code, received_units: el ? Number(el.value || 0) : Number(l.processed_units ?? l.confirmed_units ?? 0) }; });
+  if (!confirm('บันทึกรับของตามจำนวนที่กรอก? ระบบจะลงเป็นรับเข้า (ใช้คิดผลต่าง) ให้อัตโนมัติ')) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/receive${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines }) });
+    await brnLoadOrder();
+    _bmcStatus('brnOrdStatus', '✓ รับของแล้ว — ลงรับเข้าให้แล้ว', 'var(--good-ink)');
+  } catch (e) { _bmcStatus('brnOrdStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+async function brnLoadOrderHistory() {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/orders${_brnQS() ? '?' + _brnQS() : ''}`);
+    document.getElementById('brnOrdHistory').innerHTML = d.orders.length ? d.orders.map(x => `<div style="border-top:1px solid var(--border);padding:4px 0">
+        #${x.order_id} · ${esc(x.cycle_date)} · ${esc((_BRN_ROUNDS.find(r => r[0] === x.round) || [0, x.round])[1])} · ${esc(x.status_th)} · ฿${_bmcNum(x.value, 0)}</div>`).join('') : 'ยังไม่มี';
+  } catch (e) { document.getElementById('brnOrdHistory').textContent = String(e.message || e); }
 }
