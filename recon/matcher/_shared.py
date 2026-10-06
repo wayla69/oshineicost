@@ -3,10 +3,71 @@
 Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
+import contextvars
+import copy
+import functools
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import date
 from ..seed_payment_map import normalize
+
+
+# ── Per-computation memo for the expensive matchers ───────────────────────────
+# cash / payout / card matchers each look one month back (so a credit is never
+# claimed twice across a month boundary) and are called by most views — often
+# several times in one request. Within ONE composed computation (a scope) their
+# results are shared; the key carries conn.total_changes so a write on that
+# connection (run-match) invalidates it. Nothing outlives the outermost call.
+_MEMO: contextvars.ContextVar = contextvars.ContextVar("recon_matcher_memo", default=None)
+
+
+@contextmanager
+def memo_scope():
+    if _MEMO.get() is not None:                 # nested: share the outer scope
+        yield
+        return
+    tok = _MEMO.set({})
+    try:
+        yield
+    finally:
+        _MEMO.reset(tok)
+
+
+def memo_scoped(fn):
+    """Run fn inside one memo scope (top-level views composing many matchers)."""
+    @functools.wraps(fn)
+    def wrap(*a, **kw):
+        with memo_scope():
+            return fn(*a, **kw)
+    return wrap
+
+
+def _freeze(x):
+    if isinstance(x, dict):
+        return tuple(sorted((k, _freeze(v)) for k, v in x.items()))
+    if isinstance(x, (set, frozenset)):
+        return frozenset(x)
+    if isinstance(x, (list, tuple)):
+        return tuple(_freeze(v) for v in x)
+    return x
+
+
+def memoized(fn):
+    """Cache fn(conn, …) inside the current memo scope; callers get a deep copy."""
+    @functools.wraps(fn)
+    def wrap(conn, *a, **kw):
+        with memo_scope():
+            cache = _MEMO.get()
+            try:
+                key = (fn.__name__, id(conn), conn.total_changes, _freeze(a), _freeze(kw))
+                hash(key)
+            except (AttributeError, TypeError):
+                return fn(conn, *a, **kw)
+            if key not in cache:
+                cache[key] = fn(conn, *a, **kw)
+            return copy.deepcopy(cache[key])
+    return wrap
 
 
 TOL_ABS = 100.0    # THB  — monthly tolerance

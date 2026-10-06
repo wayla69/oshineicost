@@ -4,7 +4,7 @@ Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
 import sqlite3
-from ._shared import TOL_ABS, _CATEGORY_SOURCE
+from ._shared import TOL_ABS, _CATEGORY_SOURCE, memo_scoped
 from .cash import cash_deposit_matching
 from .payout import payout_reconciliation
 from .category import category_reconciliation
@@ -35,6 +35,7 @@ def _reset_session(conn, session_id, branch_id, period_month):
         """, (branch_id, period_month))
 
 
+@memo_scoped
 def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
     """Reconcile a session and persist category results + discrepancies. Idempotent."""
     _reset_session(conn, session_id, branch_id, period_month)

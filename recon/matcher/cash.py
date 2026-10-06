@@ -15,6 +15,7 @@ from ._shared import (
     _pd,
     _provider_bank,
     _within_tol_day,
+    memoized,
     method_config,
     pos_category_totals_daily,
 )
@@ -216,6 +217,7 @@ def _prev_month_claims(conn, branch_id, period_month) -> set:
     return ids
 
 
+@memoized
 def cash_deposit_matching(conn, branch_id, period_month, max_group=None, max_lag=None,
                           _dedup_prev=True):
     """Group POS-cash days to the CASH_DEP bank credits that banked them.

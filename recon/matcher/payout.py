@@ -18,6 +18,8 @@ from ._shared import (
     _pd,
     _provider_bank,
     _within_tol,
+    memo_scoped,
+    memoized,
     method_config,
 )
 from .buckets import external_buckets
@@ -121,6 +123,7 @@ def _payout_carried_out_amounts(conn, pm, period_month) -> dict:
     return out
 
 
+@memo_scoped
 def payout_reconciliation(conn, branch_id, period_month):
     """Tie provider NET (should-remit) to the bank payout credit. Returns rows
     [{category, report_net, bank_payout, variance, status}]. status:
@@ -279,6 +282,7 @@ def _prev_payout_consumed_ids(conn, branch_id, period_month) -> dict:
     return out
 
 
+@memoized
 def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None,
                     _dedup_prev=True):
     """Per-provider: group consecutive net-days to the bank credit that pays them.

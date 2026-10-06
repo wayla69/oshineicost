@@ -19,6 +19,7 @@ from ._shared import (
     _provider_bank,
     _within_tol,
     _within_tol_day,
+    memoized,
     method_config,
     pos_category_totals,
 )
@@ -125,6 +126,7 @@ def _carried_bank_line_ids(conn, branch_id, period_month) -> set:
     return ids
 
 
+@memoized
 def credit_three_way(conn, branch_id, period_month, exclude_ids=None, _dedup=True,
                      _prev_credit=True):
     """Per-acquirer 3-document credit reconciliation. Returns

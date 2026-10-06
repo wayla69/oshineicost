@@ -6,7 +6,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, timedelta
 from ..seed_payment_map import normalize
-from ._shared import TOL_ABS_DAY, _provider_acquirer, _provider_bank
+from ._shared import TOL_ABS_DAY, _cc_acquirer, _point_mids, _provider_bank
 from .payout import _PAYOUT_CHANNEL
 
 
@@ -62,12 +62,14 @@ def lane_lines(conn, branch_id, period_month, category, bank, day=None):
 
     if category == "CREDIT":
         df, p = _df("l.settlement_date")
+        pmids = _point_mids(conn, branch_id)          # point MIDs → KTCPOINT, not this card lane
         for r in conn.execute(f"""
-            SELECT l.settlement_date d, l.batch_no ref, l.gross_amount amt, l.acquirer, u.provider
+            SELECT l.settlement_date d, l.batch_no ref, l.gross_amount amt, l.acquirer,
+                   l.merchant_id, u.provider
             FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
             WHERE l.branch_id=?{df} ORDER BY l.settlement_date
         """, [branch_id] + p):
-            acq = r["acquirer"] or _provider_acquirer(r["provider"])
+            acq = _cc_acquirer(r, pmids)
             if acq != bank:
                 continue
             out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
@@ -181,13 +183,14 @@ def lane_ext_lines(conn, branch_id, period_month, category, bank):
                 continue
             add("recon_bank_lines", r["id"], r["d"], r["ref"], r["provider"], r["amt"], r["ms"])
     elif category == "CREDIT":
+        pmids = _point_mids(conn, branch_id)          # point MIDs → KTCPOINT, not this card lane
         for r in conn.execute("""
             SELECT l.id, l.settlement_date d, l.batch_no ref, l.gross_amount amt,
-                   l.acquirer, l.match_status ms, u.provider
+                   l.acquirer, l.merchant_id, l.match_status ms, u.provider
             FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
             WHERE l.branch_id=? AND strftime('%Y-%m',l.settlement_date)=?
             ORDER BY l.settlement_date""", (branch_id, period_month)):
-            acq = r["acquirer"] or _provider_acquirer(r["provider"])
+            acq = _cc_acquirer(r, pmids)
             if acq != bank:
                 continue
             add("recon_cc_lines", r["id"], r["d"], r["ref"], acq, r["amt"], r["ms"])
