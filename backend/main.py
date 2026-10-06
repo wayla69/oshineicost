@@ -1867,6 +1867,16 @@ def _sku_cost_monthly_ensure():
 @app.on_event("startup")
 def _bom_startup():
     _bom_ensure_and_seed()
+    # BoM Calculation Center tables (backend/bom_center, docs/ADR-001): bc_* are
+    # site-owned and carried across swaps by prefix, bcd_* are derived. Creating
+    # them here means the first deploy after this lands puts them on the live DB,
+    # where the nightly fly_state backup and the swap's carry-forward see them.
+    try:
+        from bom_center import schema as _bc_schema
+        with get_db() as con:
+            _bc_schema.ensure(con, commit=True)
+    except Exception as e:
+        print(f"[bom-center] ensure failed: {e}")
     # Every file-borne cost source, in precedence order, through the SAME entry
     # point build_menu_fact uses — see cost_sources.apply_all for the order and
     # why it is what it is.
