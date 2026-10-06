@@ -310,15 +310,27 @@ def apply_mapping(con, release_id: int, ref: str, sku_code: str, who: str) -> di
 class Coster:
     """Prices recipe lines for one month. Built once per request."""
 
-    def __init__(self, con, price_month: str):
+    def __init__(self, con, price_month: str, prep_book: dict = None):
         self.con, self.month = con, price_month
         self.conv = Converter(con)
         self.loss = dict(con.execute("SELECT code, loss_pct FROM bc_ingredient"))
         self._p = {}
+        self.prep_book = prep_book or {}
+        self._prep = None
 
     def price(self, code):
+        """A prepared item with a complete sub-recipe is costed from its raw ingredients
+        (Phase 1.5); otherwise — and for everything raw — the month's price."""
         if code not in self._p:
-            self._p[code] = price_for(self.con, code, self.month)
+            p = None
+            if code in self.prep_book:
+                if self._prep is None:
+                    from .prep import PrepCoster
+                    self._prep = PrepCoster(self.con, self.month, self.prep_book, self.conv)
+                c = self._prep.cost(code)
+                if c["per_base"] is not None:
+                    p = (c["per_base"], "sub_recipe", self.month, 0)
+            self._p[code] = p or price_for(self.con, code, self.month)
         return self._p[code]
 
     def line(self, ln: dict) -> dict:
@@ -354,6 +366,14 @@ class Coster:
         return out
 
 
+def coster_for(con, release_id: int, rel: dict = None) -> Coster:
+    """The Coster a release is priced with: its price month and its sub-recipes
+    (frozen into it once released — prep.book)."""
+    from .prep import book
+    rel = rel or release_row(con, release_id)
+    return Coster(con, rel["price_month"] or rel["effective_month"], book(con, release_id))
+
+
 def recipe_lines(con, release_id: int, sku_code: str) -> list:
     cols = ("seq", "ingredient_code", "ingredient_name", "qty", "unit", "prep_note", "zero_by_design",
             "loss_pct", "line_cost")
@@ -383,7 +403,7 @@ def cost_recipe(con, release_id: int, sku_code: str, coster: "Coster" = None) ->
         total = float(flat or 0.0) if kind == "flat" else (0.0 if kind == "zero" else sum(ln["cost"] for ln in lines))
         problems = 0
     else:
-        coster = coster or Coster(con, rel["price_month"] or rel["effective_month"])
+        coster = coster or coster_for(con, release_id, rel)
         for ln in lines:
             ln.update(coster.line(ln))
         total = float(flat or 0.0) if kind == "flat" else sum(ln["cost"] for ln in lines)
@@ -395,7 +415,7 @@ def cost_recipe(con, release_id: int, sku_code: str, coster: "Coster" = None) ->
 def release_costs(con, release_id: int) -> dict:
     """{sku_code: (total, problems)} for every recipe in a release."""
     rel = release_row(con, release_id)
-    coster = None if rel["kind"] == "baseline" else Coster(con, rel["price_month"] or rel["effective_month"])
+    coster = None if rel["kind"] == "baseline" else coster_for(con, release_id, rel)
     out = {}
     for (code,) in con.execute("SELECT sku_code FROM bc_recipe WHERE release_id=?", (release_id,)).fetchall():
         c = cost_recipe(con, release_id, code, coster)

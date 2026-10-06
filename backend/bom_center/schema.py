@@ -204,6 +204,9 @@ MIGRATIONS = (
     ("bc_recipe", "source_ref", "TEXT"),          # where the recipe came from (sheet / block)
     ("bc_recipe_line", "loss_pct", "REAL"),       # line-level trim loss; NULL = the ingredient's own
     ("bc_ingredient", "order_round", "TEXT"),     # 'salmon' = the weekly pre-order round; NULL = regular
+    ("bc_prep_recipe", "source_cost", "REAL"),    # Phase 1.5: the batch cost the kitchen sheet stated
+    ("bc_prep_recipe", "source_ref", "TEXT"),     # where the sub-recipe came from (BoM_Semi row / flat file)
+    ("bc_prep_recipe", "updated_by", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -211,6 +214,18 @@ EXTRA_DDL = (
          tier TEXT NOT NULL, name_key TEXT NOT NULL,
          sku_code TEXT NOT NULL, mapped_by TEXT, mapped_at TEXT,
          PRIMARY KEY (tier, name_key))""",
+    # Phase 1.5 — the kitchen's answer to "which prepared code is this BoM_Semi row?" ('-' = not ours)
+    """CREATE TABLE IF NOT EXISTS bc_prep_name_map(
+         name_key TEXT PRIMARY KEY, prepared_code TEXT NOT NULL, mapped_by TEXT, mapped_at TEXT)""",
+    # sub-recipes frozen into a release when it is released: history never moves when the kitchen edits
+    """CREATE TABLE IF NOT EXISTS bc_rel_prep_recipe(
+         release_id INTEGER NOT NULL, prepared_code TEXT NOT NULL,
+         batch_yield_qty REAL NOT NULL, batch_unit TEXT NOT NULL,
+         PRIMARY KEY (release_id, prepared_code))""",
+    """CREATE TABLE IF NOT EXISTS bc_rel_prep_line(
+         release_id INTEGER NOT NULL, prepared_code TEXT NOT NULL, seq INTEGER NOT NULL,
+         ingredient_code TEXT NOT NULL, qty REAL NOT NULL, unit TEXT, note TEXT,
+         PRIMARY KEY (release_id, prepared_code, seq))""",
 )
 
 OWNED_TABLES = (
@@ -223,7 +238,8 @@ OWNED_TABLES = (
     "bc_stock_count", "bc_stock_count_line", "bc_order", "bc_order_line",
     "bc_audit", "bc_dish_name_map",
     "bc_sku_cost_month",          # the cut-over: released cost per SKU per month (dated.py)
-    "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
+    "bc_code_review",
+    "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
