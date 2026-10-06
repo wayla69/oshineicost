@@ -236,8 +236,10 @@ def _parse_kbank(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
             header_row = i
             for j, t in enumerate(texts):
                 if "วันที่" in t or t == "date":          col["date"] = j
-                elif "รายการถอน" in t or "debit" in t:   col["debit"] = j
-                elif "รายการฝาก" in t or "credit" in t:  col["credit"] = j
+                # also the English/short forms the generic parser always took
+                # ('Withdrawal'/'Deposit', 'ถอนเงิน'/'ฝากเงิน')
+                elif "ถอน" in t or "debit" in t or "withdraw" in t:  col["debit"] = j
+                elif "ฝาก" in t or "credit" in t or "deposit" in t:  col["credit"] = j
                 elif "ยอดคงเหลือ" in t or "balance" in t: col["balance"] = j
                 elif "รายการ" in t or "description" in t: col.setdefault("desc", j)
                 elif "เลขที่" in t or "ref" in t:        col.setdefault("ref", j)
@@ -245,6 +247,10 @@ def _parse_kbank(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
 
     if header_row is None:
         raise ValueError("KBank: could not find header row (วันที่ column missing)")
+    if "credit" not in col:
+        # a layout we don't know — let the caller fall back to the generic parser
+        # rather than save every deposit as 0.0
+        raise ValueError("KBank: header row has no deposit/credit column")
 
     results, skipped = [], 0
     for row in rows[header_row + 1 :]:
@@ -286,7 +292,7 @@ def _parse_scb(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
         "credit":  ["deposit", "ฝาก", "รายการฝาก"],
         "balance": ["balance", "ยอดคงเหลือ"],
         "ref":     ["reference", "เลขที่อ้างอิง", "ref"],
-    })
+    }, strict=True)
 
 
 # ── BBL ───────────────────────────────────────────────────────────────────────
@@ -296,11 +302,11 @@ def _parse_bbl(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
     return _parse_generic(ws, {
         "date":    ["date", "วันที่"],
         "desc":    ["description", "รายการ"],
-        "debit":   ["debit", "ถอน"],
-        "credit":  ["credit", "ฝาก"],
+        "debit":   ["debit", "ถอน", "withdrawal"],
+        "credit":  ["credit", "ฝาก", "deposit"],
         "balance": ["balance", "คงเหลือ"],
         "ref":     ["cheque no", "เช็คเลขที่", "ref"],
-    })
+    }, strict=True)
 
 
 # ── KTB ───────────────────────────────────────────────────────────────────────
@@ -323,7 +329,7 @@ def _parse_ktb(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
         "credit":  ["ถอนเงิน/ฝากเงิน", "ฝากเงิน", "ฝาก", "deposit", "credit"],
         "balance": ["ยอดคงเหลือ", "balance"],
         "ref":     ["หมายเลขเช็ค", "cheque", "ref"],
-    })
+    }, strict=True)
 
 
 # ── Generic fallback ──────────────────────────────────────────────────────────
@@ -331,7 +337,11 @@ def _parse_ktb(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
 def _parse_generic(
     ws: openpyxl.worksheet.worksheet.Worksheet,
     col_keywords: dict[str, list[str]],
+    strict: bool = False,
 ) -> list[dict]:
+    """strict (bank-specific keyword sets): no row naming date + credit is a
+    layout this parser doesn't know → ValueError, so parse_bank_statement falls
+    back to the generic keyword set instead of saving every credit as 0.0."""
     rows = list(ws.iter_rows(values_only=True))
     col: dict[str, int] = {}
     header_row = None
@@ -354,7 +364,7 @@ def _parse_generic(
             break
         if "date" in found and first_date_row is None:
             first_date_row = (i, found)
-    if header_row is None and first_date_row is not None:
+    if header_row is None and first_date_row is not None and not strict:
         header_row, col = first_date_row
 
     if header_row is None or "date" not in col:
