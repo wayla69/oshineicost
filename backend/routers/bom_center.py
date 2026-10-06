@@ -1681,7 +1681,7 @@ def bc_hub_pilot(weeks: int = Query(4)):
 async def _read_xlsx(file: UploadFile, limit_mb: int = 20) -> bytes:
     raw = await file.read()
     if not raw:
-        raise HTTPException(400, "ไฟล์ว่าง")
+        raise HTTPException(400, "ไฟล์ไม่มีข้อมูล")
     if len(raw) > limit_mb * 1024 * 1024:
         raise HTTPException(400, f"ไฟล์ใหญ่เกิน {limit_mb} MB")
     return raw
@@ -1735,10 +1735,10 @@ def bc_central_xlsx():
         d = _ce.items(con)
     wb = Workbook()
     heads = ["ลำดับ", "รหัสสินค้า", "รายละเอียด", "หน่วยนับ", "ราคาขาย", "หน่วยขาย", "1 หน่วยขาย = หน่วยฐาน",
-             "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของตัวคูณ", "เดือนราคา"]
-    _sheet(wb.active, "รายการสั่งส่วนกลาง", heads,
-           "รายการที่สาขาสั่งจากส่วนกลาง — แก้ “1 หน่วยขาย = หน่วยฐาน” ถ้าไม่ตรง แล้วนำเข้ากลับ"
-           " · ที่ไม่อยู่ในรายการนี้ = สาขาซื้อเองจากซัพท้องถิ่น")
+             "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของอัตราแปลง", "งวดราคา"]
+    _sheet(wb.active, "บัญชีสินค้าส่วนกลาง", heads,
+           "บัญชีสินค้าที่สาขาสั่งจากส่วนกลาง หากอัตราแปลงไม่ถูกต้อง ให้แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง"
+           " · สินค้าที่ไม่อยู่ในบัญชีนี้ สาขาจัดซื้อในพื้นที่")
     ws = wb.active
     for i, r in enumerate(d["items"], 1):
         ws.append([i, r["code"], r["name"], r["unit_label"], r["price_per_sale"], r["sale_unit"], r["base_per_sale"],
@@ -1781,7 +1781,7 @@ async def bc_central_deliveries(request: Request, file: UploadFile = File(...), 
     try:
         ids = [int(x) for x in branch_ids.split(",") if x.strip()] if branch_ids else None
     except ValueError:
-        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยจุลภาค")
+        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
     with get_db() as con:
         _ensure(con)
         p = _parse_central(con, raw, month)
@@ -1807,15 +1807,15 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
         name = con.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()[0]
         rows = _st.template_rows(con, bid)
     wb = Workbook()
-    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ชั้น", "ต้องนับ",
+    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ชั้น", "รายการบังคับนับ",
              "หมายเหตุ"]
-    _sheet(wb.active, "นับสต๊อก", heads,
-           f"นับสต๊อก สาขา{name} · วันที่นับ {count_date or '……'} (ของในร้านก่อนเปิดขายและก่อนรับของวันนั้น)"
-           " · ใส่จำนวนในหน่วยนับ (เปลี่ยนหน่วยได้ เช่น แพ็ค/กิโลกรัม) · ช่องว่าง = ไม่ได้นับ")
+    _sheet(wb.active, "ตรวจนับ", heads,
+           f"แบบฟอร์มตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น)"
+           " · กรอกจำนวนตามหน่วยนับ (เปลี่ยนหน่วยได้ เช่น แพ็ค/กิโลกรัม) · ช่องที่เว้นว่างถือว่าไม่ได้ตรวจนับ")
     ws = wb.active
     for r in rows:
         ws.append([r["zone"], r["code"], r["name"], r["count_unit"], None, r["per_count_unit"], r["base_unit"],
-                   r["class"], "ต้องนับ" if r["required"] else "", None])
+                   r["class"], "บังคับ" if r["required"] else "", None])
     ws.column_dimensions["C"].width = 44
     ws.freeze_panes = "A3"
     safe = re.sub(r"[^\w-]", "_", f"{bid}_{count_date or 'date'}")

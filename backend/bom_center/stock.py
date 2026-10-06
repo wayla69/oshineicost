@@ -289,7 +289,7 @@ def read_count_file(data: bytes) -> list:
     hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]
                and any(str(c or "").strip().startswith("จำนวน") for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน…”) — ใช้แม่แบบนับสต๊อกของระบบ")
+        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) กรุณาใช้แบบฟอร์มตรวจนับของระบบ")
     head = [str(c or "").strip() for c in grid[hi]]
     ci = head.index("รหัส")
     cq = next(i for i, h in enumerate(head) if h.startswith("จำนวน"))
@@ -311,7 +311,7 @@ def read_count_file(data: bytes) -> list:
         out.append({"code": code, "qty": qf, "unit": str(cell(r, cu) or "").strip(),
                     "note": str(cell(r, cn) or "").strip() or None})
     if not out:
-        raise ValueError("ไฟล์ไม่มีจำนวนที่นับ")
+        raise ValueError("ไม่พบจำนวนที่ตรวจนับในไฟล์")
     return out
 
 
@@ -322,10 +322,10 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     except (TypeError, ValueError):
         raise ValueError("วันที่นับต้องเป็น YYYY-MM-DD")
     if draft_of(con, branch_id):
-        raise ValueError("สาขานี้มีร่างนับค้างอยู่ — ส่งหรือลบร่างก่อนนำเข้า")
+        raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ กรุณาส่งหรือลบร่างก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
                    " COALESCE(status,'submitted')='submitted'", (branch_id, count_date)).fetchone():
-        raise ValueError(f"วันที่ {count_date} มีผลนับที่ส่งแล้ว — นำเข้าซ้ำไม่ได้")
+        raise ValueError(f"วันที่ {count_date} มีผลตรวจนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
     conv = Converter(con)
     known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}
     unknown = sorted({ln["code"] for ln in lines if ln["code"] not in known})
@@ -334,6 +334,6 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     out = {"branch_id": branch_id, "count_date": count_date, "lines": len(lines) - len(unknown),
            "unknown": unknown, "unconverted": bad, "dry_run": dry_run, "ok": not unknown and not bad}
     if out["ok"] and not dry_run:
-        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากไฟล์")
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ")
         out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
     return out

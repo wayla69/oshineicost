@@ -11,7 +11,7 @@
       <button class="subtab-btn" data-ohbsub="comp" onclick="ohbSetSub('comp')">ตรวจการสั่ง (Compliance)</button>
       <button class="subtab-btn" data-ohbsub="month" onclick="ohbSetSub('month')">สรุปผลต่างรายเดือน</button>
       <button class="subtab-btn" data-ohbsub="pilot" onclick="ohbSetSub('pilot')">Pilot 4 สาขา</button>
-      <button class="subtab-btn" data-ohbsub="central" onclick="ohbSetSub('central')">รายการส่วนกลาง &amp; ปิดเดือน</button>
+      <button class="subtab-btn" data-ohbsub="central" onclick="ohbSetSub('central')">สินค้าส่วนกลางและปิดงวด</button>
     </div>
   </div>
 
@@ -60,45 +60,48 @@
   <!-- ── S11: the central list, a month's deliveries, a month closed later ── -->
   <div id="ohb-pane-central" style="display:none">
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">1 · รายการสั่งส่วนกลาง</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">สาขาสั่งของจากส่วนกลางได้เฉพาะรายการนี้ ในหน่วยและราคาของส่วนกลาง (หน้า “สั่งส่วนกลาง” ของสาขา) ·
-        นอกนั้นสาขาซื้อเองจากซัพท้องถิ่น (หน้า “ซื้อเองท้องถิ่น” — ไม่ส่งส่วนกลาง) · นำเข้าจากรายงานยอดสั่งสินค้าทุกสาขาของส่วนกลาง หรือไฟล์ที่ดาวน์โหลดจากที่นี่แล้วแก้</p>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">1. บัญชีสินค้าที่สั่งจากส่วนกลาง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">สาขาสั่งสินค้าจากส่วนกลางได้เฉพาะรายการในบัญชีนี้ โดยใช้หน่วยและราคาของส่วนกลาง
+        สินค้านอกบัญชีให้สาขาจัดซื้อจากผู้จำหน่ายในพื้นที่ ข้อมูลนำเข้าจากรายงานยอดสั่งสินค้ารายเดือนของส่วนกลาง หรือจากไฟล์บัญชีที่ดาวน์โหลดและแก้ไขแล้ว</p>
       <div id="ohbCenStat" class="text-xs mt-2" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้ารายการ (.xlsx)
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าบัญชีสินค้า (.xlsx)
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbCenImport(this)"></label>
-        <a href="#" onclick="window.location.href=API+'/api/bom-center/central.xlsx';return false" style="color:var(--accent)">ดาวน์โหลดรายการ (แก้ตัวคูณหน่วยแล้วนำเข้ากลับได้)</a>
+        <a href="#" onclick="window.location.href=API+'/api/bom-center/central.xlsx';return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (.xlsx)</a>
       </div>
       <span id="ohbCenStatus" class="text-xs"></span>
       <div id="ohbCenReport" class="mt-2"></div>
     </div>
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">1b · รหัสในสูตร ↔ รหัสที่ส่วนกลางส่ง</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">สูตรบางเมนูยังเรียกของด้วยรหัสเก่า (เช่น ทูน่าซากุ 03-01-288) แต่ส่วนกลางส่งรหัสใหม่ (03-01-074) — ถ้าไม่โยง
-        ผลต่างจะเห็นว่า “รับมาแต่ไม่ได้ใช้” กับ “ใช้แต่ไม่ได้รับ” · การโยงมีผลกับยอดแนะนำสั่งและผลต่างเท่านั้น ไม่เปลี่ยนต้นทุนสูตร</p>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">2. จับคู่รหัสวัตถุดิบในสูตรกับรหัสสินค้าส่วนกลาง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">สูตรอาหารบางรายการยังใช้รหัสวัตถุดิบเดิม ขณะที่ส่วนกลางจัดส่งด้วยรหัสใหม่ (ตัวอย่าง: ทูน่าซากุ ในสูตรใช้ 03-01-288 ส่วนกลางใช้ 03-01-074)
+        หากไม่จับคู่ รายงานผลต่างจะแสดงเป็น “รับเข้าแต่ไม่มีการใช้” และ “มีการใช้แต่ไม่มีการรับเข้า”
+        การจับคู่มีผลต่อยอดแนะนำการสั่งและการคำนวณผลต่างเท่านั้น ไม่มีผลต่อต้นทุนสูตร</p>
       <span id="ohbLinkStatus" class="text-xs"></span>
       <div id="ohbLinks" class="mt-2"></div>
     </div>
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">2 · ลงรับของทั้งเดือนจากรายงานส่วนกลาง</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">ยอดส่งของแต่ละสาขาในรายงาน → ใบรับของ 1 ใบต่อสาขา ลงวันสุดท้ายของเดือน (อ้างอิง CENTRAL-ปปปป-ดด) ·
-        นำเข้าซ้ำเดือนเดิม = แทนที่ของเดิม · ใช้ตอนปิดเดือนย้อนหลัง — ถ้าสาขากดรับของในแอปทุกครั้งอยู่แล้วไม่ต้องใช้ (จะนับซ้ำ)</p>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">3. บันทึกรับสินค้าประจำเดือนจากรายงานส่วนกลาง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">ระบบสร้างใบรับสินค้าสาขาละ 1 ใบจากยอดจัดส่งในรายงาน ลงวันที่วันสุดท้ายของเดือน (เลขอ้างอิง CENTRAL-ปปปป-ดด)
+        การนำเข้าเดือนเดิมซ้ำจะแทนที่ใบรับเดิม ใช้สำหรับการปิดงวดย้อนหลังเท่านั้น
+        หากสาขาบันทึกรับสินค้าในระบบครบทุกครั้งแล้ว ไม่ต้องใช้ขั้นตอนนี้ เพื่อป้องกันการบันทึกซ้ำ</p>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">เลือกรายงาน (.xlsx)
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">เลือกไฟล์รายงาน (.xlsx)
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbDelPick(this)"></label>
       </div>
       <span id="ohbDelStatus" class="text-xs"></span>
       <div id="ohbDelReport" class="mt-2"></div>
     </div>
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">3 · นับสต๊อกจากไฟล์ (ต้นงวด / ปลายงวด)</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">ปิดเดือนย้อนหลัง: นับวันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) — ของในร้านก่อนเปิดขายและก่อนรับของวันนั้น ·
-        ดาวน์โหลดแม่แบบของสาขา → กรอกจำนวน → นำเข้า (นำเข้าวันต้นงวดก่อน) · จากนั้นยืนยัน “รับของครบ” ที่หน้าผลต่างของสาขา แล้วดู “สรุปผลต่างรายเดือน”</p>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">4. นำเข้าผลตรวจนับสินค้าคงเหลือ (ต้นงวด / ปลายงวด)</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">การปิดงวดย้อนหลังใช้ผลตรวจนับ ณ วันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) โดยนับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น
+        ขั้นตอน: ดาวน์โหลดแบบฟอร์มของสาขา กรอกจำนวน แล้วนำเข้า โดยนำเข้าผลต้นงวดก่อน
+        จากนั้นยืนยันการรับสินค้าครบถ้วนที่หน้าผลต่างของสาขา และตรวจสอบผลที่ “สรุปผลต่างรายเดือน”</p>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbCntBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
-        <label>วันที่นับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแม่แบบนับ</a>
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลนับ (.xlsx)
+        <label>วันที่ตรวจนับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแบบฟอร์มตรวจนับ</a>
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลตรวจนับ (.xlsx)
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbCntImport(this)"></label>
       </div>
       <span id="ohbCntStatus" class="text-xs"></span>

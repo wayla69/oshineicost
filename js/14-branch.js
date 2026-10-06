@@ -423,20 +423,20 @@ function _brnRenderPages(p) {
   const nLocal = (p.local_rows || []).filter(r => r.order_units > 0).length;
   const b = (k, t) => { const on = k === _brnOrdPage;
     return `<button onclick="brnSetOrdPage('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent-soft, transparent)' : 'transparent'};color:var(--text-primary);font-weight:${on ? 600 : 400}">${t}</button>`; };
-  box.innerHTML = b('central', `สั่งส่วนกลาง (${p.rows.filter(r => r.order_units > 0).length})`) + b('local', `ซื้อเองท้องถิ่น (${nLocal})`);
+  box.innerHTML = b('central', `สั่งจากส่วนกลาง (${p.rows.filter(r => r.order_units > 0).length})`) + b('local', `จัดซื้อในพื้นที่ (${nLocal})`);
 }
 function _brnRenderLocal(p) {
   const q = (document.getElementById('brnOrdQ').value || '').trim().toLowerCase();
   const only = document.getElementById('brnOrdOnly').checked;
   const rows = (p.local_rows || []).filter(r => (!only || r.order_units > 0) && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
-  document.getElementById('brnOrdList').innerHTML = `<div class="text-xs mb-1" style="color:var(--text-muted)">รายการที่ไม่อยู่ในรายการส่วนกลาง — สาขาซื้อเองจากซัพท้องถิ่น · ยอดแนะนำคิดแบบเดียวกัน (พยากรณ์ + สำรอง − คงเหลือ) · ไม่ส่งส่วนกลาง</div>` +
+  document.getElementById('brnOrdList').innerHTML = `<div class="text-xs mb-1" style="color:var(--text-muted)">สินค้านอกบัญชีส่วนกลาง สาขาจัดซื้อจากผู้จำหน่ายในพื้นที่ · ยอดแนะนำคำนวณจากพยากรณ์ + สต๊อกสำรอง − คงเหลือ · รายการนี้ไม่ส่งไปยังส่วนกลาง</div>` +
     (rows.map(r => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:baseline">
       <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(r.name)}
-        ${r.kind === 'prepared' ? _bmcChip('ของเตรียม — ยังไม่มีสูตรกึ่งสำเร็จ จึงแตกเป็นวัตถุดิบไม่ได้', 'var(--amber-ink)') : ''}</div>
+        ${r.kind === 'prepared' ? _bmcChip('ของเตรียม: ยังไม่มีสูตรกึ่งสำเร็จ จึงคำนวณเป็นวัตถุดิบไม่ได้', 'var(--amber-ink)') : ''}</div>
         <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} · ต้องใช้ ${_bmcNum(r.need, 0)} ${esc(r.base_unit || '')}${r.on_hand != null ? '' : ' (ไม่ได้นับ — ไม่หัก)'}</div></div>
       <div class="text-sm" style="margin-left:auto;color:var(--text-primary)">แนะนำ <b>${_bmcNum(r.order_units, 0)}</b> ${esc(_brnUnitLabel(r))}</div></div>`).join('')
-      || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีของที่ต้องซื้อเอง</span>');
-  document.getElementById('brnOrdActions').innerHTML = `<span class="text-xs" style="color:var(--text-muted)">หน้านี้เป็นรายการช่วยซื้อของสาขาเท่านั้น — ไม่ส่งส่วนกลาง</span>`;
+      || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องจัดซื้อเอง</span>');
+  document.getElementById('brnOrdActions').innerHTML = `<span class="text-xs" style="color:var(--text-muted)">รายการนี้ใช้ประกอบการจัดซื้อของสาขาเท่านั้น ไม่ส่งไปยังส่วนกลาง</span>`;
 }
 
 function brnRenderOrder() {
