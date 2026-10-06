@@ -5,12 +5,14 @@
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
       ศูนย์ต้นทุนวัตถุดิบที่ทุกหน้าจะเรียกใช้ · <b>ราคา</b> = ราคาซื้อจริงถัวเฉลี่ยจากบัญชีต่อเดือน (มูลค่ารวม ÷ ปริมาณ) ·
       <b>หน่วยฐาน</b> = หน่วยที่สูตรนับ (กรัม / มิลลิลิตร / ชิ้น) ระบบแปลง กิโลกรัม แพ็ค ลิตร ให้เอง ·
-      ทุกการนำเข้าแสดงผลให้ตรวจก่อนบันทึก · สูตร BoM ตาม Tier จะมาใน Sprint ถัดไป
+      <b>สูตรตาม Tier</b> = เก็บปริมาณเท่านั้น ต้นทุนคิดจากราคาเดือนที่เลือก · Tier สูงกินเมนู Tier ต่ำได้ ·
+      ทุกการนำเข้าแสดงผลให้ตรวจก่อนบันทึก
     </p>
   </div>
 
   <div class="subtab-bar mb-3">
     <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
+    <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
     <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
     <button class="subtab-btn" data-bmcsub="price" onclick="bmcSetSub('price')">ราคารายเดือน</button>
     <button class="subtab-btn" data-bmcsub="conv" onclick="bmcSetSub('conv')">แปลงหน่วย</button>
@@ -27,6 +29,48 @@
     <div id="bmcKpis" class="grid gap-3 mb-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
     <div id="bmcSetupCard" class="card p-4 mb-3"></div>
     <div id="bmcIssuesCard" class="card p-4 mb-3"></div>
+  </div>
+
+  <!-- ── recipes by tier ────────────────────────────────────────────────── -->
+  <div id="bmc-pane-rec" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">เวอร์ชันสูตร
+        <select id="bmcRel" onchange="bmcLoadRecipes()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:280px"></select>
+      </label>
+      <div id="bmcTierChips" class="flex flex-wrap gap-1"></div>
+      <input type="search" id="bmcRecQ" placeholder="ค้นหาเมนู/รหัส…" oninput="bmcRenderRecipes()"
+             style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:180px">
+      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"><input type="checkbox" id="bmcRecIssues" onchange="bmcRenderRecipes()"> เฉพาะที่ต้องตรวจ</label>
+      <span id="bmcRecSummary" class="text-xs" style="color:var(--text-muted)"></span>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mb-3 p-2 bc-write" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
+      <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
+             title="ไฟล์ COST-RW (sheet BF_459NET … BF_1,299NET) → สร้าง/อัปเดต draft บุฟเฟ่ต์ — ตรวจก่อนบันทึก">
+        นำเข้าสูตรจากไฟล์ Cost-RW
+        <input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcImportCostRw(this)">
+      </label>
+      <button onclick="bmcExportRecipes()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">โหลดสูตรเป็น Excel (sheet ต่อ Tier)</button>
+      <label style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
+             title="ไฟล์ที่โหลดจากปุ่มข้างหน้า แก้ใน Excel แล้วนำกลับ — เมนูที่อยู่ในไฟล์จะถูกแทนทั้งสูตร">
+        นำเข้า Excel ที่แก้แล้ว
+        <input type="file" accept=".xlsx" style="display:none" onchange="bmcImportFlat(this)">
+      </label>
+      <span id="bmcRecStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcRecReport" class="mb-3"></div>
+    <div id="bmcUnmatched" class="mb-3"></div>
+    <div class="card p-4 overflow-x-auto">
+      <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">รหัส POS</th>
+          <th class="py-1.5 pr-2">เสิร์ฟ</th><th class="py-1.5 pr-2 text-right">ต้นทุน/เสิร์ฟ</th>
+          <th class="py-1.5 pr-2 text-right">ในไฟล์ต้นทาง</th><th class="py-1.5 pr-2 text-right">ระบบปัจจุบัน (v0)</th>
+          <th class="py-1.5 pr-2 text-right">เทียบ v0</th><th class="py-1.5 pr-2 text-right">บรรทัด</th><th class="py-1.5">สถานะ</th>
+        </tr></thead>
+        <tbody id="bmcRecBody"></tbody>
+      </table>
+    </div>
+    <div id="bmcEditor" class="card p-4 mt-3" style="display:none"></div>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->

@@ -22,6 +22,7 @@ import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
 from bom_center import master as _m
 from bom_center import prices as _p
+from bom_center import recipes as _r
 from bom_center.schema import ensure as _ensure
 from bom_center.units import Converter
 
@@ -563,3 +564,206 @@ def bc_price_carry(request: Request, month: str = Query(...)):
         con.commit()
     invalidate_cache("bc_")
     return {"ok": True, "month": month, "carried_forward": n}
+
+
+# ── M3 recipes by tier (Sprint S2) ───────────────────────────────────────────
+def _next_month(m: str) -> str:
+    y, mo = int(m[:4]), int(m[5:7])
+    return f"{y + (mo == 12):04d}-{1 if mo == 12 else mo + 1:02d}"
+
+
+@router.get("/api/bom-center/releases")
+def bc_releases():
+    with get_db() as con:
+        _ensure(con)
+        rows = con.execute("SELECT release_id, label, kind, effective_month, status, scope, price_month, created_by,"
+                           " created_at, released_by, released_at, acknowledged_by, acknowledged_at,"
+                           " (SELECT COUNT(*) FROM bc_recipe r WHERE r.release_id=b.release_id),"
+                           " (SELECT COUNT(*) FROM bc_release_check c WHERE c.release_id=b.release_id"
+                           "   AND c.check_code='unmatched')"
+                           " FROM bc_release b ORDER BY (kind='baseline'), effective_month DESC, release_id DESC").fetchall()
+        priced = [r[0] for r in con.execute("SELECT DISTINCT month FROM bc_ingredient_price ORDER BY month DESC")]
+    cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
+            "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched")
+    return {"releases": [dict(zip(cols, r)) for r in rows], "price_months": priced,
+            "suggest": {"effective_month": _next_month(_this_month()), "price_month": priced[0] if priced else None}}
+
+
+@router.get("/api/bom-center/recipes")
+def bc_recipes(release_id: int = Query(...), tier: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        if not _r.release_row(con, release_id):
+            raise HTTPException(404, "ไม่พบ release")
+        return _r.tier_view(con, release_id, tier)
+
+
+@router.get("/api/bom-center/recipes-export.xlsx")
+def bc_recipes_export(release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        rel = _r.release_row(con, release_id)
+        if not rel:
+            raise HTTPException(404, "ไม่พบ release")
+        wb = _r.export_flat(con, release_id)
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", rel["label"])
+    return _xlsx(wb, f"BOM_RECIPES_{safe}.xlsx")
+
+
+@router.get("/api/bom-center/buffet-skus")
+def bc_buffet_skus(release_id: Optional[int] = Query(None)):
+    """Buffet POS codes for the mapping picker — those without a recipe in the release first."""
+    with get_db() as con:
+        _ensure(con)
+        have = {c for (c,) in con.execute("SELECT sku_code FROM bc_recipe WHERE release_id=?", (release_id or -1,))}
+        tier = dict(con.execute("SELECT s.sku_code, t.tier FROM sku_tier t JOIN skus s USING(sku_id)")) \
+            if con.execute("SELECT 1 FROM sqlite_master WHERE name='sku_tier'").fetchone() else {}
+        rows = [{"sku_code": c, "name": d, "tier": tier.get(c), "has_recipe": c in have}
+                for c, d in con.execute("SELECT sku_code, description FROM skus WHERE sku_code LIKE 'OTHBF%'"
+                                        " ORDER BY sku_code")]
+    rows.sort(key=lambda r: (r["has_recipe"], r["sku_code"]))
+    return {"rows": rows}
+
+
+@router.get("/api/bom-center/recipes/{sku_code}")
+def bc_recipe_detail(sku_code: str, release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        rel = _r.release_row(con, release_id)
+        if not rel:
+            raise HTTPException(404, "ไม่พบ release")
+        out = _r.cost_recipe(con, release_id, sku_code)
+        names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
+        for ln in out["lines"]:
+            ln["master_name"] = names.get(ln.get("ingredient_code"))
+        d = con.execute("SELECT d.name_th, d.name_en, d.min_tier, ds.serve_unit FROM bc_dish_sku ds"
+                        " JOIN bc_dish d USING(dish_id) WHERE ds.sku_code=?", (sku_code,)).fetchone()
+        pos = con.execute("SELECT description FROM skus WHERE sku_code=?", (sku_code,)).fetchone()
+    out.update(release=rel, dish=dict(zip(("name_th", "name_en", "min_tier", "serve"), d)) if d else None,
+               pos_name=pos[0] if pos else None)
+    return out
+
+
+class RecipeLine(BaseModel):
+    ingredient_code: Optional[str] = None
+    ingredient_name: Optional[str] = None
+    qty: float = 0
+    unit: Optional[str] = None
+    loss_pct: Optional[float] = None
+    zero_by_design: Optional[bool] = False
+    prep_note: Optional[str] = None
+
+
+def _write(con, fn):
+    """Run a write on the shared per-thread connection: commit, or roll back on any error."""
+    try:
+        out = fn()
+        con.commit()
+        return out
+    except ValueError as e:
+        con.rollback()
+        raise HTTPException(400, str(e))
+    except Exception:
+        con.rollback()
+        raise
+
+
+@router.put("/api/bom-center/recipes/{sku_code}", dependencies=[Depends(require_write_token)])
+def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _r.save_lines(con, release_id, sku_code, [ln.dict() for ln in lines], _who(request)))
+        out = _r.cost_recipe(con, release_id, sku_code)
+    invalidate_cache("bc_")
+    return {"ok": True, "total": out["total"], "problems": out["problems"]}
+
+
+@router.post("/api/bom-center/recipes/import-cost-rw", dependencies=[Depends(require_write_token)])
+async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
+                                    label: Optional[str] = Query(None), effective_month: Optional[str] = Query(None),
+                                    price_month: Optional[str] = Query(None)):
+    """The Cost-RW workbook's BF_<tier>NET sheets -> a buffet draft release."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    if len(raw) > 120 * 1024 * 1024:
+        raise HTTPException(400, "ไฟล์ใหญ่เกิน 120 MB")
+    eff = effective_month or _next_month(_this_month())
+    _month_or_400(eff)
+    try:
+        parsed = _r.parse_cost_rw(raw)
+    except Exception as e:
+        raise HTTPException(400, f"อ่านไฟล์ไม่ได้: {e}")
+    if not parsed["blocks"]:
+        raise HTTPException(400, "ไม่พบ sheet สูตรบุฟเฟ่ต์ (BF_<tier>NET…) ในไฟล์นี้")
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        pm = price_month
+        if not pm:
+            r = con.execute("SELECT MAX(month) FROM bc_ingredient_price WHERE source IN ('purchase_avg','manual')").fetchone()
+            pm = r[0] if r and r[0] else con.execute("SELECT MAX(month) FROM bc_ingredient_price").fetchone()[0]
+        if not pm:
+            raise HTTPException(400, "ยังไม่มีราคาวัตถุดิบในระบบ — นำเข้าทะเบียน/DATAP หรือราคาซื้อจริงก่อน")
+        _month_or_400(pm)
+        lbl = label or f"{eff} บุฟเฟ่ต์ (draft)"
+        try:
+            rid = _r.get_or_create_draft(con, lbl, eff, pm, who)
+            stats = _r.import_cost_rw(con, parsed, rid, who)
+            view = _r.tier_view(con, rid)
+            if dry_run:
+                con.rollback()
+            else:
+                con.commit()
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    return {"dry_run": dry_run, "release_id": None if dry_run else rid, "label": lbl, "effective_month": eff,
+            "price_month": pm, "sheets": parsed["sheets"], "skipped": parsed["skipped"], **stats,
+            "costed": len(view["rows"]), "with_problems": view["problems"], "sheet_mismatch": view["sheet_mismatch"],
+            "mismatch_rows": [r for r in view["rows"] if r["sheet_diff"] is not None
+                              and abs(r["sheet_diff"]) > 0.01][:60]}
+
+
+class MapBody(BaseModel):
+    release_id: int
+    ref: str
+    sku_code: str
+
+
+@router.post("/api/bom-center/recipes/map", dependencies=[Depends(require_write_token)])
+def bc_recipes_map(body: MapBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _r.apply_mapping(con, body.release_id, body.ref, body.sku_code.strip(),
+                                                    _who(request)))
+    invalidate_cache("bc_")
+    return {"ok": True, **out}
+
+
+@router.post("/api/bom-center/recipes/import-flat", dependencies=[Depends(require_write_token)])
+async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...), release_id: int = Query(...),
+                                 dry_run: bool = Query(True)):
+    raw = await file.read()
+    with get_db() as con:
+        _ensure(con)
+        try:
+            out = _r.import_flat(con, raw, release_id, _who(request))
+            if dry_run:
+                con.rollback()
+            else:
+                con.commit()
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    return {"dry_run": dry_run, **out}
