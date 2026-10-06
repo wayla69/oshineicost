@@ -29,6 +29,22 @@ import sqlite3
 router = APIRouter()
 
 
+# Text a spreadsheet would read as a formula (OWASP CSV/formula injection). Notes and
+# reasons are typed by staff and reach the Auditor Pack, so a cell starting with one
+# of these is forced to plain text (quote-prefixed) — strings only, numbers untouched.
+_XL_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _xl_append(ws, row):
+    """ws.append(row), then neutralise any str cell that would act as a formula."""
+    ws.append(row)
+    for c in ws[ws.max_row]:
+        v = c.value
+        if isinstance(v, str) and v.startswith(_XL_FORMULA_LEAD):
+            c.data_type = "s"
+            c.quotePrefix = True
+
+
 def _branch_error_report(conn, period_month: str | None = None) -> dict:
     from collections import defaultdict
     q = ("SELECT branch_id, period_month, category, note, created_by, created_at "
@@ -98,14 +114,14 @@ def branch_error_report_xlsx(period_month: str | None = None):
     for c in ws[1]:
         c.font = bold
     for s in rep["summary"]:
-        ws.append([s["branch_name"], s["count"], s["months"], s["total_abs_variance"]])
+        _xl_append(ws, [s["branch_name"], s["count"], s["months"], s["total_abs_variance"]])
     ws2 = wb.create_sheet("รายการ")
     ws2.append(["สาขา", "เดือน", "ช่องทาง", "ผลต่าง", "เหตุผล", "รับทราบโดย", "เมื่อ"])
     for c in ws2[1]:
         c.font = bold
     for it in rep["items"]:
-        ws2.append([it["branch_name"], it["period_month"], it["category"],
-                    it["variance"], it["reason"], it["by"], it["at"]])
+        _xl_append(ws2, [it["branch_name"], it["period_month"], it["category"],
+                         it["variance"], it["reason"], it["by"], it["at"]])
     for w in (ws, ws2):
         for i, _h in enumerate(w[1], 1):
             w.column_dimensions[chr(64 + i)].width = 22
@@ -457,9 +473,9 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
             cc.font = bold
         _st_th = {"open": "ค้าง", "acknowledged": "รับทราบแล้ว", "resolved": "แก้ไขแล้ว"}
         for e in all_err["errors"]:
-            wse.append([e["branch_name"], e["type_th"], e["channel_th"] or "—", e["detail"],
-                        e["amount"], _st_th.get(e["status"], e["status"]),
-                        e["reason"], e["by"]])
+            _xl_append(wse, [e["branch_name"], e["type_th"], e["channel_th"] or "—", e["detail"],
+                             e["amount"], _st_th.get(e["status"], e["status"]),
+                             e["reason"], e["by"]])
         for col, w in zip("ABCDEFGH", (20, 22, 18, 34, 14, 14, 38, 14)):
             wse.column_dimensions[col].width = w
         ws = wb.create_sheet("บันทึกผิดช่อง — สรุปรายสาขา")
@@ -469,7 +485,7 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
     for c in ws[1]:
         c.font = bold
     for s in rep["summary"]:
-        ws.append([s["branch_name"], s["count"], s["months"], s["total"]])
+        _xl_append(ws, [s["branch_name"], s["count"], s["months"], s["total"]])
     ws2 = wb.create_sheet("รายการ")
     ws2.append(["สาขา", "เดือน", "วันที่", "บันทึกผิดเป็น", "ที่จริงเข้า", "ยอด (บาท)",
                 "เหตุผล / หมายเหตุ", "ยืนยันโดย", "เมื่อ"])
@@ -477,9 +493,9 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
         c.font = bold
     for it in rep["items"]:
         to_th = it["to_th"] + (f" ({it['to_bank_th']})" if it["to_bank_th"] else "")
-        ws2.append([it["branch_name"], it["period_month"], ", ".join(it["days"]),
-                    it["from_th"], to_th, it["amount"], it["reason"], it["by"],
-                    (it["at"] or "")[:16]])
+        _xl_append(ws2, [it["branch_name"], it["period_month"], ", ".join(str(d) for d in it["days"]),
+                         it["from_th"], to_th, it["amount"], it["reason"], it["by"],
+                         (it["at"] or "")[:16]])
     ws.column_dimensions["A"].width = 22
     for col, w in zip("ABCDEFGHI", (22, 10, 22, 16, 18, 14, 40, 16, 18)):
         ws2.column_dimensions[col].width = w
@@ -621,7 +637,7 @@ def wrong_channel_report_print(period_month: str | None = None,
                      "<th>เหตุผล / หมายเหตุ</th><th>ยืนยันโดย</th></tr></thead><tbody>")
         for r in rows:
             to_th = _esc(r["to_th"]) + (f" ({_esc(r['to_bank_th'])})" if r["to_bank_th"] else "")
-            days = ", ".join(d[8:].lstrip("0") for d in r["days"]) or "—"
+            days = ", ".join(_esc(str(d)[8:].lstrip("0")) for d in r["days"]) or "—"
             parts.append(
                 f"<tr><td>{days}</td><td>{_esc(r['from_th'])}</td>"
                 f"<td><span class='arr'>→</span> {to_th}</td>"
@@ -1718,7 +1734,7 @@ def _xlsx_response(sheets, fname):
         for c in ws[1]:
             c.font = bold
         for row in body:
-            ws.append(row)
+            _xl_append(ws, row)
         for i in range(1, len(headers) + 1):
             ws.column_dimensions[chr(64 + i)].width = 22
     buf = io.BytesIO()
