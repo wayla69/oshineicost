@@ -105,6 +105,9 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     from .prep import book
     has_sub = set(book(con))
     codes = {c for c, m in master.items() if m[6] and m[9] and c not in has_sub} | set(per_day)
+    # S11: everything the centre supplies sits on a shelf too (tableware and uniforms aside)
+    from .central import NON_FOOD, central_map
+    codes |= {c for c in central_map(con) if c in master and not c.startswith(NON_FOOD)}
     prev = {}
     lc = last_submitted(con, branch_id)
     if lc:
@@ -266,3 +269,71 @@ def set_layout(con, rows: list, who: str) -> int:
         audit(con, who, "stock_layout", "bc_ingredient", code, None, {"zone": z, "count_unit": cu})
         n += 1
     return n
+
+
+# ── S11: a count from a spreadsheet (a month closed after the fact) ──────────
+def template_rows(con, branch_id: int) -> list:
+    """The branch's count list as rows for the count template."""
+    sh = sheet(con, branch_id)
+    return [{"zone": z["label"], "code": it["code"], "name": it["name"], "count_unit": it["count_unit"],
+             "per_count_unit": it["per_count_unit"], "base_unit": it["base_unit"], "class": it["class"],
+             "required": it["required"]} for z in sh["zones"] for it in z["items"]]
+
+
+def read_count_file(data: bytes) -> list:
+    """[{code, qty, unit, note}] from the count template (or any sheet with รหัส + จำนวน columns)."""
+    import io
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    grid = [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+    hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]
+               and any(str(c or "").strip().startswith("จำนวน") for c in r)), None)
+    if hi is None:
+        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน…”) — ใช้แม่แบบนับสต๊อกของระบบ")
+    head = [str(c or "").strip() for c in grid[hi]]
+    ci = head.index("รหัส")
+    cq = next(i for i, h in enumerate(head) if h.startswith("จำนวน"))
+    cu = next((i for i, h in enumerate(head) if h.startswith("หน่วยนับ")), None)
+    cn = next((i for i, h in enumerate(head) if h.startswith("หมายเหตุ")), None)
+
+    def cell(r, i):
+        return r[i] if i is not None and i < len(r) else None
+    out = []
+    for r in grid[hi + 1:]:
+        code = str(cell(r, ci) or "").strip()
+        q = cell(r, cq)
+        if not code or q is None or str(q).strip() == "":
+            continue
+        try:
+            qf = float(str(q).replace(",", ""))
+        except ValueError:
+            raise ValueError(f"{code}: จำนวน “{q}” ไม่ใช่ตัวเลข")
+        out.append({"code": code, "qty": qf, "unit": str(cell(r, cu) or "").strip(),
+                    "note": str(cell(r, cn) or "").strip() or None})
+    if not out:
+        raise ValueError("ไฟล์ไม่มีจำนวนที่นับ")
+    return out
+
+
+def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dry_run: bool = True) -> dict:
+    """Save a whole count from a file and submit it, dated the day it was counted."""
+    try:
+        date.fromisoformat(count_date)
+    except (TypeError, ValueError):
+        raise ValueError("วันที่นับต้องเป็น YYYY-MM-DD")
+    if draft_of(con, branch_id):
+        raise ValueError("สาขานี้มีร่างนับค้างอยู่ — ส่งหรือลบร่างก่อนนำเข้า")
+    if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
+                   " COALESCE(status,'submitted')='submitted'", (branch_id, count_date)).fetchone():
+        raise ValueError(f"วันที่ {count_date} มีผลนับที่ส่งแล้ว — นำเข้าซ้ำไม่ได้")
+    conv = Converter(con)
+    known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}
+    unknown = sorted({ln["code"] for ln in lines if ln["code"] not in known})
+    bad = [f"{ln['code']}: แปลง {ln['unit'] or '-'} ไม่ได้" for ln in lines if ln["code"] in known
+           and conv.to_base(ln["code"], ln["qty"], ln["unit"] or conv.base_unit(ln["code"]))[0] is None]
+    out = {"branch_id": branch_id, "count_date": count_date, "lines": len(lines) - len(unknown),
+           "unknown": unknown, "unconverted": bad, "dry_run": dry_run, "ok": not unknown and not bad}
+    if out["ok"] and not dry_run:
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากไฟล์")
+        out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
+    return out

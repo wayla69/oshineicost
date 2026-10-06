@@ -102,6 +102,8 @@ def _per_dish(con, month: str) -> tuple:
     # planning reads the kitchen's CURRENT sub-recipes (costs read the ones frozen into a release)
     from .prep import book as _prep_book, explode
     pbook, emem, via = _prep_book(con), {}, {}
+    from .central import links as _links
+    link = _links(con)                                    # S11: a recipe's older code -> the code the centre sends
 
     def add(sid, code, qty, unit, line_loss=None, zero=False):
         if zero or not code or not qty:
@@ -119,13 +121,14 @@ def _per_dish(con, month: str) -> tuple:
             if raw:
                 stats["exploded_lines"] += 1
                 for rc, per in raw.items():
+                    rc = link.get(rc, rc)
                     rl = min(loss.get(rc) or 0.0, 99.0)
                     out.setdefault(sid, []).append((rc, q * per / (1.0 - rl / 100.0)))
                     via.setdefault(rc, set()).add(code)
                 if gaps:                                  # part of the sub-recipe cannot be counted
                     bad.setdefault(sid, []).append((code, unit, "สูตรย่อยไม่ครบ: " + ", ".join(map(str, gaps[:3]))))
                 return
-        out.setdefault(sid, []).append((code, q))
+        out.setdefault(sid, []).append((link.get(code, code), q))
 
     rid = release_in_force(con, month)
     covered = set()
@@ -155,6 +158,7 @@ def _per_dish(con, month: str) -> tuple:
         seen.add(sid)
         add(sid, remap.get(((ic or "").strip(), name), ic), qty, unit)
     stats["remapped_codes"] = len(remap)
+    stats["linked_codes"] = len(link)
     stats["legacy_skus"] = len(seen)
     stats["_bad"] = bad
     stats["via"] = {k: sorted(v) for k, v in via.items()}  # raw code -> the prepared items it came through
@@ -250,6 +254,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     salmon = {r[0] for r in con.execute("SELECT code FROM bc_ingredient WHERE order_round='salmon'")} \
         if has_round_col else set()
     salmon = salmon or set(SALMON_DEFAULT)
+    from .central import central_map
+    cmap = central_map(con)                               # S11: the centre's list decides what is ordered from it
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
     # the days between the stock figure and the first covered day still eat into it
     basis = ((stock or {}).get("basis") or {}).get("date")
@@ -290,7 +296,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         p = price_for(con, code, month)
         ppb = p[0] if p else None
         rows.append({"code": code, "name": name or code, "base_unit": base, "class": k, "kind": kind,
-                     "monitored": bool(mon), "sourcing": src or "central",
+                     "monitored": bool(mon),
+                     "sourcing": ("central" if code in cmap else "local") if cmap else (src or "central"),
                      "per_day": round(fc / len(cover), 3) if cover else 0, "forecast": round(fc, 2),
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
                      "on_hand": None if oh is None else round(oh, 2), "on_order": round(onord, 2),
