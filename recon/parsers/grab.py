@@ -11,7 +11,7 @@ Expected Excel columns (may vary by report version):
 
 from __future__ import annotations
 import io
-from .bank import _to_float, _parse_thai_date, _blank
+from .bank import _to_float, _parse_thai_date, _blank, _cell
 import openpyxl
 
 
@@ -49,8 +49,10 @@ def parse_grab_report(file_bytes: bytes) -> tuple[list[dict], int]:
             if any(k in t for k in _STATUS_COLS):  col.setdefault("status", j)
             if any(k in t for k in _TYPE_COLS):    col.setdefault("order_type", j)
             if any(k in t for k in _FOOD_COLS):    col.setdefault("food", j)
+            # 'อัตราค่าคอมมิชชั่น' (rate) contains 'ค่าคอมมิชชั่น' (amount): a
+            # rate column is never the commission amount.
             if any(k in t for k in _COMM_RATE):    col.setdefault("comm_rate", j)
-            if any(k in t for k in _COMM_AMT):     col.setdefault("comm_amt", j)
+            elif any(k in t for k in _COMM_AMT):   col.setdefault("comm_amt", j)
             if any(k in t for k in _PROMO_COLS):   col.setdefault("promo", j)
             if any(k in t for k in _NET_COLS):     col.setdefault("net", j)
             if any(k in t for k in _PAYOUT_COLS):  col.setdefault("payout_date", j)
@@ -71,12 +73,13 @@ def parse_grab_report(file_bytes: bytes) -> tuple[list[dict], int]:
                 skipped += 1
             continue
 
-        food_amt = _to_float(row[col.get("food", 0)])
-        comm_amt = _to_float(row[col.get("comm_amt", 0)])
-        promo    = _to_float(row[col.get("promo", 0)])
-        net      = _to_float(row[col.get("net", 0)]) if "net" in col else food_amt - comm_amt - promo
+        # A column the header lacks reads as empty — never as column 0.
+        food_amt = _to_float(_cell(row, col, "food"))
+        comm_amt = _to_float(_cell(row, col, "comm_amt"))
+        promo    = _to_float(_cell(row, col, "promo"))
+        net      = _to_float(_cell(row, col, "net")) if "net" in col else food_amt - comm_amt - promo
 
-        status_raw = str(row[col.get("status", 0)] or "").strip().lower()
+        status_raw = str(_cell(row, col, "status") or "").strip().lower()
         if "cancel" in status_raw or "ยกเลิก" in status_raw:
             order_status = "Cancelled"
         elif "refund" in status_raw or "คืน" in status_raw:
@@ -86,16 +89,16 @@ def parse_grab_report(file_bytes: bytes) -> tuple[list[dict], int]:
 
         results.append({
             "order_date":      order_date,
-            "order_id":        str(row[col.get("order_id", 0)] or "").strip(),
-            "merchant_name":   str(row[col.get("merchant", 0)] or "").strip(),
-            "order_type":      str(row[col.get("order_type", 0)] or "GrabFood").strip(),
+            "order_id":        str(_cell(row, col, "order_id") or "").strip(),
+            "merchant_name":   str(_cell(row, col, "merchant") or "").strip(),
+            "order_type":      str(_cell(row, col, "order_type") or "GrabFood").strip(),
             "order_status":    order_status,
             "food_amount":     food_amt,
-            "commission_rate": _to_float(row[col.get("comm_rate", 0)]),
+            "commission_rate": _to_float(_cell(row, col, "comm_rate")),
             "commission_amt":  comm_amt,
             "promo_deduct":    promo,
             "net_payout":      net,
-            "payout_date":     _parse_thai_date(row[col.get("payout_date", 0)]),
+            "payout_date":     _parse_thai_date(_cell(row, col, "payout_date")),
         })
 
     return results, skipped
