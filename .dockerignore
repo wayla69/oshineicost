@@ -48,3 +48,6 @@ backend/dbchunks/
 **/*.db.*
 **/*.db.gz
 backend/.seed_token.txt
+
+# recon login secrets backup — never ship into the image (recon/LOGIN_ROLLOUT.md)
+backend/.recon_login*.txt
