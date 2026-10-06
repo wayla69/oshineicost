@@ -291,7 +291,12 @@ def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
     cat_pairs = Counter((it["from_cat"], it["to_cat"]) for it in scope)
 
     cur = len(scope)
-    prev = trend[-2]["count"] if len(trend) >= 2 and trend[-1]["month"] == period_month else None
+    # baseline = the previous CALENDAR month (0 when it had none), not the last month
+    # that happened to have errors (that skipped a clean month and read worse as better)
+    prev = None
+    if period_month:
+        pm_prev = _ic_prev_month(period_month, 1)
+        prev = by_m[pm_prev]["count"] if pm_prev in by_m else 0
     if prev is None:
         direction = "flat"
     elif cur < prev:
