@@ -26,6 +26,7 @@ from bom_center import prep as _pr
 from bom_center import prices as _p
 from bom_center import recipes as _r
 from bom_center import release as _rl
+from bom_center import stock as _st
 from bom_center.schema import ensure as _ensure
 from bom_center.units import Converter
 
@@ -1191,3 +1192,115 @@ async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dr
             con.commit()
     invalidate_cache("bc_")
     return out
+
+
+# ── Phase 2 · S6: branch stock counts (stock.py) ────────────────────────────
+def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
+    """The branch a call works on. A branch login (its account carries a branch) is
+    pinned to it — asking for another branch is refused; the centre must name one."""
+    scoped = _auth.scope_branch(request)
+    if scoped:
+        r = con.execute("SELECT branch_id FROM branches WHERE name=?", (scoped,)).fetchone()
+        if not r:
+            raise HTTPException(403, "บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ — แจ้งผู้ดูแล")
+        if branch_id is not None and int(branch_id) != int(r[0]):
+            raise HTTPException(403, "บัญชีสาขาเข้าถึงได้เฉพาะสาขาของตัวเอง")
+        return int(r[0])
+    if branch_id is None:
+        raise HTTPException(400, "เลือกสาขา")
+    if not con.execute("SELECT 1 FROM branches WHERE branch_id=?", (branch_id,)).fetchone():
+        raise HTTPException(404, "ไม่พบสาขา")
+    return int(branch_id)
+
+
+@router.get("/api/bom-center/stock/me")
+def bc_stock_me(request: Request):
+    """Who is counting: a branch login gets its branch; the centre gets the branch list."""
+    with get_db() as con:
+        _ensure(con)
+        scoped = _auth.scope_branch(request)
+        rows = con.execute("SELECT branch_id, name FROM branches WHERE name <> 'ALL'"
+                           " AND COALESCE(active, 1) = 1 ORDER BY name").fetchall() \
+            if "active" in {r[1] for r in con.execute("PRAGMA table_info(branches)")} else \
+            con.execute("SELECT branch_id, name FROM branches WHERE name <> 'ALL' ORDER BY name").fetchall()
+        branches = [{"branch_id": r[0], "name": r[1]} for r in rows]
+        if scoped:
+            branches = [b for b in branches if b["name"] == scoped]
+        return {"scoped": bool(scoped), "branch": scoped, "branches": branches,
+                "zones": [{"zone": z, "label": t} for z, t in _st.ZONES]}
+
+
+@router.get("/api/bom-center/stock/sheet")
+def bc_stock_sheet(request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return _st.sheet(con, bid)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+class StockLine(BaseModel):
+    code: str
+    qty: Optional[float] = None
+    unit: Optional[str] = None
+    note: Optional[str] = None
+
+
+class StockBody(BaseModel):
+    lines: List[StockLine] = []
+    submit: bool = False
+    count_date: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/stock/count", dependencies=[Depends(require_write_token)])
+def bc_stock_save(body: StockBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _write(con, lambda: _st.save(con, bid, [ln.dict() for ln in body.lines], _who(request),
+                                            submit=body.submit, count_date=body.count_date, note=body.note))
+
+
+@router.delete("/api/bom-center/stock/draft", dependencies=[Depends(require_write_token)])
+def bc_stock_discard(request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"discarded": _write(con, lambda: _st.discard_draft(con, bid, _who(request)))}
+
+
+@router.get("/api/bom-center/stock/counts")
+def bc_stock_counts(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"branch_id": bid, "counts": _st.history(con, bid, max(1, min(limit, 200)))}
+
+
+@router.get("/api/bom-center/stock/count/{count_id}")
+def bc_stock_count_detail(count_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            d = _st.detail(con, count_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        _stock_branch(con, request, d["branch_id"])      # a branch login reads only its own counts
+        return d
+
+
+class LayoutRow(BaseModel):
+    code: str
+    zone: Optional[str] = None
+    count_unit: Optional[str] = None
+
+
+@router.post("/api/bom-center/stock/layout", dependencies=[Depends(require_write_token)])
+def bc_stock_layout(rows: List[LayoutRow], request: Request):
+    with get_db() as con:
+        _ensure(con)
+        n = _write(con, lambda: _st.set_layout(con, [r.dict() for r in rows], _who(request)))
+    return {"ok": True, "updated": n}

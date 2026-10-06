@@ -38,6 +38,7 @@ from typing import Optional, Dict, List, Set
 ROLES: List[str] = [
     "management", "marketing", "operation", "analyst", "accounting", "innovation",
     "salessupport",
+    "branch",              # one account per branch (owner §10-5) — sees only its own branch's pages
 ]
 
 MODULES: List[str] = [
@@ -62,6 +63,7 @@ MODULES: List[str] = [
     "bom.center",          # BoM Center: ทะเบียนวัตถุดิบ, หน่วย, ราคารายเดือน (แก้ไข/นำเข้า)
     "bom.release",         # BoM Center: ปล่อยเวอร์ชันสูตร (analyst — owner 2026-10-06)
     "bom.audit",           # BoM Center: ตรวจ/รับทราบเวอร์ชันที่ปล่อยแล้ว และย้อนกลับ (management)
+    "branch.stock",        # สาขาของฉัน: นับสต๊อก (Phase 2) — a branch account works on its own branch only
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -101,6 +103,12 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
         # sheet shows ingredient ฿ vs sales per branch, nothing chain-wide on cost.
         "sales.overview", "supply.ordering", "report.export",
+    },
+    "branch": {
+        # A branch login (owner §10-5: one account per branch). Its own branch only —
+        # the account's `branch` scopes every /api/bom-center/stock call. No
+        # sales.overview: a role without it is DENY-by-default (path_allowed).
+        "branch.stock",
     },
 }
 
@@ -190,6 +198,8 @@ PUBLIC_PREFIXES = (
     "/api/search",
     "/api/analysis/health",
 )
+# what a role WITHOUT sales.overview may still reach when no rule names the path
+OPEN_TO_ALL = PUBLIC_PREFIXES + ("/api/usage/",)
 
 # Rules: (methods, path_prefix, {modules}). `methods` is "*", "GET", or "W"
 # (write = POST/PUT/DELETE/PATCH). A request is allowed when the user's modules
@@ -264,6 +274,10 @@ MODULE_RULES = [
     # the order calendar is the sales team's to fill (owner §10-7); Sales Support runs suggestions
     ("W",   "/api/bom-center/order-calendar",          {"supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/forecast",                {"supply.ordering", "bom.center"}),
+    # Phase 2: a branch counts its own stock; the centre reads every branch's and sets zones/units
+    ("GET", "/api/bom-center/stock",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
+    ("W",   "/api/bom-center/stock",                   {"branch.stock", "bom.center"}),
+    ("W",   "/api/bom-center/stock/layout",            {"bom.center", "supply.ordering"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),
@@ -302,7 +316,9 @@ def path_allowed(method: str, path: str, user_modules: Set[str]) -> bool:
     matched = [(len(pfx), mods) for (meths, pfx, mods) in MODULE_RULES
                if path.startswith(pfx) and _method_matches(meths, method)]
     if not matched:
-        return True
+        # default-allow rests on every central role holding sales.overview; a role
+        # without it (the branch login) reaches only the public scaffolding
+        return "sales.overview" in user_modules or path.startswith(OPEN_TO_ALL)
     longest = max(length for length, _ in matched)
     allowed = set().union(*[mods for length, mods in matched if length == longest])
     return bool(allowed & user_modules)
@@ -590,6 +606,8 @@ def create_user(con: sqlite3.Connection, username: str, password: str, role: str
     branch = (branch or "").strip() or None
     if branch and not branch_exists(con, branch):
         raise ValueError("ไม่พบสาขานี้")
+    if role == "branch" and not branch:
+        raise ValueError("บัญชีสาขาต้องเลือกสาขา")
     h = hash_password(password)
     con.execute(
         "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change, branch) VALUES (?,?,?,?,1,?)",
@@ -622,6 +640,11 @@ def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] =
         sets.append("active = ?"); vals.append(1 if active else 0)
     if not sets:
         return
+    cur = get_user(con, username)
+    final_role = role if role is not None else (cur["role"] if cur else None)
+    final_branch = (b if branch is not UNSET else (cur["branch"] if cur else None))
+    if final_role == "branch" and not final_branch:
+        raise ValueError("บัญชีสาขาต้องเลือกสาขา")
     vals.append(username)
     con.execute(f"UPDATE app_user SET {', '.join(sets)} WHERE username = ?", vals)
     con.commit()

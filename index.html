@@ -1353,6 +1353,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body:not(.force-desktop) .app-layout { display: none; }
   body:not(.force-desktop) #mobileSummary { display: block; }
   body.force-desktop #backToMobile { display: flex; }
+  body.no-mobile-app #backToMobile { display: none; }
 }
 #mobileSummary { min-height: 100vh; background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
 .ms-header { position: sticky; top: 0; z-index: 20; background: var(--accent);
@@ -1943,6 +1944,10 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">BoM Center &amp; จัดซื้อ</span>
   </div>
+  <div class="nav-item" id="nav-branchstock" onclick="switchTab('branchstock')" title="สาขาของฉัน · นับสต๊อกทีละโซน (แช่แข็ง/แช่เย็น/ของแห้ง/บาร์น้ำ) — นับปลายงวดครั้งนี้ = ต้นงวดครั้งหน้าอัตโนมัติ">
+    <svg class="nav-icon" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
+    <span class="nav-label">สาขาของฉัน</span>
+  </div>
   <div class="nav-item" id="nav-ordering" style="display:none" onclick="switchTab('ordering')" title="จัดซื้อ · แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">จัดซื้อ</span>
@@ -2225,5 +2230,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <script src="/js/11-feedback.js"></script>
 <script src="/js/12-checklist.js"></script>
 <script src="/js/13-bom-center.js"></script>
+<script src="/js/14-branch.js"></script>
 </body>
 </html>
