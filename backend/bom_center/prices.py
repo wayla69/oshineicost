@@ -38,11 +38,20 @@ def month_diff(a: str, b: str) -> int:
 
 def price_for(con, code: str, month: str):
     """(price_per_base, source, priced_month, age_months) in force for `month`:
-    that month's row, else the latest earlier one. None when never priced."""
+    that month's row, else the latest earlier one. An item with NO price up to
+    `month` falls back to the earliest LATER supplier quote (list_ref) — the DATAP
+    sheet is dated 23-07-2569, so without this an item never bought in June had no
+    June price at all; a later actual purchase never reaches back (age < 0 marks it).
+    None when never priced."""
     r = con.execute("SELECT price_per_base, source, month, price_age_months FROM bc_ingredient_price"
                     " WHERE ingredient_code=? AND month<=? ORDER BY month DESC LIMIT 1", (code, month)).fetchone()
     if not r:
-        return None
+        r = con.execute("SELECT price_per_base, source, month, price_age_months FROM bc_ingredient_price"
+                        " WHERE ingredient_code=? AND month>? AND source='list_ref' ORDER BY month LIMIT 1",
+                        (code, month)).fetchone()
+        if not r:
+            return None
+        return float(r[0]), r[1], r[2], month_diff(r[2], month)
     age = (r[3] or 0) + month_diff(r[2], month)
     return float(r[0]), r[1], r[2], age
 
