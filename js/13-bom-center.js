@@ -50,13 +50,14 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   document.querySelectorAll('#tab-bomcenter [data-bmcsub]').forEach(b => b.classList.toggle('active', b.dataset.bmcsub === k));
-  ['overview', 'rec', 'rel', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'rel', 'fc', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
   if (k === 'overview') bmcLoadOverview();
   if (k === 'rec') bmcLoadReleases();
   if (k === 'rel') bmcLoadReleasePane();
+  if (k === 'fc') bmcLoadForecastPane();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
   if (k === 'conv') bmcLoadConv();
@@ -932,4 +933,137 @@ async function bmcLoadRelHistory() {
         ${h.key && h.key !== String(_bmcRlRel.release_id) ? ' · ' + esc(String(h.key).split('|').slice(1).join(' ')) : ''}</div>`).join('')
         || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีประวัติ</div>');
   } catch (e) { /* history is a nicety */ }
+}
+
+// ── forecast: suggested order per round (Sprint S4b) ────────────────────────
+// Sales Support (supply.ordering) runs it and fills the order calendar; the
+// numbers are expected use + safety stock, NOT yet net of what is in the fridge
+// (branches start counting stock in Phase 2) — the page says so every time.
+let _bmcFc = null;
+let _bmcCal = null;
+const _BMC_WD = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'];
+function _bmcFcCanWrite() { return hasModule('supply.ordering') || hasModule('bom.center') || hasModule('bom.edit'); }
+
+async function bmcLoadForecastPane() {
+  document.querySelectorAll('#tab-bomcenter .bmc-fc-write').forEach(el => { el.style.display = _bmcFcCanWrite() ? '' : 'none'; });
+  const day = document.getElementById('bmcFcDay');
+  if (!day.value) day.value = new Date().toISOString().slice(0, 10);
+  await bmcLoadCalendar();
+  const sel = document.getElementById('bmcFcBranch');
+  if (!sel.options.length && _bmcCal) {
+    sel.innerHTML = _bmcCal.rows.map(r => `<option value="${r.branch_id}">${esc(r.branch)}</option>`).join('');
+  }
+  bmcLoadRuns();
+}
+async function bmcRunForecast() {
+  const bid = document.getElementById('bmcFcBranch').value;
+  if (!bid) return;
+  const rnd = document.getElementById('bmcFcRound').value, day = document.getElementById('bmcFcDay').value;
+  const season = document.getElementById('bmcFcSeason').checked ? 'auto' : 'off';
+  _bmcStatus('bmcFcStatus', 'กำลังคำนวณ…');
+  try {
+    _bmcFc = await _bmcJson(`${API}/api/bom-center/forecast?branch_id=${bid}&round=${rnd}&order_day=${day}&season=${season}`);
+    bmcRenderForecast();
+    _bmcStatus('bmcFcStatus', '');
+  } catch (e) { _bmcStatus('bmcFcStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+function bmcRenderForecast() {
+  const f = _bmcFc;
+  const kInk = { A: 'var(--bad-ink)', B: 'var(--amber-ink)', C: 'var(--text-muted)' };
+  const fmtQ = (v, u) => v == null ? '—' : (u === 'กรัม' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' กก.' : u === 'มิลลิลิตร' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' ลิตร' : _bmcNum(v, 1) + ' ' + (u || ''));
+  document.getElementById('bmcFcHead').innerHTML = `<div class="card p-4">
+    <div class="flex flex-wrap gap-4 items-baseline">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.branch)} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round}</div>
+      <div class="text-xs" style="color:var(--text-secondary)">สั่ง <b>${f.order_weekday} ${esc(f.order_day)}</b> → ของถึง <b>${esc(f.delivery)}</b> → ต้องพอใช้ <b>${esc(f.cover_from)} ถึง ${esc(f.cover_to)}</b> (${f.cover_days} วัน)</div>
+      <div class="ml-auto text-right"><div class="text-[11px]" style="color:var(--text-muted)">มูลค่าแนะนำ</div><div class="text-lg font-bold" style="color:var(--text-primary)">฿${_bmcNum(f.value_total, 0)}</div></div>
+    </div>
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ใช้ยอดขาย ${esc(f.history_from)} ถึง ${esc(f.history_to)} (${f.trading_days} วันที่ขาย · เฉพาะช่วงเมนูใหม่) ·
+      สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ปล่อยแล้ว (${f.stats.release_skus} เมนู) + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ ·
+      เทศกาล ×${(f.season?.factor || 1).toFixed(2)}${f.season?.reason ? ' (' + esc(f.season.reason) + ')' : ''}
+      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบสั่งของสาขานี้ — ใช้ค่าเริ่มต้น</b>'}</div>
+    <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
+      ยอดแนะนำ = คาดการณ์การใช้ + สต๊อกกันขาด <b>ยังไม่หักของที่มีอยู่ในสาขา</b> (สาขาเริ่มนับสต๊อกใน Phase 2) — ใช้เป็นตัวตั้ง ไม่ใช่ใบสั่งซื้อสำเร็จรูป</div>
+    ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรที่ยังนับไม่ได้ (หน่วยแปลงไม่ได้) ในเมนูที่สาขานี้ขาย — แก้ที่แท็บ แปลงหน่วย</summary>
+      <div class="text-[11px] mt-1" style="color:var(--text-secondary)">${f.stats.missed.map(m => `${esc(m.code)} (${esc(m.unit)}) · ${_bmcNum(m.plates, 0)} จาน · ${esc(m.why)}`).join('<br>')}</div></details>` : ''}
+  </div>`;
+  const box = document.getElementById('bmcFcTable');
+  box.style.display = '';
+  box.innerHTML = `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="pr-2">รหัส</th><th class="pr-2">วัตถุดิบ</th><th class="pr-2">ชั้น</th><th class="pr-2 text-right">ใช้/วัน</th>
+      <th class="pr-2 text-right">ต้องใช้ทั้งรอบ</th><th class="pr-2 text-right">กันขาด</th><th class="pr-2 text-right">แนะนำสั่ง</th>
+      <th class="pr-2 text-right">มูลค่า</th><th class="pr-2 text-right">แนวโน้ม</th><th></th></tr></thead>
+    <tbody>${f.rows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
+      <td class="pr-2 py-1 whitespace-nowrap">${esc(r.code)}</td><td class="pr-2">${esc(r.name || '')}</td>
+      <td class="pr-2">${_bmcChip(r.class, kInk[r.class])}</td>
+      <td class="pr-2 text-right">${fmtQ(r.per_day, r.base_unit)}</td><td class="pr-2 text-right">${fmtQ(r.forecast, r.base_unit)}</td>
+      <td class="pr-2 text-right">${fmtQ(r.safety, r.base_unit)}</td>
+      <td class="pr-2 text-right font-semibold">${r.suggested_units != null ? `${_bmcNum(r.suggested_units, 0)} ${esc(r.recv_unit || '')}` : fmtQ(r.need, r.base_unit) + ' ' + _bmcChip('ไม่รู้ขนาดแพ็ค', 'var(--amber-ink)')}</td>
+      <td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
+      <td class="pr-2 text-right" style="color:${r.trend > 1.05 ? 'var(--amber-ink)' : r.trend < 0.95 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.trend > 1 ? '+' : ''}${Math.round((r.trend - 1) * 100)}%</td>
+      <td>${r.monitored ? _bmcChip('บังคับสั่ง', 'var(--navy-ink)') : ''} ${r.sourcing === 'local' ? _bmcChip('สาขาซื้อเอง', 'var(--text-muted)') : ''}</td></tr>`).join('')
+      || '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ไม่มีวัตถุดิบในรอบนี้</td></tr>'}</tbody></table>`;
+}
+async function bmcSaveForecast() {
+  const bid = Number(document.getElementById('bmcFcBranch').value);
+  const body = { branch_id: bid, round: document.getElementById('bmcFcRound').value, order_day: document.getElementById('bmcFcDay').value,
+    season: document.getElementById('bmcFcSeason').checked ? 'auto' : 'off' };
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/forecast/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    _bmcStatus('bmcFcStatus', `✓ บันทึกรอบสั่ง #${d.run_id} · ${d.lines} รายการ · ฿${_bmcNum(d.value_total, 0)}`, 'var(--good-ink)');
+    bmcLoadRuns();
+  } catch (e) { _bmcStatus('bmcFcStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcBacktest() {
+  const bid = document.getElementById('bmcFcBranch').value;
+  _bmcStatus('bmcFcStatus', 'กำลังย้อนทดสอบ…');
+  try {
+    const b = await _bmcJson(`${API}/api/bom-center/forecast/backtest?branch_id=${bid}&weeks=3`);
+    const c = b.mape_by_class || {};
+    _bmcStatus('bmcFcStatus', b.available ? `ย้อนทดสอบ 3 สัปดาห์ (ถึง ${b.as_of}) — คลาดเคลื่อนรายสัปดาห์: A ${c.A ?? '—'}% · B ${c.B ?? '—'}% · C ${c.C ?? '—'}% (เป้า A ≤ ${b.target_a}%)` : 'ข้อมูลไม่พอ',
+      c.A != null && c.A <= b.target_a ? 'var(--good-ink)' : 'var(--amber-ink)');
+  } catch (e) { _bmcStatus('bmcFcStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcLoadCalendar() {
+  try { _bmcCal = await _bmcJson(`${API}/api/bom-center/order-calendar`); } catch (e) { return; }
+  const w = _bmcFcCanWrite();
+  const sel = (bid, rnd, field, val, opts) => w
+    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="${field}" onchange="this.style.background='var(--accent-soft)'" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
+        ${opts.map(o => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${_BMC_WD[o]}</option>`).join('')}</select>`
+    : _BMC_WD[val];
+  const lead = (bid, rnd, val) => w ? `<input data-bid="${bid}" data-rnd="${rnd}" data-f="lead_days" type="number" min="0" max="14" value="${val ?? ''}" onchange="this.style.background='var(--accent-soft)'"
+        style="width:46px;border:1px solid var(--border);border-radius:4px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)">` : (val ?? '');
+  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบสั่งของแต่ละสาขา</div>
+      ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบสั่ง</button>` : ''}</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ฝ่ายขายเติมต่อสาขา: รอบ 1 สั่งวันอังคารหรือพุธ · รอบ 2 สั่งวันศุกร์หรือเสาร์ · แซลมอนสดสั่งสัปดาห์ละครั้งล่วงหน้า (ส่งถึง = วันสั่ง + ระยะส่ง)</div>
+    <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1</th><th class="pr-2">ระยะส่ง (วัน)</th><th class="pr-2">รอบ 2</th><th class="pr-2">ระยะส่ง</th>
+      <th class="pr-2">แซลมอนสด</th><th class="pr-2">ระยะส่ง</th><th>ตั้งโดย</th></tr></thead>
+    <tbody>${_bmcCal.rows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
+      <td class="pr-2">${sel(r.branch_id, '1', 'order_weekday', r.r1.order_weekday, [2, 3])}</td><td class="pr-2">${lead(r.branch_id, '1', r.r1.lead_days)}</td>
+      <td class="pr-2">${sel(r.branch_id, '2', 'order_weekday', r.r2.order_weekday, [5, 6])}</td><td class="pr-2">${lead(r.branch_id, '2', r.r2.lead_days)}</td>
+      <td class="pr-2">${sel(r.branch_id, 'salmon', 'order_weekday', r.rsalmon.order_weekday, [0, 1, 2, 3, 4, 5, 6])}</td><td class="pr-2">${lead(r.branch_id, 'salmon', r.rsalmon.lead_days)}</td>
+      <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '') : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function bmcSaveCalendar() {
+  const rows = {};
+  document.querySelectorAll('#bmcFcCal [data-bid]').forEach(el => {
+    const k = el.dataset.bid + '|' + el.dataset.rnd;
+    rows[k] = rows[k] || { branch_id: Number(el.dataset.bid), round: el.dataset.rnd };
+    rows[k][el.dataset.f] = el.value === '' ? null : Number(el.value);
+  });
+  try {
+    await _bmcJson(`${API}/api/bom-center/order-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.values(rows)) });
+    _bmcStatus('bmcFcStatus', '✓ บันทึกรอบสั่งแล้ว', 'var(--good-ink)');
+    bmcLoadCalendar();
+  } catch (e) { _bmcStatus('bmcFcStatus', 'บันทึกไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcLoadRuns() {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/forecast/runs?limit=20`);
+    document.getElementById('bmcFcRuns').innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รอบสั่งที่บันทึกไว้</div>` +
+      (d.rows.map(r => `<div class="text-[11.5px] py-0.5 border-b" style="border-color:var(--border-soft);color:var(--text-secondary)">#${r.run_id} · ${esc(r.branch || '')} ·
+        ${r.round === 'salmon' ? 'แซลมอน' : 'รอบ ' + r.round} · สั่ง ${esc(r.order_day)} · ใช้ ${esc(r.cover_from)}–${esc(r.cover_to)} · ${r.lines} รายการ · ฿${_bmcNum(r.value, 0)} ·
+        ${esc(r.created_by || '-')} ${esc(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</div>`).join('')
+        || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มี</div>');
+  } catch (e) { /* list is a nicety */ }
 }

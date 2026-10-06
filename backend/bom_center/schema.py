@@ -203,6 +203,7 @@ MIGRATIONS = (
     ("bc_recipe", "source_cost", "REAL"),         # the cost the source sheet stated (tie-out)
     ("bc_recipe", "source_ref", "TEXT"),          # where the recipe came from (sheet / block)
     ("bc_recipe_line", "loss_pct", "REAL"),       # line-level trim loss; NULL = the ingredient's own
+    ("bc_ingredient", "order_round", "TEXT"),     # 'salmon' = the weekly pre-order round; NULL = regular
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

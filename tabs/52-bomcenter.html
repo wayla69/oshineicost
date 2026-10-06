@@ -14,6 +14,7 @@
     <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
     <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
     <button class="subtab-btn" data-bmcsub="rel" onclick="bmcSetSub('rel')">ตรวจ &amp; ปล่อย</button>
+    <button class="subtab-btn" data-bmcsub="fc" onclick="bmcSetSub('fc')">แนะนำยอดสั่ง</button>
     <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
     <button class="subtab-btn" data-bmcsub="price" onclick="bmcSetSub('price')">ราคารายเดือน</button>
     <button class="subtab-btn" data-bmcsub="conv" onclick="bmcSetSub('conv')">แปลงหน่วย</button>
@@ -86,6 +87,29 @@
     <div id="bmcRlChecks" class="card p-4 mb-3"></div>
     <div id="bmcRlCompare" class="card p-4 mb-3"></div>
     <div id="bmcRlHistory" class="card p-4 mb-3"></div>
+  </div>
+
+  <!-- ── forecast: suggested order per round ───────────────────────────── -->
+  <div id="bmc-pane-fc" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
+        <select id="bmcFcBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+      <label class="text-xs" style="color:var(--text-muted)">รอบ<br>
+        <select id="bmcFcRound" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+          <option value="1">รอบ 1 (อังคาร/พุธ)</option><option value="2">รอบ 2 (ศุกร์/เสาร์)</option><option value="salmon">แซลมอนสด (สั่งล่วงหน้า 1 สัปดาห์)</option></select></label>
+      <label class="text-xs" style="color:var(--text-muted)">วันที่จะสั่ง<br>
+        <input type="date" id="bmcFcDay" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"><input type="checkbox" id="bmcFcSeason" checked> ปรับตามเทศกาล/ปีก่อน</label>
+      <button onclick="bmcRunForecast()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">คำนวณยอดแนะนำ</button>
+      <button onclick="bmcSaveForecast()" class="bmc-fc-write" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer"
+              title="เก็บตัวเลขนี้ไว้เป็นรอบสั่ง — หน้าสั่งของของสาขา (Phase 2) และรายงาน compliance เทียบกับตัวเลขที่เก็บไว้">บันทึกเป็นรอบสั่ง</button>
+      <button onclick="bmcBacktest()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ความแม่นยำย้อนหลัง</button>
+      <span id="bmcFcStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcFcHead" class="mb-3"></div>
+    <div id="bmcFcTable" class="card p-4 mb-3 overflow-x-auto" style="display:none"></div>
+    <div id="bmcFcCal" class="card p-4 mb-3"></div>
+    <div id="bmcFcRuns" class="card p-4 mb-3"></div>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
