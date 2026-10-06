@@ -24,6 +24,8 @@ from ..matcher import lane_lines
 from ..matcher import lane_pos_days
 from ..matcher import map_bank_suggestions
 from ..matcher import payout_matching
+from ..matcher import payout_reconciliation
+from ..matcher._shared import _CATEGORY_SOURCE
 from ..matcher import pos_codes_scope
 from ..matcher import pos_lane_lines
 from ..matcher import suggest_reclassifications
@@ -432,6 +434,82 @@ def lane_adj_delete(adj_id: int, request: Request):
         conn.commit()
     return {"deleted": adj_id}
 
+
+
+# ── Payout gaps on the branch page (owner 2026-10-06) ─────────────────────────
+# Provider NET ↔ bank payout credit mismatches are acknowledged from the branch
+# page. The acknowledgement IS the PAYOUT discrepancy row, born 'accepted' at the
+# live variance — run-match then leaves it alone (same variance) and approval
+# isn't blocked; if the gap moves later it is queued again.
+class PayoutAck(BaseModel):
+    branch_id:    int
+    period_month: str
+    category:     str
+    note:         str | None = None
+    created_by:   str | None = None
+
+
+@router.post("/api/payout-ack", dependencies=[Depends(require_write_token)])
+def payout_ack(body: PayoutAck, request: Request):
+    _validate_period(body.period_month)
+    note = (body.note or "").strip()
+    if len(note) < 10:
+        raise HTTPException(400, "การรับทราบยอดโอนต้องระบุเหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
+    actor = _actor(request, body.created_by)
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.period_month)
+        ses = conn.execute("SELECT session_id FROM recon_sessions WHERE branch_id=? AND period_month=?",
+                           (body.branch_id, body.period_month)).fetchone()
+        if not ses:
+            raise HTTPException(409, "ยังไม่มีงวดของสาขานี้ — เปิดหน้าสาขาแล้วลองใหม่")
+        row = next((r for r in payout_reconciliation(conn, body.branch_id, body.period_month)
+                    if r["category"] == body.category), None)
+        if not row or row["status"] != "mismatch":
+            raise HTTPException(409, "ยอดโอนของช่องทางนี้ไม่ได้ต่างจากรายงานแล้ว — โหลดหน้าใหม่")
+        sid = ses["session_id"]
+        conn.execute("DELETE FROM recon_discrepancies WHERE session_id=? AND category=? "
+                     "AND bank='PAYOUT' AND disc_type='amount_mismatch' AND resolution='pending'",
+                     (sid, body.category))
+        cur = conn.execute("""
+            INSERT INTO recon_discrepancies
+                (session_id, disc_type, source_type, category, bank,
+                 amount_external, amount_pos, variance,
+                 resolution, resolution_note, resolved_by, resolved_at)
+            VALUES (?,?,?,?,?,?,?,?,'accepted',?,?,datetime('now'))
+        """, (sid, "amount_mismatch", _CATEGORY_SOURCE.get(body.category, "bank"), body.category,
+              "PAYOUT", row["bank_payout"], row["report_net"], row["variance"],
+              f"รับทราบ: {note}", actor or "staff"))
+        _audit(conn, "discrepancy", cur.lastrowid, "create", actor or "staff", [
+            {"field": "payout_accept", "old": None,
+             "new": f"{body.category} net {float(row['report_net'] or 0):.2f} / "
+                    f"bank {float(row['bank_payout'] or 0):.2f} ({float(row['variance'] or 0):+.2f})"},
+            {"field": "branch_id", "old": None, "new": body.branch_id},
+            {"field": "period_month", "old": None, "new": body.period_month},
+            {"field": "note", "old": None, "new": note}])
+        conn.commit()
+    return {"id": cur.lastrowid, "variance": row["variance"]}
+
+
+@router.delete("/api/payout-ack/{disc_id}", dependencies=[Depends(require_write_token)])
+def payout_ack_delete(disc_id: int, request: Request):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT d.*, s.branch_id, s.period_month FROM recon_discrepancies d "
+            "JOIN recon_sessions s ON s.session_id=d.session_id "
+            "WHERE d.id=? AND d.bank='PAYOUT' AND d.resolution!='pending'", (disc_id,)).fetchone()
+        if not row:
+            raise HTTPException(404)
+        _assert_period_open(conn, row["branch_id"], row["period_month"])
+        conn.execute("DELETE FROM recon_discrepancies WHERE id=?", (disc_id,))
+        _audit(conn, "discrepancy", disc_id, "delete", _actor(request), [
+            {"field": "payout_accept", "new": None,
+             "old": f"{row['category']} ({float(row['variance'] or 0):+.2f})"},
+            {"field": "branch_id", "old": row["branch_id"], "new": None},
+            {"field": "period_month", "old": row["period_month"], "new": None},
+            {"field": "note", "old": row["resolution_note"], "new": None}])
+        conn.commit()
+    return {"deleted": disc_id}
 
 _MOVE_CHANNELS = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"}
 
