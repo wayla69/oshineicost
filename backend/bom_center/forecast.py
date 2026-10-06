@@ -126,7 +126,7 @@ def _per_dish(con, month: str) -> tuple:
                     out.setdefault(sid, []).append((rc, q * per / (1.0 - rl / 100.0)))
                     via.setdefault(rc, set()).add(code)
                 if gaps:                                  # part of the sub-recipe cannot be counted
-                    bad.setdefault(sid, []).append((code, unit, "สูตรย่อยไม่ครบ: " + ", ".join(map(str, gaps[:3]))))
+                    bad.setdefault(sid, []).append((code, unit, "สูตรย่อยไม่สมบูรณ์: " + ", ".join(map(str, gaps[:3]))))
                 return
         out.setdefault(sid, []).append((link.get(code, code), q))
 

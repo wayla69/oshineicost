@@ -105,7 +105,7 @@ def test_order_pages_central_and_local(udon):
     assert crab["order_unit"] == "pack" and crab["qty_per_recv"] == 10000.0
     s = OR.plan(udon, 1, "salmon", date(2026, 10, 6), as_of=date(2026, 10, 5))
     assert s["rows"] == [] and [r["code"] for r in s["local_rows"]] == ["02-01-001"]   # salmon: bought locally
-    with pytest.raises(ValueError, match="ไม่อยู่ในรายการสั่งส่วนกลาง"):
+    with pytest.raises(ValueError, match="ไม่อยู่ในบัญชีสินค้าส่วนกลาง"):
         OR.save(udon, 1, "1", p["order_day"], p, [{"code": "02-01-001", "confirmed_units": 1,
                                                     "reason_code": "event"}], "udon")
 
@@ -156,7 +156,7 @@ def test_deliveries_then_counts_close_the_month(udon):
     with pytest.raises(ValueError, match="นับปิดแล้ว"):                          # the month is closed now
         VA.delete_receipt(udon, 1, rec[0]["receipt_id"], "ss")
     again = CE.deliveries(udon, p, "ss", dry_run=True)
-    assert "แทนที่ไม่ได้" in {x["code"]: x for x in again["branches"]}["C1001"]["error"]
+    assert "แทนที่ใบรับไม่ได้" in {x["code"]: x for x in again["branches"]}["C1001"]["error"]
 
 
 def test_a_recipes_older_code_is_counted_as_the_one_delivered(udon):
@@ -173,7 +173,7 @@ def test_a_recipes_older_code_is_counted_as_the_one_delivered(udon):
     assert [r["code"] for r in after["rows"]] == ["13-01-777"]                    # ordered from the centre now
     assert after["rows"][0]["forecast"] == pytest.approx(before["local_rows"][0]["forecast"])
     assert CE.link_view(udon)["links"][0]["new_code"] == "13-01-777"
-    with pytest.raises(ValueError, match="เป็นทอด"):
+    with pytest.raises(ValueError, match="ต่อเนื่อง"):
         CE.set_link(udon, "02-01-001", "13-01-009", "ss")
     with pytest.raises(ValueError, match="รหัสเดียวกัน"):
         CE.set_link(udon, "02-01-001", "02-01-001", "ss")

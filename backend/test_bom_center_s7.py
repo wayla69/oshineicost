@@ -81,7 +81,7 @@ def test_reasons_and_confirmation(db):
     VA.confirm_receipts(db, 1, e, "udon")
     p = VA.period(db, 1)
     crab = _rows(p)["13-01-009"]
-    assert crab["reason"] == "overportion" and crab["reason_th"] == "ตักเกินสูตร" and not crab["needs_reason"]
+    assert crab["reason"] == "overportion" and crab["reason_th"] == "เสิร์ฟเกินปริมาณตามสูตร" and not crab["needs_reason"]
     assert p["complete"] and p["receipts_confirmed_by"] == "udon" and p["needs_reason"] == 0
     VA.confirm_receipts(db, 1, e, "udon", undo=True)
     assert not VA.period(db, 1)["complete"]

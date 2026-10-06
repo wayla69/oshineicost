@@ -122,8 +122,8 @@ class Converter:
         if not base:
             return None, "ทะเบียนยังไม่ระบุหน่วยฐาน"
         if per is None and _is_pack_word(u):
-            return None, f"ยังไม่ระบุว่า 1 {u} = กี่ {base}"
-        return None, f"แปลง {u} เป็น {base} ไม่ได้ — เพิ่มกฎหน่วย"
+            return None, f"ยังไม่ระบุว่า 1 {u} เท่ากับกี่ {base}"
+        return None, f"แปลง {u} เป็น {base} ไม่ได้ กรุณาเพิ่มกฎหน่วย"
 
     def to_base(self, code: str, qty, unit) -> tuple:
         """-> (qty_in_base or None, how)."""

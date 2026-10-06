@@ -284,7 +284,7 @@ def add_from_purchase(con, code: str, name: str, unit: str, who: str) -> str:
         base = u or None
     stats = {"inserted": 0, "updated": 0, "unchanged": 0}
     _upsert(con, code, {"name_th": (str(name).strip() if name else None), "base_unit": base,
-                        "note": f"เพิ่มจากรายงานบัญชี (ซื้อเป็น {unit}) — ตรวจหน่วยฐานและขนาดบรรจุ"}, who, False, stats)
+                        "note": f"เพิ่มจากรายงานบัญชี (ซื้อเป็น {unit}) กรุณาตรวจสอบหน่วยฐานและขนาดบรรจุ"}, who, False, stats)
     if stats["inserted"]:
         audit(con, who, "add_from_purchase", "bc_ingredient", code, None, base)
     return base

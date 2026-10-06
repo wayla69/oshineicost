@@ -123,7 +123,7 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
     grid = [list(r) for r in ws.iter_rows(values_only=True)]
     hi = next((i for i, r in enumerate(grid[:15]) if any(str(c or "").strip() == "รหัสสินค้า" for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” — ใช้รายงานยอดสั่งสินค้าทุกสาขาของส่วนกลาง")
+        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” กรุณาใช้รายงานยอดสั่งสินค้าทุกสาขาของส่วนกลาง")
     head = [str(c or "").strip() for c in grid[hi]]
 
     def col(*names):
@@ -214,21 +214,21 @@ def _factor(conv, master: dict, it) -> tuple:
     Order: a factor written in the file > the inner unit by an exact route (base /
     unit rule / kg->g) > a pack size written in the name > the master's own pack."""
     if it.get("factor_given"):
-        return float(it["factor_given"]), "ใส่เองในไฟล์", None
+        return float(it["factor_given"]), "ระบุในไฟล์", None
     n = it["inner_qty"] or 1.0
     inner = INNER_TH.get(it["inner"] or "", it["inner"] or "")
     m = master.get(it["code"])
     base, recv, per = m if m else (None, None, None)
     if not base:                                          # a new code, or one the master has no base for
         if norm(inner) == "กิโลกรัม":
-            return n * 1000.0, f"{n:g} กก. = {n * 1000:g} กรัม (ตั้งหน่วยฐานเป็นกรัม)", "กรัม"
+            return n * 1000.0, f"{n:g} กก. = {n * 1000:g} กรัม (กำหนดหน่วยฐานเป็นกรัม)", "กรัม"
         hint = name_hint(it["name"], "กรัม")
         if hint.get(it["inner"]):
             f = n * hint[it["inner"]]
-            return f, f"{n:g} × {inner} {hint[it['inner']]:g} กรัม (จากชื่อสินค้า — ตั้งหน่วยฐานเป็นกรัม)", "กรัม"
+            return f, f"{n:g} × {inner} {hint[it['inner']]:g} กรัม (จากชื่อสินค้า กำหนดหน่วยฐานเป็นกรัม)", "กรัม"
         if m is not None and per:
             return None, "ทะเบียนยังไม่ระบุหน่วยฐาน", None
-        return n, f"{n:g} {inner} (ตั้ง{inner}เป็นหน่วยฐาน)", inner or None
+        return n, f"{n:g} {inner} (กำหนด{inner}เป็นหน่วยฐาน)", inner or None
     u = norm(inner)
     # the inner unit through the exact routes only — a generic pack word must NOT
     # fall back to the master's pack, which for a boxed item is the whole box
@@ -248,9 +248,9 @@ def _factor(conv, master: dict, it) -> tuple:
     if hint.get("กล") and it["outer"] == "กล":
         return hint["กล"], f"กล่องละ {hint['กล']:g} {base} (จากชื่อสินค้า)", None
     if per:                                               # the master's own pack, which a person should glance at
-        warn = f" — ตรวจ: 1 {sale_th(it)} มี {n:g} {inner}" if n != 1 else ""
+        warn = f" (ควรตรวจสอบ: 1 {sale_th(it)} บรรจุ {n:g} {inner})" if n != 1 else ""
         return float(per), f"จากทะเบียน: 1 {recv or 'แพ็ค'} = {per:g} {base}{warn}", None
-    return None, f"ยังไม่รู้ว่า 1 {sale_th(it)} = กี่ {base}", None
+    return None, f"ยังไม่ระบุว่า 1 {sale_th(it)} เท่ากับกี่{base}", None
 
 
 def plan_catalogue(con, parsed: dict) -> dict:
@@ -261,7 +261,7 @@ def plan_catalogue(con, parsed: dict) -> dict:
     rows = []
     for it in parsed["items"]:
         if it["code"].startswith(NOT_GOODS):
-            rows.append({**_brief(it), "status": "skip", "factor_how": "ไม่ใช่สินค้า (ค่าส่ง/รายได้อื่น)"})
+            rows.append({**_brief(it), "status": "skip", "factor_how": "ไม่ใช่สินค้า (ค่าขนส่ง/รายได้อื่น)"})
             continue
         f, how, new_base = _factor(conv, master, it)
         m = master.get(it["code"])
@@ -317,7 +317,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True) 
             if not con.execute("SELECT 1 FROM bc_unit_rule WHERE ingredient_code=? AND unit='แพ็ค'",
                                (r["code"],)).fetchone():
                 con.execute("INSERT INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label) VALUES(?,?,?,?)",
-                            (r["code"], "แพ็ค", f / r["inner_qty"], f"1/{r['inner_qty']:g} ของ {r['recv_label']} (รายการส่วนกลาง)"))
+                            (r["code"], "แพ็ค", f / r["inner_qty"], f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีส่วนกลาง)"))
         con.execute("INSERT INTO bc_central_item(code, name, unit_label, sale_unit, inner_qty, inner_unit, base_per_sale,"
                     " factor_how, price_per_sale, price_month, active, source_ref, updated_at, updated_by)"
                     " VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,"
@@ -378,10 +378,10 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
     from .variance import _closed_through, add_receipt
     month = parsed.get("month")
     if not month:
-        raise ValueError("ไม่รู้ว่าเป็นเดือนไหน — ใส่เดือน (YYYY-MM)")
+        raise ValueError("ไม่พบงวดของรายงาน กรุณาระบุเดือน (YYYY-MM)")
     rdate = receipt_date or _month_end(month)
     if rdate[:7] != month:
-        raise ValueError(f"วันที่รับของ {rdate} ไม่อยู่ในเดือน {month}")
+        raise ValueError(f"วันที่ใบรับ {rdate} ไม่อยู่ในงวด {month}")
     conv = Converter(con)
     pl = {r["code"]: r for r in plan_catalogue(con, parsed)["rows"]}
     want = {int(b) for b in branch_ids} if branch_ids else None
@@ -392,7 +392,7 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
         res = {"code": b["code"], "label": b["label"], "branch_id": b["branch_id"], "branch": b["branch"],
                "lines": 0, "value_central": 0.0, "skipped": [], "replaced": 0}
         if not b["branch_id"]:
-            res["error"] = "จับคู่สาขาไม่ได้"
+            res["error"] = "ไม่พบสาขาที่ตรงกัน"
             out.append(res)
             continue
         lines = []
@@ -415,7 +415,7 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
                                           (b["branch_id"], ref))]
         closed = _closed_through(con, b["branch_id"])
         if old and closed and rdate < closed:
-            res["error"] = f"เดือนนี้อยู่ในรอบที่นับปิดแล้ว ({closed}) — แทนที่ไม่ได้"
+            res["error"] = f"งวดนี้ปิดด้วยผลตรวจนับแล้ว ({closed}) จึงแทนที่ใบรับไม่ได้"
         res["replaced"] = len(old)
         if not dry_run and lines and not res.get("error"):
             for rid in old:
@@ -424,10 +424,10 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
             # the order unit must be in the master before the receipt converts it
             for ln in lines:
                 if conv.to_base(ln["code"], 1, ln["unit"])[0] is None:
-                    raise ValueError(f"{ln['code']}: นำเข้ารายการส่วนกลางก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
+                    raise ValueError(f"{ln['code']}: กรุณานำเข้าบัญชีสินค้าส่วนกลางก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
             r = add_receipt(con, b["branch_id"], rdate, [{"code": ln["code"], "qty": ln["qty"], "unit": ln["unit"]}
                                                          for ln in lines], who, ref=ref,
-                            note=f"ยอดส่งจากส่วนกลาง {month} ({parsed.get('sheet') or ''})", source="central")
+                            note=f"ยอดจัดส่งจากส่วนกลาง งวด {month} ({parsed.get('sheet') or ''})", source="central")
             res["receipt_id"] = r["receipt_id"]
         out.append(res)
     return {"month": month, "receipt_date": rdate, "dry_run": dry_run, "branches": out}
@@ -524,9 +524,9 @@ def set_link(con, old_code: str, new_code, who: str, note: str = None):
     if new_code not in known:
         raise ValueError(f"ไม่พบรหัส {new_code}")
     if new_code == old_code:
-        raise ValueError("รหัสเดิมกับรหัสใหม่เป็นรหัสเดียวกัน")
+        raise ValueError("รหัสในสูตรและรหัสส่วนกลางเป็นรหัสเดียวกัน")
     if con.execute("SELECT 1 FROM bc_code_link WHERE old_code=?", (new_code,)).fetchone():
-        raise ValueError(f"{new_code} ถูกโยงไปรหัสอื่นอยู่แล้ว — โยงต่อกันเป็นทอดไม่ได้")
+        raise ValueError(f"{new_code} จับคู่กับรหัสอื่นอยู่แล้ว จึงจับคู่ต่อเนื่องไม่ได้")
     con.execute("INSERT INTO bc_code_link(old_code, new_code, note, who, at) VALUES(?,?,?,?,?)"
                 " ON CONFLICT(old_code) DO UPDATE SET new_code=excluded.new_code, note=excluded.note,"
                 " who=excluded.who, at=excluded.at", (old_code, new_code, note, who, now()))

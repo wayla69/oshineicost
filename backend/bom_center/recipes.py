@@ -69,7 +69,7 @@ def parse_cost_rw(data: bytes, kinds=("BF",)) -> dict:
         m = re.match(r"^(BF|AC)_([\d,]+)NET", sn.strip())
         if not m:
             if re.search(r"(BF|AC)_[\d,]+NET", sn):
-                skipped.append({"sheet": sn, "why": "สำเนา/ชื่อไม่ตรงรูปแบบ — ไม่นำเข้า"})
+                skipped.append({"sheet": sn, "why": "เป็นสำเนาหรือชื่อไม่ตรงรูปแบบ จึงไม่นำเข้า"})
             continue
         kind, tier = m.group(1), int(m.group(2).replace(",", ""))
         if kind not in kinds:
@@ -144,10 +144,10 @@ def match_blocks(con, blocks: list) -> list:
         o = owner.get(b["sku_code"])
         if o is None or rank[b["method"]] > rank[o["method"]]:
             if o is not None:
-                o.update(sku_code=None, method=None, why=f"รหัสถูกบล็อกอื่นใช้แล้ว ({b['th'] or b['en']})")
+                o.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับบล็อกอื่นแล้ว ({b['th'] or b['en']})")
             owner[b["sku_code"]] = b
         else:
-            b.update(sku_code=None, method=None, why=f"รหัสถูกบล็อกอื่นใช้แล้ว ({o['th'] or o['en']})")
+            b.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับบล็อกอื่นแล้ว ({o['th'] or o['en']})")
     return blocks
 
 
@@ -156,11 +156,11 @@ def get_or_create_draft(con, label: str, effective_month: str, price_month: str,
     ensure(con)
     from .dated import CUTOVER_MONTH
     if effective_month < CUTOVER_MONTH:
-        raise ValueError(f"เวอร์ชันต้องมีผลตั้งแต่ {CUTOVER_MONTH} (เริ่มเมนูใหม่) — เดือนก่อนหน้าใช้ต้นทุนระบบเดิมเสมอ")
+        raise ValueError(f"เวอร์ชันต้องมีผลตั้งแต่ {CUTOVER_MONTH} (เดือนที่เริ่มเมนูใหม่) เดือนก่อนหน้านั้นใช้ต้นทุนจากระบบเดิม")
     r = con.execute("SELECT release_id, status FROM bc_release WHERE label=?", (label,)).fetchone()
     if r:
         if r[1] not in ("draft", "review"):
-            raise ValueError(f"release {label} ปล่อยแล้ว แก้ไม่ได้ — สร้าง draft ใหม่")
+            raise ValueError(f"release {label} ปล่อยแล้วจึงแก้ไขไม่ได้ กรุณาสร้าง draft ใหม่")
         con.execute("UPDATE bc_release SET effective_month=?, price_month=? WHERE release_id=?",
                     (effective_month, price_month, r[0]))
         return r[0]
@@ -236,7 +236,7 @@ def write_recipe(con, release_id: int, sku_code: str, lines: list, *, source: st
             add_from_purchase(con, code, ln.get("_product") or ln.get("ingredient_name"), ln.get("unit"), who)
             con.execute("UPDATE bc_ingredient SET kind=?, family=?, note=? WHERE code=? AND updated_by=?",
                         (kind_of(code, ln.get("ingredient_name") or ""), family_of(code),
-                         "เพิ่มจากสูตร Cost-RW — ตรวจหน่วยและราคา", code, who))
+                         "เพิ่มจากสูตร Cost-RW กรุณาตรวจสอบหน่วยและราคา", code, who))
             known.add(code)
         con.execute("INSERT INTO bc_recipe_line(release_id, sku_code, seq, ingredient_code, ingredient_name, qty, unit,"
                     " prep_note, zero_by_design, loss_pct) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -464,7 +464,7 @@ def tier_view(con, release_id: int, tier: int = None) -> dict:
 def save_lines(con, release_id: int, sku_code: str, lines: list, who: str):
     rel = release_row(con, release_id)
     if not rel or rel["status"] not in ("draft", "review"):
-        raise ValueError("แก้ได้เฉพาะ release ที่ยังเป็น draft")
+        raise ValueError("แก้ไขได้เฉพาะ release ที่ยังเป็น draft")
     old = recipe_lines(con, release_id, sku_code)
     keep = con.execute("SELECT source_cost, source_ref FROM bc_recipe WHERE release_id=? AND sku_code=?",
                        (release_id, sku_code)).fetchone()
@@ -474,7 +474,7 @@ def save_lines(con, release_id: int, sku_code: str, lines: list, who: str):
             continue
         q = float(ln.get("qty") or 0)
         if q < 0:
-            raise ValueError("ปริมาณติดลบไม่ได้")
+            raise ValueError("ปริมาณต้องไม่ติดลบ")
         lp = ln.get("loss_pct")
         if lp not in (None, "") and not (0 <= float(lp) < 100):
             raise ValueError("สูญเสีย % ต้องอยู่ระหว่าง 0–99")

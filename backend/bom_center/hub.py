@@ -17,8 +17,8 @@ from datetime import date, datetime, timedelta, timezone
 from .clock import today as bkk_today
 from .master import audit
 
-SS_REASONS = (("short", "ซัพพลายเออร์ของขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
-              ("pack", "ปรับตามขนาดแพ็ค / ขั้นต่ำ"), ("merge", "รวมกับรอบอื่น"), ("stock", "ส่วนกลางมีของให้แทน"),
+SS_REASONS = (("short", "ซัพพลายเออร์สินค้าขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
+              ("pack", "ปรับตามขนาดแพ็ค / ขั้นต่ำ"), ("merge", "รวมกับรอบอื่น"), ("stock", "ส่วนกลางจัดส่งสินค้าในสต็อกแทน"),
               ("other", "อื่น ๆ"))
 SS_REASON_TH = dict(SS_REASONS)
 BKK = timezone(timedelta(hours=7))
@@ -117,9 +117,9 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
     """Sales Support sets what will be sent. Default = what the branch confirmed."""
     o = con.execute("SELECT status, cycle_date FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     if not o:
-        raise ValueError("ไม่พบออเดอร์")
+        raise ValueError("ไม่พบใบสั่งซื้อ")
     if o[0] not in ("submitted", "processed"):
-        raise ValueError("ดำเนินการได้เฉพาะออเดอร์ที่สาขาส่งแล้ว")
+        raise ValueError("ดำเนินการได้เฉพาะใบสั่งซื้อที่สาขาส่งแล้ว")
     given = {(ln.get("code") or "").strip(): ln for ln in lines or []}
     for c, conf in con.execute("SELECT ingredient_code, confirmed_units FROM bc_order_line WHERE order_id=?",
                                (order_id,)).fetchall():
@@ -130,16 +130,16 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
         except (TypeError, ValueError):
             raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
-            raise ValueError(f"{c}: จำนวนติดลบไม่ได้")
+            raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
         rs = ((ln or {}).get("reason") or "").strip() or None
         note = ((ln or {}).get("note") or "").strip() or None
         if abs(q - float(conf or 0)) > 1e-9:
             if not rs:
-                raise ValueError(f"{c}: ส่งไม่ตรงกับที่สาขายืนยัน ต้องเลือกเหตุผล")
+                raise ValueError(f"{c}: จำนวนส่งไม่ตรงกับที่สาขายืนยัน กรุณาเลือกเหตุผล")
             if rs not in SS_REASON_TH:
                 raise ValueError(f"{c}: เหตุผลไม่อยู่ในรายการ")
             if rs == "other" and not note:
-                raise ValueError(f"{c}: เหตุผล “อื่น ๆ” ต้องเขียนอธิบาย")
+                raise ValueError(f"{c}: เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
         else:
             rs = note = None
         con.execute("UPDATE bc_order_line SET processed_units=?, ss_reason=?, ss_note=? WHERE order_id=?"
