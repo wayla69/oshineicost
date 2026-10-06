@@ -568,8 +568,10 @@ def _close_board_fields(r: dict) -> tuple[dict, dict]:
     Definitions (help.html §3.2 states the same):
       open_amount (per channel) — baht still UNexplained: the channel residual
           (month variance after per-day acks) when status is 'diff' and the
-          channel is not accepted; COUPON uses its headline variance (the
-          issuer-points gap) because its residual compares gross coupon values.
+          channel is not accepted, less the days still 'waiting' (money in
+          transit is counted under waiting, not here); COUPON uses its headline
+          variance (the issuer-points gap) because its residual compares gross
+          coupon values.
       unexplained_total — Σ|open_amount| + Σ|variance| of payout gaps not accepted.
       missing_docs — documents 'missing' or 'partial' (fewer days than POS),
           except those whose channel was accepted with a reason (same rule as todo).
@@ -587,9 +589,13 @@ def _close_board_fields(r: dict) -> tuple[dict, dict]:
     for c in r["channels"]:
         key = c["key"]
         is_acc = key in accepted
+        # days whose money is still due on the provider's next cycle (not acked)
+        pend = [d for d in c["days"] if d["status"] == "waiting" and not d.get("ack")]
         open_amt = 0.0
         if c["status"] == "diff" and not is_acc:
-            open_amt = c["variance"] if key == "COUPON" else c.get("residual", c["variance"])
+            # money still in transit is "waiting", not "unexplained" — take it out of the residual
+            open_amt = c["variance"] if key == "COUPON" else \
+                c.get("residual", c["variance"]) + sum(d["pos"] - d["ext"] for d in pend)
         mdoc = None
         if c["status"] == "waiting_doc" and not is_acc:
             banks = {b["bank"] for b in c.get("banks") or ()}
@@ -599,8 +605,7 @@ def _close_board_fields(r: dict) -> tuple[dict, dict]:
             mdoc = hit["label"] if hit else None
         waiting = 0.0
         if not is_acc and not mdoc:
-            waiting = sum(max(0.0, d["pos"] - d["ext"]) for d in c["days"]
-                          if d["status"] == "waiting")
+            waiting = sum(max(0.0, d["pos"] - d["ext"]) for d in pend)
         channels[key] = {"pos": c["pos"], "ext": c["ext"], "variance": c["variance"],
                          "status": c["status"], "residual": c.get("residual", c["variance"]),
                          "accepted": is_acc, "open_amount": round(open_amt, 2),

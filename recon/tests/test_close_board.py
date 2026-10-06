@@ -57,7 +57,9 @@ def test_diff_channel_counts_until_accepted(client):
     b = _ov(client)[4]
     qr = b["channels"]["QR"]
     full = next(c for c in _v2(client)["channels"] if c["key"] == "QR")
-    assert qr["status"] == "diff" and qr["open_amount"] == full["residual"] != 0
+    pend = sum(d["pos"] - d["ext"] for d in full["days"] if d["status"] == "waiting" and not d.get("ack"))
+    assert qr["status"] == "diff" and qr["open_amount"] != 0
+    assert abs(qr["open_amount"] - round(full["residual"] + pend, 2)) < 0.01
     assert b["unexplained_total"] >= abs(qr["open_amount"])
     # an accepted channel is explained: open_amount 0, flagged accepted
     r = client.post("/api/lanes/adj", json={"branch_id": 4, "period_month": PM, "category": "QR",
@@ -66,6 +68,18 @@ def test_diff_channel_counts_until_accepted(client):
     assert r.status_code == 200, r.text
     qr2 = _ov(client)[4]["channels"]["QR"]
     assert qr2["accepted"] is True and qr2["open_amount"] == 0
+
+
+def test_money_in_transit_is_waiting_not_unexplained(client):
+    db = main._DB_PATH
+    _pos_day(db, [("2026-06-10", "KNNQR", 1000), ("2026-06-20", "KNNQR", 700)])
+    _bank(db, "kbank", "QR", 400, "2026-06-10")               # statement only reaches the 10th
+    full = next(c for c in _v2(client)["channels"] if c["key"] == "QR")
+    d20 = next(d for d in full["days"] if d["day"] == "2026-06-20")
+    assert d20["status"] == "waiting"                          # due on the next statement
+    qr = _ov(client)[4]["channels"]["QR"]
+    assert qr["waiting"] == 700
+    assert abs(qr["open_amount"] - (full["residual"] + 700)) < 0.01   # the 20th is not "unexplained"
 
 
 def test_missing_documents_listed_with_channel_label(client):
