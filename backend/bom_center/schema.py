@@ -223,6 +223,7 @@ OWNED_TABLES = (
     "bc_stock_count", "bc_stock_count_line", "bc_order", "bc_order_line",
     "bc_audit", "bc_dish_name_map",
     "bc_sku_cost_month",          # the cut-over: released cost per SKU per month (dated.py)
+    "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
@@ -235,7 +236,8 @@ def ensure(con, commit: bool = False) -> None:
     transaction (snapshot_v0's dry-run rolls everything back) must not have
     their half-written work committed under them by a CREATE TABLE."""
     from .dated import DDL as DATED_DDL
-    for ddl in DDL + EXTRA_DDL + (DATED_DDL,):
+    from .codes import DDL as CODES_DDL
+    for ddl in DDL + EXTRA_DDL + (DATED_DDL, CODES_DDL):
         con.execute(ddl)
     for table, col, typ in MIGRATIONS:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}

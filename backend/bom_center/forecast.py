@@ -124,18 +124,21 @@ def _per_dish(con, month: str) -> tuple:
         stats["release_skus"] = len(covered)
         stats["release_id"] = rid
     legacy = con.execute("""
-        SELECT m.sale_sku, bi.ingredient_code, bi.qty_per_serving, bi.unit
+        SELECT m.sale_sku, bi.ingredient_code, bi.qty_per_serving, bi.unit, COALESCE(bi.ingredient_name,'')
           FROM (SELECT sku_id AS sale_sku, sku_id AS bom_sku FROM (SELECT DISTINCT sku_id FROM bom_ingredients)
                 UNION ALL
                 SELECT s.sku_id, a.resolved_sku_id FROM bom_sku_alias a JOIN skus s ON s.sku_code = a.bom_sku_code
                  WHERE s.sku_id NOT IN (SELECT DISTINCT sku_id FROM bom_ingredients)) m
           JOIN bom_ingredients bi ON bi.sku_id = m.bom_sku""").fetchall()
+    from .codes import remaps
+    remap = remaps(con)                                   # analyst: "this old code really means X" (planning only)
     seen = set()
-    for sid, ic, qty, unit in legacy:
+    for sid, ic, qty, unit, name in legacy:
         if sid in covered:
             continue
         seen.add(sid)
-        add(sid, ic, qty, unit)
+        add(sid, remap.get(((ic or "").strip(), name), ic), qty, unit)
+    stats["remapped_codes"] = len(remap)
     stats["legacy_skus"] = len(seen)
     stats["_bad"] = bad
     return out, stats

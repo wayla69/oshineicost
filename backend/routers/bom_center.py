@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
+from bom_center import codes as _cr
 from bom_center import master as _m
 from bom_center import prices as _p
 from bom_center import recipes as _r
@@ -112,6 +113,59 @@ def bc_summary(month: Optional[str] = Query(None)):
         "price_months": months,
         "last_import": dict(zip(("at", "who", "month"), last_import)) if last_import else None,
     }
+
+
+# ── code check: old-recipe codes vs the master ──────────────────────────────
+_CR_STATUS_TH = {"missing": "ไม่อยู่ในทะเบียน", "conflict": "ชื่อไม่ตรง — น่าจะคนละของ",
+                 "same": "ตรวจแล้ว: ของเดียวกัน", "remap": "ตรวจแล้ว: ใช้รหัสอื่นแทน", "ok": "ชื่อตรงกัน"}
+
+
+class CodeDecision(BaseModel):
+    code: str
+    status: str                      # same | remap | clear
+    use_code: Optional[str] = None
+    note: Optional[str] = None
+    names: Optional[List[str]] = None  # default: the code's names that still need a decision
+
+
+@router.get("/api/bom-center/code-review")
+def bc_code_review(all: bool = Query(False)):
+    """Every code the old recipes use: not in the master / name disagrees / checked."""
+    with get_db() as con:
+        _ensure(con)
+        return _cr.review(con, with_ok=all)
+
+
+@router.post("/api/bom-center/code-review", dependencies=[Depends(require_write_token)])
+def bc_code_review_decide(body: CodeDecision, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _cr.decide(con, body.code, body.status, body.use_code, body.note, _who(request),
+                                                     body.names))
+    invalidate_cache()               # the order plan reads the decision
+    return out
+
+
+@router.get("/api/bom-center/code-review.xlsx")
+def bc_code_review_xlsx(all: bool = Query(True)):
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        d = _cr.review(con, with_ok=all)
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "ตรวจรหัสสูตรเดิม",
+           ["รหัส", "ชื่อในสูตรเดิม", "หน่วย", "จำนวนเมนูที่ใช้ชื่อนี้", "ชื่อในทะเบียน", "สถานะของชื่อนี้",
+            "รหัสแนะนำ", "ชื่อรหัสแนะนำ", "ใช้รหัสแทน", "หมายเหตุ", "ผู้ตรวจ"],
+           "หนึ่งแถวต่อ รหัส + ชื่อ ที่สูตรเดิมใช้ — สูตรเดิมใช้รหัสเดียวกันหลายชื่อ 'ชื่อไม่ตรง' = ชื่อนี้น่าจะเป็นคนละของกับรหัสในทะเบียน")
+    for r in d["rows"]:
+        sg = (r.get("suggest") or [{}])[0]
+        for n in r["names"]:
+            bad = n["status"] in ("conflict", "missing")
+            ws.append([r["code"], n["name"], n["unit"], n["dishes"], r["master_name"],
+                       _CR_STATUS_TH.get(n["status"], n["status"]), sg.get("code") if bad else None,
+                       sg.get("name") if bad else None, n.get("use_code"), n.get("note"), n.get("who")])
+    return _xlsx(wb, "bom_center_code_review.xlsx")
 
 
 # ── M1 ingredient master ─────────────────────────────────────────────────────

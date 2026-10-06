@@ -279,6 +279,17 @@ def _ing_mode(code: str, branch: str, defaults: dict, per_branch: dict) -> str:
     return per_branch.get((code, branch or ""), defaults.get(code, _forced_default(code)))
 
 
+def _code_remap_sql(con):
+    """(JOIN, code expression) applying the BoM Center code check (bc_code_review):
+    an old-recipe line (code + name) the analyst marked "really means X" is planned as X.
+    Planning only — costs never read this. No table → no-op."""
+    if not con.execute("SELECT 1 FROM sqlite_master WHERE name='bc_code_review'").fetchone():
+        return "", "bi.ingredient_code"
+    return ("LEFT JOIN bc_code_review cr ON cr.code = TRIM(bi.ingredient_code)"
+            " AND cr.recipe_name = COALESCE(bi.ingredient_name, '') AND cr.status = 'remap'",
+            "COALESCE(cr.use_code, bi.ingredient_code)")
+
+
 def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
                    group: Optional[str], basis: str, buffer_pct: float,
                    ing_type: Optional[str], q: Optional[str], group_family: bool,
@@ -303,10 +314,11 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
 
     key_cols = "b.name AS branch, " if per_branch else ""
     grp_cols = "b.branch_id, " if per_branch else ""
+    rj, rc = _code_remap_sql(con)
     sql = f"""
         SELECT {key_cols}
-               COALESCE(NULLIF(bi.ingredient_code,''), '__' || bi.ingredient_name) AS ing_key,
-               MAX(bi.ingredient_code) AS code,
+               COALESCE(NULLIF({rc},''), '__' || bi.ingredient_name) AS ing_key,
+               MAX({rc}) AS code,
                MAX(bi.ingredient_name) AS name,
                MAX(bi.ingredient_type) AS type,
                bi.unit                 AS unit,
@@ -320,6 +332,7 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
           JOIN branches b         ON b.branch_id = d.branch_id
           JOIN {_ING_BOM_MAP} m   ON m.sale_sku  = d.sku_id
           JOIN bom_ingredients bi ON bi.sku_id   = m.bom_sku
+          {rj}
          WHERE {' AND '.join(filters)}
          GROUP BY {grp_cols}ing_key, bi.unit
     """
@@ -1977,16 +1990,18 @@ def _pctl(sorted_vals, q: float):
 
 def _ing_consumed(con, branch: str, start: str, end: str):
     """Actual consumption per ingredient for one branch over a closed window."""
+    rj, rc = _code_remap_sql(con)
     rows = con.execute(f"""
-        SELECT COALESCE(NULLIF(bi.ingredient_code,''), '__' || bi.ingredient_name) AS code,
+        SELECT COALESCE(NULLIF({rc},''), '__' || bi.ingredient_name) AS code,
                bi.unit AS unit,
                SUM(d.qty * bi.qty_per_serving) AS qty
           FROM v_sales_sku_daily d
           JOIN branches b         ON b.branch_id = d.branch_id
           JOIN {_ING_BOM_MAP} m   ON m.sale_sku  = d.sku_id
           JOIN bom_ingredients bi ON bi.sku_id   = m.bom_sku
+          {rj}
          WHERE b.name = :branch AND d.day BETWEEN :start AND :end
-         GROUP BY code, bi.unit
+         GROUP BY 1, 2
     """, {"branch": branch, "start": start, "end": end}).fetchall()
     return {(r["code"], r["unit"] or ""): float(r["qty"] or 0) for r in rows}
 
