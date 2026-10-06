@@ -561,10 +561,81 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     }
 
 
+def _close_board_fields(r: dict) -> tuple[dict, dict]:
+    """Close Board figures for one branch, derived only from its reconcile_month
+    payload (no extra queries — the overview runs on a 2-core box).
+
+    Definitions (help.html §3.2 states the same):
+      open_amount (per channel) — baht still UNexplained: the channel residual
+          (month variance after per-day acks) when status is 'diff' and the
+          channel is not accepted, less the days still 'waiting' (money in
+          transit is counted under waiting, not here); COUPON uses its headline
+          variance (the issuer-points gap) because its residual compares gross
+          coupon values.
+      unexplained_total — Σ|open_amount| + Σ|variance| of payout gaps not accepted.
+      missing_docs — documents 'missing' or 'partial' (fewer days than POS),
+          except those whose channel was accepted with a reason (same rule as todo).
+      missing_doc (per channel) — label of the missing/partial document behind a
+          'waiting_doc' channel (its own doc, or the statement of one of its banks).
+      waiting (per channel) / waiting_total — POS baht on days still 'waiting'
+          (money due on the provider's next cycle), for channels not accepted and
+          not blocked by a missing document.
+      payout_open_total — Σ|variance| of payout gaps not accepted."""
+    accepted = {c["key"] for c in r["channels"] if c.get("accepted")}
+    missing = [d for d in r["documents"]
+               if d["status"] in ("missing", "partial")
+               and not (d.get("channel") and d["channel"] in accepted)]
+    channels: dict = {}
+    for c in r["channels"]:
+        key = c["key"]
+        is_acc = key in accepted
+        # days whose money is still due on the provider's next cycle (not acked)
+        pend = [d for d in c["days"] if d["status"] == "waiting" and not d.get("ack")]
+        open_amt = 0.0
+        if c["status"] == "diff" and not is_acc:
+            # money still in transit is "waiting", not "unexplained" — take it out of the residual
+            open_amt = c["variance"] if key == "COUPON" else \
+                c.get("residual", c["variance"]) + sum(d["pos"] - d["ext"] for d in pend)
+        mdoc = None
+        if c["status"] == "waiting_doc" and not is_acc:
+            banks = {b["bank"] for b in c.get("banks") or ()}
+            hit = next((d for d in missing if d.get("channel") == key), None) or \
+                next((d for d in missing if d.get("source") == "bank"
+                      and d.get("provider") in banks), None)
+            mdoc = hit["label"] if hit else None
+        waiting = 0.0
+        if not is_acc and not mdoc:
+            waiting = sum(max(0.0, d["pos"] - d["ext"]) for d in pend)
+        channels[key] = {"pos": c["pos"], "ext": c["ext"], "variance": c["variance"],
+                         "status": c["status"], "residual": c.get("residual", c["variance"]),
+                         "accepted": is_acc, "open_amount": round(open_amt, 2),
+                         "missing_doc": mdoc, "waiting": round(waiting, 2)}
+    pay = r.get("payout_issues") or []
+    pay_open = [p for p in pay if not p.get("accepted")]
+    payout_open_total = round(sum(abs(p["variance"]) for p in pay_open), 2)
+    ses = r.get("session") or {}
+    extra = {
+        "unexplained_total": round(sum(abs(c["open_amount"]) for c in channels.values())
+                                   + payout_open_total, 2),
+        "missing_docs": [{"key": d["key"], "label": d["label"], "status": d["status"],
+                          "source": d.get("source"), "provider": d.get("provider"),
+                          "channel": d.get("channel")} for d in missing],
+        "waiting_total": round(sum(c["waiting"] for c in channels.values()), 2),
+        "payout_open_total": payout_open_total,
+        "payout_open_count": len(pay_open),
+        "payout_issue_count": len(pay),
+        "prepared_by": ses.get("created_by"),
+        "approved_by": ses.get("approved_by"),
+        "approved_at": ses.get("approved_at"),
+    }
+    return channels, extra
+
+
 @memo_scoped
 def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
     """All master branches for one month — the board: per-branch progress +
-    per-channel variance, every cell drillable into reconcile_month."""
+    per-channel variance, every cell drillable into reconcile_month. Each branch
+    also carries the Close Board figures (_close_board_fields)."""
     branches = conn.execute(
         "SELECT branch_id, name FROM branches "
         "WHERE branch_type='master' AND active=1 ORDER BY name").fetchall()
@@ -572,6 +643,7 @@ def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
     for b in branches:
         r = reconcile_month(conn, b["branch_id"], period_month)
         _rc = r.get("reclass_suggestions") or []
+        board_ch, board = _close_board_fields(r)
         rows.append({
             "branch_id": b["branch_id"],
             "branch_name": b["name"],
@@ -585,9 +657,8 @@ def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
             # money sitting in the wrong lane doesn't read as falsely "ครบ".
             "reclass_count": len(_rc),
             "reclass_amount": round(sum(s.get("amount", 0) or 0 for s in _rc), 2),
-            "channels": {c["key"]: {"pos": c["pos"], "ext": c["ext"],
-                                    "variance": c["variance"], "status": c["status"]}
-                         for c in r["channels"]},
+            "channels": board_ch,
+            **board,
         })
     return {"period_month": period_month, "channel_order": [k for k, _ in CHANNELS],
             "channel_labels": _CH_LABEL, "branches": rows,

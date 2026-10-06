@@ -141,11 +141,11 @@ async function loadTrend(){
         <a class="btn btn-sm ml-auto" href="#b/${_TREND_BID}">→ เปิดหน้าสาขา</a>
       </div>
       ${weekly.length
-        ? `<table><thead><tr>
+        ? `<div class="ovx-auto"><table><thead><tr>
             <th>สัปดาห์</th><th>POS</th><th>เงินเข้า</th>
             <th class="minw-160">Lane match</th>
             <th class="minw-160">Coverage</th>
-           </tr></thead><tbody>${weekRows}</tbody></table>`
+           </tr></thead><tbody>${weekRows}</tbody></table></div>`
         : '<div class="lbl tc pad-16">ยังไม่มีข้อมูลรายวัน</div>'}
     </div>
     <div class="card">

@@ -1,4 +1,4 @@
-/* recon frontend — 00-core.js: shared core: helpers ($ fmt esc jsa api mgrApi busy toast), route + route sequence token, header, theme, bottom sheet, nav, branch pickers.
+/* recon frontend — 00-core.js: shared core: helpers ($ fmt esc jsa api mgrApi busy toast), role + landing, route + route sequence token, header, theme, bottom sheet, nav, branch pickers.
    Plain scripts sharing one global scope, loaded in order by index.html (00 → 90);
    a slice may call any other slice's functions, but top-level code only uses earlier slices. */
 const $=id=>document.getElementById(id);
@@ -77,28 +77,36 @@ const SES_ST={draft:'กำลังทำ',in_review:'รอผู้จัด�
 const isClosedSt=st=>st==='approved'||st==='closed';
 
 let MONTH=localStorage.getItem('v2_month')||ymdLocal().slice(0,7);
-let DATA=null, UP_DOC=null, PENDING_CH=null;
+let DATA=null, UP_DOC=null;
 
-/* คลิกช่องทางในหน้าภาพรวม → เข้าสาขาแล้วกางช่องทางนั้นทันที */
-function goChannel(bid,key){PENDING_CH=key;location.hash='b/'+bid;}
-/* shared drill: expand a channel's day evidence (works in any Phase-2 bucket) */
+/* คลิกช่องทาง (ภาพรวม / Close Board / todo) → เปิดพื้นที่ทำงานของสาขาที่รายการนั้น (#b/<id>/<KEY>) */
+function goChannel(bid,key){location.hash='b/'+bid+(key?'/'+key:'');}
+/* shared drill: select a channel in the open branch workspace (deep link #b/<id>/<KEY>) */
 function openEvidence(channelKey){
-  if(!DATA||!DATA.channels)return;
-  const idx=DATA.channels.findIndex(c=>c.key===channelKey);
-  if(idx<0)return;
-  const el=$('days-'+idx);
-  // if the channel sits inside a collapsed drawer (เรียบร้อย/รอรอบ), open it first
-  const dw=el&&el.closest('[id^="dw-"]');
-  if(dw&&dw.style.display==='none') toggleDrawer(dw.id.slice(3));
-  if(el && el.style.display==='none') toggleDays(idx);
-  setTimeout(()=>{const e=$('days-'+idx); if(e) e.scrollIntoView({behavior:_scrollBehavior(),block:'center'});},50);
+  if(!DATA||!channelKey)return;
+  goChannel(DATA.branch_id,channelKey);
 }
-function drillTodo(key){ openEvidence(key); }   // back-compat: todo card + drillReclass call this
+function drillTodo(key){ openEvidence(key); }   // back-compat: reclass "ขอดูรายการ" calls this
+
+/* ── บทบาทผู้ใช้ (UX phase 2) ──
+   Contract with the login track: at boot window.ME = {login_enabled, user:{username,display_name,role}|null},
+   role ∈ manager / accountant / viewer. No ME (login not merged / off) = no login → overview landing. */
+function _role(){ const me=window.ME; return (me&&me.user&&me.user.role)||null; }
+// หน้าแรก: นักบัญชี/ผู้จัดการ → Close Board · คนอื่น (viewer / ไม่ล็อกอิน) → รายการสาขา (หน้าเดิม)
+function _landing(){ const r=_role(); return (r==='accountant'||r==='manager')?'close':'branches'; }
+// the route being drawn ('' resolved to the landing) — header() / nav read this, not location.hash
+let _ROUTE='';
+const _WS_RE=/^b\/(\d+)(?:\/([A-Za-z_]+))?$/;
 
 function route(){
   ++_ROUTE_SEQ;                    // ผลของหน้าก่อนที่ยังโหลดค้างจะถูกทิ้ง (ดู _cur)
-  const h=location.hash.slice(1);
+  const raw=location.hash.slice(1);
+  const h=raw||_landing();
+  _ROUTE=h;
   _setNavActive(h);
+  const app=$('app'); if(app)app.classList.toggle('wide',h==='close'||_WS_RE.test(h));
+  if(h==='close')return loadCloseBoard();
+  if(h==='branches')return loadOverview();
   if(h==='reports')return loadReports();
   if(h==='errors')return loadErrorReport();
   if(h==='wrong')return loadWrongChannel();
@@ -118,20 +126,22 @@ function route(){
   if(h==='setup')return loadSetup();
   if(h.startsWith('payout'))return loadPayout(h);
   if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
-  const m=h.match(/^b\/(\d+)/);
-  if(m)loadBranch(+m[1]);else loadOverview();
+  const m=h.match(_WS_RE);
+  if(m)loadBranch(+m[1],m[2]?m[2].toUpperCase():null);else loadOverview();
 }
-window.addEventListener('hashchange',route);
-// คีย์บอร์ด: แถว/ช่องที่กดได้ (role="button" tabindex="0") — Enter/Space = คลิก (ตัวจัดการเดียวทั้งแอป)
-document.addEventListener('keydown',e=>{
-  if(e.key!=='Enter'&&e.key!==' ')return;
-  const el=e.target;
-  if(!el||!el.getAttribute||el.getAttribute('role')!=='button'||/^(BUTTON|A|INPUT|SELECT|TEXTAREA)$/.test(el.tagName))return;
-  e.preventDefault();el.click();
+// เปลี่ยน hash: ภายในพื้นที่ทำงานสาขาเดิม (เลือกรายการ / ปุ่มย้อนกลับ) → แค่สลับแผงขวา ไม่โหลดใหม่ทั้งหน้า
+window.addEventListener('hashchange',()=>{
+  if(typeof mxClose==='function')mxClose();
+  const m=location.hash.slice(1).match(_WS_RE);
+  if(m&&DATA&&DATA.branch_id===+m[1]&&DATA.period_month===MONTH&&$('ws-root')&&typeof wsSelect==='function'){
+    wsSelect(m[2]?m[2].toUpperCase():null);return;
+  }
+  route();
 });
-
+// the login track may set window.ME after boot: re-draw the landing once it does
+window.addEventListener('recon:me',()=>{ if(!location.hash.slice(1))route(); });
 function header(extra){
-  const h=location.hash.slice(1);
+  const h=_ROUTE||location.hash.slice(1);
   return `<div class="row mb-8">
     <div class="row" style="gap:9px;cursor:pointer;flex-wrap:nowrap" onclick="location.hash=''">
       <div class="logo"><i class="ti ti-scale" aria-hidden="true"></i></div>
@@ -146,7 +156,7 @@ function header(extra){
   </div>
   ${_topNavHtml(h)}`;
 }
-function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);route();}
+function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);if(typeof mxClose==='function')mxClose();route();}
 /* โหมดมืด/สว่าง — ปุ่มไอคอนบนหัวหน้า · จำไว้ใน localStorage คีย์เดียวกับแดชบอร์ด ('oshinei_dark')
    ยังไม่เคยเลือก = ตามระบบ (prefers-color-scheme) */
 const _isDark=()=>document.body.classList.contains('dark');
@@ -199,13 +209,15 @@ function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 
 /* ════════════════ PHASE 5 — Responsive Nav + Reports Hub ════════════════ */
 const _NAV_TABS=[
-  ['home','<i class="ti ti-home" aria-hidden="true"></i>','หน้าหลัก','#'],
+  ['home','<i class="ti ti-building-store" aria-hidden="true"></i>','สาขา','#branches'],
+  ['close','<i class="ti ti-calendar-check" aria-hidden="true"></i>','ปิดเดือน','#close'],
   ['reports','<i class="ti ti-report" aria-hidden="true"></i>','รายงาน','#reports'],
   ['admin','<i class="ti ti-settings" aria-hidden="true"></i>','Admin','#setup'],
   ['diag','<i class="ti ti-activity" aria-hidden="true"></i>','วินิจฉัย','#board'],
 ];
 function _navZone(h){
-  if(!h||h.match(/^b\//)||h==='daybook'||h==='dashboard')return 'home';
+  if(h==='close')return 'close';
+  if(!h||h==='branches'||h.match(/^b\//)||h==='daybook'||h==='dashboard')return 'home';
   if(h==='reports'||h==='wrong'||h==='errors'||h==='coupon')return 'reports';
   if(h==='setup'||h==='audit'||h==='bankcov'||h.startsWith('payout')||h.startsWith('discrepancies'))return 'admin';
   if(h==='board'||h==='trend')return 'diag';
