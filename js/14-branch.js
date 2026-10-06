@@ -1,4 +1,4 @@
-// 14-branch.js — สาขาของฉัน (BoM Center Phase 2, Sprint S6: นับสต๊อก).
+// 14-branch.js — สาขาของฉัน (BoM Center Phase 2: S6 นับสต๊อก · S7 รับของ + ผลต่างของฉัน).
 // Mobile first (375 px). Shares the global scope of slices 01-13; every name here
 // starts with `brn`. A branch login is pinned to its own branch by the server
 // (auth.scope_branch); central roles pick a branch from the list.
@@ -34,7 +34,7 @@ async function loadBranchStock() {
       sel.style.display = '';
       nm.textContent = '';
     }
-    await brnLoadSheet();
+    await brnBranchChanged();
   } catch (e) {
     document.getElementById('brnList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`;
   }
@@ -176,4 +176,199 @@ async function brnSetLayout(code, zone) {
     if (_brnDirty) await brnSave(false, true);
     await brnLoadSheet();
   } catch (e) { _bmcStatus('brnStatus', 'ตั้งโซนไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)'); }
+}
+
+// ── sub-tabs (S7): นับสต๊อก · รับของ · ผลต่างของฉัน ───────────────────────────
+let _brnSub = 'count';
+let _brnRecv = [];            // lines waiting to be saved: {code, name, qty, unit}
+let _brnVar = null;           // /api/bom-center/variance/period
+
+function brnSetSub(k) {
+  _brnSub = k;
+  document.querySelectorAll('#tab-branchstock [data-brnsub]').forEach(b => b.classList.toggle('active', b.dataset.brnsub === k));
+  ['count', 'recv', 'var'].forEach(p => { const el = document.getElementById('brn-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  if (k === 'recv') brnLoadRecv();
+  if (k === 'var') brnLoadVarPane();
+}
+async function brnBranchChanged() {
+  _brnVar = null;
+  _brnRecv = [];
+  await brnLoadSheet();
+  if (_brnSub === 'recv') brnLoadRecv();
+  if (_brnSub === 'var') brnLoadVarPane();
+}
+function _brnNeedBranch(boxId) {
+  if (!(_brnMe && _brnMe.scoped) && !_brnBid()) {
+    const el = document.getElementById(boxId);
+    if (el) el.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">เลือกสาขาด้านบนก่อน</span>';
+    return true;
+  }
+  return false;
+}
+
+// ── รับของ ───────────────────────────────────────────────────────────────────
+function _brnAllItems() { return _brnSheet ? _brnSheet.zones.flatMap(z => z.items) : []; }
+async function brnLoadRecv() {
+  const d = document.getElementById('brnRecvDate');
+  if (d && !d.value) d.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const dl = document.getElementById('brnItemList');
+  if (dl) dl.innerHTML = _brnAllItems().map(i => `<option value="${esc(i.code)} — ${esc(i.name)}"></option>`).join('');
+  brnRenderRecvLines();
+  if (_brnNeedBranch('brnRecvHistory')) return;
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/stock/receipts?${_brnQS()}`);
+    document.getElementById('brnRecvHistory').innerHTML = r.receipts.length ? r.receipts.map(x => `<div style="border-top:1px solid var(--border);padding:5px 0">
+        <b>${esc(x.receipt_date)}</b>${x.ref ? ' · ' + esc(x.ref) : ''} · ${x.lines.length} รายการ · ${esc(x.entered_by || '')}
+        ${x.locked ? _bmcChip('อยู่ในรอบที่ปิดแล้ว', 'var(--text-muted)') : `<button onclick="brnRecvDelete(${x.receipt_id})" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>`}
+        <div style="color:var(--text-muted)">${x.lines.map(l => `${esc(l.name || l.code)} ${_bmcNum(l.qty)} ${esc(l.unit || '')}`).join(' · ')}</div></div>`).join('')
+      : 'ยังไม่มี';
+  } catch (e) { document.getElementById('brnRecvHistory').textContent = String(e.message || e); }
+}
+function _brnPicked() {
+  const v = (document.getElementById('brnRecvItem').value || '').trim();
+  const code = v.split(' — ')[0].trim();
+  return _brnAllItems().find(i => i.code === code || i.name === v);
+}
+function brnRecvPicked() {
+  const it = _brnPicked();
+  document.getElementById('brnRecvUnit').textContent = it ? (it.count_unit || it.base_unit || '') : '';
+}
+function brnRecvAdd() {
+  const it = _brnPicked();
+  const q = Number(String(document.getElementById('brnRecvQty').value || '').replace(',', '.'));
+  if (!it) { _bmcStatus('brnRecvStatus', 'เลือกวัตถุดิบจากรายการ', 'var(--amber-ink)'); return; }
+  if (!(q > 0)) { _bmcStatus('brnRecvStatus', 'ใส่จำนวนมากกว่า 0', 'var(--amber-ink)'); return; }
+  const unit = it.count_unit || it.base_unit;
+  const same = _brnRecv.find(l => l.code === it.code && l.unit === unit);
+  if (same) same.qty += q; else _brnRecv.push({ code: it.code, name: it.name, qty: q, unit });
+  document.getElementById('brnRecvItem').value = '';
+  document.getElementById('brnRecvQty').value = '';
+  document.getElementById('brnRecvUnit').textContent = '';
+  _bmcStatus('brnRecvStatus', '');
+  brnRenderRecvLines();
+  document.getElementById('brnRecvItem').focus();
+}
+function brnRenderRecvLines() {
+  const box = document.getElementById('brnRecvLines');
+  if (!box) return;
+  box.innerHTML = _brnRecv.length ? _brnRecv.map((l, i) => `<div style="display:flex;gap:8px;align-items:center;border-top:1px solid var(--border);padding:5px 0">
+      <span style="flex:1">${esc(l.name)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(l.code)}</span></span>
+      <b>${_bmcNum(l.qty)}</b> <span class="text-xs" style="color:var(--text-secondary)">${esc(l.unit || '')}</span>
+      <button onclick="_brnRecv.splice(${i},1);brnRenderRecvLines()" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button></div>`).join('')
+    : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรายการ — เลือกวัตถุดิบ ใส่จำนวน แล้วกด “+ เพิ่ม”</span>';
+}
+async function brnRecvSave() {
+  if (!_brnRecv.length) { _bmcStatus('brnRecvStatus', 'ยังไม่มีรายการ', 'var(--amber-ink)'); return; }
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/stock/receipt?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receipt_date: document.getElementById('brnRecvDate').value, ref: document.getElementById('brnRecvRef').value || null,
+        lines: _brnRecv.map(l => ({ code: l.code, qty: l.qty, unit: l.unit })) }) });
+    _brnRecv = [];
+    document.getElementById('brnRecvRef').value = '';
+    _bmcStatus('brnRecvStatus', `✓ บันทึกรับของ ${r.lines} รายการ`, 'var(--good-ink)');
+    brnLoadRecv();
+  } catch (e) { _bmcStatus('brnRecvStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+async function brnRecvDelete(id) {
+  if (!confirm('ลบใบรับของนี้?')) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/stock/receipt/${id}?${_brnQS()}`, { method: 'DELETE' });
+    brnLoadRecv();
+  } catch (e) { _bmcStatus('brnRecvStatus', 'ลบไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+
+// ── ผลต่างของฉัน ─────────────────────────────────────────────────────────────
+const _BRN_VS = { over: ['ใช้เกินสูตร', 'var(--bad-ink)'], under: ['ใช้น้อยกว่าสูตร', 'var(--amber-ink)'],
+  negative: ['ของเหลือมากกว่าที่มี', 'var(--bad-ink)'], no_bom: ['ใช้แต่ไม่มีในสูตร', 'var(--amber-ink)'],
+  not_counted: ['นับไม่ครบ', 'var(--text-muted)'], ok: ['ตามสูตร', 'var(--good-ink)'] };
+
+async function brnLoadVarPane() {
+  const ov = document.getElementById('brnVarOverview');
+  if (_brnMe && !_brnMe.scoped && (hasModule('supply.ordering') || hasModule('bom.center') || hasModule('ops.report'))) {
+    try {
+      const d = await _bmcJson(`${API}/api/bom-center/variance/overview`);
+      ov.style.display = '';
+      ov.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ทุกสาขาที่นับแล้ว — รอบล่าสุด</div>` + (d.branches.length ? d.branches.map(b => `<div style="border-top:1px solid var(--border);padding:4px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
+          <a href="#" onclick="brnPickBranch(${b.branch_id});return false" style="color:var(--accent);font-weight:600">${esc(b.branch)}</a>
+          ${b.end_date ? `<span>${esc(b.begin_date)} → ${esc(b.end_date)}</span><span>ผลต่าง <b style="color:${(b.gap_value || 0) > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(b.gap_value, 0)}</b>${b.gap_pct != null ? ` (${b.gap_pct > 0 ? '+' : ''}${_bmcNum(b.gap_pct, 1)}%)` : ''}</span>
+            <span>ต้องตรวจ ${b.flagged} · ยังไม่ใส่เหตุผล ${b.needs_reason}</span>${b.complete ? _bmcChip('รับของครบ', 'var(--good-ink)') : _bmcChip('ยังไม่สมบูรณ์', 'var(--amber-ink)')}`
+            : `<span style="color:var(--text-muted)">นับแล้ว 1 ครั้ง (${esc(b.last_count || '')}) — รอนับปลายงวด</span>`}</div>`).join('') : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาใดนับ</span>');
+    } catch (e) { ov.style.display = 'none'; }
+  } else if (ov) ov.style.display = 'none';
+  if (_brnNeedBranch('brnVarList')) { document.getElementById('brnVarHead').innerHTML = ''; return; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/variance/periods?${_brnQS()}`);
+    const sel = document.getElementById('brnVarPeriod');
+    sel.innerHTML = d.periods.map(p => `<option value="${p.end_count_id}">${esc(p.begin_date)} → ${esc(p.end_date)} (${p.days} วัน)${p.complete ? '' : ' · ยังไม่สมบูรณ์'}</option>`).join('');
+    if (!d.periods.length) {
+      document.getElementById('brnVarHead').innerHTML = '';
+      document.getElementById('brnVarList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบให้เทียบ — ต้องนับอย่างน้อย 2 ครั้ง (ต้นงวด แล้วปลายงวด)</span>';
+      return;
+    }
+    await brnLoadVariance(sel.value);
+  } catch (e) { document.getElementById('brnVarList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnPickBranch(id) {
+  const sel = document.getElementById('brnBranch');
+  sel.value = String(id);
+  brnBranchChanged();
+}
+async function brnLoadVariance(endId) {
+  try {
+    _brnVar = await _bmcJson(`${API}/api/bom-center/variance/period?${_brnQS()}${endId ? '&end_count_id=' + endId : ''}`);
+    brnRenderVariance();
+  } catch (e) { document.getElementById('brnVarList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnRenderVariance() {
+  const v = _brnVar;
+  if (!v) return;
+  document.getElementById('brnVarHead').innerHTML = `<div style="color:var(--text-secondary)">${esc(v.begin_date)} → ${esc(v.end_date)} · ขาย ${v.trading_days} วัน · ราคาเดือน ${esc(v.price_month)} ·
+      รับของ ${v.receipts} ใบ · ตามสูตร ฿${_bmcNum(v.bom_value, 0)}</div>
+    <div class="mt-1 text-sm">ผลต่างรวม <b style="color:${v.gap_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(v.gap_value, 0)}</b>${v.gap_pct != null ? ` (${v.gap_pct > 0 ? '+' : ''}${_bmcNum(v.gap_pct, 1)}% ของตามสูตร)` : ''} ·
+      ใช้เกินสูตร ฿${_bmcNum(v.over_value, 0)} · ต้องตรวจ ${v.flagged} · ยังไม่ใส่เหตุผล <b style="color:${v.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${v.needs_reason}</b>
+      ${v.not_counted ? ` · นับไม่ครบ ${v.not_counted}` : ''}</div>
+    <div class="mt-2">${v.complete
+      ? `${_bmcChip('รับของครบแล้ว', 'var(--good-ink)')} <span style="color:var(--text-muted)">โดย ${esc(v.receipts_confirmed_by || '')}</span> <button onclick="brnConfirmRecv(true)" style="font-size:11px;color:var(--text-muted);background:none;border:0;cursor:pointer">ยกเลิก</button>`
+      : `${_bmcChip('ยังไม่สมบูรณ์', 'var(--amber-ink)')} <span style="color:var(--text-muted)">ถ้ายังบันทึกรับของไม่ครบ ตัวเลขจะเห็นว่า “ใช้น้อยกว่าสูตร” —</span>
+         <button onclick="brnConfirmRecv(false)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">ยืนยันว่ารับของรอบนี้บันทึกครบแล้ว</button>`}
+      <span id="brnVarStatus" class="text-xs"></span></div>`;
+  const all = document.getElementById('brnVarAll').checked;
+  const rows = v.rows.filter(r => all || r.status !== 'ok').slice(0, all ? 500 : 60);
+  const opts = r => v.reasons.map(o => `<option value="${o.code}"${r.reason === o.code ? ' selected' : ''}>${esc(o.label)}</option>`).join('');
+  const qty = (x, u) => x == null ? '—' : `${_bmcNum(x, 0)} ${esc(u || '')}`;
+  document.getElementById('brnVarList').innerHTML = rows.length ? rows.map(r => {
+    const [label, ink] = _BRN_VS[r.status];
+    const flag = ['over', 'under', 'negative', 'no_bom'].includes(r.status);
+    return `<div style="border-top:1px solid var(--border);padding:8px 0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(r.name)}</b>
+        ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} (เกณฑ์ ±${v.thresholds[r.class]}%)</span>
+        <span style="margin-left:auto" class="text-sm">${r.gap_value != null ? `<b style="color:${r.gap_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(r.gap_value, 0)}</b>` : ''}</span></div>
+      <div class="text-xs mt-0.5" style="color:var(--text-secondary)">ต้น ${qty(r.begin, r.base_unit)} + รับ ${qty(r.received, r.base_unit)} − ปลาย ${qty(r.end, r.base_unit)} = ใช้จริง <b>${qty(r.actual, r.base_unit)}</b> · ตามสูตร <b>${qty(r.bom, r.base_unit)}</b>
+        ${r.gap != null ? ` · ต่าง ${r.gap > 0 ? '+' : ''}${_bmcNum(r.gap, 0)}${r.gap_pct != null ? ` (${r.gap_pct > 0 ? '+' : ''}${_bmcNum(r.gap_pct, 1)}%)` : ''}` : ''}</div>
+      ${flag ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
+        <select id="brnRs_${esc(r.code)}" style="border:1px solid ${r.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts(r)}</select>
+        <input id="brnRn_${esc(r.code)}" value="${esc(r.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+        <button onclick="brnSaveReason(${_bmcQ(r.code)})" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึก</button>
+        ${r.reason_by ? `<span style="color:var(--text-muted)">${esc(r.reason_by)}</span>` : ''}</div>` : ''}
+    </div>`;
+  }).join('') : '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
+}
+async function brnSaveReason(code) {
+  const reason = document.getElementById('brnRs_' + code).value;
+  const note = document.getElementById('brnRn_' + code).value;
+  if (!reason) { _bmcStatus('brnVarStatus', 'เลือกเหตุผลก่อน', 'var(--amber-ink)'); return; }
+  try {
+    await _bmcJson(`${API}/api/bom-center/variance/reason?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end_count_id: _brnVar.end_count_id, code, reason, note }) });
+    await brnLoadVariance(_brnVar.end_count_id);
+    _bmcStatus('brnVarStatus', '✓ บันทึกเหตุผลแล้ว', 'var(--good-ink)');
+  } catch (e) { _bmcStatus('brnVarStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+async function brnConfirmRecv(undo) {
+  if (!undo && !confirm('ยืนยันว่าของทุกชิ้นที่เข้าร้านในรอบนี้บันทึกรับของครบแล้ว?')) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/variance/confirm-receipts?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end_count_id: _brnVar.end_count_id, undo: !!undo }) });
+    await brnLoadVariance(_brnVar.end_count_id);
+  } catch (e) { _bmcStatus('brnVarStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }

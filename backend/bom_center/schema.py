@@ -229,6 +229,26 @@ EXTRA_DDL = (
          release_id INTEGER NOT NULL, prepared_code TEXT NOT NULL,
          batch_yield_qty REAL NOT NULL, batch_unit TEXT NOT NULL,
          PRIMARY KEY (release_id, prepared_code))""",
+    # Phase 2 · S7 — goods received at a branch (the branch types it now; S8 order receiving writes here too)
+    """CREATE TABLE IF NOT EXISTS bc_receipt(
+         receipt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         branch_id INTEGER NOT NULL, receipt_date TEXT NOT NULL,
+         source TEXT NOT NULL DEFAULT 'branch',   -- branch / order / import
+         ref TEXT, note TEXT, entered_by TEXT, created_at TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_receipt_branch ON bc_receipt(branch_id, receipt_date)",
+    """CREATE TABLE IF NOT EXISTS bc_receipt_line(
+         receipt_id INTEGER NOT NULL, ingredient_code TEXT NOT NULL,
+         qty REAL NOT NULL, unit TEXT, qty_base REAL,
+         PRIMARY KEY (receipt_id, ingredient_code))""",
+    # the branch's reason for a gap in one period (keyed by the period's END count)
+    """CREATE TABLE IF NOT EXISTS bc_variance_reason(
+         end_count_id INTEGER NOT NULL, ingredient_code TEXT NOT NULL, branch_id INTEGER NOT NULL,
+         reason_code TEXT NOT NULL, note TEXT, who TEXT, at TEXT,
+         PRIMARY KEY (end_count_id, ingredient_code))""",
+    # "every delivery of this period is recorded" — until then the period is incomplete, never guessed
+    """CREATE TABLE IF NOT EXISTS bc_variance_period(
+         end_count_id INTEGER PRIMARY KEY, branch_id INTEGER NOT NULL,
+         receipts_confirmed_by TEXT, receipts_confirmed_at TEXT)""",
     """CREATE TABLE IF NOT EXISTS bc_rel_prep_line(
          release_id INTEGER NOT NULL, prepared_code TEXT NOT NULL, seq INTEGER NOT NULL,
          ingredient_code TEXT NOT NULL, qty REAL NOT NULL, unit TEXT, note TEXT,
@@ -247,6 +267,7 @@ OWNED_TABLES = (
     "bc_sku_cost_month",          # the cut-over: released cost per SKU per month (dated.py)
     "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
     "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)
+    "bc_receipt", "bc_receipt_line", "bc_variance_reason", "bc_variance_period",   # Phase 2 S7 (variance.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
