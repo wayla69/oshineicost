@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Type-check the dashboard's JS slices without a build step (jsconfig.json,
-# js/globals.d.ts). Part of scripts/gate.sh.
+# js/globals.d.ts) and recon's (recon/frontend/jsconfig.json, recon/frontend/js/).
+# Part of scripts/gate.sh.
 #
 # Fails on the error classes that mean a broken program:
 #   TS2304/TS2552  a name that is defined nowhere (or a typo tsc can spell-correct)
@@ -17,7 +18,9 @@
 set -u
 cd "$(dirname "$0")/.."
 command -v npx >/dev/null 2>&1 || { echo "check-js: npx not found — install Node.js to run the JS check"; exit 0; }
-out=$(npx --yes -p typescript tsc -p jsconfig.json 2>&1)
+# Two programs: each app's slices share one global scope of their own (both
+# define $, fmt, esc, api… for their own page), so they are checked apart.
+out=$(npx --yes -p typescript tsc -p jsconfig.json 2>&1; npx --yes -p typescript tsc -p recon/frontend/jsconfig.json 2>&1)
 noise='TS2339|TS2345|TS2322'
 real=$(printf '%s\n' "$out" | grep "error TS" | grep -Ev "$noise" || true)
 n_noise=$(printf '%s\n' "$out" | grep "error TS" | grep -Ec "$noise" || true)
