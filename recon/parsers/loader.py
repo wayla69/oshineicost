@@ -256,7 +256,9 @@ def unlock_pdf(raw: bytes, passwords: list[str] | None = None) -> bytes | None:
     except ImportError:
         return None
     pws = passwords if passwords is not None else pdf_passwords()
-    for pw in pws:
+    # "" first: an owner-password-only PDF (permissions lock, no open password)
+    # opens without one — it must not be refused as locked.
+    for pw in [""] + [p for p in pws if p]:
         try:
             with pikepdf.open(io.BytesIO(raw), password=pw) as pdf:
                 buf = io.BytesIO()

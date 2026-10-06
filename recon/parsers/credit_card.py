@@ -13,7 +13,7 @@ Supported:
 from __future__ import annotations
 import io
 import openpyxl
-from .bank import _to_float, _parse_thai_date, _blank
+from .bank import _to_float, _parse_thai_date, _blank, _cell
 
 
 def _detect_card_type(raw: str) -> str:
@@ -65,17 +65,22 @@ def _parse_kbank_merchant(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[di
             if not _blank(raw_date):
                 skipped += 1
             continue
+        # A column the header lacks reads as empty — never as column 0.
+        gross  = _to_float(_cell(row, col, "gross"))
+        refund = _to_float(_cell(row, col, "refund"))
+        fee    = _to_float(_cell(row, col, "mdr_fee"))
         results.append({
             "settlement_date": d,
-            "card_type":       _detect_card_type(str(row[col.get("card_type", 0)] or "")),
-            "txn_count":       int(_to_float(row[col.get("count", 0)])),
-            "gross_amount":    _to_float(row[col.get("gross", 0)]),
-            "refund_amount":   _to_float(row[col.get("refund", 0)]),
-            "mdr_fee":         _to_float(row[col.get("mdr_fee", 0)]),
-            "net_amount":      _to_float(row[col.get("net", 0)]),
-            "terminal_id":     str(row[col.get("terminal", 0)] or "").strip(),
-            "merchant_id":     str(row[col.get("merchant", 0)] or "").strip(),
-            "batch_no":        str(row[col.get("batch", 0)] or "").strip(),
+            "card_type":       _detect_card_type(str(_cell(row, col, "card_type") or "")),
+            "txn_count":       int(_to_float(_cell(row, col, "count"))),
+            "gross_amount":    gross,
+            "refund_amount":   refund,
+            "mdr_fee":         fee,
+            "net_amount":      (_to_float(_cell(row, col, "net")) if "net" in col
+                                else gross - refund - fee),
+            "terminal_id":     str(_cell(row, col, "terminal") or "").strip(),
+            "merchant_id":     str(_cell(row, col, "merchant") or "").strip(),
+            "batch_no":        str(_cell(row, col, "batch") or "").strip(),
         })
     return results, skipped
 
@@ -201,19 +206,20 @@ def _parse_generic_cc(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
             if not _blank(raw_date):
                 skipped += 1
             continue
-        gross  = _to_float(row[col.get("gross", 0)])
-        refund = _to_float(row[col.get("refund", 0)])
-        fee    = _to_float(row[col.get("mdr_fee", 0)])
-        net    = _to_float(row[col.get("net", 0)]) if "net" in col else gross - refund - fee
+        # A column the header lacks reads as empty — never as column 0.
+        gross  = _to_float(_cell(row, col, "gross"))
+        refund = _to_float(_cell(row, col, "refund"))
+        fee    = _to_float(_cell(row, col, "mdr_fee"))
+        net    = _to_float(_cell(row, col, "net")) if "net" in col else gross - refund - fee
         results.append({
             "settlement_date": d,
-            "card_type":  _detect_card_type(str(row[col.get("card_type", 0)] or "")),
-            "txn_count":  int(_to_float(row[col.get("count", 0)])),
+            "card_type":  _detect_card_type(str(_cell(row, col, "card_type") or "")),
+            "txn_count":  int(_to_float(_cell(row, col, "count"))),
             "gross_amount":  gross,
             "refund_amount": refund,
             "mdr_fee":       fee,
             "net_amount":    net,
-            "terminal_id":   str(row[col.get("terminal", 0)] or "").strip(),
+            "terminal_id":   str(_cell(row, col, "terminal") or "").strip(),
             "merchant_id":   "",
             "batch_no":      "",
         })
@@ -234,7 +240,10 @@ def parse_cc_settlement(
     # Detect provider from file header rows. Scan deep enough (15 rows) to catch
     # both the Krungsri marker ('Entity Name : KRUNGSRI', row ~5) and the RDB003
     # column header ('MSF Amt' / 'Net Payment', row ~11).
-    detected = provider or "generic"
+    # The UI sends 'KBANK' / 'KTC'; route on the lower-cased key but return
+    # (store) the provider exactly as given.
+    key = (provider or "").strip().lower()
+    detected = key or "generic"
     header_text = " ".join(
         str(c).lower()
         for row in ws.iter_rows(min_row=1, max_row=15, values_only=True)
@@ -245,7 +254,7 @@ def parse_cc_settlement(
     sig_rdb003 = "msf amt" in header_text and "net payment" in header_text
     if sig_rdb003:
         detected = "krungsri"
-    elif not provider:
+    elif not key:
         if "krungsri" in header_text or "ayudhya" in header_text:
             detected = "krungsri"
         elif "kasikorn" in header_text or "kbank" in header_text:
@@ -264,4 +273,6 @@ def parse_cc_settlement(
     except ValueError:
         rows, skipped = _parse_generic_cc(ws)
 
+    if provider and detected != "Krungsri":
+        detected = provider
     return detected, rows, skipped
