@@ -100,11 +100,13 @@ app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["
 
 @app.middleware("http")
 async def _frontend_no_cache(request, call_next):
-    """The frontend is a single inline-HTML file served by StaticFiles, which
-    sends only last-modified/etag (no Cache-Control). Browsers then apply
-    heuristic caching and may serve a stale build even after a refresh. Force
-    revalidation on /app so a fresh deploy is visible immediately (the etag still
-    yields a cheap 304 when nothing changed)."""
+    """The frontend (index.html + its js/*.js slices, the ui-kit stylesheets and
+    vendor files) is served by StaticFiles, which sends only last-modified/etag
+    (no Cache-Control). Browsers then apply heuristic caching and may serve a
+    stale build even after a refresh. Force revalidation on EVERYTHING under /app
+    (not just index.html: a fresh page with a cached old script is the worst
+    case) so a fresh deploy is visible immediately (the etag still yields a cheap
+    304 when nothing changed)."""
     resp = await call_next(request)
     if request.url.path.startswith("/app"):
         resp.headers["Cache-Control"] = "no-cache, must-revalidate"
@@ -297,6 +299,14 @@ def startup():
 # ── Static frontend ───────────────────────────────────────────────────────────
 
 _FRONTEND = Path(__file__).parent / "frontend"
+# The dashboard's shared design kit (docs/ui-kit: tokens.css = the single source
+# of colour/radius/shadow tokens, theme-groups.css = group hues). The frontend
+# links it as ui-kit/… so recon wears the same tokens, light and dark. Mounted
+# BEFORE /app so the /app StaticFiles mount does not shadow it; read-only, and
+# skipped when the folder is absent (the page then falls back to its own values).
+_UI_KIT = Path(__file__).resolve().parent.parent / "docs" / "ui-kit"
+if _UI_KIT.is_dir():
+    app.mount("/app/ui-kit", StaticFiles(directory=str(_UI_KIT)), name="ui-kit")
 if _FRONTEND.exists():
     app.mount("/app", StaticFiles(directory=str(_FRONTEND), html=True), name="frontend")
 

@@ -4,26 +4,45 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>กระทบยอด — Oshinei</title>
+<!-- The dashboard's design kit (docs/ui-kit, mounted at /app/ui-kit by recon/main.py):
+     tokens.css = colours / radii / shadows for light AND body.dark; theme-groups.css = group hues
+     (recon is the "money" group). recon's own names below are aliases of these tokens. -->
+<link rel="stylesheet" href="ui-kit/tokens.css">
+<link rel="stylesheet" href="ui-kit/theme-groups.css">
 <link rel="stylesheet" href="vendor/kira-ui.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <style>
-/* Formal theme (2026-09-30): the dashboard's navy, KIRA UI, square bordered surfaces */
+/* Tokens (2026-10 UX phase 1): recon wears the dashboard's design kit. Every recon name is an
+   ALIAS of a kit token (ui-kit/tokens.css), declared on BOTH :root and body.dark so the dark
+   theme re-resolves them against the kit's dark values. The fallbacks only matter if the kit
+   folder is missing (then the page stays light). Text colours are always one of these inks. */
+:root,body.dark{
+  --brand:var(--accent,#1f3a6b);--brand-deep:var(--accent-hover,#16294d);--brand-soft:var(--accent-soft,#e8eef7);
+  --on-brand:var(--on-accent,#fff);
+  --ok:var(--good-ink,#047857);--warn:var(--amber-ink,#a44a08);--err:var(--bad-ink,#b91c1c);--info:var(--sky-ink,#0369a1);
+  --bg:var(--bg-page,#f0f4f8);--card:var(--bg-card,#fff);--input:var(--bg-input,#fff);
+  --subtle:var(--bg-subtle,#f8fafc);--hover:var(--bg-hover,#eef2f7);
+  --line:var(--border,#d5dbe3);--line-soft:var(--border-soft,#e6eaf0);--line-ctl:var(--border-control,#7d8aa0);
+  --txt:var(--text-primary,#0f172a);--sub:var(--text-secondary,#475569);--mut:var(--text-muted,#5f6c80);
+  --radius:var(--r-md,12px);--radius-sm:var(--r-sm,8px);--radius-lg:var(--r-lg,16px);
+  --shadow:var(--shadow-card,none);
+  /* the money group's hue (ui-kit/theme-groups.css, body[data-group="money"]) */
+  --place:var(--group,#c2413b)}
+/* recon-local status tints (the kit has no soft good/bad/amber/info backgrounds) */
 :root{
-  --brand:#1f3a6b;--brand-deep:#16294d;--brand-soft:#e8eef7;
-  --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fdf6ea;
-  --err:#b91c1c;--err-bg:#fdf0ef;--info:#1d4ed8;--info-bg:#eef4fb;
-  --bg:#f0f4f8;--card:#fff;--line:#d5dbe3;--line-soft:#e6eaf0;
-  --txt:#0f172a;--sub:#475569;--mut:#5f6c80;
-  --radius:4px;--radius-sm:3px;
-  --shadow:none;
+  --ok-bg:#ecfdf5;--warn-bg:#fdf6ea;--err-bg:#fdf0ef;--info-bg:#eef4fb;--ok-line:#a7f3d0;
+  /* data marks (day-cell edges, progress fills): bright fills, never text; same in both themes */
+  --mark-ok:#10b981;--mark-err:#ef4444;--mark-warn:#f59e0b;--mark-info:#3b82f6;
   --nav-h:58px}
+body.dark{--ok-bg:#0f2f29;--warn-bg:#33270f;--err-bg:#3a1b20;--info-bg:#132a47;--ok-line:#1f5c4a;
+  color-scheme:dark}
 *{box-sizing:border-box;margin:0}
 body{font-family:'KIRA UI','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
   background:var(--bg);color:var(--txt);font-size:14.5px;line-height:1.6;
   -webkit-font-smoothing:antialiased}
 .ti{vertical-align:-.125em;line-height:1}
 .wrap{max-width:1080px;margin:0 auto;padding:24px 22px 56px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);
   padding:18px 22px;box-shadow:var(--shadow)}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 h1{font-size:19px;font-weight:700;letter-spacing:-.01em}
@@ -39,21 +58,21 @@ a:hover{text-decoration:underline}
 
 /* status chips — พื้นอ่อน ตัวอักษรเข้ม อ่านชัดไม่แสบตา */
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
-  padding:3px 10px;border-radius:3px;white-space:nowrap;border:none;line-height:1.5;
+  padding:3px 10px;border-radius:var(--radius-sm);white-space:nowrap;border:none;line-height:1.5;
   font-family:inherit}
 .c-ok{background:var(--ok-bg);color:var(--ok)}
 .c-warn{background:var(--warn-bg);color:var(--warn)}
 .c-err{background:var(--err-bg);color:var(--err)}
 .c-mut{background:var(--line-soft);color:var(--sub)}
 .c-setup{background:var(--info-bg);color:var(--info)}
-button.chip{cursor:pointer;transition:filter .15s}
+button.chip{cursor:pointer;transition:filter .12s}
 button.chip:hover{filter:brightness(.95)}
 
-.btn{border:1px solid var(--line);background:#fff;border-radius:var(--radius-sm);padding:8px 15px;
+.btn{border:1px solid var(--line);background:var(--card);border-radius:var(--radius-sm);padding:8px 15px;
   cursor:pointer;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--txt);
-  transition:background .15s,border-color .15s}
-.btn:hover{background:var(--line-soft);border-color:#cbd5e1}
-.btn-pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+  transition:background .12s,border-color .12s}
+.btn:hover{background:var(--line-soft);border-color:var(--line-ctl)}
+.btn-pri{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 .btn-pri:hover{background:var(--brand-deep);border-color:var(--brand-deep)}
 .btn-sm{font-size:12px;padding:4px 10px}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
@@ -62,23 +81,23 @@ button.chip:hover{filter:brightness(.95)}
 .grid-ch{display:grid;grid-template-columns:1.45fr 1fr 1fr 1.35fr 20px;gap:10px;
   align-items:center;padding:14px 18px;border-bottom:1px solid var(--line-soft);
   cursor:pointer;transition:background .12s}
-.grid-ch:hover{background:#f8fafc}
+.grid-ch:hover{background:var(--hover)}
 .grid-ch:last-child{border-bottom:none}
 .ch-name{font-size:15px;font-weight:600}
 .grid-ch .num{font-size:15px}
 
 /* ปฏิทินวัน */
 .daygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;padding:14px 18px}
-.daycell{border:1px solid var(--line);border-radius:4px;padding:7px 9px;font-size:12px;
-  cursor:pointer;background:#fff;transition:border-color .12s,box-shadow .12s}
+.daycell{border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px 9px;font-size:12px;
+  cursor:pointer;background:var(--card);transition:border-color .12s,box-shadow .12s}
 .daycell:hover{border-color:var(--brand);box-shadow:var(--shadow)}
 .daycell b{font-size:13.5px}
-.d-ok{border:1px solid #10b981}.d-diff{border-left:4px solid #ef4444}
-.d-waiting{border-left:4px solid #f59e0b}.d-setup{border-left:4px solid #3b82f6}
+.d-ok{border:1px solid var(--mark-ok)}.d-diff{border-left:4px solid var(--mark-err)}
+.d-waiting{border-left:4px solid var(--mark-warn)}.d-setup{border-left:4px solid var(--mark-info)}
 
 .prog{height:9px;background:var(--line);border-radius:4px;overflow:hidden;flex:1;min-width:90px}
-.prog>div{height:100%;background:#10b981;border-radius:4px;transition:width .3s}
-.prog.p-warn>div{background:#f59e0b}.prog.p-err>div{background:#ef4444}
+.prog>div{height:100%;background:var(--mark-ok);border-radius:4px}
+.prog.p-warn>div{background:var(--mark-warn)}.prog.p-err>div{background:var(--mark-err)}
 
 table{border-collapse:collapse;width:100%}
 td,th{padding:10px 14px;font-size:13.5px;border-bottom:1px solid var(--line-soft);text-align:right}
@@ -86,26 +105,26 @@ th{font-size:11.5px;font-weight:600;color:var(--mut)}
 td:first-child,th:first-child{text-align:left}
 td.mono{font-variant-numeric:tabular-nums}
 
-.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#0f172a;
-  color:#fff;padding:11px 20px;border-radius:4px;font-size:13.5px;opacity:0;
-  transition:opacity .3s;pointer-events:none;z-index:50;box-shadow:0 8px 24px rgba(15,23,42,.25)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--txt);
+  color:var(--card);padding:11px 20px;border-radius:var(--radius);font-size:13.5px;opacity:0;
+  transition:opacity .12s;pointer-events:none;z-index:50;box-shadow:0 8px 24px rgba(15,23,42,.25)}
 .toast.show{opacity:1}
 
 .todo-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
 .todo-item:last-child{border-bottom:none}
-.sugg{background:var(--ok-bg);border:1px solid #a7f3d0;border-radius:4px;padding:11px 15px;margin-bottom:8px;font-size:13.5px}
-.hero-rc{background:#fff7ed;border:1px solid #fed7aa;border:1px solid var(--warn)}
+.sugg{background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:var(--radius);padding:11px 15px;margin-bottom:8px;font-size:13.5px}
+.hero-rc{background:var(--warn-bg);border:1px solid var(--warn)}
 .rc-head{font-weight:700;font-size:14px;margin-bottom:4px}
 .rc-story{font-size:14.5px;line-height:1.55}
 .rc-ev{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
-.rc-chip{background:#fff;border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:13px}
+.rc-chip{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);padding:5px 10px;font-size:13px}
 .rc-arrow{color:var(--mut);font-weight:700}
 .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;justify-content:center;z-index:60}
-.sheet-box{background:#fff;width:100%;max-width:520px;border-radius:4px 16px 0 0;padding:18px 18px 22px;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
+.sheet-box{background:var(--card);width:100%;max-width:520px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:18px 18px 22px;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
 .sheet-h{font-weight:700;font-size:15px;margin-bottom:4px}
-.sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:4px;font:inherit;box-sizing:border-box}
+.sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);font:inherit;box-sizing:border-box}
 .rc-reasons{display:flex;flex-direction:column;gap:7px}
-.rc-reason{justify-content:flex-start;text-align:left;background:#f8fafc;border:1px solid var(--line)}
+.rc-reason{justify-content:flex-start;text-align:left;background:var(--subtle);border:1px solid var(--line)}
 /* Phase 2: branch inbox drawers + problem/coin cards */
 .drawer-h{display:block;font-size:13.5px;font-weight:600;color:var(--sub)}
 .drawer-h:hover{text-decoration:none;filter:brightness(.95)}
@@ -114,7 +133,7 @@ td.mono{font-variant-numeric:tabular-nums}
 .coin-card{background:var(--line-soft);border:1px solid var(--mut)}
 .coin-name{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
 .ch-prob .grid-ch{padding-left:0}
-.fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;
+.fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);
   font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;text-align:right}
 .fee-in:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
 input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size:13.5px;color:var(--txt)}
@@ -124,9 +143,9 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 /* ── หน้าแรก: กล่องงานทั้งเครือ (Phase 3 inbox) ── */
 .ov-hero{padding:14px 18px}
 .ov-hero-line{font-size:15.5px;line-height:1.5}
-.ov-reclass{background:var(--ok-bg);border:1px solid #a7f3d0;border:1px solid var(--ok);font-size:14px;padding:12px 16px}
+.ov-reclass{background:var(--ok-bg);border:1px solid var(--ok);font-size:14px;padding:12px 16px}
 .ov-row{display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;border-bottom:1px solid var(--line-soft);transition:background .12s}
-.ov-row:hover{background:#f8fafc}
+.ov-row:hover{background:var(--hover)}
 .ov-row:last-child{border-bottom:none}
 .ov-row-main{flex:1;min-width:0}
 .ov-bname{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
@@ -136,14 +155,14 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 .ov-row-done{padding:11px 18px}
 .ov-row-done .ov-bname{font-weight:500;color:var(--sub)}
 .ov-done-toggle{display:block;padding:12px 18px;font-size:13.5px;color:var(--sub);font-weight:500}
-.ov-done-toggle:hover{text-decoration:none;background:#f8fafc}
+.ov-done-toggle:hover{text-decoration:none;background:var(--hover)}
 /* Phase 4 #1: overview manager attention bar */
 .review-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--warn);background:var(--warn-bg)}
 .review-bar .rb-link{font-size:13px;font-weight:600}
 .review-bar .rb-link:not(:last-child)::after{content:'·';color:var(--mut);margin-left:8px;font-weight:400}
 /* Phase 4 #2: "เพิ่มเติม" bottom-sheet menu rows */
 .more-menu{display:flex;flex-direction:column;gap:2px;margin-top:8px}
-.more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:4px;color:var(--txt);font-size:14px;font-weight:600;background:#fff;transition:background .12s}
+.more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);font-size:14px;font-weight:600;background:var(--card);transition:background .12s}
 .more-item:hover{background:var(--line-soft);text-decoration:none}
 .more-item .lbl{font-weight:400}
 /* <i class="ti ti-calendar" aria-hidden="true"></i> สรุปบัญชีรายวัน (รายใบ) — daybook cards, 1 วัน = 1 ใบ */
@@ -185,7 +204,7 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 .loading{padding:38px 0;text-align:center;color:var(--mut);font-size:13px}
 .spin{display:inline-block;width:17px;height:17px;border:2.5px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit}
+.mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit}
 .mv-tbl{width:100%;border-collapse:collapse;font-size:13px}
 .mv-tbl td{padding:5px 6px;border-top:1px solid var(--line-soft)}
 @media (max-width:640px){
@@ -200,9 +219,9 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
   td,th{padding:7px 7px;font-size:12.5px}
 }
 /* ── Phase 5: Responsive Nav ── */
-#main-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;
+#main-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);
   border-top:1px solid var(--line);display:flex;z-index:40;
-  box-shadow:0 -2px 12px rgba(15,23,42,.06);safe-area-inset-bottom:env(safe-area-inset-bottom)}
+  box-shadow:inset 0 3px 0 var(--place),0 -2px 12px rgba(15,23,42,.06);safe-area-inset-bottom:env(safe-area-inset-bottom)}
 .nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:1px;font-size:10.5px;font-weight:500;
   color:var(--mut);padding:6px 2px;text-decoration:none;border:none;background:none;
@@ -210,7 +229,7 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 .nav-tab.active,.nav-tab:hover{color:var(--brand);text-decoration:none}
 .nav-tab .ni{font-size:20px;line-height:1.2}
 /* top-tab strip — rendered inside header() on desktop */
-.top-nav{display:none;border-bottom:1px solid var(--line);
+.top-nav{display:none;border-bottom:1px solid var(--line);box-shadow:inset 0 -3px 0 var(--place);
   margin:4px -18px 12px;padding:0 4px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
 .top-nav::-webkit-scrollbar{display:none}
 .tnt{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500;
@@ -223,9 +242,9 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 /* reports hub grid */
 .rpt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:6px}
 .rpt-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;
-  border:1px solid var(--line);border-radius:4px;background:#fff;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--card);
   color:var(--txt);text-decoration:none;transition:background .12s,border-color .12s}
-.rpt-item:hover{background:var(--line-soft);border-color:#cbd5e1;text-decoration:none}
+.rpt-item:hover{background:var(--line-soft);border-color:var(--line-ctl);text-decoration:none}
 .rpt-icon{font-size:20px;flex:none;line-height:1.3}
 .rpt-body{flex:1;min-width:0}
 .rpt-title{font-weight:600;font-size:13.5px;line-height:1.3}
@@ -243,9 +262,33 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 @media(max-width:640px){#disc-bulk-bar{bottom:calc(var(--nav-h) + env(safe-area-inset-bottom))}}
 /* แถว/ช่องที่กดได้ (role=button) — กด Tab แล้วเห็นกรอบโฟกัส */
 [role=button][tabindex]:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+/* focus: 2px accent outline, 2px off the edge (design rule); full-width rows above keep it inset
+   so a card edge never clips it */
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+[role=button][tabindex]:focus-visible{outline-offset:-2px}
+/* form fields sit on the kit's input surface in both themes */
+input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),select,textarea{
+  background-color:var(--input);color:var(--txt)}
+/* theme toggle (header) */
+.theme-btn{padding:4px 8px;line-height:1.2}
+.theme-btn .ti{font-size:15px}
+/* motion: colour/border only, and none at all when the OS asks for less */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;scroll-behavior:auto !important}
+}
 </style>
 </head>
-<body>
+<body data-group="money">
+<script>
+/* Theme before first paint: the stored choice (same key as the dashboard: 'oshinei_dark' = '1'/'0'),
+   else follow the OS. Storage can be blocked (private mode) — then just follow the OS. */
+(function(){
+  let d=null;try{d=localStorage.getItem('oshinei_dark');}catch(e){}
+  if(d!=='1'&&d!=='0')d=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'1':'0';
+  if(d==='1')document.body.classList.add('dark');
+})();
+</script>
 <div class="wrap" id="app">กำลังโหลด…</div>
 <nav id="main-nav" aria-label="เมนูหลัก"></nav>
 <div class="toast" id="toast"></div>
@@ -341,7 +384,7 @@ function openEvidence(channelKey){
   const dw=el&&el.closest('[id^="dw-"]');
   if(dw&&dw.style.display==='none') toggleDrawer(dw.id.slice(3));
   if(el && el.style.display==='none') toggleDays(idx);
-  setTimeout(()=>{const e=$('days-'+idx); if(e) e.scrollIntoView({behavior:'smooth',block:'center'});},50);
+  setTimeout(()=>{const e=$('days-'+idx); if(e) e.scrollIntoView({behavior:_scrollBehavior(),block:'center'});},50);
 }
 function drillTodo(key){ openEvidence(key); }   // back-compat: todo card + drillReclass call this
 
@@ -384,19 +427,48 @@ function header(extra){
   const h=location.hash.slice(1);
   return `<div class="row" style="margin-bottom:8px">
     <div class="row" style="gap:9px;cursor:pointer;flex-wrap:nowrap" onclick="location.hash=''">
-      <div style="width:34px;height:34px;border-radius:var(--radius-sm);background:var(--brand);color:#fff;
+      <div style="width:34px;height:34px;border-radius:var(--radius-sm);background:var(--brand);color:var(--on-brand);
         display:flex;align-items:center;justify-content:center;font-size:19px;flex:none"><i class="ti ti-scale" aria-hidden="true"></i></div>
       <div><h1 style="line-height:1.2">กระทบยอดรายเดือน</h1>
         <div class="lbl">Oshinei · POS ↔ เงินเข้าบัญชีจริง</div></div>
     </div>
     <input type="month" value="${esc(MONTH)}" onchange="setMonth(this.value)"
-      style="padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;box-shadow:var(--shadow)">
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);box-shadow:var(--shadow)">
     ${extra||''}
-    <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)"><i class="ti ti-key" aria-hidden="true"></i> รหัส</button>
+    ${_themeBtnHtml('margin-left:auto')}
+    <button class="btn btn-sm" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)"><i class="ti ti-key" aria-hidden="true"></i> รหัส</button>
   </div>
   ${_topNavHtml(h)}`;
 }
 function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);route();}
+/* โหมดมืด/สว่าง — ปุ่มไอคอนบนหัวหน้า · จำไว้ใน localStorage คีย์เดียวกับแดชบอร์ด ('oshinei_dark')
+   ยังไม่เคยเลือก = ตามระบบ (prefers-color-scheme) */
+const _isDark=()=>document.body.classList.contains('dark');
+function _themeBtnHtml(style){
+  const d=_isDark();
+  return `<button class="btn btn-sm theme-btn" id="theme-btn" ${style?`style="${style}"`:''} onclick="toggleTheme()"
+    aria-label="สลับโหมดมืด/สว่าง" title="สลับโหมดมืด/สว่าง" aria-pressed="${d}"><i class="ti ti-${d?'sun':'moon'}" aria-hidden="true"></i></button>`;
+}
+function _applyTheme(dark){
+  document.body.classList.toggle('dark',dark);
+  const b=$('theme-btn');
+  if(b){b.setAttribute('aria-pressed',String(dark));b.innerHTML=`<i class="ti ti-${dark?'sun':'moon'}" aria-hidden="true"></i>`;}
+}
+function toggleTheme(){
+  const dark=!_isDark();
+  _applyTheme(dark);
+  try{localStorage.setItem('oshinei_dark',dark?'1':'0');}catch(e){}
+}
+// ยังไม่เคยเลือกเอง → เปลี่ยนตามระบบทันทีเมื่อผู้ใช้สลับธีมของเครื่อง
+try{
+  const mq=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)');
+  if(mq&&mq.addEventListener)mq.addEventListener('change',e=>{
+    let d=null;try{d=localStorage.getItem('oshinei_dark');}catch(_){}
+    if(d!=='1'&&d!=='0')_applyTheme(e.matches);
+  });
+}catch(e){}
+// เลื่อนหน้าแบบนุ่ม เว้นแต่ระบบขอให้ลดการเคลื่อนไหว (prefers-reduced-motion)
+const _scrollBehavior=()=>(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)?'auto':'smooth';
 
 // จำนวน "เรื่องที่ต้องทำ" ของสาขา = todo + คู่ผิดช่อง (กันสาขาที่ดูเหมือนครบแต่ยังมีเงินผิดช่อง)
 function branchOpen(b){return (b.todo_count||0)+(b.reclass_count||0);}
@@ -622,7 +694,7 @@ function renderWrongChannel(){
   const errAmt=errs.reduce((a,e)=>a+Math.abs(e.amount||0),0);
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> รายงานข้อผิดพลาดประจำเดือน — ${esc(monthTh(MONTH))}</h2>
-    <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${brOpts}</select>
+    <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/reports/wrong-channel.print${pm}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
     <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">Excel</a></div>
   <div class="muted" style="margin-bottom:10px">ข้อผิดพลาดทุกประเภทที่พบในเดือนนี้ — ยอดต่าง, ขาดเอกสาร, เงินเข้าเกิน, เงินโอนไม่ครบ, รหัสยังไม่ตั้งธนาคาร และการบันทึกผิดช่อง · <b>ค้าง</b> = ยังต้องจัดการก่อนปิดเดือน</div>`;
@@ -751,7 +823,7 @@ function renderDaybook(){
   const brOpts=(r.branches||[]).map(b=>`<option value="${b.branch_id}" ${b.branch_id===r.branch_id?'selected':''}>${esc(b.name)}</option>`).join('');
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-calendar" aria-hidden="true"></i> สรุปบัญชีรายวัน (รายใบ) — ${esc(monthTh(MONTH))}</h2>
-    <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${brOpts}</select>
+    <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/daily-accounts.print${pm}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
   <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="#setup"><i class="ti ti-settings" aria-hidden="true"></i> ตั้งค่าระบบ</a></div>`;
   if(!(r.days||[]).length){ $('app').innerHTML=html+emptyState('calendar-off','ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้','ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน'); return; }
@@ -784,7 +856,7 @@ async function loadDashboard(){
 }
 function setDashDay(v){ if(!v)return; DASH_DAY=v; loadDashboard(); }
 function setDashMode(m){ DASH_MODE=m; renderDashboard(); }   // client-side — data already loaded
-function _dashDot(ch){ return `<span class="dash-dot" style="background:${CH_COLOR[ch]||'#94a3b8'}"></span>`; }
+function _dashDot(ch){ return `<span class="dash-dot" style="background:${CH_COLOR[ch]||'var(--mut)'}"></span>`; }
 function dashBranchCard(b){
   const empty=(rows)=>`<div class="card db-card dash-empty"><div class="db-head"><div class="db-date">${esc(b.name)}</div>
       <div class="db-net lbl">— ไม่มีรายการวันนี้</div></div></div>`;
@@ -837,7 +909,7 @@ function renderDashboard(){
   let html=header()+`<div class="row" style="margin-bottom:6px;align-items:center">
     <h2 style="font-size:16px"><i class="ti ti-chart-bar" aria-hidden="true"></i> รายได้ตามช่องทาง — รายวัน (ทุกสาขา)</h2>
     <input type="date" value="${esc(DASH_DAY)}" onchange="setDashDay(this.value)" title="เลือกวันจากปฏิทิน"
-      style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
+      style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">
   </div>
   <div class="row" style="gap:6px;margin-bottom:10px">${seg('acct','เงินเข้าจริง (บัญชี)')}${seg('pos','ยอด POS')}${seg('cmp','ประกบ POS ↔ เงินเข้า')}</div>
   <div class="muted" style="margin-bottom:12px">${acct
@@ -951,16 +1023,16 @@ async function loadBranch(bid){
 
   // คำถามตั้งค่า (unmapped codes) — ตอบจากคำแนะนำเอกสาร หรือตั้งค่าเองตรงนี้เลย
   r.setup_questions.forEach((q,qi)=>{
-    html+=`<div class="card c-setup" style="margin-bottom:12px;background:#e6f1fb">
+    html+=`<div class="card c-setup" style="margin-bottom:12px;background:var(--info-bg)">
       <div class="row">รหัสชำระ <b>${esc(q.code)}</b> (${fmt(q.amount)} บาท) ยังไม่รู้ว่าเข้าธนาคารไหน
       ${q.suggestion?` — เอกสารชี้ว่าเป็น <b>${esc(q.suggestion.category)}·${esc(q.suggestion.bank)}</b> (ตรง ${q.suggestion.hits} วัน)
         ${closed?'':`<button class="btn btn-sm" onclick="applySugg(${qi},this)">ใช้คำตอบนี้</button>`}`:''}
       ${closed?'':`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleMapper(${qi});return false">ตั้งค่าเอง ▾</a>`}</div>
       <div id="mapper-${qi}" style="display:none;margin-top:8px" class="row">
-        <select id="map-cat-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:4px">
+        <select id="map-cat-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:var(--radius-sm)">
           ${['QR','TRANSFER','CREDIT','CASH','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'].map(c=>`<option>${c}</option>`).join('')}
         </select>
-        <select id="map-bank-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:4px">
+        <select id="map-bank-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:var(--radius-sm)">
           ${['KTB','KBANK','KTC','BAY','SCB','BBL','NONE'].map(b=>`<option>${b}</option>`).join('')}
         </select>
         <button class="btn btn-sm btn-pri" onclick="applyMapper(${qi},this)">บันทึก</button>
@@ -972,7 +1044,7 @@ async function loadBranch(bid){
   const xfers=r.internal_transfer_suggestions||[];
   if(!closed&&xfers.length){
     const sum=xfers.reduce((a,x)=>a+x.amount,0);
-    html+=`<div class="card" style="margin-bottom:12px;background:#fffbeb;border:1px solid var(--warn)">
+    html+=`<div class="card" style="margin-bottom:12px;background:var(--warn-bg);border:1px solid var(--warn)">
       <div class="row"><b style="font-size:13.5px">⇄ พบยอดโอนเข้าที่น่าจะเป็น "การโอนกันเอง" ${xfers.length} รายการ (รวม ${fmt(sum)})</b>
         ${xfers.length>1?`<button class="btn btn-sm" style="margin-left:auto" onclick="excludeAllXfers()">ตัดออกทั้งหมด</button>`:''}</div>
       <div class="muted" style="margin:2px 0 8px">ยอดก้อนใหญ่ + เลขกลม + ไม่มีคำว่า "ขาย" ในรายละเอียด — ตัดออกแล้วจะไม่ถูกนำมากระทบยอด (ย้ายไปกล่อง "โอนภายใน" · ย้อนกลับได้)</div>
@@ -1199,7 +1271,7 @@ async function previewUpload(){
   const wrongBranch=p.detected_branch_id&&p.detected_branch_id!==DATA.branch_id;
   const zeroRow=p.row_count===0&&!p.empty_statement;            // A1/C7: nothing usable parsed
   const block=wrongBranch||zeroRow;                              // can't confirm these
-  panel.innerHTML=`<div class="card" style="margin-top:10px;background:#fafafa">
+  panel.innerHTML=`<div class="card" style="margin-top:10px;background:var(--subtle)">
     <div class="row"><b style="font-size:13.5px">${esc(UP_DOC.label)}</b>
       <span class="lbl">${esc(f.name)} · ตรวจพบ: ${esc(p.provider||'ไม่ระบุ')} · ${p.row_count} รายการ${p.skipped_rows?` (ข้าม ${p.skipped_rows})`:''}${dupCount(p)?` · ซ้ำกับที่มีอยู่ ${dupCount(p)} รายการ (จะข้าม)`:''}</span></div>
     ${p.empty_statement?`<div class="chip c-warn" style="margin-top:6px">เอกสารว่าง (No Data) — ยืนยันได้ ระบบจะบันทึกว่าเดือนนี้ไม่มีรายการ</div>`:''}
@@ -1241,7 +1313,7 @@ async function bulkUpload(inputId){
   const dupAll=dupCount(s)||(r.files||[]).reduce((a,f)=>a+dupCount(f),0);
   const stCls=x=>x==='ok'?'c-ok':x==='skipped'?'c-warn':'c-err';
   const stTh=x=>x==='ok'?'สำเร็จ':x==='skipped'?'ข้าม':'ผิดพลาด';
-  panel.innerHTML=`<div class="card" style="margin-top:10px;background:#fafafa">
+  panel.innerHTML=`<div class="card" style="margin-top:10px;background:var(--subtle)">
     <div class="row"><b style="font-size:13.5px">ผลอัปโหลด ${s.total} ไฟล์</b>
       <span class="lbl">✓ สำเร็จ ${s.saved} · ข้าม ${s.skipped} · ผิดพลาด ${s.errored} · รวม ${fmt(s.rows)} รายการ${dupAll?` · ข้ามบรรทัดซ้ำ ${fmt(dupAll)}`:''}</span>
       <button class="btn btn-sm btn-pri" style="margin-left:auto" onclick="route()">รีเฟรชหน้า</button></div>
@@ -1290,7 +1362,7 @@ async function toggleDocs(){
           ${DATA.closed?'':`<button class="btn btn-sm" onclick="moveUpload(${u.upload_id})" title="เอกสารอยู่ผิดสาขา">ย้ายสาขา</button>
           <button class="btn btn-sm" style="color:var(--err)" onclick="delUpload(${u.upload_id},this)">ลบ</button>`}
         </td></tr>
-        <tr id="uplines-${u.upload_id}" style="display:none"><td colspan="6" style="text-align:left;background:#fafafa"></td></tr>`;
+        <tr id="uplines-${u.upload_id}" style="display:none"><td colspan="6" style="text-align:left;background:var(--subtle)"></td></tr>`;
     }).join('')}
   </table></div>
   <div class="muted" style="margin-top:4px">% จับคู่คำนวณสดจากเอกสารจริง — ลบไฟล์แล้วอัปใหม่ได้ถ้าอัปผิด (ระบบกันไฟล์ซ้ำให้)</div>`;
@@ -1858,7 +1930,7 @@ async function openDay(i,day){
   });
   _DAYS[i]={i,day,lines,key:ch.key};   // แยกต่อช่องทาง — เปิดหลายช่องพร้อมกันไม่ชนกัน
   const varCol=Math.abs(d.variance)<=100?'var(--ok)':'var(--err)';
-  box.innerHTML=`<div class="card" style="background:#fafafa">
+  box.innerHTML=`<div class="card" style="background:var(--subtle)">
     <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">${day} · ${esc(ch.label)}</b>
       <span class="lbl">POS ${fmt(d.pos)}${pos&&pos.count?` · ${pos.count} บิล`:''} · เข้าจริง ${fmt(d.ext)} ·
         ต่าง <span style="color:${varCol};font-weight:600">${d.variance>0?'+':''}${fmt(d.variance)}</span></span></div>
@@ -1896,7 +1968,7 @@ function posDayHtml(pos,i){
         <td style="text-align:left"><span class="lbl" id="poscar-${i}-${k}">▸</span> ${esc(b.code)}
           <span class="lbl">${esc(b.bank)}</span></td>
         <td class="mono">${fmt(b.amount)}</td><td class="lbl">${b.count} บิล</td></tr>
-      <tr id="poscode-${i}-${k}" style="display:none"><td colspan="3" style="padding:0;background:#fff">
+      <tr id="poscode-${i}-${k}" style="display:none"><td colspan="3" style="padding:0;background:var(--card)">
         <div style="max-height:180px;overflow:auto"><table>${recs.map(l=>`<tr>
           <td style="text-align:left;font-size:12px;color:var(--sub)">${esc(l.receipt_no)}</td>
           <td class="mono" style="font-size:12px">${fmt(l.amount)}</td></tr>`).join('')}</table></div></td></tr>`;
@@ -1924,7 +1996,7 @@ async function toggleCodeDaily(i,k){
   catch(e){box.innerHTML=`<div class="chip c-err" style="margin:6px 0">${esc(e.message)}</div>`;return;}
   const days=r.by_day||[];
   if(!days.length){box.innerHTML='<div class="muted" style="padding:6px 0">ไม่มียอดของรหัสนี้</div>';return;}
-  box.innerHTML=`<div class="card" style="padding:8px 10px;margin:6px 0;box-shadow:none;background:#fafafa">
+  box.innerHTML=`<div class="card" style="padding:8px 10px;margin:6px 0;box-shadow:none;background:var(--subtle)">
     <div class="row" style="margin-bottom:4px"><b style="font-size:13px">${esc(code)} · ยอดรายวัน</b>
       <span class="lbl">รวม ${fmt(r.total)} · ${r.count} บิล${r.truncated?' (ใบเสร็จแสดงบางส่วน)':''}</span>
       <a href="#" class="lbl" style="margin-left:auto" onclick="toggleCodeDaily(${i},${k});return false">ปิด</a></div>
@@ -2001,7 +2073,7 @@ async function openMatcher(i,bank){
       <span class="lbl">${esc(m.note||'')}</span>
       ${DATA.closed?'':`<button class="btn btn-sm" style="margin-left:auto" onclick="mmDelete(${m.match_id})">ยกเลิก</button>`}
     </div>`).join('');
-  box.innerHTML=`<div class="card" style="margin:8px 12px;background:#fafafa">
+  box.innerHTML=`<div class="card" style="margin:8px 12px;background:var(--subtle)">
     <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">จับคู่ละเอียด — ${esc(ch.label)} · ${esc(bank)}</b>
       <a href="#" class="lbl" style="margin-left:auto" onclick="openMatcher(${i});return false">ปิด</a></div>
     ${matches?`<div style="border-bottom:1px dashed var(--line);margin-bottom:6px;padding-bottom:4px">${matches}</div>`:''}
@@ -2017,7 +2089,7 @@ async function openMatcher(i,bank){
     </div>
     <div class="row" style="margin-top:8px">
       <span class="lbl" id="mm-sum-${i}">เลือกทั้งสองฝั่งเพื่อจับคู่</span>
-      <input id="mm-note-${i}" class="mm-note" placeholder="หมายเหตุ" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;font-size:13px">
+      <input id="mm-note-${i}" class="mm-note" placeholder="หมายเหตุ" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);font-size:13px">
       <button class="btn btn-sm btn-pri" id="mm-go-${i}" disabled onclick="mmSubmit(${i},this)"><i class="ti ti-link" aria-hidden="true"></i> จับคู่</button>
     </div></div>`;
 }
@@ -2195,7 +2267,7 @@ function _diagBranchPicker(branches, currentBid, onchangeExpr){
     `<option value="${b.branch_id}" ${b.branch_id==currentBid?'selected':''}>${esc(b.name)}</option>`
   ).join('');
   return `<select onchange="${onchangeExpr}" title="เลือกสาขา"
-    style="padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${opts}</select>`;
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">${opts}</select>`;
 }
 
 /* ── #audit — Audit log (global, read-only) ─────────────────────────────── */
@@ -2238,7 +2310,7 @@ async function loadAudit(){
     <div class="row" style="margin-bottom:10px">
       <h2 style="font-size:16px"><i class="ti ti-clipboard-list" aria-hidden="true"></i> Audit Log — ประวัติการแก้ไข</h2>
       <select onchange="_AUDIT_ENTITY=this.value;loadAudit()" title="กรอง entity"
-        style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${entityOpts}</select>
+        style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">${entityOpts}</select>
     </div>
     <div class="muted" style="margin-bottom:10px">ทุกการเปลี่ยนแปลงในระบบ — บันทึกอัตโนมัติ · แสดงล่าสุด 200 รายการ · กรองด้วย entity ด้านขวา</div>
     <div class="card" style="padding:0;overflow:auto">
@@ -2308,8 +2380,8 @@ async function loadTrend(){
   const daily = (data.daily||[]);
   const cells = daily.map(d => {
     const pct = d.lane_pct;
-    const bg  = pct>=99?'#dcfce7':pct>=60?'#fef9c3':d.total_lanes?'#fee2e2':'#f1f5f9';
-    const col = pct>=99?'#15803d':pct>=60?'#854d0e':d.total_lanes?'#b91c1c':'#94a3b8';
+    const bg  = pct>=99?'var(--ok-bg)':pct>=60?'var(--warn-bg)':d.total_lanes?'var(--err-bg)':'var(--line-soft)';
+    const col = pct>=99?'var(--ok)':pct>=60?'var(--warn)':d.total_lanes?'var(--err)':'var(--mut)';
     const dayN = d.day.slice(8);
     const tip = `${d.day}\nLane match: ${pct}% (${d.matched}/${d.total_lanes})\nCoverage: ${d.cov_pct}%\nPOS: ${fmt(d.pos)} | Ext: ${fmt(d.ext)}`;
     return `<div class="daycell" title="${esc(tip)}"
@@ -2491,8 +2563,8 @@ function _renderBankCov(branches, picker, sid){
 let _BOARD_DATE = null;
 let _BOARD_DATES = null;   // {min_day, max_day} cached once
 
-const _BOARD_CELL = {matched:'#dcfce7',variance:'#fee2e2',pos_only:'#fef9c3',ext_only:'#fef9c3',no_source:'#f1f5f9',manual:'#dbeafe'};
-const _BOARD_FG   = {matched:'#15803d',variance:'#b91c1c',pos_only:'#854d0e',ext_only:'#854d0e',no_source:'#94a3b8',manual:'#1d4ed8'};
+const _BOARD_CELL = {matched:'var(--ok-bg)',variance:'var(--err-bg)',pos_only:'var(--warn-bg)',ext_only:'var(--warn-bg)',no_source:'var(--line-soft)',manual:'var(--info-bg)'};
+const _BOARD_FG   = {matched:'var(--ok)',variance:'var(--err)',pos_only:'var(--warn)',ext_only:'var(--warn)',no_source:'var(--mut)',manual:'var(--info)'};
 
 async function loadBoard(){
   const t=++_ROUTE_SEQ;
@@ -2543,9 +2615,9 @@ function _renderBoard(d){
       const cm = meta[c]||{};
       const tip = `${esc(b.branch_name)} · ${esc(lbl(c))}\nPOS ${fmt(cell.pos)} / เงินเข้า ${fmt(cell.ext)}\nต่าง ${varTxt2(cell.variance)} (${cell.status})`;
       return `<td style="text-align:right"><span title="${tip}"
-        style="display:inline-block;min-width:60px;padding:2px 7px;border-radius:4px;cursor:default;
+        style="display:inline-block;min-width:60px;padding:2px 7px;border-radius:var(--radius-sm);cursor:default;
                font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;
-               background:${_BOARD_CELL[cell.status]||'#f1f5f9'};color:${_BOARD_FG[cell.status]||'#475569'}"
+               background:${_BOARD_CELL[cell.status]||'var(--line-soft)'};color:${_BOARD_FG[cell.status]||'var(--sub)'}"
         >${fmt(cell.pos)}</span></td>`;
     }).join('');
     return `<tr>
@@ -2585,12 +2657,12 @@ function _renderBoard(d){
           min="${esc(_BOARD_DATES&&_BOARD_DATES.min_day||'')}"
           max="${esc(_BOARD_DATES&&_BOARD_DATES.max_day||'')}"
           onchange="_boardPickDate(this.value)"
-          style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
+          style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">
         <button class="btn btn-sm" onclick="_boardStep(1)">▶</button>
         <a class="btn btn-sm" href="/api/daily-report?day=${esc(_BOARD_DATE)}" target="_blank" title="รายงาน PDF ทุกสาขา"><i class="ti ti-printer" aria-hidden="true"></i> PDF ทุกสาขา</a>
       </div>
     </div>
-    <div class="muted" style="margin-bottom:10px">ยอด POS ต่อช่องทาง · สี: <span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:12px">✓ ตรง</span> <span style="background:#fee2e2;color:#b91c1c;padding:1px 6px;border-radius:4px;font-size:12px">≠ ต่าง</span> <span style="background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:4px;font-size:12px">ขาดเอกสาร</span></div>
+    <div class="muted" style="margin-bottom:10px">ยอด POS ต่อช่องทาง · สี: <span style="background:var(--ok-bg);color:var(--ok);padding:1px 6px;border-radius:var(--radius-sm);font-size:12px">✓ ตรง</span> <span style="background:var(--err-bg);color:var(--err);padding:1px 6px;border-radius:var(--radius-sm);font-size:12px">≠ ต่าง</span> <span style="background:var(--warn-bg);color:var(--warn);padding:1px 6px;border-radius:var(--radius-sm);font-size:12px">ขาดเอกสาร</span></div>
     <div class="card" style="margin-bottom:12px">
       <div class="row" style="flex-wrap:wrap;gap:16px">
         <div><div class="lbl">POS รวมทุกสาขา</div><b class="mono" style="font-size:18px">${fmt(tot.pos)}</b></div>
@@ -2676,7 +2748,7 @@ async function loadCoupon(){
   const dateInput = _CP_GRAN !== 'month'
     ? `<input type="date" value="${esc(_CP_DATE||MONTH+'-01')}"
          onchange="_CP_DATE=this.value;loadCoupon()"
-         style="padding:5px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">`
+         style="padding:5px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">`
     : '';
 
   // Branch picker
@@ -2686,7 +2758,7 @@ async function loadCoupon(){
   ].join('');
   const branchPicker = `<select onchange="_CP_BID=this.value;loadCoupon()"
     title="เลือกสาขา"
-    style="padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">${branchOpts}</select>`;
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">${branchOpts}</select>`;
 
   const tot = d.total || 0;
   const series = d.series || [];
@@ -2781,7 +2853,7 @@ async function _cpDrill(seriesId){
   const box = $('cp-drill');
   if(!box) return;
   box.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="muted">กำลังโหลด Series ${seriesId}…</div></div>`;
-  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  box.scrollIntoView({behavior:_scrollBehavior(), block:'nearest'});
 
   const q = _cpQuery() + `&series_id=${seriesId}` + (_CP_BID ? `&branch_id=${encodeURIComponent(_CP_BID)}` : '');
   let d = null;
@@ -2826,7 +2898,7 @@ async function _cpDrill(seriesId){
       ? subTable('แยกรายสาขา', brows, r=>r.branch_name) + subTable('แยกรายวัน', drows, r=>r.day)
       : '<div class="muted">ไม่มีข้อมูลสำหรับ series นี้</div>'}
   </div>`;
-  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  box.scrollIntoView({behavior:_scrollBehavior(), block:'nearest'});
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -3019,7 +3091,7 @@ function _discRender(){
   const rows=sorted.length?sorted.map(d=>{
     const isPending=d.resolution==='pending';
     const resSelect=isPending
-      ?`<select style="font-size:12px;padding:2px 5px;border:1px solid var(--line);border-radius:4px;background:#fff"
+      ?`<select style="font-size:12px;padding:2px 5px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input)"
            onchange="_discResolve(${d.id},this.value,this)">
            <option value="">แก้ไข…</option>
            <option value="accepted">✓ ยอมรับ</option>
@@ -3038,7 +3110,7 @@ function _discRender(){
           role="button" tabindex="0" onclick="_discDrillDays(${d.id},this)" title="คลิกดูแยกรายวัน">▾ ${d.variance>0?'+':''}${fmt(d.variance||0)}</td>
       <td class="mono" style="text-align:right;color:var(--sub)">${fmt(d.amount_external||0)}</td>
       <td class="mono" style="text-align:right">${fmt(d.amount_pos||0)}</td>
-      <td><input style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:#fff;width:90px"
+      <td><input style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);width:90px"
            placeholder="มอบหมาย…" value="${esc(d.assigned_to||'')}"
            onchange="_discAssign(${d.id},this.value)"></td>
       <td>${resSelect}</td>
@@ -3057,7 +3129,7 @@ function _discRender(){
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
         <span class="lbl">แสดง:</span>
-        <select style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit"
+        <select style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit"
           onchange="_DISC_FLT.resolution=this.value;_discFetch()">
           <option value="pending" ${_DISC_FLT.resolution==='pending'?'selected':''}>รอแก้ไข</option>
           <option value="accepted" ${_DISC_FLT.resolution==='accepted'?'selected':''}>ยอมรับแล้ว</option>
@@ -3065,11 +3137,11 @@ function _discRender(){
           <option value="rejected" ${_DISC_FLT.resolution==='rejected'?'selected':''}>ปฏิเสธ</option>
           <option value="all" ${_DISC_FLT.resolution==='all'?'selected':''}>ทุกสถานะ</option>
         </select>
-        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;width:110px"
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit;width:110px"
           placeholder="ช่องทาง…" value="${esc(_DISC_FLT.category)}"
           oninput="_DISC_FLT.category=this.value"
           onkeydown="if(event.key==='Enter')_discFetch()">
-        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit;width:90px"
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit;width:90px"
           placeholder="ธนาคาร…" value="${esc(_DISC_FLT.bank)}"
           oninput="_DISC_FLT.bank=this.value"
           onkeydown="if(event.key==='Enter')_discFetch()">
@@ -3093,13 +3165,13 @@ function _discRender(){
         <tbody id="disc-tbody">${rows}</tbody>
       </table>
     </div>
-    <div id="disc-bulk-bar" style="position:fixed;left:0;right:0;background:var(--brand);color:#fff;padding:10px 16px;display:none;z-index:200">
+    <div id="disc-bulk-bar" style="position:fixed;left:0;right:0;background:var(--brand);color:var(--on-brand);padding:10px 16px;display:none;z-index:200">
       <div class="row" style="gap:10px;max-width:900px;margin:0 auto;flex-wrap:wrap">
         <span id="disc-bulk-count" style="font-weight:600;align-self:center"></span>
-        <button class="btn" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('accepted',this)">✓ ยอมรับทั้งหมด</button>
-        <button class="btn" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('adjusted',this)">~ ปรับแล้ว</button>
-        <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="_discBulk('rejected',this)">✕ ปฏิเสธ</button>
-        <button class="btn btn-sm" style="margin-left:auto;background:rgba(0,0,0,.2);color:#fff;border:none" onclick="_discClearSel()">ยกเลิก</button>
+        <button class="btn" style="background:rgba(255,255,255,.2);color:var(--on-brand);border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('accepted',this)">✓ ยอมรับทั้งหมด</button>
+        <button class="btn" style="background:rgba(255,255,255,.2);color:var(--on-brand);border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('adjusted',this)">~ ปรับแล้ว</button>
+        <button class="btn" style="background:rgba(255,255,255,.15);color:var(--on-brand);border:1px solid rgba(255,255,255,.2)" onclick="_discBulk('rejected',this)">✕ ปฏิเสธ</button>
+        <button class="btn btn-sm" style="margin-left:auto;background:rgba(0,0,0,.2);color:var(--on-brand);border:none" onclick="_discClearSel()">ยกเลิก</button>
       </div>
     </div>`;
 
@@ -3182,7 +3254,7 @@ async function _discDrillDays(discId,cell){
   const colspan=parentTr.children.length;
   const expTr=document.createElement('tr');
   expTr.id=expandId;
-  expTr.style.background='#f8fafc';
+  expTr.style.background='var(--subtle)';
   expTr.innerHTML=`<td colspan="${colspan}" style="padding:10px 24px;color:var(--mut);font-size:13px">กำลังโหลด…</td>`;
   parentTr.after(expTr);
 
@@ -3196,7 +3268,7 @@ async function _discDrillDays(discId,cell){
     const dayRows=days.map(d=>{
       const clr=Math.abs(d.variance||0)>0.5?'var(--err)':'var(--ok)';
       const stCls=d.status==='matched'?'c-ok':d.status==='diff'?'c-err':'c-warn';
-      return `<tr style="border-top:1px solid #edf0f5">
+      return `<tr style="border-top:1px solid var(--line-soft)">
         <td style="padding:4px 10px;font-family:monospace;font-size:12px;color:var(--sub)">${esc(d.day)}</td>
         <td style="padding:4px 10px;text-align:right;font-family:monospace;font-size:12px">${fmt(d.pos||0)}</td>
         <td style="padding:4px 10px;text-align:right;font-family:monospace;font-size:12px;color:var(--sub)">${fmt(d.ext||0)}</td>
@@ -3206,7 +3278,7 @@ async function _discDrillDays(discId,cell){
     }).join('');
     expTr.innerHTML=`<td colspan="${colspan}" style="padding:0">
       <table style="width:100%">
-        <thead><tr style="background:#f1f4f9;font-size:11px;color:var(--mut)">
+        <thead><tr style="background:var(--hover);font-size:11px;color:var(--mut)">
           <th style="padding:4px 10px;text-align:left;font-weight:500">วันที่</th>
           <th style="padding:4px 10px;text-align:right;font-weight:500">POS</th>
           <th style="padding:4px 10px;text-align:right;font-weight:500">เงินเข้า</th>
@@ -3415,7 +3487,7 @@ function loadReports(){
 function _icBranchSel(brs,sel,fn,includeAll){
   const all=includeAll===false?'':`<option value="">ทุกสาขา</option>`;
   return `<select onchange="${fn}(this.value)" title="เลือกสาขา"
-    style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font:inherit">
+    style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);font:inherit">
     ${all}${brs.map(b=>`<option value="${b.branch_id}" ${String(sel)===String(b.branch_id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`;
 }
 
@@ -3619,7 +3691,7 @@ async function loadAcceptedVariance(){
     <a class="btn btn-sm" href="/api/reports/accepted-variance.xlsx${q}">Excel</a></div>
   <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
     <span class="muted">ยอดผลต่างที่ “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · เกณฑ์เน้นต่อรายการ</span>
-    <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:4px;font:inherit" title="เกณฑ์ (บาท/รายการ)">
+    <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);font:inherit" title="เกณฑ์ (บาท/รายการ)">
     <span class="muted">บาท</span></div>`;
   if(!s.items.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีผลต่างที่รับทราบในงวดนี้','ทุกช่องทางตรงตามจริง');return;}
   const over=s.over_count?`<span class="chip c-err">เกินเกณฑ์ ${s.over_count} รายการ</span>`:`<span class="chip c-ok">ไม่มีรายการเกินเกณฑ์ ✓</span>`;
@@ -3716,7 +3788,7 @@ function _setupDocChips(r){
   for(const k of ['doc1','doc2']){
     if(!m[k])continue;
     const up=ds[k]==='uploaded';
-    chips.push(`<span style="font-size:11px;padding:1px 7px;border-radius:4px;display:inline-block;margin:1px 2px 1px 0;background:${up?'var(--ok-bg)':'var(--warn-bg)'};color:${up?'var(--ok)':'var(--warn)'}">${up?'✓':'…'} ${esc(_SETUP_DOC_TH[m[k]]||m[k])}</span>`);
+    chips.push(`<span style="font-size:11px;padding:1px 7px;border-radius:var(--radius-sm);display:inline-block;margin:1px 2px 1px 0;background:${up?'var(--ok-bg)':'var(--warn-bg)'};color:${up?'var(--ok)':'var(--warn)'}">${up?'✓':'…'} ${esc(_SETUP_DOC_TH[m[k]]||m[k])}</span>`);
   }
   return chips.join('')||'<span class="lbl">—</span>';
 }
@@ -3741,12 +3813,12 @@ function _setupRender(){
   let html=header();
   // page title card
   html+=`<div class="card" style="margin-bottom:12px"><div class="row">
-    <div style="width:32px;height:32px;border-radius:4px;background:var(--brand);color:#fff;
+    <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:var(--brand);color:var(--on-brand);
       display:flex;align-items:center;justify-content:center;font-size:16px;flex:none"><i class="ti ti-settings" aria-hidden="true"></i></div>
     <div><h2 style="margin:0;font-size:16px">ตั้งค่าระบบกระทบยอด</h2>
       <div class="lbl">ตารางจับคู่รหัสรับเงิน · วิธีกระทบยอด · บัญชีธนาคาร · MID · รหัสสเตทเมนต์</div></div>
     <input type="month" value="${esc(MONTH)}" onchange="_setupChangeMonth(this.value)"
-      style="padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;margin-left:auto">
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);margin-left:auto">
     <a href="#" onclick="location.hash='';return false" class="btn btn-sm">← กลับ</a>
   </div></div>`;
 
@@ -3922,7 +3994,7 @@ function _setupEditLane(cfgId){
   const docs1=['','deposit_slip','cc_summary','grab_report','lineman_report','points_summary'];
   const docs2=['','bank_stmt_KTB','bank_stmt_KBANK','bank_stmt_*'];
   const methods=['direct','two_stage','cash_3way','itemized','issuer_points'];
-  box.innerHTML=`<div class="card" style="background:#fafcff;border-color:var(--info);margin-top:10px">
+  box.innerHTML=`<div class="card" style="background:var(--subtle);border-color:var(--info);margin-top:10px">
     <div class="row"><b>แก้ lane ${esc(c.category)}·${esc(c.bank)}</b>
       <span class="chip c-setup">มีผลกับทุกรหัสใน lane นี้ · ต้องใช้รหัสผู้จัดการ</span>
       <a href="#" class="lbl" style="margin-left:auto" onclick="$('setup-lane-editor').innerHTML='';return false">ปิด</a></div>
@@ -3938,10 +4010,10 @@ function _setupEditLane(cfgId){
     </div>
     <div class="row" style="margin-top:10px">
       <input type="text" id="sle-notes" value="${esc(c.notes||'')}" placeholder="หมายเหตุ"
-        style="flex:1;min-width:200px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--txt)">
+        style="flex:1;min-width:200px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);color:var(--txt)">
       <button class="btn btn-pri btn-sm" onclick="_setupSaveLane(${c.id})">บันทึก (ผู้จัดการ)</button>
     </div></div>`;
-  box.scrollIntoView({behavior:'smooth',block:'center'});
+  box.scrollIntoView({behavior:_scrollBehavior(),block:'center'});
 }
 async function _setupSaveLane(cfgId){
   const c=_SETUP_M.method_configs.find(x=>x.id===cfgId);
