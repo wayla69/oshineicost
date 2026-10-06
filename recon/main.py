@@ -12,6 +12,7 @@ Environment:
 
 from __future__ import annotations
 import os
+import re
 import sqlite3
 from pathlib import Path
 
@@ -433,19 +434,34 @@ if _FRONTEND.exists():
 # Recon shares the dashboard's signed session cookie (see _actor). When this flag is
 # set, WRITE requests must carry a valid session — making the actor identity provable,
 # not just best-effort. DEFAULT OFF: unset → unchanged (open/token-gated), so nothing
-# breaks until the owner turns it on (login lives on the dashboard app). Reads stay open.
+# breaks until the owner turns it on (login lives on the dashboard app).
+# With the flag on, the reads that hand out evidence wholesale (control reports, the
+# audit log, month packs, working-paper/snapshot/attachment downloads, printable
+# evidence) need a session too. The frontend shell (/app), /health and the working
+# GETs the screens load stay open. No role/branch gating here — RBAC is the dashboard's.
+_SENSITIVE_GET = re.compile(
+    r"^/api/(reports/|audit|monthly-report|daily-report|daily-accounts\.print"
+    r"|sessions/\d+/export\.xlsx$|snapshots/\d+/file$|attachments/\d+/file$)")
+
+
 @app.middleware("http")
 async def _enforce_recon_session(request: Request, call_next):
+    path = request.url.path
     if (os.environ.get("RECON_ENFORCE_AUTH", "").strip()
-            and _parse_session is not None
-            and request.method in ("POST", "PATCH", "PUT", "DELETE")
-            and request.url.path.startswith("/api/")):
+            and path.startswith("/api/")
+            and (request.method in ("POST", "PATCH", "PUT", "DELETE")
+                 or (request.method in ("GET", "HEAD") and _SENSITIVE_GET.match(path)))):
+        from fastapi.responses import JSONResponse
+        if _parse_session is None:
+            # Fail CLOSED: the flag promises a login gate; without backend.auth there
+            # is no way to check one (see /api/_diag/auth-wiring for why it's missing).
+            return JSONResponse(
+                {"detail": "ระบบตรวจสอบการเข้าสู่ระบบไม่พร้อม — ติดต่อผู้ดูแล"}, status_code=503)
         try:
             ok = bool(_parse_session(request.cookies.get(_SESSION_COOKIE, "") or ""))
         except Exception:
             ok = False
         if not ok:
-            from fastapi.responses import JSONResponse
             return JSONResponse(
                 {"detail": "ต้องเข้าสู่ระบบก่อนทำรายการ (ล็อกอินที่หน้าหลัก)"}, status_code=401)
     return await call_next(request)

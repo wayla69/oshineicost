@@ -220,11 +220,17 @@ def _accepted_tokens() -> dict:
     return out
 
 
+def _same_secret(a: str, b: str) -> bool:
+    # compare_digest on str raises TypeError for non-ASCII (a header decoded as
+    # latin-1) → a 500 instead of a 403. Bytes compare any value safely.
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
 def require_write_token(x_upload_token: str = Header(None)):
     toks = _accepted_tokens()
     if toks:
         provided = (x_upload_token or "").strip()      # header only - a ?token= would be logged
-        if not any(hmac.compare_digest(provided, t) for t in toks):
+        if not any(_same_secret(provided, t) for t in toks):
             raise HTTPException(403, "A valid write token is required.")
 
 
@@ -232,7 +238,7 @@ def _require_manager(x_manager_token: str | None):
     """Two-tier close: approving a month needs the manager code when
     OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate)."""
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
-    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+    if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
@@ -242,7 +248,7 @@ def require_manager_token(x_manager_token: str = Header(None)):
     ordinary code↔bank mapping stays on the staff write token (owner decision
     2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset."""
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
-    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+    if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
 
 

@@ -8,11 +8,13 @@ from fastapi import APIRouter
 from ..core import _DAY_RE
 from ..core import _MASTER_ONLY
 from ..core import _PERIOD_RE
+from ..core import _POS_DAY_UNAVAILABLE
 from ..core import _actor
 from ..core import _assert_period_open
 from ..core import _audit
 from ..core import _validate_master_branch
 from ..core import _validate_period
+from ..core import _has_table
 from ..core import get_db
 from ..core import require_write_token
 from ..matcher import _BANK_LABEL
@@ -122,6 +124,16 @@ def drill(branch_id: int, category: str | None = None, bank: str | None = None,
 _EXT_TABLES = {"recon_bank_lines", "recon_cc_lines", "recon_grab_lines", "recon_lineman_lines"}
 
 
+# table → (date column, amount column) — the same amount lane_ext_lines shows staff,
+# so a manual match books what the document says, never what the client sent.
+_EXT_COLS = {
+    "recon_bank_lines":    ("txn_date",        "credit"),
+    "recon_cc_lines":      ("settlement_date", "gross_amount"),
+    "recon_grab_lines":    ("order_date",      "food_amount"),
+    "recon_lineman_lines": ("order_date",      "food_amount"),
+}
+
+
 class ManualMatch(BaseModel):
     branch_id:    int
     category:     str
@@ -168,7 +180,8 @@ def manual_list(branch_id: int, category: str, bank: str, period_month: str):
     _validate_period(period_month)
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
-        pos = lane_pos_days(conn, branch_id, period_month, category, bank)
+        has_pos = _has_table(conn, "pos_payment_day")      # written by the dashboard sync
+        pos = lane_pos_days(conn, branch_id, period_month, category, bank) if has_pos else []
         ext = lane_ext_lines(conn, branch_id, period_month, category, bank)
 
         matches, consumed = [], {}
@@ -190,7 +203,7 @@ def manual_list(branch_id: int, category: str, bank: str, period_month: str):
 
         return {"branch_id": branch_id, "category": category, "bank": bank,
                 "period_month": period_month, "pos_days": pos, "ext_lines": ext,
-                "matches": matches}
+                "matches": matches, "pos_available": has_pos}
 
 
 @router.post("/api/manual", dependencies=[Depends(require_write_token)])
@@ -203,10 +216,41 @@ def manual_create(body: ManualMatch, request: Request):
     # a system reason rather than rejected (keeps the one-click flow working).
     note = (body.note or "").strip() or "(จับคู่ด้วยมือ — ตามรายการที่ตรงกัน)"
     actor = _actor(request, body.matched_by)
-    pos_amount = round(sum(float(x.get("amount") or 0) for x in body.pos_days), 2)
-    ext_amount = round(sum(float(x.get("amount") or 0) for x in body.ext), 2)
+    # POS days: a real day of THIS month (the string is echoed into print reports),
+    # summed per day — two entries for one day must not each pass the guard alone.
+    pos_days, want = [], {}
+    for x in body.pos_days:
+        day = x.get("day")
+        if not (isinstance(day, str) and _DAY_RE.match(day) and day.startswith(body.period_month)):
+            raise HTTPException(400, f"วันที่ POS ต้องเป็นวันในเดือน {body.period_month} (YYYY-MM-DD)")
+        try:
+            amt = float(x.get("amount") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"amount for {day} must be a number.")
+        if amt <= 0:
+            raise HTTPException(400, f"amount for {day} must be positive.")
+        pos_days.append({"day": day, "amount": amt})
+        want[day] = want.get(day, 0.0) + amt
+    refs: list = []
+    for e in body.ext:
+        tbl = e.get("table")
+        if tbl not in _EXT_COLS:
+            raise HTTPException(400, f"bad ext table {tbl!r}")
+        try:
+            eid = int(e.get("id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"bad ext id {e.get('id')!r}")
+        if (tbl, eid) in refs:
+            raise HTTPException(400, "เลือกรายการเอกสารเดียวกันซ้ำในคู่เดียว")
+        refs.append((tbl, eid))
+    pos_amount = round(sum(want.values()), 2)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
+        if not _has_table(conn, "pos_payment_day"):
+            raise HTTPException(409, _POS_DAY_UNAVAILABLE)
+        # Check-then-insert under one write lock: a double-click or a second tab must
+        # not both read "remaining" / "line free" and then both book.
+        conn.execute("BEGIN IMMEDIATE")
         _assert_period_open(conn, body.branch_id, body.period_month)
 
         # Partial allocation guard: a day can't be allocated beyond what's left.
@@ -219,14 +263,27 @@ def manual_create(body: ManualMatch, request: Request):
             (body.branch_id, body.period_month, body.category, body.bank)):
             for x in json.loads(m["pos_days"] or "[]"):
                 already[x["day"]] = already.get(x["day"], 0.0) + float(x.get("amount") or 0)
-        for x in body.pos_days:
-            day, amt = x.get("day"), float(x.get("amount") or 0)
-            if amt <= 0:
-                raise HTTPException(400, f"amount for {day} must be positive.")
+        for day, amt in want.items():
             remaining = round(totals.get(day, 0.0) - already.get(day, 0.0), 2)
             if amt > remaining + 0.5:
                 raise HTTPException(
                     409, f"{day}: amount {amt:.0f} exceeds remaining {remaining:.0f}.")
+        # Each ticked line: this branch, this month, free to book — amount from the DB.
+        lines = []
+        for tbl, eid in refs:
+            dcol, acol = _EXT_COLS[tbl]
+            r = conn.execute(f"SELECT branch_id, {dcol} AS d, {acol} AS amt, match_status "
+                             f"FROM {tbl} WHERE id=?", (eid,)).fetchone()
+            if not r:
+                raise HTTPException(404, f"ไม่พบรายการเอกสาร {tbl}#{eid}")
+            if r["branch_id"] != body.branch_id or str(r["d"] or "")[:7] != body.period_month:
+                raise HTTPException(400, f"รายการเอกสาร #{eid} ไม่ใช่ของสาขา/เดือนนี้")
+            if r["match_status"] == "manual":
+                raise HTTPException(409, f"รายการเอกสาร #{eid} ถูกจับคู่ด้วยมือไปแล้ว — ยกเลิกคู่เดิมก่อน")
+            if r["match_status"] == "excluded":
+                raise HTTPException(409, f"รายการเอกสาร #{eid} ถูกตัดออก (ไม่ใช่รายได้) — คืนค่าก่อนจึงจับคู่ได้")
+            lines.append((tbl, eid, round(float(r["amt"] or 0), 2)))
+        ext_amount = round(sum(a for _, _, a in lines), 2)
         cur = conn.execute("""
             INSERT INTO recon_manual_match
                 (branch_id, category, bank, period_month, pos_amount, ext_amount,
@@ -234,15 +291,11 @@ def manual_create(body: ManualMatch, request: Request):
             VALUES (?,?,?,?,?,?,?,?,?,?)
         """, (body.branch_id, body.category, body.bank, body.period_month,
               pos_amount, ext_amount, round(ext_amount - pos_amount, 2),
-              json.dumps(body.pos_days), note, actor))
+              json.dumps(pos_days), note, actor))
         mid = cur.lastrowid
-        for e in body.ext:
-            tbl = e.get("table")
-            if tbl not in _EXT_TABLES:
-                raise HTTPException(400, f"bad ext table {tbl!r}")
-            eid = int(e.get("id"))
+        for tbl, eid, amt in lines:
             conn.execute("INSERT INTO recon_manual_match_line (match_id, ext_table, ext_id, amount) "
-                         "VALUES (?,?,?,?)", (mid, tbl, eid, float(e.get("amount") or 0)))
+                         "VALUES (?,?,?,?)", (mid, tbl, eid, amt))
             conn.execute(f"UPDATE {tbl} SET match_status='manual' WHERE id=?", (eid,))
         _audit(conn, "manual_match", mid, "create", actor,
                [{"field": "match", "old": None,
@@ -252,23 +305,48 @@ def manual_create(body: ManualMatch, request: Request):
             "variance": round(ext_amount - pos_amount, 2)}
 
 
+def _status_before_manual(conn, tbl: str, eid: int) -> str:
+    """What a line returns to when its manual match is undone: 'unmatched', unless the
+    audit trail shows it was excluded (not revenue) when it was ticked — possible only
+    for matches booked before /api/manual refused excluded lines."""
+    if tbl == "recon_bank_lines":
+        last = conn.execute(
+            "SELECT new_val FROM recon_audit_log WHERE entity='bank_line' AND entity_id=? "
+            "AND field='match_status' ORDER BY id DESC LIMIT 1", (eid,)).fetchone()
+        if last and last["new_val"] == "excluded":
+            return "excluded"
+    return "unmatched"
+
+
 @router.delete("/api/manual/{match_id}", dependencies=[Depends(require_write_token)])
-def manual_delete(match_id: int):
+def manual_delete(match_id: int, request: Request):
     with get_db() as conn:
-        m = conn.execute("SELECT branch_id, period_month FROM recon_manual_match WHERE match_id=?",
+        m = conn.execute("SELECT * FROM recon_manual_match WHERE match_id=?",
                          (match_id,)).fetchone()
         if not m:
             raise HTTPException(404)
         _assert_period_open(conn, m["branch_id"], m["period_month"])
         for ln in conn.execute("SELECT ext_table, ext_id FROM recon_manual_match_line WHERE match_id=?",
-                               (match_id,)):
-            if ln["ext_table"] in _EXT_TABLES:
-                conn.execute(f"UPDATE {ln['ext_table']} SET match_status='unmatched' "
-                             f"WHERE id=? AND match_status='manual'", (ln["ext_id"],))
+                               (match_id,)).fetchall():
+            tbl, eid = ln["ext_table"], ln["ext_id"]
+            if tbl not in _EXT_TABLES:
+                continue
+            if conn.execute("SELECT 1 FROM recon_manual_match_line WHERE ext_table=? AND ext_id=? "
+                            "AND match_id<>?", (tbl, eid, match_id)).fetchone():
+                continue                         # another match still books this line
+            conn.execute(f"UPDATE {tbl} SET match_status=? WHERE id=? AND match_status='manual'",
+                         (_status_before_manual(conn, tbl, eid), eid))
         conn.execute("DELETE FROM recon_manual_match_line WHERE match_id=?", (match_id,))
         conn.execute("DELETE FROM recon_manual_match WHERE match_id=?", (match_id,))
-        _audit(conn, "manual_match", match_id, "delete", "staff",
-               [{"field": "match", "old": "matched", "new": None}])
+        # The row is gone after this — the audit row carries its scope and content.
+        _audit(conn, "manual_match", match_id, "delete", _actor(request), [
+            {"field": "match", "old": f"POS {m['pos_amount'] or 0:.0f} ↔ EXT {m['ext_amount'] or 0:.0f}",
+             "new": None},
+            {"field": "branch_id", "old": m["branch_id"], "new": None},
+            {"field": "period_month", "old": m["period_month"], "new": None},
+            {"field": "lane", "old": f"{m['category']}·{m['bank']}", "new": None},
+            {"field": "pos_days", "old": m["pos_days"], "new": None},
+            {"field": "note", "old": m["note"], "new": None}])
         conn.commit()
     return {"deleted": match_id}
 
@@ -337,14 +415,20 @@ def lane_adj_upsert(body: LaneAdj, request: Request):
 
 
 @router.delete("/api/lanes/adj/{adj_id}", dependencies=[Depends(require_write_token)])
-def lane_adj_delete(adj_id: int):
+def lane_adj_delete(adj_id: int, request: Request):
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT branch_id, period_month FROM recon_lane_adj WHERE id=?", (adj_id,)).fetchone()
+        row = conn.execute("SELECT * FROM recon_lane_adj WHERE id=?", (adj_id,)).fetchone()
         if not row:
             raise HTTPException(404)
         _assert_period_open(conn, row["branch_id"], row["period_month"])
         conn.execute("DELETE FROM recon_lane_adj WHERE id=?", (adj_id,))
+        # Un-accepting a lane is an override too — audit what was removed.
+        _audit(conn, "lane_adj", adj_id, "delete", _actor(request), [
+            {"field": row["adj_type"], "new": None,
+             "old": f"{row['category']}·{row['bank']} POS+{row['adj_pos'] or 0:.0f}/EXT+{row['adj_ext'] or 0:.0f}"},
+            {"field": "branch_id", "old": row["branch_id"], "new": None},
+            {"field": "period_month", "old": row["period_month"], "new": None},
+            {"field": "note", "old": row["note"], "new": None}])
         conn.commit()
     return {"deleted": adj_id}
 
@@ -398,7 +482,16 @@ def channel_move_create(body: ChannelMove, request: Request):
         raise HTTPException(400, "จำนวนเงินต้องมากกว่า 0")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
+        conn.execute("BEGIN IMMEDIATE")              # duplicate check + insert as one step
         _assert_period_open(conn, body.branch_id, body.period_month)
+        # A double-click posts the same move twice within a second or two; a genuine
+        # second move of the very same amount seconds later is not a real case.
+        if conn.execute(
+                "SELECT 1 FROM recon_channel_move WHERE branch_id=? AND period_month=? "
+                "AND from_category=? AND from_bank=? AND to_category=? AND to_bank=? "
+                "AND ABS(amount-?)<0.005 AND created_at >= datetime('now','-10 seconds')",
+                (body.branch_id, body.period_month, fc, fb, tc, tb, round(body.amount, 2))).fetchone():
+            raise HTTPException(409, "บันทึกการย้ายช่องนี้ไปแล้วเมื่อสักครู่ (กดซ้ำ?) — ตรวจรายการก่อนบันทึกอีกครั้ง")
         # Validate against the branch's CURRENT lanes: the source must exist and hold
         # enough POS (over-moving would drive the lane negative — the monthly view drops
         # the row while the daily view keeps it, so the two diverge). The destination must
@@ -427,21 +520,27 @@ def channel_move_create(body: ChannelMove, request: Request):
 
 
 @router.delete("/api/channel-move/{move_id}", dependencies=[Depends(require_write_token)])
-def channel_move_delete(move_id: int):
+def channel_move_delete(move_id: int, request: Request):
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT branch_id, period_month FROM recon_channel_move WHERE id=?", (move_id,)).fetchone()
+        row = conn.execute("SELECT * FROM recon_channel_move WHERE id=?", (move_id,)).fetchone()
         if not row:
             raise HTTPException(404)
         _assert_period_open(conn, row["branch_id"], row["period_month"])
         conn.execute("DELETE FROM recon_channel_move WHERE id=?", (move_id,))
-        _audit(conn, "channel_move", move_id, "delete", "staff")
+        _audit(conn, "channel_move", move_id, "delete", _actor(request), [
+            {"field": "move", "new": None,
+             "old": f"{row['from_category']}·{row['from_bank']} → {row['to_category']}·{row['to_bank']}"},
+            {"field": "amount", "old": row["amount"], "new": None},
+            {"field": "branch_id", "old": row["branch_id"], "new": None},
+            {"field": "period_month", "old": row["period_month"], "new": None},
+            {"field": "note", "old": row["note"], "new": None}])
         conn.commit()
     return {"deleted": move_id}
 
 
 @router.get("/api/overview")
 def overview(period_month: str):
+    _validate_period(period_month)
     with get_db() as conn:
         branches = conn.execute(
             f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name"

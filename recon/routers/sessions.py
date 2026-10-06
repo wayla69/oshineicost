@@ -5,6 +5,7 @@ Moved out of recon/main.py in Phase 7c (2026-09) by the AST: these endpoints and
 the helpers only they use, unchanged. URLs are unchanged.
 """
 from fastapi import APIRouter
+from ..core import _DAY_RE
 from ..core import _SNAPSHOT_DIR
 from ..core import _actor
 from ..core import _assert_period_open
@@ -22,6 +23,7 @@ from ..matcher import daily_reconciliation
 from ..matcher import lane_lines
 from ..matcher import payout_reconciliation
 from ..matcher import run_auto_match
+from ..reconcile_v2 import CHANNELS as _V2_CHANNELS
 from datetime import datetime as _dt
 from fastapi import Depends
 from fastapi import Form
@@ -79,18 +81,18 @@ def _set_ignore(conn, line_id: int, ignored: bool, by: str, note: str) -> str:
 
 
 @router.patch("/api/bank-lines/{line_id}/ignore", dependencies=[Depends(require_write_token)])
-def set_bank_line_ignore(line_id: int, body: _IgnoreBody):
+def set_bank_line_ignore(line_id: int, body: _IgnoreBody, request: Request):
     """Flag a bank credit as an internal transfer (not revenue) so it stops
     polluting the lanes — e.g. a ฿2M intercompany sweep showing as TRANSFER
     ext_only. Reversible; survives Run Match; audited with the note."""
     with get_db() as conn:
-        new_status = _set_ignore(conn, line_id, body.ignored, body.by, body.note)
+        new_status = _set_ignore(conn, line_id, body.ignored, _actor(request, body.by), body.note)
         conn.commit()
     return {"line_id": line_id, "match_status": new_status}
 
 
 @router.post("/api/bank-lines/bulk-ignore", dependencies=[Depends(require_write_token)])
-def bulk_bank_line_ignore(body: _BulkIgnoreBody):
+def bulk_bank_line_ignore(body: _BulkIgnoreBody, request: Request):
     """Exclude (or restore) many bank credits in one request — the suggestion
     card's "ตัดออกทั้งหมด" and the month-end IORSDT sweep. Same rules as the
     single PATCH, applied per line: a line that cannot change is reported in
@@ -101,10 +103,11 @@ def bulk_bank_line_ignore(body: _BulkIgnoreBody):
     if len(ids) > 500:
         raise HTTPException(400, "at most 500 lines per request")
     done, skipped = [], []
+    actor = _actor(request, body.by)
     with get_db() as conn:
         for line_id in ids:
             try:
-                _set_ignore(conn, line_id, body.ignored, body.by, body.note)
+                _set_ignore(conn, line_id, body.ignored, actor, body.note)
                 done.append(line_id)
             except HTTPException as e:
                 skipped.append({"line_id": line_id, "reason": e.detail})
@@ -199,11 +202,23 @@ def update_session_status(
         _require_manager(x_manager_token)
     actor = _actor(request, approved_by, default="")        # blank when unknown → SoD-safe
     with get_db() as conn:
+        # Read-check-write under one write lock: two managers approving at the same
+        # moment must not both pass the checks below (the UPDATEs are guarded too).
+        conn.execute("BEGIN IMMEDIATE")
         old_row = conn.execute(
-            "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()
+            "SELECT status, created_by FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
         if not old_row:
             raise HTTPException(404, f"session {session_id} not found")
         old_status = old_row["status"]
+        # Re-approving would silently replace the approver (no audit, no snapshot).
+        if status == old_status and status in ("approved", "closed"):
+            raise HTTPException(409, f"งวดนี้อยู่ในสถานะ {status} แล้ว")
+        # 'closed' is the archive step AFTER sign-off: SoD and the approver stamp
+        # happen at 'approved', so a month can't skip past them straight to closed.
+        if status == "closed" and old_status != "approved":
+            raise HTTPException(
+                409, "ปิดงวดได้หลังอนุมัติแล้วเท่านั้น — ให้ผู้อนุมัติ (ไม่ใช่ผู้จัดทำ) อนุมัติก่อน")
         # Reopen gate (control fix 2026-06-19): unlocking an already-signed-off month
         # (approved/closed → draft/in_review) is sensitive — require the MANAGER code +
         # a logged reason, just like approval. The next re-approval re-freezes a fresh
@@ -230,41 +245,45 @@ def update_session_status(
             # Segregation of duties (AUD-4): the person who prepared the month
             # cannot also approve it. A classic audit finding; enforced when both
             # identities are known.
-            prep = (conn.execute("SELECT created_by FROM recon_sessions WHERE session_id=?",
-                                  (session_id,)).fetchone()["created_by"] or "").strip().lower()
+            prep = (old_row["created_by"] or "").strip().lower()
             appr = (actor or "").strip().lower()
             if prep and appr and prep == appr:
                 raise HTTPException(
                     409, "แบ่งแยกหน้าที่ (SoD): ผู้จัดทำไม่สามารถอนุมัติงานของตัวเองได้ — "
                          "ต้องให้ผู้อื่นเป็นผู้อนุมัติ")
-            conn.execute("""
+            cur = conn.execute("""
                 UPDATE recon_sessions
                 SET status=?, approved_by=?, approved_at=datetime('now')
-                WHERE session_id=?
-            """, (status, actor, session_id))
+                WHERE session_id=? AND status=?
+            """, (status, actor, session_id, old_status))
         else:
-            conn.execute(
-                "UPDATE recon_sessions SET status=? WHERE session_id=?",
-                (status, session_id),
+            cur = conn.execute(
+                "UPDATE recon_sessions SET status=? WHERE session_id=? AND status=?",
+                (status, session_id, old_status),
             )
+        if cur.rowcount != 1:
+            raise HTTPException(409, "สถานะงวดถูกเปลี่ยนระหว่างทำรายการ — โหลดหน้าใหม่แล้วลองอีกครั้ง")
         if old_status != status:
             diffs = [{"field": "status", "old": old_status, "new": status}]
             if reopening:
                 diffs.append({"field": "reopen_reason", "old": None, "new": reason.strip()})
             _audit(conn, "session", session_id, "update", actor or "staff", diffs)
-        # AUD-5: freeze the working paper at each sign-off transition. Best-effort —
-        # the export can be regenerated, so a snapshot hiccup must not block close.
-        snap = None
-        if status in ("approved", "closed") and old_status != status:
-            try:
+        conn.commit()
+    # AUD-5: freeze the working paper at each sign-off transition. Best-effort — the
+    # export can be regenerated, so a snapshot hiccup must not block close. Built
+    # after the status commit so the workbook render doesn't hold the write lock.
+    snap = None
+    if status in ("approved", "closed") and old_status != status:
+        try:
+            with get_db() as conn:
                 full = conn.execute(
                     "SELECT s.*, b.name AS branch_name FROM recon_sessions s "
                     "JOIN branches b ON b.branch_id=s.branch_id WHERE s.session_id=?",
                     (session_id,)).fetchone()
                 snap = _write_close_snapshot(conn, full, status, actor)
-            except Exception:
-                snap = None
-        conn.commit()
+                conn.commit()
+        except Exception:
+            snap = None
     return {"session_id": session_id, "status": status, "snapshot": snap}
 
 
@@ -676,39 +695,42 @@ def disc_daily_breakdown(disc_id: int):
 
 
 @router.patch("/api/discrepancies/{disc_id}/resolve", dependencies=[Depends(require_write_token)])
-def resolve_discrepancy(disc_id: int, body: ResolveBody):
+def resolve_discrepancy(disc_id: int, body: ResolveBody, request: Request):
+    actor = _actor(request, body.resolved_by)          # the logged-in user wins over the body
     with get_db() as conn:
-        _assert_disc_period_open(conn, disc_id)
         old = conn.execute(
             "SELECT resolution, resolution_note FROM recon_discrepancies WHERE id=?",
             (disc_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"discrepancy {disc_id} not found")
+        _assert_disc_period_open(conn, disc_id)
         conn.execute("""
             UPDATE recon_discrepancies
             SET resolution=?, resolution_note=?, resolved_by=?, resolved_at=datetime('now')
             WHERE id=?
-        """, (body.resolution, body.resolution_note, body.resolved_by, disc_id))
+        """, (body.resolution, body.resolution_note, actor, disc_id))
         diffs = []
-        if old:
-            if old["resolution"] != body.resolution:
-                diffs.append({"field": "resolution", "old": old["resolution"], "new": body.resolution})
-            if (old["resolution_note"] or "") != (body.resolution_note or ""):
-                diffs.append({"field": "resolution_note",
-                               "old": old["resolution_note"], "new": body.resolution_note})
-        _audit(conn, "discrepancy", disc_id, "update", body.resolved_by or "staff", diffs or None)
+        if old["resolution"] != body.resolution:
+            diffs.append({"field": "resolution", "old": old["resolution"], "new": body.resolution})
+        if (old["resolution_note"] or "") != (body.resolution_note or ""):
+            diffs.append({"field": "resolution_note",
+                           "old": old["resolution_note"], "new": body.resolution_note})
+        _audit(conn, "discrepancy", disc_id, "update", actor, diffs or None)
         conn.commit()
     return {"id": disc_id, "resolution": body.resolution}
 
 
 @router.patch("/api/discrepancies/{disc_id}/assign", dependencies=[Depends(require_write_token)])
-def assign_discrepancy(disc_id: int, assigned_to: str = Form(...)):
+def assign_discrepancy(disc_id: int, request: Request, assigned_to: str = Form(...)):
     with get_db() as conn:
-        _assert_disc_period_open(conn, disc_id)
         old = conn.execute(
             "SELECT assigned_to FROM recon_discrepancies WHERE id=?", (disc_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"discrepancy {disc_id} not found")
+        _assert_disc_period_open(conn, disc_id)
         conn.execute("UPDATE recon_discrepancies SET assigned_to=? WHERE id=?", (assigned_to, disc_id))
-        _audit(conn, "discrepancy", disc_id, "update", "staff",
-               [{"field": "assigned_to",
-                 "old": old["assigned_to"] if old else None, "new": assigned_to}])
+        _audit(conn, "discrepancy", disc_id, "update", _actor(request),
+               [{"field": "assigned_to", "old": old["assigned_to"], "new": assigned_to}])
         conn.commit()
     return {"id": disc_id, "assigned_to": assigned_to}
 
@@ -722,9 +744,10 @@ class BulkResolveBody(BaseModel):
 
 @router.post("/api/sessions/{session_id}/discrepancies/bulk-resolve",
           dependencies=[Depends(require_write_token)])
-def bulk_resolve_discrepancies(session_id: int, body: BulkResolveBody):
+def bulk_resolve_discrepancies(session_id: int, body: BulkResolveBody, request: Request):
     if not body.ids:
         raise HTTPException(400, "ids list must not be empty")
+    actor = _actor(request, body.resolved_by)
     with get_db() as conn:
         s = conn.execute(
             "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
@@ -733,20 +756,19 @@ def bulk_resolve_discrepancies(session_id: int, body: BulkResolveBody):
             raise HTTPException(404)
         _assert_period_open(conn, s["branch_id"], s["period_month"])
         ph = ",".join("?" * len(body.ids))
-        conn.execute(f"""
+        # rowcount = what THIS request changed (ids of another session, unknown or
+        # already-resolved ids are skipped by the WHERE and must not be counted).
+        updated = conn.execute(f"""
             UPDATE recon_discrepancies
             SET resolution=?, resolution_note=?, resolved_by=?, resolved_at=datetime('now')
             WHERE session_id=? AND id IN ({ph}) AND resolution='pending'
-        """, [body.resolution, body.resolution_note, body.resolved_by or "staff", session_id]
-             + list(body.ids))
-        _audit(conn, "session", session_id, "update", body.resolved_by or "staff",
+        """, [body.resolution, body.resolution_note, actor, session_id]
+             + list(body.ids)).rowcount
+        _audit(conn, "session", session_id, "update", actor,
                [{"field": "bulk_resolve",
                  "old": "pending",
-                 "new": f"{body.resolution} × {len(body.ids)} items"}])
+                 "new": f"{body.resolution} × {updated} items"}])
         conn.commit()
-        updated = conn.execute(
-            f"SELECT COUNT(*) FROM recon_discrepancies WHERE id IN ({ph}) AND resolution=?",
-            list(body.ids) + [body.resolution]).fetchone()[0]
     return {"updated": updated, "resolution": body.resolution}
 
 
@@ -808,30 +830,32 @@ def list_lines(source: str, branch_id: int, period_month: str):
 
 
 @router.patch("/api/lines/{source}/{line_id}/fee-vat", dependencies=[Depends(require_write_token)])
-def set_fee_vat(source: str, line_id: int, body: FeeVat):
+def set_fee_vat(source: str, line_id: int, body: FeeVat, request: Request):
     table = _FEE_VAT_TABLE.get(source)
     if not table:
         raise HTTPException(400, f"source must be one of {sorted(_FEE_VAT_TABLE)}")
     date_col = "settlement_date" if source == "credit_card" else "order_date"
+    actor = _actor(request, body.by)
     with get_db() as conn:
         line = conn.execute(
             f"SELECT branch_id, {date_col} AS d, fee_manual, vat_manual FROM {table} WHERE id=?",
             (line_id,)).fetchone()
-        if line and line["d"]:
+        if not line:
+            raise HTTPException(404, f"{source} line {line_id} not found")
+        if line["d"]:
             _assert_period_open(conn, line["branch_id"], str(line["d"])[:7])
         conn.execute(f"""
             UPDATE {table}
             SET fee_manual=?, vat_manual=?, fee_vat_by=?, fee_vat_at=datetime('now')
             WHERE id=?
-        """, (body.fee_manual, body.vat_manual, body.by or "staff", line_id))
-        if line:
-            diffs = []
-            if line["fee_manual"] != body.fee_manual:
-                diffs.append({"field": "fee_manual", "old": line["fee_manual"], "new": body.fee_manual})
-            if line["vat_manual"] != body.vat_manual:
-                diffs.append({"field": "vat_manual", "old": line["vat_manual"], "new": body.vat_manual})
-            if diffs:
-                _audit(conn, "line", line_id, "update", body.by or "staff", diffs)
+        """, (body.fee_manual, body.vat_manual, actor, line_id))
+        diffs = []
+        if line["fee_manual"] != body.fee_manual:
+            diffs.append({"field": "fee_manual", "old": line["fee_manual"], "new": body.fee_manual})
+        if line["vat_manual"] != body.vat_manual:
+            diffs.append({"field": "vat_manual", "old": line["vat_manual"], "new": body.vat_manual})
+        if diffs:
+            _audit(conn, "line", line_id, "update", actor, diffs)
         conn.commit()
     return {"source": source, "line_id": line_id,
             "fee_manual": body.fee_manual, "vat_manual": body.vat_manual}
@@ -862,6 +886,24 @@ class DayAck(BaseModel):
     created_by:   str | None = None
 
 
+_ACK_CHANNELS = {k for k, _ in _V2_CHANNELS}      # the channel cards a day can be acked on
+
+
+def _live_day_variance(conn, branch_id: int, period_month: str, category: str, day: str):
+    """The day's variance exactly as the branch page shows it: reconcile_month sums
+    daily_reconciliation's lanes of the channel for the day, ext − pos. None when
+    the engine has no lane for that channel/day (or cannot run)."""
+    try:
+        daily = daily_reconciliation(conn, branch_id, period_month)
+    except Exception:
+        return None
+    lanes = [l for d in daily.get("days", []) if d["day"] == day
+             for l in d["lanes"] if l["category"] == category]
+    if not lanes:
+        return None
+    return round(sum(l["ext"] for l in lanes) - sum(l["pos"] for l in lanes), 2)
+
+
 @router.get("/api/day-ack")
 def day_ack_list(branch_id: int, period_month: str):
     _validate_period(period_month)
@@ -878,12 +920,21 @@ def day_ack_upsert(body: DayAck, request: Request):
     # Same audit-grade rule as a channel accept: a meaningful reason (≥10 chars).
     if len((body.note or "").strip()) < 10:
         raise HTTPException(400, "การรับทราบผลต่างรายวันต้องใส่เหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
-    if not (body.day or "").startswith(body.period_month):
-        raise HTTPException(400, "day must fall inside period_month")
+    if not (_DAY_RE.match(body.day or "") and body.day.startswith(body.period_month)):
+        raise HTTPException(400, "day must be a YYYY-MM-DD inside period_month")
+    if body.category not in _ACK_CHANNELS:
+        raise HTTPException(400, f"category must be one of {sorted(_ACK_CHANNELS)}")
     actor = _actor(request, body.created_by)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)
+        # Store the variance the branch page shows for that day, not the client's
+        # number; the body value is kept only when the engine has no lane that day.
+        variance = _live_day_variance(conn, body.branch_id, body.period_month,
+                                      body.category, body.day)
+        source = "engine"
+        if variance is None:
+            variance, source = body.variance, "client"
         existing = conn.execute(
             "SELECT id FROM recon_day_ack WHERE branch_id=? AND period_month=? "
             "AND category=? AND day=?",
@@ -892,7 +943,7 @@ def day_ack_upsert(body: DayAck, request: Request):
             conn.execute(
                 "UPDATE recon_day_ack SET variance=?, note=?, created_by=?, "
                 "created_at=datetime('now') WHERE id=?",
-                (body.variance, body.note, actor, existing["id"]))
+                (variance, body.note, actor, existing["id"]))
             row_id = existing["id"]
         else:
             cur = conn.execute(
@@ -900,23 +951,31 @@ def day_ack_upsert(body: DayAck, request: Request):
                 "(branch_id,period_month,category,day,variance,note,created_by) "
                 "VALUES (?,?,?,?,?,?,?)",
                 (body.branch_id, body.period_month, body.category, body.day,
-                 body.variance, body.note, actor))
+                 variance, body.note, actor))
             row_id = cur.lastrowid
-        _audit(conn, "day_ack", row_id, "accept", actor,
-               [{"field": "variance", "old": None, "new": body.variance}])
+        diffs = [{"field": "variance", "old": None, "new": variance}]
+        if source == "client":
+            diffs.append({"field": "variance_source", "old": None, "new": "client"})
+        _audit(conn, "day_ack", row_id, "accept", actor, diffs)
         conn.commit()
-    return {"id": row_id}
+    return {"id": row_id, "variance": variance, "variance_source": source}
 
 
 @router.delete("/api/day-ack/{ack_id}", dependencies=[Depends(require_write_token)])
-def day_ack_delete(ack_id: int):
+def day_ack_delete(ack_id: int, request: Request):
     with get_db() as conn:
-        row = conn.execute(
-            "SELECT branch_id, period_month FROM recon_day_ack WHERE id=?", (ack_id,)).fetchone()
+        row = conn.execute("SELECT * FROM recon_day_ack WHERE id=?", (ack_id,)).fetchone()
         if not row:
             raise HTTPException(404)
         _assert_period_open(conn, row["branch_id"], row["period_month"])
         conn.execute("DELETE FROM recon_day_ack WHERE id=?", (ack_id,))
+        # Un-acknowledging reopens the day's variance — audit it with what was removed.
+        _audit(conn, "day_ack", ack_id, "delete", _actor(request), [
+            {"field": "variance", "old": row["variance"], "new": None},
+            {"field": "branch_id", "old": row["branch_id"], "new": None},
+            {"field": "period_month", "old": row["period_month"], "new": None},
+            {"field": "day", "old": f"{row['category']} {row['day']}", "new": None},
+            {"field": "note", "old": row["note"], "new": None}])
         conn.commit()
     return {"deleted": ack_id}
 
