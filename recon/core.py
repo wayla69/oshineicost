@@ -27,10 +27,12 @@ try:
 except Exception as _e:                              # standalone recon
     _parse_session, _SESSION_COOKIE = None, "oshinei_session"
     _AUTH_IMPORT_ERR = repr(_e)
+from . import auth as _auth   # recon's OWN login (RECON_LOGIN) — not backend.auth
 from contextlib import contextmanager
 from datetime import datetime as _dt
 from fastapi import HTTPException
 from fastapi import Header
+from fastapi import Request
 from pathlib import Path
 import hmac
 import os
@@ -228,7 +230,13 @@ def _same_secret(a: str, b: str) -> bool:
     return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
-def require_write_token(x_upload_token: str = Header(None)):
+def require_write_token(request: Request, x_upload_token: str = Header(None)):
+    """Staff write gate. With the recon login ON (RECON_LOGIN=1) a logged-in user
+    passes — the middleware already refused viewers and anonymous callers; a
+    caller with no session must hold the write token (the bulk-upload script).
+    Login OFF: unchanged — the token when OSHINEI_SEED_TOKEN is set, open locally."""
+    if _auth.login_enabled() and _auth.current_user(request) is not None:
+        return
     toks = _accepted_tokens()
     if toks:
         provided = (x_upload_token or "").strip()      # header only - a ?token= would be logged
@@ -236,29 +244,49 @@ def require_write_token(x_upload_token: str = Header(None)):
             raise HTTPException(403, "A valid write token is required.")
 
 
-def _require_manager(x_manager_token: str | None):
+def _require_manager(x_manager_token: str | None, request=None):
     """Two-tier close: approving a month needs the manager code when
-    OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate)."""
+    OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate).
+    With the recon login ON the shared code is not used: the session's ROLE must be
+    manager (no request → refused: fail closed)."""
+    if _auth.login_enabled():
+        _auth.require_role(request, "manager")
+        return
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
     if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
-def require_manager_token(x_manager_token: str = Header(None)):
+def require_manager_token(request: Request, x_manager_token: str = Header(None)):
     """Dependency for advanced-setup mutations (method parameters, tolerances):
     a bad value can mass-flip lane statuses, so these need the MANAGER code —
     ordinary code↔bank mapping stays on the staff write token (owner decision
-    2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset."""
+    2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset.
+    With the recon login ON: the session role must be manager instead."""
+    if _auth.login_enabled():
+        _auth.require_role(request, "manager")
+        return
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
     if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
 
 
 def _actor(request, fallback=None, default="staff"):
-    """Authenticated username from the signed session cookie, else the client-supplied
-    fallback, else `default`. Pass default='' for identity fields that must stay blank
-    when the actor is unknown (e.g. SoD compares created_by vs approved_by — two blanks
-    must NOT read as the same person). Never raises."""
+    """Who did it. Recon login ON: the recon user's USERNAME (unique and never
+    renamed, so SoD compares real identities); a session-less machine call (bulk
+    upload with the write token) is 'token[:label]'; the client value is ignored.
+    Login OFF (unchanged): the dashboard session's username, else the
+    client-supplied fallback, else `default`. Pass default='' for identity fields
+    that must stay blank when the actor is unknown (e.g. SoD compares created_by vs
+    approved_by — two blanks must NOT read as the same person). Never raises."""
+    if _auth.login_enabled():
+        try:
+            u = _auth.current_user(request)
+            if u:
+                return u["username"]
+            return (_auth.machine_token_label(request) if request is not None else None) or default
+        except Exception:
+            return default
     if _parse_session is not None and request is not None:
         try:
             tok = request.cookies.get(_SESSION_COOKIE)

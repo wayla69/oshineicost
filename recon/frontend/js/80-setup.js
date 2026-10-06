@@ -1,4 +1,4 @@
-/* recon frontend — 80-setup.js: #setup — payment map, lanes, bank accounts, MIDs, statement codes.
+/* recon frontend — 80-setup.js: #setup — payment map, lanes, bank accounts, MIDs, statement codes (+ ⑥ users, 85-users.js).
    Plain scripts sharing one global scope, loaded in order by index.html (00 → 90);
    a slice may call any other slice's functions, but top-level code only uses earlier slices. */
 /* ════════════════ PHASE 4 — #setup (ตั้งค่าระบบ in-app) ════════════════ */
@@ -103,7 +103,7 @@ function _setupRender(){
         <td><span class="chip ${cls} fs-11">${lab}</span></td>
       </tr>`;}).join('')}
   </table></div>
-  <div class="muted mt-6 fs-12">แก้ประเภท/ธนาคาร = สิทธิ์พนักงาน (<i class="ti ti-key" aria-hidden="true"></i>) · แก้วิธี/พารามิเตอร์ lane = ต้องรหัสผู้จัดการ · มีผลกับทุกรหัสใน lane เดียวกัน</div>
+  <div class="muted mt-6 fs-12">แก้ประเภท/ธนาคาร = สิทธิ์พนักงาน (<i class="ti ti-key" aria-hidden="true"></i>) · แก้วิธี/พารามิเตอร์ lane = ต้อง${mgrWord()} · มีผลกับทุกรหัสใน lane เดียวกัน</div>
   <div id="setup-lane-editor"></div></div>`;
 
   // ② lane method configs
@@ -127,7 +127,7 @@ function _setupRender(){
       <td><button class="btn btn-sm" onclick="_setupEditLane(${c.id})">แก้ไข</button></td>
     </tr>`).join('')}
   </table></div>
-  <div class="muted mt-6 fs-12">tol ว่าง = ค่ากลาง (±฿${fmt(_SETUP_M.globals.TOL_ABS_DAY)}/วัน หรือ ${_SETUP_M.globals.TOL_PCT_DAY}% · ±฿${fmt(_SETUP_M.globals.TOL_ABS)}/เดือน หรือ ${_SETUP_M.globals.TOL_PCT}%) · ${_SETUP_M.manager_required?'ต้องใช้รหัสผู้จัดการ':'เซิร์ฟเวอร์นี้ยังไม่ตั้งรหัสผู้จัดการ (แก้ได้เลย)'}</div>
+  <div class="muted mt-6 fs-12">tol ว่าง = ค่ากลาง (±฿${fmt(_SETUP_M.globals.TOL_ABS_DAY)}/วัน หรือ ${_SETUP_M.globals.TOL_PCT_DAY}% · ±฿${fmt(_SETUP_M.globals.TOL_ABS)}/เดือน หรือ ${_SETUP_M.globals.TOL_PCT}%) · ${(ME.login_enabled||_SETUP_M.manager_required)?'ต้องใช้'+mgrWord():'เซิร์ฟเวอร์นี้ยังไม่ตั้งรหัสผู้จัดการ (แก้ได้เลย)'}</div>
   </div>`;
 
   // ③ bank accounts
@@ -168,11 +168,15 @@ function _setupRender(){
     <h2 class="m-0 fs-15">⑤ รหัสในสเตทเมนต์ → ช่องทาง</h2>
     <a href="/api/statement-codes.html" target="_blank" class="lbl ml-auto"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์ใบให้ทีมตรวจ</a>
     <a href="/api/statement-codes.xlsx" class="lbl ml-12">Excel</a></div>
-  <div class="muted mb-8 fs-12">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้รหัสผู้จัดการ</div>
+  <div class="muted mb-8 fs-12">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้${mgrWord()}</div>
   <div id="setup-codes-body" class="muted">กำลังโหลด…</div></div>`;
+
+  // ⑥ recon login accounts (85-users.js) — managers only; empty for everyone else
+  html+=usersCardHtml();
 
   $('app').innerHTML=html;
   _setupLoadCodes();
+  loadUsersAdmin();
 }
 
 /* ── ⑤ statement-code remap ── */
@@ -242,7 +246,7 @@ function _setupEditLane(cfgId){
   const methods=['direct','two_stage','cash_3way','itemized','issuer_points'];
   box.innerHTML=`<div class="card bg-subtle bdc-info mt-10">
     <div class="row"><b>แก้ lane ${esc(c.category)}·${esc(c.bank)}</b>
-      <span class="chip c-setup">มีผลกับทุกรหัสใน lane นี้ · ต้องใช้รหัสผู้จัดการ</span>
+      <span class="chip c-setup">มีผลกับทุกรหัสใน lane นี้ · ต้องใช้${mgrWord()}</span>
       <a href="#" class="lbl ml-auto" onclick="$('setup-lane-editor').innerHTML='';return false">ปิด</a></div>
     <div class="row" style="margin-top:8px;gap:14px">
       <label class="lbl">เอกสาร 1<br><select id="sle-doc1">${docs1.map(d=>`<option value="${d}" ${d===(c.doc1||'')?'selected':''}>${d?(_SETUP_DOC_TH[d]||d):'—'}</option>`).join('')}</select></label>

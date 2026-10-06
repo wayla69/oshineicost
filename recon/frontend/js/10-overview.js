@@ -1,4 +1,4 @@
-/* recon frontend — 10-overview.js: #'' — chain overview (the inbox of every branch).
+/* recon frontend — 10-overview.js: #branches (and the landing for viewers / no login) — chain overview (the inbox of every branch).
    Plain scripts sharing one global scope, loaded in order by index.html (00 → 90);
    a slice may call any other slice's functions, but top-level code only uses earlier slices. */
 /* ── ภาพรวมทุกสาขา (กล่องงานทั้งเครือ) ── */
@@ -28,10 +28,13 @@ async function loadOverview(){
   let html=header();
 
   // hero line + chain progress (guard the empty-DB case: no ✓/100% over zero data)
+  // UX phase 2: the Close Board (#close) is the matrix view of the same month — one tap away
+  const cbLink=`<a href="#close" class="ov-cb-link"><i class="ti ti-calendar-check" aria-hidden="true"></i> Close Board — ตารางปิดเดือนทุกสาขา ›</a>`;
   if(!branches.length){
-    html+=`<div class="card ov-hero mb-12"><div class="ov-hero-line">เดือน <b>${esc(monthTh(ov.period_month))}</b></div></div>`;
+    html+=`<div class="card ov-hero mb-12"><div class="ov-hero-line">เดือน <b>${esc(monthTh(ov.period_month))}</b></div>${cbLink}</div>`;
   } else {
     html+=`<div class="card ov-hero mb-12">
+      ${cbLink}
       <div class="ov-hero-line">เดือน <b>${esc(monthTh(ov.period_month))}</b>
         ${totalTodo
           ? `· เหลือ <b>${totalTodo}</b> เรื่อง ก่อนปิดได้ทั้งเครือ`

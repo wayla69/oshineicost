@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .seed_payment_map import seed_payment_map
+from . import auth as _auth
 # Everything more than one endpoint family shares lives in core.py (see its
 # docstring). Every name is re-exported here so main.X keeps resolving; to point
 # the app at another database assign recon.core._DB_PATH — main._DB_PATH is a copy.
@@ -293,6 +294,10 @@ def startup():
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
         _seed_method_defaults(conn)     # owner's per-lane method table
         _seed_requirement_codes(conn)   # owner's 12-code routing answers
+        # recon login: first manager from RECON_ADMIN_USER/PASSWORD while recon_users is empty
+        boot = _auth.bootstrap_admin(conn)
+        if boot:
+            _audit(conn, "recon_user", 0, "bootstrap", "bootstrap", [{"field": "username", "new": boot}])
         conn.commit()
 
 
@@ -454,11 +459,61 @@ _SENSITIVE_GET = re.compile(
     r"|sessions/\d+/export\.xlsx$|snapshots/\d+/file$|attachments/\d+/file$)")
 
 
+# ── Recon's own login (RECON_LOGIN=1, recon/auth.py — owner decision 2026-10-06) ──
+# When the flag is ON it REPLACES the RECON_ENFORCE_AUTH path above: the dashboard
+# cookie no longer counts; every /api call needs a recon session, except
+#   • /api/me, /api/auth/login, /api/auth/logout (the SPA must reach its login screen;
+#     /app/* static and /health are outside /api and stay open);
+#   • a session-less WRITE carrying a valid X-Upload-Token (the bulk-upload script) —
+#     the endpoint's require_write_token re-checks it; manager-only actions still
+#     refuse it (they need a manager SESSION).
+# Roles: viewer → every POST/PATCH/PUT/DELETE 403; accountant → work actions, not
+# approve/close/reopen nor the manager setup (core._require_manager /
+# require_manager_token check the role) nor /api/users; manager → everything.
+# A missing RECON_SESSION_SECRET with the flag on → 503 for all of /api: fail CLOSED.
+_LOGIN_OPEN = {"/api/me", "/api/auth/login", "/api/auth/logout"}
+_SELF_SERVICE = {"/api/me", "/api/auth/logout", "/api/auth/change-password"}
+_MUTATING = ("POST", "PATCH", "PUT", "DELETE")
+
+
+async def _recon_login_gate(request: Request):
+    """None = let the request through; else the refusal response."""
+    from fastapi.responses import JSONResponse
+    from starlette.concurrency import run_in_threadpool
+    path = request.url.path
+    if not path.startswith("/api/") or path in _LOGIN_OPEN:
+        return None
+    if not _auth.secret_ok():
+        return JSONResponse({"detail": _auth.MSG_NO_SECRET}, status_code=503)
+    user = await run_in_threadpool(_auth.current_user, request)
+    if user is None:
+        if (request.method in _MUTATING and not path.startswith(("/api/users", "/api/auth/"))
+                and _auth.machine_token_label(request)):
+            return None                                     # bulk uploader (write token)
+        return JSONResponse({"detail": _auth.MSG_NEED_LOGIN}, status_code=401)
+    if user["must_change_pw"] and path not in _SELF_SERVICE:
+        return JSONResponse({"detail": _auth.MSG_MUST_CHANGE}, status_code=403)
+    if user["role"] == "viewer" and request.method in _MUTATING and path not in _SELF_SERVICE:
+        return JSONResponse({"detail": _auth.MSG_VIEWER}, status_code=403)
+    if path.startswith("/api/users") and user["role"] != "manager":
+        return JSONResponse({"detail": _auth.MSG_MANAGER_ONLY}, status_code=403)
+    return None
+
+
 @app.middleware("http")
 async def _enforce_recon_session(request: Request, call_next):
     path = request.url.path
+    if _auth.login_enabled():
+        refused = await _recon_login_gate(request)
+        if refused is not None:
+            return refused
+        return await call_next(request)
+    # RECON_LOGIN off → the RECON_ENFORCE_AUTH behaviour exactly as before. The new
+    # /api/auth/* and /api/users endpoints are exempt: they check a RECON session
+    # themselves (so the owner can sign in and create accounts before switching on).
     if (os.environ.get("RECON_ENFORCE_AUTH", "").strip()
             and path.startswith("/api/")
+            and not path.startswith(("/api/auth/", "/api/users"))
             and (request.method in ("POST", "PATCH", "PUT", "DELETE")
                  or (request.method in ("GET", "HEAD") and _SENSITIVE_GET.match(path)))):
         from fastapi.responses import JSONResponse
@@ -537,6 +592,7 @@ from .routers.sessions import router as _sessions_router  # noqa: E402
 from .routers.matching import router as _matching_router  # noqa: E402
 from .routers.reports import router as _reports_router  # noqa: E402
 from .routers.daily import router as _daily_router  # noqa: E402
+from .routers.auth import router as _auth_router  # noqa: E402
 from .routers.daily import _monthly_finance_html  # noqa: E402,F401  (tests reach it as main._monthly_finance_html)
 app.include_router(_diagnostics_router)
 app.include_router(_config_router)
@@ -545,4 +601,5 @@ app.include_router(_sessions_router)
 app.include_router(_matching_router)
 app.include_router(_reports_router)
 app.include_router(_daily_router)
+app.include_router(_auth_router)
 from .routers.uploads import _infer_source_type  # noqa: E402,F401  (tests reach it as main._infer_source_type)

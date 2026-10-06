@@ -199,7 +199,7 @@ def update_session_status(
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
     if status in ("approved", "closed"):
-        _require_manager(x_manager_token)
+        _require_manager(x_manager_token, request)
     actor = _actor(request, approved_by, default="")        # blank when unknown → SoD-safe
     with get_db() as conn:
         # Read-check-write under one write lock: two managers approving at the same
@@ -225,7 +225,7 @@ def update_session_status(
         # snapshot, so the working paper always matches the final figures.
         reopening = old_status in ("approved", "closed") and status not in ("approved", "closed")
         if reopening:
-            _require_manager(x_manager_token)
+            _require_manager(x_manager_token, request)
             if len((reason or "").strip()) < 10:
                 raise HTTPException(
                     400, "การเปิดงวดที่ปิดแล้วต้องระบุเหตุผล (อย่างน้อย 10 ตัวอักษร)")

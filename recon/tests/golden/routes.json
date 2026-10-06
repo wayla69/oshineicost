@@ -72,6 +72,24 @@
   ]
  ],
  [
+  "/api/auth/change-password",
+  [
+   "POST"
+  ]
+ ],
+ [
+  "/api/auth/login",
+  [
+   "POST"
+  ]
+ ],
+ [
+  "/api/auth/logout",
+  [
+   "POST"
+  ]
+ ],
+ [
   "/api/bank-accounts",
   [
    "GET"
@@ -307,6 +325,12 @@
  ],
  [
   "/api/map-suggestions",
+  [
+   "GET"
+  ]
+ ],
+ [
+  "/api/me",
   [
    "GET"
   ]
@@ -741,6 +765,30 @@
   "/api/uploads/{upload_id}/lines",
   [
    "GET"
+  ]
+ ],
+ [
+  "/api/users",
+  [
+   "GET"
+  ]
+ ],
+ [
+  "/api/users",
+  [
+   "POST"
+  ]
+ ],
+ [
+  "/api/users/{user_id}",
+  [
+   "PATCH"
+  ]
+ ],
+ [
+  "/api/users/{user_id}/reset-password",
+  [
+   "POST"
   ]
  ],
  [
