@@ -1047,11 +1047,14 @@ def _recon_certificate(conn, branch_id, period_month):
     frozen working-paper snapshot hash, and the count of manual overrides. Read-only."""
     r = reconcile_month(conn, branch_id, period_month)
     chs = r["channels"]
-    rows, resid_total = [], 0.0
+    rows, resid_total, resid_net = [], 0.0, 0.0
     for c in chs:
         resid = c.get("residual", c.get("variance", 0)) or 0
-        if c["key"] != "COUPON":          # COUPON variance is loyalty points, not baht
-            resid_total += resid
+        # COUPON variance is loyalty points, not baht; an accepted channel is signed
+        # off. Sum ABS so a short QR can't cancel an over CASH into a green ฿0.
+        if c["key"] != "COUPON" and not c.get("accepted"):
+            resid_total += abs(resid)
+            resid_net += resid
         rows.append({"key": c["key"], "label": c["label"],
             "pos": c["pos"], "ext": c["ext"], "variance": c.get("variance", 0),
             "residual": resid, "status": c["status"],
@@ -1076,6 +1079,7 @@ def _recon_certificate(conn, branch_id, period_month):
         "pos_total": round(sum(c["pos"] for c in chs), 2),
         "ext_total": round(sum(c["ext"] for c in chs), 2),
         "residual_total": round(resid_total, 2),
+        "residual_net": round(resid_net, 2),
         "ack_count": len(ack_rows),
         "ack_amount": round(sum(abs(x["amount"]) for x in ack_rows), 2),
         "override_count": reg["count"], "override_missing_reason": reg["missing_reason"],
@@ -1339,7 +1343,9 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None,
             f"<div>POS รวม: <b>฿{m(c['pos_total'])}</b></div>"
             f"<div>เงินเข้าจริงรวม: <b>฿{m(c['ext_total'])}</b></div>"
             f"<div>ผลต่างคงเหลือ (หลังรับทราบ): <b class='{'big' if abs(c['residual_total'])>100 else 'ok'}'>"
-            f"฿{m(c['residual_total'])}</b></div>"
+            f"฿{m(c['residual_total'])}</b>"
+            + (f" <span class='muted'>(สุทธิ {c['residual_net']:+,.0f})</span>"
+               if abs(c['residual_total'] - abs(c['residual_net'])) > 0.5 else "") + "</div>"
             f"<div>รายการรับทราบ: <b>{c['ack_count']}</b> (฿{m(c['ack_amount'])})</div>"
             f"<div>แก้ด้วยมือทั้งหมด: <b>{c['override_count']}</b> รายการ</div></div>",
             "<table><thead><tr><th class='l'>ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th>"
@@ -1358,7 +1364,7 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None,
                 f"<td class='l'><span class='chip {stx}'>{esc(stl)}</span></td></tr>")
         out.append(f"</tbody><tfoot><tr><td class='l'>รวม</td>"
             f"<td class='mono'>{m(c['pos_total'])}</td><td class='mono'>{m(c['ext_total'])}</td>"
-            f"<td></td><td class='mono'>{c['residual_total']:+,.0f}</td><td></td></tr></tfoot></table>")
+            f"<td></td><td class='mono'>{m(c['residual_total'])}</td><td></td></tr></tfoot></table>")
         out.append("<div class='lead'>" + snap_line + "</div>")
         out.append("<div class='sub' style='margin-top:14px'>ข้าพเจ้าขอรับรองว่าการกระทบยอด"
             "รายได้และเงินรับของสาขา/งวดข้างต้นถูกต้องและครบถ้วน ผลต่างที่คงเหลือได้รับการ"
