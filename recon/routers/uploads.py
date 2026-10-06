@@ -108,6 +108,9 @@ def _specific_failure_message(source_type: SourceType, raw: bytes, filename: str
 
 
 def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
+    """Returns (provider, rows, skipped, raw) — raw is the UNLOCKED bytes when the
+    upload was a password-locked PDF, so callers' empty-statement checks read the
+    decrypted document (the file hash stays on the caller's original bytes)."""
     # C3: a password-locked file can't be type-detected or parsed — say so first.
     locked = _is_encrypted_upload(raw, filename)
     if locked:
@@ -132,7 +135,7 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
         # A statement with zero movements (e.g. KBank CA 'No Data' month) has no
         # table for any parser to find — that's a valid empty document, not an error.
         if _is_empty_statement(raw, filename):
-            return (provider or "", [], 0)
+            return (provider or "", [], 0, raw)
         raise HTTPException(422, _specific_failure_message(source_type, raw, filename)
                             or f"Parse error: {exc}")
     # Parsed but found nothing (and not a legit empty statement): give the most
@@ -141,7 +144,7 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
         msg = _specific_failure_message(source_type, raw, filename)
         if msg:
             raise HTTPException(422, msg)
-    return prov, rows, skipped
+    return prov, rows, skipped, raw
 
 
 @router.post("/api/uploads/{source_type}/preview")
@@ -156,12 +159,22 @@ async def preview_upload(
     raw = await _read_upload(file)
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
-    prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
+    prov, rows, skipped, raw = _parse_or_422(source_type, raw, provider, file.filename)
     detected = _detect_branch_from_rows(source_type, rows)   # by bank account # / acquirer MID
+    with get_db() as conn:
+        dup_lines = sum(1 for r in rows if _bank_line_exists(conn, branch_id, r)) \
+            if source_type == "bank" else 0
     return {
         "provider":     prov,
         "row_count":    len(rows),
         "skipped_rows": skipped,   # data rows dropped for an unparseable date
+        # months the rows are dated in (the matcher reads lines by their own date);
+        # confirm refuses a statement/Grab/LINE MAN doc with no row in period_month
+        # and any doc with a row in an approved/closed month
+        "row_months":   _row_months(source_type, rows),
+        # bank lines already saved from another upload (re-downloaded statement) —
+        # confirm skips these
+        "duplicate_lines": dup_lines,
         "preview":      rows[:50],
         "columns":      list(rows[0].keys()) if rows else [],
         "empty_statement": _is_empty_statement(raw, file.filename) if not rows else False,
@@ -213,24 +226,94 @@ def _detect_branch_from_rows(source_type: str, rows: list) -> dict:
         return {}
 
 
-def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
-                branch_id: int, period_month: str, provider: str = "") -> dict:
-    """Parse + validate + persist ONE document into recon_uploads + its line table.
-    Runs every guard (dedup, C3 lock, A2/C6 wrong-type, wrong-branch, A1 zero-row)
-    and raises HTTPException on any. Does NOT commit — the caller owns the
-    transaction (single commit in confirm; one commit per file in bulk)."""
-    file_hash = hashlib.sha256(raw).hexdigest()
-    dup = conn.execute("""
-        SELECT file_name, uploaded_at FROM recon_uploads
-        WHERE branch_id=? AND period_month=? AND source_type=?
-          AND file_hash=? AND status='confirmed'
-    """, (branch_id, period_month, source_type, file_hash)).fetchone()
-    if dup:
-        raise HTTPException(
-            409, f"ไฟล์นี้อัปโหลดไปแล้วสำหรับสาขา/เดือนนี้ "
-                 f"('{dup['file_name']}' เมื่อ {dup['uploaded_at']})")
+# The date each line table is read by (matcher scopes lines by THIS date's
+# month, not by the upload's period_month).
+_DATE_COL = {
+    "bank":        "txn_date",
+    "credit_card": "settlement_date",
+    "grab":        "order_date",
+    "lineman":     "order_date",
+}
 
-    prov, rows, skipped = _parse_or_422(source_type, raw, provider, filename)
+
+def _row_months(source_type: str, rows: list) -> list[str]:
+    key = _DATE_COL[source_type]
+    return sorted({str(r[key])[:7] for r in rows if r.get(key)})
+
+
+def _upload_line_months(conn, source_type: str, upload_id: int) -> list[str]:
+    table, col = _LINE_TABLE[source_type], _DATE_COL[source_type]
+    return [r[0] for r in conn.execute(
+        f"SELECT DISTINCT substr({col},1,7) FROM {table} "
+        f"WHERE upload_id=? AND {col} IS NOT NULL", (upload_id,))]
+
+
+def _assert_months_open(conn, branch_id: int, months) -> None:
+    """423 when any month the document's lines fall in is approved/closed."""
+    for m in months:
+        try:
+            _assert_period_open(conn, branch_id, m)
+        except HTTPException as e:
+            raise HTTPException(
+                423, f"เอกสารนี้มีรายการของเดือน {m} ซึ่งปิด/อนุมัติแล้ว — {e.detail}")
+
+
+def _find_dup_file(conn, branch_id: int, source_type: str, file_hash: str | None,
+                   exclude_upload: int | None = None):
+    """A confirmed upload of the identical file for this branch, in ANY month
+    (the same bytes picked under another month would double the same lines)."""
+    if not file_hash:
+        return None
+    return conn.execute("""
+        SELECT file_name, uploaded_at, period_month FROM recon_uploads
+        WHERE branch_id=? AND source_type=? AND file_hash=? AND status='confirmed'
+          AND upload_id IS NOT ?
+    """, (branch_id, source_type, file_hash, exclude_upload)).fetchone()
+
+
+def _dup_file_message(dup) -> str:
+    return (f"ไฟล์นี้อัปโหลดไปแล้วสำหรับสาขานี้ (เดือน {dup['period_month']}: "
+            f"'{dup['file_name']}' เมื่อ {dup['uploaded_at']})")
+
+
+def _bank_line_exists(conn, branch_id: int, row: dict, exclude_upload: int | None = None) -> bool:
+    """A bank line with the same date, debit, credit and running balance (same
+    account when both sides know it) is already saved for this branch — i.e. a
+    re-downloaded statement (different bytes, same movements). Lines without a
+    balance are never matched: two genuine same-day same-amount receipts would
+    be indistinguishable."""
+    if row.get("balance") is None or not row.get("txn_date"):
+        return False
+    acct = str(row.get("account_no") or "")
+    return conn.execute("""
+        SELECT 1 FROM recon_bank_lines l
+        JOIN recon_uploads u ON u.upload_id = l.upload_id AND u.status = 'confirmed'
+        WHERE l.branch_id=? AND l.txn_date=? AND l.balance IS NOT NULL
+          AND ABS(l.balance - ?) < 0.005
+          AND ABS(COALESCE(l.credit, 0) - ?) < 0.005
+          AND ABS(COALESCE(l.debit, 0) - ?) < 0.005
+          AND (COALESCE(l.account_no, '') = '' OR ? = '' OR l.account_no = ?)
+          AND l.upload_id IS NOT ?
+        LIMIT 1
+    """, (branch_id, row["txn_date"], float(row["balance"]),
+          float(row.get("credit") or 0), float(row.get("debit") or 0),
+          acct, acct, exclude_upload)).fetchone() is not None
+
+
+def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
+                branch_id: int, period_month: str, provider: str = "",
+                actor: str = "staff") -> dict:
+    """Parse + validate + persist ONE document into recon_uploads + its line table.
+    Runs every guard (dedup, C3 lock, A2/C6 wrong-type, wrong-branch, A1 zero-row,
+    row-month period/lock, bank line overlap) and raises HTTPException on any.
+    Does NOT commit — the caller owns the transaction (single commit in confirm;
+    one commit per file in bulk)."""
+    file_hash = hashlib.sha256(raw).hexdigest()
+    dup = _find_dup_file(conn, branch_id, source_type, file_hash)
+    if dup:
+        raise HTTPException(409, _dup_file_message(dup))
+
+    prov, rows, skipped, raw = _parse_or_422(source_type, raw, provider, filename)
 
     # Wrong-branch guard: a document that identifies its own branch (account # /
     # acquirer MID) and isn't the chosen one is refused (how a UBN stmt lands on UDN).
@@ -247,6 +330,33 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
         raise HTTPException(
             422, "อ่านได้ 0 รายการ — น่าจะเป็นเอกสารผิดประเภทหรือรูปแบบที่ยังไม่รองรับ "
                  "(เช่น ใบกำกับภาษีค่าธรรมเนียม แทนรายงาน settlement)")
+
+    # Row months: the matcher reads every line by its OWN date, so the picked
+    # period_month alone guards nothing. A document may span a month boundary
+    # (T+1 deposits, payouts landing on the 1st), so rows outside period_month
+    # are allowed — but every month a row falls in must be open, and a statement
+    # / delivery report with NO row in period_month was picked under the wrong
+    # month. Card settlements are exempt from the latter: a per-day KTC/BAY
+    # report carries only its payout date, which for month-end sales is the 1st
+    # of the next month, yet it belongs to the sales month's document set.
+    months = _row_months(source_type, rows)
+    if months and period_month not in months and source_type != "credit_card":
+        raise HTTPException(
+            422, f"รายการในเอกสารนี้เป็นของเดือน {', '.join(months)} "
+                 f"ไม่ใช่เดือนที่เลือก ({period_month}) — เลือกเดือนให้ตรงกับเอกสารแล้วอัปโหลดใหม่")
+    _assert_months_open(conn, branch_id, months)
+
+    # Line-level overlap (bank): a re-downloaded statement has different bytes
+    # but the same movements — skip lines already saved instead of doubling.
+    dup_lines = 0
+    if source_type == "bank" and rows:
+        kept = [r for r in rows if not _bank_line_exists(conn, branch_id, r)]
+        dup_lines = len(rows) - len(kept)
+        if not kept:
+            raise HTTPException(
+                409, f"ทุกรายการในเอกสารนี้ ({dup_lines} รายการ) อัปโหลดไว้แล้วจากไฟล์อื่น "
+                     "— ไม่บันทึกซ้ำ")
+        rows = kept
 
     note = "ไม่มีรายการในเอกสาร (No Data)" if (
         not rows and _is_empty_statement(raw, filename)) else None
@@ -267,15 +377,17 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
         placeholders = ", ".join("?" * len(row))
         conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
                      list(row.values()))
-    _audit(conn, "upload", upload_id, "create", "staff",
+    _audit(conn, "upload", upload_id, "create", actor,
            [{"field": "file_name", "old": None, "new": filename}])
     return {"upload_id": upload_id, "rows_saved": len(rows),
-            "skipped_rows": skipped, "provider": prov}
+            "skipped_rows": skipped, "provider": prov,
+            "duplicate_lines": dup_lines}   # bank lines skipped as already saved
 
 
 @router.post("/api/uploads/{source_type}/confirm", dependencies=[Depends(require_write_token)])
 async def confirm_upload(
     source_type: SourceType,
+    request: Request,
     file: UploadFile = File(...),
     branch_id: int   = Form(...),
     period_month: str = Form(...),
@@ -286,7 +398,8 @@ async def confirm_upload(
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
         _assert_period_open(conn, branch_id, period_month)
-        result = _ingest_one(conn, source_type, raw, file.filename, branch_id, period_month, provider)
+        result = _ingest_one(conn, source_type, raw, file.filename, branch_id, period_month,
+                             provider, actor=_actor(request, None))
         conn.commit()
     return result
 
@@ -344,6 +457,7 @@ def _expand_zip(zip_name: str, raw: bytes, manifest: list) -> list:
 
 @router.post("/api/uploads/bulk", dependencies=[Depends(require_write_token)])
 async def bulk_upload(
+    request: Request,
     files: list[UploadFile] = File(...),
     branch_id: int   = Form(...),
     period_month: str = Form(...),
@@ -391,10 +505,12 @@ async def bulk_upload(
                 manifest.append({"file": name, "status": "skipped", "rows_saved": 0,
                                  "reason": "ไม่ทราบประเภทไฟล์ — เลือกช่องเองแล้วอัปโหลด"}); continue
             try:
-                res = _ingest_one(conn, st, raw, name, branch_id, period_month, provider)
+                res = _ingest_one(conn, st, raw, name, branch_id, period_month, provider,
+                                  actor=_actor(request, None))
                 conn.commit()
                 manifest.append({"file": name, "source_type": st, "status": "ok",
-                                 "rows_saved": res["rows_saved"], "reason": ""})
+                                 "rows_saved": res["rows_saved"], "reason": "",
+                                 "duplicate_lines": res["duplicate_lines"]})
             except HTTPException as e:
                 conn.rollback()
                 status = "skipped" if e.status_code == 409 else "error"
@@ -512,16 +628,20 @@ def upload_lines(upload_id: int, limit: int = 300):
 def delete_upload(upload_id: int, request: Request):
     with get_db() as conn:
         up = conn.execute(
-            "SELECT branch_id, period_month, file_name, file_hash FROM recon_uploads "
+            "SELECT source_type, branch_id, period_month, file_name, file_hash FROM recon_uploads "
             "WHERE upload_id=?", (upload_id,)).fetchone()
-        if up:
-            _assert_period_open(conn, up["branch_id"], up["period_month"])
+        if not up:
+            raise HTTPException(404, "upload not found")
+        _assert_period_open(conn, up["branch_id"], up["period_month"])
+        # its lines count in the months of their OWN dates — those must be open too
+        _assert_months_open(conn, up["branch_id"],
+                            _upload_line_months(conn, up["source_type"], upload_id))
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
         # Record the file hash too, so a deleted source document stays traceable in the
         # audit log (it may be referenced by an earlier close snapshot's manifest).
         _audit(conn, "upload", upload_id, "delete", _actor(request, None),
-               [{"field": "file_name", "old": up["file_name"] if up else None, "new": None},
-                {"field": "file_hash", "old": (up["file_hash"] if up else None), "new": None}])
+               [{"field": "file_name", "old": up["file_name"], "new": None},
+                {"field": "file_hash", "old": up["file_hash"], "new": None}])
         conn.commit()
     return {"deleted": upload_id}
 
@@ -531,12 +651,15 @@ class _UploadBranchBody(BaseModel):
 
 
 @router.patch("/api/uploads/{upload_id}/branch", dependencies=[Depends(require_write_token)])
-def reassign_upload_branch(upload_id: int, body: _UploadBranchBody):
+def reassign_upload_branch(upload_id: int, body: _UploadBranchBody, request: Request):
     """Move a confirmed upload (and all its parsed lines) to another branch —
-    the 2-click fix for a statement confirmed under the wrong branch."""
+    the 2-click fix for a statement confirmed under the wrong branch. Runs the
+    upload path's guards for the TARGET branch: period/line-month locks,
+    duplicate file, duplicate bank lines, and the document's own account/MID."""
     with get_db() as conn:
         up = conn.execute(
-            "SELECT source_type, branch_id, period_month, file_name FROM recon_uploads WHERE upload_id=?",
+            "SELECT source_type, branch_id, period_month, file_name, file_hash "
+            "FROM recon_uploads WHERE upload_id=?",
             (upload_id,)).fetchone()
         if not up:
             raise HTTPException(404, "upload not found")
@@ -545,14 +668,38 @@ def reassign_upload_branch(upload_id: int, body: _UploadBranchBody):
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, up["branch_id"], up["period_month"])
         _assert_period_open(conn, body.branch_id, up["period_month"])
+        line_months = _upload_line_months(conn, up["source_type"], upload_id)
+        _assert_months_open(conn, up["branch_id"], line_months)
+        _assert_months_open(conn, body.branch_id, line_months)
 
         table = _LINE_TABLE[up["source_type"]]
+        dup = _find_dup_file(conn, body.branch_id, up["source_type"], up["file_hash"],
+                             exclude_upload=upload_id)
+        if dup:
+            raise HTTPException(409, _dup_file_message(dup))
+        lines = [dict(r) for r in conn.execute(
+            f"SELECT * FROM {table} WHERE upload_id=?", (upload_id,))]
+        # Wrong-branch guard, as on upload: the document's own account # / MID.
+        detected = _detect_branch_from_rows(up["source_type"], lines)
+        det_bid = detected.get("detected_branch_id")
+        if det_bid and det_bid != body.branch_id:
+            raise HTTPException(
+                409, f"เอกสารนี้เป็นของสาขา '{detected.get('detected_branch_name')}' "
+                     f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก")
+        if up["source_type"] == "bank":
+            overlap = sum(1 for r in lines
+                          if _bank_line_exists(conn, body.branch_id, r, exclude_upload=upload_id))
+            if overlap:
+                raise HTTPException(
+                    409, f"สาขาปลายทางมีรายการเดียวกันนี้อยู่แล้ว {overlap} รายการ "
+                         "— ย้ายแล้วจะนับซ้ำ")
+
         moved = conn.execute(
             f"UPDATE {table} SET branch_id=? WHERE upload_id=?",
             (body.branch_id, upload_id)).rowcount
         conn.execute("UPDATE recon_uploads SET branch_id=? WHERE upload_id=?",
                      (body.branch_id, upload_id))
-        _audit(conn, "upload", upload_id, "update", "staff",
+        _audit(conn, "upload", upload_id, "update", _actor(request, None),
                [{"field": "branch_id", "old": up["branch_id"], "new": body.branch_id}])
         conn.commit()
     return {"upload_id": upload_id, "branch_id": body.branch_id, "moved_lines": moved}
@@ -627,19 +774,44 @@ def get_attachment_file(att_id: int):
         raise HTTPException(404, "file missing from storage")
     return Response(content=fp.read_bytes(),
                     media_type=r["mime"] or "application/octet-stream",
-                    headers={"Content-Disposition": f'inline; filename="{r["file_name"]}"'})
+                    headers={"Content-Disposition": _inline_disposition(r["file_name"])})
+
+
+def _inline_disposition(file_name: str | None) -> str:
+    """Content-Disposition safe for any name: Thai names aren't latin-1 (a raw
+    header 500s), so RFC 5987 — an ASCII fallback plus a UTF-8 filename*.
+    Quotes, backslashes and control chars (CR/LF) are stripped."""
+    from urllib.parse import quote
+    name = re.sub(r'[\x00-\x1f\x7f"\\]', "", file_name or "").strip() or "attachment"
+    if name.isascii():
+        fallback = name
+    else:
+        ext = Path(name).suffix.encode("ascii", "ignore").decode()
+        fallback = f"attachment{ext}"
+    return f"inline; filename=\"{fallback}\"; filename*=UTF-8''{quote(name)}"
 
 
 @router.delete("/api/attachments/{att_id}", dependencies=[Depends(require_write_token)])
-def delete_attachment(att_id: int):
+def delete_attachment(att_id: int, request: Request):
     with get_db() as conn:
-        r = conn.execute("SELECT file_path FROM recon_attachment WHERE id=?",
-                         (att_id,)).fetchone()
-        if r and r["file_path"]:
-            fp = _ATTACH_DIR / r["file_path"]
-            fp.unlink(missing_ok=True)
+        r = conn.execute(
+            "SELECT branch_id, day, file_name, file_path FROM recon_attachment WHERE id=?",
+            (att_id,)).fetchone()
+        if not r:
+            raise HTTPException(404, "not found")
+        _assert_period_open(conn, r["branch_id"], (r["day"] or "")[:7])
+        # a deposit slip pointing at this photo must not dangle
+        conn.execute("UPDATE recon_deposit_slip SET attachment_id=NULL WHERE attachment_id=?",
+                     (att_id,))
         conn.execute("DELETE FROM recon_attachment WHERE id=?", (att_id,))
+        _audit(conn, "attachment", att_id, "delete", _actor(request, None),
+               [{"field": "file_name", "old": r["file_name"], "new": None},
+                {"field": "branch_id", "old": r["branch_id"], "new": None},
+                {"field": "day",       "old": r["day"],       "new": None}])
         conn.commit()
+    # unlink only after the row delete committed — a failed delete keeps the file
+    if r["file_path"]:
+        (_ATTACH_DIR / r["file_path"]).unlink(missing_ok=True)
     return {"deleted": att_id}
 
 
