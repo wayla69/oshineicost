@@ -11,7 +11,7 @@ writes need bom.center or bom.edit (auth.MODULE_RULES).
 """
 import io
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
@@ -21,6 +21,7 @@ from pydantic import BaseModel
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
 from bom_center import codes as _cr
+from bom_center import hub as _hub
 from bom_center import master as _m
 from bom_center import orders as _or
 from bom_center import prep as _pr
@@ -1513,3 +1514,152 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
         bid = _stock_branch(con, request, branch_id)
         return _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
                                                receipt_date=body.receipt_date))
+
+
+# ── Phase 2 · S9: the centre's side — Sales Support queue, Ops compliance, monthly (hub.py) ──
+def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: Optional[str]) -> list:
+    if ids:
+        try:
+            return [int(x) for x in ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(400, "ids ต้องเป็นตัวเลขคั่นด้วย ,")
+    return [r["order_id"] for r in _hub.queue(con, "submitted", date_from, date_to)] + \
+        [r["order_id"] for r in _hub.queue(con, "processed", date_from, date_to)]
+
+
+@router.get("/api/bom-center/hub/queue")
+def bc_hub_queue(status: str = Query("submitted"), date_from: Optional[str] = Query(None),
+                 date_to: Optional[str] = Query(None)):
+    if status not in ("submitted", "processed", "received", "all"):
+        raise HTTPException(400, "status ต้องเป็น submitted / processed / received / all")
+    with get_db() as con:
+        _ensure(con)
+        rows = _hub.queue(con, status, date_from, date_to)
+    return {"status": status, "orders": rows, "reasons": [{"code": k, "label": v} for k, v in _hub.SS_REASONS],
+            "sla": {"submit_by": _hub.SLA_SUBMIT_BY, "process_by": _hub.SLA_PROCESS_BY}}
+
+
+@router.get("/api/bom-center/hub/order/{order_id}")
+def bc_hub_order(order_id: int):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            o = _or.detail(con, order_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        o["branch"] = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
+        o["delivery"] = _hub.delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
+        return o
+
+
+class ProcessLine(BaseModel):
+    code: str
+    processed_units: Optional[float] = None
+    reason: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ProcessBody(BaseModel):
+    lines: List[ProcessLine] = []
+    po_ref: Optional[str] = None
+
+
+@router.post("/api/bom-center/hub/process/{order_id}", dependencies=[Depends(require_write_token)])
+def bc_hub_process(order_id: int, body: ProcessBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        return _write(con, lambda: _hub.process(con, order_id, [ln.dict() for ln in body.lines], _who(request),
+                                                po_ref=body.po_ref))
+
+
+@router.get("/api/bom-center/hub/consolidated")
+def bc_hub_consolidated(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
+                        date_to: Optional[str] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        return _hub.consolidated(con, _ids_or_filter(con, ids, date_from, date_to))
+
+
+@router.get("/api/bom-center/hub/consolidated.xlsx")
+def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
+                             date_to: Optional[str] = Query(None)):
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        oids = _ids_or_filter(con, ids, date_from, date_to)
+        c = _hub.consolidated(con, oids)
+        per_branch = []
+        for oid in oids:
+            o = _or.detail(con, oid)
+            bname = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
+            dlv = _hub.delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
+            for ln in o["lines"]:
+                q = ln["processed_units"] if ln["processed_units"] is not None else ln["confirmed_units"]
+                if q:
+                    per_branch.append([bname, dlv, o["cycle_date"], o["round"], ln["code"], ln["name"], q,
+                                       "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"]])
+    wb = Workbook()
+    ws = wb.active
+    br = c["branches"]
+    _sheet(ws, "รวมต่อซัพพลายเออร์", ["วันส่ง", "ซัพพลายเออร์", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
+           "ออเดอร์สาขาที่ส่งแล้ว รวมต่อซัพพลายเออร์ × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ ถ้ายังไม่ดำเนินการใช้ยอดที่สาขายืนยัน)")
+    for g in c["groups"]:
+        for it in g["items"]:
+            ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
+                      [it["by_branch"].get(b) for b in br])
+    ws2 = wb.create_sheet()
+    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันสั่ง", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ออเดอร์"],
+           "ทุกบรรทัดของออเดอร์ที่เลือก")
+    for r in per_branch:
+        ws2.append(r)
+    return _xlsx(wb, "bom_center_orders_consolidated.xlsx")
+
+
+def _dates_or_week(date_from: Optional[str], date_to: Optional[str]) -> tuple:
+    t = date.today()
+    d1 = date_to or t.isoformat()
+    d0 = date_from or (date.fromisoformat(d1) - timedelta(days=13)).isoformat()
+    for d in (d0, d1):
+        try:
+            date.fromisoformat(d)
+        except ValueError:
+            raise HTTPException(400, "วันที่ต้องเป็น YYYY-MM-DD")
+    return d0, d1
+
+
+@router.get("/api/bom-center/hub/compliance")
+def bc_hub_compliance(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                      branch_id: Optional[int] = Query(None)):
+    d0, d1 = _dates_or_week(date_from, date_to)
+    with get_db() as con:
+        _ensure(con)
+        return _hub.compliance(con, d0, d1, branch_id)
+
+
+@router.get("/api/bom-center/hub/compliance.xlsx")
+def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+    from openpyxl import Workbook
+    d0, d1 = _dates_or_week(date_from, date_to)
+    with get_db() as con:
+        _ensure(con)
+        c = _hub.compliance(con, d0, d1)
+    th = {"ok": "ตามแนะนำ", "over": "สั่งเกิน", "under": "สั่งขาด", "not_ordered": "ไม่ได้สั่ง",
+          "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงวัน"}
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "Compliance การสั่ง", ["วันสั่ง", "สาขา", "รอบ", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่วนกลางดำเนินการ ฿",
+                                       "รับจริง ฿", "ยืนยัน vs แนะนำ %", "ส่วนกลางเปลี่ยน %", "ส่งขาด %", "ส่งทันเวลา", "ดำเนินการทันเวลา"],
+           f"รอบที่ปฏิทินกำหนด {d0} ถึง {d1} — ตามแนะนำ = ยืนยันต่างจากแนะนำไม่เกิน ±{_hub.TOL_PCT:g}%")
+    for r in c["rows"]:
+        ws.append([r["cycle_date"], r["branch"], r["round"], th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
+                   r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
+                   r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time")])
+    return _xlsx(wb, "bom_center_order_compliance.xlsx")
+
+
+@router.get("/api/bom-center/hub/monthly")
+def bc_hub_monthly(month: Optional[str] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        m = month if month and _MONTH.match(month) else _rl.last_full_month(con)
+        return _hub.monthly(con, m)

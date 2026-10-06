@@ -107,7 +107,8 @@ const TAB_MODULE = {
   ordering:['ops.report','supply.ordering'], ordersetup:['ops.report','supply.ordering'],
   ingpurchase:['cost.analysis','supply.ordering'],   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
   bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit'],
-  branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก   // BoM Center (S1): ทะเบียน ราคา หน่วย
+  branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก
+  orderhub:['supply.ordering','ops.report','bom.center'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -124,7 +125,7 @@ const ROLE_START = {
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
   analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['dailysales', 'ยอดขายรายวัน เทียบเดือน / ปีก่อน'], ['cost', 'ต้นทุนและ food cost']],
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['menuimpact', 'วัตถุดิบ: มี vs ไม่มี กระทบอะไร'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
-  salessupport: [['ingpurchase', 'กรอก/นำเข้ายอดซื้อวัตถุดิบรายสัปดาห์ เทียบยอดขาย'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก'], ['ordersetup', 'ขนาดบรรจุ ราคา และปฏิทินเทศกาล']],
+  salessupport: [['orderhub', 'คิวออเดอร์จากสาขา — ดำเนินการ รวมต่อซัพพลายเออร์ ส่งออก Excel'], ['ingpurchase', 'กรอก/นำเข้ายอดซื้อวัตถุดิบรายสัปดาห์ เทียบยอดขาย'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก']],
   branch: [['branchstock', 'นับสต๊อกของสาขา ทีละโซน']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
@@ -199,7 +200,7 @@ function tabAllowed(name) {
 function firstAllowedTab() {
   const order = ['overall','home','action','dailysales','trend','compare','more',
     'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
-    'staff','custtype','ingpurchase','ordering','branchstock','manual'];
+    'staff','custtype','ingpurchase','ordering','orderhub','branchstock','manual'];
   return order.find(tabAllowed) || 'manual';
 }
 
@@ -1997,7 +1998,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'BoM Center — ทะเบียนวัตถุดิบ · ราคารายเดือน · แปลงหน่วย', branchstock:'สาขาของฉัน — นับสต๊อก · สั่งของ · รับของ · ผลต่าง' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'BoM Center — ทะเบียนวัตถุดิบ · ราคารายเดือน · แปลงหน่วย', branchstock:'สาขาของฉัน — นับสต๊อก · สั่งของ · รับของ · ผลต่าง', orderhub:'ศูนย์สั่งของ — คิวออเดอร์ · ตรวจการสั่ง · สรุปผลต่างรายเดือน' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2030,6 +2031,7 @@ const TABS = {
   ordersetup: { load: () => loadOrderSetup() },
   bomcenter: { load: () => loadBomCenter() },
   branchstock: { load: () => loadBranchStock() },
+  orderhub: { load: () => loadOrderHub() },
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
@@ -2139,7 +2141,7 @@ function switchTab(name, direct) {
   if (_pb) _pb.style.display = hidePeriod ? 'none' : '';
   // สาขาของฉัน has its own branch (the login's) and its own dates — no chain filters at all,
   // removed from the layout (not just invisible) so a phone shows the count list first
-  const ownPage = (name === 'branchstock');
+  const ownPage = (name === 'branchstock' || name === 'orderhub');
   document.getElementById('selBranch').closest('div').classList.toggle('hidden', ownPage);
   document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('hidden', ownPage);
   document.getElementById('dateRangePickers')?.classList.toggle('hidden', ownPage);

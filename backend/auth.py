@@ -285,6 +285,9 @@ MODULE_RULES = [
     # S8 the branch order: the branch suggests/confirms/submits/receives its own; the centre may too
     ("GET", "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center"}),
+    # S9 the centre: Sales Support works the queue; Ops reads compliance and the monthly summary
+    ("GET", "/api/bom-center/hub",                     {"supply.ordering", "ops.report", "bom.center"}),
+    ("W",   "/api/bom-center/hub",                     {"supply.ordering", "bom.center"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),

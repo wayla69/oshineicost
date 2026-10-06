@@ -299,6 +299,7 @@
  ],
  "selected_month": null,
  "selected_week": "2026-04-27",
+ "stock_variance": null,
  "table": {
   "available": false
  },

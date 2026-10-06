@@ -15,7 +15,7 @@ def test_bundle_carries_every_panel_in_file_order(client):
     r = client.get("/tabs.html")
     assert r.status_code == 200
     ids = re.findall(r'<div id="tab-([a-z0-9]+)"', r.text)
-    assert len(ids) == 53, len(ids)          # 53-branchstock (สาขาของฉัน, Phase 2 S6)
+    assert len(ids) == 54, len(ids)          # 54-orderhub (ศูนย์สั่งของ, Phase 2 S9)
     files = sorted(p.name for p in (ROOT / "tabs").glob("*.html"))
     assert [re.sub(r"^\d+-|\.html$", "", f) for f in files] == ids, "bundle order must be file order"
     assert ids[0] == "home"

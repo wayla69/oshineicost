@@ -408,6 +408,10 @@ const MGT_I18N = {
     naTier:'Buffet price-tier data is not available for this period.',
     s12:'15. Appendix B — Definitions & Method',
     s14:'14. Appendix A — Top 60 menus by price tier (cost/head)',
+    s13a:'13A. Stock-count usage variance — counting branches',
+    svNote:'Periods between two stock counts that ended this month · actual use = begin + received − end, against recipe use for the same sales · + = used more than the recipes allow · branches that do not count yet are not shown.',
+    svBranch:'Branch', svPeriods:'Periods', svBom:'Recipe use ฿', svGap:'Gap ฿', svPct:'Gap %', svOver:'Over-use ฿', svPrev:'Last month %',
+    svReasons:'Top reasons', svOpen:'without a reason', svIncomplete:'deliveries not confirmed',
     top60Note:'Every tier that sold in the period · ranked by food cost per buffet head · % = share of that tier’s food cost/head · Qty/100 = pieces per 100 guests · same basis as §12.',
     defs:[
       ['Net sales','bill total including VAT ÷ 1.07. VAT is never counted as revenue.'],
@@ -531,6 +535,10 @@ const MGT_I18N = {
     naTier:'ไม่มีข้อมูล tier ราคาบุฟเฟ่ต์ในช่วงนี้',
     s12:'15. ภาคผนวก ข — นิยามและวิธีคำนวณ',
     s14:'14. ภาคผนวก ก — Top 60 เมนูต่อกลุ่มราคา (ต้นทุน/หัว)',
+    s13a:'13A. ผลต่างการใช้วัตถุดิบ — สาขาที่นับสต๊อก',
+    svNote:'รอบระหว่างการนับสต๊อก 2 ครั้งที่ปิดในเดือนนี้ · ใช้จริง = ต้น + รับเข้า − ปลาย เทียบกับใช้ตามสูตรของยอดขายช่วงเดียวกัน · + = ใช้เกินสูตร · สาขาที่ยังไม่นับไม่แสดง',
+    svBranch:'สาขา', svPeriods:'รอบ', svBom:'ตามสูตร ฿', svGap:'ผลต่าง ฿', svPct:'ผลต่าง %', svOver:'ใช้เกิน ฿', svPrev:'เดือนก่อน %',
+    svReasons:'เหตุผลหลัก', svOpen:'ยังไม่ใส่เหตุผล', svIncomplete:'ยังไม่ยืนยันรับของครบ',
     top60Note:'ทุกกลุ่มราคาที่มียอดขายในช่วงนี้ · เรียงตามต้นทุนอาหารต่อหัวบุฟเฟ่ต์ · % = สัดส่วนของต้นทุน/หัวของกลุ่มราคานั้น · จำนวน/100หัว = จำนวนชิ้นต่อลูกค้า 100 คน · ฐานเดียวกับข้อ 12',
     defs:[
       ['ยอดขายสุทธิ','ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้'],
@@ -1735,6 +1743,28 @@ function renderMgtReport(j, jM, jF) {
     return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}${respB}</div></div><div class="mt-4">${loop}</div>`;
   })();
 
+  // §13A — usage variance of the branches that count stock (BoM Center Phase 2 · S9)
+  const svHtml = (() => {
+    const S = j.stock_variance;
+    if (!S || !(S.branches || []).length) return '';
+    const pct = v => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+    const ink = v => v == null ? 'inherit' : (v > 0 ? 'var(--bad-ink)' : 'inherit');
+    const rows = S.branches.map(b => `<tr class="border-t border-slate-100"><td class="py-1 font-medium text-slate-700">${esc(b.branch)}${b.needs_reason ? ` <span class="text-[10px]" style="color:var(--amber-ink)">· ${b.needs_reason} ${T.svOpen}</span>` : ''}${b.complete < b.periods ? ` <span class="text-[10px] text-slate-400">· ${T.svIncomplete}</span>` : ''}</td>
+      <td class="text-right tabular-nums">${b.periods}</td><td class="text-right tabular-nums">${baht(b.bom_value)}</td>
+      <td class="text-right tabular-nums font-semibold" style="color:${ink(b.gap_value)}">${baht(b.gap_value)}</td>
+      <td class="text-right tabular-nums" style="color:${ink(b.gap_pct)}">${pct(b.gap_pct)}</td>
+      <td class="text-right tabular-nums">${baht(b.over_value)}</td><td class="text-right tabular-nums text-slate-500">${pct(b.prev_gap_pct)}</td></tr>`).join('');
+    const t = S.total || {};
+    const reasons = (S.top_reasons || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.svReasons}</p>` +
+      S.top_reasons.map(r => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="text-slate-700">${esc(r.label)}</span><span class="tabular-nums">${r.items} · ${baht(r.value)}</span></div>`).join('') : '';
+    return `<p class="text-[11px] text-slate-400 mb-2">${T.svNote}</p>
+      <table class="w-full text-[12px]"><thead><tr class="text-slate-400 text-[10px] uppercase"><th class="text-left py-1">${T.svBranch}</th><th class="text-right">${T.svPeriods}</th>
+      <th class="text-right">${T.svBom}</th><th class="text-right">${T.svGap}</th><th class="text-right">${T.svPct}</th><th class="text-right">${T.svOver}</th><th class="text-right">${T.svPrev}</th></tr></thead>
+      <tbody>${rows}<tr class="border-t-2 border-slate-300 font-semibold"><td class="py-1">${isTH ? 'รวม' : 'Total'}</td><td></td><td class="text-right tabular-nums">${baht(t.bom_value)}</td>
+      <td class="text-right tabular-nums" style="color:${ink(t.gap_value)}">${baht(t.gap_value)}</td><td class="text-right tabular-nums">${pct(t.gap_pct)}</td>
+      <td class="text-right tabular-nums">${baht(t.over_value)}</td><td></td></tr></tbody></table>${reasons}`;
+  })();
+
   // Appendix B — Top 60 menus per price tier (owner request 2026-10-01). Reads the
   // same per-tier ranking as §11's cost drivers (menus_top60 beside menus).
   const top60Appendix = (() => {
@@ -1795,6 +1825,7 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s10', c:'#0d9488', keep:true, t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
     { id:'mgt-s11', c:'#b45309', t:T.s11, h:tierHtml || naBox(T.naTier) },
     { id:'mgt-s12', c:'#0f766e', t:T.s12v, h:voiceHtml || naBox(T.naVoice) },
+    ...(svHtml ? [{ id:'mgt-s13a', c:'#7c3aed', keep:true, t:T.s13a, h:svHtml }] : []),   // only once branches count
     { id:'mgt-s14', c:'#b45309', t:T.s14, h:top60Appendix || naBox(T.naTier) },
     { id:'mgt-s13', c:'#475569', keep:true, t:T.s12, h:appendix + `<div class="mgt-foot mt-3">${footnote}</div>` },
   ];

@@ -217,6 +217,9 @@ MIGRATIONS = (
     # Phase 2 · S8 — the branch order
     ("bc_order", "stock_count_id", "INTEGER"),   # the count the suggestion deducted (NULL = ไม่หักสต๊อก)
     ("bc_order", "value", "REAL"),               # ฿ of the confirmed quantities at the month's price
+    # Phase 2 · S9 — Sales Support's reason when what is sent differs from what the branch confirmed
+    ("bc_order_line", "ss_reason", "TEXT"),
+    ("bc_order_line", "ss_note", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

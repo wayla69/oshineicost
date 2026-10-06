@@ -359,6 +359,7 @@
  ],
  "selected_month": null,
  "selected_week": null,
+ "stock_variance": null,
  "table": {
   "available": true,
   "avg_turn_min": 90.0,

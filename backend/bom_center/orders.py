@@ -100,13 +100,15 @@ def detail(con, order_id: int) -> dict:
     if not o:
         raise ValueError("ไม่พบออเดอร์")
     names = {c: (n, b) for c, n, b in con.execute("SELECT code, name_th, base_unit FROM bc_ingredient")}
+    from .hub import SS_REASON_TH
     o["lines"] = [{"code": c, "name": (names.get(c) or (c,))[0], "suggested_units": s, "confirmed_units": cf,
                    "processed_units": p, "received_units": rc, "order_unit": u, "reason_code": rs,
-                   "reason_th": REASON_TH.get(rs) if rs else None, "note": n}
-                  for c, s, cf, p, rc, u, rs, n in con.execute(
+                   "reason_th": REASON_TH.get(rs) if rs else None, "note": n,
+                   "ss_reason": sr, "ss_reason_th": SS_REASON_TH.get(sr) if sr else None, "ss_note": sn}
+                  for c, s, cf, p, rc, u, rs, n, sr, sn in con.execute(
                       "SELECT ingredient_code, suggested_units, confirmed_units, processed_units, received_units,"
-                      " order_unit, reason_code, note FROM bc_order_line WHERE order_id=? ORDER BY ingredient_code",
-                      (order_id,))]
+                      " order_unit, reason_code, note, ss_reason, ss_note FROM bc_order_line WHERE order_id=?"
+                      " ORDER BY ingredient_code", (order_id,))]
     o["status_th"] = STATUS_TH.get(o["status"], o["status"])
     return o
 
