@@ -207,6 +207,13 @@ MIGRATIONS = (
     ("bc_prep_recipe", "source_cost", "REAL"),    # Phase 1.5: the batch cost the kitchen sheet stated
     ("bc_prep_recipe", "source_ref", "TEXT"),     # where the sub-recipe came from (BoM_Semi row / flat file)
     ("bc_prep_recipe", "updated_by", "TEXT"),
+    # Phase 2 · S6 — branch stock counts
+    ("bc_ingredient", "storage_zone", "TEXT"),    # frozen / chilled / dry / bar / other — where a branch keeps it
+    ("bc_ingredient", "count_unit", "TEXT"),      # the unit a branch counts it in (NULL = its pack, else base)
+    ("bc_stock_count", "status", "TEXT"),         # draft / submitted (NULL = submitted)
+    ("bc_stock_count", "submitted_at", "TEXT"),
+    ("bc_stock_count", "updated_at", "TEXT"),
+    ("bc_stock_count_line", "note", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -238,8 +245,8 @@ OWNED_TABLES = (
     "bc_stock_count", "bc_stock_count_line", "bc_order", "bc_order_line",
     "bc_audit", "bc_dish_name_map",
     "bc_sku_cost_month",          # the cut-over: released cost per SKU per month (dated.py)
-    "bc_code_review",
-    "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
+    "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
+    "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
