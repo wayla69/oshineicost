@@ -23,10 +23,28 @@ from datetime import datetime as _dt
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi.responses import Response
+import contextvars
 import json
 import sqlite3
 
 router = APIRouter()
+
+
+# Request-scoped reuse of reconcile_month while ONE Auditor Pack is built: its six
+# reports ask for the same branch-months over and over. Set only inside
+# auditor_pack_zip (a ContextVar, so concurrent requests never share it); everywhere
+# else _reconcile is a plain reconcile_month call. Not a cache across requests.
+_PACK_RM: contextvars.ContextVar = contextvars.ContextVar("recon_pack_rm", default=None)
+
+
+def _reconcile(conn, branch_id, period_month):
+    memo = _PACK_RM.get()
+    if memo is None:
+        return reconcile_month(conn, branch_id, period_month)
+    key = (branch_id, period_month)
+    if key not in memo:
+        memo[key] = reconcile_month(conn, branch_id, period_month)
+    return memo[key]
 
 
 # Text a spreadsheet would read as a formula (OWASP CSV/formula injection). Notes and
@@ -919,7 +937,7 @@ def _live_channels(conn, live, branch_id, period_month):
     if branch_id not in live:
         try:
             live[branch_id] = {c["key"]: c for c in
-                               reconcile_month(conn, branch_id, period_month)["channels"]}
+                               _reconcile(conn, branch_id, period_month)["channels"]}
         except Exception as e:
             print(f"[recon-report] reconcile_month branch={branch_id} {period_month} failed: {e}")
             live[branch_id] = None
@@ -1065,7 +1083,7 @@ def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
             if sess and sess["status"] in ("approved", "closed"):
                 continue
             try:
-                r = reconcile_month(conn, bid, m)
+                r = _reconcile(conn, bid, m)
             except Exception as e:
                 print(f"[recon-report] reconcile_month branch={bid} {m} failed, month skipped: {e}")
                 continue
@@ -1087,7 +1105,7 @@ def _recon_certificate(conn, branch_id, period_month):
     """Sign-off certificate data for one branch-month: per-channel POS vs money-in
     with residual after acknowledgements, preparer/reviewer + approval date, the
     frozen working-paper snapshot hash, and the count of manual overrides. Read-only."""
-    r = reconcile_month(conn, branch_id, period_month)
+    r = _reconcile(conn, branch_id, period_month)
     chs = r["channels"]
     rows, resid_total, resid_net = [], 0.0, 0.0
     for c in chs:
@@ -1991,15 +2009,19 @@ def auditor_pack_zip(period_month: str, branch_id: int | None = None):
         "  06 ประวัติการแก้ไข (audit trail — เพิ่มอย่างเดียว แก้ไม่ได้)\n")
     buf = io.BytesIO()
     failed = []
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, thunk in parts:
-            try:
-                z.writestr(name, _body(thunk()))
-            except Exception as e:                       # never let one report sink the pack
-                failed.append(f"{name}: {e}")
-        if failed:
-            readme += "\nหมายเหตุ — รายงานที่สร้างไม่สำเร็จ:\n  " + "\n  ".join(failed) + "\n"
-        z.writestr("00_README.txt", readme)
+    memo_token = _PACK_RM.set({})        # one reconcile per branch-month for the whole pack
+    try:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, thunk in parts:
+                try:
+                    z.writestr(name, _body(thunk()))
+                except Exception as e:                       # never let one report sink the pack
+                    failed.append(f"{name}: {e}")
+            if failed:
+                readme += "\nหมายเหตุ — รายงานที่สร้างไม่สำเร็จ:\n  " + "\n  ".join(failed) + "\n"
+            z.writestr("00_README.txt", readme)
+    finally:
+        _PACK_RM.reset(memo_token)
     return Response(
         content=buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=\"auditor_pack_{pm}{bsuf}.zip\""})
