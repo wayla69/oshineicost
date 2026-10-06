@@ -1676,8 +1676,9 @@ _AUDIT_ACTION_TH = {"create": "สร้าง", "update": "แก้ไข", "d
 
 
 # entity → (parent table, primary-key column) so an audit row can be resolved to a
-# branch+period. Deleted parents drop out (their row is gone); the append-only audit
-# log itself is never mutated.
+# branch+period. When the parent row was deleted, branch+period are recovered from
+# the entity's own audit rows (see _audit_orphan_scope) so the change history keeps
+# it; the append-only audit log itself is never mutated.
 _AUDIT_SRC = [("session", "recon_sessions", "session_id"),
               ("manual_match", "recon_manual_match", "match_id"),
               ("channel_move", "recon_channel_move", "id"),
@@ -1687,9 +1688,49 @@ _AUDIT_SRC = [("session", "recon_sessions", "session_id"),
               ("close_snapshot", "recon_close_snapshot", "id")]
 
 
+_AUDIT_UNKNOWN_BRANCH = "ไม่ทราบสาขา (รายการถูกลบ)"
+
+
+def _audit_orphan_scope(arows):
+    """(branch_id, period_month) for an audited entity whose parent row is gone,
+    recovered from its own audit rows: a branch_id / period_month / day field, or a
+    dict (JSON or Python repr — _audit str()s values) in old/new carrying them.
+    Either part may be None when nothing recorded it."""
+    import ast
+    bid = pm = None
+    for r in arows:
+        f = (r["field"] or "").lower()
+        for raw in (r["old_val"], r["new_val"]):
+            if raw is None:
+                continue
+            vals = {f: raw} if f in ("branch_id", "period_month", "day") else None
+            if vals is None:
+                for parse in (json.loads, ast.literal_eval):
+                    try:
+                        vals = parse(raw)
+                        break
+                    except Exception:
+                        vals = None
+            if not isinstance(vals, dict):
+                continue
+            if bid is None and vals.get("branch_id") not in (None, ""):
+                try:
+                    bid = int(vals["branch_id"])
+                except (TypeError, ValueError):
+                    pass
+            cand = str(vals.get("period_month") or str(vals.get("day") or "")[:7])
+            if pm is None and _PERIOD_RE.match(cand):
+                pm = cand
+    return bid, pm
+
+
 def _audit_trail(conn, period_month, branch_id=None, limit=400):
     """Branch+month-scoped change history from the append-only audit log: who changed
-    what, when, across sessions/overrides/uploads/snapshots. Read-only."""
+    what, when, across sessions/overrides/uploads/snapshots. Read-only.
+    Rows of a DELETED record are kept (LEFT JOIN): branch+period come from the audit
+    rows themselves; with no recoverable period the month of the first audit row is
+    used, with no recoverable branch the row is listed under an unknown-branch bucket
+    (left out only when a branch filter is applied)."""
     bmap = {r["branch_id"]: r["name"] for r in conn.execute(
         f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
     rows = []
@@ -1697,23 +1738,49 @@ def _audit_trail(conn, period_month, branch_id=None, limit=400):
         try:
             cur = conn.execute(
                 f"SELECT a.ts, a.action, a.field, a.old_val, a.new_val, a.\"by\" AS by_, "
-                f"p.branch_id AS bid, p.period_month AS pm "
-                f"FROM recon_audit_log a JOIN {tbl} p ON p.{pk}=a.entity_id "
-                f"WHERE a.entity=? AND p.period_month=?", (entity, period_month))
+                f"a.entity_id AS eid, p.{pk} AS pid, p.branch_id AS bid, p.period_month AS pm "
+                f"FROM recon_audit_log a LEFT JOIN {tbl} p ON p.{pk}=a.entity_id "
+                f"WHERE a.entity=? AND (p.period_month=? OR p.{pk} IS NULL)",
+                (entity, period_month))
+            fetched = cur.fetchall()
         except sqlite3.OperationalError:
             continue
-        for r in cur:
-            bid = r["bid"]
-            if bid not in bmap or (branch_id is not None and bid != branch_id):
+        orphans: dict = {}
+        for r in fetched:
+            if r["pid"] is None:
+                orphans.setdefault(r["eid"], []).append(r)
+        scope = {}                                  # eid → (bid, pm, period inferred?)
+        for eid, arows in orphans.items():
+            bid, pm = _audit_orphan_scope(arows)
+            inferred = pm is None
+            if inferred:
+                pm = min((a["ts"] or "") for a in arows)[:7]
+            scope[eid] = (bid, pm, inferred)
+        for r in fetched:
+            inferred = False
+            if r["pid"] is None:
+                bid, pm, inferred = scope[r["eid"]]
+                if pm != period_month:
+                    continue
+            else:
+                bid = r["bid"]
+            if branch_id is not None and bid != branch_id:
+                continue
+            if bid is not None and bid not in bmap:
                 continue
             if r["action"] == "update" and (r["old_val"] is not None or r["new_val"] is not None):
                 detail = f"{r['field'] or ''} {r['old_val'] or '—'} → {r['new_val'] or '—'}".strip()
+            elif r["action"] == "delete" and r["old_val"] is not None:
+                detail = f"{r['field'] or ''} {r['old_val']}".strip()
             else:
                 detail = r["new_val"] or r["field"] or ""
+            if inferred:
+                detail = (detail + " (ไม่ทราบงวด — แสดงตามวันที่บันทึก)").strip()
             rows.append({"ts": r["ts"], "by": r["by_"] or "—", "entity": entity,
                 "entity_th": _AUDIT_ENTITY_TH.get(entity, entity),
                 "action": r["action"], "action_th": _AUDIT_ACTION_TH.get(r["action"], r["action"]),
-                "detail": detail, "branch_id": bid, "branch_name": bmap.get(bid, str(bid))})
+                "detail": detail, "branch_id": bid,
+                "branch_name": bmap[bid] if bid is not None else _AUDIT_UNKNOWN_BRANCH})
     rows.sort(key=lambda x: (x["ts"] or ""), reverse=True)
     return {"period_month": period_month, "branch_id": branch_id,
             "count": len(rows), "rows": rows[:limit], "shown": min(len(rows), limit)}
