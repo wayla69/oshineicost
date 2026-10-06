@@ -1,4 +1,4 @@
-/* recon frontend — 00-core.js: shared core: helpers ($ fmt esc jsa api mgrApi busy toast), route + route sequence token, header, theme, bottom sheet, nav, branch pickers.
+/* recon frontend — 00-core.js: shared core: helpers ($ fmt esc jsa api mgrApi busy toast), ME (who is logged in), route + route sequence token, header, theme, bottom sheet, nav, branch pickers.
    Plain scripts sharing one global scope, loaded in order by index.html (00 → 90);
    a slice may call any other slice's functions, but top-level code only uses earlier slices. */
 const $=id=>document.getElementById(id);
@@ -41,7 +41,20 @@ function detailText(d){
 }
 function emptyState(icon,title,hint,action){return `<div class="card empty"><i class="ti ti-${icon} ei" aria-hidden="true"></i><div class="et">${title}</div>${hint?`<div class="eh">${hint}</div>`:''}${action||''}</div>`;}
 function loadingState(msg){return `<div class="loading"><span class="spin" aria-hidden="true"></span>${msg||'กำลังโหลด…'}</div>`;}
-function tokenHdr(){const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
+/* ME = who is using recon (its OWN login, recon/auth.py) — loaded by 90-boot.js BEFORE the first route().
+   CONTRACT for every screen: window.ME = {login_enabled, login_ready, user:{username,display_name,role,must_change_pw}|null}.
+   login_enabled=false (RECON_LOGIN unset) → everything behaves exactly as before (write token + manager code). */
+var ME={login_enabled:false,login_ready:false,user:null};
+async function loadMe(){
+  try{const r=await fetch('/api/me');if(r.ok)ME=await r.json();}catch(e){}
+  if(!ME||typeof ME!=='object')ME={login_enabled:false,login_ready:false,user:null};
+  window.ME=ME;
+  _applyRoleUi();
+  return ME;
+}
+const isManager=()=>!ME.login_enabled||!!(ME.user&&ME.user.role==='manager');
+// with the login on the session is the credential: the shared write token is never sent from the browser
+function tokenHdr(){if(ME.login_enabled)return {};const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
 function setToken(){
   let t=prompt('รหัสสำหรับบันทึกข้อมูล (Write token) — เว้นว่างเพื่อล้าง:',localStorage.getItem('oshinei_token')||'');
   if(t===null)return; t=t.trim();
@@ -49,17 +62,22 @@ function setToken(){
   toast(t?'บันทึกรหัสแล้ว':'ล้างรหัสแล้ว');
 }
 // ถ้าเซิร์ฟเวอร์ตอบ 403 เพราะยังไม่ได้ใส่รหัส → ชวนตั้งรหัสทันที
-function hint403(e){ if(String(e.message||'').includes('write token')||String(e.message).includes('403')) toast('ต้องตั้งรหัสบันทึกก่อน — กดปุ่มรหัส มุมบนขวา'); }
+function hint403(e){ if(ME.login_enabled)return;   // login on: api() already showed the server's Thai reason
+  if(String(e.message||'').includes('write token')||String(e.message).includes('403')) toast('ต้องตั้งรหัสบันทึกก่อน — กดปุ่มรหัส มุมบนขวา'); }
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),...tokenHdr()};
   if(opts.body && !(opts.body instanceof FormData)){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
   const r=await fetch(path,opts);
   if(!r.ok){let d='';try{d=detailText((await r.json()).detail)}catch(e){};
+    if(ME.login_enabled&&r.status===401){ME.user=null;_applyRoleUi();renderLogin(d);}        // session ended → sign in again
+    else if(ME.login_enabled&&r.status===403&&d.includes('เปลี่ยนรหัสผ่าน'))renderChangePw(true);
+    else if(ME.login_enabled&&r.status===403&&d)toast(d);                                    // e.g. สิทธิ์ดูอย่างเดียว
     const err=new Error(d||('HTTP '+r.status));err.status=r.status;throw err;}
   return r.json();
 }
 function _mgrHdr(){const c=sessionStorage.getItem('mgr_code')||'';return c?{'X-Manager-Token':c}:{};}
 async function mgrApi(path,opts={}){
+  if(ME.login_enabled)return api(path,opts);       // login on: the backend checks the ROLE, no shared code
   for(let attempt=0;attempt<2;attempt++){
     try{return await api(path,{...opts,headers:{...(opts.headers||{}),..._mgrHdr()}});}
     catch(e){
@@ -98,6 +116,11 @@ function drillTodo(key){ openEvidence(key); }   // back-compat: todo card + dril
 function route(){
   ++_ROUTE_SEQ;                    // ผลของหน้าก่อนที่ยังโหลดค้างจะถูกทิ้ง (ดู _cur)
   const h=location.hash.slice(1);
+  // recon login (05-login.js): signed out → login screen; first login / reset → set a new password first
+  if(ME.login_enabled&&!ME.user)return renderLogin();
+  if(ME.user&&ME.user.must_change_pw)return renderChangePw(true);
+  if(h==='login')return ME.user?(location.hash=''):renderLogin();
+  _leaveLoginShell();
   _setNavActive(h);
   if(h==='reports')return loadReports();
   if(h==='errors')return loadErrorReport();
@@ -142,7 +165,7 @@ function header(extra){
       style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--input);box-shadow:var(--shadow)">
     ${extra||''}
     ${_themeBtnHtml('ml-auto')}
-    <button class="btn btn-sm" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)"><i class="ti ti-key" aria-hidden="true"></i> รหัส</button>
+    ${_authHdrHtml()}
   </div>
   ${_topNavHtml(h)}`;
 }

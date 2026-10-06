@@ -490,7 +490,8 @@ async function setSt(bid,st,btn){
   });
 }
 async function closeMonth(bid,btn){
-  const who=prompt('ชื่อผู้จัดการที่อนุมัติ:');
+  // login on: the approver IS the signed-in manager (the server stamps it) — no name to type
+  const who=ME.login_enabled?((ME.user&&ME.user.username)||''):prompt('ชื่อผู้จัดการที่อนุมัติ:');
   if(who===null)return;
   if(!who.trim()){toast('ต้องใส่ชื่อผู้อนุมัติ');return;}
   if(!confirm('ปิดเดือน: บันทึกผลถาวร ออกไฟล์ Excel ได้ และล็อกการแก้ไขทั้งเดือนนี้ ยืนยัน?'))return;
@@ -505,6 +506,7 @@ async function closeMonth(bid,btn){
 }
 // PATCH สถานะที่ต้องใช้รหัสผู้จัดการ (ปิดเดือน / เปิดงวดใหม่): ลองรหัสที่จำไว้ก่อน ถ้าเซิร์ฟเวอร์ขอ (403) ค่อยถามแล้วลองใหม่
 async function statusWithManagerCode(sid,mkForm,askMsg){
+  if(ME.login_enabled){await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:mkForm()});return;}   // the role is the check
   let code=sessionStorage.getItem('mgr_code')||'';
   for(let attempt=0;attempt<2;attempt++){
     try{
@@ -526,7 +528,7 @@ function approveWithManagerCode(sid,who){
 function reopenMonth(bid){
   if(!DATA||!DATA.session){toast('ไม่พบงวดของสาขานี้');return;}
   showSheet(`<div class="sheet-h"><i class="ti ti-lock-open" aria-hidden="true"></i> เปิดงวดใหม่ — ${esc(DATA.branch_name||'')} · ${esc(monthTh(MONTH))}</div>
-    <div class="lbl mb-10">ปลดล็อกเดือนที่ปิดแล้วให้กลับมาแก้ไขได้ (สถานะกลับเป็น "กำลังทำ") — ต้องใช้<b>รหัสผู้จัดการ</b> และ<b>เหตุผล</b> ที่จะบันทึกในประวัติการแก้ไข · แก้เสร็จต้องส่งตรวจและปิดเดือนใหม่ ระบบจะสร้างหลักฐานแช่แข็งชุดใหม่ให้</div>
+    <div class="lbl mb-10">ปลดล็อกเดือนที่ปิดแล้วให้กลับมาแก้ไขได้ (สถานะกลับเป็น "กำลังทำ") — ต้องใช้${ME.login_enabled?'<b>สิทธิ์ผู้จัดการ</b>':'<b>รหัสผู้จัดการ</b>'} และ<b>เหตุผล</b> ที่จะบันทึกในประวัติการแก้ไข · แก้เสร็จต้องส่งตรวจและปิดเดือนใหม่ ระบบจะสร้างหลักฐานแช่แข็งชุดใหม่ให้</div>
     <textarea id="reopen-note" class="sheet-ta" placeholder="เหตุผลที่ต้องเปิดงวดใหม่ (อย่างน้อย 10 ตัวอักษร) เช่น พบสเตทเมนต์ KBANK วันที่ 30 อัปไม่ครบ"></textarea>
     <div class="row mt-10 gap-8">
       <button class="btn btn-pri" onclick="submitReopen(${bid},this)">เปิดงวดใหม่</button>

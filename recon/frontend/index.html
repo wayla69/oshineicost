@@ -314,6 +314,18 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),
 .my-2-4{margin:2px 0 4px !important}.my-2-6{margin:2px 0 6px !important}.m-8-14{margin:8px 14px !important}.my-6{margin:6px 0 !important}.minw-160{min-width:160px !important}.minw-200{min-width:200px !important}
 .maxh-220{max-height:220px !important}.maxh-300{max-height:300px !important}.w-90{width:90px !important}.w-80{width:80px !important}.w-60{width:60px !important}.w-110{width:110px !important}
 .maxw-220{max-width:220px !important}
+/* recon login (05-login.js / 85-users.js): the sign-in card, labelled fields, the header user chip */
+body.login-screen #main-nav{display:none !important}
+.login-wrap{max-width:400px;margin:6vh auto 0}
+.login-card{padding:24px 24px 20px}
+.fld{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.fld input,.fld select{width:100% !important;font-size:15px !important;padding:9px 11px !important}
+.login-err{color:var(--err);font-size:13px;min-height:20px;margin:0 0 8px}
+.login-err:empty{min-height:0;margin:0}
+.user-chip{display:inline-flex;align-items:center;gap:5px;max-width:230px}
+.user-chip .uc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.user-chip .uc-role{color:var(--sub);white-space:nowrap}
+@media (max-width:640px){.login-wrap{margin-top:2vh}.user-chip{max-width:150px}.user-chip .uc-role{display:none}}
 /* motion: colour/border only, and none at all when the OS asks for less */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
@@ -337,6 +349,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),
 <input type="file" id="file-input" style="display:none" accept=".pdf,.xlsx,.xls,.csv">
 <!-- The app script, split per screen family (js/NN-*.js, shared global scope; order matters). -->
 <script src="js/00-core.js"></script>
+<script src="js/05-login.js"></script>
 <script src="js/10-overview.js"></script>
 <script src="js/20-branch.js"></script>
 <script src="js/25-branch-days.js"></script>
@@ -345,6 +358,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),
 <script src="js/60-diagnostics.js"></script>
 <script src="js/70-coupon-payout-discrepancies.js"></script>
 <script src="js/80-setup.js"></script>
+<script src="js/85-users.js"></script>
 <script src="js/90-boot.js"></script>
 </body>
 </html>

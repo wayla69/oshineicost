@@ -51,7 +51,7 @@ async function loadBranch(bid){
       <span class="lbl">ตรงแล้ว</span>
     </div></div>`;
 
-  if(closed) html+=`<div class="card c-ok row mb-12 bg-ok"><span style="flex:1;min-width:220px"><i class="ti ti-lock" aria-hidden="true"></i> เดือนนี้ปิดแล้ว — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ · ถ้าต้องแก้ ผู้จัดการกด <b>เปิดงวดใหม่</b> (ใส่รหัสผู้จัดการ + เหตุผล)</span>
+  if(closed) html+=`<div class="card c-ok row mb-12 bg-ok"><span style="flex:1;min-width:220px"><i class="ti ti-lock" aria-hidden="true"></i> เดือนนี้ปิดแล้ว — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ · ถ้าต้องแก้ ผู้จัดการกด <b>เปิดงวดใหม่</b> (${ME.login_enabled?'ผู้จัดการ':'ใส่รหัสผู้จัดการ'} + เหตุผล)</span>
     <button class="btn btn-sm" onclick="reopenMonth(${bid})"><i class="ti ti-lock-open" aria-hidden="true"></i> เปิดงวดใหม่ (ผู้จัดการ)</button></div>`;
 
   // ⇄ เงินอยู่ผิดช่อง — การ์ดงาน #1 อยู่บนสุด (2 แตะ): เล่าเป็นเรื่อง + ปุ่มเดียวจบ

@@ -435,3 +435,20 @@ def test_create_user_cli(env, monkeypatch, capsys):
     assert create_user.main(["mgr1", "--reset"]) == 0
     r = _q("SELECT active, locked_until, pw_version FROM recon_users")[0]
     assert r["active"] == 1 and r["locked_until"] is None and r["pw_version"] == 2
+
+
+# ── frontend wiring (the parallel screens rely on window.ME) ──────────────────
+def test_frontend_loads_me_before_the_first_route():
+    fe = Path(main.__file__).resolve().parent / "frontend"
+    core_js = (fe / "js" / "00-core.js").read_text(encoding="utf-8")
+    boot = (fe / "js" / "90-boot.js").read_text(encoding="utf-8")
+    assert "var ME={login_enabled:false" in core_js and "window.ME=ME" in core_js
+    assert "loadMe().then(()=>route())" in boot and "\nroute();" not in boot
+    login = (fe / "js" / "05-login.js").read_text(encoding="utf-8")
+    for name in ("function renderLogin(", "function renderChangePw(", "function doLogout(",
+                 "function _authHdrHtml(", "function _applyRoleUi("):
+        assert name in login, name
+    users = (fe / "js" / "85-users.js").read_text(encoding="utf-8")
+    assert "function usersCardHtml(" in users and "function loadUsersAdmin(" in users
+    # the write-token key button survives only while the login is off
+    assert "if(!ME.login_enabled)" in login and "setToken()" in login
