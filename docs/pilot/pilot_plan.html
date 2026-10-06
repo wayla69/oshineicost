@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผน Pilot สาขา</title>
+<style>
+  :root { --ink:#0f172a; --muted:#475569; --line:#cbd5e1; --accent:#1f3a6b; --soft:#eef2f8; --good:#15803d; --bg:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink:#e2e8f0; --muted:#94a3b8; --line:#334155; --accent:#93b4e8; --soft:#1e293b; --good:#4ade80; --bg:#0f172a; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 "Noto Sans Thai","Sarabun",system-ui,sans-serif; }
+  .page { max-width:860px; margin:0 auto; padding:20px 16px; }
+  h1 { font-size:20px; margin:0 0 2px; color:var(--accent); }
+  h2 { font-size:16px; color:var(--accent); margin:18px 0 6px; }
+  .sub { color:var(--muted); font-size:12.5px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; } td, th { border-top:1px solid var(--line); padding:5px 6px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  ol, ul { margin:0; padding-left:20px; } li { margin:3px 0; }
+  .scene { background:var(--soft); border-radius:8px; padding:8px 10px; margin:6px 0; }
+  @media print { .page { padding:0; max-width:none; } @page { size:A4; margin:12mm; } }
+</style>
+</head>
+<body><div class="page">
+  <h1>Pilot BoM Center Phase 2 — 4 สาขา 4 สัปดาห์</h1>
+  <div class="sub">อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง (เจ้าของเลือก §10-11) · ดูความพร้อมและผลระหว่าง pilot ได้ที่ ศูนย์สั่งของ → Pilot 4 สาขา</div>
+
+  <h2>ก่อนเริ่ม (สัปดาห์ 0)</h2>
+  <table><tr><th>งาน</th><th>ใคร</th><th>ที่ไหนในแอป</th></tr>
+    <tr><td>เติมทะเบียนวัตถุดิบ + ตรวจรหัสสูตรเดิม (ชื่อไม่ตรง)</td><td>Analyst</td><td>BoM Center → ภาพรวม</td></tr>
+    <tr><td>นำเข้าราคาซื้อจริงเดือนล่าสุด (เติมราคาโชยุ 15-04-002)</td><td>Analyst / บัญชี</td><td>BoM Center → ราคารายเดือน</td></tr>
+    <tr><td>นำเข้าสูตรกึ่งสำเร็จจากไฟล์ครัว + จับคู่ 15 สูตรที่เหลือ</td><td>Analyst + ครัว</td><td>BoM Center → สูตรกึ่งสำเร็จ</td></tr>
+    <tr><td>สร้างบัญชีสาขา 4 บัญชี (บทบาท “สาขา” + เลือกสาขา)</td><td>Admin</td><td>ตั้งค่า → ผู้ใช้งาน</td></tr>
+    <tr><td>ตั้งวันสั่ง 3 รอบของ 4 สาขา</td><td>ฝ่ายขาย</td><td>BoM Center → แนะนำยอดสั่ง</td></tr>
+    <tr><td>อบรมสาขา (วิดีโอ 5 นาที + คู่มือ 1 หน้า) · อบรม Sales Support 1 ชม.</td><td>IT / Ops</td><td>/docs/pilot/</td></tr>
+    <tr><td>นับต้นงวดครั้งแรก (ก่อนเปิดร้าน)</td><td>สาขา</td><td>สาขาของฉัน → นับสต๊อก</td></tr></table>
+
+  <h2>ระหว่าง pilot (สัปดาห์ 1–4)</h2>
+  <ul><li>ทุกวันสั่ง: สาขานับก่อนเปิด → สั่งตามแนะนำ (แก้พร้อมเหตุผล) → ส่ง · Sales Support ดำเนินการภายใน 14:00 · สาขารับของในระบบ</li>
+      <li>ทุกครั้งที่นับปลายงวด: สาขาใส่เหตุผลผลต่าง + ยืนยันรับของครบ</li>
+      <li>ทุกวันจันทร์: Ops + SCM + IT ทบทวน 30 นาที — ศูนย์สั่งของ (Pilot · ตรวจการสั่ง · ผลต่าง) → ปรับหน่วยครัว / เกณฑ์ / เหตุผล</li>
+      <li>ทบทวนสำรอง (safety stock) ของชั้น A — ตอนนี้ราว 50% ของพยากรณ์ 3 วัน อาจสูงไป</li></ul>
+
+  <h2>เกณฑ์ผ่าน (plan §7.3)</h2>
+  <table><tr><th>ตัวชี้วัด</th><th>เกณฑ์</th><th>วัดจาก</th></tr>
+    <tr><td>นับครบวันสั่ง</td><td>≥ 90% ของวันสั่งรอบ 1/2</td><td>มีผลนับที่ส่งแล้วในวันสั่งนั้น</td></tr>
+    <tr><td>เวลานับ</td><td>≤ 20 นาที (มัธยฐาน)</td><td>บันทึกร่างครั้งแรก → ส่งผลนับ</td></tr>
+    <tr><td>ผลต่างมีเหตุผล</td><td>≥ 80% ของรายการที่ต้องตรวจ</td><td>ผลต่างของฉัน</td></tr>
+    <tr><td>ความคลาดเคลื่อนพยากรณ์ชั้น A</td><td>≤ 15% (MAPE รายสัปดาห์)</td><td>backtest ของ Forecast Engine</td></tr></table>
+  <div class="sub" style="margin-top:4px">ผ่านครบ → ขยายทุกสาขา master → franchise · ไม่ผ่าน → ปรับแล้ว pilot ต่อ 2 สัปดาห์</div>
+
+  <h2>สคริปต์วิดีโอสาขา 5 นาที (ถ่ายบนมือถือจริง)</h2>
+  <div class="scene"><b>0:00–0:30 ทำไม</b> — “ระบบรู้ว่าเราใช้อะไรไปจากยอดขาย เรานับของที่เหลือ ระบบบอกว่าควรสั่งเท่าไร และบอกว่าตรงไหนใช้เกินสูตร” (ภาพ: หน้าสาขาของฉัน 4 แท็บ)</div>
+  <div class="scene"><b>0:30–2:00 นับสต๊อก</b> — เข้าระบบ → นับสต๊อก → เลือกโซนแช่แข็ง → หยิบแพ็คจริง กด + → พิมพ์ 2.5 → ติ๊กเฉพาะรายการบังคับ → ปิดแอปแล้วเปิดใหม่ให้เห็นว่าร่างยังอยู่ → ส่งผลนับ</div>
+  <div class="scene"><b>2:00–3:15 สั่งของ</b> — แท็บสั่งของ → รอบ 1 → อ่านบรรทัด “พยากรณ์ + สำรอง − คงเหลือคาด” → แก้หนึ่งรายการเพิ่ม 2 เท่า → ระบบขอเหตุผล → เลือก “มีงาน/จองกลุ่ม” → ส่งให้ส่วนกลาง</div>
+  <div class="scene"><b>3:15–4:00 รับของ</b> — ของมาถึง → ของมาถึงแล้ว — รับของ → แก้หนึ่งรายการที่มาไม่ครบ → บันทึก · ซื้อเองที่ตลาด → แท็บรับของ</div>
+  <div class="scene"><b>4:00–4:45 ผลต่างของฉัน</b> — เปิดรอบล่าสุด → รายการบนสุด ฿ มากสุด → เลือกเหตุผล “ตักเกินสูตร” → ยืนยันรับของครบ</div>
+  <div class="scene"><b>4:45–5:00 ปิด</b> — “นับก่อนเปิดร้านทุกวันสั่ง ใช้เวลาไม่เกิน 20 นาที — ถ้าติดอะไรถาม Sales Support”</div>
+</div></body>
+</html>

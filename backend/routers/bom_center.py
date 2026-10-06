@@ -22,8 +22,10 @@ import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
 from bom_center import codes as _cr
 from bom_center import hub as _hub
+from bom_center.clock import today as bkk_today
 from bom_center import master as _m
 from bom_center import orders as _or
+from bom_center import pilot as _pl
 from bom_center import prep as _pr
 from bom_center import prices as _p
 from bom_center import recipes as _r
@@ -51,7 +53,7 @@ def _month_or_400(m: Optional[str]) -> str:
 
 
 def _this_month() -> str:
-    d = date.today()
+    d = bkk_today()
     return f"{d.year:04d}-{d.month:02d}"
 
 
@@ -1415,7 +1417,7 @@ def _round_or_400(r: str) -> str:
 
 def _day_or_today(d: Optional[str]) -> date:
     if not d:
-        return date.today()
+        return bkk_today()
     try:
         return date.fromisoformat(d)
     except ValueError:
@@ -1616,7 +1618,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
 
 
 def _dates_or_week(date_from: Optional[str], date_to: Optional[str]) -> tuple:
-    t = date.today()
+    t = bkk_today()
     d1 = date_to or t.isoformat()
     d0 = date_from or (date.fromisoformat(d1) - timedelta(days=13)).isoformat()
     for d in (d0, d1):
@@ -1663,3 +1665,12 @@ def bc_hub_monthly(month: Optional[str] = Query(None)):
         _ensure(con)
         m = month if month and _MONTH.match(month) else _rl.last_full_month(con)
         return _hub.monthly(con, m)
+
+
+# ── Phase 2 · S10: pilot readiness and scorecard (pilot.py) ─────────────────
+@router.get("/api/bom-center/hub/pilot")
+def bc_hub_pilot(weeks: int = Query(4)):
+    """Before the pilot: what is still to set up. During it: each branch against §7.3's pass criteria."""
+    with get_db() as con:
+        _ensure(con)
+        return {"readiness": _pl.readiness(con), "scorecard": _pl.overview(con, max(1, min(weeks, 8)))}

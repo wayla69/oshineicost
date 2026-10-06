@@ -21,6 +21,7 @@ cancelled. A submitted order can be reopened until Sales Support processes it.
 import math
 from datetime import date, datetime, timedelta, timezone
 
+from .clock import today as bkk_today
 from .master import audit
 
 DEVIATION_PCT = 20.0          # a confirmed quantity further than this from the suggestion needs a reason
@@ -262,7 +263,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
         if q > 0:
             u = units[c]
             rlines.append({"code": c, "qty": q, "unit": (recv.get(c) if u and u != "base" else base.get(c))})
-    rd = receipt_date or date.today().isoformat()
+    rd = receipt_date or bkk_today().isoformat()
     rec = add_receipt(con, branch_id, rd, rlines, who, ref=f"ORDER-{order_id}", source="order") if rlines else None
     con.execute("UPDATE bc_order SET status='received', received_at=? WHERE order_id=?", (now(), order_id))
     audit(con, who, "order_receive", "bc_order", str(order_id), None, {"lines": len(rlines)})
