@@ -385,17 +385,21 @@ def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> 
             acc = ch.get("accepted")
             ext_only = ch.get("pos", 0) <= 0.5 and ch.get("ext", 0) > 0.5
             typ = "ext_only" if ext_only else "variance"
-            if ch["status"] == "diff":
-                add(bid, bn, typ, ch["key"], ch_th, ch.get("detail", ""),
-                    ch.get("residual", ch.get("variance", 0)), "open")
-            elif acc:
+            # accepted first: an accepted channel keeps status 'diff' in the engine
+            # (the accept only clears its todo), so it must not be listed as open
+            if acc:
                 add(bid, bn, "variance", ch["key"], ch_th, "รับทราบทั้งช่องทาง",
                     ch.get("variance", 0), "acknowledged", acc.get("note", ""), acc.get("by", ""))
+            elif ch["status"] == "diff":
+                add(bid, bn, typ, ch["key"], ch_th, ch.get("detail", ""),
+                    ch.get("residual", ch.get("variance", 0)), "open")
             elif ch.get("acked_days"):
                 add(bid, bn, "variance", ch["key"], ch_th,
                     f"รับทราบรายวัน {ch['acked_days']} วัน", ch.get("acked_var", 0), "acknowledged")
+        accepted_keys = {c["key"] for c in rm.get("channels", []) if c.get("accepted")}
         for d in rm.get("documents", []):
-            if d["status"] == "missing":
+            # same rule as the engine's todo: a missing doc of an accepted channel is not open
+            if d["status"] == "missing" and d.get("channel") not in accepted_keys:
                 add(bid, bn, "missing_doc", d.get("channel"), d["label"],
                     d.get("detail", "ยังไม่อัปโหลด"), 0, "open")
         for q in rm.get("setup_questions", []):
