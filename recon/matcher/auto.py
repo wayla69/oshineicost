@@ -61,6 +61,22 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
     except sqlite3.OperationalError:
         accepted = {}
 
+    # Per-day acks (reconcile BY DATE): a channel the branch page calls clear only
+    # because staff acknowledged its differing days must not re-block approval —
+    # its lane discrepancies are likewise born 'accepted', carrying the day reasons.
+    from ..reconcile_v2 import reconcile_month      # v2 composes the matcher: lazy
+    try:
+        v2 = reconcile_month(conn, branch_id, period_month)["channels"]
+    except sqlite3.OperationalError:
+        v2 = []
+    for ch in v2:
+        acks = [d["ack"] for d in ch["days"] if d.get("ack")]
+        if ch["key"] in accepted or not acks or ch["status"] not in ("ok", "no_source"):
+            continue
+        notes = "; ".join(dict.fromkeys(a["note"] for a in acks if a.get("note")))
+        accepted[ch["key"]] = {"note": f"รายวัน {len(acks)} วัน — {notes}",
+                               "created_by": acks[-1].get("by")}
+
     # Discrepancies staff already resolved/accepted survive the reset. A re-run must
     # not plant a fresh pending twin of them (duplicates + a 409 at approval, so
     # ปิดเดือน — run-match then approve — could never close a month). A resolution
