@@ -50,7 +50,7 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   document.querySelectorAll('#tab-bomcenter [data-bmcsub]').forEach(b => b.classList.toggle('active', b.dataset.bmcsub === k));
-  ['overview', 'rec', 'rel', 'fc', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -58,6 +58,7 @@ function bmcSetSub(k) {
   if (k === 'rec') bmcLoadReleases();
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
+  if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
   if (k === 'conv') bmcLoadConv();
@@ -515,6 +516,184 @@ async function bmcHistory(code) {
         <td class="text-[10.5px]" style="color:var(--text-muted)">${esc(h.note || '')}${h.by ? ' · ' + esc(h.by) : ''}</td></tr>`).join('') || '<tr><td colspan="7">ยังไม่มีราคา</td></tr>'}</tbody></table>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── Phase 1.5: sub-recipes of prepared items (prep.py) ──────────────────────
+let _bmcPrep = null;          // /api/bom-center/prep
+let _bmcPrepView = 'todo';    // todo | all | ok | none
+let _bmcPrepEdit = null;      // the sub-recipe open in the editor
+const _BMC_PREP = {
+  incomplete: ['สูตรคิดไม่ครบ', 'var(--bad-ink)'], check: ['ต่างจากราคาซื้อ > 5%', 'var(--amber-ink)'],
+  none: ['ยังไม่มีสูตร', 'var(--text-muted)'], ok: ['ใช้ต้นทุนจากสูตร', 'var(--good-ink)'],
+};
+const _bmcInput = (attrs, w) => `<input ${attrs} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:3px 6px;font-size:12px;width:${w};background:var(--bg-input);color:var(--text-primary)">`;
+const _bmcBtn = (label, on, primary) => `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:${primary ? '6px 14px' : '2px 10px'};font-size:${primary ? 13 : 12}px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
+
+async function bmcLoadPrep() {
+  const box = document.getElementById('bmcPrepList');
+  box.innerHTML = '<span style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    _bmcPrep = await _bmcJson(`${API}/api/bom-center/prep`);
+    if (!_bmcIng.length) bmcLoadIng(true).then(() => {
+      const dl = document.getElementById('bmcCodeList');
+      if (dl && !dl.children.length) dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}</option>`).join('');
+    }).catch(() => {});
+    bmcRenderPrep();
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcPrepView(v) { _bmcPrepView = v; bmcRenderPrep(); }
+function bmcRenderPrep() {
+  const d = _bmcPrep;
+  if (!d) return;
+  const c = d.counts || {};
+  const n = k => c[k] || 0;
+  const chip = (label, v) => _bmcBtn(label, `bmcPrepView('${v}')`, false).replace('background:transparent', `background:${_bmcPrepView === v ? 'var(--accent-soft, var(--bg-hover))' : 'transparent'}`);
+  document.getElementById('bmcPrepChips').innerHTML = chip(`ต้องจัดการ (${n('incomplete') + n('check')})`, 'todo')
+    + chip(`ยังไม่มีสูตร (${n('none')})`, 'none') + chip(`ใช้ต้นทุนจากสูตร (${n('ok')})`, 'ok') + chip(`ทั้งหมด (${d.rows.length})`, 'all');
+  document.getElementById('bmcPrepMonth').textContent = `คิดราคาเดือน ${d.month}`;
+  const q = (document.getElementById('bmcPrepQ').value || '').trim().toLowerCase();
+  const rows = d.rows.filter(r => (_bmcPrepView === 'all' || (_bmcPrepView === 'todo' ? (r.status === 'incomplete' || r.status === 'check') : r.status === _bmcPrepView))
+    && (!q || (r.code + ' ' + (r.name || '')).toLowerCase().includes(q)));
+  document.getElementById('bmcPrepList').innerHTML = rows.length ? rows.map(r => {
+    const [label, ink] = _BMC_PREP[r.status];
+    const cost = r.has_recipe
+      ? `1 สูตร = ${_bmcNum(r.yield_qty)} ${esc(r.yield_unit || '')} · ${_bmcNum(r.lines, 0)} วัตถุดิบ · จากสูตร <b>${r.per_base != null ? '฿' + _bmcPrice(r.per_base) : '—'}</b>/${esc(r.base_unit || '')}`
+        + ` · ราคาซื้อ ${r.own_price != null ? '฿' + _bmcPrice(r.own_price) : '—'}${r.diff_pct != null ? ` (<b style="color:${Math.abs(r.diff_pct) > d.tolerance_pct ? 'var(--amber-ink)' : 'var(--good-ink)'}">${r.diff_pct > 0 ? '+' : ''}${_bmcNum(r.diff_pct, 1)}%</b>)` : ''}`
+      : `ใช้ราคาซื้อ ${r.own_price != null ? '฿' + _bmcPrice(r.own_price) + '/' + esc(r.base_unit || '') : '— ไม่มีราคา'}${r.qty_per_recv ? ` · ขนาดบรรจุ ${_bmcNum(r.qty_per_recv)} ${esc(r.base_unit || '')}` : ''}`;
+    return `<div style="border-top:1px solid var(--border);padding:7px 0">
+      <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b style="color:var(--text-primary)">${esc(r.code)}</b>
+        <span style="color:var(--text-primary)">${esc(r.name || '')}</span>${_bmcChip(label, ink)}
+        <span style="margin-left:auto">${_bmcBtn(r.has_recipe ? 'เปิดสูตร' : (_bmcCanWrite() ? 'ใส่สูตร' : 'ดู'), `bmcOpenPrep(${_bmcQ(r.code)})`)}</span></div>
+      <div class="mt-0.5" style="color:var(--text-secondary)">${cost}</div>
+      ${(r.problems || []).length ? `<div class="mt-0.5" style="color:var(--bad-ink)">${r.problems.slice(0, 3).map(esc).join(' · ')}${r.n_problems > 3 ? ` +${r.n_problems - 3}` : ''}</div>` : ''}
+      ${r.source_ref ? `<div class="text-[10.5px]" style="color:var(--text-muted)">ที่มา: ${esc(r.source_ref)}${r.updated_by ? ' · ' + esc(r.updated_by) : ''}</div>` : ''}
+    </div>`;
+  }).join('') : `<div style="color:var(--good-ink)">${_bmcPrepView === 'todo' ? '✓ ไม่มีสูตรที่ต้องจัดการ' : 'ไม่มีรายการ'}</div>`;
+}
+
+async function bmcOpenPrep(code) {
+  const box = document.getElementById('bmcPrepDetail');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/prep/${encodeURIComponent(code)}`);
+    _bmcPrepEdit = { code, yield_qty: d.yield_qty || d.qty_per_recv || '', yield_unit: d.yield_unit || d.base_unit || '',
+      lines: (d.lines || []).map(l => ({ ingredient_code: l.ingredient_code || '', qty: l.qty, unit: l.unit || '', note: l.note || '',
+        ingredient_name: l.ingredient_name, cost: l.cost, price_per_base: l.price_per_base, source: l.source, problem: l.problem })), d };
+    bmcRenderPrepEdit();
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcRenderPrepEdit() {
+  const e = _bmcPrepEdit, d = e.d, w = _bmcCanWrite();
+  const box = document.getElementById('bmcPrepDetail');
+  const lines = e.lines.map((l, i) => `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);padding:5px 0">
+      <span style="width:18px;color:var(--text-muted)">${i + 1}</span>
+      ${w ? _bmcInput(`list="bmcCodeList" value="${esc(l.ingredient_code)}" placeholder="รหัส" onchange="_bmcPrepEdit.lines[${i}].ingredient_code=this.value.trim()"`, '110px')
+          + _bmcInput(`type="number" step="any" value="${l.qty ?? ''}" onchange="_bmcPrepEdit.lines[${i}].qty=this.value"`, '80px')
+          + _bmcInput(`value="${esc(l.unit)}" placeholder="หน่วย" onchange="_bmcPrepEdit.lines[${i}].unit=this.value"`, '80px')
+        : `<b>${esc(l.ingredient_code || '—')}</b> ${_bmcNum(l.qty)} ${esc(l.unit)}`}
+      <span style="color:var(--text-secondary);min-width:120px">${esc(l.ingredient_name || l.note || '')}</span>
+      <span style="color:var(--text-muted)">${l.cost != null ? '฿' + _bmcNum(l.cost, 2) + (l.source === 'sub_recipe' ? ' (จากสูตรย่อย)' : '') : ''}</span>
+      ${l.problem ? `<span style="color:var(--bad-ink)">${esc(l.problem)}</span>` : ''}
+      ${w ? `<button onclick="_bmcPrepEdit.lines.splice(${i},1);bmcRenderPrepEdit()" style="margin-left:auto;font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>` : ''}
+    </div>`).join('');
+  const raw = (d.raw_per_base || []).slice(0, 12).map(x => `<b>${esc(x.code)}</b> ${esc(x.name || '')} ${_bmcNum(x.qty_per_base, 4)}`).join(' · ');
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(d.code)} ${esc(d.name || '')}</div>
+      ${_bmcBtn('ปิด', "document.getElementById('bmcPrepDetail').style.display='none'")}</div>
+    <div class="text-xs mt-1" style="color:var(--text-secondary)">หน่วยฐาน ${esc(d.base_unit || '—')}${d.qty_per_recv ? ` · ขนาดบรรจุในทะเบียน ${_bmcNum(d.qty_per_recv)}` : ''} ·
+      ราคาซื้อ ${d.own_price != null ? '฿' + _bmcPrice(d.own_price) : '—'} · จากสูตร ${d.per_base != null ? '<b>฿' + _bmcPrice(d.per_base) + '</b>' : '—'}
+      ${d.batch_cost != null && d.has_recipe ? ` · ต้นทุนต่อ 1 สูตร ฿${_bmcNum(d.batch_cost, 2)}` : ''}${d.source_cost != null ? ` (ไฟล์ครัว ฿${_bmcNum(d.source_cost, 2)})` : ''} · ราคาเดือน ${esc(d.month)}</div>
+    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs" style="color:var(--text-muted)">1 สูตร ได้
+      ${w ? _bmcInput(`type="number" step="any" value="${e.yield_qty}" onchange="_bmcPrepEdit.yield_qty=this.value"`, '100px') + _bmcInput(`value="${esc(e.yield_unit)}" onchange="_bmcPrepEdit.yield_unit=this.value"`, '90px')
+        : `<b>${_bmcNum(e.yield_qty)} ${esc(e.yield_unit)}</b>`}</div>
+    <div class="text-xs mt-2">${lines || '<span style="color:var(--text-muted)">ยังไม่มีวัตถุดิบในสูตร</span>'}</div>
+    ${w ? `<div class="flex flex-wrap gap-2 mt-2">${_bmcBtn('+ เพิ่มวัตถุดิบ', "_bmcPrepEdit.lines.push({ingredient_code:'',qty:'',unit:'',note:''});bmcRenderPrepEdit()")}
+      ${_bmcBtn('บันทึกสูตร', 'bmcSavePrep()', true)}<span id="bmcPrepEditStatus" class="text-xs"></span></div>` : ''}
+    ${(d.problems || []).length ? `<div class="text-xs mt-2" style="color:var(--bad-ink)">ยังคิดต้นทุนจากสูตรไม่ได้: ${d.problems.slice(0, 5).map(esc).join(' · ')} — ระหว่างนี้ใช้ราคาซื้อ</div>` : ''}
+    ${raw ? `<div class="text-[11px] mt-2" style="color:var(--text-secondary)">ใน 1 ${esc(d.base_unit || 'หน่วย')} มีวัตถุดิบดิบ (แผนสั่งใช้ตัวเลขนี้): ${raw}</div>` : ''}`;
+}
+async function bmcSavePrep() {
+  const e = _bmcPrepEdit;
+  try {
+    await _bmcJson(`${API}/api/bom-center/prep/${encodeURIComponent(e.code)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yield_qty: Number(e.yield_qty), yield_unit: e.yield_unit,
+        lines: e.lines.map(l => ({ ingredient_code: l.ingredient_code || null, qty: l.qty === '' ? null : Number(l.qty), unit: l.unit || null, note: l.note || null })) }) });
+    await bmcOpenPrep(e.code);
+    _bmcStatus('bmcPrepEditStatus', '✓ บันทึกแล้ว', 'var(--good-ink)');
+    bmcLoadPrep();
+  } catch (err) { _bmcStatus('bmcPrepEditStatus', 'ไม่สำเร็จ — ' + String(err.message || err).slice(0, 200), 'var(--bad-ink)'); }
+}
+
+let _bmcPrepFile = null;
+async function bmcPrepImportSemi(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  _bmcPrepFile = file;
+  input.value = '';
+  await bmcPrepPreview();
+}
+async function bmcPrepPreview() {
+  const box = document.getElementById('bmcPrepImport');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังอ่านไฟล์…</span>';
+  try {
+    const fd = new FormData(); fd.append('file', _bmcPrepFile, _bmcPrepFile.name);
+    const p = await _bmcJson(`${API}/api/bom-center/prep/import-semi?dry_run=true`, { method: 'POST', body: fd });
+    const methodTh = { 'name+yield': 'ชื่อ + ปริมาณต่อสูตรตรง', name: 'ชื่อตรง', map: 'จับคู่เอง' };
+    const writes = p.writes.map(w => `<div style="border-top:1px solid var(--border);padding:5px 0">
+        <b>${esc(w.prepared_code)}</b> ${esc(w.prepared_name || '')} ← <span style="color:var(--text-secondary)">แถว ${w.row}: ${esc(w.src_code)} ${esc(w.src_name)} (${esc(w.yield_text || '')})</span>
+        ${_bmcChip(methodTh[w.method] || w.method, w.score >= 1.1 || w.method === 'map' ? 'var(--good-ink)' : 'var(--amber-ink)')}
+        ${w.replaces ? _bmcChip('แทนสูตรเดิม', 'var(--text-muted)') : ''}
+        ${w.unresolved ? `<span style="color:var(--bad-ink)"> · หารหัสไม่เจอ ${w.unresolved}: ${w.lines.filter(l => !l.ingredient_code).map(l => esc(l.note)).join(', ')}</span>` : ''}</div>`).join('');
+    const um = p.unmatched.map(u => `<div style="border-top:1px solid var(--border);padding:5px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span>แถว ${u.row}: <b>${esc(u.src_code)} ${esc(u.name)}</b> <span style="color:var(--text-muted)">${esc(u.yield_text || '')}</span></span>
+        ${_bmcCanWrite() ? _bmcInput(`list="bmcCodeList" placeholder="รหัสในทะเบียน" id="bmcPrepMap_${u.row}"`, '120px')
+          + _bmcBtn('จับคู่', `bmcPrepMap(${_bmcQ(u.name)}, document.getElementById('bmcPrepMap_${u.row}').value)`)
+          + _bmcBtn('ไม่ใช่ของเรา', `bmcPrepMap(${_bmcQ(u.name)}, '-')`) : ''}</div>`).join('');
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ตรวจก่อนบันทึก — ${esc(_bmcPrepFile.name)} · sheet ${esc(p.sheet || '')}</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">${p.rows} สูตรในไฟล์ → บันทึกให้ <b>${p.writes.length}</b> รหัสในทะเบียน (จับคู่ด้วยชื่อ + ปริมาณที่ได้ต่อสูตร ไม่ใช้เลขรหัสในไฟล์ เพราะเป็นชุดรหัสเก่า) ·
+        หารหัสวัตถุดิบไม่เจอ ${p.unresolved_lines} บรรทัด (บันทึกไว้ แล้วใส่รหัสในหน้าสูตรได้) · สูตรในไฟล์ที่ยังไม่รู้ว่าเป็นรหัสไหน ${p.unmatched.length} ·
+        รหัสกึ่งสำเร็จที่ยังไม่มีสูตร ${p.prepared_without.length}</p>
+      ${_bmcCanWrite() ? `<div class="flex gap-2 my-2">${_bmcBtn(`บันทึก ${p.writes.length} สูตร`, 'bmcPrepApply()', true)}${_bmcBtn('ยกเลิก', "document.getElementById('bmcPrepImport').style.display='none'")}<span id="bmcPrepApplyStatus" class="text-xs"></span></div>` : ''}
+      ${um ? `<div class="text-xs font-semibold mt-2" style="color:var(--text-primary)">สูตรในไฟล์ที่ยังไม่รู้ว่าเป็นรหัสไหน — ใส่รหัส หรือกด “ไม่ใช่ของเรา”</div><div class="text-xs">${um}</div>` : ''}
+      <div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">ที่จะบันทึก (สีเหลือง = จับคู่ด้วยชื่อที่ไม่ตรงทั้งหมด ควรตรวจ)</div><div class="text-xs">${writes}</div>`;
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcPrepMap(name, code) {
+  code = (code || '').trim();
+  if (!code) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/prep/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ src_name: name, prepared_code: code }) });
+    await bmcPrepPreview();
+  } catch (e) { alert('จับคู่ไม่สำเร็จ — ' + String(e.message || e)); }
+}
+async function bmcPrepApply() {
+  try {
+    const fd = new FormData(); fd.append('file', _bmcPrepFile, _bmcPrepFile.name);
+    const r = await _bmcJson(`${API}/api/bom-center/prep/import-semi?dry_run=false`, { method: 'POST', body: fd });
+    document.getElementById('bmcPrepImport').style.display = 'none';
+    _bmcStatus('bmcPrepStatus', `✓ บันทึกสูตรกึ่งสำเร็จ ${r.saved} รหัส`, 'var(--good-ink)');
+    bmcLoadPrep();
+  } catch (e) { _bmcStatus('bmcPrepApplyStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+function bmcPrepTemplate() { window.location.href = `${API}/api/bom-center/prep/template.xlsx`; }
+async function bmcPrepImportFlat(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  input.value = '';
+  const send = dry => { const fd = new FormData(); fd.append('file', file, file.name);
+    return _bmcJson(`${API}/api/bom-center/prep/import-flat?dry_run=${dry}`, { method: 'POST', body: fd }); };
+  try {
+    const pre = await send(true);
+    if (pre.errors.length) { _bmcStatus('bmcPrepStatus', 'ไฟล์มีปัญหา: ' + pre.errors.slice(0, 3).join(' · '), 'var(--bad-ink)'); return; }
+    if (!confirm(`นำเข้าแม่แบบ: แทนที่สูตรของ ${pre.codes} รหัส — บันทึกเลยไหม?`)) return;
+    const r = await send(false);
+    _bmcStatus('bmcPrepStatus', `✓ บันทึก ${r.saved} รหัส`, 'var(--good-ink)');
+    bmcLoadPrep();
+  } catch (e) { _bmcStatus('bmcPrepStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 
 // ── unit converter ──────────────────────────────────────────────────────────

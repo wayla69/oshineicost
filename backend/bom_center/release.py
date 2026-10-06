@@ -41,12 +41,16 @@ CHECKS = {
     "C07": ("warn", "เมนูบุฟเฟ่ต์ที่ขายเดือนล่าสุดแต่ไม่มีสูตรใน release นี้"),
     "C08": ("warn", "ต้นทุนไม่ตรงยอดในไฟล์ต้นทาง (> ฿0.01)"),
     "C09": ("block", "รหัส POS ไม่มีในระบบ / สูตรว่าง"),
-    "C10": ("warn", "วัตถุดิบกึ่งสำเร็จยังไม่มีสูตร (ใช้ราคาซื้อ/ใบเสนอไปก่อน — Phase 1.5)"),
+    "C10": ("block", "วัตถุดิบกึ่งสำเร็จยังไม่มีสูตรย่อย — ใส่สูตร หรือยืนยันใช้ราคาซื้อไปก่อนพร้อมเหตุผล"),
     "C11": ("block", "ต้นทุนดูเหมือนราคาขาย"),
     "C12": ("warn", "สัดส่วนผิดธรรมชาติ (> 1 กก./ลิตร ต่อเสิร์ฟ หรือต้นทุนรวม ฿0)"),
+    "C13": ("block", "สูตรย่อยคิดต้นทุนไม่ครบ (ไม่พบรหัส / ไม่มีราคา / แปลงหน่วยไม่ได้ / วนซ้ำ) — ใช้ราคาซื้อแทน"),
+    "C14": ("warn", "ต้นทุนจากสูตรย่อยต่างจากราคาซื้อ > 5% — ครัวตรวจ yield"),
     "UNM": ("warn", "สูตรในไฟล์ที่ยังไม่จับคู่รหัส POS"),
 }
-ACCEPTABLE = {"C05"}               # a block a person may accept with a reason
+# blocks a person may accept with a reason: a big cost move (C05), and — Phase 1.5 —
+# a prepared item still costed at its purchase price (C10/C13) while the kitchen writes its sub-recipe
+ACCEPTABLE = {"C05", "C10", "C13"}
 
 
 def now() -> str:
@@ -113,12 +117,15 @@ def run_checks(con, release_id: int) -> dict:
 
     known_ing = {r[0] for r in con.execute("SELECT code FROM bc_ingredient")}
     kinds = dict(con.execute("SELECT code, kind FROM bc_ingredient"))
-    has_prep = {r[0] for r in con.execute("SELECT prepared_code FROM bc_prep_recipe")}
+    from .prep import PrepCoster, TOLERANCE_PCT, book
+    pbook = book(con, release_id)
     pos = {r[0] for r in con.execute("SELECT sku_code FROM skus")}
     names = dict(con.execute("SELECT sku_code, description FROM skus"))
     month_now = rel["effective_month"]
     before = costs_in_force(con, month_now, exclude_release=release_id)
-    coster = Coster(con, rel["price_month"] or rel["effective_month"])
+    coster = Coster(con, rel["price_month"] or rel["effective_month"], pbook)
+    pcost = PrepCoster(con, coster.month, pbook, coster.conv)
+    prep_seen = set()
     sales_month = last_full_month(con)
     avg_price = {c: (rev / q if q else None) for c, rev, q in con.execute(
         "SELECT s.sku_code, SUM(m.subtotal_ex_vat), SUM(m.qty) FROM " + _sales(con) + " m JOIN skus s USING(sku_id)"
@@ -145,8 +152,9 @@ def run_checks(con, release_id: int) -> dict:
                 add("C03", ref, f"{label} บรรทัด {ln['seq']}: {code} — {p}")
             elif not ln.get("zero") and (ln.get("cost") or 0) <= 0:
                 add("C02", ref, f"{label} บรรทัด {ln['seq']}: {code} ต้นทุน ฿0 แต่ไม่ได้ติดธงตั้งใจเป็น 0")
-            if code and kinds.get(code) == "prepared" and code not in has_prep and not ln.get("zero"):
-                add("C10", code, f"{code} {ln.get('ingredient_name') or ''} (กึ่งสำเร็จ) ยังไม่มีสูตรย่อย")
+            if code and kinds.get(code) == "prepared" and not ln.get("zero") and code not in prep_seen:
+                prep_seen.add(code)
+                _prep_checks(add, pcost, code, ln.get("ingredient_name") or "", label, TOLERANCE_PCT)
             qb = ln.get("qty_base")
             if qb and ln.get("base_unit") in ("กรัม", "มิลลิลิตร") and qb > 1000:
                 add("C12", ref, f"{label} บรรทัด {ln['seq']}: {qb:,.0f} {ln['base_unit']} ต่อเสิร์ฟ")
@@ -189,6 +197,22 @@ def run_checks(con, release_id: int) -> dict:
         con.execute("INSERT OR REPLACE INTO bc_release_check(release_id, check_code, ref, severity, message,"
                     " resolved_by, resolved_at) VALUES(?,?,?,?,?,?,?)", (release_id, code, ref, sev, msg, by, at))
     return checks_summary(con, release_id)
+
+
+def _prep_checks(add, pcost, code: str, name: str, used_in: str, tol: float):
+    """C10 / C13 / C14 for one prepared item a recipe uses (once per release)."""
+    if code not in pcost.book:
+        add("C10", code, f"{code} {name} (กึ่งสำเร็จ) ยังไม่มีสูตรย่อย — ใช้ราคาซื้อ/ใบเสนอ (เช่นใน {used_in})")
+        return
+    c = pcost.cost(code)
+    if c["per_base"] is None:
+        add("C13", code, f"{code} {name}: " + "; ".join(c["problems"][:3]))
+        return
+    own = pcost._price(code)
+    if own and own[0]:
+        pct = 100.0 * (c["per_base"] - own[0]) / own[0]
+        if abs(pct) > tol:
+            add("C14", code, f"{code} {name}: จากสูตร ฿{c['per_base']:,.4f} / ราคาซื้อ ฿{own[0]:,.4f} ต่อหน่วยฐาน ({pct:+.1f}%)")
 
 
 def checks_summary(con, release_id: int) -> dict:
@@ -341,15 +365,18 @@ def do_release(con, release_id: int, who: str, backdate_reason: str = None, toda
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE kind='monthly' AND"
                 " status='released' AND effective_month=? AND release_id<>?",
                 (f" · แทนที่โดย release {release_id} ({now()})", eff, release_id))
+    from .prep import freeze
+    n_prep = freeze(con, release_id)              # the sub-recipes this release is costed with, kept with it
     con.execute("UPDATE bc_release SET status='released', released_by=?, released_at=?, acknowledged_by=NULL,"
                 " acknowledged_at=NULL WHERE release_id=?", (who, now(), release_id))
     from .engine import rebuild_cost_cache
     rebuild_cost_cache(con, release_id)
     d = dated.rebuild(con, today)
     audit(con, who, "release", "bc_release", str(release_id), rel["status"],
-          json.dumps({"late": late, "backdated": backdated, "dated_rows": d["rows"]}, ensure_ascii=False))
+          json.dumps({"late": late, "backdated": backdated, "dated_rows": d["rows"], "sub_recipes": n_prep},
+                     ensure_ascii=False))
     return {"released": True, "late": late, "backdated": backdated, "warnings": summary["warnings"],
-            "dated_rows": d["rows"]}
+            "dated_rows": d["rows"], "sub_recipes": n_prep}
 
 
 def acknowledge(con, release_id: int, who: str, note: str = ""):
