@@ -1939,7 +1939,11 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
     <span class="nav-label">เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
-  <div class="nav-item" id="nav-ordering" onclick="switchTab('ordering')" title="จัดซื้อ · แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
+  <div class="nav-item" id="nav-bomcenter" onclick="switchTab('bomcenter')" title="BoM Center & จัดซื้อ · ทะเบียนวัตถุดิบ, ราคาซื้อจริงรายเดือน, แปลงหน่วย, แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    <span class="nav-label">BoM Center &amp; จัดซื้อ</span>
+  </div>
+  <div class="nav-item" id="nav-ordering" style="display:none" onclick="switchTab('ordering')" title="จัดซื้อ · แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">จัดซื้อ</span>
   </div>
@@ -2220,5 +2224,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <script src="/js/10-ordering.js"></script>
 <script src="/js/11-feedback.js"></script>
 <script src="/js/12-checklist.js"></script>
+<script src="/js/13-bom-center.js"></script>
 </body>
 </html>
