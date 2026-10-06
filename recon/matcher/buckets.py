@@ -11,12 +11,35 @@ from ._shared import (
     _cc_acquirer,
     _eff_fee_vat,
     _point_mids,
-    _provider_acquirer,
     _provider_bank,
+    memo_scoped,
 )
 from .cash import cash_deposit_matching, prev_month_consumed_ids
 
 
+def _settlement_claimed_ids(conn, branch_id, period_month) -> set:
+    """Bank-line ids that are a card settlement (credit_three_way) or a provider
+    payout (payout_matching — this month's, and last month's carried into this
+    month). KBank posts both as plain รับโอนเงิน, so without this one credit sat in
+    CREDIT/GRAB *and* in the TRANSFER lane. Lazy imports: credit/payout → buckets."""
+    from .credit import credit_three_way
+    from .payout import _prev_payout_consumed_ids, payout_matching
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+    try:
+        ids = set(credit_three_way(conn, branch_id, period_month)["bank_line_ids"])
+        ids |= credit_three_way(conn, branch_id, prev, _prev_credit=False)["bank_line_ids"]
+        for r in payout_matching(conn, branch_id, period_month).values():
+            ids |= {p["credit_id"] for p in r["payouts"]
+                    if p["status"] == "matched" and p.get("credit_id")}
+        for s in _prev_payout_consumed_ids(conn, branch_id, period_month).values():
+            ids |= set(s)
+    except sqlite3.OperationalError:
+        return set()
+    return ids
+
+
+@memo_scoped
 def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str) -> dict:
     """Aggregate external lines into {(category, bank): {amount, net, lines:[(table,id)]}}."""
     buckets: dict = {}
@@ -34,6 +57,7 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
     # spurious QR/transfer ext_only disappears.
     cash_ids = cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"]
     prev_ids = prev_month_consumed_ids(conn, branch_id, period_month)
+    settled_ids = _settlement_claimed_ids(conn, branch_id, period_month)
     seen_ids = set()
     for r in conn.execute("""
         SELECT l.id, l.credit, l.channel, u.provider
@@ -47,6 +71,8 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
             continue
         if r["id"] in cash_ids:
             add(("CASH", "NONE"), "recon_bank_lines", r["id"], amt, amt)
+            continue
+        if r["id"] in settled_ids:   # a card settlement / provider payout, not a QR/transfer sale
             continue
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if not cat:
@@ -169,6 +195,7 @@ def _external_buckets_daily(conn, branch_id, period_month, include_cash=True, ex
     may be parsed as QR/TRANSFER, e.g. KTB 'SDCH') — skip them here so they don't
     also show as an ext_only QR/transfer line on their own date."""
     exclude_ids = exclude_ids or set()
+    pmids = _point_mids(conn, branch_id)
     buckets = {}
     def add(day, cat, bank, amount, net):
         b = buckets.setdefault((day, cat, bank), {"amount": 0.0, "net": 0.0})
@@ -206,7 +233,9 @@ def _external_buckets_daily(conn, branch_id, period_month, include_cash=True, ex
         SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
         WHERE l.branch_id=? AND l.match_status!='manual' AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
-        acq = r["acquirer"] or _provider_acquirer(r["provider"])
+        acq = _cc_acquirer(r, pmids) or ""
+        if acq.endswith("POINT"):      # loyalty points — COUPON lane, same as the monthly buckets
+            continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
         add(r["settlement_date"], "CREDIT", acq, gross,

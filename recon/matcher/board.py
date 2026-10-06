@@ -8,43 +8,50 @@ import sqlite3
 from datetime import date, timedelta
 from ..seed_payment_map import normalize
 from ._shared import (
+    DEF_CASH_LAG,
     TOL_ABS_DAY,
     _CATEGORY_SOURCE,
     _CHANNEL_CATEGORY,
     _REAL_BANKS,
+    _cc_acquirer,
     _cfg,
     _col_key,
     _col_label,
     _eff_fee_vat,
     _lane_cov_key,
     _manual_consumed,
+    _point_mids,
     _within_tol_day,
+    memo_scoped,
     method_config,
     pos_category_totals_daily,
 )
 from .cash import cash_deposit_matching, cash_three_way, prev_month_consumed_ids
-from .buckets import _apply_transfer_any, _external_buckets_daily, channel_move_deltas
+from .buckets import (
+    _apply_transfer_any,
+    _external_buckets_daily,
+    _settlement_claimed_ids,
+    channel_move_deltas,
+)
 from .coverage import _coverage
 
 
+@memo_scoped
 def daily_reconciliation(conn, branch_id, period_month):
     """Per-day, per-lane reconciliation with pending tracking for late documents."""
     pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
     cash = cash_deposit_matching(conn, branch_id, period_month)
     # Lines the cash matcher claimed (may be labelled QR/TRANSFER, e.g. KTB SDCH)
     # are excluded from the electronic buckets so they aren't double-counted —
-    # likewise month-start deposits the PREVIOUS month's matcher already claimed.
+    # likewise month-start deposits the PREVIOUS month's matcher already claimed,
+    # and card settlements / provider payouts posted as plain รับโอนเงิน.
     ext = _external_buckets_daily(
         conn, branch_id, period_month, include_cash=False,
-        exclude_ids=set(cash["consumed_ids"]) | prev_month_consumed_ids(conn, branch_id, period_month))
+        exclude_ids=(set(cash["consumed_ids"]) | prev_month_consumed_ids(conn, branch_id, period_month)
+                     | _settlement_claimed_ids(conn, branch_id, period_month)))
     cov = _coverage(conn, branch_id, period_month)
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
     cfgs = method_config(conn)                                   # per-lane tolerance overrides
-
-    # Multi-bank TRANSFER codes (bank='ANY'): per-bank lanes consume their own
-    # statement lines first, the leftover feeds the day's ANY lane.
-    for d in {dy for (dy, c, b) in pos if c == "TRANSFER" and b == "ANY"}:
-        _apply_transfer_any(pos, ext, (d, "TRANSFER", "ANY"))
 
     # Feed matched cash groups back in as per-day external amounts: each POS day
     # in a group is covered by its deposit (the group's variance lands on the
@@ -84,6 +91,12 @@ def daily_reconciliation(conn, branch_id, period_month):
                                if c == cat and b == bank and abs(pos[(dy, c, b)]) > 0.005)
             tgt = lane_days[-1] if lane_days else eom
             pos[(tgt, cat, bank)] = pos.get((tgt, cat, bank), 0.0) + d
+
+    # Multi-bank TRANSFER codes (bank='ANY'): per-bank lanes consume their own
+    # statement lines first, the leftover feeds the day's ANY lane. After the moves
+    # above, so a transfer moved into a per-bank lane keeps its line there.
+    for d in {dy for (dy, c, b) in pos if c == "TRANSFER" and b == "ANY"}:
+        _apply_transfer_any(pos, ext, (d, "TRANSFER", "ANY"))
 
     by_day = {}
     for (day, cat, bank) in set(pos) | set(ext):
@@ -187,6 +200,7 @@ def daily_reconciliation(conn, branch_id, period_month):
 _BOARD_CAT_ORDER = ["CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"]
 
 
+@memo_scoped
 def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     """Reconciliation matrix for a single day across all master branches.
     Returns {day, categories, branches:[{branch_id, branch_name, cells, totals}],
@@ -239,9 +253,15 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     # the QR/transfer columns below so they don't double-count as ext_only.
     month = day[:7]
     cash_consumed: set = set()
+    # Deposits dated in the first lag days that LAST month's cash matcher claimed
+    # (30th/31st cash banked on the 1st) are last month's — not this day's QR/transfer.
+    cash_lag = int(_cfg(method_config(conn), "CASH").get("lag_days") or DEF_CASH_LAG)
+    month_start = int(day[8:10]) <= cash_lag
     for bid in branches:
         cm = cash_deposit_matching(conn, bid, month)
         cash_consumed |= cm["consumed_ids"]
+        if month_start:
+            cash_consumed |= prev_month_consumed_ids(conn, bid, month)
         for g in cm["groups"]:
             for j, dd in enumerate(g["days"]):
                 if dd["day"] == day:
@@ -260,10 +280,16 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         if cat:
             add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
 
+    pmids: dict = {}
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
+        if r["branch_id"] not in pmids:
+            pmids[r["branch_id"]] = _point_mids(conn, r["branch_id"])
+        acq = _cc_acquirer(r, pmids[r["branch_id"]]) or ""
+        if acq.endswith("POINT"):      # loyalty points belong to COUPON, not a card column
+            continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
-        add(r["branch_id"], "CREDIT", r["acquirer"], gross,
+        add(r["branch_id"], "CREDIT", acq, gross,
             gross - float(r["refund_amount"] or 0) - fee - vat)
 
     for cat, table, vat_col in (("GRAB", "recon_grab_lines", "vat_amount"),
@@ -278,7 +304,7 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     consumed: dict = {}
     try:
         for r in conn.execute(
-            "SELECT branch_id, category, pos_days FROM recon_manual_match WHERE period_month=?",
+            "SELECT branch_id, category, bank, pos_days FROM recon_manual_match WHERE period_month=?",
             (day[:7],)):
             if r["branch_id"] not in branches:
                 continue

@@ -13,7 +13,7 @@ Expected columns (Thai headers common):
 
 from __future__ import annotations
 import io
-from .bank import _to_float, _parse_thai_date, _blank
+from .bank import _to_float, _parse_thai_date, _blank, _cell
 import openpyxl
 
 
@@ -141,8 +141,10 @@ def parse_lineman_report(file_bytes: bytes) -> tuple[list[dict], int]:
             if any(k.lower() in t for k in _MERCHANT_COLS): col.setdefault("merchant", j)
             if any(k.lower() in t for k in _FOOD_COLS):     col.setdefault("food", j)
             if any(k.lower() in t for k in _DELIVERY_COLS): col.setdefault("delivery", j)
+            # 'commission rate' contains 'commission' (amount): a rate column
+            # is never the commission amount.
             if any(k.lower() in t for k in _COMM_RATE):     col.setdefault("comm_rate", j)
-            if any(k.lower() in t for k in _COMM_AMT):      col.setdefault("comm_amt", j)
+            elif any(k.lower() in t for k in _COMM_AMT):    col.setdefault("comm_amt", j)
             if any(k.lower() in t for k in _VAT_COLS):      col.setdefault("vat", j)
             if any(k.lower() in t for k in _PROMO_COLS):    col.setdefault("promo", j)
             if any(k.lower() in t for k in _NET_COLS):      col.setdefault("net", j)
@@ -163,13 +165,14 @@ def parse_lineman_report(file_bytes: bytes) -> tuple[list[dict], int]:
                 skipped += 1
             continue
 
-        food_amt = _to_float(row[col.get("food", 0)])
-        comm_amt = _to_float(row[col.get("comm_amt", 0)])
-        vat_amt  = _to_float(row[col.get("vat", 0)])
-        promo    = _to_float(row[col.get("promo", 0)])
-        net      = _to_float(row[col.get("net", 0)]) if "net" in col else food_amt - comm_amt - vat_amt - promo
+        # A column the header lacks reads as empty — never as column 0.
+        food_amt = _to_float(_cell(row, col, "food"))
+        comm_amt = _to_float(_cell(row, col, "comm_amt"))
+        vat_amt  = _to_float(_cell(row, col, "vat"))
+        promo    = _to_float(_cell(row, col, "promo"))
+        net      = _to_float(_cell(row, col, "net")) if "net" in col else food_amt - comm_amt - vat_amt - promo
 
-        status_raw = str(row[col.get("status", 0)] or "").strip().lower()
+        status_raw = str(_cell(row, col, "status") or "").strip().lower()
         if "ยกเลิก" in status_raw or "cancel" in status_raw:
             order_status = "Cancelled"
         else:
@@ -177,17 +180,17 @@ def parse_lineman_report(file_bytes: bytes) -> tuple[list[dict], int]:
 
         results.append({
             "order_date":        order_date,
-            "order_id":          str(row[col.get("order_id", 0)] or "").strip(),
-            "merchant_name":     str(row[col.get("merchant", 0)] or "").strip(),
+            "order_id":          str(_cell(row, col, "order_id") or "").strip(),
+            "merchant_name":     str(_cell(row, col, "merchant") or "").strip(),
             "order_status":      order_status,
             "food_amount":       food_amt,
-            "delivery_fee":      _to_float(row[col.get("delivery", 0)]),
-            "commission_rate":   _to_float(row[col.get("comm_rate", 0)]),
+            "delivery_fee":      _to_float(_cell(row, col, "delivery")),
+            "commission_rate":   _to_float(_cell(row, col, "comm_rate")),
             "commission_amt":    comm_amt,
             "vat_on_commission": vat_amt,
             "promo_deduct":      promo,
             "net_payout":        net,
-            "payout_date":       _parse_thai_date(row[col.get("payout_date", 0)]),
+            "payout_date":       _parse_thai_date(_cell(row, col, "payout_date")),
         })
 
     return results, skipped

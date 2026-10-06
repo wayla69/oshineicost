@@ -11,7 +11,9 @@ spell them that way. Assign through THIS module — `recon.core._DB_PATH = x` �
 to point the app at another database; main._DB_PATH is a copy.
 """
 from __future__ import annotations
+from .matcher import _cc_acquirer
 from .matcher import _eff_fee_vat
+from .matcher import _point_mids
 from .matcher import coupon_discount_total_daily
 from .matcher import daily_reconciliation
 from .matcher import point_pos_total_daily
@@ -220,11 +222,17 @@ def _accepted_tokens() -> dict:
     return out
 
 
+def _same_secret(a: str, b: str) -> bool:
+    # compare_digest on str raises TypeError for non-ASCII (a header decoded as
+    # latin-1) → a 500 instead of a 403. Bytes compare any value safely.
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
 def require_write_token(x_upload_token: str = Header(None)):
     toks = _accepted_tokens()
     if toks:
         provided = (x_upload_token or "").strip()      # header only - a ?token= would be logged
-        if not any(hmac.compare_digest(provided, t) for t in toks):
+        if not any(_same_secret(provided, t) for t in toks):
             raise HTTPException(403, "A valid write token is required.")
 
 
@@ -232,7 +240,7 @@ def _require_manager(x_manager_token: str | None):
     """Two-tier close: approving a month needs the manager code when
     OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate)."""
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
-    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+    if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
@@ -242,7 +250,7 @@ def require_manager_token(x_manager_token: str = Header(None)):
     ordinary code↔bank mapping stays on the staff write token (owner decision
     2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset."""
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
-    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+    if expected and not _same_secret((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
 
 
@@ -431,6 +439,7 @@ def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> 
     agg: dict = {}
     def cell(day, ch):
         return agg.setdefault((day, ch), {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0})
+    pmids = _point_mids(conn, branch_id)
     for ch, tbl, dcol, gcol, fcol, vcol, discol, extra in _FEE_CH_SPEC:
         try:
             lines = conn.execute(
@@ -441,6 +450,10 @@ def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> 
         for r in lines:
             day = (r[dcol] or "")[:10]
             if not day:
+                continue
+            # KTC/BAY point settlements are booked under COUPON (from the POS tender
+            # split below) — their cc rows must not ALSO count as card revenue.
+            if ch == "CREDIT" and (_cc_acquirer(r, pmids) or "").endswith("POINT"):
                 continue
             fee, vat = _eff_fee_vat(r, fcol, vcol)
             a = cell(day, ch)

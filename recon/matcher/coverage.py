@@ -4,17 +4,25 @@ Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
 from datetime import date, timedelta
-from ._shared import _CHANNEL_CATEGORY, _REAL_BANKS, _provider_acquirer, _provider_bank
+from ._shared import (
+    _CHANNEL_CATEGORY,
+    _REAL_BANKS,
+    _cc_acquirer,
+    _point_mids,
+    _provider_acquirer,
+    _provider_bank,
+    memo_scoped,
+)
 from .cash import cash_deposit_matching, prev_month_consumed_ids
 from .payout import (
-    _PAYOUT_CANDIDATE_CHANNELS,
     _PAYOUT_CHANNELS,
     _PAYOUT_CHAN_CAT,
-    _payout_candidate_credits,
-    _payout_net_by_day,
+    _prev_payout_consumed_ids,
+    payout_matching,
 )
-from .credit import _match_net_days_to_credits, credit_three_way
+from .credit import credit_three_way
 from .category import category_reconciliation
+from .buckets import _settlement_claimed_ids
 
 
 def _coverage(conn, branch_id, period_month):
@@ -94,11 +102,13 @@ def _lane_status_map(conn, branch_id, period_month):
     return {(r["category"], r["bank"]): r["status"] for r in rows}
 
 
+@memo_scoped
 def upload_match_stats(conn, branch_id, period_month):
     """{upload_id: {total, matched, excluded}} computed live by lane status."""
     lane_status = _lane_status_map(conn, branch_id, period_month)
     cash = cash_deposit_matching(conn, branch_id, period_month)
-    cash_ids = {g["line_id"] for g in cash["groups"]}
+    # a card settlement / provider payout posted as รับโอนเงิน is explained there
+    explained = {g["line_id"] for g in cash["groups"]} | _settlement_claimed_ids(conn, branch_id, period_month)
 
     out: dict = {}
     def bump(uid, key):
@@ -114,20 +124,24 @@ def upload_match_stats(conn, branch_id, period_month):
         if not cat:                       # FEE / OTHER / payout legs — not a revenue lane
             continue
         bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
-        st = _line_status(r["ms"], cat, bank, lane_status, cash_ids, r["id"])
+        st = _line_status(r["ms"], cat, bank, lane_status, explained, r["id"])
         if st == "excluded":
             bump(r["upload_id"], "excluded"); continue
         bump(r["upload_id"], "total")
         if st == "matched":
             bump(r["upload_id"], "matched")
 
+    pmids = _point_mids(conn, branch_id)
     for r in conn.execute("""
-        SELECT l.upload_id, l.match_status ms, l.acquirer, u.provider
+        SELECT l.upload_id, l.match_status ms, l.acquirer, l.merchant_id, u.provider
         FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
         WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
-        bank = r["acquirer"] or _provider_acquirer(r["provider"])
-        st = _line_status(r["ms"], "CREDIT", bank, lane_status)
+        bank = _cc_acquirer(r, pmids) or ""
+        if bank.endswith("POINT"):        # point rows reconcile in the COUPON lane
+            st = _line_status(r["ms"], "COUPON", "NONE", lane_status)
+        else:
+            st = _line_status(r["ms"], "CREDIT", bank, lane_status)
         if st == "excluded":
             bump(r["upload_id"], "excluded"); continue
         bump(r["upload_id"], "total")
@@ -148,6 +162,7 @@ def upload_match_stats(conn, branch_id, period_month):
     return out
 
 
+@memo_scoped
 def bank_statement_coverage(conn, branch_id, period_month):
     """Per-line coverage of every bank-statement credit for a branch/month, plus the
     CREDIT 3-document chain. Returns {totals, groups, credit_three_way,
@@ -161,18 +176,21 @@ def bank_statement_coverage(conn, branch_id, period_month):
     c3 = credit_three_way(conn, branch_id, period_month, exclude_ids=cash_ids)
     credit_ids = set(c3["bank_line_ids"])
 
-    # Grab / Line Man net payouts → which bank credits they consumed. Share one 'used'
-    # set seeded with cash + credit ids so a single line is never double-claimed.
-    used = set(cash_ids) | credit_ids
-    payout_ids = {"GRAB": set(), "LINEMAN": set()}
-    net_by_day_all = _payout_net_by_day(conn, branch_id, period_month)
-    for cat in ("GRAB", "LINEMAN"):
-        cand = [c for c in _payout_candidate_credits(
-                    conn, branch_id, period_month, _PAYOUT_CANDIDATE_CHANNELS[cat])
-                if c["id"] not in used]
-        _tot, u, _g = _match_net_days_to_credits(net_by_day_all.get(cat, {}), cand)
-        payout_ids[cat] = u
-        used |= u
+    # Grab / Line Man net payouts → the credits payout_matching claimed (the SAME
+    # matcher as the channel trace: LINE MAN ฿500 threshold, month-end sweep, tagged-
+    # first), never a re-match under other rules. Cash/credit claims win (elif order).
+    pm = payout_matching(conn, branch_id, period_month)
+    payout_ids = {cat: {p["credit_id"] for p in pm.get(cat, {}).get("payouts", [])
+                        if p["status"] == "matched" and p.get("credit_id")}
+                  for cat in ("GRAB", "LINEMAN")}
+    # payouts / card settlements LAST month's matchers claimed that landed in this
+    # month (T+1, LINE MAN sweep) — explained there, informational here
+    prev_payout = {i: cat for cat, ids in _prev_payout_consumed_ids(conn, branch_id, period_month).items()
+                   for i in ids}
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+    for i in credit_three_way(conn, branch_id, prev, _prev_credit=False)["bank_line_ids"]:
+        prev_payout.setdefault(i, "CREDIT")
 
     lines = []
     groups: dict = {}
@@ -203,6 +221,8 @@ def bank_statement_coverage(conn, branch_id, period_month):
             status, group, lane_bank = "matched", "GRAB", "NONE"
         elif r["id"] in payout_ids["LINEMAN"]:
             status, group, lane_bank = "matched", "LINEMAN", "NONE"
+        elif r["id"] in prev_payout:  # last month's payout / card settlement
+            status, group, lane_bank = "informational", prev_payout[r["id"]], "NONE"
         elif chan in _PAYOUT_CHANNELS:           # payout leg with no provider net behind it
             status, group, lane_bank = "unmatched", _PAYOUT_CHAN_CAT[chan], bankp
         elif cat:

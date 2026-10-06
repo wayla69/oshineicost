@@ -69,6 +69,8 @@ _STATUS_TH = {"matched": "ตรงกับเอกสาร", "variance": "�
 
 
 def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
+    import html as _html
+    def esc(s): return _html.escape(str(s if s is not None else ""))
     board = daily_board(conn, day)
     cmeta = board.get("column_meta", {})
     rows = board["branches"]
@@ -124,7 +126,7 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
     def status_badge(s):
         cls = {"matched": "b-ok", "manual": "b-ok", "variance": "b-err", "ext_only": "b-warn",
                "pos_only": "b-warn", "no_source": "b-mut"}.get(s, "b-mut")
-        return f'<span class="badge {cls}">{_STATUS_TH.get(s, s)}</span>'
+        return f'<span class="badge {cls}">{esc(_STATUS_TH.get(s, s))}</span>'
 
     scope = "ทุกสาขา" if not branch_id else (rows[0]["branch_name"] if rows else "—")
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
@@ -133,7 +135,7 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
              "<div class='toolbar'><button class='btn' onclick='window.print()'>พิมพ์ / บันทึกเป็น PDF</button></div>"]
 
     if not rows:
-        parts.append(f"<div class='sheet'><h1>รายงานกระทบยอดรายวัน</h1><p class='muted'>{day} · {scope}</p>"
+        parts.append(f"<div class='sheet'><h1>รายงานกระทบยอดรายวัน</h1><p class='muted'>{esc(day)} · {esc(scope)}</p>"
                      "<p>ไม่มีข้อมูลการขายสำหรับวันนี้</p></div>")
         parts.append("</body></html>")
         return "".join(parts)
@@ -142,14 +144,14 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
         bid = b["branch_id"]
         parts.append("<div class='sheet'>")
         parts.append(f"<h1>รายงานกระทบยอดรายวัน — หลักฐานการกระทบยอด</h1>"
-                     f"<p class='muted'>สาขา <b>{b['branch_name']}</b> · วันที่ <b>{day}</b> · "
+                     f"<p class='muted'>สาขา <b>{esc(b['branch_name'])}</b> · วันที่ <b>{esc(day)}</b> · "
                      f"ออกรายงานเมื่อ {_dt.now().strftime('%Y-%m-%d %H:%M')}</p>")
         var = b["variance"]; vc = "pos" if abs(var) < 1 else "neg"
         parts.append("<div class='kpis'>"
                      f"<div class='kpi'><div class='l'>ยอด POS (ที่กระทบได้)</div><div class='v mono'>{_m(b['pos_total'])}</div></div>"
                      f"<div class='kpi'><div class='l'>ยอดจากเอกสาร</div><div class='v mono'>{_m(b['ext_total'])}</div></div>"
                      f"<div class='kpi'><div class='l'>ส่วนต่าง</div><div class='v mono {vc}'>{_m(var)}</div></div>"
-                     f"<div class='kpi'><div class='l'>รายการมีปัญหา</div><div class='v'>{b['issues']}</div></div>"
+                     f"<div class='kpi'><div class='l'>รายการมีปัญหา</div><div class='v'>{esc(b['issues'])}</div></div>"
                      "</div>")
 
         # 1) Category reconciliation (POS vs documents)
@@ -159,7 +161,7 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
         for ck, cell in b["cells"].items():
             lbl = (cmeta.get(ck) or {}).get("label", ck)
             v = cell["variance"]
-            parts.append(f"<tr><td>{lbl}</td><td class='right mono'>{_m(cell['pos'])}</td>"
+            parts.append(f"<tr><td>{esc(lbl)}</td><td class='right mono'>{_m(cell['pos'])}</td>"
                          f"<td class='right mono'>{_m(cell['ext'])}</td><td class='right mono'>{_m(cell.get('manual'))}</td>"
                          f"<td class='right mono {'pos' if abs(v)<1 else 'neg'}'>{_m(v)}</td><td>{status_badge(cell['status'])}</td></tr>")
         parts.append(f"<tr><td colspan='6' class='muted' style='border:0'></td></tr></tbody><tfoot><tr><td>รวม</td>"
@@ -195,9 +197,9 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
                          "<th class='right'>ค่าธรรมเนียม</th><th class='right'>VAT</th><th class='right'>โปรโมชัน</th>"
                          "<th class='right'>สุทธิ</th><th>หมายเหตุ</th></tr></thead><tbody>")
             for nm, g, rf, fe, va, pr, nt, note in feerows:
-                parts.append(f"<tr><td>{nm}</td><td class='right mono'>{_m(g)}</td><td class='right mono'>{_m(rf)}</td>"
+                parts.append(f"<tr><td>{esc(nm)}</td><td class='right mono'>{_m(g)}</td><td class='right mono'>{_m(rf)}</td>"
                              f"<td class='right mono neg'>{_m(fe)}</td><td class='right mono neg'>{_m(va)}</td>"
-                             f"<td class='right mono neg'>{_m(pr)}</td><td class='right mono'>{_m(nt)}</td><td class='muted'>{note}</td></tr>")
+                             f"<td class='right mono neg'>{_m(pr)}</td><td class='right mono'>{_m(nt)}</td><td class='muted'>{esc(note)}</td></tr>")
             parts.append(f"</tbody><tfoot><tr><td>รวม</td><td class='right mono'>{_m(tot['gross'])}</td>"
                          f"<td class='right mono'>{_m(tot['refund'])}</td><td class='right mono neg'>{_m(tot['fee'])}</td>"
                          f"<td class='right mono neg'>{_m(tot['vat'])}</td><td class='right mono neg'>{_m(tot['promo'])}</td>"
@@ -212,9 +214,9 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
             parts.append("<table><thead><tr><th>ช่องทาง</th><th>ธนาคาร</th><th class='right'>ยอดที่กระทบ (วันนี้)</th>"
                          "<th>เหตุผล / หมายเหตุ</th><th>โดย</th></tr></thead><tbody>")
             for r, amt in ms:
-                parts.append(f"<tr><td>{r['category']}</td><td>{r['bank'] or '—'}</td>"
-                             f"<td class='right mono'>{_m(amt)}</td><td>{(r['note'] or '—')}</td>"
-                             f"<td class='muted'>{(r['matched_by'] or '—')}<br>{(r['matched_at'] or '')[:16]}</td></tr>")
+                parts.append(f"<tr><td>{esc(r['category'])}</td><td>{esc(r['bank'] or '—')}</td>"
+                             f"<td class='right mono'>{_m(amt)}</td><td>{esc(r['note'] or '—')}</td>"
+                             f"<td class='muted'>{esc(r['matched_by'] or '—')}<br>{esc((r['matched_at'] or '')[:16])}</td></tr>")
             parts.append("</tbody></table>")
 
         # 4) Document evidence — the actual lines used
@@ -224,14 +226,14 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
             parts.append("<h3>รายการเดินบัญชีธนาคาร</h3><table><thead><tr><th>ช่องทาง</th><th>บัญชี</th>"
                          "<th class='right'>เงินเข้า</th></tr></thead><tbody>")
             for r in bk:
-                parts.append(f"<tr><td>{r['channel']}</td><td class='mono'>{r['account_no'] or '—'}</td>"
+                parts.append(f"<tr><td>{esc(r['channel'])}</td><td class='mono'>{esc(r['account_no'] or '—')}</td>"
                              f"<td class='right mono'>{_m(r['credit'])}</td></tr>")
             parts.append("</tbody></table>")
         if cc_l:
             parts.append("<h3>สรุปยอดบัตรเครดิต (settlement)</h3><table><thead><tr><th>ผู้รับบัตร</th>"
                          "<th>MID/Terminal</th><th class='right'>ยอดเต็ม</th><th class='right'>สุทธิ</th></tr></thead><tbody>")
             for r in cc_l:
-                parts.append(f"<tr><td>{r['acquirer'] or '—'}</td><td class='mono'>{(r['merchant_id'] or '—')}/{(r['terminal_id'] or '—')}</td>"
+                parts.append(f"<tr><td>{esc(r['acquirer'] or '—')}</td><td class='mono'>{esc(r['merchant_id'] or '—')}/{esc(r['terminal_id'] or '—')}</td>"
                              f"<td class='right mono'>{_m(r['gross_amount'])}</td><td class='right mono'>{_m(r['net_amount'])}</td></tr>")
             parts.append("</tbody></table>")
         if gr_l or ln_l:
@@ -892,8 +894,12 @@ def daily_dashboard(day: str):
     master branch's per-channel breakdown for `day` + per-branch totals + grand totals
     across branches. Inherits the coupon split (KTC/BAY points kept as เงินรับจริง; other
     discount coupons surfaced as a ส่วนลด deduction line) from _daily_finance_data."""
+    # strptime alone takes '2026-6-1', then day[:7] = '2026-6-' matches nothing → a
+    # silent empty board. The regex insists on the zero-padded form the data uses.
     try:
-        _dt.strptime(day or "", "%Y-%m-%d")
+        if not _DAY_RE.match(day or ""):
+            raise ValueError(day)
+        _dt.strptime(day, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
     with get_db() as conn:

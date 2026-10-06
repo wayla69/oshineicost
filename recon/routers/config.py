@@ -9,6 +9,7 @@ from ..core import RECON_START_MONTH
 from ..core import _BANKS
 from ..core import _CATEGORIES
 from ..core import _MASTER_ONLY
+from ..core import _actor
 from ..core import _audit
 from ..core import _override_channel
 from ..core import _seed_method_defaults
@@ -28,6 +29,7 @@ from ..parsers.bank import _normalise_channel
 from ..seed_payment_map import seed_payment_map
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 import os
@@ -55,7 +57,17 @@ class PaymentMapUpsert(BaseModel):
     updated_by:        str = ""
 
 
-def _validate_map(body: PaymentMapUpsert):
+class PaymentMapPatch(BaseModel):
+    """PATCH is partial: a field not sent keeps its stored value. The quick-fix
+    buttons send only category+bank and used to reset reconcile=1 / notes=''."""
+    category:   str | None = None
+    bank:       str | None = None
+    reconcile:  int | None = None
+    notes:      str | None = None
+    updated_by: str = ""
+
+
+def _validate_map(body):
     if body.category not in _CATEGORIES:
         raise HTTPException(400, f"category must be one of {sorted(_CATEGORIES)}")
     if body.bank not in _BANKS:
@@ -121,35 +133,42 @@ def create_payment_map(body: PaymentMapUpsert):
 
 
 @router.patch("/api/payment-map/{map_id}", dependencies=[Depends(require_write_token)])
-def update_payment_map(map_id: int, body: PaymentMapUpsert):
-    _validate_map(body)
+def update_payment_map(map_id: int, body: PaymentMapPatch, request: Request):
+    actor = _actor(request, body.updated_by, default="manual")
     with get_db() as conn:
         old = conn.execute(
-            "SELECT category, bank, reconcile FROM recon_payment_map WHERE id=?",
+            "SELECT category, bank, reconcile, notes FROM recon_payment_map WHERE id=?",
             (map_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"payment map {map_id} not found")
+        new = {f: (getattr(body, f) if getattr(body, f) is not None else old[f])
+               for f in ("category", "bank", "reconcile", "notes")}
+        _validate_map(PaymentMapPatch(**new))
         conn.execute("""
             UPDATE recon_payment_map
             SET category=?, bank=?, reconcile=?, notes=?, updated_by=?, updated_at=datetime('now')
             WHERE id=?
-        """, (body.category, body.bank, body.reconcile, body.notes, body.updated_by or "manual", map_id))
-        if old:
-            diffs = []
-            if old["category"] != body.category:
-                diffs.append({"field": "category", "old": old["category"], "new": body.category})
-            if old["bank"] != body.bank:
-                diffs.append({"field": "bank", "old": old["bank"], "new": body.bank})
-            if old["reconcile"] != body.reconcile:
-                diffs.append({"field": "reconcile", "old": old["reconcile"], "new": body.reconcile})
-            if diffs:
-                _audit(conn, "payment_map", map_id, "update", body.updated_by or "staff", diffs)
+        """, (new["category"], new["bank"], new["reconcile"], new["notes"], actor, map_id))
+        diffs = [{"field": f, "old": old[f], "new": new[f]}
+                 for f in ("category", "bank", "reconcile", "notes")
+                 if ("" if old[f] is None else old[f]) != ("" if new[f] is None else new[f])]
+        if diffs:
+            _audit(conn, "payment_map", map_id, "update", actor, diffs)
         conn.commit()
     return {"id": map_id}
 
 
 @router.delete("/api/payment-map/{map_id}", dependencies=[Depends(require_write_token)])
-def delete_payment_map(map_id: int):
+def delete_payment_map(map_id: int, request: Request):
     with get_db() as conn:
+        old = conn.execute("SELECT * FROM recon_payment_map WHERE id=?", (map_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"payment map {map_id} not found")
         conn.execute("DELETE FROM recon_payment_map WHERE id=?", (map_id,))
+        _audit(conn, "payment_map", map_id, "delete", _actor(request), [
+            {"field": "payment_code_norm", "old": old["payment_code_norm"], "new": None},
+            {"field": "mapping", "old": f"{old['category']}·{old['bank']} reconcile={old['reconcile']}",
+             "new": None}])
         conn.commit()
     return {"deleted": map_id}
 
@@ -401,8 +420,23 @@ def list_bank_accounts(branch_id: int | None = None):
         return [dict(r) for r in conn.execute(sql, params)]
 
 
+def _config_diffs(old, new: dict) -> list[dict]:
+    """Per-field audit diffs for a config row (old = sqlite Row or None, new = values)."""
+    return [{"field": f, "old": (old[f] if old is not None else None), "new": v}
+            for f, v in new.items() if old is None or old[f] != v]
+
+
+def _with_branch(diffs: list[dict], old) -> list[dict]:
+    """Keep branch_id on every update diff so the trail can scope the change."""
+    if not any(d["field"] == "branch_id" for d in diffs):
+        diffs.append({"field": "branch_id", "old": old["branch_id"], "new": old["branch_id"]})
+    return diffs
+
+
+# Which statement account belongs to which branch decides where money lands — every
+# change to it is audited (with branch_id, so the trail can scope it).
 @router.post("/api/bank-accounts", dependencies=[Depends(require_write_token)])
-def create_bank_account(body: BankAccount):
+def create_bank_account(body: BankAccount, request: Request):
     if body.bank not in ("KTB", "KBANK"):
         raise HTTPException(400, "bank must be KTB or KBANK")
     with get_db() as conn:
@@ -412,34 +446,46 @@ def create_bank_account(body: BankAccount):
                 INSERT INTO recon_bank_account (branch_id, bank, account_no, account_name, active)
                 VALUES (?,?,?,?,?)
             """, (body.branch_id, body.bank, body.account_no, body.account_name, body.active))
-            conn.commit()
-            return {"account_id": cur.lastrowid}
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"account {body.bank}/{body.account_no} already exists")
+        _audit(conn, "bank_account", cur.lastrowid, "create", _actor(request),
+               _config_diffs(None, body.model_dump()))
+        conn.commit()
+        return {"account_id": cur.lastrowid}
 
 
 @router.patch("/api/bank-accounts/{account_id}", dependencies=[Depends(require_write_token)])
-def update_bank_account(account_id: int, body: BankAccount):
+def update_bank_account(account_id: int, body: BankAccount, request: Request):
     if body.bank not in ("KTB", "KBANK"):
         raise HTTPException(400, "bank must be KTB or KBANK")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
-        cur = conn.execute("""
+        old = conn.execute("SELECT * FROM recon_bank_account WHERE account_id=?",
+                           (account_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"bank account {account_id} not found")
+        conn.execute("""
             UPDATE recon_bank_account SET branch_id=?, bank=?, account_no=?, account_name=?, active=?
             WHERE account_id=?
         """, (body.branch_id, body.bank, body.account_no, body.account_name, body.active, account_id))
-        if cur.rowcount == 0:
-            raise HTTPException(404, f"bank account {account_id} not found")
+        diffs = _config_diffs(old, body.model_dump())
+        if diffs:
+            _audit(conn, "bank_account", account_id, "update", _actor(request), _with_branch(diffs, old))
         conn.commit()
     return {"account_id": account_id}
 
 
 @router.delete("/api/bank-accounts/{account_id}", dependencies=[Depends(require_write_token)])
-def delete_bank_account(account_id: int):
+def delete_bank_account(account_id: int, request: Request):
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM recon_bank_account WHERE account_id=?", (account_id,))
-        if cur.rowcount == 0:
+        old = conn.execute("SELECT * FROM recon_bank_account WHERE account_id=?",
+                           (account_id,)).fetchone()
+        if not old:
             raise HTTPException(404, f"bank account {account_id} not found")
+        conn.execute("DELETE FROM recon_bank_account WHERE account_id=?", (account_id,))
+        _audit(conn, "bank_account", account_id, "delete", _actor(request),
+               [{"field": f, "old": old[f], "new": None}
+                for f in ("branch_id", "bank", "account_no", "account_name", "active")])
         conn.commit()
     return {"deleted": account_id}
 
@@ -465,7 +511,7 @@ def list_acquirer_mids(branch_id: int | None = None):
 
 
 @router.post("/api/acquirer-mids", dependencies=[Depends(require_write_token)])
-def create_acquirer_mid(body: AcquirerMid):
+def create_acquirer_mid(body: AcquirerMid, request: Request):
     if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "KTCPOINT", "BAYPOINT"):
         raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB, BBL, KTCPOINT or BAYPOINT")
     with get_db() as conn:
@@ -474,32 +520,42 @@ def create_acquirer_mid(body: AcquirerMid):
             INSERT INTO recon_acquirer_mid (branch_id, acquirer, merchant_id, terminal_id, active)
             VALUES (?,?,?,?,?)
         """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active))
+        _audit(conn, "acquirer_mid", cur.lastrowid, "create", _actor(request),
+               _config_diffs(None, body.model_dump()))
         conn.commit()
         return {"mid_id": cur.lastrowid}
 
 
 @router.patch("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
-def update_acquirer_mid(mid_id: int, body: AcquirerMid):
+def update_acquirer_mid(mid_id: int, body: AcquirerMid, request: Request):
     if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "KTCPOINT", "BAYPOINT"):
         raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB, BBL, KTCPOINT or BAYPOINT")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
-        cur = conn.execute("""
+        old = conn.execute("SELECT * FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"acquirer MID {mid_id} not found")
+        conn.execute("""
             UPDATE recon_acquirer_mid SET branch_id=?, acquirer=?, merchant_id=?, terminal_id=?, active=?
             WHERE mid_id=?
         """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active, mid_id))
-        if cur.rowcount == 0:
-            raise HTTPException(404, f"acquirer MID {mid_id} not found")
+        diffs = _config_diffs(old, body.model_dump())
+        if diffs:
+            _audit(conn, "acquirer_mid", mid_id, "update", _actor(request), _with_branch(diffs, old))
         conn.commit()
     return {"mid_id": mid_id}
 
 
 @router.delete("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
-def delete_acquirer_mid(mid_id: int):
+def delete_acquirer_mid(mid_id: int, request: Request):
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
-        if cur.rowcount == 0:
+        old = conn.execute("SELECT * FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,)).fetchone()
+        if not old:
             raise HTTPException(404, f"acquirer MID {mid_id} not found")
+        conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
+        _audit(conn, "acquirer_mid", mid_id, "delete", _actor(request),
+               [{"field": f, "old": old[f], "new": None}
+                for f in ("branch_id", "acquirer", "merchant_id", "terminal_id", "active")])
         conn.commit()
     return {"deleted": mid_id}
 
@@ -510,12 +566,18 @@ _OVERRIDE_CHANNELS = {"QR", "TRANSFER", "CASH_DEP", "CC_SETTLE",
 
 def _reapply_statement_overrides(conn, code: str) -> int:
     """Re-classify stored bank lines whose description contains `code`, from the
-    parser base + current overrides. Used on save (apply) and delete (revert)."""
+    parser base + current overrides. Used on save (apply) and delete (revert).
+    Lines of an approved/closed branch-month are left as signed off — a remap must
+    not rewrite a locked period's channels (reopen the month first)."""
     overrides = _statement_code_overrides(conn)
-    like = f"%{code.upper()}%"
+    # The code is a literal substring: escape LIKE's own wildcards (% _) first.
+    lit = code.upper().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     rows = conn.execute(
-        "SELECT id, description FROM recon_bank_lines "
-        "WHERE UPPER(COALESCE(description,'')) LIKE ?", (like,)).fetchall()
+        "SELECT l.id, l.description FROM recon_bank_lines l "
+        "WHERE UPPER(COALESCE(l.description,'')) LIKE ? ESCAPE '\\' "
+        "AND NOT EXISTS (SELECT 1 FROM recon_sessions s WHERE s.branch_id=l.branch_id "
+        "  AND s.period_month=substr(l.txn_date,1,7) AND s.status IN ('approved','closed'))",
+        (f"%{lit}%",)).fetchall()
     n = 0
     for r in rows:
         base = _normalise_channel(r["description"])
@@ -543,33 +605,34 @@ def statement_codes():
 
 
 @router.post("/api/statement-codes/override", dependencies=[Depends(require_manager_token)])
-def set_statement_override(body: CodeOverride):
+def set_statement_override(body: CodeOverride, request: Request):
     code = (body.code or "").strip().upper()
     if not code:
         raise HTTPException(400, "ต้องระบุรหัส")
     if body.channel not in _OVERRIDE_CHANNELS:
         raise HTTPException(400, f"ช่องทางต้องเป็นหนึ่งใน {sorted(_OVERRIDE_CHANNELS)}")
+    actor = _actor(request, body.by, default="manager")
     with get_db() as conn:
         conn.execute(
             "INSERT INTO recon_statement_code_map (code, channel, note, updated_by, updated_at) "
             "VALUES (?,?,?,?,datetime('now')) "
             "ON CONFLICT(code) DO UPDATE SET channel=excluded.channel, note=excluded.note, "
             "updated_by=excluded.updated_by, updated_at=datetime('now')",
-            (code, body.channel, body.note or "", body.by or "manager"))
+            (code, body.channel, body.note or "", actor))
         n = _reapply_statement_overrides(conn, code)
-        _audit(conn, "statement_code", 0, "override", body.by or "manager",
+        _audit(conn, "statement_code", 0, "override", actor,
                [{"field": code, "old": None, "new": body.channel}])
         conn.commit()
     return {"code": code, "channel": body.channel, "lines_reclassified": n}
 
 
 @router.delete("/api/statement-codes/override/{code}", dependencies=[Depends(require_manager_token)])
-def del_statement_override(code: str):
+def del_statement_override(code: str, request: Request):
     code_u = (code or "").strip().upper()
     with get_db() as conn:
         conn.execute("DELETE FROM recon_statement_code_map WHERE code=?", (code_u,))
         n = _reapply_statement_overrides(conn, code_u)   # revert lines to base classification
-        _audit(conn, "statement_code", 0, "revert", "manager",
+        _audit(conn, "statement_code", 0, "revert", _actor(request, default="manager"),
                [{"field": code_u, "old": None, "new": None}])
         conn.commit()
     return {"code": code_u, "removed": True, "lines_reclassified": n}
@@ -697,12 +760,20 @@ def account_map_list():
 
 
 @router.put("/api/account-map", dependencies=[Depends(require_write_token)])
-def account_map_upsert(body: AccountMap):
+def account_map_upsert(body: AccountMap, request: Request):
+    actor = _actor(request, body.updated_by)
     with get_db() as conn:
+        old = conn.execute("SELECT account_code, account_name FROM recon_account_map WHERE slot=?",
+                           (body.slot,)).fetchone()
         conn.execute(
             "INSERT INTO recon_account_map(slot,account_code,account_name,updated_by) "
             "VALUES(?,?,?,?) ON CONFLICT(slot) DO UPDATE SET account_code=excluded.account_code, "
             "account_name=excluded.account_name, updated_at=datetime('now'), updated_by=excluded.updated_by",
-            (body.slot, body.account_code, body.account_name, body.updated_by or "staff"))
+            (body.slot, body.account_code, body.account_name, actor))
+        # The slot is the key (text) — entity_id 0 like statement_code, slot in the field.
+        _audit(conn, "account_map", 0, "update" if old else "create", actor,
+               [{"field": f"{body.slot}.{f}", "old": old[f] if old else None, "new": getattr(body, f)}
+                for f in ("account_code", "account_name")
+                if (old[f] if old else None) != getattr(body, f)] or None)
         conn.commit()
     return {"slot": body.slot}

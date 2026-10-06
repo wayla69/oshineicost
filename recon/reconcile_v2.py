@@ -22,6 +22,7 @@ import sqlite3
 from datetime import date
 
 from .matcher import (
+    TOL_ABS_DAY,
     category_reconciliation,
     coupon_reconciliation,
     credit_three_way,
@@ -37,6 +38,7 @@ from .matcher import (
     _REAL_BANKS,
     _BANK_LABEL,
 )
+from .matcher._shared import memo_scoped
 
 # Channel order + Thai labels (the UI renders these verbatim)
 CHANNELS = [
@@ -219,6 +221,7 @@ def _non_revenue(conn, branch_id, period_month):
             "lines": lines}
 
 
+@memo_scoped
 def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str) -> dict:
     """The whole month for one branch, channel-first: month → channel → days."""
     monthly_rows, unmapped = category_reconciliation(conn, branch_id, period_month)
@@ -265,11 +268,17 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         # Per-day card: one status per day (worst lane wins). Each day carries any
         # per-day acknowledgement (reconcile BY DATE) so its variance stops counting.
         days = []
-        n_done = n_pending = n_issue = n_setup = n_diff_acked = 0
+        n_done = n_pending = n_issue = n_setup = n_diff_acked = n_stale = 0
         for day in sorted(days_map):
             cd = days_map[day]
             sts = cd["statuses"]
             ack = day_acks.get((key, day))
+            # An ack covers the variance it was given on. If a later upload moved the
+            # day beyond the daily tolerance, it no longer clears the day — staff re-ack.
+            stale = None
+            if ack and abs((cd["ext"] - cd["pos"]) - float(ack["variance"] or 0)) > TOL_ABS_DAY:
+                stale, ack = ack, None
+                n_stale += 1
             if "unmapped_bank" in sts:
                 dst = "setup"; n_setup += 1
             elif sts & _DAY_ISSUE:
@@ -288,6 +297,9 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                  "banks": sorted(cd["banks"])}
             if ack:
                 d["ack"] = ack
+            if stale:
+                d["ack_stale"] = stale
+                d["detail"] = "ยอดเปลี่ยนหลังรับทราบ"
             days.append(d)
         # Residual = month variance still UNexplained after per-day acks. The
         # by-date worklist surfaces every day with a real variance (diff-status or
@@ -314,6 +326,9 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                 status, detail = "no_source", "ตรวจกับผู้ออกคูปอง"
             elif any(r["status"] == "mismatch" for r in issuer_points):
                 status, detail = "diff", "ยอดแต้มไม่ตรงกับใบสรุปคะแนน"
+            elif any(r["status"] == "ext_only" for r in issuer_points):
+                miss = [r["issuer"] for r in issuer_points if r["status"] == "ext_only"]
+                status, detail = "diff", "มีใบสรุปคะแนน " + ", ".join(miss) + " แต่ไม่มียอดแต้มใน POS"
             elif any(r["status"] == "waiting_doc" for r in issuer_points):
                 miss = [r["issuer"] for r in issuer_points if r["status"] == "waiting_doc"]
                 status, detail = "waiting_doc", "อัปโหลดสรุปคะแนน " + ", ".join(miss)
@@ -337,6 +352,8 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
             detail = ("เงินเข้าโดยไม่มียอดขาย POS" if pos_amt == 0
                       else f"ต่างกัน {len(open_issue_days)} วัน"
                            + (f" · รับทราบแล้ว {n_diff_acked} วัน" if n_diff_acked else ""))
+            if n_stale:
+                detail += f" · ยอดเปลี่ยนหลังรับทราบ {n_stale} วัน"
         elif n_pending:
             status, detail = "waiting_doc", f"รอเอกสาร {n_pending} วัน"
         else:
@@ -450,7 +467,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                          "label": f"{ch['label']}: {ch['detail']}"})
 
     session = conn.execute(
-        "SELECT session_id, status, approved_at, approved_by "
+        "SELECT session_id, status, created_by, approved_at, approved_by "
         "FROM recon_sessions WHERE branch_id=? AND period_month=?",
         (branch_id, period_month)).fetchone()
     branch = conn.execute(
@@ -495,6 +512,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     }
 
 
+@memo_scoped
 def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
     """All master branches for one month — the board: per-branch progress +
     per-channel variance, every cell drillable into reconcile_month."""
