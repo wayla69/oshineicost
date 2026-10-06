@@ -77,7 +77,15 @@ def unit_costs(con, release_id: int) -> dict:
 def rebuild_cost_cache(con, release_id: int) -> int:
     """(Re)build bcd_cost_cache for one release from bc_recipe/_line. Compute-
     then-replace, like the legacy builder: a failure never leaves a half table."""
-    costs = unit_costs(con, release_id)
+    kind = con.execute("SELECT kind FROM bc_release WHERE release_id=?", (release_id,)).fetchone()
+    if kind and kind[0] == "monthly":
+        # a monthly release holds quantities only: price them at its price_month (recipes.Coster).
+        # Only the SKUs it covers are cached — everything else stays on the release before it.
+        from .recipes import release_costs
+        costs = {code: (round(total or 0.0, 6), "recipe" if not problems else f"recipe ({problems} ปัญหา)")
+                 for code, (total, problems) in release_costs(con, release_id).items()}
+    else:
+        costs = unit_costs(con, release_id)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     rows = [(release_id, code, cost, src, now) for code, (cost, src) in costs.items()]
     con.execute("DELETE FROM bcd_cost_cache WHERE release_id=?", (release_id,))

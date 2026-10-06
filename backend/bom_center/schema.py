@@ -196,6 +196,22 @@ DDL = (
     "CREATE INDEX IF NOT EXISTS ix_bcd_demand_day_day ON bcd_demand_day(day)",
 )
 
+# Columns added after a table first shipped: ensure() adds whichever are missing,
+# so a live DB created by an earlier sprint is brought up to date at startup.
+MIGRATIONS = (
+    ("bc_release", "price_month", "TEXT"),        # the month of prices a monthly release is costed at
+    ("bc_recipe", "source_cost", "REAL"),         # the cost the source sheet stated (tie-out)
+    ("bc_recipe", "source_ref", "TEXT"),          # where the recipe came from (sheet / block)
+    ("bc_recipe_line", "loss_pct", "REAL"),       # line-level trim loss; NULL = the ingredient's own
+)
+EXTRA_DDL = (
+    # a person's answer to "which POS code is this recipe block?" — kept across imports
+    """CREATE TABLE IF NOT EXISTS bc_dish_name_map(
+         tier TEXT NOT NULL, name_key TEXT NOT NULL,
+         sku_code TEXT NOT NULL, mapped_by TEXT, mapped_at TEXT,
+         PRIMARY KEY (tier, name_key))""",
+)
+
 OWNED_TABLES = (
     "bc_ingredient", "bc_ingredient_alias", "bc_unit_rule",
     "bc_ingredient_price", "bc_ingredient_price_branch",
@@ -204,7 +220,7 @@ OWNED_TABLES = (
     "bc_release", "bc_recipe", "bc_recipe_line", "bc_release_check",
     "bc_order_calendar", "bc_forecast_run", "bc_forecast_line",
     "bc_stock_count", "bc_stock_count_line", "bc_order", "bc_order_line",
-    "bc_audit",
+    "bc_audit", "bc_dish_name_map",
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
@@ -216,8 +232,12 @@ def ensure(con, commit: bool = False) -> None:
     Does not commit unless asked: callers that build a release inside one
     transaction (snapshot_v0's dry-run rolls everything back) must not have
     their half-written work committed under them by a CREATE TABLE."""
-    for ddl in DDL:
+    for ddl in DDL + EXTRA_DDL:
         con.execute(ddl)
+    for table, col, typ in MIGRATIONS:
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        if col not in have:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
     if commit:
         con.commit()
 
