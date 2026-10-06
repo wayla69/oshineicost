@@ -1572,6 +1572,7 @@ function toggleDays(i){
       <b>${+d.day.slice(8)}</b> <span class="lbl">${d.ack?'✓':({ok:'✓',diff:'≠',waiting:'<i class="ti ti-hourglass-high" aria-hidden="true"></i>',setup:'?',no_source:'·'}[d.status]||'')}</span>
       <div class="mono" style="font-size:11px">${fmt(d.pos)}</div>
       ${d.status==='diff'&&!d.ack?`<div class="mono" style="font-size:11px;color:var(--err)">${d.variance>0?'+':''}${fmt(d.variance)}</div>`:''}
+      ${d.ack_stale?`<div class="lbl" style="font-size:10px;color:var(--warn)" title="รับทราบไว้ที่ ${fmt(d.ack_stale.variance)} — ต้องรับทราบใหม่">${esc(d.detail||'ยอดเปลี่ยนหลังรับทราบ')}</div>`:''}
     </div>`).join('')}</div>
   <div id="daylines-${i}" style="padding:0 12px 12px"></div>`;
   el.style.display='';
@@ -1608,8 +1609,10 @@ function dayWorklistHtml(ch,i){
   const openCount=vdays.filter(d=>!d.ack).length;
   const rows=vdays.map(d=>{
     const acked=d.ack;
+    const st=!acked&&d.ack_stale;   // acked once, then the day's figure moved > ฿50 → re-ack
     const chip=acked?'<span class="chip c-mut">✓ รับทราบ</span>'
-      :(d.status==='diff'?'<span class="chip c-err">≠ ต่าง</span>':'<span class="chip c-warn">ต่างเล็กน้อย</span>');
+      :(d.status==='diff'?'<span class="chip c-err">≠ ต่าง</span>':'<span class="chip c-warn">ต่างเล็กน้อย</span>')
+       +(st?` <span class="chip c-warn">${esc(d.detail||'ยอดเปลี่ยนหลังรับทราบ')}</span>`:'');
     const act=DATA.closed?''
       :acked?`<a href="#" onclick="event.stopPropagation();unackDay(${acked.id});return false">เลิกรับทราบ</a>`
             :`<button class="btn btn-sm" onclick="event.stopPropagation();ackDay(${i},${jsa(d.day)},${+d.variance||0})">รับทราบวันนี้</button>`;
@@ -1618,7 +1621,8 @@ function dayWorklistHtml(ch,i){
       <td class="mono">${d.ext?fmt(d.ext):'—'}</td>
       <td class="mono" style="color:${acked?'var(--mut)':'var(--err)'}">${d.variance>0?'+':''}${fmt(d.variance)}</td>
       <td>${chip}</td><td style="text-align:right">${act}</td></tr>
-      ${acked?`<tr style="opacity:.65"><td></td><td colspan="5" class="lbl" style="text-align:left">"${esc(acked.note||'')}"${acked.by?` — ${esc(acked.by)}`:''}</td></tr>`:''}`;
+      ${acked?`<tr style="opacity:.65"><td></td><td colspan="5" class="lbl" style="text-align:left">"${esc(acked.note||'')}"${acked.by?` — ${esc(acked.by)}`:''}</td></tr>`:''}
+      ${st?`<tr><td></td><td colspan="5" class="lbl" style="text-align:left;color:var(--warn)">เคยรับทราบไว้ที่ ${fmt(st.variance)} ("${esc(st.note||'')}") — ยอดวันนี้เปลี่ยนแล้ว ต้องรับทราบใหม่</td></tr>`:''}`;
   }).join('');
   return `<div style="padding:6px 18px 10px">
     <div class="lbl" style="margin-bottom:4px"><b>ตรวจผลต่างรายวัน</b> — กระทบยอดทีละวัน รับทราบพร้อมเหตุผล (ติดไปในไฟล์ Excel ให้ผู้จัดการเห็น)${openCount?` · เหลือ ${openCount} วัน`:' · ครบแล้ว'}</div>
