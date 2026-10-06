@@ -53,14 +53,15 @@ def _base(units, unit, per):
 
 
 def _value(con, order_id: int, field: str, month: str) -> float:
-    from .prices import price_for
+    from .central import central_map, unit_price
     per = _per(con)
+    cmap = central_map(con)
     v = 0.0
     for c, q, u in con.execute(f"SELECT ingredient_code, {field}, order_unit FROM bc_order_line WHERE order_id=?",
                                (order_id,)):
-        p = price_for(con, c, month)
+        p = unit_price(con, c, month, cmap)[0]
         if p and q:
-            v += _base(q, u, per.get(c)) * p[0]
+            v += _base(q, u, per.get(c)) * p
     return round(v, 2)
 
 

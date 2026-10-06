@@ -11,6 +11,7 @@
       <button class="subtab-btn" data-ohbsub="comp" onclick="ohbSetSub('comp')">ตรวจการสั่ง (Compliance)</button>
       <button class="subtab-btn" data-ohbsub="month" onclick="ohbSetSub('month')">สรุปผลต่างรายเดือน</button>
       <button class="subtab-btn" data-ohbsub="pilot" onclick="ohbSetSub('pilot')">Pilot 4 สาขา</button>
+      <button class="subtab-btn" data-ohbsub="central" onclick="ohbSetSub('central')">รายการส่วนกลาง &amp; ปิดเดือน</button>
     </div>
   </div>
 
@@ -54,6 +55,55 @@
     </div>
     <div id="ohbPilotReady" class="card p-3 mb-3"></div>
     <div id="ohbPilotScore" class="card p-3 mb-3"></div>
+  </div>
+
+  <!-- ── S11: the central list, a month's deliveries, a month closed later ── -->
+  <div id="ohb-pane-central" style="display:none">
+    <div class="card p-3 mb-3">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">1 · รายการสั่งส่วนกลาง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">สาขาสั่งของจากส่วนกลางได้เฉพาะรายการนี้ ในหน่วยและราคาของส่วนกลาง (หน้า “สั่งส่วนกลาง” ของสาขา) ·
+        นอกนั้นสาขาซื้อเองจากซัพท้องถิ่น (หน้า “ซื้อเองท้องถิ่น” — ไม่ส่งส่วนกลาง) · นำเข้าจากรายงานยอดสั่งสินค้าทุกสาขาของส่วนกลาง หรือไฟล์ที่ดาวน์โหลดจากที่นี่แล้วแก้</p>
+      <div id="ohbCenStat" class="text-xs mt-2" style="color:var(--text-secondary)"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้ารายการ (.xlsx)
+          <input type="file" accept=".xlsx" style="display:none" onchange="ohbCenImport(this)"></label>
+        <a href="#" onclick="window.location.href=API+'/api/bom-center/central.xlsx';return false" style="color:var(--accent)">ดาวน์โหลดรายการ (แก้ตัวคูณหน่วยแล้วนำเข้ากลับได้)</a>
+      </div>
+      <span id="ohbCenStatus" class="text-xs"></span>
+      <div id="ohbCenReport" class="mt-2"></div>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">1b · รหัสในสูตร ↔ รหัสที่ส่วนกลางส่ง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">สูตรบางเมนูยังเรียกของด้วยรหัสเก่า (เช่น ทูน่าซากุ 03-01-288) แต่ส่วนกลางส่งรหัสใหม่ (03-01-074) — ถ้าไม่โยง
+        ผลต่างจะเห็นว่า “รับมาแต่ไม่ได้ใช้” กับ “ใช้แต่ไม่ได้รับ” · การโยงมีผลกับยอดแนะนำสั่งและผลต่างเท่านั้น ไม่เปลี่ยนต้นทุนสูตร</p>
+      <span id="ohbLinkStatus" class="text-xs"></span>
+      <div id="ohbLinks" class="mt-2"></div>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">2 · ลงรับของทั้งเดือนจากรายงานส่วนกลาง</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">ยอดส่งของแต่ละสาขาในรายงาน → ใบรับของ 1 ใบต่อสาขา ลงวันสุดท้ายของเดือน (อ้างอิง CENTRAL-ปปปป-ดด) ·
+        นำเข้าซ้ำเดือนเดิม = แทนที่ของเดิม · ใช้ตอนปิดเดือนย้อนหลัง — ถ้าสาขากดรับของในแอปทุกครั้งอยู่แล้วไม่ต้องใช้ (จะนับซ้ำ)</p>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">เลือกรายงาน (.xlsx)
+          <input type="file" accept=".xlsx" style="display:none" onchange="ohbDelPick(this)"></label>
+      </div>
+      <span id="ohbDelStatus" class="text-xs"></span>
+      <div id="ohbDelReport" class="mt-2"></div>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">3 · นับสต๊อกจากไฟล์ (ต้นงวด / ปลายงวด)</div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">ปิดเดือนย้อนหลัง: นับวันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) — ของในร้านก่อนเปิดขายและก่อนรับของวันนั้น ·
+        ดาวน์โหลดแม่แบบของสาขา → กรอกจำนวน → นำเข้า (นำเข้าวันต้นงวดก่อน) · จากนั้นยืนยัน “รับของครบ” ที่หน้าผลต่างของสาขา แล้วดู “สรุปผลต่างรายเดือน”</p>
+      <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
+        <label>สาขา<br><select id="ohbCntBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <label>วันที่นับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแม่แบบนับ</a>
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลนับ (.xlsx)
+          <input type="file" accept=".xlsx" style="display:none" onchange="ohbCntImport(this)"></label>
+      </div>
+      <span id="ohbCntStatus" class="text-xs"></span>
+      <div id="ohbCntReport" class="mt-2"></div>
+    </div>
   </div>
 
   <!-- ── monthly ── -->

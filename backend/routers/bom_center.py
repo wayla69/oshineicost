@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
+from bom_center import central as _ce
 from bom_center import codes as _cr
 from bom_center import hub as _hub
 from bom_center.clock import today as bkk_today
@@ -1674,3 +1675,170 @@ def bc_hub_pilot(weeks: int = Query(4)):
     with get_db() as con:
         _ensure(con)
         return {"readiness": _pl.readiness(con), "scorecard": _pl.overview(con, max(1, min(weeks, 8)))}
+
+
+# ── Phase 2 · S11: the central list, the month's deliveries, counts from a file ──
+async def _read_xlsx(file: UploadFile, limit_mb: int = 20) -> bytes:
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    if len(raw) > limit_mb * 1024 * 1024:
+        raise HTTPException(400, f"ไฟล์ใหญ่เกิน {limit_mb} MB")
+    return raw
+
+
+def _parse_central(con, raw: bytes, month: Optional[str]):
+    if month:
+        _month_or_400(month)
+    try:
+        p = _ce.parse_report(con, raw, month)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"อ่านไฟล์ไม่ได้: {e}")
+    if not p["items"]:
+        raise HTTPException(400, "ไม่พบรายการสินค้าในไฟล์")
+    return p
+
+
+@router.get("/api/bom-center/central")
+def bc_central():
+    with get_db() as con:
+        _ensure(con)
+        return _ce.items(con)
+
+
+@router.post("/api/bom-center/central/import", dependencies=[Depends(require_write_token)])
+async def bc_central_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
+                            set_local: bool = Query(True), month: Optional[str] = Query(None)):
+    """The centre's monthly report (or this list's own export) -> the central list.
+    Everything not on it becomes 'local' (the branch buys it itself)."""
+    raw = await _read_xlsx(file)
+    with get_db() as con:
+        _ensure(con)
+        p = _parse_central(con, raw, month)
+        if dry_run:
+            pl = _ce.plan_catalogue(con, p)
+            return {"dry_run": True, "month": p["month"], "sheet": p["sheet"], "branches": p["branches"],
+                    **pl["counts"], "rows": pl["rows"]}
+        out = _write(con, lambda: _ce.apply_catalogue(con, p, _who(request), set_local_others=set_local))
+    invalidate_cache("bc_")
+    return {"dry_run": False, **out}
+
+
+@router.get("/api/bom-center/central.xlsx")
+def bc_central_xlsx():
+    """The list in the report's own layout + the base-unit factor: edit it and import it back."""
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        d = _ce.items(con)
+    wb = Workbook()
+    heads = ["ลำดับ", "รหัสสินค้า", "รายละเอียด", "หน่วยนับ", "ราคาขาย", "หน่วยขาย", "1 หน่วยขาย = หน่วยฐาน",
+             "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของตัวคูณ", "เดือนราคา"]
+    _sheet(wb.active, "รายการสั่งส่วนกลาง", heads,
+           "รายการที่สาขาสั่งจากส่วนกลาง — แก้ “1 หน่วยขาย = หน่วยฐาน” ถ้าไม่ตรง แล้วนำเข้ากลับ"
+           " · ที่ไม่อยู่ในรายการนี้ = สาขาซื้อเองจากซัพท้องถิ่น")
+    ws = wb.active
+    for i, r in enumerate(d["items"], 1):
+        ws.append([i, r["code"], r["name"], r["unit_label"], r["price_per_sale"], r["sale_unit"], r["base_per_sale"],
+                   r["base_unit"], r["recv_unit"], r["factor_how"], r["price_month"]])
+    for col, w in (("C", 48), ("I", 22), ("J", 52)):
+        ws.column_dimensions[col].width = w
+    return _xlsx(wb, "bom_center_central_list.xlsx")
+
+
+@router.get("/api/bom-center/central/links")
+def bc_central_links():
+    """Recipe codes counted as the code the centre sends, and suggested pairs to confirm."""
+    with get_db() as con:
+        _ensure(con)
+        return _ce.link_view(con)
+
+
+class LinkBody(BaseModel):
+    old_code: str
+    new_code: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/central/links", dependencies=[Depends(require_write_token)])
+def bc_central_links_save(body: List[LinkBody], request: Request):
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: [_ce.set_link(con, b.old_code, b.new_code, who, b.note) for b in body])
+    invalidate_cache("bc_")
+    return {"saved": len(body)}
+
+
+@router.post("/api/bom-center/central/deliveries", dependencies=[Depends(require_write_token)])
+async def bc_central_deliveries(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
+                                branch_ids: Optional[str] = Query(None), month: Optional[str] = Query(None),
+                                receipt_date: Optional[str] = Query(None)):
+    """The month's quantities per branch -> one goods-received note per branch (ref CENTRAL-YYYY-MM)."""
+    raw = await _read_xlsx(file)
+    try:
+        ids = [int(x) for x in branch_ids.split(",") if x.strip()] if branch_ids else None
+    except ValueError:
+        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยจุลภาค")
+    with get_db() as con:
+        _ensure(con)
+        p = _parse_central(con, raw, month)
+        if dry_run:
+            try:
+                return _ce.deliveries(con, p, _who(request), ids, dry_run=True, receipt_date=receipt_date)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        out = _write(con, lambda: _ce.deliveries(con, p, _who(request), ids, dry_run=False,
+                                                 receipt_date=receipt_date))
+    invalidate_cache("bc_")
+    return out
+
+
+@router.get("/api/bom-center/stock/count-template.xlsx")
+def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(None),
+                            count_date: Optional[str] = Query(None)):
+    """The branch's count list as a sheet to fill in (a count on paper, or a month closed later)."""
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        name = con.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()[0]
+        rows = _st.template_rows(con, bid)
+    wb = Workbook()
+    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ชั้น", "ต้องนับ",
+             "หมายเหตุ"]
+    _sheet(wb.active, "นับสต๊อก", heads,
+           f"นับสต๊อก สาขา{name} · วันที่นับ {count_date or '……'} (ของในร้านก่อนเปิดขายและก่อนรับของวันนั้น)"
+           " · ใส่จำนวนในหน่วยนับ (เปลี่ยนหน่วยได้ เช่น แพ็ค/กิโลกรัม) · ช่องว่าง = ไม่ได้นับ")
+    ws = wb.active
+    for r in rows:
+        ws.append([r["zone"], r["code"], r["name"], r["count_unit"], None, r["per_count_unit"], r["base_unit"],
+                   r["class"], "ต้องนับ" if r["required"] else "", None])
+    ws.column_dimensions["C"].width = 44
+    ws.freeze_panes = "A3"
+    safe = re.sub(r"[^\w-]", "_", f"{bid}_{count_date or 'date'}")
+    return _xlsx(wb, f"stock_count_{safe}.xlsx")
+
+
+@router.post("/api/bom-center/stock/count-import", dependencies=[Depends(require_write_token)])
+async def bc_stock_count_import(request: Request, file: UploadFile = File(...), count_date: str = Query(...),
+                                branch_id: Optional[int] = Query(None), dry_run: bool = Query(True)):
+    """A whole count from the template, submitted with the date it was counted."""
+    raw = await _read_xlsx(file)
+    try:
+        lines = _st.read_count_file(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        if dry_run:
+            try:
+                return _st.import_count(con, bid, count_date, lines, _who(request), dry_run=True)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        out = _write(con, lambda: _st.import_count(con, bid, count_date, lines, _who(request), dry_run=False))
+    invalidate_cache("bc_")
+    return out

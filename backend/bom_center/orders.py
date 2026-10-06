@@ -133,6 +133,8 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
 
     The suggested quantities are frozen when the order is first created — later
     edits change only what the branch confirms."""
+    from .central import central_map
+    cmap = central_map(con)
     oid = find(con, branch_id, rnd, cycle_date)
     if oid:
         o = _order_row(con, oid)
@@ -169,6 +171,8 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         if c not in have:                                   # an item the suggestion did not include
             if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (c,)).fetchone():
                 raise ValueError(f"ไม่พบรหัส {c} ในทะเบียน")
+            if cmap and c not in cmap:
+                raise ValueError(f"{c} ไม่อยู่ในรายการสั่งส่วนกลาง — สาขาซื้อเองจากซัพท้องถิ่น")
             con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                         " order_unit, reason_code, note) VALUES(?,?,0,?,?,?,?)",
                         (oid, c, q, unit_of.get(c) or ln.get("order_unit") or "base", rs, ln.get("note")))
@@ -201,15 +205,16 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
 
 
 def _value(con, order_id: int, cycle_date: str) -> float:
-    from .prices import price_for
+    from .central import central_map, unit_price
     month = cycle_date[:7]
+    cmap = central_map(con)
     per = {c: p for c, p in con.execute("SELECT code, qty_per_recv FROM bc_ingredient")}
     v = 0.0
     for c, q, u in con.execute("SELECT ingredient_code, confirmed_units, order_unit FROM bc_order_line WHERE order_id=?",
                                (order_id,)):
-        p = price_for(con, c, month)
+        p = unit_price(con, c, month, cmap)[0]
         if p and q:
-            v += q * ((per.get(c) or 1.0) if u and u != "base" else 1.0) * p[0]
+            v += q * ((per.get(c) or 1.0) if u and u != "base" else 1.0) * p
     return round(v, 2)
 
 
@@ -293,12 +298,22 @@ def plan(con, branch_id: int, rnd: str, order_day: date, as_of: date = None) -> 
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = as_of or (date.fromisoformat(last) if last else order_day - timedelta(days=1))
     stock = stock_position(con, branch_id, as_of, order_day)
+    from .central import central_map, unit_price
     s = suggest(con, branch_id, rnd, order_day, as_of=as_of, stock=stock)
     s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"])}
+    cmap = central_map(con)
+    month = s["order_day"][:7]
     for r in s["rows"]:
         units, kind = order_units(r["need"], r.get("qty_per_recv"), r.get("moq"))
         r["order_units"] = units
         r["order_unit"] = kind
+        if r["code"] in cmap:
+            r["price_per_base"], r["price_source"] = unit_price(con, r["code"], month, cmap)
+            r["price_per_sale"] = cmap[r["code"]][1]
+    # page 1 is what goes to the centre; page 2 the branch buys from local suppliers itself
+    s["central_list"] = bool(cmap)
+    s["local_rows"] = [r for r in s["rows"] if r.get("sourcing") == "local"]
+    s["rows"] = [r for r in s["rows"] if r.get("sourcing") != "local"]
     oid = find(con, branch_id, rnd, s["order_day"])
     s["order"] = detail(con, oid) if oid else None
     s["reasons"] = [{"code": k, "label": v} for k, v in REASONS]
