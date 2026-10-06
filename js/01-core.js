@@ -106,7 +106,7 @@ const TAB_MODULE = {
   // จัดซื้อ/วัตถุดิบ: any ONE of the listed modules opens the tab (supply.ordering = Sales Support)
   ordering:['ops.report','supply.ordering'], ordersetup:['ops.report','supply.ordering'],
   ingpurchase:['cost.analysis','supply.ordering'],   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
-  bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit'],   // BoM Center (S1): ทะเบียน ราคา หน่วย
+  bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit'],   // BoM Center (S1): ทะเบียน ราคา หน่วย
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -170,13 +170,13 @@ const MODULE_LABEL_TH = {
   'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
   'supply.ordering':'จัดซื้อ/วัตถุดิบ', 'customer.feedback':'เสียงลูกค้า',
-  'bom.center':'BoM Center (แก้ไข)',
+  'bom.center':'BoM Center (แก้ไข)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
   operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback'],
-  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center','bom.release'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export','bom.center'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.center'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
@@ -439,7 +439,7 @@ function _renderPermMatrix(canEdit) {
     'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
     'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
-    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'จัดซื้อ', 'bom.center':'BoM Center',
+    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'จัดซื้อ', 'bom.center':'BoM Center', 'bom.release':'ปล่อยสูตร', 'bom.audit':'รับทราบสูตร',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;

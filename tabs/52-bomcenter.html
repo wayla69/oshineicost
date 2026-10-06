@@ -13,6 +13,7 @@
   <div class="subtab-bar mb-3">
     <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
     <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
+    <button class="subtab-btn" data-bmcsub="rel" onclick="bmcSetSub('rel')">ตรวจ &amp; ปล่อย</button>
     <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
     <button class="subtab-btn" data-bmcsub="price" onclick="bmcSetSub('price')">ราคารายเดือน</button>
     <button class="subtab-btn" data-bmcsub="conv" onclick="bmcSetSub('conv')">แปลงหน่วย</button>
@@ -71,6 +72,20 @@
       </table>
     </div>
     <div id="bmcEditor" class="card p-4 mt-3" style="display:none"></div>
+  </div>
+
+  <!-- ── review & release ──────────────────────────────────────────────── -->
+  <div id="bmc-pane-rel" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">เวอร์ชัน
+        <select id="bmcRlSel" onchange="bmcLoadRelease()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:300px"></select>
+      </label>
+      <span id="bmcRlStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcRlHead" class="card p-4 mb-3"></div>
+    <div id="bmcRlChecks" class="card p-4 mb-3"></div>
+    <div id="bmcRlCompare" class="card p-4 mb-3"></div>
+    <div id="bmcRlHistory" class="card p-4 mb-3"></div>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
