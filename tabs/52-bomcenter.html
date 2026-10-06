@@ -13,6 +13,7 @@
   <div class="subtab-bar mb-3">
     <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
     <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
+    <button class="subtab-btn" data-bmcsub="prep" onclick="bmcSetSub('prep')">สูตรกึ่งสำเร็จ</button>
     <button class="subtab-btn" data-bmcsub="rel" onclick="bmcSetSub('rel')">ตรวจ &amp; ปล่อย</button>
     <button class="subtab-btn" data-bmcsub="fc" onclick="bmcSetSub('fc')">แนะนำยอดสั่ง</button>
     <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
@@ -76,6 +77,32 @@
   </div>
 
   <!-- ── review & release ──────────────────────────────────────────────── -->
+  <div id="bmc-pane-prep" style="display:none">
+    <div class="card p-4 mb-3">
+      <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรกึ่งสำเร็จ (CK / HK / DK) — ของที่ครัวทำเองจากวัตถุดิบดิบ</div>
+      <p class="text-xs mb-2" style="color:var(--text-secondary)">1 สูตร = ปริมาณที่ได้ต่อหม้อ/ชุด (เช่น น้ำซุปใส 1 สูตร = 15,225 มล.) · ต้นทุนต่อหน่วยฐาน = ต้นทุนวัตถุดิบดิบในสูตร ÷ ปริมาณที่ได้ ·
+        ของกึ่งสำเร็จที่สูตรครบ <b>คิดต้นทุนจากสูตร</b> และ<b>แผนสั่งแนะนำสั่งวัตถุดิบดิบข้างใน</b> แทนตัวมันเอง · ที่ยังไม่มีสูตรหรือสูตรไม่ครบ ใช้ราคาซื้อ/ใบเสนอไปก่อน ·
+        ต้นทุนจากสูตรต่างจากราคาซื้อเกิน 5% = ครัวตรวจปริมาณที่ได้ · สูตรที่ใช้คิดต้นทุนถูกเก็บไว้กับ release ตอนปล่อย แก้ทีหลังไม่ย้อนไปเปลี่ยนเดือนที่ปล่อยแล้ว</p>
+      <div class="flex flex-wrap items-center gap-2 bc-write">
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
+          นำเข้าไฟล์ครัว (sheet BoM_Semi)<input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcPrepImportSemi(this)"></label>
+        <a href="#" onclick="bmcPrepTemplate();return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดสูตรทั้งหมด / แม่แบบ (Excel)</a>
+        <label class="text-xs" style="color:var(--accent);cursor:pointer">นำเข้าแม่แบบ<input type="file" accept=".xlsx" style="display:none" onchange="bmcPrepImportFlat(this)"></label>
+        <span id="bmcPrepStatus" class="text-xs"></span>
+      </div>
+    </div>
+    <div id="bmcPrepImport" class="card p-4 mb-3" style="display:none"></div>
+    <div id="bmcPrepDetail" class="card p-4 mb-3" style="display:none"></div>
+    <div class="card p-4 mb-3">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <div id="bmcPrepChips" class="flex flex-wrap gap-1"></div>
+        <input type="search" id="bmcPrepQ" placeholder="ค้นหารหัส/ชื่อ…" oninput="bmcRenderPrep()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:170px">
+        <span id="bmcPrepMonth" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <div id="bmcPrepList" class="text-xs"></div>
+    </div>
+  </div>
   <div id="bmc-pane-rel" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
       <label class="text-xs" style="color:var(--text-muted)">เวอร์ชัน

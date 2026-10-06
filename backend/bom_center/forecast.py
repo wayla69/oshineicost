@@ -96,8 +96,12 @@ def _per_dish(con, month: str) -> tuple:
     loss = dict(con.execute("SELECT code, loss_pct FROM bc_ingredient"))
     aliases = dict(con.execute("SELECT alias_code, ingredient_code FROM bc_ingredient_alias"))
     sku_id = dict(con.execute("SELECT sku_code, sku_id FROM skus"))
-    out, stats = {}, {"release_skus": 0, "legacy_skus": 0, "unconverted_lines": 0}
+    out, stats = {}, {"release_skus": 0, "legacy_skus": 0, "unconverted_lines": 0, "exploded_lines": 0}
     bad = {}                                              # sku_id -> [(code, unit, why)] lines that cannot be counted
+    # Phase 1.5: a prepared item with a sub-recipe is ordered as the raw ingredients in it —
+    # planning reads the kitchen's CURRENT sub-recipes (costs read the ones frozen into a release)
+    from .prep import book as _prep_book, explode
+    pbook, emem, via = _prep_book(con), {}, {}
 
     def add(sid, code, qty, unit, line_loss=None, zero=False):
         if zero or not code or not qty:
@@ -109,7 +113,19 @@ def _per_dish(con, month: str) -> tuple:
             bad.setdefault(sid, []).append((code, unit, how))
             return
         lp = line_loss if line_loss is not None else (loss.get(code) or 0.0)
-        out.setdefault(sid, []).append((code, qb / (1.0 - min(lp, 99.0) / 100.0)))
+        q = qb / (1.0 - min(lp, 99.0) / 100.0)
+        if code in pbook:
+            raw, gaps = explode(pbook, conv, code, _memo=emem)
+            if raw:
+                stats["exploded_lines"] += 1
+                for rc, per in raw.items():
+                    rl = min(loss.get(rc) or 0.0, 99.0)
+                    out.setdefault(sid, []).append((rc, q * per / (1.0 - rl / 100.0)))
+                    via.setdefault(rc, set()).add(code)
+                if gaps:                                  # part of the sub-recipe cannot be counted
+                    bad.setdefault(sid, []).append((code, unit, "สูตรย่อยไม่ครบ: " + ", ".join(map(str, gaps[:3]))))
+                return
+        out.setdefault(sid, []).append((code, q))
 
     rid = release_in_force(con, month)
     covered = set()
@@ -141,6 +157,7 @@ def _per_dish(con, month: str) -> tuple:
     stats["remapped_codes"] = len(remap)
     stats["legacy_skus"] = len(seen)
     stats["_bad"] = bad
+    stats["via"] = {k: sorted(v) for k, v in via.items()}  # raw code -> the prepared items it came through
     return out, stats
 
 
@@ -261,9 +278,10 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
                      "sigma": round(m["sigma"], 3), "recv_unit": recv, "qty_per_recv": per,
                      "suggested_units": units, "pack_known": bool(per),
-                     "price_per_base": ppb,
+                     "price_per_base": ppb, "via": stats.get("via", {}).get(code, []),
                      "value": round((units * per if units else need) * ppb, 2) if ppb else None})
     rows.sort(key=lambda r: -(r["value"] or 0))
+    stats.pop("via", None)                                 # carried on each row instead
     cal = calendar(con, branch_id)[rnd]
     return {"branch_id": branch_id, "branch": bname, "round": rnd, "order_day": order_day.isoformat(),
             "order_weekday": WD_TH[_wd(order_day)], "delivery": dlv.isoformat(),

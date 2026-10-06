@@ -22,6 +22,7 @@ import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
 from bom_center import codes as _cr
 from bom_center import master as _m
+from bom_center import prep as _pr
 from bom_center import prices as _p
 from bom_center import recipes as _r
 from bom_center import release as _rl
@@ -1065,3 +1066,128 @@ def bc_forecast_backtest(branch_id: int = Query(...), weeks: int = Query(4, ge=1
     with get_db() as con:
         _ensure(con)
         return _fc.backtest(con, branch_id, weeks=weeks)
+
+
+# ── Phase 1.5: sub-recipes of prepared items (prep.py) ──────────────────────
+def _prep_month(con, month: Optional[str]) -> str:
+    """The price month sub-recipes are costed at: asked, else the latest month that has prices."""
+    if month and _MONTH.match(month):
+        return month
+    r = con.execute("SELECT MAX(month) FROM bc_ingredient_price").fetchone()
+    return r[0] if r and r[0] else _this_month()
+
+
+@router.get("/api/bom-center/prep")
+def bc_prep_list(month: Optional[str] = Query(None)):
+    """Every prepared item: has a sub-recipe? computed cost vs purchase price."""
+    with get_db() as con:
+        _ensure(con)
+        m = _prep_month(con, month)
+        rows = _pr.overview(con, m)
+    counts = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {"month": m, "rows": rows, "counts": counts, "tolerance_pct": _pr.TOLERANCE_PCT}
+
+
+@router.get("/api/bom-center/prep/template.xlsx")
+def bc_prep_template():
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        rows = _pr.export_flat(con)
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "สูตรกึ่งสำเร็จ", list(_pr.FLAT_COLS),
+           "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · batch_yield_qty + batch_unit = ปริมาณที่ได้ต่อ 1 สูตร · นำเข้าแล้วแทนที่สูตรของรหัสนั้นทั้งชุด")
+    for r in rows:
+        ws.append(r)
+    return _xlsx(wb, "bom_center_sub_recipes.xlsx")
+
+
+@router.get("/api/bom-center/prep/{code}")
+def bc_prep_detail(code: str, month: Optional[str] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            return _pr.detail(con, code, _prep_month(con, month))
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+
+class PrepLine(BaseModel):
+    ingredient_code: Optional[str] = None
+    qty: Optional[float] = None
+    unit: Optional[str] = None
+    note: Optional[str] = None
+
+
+class PrepBody(BaseModel):
+    yield_qty: float
+    yield_unit: str
+    lines: List[PrepLine]
+
+
+@router.put("/api/bom-center/prep/{code}", dependencies=[Depends(require_write_token)])
+def bc_prep_save(code: str, body: PrepBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        n = _write(con, lambda: _pr.save(con, code, body.yield_qty, body.yield_unit,
+                                          [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ในหน้าเว็บ"))
+    invalidate_cache("bc_")
+    return {"ok": True, "lines": n}
+
+
+@router.post("/api/bom-center/prep/import-semi", dependencies=[Depends(require_write_token)])
+async def bc_prep_import_semi(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
+    """The kitchen's BoM_Semi workbook -> sub-recipes, matched by name + batch size."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    if len(raw) > 60 * 1024 * 1024:
+        raise HTTPException(400, "ไฟล์ใหญ่เกิน 60 MB")
+    try:
+        parsed = _pr.parse_bom_semi(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"อ่านไฟล์ไม่ได้: {e}")
+    with get_db() as con:
+        _ensure(con)
+        plan = _pr.plan_import(con, parsed)
+        if dry_run:
+            return {"dry_run": True, **plan}
+        out = _write(con, lambda: _pr.apply_import(con, plan, _who(request)))
+    invalidate_cache("bc_")
+    return {"dry_run": False, **plan, **out}
+
+
+class PrepMapBody(BaseModel):
+    src_name: str
+    prepared_code: str               # a master code, or '-' = this sheet row is not one of ours
+
+
+@router.post("/api/bom-center/prep/map", dependencies=[Depends(require_write_token)])
+def bc_prep_map(body: PrepMapBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _pr.set_map(con, body.src_name, body.prepared_code, _who(request)))
+    return {"ok": True}
+
+
+@router.post("/api/bom-center/prep/import-flat", dependencies=[Depends(require_write_token)])
+async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    with get_db() as con:
+        _ensure(con)
+        try:
+            out = _pr.import_flat(con, raw, _who(request), dry_run=dry_run)
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        if not dry_run and not out["errors"]:
+            con.commit()
+    invalidate_cache("bc_")
+    return out
