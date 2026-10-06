@@ -22,6 +22,7 @@ import auth as _auth
 from core import get_db, invalidate_cache, require_write_token
 from bom_center import codes as _cr
 from bom_center import master as _m
+from bom_center import orders as _or
 from bom_center import prep as _pr
 from bom_center import prices as _p
 from bom_center import recipes as _r
@@ -1402,3 +1403,113 @@ def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional
         bid = _stock_branch(con, request, branch_id)
         _write(con, lambda: _va.confirm_receipts(con, bid, body.end_count_id, _who(request), undo=body.undo))
     return {"ok": True}
+
+
+# ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
+def _round_or_400(r: str) -> str:
+    if r not in ("1", "2", "salmon"):
+        raise HTTPException(400, "รอบต้องเป็น 1 / 2 / salmon")
+    return r
+
+
+def _day_or_today(d: Optional[str]) -> date:
+    if not d:
+        return date.today()
+    try:
+        return date.fromisoformat(d)
+    except ValueError:
+        raise HTTPException(400, "วันที่ต้องเป็น YYYY-MM-DD")
+
+
+@router.get("/api/bom-center/order/plan")
+def bc_order_plan(request: Request, round: str = Query("1"), order_day: Optional[str] = Query(None),
+                  branch_id: Optional[int] = Query(None)):
+    """This round's suggestion net of stock + the cycle's order if one exists."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _or.plan(con, bid, _round_or_400(round), _day_or_today(order_day))
+
+
+class OrderLine(BaseModel):
+    code: str
+    confirmed_units: Optional[float] = None
+    reason_code: Optional[str] = None
+    note: Optional[str] = None
+
+
+class OrderBody(BaseModel):
+    round: str
+    order_day: Optional[str] = None
+    lines: List[OrderLine] = []
+    submit: bool = False
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/order/save", dependencies=[Depends(require_write_token)])
+def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        rnd = _round_or_400(body.round)
+        p = _or.plan(con, bid, rnd, _day_or_today(body.order_day))
+        out = _write(con, lambda: _or.save(con, bid, rnd, p["order_day"], p, [ln.dict() for ln in body.lines],
+                                           _who(request), submit=body.submit, note=body.note))
+    return out
+
+
+@router.get("/api/bom-center/orders")
+def bc_orders(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return {"branch_id": bid, "orders": _or.history(con, bid, max(1, min(limit, 200)))}
+
+
+@router.get("/api/bom-center/order/{order_id}")
+def bc_order_detail(order_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            o = _or.detail(con, order_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        _stock_branch(con, request, o["branch_id"])
+        return o
+
+
+@router.post("/api/bom-center/order/{order_id}/reopen", dependencies=[Depends(require_write_token)])
+def bc_order_reopen(order_id: int, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        _write(con, lambda: _or.reopen(con, bid, order_id, _who(request)))
+    return {"ok": True}
+
+
+@router.post("/api/bom-center/order/{order_id}/cancel", dependencies=[Depends(require_write_token)])
+def bc_order_cancel(order_id: int, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        _write(con, lambda: _or.cancel(con, bid, order_id, _who(request)))
+    return {"ok": True}
+
+
+class ReceiveLine(BaseModel):
+    code: str
+    received_units: float
+
+
+class ReceiveBody(BaseModel):
+    lines: List[ReceiveLine]
+    receipt_date: Optional[str] = None
+
+
+@router.post("/api/bom-center/order/{order_id}/receive", dependencies=[Depends(require_write_token)])
+def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
+                                               receipt_date=body.receipt_date))

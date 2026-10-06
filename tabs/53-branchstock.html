@@ -9,6 +9,7 @@
     </div>
     <div class="subtab-bar mt-3">
       <button class="subtab-btn active" data-brnsub="count" onclick="brnSetSub('count')">นับสต๊อก</button>
+      <button class="subtab-btn" data-brnsub="order" onclick="brnSetSub('order')">สั่งของ</button>
       <button class="subtab-btn" data-brnsub="recv" onclick="brnSetSub('recv')">รับของ</button>
       <button class="subtab-btn" data-brnsub="var" onclick="brnSetSub('var')">ผลต่างของฉัน</button>
     </div>
@@ -49,6 +50,28 @@
     <div class="card p-3 mb-3">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการนับ</div>
       <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- ── สั่งของ ── -->
+  <div id="brn-pane-order" style="display:none">
+    <div class="card p-3 mb-3">
+      <div id="brnOrdRounds" class="flex flex-wrap gap-1"></div>
+      <div id="brnOrdHead" class="text-xs mt-2"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะที่ต้องสั่ง</label>
+        <input type="search" id="brnOrdQ" placeholder="ค้นหา…" oninput="brnRenderOrder()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
+      </div>
+    </div>
+    <div id="brnOrdList" class="card p-3 mb-3"></div>
+    <div class="card p-3 mb-3" style="position:sticky;bottom:0;z-index:5">
+      <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
+      <span id="brnOrdStatus" class="text-xs"></span>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ออเดอร์ล่าสุด</div>
+      <div id="brnOrdHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
   </div>
 
