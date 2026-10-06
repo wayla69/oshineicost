@@ -1,14 +1,14 @@
 <div id="tab-orderhub" style="display:none">
 
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">ศูนย์สั่งของ — Sales Support · Ops</h2>
+    <h2 class="text-base font-bold" style="color:var(--accent)">ศูนย์สั่งสินค้า · Sales Support · Ops</h2>
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
-      ออเดอร์ที่สาขาส่งมาเข้าคิวที่นี่ · Sales Support ใส่ยอดที่จะส่งจริง (ต่างจากที่สาขายืนยันต้องมีเหตุผล) แล้วกด “ดำเนินการแล้ว” ·
-      ส่งก่อน 10:00 ของวันสั่ง ควรดำเนินการภายใน 14:00 วันเดียวกัน · Ops ตรวจการสั่ง 4 ค่า: แนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
+      ใบสั่งที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · Sales Support ระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล ·
+      สาขาส่งใบสั่งก่อน 10:00 ของวันสั่ง และส่วนกลางควรดำเนินการภายใน 14:00 ของวันเดียวกัน · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
     </p>
     <div class="subtab-bar mt-3">
-      <button class="subtab-btn active" data-ohbsub="queue" onclick="ohbSetSub('queue')">คิวออเดอร์</button>
-      <button class="subtab-btn" data-ohbsub="comp" onclick="ohbSetSub('comp')">ตรวจการสั่ง (Compliance)</button>
+      <button class="subtab-btn active" data-ohbsub="queue" onclick="ohbSetSub('queue')">คิวใบสั่ง</button>
+      <button class="subtab-btn" data-ohbsub="comp" onclick="ohbSetSub('comp')">ตรวจสอบการสั่ง (Compliance)</button>
       <button class="subtab-btn" data-ohbsub="month" onclick="ohbSetSub('month')">สรุปผลต่างรายเดือน</button>
       <button class="subtab-btn" data-ohbsub="pilot" onclick="ohbSetSub('pilot')">Pilot 4 สาขา</button>
       <button class="subtab-btn" data-ohbsub="central" onclick="ohbSetSub('central')">สินค้าส่วนกลางและปิดงวด</button>
@@ -22,7 +22,7 @@
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label>วันสั่งตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">รวมต่อซัพพลายเออร์ × วันส่ง</button>
+        <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
       </div>
     </div>
@@ -47,11 +47,11 @@
   <!-- ── pilot ── -->
   <div id="ohb-pane-pilot" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-secondary)">
-      Pilot 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง) · เกณฑ์ผ่าน: นับครบ ≥ 90% ของวันสั่ง · เวลานับ ≤ 20 นาที ·
+      Pilot 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง) · เกณฑ์ผ่าน: ตรวจนับครบ ≥ 90% ของวันสั่ง · เวลาตรวจนับ ≤ 20 นาที ·
       ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์ชั้น A ≤ 15% ·
       คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> ·
       <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">Sales Support</a> ·
-      <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผน pilot + สคริปต์วิดีโอ</a>
+      <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผน Pilot และสคริปต์วิดีโอ</a>
     </div>
     <div id="ohbPilotReady" class="card p-3 mb-3"></div>
     <div id="ohbPilotScore" class="card p-3 mb-3"></div>
@@ -113,7 +113,7 @@
   <div id="ohb-pane-month" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-muted)">
       เดือน <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      <span class="ml-2">รอบนับสต๊อกที่ปิดในเดือนนี้ · ใช้จริง = ต้น + รับเข้า − ปลาย เทียบตามสูตร · ส่วนนี้อยู่ใน Management Report (รายเดือน) ข้อ 13A ด้วย</span>
+      <span class="ml-2">รอบตรวจนับที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร · ข้อมูลส่วนนี้แสดงใน Management Report (รายเดือน) ข้อ 13A ด้วย</span>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>
   </div>

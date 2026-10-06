@@ -115,7 +115,7 @@ def parse_bom_semi(data: bytes) -> dict:
             cpu.setdefault(nm, (code, norm(unit) if unit and unit != "รอถาม" else "", _num(r[jp]) if jp is not None else None))
         break
     if sheet_used is None:
-        raise ValueError("ไม่พบ sheet สูตรกึ่งสำเร็จ (ต้องมีหัวคอลัมน์ Menu / Mat1 / Usage1 — รูปแบบ BoM_Semi)")
+        raise ValueError("ไม่พบ sheet สูตรกึ่งสำเร็จ ต้องมีหัวคอลัมน์ Menu / Mat1 / Usage1 ตามรูปแบบ BoM_Semi")
     return {"sheet": sheet_used, "blocks": blocks, "cpu": cpu}
 
 
@@ -223,7 +223,7 @@ def _resolver(con, blocks: list, cpu: dict):
         near = [s for s in _suggest(raw_master, name) if s["score"] >= 1.0]   # the name sits inside one master name
         if near:
             code = near[0]["code"]
-            return code, (hit[1] if hit and hit[1] else master[code][2]), "ชื่อใกล้เคียง — ควรตรวจ"
+            return code, (hit[1] if hit and hit[1] else master[code][2]), "ชื่อใกล้เคียง (ควรตรวจสอบ)"
         return None, (hit[1] if hit else ""), None
     return resolve
 
@@ -292,7 +292,7 @@ def save(con, code: str, yield_qty, yield_unit, lines: list, who: str, source_re
         if not q or q <= 0:
             raise ValueError(f"{code} บรรทัด {i}: ปริมาณต้องมากกว่า 0")
         if ic == code:
-            raise ValueError(f"{code} บรรทัด {i}: ใช้ตัวเองในสูตรไม่ได้")
+            raise ValueError(f"{code} บรรทัด {i}: ไม่สามารถใช้รายการนี้เป็นส่วนผสมของตัวเองได้")
         clean.append((len(clean) + 1, ic, q, norm(ln.get("unit")) or None, _clean(ln.get("note")) or None))
     old = con.execute("SELECT batch_yield_qty, batch_unit FROM bc_prep_recipe WHERE prepared_code=?", (code,)).fetchone()
     con.execute("INSERT INTO bc_prep_recipe(prepared_code, batch_yield_qty, batch_unit, note, updated_at, source_cost,"
@@ -322,7 +322,7 @@ def apply_import(con, plan: dict, who: str) -> dict:
 def set_map(con, src_name: str, code: str, who: str):
     k = _key(src_name)
     if not k:
-        raise ValueError("ไม่มีชื่อ")
+        raise ValueError("ไม่ได้ระบุชื่อ")
     code = (code or "").strip()
     if code != SKIP and not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (code,)).fetchone():
         raise ValueError(f"ไม่พบรหัส {code} ในทะเบียน")
@@ -394,7 +394,7 @@ class PrepCoster:
             out["problems"].append("ไม่มีสูตรย่อย")
             return out
         if code in _stack:
-            out["problems"].append("สูตรย่อยวนกลับมาใช้ตัวเอง: " + " → ".join(_stack + (code,)))
+            out["problems"].append("สูตรย่อยอ้างอิงวนกลับมาที่ตัวเอง: " + " → ".join(_stack + (code,)))
             return out
         yb, how = self.conv.to_base(code, r["yield_qty"], r["yield_unit"])
         if not yb:
@@ -404,7 +404,7 @@ class PrepCoster:
             ic = ln["ingredient_code"]
             row = dict(ln, cost=None, price_per_base=None, qty_base=None, source=None, problem=None)
             if not ic:
-                row["problem"] = f"ไม่พบรหัสของ “{ln.get('note') or ''}”"
+                row["problem"] = f"ไม่พบรหัสวัตถุดิบของ “{ln.get('note') or ''}”"
             else:
                 qb, how = self.conv.to_base(ic, ln["qty"], ln["unit"])
                 if qb is None:
@@ -415,7 +415,7 @@ class PrepCoster:
                         sub = self.cost(ic, _stack + (code,))
                         p, src = sub["per_base"], "sub_recipe"
                         if p is None:
-                            row["problem"] = f"{ic}: สูตรย่อยคิดไม่ครบ — " + "; ".join(sub["problems"][:2])
+                            row["problem"] = f"{ic}: คำนวณต้นทุนสูตรย่อยไม่ครบ: " + "; ".join(sub["problems"][:2])
                     else:
                         pr = self._price(ic)
                         p, src = (pr[0], pr[1]) if pr else (None, None)
@@ -441,7 +441,7 @@ def explode(book_: dict, conv: Converter, code: str, _stack: tuple = (), _memo: 
         return _memo[code]
     r = book_.get(code)
     if r is None or code in _stack:
-        return {}, ["ไม่มีสูตรย่อย" if r is None else "สูตรย่อยวน"]
+        return {}, ["ไม่มีสูตรย่อย" if r is None else "สูตรย่อยอ้างอิงวนกลับมาที่ตัวเอง"]
     yb, _ = conv.to_base(code, r["yield_qty"], r["yield_unit"])
     if not yb:
         return {}, ["แปลงปริมาณที่ได้ต่อสูตรไม่ได้"]
@@ -546,7 +546,7 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
     rows = list(ws.iter_rows(values_only=True))
     hdr = next((i for i, r in enumerate(rows[:5]) if "prepared_code" in [_clean(v) for v in r]), None)
     if hdr is None:
-        raise ValueError("ไม่พบหัวคอลัมน์ prepared_code — ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
+        raise ValueError("ไม่พบหัวคอลัมน์ prepared_code กรุณาใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
     h = {_clean(v): j for j, v in enumerate(rows[hdr]) if v}
     grp, errors = {}, []
     for i, r in enumerate(rows[hdr + 1:], start=hdr + 2):
@@ -563,7 +563,7 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
     saved = 0
     for code, e in grp.items():
         try:
-            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="แม่แบบแบน (Excel)")
+            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากแม่แบบ (Excel)")
             saved += 1
         except ValueError as ex:
             errors.append(str(ex))

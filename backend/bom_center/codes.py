@@ -222,7 +222,7 @@ def decide(con, code: str, status: str, use_code: str = None, note: str = None, 
         row = next((r for r in review(con)["rows"] if r["code"] == code), None)
         names = (row or {}).get("todo_names") or []
     if not names:
-        raise ValueError(f"รหัส {code} ไม่มีชื่อที่ต้องตรวจ")
+        raise ValueError(f"รหัส {code} ไม่มีชื่อที่ต้องตรวจสอบ")
     t = now()
     for nm in names:
         con.execute("INSERT INTO bc_code_review(code, recipe_name, status, use_code, note, who, at)"

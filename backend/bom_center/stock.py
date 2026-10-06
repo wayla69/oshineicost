@@ -159,7 +159,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     try:
         date.fromisoformat(cdate)
     except ValueError:
-        raise ValueError("วันที่นับต้องเป็น YYYY-MM-DD")
+        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if dr:
         cid = dr["count_id"]
         con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, kind=?, count_date=?,"
@@ -183,7 +183,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         except (TypeError, ValueError):
             raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
-            raise ValueError(f"{code}: จำนวนติดลบไม่ได้")
+            raise ValueError(f"{code}: จำนวนต้องไม่ติดลบ")
         unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
         qb, how = conv.to_base(code, q, unit)
         if qb is None:
@@ -196,12 +196,12 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     out = {"count_id": cid, "kind": kind, "lines": n, "status": "draft", "unconverted": bad}
     if submit:
         if not n:
-            raise ValueError("ยังไม่ได้นับรายการใดเลย")
+            raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
         # every line of the draft, not only the ones sent now, must have reached the base unit
         bad = [f"{c}: แปลง {u} ไม่ได้" for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
         if bad:
-            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " — แจ้งส่วนกลางเพิ่มกฎหน่วย")
+            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " กรุณาแจ้งส่วนกลางให้เพิ่มกฎหน่วย")
         con.execute("UPDATE bc_stock_count SET status='submitted', submitted_at=? WHERE count_id=?", (now(), cid))
         audit(con, who, "stock_submit", "bc_stock_count", str(cid), None,
               {"branch_id": branch_id, "kind": kind, "date": cdate, "lines": n})
@@ -222,7 +222,7 @@ def detail(con, count_id: int) -> dict:
     r = con.execute("SELECT count_id, branch_id, count_date, kind, status, counted_by, submitted_at, note"
                     " FROM bc_stock_count WHERE count_id=?", (count_id,)).fetchone()
     if not r:
-        raise ValueError("ไม่พบการนับนี้")
+        raise ValueError("ไม่พบผลตรวจนับนี้")
     out = dict(zip(("count_id", "branch_id", "count_date", "kind", "status", "counted_by", "submitted_at", "note"), r))
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     out["lines"] = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "qty_base": qb, "note": nt}
@@ -264,7 +264,7 @@ def set_layout(con, rows: list, who: str) -> int:
             raise ValueError(f"{code}: โซนต้องเป็น {', '.join(sorted(zones))}")
         cu = (r.get("count_unit") or "").strip() or None
         if cu and conv.factor(code, cu)[0] is None:
-            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ — เพิ่มกฎหน่วยก่อน")
+            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน")
         con.execute("UPDATE bc_ingredient SET storage_zone=?, count_unit=? WHERE code=?", (z, cu, code))
         audit(con, who, "stock_layout", "bc_ingredient", code, None, {"zone": z, "count_unit": cu})
         n += 1
@@ -320,7 +320,7 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     try:
         date.fromisoformat(count_date)
     except (TypeError, ValueError):
-        raise ValueError("วันที่นับต้องเป็น YYYY-MM-DD")
+        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if draft_of(con, branch_id):
         raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ กรุณาส่งหรือลบร่างก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"

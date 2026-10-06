@@ -151,8 +151,8 @@ def aggregate(con, lines: list, add_unknown: bool = False, who: str = "-", month
                     fits = (value / qty) / ref[0]
                     issues.append({"code": code, "name": ln.get("name"), "unit": ln.get("unit"), "qty": qty,
                                    "value": round(value, 2), "suggest_factor": round(fits, 3),
-                                   "why": f"{how} ทำให้ราคาเป็น {ratio:.2f} เท่าของราคาล่าสุด — 1 {ln.get('unit')}"
-                                          f" น่าจะ = {fits:,.0f} {conv.base_unit(code)} (ตั้งกฎหน่วย)"})
+                                   "why": f"{how} ทำให้ราคาเป็น {ratio:.2f} เท่าของราคาล่าสุด 1 {ln.get('unit')}"
+                                          f" ควรเท่ากับประมาณ {fits:,.0f} {conv.base_unit(code)} กรุณาตั้งกฎหน่วย"})
                     continue
         a = codes.setdefault(code, {"qty_base": 0.0, "value": 0.0, "lines": 0, "units": set(), "hows": set()})
         a["qty_base"] += qb
@@ -296,7 +296,7 @@ def set_manual(con, code: str, month: str, price_per_base: float, note: str, who
     if price_per_base <= 0:
         raise ValueError("ราคาต้องมากกว่า 0")
     if not (note or "").strip():
-        raise ValueError("ต้องระบุเหตุผลเมื่อแก้ราคาเอง")
+        raise ValueError("ต้องระบุเหตุผลเมื่อแก้ไขราคาด้วยตนเอง")
     old = con.execute("SELECT price_per_base, source FROM bc_ingredient_price WHERE ingredient_code=? AND month=?",
                       (code, month)).fetchone()
     con.execute("INSERT OR REPLACE INTO bc_ingredient_price(ingredient_code, month, price_per_base, source,"
