@@ -913,13 +913,42 @@ def _ic_lane_th(cat, bank):
     return base
 
 
-def _override_register(conn, period_month, branch_id=None):
+def _live_channels(conn, live, branch_id, period_month):
+    """{channel key: engine channel} for one branch-month, memoised in `live`
+    (branch_id → map). None when the engine fails for that branch."""
+    if branch_id not in live:
+        try:
+            live[branch_id] = {c["key"]: c for c in
+                               reconcile_month(conn, branch_id, period_month)["channels"]}
+        except Exception as e:
+            print(f"[recon-report] reconcile_month branch={branch_id} {period_month} failed: {e}")
+            live[branch_id] = None
+    return live[branch_id]
+
+
+def _live_day_variance(chmap, category, day, typed):
+    """(variance, note) for an acknowledged day: the engine's live day variance — what
+    the ack actually clears — with a note when the stored (client-sent) figure differs.
+    The stored figure is only the fallback when the engine has no such day (or failed)."""
+    typed = float(typed or 0)
+    for d in ((chmap or {}).get(category) or {}).get("days", []):
+        if d["day"] == day:
+            v = float(d["variance"] or 0)
+            return v, (f" (ตอนรับทราบบันทึกไว้ {typed:+,.0f})" if abs(v - typed) > 0.5 else "")
+    return typed, " (ไม่พบยอดวันนี้ในข้อมูลปัจจุบัน — ใช้ยอดตอนรับทราบ)"
+
+
+def _override_register(conn, period_month, branch_id=None, live=None):
     """Every manual intervention (management override) in the month across master
     branches: manual tick-to-match, cross-channel move, lane adjustment, and per-day
     acknowledged variance — the four reversible tables. One normalized row each:
-    branch · when · who · kind · lane · amount · reason. Read-only."""
+    branch · when · who · kind · lane · amount · reason. Read-only.
+    Acknowledgements are valued at the engine's live variance (a whole-channel accept
+    at the channel's residual, a day-ack at that day's variance); `live` can carry
+    branch_id → channel maps the caller already computed."""
     bmap = {r["branch_id"]: r["name"] for r in conn.execute(
         f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
+    live = {} if live is None else live
 
     def keep(bid):
         return (bid in bmap) and (branch_id is None or bid == branch_id)
@@ -959,6 +988,12 @@ def _override_register(conn, period_month, branch_id=None):
         amt = float(r["adj_pos"] or 0) + float(r["adj_ext"] or 0)
         det = ((f"POS +{float(r['adj_pos'] or 0):,.0f}" if r["adj_pos"] else "")
                + (f" เงินเข้า +{float(r['adj_ext'] or 0):,.0f}" if r["adj_ext"] else "")).strip()
+        if r["adj_type"] == "accept":
+            # an accept is a zero-amount marker: what it writes off is the channel's
+            # residual (variance left after day-acks), not adj_pos+adj_ext (= ฿0)
+            ch = (_live_channels(conn, live, r["branch_id"], period_month) or {}).get(r["category"])
+            if ch:
+                amt = float(ch.get("residual", ch.get("variance", 0)) or 0)
         rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
             "at": r["created_at"], "by": r["created_by"] or "—",
             "kind": _adj_kind.get(r["adj_type"], "ปรับปรุง"), "kind_key": "lane_adj",
@@ -970,12 +1005,14 @@ def _override_register(conn, period_month, branch_id=None):
                           (period_month,)):
         if not keep(r["branch_id"]):
             continue
+        v, vnote = _live_day_variance(_live_channels(conn, live, r["branch_id"], period_month),
+                                      r["category"], r["day"], r["variance"])
         rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
             "at": r["created_at"], "by": r["created_by"] or "—",
             "kind": "รับทราบผลต่างรายวัน", "kind_key": "day_ack",
             "lane": f"{_CH_LABEL.get(r['category'], r['category'])} · {r['day']}",
-            "amount": round(float(r["variance"] or 0), 2),
-            "detail": f"วันที่ {r['day']} ต่าง {float(r['variance'] or 0):+,.0f} บาท",
+            "amount": round(v, 2),
+            "detail": f"วันที่ {r['day']} ต่าง {v:+,.0f} บาท{vnote}",
             "reason": r["note"] or ""})
     rows.sort(key=lambda x: (x["at"] or ""), reverse=True)
     for r in rows:
@@ -1064,7 +1101,8 @@ def _recon_certificate(conn, branch_id, period_month):
             "pos": c["pos"], "ext": c["ext"], "variance": c.get("variance", 0),
             "residual": resid, "status": c["status"],
             "accepted": bool(c.get("accepted")), "detail": c.get("detail", "")})
-    reg = _override_register(conn, period_month, branch_id)
+    reg = _override_register(conn, period_month, branch_id,
+                             live={branch_id: {c["key"]: c for c in chs}})
     ack_rows = [x for x in reg["rows"] if x["kind_key"] in ("day_ack", "lane_adj")]
     snap = conn.execute(
         "SELECT status, sha256, created_at, file_name, source_manifest FROM recon_close_snapshot "
@@ -1438,22 +1476,16 @@ def _accepted_variance_summary(conn, period_month, branch_id=None, threshold=100
     def keep(bid):
         return bid in bmap and (branch_id is None or bid == branch_id)
 
-    items, var_cache = [], {}
+    items, live = [], {}             # live: branch_id → engine channel map (one reconcile each)
     for a in conn.execute(
             "SELECT branch_id, period_month, category, bank, note, created_by, created_at "
             "FROM recon_lane_adj WHERE adj_type='accept' AND period_month=?", (period_month,)):
         if not keep(a["branch_id"]):
             continue
-        key = (a["branch_id"], a["period_month"])
-        if key not in var_cache:
-            try:
-                var_cache[key] = {c["key"]: c.get("residual", c["variance"])
-                                  for c in reconcile_month(conn, a["branch_id"], a["period_month"])["channels"]}
-            except Exception:
-                var_cache[key] = {}
+        ch = (_live_channels(conn, live, a["branch_id"], period_month) or {}).get(a["category"])
         items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
             "scope": _ic_lane_th(a["category"], a["bank"]), "channel": a["category"],
-            "amount": round(var_cache[key].get(a["category"], 0.0), 2),
+            "amount": round(float(ch.get("residual", ch["variance"]) or 0) if ch else 0.0, 2),
             "reason": a["note"] or "", "by": a["created_by"] or "—",
             "at": a["created_at"] or "", "source": "channel"})
     for a in conn.execute(
@@ -1461,9 +1493,14 @@ def _accepted_variance_summary(conn, period_month, branch_id=None, threshold=100
             "FROM recon_day_ack WHERE period_month=?", (period_month,)):
         if not keep(a["branch_id"]):
             continue
+        # value the ack at the engine's live day variance (what it actually clears);
+        # the stored figure is client-typed and only shown when it differs
+        v, vnote = _live_day_variance(_live_channels(conn, live, a["branch_id"], period_month),
+                                      a["category"], a["day"], a["variance"])
         items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
-            "scope": f"{_CH_LABEL.get(a['category'], a['category'])} · {a['day']}",
-            "channel": a["category"], "amount": round(float(a["variance"] or 0), 2),
+            "scope": f"{_CH_LABEL.get(a['category'], a['category'])} · {a['day']}{vnote}",
+            "channel": a["category"], "amount": round(v, 2),
+            "acked_amount": round(float(a["variance"] or 0), 2),
             "reason": a["note"] or "", "by": a["created_by"] or "—",
             "at": a["created_at"] or "", "source": "day"})
     items.sort(key=lambda x: -abs(x["amount"]))
