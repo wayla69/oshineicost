@@ -44,7 +44,8 @@ const _WS_RANK={act:{docs:0,setup:1,ch:2,payout:3,reclass:4,xfer:5},ok:{ch:0,pay
 function _chLine(ch,b){
   if(ch.accepted)return 'รับทราบ: '+(ch.accepted.note||'');
   if(ch.key==='COUPON')return ch.detail||'แต้ม KTC / BAY';
-  if(ch.status==='diff')return `ยังต่าง ${_sgn(_chOpen(ch))}`+(ch.open_var_days?` · ${ch.open_var_days} วัน`:'');
+  if(ch.status==='diff'){const o=_chOpen(ch);
+    return (Math.abs(o)>=1?`ยังต่าง ${_sgn(o)}`:'ต่างรายวัน (รวมทั้งเดือนใกล้ ฿0)')+(ch.open_var_days?` · ${ch.open_var_days} วัน`:'');}
   if(ch.status==='waiting_doc'||ch.status==='setup')return ch.detail||'';
   if(b==='coin')return `POS ฿${fmt(ch.pos)} · ต่าง ${_sgn(ch.variance)}`;
   return `POS ฿${fmt(ch.pos)}`+(ch.days_total?` · ${ch.days_done}/${ch.days_total} วัน`:'');
@@ -134,7 +135,7 @@ function _wsReportLinks(r){
   L.push([`#payout?bid=${bid}`,'credit-card','เงินเข้าธนาคาร','']);
   if(ses)L.push([`#discrepancies?bid=${bid}`,'adjustments','ข้อแตกต่าง','']);
   L.push([`/api/reports/override-register.print?period_month=${MONTH}&branch_id=${bid}`,'writing','ทะเบียนการปรับปรุงด้วยมือ','_blank']);
-  return L.map(([href,ic,lbl,tg])=>`<a role="menuitem" href="${href}"${tg?` target="${tg}" rel="noopener"`:''}><i class="ti ti-${ic}" aria-hidden="true"></i> ${esc(lbl)}${tg?' <span class="lbl">↗</span>':''}</a>`).join('');
+  return L.map(([href,ic,lbl,tg])=>`<a href="${href}"${tg?` target="${tg}" rel="noopener"`:''}><i class="ti ti-${ic}" aria-hidden="true"></i> ${esc(lbl)}${tg?' <span class="lbl">↗</span>':''}</a>`).join('');
 }
 function wsHeadHtml(r){
   const ses=r.session, st=(ses&&ses.status)||'draft', closed=isClosedSt(st);
@@ -150,8 +151,8 @@ function wsHeadHtml(r){
     <div class="ws-act">
       <div class="ws-prog" title="ตรงแล้ว ${r.progress_pct}% (ถ่วงด้วยยอดเงิน)"><div class="prog ${progCls(r.progress_pct)}"><div style="width:${r.progress_pct}%"></div></div>
         <span class="mono fs-13 fw-600">${r.progress_pct}%</span></div>
-      <details class="menu" id="ws-rep"><summary class="btn btn-sm" aria-haspopup="menu">รายงาน ▾</summary>
-        <div class="menu-pop" role="menu" aria-label="รายงานของสาขา">${_wsReportLinks(r)}</div></details>
+      <details class="menu" id="ws-rep"><summary class="btn btn-sm">รายงาน ▾</summary>
+        <div class="menu-pop" role="group" aria-label="รายงานของสาขา">${_wsReportLinks(r)}</div></details>
       ${_wsPrimary(r)}
     </div></div>`;
 }

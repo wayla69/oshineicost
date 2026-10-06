@@ -40,7 +40,9 @@ function _cbCell(b,key,label){
   if(!c)return `<td><a class="cb-cell cb-none" href="${href}" aria-label="${nm}: ไม่มีข้อมูล" title="ไม่มียอดช่องทางนี้">—</a></td>`;
   let cls,txt,tip;
   if(c.accepted){cls='cb-acc';txt='✓ รับทราบ';tip='รับทราบผลต่างพร้อมเหตุผลแล้ว';}
-  else if(c.status==='diff'){cls='cb-diff';txt=_sgn(c.open_amount||c.residual||c.variance);tip='ยังอธิบายไม่ได้ (หลังหักวันที่รับทราบแล้ว)';}
+  else if(c.status==='diff'){const o=+c.open_amount||0;cls='cb-diff';
+    // days that differ but net to ~0 over the month are still open — say so instead of "฿0"
+    txt=Math.abs(o)>=1?_sgn(o):'ต่างรายวัน';tip='ยังอธิบายไม่ได้ (หลังหักวันที่รับทราบแล้ว และไม่นับเงินที่รอเข้าตามรอบ)';}
   else if(c.status==='waiting_doc'&&c.missing_doc){cls='cb-miss';txt='ขาด '+esc(c.missing_doc);tip='ยังไม่ได้อัปโหลด / มีไม่ครบเดือน';}
   else if(c.status==='waiting_doc'){cls='cb-wait';txt='รอรอบ';tip=c.waiting?`รอเงินเข้าตามรอบ ฿${fmt(c.waiting)}`:'รอเงินเข้าตามรอบ';}
   else if(c.status==='setup'){cls='cb-setup';txt='ตั้งค่า';tip='รหัสชำระใหม่ ต้องระบุธนาคาร';}
