@@ -50,12 +50,13 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   document.querySelectorAll('#tab-bomcenter [data-bmcsub]').forEach(b => b.classList.toggle('active', b.dataset.bmcsub === k));
-  ['overview', 'rec', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'rel', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
   if (k === 'overview') bmcLoadOverview();
   if (k === 'rec') bmcLoadReleases();
+  if (k === 'rel') bmcLoadReleasePane();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
   if (k === 'conv') bmcLoadConv();
@@ -729,4 +730,198 @@ async function bmcImportFlat(input) {
     bmcLoadRecipes();
   } catch (e) { _bmcStatus('bmcRecStatus', 'นำเข้าไม่สำเร็จ — ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
+}
+
+// ── review & release (Sprint S3) ────────────────────────────────────────────
+// The analyst runs the checks and releases (bom.release); management reads the
+// comparison and acknowledges, or rolls back (bom.audit). Releasing does not yet
+// change report COGS — that is the S4 cut-over; the page says so.
+let _bmcRlRel = null;
+const _BMC_STATUS_TH = { draft: 'draft', review: 'รอตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้/ย้อนกลับ' };
+
+async function bmcLoadReleasePane(keepId) {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/releases`);
+    _bmcRels = d.releases || [];
+    window._bmcRelSuggest = d.suggest || {};
+    const sel = document.getElementById('bmcRlSel');
+    const monthly = _bmcRels.filter(r => r.kind === 'monthly');
+    const cur = keepId || Number(sel.value) || (monthly[0] || {}).release_id;
+    sel.innerHTML = monthly.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''}>${esc(r.label)} · ${_BMC_STATUS_TH[r.status] || r.status} · มีผล ${esc(r.effective_month)}</option>`).join('')
+      || '<option value="">ยังไม่มีเวอร์ชันรายเดือน — นำเข้าสูตรที่แท็บ สูตรตาม Tier</option>';
+    await bmcLoadRelease();
+  } catch (e) { _bmcStatus('bmcRlStatus', 'โหลดไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcLoadRelease() {
+  const id = Number(document.getElementById('bmcRlSel').value);
+  _bmcRlRel = _bmcRels.find(r => r.release_id === id) || null;
+  ['bmcRlHead', 'bmcRlChecks', 'bmcRlCompare', 'bmcRlHistory'].forEach(k => { document.getElementById(k).innerHTML = ''; });
+  if (!_bmcRlRel) return;
+  bmcRenderRelHead();
+  await Promise.all([bmcLoadChecks(), bmcLoadCompare(), bmcLoadRelHistory()]);
+}
+function bmcRenderRelHead(checks) {
+  const r = _bmcRlRel;
+  const can = m => hasModule(m) || hasModule('bom.edit');
+  const btn = (label, fn, primary, title) => `<button onclick="${fn}" title="${esc(title || '')}" style="font-size:12.5px;${primary
+    ? 'background:var(--accent);color:var(--on-accent);border:0' : 'background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control)'};border-radius:var(--r-sm);padding:5px 14px;cursor:pointer">${label}</button>`;
+  const acts = [];
+  if (['draft', 'review'].includes(r.status)) {
+    if (can('bom.center') || can('bom.release')) acts.push(btn('ตรวจใหม่', 'bmcRunChecks()', false, 'คำนวณรายการตรวจ 12 ข้อใหม่จากสูตรและราคาปัจจุบัน'));
+    if (can('bom.release')) acts.push(btn('ปล่อยเวอร์ชันนี้', 'bmcDoRelease()', !!(checks && checks.can_release),
+      checks && !checks.can_release ? 'ยังมีข้อที่ต้องแก้' : 'analyst ปล่อย — management รับทราบภายหลัง'));
+  }
+  if (r.status === 'released') {
+    if (!r.acknowledged_by && (hasModule('bom.audit'))) acts.push(btn('รับทราบ (management)', 'bmcAck()', true));
+    if (hasModule('bom.audit') || hasModule('bom.release')) acts.push(btn('ย้อนกลับเวอร์ชันนี้', 'bmcRetire()', false, 'เวอร์ชันก่อนหน้ากลับมามีผลแทน'));
+    if (can('bom.center')) acts.push(btn('สร้าง draft เดือนถัดไปจากเวอร์ชันนี้', 'bmcNewDraft()', false));
+  }
+  const stInk = { draft: 'var(--amber-ink)', review: 'var(--amber-ink)', released: 'var(--good-ink)', retired: 'var(--text-muted)' }[r.status];
+  document.getElementById('bmcRlHead').innerHTML = `
+    <div class="flex flex-wrap items-start gap-3">
+      <div><div class="text-base font-bold" style="color:var(--text-primary)">${esc(r.label)} ${_bmcChip(_BMC_STATUS_TH[r.status] || r.status, stInk)}</div>
+        <div class="text-xs mt-1" style="color:var(--text-secondary)">มีผลเดือน <b>${esc(r.effective_month)}</b> · คิดต้นทุนด้วยราคาเดือน <b>${esc(r.price_month || '-')}</b> ·
+          ${r.recipes} สูตร${r.unmatched ? ` · ยังไม่จับคู่ ${r.unmatched}` : ''}</div>
+        <div class="text-xs mt-1" style="color:var(--text-secondary)">สร้างโดย ${esc(r.created_by || '-')}
+          ${r.released_by ? ` · ปล่อยโดย <b>${esc(r.released_by)}</b> ${esc(String(r.released_at || '').slice(0, 16).replace('T', ' '))}` : ''}
+          ${r.status === 'released' ? (r.acknowledged_by ? ` · <span style="color:var(--good-ink)">management รับทราบแล้ว: ${esc(r.acknowledged_by)} ${esc(String(r.acknowledged_at || '').slice(0, 16).replace('T', ' '))}</span>`
+            : ' · <span style="color:var(--amber-ink)">รอ management รับทราบ</span>') : ''}</div></div>
+      <div class="ml-auto flex flex-wrap gap-2">${acts.join('')}</div>
+    </div>
+    <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
+      ลำดับงาน: analyst ตรวจ → แก้ข้อที่ต้องแก้ (หรือยืนยันพร้อมเหตุผลสำหรับข้อที่ยอมรับได้) → ปล่อยภายในวันที่ 25 ของเดือนก่อนมีผล → management อ่านผลกระทบด้านล่างแล้วรับทราบ หรือย้อนกลับ ·
+      ขณะนี้การปล่อยยังไม่เปลี่ยนต้นทุนในรายงาน (สลับเครื่องคำนวณใน Sprint S4)</div>`;
+}
+async function bmcLoadChecks() {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-checks?release_id=${_bmcRlRel.release_id}`);
+    bmcRenderChecks(d);
+  } catch (e) { document.getElementById('bmcRlChecks').innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcRenderChecks(d) {
+  bmcRenderRelHead(d);
+  const box = document.getElementById('bmcRlChecks');
+  if (!d.rows.length) {
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ 12 ข้อ</div>
+      <div class="text-xs mt-1" style="color:var(--text-muted)">${['draft', 'review'].includes(_bmcRlRel.status) ? 'ยังไม่ได้ตรวจ — กด “ตรวจใหม่”' : 'ไม่มีข้อค้าง'}</div>`;
+    return;
+  }
+  const canAccept = (hasModule('bom.release') || hasModule('bom.edit')) && ['draft', 'review'].includes(_bmcRlRel.status);
+  const head = d.by_code.map(k => _bmcChip(`${k.code} ${k.title} · ${k.open}${k.count !== k.open ? '/' + k.count : ''}`,
+    k.severity === 'block' && k.open ? 'var(--bad-ink)' : k.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)')).join(' ');
+  const rows = d.rows.slice(0, 400);
+  box.innerHTML = `<div class="flex flex-wrap items-center gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ</div>
+      ${d.can_release ? _bmcChip('ไม่มีข้อที่ต้องแก้ — ปล่อยได้', 'var(--good-ink)') : _bmcChip(`ต้องแก้ ${d.open_blocks} ข้อก่อนปล่อย`, 'var(--bad-ink)')}
+      ${_bmcChip(`ข้อสังเกต ${d.warnings}`, 'var(--amber-ink)')}</div>
+    <div class="flex flex-wrap gap-1 mb-2">${head}</div>
+    <div class="overflow-x-auto" style="max-height:420px;overflow-y:auto"><table class="text-xs w-full"><tbody>${rows.map((r, i) => `<tr class="border-b" style="border-color:var(--border-soft)">
+      <td class="pr-2 py-1 whitespace-nowrap">${_bmcChip(r.check_code, r.severity === 'block' && !r.resolved_by ? 'var(--bad-ink)' : r.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)')}</td>
+      <td class="pr-2">${esc(r.message || '')}${r.resolved_by ? `<div class="text-[10.5px]" style="color:var(--good-ink)">ยืนยันโดย ${esc(r.resolved_by)}</div>` : ''}</td>
+      <td class="whitespace-nowrap">${r.acceptable && !r.resolved_by && canAccept ? `<button onclick="bmcAccept(${i})" style="font-size:11px;background:none;color:var(--accent);border:1px solid var(--border-control);border-radius:4px;padding:1px 8px;cursor:pointer">ยืนยันพร้อมเหตุผล</button>` : ''}
+        ${/^OTH/.test(r.ref) ? `<button onclick="bmcSetSub('rec');setTimeout(()=>bmcOpenRecipe('${esc(r.ref.split('#')[0])}'),1200)" style="font-size:11px;background:none;color:var(--accent);border:0;cursor:pointer">เปิดสูตร</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+    ${d.rows.length > rows.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดง ${rows.length} จาก ${d.rows.length}</div>` : ''}`;
+  window._bmcChecks = d;
+}
+async function bmcRunChecks() {
+  _bmcStatus('bmcRlStatus', 'กำลังตรวจ…');
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/check?release_id=${_bmcRlRel.release_id}`, { method: 'POST' });
+    bmcRenderChecks(d);
+    _bmcStatus('bmcRlStatus', d.can_release ? '✓ ตรวจแล้ว — ปล่อยได้' : `ตรวจแล้ว — ต้องแก้ ${d.open_blocks} ข้อ`, d.can_release ? 'var(--good-ink)' : 'var(--amber-ink)');
+    bmcLoadCompare();
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcAccept(i) {
+  const r = window._bmcChecks.rows[i];
+  const reason = prompt(`ยืนยันข้อ ${r.check_code}\n${r.message}\n\nเหตุผล (จำเป็น) เช่น ปรับสูตรตามที่ครัวแจ้ง`);
+  if (!reason) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: _bmcRlRel.release_id, check_code: r.check_code, ref: r.ref, reason }) });
+    bmcRenderChecks(d);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcDoRelease() {
+  const r = _bmcRlRel;
+  if (!confirm(`ปล่อย “${r.label}” มีผลเดือน ${r.effective_month}?\n\nหลังปล่อยแก้สูตรในเวอร์ชันนี้ไม่ได้ (สร้าง draft ใหม่แทน) · management จะได้เห็นผลกระทบและรับทราบ`)) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/release?release_id=${r.release_id}`, { method: 'POST' });
+    _bmcStatus('bmcRlStatus', '✓ ปล่อยแล้ว' + (d.late ? ' — ' + d.late : '') + (d.warnings ? ` · ข้อสังเกต ${d.warnings}` : ''), d.late ? 'var(--amber-ink)' : 'var(--good-ink)');
+    bmcLoadReleasePane(r.release_id);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ปล่อยไม่ได้ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcAck() {
+  const note = prompt(`รับทราบ “${_bmcRlRel.label}”\nหมายเหตุ (ไม่บังคับ)`, '');
+  if (note === null) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/release-act/acknowledge`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: _bmcRlRel.release_id, note }) });
+    _bmcStatus('bmcRlStatus', '✓ รับทราบแล้ว', 'var(--good-ink)');
+    bmcLoadReleasePane(_bmcRlRel.release_id);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcRetire() {
+  const reason = prompt(`ย้อนกลับ “${_bmcRlRel.label}” — เวอร์ชันก่อนหน้าจะกลับมามีผล\nเหตุผล (จำเป็น)`);
+  if (!reason) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/release-act/retire`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: _bmcRlRel.release_id, note: reason }) });
+    _bmcStatus('bmcRlStatus', '✓ ย้อนกลับแล้ว', 'var(--good-ink)');
+    bmcLoadReleasePane(_bmcRlRel.release_id);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcNewDraft() {
+  const sg = window._bmcRelSuggest || {};
+  const eff = prompt('draft ใหม่มีผลเดือนไหน (YYYY-MM)', sg.effective_month || '');
+  if (!eff) return;
+  const pm = prompt('คิดต้นทุนด้วยราคาเดือนไหน (YYYY-MM)', sg.price_month || '');
+  if (!pm) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/new-draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_release_id: _bmcRlRel.release_id, effective_month: eff, price_month: pm }) });
+    _bmcStatus('bmcRlStatus', `✓ สร้าง ${d.label}`, 'var(--good-ink)');
+    bmcLoadReleasePane(d.release_id);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ — ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+async function bmcLoadCompare() {
+  const box = document.getElementById('bmcRlCompare');
+  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณผลกระทบ…</div>';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-compare?release_id=${_bmcRlRel.release_id}`);
+    const sgn = v => (v > 0 ? '+' : '') + _bmcNum(v, 0);
+    const ink = v => v > 0.5 ? 'var(--bad-ink)' : v < -0.5 ? 'var(--good-ink)' : 'var(--text-muted)';
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ผลกระทบถ้าใช้เวอร์ชันนี้ — เทียบยอดขายเดือน ${esc(d.month)}</div>
+      <div class="text-xs mb-3" style="color:var(--text-secondary)">ต้นทุนเปลี่ยน ${d.changed} เมนู · COGS เปลี่ยนรวม <b style="color:${ink(d.total_delta)}">฿${sgn(d.total_delta)}</b> ต่อเดือน
+        (เทียบกับต้นทุนที่ใช้อยู่ตอนนี้ของแต่ละเมนู)</div>
+      ${d.tiers.length ? `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">Food cost % ตาม Tier ของลูกค้า (สิ่งที่ลูกค้าแต่ละ Tier กินจริงต่อบิล)</div>
+      <div class="overflow-x-auto mb-3"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+        <th class="pr-2">Tier</th><th class="pr-2 text-right">ลูกค้า</th><th class="pr-2 text-right">รายได้</th><th class="pr-2 text-right">COGS เดิม</th><th class="pr-2 text-right">COGS ใหม่</th>
+        <th class="pr-2 text-right">% เดิม</th><th class="pr-2 text-right">% ใหม่</th><th class="pr-2 text-right">ต้นทุน/หัว เดิม → ใหม่</th></tr></thead>
+        <tbody>${d.tiers.map(t => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2">${/^\d+$/.test(t.tier) ? '฿' + Number(t.tier).toLocaleString() : esc(t.tier)}</td>
+          <td class="pr-2 text-right">${_bmcNum(t.pax, 0)}</td><td class="pr-2 text-right">${_bmcNum(t.rev, 0)}</td><td class="pr-2 text-right">${_bmcNum(t.cogs_old, 0)}</td>
+          <td class="pr-2 text-right">${_bmcNum(t.cogs_new, 0)}</td><td class="pr-2 text-right">${t.food_pct_old}%</td>
+          <td class="pr-2 text-right font-semibold" style="color:${ink(t.food_pct_new - t.food_pct_old)}">${t.food_pct_new}%</td>
+          <td class="pr-2 text-right">${_bmcNum(t.head_old)} → ${_bmcNum(t.head_new)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="grid gap-4" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <div style="min-width:0"><div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รายสาขา</div>
+          <div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums"><tbody>${d.branches.map(b => `<tr class="border-b" style="border-color:var(--border-soft)">
+            <td class="pr-2">${esc(b.branch)}</td><td class="pr-2 text-right">${_bmcNum(b.plates, 0)} จาน</td><td class="text-right" style="color:${ink(b.delta)}">฿${sgn(b.delta)}</td></tr>`).join('')}</tbody></table></div></div>
+        <div style="min-width:0"><div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">เมนูที่กระทบมากสุด</div>
+          <div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums"><tbody>${d.dishes.slice(0, 25).map(x => `<tr class="border-b" style="border-color:var(--border-soft)">
+            <td class="pr-2">${esc(x.name || x.sku_code)}</td><td class="pr-2 text-right whitespace-nowrap">${_bmcNum(x.old)} → ${_bmcNum(x.new)}</td>
+            <td class="pr-2 text-right">${x.pct == null ? '' : (x.pct > 0 ? '+' : '') + x.pct + '%'}</td><td class="text-right" style="color:${ink(x.impact)}">฿${sgn(x.impact)}</td></tr>`).join('')}</tbody></table></div></div>
+      </div>`;
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcLoadRelHistory() {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-history?release_id=${_bmcRlRel.release_id}`);
+    const th = { import_cost_rw: 'นำเข้า Cost-RW', edit_recipe: 'แก้สูตร', accept_check: 'ยืนยันข้อตรวจ', release: 'ปล่อย', acknowledge: 'รับทราบ',
+      retire: 'ย้อนกลับ', new_draft: 'สร้าง draft' };
+    document.getElementById('bmcRlHistory').innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ประวัติ</div>` +
+      (d.rows.map(h => `<div class="text-[11.5px] py-0.5 border-b" style="border-color:var(--border-soft);color:var(--text-secondary)">
+        ${esc(String(h.at).slice(0, 16).replace('T', ' '))} · <b>${esc(h.who || '-')}</b> · ${esc(th[h.action] || h.action)}
+        ${h.key && h.key !== String(_bmcRlRel.release_id) ? ' · ' + esc(String(h.key).split('|').slice(1).join(' ')) : ''}</div>`).join('')
+        || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีประวัติ</div>');
+  } catch (e) { /* history is a nicety */ }
 }

@@ -23,6 +23,7 @@ from core import get_db, invalidate_cache, require_write_token
 from bom_center import master as _m
 from bom_center import prices as _p
 from bom_center import recipes as _r
+from bom_center import release as _rl
 from bom_center.schema import ensure as _ensure
 from bom_center.units import Converter
 
@@ -767,3 +768,120 @@ async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...),
     if not dry_run:
         invalidate_cache("bc_")
     return {"dry_run": dry_run, **out}
+
+
+# ── M5 review & release (Sprint S3) ──────────────────────────────────────────
+# Reads under /api/bom-center (cost.analysis …). Each action path carries its own
+# permission in auth.MODULE_RULES (longest prefix wins): release = bom.release
+# (analyst), acknowledge = bom.audit (management), retire = either, the rest bom.center.
+@router.get("/api/bom-center/release-checks")
+def bc_release_checks(release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        if not _r.release_row(con, release_id):
+            raise HTTPException(404, "ไม่พบ release")
+        out = _rl.checks_summary(con, release_id)
+    out["catalog"] = [{"code": k, "severity": v[0], "title": v[1]} for k, v in _rl.CHECKS.items()]
+    return out
+
+
+@router.get("/api/bom-center/release-compare")
+def bc_release_compare(release_id: int = Query(...), month: Optional[str] = Query(None)):
+    if month:
+        _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        if not _r.release_row(con, release_id):
+            raise HTTPException(404, "ไม่พบ release")
+        out = _rl.compare(con, release_id, month)
+    out["dishes"] = out["dishes"][:300]
+    return out
+
+
+@router.post("/api/bom-center/release-act/check", dependencies=[Depends(require_write_token)])
+def bc_release_run_checks(release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        rel = _r.release_row(con, release_id)
+        if not rel or rel["kind"] != "monthly":
+            raise HTTPException(404, "ไม่พบ release รายเดือน")
+        return _write(con, lambda: _rl.run_checks(con, release_id))
+
+
+class AcceptBody(BaseModel):
+    release_id: int
+    check_code: str
+    ref: str
+    reason: str
+
+
+@router.post("/api/bom-center/release-act/accept", dependencies=[Depends(require_write_token)])
+def bc_release_accept(body: AcceptBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _rl.accept(con, body.release_id, body.check_code, body.ref, body.reason, _who(request)))
+        return _rl.checks_summary(con, body.release_id)
+
+
+@router.post("/api/bom-center/release-act/release", dependencies=[Depends(require_write_token)])
+def bc_release_do(request: Request, release_id: int = Query(...)):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _rl.do_release(con, release_id, _who(request)))
+    invalidate_cache("bc_")
+    return out
+
+
+class NoteBody(BaseModel):
+    release_id: int
+    note: Optional[str] = ""
+
+
+@router.post("/api/bom-center/release-act/acknowledge", dependencies=[Depends(require_write_token)])
+def bc_release_ack(body: NoteBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _rl.acknowledge(con, body.release_id, _who(request), body.note or ""))
+    return {"ok": True}
+
+
+@router.post("/api/bom-center/release-act/retire", dependencies=[Depends(require_write_token)])
+def bc_release_retire(body: NoteBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _rl.retire(con, body.release_id, _who(request), body.note or ""))
+    invalidate_cache("bc_")
+    return {"ok": True}
+
+
+class NewDraftBody(BaseModel):
+    from_release_id: int
+    effective_month: str
+    price_month: str
+    label: Optional[str] = None
+
+
+@router.post("/api/bom-center/release-act/new-draft", dependencies=[Depends(require_write_token)])
+def bc_release_new_draft(body: NewDraftBody, request: Request):
+    _month_or_400(body.effective_month)
+    _month_or_400(body.price_month)
+    label = body.label or f"{body.effective_month} บุฟเฟ่ต์ (draft)"
+    with get_db() as con:
+        _ensure(con)
+        rid = _write(con, lambda: _rl.new_draft_from(con, body.from_release_id, label, body.effective_month,
+                                                      body.price_month, _who(request)))
+    return {"ok": True, "release_id": rid, "label": label}
+
+
+@router.get("/api/bom-center/release-history")
+def bc_release_history(release_id: int = Query(...)):
+    """The audit trail of one release: import, edits, acceptances, release, acknowledge, retire."""
+    with get_db() as con:
+        _ensure(con)
+        rows = con.execute("SELECT at, who, action, table_name, row_key, old_value, new_value FROM bc_audit"
+                           " WHERE (table_name='bc_release' AND row_key=?)"
+                           "    OR (table_name IN ('bc_recipe_line','bc_release_check') AND row_key LIKE ?)"
+                           " ORDER BY id DESC LIMIT 300",
+                           (str(release_id), f"{release_id}|%")).fetchall()
+    cols = ("at", "who", "action", "table", "key", "old", "new")
+    return {"rows": [dict(zip(cols, r)) for r in rows]}
