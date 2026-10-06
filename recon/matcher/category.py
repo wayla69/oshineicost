@@ -4,11 +4,12 @@ Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
 import sqlite3
-from ._shared import _cfg, _within_tol, method_config, pos_category_totals
+from ._shared import _cfg, _within_tol, memo_scoped, method_config, pos_category_totals
 from .buckets import _apply_transfer_any, channel_move_deltas, external_buckets
 from .coupon import coupon_reconciliation
 
 
+@memo_scoped
 def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_month: str):
     """Compare POS buckets to external buckets. Returns (rows, unmapped).
 
@@ -18,13 +19,15 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
     pos, unmapped = pos_category_totals(conn, branch_id, period_month)
     ext = external_buckets(conn, branch_id, period_month)
     cfgs = method_config(conn)
-    _apply_transfer_any(pos, ext)
 
     # Manual cross-channel moves (booked-in-wrong-channel): shift the POS base out of
     # the wrong lane and into the right one BEFORE adjustments, so both lanes correct
     # at once. Lives in `pos` (never in recon_lane_adj) → no UNIQUE/accept collision.
+    # Also BEFORE the TRANSFER·ANY spill: a transfer moved into TRANSFER·KBANK must
+    # keep its statement line in that lane, not leak into ANY as "leftover".
     for k, d in channel_move_deltas(conn, branch_id, period_month).items():
         pos[k] = pos.get(k, 0.0) + d
+    _apply_transfer_any(pos, ext)
 
     # Load lane adjustments (graceful if table not yet created)
     adjs: dict = {}
@@ -65,8 +68,8 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
                     _coupon_rows = coupon_reconciliation(conn, branch_id, period_month)
                 if not _coupon_rows:
                     status = "no_source"
-                elif any(r["status"] == "mismatch" for r in _coupon_rows):
-                    status = "mismatch"
+                elif any(r["status"] in ("mismatch", "ext_only") for r in _coupon_rows):
+                    status = "mismatch"    # ext_only = a points summary with no POS points
                 elif any(r["status"] in ("waiting_doc", "awaiting_payout") for r in _coupon_rows):
                     status = "waiting_doc"
                 else:

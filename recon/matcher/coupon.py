@@ -3,11 +3,12 @@
 Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
-from ._shared import TOL_ABS
+from ._shared import TOL_ABS, memo_scoped
 from .points import point_pos_total, point_settlement_total
 from .payout import payout_matching
 
 
+@memo_scoped
 def coupon_reconciliation(conn, branch_id, period_month):
     """Per-issuer loyalty-point reconciliation for the COUPON channel (the
     owner's table: Coupon = KTC/BAY credit-card points used as discount).

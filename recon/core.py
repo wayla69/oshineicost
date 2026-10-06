@@ -11,7 +11,9 @@ spell them that way. Assign through THIS module — `recon.core._DB_PATH = x` �
 to point the app at another database; main._DB_PATH is a copy.
 """
 from __future__ import annotations
+from .matcher import _cc_acquirer
 from .matcher import _eff_fee_vat
+from .matcher import _point_mids
 from .matcher import coupon_discount_total_daily
 from .matcher import daily_reconciliation
 from .matcher import point_pos_total_daily
@@ -437,6 +439,7 @@ def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> 
     agg: dict = {}
     def cell(day, ch):
         return agg.setdefault((day, ch), {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0})
+    pmids = _point_mids(conn, branch_id)
     for ch, tbl, dcol, gcol, fcol, vcol, discol, extra in _FEE_CH_SPEC:
         try:
             lines = conn.execute(
@@ -447,6 +450,10 @@ def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> 
         for r in lines:
             day = (r[dcol] or "")[:10]
             if not day:
+                continue
+            # KTC/BAY point settlements are booked under COUPON (from the POS tender
+            # split below) — their cc rows must not ALSO count as card revenue.
+            if ch == "CREDIT" and (_cc_acquirer(r, pmids) or "").endswith("POINT"):
                 continue
             fee, vat = _eff_fee_vat(r, fcol, vcol)
             a = cell(day, ch)

@@ -15,6 +15,7 @@ from ._shared import (
     _pd,
     _provider_bank,
     _within_tol_day,
+    memoized,
     method_config,
     pos_category_totals_daily,
 )
@@ -154,7 +155,7 @@ def _claimed_lanes(conn, branch_id, period_month):
     return lanes
 
 
-def _cash_dep_credits(conn, branch_id, period_month, max_lag):
+def _cash_dep_credits(conn, branch_id, period_month, max_lag, exclude_ids=None):
     """Bank credits that could be a cash lump deposit for this month.
 
     Banks post the next-day cash deposit under inconsistent codes (CASH_DEP,
@@ -165,7 +166,9 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag):
         unexplained credit — cash is the only tender with no electronic trail).
     Card settlements, fees and payout legs are never cash. Window = the month
     plus the first max_lag days of the next month (day-31 cash banked on the 1st).
+    `exclude_ids` drops credits last month's matchers already claimed.
     """
+    exclude_ids = exclude_ids or set()
     y, m = int(period_month[:4]), int(period_month[5:7])
     month_start = date(y, m, 1).isoformat()
     nm_y, nm_m = (y + 1, 1) if m == 12 else (y, m + 1)
@@ -184,6 +187,8 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag):
         return []
     out = []
     for r in rows:
+        if r["id"] in exclude_ids:
+            continue
         ch = r["channel"]
         if ch != "CASH_DEP":
             cat = _CHANNEL_CATEGORY.get(ch)          # only QR/TRANSFER are credible cash codes
@@ -196,10 +201,31 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag):
     return out
 
 
-def cash_deposit_matching(conn, branch_id, period_month, max_group=None, max_lag=None):
+def _prev_month_claims(conn, branch_id, period_month) -> set:
+    """Bank-line ids dated in THIS month that last month's cash or payout matcher
+    already claimed (a 1-Jul deposit that banked 30-Jun cash, a 1-Jul transfer that
+    paid June's Grab). Last month's matchers run non-recursively (_dedup_prev=False)."""
+    from .payout import _prev_payout_consumed_ids     # payout → buckets → cash: lazy
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+    ids = set(cash_deposit_matching(conn, branch_id, prev, _dedup_prev=False)["consumed_ids"])
+    try:
+        for s in _prev_payout_consumed_ids(conn, branch_id, period_month).values():
+            ids |= set(s)
+    except sqlite3.OperationalError:
+        pass
+    return ids
+
+
+@memoized
+def cash_deposit_matching(conn, branch_id, period_month, max_group=None, max_lag=None,
+                          _dedup_prev=True):
     """Group POS-cash days to the CASH_DEP bank credits that banked them.
     max_group/max_lag default to the CASH lane's recon_method_config
-    (merge_days/lag_days), falling back to the engine constants.
+    (merge_days/lag_days), falling back to the engine constants. Credits last
+    month's matchers already claimed are skipped (TC-35: a 1-Jul deposit that
+    banked 30-Jun cash is June's, not July's); `_dedup_prev=False` skips that
+    lookup (used for the previous-month call itself, so it never recurses).
 
     Returns {
       groups:   [{deposit_date, amount, days:[{day,pos}], group_pos, lag,
@@ -220,7 +246,8 @@ def cash_deposit_matching(conn, branch_id, period_month, max_group=None, max_lag
     # slightly-off lump deposit is still FOUND and traced; the owner's strict
     # "few baht" tolerance (tol_abs_day) is applied at the day-status level.
     cash_days, available = _cash_pos_days(conn, branch_id, period_month)
-    credits = _cash_dep_credits(conn, branch_id, period_month, max_lag)
+    prev_claimed = _prev_month_claims(conn, branch_id, period_month) if _dedup_prev else set()
+    credits = _cash_dep_credits(conn, branch_id, period_month, max_lag, exclude_ids=prev_claimed)
     days = sorted((d, a) for d, a in cash_days.items() if a > TOL_ABS_DAY)
 
     groups, day_group, used = [], {}, set()
