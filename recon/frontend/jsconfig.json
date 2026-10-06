@@ -1,0 +1,17 @@
+{
+  "//": "Type-check recon's JS slices the same way as the dashboard's (root jsconfig.json): `npx -p typescript tsc -p recon/frontend/jsconfig.json`, run by scripts/check-js.sh (part of scripts/gate.sh). The slices in js/ are plain scripts sharing one global scope, so tsc sees them as one program and reports a name used in one slice but defined in none. A separate project from the dashboard's because both define the same helper names ($, fmt, esc, api...) in their own pages.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "none",
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["js/*.js"]
+}
