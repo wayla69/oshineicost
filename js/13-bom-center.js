@@ -104,14 +104,128 @@ async function bmcLoadOverview() {
       setup.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ความพร้อมของข้อมูล</div>` +
         steps.map(([ok, good, bad]) => `<div class="text-xs py-0.5" style="color:${ok ? 'var(--good-ink)' : 'var(--amber-ink)'}">${ok ? '✓' : '•'} ${esc(ok ? good : bad)}</div>`).join('');
     }
-    const iss = document.getElementById('bmcIssuesCard');
-    iss.innerHTML = s.recipe_codes_missing
-      ? `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รหัสที่สูตรใช้แต่ไม่อยู่ในทะเบียน (${s.recipe_codes_missing})</div>
-         <div class="text-[11px]" style="color:var(--text-muted)">${s.recipe_codes_missing_list.map(esc).join(' · ')}</div>`
-      : '';
-    iss.style.display = s.recipe_codes_missing ? '' : 'none';
+    bmcLoadCodeReview(s);
   } catch (e) {
     document.getElementById('bmcKpis').innerHTML = `<div class="card p-3 text-xs" style="color:var(--bad-ink)">โหลดไม่สำเร็จ — ${esc(String(e.message || e))}</div>`;
+  }
+}
+
+// ── code check: old-recipe codes vs the master (codes.py) ───────────────────
+let _bmcCr = null;            // /api/bom-center/code-review
+let _bmcCrView = 'todo';      // todo | done | all
+let _bmcCrGroups = [];       // [{code, names}] behind the buttons of the rendered rows
+const _BMC_CR = {
+  missing: ['ไม่อยู่ในทะเบียน', 'var(--amber-ink)'], conflict: ['ชื่อไม่ตรง', 'var(--bad-ink)'],
+  same: ['ของเดียวกัน', 'var(--good-ink)'], remap: ['ใช้รหัสอื่นแทน', 'var(--navy-ink)'], ok: ['ชื่อตรง', 'var(--text-muted)'],
+};
+async function bmcLoadCodeReview(s) {
+  const iss = document.getElementById('bmcIssuesCard');
+  if (!iss) return;
+  iss.style.display = '';
+  if (s && !s.ingredients) {
+    // an empty master makes every recipe code "missing" — say what fixes it instead of listing them
+    iss.innerHTML = s.recipe_codes_missing
+      ? `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รหัสที่สูตรเดิมใช้: ${_bmcNum(s.recipe_codes_missing, 0)} รหัส ยังไม่อยู่ในทะเบียน</div>
+         <p class="text-xs" style="color:var(--text-secondary)">ไม่ต้องไล่เพิ่มทีละรหัส — ตัวเลขนี้ขึ้นเพราะทะเบียนยังว่าง กด “เติมจากข้อมูลในระบบ” ด้านบนครั้งเดียว
+         ระบบจะเพิ่มทั้ง ${_bmcNum(s.recipe_codes_missing, 0)} รหัสพร้อมชื่อ หน่วย และขนาดบรรจุให้เอง แล้วการ์ดนี้จะเปลี่ยนเป็นรายการ
+         <b>“รหัสเดียวกันแต่ชื่อไม่ตรง”</b> ที่ต้องให้คนตรวจจริง ๆ</p>`
+      : '';
+    iss.style.display = s.recipe_codes_missing ? '' : 'none';
+    return;
+  }
+  iss.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังตรวจรหัสสูตรเดิม…</div>';
+  try {
+    _bmcCr = await _bmcJson(`${API}/api/bom-center/code-review?all=false`);
+    bmcRenderCodeReview();
+  } catch (e) {
+    iss.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">ตรวจรหัสไม่สำเร็จ — ${esc(String(e.message || e))}</div>`;
+  }
+}
+function bmcCrView(v) { _bmcCrView = v; bmcRenderCodeReview(); }
+function _bmcQ(v) { return JSON.stringify(v).replace(/"/g, '&quot;'); }
+function bmcRenderCodeReview() {
+  const iss = document.getElementById('bmcIssuesCard');
+  const d = _bmcCr;
+  if (!iss || !d) return;
+  const c = d.counts || {};
+  const todo = (c.conflict || 0) + (c.missing || 0);
+  const done = (d.rows || []).filter(r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap')).length;
+  const hasDone = r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap');
+  const rows = (d.rows || []).filter(r => _bmcCrView === 'all' || (_bmcCrView === 'todo'
+    ? (r.groups || []).length > 0 : hasDone(r)));
+  const w = _bmcCanWrite();
+  const btn = (label, on, active) => `<button onclick="${on}" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 10px;font-size:12px;cursor:pointer;background:${active ? 'var(--accent)' : 'transparent'};color:${active ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
+  const small = (label, on, ink) => `<button onclick="${on}" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:1px 8px;font-size:11px;cursor:pointer;background:transparent;color:${ink || 'var(--text-primary)'};white-space:nowrap">${label}</button>`;
+  // each wrong-name group gets its own decision; names travel through _bmcCrGroups, not the onclick text
+  _bmcCrGroups = [];
+  const gid = (code, names) => { _bmcCrGroups.push({ code, names }); return _bmcCrGroups.length - 1; };
+  const dishes = (r, nm) => ((r.names || []).find(x => x.name === nm) || { dishes: 0 }).dishes;
+  const nameList = (r, names, ink) => names.map(nm =>
+    `<span style="color:${ink}">${esc(nm || '(ไม่มีชื่อ)')}</span> <span style="color:var(--text-muted);white-space:nowrap">(${_bmcNum(dishes(r, nm), 0)} เมนู)</span>`).join(' · ');
+  const okLine = r => {
+    const okN = (r.names || []).filter(n => n.status === 'ok');
+    return okN.length ? `<div class="text-[10.5px] mt-0.5" style="color:var(--text-muted)">ชื่อที่ตรงกับทะเบียนแล้ว ไม่ถูกย้าย: ${okN.slice(0, 3).map(n => esc(n.name)).join(', ')}${okN.length > 3 ? ` +${okN.length - 3}` : ''} (${_bmcNum(okN.reduce((a, n) => a + n.dishes, 0), 0)} เมนู)</div>` : '';
+  };
+  const head = (r, st) => `<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+      <b style="color:var(--text-primary)">${esc(r.code)}</b>${_bmcChip(_BMC_CR[st][0], _BMC_CR[st][1])}
+      <span class="text-[11px]" style="color:var(--text-secondary)">ในทะเบียน: ${esc(r.master_name || '— ไม่มีในทะเบียน')}${r.unit ? ` · หน่วย ${esc(r.unit)}` : ''}</span></div>`;
+  const block = inner => `<div style="border-top:1px solid var(--border);padding:8px 0">${inner}</div>`;
+  const groupRows = r => (r.groups || []).map((g, i) => {
+    const id = gid(r.code, g.names);
+    const sg = (g.suggest || [])[0];
+    const acts = !w ? '' : `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">`
+      + (r.status === 'missing' ? small('เติมทะเบียน', 'bmcSeed()') : small('ของเดียวกัน', `bmcCrDecideG(${id}, 'same')`, 'var(--good-ink)'))
+      + (sg ? small('ใช้ ' + esc(sg.code), `bmcCrDecideG(${id}, 'remap', ${_bmcQ(sg.code)})`, 'var(--navy-ink)') : '')
+      + small('รหัสอื่น…', `bmcCrDecideG(${id}, 'remap', null)`) + '</div>';
+    return block((i === 0 ? head(r, r.status === 'missing' ? 'missing' : 'conflict') : `<div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · อีกกลุ่มชื่อ</div>`)
+      + `<div class="text-xs mt-1">ชื่อในสูตรเดิม: ${nameList(r, g.names, 'var(--bad-ink)')}</div>`
+      + `<div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">รหัสที่น่าจะใช่: ${(g.suggest || []).slice(0, 2).map(x => `<b>${esc(x.code)}</b> ${esc(x.name || '')}`).join(' · ') || '— ไม่พบ เลือกเองด้วย “รหัสอื่น…”'}</div>`
+      + (i === 0 ? okLine(r) : '') + acts);
+  }).join('');
+  const doneRow = r => {
+    const dn = (r.names || []).filter(n => n.status === 'same' || n.status === 'remap');
+    if (!dn.length) return '';
+    const id = gid(r.code, dn.map(n => n.name));
+    const st = dn.some(n => n.status === 'remap') ? 'remap' : 'same';
+    return block(head(r, st) + dn.map(n => `<div class="text-xs mt-1"><span style="color:${n.status === 'remap' ? 'var(--navy-ink)' : 'var(--good-ink)'}">${esc(n.name)}</span>
+        <span style="color:var(--text-muted)">(${_bmcNum(n.dishes, 0)} เมนู)</span>
+        ${n.status === 'remap' ? `→ <b>${esc(n.use_code || '')}</b> ${esc(n.use_name || '')}` : '· ของเดียวกัน'}
+        <span class="text-[10.5px]" style="color:var(--text-muted)">${esc(n.who || '')}${n.note ? ' · ' + esc(n.note) : ''}</span></div>`).join('')
+      + (w ? `<div style="margin-top:4px">${small('ยกเลิกการตัดสินใจ', `bmcCrDecideG(${id}, 'clear')`, 'var(--text-muted)')}</div>` : ''));
+  };
+  const body = rows.map(r => (_bmcCrView === 'done' ? '' : groupRows(r)) + (_bmcCrView === 'todo' ? '' : doneRow(r))).join('');
+  iss.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">ตรวจรหัสสูตรเดิม — รหัสเดียวกันแต่ชื่อไม่ตรง</div>
+      <a href="${API}/api/bom-center/code-review.xlsx?all=true" class="text-xs" style="color:var(--accent)">ดาวน์โหลด Excel (ทุกรหัส)</a></div>
+    <p class="text-xs mt-1 mb-2" style="color:var(--text-secondary)">สูตรเดิมใช้ ${_bmcNum(d.used, 0)} รหัส — ชื่อตรงกับทะเบียน ${_bmcNum(c.ok, 0)} ·
+      <b style="color:var(--bad-ink)">ชื่อไม่ตรง ${_bmcNum(c.conflict, 0)}</b> · ไม่อยู่ในทะเบียน ${_bmcNum(c.missing, 0)} · ตรวจแล้ว ${_bmcNum(done, 0)}.
+      “ชื่อไม่ตรง” = บางบรรทัดในสูตรเดิมใช้รหัสนี้เรียกของคนละอย่างกับบัญชี (เช่น สูตรว่า หัวไชเท้า บัญชีว่า มะนาว) แผนสั่งจะสั่งผิดของจนกว่าจะตรวจ —
+      กด <b>ของเดียวกัน</b> ถ้าแค่เขียนชื่อต่างกัน หรือ <b>ใช้รหัสแนะนำ</b> ถ้าเป็นคนละของ · การตัดสินใจมีผลเฉพาะ<b>ชื่อสีแดง</b> บรรทัดที่ชื่อตรงอยู่แล้วไม่ถูกย้าย ·
+      มีผลกับแผนสั่งเท่านั้น ต้นทุนย้อนหลังไม่เปลี่ยน</p>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">${btn(`ต้องตรวจ (${todo})`, "bmcCrView('todo')", _bmcCrView === 'todo')}${btn(`ตรวจแล้ว (${done})`, "bmcCrView('done')", _bmcCrView === 'done')}${btn('ทั้งหมดที่มีปัญหา', "bmcCrView('all')", _bmcCrView === 'all')}</div>
+    <div id="bmcCrStatus" class="text-xs mb-1"></div>
+    ${rows.length ? `<div>${body}</div>`
+      : `<div class="text-xs" style="color:var(--good-ink)">${_bmcCrView === 'todo' ? '✓ ไม่มีรหัสที่ต้องตรวจ' : 'ยังไม่มีรายการ'}</div>`}`;
+}
+function bmcCrDecideG(i, status, useCode) {
+  const g = _bmcCrGroups[i];
+  return g ? bmcCrDecide(g.code, status, useCode, g.names) : null;
+}
+async function bmcCrDecide(code, status, useCode, names) {
+  let note = null;
+  if (status === 'remap' && !useCode) {          // "รหัสอื่น…": the analyst types the code (and why)
+    useCode = (prompt(`รหัส ${code} ในสูตรเดิม ควรใช้รหัสไหนในทะเบียนแทน? (เช่น V-007)`) || '').trim();
+    if (!useCode) return;
+    note = prompt(`ใช้ ${useCode} แทน ${code} — หมายเหตุ (ไม่บังคับ)`, '') || null;
+  }
+  try {
+    await _bmcJson(`${API}/api/bom-center/code-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, status, use_code: useCode || null, note, names: names || null }) });
+    _bmcCr = await _bmcJson(`${API}/api/bom-center/code-review?all=false`);
+    bmcRenderCodeReview();
+    _bmcStatus('bmcCrStatus', `✓ บันทึก ${code} แล้ว`, 'var(--good-ink)');
+  } catch (e) {
+    _bmcStatus('bmcCrStatus', 'ไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
   }
 }
 
