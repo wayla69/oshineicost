@@ -162,13 +162,15 @@
 | `bc_release` | release_id | effective_month, status (draft/review/released/retired), scope (buffet/alacarte/all), created_by, reviewed_by, released_at, parent_release_id, notes | เวอร์ชัน |
 | `bc_recipe` / `bc_recipe_line` | (release_id, sku_code), (…, seq) | sop_ok, note; line: ingredient_code, qty, unit, prep_note, zero_by_design | สูตร = ปริมาณเท่านั้น |
 | `bc_release_check` | (release_id, check_code, ref) | severity (block/warn), message, resolved_by | ผลด่านตรวจ |
-| `bc_cost_cache` | (release_id, sku_code) | unit_cost, cost_breakdown_json | materialized → ป้อน `sku_effective_cost` |
-| `bc_demand_day` | (branch_id, day, ingredient_code) | qty_base (gross of yield), from_release_id | materialized ยอดขาย×สูตร รายวัน (เร็วกว่า join 650 k แถวทุกครั้ง) |
+| `bcd_cost_cache` | (release_id, sku_code) | unit_cost, cost_breakdown_json | materialized → ป้อน `sku_effective_cost` |
+| `bcd_demand_day` | (branch_id, day, ingredient_code) | qty_base (gross of yield), from_release_id | materialized ยอดขาย×สูตร รายวัน (เร็วกว่า join 650 k แถวทุกครั้ง) |
 | `bc_order_calendar` | (branch_id, round) | round ∈ {1, 2, salmon}; order_weekday (รอบ 1 เลือกอังคาร/พุธ, รอบ 2 เลือกศุกร์/เสาร์, แซลมอน 1 วัน), delivery_weekday, lead_days, filled_by | ตารางที่ **ฝ่ายขายเติมเองต่อสาขา** (§10-7) |
 | `bc_forecast_run` / `bc_forecast_line` | run_id, (run_id, ingredient_code) | branch, cycle_date, cover_from, cover_to, method, params; line: forecast_base, safety_base, on_hand, suggested_units, pack, price | M7 |
 | `bc_stock_count` / `bc_stock_count_line` | count_id, (count_id, ingredient_code) | branch, count_date, kind (begin/end/spot), counted_by; line: qty_kitchen, unit, qty_base, photo_ref | Phase 2 |
 | `bc_order` / `bc_order_line` | order_id, (order_id, ingredient_code) | branch, cycle_date, status (suggested → confirmed → **submitted → processed** (Sales Support) → received), confirmed_by, processed_by, processed_at, po_ref; line: suggested, confirmed, processed_qty, reason_code, received_qty | Phase 2 — แทน `ingredient_order_issue/_line/_actual`; สาขาส่งให้ส่วนกลาง Sales Support ดำเนินการต่อ (§10-6) |
 | `bc_variance` (view) | (branch, period, ingredient) | theoretical, actual = begin + received − end, gap_qty, gap_value, gap_pct, reason_code | Phase 2 |
+
+**สอง prefix** (ADR-001, S0): `bc_*` = ของเว็บ preserved ข้าม swap โดยชื่อ · `bcd_*` = ตารางอนุพันธ์ (`bcd_cost_cache`, `bcd_demand_day`) สร้างใหม่หลัง swap ไม่คัดลอก เพราะ swap นำยอดขายใหม่มาและตารางใหญ่จะถ่วงเวลา swap
 
 **ตารางเดิมที่คงไว้ชั่วคราว** (`bom_ingredients`, `sku_cost`, `bom_sku_alias`, `cost_override`, `cost_provenance`, `ingredient_order_unit`, `ingredient_sourcing`, `ingredient_order_*`, `stock_count`, `requisition_line`) — **ห้ามลบใน Phase 1**; หลัง cut-over 1 เดือน จึงทำ view ชื่อเดิมครอบ `bc_*` ให้สคริปต์/ทดสอบเก่ายังผ่าน
 
@@ -191,8 +193,8 @@
 ### 4.5 เรื่องแพลตฟอร์มที่ต้องตัดสินตั้งแต่วันแรก
 
 - **ตารางของเว็บ vs ของ PC**: `bc_*` ทั้งหมดเป็นของเว็บ (เพิ่ม `"bc"` ใน `core._PRESERVED_PREFIXES`) และต้องโผล่ใน `fly_state_*.manifest.txt` ของการสำรองรายคืนก่อน PR แรก merge (วิธีตรวจตามบันทึก #209)
-- **`build_menu_fact.py` บน PC ต้องเห็นเวอร์ชันเดียวกับแอป**: ให้ sync อ่าน `bc_cost_cache` ของ release ปัจจุบันจาก fly_state ที่ดึงมาล่าสุด (มีกลไก `pull_fly_state.py` อยู่แล้ว) ถ้าไม่มีให้เรียก `GET /api/bom/release/current/cost-cache` (token) — ห้ามคำนวณต้นทุนเองบน PC อีก (ต่อยอดกฎ #193 ที่มี test กันไว้)
-- **เวลาคำนวณ**: ยอดขายรายวัน 650 k แถว × สูตร → ทำ `bc_demand_day` แบบ incremental (เฉพาะวันที่ sync เพิ่ม) ไม่ join สดทุกครั้ง; API ทุกตัวอยู่ใต้ `ttl_cache` + single-flight ที่มีอยู่
+- **`build_menu_fact.py` บน PC ต้องเห็นเวอร์ชันเดียวกับแอป**: ให้ sync อ่าน `bcd_cost_cache` ของ release ปัจจุบันจาก fly_state ที่ดึงมาล่าสุด (มีกลไก `pull_fly_state.py` อยู่แล้ว) ถ้าไม่มีให้เรียก `GET /api/bom/release/current/cost-cache` (token) — ห้ามคำนวณต้นทุนเองบน PC อีก (ต่อยอดกฎ #193 ที่มี test กันไว้)
+- **เวลาคำนวณ**: ยอดขายรายวัน 650 k แถว × สูตร → ทำ `bcd_demand_day` แบบ incremental (เฉพาะวันที่ sync เพิ่ม) ไม่ join สดทุกครั้ง; API ทุกตัวอยู่ใต้ `ttl_cache` + single-flight ที่มีอยู่
 - **สิทธิ์ (RBAC)**: โมดูลใหม่ `bom.view`, `bom.edit` + `bom.release` (analyst — **ผู้ปล่อย**), `bom.audit` (management — **ตรวจ/รับทราบหลังปล่อย** และสั่งย้อนกลับได้), `scm.price` (ผู้นำเข้าราคาซื้อจริงจากบัญชี), `scm.orders` (Sales Support — คิวออเดอร์สาขา), `branch.stock`, `branch.order` (สาขา), `ops.variance` (Ops) + **role ใหม่ `branch`** 1 บัญชีต่อสาขา ผูก `app_user.branch_id` (คอลัมน์ใหม่) + ช่อง "ชื่อผู้นับ/ผู้สั่ง" ตอนส่ง (§10-3, §10-5, §10-6)
 - **การเขียน**: ทุก POST/PUT ผ่าน `require_write_token` ตามกฎ write-auth เดิม; log ลง `bc_audit` (ใคร/อะไร/ค่าเดิม/ค่าใหม่)
 - **Deploy**: ตามเดิมเท่านั้น (`bash scripts/deploy-clean.sh`), ทุก PR ต้อง `gh pr checks` เขียว, golden tests ต้องไม่เปลี่ยนจนถึง cut-over
@@ -254,7 +256,7 @@
 ### 5.6 การย้ายข้อมูลและ parity (หัวใจความปลอดภัย)
 
 1. **Release v0** = รัน `cost_sources.apply_all` ครั้งสุดท้าย แล้ว snapshot `sku_effective_cost` + `bom_ingredients` + `sku_cost` + overrides เข้า `bc_*` ด้วยสคริปต์ dry-run/backup ตามธรรมเนียม (`--apply` + `.pre_bc_*` backup)
-2. **ทดสอบ parity v0**: COGS เดือน ก.ย. 69 รายสาขา จาก engine ใหม่ (อ่าน v0) = engine เดิม **เท่ากันทุกบาท**; golden tests ผ่านครบ → จึงเปิดให้ engine อ่านจาก `bc_cost_cache`
+2. **ทดสอบ parity v0**: COGS เดือน ก.ย. 69 รายสาขา จาก engine ใหม่ (อ่าน v0) = engine เดิม **เท่ากันทุกบาท**; golden tests ผ่านครบ → จึงเปิดให้ engine อ่านจาก `bcd_cost_cache`
 3. **Release v1 draft** = นำเข้า Cost-RW (BF) + ราคาซื้อจริงถัวเฉลี่ยของเดือนล่าสุดที่บัญชีปิด (DATAP 2569-07 เก็บเป็นราคาอ้างอิงและใช้ tie-out กับ sheet) + mapping 28 ชื่อ (สูตรกึ่งสำเร็จไว้ Phase 1.5 ตาม §10-8)
 4. **รายงาน v0→v1**: ต้นทุน/เมนู (194), COGS รายสาขา/เดือน, %/Tier, ความครอบคลุมจาน — คือสิ่งที่ analyst ตรวจ (น่าจะพบ: เมนูที่ v0 ใช้ต้นทุนเหมาเก่า, ทุเรียน ฿68 ที่ v1 ไม่มีถ้า sheet ไม่มี ฯลฯ) → แก้ใน draft จนยอมรับ → analyst ปล่อย v1 ภายใน 25 ธ.ค. 69 มีผล 2027-01 (ราคาซื้อจริงถัวเฉลี่ย พ.ย. 69 ตามกฎความล่าช้า §5.1-3) → management ตรวจ/รับทราบ
 5. **Cut-over**: หลัง v1 ปล่อย ทุกรายงานอ่าน v1 สำหรับเดือนที่มีผลเป็นต้นไป; **ประวัติเดือนก่อนยังอ่าน v0** (ตารางเวอร์ชันมี `effective_month` — นี่คือสิ่งที่ระบบเดิมทำไม่ได้)
@@ -267,7 +269,7 @@
 | **S1** | 2–3 | M1 Ingredient Master (นำเข้า DATAP + order_unit + ใบคลัง) + M2 Converter + M4 Price Import จากรายงานซื้อของบัญชี (template + ถัวเฉลี่ยถ่วงน้ำหนัก + กฎราคาล่าสุดที่มี + ค่าต่อสาขา; DATAP เป็นราคาอ้างอิง) + โครงตาราง `bc_prep_recipe*` | หน้า "วัตถุดิบ" + "ราคาเดือนนี้" ใช้ได้; 315 รหัสมี unit rule ครบ; ราคาซื้อจริงเดือนล่าสุดนำเข้าได้จริงจากไฟล์บัญชี |
 | **S2** | 4–5 | M3 Recipe by Tier + import Cost-RW/CSV + export template + mapping 28 ชื่อ | v1 draft ครบ 194 เมนู; tie-out ±฿0.01 (เทียบที่ราคา DATAP เดียวกับ sheet ก่อนสลับเป็นราคาซื้อจริง) |
 | **S3** | 6–7 | M5 Review/Release + ด่านตรวจ 12 ข้อ + รายงาน v0→v1 + ขั้น management รับทราบหลังปล่อย + audit log + RBAC โมดูลใหม่ (analyst ปล่อย / management ตรวจ) | analyst ปล่อย v1 ได้ (บน staging copy ก่อน); management เห็นรายงานเทียบและกดรับทราบได้ |
-| **S4** | 8–9 | M6 adapter → engine/menu_fact/แผนสั่ง/เทียบเมนู อ่าน release; `bc_demand_day`; Forecast v1 (ปฏิทินรอบ, lead time, แซลมอน, safety stock, ระเบิดถึงดิบ) | regression 4 รายงานเท่ากัน; ต้นทุน %/Tier ออกจากแอป = ไฟล์ Cal ต้นทุน (อุดร ก.ย.) ภายใน ±1 pp |
+| **S4** | 8–9 | M6 adapter → engine/menu_fact/แผนสั่ง/เทียบเมนู อ่าน release; `bcd_demand_day`; Forecast v1 (ปฏิทินรอบ, lead time, แซลมอน, safety stock, ระเบิดถึงดิบ) | regression 4 รายงานเท่ากัน; ต้นทุน %/Tier ออกจากแอป = ไฟล์ Cal ต้นทุน (อุดร ก.ย.) ภายใน ±1 pp |
 | **S5** | 10 | hardening, คู่มือ 2 หน้า (analyst/บัญชี-ราคา/management), training 1 ชม., ปิดการใช้ `apply_all` | Cut-over + ทบทวน 2 สัปดาห์หลังปล่อย |
 
 ### 5.8 Phase 1.5 — สูตรกึ่งสำเร็จ (2 สัปดาห์ ต่อจาก S5 · §10-8)
@@ -308,7 +310,7 @@
 | ข้อ | ความต้องการ | สิ่งที่ส่งมอบ | เกณฑ์ตรวจรับ |
 |---|---|---|---|
 | 1 | ใส่ beginning stock | หน้า "นับสต๊อก" มือถือ: รายการตามโซนเก็บ (แช่แข็ง/แช่เย็น/แห้ง) ในหน่วยครัว, ค่าครั้งก่อนแสดงจาง, รูปแนบ (ไม่บังคับ), ต้นงวดครั้งแรกเท่านั้น — รอบถัดไป **ปลายงวดเดิม = ต้นงวดใหม่อัตโนมัติ** | นับครบรายการบังคับ (A-class) ≤ 20 นาที; ไม่ต้องกรอกต้นงวดซ้ำ |
-| 2 | แจ้งการใช้ตาม BoM | หน้า "การใช้ตามสูตร" ต่อช่วงนับ: ยอดขาย × สูตร (release เดือนนั้น) ต่อวัตถุดิบ, แยกเมนูต้นทาง (drill) | ตรงกับ `bc_demand_day` รวมช่วง; มีลิงก์ไปเมนู |
+| 2 | แจ้งการใช้ตาม BoM | หน้า "การใช้ตามสูตร" ต่อช่วงนับ: ยอดขาย × สูตร (release เดือนนั้น) ต่อวัตถุดิบ, แยกเมนูต้นทาง (drill) | ตรงกับ `bcd_demand_day` รวมช่วง; มีลิงก์ไปเมนู |
 | 3 | ใส่ ending stock ก่อนสั่ง | ปุ่ม "นับก่อนสั่ง" ในหน้าสั่งของ → บันทึก `kind='end'` ประทับเวลา; ไม่นับ = สั่งได้แต่ติดป้าย "ไม่หักสต๊อก" (ไม่ปิดกั้น — ตามกฎ no-kill/adoption) | ทุกออเดอร์บันทึกว่ามี/ไม่มีการนับ |
 | 4 | เทียบ actual vs BoM | ผลต่าง = (ต้น + รับเข้า − ปลาย) − ทฤษฎี; รายวัตถุดิบ/รอบ/สาขา; % และ ฿; เกณฑ์ตามชั้น (A ±5 %, B ±10 %, C ±20 %); รหัสเหตุผลที่สาขากรอก (ของเสีย/หมดอายุ/ชิม-พนักงาน/ตักเกิน/โอนสาขา/นับผิด/อื่น) | ผลต่างคำนวณได้เมื่อมีนับปลาย+ต้น+รับเข้าครบ; ไม่ครบ → แสดง "ไม่สมบูรณ์" ไม่เดา |
 | 5 | รายงานวิเคราะห์ให้ Ops ตรวจต่อ | หน้า "ผลต่างการใช้" (Ops): สาขา × วัตถุดิบ heatmap, Top gap ฿, แนวโน้ม 8 รอบ, แยก "ยังไม่มีเหตุผล", ส่งออก Excel/พิมพ์ A4 (รูปแบบจดหมายเดิม) | Ops เลือกสาขา/ช่วง แล้วได้รายการตรวจ ≤ 10 บรรทัด/สาขา เรียงตาม ฿ |
@@ -438,9 +440,9 @@
 | ราคาถัวเฉลี่ยกลบความต่างระหว่างสาขา | เก็บค่าต่อสาขาคู่กัน (`bc_ingredient_price_branch`) + รายงานราคาต่างกันระหว่างสาขา (§8-S6) |
 | ไฟล์ Cost-RW มี error 102 จุด/ชื่อไม่ตรง 28 | ด่านตรวจบล็อก; หน้าจับคู่ชื่อ; ไม่มี "นำเข้าแล้วมีผลทันที" |
 | ตารางผู้ใช้ถูก DB swap ลบ (บั๊กซ้ำ) | prefix `bc_` preserved ตั้งแต่ PR แรก + ตรวจ manifest สำรองรายคืน |
-| PC (`build_menu_fact`) กับเว็บเห็นต้นทุนต่างเวอร์ชัน | PC อ่าน `bc_cost_cache` จาก fly_state/API เท่านั้น + test ห้ามคำนวณเอง |
+| PC (`build_menu_fact`) กับเว็บเห็นต้นทุนต่างเวอร์ชัน | PC อ่าน `bcd_cost_cache` จาก fly_state/API เท่านั้น + test ห้ามคำนวณเอง |
 | สาขาไม่นับ/นับมั่ว | ไม่บังคับแต่ติดป้าย; KPI การใช้งาน; blind count; pilot ก่อน |
-| ประสิทธิภาพ (650 k แถวรายวัน × สูตร) | `bc_demand_day` incremental; cache เดิม; heavy cap |
+| ประสิทธิภาพ (650 k แถวรายวัน × สูตร) | `bcd_demand_day` incremental; cache เดิม; heavy cap |
 | ขอบเขตบาน (AL, ของหวาน, เครื่องดื่ม, คลังกลาง) | ประตูเฟสชัด; AL = 2 สัปดาห์หลัง P1; คลังกลางเป็นรายงานไม่ใช่ WMS |
 | สูตรกึ่งสำเร็จยังไม่นำเข้าใน Phase 1 (เลื่อนเป็น 1.5 ตาม §10-8) | เตือนไม่บล็อกใน Phase 1; แสดง "ราคาซื้อ/อ้างอิง รอสูตร" ชัด; โครงตารางพร้อมตั้งแต่ S1 เพื่อให้ 1.5 เป็นงานข้อมูล ไม่ใช่งาน schema |
 

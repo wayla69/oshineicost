@@ -352,7 +352,13 @@ _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_sett
                      "branch_downtime", "cost_override", "requisition_line", "stock_count",
                      "ingredient_sourcing", "ingredient_order_issue", "ingredient_order_issue_line",
                      "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar")
-_PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
+#   bc_*               the BoM Calculation Center (backend/bom_center, docs/ADR-001): recipes,
+#                      releases, monthly prices, order calendars, stock counts, orders — all
+#                      typed or imported ON the site. The prefix IS the ownership rule, so a new
+#                      center table never has to be added here by name. Its derived tables are
+#                      named bcd_* on purpose: 'bc\_%' does not match them, and they must be
+#                      rebuilt after a swap (new sales), never copied over it.
+_PRESERVED_PREFIXES = ("recon", "feedback", "checklist", "bc")  # + "_" (escaped in the LIKE)
 
 
 # Tables BOTH sides write, where neither copy may simply win:

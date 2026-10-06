@@ -23,7 +23,7 @@ jobs:
           # the PINNED runtime set production runs on, plus the test tools
           pip install -r requirements.txt -r requirements-dev.txt pyflakes "python-pptx" "python-dateutil"
       - name: pyflakes (the backend is kept at zero warnings)
-        run: python -m pyflakes $(ls *.py | grep -v '^test_\|^conftest') routers/*.py
+        run: python -m pyflakes $(ls *.py | grep -v '^test_\|^conftest') routers/*.py bom_center/*.py
       - name: Run tests (with coverage)
         env:
           OSHINEI_NO_SWAP: "1"   # never touch a real DB during import
