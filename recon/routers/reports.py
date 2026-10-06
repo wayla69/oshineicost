@@ -1907,7 +1907,8 @@ def open_items_aging_xlsx(period_month: str, branch_id: int | None = None, lookb
         if branch_id:
             _validate_master_branch(conn, branch_id)
         ag = _open_items_aging(conn, period_month, branch_id, max(0, min(6, lookback)))
-    _ty = {"upload": "อัปโหลดเอกสาร", "setup": "ตั้งค่า", "diff": "ตรวจผลต่าง", "waiting": "รอเอกสาร"}
+    _ty = {"upload": "อัปโหลดเอกสาร", "setup": "ตั้งค่า", "diff": "ตรวจผลต่าง", "waiting": "รอเอกสาร",
+           "payout": "ยอดโอนจากผู้ให้บริการ"}
     body = [[it["age_days"], it["bucket"], it["period_month"], it["branch_name"],
              _ty.get(it["type"], it["type"]), it["label"]] for it in ag["items"]]
     return _xlsx_response(

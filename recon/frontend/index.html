@@ -995,6 +995,9 @@ async function loadBranch(bid){
   // (A) การ์ดปัญหา — diff / setup / เอกสารหายจริง
   _bucket.problem.forEach(i=>{ html+=chProblemCard(r.channels[i],i,closed); });
 
+  // (A2) ยอดโอนจากผู้ให้บริการ ≠ รายงานสุทธิ — เดิมอยู่แค่ใน #discrepancies ทำให้ "พร้อมปิด" แต่ปิดไม่ได้
+  html+=payoutIssuesCard(r,bid,closed);
+
   // (B) เศษเหรียญ ≤฿100 — รวมเป็นการ์ดเดียว กดรับทราบทั้งหมด
   if(_bucket.coin.length && !closed){
     const sum=_bucket.coin.reduce((a,i)=>a+Math.abs(r.channels[i].variance),0);
@@ -1053,6 +1056,11 @@ async function loadBranch(bid){
             <td style="text-align:left"><span class="chip ${cls}">${lab}</span>
               ${c.accepted?` <span class="lbl">"${esc(c.accepted.note)}" — ${esc(c.accepted.by||'staff')}</span>`
                 :c.detail?` <span class="lbl">${esc(c.detail)}</span>`:''}</td></tr>`;}).join('')}
+        ${(r.payout_issues||[]).map(p=>`<tr><td>ยอดโอน ${esc(p.label)}</td><td class="mono">${fmt(p.report_net)}</td>
+          <td class="mono">${fmt(p.bank_payout)}</td>
+          <td class="mono" style="color:var(--err)">${p.variance>0?'+':''}${fmt(p.variance)}</td>
+          <td style="text-align:left">${p.accepted?`<span class="chip c-mut">รับทราบ</span> <span class="lbl">"${esc(p.accepted.note)}" — ${esc(p.accepted.by||'staff')}</span>`
+            :'<span class="chip c-err">ยังไม่ตรง</span>'}</td></tr>`).join('')}
         ${r.non_revenue.count?`<tr><td style="color:var(--sub)">โอนภายใน (ตัดออก)</td><td></td>
           <td class="mono" style="color:var(--sub)">${fmt(r.non_revenue.amount)}</td><td></td>
           <td style="text-align:left" class="lbl">${r.non_revenue.count} รายการ — ไม่นับเป็นยอดขาย</td></tr>`:''}
@@ -1332,11 +1340,41 @@ const ACCEPT_REASONS=[
   'ลูกค้าโอนผิดบัญชี/คืนเงินภายหลัง',
 ];
 let _acceptCtx=null;
+function payoutIssuesCard(r,bid,closed){
+  const ps=r.payout_issues||[]; if(!ps.length)return '';
+  const open=ps.filter(p=>!p.accepted).length;
+  return `<div class="card" style="margin-bottom:12px;${open?'background:var(--err-bg);border:1px solid var(--err)':''}">
+    <div class="row"><b style="font-size:14px"><i class="ti ti-building-bank" aria-hidden="true"></i> ยอดโอนจากผู้ให้บริการไม่ตรงรายงาน${open?` · ค้าง ${open}`:''}</b>
+      <a class="btn btn-sm" style="margin-left:auto" href="#payout?bid=${bid}"><i class="ti ti-zoom-in" aria-hidden="true"></i> ดูรายการโอนรายวัน</a></div>
+    <div class="muted" style="margin:2px 0 6px">เทียบยอดสุทธิในรายงาน Grab / Line Man / บัตร กับเงินที่โอนเข้าธนาคารจริง — ต้องตรวจหรือรับทราบพร้อมเหตุผลก่อนปิดเดือน</div>
+    ${ps.map(p=>`<div class="todo-item"><span style="flex:1"><b>${esc(p.label)}</b>
+        <span class="lbl mono">รายงานสุทธิ ${fmt(p.report_net)} · เงินเข้า ${fmt(p.bank_payout)} · ต่าง ${p.variance>0?'+':''}${fmt(p.variance)}</span>
+        ${p.accepted?`<br><span class="lbl">รับทราบแล้ว: "${esc(p.accepted.note)}" — ${esc(p.accepted.by||'staff')}</span>`:''}</span>
+      ${closed?'':p.accepted
+        ?`<button class="btn btn-sm" onclick="unacceptPayout(${+p.accepted.id},this)">เลิกรับทราบ</button>`
+        :`<button class="btn btn-sm" onclick="acceptPayout(${jsa(p.category)})">✓ รับทราบ + เหตุผล</button>`}
+    </div>`).join('')}</div>`;
+}
+function acceptPayout(cat){
+  const p=((DATA&&DATA.payout_issues)||[]).find(x=>x.category===cat); if(!p)return;
+  _acceptCtx={channel:cat,label:'ยอดโอน '+p.label+' ต่าง '+fmt(p.variance)+' บาท',payout:true};
+  _acceptSheet(_acceptCtx.label);
+}
+async function unacceptPayout(id,btn){
+  await busy('unaccept-payout',btn,async()=>{
+    try{await api(`/api/payout-ack/${id}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
+    catch(e){toast('ไม่สำเร็จ: '+e.message);}
+  });
+}
 function acceptTodo(i){
   const t=((DATA&&DATA.todo)||[])[i];
   const channel=t&&t.channel, label=(t&&t.label)||'';
   if(!channel){toast('ข้อนี้รับทราบไม่ได้ — ต้องอัปโหลดเอกสาร');return;}
+  if(t.type==='payout'){acceptPayout(channel);return;}
   _acceptCtx={channel,label};
+  _acceptSheet(label);
+}
+function _acceptSheet(label){
   const opts=ACCEPT_REASONS.map((rsn,k)=>
     `<button class="btn rc-reason" onclick="pickAcceptReason(${k})">${esc(rsn)}</button>`).join('');
   showSheet(`<div class="sheet-h">รับทราบผลต่าง: ${esc(label)}</div>
@@ -1354,7 +1392,9 @@ async function submitAccept(btn){
   if(note.length<10){toast('ต้องใส่เหตุผลอย่างน้อย 10 ตัวอักษร');return;}
   const ctx=_acceptCtx;if(!ctx)return;
   await busy('accept',btn,async()=>{
-    try{await api('/api/lanes/adj',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+    try{if(ctx.payout){await ensureSession(DATA.branch_id);
+          await api('/api/payout-ack',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,category:ctx.channel,note:note}});}
+        else await api('/api/lanes/adj',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
         category:ctx.channel,bank:'ALL',adj_pos:0,adj_ext:0,note:note,adj_type:'accept'}});
         closeSheet();toast('รับทราบแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
   });

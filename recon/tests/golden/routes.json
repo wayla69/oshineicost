@@ -378,6 +378,18 @@
   ]
  ],
  [
+  "/api/payout-ack",
+  [
+   "POST"
+  ]
+ ],
+ [
+  "/api/payout-ack/{disc_id}",
+  [
+   "DELETE"
+  ]
+ ],
+ [
   "/api/payout-matching",
   [
    "GET"

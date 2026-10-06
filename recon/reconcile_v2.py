@@ -29,6 +29,7 @@ from .matcher import (
     daily_reconciliation,
     map_bank_suggestions,
     payout_matching,
+    payout_reconciliation,
     point_pos_total,
     point_settlement_total,
     suggest_internal_transfers,
@@ -38,7 +39,7 @@ from .matcher import (
     _REAL_BANKS,
     _BANK_LABEL,
 )
-from .matcher._shared import memo_scoped
+from .matcher._shared import TOL_ABS, memo_scoped
 
 # Channel order + Thai labels (the UI renders these verbatim)
 CHANNELS = [
@@ -174,6 +175,45 @@ def _pos_codes_by_channel(conn, branch_id, period_month):
         out.setdefault(cat, []).append({"code": code, "bank": bank, "amount": round(amt, 2)})
     for cat in out:
         out[cat].sort(key=lambda x: -x["amount"])
+    return out
+
+
+# Stage-2 payout gaps (provider NET ↔ the bank credit it should have paid) used to
+# live only in #discrepancies: run-match queued them, the branch page never showed
+# them, so "พร้อมปิดเดือน" could still 409 at approval. Owner 2026-10-06: show them
+# on the branch page. An acknowledgement is a non-pending PAYOUT discrepancy whose
+# variance still matches the live gap — the same rule run-match uses to not re-queue it.
+_PAYOUT_LABEL = {**_CH_LABEL, "CREDIT": "บัตรเครดิต (ยอดโอนจากธนาคาร)",
+                 "BAYPOINT": "BAY Point"}
+
+
+def _payout_issues(conn, branch_id, period_month, session_id):
+    try:
+        rows = payout_reconciliation(conn, branch_id, period_month)
+    except sqlite3.OperationalError:
+        return []
+    settled = {}
+    if session_id:
+        for d in conn.execute(
+                "SELECT id, category, variance, resolution, resolution_note, resolved_by "
+                "FROM recon_discrepancies WHERE session_id=? AND bank='PAYOUT' "
+                "AND disc_type='amount_mismatch' AND resolution!='pending'", (session_id,)):
+            settled.setdefault(d["category"], []).append(dict(d))
+    out = []
+    for r in rows:
+        if r["status"] != "mismatch":
+            continue
+        acc = next((d for d in settled.get(r["category"], ())
+                    if abs(float(d["variance"] or 0) - float(r["variance"] or 0)) <= TOL_ABS), None)
+        out.append({"category": r["category"],
+                    "label": _PAYOUT_LABEL.get(r["category"], r["category"]),
+                    "report_net": float(r.get("report_net") or 0),
+                    "bank_payout": float(r.get("bank_payout") or 0),
+                    "variance": float(r.get("variance") or 0),
+                    "accepted": ({"id": acc["id"],
+                                  "note": (acc["resolution_note"] or "").removeprefix("รับทราบ: "),
+                                  "by": acc["resolved_by"], "resolution": acc["resolution"]}
+                                 if acc else None)})
     return out
 
 
@@ -442,6 +482,12 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     # To-do list = exactly what blocks the month from closing. A channel-level
     # "accept" (acknowledged variance with a reason) clears its items — that's
     # the escape hatch that lets a month close over a ฿396 missing report.
+    session = conn.execute(
+        "SELECT session_id, status, created_by, approved_at, approved_by "
+        "FROM recon_sessions WHERE branch_id=? AND period_month=?",
+        (branch_id, period_month)).fetchone()
+    payout_issues = _payout_issues(conn, branch_id, period_month,
+                                   session["session_id"] if session else None)
     todo = []
     for doc in docs:
         if doc["status"] == "missing" and not (doc["channel"] and doc["channel"] in accepted):
@@ -465,11 +511,13 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                 t["type"] == "upload" for t in todo):
             todo.append({"type": "waiting", "channel": ch["key"],
                          "label": f"{ch['label']}: {ch['detail']}"})
+    for p in payout_issues:
+        if not p["accepted"]:
+            todo.append({"type": "payout", "channel": p["category"],
+                         "label": (f"ยอดโอนจาก {p['label']} ไม่ตรงรายงาน — รายงานสุทธิ "
+                                   f"{p['report_net']:,.2f} · เงินเข้า {p['bank_payout']:,.2f} "
+                                   f"({p['variance']:+,.0f} บาท)")})
 
-    session = conn.execute(
-        "SELECT session_id, status, created_by, approved_at, approved_by "
-        "FROM recon_sessions WHERE branch_id=? AND period_month=?",
-        (branch_id, period_month)).fetchone()
     branch = conn.execute(
         "SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()
 
@@ -505,6 +553,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         "setup_questions": setup_q,
         "reclass_suggestions": reclass,
         "internal_transfer_suggestions": internal_xfers,
+        "payout_issues": payout_issues,
         "todo": todo,
         "progress_pct": progress,
         "can_close": not todo,
