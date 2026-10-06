@@ -890,3 +890,124 @@ def bc_release_history(release_id: int = Query(...)):
                            (str(release_id), f"{release_id}|%")).fetchall()
     cols = ("at", "who", "action", "table", "key", "old", "new")
     return {"rows": [dict(zip(cols, r)) for r in rows]}
+
+
+# ── M7 Forecast Engine v1 + order calendar (Sprint S4b) ──────────────────────
+# The calendar is the SALES team's to fill (owner §10-7) and Sales Support runs the
+# suggestions: writes under /api/bom-center/order-calendar and /forecast are open to
+# supply.ordering as well as bom.center (auth.MODULE_RULES).
+from bom_center import forecast as _fc                                         # noqa: E402
+
+
+def _parse_day(d: Optional[str]):
+    from datetime import date as _d
+    if not d:
+        return _d.today()
+    try:
+        return _d.fromisoformat(d)
+    except ValueError:
+        raise HTTPException(400, "วันที่ต้องเป็น YYYY-MM-DD")
+
+
+@router.get("/api/bom-center/order-calendar")
+def bc_order_calendar():
+    with get_db() as con:
+        _ensure(con)
+        rows = []
+        for bid, name in con.execute("SELECT branch_id, name FROM branches WHERE name != 'ALL'"
+                                     " AND COALESCE(active, 1) = 1 ORDER BY name"):
+            cal = _fc.calendar(con, bid)
+            rows.append({"branch_id": bid, "branch": name, **{f"r{k}": v for k, v in cal.items()}})
+    return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL}
+
+
+class CalRow(BaseModel):
+    branch_id: int
+    round: str
+    order_weekday: int
+    delivery_weekday: Optional[int] = None
+    lead_days: Optional[int] = None
+
+
+@router.post("/api/bom-center/order-calendar", dependencies=[Depends(require_write_token)])
+def bc_order_calendar_save(rows: List[CalRow], request: Request):
+    from datetime import datetime as _dt, timezone as _tz
+    allowed = {"1": (2, 3), "2": (5, 6), "salmon": tuple(range(7))}            # owner: Tue/Wed · Fri/Sat
+    who = _who(request)
+    now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    def go():
+        for r in rows:
+            if r.round not in allowed:
+                raise ValueError(f"รอบ {r.round} ไม่รู้จัก")
+            if r.order_weekday not in allowed[r.round]:
+                raise ValueError(f"รอบ {r.round} สั่งได้เฉพาะวัน {', '.join(_fc.WD_TH[i] for i in allowed[r.round])}")
+            if r.lead_days is not None and not (0 <= r.lead_days <= 14):
+                raise ValueError("ระยะส่งต้องอยู่ระหว่าง 0–14 วัน")
+            con.execute("INSERT OR REPLACE INTO bc_order_calendar(branch_id, round, order_weekday, delivery_weekday,"
+                        " lead_days, filled_by, updated_at) VALUES(?,?,?,?,?,?,?)",
+                        (r.branch_id, r.round, r.order_weekday, r.delivery_weekday, r.lead_days, who, now))
+            _m.audit(con, who, "order_calendar", "bc_order_calendar", f"{r.branch_id}|{r.round}", None,
+                     f"{r.order_weekday}/{r.delivery_weekday}/{r.lead_days}")
+    with get_db() as con:
+        _ensure(con)
+        _write(con, go)
+    return {"ok": True, "rows": len(rows)}
+
+
+@router.get("/api/bom-center/forecast")
+def bc_forecast(branch_id: int = Query(...), round: str = Query("1"), order_day: Optional[str] = Query(None),
+                weeks: int = Query(6, ge=2, le=12), season: str = Query("auto")):
+    if round not in ("1", "2", "salmon"):
+        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือ salmon")
+    with get_db() as con:
+        _ensure(con)
+        return _fc.suggest(con, branch_id, round, _parse_day(order_day), weeks=weeks,
+                           season="auto" if season == "auto" else "off")
+
+
+class RunBody(BaseModel):
+    branch_id: int
+    round: str = "1"
+    order_day: Optional[str] = None
+    weeks: int = 6
+    season: str = "auto"
+
+
+@router.post("/api/bom-center/forecast/run", dependencies=[Depends(require_write_token)])
+def bc_forecast_save(body: RunBody, request: Request):
+    """Freeze a suggestion: Phase 2's order screen and compliance judge against it."""
+    if body.round not in ("1", "2", "salmon"):
+        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือ salmon")
+    with get_db() as con:
+        _ensure(con)
+        out = _fc.suggest(con, body.branch_id, body.round, _parse_day(body.order_day), weeks=body.weeks,
+                          season="auto" if body.season == "auto" else "off")
+        rid = _write(con, lambda: _fc.save_run(con, out, _who(request), body.dict()))
+    return {"ok": True, "run_id": rid, "lines": len(out["rows"]), "value_total": out["value_total"]}
+
+
+@router.get("/api/bom-center/forecast/runs")
+def bc_forecast_runs(branch_id: Optional[int] = Query(None), limit: int = Query(50, ge=1, le=500)):
+    with get_db() as con:
+        _ensure(con)
+        q = ("SELECT r.run_id, r.branch_id, b.name, r.cycle_date, r.round, r.cover_from, r.cover_to, r.created_at,"
+             " r.created_by, (SELECT COUNT(*) FROM bc_forecast_line l WHERE l.run_id = r.run_id),"
+             " (SELECT ROUND(SUM(COALESCE(l.suggested_units * l.qty_per_order, l.forecast_base + l.safety_base)"
+             "  * l.price_per_base), 2) FROM bc_forecast_line l WHERE l.run_id = r.run_id)"
+             " FROM bc_forecast_run r LEFT JOIN branches b USING(branch_id)")
+        args = []
+        if branch_id:
+            q += " WHERE r.branch_id = ?"
+            args.append(branch_id)
+        rows = con.execute(q + " ORDER BY r.run_id DESC LIMIT ?", args + [limit]).fetchall()
+    cols = ("run_id", "branch_id", "branch", "order_day", "round", "cover_from", "cover_to", "created_at",
+            "created_by", "lines", "value")
+    return {"rows": [dict(zip(cols, r)) for r in rows]}
+
+
+@router.get("/api/bom-center/forecast/backtest")
+def bc_forecast_backtest(branch_id: int = Query(...), weeks: int = Query(4, ge=1, le=8)):
+    with get_db() as con:
+        _ensure(con)
+        return _fc.backtest(con, branch_id, weeks=weeks)
