@@ -7,7 +7,8 @@
 const BOARD_COLS=[['QR','QR'],['CASH','เงินสด'],['TRANSFER','เงินโอน'],['CREDIT','บัตร'],
                   ['GRAB','Grab'],['LINEMAN','Line Man'],['COUPON','คูปอง']];
 
-/* ── กำหนดปิดเดือน: เดือน M ต้องปิดภายในวันที่ 25 ของเดือน M+1 (วันที่ตามเวลาไทย) ── */
+/* ── กำหนดปิดเดือน: เดือน M ต้องปิดภายในวันที่ CLOSE_DAY ของเดือน M+1 (วันที่ตามเวลาไทย) — owner 2026-10-06: วันที่ 5 ── */
+const CLOSE_DAY=5;
 function _bkkToday(){
   try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
   catch(e){return ymdLocal();}
@@ -15,16 +16,16 @@ function _bkkToday(){
 function closeDeadline(ym){
   let y=+ym.slice(0,4), m=+ym.slice(5,7)+1;
   if(m>12){m=1;y++;}
-  return `${y}-${String(m).padStart(2,'0')}-25`;
+  return `${y}-${String(m).padStart(2,'0')}-${String(CLOSE_DAY).padStart(2,'0')}`;
 }
 function _daysBetween(a,b){       // b − a in whole days (YYYY-MM-DD, calendar dates — no clock, no DST)
   const [y1,m1,d1]=a.split('-').map(Number),[y2,m2,d2]=b.split('-').map(Number);
   return Math.round((Date.UTC(y2,m2-1,d2)-Date.UTC(y1,m1-1,d1))/86400000);
 }
-// {cls,text,overdue,days}: chip class + "กำหนดปิด 25 พฤศจิกายน 2569 (อีก 7 วัน)" — red once past the 25th
+// {cls,text,overdue,days}: chip class + "กำหนดปิด 5 พฤศจิกายน 2569 (อีก 7 วัน)" — red once past CLOSE_DAY
 function deadlineInfo(ym,allClosed){
   const dl=closeDeadline(ym), n=_daysBetween(_bkkToday(),dl);
-  const dTh=`25 ${TH_MONTHS[+dl.slice(5,7)]} ${+dl.slice(0,4)+543}`;
+  const dTh=`${CLOSE_DAY} ${TH_MONTHS[+dl.slice(5,7)]} ${+dl.slice(0,4)+543}`;
   if(allClosed)return {cls:'c-ok',text:`กำหนดปิด ${dTh} · ปิดครบแล้ว`,overdue:false,days:n};
   if(n<0)return {cls:'c-err',text:`กำหนดปิด ${dTh} (เกิน ${-n} วัน)`,overdue:true,days:n};
   if(n===0)return {cls:'c-warn',text:`กำหนดปิด ${dTh} (วันนี้วันสุดท้าย)`,overdue:false,days:n};
