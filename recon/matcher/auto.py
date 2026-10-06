@@ -4,7 +4,7 @@ Split out of recon/matcher.py on 2026-09-05 — same code, one lane per module;
 recon.matcher re-exports every name."""
 from __future__ import annotations
 import sqlite3
-from ._shared import _CATEGORY_SOURCE
+from ._shared import TOL_ABS, _CATEGORY_SOURCE
 from .cash import cash_deposit_matching
 from .payout import payout_reconciliation
 from .category import category_reconciliation
@@ -60,6 +60,22 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
     except sqlite3.OperationalError:
         accepted = {}
 
+    # Discrepancies staff already resolved/accepted survive the reset. A re-run must
+    # not plant a fresh pending twin of them (duplicates + a 409 at approval, so
+    # ปิดเดือน — run-match then approve — could never close a month). A resolution
+    # covers the variance it was made on: if the lane has moved beyond tolerance
+    # since, the new figure is a new discrepancy.
+    settled: dict = {}
+    for d in conn.execute(
+            "SELECT category, bank, disc_type, variance FROM recon_discrepancies "
+            "WHERE session_id=? AND resolution!='pending'", (session_id,)):
+        settled.setdefault((d["category"], d["bank"], d["disc_type"]), []).append(
+            float(d["variance"] or 0))
+
+    def _settled(category, bank, disc_type, variance):
+        return any(abs(float(variance or 0) - v) <= TOL_ABS
+                   for v in settled.get((category, bank, disc_type), ()))
+
     for r in rows:
         conn.execute("""
             INSERT INTO recon_category_result
@@ -70,14 +86,23 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
 
         if r["status"] == "matched":
             for table, line_id in r["ext_lines"]:
-                conn.execute(f"UPDATE {table} SET match_status='matched' WHERE id=?", (line_id,))
+                # manual (tick-to-match) / excluded lines are staff decisions — keep them
+                conn.execute(f"UPDATE {table} SET match_status='matched' WHERE id=? "
+                             f"AND match_status NOT IN ('manual','excluded')", (line_id,))
         else:
+            # COUPON with no issuer points has nothing to check against — the branch
+            # page shows it as no_source (no todo), so it must not block approval.
+            if r["category"] == "COUPON" and r["status"] == "no_source":
+                continue
             disc_type = {
-                "mismatch":  "amount_mismatch",
-                "ext_only":  "unmatched_external",
-                "pos_only":  "unmatched_pos",
-                "no_source": "unmatched_pos",
-            }[r["status"]]
+                "mismatch":    "amount_mismatch",
+                "ext_only":    "unmatched_external",
+                "pos_only":    "unmatched_pos",
+                "no_source":   "unmatched_pos",
+                "waiting_doc": "unmatched_pos",     # COUPON: points summary not uploaded
+            }.get(r["status"], "amount_mismatch")
+            if _settled(r["category"], r["bank"], disc_type, r["variance"]):
+                continue
             acc = accepted.get(r["category"])
             if acc:
                 conn.execute("""
@@ -109,7 +134,8 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
     # discrepancy; awaiting_payout/ext_only are informational (shown, not queued).
     payouts = payout_reconciliation(conn, branch_id, period_month)
     for p in payouts:
-        if p["status"] == "mismatch":
+        if p["status"] == "mismatch" and not _settled(p["category"], "PAYOUT",
+                                                        "amount_mismatch", p["variance"]):
             conn.execute("""
                 INSERT INTO recon_discrepancies
                     (session_id, disc_type, source_type, category, bank,
