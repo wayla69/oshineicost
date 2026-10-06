@@ -460,7 +460,7 @@ function brnRenderOrder() {
   document.getElementById('brnOrdHead').innerHTML = `<div style="color:var(--text-primary)" class="text-sm">วันสั่ง <b>${esc(p.order_day)}</b> (${esc(p.order_weekday)}) · วันส่ง ${esc(p.delivery)} ·
       ใช้ได้ ${esc(p.cover_from)} ถึง ${esc(p.cover_to)} (${p.cover_days} วัน)</div>
     <div class="mt-1" style="color:var(--text-secondary)">${stockLine}</div>
-    <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่ง #${o.order_id} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}` : _bmcChip('ยังไม่มีใบสั่งรอบนี้', 'var(--text-muted)')}
+    <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่งซื้อ #${o.order_id} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}` : _bmcChip('ยังไม่มีใบสั่งซื้อรอบนี้', 'var(--text-muted)')}
       · มูลค่าที่สั่ง ≈ <b>฿${_bmcNum(total, 0)}</b>${p.calendar_filled ? '' : ' · <span style="color:var(--amber-ink)">ใช้วันสั่งค่าเริ่มต้น · Sales Support กำหนดวันสั่งได้ที่ BoM Center</span>'}</div>`;
   const q = (document.getElementById('brnOrdQ').value || '').trim().toLowerCase();
   const only = document.getElementById('brnOrdOnly').checked;
@@ -499,7 +499,7 @@ function brnRenderOrder() {
   document.getElementById('brnOrdList').innerHTML = html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องสั่ง (คงเหลือเพียงพอ)</span>';
   const btn = (label, on, primary) => `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
   let acts = '';
-  if (editable) acts = btn('บันทึกร่าง', 'brnOrderSave(false)') + btn('ส่งให้ส่วนกลาง', 'brnOrderSave(true)', true) + (o ? btn('ยกเลิกใบสั่ง', 'brnOrderAct("cancel")') : '');
+  if (editable) acts = btn('บันทึกร่าง', 'brnOrderSave(false)') + btn('ส่งให้ส่วนกลาง', 'brnOrderSave(true)', true) + (o ? btn('ยกเลิกใบสั่งซื้อ', 'brnOrderAct("cancel")') : '');
   else if (o.status === 'submitted') acts = btn('เปิดแก้ไข', 'brnOrderAct("reopen")') + (_brnRecvMode ? btn('บันทึกรับสินค้า', 'brnOrderReceive()', true) : btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true));
   else if (o.status === 'processed') acts = _brnRecvMode ? btn('บันทึกรับสินค้า', 'brnOrderReceive()', true) : btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true);
   document.getElementById('brnOrdActions').innerHTML = acts;
@@ -513,19 +513,19 @@ function _brnOrdLines() {
     .filter(l => l.confirmed_units === null || !isNaN(l.confirmed_units));
 }
 async function brnOrderSave(submit) {
-  if (submit && !confirm('ยืนยันส่งใบสั่งให้ส่วนกลาง (Sales Support)?\nแก้ไขได้จนกว่าส่วนกลางจะเริ่มดำเนินการ')) return;
+  if (submit && !confirm('ยืนยันส่งใบสั่งซื้อให้ส่วนกลาง (Sales Support)?\nแก้ไขได้จนกว่าส่วนกลางจะเริ่มดำเนินการ')) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/save${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ round: _brnRound, order_day: _brnPlan.order_day, lines: _brnOrdLines(), submit }) });
     await brnLoadOrder();
-    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งใบสั่ง #${r.order_id} แล้ว · ฿${_bmcNum(r.value, 0)}` :
+    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งใบสั่งซื้อ #${r.order_id} แล้ว · ฿${_bmcNum(r.value, 0)}` :
       `✓ บันทึกร่าง${r.needs_reason.length ? ` · ต้องระบุเหตุผล ${r.needs_reason.length} รายการก่อนส่ง` : ''}`, r.needs_reason.length && !submit ? 'var(--amber-ink)' : 'var(--good-ink)');
   } catch (e) { _bmcStatus('brnOrdStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 async function brnOrderAct(what) {
   const o = _brnPlan && _brnPlan.order;
   if (!o) return;
-  if (what === 'cancel' && !confirm('ยืนยันยกเลิกใบสั่งนี้?')) return;
+  if (what === 'cancel' && !confirm('ยืนยันยกเลิกใบสั่งซื้อนี้?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/${what}${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST' });
     await brnLoadOrder();

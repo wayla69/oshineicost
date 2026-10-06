@@ -117,9 +117,9 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
     """Sales Support sets what will be sent. Default = what the branch confirmed."""
     o = con.execute("SELECT status, cycle_date FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     if not o:
-        raise ValueError("ไม่พบใบสั่ง")
+        raise ValueError("ไม่พบใบสั่งซื้อ")
     if o[0] not in ("submitted", "processed"):
-        raise ValueError("ดำเนินการได้เฉพาะใบสั่งที่สาขาส่งแล้ว")
+        raise ValueError("ดำเนินการได้เฉพาะใบสั่งซื้อที่สาขาส่งแล้ว")
     given = {(ln.get("code") or "").strip(): ln for ln in lines or []}
     for c, conf in con.execute("SELECT ingredient_code, confirmed_units FROM bc_order_line WHERE order_id=?",
                                (order_id,)).fetchall():

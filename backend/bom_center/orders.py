@@ -99,7 +99,7 @@ def find(con, branch_id: int, rnd: str, cycle_date: str):
 def detail(con, order_id: int) -> dict:
     o = _order_row(con, order_id)
     if not o:
-        raise ValueError("ไม่พบใบสั่ง")
+        raise ValueError("ไม่พบใบสั่งซื้อ")
     names = {c: (n, b) for c, n, b in con.execute("SELECT code, name_th, base_unit FROM bc_ingredient")}
     from .hub import SS_REASON_TH
     o["lines"] = [{"code": c, "name": (names.get(c) or (c,))[0], "suggested_units": s, "confirmed_units": cf,
@@ -139,7 +139,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     if oid:
         o = _order_row(con, oid)
         if o["status"] not in ("suggested", "confirmed"):
-            raise ValueError(f"ใบสั่งนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
+            raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
                              + (" กรุณากดเปิดแก้ไขก่อน" if o["status"] == "submitted" else ""))
     else:
         basis = (suggestion.get("stock") or {}).get("basis") or {}
@@ -196,7 +196,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         if missing:
             raise ValueError(f"จำนวนที่แก้ไขต่างจากที่แนะนำเกิน {DEVIATION_PCT:g}% กรุณาเลือกเหตุผล: " + ", ".join(sorted(set(missing))[:5]))
         if not con.execute("SELECT 1 FROM bc_order_line WHERE order_id=? AND confirmed_units>0", (oid,)).fetchone():
-            raise ValueError("ใบสั่งยังไม่มีรายการสินค้า")
+            raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
         con.execute("UPDATE bc_order SET status='submitted', submitted_at=? WHERE order_id=?", (now(), oid))
         audit(con, who, "order_submit", "bc_order", str(oid), None, {"branch_id": branch_id, "round": rnd,
                                                                      "cycle_date": cycle_date, "value": value})
@@ -221,9 +221,9 @@ def _value(con, order_id: int, cycle_date: str) -> float:
 def reopen(con, branch_id: int, order_id: int, who: str):
     o = _order_row(con, order_id)
     if not o or o["branch_id"] != branch_id:
-        raise ValueError("ไม่พบใบสั่งของสาขานี้")
+        raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] != "submitted":
-        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งที่ส่งแล้วและส่วนกลางยังไม่ดำเนินการ (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและส่วนกลางยังไม่ดำเนินการ (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     con.execute("UPDATE bc_order SET status='suggested', submitted_at=NULL WHERE order_id=?", (order_id,))
     audit(con, who, "order_reopen", "bc_order", str(order_id))
 
@@ -231,7 +231,7 @@ def reopen(con, branch_id: int, order_id: int, who: str):
 def cancel(con, branch_id: int, order_id: int, who: str):
     o = _order_row(con, order_id)
     if not o or o["branch_id"] != branch_id:
-        raise ValueError("ไม่พบใบสั่งของสาขานี้")
+        raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("suggested", "confirmed", "submitted"):
         raise ValueError("ยกเลิกไม่ได้ เนื่องจากส่วนกลางดำเนินการแล้ว")
     con.execute("UPDATE bc_order SET status='cancelled' WHERE order_id=?", (order_id,))
@@ -243,9 +243,9 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     from .variance import add_receipt
     o = _order_row(con, order_id)
     if not o or o["branch_id"] != branch_id:
-        raise ValueError("ไม่พบใบสั่งของสาขานี้")
+        raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("submitted", "processed"):
-        raise ValueError(f"รับสินค้าได้เมื่อส่งใบสั่งแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+        raise ValueError(f"รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     got = {}
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
@@ -263,7 +263,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     rlines = []
     for c, q in got.items():
         if c not in units:
-            raise ValueError(f"{c} ไม่อยู่ในใบสั่งนี้")
+            raise ValueError(f"{c} ไม่อยู่ในใบสั่งซื้อนี้")
         con.execute("UPDATE bc_order_line SET received_units=? WHERE order_id=? AND ingredient_code=?", (q, order_id, c))
         if q > 0:
             u = units[c]

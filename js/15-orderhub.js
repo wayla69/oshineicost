@@ -187,7 +187,7 @@ async function ohbLoadQueue() {
     const byDay = {};
     _ohbQ.orders.forEach(o => { (byDay[o.delivery] = byDay[o.delivery] || []).push(o); });
     const days = Object.keys(byDay).sort();
-    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(d)} · ${byDay[d].length} ใบสั่ง · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
+    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(d)} · ${byDay[d].length} ใบสั่งซื้อ · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
       byDay[d].map(o => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
         <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">#${o.order_id} ${esc(o.branch)}</a>
         <span>${esc(_OHB_RND[o.round] || o.round)} · วันสั่ง ${esc(o.cycle_date)}</span><span>${o.lines} รายการ · ฿${_bmcNum(o.value, 0)}</span>
@@ -197,7 +197,7 @@ async function ohbLoadQueue() {
         ${o.processed_on_time === false ? _bmcChip('ดำเนินการหลัง 14:00', 'var(--bad-ink)') : ''}
         ${o.status === 'processed' ? _bmcChip(`ดำเนินการแล้ว${o.po_ref ? ' · ' + o.po_ref : ''}`, 'var(--good-ink)') : ''}
         ${o.status === 'received' ? _bmcChip('สาขารับแล้ว', 'var(--good-ink)') : ''}</div>`).join('')).join('')
-      : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งในช่วงนี้</span>';
+      : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งซื้อในช่วงนี้</span>';
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 
@@ -265,7 +265,7 @@ async function ohbShowConsolidated() {
         <div style="overflow-x:auto"><table class="w-full text-xs"><tbody>${g.items.map(it => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(it.name)} <span style="color:var(--text-muted)">${esc(it.code)}</span></td>
           <td class="py-1 pr-2 text-right"><b>${_bmcNum(it.total)}</b> ${esc(it.unit || '')}</td>
           <td class="py-1" style="color:var(--text-muted)">${Object.entries(it.by_branch).map(([b, q]) => `${esc(b)} ${_bmcNum(q)}`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>`).join('')
-        : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีใบสั่งในช่วงนี้</div>');
+        : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีใบสั่งซื้อในช่วงนี้</div>');
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadConsolidated() { window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbRange()}`; }
@@ -333,7 +333,7 @@ async function ohbLoadPilot() {
       ${R.centre_steps.map(step).join('')}
       ${R.branches.map(b => `<div style="border-top:1px solid var(--border);padding:6px 0;margin-top:4px">
         <div class="text-sm"><b>${esc(b.branch)}</b> ${b.ready ? _bmcChip('พร้อม', 'var(--good-ink)') : _bmcChip('ยังไม่พร้อม', 'var(--amber-ink)')}
-          <span class="text-xs" style="color:var(--text-muted)">${b.accounts.length ? 'บัญชี: ' + b.accounts.map(a => esc(a.username)).join(', ') : ''}${b.first_count ? ` · ตรวจนับครั้งแรก ${esc(b.first_count)} · ล่าสุด ${esc(b.last_count)} (${b.counts} ครั้ง)` : ''}${b.last_order ? ` · ใบสั่งล่าสุด ${esc(b.last_order)}` : ''}</span></div>
+          <span class="text-xs" style="color:var(--text-muted)">${b.accounts.length ? 'บัญชี: ' + b.accounts.map(a => esc(a.username)).join(', ') : ''}${b.first_count ? ` · ตรวจนับครั้งแรก ${esc(b.first_count)} · ล่าสุด ${esc(b.last_count)} (${b.counts} ครั้ง)` : ''}${b.last_order ? ` · ใบสั่งซื้อล่าสุด ${esc(b.last_order)}` : ''}</span></div>
         ${b.steps.map(step).join('')}</div>`).join('')}
       ${R.missing_branches.length ? `<div class="text-xs mt-1" style="color:var(--bad-ink)">ไม่พบสาขาในระบบ: ${R.missing_branches.map(esc).join(', ')}</div>` : ''}`;
     const T = d.scorecard.targets;
@@ -343,7 +343,7 @@ async function ohbLoadPilot() {
     sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผล Pilot ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
       <div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
         <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">ตรวจนับครบตามวันสั่ง (≥${T.count_coverage}%)</th><th class="py-1 pr-2 text-right">เวลาตรวจนับ (≤${T.count_minutes} นาที)</th>
-        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์ชั้น A (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">ส่งใบสั่ง</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์ชั้น A (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
       d.scorecard.branches.map(s => { const m = s.metrics, p = s.passes, [vt, vi] = vd[s.verdict];
         return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(s.from)} → ${esc(s.to)} · ${s.cycles} วันสั่ง · ตรวจนับ ${s.counts} ครั้ง</div></td>
           <td class="py-1 pr-2 text-right">${cell(m.count_coverage, p.count_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.count_minutes, p.count_minutes, '')}</td>
