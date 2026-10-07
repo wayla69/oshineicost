@@ -32,6 +32,7 @@ from contextlib import closing
 from contextlib import contextmanager
 from fastapi import HTTPException
 from fastapi import Header
+from fastapi import Request
 from fastapi.responses import Response as _Response
 from pathlib import Path
 from pydantic import BaseModel
@@ -689,7 +690,32 @@ def require_write_token(
 ):
     toks = _accepted_tokens()
     if toks and not _token_accepted(x_upload_token or ""):
-        raise HTTPException(status_code=403, detail="A valid write token is required.")
+        # X-Denied tells the page WHY: the auth middleware marks a role refusal
+        # "role" (main.py), so a 403 for a missing token is never confused with one.
+        raise HTTPException(status_code=403, detail="A valid write token is required.",
+                            headers={"X-Denied": "token"})
+
+
+def write_gate_on() -> bool:
+    """Whether writes need a token at all (unset on local dev)."""
+    return bool(_accepted_tokens())
+
+
+def is_dry_run(request: Request) -> bool:
+    """The `dry_run` query flag, read the way FastAPI parses a bool."""
+    return (request.query_params.get("dry_run") or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def require_write_token_unless_dry_run(request: Request, x_upload_token: str = Header(None)):
+    """The gate for an import that previews first. A preview (dry_run=true) writes
+    nothing — every endpoint carrying this dependency rolls back or never inserts
+    (test_bom_center_token_gate.py proves it table by table) — so it needs no
+    token: a person sees the numbers before being asked for anything. Anything
+    else goes through the gate. Fail closed: no flag, or any other value, is a
+    real write (owner's call, 2026-10-07)."""
+    if is_dry_run(request):
+        return
+    require_write_token(x_upload_token)
 
 
 # ---------------------------------------------------------------------------

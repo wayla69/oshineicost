@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 import auth as _auth
-from core import get_db, invalidate_cache, require_write_token
+from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
 from bom_center import central as _ce
 from bom_center import codes as _cr
 from bom_center import hub as _hub
@@ -271,7 +271,7 @@ def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
     return {"ok": True, **stats}
 
 
-@router.post("/api/bom-center/ingredients/seed", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/ingredients/seed", dependencies=[Depends(require_write_token_unless_dry_run)])
 def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
     """Build the master from pack sizes, recipe codes and the warehouse list.
     Inserts and fills blanks only; never overwrites what a person set."""
@@ -364,7 +364,7 @@ async def _read_master_file(file: UploadFile):
     return rows, sheet, sorted(hmap)
 
 
-@router.post("/api/bom-center/ingredients/import", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/ingredients/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_ingredients_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
                                 month: Optional[str] = Query(None)):
     """Import the master template or a DATAP sheet. Values in the file overwrite."""
@@ -560,7 +560,7 @@ def _import(lines, info, month, dry_run, who, note, add_unknown=False):
     return {"dry_run": dry_run, "source": info, "lines": len(lines), **pv, "applied": result}
 
 
-@router.post("/api/bom-center/prices/import", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/prices/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_prices_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
                            dry_run: bool = Query(True), add_unknown: bool = Query(False)):
     """A month of purchase lines -> weighted-average actual price per ingredient."""
@@ -570,7 +570,7 @@ async def bc_prices_import(request: Request, file: UploadFile = File(...), month
     return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown)
 
 
-@router.post("/api/bom-center/prices/from-requisition", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/prices/from-requisition", dependencies=[Depends(require_write_token_unless_dry_run)])
 def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_run: bool = Query(True),
                                add_unknown: bool = Query(False)):
     """The same, from the รายงานจ่ายสินค้าภายใน rows already uploaded to the site."""
@@ -746,7 +746,7 @@ def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, rel
     return {"ok": True, "total": out["total"], "problems": out["problems"]}
 
 
-@router.post("/api/bom-center/recipes/import-cost-rw", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/recipes/import-cost-rw", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
                                     label: Optional[str] = Query(None), effective_month: Optional[str] = Query(None),
                                     price_month: Optional[str] = Query(None)):
@@ -814,7 +814,7 @@ def bc_recipes_map(body: MapBody, request: Request):
     return {"ok": True, **out}
 
 
-@router.post("/api/bom-center/recipes/import-flat", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/recipes/import-flat", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...), release_id: int = Query(...),
                                  dry_run: bool = Query(True)):
     raw = await file.read()
@@ -1150,7 +1150,7 @@ def bc_prep_save(code: str, body: PrepBody, request: Request):
     return {"ok": True, "lines": n}
 
 
-@router.post("/api/bom-center/prep/import-semi", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/prep/import-semi", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_prep_import_semi(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
     """The kitchen's BoM_Semi workbook -> sub-recipes, matched by name + batch size."""
     raw = await file.read()
@@ -1187,7 +1187,7 @@ def bc_prep_map(body: PrepMapBody, request: Request):
     return {"ok": True}
 
 
-@router.post("/api/bom-center/prep/import-flat", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/prep/import-flat", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
     raw = await file.read()
     if not raw:
@@ -1713,7 +1713,7 @@ def bc_central():
         return _ce.items(con)
 
 
-@router.post("/api/bom-center/central/import", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/central/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_central_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
                             set_local: bool = Query(True), month: Optional[str] = Query(None)):
     """The centre's monthly report (or this list's own export) -> the central list.
@@ -1777,7 +1777,7 @@ def bc_central_links_save(body: List[LinkBody], request: Request):
     return {"saved": len(body)}
 
 
-@router.post("/api/bom-center/central/deliveries", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/central/deliveries", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_central_deliveries(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
                                 branch_ids: Optional[str] = Query(None), month: Optional[str] = Query(None),
                                 receipt_date: Optional[str] = Query(None)):
@@ -1827,7 +1827,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
     return _xlsx(wb, f"stock_count_{safe}.xlsx")
 
 
-@router.post("/api/bom-center/stock/count-import", dependencies=[Depends(require_write_token)])
+@router.post("/api/bom-center/stock/count-import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_stock_count_import(request: Request, file: UploadFile = File(...), count_date: str = Query(...),
                                 branch_id: Optional[int] = Query(None), dry_run: bool = Query(True)):
     """A whole count from the template, submitted with the date it was counted."""

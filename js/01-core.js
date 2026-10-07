@@ -124,18 +124,73 @@ window.askWriteToken = function (message) {
       if (tok) h.set('X-Upload-Token', tok);
       return _origFetch(input, Object.assign({}, init, { headers: h }));
     };
-    return send(localStorage.getItem(TOK_KEY) || '').then(async res => {
-      if (res.status !== 403) return observe(url, res);
+    const stored = localStorage.getItem(TOK_KEY) || '';
+    // a preview (dry_run=true) passes the gate without a token, so its success proves nothing
+    const gatedCall = !/[?&]dry_run=(1|true|yes|on)(&|$)/i.test(url);
+    return send(stored).then(async res => {
+      // A 403 means one of two things and the server says which (X-Denied): a
+      // role refusal is not a token problem — never ask, never wipe a good token.
+      if (res.status !== 403 || res.headers.get('X-Denied') === 'role') {
+        if (res.ok && stored && gatedCall && window.writeToken) _writeTokenState(true);
+        return observe(url, res);
+      }
       const tok = await window.askWriteToken('การบันทึกข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
       if (!tok) return res;                       // cancelled → surface the 403
       localStorage.setItem(TOK_KEY, tok);
       return send(tok).then(res2 => {
-        if (res2.status === 403) localStorage.removeItem(TOK_KEY);  // wrong token
+        if (res2.status === 403 && res2.headers.get('X-Denied') !== 'role') { localStorage.removeItem(TOK_KEY); _writeTokenState(false); }  // wrong token
+        else if (res2.status !== 403) _writeTokenState(true);
         return res2;
       });
     });
   };
+  window._rawFetch = _origFetch;    // for checks that must not trigger the token dialog
 })();
+
+// ── ปลดล็อกการบันทึก: does THIS browser hold a token the server accepts? ──────
+// The chip in the วัตถุดิบและใบสั่งซื้อ bar shows it, so the token is entered once,
+// on purpose, instead of surprising someone mid-save. verifyWriteToken() asks
+// POST /api/auth/token-check (writes nothing); the fetch wrapper above keeps the
+// state current as saves succeed or fail. gated=false (local dev) hides the chip.
+window.writeToken = { gated: null, unlocked: null };   // null = not checked yet
+function _writeTokenState(unlocked) {
+  window.writeToken.unlocked = unlocked;
+  if (unlocked !== null) window.writeToken.gated = true;
+  try { _renderLockChip(); } catch (e) { /* no bar on this page */ }
+}
+async function verifyWriteToken() {
+  const tok = localStorage.getItem('oshinei_upload_token') || '';
+  try {
+    const r = await window._rawFetch(`${API}/api/auth/token-check`, { method: 'POST', headers: tok ? { 'X-Upload-Token': tok } : {} });
+    if (r.status === 403) {
+      if (tok && r.headers.get('X-Denied') === 'token') localStorage.removeItem('oshinei_upload_token');
+      window.writeToken.gated = true; _writeTokenState(false);
+    } else if (r.ok) {
+      const j = await r.json();
+      window.writeToken.gated = !!j.gated; _writeTokenState(j.gated ? true : null);
+    }
+  } catch (e) { /* offline: leave the state as it is */ }
+  return window.writeToken;
+}
+async function unlockWrites() {
+  const tok = await askWriteToken('การบันทึกข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
+  if (!tok) return;
+  try { localStorage.setItem('oshinei_upload_token', tok.trim()); } catch (e) {}
+  const st = await verifyWriteToken();
+  if (st.unlocked) notifySuccess('ปลดล็อกการบันทึกแล้ว เบราว์เซอร์นี้บันทึกข้อมูลได้');
+  else notifyError('token ไม่ถูกต้อง กรุณาตรวจสอบแล้วกรอกใหม่');
+}
+function _renderLockChip() {
+  const el = document.getElementById('supplyLock');
+  if (!el) return;
+  const st = window.writeToken || {};
+  if (st.gated === false) { el.innerHTML = ''; return; }
+  const on = st.unlocked === true;
+  el.innerHTML = `<button onclick="unlockWrites()" title="${on
+      ? 'เบราว์เซอร์นี้บันทึกข้อมูลได้แล้ว · กดเพื่อเปลี่ยน token'
+      : 'ดูข้อมูลและตรวจสอบก่อนบันทึกได้ทุกหน้า การบันทึกจริงต้องกรอก Owner Write-Token ครั้งเดียวต่อเบราว์เซอร์ · กดเพื่อกรอก'}"
+    class="text-[11px] rounded-full px-2.5 py-0.5" style="border:1px solid ${on ? 'var(--good-ink)' : 'var(--amber-ink)'};color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'};background:transparent;white-space:nowrap">${on ? 'ปลดล็อกการบันทึกแล้ว' : 'ยังไม่ปลดล็อกการบันทึก'}</button>`;
+}
 
 // Session-expiry handler — re-open the login overlay (guarded so a burst of
 // concurrent 401s only prompts once).
@@ -2467,11 +2522,15 @@ function _renderSupplyBar(bar, cl, name) {
     ? `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
       chips.map(c => btn(c.label, c.key === cur.key, `supplyChipOpen('${c.key}')`, false)).join('')
     : '';
+  // the ปลดล็อกการบันทึก chip sits at the right end of the first row there is
+  const lock = '<span id="supplyLock" class="ml-auto"></span>';
   const lvl2 = items.length > 1
     ? `<div class="flex flex-wrap items-center gap-1.5 w-full${chips.length > 1 ? ' mt-1' : ''}"><span class="text-[11px] mr-1" style="color:var(--text-muted)">${_noEmoji(cur.label)}:</span>${
-        items.map(it => btn(it.label, !!(hit && it === hit.item), `supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})`, true)).join('')}</div>`
+        items.map(it => btn(it.label, !!(hit && it === hit.item), `supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})`, true)).join('')}${lvl1 ? '' : lock}</div>`
     : '';
-  bar.innerHTML = lvl1 + lvl2;
+  bar.innerHTML = lvl1 ? lvl1 + lock + lvl2 : (lvl2 || lock);
+  _renderLockChip();
+  if (window.writeToken && window.writeToken.unlocked === null && window.writeToken.gated === null) verifyWriteToken();
   const title = [cl.label, cur.label, items.length > 1 && hit ? hit.item.label : ''].filter(Boolean).map(_noEmoji).join(' · ');
   const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = title;
 }

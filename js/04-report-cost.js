@@ -1575,7 +1575,7 @@ async function onSalesDataSelected(ev) {
     }
     const data = await res.json();
     if (!res.ok) {
-      if (res.status === 403) localStorage.removeItem('oshinei_upload_token');
+      if (res.status === 403 && res.headers.get('X-Denied') !== 'role') localStorage.removeItem('oshinei_upload_token');
       throw new Error(data.detail || 'upload failed');
     }
     alert(`✓ อัพโหลดสำเร็จ\n• ไฟล์: ${data.file}\n• ชนิด: ${data.file_type}\n• เดือน: ${data.period}\n• สาขา: ${data.branch}\n• แถว: ${data.rows_ingested}`);
