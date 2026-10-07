@@ -391,6 +391,29 @@ def default_login_url(upload_url: str) -> str:
     return urlunsplit((parts.scheme, parts.hostname or "", "", "", ""))
 
 
+def token_from_backup(path: Path | None = None) -> str | None:
+    """The PC's write token: the first 'label:token' line of backend/.seed_tokens.txt (the
+    backup scripts/rotate_seed_token.py writes) -- so a rotation needs no edit here or in upload.bat."""
+    path = path or Path(__file__).resolve().parent / "backend" / ".seed_tokens.txt"
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return (line.split(":", 1)[1] if ":" in line else line).strip() or None
+    return None
+
+
+def recon_login_enabled(session, base_url: str) -> bool:
+    """recon's own login (RECON_LOGIN=1, 2026-10-07): writes then pass on X-Upload-Token alone --
+    the dashboard cookie means nothing to recon."""
+    try:
+        r = session.get(urljoin(base_url, "/api/me"), verify=False, timeout=20)
+        return bool(r.ok and r.json().get("login_enabled"))
+    except Exception:
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Bulk upload recon documents to Oshinei recon app")
@@ -414,10 +437,12 @@ def main():
                        help="Dashboard origin to log in against "
                             "(default: same host as --url, no port)")
     parser.add_argument("--no-login", action="store_true",
-                       help="Skip login -- only works if RECON_ENFORCE_AUTH is off")
+                       help="Skip the dashboard login (not needed when recon has its own login on)")
 
     args = parser.parse_args()
 
+    if not args.token:
+        args.token = token_from_backup()           # backend/.seed_tokens.txt, first line (the PC's token)
     if not args.token:
         # Prompt for token if not provided
         try:
@@ -448,6 +473,18 @@ def main():
         if len(jobs) > 20:
             print(f"  ... and {len(jobs) - 20} more")
         return
+
+    # The session + sign-in were lost after #79 (main() used an undefined `session`).
+    session = requests.Session()
+    if args.no_login:
+        pass
+    elif recon_login_enabled(session, args.url):
+        print("[INFO] recon has its own login -- uploading with the write token only")
+    else:
+        creds = (Path(args.login_file) if args.login_file
+                 else Path(__file__).resolve().parent / "backend" / ".refresh_login.txt")
+        who = login(session, args.login_url or default_login_url(args.url), creds)
+        print(f"[INFO] signed in on the dashboard as {who}")
 
     # Upload in parallel
     print(f"\n[START] Uploading {len(jobs)} files ({args.workers} workers)...")

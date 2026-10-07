@@ -94,3 +94,34 @@ def test_renshin_ubon_never_lands_on_an_oshinei_branch(tmp_path):
     assert bru.parse_loose_file(f, "May") is None
     assert "RUB" not in bru.BRANCH_CODE_MAP
     assert "RUB" in bru.OUT_OF_SCOPE_CODES
+
+
+# ── the upload path itself (2026-10-07): main() used an undefined `session` after #79,
+#    so every real run crashed with NameError once it reached the upload step ──
+
+def test_token_from_backup_reads_the_first_line(tmp_path):
+    f = tmp_path / ".seed_tokens.txt"
+    f.write_text("# note\nadmin:aaa111\nAR:bbb222\n", encoding="utf-8")
+    assert bru.token_from_backup(f) == "aaa111"
+    assert bru.token_from_backup(tmp_path / "missing.txt") is None
+
+
+def test_main_uploads_with_a_session_when_recon_login_is_on(tmp_path, monkeypatch):
+    seen = {}
+    job = {"branch_id": 4, "branch_name": "2.KR1", "period_month": "2026-05",
+           "source_type": "bank", "file_path": tmp_path / "x.pdf"}
+    monkeypatch.setattr(bru, "recon_data_dir", lambda folder=None: tmp_path)
+    monkeypatch.setattr(bru, "collect_uploads", lambda folder: [job])
+    monkeypatch.setattr(bru, "recon_login_enabled", lambda session, url: True)
+    monkeypatch.setattr(bru, "login", lambda *a, **k: pytest.fail("dashboard login must be skipped"))
+
+    def fake_upload(session, base_url, token, j, verbose=False):
+        seen.update(session=session, token=token)
+        return {"status": "OK", "file": j["file_path"].name}
+    monkeypatch.setattr(bru, "upload_file", fake_upload)
+    monkeypatch.setattr(sys, "argv", ["bulk_recon_upload.py", "--token", "tok123", "--workers", "1"])
+    try:
+        bru.main()
+    except SystemExit as e:
+        assert e.code in (0, None)
+    assert seen["token"] == "tok123" and hasattr(seen["session"], "post")
