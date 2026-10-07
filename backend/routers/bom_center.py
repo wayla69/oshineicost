@@ -1056,7 +1056,8 @@ def bc_order_calendar():
                                      " AND COALESCE(active, 1) = 1 ORDER BY name"):
             cal = _fc.calendar(con, bid)
             rows.append({"branch_id": bid, "branch": name, **{f"r{k}": v for k, v in cal.items()}})
-    return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL}
+    from bom_center.pilot import PILOT                       # the page can show the pilot branches alone
+    return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL, "pilot": list(PILOT)}
 
 
 class CalRow(BaseModel):
