@@ -55,18 +55,21 @@ def test_receive_pending_opens_the_receive_pane_on_the_order(udon):
 
 # ── owner 2026-10-07: bom.center split — accounting keeps the price, the kitchen the recipes;
 #    Sales Support may do close step 5 for a branch ───────────────────────────────────────
-def test_accounting_writes_prices_and_unit_rules_only():
+def test_accounting_reads_the_centre_and_the_analyst_keeps_the_price():
     acc = auth.ROLE_MODULES["accounting"]
-    assert "bom.prices" in acc and "bom.center" not in acc
-    assert auth.path_allowed("POST", "/api/bom-center/prices/import", acc)
-    assert auth.path_allowed("POST", "/api/bom-center/prices/manual", acc)
-    assert auth.path_allowed("POST", "/api/bom-center/units", acc)
-    assert auth.path_allowed("GET", "/api/bom-center/recipes", acc)
+    assert not ({"bom.prices", "bom.center", "bom.recipes"} & acc)          # owner 2026-10-07: the price is the analyst's
+    assert auth.path_allowed("GET", "/api/bom-center/prices", acc)              # reads through cost.analysis
     assert auth.path_allowed("GET", "/api/bom-center/todo", acc)
+    for path in ("/api/bom-center/prices/import", "/api/bom-center/prices/manual", "/api/bom-center/units",
+                 "/api/bom-center/central/import", "/api/bom-center/hub/process/1", "/api/bom-center/ingredients/import"):
+        assert not auth.path_allowed("POST", path, acc), path
     assert not auth.path_allowed("PUT", "/api/bom-center/recipes/B0001", acc)
-    assert not auth.path_allowed("POST", "/api/bom-center/central/import", acc)
-    assert not auth.path_allowed("POST", "/api/bom-center/hub/process/1", acc)
-    assert not auth.path_allowed("POST", "/api/bom-center/ingredients/import", acc)
+    ana = auth.ROLE_MODULES["analyst"]
+    assert auth.path_allowed("POST", "/api/bom-center/prices/import", ana)
+    assert auth.path_allowed("POST", "/api/bom-center/units", ana)
+    # bom.prices stays a module the owner may hand to someone later
+    assert auth.path_allowed("POST", "/api/bom-center/prices/import", {"bom.prices"})
+    assert not auth.path_allowed("POST", "/api/bom-center/recipes/import-flat", {"bom.prices"})
 
 
 def test_kitchen_writes_recipes_and_sub_recipes_only():

@@ -124,7 +124,7 @@ def _month_items(con, month: str, today: date) -> list:
     out.append(_e("price_month", 100, "month", f"นำเข้าราคาซื้อจริงงวด {month}", "done" if n else "todo",
                   (f"ราคาซื้อจริง {n:,} รหัส" + (f" · นำเข้าล่าสุด {str(last[0])[:16].replace('T', ' ')} โดย {last[1]}" if last else ""))
                   if n else "จากรายงานจ่ายสินค้าภายในของฝ่ายบัญชี",
-                  owner=("bom.center",), owner_th="บัญชี / ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "price", "month": month}))
+                  owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ (ไฟล์ราคาจากบัญชี)", go={"tab": "bomcenter", "pane": "price", "month": month}))
     dr = con.execute("SELECT release_id, label, effective_month, status, price_month FROM bc_release WHERE kind='monthly'"
                      " AND status IN ('draft','review') ORDER BY release_id DESC LIMIT 1").fetchone()
     released_eff = _scalar(con, "SELECT release_id FROM bc_release WHERE kind='monthly' AND status='released'"

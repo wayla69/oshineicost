@@ -95,7 +95,8 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # INTENTIONAL: both feed the books / month-end reconciliation.
         "sales.overview", "profit.pnl", "cost.analysis", "ops.cash",
         "ops.discounts", "report.export",
-        "bom.prices",          # the monthly price is accounting's actual purchase average (§10-1) — prices only (owner 2026-10-07)
+        # no BoM Center module (owner 2026-10-07): the monthly price is the analyst's to import;
+        # accounting hands over the purchase file and reads the centre through cost.analysis
     },
     "innovation": {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",

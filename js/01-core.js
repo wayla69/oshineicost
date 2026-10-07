@@ -324,7 +324,7 @@ const ROLE_MODULES_TH = {
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
   operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback'],
   analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center','bom.release'],
-  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export','bom.prices'],
+  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
   branch: ['branch.stock'],
