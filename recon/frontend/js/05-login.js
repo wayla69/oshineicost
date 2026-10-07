@@ -9,18 +9,18 @@ const mgrWord=()=>ME.login_enabled?'สิทธิ์ผู้จัดกา�
 
 /* ── role-based UI: the backend is the real gate, this only hides what would answer 403 ── */
 // onclick handlers that write (viewer: hidden)
-const _RO_HIDE=['setSt(','closeMonth(','reopenMonth(','submitReopen(','pickDoc(','openMatcher(','mmSubmit(','mmDelete(',
+const _RO_HIDE=['setSt(','closeMonth(','submitSignoff(','reopenMonth(','submitReopen(','pickDoc(','dzPick(','openMatcher(','mmSubmit(','mmDelete(',
   'mxOpen(','mxSubmit(','mxUndo(','acceptChannel(',
   'manualMatchDay(','undoMove(','unacceptPayout(','acceptPayout(','submitMove(','showChannelMove(','submitAckDay(',
   'pickAckDayReason(','ackDay(','unackDay(','unaccept(','submitAccept(','pickAcceptReason(','acceptTodo(','acceptCoinAll(','moveUpload(','delUpload(',
   'confirmUpload(','ignoreLine(','excludeXfer(','excludeAllXfers(','confirmReclass(','applyReclass(','applySugg(',
   'applyMapper(','toggleMapper(','_setupEditLane(','_setupSaveLane(','_setupSaveCode(','_setupRevertCode(',
   '_setupSeedRequirement(','_setupReseedPos(','_setupDelMid(','_setupDelAccount(','_setupAddMid(','_setupAddAccount(',
-  '_discBulk(',"-input').click("];   // the last one = the bulk-upload file pickers
+  '_discBulk(',"-input').click("];   // the last one = the bulk-upload file pickers; dzPick( = the month's drop zone
 // inputs whose onchange writes (viewer: greyed out, not clickable)
 const _RO_LOCK=['_setupSaveMap(','_discAssign(','_discResolve(','saveFee(','saveSlip(','attachSlip(','bulkUpload('];
 // manager-only actions (accountant: hidden — approve/close/reopen + the manager setup)
-const _ACCT_HIDE=['closeMonth(','reopenMonth(','submitReopen(','_setupEditLane(','_setupSaveLane(','_setupSaveCode(',
+const _ACCT_HIDE=['closeMonth(','submitSignoff(','reopenMonth(','submitReopen(','_setupEditLane(','_setupSaveLane(','_setupSaveCode(',
   '_setupRevertCode(','_setupSeedRequirement('];
 function _roleCss(){
   const sel=(scope,attr,list)=>list.map(f=>`body.${scope} [${attr}*="${f}"]`).join(',');

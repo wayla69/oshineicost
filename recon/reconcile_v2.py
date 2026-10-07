@@ -544,6 +544,13 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         session["pending_discrepancies"] = conn.execute(
             "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
             (session["session_id"],)).fetchone()[0]
+        # when (and by whom) the month was last sent for review — what the manager signs
+        sent = conn.execute(
+            "SELECT ts, by FROM recon_audit_log WHERE entity='session' AND entity_id=? "
+            "AND field='status' AND new_val='in_review' ORDER BY ts DESC, id DESC LIMIT 1",
+            (session["session_id"],)).fetchone()
+        session["sent_for_review_at"] = sent["ts"] if sent else None
+        session["sent_for_review_by"] = sent["by"] if sent else None
     payout_issues = _payout_issues(conn, branch_id, period_month,
                                    session["session_id"] if session else None)
     todo = []

@@ -112,6 +112,10 @@ def test_session_carries_the_pending_discrepancy_count(client):
     c.commit(); c.close()
     ses = client.get(f"/api/v2/reconcile?branch_id=4&month={PM}").json()["session"]
     assert ses["session_id"] == sid and ses["pending_discrepancies"] == 2
+    assert ses["sent_for_review_at"] is None
+    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
+    ses = client.get(f"/api/v2/reconcile?branch_id=4&month={PM}").json()["session"]
+    assert ses["sent_for_review_at"] and ses["sent_for_review_by"] == "staff"
 
 
 # ── drop zone: what the bulk result tells about each file ─────────────────────
