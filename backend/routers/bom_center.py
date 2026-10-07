@@ -646,10 +646,15 @@ def bc_releases():
                            "   AND c.check_code='unmatched')"
                            " FROM bc_release b ORDER BY (kind='baseline'), effective_month DESC, release_id DESC").fetchall()
         priced = [r[0] for r in con.execute("SELECT DISTINCT month FROM bc_ingredient_price ORDER BY month DESC")]
+        # costs follow ACTUAL purchase prices (owner decision): suggest the latest month the accounts
+        # were imported for — not a later supplier quote's month (DATAP is dated 2026-07, actuals June)
+        actual = con.execute("SELECT MAX(month) FROM bc_ingredient_price"
+                             " WHERE source IN ('purchase_avg','manual')").fetchone()[0]
     cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
             "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched")
     return {"releases": [dict(zip(cols, r)) for r in rows], "price_months": priced,
-            "suggest": {"effective_month": _next_month(_this_month()), "price_month": priced[0] if priced else None}}
+            "suggest": {"effective_month": _next_month(_this_month()),
+                        "price_month": actual or (priced[0] if priced else None)}}
 
 
 @router.get("/api/bom-center/recipes")
