@@ -71,6 +71,7 @@ function _setupRender(){
   // ⑥ recon login accounts (85-users.js) first: the page is ~4,500px long and managers kept missing it at
   // the bottom (2026-10-07). Managers see the user list + เพิ่มผู้ใช้; signed-out staff see the sign-in card.
   html+=usersCardHtml();
+  html+=rptDiagCardHtml();     // ตรวจระบบ (Daily Board · Trend · Audit Log · Bank Coverage) — left the nav in UX phase 3
 
   // ① payment map
   html+=`<div class="card mb-12"><div class="row mb-8">

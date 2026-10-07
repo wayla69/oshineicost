@@ -71,7 +71,7 @@ async function api(path,opts={}){
   if(!r.ok){let d='';try{d=detailText((await r.json()).detail)}catch(e){};
     if(ME.login_enabled&&r.status===401){ME.user=null;_applyRoleUi();renderLogin(d);}        // session ended → sign in again
     else if(ME.login_enabled&&r.status===403&&d.includes('เปลี่ยนรหัสผ่าน'))renderChangePw(true);
-    else if(ME.login_enabled&&r.status===403&&d)toast(d);                                    // e.g. สิทธิ์ดูอย่างเดียว
+    else if(ME.login_enabled&&r.status===403&&d&&!opts.quiet)toast(d);                       // e.g. สิทธิ์ดูอย่างเดียว (quiet: the caller shows it inline)
     const err=new Error(d||('HTTP '+r.status));err.status=r.status;throw err;}
   return r.json();
 }
@@ -131,6 +131,7 @@ function route(){
   if(h==='close')return loadCloseBoard();
   if(h==='branches')return loadOverview();
   if(h==='reports')return loadReports();
+  if(h.startsWith('report/'))return loadReportViewer(h.slice(7));
   if(h==='errors')return loadErrorReport();
   if(h==='wrong')return loadWrongChannel();
   if(h==='daybook')return loadDaybook();
@@ -220,10 +221,12 @@ function openSummary(b){
   return s;
 }
 
-/* ── bottom sheet กลาง (ใช้กับเหตุผลรับทราบ) ── */
-function showSheet(html){
+/* ── bottom sheet กลาง (ใช้กับเหตุผลรับทราบ) · cls = a variant on the overlay, e.g. 'sheet-sign'
+   (the sign-off sheet: centred on a desktop, full screen on a phone) ── */
+function showSheet(html,cls){
   let o=$('sheet');
-  if(!o){o=document.createElement('div');o.id='sheet';o.className='sheet-overlay';document.body.appendChild(o);}
+  if(!o){o=document.createElement('div');o.id='sheet';document.body.appendChild(o);}
+  o.className='sheet-overlay'+(cls?' '+cls:'');
   o.innerHTML=`<div class="sheet-box">${html}</div>`;
   o.onclick=(e)=>{if(e.target===o)closeSheet();};
   o.style.display='flex';
@@ -236,14 +239,13 @@ const _NAV_TABS=[
   ['close','<i class="ti ti-calendar-check" aria-hidden="true"></i>','ปิดเดือน','#close'],
   ['reports','<i class="ti ti-report" aria-hidden="true"></i>','รายงาน','#reports'],
   ['admin','<i class="ti ti-settings" aria-hidden="true"></i>','Admin','#setup'],
-  ['diag','<i class="ti ti-activity" aria-hidden="true"></i>','วินิจฉัย','#board'],
-];
+];   // ตรวจระบบ (#board #trend #audit #bankcov) left the nav (UX phase 3): reached from รายงาน and Admin
 function _navZone(h){
   if(h==='close')return 'close';
-  if(!h||h==='branches'||h.match(/^b\//)||h==='daybook'||h==='dashboard')return 'home';
-  if(h==='reports'||h==='wrong'||h==='errors'||h==='coupon')return 'reports';
-  if(h==='setup'||h==='audit'||h==='bankcov'||h.startsWith('payout')||h.startsWith('discrepancies'))return 'admin';
-  if(h==='board'||h==='trend')return 'diag';
+  if(!h||h==='branches'||h.match(/^b\//))return 'home';
+  if(h==='reports'||h.startsWith('report/')||['wrong','errors','coupon','daybook','dashboard','certificate','override',
+     'aging','closereg','accepted','auditlog'].includes(h))return 'reports';
+  if(h==='setup'||['audit','bankcov','board','trend'].includes(h)||h.startsWith('payout')||h.startsWith('discrepancies'))return 'admin';
   return 'home';
 }
 function _topNavHtml(h){

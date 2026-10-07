@@ -1,4 +1,4 @@
-/* recon frontend — 40-reports.js: #reports hub, #errors, #wrong and the internal-control reports (#override #aging #certificate #closereg #accepted #auditlog).
+/* recon frontend — 40-reports.js: #reports hub (four packs by reader — registry in 45-report-viewer.js), #errors, #wrong and the internal-control reports (#override #aging #certificate #closereg #accepted #auditlog).
    Plain scripts sharing one global scope, loaded in order by index.html (00 → 90);
    a slice may call any other slice's functions, but top-level code only uses earlier slices. */
 /* ── รายงานข้อผิดพลาดการบันทึก รายสาขา (สำหรับประเมินพนักงาน) ── */
@@ -143,161 +143,53 @@ function renderWrongChannel(){
   $('app').innerHTML=html;
 }
 
-function loadReports(){
-  const el=$('app');
-  const pfx=`/api`;
-  el.innerHTML=header()+`
-  <div class="mb-14">
-    <h2 class="fs-16 mb-4">② รายงาน</h2>
-    <div class="lbl">รายงานและเครื่องมือทั้งหมด — เปิดในแอปหรือพิมพ์ PDF</div>
+/* ── #reports — four packs by WHO receives them (registry: RPT_PACKS · RPTS in 45-report-viewer.js) ──
+   Month + branch are chosen once at the top; every card opens the in-app viewer #report/<key>. */
+function _rptRowHtml(k){
+  const e=RPTS[k], needBr=e.branch==='req'&&!RPT_BR;
+  const l=needBr?{url:'',xlsx:'',zip:''}:rptLinks(k,MONTH,RPT_BR,'');
+  const act=[];
+  if(needBr)act.push('<span class="chip c-mut">เลือกสาขาก่อน</span>');
+  else if(e.session)act.push(`<button class="btn btn-sm" onclick="rptDownload(${jsa(k)},this)"><i class="ti ti-download" aria-hidden="true"></i> Excel</button>`);
+  if(l.xlsx&&e.url)act.push(`<a class="btn btn-sm" href="${esc(l.xlsx)}" download title="ดาวน์โหลด Excel"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i> Excel</a>`);
+  if(l.zip)act.push(`<a class="btn btn-sm btn-pri" href="${esc(l.zip)}" download><i class="ti ti-file-zip" aria-hidden="true"></i> ZIP</a>`);
+  return `<div class="rpt-row">
+    <a class="rpt-row-main" href="#report/${esc(k)}"><span class="rpt-icon"><i class="ti ti-${e.icon}" aria-hidden="true"></i></span>
+      <span class="rpt-body"><span class="rpt-title">${esc(e.title)}</span><span class="rpt-desc">${esc(e.desc||'')}</span></span></a>
+    ${act.length?`<div class="rpt-row-act">${act.join('')}</div>`:''}</div>`;
+}
+function _rptItemHtml(k){
+  const e=RPTS[k];
+  return `<a class="rpt-item" href="${e.url?'#report/'+esc(k):esc(e.screen)}">
+    <span class="rpt-icon"><i class="ti ti-${e.icon}" aria-hidden="true"></i></span>
+    <div class="rpt-body"><div class="rpt-title">${esc(e.title)}</div><div class="rpt-desc">${esc(e.desc||'')}</div>
+      <span class="rpt-badge${e.url?'':' ext'}">${e.url?'เปิดในแอป · พิมพ์ได้':'หน้าจอในแอป'}</span></div></a>`;
+}
+async function loadReports(){
+  const t=++_ROUTE_SEQ;
+  $('app').innerHTML=header()+loadingState();
+  const brs=await _diagBranches();
+  if(!_cur(t))return;
+  _rptCheckBranch(brs);
+  const bn=_rptBrName(brs);
+  $('app').innerHTML=header()+`
+  <div class="mb-10"><h2 class="fs-16 mb-4">รายงาน</h2>
+    <div class="lbl">จัดเป็นชุดตามผู้รับ — เลือกเดือนและสาขาครั้งเดียว แล้วเปิดอ่าน · พิมพ์ PDF · ดาวน์โหลด Excel ได้ในแอป</div></div>
+  <div class="card rpt-scope">
+    <label class="rpt-f"><span class="lbl">เดือน</span><input type="month" class="ctl" value="${esc(MONTH)}" onchange="setMonth(this.value)"></label>
+    <label class="rpt-f"><span class="lbl">สาขา</span>${rptBranchSel(brs,false)}</label>
+    <span class="lbl rpt-scope-s">ทุกรายงานด้านล่างใช้ <b>${esc(monthTh(MONTH))}</b> · <b>${esc(bn||'ทุกสาขาหลัก')}</b></span>
   </div>
-
-  <div class="lbl grp-h">งานประจำ / Operations</div>
-  <div class="rpt-grid mb-16">
-    <a class="rpt-item" href="#dashboard">
-      <span class="rpt-icon"><i class="ti ti-chart-bar" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">Dashboard รายได้รายวัน</div>
-        <div class="rpt-desc">ทุกสาขา × ช่องทาง แยกตามวัน · เลือกวันจากปฏิทิน</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#daybook">
-      <span class="rpt-icon"><i class="ti ti-calendar" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">สรุปบัญชีรายวัน (รายใบ)</div>
-        <div class="rpt-desc">แต่ละวัน = 1 ใบ · ยอดเต็ม/ส่วนลดแยกบรรทัด · เลือกสาขา · พิมพ์ PDF</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="${pfx}/monthly-report?period_month=${MONTH}" target="_blank" rel="noopener">
-      <span class="rpt-icon"><i class="ti ti-printer" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">รายงานการจับคู่รายวัน</div>
-        <div class="rpt-desc">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · ทุกสาขา</div>
-        <span class="rpt-badge ext">PDF ↗</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="${pfx}/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank" rel="noopener">
-      <span class="rpt-icon"><i class="ti ti-inbox" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ติดตามเอกสารที่ยังขาด</div>
-        <div class="rpt-desc">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ</div>
-        <span class="rpt-badge ext">PDF ↗</span>
-      </div>
-    </a>
-  </div>
-
-  <div class="lbl grp-h">การตรวจสอบ / Review</div>
-  <div class="rpt-grid mb-16">
-    <a class="rpt-item" href="#wrong">
-      <span class="rpt-icon">⇄</span>
-      <div class="rpt-body">
-        <div class="rpt-title">เงินบันทึกผิดช่อง</div>
-        <div class="rpt-desc">สรุป + ใบเซ็นรับทราบส่งสาขา · แยกประเภทข้อผิดพลาด</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#errors">
-      <span class="rpt-icon"><i class="ti ti-clipboard-list" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ข้อผิดพลาดการบันทึก</div>
-        <div class="rpt-desc">รายสาขา/เดือน · ประเมินพนักงาน</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#coupon">
-      <span class="rpt-icon"><i class="ti ti-ticket" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">คูปองซีรีส์</div>
-        <div class="rpt-desc">ส่วนลดแยกตามซีรีส์คูปอง · MoM · ดูรายสาขา/รายวัน</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-  </div>
-
-  <div class="row" style="margin:0 0 6px 2px;align-items:center">
-    <div class="lbl fw-700 ls-wide">การควบคุมภายใน / Audit &amp; Controls</div>
-    <a class="btn btn-sm btn-pri ml-auto" href="${pfx}/reports/auditor-pack.zip?period_month=${MONTH}"><i class="ti ti-package" aria-hidden="true"></i> ชุดเอกสารผู้สอบ (ZIP) — งวด ${MONTH}</a>
-  </div>
-  <div class="rpt-grid mb-16">
-    <a class="rpt-item" href="#certificate">
-      <span class="rpt-icon"><i class="ti ti-certificate" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ใบรับรองการกระทบยอด</div>
-        <div class="rpt-desc">รายสาขา/เดือน · POS vs เงินเข้า · ผู้จัดทำ/ผู้สอบทาน · พิมพ์เซ็น</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#override">
-      <span class="rpt-icon"><i class="ti ti-writing" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ทะเบียนการปรับปรุงด้วยมือ</div>
-        <div class="rpt-desc">ทุกการแก้ด้วยมือ · ใคร·เมื่อ·เหตุผล · รายการแรกที่ผู้สอบขอ</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#aging">
-      <span class="rpt-icon"><i class="ti ti-hourglass-high" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">อายุรายการค้าง</div>
-        <div class="rpt-desc">รายการยังไม่ปิด แยกช่วงอายุ 0-7 / 8-30 / เกิน 30 วัน</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#closereg">
-      <span class="rpt-icon"><i class="ti ti-calendar-check" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ทะเบียนการปิดเดือน</div>
-        <div class="rpt-desc">ทุกสาขา × 6 เดือน · ปิด/อนุมัติ/ยังเปิด · ใครเซ็น · มีหลักฐานไหม</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#accepted">
-      <span class="rpt-icon"><i class="ti ti-receipt-off" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">สรุปผลต่างที่รับทราบ</div>
-        <div class="rpt-desc">Write-off แยกตามเหตุผล·สาขา · เน้นรายการเกินเกณฑ์</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="#auditlog">
-      <span class="rpt-icon"><i class="ti ti-history" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ประวัติการแก้ไข (Audit Trail)</div>
-        <div class="rpt-desc">ใคร·เมื่อ·แก้อะไร ทุกการเปลี่ยนแปลง · เพิ่มอย่างเดียว แก้ไม่ได้</div>
-        <span class="rpt-badge">in-app</span>
-      </div>
-    </a>
-  </div>
-
-  <div class="lbl grp-h">เอกสาร & เครื่องมือ / Docs & Tools</div>
-  <div class="rpt-grid mb-16">
-    <a class="rpt-item" href="${pfx}/statement-codes.html" target="_blank" rel="noopener">
-      <span class="rpt-icon"><i class="ti ti-book" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">พจนานุกรมรหัสสเตทเมนต์</div>
-        <div class="rpt-desc">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</div>
-        <span class="rpt-badge ext">PDF ↗</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="${pfx}/uat-signoff?period_month=${MONTH}" target="_blank" rel="noopener">
-      <span class="rpt-icon"><i class="ti ti-circle-check" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">ใบทดสอบ + รับรองการใช้งาน (UAT)</div>
-        <div class="rpt-desc">เช็กลิสต์ทดสอบ + ช่องเซ็นรับรอง · เดือน ${MONTH}</div>
-        <span class="rpt-badge ext">PDF ↗</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="/app/help.html" target="_blank" rel="noopener">
-      <span class="rpt-icon"><i class="ti ti-books" aria-hidden="true"></i></span>
-      <div class="rpt-body">
-        <div class="rpt-title">คู่มือการใช้งาน</div>
-        <div class="rpt-desc">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</div>
-        <span class="rpt-badge ext">เปิดใหม่ ↗</span>
-      </div>
-    </a>
-  </div>`;
+  <div class="rpt-packs">${RPT_PACKS.map(pk=>{const ks=rptKeys(pk.key);return ks.length?`<section class="card rpt-pack" aria-labelledby="rpk-${pk.key}">
+    <div class="rpt-pack-h"><span class="rpt-pack-i"><i class="ti ti-${pk.icon}" aria-hidden="true"></i></span>
+      <div><h3 id="rpk-${pk.key}" class="rpt-pack-t">${esc(pk.title)}</h3><div class="lbl">ผู้รับ: ${esc(pk.reader)}</div></div></div>
+    <div class="lbl rpt-pack-n">${esc(pk.note)}</div>
+    <div class="rpt-list">${ks.map(_rptRowHtml).join('')}</div></section>`:'';}).join('')}</div>
+  ${RPT_GROUPS.map(g=>{const ks=rptKeys(g.key);return ks.length?`<div class="row rpt-grp-h"><span class="lbl grp-h"><i class="ti ti-${g.icon}" aria-hidden="true"></i> ${esc(g.title)}</span><span class="lbl">${esc(g.note)}</span></div>
+  <div class="rpt-grid mb-16">${ks.map(_rptItemHtml).join('')}${g.key==='tools'?`<a class="rpt-item" href="/app/help.html" target="_blank" rel="noopener">
+    <span class="rpt-icon"><i class="ti ti-books" aria-hidden="true"></i></span>
+    <div class="rpt-body"><div class="rpt-title">คู่มือการใช้งาน</div><div class="rpt-desc">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</div>
+      <span class="rpt-badge ext">เปิดแท็บใหม่ ↗</span></div></a>`:''}</div>`:'';}).join('')}`;
 }
 /* ════════════════════════════════════════════════════════════════════════
    § Internal-control reports (audit evidence) — READ-ONLY, frontend-only

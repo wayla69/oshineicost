@@ -426,6 +426,18 @@
   ]
  ],
  [
+  "/api/reports/accepted-variance-year.print",
+  [
+   "GET"
+  ]
+ ],
+ [
+  "/api/reports/accepted-variance-year.xlsx",
+  [
+   "GET"
+  ]
+ ],
+ [
   "/api/reports/accepted-variance.print",
   [
    "GET"
@@ -463,6 +475,12 @@
  ],
  [
   "/api/reports/branch-errors",
+  [
+   "GET"
+  ]
+ ],
+ [
+  "/api/reports/branch-errors.print",
   [
    "GET"
   ]
