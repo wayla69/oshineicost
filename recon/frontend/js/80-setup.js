@@ -68,6 +68,10 @@ function _setupRender(){
     <a href="#" onclick="location.hash='';return false" class="btn btn-sm">← กลับ</a>
   </div></div>`;
 
+  // ⑥ recon login accounts (85-users.js) first: the page is ~4,500px long and managers kept missing it at
+  // the bottom (2026-10-07). Managers see the user list + เพิ่มผู้ใช้; signed-out staff see the sign-in card.
+  html+=usersCardHtml();
+
   // ① payment map
   html+=`<div class="card mb-12"><div class="row mb-8">
     <h2 class="m-0 fs-15">① ตารางจับคู่รหัสรับเงิน</h2>
@@ -170,9 +174,6 @@ function _setupRender(){
     <a href="/api/statement-codes.xlsx" class="lbl ml-12">Excel</a></div>
   <div class="muted mb-8 fs-12">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้${mgrWord()}</div>
   <div id="setup-codes-body" class="muted">กำลังโหลด…</div></div>`;
-
-  // ⑥ recon login accounts (85-users.js) — managers only; empty for everyone else
-  html+=usersCardHtml();
 
   $('app').innerHTML=html;
   _setupLoadCodes();
