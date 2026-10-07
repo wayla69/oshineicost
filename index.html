@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei — Sales & Cost Analysis</title>
+<!-- Installable on a phone (the branch login keeps the app on its home screen): manifest + icons under /pwa -->
+<meta name="theme-color" content="#1f3a6b">
+<link rel="manifest" href="/pwa/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png">
+<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Oshinei">
 <!-- KIRA UI (Noto Sans + Noto Sans Thai, SIL OFL 1.1): the app face since 2026-09-30 -->
 <link rel="stylesheet" href="vendor/kira-ui-font.css">
 <!-- Design tokens — single source of truth, shared with the UI kit.
@@ -1404,11 +1413,19 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 @media (max-width: 700px) {
   body.supply-phone #supplyNav { display: flex; }
   body.supply-phone .content-area { padding-bottom: 76px; }
-  body.supply-phone #clusterBar > button, body.supply-phone #clusterBar > span:not(#supplyLock),
-  body.supply-phone #clusterBar > div > button, body.supply-phone #clusterBar > div > span:not(#supplyLock) { display: none; }
-  body.supply-phone #clusterBar > div { margin-top: 0; }
+  /* the strip replaces the chip rows entirely; the lock state moves to the icon beside the user name */
+  body.supply-phone #clusterBar { display: none !important; }
+  body.supply-phone #supplyLockTop { display: inline-flex; }
   body.supply-phone .brn-sticky-bottom { bottom: 60px !important; }
 }
+/* the branch login's top bar keeps only the user chip (name · lock · logout) and the theme
+   toggle — search, presets, exports and uploads are the sales dashboard's tools */
+body.role-branch .topbar-actions > :not(#userChip):not(#darkBtn) { display: none !important; }
+body.role-branch #presetBar { display: none !important; }
+/* ปลดล็อกการบันทึก as a lock icon beside the user name (shown on the branch phone, see above) */
+#supplyLockTop { display: none; align-items: center; }
+#supplyLockTop button { width: 26px; height: 26px; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+#supplyLockTop svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #mobileSummary { padding-bottom: 80px; }
 #msSheet { display: none; position: fixed; inset: 0; z-index: 45; overflow-y: auto; -webkit-overflow-scrolling: touch;
   background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
@@ -2122,6 +2139,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <div id="userChip" style="display:none;align-items:center;gap:6px;padding:3px 6px 3px 10px;
            border:1px solid var(--border);border-radius:999px;font-size:12px;white-space:nowrap">
         <span id="userChipName" style="font-weight:600;color:var(--text-secondary)"></span>
+        <span id="supplyLockTop"></span>
         <button onclick="openPasswordChange(false)" class="topbar-icon-btn" title="เปลี่ยนรหัสผ่าน" aria-label="เปลี่ยนรหัสผ่าน" style="width:26px;height:26px"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2"/></svg></button>
         <button onclick="doLogout()" class="topbar-icon-btn" title="ออกจากระบบ" aria-label="ออกจากระบบ" style="width:26px;height:26px">⎋</button>
       </div>
