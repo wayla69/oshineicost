@@ -187,18 +187,26 @@ const TAB_MODULE = {
 // first_time), on top of the home page; "เข้าใจแล้ว" dismisses it for good.
 const ROLE_START = {
   management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
-  accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['opsreport', 'การชำระเงิน บิลยกเลิก โต๊ะ โปรโมชัน'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
-  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
+  accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['bomcenter', 'นำเข้าราคาซื้อจริงรายเดือนจากรายงานจ่ายสินค้าของฝ่ายบัญชี', 'price'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
+  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจสอบว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · ยืนยัน · ดำเนินการ · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
-  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['dailysales', 'ยอดขายรายวัน เทียบเดือน / ปีก่อน'], ['cost', 'ต้นทุนและ food cost']],
-  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['menuimpact', 'วัตถุดิบ: มี vs ไม่มี กระทบอะไร'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
-  salessupport: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ดำเนินการ สรุปรวมตามผู้จำหน่าย และส่งออก Excel'], ['ingpurchase', 'กรอก/นำเข้ายอดซื้อวัตถุดิบรายสัปดาห์ เทียบยอดขาย'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก']],
-  branch: [['branchstock', 'ตรวจนับสินค้าคงเหลือของสาขาทีละโซน']],
+  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['bomcenter', 'ความพร้อมของวัตถุดิบ ราคา และสูตร ก่อนปล่อยเวอร์ชันภายในวันที่ 25', 'overview'], ['cost', 'ต้นทุนและ food cost']],
+  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'แก้สูตรตาม Tier และสูตรกึ่งสำเร็จ ต้นทุนปรับตามทันที', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
+  salessupport: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง กดดำเนินการแล้ว และสรุปรวมตามผู้จำหน่าย', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันสั่งรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
+  branch: [['branchstock', 'ตรวจนับสินค้าคงเหลือทีละโซนก่อนเปิดร้าน', 'count'], ['branchstock', 'สั่งสินค้ารอบนี้จากยอดแนะนำ และส่งให้ส่วนกลางก่อน 10:00', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
+// An entry may name a pane of the วัตถุดิบและใบสั่งซื้อ module ([tab, why, pane]):
+// it opens through supplyGo and is titled by its chip, not by PAGE_TITLES.
+function _startGo(t, pane) { return pane ? `supplyGo({tab:'${t}',pane:'${pane}'})` : `switchTab('${t}')`; }
+function _startTitle(t, pane) {
+  const hit = pane ? _supplyItemOf(t, pane) : null;
+  return hit ? `${hit.chip.label} · ${hit.item.label}` : (PAGE_TITLES[t] || t);
+}
 function showStartCard(role) {
   const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 3);
-  const host = document.getElementById('tab-home'); if (!host || !items.length) return;
+  // The branch role has no home page: the card sits on top of the page it landed on.
+  const host = document.getElementById(tabAllowed('home') ? 'tab-home' : 'tab-' + activeTab); if (!host || !items.length) return;
   let card = document.getElementById('homeStartCard');
   if (!card) { card = document.createElement('div'); card.id = 'homeStartCard'; host.insertBefore(card, host.firstChild); }
   card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
@@ -206,8 +214,8 @@ function showStartCard(role) {
       <div class="text-base font-bold" style="color:var(--text-primary)">เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
       <div class="text-xs mt-1" style="color:var(--text-muted)">สามหน้าที่บทบาทนี้ใช้บ่อยที่สุด กดเปิดได้เลย — การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
       <button onclick="dismissStartCard()" class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary)">เข้าใจแล้ว ✕</button></div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why], i) => `<button onclick="switchTab('${t}')" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
-      <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(PAGE_TITLES[t] || t)}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why, pane], i) => `<button onclick="${_startGo(t, pane)}" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
+      <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(_startTitle(t, pane))}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
     <div class="text-xs mt-3" style="color:var(--text-muted)">คู่มือฉบับเต็ม: <a href="#" onclick="switchTab('manual');return false" class="underline">คู่มือการใช้งาน</a></div>`;
   card.hidden = false;
 }
@@ -220,7 +228,7 @@ async function maybeShowStartCard() {
   try { if (localStorage.getItem(_startKey())) return; } catch(e) {}
   let me = null;
   try { me = await api(`${API}/api/usage/me`); } catch(e) { return; }
-  if (me && me.first_time && tabAllowed('home')) { switchTab('home'); showStartCard(window.AUTH.role || me.role); }
+  if (me && me.first_time) { if (tabAllowed('home')) switchTab('home'); showStartCard(window.AUTH.role || me.role); }
 }
 
 const ROLE_LABEL_TH = {
@@ -2065,7 +2073,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'BoM Center — ทะเบียนวัตถุดิบ · ราคารายเดือน · แปลงหน่วย', branchstock:'สาขาของฉัน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่างการใช้', orderhub:'ศูนย์สั่งสินค้า · คิวใบสั่งซื้อ · ตรวจการสั่ง · สรุปผลต่างรายเดือน · ปิดงวด' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2095,10 +2103,12 @@ const TABS = {
   opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
   ingpurchase: { load: () => loadIngPurchase() },
-  ordersetup: { load: () => loadOrderSetup() },
-  bomcenter: { load: () => loadBomCenter() },
-  branchstock: { load: () => loadBranchStock() },
-  orderhub: { load: () => loadOrderHub() },
+  // ownFilters: the page has its own branch / month controls, so switchTab removes the
+  // global filter bar from the layout (not just invisible: a phone then shows the page first).
+  ordersetup: { load: () => loadOrderSetup(), ownFilters: true },
+  bomcenter: { load: () => loadBomCenter(), ownFilters: true },
+  branchstock: { load: () => loadBranchStock(), ownFilters: true },
+  orderhub: { load: () => loadOrderHub(), ownFilters: true },
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
@@ -2206,9 +2216,9 @@ function switchTab(name, direct) {
   document.getElementById('monthRangePickers')?.classList.toggle('invisible', hidePeriod);
   const _pb = document.getElementById('presetBar');
   if (_pb) _pb.style.display = hidePeriod ? 'none' : '';
-  // สาขาของฉัน has its own branch (the login's) and its own dates — no chain filters at all,
-  // removed from the layout (not just invisible) so a phone shows the count list first
-  const ownPage = (name === 'branchstock' || name === 'orderhub');
+  // Pages with their own branch / month controls (TABS[].ownFilters) get no chain filters at all,
+  // removed from the layout (not just invisible) so a phone shows the page first
+  const ownPage = !!(TABS[name] && TABS[name].ownFilters);
   document.getElementById('selBranch').closest('div').classList.toggle('hidden', ownPage);
   document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('hidden', ownPage);
   document.getElementById('dateRangePickers')?.classList.toggle('hidden', ownPage);
@@ -2237,6 +2247,48 @@ function switchTab(name, direct) {
   Promise.resolve(loadActiveTab()).finally(() => hideLoadingBar());
 }
 
+// ── วัตถุดิบและใบสั่งซื้อ (BoM Center): one entry, a two-level bar ──────────
+// The supply cluster is the only one whose bar lists PANES, not tabs: the
+// module's 17 panes sit in 3 tabs (bomcenter / branchstock / orderhub) plus 3
+// legacy ordering tabs, and staff could not find them (owner, 2026-10-07).
+// Level 1 = a question ("ข้อมูลตั้งต้น", "ใบสั่งซื้อ" …), level 2 = the panes
+// that answer it. Every pane and every legacy tab lives in exactly one chip;
+// nothing is hidden or deleted. Its own const, referenced by name from
+// TAB_CLUSTERS, so scripts/usage_kill_list.py keeps parsing the cluster line.
+// `pane` is the tab's own sub-view key (_bmcSub / _brnSub / _ohbSub / _osSub);
+// an item without one is a whole tab.
+const SUPPLY_CHIPS = [
+  { key: 'overview', label: 'ภาพรวม', items: [
+    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม' },
+    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา' }] },
+  { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ' },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน' },
+    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง' }] },
+  { key: 'recipes', label: 'สูตรและการปล่อย', items: [
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตาม Tier' },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ' },
+    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและปล่อยเวอร์ชัน' }] },
+  { key: 'orders', label: 'ใบสั่งซื้อ', items: [
+    { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ' },
+    { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ' },
+    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง' },
+    { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)' },
+    { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
+  { key: 'close', label: 'ปิดงวดเดือน', items: [
+    { tab: 'orderhub', pane: 'central', label: 'สินค้าส่วนกลางและนำเข้าข้อมูล' },
+    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน' }] },
+  { key: 'branch', label: 'สาขาของฉัน', items: [
+    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับ' },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า' },
+    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า' },
+    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้' }] },
+  { key: 'setup', label: 'ตั้งค่า', items: [
+    { tab: 'bomcenter', pane: 'cal', label: 'รอบสั่งของสาขา' },
+    { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ' },
+    { tab: 'ordersetup', pane: 'cal', label: 'ปฏิทินเทศกาล' }] },
+];
+
 // Lean-overhaul Phase 2: every analysis area is ONE sidebar entry + a cluster
 // bar of related views on the page itself. tabs[0] of each cluster is its
 // sidebar entry (applyPermissions' safety net relies on that ordering).
@@ -2253,7 +2305,7 @@ const TAB_CLUSTERS = [
   { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','Benchmark'],['pnl','P&L เชิงลึก']] },
   { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
   { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
-  { key: 'supply', label: 'BoM Center & จัดซื้อ', tabs: [['bomcenter','วัตถุดิบ & ราคา'],['ordering','แผนสั่งวัตถุดิบ'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
+  { chips: SUPPLY_CHIPS, key: 'supply', label: 'วัตถุดิบและใบสั่งซื้อ', tabs: [['bomcenter','ข้อมูลตั้งต้นและสูตร'],['orderhub','ใบสั่งซื้อและปิดงวดเดือน'],['branchstock','สาขาของฉัน'],['ordering','แผนสั่งวัตถุดิบ'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
 ];
 const _inChip = (t, name) => t[0] === name || (t[2] || []).includes(name);
 const clusterOf = name => TAB_CLUSTERS.find(c => c.tabs.some(t => _inChip(t, name)));
@@ -2301,6 +2353,7 @@ function _updateClusterBar(name) {
   }
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
+  if (cl.chips) { _renderSupplyBar(bar, cl, name); return; }   // วัตถุดิบและใบสั่งซื้อ: chips are panes
   const allowed = cl.tabs.filter(([t]) => tabAllowed(t));
   const shown = allowed.filter(([t]) => !SOFT_KILL.has(t));
   const folded = allowed.filter(([t]) => SOFT_KILL.has(t));
@@ -2319,6 +2372,108 @@ function _updateClusterBar(name) {
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
+}
+
+// ── วัตถุดิบและใบสั่งซื้อ: the two-level bar, deep links and the shared context ──
+// The pane each tab remembers is a `let` in its own slice (_bmcSub, _brnSub,
+// _ohbSub, _osSub); the slices register their accessors here as they load, so
+// this file never reaches into a later one.
+const _SUPPLY_PANE = {};     // tab → { get(), set(pane), show(pane), month?(m) }
+let _supplyChip = null;      // the level-1 chip the user is in (derived from the open pane)
+const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) whose work the role does daily
+  branch: { chip: 'branch' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
+  operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'master', tab: 'bomcenter', pane: 'price' },
+};
+function _supplyLastKey() { return 'supply:last:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
+function _supplyLastGet() { try { return JSON.parse(localStorage.getItem(_supplyLastKey()) || '{}') || {}; } catch (e) { return {}; } }
+// One month and one branch for the whole module (localStorage): every picker
+// reads it when it fills and writes it back on change, so nobody re-selects.
+function supplyCtx() { try { return JSON.parse(localStorage.getItem('oshinei_supply_ctx') || '{}') || {}; } catch (e) { return {}; } }
+function supplyCtxSet(patch) {
+  const c = Object.assign(supplyCtx(), patch || {});
+  try { localStorage.setItem('oshinei_supply_ctx', JSON.stringify(c)); } catch (e) {}
+  return c;
+}
+function _supplyItemOf(tab, pane) {
+  for (const ch of SUPPLY_CHIPS) {
+    const it = ch.items.find(i => i.tab === tab && (!i.pane || i.pane === pane));
+    if (it) return { chip: ch, item: it };
+  }
+  for (const ch of SUPPLY_CHIPS) {        // a pane no chip lists: light the tab's first item
+    const it = ch.items.find(i => i.tab === tab);
+    if (it) return { chip: ch, item: it };
+  }
+  return null;
+}
+function _supplyChipAllowed(ch) { return ch.items.some(it => tabAllowed(it.tab)); }
+
+// Open one item of the module. The pane is remembered BEFORE switchTab so the
+// tab's loader opens straight on it (one load, no flash of the previous pane);
+// month / branch go into the shared context first so the pane reads them.
+function supplyGo(o) {
+  o = o || {};
+  let tab = o.tab, pane = o.pane || null;
+  if (!tab || !tabAllowed(tab)) {
+    const first = SUPPLY_CHIPS.flatMap(c => c.items).find(it => tabAllowed(it.tab));
+    if (!first) return;
+    tab = first.tab; pane = first.pane || null;
+  }
+  if (o.month) supplyCtxSet({ month: o.month });
+  if (o.branch != null) supplyCtxSet({ branch_id: o.branch });
+  const hit = _supplyItemOf(tab, pane);
+  if (hit) {
+    _supplyChip = hit.chip.key;
+    const last = _supplyLastGet(); last[hit.chip.key] = { tab, pane };
+    try { localStorage.setItem(_supplyLastKey(), JSON.stringify(last)); } catch (e) {}
+  }
+  const acc = _SUPPLY_PANE[tab];
+  if (acc && o.month && acc.month) acc.month(o.month);
+  if (acc && pane) acc.set(pane);
+  if (activeTab === tab && acc && pane) acc.show(pane);   // same tab: move to the pane, don't reload the whole tab
+  else switchTab(tab);
+  if (o.anchor) setTimeout(() => { const el = document.getElementById(o.anchor); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 400);
+}
+// A level-1 chip: reopen the item last used there, else its first item the role can open.
+function supplyChipOpen(key) {
+  const ch = SUPPLY_CHIPS.find(c => c.key === key);
+  if (!ch) return;
+  const items = ch.items.filter(it => tabAllowed(it.tab));
+  const last = _supplyLastGet()[key];
+  const it = (last && items.find(i => i.tab === last.tab && (i.pane || null) === (last.pane || null))) || items[0];
+  if (it) supplyGo({ tab: it.tab, pane: it.pane });
+}
+// The sidebar entry (the module's nav items all call this; which one is visible is a permission matter).
+function supplyOpen() {
+  const want = _SUPPLY_LANDING[(window.AUTH && window.AUTH.role) || ''] || {};
+  if (want.tab && tabAllowed(want.tab) && !_supplyLastGet()[want.chip]) { supplyGo({ tab: want.tab, pane: want.pane }); return; }
+  const ch = (want.chip && SUPPLY_CHIPS.find(c => c.key === want.chip && _supplyChipAllowed(c))) || SUPPLY_CHIPS.find(_supplyChipAllowed);
+  if (ch) supplyChipOpen(ch.key);
+}
+function _renderSupplyBar(bar, cl, name) {
+  const acc = _SUPPLY_PANE[name];
+  const hit = _supplyItemOf(name, acc ? acc.get() : null);
+  const chips = cl.chips.filter(_supplyChipAllowed);
+  if (!chips.length) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
+  // the lit chip is the one holding the open pane; _supplyChip only decides when no chip lists it
+  let cur = hit ? chips.find(c => c.key === hit.chip.key) : null;
+  if (!cur) cur = chips.find(c => c.key === _supplyChip) || chips[0];
+  _supplyChip = cur.key;
+  const items = cur.items.filter(it => tabAllowed(it.tab));
+  const btn = (lbl, on, onclick, small) => `<button onclick="${onclick}" class="text-xs rounded-lg ${small ? 'px-2.5 py-0.5' : 'px-3 py-1'} transition-colors" style="${on
+    ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
+    : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${_noEmoji(lbl)}</button>`;
+  // a role with a single chip (the branch login) gets the level-2 row alone
+  const lvl1 = chips.length > 1
+    ? `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
+      chips.map(c => btn(c.label, c.key === cur.key, `supplyChipOpen('${c.key}')`, false)).join('')
+    : '';
+  const lvl2 = items.length > 1
+    ? `<div class="flex flex-wrap items-center gap-1.5 w-full${chips.length > 1 ? ' mt-1' : ''}"><span class="text-[11px] mr-1" style="color:var(--text-muted)">${_noEmoji(cur.label)}:</span>${
+        items.map(it => btn(it.label, !!(hit && it === hit.item), `supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})`, true)).join('')}</div>`
+    : '';
+  bar.innerHTML = lvl1 + lvl2;
+  const title = [cl.label, cur.label, items.length > 1 && hit ? hit.item.label : ''].filter(Boolean).map(_noEmoji).join(' · ');
+  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = title;
 }
 
 function toggleSidebar() {

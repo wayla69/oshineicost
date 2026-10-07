@@ -478,16 +478,20 @@ function opKeepTopN() {
 // Order setup — pack sizes + festival calendar
 // ═══════════════════════════════════════════════════════════════════════════
 let _osPacks = [], _osEdits = {}, _osSub = 'pack';
+// The วัตถุดิบและใบสั่งซื้อ bar (01-core.js) reads, sets and shows this tab's panes through here.
+_SUPPLY_PANE.ordersetup = { get: () => _osSub, set: k => { _osSub = k; }, show: k => osSetSub(k) };
 
-function osSetSub(k) {
+function osSetSub(k, quiet) {   // quiet: only show the pane (the caller loads it)
   _osSub = k;
   document.querySelectorAll('[data-osub]').forEach(b => b.classList.toggle('active', b.dataset.osub === k));
   document.getElementById('os-pane-pack').style.display = k === 'pack' ? '' : 'none';
   document.getElementById('os-pane-cal').style.display  = k === 'cal'  ? '' : 'none';
-  if (k === 'cal') osLoadCalendar();
+  if (k === 'cal' && !quiet) osLoadCalendar();
+  try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 
 async function loadOrderSetup(force) {
+  osSetSub(_osSub, true);          // reopen the remembered pane (the bar may have preset it)
   if (!force && _osPacks.length) { osRenderPacks(); return; }
   try {
     const d = await api(`${API}/api/ingredients/order-units`);

@@ -14,6 +14,12 @@ declare const marked: any;
 // ── globals the shell / the slices define on `window` rather than as names ──
 declare var __vendorErr: string[];      // index.html: vendor scripts that failed to load
 declare var allMonths: string[];        // 01-core.js: Object.defineProperty(window, 'allMonths', …)
+// 01-core.js: window.uiDialog / uiConfirm / uiPrompt / askWriteToken — the in-page
+// dialogs every slice awaits (the app's browser pane has no prompt()/confirm()).
+declare function uiDialog(opt: any): Promise<any>;
+declare function uiConfirm(message: string, opt?: any): Promise<boolean>;
+declare function uiPrompt(message: string, value?: any, opt?: any): Promise<string | null>;
+declare function askWriteToken(message?: string): Promise<string | null>;
 
 // Slices keep per-feature state on window (window.gpbGranularity, …) and read it
 // back as a property — any name is allowed there.

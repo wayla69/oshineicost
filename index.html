@@ -1334,6 +1334,8 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .content-area canvas { max-width: 100%; }
   #clusterBar { flex-wrap: wrap; height: auto; }
   .cluster-tab, .gran-btn { font-size: 11px; }
+  /* วัตถุดิบและใบสั่งซื้อ: a branch login works this bar with a thumb */
+  body[data-group="supply"] #clusterBar button { padding: 8px 12px; font-size: 13px; }
 
   /* Subtab button bars were the main cause of page-level horizontal scroll on
      phones (a row of nowrap buttons wider than the viewport). Let them wrap to
@@ -1940,27 +1942,33 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
     <span class="nav-label">เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
-  <div class="nav-item" id="nav-bomcenter" onclick="switchTab('bomcenter')" title="BoM Center & จัดซื้อ · ทะเบียนวัตถุดิบ, ราคาซื้อจริงรายเดือน, แปลงหน่วย, แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
+  <!-- วัตถุดิบและใบสั่งซื้อ (BoM Center) is ONE entry: the bar on the page lists its
+       7 questions (ภาพรวม · ข้อมูลตั้งต้น · สูตรและการปล่อย · ใบสั่งซื้อ · ปิดงวดเดือน ·
+       สาขาของฉัน · ตั้งค่า) and the panes under each (SUPPLY_CHIPS, js/01-core.js).
+       The module's other nav items stay in the DOM hidden; applyPermissions reveals
+       one of them for a role that cannot open bomcenter (Ops → orderhub, a branch
+       login → branchstock, which keeps its own name "สาขาของฉัน"). -->
+  <div class="nav-item" id="nav-bomcenter" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · ทะเบียนวัตถุดิบและราคา · สูตรและการปล่อยเวอร์ชัน · ใบสั่งซื้อของสาขาและส่วนกลาง · ปิดงวดเดือน · สาขาของฉัน · ตั้งค่า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-    <span class="nav-label">BoM Center &amp; จัดซื้อ</span>
+    <span class="nav-label">วัตถุดิบและใบสั่งซื้อ</span>
   </div>
-  <div class="nav-item" id="nav-branchstock" onclick="switchTab('branchstock')" title="สาขาของฉัน · ตรวจนับสินค้าคงเหลือทีละโซน (แช่แข็ง/แช่เย็น/ของแห้ง/บาร์น้ำ) · ผลตรวจนับปลายงวดใช้เป็นต้นงวดของรอบถัดไปโดยอัตโนมัติ">
+  <div class="nav-item" id="nav-branchstock" style="display:none" onclick="supplyOpen()" title="สาขาของฉัน · ตรวจนับสินค้าคงเหลือทีละโซน (แช่แข็ง/แช่เย็น/ของแห้ง/บาร์น้ำ) · สั่งสินค้า · รับสินค้า · ผลต่างการใช้">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
     <span class="nav-label">สาขาของฉัน</span>
   </div>
-  <div class="nav-item" id="nav-orderhub" onclick="switchTab('orderhub')" title="ศูนย์สั่งสินค้า · คิวใบสั่งซื้อจากสาขา (Sales Support) · ตรวจการสั่ง (Ops) · สรุปผลต่างการใช้รายเดือน · สินค้าส่วนกลางและปิดงวด">
+  <div class="nav-item" id="nav-orderhub" style="display:none" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · คิวใบสั่งซื้อจากสาขา (Sales Support) · ตรวจสอบการสั่ง (Ops) · สรุปผลต่างการใช้รายเดือน · สินค้าส่วนกลางและปิดงวดเดือน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 7h13l5 5v5h-3"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M3 7v10h2"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
-    <span class="nav-label">ศูนย์สั่งสินค้า</span>
+    <span class="nav-label">วัตถุดิบและใบสั่งซื้อ</span>
   </div>
-  <div class="nav-item" id="nav-ordering" style="display:none" onclick="switchTab('ordering')" title="จัดซื้อ · แผนสั่งวัตถุดิบ, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
+  <div class="nav-item" id="nav-ordering" style="display:none" onclick="switchTab('ordering')" title="แผนสั่งวัตถุดิบ (ระบบเดิม) · อยู่ในแถบ วัตถุดิบและใบสั่งซื้อ → ใบสั่งซื้อ">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">จัดซื้อ</span>
   </div>
-  <div class="nav-item" id="nav-ingpurchase" style="display:none" onclick="switchTab('ingpurchase')" title="ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา — นำเข้ายอดซื้อรายสัปดาห์จาก Excel แล้วเทียบกับยอดขายของสาขานั้น">
+  <div class="nav-item" id="nav-ingpurchase" style="display:none" onclick="switchTab('ingpurchase')" title="ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา · อยู่ในแถบ วัตถุดิบและใบสั่งซื้อ → ใบสั่งซื้อ">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">ยอดซื้อ vs ยอดขาย</span>
   </div>
-  <div class="nav-item" id="nav-ordersetup" style="display:none" onclick="switchTab('ordersetup')" title="ตั้งค่าการสั่งซื้อ — ขนาดบรรจุ (หน่วยสั่ง) และปฏิทินเทศกาล/โปรโมชัน">
+  <div class="nav-item" id="nav-ordersetup" style="display:none" onclick="switchTab('ordersetup')" title="ขนาดบรรจุ (หน่วยสั่ง) และปฏิทินเทศกาล/โปรโมชัน · อยู่ในแถบ วัตถุดิบและใบสั่งซื้อ → ตั้งค่า">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>
     <span class="nav-label">ตั้งค่าการสั่งซื้อ</span>
   </div>
