@@ -31,36 +31,71 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
 // server allows writes without a token and this stays invisible. /api/upload
 // manages its own token (see handleUpload) and is excluded here. Read-only POSTs
 // like /api/bom-cost/simulate aren't gated server-side, so they never prompt.
-// The token is asked for in an in-page dialog, not window.prompt(): embedded
-// browsers (the Claude app's browser pane, some in-app webviews) do not support
-// prompt(), and a save then failed with "prompt() is not supported".
-window.askWriteToken = function (message) {
-  // several saves can hit 403 together: they all wait for the one dialog
-  if (window._askTokenPending) return window._askTokenPending;
-  return (window._askTokenPending = new Promise(resolve => {
+// ── In-page dialogs ───────────────────────────────────────────────────────────
+// window.prompt/confirm are not usable in embedded browsers (the Claude app's
+// browser pane throws on prompt() and answers confirm() with "cancel" without
+// showing anything), so a save there failed or was silently cancelled. Every
+// question the app asks goes through uiDialog instead:
+//   await uiConfirm(message)                      -> true / false
+//   await uiPrompt(message, value, {list, placeholder, required})  -> text or null
+// `list` = [{value, label}] offered as suggestions while typing (a datalist).
+window.uiDialog = function (opt) {
+  return new Promise(resolve => {
+    const o = opt || {};
     const wrap = document.createElement('div');
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
     wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
-    wrap.innerHTML = `<form style="width:100%;max-width:380px;background:var(--bg-card, var(--bg-input, #fff));color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
-        <div style="font-weight:600;font-size:15px;margin-bottom:6px">ยืนยันสิทธิ์บันทึกข้อมูล</div>
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;white-space:pre-line"></div>
-        <input type="password" autocomplete="off" spellcheck="false" placeholder="Owner Write-Token"
-               style="width:100%;box-sizing:border-box;border:1px solid var(--border-control, var(--border));border-radius:var(--r-sm, 8px);padding:8px 10px;font-size:14px;background:var(--bg-input, #fff);color:var(--text-primary)">
+    const field = 'width:100%;box-sizing:border-box;border:1px solid var(--border-control, var(--border));border-radius:var(--r-sm, 8px);padding:8px 10px;font-size:14px;background:var(--bg-input, #fff);color:var(--text-primary)';
+    const listId = 'uiDlgList' + Date.now();
+    wrap.innerHTML = `<form style="width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--bg-card, var(--bg-input, #fff));color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
+        <div data-el="title" style="font-weight:600;font-size:15px;margin-bottom:6px"></div>
+        <div data-el="msg" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;white-space:pre-line"></div>
+        ${o.input ? `<input data-el="in" type="${o.input.password ? 'password' : 'text'}" autocomplete="off" spellcheck="false" ${o.input.list ? `list="${listId}"` : ''} style="${field}">
+          ${o.input.list ? `<datalist id="${listId}"></datalist>` : ''}
+          <div data-el="err" style="font-size:12px;color:var(--bad-ink);margin-top:4px"></div>` : ''}
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-          <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ยกเลิก</button>
-          <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)">ยืนยัน</button>
+          <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)"></button>
+          <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)"></button>
         </div></form>`;
-    wrap.querySelector('form > div:nth-child(2)').textContent = message || '';
-    const input = wrap.querySelector('input');
+    wrap.querySelector('[data-el="title"]').textContent = o.title || 'ยืนยันการดำเนินการ';
+    wrap.querySelector('[data-el="msg"]').textContent = o.message || '';
+    wrap.querySelector('[data-act="cancel"]').textContent = o.cancelText || 'ยกเลิก';
+    wrap.querySelector('[type="submit"]').textContent = o.okText || 'ยืนยัน';
+    const input = wrap.querySelector('[data-el="in"]');
+    if (input) {
+      input.value = o.input.value || '';
+      input.placeholder = o.input.placeholder || '';
+      const dl = wrap.querySelector('datalist');
+      if (dl) dl.innerHTML = o.input.list.map(x => `<option value="${String(x.value).replace(/"/g, '&quot;')}">${String(x.label || '').replace(/</g, '&lt;')}</option>`).join('');
+    }
     const done = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
-    const onKey = e => { if (e.key === 'Escape') done(''); };
-    wrap.querySelector('form').addEventListener('submit', e => { e.preventDefault(); done(input.value.trim()); });
-    wrap.querySelector('[data-act="cancel"]').addEventListener('click', () => done(''));
+    const onKey = e => { if (e.key === 'Escape') done(input ? null : false); };
+    wrap.querySelector('form').addEventListener('submit', e => {
+      e.preventDefault();
+      if (!input) return done(true);
+      const v = input.value.trim();
+      if (o.input.required && !v) { wrap.querySelector('[data-el="err"]').textContent = 'กรุณากรอกข้อมูล'; input.focus(); return; }
+      done(v);
+    });
+    wrap.querySelector('[data-act="cancel"]').addEventListener('click', () => done(input ? null : false));
     document.addEventListener('keydown', onKey);
     document.body.appendChild(wrap);
-    setTimeout(() => input.focus(), 0);
-  }).finally(() => { window._askTokenPending = null; }));
+    setTimeout(() => (input || wrap.querySelector('[type="submit"]')).focus(), 0);
+  });
+};
+window.uiConfirm = (message, opt) => window.uiDialog(Object.assign({ message }, opt || {}));
+window.uiPrompt = (message, value, opt) => {
+  const o = opt || {};
+  return window.uiDialog({ title: o.title || 'กรอกข้อมูล', message, okText: o.okText || 'ตกลง',
+    input: { value: value == null ? '' : String(value), list: o.list, placeholder: o.placeholder, required: o.required } });
+};
+// the owner token: several saves can hit 403 together and all wait for the one dialog
+window.askWriteToken = function (message) {
+  if (window._askTokenPending) return window._askTokenPending;
+  return (window._askTokenPending = window.uiDialog({ title: 'ยืนยันสิทธิ์บันทึกข้อมูล', message,
+    input: { password: true, placeholder: 'Owner Write-Token' } })
+    .then(v => v || '').finally(() => { window._askTokenPending = null; }));
 };
 
 (function () {

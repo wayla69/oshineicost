@@ -96,14 +96,17 @@ async function bmcLoadOverview() {
         จากนั้นนำเข้า sheet DATAP (ไฟล์ COST-RW) เพื่อระบุสูญเสีย % และผู้จำหน่าย แล้วนำเข้าราคาซื้อจริงของเดือนล่าสุด</p>
         ${_bmcCanWrite() ? '<button onclick="bmcSeed()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">เติมจากข้อมูลในระบบ</button>' : ''}`;
     } else {
+      // each open item links to the list where it is fixed
       const steps = [
-        [s.recipe_codes_missing === 0, `รหัสวัตถุดิบที่สูตรใช้อยู่ในทะเบียนครบ`, `สูตรใช้รหัสที่ยังไม่อยู่ในทะเบียน ${s.recipe_codes_missing} รหัส กรุณากด “เติมจากข้อมูลในระบบ”`],
-        [s.no_base_unit === 0, 'ทุกวัตถุดิบมีหน่วยฐาน', `${s.no_base_unit} รายการยังไม่มีหน่วยฐาน`],
-        [s.raw_without_pack === 0, 'วัตถุดิบดิบมีขนาดบรรจุครบ', `${s.raw_without_pack} รายการดิบยังไม่มีขนาดบรรจุ (จึงแปลงหน่วยแพ็คหรือถุงไม่ได้)`],
-        [(s.price_sources || {}).purchase_avg > 0, `มีราคาซื้อจริงของเดือน ${s.month}`, `ยังไม่มีราคาซื้อจริงของเดือน ${s.month} กรุณานำเข้าที่แท็บราคารายเดือน`],
+        [s.recipe_codes_missing === 0, `รหัสวัตถุดิบที่สูตรใช้อยู่ในทะเบียนครบ`, `สูตรใช้รหัสที่ยังไม่อยู่ในทะเบียน ${s.recipe_codes_missing} รหัส`, 'bmcGoIssues()', 'ตรวจรายการและรหัสที่แนะนำ'],
+        [s.no_base_unit === 0, 'ทุกวัตถุดิบมีหน่วยฐาน', `${s.no_base_unit} รายการยังไม่มีหน่วยฐาน`, "bmcGoIng('ไม่มีหน่วยฐาน')", 'เปิดรายการ'],
+        [s.raw_without_pack === 0, 'วัตถุดิบดิบมีขนาดบรรจุครบ', `${s.raw_without_pack} รายการดิบยังไม่มีขนาดบรรจุ (จึงแปลงหน่วยแพ็คหรือถุงไม่ได้)`, "bmcGoIng('ไม่มีขนาดบรรจุ')", 'เปิดรายการ'],
+        [(s.price_sources || {}).purchase_avg > 0, `มีราคาซื้อจริงของเดือน ${s.month}`, `ยังไม่มีราคาซื้อจริงของเดือน ${s.month}`, "bmcSetSub('price')", 'นำเข้าที่แท็บราคารายเดือน'],
       ];
+      const go = (on, label) => ` <a href="#" onclick="${on};return false" style="color:var(--accent);white-space:nowrap">${label} →</a>`;
       setup.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ความพร้อมของข้อมูล</div>` +
-        steps.map(([ok, good, bad]) => `<div class="text-xs py-0.5" style="color:${ok ? 'var(--good-ink)' : 'var(--amber-ink)'}">${ok ? '✓' : '•'} ${esc(ok ? good : bad)}</div>`).join('');
+        steps.map(([ok, good, bad, on, label]) => `<div class="text-xs py-0.5" style="color:${ok ? 'var(--good-ink)' : 'var(--amber-ink)'}">${ok ? '✓' : '•'} ${esc(ok ? good : bad)}${ok ? '' : go(on, label)}</div>`).join('') +
+        '<div id="bmcSetupCr"></div>';
     }
     bmcLoadCodeReview(s);
   } catch (e) {
@@ -143,6 +146,51 @@ async function bmcLoadCodeReview(s) {
   }
 }
 function bmcCrView(v) { _bmcCrView = v; bmcRenderCodeReview(); }
+function bmcGoIssues() {
+  bmcSetSub('overview');
+  _bmcCrView = 'todo';
+  setTimeout(() => { const el = document.getElementById('bmcIssuesCard'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
+}
+let _bmcIngProb = '';         // the ingredient tab shows only rows with this problem ('' = any)
+function bmcGoIng(prob) {
+  _bmcIngProb = prob || '';
+  bmcSetSub('ing');
+  const cb = document.getElementById('bmcIngIssues');
+  if (cb) cb.checked = !!prob;
+  bmcLoadIng(false);
+}
+// master items for "รหัสอื่น…": names close to the recipe's names first (the master is not
+// cleaned yet, so an exact match is rare — character pairs shared, Dice coefficient)
+let _bmcMasterAll = null;
+function _bmcPairs(t) {
+  const k = String(t || '').toLowerCase().replace(/[\s\d().,/\-]+/g, '');
+  const out = new Set();
+  for (let i = 0; i < k.length - 1; i++) out.add(k.slice(i, i + 2));
+  return out;
+}
+function _bmcSim(a, b) {
+  const x = _bmcPairs(a), y = _bmcPairs(b);
+  if (!x.size || !y.size) return 0;
+  let n = 0; x.forEach(p => { if (y.has(p)) n++; });
+  return 2 * n / (x.size + y.size);
+}
+async function _bmcCodeChoices(names, exclude) {
+  if (!_bmcMasterAll) {
+    const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
+    _bmcMasterAll = (d.rows || []).map(r => ({ code: r.code, name: r.name_th || '' }));
+  }
+  return _bmcMasterAll.filter(m => m.code !== exclude)
+    .map(m => ({ m, s: Math.max(0, ...names.map(n => _bmcSim(n, m.name))) }))
+    .sort((a, b) => b.s - a.s || a.m.code.localeCompare(b.m.code))
+    .map(({ m, s }) => ({ value: m.code, label: `${m.name}${s >= 0.3 ? ` · ชื่อใกล้เคียง ${Math.round(s * 100)}%` : ''}` }));
+}
+function _bmcPickedCode(v, choices) {
+  if (!v) return '';
+  const t = v.trim();
+  if (choices.some(c => c.value === t)) return t;
+  const byName = choices.find(c => c.label.split(' · ')[0].trim() === t);   // typed a name exactly
+  return byName ? byName.value : t;
+}
 function _bmcQ(v) { return JSON.stringify(v).replace(/"/g, '&quot;'); }
 function bmcRenderCodeReview() {
   const iss = document.getElementById('bmcIssuesCard');
@@ -150,6 +198,10 @@ function bmcRenderCodeReview() {
   if (!iss || !d) return;
   const c = d.counts || {};
   const todo = (c.conflict || 0) + (c.missing || 0);
+  const setupCr = document.getElementById('bmcSetupCr');
+  if (setupCr) setupCr.innerHTML = todo
+    ? `<div class="text-xs py-0.5" style="color:var(--amber-ink)">• รหัสในสูตรเดิมที่ชื่อไม่ตรงกับทะเบียน ${_bmcNum(c.conflict || 0, 0)} รหัส${c.missing ? ` · ไม่อยู่ในทะเบียน ${_bmcNum(c.missing, 0)} รหัส` : ''} <a href="#" onclick="bmcGoIssues();return false" style="color:var(--accent);white-space:nowrap">ตรวจและจับคู่รหัส →</a></div>`
+    : `<div class="text-xs py-0.5" style="color:var(--good-ink)">✓ รหัสในสูตรเดิมตรงกับทะเบียนหรือตรวจแล้วทั้งหมด</div>`;
   const done = (d.rows || []).filter(r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap')).length;
   const hasDone = r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap');
   const rows = (d.rows || []).filter(r => _bmcCrView === 'all' || (_bmcCrView === 'todo'
@@ -214,10 +266,12 @@ function bmcCrDecideG(i, status, useCode) {
 }
 async function bmcCrDecide(code, status, useCode, names) {
   let note = null;
-  if (status === 'remap' && !useCode) {          // "รหัสอื่น…": the analyst types the code (and why)
-    useCode = (prompt(`กรุณาระบุรหัสในทะเบียนที่ใช้แทนรหัส ${code} ของสูตรเดิม (เช่น V-007)`) || '').trim();
+  if (status === 'remap' && !useCode) {          // "รหัสอื่น…": pick a master code, closest names first
+    const choices = await _bmcCodeChoices(names || [], code);
+    useCode = _bmcPickedCode(await uiPrompt(`กรุณาระบุรหัสในทะเบียนที่ใช้แทนรหัส ${code} ของสูตรเดิม\nพิมพ์รหัสหรือชื่อ ระบบจะแสดงรายการในทะเบียนที่ชื่อใกล้เคียงที่สุดก่อน`, '',
+      { title: 'เลือกรหัสที่ใช้แทน', list: choices, placeholder: 'เช่น V-007 หรือ ต้นหอม', required: true }), choices);
     if (!useCode) return;
-    note = prompt(`ใช้ ${useCode} แทน ${code}\nหมายเหตุ (ไม่บังคับ)`, '') || null;
+    note = await uiPrompt(`ใช้ ${useCode} แทน ${code}\nหมายเหตุ (ไม่บังคับ)`, '') || null;
   }
   try {
     await _bmcJson(`${API}/api/bom-center/code-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -256,7 +310,11 @@ function bmcRenderIng() {
   const q = (document.getElementById('bmcIngQ').value || '').toLowerCase();
   const kind = document.getElementById('bmcIngKind').value;
   const only = document.getElementById('bmcIngIssues').checked;
+  const bar = document.getElementById('bmcIngProbBar');
+  if (bar) bar.innerHTML = _bmcIngProb && only
+    ? `${_bmcChip('แสดงเฉพาะ: ' + _bmcIngProb, 'var(--amber-ink)')} <a href="#" onclick="_bmcIngProb='';bmcRenderIng();return false" style="color:var(--accent)">แสดงทุกปัญหา</a>` : '';
   const rows = _bmcIng.filter(r => (!kind || r.kind === kind) && (!only || r.problems.length)
+    && (!only || !_bmcIngProb || r.problems.includes(_bmcIngProb))
     && (!q || `${r.code} ${r.name_th || ''}`.toLowerCase().includes(q)));
   const w = _bmcCanWrite();
   const inp = (r, f, width, type) => w
@@ -305,7 +363,7 @@ async function bmcSeed() {
       + `ราคาใบเสนอราคาอ้างอิง ${pre.ref_prices} · รหัสคลังที่จับคู่กับรหัสสูตร ${pre.aliases}\n`
       + (pre.multi_unit_codes.length ? `รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} (ใช้หน่วยที่ใช้มากที่สุด กรุณาตรวจสอบที่แท็บแปลงหน่วย)\n` : '')
       + `\nไม่เขียนทับค่าที่ตั้งไว้แล้ว · ยืนยันการบันทึก?`;
-    if (!confirm(msg)) return;
+    if (!await uiConfirm(msg)) return;
     const d = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=false`, { method: 'POST' });
     _bmcStatus('bmcIngStatus', `✓ ทะเบียน ${d.before} → ${d.after} รายการ`, 'var(--good-ink)');
     _bmcIng = [];
@@ -326,7 +384,7 @@ async function bmcImportIng(input) {
       sheet <b>${esc(pre.sheet)}</b> · อ่าน ${pre.rows} แถว · ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} · ไม่เปลี่ยน ${pre.unchanged} · ราคาใบเสนอราคา ${pre.ref_prices}
       ${pre.skipped.length ? `<div class="mt-1" style="color:var(--amber-ink)">ข้าม ${pre.skipped.length} แถว: ${pre.skipped.slice(0, 8).map(s => `แถว ${s.row}${s.code ? ' ' + esc(s.code) : ''} (${esc(s.why)})`).join(' · ')}</div>` : ''}</div>`;
     if (!(pre.inserted + pre.updated + pre.ref_prices)) { _bmcStatus('bmcIngStatus', 'ไม่มีรายการเปลี่ยนแปลง'); return; }
-    if (!confirm(`ยืนยันการนำเข้า ${file.name}: ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม`)) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
+    if (!await uiConfirm(`ยืนยันการนำเข้า ${file.name}: ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม`)) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
     const d = await send(false);
     _bmcStatus('bmcIngStatus', `✓ นำเข้าแล้ว ใหม่ ${d.inserted} · แก้ไข ${d.updated}`, 'var(--good-ink)');
     bmcLoadIng(true);
@@ -445,7 +503,7 @@ async function _bmcRunPriceImport(send, label) {
     box.innerHTML = _bmcPreviewHtml(pre, false);
     if (!pre.priced) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
     if (pre.month !== _bmcMonth()) { const el = document.getElementById('bmcMonth'); if (el) el.value = pre.month; }
-    if (!confirm(`${label}\nเดือน ${pre.month}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
+    if (!await uiConfirm(`${label}\nเดือน ${pre.month}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
         (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (กรุณาตรวจสอบหน่วยฐานภายหลัง)` : '') +
         (pre.counts.flag ? `\n⚠ ${pre.counts.flag} รายการราคาเปลี่ยน ≥25% กรุณาตรวจสอบในตารางก่อนยืนยัน` : '') +
         (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : '') + `\n\nยืนยันการบันทึก?`)) {
@@ -475,7 +533,7 @@ async function bmcPricesFromReq() {
 }
 async function bmcCarry() {
   const m = _bmcMonth();
-  if (!confirm(`ยืนยันการใช้ราคาล่าสุดของทุกวัตถุดิบในเดือน ${m}\n(รายการที่มีราคาซื้อจริงหรือราคาที่กำหนดเองแล้วจะไม่เปลี่ยน)`)) return;
+  if (!await uiConfirm(`ยืนยันการใช้ราคาล่าสุดของทุกวัตถุดิบในเดือน ${m}\n(รายการที่มีราคาซื้อจริงหรือราคาที่กำหนดเองแล้วจะไม่เปลี่ยน)`)) return;
   try {
     const d = await _bmcJson(`${API}/api/bom-center/prices/carry-forward?month=${m}`, { method: 'POST' });
     _bmcStatus('bmcPriceStatus', `✓ ยกราคามา ${d.carried_forward} รายการ`, 'var(--good-ink)');
@@ -484,11 +542,11 @@ async function bmcCarry() {
 }
 async function bmcManual(code) {
   const r = _bmcPrices.find(x => x.code === code) || {};
-  const v = prompt(`ราคาต่อ ${r.base_unit || 'หน่วยฐาน'} ของ ${code} ${r.name || ''} เดือน ${_bmcMonth()}\n(เว้นว่างเพื่อยกเลิกราคาที่กำหนดเอง)`, r.source === 'manual' ? r.price_per_base : '');
+  const v = await uiPrompt(`ราคาต่อ ${r.base_unit || 'หน่วยฐาน'} ของ ${code} ${r.name || ''} เดือน ${_bmcMonth()}\n(เว้นว่างเพื่อยกเลิกราคาที่กำหนดเอง)`, r.source === 'manual' ? r.price_per_base : '');
   if (v === null) return;
   let note = '';
   if (v.trim() !== '') {
-    note = prompt('กรุณาระบุเหตุผล (จำเป็น) เช่น ผู้จำหน่ายแจ้งปรับราคา');
+    note = await uiPrompt('กรุณาระบุเหตุผล (จำเป็น) เช่น ผู้จำหน่ายแจ้งปรับราคา');
     if (!note) return;
   }
   try {
@@ -689,7 +747,7 @@ async function bmcPrepImportFlat(input) {
   try {
     const pre = await send(true);
     if (pre.errors.length) { _bmcStatus('bmcPrepStatus', 'ไฟล์มีปัญหา: ' + pre.errors.slice(0, 3).join(' · '), 'var(--bad-ink)'); return; }
-    if (!confirm(`ยืนยันการนำเข้าแม่แบบ: สูตรของ ${pre.codes} รหัสจะถูกแทนที่`)) return;
+    if (!await uiConfirm(`ยืนยันการนำเข้าแม่แบบ: สูตรของ ${pre.codes} รหัสจะถูกแทนที่`)) return;
     const r = await send(false);
     _bmcStatus('bmcPrepStatus', `✓ บันทึก ${r.saved} รหัส`, 'var(--good-ink)');
     bmcLoadPrep();
@@ -744,7 +802,7 @@ async function bmcSaveRule() {
   catch (e) { _bmcStatus('bmcRuleStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
 async function bmcDelRule(code, unit) {
-  if (!confirm(`ยืนยันการลบกฎ 1 ${unit} ของ ${code}`)) return;
+  if (!await uiConfirm(`ยืนยันการลบกฎ 1 ${unit} ของ ${code}`)) return;
   try { await _bmcPostRule(code, unit, null); } catch (e) { _bmcStatus('bmcRuleStatus', String(e.message || e), 'var(--bad-ink)'); }
 }
 
@@ -987,9 +1045,9 @@ async function bmcImportCostRw(input) {
   const file = input?.files?.[0];
   if (!file) return;
   const sg = window._bmcRelSuggest || {};
-  const eff = prompt('กรุณาระบุเดือนที่เวอร์ชันนี้มีผล (YYYY-MM)', sg.effective_month || '');
+  const eff = await uiPrompt('กรุณาระบุเดือนที่เวอร์ชันนี้มีผล (YYYY-MM)', sg.effective_month || '');
   if (!eff) { input.value = ''; return; }
-  const pm = prompt('กรุณาระบุเดือนของราคาวัตถุดิบที่ใช้คิดต้นทุน (YYYY-MM)\n(ใช้ราคาซื้อจริงของงวดล่าสุดที่บัญชีปิดแล้ว)', sg.price_month || '');
+  const pm = await uiPrompt('กรุณาระบุเดือนของราคาวัตถุดิบที่ใช้คิดต้นทุน (YYYY-MM)\n(ใช้ราคาซื้อจริงของงวดล่าสุดที่บัญชีปิดแล้ว)', sg.price_month || '');
   if (!pm) { input.value = ''; return; }
   const send = dry => { const fd = new FormData(); fd.append('file', file, file.name);
     return _bmcJson(`${API}/api/bom-center/recipes/import-cost-rw?dry_run=${dry}&effective_month=${eff}&price_month=${pm}`, { method: 'POST', body: fd }); };
@@ -997,7 +1055,7 @@ async function bmcImportCostRw(input) {
     _bmcStatus('bmcRecStatus', 'กำลังอ่านไฟล์ Cost-RW… (ไฟล์มีขนาดใหญ่ อาจใช้เวลาสักครู่)');
     const pre = await send(true);
     document.getElementById('bmcRecReport').innerHTML = _bmcCostRwReport(pre, false);
-    if (!confirm(`ยืนยันการนำเข้าสูตรบุฟเฟ่ต์ ${pre.matched} เมนู เข้า “${pre.label}”\nยังไม่จับคู่ ${pre.unmatched.length} รายการ (จับคู่ต่อได้บนหน้าจอ)\nสูตรเดิมในฉบับร่างนี้ของเมนูที่อยู่ในไฟล์จะถูกแทนที่`)) {
+    if (!await uiConfirm(`ยืนยันการนำเข้าสูตรบุฟเฟ่ต์ ${pre.matched} เมนู เข้า “${pre.label}”\nยังไม่จับคู่ ${pre.unmatched.length} รายการ (จับคู่ต่อได้บนหน้าจอ)\nสูตรเดิมในฉบับร่างนี้ของเมนูที่อยู่ในไฟล์จะถูกแทนที่`)) {
       _bmcStatus('bmcRecStatus', 'ยังไม่บันทึก กรุณาตรวจสอบผลด้านบน'); return;
     }
     const d = await send(false);
@@ -1018,7 +1076,7 @@ async function bmcImportFlat(input) {
     return _bmcJson(`${API}/api/bom-center/recipes/import-flat?release_id=${_bmcRel.release_id}&dry_run=${dry}`, { method: 'POST', body: fd }); };
   try {
     const pre = await send(true);
-    if (!confirm(`ยืนยันการแทนที่สูตร ${pre.recipes} เมนู (${pre.lines} บรรทัด) ใน “${_bmcRel.label}”` + (pre.errors.length ? `\nข้าม ${pre.errors.length} แถว: ` + pre.errors.slice(0, 4).map(e => e.why).join(', ') : ''))) return;
+    if (!await uiConfirm(`ยืนยันการแทนที่สูตร ${pre.recipes} เมนู (${pre.lines} บรรทัด) ใน “${_bmcRel.label}”` + (pre.errors.length ? `\nข้าม ${pre.errors.length} แถว: ` + pre.errors.slice(0, 4).map(e => e.why).join(', ') : ''))) return;
     const d = await send(false);
     _bmcStatus('bmcRecStatus', `✓ แทนที่สูตร ${d.recipes} เมนู`, 'var(--good-ink)');
     bmcLoadRecipes();
@@ -1127,7 +1185,7 @@ async function bmcRunChecks() {
 }
 async function bmcAccept(i) {
   const r = window._bmcChecks.rows[i];
-  const reason = prompt(`ยืนยันข้อ ${r.check_code}\n${r.message}\n\nกรุณาระบุเหตุผล (จำเป็น) เช่น ปรับสูตรตามที่ครัวแจ้ง`);
+  const reason = await uiPrompt(`ยืนยันข้อ ${r.check_code}\n${r.message}\n\nกรุณาระบุเหตุผล (จำเป็น) เช่น ปรับสูตรตามที่ครัวแจ้ง`);
   if (!reason) return;
   try {
     const d = await _bmcJson(`${API}/api/bom-center/release-act/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1141,10 +1199,10 @@ async function bmcDoRelease() {
   let backdate_reason = null;
   if (r.effective_month <= cur) {
     // the month has started: releasing RE-COSTS sales already made (from ${r.effective_month} on)
-    backdate_reason = prompt(`เวอร์ชันนี้มีผลเดือน ${r.effective_month} ซึ่งเริ่มแล้ว\nการปล่อยจะคำนวณต้นทุนยอดขายตั้งแต่ ${r.effective_month} ใหม่ทั้งหมด`
+    backdate_reason = await uiPrompt(`เวอร์ชันนี้มีผลเดือน ${r.effective_month} ซึ่งเริ่มแล้ว\nการปล่อยจะคำนวณต้นทุนยอดขายตั้งแต่ ${r.effective_month} ใหม่ทั้งหมด`
       + ` (เดือนก่อน ก.ย. 2569 จะไม่เปลี่ยน)\n\nกรุณาระบุเหตุผลของการมีผลย้อนหลัง (จำเป็น):`);
     if (!backdate_reason) return;
-  } else if (!confirm(`ยืนยันการปล่อย “${r.label}” มีผลเดือน ${r.effective_month}\n\nหลังปล่อยแล้วจะแก้ไขสูตรในเวอร์ชันนี้ไม่ได้ (ต้องสร้างฉบับร่างใหม่) · management จะเห็นผลกระทบและรับทราบ`)) return;
+  } else if (!await uiConfirm(`ยืนยันการปล่อย “${r.label}” มีผลเดือน ${r.effective_month}\n\nหลังปล่อยแล้วจะแก้ไขสูตรในเวอร์ชันนี้ไม่ได้ (ต้องสร้างฉบับร่างใหม่) · management จะเห็นผลกระทบและรับทราบ`)) return;
   try {
     const d = await _bmcJson(`${API}/api/bom-center/release-act/release?release_id=${r.release_id}`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backdate_reason }) });
@@ -1153,7 +1211,7 @@ async function bmcDoRelease() {
   } catch (e) { _bmcStatus('bmcRlStatus', 'ปล่อยสูตรไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
 async function bmcAck() {
-  const note = prompt(`รับทราบ “${_bmcRlRel.label}”\nหมายเหตุ (ไม่บังคับ)`, '');
+  const note = await uiPrompt(`รับทราบ “${_bmcRlRel.label}”\nหมายเหตุ (ไม่บังคับ)`, '');
   if (note === null) return;
   try {
     await _bmcJson(`${API}/api/bom-center/release-act/acknowledge`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1163,7 +1221,7 @@ async function bmcAck() {
   } catch (e) { _bmcStatus('bmcRlStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
 async function bmcRetire() {
-  const reason = prompt(`ยืนยันการย้อนกลับ “${_bmcRlRel.label}” เวอร์ชันก่อนหน้าจะกลับมามีผลแทน\nกรุณาระบุเหตุผล (จำเป็น)`);
+  const reason = await uiPrompt(`ยืนยันการย้อนกลับ “${_bmcRlRel.label}” เวอร์ชันก่อนหน้าจะกลับมามีผลแทน\nกรุณาระบุเหตุผล (จำเป็น)`);
   if (!reason) return;
   try {
     await _bmcJson(`${API}/api/bom-center/release-act/retire`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1174,9 +1232,9 @@ async function bmcRetire() {
 }
 async function bmcNewDraft() {
   const sg = window._bmcRelSuggest || {};
-  const eff = prompt('กรุณาระบุเดือนที่ฉบับร่างใหม่มีผล (YYYY-MM)', sg.effective_month || '');
+  const eff = await uiPrompt('กรุณาระบุเดือนที่ฉบับร่างใหม่มีผล (YYYY-MM)', sg.effective_month || '');
   if (!eff) return;
-  const pm = prompt('กรุณาระบุเดือนของราคาที่ใช้คิดต้นทุน (YYYY-MM)', sg.price_month || '');
+  const pm = await uiPrompt('กรุณาระบุเดือนของราคาที่ใช้คิดต้นทุน (YYYY-MM)', sg.price_month || '');
   if (!pm) return;
   try {
     const d = await _bmcJson(`${API}/api/bom-center/release-act/new-draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' },

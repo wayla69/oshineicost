@@ -104,7 +104,7 @@ async function ohbCenImport(input) {
       <thead><tr style="color:var(--text-muted)" class="text-left"><th>รหัส</th><th>ชื่อสินค้า</th><th>หน่วยนับ</th><th class="text-right">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th></th></tr></thead>
       <tbody>${look.map(_ohbCenRow).join('')}</tbody></table></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจสอบ · หากอัตราแปลงไม่ถูกต้อง ให้ดาวน์โหลดบัญชีสินค้าหลังบันทึก แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง</div>`;
-    if (!confirm(`ยืนยันบันทึกบัญชีสินค้าส่วนกลาง ${pre.items} รายการ\n- รหัสอื่นอีก ${pre.to_local} รายการจะกำหนดเป็น “สาขาจัดซื้อเอง”\n- หน่วยสั่งในทะเบียนจะเปลี่ยนเป็นหน่วยขายของส่วนกลาง`)) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่มีการบันทึก'); return; }
+    if (!await uiConfirm(`ยืนยันบันทึกบัญชีสินค้าส่วนกลาง ${pre.items} รายการ\n- รหัสอื่นอีก ${pre.to_local} รายการจะกำหนดเป็น “สาขาจัดซื้อเอง”\n- หน่วยสั่งในทะเบียนจะเปลี่ยนเป็นหน่วยขายของส่วนกลาง`)) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่มีการบันทึก'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/central/import?dry_run=false`, { method: 'POST', body: _ohbFd(file) });
     _bmcStatus('ohbCenStatus', `✓ บันทึกบัญชีสินค้า ${d.saved} รายการ (รหัสใหม่ ${d.inserted}) · กำหนดเป็นสาขาจัดซื้อเอง ${d.set_local} รายการ`, 'var(--good-ink)');
     ohbLoadCentral();
@@ -143,7 +143,7 @@ async function ohbDelPreview(ids) {
 async function ohbDelSave() {
   const ids = _ohbDelIds();
   if (!ids.length) { _bmcStatus('ohbDelStatus', 'กรุณาเลือกอย่างน้อย 1 สาขา', 'var(--amber-ink)'); return; }
-  if (!confirm(`ยืนยันบันทึกรับสินค้าประจำเดือน ${ids.length} สาขา\nหากเคยนำเข้าเดือนนี้แล้ว ใบรับเดิมจะถูกแทนที่`)) return;
+  if (!await uiConfirm(`ยืนยันบันทึกรับสินค้าประจำเดือน ${ids.length} สาขา\nหากเคยนำเข้าเดือนนี้แล้ว ใบรับเดิมจะถูกแทนที่`)) return;
   try {
     const d = await _bmcJson(`${API}/api/bom-center/central/deliveries?dry_run=false&branch_ids=${ids.join(',')}`, { method: 'POST', body: _ohbFd(_ohbDelFile) });
     _bmcStatus('ohbDelStatus', '✓ ' + d.branches.map(b => `${b.branch || b.label}: ${b.receipt_id ? 'ใบรับเลขที่ ' + b.receipt_id + ' · ' + b.lines + ' รายการ' : (b.error || 'ไม่มีรายการรับ')}`).join(' · '), 'var(--good-ink)');
@@ -165,7 +165,7 @@ async function ohbCntImport(input) {
       ${pre.unconverted.length ? `<div style="color:var(--bad-ink)">แปลงหน่วยไม่ได้: ${pre.unconverted.slice(0, 8).map(esc).join(' · ')}</div>` : ''}</div>`;
     if (!pre.ok) { _bmcStatus('ohbCntStatus', 'กรุณาแก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
     const name = document.getElementById('ohbCntBranch').selectedOptions[0]?.textContent || '';
-    if (!confirm(`ยืนยันส่งผลตรวจนับ สาขา${name} วันที่ ${day} (${pre.lines} รายการ)\nเมื่อส่งแล้วจะแก้ไขไม่ได้ หากต้องนับใหม่ให้นำเข้าเป็นวันที่ใหม่`)) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
+    if (!await uiConfirm(`ยืนยันส่งผลตรวจนับ สาขา${name} วันที่ ${day} (${pre.lines} รายการ)\nเมื่อส่งแล้วจะแก้ไขไม่ได้ หากต้องนับใหม่ให้นำเข้าเป็นวันที่ใหม่`)) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
     _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับเลขที่ ${d.count_id} (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.lines} รายการ`, 'var(--good-ink)');
   } catch (e) { _bmcStatus('ohbCntStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
