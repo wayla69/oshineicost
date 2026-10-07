@@ -16,6 +16,32 @@ function showMobileSummary() {
   loadMobileSummary(true);
 }
 
+// ── The top bar folds on a phone. Its controls (branch · period · search · filters ·
+// presets · tools · user · uploads) are six or seven rows of chrome before the first
+// number on a 360 px screen; the fold button at the right of the title row hides them
+// until they are wanted. Remembered per device (oshinei_tb_fold), folded by default.
+// The CSS applies body.tb-folded at ≤700 px only (index.html, MOBILE), so the class is
+// inert on a desktop; the branch login keeps its bare bar instead (#314).
+function applyTopbarFold(folded) {
+  document.body.classList.toggle('tb-folded', !!folded);
+  const b = document.getElementById('tbFoldBtn');
+  if (!b) return;
+  b.setAttribute('aria-expanded', folded ? 'false' : 'true');
+  b.title = folded ? 'แสดงตัวกรองและเครื่องมือ' : 'ซ่อนตัวกรองและเครื่องมือ';
+  const c = document.getElementById('tbFoldChev');
+  if (c) c.textContent = folded ? '▾' : '▴';
+}
+function toggleTopbarFold() {
+  const folded = !document.body.classList.contains('tb-folded');
+  try { localStorage.setItem('oshinei_tb_fold', folded ? '1' : '0'); } catch (e) {}
+  applyTopbarFold(folded);
+}
+function initTopbarFold() {
+  let v = null;
+  try { v = localStorage.getItem('oshinei_tb_fold'); } catch (e) {}
+  applyTopbarFold(v === null ? true : v === '1');
+}
+
 // ── shared state + helpers ──
 let _msView = 'summary', _msRpt = null, _msBranchesFilled = false, _msMonthsFilled = false,
     _msSalesGran = 'month', _msBranchSort = 'rev';
