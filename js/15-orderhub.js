@@ -32,7 +32,6 @@ function loadOrderHub() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  document.querySelectorAll('#tab-orderhub [data-ohbsub]').forEach(b => b.classList.toggle('active', b.dataset.ohbsub === k));
   ['queue', 'comp', 'month', 'pilot', 'central'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();

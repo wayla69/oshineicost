@@ -483,7 +483,6 @@ _SUPPLY_PANE.ordersetup = { get: () => _osSub, set: k => { _osSub = k; }, show: 
 
 function osSetSub(k, quiet) {   // quiet: only show the pane (the caller loads it)
   _osSub = k;
-  document.querySelectorAll('[data-osub]').forEach(b => b.classList.toggle('active', b.dataset.osub === k));
   document.getElementById('os-pane-pack').style.display = k === 'pack' ? '' : 'none';
   document.getElementById('os-pane-cal').style.display  = k === 'cal'  ? '' : 'none';
   if (k === 'cal' && !quiet) osLoadCalendar();

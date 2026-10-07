@@ -11,17 +11,6 @@
     <span class="text-[11px] ml-auto" style="color:var(--text-muted)" title="ราคา = ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี (มูลค่ารวม ÷ ปริมาณ) · หน่วยฐาน = หน่วยที่ใช้ในสูตร ระบบแปลงกิโลกรัม แพ็ค และลิตรให้อัตโนมัติ · สูตรตาม Tier เก็บเฉพาะปริมาณ ต้นทุนคำนวณจากราคาของเดือนที่เลือก">ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี · การนำเข้าทุกครั้งแสดงผลให้ตรวจสอบก่อนบันทึก</span>
   </div>
 
-  <div class="subtab-bar mb-3" style="display:none">
-    <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
-    <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
-    <button class="subtab-btn" data-bmcsub="prep" onclick="bmcSetSub('prep')">สูตรกึ่งสำเร็จ</button>
-    <button class="subtab-btn" data-bmcsub="rel" onclick="bmcSetSub('rel')">ตรวจ &amp; ปล่อย</button>
-    <button class="subtab-btn" data-bmcsub="fc" onclick="bmcSetSub('fc')">แนะนำยอดสั่ง</button>
-    <button class="subtab-btn" data-bmcsub="ing" onclick="bmcSetSub('ing')">ทะเบียนวัตถุดิบ</button>
-    <button class="subtab-btn" data-bmcsub="price" onclick="bmcSetSub('price')">ราคารายเดือน</button>
-    <button class="subtab-btn" data-bmcsub="conv" onclick="bmcSetSub('conv')">แปลงหน่วย</button>
-  </div>
-
   <!-- ── overview ──────────────────────────────────────────────────────── -->
   <div id="bmc-pane-overview">
     <div id="bmcKpis" class="grid gap-3 mb-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>

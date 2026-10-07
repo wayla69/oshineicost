@@ -194,7 +194,6 @@ _SUPPLY_PANE.branchstock = { get: () => _brnSub, set: k => { _brnSub = k; }, sho
 
 function brnSetSub(k, quiet) {   // quiet: only show the pane (the caller loads it)
   _brnSub = k;
-  document.querySelectorAll('#tab-branchstock [data-brnsub]').forEach(b => b.classList.toggle('active', b.dataset.brnsub === k));
   ['count', 'order', 'recv', 'var'].forEach(p => { const el = document.getElementById('brn-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   if (!quiet) {
     if (k === 'order') brnLoadOrder();
