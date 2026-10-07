@@ -5,6 +5,8 @@ Moved out of recon/main.py in Phase 7c (2026-09) by the AST: these endpoints and
 the helpers only they use, unchanged. URLs are unchanged.
 """
 from fastapi import APIRouter
+from .. import auth as _A
+from .auth import _ip
 from ..core import _DAY_RE
 from ..core import _SNAPSHOT_DIR
 from ..core import _actor
@@ -193,8 +195,14 @@ def update_session_status(
     status:      str = Form(...),
     approved_by: str = Form(""),
     reason:      str = Form(""),
+    password:    str = Form(""),
     x_manager_token: str = Header(None),
 ):
+    """Move a month along draft → in_review → approved (→ closed), or reopen it.
+    Approving / closing / reopening is a sign-off: login OFF → the manager code;
+    login ON → the manager ROLE plus a step-up re-authentication (the signed-in
+    user's own `password` in the form, checked last, after every other gate, and
+    counted toward the login lockout)."""
     valid = {"draft", "in_review", "approved", "closed"}
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
@@ -239,8 +247,6 @@ def update_session_status(
                 raise HTTPException(
                     409, f"Cannot {status} — {pending} open discrepancy(ies) remain. "
                          "Resolve or accept them first.")
-        # Only stamp approval metadata when the session is actually approved;
-        # moving back to draft/in_review must not record a (false) approval.
         if status == "approved":
             # Segregation of duties (AUD-4): the person who prepared the month
             # cannot also approve it. A classic audit finding; enforced when both
@@ -251,6 +257,14 @@ def update_session_status(
                 raise HTTPException(
                     409, "แบ่งแยกหน้าที่ (SoD): ผู้จัดทำไม่สามารถอนุมัติงานของตัวเองได้ — "
                          "ต้องให้ผู้อื่นเป็นผู้อนุมัติ")
+        # Step-up (login ON): a sign-off is the user's own act — re-enter the password.
+        # Last gate, so a refused attempt never burns a try on a month that could not
+        # be signed anyway; a wrong one counts toward the same lockout as the login.
+        if _A.login_enabled() and (status in ("approved", "closed") or reopening):
+            _stepup(conn, request, password, session_id, status)
+        # Only stamp approval metadata when the session is actually approved;
+        # moving back to draft/in_review must not record a (false) approval.
+        if status == "approved":
             cur = conn.execute("""
                 UPDATE recon_sessions
                 SET status=?, approved_by=?, approved_at=datetime('now')
@@ -285,6 +299,24 @@ def update_session_status(
         except Exception:
             snap = None
     return {"session_id": session_id, "status": status, "snapshot": snap}
+
+
+def _stepup(conn, request, password: str, session_id: int, status: str) -> None:
+    """403 unless `password` is the signed-in user's own. A counted failure (or an
+    attempt while locked) is audited as 'stepup_fail' and committed before the
+    refusal; the caller's transaction has written nothing else yet."""
+    u = _A.current_user(request)
+    if u is None:                                     # require_role ran first; belt and braces
+        raise HTTPException(401, _A.MSG_NEED_LOGIN)
+    res = _A.verify_stepup(conn, u["id"], password or "")
+    if res == "ok":
+        return
+    if res != "blank":
+        _audit(conn, "recon_auth", u["id"], "stepup_fail", u["username"],
+               [{"field": "reason", "new": res}, {"field": "session_id", "new": session_id},
+                {"field": "status", "new": status}, {"field": "ip", "new": _ip(request)}])
+        conn.commit()
+    raise HTTPException(403, _A.stepup_message(res))
 
 
 def _norm_ts(s):
