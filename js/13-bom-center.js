@@ -9,6 +9,11 @@ let _bmcIng = [];            // rows from /api/bom-center/ingredients
 let _bmcIngEdits = {};       // code -> {field: value}
 let _bmcPrices = [];         // rows from /api/bom-center/prices
 let _bmcSummary = null;
+// The วัตถุดิบและใบสั่งซื้อ bar (01-core.js) reads, sets and shows this tab's panes through here.
+_SUPPLY_PANE.bomcenter = {
+  get: () => _bmcSub, set: k => { _bmcSub = k; }, show: k => bmcSetSub(k),
+  month: m => { const el = document.getElementById('bmcMonth'); if (el && el.value !== m) { el.value = m; _bmcIng = []; _bmcPrices = []; } },
+};
 
 const _BMC_KIND = { raw: 'ดิบ', prepared: 'กึ่งสำเร็จ', consumable: 'วัสดุสิ้นเปลือง', zero_by_design: '฿0 โดยเจตนา' };
 const _BMC_SRC = { purchase_avg: 'ซื้อจริง', carry_forward: 'ยกมา', manual: 'กำหนดเอง', list_ref: 'ใบเสนอราคา', snapshot: 'สูตรเดิม' };
@@ -17,7 +22,10 @@ const _BMC_SRC_INK = { purchase_avg: 'var(--good-ink)', carry_forward: 'var(--am
 
 function _bmcMonth() {
   const el = document.getElementById('bmcMonth');
-  if (el && !el.value) { const d = new Date(); el.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+  if (el && !el.value) {   // the module's shared month first (supplyCtx), else this calendar month
+    const d = new Date();
+    el.value = supplyCtx().month || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
   return el ? el.value : '';
 }
 function _bmcAddUnknown() { const el = document.getElementById('bmcAddUnknown'); return !!(el && el.checked); }
@@ -50,7 +58,7 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   document.querySelectorAll('#tab-bomcenter [data-bmcsub]').forEach(b => b.classList.toggle('active', b.dataset.bmcsub === k));
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -58,12 +66,15 @@ function bmcSetSub(k) {
   if (k === 'rec') bmcLoadReleases();
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
+  if (k === 'cal') bmcLoadCalendar();
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
   if (k === 'conv') bmcLoadConv();
+  try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
-function bmcMonthChanged() { _bmcIng = []; _bmcPrices = []; bmcLoadOverview(); }
+// The month strip sits above every pane: a change reloads the pane that is open.
+function bmcMonthChanged() { _bmcIng = []; _bmcPrices = []; supplyCtxSet({ month: _bmcMonth() }); bmcSetSub(_bmcSub); }
 
 async function loadBomCenter() {
   _bmcMonth();
@@ -101,7 +112,7 @@ async function bmcLoadOverview() {
         [s.recipe_codes_missing === 0, `รหัสวัตถุดิบที่สูตรใช้อยู่ในทะเบียนครบ`, `สูตรใช้รหัสที่ยังไม่อยู่ในทะเบียน ${s.recipe_codes_missing} รหัส`, 'bmcGoIssues()', 'ตรวจรายการและรหัสที่แนะนำ'],
         [s.no_base_unit === 0, 'ทุกวัตถุดิบมีหน่วยฐาน', `${s.no_base_unit} รายการยังไม่มีหน่วยฐาน`, "bmcGoIng('ไม่มีหน่วยฐาน')", 'เปิดรายการ'],
         [s.raw_without_pack === 0, 'วัตถุดิบดิบมีขนาดบรรจุครบ', `${s.raw_without_pack} รายการดิบยังไม่มีขนาดบรรจุ (จึงแปลงหน่วยแพ็คหรือถุงไม่ได้)`, "bmcGoIng('ไม่มีขนาดบรรจุ')", 'เปิดรายการ'],
-        [(s.price_sources || {}).purchase_avg > 0, `มีราคาซื้อจริงของเดือน ${s.month}`, `ยังไม่มีราคาซื้อจริงของเดือน ${s.month}`, "bmcSetSub('price')", 'นำเข้าที่แท็บราคารายเดือน'],
+        [(s.price_sources || {}).purchase_avg > 0, `มีราคาซื้อจริงของเดือน ${s.month}`, `ยังไม่มีราคาซื้อจริงของเดือน ${s.month}`, "bmcSetSub('price')", 'นำเข้าที่ ราคารายเดือน'],
       ];
       const go = (on, label) => ` <a href="#" onclick="${on};return false" style="color:var(--accent);white-space:nowrap">${label} →</a>`;
       setup.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ความพร้อมของข้อมูล</div>` +
@@ -361,7 +372,7 @@ async function bmcSeed() {
     const pre = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=true`, { method: 'POST' });
     const msg = `เติมทะเบียนจากข้อมูลในระบบ\n\nรหัสใหม่ ${pre.inserted} · เติมช่องที่ว่าง ${pre.updated} · ไม่เปลี่ยน ${pre.unchanged}\n`
       + `ราคาใบเสนอราคาอ้างอิง ${pre.ref_prices} · รหัสคลังที่จับคู่กับรหัสสูตร ${pre.aliases}\n`
-      + (pre.multi_unit_codes.length ? `รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} (ใช้หน่วยที่ใช้มากที่สุด กรุณาตรวจสอบที่แท็บแปลงหน่วย)\n` : '')
+      + (pre.multi_unit_codes.length ? `รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} (ใช้หน่วยที่ใช้มากที่สุด กรุณาตรวจสอบที่ หน่วยและการแปลง)\n` : '')
       + `\nไม่เขียนทับค่าที่ตั้งไว้แล้ว · ยืนยันการบันทึก?`;
     if (!await uiConfirm(msg)) return;
     const d = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=false`, { method: 'POST' });
@@ -1100,7 +1111,7 @@ async function bmcLoadReleasePane(keepId) {
     const monthly = _bmcRels.filter(r => r.kind === 'monthly');
     const cur = keepId || Number(sel.value) || (monthly[0] || {}).release_id;
     sel.innerHTML = monthly.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''}>${esc(r.label)} · ${_BMC_STATUS_TH[r.status] || r.status} · มีผล ${esc(r.effective_month)}</option>`).join('')
-      || '<option value="">ยังไม่มีเวอร์ชันรายเดือน กรุณานำเข้าสูตรที่แท็บสูตรตาม Tier</option>';
+      || '<option value="">ยังไม่มีเวอร์ชันรายเดือน กรุณานำเข้าสูตรที่ สูตรตาม Tier</option>';
     await bmcLoadRelease();
   } catch (e) { _bmcStatus('bmcRlStatus', 'โหลดข้อมูลไม่สำเร็จ:' + String(e.message || e), 'var(--bad-ink)'); }
 }
@@ -1303,6 +1314,8 @@ async function bmcLoadForecastPane() {
   const sel = document.getElementById('bmcFcBranch');
   if (!sel.options.length && _bmcCal) {
     sel.innerHTML = _bmcCal.rows.map(r => `<option value="${r.branch_id}">${esc(r.branch)}</option>`).join('');
+    const ctx = supplyCtx().branch_id;   // the module's shared branch, when this list has it
+    if (ctx && _bmcCal.rows.some(r => r.branch_id === ctx)) sel.value = String(ctx);
   }
   bmcLoadRuns();
 }
@@ -1331,10 +1344,10 @@ function bmcRenderForecast() {
     <div class="text-[11px] mt-2" style="color:var(--text-muted)">ใช้ยอดขาย ${esc(f.history_from)} ถึง ${esc(f.history_to)} (${f.trading_days} วันที่มีการขาย · เฉพาะช่วงเมนูใหม่) ·
       สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ปล่อยแล้ว (${f.stats.release_skus} เมนู) + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ ·
       เทศกาล ×${(f.season?.factor || 1).toFixed(2)}${f.season?.reason ? ' (' + esc(f.season.reason) + ')' : ''}
-      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบสั่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b>'}</div>
+      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบสั่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบสั่ง →</a>'}</div>
     <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
       ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (สาขาเริ่มตรวจนับสต๊อกใน Phase 2) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
-    ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรในเมนูที่สาขานี้ขายที่ยังคำนวณไม่ได้ (แปลงหน่วยไม่ได้) กรุณาแก้ไขที่แท็บแปลงหน่วย</summary>
+    ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรในเมนูที่สาขานี้ขายที่ยังคำนวณไม่ได้ (แปลงหน่วยไม่ได้) <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
       <div class="text-[11px] mt-1" style="color:var(--text-secondary)">${f.stats.missed.map(m => `${esc(m.code)} (${esc(m.unit)}) · ${_bmcNum(m.plates, 0)} จาน · ${esc(m.why)}`).join('<br>')}</div></details>` : ''}
   </div>`;
   const box = document.getElementById('bmcFcTable');
@@ -1404,9 +1417,13 @@ async function bmcSaveCalendar() {
   });
   try {
     await _bmcJson(`${API}/api/bom-center/order-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.values(rows)) });
+    _bmcStatus('bmcCalStatus', '✓ บันทึกรอบสั่งแล้ว', 'var(--good-ink)');
     _bmcStatus('bmcFcStatus', '✓ บันทึกรอบสั่งแล้ว', 'var(--good-ink)');
     bmcLoadCalendar();
-  } catch (e) { _bmcStatus('bmcFcStatus', 'บันทึกไม่สำเร็จ:' + String(e.message || e), 'var(--bad-ink)'); }
+  } catch (e) {
+    _bmcStatus('bmcCalStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)');
+    _bmcStatus('bmcFcStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)');
+  }
 }
 async function bmcLoadRuns() {
   try {

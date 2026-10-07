@@ -1,16 +1,17 @@
 <div id="tab-bomcenter" style="display:none">
 
-  <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">BoM Center — ทะเบียนวัตถุดิบ · ราคารายเดือน · แปลงหน่วย</h2>
-    <p class="text-xs mt-1" style="color:var(--text-secondary)">
-      ศูนย์ข้อมูลต้นทุนวัตถุดิบที่ทุกหน้าใช้ร่วมกัน · <b>ราคา</b> = ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี (มูลค่ารวม ÷ ปริมาณ) ·
-      <b>หน่วยฐาน</b> = หน่วยที่ใช้ในสูตร (กรัม / มิลลิลิตร / ชิ้น) ระบบแปลงกิโลกรัม แพ็ค และลิตรให้อัตโนมัติ ·
-      <b>สูตรตาม Tier</b> = เก็บเฉพาะปริมาณ ต้นทุนคำนวณจากราคาของเดือนที่เลือก · ลูกค้า Tier สูงสั่งเมนูของ Tier ต่ำกว่าได้ ·
-      การนำเข้าทุกครั้งแสดงผลให้ตรวจสอบก่อนบันทึก
-    </p>
+  <!-- The month strip is visible on every pane: one price month for the whole tab.
+       Pane switching lives in the bar on the page (SUPPLY_CHIPS, js/01-core.js);
+       the old sub-tab bar below is kept in the markup, hidden. -->
+  <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+    <label class="text-xs" style="color:var(--text-muted)">เดือนราคา
+      <input type="month" id="bmcMonth" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+    </label>
+    <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)" title="ราคา = ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี (มูลค่ารวม ÷ ปริมาณ) · หน่วยฐาน = หน่วยที่ใช้ในสูตร ระบบแปลงกิโลกรัม แพ็ค และลิตรให้อัตโนมัติ · สูตรตาม Tier เก็บเฉพาะปริมาณ ต้นทุนคำนวณจากราคาของเดือนที่เลือก">ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี · การนำเข้าทุกครั้งแสดงผลให้ตรวจสอบก่อนบันทึก</span>
   </div>
 
-  <div class="subtab-bar mb-3">
+  <div class="subtab-bar mb-3" style="display:none">
     <button class="subtab-btn active" data-bmcsub="overview" onclick="bmcSetSub('overview')">ภาพรวม</button>
     <button class="subtab-btn" data-bmcsub="rec" onclick="bmcSetSub('rec')">สูตรตาม Tier</button>
     <button class="subtab-btn" data-bmcsub="prep" onclick="bmcSetSub('prep')">สูตรกึ่งสำเร็จ</button>
@@ -23,12 +24,6 @@
 
   <!-- ── overview ──────────────────────────────────────────────────────── -->
   <div id="bmc-pane-overview">
-    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
-      <label class="text-xs" style="color:var(--text-muted)">เดือน
-        <input type="month" id="bmcMonth" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      </label>
-      <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
-    </div>
     <div id="bmcKpis" class="grid gap-3 mb-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
     <div id="bmcSetupCard" class="card p-4 mb-3"></div>
     <div id="bmcIssuesCard" class="card p-4 mb-3"></div>
@@ -120,7 +115,7 @@
   <div id="bmc-pane-fc" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
       <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
-        <select id="bmcFcBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <select id="bmcFcBranch" onchange="supplyCtxSet({branch_id: Number(this.value) || null})" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <label class="text-xs" style="color:var(--text-muted)">รอบ<br>
         <select id="bmcFcRound" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
           <option value="1">รอบ 1 (อังคาร/พุธ)</option><option value="2">รอบ 2 (ศุกร์/เสาร์)</option><option value="salmon">แซลมอนสด (สั่งล่วงหน้า 1 สัปดาห์)</option></select></label>
@@ -135,8 +130,13 @@
     </div>
     <div id="bmcFcHead" class="mb-3"></div>
     <div id="bmcFcTable" class="card p-4 mb-3 overflow-x-auto" style="display:none"></div>
-    <div id="bmcFcCal" class="card p-4 mb-3"></div>
     <div id="bmcFcRuns" class="card p-4 mb-3"></div>
+  </div>
+
+  <!-- ── order calendar (ตั้งค่า → รอบสั่งของสาขา) ─────────────────────── -->
+  <div id="bmc-pane-cal" style="display:none">
+    <div id="bmcFcCal" class="card p-4 mb-3"></div>
+    <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
@@ -185,7 +185,7 @@
   <!-- ── monthly prices ────────────────────────────────────────────────── -->
   <div id="bmc-pane-price" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
-      <span class="text-xs" style="color:var(--text-muted)">เดือน <b id="bmcPriceMonthLbl"></b> (เปลี่ยนเดือนได้ที่แท็บภาพรวม)</span>
+      <span class="text-xs" style="color:var(--text-muted)">เดือน <b id="bmcPriceMonthLbl"></b></span>
       <input type="search" id="bmcPriceQ" placeholder="ค้นหา…" oninput="bmcRenderPrices()"
              style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:180px">
       <select id="bmcPriceSrc" onchange="bmcRenderPrices()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
@@ -208,7 +208,7 @@
         <button onclick="bmcCarry()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
                 title="สำหรับเดือนที่ยังไม่มีไฟล์ ระบบใช้ราคาล่าสุดของแต่ละวัตถุดิบ พร้อมแสดงอายุของราคา">ยกราคาล่าสุดมาใช้</button>
         <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"
-               title="รหัสที่มีในรายงานบัญชีแต่ยังไม่อยู่ในทะเบียน (เช่น ทุเรียน FV00043) จะถูกเพิ่ม โดยกำหนดหน่วยฐานโดยประมาณจากหน่วยที่ซื้อ กรุณาตรวจสอบที่แท็บทะเบียนวัตถุดิบ">
+               title="รหัสที่มีในรายงานบัญชีแต่ยังไม่อยู่ในทะเบียน (เช่น ทุเรียน FV00043) จะถูกเพิ่ม โดยกำหนดหน่วยฐานโดยประมาณจากหน่วยที่ซื้อ กรุณาตรวจสอบที่ ทะเบียนวัตถุดิบ">
           <input type="checkbox" id="bmcAddUnknown" checked> เพิ่มรหัสที่ยังไม่มีในทะเบียน</label>
         <span id="bmcPriceStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
       </div>

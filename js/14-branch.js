@@ -27,13 +27,14 @@ async function loadBranchStock() {
       sel.style.display = 'none';
       nm.textContent = _brnMe.branch || '';
     } else {
-      const keep = sel.value;
+      const keep = sel.value || String(supplyCtx().branch_id || '');   // the module's shared branch
       sel.innerHTML = '<option value="">— เลือกสาขา —</option>' +
         _brnMe.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
-      if (keep) sel.value = keep;
+      if (keep && _brnMe.branches.some(b => String(b.branch_id) === keep)) sel.value = keep;
       sel.style.display = '';
       nm.textContent = '';
     }
+    brnSetSub(_brnSub, true);       // show the remembered pane; brnBranchChanged loads it
     await brnBranchChanged();
   } catch (e) {
     document.getElementById('brnList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`;
@@ -182,16 +183,22 @@ async function brnSetLayout(code, zone) {
 let _brnSub = 'count';
 let _brnRecv = [];            // lines waiting to be saved: {code, name, qty, unit}
 let _brnVar = null;           // /api/bom-center/variance/period
+// The วัตถุดิบและใบสั่งซื้อ bar (01-core.js) reads, sets and shows this tab's panes through here.
+_SUPPLY_PANE.branchstock = { get: () => _brnSub, set: k => { _brnSub = k; }, show: k => brnSetSub(k) };
 
-function brnSetSub(k) {
+function brnSetSub(k, quiet) {   // quiet: only show the pane (the caller loads it)
   _brnSub = k;
   document.querySelectorAll('#tab-branchstock [data-brnsub]').forEach(b => b.classList.toggle('active', b.dataset.brnsub === k));
   ['count', 'order', 'recv', 'var'].forEach(p => { const el = document.getElementById('brn-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
-  if (k === 'order') brnLoadOrder();
-  if (k === 'recv') brnLoadRecv();
-  if (k === 'var') brnLoadVarPane();
+  if (!quiet) {
+    if (k === 'order') brnLoadOrder();
+    if (k === 'recv') brnLoadRecv();
+    if (k === 'var') brnLoadVarPane();
+  }
+  try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 async function brnBranchChanged() {
+  supplyCtxSet({ branch_id: _brnBid() || supplyCtx().branch_id || null });
   _brnVar = null;
   _brnRecv = [];
   _brnPlan = null;
@@ -489,7 +496,7 @@ function brnRenderOrder() {
       ใช้ได้ ${esc(p.cover_from)} ถึง ${esc(p.cover_to)} (${p.cover_days} วัน)</div>
     <div class="mt-1" style="color:var(--text-secondary)">${stockLine}</div>
     <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่งซื้อ #${o.order_id} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}` : _bmcChip('ยังไม่มีใบสั่งซื้อรอบนี้', 'var(--text-muted)')}
-      · มูลค่าที่สั่ง ≈ <b>฿${_bmcNum(total, 0)}</b>${p.calendar_filled ? '' : ' · <span style="color:var(--amber-ink)">ใช้วันสั่งค่าเริ่มต้น · Sales Support กำหนดวันสั่งได้ที่ BoM Center</span>'}</div>`;
+      · มูลค่าที่สั่ง ≈ <b>฿${_bmcNum(total, 0)}</b>${p.calendar_filled ? '' : ' · <span style="color:var(--amber-ink)">ใช้วันสั่งค่าเริ่มต้น · Sales Support กำหนดวันสั่งได้ที่ ตั้งค่า → รอบสั่งของสาขา</span>'}</div>`;
   const q = (document.getElementById('brnOrdQ').value || '').trim().toLowerCase();
   const only = document.getElementById('brnOrdOnly').checked;
   const rows = p.rows.filter(r => (!only || r.order_units > 0 || Number(_brnOrdQty[r.code] || 0) > 0)

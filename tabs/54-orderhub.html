@@ -1,12 +1,13 @@
 <div id="tab-orderhub" style="display:none">
 
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">ศูนย์สั่งสินค้า · Sales Support · Ops</h2>
+    <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน · Sales Support · Ops</h2>
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
       ใบสั่งซื้อที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · Sales Support ระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล ·
       สาขาส่งใบสั่งซื้อก่อน 10:00 ของวันสั่ง และส่วนกลางควรดำเนินการภายใน 14:00 ของวันเดียวกัน · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
     </p>
-    <div class="subtab-bar mt-3">
+    <!-- pane switching lives in the bar on the page (SUPPLY_CHIPS, js/01-core.js); kept hidden -->
+    <div class="subtab-bar mt-3" style="display:none">
       <button class="subtab-btn active" data-ohbsub="queue" onclick="ohbSetSub('queue')">คิวใบสั่งซื้อ</button>
       <button class="subtab-btn" data-ohbsub="comp" onclick="ohbSetSub('comp')">ตรวจสอบการสั่ง (Compliance)</button>
       <button class="subtab-btn" data-ohbsub="month" onclick="ohbSetSub('month')">สรุปผลต่างรายเดือน</button>
@@ -96,7 +97,8 @@
       <div class="text-sm font-semibold" style="color:var(--text-primary)">4. นำเข้าผลตรวจนับสินค้าคงเหลือ (ต้นงวด / ปลายงวด)</div>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">การปิดงวดย้อนหลังใช้ผลตรวจนับ ณ วันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) โดยนับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น
         ขั้นตอน: ดาวน์โหลดแบบฟอร์มของสาขา กรอกจำนวน แล้วนำเข้า โดยนำเข้าผลต้นงวดก่อน
-        จากนั้นยืนยันการรับสินค้าครบถ้วนที่หน้าผลต่างของสาขา และตรวจสอบผลที่ “สรุปผลต่างรายเดือน”</p>
+        จากนั้นยืนยันการรับสินค้าครบถ้วนที่ <a href="#" onclick="supplyGo({tab:'branchstock',pane:'var'});return false" style="color:var(--accent);text-decoration:underline">สาขาของฉัน → ผลต่างการใช้</a>
+        และตรวจสอบผลที่ <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน</a></p>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbCntBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
         <label>วันที่ตรวจนับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -112,7 +114,7 @@
   <!-- ── monthly ── -->
   <div id="ohb-pane-month" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-muted)">
-      เดือน <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      เดือนที่ปิดงวด <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
       <span class="ml-2">รอบตรวจนับที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร · ข้อมูลส่วนนี้แสดงใน Management Report (รายเดือน) ข้อ 13A ด้วย</span>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>

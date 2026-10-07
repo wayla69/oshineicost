@@ -5,6 +5,11 @@
 
 let _ohbSub = 'queue';
 let _ohbStatus = 'submitted';
+// The วัตถุดิบและใบสั่งซื้อ bar (01-core.js) reads, sets and shows this tab's panes through here.
+_SUPPLY_PANE.orderhub = {
+  get: () => _ohbSub, set: k => { _ohbSub = k; }, show: k => ohbSetSub(k),
+  month: m => { const el = document.getElementById('ohbMonth'); if (el) el.value = m; },
+};
 let _ohbQ = null;             // /api/bom-center/hub/queue
 let _ohbOrder = null;         // the order open in the detail panel
 const _OHB_RND = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอน' };
@@ -22,7 +27,7 @@ function loadOrderHub() {
   set('ohbTo', _ohbIso(new Date(t.getTime() + 7 * 864e5)));
   set('ohbCFrom', _ohbIso(new Date(t.getTime() - 13 * 864e5)));
   set('ohbCTo', _ohbIso(t));
-  set('ohbMonth', _ohbIso(new Date(t.getFullYear(), t.getMonth() - 1, 15)).slice(0, 7));
+  set('ohbMonth', supplyCtx().month || _ohbIso(new Date(t.getFullYear(), t.getMonth() - 1, 15)).slice(0, 7));
   ohbSetSub(_ohbSub);
 }
 function ohbSetSub(k) {
@@ -34,6 +39,7 @@ function ohbSetSub(k) {
   if (k === 'month') ohbLoadMonth();
   if (k === 'pilot') ohbLoadPilot();
   if (k === 'central') ohbLoadCentral();
+  try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 
 // ── S11: the central list · a month's deliveries · a count from a file ──────
@@ -48,6 +54,9 @@ async function ohbLoadCentral() {
     if (!sel.options.length) {
       const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
       sel.innerHTML = me.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+      const ctx = supplyCtx().branch_id;   // the module's shared branch, when this list has it
+      if (ctx && me.branches.some(b => b.branch_id === ctx)) sel.value = String(ctx);
+      sel.onchange = () => supplyCtxSet({ branch_id: Number(sel.value) || null });
     }
   } catch (e) { document.getElementById('ohbCenStat').textContent = String(e.message || e); }
 }
