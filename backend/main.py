@@ -369,6 +369,8 @@ async def usage_counter(request: Request, call_next):
             _usage_bump("api", f"{request.method} {name}", _usage_user(request))
             if name == "/api/home/brief":          # someone opened the app: Monday → this week's adoption digest
                 _maybe_weekly_adoption_digest()
+            if name in ("/api/auth/me", "/api/home/brief", "/api/bom-center/todo"):   # someone's day starts
+                _maybe_supply_reminder()                                          # → the order-day reminder
     except Exception:
         pass
     return response
@@ -674,6 +676,56 @@ def _maybe_weekly_adoption_digest(now=None, send=None):
         return _adoption_digest_build(now=now, send=send)
     except Exception as e:
         print(f"[adoption] weekly digest failed: {e}")
+        return None
+
+
+# ── order-day reminders for the pilot (วัตถุดิบและใบสั่งซื้อ) ─────────────────
+def _supply_reminder_send(text: str, send=None) -> tuple:
+    """(telegram_configured, sent) — the same delivery as the adoption digest."""
+    import notify as _notify
+    configured = bool(_notify.telegram_config()[0] and _notify.telegram_config()[1])
+    sent = False
+    if configured:
+        try:
+            sent = bool((send or _notify.send_telegram)(text))
+        except Exception as e:
+            print(f"[supply] telegram failed: {e}")
+    return configured, sent
+
+
+def _maybe_supply_reminder(now=None, send=None):
+    """The first API request after 07:00 (Thai clock) each day builds the day's
+    reminder (the pilot branches' duties and the queue, from the same facts as
+    หน้างาน), stores it and sends it to Telegram when the bot is configured; the
+    first request after 10:00 adds the queue note when ใบสั่งซื้อ still wait.
+    Best-effort and once a day each; a quiet day is stored but not sent."""
+    try:
+        from bom_center import reminders as _rem
+        now = now or _thai_now()
+        if now.hour < 7:
+            return None
+        day = now.strftime("%Y-%m-%d")
+        out = None
+        if _usage_meta_get("supply_reminder_day") != day:
+            _usage_meta_set("supply_reminder_day", day)          # claim first: a burst of requests sends once
+            with get_db() as con:
+                rec = _rem.morning(con, today=now.date(), app_url=APP_URL)
+            configured, sent = _supply_reminder_send(rec["text"], send) if rec["any_work"] else (False, False)
+            rec.update({"generated_at": now.strftime("%Y-%m-%d %H:%M"), "telegram_configured": configured, "sent": sent})
+            _usage_meta_set("supply_reminder", _json.dumps(rec, ensure_ascii=False))
+            out = rec
+        if now.hour >= 10 and _usage_meta_get("supply_sla_day") != day:
+            _usage_meta_set("supply_sla_day", day)
+            with get_db() as con:
+                rec2 = _rem.sla(con, today=now.date(), app_url=APP_URL)
+            if rec2:
+                configured, sent = _supply_reminder_send(rec2["text"], send)
+                rec2.update({"generated_at": now.strftime("%Y-%m-%d %H:%M"), "telegram_configured": configured, "sent": sent})
+                _usage_meta_set("supply_sla", _json.dumps(rec2, ensure_ascii=False))
+                out = out or rec2
+        return out
+    except Exception as e:
+        print(f"[supply] reminder failed: {e}")
         return None
 
 
