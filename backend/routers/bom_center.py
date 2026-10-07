@@ -1819,6 +1819,53 @@ async def bc_central_deliveries(request: Request, file: UploadFile = File(...), 
     return out
 
 
+@router.post("/api/bom-center/central/month-import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_central_month_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
+                                  set_local: bool = Query(True), month: Optional[str] = Query(None),
+                                  branch_ids: Optional[str] = Query(None), receipt_date: Optional[str] = Query(None)):
+    """The centre's monthly report ONCE: the central list AND one goods-received note per
+    branch, previewed together and saved in one transaction — the list first, so the
+    notes convert with the order units it puts in the master. The preview shows every
+    branch; the save books the branches named in branch_ids and none when it is empty."""
+    raw = await _read_xlsx(file)
+    try:
+        ids = [int(x) for x in branch_ids.split(",") if x.strip()] if branch_ids else []
+    except ValueError:
+        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        p = _parse_central(con, raw, month)
+        try:
+            rows = _ce.plan_catalogue(con, p)["rows"] if dry_run else []
+            cat = _ce.apply_catalogue(con, p, who, set_local_others=set_local)
+            if not p.get("month"):          # the list's own export: no month, no quantities → the list alone
+                if ids:
+                    raise ValueError("ไฟล์นี้ไม่มีงวดของรายงาน จึงสร้างใบรับสินค้าไม่ได้ (ระบุเดือนด้วย month=YYYY-MM หากต้องการ)")
+                dl = {"month": None, "receipt_date": None, "dry_run": dry_run, "branches": [],
+                      "note": "ไฟล์นี้ไม่มีงวดและยอดจัดส่งรายสาขา จึงบันทึกเฉพาะบัญชีสินค้า"}
+            elif dry_run:
+                dl = _ce.deliveries(con, p, who, None, dry_run=True, receipt_date=receipt_date)
+            elif ids:
+                dl = _ce.deliveries(con, p, who, ids, dry_run=False, receipt_date=receipt_date)
+            else:
+                dl = {"month": p["month"], "receipt_date": receipt_date, "dry_run": False, "branches": []}
+            if dry_run:
+                con.rollback()
+            else:
+                con.commit()
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+    return {"dry_run": dry_run, "month": p["month"], "sheet": p["sheet"], "catalogue": {**cat, "rows": rows},
+            "deliveries": dl}
+
+
 @router.get("/api/bom-center/stock/count-template.xlsx")
 def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(None),
                             count_date: Optional[str] = Query(None)):

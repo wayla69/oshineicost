@@ -59,48 +59,76 @@
   </div>
 
   <!-- ── S11: the central list, a month's deliveries, a month closed later ── -->
+  <!-- ── ปิดงวดเดือน: one month's close as numbered steps. The statuses come from
+       GET /api/bom-center/todo (close.steps); the centre's report is uploaded ONCE
+       (the list + the month's goods-received notes, one confirm); the count import
+       is pre-set to the branch and the date the checklist says is missing. ── -->
   <div id="ohb-pane-central" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <span class="text-sm font-semibold" style="color:var(--text-primary)">ปิดงวดเดือน</span>
+      <label class="text-xs" style="color:var(--text-muted)">งวดเดือน
+        <input type="month" id="ohbCloseMonth" onchange="ohbCloseMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <span id="ohbCloseSummary" class="text-xs" style="color:var(--text-secondary)"></span>
+      <span id="ohbCloseStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">1. บัญชีสินค้าที่สั่งจากส่วนกลาง</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">สาขาสั่งสินค้าจากส่วนกลางได้เฉพาะรายการในบัญชีนี้ โดยใช้หน่วยและราคาของส่วนกลาง
-        สินค้านอกบัญชีให้สาขาจัดซื้อจากผู้จำหน่ายในพื้นที่ ข้อมูลนำเข้าจากรายงานยอดสั่งสินค้ารายเดือนของส่วนกลาง หรือจากไฟล์บัญชีที่ดาวน์โหลดและแก้ไขแล้ว</p>
-      <div id="ohbCenStat" class="text-xs mt-2" style="color:var(--text-secondary)"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">1</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">สูตรเวอร์ชันที่มีผลในเดือนนี้</span>
+        <span id="ohbSt1" class="ml-auto"></span>
+      </div>
+      <div id="ohbSt1Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">ต้นทุนตามสูตรของเดือนนี้ใช้เวอร์ชันที่ปล่อยแล้วและมีผลถึงเดือนนี้ หากยังไม่มี ให้ปล่อยที่
+        <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'rel'});return false" style="color:var(--accent);text-decoration:underline">สูตรและการปล่อย → ตรวจและปล่อยเวอร์ชัน</a></div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">2</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">นำเข้ารายงานส่วนกลางประจำเดือน</span>
+        <span id="ohbSt2" class="ml-auto"></span>
+      </div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">ไฟล์เดียว ได้สองอย่างในการยืนยันครั้งเดียว: <b>บัญชีสินค้าที่สั่งจากส่วนกลาง</b> (หน่วย ราคา และการกำหนดให้รายการอื่นเป็น “สาขาจัดซื้อเอง”)
+        และ<b>ใบรับสินค้าประจำเดือนของแต่ละสาขา</b> (สาขาละ 1 ใบ ลงวันที่สิ้นเดือน เลขอ้างอิง CENTRAL-ปปปป-ดด นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม)
+        ระบบแสดงผลให้ตรวจสอบก่อนบันทึก · สาขาที่บันทึกรับสินค้าในระบบครบทุกครั้งแล้ว ไม่ต้องเลือก เพื่อป้องกันการบันทึกซ้ำ</p>
+      <div id="ohbCenStat" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าบัญชีสินค้า (.xlsx)
-          <input type="file" accept=".xlsx" style="display:none" onchange="ohbCenImport(this)"></label>
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer">นำเข้ารายงานส่วนกลาง (.xlsx)
+          <input type="file" accept=".xlsx" style="display:none" onchange="ohbMonthPick(this)"></label>
+        <label class="flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" id="ohbSetLocal" checked> รายการนอกบัญชีให้สาขาจัดซื้อเอง</label>
         <a href="#" onclick="window.location.href=API+'/api/bom-center/central.xlsx';return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (.xlsx)</a>
       </div>
       <span id="ohbCenStatus" class="text-xs"></span>
       <div id="ohbCenReport" class="mt-2"></div>
+      <div id="ohbDelReport" class="mt-2"></div>
+      <span id="ohbDelStatus" class="text-xs"></span>
     </div>
+
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">2. จับคู่รหัสวัตถุดิบในสูตรกับรหัสสินค้าส่วนกลาง</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">3</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">จับคู่รหัสวัตถุดิบในสูตรกับรหัสสินค้าส่วนกลาง</span>
+        <span id="ohbSt3" class="ml-auto"></span>
+      </div>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">สูตรอาหารบางรายการยังใช้รหัสวัตถุดิบเดิม ขณะที่ส่วนกลางจัดส่งด้วยรหัสใหม่ (ตัวอย่าง: ทูน่าซากุ ในสูตรใช้ 03-01-288 ส่วนกลางใช้ 03-01-074)
         หากไม่จับคู่ รายงานผลต่างจะแสดงเป็น “รับเข้าแต่ไม่มีการใช้” และ “มีการใช้แต่ไม่มีการรับเข้า”
         การจับคู่มีผลต่อยอดแนะนำการสั่งและการคำนวณผลต่างเท่านั้น ไม่มีผลต่อต้นทุนสูตร</p>
       <span id="ohbLinkStatus" class="text-xs"></span>
       <div id="ohbLinks" class="mt-2"></div>
     </div>
+
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">3. บันทึกรับสินค้าประจำเดือนจากรายงานส่วนกลาง</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">ระบบสร้างใบรับสินค้าสาขาละ 1 ใบจากยอดจัดส่งในรายงาน ลงวันที่วันสุดท้ายของเดือน (เลขอ้างอิง CENTRAL-ปปปป-ดด)
-        การนำเข้าเดือนเดิมซ้ำจะแทนที่ใบรับเดิม ใช้สำหรับการปิดงวดย้อนหลังเท่านั้น
-        หากสาขาบันทึกรับสินค้าในระบบครบทุกครั้งแล้ว ไม่ต้องใช้ขั้นตอนนี้ เพื่อป้องกันการบันทึกซ้ำ</p>
-      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">เลือกไฟล์รายงาน (.xlsx)
-          <input type="file" accept=".xlsx" style="display:none" onchange="ohbDelPick(this)"></label>
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">4</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">ผลตรวจนับต้นงวดและปลายงวดจากแบบฟอร์ม</span>
+        <span id="ohbSt4" class="ml-auto"></span>
       </div>
-      <span id="ohbDelStatus" class="text-xs"></span>
-      <div id="ohbDelReport" class="mt-2"></div>
-    </div>
-    <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">4. นำเข้าผลตรวจนับสินค้าคงเหลือ (ต้นงวด / ปลายงวด)</div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">การปิดงวดย้อนหลังใช้ผลตรวจนับ ณ วันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) โดยนับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น
-        ขั้นตอน: ดาวน์โหลดแบบฟอร์มของสาขา กรอกจำนวน แล้วนำเข้า โดยนำเข้าผลต้นงวดก่อน
-        จากนั้นยืนยันการรับสินค้าครบถ้วนที่ <a href="#" onclick="supplyGo({tab:'branchstock',pane:'var'});return false" style="color:var(--accent);text-decoration:underline">สาขาของฉัน → ผลต่างการใช้</a>
-        และตรวจสอบผลที่ <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน</a></p>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">นับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น: วันที่ 1 ของเดือน (ต้นงวด) และวันที่ 1 ของเดือนถัดไป (ปลายงวด) นำเข้าต้นงวดก่อน ·
+        ระบบเลือกสาขาและวันที่ที่ยังขาดให้แล้ว ดาวน์โหลดแบบฟอร์ม กรอกจำนวน แล้วนำเข้า</p>
+      <div id="ohbSt4Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label>สาขา<br><select id="ohbCntBranch" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <label>สาขา<br><select id="ohbCntBranch" onchange="ohbCntBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
         <label>วันที่ตรวจนับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแบบฟอร์มตรวจนับ</a>
         <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลตรวจนับ (.xlsx)
@@ -108,6 +136,27 @@
       </div>
       <span id="ohbCntStatus" class="text-xs"></span>
       <div id="ohbCntReport" class="mt-2"></div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">5</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง</span>
+        <span id="ohbSt5" class="ml-auto"></span>
+      </div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">เมื่อมีผลตรวจนับครบสองครั้ง สาขา (หรือส่วนกลางที่เลือกสาขา) ยืนยันที่หน้าผลต่างว่ารับสินค้าของรอบนี้บันทึกครบแล้ว และระบุเหตุผลของรายการที่เกินเกณฑ์</p>
+      <div id="ohbSt5Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">6</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">สรุปผลต่างรายเดือน</span>
+        <span id="ohbSt6" class="ml-auto"></span>
+      </div>
+      <div class="text-xs mt-1" style="color:var(--text-secondary)">ผลต่างการใช้ของทุกสาขาในเดือนนี้ที่
+        <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน →</a>
+        · แสดงในรายงานผู้บริหาร (รายเดือน) ข้อ 13A ด้วย</div>
     </div>
   </div>
 
