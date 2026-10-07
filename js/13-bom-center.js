@@ -59,7 +59,6 @@ function _bmcChip(text, ink) {
 
 function bmcSetSub(k) {
   _bmcSub = k;
-  document.querySelectorAll('#tab-bomcenter [data-bmcsub]').forEach(b => b.classList.toggle('active', b.dataset.bmcsub === k));
   ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
