@@ -12,6 +12,8 @@ const TABS = [
   'opsreport', 'staff', 'discounts', 'ops',
   'cashctl', 'custtype', 'modifiers', 'pricezone', 'cancelbill',
   'manual', 'report', 'settings',
+  // วัตถุดิบและใบสั่งซื้อ — one sidebar entry, 7 chips (2026-10-07): every tab the chips open
+  'supplyhome', 'bomcenter', 'orderhub', 'branchstock', 'ordersetup', 'ordering', 'ingpurchase',
 ];
 
 // Benign console noise to ignore (favicon, third-party CDN, aborted fetches on tab-switch).
