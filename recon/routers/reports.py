@@ -63,7 +63,8 @@ def _xl_append(ws, row):
             c.quotePrefix = True
 
 
-def _branch_error_report(conn, period_month: str | None = None) -> dict:
+def _branch_error_report(conn, period_month: str | None = None,
+                         branch_id: int | None = None) -> dict:
     from collections import defaultdict
     q = ("SELECT branch_id, period_month, category, note, created_by, created_at "
          "FROM recon_lane_adj WHERE adj_type='accept'")
@@ -71,6 +72,9 @@ def _branch_error_report(conn, period_month: str | None = None) -> dict:
     if period_month:
         q += " AND period_month=?"
         params.append(period_month)
+    if branch_id:
+        q += " AND branch_id=?"
+        params.append(branch_id)
     accepts = conn.execute(q + " ORDER BY branch_id, period_month, category", params).fetchall()
     bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
 
@@ -110,22 +114,22 @@ def _branch_error_report(conn, period_month: str | None = None) -> dict:
 
 
 @router.get("/api/reports/branch-errors")
-def branch_error_report(period_month: str | None = None):
+def branch_error_report(period_month: str | None = None, branch_id: int | None = None):
     if period_month:
         _validate_period(period_month)
     with get_db() as conn:
-        return _branch_error_report(conn, period_month)
+        return _branch_error_report(conn, period_month, branch_id)
 
 
 @router.get("/api/reports/branch-errors.xlsx")
-def branch_error_report_xlsx(period_month: str | None = None):
+def branch_error_report_xlsx(period_month: str | None = None, branch_id: int | None = None):
     import io
     import openpyxl
     from openpyxl.styles import Font
     if period_month:
         _validate_period(period_month)
     with get_db() as conn:
-        rep = _branch_error_report(conn, period_month)
+        rep = _branch_error_report(conn, period_month, branch_id)
     wb = openpyxl.Workbook(); bold = Font(bold=True)
     ws = wb.active; ws.title = "สรุปรายสาขา"
     ws.append(["สาขา", "จำนวนครั้งที่รับทราบ", "จำนวนเดือน", "ยอดผลต่างรวม (abs)"])
@@ -149,6 +153,60 @@ def branch_error_report_xlsx(period_month: str | None = None):
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=\"{fname}\""})
+
+
+@router.get("/api/reports/branch-errors.print")
+def branch_error_report_print(request: Request, period_month: str, branch_id: int | None = None):
+    """Print-to-PDF of the recording-error report (every accepted variance = a channel the
+    branch could not make tie) for ONE month, per branch, to hand to the branches.
+    Read-only; same numbers as /api/reports/branch-errors."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v): return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        rep = _branch_error_report(conn, period_month, branch_id)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc)
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>รายงานข้อผิดพลาดการบันทึก</title>", _ic_print_css("#b45309"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>รายงานข้อผิดพลาดการบันทึก — รายสาขา · งวด {esc(period_month)}</h1>",
+        "<div class='sub'>นับจากรายการ “รับทราบผลต่าง” ที่บันทึกไว้ (มีเหตุผล + ผู้บันทึก) — "
+        "ช่องทางที่สาขากระทบยอดไม่ตรงจนต้องรับทราบ ใช้ประเมิน/โค้ชพนักงาน · "
+        f"รวม <b>{len(rep['items'])}</b> รายการ</div>"]
+    if not rep["items"]:
+        parts.append("<div class='none'>✓ ไม่มีรายการรับทราบผลต่างในงวดนี้</div>")
+    else:
+        parts.append("<h2>สรุปรายสาขา</h2><table><thead><tr><th class='l'>สาขา</th>"
+                     "<th>จำนวนครั้ง</th><th>ยอดผลต่างรวม (บาท)</th></tr></thead><tbody>")
+        for r in rep["summary"]:
+            parts.append(f"<tr><td class='l'><b>{esc(r['branch_name'])}</b></td>"
+                         f"<td class='mono'>{r['count']}</td>"
+                         f"<td class='mono big'>{m(r['total_abs_variance'])}</td></tr>")
+        parts.append("</tbody></table><h2>รายการทั้งหมด</h2><table><thead><tr>"
+                     "<th class='l'>สาขา</th><th class='l'>ช่องทาง</th><th>ผลต่าง (บาท)</th>"
+                     "<th class='l'>เหตุผล</th><th class='l'>รับทราบโดย</th><th class='l'>เมื่อ</th>"
+                     "</tr></thead><tbody>")
+        for it in rep["items"]:
+            parts.append(f"<tr><td class='l'>{esc(it['branch_name'])}</td>"
+                         f"<td class='l'>{esc(_CH_LABEL.get(it['category'], it['category']))}</td>"
+                         f"<td class='mono'>{m(it['variance'])}</td>"
+                         f"<td class='l'>{esc(it['reason']) or '—'}</td>"
+                         f"<td class='l'>{esc(it['by']) or '—'}</td>"
+                         f"<td class='l muted'>{esc((it['at'] or '')[:16])}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้จัดการสาขา (รับทราบ)</div><div>ผู้ตรวจ (บัญชี)</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
 _EXT_TABLE_CAT = {
@@ -1952,6 +2010,126 @@ def accepted_variance_xlsx(period_month: str, branch_id: int | None = None,
         ("แยกตามสาขา", ["สาขา", "จำนวนครั้ง", "ยอดรวม"], by_branch),
         ("รายการทั้งหมด", ["สาขา", "ช่องทาง/วัน", "ยอด", "เหตุผล", "โดย"], items)],
         f"accepted_variance_{period_month}.xlsx")
+
+
+def _accepted_variance_year(conn, period_month, branch_id=None, threshold=1000.0):
+    """Accepted variance (write-off) for the calendar year up to and including
+    period_month: one _accepted_variance_summary per month, rolled up by month,
+    branch and reason, every item tagged with its month. Read-only."""
+    from collections import defaultdict
+    year, last = period_month[:4], int(period_month[5:7])
+    months, items = [], []
+    for i in range(1, last + 1):
+        pm = f"{year}-{i:02d}"
+        s = _accepted_variance_summary(conn, pm, branch_id, threshold)
+        months.append({"period_month": pm, "count": s["count"],
+                       "total_abs": s["grand_total_abs"], "over_count": s["over_count"]})
+        items += [dict(it, period_month=pm) for it in s["items"]]
+    by_branch = defaultdict(lambda: {"count": 0, "total_abs": 0.0})
+    by_reason = defaultdict(lambda: {"count": 0, "total_abs": 0.0})
+    for it in items:
+        for g in (by_branch[(it["branch_id"], it["branch_name"])],
+                  by_reason[(it["reason"].strip() or "ไม่ระบุเหตุผล")]):
+            g["count"] += 1
+            g["total_abs"] += abs(it["amount"])
+    items.sort(key=lambda x: -abs(x["amount"]))
+    return {"year": year, "through": period_month, "threshold": threshold, "months": months,
+        "items": items, "count": len(items),
+        "grand_total_abs": round(sum(abs(it["amount"]) for it in items), 2),
+        "over_count": sum(1 for it in items if abs(it["amount"]) > threshold),
+        "by_branch": sorted([{"branch_id": k[0], "branch_name": k[1], "count": v["count"],
+                              "total_abs": round(v["total_abs"], 2)} for k, v in by_branch.items()],
+                            key=lambda x: -x["total_abs"]),
+        "by_reason": sorted([{"reason": k, "count": v["count"],
+                              "total_abs": round(v["total_abs"], 2)} for k, v in by_reason.items()],
+                            key=lambda x: -x["total_abs"])}
+
+
+@router.get("/api/reports/accepted-variance-year.print")
+def accepted_variance_year_print(request: Request, period_month: str, branch_id: int | None = None,
+                                 threshold: float = 1000.0):
+    """Print-to-PDF accepted variance for the year to date (January → period_month):
+    month-by-month totals, by branch, by reason, every item over the threshold flagged."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v): return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    threshold = max(0.0, threshold)
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        y = _accepted_variance_year(conn, period_month, branch_id, threshold)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc, extra=f"&threshold={int(threshold)}")
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>ผลต่างที่รับทราบทั้งปี</title>", _ic_print_css("#b91c1c"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>ผลต่างที่รับทราบทั้งปี (Accepted-Variance YTD) — {esc(y['year'])}-01 ถึง {esc(period_month)}</h1>",
+        f"<div class='sub'>ยอดผลต่างที่ถูก “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) ตั้งแต่ต้นปี · "
+        f"รวม <b class='big'>฿{m(y['grand_total_abs'])}</b> จาก <b>{y['count']}</b> รายการ · "
+        f"เกินเกณฑ์ ฿{m(threshold)}/รายการ: <b class='big'>{y['over_count']}</b> รายการ</div>",
+        "<h2>รายเดือน</h2><table><thead><tr><th class='l'>งวด</th><th>จำนวนรายการ</th>"
+        "<th>ยอดรวม (บาท)</th><th>เกินเกณฑ์</th></tr></thead><tbody>"]
+    for r in y["months"]:
+        parts.append(f"<tr><td class='l'>{esc(r['period_month'])}</td><td class='mono'>{r['count']}</td>"
+                     f"<td class='mono'>{m(r['total_abs'])}</td>"
+                     f"<td class='mono{' big' if r['over_count'] else ''}'>{r['over_count']}</td></tr>")
+    parts.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{y['count']}</td>"
+                 f"<td class='mono'>{m(y['grand_total_abs'])}</td><td class='mono'>{y['over_count']}</td>"
+                 "</tr></tfoot></table>")
+    if not y["items"]:
+        parts.append("<div class='none'>✓ ไม่มีผลต่างที่รับทราบตั้งแต่ต้นปี</div>")
+    else:
+        for title, col, rows, key in (("แยกตามสาขา", "สาขา", y["by_branch"], "branch_name"),
+                                      ("แยกตามเหตุผล", "เหตุผล", y["by_reason"], "reason")):
+            parts.append(f"<h2>{title}</h2><table><thead><tr><th class='l'>{col}</th>"
+                         "<th>จำนวนครั้ง</th><th>ยอดรวม (บาท)</th></tr></thead><tbody>")
+            for r in rows:
+                parts.append(f"<tr><td class='l'>{esc(r[key])}</td><td class='mono'>{r['count']}</td>"
+                             f"<td class='mono'>{m(r['total_abs'])}</td></tr>")
+            parts.append("</tbody></table>")
+        parts.append("<h2>รายการทั้งหมด (เรียงยอดมากสุด)</h2><table><thead><tr><th class='l'>งวด</th>"
+            "<th class='l'>สาขา</th><th class='l'>ช่องทาง / วัน</th><th>ยอด</th>"
+            "<th class='l'>เหตุผล</th><th class='l'>โดย</th></tr></thead><tbody>")
+        for it in y["items"]:
+            big = " big" if abs(it["amount"]) > threshold else ""
+            rsn = esc(it["reason"]) or "<span class='big'>— ไม่ระบุ —</span>"
+            parts.append(f"<tr><td class='l muted'>{esc(it['period_month'])}</td>"
+                f"<td class='l'>{esc(it['branch_name'])}</td><td class='l'>{esc(it['scope'])}</td>"
+                f"<td class='mono{big}'>{it['amount']:+,.0f}</td>"
+                f"<td class='l'>{rsn}</td><td class='l'>{esc(it['by'])}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้จัดทำ</div><div>ผู้สอบทาน (ผู้จัดการ)</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+@router.get("/api/reports/accepted-variance-year.xlsx")
+def accepted_variance_year_xlsx(period_month: str, branch_id: int | None = None,
+                                threshold: float = 1000.0):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        y = _accepted_variance_year(conn, period_month, branch_id, max(0.0, threshold))
+    return _xlsx_response([
+        ("รายเดือน", ["งวด", "จำนวนรายการ", "ยอดรวม", "เกินเกณฑ์"],
+         [[r["period_month"], r["count"], r["total_abs"], r["over_count"]] for r in y["months"]]),
+        ("แยกตามสาขา", ["สาขา", "จำนวนครั้ง", "ยอดรวม"],
+         [[r["branch_name"], r["count"], r["total_abs"]] for r in y["by_branch"]]),
+        ("แยกตามเหตุผล", ["เหตุผล", "จำนวนครั้ง", "ยอดรวม"],
+         [[r["reason"], r["count"], r["total_abs"]] for r in y["by_reason"]]),
+        ("รายการทั้งหมด", ["งวด", "สาขา", "ช่องทาง/วัน", "ยอด", "เหตุผล", "โดย"],
+         [[it["period_month"], it["branch_name"], it["scope"], round(it["amount"], 2),
+           it["reason"], it["by"]] for it in y["items"]])],
+        f"accepted_variance_ytd_{period_month}.xlsx")
 
 
 @router.get("/api/reports/audit-trail.xlsx")

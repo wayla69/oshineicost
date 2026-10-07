@@ -245,8 +245,8 @@ def update_session_status(
                 (session_id,)).fetchone()[0]
             if pending:
                 raise HTTPException(
-                    409, f"Cannot {status} — {pending} open discrepancy(ies) remain. "
-                         "Resolve or accept them first.")
+                    409, f"ยังปิดไม่ได้ — มีข้อแตกต่างค้าง {pending} รายการ (ระบบเพิ่งจับคู่ใหม่ก่อนลงนาม) · "
+                         "จัดการหรือรับทราบในหน้า ข้อแตกต่าง ก่อน แล้วลงนามอีกครั้ง")
         if status == "approved":
             # Segregation of duties (AUD-4): the person who prepared the month
             # cannot also approve it. A classic audit finding; enforced when both
