@@ -220,6 +220,10 @@ MIGRATIONS = (
     # Phase 2 · S9 — Sales Support's reason when what is sent differs from what the branch confirmed
     ("bc_order_line", "ss_reason", "TEXT"),
     ("bc_order_line", "ss_note", "TEXT"),
+    # PR-19 — the branch's own expectation for the cover period (buffer), one per order
+    ("bc_order", "buffer_pct", "REAL"),          # +20 = the branch expects 20 % more sales than the forecast
+    ("bc_order", "buffer_reason", "TEXT"),       # event / promotion / booking / holiday / quiet / other
+    ("bc_order", "buffer_note", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

@@ -30,6 +30,32 @@ REASONS = (("stock_more", "สินค้าคงเหลือมากก�
            ("quality", "สินค้ารอบก่อนเสีย / คุณภาพไม่ดี"), ("pack", "ขนาดแพ็ค / ขั้นต่ำซัพพลายเออร์"),
            ("other", "อื่น ๆ"))
 REASON_TH = dict(REASONS)
+# PR-19: the branch's buffer — its own expectation for the cover period, one per order
+BUFFER_REASONS = (("event", "มีงาน / กิจกรรมในพื้นที่"), ("promotion", "โปรโมชัน"), ("booking", "ลูกค้าจองกลุ่ม"),
+                  ("holiday", "วันหยุดยาว / เทศกาล"), ("quiet", "คาดว่าลูกค้าจะน้อยลง"), ("other", "อื่น ๆ (ระบุ)"))
+BUFFER_REASON_TH = dict(BUFFER_REASONS)
+BUFFER_MIN, BUFFER_MAX = -50.0, 100.0
+
+
+def buffer_clean(buffer) -> tuple:
+    """(pct, reason, note) validated: 0 clears; anything else needs a listed reason."""
+    if not buffer:
+        return 0.0, None, None
+    try:
+        pct = float(buffer.get("pct") or 0)
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("buffer ต้องเป็นตัวเลข")
+    if not (BUFFER_MIN <= pct <= BUFFER_MAX):
+        raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
+    if pct == 0:
+        return 0.0, None, None
+    reason = (buffer.get("reason") or "").strip() or None
+    note = (buffer.get("note") or "").strip() or None
+    if reason not in BUFFER_REASON_TH:
+        raise ValueError("กรุณาเลือกเหตุผลที่คาดว่ายอดขายจะต่างจากปกติ")
+    if reason == "other" and not note:
+        raise ValueError("เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
+    return pct, reason, note
 OPEN = ("submitted", "processed")
 
 
@@ -85,7 +111,8 @@ def on_order(con, branch_id: int, before: date) -> dict:
 # ── the order ────────────────────────────────────────────────────────────────
 def _order_row(con, order_id: int) -> dict:
     cols = ("order_id", "branch_id", "cycle_date", "round", "run_id", "status", "confirmed_by", "confirmed_at",
-            "submitted_at", "processed_by", "processed_at", "po_ref", "received_at", "note", "stock_count_id", "value")
+            "submitted_at", "processed_by", "processed_at", "po_ref", "received_at", "note", "stock_count_id", "value",
+            "buffer_pct", "buffer_reason", "buffer_note")
     r = con.execute(f"SELECT {', '.join(cols)} FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     return dict(zip(cols, r)) if r else None
 
@@ -111,6 +138,7 @@ def detail(con, order_id: int) -> dict:
                       " order_unit, reason_code, note, ss_reason, ss_note FROM bc_order_line WHERE order_id=?"
                       " ORDER BY ingredient_code", (order_id,))]
     o["status_th"] = STATUS_TH.get(o["status"], o["status"])
+    o["buffer_reason_th"] = BUFFER_REASON_TH.get(o.get("buffer_reason")) if o.get("buffer_reason") else None
     from .hub import delivery_of
     o["delivery"] = delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
     return o
@@ -130,11 +158,14 @@ def _needs_reason(sugg, conf) -> bool:
 
 
 def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines: list, who: str,
-         submit: bool = False, note: str = None) -> dict:
+         submit: bool = False, note: str = None, buffer: dict = None) -> dict:
     """Create (from the suggestion) or update the cycle's order; optionally submit it.
 
     The suggested quantities are frozen when the order is first created — later
-    edits change only what the branch confirms."""
+    edits change only what the branch confirms. `buffer` (PR-19, None = keep) is
+    the branch's expectation {pct, reason, note}: the suggestion stays the engine's
+    base number, the confirmed quantities start from the buffered one, and the
+    deviation rule judges against base × (1 + pct/100)."""
     from .central import central_map
     cmap = central_map(con)
     oid = find(con, branch_id, rnd, cycle_date)
@@ -151,8 +182,13 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         oid = cur.lastrowid
         con.executemany("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                         " order_unit) VALUES(?,?,?,?,?)",
-                        [(oid, r["code"], r["order_units"], r["order_units"], r["order_unit"])
+                        [(oid, r["code"], r.get("order_units_base", r["order_units"]), r["order_units"], r["order_unit"])
                          for r in suggestion["rows"]])
+    if buffer is not None:
+        pct, reason, bnote = buffer_clean(buffer)
+        con.execute("UPDATE bc_order SET buffer_pct=?, buffer_reason=?, buffer_note=? WHERE order_id=?",
+                    (pct or None, reason, bnote, oid))
+    up = 1.0 + float(con.execute("SELECT COALESCE(buffer_pct, 0) FROM bc_order WHERE order_id=?", (oid,)).fetchone()[0]) / 100.0
     have = {c: s for c, s in con.execute("SELECT ingredient_code, suggested_units FROM bc_order_line WHERE order_id=?", (oid,))}
     unit_of = {r["code"]: r["order_unit"] for r in suggestion.get("rows", [])}
     for ln in lines or []:
@@ -187,7 +223,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     missing = []
     for c, s, cf, rs, n in con.execute("SELECT ingredient_code, suggested_units, confirmed_units, reason_code, note"
                                        " FROM bc_order_line WHERE order_id=?", (oid,)):
-        if _needs_reason(s, cf) and not rs:
+        if _needs_reason((s or 0) * up, cf) and not rs:        # the buffer explains its own share
             missing.append(c)
         if rs == "other" and not (n or "").strip():
             missing.append(c)
@@ -282,7 +318,8 @@ def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
     `statuses` narrows (OPEN = sent or processed, the ones still to be received)."""
     from .hub import delivery_of
     sql = ("SELECT o.order_id, o.cycle_date, o.round, o.status, o.value, o.submitted_at, o.received_at, o.processed_at,"
-           " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0)"
+           " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0),"
+           " o.buffer_pct"
            " FROM bc_order o WHERE o.branch_id=?")
     args = [branch_id]
     if statuses:
@@ -292,7 +329,7 @@ def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
     out = []
     for r in rows:
         d = dict(zip(("order_id", "cycle_date", "round", "status", "value", "submitted_at", "received_at", "processed_at",
-                      "lines"), r))
+                      "lines", "buffer_pct"), r))
         d["status_th"] = STATUS_TH.get(d["status"], d["status"])
         d["delivery"] = delivery_of(con, branch_id, d["round"], d["cycle_date"])
         out.append(d)
@@ -321,21 +358,32 @@ def order_units(need: float, per, moq) -> tuple:
     return float(math.ceil(need)), "base"
 
 
-def plan(con, branch_id: int, rnd: str, order_day: date, as_of: date = None) -> dict:
-    """The suggestion net of stock, ready to become an order."""
-    from .forecast import suggest
+def plan(con, branch_id: int, rnd: str, order_day: date, as_of: date = None, buffer_pct: float = None) -> dict:
+    """The suggestion net of stock, ready to become an order. `buffer_pct` (PR-19):
+    the branch's expectation to apply; None = the cycle's order's own, if any."""
+    from .forecast import suggest, cover_period
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = as_of or (date.fromisoformat(last) if last else order_day - timedelta(days=1))
     stock = stock_position(con, branch_id, as_of, order_day)
     from .central import central_map, unit_price
-    s = suggest(con, branch_id, rnd, order_day, as_of=as_of, stock=stock)
+    if buffer_pct is None:
+        cyc = cover_period(con, branch_id, rnd, order_day)[0].isoformat()
+        oid0 = find(con, branch_id, rnd, cyc)
+        buffer_pct = (_order_row(con, oid0) or {}).get("buffer_pct") if oid0 else None
+    pct = float(buffer_pct or 0.0)
+    if not (BUFFER_MIN <= pct <= BUFFER_MAX):
+        raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
+    s = suggest(con, branch_id, rnd, order_day, as_of=as_of, stock=stock, uplift_pct=pct)
     s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"])}
+    s["buffer"] = {"pct": pct, "min": BUFFER_MIN, "max": BUFFER_MAX,
+                   "reasons": [{"code": k, "label": v} for k, v in BUFFER_REASONS]}
     cmap = central_map(con)
     month = s["order_day"][:7]
     for r in s["rows"]:
         units, kind = order_units(r["need"], r.get("qty_per_recv"), r.get("moq"))
         r["order_units"] = units
         r["order_unit"] = kind
+        r["order_units_base"] = order_units(r.get("need_base", r["need"]), r.get("qty_per_recv"), r.get("moq"))[0] if pct else units
         if r["code"] in cmap:
             r["price_per_base"], r["price_source"] = unit_price(con, r["code"], month, cmap)
             r["price_per_sale"] = cmap[r["code"]][1]

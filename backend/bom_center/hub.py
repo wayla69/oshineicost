@@ -90,7 +90,7 @@ def sla(submitted_at: str, processed_at: str, cycle_date: str) -> dict:
 def queue(con, status: str = "submitted", date_from: str = None, date_to: str = None) -> list:
     sts = ("submitted", "processed", "received") if status == "all" else (status,)
     q = ("SELECT o.order_id, o.branch_id, b.name, o.cycle_date, o.round, o.status, o.value, o.submitted_at,"
-         " o.processed_at, o.processed_by, o.po_ref, o.stock_count_id,"
+         " o.processed_at, o.processed_by, o.po_ref, o.stock_count_id, o.buffer_pct, o.buffer_reason,"
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0),"
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND l.reason_code IS NOT NULL)"
          f" FROM bc_order o JOIN branches b USING(branch_id) WHERE o.status IN ({','.join('?' * len(sts))})")
@@ -105,7 +105,10 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     out = []
     for r in con.execute(q, args).fetchall():
         d = dict(zip(("order_id", "branch_id", "branch", "cycle_date", "round", "status", "value", "submitted_at",
-                      "processed_at", "processed_by", "po_ref", "stock_count_id", "lines", "branch_changes"), r))
+                      "processed_at", "processed_by", "po_ref", "stock_count_id", "buffer_pct", "buffer_reason",
+                      "lines", "branch_changes"), r))
+        from .orders import BUFFER_REASON_TH
+        d["buffer_reason_th"] = BUFFER_REASON_TH.get(d["buffer_reason"]) if d["buffer_reason"] else None
         d["delivery"] = delivery_of(con, d["branch_id"], d["round"], d["cycle_date"])
         d.update(sla(d["submitted_at"], d["processed_at"], d["cycle_date"]))
         d["stock_deducted"] = d.pop("stock_count_id") is not None
