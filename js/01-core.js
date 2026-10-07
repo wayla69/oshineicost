@@ -357,6 +357,8 @@ async function bootstrapAuth() {
 }
 
 function showLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='flex';
+                        // a phone keeps the login for a month unless unticked; a desktop asks again after 12 h
+                        const r=document.getElementById('loginRemember'); if (r) { try { r.checked = window.matchMedia('(max-width:700px)').matches; } catch(e) {} }
                         setTimeout(()=>document.getElementById('loginUser')?.focus(),50); }
 function hideLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='none'; }
 
@@ -371,7 +373,7 @@ async function doLogin(ev) {
   try {
     const res = await fetch(`${API}/api/auth/login`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ username:u, password:p }),
+      body: JSON.stringify({ username:u, password:p, remember: !!document.getElementById('loginRemember')?.checked }),
     });
     if (!res.ok) {
       const d = await res.json().catch(()=>({}));
@@ -1640,6 +1642,7 @@ const GLANCE_PLUGIN = {
 };
 
 let activeTab       = 'home';
+let _lastTabLoadAt  = 0;      // the open tab's last load (foreground refresh on a phone, 03-tabs-main.js)
 let activeSubtab    = 'mostOrdered';
 let activeOpsSubtab = 'cohort';
 let chartInstances = {};    // name → Chart instance
@@ -2216,6 +2219,8 @@ const TABS = {
 };
 
 function loadActiveTab() {
+  if (!_desktopBooted && _phoneFirst()) return;   // the shell boots on "เต็ม →" (03-tabs-main.js)
+  _lastTabLoadAt = Date.now();
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
   const t = TABS[activeTab];

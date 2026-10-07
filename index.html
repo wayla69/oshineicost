@@ -914,6 +914,9 @@ body.dark .db-status.online  { background: #064e3b; color: #6ee7b7; border-color
 body.dark .db-status.offline { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
 body.dark .db-status.checking { background: #1e293b; color: #94a3b8; border-color: #334155; }
 .db-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+/* a hidden app (another tab, a phone in a pocket) runs no animation at all (visibilitychange, 03-tabs-main.js) */
+body.app-hidden * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { .db-status .db-dot { animation: none !important; } }
 .db-status.online  .db-dot { background: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.3); animation: dbPulse 2s ease infinite; }
 .db-status.offline .db-dot { background: #ef4444; }
 .db-status.checking .db-dot { background: #94a3b8; animation: dbSpin 1s linear infinite; }
@@ -1596,6 +1599,10 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <input id="loginPass" type="password" autocomplete="current-password" required
            style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:var(--r-md);
                   padding:10px 12px;font-size:14px;margin-bottom:8px">
+    <!-- a 30-day session for this device (ticked by default on a phone, showLogin); the server honours it for every role -->
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#475569;margin:2px 0 6px;cursor:pointer">
+      <input id="loginRemember" type="checkbox" style="width:16px;height:16px;margin:0;flex-shrink:0"> จำการเข้าสู่ระบบบนเครื่องนี้ไว้ 30 วัน
+    </label>
     <div id="loginError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
     <button type="submit" id="loginBtn"
             style="width:100%;margin-top:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:var(--r-md);
