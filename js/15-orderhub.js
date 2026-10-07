@@ -249,6 +249,8 @@ async function ohbCntImport(input) {
 // ── queue ────────────────────────────────────────────────────────────────────
 function ohbSetStatus(s) { _ohbStatus = s; ohbLoadQueue(); }
 function _ohbRange() { return `date_from=${document.getElementById('ohbFrom').value}&date_to=${document.getElementById('ohbTo').value}`; }
+// the consolidation and the workbook follow the status chip (open = pending + processed is the server's default)
+function _ohbExportQS() { return `${_ohbRange()}&status=${_ohbStatus}`; }
 async function ohbLoadQueue() {
   document.getElementById('ohbStatusChips').innerHTML = _OHB_ST.map(([k, t]) => {
     const on = k === _ohbStatus;
@@ -333,8 +335,8 @@ async function ohbShowConsolidated() {
   box.style.display = '';
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังรวมข้อมูล…</span>';
   try {
-    const c = await _bmcJson(`${API}/api/bom-center/hub/consolidated?${_ohbRange()}`);
-    box.innerHTML = `<div style="display:flex;justify-content:space-between"><div class="text-sm font-semibold" style="color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง (รอดำเนินการและดำเนินการแล้ว)</div>${_ohbBtn('ปิด', "document.getElementById('ohbConsolidated').style.display='none'")}</div>` +
+    const c = await _bmcJson(`${API}/api/bom-center/hub/consolidated?${_ohbExportQS()}`);
+    box.innerHTML = `<div style="display:flex;justify-content:space-between"><div class="text-sm font-semibold" style="color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง (${esc(c.status_th || '')})</div>${_ohbBtn('ปิด', "document.getElementById('ohbConsolidated').style.display='none'")}</div>` +
       (c.groups.length ? c.groups.map(g => `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">${esc(g.supplier)} · วันส่ง ${esc(g.delivery)}</div>
         <div style="overflow-x:auto"><table class="w-full text-xs"><tbody>${g.items.map(it => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(it.name)} <span style="color:var(--text-muted)">${esc(it.code)}</span></td>
           <td class="py-1 pr-2 text-right"><b>${_bmcNum(it.total)}</b> ${esc(it.unit || '')}</td>
@@ -342,7 +344,10 @@ async function ohbShowConsolidated() {
         : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีใบสั่งซื้อในช่วงนี้</div>');
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-function ohbDownloadConsolidated() { window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbRange()}`; }
+function ohbDownloadConsolidated() {
+  const split = document.getElementById('ohbSplit')?.checked ? '&split=true' : '';
+  window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}${split}`;
+}
 
 // ── compliance ───────────────────────────────────────────────────────────────
 const _OHB_CS = { ok: ['ตามยอดแนะนำ', 'var(--good-ink)'], over: ['สั่งเกินยอดแนะนำ', 'var(--amber-ink)'], under: ['สั่งต่ำกว่ายอดแนะนำ', 'var(--amber-ink)'],

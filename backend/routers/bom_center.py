@@ -1621,14 +1621,44 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
 
 
 # ── Phase 2 · S9: the centre's side — Sales Support queue, Ops compliance, monthly (hub.py) ──
-def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: Optional[str]) -> list:
+_HUB_STATUS_TH = {"open": "รอดำเนินการและดำเนินการแล้ว", "submitted": "รอดำเนินการ", "processed": "ดำเนินการแล้ว",
+                  "received": "สาขารับแล้ว", "all": "ทุกสถานะ"}
+
+
+def _hub_status_or_400(status: Optional[str]) -> str:
+    st = status or "open"
+    if st not in _HUB_STATUS_TH:
+        raise HTTPException(400, "status ต้องเป็น open / submitted / processed / received / all")
+    return st
+
+
+def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: Optional[str],
+                   status: str = "open") -> list:
+    """The orders to consolidate: named ids, else those of `status` in the date range
+    (open = sent or processed, the ones Sales Support still buys for)."""
     if ids:
         try:
             return [int(x) for x in ids.split(",") if x.strip()]
         except ValueError:
             raise HTTPException(400, "ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
-    return [r["order_id"] for r in _hub.queue(con, "submitted", date_from, date_to)] + \
-        [r["order_id"] for r in _hub.queue(con, "processed", date_from, date_to)]
+    sts = ("submitted", "processed") if status == "open" else ("all",) if status == "all" else (status,)
+    out = []
+    for st in sts:
+        out += [r["order_id"] for r in _hub.queue(con, st, date_from, date_to)]
+    return out
+
+
+def _sheet_title(name: str, used: set) -> str:
+    """An Excel sheet title: 31 characters, none of the characters Excel forbids (colon,
+    slashes, question mark, asterisk, brackets), unique in the workbook."""
+    t = re.sub(r"[:\\/?*\[\]]", " ", str(name or "ไม่ระบุผู้จำหน่าย")).strip()[:31] or "ผู้จำหน่าย"
+    base, n = t, 2
+    while t in used:
+        suf = f" ({n})"
+        t = base[:31 - len(suf)] + suf
+        n += 1
+    used.add(t)
+    return t
 
 
 @router.get("/api/bom-center/hub/queue")
@@ -1678,19 +1708,26 @@ def bc_hub_process(order_id: int, body: ProcessBody, request: Request):
 
 @router.get("/api/bom-center/hub/consolidated")
 def bc_hub_consolidated(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
-                        date_to: Optional[str] = Query(None)):
+                        date_to: Optional[str] = Query(None), status: Optional[str] = Query(None)):
+    st = _hub_status_or_400(status)
     with get_db() as con:
         _ensure(con)
-        return _hub.consolidated(con, _ids_or_filter(con, ids, date_from, date_to))
+        out = _hub.consolidated(con, _ids_or_filter(con, ids, date_from, date_to, st))
+    out["status"], out["status_th"] = st, _HUB_STATUS_TH[st]
+    return out
 
 
 @router.get("/api/bom-center/hub/consolidated.xlsx")
 def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
-                             date_to: Optional[str] = Query(None)):
+                             date_to: Optional[str] = Query(None), status: Optional[str] = Query(None),
+                             split: bool = Query(False)):
+    """The consolidated workbook for the orders of `status` (default open); split=true adds one
+    sheet per supplier after the two standard sheets, so a supplier gets its own page."""
     from openpyxl import Workbook
+    st = _hub_status_or_400(status)
     with get_db() as con:
         _ensure(con)
-        oids = _ids_or_filter(con, ids, date_from, date_to)
+        oids = _ids_or_filter(con, ids, date_from, date_to, st)
         c = _hub.consolidated(con, oids)
         per_branch = []
         for oid in oids:
@@ -1706,7 +1743,8 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     ws = wb.active
     br = c["branches"]
     _sheet(ws, "รวมตามผู้จำหน่าย", ["วันส่ง", "ผู้จำหน่าย", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
-           "ใบสั่งซื้อของสาขาที่ส่งแล้ว สรุปรวมตามผู้จำหน่าย × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
+           f"ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”" + (f" วันสั่ง {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
+           + " สรุปรวมตามผู้จำหน่าย × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:
             ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
@@ -1716,7 +1754,19 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
-    return _xlsx(wb, "bom_center_orders_consolidated.xlsx")
+    if split:                                   # one page per supplier, its items by delivery day
+        by_sup = {}
+        for g in c["groups"]:
+            by_sup.setdefault(g["supplier"], []).append(g)
+        used = {ws.title, ws2.title}
+        for sup, gs in sorted(by_sup.items()):
+            w = wb.create_sheet()
+            _sheet(w, _sheet_title(sup, used), ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
+                   f"ผู้จำหน่าย {sup} · ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”")
+            for g in gs:
+                for it in g["items"]:
+                    w.append([g["delivery"], it["code"], it["name"], it["unit"], it["total"]] + [it["by_branch"].get(b) for b in br])
+    return _xlsx(wb, f"bom_center_orders_{st}_{date_from or 'all'}_{date_to or 'all'}.xlsx")
 
 
 def _dates_or_week(date_from: Optional[str], date_to: Optional[str]) -> tuple:
