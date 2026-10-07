@@ -205,7 +205,11 @@ async function msFetchRpt(branch, month) {
   if (j && j.available) { _msRptCache[key] = j; _msFetchedAt = Date.now(); }
   return j;
 }
-function msRefresh() { Object.keys(_msRptCache).forEach(k => delete _msRptCache[k]); loadMobileSummary(true); }
+function msRefresh() {
+  Object.keys(_msRptCache).forEach(k => delete _msRptCache[k]);
+  Object.keys(_msBriefCache).forEach(k => delete _msBriefCache[k]); _msScorecard = null;
+  loadMobileSummary(true);
+}
 // a month-only report comes from the complete-month path unless the reader picked
 // an older month, in which case the day/menu calls must be anchored on it too
 function msPickedOlderMonth() {
@@ -386,6 +390,67 @@ function msRenderSummary() {
       <p class="sub">${msPchip(b.wow_pct)} · ${fmt(b.revenue)}</p></div>`;
   const bw = document.getElementById('msBestWorst');
   if (bw) { bw.innerHTML = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.parentElement.style.display = brs.length > 1 ? '' : 'none'; }
+  msLoadYesterday();
+}
+
+// ── เมื่อวาน: the Daily Brief's first card on the phone. The last finished day's
+// revenue against the same weekday last week, its customers and bills, and the
+// branches below their own normal — from the same /api/home/brief and
+// /api/home/branch-scorecard the desktop reads, so the two never disagree. Tap →
+// the worst branch's sheet (the chosen branch's own sheet when one is picked).
+// Hidden when the reader picked an older month: that month has no "yesterday". ──
+const _msBriefCache = {};
+let _msScorecard = null;
+async function msLoadYesterday() {
+  const wrap = document.getElementById('msYesterdayWrap'), el = document.getElementById('msYesterday');
+  if (!wrap || !el) return;
+  if (msPickedOlderMonth()) { wrap.style.display = 'none'; return; }
+  const br = msBranch();
+  try {
+    if (!_msBriefCache[br]) _msBriefCache[br] = api(`${API}/api/home/brief${br ? '?branch=' + encodeURIComponent(br) : ''}`);
+    if (!_msScorecard) _msScorecard = api(`${API}/api/home/branch-scorecard`);
+    const [brief, sc] = await Promise.all([_msBriefCache[br], _msScorecard]);
+    if (br !== msBranch() || _msView !== 'summary') return;   // the reader moved on while this loaded
+    if (!brief || !brief.yesterday) { wrap.style.display = 'none'; return; }
+    el.innerHTML = msYesterdayHtml(brief, sc, br);
+    wrap.style.display = '';
+  } catch (e) {
+    delete _msBriefCache[br]; _msScorecard = null;   // a failed call is not kept for next time
+    wrap.style.display = 'none';
+  }
+}
+function msYesterdayHtml(brief, sc, br) {
+  const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow;
+  const wowPct = wow ? Math.round((rev - wow) / wow * 1000) / 10 : null;
+  const d = new Date(brief.yesterday + 'T00:00:00');
+  const when = isNaN(d) ? brief.yesterday : `${_MS_TH_DOW[d.getDay()]} ${d.getDate()} ${_MS_TH_MON[d.getMonth()]}`;
+  const rows = ((sc || {}).branches || []);
+  // the Daily Brief's rule (js/07-home.js): status down, or 8 % or more under the branch's trailing average
+  const down = rows.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
+                   .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
+  const bad = 'color:var(--bad-ink,#b91c1c)', good = 'color:var(--good-ink,#047857)';
+  let line3 = '', go = '', target = '';
+  if (br) {
+    const me = rows.find(b => b.branch === br);
+    if (me && me.vs_avg_pct != null) {
+      line3 = me.vs_avg_pct <= -8
+        ? `<span style="${bad}">ต่ำกว่าค่าปกติของสาขา ${Math.abs(me.vs_avg_pct).toFixed(0)}%</span>`
+        : `<span style="${good}">อยู่ในเกณฑ์ปกติของสาขา (${me.vs_avg_pct >= 0 ? '+' : ''}${me.vs_avg_pct.toFixed(0)}% เทียบค่าเฉลี่ย 7 วัน)</span>`;
+    }
+    go = 'msOpenBranch(this.dataset.br)'; target = br;
+  } else {
+    line3 = down.length
+      ? `<span style="${bad}">${down.length} สาขาต่ำกว่าปกติ</span> · ${down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}`).join(' · ')}`
+      : `<span style="${good}">ทุกสาขาอยู่ในเกณฑ์ปกติ</span>`;
+    if (down.length) { go = 'msOpenBranch(this.dataset.br)'; target = down[0].branch; }
+    else go = "msSwitchView('branches')";
+  }
+  return `<div data-br="${esc(target)}" onclick="${go}" role="button" aria-label="เมื่อวาน — แตะเพื่อดูรายสาขา" style="cursor:pointer;min-height:44px">
+    <p style="font-size:12px;${_msMuted}">เมื่อวาน · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
+    <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${wowPct != null ? msPchip(wowPct) : ''}<span style="font-size:12px;${_msMuted}">เทียบวันเดียวกันสัปดาห์ก่อน</span></p>
+    <p style="font-size:12px;${_msMuted};margin-top:2px">ลูกค้า ${fmtN(brief.customer_yesterday || 0)} · ${fmtN(brief.tx_yesterday || 0)} บิล · ${fmt(brief.avg_ticket_yesterday || 0)}/บิล</p>
+    ${line3 ? `<p style="font-size:13px;margin-top:6px;display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">${line3}</span><span style="${_msMuted}">›</span></p>` : ''}
+  </div>`;
 }
 
 // ── VIEW: สาขา ──
