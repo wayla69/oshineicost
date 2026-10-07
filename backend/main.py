@@ -293,9 +293,11 @@ async def enforce_auth(request: Request, call_next):
         return await call_next(request)
     mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
     if not _auth.path_allowed(request.method, path, mods):
+        # X-Denied: role — the page must not mistake this for a missing write token
+        # (core.require_write_token marks its own 403 "token").
         return JSONResponse(
-            {"detail": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (forbidden)."},
-            status_code=403)
+            {"detail": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (forbidden).", "code": "role"},
+            status_code=403, headers={"X-Denied": "role"})
     return await call_next(request)
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,8 @@ Moved out of main.py in Phase 2b (2026-09) by the AST: these endpoints and
 the helpers only they use, unchanged. URLs are unchanged.
 """
 from fastapi import APIRouter
-from core import get_db
+from fastapi import Depends
+from core import get_db, require_write_token, write_gate_on
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
@@ -116,6 +117,15 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
     return {"username": row["username"], "role": row["role"], "branch": branch,
             "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
+
+
+@router.post("/api/auth/token-check", include_in_schema=False, dependencies=[Depends(require_write_token)])
+def auth_token_check():
+    """Does this browser hold a write token the server accepts? Writes nothing.
+    403 (X-Denied: token) when not; {gated: false} when no token is configured
+    (local dev). Under /api/auth/ so every logged-in role — the branch login
+    included — can check before its first save (the ปลดล็อกการบันทึก chip)."""
+    return {"ok": True, "gated": write_gate_on()}
 
 
 @router.post("/api/auth/me/password", include_in_schema=False)
