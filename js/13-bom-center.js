@@ -414,14 +414,15 @@ async function bmcLoadPrices(force) {
     const d = await _bmcJson(`${API}/api/bom-center/prices?month=${_bmcMonth()}`);
     _bmcPrices = (d.rows || []).filter(r => r.active);
     bmcRenderPrices();
+    // the requisition reports already in the system: pick a month here, no detour to change the price month first
     const rm = await _bmcJson(`${API}/api/bom-center/prices/requisition-months`).catch(() => ({ months: [] }));
-    const btn = document.getElementById('bmcFromReqBtn');
-    if (btn) {
-      const has = (rm.months || []).includes(_bmcMonth());
-      btn.disabled = !has;
-      btn.style.opacity = has ? 1 : 0.5;
-      btn.title = has ? `ใช้รายงานจ่ายสินค้าภายในเดือน ${_bmcMonth()} ที่อัปโหลดไว้ในระบบ`
-        : `ยังไม่มีรายงานจ่ายสินค้าภายในเดือน ${_bmcMonth()} ในระบบ` + (rm.months?.length ? ` (มี: ${rm.months.join(', ')})` : '');
+    const sel = document.getElementById('bmcReqMonth'), btn = document.getElementById('bmcFromReqBtn');
+    if (sel && btn) {
+      const months = rm.months || [];
+      sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('') || '<option value="">ยังไม่มีรายงานในระบบ</option>';
+      sel.value = months.includes(_bmcMonth()) ? _bmcMonth() : (months[0] || '');
+      btn.disabled = !months.length;
+      btn.style.opacity = months.length ? 1 : 0.5;
     }
   } catch (e) {
     document.getElementById('bmcPriceBody').innerHTML = `<tr><td colspan="9" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
@@ -448,12 +449,13 @@ function bmcRenderPrices() {
   _bmcStatus('bmcPriceSummary', `${rows.length} รายการ · ` + Object.entries(by).map(([k, n]) => `${_BMC_SRC[k] || (k === 'none' ? 'ไม่มีราคา' : k)} ${n}`).join(' · '));
 }
 let _bmcLastSuggested = [];
+let _bmcPriceSend = null, _bmcPriceLabel = '', _bmcPricePre = null, _bmcChosenRules = [];
 function _bmcSuggestedHtml(list) {
   _bmcLastSuggested = list || [];
   if (!_bmcLastSuggested.length || !_bmcCanWrite()) return '';
   return `<div class="mt-3 p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
     <div class="text-xs font-semibold" style="color:var(--text-primary)">กฎหน่วยที่ระบบเสนอ (${_bmcLastSuggested.length}): ขนาดแพ็คในรายงานบัญชีไม่ตรงกับทะเบียน</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">คำนวณจากราคาล่าสุดของวัตถุดิบนั้น · ระบบเลือกไว้เฉพาะรายการที่ทุกบรรทัดให้ค่าตรงกัน · แก้ไขตัวเลขได้ก่อนบันทึก · หลังบันทึก กรุณาอัปโหลดไฟล์เดิมอีกครั้ง</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">คำนวณจากราคาล่าสุดของวัตถุดิบนั้น · ระบบเลือกไว้เฉพาะรายการที่ทุกบรรทัดให้ค่าตรงกัน · แก้ไขตัวเลขได้ · กฎที่เลือกจะบันทึกพร้อมราคาในการยืนยันเดียวกัน ไม่ต้องอัปโหลดไฟล์ซ้ำ</div>
     <div class="overflow-x-auto"><table class="text-[11.5px] w-full" style="font-variant-numeric:tabular-nums"><tbody>
     ${_bmcLastSuggested.map((s, i) => `<tr class="border-b" style="border-color:var(--border-soft)">
       <td class="pr-2"><input type="checkbox" id="bmcSug${i}" ${s.consistent ? 'checked' : ''}></td>
@@ -463,19 +465,47 @@ function _bmcSuggestedHtml(list) {
       <td class="pr-2 text-right">${s.lines} บรรทัด · ฿${_bmcNum(s.value, 0)}</td>
       <td>${s.consistent ? '' : _bmcChip('ค่าไม่สม่ำเสมอ ควรตรวจสอบ', 'var(--amber-ink)')}</td></tr>`).join('')}
     </tbody></table></div>
-    <button onclick="bmcApplySuggested()" class="mt-2" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12px;cursor:pointer">บันทึกกฎที่เลือก</button>
+    <button onclick="bmcPriceRepreview()" class="mt-2" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 14px;font-size:12px;cursor:pointer">คำนวณใหม่ด้วยกฎที่เลือก</button>
   </div>`;
 }
-async function bmcApplySuggested() {
-  const rules = _bmcLastSuggested.map((s, i) => ({ s, on: document.getElementById('bmcSug' + i)?.checked,
-    f: Number(document.getElementById('bmcSugF' + i)?.value) }))
+// the pack guard's suggestions the person ticked (+ those already applied in a re-preview)
+function _bmcSelectedRules() {
+  return _bmcLastSuggested.map((s, i) => ({ s, on: document.getElementById('bmcSug' + i)?.checked, f: Number(document.getElementById('bmcSugF' + i)?.value) }))
     .filter(x => x.on && x.f > 0).map(x => ({ code: x.s.code, unit: x.s.unit, factor_to_base: x.f }));
-  if (!rules.length) { _bmcStatus('bmcPriceStatus', 'ยังไม่ได้เลือกกฎ'); return; }
+}
+function _bmcRulesToSend() {
+  const sel = _bmcSelectedRules(), seen = new Set(sel.map(r => r.code + '|' + r.unit));
+  return sel.concat(_bmcChosenRules.filter(r => !seen.has(r.code + '|' + r.unit)));
+}
+async function bmcPriceRepreview() {
+  if (!_bmcPriceSend) return;
+  _bmcChosenRules = _bmcRulesToSend();
   try {
-    await _bmcJson(`${API}/api/bom-center/units`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rules) });
-    _bmcStatus('bmcPriceStatus', `✓ บันทึกกฎหน่วย ${rules.length} รายการแล้ว กรุณาอัปโหลดไฟล์เดิมอีกครั้งเพื่อคำนวณราคาใหม่`, 'var(--good-ink)');
-    _bmcIng = [];
-  } catch (e) { _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+    _bmcStatus('bmcPriceStatus', 'กำลังคำนวณใหม่…');
+    _bmcPricePre = await _bmcPriceSend(true, _bmcChosenRules);
+    document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(_bmcPricePre, false);
+    _bmcStatus('bmcPriceStatus', `คำนวณด้วยกฎหน่วย ${_bmcChosenRules.length} รายการแล้ว ตรวจสอบผล แล้วกด “บันทึกราคา”`);
+  } catch (e) { _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+async function bmcPriceCommit() {
+  const pre = _bmcPricePre;
+  if (!pre || !_bmcPriceSend) return;
+  const rules = _bmcRulesToSend();
+  if (!pre.priced && !rules.length) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
+  if (!await uiConfirm(`${_bmcPriceLabel}\nเดือน ${pre.month}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
+      (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ (บรรทัดที่ติดกฎจะคิดราคาได้ในการบันทึกนี้)` : '') +
+      (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (กรุณาตรวจสอบหน่วยฐานภายหลัง)` : '') +
+      (pre.counts.flag ? `\n⚠ ${pre.counts.flag} รายการราคาเปลี่ยน ≥25% กรุณาตรวจสอบในตารางก่อนยืนยัน` : '') +
+      (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : '') + `\n\nยืนยันการบันทึก?`)) {
+    _bmcStatus('bmcPriceStatus', 'ยังไม่บันทึก กรุณาตรวจสอบผลด้านล่าง'); return;
+  }
+  try {
+    const d = await _bmcPriceSend(false, rules);
+    document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(d, true);
+    _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : ''), 'var(--good-ink)');
+    _bmcPrices = []; _bmcIng = []; _bmcPricePre = null; _bmcChosenRules = [];
+    bmcLoadPrices(true);
+  } catch (e) { _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 function _bmcPreviewHtml(p, applied) {
   const flagInk = { flag: 'var(--bad-ink)', warn: 'var(--amber-ink)', new: 'var(--navy-ink)', ok: 'var(--text-muted)' };
@@ -506,27 +536,27 @@ function _bmcPreviewHtml(p, applied) {
         <td class="pr-2 text-right">฿${_bmcNum(i.value, 0)}</td><td style="color:var(--amber-ink)">${esc(i.why)}
         </td></tr>`).join('')}</tbody></table></div>` : ''}
     ${_bmcSuggestedHtml(p.suggested_rules)}
+    ${applied || !_bmcCanWrite() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button onclick="bmcPriceCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกราคา${(p.suggested_rules || []).length || _bmcChosenRules.length ? 'พร้อมกฎที่เลือก' : ''}</button>
+      <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่มีการบันทึกจนกว่าจะยืนยัน</span></div>`}
   </div>`;
 }
+// One upload: preview → (tick the pack guard's suggestions, recalculate if wanted) → one confirm
+// saves the prices AND the rules. Without suggestions the confirm comes straight after the preview.
 async function _bmcRunPriceImport(send, label) {
   const box = document.getElementById('bmcPricePreview');
+  _bmcPriceSend = send; _bmcPriceLabel = label; _bmcChosenRules = []; _bmcPricePre = null;
   try {
     _bmcStatus('bmcPriceStatus', 'กำลังคำนวณ…');
-    const pre = await send(true);
+    const pre = await send(true, []);
+    _bmcPricePre = pre;
     box.innerHTML = _bmcPreviewHtml(pre, false);
-    if (!pre.priced) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
-    if (pre.month !== _bmcMonth()) { const el = document.getElementById('bmcMonth'); if (el) el.value = pre.month; }
-    if (!await uiConfirm(`${label}\nเดือน ${pre.month}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
-        (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (กรุณาตรวจสอบหน่วยฐานภายหลัง)` : '') +
-        (pre.counts.flag ? `\n⚠ ${pre.counts.flag} รายการราคาเปลี่ยน ≥25% กรุณาตรวจสอบในตารางก่อนยืนยัน` : '') +
-        (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : '') + `\n\nยืนยันการบันทึก?`)) {
-      _bmcStatus('bmcPriceStatus', 'ยังไม่บันทึก กรุณาตรวจสอบผลด้านล่าง'); return;
+    if (pre.month !== _bmcMonth()) { const el = document.getElementById('bmcMonth'); if (el) el.value = pre.month; supplyCtxSet({ month: pre.month }); }
+    if ((pre.suggested_rules || []).length) {
+      _bmcStatus('bmcPriceStatus', 'ระบบเสนอกฎหน่วย เลือกแล้วกด “คำนวณใหม่ด้วยกฎที่เลือก” เพื่อดูผล หรือกด “บันทึกราคาพร้อมกฎที่เลือก” ได้เลย', 'var(--amber-ink)');
+      return;
     }
-    const d = await send(false);
-    box.innerHTML = _bmcPreviewHtml(d, true);
-    _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}`, 'var(--good-ink)');
-    _bmcPrices = []; _bmcIng = [];
-    bmcLoadPrices(true);
+    if (!pre.priced) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
+    await bmcPriceCommit();
   } catch (e) {
     _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
   }
@@ -534,15 +564,18 @@ async function _bmcRunPriceImport(send, label) {
 async function bmcImportPrices(input) {
   const file = input?.files?.[0];
   if (!file) return;
-  const send = dry => { const fd = new FormData(); fd.append('file', file, file.name);
+  const send = (dry, rules) => { const fd = new FormData(); fd.append('file', file, file.name);
+    if (rules && rules.length) fd.append('rules', JSON.stringify(rules));
     return _bmcJson(`${API}/api/bom-center/prices/import?dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST', body: fd }); };
   await _bmcRunPriceImport(send, `ไฟล์ ${file.name}`);
   input.value = '';
 }
 async function bmcPricesFromReq() {
-  const m = _bmcMonth();
-  await _bmcRunPriceImport(dry => _bmcJson(`${API}/api/bom-center/prices/from-requisition?month=${m}&dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST' }),
-    'รายงานจ่ายสินค้าภายในที่อัปโหลดไว้');
+  const sel = document.getElementById('bmcReqMonth');
+  const m = (sel && sel.value) || _bmcMonth();
+  if (!m) { _bmcStatus('bmcPriceStatus', 'ยังไม่มีรายงานจ่ายสินค้าภายในในระบบ', 'var(--amber-ink)'); return; }
+  await _bmcRunPriceImport((dry, rules) => _bmcJson(`${API}/api/bom-center/prices/from-requisition?month=${m}&dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules: rules || [] }) }), `รายงานจ่ายสินค้าภายในเดือน ${m} ที่อัปโหลดไว้`);
 }
 async function bmcCarry() {
   const m = _bmcMonth();
@@ -834,6 +867,10 @@ async function bmcLoadReleases(keepId) {
     const d = await _bmcJson(`${API}/api/bom-center/releases`);
     _bmcRels = d.releases || [];
     window._bmcRelSuggest = d.suggest || {};
+    // the Cost-RW card's months: pre-filled with the suggestion, edited in place (no prompts before the file)
+    const eff = document.getElementById('bmcCrwEff'), pm = document.getElementById('bmcCrwPm');
+    if (eff && !eff.value) eff.value = (d.suggest || {}).effective_month || '';
+    if (pm && !pm.value) pm.value = (d.suggest || {}).price_month || '';
     const sel = document.getElementById('bmcRel');
     const cur = keepId || Number(sel.value) || (_bmcRels.find(r => r.kind === 'monthly') || _bmcRels[0] || {}).release_id;
     const st = { draft: 'ฉบับร่าง', review: 'รอตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้' };
@@ -1058,10 +1095,9 @@ async function bmcImportCostRw(input) {
   const file = input?.files?.[0];
   if (!file) return;
   const sg = window._bmcRelSuggest || {};
-  const eff = await uiPrompt('กรุณาระบุเดือนที่เวอร์ชันนี้มีผล (YYYY-MM)', sg.effective_month || '');
-  if (!eff) { input.value = ''; return; }
-  const pm = await uiPrompt('กรุณาระบุเดือนของราคาวัตถุดิบที่ใช้คิดต้นทุน (YYYY-MM)\n(ใช้ราคาซื้อจริงของงวดล่าสุดที่บัญชีปิดแล้ว)', sg.price_month || '');
-  if (!pm) { input.value = ''; return; }
+  const eff = document.getElementById('bmcCrwEff')?.value || sg.effective_month || '';
+  const pm = document.getElementById('bmcCrwPm')?.value || sg.price_month || '';
+  if (!eff || !pm) { _bmcStatus('bmcRecStatus', 'กรุณาระบุเดือนที่มีผลและเดือนราคาในช่องข้างปุ่มก่อนเลือกไฟล์', 'var(--amber-ink)'); input.value = ''; return; }
   const send = dry => { const fd = new FormData(); fd.append('file', file, file.name);
     return _bmcJson(`${API}/api/bom-center/recipes/import-cost-rw?dry_run=${dry}&effective_month=${eff}&price_month=${pm}`, { method: 'POST', body: fd }); };
   try {

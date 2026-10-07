@@ -10,11 +10,12 @@ Reads need any of cost.analysis / supply.ordering / bom.center / bom.edit;
 writes need bom.center or bom.edit (auth.MODULE_RULES).
 """
 import io
+import json
 import re
 from datetime import date, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -535,13 +536,35 @@ async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
     return lines, {"format": "template", "sheet": sheet, "columns": sorted(hmap)}, month
 
 
-def _import(lines, info, month, dry_run, who, note, add_unknown=False):
+def _rules_or_400(raw) -> list:
+    """Unit rules a price import carries ([{code, unit, factor_to_base}] as JSON): the pack
+    guard's suggestions the person ticked, saved in the same confirm as the prices."""
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        raise HTTPException(400, "rules ต้องเป็น JSON")
+    out = []
+    for r in items or []:
+        try:
+            out.append({"code": str(r["code"]).strip(), "unit": str(r["unit"]).strip(), "factor_to_base": float(r["factor_to_base"])})
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, "กฎหน่วยต้องมี code, unit และ factor_to_base")
+    return out
+
+
+def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=None):
     """Preview, and unless dry_run, write. get_db() hands out a long-lived
     per-thread connection, so a dry run must ROLL BACK explicitly — otherwise the
-    codes add_unknown registered would ride along with the next request's commit."""
+    codes add_unknown registered would ride along with the next request's commit.
+    `rules` are written first, inside the same transaction, so the preview already
+    prices the lines they unlock and a dry run discards them with the rest."""
     with get_db() as con:
         _ensure(con)
         try:
+            for r in rules or []:
+                _m.set_unit_rule(con, r["code"], r["unit"], r["factor_to_base"], "จากการนำเข้าราคา", who)
             agg = _p.aggregate(con, lines, add_unknown=add_unknown, who=who, month=month)
             pv = _p.preview(con, month, agg)
             result = None
@@ -558,24 +581,34 @@ def _import(lines, info, month, dry_run, who, note, add_unknown=False):
     if not dry_run:
         invalidate_cache("bc_")
     pv["issues"] = pv["issues"][:300]
-    return {"dry_run": dry_run, "source": info, "lines": len(lines), **pv, "applied": result}
+    return {"dry_run": dry_run, "source": info, "lines": len(lines), **pv, "applied": result,
+            "rules_applied": len(rules or [])}
+
+
+class RulesBody(BaseModel):
+    rules: List[UnitRule] = []
 
 
 @router.post("/api/bom-center/prices/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_prices_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
-                           dry_run: bool = Query(True), add_unknown: bool = Query(False)):
-    """A month of purchase lines -> weighted-average actual price per ingredient."""
+                           dry_run: bool = Query(True), add_unknown: bool = Query(False),
+                           rules: Optional[str] = Form(None)):
+    """A month of purchase lines -> weighted-average actual price per ingredient.
+    `rules` (a JSON list in the form) are the pack guard's suggestions the person ticked."""
     if month:
         _month_or_400(month)
+    rl = _rules_or_400(rules)
     lines, info, month = await _price_lines_from_file(file, month)
-    return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown)
+    return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown, rules=rl)
 
 
 @router.post("/api/bom-center/prices/from-requisition", dependencies=[Depends(require_write_token_unless_dry_run)])
 def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_run: bool = Query(True),
-                               add_unknown: bool = Query(False)):
+                               add_unknown: bool = Query(False), body: Optional[RulesBody] = None):
     """The same, from the รายงานจ่ายสินค้าภายใน rows already uploaded to the site."""
     _month_or_400(month)
+    rl = [{"code": r.code, "unit": r.unit, "factor_to_base": float(r.factor_to_base or 0)} for r in (body.rules if body else [])
+          if r.factor_to_base]
     with get_db() as con:
         has = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='requisition_line'").fetchone()
         rows = con.execute("SELECT item_code, item_name, qty, unit, value, unit_price, branch_id FROM requisition_line"
@@ -584,7 +617,7 @@ def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_ru
         raise HTTPException(404, f"ยังไม่มีรายงานจ่ายสินค้าภายในเดือน {month} ในระบบ")
     lines = [dict(zip(("code", "name", "qty", "unit", "value", "unit_price", "branch_id"), r)) for r in rows]
     return _import(lines, {"format": "requisition_line ในระบบ"}, month, dry_run, _who(request),
-                   "จากรายงานจ่ายสินค้าภายในที่อัปโหลดไว้", add_unknown)
+                   "จากรายงานจ่ายสินค้าภายในที่อัปโหลดไว้", add_unknown, rules=rl)
 
 
 @router.get("/api/bom-center/prices/requisition-months")
