@@ -1449,13 +1449,18 @@ def _day_or_today(d: Optional[str]) -> date:
 
 
 @router.get("/api/bom-center/order/plan")
-def bc_order_plan(request: Request, round: str = Query("1"), order_day: Optional[str] = Query(None),
+def bc_order_plan(request: Request, round: Optional[str] = Query(None), order_day: Optional[str] = Query(None),
                   branch_id: Optional[int] = Query(None)):
-    """This round's suggestion net of stock + the cycle's order if one exists."""
+    """This round's suggestion net of stock + the cycle's order if one exists. Without a
+    round, the one whose order day comes first — the branch page opens on it."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _or.plan(con, bid, _round_or_400(round), _day_or_today(order_day))
+        day = _day_or_today(order_day)
+        rnd = _round_or_400(round) if round else _or.next_round(con, bid, day)
+        out = _or.plan(con, bid, rnd, day)
+        out["round"] = rnd
+        return out
 
 
 class OrderLine(BaseModel):
@@ -1486,11 +1491,14 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
 
 
 @router.get("/api/bom-center/orders")
-def bc_orders(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20)):
+def bc_orders(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20),
+              status: Optional[str] = Query(None)):
+    """The branch's orders; status=open → sent or processed (awaiting receipt), or a comma list."""
+    sts = _or.OPEN if status == "open" else (tuple(x for x in status.split(",") if x) if status and status != "all" else None)
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return {"branch_id": bid, "orders": _or.history(con, bid, max(1, min(limit, 200)))}
+        return {"branch_id": bid, "orders": _or.history(con, bid, max(1, min(limit, 200)), statuses=sts)}
 
 
 @router.get("/api/bom-center/order/{order_id}")

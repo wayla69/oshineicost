@@ -49,6 +49,7 @@
       </div>
     </div>
 
+    <div id="brnNext"></div>
     <div class="card p-3 mb-3">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการตรวจนับ</div>
       <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
@@ -72,6 +73,7 @@
       <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
       <span id="brnOrdStatus" class="text-xs"></span>
     </div>
+    <div id="brnOrdDetail" class="card p-3 mb-3" style="display:none"></div>
     <div class="card p-3 mb-3">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ใบสั่งซื้อล่าสุด</div>
       <div id="brnOrdHistory" class="text-xs" style="color:var(--text-secondary)"></div>
@@ -80,6 +82,9 @@
 
   <!-- ── รับของ ── -->
   <div id="brn-pane-recv" style="display:none">
+    <!-- orders the centre has processed (or the branch sent) are received here, whatever today's cycle is -->
+    <div id="brnRecvOpen" class="card p-3 mb-3" style="display:none"></div>
+    <div id="brnRecvOrder" class="card p-3 mb-3" style="display:none;border-left:4px solid var(--accent)"></div>
     <div class="card p-3 mb-3">
       <p class="text-xs mb-2" style="color:var(--text-secondary)">บันทึกสินค้าที่รับเข้าร้านทุกครั้ง ทั้งจากส่วนกลางและที่สาขาจัดซื้อเอง ผลต่างการใช้คำนวณจาก ต้นงวด + <b>รับเข้า</b> − ปลายงวด
         หากไม่บันทึก ผลจะแสดงเป็น “ใช้น้อยกว่าสูตร” · สินค้าที่รับก่อนตรวจนับปลายงวด ให้ลงวันที่ก่อนวันตรวจนับ</p>
@@ -90,7 +95,7 @@
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label style="flex:1 1 200px">วัตถุดิบ<br><input id="brnRecvItem" list="brnItemList" placeholder="พิมพ์ชื่อหรือรหัส" onchange="brnRecvPicked()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:100%;background:var(--bg-input);color:var(--text-primary)"></label>
-        <label>จำนวน<br><input id="brnRecvQty" inputmode="decimal" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>จำนวน<br><input id="brnRecvQty" inputmode="decimal" onkeydown="if(event.key==='Enter'){event.preventDefault();brnRecvAdd()}" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
         <span id="brnRecvUnit" style="padding-bottom:8px;color:var(--text-secondary)"></span>
         <button onclick="brnRecvAdd()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">+ เพิ่ม</button>
       </div>
