@@ -5,10 +5,17 @@
 // ════════════════════════════════════════════════════════════════
 // MOBILE OWNER SUMMARY
 // ════════════════════════════════════════════════════════════════
-function showFullDashboard() {
+async function showFullDashboard(tab) {
   document.body.classList.add('force-desktop');
-  try { if (!activeTab) switchTab('home'); else loadActiveTab(); } catch (e) {}
   window.scrollTo(0, 0);
+  // phone-first boot (03-tabs-main.js): the desktop shell loads now, on the first tap
+  const first = !_desktopBooted;
+  try { showLoadingBar(); } catch (e) {}
+  try { await ensureDesktopBooted(); } catch (e) { console.warn('desktop boot:', e); }
+  try {
+    if (tab) switchTab(tab);
+    else if (!first) { if (!activeTab) switchTab('home'); else loadActiveTab(); }
+  } catch (e) {}
 }
 function showMobileSummary() {
   document.body.classList.remove('force-desktop');
@@ -182,6 +189,8 @@ function msRenderActive() {
 // numbers as the printed pack (owner request 2026-10-01: "see deeper on the phone").
 // mtd=1 lets it describe the in-progress month, month-to-date and MTD-fair. ──
 const _msRptCache = {};
+let _msFetchedAt = 0;   // when the summary last came from the server (foreground refresh, 03-tabs-main.js)
+function msClock(t) { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function msMonth() { return document.getElementById('msMonthSel')?.value || ''; }
 function msMgtParams(branch, month) {
   const q = new URLSearchParams({ period: 'monthly', mtd: '1', lang: 'th' });
@@ -193,7 +202,7 @@ async function msFetchRpt(branch, month) {
   const key = (month || '') + '|' + (branch || '');
   if (_msRptCache[key]) return _msRptCache[key];
   const j = await api(`${API}/api/reports/management?${msMgtParams(branch, month)}`);
-  if (j && j.available) _msRptCache[key] = j;
+  if (j && j.available) { _msRptCache[key] = j; _msFetchedAt = Date.now(); }
   return j;
 }
 function msRefresh() { Object.keys(_msRptCache).forEach(k => delete _msRptCache[k]); loadMobileSummary(true); }
@@ -233,7 +242,7 @@ async function loadMobileSummary(force) {
     _msMonthsFilled = true;
   }
   document.getElementById('msSubtitle').textContent = (br || 'ทุกสาขา') + ' · ' + (j.label || '');
-  if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day || ''}`;
+  if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day || ''}` + (_msFetchedAt ? ` · โหลดล่าสุด ${msClock(_msFetchedAt)}` : '');
   msRenderActive();
   msLoadVoice();
 }
@@ -256,7 +265,7 @@ async function msLoadVoice() {
   box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
       <div style="font-size:11px;color:var(--text-muted,#64748b)">${esc(r.source)} · <b style="color:var(--text-primary,#1e293b)">${esc(r.branch_name || '')}</b>${r.rating != null ? ` · ${r.rating}★` : ''} · ${r.age_days === 0 ? 'วันนี้' : (r.age_days || 0) + ' วัน'}${r.sla_breached ? ' <span style="color:var(--bad-ink);font-weight:600">เกิน SLA</span>' : ''}${r.contact ? ` · ${esc(r.contact)}` : ''}</div>
       <div style="font-size:13px;margin:3px 0">${r.text ? esc(r.text.slice(0, 160)) : '<i style="color:var(--text-muted,#64748b)">(ให้ดาวอย่างเดียว)</i>'}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard(); switchTab('feedback')" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard('feedback')" style="font-size:11px;padding:4px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
     </div>`).join('') : `<div style="font-size:12px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ</div>`;
 }
 async function msVoiceHandled(id) {

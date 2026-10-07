@@ -469,3 +469,21 @@ def test_branch_login_lives_30_days(client, app_db, auth_on):
     assert f"max-age={auth.SESSION_TTL_BRANCH}" in rb.headers.get("set-cookie", "").lower()
     exp_m = auth.parse_token(mg.cookies.get(auth.SESSION_COOKIE))["exp"]
     assert abs(exp_m - (time.time() + auth.SESSION_TTL)) < 120
+
+
+# ── "จำการเข้าสู่ระบบบนเครื่องนี้ไว้ 30 วัน": any role, by choice on the login form ──
+def test_remembered_login_lives_30_days(client, app_db, auth_on):
+    import time
+    c = _fresh(app_db)
+    r = c.post("/api/auth/login", json={"username": "management1", "password": DEFAULT_PW, "remember": True})
+    assert r.status_code == 200, r.text
+    exp = auth.parse_token(c.cookies.get(auth.SESSION_COOKIE))["exp"]
+    assert abs(exp - (time.time() + auth.SESSION_TTL_REMEMBER)) < 120
+    assert f"max-age={auth.SESSION_TTL_REMEMBER}" in r.headers.get("set-cookie", "").lower()
+    # unticked — and the field absent, as the PC-side callers send it — stays 12 h
+    for body in ({"remember": False}, {}):
+        c2 = _fresh(app_db)
+        r2 = c2.post("/api/auth/login", json={"username": "management1", "password": DEFAULT_PW, **body})
+        assert r2.status_code == 200, r2.text
+        exp2 = auth.parse_token(c2.cookies.get(auth.SESSION_COOKIE))["exp"]
+        assert abs(exp2 - (time.time() + auth.SESSION_TTL)) < 120

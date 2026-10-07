@@ -25,6 +25,7 @@ router = APIRouter()
 class _LoginBody(BaseModel):
     username: str
     password: str
+    remember: bool = False   # "จำการเข้าสู่ระบบบนเครื่องนี้ไว้ 30 วัน" (auth.session_ttl)
 
 
 class _UserCreate(BaseModel):
@@ -113,7 +114,7 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
         _auth.clear_login_failures(ip, body.username)
         _log_auth_event(con, "login", row["username"], ip)
     branch = row["branch"] if "branch" in row.keys() else None
-    ttl = _auth.session_ttl(row["role"])                      # the branch phone: 30 days
+    ttl = _auth.session_ttl(row["role"], remember=bool(body.remember))   # the branch phone / a remembered device: 30 days
     token = _auth.make_token(row["id"], row["username"], row["role"], ttl=ttl, branch=branch)
     _set_session_cookie(response, request, token, max_age=ttl)
     return {"username": row["username"], "role": row["role"], "branch": branch,

@@ -182,6 +182,8 @@ async function checkApiHealth() {
   const badge = document.getElementById('dbStatus');
   const label = document.getElementById('dbStatusText');
   if (!badge) return true;
+  // a hidden app (another tab, a phone in a pocket) keeps its last verdict instead of polling
+  if (document.hidden && !badge.classList.contains('checking')) return !badge.classList.contains('offline');
 
   // AbortController-based timeout (compatible with all modern browsers)
   const controller = new AbortController();
@@ -248,9 +250,80 @@ function hideLoadingBar() {
   if (b) b.style.display = 'none';
 }
 
+// ── Phone-first boot. On a small screen the owner's summary (#mobileSummary) is the
+// landing page. The desktop shell behind it — 48 tab fragments (570 KB) and the Daily
+// Brief's ~20 calls — used to boot FIRST, and the summary waited for it. Now the
+// summary loads straight away and the shell boots on "เต็ม →" (ensureDesktopBooted).
+// The branch login is force-desktop from applyPermissions, so it boots the shell at once.
+function _phoneFirst() {
+  try {
+    if (!(window.innerWidth > 0)) return false;   // a hidden pane reports 0 wide — that is not a phone
+    return window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop');
+  } catch (e) { return false; }
+}
+// The viewport can change after boot (a window dragged narrower or wider, a pane shown
+// late): boot whichever side is now on screen and has not loaded yet.
+let _appStarted = false, _resizeT = null;
+function _viewportChanged() {
+  clearTimeout(_resizeT);
+  _resizeT = setTimeout(() => {
+    if (!_appStarted) return;
+    if (_phoneFirst()) { if (!_msRpt) loadMobileSummary(); }
+    else if (!_desktopBooted) ensureDesktopBooted();
+  }, 250);
+}
+window.addEventListener('resize', _viewportChanged);
+try { window.matchMedia('(max-width:700px)').addEventListener('change', _viewportChanged); } catch (e) {}
+// The desktop shell: the fragments, the settings/preset furniture, the YTD period and
+// the landing tab. One promise, shared by every caller; a no-op once booted.
+let _desktopBooted = false, _desktopBootP = null;
+function ensureDesktopBooted() {
+  if (!_desktopBootP) _desktopBootP = (async () => {
+    const lazy = !document.getElementById('tabsRoot')?.childElementCount;
+    await loadTabFragments();
+    // on a phone the permissions ran before the fragments existed — the Settings →
+    // ผู้ใช้งาน sub-tab lives in one, so apply them again now
+    if (lazy && window.AUTH && window.AUTH.enabled) applyPermissions();
+    populateTargetMonths();
+    try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
+    try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
+    document.getElementById('presetBar').classList.remove('hidden');
+    // Default the period to YTD (Jan of the latest year → latest month) so the
+    // cumulative "ยอดรวมช่วงที่เลือก" totals read year-to-date on first load.
+    if (allMonths.length) {
+      const _last = allMonths[allMonths.length - 1], _y = _last.slice(0, 4);
+      const _sf = document.getElementById('selMonthFrom'), _st = document.getElementById('selMonthTo');
+      if (_sf) _sf.value = allMonths.find(m => m >= `${_y}-01`) || _last;
+      if (_st) _st.value = _last;
+      const _yq = document.getElementById('selYearQuick'); if (_yq) _yq.value = _y;
+    }
+    _desktopBooted = true;
+    // Land on the Daily Brief (home) tab, not Overall (handles tab display +
+    // hides the period controls home doesn't use).
+    switchTab('home');
+  })();
+  return _desktopBootP;
+}
+
+// ── Foreground. A phone comes back to the app hours later with the numbers it left:
+// refresh the summary (or the open tab) when they are older than 5 min, re-check the
+// API, and pause every infinite animation while the app is hidden (body.app-hidden).
+const _STALE_MS = 5 * 60 * 1000;
+document.addEventListener('visibilitychange', () => {
+  document.body.classList.toggle('app-hidden', document.hidden);
+  if (document.hidden) return;
+  try { checkApiHealth(); } catch (e) {}
+  let phone = false;
+  try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
+  if (!phone) return;
+  if (_phoneFirst()) { if (_msFetchedAt && Date.now() - _msFetchedAt > _STALE_MS) msRefresh(); }
+  else if (_desktopBooted && _lastTabLoadAt && Date.now() - _lastTabLoadAt > _STALE_MS) loadActiveTab();
+});
+
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
-  await loadTabFragments();   // the 48 panels, before anything looks for one
+  // the 48 panels, before anything looks for one — a phone defers them to ensureDesktopBooted
+  if (!_phoneFirst()) await loadTabFragments();
   initDarkMode();
   initTopbarFold();           // phone: the top bar's controls fold away (09c-mobile.js)
   showLoadingBar();
@@ -278,38 +351,26 @@ async function startApp() {
           clearInterval(_healthTimer);
           _healthTimer = setInterval(checkApiHealth, 30000);
           await Promise.all([loadBranches(), loadMonths()]);
-          populateTargetMonths();
-          try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
-          try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
-          document.getElementById('presetBar').classList.remove('hidden');
-          loadActiveTab();
+          _appStarted = true;
+          if (_phoneFirst()) loadMobileSummary(); else await ensureDesktopBooted();
         }
       }, 5000);
       return;
     }
     await Promise.all([loadBranches(), loadMonths()]);
-    populateTargetMonths();
-    try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
-    try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
-    document.getElementById('presetBar').classList.remove('hidden');
-    // Default the period to YTD (Jan of the latest year → latest month) so the
-    // cumulative "ยอดรวมช่วงที่เลือก" totals read year-to-date on first load.
-    if (allMonths.length) {
-      const _last = allMonths[allMonths.length - 1], _y = _last.slice(0, 4);
-      const _sf = document.getElementById('selMonthFrom'), _st = document.getElementById('selMonthTo');
-      if (_sf) _sf.value = allMonths.find(m => m >= `${_y}-01`) || _last;
-      if (_st) _st.value = _last;
-      const _yq = document.getElementById('selYearQuick'); if (_yq) _yq.value = _y;
+    _appStarted = true;
+    if (_phoneFirst()) {
+      // the owner's summary first — one management payload; the desktop shell
+      // boots when "เต็ม →" is tapped (ensureDesktopBooted)
+      await initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date
+      loadMobileSummary();
+    } else {
+      await ensureDesktopBooted();
+      initDataCoverageNote();
+      // First login of a person: the role's three tabs, on top of the home page
+      try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }
     }
-    // Land on the Daily Brief (home) tab, not Overall (handles tab display +
-    // hides the period controls home doesn't use).
-    switchTab('home');
-    const _coverage = initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date
-    // First login of a person: the role's three tabs, on top of the home page
-    try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }
-    // Phone-first: load the mobile owner summary when on a small screen
-    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) { await _coverage; loadMobileSummary(); } } catch(e) {}
-    // Periodic health check every 30 s (silent badge update only)
+    // Periodic health check every 30 s (silent badge update only; idle while hidden)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
     hideLoadingBar();
