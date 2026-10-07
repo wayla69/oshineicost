@@ -686,7 +686,11 @@ def bc_releases():
                              " WHERE source IN ('purchase_avg','manual')").fetchone()[0]
     cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
             "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched")
-    return {"releases": [dict(zip(cols, r)) for r in rows], "price_months": priced,
+    rels = [dict(zip(cols, r)) for r in rows]
+    for r in rels:               # what the version waits for (หน้างาน and the pane read it)
+        r["next_step"] = ("release" if r["kind"] == "monthly" and r["status"] in ("draft", "review")
+                          else "acknowledge" if r["status"] == "released" and not r["acknowledged_at"] else None)
+    return {"releases": rels, "price_months": priced,
             "suggest": {"effective_month": _next_month(_this_month()),
                         "price_month": actual or (priced[0] if priced else None)}}
 
@@ -876,12 +880,25 @@ async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...),
 # permission in auth.MODULE_RULES (longest prefix wins): release = bom.release
 # (analyst), acknowledge = bom.audit (management), retire = either, the rest bom.center.
 @router.get("/api/bom-center/release-checks")
-def bc_release_checks(release_id: int = Query(...)):
+def bc_release_checks(release_id: int = Query(...), recompute: bool = Query(False)):
+    """The checks as saved. recompute=true runs them afresh for a draft and shows the result
+    WITHOUT saving it (a look needs no token); accepting or releasing saves them."""
     with get_db() as con:
         _ensure(con)
-        if not _r.release_row(con, release_id):
+        rel = _r.release_row(con, release_id)
+        if not rel:
             raise HTTPException(404, "ไม่พบ release")
-        out = _rl.checks_summary(con, release_id)
+        fresh = False
+        if recompute and rel["kind"] == "monthly" and rel["status"] in ("draft", "review"):
+            try:
+                _rl.run_checks(con, release_id)
+                out = _rl.checks_summary(con, release_id)
+                fresh = True
+            finally:
+                con.rollback()
+        else:
+            out = _rl.checks_summary(con, release_id)
+    out["fresh"] = fresh
     out["catalog"] = [{"code": k, "severity": v[0], "title": v[1]} for k, v in _rl.CHECKS.items()]
     return out
 
@@ -926,6 +943,26 @@ def bc_release_accept(body: AcceptBody, request: Request):
 
 class ReleaseBody(BaseModel):
     backdate_reason: Optional[str] = None
+
+
+class AcceptManyBody(BaseModel):
+    release_id: int
+    check_code: str
+    refs: Optional[List[str]] = None       # None = every open row of that code
+    reason: str
+
+
+@router.post("/api/bom-center/release-act/accept-many", dependencies=[Depends(require_write_token)])
+def bc_release_accept_many(body: AcceptManyBody, request: Request):
+    """One reason for a whole code's open findings (shares /release-act/accept's permission)."""
+    with get_db() as con:
+        _ensure(con)
+        if not _r.release_row(con, body.release_id):
+            raise HTTPException(404, "ไม่พบ release")
+        out = _write(con, lambda: _rl.accept_many(con, body.release_id, body.check_code, body.refs, body.reason,
+                                                  _who(request)))
+    invalidate_cache("bc_")
+    return out
 
 
 @router.post("/api/bom-center/release-act/release", dependencies=[Depends(require_write_token)])
