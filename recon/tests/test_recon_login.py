@@ -273,15 +273,16 @@ def test_accountant_works_but_cannot_approve_or_admin(on):
     assert acc.get("/api/users").status_code == 403
     assert acc.post("/api/users", json={"username": "x1", "role": "manager",
                                         "password": "Whatever-123"}).status_code == 403
-    # manager approves the accountant's month; the approver is the session user
-    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "acc1"})
+    # manager approves the accountant's month (own password = step-up); the approver is the session user
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "acc1",
+                                                       "password": NEW_PW})
     assert r.status_code == 200, r.text
     assert _q("SELECT approved_by, status FROM recon_sessions WHERE session_id=?", sid)[0] == \
         {"approved_by": "boss", "status": "approved"}
-    # reopen = manager only, reason still required
-    assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "draft",
+    # reopen = manager only, reason still required (+ the manager's own password)
+    assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "password": NEW_PW,
                      "reason": "found a missing statement"}).status_code == 403
-    assert mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft",
+    assert mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "password": NEW_PW,
                      "reason": "found a missing statement"}).status_code == 200
 
 
@@ -293,7 +294,116 @@ def test_sod_with_two_real_users(on):
     assert _q("SELECT created_by FROM recon_sessions WHERE session_id=?", sid)[0]["created_by"] == "boss"
     own = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "boss2"})
     assert own.status_code == 409 and "SoD" in own.json()["detail"]     # the body can't fake another approver
-    assert m2.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 200
+    assert m2.patch(f"/api/sessions/{sid}/status", data={"status": "approved",
+                                                         "password": NEW_PW}).status_code == 200
+
+
+# ── step-up: approving / closing / reopening re-asks the signed-in user's password ──
+def _in_review(mgr):
+    """An accountant's month sent for review; returns (accountant client, session id)."""
+    _, pw = _add(mgr, "acc1", "accountant")
+    acc = _as("acc1", pw)
+    sid = acc.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+    assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
+    return acc, sid
+
+
+def _status(sid):
+    return _q("SELECT status, approved_by FROM recon_sessions WHERE session_id=?", sid)[0]
+
+
+def _fails(user="boss"):
+    return _q("SELECT failed_count, locked_until FROM recon_users WHERE username=?", user)[0]
+
+
+def test_stepup_approve_needs_the_managers_own_password(on):
+    mgr = _boss(on)
+    _, sid = _in_review(mgr)
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved"})
+    assert r.status_code == 403 and r.json()["detail"] == A.MSG_STEPUP_NEED
+    assert _status(sid)["status"] == "in_review" and _fails()["failed_count"] == 0   # blank: not counted
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": "not-my-password"})
+    assert r.status_code == 403 and r.json()["detail"] == A.MSG_STEPUP_FAIL
+    assert "เปลี่ยนรหัสผ่าน" not in r.json()["detail"]       # the UI would open the change-password screen
+    assert _status(sid)["status"] == "in_review" and _fails()["failed_count"] == 1
+    log = _q("SELECT field, new_val, by FROM recon_audit_log WHERE entity='recon_auth' AND action='stepup_fail'")
+    assert {"field": "reason", "new_val": "bad_password", "by": "boss"} in log
+    assert {"field": "session_id", "new_val": str(sid), "by": "boss"} in log
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": NEW_PW})
+    assert r.status_code == 200, r.text
+    assert _status(sid) == {"status": "approved", "approved_by": "boss"}
+    assert _fails()["failed_count"] == 0                        # a good step-up clears the count
+    # 'closed' (the archive step) is a sign-off too
+    assert mgr.patch(f"/api/sessions/{sid}/status", data={"status": "closed"}).status_code == 403
+    assert mgr.patch(f"/api/sessions/{sid}/status",
+                     data={"status": "closed", "password": NEW_PW}).status_code == 200
+
+
+def test_stepup_reopen_and_the_ordinary_moves(on):
+    mgr = _boss(on)
+    acc, sid = _in_review(mgr)
+    # send back for fixes / send for review: no password
+    assert mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft"}).status_code == 200
+    assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
+    assert mgr.patch(f"/api/sessions/{sid}/status",
+                     data={"status": "approved", "password": NEW_PW}).status_code == 200
+    why = "พบสเตทเมนต์ KBANK วันที่ 30 อัปไม่ครบ"
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "reason": why})
+    assert r.status_code == 403 and r.json()["detail"] == A.MSG_STEPUP_NEED
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "reason": "short",
+                                                       "password": "wrong-password-1"})
+    assert r.status_code == 400 and _fails()["failed_count"] == 0   # reason checked before the password
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "reason": why,
+                                                       "password": "wrong-password-1"})
+    assert r.status_code == 403 and _status(sid)["status"] == "approved"
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "reason": why, "password": NEW_PW})
+    assert r.status_code == 200 and _status(sid)["status"] == "draft"
+    assert _q("SELECT new_val FROM recon_audit_log WHERE entity='session' AND field='reopen_reason'")[0] \
+        == {"new_val": why}
+
+
+def test_stepup_sod_refusal_burns_no_password_try(on):
+    mgr = _boss(on)
+    sid = mgr.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": "wrong-password-1"})
+    assert r.status_code == 409 and "SoD" in r.json()["detail"]
+    assert _fails()["failed_count"] == 0
+
+
+def test_stepup_failures_share_the_login_lockout(on):
+    mgr = _boss(on)
+    _, sid = _in_review(mgr)
+    for _ in range(A.MAX_FAILS - 1):                            # 4 wrong logins (another browser)…
+        assert _login(TestClient(main.app), "boss", "bad-password-x").status_code == 401
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": "bad-password-y"})
+    assert r.status_code == 403 and r.json()["detail"] == A.MSG_STEPUP_LOCKED   # …+1 step-up = locked
+    assert _fails()["locked_until"]
+    # locked: the right password is refused too, both at step-up and at the login
+    r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": NEW_PW})
+    assert r.status_code == 403 and r.json()["detail"] == A.MSG_STEPUP_LOCKED
+    assert _login(TestClient(main.app), "boss", NEW_PW).status_code == 401
+    assert _status(sid)["status"] == "in_review"
+    reasons = [x["new_val"] for x in _q("SELECT new_val FROM recon_audit_log WHERE entity='recon_auth' "
+                                         "AND action='stepup_fail' AND field='reason' ORDER BY id")]
+    assert reasons == ["bad_password_locked", "locked"]
+    _x("UPDATE recon_users SET locked_until='2000-01-01T00:00:00' WHERE username='boss'")   # 15 min later
+    assert mgr.patch(f"/api/sessions/{sid}/status",
+                     data={"status": "approved", "password": NEW_PW}).status_code == 200
+
+
+def test_stepup_login_off_keeps_the_manager_code(env):
+    """Login OFF: no password is asked or checked — the manager code is the gate."""
+    env.setenv("OSHINEI_MANAGER_TOKEN", "mgr-x")
+    with TestClient(main.app) as cl:
+        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+        f = {"status": "approved", "approved_by": "zed", "password": "anything-at-all"}
+        assert cl.patch(f"/api/sessions/{sid}/status", data=f).status_code == 403
+        assert cl.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "zed"},
+                        headers={"X-Manager-Token": "mgr-x"}).status_code == 200
+        r = cl.patch(f"/api/sessions/{sid}/status", data={"status": "draft", "reason": "ทดสอบเปิดงวดใหม่อีกครั้ง"},
+                     headers={"X-Manager-Token": "mgr-x"})
+        assert r.status_code == 200
+        assert not _q("SELECT * FROM recon_audit_log WHERE action='stepup_fail'")
 
 
 # ── the bulk uploader keeps working ───────────────────────────────────────────

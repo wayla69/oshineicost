@@ -333,17 +333,59 @@ def authenticate(conn, username: str, password: str) -> tuple[dict | None, str]:
         _burn(password)
         return row, "locked"
     if not verify_password(password, row["pw_hash"]):
-        fails = int(row["failed_count"] or 0) + 1
-        if fails >= MAX_FAILS:
-            conn.execute("UPDATE recon_users SET failed_count=0, locked_until=? WHERE id=?",
-                         (_iso(now + timedelta(minutes=LOCK_MINUTES)), row["id"]))
-            return row, "bad_password_locked"
-        conn.execute("UPDATE recon_users SET failed_count=?, locked_until=NULL WHERE id=?",
-                     (fails, row["id"]))
-        return row, "bad_password"
+        return row, _count_failure(conn, row, now)
     conn.execute("UPDATE recon_users SET failed_count=0, locked_until=NULL, last_login_at=? WHERE id=?",
                  (_iso(now), row["id"]))
     return conn.execute("SELECT * FROM recon_users WHERE id=?", (row["id"],)).fetchone(), "ok"
+
+
+def _count_failure(conn, row, now: datetime) -> str:
+    """One more wrong password for this account — shared by the login and the
+    step-up check, so both count toward the same lockout. The caller commits."""
+    fails = int(row["failed_count"] or 0) + 1
+    if fails >= MAX_FAILS:
+        conn.execute("UPDATE recon_users SET failed_count=0, locked_until=? WHERE id=?",
+                     (_iso(now + timedelta(minutes=LOCK_MINUTES)), row["id"]))
+        return "bad_password_locked"
+    conn.execute("UPDATE recon_users SET failed_count=?, locked_until=NULL WHERE id=?",
+                 (fails, row["id"]))
+    return "bad_password"
+
+
+# ── step-up: re-enter the password for a sign-off action ──────────────────────
+MSG_STEPUP_NEED = "ใส่รหัสผ่านของคุณเพื่อยืนยันตัวตนก่อนทำรายการนี้"
+MSG_STEPUP_FAIL = ("รหัสผ่านไม่ถูกต้อง — ยืนยันตัวตนไม่สำเร็จ "
+                   f"(ถ้าใส่ผิด {MAX_FAILS} ครั้งติดกัน บัญชีจะถูกล็อก {LOCK_MINUTES} นาที)")
+MSG_STEPUP_LOCKED = (f"บัญชีถูกล็อกชั่วคราว {LOCK_MINUTES} นาที เพราะใส่รหัสผ่านผิดหลายครั้ง — "
+                     "ลองใหม่ภายหลัง หรือให้ผู้จัดการคนอื่นตั้งรหัสผ่านใหม่ให้")
+
+
+def verify_stepup(conn, uid: int, password: str) -> str:
+    """Re-authenticate the logged-in user before approve / close / reopen.
+    Returns 'ok', or why not: 'blank' (nothing typed — not counted), 'locked',
+    'inactive', 'bad_password' / 'bad_password_locked' (counted toward the SAME
+    lockout as the login). The caller audits, commits and answers 403."""
+    if not password:
+        return "blank"
+    row = conn.execute("SELECT * FROM recon_users WHERE id=?", (int(uid),)).fetchone() \
+        if _has_users_table(conn) else None
+    if row is None or not row["active"]:
+        _burn(password)
+        return "inactive"
+    now = _now()
+    lu = _parse_iso(row["locked_until"])
+    if lu and lu > now:
+        _burn(password)
+        return "locked"
+    if not verify_password(password, row["pw_hash"]):
+        return _count_failure(conn, row, now)
+    conn.execute("UPDATE recon_users SET failed_count=0, locked_until=NULL WHERE id=?", (row["id"],))
+    return "ok"
+
+
+def stepup_message(reason: str) -> str:
+    return {"blank": MSG_STEPUP_NEED, "locked": MSG_STEPUP_LOCKED,
+            "bad_password_locked": MSG_STEPUP_LOCKED}.get(reason, MSG_STEPUP_FAIL)
 
 
 def active_managers(conn, excluding: int | None = None) -> int:

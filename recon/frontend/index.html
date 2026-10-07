@@ -496,6 +496,62 @@ body.login-screen #main-nav{display:none !important}
 .user-chip .uc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .user-chip .uc-role{color:var(--sub);white-space:nowrap}
 @media (max-width:640px){.login-wrap{margin-top:2vh}.user-chip{max-width:150px}.user-chip .uc-role{display:none}}
+/* ── UX phase 3: sign-off sheet (26-signoff.js) · drop zone + coverage strips (22-docs.js) ── */
+.close-why{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--warn)}
+.sheet-overlay.sheet-sign{align-items:center;padding:24px}
+.sheet-sign .sheet-box{max-width:660px;max-height:calc(100vh - 48px);overflow:auto;border-radius:var(--radius-lg);
+  box-shadow:0 12px 40px rgba(15,23,42,.3);padding:18px 22px 20px}
+.so-h{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.so-hi{font-size:22px;color:var(--brand);margin-top:4px}
+.so-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 14px;margin:0 0 4px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--subtle)}
+.so-facts dt{font-size:11.5px;color:var(--mut);font-weight:500}
+.so-facts dd{margin:0;font-weight:600;font-size:13.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.so-list{list-style:none;padding:0;margin:0 0 10px;display:flex;flex-direction:column;gap:6px}
+.so-item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line-soft);border-radius:var(--radius-sm)}
+.so-ic{flex:none;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.so-ok .so-ic{background:var(--ok-bg);color:var(--ok)}
+.so-bad{border-color:var(--warn);background:var(--warn-bg)}
+.so-bad .so-ic{background:var(--warn);color:var(--card)}
+.so-b{min-width:0;flex:1;font-size:13.5px;line-height:1.5}
+.so-sub{margin:4px 0 0;padding-left:18px;font-size:12.5px;color:var(--sub);overflow-wrap:anywhere}
+.so-links{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
+.so-note{padding:8px 0 0;border-top:1px dashed var(--line)}
+.so-sign{margin-top:12px;padding:12px;border:1px solid var(--brand);border-radius:var(--radius-sm);background:var(--brand-soft)}
+.so-sign .fld{margin-bottom:0}
+.so-sign .fld+.fld{margin-top:10px}
+.so-act{margin-top:8px}
+.dz{border:2px dashed var(--line-ctl);border-radius:var(--radius);background:var(--subtle);padding:18px 16px;text-align:center;
+  cursor:pointer;margin:6px 0 4px;transition:background .12s,border-color .12s}
+.dz:hover,.dz:focus-visible{border-color:var(--brand);background:var(--brand-soft)}
+.dz.dz-on{border-color:var(--brand);border-style:solid;background:var(--brand-soft)}
+.dz-i{font-size:30px;color:var(--brand)}
+.dz-t{font-size:15px;font-weight:600;margin:2px 0}
+.dz-btns{justify-content:center}
+.dz-list{list-style:none;padding:0;margin:8px 0 0;max-height:340px;overflow:auto}
+.dz-f{padding:7px 0;border-top:1px solid var(--line-soft)}
+.dz-fh{display:flex;align-items:center;gap:8px;min-width:0}
+.dz-fn{flex:1;min-width:0;font-weight:600;font-size:13px}
+.dz-fd{margin-top:1px;overflow-wrap:anywhere}
+.doc-row .cov{flex:0 0 100%}
+.cov-row{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:2px}
+.cov-row,.cov-scale{max-width:calc(var(--n) * 18px)}
+.cov-d{display:inline-block;aspect-ratio:1;border-radius:2px;background:var(--line-soft)}
+.cov-on{background:var(--mark-ok)}
+.cov-miss{background:transparent;box-shadow:inset 0 0 0 1.5px var(--mark-err)}
+.cov-fut{background:var(--line-soft)}
+.cov-scale{display:flex;justify-content:space-between;font-size:10.5px;color:var(--mut);font-variant-numeric:tabular-nums;line-height:1.4}
+.cov-legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
+.cov-legend .cov-d{width:10px;vertical-align:-1px;margin-right:3px}
+@media (max-width:640px){
+  .sheet-overlay.sheet-sign{padding:0;align-items:stretch}
+  .sheet-sign .sheet-box{max-width:none;max-height:none;height:100%;border-radius:0;padding:14px 14px 0}
+  .sheet-sign .so-act{position:sticky;bottom:0;margin:8px -14px 0;padding:10px 14px 14px;background:var(--card);border-top:1px solid var(--line)}
+  .so-h h2:focus{outline:none}
+  .so-facts{grid-template-columns:1fr 1fr}
+  .dz{padding:14px 10px}
+  .cov-row{gap:1px}
+}
 /* motion: colour/border only, and none at all when the OS asks for less */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
@@ -523,7 +579,9 @@ body.login-screen #main-nav{display:none !important}
 <script src="js/10-overview.js"></script>
 <script src="js/15-closeboard.js"></script>
 <script src="js/20-branch.js"></script>
+<script src="js/22-docs.js"></script>
 <script src="js/25-branch-days.js"></script>
+<script src="js/26-signoff.js"></script>
 <script src="js/27-matcher.js"></script>
 <script src="js/40-reports.js"></script>
 <script src="js/50-daybook-dashboard.js"></script>

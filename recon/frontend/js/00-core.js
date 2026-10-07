@@ -71,7 +71,7 @@ async function api(path,opts={}){
   if(!r.ok){let d='';try{d=detailText((await r.json()).detail)}catch(e){};
     if(ME.login_enabled&&r.status===401){ME.user=null;_applyRoleUi();renderLogin(d);}        // session ended → sign in again
     else if(ME.login_enabled&&r.status===403&&d.includes('เปลี่ยนรหัสผ่าน'))renderChangePw(true);
-    else if(ME.login_enabled&&r.status===403&&d)toast(d);                                    // e.g. สิทธิ์ดูอย่างเดียว
+    else if(ME.login_enabled&&r.status===403&&d&&!opts.quiet)toast(d);                       // e.g. สิทธิ์ดูอย่างเดียว (quiet: the caller shows it inline)
     const err=new Error(d||('HTTP '+r.status));err.status=r.status;throw err;}
   return r.json();
 }
@@ -220,10 +220,12 @@ function openSummary(b){
   return s;
 }
 
-/* ── bottom sheet กลาง (ใช้กับเหตุผลรับทราบ) ── */
-function showSheet(html){
+/* ── bottom sheet กลาง (ใช้กับเหตุผลรับทราบ) · cls = a variant on the overlay, e.g. 'sheet-sign'
+   (the sign-off sheet: centred on a desktop, full screen on a phone) ── */
+function showSheet(html,cls){
   let o=$('sheet');
-  if(!o){o=document.createElement('div');o.id='sheet';o.className='sheet-overlay';document.body.appendChild(o);}
+  if(!o){o=document.createElement('div');o.id='sheet';document.body.appendChild(o);}
+  o.className='sheet-overlay'+(cls?' '+cls:'');
   o.innerHTML=`<div class="sheet-box">${html}</div>`;
   o.onclick=(e)=>{if(e.target===o)closeSheet();};
   o.style.display='flex';

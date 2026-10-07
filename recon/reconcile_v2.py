@@ -59,6 +59,49 @@ _DAY_DONE = {"matched", "manual"}
 _DAY_ISSUE = {"variance", "missing", "ext_only"}
 
 
+def _days_covered(conn, branch_id, period_month):
+    """Per-day coverage of each external source this month: {cov_key: {day ints}}
+    with the same keys as _coverage (('bank', 'KBANK'), ('cc', 'KTC'), ('grab', None)…).
+
+    One uploaded document covers every day from its first to its last line date
+    (clipped to the month) — a statement for 1–16 covers the 16th even when no
+    money moved on the 7th — and several uploads add up (union). Four grouped
+    reads per branch: the Close Board runs this for every branch."""
+    from .matcher._shared import _provider_acquirer, _provider_bank
+    y, mo = int(period_month[:4]), int(period_month[5:7])
+    eom = calendar.monthrange(y, mo)[1]
+    out: dict = {}
+
+    def span(key, lo, hi):
+        try:
+            a = int(lo[8:10]) if lo[:7] == period_month else 1       # began last month
+            b = int(hi[8:10]) if hi[:7] == period_month else eom     # runs into next month
+        except (TypeError, ValueError):
+            return
+        out.setdefault(key, set()).update(range(max(1, a), min(eom, b) + 1))
+
+    for src, table, col in (("bank", "recon_bank_lines", "txn_date"),
+                            ("cc", "recon_cc_lines", "settlement_date"),
+                            ("grab", "recon_grab_lines", "order_date"),
+                            ("lineman", "recon_lineman_lines", "order_date")):
+        try:     # the whole span of every upload with a line in this month (a statement
+                 # for 25 Jun – 5 Jul covers the 30th even when nothing moved that day)
+            rows = conn.execute(f"""
+                SELECT u.provider, MIN(l.{col}) lo, MAX(l.{col}) hi
+                FROM {table} l JOIN recon_uploads u ON u.upload_id=l.upload_id
+                WHERE l.branch_id=? AND l.upload_id IN (
+                    SELECT upload_id FROM {table} WHERE branch_id=? AND strftime('%Y-%m', {col})=?)
+                GROUP BY l.upload_id""", (branch_id, branch_id, period_month)).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        for r in rows:
+            prov = r["provider"]
+            key = (src, _provider_bank(prov) if src == "bank" else
+                   _provider_acquirer(prov) if src == "cc" else None)
+            span(key, r["lo"], r["hi"])
+    return out
+
+
 def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
     """Required documents derived from the POS channels this branch actually has;
     status from what's been uploaded (coverage = max line date per source)."""
@@ -88,6 +131,11 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
     eom = f"{period_month}-{calendar.monthrange(y, mo)[1]:02d}"
     cmp_day = last_pos_day or min(eom, date.today().isoformat())
 
+    # Phase 3 coverage strips: which days each document covers, and the last day it
+    # is due through (the same cut-off the status uses) — days after it are not late.
+    days_cov = _days_covered(conn, branch_id, period_month)
+    due = int(cmp_day[8:10]) if cmp_day[:7] == period_month else int(eom[8:10])
+
     def add(key, label, cov_key):
         mx = cov.get(cov_key)
         if not mx:
@@ -97,7 +145,8 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
         else:
             status, detail = "uploaded", ""
         docs.append({"key": key, "label": label, "status": status,
-                     "detail": detail, "coverage_to": mx})       # C8
+                     "detail": detail, "coverage_to": mx,        # C8
+                     "days_covered": sorted(days_cov.get(cov_key, ())), "days_due": due})
 
     for b in sorted(pos_banks):
         add(f"stmt_{b}", f"สเตทเมนต์ {b}", ("bank", b))
@@ -121,7 +170,9 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
             have = point_settlement_total(conn, branch_id, period_month, pacq) > 0
             docs.append({"key": f"points_{issuer}", "label": f"สรุปคะแนน {issuer}",
                          "status": "uploaded" if have else "missing",
-                         "detail": "" if have else "ยังไม่ได้อัปโหลด"})
+                         "detail": "" if have else "ยังไม่ได้อัปโหลด",
+                         # a monthly summary, not a daily document: no per-day strip
+                         "days_covered": None, "days_due": due})
     # Upload metadata so the v2 UI can open the right uploader from the chip:
     # source_type + provider hint, and which channel an "accept" would clear
     # (a whole missing statement is never acceptable — nothing reconciles without it)
@@ -486,6 +537,20 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         "SELECT session_id, status, created_by, approved_at, approved_by "
         "FROM recon_sessions WHERE branch_id=? AND period_month=?",
         (branch_id, period_month)).fetchone()
+    if session:
+        # discrepancies still pending block the approval (409) — the sign-off sheet and
+        # the close button say so up front instead of failing after the password
+        session = dict(session)
+        session["pending_discrepancies"] = conn.execute(
+            "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
+            (session["session_id"],)).fetchone()[0]
+        # when (and by whom) the month was last sent for review — what the manager signs
+        sent = conn.execute(
+            "SELECT ts, by FROM recon_audit_log WHERE entity='session' AND entity_id=? "
+            "AND field='status' AND new_val='in_review' ORDER BY ts DESC, id DESC LIMIT 1",
+            (session["session_id"],)).fetchone()
+        session["sent_for_review_at"] = sent["ts"] if sent else None
+        session["sent_for_review_by"] = sent["by"] if sent else None
     payout_issues = _payout_issues(conn, branch_id, period_month,
                                    session["session_id"] if session else None)
     todo = []
@@ -546,7 +611,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         "branch_id": branch_id,
         "branch_name": branch["name"] if branch else str(branch_id),
         "period_month": period_month,
-        "session": dict(session) if session else None,
+        "session": session,
         "documents": docs,
         "channels": channels,
         "non_revenue": _non_revenue(conn, branch_id, period_month),

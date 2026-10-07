@@ -30,6 +30,14 @@ function classifyCh(ch,uploadKeys,missingStmtBanks){   // 'problem' | 'coin' | '
   if(ch.key!=='COUPON' && Math.abs(ch.variance)>0 && Math.abs(ch.variance)<=COIN_TOL) return 'coin';
   return 'green';
 }
+// a stored UTC stamp ('YYYY-MM-DD HH:MM:SS' or ISO 'T') → Bangkok 'YYYY-MM-DD HH:MM'
+function tsBkk(ts){
+  if(!ts)return '';
+  const d=new Date(String(ts).replace(' ','T').slice(0,19)+'Z');
+  if(isNaN(d))return String(ts).slice(0,16);
+  const b=new Date(d.getTime()+7*3600e3);
+  return b.toISOString().slice(0,16).replace('T',' ');
+}
 const _baht=v=>(v<0?'−฿':'฿')+fmt(Math.abs(v));       // ฿1,200 / −฿300 (true minus sign)
 // money still due on the next cycle: POS − money-in over the days still 'waiting' (not acked)
 const _chPend=ch=>(ch.days||[]).filter(d=>d.status==='waiting'&&!d.ack).reduce((a,d)=>a+d.pos-d.ext,0);
@@ -118,11 +126,21 @@ function wsListHtml(items,sel){
 }
 
 /* ── หัวตรึง + ขั้นตอน ── */
+// why the month can't be closed yet ('' = closable): open to-dos, then pending discrepancies (the server's 409)
+function closeBlock(r){
+  const n=(r.todo||[]).length, p=(r.session&&r.session.pending_discrepancies)||0, w=[];
+  if(n)w.push(`ยังเหลือ ${n} รายการ`);
+  if(p)w.push(`มีข้อแตกต่างค้าง ${p}`);
+  return w.join(' · ');
+}
 function _wsPrimary(r){
   const bid=r.branch_id, st=(r.session&&r.session.status)||'draft';
   if(isClosedSt(st))return `<button class="btn btn-pri" onclick="reopenMonth(${bid})"><i class="ti ti-lock-open" aria-hidden="true"></i> เปิดงวดใหม่ (ผู้จัดการ)</button>`;
-  if(st==='in_review')return `<button class="btn" onclick="setSt(${bid},'draft',this)">ส่งกลับแก้</button>
-    <button class="btn btn-pri" onclick="closeMonth(${bid},this)" ${r.todo.length?'disabled title="ยังมีเรื่องค้าง — จัดการหรือรับทราบให้ครบก่อน"':''}>ปิดเดือน (ผู้จัดการ)</button>`;
+  if(st==='in_review'){
+    const why=closeBlock(r);
+    return `<button class="btn" onclick="setSt(${bid},'draft',this)">ส่งกลับแก้</button>
+    <button class="btn btn-pri" onclick="closeMonth(${bid},this)"${why?` disabled title="${esc(why)}"`:''}><i class="ti ti-signature" aria-hidden="true"></i> ปิดเดือน (ผู้จัดการ)</button>${why&&isManager()?`<span class="close-why"><i class="ti ti-alert-circle" aria-hidden="true"></i> ${esc(why)}</span>`:''}`;
+  }
   return `<button class="btn btn-pri" onclick="setSt(${bid},'in_review',this)">ส่งตรวจ</button>`;
 }
 function _wsReportLinks(r){
@@ -146,7 +164,7 @@ function wsHeadHtml(r){
       <div class="ws-name"><div class="lbl">สาขา · เดือน</div><h2>${esc(r.branch_name)} · ${esc(monthTh(MONTH))}</h2></div>
       <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${esc(SES_ST[st]||st)}</span>
       ${dl?`<span class="chip ${dl.cls}">${esc(dl.text)}</span>`:''}
-      <span class="lbl ws-who">ผู้ทำ: ${esc(who)}${closed?` · ปิดโดย ${esc(ses.approved_by||'ผู้จัดการ')} ${esc((ses.approved_at||'').slice(0,16))}`:''}</span>
+      <span class="lbl ws-who">ผู้ทำ: ${esc(who)}${closed?` · ปิดโดย ${esc(ses.approved_by||'ผู้จัดการ')} ${esc(tsBkk(ses.approved_at))}`:''}</span>
     </div>
     <div class="ws-act">
       <div class="ws-prog" title="ตรงแล้ว ${r.progress_pct}% (ถ่วงด้วยยอดเงิน)"><div class="prog ${progCls(r.progress_pct)}"><div style="width:${r.progress_pct}%"></div></div>
@@ -334,35 +352,7 @@ function acceptChannel(key){
   _acceptCtx={channel:key,label:ch.label+(Math.abs(res)>0.5?` ต่าง ${fmt(res)} บาท`:'')};
   _acceptSheet(_acceptCtx.label);
 }
-function wsDocsHtml(){
-  const r=DATA, closed=DATA.closed;
-  // C8 + Phase 4 #3: uploaded → "ถึง NN"; partial → "ถึงวันที่ N — ขาด N+1–<horizon>", capped at today for the current month
-  const _eom=new Date(+MONTH.slice(0,4), +MONTH.slice(5,7), 0).getDate();
-  const _now=new Date();
-  const _horizon=(MONTH===ymdLocal(_now).slice(0,7))?Math.min(_eom,_now.getDate()):_eom;
-  const rows=(r.documents||[]).map((d,di)=>{
-    const cls=d.status==='uploaded'?'c-ok':d.status==='partial'?'c-warn':'c-err';
-    const _covTo=d.coverage_to?+d.coverage_to.slice(8):0;
-    const stTxt=d.status==='uploaded'?('อัปโหลดแล้ว'+(d.coverage_to?' · ถึง '+d.coverage_to.slice(8):''))
-      :d.status==='partial'?(_covTo&&_covTo<_horizon?`ถึงวันที่ ${_covTo} — ขาด ${_covTo+1}–${_horizon}`:_covTo?`ถึงวันที่ ${_covTo}`:'ไม่ครบเดือน')
-      :(d.detail||'ยังไม่ได้อัปโหลด');
-    return `<div class="doc-row"><div class="fx-1"><b class="fs-14">${esc(d.label)}</b>${d.hint?`<div class="lbl">${esc(d.hint)}</div>`:''}</div>
-      <span class="chip ${cls}">${esc(stTxt)}</span>
-      ${d.status!=='uploaded'&&!closed?`<button class="btn btn-sm btn-pri" onclick="pickDoc(${di})">↑ อัปโหลด</button>`:''}</div>`;
-  }).join('');
-  return `<div class="card ws-pane">
-    <div class="ws-dh"><h3>เอกสารประจำเดือน</h3>
-      ${closed?'':`<div class="row ml-auto gap-8">
-        <input type="file" id="bulk-input" multiple hidden onchange="bulkUpload('bulk-input')">
-        <input type="file" id="bulk-folder-input" webkitdirectory multiple hidden onchange="bulkUpload('bulk-folder-input')">
-        <button class="btn btn-sm" title="เลือกหลายไฟล์พร้อมกัน — ระบบแยกประเภทให้เอง (zip แตกอัตโนมัติ)" onclick="$('bulk-input').click()"><i class="ti ti-files" aria-hidden="true"></i> หลายไฟล์</button>
-        <button class="btn btn-sm" title="เลือกทั้งโฟลเดอร์ของสาขานี้" onclick="$('bulk-folder-input').click()"><i class="ti ti-folder" aria-hidden="true"></i> ทั้งโฟลเดอร์</button></div>`}</div>
-    ${rows||'<div class="muted">เดือนนี้ไม่มีเอกสารที่ต้องใช้</div>'}
-    <div id="up-panel"></div>
-    <div class="row mt-10"><a href="#" class="lbl" onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a></div>
-    <div id="docs-panel" style="display:none"></div>
-  </div>`;
-}
+// wsDocsHtml (the DOCS pane: drop zone + coverage strips) lives in 22-docs.js
 function wsSetupHtml(){
   const closed=DATA.closed;
   return `<div class="card ws-pane"><div class="ws-dh"><h3>รหัสชำระที่ยังไม่รู้ว่าเข้าธนาคารไหน</h3></div>
@@ -418,8 +408,8 @@ function wsCloseHtml(){
   const r=DATA, bid=r.branch_id, ses=r.session, st=(ses&&ses.status)||'draft', closed=isClosedSt(st);
   let h='';
   if(closed)h+=`<div class="card c-ok mb-12 bg-ok"><i class="ti ti-lock" aria-hidden="true"></i> เดือนนี้ปิดแล้ว
-      โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))} — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ ·
-      ถ้าต้องแก้ ผู้จัดการกด <b>เปิดงวดใหม่</b> (ใส่รหัสผู้จัดการ + เหตุผล)
+      โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc(tsBkk(ses.approved_at))} — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ ·
+      ถ้าต้องแก้ ผู้จัดการกด <b>เปิดงวดใหม่</b> (เหตุผล + ${ME.login_enabled?'รหัสผ่านของตัวเอง':'รหัสผู้จัดการ'})
       <div class="row mt-8 gap-8"><button class="btn btn-sm" onclick="reopenMonth(${bid})"><i class="ti ti-lock-open" aria-hidden="true"></i> เปิดงวดใหม่ (ผู้จัดการ)</button>
       <a class="btn btn-sm" href="/api/reports/recon-certificate.print?period_month=${MONTH}&branch_id=${bid}" target="_blank" rel="noopener"><i class="ti ti-certificate" aria-hidden="true"></i> ใบรับรอง</a></div></div>`;
   else if(r.todo.length){
@@ -434,7 +424,10 @@ function wsCloseHtml(){
     });
     h+=`</div><div class="muted">"รับทราบ" = ยอมรับผลต่างโดยใส่เหตุผลจริง (เช่น ผลต่างจากค่าธรรมเนียมที่กระทบยอดแล้ว) — เหตุผลจะติดไปในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ</div>
       <div id="up-panel"></div></div>`;
-  } else h+=`<div class="card mb-12"><span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span></div>`;
+  } else if((ses&&ses.pending_discrepancies)>0)h+=`<div class="card mb-12 bd-warn bg-warn"><b class="fs-135">มีข้อแตกต่างที่ยังไม่ได้ตัดสิน ${ses.pending_discrepancies} รายการ</b>
+      <div class="muted my-2-6">ต้องยอมรับ/ปรับปรุง/ปฏิเสธให้ครบก่อน จึงจะลงนามปิดเดือนได้</div>
+      <a class="btn btn-sm" href="#discrepancies?bid=${bid}"><i class="ti ti-adjustments" aria-hidden="true"></i> ไปที่ข้อแตกต่าง ›</a></div>`;
+  else h+=`<div class="card mb-12"><span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span></div>`;
 
   // จอสรุปผู้จัดการ — เห็นทุกอย่างที่ staff ทำ/รับทราบ ก่อนใส่รหัสปิดเดือน (ขั้นที่ 4)
   const title=closed?'สรุปผลที่ปิดไว้':st==='in_review'?'สรุปสำหรับผู้จัดการ — ตรวจก่อนปิดเดือน':'สรุปที่ผู้จัดการจะเห็นเมื่อส่งตรวจ';
@@ -539,36 +532,7 @@ async function confirmUpload(btn){
   });
 }
 
-/* ── อัปโหลดหลายไฟล์/ทั้งโฟลเดอร์ในครั้งเดียว (B1) ── */
-async function bulkUpload(inputId){
-  const inp=$(inputId); const files=[...(inp.files||[])]; if(!files.length)return;
-  const panel=$('up-panel');
-  panel.innerHTML=`<div class="muted mt-10">กำลังอัปโหลด ${files.length} ไฟล์… (อาจใช้เวลาสักครู่)</div>`;
-  const fd=new FormData();
-  for(const f of files) fd.append('files',f);
-  fd.append('branch_id',DATA.branch_id); fd.append('period_month',MONTH); fd.append('source_type','auto');
-  let r;
-  try{ r=await api('/api/uploads/bulk',{method:'POST',body:fd}); }
-  catch(e){ panel.innerHTML=`<div class="chip c-err mt-10">อัปโหลดไม่สำเร็จ: ${esc(e.message)}</div>`; inp.value=''; hint403(e); return; }
-  const s=r.summary||{};
-  const dupAll=dupCount(s)||(r.files||[]).reduce((a,f)=>a+dupCount(f),0);
-  const stCls=x=>x==='ok'?'c-ok':x==='skipped'?'c-warn':'c-err';
-  const stTh=x=>x==='ok'?'สำเร็จ':x==='skipped'?'ข้าม':'ผิดพลาด';
-  panel.innerHTML=`<div class="card mt-10 bg-subtle">
-    <div class="row"><b class="fs-135">ผลอัปโหลด ${s.total} ไฟล์</b>
-      <span class="lbl">✓ สำเร็จ ${s.saved} · ข้าม ${s.skipped} · ผิดพลาด ${s.errored} · รวม ${fmt(s.rows)} รายการ${dupAll?` · ข้ามบรรทัดซ้ำ ${fmt(dupAll)}`:''}</span>
-      <button class="btn btn-sm btn-pri ml-auto" onclick="route()">รีเฟรชหน้า</button></div>
-    <div style="max-height:340px;overflow:auto;margin-top:6px"><table class="w-full">
-      <tr><th class="tl">ไฟล์</th><th>ประเภท</th><th>สถานะ</th><th>รายการ</th><th class="tl">หมายเหตุ</th></tr>
-      ${(r.files||[]).map(f=>`<tr>
-        <td class="tl">${esc(f.file)}</td>
-        <td>${esc(f.source_type||'-')}</td>
-        <td><span class="chip ${stCls(f.status)}">${stTh(f.status)}</span></td>
-        <td class="mono">${f.rows_saved||''}</td>
-        <td class="lbl tl">${esc(detailText(f.reason))}${dupCount(f)?`${f.reason?' · ':''}ข้ามบรรทัดซ้ำ ${dupCount(f)}`:''}</td></tr>`).join('')}
-    </table></div></div>`;
-  inp.value='';
-}
+/* bulk upload (drop zone, many files, zip, a folder) → 22-docs.js bulkFiles() */
 
 /* ── แผงจัดการไฟล์ที่อัปโหลดแล้ว (ยกความสามารถหน้า Uploads เดิมเข้ามา) ── */
 const SRC_LABEL={bank:'สเตทเมนต์',credit_card:'สรุปยอดบัตร',grab:'Grab',lineman:'Line Man'};
