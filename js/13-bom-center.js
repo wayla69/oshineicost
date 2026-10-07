@@ -50,6 +50,8 @@ async function _bmcJson(url, opt) {
 function _bmcStatus(id, msg, ink) {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.style.color = ink || 'var(--text-muted)'; }
+  // a save that succeeded (every one reports "✓ …"): หน้างาน says what comes next (16-supplyhome.js)
+  if (msg && String(msg).startsWith('✓') && typeof shmAfterStatus === 'function') shmAfterStatus(id);
 }
 function _bmcChip(text, ink) {
   return `<span style="display:inline-block;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:10.5px;white-space:nowrap">${esc(text)}</span>`;

@@ -465,18 +465,31 @@ def _recipe_codes(con) -> set:
     return out
 
 
-def link_view(con) -> dict:
-    """The links kept, and suggestions: a code the recipes name that is NOT on the central list,
-    paired by name with a central item (the same product under the code the centre sends now)."""
-    from .codes import _core, _score, key
+def _olds(con) -> tuple:
+    """(names, cmap, kept, used, olds): the codes the recipes name, and those among them that
+    are off the central list and not yet linked. A prepared item (CK-/HK-/DK-) is MADE from
+    what the centre sends — a sub-recipe, not the same product."""
     ensure(con)
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     cmap = central_map(con)
     kept = links(con)
     used = _recipe_codes(con)
-    targets = [c for c in cmap if not c.startswith(NON_FOOD)]
-    # a prepared item (CK-/HK-/DK-) is MADE from what the centre sends — a sub-recipe, not the same product
     olds = [c for c in used if c not in cmap and c not in kept and c in names and not c.startswith(PREPARED)]
+    return names, cmap, kept, used, olds
+
+
+def link_counts(con) -> dict:
+    """How many links are kept and how many codes still wait — without the fuzzy scoring (หน้างาน)."""
+    _names, cmap, kept, _used, olds = _olds(con)
+    return {"links": len(kept), "candidates": len(olds), "list": len(cmap)}
+
+
+def link_view(con) -> dict:
+    """The links kept, and suggestions: a code the recipes name that is NOT on the central list,
+    paired by name with a central item (the same product under the code the centre sends now)."""
+    from .codes import _core, _score, key
+    names, cmap, kept, used, olds = _olds(con)
+    targets = [c for c in cmap if not c.startswith(NON_FOOD)]
 
     def score(a: str, b: str) -> float:
         """Both ways, the weaker: 'ซอสถั่วเหลือง' and 'น้ำมันถั่วเหลือง' share a core word but are not the

@@ -290,6 +290,9 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/hub",                     {"supply.ordering", "bom.center"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit"}),
+    # หน้างาน: every supply role reads its own to-do list (a branch login gets its branch only)
+    ("GET", "/api/bom-center/todo",                    {"branch.stock", "supply.ordering", "bom.center", "bom.edit",
+                                                        "bom.release", "bom.audit", "ops.report", "cost.analysis"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),

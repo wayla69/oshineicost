@@ -231,6 +231,7 @@ const TAB_MODULE = {
   bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit'],
   branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก
   orderhub:['supply.ordering','ops.report','bom.center'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
+  supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -245,7 +246,7 @@ const ROLE_START = {
   accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['bomcenter', 'นำเข้าราคาซื้อจริงรายเดือนจากรายงานจ่ายสินค้าของฝ่ายบัญชี', 'price'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
   operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจสอบว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · ยืนยัน · ดำเนินการ · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
-  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['bomcenter', 'ความพร้อมของวัตถุดิบ ราคา และสูตร ก่อนปล่อยเวอร์ชันภายในวันที่ 25', 'overview'], ['cost', 'ต้นทุนและ food cost']],
+  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานของฉันวันนี้และสถานะปิดงวดเดือน พร้อมลิงก์เข้าแต่ละงาน'], ['cost', 'ต้นทุนและ food cost']],
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'แก้สูตรตาม Tier และสูตรกึ่งสำเร็จ ต้นทุนปรับตามทันที', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
   salessupport: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง กดดำเนินการแล้ว และสรุปรวมตามผู้จำหน่าย', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันสั่งรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
   branch: [['branchstock', 'ตรวจนับสินค้าคงเหลือทีละโซนก่อนเปิดร้าน', 'count'], ['branchstock', 'สั่งสินค้ารอบนี้จากยอดแนะนำ และส่งให้ส่วนกลางก่อน 10:00', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
@@ -330,7 +331,7 @@ function tabAllowed(name) {
 function firstAllowedTab() {
   const order = ['overall','home','action','dailysales','trend','compare','more',
     'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
-    'staff','custtype','ingpurchase','ordering','orderhub','branchstock','manual'];
+    'staff','custtype','supplyhome','ingpurchase','ordering','orderhub','branchstock','manual'];
   return order.find(tabAllowed) || 'manual';
 }
 
@@ -468,6 +469,8 @@ function applyPermissions() {
     const alt = cl.tabs.find(([t]) => tabAllowed(t));
     if (alt) { const el = document.getElementById('nav-' + alt[0]); if (el) el.style.display = ''; }
   });
+  // the branch login's entry to วัตถุดิบและใบสั่งซื้อ is its own page: call it so
+  if (window.AUTH.role === 'branch') { const l = document.querySelector('#nav-supplyhome .nav-label'); if (l) l.textContent = 'สาขาของฉัน'; }
   // 2) Collapse nav-section headers whose items are all hidden
   document.querySelectorAll('.nav-section').forEach(sec => {
     let n = sec.nextElementSibling, anyVisible = false;
@@ -2128,7 +2131,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2164,6 +2167,7 @@ const TABS = {
   bomcenter: { load: () => loadBomCenter(), ownFilters: true },
   branchstock: { load: () => loadBranchStock(), ownFilters: true },
   orderhub: { load: () => loadOrderHub(), ownFilters: true },
+  supplyhome: { load: () => loadSupplyHome(), ownFilters: true },
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
@@ -2313,13 +2317,14 @@ function switchTab(name, direct) {
 // `pane` is the tab's own sub-view key (_bmcSub / _brnSub / _ohbSub / _osSub);
 // an item without one is a whole tab.
 const SUPPLY_CHIPS = [
-  { key: 'overview', label: 'ภาพรวม', items: [
-    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม' },
+  { key: 'home', label: 'หน้างาน', items: [
+    { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' },
     { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา' }] },
   { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน' },
-    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง' }] },
+    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง' },
+    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม' }] },
   { key: 'recipes', label: 'สูตรและการปล่อย', items: [
     { tab: 'bomcenter', pane: 'rec', label: 'สูตรตาม Tier' },
     { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ' },
@@ -2360,7 +2365,7 @@ const TAB_CLUSTERS = [
   { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','Benchmark'],['pnl','P&L เชิงลึก']] },
   { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
   { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
-  { chips: SUPPLY_CHIPS, key: 'supply', label: 'วัตถุดิบและใบสั่งซื้อ', tabs: [['bomcenter','ข้อมูลตั้งต้นและสูตร'],['orderhub','ใบสั่งซื้อและปิดงวดเดือน'],['branchstock','สาขาของฉัน'],['ordering','แผนสั่งวัตถุดิบ'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
+  { chips: SUPPLY_CHIPS, key: 'supply', label: 'วัตถุดิบและใบสั่งซื้อ', tabs: [['supplyhome','หน้างาน'],['bomcenter','ข้อมูลตั้งต้นและสูตร'],['orderhub','ใบสั่งซื้อและปิดงวดเดือน'],['branchstock','สาขาของฉัน'],['ordering','แผนสั่งวัตถุดิบ'],['ingpurchase','ยอดซื้อ vs ยอดขาย'],['ordersetup','ตั้งค่าการสั่งซื้อ']] },
 ];
 const _inChip = (t, name) => t[0] === name || (t[2] || []).includes(name);
 const clusterOf = name => TAB_CLUSTERS.find(c => c.tabs.some(t => _inChip(t, name)));
@@ -2499,6 +2504,7 @@ function supplyChipOpen(key) {
 }
 // The sidebar entry (the module's nav items all call this; which one is visible is a permission matter).
 function supplyOpen() {
+  if (tabAllowed('supplyhome')) { supplyGo({ tab: 'supplyhome' }); return; }   // everyone lands on หน้างาน
   const want = _SUPPLY_LANDING[(window.AUTH && window.AUTH.role) || ''] || {};
   if (want.tab && tabAllowed(want.tab) && !_supplyLastGet()[want.chip]) { supplyGo({ tab: want.tab, pane: want.pane }); return; }
   const ch = (want.chip && SUPPLY_CHIPS.find(c => c.key === want.chip && _supplyChipAllowed(c))) || SUPPLY_CHIPS.find(_supplyChipAllowed);
