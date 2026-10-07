@@ -134,7 +134,7 @@ async function brnSave(submit, quiet) {
     const missing = req.filter(i => _brnQty[i.code] === undefined || _brnQty[i.code] === '');
     const msg = (missing.length ? `ยังไม่ได้ตรวจนับรายการบังคับ ${missing.length} รายการ (เช่น ${missing.slice(0, 3).map(i => i.name).join(', ')})\n` : '')
       + `ยืนยันส่งผลตรวจนับเป็น${_brnSheet.next_kind === 'begin' ? 'ต้นงวด' : 'ปลายงวด'}?\nเมื่อส่งแล้วจะแก้ไขไม่ได้ หากต้องการแก้ไข กรุณาตรวจนับใหม่เป็นครั้งใหม่`;
-    if (!confirm(msg)) return;
+    if (!await uiConfirm(msg)) return;
   } else if (!_brnDirty && quiet) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/stock/count?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -151,7 +151,7 @@ async function brnSave(submit, quiet) {
 }
 
 async function brnDiscard() {
-  if (!confirm('ยืนยันล้างร่างผลตรวจนับทั้งหมด?')) return;
+  if (!await uiConfirm('ยืนยันล้างร่างผลตรวจนับทั้งหมด?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/stock/draft?${_brnQS()}`, { method: 'DELETE' });
     await brnLoadSheet();
@@ -273,7 +273,7 @@ async function brnRecvSave() {
   } catch (e) { _bmcStatus('brnRecvStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function brnRecvDelete(id) {
-  if (!confirm('ยืนยันลบบันทึกรับสินค้านี้?')) return;
+  if (!await uiConfirm('ยืนยันลบบันทึกรับสินค้านี้?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/stock/receipt/${id}?${_brnQS()}`, { method: 'DELETE' });
     brnLoadRecv();
@@ -368,7 +368,7 @@ async function brnSaveReason(code) {
   } catch (e) { _bmcStatus('brnVarStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function brnConfirmRecv(undo) {
-  if (!undo && !confirm('ยืนยันว่าได้บันทึกรับสินค้าทุกรายการในรอบนี้ครบแล้ว?')) return;
+  if (!undo && !await uiConfirm('ยืนยันว่าได้บันทึกรับสินค้าทุกรายการในรอบนี้ครบแล้ว?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/variance/confirm-receipts?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ end_count_id: _brnVar.end_count_id, undo: !!undo }) });
@@ -513,7 +513,7 @@ function _brnOrdLines() {
     .filter(l => l.confirmed_units === null || !isNaN(l.confirmed_units));
 }
 async function brnOrderSave(submit) {
-  if (submit && !confirm('ยืนยันส่งใบสั่งซื้อให้ส่วนกลาง (Sales Support)?\nแก้ไขได้จนกว่าส่วนกลางจะเริ่มดำเนินการ')) return;
+  if (submit && !await uiConfirm('ยืนยันส่งใบสั่งซื้อให้ส่วนกลาง (Sales Support)?\nแก้ไขได้จนกว่าส่วนกลางจะเริ่มดำเนินการ')) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/save${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ round: _brnRound, order_day: _brnPlan.order_day, lines: _brnOrdLines(), submit }) });
@@ -525,7 +525,7 @@ async function brnOrderSave(submit) {
 async function brnOrderAct(what) {
   const o = _brnPlan && _brnPlan.order;
   if (!o) return;
-  if (what === 'cancel' && !confirm('ยืนยันยกเลิกใบสั่งซื้อนี้?')) return;
+  if (what === 'cancel' && !await uiConfirm('ยืนยันยกเลิกใบสั่งซื้อนี้?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/${what}${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST' });
     await brnLoadOrder();
@@ -536,7 +536,7 @@ async function brnOrderReceive() {
   const o = _brnPlan.order;
   const lines = o.lines.map(l => { const el = document.getElementById('brnRcv_' + l.code);
     return { code: l.code, received_units: el ? Number(el.value || 0) : Number(l.processed_units ?? l.confirmed_units ?? 0) }; });
-  if (!confirm('ยืนยันบันทึกรับสินค้าตามจำนวนที่กรอก?\nระบบจะบันทึกเป็นรับเข้าสำหรับคำนวณผลต่างโดยอัตโนมัติ')) return;
+  if (!await uiConfirm('ยืนยันบันทึกรับสินค้าตามจำนวนที่กรอก?\nระบบจะบันทึกเป็นรับเข้าสำหรับคำนวณผลต่างโดยอัตโนมัติ')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/receive${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lines }) });
