@@ -124,8 +124,9 @@ def _lines(con) -> list:
          GROUP BY 1, 2""").fetchall()
 
 
-def review(con, with_ok: bool = False) -> dict:
+def review(con, with_ok: bool = False, suggestions: bool = True) -> dict:
     """One row per code the old recipes use, with every name it is used under.
+    suggestions=False skips the fuzzy matching (the counts alone, for หน้างาน).
 
     A name is: ok (looks like the master's item) / conflict (looks like another
     item) / missing (code not in the master) / same / remap (the analyst decided).
@@ -170,7 +171,7 @@ def review(con, with_ok: bool = False) -> dict:
                "dishes": dishes_per_code.get(code, sum(n["dishes"] for n in names)), "status": status,
                "master_name": m[0] if m else None, "master_kind": m[1] if m else None, "names": names,
                "todo_names": [n["name"] for n in todo], "todo_dishes": sum(n["dishes"] for n in todo)}
-        if todo and master:
+        if todo and master and suggestions:
             # one code's wrong names can be different items (F-003: เนยจืด and สะโพกไก่) — group
             # them by the master code each one points to, so every group gets its own decision
             groups = {}

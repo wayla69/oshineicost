@@ -45,7 +45,7 @@ async function loadHome() {
     const hp = new URLSearchParams();                               // yesterday's hourly
     hp.set('date_from', brief.yesterday); hp.set('date_to', brief.yesterday);
     if (getBranch()) hp.set('branch', getBranch());
-    const [scorecard, fc, anomaly, sd, leak, movers, hourly, trend7] = await Promise.all([
+    const [scorecard, fc, anomaly, sd, leak, movers, hourly, trend7, todo] = await Promise.all([
       renderHomeScorecard(brief.yesterday),                                       // renders leaderboard + returns its data
       api(`${API}/api/forecast?${bp}`).catch(() => null),
       api(`${API}/api/analysis/anomalies`).catch(() => ({ insights: [] })),
@@ -54,7 +54,11 @@ async function loadHome() {
       api(`${API}/api/home/menu-movers?${gp}&limit=15`).catch(() => null),
       api(`${API}/api/analysis/hourly?${hp}`).catch(() => null),
       api(`${API}/api/sales/daily?${dayp}`).catch(() => null),
+      // วัตถุดิบและใบสั่งซื้อ: my open work from หน้างาน (16-supplyhome.js) — only for a supply role
+      ['supply.ordering', 'bom.center', 'bom.release', 'bom.audit', 'branch.stock'].some(hasModule)
+        ? api(`${API}/api/bom-center/todo`).catch(() => null) : Promise.resolve(null),
     ]);
+    window._shmHome = todo && Array.isArray(todo.items) ? todo : null;
 
     // Reveal the content FIRST so the chart canvases have real layout dimensions —
     // mkChart() on a display:none canvas renders to 0×0 and never recovers.
@@ -63,7 +67,7 @@ async function loadHome() {
 
     renderHomeStatusBand(brief, fc, sd, scorecard);
     renderHomeDecisionTiles(brief, fc, sd, scorecard);
-    renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak);
+    renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, window._shmHome);
     renderHomeForecast(fc);
     renderHomeLeakWatch(leak, brief);
     renderHomeMenuMovers(movers);
@@ -211,7 +215,7 @@ function homeDrillBranch(name) {
 
 // Action queue — synthesises margin + branch drift + run-rate + anomalies into a
 // prioritised to-do list (red → amber → green). This is the Daily Brief's unique job.
-function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
+function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   const el = document.getElementById('home-action-queue'); if (!el) return;
   const branches = (scorecard && scorecard.branches) || [];
   const A = [];
@@ -271,6 +275,14 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
   const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
   if (up && up.vs_avg_pct >= 10)
     A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
+  // วัตถุดิบและใบสั่งซื้อ: at most three of my open items from หน้างาน, overdue ones first
+  if (todo && Array.isArray(todo.items)) {
+    const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && (i.owner_modules || []).some(hasModule));
+    mine.sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
+    mine.slice(0, 3).forEach(i => A.push({ p: i.urgent ? 1 : 5, sev: i.urgent ? 'red' : 'amber', icon: '',
+      text: `${esc(i.title)}${i.detail ? ' — ' + esc(i.detail) : ''}${i.branch ? ' (' + esc(i.branch) + ')' : ''}`,
+      act: 'ไปที่งาน', go: `shmGoFromHome('${esc(i.key)}')` }));
+  }
   A.sort((a, b) => a.p - b.p);
 
   const cnt = document.getElementById('home-action-count');

@@ -28,6 +28,7 @@ from bom_center import master as _m
 from bom_center import orders as _or
 from bom_center import pilot as _pl
 from bom_center import prep as _pr
+from bom_center import todo as _td
 from bom_center import prices as _p
 from bom_center import recipes as _r
 from bom_center import release as _rl
@@ -1206,6 +1207,23 @@ async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dr
 
 
 # ── Phase 2 · S6: branch stock counts (stock.py) ────────────────────────────
+# ── หน้างาน: the to-do list and the month-close checklist (todo.py) ─────────
+@router.get("/api/bom-center/todo")
+def bc_todo(request: Request, month: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
+    """What each person has to do now, and where `month` stands on its way to closing.
+    A branch login gets its own branch only; the centre may name one or see them all."""
+    if month:
+        _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        try:
+            return _td.build(con, month, branch_id, _auth.scope_branch(request))
+        except PermissionError as e:
+            raise HTTPException(403, str(e))
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+
 def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
     """The branch a call works on. A branch login (its account carries a branch) is
     pinned to it — asking for another branch is refused; the centre must name one."""
