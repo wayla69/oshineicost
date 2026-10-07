@@ -566,6 +566,7 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
    MISC COMPONENTS
 ════════════════════════════════════════════════════════════ */
 /* Topbar icon buttons */
+.top-bar .tb-fold { display: none; }   /* the phone's fold button (see MOBILE); outranks .topbar-icon-btn */
 .topbar-icon-btn {
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -1331,6 +1332,22 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   #globalSearch { width: 140px !important; font-size: 11px; }
   .content-area { padding: 12px; }
 
+  /* ── The top bar folds (toggleTopbarFold, js/09c-mobile.js). On a phone its controls
+     are six or seven rows of chrome before the first number (branch · period · search ·
+     filters · presets · tools · user · uploads). The title row stays, with the fold
+     button at its right; everything else folds away until the button is tapped. The
+     choice is remembered per device, folded by default. The branch login keeps its
+     bare bar instead (body.role-branch, below). ── */
+  .topbar-scope { flex: 1 1 0%; }
+  .top-bar .tb-fold { display: inline-flex; align-self: flex-start; margin-left: auto; }
+  .topbar-actions { flex-basis: 100%; }
+  body.role-branch .top-bar .tb-fold { display: none; }
+  body.tb-folded:not(.role-branch) .topbar-scope > :not(.page-title):not(#dataCoverageNote),
+  body.tb-folded:not(.role-branch) .topbar-actions,
+  body.tb-folded:not(.role-branch) #presetBar { display: none !important; }
+  /* a page that blanks a control (visibility, switchTab) must not hold an empty row here */
+  .top-bar .invisible { display: none !important; }
+
   /* ── Responsive full-dashboard (when owner taps "เต็ม →" on a phone) ──
      Scoped to .content-area so the dedicated mobile app (#mobileSummary) is
      untouched. Collapses dense KPI/stat grids to 2 columns and lets wide
@@ -2082,6 +2099,13 @@ body.mgt-reading .content-area { padding-top: 10px; }
         </div>
       </div>
     </div>
+    <!-- Phone only: folds the controls away so the page opens on its data (toggleTopbarFold) -->
+    <button id="tbFoldBtn" type="button" onclick="toggleTopbarFold()" class="topbar-icon-btn tb-fold whitespace-nowrap"
+      aria-expanded="true" aria-label="แสดงหรือซ่อนตัวกรองและเครื่องมือ" title="ซ่อนตัวกรองและเครื่องมือ"
+      style="width:auto;padding:0 10px;font-size:12px;gap:5px">
+      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg>
+      <span style="color:var(--text-secondary);font-weight:500">เครื่องมือ</span> <span id="tbFoldChev" aria-hidden="true">▴</span>
+    </button>
     <!-- ░░ ACTIONS zone — find · extra filters · tools · uploads ░░ -->
     <div class="topbar-actions flex items-center gap-2 flex-wrap" style="margin-left:auto">
       <!-- Global search -->

@@ -252,6 +252,7 @@ function hideLoadingBar() {
 async function init() {
   await loadTabFragments();   // the 48 panels, before anything looks for one
   initDarkMode();
+  initTopbarFold();           // phone: the top bar's controls fold away (09c-mobile.js)
   showLoadingBar();
   await bootstrapAuth();
   if (window.AUTH.enabled && !window.AUTH.authenticated) {
