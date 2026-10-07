@@ -31,6 +31,38 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
 // server allows writes without a token and this stays invisible. /api/upload
 // manages its own token (see handleUpload) and is excluded here. Read-only POSTs
 // like /api/bom-cost/simulate aren't gated server-side, so they never prompt.
+// The token is asked for in an in-page dialog, not window.prompt(): embedded
+// browsers (the Claude app's browser pane, some in-app webviews) do not support
+// prompt(), and a save then failed with "prompt() is not supported".
+window.askWriteToken = function (message) {
+  // several saves can hit 403 together: they all wait for the one dialog
+  if (window._askTokenPending) return window._askTokenPending;
+  return (window._askTokenPending = new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
+    wrap.innerHTML = `<form style="width:100%;max-width:380px;background:var(--bg-card, var(--bg-input, #fff));color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
+        <div style="font-weight:600;font-size:15px;margin-bottom:6px">ยืนยันสิทธิ์บันทึกข้อมูล</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;white-space:pre-line"></div>
+        <input type="password" autocomplete="off" spellcheck="false" placeholder="Owner Write-Token"
+               style="width:100%;box-sizing:border-box;border:1px solid var(--border-control, var(--border));border-radius:var(--r-sm, 8px);padding:8px 10px;font-size:14px;background:var(--bg-input, #fff);color:var(--text-primary)">
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ยกเลิก</button>
+          <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)">ยืนยัน</button>
+        </div></form>`;
+    wrap.querySelector('form > div:nth-child(2)').textContent = message || '';
+    const input = wrap.querySelector('input');
+    const done = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if (e.key === 'Escape') done(''); };
+    wrap.querySelector('form').addEventListener('submit', e => { e.preventDefault(); done(input.value.trim()); });
+    wrap.querySelector('[data-act="cancel"]').addEventListener('click', () => done(''));
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(wrap);
+    setTimeout(() => input.focus(), 0);
+  }).finally(() => { window._askTokenPending = null; }));
+};
+
 (function () {
   const TOK_KEY = 'oshinei_upload_token';
   const _origFetch = window.fetch.bind(window);
@@ -57,9 +89,9 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
       if (tok) h.set('X-Upload-Token', tok);
       return _origFetch(input, Object.assign({}, init, { headers: h }));
     };
-    return send(localStorage.getItem(TOK_KEY) || '').then(res => {
+    return send(localStorage.getItem(TOK_KEY) || '').then(async res => {
       if (res.status !== 403) return observe(url, res);
-      const tok = (window.prompt('ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
+      const tok = await window.askWriteToken('การบันทึกข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
       if (!tok) return res;                       // cancelled → surface the 403
       localStorage.setItem(TOK_KEY, tok);
       return send(tok).then(res2 => {

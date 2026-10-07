@@ -1568,7 +1568,7 @@ async function onSalesDataSelected(ev) {
   try {
     let res = await doUpload(localStorage.getItem('oshinei_upload_token') || '');
     if (res.status === 403) {
-      const tok = prompt('การอัพโหลดบนเซิร์ฟเวอร์นี้ต้องใช้ Upload Token:');
+      const tok = await window.askWriteToken('การอัปโหลดข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
       if (!tok) { ev.target.value = ''; return; }
       localStorage.setItem('oshinei_upload_token', tok.trim());
       res = await doUpload(tok.trim());
