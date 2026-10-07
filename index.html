@@ -1391,6 +1391,24 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 #msNav button .ic { font-size: 19px; line-height: 1; }
 #msNav button.active { color: var(--accent); font-weight: 700; }
 @media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
+/* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
+   หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
+   give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
+#supplyNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; display: none;
+  background: var(--bg-card,#fff); border-top: 1px solid var(--border,#e2e8f0);
+  justify-content: space-around; padding: 4px 2px calc(4px + env(safe-area-inset-bottom, 0px)); }
+#supplyNav button { flex: 1; min-width: 0; background: none; border: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; font-size: 10.5px; line-height: 1.2; color: var(--text-muted,#94a3b8); padding: 4px 0; cursor: pointer; }
+#supplyNav button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#supplyNav button.active { color: var(--group-ink, var(--accent)); font-weight: 700; }
+@media (max-width: 700px) {
+  body.supply-phone #supplyNav { display: flex; }
+  body.supply-phone .content-area { padding-bottom: 76px; }
+  body.supply-phone #clusterBar > button, body.supply-phone #clusterBar > span:not(#supplyLock),
+  body.supply-phone #clusterBar > div > button, body.supply-phone #clusterBar > div > span:not(#supplyLock) { display: none; }
+  body.supply-phone #clusterBar > div { margin-top: 0; }
+  body.supply-phone .brn-sticky-bottom { bottom: 60px !important; }
+}
 #mobileSummary { padding-bottom: 80px; }
 #msSheet { display: none; position: fixed; inset: 0; z-index: 45; overflow-y: auto; -webkit-overflow-scrolling: touch;
   background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
@@ -1742,6 +1760,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <button id="msnav-profit"    data-g="profit" onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
   <button id="msnav-discounts" data-g="money"  onclick="msSwitchView('discounts')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>ส่วนลด</button>
 </nav>
+<nav id="supplyNav" aria-label="สาขาของฉัน"></nav>
 <button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></button>
 
 <div class="app-layout">
