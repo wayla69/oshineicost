@@ -471,6 +471,8 @@ function applyPermissions() {
   });
   // the branch login's entry to วัตถุดิบและใบสั่งซื้อ is its own page: call it so
   if (window.AUTH.role === 'branch') { const l = document.querySelector('#nav-supplyhome .nav-label'); if (l) l.textContent = 'สาขาของฉัน'; }
+  // ... and on a phone its pages sit on a bottom strip (#supplyNav) instead of the chip rows
+  if (window.AUTH.role === 'branch') { document.body.classList.add('supply-phone'); _renderSupplyNav(activeTab); }
   // 2) Collapse nav-section headers whose items are all hidden
   document.querySelectorAll('.nav-section').forEach(sec => {
     let n = sec.nextElementSibling, anyVisible = false;
@@ -2404,6 +2406,7 @@ function _updateClusterBar(name) {
   if (!bar) return;
   const cl = clusterOf(name);
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
+  _renderSupplyNav(name);                          // the branch phone strip follows every switch
   // The group you are in stays lit in the sidebar, whichever of its views is open
   // (its entry is tabs[0], or the first member the role can open - applyPermissions).
   if (cl) {
@@ -2510,6 +2513,27 @@ function supplyOpen() {
   const ch = (want.chip && SUPPLY_CHIPS.find(c => c.key === want.chip && _supplyChipAllowed(c))) || SUPPLY_CHIPS.find(_supplyChipAllowed);
   if (ch) supplyChipOpen(ch.key);
 }
+// ── #supplyNav: the branch login's bottom strip on a phone ───────────────────
+// body.supply-phone (applyPermissions, role branch) + ≤700 px shows it; the lit
+// button is the open page. Every tap is a supplyGo deep link.
+const SUPPLY_PHONE_NAV = [
+  { tab: 'supplyhome', label: 'หน้างาน', icon: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>' },
+  { tab: 'branchstock', pane: 'count', label: 'ตรวจนับ', icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M8 11h8M8 15h5"/>' },
+  { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>' },
+  { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/>' },
+  { tab: 'branchstock', pane: 'var', label: 'ผลต่าง', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>' },
+];
+function _renderSupplyNav(name) {
+  const nav = document.getElementById('supplyNav');
+  if (!nav) return;   // rendered for everyone; CSS shows it only for body.supply-phone on a phone
+  const acc = _SUPPLY_PANE[name];
+  const pane = acc ? acc.get() : null;
+  nav.innerHTML = SUPPLY_PHONE_NAV.filter(it => tabAllowed(it.tab)).map(it => {
+    const on = it.tab === name && (!it.pane || it.pane === pane);
+    return `<button class="${on ? 'active' : ''}" aria-current="${on ? 'page' : 'false'}" onclick="supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})"><svg viewBox="0 0 24 24" aria-hidden="true">${it.icon}</svg>${it.label}</button>`;
+  }).join('');
+}
+
 function _renderSupplyBar(bar, cl, name) {
   const acc = _SUPPLY_PANE[name];
   const hit = _supplyItemOf(name, acc ? acc.get() : null);
