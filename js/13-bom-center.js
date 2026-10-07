@@ -860,7 +860,9 @@ let _bmcRecView = null;      // /api/bom-center/recipes
 let _bmcEdit = null;         // {sku, d, lines}
 const _BMC_TIERS = [459, 629, 789, 999, 1299];
 
-function _bmcRelEditable() { return !!(_bmcRel && ['draft', 'review'].includes(_bmcRel.status) && _bmcCanWrite()); }
+function _bmcEditableFor(rel) { return !!(rel && ['draft', 'review'].includes(rel.status) && _bmcCanWrite()); }
+function _bmcRelEditable() { return _bmcEditableFor(_bmcRel); }
+function _bmcEdRel() { return (_bmcEdit && _bmcEdit.rel) || _bmcRel; }   // the release the open editor belongs to
 
 async function bmcLoadReleases(keepId) {
   try {
@@ -971,12 +973,13 @@ async function bmcMapBlock(i, skip) {
 }
 
 // recipe editor ---------------------------------------------------------------
-async function bmcOpenRecipe(sku) {
-  const box = document.getElementById('bmcEditor');
+async function bmcOpenRecipe(sku, opt) {   // opt {rel, host}: the release pane opens a recipe in its own card
+  const rel = (opt && opt.rel) || _bmcRel, host = (opt && opt.host) || 'bmcEditor';
+  const box = document.getElementById(host);
   box.style.display = ''; box.innerHTML = 'กำลังโหลด…';
   try {
-    const d = await _bmcJson(`${API}/api/bom-center/recipes/${encodeURIComponent(sku)}?release_id=${_bmcRel.release_id}`);
-    _bmcEdit = { sku, d, lines: d.lines.map(l => ({ ...l })) };
+    const d = await _bmcJson(`${API}/api/bom-center/recipes/${encodeURIComponent(sku)}?release_id=${rel.release_id}`);
+    _bmcEdit = { sku, d, lines: d.lines.map(l => ({ ...l })), rel, host };
     if (!_bmcIng.length) bmcLoadIng(true).then(() => _bmcFillIngList());
     else _bmcFillIngList();
     bmcRenderEditor();
@@ -989,20 +992,20 @@ function _bmcFillIngList() {
   dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')} (${esc(r.base_unit || '')})</option>`).join('');
 }
 function bmcRenderEditor() {
-  const e = _bmcEdit, d = e.d, w = _bmcRelEditable();
+  const e = _bmcEdit, d = e.d, w = _bmcEditableFor(e.rel || _bmcRel), host = e.host || 'bmcEditor';
   const inp = (i, f, width, type) => w
     ? `<input ${f === 'ingredient_code' ? 'list="bmcIngList"' : ''} ${type ? `type="${type}" step="any"` : ''} value="${esc(e.lines[i][f] ?? '')}" onchange="bmcEdLine(${i},'${f}',this)"
         style="width:${width}px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);${type ? 'text-align:right' : ''}">`
     : esc(e.lines[i][f] ?? '');
   const total = e.lines.reduce((s, l) => s + (l.cost || 0), 0);
-  document.getElementById('bmcEditor').innerHTML = `
+  document.getElementById(host).innerHTML = `
     <div class="flex flex-wrap items-start gap-2 mb-2"><div>
       <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(d.dish?.name_th || d.pos_name || e.sku)} <span class="text-xs" style="color:var(--text-muted)">${esc(e.sku)} · ${esc(d.dish?.serve || '')}</span></div>
       <div class="text-[11px]" style="color:var(--text-muted)">${d.dish?.min_tier ? 'Tier ฿' + d.dish.min_tier.toLocaleString() + ' · ' : ''}${esc(d.source_ref || '')} · ราคาเดือน ${esc(d.release?.price_month || '-')}
         ${w ? '' : ' · <b>อ่านอย่างเดียว</b> (แก้ไขได้เฉพาะสูตรฉบับร่าง)'}</div></div>
       <div class="ml-auto text-right"><div class="text-[11px]" style="color:var(--text-muted)">ต้นทุน/เสิร์ฟ</div><div class="text-xl font-bold" style="color:var(--text-primary)">฿${_bmcNum(total, 2)}</div>
         ${d.source_cost != null ? `<div class="text-[11px]" style="color:var(--text-muted)">ไฟล์ต้นทาง ฿${_bmcNum(d.source_cost, 2)}</div>` : ''}</div>
-      <button onclick="document.getElementById('bmcEditor').style.display='none'" style="font-size:12px;background:none;border:0;color:var(--text-muted);cursor:pointer">ปิด</button></div>
+      <button onclick="document.getElementById('${host}').style.display='none'" style="font-size:12px;background:none;border:0;color:var(--text-muted);cursor:pointer">ปิด</button></div>
     <div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">#</th><th class="pr-2">รหัสวัตถุดิบ</th><th class="pr-2">วัตถุดิบ</th>
         <th class="pr-2 text-right">ปริมาณ</th><th class="pr-2">หน่วย</th><th class="pr-2 text-right">สูญเสีย %</th><th class="pr-2">฿0 โดยเจตนา</th>
@@ -1031,7 +1034,7 @@ async function _bmcPreviewLine(i) {        // cost one edited line at once: conv
   if (l.zero_by_design) { bmcRenderEditor(); return; }
   if (!l.ingredient_code) { l.problem = 'ไม่มีรหัสวัตถุดิบ'; bmcRenderEditor(); return; }
   try {
-    const c = await _bmcJson(`${API}/api/bom-center/convert?code=${encodeURIComponent(l.ingredient_code)}&qty=${Number(l.qty) || 0}&unit=${encodeURIComponent(l.unit || '')}&month=${_bmcRel.price_month || ''}`);
+    const c = await _bmcJson(`${API}/api/bom-center/convert?code=${encodeURIComponent(l.ingredient_code)}&qty=${Number(l.qty) || 0}&unit=${encodeURIComponent(l.unit || '')}&month=${_bmcEdRel().price_month || ''}`);
     if (c.qty_base == null) l.problem = c.how;
     else if (c.price_per_base == null) l.problem = 'ไม่มีราคา';
     else {
@@ -1068,11 +1071,12 @@ async function bmcEdSave() {
     qty: Number(l.qty) || 0, unit: l.unit || null, loss_pct: (l.loss_pct === '' || l.loss_pct == null) ? null : Number(l.loss_pct),
     zero_by_design: !!l.zero_by_design, prep_note: l.prep_note || null }));
   try {
-    const r = await _bmcJson(`${API}/api/bom-center/recipes/${encodeURIComponent(_bmcEdit.sku)}?release_id=${_bmcRel.release_id}`,
+    const r = await _bmcJson(`${API}/api/bom-center/recipes/${encodeURIComponent(_bmcEdit.sku)}?release_id=${_bmcEdRel().release_id}`,
       { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(lines) });
-    const sku = _bmcEdit.sku;
-    await bmcLoadRecipes();
-    await bmcOpenRecipe(sku);
+    const sku = _bmcEdit.sku, opt = { rel: _bmcEdit.rel, host: _bmcEdit.host };
+    if (opt.host === 'bmcRlEditor') await bmcLoadChecks();        // edited from a finding: the checks read the fix at once
+    else await bmcLoadRecipes();
+    await bmcOpenRecipe(sku, opt);
     _bmcStatus('bmcEdStatus', `✓ บันทึกแล้ว · ต้นทุน ฿${_bmcNum(r.total, 2)}` + (r.problems ? ` · ยังมีปัญหา ${r.problems} บรรทัด` : ''), r.problems ? 'var(--amber-ink)' : 'var(--good-ink)');
   } catch (e) { _bmcStatus('bmcEdStatus', 'บันทึกไม่สำเร็จ:' + String(e.message || e), 'var(--bad-ink)'); }
 }
@@ -1168,7 +1172,7 @@ function bmcRenderRelHead(checks) {
     ? 'background:var(--accent);color:var(--on-accent);border:0' : 'background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control)'};border-radius:var(--r-sm);padding:5px 14px;cursor:pointer">${label}</button>`;
   const acts = [];
   if (['draft', 'review'].includes(r.status)) {
-    if (can('bom.center') || can('bom.release')) acts.push(btn('ตรวจใหม่', 'bmcRunChecks()', false, 'คำนวณรายการตรวจ 12 ข้อใหม่จากสูตรและราคาปัจจุบัน'));
+    if (can('bom.center') || can('bom.release')) acts.push(btn('บันทึกผลตรวจ', 'bmcRunChecks()', false, 'ผลตรวจคำนวณใหม่ทุกครั้งที่เปิดหน้า ปุ่มนี้บันทึกผลชุดนี้ไว้ในระบบ (หน้างานอ่านสถานะจากที่บันทึก)'));
     if (can('bom.release')) acts.push(btn('ปล่อยเวอร์ชันนี้', 'bmcDoRelease()', !!(checks && checks.can_release),
       checks && !checks.can_release ? 'ยังมีข้อที่ต้องแก้ไข' : 'analyst ปล่อยสูตร และ management รับทราบภายหลัง'));
   }
@@ -1189,13 +1193,16 @@ function bmcRenderRelHead(checks) {
             : ' · <span style="color:var(--amber-ink)">รอ management รับทราบ</span>') : ''}</div></div>
       <div class="ml-auto flex flex-wrap gap-2">${acts.join('')}</div>
     </div>
+    ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหาร (management) อ่านผลกระทบด้านล่าง แล้วกด “รับทราบ” — เปิดได้จากหน้างาน</div>` : ''}
     <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
-      ลำดับงาน: (1) analyst ตรวจสอบ (2) แก้ไขข้อที่ต้องแก้ หรือยืนยันพร้อมเหตุผลสำหรับข้อที่ยอมรับได้ (3) ปล่อยสูตรภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล (4) management อ่านผลกระทบด้านล่าง แล้วรับทราบหรือย้อนกลับ ·
+      ลำดับงาน: (1) ผลตรวจ 12 ข้อแสดงทันทีเมื่อเปิดหน้า (2) แก้ไขข้อที่ต้องแก้ได้ในหน้านี้ (“เปิดสูตร”) หรือยืนยันข้อที่ยอมรับได้ทีละรายการหรือทั้งกลุ่มพร้อมเหตุผล (3) ปล่อยสูตรภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล (4) management อ่านผลกระทบด้านล่าง แล้วรับทราบหรือย้อนกลับ ·
       เมื่อปล่อยแล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลจะเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อน ก.ย. 2569 ใช้ต้นทุนระบบเดิมเสมอ)</div>`;
 }
 async function bmcLoadChecks() {
   try {
-    const d = await _bmcJson(`${API}/api/bom-center/release-checks?release_id=${_bmcRlRel.release_id}`);
+    // a draft: the checks are computed afresh on open — nothing is written, no token is asked
+    const fresh = ['draft', 'review'].includes(_bmcRlRel.status);
+    const d = await _bmcJson(`${API}/api/bom-center/release-checks?release_id=${_bmcRlRel.release_id}${fresh ? '&recompute=true' : ''}`);
     bmcRenderChecks(d);
   } catch (e) { document.getElementById('bmcRlChecks').innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -1204,24 +1211,45 @@ function bmcRenderChecks(d) {
   const box = document.getElementById('bmcRlChecks');
   if (!d.rows.length) {
     box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ 12 ข้อ</div>
-      <div class="text-xs mt-1" style="color:var(--text-muted)">${['draft', 'review'].includes(_bmcRlRel.status) ? 'ยังไม่ได้ตรวจ กรุณากด “ตรวจใหม่”' : 'ไม่มีข้อค้างตรวจ'}</div>`;
+      <div class="text-xs mt-1" style="color:var(--text-muted)">${['draft', 'review'].includes(_bmcRlRel.status) ? 'ไม่พบข้อที่ต้องตรวจ' : 'ไม่มีข้อค้างตรวจ'}</div>`;
     return;
   }
   const canAccept = (hasModule('bom.release') || hasModule('bom.edit')) && ['draft', 'review'].includes(_bmcRlRel.status);
-  const head = d.by_code.map(k => _bmcChip(`${k.code} ${k.title} · ${k.open}${k.count !== k.open ? '/' + k.count : ''}`,
-    k.severity === 'block' && k.open ? 'var(--bad-ink)' : k.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)')).join(' ');
-  const rows = d.rows.slice(0, 400);
-  box.innerHTML = `<div class="flex flex-wrap items-center gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ</div>
-      ${d.can_release ? _bmcChip('ไม่มีข้อที่ต้องแก้ไข พร้อมปล่อย', 'var(--good-ink)') : _bmcChip(`ต้องแก้ไข ${d.open_blocks} ข้อก่อนปล่อย`, 'var(--bad-ink)')}
-      ${_bmcChip(`ข้อสังเกต ${d.warnings}`, 'var(--amber-ink)')}</div>
-    <div class="flex flex-wrap gap-1 mb-2">${head}</div>
-    <div class="overflow-x-auto" style="max-height:420px;overflow-y:auto"><table class="text-xs w-full"><tbody>${rows.map((r, i) => `<tr class="border-b" style="border-color:var(--border-soft)">
-      <td class="pr-2 py-1 whitespace-nowrap">${_bmcChip(r.check_code, r.severity === 'block' && !r.resolved_by ? 'var(--bad-ink)' : r.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)')}</td>
-      <td class="pr-2">${esc(r.message || '')}${r.resolved_by ? `<div class="text-[10.5px]" style="color:var(--good-ink)">ยืนยันโดย ${esc(r.resolved_by)}</div>` : ''}</td>
-      <td class="whitespace-nowrap">${r.acceptable && !r.resolved_by && canAccept ? `<button onclick="bmcAccept(${i})" style="font-size:11px;background:none;color:var(--accent);border:1px solid var(--border-control);border-radius:4px;padding:1px 8px;cursor:pointer">ยืนยันพร้อมเหตุผล</button>` : ''}
-        ${/^OTH/.test(r.ref) ? `<button onclick="bmcSetSub('rec');setTimeout(()=>bmcOpenRecipe('${esc(r.ref.split('#')[0])}'),1200)" style="font-size:11px;background:none;color:var(--accent);border:0;cursor:pointer">เปิดสูตร</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
-    ${d.rows.length > rows.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดง ${rows.length} จาก ${d.rows.length}</div>` : ''}`;
   window._bmcChecks = d;
+  // one group per check code, open ones first; an ACCEPTABLE group takes one reason for all its open rows
+  const groups = {};
+  d.rows.forEach((r, i) => { (groups[r.check_code] = groups[r.check_code] || { code: r.check_code, title: r.title, severity: r.severity, acceptable: r.acceptable, rows: [] }).rows.push({ r, i }); });
+  const order = d.by_code.map(k => k.code).filter(c => groups[c]);
+  const btnS = 'font-size:11px;background:none;color:var(--accent);border:1px solid var(--border-control);border-radius:4px;padding:1px 8px;cursor:pointer';
+  const html = order.map(c => {
+    const g = groups[c], open = g.rows.filter(x => !x.r.resolved_by).length;
+    const ink = g.severity === 'block' && open ? 'var(--bad-ink)' : g.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)';
+    return `<details ${open ? 'open' : ''} class="mb-1"><summary class="text-xs cursor-pointer py-1" style="color:var(--text-primary)">${_bmcChip(g.code, ink)} <b>${esc(g.title)}</b> · ค้าง ${open} จาก ${g.rows.length}
+        ${g.acceptable && open && canAccept ? `<button onclick="event.preventDefault();bmcAcceptGroup('${esc(g.code)}')" style="${btnS};margin-left:8px">ยืนยันทั้งกลุ่มพร้อมเหตุผล (${open})</button>` : ''}</summary>
+      <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto"><table class="text-xs w-full"><tbody>${g.rows.slice(0, 200).map(({ r, i }) => `<tr class="border-b" style="border-color:var(--border-soft)">
+        <td class="pr-2 py-1">${esc(r.message || '')}${r.resolved_by ? `<div class="text-[10.5px]" style="color:var(--good-ink)">ยืนยันโดย ${esc(r.resolved_by)}</div>` : ''}</td>
+        <td class="whitespace-nowrap">${r.acceptable && !r.resolved_by && canAccept ? `<button onclick="bmcAccept(${i})" style="${btnS}">ยืนยันพร้อมเหตุผล</button>` : ''}
+          ${/^OTH/.test(r.ref) ? `<button onclick="bmcOpenRecipe('${esc(r.ref.split('#')[0])}', {rel: _bmcRlRel, host: 'bmcRlEditor'})" style="font-size:11px;background:none;color:var(--accent);border:0;cursor:pointer">เปิดสูตร</button>` : ''}</td></tr>`).join('')}</tbody></table>
+      ${g.rows.length > 200 ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดง 200 จาก ${g.rows.length}</div>` : ''}</div></details>`;
+  }).join('');
+  box.innerHTML = `<div class="flex flex-wrap items-center gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ</div>
+      ${d.fresh ? _bmcChip('คำนวณใหม่เมื่อเปิดหน้า', 'var(--text-muted)') : ''}
+      ${d.can_release ? _bmcChip('ไม่มีข้อที่ต้องแก้ไข พร้อมปล่อย', 'var(--good-ink)') : _bmcChip(`ต้องแก้ไข ${d.open_blocks} ข้อก่อนปล่อย`, 'var(--bad-ink)')}
+      ${_bmcChip(`ข้อสังเกต ${d.warnings}`, 'var(--amber-ink)')}</div>${html}`;
+}
+async function bmcAcceptGroup(code) {
+  const d = window._bmcChecks;
+  if (!d) return;
+  const refs = d.rows.filter(r => r.check_code === code && !r.resolved_by && r.acceptable).map(r => r.ref);
+  if (!refs.length) return;
+  const reason = await uiPrompt(`ยืนยันข้อ ${code} ทั้งกลุ่ม ${refs.length} รายการ\n\nกรุณาระบุเหตุผล (จำเป็น) เหตุผลเดียวใช้กับทุกรายการในกลุ่ม`);
+  if (!reason) return;
+  try {
+    const out = await _bmcJson(`${API}/api/bom-center/release-act/accept-many`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: _bmcRlRel.release_id, check_code: code, refs, reason }) });
+    bmcRenderChecks(out);
+    _bmcStatus('bmcRlStatus', `✓ ยืนยันข้อ ${code} แล้ว ${refs.length} รายการ`, 'var(--good-ink)');
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
 async function bmcRunChecks() {
   _bmcStatus('bmcRlStatus', 'กำลังตรวจ…');

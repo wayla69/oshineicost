@@ -249,12 +249,34 @@ def accept(con, release_id: int, code: str, ref: str, reason: str, who: str):
         raise ValueError("ต้องระบุเหตุผล")
     r = con.execute("SELECT message FROM bc_release_check WHERE release_id=? AND check_code=? AND ref=?",
                     (release_id, code, ref)).fetchone()
+    if not r:                   # the finding was only previewed (release-checks?recompute): save the run, then accept
+        run_checks(con, release_id)
+        r = con.execute("SELECT message FROM bc_release_check WHERE release_id=? AND check_code=? AND ref=?",
+                        (release_id, code, ref)).fetchone()
     if not r:
         raise ValueError("ไม่พบรายการตรวจนี้ กรุณากดตรวจสอบใหม่ก่อน")
     msg = r[0].split(" ‖ ยอมรับ: ")[0] + " ‖ ยอมรับ: " + reason.strip()
     con.execute("UPDATE bc_release_check SET resolved_by=?, resolved_at=?, message=? WHERE release_id=? AND"
                 " check_code=? AND ref=?", (who, now(), msg, release_id, code, ref))
     audit(con, who, "accept_check", "bc_release_check", f"{release_id}|{code}|{ref}", None, reason)
+
+
+def accept_many(con, release_id: int, code: str, refs, reason: str, who: str) -> dict:
+    """One reason for a whole code's open findings (an ACCEPTABLE code). refs=None means
+    every open row of that code; a preview-only run is saved first. Returns the summary."""
+    if code not in ACCEPTABLE:
+        raise ValueError("รายการนี้ต้องแก้ไข ไม่สามารถยอมรับได้")
+    if not (reason or "").strip():
+        raise ValueError("ต้องระบุเหตุผล")
+    s = checks_summary(con, release_id)
+    have = {r["ref"] for r in s["rows"] if r["check_code"] == code}
+    if not have or (refs and any(x not in have for x in refs)):
+        run_checks(con, release_id)
+        s = checks_summary(con, release_id)
+    todo = list(refs) if refs else [r["ref"] for r in s["rows"] if r["check_code"] == code and not r["resolved_by"]]
+    for ref in todo:
+        accept(con, release_id, code, ref, reason, who)
+    return checks_summary(con, release_id)
 
 
 # ── comparison ───────────────────────────────────────────────────────────────
