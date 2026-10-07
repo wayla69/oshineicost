@@ -211,6 +211,37 @@ function _brnNeedBranch(boxId) {
 
 // ── รับของ ───────────────────────────────────────────────────────────────────
 function _brnAllItems() { return _brnSheet ? _brnSheet.zones.flatMap(z => z.items) : []; }
+// one received-goods note as a card: what it is and the delete button up front, its lines folded away
+// (a month's central delivery has ~100 lines; listing them inline buried the button)
+const _BRN_RECV_SRC = { central: ['รายงานส่วนกลาง', 'var(--navy-ink)'], order: ['ตามใบสั่งซื้อ', 'var(--good-ink)'],
+  branch: ['บันทึกเอง', 'var(--text-muted)'], import: ['นำเข้าจากไฟล์', 'var(--text-muted)'] };
+function _brnRecvCard(x) {
+  const src = _BRN_RECV_SRC[x.source] || [x.source || '', 'var(--text-muted)'];
+  const bad = x.lines.filter(l => l.qty_base == null).length;
+  const preview = x.lines.slice(0, 3).map(l => esc(l.name || l.code)).join(', ') + (x.lines.length > 3 ? ` และอีก ${x.lines.length - 3} รายการ` : '');
+  const rows = x.lines.map(l => `<tr style="border-top:1px solid var(--border)">
+      <td class="py-1 pr-2" style="color:var(--text-primary)">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
+      <td class="py-1 pr-2 text-right" style="white-space:nowrap;color:var(--text-primary)">${_bmcNum(l.qty)}</td>
+      <td class="py-1" style="color:var(--text-secondary)">${esc(l.unit || '')}${l.qty_base == null ? ' ' + _bmcChip('แปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</td></tr>`).join('');
+  const del = x.locked ? _bmcChip('อยู่ในรอบที่ปิดแล้ว', 'var(--text-muted)')
+    : `<button onclick="brnRecvDelete(${x.receipt_id})" style="border:1px solid var(--bad-ink);color:var(--bad-ink);background:transparent;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer;white-space:nowrap">ลบใบรับ</button>`;
+  return `<div style="border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:10px 12px;margin-bottom:8px;background:var(--bg-card, transparent)">
+    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1 1 200px;min-width:0">
+        <div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(x.receipt_date)} ${_bmcChip(src[0], src[1])}</div>
+        <div class="text-xs mt-0.5" style="color:var(--text-secondary)">${x.ref ? esc(x.ref) + ' · ' : ''}<b>${x.lines.length}</b> รายการ${x.entered_by && x.entered_by !== '-' ? ' · บันทึกโดย ' + esc(x.entered_by) : ''}
+          ${bad ? ' · ' + _bmcChip(bad + ' รายการแปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</div>
+        <div class="text-xs mt-1" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${preview}</div>
+      </div>
+      <div>${del}</div>
+    </div>
+    <details class="mt-1">
+      <summary class="text-xs" style="color:var(--accent);cursor:pointer">ดูรายการสินค้า (${x.lines.length})</summary>
+      <div style="max-height:320px;overflow:auto;margin-top:6px"><table class="w-full text-xs">
+        <thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">สินค้า</th><th class="pr-2 text-right">จำนวน</th><th>หน่วย</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </details></div>`;
+}
 async function brnLoadRecv() {
   const d = document.getElementById('brnRecvDate');
   if (d && !d.value) d.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -220,11 +251,8 @@ async function brnLoadRecv() {
   if (_brnNeedBranch('brnRecvHistory')) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/stock/receipts?${_brnQS()}`);
-    document.getElementById('brnRecvHistory').innerHTML = r.receipts.length ? r.receipts.map(x => `<div style="border-top:1px solid var(--border);padding:5px 0">
-        <b>${esc(x.receipt_date)}</b>${x.ref ? ' · ' + esc(x.ref) : ''} · ${x.lines.length} รายการ · ${esc(x.entered_by || '')}
-        ${x.locked ? _bmcChip('อยู่ในรอบที่ปิดแล้ว', 'var(--text-muted)') : `<button onclick="brnRecvDelete(${x.receipt_id})" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>`}
-        <div style="color:var(--text-muted)">${x.lines.map(l => `${esc(l.name || l.code)} ${_bmcNum(l.qty)} ${esc(l.unit || '')}`).join(' · ')}</div></div>`).join('')
-      : 'ยังไม่มีข้อมูล';
+    document.getElementById('brnRecvHistory').innerHTML = r.receipts.length ? r.receipts.map(_brnRecvCard).join('')
+      : '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีบันทึกรับสินค้า</div>';
   } catch (e) { document.getElementById('brnRecvHistory').textContent = String(e.message || e); }
 }
 function _brnPicked() {
