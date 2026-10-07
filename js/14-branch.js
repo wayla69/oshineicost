@@ -21,6 +21,7 @@ function _brnCanLayout() { return hasModule('bom.center') || hasModule('supply.o
 // an order may also be worked by Sales Support. Other roles see the pages read-only.
 function _brnCanCount() { return hasModule('branch.stock') || hasModule('bom.center'); }
 function _brnCanOrder() { return hasModule('branch.stock') || hasModule('bom.center') || hasModule('supply.ordering'); }
+function _brnCanVariance() { return hasModule('branch.stock') || hasModule('bom.center') || hasModule('supply.ordering'); }   // close step 5 (owner 2026-10-07)
 const _BRN_READONLY = 'บทบาทของคุณดูหน้านี้ได้ แต่บันทึกแทนสาขาไม่ได้';
 
 async function loadBranchStock() {
@@ -476,7 +477,7 @@ function brnRenderVariance() {
   }).join('') : '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
 }
 async function brnSaveReason(code) {
-  if (!_brnCanCount()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
+  if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   const reason = document.getElementById('brnRs_' + code).value;
   const note = document.getElementById('brnRn_' + code).value;
   if (!reason) { _bmcStatus('brnVarStatus', 'กรุณาเลือกเหตุผล', 'var(--amber-ink)'); return; }
@@ -488,7 +489,7 @@ async function brnSaveReason(code) {
   } catch (e) { _bmcStatus('brnVarStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function brnConfirmRecv(undo) {
-  if (!_brnCanCount()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
+  if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!undo && !await uiConfirm('ยืนยันว่าได้บันทึกรับสินค้าทุกรายการในรอบนี้ครบแล้ว?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/variance/confirm-receipts?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -61,6 +61,8 @@ MODULES: List[str] = [
     "customer.feedback",   # เสียงลูกค้า: รีวิว/ความรู้สึก/เมนูที่ถูกพูดถึง
     "supply.ordering",     # จัดซื้อ/วัตถุดิบ: แผนสั่ง, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ
     "bom.center",          # BoM Center: ทะเบียนวัตถุดิบ, หน่วย, ราคารายเดือน (แก้ไข/นำเข้า)
+    "bom.prices",          # BoM Center: ราคารายเดือนเท่านั้น (บัญชี — owner 2026-10-07)
+    "bom.recipes",         # BoM Center: สูตรตาม Tier และสูตรกึ่งสำเร็จเท่านั้น (ครัว — owner 2026-10-07)
     "bom.release",         # BoM Center: ปล่อยเวอร์ชันสูตร (analyst — owner 2026-10-06)
     "bom.audit",           # BoM Center: ตรวจ/รับทราบเวอร์ชันที่ปล่อยแล้ว และย้อนกลับ (management)
     "branch.stock",        # สาขาของฉัน: นับสต๊อก (Phase 2) — a branch account works on its own branch only
@@ -93,11 +95,12 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # INTENTIONAL: both feed the books / month-end reconciliation.
         "sales.overview", "profit.pnl", "cost.analysis", "ops.cash",
         "ops.discounts", "report.export",
-        "bom.center",          # the monthly price is accounting's actual purchase average (§10-1)
+        # no BoM Center module (owner 2026-10-07): the monthly price is the analyst's to import;
+        # accounting hands over the purchase file and reads the centre through cost.analysis
     },
     "innovation": {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
-        "bom.edit", "system.settings", "customer.feedback", "bom.center",
+        "bom.edit", "system.settings", "customer.feedback", "bom.recipes",   # the kitchen edits recipes only (owner 2026-10-07)
     },
     "salessupport": {
         # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
@@ -265,8 +268,14 @@ MODULE_RULES = [
     ("GET", "/api/analysis/persona",         {"menu.analysis", "customer.buffet"}),
     # ── writes (also write-token gated in main.py — defense in depth) ───────
     ("W",   "/api/cost",                     {"bom.edit"}),
-    ("GET", "/api/bom-center",               {"cost.analysis", "supply.ordering", "bom.center", "bom.edit"}),
-    ("W",   "/api/bom-center",               {"bom.center", "bom.edit"}),
+    ("GET", "/api/bom-center",               {"cost.analysis", "supply.ordering", "bom.center", "bom.edit", "bom.prices", "bom.recipes"}),
+    ("W",   "/api/bom-center",               {"bom.center"}),
+    # owner 2026-10-07: accounting keeps the monthly price (and the unit rules a price file needs),
+    # the kitchen keeps the recipes and sub-recipes; everything else in the centre is bom.center
+    ("W",   "/api/bom-center/prices",                  {"bom.center", "bom.prices"}),
+    ("W",   "/api/bom-center/units",                   {"bom.center", "bom.prices"}),
+    ("W",   "/api/bom-center/recipes",                 {"bom.center", "bom.recipes"}),
+    ("W",   "/api/bom-center/prep",                    {"bom.center", "bom.recipes"}),
     # release workflow (owner 2026-10-06): the analyst releases, management acknowledges / rolls back
     ("W",   "/api/bom-center/release-act/release",     {"bom.release"}),
     ("W",   "/api/bom-center/release-act/acknowledge", {"bom.audit"}),
@@ -283,7 +292,7 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/stock/count-import",      {"branch.stock", "bom.center", "supply.ordering"}),
     # S7 usage variance: the branch reads its own and gives reasons; the centre reads every branch
     ("GET", "/api/bom-center/variance",                {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
-    ("W",   "/api/bom-center/variance",                {"branch.stock", "bom.center"}),
+    ("W",   "/api/bom-center/variance",                {"branch.stock", "bom.center", "supply.ordering"}),   # owner 2026-10-07: Sales Support may confirm / reason for a branch
     ("GET", "/api/bom-center/variance/overview",       {"supply.ordering", "bom.center", "ops.report"}),
     # S8 the branch order: the branch suggests/confirms/submits/receives its own; the centre may too
     ("GET", "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
@@ -292,11 +301,11 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/hub",                     {"supply.ordering", "ops.report", "bom.center"}),
     ("W",   "/api/bom-center/hub",                     {"supply.ordering", "bom.center"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
-    ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit"}),
+    ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)
-    ("GET", "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit", "ops.report", "cost.analysis"}),
+    ("GET", "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit", "ops.report", "cost.analysis", "bom.prices", "bom.recipes"}),
     # หน้างาน: every supply role reads its own to-do list (a branch login gets its branch only)
-    ("GET", "/api/bom-center/todo",                    {"branch.stock", "supply.ordering", "bom.center", "bom.edit",
+    ("GET", "/api/bom-center/todo",                    {"branch.stock", "supply.ordering", "bom.center", "bom.edit", "bom.prices", "bom.recipes",
                                                         "bom.release", "bom.audit", "ops.report", "cost.analysis"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),

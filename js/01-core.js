@@ -238,10 +238,10 @@ const TAB_MODULE = {
   // จัดซื้อ/วัตถุดิบ: any ONE of the listed modules opens the tab (supply.ordering = Sales Support)
   ordering:['ops.report','supply.ordering'], ordersetup:['ops.report','supply.ordering'],
   ingpurchase:['cost.analysis','supply.ordering'],   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
-  bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit'],
+  bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','bom.prices','bom.recipes'],
   branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก
   orderhub:['supply.ordering','ops.report','bom.center'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
-  supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
+  supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis','bom.prices','bom.recipes'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -316,6 +316,7 @@ const MODULE_LABEL_TH = {
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
   'supply.ordering':'วัตถุดิบและใบสั่งซื้อ (ดำเนินการ)', 'customer.feedback':'เสียงลูกค้า',
   'bom.center':'BoM Center (ข้อมูลและสูตร)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
+  'bom.prices':'BoM Center (ราคารายเดือน)', 'bom.recipes':'BoM Center (สูตร)',
   'branch.stock':'สาขา: ตรวจนับและสั่งสินค้า',
 };
 const ROLE_MODULES_TH = {
@@ -323,8 +324,8 @@ const ROLE_MODULES_TH = {
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
   operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback'],
   analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center','bom.release'],
-  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export','bom.center'],
-  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.center'],
+  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
+  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
   branch: ['branch.stock'],
 };
@@ -599,7 +600,7 @@ function _renderPermMatrix(canEdit) {
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
     'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
     'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'BoM Center', 'bom.release':'ปล่อยสูตร', 'bom.audit':'รับทราบสูตร',
-    'branch.stock':'สาขา: ตรวจนับ',
+    'branch.stock':'สาขา: ตรวจนับ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;

@@ -124,7 +124,7 @@ def _month_items(con, month: str, today: date) -> list:
     out.append(_e("price_month", 100, "month", f"นำเข้าราคาซื้อจริงงวด {month}", "done" if n else "todo",
                   (f"ราคาซื้อจริง {n:,} รหัส" + (f" · นำเข้าล่าสุด {str(last[0])[:16].replace('T', ' ')} โดย {last[1]}" if last else ""))
                   if n else "จากรายงานจ่ายสินค้าภายในของฝ่ายบัญชี",
-                  owner=("bom.center",), owner_th="บัญชี / ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "price", "month": month}))
+                  owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ (ไฟล์ราคาจากบัญชี)", go={"tab": "bomcenter", "pane": "price", "month": month}))
     dr = con.execute("SELECT release_id, label, effective_month, status, price_month FROM bc_release WHERE kind='monthly'"
                      " AND status IN ('draft','review') ORDER BY release_id DESC LIMIT 1").fetchone()
     released_eff = _scalar(con, "SELECT release_id FROM bc_release WHERE kind='monthly' AND status='released'"
@@ -359,7 +359,7 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
     per_branch("deliveries", 4, f"บันทึกรับสินค้าประจำเดือน {month}", ("supply.ordering", "bom.center"), "Sales Support", deliveries)
     per_branch("begin_count", 5, f"ผลตรวจนับต้นงวด 1 {month}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("begin", m0))
     per_branch("end_count", 6, f"ผลตรวจนับปลายงวด 1 {_month_add(month, 1)}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("end", m1))
-    per_branch("receipts_confirm", 7, "ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง", ("branch.stock", "bom.center"), "สาขา", confirm)
+    per_branch("receipts_confirm", 7, "ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง", ("branch.stock", "supply.ordering", "bom.center"), "สาขา", confirm)
     conf_done = branches and steps[-1]["status"] == "done"
     steps.append(_e("monthly_summary", 8, "close", f"สรุปผลต่างรายเดือน {month}", "done" if conf_done else "todo",
                     "ดูผลต่างการใช้ของทุกสาขา และข้อ 13A ในรายงานผู้บริหาร" if conf_done else "รอขั้นตอนก่อนหน้าครบทุกสาขา",

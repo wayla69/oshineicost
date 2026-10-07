@@ -52,3 +52,52 @@ def test_receive_pending_opens_the_receive_pane_on_the_order(udon):
     it = {i["key"].split(":")[0]: i for i in TD.build(c, "2026-09", 1, None, today=date(2026, 10, 9))["items"]}
     go = it["receive_pending"]["go"]
     assert go["tab"] == "branchstock" and go["pane"] == "recv" and go["extra"]["order_id"] == oid
+
+# ── owner 2026-10-07: bom.center split — accounting keeps the price, the kitchen the recipes;
+#    Sales Support may do close step 5 for a branch ───────────────────────────────────────
+def test_accounting_reads_the_centre_and_the_analyst_keeps_the_price():
+    acc = auth.ROLE_MODULES["accounting"]
+    assert not ({"bom.prices", "bom.center", "bom.recipes"} & acc)          # owner 2026-10-07: the price is the analyst's
+    assert auth.path_allowed("GET", "/api/bom-center/prices", acc)              # reads through cost.analysis
+    assert auth.path_allowed("GET", "/api/bom-center/todo", acc)
+    for path in ("/api/bom-center/prices/import", "/api/bom-center/prices/manual", "/api/bom-center/units",
+                 "/api/bom-center/central/import", "/api/bom-center/hub/process/1", "/api/bom-center/ingredients/import"):
+        assert not auth.path_allowed("POST", path, acc), path
+    assert not auth.path_allowed("PUT", "/api/bom-center/recipes/B0001", acc)
+    ana = auth.ROLE_MODULES["analyst"]
+    assert auth.path_allowed("POST", "/api/bom-center/prices/import", ana)
+    assert auth.path_allowed("POST", "/api/bom-center/units", ana)
+    # bom.prices stays a module the owner may hand to someone later
+    assert auth.path_allowed("POST", "/api/bom-center/prices/import", {"bom.prices"})
+    assert not auth.path_allowed("POST", "/api/bom-center/recipes/import-flat", {"bom.prices"})
+
+
+def test_kitchen_writes_recipes_and_sub_recipes_only():
+    kit = auth.ROLE_MODULES["innovation"]
+    assert "bom.recipes" in kit and "bom.center" not in kit and "bom.edit" in kit
+    assert auth.path_allowed("PUT", "/api/bom-center/recipes/B0001", kit)
+    assert auth.path_allowed("POST", "/api/bom-center/recipes/import-cost-rw", kit)
+    assert auth.path_allowed("PUT", "/api/bom-center/prep/CK-001", kit)
+    assert auth.path_allowed("POST", "/api/bom-center/prep/import-semi", kit)
+    assert auth.path_allowed("GET", "/api/bom-center/prices", kit)
+    assert not auth.path_allowed("POST", "/api/bom-center/prices/import", kit)
+    assert not auth.path_allowed("POST", "/api/bom-center/release-act/release", kit)
+    assert not auth.path_allowed("POST", "/api/bom-center/release-act/new-draft", kit)
+    assert not auth.path_allowed("POST", "/api/bom-center/central/import", kit)
+    assert not auth.path_allowed("POST", "/api/bom-center/ingredients/import", kit)   # bom.edit alone is not the centre
+
+
+def test_analyst_and_management_keep_everything():
+    for role in ("analyst", "management"):
+        mods = auth.ROLE_MODULES[role]
+        for path in ("/api/bom-center/prices/import", "/api/bom-center/recipes/B0001", "/api/bom-center/prep/CK-001",
+                     "/api/bom-center/ingredients/import", "/api/bom-center/central/import", "/api/bom-center/variance/confirm-receipts"):
+            assert auth.path_allowed("POST", path, mods), (role, path)
+
+
+def test_sales_support_may_do_close_step_5():
+    ss = auth.ROLE_MODULES["salessupport"]
+    assert auth.path_allowed("POST", "/api/bom-center/variance/confirm-receipts", ss)
+    assert auth.path_allowed("POST", "/api/bom-center/variance/reason", ss)
+    assert not auth.path_allowed("POST", "/api/bom-center/stock/save", ss)            # a count stays the branch's
+    assert "supply.ordering" in auth.MODULES and "bom.prices" in auth.MODULES and "bom.recipes" in auth.MODULES
