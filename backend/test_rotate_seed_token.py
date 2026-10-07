@@ -66,7 +66,10 @@ def test_apply_writes_backup_then_verifies(tmp_path, monkeypatch, capsys):
         sent["value"] = cmd[-1].split("=", 1)[1]
         return subprocess.CompletedProcess(cmd, 0, "", "")
     monkeypatch.setattr(rot.subprocess, "run", fake_run)
-    monkeypatch.setattr(rot, "probe", lambda tok: 422 if tok in sent["value"] else 401)
+    # exact match against the list sent to Fly — a substring test flaked when an old token
+    # like "aaa" happened to occur inside a new random hex token (CI, 2026-10-07)
+    monkeypatch.setattr(rot, "probe",
+                        lambda tok: 422 if tok in {t.split(":", 1)[1] for t in sent["value"].split(",")} else 401)
     assert rot.main(["--keep", "admin", "AR", "--apply", "--backup", str(b)]) == 0
     new = rot.parse_backup(b.read_text(encoding="utf-8"))
     assert [lab for lab, _ in new] == ["admin", "AR"] and sent["value"] == rot.fly_value(new)
