@@ -47,6 +47,10 @@
         นำเข้าสูตรจากไฟล์ Cost-RW
         <input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcImportCostRw(this)">
       </label>
+      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนที่เวอร์ชันนี้มีผล (ระบบเสนอเดือนถัดไป)">มีผลเดือน
+        <input type="month" id="bmcCrwEff" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนของราคาซื้อจริงที่ใช้คิดต้นทุน (ระบบเสนองวดล่าสุดที่บัญชีปิดแล้ว)">ราคาเดือน
+        <input type="month" id="bmcCrwPm" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
       <button onclick="bmcExportRecipes()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดสูตรเป็น Excel (1 sheet ต่อ Tier)</button>
       <label style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
              title="ใช้ไฟล์ที่ดาวน์โหลดจากปุ่มก่อนหน้า แก้ไขใน Excel แล้วนำเข้ากลับ สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร">
@@ -203,7 +207,9 @@
           อัปโหลดไฟล์บัญชี / template
           <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcImportPrices(this)">
         </label>
-        <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานจ่ายสินค้าที่อัปโหลดไว้</button>
+        <span class="text-[11px]" style="color:var(--text-muted)">หรือรายงานที่อัปโหลดไว้ในระบบ:</span>
+        <select id="bmcReqMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)" title="เดือนของรายงานจ่ายสินค้าภายในที่อัปโหลดไว้ในระบบ"></select>
+        <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานเดือนนี้</button>
         <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลด template</button>
         <button onclick="bmcCarry()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
                 title="สำหรับเดือนที่ยังไม่มีไฟล์ ระบบใช้ราคาล่าสุดของแต่ละวัตถุดิบ พร้อมแสดงอายุของราคา">ยกราคาล่าสุดมาใช้</button>
