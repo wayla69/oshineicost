@@ -24,6 +24,7 @@ COPY js/        /app/js/
 COPY tabs/      /app/tabs/
 COPY vendor/    /app/vendor/
 COPY docs/      /app/docs/
+COPY pwa/       /app/pwa/
 COPY start.sh   /app/start.sh
 RUN chmod +x /app/start.sh
 
