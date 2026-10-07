@@ -25,6 +25,8 @@
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <label class="flex items-center gap-1" style="padding-bottom:6px;color:var(--text-secondary)"><input type="checkbox" id="ohbSplit"> แยก sheet ตามผู้จำหน่าย</label>
+        <span class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)">สรุปและไฟล์ใช้สถานะที่เลือกด้านบน</span>
       </div>
     </div>
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
