@@ -238,8 +238,12 @@ def _abc(values: dict) -> dict:
 
 
 def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, season: str = "auto",
-            as_of: date = None, stock: dict = None) -> dict:
+            as_of: date = None, stock: dict = None, uplift_pct: float = 0.0) -> dict:
     """The suggestion for one branch, one round, one order day (nothing saved).
+
+    `uplift_pct` (PR-19): the branch's own expectation for the cover period — +20 scales
+    the forecast of every item by 1.2 before safety and stock; every row also carries
+    the unscaled `forecast_base` / `need_base` so the page can show "ปกติ".
 
     `stock` (orders.stock_position, Phase 2): on hand at the last count, net of what
     arrived and what the sales used since, plus what is on order — deducted per item
@@ -260,6 +264,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         except Exception:
             pass
     factor = float(sf.get("factor") or 1.0)
+    up = 1.0 + float(uplift_pct or 0.0) / 100.0            # the branch's buffer on top of the season factor
     master = {r[0]: r[1:] for r in con.execute(
         "SELECT code, name_th, base_unit, recv_unit, qty_per_recv, moq, shelf_days, kind, monitored,"
         " sourcing_default FROM bc_ingredient")}
@@ -287,8 +292,9 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         m = _daily_model(s, days, as_of)
         if m["overall"] <= 0:
             continue
-        per_day = [m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in cover]
-        fc = sum(per_day)
+        per_day_base = [m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in cover]
+        fc_base = sum(per_day_base)
+        fc = fc_base * up
         name, base, recv, per, moq, shelf, kind, mon, src = master.get(code, (None,) * 9)
         k = klass.get(code, "C")
         days_n = len(cover)
@@ -296,6 +302,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             days_n = min(days_n, int(shelf))
         safety = Z[k] * m["sigma"] * math.sqrt(max(days_n, 1))
         need = fc + safety
+        need_base = fc_base + safety
         oh = (stock or {}).get("qty", {}).get(code)
         onord = (stock or {}).get("on_order", {}).get(code, 0.0)
         pre = projected = None
@@ -303,8 +310,10 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             pre = sum(m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in pre_days)
             projected = oh - pre + onord
             need = max(0.0, need - max(projected, 0.0))
+            need_base = max(0.0, need_base - max(projected, 0.0))
         elif onord:
             need = max(0.0, need - onord)
+            need_base = max(0.0, need_base - onord)
         units = to_order_units(need, per, moq or 1) if per else None
         p = price_for(con, code, month)
         ppb = p[0] if p else None
@@ -312,6 +321,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "monitored": bool(mon),
                      "sourcing": ("central" if code in cmap else "local") if cmap else (src or "central"),
                      "per_day": round(fc / len(cover), 3) if cover else 0, "forecast": round(fc, 2),
+                     "forecast_base": round(fc_base, 2), "need_base": round(need_base, 2),
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
                      "on_hand": None if oh is None else round(oh, 2), "on_order": round(onord, 2),
                      "pre_cover_use": None if pre is None else round(pre, 2),
@@ -327,10 +337,54 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             "order_weekday": WD_TH[_wd(order_day)], "delivery": dlv.isoformat(),
             "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "cover_days": len(cover),
             "calendar_filled": cal["filled"], "history_from": start.isoformat(), "history_to": as_of.isoformat(),
-            "trading_days": len(days), "season": sf, "stats": stats,
+            "trading_days": len(days), "season": sf, "stats": stats, "uplift_pct": round(float(uplift_pct or 0.0), 2),
             "on_hand_included": bool((stock or {}).get("basis")),
             "rows": rows, "value_total": round(sum(r["value"] or 0 for r in rows), 2),
             "salmon_codes": sorted(salmon)}
+
+
+def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6) -> dict:
+    """PR-19: the customers the cover period normally brings, day by day — the weekday
+    mean of the last `weeks` weeks (the forecast's own baseline rule) and the same
+    dates a year earlier — so a branch can turn "we expect N customers" into a buffer %."""
+    order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
+    cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
+    out = {"branch_id": branch_id, "round": rnd, "order_day": order_day.isoformat(), "delivery": dlv.isoformat(),
+           "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "available": False, "days": [],
+           "baseline_total": 0, "last_year_total": None}
+    if not con.execute("SELECT 1 FROM sqlite_master WHERE name='sales_transaction'").fetchone():
+        return out
+    last = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE branch_id=?", (branch_id,)).fetchone()[0]
+    if not last:
+        return out
+    as_of = min(date.fromisoformat(last), order_day - timedelta(days=1))
+    start = as_of - timedelta(days=7 * weeks - 1)
+    by_wd, n_wd = defaultdict(float), defaultdict(int)
+    for d, pax in con.execute("SELECT date(sold_at), SUM(COALESCE(customer_count, 0)) FROM sales_transaction"
+                              " WHERE branch_id=? AND date(sold_at) BETWEEN ? AND ? GROUP BY date(sold_at)",
+                              (branch_id, start.isoformat(), as_of.isoformat())):
+        wd = _wd(date.fromisoformat(d))
+        by_wd[wd] += float(pax or 0)
+        n_wd[wd] += 1
+    if not n_wd:
+        return out
+    overall = sum(by_wd.values()) / max(sum(n_wd.values()), 1)
+    ly = {d: float(p or 0) for d, p in con.execute(
+        "SELECT date(sold_at), SUM(COALESCE(customer_count, 0)) FROM sales_transaction WHERE branch_id=?"
+        " AND date(sold_at) BETWEEN date(?, '-1 year') AND date(?, '-1 year') GROUP BY date(sold_at)",
+        (branch_id, c_from.isoformat(), c_to.isoformat()))}
+    days = []
+    for d in cover:
+        wd = _wd(d)
+        base = by_wd[wd] / n_wd[wd] if n_wd.get(wd) else overall
+        lyd = con.execute("SELECT date(?, '-1 year')", (d.isoformat(),)).fetchone()[0]
+        days.append({"date": d.isoformat(), "weekday": WD_TH[wd], "baseline_pax": round(base),
+                     "last_year_pax": round(ly[lyd]) if lyd in ly else None})
+    out.update({"available": True, "days": days, "history_from": start.isoformat(), "history_to": as_of.isoformat(),
+                "baseline_total": sum(x["baseline_pax"] for x in days),
+                "last_year_total": (sum(x["last_year_pax"] for x in days if x["last_year_pax"] is not None)
+                                    if any(x["last_year_pax"] is not None for x in days) else None)})
+    return out
 
 
 def save_run(con, out: dict, who: str, params: dict) -> int:

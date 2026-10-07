@@ -493,6 +493,9 @@ let _brnPlan = null;          // /api/bom-center/order/plan
 let _brnOrdQty = {};          // code -> confirmed units (string)
 let _brnOrdReason = {};       // code -> {reason_code, note}
 let _brnRecvMode = false;     // receiving an order that arrived
+let _brnBuf = { pct: 0, reason: '', note: '' };   // PR-19: the branch's expectation for the cover period
+let _brnOrdEdited = new Set();                    // codes the person typed in this session (kept when the buffer changes)
+let _brnCovers = null;                            // /api/bom-center/order/covers
 const _BRN_ROUNDS = [['1', 'รอบ 1 (อ./พ.)'], ['2', 'รอบ 2 (ศ./ส.)'], ['salmon', 'แซลมอนสด']];
 
 function _brnRoundChips() {
@@ -501,24 +504,36 @@ function _brnRoundChips() {
     return `<button onclick="brnSetRound('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t}</button>`;
   }).join('');
 }
-async function brnLoadOrder() {
+function _brnBufQS() { return _brnBuf.pct ? 'buffer_pct=' + encodeURIComponent(_brnBuf.pct) : ''; }
+function _brnBufReasonTh(code) { return ((((_brnPlan || {}).buffer || {}).reasons || []).find(r => r.code === code) || {}).label || code || ''; }
+async function brnLoadOrder(opts) {
+  opts = opts || {};
   _brnRoundChips();
   if (_brnNeedBranch('brnOrdList')) { document.getElementById('brnOrdHead').innerHTML = ''; return; }
   document.getElementById('brnOrdList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณยอดแนะนำ…</span>';
   _bmcStatus('brnOrdStatus', '');
   try {
     // no round chosen yet: the server opens the one whose order day comes first
-    const qs = [_brnRound ? 'round=' + _brnRound : '', _brnQS()].filter(Boolean).join('&');
+    const qs = [_brnRound ? 'round=' + _brnRound : '', _brnQS(), opts.withBuffer ? _brnBufQS() : ''].filter(Boolean).join('&');
     _brnPlan = await _bmcJson(`${API}/api/bom-center/order/plan${qs ? '?' + qs : ''}`);
     _brnRound = _brnPlan.round || _brnRound || '1';
     _brnRoundChips();
-    _brnOrdQty = {}; _brnOrdReason = {}; _brnRecvMode = false;
+    const kept = opts.keepEdits ? { qty: _brnOrdQty, reason: _brnOrdReason, edited: _brnOrdEdited } : null;
+    _brnOrdQty = {}; _brnOrdReason = {}; _brnRecvMode = false; _brnOrdEdited = new Set();
     const o = _brnPlan.order;
     _brnPlan.rows.forEach(r => { _brnOrdQty[r.code] = String(r.order_units); });
     if (o) o.lines.forEach(l => {
       _brnOrdQty[l.code] = l.confirmed_units == null ? '' : String(l.confirmed_units);
       if (l.reason_code) _brnOrdReason[l.code] = { reason_code: l.reason_code, note: l.note || '' };
     });
+    if (kept) {                                  // a new buffer: untouched lines take the new suggestion, typed ones stay
+      _brnPlan.rows.forEach(r => { if (!kept.edited.has(r.code)) _brnOrdQty[r.code] = String(r.order_units); });
+      kept.edited.forEach(c => { if (c in kept.qty) _brnOrdQty[c] = kept.qty[c]; if (kept.reason[c]) _brnOrdReason[c] = kept.reason[c]; });
+      _brnOrdEdited = kept.edited;
+    }
+    const pb = _brnPlan.buffer || {};
+    _brnBuf = { pct: Number(pb.pct) || 0, reason: o && o.buffer_reason ? o.buffer_reason : (opts.withBuffer ? _brnBuf.reason : ''),
+                note: o && o.buffer_note ? o.buffer_note : (opts.withBuffer ? _brnBuf.note : '') };
     brnRenderOrder();
     brnLoadOrderHistory();
   } catch (e) { document.getElementById('brnOrdList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -564,6 +579,8 @@ function brnRenderOrder() {
   if (_brnOrdPage === 'local' && p.central_list) { _brnRenderLocal(p); return; }
   const o = p.order;
   const editable = !o || ['suggested', 'confirmed'].includes(o.status);
+  _brnRenderBuffer(p, editable);
+  const up = 1 + ((p.buffer || {}).pct || 0) / 100;
   const stockLine = p.stock.deducted
     ? `${_bmcChip('หักยอดคงเหลือแล้ว', 'var(--good-ink)')} จากผลตรวจนับวันที่ ${esc(p.stock.basis.date)} (บวกรับเข้า หักการใช้ตามยอดขาย)`
     : `${_bmcChip('ไม่หักยอดคงเหลือ', 'var(--amber-ink)')} ยังไม่มีผลตรวจนับ ยอดแนะนำการสั่งจึงเท่ากับยอดพยากรณ์ <a href="#" onclick="brnSetSub('count');return false" style="color:var(--accent)">ตรวจนับก่อนสั่ง →</a>`;
@@ -593,7 +610,8 @@ function brnRenderOrder() {
         style="flex:1 1 120px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></div>`;
   };
   const html = rows.map(r => {
-    const sugg = line[r.code] ? line[r.code].suggested_units : r.order_units;
+    const base = line[r.code] ? line[r.code].suggested_units : (r.order_units_base ?? r.order_units);
+    const sugg = line[r.code] ? (up === 1 ? base : Math.round(base * up)) : r.order_units;
     const v = _brnOrdQty[r.code] ?? '';
     const dev = _brnOrdNeedsReason(sugg, v);
     const detail = `พยากรณ์ ${_bmcNum(r.forecast, 0)} + สำรอง ${_bmcNum(r.safety, 0)}` +
@@ -607,8 +625,8 @@ function brnRenderOrder() {
           ${r.monitored ? _bmcChip('บังคับ', 'var(--amber-ink)') : ''} ${(r.via || []).length ? _bmcChip('ใช้ใน ' + r.via.slice(0, 2).join(', '), 'var(--text-muted)') : ''}</div>
           <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} · ${detail}</div></div>
         <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
-          <span class="text-xs" style="color:var(--text-muted)">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b></span>
-          <input inputmode="decimal" value="${esc(v)}" ${editable ? '' : 'disabled'} oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;brnRenderOrderDeferred()"
+          <span class="text-xs" style="color:var(--text-muted)">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b>${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}</span>
+          <input inputmode="decimal" value="${esc(v)}" ${editable ? '' : 'disabled'} oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"
             style="width:68px;height:36px;text-align:center;font-size:16px;border:1px solid ${dev ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)">
           ${recvCell}
           <span class="text-xs" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(_brnUnitLabel(r))}</span></div></div>
@@ -622,6 +640,90 @@ function brnRenderOrder() {
   else if (o.status === 'processed') acts = _brnRecvMode ? btn('บันทึกรับสินค้า', 'brnOrderReceive()', true) : btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true);
   document.getElementById('brnOrdActions').innerHTML = acts;
 }
+// ── PR-19: the buffer card — "คาดว่ายอดขายรอบนี้จะต่างจากปกติหรือไม่" ─────────────
+function _brnRenderBuffer(p, editable) {
+  const box = document.getElementById('brnOrdBuffer');
+  if (!box) return;
+  const b = p.buffer || { pct: 0, reasons: [] };
+  const cur = _brnBuf;
+  const sign = v => (Number(v) > 0 ? '+' : '') + _bmcNum(v, 0) + '%';
+  if (!editable) {
+    box.innerHTML = cur.pct ? `<div class="text-xs" style="color:var(--text-secondary)">สาขาปรับยอดพยากรณ์ <b>${sign(cur.pct)}</b> · ${esc(_brnBufReasonTh(cur.reason))}${cur.note ? ' · ' + esc(cur.note) : ''}</div>` : '';
+    return;
+  }
+  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)';
+  const season = p.season && Number(p.season.factor) !== 1 && p.season.factor ? ` และปรับตามปฏิทิน/ปีก่อนแล้ว (×${_bmcNum(p.season.factor, 2)})` : '';
+  box.innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">คาดว่ายอดขายรอบนี้จะต่างจากปกติหรือไม่</div>
+    <div class="text-[11px] mb-1" style="color:var(--text-muted)">ยอดแนะนำมาจากยอดขาย 6 สัปดาห์ล่าสุด${season} · หากมีงาน โปรโมชัน หรือลูกค้าจอง ให้ระบุ % ที่คาดว่าจะเพิ่มหรือลด ระบบคำนวณยอดแนะนำใหม่ทุกรายการ และส่วนที่เพิ่มตามนี้ไม่ต้องให้เหตุผลรายบรรทัด</div>
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" style="width:72px;height:34px;text-align:center;font-size:15px;${inp}"><span style="color:var(--text-secondary)">%</span>
+      <select id="brnBufReason" style="${inp}"><option value="">— เหตุผล —</option>${(b.reasons || []).map(r => `<option value="${r.code}" ${r.code === cur.reason ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
+      <input id="brnBufNote" value="${esc(cur.note || '')}" placeholder="หมายเหตุ" style="flex:1 1 120px;${inp}">
+      <button onclick="brnApplyBuffer()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer">ใช้กับยอดแนะนำ</button>
+      <button onclick="brnToggleCovers()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">คำนวณจากจำนวนลูกค้า</button>
+    </div>
+    ${cur.pct ? `<div class="text-[11px] mt-1" style="color:var(--navy-ink)">ใช้อยู่: ${sign(cur.pct)} · ${esc(_brnBufReasonTh(cur.reason))}</div>` : ''}
+    <div id="brnCovers" class="mt-2" style="display:none"></div>`;
+}
+async function brnApplyBuffer() {
+  const pct = Number(document.getElementById('brnBufPct').value || 0);
+  const reason = document.getElementById('brnBufReason').value;
+  const note = document.getElementById('brnBufNote').value.trim();
+  const b = (_brnPlan && _brnPlan.buffer) || {};
+  if (pct < (b.min ?? -50) || pct > (b.max ?? 100)) { _bmcStatus('brnOrdStatus', `% ต้องอยู่ระหว่าง ${b.min ?? -50} ถึง +${b.max ?? 100}`, 'var(--bad-ink)'); return; }
+  if (pct && !reason) { _bmcStatus('brnOrdStatus', 'กรุณาเลือกเหตุผลที่คาดว่ายอดขายจะต่างจากปกติ', 'var(--bad-ink)'); return; }
+  if (pct && reason === 'other' && !note) { _bmcStatus('brnOrdStatus', 'เหตุผล “อื่น ๆ” ต้องระบุหมายเหตุ', 'var(--bad-ink)'); return; }
+  _brnBuf = { pct, reason: pct ? reason : '', note: pct ? note : '' };
+  await brnLoadOrder({ withBuffer: true, keepEdits: true });
+  _bmcStatus('brnOrdStatus', pct ? `ปรับยอดแนะนำตามที่คาด ${pct > 0 ? '+' : ''}${_bmcNum(pct, 0)}% แล้ว (${_brnBufReasonTh(reason)})` : 'กลับมาใช้ยอดพยากรณ์ปกติแล้ว', 'var(--good-ink)');
+  _brnOrdTouched();                              // the draft keeps the buffer
+}
+async function brnToggleCovers() {
+  const box = document.getElementById('brnCovers');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังดึงจำนวนลูกค้า…</span>';
+  try {
+    const qs = [_brnRound ? 'round=' + _brnRound : '', _brnPlan ? 'order_day=' + _brnPlan.order_day : '', _brnQS()].filter(Boolean).join('&');
+    _brnCovers = await _bmcJson(`${API}/api/bom-center/order/covers${qs ? '?' + qs : ''}`);
+    brnRenderCovers();
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnRenderCovers() {
+  const c = _brnCovers, box = document.getElementById('brnCovers');
+  if (!c || !box) return;
+  if (!c.available) { box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูลจำนวนลูกค้าของสาขานี้ จึงคำนวณให้ไม่ได้ กรุณาระบุ % เอง</span>'; return; }
+  const inp = 'width:64px;height:30px;text-align:center;font-size:13px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
+  box.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ลูกค้าต่อวันตามปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ ${esc(c.history_from)} ถึง ${esc(c.history_to)} · กรอกจำนวนที่คาดในช่องขวา ระบบแปลงเป็น % ให้</div>
+    <table class="text-xs w-full"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">วันที่</th><th class="pr-2 text-right">ปกติ (คน)</th><th class="pr-2 text-right">ปีก่อน</th><th class="text-right">คาดว่า (คน)</th></tr></thead>
+    <tbody>${c.days.map((d, i) => `<tr style="border-top:1px solid var(--border-soft)"><td class="pr-2 py-1">${esc(d.weekday)} ${esc(d.date.slice(5))}</td><td class="pr-2 text-right">${_bmcNum(d.baseline_pax, 0)}</td>
+      <td class="pr-2 text-right" style="color:var(--text-muted)">${d.last_year_pax == null ? '–' : _bmcNum(d.last_year_pax, 0)}</td>
+      <td class="text-right"><input id="brnCov_${i}" inputmode="numeric" value="${d.baseline_pax}" oninput="brnCoversCalc()" style="${inp}"></td></tr>`).join('')}</tbody>
+    <tfoot><tr style="border-top:1px solid var(--border)"><td class="pr-2 py-1 font-semibold">รวม</td><td class="pr-2 text-right font-semibold">${_bmcNum(c.baseline_total, 0)}</td>
+      <td class="pr-2 text-right" style="color:var(--text-muted)">${c.last_year_total == null ? '–' : _bmcNum(c.last_year_total, 0)}</td><td class="text-right font-semibold" id="brnCovSum">${_bmcNum(c.baseline_total, 0)}</td></tr></tfoot></table>
+    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs"><span id="brnCovPct" style="color:var(--text-primary)">= เท่ากับปกติ (0%)</span>
+      <button onclick="brnCoversUse()" style="border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:var(--r-sm);padding:5px 10px;font-size:12.5px;cursor:pointer">ใช้ค่านี้</button></div>`;
+}
+function _brnCoversPct() {
+  const c = _brnCovers;
+  if (!c || !c.available || !c.baseline_total) return 0;
+  const sum = c.days.reduce((a, d, i) => a + (Number((document.getElementById('brnCov_' + i) || {}).value) || 0), 0);
+  const el = document.getElementById('brnCovSum'); if (el) el.textContent = _bmcNum(sum, 0);
+  return Math.round((sum / c.baseline_total - 1) * 100);
+}
+function brnCoversCalc() {
+  const pct = _brnCoversPct();
+  const el = document.getElementById('brnCovPct');
+  if (el) el.textContent = pct ? `= ${pct > 0 ? 'เพิ่ม' : 'ลด'} ${Math.abs(pct)}% จากปกติ` : '= เท่ากับปกติ (0%)';
+}
+function brnCoversUse() {
+  const pct = _brnCoversPct();
+  const el = document.getElementById('brnBufPct');
+  if (el) el.value = Math.max(-50, Math.min(100, pct));
+  _bmcStatus('brnOrdStatus', `ใส่ ${pct > 0 ? '+' : ''}${pct}% ให้แล้ว เลือกเหตุผลแล้วกด “ใช้กับยอดแนะนำ”`, 'var(--text-muted)');
+}
+
 let _brnOrdTimer = null, _brnOrdAuto = null;
 function brnRenderOrderDeferred() { clearTimeout(_brnOrdTimer); _brnOrdTimer = setTimeout(brnRenderOrder, 700); _brnOrdTouched(); }
 // the draft saves itself 2.5 s after the last change (as the count sheet does), so nothing typed is lost
@@ -640,7 +742,8 @@ async function brnOrderSave(submit, quiet) {
   if (submit && !await uiConfirm('ยืนยันส่งใบสั่งซื้อให้ส่วนกลาง (Sales Support)?\nแก้ไขได้จนกว่าส่วนกลางจะเริ่มดำเนินการ')) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/save${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ round: _brnRound, order_day: _brnPlan.order_day, lines: _brnOrdLines(), submit }) });
+      body: JSON.stringify({ round: _brnRound, order_day: _brnPlan.order_day, lines: _brnOrdLines(), submit,
+                             buffer: _brnBuf.pct ? { pct: _brnBuf.pct, reason: _brnBuf.reason, note: _brnBuf.note } : { pct: 0 } }) });
     if (quiet) {                                 // the autosave: no reload, the page stays where the person is
       const created = !_brnPlan.order;
       if (created) _brnPlan.order = { order_id: r.order_id, status: 'confirmed', status_th: 'ร่าง (ยังไม่ส่ง)', lines: [] };

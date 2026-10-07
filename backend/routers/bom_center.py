@@ -1521,15 +1521,34 @@ def _day_or_today(d: Optional[str]) -> date:
 
 @router.get("/api/bom-center/order/plan")
 def bc_order_plan(request: Request, round: Optional[str] = Query(None), order_day: Optional[str] = Query(None),
-                  branch_id: Optional[int] = Query(None)):
+                  branch_id: Optional[int] = Query(None), buffer_pct: Optional[float] = Query(None)):
     """This round's suggestion net of stock + the cycle's order if one exists. Without a
-    round, the one whose order day comes first — the branch page opens on it."""
+    round, the one whose order day comes first — the branch page opens on it.
+    `buffer_pct` (PR-19) applies the branch's expectation; omitted = the order's own."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         day = _day_or_today(order_day)
         rnd = _round_or_400(round) if round else _or.next_round(con, bid, day)
-        out = _or.plan(con, bid, rnd, day)
+        try:
+            out = _or.plan(con, bid, rnd, day, buffer_pct=buffer_pct)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        out["round"] = rnd
+        return out
+
+
+@router.get("/api/bom-center/order/covers")
+def bc_order_covers(request: Request, round: Optional[str] = Query(None), order_day: Optional[str] = Query(None),
+                    branch_id: Optional[int] = Query(None)):
+    """PR-19: the customers the cover period normally brings, day by day (the forecast's
+    weekday baseline and last year's same dates) — the helper behind "คำนวณจากจำนวนลูกค้า"."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        day = _day_or_today(order_day)
+        rnd = _round_or_400(round) if round else _or.next_round(con, bid, day)
+        out = _fc.covers(con, bid, rnd, day)
         out["round"] = rnd
         return out
 
@@ -1547,6 +1566,7 @@ class OrderBody(BaseModel):
     lines: List[OrderLine] = []
     submit: bool = False
     note: Optional[str] = None
+    buffer: Optional[dict] = None          # PR-19: {pct, reason, note}; absent = keep the order's own
 
 
 @router.post("/api/bom-center/order/save", dependencies=[Depends(require_write_token)])
@@ -1555,9 +1575,13 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         rnd = _round_or_400(body.round)
-        p = _or.plan(con, bid, rnd, _day_or_today(body.order_day))
+        try:
+            p = _or.plan(con, bid, rnd, _day_or_today(body.order_day),
+                         buffer_pct=(body.buffer or {}).get("pct") if body.buffer is not None else None)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         out = _write(con, lambda: _or.save(con, bid, rnd, p["order_day"], p, [ln.dict() for ln in body.lines],
-                                           _who(request), submit=body.submit, note=body.note))
+                                           _who(request), submit=body.submit, note=body.note, buffer=body.buffer))
     return out
 
 
