@@ -180,12 +180,22 @@ async function unlockWrites() {
   if (st.unlocked) notifySuccess('ปลดล็อกการบันทึกแล้ว เบราว์เซอร์นี้บันทึกข้อมูลได้');
   else notifyError('token ไม่ถูกต้อง กรุณาตรวจสอบแล้วกรอกใหม่');
 }
+// The same state as a lock icon beside the user name — the branch phone hides the
+// chip bar (#supplyNav takes its place), so the lock lives up in the top bar there.
+function _renderLockIcon(st, on) {
+  const top = document.getElementById('supplyLockTop');
+  if (!top) return;
+  if (st.gated === false) { top.innerHTML = ''; return; }
+  const label = on ? 'ปลดล็อกการบันทึกแล้ว' : 'ยังไม่ปลดล็อกการบันทึก';
+  top.innerHTML = `<button onclick="unlockWrites()" aria-label="${label}" title="${label}${on ? '' : ' · กดเพื่อกรอก Owner Write-Token ครั้งเดียวต่อเครื่อง'}" style="color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/>${on ? '<path d="M8 11V7a4 4 0 017.6-1.8"/>' : '<path d="M8 11V7a4 4 0 018 0v4"/>'}</svg></button>`;
+}
 function _renderLockChip() {
+  const st = window.writeToken || {};
+  const on = st.unlocked === true;
+  _renderLockIcon(st, on);
   const el = document.getElementById('supplyLock');
   if (!el) return;
-  const st = window.writeToken || {};
   if (st.gated === false) { el.innerHTML = ''; return; }
-  const on = st.unlocked === true;
   el.innerHTML = `<button onclick="unlockWrites()" title="${on
       ? 'เบราว์เซอร์นี้บันทึกข้อมูลได้แล้ว · กดเพื่อเปลี่ยน token'
       : 'ดูข้อมูลและตรวจสอบก่อนบันทึกได้ทุกหน้า การบันทึกจริงต้องกรอก Owner Write-Token ครั้งเดียวต่อเบราว์เซอร์ · กดเพื่อกรอก'}"
@@ -456,6 +466,9 @@ function renderUserChip() {
 function applyPermissions() {
   renderUserChip();
   if (!window.AUTH || !window.AUTH.enabled) return;   // auth off → show everything
+  // body.role-<role>: CSS trims the chrome a role never uses (the branch login's top bar)
+  [...document.body.classList].filter(c => c.startsWith('role-')).forEach(c => document.body.classList.remove(c));
+  document.body.classList.add('role-' + (window.AUTH.role || 'none'));
   // 1) Hide disallowed nav items (don't force-show ones intentionally display:none)
   Object.keys(TAB_MODULE).forEach(tab => {
     const el = document.getElementById('nav-' + tab);

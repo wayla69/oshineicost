@@ -369,6 +369,13 @@ def verify_password(password: str, pw_hash: str, pw_salt: str) -> bool:
 # ---------------------------------------------------------------------------
 SESSION_COOKIE = "oshinei_session"
 SESSION_TTL = 12 * 3600   # 12 hours
+SESSION_TTL_BRANCH = 30 * 24 * 3600   # the branch phone stays signed in for a month (owner 2026-10-07)
+
+
+def session_ttl(role: Optional[str]) -> int:
+    """How long a login lasts. The branch login lives on the shop's phone and must
+    not ask for the password before every count; every other role keeps 12 h."""
+    return SESSION_TTL_BRANCH if role == "branch" else SESSION_TTL
 
 
 class AuthMisconfigured(RuntimeError):

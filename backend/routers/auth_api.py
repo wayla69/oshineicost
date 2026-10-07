@@ -42,10 +42,11 @@ class _UserUpdate(BaseModel):
     branch: Optional[str] = None          # "" clears the scope
 
 
-def _set_session_cookie(response: Response, request: Request, token: str):
+def _set_session_cookie(response: Response, request: Request, token: str,
+                        max_age: int = _auth.SESSION_TTL):
     response.set_cookie(
         _auth.SESSION_COOKIE, token,
-        max_age=_auth.SESSION_TTL, httponly=True, samesite="lax",
+        max_age=max_age, httponly=True, samesite="lax",
         secure=(request.url.scheme == "https"), path="/",
     )
 
@@ -112,8 +113,9 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
         _auth.clear_login_failures(ip, body.username)
         _log_auth_event(con, "login", row["username"], ip)
     branch = row["branch"] if "branch" in row.keys() else None
-    token = _auth.make_token(row["id"], row["username"], row["role"], branch=branch)
-    _set_session_cookie(response, request, token)
+    ttl = _auth.session_ttl(row["role"])                      # the branch phone: 30 days
+    token = _auth.make_token(row["id"], row["username"], row["role"], ttl=ttl, branch=branch)
+    _set_session_cookie(response, request, token, max_age=ttl)
     return {"username": row["username"], "role": row["role"], "branch": branch,
             "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}

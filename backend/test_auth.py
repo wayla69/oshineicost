@@ -453,3 +453,19 @@ def test_saved_matrix_from_before_a_new_role_or_module_still_grants_defaults(app
     finally:
         con.execute("DELETE FROM app_settings WHERE key='role_permissions'"); con.commit()
         auth.refresh_perm_cache(con); con.close()
+
+
+# ── the branch phone stays signed in for a month; everyone else 12 h ──────────
+def test_branch_login_lives_30_days(client, app_db, auth_on):
+    import time
+    mg = _fresh(app_db); _login(mg, "management1")
+    r = mg.post("/api/auth/users", json={"username": "brn_ttl", "password": "Temp@12345", "role": "branch", "branch": "BranchA"})
+    assert r.status_code == 200, r.text
+    b = _fresh(app_db)
+    rb = _login(b, "brn_ttl", "Temp@12345")
+    assert rb.status_code == 200, rb.text
+    exp = auth.parse_token(b.cookies.get(auth.SESSION_COOKIE))["exp"]
+    assert abs(exp - (time.time() + auth.SESSION_TTL_BRANCH)) < 120
+    assert f"max-age={auth.SESSION_TTL_BRANCH}" in rb.headers.get("set-cookie", "").lower()
+    exp_m = auth.parse_token(mg.cookies.get(auth.SESSION_COOKIE))["exp"]
+    assert abs(exp_m - (time.time() + auth.SESSION_TTL)) < 120

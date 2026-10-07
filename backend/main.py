@@ -67,6 +67,7 @@ import os as _os_db
 if _os_db.environ.get("OSHINEI_NO_SWAP") != "1":
     _maybe_swap_incoming_db()
 STATIC  = HERE.parent / "vendor"
+PWA     = HERE.parent / "pwa"          # web app manifest + icons (a phone keeps the app on its home screen)
 DOCS    = HERE.parent / "docs"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')
 
@@ -754,6 +755,8 @@ def usage_task_health(request: Request):
 # Serve vendor JS/CSS
 if STATIC.exists():
     app.mount("/vendor", StaticFiles(directory=str(STATIC)), name="vendor")
+if PWA.exists():
+    app.mount("/pwa", StaticFiles(directory=str(PWA)), name="pwa")
 
 # Serve generated reports / docs (HTML) so they open in-browser
 if DOCS.exists():
