@@ -252,6 +252,38 @@ input[type=month],select,input[type=text],.mm-note{font-family:inherit;font-size
 .rpt-badge{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;
   display:inline-block;margin-top:4px;background:var(--ok-bg);color:var(--ok)}
 .rpt-badge.ext{background:var(--line-soft);color:var(--sub)}
+/* reports hub — four packs by reader (UX phase 3): one scope bar, pack cards, rows that open the viewer */
+.rpt-scope{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:14px}
+.rpt-f{display:flex;flex-direction:column;gap:2px}
+.rpt-scope-s{margin-left:auto;align-self:center}
+.rpt-packs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;margin-bottom:18px}
+.rpt-pack{padding:14px 16px 8px;margin:0}
+.rpt-pack-h{display:flex;align-items:center;gap:10px}
+.rpt-pack-i{width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);
+  background:var(--brand-soft);color:var(--brand);font-size:18px}
+.rpt-pack-t{font-size:15px;font-weight:700;line-height:1.25;margin:0}
+.rpt-pack-n{margin:6px 0 4px}
+.rpt-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--line-soft)}
+.rpt-row-main{flex:1 1 220px;min-width:0;display:flex;align-items:flex-start;gap:10px;color:var(--txt);text-decoration:none;border-radius:var(--radius-sm)}
+.rpt-row-main:hover{text-decoration:none}.rpt-row-main:hover .rpt-title{color:var(--brand);text-decoration:underline}
+.rpt-row-main .rpt-body{display:flex;flex-direction:column}
+.rpt-row-act{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.rpt-grp-h{margin:4px 0 0 2px}.rpt-grp-h .grp-h{margin:0 !important}
+/* in-app report viewer (#report/<key>): toolbar + the server report in a same-origin iframe */
+.rv-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;margin-bottom:10px;position:sticky;top:0;z-index:5}
+.rv-t{flex:1 1 220px;min-width:0}
+.rv-title{font-size:15.5px;font-weight:700;line-height:1.3;margin:0}
+.rv-ctl,.rv-act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rv-frame{position:relative;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--subtle);overflow:hidden}
+.rv-frame iframe{display:block;width:100%;height:70vh;border:0;background:transparent}
+.rv-frame .loading{position:absolute;inset:0 0 auto 0}
+.rv-dl .rv-dl-i{font-size:28px;color:var(--brand)}
+.rv-dl-list{margin:10px 0 6px 20px;font-size:13.5px;line-height:1.7}
+@media(max-width:640px){
+  .rv-bar{position:static}.rv-act .btn,.rv-ctl .ctl{flex:1 1 auto}
+  .rv-frame iframe{height:calc(100dvh - 210px);min-height:420px}
+  .rpt-scope-s{margin-left:0}.rpt-row-act{margin-left:42px}
+}
 @media(min-width:641px){
   #main-nav{display:none !important}
   .top-nav{display:flex}
@@ -526,6 +558,7 @@ body.login-screen #main-nav{display:none !important}
 <script src="js/25-branch-days.js"></script>
 <script src="js/27-matcher.js"></script>
 <script src="js/40-reports.js"></script>
+<script src="js/45-report-viewer.js"></script>
 <script src="js/50-daybook-dashboard.js"></script>
 <script src="js/60-diagnostics.js"></script>
 <script src="js/70-coupon-payout-discrepancies.js"></script>
