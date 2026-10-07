@@ -32,14 +32,17 @@ test('every tab renders with no console errors', async ({ page }) => {
     await page.evaluate(name => window.switchTab(name), t);
     await page.waitForTimeout(900);
     const info = await page.evaluate(name => {
-      const el = document.getElementById('tab-' + name);
+      // an alias tab (the 2026-10-01 nav regroup) opens its host page with a sub-view:
+      // judge the page switchTab actually landed on, not the alias id
+      const shown = (typeof activeTab !== 'undefined' && activeTab) || name;
+      const el = document.getElementById('tab-' + shown);
       const visible = !!(el && el.style.display !== 'none' && !el.classList.contains('hidden'));
       const len = el ? el.innerText.replace(/\s/g, '').length : 0;
-      return { visible, len };
+      return { shown, visible, len };
     }, t);
     results[t] = info;
-    expect(info.visible, `tab '${t}' should be visible`).toBeTruthy();
-    expect(info.len, `tab '${t}' should render content`).toBeGreaterThan(30);
+    expect(info.visible, `tab '${t}' (shown as '${info.shown}') should be visible`).toBeTruthy();
+    expect(info.len, `tab '${t}' (shown as '${info.shown}') should render content`).toBeGreaterThan(30);
   }
 
   if (errors.length) console.log('Console errors:\n' + errors.join('\n'));

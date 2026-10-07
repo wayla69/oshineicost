@@ -24,10 +24,12 @@ BASE_URL=https://oshinei-dashboard.fly.dev npx playwright test
 ```
 
 ## CI
-The `e2e` job in `.github/workflows/test.yml` runs on **every push/PR**: it
-seeds the fixture DB, starts the dashboard locally, and runs the smoke against
-it — so a frontend/API regression blocks the merge instead of being found on
-prod. A manual dispatch (Actions → Run workflow) targets a live deployment
+The `e2e` job in `.github/workflows/test.yml` runs on **every pull request**
+(enabled 2026-10-07; it was manual-dispatch only from 2026-09-04): it seeds the
+fixture DB, starts the dashboard locally, and runs the smoke against it — so a
+frontend/API regression (a page-level JS error, a tab that no longer renders)
+blocks the merge instead of being found on prod. The Playwright browser is
+cached between runs. A manual dispatch (Actions → Run workflow) targets a live deployment
 when the `E2E_BASE_URL` repo variable is set.
 
 The backend Python tests (`backend/`) and the recon suite (`recon/tests/`)
