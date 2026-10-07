@@ -41,6 +41,19 @@ WD_TH = ["อาทิตย์", "จันทร์", "อังคาร", "�
 SALMON_DEFAULT = ("02-01-001",)                                     # fresh salmon (owner: weekly pre-order)
 
 
+def _loaded(name: str):
+    """An app module as the running app loaded it. Production starts `backend.main`,
+    so the module is `backend.<name>`; importing `<name>` again would load a second
+    copy, which core.ttl_cache refuses (duplicate cached function) — and the caller's
+    try/except then silently dropped the feature (season factor, forced list)."""
+    import importlib
+    import sys
+    for full in (name, "backend." + name):
+        if full in sys.modules:
+            return sys.modules[full]
+    return importlib.import_module(name)
+
+
 def _wd(d: date) -> int:
     """SQLite %w: Sunday = 0."""
     return (d.weekday() + 1) % 7
@@ -242,8 +255,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     sf = {"factor": 1.0, "mode": "off", "reason": ""}
     if season == "auto":
         try:
-            from routers.ingredients import _ing_season_resolve
-            sf = _ing_season_resolve(con, bname, c_from.isoformat(), c_to.isoformat(), "auto")
+            sf = _loaded("routers.ingredients")._ing_season_resolve(con, bname, c_from.isoformat(),
+                                                                     c_to.isoformat(), "auto")
         except Exception:
             pass
     factor = float(sf.get("factor") or 1.0)

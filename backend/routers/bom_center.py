@@ -60,7 +60,7 @@ def _this_month() -> str:
 
 def _forced():
     try:
-        from routers.ingredients import _forced_order
+        from .ingredients import _forced_order
         return _forced_order()
     except Exception:
         return None
@@ -321,7 +321,7 @@ def bc_ingredients_template():
 
 async def _read_master_file(file: UploadFile):
     """The center's template, or a DATAP sheet (also inside the 80 MB Cost-RW workbook)."""
-    from routers.ingredients import _norm_head
+    from .ingredients import _norm_head
     raw = await file.read()
     if not raw:
         raise HTTPException(400, "ไฟล์ไม่มีข้อมูล")
@@ -485,7 +485,7 @@ async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
         except Exception as e:
             raise HTTPException(400, f"อ่านไฟล์ Excel ไม่ได้: {e}")
         if any(s.replace("-", " ").upper().startswith("USE ") for s in sheets):
-            from routers.requisition import parse_workbook
+            from .requisition import parse_workbook
             lines, info = parse_workbook(raw)
             months = sorted({ln["period_month"] for ln in lines})
             if not lines:
@@ -503,7 +503,7 @@ async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
 
         async def read(self):
             return raw
-    from routers.ingredients import _read_upload_table
+    from .ingredients import _read_upload_table
     rows, hmap, sheet = await _read_upload_table(_F(), _PRICE_ALIASES,
                                                  optional=("name", "unit_price", "value", "branch", "month"))
     if "value" not in hmap and "unit_price" not in hmap:
