@@ -379,9 +379,14 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
                      list(row.values()))
     _audit(conn, "upload", upload_id, "create", actor,
            [{"field": "file_name", "old": None, "new": filename}])
+    dkey = _DATE_COL[source_type]
     return {"upload_id": upload_id, "rows_saved": len(rows),
             "skipped_rows": skipped, "provider": prov,
-            "duplicate_lines": dup_lines}   # bank lines skipped as already saved
+            "duplicate_lines": dup_lines,   # bank lines skipped as already saved
+            "row_months": months,
+            # saved rows dated outside the picked month (T+1 deposits, a payout on the 1st):
+            # they count in their own month — the drop-zone result names them
+            "other_month_rows": sum(1 for r in rows if str(r.get(dkey) or "")[:7] not in ("", period_month))}
 
 
 @router.post("/api/uploads/{source_type}/confirm", dependencies=[Depends(require_write_token)])
@@ -510,7 +515,10 @@ async def bulk_upload(
                 conn.commit()
                 manifest.append({"file": name, "source_type": st, "status": "ok",
                                  "rows_saved": res["rows_saved"], "reason": "",
-                                 "duplicate_lines": res["duplicate_lines"]})
+                                 "duplicate_lines": res["duplicate_lines"],
+                                 "row_months": res["row_months"],
+                                 "other_month_rows": res["other_month_rows"],
+                                 "provider": res["provider"]})
             except HTTPException as e:
                 conn.rollback()
                 status = "skipped" if e.status_code == 409 else "error"
@@ -525,7 +533,9 @@ async def bulk_upload(
     skip = sum(1 for m in manifest if m["status"] == "skipped")
     err = sum(1 for m in manifest if m["status"] == "error")
     return {"summary": {"total": len(manifest), "saved": ok, "skipped": skip,
-                        "errored": err, "rows": sum(m["rows_saved"] for m in manifest)},
+                        "errored": err, "rows": sum(m["rows_saved"] for m in manifest),
+                        "duplicate_lines": sum(m.get("duplicate_lines") or 0 for m in manifest),
+                        "other_month_rows": sum(m.get("other_month_rows") or 0 for m in manifest)},
             "files": manifest}
 
 
