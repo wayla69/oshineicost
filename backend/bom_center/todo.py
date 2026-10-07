@@ -359,7 +359,7 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
     per_branch("deliveries", 4, f"บันทึกรับสินค้าประจำเดือน {month}", ("supply.ordering", "bom.center"), "Sales Support", deliveries)
     per_branch("begin_count", 5, f"ผลตรวจนับต้นงวด 1 {month}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("begin", m0))
     per_branch("end_count", 6, f"ผลตรวจนับปลายงวด 1 {_month_add(month, 1)}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("end", m1))
-    per_branch("receipts_confirm", 7, "ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง", ("branch.stock", "bom.center"), "สาขา", confirm)
+    per_branch("receipts_confirm", 7, "ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง", ("branch.stock", "supply.ordering", "bom.center"), "สาขา", confirm)
     conf_done = branches and steps[-1]["status"] == "done"
     steps.append(_e("monthly_summary", 8, "close", f"สรุปผลต่างรายเดือน {month}", "done" if conf_done else "todo",
                     "ดูผลต่างการใช้ของทุกสาขา และข้อ 13A ในรายงานผู้บริหาร" if conf_done else "รอขั้นตอนก่อนหน้าครบทุกสาขา",
