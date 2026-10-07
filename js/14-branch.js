@@ -17,6 +17,11 @@ function _brnBid() {
 }
 function _brnQS() { const b = _brnBid(); return b ? `branch_id=${b}` : ''; }
 function _brnCanLayout() { return hasModule('bom.center') || hasModule('supply.ordering'); }
+// the server's write rules (auth.py): counts, manual receipts and variance = the branch or bom.center;
+// an order may also be worked by Sales Support. Other roles see the pages read-only.
+function _brnCanCount() { return hasModule('branch.stock') || hasModule('bom.center'); }
+function _brnCanOrder() { return hasModule('branch.stock') || hasModule('bom.center') || hasModule('supply.ordering'); }
+const _BRN_READONLY = 'บทบาทของคุณดูหน้านี้ได้ แต่บันทึกแทนสาขาไม่ได้';
 
 async function loadBranchStock() {
   try {
@@ -42,6 +47,7 @@ async function loadBranchStock() {
 }
 
 async function brnLoadSheet() {
+  document.querySelectorAll('#tab-branchstock .brn-write').forEach(el => { el.style.display = _brnCanCount() ? '' : 'none'; });
   const list = document.getElementById('brnList');
   if (!(_brnMe && _brnMe.scoped) && !_brnBid()) {
     list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กรุณาเลือกสาขาด้านบน</span>';
@@ -128,6 +134,7 @@ function _brnLines() {
 }
 
 async function brnSave(submit, quiet) {
+  if (!_brnCanCount()) { if (!quiet) _bmcStatus('brnStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!_brnSheet) return;
   clearTimeout(_brnTimer);
   if (submit) {
@@ -207,7 +214,7 @@ async function brnBranchChanged() {
   _brnVar = null;
   _brnRecv = [];
   _brnPlan = null;
-  _brnRound = null;
+  if (_brnRoundKeep) _brnRoundKeep = false; else _brnRound = null;
   await brnLoadSheet();
   if (_brnSub === 'order') brnLoadOrder();
   if (_brnSub === 'recv') brnLoadRecv();
@@ -303,6 +310,7 @@ function brnRenderRecvLines() {
     : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรายการ · เลือกวัตถุดิบ ระบุจำนวน แล้วกด “+ เพิ่ม”</span>';
 }
 async function brnRecvSave() {
+  if (!_brnCanCount()) { _bmcStatus('brnRecvStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!_brnRecv.length) { _bmcStatus('brnRecvStatus', 'ยังไม่มีรายการ', 'var(--amber-ink)'); return; }
   if (!await uiConfirm(`ยืนยันบันทึกรับสินค้า ${_brnRecv.length} รายการ วันที่ ${document.getElementById('brnRecvDate').value}`)) return;
   try {
@@ -468,6 +476,7 @@ function brnRenderVariance() {
   }).join('') : '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
 }
 async function brnSaveReason(code) {
+  if (!_brnCanCount()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   const reason = document.getElementById('brnRs_' + code).value;
   const note = document.getElementById('brnRn_' + code).value;
   if (!reason) { _bmcStatus('brnVarStatus', 'กรุณาเลือกเหตุผล', 'var(--amber-ink)'); return; }
@@ -479,16 +488,19 @@ async function brnSaveReason(code) {
   } catch (e) { _bmcStatus('brnVarStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function brnConfirmRecv(undo) {
+  if (!_brnCanCount()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!undo && !await uiConfirm('ยืนยันว่าได้บันทึกรับสินค้าทุกรายการในรอบนี้ครบแล้ว?')) return;
   try {
     await _bmcJson(`${API}/api/bom-center/variance/confirm-receipts?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ end_count_id: _brnVar.end_count_id, undo: !!undo }) });
     await brnLoadVariance(_brnVar.end_count_id);
+    _bmcStatus('brnVarStatus', undo ? 'ยกเลิกการยืนยันแล้ว' : '✓ ยืนยันรับสินค้าครบแล้ว', 'var(--good-ink)');
   } catch (e) { _bmcStatus('brnVarStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 
 // ── สั่งของ (S8) ─────────────────────────────────────────────────────────────
 let _brnRound = null;         // null = the round whose order day comes first (the server picks)
+let _brnRoundKeep = false;    // a deep link chose the round: the next branch load must not reset it
 let _brnPlan = null;          // /api/bom-center/order/plan
 let _brnOrdQty = {};          // code -> confirmed units (string)
 let _brnOrdReason = {};       // code -> {reason_code, note}
@@ -736,6 +748,7 @@ function _brnOrdLines() {
 }
 async function brnOrderSave(submit, quiet) {
   clearTimeout(_brnOrdAuto);
+  if (!_brnCanOrder()) { if (!quiet) _bmcStatus('brnOrdStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!_brnPlan || !_brnPlan.rows) return;
   const cur = _brnPlan.order;
   if (cur && !['suggested', 'confirmed'].includes(cur.status)) return;      // sent already: nothing to save

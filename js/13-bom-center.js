@@ -51,7 +51,8 @@ function _bmcStatus(id, msg, ink) {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.style.color = ink || 'var(--text-muted)'; }
   // a save that succeeded (every one reports "✓ …"): หน้างาน says what comes next (16-supplyhome.js)
-  if (msg && String(msg).startsWith('✓') && typeof shmAfterStatus === 'function') shmAfterStatus(id);
+  // (an autosaved draft is not a step done: no toast until the person submits)
+  if (msg && String(msg).startsWith('✓') && !/ร่าง/.test(String(msg)) && typeof shmAfterStatus === 'function') shmAfterStatus(id);
 }
 function _bmcChip(text, ink) {
   return `<span style="display:inline-block;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:10.5px;white-space:nowrap">${esc(text)}</span>`;
@@ -1166,7 +1167,7 @@ async function bmcLoadRelease() {
 }
 function bmcRenderRelHead(checks) {
   const r = _bmcRlRel;
-  const can = m => hasModule(m) || hasModule('bom.edit');
+  const can = m => hasModule(m) || (m === 'bom.center' && hasModule('bom.edit'));   // release and accept: bom.release only (auth.py)
   const btn = (label, fn, primary, title) => `<button onclick="${fn}" title="${esc(title || '')}" style="font-size:12.5px;${primary
     ? 'background:var(--accent);color:var(--on-accent);border:0' : 'background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control)'};border-radius:var(--r-sm);padding:5px 14px;cursor:pointer">${label}</button>`;
   const acts = [];
@@ -1176,7 +1177,7 @@ function bmcRenderRelHead(checks) {
       checks && !checks.can_release ? 'ยังมีข้อที่ต้องแก้ไข' : 'analyst ปล่อยสูตร และ management รับทราบภายหลัง'));
   }
   if (r.status === 'released') {
-    if (!r.acknowledged_by && (hasModule('bom.audit'))) acts.push(btn('รับทราบ (management)', 'bmcAck()', true));
+    if (!r.acknowledged_by && (hasModule('bom.audit'))) acts.push(btn('รับทราบ (ผู้บริหาร)', 'bmcAck()', true));
     if (hasModule('bom.audit') || hasModule('bom.release')) acts.push(btn('ย้อนกลับเวอร์ชันนี้', 'bmcRetire()', false, 'เวอร์ชันก่อนหน้ากลับมามีผลแทน'));
     if (can('bom.center')) acts.push(btn('สร้างฉบับร่างเดือนถัดไปจากเวอร์ชันนี้', 'bmcNewDraft()', false));
   }
@@ -1213,7 +1214,7 @@ function bmcRenderChecks(d) {
       <div class="text-xs mt-1" style="color:var(--text-muted)">${['draft', 'review'].includes(_bmcRlRel.status) ? 'ไม่พบข้อที่ต้องตรวจ' : 'ไม่มีข้อค้างตรวจ'}</div>`;
     return;
   }
-  const canAccept = (hasModule('bom.release') || hasModule('bom.edit')) && ['draft', 'review'].includes(_bmcRlRel.status);
+  const canAccept = hasModule('bom.release') && ['draft', 'review'].includes(_bmcRlRel.status);
   window._bmcChecks = d;
   // one group per check code, open ones first; an ACCEPTABLE group takes one reason for all its open rows
   const groups = {};
@@ -1375,7 +1376,7 @@ function _bmcFcCanWrite() { return hasModule('supply.ordering') || hasModule('bo
 async function bmcLoadForecastPane() {
   document.querySelectorAll('#tab-bomcenter .bmc-fc-write').forEach(el => { el.style.display = _bmcFcCanWrite() ? '' : 'none'; });
   const day = document.getElementById('bmcFcDay');
-  if (!day.value) day.value = new Date().toISOString().slice(0, 10);
+  if (!day.value) day.value = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);   // Bangkok's date
   await bmcLoadCalendar();
   const sel = document.getElementById('bmcFcBranch');
   if (!sel.options.length && _bmcCal) {
@@ -1412,7 +1413,7 @@ function bmcRenderForecast() {
       เทศกาล ×${(f.season?.factor || 1).toFixed(2)}${f.season?.reason ? ' (' + esc(f.season.reason) + ')' : ''}
       ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบสั่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบสั่ง →</a>'}</div>
     <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
-      ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (สาขาเริ่มตรวจนับสต๊อกใน Phase 2) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
+      ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (หน้าสั่งสินค้าของสาขาหักให้เมื่อสาขามีผลตรวจนับ) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
     ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรในเมนูที่สาขานี้ขายที่ยังคำนวณไม่ได้ (แปลงหน่วยไม่ได้) <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
       <div class="text-[11px] mt-1" style="color:var(--text-secondary)">${f.stats.missed.map(m => `${esc(m.code)} (${esc(m.unit)}) · ${_bmcNum(m.plates, 0)} จาน · ${esc(m.why)}`).join('<br>')}</div></details>` : ''}
   </div>`;

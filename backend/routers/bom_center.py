@@ -1039,8 +1039,9 @@ from bom_center import forecast as _fc                                         #
 
 def _parse_day(d: Optional[str]):
     from datetime import date as _d
+    from bom_center.clock import today as _bkk_today
     if not d:
-        return _d.today()
+        return _bkk_today()                       # the Thai calendar day, not the UTC server's
     try:
         return _d.fromisoformat(d)
     except ValueError:
@@ -1302,9 +1303,9 @@ def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
     if scoped:
         r = con.execute("SELECT branch_id FROM branches WHERE name=?", (scoped,)).fetchone()
         if not r:
-            raise HTTPException(403, "บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ กรุณาแจ้งผู้ดูแลระบบ")
+            raise HTTPException(403, detail="บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ กรุณาแจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
         if branch_id is not None and int(branch_id) != int(r[0]):
-            raise HTTPException(403, "บัญชีสาขาเข้าถึงได้เฉพาะสาขาของตัวเอง")
+            raise HTTPException(403, detail="บัญชีสาขาเข้าถึงได้เฉพาะสาขาของตัวเอง", headers={"X-Denied": "role"})
         return int(r[0])
     if branch_id is None:
         raise HTTPException(400, "กรุณาเลือกสาขา")

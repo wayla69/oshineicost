@@ -247,6 +247,7 @@ MODULE_RULES = [
     ("GET", "/api/reports/ops",              {"ops.report"}),
     ("GET", "/api/ingredients",              {"cost.analysis", "ops.report",
                                               "supply.ordering"}),  # order plan + branch letter + purchases
+    ("W",   "/api/ingredients",              {"supply.ordering", "ops.report", "bom.center"}),   # ตั้งค่าการสั่งซื้อ and the legacy plan
     ("GET", "/api/analysis/discount",        {"ops.discounts"}),
     ("GET", "/api/analysis/coupon",          {"ops.discounts"}),
     ("GET", "/api/extra/cash",               {"ops.cash"}),
@@ -292,6 +293,8 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/hub",                     {"supply.ordering", "bom.center"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit"}),
+    # the list and the code links are read by Ops too (the close stepper opens on them)
+    ("GET", "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit", "ops.report", "cost.analysis"}),
     # หน้างาน: every supply role reads its own to-do list (a branch login gets its branch only)
     ("GET", "/api/bom-center/todo",                    {"branch.stock", "supply.ordering", "bom.center", "bom.edit",
                                                         "bom.release", "bom.audit", "ops.report", "cost.analysis"}),

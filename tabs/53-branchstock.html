@@ -35,9 +35,9 @@
 
     <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div class="flex flex-wrap items-center gap-2">
-        <button onclick="brnSave(false)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
-        <button onclick="brnSave(true)" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลตรวจนับ</button>
-        <button onclick="brnDiscard()" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ล้างร่าง</button>
+        <button onclick="brnSave(false)" class="brn-write" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
+        <button onclick="brnSave(true)" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลตรวจนับ</button>
+        <button onclick="brnDiscard()" class="brn-write" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ล้างร่าง</button>
         <span id="brnStatus" class="text-xs"></span>
       </div>
     </div>
@@ -96,7 +96,7 @@
       <datalist id="brnItemList"></datalist>
       <div id="brnRecvLines" class="text-sm mt-2"></div>
       <div class="flex flex-wrap items-center gap-2 mt-2">
-        <button onclick="brnRecvSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับสินค้า</button>
+        <button onclick="brnRecvSave()" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับสินค้า</button>
         <span id="brnRecvStatus" class="text-xs"></span>
       </div>
     </div>
