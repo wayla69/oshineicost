@@ -13,20 +13,30 @@ const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
   bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
   ohbCenStatus: 'central_report', ohbLinkStatus: 'code_links', ohbDelStatus: 'deliveries', ohbCntStatus: 'begin_count',
-  brnStatus: 'count_today', brnOrdStatus: 'order_today_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending' };
+  brnStatus: 'count_today', brnOrdStatus: 'order_today_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
+  ohbDStatus: 'queue_pending' };
 
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js): this tab has one view; a month from a link lands in the strip.
 _SUPPLY_PANE.supplyhome = { get: () => null, set: () => {}, show: () => loadSupplyHome(),
   month: m => { const el = document.getElementById('shmMonth'); if (el) el.value = m; } };
 
-function _shmMine(it) { return (it.owner_modules || []).some(hasModule); }
+// "mine" by role (owner_th names the department), not by module: management holds every
+// module and would otherwise own every branch's count; a role without a word falls back to modules
+const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['Sales Support', 'ฝ่ายขาย'], analyst: ['ฝ่ายวิเคราะห์'],
+  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['Ops'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'] };
+function _shmMine(it) {
+  const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
+  const words = role && _SHM_ROLE_OWNERS[role];
+  if (words && it.owner_th) return words.some(w => it.owner_th.includes(w));
+  return (it.owner_modules || []).some(hasModule);
+}
 function _shmQuery() {
   const qs = new URLSearchParams();
   const m = document.getElementById('shmMonth'), b = document.getElementById('shmBranch');
   const ctx = supplyCtx();
   if (m && m.value) qs.set('month', m.value); else if (ctx.month) qs.set('month', ctx.month);
   if (b && b.options.length) { if (b.value) qs.set('branch_id', b.value); }
-  else if (ctx.branch_id) qs.set('branch_id', ctx.branch_id);
+  else if (ctx.branch_id && !(window.AUTH && window.AUTH.enabled && window.AUTH.role === 'branch')) qs.set('branch_id', ctx.branch_id);   // a branch login is scoped by the server
   return qs;
 }
 
@@ -79,7 +89,7 @@ function _shmRender(d) {
 }
 function _shmCard(it, n) {
   const [lbl, ink] = _SHM_ST[it.status] || _SHM_ST.todo;
-  const openable = it.go && it.go.tab;
+  const openable = it.go && it.go.tab && tabAllowed(it.go.tab);   // another department's step shows its owner, not a button
   const act = !openable ? '' : it.status === 'done' || it.status === 'na'
     ? `<a href="#" onclick="shmGo('${esc(it.key)}');return false" class="text-[11px] whitespace-nowrap" style="color:var(--text-muted)">ดู →</a>`
     : `<button onclick="shmGo('${esc(it.key)}')" class="text-xs rounded-lg px-3 py-1 whitespace-nowrap" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>`;
@@ -121,7 +131,7 @@ function _shmOpen(go) {
   if (!go || !go.tab) return;
   if (!tabAllowed(go.tab)) { notifyError('บทบาทของคุณไม่มีสิทธิ์เปิดหน้านี้'); return; }
   const x = go.extra || {};
-  if (x.round && typeof _brnRound !== 'undefined') _brnRound = x.round;
+  if (x.round && typeof _brnRound !== 'undefined') { _brnRound = x.round; _brnRoundKeep = true; }   // survives the page's branch reset
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);
@@ -130,6 +140,7 @@ function _shmOpen(go) {
     if (String(s.value) !== String(x.release_id) && [...s.options].some(o => o.value === String(x.release_id))) { s.value = String(x.release_id); bmcLoadRelease(); }
   });
   if (x.count_date) _shmWhen(() => document.getElementById('ohbCntDate'), () => { document.getElementById('ohbCntDate').value = x.count_date; });
+  if (x.order_id) _shmWhen(() => typeof brnOpenReceive === 'function' && _brnMe && document.getElementById('brnRecvOpen'), () => brnOpenReceive(x.order_id));
   if (x.end_count_id) _shmWhen(() => { const s = document.getElementById('brnVarPeriod'); return s && s.options.length; }, () => {
     const s = document.getElementById('brnVarPeriod');
     if (String(s.value) !== String(x.end_count_id) && [...s.options].some(o => o.value === String(x.end_count_id))) { s.value = String(x.end_count_id); brnLoadVariance(x.end_count_id); }
@@ -140,7 +151,10 @@ function _shmOpen(go) {
 // _bmcStatus (13-bom-center.js) calls shmAfterStatus(id) whenever a status line
 // starts with ✓; the next open item after the one that save completes is shown as
 // a toast that opens it. One toast per 2 s — a save may write two status lines.
-function shmAfterStatus(id) { const k = _SHM_STATUS_KEY[id]; if (k) shmAfter(k); }
+function shmAfterStatus(id) {
+  const k = id === 'brnOrdStatus' && typeof _brnRound !== 'undefined' && _brnRound ? 'order_today_' + _brnRound : _SHM_STATUS_KEY[id];
+  if (k) shmAfter(k);
+}
 async function shmAfter(key) {
   if (!key || Date.now() - _shmToastAt < 2000) return;
   _shmToastAt = Date.now();

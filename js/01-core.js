@@ -300,8 +300,8 @@ async function maybeShowStartCard() {
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
-  salessupport:'Sales Support (จัดซื้อ/วัตถุดิบ)',
-  branch:'สาขา (นับสต๊อก/สั่งของ — 1 บัญชีต่อสาขา)',
+  salessupport:'Sales Support (วัตถุดิบและใบสั่งซื้อ)',
+  branch:'สาขา (ตรวจนับ/สั่งสินค้า — 1 บัญชีต่อสาขา)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
 // so the owner can see what each role unlocks before assigning it. Only a FALLBACK:
@@ -314,9 +314,9 @@ const MODULE_LABEL_TH = {
   'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
   'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
-  'supply.ordering':'จัดซื้อ/วัตถุดิบ', 'customer.feedback':'เสียงลูกค้า',
-  'bom.center':'BoM Center (แก้ไข)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
-  'branch.stock':'สาขา: นับสต๊อก',
+  'supply.ordering':'วัตถุดิบและใบสั่งซื้อ (ดำเนินการ)', 'customer.feedback':'เสียงลูกค้า',
+  'bom.center':'BoM Center (ข้อมูลและสูตร)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
+  'branch.stock':'สาขา: ตรวจนับและสั่งสินค้า',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
@@ -598,8 +598,8 @@ function _renderPermMatrix(canEdit) {
     'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
     'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
-    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'จัดซื้อ', 'bom.center':'BoM Center', 'bom.release':'ปล่อยสูตร', 'bom.audit':'รับทราบสูตร',
-    'branch.stock':'สาขา: นับสต๊อก',
+    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'BoM Center', 'bom.release':'ปล่อยสูตร', 'bom.audit':'รับทราบสูตร',
+    'branch.stock':'สาขา: ตรวจนับ',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
@@ -2469,10 +2469,12 @@ function _supplyLastKey() { return 'supply:last:' + ((window.AUTH && window.AUTH
 function _supplyLastGet() { try { return JSON.parse(localStorage.getItem(_supplyLastKey()) || '{}') || {}; } catch (e) { return {}; } }
 // One month and one branch for the whole module (localStorage): every picker
 // reads it when it fills and writes it back on change, so nobody re-selects.
-function supplyCtx() { try { return JSON.parse(localStorage.getItem('oshinei_supply_ctx') || '{}') || {}; } catch (e) { return {}; } }
+// keyed by user: a shared or training phone must not hand one login another's branch
+function _supplyCtxKey() { return 'oshinei_supply_ctx:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
+function supplyCtx() { try { return JSON.parse(localStorage.getItem(_supplyCtxKey()) || '{}') || {}; } catch (e) { return {}; } }
 function supplyCtxSet(patch) {
   const c = Object.assign(supplyCtx(), patch || {});
-  try { localStorage.setItem('oshinei_supply_ctx', JSON.stringify(c)); } catch (e) {}
+  try { localStorage.setItem(_supplyCtxKey(), JSON.stringify(c)); } catch (e) {}
   return c;
 }
 function _supplyItemOf(tab, pane) {

@@ -413,6 +413,14 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
         ref = REF.format(month=month)
         old = [rid for rid, in con.execute("SELECT receipt_id FROM bc_receipt WHERE branch_id=? AND ref=?",
                                           (b["branch_id"], ref))]
+        # a branch that booked its own receipts this month (orders received, manual entries)
+        # must not get the centre's monthly note on top — that would count the goods twice
+        own = con.execute("SELECT COUNT(*) FROM bc_receipt WHERE branch_id=? AND receipt_date BETWEEN ? AND ?"
+                          " AND COALESCE(source, 'branch') <> 'central'",
+                          (b["branch_id"], f"{month}-01", _month_end(month))).fetchone()[0]
+        res["own_receipts"] = int(own or 0)
+        if own:
+            res["error"] = f"สาขาบันทึกรับสินค้าเองแล้ว {own} ใบในงวดนี้ จึงไม่บันทึกใบรับจากรายงานส่วนกลางซ้ำ"
         closed = _closed_through(con, b["branch_id"])
         if old and closed and rdate < closed:
             res["error"] = f"งวดนี้ปิดด้วยผลตรวจนับแล้ว ({closed}) จึงแทนที่ใบรับไม่ได้"

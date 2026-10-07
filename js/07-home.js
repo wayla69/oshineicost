@@ -55,7 +55,7 @@ async function loadHome() {
       api(`${API}/api/analysis/hourly?${hp}`).catch(() => null),
       api(`${API}/api/sales/daily?${dayp}`).catch(() => null),
       // วัตถุดิบและใบสั่งซื้อ: my open work from หน้างาน (16-supplyhome.js) — only for a supply role
-      ['supply.ordering', 'bom.center', 'bom.release', 'bom.audit', 'branch.stock'].some(hasModule)
+      ['supply.ordering', 'bom.center', 'bom.edit', 'bom.release', 'bom.audit', 'branch.stock', 'ops.report', 'cost.analysis'].some(hasModule)
         ? api(`${API}/api/bom-center/todo`).catch(() => null) : Promise.resolve(null),
     ]);
     window._shmHome = todo && Array.isArray(todo.items) ? todo : null;
@@ -277,7 +277,8 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
     A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
   // วัตถุดิบและใบสั่งซื้อ: at most three of my open items from หน้างาน, overdue ones first
   if (todo && Array.isArray(todo.items)) {
-    const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && (i.owner_modules || []).some(hasModule));
+    const isMine = i => typeof _shmMine === 'function' ? _shmMine(i) : (i.owner_modules || []).some(hasModule);
+    const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && isMine(i));
     mine.sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
     mine.slice(0, 3).forEach(i => A.push({ p: i.urgent ? 1 : 5, sev: i.urgent ? 'red' : 'amber', icon: '',
       text: `${esc(i.title)}${i.detail ? ' — ' + esc(i.detail) : ''}${i.branch ? ' (' + esc(i.branch) + ')' : ''}`,

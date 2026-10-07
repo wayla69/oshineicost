@@ -245,7 +245,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool) ->
             out.append(_e("receive_pending", 320, "week", "บันทึกรับสินค้าตามใบสั่งซื้อที่ส่งถึงแล้ว", "todo",
                           "ใบสั่งซื้อ " + " · ".join(f"#{o} ({'แซลมอน' if r == 'salmon' else 'รอบ ' + r} {c})" for o, r, c in due),
                           count=len(due), owner=("branch.stock",), owner_th="สาขา", branch=b,
-                          go={"tab": "branchstock", "pane": "order", "extra": {"round": due[0][1]}}))
+                          go={"tab": "branchstock", "pane": "recv", "extra": {"order_id": due[0][0]}}))
         if single:
             from .variance import period
             try:
