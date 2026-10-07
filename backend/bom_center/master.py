@@ -217,6 +217,12 @@ def _month_of(v):
 def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
     """Apply parsed sheet rows (dicts keyed by IMPORT_ALIASES). Caller commits."""
     stats = {"inserted": 0, "updated": 0, "unchanged": 0, "ref_prices": 0, "skipped": []}
+    if not default_month:
+        # a quote sheet dates most rows (DATAP: 23-07-2569); the rows it leaves undated belong
+        # to the same quote — without this they silently lost their price (18 of 317 in DATAP)
+        dated = [m for m in (_month_of(r.get("date")) for r in rows) if m]
+        default_month = max(set(dated), key=dated.count) if dated else None
+        stats["undated_month"] = default_month
     for i, r in enumerate(rows):
         code = str(r.get("code") or "").strip()
         if not code or code in ("#N/A", "None"):
