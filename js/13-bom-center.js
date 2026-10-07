@@ -1368,6 +1368,7 @@ async function bmcLoadRelHistory() {
 // (branches start counting stock in Phase 2) — the page says so every time.
 let _bmcFc = null;
 let _bmcCal = null;
+let _bmcCalPilotOnly = true;   // the calendar page: the pilot branches alone until the sales team asks for all
 const _BMC_WD = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'];
 function _bmcFcCanWrite() { return hasModule('supply.ordering') || hasModule('bom.center') || hasModule('bom.edit'); }
 
@@ -1456,34 +1457,48 @@ async function bmcLoadCalendar() {
   try { _bmcCal = await _bmcJson(`${API}/api/bom-center/order-calendar`); } catch (e) { return; }
   const w = _bmcFcCanWrite();
   const sel = (bid, rnd, field, val, opts) => w
-    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="${field}" onchange="this.style.background='var(--accent-soft)'" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
+    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="${field}" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1'" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
         ${opts.map(o => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${_BMC_WD[o]}</option>`).join('')}</select>`
     : _BMC_WD[val];
-  const lead = (bid, rnd, val) => w ? `<input data-bid="${bid}" data-rnd="${rnd}" data-f="lead_days" type="number" min="0" max="14" value="${val ?? ''}" onchange="this.style.background='var(--accent-soft)'"
+  const lead = (bid, rnd, val) => w ? `<input data-bid="${bid}" data-rnd="${rnd}" data-f="lead_days" type="number" min="0" max="14" value="${val ?? ''}" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1'"
         style="width:46px;border:1px solid var(--border);border-radius:4px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)">` : (val ?? '');
-  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบสั่งสินค้าของแต่ละสาขา</div>
+  const pilot = _bmcCal.pilot || [];
+  const calRows = (_bmcCalPilotOnly && pilot.length) ? _bmcCal.rows.filter(r => pilot.includes(r.branch)) : _bmcCal.rows;
+  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบสั่งสินค้าของแต่ละสาขา</div>
+      ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
+      <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
       ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบสั่ง</button>` : ''}</div>
     <div class="text-[11px] mb-2" style="color:var(--text-muted)">ฝ่ายขายกรอกข้อมูลรายสาขา: รอบ 1 สั่งวันอังคารหรือพุธ · รอบ 2 สั่งวันศุกร์หรือเสาร์ · แซลมอนสดสั่งล่วงหน้าสัปดาห์ละครั้ง (วันส่งถึง = วันสั่ง + ระยะส่ง)</div>
     <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1</th><th class="pr-2">ระยะส่ง (วัน)</th><th class="pr-2">รอบ 2</th><th class="pr-2">ระยะส่ง</th>
       <th class="pr-2">แซลมอนสด</th><th class="pr-2">ระยะส่ง</th><th>ตั้งโดย</th></tr></thead>
-    <tbody>${_bmcCal.rows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
+    <tbody>${calRows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
       <td class="pr-2">${sel(r.branch_id, '1', 'order_weekday', r.r1.order_weekday, [2, 3])}</td><td class="pr-2">${lead(r.branch_id, '1', r.r1.lead_days)}</td>
       <td class="pr-2">${sel(r.branch_id, '2', 'order_weekday', r.r2.order_weekday, [5, 6])}</td><td class="pr-2">${lead(r.branch_id, '2', r.r2.lead_days)}</td>
       <td class="pr-2">${sel(r.branch_id, 'salmon', 'order_weekday', r.rsalmon.order_weekday, [0, 1, 2, 3, 4, 5, 6])}</td><td class="pr-2">${lead(r.branch_id, 'salmon', r.rsalmon.lead_days)}</td>
       <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '') : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
 }
 async function bmcSaveCalendar() {
-  const rows = {};
+  // only the (branch, round) groups someone touched are sent — the others keep
+  // whatever they have (a default stays a default, not "set by me")
+  const rows = {}, dirty = {};
   document.querySelectorAll('#bmcFcCal [data-bid]').forEach(el => {
     const k = el.dataset.bid + '|' + el.dataset.rnd;
     rows[k] = rows[k] || { branch_id: Number(el.dataset.bid), round: el.dataset.rnd };
     rows[k][el.dataset.f] = el.value === '' ? null : Number(el.value);
+    if (el.dataset.dirty === '1') dirty[k] = true;
   });
+  const changed = Object.keys(rows).filter(k => dirty[k]).map(k => rows[k]);
+  if (!changed.length) {
+    _bmcStatus('bmcCalStatus', 'ไม่มีรายการที่แก้ไข', 'var(--text-muted)');
+    _bmcStatus('bmcFcStatus', 'ไม่มีรายการที่แก้ไข', 'var(--text-muted)');
+    return;
+  }
   try {
-    await _bmcJson(`${API}/api/bom-center/order-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.values(rows)) });
-    _bmcStatus('bmcCalStatus', '✓ บันทึกรอบสั่งแล้ว', 'var(--good-ink)');
-    _bmcStatus('bmcFcStatus', '✓ บันทึกรอบสั่งแล้ว', 'var(--good-ink)');
+    const r = await _bmcJson(`${API}/api/bom-center/order-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
+    const msg = `✓ บันทึกรอบสั่งแล้ว ${(r && r.rows) || changed.length} รายการ`;
+    _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
+    _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
     bmcLoadCalendar();
   } catch (e) {
     _bmcStatus('bmcCalStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)');
