@@ -111,6 +111,8 @@ def detail(con, order_id: int) -> dict:
                       " order_unit, reason_code, note, ss_reason, ss_note FROM bc_order_line WHERE order_id=?"
                       " ORDER BY ingredient_code", (order_id,))]
     o["status_th"] = STATUS_TH.get(o["status"], o["status"])
+    from .hub import delivery_of
+    o["delivery"] = delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
     return o
 
 
@@ -275,11 +277,38 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     return {"order_id": order_id, "status": "received", "receipt_id": rec and rec["receipt_id"]}
 
 
-def history(con, branch_id: int, limit: int = 20) -> list:
-    rows = con.execute("SELECT order_id, cycle_date, round, status, value, submitted_at, received_at FROM bc_order"
-                       " WHERE branch_id=? ORDER BY cycle_date DESC, order_id DESC LIMIT ?", (branch_id, limit)).fetchall()
-    return [dict(zip(("order_id", "cycle_date", "round", "status", "value", "submitted_at", "received_at"), r),
-                 status_th=STATUS_TH.get(r[3], r[3])) for r in rows]
+def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
+    """The branch's orders, newest first, each with its delivery day and line count;
+    `statuses` narrows (OPEN = sent or processed, the ones still to be received)."""
+    from .hub import delivery_of
+    sql = ("SELECT o.order_id, o.cycle_date, o.round, o.status, o.value, o.submitted_at, o.received_at, o.processed_at,"
+           " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0)"
+           " FROM bc_order o WHERE o.branch_id=?")
+    args = [branch_id]
+    if statuses:
+        sql += f" AND o.status IN ({','.join('?' * len(statuses))})"
+        args += list(statuses)
+    rows = con.execute(sql + " ORDER BY o.cycle_date DESC, o.order_id DESC LIMIT ?", args + [limit]).fetchall()
+    out = []
+    for r in rows:
+        d = dict(zip(("order_id", "cycle_date", "round", "status", "value", "submitted_at", "received_at", "processed_at",
+                      "lines"), r))
+        d["status_th"] = STATUS_TH.get(d["status"], d["status"])
+        d["delivery"] = delivery_of(con, branch_id, d["round"], d["cycle_date"])
+        out.append(d)
+    return out
+
+
+def next_round(con, branch_id: int, today: date) -> str:
+    """The round whose order day comes first from `today` (today counts): what the
+    branch page opens on when nobody picked a round."""
+    from .forecast import cover_period
+    best = None
+    for rnd in ("1", "2", "salmon"):
+        day = cover_period(con, branch_id, rnd, today)[0]
+        if best is None or day < best[0]:
+            best = (day, rnd)
+    return best[1]
 
 
 def order_units(need: float, per, moq) -> tuple:
