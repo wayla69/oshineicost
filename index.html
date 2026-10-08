@@ -1705,6 +1705,21 @@ body.mgt-reading .content-area { padding-top: 10px; }
     </div>
   </div>
 
+  <!-- offline: the worker served the last stored copy (sw.js → message offline-fallback) -->
+  <div id="msOffline" class="ms-section" role="status" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--r-md);background:#fef3c7;color:#92400e;font-size:12px;font-weight:600"></div>
+  <!-- the morning brief as a notification on this phone (msPushInit, 09c-mobile.js; routers/push_api.py) -->
+  <div id="msPush" class="ms-section" style="display:none;margin-top:10px">
+    <div class="ms-card" style="padding:10px 14px">
+      <p style="font-size:13px;font-weight:700">แจ้งเตือนตอนเช้า</p>
+      <p id="msPushState" style="font-size:12px;color:var(--text-muted,#64748b);margin-top:2px">กำลังตรวจสอบ…</p>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button id="msPushOn" onclick="msPushEnable()" style="min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent)">เปิดการแจ้งเตือน</button>
+        <button id="msPushOff" onclick="msPushDisable()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ปิด</button>
+        <button id="msPushTest" onclick="msPushTest()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ส่งทดสอบ</button>
+        <button id="msPushLater" onclick="msPushLater()" style="min-height:44px;padding:10px 14px;font-size:13px;border-radius:var(--r-md);border:0;background:none;color:var(--text-muted,#64748b)">ไว้ก่อน</button>
+      </div>
+    </div>
+  </div>
   <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
     <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;min-height:44px;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>

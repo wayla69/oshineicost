@@ -349,7 +349,7 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      (found 2026-09-21). NOT ingredient_order_unit: pack sizes are seeded on
 #                      the PC (seed_order_units.py) and travel WITH the base DB - its rows a
 #                      PERSON wrote are carried forward one by one instead: see _MERGED_ROWS.
-_PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings",
+_PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings", "push_subscription",
                      "branch_downtime", "cost_override", "requisition_line", "stock_count",
                      "ingredient_sourcing", "ingredient_order_issue", "ingredient_order_issue_line",
                      "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar")

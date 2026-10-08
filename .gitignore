@@ -60,6 +60,7 @@ Thumbs.db
 backend/.seed_token.txt
 backend/.seed_token*.txt
 backend/.manager_token*.txt
+backend/.vapid_keys.txt
 backend/.refresh_login.txt
 # recon login secrets backup (RECON_SESSION_SECRET / RECON_ADMIN_*) — recon/LOGIN_ROLLOUT.md
 backend/.recon_login*.txt

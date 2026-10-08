@@ -1,0 +1,299 @@
+# -*- coding: utf-8 -*-
+"""Web Push for the phone: the morning brief as a notification, no chat bot needed.
+
+    OSHINEI_VAPID_PRIVATE   base64url raw EC private key (32 bytes)      } generated once with
+    OSHINEI_VAPID_PUBLIC    base64url uncompressed public point (65 bytes)} py_vapid, kept as Fly
+    OSHINEI_VAPID_SUBJECT   a URL or mailto: the push service may contact } secrets + local backup
+
+Unset → /api/push/vapid-public says configured:false and the phone hides its card;
+nothing else changes. Subscriptions live in push_subscription (preserved across the
+sync's DB swap by name, core._PRESERVED_EXACT). The morning send runs from a daemon
+thread in main.py (the Fly machine never stops: min_machines_running = 1), once a
+day after 08:30 Thai time, guarded by usage_meta like the supply reminder.
+"""
+import json
+import os
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+
+import auth as _auth
+from core import get_db
+
+router = APIRouter()
+
+MORNING_HOUR, MORNING_MINUTE = 8, 30          # Thai clock
+MAX_FAILS = 5                                   # a dead endpoint is dropped after this many errors
+
+TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+TH_DOW = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']   # Python weekday(): Monday = 0
+
+
+# ── config ──────────────────────────────────────────────────────────────────
+def vapid_config(env=None) -> dict:
+    env = os.environ if env is None else env
+    priv = (env.get("OSHINEI_VAPID_PRIVATE") or "").strip()
+    pub = (env.get("OSHINEI_VAPID_PUBLIC") or "").strip()
+    sub = (env.get("OSHINEI_VAPID_SUBJECT") or "https://oshinei-dashboard.fly.dev").strip()
+    return {"private": priv, "public": pub, "subject": sub, "configured": bool(priv and pub)}
+
+
+def _thai_now():
+    return datetime.utcnow() + timedelta(hours=7)
+
+
+# ── storage ─────────────────────────────────────────────────────────────────
+def ensure(con) -> None:
+    con.execute("""CREATE TABLE IF NOT EXISTS push_subscription(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL DEFAULT '',
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        ua TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_ok TEXT,
+        fails INTEGER NOT NULL DEFAULT 0)""")
+    con.execute("CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY, value TEXT)")
+
+
+def _meta_get(con, key: str):
+    r = con.execute("SELECT value FROM usage_meta WHERE key = ?", (key,)).fetchone()
+    return r[0] if r else None
+
+
+def _meta_set(con, key: str, value: str) -> None:
+    con.execute("INSERT INTO usage_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value))
+
+
+def _caller(request: Request) -> str:
+    """The logged-in user's name ('' when auth is off). 401 when auth is on and nobody is."""
+    if not _auth.auth_enabled():
+        return ""
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if not payload:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return str(payload.get("u") or "")
+
+
+class _Keys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class _SubscribeBody(BaseModel):
+    endpoint: str
+    keys: _Keys
+    ua: Optional[str] = ""
+
+
+class _EndpointBody(BaseModel):
+    endpoint: str
+
+
+@router.get("/api/push/vapid-public", include_in_schema=False)
+def push_vapid_public():
+    c = vapid_config()
+    return {"configured": c["configured"], "key": c["public"] or None}
+
+
+@router.post("/api/push/subscribe", include_in_schema=False)
+def push_subscribe(body: _SubscribeBody, request: Request):
+    user = _caller(request)
+    if not body.endpoint.startswith("https://"):
+        raise HTTPException(status_code=400, detail="endpoint must be https")
+    with get_db() as con:
+        ensure(con)
+        con.execute("""INSERT INTO push_subscription(username, endpoint, p256dh, auth, ua, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(endpoint) DO UPDATE SET username = excluded.username, p256dh = excluded.p256dh,
+                         auth = excluded.auth, ua = excluded.ua, fails = 0""",
+                    (user, body.endpoint, body.keys.p256dh, body.keys.auth, (body.ua or "")[:200],
+                     _thai_now().strftime("%Y-%m-%d %H:%M")))
+        con.commit()
+        n = con.execute("SELECT COUNT(*) FROM push_subscription WHERE username = ?", (user,)).fetchone()[0]
+    return {"ok": True, "devices": n}
+
+
+@router.post("/api/push/unsubscribe", include_in_schema=False)
+def push_unsubscribe(body: _EndpointBody, request: Request):
+    _caller(request)
+    with get_db() as con:
+        ensure(con)
+        cur = con.execute("DELETE FROM push_subscription WHERE endpoint = ?", (body.endpoint,))
+        con.commit()
+        return {"ok": True, "removed": cur.rowcount}
+
+
+@router.get("/api/push/status", include_in_schema=False)
+def push_status(request: Request):
+    """How the morning notification stands: configured, how many devices, what the
+    last send did. Endpoints are never returned (they are capability URLs)."""
+    user = _caller(request)
+    c = vapid_config()
+    with get_db() as con:
+        ensure(con)
+        total = con.execute("SELECT COUNT(*) FROM push_subscription").fetchone()[0]
+        mine = con.execute("SELECT COUNT(*) FROM push_subscription WHERE username = ?", (user,)).fetchone()[0]
+        last = _meta_get(con, "push_morning")
+    return {"configured": c["configured"], "devices": total, "my_devices": mine,
+            "send_at": f"{MORNING_HOUR:02d}:{MORNING_MINUTE:02d}",
+            "last": json.loads(last) if last else None}
+
+
+@router.post("/api/push/test", include_in_schema=False)
+def push_test(request: Request):
+    """One test notification to the caller's own devices, so the toggle proves itself."""
+    user = _caller(request)
+    c = vapid_config()
+    if not c["configured"]:
+        raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่าคีย์แจ้งเตือน (VAPID) บนเซิร์ฟเวอร์")
+    payload = {"title": "Oshinei · ทดสอบการแจ้งเตือน", "body": f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}",
+               "url": "/", "tag": "oshinei-test"}
+    with get_db() as con:
+        ensure(con)
+        r = send_to_all(con, payload, only_user=user)
+        con.commit()
+    if not r["targets"]:
+        raise HTTPException(status_code=404, detail="เครื่องนี้ยังไม่ได้เปิดรับการแจ้งเตือน")
+    return r
+
+
+# ── sending ──────────────────────────────────────────────────────────────────
+def _default_send(sub_info: dict, data: str) -> int:
+    """pywebpush, imported lazily so a box without it still serves everything else.
+    Returns the push service's HTTP status; raises on transport errors."""
+    from pywebpush import webpush, WebPushException   # noqa: WPS433
+    c = vapid_config()
+    try:
+        resp = webpush(subscription_info=sub_info, data=data, vapid_private_key=c["private"],
+                       vapid_claims={"sub": c["subject"]}, ttl=6 * 3600)
+        return getattr(resp, "status_code", 201)
+    except WebPushException as e:
+        resp = getattr(e, "response", None)
+        if resp is not None and getattr(resp, "status_code", None):
+            return int(resp.status_code)
+        raise
+
+
+def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None) -> dict:
+    """Push `payload` to every stored device (or one user's). 404/410 = the browser
+    dropped the subscription → row deleted; other failures count, MAX_FAILS drops it."""
+    send = send or _default_send
+    q, params = "SELECT id, endpoint, p256dh, auth, fails FROM push_subscription", ()
+    if only_user is not None:
+        q, params = q + " WHERE username = ?", (only_user,)
+    rows = con.execute(q, params).fetchall()
+    data = json.dumps(payload, ensure_ascii=False)
+    out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0}
+    now = _thai_now().strftime("%Y-%m-%d %H:%M")
+    for r in rows:
+        sub_info = {"endpoint": r[1], "keys": {"p256dh": r[2], "auth": r[3]}}
+        try:
+            status = send(sub_info, data)
+        except Exception as e:  # noqa: BLE001 — a transport error is a failure like any other
+            print(f"[push] send failed for #{r[0]}: {e}")
+            status = 0
+        if 200 <= status < 300:
+            out["sent"] += 1
+            con.execute("UPDATE push_subscription SET last_ok = ?, fails = 0 WHERE id = ?", (now, r[0]))
+        elif status in (404, 410):
+            out["gone"] += 1
+            con.execute("DELETE FROM push_subscription WHERE id = ?", (r[0],))
+        else:
+            out["failed"] += 1
+            if (r[4] or 0) + 1 >= MAX_FAILS:
+                con.execute("DELETE FROM push_subscription WHERE id = ?", (r[0],))
+            else:
+                con.execute("UPDATE push_subscription SET fails = fails + 1 WHERE id = ?", (r[0],))
+    return out
+
+
+# ── the morning brief as a notification ─────────────────────────────────────
+def _fmt_money(v) -> str:
+    v = float(v or 0)
+    if abs(v) >= 1e6:
+        return f"{v / 1e6:.2f}M"
+    if abs(v) >= 1e3:
+        return f"{v / 1e3:.1f}K"
+    return f"{v:,.0f}"
+
+
+def _th_day(iso: str) -> str:
+    try:
+        d = datetime.strptime(iso, "%Y-%m-%d")
+        return f"{TH_DOW[d.weekday()]} {d.day} {TH_MON[d.month - 1]}"
+    except Exception:
+        return iso or ""
+
+
+def morning_payload(brief: dict, scorecard: dict) -> Optional[dict]:
+    """The phone's เมื่อวาน strip as title + body — same numbers, same rule for
+    'below normal' (status down or vs_avg_pct ≤ −8, js/07-home.js). None when the
+    brief has no day."""
+    if not brief or not brief.get("yesterday"):
+        return None
+    rev, wow = float(brief.get("revenue_yesterday") or 0), brief.get("revenue_wow")
+    chip = ""
+    if wow:
+        pct = (rev - float(wow)) / float(wow) * 100
+        chip = f" {'▲' if pct >= 0 else '▼'}{abs(pct):.1f}%"
+    title = f"เมื่อวาน ({_th_day(brief['yesterday'])}) {_fmt_money(rev)}{chip}"
+    rows = (scorecard or {}).get("branches") or []
+    down = [b for b in rows if b.get("status") == "down" or (b.get("vs_avg_pct") is not None and b["vs_avg_pct"] <= -8)]
+    down.sort(key=lambda b: (b.get("vs_avg_pct") if b.get("vs_avg_pct") is not None else 0))
+    bits = [f"ลูกค้า {int(brief.get('customer_yesterday') or 0):,}"]
+    if down:
+        worst = ", ".join(f"{b['branch']} {b['vs_avg_pct']:.0f}%" for b in down[:2] if b.get("vs_avg_pct") is not None)
+        bits.append(f"{len(down)} สาขาต่ำกว่าปกติ" + (f": {worst}" if worst else ""))
+    else:
+        bits.append("ทุกสาขาอยู่ในเกณฑ์ปกติ")
+    if brief.get("skipped_day"):
+        bits.append(f"ข้อมูล {_th_day(brief['skipped_day'])} ยังมาไม่ครบ")
+    return {"title": title, "body": " · ".join(bits), "url": "/", "tag": "oshinei-morning"}
+
+
+def build_morning() -> Optional[dict]:
+    """Read the same two endpoints the Daily Brief and the phone strip read."""
+    from routers import home_extra as _he   # local import: home_extra imports core/rules at module load
+    # both are @ttl_cache'd: called in-process the wrapper hands back serialized bytes,
+    # so read the plain functions functools.wraps kept under __wrapped__
+    brief_fn = getattr(_he.home_brief, "__wrapped__", _he.home_brief)
+    sc_fn = getattr(_he.home_branch_scorecard, "__wrapped__", _he.home_branch_scorecard)
+    return morning_payload(brief_fn(branch=None), sc_fn(date=None, group=None))
+
+
+def maybe_send_morning(now=None, send=None, force: bool = False) -> Optional[dict]:
+    """Once a day, from MORNING_HOUR:MORNING_MINUTE Thai time: build the brief and push
+    it to every device. Best-effort; a day with no devices or no data is recorded too.
+    Returns the record it stored, or None when it was not time / already done."""
+    now = now or _thai_now()
+    if not force and (now.hour, now.minute) < (MORNING_HOUR, MORNING_MINUTE):
+        return None
+    day = now.strftime("%Y-%m-%d")
+    with get_db() as con:
+        ensure(con)
+        if not force and _meta_get(con, "push_morning_day") == day:
+            return None
+        _meta_set(con, "push_morning_day", day)      # claim first: two ticks never send twice
+        con.commit()
+        c = vapid_config()
+        rec = {"day": day, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "configured": c["configured"]}
+        try:
+            payload = build_morning()
+        except Exception as e:  # noqa: BLE001
+            payload = None
+            rec["error"] = f"brief: {e}"
+        rec["payload"] = payload
+        if payload and c["configured"]:
+            rec.update(send_to_all(con, payload, send=send))
+        else:
+            rec.update({"targets": con.execute("SELECT COUNT(*) FROM push_subscription").fetchone()[0],
+                        "sent": 0, "gone": 0, "failed": 0})
+        _meta_set(con, "push_morning", json.dumps(rec, ensure_ascii=False))
+        con.commit()
+    print(f"[push] morning {day}: {rec.get('sent')}/{rec.get('targets')} sent" + (f" ({rec['error']})" if rec.get("error") else ""))
+    return rec

@@ -930,6 +930,32 @@ def tabs_html(v: Optional[str] = Query(None)):
                      headers={"Cache-Control": cache, "X-Tabs-Version": h})
 
 
+_SW_FILE = INDEX.parent / "sw.js"
+
+
+def _build_id() -> str:
+    """One short hash over every js slice's hash + the tabs bundle: it changes whenever
+    any of them does, so the service worker's shell cache is retired on a deploy."""
+    parts = [_js_hash(p) for p in sorted(_JS_DIR.glob("*.js"))] if _JS_DIR.exists() else []
+    try:
+        parts.append(_tabs_bundle()[1])
+    except Exception:
+        pass
+    return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()[:10]
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    """The service worker (repo root sw.js) with __BUILD__ replaced by the deploy's
+    content hash. no-cache so the browser re-checks it on every visit; served from
+    the root so it controls the whole app."""
+    if not _SW_FILE.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    body = _SW_FILE.read_text(encoding="utf-8").replace("__BUILD__", _build_id())
+    return _Response(content=body, media_type="application/javascript",
+                     headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
 @app.get("/js/{name}", include_in_schema=False)
 def app_js_slice(name: str, v: Optional[str] = Query(None)):
     """One slice of the SPA JS (P2 refactor: app.js split into js/01…09,
@@ -2187,6 +2213,37 @@ if __package__:
 else:
     from routers.home_extra import router as _home_extra_router
 app.include_router(_home_extra_router)
+if __package__:
+    from .routers import push_api as _push_api
+else:
+    from routers import push_api as _push_api
+app.include_router(_push_api.router)
+
+
+def _push_scheduler_loop():
+    """Every minute: send the morning brief as a notification once a day after 08:30
+    Thai time (routers/push_api.maybe_send_morning). A daemon thread — the Fly machine
+    never stops (min_machines_running = 1), so nobody has to open the app for it."""
+    import time as _time
+    while True:
+        try:
+            _push_api.maybe_send_morning()
+        except Exception as e:  # noqa: BLE001 — never let the loop die
+            print(f"[push] scheduler: {e}")
+        _time.sleep(60)
+
+
+@app.on_event("startup")
+def _push_startup():
+    try:
+        with get_db() as con:
+            _push_api.ensure(con)
+            con.commit()
+    except Exception as e:
+        print(f"[push] ensure failed: {e}")
+    import os as _os, sys as _sys
+    if _os.environ.get("OSHINEI_PUSH_SCHEDULER", "1") == "1" and "pytest" not in _sys.modules:
+        threading.Thread(target=_push_scheduler_loop, name="push-morning", daemon=True).start()
 if __package__:
     from .routers.cost_bom import router as _cost_bom_router
     from .routers.cost_bom import get_cost_detail, branch_bom_analysis  # noqa: F401
