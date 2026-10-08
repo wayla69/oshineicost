@@ -294,6 +294,34 @@ def closed_day_clause(col: str = "t.sold_at") -> str:
     return f"date({col}) < {TH_TODAY_SQL}"
 
 
+def latest_settled_day(con, where: str = "t.source='Easy' AND b.name!='ALL'", params: Optional[dict] = None,
+                       min_ratio: float = 0.4, lookback: int = 10) -> dict:
+    """The newest FINISHED day whose bills have actually arrived.
+
+    closed_day_clause keeps the day still trading out of the headline; this also steps
+    back over a finished day the POS has not posted yet. The 06:00 sync runs before the
+    previous day lands in MSSQL — 2026-10-08 the 7th held 7 bills chain-wide and the
+    Daily Brief (desktop and phone) headlined it as a −99.9 % day. A day with fewer
+    than `min_ratio` × the mean bills of the up-to-7 days before it is skipped.
+    Returns {"day", "skipped_day", "skipped_bills"}; day is None when there is no data.
+    `where` uses the aliases t (sales_transaction) and b (branches)."""
+    rows = con.execute(
+        f"SELECT date(t.sold_at) AS d, COUNT(*) AS n FROM sales_transaction t "
+        f"JOIN branches b ON b.branch_id = t.branch_id "
+        f"WHERE {where} AND {closed_day_clause('t.sold_at')} "
+        f"GROUP BY date(t.sold_at) ORDER BY d DESC LIMIT :_lim",
+        {**(params or {}), "_lim": lookback + 7}).fetchall()
+    counts = [(r[0], r[1]) for r in rows]   # newest first
+    skipped_day, skipped_bills = None, None
+    for i, (d, n) in enumerate(counts[:lookback]):
+        prior = [c for _, c in counts[i + 1:i + 8]]
+        if not prior or n >= min_ratio * (sum(prior) / len(prior)):
+            return {"day": d, "skipped_day": skipped_day, "skipped_bills": skipped_bills}
+        if skipped_day is None:
+            skipped_day, skipped_bills = d, n
+    return {"day": counts[0][0] if counts else None, "skipped_day": None, "skipped_bills": None}
+
+
 def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
                  group: Optional[str] = None, alias: str = "b") -> None:
     if branch:

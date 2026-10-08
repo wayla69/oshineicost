@@ -1403,6 +1403,8 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body.no-mobile-app #backToMobile { display: none; }
 }
 #mobileSummary { min-height: 100vh; background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
+/* plain <b>/<p> inherit from here — without it dark mode drew the numbers in the light theme's ink */
+#mobileSummary, #msSheet { color: var(--text-primary, #1e293b); }
 .ms-header { position: sticky; top: 0; z-index: 20; background: var(--accent);
   background:#1f3a6b; color: #fff;   /* white >= 6.29:1 end to end (#4a70b0 was 4.47) */
   padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
@@ -1425,6 +1427,12 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius:var(--r-md);
   min-height: 44px; min-width: 44px; padding: 8px 14px; font-size: 13px; font-weight: 600;
   display: inline-flex; align-items: center; justify-content: center; }
+.ms-toggle .ui-icon { width: 18px; height: 18px; }
+/* pull-to-refresh: a strip that grows under the header while the finger drags down (09c-mobile.js) */
+#msPull { height: 0; overflow: hidden; text-align: center; font-size: 12px; line-height: 36px;
+  color: var(--text-muted,#64748b); transition: height .15s; }
+#msPull.ready { color: var(--accent); font-weight: 600; }
+@media (max-width: 700px) { body:not(.force-desktop) { overscroll-behavior-y: contain; } }   /* our pull, not the browser's page reload */
 #backToMobile { position: fixed; bottom: 84px; right: 16px; z-index: 60;
   width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent);
   font-size: 20px; box-shadow: 0 4px 14px rgba(31,58,107,.5); align-items: center; justify-content: center; }
@@ -1679,10 +1687,22 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <div class="ms-logo">お</div>
     <div style="flex:1;min-width:0">
       <p style="font-weight:700;font-size:15px;line-height:1.1">Oshinei</p>
-      <p id="msSubtitle" style="font-size:12px">สรุปสำหรับเจ้าของ</p>
+      <p id="msSubtitle" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">สรุปสำหรับเจ้าของ</p>
     </div>
     <button class="ms-toggle" onclick="msRefresh()" aria-label="รีเฟรช">↻</button>
+    <!-- the phone's own light/dark toggle (setDarkBtnIcon fills the icon, 06-features.js) -->
+    <button class="ms-toggle" id="msDarkBtn" onclick="toggleDarkMode()" aria-label="สลับโหมดมืด" aria-pressed="false" style="padding:8px 10px;min-width:40px"></button>
     <button class="ms-toggle" onclick="showFullDashboard()">เต็ม →</button>
+  </div>
+  <!-- pull-to-refresh indicator (09c-mobile.js) -->
+  <div id="msPull" aria-hidden="true"></div>
+  <!-- install offer: beforeinstallprompt, or the iOS hint (msShowInstall, 09c-mobile.js) -->
+  <div id="msInstall" class="ms-section" style="display:none;margin-top:10px">
+    <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ</b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
+      <button id="msInstallBtn" onclick="msInstallApp()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">ติดตั้ง</button>
+      <button onclick="msInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted,#64748b);font-size:20px;flex-shrink:0">×</button>
+    </div>
   </div>
 
   <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">

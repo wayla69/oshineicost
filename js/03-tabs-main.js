@@ -322,6 +322,9 @@ document.addEventListener('visibilitychange', () => {
 
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
+  // the phone remembers which side was used last: เต็ม → once means เต็ม next time too,
+  // until the phone button brings the summary back (showMobileSummary, 09c-mobile.js)
+  try { if (window.matchMedia('(max-width:700px)').matches && localStorage.getItem('oshinei_phone_mode') === 'full') document.body.classList.add('force-desktop'); } catch (e) {}
   // the 48 panels, before anything looks for one — a phone defers them to ensureDesktopBooted
   if (!_phoneFirst()) await loadTabFragments();
   initDarkMode();
