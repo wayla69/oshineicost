@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════════
 async function showFullDashboard(tab) {
   document.body.classList.add('force-desktop');
+  try { localStorage.setItem('oshinei_phone_mode', 'full'); } catch (e) {}   // next open lands here (init, 03-tabs-main.js)
   window.scrollTo(0, 0);
   // phone-first boot (03-tabs-main.js): the desktop shell loads now, on the first tap
   const first = !_desktopBooted;
@@ -19,9 +20,72 @@ async function showFullDashboard(tab) {
 }
 function showMobileSummary() {
   document.body.classList.remove('force-desktop');
+  try { localStorage.setItem('oshinei_phone_mode', 'summary'); } catch (e) {}
   window.scrollTo(0, 0);
   loadMobileSummary(true);
 }
+
+// ── Pull to refresh on the summary: a downward drag from the top grows #msPull
+// ("ดึงลงเพื่อรีเฟรช" → "ปล่อยเพื่อรีเฟรช"), letting go past the threshold runs msRefresh().
+// body:not(.force-desktop) has overscroll-behavior-y: contain (index.html) so the
+// browser's own page reload does not fire first. Off while the branch sheet is open. ──
+(function () {
+  const root = document.getElementById('mobileSummary'), ind = document.getElementById('msPull');
+  if (!root || !ind) return;
+  const ARM = 140, MAXH = 64;
+  let y0 = null, dist = 0, pulling = false;
+  root.addEventListener('touchstart', e => {
+    if (document.body.classList.contains('ms-sheet-open') || window.scrollY > 0) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dist = 0; pulling = false;
+  }, { passive: true });
+  root.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dist = e.touches[0].clientY - y0;
+    if (dist <= 0 || window.scrollY > 0) { if (pulling) { pulling = false; ind.style.height = '0px'; } return; }
+    pulling = true;
+    ind.style.height = Math.min(MAXH, dist * 0.45) + 'px';
+    ind.classList.toggle('ready', dist >= ARM);
+    ind.textContent = dist >= ARM ? '↑ ปล่อยเพื่อรีเฟรช' : '↓ ดึงลงเพื่อรีเฟรช';
+  }, { passive: true });
+  root.addEventListener('touchend', () => {
+    if (y0 != null && pulling && dist >= ARM) {
+      ind.textContent = 'กำลังรีเฟรช…'; ind.style.height = '36px';
+      try { msRefresh(); } catch (e) {}
+      setTimeout(() => { ind.style.height = '0px'; }, 900);
+    } else ind.style.height = '0px';
+    y0 = null; dist = 0; pulling = false; ind.classList.remove('ready');
+  }, { passive: true });
+})();
+
+// ── Install. Chrome / Edge / Samsung fire beforeinstallprompt: keep the event and offer
+// one ติดตั้ง button. iOS has no such event: Safari gets a one-line hint instead
+// (แชร์ → เพิ่มไปยังหน้าจอโฮม). Shown on the phone summary only, never inside the
+// installed app, and × keeps it away for 30 days (a completed install for a year). ──
+let _installEvt = null;
+function _msStandalone() { try { return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } }
+function _msInstallSnoozed() { try { return Date.now() < (+localStorage.getItem('oshinei_install_snooze') || 0); } catch (e) { return false; } }
+function msShowInstall(mode) {
+  const w = document.getElementById('msInstall'); if (!w || _msStandalone() || _msInstallSnoozed()) return;
+  const btn = document.getElementById('msInstallBtn'), hint = document.getElementById('msInstallHint');
+  if (mode === 'ios') { if (btn) btn.style.display = 'none'; if (hint) hint.textContent = 'กดปุ่มแชร์ของ Safari แล้วเลือก "เพิ่มไปยังหน้าจอโฮม"'; }
+  else if (btn) btn.style.display = '';
+  w.style.display = '';
+}
+async function msInstallApp() {
+  if (!_installEvt) return;
+  try { _installEvt.prompt(); const r = await _installEvt.userChoice; if (r && r.outcome === 'accepted') msInstallDismiss(365); } catch (e) {}
+  _installEvt = null;
+}
+function msInstallDismiss(days) {
+  try { localStorage.setItem('oshinei_install_snooze', String(Date.now() + (days || 30) * 86400000)); } catch (e) {}
+  const w = document.getElementById('msInstall'); if (w) w.style.display = 'none';
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installEvt = e; msShowInstall('prompt'); });
+window.addEventListener('appinstalled', () => msInstallDismiss(365));
+(function () {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua)) msShowInstall('ios');
+})();
 
 // ── The top bar folds on a phone. Its controls (branch · period · search · filters ·
 // presets · tools · user · uploads) are six or seven rows of chrome before the first
@@ -445,11 +509,18 @@ function msYesterdayHtml(brief, sc, br) {
     if (down.length) { go = 'msOpenBranch(this.dataset.br)'; target = down[0].branch; }
     else go = "msSwitchView('branches')";
   }
+  let skipNote = '';
+  if (brief.skipped_day) {
+    const sd = new Date(brief.skipped_day + 'T00:00:00');
+    const sWhen = isNaN(sd) ? brief.skipped_day : `${sd.getDate()} ${_MS_TH_MON[sd.getMonth()]}`;
+    skipNote = `<p style="font-size:12px;${_msMuted};margin-top:4px">ข้อมูลวันที่ ${esc(sWhen)} มีเพียง ${fmtN(brief.skipped_bills || 0)} บิล ยังมาไม่ครบ จึงแสดงวันก่อนหน้า</p>`;
+  }
   return `<div data-br="${esc(target)}" onclick="${go}" role="button" aria-label="เมื่อวาน — แตะเพื่อดูรายสาขา" style="cursor:pointer;min-height:44px">
-    <p style="font-size:12px;${_msMuted}">เมื่อวาน · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
+    <p style="font-size:12px;${_msMuted}">${brief.skipped_day ? 'วันล่าสุดที่ข้อมูลครบ' : 'เมื่อวาน'} · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
     <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${wowPct != null ? msPchip(wowPct) : ''}<span style="font-size:12px;${_msMuted}">เทียบวันเดียวกันสัปดาห์ก่อน</span></p>
     <p style="font-size:12px;${_msMuted};margin-top:2px">ลูกค้า ${fmtN(brief.customer_yesterday || 0)} · ${fmtN(brief.tx_yesterday || 0)} บิล · ${fmt(brief.avg_ticket_yesterday || 0)}/บิล</p>
     ${line3 ? `<p style="font-size:13px;margin-top:6px;display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">${line3}</span><span style="${_msMuted}">›</span></p>` : ''}
+    ${skipNote}
   </div>`;
 }
 

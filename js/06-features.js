@@ -1170,26 +1170,47 @@ async function saveClosedHours() {
 // ════════════════════════════════════════════════════════════════
 // FEATURE 10: DARK MODE
 // ════════════════════════════════════════════════════════════════
-function initDarkMode() {
-  if (localStorage.getItem('oshinei_dark') === '1') {
-    document.body.classList.add('dark');
-    setDarkBtnIcon(true);
-  }
-}
-
-function toggleDarkMode() {
-  const isDark = document.body.classList.toggle('dark');
-  localStorage.setItem('oshinei_dark', isDark ? '1' : '0');
+// A saved choice (oshinei_dark) wins everywhere. A PHONE with no saved choice follows
+// the device (prefers-color-scheme) and keeps following it until the person taps a
+// toggle — the phone summary has its own in its header (#msDarkBtn, 2026-10-08). A
+// desktop with no choice stays light, as it always has.
+function _systemDark() { try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; } }
+function _darkChoice() { try { return localStorage.getItem('oshinei_dark'); } catch (e) { return null; } }
+function _onPhone() { try { return window.matchMedia('(max-width:700px)').matches; } catch (e) { return false; } }
+function applyDarkMode(isDark, rerender) {
+  document.body.classList.toggle('dark', !!isDark);
   document.getElementById('darkBtn')?.setAttribute('aria-pressed', isDark ? 'true' : 'false');
-  setDarkBtnIcon(isDark);
+  setDarkBtnIcon(!!isDark);
+  if (!rerender) return;
   // Force-rebuild charts so palette/axes recompute via chartTheme()
   Object.keys(chartInstances).forEach(id => { try { chartInstances[id].destroy(); } catch(e){} delete chartInstances[id]; });
   loadActiveTab();
+}
+function initDarkMode() {
+  const choice = _darkChoice();
+  applyDarkMode(choice === null ? (_onPhone() && _systemDark()) : choice === '1', false);
+  try {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+      if (_darkChoice() === null && _onPhone()) applyDarkMode(e.matches, true);
+    });
+  } catch (e) {}
+}
+
+function toggleDarkMode() {
+  const isDark = !document.body.classList.contains('dark');
+  try { localStorage.setItem('oshinei_dark', isDark ? '1' : '0'); } catch (e) {}
+  applyDarkMode(isDark, true);
 }
 
 function setDarkBtnIcon(isDark) {
   const btn = document.getElementById('darkBtn');
   if (btn) btn.innerHTML = isDark ? ICON.sun : ICON.moon;
+  const mb = document.getElementById('msDarkBtn');
+  if (mb) {
+    mb.innerHTML = isDark ? ICON.sun : ICON.moon;
+    mb.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+    mb.title = isDark ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด';
+  }
 }
 
 

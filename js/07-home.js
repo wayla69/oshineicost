@@ -113,7 +113,8 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
   const wow = brief.revenue_wow ? ((brief.revenue_yesterday - brief.revenue_wow) / brief.revenue_wow * 100) : null;
   const wowTxt = wow != null ? `(${wow >= 0 ? '+' : ''}${wow.toFixed(0)}% เทียบสัปดาห์ก่อน)` : '';
   const projTxt = fc && fc.available ? ` คาดจบเดือน ~<b>${fmt(fc.projected)}</b>` : '';
-  const line1 = `เมื่อวาน (${brief.yesterday}) ทำได้ <b>${fmt(brief.revenue_yesterday || 0)}</b> ${wowTxt} · เดือนนี้ทำไป <b>${fmt(brief.mtd_revenue || 0)}</b> ใน ${brief.mtd_days || 0} วัน${projTxt}`;
+  const skipNote = brief.skipped_day ? ` · <span style="color:var(--text-muted)">ข้อมูลวันที่ ${brief.skipped_day} มีเพียง ${brief.skipped_bills} บิล ยังมาไม่ครบ จึงแสดงวันก่อนหน้า</span>` : '';
+  const line1 = `เมื่อวาน (${brief.yesterday}) ทำได้ <b>${fmt(brief.revenue_yesterday || 0)}</b> ${wowTxt} · เดือนนี้ทำไป <b>${fmt(brief.mtd_revenue || 0)}</b> ใน ${brief.mtd_days || 0} วัน${projTxt}${skipNote}`;
   const bits = [];
   if (s.downCount) bits.push(`${s.downCount} สาขาต่ำกว่าปกติ`);
   if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% สูงกว่าแถบเป้า ${s.H.hi}%`);

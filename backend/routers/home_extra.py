@@ -7,7 +7,7 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import closed_day_clause
+from rules import closed_day_clause, latest_settled_day
 from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_band,
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
@@ -32,9 +32,10 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
     _group_filter(base, params, group)
     where = " AND ".join(base)
     with get_db() as con:
-        # the latest FINISHED day (rules.closed_day_clause) — never the day still trading
-        maxd = con.execute(f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
-                           f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where} AND {closed_day_clause('t.sold_at')}", params).fetchone()[0]
+        # the latest FINISHED day whose bills have arrived (rules.latest_settled_day) —
+        # never the day still trading, nor a day the POS has not posted yet
+        settled = latest_settled_day(con, where=where, params=params)
+        maxd = settled["day"]
         if not maxd:
             return {"date": None, "days": [], "branches": []}
         focus = (date or maxd)[:10]
@@ -70,7 +71,8 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
                         "spark": spark, "avg7": round(avg7, 0),
                         "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status})
         out.sort(key=lambda r: -r["revenue"])
-    return {"date": focus, "days": days, "branches": out}
+    return {"date": focus, "days": days, "branches": out,
+            "skipped_day": None if date else settled["skipped_day"], "skipped_bills": None if date else settled["skipped_bills"]}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -515,13 +517,14 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
 def home_brief(branch: Optional[str] = Query(None)):
     """Yesterday vs target + MTD + recent anomalies + top/bottom branch."""
     with get_db() as con:
-        # "Yesterday" = the latest FINISHED day (rules.closed_day_clause). Plain
-        # MAX(sold_at) became today after the noon sync — a few hours of bills shown
-        # as a -99.9% day (owner 2026-10-02).
-        max_row = con.execute(
-            f"SELECT DATE(MAX(sold_at)) AS max_date FROM sales_transaction WHERE source='Easy' AND {closed_day_clause('sold_at')}"
-        ).fetchone()
-        yesterday = max_row["max_date"] if max_row else None
+        # "Yesterday" = the latest FINISHED day whose bills have arrived
+        # (rules.latest_settled_day). Plain MAX(sold_at) became today after the noon
+        # sync — a few hours of bills shown as a -99.9% day (owner 2026-10-02); and the
+        # 06:00 sync runs before the previous day is posted, so a finished day with a
+        # handful of bills is skipped the same way (2026-10-08). The whole chain sets
+        # the day, a branch filter does not move it — every tile reads the same day.
+        settled = latest_settled_day(con)
+        yesterday = settled["day"]
         if not yesterday:
             return {"yesterday": None}
 
@@ -660,6 +663,8 @@ def home_brief(branch: Optional[str] = Query(None)):
 
     return {
         "yesterday": yesterday,
+        "skipped_day": settled["skipped_day"],       # a newer finished day set aside: its bills had not arrived
+        "skipped_bills": settled["skipped_bills"],
         "dow_label": dow_label,
         "revenue_yesterday": yest_row["revenue"] if yest_row else 0,
         "tx_yesterday": yest_row["tx_count"] if yest_row else 0,
