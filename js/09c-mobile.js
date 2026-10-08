@@ -171,6 +171,33 @@ async function msPushRender(note) {
   if (test) test.style.display = sub ? '' : 'none';
   const later = document.getElementById('msPushLater');
   if (later) { later.textContent = sub ? 'ซ่อน' : 'ไว้ก่อน'; later.setAttribute('onclick', sub ? 'msPushHide()' : 'msPushLater()'); }
+  msPushKinds(sub);
+}
+// one checkbox per kind of notification, saved on the server per device (push_subscription.off)
+async function msPushKinds(sub) {
+  const box = document.getElementById('msPushKinds'); if (!box) return;
+  if (!sub) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  let j;
+  try {
+    const r = await fetch(`${API}/api/push/prefs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    j = await r.json();
+  } catch (e) { box.style.display = 'none'; return; }
+  box.innerHTML = '<div style="font-size:12px;color:var(--text-muted,#64748b);margin:10px 0 0">ชนิดที่ต้องการรับ</div>' +
+    j.kinds.map(k => `<label style="display:flex;align-items:center;gap:10px;min-height:44px;font-size:13px;color:var(--text-primary,#1e293b)"><input type="checkbox" data-kind="${esc(k.id)}" ${(j.off || []).includes(k.id) ? '' : 'checked'} onchange="msPushKindsSave()" style="width:20px;height:20px;accent-color:var(--accent)">${esc(k.label)}</label>`).join('');
+  box.style.display = '';
+}
+async function msPushKindsSave() {
+  const box = document.getElementById('msPushKinds'), st = document.getElementById('msPushState');
+  if (!box) return;
+  const off = [...box.querySelectorAll('input[data-kind]')].filter(i => !i.checked).map(i => i.dataset.kind);
+  try {
+    const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const r = await fetch(`${API}/api/push/prefs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint, off }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (st) st.textContent = off.length ? `บันทึกแล้ว · ปิดอยู่ ${off.length} ชนิด` : 'บันทึกแล้ว · รับครบทุกชนิด';
+  } catch (e) { if (st) st.textContent = 'บันทึกไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
 async function msPushEnable() {
   const st = document.getElementById('msPushState');

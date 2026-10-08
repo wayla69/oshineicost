@@ -49,6 +49,11 @@ DISC_RATE_MIN = 5.0                             # a branch-day's discount ≥ 5%
 DISC_MULT = 2.0                                 # … and ≥ 2× that branch's own 28-day rate …
 DISC_MIN_BAHT = 3000.0                          # … and at least this many baht (pos_cashcount_day)
 
+# what a device can switch off, one by one (push_subscription.off holds the muted ids, comma-separated)
+KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
+         ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ")]
+KIND_IDS = [k for k, _ in KINDS]
+
 TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 TH_DOW = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']   # Python weekday(): Monday = 0
 
@@ -81,6 +86,8 @@ def ensure(con) -> None:
     cols = {r[1] for r in con.execute("PRAGMA table_info(push_subscription)").fetchall()}
     if "branch" not in cols:       # the branch a scoped login is confined to ('' = sees the whole chain)
         con.execute("ALTER TABLE push_subscription ADD COLUMN branch TEXT NOT NULL DEFAULT ''")
+    if "off" not in cols:          # kinds this device muted ('' = all on), e.g. 'cash,disc'
+        con.execute("ALTER TABLE push_subscription ADD COLUMN off TEXT NOT NULL DEFAULT ''")
     con.execute("CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY, value TEXT)")
 
 
@@ -170,6 +177,32 @@ def push_status(request: Request):
             "last": json.loads(last) if last else None}
 
 
+class _PrefsBody(BaseModel):
+    endpoint: str
+    off: Optional[list] = None      # None = just read; a list = the kinds to mute (replaces the old set)
+
+
+@router.post("/api/push/prefs", include_in_schema=False)
+def push_prefs(body: _PrefsBody, request: Request):
+    """Which kinds this device receives. Only the caller's own device can be read or changed
+    (matched by endpoint AND username); unknown ids are dropped."""
+    user = _caller(request)
+    with get_db() as con:
+        ensure(con)
+        row = con.execute("SELECT off FROM push_subscription WHERE endpoint = ? AND username = ?",
+                          (body.endpoint, user)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="เครื่องนี้ยังไม่ได้เปิดรับการแจ้งเตือน")
+        if body.off is not None:
+            off = [k for k in KIND_IDS if k in {str(x) for x in body.off}]
+            con.execute("UPDATE push_subscription SET off = ? WHERE endpoint = ? AND username = ?",
+                        (",".join(off), body.endpoint, user))
+            con.commit()
+        else:
+            off = [k for k in (row[0] or "").split(",") if k in KIND_IDS]
+    return {"kinds": [{"id": k, "label": lbl} for k, lbl in KINDS], "off": off}
+
+
 @router.post("/api/push/test", include_in_schema=False)
 def push_test(request: Request):
     """One test notification to the caller's own devices, so the toggle proves itself."""
@@ -206,19 +239,22 @@ def _default_send(sub_info: dict, data: str) -> int:
 
 
 def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None,
-                chain_only: bool = False) -> dict:
+                chain_only: bool = False, kind: Optional[str] = None) -> dict:
     """Push `payload` to every stored device (or one user's). 404/410 = the browser
     dropped the subscription → row deleted; other failures count, MAX_FAILS drops it.
-    `chain_only` skips devices of branch-scoped logins (the payload is chain-wide)."""
+    `chain_only` skips devices of branch-scoped logins (the payload is chain-wide); `kind`
+    skips devices that muted that kind (push_prefs)."""
     send = send or _default_send
-    q, params = "SELECT id, endpoint, p256dh, auth, fails FROM push_subscription", ()
+    q, params = "SELECT id, endpoint, p256dh, auth, fails, off FROM push_subscription", ()
     if only_user is not None:
         q, params = q + " WHERE username = ?", (only_user,)
     elif chain_only:
         q = q + " WHERE branch = ''"
     rows = con.execute(q, params).fetchall()
     data = json.dumps(payload, ensure_ascii=False)
-    out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0, "statuses": []}
+    muted = [r for r in rows if kind and kind in (r[5] or "").split(",")]
+    rows = [r for r in rows if r not in muted]
+    out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0, "statuses": [], "muted": len(muted)}
     now = _thai_now().strftime("%Y-%m-%d %H:%M")
     for r in rows:
         sub_info = {"endpoint": r[1], "keys": {"p256dh": r[2], "auth": r[3]}}
@@ -324,7 +360,7 @@ def maybe_send_morning(now=None, send=None, force: bool = False) -> Optional[dic
             rec["error"] = f"brief: {e}"
         rec["payload"] = payload
         if payload and c["configured"]:
-            rec.update(send_to_all(con, payload, send=send, chain_only=True))
+            rec.update(send_to_all(con, payload, send=send, chain_only=True, kind="morning"))
         else:
             rec.update({"targets": con.execute("SELECT COUNT(*) FROM push_subscription").fetchone()[0],
                         "sent": 0, "gone": 0, "failed": 0})
@@ -492,8 +528,8 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
             if key in sent_keys:
                 continue
             if c["configured"]:
-                r = send_to_all(con, payload, send=send, chain_only=True)
-                rec.setdefault("results", {})[key] = {k: r[k] for k in ("targets", "sent", "gone", "failed")}
+                r = send_to_all(con, payload, send=send, chain_only=True, kind=key.split(":")[0])
+                rec.setdefault("results", {})[key] = {k: r[k] for k in ("targets", "sent", "gone", "failed", "muted")}
             sent_keys.append(key)                    # recorded even with no device: no flood when one appears
             rec["sent"].append(key)
             print(f"[push] alert {key}: {payload['title']}")
