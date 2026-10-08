@@ -16,12 +16,13 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
 from bom_center import central as _ce
+from bom_center import claims as _cl
 from bom_center import codes as _cr
 from bom_center import hub as _hub
 from bom_center.clock import today as bkk_today
@@ -1644,6 +1645,124 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
         bid = _stock_branch(con, request, branch_id)
         return _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
                                                receipt_date=body.receipt_date))
+
+
+# ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with photos; Sales Support decides ──
+def _claim_scope(con, request: Request, branch_id: Optional[int]):
+    """A branch login is pinned to its own branch; the centre names one, or None for every branch."""
+    if _auth.scope_branch(request):
+        return _stock_branch(con, request, branch_id)
+    if branch_id is None:
+        return None
+    if not con.execute("SELECT 1 FROM branches WHERE branch_id=?", (branch_id,)).fetchone():
+        raise HTTPException(404, "ไม่พบสาขา")
+    return int(branch_id)
+
+
+def _claim_head_or_403(con, request: Request, claim_id: int) -> dict:
+    h = _cl._head(con, claim_id)
+    if not h:
+        raise HTTPException(404, "ไม่พบรายการเคลม")
+    if _auth.scope_branch(request) and h["branch_id"] != _stock_branch(con, request, None):
+        raise HTTPException(403, detail="บัญชีสาขาเข้าถึงได้เฉพาะเคลมของสาขาตัวเอง", headers={"X-Denied": "role"})
+    return h
+
+
+@router.get("/api/bom-center/claims/claimable")
+def bc_claims_claimable(request: Request, order_id: int = Query(...), branch_id: Optional[int] = Query(None)):
+    """The lines of a received order and how much of each can still be claimed."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return {**_cl.claimable(con, bid, order_id), "reasons": [{"code": c, "label": t} for c, t in _cl.REASONS],
+                    "max_photos": _cl.MAX_PHOTOS}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@router.get("/api/bom-center/claims")
+def bc_claims_list(request: Request, status: Optional[str] = Query(None), branch_id: Optional[int] = Query(None),
+                   limit: int = Query(50)):
+    if status and status not in ("all", *_cl.STATUS_TH):
+        raise HTTPException(400, "status ต้องเป็น submitted / approved / rejected / cancelled / all")
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        return {"claims": _cl.listing(con, bid, status, max(1, min(limit, 200))),
+                "reasons": [{"code": c, "label": t} for c, t in _cl.REASONS],
+                "statuses": [{"code": c, "label": t} for c, t in _cl.STATUS_TH.items()]}
+
+
+@router.get("/api/bom-center/claims/{claim_id}")
+def bc_claim_detail(claim_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _claim_head_or_403(con, request, claim_id)
+        return _cl.detail(con, claim_id)
+
+
+@router.get("/api/bom-center/claims/{claim_id}/photo/{photo_id}")
+def bc_claim_photo(claim_id: int, photo_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _claim_head_or_403(con, request, claim_id)
+        try:
+            mime, data, _bid = _cl.photo(con, claim_id, photo_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+    return Response(content=data, media_type=mime, headers={"Cache-Control": "private, max-age=3600",
+                                                            "X-Content-Type-Options": "nosniff",
+                                                            "Content-Disposition": "inline"})
+
+
+@router.post("/api/bom-center/claims", dependencies=[Depends(require_write_token)])
+async def bc_claim_create(request: Request, payload: str = Form(...), photos: List[UploadFile] = File(default=[]),
+                          branch_id: Optional[int] = Query(None)):
+    """One claim = one received order + its lines + 1–6 photos, sent together (multipart)."""
+    try:
+        p = json.loads(payload)
+        order_id = int(p["order_id"])
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(400, "ข้อมูลการเคลมไม่ถูกต้อง")
+    raws = []
+    for f in photos:
+        b = await f.read(_cl.MAX_PHOTO_BYTES + 1)
+        if b:
+            raws.append(b)
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        out = _write(con, lambda: _cl.create(con, bid, order_id, p.get("lines") or [], raws, p.get("note"), _who(request)))
+    invalidate_cache("bc_")
+    return out
+
+
+@router.post("/api/bom-center/claims/{claim_id}/cancel", dependencies=[Depends(require_write_token)])
+def bc_claim_cancel(claim_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        _claim_head_or_403(con, request, claim_id)
+        out = _write(con, lambda: _cl.cancel(con, claim_id, _who(request)))
+    invalidate_cache("bc_")
+    return out
+
+
+class ClaimDecision(BaseModel):
+    claim_id: int
+    decision: str                       # approve | reject
+    lines: List[dict] = []              # [{code, approved_units}] — absent = everything claimed
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/claim-act/decide", dependencies=[Depends(require_write_token)])
+def bc_claim_decide(body: ClaimDecision, request: Request):
+    """Sales Support: approve (the stock is adjusted) or reject (a reason is required)."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _cl.decide(con, body.claim_id, body.decision, body.lines, body.note, _who(request)))
+    invalidate_cache("bc_")
+    return out
 
 
 # ── Phase 2 · S9: the centre's side — Sales Support queue, Ops compliance, monthly (hub.py) ──

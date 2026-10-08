@@ -131,9 +131,13 @@ def test_monthly_summary(con):  # noqa: F811
 
 
 def test_who_may_do_what():
-    ss, ops, br = (auth.ROLE_MODULES[r] for r in ("salessupport", "operation", "branch"))
+    ss, ops, br, wh = (auth.ROLE_MODULES[r] for r in ("salessupport", "operation", "branch", "warehouse"))
     assert auth.path_allowed("GET", "/api/bom-center/hub/queue", ss)
-    assert auth.path_allowed("POST", "/api/bom-center/hub/process/1", ss)
+    # owner 2026-10-08: the WAREHOUSE updates what is sent; Sales Support reads the queue and exports it
+    assert auth.path_allowed("POST", "/api/bom-center/hub/process/1", wh)
+    assert not auth.path_allowed("POST", "/api/bom-center/hub/process/1", ss)
+    assert auth.path_allowed("GET", "/api/bom-center/hub/queue", wh)
+    assert auth.path_allowed("GET", "/api/bom-center/hub/consolidated", ss)
     assert auth.path_allowed("GET", "/api/bom-center/hub/compliance", ops)
     assert not auth.path_allowed("POST", "/api/bom-center/hub/process/1", ops)
     assert not auth.path_allowed("GET", "/api/bom-center/hub/queue", br)

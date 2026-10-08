@@ -3,7 +3,7 @@
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
     <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
-      ใบสั่งซื้อที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · Sales Support ระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล ·
+      ใบสั่งซื้อที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · คลังระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล · ประสานงานขาย (Sales Support) พิจารณาเคลมสินค้าที่สาขาแจ้ง ·
       สาขาส่งใบสั่งซื้อก่อน 10:00 ของวันสั่ง และส่วนกลางควรดำเนินการภายใน 14:00 ของวันเดียวกัน · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
     </p>
   </div>
@@ -24,6 +24,16 @@
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbQueue" class="card p-3 mb-3"></div>
+  </div>
+
+  <!-- ── เคลมสินค้า (owner 2026-10-08) ── -->
+  <div id="ohb-pane-claims" style="display:none">
+    <div class="card p-3 mb-3">
+      <div class="text-xs mb-2" style="color:var(--text-secondary)">สาขาแจ้งเคลมสินค้าที่ชำรุด เสีย หรือส่งผิดหลังรับของ พร้อมรูปถ่าย · ประสานงานขายตรวจรูปแล้วอนุมัติรับเคลม ระบบจะปรับสินค้าของสาขา (หักออกจากสินค้าที่รับ) หรือไม่อนุมัติพร้อมเหตุผล</div>
+      <div id="ohbClaimChips" class="flex flex-wrap gap-1"></div>
+    </div>
+    <div id="ohbClaimDetail" class="card p-3 mb-3" style="display:none"></div>
+    <div id="ohbClaimList" class="card p-3 mb-3"></div>
   </div>
 
   <!-- ── compliance ── -->

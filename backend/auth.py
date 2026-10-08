@@ -38,6 +38,7 @@ from typing import Optional, Dict, List, Set
 ROLES: List[str] = [
     "management", "marketing", "operation", "analyst", "accounting", "innovation",
     "salessupport",
+    "warehouse",           # คลัง: ยืนยันยอดส่งจริงของใบสั่งซื้อ (owner 2026-10-08 — ไม่ใช่ประสานงานขายอีกต่อไป)
     "branch",              # one account per branch (owner §10-5) — sees only its own branch's pages
 ]
 
@@ -66,6 +67,7 @@ MODULES: List[str] = [
     "bom.release",         # BoM Center: ปล่อยเวอร์ชันสูตร (analyst — owner 2026-10-06)
     "bom.audit",           # BoM Center: ตรวจ/รับทราบเวอร์ชันที่ปล่อยแล้ว และย้อนกลับ (management)
     "branch.stock",        # สาขาของฉัน: นับสต๊อก (Phase 2) — a branch account works on its own branch only
+    "supply.warehouse",    # คลัง: ระบุยอดส่งจริงและกด "ดำเนินการแล้ว" ที่คิวใบสั่งซื้อ (owner 2026-10-08)
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -106,6 +108,11 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
         # sheet shows ingredient ฿ vs sales per branch, nothing chain-wide on cost.
         "sales.overview", "supply.ordering", "report.export",
+    },
+    "warehouse": {
+        # The central warehouse updates what is actually sent (owner 2026-10-08). Like the branch login it
+        # has no sales.overview: a role without it reaches only the paths a rule below names.
+        "supply.warehouse",
     },
     "branch": {
         # A branch login (owner §10-5: one account per branch). Its own branch only —
@@ -298,15 +305,21 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/order",                   {"branch.stock", "supply.ordering", "bom.center"}),
     # S9 the centre: Sales Support works the queue; Ops reads compliance and the monthly summary
-    ("GET", "/api/bom-center/hub",                     {"supply.ordering", "ops.report", "bom.center"}),
-    ("W",   "/api/bom-center/hub",                     {"supply.ordering", "bom.center"}),
+    ("GET", "/api/bom-center/hub",                     {"supply.ordering", "ops.report", "bom.center", "supply.warehouse"}),
+    # owner 2026-10-08: the WAREHOUSE updates what is sent (ส่งจริง + เหตุผล + PO + ดำเนินการแล้ว), no longer Sales Support
+    ("W",   "/api/bom-center/hub",                     {"supply.warehouse"}),
+    # claims (owner 2026-10-08): the branch reports a claim with photos after receiving; Sales Support decides.
+    # Reading is open to the supply roles; a branch login is pinned to its own branch in the router.
+    ("GET", "/api/bom-center/claims",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
+    ("W",   "/api/bom-center/claims",                  {"branch.stock", "supply.ordering", "bom.center"}),
+    ("W",   "/api/bom-center/claim-act",               {"supply.ordering"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)
     ("GET", "/api/bom-center/central",                 {"supply.ordering", "bom.center", "bom.edit", "ops.report", "cost.analysis", "bom.prices", "bom.recipes"}),
     # หน้างาน: every supply role reads its own to-do list (a branch login gets its branch only)
     ("GET", "/api/bom-center/todo",                    {"branch.stock", "supply.ordering", "bom.center", "bom.edit", "bom.prices", "bom.recipes",
-                                                        "bom.release", "bom.audit", "ops.report", "cost.analysis"}),
+                                                        "bom.release", "bom.audit", "ops.report", "cost.analysis", "supply.warehouse"}),
     ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
     ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),

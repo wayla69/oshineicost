@@ -85,6 +85,7 @@
 | PR | เรื่อง | สถานะ |
 |---|---|---|
 | #302 | เมนูเดียว + 7 ชิป + landing ต่อบทบาท (`SUPPLY_CHIPS`, `supplyGo`, `_SUPPLY_PANE`, `ownFilters`) | LIVE c6ed773 |
+| (2026-10-08) | **คลัง + เคลมสินค้า**: บทบาทใหม่ `warehouse` (โมดูล `supply.warehouse`) เป็นผู้ระบุยอดส่งจริงและกด “ดำเนินการแล้ว” แทน Sales Support · สาขาแจ้งเคลมหลังรับของพร้อมรูป (`bc_claim*`, `/api/bom-center/claims`) · Sales Support อนุมัติ → ใบรับติดลบ (`source='claim'`) ปรับสินค้าของสาขา | PR นี้ |
 | #303 | token: dry run ไม่ต้องใช้ token · `X-Denied` · `/api/auth/token-check` · ชิปปลดล็อก | LIVE 077e0d0 |
 | #305 | หน้างาน (`todo.py`, tab `supplyhome`, js/16) · คิวงานบนหน้าแรก · toast ขั้นตอนถัดไป | LIVE dd57922 |
 | #306 | ปิดงวดเดือนเป็นขั้นตอนที่ 1–6 · `POST /central/month-import` · Sales Support นำเข้าผลตรวจนับได้ | LIVE b87c06e |

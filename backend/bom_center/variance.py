@@ -84,10 +84,12 @@ def _closed_through(con, branch_id: int):
 
 
 def delete_receipt(con, branch_id: int, receipt_id: int, who: str) -> bool:
-    r = con.execute("SELECT receipt_date FROM bc_receipt WHERE receipt_id=? AND branch_id=?",
+    r = con.execute("SELECT receipt_date, source FROM bc_receipt WHERE receipt_id=? AND branch_id=?",
                     (receipt_id, branch_id)).fetchone()
     if not r:
         raise ValueError("ไม่พบใบรับสินค้านี้")
+    if r[1] == "claim":
+        raise ValueError("รายการนี้เกิดจากการอนุมัติเคลม ลบไม่ได้ หากต้องแก้ไขให้แจ้งประสานงานขาย")
     closed = _closed_through(con, branch_id)
     if closed and r[0] < closed:
         raise ValueError(f"ใบรับสินค้าวันที่ {r[0]} อยู่ในรอบที่ตรวจนับปิดแล้ว ({closed}) จึงลบไม่ได้ กรุณาแจ้งส่วนกลาง")

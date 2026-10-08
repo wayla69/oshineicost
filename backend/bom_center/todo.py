@@ -207,10 +207,15 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool) ->
                       go={"tab": "bomcenter", "pane": "cal"}))
         q = con.execute("SELECT COUNT(*), MIN(cycle_date) FROM bc_order WHERE status='submitted'").fetchone()
         late = bool(q[0] and q[1] and q[1] < today.isoformat())
-        out.append(_e("queue_pending", 220, "week", "ดำเนินการใบสั่งซื้อที่สาขาส่งมา", "todo" if q[0] else "done",
+        out.append(_e("queue_pending", 220, "week", "ระบุยอดส่งจริงของใบสั่งซื้อที่สาขาส่งมา", "todo" if q[0] else "done",
                       (f"รอ {q[0]} ใบ ภายใน 14:00 ของวันสั่ง" + (" · มีใบที่เลยวันสั่งแล้ว" if late else "")) if q[0] else "ไม่มีใบสั่งซื้อค้าง",
-                      count=q[0] or None, owner=("supply.ordering",), owner_th="Sales Support", urgent=late,
+                      count=q[0] or None, owner=("supply.warehouse",), owner_th="คลัง", urgent=late,    # owner 2026-10-08
                       go={"tab": "orderhub", "pane": "queue"}))
+        nc = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE status='submitted'") if _has(con, "bc_claim") else 0
+        out.append(_e("claims_pending", 225, "week", "พิจารณาเคลมสินค้าที่สาขาแจ้ง", "todo" if nc else "done",
+                      f"รออนุมัติ {nc} เรื่อง ตรวจรูปแล้วอนุมัติเพื่อปรับสินค้าของสาขา" if nc else "ไม่มีเคลมค้าง",
+                      count=nc or None, owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
+                      go={"tab": "orderhub", "pane": "claims"}))
     for b in branches:
         bid = b["branch_id"]
         cal = calendar(con, bid)
@@ -246,6 +251,12 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool) ->
                           "ใบสั่งซื้อ " + " · ".join(f"#{o} ({'แซลมอน' if r == 'salmon' else 'รอบ ' + r} {c})" for o, r, c in due),
                           count=len(due), owner=("branch.stock",), owner_th="สาขา", branch=b,
                           go={"tab": "branchstock", "pane": "recv", "extra": {"order_id": due[0][0]}}))
+        nc_b = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE branch_id=? AND status='submitted'", (bid,)) \
+            if _has(con, "bc_claim") else 0
+        if nc_b:
+            out.append(_e("claims_open", 325, "week", "เคลมสินค้าที่แจ้งไว้ รอประสานงานขายพิจารณา", "na",
+                          f"รอพิจารณา {nc_b} เรื่อง", count=nc_b, owner=("branch.stock",), owner_th="สาขา", branch=b,
+                          go={"tab": "branchstock", "pane": "recv", "anchor": "brnClaimCard"}))
         if single:
             from .variance import period
             try:
