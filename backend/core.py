@@ -685,9 +685,28 @@ def _token_accepted(provided: str) -> bool:
     return any(hmac.compare_digest(provided, t) for t in _accepted_tokens())
 
 
+def is_branch_session(request: Request) -> bool:
+    """True for a signed-in BRANCH login (the signed session says role 'branch').
+    That login is already confined to its own branch and to the branch.stock routes by
+    the auth middleware (a path with no rule is closed to it), so the owner write-token
+    adds nothing for it — a branch phone never has to be unlocked (owner, 2026-10-08).
+    False with auth off, no/forged cookie, or any other role."""
+    try:
+        import auth as _auth
+        if not _auth.auth_enabled():
+            return False
+        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}
+        return payload.get("r") == "branch" and bool(payload.get("b"))
+    except Exception:
+        return False
+
+
 def require_write_token(
+    request: Request,
     x_upload_token: str = Header(None),
 ):
+    if is_branch_session(request):
+        return
     toks = _accepted_tokens()
     if toks and not _token_accepted(x_upload_token or ""):
         # X-Denied tells the page WHY: the auth middleware marks a role refusal
@@ -715,7 +734,7 @@ def require_write_token_unless_dry_run(request: Request, x_upload_token: str = H
     real write (owner's call, 2026-10-07)."""
     if is_dry_run(request):
         return
-    require_write_token(x_upload_token)
+    require_write_token(request, x_upload_token)
 
 
 # ---------------------------------------------------------------------------
