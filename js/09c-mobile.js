@@ -112,6 +112,17 @@ async function msPushRender(note) {
   if (!st) return;
   let sub = null;
   try { const reg = await navigator.serviceWorker.ready; sub = await reg.pushManager.getSubscription(); } catch (e) {}
+  // the browser may hold a subscription the server no longer has (a failed POST, a dropped
+  // row, a DB swap before the table was preserved): store it again, quietly
+  if (sub) {
+    try {
+      const st = await api(`${API}/api/push/status`);
+      if (st && st.my_devices === 0) {
+        await fetch(`${API}/api/push/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...sub.toJSON(), ua: navigator.userAgent.slice(0, 200) }) });
+      }
+    } catch (e) {}
+  }
   const denied = Notification.permission === 'denied';
   if (sub) st.textContent = note || 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30';
   else if (denied) st.textContent = 'ถูกปิดไว้ในการตั้งค่าของเบราว์เซอร์ — เปิดการแจ้งเตือนให้เว็บนี้ก่อน';
@@ -130,7 +141,11 @@ async function msPushEnable() {
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _msB64ToU8(_msVapid) });
     const r = await fetch(`${API}/api/push/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...sub.toJSON(), ua: navigator.userAgent.slice(0, 200) }) });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || ('HTTP ' + r.status)); }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      try { await sub.unsubscribe(); } catch (e2) {}   // keep the browser and the server in step
+      throw new Error(d.detail || ('HTTP ' + r.status));
+    }
     await msPushRender();
   } catch (e) { if (st) st.textContent = 'เปิดไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
@@ -151,7 +166,9 @@ async function msPushTest() {
     const r = await fetch(`${API}/api/push/test`, { method: 'POST' });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
-    await msPushRender(d.sent ? 'ส่งทดสอบแล้ว · ดูการแจ้งเตือนบนเครื่อง' : `ส่งไม่ถึง (${d.failed || 0} ล้มเหลว, ${d.gone || 0} หมดอายุ)`);
+    const codes = (d.statuses || []).join(', ');
+    await msPushRender(d.sent ? `ส่งทดสอบแล้ว · ดูการแจ้งเตือนบนเครื่อง (push service ตอบ ${codes})`
+                             : `ส่งไม่ถึง (${d.failed || 0} ล้มเหลว, ${d.gone || 0} หมดอายุ · push service ตอบ ${codes || 'ไม่มี'})`);
   } catch (e) { if (st) st.textContent = 'ส่งทดสอบไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
 

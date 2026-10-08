@@ -77,7 +77,8 @@ def test_sender_bookkeeping_sent_gone_failed(client, monkeypatch):
         out = P.send_to_all(con, {"title": "t", "body": "b", "url": "/"}, send=fake_send)
         con.commit()
         left = [r[0] for r in con.execute("SELECT endpoint FROM push_subscription ORDER BY endpoint")]
-    assert out == {"targets": 2, "sent": 1, "gone": 1, "failed": 0}
+    assert {k: out[k] for k in ("targets", "sent", "gone", "failed")} == {"targets": 2, "sent": 1, "gone": 1, "failed": 0}
+    assert sorted(out["statuses"]) == [201, 410]      # the push service's answers travel back to the card
     assert left == [SUB["endpoint"]]                       # 410 → the dead device is dropped
     assert calls and calls[0][1]["title"] == "t"
     # repeated failures retire a device after MAX_FAILS attempts
