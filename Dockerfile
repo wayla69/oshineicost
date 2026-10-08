@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt \
 COPY backend/ /app/backend/
 COPY recon/   /app/recon/
 COPY index.html /app/index.html
+# the service worker, served at /sw.js (backend/main.py) — Docker takes no comment on a COPY line
+COPY sw.js      /app/sw.js
 COPY js/        /app/js/
 COPY tabs/      /app/tabs/
 COPY vendor/    /app/vendor/

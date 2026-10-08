@@ -155,3 +155,11 @@ def test_service_worker_is_served_with_the_build_id(client):
     assert "__BUILD__" not in r.text and "oshinei-shell-" in r.text
     assert r.headers["cache-control"] == "no-cache"
     assert "/api/push/subscribe" in r.text and "notificationclick" in r.text
+
+
+def test_dockerfile_ships_the_worker():
+    """2026-10-08: the first deploy of the worker 404'd on Fly — the image copies
+    paths one by one (Dockerfile) and sw.js at the repo root was not among them."""
+    from pathlib import Path
+    docker = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY sw.js" in docker
