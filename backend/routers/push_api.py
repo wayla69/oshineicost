@@ -188,7 +188,7 @@ def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None) 
         q, params = q + " WHERE username = ?", (only_user,)
     rows = con.execute(q, params).fetchall()
     data = json.dumps(payload, ensure_ascii=False)
-    out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0}
+    out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0, "statuses": []}
     now = _thai_now().strftime("%Y-%m-%d %H:%M")
     for r in rows:
         sub_info = {"endpoint": r[1], "keys": {"p256dh": r[2], "auth": r[3]}}
@@ -197,6 +197,8 @@ def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None) 
         except Exception as e:  # noqa: BLE001 — a transport error is a failure like any other
             print(f"[push] send failed for #{r[0]}: {e}")
             status = 0
+        out["statuses"].append(int(status))
+        print(f"[push] #{r[0]} {r[1][:40]}… → {status}")
         if 200 <= status < 300:
             out["sent"] += 1
             con.execute("UPDATE push_subscription SET last_ok = ?, fails = 0 WHERE id = ?", (now, r[0]))
@@ -258,7 +260,10 @@ def morning_payload(brief: dict, scorecard: dict) -> Optional[dict]:
 
 def build_morning() -> Optional[dict]:
     """Read the same two endpoints the Daily Brief and the phone strip read."""
-    from routers import home_extra as _he   # local import: home_extra imports core/rules at module load
+    # the SAME module object main.py registered: on Fly the app runs as backend.main, so an
+    # absolute `from routers import home_extra` re-executed the module under a second name and
+    # @ttl_cache refused the duplicate function names (2026-10-08 08:30: every morning send failed)
+    from . import home_extra as _he
     # both are @ttl_cache'd: called in-process the wrapper hands back serialized bytes,
     # so read the plain functions functools.wraps kept under __wrapped__
     brief_fn = getattr(_he.home_brief, "__wrapped__", _he.home_brief)
