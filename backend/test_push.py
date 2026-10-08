@@ -249,3 +249,50 @@ def test_morning_push_skips_branch_scoped_devices(client, monkeypatch):
 def test_read_scorecard_returns_a_dict_from_the_cached_endpoint(client):
     sc = P.read_scorecard()          # the real ttl_cache'd function, in-process: a Response, not a dict
     assert isinstance(sc, dict) and "branches" in sc
+
+
+# ── cash short and discount spikes ──────────────────────────────────────────
+def _cd(**rows):
+    return {"day": "2026-10-06", "branches": [
+        {"branch": n, "over_short": o, "sales": s, "discount": d, "base_rate": r}
+        for n, (o, s, d, r) in rows.items()]}
+
+
+def test_cash_short_alert_ignores_small_shortfalls_and_positive_overs():
+    got = P.cash_discount_payloads(_cd(
+        เพชรบูรณ์=(-22616, 42403, 0, 0.01), พัทยา=(-3000, 121282, 0, 0.01), รังสิต=(-150, 90000, 0, 0.01),
+        ลพบุรี=(324351, 80000, 0, 0.01), สยาม=(0, 50000, 0, 0.01)))
+    assert len(got) == 1
+    key, pl = got[0]
+    assert key.startswith("cash:2026-10-06:") and "2 สาขาเงินสดขาด" in pl["title"]
+    assert "เพชรบูรณ์ ขาด ฿22.6K" in pl["body"] and pl["url"] == "/?go=branches" and "รังสิต" not in pl["body"]
+    one = P.cash_discount_payloads(_cd(เพชรบูรณ์=(-22616, 42403, 0, 0.01)))[0][1]
+    assert one["url"].startswith("/?go=branch&b=") and one["tag"] == "oshinei-cash"
+
+
+def test_discount_alert_needs_rate_multiple_and_baht():
+    got = P.cash_discount_payloads(_cd(
+        ฉะเชิงเทรา=(0, 128665, 8637, 0.029),     # 6.7% vs 2.9%: yes
+        เชียงใหม่=(0, 59383, 2000, 0.01),        # 3.4%: under 5% and under ฿3K
+        พัทยา=(0, 60000, 3600, 0.05),            # 6% but it is always ~5%: under 2× its own
+        ระยอง=(0, 90000, 9000, None)))           # no history: not judged
+    assert len(got) == 1 and got[0][1]["tag"] == "oshinei-disc"
+    assert "ฉะเชิงเทรา" in got[0][1]["title"] and "6.7%" in got[0][1]["body"]
+
+
+def test_cash_discount_rows_reads_the_last_complete_day(client):
+    with main.get_db() as con:
+        r = P.cash_discount_rows(con)
+    assert r.get("day") and r["branches"] and {"branch", "over_short", "sales", "discount", "base_rate"} <= set(r["branches"][0])
+
+
+def test_cash_alert_is_sent_once_with_the_drop_alerts(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    sent = []
+    send = lambda sub, data: (sent.append(json.loads(data)) or 201)
+    cd = _cd(เพชรบูรณ์=(-22616, 42403, 0, 0.01))
+    r = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 0), send=send, scorecard=_sc(สยาม=(48000, 50000)), cashdata=cd)
+    assert len(r["sent"]) == 1 and sent[0]["tag"] == "oshinei-cash"
+    r2 = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 11), send=send, scorecard=_sc(สยาม=(48000, 50000)), cashdata=cd)
+    assert r2["sent"] == [] and len(sent) == 1

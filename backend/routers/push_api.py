@@ -11,6 +11,10 @@ sync's DB swap by name, core._PRESERVED_EXACT). The morning send runs from a dae
 thread in main.py (the Fly machine never stops: min_machines_running = 1), once a
 day after 08:30 Thai time, guarded by usage_meta like the supply reminder.
 
+Cash and discounts (same table, pos_cashcount_day): a branch whose cash count was short by
+≥ CASH_SHORT_MIN on the last complete day, and a branch whose discount rate that day was ≥ 5%
+and ≥ 2× its own 28-day rate. Rare on real data (about one a week each), so each one is a push.
+
 Alerts (2026-10-08): the same thread also checks every ALERT_EVERY_MIN minutes for two
 things worth a push on their own — a branch far below its normal on the last settled day (under both its 7-day average and
 last week's same weekday),
@@ -40,6 +44,10 @@ ALERT_EVERY_MIN = 10
 STALE_HOUR = 13                                 # after the 12:00 sync: yesterday still missing = stuck
 DROP_PCT = -40.0                                # under BOTH the 7-day average and the same weekday last week
 DROP_MIN_AVG = 5000.0                           # ex-VAT baht/day — a tiny branch's noise is not an alert
+CASH_SHORT_MIN = 2000.0                         # a day's cash count short by at least this (baht)
+DISC_RATE_MIN = 5.0                             # a branch-day's discount ≥ 5% of its sales …
+DISC_MULT = 2.0                                 # … and ≥ 2× that branch's own 28-day rate …
+DISC_MIN_BAHT = 3000.0                          # … and at least this many baht (pos_cashcount_day)
 
 TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 TH_DOW = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']   # Python weekday(): Monday = 0
@@ -379,7 +387,73 @@ def alert_payloads(sc: dict, now) -> list:
     return out
 
 
-def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None) -> Optional[dict]:
+def cash_discount_rows(con) -> dict:
+    """The last COMPLETE day of pos_cashcount_day (≥ 60% of the busiest recent day's branches
+    reported) with each branch's cash over/short, sales, discount and its own 28-day discount
+    rate. {} when the table is missing or empty."""
+    try:
+        days = con.execute(
+            "SELECT day, COUNT(*) n FROM pos_cashcount_day GROUP BY day ORDER BY day DESC LIMIT 14").fetchall()
+    except Exception:
+        return {}
+    if not days:
+        return {}
+    top = max(r[1] for r in days)
+    day = next((r[0] for r in days if r[1] >= 0.6 * top), None)
+    if not day:
+        return {}
+    rows = con.execute(
+        """WITH base AS (SELECT branch_id, SUM(discount) * 1.0 / NULLIF(SUM(total_sales), 0) r
+                         FROM pos_cashcount_day WHERE day >= date(:d, '-28 day') AND day < :d GROUP BY branch_id)
+           SELECT b.name, x.over_short, x.total_sales, x.discount, base.r
+           FROM pos_cashcount_day x JOIN branches b ON b.branch_id = x.branch_id
+           LEFT JOIN base ON base.branch_id = x.branch_id
+           WHERE x.day = :d AND b.name != 'ALL'""", {"d": day}).fetchall()
+    return {"day": day, "branches": [
+        {"branch": r[0], "over_short": r[1] or 0, "sales": r[2] or 0, "discount": r[3] or 0, "base_rate": r[4]}
+        for r in rows]}
+
+
+def cash_discount_payloads(data: dict) -> list:
+    """[(key, payload)] — pure, like alert_payloads. A branch's cash count short by
+    CASH_SHORT_MIN+, and a branch-day discount that is high in itself AND against its own
+    history. Positive overs are ignored: the big ones in the data are entry errors."""
+    out = []
+    day = (data or {}).get("day")
+    rows = (data or {}).get("branches") or []
+    if not day:
+        return out
+
+    def url(rs):
+        return f"/?go=branch&b={quote(rs[0]['branch'])}" if len(rs) == 1 else "/?go=branches"
+
+    short = sorted([b for b in rows if b["over_short"] <= -CASH_SHORT_MIN], key=lambda b: b["over_short"])
+    if short:
+        bits = [f"{b['branch']} ขาด ฿{_fmt_money(-b['over_short'])}" for b in short[:3]]
+        more = f" และอีก {len(short) - 3} สาขา" if len(short) > 3 else ""
+        title = (f"{short[0]['branch']} เงินสดขาด ({_th_day(day)})" if len(short) == 1
+                 else f"{len(short)} สาขาเงินสดขาด ({_th_day(day)})")
+        out.append((f"cash:{day}:" + ",".join(sorted(b["branch"] for b in short)),
+                    {"title": title, "body": " · ".join(bits) + more + " — ตรวจการนับเงินสดของวันนั้น",
+                     "url": url(short), "tag": "oshinei-cash"}))
+    hi = []
+    for b in rows:
+        s, d, br = b["sales"], b["discount"], b["base_rate"]
+        if s and d >= DISC_MIN_BAHT and br is not None and d / s * 100 >= DISC_RATE_MIN and d / s >= DISC_MULT * br:
+            hi.append({**b, "rate": d / s * 100, "base_pct": br * 100})
+    hi.sort(key=lambda b: -b["discount"])
+    if hi:
+        bits = [f"{b['branch']} ลด {b['rate']:.1f}% (ปกติ {b['base_pct']:.1f}%) ฿{_fmt_money(b['discount'])}" for b in hi[:3]]
+        more = f" และอีก {len(hi) - 3} สาขา" if len(hi) > 3 else ""
+        title = (f"{hi[0]['branch']} ส่วนลดสูงผิดปกติ ({_th_day(day)})" if len(hi) == 1
+                 else f"{len(hi)} สาขาส่วนลดสูงผิดปกติ ({_th_day(day)})")
+        out.append((f"disc:{day}:" + ",".join(sorted(b["branch"] for b in hi)),
+                    {"title": title, "body": " · ".join(bits) + more,
+                     "url": url(hi) if len(hi) == 1 else "/?go=discounts", "tag": "oshinei-disc"}))
+    return out
+
+
+def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, cashdata=None) -> Optional[dict]:
     """Every ALERT_EVERY_MIN minutes from ALERT_FROM_HOUR: push each alert not yet sent.
     Returns {"checked", "sent": [keys], ...} or None when it was not time."""
     now = now or _thai_now()
@@ -404,6 +478,13 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None) 
         except Exception as e:  # noqa: BLE001
             rec["error"] = f"scorecard: {e}"
             print(f"[push] alerts: {e}")
+            todo = []
+        try:                                          # a failure in one source never hides the other
+            todo += cash_discount_payloads(cashdata if cashdata is not None else cash_discount_rows(con))
+        except Exception as e:  # noqa: BLE001
+            rec["error_cash"] = str(e)
+            print(f"[push] alerts cash: {e}")
+        if not todo and rec.get("error") and rec.get("error_cash"):
             return rec
         sent_keys = json.loads(_meta_get(con, "push_alerts_sent") or "[]")
         c = vapid_config()
