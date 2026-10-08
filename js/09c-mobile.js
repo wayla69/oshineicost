@@ -97,6 +97,7 @@ function msDeepLink(link) {
   const go = q.get('go'), b = q.get('b');
   if (go === 'branch' && b) { msSwitchView('branches'); msOpenBranch(b); }
   else if (go === 'branches') msSwitchView('branches');
+  else if (go === 'discounts') { if (document.getElementById('msnav-discounts')?.style.display !== 'none') msSwitchView('discounts'); else msSwitchView('branches'); }
   else if (go === 'summary') {
     msSwitchView('summary');
     setTimeout(() => document.getElementById('msYesterdayWrap')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400);
