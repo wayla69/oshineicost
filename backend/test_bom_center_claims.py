@@ -216,6 +216,24 @@ def _seed_received_order(branch_id):
     return oid
 
 
+def _cleanup(oid):
+    """The app DB is shared by the whole session: leave no order, receipt or claim behind for the next test file."""
+    import core
+    with core.get_db() as c:
+        cl = [r[0] for r in c.execute("SELECT claim_id FROM bc_claim WHERE order_id=?", (oid,))]
+        for t in ("bc_claim_photo", "bc_claim_line"):
+            c.executemany(f"DELETE FROM {t} WHERE claim_id=?", [(i,) for i in cl])
+        c.execute("DELETE FROM bc_claim WHERE order_id=?", (oid,))
+        refs = [f"ORDER-{oid}"] + [f"CLAIM-{i}" for i in cl]
+        for rid, in c.execute(f"SELECT receipt_id FROM bc_receipt WHERE ref IN ({','.join('?' * len(refs))})", refs).fetchall():
+            c.execute("DELETE FROM bc_receipt_line WHERE receipt_id=?", (rid,))
+            c.execute("DELETE FROM bc_receipt WHERE receipt_id=?", (rid,))
+        c.execute("DELETE FROM bc_order_line WHERE order_id=?", (oid,))
+        c.execute("DELETE FROM bc_order WHERE order_id=?", (oid,))
+        c.execute("DELETE FROM bc_ingredient WHERE code='T-CL1'")
+        c.commit()
+
+
 @pytest.fixture
 def auth_on(monkeypatch):
     monkeypatch.setenv("OSHINEI_AUTH", "1")
@@ -240,8 +258,15 @@ def _branch_user(name, branch):
 
 
 def test_http_flow_with_photos_and_branch_scoping(client, app_db, auth_on):
-    import json
     oid = _seed_received_order(1)                                      # BranchA's order
+    try:
+        _http_flow(oid)
+    finally:
+        _cleanup(oid)
+
+
+def _http_flow(oid):
+    import json
     a = _branch_user("brn_claim_a", "BranchA")
     b = _branch_user("brn_claim_b", "BranchB")
     payload = json.dumps({"order_id": oid, "lines": [{"code": "T-CL1", "claim_units": 2, "reason": "damaged", "note": "บุบ"}], "note": "ถ่ายตอนรับ"})

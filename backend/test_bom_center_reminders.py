@@ -31,7 +31,7 @@ def test_morning_names_the_duties_and_follows_them(udon):
     rec = RM.morning(c, today=TUE)
     line = next(b for b in rec["branches"] if b["name"] == "อุดรธานี")
     assert "ตรวจนับแล้ว" in line["text"] and "ส่งใบสั่งซื้อรอบ 1 แล้ว" in line["text"] and line["pending"] is False
-    assert rec["queue"]["count"] == 1 and "Sales Support" in rec["text"] and "ค้างคิว 1 ใบ" in rec["text"]
+    assert rec["queue"]["count"] == 1 and "คลัง" in rec["text"] and "ค้างคิว 1 ใบ" in rec["text"]
     off = RM.morning(c, today=WED)
     assert "ไม่มีวันสั่ง" in next(b for b in off["branches"] if b["name"] == "อุดรธานี")["text"]
 
