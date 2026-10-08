@@ -279,6 +279,7 @@ try { window.matchMedia('(max-width:700px)').addEventListener('change', _viewpor
 let _desktopBooted = false, _desktopBootP = null;
 function ensureDesktopBooted() {
   if (!_desktopBootP) _desktopBootP = (async () => {
+    await ensureSlicesLoaded();               // the tabs' code (01-core.js) — a phone fetches it only now
     const lazy = !document.getElementById('tabsRoot')?.childElementCount;
     await loadTabFragments();
     // on a phone the permissions ran before the fragments existed — the Settings →
@@ -325,8 +326,9 @@ async function init() {
   // the phone remembers which side was used last: เต็ม → once means เต็ม next time too,
   // until the phone button brings the summary back (showMobileSummary, 09c-mobile.js)
   try { if (window.matchMedia('(max-width:700px)').matches && localStorage.getItem('oshinei_phone_mode') === 'full') document.body.classList.add('force-desktop'); } catch (e) {}
-  // the 48 panels, before anything looks for one — a phone defers them to ensureDesktopBooted
-  if (!_phoneFirst()) await loadTabFragments();
+  // the tabs' code and the 48 panels, before anything looks for them — a phone defers
+  // both to ensureDesktopBooted
+  if (!_phoneFirst()) { await ensureSlicesLoaded(); await loadTabFragments(); }
   initDarkMode();
   initTopbarFold();           // phone: the top bar's controls fold away (09c-mobile.js)
   showLoadingBar();

@@ -1558,6 +1558,7 @@ const TAB_NUMS = {
 function showShortcutsHelp() {}
 function setupShortcuts() {
   document.addEventListener('keydown', (e) => {
+    if (!_desktopBooted && _phoneFirst()) return;   // the summary has no tabs to switch, and the slices are not here yet
     const tag = (e.target.tagName||'').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;

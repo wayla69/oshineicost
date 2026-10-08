@@ -1646,6 +1646,39 @@ const GLANCE_PLUGIN = {
 
 let activeTab       = 'home';
 let _lastTabLoadAt  = 0;      // the open tab's last load (foreground refresh on a phone, 03-tabs-main.js)
+
+// ── Lazy slices (2026-10-08). index.html loads five slices eagerly — 01-core,
+// 03-tabs-main, 06-features, 09b-cost-pnl, 09c-mobile: the login, the boot and the phone
+// summary. The other fifteen (the desktop tabs' code, ~1.6 MB) sit in index.html as inert
+// <script type="text/plain" class="lazy-slice" data-lazy="/js/…?v=hash"> tags, in the same
+// order as before; this turns them into real scripts one after another (async=false keeps
+// the order; the server's ?v= makes them immutable-cached). init() awaits it on a desktop
+// and ensureDesktopBooted() on "เต็ม →", so no tab loader runs before its slice exists; a
+// phone that stays on the summary never downloads or parses them (2.15 MB → 0.57 MB).
+let _slicesP = null;
+function ensureSlicesLoaded() {
+  if (_slicesP) return _slicesP;
+  _slicesP = (async () => {
+    // init() runs from the end of 09c-mobile.js while the parser is still on the tags
+    // after it — wait for the whole document, or the later tags are not in the DOM yet
+    // (first try loaded 6 of 15 and feedback/bomcenter were "not defined")
+    if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
+    const tags = [...document.querySelectorAll('script.lazy-slice[data-lazy]')];
+    for (const t of tags) {
+      const src = t.dataset.lazy;
+      if (!src || t.dataset.loaded) continue;
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src; s.async = false;
+        s.onload = () => { t.dataset.loaded = '1'; res(); };
+        s.onerror = () => rej(new Error('slice failed to load: ' + src));
+        document.head.appendChild(s);
+      });
+    }
+    document.body.classList.add('slices-loaded');
+  })().catch(e => { _slicesP = null; throw e; });   // a failed download is retried on the next call
+  return _slicesP;
+}
 let activeSubtab    = 'mostOrdered';
 let activeOpsSubtab = 'cohort';
 let chartInstances = {};    // name → Chart instance
