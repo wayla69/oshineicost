@@ -240,8 +240,8 @@ const TAB_MODULE = {
   ingpurchase:['cost.analysis','supply.ordering'],   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
   bomcenter:['cost.analysis','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','bom.prices','bom.recipes'],
   branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก
-  orderhub:['supply.ordering','ops.report','bom.center'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
-  supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis','bom.prices','bom.recipes'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
+  orderhub:['supply.ordering','ops.report','bom.center','supply.warehouse'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
+  supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis','bom.prices','bom.recipes','supply.warehouse'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -258,7 +258,8 @@ const ROLE_START = {
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
   analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานของฉันวันนี้และสถานะปิดงวดเดือน พร้อมลิงก์เข้าแต่ละงาน'], ['cost', 'ต้นทุนและ food cost']],
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'แก้สูตรตาม Tier และสูตรกึ่งสำเร็จ ต้นทุนปรับตามทันที', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
-  salessupport: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง กดดำเนินการแล้ว และสรุปรวมตามผู้จำหน่าย', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันสั่งรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
+  salessupport: [['orderhub', 'เคลมสินค้าที่สาขาแจ้ง: ดูรูป อนุมัติรับเคลมเพื่อปรับสินค้าของสาขา', 'claims'], ['orderhub', 'คิวใบสั่งซื้อจากสาขา: ดูสถานะและสรุปรวมตามผู้จำหน่ายส่งออก Excel', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันสั่งรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
+  warehouse: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง และกดดำเนินการแล้ว', 'queue']],
   branch: [['branchstock', 'ตรวจนับสินค้าคงเหลือทีละโซนก่อนเปิดร้าน', 'count'], ['branchstock', 'สั่งสินค้ารอบนี้จากยอดแนะนำ และส่งให้ส่วนกลางก่อน 10:00', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
@@ -301,6 +302,7 @@ const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
   salessupport:'Sales Support (วัตถุดิบและใบสั่งซื้อ)',
+  warehouse:'คลัง (ระบุยอดส่งจริงของใบสั่งซื้อ)',
   branch:'สาขา (ตรวจนับ/สั่งสินค้า — 1 บัญชีต่อสาขา)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
@@ -318,6 +320,7 @@ const MODULE_LABEL_TH = {
   'bom.center':'BoM Center (ข้อมูลและสูตร)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
   'bom.prices':'BoM Center (ราคารายเดือน)', 'bom.recipes':'BoM Center (สูตร)',
   'branch.stock':'สาขา: ตรวจนับและสั่งสินค้า',
+  'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
@@ -327,6 +330,7 @@ const ROLE_MODULES_TH = {
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
+  warehouse: ['supply.warehouse'],
   branch: ['branch.stock'],
 };
 
@@ -2425,10 +2429,12 @@ function switchTab(name, direct) {
 // TAB_CLUSTERS, so scripts/usage_kill_list.py keeps parsing the cluster line.
 // `pane` is the tab's own sub-view key (_bmcSub / _brnSub / _ohbSub / _osSub);
 // an item without one is a whole tab.
+// the centre's own panes: the warehouse (which only works the queue) must not be offered them
+const _SUPPLY_CENTRE = ['supply.ordering', 'ops.report', 'bom.center'];
 const SUPPLY_CHIPS = [
   { key: 'home', label: 'หน้างาน', items: [
     { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' },
-    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา' }] },
+    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา', mods: _SUPPLY_CENTRE }] },
   { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน' },
@@ -2440,13 +2446,14 @@ const SUPPLY_CHIPS = [
     { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและปล่อยเวอร์ชัน' }] },
   { key: 'orders', label: 'ใบสั่งซื้อ', items: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ' },
+    { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE },
     { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ' },
-    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง' },
+    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE },
     { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)' },
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
-    { tab: 'orderhub', pane: 'central', label: 'สินค้าส่วนกลางและนำเข้าข้อมูล' },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน' }] },
+    { tab: 'orderhub', pane: 'central', label: 'สินค้าส่วนกลางและนำเข้าข้อมูล', mods: _SUPPLY_CENTRE },
+    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'count', label: 'ตรวจนับ' },
     { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า' },
@@ -2552,6 +2559,7 @@ const _SUPPLY_PANE = {};     // tab → { get(), set(pane), show(pane), month?(m
 let _supplyChip = null;      // the level-1 chip the user is in (derived from the open pane)
 const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) whose work the role does daily
   branch: { chip: 'branch' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
+  warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
   operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'master', tab: 'bomcenter', pane: 'price' },
 };
 function _supplyLastKey() { return 'supply:last:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
@@ -2577,7 +2585,9 @@ function _supplyItemOf(tab, pane) {
   }
   return null;
 }
-function _supplyChipAllowed(ch) { return ch.items.some(it => tabAllowed(it.tab)); }
+// an item opens when its tab does and, if it names `mods`, the user holds one of them
+function _supplyItemAllowed(it) { return tabAllowed(it.tab) && (!it.mods || it.mods.some(hasModule)); }
+function _supplyChipAllowed(ch) { return ch.items.some(_supplyItemAllowed); }
 
 // Open one item of the module. The pane is remembered BEFORE switchTab so the
 // tab's loader opens straight on it (one load, no flash of the previous pane);
@@ -2586,7 +2596,7 @@ function supplyGo(o) {
   o = o || {};
   let tab = o.tab, pane = o.pane || null;
   if (!tab || !tabAllowed(tab)) {
-    const first = SUPPLY_CHIPS.flatMap(c => c.items).find(it => tabAllowed(it.tab));
+    const first = SUPPLY_CHIPS.flatMap(c => c.items).find(_supplyItemAllowed);
     if (!first) return;
     tab = first.tab; pane = first.pane || null;
   }
@@ -2609,7 +2619,7 @@ function supplyGo(o) {
 function supplyChipOpen(key) {
   const ch = SUPPLY_CHIPS.find(c => c.key === key);
   if (!ch) return;
-  const items = ch.items.filter(it => tabAllowed(it.tab));
+  const items = ch.items.filter(_supplyItemAllowed);
   const last = _supplyLastGet()[key];
   const it = (last && items.find(i => i.tab === last.tab && (i.pane || null) === (last.pane || null))) || items[0];
   if (it) supplyGo({ tab: it.tab, pane: it.pane });
@@ -2652,7 +2662,7 @@ function _renderSupplyBar(bar, cl, name) {
   let cur = hit ? chips.find(c => c.key === hit.chip.key) : null;
   if (!cur) cur = chips.find(c => c.key === _supplyChip) || chips[0];
   _supplyChip = cur.key;
-  const items = cur.items.filter(it => tabAllowed(it.tab));
+  const items = cur.items.filter(_supplyItemAllowed);
   const btn = (lbl, on, onclick, small) => `<button onclick="${onclick}" class="text-xs rounded-lg ${small ? 'px-2.5 py-0.5' : 'px-3 py-1'} transition-colors" style="${on
     ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
     : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${_noEmoji(lbl)}</button>`;

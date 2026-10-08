@@ -72,8 +72,12 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     queue = {"count": q.get("count") or 0, "late": bool(q.get("urgent"))}
     if queue["count"]:
         any_work = True
-        lines.append(f"<b>Sales Support</b>: ใบสั่งซื้อค้างคิว {queue['count']} ใบ"
+        lines.append(f"<b>คลัง</b>: ใบสั่งซื้อค้างคิว {queue['count']} ใบ"
                      + (" · มีใบที่เลยวันสั่งแล้ว" if queue["late"] else ""))
+    cl = centre.get("claims_pending") or {}
+    if cl.get("count"):
+        any_work = True
+        lines.append(f"<b>ประสานงานขาย</b>: เคลมสินค้ารอพิจารณา {cl['count']} เรื่อง")
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
     tail = f"หน้างาน: {html.escape(app_url.rstrip('/'))}/" if app_url else ""
     text = "\n".join([head] + lines + ([tail] if tail else []))
@@ -87,7 +91,7 @@ def sla(con, today: date = None, app_url: str = "") -> Optional[dict]:
     q = centre.get("queue_pending") or {}
     if not q.get("count"):
         return None
-    text = (f"<b>ใบสั่งซื้อค้างคิว {q['count']} ใบ</b> — ดำเนินการภายใน 14:00 ของวันสั่ง"
+    text = (f"<b>ใบสั่งซื้อค้างคิว {q['count']} ใบ</b> — คลังระบุยอดส่งจริงภายใน 14:00 ของวันสั่ง"
             + (" · มีใบที่เลยวันสั่งแล้ว" if q.get("urgent") else "")
             + (f"\nคิวใบสั่งซื้อ: {html.escape(app_url.rstrip('/'))}/" if app_url else ""))
     return {"today": today.isoformat(), "text": text, "count": q["count"], "late": bool(q.get("urgent"))}

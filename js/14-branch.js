@@ -235,7 +235,8 @@ function _brnAllItems() { return _brnSheet ? _brnSheet.zones.flatMap(z => z.item
 // one received-goods note as a card: what it is and the delete button up front, its lines folded away
 // (a month's central delivery has ~100 lines; listing them inline buried the button)
 const _BRN_RECV_SRC = { central: ['รายงานส่วนกลาง', 'var(--navy-ink)'], order: ['ตามใบสั่งซื้อ', 'var(--good-ink)'],
-  branch: ['บันทึกเอง', 'var(--text-muted)'], import: ['นำเข้าจากไฟล์', 'var(--text-muted)'] };
+  branch: ['บันทึกเอง', 'var(--text-muted)'], import: ['นำเข้าจากไฟล์', 'var(--text-muted)'],
+  claim: ['ปรับตามเคลม', 'var(--amber-ink)'] };
 function _brnRecvCard(x) {
   const src = _BRN_RECV_SRC[x.source] || [x.source || '', 'var(--text-muted)'];
   const bad = x.lines.filter(l => l.qty_base == null).length;
@@ -244,7 +245,8 @@ function _brnRecvCard(x) {
       <td class="py-1 pr-2" style="color:var(--text-primary)">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
       <td class="py-1 pr-2 text-right" style="white-space:nowrap;color:var(--text-primary)">${_bmcNum(l.qty)}</td>
       <td class="py-1" style="color:var(--text-secondary)">${esc(l.unit || '')}${l.qty_base == null ? ' ' + _bmcChip('แปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</td></tr>`).join('');
-  const del = x.locked ? _bmcChip('อยู่ในรอบที่ปิดแล้ว', 'var(--text-muted)')
+  const del = x.source === 'claim' ? _bmcChip('ลบไม่ได้ (เกิดจากการอนุมัติเคลม)', 'var(--text-muted)')
+    : x.locked ? _bmcChip('อยู่ในรอบที่ปิดแล้ว', 'var(--text-muted)')
     : `<button onclick="brnRecvDelete(${x.receipt_id})" style="border:1px solid var(--bad-ink);color:var(--bad-ink);background:transparent;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer;white-space:nowrap">ลบใบรับ</button>`;
   return `<div style="border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:10px 12px;margin-bottom:8px;background:var(--bg-card, transparent)">
     <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
@@ -271,6 +273,7 @@ async function brnLoadRecv() {
   brnRenderRecvLines();
   if (_brnNeedBranch('brnRecvHistory')) return;
   brnLoadRecvOpen();
+  brnLoadClaims();
   try {
     const r = await _bmcJson(`${API}/api/bom-center/stock/receipts?${_brnQS()}`);
     document.getElementById('brnRecvHistory').innerHTML = r.receipts.length ? r.receipts.map(_brnRecvCard).join('')
@@ -385,6 +388,7 @@ async function brnReceiveOrder() {
     _brnRecvOrd = null;
     document.getElementById('brnRecvOrder').style.display = 'none';
     _bmcStatus('brnRecvStatus', `✓ บันทึกรับสินค้าตามใบสั่งซื้อ #${o.order_id} แล้ว`, 'var(--good-ink)');
+    brnClaimHint(o.order_id);
     brnLoadRecv();
   } catch (e) { _bmcStatus('brnRecvOrdStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
@@ -815,4 +819,186 @@ async function brnOpenOrder(id) {
       <tbody>${o.lines.filter(l => l.confirmed_units || l.processed_units || l.received_units).map(l => `<tr style="border-top:1px solid var(--border-soft)"><td class="pr-2 py-1">${esc(l.name)}${l.reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.reason_th)}</span>` : ''}</td>
         <td class="pr-2 text-right">${_bmcNum(l.suggested_units, 0)}</td><td class="pr-2 text-right">${_bmcNum(l.confirmed_units, 0)}</td><td class="pr-2 text-right">${l.processed_units != null ? _bmcNum(l.processed_units, 0) : '–'}</td><td class="text-right">${l.received_units != null ? _bmcNum(l.received_units, 0) : '–'}</td></tr>`).join('')}</tbody></table>`;
   } catch (e) { box.style.display = ''; box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── แจ้งเคลมสินค้า (owner 2026-10-08) ────────────────────────────────────────────
+// After a received order the branch reports goods that arrived damaged / wrong: the lines, a
+// reason each and 1–6 photos, sent together. Sales Support decides (js/15-orderhub.js); an
+// approved claim takes the goods out of what the branch "received" so the variance stays true.
+let _brnClaimOrd = null;       // GET /claims/claimable — the order being claimed
+let _brnClaimPhotos = [];      // [{blob, url}] — re-compressed JPEGs waiting to be sent
+const _BRN_CLAIM_ST = { submitted: ['รอประสานงานขายพิจารณา', 'var(--amber-ink)'], approved: ['อนุมัติรับเคลมแล้ว', 'var(--good-ink)'],
+  rejected: ['ไม่อนุมัติ', 'var(--bad-ink)'], cancelled: ['ยกเลิกแล้ว', 'var(--text-muted)'] };
+function _brnCanClaim() { return _brnCanOrder(); }
+
+async function brnLoadClaims() {
+  const box = document.getElementById('brnClaimList');
+  if (!box) return;
+  const q = _brnQS() ? '&' + _brnQS() : '';
+  try {
+    const [ords, cl] = await Promise.all([_bmcJson(`${API}/api/bom-center/orders?status=received&limit=6${q}`),
+                                          _bmcJson(`${API}/api/bom-center/claims?limit=15${q}`)]);
+    const recent = ords.orders.map(o => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding:6px 0" class="text-xs">
+        <span><b>#${o.order_id}</b> · ${esc(_brnRoundLabel(o.round))} · สั่ง ${esc(o.cycle_date)} · รับแล้ว ${esc(String(o.received_at || '').slice(0, 10))}</span>
+        ${_brnCanClaim() ? `<button onclick="brnClaimOpen(${o.order_id})" style="margin-left:auto;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer">แจ้งเคลม</button>` : ''}</div>`).join('');
+    const mine = cl.claims.map(c => { const st = _BRN_CLAIM_ST[c.status] || [c.status, 'var(--text-muted)'];
+      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding:6px 0" class="text-xs">
+        <a href="#" onclick="brnClaimView(${c.claim_id});return false" style="color:var(--accent);font-weight:600">เคลม #${c.claim_id}</a>
+        <span>ใบสั่งซื้อ #${c.order_id} · ${c.lines} รายการ · ${c.photos} รูป · ${esc(String(c.created_at || '').slice(0, 10))}</span>${_bmcChip(st[0], st[1])}</div>`; }).join('');
+    box.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">เลือกใบสั่งซื้อที่รับแล้ว แล้วกด “แจ้งเคลม” ระบุรายการที่ชำรุด เสีย หรือส่งผิด พร้อมแนบรูปถ่าย</div>`
+      + (recent || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีใบสั่งซื้อที่บันทึกรับสินค้าแล้ว</div>')
+      + (mine ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">เคลมที่แจ้งไว้</div>${mine}` : '');
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// a photo is shrunk in the browser first (the longest side 1280 px, JPEG): a phone picture is 3–8 MB
+function _brnShrink(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('แปลงรูปไม่สำเร็จ')), 'image/jpeg', 0.8);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('อ่านรูปนี้ไม่ได้ กรุณาถ่ายหรือเลือกรูปใหม่')); };
+    img.src = url;
+  });
+}
+async function brnClaimPick(input) {
+  const max = (_brnClaimOrd && _brnClaimOrd.max_photos) || 6;
+  for (const f of [...input.files]) {
+    if (_brnClaimPhotos.length >= max) { _bmcStatus('brnClaimStatus', `แนบรูปได้ไม่เกิน ${max} รูป`, 'var(--amber-ink)'); break; }
+    try { const b = await _brnShrink(f); _brnClaimPhotos.push({ blob: b, url: URL.createObjectURL(b) }); }
+    catch (e) { _bmcStatus('brnClaimStatus', String(e.message || e), 'var(--bad-ink)'); }
+  }
+  input.value = '';
+  brnClaimRenderPhotos();
+}
+function brnClaimRenderPhotos() {
+  const box = document.getElementById('brnClaimPhotos');
+  if (!box) return;
+  const max = (_brnClaimOrd && _brnClaimOrd.max_photos) || 6;
+  box.innerHTML = _brnClaimPhotos.map((p, i) => `<div style="position:relative;width:84px;height:84px"><img src="${p.url}" alt="รูปที่ ${i + 1}" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+      <button onclick="brnClaimDrop(${i})" aria-label="ลบรูปที่ ${i + 1}" style="position:absolute;top:-6px;right:-6px;width:26px;height:26px;border-radius:13px;border:0;background:var(--bad-ink);color:#fff;font-size:14px;cursor:pointer">×</button></div>`).join('');
+  const n = document.getElementById('brnClaimPhotoN');
+  if (n) n.textContent = `แนบแล้ว ${_brnClaimPhotos.length}/${max} รูป`;
+}
+function brnClaimDrop(i) { const p = _brnClaimPhotos.splice(i, 1)[0]; if (p) URL.revokeObjectURL(p.url); brnClaimRenderPhotos(); }
+
+async function brnClaimOpen(orderId) {
+  const box = document.getElementById('brnClaimForm');
+  if (!box) return;
+  _brnClaimPhotos.forEach(p => URL.revokeObjectURL(p.url)); _brnClaimPhotos = [];
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    _brnClaimOrd = await _bmcJson(`${API}/api/bom-center/claims/claimable?order_id=${orderId}${_brnQS() ? '&' + _brnQS() : ''}`);
+    const o = _brnClaimOrd;
+    const lines = o.lines.filter(l => l.remaining_units > 0);
+    const field = 'border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)';
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">แจ้งเคลมใบสั่งซื้อ #${o.order_id} · ${esc(_brnRoundLabel(o.round))} · สั่ง ${esc(o.cycle_date)}</div>
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">ใส่จำนวนเฉพาะรายการที่มีปัญหา (เคลมได้ไม่เกินจำนวนที่รับ) เลือกสาเหตุ แล้วแนบรูปถ่ายสินค้าอย่างน้อย 1 รูป</div>
+      <div class="mt-2">${lines.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0">
+        <div class="text-sm">${esc(l.name || l.code)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(l.code)} · รับ ${_bmcNum(l.received_units)}${l.claimed_units ? ' · เคลมไปแล้ว ' + _bmcNum(l.claimed_units) : ''} · เคลมได้อีก ${_bmcNum(l.remaining_units)} ${l.order_unit === 'base' ? '' : 'แพ็ค'}</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          <input inputmode="decimal" id="brnCq_${esc(l.code)}" placeholder="จำนวนที่เคลม" style="width:110px;height:38px;text-align:center;font-size:16px;${field}">
+          <select id="brnCr_${esc(l.code)}" style="flex:1 1 150px;height:38px;font-size:14px;${field}"><option value="">— สาเหตุ —</option>${o.reasons.map(r => `<option value="${r.code}">${esc(r.label)}</option>`).join('')}</select>
+          <input id="brnCn_${esc(l.code)}" placeholder="หมายเหตุ (ถ้ามี)" style="flex:1 1 140px;height:38px;font-size:14px;padding:0 8px;${field}"></div></div>`).join('')
+        || '<span class="text-xs" style="color:var(--amber-ink)">ทุกรายการของใบสั่งซื้อนี้ถูกเคลมครบแล้ว</span>'}</div>
+      <div class="mt-2" style="border-top:1px solid var(--border);padding-top:8px">
+        <div class="text-xs font-semibold" style="color:var(--text-primary)">รูปถ่ายสินค้า <span id="brnClaimPhotoN" style="font-weight:400;color:var(--text-muted)"></span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <button onclick="document.getElementById('brnClaimCam').click()" style="border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:var(--r-sm);padding:9px 14px;font-size:14px;cursor:pointer">ถ่ายรูป</button>
+          <button onclick="document.getElementById('brnClaimGal').click()" style="border:1px solid var(--border);color:var(--text-primary);background:transparent;border-radius:var(--r-sm);padding:9px 14px;font-size:14px;cursor:pointer">เลือกรูปจากเครื่อง</button>
+          <input type="file" id="brnClaimCam" accept="image/*" capture="environment" style="display:none" onchange="brnClaimPick(this)">
+          <input type="file" id="brnClaimGal" accept="image/*" multiple style="display:none" onchange="brnClaimPick(this)"></div>
+        <div id="brnClaimPhotos" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div></div>
+      <textarea id="brnClaimNote" rows="2" placeholder="ข้อความถึงประสานงานขาย (ถ้ามี)" style="width:100%;margin-top:10px;padding:8px;font-size:14px;${field}"></textarea>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <button onclick="brnClaimSend()" ${lines.length ? '' : 'disabled'} style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:9px 18px;font-size:14px;cursor:pointer">ส่งแจ้งเคลม</button>
+        <button onclick="brnClaimClose()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">ยกเลิก</button>
+        <span id="brnClaimStatus" class="text-xs"></span></div>`;
+    brnClaimRenderPhotos();
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnClaimClose() {
+  _brnClaimPhotos.forEach(p => URL.revokeObjectURL(p.url)); _brnClaimPhotos = []; _brnClaimOrd = null;
+  const box = document.getElementById('brnClaimForm'); if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+async function brnClaimSend() {
+  const o = _brnClaimOrd;
+  if (!o) return;
+  const lines = [];
+  for (const l of o.lines.filter(x => x.remaining_units > 0)) {
+    const qv = (document.getElementById('brnCq_' + l.code) || {}).value;
+    if (qv === undefined || String(qv).trim() === '') continue;
+    const q = Number(String(qv).replace(',', '.'));
+    const reason = document.getElementById('brnCr_' + l.code).value, note = document.getElementById('brnCn_' + l.code).value.trim();
+    if (!(q > 0)) { _bmcStatus('brnClaimStatus', `${l.name || l.code}: จำนวนต้องมากกว่า 0`, 'var(--amber-ink)'); return; }
+    if (q > l.remaining_units + 1e-9) { _bmcStatus('brnClaimStatus', `${l.name || l.code}: เคลมได้ไม่เกิน ${_bmcNum(l.remaining_units)}`, 'var(--amber-ink)'); return; }
+    if (!reason) { _bmcStatus('brnClaimStatus', `${l.name || l.code}: กรุณาเลือกสาเหตุ`, 'var(--amber-ink)'); return; }
+    if (reason === 'other' && !note) { _bmcStatus('brnClaimStatus', `${l.name || l.code}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย`, 'var(--amber-ink)'); return; }
+    lines.push({ code: l.code, claim_units: q, reason, note: note || null });
+  }
+  if (!lines.length) { _bmcStatus('brnClaimStatus', 'กรุณาใส่จำนวนที่เคลมอย่างน้อย 1 รายการ', 'var(--amber-ink)'); return; }
+  if (!_brnClaimPhotos.length) { _bmcStatus('brnClaimStatus', 'กรุณาแนบรูปถ่ายสินค้าอย่างน้อย 1 รูป', 'var(--amber-ink)'); return; }
+  if (!await uiConfirm(`ส่งแจ้งเคลมใบสั่งซื้อ #${o.order_id} · ${lines.length} รายการ · ${_brnClaimPhotos.length} รูป ให้ประสานงานขายพิจารณา?`)) return;
+  const fd = new FormData();
+  fd.append('payload', JSON.stringify({ order_id: o.order_id, lines, note: (document.getElementById('brnClaimNote').value || '').trim() || null }));
+  _brnClaimPhotos.forEach((p, i) => fd.append('photos', p.blob, `claim_${i + 1}.jpg`));
+  _bmcStatus('brnClaimStatus', 'กำลังส่ง…');
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/claims${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', body: fd });
+    brnClaimClose();
+    _bmcStatus('brnClaimMsg', `✓ ส่งแจ้งเคลมแล้ว (เคลม #${r.claim_id}) ประสานงานขายจะพิจารณาและแจ้งผลที่หน้านี้`, 'var(--good-ink)');
+    brnLoadClaims();
+  } catch (e) { _bmcStatus('brnClaimStatus', 'ส่งไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+}
+async function brnClaimView(id) {
+  const box = document.getElementById('brnClaimForm');
+  if (!box) return;
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const c = await _bmcJson(`${API}/api/bom-center/claims/${id}${_brnQS() ? '?' + _brnQS() : ''}`);
+    const st = _BRN_CLAIM_ST[c.status] || [c.status_th, 'var(--text-muted)'];
+    box.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="text-sm font-semibold" style="color:var(--text-primary)">เคลม #${c.claim_id} · ใบสั่งซื้อ #${c.order_id} ${_bmcChip(st[0], st[1])}</div>
+        <button onclick="brnClaimClose()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">ปิด</button></div>
+      ${c.decision_note ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">ผลการพิจารณา${c.decided_by ? ' โดย ' + esc(c.decided_by) : ''}: ${esc(c.decision_note)}</div>` : ''}
+      ${c.status === 'approved' ? '<div class="text-xs mt-1" style="color:var(--good-ink)">ระบบปรับสินค้าของสาขาแล้ว: หักจำนวนที่อนุมัติออกจากสินค้าที่รับ ผลต่างการใช้จึงไม่รวมของที่เคลมได้</div>' : ''}
+      <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="pr-2">สินค้า</th><th class="pr-2 text-right">เคลม</th><th class="pr-2 text-right">อนุมัติ</th><th>สาเหตุ</th></tr></thead><tbody>
+        ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
+          <td class="py-1 pr-2 text-right">${_bmcNum(l.claim_units)}</td><td class="py-1 pr-2 text-right">${l.approved_units == null ? '—' : _bmcNum(l.approved_units)}</td>
+          <td class="py-1">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</td></tr>`).join('')}</tbody></table></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${c.photos.map(p => `<img src="${API}/api/bom-center/claims/${c.claim_id}/photo/${p.photo_id}" alt="รูปเคลม" loading="lazy" onclick="brnClaimLight(this.src)" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in">`).join('')}</div>
+      ${c.status === 'submitted' && _brnCanClaim() ? `<div class="mt-2"><button onclick="brnClaimCancel(${c.claim_id})" style="border:1px solid var(--bad-ink);color:var(--bad-ink);background:transparent;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ยกเลิกเคลมนี้</button> <span id="brnClaimStatus" class="text-xs"></span></div>` : ''}`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function brnClaimCancel(id) {
+  if (!await uiConfirm(`ยกเลิกเคลม #${id}? สาขาแจ้งใหม่ได้ภายหลัง`)) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/claims/${id}/cancel${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST' });
+    brnClaimClose(); brnLoadClaims();
+  } catch (e) { _bmcStatus('brnClaimStatus', 'ยกเลิกไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+function brnClaimLight(src) {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  d.innerHTML = `<img src="${src}" alt="รูปเคลม" style="max-width:96vw;max-height:94vh;object-fit:contain">`;
+  const done = () => { d.remove(); document.removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') done(); };
+  d.onclick = done; document.addEventListener('keydown', key); document.body.appendChild(d);
+}
+function brnClaimHint(orderId) {   // right after a receipt: a line to claim what arrived wrong
+  const el = document.getElementById('brnClaimMsg');
+  if (!el || !_brnCanClaim()) return;
+  el.style.color = 'var(--text-secondary)';
+  el.innerHTML = `รับสินค้าตามใบสั่งซื้อ #${orderId} แล้ว หากมีสินค้าชำรุด เสีย หรือส่งผิด <a href="#" onclick="brnClaimOpen(${orderId});return false" style="color:var(--accent);font-weight:600;text-decoration:underline">แจ้งเคลม</a>`;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }

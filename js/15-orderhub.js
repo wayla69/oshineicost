@@ -14,7 +14,8 @@ let _ohbQ = null;             // /api/bom-center/hub/queue
 let _ohbOrder = null;         // the order open in the detail panel
 const _OHB_RND = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอน' };
 const _OHB_ST = [['submitted', 'รอดำเนินการ'], ['processed', 'ดำเนินการแล้ว'], ['received', 'สาขารับแล้ว'], ['all', 'ทั้งหมด']];
-function _ohbCanWork() { return hasModule('supply.ordering') || hasModule('bom.center'); }
+// owner 2026-10-08: the WAREHOUSE updates what is sent (the queue's ส่งจริง + ดำเนินการแล้ว); Sales Support decides claims
+function _ohbCanWork() { return hasModule('supply.warehouse'); }
 function _ohbIso(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 function _ohbBtn(label, on, primary) {
   return `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:${primary ? '7px 14px' : '3px 10px'};font-size:${primary ? 13 : 12}px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
@@ -32,12 +33,13 @@ function loadOrderHub() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  ['queue', 'comp', 'month', 'pilot', 'central'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot', 'central', 'claims'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
   if (k === 'month') ohbLoadMonth();
   if (k === 'pilot') ohbLoadPilot();
   if (k === 'central') ohbLoadCentral();
+  if (k === 'claims') ohbLoadClaims();
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 
@@ -312,6 +314,7 @@ function ohbRenderDetail() {
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ยอดแนะนำ</th><th class="py-1 pr-2 text-right">สาขายืนยัน</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1">เหตุผล (ส่วนกลาง)</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
+    ${!work && o.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">คลังเป็นผู้ระบุยอดส่งจริงและกด “ดำเนินการแล้ว”</div>' : ''}
     ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
       ${_ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ดำเนินการแล้ว', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
 }
@@ -430,4 +433,85 @@ async function ohbLoadPilot() {
           <td class="py-1 pr-2 text-right">${cell(m.reason_coverage, p.reason_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.mape_a, p.mape_a, '%')}</td>
           <td class="py-1 pr-2 text-right">${cell(m.order_submission, null, '%')}</td><td class="py-1">${_bmcChip(vt, vi)}</td></tr>`; }).join('') + '</tbody></table></div>';
   } catch (e) { rb.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── เคลมสินค้า (owner 2026-10-08): Sales Support looks at the photos and decides ───────────
+// Approving takes the approved quantity out of the branch's received goods (a negative
+// goods-receipt dated the day the order arrived), so the usage variance stays true.
+let _ohbClaimSt = 'submitted';
+let _ohbClaimOpen = null;     // the claim in the detail panel
+const _OHB_CLAIM_ST = [['submitted', 'รอพิจารณา'], ['approved', 'อนุมัติแล้ว'], ['rejected', 'ไม่อนุมัติ'], ['all', 'ทั้งหมด']];
+const _OHB_CLAIM_INK = { submitted: 'var(--amber-ink)', approved: 'var(--good-ink)', rejected: 'var(--bad-ink)', cancelled: 'var(--text-muted)' };
+function _ohbCanDecide() { return hasModule('supply.ordering'); }
+function ohbClaimSetStatus(s) { _ohbClaimSt = s; ohbLoadClaims(); }
+async function ohbLoadClaims() {
+  document.getElementById('ohbClaimChips').innerHTML = _OHB_CLAIM_ST.map(([k, t]) => {
+    const on = k === _ohbClaimSt;
+    return `<button onclick="ohbClaimSetStatus('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t}</button>`;
+  }).join('');
+  const box = document.getElementById('ohbClaimList');
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/claims?status=${_ohbClaimSt}&limit=100`);
+    box.innerHTML = d.claims.length ? d.claims.map(c => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
+        <a href="#" onclick="ohbClaimView(${c.claim_id});return false" style="color:var(--accent);font-weight:600">เคลม #${c.claim_id} ${esc(c.branch || '')}</a>
+        <span>ใบสั่งซื้อ #${c.order_id} · ${esc(_OHB_RND[c.round] || c.round || '')} · สั่ง ${esc(c.cycle_date || '')}</span>
+        <span>${c.lines} รายการ · ${c.photos} รูป · แจ้ง ${esc(String(c.created_at || '').slice(0, 10))}${c.created_by && c.created_by !== '-' ? ' โดย ' + esc(c.created_by) : ''}</span>
+        ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}</div>`).join('')
+      : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีเคลมในสถานะนี้</span>';
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function ohbClaimView(id) {
+  const box = document.getElementById('ohbClaimDetail');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    _ohbClaimOpen = await _bmcJson(`${API}/api/bom-center/claims/${id}`);
+    ohbClaimRender();
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function ohbClaimRender() {
+  const c = _ohbClaimOpen;
+  const act = _ohbCanDecide() && c.status === 'submitted';
+  const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
+  document.getElementById('ohbClaimDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">เคลม #${c.claim_id} · ${esc(c.branch || '')} · ใบสั่งซื้อ #${c.order_id} · สั่ง ${esc(c.cycle_date || '')}</div>
+      ${_ohbBtn('ปิด', "document.getElementById('ohbClaimDetail').style.display='none'")}</div>
+    <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}
+      แจ้งโดย ${esc(c.created_by || '-')} เมื่อ ${esc(String(c.created_at || '').replace('T', ' ').slice(0, 16))}${c.note ? ' · ' + esc(c.note) : ''}
+      ${c.decided_by ? ` · พิจารณาโดย ${esc(c.decided_by)}${c.decision_note ? ': ' + esc(c.decision_note) : ''}` : ''}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">${c.photos.map((p, i) => `<img src="${API}/api/bom-center/claims/${c.claim_id}/photo/${p.photo_id}" alt="รูปเคลมที่ ${i + 1}" loading="lazy" onclick="brnClaimLight(this.src)" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in">`).join('') || '<span class="text-xs" style="color:var(--amber-ink)">ไม่มีรูปแนบ</span>'}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">กดที่รูปเพื่อดูภาพขยาย</div>
+    <div id="ohbClaimResult" class="text-xs mt-1"></div>
+    <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      <th class="py-1 pr-2">สินค้า</th><th class="py-1 pr-2 text-right">สาขาเคลม</th><th class="py-1 pr-2">สาเหตุ</th><th class="py-1 text-right">${act ? 'อนุมัติ' : 'อนุมัติแล้ว'}</th></tr></thead><tbody>
+      ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
+        <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.claim_units)}</b> ${esc(l.unit || '')}</td>
+        <td class="py-1 pr-2">${esc(l.reason_th)}${l.note ? '<div class="text-[10.5px]" style="color:var(--text-muted)">' + esc(l.note) + '</div>' : ''}</td>
+        <td class="py-1 text-right">${act ? `<input inputmode="decimal" id="ohbCA_${esc(l.code)}" value="${esc(String(l.claim_units))}" style="width:70px;text-align:center;padding:3px;${field}">` : (l.approved_units == null ? '—' : _bmcNum(l.approved_units))}</td></tr>`).join('')}</tbody></table></div>
+    ${act ? `<textarea id="ohbClaimNote" rows="2" placeholder="หมายเหตุถึงสาขา (จำเป็นเมื่อไม่อนุมัติ)" style="width:100%;margin-top:8px;padding:8px;font-size:13px;${field}"></textarea>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        ${_ohbBtn('อนุมัติรับเคลมและปรับสินค้า', "ohbClaimDecide('approve')", true)}${_ohbBtn('ไม่อนุมัติ', "ohbClaimDecide('reject')")}<span id="ohbClaimStatus" class="text-xs"></span></div>
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">เมื่ออนุมัติ ระบบหักจำนวนที่อนุมัติออกจากสินค้าที่สาขารับ ผลต่างการใช้ของสาขาจึงไม่รวมของที่เคลมได้</div>`
+      : (c.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">ประสานงานขายเป็นผู้พิจารณาเคลม</div>' : '')}`;
+}
+async function ohbClaimDecide(decision) {
+  const c = _ohbClaimOpen;
+  if (!c) return;
+  const note = (document.getElementById('ohbClaimNote').value || '').trim();
+  const lines = c.lines.map(l => { const el = document.getElementById('ohbCA_' + l.code);
+    return { code: l.code, approved_units: el && el.value !== '' ? Number(String(el.value).replace(',', '.')) : l.claim_units }; });
+  if (decision === 'reject' && !note) { _bmcStatus('ohbClaimStatus', 'กรุณาระบุเหตุผลที่ไม่อนุมัติ เพื่อให้สาขาทราบ', 'var(--amber-ink)'); return; }
+  const n = lines.filter(l => l.approved_units > 0).length;
+  if (!await uiConfirm(decision === 'approve'
+      ? `อนุมัติรับเคลม #${c.claim_id} · ${n} รายการ?\nระบบจะปรับสินค้าของสาขา${c.branch || ''} (หักออกจากสินค้าที่รับ)`
+      : `ไม่อนุมัติเคลม #${c.claim_id}?\nสาขาจะเห็นเหตุผลที่ระบุ`)) return;
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/claim-act/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim_id: c.claim_id, decision, lines, note: note || null }) });
+    await ohbClaimView(c.claim_id);
+    _bmcStatus('ohbClaimResult', decision === 'approve' ? `✓ อนุมัติแล้ว · ปรับสินค้าของสาขา ${r.adjusted} รายการ (ลงวันที่ ${r.receipt_date})` : '✓ บันทึกการไม่อนุมัติแล้ว', 'var(--good-ink)');
+    ohbLoadClaims();
+  } catch (e) { _bmcStatus('ohbClaimStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
