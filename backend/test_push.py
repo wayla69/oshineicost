@@ -296,3 +296,43 @@ def test_cash_alert_is_sent_once_with_the_drop_alerts(client, monkeypatch):
     assert len(r["sent"]) == 1 and sent[0]["tag"] == "oshinei-cash"
     r2 = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 11), send=send, scorecard=_sc(สยาม=(48000, 50000)), cashdata=cd)
     assert r2["sent"] == [] and len(sent) == 1
+
+
+# ── per-kind switches ────────────────────────────────────────────────────────
+def test_prefs_roundtrip_and_unknown_ids_are_dropped(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    j = client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"]}).json()
+    assert j["off"] == [] and [k["id"] for k in j["kinds"]] == ["morning", "drop", "stale", "cash", "disc"]
+    j = client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"], "off": ["cash", "bogus", "disc"]}).json()
+    assert j["off"] == ["cash", "disc"]
+    assert client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"]}).json()["off"] == ["cash", "disc"]
+    # a re-subscribe (the browser rotating its keys) keeps the choice
+    client.post("/api/push/subscribe", json=SUB)
+    assert client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"]}).json()["off"] == ["cash", "disc"]
+    assert client.post("/api/push/prefs", json={"endpoint": "https://push.example/nope"}).status_code == 404
+
+
+def test_a_muted_kind_is_not_sent_to_that_device_only(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/push/subscribe", json=SUB2)
+    client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"], "off": ["cash"]})
+    sent = []
+    send = lambda sub, data: (sent.append(sub["endpoint"]) or 201)
+    cd = {"day": "2026-10-06", "branches": [
+        {"branch": "เพชรบูรณ์", "over_short": -22616, "sales": 42403, "discount": 0, "base_rate": 0.01}]}
+    r = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 0), send=send, scorecard=_sc(สยาม=(48000, 50000)), cashdata=cd)
+    assert sent == [SUB2["endpoint"]] and r["results"]["cash:2026-10-06:เพชรบูรณ์"]["muted"] == 1
+    # the morning brief is a separate switch: still reaches the device that muted cash
+    sent.clear()
+    with main.get_db() as con:
+        P.send_to_all(con, {"title": "t", "body": "b"}, send=send, chain_only=True, kind="morning")
+        con.commit()
+    assert sorted(sent) == sorted([SUB["endpoint"], SUB2["endpoint"]])
+    # the test button ignores the switches
+    sent.clear()
+    with main.get_db() as con:
+        P.send_to_all(con, {"title": "t", "body": "b"}, send=send)
+        con.commit()
+    assert len(sent) == 2
