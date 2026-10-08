@@ -1838,6 +1838,57 @@ function resetZoom(chartId) {
   if (c) c.resetZoom();
 }
 
+// ── Charts on a phone (2026-10-08). Every tab's chart is drawn for a wide screen: a
+// 220–300 px wrapper, a legend across the top, every category tick. On a 375 px screen
+// the ticks collide and the legend becomes a paragraph. Called from mkChart() when the
+// screen is ≤700 px wide (the full dashboard after เต็ม →); it only fills in what a chart
+// did not set itself, so an explicit legend / tick choice still wins:
+//   · the wrapper grows to 320 px (not for pies / doughnuts) with maintainAspectRatio off
+//   · the legend moves below, small; it is dropped when there are more than 6 series
+//   · the category axis keeps ≤ 6 ticks, rotated as Chart.js sees fit (a horizontal bar chart keeps all its
+//     branch names), value axes ≤ 5 ticks, 11 px tick font, no x-axis title
+// The glance layer (GLANCE_PLUGIN) keeps drawing latest / peak / avg as before.
+function _onPhoneScreen() {
+  try { return window.innerWidth > 0 && window.matchMedia('(max-width:700px)').matches; } catch (e) { return false; }
+}
+function _phoneChartTune(config, ctx) {
+  const type = config.type;
+  const o = config.options = config.options || {};
+  const wrap = ctx.parentElement;
+  const h = wrap ? parseInt(wrap.style.height || '', 10) : 0;
+  if (h && h >= 150 && h < 320 && !['doughnut', 'pie', 'polarArea', 'radar'].includes(type)) {
+    wrap.style.height = '320px';
+    o.maintainAspectRatio = false;
+  }
+  o.plugins = o.plugins || {};
+  const ds = (config.data && config.data.datasets) || [];
+  const lg = o.plugins.legend = o.plugins.legend || {};
+  if (lg.display === undefined) lg.display = ds.length <= 6;
+  if (lg.display !== false) {
+    if (!lg.position) lg.position = 'bottom';
+    lg.labels = Object.assign({ boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 11 } }, lg.labels || {});
+  }
+  if (!['bar', 'line', 'scatter', 'bubble'].includes(type)) return;
+  const horizontal = o.indexAxis === 'y';
+  o.scales = o.scales || {};
+  if (!o.scales.x) o.scales.x = {};
+  if (!o.scales.y) o.scales.y = {};
+  Object.entries(o.scales).forEach(([k, sc]) => {
+    if (!sc || sc.display === false) return;
+    const isX = k.startsWith('x'), isY = k.startsWith('y');
+    const categoryAxis = horizontal ? isY : isX;
+    sc.ticks = sc.ticks || {};
+    if (categoryAxis && !horizontal) {
+      if (sc.ticks.maxTicksLimit === undefined) sc.ticks.maxTicksLimit = 6;
+      if (sc.ticks.autoSkip === undefined) sc.ticks.autoSkip = true;
+      if (sc.title && sc.title.display) sc.title.display = false;
+    } else if (!categoryAxis && sc.ticks.maxTicksLimit === undefined) {
+      sc.ticks.maxTicksLimit = 5;
+    }
+    sc.ticks.font = Object.assign({ size: 11 }, sc.ticks.font || {});
+  });
+}
+
 function mkChart(id, config) {
   // Vendor-load race: a tab loader can fire before chart.umd.min.js finishes
   // loading. Fail soft (the chart re-renders on the next tab/filter load) rather
@@ -1859,6 +1910,8 @@ function mkChart(id, config) {
       };
     }
   }
+  // A phone showing the full dashboard (เต็ม →) gets a chart cut for 375 px: see _phoneChartTune.
+  if (_onPhoneScreen()) { try { _phoneChartTune(config, ctx); } catch (e) { console.warn('phone chart tune:', e); } }
   // Apply theme-aware axis / grid / label colors (respects dark mode).
   // A canvas inside a [data-force-light] container (the printable Management
   // Report keeps a white-paper look in dark mode) always themes as light.
