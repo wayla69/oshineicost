@@ -57,6 +57,104 @@ function showMobileSummary() {
   }, { passive: true });
 })();
 
+// ── Service worker (sw.js): the shell and the summary's last numbers survive a lost
+// connection, and the morning brief can arrive as a notification. Registered for
+// everyone — online nothing changes (network-first). The worker tells the page when it
+// served a stale copy; #msOffline then says so with the time the copy was stored. ──
+let _msOfflineAt = '';
+function _msOfflineShow(stampIso) {
+  const el = document.getElementById('msOffline'); if (!el) return;
+  const t = stampIso ? new Date(stampIso) : null;
+  const when = t && !isNaN(t) ? ` · ข้อมูลเมื่อ ${msClock(t.getTime())}` : '';
+  el.textContent = `ออฟไลน์${when} · แสดงชุดล่าสุดที่โหลดไว้`;
+  el.style.display = '';
+}
+function _msOfflineHide() { const el = document.getElementById('msOffline'); if (el) el.style.display = 'none'; }
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('/sw.js').catch(e => console.warn('sw:', e));
+  navigator.serviceWorker.addEventListener('message', e => {
+    const d = e.data || {};
+    if (d.type === 'offline-fallback') { _msOfflineAt = d.cachedAt || _msOfflineAt; _msOfflineShow(_msOfflineAt); }
+    if (d.type === 'notification-open') { try { showMobileSummary(); } catch (err) {} }
+  });
+}
+window.addEventListener('offline', () => _msOfflineShow(_msOfflineAt));
+window.addEventListener('online', () => { _msOfflineHide(); _msOfflineAt = ''; if (_phoneFirst()) { try { msRefresh(); } catch (e) {} } });
+if (navigator.onLine === false) setTimeout(() => _msOfflineShow(''), 0);
+
+// ── Notifications: the morning brief on this phone at 08:30 (routers/push_api.py). The
+// card shows only where push exists (an installed app on iOS, any Chrome on Android)
+// and the server has its VAPID key; เปิด asks permission, subscribes and stores the
+// device; ปิด removes it; ทดสอบ asks the server for one test notification. ──
+let _msVapid = null;
+function _msPushSupported() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function _msB64ToU8(s) { const pad = '='.repeat((4 - (s.length % 4)) % 4); const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); const out = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; }
+async function msPushInit() {
+  const card = document.getElementById('msPush'); if (!card) return;
+  if (!_msPushSupported()) { card.style.display = 'none'; return; }
+  try {
+    if (_msVapid === null) { const j = await api(`${API}/api/push/vapid-public`); _msVapid = (j && j.configured && j.key) ? j.key : ''; }
+  } catch (e) { _msVapid = ''; }
+  if (!_msVapid) { card.style.display = 'none'; return; }
+  // "ไว้ก่อน" keeps the card away for 30 days unless this device is already subscribed
+  let sub = null; try { const reg = await navigator.serviceWorker.ready; sub = await reg.pushManager.getSubscription(); } catch (e) {}
+  let snoozed = false; try { snoozed = Date.now() < (+localStorage.getItem('oshinei_push_snooze') || 0); } catch (e) {}
+  if (!sub && snoozed) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  await msPushRender();
+}
+function msPushLater() {
+  try { localStorage.setItem('oshinei_push_snooze', String(Date.now() + 30 * 86400000)); } catch (e) {}
+  const card = document.getElementById('msPush'); if (card) card.style.display = 'none';
+}
+async function msPushRender(note) {
+  const st = document.getElementById('msPushState'), on = document.getElementById('msPushOn'), off = document.getElementById('msPushOff'), test = document.getElementById('msPushTest');
+  if (!st) return;
+  let sub = null;
+  try { const reg = await navigator.serviceWorker.ready; sub = await reg.pushManager.getSubscription(); } catch (e) {}
+  const denied = Notification.permission === 'denied';
+  if (sub) st.textContent = note || 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30';
+  else if (denied) st.textContent = 'ถูกปิดไว้ในการตั้งค่าของเบราว์เซอร์ — เปิดการแจ้งเตือนให้เว็บนี้ก่อน';
+  else st.textContent = note || 'ยังไม่เปิด · รับสรุปเมื่อวานทุกเช้า 08:30 บนเครื่องนี้';
+  if (on) on.style.display = sub || denied ? 'none' : '';
+  if (off) off.style.display = sub ? '' : 'none';
+  if (test) test.style.display = sub ? '' : 'none';
+  const later = document.getElementById('msPushLater'); if (later) later.style.display = sub ? 'none' : '';
+}
+async function msPushEnable() {
+  const st = document.getElementById('msPushState');
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { await msPushRender(perm === 'denied' ? '' : 'ยังไม่ได้อนุญาต'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _msB64ToU8(_msVapid) });
+    const r = await fetch(`${API}/api/push/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...sub.toJSON(), ua: navigator.userAgent.slice(0, 200) }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || ('HTTP ' + r.status)); }
+    await msPushRender();
+  } catch (e) { if (st) st.textContent = 'เปิดไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
+}
+async function msPushDisable() {
+  try {
+    const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      try { await fetch(`${API}/api/push/unsubscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }); } catch (e) {}
+      await sub.unsubscribe();
+    }
+  } catch (e) {}
+  await msPushRender('ปิดแล้ว');
+}
+async function msPushTest() {
+  const st = document.getElementById('msPushState');
+  if (st) st.textContent = 'กำลังส่งทดสอบ…';
+  try {
+    const r = await fetch(`${API}/api/push/test`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+    await msPushRender(d.sent ? 'ส่งทดสอบแล้ว · ดูการแจ้งเตือนบนเครื่อง' : `ส่งไม่ถึง (${d.failed || 0} ล้มเหลว, ${d.gone || 0} หมดอายุ)`);
+  } catch (e) { if (st) st.textContent = 'ส่งทดสอบไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
+}
+
 // ── Install. Chrome / Edge / Samsung fire beforeinstallprompt: keep the event and offer
 // one ติดตั้ง button. iOS has no such event: Safari gets a one-line hint instead
 // (แชร์ → เพิ่มไปยังหน้าจอโฮม). Shown on the phone summary only, never inside the
@@ -455,6 +553,7 @@ function msRenderSummary() {
   const bw = document.getElementById('msBestWorst');
   if (bw) { bw.innerHTML = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.parentElement.style.display = brs.length > 1 ? '' : 'none'; }
   msLoadYesterday();
+  msPushInit();
 }
 
 // ── เมื่อวาน: the Daily Brief's first card on the phone. The last finished day's

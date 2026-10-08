@@ -401,6 +401,8 @@ async function doLogin(ev) {
 
 async function doLogout() {
   try { await fetch(`${API}/api/auth/logout`, { method:'POST' }); } catch(e){}
+  // the offline copy of this person's numbers goes with the session (sw.js)
+  try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: 'clear-api-cache' }); } catch(e){}
   location.reload();
 }
 
