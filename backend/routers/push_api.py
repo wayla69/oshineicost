@@ -11,6 +11,10 @@ sync's DB swap by name, core._PRESERVED_EXACT). The morning send runs from a dae
 thread in main.py (the Fly machine never stops: min_machines_running = 1), once a
 day after 08:30 Thai time, guarded by usage_meta like the supply reminder.
 
+Weekly (Monday 08:30 onward, once per week): last Monday–Sunday against the week before, chain
+total + customers + the best and the weakest branch, sent as soon as the settled day reaches that
+Sunday (so a late sync only delays it).
+
 Cash and discounts (same table, pos_cashcount_day): a branch whose cash count was short by
 ≥ CASH_SHORT_MIN on the last complete day, and a branch whose discount rate that day was ≥ 5%
 and ≥ 2× its own 28-day rate. Rare on real data (about one a week each), so each one is a push.
@@ -50,7 +54,7 @@ DISC_MULT = 2.0                                 # … and ≥ 2× that branch's 
 DISC_MIN_BAHT = 3000.0                          # … and at least this many baht (pos_cashcount_day)
 
 # what a device can switch off, one by one (push_subscription.off holds the muted ids, comma-separated)
-KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
+KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("weekly", "สรุปรายสัปดาห์ เช้าวันจันทร์"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
          ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ")]
 KIND_IDS = [k for k, _ in KINDS]
 
@@ -421,6 +425,118 @@ def alert_payloads(sc: dict, now) -> list:
                      "body": f"ข้อมูลครบถึง {_th_day(day)} (ขาด {gap} วัน) — การซิงก์อาจค้าง ตรวจที่เครื่องซิงก์หรือตัวเฝ้าระวังงาน",
                      "url": "/?go=summary", "tag": "oshinei-stale"}))
     return out
+
+
+WEEKLY_MIN_PRIOR = 20000.0     # a branch needs this much ex-VAT in the prior week to be ranked
+
+
+def weekly_data(con, now=None) -> dict:
+    """The Monday–Sunday week that just ended (the latest Sunday before Thai today) vs the
+    week before, per branch. {} until the settled day has reached that Sunday — a late sync
+    never turns this into a report on an older week."""
+    from rules import net_revenue_sum, latest_settled_day
+    where = "t.source='Easy' AND b.name!='ALL'"
+    settled = latest_settled_day(con, where=where)
+    day = settled.get("day")
+    if not day:
+        return {}
+    today = (now or _thai_now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = today - timedelta(days=((today.weekday() + 1) % 7) or 7)     # the Sunday just gone
+    if datetime.strptime(day, "%Y-%m-%d") < end:
+        return {}
+    start, p_start, p_end = end - timedelta(days=6), end - timedelta(days=13), end - timedelta(days=7)
+    f = "%Y-%m-%d"
+    rows = con.execute(
+        f"""SELECT b.name AS branch,
+                   CASE WHEN date(t.sold_at) >= :s THEN 'cur' ELSE 'prev' END AS w,
+                   ROUND({net_revenue_sum('t')}, 2) AS rev, SUM(t.customer_count) AS cust, COUNT(*) AS bills
+            FROM sales_transaction t JOIN branches b ON b.branch_id = t.branch_id
+            WHERE {where} AND date(t.sold_at) BETWEEN :ps AND :e
+            GROUP BY b.name, w""",
+        {"s": start.strftime(f), "ps": p_start.strftime(f), "e": end.strftime(f)}).fetchall()
+    br: dict = {}
+    for r in rows:
+        br.setdefault(r[0], {})[r[1]] = {"rev": r[2] or 0, "cust": r[3] or 0, "bills": r[4] or 0}
+    return {"start": start.strftime(f), "end": end.strftime(f), "prev_start": p_start.strftime(f),
+            "prev_end": p_end.strftime(f), "branches": br}
+
+
+def weekly_payload(data: dict) -> Optional[dict]:
+    """Pure: title + body for the weekly push. None without two weeks of data."""
+    br = (data or {}).get("branches") or {}
+    cur = sum(v.get("cur", {}).get("rev", 0) for v in br.values())
+    prev = sum(v.get("prev", {}).get("rev", 0) for v in br.values())
+    if not cur or not prev:
+        return None
+    pct = (cur - prev) / prev * 100
+    cust = sum(v.get("cur", {}).get("cust", 0) for v in br.values())
+    cust_prev = sum(v.get("prev", {}).get("cust", 0) for v in br.values())
+    title = (f"สัปดาห์ที่ผ่านมา ({_th_day(data['start'])} – {_th_day(data['end'])}) "
+             f"{_fmt_money(cur)} {'▲' if pct >= 0 else '▼'}{abs(pct):.1f}%")
+    bits = []
+    if cust_prev:
+        cp = (cust - cust_prev) / cust_prev * 100
+        bits.append(f"ลูกค้า {int(cust):,} ({'▲' if cp >= 0 else '▼'}{abs(cp):.1f}%)")
+    else:
+        bits.append(f"ลูกค้า {int(cust):,}")
+    ranked = []
+    for name, v in br.items():
+        c, p = v.get("cur", {}).get("rev", 0), v.get("prev", {}).get("rev", 0)
+        if p >= WEEKLY_MIN_PRIOR:
+            ranked.append((name, (c - p) / p * 100))
+    ranked.sort(key=lambda x: x[1])
+    if ranked:
+        best, worst = ranked[-1], ranked[0]
+        if best[1] > 0:
+            bits.append(f"ดีสุด {best[0]} +{best[1]:.0f}%")
+        if worst[1] < 0:
+            bits.append(f"ต่ำสุด {worst[0]} {worst[1]:.0f}%")
+        bits.append(f"{sum(1 for _, x in ranked if x < 0)} จาก {len(ranked)} สาขายอดต่ำกว่าสัปดาห์ก่อน")
+    return {"title": title, "body": " · ".join(bits), "url": "/?go=branches", "tag": "oshinei-weekly"}
+
+
+def maybe_send_weekly(now=None, send=None, force: bool = False, data=None) -> Optional[dict]:
+    """Monday 08:30 (until Wednesday) once per week: the week that just ended. Waits for the
+    settled day to reach that Sunday; checked every ALERT_EVERY_MIN minutes. Returns the
+    stored record, or None when it was not time / already sent / data not complete."""
+    now = now or _thai_now()
+    if not force and (now.weekday() > 2 or (now.weekday() == 0 and (now.hour, now.minute) < (MORNING_HOUR, MORNING_MINUTE))):
+        return None
+    with get_db() as con:
+        ensure(con)
+        stamp = now.strftime("%Y-%m-%d %H:%M")
+        last = _meta_get(con, "push_weekly_check")
+        if not force and last:
+            try:
+                if now - datetime.strptime(last, "%Y-%m-%d %H:%M") < timedelta(minutes=ALERT_EVERY_MIN):
+                    return None
+            except ValueError:
+                pass
+        _meta_set(con, "push_weekly_check", stamp)
+        con.commit()
+        try:
+            d = data if data is not None else weekly_data(con, now)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] weekly: {e}")
+            return {"checked": stamp, "error": str(e)}
+        if not d or not d.get("start"):
+            return None
+        if not force and _meta_get(con, "push_weekly_week") == d["start"]:
+            return None
+        payload = weekly_payload(d)
+        if not payload:
+            return None
+        _meta_set(con, "push_weekly_week", d["start"])        # claim first, like the morning guard
+        con.commit()
+        rec = {"week": d["start"], "generated_at": stamp, "payload": payload}
+        c = vapid_config()
+        if c["configured"]:
+            r = send_to_all(con, payload, send=send, chain_only=True, kind="weekly")
+            rec.update({k: r[k] for k in ("targets", "sent", "gone", "failed", "muted")})
+        _meta_set(con, "push_weekly", json.dumps(rec, ensure_ascii=False))
+        con.commit()
+    print(f"[push] weekly {rec['week']}: {rec.get('sent')}/{rec.get('targets')} sent")
+    return rec
 
 
 def cash_discount_rows(con) -> dict:
