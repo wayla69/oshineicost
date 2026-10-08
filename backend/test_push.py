@@ -112,7 +112,7 @@ def test_morning_payload_reads_like_the_strip():
     p = P.morning_payload(brief, sc)
     assert p["title"] == "เมื่อวาน (อ. 6 ต.ค.) 2.05M ▼1.1%"
     assert p["body"] == "ลูกค้า 2,989 · 3 สาขาต่ำกว่าปกติ: อยุธยา -58%, นครสวรรค์ -57% · ข้อมูล พ. 7 ต.ค. ยังมาไม่ครบ"
-    assert p["url"] == "/" and p["tag"] == "oshinei-morning"
+    assert p["url"] == "/?go=summary" and p["tag"] == "oshinei-morning"
     assert P.morning_payload({"yesterday": None}, sc) is None
     quiet = P.morning_payload({"yesterday": "2026-10-06", "revenue_yesterday": 1000, "customer_yesterday": 3}, {"branches": []})
     assert quiet["body"] == "ลูกค้า 3 · ทุกสาขาอยู่ในเกณฑ์ปกติ" and quiet["title"] == "เมื่อวาน (อ. 6 ต.ค.) 1.0K"
@@ -164,3 +164,88 @@ def test_dockerfile_ships_the_worker():
     from pathlib import Path
     docker = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY sw.js" in docker
+
+
+# ── alerts ────────────────────────────────────────────────────────────────────
+from datetime import datetime
+
+
+def _sc(day="2026-10-06", **rows):
+    return {"date": day, "branches": [
+        {"branch": n, "revenue": r, "avg7": a, "vs_avg_pct": round((r - a) / a * 100, 1) if a else None,
+         "vs_wow_pct": round((r - a) / a * 100, 1) if a else None}
+        for n, (r, a) in rows.items()]}
+
+
+def test_drop_alert_names_the_deep_link_and_ignores_small_branches():
+    now = datetime(2026, 10, 7, 9, 0)
+    sc = _sc(อยุธยา=(12000, 29000), นครสวรรค์=(3000, 4000), สยาม=(48000, 50000))
+    got = P.alert_payloads(sc, now)
+    assert len(got) == 1
+    key, pl = got[0]
+    assert key.startswith("drop:2026-10-06:") and "อยุธยา" in pl["title"]
+    assert pl["url"] == "/?go=branch&b=%E0%B8%AD%E0%B8%A2%E0%B8%B8%E0%B8%98%E0%B8%A2%E0%B8%B2"   # small & normal ones stay out
+    sc2 = _sc(อยุธยา=(12000, 29000), เชียงใหม่=(10000, 30000))
+    pl2 = P.alert_payloads(sc2, now)[0][1]
+    assert "2 สาขา" in pl2["title"] and pl2["url"] == "/?go=branches"
+
+
+def test_a_normal_tuesday_is_not_a_drop():
+    # low against the 7-day average (it holds the weekend) but in line with last Tuesday
+    sc = {"date": "2026-10-06", "branches": [
+        {"branch": "รังสิต", "revenue": 58000, "avg7": 100000, "vs_avg_pct": -42.0, "vs_wow_pct": -21.0},
+        {"branch": "ใหม่", "revenue": 20000, "avg7": 60000, "vs_avg_pct": -66.0, "vs_wow_pct": None}]}
+    assert P.alert_payloads(sc, datetime(2026, 10, 7, 9, 0)) == []
+
+
+def test_stale_alert_waits_for_the_afternoon_and_needs_a_gap():
+    sc = _sc(day="2026-10-05", สยาม=(48000, 50000))            # yesterday (06) is missing
+    assert not [k for k, _ in P.alert_payloads(sc, datetime(2026, 10, 7, 12, 59)) if k.startswith("stale")]
+    got = dict(P.alert_payloads(sc, datetime(2026, 10, 7, 13, 0)))
+    assert "stale:2026-10-07" in got and "ขาด 1 วัน" in got["stale:2026-10-07"]["body"]
+    ok = _sc(day="2026-10-06", สยาม=(48000, 50000))
+    assert P.alert_payloads(ok, datetime(2026, 10, 7, 15, 0)) == []
+
+
+def test_alerts_send_once_and_only_to_whole_chain_logins(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    with main.get_db() as con:
+        P.ensure(con)
+        con.execute("INSERT INTO push_subscription(username, endpoint, p256dh, auth, created_at, branch) "
+                    "VALUES ('mgr', 'https://push.example/scoped', 'p', 'a', '2026-10-07 08:00', 'สยาม')")
+        con.commit()
+    sent = []
+    send = lambda sub, data: (sent.append((sub["endpoint"], json.loads(data))) or 201)
+    sc = _sc(อยุธยา=(12000, 29000))
+    t0 = datetime(2026, 10, 7, 9, 0)
+    r = P.maybe_send_alerts(now=t0, send=send, scorecard=sc)
+    assert len(r["sent"]) == 1 and [e for e, _ in sent] == [SUB["endpoint"]]   # the branch-scoped device is skipped
+    assert sent[0][1]["tag"] == "oshinei-drop"
+    # 10 minutes later the same condition is not sent again; within 10 minutes nothing even runs
+    assert P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 5), send=send, scorecard=sc) is None
+    r2 = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 11), send=send, scorecard=sc)
+    assert r2["sent"] == [] and len(sent) == 1
+    # a second branch joining the list is a new condition
+    sc2 = _sc(อยุธยา=(12000, 29000), เชียงใหม่=(10000, 30000))
+    r3 = P.maybe_send_alerts(now=datetime(2026, 10, 7, 9, 22), send=send, scorecard=sc2)
+    assert len(r3["sent"]) == 1 and len(sent) == 2
+    # before 07:00 nothing is checked
+    assert P.maybe_send_alerts(now=datetime(2026, 10, 8, 6, 30), send=send, scorecard=sc) is None
+
+
+def test_morning_push_skips_branch_scoped_devices(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    with main.get_db() as con:
+        con.execute("INSERT INTO push_subscription(username, endpoint, p256dh, auth, created_at, branch) "
+                    "VALUES ('mgr', 'https://push.example/scoped', 'p', 'a', '2026-10-07 08:00', 'สยาม')")
+        con.commit()
+        r = P.send_to_all(con, {"title": "t", "body": "b"}, send=lambda s, d: 201, chain_only=True)
+        con.commit()                 # send_to_all updates last_ok: never leave the write open for the next test
+    assert r["targets"] == 1
+
+
+def test_read_scorecard_returns_a_dict_from_the_cached_endpoint(client):
+    sc = P.read_scorecard()          # the real ttl_cache'd function, in-process: a Response, not a dict
+    assert isinstance(sc, dict) and "branches" in sc

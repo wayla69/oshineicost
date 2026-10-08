@@ -2233,6 +2233,7 @@ def _push_scheduler_loop():
     while True:
         try:
             _push_api.maybe_send_morning()
+            _push_api.maybe_send_alerts()
         except Exception as e:  # noqa: BLE001 — never let the loop die
             print(f"[push] scheduler: {e}")
         _time.sleep(60)

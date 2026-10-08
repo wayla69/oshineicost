@@ -10,11 +10,20 @@ nothing else changes. Subscriptions live in push_subscription (preserved across 
 sync's DB swap by name, core._PRESERVED_EXACT). The morning send runs from a daemon
 thread in main.py (the Fly machine never stops: min_machines_running = 1), once a
 day after 08:30 Thai time, guarded by usage_meta like the supply reminder.
+
+Alerts (2026-10-08): the same thread also checks every ALERT_EVERY_MIN minutes for two
+things worth a push on their own — a branch far below its normal on the last settled day (under both its 7-day average and
+last week's same weekday),
+and sales data that has not arrived by early afternoon (the sync is stuck). Each alert
+fires once per distinct condition (usage_meta push_alerts_sent) and carries a deep link
+(?go=…) the phone opens on tap. Morning brief and alerts go only to logins that see the
+whole chain; a branch-scoped login's devices are skipped.
 """
 import json
 import os
 from datetime import datetime, timedelta
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -26,6 +35,11 @@ router = APIRouter()
 
 MORNING_HOUR, MORNING_MINUTE = 8, 30          # Thai clock
 MAX_FAILS = 5                                   # a dead endpoint is dropped after this many errors
+ALERT_FROM_HOUR = 7                             # drop alerts start once the 06:00 sync has settled
+ALERT_EVERY_MIN = 10
+STALE_HOUR = 13                                 # after the 12:00 sync: yesterday still missing = stuck
+DROP_PCT = -40.0                                # under BOTH the 7-day average and the same weekday last week
+DROP_MIN_AVG = 5000.0                           # ex-VAT baht/day — a tiny branch's noise is not an alert
 
 TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 TH_DOW = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']   # Python weekday(): Monday = 0
@@ -56,6 +70,9 @@ def ensure(con) -> None:
         created_at TEXT NOT NULL,
         last_ok TEXT,
         fails INTEGER NOT NULL DEFAULT 0)""")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(push_subscription)").fetchall()}
+    if "branch" not in cols:       # the branch a scoped login is confined to ('' = sees the whole chain)
+        con.execute("ALTER TABLE push_subscription ADD COLUMN branch TEXT NOT NULL DEFAULT ''")
     con.execute("CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY, value TEXT)")
 
 
@@ -107,12 +124,13 @@ def push_subscribe(body: _SubscribeBody, request: Request):
         raise HTTPException(status_code=400, detail="endpoint must be https")
     with get_db() as con:
         ensure(con)
-        con.execute("""INSERT INTO push_subscription(username, endpoint, p256dh, auth, ua, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?)
+        branch = _auth.scope_branch(request) or ""
+        con.execute("""INSERT INTO push_subscription(username, endpoint, p256dh, auth, ua, created_at, branch)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(endpoint) DO UPDATE SET username = excluded.username, p256dh = excluded.p256dh,
-                         auth = excluded.auth, ua = excluded.ua, fails = 0""",
+                         auth = excluded.auth, ua = excluded.ua, fails = 0, branch = excluded.branch""",
                     (user, body.endpoint, body.keys.p256dh, body.keys.auth, (body.ua or "")[:200],
-                     _thai_now().strftime("%Y-%m-%d %H:%M")))
+                     _thai_now().strftime("%Y-%m-%d %H:%M"), branch))
         con.commit()
         n = con.execute("SELECT COUNT(*) FROM push_subscription WHERE username = ?", (user,)).fetchone()[0]
     return {"ok": True, "devices": n}
@@ -179,13 +197,17 @@ def _default_send(sub_info: dict, data: str) -> int:
         raise
 
 
-def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None) -> dict:
+def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None,
+                chain_only: bool = False) -> dict:
     """Push `payload` to every stored device (or one user's). 404/410 = the browser
-    dropped the subscription → row deleted; other failures count, MAX_FAILS drops it."""
+    dropped the subscription → row deleted; other failures count, MAX_FAILS drops it.
+    `chain_only` skips devices of branch-scoped logins (the payload is chain-wide)."""
     send = send or _default_send
     q, params = "SELECT id, endpoint, p256dh, auth, fails FROM push_subscription", ()
     if only_user is not None:
         q, params = q + " WHERE username = ?", (only_user,)
+    elif chain_only:
+        q = q + " WHERE branch = ''"
     rows = con.execute(q, params).fetchall()
     data = json.dumps(payload, ensure_ascii=False)
     out = {"targets": len(rows), "sent": 0, "gone": 0, "failed": 0, "statuses": []}
@@ -255,7 +277,7 @@ def morning_payload(brief: dict, scorecard: dict) -> Optional[dict]:
         bits.append("ทุกสาขาอยู่ในเกณฑ์ปกติ")
     if brief.get("skipped_day"):
         bits.append(f"ข้อมูล {_th_day(brief['skipped_day'])} ยังมาไม่ครบ")
-    return {"title": title, "body": " · ".join(bits), "url": "/", "tag": "oshinei-morning"}
+    return {"title": title, "body": " · ".join(bits), "url": "/?go=summary", "tag": "oshinei-morning"}
 
 
 def build_morning() -> Optional[dict]:
@@ -294,11 +316,107 @@ def maybe_send_morning(now=None, send=None, force: bool = False) -> Optional[dic
             rec["error"] = f"brief: {e}"
         rec["payload"] = payload
         if payload and c["configured"]:
-            rec.update(send_to_all(con, payload, send=send))
+            rec.update(send_to_all(con, payload, send=send, chain_only=True))
         else:
             rec.update({"targets": con.execute("SELECT COUNT(*) FROM push_subscription").fetchone()[0],
                         "sent": 0, "gone": 0, "failed": 0})
         _meta_set(con, "push_morning", json.dumps(rec, ensure_ascii=False))
         con.commit()
     print(f"[push] morning {day}: {rec.get('sent')}/{rec.get('targets')} sent" + (f" ({rec['error']})" if rec.get("error") else ""))
+    return rec
+
+
+# ── alerts: worth a push on their own ───────────────────────────────────────
+def _plain(v):
+    """@ttl_cache'd endpoints hand back serialized bytes when called in-process."""
+    if hasattr(v, "body"):                       # a starlette Response around the cached bytes
+        v = v.body
+    if isinstance(v, (bytes, bytearray, str)):
+        return json.loads(v)
+    return v
+
+
+def read_scorecard() -> dict:
+    from . import home_extra as _he          # the registered module object (see build_morning)
+    return _plain(_he.home_branch_scorecard(date=None, group=None))
+
+
+def alert_payloads(sc: dict, now) -> list:
+    """[(key, payload)] for the conditions in the scorecard right now. Pure: no I/O, so the
+    rules are testable. A drop is a branch ≥40% under its 7-day average AND its same weekday last week on the last settled
+    day (and big enough to matter); data is stale when that settled day is older than
+    yesterday once the early-afternoon sync is done."""
+    out = []
+    day = (sc or {}).get("date")
+    if not day:
+        return out
+    # both baselines: the 7-day average alone flags every Tuesday (it holds the weekend);
+    # same-weekday-last-week alone flags a one-off strong week. A branch with no last-week
+    # figure is not judged.
+    rows = [b for b in (sc.get("branches") or [])
+            if b.get("vs_avg_pct") is not None and b["vs_avg_pct"] <= DROP_PCT
+            and b.get("vs_wow_pct") is not None and b["vs_wow_pct"] <= DROP_PCT
+            and (b.get("avg7") or 0) >= DROP_MIN_AVG]
+    rows.sort(key=lambda b: b["vs_avg_pct"])
+    if rows:
+        bits = [f"{b['branch']} {b['vs_avg_pct']:.0f}% (฿{_fmt_money(b.get('revenue'))} จากปกติ ฿{_fmt_money(b.get('avg7'))})"
+                for b in rows[:3]]
+        more = f" และอีก {len(rows) - 3} สาขา" if len(rows) > 3 else ""
+        title = (f"{rows[0]['branch']} ยอดตกหนัก ({_th_day(day)})" if len(rows) == 1
+                 else f"{len(rows)} สาขายอดตกหนัก ({_th_day(day)})")
+        url = f"/?go=branch&b={quote(rows[0]['branch'])}" if len(rows) == 1 else "/?go=branches"
+        out.append((f"drop:{day}:" + ",".join(sorted(b["branch"] for b in rows)),
+                    {"title": title, "body": " · ".join(bits) + more + " — หรือข้อมูลสาขายังไม่เข้า",
+                     "url": url, "tag": "oshinei-drop"}))
+    today = now.strftime("%Y-%m-%d")
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    if now.hour >= STALE_HOUR and day < yesterday:
+        gap = (datetime.strptime(yesterday, "%Y-%m-%d") - datetime.strptime(day, "%Y-%m-%d")).days
+        out.append((f"stale:{today}",
+                    {"title": "ข้อมูลขายยังไม่เข้า",
+                     "body": f"ข้อมูลครบถึง {_th_day(day)} (ขาด {gap} วัน) — การซิงก์อาจค้าง ตรวจที่เครื่องซิงก์หรือตัวเฝ้าระวังงาน",
+                     "url": "/?go=summary", "tag": "oshinei-stale"}))
+    return out
+
+
+def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None) -> Optional[dict]:
+    """Every ALERT_EVERY_MIN minutes from ALERT_FROM_HOUR: push each alert not yet sent.
+    Returns {"checked", "sent": [keys], ...} or None when it was not time."""
+    now = now or _thai_now()
+    if not force and now.hour < ALERT_FROM_HOUR:
+        return None
+    with get_db() as con:
+        ensure(con)
+        last = _meta_get(con, "push_alert_check")
+        stamp = now.strftime("%Y-%m-%d %H:%M")
+        if not force and last:
+            try:
+                if now - datetime.strptime(last, "%Y-%m-%d %H:%M") < timedelta(minutes=ALERT_EVERY_MIN):
+                    return None
+            except ValueError:
+                pass
+        _meta_set(con, "push_alert_check", stamp)    # claim first, like the morning guard
+        con.commit()
+        rec = {"checked": stamp, "sent": []}
+        try:
+            sc = scorecard if scorecard is not None else read_scorecard()
+            todo = alert_payloads(sc, now)
+        except Exception as e:  # noqa: BLE001
+            rec["error"] = f"scorecard: {e}"
+            print(f"[push] alerts: {e}")
+            return rec
+        sent_keys = json.loads(_meta_get(con, "push_alerts_sent") or "[]")
+        c = vapid_config()
+        for key, payload in todo:
+            if key in sent_keys:
+                continue
+            if c["configured"]:
+                r = send_to_all(con, payload, send=send, chain_only=True)
+                rec.setdefault("results", {})[key] = {k: r[k] for k in ("targets", "sent", "gone", "failed")}
+            sent_keys.append(key)                    # recorded even with no device: no flood when one appears
+            rec["sent"].append(key)
+            print(f"[push] alert {key}: {payload['title']}")
+        _meta_set(con, "push_alerts_sent", json.dumps(sent_keys[-60:], ensure_ascii=False))
+        _meta_set(con, "push_alerts", json.dumps(rec, ensure_ascii=False))
+        con.commit()
     return rec
