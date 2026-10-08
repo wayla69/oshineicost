@@ -75,12 +75,33 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   navigator.serviceWorker.addEventListener('message', e => {
     const d = e.data || {};
     if (d.type === 'offline-fallback') { _msOfflineAt = d.cachedAt || _msOfflineAt; _msOfflineShow(_msOfflineAt); }
-    if (d.type === 'notification-open') { try { showMobileSummary(); } catch (err) {} }
+    if (d.type === 'notification-open') { try { _msPendingLink = d.url || ''; showMobileSummary(); } catch (err) {} }
   });
 }
 window.addEventListener('offline', () => _msOfflineShow(_msOfflineAt));
 window.addEventListener('online', () => { _msOfflineHide(); _msOfflineAt = ''; if (_phoneFirst()) { try { msRefresh(); } catch (e) {} } });
 if (navigator.onLine === false) setTimeout(() => _msOfflineShow(''), 0);
+
+// ── Deep link: a notification opens "/?go=summary|branches|branch&b=<name>". Read once at
+// load (the query is then dropped from the address bar) or handed over by sw.js when the
+// app is already open; applied when the summary has data (loadMobileSummary). ──
+let _msPendingLink = '';
+(function () {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get('go')) { _msPendingLink = location.search; history.replaceState(null, '', location.pathname + location.hash); }
+  } catch (e) {}
+})();
+function msDeepLink(link) {
+  let q; try { q = new URLSearchParams(String(link).includes('?') ? String(link).split('?')[1] : String(link)); } catch (e) { return; }
+  const go = q.get('go'), b = q.get('b');
+  if (go === 'branch' && b) { msSwitchView('branches'); msOpenBranch(b); }
+  else if (go === 'branches') msSwitchView('branches');
+  else if (go === 'summary') {
+    msSwitchView('summary');
+    setTimeout(() => document.getElementById('msYesterdayWrap')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400);
+  }
+}
 
 // ── Notifications: the morning brief on this phone at 08:30 (routers/push_api.py). The
 // card shows only where push exists (an installed app on iOS, any Chrome on Android)
@@ -428,6 +449,7 @@ async function loadMobileSummary(force) {
   if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day || ''}` + (_msFetchedAt ? ` · โหลดล่าสุด ${msClock(_msFetchedAt)}` : '');
   msRenderActive();
   msLoadVoice();
+  if (_msPendingLink) { const l = _msPendingLink; _msPendingLink = ''; msDeepLink(l); }
 }
 
 // ── the customer-voice queue on the phone (E4): what waits for an answer, the
