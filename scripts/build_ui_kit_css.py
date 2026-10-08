@@ -73,7 +73,7 @@ head = '''/* ══════════════════════�
    marketing surfaces only (deck cover, hero) — never the dashboard.
    ════════════════════════════════════════════════════════════════════════ */
 @import "tokens.css";
-@import url("/vendor/kira-ui-font.css");   /* KIRA UI + Noto symbols, served without a login */
+@import url("/vendor/kira-ui-font.css?v=7.0");   /* KIRA UI + Noto symbols, served without a login */
 
 /* ── 2. tokens the app keeps outside tokens.css (from design-system/tokens.json) ── */
 :root {

@@ -119,7 +119,7 @@ def purge_contacts(con, today: str = None, days: int = CONTACT_DAYS) -> int:
 
 # ── the public side ──────────────────────────────────────────────────────────
 _CSS = """
-*{box-sizing:border-box} body{margin:0;font-family:'Segoe UI',Tahoma,system-ui,sans-serif;background:#f0f7f5;color:#1f2937}
+*{box-sizing:border-box} body{margin:0;font-family:'KIRA UI','Noto Sans Thai',sans-serif;background:#f0f7f5;color:#1f2937}
 .wrap{max-width:480px;margin:0 auto;padding:20px 16px 40px} .brand{font-weight:800;color:#0f766e;font-size:14px;letter-spacing:.04em}
 h1{font-size:22px;margin:.3rem 0 .2rem} .sub{color:#6b7280;font-size:13px;margin-bottom:14px}
 .faces{display:flex;gap:6px;justify-content:space-between;margin:8px 0 4px}
@@ -143,7 +143,7 @@ def _survey_page(link: dict, code: str) -> str:
     faces = "".join(f'<div class="face" data-v="{v}" role="button" tabindex="0">{ico}<small>{lab}</small></div>' for v, ico, lab in FACES)
     chips = "".join(f'<span class="chip" data-a="{html.escape(k)}" role="button" tabindex="0">{html.escape(lab)}</span>' for k, lab in ASPECTS)
     return f"""<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>โอชิเน {b} · บอกเราหน่อย</title><style>{_CSS}</style></head><body><div class="wrap">
+<title>โอชิเน {b} · บอกเราหน่อย</title><link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0"><style>{_CSS}</style></head><body><div class="wrap">
 <div class="brand">OSHINEI · {b}</div>
 <form id="f" autocomplete="off">
 <h1>วันนี้เป็นอย่างไรบ้าง?</h1><div class="sub">ใช้เวลาไม่ถึง 20 วินาที ทุกคำตอบถึงผู้จัดการสาขาโดยตรง</div>
@@ -209,13 +209,12 @@ def _poster_page(link: dict, url: str) -> str:
     u = html.escape(url)
     code = html.escape(link["code"] or "")
     return f"""<!doctype html><html lang="th"><head><meta charset="utf-8"><title>โปสเตอร์ QR · {b}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0">
 <style>
 @page{{size:A5 portrait;margin:0}}
 *{{box-sizing:border-box}}
 body{{margin:0;background:#f0f4f8;color:#0f172a;
-     font-family:'IBM Plex Sans Thai','Noto Sans Thai','Segoe UI',Tahoma,system-ui,sans-serif}}
+     font-family:'KIRA UI','Noto Sans Thai',sans-serif}}
 
 /* the sheet is exactly A5 so what you see is what the printer puts on the card */
 .sheet{{width:148mm;height:210mm;margin:8mm auto;background:#fff;position:relative;overflow:hidden;
@@ -242,7 +241,7 @@ h1{{font-size:27pt;line-height:1.15;font-weight:700;margin:9mm 0 0;text-align:ce
 .foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #cbd5e1;text-align:center}}
 .foot .thanks{{font-size:11.5pt;color:#334155}}
 .foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#64748b;word-break:break-all;
-           font-family:'IBM Plex Sans Thai',Consolas,monospace}}
+           font-family:ui-monospace,Consolas,monospace}}
 .foot .code{{font-weight:700;color:#312e81;letter-spacing:.06em}}
 
 .tools{{text-align:center;margin:10px 0 0}}

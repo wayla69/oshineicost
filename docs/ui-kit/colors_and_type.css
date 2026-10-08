@@ -16,7 +16,7 @@
    marketing surfaces only (deck cover, hero) — never the dashboard.
    ════════════════════════════════════════════════════════════════════════ */
 @import "tokens.css";
-@import url("/vendor/kira-ui-font.css");   /* KIRA UI + Noto symbols, served without a login */
+@import url("/vendor/kira-ui-font.css?v=7.0");   /* KIRA UI + Noto symbols, served without a login */
 
 /* ── 2. tokens the app keeps outside tokens.css (from design-system/tokens.json) ── */
 :root {
@@ -277,7 +277,7 @@ button { transition: background-color .12s, color .12s, border-color .12s; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ── Card ── */
-.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text-primary); box-shadow: var(--shadow-none); }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); color: var(--text-primary); box-shadow: var(--shadow-card); }
 .card.pad { padding: 16px; }
 
 /* ── KPI card: the 3px top rule states direction ── */
