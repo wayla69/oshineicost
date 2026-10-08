@@ -1756,6 +1756,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <div class="ms-section-title">ดีสุด / ⚠ ต้องดู (เทียบเดือนก่อน)</div>
       <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
     </div>
+    <!-- once notifications are on the card above hides itself; this brings it back (msPushReopen) -->
+    <div class="ms-section" style="text-align:center"><button id="msPushReopen" onclick="msPushReopen()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;border:0;background:none;color:var(--text-muted,#64748b);text-decoration:underline">ตั้งค่าการแจ้งเตือน</button></div>
   </div>
 
   <!-- VIEW: ยอดขาย — trend by day / week / month, peak hours, tender mix -->

@@ -117,16 +117,33 @@ async function msPushInit() {
     if (_msVapid === null) { const j = await api(`${API}/api/push/vapid-public`); _msVapid = (j && j.configured && j.key) ? j.key : ''; }
   } catch (e) { _msVapid = ''; }
   if (!_msVapid) { card.style.display = 'none'; return; }
-  // "ไว้ก่อน" keeps the card away for 30 days unless this device is already subscribed
+  // "ไว้ก่อน" keeps the card away for 30 days; once this device is subscribed the card
+  // stays out of the way too (a small ตั้งค่าการแจ้งเตือน link at the bottom brings it back)
   let sub = null; try { const reg = await navigator.serviceWorker.ready; sub = await reg.pushManager.getSubscription(); } catch (e) {}
   let snoozed = false; try { snoozed = Date.now() < (+localStorage.getItem('oshinei_push_snooze') || 0); } catch (e) {}
-  if (!sub && snoozed) { card.style.display = 'none'; return; }
+  const reopen = document.getElementById('msPushReopen');
+  if (sub && !_msPushOpen) { card.style.display = 'none'; if (reopen) reopen.style.display = ''; return; }
+  if (!sub && snoozed) { card.style.display = 'none'; if (reopen) reopen.style.display = ''; return; }
   card.style.display = '';
+  if (reopen) reopen.style.display = 'none';
   await msPushRender();
 }
+let _msPushOpen = false;     // the card was opened on purpose (just enabled, or via the bottom link)
 function msPushLater() {
   try { localStorage.setItem('oshinei_push_snooze', String(Date.now() + 30 * 86400000)); } catch (e) {}
   const card = document.getElementById('msPush'); if (card) card.style.display = 'none';
+  const reopen = document.getElementById('msPushReopen'); if (reopen) reopen.style.display = '';
+}
+function msPushHide() {      // subscribed: tuck the card away, keep the bottom link
+  _msPushOpen = false;
+  const card = document.getElementById('msPush'); if (card) card.style.display = 'none';
+  const reopen = document.getElementById('msPushReopen'); if (reopen) reopen.style.display = '';
+}
+function msPushReopen() {
+  _msPushOpen = true;
+  try { localStorage.removeItem('oshinei_push_snooze'); } catch (e) {}
+  msPushInit();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 async function msPushRender(note) {
   const st = document.getElementById('msPushState'), on = document.getElementById('msPushOn'), off = document.getElementById('msPushOff'), test = document.getElementById('msPushTest');
@@ -151,7 +168,8 @@ async function msPushRender(note) {
   if (on) on.style.display = sub || denied ? 'none' : '';
   if (off) off.style.display = sub ? '' : 'none';
   if (test) test.style.display = sub ? '' : 'none';
-  const later = document.getElementById('msPushLater'); if (later) later.style.display = sub ? 'none' : '';
+  const later = document.getElementById('msPushLater');
+  if (later) { later.textContent = sub ? 'ซ่อน' : 'ไว้ก่อน'; later.setAttribute('onclick', sub ? 'msPushHide()' : 'msPushLater()'); }
 }
 async function msPushEnable() {
   const st = document.getElementById('msPushState');
@@ -167,6 +185,7 @@ async function msPushEnable() {
       try { await sub.unsubscribe(); } catch (e2) {}   // keep the browser and the server in step
       throw new Error(d.detail || ('HTTP ' + r.status));
     }
+    _msPushOpen = true;      // stay visible so ส่งทดสอบ can be tried; ซ่อน tucks it away
     await msPushRender();
   } catch (e) { if (st) st.textContent = 'เปิดไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }

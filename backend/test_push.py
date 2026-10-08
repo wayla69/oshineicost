@@ -242,6 +242,7 @@ def test_morning_push_skips_branch_scoped_devices(client, monkeypatch):
                     "VALUES ('mgr', 'https://push.example/scoped', 'p', 'a', '2026-10-07 08:00', 'สยาม')")
         con.commit()
         r = P.send_to_all(con, {"title": "t", "body": "b"}, send=lambda s, d: 201, chain_only=True)
+        con.commit()                 # send_to_all updates last_ok: never leave the write open for the next test
     assert r["targets"] == 1
 
 
