@@ -2358,25 +2358,29 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <!-- P2 structure refactor: app.js split into sequential slices (shared
      global scope — load order 01→09 must be preserved). /app.js still serves
      the concatenation for any stale cached shell during rollout. -->
+<!-- Five slices load here: everything the login, the boot and the phone summary need.
+     The other fifteen (the desktop tabs' code) are inert data-lazy tags below, in the same
+     order; ensureSlicesLoaded() (js/01-core.js) turns them into scripts before the desktop
+     shell boots. A phone that stays on the summary never downloads or parses them. -->
 <script src="/js/01-core.js"></script>
-<script src="/js/02-mgt-report.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/02-mgt-report.js"></script>
 <script src="/js/03-tabs-main.js"></script>
-<script src="/js/04-report-cost.js"></script>
-<script src="/js/05-pnl-settings.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/04-report-cost.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/05-pnl-settings.js"></script>
 <script src="/js/06-features.js"></script>
-<script src="/js/07-home.js"></script>
-<script src="/js/08-guest-buffet.js"></script>
-<script src="/js/09-analysis-tabs.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/07-home.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/08-guest-buffet.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/09-analysis-tabs.js"></script>
 <script src="/js/09b-cost-pnl.js"></script>
 <script src="/js/09c-mobile.js"></script>
-<script src="/js/09d-bom-tools.js"></script>
-<script src="/js/09e-menu-compare-bom.js"></script>
-<script src="/js/10-ordering.js"></script>
-<script src="/js/11-feedback.js"></script>
-<script src="/js/12-checklist.js"></script>
-<script src="/js/13-bom-center.js"></script>
-<script src="/js/14-branch.js"></script>
-<script src="/js/15-orderhub.js"></script>
-<script src="/js/16-supplyhome.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/09d-bom-tools.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/09e-menu-compare-bom.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/10-ordering.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/11-feedback.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/12-checklist.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/13-bom-center.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/14-branch.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/15-orderhub.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/16-supplyhome.js"></script>
 </body>
 </html>

@@ -890,6 +890,11 @@ def _versioned_index_html() -> str:
         p = _JS_DIR / m.group(1)
         return f'src="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
     html = _re.sub(r'src="/js/([0-9a-z-]+\.js)"', sub, html)
+    # the lazily loaded slices carry the same content hash on their inert tags
+    def sub_lazy(m):
+        p = _JS_DIR / m.group(1)
+        return f'data-lazy="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
+    html = _re.sub(r'data-lazy="/js/([0-9a-z-]+\.js)"', sub_lazy, html)
     return html.replace('<div id="tabsRoot"></div>',
                         f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle()[1]}"></div>', 1)
 

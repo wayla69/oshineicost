@@ -11,6 +11,12 @@ _SLICES = ["01-core.js", "02-mgt-report.js", "03-tabs-main.js", "04-report-cost.
            "13-bom-center.js", "14-branch.js", "15-orderhub.js", "16-supplyhome.js"]
 
 
+# 2026-10-08: five slices load eagerly (the login, the boot, the phone summary); the other
+# fifteen are inert data-lazy tags that ensureSlicesLoaded() (js/01-core.js) turns into
+# scripts before the desktop shell boots — a phone on the summary never parses them.
+_EAGER = {"01-core.js", "03-tabs-main.js", "06-features.js", "09b-cost-pnl.js", "09c-mobile.js"}
+
+
 def test_root_references_all_slices_in_order_with_hashes(client):
     import re
     r = client.get("/")
@@ -19,10 +25,14 @@ def test_root_references_all_slices_in_order_with_hashes(client):
     assert "no-cache" in r.headers.get("cache-control", "")
     pos = []
     for s in _SLICES:
-        m = re.search(rf'<script src="/js/{re.escape(s)}\?v=[0-9a-f]{{8}}"></script>', html)
-        assert m, f"shell must reference {s} with a content hash"
+        if s in _EAGER:
+            m = re.search(rf'<script src="/js/{re.escape(s)}\?v=[0-9a-f]{{8}}"></script>', html)
+        else:
+            m = re.search(rf'<script type="text/plain" class="lazy-slice" data-lazy="/js/{re.escape(s)}\?v=[0-9a-f]{{8}}"></script>', html)
+        assert m, f"shell must reference {s} with a content hash ({'eager' if s in _EAGER else 'lazy'})"
         pos.append(m.start())
     assert pos == sorted(pos), "slices must load in name order (shared global scope)"
+    assert len(re.findall(r'<script src="/js/', html)) == len(_EAGER), "only the five core slices load eagerly"
     # the application code itself must not be inlined in the shell
     assert "function switchTab" not in html
 
