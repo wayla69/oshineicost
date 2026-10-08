@@ -303,7 +303,7 @@ def test_prefs_roundtrip_and_unknown_ids_are_dropped(client, monkeypatch):
     _keys(monkeypatch); _wipe(client)
     client.post("/api/push/subscribe", json=SUB)
     j = client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"]}).json()
-    assert j["off"] == [] and [k["id"] for k in j["kinds"]] == ["morning", "drop", "stale", "cash", "disc"]
+    assert j["off"] == [] and [k["id"] for k in j["kinds"]] == ["morning", "weekly", "drop", "stale", "cash", "disc"]
     j = client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"], "off": ["cash", "bogus", "disc"]}).json()
     assert j["off"] == ["cash", "disc"]
     assert client.post("/api/push/prefs", json={"endpoint": SUB["endpoint"]}).json()["off"] == ["cash", "disc"]
@@ -336,3 +336,41 @@ def test_a_muted_kind_is_not_sent_to_that_device_only(client, monkeypatch):
         P.send_to_all(con, {"title": "t", "body": "b"}, send=send)
         con.commit()
     assert len(sent) == 2
+
+
+# ── weekly ───────────────────────────────────────────────────────────────────
+def _wk(**rows):
+    return {"start": "2026-09-28", "end": "2026-10-04", "branches": {
+        n: {"cur": {"rev": c, "cust": cc, "bills": 10}, "prev": {"rev": p, "cust": pc, "bills": 10}}
+        for n, (c, p, cc, pc) in rows.items()}}
+
+
+def test_weekly_payload_reads_like_a_summary():
+    pl = P.weekly_payload(_wk(สยาม=(600000, 500000, 3000, 2800), อยุธยา=(300000, 400000, 1500, 1900), เล็ก=(5000, 10000, 40, 80)))
+    assert "สัปดาห์ที่ผ่านมา" in pl["title"] and "▼" in pl["title"]       # 905K vs 910K
+    assert "ดีสุด สยาม +20%" in pl["body"] and "ต่ำสุด อยุธยา -25%" in pl["body"]
+    assert "1 จาก 2 สาขายอดต่ำกว่าสัปดาห์ก่อน" in pl["body"]       # the small branch is not ranked
+    assert pl["url"] == "/?go=branches" and pl["tag"] == "oshinei-weekly"
+    assert P.weekly_payload({"start": "x", "end": "y", "branches": {}}) is None
+
+
+def test_weekly_is_sent_once_on_monday_and_respects_the_switch(client, monkeypatch):
+    _keys(monkeypatch); _wipe(client)
+    client.post("/api/push/subscribe", json=SUB)
+    client.post("/api/push/subscribe", json=SUB2)
+    client.post("/api/push/prefs", json={"endpoint": SUB2["endpoint"], "off": ["weekly"]})
+    sent = []
+    send = lambda sub, data: (sent.append(sub["endpoint"]) or 201)
+    d = _wk(สยาม=(600000, 500000, 3000, 2800))
+    assert P.maybe_send_weekly(now=datetime(2026, 10, 5, 8, 0), send=send, data=d) is None          # Monday before 08:30
+    assert P.maybe_send_weekly(now=datetime(2026, 10, 3, 9, 0), send=send, data=d) is None          # Saturday
+    r = P.maybe_send_weekly(now=datetime(2026, 10, 5, 8, 31), send=send, data=d)
+    assert r["sent"] == 1 and r["muted"] == 1 and sent == [SUB["endpoint"]]
+    assert P.maybe_send_weekly(now=datetime(2026, 10, 5, 8, 50), send=send, data=d) is None         # already this week
+    assert len(sent) == 1
+
+
+def test_weekly_data_waits_for_the_sunday(client):
+    with main.get_db() as con:
+        r = P.weekly_data(con, now=datetime(2026, 10, 5, 9, 0))
+    assert isinstance(r, dict)          # {} or a week: never an exception on the fixture
