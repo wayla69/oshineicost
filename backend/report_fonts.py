@@ -1,4 +1,4 @@
-"""KIRA UI for generated reports (PDF / standalone HTML).
+"""KIRA UI for generated reports (PDF / standalone HTML / reportlab).
 
 The app itself loads KIRA UI from /vendor (see vendor/kira-ui-font.css). Reports are
 different: they are rendered to PDF by headless Chrome from a local file, opened from
@@ -6,10 +6,17 @@ docs/ or forwarded as .html, so they cannot rely on a server path or on Google F
 (KIRA UI isn't there). Each report therefore embeds the face as data: URIs.
 
 It embeds a SUBSET (vendor/fonts/report/*.subset.woff2: Basic Latin, Latin-1, all of
-Thai incl. ฿, dashes/quotes/bullets; every
-OpenType layout feature kept, so Thai tone marks still stack and tnum still works) -
-~30 KB a weight instead of ~190 KB. KIRA UI is Noto Sans + Noto Sans Thai under the
-SIL OFL 1.1: vendor/fonts/KIRA-UI-LICENSE-OFL-1.1.txt.
+Thai incl. ฿, General Punctuation (dashes/quotes/bullets), € № ◌; every OpenType layout
+feature kept, so Thai tone marks still stack and tnum still works) - ~32 KB a weight
+instead of ~190 KB. KIRA UI 7.0 "Polished" since 2026-10-08 (3.1 before: same metrics
+and coverage, ~90 Latin outlines refined, optional ss05). KIRA UI is Noto Sans + Noto Sans Thai under
+the SIL OFL 1.1: vendor/fonts/KIRA-UI-LICENSE-OFL-1.1.txt.
+
+Rebuild the subsets from the owner's TTF package with fontTools (py -3.14 has brotli):
+  py -3.14 -m fontTools.subset KIRA-UI-<W>.ttf --flavor=woff2 --layout-features='*'      --name-IDs='*' --name-legacy --notdef-outline      --unicodes="U+0020-007E,U+00A0-00FF,U+0E00-0E7F,U+2000-206F,U+20AC,U+2116,U+25CC"      --output-file=vendor/fonts/report/KIRA-UI-<W>.subset.woff2
+and the same without --flavor for the two .subset.ttf files reportlab reads (below). KIRA UI 7.0 ships
+the SAME PostScript name (name ID 6 "KIRA UI 7.0", with a space) in all four weights, which makes a PDF
+merge Regular and Bold; set ID 6 to KIRAUI-<W> (and ID 3) on every subset with fontTools afterwards.
 """
 import base64
 from functools import lru_cache
@@ -58,3 +65,53 @@ def font_face_css() -> str:
             rules.append("@font-face{font-family:'KIRA UI';font-style:normal;font-weight:%d;font-display:block;%s"
                          "src:url(data:font/woff2;base64,%s) format('woff2');unicode-range:%s}" % (weight, extra, b64, rng))
     return "\n".join(rules)
+
+
+# ── reportlab + matplotlib (the Monthly Pack PDF, backend/routers/export.py) ─────────────
+# reportlab's built-in Helvetica has no Thai, so branch and ingredient names came out as
+# black boxes. The two TTF subsets (same coverage as the woff2 ones, ~73 KB each) are
+# registered once per process; <b> inside a Paragraph maps to the Bold face.
+TTF_FILES = {"KIRA UI": "KIRA-UI-Regular.subset.ttf", "KIRA UI Bold": "KIRA-UI-Bold.subset.ttf"}
+_HELVETICA = ("Helvetica", "Helvetica-Bold")
+
+
+@lru_cache(maxsize=1)
+def reportlab_fonts() -> tuple:
+    """(regular, bold) reportlab font names: KIRA UI when the TTF subsets exist and
+    reportlab is importable, else Helvetica so the PDF still builds (Latin only)."""
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.fonts import addMapping
+    except Exception:
+        return _HELVETICA
+    paths = {name: FONT_DIR / fname for name, fname in TTF_FILES.items()}
+    if not all(p.exists() for p in paths.values()):
+        return _HELVETICA
+    try:
+        for name, path in paths.items():
+            if name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(name, str(path)))
+        # <b>/<i> in Paragraph markup: bold -> the Bold face, italic -> same face (none drawn)
+        addMapping("KIRA UI", 0, 0, "KIRA UI"); addMapping("KIRA UI", 1, 0, "KIRA UI Bold")
+        addMapping("KIRA UI", 0, 1, "KIRA UI"); addMapping("KIRA UI", 1, 1, "KIRA UI Bold")
+    except Exception:
+        return _HELVETICA
+    return ("KIRA UI", "KIRA UI Bold")
+
+
+def matplotlib_use_kira() -> bool:
+    """Make matplotlib draw chart text (axis labels carry Thai branch / ingredient names)
+    in KIRA UI. Returns False, leaving the default face, when the file or matplotlib
+    is missing."""
+    path = FONT_DIR / TTF_FILES["KIRA UI"]
+    if not path.exists():
+        return False
+    try:
+        from matplotlib import font_manager, rcParams
+        font_manager.fontManager.addfont(str(path))
+        rcParams["font.family"] = "KIRA UI"
+        rcParams["axes.unicode_minus"] = False   # the subset has U+2212, but keep ASCII minus
+        return True
+    except Exception:
+        return False

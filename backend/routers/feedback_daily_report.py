@@ -139,10 +139,10 @@ def feedback_daily_report(request: Request, date: Optional[str] = Query(None), d
 _PRINT_CSS = """
 @page { size: A4; margin: 12mm 12mm 14mm 12mm; }
 * { box-sizing: border-box; }
-body { margin: 0; font: 10pt/1.45 "Sarabun", "Segoe UI", Tahoma, sans-serif; color: #1b232a; background: #fff; }
-h1, h2, h3 { font-family: "Bai Jamjuree", "Sarabun", sans-serif; margin: 0; }
+body { margin: 0; font: 10pt/1.45 "KIRA UI", "Noto Sans Thai", sans-serif; color: #1b232a; background: #fff; }
+h1, h2, h3 { font-family: "KIRA UI", "Noto Sans Thai", sans-serif; margin: 0; }
 .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f766e; padding-bottom: 6pt; margin-bottom: 8pt; }
-.brand { font: 700 8pt "Bai Jamjuree"; letter-spacing: .1em; text-transform: uppercase; color: #0f766e; }
+.brand { font: 700 8pt "KIRA UI"; letter-spacing: .1em; text-transform: uppercase; color: #0f766e; }
 .head h1 { font-size: 18pt; margin-top: 2pt; }
 .head .meta { text-align: right; font-size: 8.5pt; color: #64748b; }
 .headline { background: #f0fdfa; border: .6pt solid #99f6e4; border-radius: 4pt; padding: 6pt 9pt; font-size: 10.5pt; font-weight: 600; margin-bottom: 9pt; }
@@ -164,7 +164,7 @@ td { padding: 3pt 5pt; border-bottom: .5pt solid #e2e8f0; vertical-align: top; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }
 .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12pt; break-inside: avoid-page; }
 .empty { color: #94a3b8; font-size: 9pt; font-style: italic; }
-.branch-h { font: 700 8.6pt "Bai Jamjuree"; color: #0f766e; margin: 7pt 0 2pt; padding-top: 3pt; border-top: .5pt dashed #cbd5e1; }
+.branch-h { font: 700 8.6pt "KIRA UI"; color: #0f766e; margin: 7pt 0 2pt; padding-top: 3pt; border-top: .5pt dashed #cbd5e1; }
 .branch-h:first-child { border-top: 0; padding-top: 0; }
 .ex { font-size: 7.6pt; color: #64748b; font-style: italic; }
 .foot { margin-top: 10pt; font-size: 7.6pt; color: #94a3b8; }
@@ -422,7 +422,7 @@ def _build_print_html(data: dict) -> str:
 
     return f"""<!doctype html>
 <html lang="th"><head><meta charset="utf-8"><title>{_esc(title)}</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0">
 <style>{_PRINT_CSS}</style></head><body>
 <div class="head"><div><div class="brand">Oshinei Dashboard · โมดูล เสียงลูกค้า</div><h1>{_esc(title)}</h1></div>
 <div class="meta">พิมพ์เมื่อ {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}<br>{data['branch_count']} สาขาในรายงานนี้</div></div>

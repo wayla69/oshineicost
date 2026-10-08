@@ -455,6 +455,9 @@ def _mpack_render_pdf(pack: dict) -> bytes:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from report_fonts import reportlab_fonts, matplotlib_use_kira  # KIRA UI in the PDF + charts
+    F_REG, F_BOLD = reportlab_fonts()
+    matplotlib_use_kira()
 
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
@@ -462,6 +465,8 @@ def _mpack_render_pdf(pack: dict) -> bytes:
                             topMargin=1.5*cm, bottomMargin=1.5*cm,
                             title=f"Monthly Pack {pack['month']}")
     styles = getSampleStyleSheet()
+    for _st in ("Title", "Heading2", "BodyText"):
+        styles[_st].fontName = F_BOLD if _st != "BodyText" else F_REG
     h1 = ParagraphStyle("h1", parent=styles["Title"], textColor=colors.HexColor("#1F4E79"))
     h2 = ParagraphStyle("h2", parent=styles["Heading2"], textColor=colors.HexColor("#1F4E79"))
     body  = styles["BodyText"]
@@ -488,11 +493,12 @@ def _mpack_render_pdf(pack: dict) -> bytes:
         ["Food Cost %",      fmt_p(sc["food_cost_pct"]),fmt_p(sp["food_cost_pct"])],
     ], colWidths=[5*cm, 5*cm, 5*cm])
     cover_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), F_REG),   # KIRA UI: Thai names (Helvetica has none)
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E79")),
         ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-        ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTNAME",   (0,0), (-1,0), F_BOLD),
         ("ALIGN",      (1,1), (-1,-1), "RIGHT"),
-        ("FONTNAME",   (0,1), (0,-1), "Helvetica-Bold"),
+        ("FONTNAME",   (0,1), (0,-1), F_BOLD),
         ("GRID",       (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
         ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.whitesmoke, colors.white]),
     ]))
@@ -502,7 +508,7 @@ def _mpack_render_pdf(pack: dict) -> bytes:
     story.append(PageBreak())
 
     # ── P&L per Branch ────────────────────────────────────────────────────
-    story.append(Paragraph("P&L per Branch", h2))
+    story.append(Paragraph("P&amp;L per Branch", h2))
     # Bar chart of GP% per branch
     branches = pack["branches"]
     if branches:
@@ -534,13 +540,14 @@ def _mpack_render_pdf(pack: dict) -> bytes:
         tbl_data.append([
             b["branch"], fmt_n(b["revenue"]), fmt_n(b["cogs"]), fmt_n(b["gp"]),
             fmt_p(b["gp_pct"]), fmt_p(b["food_cost_pct"]),
-            {"in":"✓","borderline":"⚠","out":"●","low":"ℹ️","no-data":"—"}.get(b["status"],"—"),
+            {"in":"ในเป้า","borderline":"ใกล้ขอบ","out":"เกินเป้า","low":"ต่ำผิดปกติ","no-data":"-"}.get(b["status"],"-"),  # words: KIRA UI has no ✓ ⚠ ●
         ])
-    branch_tbl = Table(tbl_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 1.8*cm, 1.8*cm, 1.4*cm])
+    branch_tbl = Table(tbl_data, colWidths=[3.2*cm, 2.5*cm, 2.5*cm, 2.5*cm, 1.8*cm, 1.8*cm, 2.1*cm])
     branch_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), F_REG),   # KIRA UI: Thai names (Helvetica has none)
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E79")),
         ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-        ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTNAME",   (0,0), (-1,0), F_BOLD),
         ("FONTSIZE",   (0,0), (-1,-1), 8),
         ("ALIGN",      (1,1), (-1,-1), "RIGHT"),
         ("ALIGN",      (6,1), (6,-1), "CENTER"),
@@ -578,9 +585,10 @@ def _mpack_render_pdf(pack: dict) -> bytes:
             ])
         t = Table(tbl_data, colWidths=[2.3*cm, 7*cm, 2*cm, 2*cm, 2.3*cm, 1.4*cm])
         t.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), F_REG),   # KIRA UI: Thai names (Helvetica has none)
             ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E79")),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME",   (0,0), (-1,0), F_BOLD),
             ("FONTSIZE",   (0,0), (-1,-1), 7),
             ("ALIGN",      (2,1), (-1,-1), "RIGHT"),
             ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5e1")),
@@ -614,9 +622,10 @@ def _mpack_render_pdf(pack: dict) -> bytes:
             ])
         t = Table(tbl_data, colWidths=[2.2*cm, 6.5*cm, 2.2*cm, 2*cm, 2.3*cm, 1.4*cm])
         t.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), F_REG),   # KIRA UI: Thai names (Helvetica has none)
             ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E79")),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME",   (0,0), (-1,0), F_BOLD),
             ("FONTSIZE",   (0,0), (-1,-1), 7),
             ("ALIGN",      (3,1), (-1,-1), "RIGHT"),
             ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5e1")),
@@ -635,9 +644,10 @@ def _mpack_render_pdf(pack: dict) -> bytes:
             a_data.append([a["branch"], a["severity"], a["message"]])
         a_tbl = Table(a_data, colWidths=[3.5*cm, 2.5*cm, 11*cm])
         a_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (-1,-1), F_REG),   # KIRA UI: Thai names (Helvetica has none)
             ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F4E79")),
             ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
-            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME",   (0,0), (-1,0), F_BOLD),
             ("FONTSIZE",   (0,0), (-1,-1), 9),
             ("GRID",       (0,0), (-1,-1), 0.3, colors.HexColor("#cbd5e1")),
             ("VALIGN",     (0,0), (-1,-1), "TOP"),

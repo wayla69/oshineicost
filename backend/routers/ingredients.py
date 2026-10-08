@@ -1099,10 +1099,11 @@ def ingredients_order_letter(
 
     html_out = f"""<!doctype html><html lang="th"><head><meta charset="utf-8">
 <title>ใบแจ้งปริมาณสั่งวัตถุดิบ · {esc(pages[0][0] if branch else 'ทุกสาขา')} · {end}</title>
+<link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0">
 <style>
   @page {{ size: A4; margin: 14mm 12mm; }}
   * {{ box-sizing: border-box; }}
-  body {{ font-family:"Sarabun","Leelawadee UI","Tahoma",sans-serif; color:#0f172a;
+  body {{ font-family:"KIRA UI","Noto Sans Thai",sans-serif; color:#0f172a;
          margin:0; background:#f1f5f9; font-size:12px; }}
   .page {{ background:#fff; width:190mm; min-height:263mm; margin:8mm auto; padding:10mm 9mm;
            box-shadow:0 1px 6px rgba(0,0,0,.12); page-break-after:always; }}
@@ -1123,7 +1124,7 @@ def ingredients_order_letter(
   table.grid tbody tr:nth-child(even) {{ background:#f8fafc; }}
   table.grid tfoot td {{ background:#ecfdf5; border-top:2px solid #0f766e; }}
   .r {{ text-align:right; }} .c {{ text-align:center; }} .b {{ font-weight:700; }}
-  .mono {{ font-family:"Consolas",monospace; font-size:10px; color:#475569; }}
+  .mono {{ font-family:ui-monospace,Consolas,monospace; font-size:10px; color:#475569; }}
   .excl {{ margin-top:8px; font-size:10.5px; color:#475569; background:#f1f5f9;
            border-left:3px solid #94a3b8; padding:6px 9px; line-height:1.6; }}
   .notes {{ margin-top:10px; font-size:10.5px; background:#fffbeb; border-left:3px solid #f59e0b;
@@ -1643,8 +1644,8 @@ def ingredients_compliance_letter(
                     con, h["issue_id"], tolerance_pct)))
         if not pages:
             return Response(content=
-                "<!doctype html><meta charset='utf-8'>"
-                "<div style=\"font-family:Sarabun,Tahoma,sans-serif;padding:40px;"
+                "<!doctype html><meta charset='utf-8'><link rel='stylesheet' href='/vendor/kira-ui-font.css?v=7.0'>"
+                "<div style=\"font-family:'KIRA UI','Noto Sans Thai',sans-serif;padding:40px;"
                 "text-align:center;color:#047857\"><h2>ไม่มีสาขาที่ต้องออกหนังสือแจ้งเตือน</h2>"
                 "<p style='color:#475569'>ทุกสาขาสั่งวัตถุดิบผ่านส่วนกลางครบตามแผน "
                 f"(เกณฑ์: ต่ำกว่าที่แนะนำเกิน {tolerance_pct:g}%)</p></div>",
@@ -1743,10 +1744,11 @@ def ingredients_compliance_letter(
                           '<div class="head">', 1) for b in body]
     html_out = f"""<!doctype html><html lang="th"><head><meta charset="utf-8">
 <title>{'ร่าง · ' if preview else ''}หนังสือแจ้งเตือนการสั่งวัตถุดิบ · {len(pages)} สาขา</title>
+<link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0">
 <style>
   @page {{ size: A4; margin: 14mm 12mm; }}
   * {{ box-sizing: border-box; }}
-  body {{ font-family:"Sarabun","Leelawadee UI","Tahoma",sans-serif; color:#0f172a;
+  body {{ font-family:"KIRA UI","Noto Sans Thai",sans-serif; color:#0f172a;
          margin:0; background:#f1f5f9; font-size:12px; }}
   .page {{ background:#fff; width:190mm; min-height:263mm; margin:8mm auto; padding:10mm 9mm;
            box-shadow:0 1px 6px rgba(0,0,0,.12); page-break-after:always; }}
@@ -1767,7 +1769,7 @@ def ingredients_compliance_letter(
   table.grid td {{ border:1px solid #cbd5e1; padding:3.5px 5px; }}
   table.grid tbody tr:nth-child(even) {{ background:#fef2f2; }}
   .r {{ text-align:right; }} .c {{ text-align:center; }}
-  .mono {{ font-family:"Consolas",monospace; font-size:10px; color:#475569; }}
+  .mono {{ font-family:ui-monospace,Consolas,monospace; font-size:10px; color:#475569; }}
   .bad {{ color:#b91c1c; font-weight:700; }}
   .warn {{ color:#b45309; font-weight:700; }}
   .action {{ margin-top:12px; font-size:11px; background:#fff7ed; border-left:3px solid #ea580c;

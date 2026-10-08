@@ -1,9 +1,11 @@
-/* KIRA UI 3.1 (Noto Sans + Noto Sans Thai, SIL OFL 1.1 - see fonts/KIRA-UI-LICENSE-OFL-1.1.txt
-   and fonts/KIRA-UI-NOTICE.txt). 400/500/600/700; heavier weights resolve to 700. */
-@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap; src: url(./fonts/KIRA-UI-Regular.woff2) format('woff2'); }
-@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap; src: url(./fonts/KIRA-UI-Medium.woff2) format('woff2'); }
-@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/KIRA-UI-SemiBold.woff2) format('woff2'); }
-@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/KIRA-UI-Bold.woff2) format('woff2'); }
+/* KIRA UI 7.0 "Polished" (2026-10-08; 3.1 before). A rebuild of Noto Sans + Noto Sans Thai, SIL OFL 1.1 - see
+   fonts/KIRA-UI-LICENSE-OFL-1.1.txt and fonts/KIRA-UI-NOTICE.txt. 400/500/600/700; heavier weights resolve to 700.
+   ?v= on the four files: the app serves /vendor with ETag only, so a new query string is what makes every
+   browser and the service-worker shell fetch the new outlines instead of a heuristically-fresh 3.1 copy. */
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap; src: url(./fonts/KIRA-UI-Regular.woff2?v=7.0) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap; src: url(./fonts/KIRA-UI-Medium.woff2?v=7.0) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/KIRA-UI-SemiBold.woff2?v=7.0) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/KIRA-UI-Bold.woff2?v=7.0) format('woff2'); }
 
 /* Symbols KIRA UI lacks (it is Noto Sans + Noto Sans Thai): arrows, math signs, ▲▼●■, ✓✗★⚠☐, ①②③.
    Subsets of Noto Sans Math / Symbols 2 / Symbols (SIL OFL 1.1, fonts/symbols/*-OFL.txt), declared
