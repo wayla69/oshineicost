@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt \
 COPY backend/ /app/backend/
 COPY recon/   /app/recon/
 COPY index.html /app/index.html
+COPY sw.js      /app/sw.js       # the service worker, served at /sw.js (backend/main.py)
 COPY js/        /app/js/
 COPY tabs/      /app/tabs/
 COPY vendor/    /app/vendor/
