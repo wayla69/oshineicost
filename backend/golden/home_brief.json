@@ -38,6 +38,8 @@
  "mtd_revenue": 5700.0,
  "revenue_wow": null,
  "revenue_yesterday": 1900.0,
+ "skipped_bills": null,
+ "skipped_day": null,
  "tx_yesterday": 2,
  "yesterday": "2026-06-03",
  "yesterday_by_branch": [
