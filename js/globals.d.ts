@@ -18,6 +18,7 @@ declare var allMonths: string[];        // 01-core.js: Object.defineProperty(win
 // dialogs every slice awaits (the app's browser pane has no prompt()/confirm()).
 declare function uiDialog(opt: any): Promise<any>;
 declare function uiConfirm(message: string, opt?: any): Promise<boolean>;
+declare function uiNotice(message: string, opt?: any): Promise<boolean>;
 declare function uiPrompt(message: string, value?: any, opt?: any): Promise<string | null>;
 declare function askWriteToken(message?: string): Promise<string | null>;
 

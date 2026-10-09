@@ -40,7 +40,7 @@ REASONS = [
 REASON_TH = dict(REASONS)
 STATUS_TH = {"submitted": "รอประสานงานขายพิจารณา", "approved": "อนุมัติรับเคลมแล้ว",
              "rejected": "ไม่อนุมัติ", "cancelled": "สาขายกเลิก"}
-ORIGIN_TH = {"receive": "แจ้งขณะรับสินค้า", "after": "แจ้งหลังรับสินค้า"}
+ORIGIN_TH = {"receive": "แจ้งขณะรับสินค้า", "after": "แจ้งภายหลัง"}
 OPEN = ("submitted", "approved")          # the statuses that use up a line's claimable quantity
 
 
@@ -223,10 +223,20 @@ def _head(con, claim_id):
     return d
 
 
+def _delivery(con, h: dict):
+    """PR-M4: the delivery day of the claim's order — a claim is read as "round · delivery day · N lines", not by its id."""
+    from .hub import delivery_of
+    if not h.get("cycle_date"):
+        return None
+    dd = con.execute("SELECT delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
+    return delivery_of(con, h["branch_id"], h["round"], h["cycle_date"], dd[0] if dd else None)
+
+
 def detail(con, claim_id: int) -> dict:
     d = _head(con, claim_id)
     if not d:
         raise ValueError("ไม่พบรายการเคลม")
+    d["delivery"] = _delivery(con, d)
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (d["order_id"],))}
     recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
@@ -260,6 +270,7 @@ def listing(con, branch_id=None, status=None, limit: int = 50) -> list:
     out = []
     for cid in rows:
         h = _head(con, cid)
+        h["delivery"] = _delivery(con, h)
         h["lines"] = con.execute("SELECT COUNT(*) FROM bc_claim_line WHERE claim_id=?", (cid,)).fetchone()[0]
         h["photos"] = con.execute("SELECT COUNT(*) FROM bc_claim_photo WHERE claim_id=?", (cid,)).fetchone()[0]
         out.append(h)

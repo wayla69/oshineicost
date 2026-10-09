@@ -50,14 +50,17 @@ def test_begin_then_end_and_the_end_is_the_next_begin(db):
     assert out["status"] == "draft" and out["kind"] == "begin"
     assert ST.sheet(db, 1, AS_OF)["draft"]["count_id"] == out["count_id"]
     assert _items(ST.sheet(db, 1, AS_OF))["13-01-009"]["draft_qty"] == 2.5
-    out = ST.save(db, 1, [{"code": "S-011", "qty": 3, "unit": "ถุง 1 กก."}], "udon", submit=True, count_date="2026-10-01")
-    assert out["status"] == "submitted" and out["lines"] == 2
+    out = ST.save(db, 1, [{"code": "S-011", "qty": 3, "unit": "ถุง 1 กก."}, {"code": "02-01-001", "qty": 2, "unit": "แพ็ค 1 กก."}],
+                  "udon", submit=True, count_date="2026-10-01")          # PR-M4: every required item is counted
+    assert out["status"] == "submitted" and out["lines"] == 3
     d = ST.detail(db, out["count_id"])
-    assert {l["code"]: l["qty_base"] for l in d["lines"]} == {"13-01-009": 2500.0, "S-011": 3000.0}
+    assert {l["code"]: l["qty_base"] for l in d["lines"]} == {"13-01-009": 2500.0, "S-011": 3000.0, "02-01-001": 2000.0}
     sh = ST.sheet(db, 1, AS_OF)
     assert sh["next_kind"] == "end" and sh["last_count"]["kind"] == "begin"
     assert _items(sh)["13-01-009"]["last_qty"] == 2.5
-    out2 = ST.save(db, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True, count_date="2026-10-04")
+    # PR-M4: every required (บังคับ) item must be counted before a count is submitted
+    out2 = ST.save(db, 1, [{"code": "13-01-009", "qty": 1}, {"code": "02-01-001", "qty": 1}, {"code": "S-011", "qty": 1}], "udon",
+                   submit=True, count_date="2026-10-04")
     assert out2["kind"] == "end"
     ps = ST.periods(db, 1)
     assert ps == [({"count_id": out["count_id"], "date": "2026-10-01"}, {"count_id": out2["count_id"], "date": "2026-10-04"})]
@@ -162,3 +165,43 @@ def test_a_branch_login_is_pinned_to_its_branch(db, monkeypatch):
         RB._stock_branch(db, None, None)
     assert e.value.status_code == 400
     assert RB._stock_branch(db, None, 1) == 1
+
+
+# ── PR-M4 · "ทุกรายการที่สั่งต้องนับ": a count is submitted only with every required item counted ──
+def _required(sh):
+    return [i for z in sh["zones"] for i in z["items"] if i["required"]]
+
+
+def test_a_count_with_an_uncounted_required_item_is_refused(db):
+    req = _required(ST.sheet(db, 1, AS_OF))
+    assert len(req) >= 2, "the fixture must have a few required items (monitored or class A)"
+    first = req[0]
+    ST.save(db, 1, [{"code": first["code"], "qty": 1, "unit": first["count_unit"]}], "udon", count_date="2026-10-01")
+    with pytest.raises(ValueError) as e:
+        ST.save(db, 1, [], "udon", submit=True, count_date="2026-10-01")
+    msg = str(e.value)
+    n = len(req) - 1
+    assert msg.startswith(f"ยังไม่นับรายการบังคับ {n} รายการ (เช่น ") and msg.endswith(") นับให้ครบก่อนส่ง")
+    assert req[1]["name"] in msg and first["name"] not in msg
+    db.rollback()
+    assert ST.draft_of(db, 1) is None                     # the refused call stored nothing (the router rolls back too)
+    # a 0 is a count: every required item at 0 is accepted
+    out = ST.save(db, 1, [{"code": i["code"], "qty": 0, "unit": i["count_unit"]} for i in req], "udon", submit=True,
+                  count_date="2026-10-01")
+    assert out["status"] == "submitted" and out["lines"] == len(req)
+
+
+def test_a_file_import_for_a_closed_month_is_not_held_to_the_required_list(db):
+    out = ST.import_count(db, 1, "2026-09-01", [{"code": "S-011", "qty": 2.0, "unit": "ถุง 1 กก.", "note": None}],
+                          "analyst", dry_run=False)
+    assert out["ok"] and out["status"] == "submitted"
+
+
+def test_last_count_is_read_in_the_unit_counted_now(db):
+    ST.save(db, 1, [{"code": i["code"], "qty": (2500 if i["code"] == "13-01-009" else 0), "unit": "กรัม"}
+                    for i in _required(ST.sheet(db, 1, AS_OF)) + [i for z in ST.sheet(db, 1, AS_OF)["zones"] for i in z["items"]
+                                                                  if i["code"] == "13-01-009" and not i["required"]]],
+            "udon", submit=True, count_date="2026-10-01")
+    crab = _items(ST.sheet(db, 1, AS_OF))["13-01-009"]
+    assert crab["count_unit"] == "แพ็ค 1 กก." and crab["last_unit"] == crab["count_unit"]      # typed in grams, read in packs
+    assert crab["last_qty"] == 2.5 and crab["last_base"] == 2500.0

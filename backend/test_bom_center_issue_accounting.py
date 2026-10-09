@@ -77,7 +77,7 @@ def log_fixture(con):
     """The branch started with the 1 Sep count · 4 Sep on time (reopened, then confirmed again) · 6 Sep on time ·
     7 Sep a draft · 8 Sep confirmed the next day (late) · one late purchase order on 5 Sep · one claim on 6 Sep."""
     ST.save(con, 1, [{"code": c, "qty": q, "unit": "กรัม"} for c, q in ((CRAB, 10), (SALMON, 0))], "udon", submit=True,
-            count_date="2026-09-01")
+            count_date="2026-09-01", require_all=False)
     slip(con, "2026-09-04", [g(CRAB, 5)])
     slip(con, "2026-09-06", [g(CRAB, 5)])
     slip(con, "2026-09-07", [g(CRAB, 9)], submit=False)

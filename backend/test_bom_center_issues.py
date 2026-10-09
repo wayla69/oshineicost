@@ -60,7 +60,7 @@ def slip(con, day, lines, submit=True, now=None):
 def build_stock(con):
     """10 packs counted 1 Oct, 5 received 2 Oct; slips: 1 Oct used 1000 g, 2 Oct used 600 g, 3 Oct wasted 700 g,
     4 Oct a DRAFT using 5 packs. System stock on 5 Oct = 10000 + 5000 - 1000 - 600 - 700 = 12700 g."""
-    cid = ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-10-01")["count_id"]
+    cid = ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-10-01", require_all=False)["count_id"]
     VA.add_receipt(con, 1, "2026-10-02", [{"code": CRAB, "qty": 5, "unit": PACK}], "udon")
     slip(con, "2026-10-01", [used(qty=1000)])
     slip(con, "2026-10-02", [used(qty=600)])
@@ -207,7 +207,7 @@ def test_validations(con, day, lines, submit, msg):  # noqa: F811
 
 
 def test_a_confirmed_slip_is_locked_and_lines_with_zero_quantity_go(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")
+    ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     con.commit()
     assert IS.save(con, 1, "2026-10-02", [used()], "udon", submit=True, now=NOW)["status"] == "confirmed"
     with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2/10/2026 ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข"):
@@ -223,8 +223,8 @@ def test_a_slip_before_the_latest_count_can_be_confirmed_and_reconfirmed_and_bel
     """An error found after the count must be fixable: the slip of 1 Oct (before the 2 Oct end count) is accepted,
     reopened, edited and confirmed again; the reconciliation of THAT period counts it; the stock now is unchanged."""
     from bom_center import issue_reports as IR
-    ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-09-01")
-    end = ST.save(con, 1, [{"code": CRAB, "qty": 8, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")["count_id"]
+    ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-09-01", require_all=False)
+    end = ST.save(con, 1, [{"code": CRAB, "qty": 8, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)["count_id"]
     con.commit()
     before = ST.system_position(con, 1, date(2026, 10, 5))["qty"]
     out = IS.save(con, 1, "2026-10-01", [used(qty=1000)], "udon", submit=True, now=NOW)
@@ -309,7 +309,7 @@ def test_system_position_is_count_plus_receipts_minus_confirmed_slips(con):  # n
 
 # ── 6 · the plan ─────────────────────────────────────────────────────────────
 def test_the_plan_deducts_the_system_stock_after_todays_slip(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-05")
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-05", require_all=False)
     con.commit()
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     r = next(x for x in p["rows"] if x["code"] == CRAB)
@@ -329,7 +329,7 @@ def test_the_plan_deducts_the_system_stock_after_todays_slip(con):  # noqa: F811
 
 # ── 7 · submit needs today's slip ────────────────────────────────────────────
 def test_submit_needs_todays_confirmed_slip_no_count_is_written_and_a_gap_only_warns(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     con.commit()
     line = [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}]
     n_counts = con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0]
@@ -470,7 +470,7 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     it = _issue_items(build(branch_id=1))
     assert it["issue_today"]["started"] is False and not [k for k in it if k.startswith("issue_missing_")]
     assert "ใบตัดเบิกเมื่อวาน" not in RM.branch_line(build(branch_id=1)["items"])["text"]
-    ST.save(c, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")
+    ST.save(c, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     c.commit()
     d = build(branch_id=1)
     it = _issue_items(d)

@@ -259,11 +259,15 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         z = zone if zone in by_zone else guess_zone(c, name, fam, kind, valid)
         k = klass.get(c, "C")
         pv = prev.get(c)
+        last_q, last_u = (pv[0], pv[1]) if pv else (None, None)
+        # "ครั้งก่อน" is read in the unit the item is counted in now: a previous count typed in another unit is converted
+        if pv and pv[2] is not None and factor and (last_u or unit) != unit:
+            last_q, last_u = round(pv[2] / factor, 3), unit
         by_zone[z].append({
             "code": c, "name": name or c, "base_unit": base, "count_unit": unit, "per_count_unit": factor,
             "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A", "monitored": bool(mon),
             "use_per_day": round(per_day.get(c, 0.0), 3),
-            "last_qty": pv[0] if pv else None, "last_unit": pv[1] if pv else None, "last_base": pv[2] if pv else None,
+            "last_qty": last_q, "last_unit": last_u, "last_base": pv[2] if pv else None,
             "draft_qty": draft.get(c, (None,))[0]})
     order = {"A": 0, "B": 1, "C": 2}
     out_z = []
@@ -277,10 +281,20 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
             "required": sum(1 for z in out_z for r in z["items"] if r["required"])}
 
 
+def uncounted_required(con, branch_id: int, count_id: int) -> list:
+    """The required (บังคับ) items of the branch's sheet that the count `count_id` has no quantity for: [(code, name)]."""
+    have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=?", (count_id,))}
+    return [(it["code"], it["name"]) for z in sheet(con, branch_id)["zones"] for it in z["items"]
+            if it["required"] and it["code"] not in have]
+
+
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
-         note: str = None) -> dict:
+         note: str = None, require_all: bool = True) -> dict:
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
-    BEGIN stock, every later one the END of a period and the BEGIN of the next."""
+    BEGIN stock, every later one the END of a period and the BEGIN of the next.
+
+    PR-M4 (owner rule "ทุกรายการที่สั่งต้องนับ"): a count is submitted only when every required (บังคับ) item has a
+    quantity — `require_all=False` is for a historical count loaded from a file (import_count), never for a branch."""
     _branch_name(con, branch_id)
     conv = Converter(con)
     cdate = count_date or bkk_today().isoformat()
@@ -327,6 +341,10 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     if submit:
         if not n:
             raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
+        if require_all:
+            miss = uncounted_required(con, branch_id, cid)
+            if miss:
+                raise ValueError(f"ยังไม่นับรายการบังคับ {len(miss)} รายการ (เช่น {', '.join(n for _, n in miss[:3])}) นับให้ครบก่อนส่ง")
         # every line of the draft, not only the ones sent now, must have reached the base unit
         bad = [f"{c}: แปลง {u} ไม่ได้" for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
@@ -510,6 +528,7 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     out = {"branch_id": branch_id, "count_date": count_date, "lines": len(lines) - len(unknown),
            "unknown": unknown, "unconverted": bad, "dry_run": dry_run, "ok": not unknown and not bad}
     if out["ok"] and not dry_run:
-        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ")
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ",
+                 require_all=False)
         out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
     return out

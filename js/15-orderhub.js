@@ -692,14 +692,16 @@ function isrReconHead(r) {
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
     ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) คงเหลือตามระบบจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
 }
-// o: {all: show every row, edit: reason inputs, pfx: id prefix, save: name of the save function (code, true)}
+// o: {all: show every row, edit: reason inputs, pfx: id prefix, save: name of the save function (code, true),
+//     qty: optional (qtyBase, row) -> HTML text, a quantity in the unit the page's readers count in (the branch page passes
+//     brnQtyUnit; the centre's pages pass nothing and keep the base unit)}
 function isrReconTable(r, o) {
   o = o || {};
   const rows = r.rows.filter(x => o.all || x.status !== 'ok').slice(0, o.all ? 500 : 80);
   if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
   const pfx = o.pfx || 'isrRc';
-  const q = (v, u) => v == null ? '—' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
-  const sg = v => v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}`;
+  const q = (v, x) => v == null ? '—' : o.qty ? o.qty(v, x) : `${_bmcNum(v, 1)} ${esc(x.base_unit || '')}`;
+  const sg = (v, x) => v == null ? '—' : o.qty ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${o.qty(Math.abs(v), x)}` : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}`;
   return rows.map(x => {
     const [label, ink] = _ISR_ST[x.status] || [x.status_th, 'var(--text-muted)'];
     const flag = x.status === 'over' || x.status === 'under';
@@ -708,14 +710,15 @@ function isrReconTable(r, o) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ชั้น ${esc(x.class)} (เกณฑ์ ±${r.thresholds[x.class]}%)</span>
         <span style="margin-left:auto" class="text-sm">${x.diff_value != null ? `<b style="color:${x.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(x.diff_value)}</b>` : ''}</span></div>
-      <div class="text-xs mt-0.5" style="color:var(--text-secondary)">ยกมา ${q(x.begin, x.base_unit)} + รับ ${q(x.received, x.base_unit)} + เคลม/ปรับ ${q(x.claims, x.base_unit)} − ตัดเบิก ${q(x.used, x.base_unit)} − ของเสีย ${q(x.waste, x.base_unit)}
-        = คงเหลือตามระบบ <b>${q(x.system, x.base_unit)}</b> · นับจริง <b>${q(x.count, x.base_unit)}</b>${x.diff != null ? ` · ผลต่าง ${sg(x.diff)}${x.diff_pct != null ? ` (${_isrPct(x.diff_pct)})` : ''}` : ''}</div>
+      <div class="text-xs mt-0.5" style="color:var(--text-secondary)">ยกมา ${q(x.begin, x)} + รับ ${q(x.received, x)} + เคลม/ปรับ ${q(x.claims, x)} − ตัดเบิก ${q(x.used, x)} − ของเสีย ${q(x.waste, x)}
+        = คงเหลือตามระบบ <b>${q(x.system, x)}</b> · นับจริง <b>${q(x.count, x)}</b>${x.diff != null ? ` · ผลต่าง ${sg(x.diff, x)}${x.diff_pct != null ? ` (${_isrPct(x.diff_pct)})` : ''}` : ''}</div>
       ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลตรวจนับต้นงวดหรือปลายงวด จึงยังเปรียบเทียบไม่ได้</div>' : ''}
-      ${flag && o.edit ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
-        <select id="${pfx}Rs_${esc(x.code)}" style="border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
-        <input id="${pfx}Rn_${esc(x.code)}" value="${esc(x.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
-        <button onclick="${o.save}(${_bmcQ(x.code)}, true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึก</button>
-        ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(whoTh(x.reason_by))}</span>` : ''}</div>`
+      ${flag && o.edit ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs${o.qty ? ' brn-reason' : ''}">
+        <select id="${pfx}Rs_${esc(x.code)}" style="${o.qty ? 'flex:1 1 100%;' : ''}border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
+        <input id="${pfx}Rn_${esc(x.code)}" value="${esc(x.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 ${o.qty ? '0' : '140px'};min-width:0;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+        <button${o.qty ? ' class="brn-act brn-act-line"' : ''} onclick="${o.save}(${_bmcQ(x.code)}, true)" style="${o.qty ? '' : 'border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)'}">บันทึก</button>
+        ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(whoTh(x.reason_by))}</span>` : ''}</div>
+      <div id="${pfx}E_${esc(x.code)}" class="brn-err" role="alert"></div>`
       : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(whoTh(x.reason_by)) : ''}</div>`
         : (flag ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
     </div>`;

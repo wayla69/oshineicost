@@ -280,3 +280,22 @@ def _http_flow(oid):
     assert ok.status_code == 200 and ok.json()["adjusted"] == 0 and ok.json()["restored"] == 1, ok.text
     row = next(x for x in mg.get("/api/bom-center/hub/queue?status=received").json()["orders"] if x["order_id"] == oid)
     assert row["claims"] == 1 and row["claims_pending"] == 0
+
+
+def test_http_receive_everything_in_one_call(client, app_db, auth_on):
+    """PR-M4 · "รับครบ": the phone sends every line at the quantity the warehouse sent, with the acknowledgement and no
+    reason — one call, no claim, the order is received."""
+    oid = _seed_processed_order(1, sent=7)
+    try:
+        a = _branch_user("brn_claim_a", "BranchA")
+        d = a.get(f"/api/bom-center/order/{oid}").json()
+        lines = [{"code": ln["code"], "received_units": float(ln["processed_units"])} for ln in d["lines"]
+                 if float(ln["processed_units"] or 0) > 0]
+        assert lines == [{"code": "T-CL1", "received_units": 7.0}]
+        r = a.post(f"/api/bom-center/order/{oid}/receive", json={"lines": lines, "receipt_date": "2026-10-07", "ack": True})
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "received" and r.json()["claim_id"] is None and r.json()["claim_lines"] == 0
+        done = a.get(f"/api/bom-center/order/{oid}").json()
+        assert done["status"] == "received" and done["claims"] == [] and done["lines"][0]["received_units"] == 7
+    finally:
+        _cleanup(oid)

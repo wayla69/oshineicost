@@ -309,11 +309,11 @@ def test_reconcile_numbers_status_reason_and_totals(con):  # noqa: F811
 
 
 def test_reconcile_within_the_class_threshold_is_ok_and_a_surplus_is_over(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 100, "unit": "กรัม"}, {"code": VEG, "qty": 100, "unit": "กรัม"}], "udon",
-            submit=True, count_date="2026-09-01")
+    ST.save(con, 1, [{"code": CRAB, "qty": 100, "unit": "กรัม"}, {"code": VEG, "qty": 100, "unit": "กรัม"},
+                     {"code": SALMON, "qty": 0, "unit": "กรัม"}], "udon", submit=True, count_date="2026-09-01")
     slip(con, "2026-09-04", [g(CRAB, 40), g(VEG, 10)])
-    end = ST.save(con, 1, [{"code": CRAB, "qty": 57, "unit": "กรัม"}, {"code": VEG, "qty": 120, "unit": "กรัม"}], "udon",
-                  submit=True, count_date="2026-10-01")["count_id"]
+    end = ST.save(con, 1, [{"code": CRAB, "qty": 57, "unit": "กรัม"}, {"code": VEG, "qty": 120, "unit": "กรัม"},
+                           {"code": SALMON, "qty": 0, "unit": "กรัม"}], "udon", submit=True, count_date="2026-10-01")["count_id"]
     con.commit()
     rows = {x["code"]: x for x in IR.reconcile(con, 1, end)["rows"]}
     assert rows[CRAB]["class"] == "B" and rows[VEG]["class"] == "C"                                  # by the baht issued: 6.00 vs 0.40

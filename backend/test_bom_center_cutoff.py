@@ -153,7 +153,7 @@ def test_saving_an_order_writes_no_stock_count(con):  # noqa: F811
     assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 0
     assert con.execute("SELECT stock_count_id FROM bc_order WHERE order_id=?", (out["order_id"],)).fetchone()[0] is None
     # a month-end count is the order's basis (the id is kept), still no count of its own
-    cid = ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05")["count_id"]
+    cid = ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05", require_all=False)["count_id"]
     again = OR.save_flow(con, 1, "1", WED, [], "udon", now=NOW, as_of=AS_OF)
     assert con.execute("SELECT stock_count_id FROM bc_order WHERE order_id=?", (again["order_id"],)).fetchone()[0] == cid
     assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 1
@@ -171,7 +171,7 @@ def test_an_order_needs_todays_confirmed_slip_and_an_earlier_gap_only_warns(con)
     with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้"):
         OR.save_flow(con, 1, "1", WED, line, "udon", submit=True, now=NOW, as_of=AS_OF)
     con.rollback()
-    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02")
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     con.commit()                                                                          # 2, 3 and 4 Oct have no slip
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     assert p["stock"]["missing_days"] == ["2026-10-02", "2026-10-03", "2026-10-04"]       # a warning, today is not in it
@@ -192,7 +192,7 @@ def test_a_draft_suggestion_follows_the_system_stock_and_is_frozen_when_sent(con
     crab = lambda: next(ln for ln in OR.detail(con, first["order_id"])["lines"] if ln["code"] == CRAB)  # noqa: E731
     s0 = crab()["suggested_units"]
     assert s0 > 0 and crab()["confirmed_units"] == s0
-    ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05")
+    ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05", require_all=False)
     OR.save_flow(con, 1, "1", WED, [{"code": CRAB, "confirmed_units": 0}], "udon", now=NOW, as_of=AS_OF)   # a full shelf: nothing to order
     assert crab()["suggested_units"] == 0 and crab()["confirmed_units"] == 0           # no reason is demanded for the change
     slip(con)
@@ -228,7 +228,7 @@ def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # n
 
 
 def test_reopen_and_cancel_leave_the_stock_counts_and_the_slip_alone(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02")
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     slip(con)
     a = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon",
                      submit=True, now=NOW, as_of=AS_OF)
@@ -264,7 +264,7 @@ def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: 
 
 
 def test_stock_position_is_the_system_stock_plus_what_is_on_order(con):  # noqa: F811
-    x = ST.save(con, 1, [{"code": CRAB, "qty": 5, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02")["count_id"]
+    x = ST.save(con, 1, [{"code": CRAB, "qty": 5, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02", require_all=False)["count_id"]
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-04")        # a draft is no basis
     con.commit()
     sp = OR.stock_position(con, 1, AS_OF, date(2026, 10, 5))

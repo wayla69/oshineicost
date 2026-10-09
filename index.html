@@ -1478,6 +1478,36 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .brn-sheet-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
 .brn-sheet-card { position: absolute; left: 0; right: 0; bottom: 0; max-height: 80vh; overflow-y: auto; background: var(--bg-card,#fff);
   border-radius: 16px 16px 0 0; padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 24px rgba(0,0,0,.25); }
+/* ── PR-M4 · รับสินค้า · แจ้งเคลม · ผลต่าง ──
+   the receive form opens with one question and two big buttons; a line picked from a search expands like a daily-page row;
+   the variance head is three numbers; a day is a card. Everything tappable is 44 px. */
+.brn-act { min-height: 44px; padding: 0 16px; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font-size: 14px; cursor: pointer; }
+.brn-act:disabled { opacity: .45; cursor: not-allowed; }
+.brn-act.brn-act-line { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
+.brn-link { border: 0; background: none; padding: 6px 0; min-height: 36px; font-size: 13px; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.brn-q { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.brn-qbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.brn-qbtn { min-height: 52px; border: 2px solid var(--border-control); border-radius: var(--r-md, 12px); background: transparent; color: var(--text-primary); font-size: 16px; font-weight: 600; cursor: pointer; }
+.brn-qbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.brn-pick { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 10px; margin-bottom: 4px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); font-size: 14px; cursor: pointer; }
+.brn-x { flex: 0 0 auto; width: 44px; height: 44px; border: 0; background: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
+.brn-err { font-size: 12px; line-height: 1.3; color: var(--bad-ink); margin-top: 2px; }
+.brn-err:empty { display: none; }
+.brn-why-line { display: block; font-size: 14px; line-height: 1.35; margin-top: 4px; }
+.brn-why-line:empty { display: none; }
+.brn-chk { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 40px; min-height: 44px; margin: -6px 0 -6px -8px; cursor: pointer; }
+.brn-chk input { width: 22px; height: 22px; }
+.brn-v3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.brn-v3t { border: 1px solid var(--border); border-radius: var(--r-md, 12px); padding: 6px 8px; min-width: 0; }
+.brn-v3l { font-size: 11px; color: var(--text-muted); }
+.brn-v3v { font-size: 16px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.brn-v3s { font-size: 12px; font-weight: 600; }
+.brn-chipbtn { min-height: 44px; padding: 0 14px; border: 1px solid var(--amber-ink); border-radius: 999px; background: transparent; color: var(--amber-ink); font-size: 14px; font-weight: 600; cursor: pointer; }
+.brn-multi { position: sticky; top: 0; z-index: 4; padding: 6px 0 8px; background: var(--bg-card, #fff); border-bottom: 1px solid var(--border); }
+.brn-others > summary { cursor: pointer; font-size: 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center; color: var(--text-secondary); }
+.brn-daycard { display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 8px 10px; min-height: 56px; border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--r-md, 12px); background: transparent; cursor: pointer; font-size: 14px; }
+.brn-claimrow:focus-visible { outline: 2px solid var(--accent); }
+@media (min-width: 701px) { .brn-vrow .brn-reason select { flex: 0 0 auto !important; width: 320px; max-width: 100%; } .brn-vrow .brn-reason input { max-width: 360px; } }
 /* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
    หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
    give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
@@ -1552,6 +1582,13 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body.supply-phone #brn-pane-issue .brn-sticky-bottom, body.supply-phone #brn-pane-order .brn-sticky-bottom { flex-direction: column-reverse; align-items: stretch; height: auto; min-height: 52px; gap: 2px; }
   body.supply-phone #brn-pane-order .brn-sticky-bottom > div { flex-wrap: wrap !important; overflow: visible; row-gap: 4px; }   /* the reason a button is off is a line under the buttons, not clipped beside them */
   body.supply-phone #brn-pane-issue .brn-sticky-bottom span[id$="Status"], body.supply-phone #brn-pane-order .brn-sticky-bottom span[id$="Status"] { max-width: 100%; font-size: 14px; line-height: 20px; white-space: normal; overflow: visible; }
+  /* PR-M4: the receive form's action bar holds the button AND the reason it is off (a line under it), so it grows with its text */
+  body.supply-phone #brnRecvOrder .brn-rcv-bar { height: auto !important; min-height: 52px; display: block !important; overflow: visible !important; padding: 8px 10px !important; }
+  body.supply-phone #brnRecvOrder .brn-rcv-bar > div { flex-wrap: wrap !important; overflow: visible !important; }
+  body.supply-phone #brnRecvOrder .brn-rcv-bar button { height: 44px; font-size: 14px !important; }
+  body.supply-phone #brnRecvOrder .brn-rcv-bar span[id$="Status"] { max-width: 100%; white-space: normal; overflow: visible; font-size: 14px; display: block; }
+  body.supply-phone #tab-branchstock .brn-reason select, body.supply-phone #tab-branchstock .brn-reason input { min-height: 44px; }
+  body.supply-phone #tab-branchstock .brn-multi button { height: auto; min-height: 44px; }
   /* every numeric box and its − / + buttons: 44 px */
   body.supply-phone #tab-branchstock input[inputmode="decimal"], body.supply-phone #tab-branchstock input[inputmode="numeric"],
   body.supply-phone #tab-branchstock input[type="number"] { min-height: 44px !important; font-size: 16px !important; }

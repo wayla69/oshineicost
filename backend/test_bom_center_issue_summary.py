@@ -32,7 +32,7 @@ TOKEN = {"X-Upload-Token": "owner-token-xyz"}
 
 def _count(db, day, lines, bid=1):
     return ST.save(db, bid, [{"code": c, "qty": q, "unit": "กรัม"} for c, q in lines.items()], "udon",
-                   submit=True, count_date=day)["count_id"]
+                   submit=True, count_date=day, require_all=False)["count_id"]
 
 
 def _period(db, bid=1):
@@ -241,11 +241,11 @@ def _seed(db_path):
     ids = {}
     for bid in (1, 2):
         ST.save(c, bid, [{"code": "T-ISS1", "qty": 10, "unit": "กรัม"}, {"code": "T-ISS2", "qty": 4, "unit": "กรัม"}],
-                "udon", submit=True, count_date="2026-09-01")
+                "udon", submit=True, count_date="2026-09-01", require_all=False)
         if bid == 1:
             VA.add_receipt(c, 1, "2026-09-10", [{"code": "T-ISS1", "qty": 5, "unit": "กรัม"}], "udon")
         ids[bid] = ST.save(c, bid, [{"code": "T-ISS1", "qty": 6, "unit": "กรัม"}, {"code": "T-ISS2", "qty": 4, "unit": "กรัม"}],
-                           "udon", submit=True, count_date="2026-10-01")["count_id"]
+                           "udon", submit=True, count_date="2026-10-01", require_all=False)["count_id"]
     c.commit()
     c.close()
     return ids

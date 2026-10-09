@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""PR-M3 — check the branch's daily pages (ตัดเบิก · สั่งสินค้า) in a real browser, on a phone and on a desktop.
+"""PR-M3 / PR-M4 — check the branch's pages in a real browser, on a phone and on a desktop: the daily pages
+(ตัดเบิก · สั่งสินค้า, M3) and รับสินค้า · เคลมภายหลัง · ผลต่าง · ตรวจนับสิ้นเดือน (M4).
 
-    py -3.14 scripts\\verify_branch_phone.py --base http://127.0.0.1:8058 [--shots DIR] [--password PW]
+    py -3.14 scripts\\verify_branch_phone.py --base http://127.0.0.1:8058 [--shots DIR] [--password PW] [--db COPY.db]
 
 Start a scratch server on a COPY of a database first (it never touches the live app), for example from backend/:
     OSHINEI_DB=<copy of a DB> OSHINEI_NO_SWAP=1 OSHINEI_AUTH=1 OSHINEI_AUTH_SECRET=x OSHINEI_SEED_TOKEN=local-test-token \\
@@ -19,6 +20,18 @@ Phone (390x844):
     confirm dialog counts the items left empty ("ไม่ได้กรอก");
   * สั่งสินค้า: one-line rounds with a state chip, the buffer card folded, a row with "แนะนำ" · "คงเหลือ" · the order box with
     its unit and a "ดูที่มา" that opens the formula, the customer-count helper as a bottom sheet.
+  * รับสินค้า (M4, needs --db: the checks make their own order sent by the warehouse in that scratch copy): the form opens with one
+    question and two 52 px buttons; รับครบ = one line "รับครบ N รายการ" + the acknowledgement (a link opens the terms) + the save
+    button in the sticky bar with the reason it is off written under it, ONE call to /receive with every line at the quantity sent
+    (the taps are counted); มีรายการไม่ครบ = a search, only the picked line expands (44 px box, the gap, the reason, the claim box),
+    a word in the box turns red with its note, one call, one receive-time claim;
+  * เคลมภายหลัง: the photo line once at the top, nothing listed per line until picked, a picked item opens (44 px quantity, reason,
+    a note box for อื่น ๆ), every refusal is written under its line, the claim list is two lines without ids;
+  * ผลต่าง: tabs รายงวด · รายวัน · สิ้นเดือน, the head is three numbers and ONE action chip, only the high-value lines have a form,
+    the rest sit folded under "รายการอื่น", quantities in count units, an empty save shows its error under the line, a reason
+    saved on one line and on two ticked lines at once, one card per day with a 3-column item list, the month-end tab in count units;
+  * ตรวจนับ: the zone chip gets a ✓ when every required item is counted, the submit is refused with only a "กลับไปนับ" button
+    (no request leaves) and the server refuses the same way; the 6th strip entry shows on days 1–3 (Bangkok clock) only.
 Desktop (1440): the same pages still list, save and ask.
 """
 import argparse
@@ -40,6 +53,29 @@ CLIP_JS = """(root) => { const clipped = []; let n = 0;
   return { n, clipped }; }"""
 
 
+def fresh_processed_order(db_path):
+    """Scratch copies only: make exactly ONE order that the warehouse has sent (status processed) for the receive checks —
+    every older processed order of the branch is marked received, and a new one is cloned (lines at the quantity sent)."""
+    import sqlite3
+    con = sqlite3.connect(db_path, timeout=60)
+    try:
+        bid = con.execute("SELECT branch_id FROM branches WHERE name='อุดรธานี'").fetchone()[0]
+        con.execute("UPDATE bc_order SET status='received', received_at=COALESCE(received_at, '2026-10-09T03:00:00+00:00') WHERE branch_id=? AND status='processed'", (bid,))
+        src = con.execute("SELECT order_id FROM bc_order WHERE branch_id=? AND round IN ('1','2') AND status IN ('received','cancelled','processed')"
+                          " ORDER BY (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=bc_order.order_id AND l.processed_units>0) DESC, order_id LIMIT 1", (bid,)).fetchone()[0]
+        cols = [r[1] for r in con.execute("PRAGMA table_info(bc_order)") if r[1] != "order_id"]
+        sel = ", ".join("'processed'" if c == "status" else "NULL" if c in ("received_at", "ack_at", "ack_by", "accounting_keyed_at", "accounting_keyed_by") else c for c in cols)
+        con.execute(f"INSERT INTO bc_order({', '.join(cols)}) SELECT {sel} FROM bc_order WHERE order_id=?", (src,))
+        new = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+        con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units, processed_units, received_units, order_unit, reason_code, note, ss_reason, ss_note)"
+                    " SELECT ?, ingredient_code, suggested_units, confirmed_units, COALESCE(processed_units, confirmed_units), NULL, order_unit, reason_code, note, NULL, NULL"
+                    " FROM bc_order_line WHERE order_id=?", (new, src))
+        con.commit()
+        return new
+    finally:
+        con.close()
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -47,6 +83,7 @@ def main(argv=None) -> int:
     ap.add_argument("--password", default=os.environ.get("OSHINEI_ROLES_PASSWORD", ""))
     ap.add_argument("--shots", default="")
     ap.add_argument("--user", default="branch1")
+    ap.add_argument("--db", default="", help="the scratch DB copy the server runs on: the receive checks make their own sent orders in it")
     a = ap.parse_args(argv)
     if not a.password:
         m = re.search(r'^DEFAULT_PASSWORD\s*=\s*"([^"]+)"', open(os.path.join(os.path.dirname(__file__), "..", "backend", "auth.py"), encoding="utf-8").read(), re.M)
@@ -283,6 +320,360 @@ def main(argv=None) -> int:
         shot(page, "order_covers.png")
         page.click("#brnCovSheet button[aria-label=ปิด]")
         check(not page.evaluate("document.getElementById('brnCovSheet').classList.contains('open')"), "the sheet closes")
+        # ═════════════ PR-M4 · รับสินค้า · เคลมภายหลัง · ผลต่าง · ตรวจนับ ═════════════
+        reqs = []
+        page.on("request", lambda rq: reqs.append((rq.method, rq.url, rq.post_data or (rq.post_data_buffer or b"").decode("utf-8", "ignore"))) if rq.method == "POST" else None)
+        taps = [0]
+
+        def tap(sel, **kw):
+            taps[0] += 1
+            page.click(sel, **kw)
+
+        def posts(part):
+            return [r for r in reqs if part in r[1]]
+
+        def dialog():
+            return page.evaluate("() => ({ title: document.querySelector('[data-el=title]').textContent, msg: document.querySelector('[data-el=msg]').textContent, ok: document.querySelector('[data-el=msg]').closest('form').querySelector('[type=submit]').textContent, cancelShown: getComputedStyle(document.querySelector('[data-act=cancel]')).display !== 'none' })")
+
+        def api(path):
+            return ctx.request.get(a.base + path).json()
+
+        # ── รับสินค้า ──
+        print("== phone · รับสินค้า")
+        if a.db:
+            fresh_processed_order(a.db)
+        else:
+            print("note: no --db, the receive sections use the processed order that is there (if any)")
+        page.evaluate("supplyGo({tab:'branchstock', pane:'recv'})")
+        page.wait_for_timeout(500)
+        page.evaluate("brnLoadRecv()")
+        openo = api("/api/bom-center/orders?status=open&limit=20")["orders"]
+        sent_orders = [o for o in openo if o["status"] == "processed"]
+        if len(sent_orders) != 1:
+            check(False, f"expected exactly one order sent by the warehouse for the receive test, found {len(sent_orders)} (pass --db of the scratch copy)")
+        else:
+            oid = sent_orders[0]["order_id"]
+            det = api(f"/api/bom-center/order/{oid}")
+            lines_all = [l for l in det["lines"] if float(l.get("processed_units") or 0) > 0 or l.get("received_units")]
+            page.wait_for_selector("#brnRecvOrder .brn-q", timeout=15000)
+            page.wait_for_timeout(500)
+            q = page.evaluate("""() => { const f = document.getElementById('brnRecvOrder'); const b = document.getElementById('brnRecvOrdSave').getBoundingClientRect();
+              const w = document.getElementById('brnRecvWhy'); const nav = document.getElementById('supplyNav');
+              const bt = [...f.querySelectorAll('.brn-qbtn')].map(x => ({ t: x.innerText.trim(), h: x.getBoundingClientRect().height }));
+              return { q: f.querySelector('.brn-q').innerText.trim(), bt, rows: f.querySelectorAll('.brn-row').length, dis: document.getElementById('brnRecvOrdSave').disabled,
+                       why: w.innerText.trim(), whyBelow: w.getBoundingClientRect().top >= b.bottom - 1, saveBottom: b.bottom, saveTop: b.top, navTop: nav ? nav.getBoundingClientRect().top : innerHeight,
+                       sticky: getComputedStyle(f.querySelector('.brn-rcv-bar')).position, vh: innerHeight, formTop: f.getBoundingClientRect().top }; }""")
+            check(q["q"] == "รับครบตามที่คลังส่งทุกรายการ?" and [x["t"] for x in q["bt"]] == ["รับครบ", "มีรายการไม่ครบ"] and all(x["h"] >= 43.5 for x in q["bt"]),
+                  f"the form opens with ONE question and two big buttons: {q['q']} · {[(x['t'], round(x['h'])) for x in q['bt']]}")
+            check(q["rows"] == 0, f"no line is listed before the answer ({len(lines_all)} lines in the order)")
+            check(q["dis"] and "รับครบ" in q["why"] and q["whyBelow"], f"the save button is off and says why under it: '{q['why']}'")
+            check(q["sticky"] == "sticky" and q["saveBottom"] <= q["navTop"] + 1 and q["saveTop"] >= 0, f"the save button sits in the sticky bar, on screen without scrolling (button {q['saveTop']:.0f}–{q['saveBottom']:.0f}px, strip at {q['navTop']:.0f}px)")
+            shot(page, "recv_question.png")
+            # the “รับครบ” path
+            taps[0] = 0
+            n0 = len(posts("/receive"))
+            tap("#brnRcvAll")
+            bd = page.evaluate("() => ({ t: document.getElementById('brnRcvBody').innerText.replace(/\\s+/g, ' ').trim(), rows: document.querySelectorAll('#brnRecvOrder .brn-row').length, why: document.getElementById('brnRecvWhy').innerText.trim(), ack: document.querySelector('#brnRecvAck + span').innerText.trim(), terms: [...document.querySelectorAll('#brnRecvOrder .brn-link')].map(x => x.innerText.trim()) })")
+            check(bd["t"].startswith(f"รับครบ {len(lines_all)} รายการ") and bd["rows"] == 0, f"รับครบ → the lines stay folded as one line: '{bd['t'][:60]}'")
+            check(bd["ack"] == "ตรวจสภาพและจำนวนครบแล้ว" and "เงื่อนไขการเคลม" in bd["terms"] and "ติ๊ก" in bd["why"], f"the acknowledgement is one checkbox '{bd['ack']}' with a link 'เงื่อนไขการเคลม'; the bar says: {bd['why']}")
+            page.click("text=เงื่อนไขการเคลม")                                     # (reading the terms is not a step of the path)
+            terms = page.evaluate("(() => { const t = document.getElementById('brnRcvTerms'); return { shown: t.style.display !== 'none', t: t.innerText }; })()")
+            check(terms["shown"] and "เคลมภายหลังอาจไม่ได้รับพิจารณา" in terms["t"], "the link opens the full claim terms")
+            page.click("text=เงื่อนไขการเคลม")
+            shot(page, "recv_all.png")
+            tap("#brnRecvAck")
+            check(not page.evaluate("document.getElementById('brnRecvOrdSave').disabled"), "ticking the acknowledgement turns the save button on")
+            tap("#brnRecvOrdSave")
+            page.wait_for_selector("form [data-el=msg]", timeout=5000)
+            dlg = dialog()
+            print("     dialog:", dlg["msg"].replace("\n", " ⏎ "))
+            check(dlg["title"] == "ยืนยันการบันทึกรับสินค้า" and f"{len(lines_all)} รายการ" in dlg["msg"] and "รับครบทุกรายการ" in dlg["msg"] and dlg["ok"] == "บันทึกรับสินค้า",
+                  f"the confirmation states the quantity: {dlg['msg'][:90]}")
+            taps[0] += 1
+            page.evaluate("document.getElementById('brnRecvStatus').textContent = ''")
+            page.click("form:has([data-el=msg]) [type=submit]")
+            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvStatus').innerText)", timeout=15000)
+            rc = posts("/receive")[n0:]
+            body = __import__("json").loads(rc[0][2]) if rc else {}
+            bl = body.get("lines", [])
+            sent_by = {l["code"]: float(l.get("processed_units") or 0) for l in lines_all}
+            check(len(rc) == 1 and body.get("ack") is True and len(bl) == len(lines_all) and all(float(x["received_units"]) == sent_by[x["code"]] and "reason" not in x for x in bl),
+                  f"รับครบ = ONE call to /receive with all {len(bl)} lines at the quantity sent, ack true, no reason")
+            nums["taps_receive_all"] = taps[0]
+            check(taps[0] <= 4, f"รับครบ took {taps[0]} taps inside the open form (รับครบ · tick · บันทึก · ยืนยัน); 3 before the confirmation; 5 with the card's รับสินค้า button when the form is not already open")
+            print("     taps:", taps[0])
+            dd = api(f"/api/bom-center/order/{oid}")
+            check(dd["status"] == "received" and dd["claims"] == [], "the order is received and no claim was raised")
+
+            # the “มีรายการไม่ครบ” path
+            if a.db:
+                fresh_processed_order(a.db)
+                page.evaluate("brnLoadRecv()")
+            openo = api("/api/bom-center/orders?status=open&limit=20")["orders"]
+            sent_orders = [o for o in openo if o["status"] == "processed"]
+            oid = sent_orders[0]["order_id"]
+            det = api(f"/api/bom-center/order/{oid}")
+            lines_all = [l for l in det["lines"] if float(l.get("processed_units") or 0) > 0 or l.get("received_units")]
+            sent_by = {l["code"]: float(l.get("processed_units") or 0) for l in lines_all}
+            page.wait_for_selector("#brnRecvOrder .brn-q", timeout=15000)
+            page.wait_for_function("document.getElementById('brnRecvOrder').style.display !== 'none' && !document.getElementById('brnRcvAll').getAttribute('aria-pressed').includes('true')", timeout=10000)
+            tap("#brnRcvSome")
+            check(page.evaluate("!!document.getElementById('brnRcvQ') && document.querySelectorAll('#brnRecvOrder .brn-row').length === 0"), "มีรายการไม่ครบ → a search box, no line is open yet")
+            pick = next(l for l in lines_all if float(l.get("processed_units") or 0) >= 2)
+            term = pick["name"].strip()[:5]
+            page.fill("#brnRcvQ", term)
+            hits = page.evaluate("[...document.querySelectorAll('#brnRcvRes .brn-pick')].map(b => b.innerText.replace(/\\s+/g, ' ').trim())")
+            check(0 < len(hits) <= 8, f"the search lists at most 8 lines: {len(hits)} for '{term}'")
+            page.click(f"#brnRcvRes .brn-pick:has-text('{pick['name'].strip()[:12]}') >> nth=0")
+            card = page.evaluate("""() => { const r = document.querySelectorAll('#brnRecvOrder .brn-row'); const i = r[0] && r[0].querySelector('.brn-qty'); const rect = i && i.getBoundingClientRect();
+              return { n: r.length, h: rect && rect.height, v: i && i.value, rest: document.getElementById('brnRcvRest').innerText.replace(/\\s+/g, ' ').trim(), diffShown: r[0] && getComputedStyle(r[0].querySelector('[id^=brnRcvD_]')).display !== 'none' }; }""")
+            check(card["n"] == 1 and card["h"] >= 43.5 and float(card["v"]) == sent_by[pick["code"]], f"only the picked line expands: รับจริง box {card['h']:.0f}px high, pre-set to the sent quantity {card['v']}")
+            check(card["rest"].startswith(f"รับครบ {len(lines_all) - 1} รายการ"), f"the rest stay folded as '{card['rest']}'")
+            page.fill(f"#brnRcvO_{pick['code']}", "abc")
+            err = page.evaluate("(c) => ({ t: document.getElementById('brnRcvE_' + c).innerText, inv: document.getElementById('brnRcvO_' + c).getAttribute('aria-invalid') })", pick["code"])
+            check("ตัวเลข" in err["t"] and err["inv"] == "true", f"a word in รับจริง turns red with the note under the line: {err['t']}")
+            short_to = sent_by[pick["code"]] - 1
+            page.fill(f"#brnRcvO_{pick['code']}", f"{short_to:g}")
+            gap = page.evaluate("""(c) => ({ d: getComputedStyle(document.getElementById('brnRcvD_' + c)).display, n: document.getElementById('brnRcvDn_' + c).innerText, r: document.getElementById('brnRcvR_' + c).value,
+              rh: document.getElementById('brnRcvR_' + c).getBoundingClientRect().height, fs: getComputedStyle(document.getElementById('brnRcvR_' + c)).fontSize,
+              box: getComputedStyle(document.getElementById('brnRecvClaimBox')).display, boxT: document.getElementById('brnRecvClaimTitle').innerText })""", pick["code"])
+            check(gap["d"] != "none" and gap["n"] == "1" and gap["r"] == "short" and gap["rh"] >= 43.5 and gap["fs"] == "16px" and gap["box"] != "none" and "1 รายการ" in gap["boxT"],
+                  f"a shortfall shows the gap, the reason (default ส่งไม่ครบ, {gap['rh']:.0f}px, {gap['fs']}) and the claim box: {gap['boxT']}")
+            shot(page, "recv_some.png")
+            tap("#brnRecvAck")
+            tap("#brnRecvOrdSave")
+            page.wait_for_selector("form [data-el=msg]", timeout=5000)
+            dlg = dialog()
+            check("แจ้งเคลมส่วนต่าง 1 รายการ" in dlg["msg"] and "รับครบทุกรายการ" not in dlg["msg"], f"the confirmation names the claim: {dlg['msg'][:130]}")
+            n0 = len(posts("/receive"))
+            page.evaluate("document.getElementById('brnRecvStatus').textContent = ''")
+            page.click("form:has([data-el=msg]) [type=submit]")
+            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvStatus').innerText)", timeout=15000)
+            rc = posts("/receive")[n0:]
+            body = __import__("json").loads(rc[0][2]) if rc else {}
+            bl = body.get("lines", [])
+            shorts = [x for x in bl if x.get("reason")]
+            check(len(rc) == 1 and len(bl) == len(lines_all) and len(shorts) == 1 and shorts[0]["code"] == pick["code"] and float(shorts[0]["received_units"]) == short_to
+                  and all(float(x["received_units"]) == sent_by[x["code"]] for x in bl if x is not shorts[0]),
+                  f"one call, every line sent: {len(bl)} lines, the picked one short with a reason, the others at the sent quantity")
+            st = page.evaluate("document.getElementById('brnRecvStatus').innerText")
+            check("แจ้งเคลม 1 รายการ" in st and "#" not in st, f"the claim is raised in the same save: '{st}'")
+            dd = api(f"/api/bom-center/order/{oid}")
+            check(dd["status"] == "received" and len(dd["claims"]) == 1 and dd["claims"][0]["origin"] == "receive" and dd["claims"][0]["lines"][0]["claim_units"] == 1, "the order is received and ONE receive-time claim of 1 pack exists")
+            shot(page, "recv_done.png")
+
+            # ── เคลมภายหลัง ──
+            print("== phone · เคลมภายหลัง")
+            page.evaluate("brnLoadRecv()")
+            page.wait_for_selector("#brnClaimList .brn-act", timeout=15000)
+            page.wait_for_timeout(600)
+            claim_row = page.evaluate("[...document.querySelectorAll('#brnClaimList a.brn-claimrow')].map(a => ({ t: a.innerText.replace(/\\s+/g, ' ').trim(), kids: a.children.length }))")
+            check(claim_row and all(re.match(r"^.+ · ส่ง \d+/\d+ · \d+ รายการ .+$", r["t"]) and "#" not in r["t"] and r["kids"] == 2 for r in claim_row),
+                  f"a claim reads as two lines 'round · ส่ง d/m · N รายการ' + chips, no id: {[r['t'] for r in claim_row[:2]]}")
+            check(any("แจ้งขณะรับสินค้า" in r["t"] for r in claim_row) and any("รอประสานงานขายพิจารณา" in r["t"] or "อนุมัติ" in r["t"] for r in claim_row), "the origin chip (แจ้งขณะรับสินค้า) and the status are on the second line")
+            shot(page, "claim_list.png")
+            tap("#brnClaimList .brn-act >> nth=0")
+            page.wait_for_selector("#brnClQ", timeout=10000)
+            cf = page.evaluate("""() => { const card = document.getElementById('brnClaimCard'); const form = document.getElementById('brnClaimForm');
+              const occ = (card.innerText.match(/ส่งรูปทางไลน์ถึงประสานงานขาย/g) || []).length;
+              return { occ, inForm: form.innerText.includes('ส่งรูปทางไลน์ถึงประสานงานขาย'), top: card.innerText.indexOf('ส่งรูปทางไลน์ถึงประสานงานขาย') < card.innerText.indexOf('แจ้งเคลม ·'),
+                       rows: document.querySelectorAll('#brnClPicked .brn-row').length, dis: document.getElementById('brnClaimSendBtn').disabled, hint: document.getElementById('brnClaimStatus').innerText.trim(),
+                       qh: document.getElementById('brnClQ').getBoundingClientRect().height }; }""")
+            check(cf["occ"] == 1 and not cf["inForm"] and cf["top"], "the photo instruction 'ส่งรูปทางไลน์ถึงประสานงานขาย' appears ONCE, at the top of the card")
+            check(cf["rows"] == 0 and cf["dis"] and "อย่างน้อย 1 รายการ" in cf["hint"], f"nothing is listed per line: pick items first (send is off: '{cf['hint']}')")
+            cl = api(f"/api/bom-center/claims/claimable?order_id={oid}")
+            cpick = next(l for l in cl["lines"] if l["remaining_units"] >= 1)
+            page.fill("#brnClQ", cpick["name"].strip()[:6])
+            page.click(f"#brnClRes .brn-pick:has-text('{cpick['name'].strip()[:12]}') >> nth=0")
+            row = page.evaluate("""(c) => { const r = document.querySelectorAll('#brnClPicked .brn-row'); const q = document.getElementById('brnCq_' + c); return { n: r.length, h: q.getBoundingClientRect().height,
+              noteShown: getComputedStyle(document.getElementById('brnCnBox_' + c)).display !== 'none', dis: document.getElementById('brnClaimSendBtn').disabled }; }""", cpick["code"])
+            check(row["n"] == 1 and row["h"] >= 43.5 and not row["noteShown"] and not row["dis"], f"only the picked item opens: quantity box {row['h']:.0f}px, no note box until 'อื่น ๆ'")
+            page.select_option(f"#brnCr_{cpick['code']}", "other")
+            check(page.evaluate("(c) => getComputedStyle(document.getElementById('brnCnBox_' + c)).display !== 'none'", cpick["code"]), "choosing อื่น ๆ opens the note box")
+            tap("#brnClaimSendBtn")                                                         # nothing typed yet: the message stays under the line
+            e = page.evaluate("(c) => document.getElementById('brnCe_' + c).innerText", cpick["code"])
+            check("มากกว่า 0" in e, f"a missing quantity is refused under its line: {e}")
+            page.fill(f"#brnCq_{cpick['code']}", "1")
+            tap("#brnClaimSendBtn")
+            e = page.evaluate("(c) => document.getElementById('brnCe_' + c).innerText", cpick["code"])
+            check("อื่น ๆ" in e and "คำอธิบาย" in e, f"อื่น ๆ without a note is refused under its line: {e}")
+            page.select_option(f"#brnCr_{cpick['code']}", "damaged")
+            shot(page, "claim_form.png")
+            tap("#brnClaimSendBtn")
+            page.wait_for_selector("form [data-el=msg]", timeout=5000)
+            dlg = dialog()
+            check(dlg["msg"].startswith("ส่งแจ้งเคลม 1 รายการ") and "#" not in dlg["msg"], f"the confirmation: {dlg['msg']}")
+            n0 = len(posts("/claims"))
+            page.click("form:has([data-el=msg]) [type=submit]")
+            page.wait_for_function("/ส่งแจ้งเคลมแล้ว/.test(document.getElementById('brnClaimMsg').innerText)", timeout=15000)
+            cp = posts("/claims")[n0:]
+            check(len(cp) == 1 and '"claim_units":1' in cp[0][2] and "damaged" in cp[0][2], "one claim call with the one picked line")
+            page.wait_for_timeout(800)
+            claim_row = page.evaluate("[...document.querySelectorAll('#brnClaimList a.brn-claimrow')].map(a => a.innerText.replace(/\\s+/g, ' ').trim())")
+            check(any("แจ้งภายหลัง" in t and "รอประสานงานขายพิจารณา" in t for t in claim_row), f"the new claim shows 'แจ้งภายหลัง' + 'รอประสานงานขายพิจารณา': {claim_row[:2]}")
+            shot(page, "claim_sent.png")
+
+        # ── ผลต่าง ──
+        print("== phone · ผลต่าง")
+        page.evaluate("supplyGo({tab:'branchstock', pane:'var'})")
+        page.wait_for_selector("#brnVarList .brn-vrow, #brnVarList .text-sm", timeout=60000)
+        page.wait_for_timeout(1200)
+        periods = api("/api/bom-center/variance/periods")["periods"]
+        vp = api(f"/api/bom-center/variance/period?end_count_id={periods[0]['end_count_id']}") if periods else None
+        tabs = page.evaluate("[...document.querySelectorAll('#brnVarTabs button')].map(b => b.innerText.trim())")
+        check(tabs == ["รายงวด", "รายวัน", "สิ้นเดือน"], f"the three tabs: {tabs}")
+        if vp:
+            head = page.evaluate("""() => ({ tiles: [...document.querySelectorAll('#brnVarHead .brn-v3t')].map(t => t.innerText.replace(/\\s+/g, ' ').trim()),
+              chip: (document.querySelector('#brnVarHead .brn-chipbtn') || {}).innerText || '', h: (document.querySelector('#brnVarHead .brn-chipbtn') || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height,
+              asks: document.querySelectorAll('#brnVarList .brn-vrow').length, selects: document.querySelectorAll('#brnVarList .brn-vrow select').length,
+              others: (document.querySelector('#brnVarOthers summary') || {}).innerText, othersOpen: !!(document.getElementById('brnVarOthers') || {}).open,
+              firstIsAsk: !!document.querySelector('#brnVarList > .brn-vrow, #brnVarList > .brn-multi') })""")
+            check(len(head["tiles"]) == 3 and head["tiles"][0].startswith("ใช้จริง") and head["tiles"][1].startswith("ตามสูตร") and head["tiles"][2].startswith("ผลต่าง"), f"the head is three numbers: {head['tiles']}")
+            check(head["chip"] == f"ต้องให้เหตุผล {vp['totals']['ask_reason_open']} รายการ" and head["h"] >= 43.5, f"one action chip: '{head['chip']}' ({head['h']:.0f}px)")
+            check(head["asks"] == vp["totals"]["ask_reason"] and head["selects"] == head["asks"], f"only the {vp['totals']['ask_reason']} high-value lines have a form ({head['asks']} rows, {head['selects']} selects)")
+            check(head["others"] == f"รายการอื่น {vp['totals']['other_flagged']} รายการ" and not head["othersOpen"], f"the rest are folded as '{head['others']}'")
+            check(vp["totals"]["ask_reason"] < vp["flagged"], f"{vp['flagged']} lines are over the threshold but only {vp['totals']['ask_reason']} are asked (class A + the top 20 by ฿)")
+            shot(page, "var_period_top.png")
+            # a line in count units
+            line = page.evaluate("document.querySelector('#brnVarList .brn-vrow .text-xs').innerText.replace(/\\s+/g, ' ').trim()")
+            check(re.match(r"^ใช้จริง .+ · ตามสูตร .+ · (เกิน|น้อยกว่า) .+ \([+−]\d", line) is not None, f"the line reads: {line}")
+            rows_txt = page.evaluate("[...document.querySelectorAll('#brnVarList .brn-vrow')].map(r => [r.dataset.code, r.querySelector('.text-xs').innerText])")
+            by_code = {r["code"]: r for r in vp["rows"]}
+            def unit_of(c):                                           # the count unit as the page writes it (a bracket note dropped)
+                return re.sub(r"\s*\([^)]*\)", "", by_code[c]["count_unit"] or "").strip()
+            not_g = [(c, t_) for c, t_ in rows_txt if by_code[c]["count_unit"] != "กรัม"]
+            wrong = [c for c, t_ in not_g if t_.count(unit_of(c)) < 2]       # the unit is written after the used AND the recipe quantity
+            check(not_g and not wrong, f"quantities are in the unit counted: {len(not_g)} of {len(rows_txt)} asked lines are not counted in grams and every one reads in its count unit (e.g. {not_g[0][1][:70]!r}); grams only where the count unit is grams")
+            # inline error: save without a reason
+            code0 = page.evaluate("document.querySelector('#brnVarList .brn-vrow[data-open=\"1\"]').dataset.code")
+            head_before = page.evaluate("document.getElementById('brnVarHead').innerText")
+            page.click(f"#brnVarList .brn-vrow[data-code='{code0}'] button:has-text('บันทึก')")
+            er = page.evaluate("""(c) => { const e = document.getElementById('brnVarE_' + c); const r = e.closest('.brn-vrow'); return { t: e.innerText, inRow: !!r, below: e.getBoundingClientRect().top >= r.querySelector('select').getBoundingClientRect().bottom - 1, head: document.getElementById('brnVarHead').innerText, status: document.getElementById('brnVarStatus').innerText }; }""", code0)
+            check("เลือกเหตุผล" in er["t"] and er["inRow"] and er["below"] and er["head"] == head_before and er["status"] == "", f"an empty save shows its error under the line, not in the header: '{er['t']}'")
+            shot(page, "var_error_inline.png")
+            # one reason on one line
+            n_open = vp["totals"]["ask_reason_open"]
+            page.select_option(f"#brnRs_{code0}", "miscount")
+            page.click(f"#brnVarList .brn-vrow[data-code='{code0}'] button:has-text('บันทึก')")
+            page.wait_for_function("(n) => document.querySelector('#brnVarHead .brn-chipbtn') ? document.querySelector('#brnVarHead .brn-chipbtn').innerText.includes('ต้องให้เหตุผล ' + (n - 1) + ' ') : n === 1", arg=n_open, timeout=15000)
+            check(api(f"/api/bom-center/variance/period?end_count_id={periods[0]['end_count_id']}")["totals"]["ask_reason_open"] == n_open - 1, f"one reason saved: the chip went from {n_open} to {n_open - 1}")
+            # the same reason for several ticked lines
+            if n_open >= 4:
+                codes = page.evaluate("[...document.querySelectorAll('#brnVarList .brn-vrow[data-open=\"1\"]')].slice(0, 2).map(r => r.dataset.code)")
+                for c in codes:
+                    page.check(f"#brnVarList .brn-vrow[data-code='{c}'] .brn-chk input")
+                check(page.evaluate("document.getElementById('brnVarSelN').innerText").startswith("เลือก 2 รายการ"), "two ticked lines are counted")
+                page.click("#brnVarMultiBtn")
+                check("เลือกเหตุผล" in page.evaluate("document.getElementById('brnVarMultiE').innerText"), "no reason chosen → the message is under the multi-select bar")
+                page.select_option("#brnVarMultiR", "waste")
+                page.click("#brnVarMultiBtn")
+                page.wait_for_function("(n) => document.querySelector('#brnVarHead .brn-chipbtn').innerText.includes('ต้องให้เหตุผล ' + (n - 3) + ' ')", arg=n_open, timeout=20000)
+                after = api(f"/api/bom-center/variance/period?end_count_id={periods[0]['end_count_id']}")
+                saved = [r for r in after["rows"] if r["code"] in codes]
+                check(all(r.get("reason") == "waste" for r in saved) and after["totals"]["ask_reason_open"] == n_open - 3, "ใช้เหตุผลเดียวกันกับที่เลือก: both lines saved with one reason in one action")
+            # the others, folded, no form
+            page.click("#brnVarOthers summary")
+            oth = page.evaluate("({ forms: document.querySelectorAll('#brnVarOthers select, #brnVarOthers button:not(.brn-link)').length, rows: document.querySelectorAll('#brnVarOthers > div').length })")
+            check(oth["forms"] == 0 and oth["rows"] > 0, f"'รายการอื่น' lists {oth['rows']} lines with no form")
+            shot(page, "var_period_others.png")
+        # daily
+        page.click("#brnVarTabs button:has-text('รายวัน')")
+        page.wait_for_selector("#brnVarDayList .brn-daycard, #brnVarDayList .text-xs", timeout=60000)
+        page.wait_for_timeout(800)
+        dc = page.evaluate("""() => ({ cards: document.querySelectorAll('#brnVarDayList .brn-daycard').length, tables: document.querySelectorAll('#brnVarDayList table').length,
+          first: (document.querySelector('#brnVarDayList .brn-daycard') || { innerText: '' }).innerText.replace(/\\s+/g, ' ').trim(),
+          h: (document.querySelector('#brnVarDayList .brn-daycard') || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height })""")
+        check(dc["cards"] > 0 and dc["tables"] == 0 and dc["h"] >= 43.5, f"รายวัน = one card per day, no 9-column table ({dc['cards']} cards): {dc['first'][:80]}")
+        shot(page, "var_daily.png")
+        dly = api("/api/bom-center/issue-reports/daily?month=" + page.evaluate("document.getElementById('brnVarDayMonth').value"))
+        best = max((r for r in dly["rows"] if r["trading"]), key=lambda r: r["bom_value"], default=None)
+        conf = page.query_selector(f"#brnVarDayList .brn-daycard[onclick*=\"'{best['date']}'\"]") if best else None
+        if conf:
+            conf.click()
+            page.wait_for_selector("#brnVarDayDetail table, #brnVarDayDetail .text-xs", timeout=20000)
+            dd = page.evaluate("({ th: [...document.querySelectorAll('#brnVarDayDetail th')].map(x => x.innerText.trim()), tr: document.querySelectorAll('#brnVarDayDetail tbody tr').length, cell: (document.querySelector('#brnVarDayDetail tbody tr td:nth-child(2)') || { innerText: '' }).innerText.replace(/\\s+/g, ' ') })")
+            check(dd["th"] == ["รายการ", "เบิก / ตามสูตร", "ผลต่าง"] and dd["tr"] > 0, f"a day opens its items in three columns: {dd['th']} ({dd['tr']} rows) e.g. '{dd['cell']}'")
+            shot(page, "var_daily_day.png")
+        # month end
+        page.click("#brnVarTabs button:has-text('สิ้นเดือน')")
+        page.wait_for_selector("#brnRcList .text-xs, #brnRcList div", timeout=60000)
+        page.wait_for_timeout(1000)
+        rc = page.evaluate("[...document.querySelectorAll('#brnRcList > div .text-xs')].map(x => x.innerText.replace(/\\s+/g, ' ').trim()).filter(t => t.includes('คงเหลือตามระบบ'))")
+        recon = api(f"/api/bom-center/issue-reports/reconcile?end_count_id={periods[0]['end_count_id']}") if periods else None
+        if rc and recon:
+            nonmass = [x["code"] for x in recon["rows"] if x["count_unit"] != "กรัม"]
+            check(len(rc) > 0 and not any("กรัม" in t for t in rc[:5]) or not nonmass, f"สิ้นเดือน: quantities in count units, e.g. {rc[0][:110]}")
+        shot(page, "var_recon.png")
+        page.click("#brnVarTabs button:has-text('รายงวด')")
+
+        # ── ตรวจนับสิ้นเดือน ──
+        print("== phone · ตรวจนับสิ้นเดือน")
+        page.evaluate("supplyGo({tab:'branchstock', pane:'count'})")
+        page.wait_for_selector("#brnList div", timeout=60000)
+        page.wait_for_timeout(800)
+        sh = api("/api/bom-center/stock/sheet")
+        req = [i for z in sh["zones"] for i in z["items"] if i["required"]]
+        cnt = page.evaluate("""() => ({ zones: [...document.querySelectorAll('#brnZones button')].map(b => b.innerText.trim()), progress: document.getElementById('brnProgress').innerText.replace(/\\s+/g, ' '),
+          help: document.getElementById('brnHowTo').tagName, info: document.getElementById('brnInfo').innerText })""")
+        check(not any(re.search(r"\d+/\d+", z) for z in cnt["zones"]) and cnt["help"] == "DETAILS", f"count zone chips are 'label · n' (no x/y); วิธีนับ stays folded: {cnt['zones']}")
+        ll = api("/api/bom-center/stock/sheet")
+        lq = next((i for z in ll["zones"] for i in z["items"] if i["last_qty"] is not None), None)
+        if lq:
+            off = [i["code"] for z in ll["zones"] for i in z["items"] if i["last_qty"] is not None and i["last_unit"] != i["count_unit"]]
+            txt = page.evaluate("[...document.querySelectorAll('#brnList .brn-namecol')].map(n => n.innerText.replace(/\\s+/g, ' ')).filter(t => t.includes('ครั้งก่อน')).slice(0, 3)")
+            seg = [re.search(r"ครั้งก่อน .*", t_).group(0) for t_ in txt]
+            check(not off and seg and all(lq["count_unit"] and True for _ in seg), f"'ครั้งก่อน' is read in the unit counted now (server: last_unit == count_unit for all {sum(1 for z in ll['zones'] for i in z['items'] if i['last_qty'] is not None)} counted items): {seg[:1]}")
+        # the zone tick (page state only: no request goes out)
+        zt = page.evaluate("""() => { const s = _brnSheet; const z = s.zones.find(x => x.items.some(i => i.required)); const keep = JSON.stringify(_brnQty);
+          const before = [...document.querySelectorAll('#brnZones button')].some(b => b.innerText.includes('✓'));
+          s.zones.forEach(zz => zz.items.filter(i => i.required).forEach(i => { if (zz === z) _brnQty[i.code] = '1'; else delete _brnQty[i.code]; })); brnRender();
+          const withTick = [...document.querySelectorAll('#brnZones button')].filter(b => b.innerText.includes('✓')).map(b => b.innerText.trim());
+          _brnQty = JSON.parse(keep); brnRender(); return { before, withTick, zone: z.label, after: [...document.querySelectorAll('#brnZones button')].some(b => b.innerText.includes('✓')) }; }""")
+        check(not zt["before"] and len(zt["withTick"]) == 1 and zt["zone"] in zt["withTick"][0] and not zt["after"], f"a zone whose required items are all counted gets a ✓: {zt['withTick']}")
+        shot(page, "count_top.png")
+        # the submit is refused while a required item is uncounted
+        n_save0 = len(posts("/stock/count"))
+        missing = page.evaluate("_brnSheet.zones.flatMap(z => z.items).filter(i => i.required && !_brnCounted(i.code)).length")
+        page.evaluate("document.querySelector('main.content-area').scrollTop = 0")
+        page.click("text=ส่งผลตรวจนับ >> visible=true")
+        page.wait_for_selector("form [data-el=msg]", timeout=5000)
+        dlg = dialog()
+        print("     dialog:", dlg["msg"])
+        check(missing > 0 and re.match(rf"^ยังไม่นับรายการบังคับ {missing} รายการ \(เช่น .+\) นับให้ครบก่อนส่ง$", dlg["msg"]) is not None and dlg["ok"] == "กลับไปนับ" and not dlg["cancelShown"],
+              f"the submit is refused with only a 'กลับไปนับ' button: {dlg['msg']}")
+        shot(page, "count_refuse.png")
+        page.click("form:has([data-el=msg]) [type=submit]")
+        page.wait_for_timeout(400)
+        check(len(posts("/stock/count")) == n_save0, "the refused submit sends no request")
+        sv = ctx.request.post(a.base + "/api/bom-center/stock/count", data={"lines": [{"code": req[0]["code"], "qty": 1, "unit": req[0]["count_unit"]}], "submit": True})
+        check(sv.status == 400 and "ยังไม่นับรายการบังคับ" in sv.text() and "นับให้ครบก่อนส่ง" in sv.text(), f"the server refuses the same way: {sv.status} {sv.text()[:110]}")
+
+        # ── the 6th entry of the strip, days 1–3 only ──
+        print("== phone · แถบล่าง")
+        page.evaluate("supplyGo({tab:'supplyhome'})")
+        page.wait_for_timeout(800)
+        strip = page.evaluate("[...document.querySelectorAll('#supplyNav button')].map(b => b.innerText.trim())")
+        day_now = int(dt.datetime.now(dt.timezone(dt.timedelta(hours=7))).strftime("%d"))
+        check(len(strip) == (6 if day_now <= 3 else 5), f"today is day {day_now}: the strip has {len(strip)} entries ({strip})")
+        for day, want in (("2026-10-02T09:00:00+07:00", 6), ("2026-10-03T23:30:00+07:00", 6), ("2026-10-04T00:30:00+07:00", 5), ("2026-10-20T12:00:00+07:00", 5)):
+            c2 = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, locale="th-TH")
+            c2.add_init_script("try{localStorage.setItem('oshinei_upload_token','local-test-token')}catch(e){}")
+            c2.request.post(a.base + "/api/auth/login", data={"username": a.user, "password": a.password})
+            p2 = c2.new_page()
+            p2.clock.set_fixed_time(day)
+            p2.goto(a.base + "/", wait_until="networkidle", timeout=120000)
+            p2.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=60000)
+            p2.wait_for_timeout(800)
+            items = p2.evaluate("[...document.querySelectorAll('#supplyNav button')].map(b => b.innerText.trim())")
+            check(len(items) == want and (("ตรวจนับ" in items) == (want == 6)), f"{day[:10]} {day[11:16]} (Bangkok): the strip has {len(items)} entries {items}")
+            if want == 6 and day.startswith("2026-10-02"):
+                p2.click("#supplyNav button:has-text('ตรวจนับ')")
+                p2.wait_for_function("document.getElementById('brn-pane-count').style.display !== 'none'", timeout=20000)
+                lit = p2.evaluate("(document.querySelector('#supplyNav button.active') || { innerText: '' }).innerText.trim()")
+                check(lit == "ตรวจนับ", "the 6th entry opens ตรวจนับสิ้นเดือน and is lit")
+                if a.shots:
+                    p2.screenshot(path=os.path.join(a.shots, "strip6.png"))
+            c2.close()
         check(not errors, "phone: no page error" + (f" — {errors[:2]}" if errors else ""))
         ctx.close()
 
@@ -312,6 +703,24 @@ def main(argv=None) -> int:
         d = page.evaluate("({ rows: document.querySelectorAll('#brnOrdList .brn-row').length, rounds: document.querySelectorAll('#brnOrdDeliv button').length, buf: !!document.getElementById('brnBufPct') })")
         check(d["rounds"] > 0 and not d["buf"], f"desktop: สั่งสินค้า shows {d['rounds']} rounds, {d['rows']} rows, the buffer folded")
         shot(page, "desktop_order.png")
+        # PR-M4 panes still load and answer on a desktop
+        page.evaluate("supplyGo({tab:'branchstock', pane:'var'})")
+        page.wait_for_selector("#brnVarList .brn-vrow, #brnVarList .text-sm", timeout=60000)
+        page.wait_for_timeout(800)
+        d = page.evaluate("({ tiles: document.querySelectorAll('#brnVarHead .brn-v3t').length, asks: document.querySelectorAll('#brnVarList .brn-vrow').length, tabs: [...document.querySelectorAll('#brnVarTabs button')].map(b => b.innerText.trim()) })")
+        check(d["tiles"] == 3 and d["asks"] > 0 and d["tabs"] == ["รายงวด", "รายวัน", "สิ้นเดือน"], f"desktop: ผลต่าง shows the three numbers and {d['asks']} lines to explain")
+        shot(page, "desktop_var.png")
+        page.evaluate("supplyGo({tab:'branchstock', pane:'recv'})")
+        page.wait_for_selector("#brnClaimList", timeout=30000)
+        page.wait_for_timeout(1200)
+        d = page.evaluate("({ claims: document.querySelectorAll('#brnClaimList a.brn-claimrow').length, photo: document.getElementById('brnClaimCard').innerText.includes('ส่งรูปทางไลน์ถึงประสานงานขาย') })")
+        check(d["claims"] > 0 and d["photo"], f"desktop: รับสินค้า lists {d['claims']} claims without ids and carries the photo line")
+        shot(page, "desktop_recv.png")
+        page.evaluate("supplyGo({tab:'branchstock', pane:'count'})")
+        page.wait_for_selector("#brnList div", timeout=60000)
+        page.wait_for_timeout(600)
+        check(page.evaluate("[...document.querySelectorAll('#brnZones button')].length > 0"), "desktop: ตรวจนับสิ้นเดือน lists its zones")
+        shot(page, "desktop_count.png")
         check(not errors, "desktop: no page error" + (f" — {errors[:2]}" if errors else ""))
         ctx.close()
         b.close()

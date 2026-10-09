@@ -62,6 +62,7 @@ window.uiDialog = function (opt) {
     wrap.querySelector('[data-el="msg"]').textContent = o.message || '';
     wrap.querySelector('[data-act="cancel"]').textContent = o.cancelText || 'ยกเลิก';
     wrap.querySelector('[type="submit"]').textContent = o.okText || 'ยืนยัน';
+    if (o.noCancel) wrap.querySelector('[data-act="cancel"]').style.display = 'none';      // a notice: one button
     const input = wrap.querySelector('[data-el="in"]');
     if (input) {
       input.value = o.input.value || '';
@@ -91,6 +92,11 @@ window.uiConfirm = (message, opt) => {
   if (o.ok != null && o.okText == null) o.okText = o.ok;
   if (o.cancel != null && o.cancelText == null) o.cancelText = o.cancel;
   return window.uiDialog(o);
+};
+// uiNotice(message, {title, ok}): a refusal with a single button (PR-M4: "นับให้ครบก่อนส่ง" → กลับไปนับ)
+window.uiNotice = (message, opt) => {
+  const o = opt || {};
+  return window.uiDialog({ message, title: o.title, okText: o.ok || 'ตกลง', noCancel: true });
 };
 window.uiPrompt = (message, value, opt) => {
   const o = opt || {};
@@ -2727,13 +2733,21 @@ const SUPPLY_PHONE_NAV = [
   { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>' },
   { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/>' },
   { tab: 'branchstock', pane: 'var', label: 'ผลต่าง', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>' },
+  // PR-M4: the month-end count is a 6th entry only on days 1–3 of the month (and while it is the open page); on other days it is
+  // reached from หน้างาน, and the strip stays five entries
+  { tab: 'branchstock', pane: 'count', label: 'ตรวจนับ', when: () => _supplyCountDays(), icon: '<path d="M4 6h16M4 12h16M4 18h9"/><path d="M16 17l2 2 3-4"/>' },
 ];
+// the first three days of the month by the branch's clock (Bangkok)
+function _supplyCountDays() {
+  const day = Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(8, 10));
+  return day >= 1 && day <= 3;
+}
 function _renderSupplyNav(name) {
   const nav = document.getElementById('supplyNav');
   if (!nav) return;   // rendered for everyone; CSS shows it only for body.supply-phone on a phone
   const acc = _SUPPLY_PANE[name];
   const pane = acc ? acc.get() : null;
-  nav.innerHTML = SUPPLY_PHONE_NAV.filter(it => tabAllowed(it.tab)).map(it => {
+  nav.innerHTML = SUPPLY_PHONE_NAV.filter(it => tabAllowed(it.tab) && (!it.when || it.when() || (it.tab === name && it.pane === pane))).map(it => {
     const on = it.tab === name && (!it.pane || it.pane === pane);
     return `<button class="${on ? 'active' : ''}" aria-current="${on ? 'page' : 'false'}" onclick="supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})"><svg viewBox="0 0 24 24" aria-hidden="true">${it.icon}</svg>${it.label}</button>`;
   }).join('');
