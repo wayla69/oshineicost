@@ -54,17 +54,76 @@ def _base(units, unit, per):
     return units * ((per or 1.0) if unit and unit != "base" else 1.0)
 
 
-def _value(con, order_id: int, field: str, month: str) -> float:
+VALUE_ORDERED_TH = "มูลค่าที่สั่ง"        # what the branch confirmed (confirmed_units)
+VALUE_SENT_TH = "มูลค่าที่จัดส่ง"          # what the warehouse sent (processed_units)
+
+
+def _pricer(con):
+    """(per, price): the pack sizes, and a memoised `price(code, month)` = the baht per base unit the branch
+    pays (the centre's price when the item is on its list, else the month's ingredient price)."""
     from .central import central_map, unit_price
     per = _per(con)
     cmap = central_map(con)
+    memo = {}
+
+    def price(code, month):
+        k = (code, month)
+        if k not in memo:
+            memo[k] = unit_price(con, code, month, cmap)[0]
+        return memo[k]
+    return per, price
+
+
+def _value(con, order_id: int, field: str, month: str) -> float:
+    """The baht value of ONE quantity column of an order (suggested_units, confirmed_units, processed_units,
+    received_units), priced for `month`. Every order value shown anywhere comes through here."""
+    per, price = _pricer(con)
     v = 0.0
     for c, q, u in con.execute(f"SELECT ingredient_code, {field}, order_unit FROM bc_order_line WHERE order_id=?",
                                (order_id,)):
-        p = unit_price(con, c, month, cmap)[0]
+        p = price(c, month)
         if p and q:
             v += _base(q, u, per.get(c)) * p
     return round(v, 2)
+
+
+def with_values(con, rows: list) -> list:
+    """The ONE order value of the queue, the history, the order page and the warehouse's confirmation (PR-M2).
+
+    The column `bc_order.value` is a snapshot written when the branch last saved: it goes stale when the
+    warehouse sends other quantities, or when the centre's list or the month's prices are imported after the
+    order was saved (an order showed ฿114,778 in the queue and ฿46,350 once the warehouse had sent it). So
+    nothing reads that column any more: every row gets its values priced now, from the lines, by `_value`.
+      value_ordered  confirmed_units   ("มูลค่าที่สั่ง")
+      value_sent     processed_units   ("มูลค่าที่จัดส่ง") — only once the warehouse has sent the order
+      value          the one to show: the sent value when there is one, else the ordered value
+      value_label    the words that go with `value`
+    A row needs order_id, status and cycle_date."""
+    per, price = _pricer(con)
+    ids = [r["order_id"] for r in rows if r.get("order_id") is not None]
+    lines = {}
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        for oid, c, conf, proc, u in con.execute(
+                "SELECT order_id, ingredient_code, confirmed_units, processed_units, order_unit FROM bc_order_line"
+                f" WHERE order_id IN ({','.join('?' * len(part))})", part):
+            lines.setdefault(oid, []).append((c, conf, proc, u))
+    for r in rows:
+        month = str(r.get("cycle_date") or "")[:7]
+        ordered = sent = 0.0
+        for c, conf, proc, u in lines.get(r.get("order_id"), []):
+            p = price(c, month)
+            if not p:
+                continue
+            if conf:
+                ordered += _base(conf, u, per.get(c)) * p
+            if proc:
+                sent += _base(proc, u, per.get(c)) * p
+        r["value_ordered"] = round(ordered, 2)
+        r["value_sent"] = round(sent, 2) if r.get("status") in ("processed", "received") else None
+        r["value"] = r["value_sent"] if r["value_sent"] is not None else r["value_ordered"]
+        r["value_label"] = VALUE_SENT_TH if r["value_sent"] is not None else VALUE_ORDERED_TH
+    return rows
 
 
 def delivery_of(con, branch_id: int, rnd: str, cycle_date: str, delivery_date: str = None) -> str:
@@ -136,7 +195,7 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
         d["late"] = late                                  # the flag recorded when the order was submitted
         d["stock_deducted"] = d.pop("stock_count_id") is not None
         out.append(d)
-    return out
+    return with_values(con, out)             # the stored snapshot (o.value) is replaced by the one live value
 
 
 def keyed_date(ts: str):
@@ -204,7 +263,9 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
     con.execute("UPDATE bc_order SET status='processed', processed_by=?, processed_at=?, po_ref=? WHERE order_id=?",
                 (who, now(), (po_ref or "").strip() or None, order_id))
     audit(con, who, "order_process", "bc_order", str(order_id), o[0], {"po_ref": po_ref})
-    return {"order_id": order_id, "status": "processed", "value": _value(con, order_id, "processed_units", o[1][:7])}
+    v = with_values(con, [{"order_id": order_id, "status": "processed", "cycle_date": o[1]}])[0]
+    return {"order_id": order_id, "status": "processed", "value": v["value_sent"], "value_label": v["value_label"],
+            "value_ordered": v["value_ordered"], "value_sent": v["value_sent"]}
 
 
 def consolidated(con, order_ids: list) -> dict:

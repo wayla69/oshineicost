@@ -321,6 +321,13 @@ def update_rows(con, rows: list, who: str) -> dict:
         if not code:
             continue
         vals = {k: r[k] for k in _FIELDS if k in r}
+        if "name_th" in vals:                       # a name typed on the screen: never empty, never only digits and signs ("-3")
+            name = str(vals["name_th"] or "").strip()
+            if not name:
+                raise ValueError(f"{code}: ชื่อต้องไม่ว่าง")
+            if not re.search(r"[A-Za-zก-๙]", name):
+                raise ValueError(f"{code}: ชื่อต้องมีตัวอักษร")
+            vals["name_th"] = name
         if "base_unit" in vals:
             vals["base_unit"] = norm(vals["base_unit"]) or None
         for k in ("qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days"):
