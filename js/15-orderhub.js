@@ -38,7 +38,8 @@ function loadOrderHub() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  ['queue', 'comp', 'month', 'pilot', 'central', 'claims'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  if (k === 'issuevar') ohbLoadIssueVar();
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
   if (k === 'month') ohbLoadMonth();
@@ -481,6 +482,154 @@ async function ohbLoadPilot() {
           <td class="py-1 pr-2 text-right">${cell(m.reason_coverage, p.reason_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.mape_a, p.mape_a, '%')}</td>
           <td class="py-1 pr-2 text-right">${cell(m.order_submission, null, '%')}</td><td class="py-1">${_bmcChip(vt, vi)}</td></tr>`; }).join('') + '</tbody></table></div>';
   } catch (e) { rb.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── ผลต่างตัดเบิก (PR-J3): the renderers (isr*) are shared with the branch page (14-branch.js) ───────────────
+// daily: the confirmed issue (฿) against the BoM of what was sold, flags for a class-A item over the BoM on
+// consecutive days · recon: the system stock (begin + received − issued) against the month-end count.
+const _ISR_SLIP_INK = { on_time: 'var(--good-ink)', late: 'var(--amber-ink)', draft: 'var(--amber-ink)', missing: 'var(--bad-ink)', closed: 'var(--text-muted)' };
+const _ISR_ST = { ok: ['ตรงกัน (ในเกณฑ์)', 'var(--good-ink)'], over: ['นับได้มากกว่าระบบ', 'var(--amber-ink)'],
+  under: ['นับได้น้อยกว่าระบบ', 'var(--bad-ink)'], not_counted: ['ตรวจนับไม่ครบ', 'var(--text-muted)'] };
+function _isrDm(iso) { const p = String(iso || '').split('-'); return p.length === 3 ? `${Number(p[2])}/${Number(p[1])}` : String(iso || ''); }
+function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
+function _isrMoney(v) { return v == null ? '—' : `${v < 0 ? '−' : ''}฿${_bmcNum(Math.abs(v), 0)}`; }
+function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)">—</span>' : _bmcNum(v, 0); }
+function isrFlagChips(d) {
+  const t = d.totals;
+  const chips = [_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${t.confirmed_days}/${t.trading_days} วัน`, t.trading_days && t.confirmed_days >= t.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)')];
+  if (t.late_days) chips.push(_bmcChip(`ยืนยันล่าช้า ${t.late_days} วัน`, 'var(--amber-ink)'));
+  if (t.draft_days) chips.push(_bmcChip(`ยังไม่ยืนยัน ${t.draft_days} วัน`, 'var(--amber-ink)'));
+  if (t.missing_days) chips.push(_bmcChip(`ไม่มีใบ ${t.missing_days} วัน`, 'var(--bad-ink)'));
+  if (!d.flags.length) chips.push(_bmcChip('✓ ไม่พบการเบิกเกินสูตรต่อเนื่อง', 'var(--good-ink)'));
+  d.flags.forEach(f => chips.push(_bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPct(f.max_pct)}) ${_isrDm(f.from)}–${_isrDm(f.to)}`, 'var(--bad-ink)')));
+  return chips.join(' ');
+}
+function isrDailyTable(d, openFn) {
+  if (!d.rows.length) return '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดขายหรือใบตัดเบิกในเดือนนี้</span>';
+  const t = d.totals;
+  const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
+  const body = d.rows.map(r => {
+    const ink = r.var_pct != null && r.var_pct > 0 ? 'var(--bad-ink)' : 'var(--text-primary)';
+    return `<tr style="border-top:1px solid var(--border);cursor:pointer${r.flagged ? ';background:var(--bg-input)' : ''}" onclick="${openFn}('${r.date}')">
+      <td class="py-1 pr-2" style="white-space:nowrap"><a href="#" onclick="return false" style="color:var(--accent);font-weight:600">${_isrDm(r.date)}</a> ${esc(r.weekday_th)}</td>
+      <td class="py-1 pr-2">${_bmcChip(r.slip_status_th, _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)')}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(r.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(r.waste_value)}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(r.issued_value)}</td><td class="py-1 pr-2 text-right">${r.trading ? _isrBaht(r.bom_value) : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="py-1 pr-2 text-right" style="color:${ink}">${_isrBaht(r.var_value)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${_isrPct(r.var_pct)}</td>
+      <td class="py-1">${r.over_items.map(o => `${esc(o.name)} ${_isrPct(o.var_pct)}`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}</td></tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร BoM ฿', 1)}${th('ผลต่าง ฿', 1)}${th('ผลต่าง %', 1)}${th('ชั้น A ที่เบิกเกินเกณฑ์')}</tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right" style="color:${t.var_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrBaht(t.var_value)}</td>
+      <td class="py-1 pr-2 text-right">${_isrPct(t.var_pct)}</td><td></td></tr></tfoot></table></div>
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน ${esc(d.price_month)} · เกณฑ์เตือน: ชั้น A เบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
+}
+function isrDayItems(d, closeJs) {
+  const s = d.slip, conf = s.key === 'on_time' || s.key === 'late';
+  const head = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
+      <b class="text-sm" style="color:var(--text-primary)">วัน${esc(d.weekday_th)}ที่ ${_isrDm(d.date)} · ${esc(d.branch.name || '')}</b>
+      ${_bmcChip(s.status_th, _ISR_SLIP_INK[s.key] || 'var(--text-muted)')}
+      ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(s.confirmed_by || '-')}</span>` : ''}
+      ${closeJs ? `<button onclick="${closeJs}" style="margin-left:auto;font-size:12px;color:var(--text-muted);background:none;border:0;cursor:pointer">ปิด</button>` : ''}</div>`;
+  const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกของวันนี้ยังไม่ยืนยัน จึงยังเปรียบเทียบกับสูตรไม่ได้ ตารางแสดงเฉพาะปริมาณตามสูตร BoM</div>';
+  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPct(f.max_pct)})`, 'var(--bad-ink)')).join(' ')}</div>` : '';
+  const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
+  const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
+  const rows = d.rows.map(r => {
+    const ink = r.var_pct != null && r.var_pct > 0 ? 'var(--bad-ink)' : 'var(--text-primary)';
+    return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(r.name)}</b><div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${esc(r.class)}${r.waste_reason_th ? ' · ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : ''}</div></td>
+      <td class="py-1 pr-2 text-right">${q(r.used, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.waste, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.issued, r.base_unit)}</td>
+      <td class="py-1 pr-2 text-right">${q(r.bom, r.base_unit)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${r.var_qty == null ? '—' : (r.var_qty > 0 ? '+' : '') + _bmcNum(r.var_qty, 1)}</td>
+      <td class="py-1 pr-2 text-right" style="color:${ink}">${_isrPct(r.var_pct)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${_isrBaht(r.var_value)}</td>
+      <td class="py-1">${r.signal ? _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}</td></tr>`;
+  }).join('');
+  return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ตามสูตร BoM', 1)}${th('ผลต่าง', 1)}${th('ผลต่าง %', 1)}${th('ผลต่าง ฿', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
+}
+function isrReconHead(r) {
+  const p = r.period, t = r.totals, sl = r.slips;
+  const miss = sl.missing_days;
+  return `<div style="color:var(--text-secondary)">${esc(p.begin_date)} → ${esc(p.end_date)} · ${p.days} วัน · ราคาเดือน ${esc(p.month)}</div>
+    <div class="flex flex-wrap gap-1 mt-1">
+      ${_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)')}
+      ${miss.length ? _bmcChip(`ขาดใบตัดเบิก ${miss.length} วัน`, 'var(--bad-ink)') : ''}
+      ${sl.draft_days.length ? _bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
+      ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}</div>
+    <div class="mt-1 text-sm">ผลต่างรวม <b style="color:${t.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(t.diff_value)}</b> ·
+      นับได้น้อยกว่าระบบ ${_isrMoney(t.under_value)} · นับได้มากกว่าระบบ ${_isrMoney(t.over_value)} · เกินเกณฑ์ ${t.flagged} รายการ ·
+      ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
+    ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) คงเหลือตามระบบจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
+}
+// o: {all: show every row, edit: reason inputs, pfx: id prefix, save: name of the save function (code, true)}
+function isrReconTable(r, o) {
+  o = o || {};
+  const rows = r.rows.filter(x => o.all || x.status !== 'ok').slice(0, o.all ? 500 : 80);
+  if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
+  const pfx = o.pfx || 'isrRc';
+  const q = (v, u) => v == null ? '—' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
+  const sg = v => v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}`;
+  return rows.map(x => {
+    const [label, ink] = _ISR_ST[x.status] || [x.status_th, 'var(--text-muted)'];
+    const flag = x.status === 'over' || x.status === 'under';
+    const opts = r.reasons.map(c => `<option value="${esc(c.code)}"${x.reason === c.code ? ' selected' : ''}>${esc(c.label)}</option>`).join('');
+    return `<div style="border-top:1px solid var(--border);padding:8px 0">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
+        ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ชั้น ${esc(x.class)} (เกณฑ์ ±${r.thresholds[x.class]}%)</span>
+        <span style="margin-left:auto" class="text-sm">${x.diff_value != null ? `<b style="color:${x.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(x.diff_value)}</b>` : ''}</span></div>
+      <div class="text-xs mt-0.5" style="color:var(--text-secondary)">ยกมา ${q(x.begin, x.base_unit)} + รับ ${q(x.received, x.base_unit)} + เคลม/ปรับ ${q(x.claims, x.base_unit)} − ตัดเบิก ${q(x.used, x.base_unit)} − ของเสีย ${q(x.waste, x.base_unit)}
+        = คงเหลือตามระบบ <b>${q(x.system, x.base_unit)}</b> · นับจริง <b>${q(x.count, x.base_unit)}</b>${x.diff != null ? ` · ผลต่าง ${sg(x.diff)}${x.diff_pct != null ? ` (${_isrPct(x.diff_pct)})` : ''}` : ''}</div>
+      ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลตรวจนับต้นงวดหรือปลายงวด จึงยังเปรียบเทียบไม่ได้</div>' : ''}
+      ${flag && o.edit ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
+        <select id="${pfx}Rs_${esc(x.code)}" style="border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
+        <input id="${pfx}Rn_${esc(x.code)}" value="${esc(x.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+        <button onclick="${o.save}(${_bmcQ(x.code)}, true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึก</button>
+        ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(x.reason_by)}</span>` : ''}</div>`
+      : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(x.reason_by) : ''}</div>`
+        : (flag ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
+    </div>`;
+  }).join('');
+}
+
+// the centre's pane: ผลต่างตัดเบิกรายวัน
+let _ohbIv = null;            // /api/bom-center/issue-reports/daily
+async function ohbLoadIssueVar() {
+  const sel = document.getElementById('ohbIvBranch'), mon = document.getElementById('ohbIvMonth');
+  if (!mon.value) mon.value = _ohbIso(new Date()).slice(0, 7);
+  const list = document.getElementById('ohbIvList'), chips = document.getElementById('ohbIvChips');
+  document.getElementById('ohbIvDetail').style.display = 'none';
+  try {
+    if (sel.options.length < 2) {
+      const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
+      sel.innerHTML = '<option value="">— เลือกสาขา —</option>' + me.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+    }
+    const keep = String(supplyCtx().branch_id || '');
+    if (!sel.value && keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+    if (!sel.value) { chips.innerHTML = ''; list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กรุณาเลือกสาขา</span>'; return; }
+    supplyCtxSet({ branch_id: Number(sel.value) });
+    list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+    _ohbIv = await _bmcJson(`${API}/api/bom-center/issue-reports/daily?branch_id=${sel.value}&month=${mon.value}`);
+    chips.innerHTML = isrFlagChips(_ohbIv);
+    list.innerHTML = isrDailyTable(_ohbIv, 'ohbIvOpen');
+  } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function ohbIvOpen(day) {
+  const box = document.getElementById('ohbIvDetail');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/issue-reports/daily/day?branch_id=${document.getElementById('ohbIvBranch').value}&day=${day}`);
+    box.innerHTML = isrDayItems(d, "document.getElementById('ohbIvDetail').style.display='none'");
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function ohbIvXlsx() {
+  const b = document.getElementById('ohbIvBranch').value;
+  if (!b) { _bmcStatus('ohbIvStatus', 'กรุณาเลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  window.location.href = `${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${document.getElementById('ohbIvMonth').value}`;
 }
 
 // ── เคลมสินค้า (owner 2026-10-08, 2026-10-09): Sales Support decides; the photos arrive by LINE ───────────

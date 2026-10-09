@@ -331,6 +331,8 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     ("W",   "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/issues/reopen",           {"supply.ordering", "bom.center"}),
+    # PR-J3 issue-slip reports (system stock vs count, daily issue vs BoM): read-only; a branch login is pinned to its own branch
+    ("GET", "/api/bom-center/issue-reports",           {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)

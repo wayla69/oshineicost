@@ -145,14 +145,46 @@
 
   <!-- ── ผลต่างของฉัน ── -->
   <div id="brn-pane-var" style="display:none">
-    <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
-    <div class="card p-3 mb-3">
-      <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-        รอบ <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnVarAll" onchange="brnRenderVariance()"> แสดงทุกรายการ</label>
+    <!-- สามมุมมอง: รายงวด (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบ BoM) · สิ้นเดือน (คงเหลือตามระบบเทียบนับจริง) -->
+    <div id="brnVarTabs" class="flex flex-wrap gap-1 mb-3"></div>
+
+    <div id="brnVar-period">
+      <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
+      <div class="card p-3 mb-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
+          รอบ <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          <label class="flex items-center gap-1"><input type="checkbox" id="brnVarAll" onchange="brnRenderVariance()"> แสดงทุกรายการ</label>
+        </div>
+        <div id="brnVarHead" class="text-xs mt-2"></div>
       </div>
-      <div id="brnVarHead" class="text-xs mt-2"></div>
+      <div id="brnVarList" class="card p-3 mb-3"></div>
     </div>
-    <div id="brnVarList" class="card p-3 mb-3"></div>
+
+    <div id="brnVar-daily" style="display:none">
+      <div class="card p-3 mb-3">
+        <div class="text-xs mb-2" style="color:var(--text-secondary)">เปรียบเทียบมูลค่าที่เบิกจริงในใบตัดเบิกที่ยืนยันแล้ว (เบิกใช้ + ของเสีย) กับมูลค่าตามสูตร BoM จากยอดขายของวันนั้น · รายการชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป จะแสดงเป็นสัญญาณเตือน · คลิกที่วันเพื่อดูรายการวัตถุดิบ</div>
+        <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
+          <label>เดือน<br><input type="month" id="brnVarDayMonth" onchange="brnLoadVarDaily()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+          <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        </div>
+        <div id="brnVarDayChips" class="flex flex-wrap gap-1 mt-2"></div>
+      </div>
+      <div id="brnVarDayList" class="card p-3 mb-3"></div>
+      <div id="brnVarDayDetail" class="card p-3 mb-3" style="display:none"></div>
+    </div>
+
+    <div id="brnVar-recon" style="display:none">
+      <div class="card p-3 mb-3">
+        <div class="text-xs mb-2" style="color:var(--text-secondary)">คงเหลือตามระบบ = ยกมา (ต้นงวด) + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย เทียบกับสินค้านับจริงตอนปลายงวด · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · รายการที่เกินเกณฑ์ ต้องระบุเหตุผล</div>
+        <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
+          รอบ <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          <label class="flex items-center gap-1"><input type="checkbox" id="brnRcAll" onchange="brnRenderVarRecon()"> แสดงทุกรายการ</label>
+          <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลด Excel</a>
+        </div>
+        <div id="brnRcHead" class="text-xs mt-2"></div>
+        <span id="brnRcStatus" class="text-xs"></span>
+      </div>
+      <div id="brnRcList" class="card p-3 mb-3"></div>
+    </div>
   </div>
 </div>

@@ -2449,6 +2449,7 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE },
     { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ' },
     { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE },
+    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE },
     { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)' },
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [

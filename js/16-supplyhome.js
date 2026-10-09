@@ -136,6 +136,12 @@ function _shmOpen(go) {
     if (x.delivery) { _brnDelivery = x.delivery; _brnDeliveryKeep = true; }   // the delivery day the task names
   }
   if (x.date && go.pane === 'issue' && typeof _brnIssDate !== 'undefined') { _brnIssDate = x.date; _brnIssDateKeep = true; }   // the day of the slip the task names
+  if (go.pane === 'var' && typeof _brnVarTab !== 'undefined') {           // the variance page's view (period / daily / recon) the task names
+    if (x.var_tab) _brnVarTab = x.var_tab;
+    else if (x.end_count_id) _brnVarTab = 'period';                       // the receipts step opens the period view
+    if (x.day) { _brnVarTab = 'daily'; _shmWhen(() => typeof _brnVarDay !== 'undefined' && _brnVarDay, () => brnVarDayOpen(x.day)); }
+  }
+  if (x.day && go.pane === 'issuevar') _shmWhen(() => typeof _ohbIv !== 'undefined' && _ohbIv, () => ohbIvOpen(x.day));
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);

@@ -43,6 +43,22 @@
     <div id="ohbClaimList" class="card p-3 mb-3"></div>
   </div>
 
+  <!-- ── ผลต่างตัดเบิกรายวัน (PR-J3) ── -->
+  <div id="ohb-pane-issuevar" style="display:none">
+    <div class="card p-3 mb-3">
+      <div class="text-xs mb-2" style="color:var(--text-secondary)">เปรียบเทียบมูลค่าที่สาขาเบิกจริงในใบตัดเบิกที่ยืนยันแล้ว (เบิกใช้ + ของเสีย) กับมูลค่าตามสูตร BoM จากยอดขายของวันนั้น · รายการชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นสัญญาณเตือนเพื่อให้ประสานงานขายและ Ops ตรวจสอบสาขา · คลิกที่วันเพื่อดูรายการวัตถุดิบ</div>
+      <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
+        <label>สาขา<br><select id="ohbIvBranch" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
+        <label>เดือน<br><input type="month" id="ohbIvMonth" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <a href="#" onclick="ohbIvXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <span id="ohbIvStatus" style="padding-bottom:6px"></span>
+      </div>
+      <div id="ohbIvChips" class="flex flex-wrap gap-1 mt-2"></div>
+    </div>
+    <div id="ohbIvList" class="card p-3 mb-3"></div>
+    <div id="ohbIvDetail" class="card p-3 mb-3" style="display:none"></div>
+  </div>
+
   <!-- ── compliance ── -->
   <div id="ohb-pane-comp" style="display:none">
     <div class="card p-3 mb-3">

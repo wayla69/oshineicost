@@ -511,7 +511,7 @@ function brnSetSub(k, quiet) {   // quiet: only show the pane (the caller loads 
 }
 async function brnBranchChanged() {
   supplyCtxSet({ branch_id: _brnBid() || supplyCtx().branch_id || null });
-  _brnVar = null;
+  _brnVar = null; _brnVarDay = null; _brnRecon = null;
   _brnRecv = [];
   _brnPlan = null;
   if (_brnRoundKeep) _brnRoundKeep = false; else _brnRound = null;
@@ -795,7 +795,29 @@ const _BRN_VS = { over: ['ใช้เกินสูตร', 'var(--bad-ink)'],
   negative: ['คงเหลือมากกว่าที่ควรมี', 'var(--bad-ink)'], no_bom: ['มีการใช้แต่ไม่มีในสูตร', 'var(--amber-ink)'],
   not_counted: ['ตรวจนับไม่ครบ', 'var(--text-muted)'], ok: ['ตามสูตร', 'var(--good-ink)'] };
 
+// The page has three views (PR-J3): the period (used vs recipes), the day (issued vs BoM), the month end (system stock
+// vs the physical count). The renderers of the last two are shared with the centre's pane (isr*, 15-orderhub.js).
+let _brnVarTab = 'period';
+let _brnVarDay = null;        // /api/bom-center/issue-reports/daily
+let _brnRecon = null;         // /api/bom-center/issue-reports/reconcile
+const _BRN_VT = [['period', 'รายงวด (ใช้จริง เทียบสูตร)'], ['daily', 'รายวัน (ตัดเบิก เทียบ BoM)'], ['recon', 'สิ้นเดือน (ระบบ เทียบ นับจริง)']];
+function brnVarTab(k, quiet) {
+  _brnVarTab = k;
+  _BRN_VT.forEach(([p]) => { const el = document.getElementById('brnVar-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  const bar = document.getElementById('brnVarTabs');
+  if (bar) bar.innerHTML = _BRN_VT.map(([p, t]) => {
+    const on = p === k;
+    return `<button onclick="brnVarTab('${p}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t}</button>`;
+  }).join('');
+  if (!quiet) brnLoadVarPane();
+}
 async function brnLoadVarPane() {
+  brnVarTab(_brnVarTab, true);
+  if (_brnVarTab === 'daily') return brnLoadVarDaily();
+  if (_brnVarTab === 'recon') return brnLoadVarRecon();
+  return brnLoadVarPeriod();
+}
+async function brnLoadVarPeriod() {
   const ov = document.getElementById('brnVarOverview');
   if (_brnMe && !_brnMe.scoped && (hasModule('supply.ordering') || hasModule('bom.center') || hasModule('ops.report'))) {
     try {
@@ -866,17 +888,79 @@ function brnRenderVariance() {
     </div>`;
   }).join('') : '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
 }
-async function brnSaveReason(code) {
-  if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
-  const reason = document.getElementById('brnRs_' + code).value;
-  const note = document.getElementById('brnRn_' + code).value;
-  if (!reason) { _bmcStatus('brnVarStatus', 'กรุณาเลือกเหตุผล', 'var(--amber-ink)'); return; }
+async function brnSaveReason(code, recon) {      // recon: the month-end tab (its own ids and period)
+  const sid = recon ? 'brnRcStatus' : 'brnVarStatus';
+  if (!_brnCanVariance()) { _bmcStatus(sid, _BRN_READONLY, 'var(--amber-ink)'); return; }
+  const reason = document.getElementById((recon ? 'brnRcRs_' : 'brnRs_') + code).value;
+  const note = document.getElementById((recon ? 'brnRcRn_' : 'brnRn_') + code).value;
+  if (!reason) { _bmcStatus(sid, 'กรุณาเลือกเหตุผล', 'var(--amber-ink)'); return; }
+  const endId = recon ? _brnRecon.period.end_count_id : _brnVar.end_count_id;
   try {
     await _bmcJson(`${API}/api/bom-center/variance/reason?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ end_count_id: _brnVar.end_count_id, code, reason, note }) });
-    await brnLoadVariance(_brnVar.end_count_id);
-    _bmcStatus('brnVarStatus', '✓ บันทึกเหตุผลแล้ว', 'var(--good-ink)');
-  } catch (e) { _bmcStatus('brnVarStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+      body: JSON.stringify({ end_count_id: endId, code, reason, note }) });
+    if (recon) await brnLoadVarRecon(endId); else await brnLoadVariance(endId);
+    _bmcStatus(sid, '✓ บันทึกเหตุผลแล้ว', 'var(--good-ink)');
+  } catch (e) { _bmcStatus(sid, 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+
+// ── รายวัน: ตัดเบิก เทียบ BoM ────────────────────────────────────────────────
+async function brnLoadVarDaily() {
+  const m = document.getElementById('brnVarDayMonth');
+  if (!m.value) m.value = _ohbIso(new Date()).slice(0, 7);
+  document.getElementById('brnVarDayDetail').style.display = 'none';
+  const chips = document.getElementById('brnVarDayChips');
+  if (_brnNeedBranch('brnVarDayList')) { chips.innerHTML = ''; return; }
+  document.getElementById('brnVarDayList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+  try {
+    _brnVarDay = await _bmcJson(`${API}/api/bom-center/issue-reports/daily?${_brnQS()}&month=${m.value}`);
+    chips.innerHTML = isrFlagChips(_brnVarDay);
+    document.getElementById('brnVarDayList').innerHTML = isrDailyTable(_brnVarDay, 'brnVarDayOpen');
+  } catch (e) { document.getElementById('brnVarDayList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function brnVarDayOpen(day) {
+  const box = document.getElementById('brnVarDayDetail');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/issue-reports/daily/day?${_brnQS()}&day=${day}`);
+    box.innerHTML = isrDayItems(d, "document.getElementById('brnVarDayDetail').style.display='none'");
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnVarDailyXlsx() {
+  if (_brnNeedBranch('brnVarDayList')) return;
+  window.location.href = `${API}/api/bom-center/issue-reports/daily.xlsx?${_brnQS()}&month=${document.getElementById('brnVarDayMonth').value}`;
+}
+
+// ── สิ้นเดือน: คงเหลือตามระบบ เทียบ นับจริง ─────────────────────────────────
+async function brnLoadVarRecon(endId) {
+  if (_brnNeedBranch('brnRcList')) { document.getElementById('brnRcHead').innerHTML = ''; return; }
+  const sel = document.getElementById('brnRcPeriod');
+  try {
+    if (!endId) {
+      const d = await _bmcJson(`${API}/api/bom-center/variance/periods?${_brnQS()}`);
+      sel.innerHTML = d.periods.map(p => `<option value="${p.end_count_id}">${esc(p.begin_date)} → ${esc(p.end_date)} (${p.days} วัน)</option>`).join('');
+      if (!d.periods.length) {
+        document.getElementById('brnRcHead').innerHTML = '';
+        document.getElementById('brnRcList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบสำหรับเปรียบเทียบ ต้องตรวจนับสิ้นเดือนอย่างน้อย 2 ครั้ง (ต้นงวดและปลายงวด)</span>';
+        return;
+      }
+      endId = sel.value;
+    }
+    _brnRecon = await _bmcJson(`${API}/api/bom-center/issue-reports/reconcile?${_brnQS()}&end_count_id=${endId}`);
+    brnRenderVarRecon();
+  } catch (e) { document.getElementById('brnRcList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function brnRenderVarRecon() {
+  const r = _brnRecon;
+  if (!r) return;
+  document.getElementById('brnRcHead').innerHTML = isrReconHead(r);
+  document.getElementById('brnRcList').innerHTML = isrReconTable(r, { all: document.getElementById('brnRcAll').checked, edit: _brnCanVariance(),
+    pfx: 'brnRc', save: 'brnSaveReason' });
+}
+function brnVarReconXlsx() {
+  if (!_brnRecon) return;
+  window.location.href = `${API}/api/bom-center/issue-reports/reconcile.xlsx?${_brnQS()}&end_count_id=${_brnRecon.period.end_count_id}`;
 }
 async function brnConfirmRecv(undo) {
   if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
