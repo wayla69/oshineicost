@@ -33,6 +33,19 @@ LOOKBACK_DAYS = 28
 _ZONE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
 
+def branches_with_data(con, month: str) -> set:
+    """PR-M5: the ids of the branches that have anything of the module in a month (YYYY-MM): a daily slip, an order, a
+    stock count or a goods receipt dated in it. The centre's branch selects list these and no other branch."""
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month or ""):
+        raise ValueError("เดือนต้องอยู่ในรูปแบบ YYYY-MM")
+    like = month + "-%"
+    ids = set()
+    for table, col in (("bc_issue_slip", "slip_date"), ("bc_order", "cycle_date"),
+                       ("bc_stock_count", "count_date"), ("bc_receipt", "receipt_date")):
+        ids |= {r[0] for r in con.execute(f"SELECT DISTINCT branch_id FROM {table} WHERE {col} LIKE ?", (like,))}
+    return ids
+
+
 def zones(con) -> tuple:
     """The configured zones as ((code, label), …) in count order; the 5 defaults when nothing valid is stored."""
     try:
