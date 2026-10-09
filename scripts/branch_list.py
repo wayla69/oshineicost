@@ -4,7 +4,8 @@
 One row per branch, in an Excel or CSV file:
 
     สาขา        the branch name exactly as the system shows it (required)
-    ชื่อผู้ใช้     the login name; blank = generated (branch_<branch id>)
+    ตัวย่อ       the branch abbreviation, a-z 0-9 only (ubon, udon ...); the login becomes wh_<abbreviation>
+    ชื่อผู้ใช้     the login name; blank = wh_<ตัวย่อ> (owner 2026-10-10); only for an exception
     LINE/ผู้รับ   who receives the handout (a LINE group, a person) - optional
 
 `branch_accounts.py` creates the logins from it and writes accounts_result.csv (same columns plus the
@@ -17,24 +18,30 @@ import csv
 import re
 from pathlib import Path
 
-H_BRANCH, H_USER, H_RECIP, H_RESULT = "สาขา", "ชื่อผู้ใช้", "LINE/ผู้รับ", "ผล"
-HEADERS = [H_BRANCH, H_USER, H_RECIP]
+H_BRANCH, H_ABBR, H_USER, H_RECIP, H_RESULT = "สาขา", "ตัวย่อ", "ชื่อผู้ใช้", "LINE/ผู้รับ", "ผล"
+HEADERS = [H_BRANCH, H_ABBR, H_USER, H_RECIP]
 RESULT_HEADERS = HEADERS + [H_RESULT, "หมายเหตุ"]
 USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{2,39}$")
+ABBR_RE = re.compile(r"^[a-z0-9]{2,12}$")
+PREFIX = "wh_"                                   # every branch login is wh_<ตัวย่อ> (owner 2026-10-10)
 
-# the four pilot logins created on 2026-10-07; they keep their names
-PILOT_USERNAMES = {
-    "อุบลราชธานี": "branch_ubon",
-    "อุดรธานี": "branch_udon",
-    "ขอนแก่น": "branch_khonkaen",
-    "ระยอง": "branch_rayong",
+# the four pilot branches and their abbreviations
+PILOT_ABBRS = {
+    "อุบลราชธานี": "ubon",
+    "อุดรธานี": "udon",
+    "ขอนแก่น": "khonkaen",
+    "ระยอง": "rayong",
 }
+PILOT_USERNAMES = {name: PREFIX + abbr for name, abbr in PILOT_ABBRS.items()}
+# the logins created on 2026-10-07 under the old naming; branch_accounts.py --replace-pilot retires them
+LEGACY_PILOT_USERNAMES = {name: "branch_" + abbr for name, abbr in PILOT_ABBRS.items()}
 
 # result labels written by branch_accounts.py (column ผล)
 R_CREATED, R_EXISTS, R_FAILED, R_PLAN = "สร้างแล้ว", "มีอยู่แล้ว", "ไม่สำเร็จ", "จะสร้าง"
 
 _ALIASES = {
     "branch": ("สาขา", "branch", "ชื่อสาขา"),
+    "abbr": ("ตัวย่อ", "ตัวย่อสาขา", "abbr", "abbreviation", "short"),
     "user": ("ชื่อผู้ใช้", "username", "user", "login"),
     "recip": ("line/ผู้รับ", "line", "ผู้รับ", "recipient", "ผู้รับ/line"),
     "result": ("ผล", "result", "status"),
@@ -69,7 +76,7 @@ def _grid(path: Path) -> list:
 
 
 def read_list(path) -> list:
-    """-> [{branch, username, recipient, result, line}] in file order. Raises SystemExit with a plain Thai message."""
+    """-> [{branch, abbr, username, recipient, result, line}] in file order. Raises SystemExit with a plain Thai message."""
     grid = _grid(path)
     head_at, cols = -1, {}
     for i, row in enumerate(grid[:15]):
@@ -94,15 +101,19 @@ def read_list(path) -> list:
         if not branch:
             continue
         user = cell("user")
+        abbr = cell("abbr").lower()
+        if abbr and not ABBR_RE.match(abbr):
+            problems.append(f"แถวที่ {i}: ตัวย่อ “{abbr}” ใช้ได้เฉพาะ a-z 0-9 ยาว 2–12 ตัวอักษร")
         if user and not USER_RE.match(user):
             problems.append(f"แถวที่ {i}: ชื่อผู้ใช้ “{user}” ใช้ได้เฉพาะ a-z 0-9 _ . - ยาว 3–40 ตัวอักษร")
         if branch in seen:
             problems.append(f"แถวที่ {i}: สาขา “{branch}” ซ้ำกับแถวที่ {seen[branch]}")
         seen[branch] = i
-        out.append({"branch": branch, "username": user, "recipient": cell("recip"), "result": cell("result"), "line": i})
-    names = [r["username"] for r in out if r["username"]]
-    for u in {u for u in names if names.count(u) > 1}:
-        problems.append(f"ชื่อผู้ใช้ “{u}” ซ้ำในหลายสาขา")
+        out.append({"branch": branch, "abbr": abbr, "username": user, "recipient": cell("recip"),
+                    "result": cell("result"), "line": i})
+    names = [login_of(r) for r in out if login_of(r)]
+    for u in sorted({u for u in names if names.count(u) > 1}):
+        problems.append(f"ชื่อผู้ใช้ “{u}” ซ้ำในหลายสาขา (ตรวจคอลัมน์ ตัวย่อ และ ชื่อผู้ใช้)")
     if problems:
         raise SystemExit("ไฟล์รายชื่อสาขามีข้อผิดพลาด:\n  " + "\n  ".join(problems))
     if not out:
@@ -110,37 +121,47 @@ def read_list(path) -> list:
     return out
 
 
-def username_for(branch: str, branch_id=None):
-    """The login name for a branch whose list row leaves it blank: the pilot branch keeps its existing name,
-    every other branch gets branch_<branch id>. None when the id is not known (the caller must say so:
-    branch names are Thai, so there is no ASCII name to fall back on, and two scripts guessing differently
-    would hand a branch a login that does not exist)."""
-    if branch in PILOT_USERNAMES:
-        return PILOT_USERNAMES[branch]
+def login_of(row: dict) -> str:
+    """The login a list row names without any database: its own username, else wh_<ตัวย่อ>, else the pilot name; '' if none."""
+    if row.get("username"):
+        return row["username"]
+    abbr = (row.get("abbr") or PILOT_ABBRS.get(row.get("branch"), "")).lower()
+    return PREFIX + abbr if abbr else ""
+
+
+def username_for(branch: str, branch_id=None, abbr: str = ""):
+    """The login name for a branch whose list row leaves it blank: wh_<ตัวย่อ>; the four pilot branches have their
+    abbreviation built in; a branch with no abbreviation gets wh_<branch id>. None when none of these is known
+    (the caller must say so: branch names are Thai, so there is no ASCII name to fall back on, and two scripts
+    guessing differently would hand a branch a login that does not exist)."""
+    abbr = (abbr or PILOT_ABBRS.get(branch, "")).strip().lower()
+    if abbr:
+        return PREFIX + abbr
     if branch_id is not None:
-        return f"branch_{int(branch_id)}"
+        return f"{PREFIX}{int(branch_id)}"
     return None
 
 
 def write_template(path) -> Path:
-    """An example list: the four pilot branches filled in, a note row on top."""
+    """An example list: the four pilot branches with their abbreviations, a note row on top."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     ws = wb.active
     ws.title = "รายชื่อสาขา"
-    ws.append(["กรอกหนึ่งสาขาต่อหนึ่งแถว · ชื่อสาขาต้องตรงกับที่ระบบแสดง · เว้นชื่อผู้ใช้ว่างได้ ระบบจะตั้งเป็น branch_<รหัสสาขา> · "
-               "ช่อง LINE/ผู้รับใช้จดว่าจะส่งข้อความให้ใคร (ไม่บังคับ) · ห้ามใส่รหัสผ่านในไฟล์นี้"])
+    ws.append(["กรอกหนึ่งสาขาต่อหนึ่งแถว · ชื่อสาขาต้องตรงกับที่ระบบแสดง · ตัวย่อใช้ a-z 0-9 ยาว 2–12 ตัวอักษร ระบบตั้งชื่อผู้ใช้เป็น wh_<ตัวย่อ> · "
+               "เว้นชื่อผู้ใช้ว่างไว้ (กรอกเฉพาะกรณีพิเศษ) · ช่อง LINE/ผู้รับใช้จดว่าจะส่งข้อความให้ใคร (ไม่บังคับ) · ห้ามใส่รหัสผ่านในไฟล์นี้"])
     ws["A1"].font = Font(italic=True, color="5F6C80")
     ws.append(HEADERS)
     for c in ws[2]:
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = PatternFill("solid", fgColor="1F3A6B")
-    for name, user in PILOT_USERNAMES.items():
-        ws.append([name, user, ""])
+    for name, abbr in PILOT_ABBRS.items():
+        ws.append([name, abbr, "", ""])
     ws.column_dimensions["A"].width = 26
-    ws.column_dimensions["B"].width = 22
-    ws.column_dimensions["C"].width = 30
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["D"].width = 30
     ws.freeze_panes = "A3"
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -155,5 +176,6 @@ def write_result(path, rows) -> Path:
         w = csv.writer(f)
         w.writerow(RESULT_HEADERS)
         for r in rows:
-            w.writerow([r.get("branch", ""), r.get("username", ""), r.get("recipient", ""), r.get("result", ""), r.get("note", "")])
+            w.writerow([r.get("branch", ""), r.get("abbr", ""), r.get("username", ""), r.get("recipient", ""),
+                        r.get("result", ""), r.get("note", "")])
     return p

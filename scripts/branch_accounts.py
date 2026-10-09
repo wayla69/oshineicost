@@ -6,8 +6,9 @@
     py -3.12 scripts\\branch_accounts.py --list D:\\onboarding\\branches.xlsx --yes            # creates the logins on the live site
     py -3.12 scripts\\branch_accounts.py --list ... --base http://127.0.0.1:8046 --yes         # a local test server
 
-The list is the same file branch_handout.py reads (columns สาขา · ชื่อผู้ใช้ · LINE/ผู้รับ; a blank
-username becomes branch_<branch id>; the four pilot branches keep their existing names).
+The list is the same file branch_handout.py reads (columns สาขา · ตัวย่อ · ชื่อผู้ใช้ · LINE/ผู้รับ). The
+login of a branch is wh_<ตัวย่อ> (a blank ชื่อผู้ใช้ becomes that; a branch with no abbreviation gets
+wh_<branch id>). The four pilot branches (ubon udon khonkaen rayong) have their abbreviations built in.
 
 What it does, per row:
   1. checks the branch name against the system's active branch list (GET /api/branches);
@@ -17,6 +18,13 @@ What it does, per row:
      gives the shared default password and forces a change at first sign-in. The password is not
      read, sent or printed by this script (branch_handout.py puts it on the cards).
 409 from the server counts as "already exists". Writes accounts_result.csv next to the list (only with --yes).
+
+The four pilot logins created on 2026-10-07 are named branch_ubon branch_udon branch_khonkaen branch_rayong.
+With --yes --replace-pilot (and only then):
+  * the pilot branches get a new wh_* login even though they already have the old one;
+  * the old branch_* login is switched off (PUT /api/auth/users/<name> {"active": false}) in a LATER run, once
+    the wh_* login already exists - so create the wh_* logins, send the new handout (branch_handout.py), then run
+    the same command again to retire the old logins. Nothing is ever deleted.
 
 Authentication: user administration is Management's. The script signs in as a management user (the
 account the owner uses in the browser): name from --admin-user / OSHINEI_ADMIN_USER, password from the
@@ -93,28 +101,38 @@ def sign_in(api, user: str, password: str) -> None:
         raise SystemExit(f"บัญชี {user} ยังใช้รหัสผ่านเริ่มต้น กรุณาเข้าสู่ระบบทางเบราว์เซอร์และตั้งรหัสผ่านใหม่ก่อน")
 
 
-def plan_rows(rows: list, branches: dict, users: list) -> list:
-    """Decide each row: -> [{branch, username, recipient, action: create|exists|fail, note}]. Pure, so it is tested without a server."""
+def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = False) -> list:
+    """Decide each row: -> [{branch, abbr, username, recipient, action: create|exists|fail, retire, note}]. Pure, so it is tested
+    without a server. `retire` = the old pilot logins to switch off (only with replace_pilot, only once the new login exists)."""
     by_user = {u["username"]: u for u in users}
+    legacy = set(BL.LEGACY_PILOT_USERNAMES.values())
     by_branch = {}
     for u in users:
         if u.get("role") == "branch" and u.get("active", 1) and u.get("branch"):
+            if replace_pilot and u["username"] in legacy:
+                continue                                  # the old pilot login does not count as "this branch already has one"
             by_branch.setdefault(u["branch"], []).append(u["username"])
     out, taken = [], set()
     for r in rows:
         name = r["branch"]
-        row = {"branch": name, "username": r["username"], "recipient": r.get("recipient", ""), "action": "fail", "note": ""}
+        row = {"branch": name, "abbr": r.get("abbr", ""), "username": r["username"], "recipient": r.get("recipient", ""),
+               "action": "fail", "retire": [], "note": ""}
         out.append(row)
         if name not in branches:
             row["note"] = "ไม่พบสาขานี้ในรายชื่อสาขาที่เปิดใช้งาน ตรวจชื่อให้ตรงกับระบบ"
             continue
         have = by_branch.get(name, [])
-        wanted = r["username"] or BL.username_for(name, branches[name])
+        wanted = r["username"] or BL.username_for(name, branches[name], r.get("abbr", ""))
+        if replace_pilot:
+            row["retire"] = [u["username"] for u in users if u["username"] in legacy and u.get("role") == "branch"
+                             and u.get("branch") == name and u.get("active", 1)]
         if wanted and wanted in by_user:
             if by_user[wanted].get("branch") != name or by_user[wanted].get("role") != "branch":
                 row["username"], row["note"] = wanted, "ชื่อผู้ใช้นี้ถูกใช้กับบัญชีอื่นแล้ว"
                 continue
             row.update(username=wanted, action="exists", note="มีบัญชีนี้อยู่แล้ว")
+            if row["retire"] and not by_user[wanted].get("active", 1):
+                row["retire"] = []                        # the new login is switched off: keep the old one working
             continue
         if have:
             row.update(username=have[0], action="exists", note="สาขานี้มีบัญชีอยู่แล้ว ไม่สร้างบัญชีที่สอง")
@@ -126,12 +144,13 @@ def plan_rows(rows: list, branches: dict, users: list) -> list:
             row["username"], row["note"] = wanted, "ชื่อผู้ใช้ซ้ำกับสาขาอื่นในรายชื่อ"
             continue
         taken.add(wanted)
-        row.update(username=wanted, action="create", note="")
+        row.update(username=wanted, action="create", note="")     # made in this run: the old ones are retired by the next run
     return out
 
 
-def run(api, rows: list, apply: bool) -> list:
-    """Fetch the branch list and the users, decide, and (apply=True) create. -> rows with `result`."""
+def run(api, rows: list, apply: bool, replace_pilot: bool = False) -> list:
+    """Fetch the branch list and the users, decide, and (apply=True) create. With replace_pilot the old pilot
+    branch_* logins are switched off once the wh_* login exists. -> rows with `result`."""
     st, js, text = api.request("GET", "/api/branches")
     if st != 200 or not isinstance(js, list):
         raise SystemExit(f"อ่านรายชื่อสาขาไม่ได้ ({_detail(st, js, text)})")
@@ -139,7 +158,7 @@ def run(api, rows: list, apply: bool) -> list:
     st, js, text = api.request("GET", "/api/auth/users")
     if st != 200 or not isinstance(js, list):
         raise SystemExit(f"อ่านรายชื่อผู้ใช้ไม่ได้ ({_detail(st, js, text)}) ต้องเข้าสู่ระบบด้วยบัญชี Management")
-    plan = plan_rows(rows, branches, js)
+    plan = plan_rows(rows, branches, js, replace_pilot=replace_pilot)
     for p in plan:
         if p["action"] == "fail":
             p["result"] = BL.R_FAILED
@@ -155,6 +174,17 @@ def run(api, rows: list, apply: bool) -> list:
                 p["result"], p["note"] = BL.R_EXISTS, "มีบัญชีนี้อยู่แล้ว"
             else:
                 p["result"], p["note"] = BL.R_FAILED, _detail(st, js, text)
+        if p["retire"]:                                   # only for a wh_* login that already existed before this run
+            if apply and p["result"] == BL.R_EXISTS:
+                done = []
+                for old in p["retire"]:
+                    st, js, text = api.request("PUT", f"/api/auth/users/{old}", {"active": False})
+                    done.append(f"ปิดบัญชี {old} แล้ว" if st == 200 else f"ปิดบัญชี {old} ไม่สำเร็จ ({_detail(st, js, text)})")
+                p["note"] = "; ".join(done)
+            elif not apply:
+                p["note"] = ("จะปิดบัญชีเดิม " if p["action"] == "exists" else "จะปิดบัญชีเดิม (ในการรันครั้งถัดไป) ") + ", ".join(p["retire"])
+            elif p["action"] == "create":
+                p["note"] = "บัญชีเดิม " + ", ".join(p["retire"]) + " ยังใช้งานได้ รันคำสั่งเดิมซ้ำหลังส่งข้อความแจกสาขาเพื่อปิดบัญชีเดิม"
     return plan
 
 
@@ -189,12 +219,17 @@ def main(argv=None) -> int:
     ap.add_argument("--base", default=DEFAULT_BASE, help=f"ที่อยู่ระบบ (ค่าเริ่มต้น {DEFAULT_BASE})")
     ap.add_argument("--yes", action="store_true", help="สร้างบัญชีจริง (ไม่ระบุ = แสดงแผนเท่านั้น)")
     ap.add_argument("--dry-run", action="store_true", help="แสดงแผนโดยไม่สร้างบัญชี (ค่าเริ่มต้น)")
+    ap.add_argument("--replace-pilot", action="store_true",
+                    help="สาขานำร่อง 4 แห่งได้บัญชี wh_* ใหม่ และบัญชี branch_* เดิมถูกปิดในการรันครั้งถัดไป (ใช้ร่วมกับ --yes เท่านั้น)")
     ap.add_argument("--admin-user", default=os.environ.get("OSHINEI_ADMIN_USER", "management1"),
                     help="บัญชี Management ที่ใช้เข้าสู่ระบบ (หรือ OSHINEI_ADMIN_USER)")
     ap.add_argument("--token-env", default="OSHINEI_SEED_TOKEN", help="ชื่อตัวแปรที่เก็บ write token")
     a = ap.parse_args(argv)
     if a.yes and a.dry_run:
         print("ใช้ --yes และ --dry-run พร้อมกันไม่ได้", file=sys.stderr)
+        return 2
+    if a.replace_pilot and not a.yes:
+        print("--replace-pilot ใช้ได้เฉพาะพร้อม --yes (ถ้าไม่ระบุ --yes ได้เพียงแผน)", file=sys.stderr)
         return 2
     try:
         rows = BL.read_list(a.list)
@@ -210,7 +245,7 @@ def main(argv=None) -> int:
             pw = getpass.getpass(f"รหัสผ่านของ {a.admin_user}: ")
     try:
         sign_in(api, a.admin_user, pw)
-        plan = run(api, rows, apply=a.yes)
+        plan = run(api, rows, apply=a.yes, replace_pilot=a.replace_pilot)
     except SystemExit as e:
         print(e, file=sys.stderr)
         return 2
