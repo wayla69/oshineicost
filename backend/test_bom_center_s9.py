@@ -69,17 +69,18 @@ def test_queue_and_process(con):  # noqa: F811
     assert next(l for l in OR.detail(con, oid)["lines"] if l["code"] == "13-01-009")["processed_units"] == q
 
 
-def test_consolidated_per_supplier_and_delivery(con):  # noqa: F811
-    con.execute("UPDATE bc_ingredient SET supplier='บจ.ปูอัดไทย' WHERE code='13-01-009'")
+def test_consolidated_per_delivery(con):  # noqa: F811
+    con.execute("UPDATE bc_ingredient SET supplier='บจ.ปูอัดไทย' WHERE code='13-01-009'")   # the column stays, nothing reads it
     oid, _, q = _submitted(con)
     c = HB.consolidated(con, [oid])
     g = c["groups"][0]
-    assert (g["supplier"], g["delivery"]) == ("บจ.ปูอัดไทย", "2026-10-07")
+    assert g["delivery"] == "2026-10-07" and "supplier" not in g and len(c["groups"]) == 1
+    assert c["supplier"] == "บริษัท ไดกิโตะ กรุ๊ป จำกัด"
     it = g["items"][0]
     bname = con.execute("SELECT name FROM branches WHERE branch_id=1").fetchone()[0]
     assert it["code"] == "13-01-009" and it["total"] == q and it["by_branch"] == {bname: q}
     assert c["branches"] == [bname]
-    assert HB.consolidated(con, []) == {"groups": [], "branches": []}
+    assert HB.consolidated(con, []) == {"supplier": "บริษัท ไดกิโตะ กรุ๊ป จำกัด", "groups": [], "branches": []}
 
 
 def test_sla_in_bangkok_time():

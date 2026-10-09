@@ -210,7 +210,7 @@ def test_import_datap_layout_overwrites_and_prices_reference(con):
             {"code": "V-007", "name": "หัวไชเท้า", "base_unit": "กรัม", "loss_pct": 160}]
     st = M.import_rows(con, rows, "t")
     r = con.execute("SELECT loss_pct, supplier, name_th FROM bc_ingredient WHERE code='02-01-001'").fetchone()
-    assert r == (40.0, "01_DAIKI FOOD", "ปลาแซลมอนเทร้านอร์เวย์")
+    assert r == (40.0, None, "ปลาแซลมอนเทร้านอร์เวย์")        # PR-K: the supplier column of an old sheet is accepted and ignored
     assert P.price_for(con, "02-01-001", "2026-07")[0] == pytest.approx(0.37145)
     assert len(st["skipped"]) == 2                                           # #N/A and loss 160 %
     assert con.execute("SELECT loss_pct FROM bc_ingredient WHERE code='S-099'").fetchone()[0] == 0

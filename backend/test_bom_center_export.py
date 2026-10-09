@@ -52,7 +52,11 @@ def test_status_split_and_filename(client):
     try:
         q = "date_from=2026-09-01&date_to=2026-10-31"
         d = client.get(f"/api/bom-center/hub/consolidated?{q}").json()              # default: open
-        assert d["status"] == "open" and {g["supplier"] for g in d["groups"]} == {"ผู้จำหน่าย ก", "ผู้จำหน่าย ข"}
+        # PR-K: one company supplies every central item, so the old per-item supplier values change nothing:
+        # one group per delivery day, no supplier key on a group, the company named once on the payload
+        assert d["status"] == "open" and len(d["groups"]) == 1 and all("supplier" not in g for g in d["groups"])
+        assert d["supplier"] == "บริษัท ไดกิโตะ กรุ๊ป จำกัด"
+        assert {it["code"] for it in d["groups"][0]["items"]} == {"X-1", "X-2"}
         assert sum(it["total"] for g in d["groups"] for it in g["items"] if it["code"] == "X-1") == 3
         d = client.get(f"/api/bom-center/hub/consolidated?{q}&status=received").json()
         assert d["status_th"] == "สาขารับแล้ว"
@@ -62,13 +66,14 @@ def test_status_split_and_filename(client):
         assert r.status_code == 200
         assert "bom_center_orders_submitted_2026-09-01_2026-10-31.xlsx" in r.headers["content-disposition"]
         wb = load_workbook(io.BytesIO(r.content), read_only=True)
-        assert wb.sheetnames == ["รวมตามผู้จำหน่าย", "ต่อสาขา", "ผู้จำหน่าย ก", "ผู้จำหน่าย ข"]
-        summary = {(row[1], row[2]): row[5] for row in wb["รวมตามผู้จำหน่าย"].iter_rows(min_row=3, values_only=True) if row[2]}
-        assert summary[("ผู้จำหน่าย ก", "X-1")] == 3 and summary[("ผู้จำหน่าย ข", "X-2")] == 2
-        per = {row[1]: row[4] for row in wb["ผู้จำหน่าย ก"].iter_rows(min_row=3, values_only=True) if row[1]}
-        assert per == {"X-1": 3}                                                     # the supplier's page matches
+        assert wb.sheetnames == ["รวมตามวันส่ง", "ต่อสาขา"]                         # split=true is accepted and ignored
+        rows = list(wb["รวมตามวันส่ง"].iter_rows(values_only=True))
+        assert "บริษัท ไดกิโตะ กรุ๊ป จำกัด" in rows[0][0]                          # the note row names the company
+        assert list(rows[1])[:5] == ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] and "ผู้จำหน่าย" not in rows[1]
+        summary = {row[1]: row[4] for row in rows[2:] if row[1]}
+        assert summary == {"X-1": 3, "X-2": 2}
         r = client.get(f"/api/bom-center/hub/consolidated.xlsx?{q}")
-        assert load_workbook(io.BytesIO(r.content), read_only=True).sheetnames == ["รวมตามผู้จำหน่าย", "ต่อสาขา"]
+        assert load_workbook(io.BytesIO(r.content), read_only=True).sheetnames == ["รวมตามวันส่ง", "ต่อสาขา"]
         assert "bom_center_orders_open_" in r.headers["content-disposition"]
     finally:
         _restore(main.DB_PATH, snap)

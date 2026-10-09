@@ -22,7 +22,7 @@ recipes with is the accounting system's actual purchase average (§10-1).
 import re
 from datetime import datetime, timezone
 
-from .units import norm
+from .units import Converter, norm
 
 SEED = "seed"
 
@@ -72,7 +72,7 @@ def _num(v):
         return None
 
 
-_FIELDS = ("name_th", "name_en", "family", "kind", "category", "supplier", "base_unit", "recv_unit",
+_FIELDS = ("name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
            "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored",
            "sourcing_default", "active", "note")
 
@@ -181,12 +181,13 @@ IMPORT_ALIASES = {
     "code":       ("itemcode(acc)", "itemcodeacc", "รหัส", "รหัสวัตถุดิบ", "รหัสสินค้า", "code"),
     "name":       ("productdetails", "ชื่อวัตถุดิบ", "ชื่อสินค้า", "รายละเอียด", "name", "name_th"),
     "category":   ("category", "หมวด", "หมวดหมู่"),
-    "supplier":   ("tradingcompany", "supplier", "ผู้ขาย", "ซัพพลายเออร์"),
     "base_unit":  ("unitreceived", "หน่วยฐาน", "หน่วยนับ", "base_unit", "baseunit"),
     "recv_unit":  ("หน่วยรับ", "หน่วยสั่ง", "recv_unit", "recvunit", "orderunit"),
     "qty_per_recv": ("fullquantity", "ขนาดบรรจุ", "ปริมาณต่อหน่วยรับ", "qty_per_recv", "qtyperrecv"),
     "full_price": ("fullprice", "ราคาต่อหน่วยรับ", "ราคาเต็ม", "price_per_recv"),
     "loss_pct":   ("loss(%)", "loss%", "loss", "สูญเสีย%", "สูญเสีย(%)", "loss_pct"),
+    "zone":       ("โซนจัดเก็บ", "โซน", "storage_zone", "zone"),
+    "count_unit": ("หน่วยที่นับ", "count_unit", "countunit"),
     "kind":       ("ชนิด", "kind"),
     "monitored":  ("บังคับสั่ง", "monitored"),
     "sourcing":   ("ช่องทางสั่ง", "sourcing", "sourcing_default"),
@@ -214,9 +215,53 @@ def _month_of(v):
     return None
 
 
+def _apply_layout(con, code: str, r: dict, who: str, pending: list, clear: bool) -> bool:
+    """PR-K: where an item is kept (storage_zone, given as a zone code or its label) and the unit a branch counts
+    it in (count_unit). A key absent from `r` is left alone; an empty value clears it only when `clear` (the screen),
+    never from a sheet cell left blank. The count unit is checked once the whole batch is written (`pending`)."""
+    from .stock import zone_code_for
+    sets, vals, new = [], [], {}
+    if r.get("zone") is not None or r.get("storage_zone") is not None:
+        raw = r.get("zone") if r.get("zone") is not None else r.get("storage_zone")
+        z = zone_code_for(con, raw) if str(raw or "").strip() else ""
+        if z or clear:
+            sets.append("storage_zone=?")
+            vals.append(z or None)
+            new["zone"] = z or None
+    raw = r.get("count_unit")
+    if raw is not None:
+        cu = str(raw).strip()
+        if cu or clear:
+            sets.append("count_unit=?")
+            vals.append(cu or None)
+            new["count_unit"] = cu or None
+            if cu:
+                pending.append((code, cu))
+    if not sets:
+        return False
+    old = con.execute("SELECT storage_zone, count_unit FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+    cur = {"zone": old[0], "count_unit": old[1]} if old else {}
+    if all(cur.get(k) == v for k, v in new.items()):
+        return False
+    con.execute(f"UPDATE bc_ingredient SET {', '.join(sets)}, updated_at=?, updated_by=? WHERE code=?",
+                vals + [now(), who, code])
+    audit(con, who, "stock_layout", "bc_ingredient", code, old and {"zone": old[0], "count_unit": old[1]}, new)
+    return True
+
+
+def _check_count_units(con, pending: list) -> list:
+    """-> [(code, unit)] whose count unit cannot be put into the base unit (after the batch is written)."""
+    if not pending:
+        return []
+    conv = Converter(con)
+    return [(c, u) for c, u in pending if conv.factor(c, u)[0] is None]
+
+
 def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
     """Apply parsed sheet rows (dicts keyed by IMPORT_ALIASES). Caller commits."""
     stats = {"inserted": 0, "updated": 0, "unchanged": 0, "ref_prices": 0, "skipped": []}
+    pending, undo = [], {}
+    before = {c: (z, u) for c, z, u in con.execute("SELECT code, storage_zone, count_unit FROM bc_ingredient")}
     if not default_month:
         # a quote sheet dates most rows (DATAP: 23-07-2569); the rows it leaves undated belong
         # to the same quote — without this they silently lost their price (18 of 317 in DATAP)
@@ -229,7 +274,7 @@ def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
             stats["skipped"].append({"row": i + 1, "why": "ไม่มีรหัส"})
             continue
         vals = {"name_th": (str(r["name"]).strip() if r.get("name") else None),
-                "category": r.get("category") or None, "supplier": r.get("supplier") or None,
+                "category": r.get("category") or None,
                 "base_unit": norm(r.get("base_unit")) or None, "recv_unit": r.get("recv_unit") or None,
                 "qty_per_recv": _num(r.get("qty_per_recv")), "loss_pct": _num(r.get("loss_pct")),
                 "lead_days": _num(r.get("lead_days")), "shelf_days": _num(r.get("shelf_days")),
@@ -246,17 +291,31 @@ def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
         if vals["loss_pct"] is not None and not (0 <= vals["loss_pct"] < 100):
             stats["skipped"].append({"row": i + 1, "code": code, "why": "LOSS % ต้องอยู่ระหว่าง 0–99"})
             continue
+        try:
+            if str(r.get("zone") or "").strip():
+                from .stock import zone_code_for
+                zone_code_for(con, r["zone"])              # an unknown zone skips the row, nothing of it is written
+        except ValueError as e:
+            stats["skipped"].append({"row": i + 1, "code": code, "why": str(e)})
+            continue
         _upsert(con, code, vals, who, True, stats)
+        undo.setdefault(code, before.get(code))
+        _apply_layout(con, code, r, who, pending, False)
         price, per = _num(r.get("full_price")), vals["qty_per_recv"]
         month = _month_of(r.get("date")) or default_month
         if price and per:
             _set_ref_price(con, code, month, price / per, "ราคาตามใบเสนอ (นำเข้าทะเบียน)", who, stats)
+    for c, u in _check_count_units(con, pending):          # a count unit that cannot be converted: keep the old one
+        z0, u0 = undo.get(c) or (None, None)
+        con.execute("UPDATE bc_ingredient SET count_unit=? WHERE code=?", (u0, c))
+        stats["skipped"].append({"code": c, "why": f"หน่วยที่นับ “{u}” แปลงเป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน"})
     return stats
 
 
 def update_rows(con, rows: list, who: str) -> dict:
     """Edits from the screen: [{code, field: value, …}]. Caller commits."""
     stats = {"inserted": 0, "updated": 0, "unchanged": 0}
+    pending = []
     for r in rows:
         code = str(r.get("code") or "").strip()
         if not code:
@@ -272,6 +331,10 @@ def update_rows(con, rows: list, who: str) -> dict:
         if vals.get("qty_per_recv") is not None and vals["qty_per_recv"] <= 0:
             raise ValueError(f"{code}: ขนาดบรรจุต้องมากกว่า 0")
         _upsert(con, code, vals, who, True, stats)
+        _apply_layout(con, code, r, who, pending, True)
+    bad = _check_count_units(con, pending)
+    if bad:
+        raise ValueError("; ".join(f"{c}: ยังแปลง {u} เป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน" for c, u in bad[:3]))
     return stats
 
 

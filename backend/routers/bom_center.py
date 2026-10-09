@@ -213,9 +213,9 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
             aliases.setdefault(c, []).append({"alias": a, "system": s})
         used = dict(con.execute("SELECT ingredient_code, COUNT(DISTINCT sku_id) FROM bom_ingredients"
                                 " GROUP BY ingredient_code"))
-        cols = ["code", "name_th", "name_en", "family", "kind", "category", "supplier", "base_unit", "recv_unit",
+        cols = ["code", "name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
                 "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored", "sourcing_default",
-                "active", "note", "updated_at", "updated_by"]
+                "active", "note", "storage_zone", "count_unit", "updated_at", "updated_by"]
         rows = [dict(zip(cols, r)) for r in con.execute(f"SELECT {', '.join(cols)} FROM bc_ingredient ORDER BY code")]
     ql = (q or "").strip().lower()
     out = []
@@ -254,7 +254,6 @@ class IngredientEdit(BaseModel):
     name_en: Optional[str] = None
     kind: Optional[str] = None
     category: Optional[str] = None
-    supplier: Optional[str] = None
     base_unit: Optional[str] = None
     recv_unit: Optional[str] = None
     qty_per_recv: Optional[float] = None
@@ -266,6 +265,8 @@ class IngredientEdit(BaseModel):
     sourcing_default: Optional[str] = None
     active: Optional[int] = None
     note: Optional[str] = None
+    storage_zone: Optional[str] = None       # a zone code (or its label); "" = back to the automatic guess
+    count_unit: Optional[str] = None         # the unit a branch counts in; "" = the pack / base unit
 
 
 @router.post("/api/bom-center/ingredients", dependencies=[Depends(require_write_token)])
@@ -323,23 +324,28 @@ def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
 def bc_ingredients_template():
     """The whole master as a sheet: edit in Excel, import back (a row you delete is left alone)."""
     from openpyxl import Workbook
-    heads = ["รหัส", "ชื่อวัตถุดิบ", "ชนิด", "หมวด", "ผู้ขาย", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ",
-             "สูญเสีย (%)", "ขั้นต่ำ", "Lead time", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง"]
+    heads = ["รหัส", "ชื่อวัตถุดิบ", "ชนิด", "หมวด", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ",
+             "สูญเสีย (%)", "ขั้นต่ำ", "Lead time", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง", "โซนจัดเก็บ", "หน่วยที่นับ"]
     kind_th = {"raw": "ดิบ", "prepared": "กึ่งสำเร็จ", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น0"}
     wb = Workbook()
-    _sheet(wb.active, "ทะเบียนวัตถุดิบ", heads,
-           "ห้ามแก้ไขคอลัมน์รหัส · ขนาดบรรจุ = จำนวนหน่วยฐานต่อ 1 หน่วยรับ (เช่น แซลมอน 1 กก. = 1000 กรัม) · "
-           "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น0 · ช่องทางสั่ง: ส่วนกลาง / สาขาซื้อเอง")
     ws = wb.active
     with get_db() as con:
         _ensure(con)
-        for r in con.execute("SELECT code, name_th, kind, category, supplier, base_unit, recv_unit, qty_per_recv,"
-                             " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default"
+        zl = _st.zone_labels(con)
+        _sheet(ws, "ทะเบียนวัตถุดิบ", heads,
+               "ห้ามแก้ไขคอลัมน์รหัส · ขนาดบรรจุ = จำนวนหน่วยฐานต่อ 1 หน่วยรับ (เช่น แซลมอน 1 กก. = 1000 กรัม) · "
+               "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น0 · ช่องทางสั่ง: ส่วนกลาง / สาขาซื้อเอง · "
+               "โซนจัดเก็บ: " + " / ".join(zl.values()) + " (เว้นว่างได้ ระบบจะเดาให้) · "
+               "หน่วยที่นับ = หน่วยที่สาขาใช้นับสต๊อก (เว้นว่างได้ ระบบใช้หน่วยรับหรือหน่วยฐาน) · "
+               "สินค้าส่วนกลางทุกรายการสั่งจาก " + _ce.CENTRAL_SUPPLIER)
+        for r in con.execute("SELECT code, name_th, kind, category, base_unit, recv_unit, qty_per_recv,"
+                             " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default, storage_zone, count_unit"
                              " FROM bc_ingredient WHERE active=1 ORDER BY code"):
             r = list(r)
             r[2] = kind_th.get(r[2], r[2])
-            r[12] = "ใช่" if r[12] else ""
-            r[13] = "สาขาซื้อเอง" if r[13] == "local" else "ส่วนกลาง"
+            r[11] = "ใช่" if r[11] else ""
+            r[12] = "สาขาซื้อเอง" if r[12] == "local" else "ส่วนกลาง"
+            r[13] = zl.get(r[13], r[13] or "")
             ws.append(r)
     return _xlsx(wb, f"BOM_CENTER_INGREDIENTS_{date.today().isoformat()}.xlsx")
 
@@ -1691,7 +1697,7 @@ def bc_stock_me(request: Request):
         if scoped:
             branches = [b for b in branches if b["name"] == scoped]
         return {"scoped": bool(scoped), "branch": scoped, "branches": branches,
-                "zones": [{"zone": z, "label": t} for z, t in _st.ZONES]}
+                "zones": [{"zone": z, "label": t} for z, t in _st.zones(con)]}
 
 
 @router.get("/api/bom-center/stock/sheet")
@@ -1757,6 +1763,37 @@ def bc_stock_count_detail(count_id: int, request: Request):
             raise HTTPException(404, str(e))
         _stock_branch(con, request, d["branch_id"])      # a branch login reads only its own counts
         return d
+
+
+# PR-K: the storage zones (โซนจัดเก็บ) — the centre adds, renames, deletes and reorders them
+class ZoneRow(BaseModel):
+    code: Optional[str] = None          # stable; blank on a new zone (the system makes one)
+    label: str
+
+
+def _zones_payload(con) -> dict:
+    use = _st.zone_usage(con)
+    return {"zones": [{"code": z, "label": t, "items": use.get(z, 0), "fallback": z == _st.FALLBACK_ZONE}
+                      for z, t in _st.zones(con)],
+            "defaults": [{"code": z, "label": t} for z, t in _st.DEFAULT_ZONES]}
+
+
+@router.get("/api/bom-center/zones")
+def bc_zones():
+    with get_db() as con:
+        _ensure(con)
+        return _zones_payload(con)
+
+
+@router.post("/api/bom-center/zones", dependencies=[Depends(require_write_token)])
+def bc_zones_save(rows: List[ZoneRow], request: Request):
+    """Replace the zone list in the order given. A zone that still holds ingredients cannot be deleted."""
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _st.set_zones(con, [r.dict() for r in rows], _who(request)))
+        out = _zones_payload(con)
+    invalidate_cache("bc_")
+    return {"ok": True, **out}
 
 
 class LayoutRow(BaseModel):
@@ -2060,7 +2097,7 @@ def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional
 
 # ── ใบสรุปตัดเบิก: the period's actual usage, downloaded by Accounting and ticked as posted ──
 ISSUE_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "คงเหลือ (ปลายงวด)",
-                 "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา", "ผู้จำหน่าย"]
+                 "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา"]
 ISSUE_ALL_HEADERS = ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ", "มูลค่าตัดเบิก",
                      "ไม่มีราคา", "สถานะบัญชี"]
 
@@ -2087,7 +2124,7 @@ def _issue_sheet(ws, title: str, s: dict) -> None:
     _sheet(ws, title, ISSUE_HEADERS, _issue_note(s))
     for ln in s["lines"]:
         ws.append([ln["code"], ln["name"], ln["base_unit"], ln["begin"], ln["received"], ln["claims"], ln["end"],
-                   ln["used"], ln["unit_price"], ln["value"], ln["price_source"], ln["supplier"]])
+                   ln["used"], ln["unit_price"], ln["value"], ln["price_source"]])
         if ln["note"]:
             ws.cell(row=ws.max_row, column=8).comment = Comment(ln["note"], "ระบบ")
     ws.append(["", "รวม", "", "", "", "", "", "", "", s["totals"]["used_value"]])
@@ -2100,7 +2137,6 @@ def _issue_sheet(ws, title: str, s: dict) -> None:
         row[9].number_format = "#,##0.00"
     ws.column_dimensions["B"].width = 44
     ws.column_dimensions["K"].width = 24
-    ws.column_dimensions["L"].width = 24
     ws.freeze_panes = "A3"
 
 
@@ -2792,7 +2828,7 @@ def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: O
 def _sheet_title(name: str, used: set) -> str:
     """An Excel sheet title: 31 characters, none of the characters Excel forbids (colon,
     slashes, question mark, asterisk, brackets), unique in the workbook."""
-    t = re.sub(r"[:\\/?*\[\]]", " ", str(name or "ไม่ระบุผู้จำหน่าย")).strip()[:31] or "ผู้จำหน่าย"
+    t = re.sub(r"[:\\/?*\[\]]", " ", str(name or "แผ่นงาน")).strip()[:31] or "แผ่นงาน"
     base, n = t, 2
     while t in used:
         suf = f" ({n})"
@@ -2879,9 +2915,10 @@ def bc_hub_consolidated(ids: Optional[str] = Query(None), date_from: Optional[st
 @router.get("/api/bom-center/hub/consolidated.xlsx")
 def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
                              date_to: Optional[str] = Query(None), status: Optional[str] = Query(None),
-                             split: bool = Query(False)):
-    """The consolidated workbook for the orders of `status` (default open); split=true adds one
-    sheet per supplier after the two standard sheets, so a supplier gets its own page."""
+                             split: Optional[str] = Query(None)):
+    """The consolidated workbook for the orders of `status` (default open): the total per delivery day and the
+    lines per branch. Every central item comes from one company, so the note row names it. `split` is accepted
+    and ignored (old links and bookmarks still carry it)."""
     from openpyxl import Workbook
     st = _hub_status_or_400(status)
     with get_db() as con:
@@ -2904,30 +2941,19 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     wb = Workbook()
     ws = wb.active
     br = c["branches"]
-    _sheet(ws, "รวมตามผู้จำหน่าย", ["วันส่ง", "ผู้จำหน่าย", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
-           f"ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”" + (f" วันตัดรอบ {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
-           + " สรุปรวมตามผู้จำหน่าย × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
+    _sheet(ws, "รวมตามวันส่ง", ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
+           f"สินค้าส่วนกลางสั่งจาก {c['supplier']} · ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”"
+           + (f" วันตัดรอบ {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
+           + " สรุปรวมตามวันส่ง (ใช้ยอดที่คลังระบุว่าส่งจริง หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:
-            ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
+            ws.append([g["delivery"], it["code"], it["name"], it["unit"], it["total"]] +
                       [it["by_branch"].get(b) for b in br])
     ws2 = wb.create_sheet()
     _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
-    if split:                                   # one page per supplier, its items by delivery day
-        by_sup = {}
-        for g in c["groups"]:
-            by_sup.setdefault(g["supplier"], []).append(g)
-        used = {ws.title, ws2.title}
-        for sup, gs in sorted(by_sup.items()):
-            w = wb.create_sheet()
-            _sheet(w, _sheet_title(sup, used), ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
-                   f"ผู้จำหน่าย {sup} · ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”")
-            for g in gs:
-                for it in g["items"]:
-                    w.append([g["delivery"], it["code"], it["name"], it["unit"], it["total"]] + [it["by_branch"].get(b) for b in br])
     return _xlsx(wb, f"bom_center_orders_{st}_{date_from or 'all'}_{date_to or 'all'}.xlsx")
 
 
