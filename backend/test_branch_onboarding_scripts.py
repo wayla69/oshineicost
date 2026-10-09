@@ -207,6 +207,17 @@ def test_summary_table_and_result_file(tmp_path, capsys):
     assert [r["result"] for r in BL.read_list(out)] == [BL.R_CREATED, BL.R_FAILED]       # the handout can read it back
 
 
+def test_a_rerun_keeps_the_created_mark_so_the_handout_still_covers_them(tmp_path):
+    dest = tmp_path / "accounts_result.csv"
+    BL.write_result(dest, [{"branch": "ชลบุรี", "username": "branch_1", "result": BL.R_CREATED},
+                           {"branch": "ระยอง", "username": "branch_rayong", "result": BL.R_EXISTS}])
+    plan = [{"branch": "ชลบุรี", "username": "branch_1", "result": BL.R_EXISTS, "note": ""},
+            {"branch": "ระยอง", "username": "branch_rayong", "result": BL.R_EXISTS, "note": ""},
+            {"branch": "พัทยา", "username": "branch_12", "result": BL.R_EXISTS, "note": ""}]
+    AC.keep_created(plan, dest)
+    assert [p["result"] for p in plan] == [BL.R_CREATED, BL.R_EXISTS, BL.R_EXISTS]
+
+
 def test_yes_and_dry_run_together_are_refused(tmp_path):
     p = BL.write_template(tmp_path / "l.xlsx")
     assert AC.main(["--list", str(p), "--yes", "--dry-run"]) == 2

@@ -158,6 +158,21 @@ def run(api, rows: list, apply: bool) -> list:
     return plan
 
 
+def keep_created(plan: list, dest: Path) -> None:
+    """A re-run finds the logins it made earlier and reports them 'already exists'. The earlier result file
+    remembers which ones this script created (and so still carry the default password): keep that mark,
+    otherwise the handout would skip them."""
+    if not dest.exists():
+        return
+    try:
+        before = {(r["branch"], r["username"]) for r in BL.read_list(dest) if r["result"] == BL.R_CREATED}
+    except SystemExit:
+        return
+    for p in plan:
+        if p["result"] == BL.R_EXISTS and (p["branch"], p["username"]) in before:
+            p["result"], p["note"] = BL.R_CREATED, "สร้างไว้ในการรันก่อนหน้า"
+
+
 def print_table(plan: list) -> None:
     w = max([len(p["branch"]) for p in plan] + [6])
     print(f"{'สาขา':<{w}}  {'ชื่อผู้ใช้':<22}  ผล")
@@ -199,9 +214,12 @@ def main(argv=None) -> int:
     except SystemExit as e:
         print(e, file=sys.stderr)
         return 2
+    dest = Path(a.list).with_name("accounts_result.csv")
+    if a.yes:
+        keep_created(plan, dest)
     print_table(plan)
     if a.yes:
-        out = BL.write_result(Path(a.list).with_name("accounts_result.csv"), plan)
+        out = BL.write_result(dest, plan)
         print(f"เขียนผลลัพธ์ที่ {out}")
         print("ขั้นต่อไป: py -3.12 scripts\\branch_handout.py --list " + f'"{out}"')
     else:

@@ -1676,7 +1676,7 @@ async function bmcCalBulkPick(input) {
       : `${esc(c.now_th)}`;
     const errs = d.errors.length
       ? `<div class="text-xs mb-2" style="color:var(--bad-ink)"><b>พบ ${d.errors.length} รายการที่ไม่ถูกต้อง</b> (แก้ไขไฟล์แล้วเลือกใหม่ จึงจะบันทึกได้)<ul class="list-disc pl-5">${
-          d.errors.slice(0, 50).map(e => `<li>แถวที่ ${e.line} · ${esc(e.branch)} — ${esc(e.why)}</li>`).join('')}</ul></div>` : '';
+          d.errors.slice(0, 50).map(e => `<li>รายการที่ ${e.line} · ${esc(e.branch)} — ${esc(e.why)}</li>`).join('')}</ul></div>` : '';
     const rows = d.rows.filter(r => r.change);
     box.innerHTML = `${errs}<div class="text-xs mb-2" style="color:var(--text-secondary)">ไฟล์มี ${d.branches} สาขา · เปลี่ยน <b>${d.changed_branches}</b> สาขา (${d.changed_rounds} รอบ) · ที่เหลือเหมือนเดิม</div>
       ${rows.length ? `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
