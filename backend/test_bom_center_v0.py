@@ -63,7 +63,8 @@ def test_bc_prefix_is_preserved_and_bcd_is_not():
     assert "bc" in core._PRESERVED_PREFIXES
     pred = core._preserved_pred("name")
     con = sqlite3.connect(":memory:")
-    names = ("bc_release", "bc_order_line", "bcd_cost_cache", "bcd_demand_day", "bcx", "bc", "recon_x", "bom_ingredients")
+    names = ("bc_release", "bc_order_line", "bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta", "bcx", "bc", "recon_x",
+             "bom_ingredients")
     union = " UNION ALL ".join(f"SELECT '{n}' AS name" for n in names)
     kept = {r[0] for r in con.execute(f"SELECT name FROM ({union}) WHERE {pred}")}
     assert kept == {"bc_release", "bc_order_line", "recon_x"}

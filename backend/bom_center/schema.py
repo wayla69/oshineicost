@@ -194,6 +194,12 @@ DDL = (
          qty_base REAL NOT NULL, release_id INTEGER,
          PRIMARY KEY (branch_id, day, ingredient_code))""",
     "CREATE INDEX IF NOT EXISTS ix_bcd_demand_day_day ON bcd_demand_day(day)",
+    # PR-J3: what the cache above was built from (release + a fingerprint of that day's sales), so a day is
+    # rebuilt only when the release in force or the sales of that day changed (issue_reports.bom_days)
+    """CREATE TABLE IF NOT EXISTS bcd_demand_day_meta(
+         branch_id INTEGER NOT NULL, day TEXT NOT NULL, release_id INTEGER,
+         sales_rows INTEGER, sales_qty REAL, built_at TEXT,
+         PRIMARY KEY (branch_id, day))""",
 )
 
 # Columns added after a table first shipped: ensure() adds whichever are missing,
@@ -301,7 +307,7 @@ OWNED_TABLES = (
     "bc_price_submission",        # the monthly price file Sales Support sends to the analyst (price_submissions.py)
     "bc_issue_slip", "bc_issue_line", "bc_issue_log",   # ใบตัดเบิก: the branch's daily issue slip + its log (issues.py)
 )
-DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
+DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES
 
 

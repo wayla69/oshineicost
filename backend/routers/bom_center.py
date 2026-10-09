@@ -26,6 +26,7 @@ from bom_center import claims as _cl
 from bom_center import codes as _cr
 from bom_center import hub as _hub
 from bom_center import issues as _is
+from bom_center import issue_reports as _ir
 from bom_center.clock import today as bkk_today
 from bom_center import master as _m
 from bom_center import orders as _or
@@ -170,6 +171,7 @@ def bc_code_review_decide(body: CodeDecision, request: Request):
                                                      body.names))
     invalidate_cache()               # the order plan reads the decision
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return out
 
 
@@ -288,6 +290,7 @@ def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
             raise
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, **stats}
 
 
@@ -312,6 +315,7 @@ def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
     if not dry_run:
         invalidate_cache("bc_")
         _fc.clear_usage_cache()           # the order plan's usage model reads this
+        _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": dry_run, "before": before, "after": after, **stats}
 
 
@@ -407,6 +411,7 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
     if not dry_run:
         invalidate_cache("bc_")
         _fc.clear_usage_cache()           # the order plan's usage model reads this
+        _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": dry_run, "sheet": sheet, "columns": cols, "rows": len(rows),
             **{k: v for k, v in stats.items() if k != "skipped"}, "skipped": stats["skipped"][:200]}
 
@@ -432,6 +437,7 @@ def bc_units_save(rules: List[UnitRule], request: Request):
         con.commit()
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, "rules": len(rules)}
 
 
@@ -919,6 +925,14 @@ def _write(con, fn):
         raise
 
 
+def _drop_bom_days() -> None:
+    """A recipe-side input changed (release, recipes, sub-recipes, code links, units ...): the issue reports'
+    cached BoM days (bcd_demand_day) are rebuilt on their next read. Next to every forecast.clear_usage_cache()."""
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _ir.drop_bom_days(con))
+
+
 @router.put("/api/bom-center/recipes/{sku_code}", dependencies=[Depends(require_write_token)])
 def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, release_id: int = Query(...)):
     mods = _modules(request)
@@ -929,6 +943,7 @@ def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, rel
         out = _r.cost_recipe(con, release_id, sku_code)
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, "total": out["total"], "problems": out["problems"]}
 
 
@@ -979,6 +994,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
     if not dry_run:
         invalidate_cache("bc_")
         _fc.clear_usage_cache()           # the order plan's usage model reads this
+        _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": dry_run, "release_id": None if dry_run else rid, "label": lbl, "effective_month": eff,
             "price_month": pm, "sheets": parsed["sheets"], "skipped": parsed["skipped"], **stats,
             "costed": len(view["rows"]), "with_problems": view["problems"], "sheet_mismatch": view["sheet_mismatch"],
@@ -1001,6 +1017,7 @@ def bc_recipes_map(body: MapBody, request: Request):
                                                     _who(request), modules=mods))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, **out}
 
 
@@ -1026,6 +1043,7 @@ async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...),
     if not dry_run:
         invalidate_cache("bc_")
         _fc.clear_usage_cache()           # the order plan's usage model reads this
+        _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": dry_run, **out}
 
 
@@ -1127,6 +1145,7 @@ def bc_release_do(request: Request, release_id: int = Query(...), body: Optional
                                                   backdate_reason=(body.backdate_reason if body else None)))
     invalidate_cache()          # a release changes COGS from its month on: every cached report is stale
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return out
 
 
@@ -1150,6 +1169,7 @@ def bc_release_retire(body: NoteBody, request: Request):
         _write(con, lambda: _rl.retire(con, body.release_id, _who(request), body.note or ""))
     invalidate_cache()          # the previous version's costs are back in every report
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True}
 
 
@@ -1182,6 +1202,7 @@ def bc_release_new_draft(body: NewDraftBody, request: Request):
         rid = _write(con, go)
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, "release_id": rid, "label": label}
 
 
@@ -1197,6 +1218,7 @@ def bc_release_submit_review(body: ReleaseIdBody, request: Request):
         _write(con, lambda: _rl.submit_review(con, body.release_id, _who(request)))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True}
 
 
@@ -1208,6 +1230,7 @@ def bc_release_send_back(body: NoteBody, request: Request):
         _write(con, lambda: _rl.send_back(con, body.release_id, body.note or "", _who(request)))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True}
 
 
@@ -1416,6 +1439,7 @@ def bc_prep_save(code: str, body: PrepBody, request: Request):
                                           [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ไขในหน้าเว็บ"))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"ok": True, "lines": n}
 
 
@@ -1441,6 +1465,7 @@ async def bc_prep_import_semi(request: Request, file: UploadFile = File(...), dr
         out = _write(con, lambda: _pr.apply_import(con, plan, _who(request)))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": False, **plan, **out}
 
 
@@ -1473,6 +1498,7 @@ async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dr
             con.commit()
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return out
 
 
@@ -1944,6 +1970,143 @@ def bc_issue_posted(body: PostedBody, request: Request):
         out = _write(con, lambda: _va.set_posted(con, body.end_count_id, body.posted, _who(request), pinned))
     invalidate_cache("bc_")
     return out
+
+
+# ── PR-J3 · issue-slip reports: system stock vs count, daily issue vs BoM (issue_reports.py) ──
+RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
+                 "คงเหลือตามระบบ", "นับจริง (ปลายงวด)", "ผลต่าง (จำนวน)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "สถานะ", "เหตุผล",
+                 "หมายเหตุ", "ราคาต่อหน่วย"]
+DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร BoM (มูลค่า)",
+                 "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการชั้น A ที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
+DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร BoM",
+                      "ผลต่าง (จำนวน)", "ผลต่าง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
+
+
+def _recon_or_404(con, bid: int, end_count_id: int) -> dict:
+    try:
+        return _ir.reconcile(con, bid, end_count_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.get("/api/bom-center/issue-reports/reconcile")
+def bc_ir_reconcile(request: Request, end_count_id: int = Query(...), branch_id: Optional[int] = Query(None)):
+    """R1: the system stock (the slips) against the month-end count, item by item."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _recon_or_404(con, bid, end_count_id)
+
+
+@router.get("/api/bom-center/issue-reports/reconcile.xlsx")
+def bc_ir_reconcile_xlsx(request: Request, end_count_id: int = Query(...), branch_id: Optional[int] = Query(None)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        r = _recon_or_404(con, bid, end_count_id)
+    p, sl = r["period"], r["slips"]
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "กระทบยอด", RECON_HEADERS,
+           f"รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขา{r['branch']['name']} งวด {p['begin_date']} ถึง "
+           f"{p['end_date']} (เดือน {p['month']}) · คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย · "
+           "ผลต่าง = นับจริง − คงเหลือตามระบบ · เกณฑ์ ชั้น A ±5% · B ±10% · C ±20% · "
+           f"ใบตัดเบิกยืนยันแล้ว {sl['confirmed_days']}/{sl['trading_days']} วัน")
+    for x in r["rows"]:
+        ws.append([x["code"], x["name"], x["base_unit"], x["class"], x["begin"], x["received"], x["claims"], x["used"],
+                   x["waste"], x["system"], x["count"], x["diff"], x["diff_value"], x["diff_pct"], x["status_th"],
+                   x.get("reason_th"), x.get("reason_note"), x["price_per_base"]])
+    t = r["totals"]
+    ws.append(["", "รวม", "", "", "", "", "", "", "", "", "", "", t["diff_value"]])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[4:12]:
+            c.number_format = "#,##0.###"
+        row[12].number_format = "#,##0.00"
+        row[13].number_format = "0.0"
+        row[17].number_format = "#,##0.0000"
+    ws.column_dimensions["B"].width = 44
+    ws.column_dimensions["O"].width = 24
+    ws.column_dimensions["P"].width = 26
+    ws.column_dimensions["Q"].width = 30
+    ws.freeze_panes = "C3"
+    return _xlsx(wb, f"bom_center_issue_reconcile_b{bid}_{p['month']}.xlsx")
+
+
+@router.get("/api/bom-center/issue-reports/daily")
+def bc_ir_daily(request: Request, branch_id: Optional[int] = Query(None), month: Optional[str] = Query(None)):
+    """R2: per trading day, the confirmed issue (baht) against the BoM of what was sold, with the streak flags."""
+    month = _month_or_400(month) if month else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _ir.daily(con, bid, month)
+
+
+@router.get("/api/bom-center/issue-reports/daily/day")
+def bc_ir_daily_day(request: Request, day: str = Query(...), branch_id: Optional[int] = Query(None)):
+    """R2 drill-down: the items of one day."""
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _ir.daily_day(con, bid, day)
+
+
+@router.get("/api/bom-center/issue-reports/daily.xlsx")
+def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), month: Optional[str] = Query(None)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    month = _month_or_400(month) if month else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        d = _ir.daily(con, bid, month)
+        items = _ir.daily_items(con, bid, month)
+    t = d["totals"]
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "รายวัน", DAILY_HEADERS,
+           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับตามสูตร BoM จากยอดขายของวันนั้น "
+           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · ชั้น A เบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
+           f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นเบิกเกินต่อเนื่อง")
+    for r in d["rows"]:
+        ws.append([r["date"], r["weekday_th"], r["slip_status_th"], r["used_value"], r["waste_value"], r["issued_value"],
+                   r["bom_value"] if r["trading"] else None, r["var_value"], r["var_pct"],
+                   ", ".join(f"{x['name']} ({x['var_pct']:+.1f}%)" for x in r["over_items"]), ", ".join(r["streak"])])
+    ws.append(["รวม", "", "", t["used_value"], t["waste_value"], t["issued_value"], t["bom_value"], t["var_value"],
+               t["var_pct"]])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[3:8]:
+            c.number_format = "#,##0.00"
+        row[8].number_format = "0.0"
+    ws.column_dimensions["J"].width = 48
+    ws.column_dimensions["K"].width = 36
+    ws.freeze_panes = "A3"
+    w2 = wb.create_sheet()
+    _sheet(w2, "รายการต่อวัน", DAILY_ITEM_HEADERS,
+           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
+           "ผลต่าง = รวมเบิก − ตามสูตร BoM · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
+    for it in items:
+        w2.append([it["date"], it["code"], it["name"], it["base_unit"], it["class"], it["used"], it["waste"], it["issued"],
+                   it["bom"], it["var_qty"], it["var_pct"], it["price_per_base"], it["var_value"], it["signal_th"]])
+    for row in w2.iter_rows(min_row=3, max_row=w2.max_row):
+        for c in row[5:10]:
+            c.number_format = "#,##0.###"
+        row[10].number_format = "0.0"
+        row[11].number_format = "#,##0.0000"
+        row[12].number_format = "#,##0.00"
+    w2.column_dimensions["C"].width = 44
+    w2.freeze_panes = "D3"
+    return _xlsx(wb, f"bom_center_issue_daily_b{bid}_{month}.xlsx")
 
 
 # ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
@@ -2576,6 +2739,7 @@ def bc_central_links_save(body: List[LinkBody], request: Request):
         _write(con, lambda: [_ce.set_link(con, b.old_code, b.new_code, who, b.note) for b in body])
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"saved": len(body)}
 
 
