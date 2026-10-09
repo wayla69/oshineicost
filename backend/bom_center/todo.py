@@ -215,7 +215,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       late_orders=n_late, go={"tab": "orderhub", "pane": "queue"}))
         nc = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE status='submitted'") if _has(con, "bc_claim") else 0
         out.append(_e("claims_pending", 225, "week", "พิจารณาเคลมสินค้าที่สาขาแจ้ง", "todo" if nc else "done",
-                      f"รออนุมัติ {nc} เรื่อง ตรวจรูปแล้วอนุมัติเพื่อปรับสินค้าของสาขา" if nc else "ไม่มีเคลมค้าง",
+                      f"รออนุมัติ {nc} เรื่อง ตรวจสอบรายการและรูปถ่ายที่สาขาส่งทางไลน์ แล้วพิจารณา" if nc else "ไม่มีเคลมค้าง",
                       count=nc or None, owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
                       go={"tab": "orderhub", "pane": "claims"}))
     for b in branches:

@@ -1,9 +1,10 @@
-"""เคลมสินค้า (owner 2026-10-08): a branch reports goods that arrived wrong, with photos; Sales Support decides.
+"""เคลมสินค้า (owner 2026-10-08, reshaped 2026-10-09): a branch reports goods that arrived wrong, with a
+reason per line (photos go to Sales Support by LINE, so they are optional); Sales Support decides.
 
 The promises:
-  * a claim is made against ONE received order, only for what it delivered; open and approved
+  * a LATER claim is made against ONE received order, only for what it delivered; open and approved
     claims together can never exceed the received quantity;
-  * 1–6 photos are required and each is checked by its own bytes, not its name;
+  * a photo that does arrive (0–6) is checked by its own bytes, not its name;
   * a reason per line ("other" needs a note); a reject needs a reason for the branch;
   * approving takes the approved quantity out of what the branch received — a negative receipt
     dated the day the order arrived, so the usage variance drops goods that were never usable;
@@ -30,7 +31,10 @@ CODE = "13-01-009"
 def _received(con, short=0):  # noqa: F811
     oid, sug, q = _submitted(con)
     HB.process(con, oid, [], "wh")
-    OR.receive(con, 1, oid, [{"code": CODE, "received_units": q - short}], "udon", receipt_date="2026-10-07")
+    ln = {"code": CODE, "received_units": q - short}
+    if short:
+        ln["reason"] = "short"
+    OR.receive(con, 1, oid, [ln], "udon", receipt_date="2026-10-07", ack=True)
     con.commit()
     return oid, q - short
 
@@ -40,7 +44,7 @@ def _received_qty_base(con):  # noqa: F811
                        " WHERE r.branch_id=1 AND l.ingredient_code=?", (CODE,)).fetchone()[0]
 
 
-def _claim(con, oid, qty, reason="damaged", note=None, photos=(JPEG,)):  # noqa: F811
+def _claim(con, oid, qty, reason="damaged", note=None, photos=()):  # noqa: F811
     out = CL.create(con, 1, oid, [{"code": CODE, "claim_units": qty, "reason": reason, "note": note}], list(photos), "ผู้แจ้ง", "udon")
     con.commit()                                                       # the router's _write commits a successful call
     return out
@@ -50,10 +54,11 @@ def test_claim_then_approve_adjusts_the_received_goods(con):  # noqa: F811
     oid, got = _received(con)
     assert got >= 2
     before = _received_qty_base(con)
-    c = _claim(con, oid, 1, note="กล่องบุบ")
-    assert c["claim_id"] and c["photos"] == 1
+    c = _claim(con, oid, 1, note="กล่องบุบ", photos=(JPEG,))                # one explicit photo path stays supported
+    assert c["claim_id"] and c["photos"] == 1 and c["origin"] == "after"
     d = CL.detail(con, c["claim_id"])
     assert d["status"] == "submitted" and d["lines"][0]["reason_th"].startswith("สินค้าชำรุด") and len(d["photos"]) == 1
+    assert d["origin"] == "after" and d["stock_adjusted"] is True
     out = CL.decide(con, c["claim_id"], "approve", [], "รับเคลมแล้ว", "ss")
     assert out["status"] == "approved" and out["adjusted"] == 1 and out["receipt_date"] == "2026-10-07"
     after = _received_qty_base(con)
@@ -120,7 +125,6 @@ def test_claims_cannot_exceed_what_was_received(con):  # noqa: F811
 def test_validations(con):  # noqa: F811
     oid, got = _received(con)
     bad = [
-        dict(photos=()),                                               # no photo
         dict(photos=(b"not an image",)),                               # not an image, whatever the name
         dict(photos=(JPEG,) * (CL.MAX_PHOTOS + 1)),                    # too many
         dict(photos=(JPEG + b"\x00" * CL.MAX_PHOTO_BYTES,)),           # too big
@@ -137,6 +141,8 @@ def test_validations(con):  # noqa: F811
     with pytest.raises(ValueError):                                    # a code the order never carried
         CL.create(con, 1, oid, [{"code": "02-01-001", "claim_units": 1, "reason": "damaged"}], [JPEG], None, "udon")
     con.rollback()
+    ok = _claim(con, oid, 1)                                           # no photo at all is fine (they go by LINE)
+    assert ok["photos"] == 0 and CL.detail(con, ok["claim_id"])["photos"] == []
     assert CL.sniff_image(PNG) == "image/png" and CL.sniff_image(b"RIFF\x00\x00\x00\x00WEBPVP8 ") == "image/webp"
     _claim(con, oid, 1, photos=(PNG,))                                 # png is fine
 
@@ -276,10 +282,11 @@ def _http_flow(oid):
     assert r.json()["photos"] == 2
     bad = a.post("/api/bom-center/claims", data={"payload": payload}, files=[("photos", ("x.jpg", b"GIF89a...", "image/jpeg"))])
     assert bad.status_code == 400 and "รูป" in bad.json()["detail"]    # the bytes decide, not the file name
-    noph = a.post("/api/bom-center/claims", data={"payload": payload})
-    assert noph.status_code == 400
+    noph = a.post("/api/bom-center/claims", data={"payload": json.dumps({"order_id": oid, "lines": [{"code": "T-CL1", "claim_units": 1, "reason": "damaged"}]})})
+    assert noph.status_code == 200 and noph.json()["photos"] == 0, noph.text   # no photo is accepted
+    a.post(f"/api/bom-center/claims/{noph.json()['claim_id']}/cancel")        # free the quantity again for the checks below
     # the owner branch sees it, the other branch does not
-    assert [c["claim_id"] for c in a.get("/api/bom-center/claims").json()["claims"]] == [cid]
+    assert [c["claim_id"] for c in a.get("/api/bom-center/claims?status=submitted").json()["claims"]] == [cid]
     assert b.get("/api/bom-center/claims").json()["claims"] == []
     assert a.get(f"/api/bom-center/claims/{cid}").status_code == 200
     ph = a.get(f"/api/bom-center/claims/{cid}/photo/{a.get(f'/api/bom-center/claims/{cid}').json()['photos'][0]['photo_id']}")

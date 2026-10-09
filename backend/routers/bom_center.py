@@ -1652,6 +1652,8 @@ def bc_order_detail(order_id: int, request: Request):
         except ValueError as e:
             raise HTTPException(404, str(e))
         _stock_branch(con, request, o["branch_id"])
+        o["claim_reasons"] = [{"code": c, "label": t} for c, t in _cl.REASONS]
+        o["claims"] = _cl.for_order(con, order_id)
         return o
 
 
@@ -1676,11 +1678,15 @@ def bc_order_cancel(order_id: int, request: Request, branch_id: Optional[int] = 
 class ReceiveLine(BaseModel):
     code: str
     received_units: float
+    reason: Optional[str] = None        # why the received quantity is below what the warehouse sent
+    note: Optional[str] = None
 
 
 class ReceiveBody(BaseModel):
     lines: List[ReceiveLine]
     receipt_date: Optional[str] = None
+    ack: bool = False                   # the branch checked condition and quantity (enforced in orders.receive)
+    claim_note: Optional[str] = None    # a message to Sales Support with the claim raised by this receipt
 
 
 @router.post("/api/bom-center/order/{order_id}/receive", dependencies=[Depends(require_write_token)])
@@ -1688,11 +1694,13 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
-                                               receipt_date=body.receipt_date))
+        out = _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
+                                              receipt_date=body.receipt_date, ack=body.ack, claim_note=body.claim_note))
+    invalidate_cache("bc_")
+    return out
 
 
-# ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with photos; Sales Support decides ──
+# ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with a reason (photos go by LINE); Sales Support decides ──
 def _claim_scope(con, request: Request, branch_id: Optional[int]):
     """A branch login is pinned to its own branch; the centre names one, or None for every branch."""
     if _auth.scope_branch(request):
@@ -1736,7 +1744,8 @@ def bc_claims_list(request: Request, status: Optional[str] = Query(None), branch
         bid = _claim_scope(con, request, branch_id)
         return {"claims": _cl.listing(con, bid, status, max(1, min(limit, 200))),
                 "reasons": [{"code": c, "label": t} for c, t in _cl.REASONS],
-                "statuses": [{"code": c, "label": t} for c, t in _cl.STATUS_TH.items()]}
+                "statuses": [{"code": c, "label": t} for c, t in _cl.STATUS_TH.items()],
+                "origins": [{"code": c, "label": t} for c, t in _cl.ORIGIN_TH.items()]}
 
 
 @router.get("/api/bom-center/claims/{claim_id}")
@@ -1764,7 +1773,8 @@ def bc_claim_photo(claim_id: int, photo_id: int, request: Request):
 @router.post("/api/bom-center/claims", dependencies=[Depends(require_write_token)])
 async def bc_claim_create(request: Request, payload: str = Form(...), photos: List[UploadFile] = File(default=[]),
                           branch_id: Optional[int] = Query(None)):
-    """One claim = one received order + its lines + 1–6 photos, sent together (multipart)."""
+    """One LATER claim = one received order + its lines with a reason each (multipart; photos are optional,
+    the branch sends them to Sales Support by LINE)."""
     try:
         p = json.loads(payload)
         order_id = int(p["order_id"])
@@ -1802,7 +1812,8 @@ class ClaimDecision(BaseModel):
 
 @router.post("/api/bom-center/claim-act/decide", dependencies=[Depends(require_write_token)])
 def bc_claim_decide(body: ClaimDecision, request: Request):
-    """Sales Support: approve (the stock is adjusted) or reject (a reason is required)."""
+    """Sales Support: approve or reject (a reason is required). A claim raised later adjusts the stock when
+    approved; one raised while receiving adds back whatever is not approved."""
     with get_db() as con:
         _ensure(con)
         out = _write(con, lambda: _cl.decide(con, body.claim_id, body.decision, body.lines, body.note, _who(request)))
@@ -1872,6 +1883,7 @@ def bc_hub_order(order_id: int):
         except ValueError as e:
             raise HTTPException(404, str(e))
         o["branch"] = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
+        o["claims"] = _cl.for_order(con, order_id)
         return o
 
 
