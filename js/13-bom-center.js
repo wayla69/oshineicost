@@ -1137,6 +1137,12 @@ async function bmcImportCostRw(input) {
   finally { input.value = ''; }
 }
 // what the version waits for, and the kitchen's two buttons (สร้างฉบับร่าง / ส่งตรวจ) — the banner sits first in #bmcRecReport
+// the analyst's last reason for sending a draft back ("ส่งกลับแก้ไขโดย … : reason" is appended to the notes), or ''
+function _bmcSendBackLine(r) {
+  if (!r || r.status !== 'draft') return '';
+  const n = String(r.notes || ''), i = n.lastIndexOf('ส่งกลับแก้ไขโดย');
+  return i < 0 ? '' : `<div class="text-xs mt-1" style="color:var(--amber-ink)">ส่งกลับแก้ไข: ${esc(n.slice(i).trim())}</div>`;
+}
 function bmcRenderRecBanner() {
   const host = document.getElementById('bmcRecReport');
   if (!host) return;
@@ -1154,7 +1160,7 @@ function bmcRenderRecBanner() {
     html = card('var(--amber-ink)', `<b>รอฝ่ายวิเคราะห์ตรวจ</b> · ส่งตรวจโดย ${esc(r.submitted_by || '-')} เมื่อ ${esc(String(r.submitted_at || '').slice(0, 16).replace('T', ' ') || '-')}`
       + (hasModule('bom.center') ? '' : ' · ระหว่างการตรวจ ครัวแก้ไขสูตรไม่ได้ จนกว่าฝ่ายวิเคราะห์จะส่งกลับ'));
   } else if (monthly && r.status === 'draft') {
-    html = card('var(--accent)', '<b>ฉบับร่าง</b> · ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์');
+    html = card('var(--accent)', '<b>ฉบับร่าง</b> · ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์' + _bmcSendBackLine(r));
   } else if (!hasDraft && _bmcCanRecipes()) {
     html = card('var(--accent)', `ยังไม่มีฉบับร่างของเดือน ${esc(sg.effective_month || '')} · ดาวน์โหลดแม่แบบ กรอกสูตรหลายเมนูแล้วนำเข้า หรือสร้างฉบับร่างก่อน`);
   }
@@ -1278,7 +1284,7 @@ function bmcRenderRelHead(checks) {
       <div class="ml-auto flex flex-wrap gap-2">${acts.join('')}</div>
     </div>
     ${r.status === 'review' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ฝ่ายวิเคราะห์ตรวจด่าน 12 ข้อ แก้ไขหรือยอมรับข้อที่ติด แล้วปล่อยเวอร์ชัน หรือส่งกลับให้ครัวแก้ไข</div>` : ''}
-    ${r.status === 'draft' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ”</div>` : ''}
+    ${r.status === 'draft' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ”${_bmcSendBackLine(r)}</div>` : ''}
     ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหาร (management) อ่านผลกระทบด้านล่าง แล้วกด “รับทราบ” — เปิดได้จากหน้างาน</div>` : ''}
     <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
       ลำดับงาน: (0) ครัวสร้างสูตรและส่งตรวจ (1) ผลตรวจ 12 ข้อแสดงทันทีเมื่อเปิดหน้า (2) แก้ไขข้อที่ต้องแก้ได้ในหน้านี้ (“เปิดสูตร”) หรือยืนยันข้อที่ยอมรับได้ทีละรายการหรือทั้งกลุ่มพร้อมเหตุผล (3) ปล่อยสูตรภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล (4) management อ่านผลกระทบด้านล่าง แล้วรับทราบหรือย้อนกลับ ·

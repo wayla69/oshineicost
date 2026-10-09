@@ -692,7 +692,7 @@ def bc_releases():
                            " (SELECT COUNT(*) FROM bc_recipe r WHERE r.release_id=b.release_id),"
                            " (SELECT COUNT(*) FROM bc_release_check c WHERE c.release_id=b.release_id"
                            "   AND c.check_code='unmatched'),"
-                           " submitted_by, submitted_at"
+                           " submitted_by, submitted_at, notes"
                            " FROM bc_release b ORDER BY (kind='baseline'), effective_month DESC, release_id DESC").fetchall()
         priced = [r[0] for r in con.execute("SELECT DISTINCT month FROM bc_ingredient_price ORDER BY month DESC")]
         # costs follow ACTUAL purchase prices (owner decision): suggest the latest month the accounts
@@ -701,7 +701,7 @@ def bc_releases():
                              " WHERE source IN ('purchase_avg','manual')").fetchone()[0]
     cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
             "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched",
-            "submitted_by", "submitted_at")
+            "submitted_by", "submitted_at", "notes")
     rels = [dict(zip(cols, r)) for r in rows]
     for r in rels:               # what the version waits for (หน้างาน and the pane read it)
         r["next_step"] = ("submit" if r["kind"] == "monthly" and r["status"] == "draft"

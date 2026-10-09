@@ -278,5 +278,6 @@ def _http_flow(label):
     assert r.status_code == 200, r.text
     rel = next(x for x in kitchen.get("/api/bom-center/releases").json()["releases"] if x["release_id"] == rid)
     assert rel["status"] == "draft" and rel["next_step"] == "submit" and rel["submitted_by"] is None
+    assert "ส่งกลับแก้ไขโดย analyst1: ปริมาณสูงเกินไป" in rel["notes"]          # the kitchen can read why
     put = kitchen.put(f"/api/bom-center/recipes/OTHBFX?release_id={rid}", json=[], headers=TOKEN)
     assert "อยู่ระหว่างการตรวจ" not in put.text
