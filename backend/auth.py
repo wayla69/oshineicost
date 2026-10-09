@@ -40,7 +40,12 @@ ROLES: List[str] = [
     "salessupport",
     "warehouse",           # คลัง: ยืนยันยอดส่งจริงของใบสั่งซื้อ (owner 2026-10-08 — ไม่ใช่ประสานงานขายอีกต่อไป)
     "branch",              # one account per branch (owner §10-5) — sees only its own branch's pages
+    "franchise",           # เจ้าของสาขา (PR-L, owner 2026-10-10): one login per franchise branch, reads its own branch's summary only
 ]
+
+# roles whose account is tied to ONE branch (the branch works it, the franchise owner reads it); the server pins every
+# request of such a login to that branch (scope_branch). Only `branch` also skips the write token (core.is_branch_session).
+PINNED_ROLES = ("branch", "franchise")
 
 MODULES: List[str] = [
     "sales.overview",      # หน้าแรก, ภาพรวม&KPI, ต้องดูวันนี้, รายวัน, แนวโน้ม, A/B, insight
@@ -68,6 +73,7 @@ MODULES: List[str] = [
     "bom.audit",           # BoM Center: ตรวจ/รับทราบเวอร์ชันที่ปล่อยแล้ว และย้อนกลับ (management)
     "branch.stock",        # สาขาของฉัน: นับสต๊อก (Phase 2) — a branch account works on its own branch only
     "supply.warehouse",    # คลัง: ระบุยอดส่งจริงและกด "ดำเนินการแล้ว" ที่คิวใบสั่งซื้อ (owner 2026-10-08)
+    "franchise.view",      # ร้านของฉัน: สรุปผลของสาขาตนเองสำหรับเจ้าของสาขา แบบอ่านอย่างเดียว (PR-L)
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -119,6 +125,11 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # the account's `branch` scopes every /api/bom-center/stock call. No
         # sales.overview: a role without it is DENY-by-default (path_allowed).
         "branch.stock",
+    },
+    "franchise": {
+        # The owner of a franchise branch (PR-L). One module, one GET prefix, NO write rule: every other path is closed
+        # to it (no sales.overview, so a path with no rule is denied). The account's `branch` pins the summary.
+        "franchise.view",
     },
 }
 
@@ -350,6 +361,7 @@ MODULE_RULES = [
     ("W",   "/api/bom",                      {"bom.edit"}),
     ("W",   "/api/settings",                 {"system.settings"}),
     ("W",   "/api/targets",                  {"system.settings"}),
+    ("GET", "/api/franchise",                {"franchise.view"}),   # PR-L: ร้านของฉัน (read-only; the role has no W rule anywhere)
     ("W",   "/api/branches",                 {"system.settings"}),
     ("W",   "/api/closed_hours",             {"system.settings"}),
     ("W",   "/api/upload",                   {"data.upload"}),
@@ -624,6 +636,8 @@ def provision_user(con: sqlite3.Connection, username: str, role: str,
     existing = get_user(con, username)
     if existing and not reset_existing:
         return "exists"
+    if not existing and role == "franchise" and not branch:
+        raise ValueError("บัญชีเจ้าของสาขาต้องเลือกสาขา")
     h = hash_password(pw)
     if existing:
         con.execute(
@@ -688,8 +702,8 @@ def create_user(con: sqlite3.Connection, username: str, password: str, role: str
     branch = (branch or "").strip() or None
     if branch and not branch_exists(con, branch):
         raise ValueError("ไม่พบสาขานี้")
-    if role == "branch" and not branch:
-        raise ValueError("บัญชีสาขาต้องเลือกสาขา")
+    if role in PINNED_ROLES and not branch:
+        raise ValueError("บัญชีสาขาและบัญชีเจ้าของสาขาต้องเลือกสาขา")
     h = hash_password(password)
     con.execute(
         "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change, branch) VALUES (?,?,?,?,1,?)",
@@ -725,8 +739,8 @@ def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] =
     cur = get_user(con, username)
     final_role = role if role is not None else (cur["role"] if cur else None)
     final_branch = (b if branch is not UNSET else (cur["branch"] if cur else None))
-    if final_role == "branch" and not final_branch:
-        raise ValueError("บัญชีสาขาต้องเลือกสาขา")
+    if final_role in PINNED_ROLES and not final_branch:
+        raise ValueError("บัญชีสาขาและบัญชีเจ้าของสาขาต้องเลือกสาขา")
     vals.append(username)
     con.execute(f"UPDATE app_user SET {', '.join(sets)} WHERE username = ?", vals)
     con.commit()

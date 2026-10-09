@@ -8,7 +8,8 @@ One row per branch, in an Excel or CSV file:
     ชื่อผู้ใช้     the login name; blank = wh_<ตัวย่อ> (owner 2026-10-10); only for an exception
     LINE/ผู้รับ   who receives the handout (a LINE group, a person) - optional
 
-`branch_accounts.py` creates the logins from it and writes accounts_result.csv (same columns plus the
+With `--role franchise` the same file gives the franchise owners' logins own_<ตัวย่อ> (PR-L; give it the franchise
+branches only). `branch_accounts.py` creates the logins from it and writes accounts_result.csv (same columns plus the
 outcome); `branch_handout.py` reads the same file, or that result file, to write the messages and cards.
 No password and no token is ever part of a list.
 """
@@ -24,6 +25,8 @@ RESULT_HEADERS = HEADERS + [H_RESULT, "หมายเหตุ"]
 USER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{2,39}$")
 ABBR_RE = re.compile(r"^[a-z0-9]{2,12}$")
 PREFIX = "wh_"                                   # every branch login is wh_<ตัวย่อ> (owner 2026-10-10)
+OWNER_PREFIX = "own_"                            # the franchise owner's login is own_<ตัวย่อ> (PR-L, owner 2026-10-10)
+ROLE_PREFIX = {"branch": PREFIX, "franchise": OWNER_PREFIX}
 
 # the four pilot branches and their abbreviations
 PILOT_ABBRS = {
@@ -121,24 +124,27 @@ def read_list(path) -> list:
     return out
 
 
-def login_of(row: dict) -> str:
-    """The login a list row names without any database: its own username, else wh_<ตัวย่อ>, else the pilot name; '' if none."""
-    if row.get("username"):
-        return row["username"]
+def login_of(row: dict, role: str = "branch") -> str:
+    """The login a list row names without any database: its own username, else wh_<ตัวย่อ>, else the pilot name; '' if none.
+    For role franchise only an own_* username counts (the column normally holds a branch's wh_* exception), else own_<ตัวย่อ>."""
+    user = row.get("username") or ""
+    if user and (role != "franchise" or user.startswith(OWNER_PREFIX)):
+        return user
     abbr = (row.get("abbr") or PILOT_ABBRS.get(row.get("branch"), "")).lower()
-    return PREFIX + abbr if abbr else ""
+    return ROLE_PREFIX.get(role, PREFIX) + abbr if abbr else ""
 
 
-def username_for(branch: str, branch_id=None, abbr: str = ""):
-    """The login name for a branch whose list row leaves it blank: wh_<ตัวย่อ>; the four pilot branches have their
-    abbreviation built in; a branch with no abbreviation gets wh_<branch id>. None when none of these is known
-    (the caller must say so: branch names are Thai, so there is no ASCII name to fall back on, and two scripts
-    guessing differently would hand a branch a login that does not exist)."""
+def username_for(branch: str, branch_id=None, abbr: str = "", role: str = "branch"):
+    """The login name for a branch whose list row leaves it blank: wh_<ตัวย่อ> (own_<ตัวย่อ> for the franchise owner);
+    the four pilot branches have their abbreviation built in; a branch with no abbreviation gets wh_<branch id>. None
+    when none of these is known (the caller must say so: branch names are Thai, so there is no ASCII name to fall back
+    on, and two scripts guessing differently would hand a branch a login that does not exist)."""
+    prefix = ROLE_PREFIX.get(role, PREFIX)
     abbr = (abbr or PILOT_ABBRS.get(branch, "")).strip().lower()
     if abbr:
-        return PREFIX + abbr
+        return prefix + abbr
     if branch_id is not None:
-        return f"{PREFIX}{int(branch_id)}"
+        return f"{prefix}{int(branch_id)}"
     return None
 
 

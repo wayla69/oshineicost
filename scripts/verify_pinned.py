@@ -3,7 +3,8 @@
 
     py -3.14 scripts\\verify_pinned.py --base http://127.0.0.1:8047 --user branch1 --password <password> --other ขอนแก่น
 
-Logs in with the given account, walks หน้างาน and every page of สาขาของฉัน, and fails (exit 1) when any <select>
+Logs in with the given account, walks หน้างาน and every page of สาขาของฉัน (a franchise owner: its one page ร้านของฉัน,
+and the sidebar must hold exactly that one entry), and fails (exit 1) when any <select>
 in the page lists the --other branch, a branch picker element exists, the shell's branch filter is still a
 <select>, or the branch-list endpoints (/api/branches, /api/bom-center/stock/me) were requested. The same
 checks run in backend/test_pinned_no_branch_select.py wherever the Playwright client is installed (Playwright
@@ -58,11 +59,18 @@ def main(argv=None) -> int:
         page.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=30000)
         role = page.evaluate("window.AUTH.role")
         page.wait_for_timeout(1000)
-        for tab, pane in PANES:
-            page.evaluate("([t, p]) => supplyGo({tab: t, pane: p})", [tab, pane])
-            page.wait_for_timeout(1500)
+        for tab, pane in ([("franchise", None)] if role == "franchise" else PANES):
+            if role == "franchise":
+                page.evaluate("switchTab('franchise')")
+            else:
+                page.evaluate("([t, p]) => supplyGo({tab: t, pane: p})", [tab, pane])
+            page.wait_for_timeout(2500 if role == "franchise" else 1500)
             res = page.evaluate(CHECK, a.other)
             ok = not res["naming"] and not res["pickers"] and not res["branchIds"] and res["shell"] == "INPUT"
+            if role == "franchise":      # PR-L: the sidebar holds exactly the one entry, and its page is the one on show
+                nav = page.evaluate("[...document.querySelectorAll('.sidebar-nav .nav-item')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.id)")
+                ok = ok and nav == ["nav-franchise"] and page.evaluate("document.getElementById('tab-franchise').style.display") != "none"
+                print(f"   sidebar entries: {nav}")
             bad += 0 if ok else 1
             print(f"{'ok ' if ok else 'BAD'} {tab}/{pane or '-'}: selects on page={res['selects']} naming-other={res['naming']} pickers={res['pickers']} branch-ids={res['branchIds']} shell-filter={res['shell']}")
         forbidden = [u for u in seen if re.search(r"/api/branches(\?|$)|/stock/me", u)]

@@ -242,6 +242,7 @@ const TAB_MODULE = {
   branchstock:['branch.stock','supply.ordering','bom.center','ops.report'],   // Phase 2: สาขาของฉัน — นับสต๊อก
   orderhub:['supply.ordering','ops.report','bom.center','supply.warehouse'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
   supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis','bom.prices','bom.recipes','supply.warehouse'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
+  franchise:'franchise.view',   // ร้านของฉัน (PR-L): the franchise owner's page; the nav entry shows for that role only (applyPermissions)
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -261,6 +262,7 @@ const ROLE_START = {
   salessupport: [['orderhub', 'ติดตามใบตัดเบิกของสาขา: สาขาที่ยังไม่ยืนยันหรือยืนยันล่าช้า และเปิดแก้ไขใบที่ยืนยันแล้วพร้อมระบุเหตุผล', 'issues'], ['orderhub', 'เคลมสินค้าที่สาขาแจ้ง: ดูรูป อนุมัติรับเคลมเพื่อปรับสินค้าของสาขา', 'claims'], ['orderhub', 'คิวใบสั่งซื้อจากสาขา: ดาวน์โหลด Excel คีย์เข้าระบบบัญชี แล้วทำเครื่องหมายใบที่คีย์แล้ว', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
   warehouse: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง และกดดำเนินการแล้ว', 'queue']],
   branch: [['branchstock', 'บันทึกใบตัดเบิกประจำวัน (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'สั่งสินค้าตามยอดแนะนำที่หักคงเหลือตามระบบแล้ว ส่งก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
+  franchise: [['franchise', 'สรุปผลการดำเนินงานของสาขาตนเองในเดือนนี้: ยอดขาย กำไรขั้นต้น วัตถุดิบ และวินัยการทำงานของสาขา']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 // An entry may name a pane of the วัตถุดิบและใบสั่งซื้อ module ([tab, why, pane]):
@@ -304,6 +306,7 @@ const ROLE_LABEL_TH = {
   salessupport:'Sales Support (วัตถุดิบและใบสั่งซื้อ)',
   warehouse:'คลัง (ระบุยอดส่งจริงของใบสั่งซื้อ)',
   branch:'สาขา (ตัดเบิก/สั่งสินค้า — 1 บัญชีต่อสาขา)',
+  franchise:'เจ้าของสาขา (ดูผลการดำเนินงานของสาขาตนเอง)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
 // so the owner can see what each role unlocks before assigning it. Only a FALLBACK:
@@ -321,6 +324,7 @@ const MODULE_LABEL_TH = {
   'bom.prices':'BoM Center (ราคารายเดือน)', 'bom.recipes':'BoM Center (สูตร)',
   'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า',
   'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
+  'franchise.view':'ร้านของฉัน: ดูผลการดำเนินงานของสาขาตนเอง',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
@@ -332,6 +336,7 @@ const ROLE_MODULES_TH = {
   salessupport: ['sales.overview','supply.ordering','report.export'],
   warehouse: ['supply.warehouse'],
   branch: ['branch.stock'],
+  franchise: ['franchise.view'],
 };
 
 function hasModule(m) {
@@ -346,7 +351,7 @@ function tabAllowed(name) {
 function firstAllowedTab() {
   const order = ['overall','home','action','dailysales','trend','compare','more',
     'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
-    'staff','custtype','supplyhome','ingpurchase','ordering','orderhub','branchstock','manual'];
+    'staff','custtype','supplyhome','ingpurchase','ordering','orderhub','branchstock','franchise','manual'];
   return order.find(tabAllowed) || 'manual';
 }
 
@@ -492,6 +497,14 @@ function applyPermissions() {
     const alt = cl.tabs.find(([t]) => tabAllowed(t));
     if (alt) { const el = document.getElementById('nav-' + alt[0]); if (el) el.style.display = ''; }
   });
+  // the franchise owner (PR-L) has ONE page, ร้านของฉัน: its nav entry is the only one left, and on a phone the sidebar
+  // (a tab strip there) holds just that entry beside the user chip
+  if (window.AUTH.role === 'franchise') {
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => { el.style.display = el.id === 'nav-franchise' ? '' : 'none'; });
+    document.body.classList.add('franchise-phone');
+    // no branch selector anywhere (PR-K rule): the other pages are never opened, so their branch pickers go too
+    document.querySelectorAll('#tabsRoot select').forEach(s => { if (/branch/i.test(s.id)) s.remove(); });
+  }
   // the branch login's entry to วัตถุดิบและใบสั่งซื้อ is its own page: call it so
   if (window.AUTH.role === 'branch') { const l = document.querySelector('#nav-supplyhome .nav-label'); if (l) l.textContent = 'สาขาของฉัน'; }
   // ... and on a phone its pages sit on a bottom strip (#supplyNav) instead of the chip rows
@@ -1680,7 +1693,7 @@ let _lastTabLoadAt  = 0;      // the open tab's last load (foreground refresh on
 
 // ── Lazy slices (2026-10-08). index.html loads five slices eagerly — 01-core,
 // 03-tabs-main, 06-features, 09b-cost-pnl, 09c-mobile: the login, the boot and the phone
-// summary. The other fifteen (the desktop tabs' code, ~1.6 MB) sit in index.html as inert
+// summary. The other sixteen (the desktop tabs' code, ~1.6 MB) sit in index.html as inert
 // <script type="text/plain" class="lazy-slice" data-lazy="/js/…?v=hash"> tags, in the same
 // order as before; this turns them into real scripts one after another (async=false keeps
 // the order; the server's ?v= makes them immutable-cached). init() awaits it on a desktop
@@ -2269,7 +2282,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน' };
+const PAGE_TITLES = { franchise:'ร้านของฉัน', home:'Daily Brief', overall:'Overall', action:'ต้องดูวันนี้ (Action Center)', buffetperf:'ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก (P&L Deep Dive)', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'BoM วิเคราะห์รายสาขา', bomcost:'BoM Cost Analysis', simhub:'Simulators (รวมตัวจำลอง)', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'ปรับเมนู (Menu Action Board)', menuopportunities:'โอกาสเมนู (Menu Opportunities)', feedback:'เสียงลูกค้า (Customer Feedback)', checklist:'Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'P&L รายสาขา (Branch P&L · BoM-based)', more:'Insight เพิ่มเติม (More Analytics)', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน (Daily Sales)', costhead:'ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'P&L ต่อบิล (Per-bill · BoM)', opsreport:'รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน (Cash Over/Short)', custtype:'ประเภทลูกค้า & Delivery', modifiers:'ความต้องการพิเศษ (Modifiers)', pricezone:'ราคา & โซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ (Voided Bills)', closetime:'เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2306,6 +2319,7 @@ const TABS = {
   branchstock: { load: () => loadBranchStock(), ownFilters: true },
   orderhub: { load: () => loadOrderHub(), ownFilters: true },
   supplyhome: { load: () => loadSupplyHome(), ownFilters: true },
+  franchise: { load: () => loadFranchise(), ownFilters: true },
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
