@@ -163,7 +163,8 @@ def on_order(con, branch_id: int, before: date) -> dict:
 def _order_row(con, order_id: int) -> dict:
     cols = ("order_id", "branch_id", "cycle_date", "round", "run_id", "status", "confirmed_by", "confirmed_at",
             "submitted_at", "processed_by", "processed_at", "po_ref", "received_at", "note", "stock_count_id", "value",
-            "buffer_pct", "buffer_reason", "buffer_note", "delivery_date", "cutoff_at", "late", "ack_at", "ack_by")
+            "buffer_pct", "buffer_reason", "buffer_note", "delivery_date", "cutoff_at", "late", "ack_at", "ack_by",
+            "accounting_keyed_at", "accounting_keyed_by")
     r = con.execute(f"SELECT {', '.join(cols)} FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     return dict(zip(cols, r)) if r else None
 

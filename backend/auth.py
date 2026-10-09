@@ -315,6 +315,8 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/hub",                     {"supply.ordering", "ops.report", "bom.center", "supply.warehouse"}),
     # owner 2026-10-08: the WAREHOUSE updates what is sent (ส่งจริง + เหตุผล + PO + ดำเนินการแล้ว), no longer Sales Support
     ("W",   "/api/bom-center/hub",                     {"supply.warehouse"}),
+    # Sales Support marks the orders it has keyed into the accounting system (the longer prefix beats the warehouse-only rule above)
+    ("W",   "/api/bom-center/hub/keyed",               {"supply.ordering"}),
     # claims (owner 2026-10-08): the branch reports a claim (a reason per line; photos go by LINE) while receiving or after; Sales Support decides.
     # Reading is open to the supply roles; a branch login is pinned to its own branch in the router.
     ("GET", "/api/bom-center/claims",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
