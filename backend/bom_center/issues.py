@@ -15,8 +15,11 @@ Rules (shared by every PR of the series):
     the branch likes, then CONFIRMED once;
   * a slip for a day that is over is accepted but marked `late` — set on the FIRST confirm
     only (confirmed Bangkok date > slip date); a reopen / reconfirm never changes it;
-  * no slip for a future day, none older than 60 days, none before the latest submitted
-    month-end count (that count is the stock's starting point; the count date itself is allowed);
+  * no slip for a future day, none older than 60 days. A slip dated before the latest month-end count
+    stays allowed (an error found after the count must be fixable, and the reconciliation of that
+    earlier period needs it); it does not change the current system stock, the count being its basis.
+    The only lock on a past period is Accounting's: once it has posted the ใบสรุปตัดเบิก of a period,
+    a slip dated inside it can be neither confirmed nor reopened (variance.assert_not_posted);
   * a confirmed slip is locked. Sales Support reopens it with a reason; the branch edits and
     confirms again. Every create / confirm / reconfirm / reopen (and the first save after a
     reopen) is written to bc_issue_log and to the audit trail;
@@ -151,12 +154,6 @@ def _date_or_error(slip_date) -> date:
         raise ValueError("วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD")
 
 
-def _last_count_date(con, branch_id: int):
-    from .stock import last_submitted
-    lc = last_submitted(con, branch_id)
-    return lc["count_date"] if lc else None
-
-
 def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
     """The list a branch issues from on one day: every item it keeps (the month-end count list), the system
     stock before that day's issue, the 7-day average, and the slip's own lines."""
@@ -202,13 +199,12 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
             else:
                 it["used"] = it["waste"] = it["waste_reason"] = it["line_note"] = None
     st = status_of(con, branch_id, d)
-    lc = _last_count_date(con, branch_id)
     out = {k: base[k] for k in ("branch_id", "branch", "zones", "items", "required")}
     out.update({"date": d.isoformat(), "today": today.isoformat(), "status": st, "status_th": STATUS_TH[st["status"]],
                 "slip": row and {k: row[k] for k in ("slip_id", "note", "reopened_by", "reopened_at", "reopen_note")},
                 "editable": st["status"] not in ("confirmed", "late"),
                 "backdated": d < today, "basis": pos["basis"], "missing_days": pos["missing_days"],
-                "earliest": max([(today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat()] + ([lc] if lc else [])),
+                "earliest": (today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat(),
                 "lines": list(lines.values()),
                 "reasons": [{"code": c, "label": t} for c, t in WASTE_REASONS]})
     return out
@@ -230,9 +226,6 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     if submit:                                               # confirming changes a posted period's numbers
         from .variance import assert_not_posted
         assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
-    lc = _last_count_date(con, branch_id)
-    if lc and d.isoformat() < lc:
-        raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกินวันตรวจนับสิ้นเดือนล่าสุด ({lc})")
     iso = d.isoformat()
     row = _row(con, branch_id, iso)
     if row and row["status"] == "confirmed":
