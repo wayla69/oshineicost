@@ -224,6 +224,10 @@ MIGRATIONS = (
     ("bc_order", "buffer_pct", "REAL"),          # +20 = the branch expects 20 % more sales than the forecast
     ("bc_order", "buffer_reason", "TEXT"),       # event / promotion / booking / holiday / quiet / other
     ("bc_order", "buffer_note", "TEXT"),
+    # PR-A — the delivery calendar and the 13:15 cutoff (cycle_date = the cutoff date)
+    ("bc_order", "delivery_date", "TEXT"),       # the delivery day this order is for
+    ("bc_order", "cutoff_at", "TEXT"),           # ISO time the order had to be submitted by (Bangkok)
+    ("bc_order", "late", "INTEGER DEFAULT 0"),   # 1 = submitted after the cutoff (late fee at the outside warehouse)
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -302,6 +306,8 @@ def ensure(con, commit: bool = False) -> None:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    from .orders import backfill        # PR-A: delivery weekday / delivery date of rows saved before it (idempotent)
+    backfill(con)
     if commit:
         con.commit()
 

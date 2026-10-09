@@ -6,8 +6,8 @@ The promises:
   * the month's items follow a draft from checks to release to acknowledgement;
   * the close steps turn green as the central note, the two counts and the
     confirmation land, per branch — and the end count waits for the begin count;
-  * an order day asks the branch for its count and its order, and the centre for
-    the queue;
+  * a cutoff day asks the branch for its order (count and order are one flow) and the
+    centre for the queue;
   * a branch login sees only its own branch and never the centre's keys;
   * the answer is cheap: no variance is computed unless ONE branch is in context;
   * every role but marketing may read it.
@@ -24,7 +24,7 @@ from bom_center import variance as VA
 from test_bom_center_s11 import _report, udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
 from test_bom_center_s4b import con  # noqa: F401  (sales Sep–Oct 2026 at branch 1, default order calendar)
 
-TODAY = date(2026, 10, 7)        # a Wednesday: no order round in the default calendar
+TODAY = date(2026, 10, 7)        # a Wednesday: Saturday's cutoff (Thursday 13:15) is the nearest in the default calendar
 M = "2026-09"
 ALL_MODULES = set(auth.MODULES)
 PACK = [{"code": "13-01-009", "qty": 2, "unit": "แพ็ค 1 กก."}]
@@ -52,7 +52,9 @@ def test_shape_owners_and_links(udon):
     assert it["price_month"]["status"] == "todo"                 # July quotes only, no September actuals
     assert it["draft"]["status"] == "todo" and it["draft"]["go"]["pane"] == "rec"
     assert it["acknowledge"]["status"] == "na"
-    assert it["count_today"]["status"] == "na" and "วันสั่งถัดไป" in it["count_today"]["detail"]
+    due = it["order_due_2"]                                      # Wednesday: Saturday's delivery is the nearest
+    assert due["status"] == "todo" and due["title"] == "ส่งใบสั่งซื้อรอบส่งวันเสาร์ (10/10) ภายใน วันพฤหัส 13:15"
+    assert due["go"]["extra"] == {"round": "2", "delivery": "2026-10-10"} and due["owner_modules"] == ["branch.stock"]
     assert d["close"]["branches"] == []                          # nobody has started closing September
     assert _steps(d)["deliveries"]["status"] == "todo" and _steps(d)["release_in_force"]["status"] == "todo"
 
@@ -114,20 +116,21 @@ def test_the_close_steps_follow_the_data_per_branch(udon):
     assert d["close"]["done"] >= 5
 
 
-def test_an_order_day_asks_for_the_count_the_order_and_the_queue(udon):
+def test_a_cutoff_day_asks_for_the_order_and_the_queue(udon):
     c = udon
-    tue = date(2026, 10, 6)
-    it = _by(TD.build(c, M, None, None, today=tue))
-    assert it["count_today"]["status"] == "todo" and it["order_today_1"]["status"] == "todo"
-    assert it["order_today_1"]["go"] == {"tab": "branchstock", "pane": "order", "extra": {"round": "1"}, "branch": 1}
+    mon = date(2026, 10, 5)                                      # round 1's cutoff day: Wednesday's delivery, 13:15
+    it = _by(TD.build(c, M, None, None, today=mon))
+    assert it["order_due_1"]["status"] == "todo" and it["order_due_1"]["due_today"] is True
+    assert it["order_due_1"]["go"] == {"tab": "branchstock", "pane": "order",
+                                       "extra": {"round": "1", "delivery": "2026-10-07"}, "branch": 1}
     assert it["queue_pending"]["status"] == "done"
-    ST.save(c, 1, PACK, "u", submit=True, count_date="2026-10-06")
-    c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-06', '1', 'submitted')")
-    it = _by(TD.build(c, M, None, None, today=tue))
-    assert it["count_today"]["status"] == "done" and it["order_today_1"]["status"] == "done"
+    c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'submitted')")
+    it = _by(TD.build(c, M, None, None, today=mon))
+    assert it["order_due_1"]["status"] == "done" and "ส่งแล้ว" in it["order_due_1"]["detail"]
     assert it["queue_pending"]["status"] == "todo" and it["queue_pending"]["count"] == 1
     assert it["queue_pending"]["urgent"] is False
-    assert _by(TD.build(c, M, None, None, today=date(2026, 10, 8)))["queue_pending"]["urgent"] is True
+    assert "ภายใน 14:00 ของวันตัดรอบ" in it["queue_pending"]["detail"]
+    assert _by(TD.build(c, M, None, None, today=date(2026, 10, 6)))["queue_pending"]["urgent"] is True
 
 
 def test_a_branch_login_sees_only_its_branch(udon):

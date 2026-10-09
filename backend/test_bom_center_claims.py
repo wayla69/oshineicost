@@ -20,7 +20,7 @@ from bom_center import hub as HB
 from bom_center import orders as OR
 from bom_center import variance as VA
 from test_bom_center_s4b import con  # noqa: F401
-from test_bom_center_s9 import AS_OF, TUE, _submitted  # noqa: F401
+from test_bom_center_s9 import AS_OF, WED, _submitted  # noqa: F401
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64 + b"\xff\xd9"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32

@@ -51,14 +51,16 @@ AS_OF = date(2026, 10, 5)       # the last day of the five weeks (Sep 1 + 34)
 
 
 def test_cover_periods_from_the_calendar(con):
-    o, dlv, cf, ct = F.cover_period(con, 1, "1", date(2026, 10, 6))         # a Tuesday
-    assert (o, dlv, cf, ct) == (date(2026, 10, 6), date(2026, 10, 7), date(2026, 10, 7), date(2026, 10, 9))
-    o, dlv, cf, ct = F.cover_period(con, 1, "2", date(2026, 10, 6))         # rolls forward to Friday
-    assert o == date(2026, 10, 9) and dlv == date(2026, 10, 10) and ct == date(2026, 10, 13)
-    o, dlv, cf, ct = F.cover_period(con, 1, "salmon", date(2026, 10, 6))    # Monday, a week ahead
-    assert o == date(2026, 10, 12) and dlv == date(2026, 10, 19) and (ct - cf).days == 6
+    # cover_period(day) = the window still open on `day` (cutoff date >= day); the cutoff is 13:15 two days before
+    o, dlv, cf, ct = F.cover_period(con, 1, "1", date(2026, 10, 6))         # a Tuesday: Wed 7 closed on Mon 5
+    assert (o, dlv, cf, ct) == (date(2026, 10, 12), date(2026, 10, 14), date(2026, 10, 14), date(2026, 10, 16))
+    o, dlv, cf, ct = F.cover_period(con, 1, "2", date(2026, 10, 6))         # Saturday 10, cutoff Thursday 8
+    assert o == date(2026, 10, 8) and dlv == date(2026, 10, 10) and ct == date(2026, 10, 13)
+    o, dlv, cf, ct = F.cover_period(con, 1, "salmon", date(2026, 10, 6))    # Monday 12, cutoff Saturday 10
+    assert o == date(2026, 10, 10) and dlv == date(2026, 10, 12) and (ct - cf).days == 6
+    # a legacy row (order Wednesday + 2 days = delivery Friday) reads as a Friday delivery
     con.execute("INSERT INTO bc_order_calendar(branch_id, round, order_weekday, lead_days) VALUES(1, '1', 3, 2)")
-    o, dlv, cf, ct = F.cover_period(con, 1, "1", date(2026, 10, 6))         # Wednesday, 2 days to arrive
+    o, dlv, cf, ct = F.cover_period(con, 1, "1", date(2026, 10, 6))
     assert o == date(2026, 10, 7) and dlv == date(2026, 10, 9) and ct == date(2026, 10, 9)
 
 
@@ -114,13 +116,12 @@ def test_missed_lines_are_reported_for_dishes_sold(con):
 
 def test_calendar_rules_and_permissions(client):
     import main
-    r = client.post("/api/bom-center/order-calendar", json=[{"branch_id": 1, "round": "1", "order_weekday": 4}])
-    assert r.status_code == 400                                             # round 1 is Tue/Wed only
-    r = client.post("/api/bom-center/order-calendar", json=[{"branch_id": 1, "round": "2", "order_weekday": 6,
-                                                             "lead_days": 1}])
+    r = client.post("/api/bom-center/order-calendar", json=[{"branch_id": 1, "round": "1"}])
+    assert r.status_code == 400                                             # the delivery weekday is required
+    r = client.post("/api/bom-center/order-calendar", json=[{"branch_id": 1, "round": "2", "delivery_weekday": 2}])
     assert r.status_code == 200
     cal = client.get("/api/bom-center/order-calendar").json()
-    assert next(x for x in cal["rows"] if x["branch_id"] == 1)["r2"]["order_weekday"] == 6
+    assert next(x for x in cal["rows"] if x["branch_id"] == 1)["r2"]["order_weekday"] == 6   # Tuesday delivery → Saturday cutoff
     out = client.get("/api/bom-center/forecast?branch_id=1&round=1&season=off").json()
     assert out["round"] == "1" and "rows" in out
     saved = client.post("/api/bom-center/forecast/run", json={"branch_id": 1, "round": "1", "season": "off"}).json()

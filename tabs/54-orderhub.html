@@ -4,7 +4,7 @@
     <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
       ใบสั่งซื้อที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · คลังระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล · ประสานงานขาย (Sales Support) พิจารณาเคลมสินค้าที่สาขาแจ้ง ·
-      สาขาส่งใบสั่งซื้อก่อน 10:00 ของวันสั่ง และส่วนกลางควรดำเนินการภายใน 14:00 ของวันเดียวกัน · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
+      สาขาส่งใบสั่งซื้อก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) ใบที่ส่งหลังเวลาตัดรอบมีค่าปรับล่าช้าและแสดงป้าย “ส่งล่าช้า” · คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
     </p>
   </div>
 
@@ -13,7 +13,7 @@
     <div class="card p-3 mb-3">
       <div id="ohbStatusChips" class="flex flex-wrap gap-1"></div>
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
-        <label>วันสั่งตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>ตัดรอบตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>

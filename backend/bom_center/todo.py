@@ -18,7 +18,7 @@ writes do not invalidate the cache, and this list must be right straight after a
 """
 from datetime import date, timedelta
 
-from .clock import today as bkk_today
+from .clock import now_bkk
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
@@ -182,12 +182,11 @@ def _month_items(con, month: str, today: date) -> list:
     return out
 
 
-def _week_items(con, branches: list, today: date, single: bool, centre: bool) -> list:
-    from .forecast import _next_on_or_after, _wd, calendar
+def _week_items(con, branches: list, today: date, single: bool, centre: bool, now=None) -> list:
+    from .forecast import ROUND_TH, WD_TH, _wd, calendar, next_deliveries
     from .hub import delivery_of
     from .orders import STATUS_TH
     out = []
-    wd = _wd(today)
     if centre:
         from .pilot import pilot_branches
         users = {}
@@ -200,17 +199,20 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool) ->
                       count=len(no_acc) or None, owner=("system.admin",), owner_th="ผู้ดูแลระบบ",
                       go={"tab": "settings", "pane": "users"}))
         unfilled = [b for b in branches if not all(calendar(con, b["branch_id"])[r]["filled"] for r in ("1", "2", "salmon"))]
-        out.append(_e("calendar", 210, "week", "กำหนดรอบสั่งของสาขา (รอบ 1 · รอบ 2 · แซลมอนสด)",
+        out.append(_e("calendar", 210, "week", "กำหนดรอบส่งของสาขา (รอบ 1 · รอบ 2 · แซลมอนสด)",
                       "done" if not unfilled else "todo",
                       ("ยังใช้ค่าเริ่มต้น: " + " · ".join(b["name"] for b in unfilled)) if unfilled else "ครบทุกสาขา",
                       count=len(unfilled) or None, owner=("supply.ordering",), owner_th="ฝ่ายขาย / Sales Support",
                       go={"tab": "bomcenter", "pane": "cal"}))
-        q = con.execute("SELECT COUNT(*), MIN(cycle_date) FROM bc_order WHERE status='submitted'").fetchone()
-        late = bool(q[0] and q[1] and q[1] < today.isoformat())
+        q = con.execute("SELECT COUNT(*), MIN(cycle_date), SUM(COALESCE(late,0)) FROM bc_order"
+                        " WHERE status='submitted'").fetchone()
+        late = bool(q[0] and q[1] and q[1] < today.isoformat())          # past its cutoff day: the 14:00 target has gone
+        n_late = int(q[2] or 0)                                           # submitted after the 13:15 cutoff (late fee)
         out.append(_e("queue_pending", 220, "week", "ระบุยอดส่งจริงของใบสั่งซื้อที่สาขาส่งมา", "todo" if q[0] else "done",
-                      (f"รอ {q[0]} ใบ ภายใน 14:00 ของวันสั่ง" + (" · มีใบที่เลยวันสั่งแล้ว" if late else "")) if q[0] else "ไม่มีใบสั่งซื้อค้าง",
+                      (f"รอ {q[0]} ใบ ภายใน 14:00 ของวันตัดรอบ" + (f" · ส่งล่าช้า {n_late} ใบ (มีค่าปรับ)" if n_late else "")
+                       + (" · มีใบที่เลยวันตัดรอบแล้ว" if late else "")) if q[0] else "ไม่มีใบสั่งซื้อค้าง",
                       count=q[0] or None, owner=("supply.warehouse",), owner_th="คลัง", urgent=late,    # owner 2026-10-08
-                      go={"tab": "orderhub", "pane": "queue"}))
+                      late_orders=n_late, go={"tab": "orderhub", "pane": "queue"}))
         nc = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE status='submitted'") if _has(con, "bc_claim") else 0
         out.append(_e("claims_pending", 225, "week", "พิจารณาเคลมสินค้าที่สาขาแจ้ง", "todo" if nc else "done",
                       f"รออนุมัติ {nc} เรื่อง ตรวจรูปแล้วอนุมัติเพื่อปรับสินค้าของสาขา" if nc else "ไม่มีเคลมค้าง",
@@ -218,37 +220,48 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool) ->
                       go={"tab": "orderhub", "pane": "claims"}))
     for b in branches:
         bid = b["branch_id"]
-        cal = calendar(con, bid)
-        rounds_today = [r for r in ("1", "2", "salmon") if int(cal[r]["order_weekday"]) == wd]
-        if rounds_today:
-            counted = _scalar(con, "SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=?"
-                                   " AND COALESCE(status,'submitted')='submitted'", (bid, today.isoformat()))
-            draft = _scalar(con, "SELECT 1 FROM bc_stock_count WHERE branch_id=? AND status='draft'", (bid,))
-            out.append(_e("count_today", 300, "week", "ตรวจนับสินค้าคงเหลือก่อนเปิดร้าน", "done" if counted else "todo",
-                          "ส่งผลตรวจนับแล้ว" if counted else ("มีร่างที่ยังไม่ส่ง" if draft else f"วันสั่งรอบ {' และ '.join(rounds_today)} นับก่อนสั่ง"),
-                          owner=("branch.stock",), owner_th="สาขา", branch=b, go={"tab": "branchstock", "pane": "count"}))
-            for r in rounds_today:
-                st = _scalar(con, "SELECT status FROM bc_order WHERE branch_id=? AND round=? AND cycle_date=?"
-                                  " AND status<>'cancelled' ORDER BY order_id DESC LIMIT 1", (bid, r, today.isoformat()))
-                sent = st in ("submitted", "processed", "received")
-                rn = "แซลมอนสด" if r == "salmon" else f"รอบ {r}"
-                out.append(_e(f"order_today_{r}", 310, "week", f"ส่งใบสั่งซื้อ{rn}ให้ส่วนกลางก่อน 10:00",
-                              "done" if sent else "todo", f"สถานะ: {STATUS_TH.get(st, st)}" if st else "ยังไม่ได้เปิดใบสั่งซื้อ",
-                              owner=("branch.stock",), owner_th="สาขา", branch=b,
-                              go={"tab": "branchstock", "pane": "order", "extra": {"round": r}}))
-        else:
-            nxt = min((_next_on_or_after(today + timedelta(days=1), int(cal[r]["order_weekday"])), r) for r in ("1", "2", "salmon"))
-            out.append(_e("count_today", 300, "week", "ตรวจนับและสั่งสินค้า", "na",
-                          f"วันสั่งถัดไป {nxt[0].isoformat()} ({'แซลมอนสด' if nxt[1] == 'salmon' else 'รอบ ' + nxt[1]})",
-                          owner=("branch.stock",), owner_th="สาขา", branch=b, go={"tab": "branchstock", "pane": "count"}))
+        # one duty per round: the nearest delivery, and the cutoff the branch has to beat for it
+        nearest = {}
+        for it in next_deliveries(con, bid, today, horizon_days=7, now=now):
+            nearest.setdefault(it["round"], it)
+        for r in ("1", "2", "salmon"):
+            it = nearest[r]
+            row = con.execute("SELECT status FROM bc_order WHERE branch_id=? AND round=? AND cycle_date=?"
+                              " AND status<>'cancelled' ORDER BY order_id DESC LIMIT 1",
+                              (bid, r, it["cycle_date"])).fetchone()
+            st = row[0] if row else None
+            sent = st in ("submitted", "processed", "received")
+            dlv = date.fromisoformat(it["delivery"])
+            dlv_par = f"วัน{WD_TH[_wd(dlv)]} ({dlv.day}/{dlv.month})"
+            late_now = it["late"] and not sent
+            hours = int(max(it["hours_left"], 0))
+            if sent:
+                detail = f"สถานะ: {STATUS_TH.get(st, st)}"
+            elif late_now:
+                detail = "เลยเวลาตัดรอบ มีค่าปรับล่าช้า หากยังต้องการสั่ง ให้ส่งใบสั่งซื้อโดยเร็ว"
+            elif st:
+                detail = f"เหลือ {hours} ชม. · สถานะ: {STATUS_TH.get(st, st)}"
+            else:
+                detail = f"เหลือ {hours} ชม. · ยังไม่ได้เปิดใบสั่งซื้อ"
+            what = "ส่งใบสั่งซื้อแซลมอนสด" if r == "salmon" else "ส่งใบสั่งซื้อ"
+            out.append(_e(f"order_due_{r}", 310, "week",
+                          f"{what}{' ' if r == 'salmon' else ''}รอบส่ง{dlv_par} ภายใน {it['cutoff_th']}",
+                          "done" if sent else "todo", detail,
+                          owner=("branch.stock",), owner_th="สาขา", branch=b,
+                          urgent=bool(not sent and (it["late"] or 0 <= it["hours_left"] < 4)),
+                          round_th=it["round_th"], delivery=it["delivery"], delivery_th=it["delivery_th"],
+                          cutoff_at=it["cutoff_at"], cutoff_th=it["cutoff_th"], cutoff_date=it["cycle_date"],
+                          late=bool(it["late"]), due_today=it["cycle_date"] == today.isoformat(),
+                          go={"tab": "branchstock", "pane": "order", "extra": {"round": r, "delivery": it["delivery"]}}))
         due = []
-        for oid, r, cyc in con.execute("SELECT order_id, round, cycle_date FROM bc_order WHERE branch_id=? AND status='processed'"
-                                       " ORDER BY cycle_date", (bid,)):
-            if delivery_of(con, bid, r, cyc) <= today.isoformat():
-                due.append((oid, r, cyc))
+        for oid, r, cyc, dd in con.execute("SELECT order_id, round, cycle_date, delivery_date FROM bc_order"
+                                           " WHERE branch_id=? AND status='processed' ORDER BY cycle_date", (bid,)):
+            dlv = delivery_of(con, bid, r, cyc, dd)
+            if dlv <= today.isoformat():
+                due.append((oid, r, dlv))
         if due:
             out.append(_e("receive_pending", 320, "week", "บันทึกรับสินค้าตามใบสั่งซื้อที่ส่งถึงแล้ว", "todo",
-                          "ใบสั่งซื้อ " + " · ".join(f"#{o} ({'แซลมอน' if r == 'salmon' else 'รอบ ' + r} {c})" for o, r, c in due),
+                          "ใบสั่งซื้อ " + " · ".join(f"#{o} ({ROUND_TH[r]} ส่ง {d})" for o, r, d in due),
                           count=len(due), owner=("branch.stock",), owner_th="สาขา", branch=b,
                           go={"tab": "branchstock", "pane": "recv", "extra": {"order_id": due[0][0]}}))
         nc_b = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE branch_id=? AND status='submitted'", (bid,)) \
@@ -338,7 +351,8 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
     def count_in(bid, first_day):
         d0 = date.fromisoformat(first_day)
         return con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
-                           " AND COALESCE(status,'submitted')='submitted' AND count_date BETWEEN ? AND ?"
+                           " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
+                           " AND count_date BETWEEN ? AND ?"
                            " ORDER BY count_date, count_id LIMIT 1", (bid, first_day, (d0 + tol).isoformat())).fetchone()
 
     def count_step(kind, first_day):
@@ -381,8 +395,12 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
 
 
 # ── the answer ───────────────────────────────────────────────────────────────
-def build(con, month: str = None, branch_id: int = None, scoped_branch: str = None, today: date = None) -> dict:
-    today = today or bkk_today()
+def build(con, month: str = None, branch_id: int = None, scoped_branch: str = None, today: date = None,
+          now=None) -> dict:
+    """`now` (tests): the Bangkok clock the cutoff countdown reads; with only `today` it is 08:00 that day."""
+    if now is None and today is None:
+        now = now_bkk()
+    today = today or now.date()
     month = month or _default_month(con, today)
     all_br = _branch_rows(con)
     by_id = {b["branch_id"]: b for b in all_br}
@@ -408,7 +426,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     if centre:
         items += _setup_items(con)
         items += _month_items(con, month, today)
-    items += _week_items(con, week_br, today, single=chosen is not None, centre=centre)
+    items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
     close = _close_steps(con, month, close_br, scoped=bool(scoped_branch))
     this_m = _ym(today)
     return {"month": month, "today": today.isoformat(), "scoped": bool(scoped_branch),

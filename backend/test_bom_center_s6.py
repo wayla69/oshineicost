@@ -62,6 +62,14 @@ def test_begin_then_end_and_the_end_is_the_next_begin(db):
     ps = ST.periods(db, 1)
     assert ps == [({"count_id": out["count_id"], "date": "2026-10-01"}, {"count_id": out2["count_id"], "date": "2026-10-04"})]
     assert [h["kind"] for h in ST.history(db, 1)] == ["end", "begin"]
+    # PR-A: a count made while ordering ('spot') changes neither the begin/end sequence nor the periods
+    sp = ST.save(db, 1, [{"code": "13-01-009", "qty": 4, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
+                 count_date="2026-10-05", kind="spot")
+    assert sp["kind"] == "spot" and sp["status"] == "submitted"
+    assert ST.sheet(db, 1, AS_OF)["next_kind"] == "end" and ST.sheet(db, 1, AS_OF)["last_count"]["count_id"] == out2["count_id"]
+    assert ST.draft_of(db, 1) is None and ST.periods(db, 1) == ps
+    assert [h["kind"] for h in ST.history(db, 1)] == ["spot", "end", "begin"]
+    assert [h["kind"] for h in ST.history(db, 1, kinds=ST.MONTH_KINDS)] == ["end", "begin"]
 
 
 def test_bad_counts_are_refused(db):
