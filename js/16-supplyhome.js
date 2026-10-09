@@ -13,7 +13,7 @@ const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
   bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
   ohbCenStatus: 'central_report', ohbLinkStatus: 'code_links', ohbDelStatus: 'deliveries', ohbCntStatus: 'begin_count',
-  brnStatus: 'count_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
+  brnStatus: 'end_count', brnIssStatus: 'issue_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
   ohbDStatus: 'queue_pending' };
 
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js): this tab has one view; a month from a link lands in the strip.
@@ -135,6 +135,7 @@ function _shmOpen(go) {
     _brnRound = x.round; _brnRoundKeep = true;                         // survives the page's branch reset
     if (x.delivery) { _brnDelivery = x.delivery; _brnDeliveryKeep = true; }   // the delivery day the task names
   }
+  if (x.date && go.pane === 'issue' && typeof _brnIssDate !== 'undefined') { _brnIssDate = x.date; _brnIssDateKeep = true; }   // the day of the slip the task names
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);

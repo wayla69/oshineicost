@@ -1586,7 +1586,7 @@ function bmcRenderForecast() {
       เทศกาล ×${(f.season?.factor || 1).toFixed(2)}${f.season?.reason ? ' (' + esc(f.season.reason) + ')' : ''}
       ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบส่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a>'}</div>
     <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
-      ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (หน้าสั่งสินค้าของสาขาหักให้เมื่อสาขามีผลตรวจนับ) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
+      ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (หน้าสั่งสินค้าของสาขาหักคงเหลือตามระบบให้ เมื่อสาขามีผลตรวจนับสิ้นเดือนและยืนยันใบตัดเบิกรายวัน) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
     ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรในเมนูที่สาขานี้ขายที่ยังคำนวณไม่ได้ (แปลงหน่วยไม่ได้) <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
       <div class="text-[11px] mt-1" style="color:var(--text-secondary)">${f.stats.missed.map(m => `${esc(m.code)} (${esc(m.unit)}) · ${_bmcNum(m.plates, 0)} จาน · ${esc(m.why)}`).join('<br>')}</div></details>` : ''}
   </div>`;
