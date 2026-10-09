@@ -627,7 +627,7 @@ async function bmcLoadPriceSubs() {
       return `<div class="py-2 border-b" style="border-color:var(--border-soft)">
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs font-semibold" style="color:var(--text-primary)">${esc(s.month)} · ${esc(s.filename || '')}</span>
-          <span class="text-[11px]" style="color:var(--text-muted)">${_bmcNum(s.size / 1024, 0)} KB · ส่งโดย ${esc(s.submitted_by || '-')} เมื่อ ${at(s.submitted_at)}</span>
+          <span class="text-[11px]" style="color:var(--text-muted)">${s.size < 1024 ? _bmcNum(s.size, 0) + ' ไบต์' : _bmcNum(s.size / 1024, 0) + ' KB'} · ส่งโดย ${esc(s.submitted_by || '-')} เมื่อ ${at(s.submitted_at)}</span>
           ${_bmcChip(s.status_th || s.status, _BMC_SUB_ST[s.status] || 'var(--text-muted)')}
           ${w && s.status === 'pending' ? `<span class="ml-auto flex flex-wrap gap-2">
             <button onclick="bmcSubPreview(${s.sub_id})" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ตรวจ (ดูผลก่อนบันทึก)</button>
