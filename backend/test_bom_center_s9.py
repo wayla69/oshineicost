@@ -59,7 +59,7 @@ def test_queue_and_process(con):  # noqa: F811
     assert out["status"] == "processed" and out["value"] > 0
     d = OR.detail(con, oid)
     ln = next(l for l in d["lines"] if l["code"] == "13-01-009")
-    assert ln["processed_units"] == q - 1 and ln["ss_reason_th"].startswith("ซัพพลายเออร์")
+    assert ln["processed_units"] == q - 1 and ln["ss_reason_th"].startswith("ผู้จำหน่าย")
     assert d["po_ref"] == "PO-2569-001" and d["processed_by"] == "ss"
     assert HB.queue(con) == [] and HB.queue(con, "processed")[0]["order_id"] == oid
     with pytest.raises(ValueError):                              # the branch can no longer reopen it

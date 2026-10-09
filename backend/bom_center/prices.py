@@ -152,7 +152,7 @@ def aggregate(con, lines: list, add_unknown: bool = False, who: str = "-", month
                     issues.append({"code": code, "name": ln.get("name"), "unit": ln.get("unit"), "qty": qty,
                                    "value": round(value, 2), "suggest_factor": round(fits, 3),
                                    "why": f"{how} ทำให้ราคาเป็น {ratio:.2f} เท่าของราคาล่าสุด 1 {ln.get('unit')}"
-                                          f" ควรเท่ากับประมาณ {fits:,.0f} {conv.base_unit(code)} กรุณาตั้งกฎหน่วย"})
+                                          f" ควรเท่ากับประมาณ {fits:,.0f} {conv.base_unit(code)} · ตั้งกฎหน่วย"})
                     continue
         a = codes.setdefault(code, {"qty_base": 0.0, "value": 0.0, "lines": 0, "units": set(), "hows": set()})
         a["qty_base"] += qb

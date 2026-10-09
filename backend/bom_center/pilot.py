@@ -44,9 +44,9 @@ def readiness(con) -> dict:
         "releases": con.execute("SELECT COUNT(*) FROM bc_release WHERE kind='monthly' AND status='released'").fetchone()[0],
     }
     centre_steps = [
-        ("master", centre["ingredients"] > 0, "เติมทะเบียนวัตถุดิบ (BoM Center → ภาพรวม → “เติมจากข้อมูลในระบบ”)"),
-        ("prices", bool(centre["price_months"]), "นำเข้าราคาซื้อจริงเดือนล่าสุด (BoM Center → ราคารายเดือน)"),
-        ("sub_recipes", centre["sub_recipes"] > 0, "นำเข้าสูตรกึ่งสำเร็จจากไฟล์ครัว (BoM Center → สูตรกึ่งสำเร็จ) ขั้นตอนนี้ไม่บังคับ แต่ช่วยให้สั่งวัตถุดิบดิบที่เป็นส่วนผสมได้"),
+        ("master", centre["ingredients"] > 0, "เติมทะเบียนวัตถุดิบ (ข้อมูลตั้งต้น → “เติมจากข้อมูลในระบบ”)"),
+        ("prices", bool(centre["price_months"]), "นำเข้าราคาซื้อจริงเดือนล่าสุด (ราคารายเดือน)"),
+        ("sub_recipes", centre["sub_recipes"] > 0, "นำเข้าสูตรกึ่งสำเร็จจากไฟล์ครัว (สูตรกึ่งสำเร็จ) · ไม่บังคับ แต่ช่วยให้ยอดแนะนำรวมวัตถุดิบดิบที่เป็นส่วนผสม"),
     ]
     users = {}
     if _has(con, "app_user"):
@@ -65,7 +65,7 @@ def readiness(con) -> dict:
             ("account", any(u["active"] for u in users.get(b["name"], [])),
              "สร้างบัญชีผู้ใช้ของสาขา (ตั้งค่า → ผู้ใช้งาน → บทบาท “สาขา” และเลือกสาขา)"),
             ("calendar", all(cal[r]["filled"] for r in ("1", "2", "salmon")),
-             "ฝ่ายขายกำหนดวันส่งของ 3 รอบ (ตั้งค่า → รอบส่งของสาขา)"),
+             "ประสานงานขายกำหนดวันส่งของ 3 รอบ (ตั้งค่า → รอบส่งของสาขา)"),
             ("begin_count", bool(first[0]), "สาขาตรวจนับต้นงวดครั้งแรก (สาขาของฉัน → ตรวจนับสิ้นเดือน)"),
         ]
         rows.append({"branch_id": bid, "branch": b["name"], "accounts": users.get(b["name"], []),

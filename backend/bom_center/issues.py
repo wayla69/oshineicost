@@ -28,6 +28,7 @@ Rules (shared by every PR of the series):
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import BKK, now_bkk
+from .fmt import day_th as _fmt_day
 from .master import audit
 from .units import Converter
 
@@ -229,7 +230,7 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     iso = d.isoformat()
     row = _row(con, branch_id, iso)
     if row and row["status"] == "confirmed":
-        raise ValueError(f"ใบตัดเบิกวันที่ {iso} ยืนยันแล้ว หากต้องแก้ไข กรุณาแจ้งประสานงานขายให้เปิดแก้ไข")
+        raise ValueError(f"ใบตัดเบิกวันที่ {_fmt_day(iso)} ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข")
     conv = Converter(con)
     cu = count_units(con, {(ln.get("code") or ln.get("ingredient_code") or "").strip() for ln in lines or []})
     clean, bad = [], []
@@ -258,7 +259,7 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
             continue
         if waste > 0:
             if reason not in WASTE_REASON_TH:
-                raise ValueError(f"{code}: กรุณาเลือกสาเหตุของของเสีย")
+                raise ValueError(f"{code}: เลือกสาเหตุของของเสีย")
             if reason == "other" and not lnote:
                 raise ValueError(f"{code}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         else:
@@ -303,7 +304,7 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
             "SELECT ingredient_code, unit FROM bc_issue_line WHERE slip_id=? AND (qty_used_base IS NULL"
             " OR qty_waste_base IS NULL)", (sid,))]
         if unconv:
-            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(unconv[:3]) + " กรุณาแจ้งส่วนกลางให้เพิ่มกฎหน่วย")
+            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(unconv[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
         first = int(row["confirm_count"] or 0) == 0
         late = 1 if (first and today > d) else int(row["late"] or 0)
         con.execute("UPDATE bc_issue_slip SET status='confirmed', confirmed_by=?, confirmed_at=?, late=?,"
@@ -330,7 +331,7 @@ def reopen(con, slip_id: int, who: str, note: str, now: datetime = None) -> dict
     assert_not_posted(con, row["branch_id"], row["slip_date"], "ใบตัดเบิก")     # Accounting has keyed this period
     note = (note or "").strip()
     if not note:
-        raise ValueError("กรุณาระบุเหตุผลในการเปิดแก้ไขใบตัดเบิก")
+        raise ValueError("ระบุเหตุผลที่เปิดแก้ไขใบตัดเบิก")
     con.execute("UPDATE bc_issue_slip SET status='draft', reopened_by=?, reopened_at=?, reopen_note=?, updated_at=?"
                 " WHERE slip_id=?", (who, _stamp(now), note, _stamp(now), slip_id))
     n = con.execute("SELECT COUNT(*) FROM bc_issue_line WHERE slip_id=?", (slip_id,)).fetchone()[0]
@@ -351,7 +352,7 @@ def listing(con, branch_id: int = None, date_from=None, date_to=None, status: st
     """Slips of one branch (or all), newest first, each with its line counts. `status` filters by what the
     slip shows: confirmed / late / draft (None or 'all' = every slip)."""
     if status and status != "all" and status not in ("confirmed", "late", "draft"):
-        raise ValueError("status ต้องเป็น confirmed / late / draft / all")
+        raise ValueError("คำขอไม่ถูกต้อง")
     d1 = date.fromisoformat(_iso(date_to)) if date_to else now_bkk().date()
     d0 = date.fromisoformat(_iso(date_from)) if date_from else d1 - timedelta(days=30)
     sql = ("SELECT " + ", ".join("s." + c for c in _COLS) + ", b.name,"

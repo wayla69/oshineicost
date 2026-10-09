@@ -32,9 +32,9 @@ from .clock import today as bkk_today
 from .master import audit
 
 DEVIATION_PCT = 20.0          # a confirmed quantity further than this from the suggestion needs a reason
-REASONS = (("stock_more", "สินค้าคงเหลือมากกว่าที่ระบบแสดง"), ("stock_less", "สินค้าคงเหลือน้อยกว่าที่ระบบแสดง"),
+REASONS = (("stock_more", "คงเหลือจริงมากกว่าตามระบบ"), ("stock_less", "คงเหลือจริงน้อยกว่าตามระบบ"),
            ("event", "มีงาน / โปรโมชัน / ลูกค้าจองกลุ่ม"), ("space", "พื้นที่จัดเก็บไม่เพียงพอ"),
-           ("quality", "สินค้ารอบก่อนเสีย / คุณภาพไม่ดี"), ("pack", "ขนาดแพ็ค / ขั้นต่ำซัพพลายเออร์"),
+           ("quality", "สินค้าล็อตก่อนเสีย / คุณภาพไม่ดี"), ("pack", "ขนาดแพ็ค / ขั้นต่ำผู้จำหน่าย"),
            ("other", "อื่น ๆ"))
 REASON_TH = dict(REASONS)
 # PR-19: the branch's buffer — its own expectation for the cover period, one per order
@@ -51,15 +51,15 @@ def buffer_clean(buffer) -> tuple:
     try:
         pct = float(buffer.get("pct") or 0)
     except (TypeError, ValueError, AttributeError):
-        raise ValueError("buffer ต้องเป็นตัวเลข")
+        raise ValueError("% ที่ปรับต้องเป็นตัวเลข")
     if not (BUFFER_MIN <= pct <= BUFFER_MAX):
-        raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
+        raise ValueError(f"% ที่ปรับต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
     if pct == 0:
         return 0.0, None, None
     reason = (buffer.get("reason") or "").strip() or None
     note = (buffer.get("note") or "").strip() or None
     if reason not in BUFFER_REASON_TH:
-        raise ValueError("กรุณาเลือกเหตุผลที่คาดว่ายอดขายจะต่างจากปกติ")
+        raise ValueError("เลือกเหตุผลที่คาดว่ายอดขายจะต่างจากปกติ")
     if reason == "other" and not note:
         raise ValueError("เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
     return pct, reason, note
@@ -78,8 +78,7 @@ class LateSubmit(ValueError):
 
     def __init__(self, cutoff_at: str, cutoff_th: str):
         self.cutoff_at, self.cutoff_th = cutoff_at, cutoff_th
-        super().__init__(f"เลยเวลาตัดรอบแล้ว ({cutoff_th}) หากส่งใบสั่งซื้อนี้ จะมีค่าปรับล่าช้าที่ต้องชำระให้คลังสินค้าภายนอก "
-                         "กรุณายืนยันการส่งล่าช้า")
+        super().__init__(f"เลยเวลาตัดรอบ ({cutoff_th}) ส่งตอนนี้มีค่าปรับล่าช้า · ยืนยันส่ง?")
 
 
 def backfill(con) -> None:
@@ -175,8 +174,8 @@ def detail(con, order_id: int) -> dict:
     return o
 
 
-STATUS_TH = {"suggested": "ร่าง (ยังไม่ส่ง)", "confirmed": "ร่าง (ยังไม่ส่ง)", "submitted": "ส่งแล้ว รอส่วนกลางดำเนินการ",
-             "processed": "ส่วนกลางดำเนินการแล้ว", "received": "รับสินค้าแล้ว", "cancelled": "ยกเลิก"}
+STATUS_TH = {"suggested": "ร่าง (ยังไม่ส่ง)", "confirmed": "ร่าง (ยังไม่ส่ง)", "submitted": "ส่งแล้ว (รอคลังจัดส่ง)",
+             "processed": "คลังจัดส่งแล้ว", "received": "รับสินค้าแล้ว", "cancelled": "ยกเลิก"}
 
 
 def _needs_reason(sugg, conf) -> bool:
@@ -228,7 +227,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         o = _order_row(con, oid)
         if o["status"] not in ("suggested", "confirmed"):
             raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
-                             + (" กรุณากดเปิดแก้ไขก่อน" if o["status"] == "submitted" else ""))
+                             + (" · กด “เปิดแก้ไข” ก่อน" if o["status"] == "submitted" else ""))
         con.execute("UPDATE bc_order SET delivery_date=COALESCE(?, delivery_date), cutoff_at=COALESCE(?, cutoff_at),"
                     " stock_count_id=COALESCE(?, stock_count_id) WHERE order_id=?",
                     (delivery, cut_iso, basis_id, oid))
@@ -278,7 +277,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
             if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (c,)).fetchone():
                 raise ValueError(f"ไม่พบรหัส {c} ในทะเบียน")
             if cmap and c not in cmap:
-                raise ValueError(f"{c} ไม่อยู่ในบัญชีสินค้าส่วนกลาง สาขาต้องจัดซื้อในพื้นที่")
+                raise ValueError(f"{c} ไม่อยู่ในบัญชีสินค้าส่วนกลาง · สาขาซื้อเอง")
             con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                         " order_unit, reason_code, note) VALUES(?,?,0,?,?,?,?)",
                         (oid, c, q, unit_of.get(c) or ln.get("order_unit") or "base", rs, ln.get("note")))
@@ -305,7 +304,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
            "slip_today": slip_today}
     if submit:
         if missing:
-            raise ValueError(f"จำนวนที่แก้ไขต่างจากที่แนะนำเกิน {DEVIATION_PCT:g}% กรุณาเลือกเหตุผล: " + ", ".join(sorted(set(missing))[:5]))
+            raise ValueError(f"จำนวนที่แก้ไขต่างจากที่แนะนำเกิน {DEVIATION_PCT:g}% · เลือกเหตุผล: " + ", ".join(sorted(set(missing))[:5]))
         if not con.execute("SELECT 1 FROM bc_order_line WHERE order_id=? AND confirmed_units>0", (oid,)).fetchone():
             raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
         if not _is.is_confirmed(slip_today):                # ใบตัดเบิก: the order is made from the stock AFTER today's issue
@@ -345,7 +344,7 @@ def reopen(con, branch_id: int, order_id: int, who: str):
     if not o or o["branch_id"] != branch_id:
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] != "submitted":
-        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและส่วนกลางยังไม่ดำเนินการ (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและคลังยังไม่ยืนยันยอดส่ง (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     con.execute("UPDATE bc_order SET status='suggested', submitted_at=NULL, late=0 WHERE order_id=?", (order_id,))
     audit(con, who, "order_reopen", "bc_order", str(order_id))
 
@@ -355,7 +354,7 @@ def cancel(con, branch_id: int, order_id: int, who: str):
     if not o or o["branch_id"] != branch_id:
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("suggested", "confirmed", "submitted"):
-        raise ValueError("ยกเลิกไม่ได้ เนื่องจากส่วนกลางดำเนินการแล้ว")
+        raise ValueError("ยกเลิกไม่ได้ เนื่องจากคลังจัดส่งแล้ว")
     con.execute("UPDATE bc_order SET status='cancelled' WHERE order_id=?", (order_id,))
     audit(con, who, "order_cancel", "bc_order", str(order_id))
 
@@ -377,7 +376,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     if o["status"] not in ("submitted", "processed"):
         raise ValueError(f"รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     if not ack:
-        raise ValueError("กรุณายืนยันว่าสาขาได้ตรวจสอบสภาพสินค้าและจำนวนครบถ้วนแล้ว ก่อนบันทึกรับสินค้า")
+        raise ValueError("ทำเครื่องหมายยืนยันการตรวจสินค้าก่อนบันทึก")
     got = {}
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
@@ -402,7 +401,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
         gap = sent[c] - q
         if gap > 1e-9:
             if reason not in _cl.REASON_TH:
-                raise ValueError(f"{c}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) กรุณาเลือกสาเหตุของส่วนต่าง")
+                raise ValueError(f"{c}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุของส่วนต่าง")
             if reason == "other" and not note:
                 raise ValueError(f"{c}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
             short.append({"code": c, "claim_units": round(gap, 6), "reason": reason, "note": note,
@@ -492,7 +491,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         buffer_pct = (o0 or {}).get("buffer_pct")
     pct = float(buffer_pct or 0.0)
     if not (BUFFER_MIN <= pct <= BUFFER_MAX):
-        raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
+        raise ValueError(f"% ที่ปรับต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
     from . import forecast as _fc
     with _fc._plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
         s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv)
@@ -548,7 +547,7 @@ def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: s
     o = _order_row(con, oid) if oid else None
     if o and o["status"] not in ("suggested", "confirmed"):
         raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
-                         + (" กรุณากดเปิดแก้ไขก่อน" if o["status"] == "submitted" else ""))
+                         + (" · กด “เปิดแก้ไข” ก่อน" if o["status"] == "submitted" else ""))
     pct = None if buffer is None else (buffer or {}).get("pct")
     p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now)
     return save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,

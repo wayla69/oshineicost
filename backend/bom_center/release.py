@@ -30,23 +30,27 @@ from datetime import date, datetime, timezone
 from .clock import today as bkk_today
 from .master import audit
 from .recipes import Coster, cost_recipe, recipe_lines, release_row, release_costs, write_recipe
+from .fmt import day_th, month_th as _mth
 from .schema import ensure
+
+# a recipe version's state as people read it (PR-M1; the codes stay in the database)
+STATUS_TH = {"draft": "ร่าง", "review": "รอตรวจ", "released": "ประกาศใช้แล้ว", "retired": "ยกเลิกใช้"}
 
 CHECKS = {
     "C01": ("block", "วัตถุดิบไม่มีราคาในเดือนที่ใช้คำนวณ"),
     "C02": ("block", "บรรทัดต้นทุน ฿0 ที่ไม่ได้ทำเครื่องหมาย “ตั้งใจเป็น 0”"),
     "C03": ("block", "แปลงหน่วยเป็นหน่วยฐานไม่ได้"),
     "C04": ("block", "ไม่มีรหัสวัตถุดิบ หรือรหัสไม่อยู่ในทะเบียน"),
-    "C05": ("block", "ต้นทุนเมนูเปลี่ยนแปลง ≥ ±50% จากต้นทุนที่ใช้อยู่ ต้องยืนยันพร้อมระบุเหตุผล"),
+    "C05": ("block", "ต้นทุนเมนูเปลี่ยนแปลง ≥ ±50% จากต้นทุนที่ใช้อยู่ · ต้องยอมรับพร้อมเหตุผล"),
     "C06": ("warn", "ต้นทุนเมนูเปลี่ยนแปลง ≥ ±20% จากต้นทุนที่ใช้อยู่"),
-    "C07": ("warn", "เมนูบุฟเฟ่ต์ที่มียอดขายในเดือนล่าสุดแต่ไม่มีสูตรใน release นี้"),
+    "C07": ("warn", "เมนูบุฟเฟ่ต์ที่มียอดขายในเดือนล่าสุดแต่ไม่มีสูตรในเวอร์ชันนี้"),
     "C08": ("warn", "ต้นทุนไม่ตรงกับยอดในไฟล์ต้นทาง (> ฿0.01)"),
     "C09": ("block", "รหัส POS ไม่มีในระบบ / สูตรว่าง"),
-    "C10": ("block", "วัตถุดิบกึ่งสำเร็จยังไม่มีสูตรย่อย กรุณาระบุสูตร หรือยืนยันใช้ราคาซื้อชั่วคราวพร้อมระบุเหตุผล"),
+    "C10": ("block", "วัตถุดิบกึ่งสำเร็จยังไม่มีสูตรย่อย · ระบุสูตร หรือยอมรับใช้ราคาซื้อชั่วคราวพร้อมเหตุผล"),
     "C11": ("block", "ต้นทุนใกล้เคียงราคาขาย"),
     "C12": ("warn", "ปริมาณผิดปกติ (> 1 กก./ลิตร ต่อเสิร์ฟ หรือต้นทุนรวม ฿0)"),
     "C13": ("block", "สูตรย่อยคำนวณต้นทุนไม่ครบ (ไม่พบรหัส / ไม่มีราคา / แปลงหน่วยไม่ได้ / วนซ้ำ) จึงใช้ราคาซื้อแทน"),
-    "C14": ("warn", "ต้นทุนจากสูตรย่อยต่างจากราคาซื้อเกิน 5% กรุณาให้ครัวตรวจสอบ yield"),
+    "C14": ("warn", "ต้นทุนจากสูตรย่อยต่างจากราคาซื้อเกิน 5% · ให้ครัวตรวจปริมาณที่ได้"),
     "UNM": ("warn", "สูตรในไฟล์ที่ยังไม่จับคู่รหัส POS"),
 }
 # blocks a person may accept with a reason: a big cost move (C05), and — Phase 1.5 —
@@ -170,7 +174,7 @@ def run_checks(con, release_id: int) -> dict:
             elif abs(pct) >= 20:
                 add("C06", sku, f"{label}: ฿{old:,.2f} → ฿{total:,.2f} ({pct:+.0f}%)")
         if c.get("source_cost") is not None and abs(total - c["source_cost"]) > 0.01 and not c["problems"]:
-            add("C08", sku, f"{label}: ระบบ ฿{total:,.2f} / ไฟล์ ฿{c['source_cost']:,.2f}")
+            add("C08", sku, f"{label}: คำนวณได้ ฿{total:,.2f} / ไฟล์ ฿{c['source_cost']:,.2f}")
         ap = avg_price.get(sku)
         if ap and ap > 0 and total >= 0.85 * ap:
             add("C11", sku, f"{label}: ต้นทุน ฿{total:,.2f} ≈ ราคาขายเฉลี่ย ฿{ap:,.2f}")
@@ -182,7 +186,7 @@ def run_checks(con, release_id: int) -> dict:
                 " WHERE m.period_month=? AND s.sku_code LIKE 'OTHBF%' GROUP BY s.sku_code HAVING SUM(m.qty) > 0",
                 (sales_month,)):
             if code not in have:
-                add("C07", code, f"{desc or code}: ขาย {q:,.0f} จานในเดือน {sales_month} ระบบใช้ต้นทุนจากเวอร์ชันก่อน")
+                add("C07", code, f"{desc or code}: ขาย {q:,.0f} จานในเดือน {sales_month} · ใช้ต้นทุนจากเวอร์ชันก่อน")
     seen = set()
     for code, ref, msg in findings:
         if (code, ref) in seen:
@@ -254,7 +258,7 @@ def accept(con, release_id: int, code: str, ref: str, reason: str, who: str):
         r = con.execute("SELECT message FROM bc_release_check WHERE release_id=? AND check_code=? AND ref=?",
                         (release_id, code, ref)).fetchone()
     if not r:
-        raise ValueError("ไม่พบรายการตรวจนี้ กรุณากดตรวจสอบใหม่ก่อน")
+        raise ValueError("ไม่พบรายการตรวจนี้ · กด “บันทึกผลตรวจ” ก่อน")
     msg = r[0].split(" ‖ ยอมรับ: ")[0] + " ‖ ยอมรับ: " + reason.strip()
     con.execute("UPDATE bc_release_check SET resolved_by=?, resolved_at=?, message=? WHERE release_id=? AND"
                 " check_code=? AND ref=?", (who, now(), msg, release_id, code, ref))
@@ -363,31 +367,31 @@ def do_release(con, release_id: int, who: str, backdate_reason: str = None, toda
     from . import dated
     rel = release_row(con, release_id)
     if not rel or rel["kind"] != "monthly":
-        raise ValueError("ไม่พบ release")
+        raise ValueError("ไม่พบเวอร์ชัน")
     if rel["status"] not in ("draft", "review"):
-        raise ValueError(f"release นี้มีสถานะ {rel['status']} จึงปล่อยซ้ำไม่ได้")
+        raise ValueError(f"เวอร์ชันนี้มีสถานะ {STATUS_TH.get(rel['status'], rel['status'])} จึงประกาศใช้ซ้ำไม่ได้")
     check_effective_month(rel["effective_month"])
     today = today or bkk_today()
     eff = rel["effective_month"]
     cur = f"{today.year:04d}-{today.month:02d}"
     backdated = eff <= cur
     if backdated and not (backdate_reason or "").strip():
-        raise ValueError(f"เวอร์ชันนี้มีผลเดือน {eff} ซึ่งเริ่มต้นแล้ว การปล่อยจะคำนวณต้นทุนของยอดขายที่เกิดขึ้นแล้วใหม่ "
-                         "กรุณาระบุเหตุผลการปรับย้อนหลัง")
+        raise ValueError(f"เวอร์ชันนี้มีผลเดือน{_mth(eff)} ซึ่งเริ่มต้นแล้ว การประกาศใช้จะคำนวณต้นทุนของยอดขายที่เกิดขึ้นแล้วใหม่ "
+                         "ระบุเหตุผลการปรับย้อนหลัง")
     summary = run_checks(con, release_id)
     if not summary["can_release"]:
-        raise ValueError(f"ยังมีรายการที่ต้องแก้ไข {summary['open_blocks']} รายการ กรุณาดูที่รายการตรวจสอบ")
+        raise ValueError(f"ยังมีรายการที่ต้องแก้ไข {summary['open_blocks']} รายการ · ดูที่รายการตรวจ")
     late = None
     y, m = int(eff[:4]), int(eff[5:7])
     deadline = date(y - (m == 1), 12 if m == 1 else m - 1, 25)
     if backdated:
-        late = f"ปรับย้อนหลัง: มีผล {eff} ระบบคำนวณต้นทุนยอดขายตั้งแต่ {eff} ใหม่ ({backdate_reason.strip()})"
+        late = f"ปรับย้อนหลัง: มีผล {eff} คำนวณต้นทุนยอดขายตั้งแต่ {eff} ใหม่ ({backdate_reason.strip()})"
     elif today > deadline:
-        late = f"ปล่อยหลังกำหนด (ควรปล่อยภายใน {deadline.isoformat()} สำหรับเดือนที่มีผล {eff})"
+        late = f"ประกาศใช้หลังกำหนด (ควรประกาศใช้ภายใน {day_th(deadline)} สำหรับเดือนที่มีผล {eff})"
     # an earlier release of the same month steps aside
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE kind='monthly' AND"
                 " status='released' AND effective_month=? AND release_id<>?",
-                (f" · แทนที่โดย release {release_id} ({now()})", eff, release_id))
+                (f" · แทนที่โดยเวอร์ชันเลขที่ {release_id} ({now()})", eff, release_id))
     from .prep import freeze
     n_prep = freeze(con, release_id)              # the sub-recipes this release is costed with, kept with it
     con.execute("UPDATE bc_release SET status='released', released_by=?, released_at=?, acknowledged_by=NULL,"
@@ -405,9 +409,9 @@ def do_release(con, release_id: int, who: str, backdate_reason: str = None, toda
 def acknowledge(con, release_id: int, who: str, note: str = ""):
     rel = release_row(con, release_id)
     if not rel or rel["status"] != "released":
-        raise ValueError("รับทราบได้เฉพาะ release ที่ปล่อยแล้ว")
+        raise ValueError("รับทราบได้เฉพาะเวอร์ชันที่ประกาศใช้แล้ว")
     if who not in ("-", "", None) and who == rel["released_by"]:
-        raise ValueError("ผู้รับทราบต้องไม่ใช่บุคคลเดียวกับผู้ปล่อย")
+        raise ValueError("ผู้รับทราบต้องไม่ใช่คนเดียวกับผู้ประกาศใช้")
     con.execute("UPDATE bc_release SET acknowledged_by=?, acknowledged_at=?, notes=COALESCE(notes,'') || ?"
                 " WHERE release_id=?", (who, now(), (" · รับทราบ: " + note.strip()) if note and note.strip() else "",
                                         release_id))
@@ -417,11 +421,11 @@ def acknowledge(con, release_id: int, who: str, note: str = ""):
 def retire(con, release_id: int, who: str, reason: str):
     rel = release_row(con, release_id)
     if not rel or rel["status"] != "released" or rel["kind"] != "monthly":
-        raise ValueError("ย้อนกลับได้เฉพาะ release รายเดือนที่ปล่อยแล้ว")
+        raise ValueError("ยกเลิกใช้ได้เฉพาะเวอร์ชันรายเดือนที่ประกาศใช้แล้ว")
     if not (reason or "").strip():
         raise ValueError("ต้องระบุเหตุผล")
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE release_id=?",
-                (f" · ย้อนกลับโดย {who}: {reason.strip()}", release_id))
+                (f" · ยกเลิกใช้โดย {who}: {reason.strip()}", release_id))
     con.execute("DELETE FROM bcd_cost_cache WHERE release_id=?", (release_id,))
     from . import dated
     dated.rebuild(con)
@@ -432,10 +436,10 @@ def submit_review(con, release_id: int, who: str):
     """The kitchen hands a finished monthly draft to the analyst: status review."""
     rel = release_row(con, release_id)
     if not rel or rel["kind"] != "monthly" or rel["status"] != "draft":
-        raise ValueError(f"ส่งตรวจได้เฉพาะฉบับร่าง (สถานะปัจจุบัน: {rel['status'] if rel else 'ไม่พบ'})")
+        raise ValueError(f"ส่งตรวจได้เฉพาะร่าง (สถานะปัจจุบัน: {STATUS_TH.get(rel['status'], rel['status']) if rel else 'ไม่พบ'})")
     n = con.execute("SELECT COUNT(*) FROM bc_recipe WHERE release_id=?", (release_id,)).fetchone()[0]
     if not n:
-        raise ValueError("ฉบับร่างยังไม่มีสูตร กรุณานำเข้าหรือสร้างสูตรก่อนส่งตรวจ")
+        raise ValueError("ร่างยังไม่มีสูตร · นำเข้าหรือสร้างสูตรก่อนส่งตรวจ")
     con.execute("UPDATE bc_release SET status='review', submitted_by=?, submitted_at=? WHERE release_id=?",
                 (who, now(), release_id))
     audit(con, who, "release_submit_review", "bc_release", str(release_id), "draft",
@@ -459,7 +463,7 @@ def new_draft_from(con, src_id: int, label: str, effective_month: str, price_mon
     """Next month's draft: every recipe of `src_id` copied, priced at a new month."""
     src = release_row(con, src_id)
     if not src or src["kind"] != "monthly":
-        raise ValueError("คัดลอกได้จาก release รายเดือนเท่านั้น")
+        raise ValueError("คัดลอกได้จากเวอร์ชันรายเดือนเท่านั้น")
     check_effective_month(effective_month)
     if con.execute("SELECT 1 FROM bc_release WHERE label=?", (label,)).fetchone():
         raise ValueError(f"มีชื่อ {label} แล้ว")

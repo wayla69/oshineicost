@@ -74,7 +74,7 @@ def test_the_summary_numbers_prices_and_totals(con):  # noqa: F811
 
 def test_an_unknown_period_is_refused(con):  # noqa: F811
     end = _period(con)
-    with pytest.raises(ValueError, match="ไม่พบรอบต้นงวด/ปลายงวดนี้ของสาขา"):
+    with pytest.raises(ValueError, match="ไม่พบงวดนี้ของสาขา"):
         VA.issue_summary(con, 1, end + 99)
     with pytest.raises(ValueError):
         VA.issue_summary(con, 2, end)                          # another branch's period
@@ -112,11 +112,11 @@ def test_issue_periods_lists_state_without_prices(con):  # noqa: F811
 # ── posting and the lock ─────────────────────────────────────────────────────
 def test_posting_needs_a_confirmed_period_and_locks_it(con):  # noqa: F811
     end = _period(con)
-    with pytest.raises(ValueError, match="ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้"):
+    with pytest.raises(ValueError, match="ต้องยืนยันรับสินค้าครบของงวดนี้ก่อนจึงบันทึกเข้าระบบบัญชีได้"):
         VA.set_posted(con, end, True, "acc")
-    with pytest.raises(ValueError, match="ไม่พบรอบนี้ของสาขา"):
+    with pytest.raises(ValueError, match="ไม่พบงวดนี้ของสาขา"):
         VA.set_posted(con, end, True, "acc", branch_id=2)      # another branch
-    with pytest.raises(ValueError, match="ไม่พบรอบนี้ของสาขา"):
+    with pytest.raises(ValueError, match="ไม่พบงวดนี้ของสาขา"):
         VA.set_posted(con, end + 99, True, "acc")
     VA.confirm_receipts(con, 1, end, "udon")
     out = VA.set_posted(con, end, True, "acc", branch_id=1)
@@ -129,7 +129,7 @@ def test_posting_needs_a_confirmed_period_and_locks_it(con):  # noqa: F811
     with pytest.raises(ValueError, match="ยกเลิกการยืนยันไม่ได้"):
         VA.confirm_receipts(con, 1, end, "udon", undo=True)
     # no receipt dated inside the period; one outside it is fine
-    with pytest.raises(ValueError, match=r"อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว \(2026-09-01 ถึง 2026-10-01\)"):
+    with pytest.raises(ValueError, match=r"อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว \(1/9/2026 ถึง 1/10/2026\)"):
         VA.add_receipt(con, 1, "2026-09-20", [{"code": "13-01-009", "qty": 1, "unit": "กรัม"}], "udon")
     con.rollback()
     VA.add_receipt(con, 1, "2026-10-01", [{"code": "13-01-009", "qty": 1, "unit": "กรัม"}], "udon")   # the end day: next period
@@ -173,7 +173,7 @@ def test_the_close_step_goes_blocked_todo_done(con):  # noqa: F811
     con.commit()
     steps, _ = step()
     assert steps["issue_posted"]["status"] == "done"
-    assert steps["issue_posted"]["branches"][0]["detail"].startswith("บันทึกแล้ว 20") and "โดย acc" in steps["issue_posted"]["detail"]
+    assert steps["issue_posted"]["branches"][0]["detail"].startswith("บันทึกแล้ว ") and "/20" in steps["issue_posted"]["branches"][0]["detail"] and "โดย acc" in steps["issue_posted"]["detail"]
 
 
 # ── the permission matrix ────────────────────────────────────────────────────
@@ -269,7 +269,7 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         iss1 = {ln["code"]: ln for ln in d["lines"]}["T-ISS1"]
         assert iss1["used"] == 9 and iss1["price_source"] == "ซื้อจริง (2026-09)" and iss1["value"] == pytest.approx(22.5)
         r = acc.get(f"/api/bom-center/issue-summary.xlsx?{q}")
-        assert r.status_code == 400 and "รอบนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้" in r.json()["detail"]
+        assert r.status_code == 400 and "งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้" in r.json()["detail"]
         assert acc.get(f"/api/bom-center/issue-summary?end_count_id={e1 + 999}&branch_id=1").status_code == 404
         assert acc.get(f"/api/bom-center/issue-summary?end_count_id={e1}").status_code == 400      # the centre names a branch
         # periods: the centre sees both branches, the branch login its own only
@@ -286,7 +286,7 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         r = acc.post("/api/bom-center/issue-summary/posted", json=body)
         assert r.status_code == 403 and r.headers.get("X-Denied") == "token"
         r = acc.post("/api/bom-center/issue-summary/posted", json=body, headers=TOKEN)
-        assert r.status_code == 400 and "ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน" in r.json()["detail"]
+        assert r.status_code == 400 and "ต้องยืนยันรับสินค้าครบของงวดนี้ก่อน" in r.json()["detail"]
         # confirm (management), then the workbook
         r = mg.post("/api/bom-center/variance/confirm-receipts?branch_id=1", json={"end_count_id": e1}, headers=TOKEN)
         assert r.status_code == 200, r.text
@@ -318,7 +318,7 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         assert by["BranchB"][8] == "ยังไม่ยืนยันรับสินค้าครบ (ไม่มีแผ่นงาน)"
         assert acc.get("/api/bom-center/issue-summary-all.xlsx?month=bad").status_code == 400
         r = acc.get("/api/bom-center/issue-summary-all.xlsx?month=2026-01")
-        assert r.status_code == 400 and "ยังไม่มีรอบที่ยืนยันรับสินค้าครบในเดือน 2026-01" in r.json()["detail"]
+        assert r.status_code == 400 and "ยังไม่มีงวดที่ยืนยันรับสินค้าครบในเดือน 2026-01" in r.json()["detail"]
         # post it
         r = acc.post("/api/bom-center/issue-summary/posted", json=body, headers=TOKEN)
         assert r.status_code == 200 and r.json()["posted"] is True

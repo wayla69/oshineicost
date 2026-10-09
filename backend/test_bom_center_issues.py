@@ -127,8 +127,8 @@ def test_a_draft_is_confirmed_once_and_a_slip_for_a_past_day_is_late(con):  # no
     ("2026-08-01", [], False, "บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน 60 วัน"),
     ("2026-10-05", [used(qty="abc")], False, f"{CRAB}: จำนวนต้องเป็นตัวเลข"),
     ("2026-10-05", [used(qty=-1)], False, f"{CRAB}: จำนวนต้องไม่ติดลบ"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม"}], False, f"{CRAB}: กรุณาเลือกสาเหตุของของเสีย"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "zzz"}], False, f"{CRAB}: กรุณาเลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม"}], False, f"{CRAB}: เลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "zzz"}], False, f"{CRAB}: เลือกสาเหตุของของเสีย"),
     ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "other"}], False, f"{CRAB}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
     ("2026-10-05", [], True, "ยังไม่มีรายการในใบตัดเบิก"),
     ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], True, "แปลงหน่วยไม่ได้"),
@@ -144,7 +144,7 @@ def test_a_confirmed_slip_is_locked_and_lines_with_zero_quantity_go(con):  # noq
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")
     con.commit()
     assert IS.save(con, 1, "2026-10-02", [used()], "udon", submit=True, now=NOW)["status"] == "confirmed"
-    with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2026-10-02 ยืนยันแล้ว หากต้องแก้ไข กรุณาแจ้งประสานงานขายให้เปิดแก้ไข"):
+    with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2/10/2026 ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข"):
         IS.save(con, 1, "2026-10-02", [used(qty=1)], "udon", now=NOW)
     # both quantities zero removes a line; a waste line without a reason is refused only when it has waste
     d = IS.save(con, 1, "2026-10-04", [used(), used("V-007", 5)], "udon", now=NOW)
@@ -188,7 +188,7 @@ def test_reopen_reconfirm_and_the_log(con):  # noqa: F811
     s = IS.save(con, 1, "2026-10-03", [used()], "udon", submit=True, now=NOW)         # late (5 Oct)
     sid = s["slip_id"]
     for who_msg, args in (("ไม่พบใบตัดเบิก", (9999, "ss", "x")),
-                          ("กรุณาระบุเหตุผลในการเปิดแก้ไขใบตัดเบิก", (sid, "ss", "  "))):
+                          ("ระบุเหตุผลที่เปิดแก้ไขใบตัดเบิก", (sid, "ss", "  "))):
         with pytest.raises(ValueError, match=who_msg):
             IS.reopen(con, *args, now=NOW)
     r = IS.reopen(con, sid, "ss", "สาขาคีย์ปริมาณผิด", now=at(6, 9))
@@ -410,7 +410,7 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     it = _issue_items(d)
     t = it["issue_today"]
     assert t["title"] == "ยืนยันใบตัดเบิกประจำวันที่ 5/10" and t["seq"] == 305 and t["status"] == "todo"
-    assert t["detail"] == "ยังไม่บันทึก · ต้องยืนยันก่อนส่งใบสั่งซื้อของวันนี้"
+    assert t["detail"] == "ยังไม่บันทึก · ยืนยันก่อนส่งใบสั่งซื้อ"
     assert (t["slip_status"], t["yesterday"], t["started"]) == ("missing", "missing", True)
     assert t["owner_modules"] == ["branch.stock"] and t["go"] == {"tab": "branchstock", "pane": "issue",
                                                                   "extra": {"date": "2026-10-05"}, "branch": 1}
@@ -418,12 +418,12 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     assert gaps == ["2026-10-02", "2026-10-03", "2026-10-04"]
     g = next(i for i in d["items"] if i["key"].startswith("issue_missing_2026-10-04"))
     assert g["seq"] == 306 and g["urgent"] is True and g["status"] == "todo" and g["go"]["extra"] == {"date": "2026-10-04"}
-    assert it["order_due_1"]["detail"].endswith(" · ต้องยืนยันใบตัดเบิกวันนี้ก่อน")
+    assert it["order_due_1"]["detail"].endswith(" · ยืนยันใบตัดเบิกวันนี้ก่อน")
     line = RM.branch_line(d["items"])
-    assert "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน (ล่าช้า)" in line["text"] and line["pending"] is True
+    assert "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in line["text"] and line["pending"] is True
     # a draft, then a confirmed slip today; yesterday's confirmed too
     IS.save(c, 1, "2026-10-05", [used()], "udon", now=NOW)
-    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "มีร่างแล้ว ยังไม่ยืนยัน · ต้องยืนยันก่อนส่งใบสั่งซื้อของวันนี้"
+    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "มีร่างแล้ว · ยืนยันก่อนส่งใบสั่งซื้อ"
     IS.save(c, 1, "2026-10-05", [], "udon", submit=True, now=NOW)
     IS.save(c, 1, "2026-10-04", [used()], "udon", submit=True, now=NOW)
     d = build(branch_id=1)
@@ -436,11 +436,11 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     IS.reopen(c, IS.status_of(c, 1, "2026-10-04")["slip_id"], "ss", "แก้ไข", now=NOW)
     cen = _issue_items(build())["issue_missing"]
     assert cen["seq"] == 228 and cen["title"] == "ติดตามสาขาที่ยังไม่ยืนยันใบตัดเบิกของเมื่อวาน" and cen["status"] == "todo"
-    assert cen["owner_modules"] == ["supply.ordering", "ops.report"] and cen["owner_th"] == "ประสานงานขาย (Sales Support)"
+    assert cen["owner_modules"] == ["supply.ordering", "ops.report"] and cen["owner_th"] == "ประสานงานขาย"
     assert cen["count"] == 1 and "อุดรธานี" in cen["detail"] and cen["urgent"] is True
     morning = RM.morning(c, today=date(2026, 10, 5))
-    assert any("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน (ล่าช้า)" in b["text"] for b in morning["branches"]) \
-        and "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน (ล่าช้า)" in morning["text"]
+    assert any("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in b["text"] for b in morning["branches"]) \
+        and "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in morning["text"]
 
 
 # ── 11 · the scorecard ───────────────────────────────────────────────────────

@@ -575,6 +575,8 @@ def init_auth(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE app_user ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
     if "branch" not in cols:      # E4: a login scoped to one branch (NULL = the whole chain)
         con.execute("ALTER TABLE app_user ADD COLUMN branch TEXT")
+    if "display_name" not in cols:   # PR-M1: the name people read on screens (never the login id)
+        con.execute("ALTER TABLE app_user ADD COLUMN display_name TEXT")
     con.commit()
 
 
@@ -681,10 +683,50 @@ def get_user(con: sqlite3.Connection, username: str) -> Optional[sqlite3.Row]:
 
 def list_users(con: sqlite3.Connection) -> List[Dict]:
     rows = con.execute(
-        "SELECT id, username, role, active, must_change, created_at, branch "
+        "SELECT id, username, role, active, must_change, created_at, branch, display_name "
         "FROM app_user ORDER BY role, username"
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# The label a person sees when no display name has been set (PR-M1): worker screens never show a login id.
+ROLE_TH = {"management": "ผู้บริหาร", "marketing": "การตลาด", "operation": "ฝ่ายปฏิบัติการ",
+           "analyst": "ฝ่ายวิเคราะห์", "accounting": "บัญชี", "innovation": "ครัว",
+           "salessupport": "ประสานงานขาย", "warehouse": "คลัง", "branch": "สาขา",
+           "franchise": "เจ้าของสาขา"}
+
+
+def display_name_of(row) -> str:
+    """app_user.display_name, else สาขา{branch} for a branch / franchise login, else the Thai role label."""
+    keys = row.keys() if hasattr(row, "keys") else []
+    dn = ((row["display_name"] if "display_name" in keys else None) or "").strip()
+    if dn:
+        return dn
+    role = row["role"]
+    br = (row["branch"] if "branch" in keys else None) or ""
+    if role == "branch" and br:
+        return f"สาขา{br}"
+    if role == "franchise" and br:
+        return f"เจ้าของสาขา{br}"
+    return ROLE_TH.get(role, row["username"])
+
+
+def display_name_for(con: sqlite3.Connection, username: str) -> Optional[str]:
+    """The display name of a login, or None when there is no such account."""
+    try:
+        row = get_user(con, username)
+    except sqlite3.OperationalError:
+        return None
+    return display_name_of(row) if row else None
+
+
+def names_map(con: sqlite3.Connection) -> Dict[str, str]:
+    """{username: display name} for every account — the audit lines of the screens read names, not logins."""
+    try:
+        rows = con.execute("SELECT * FROM app_user").fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {r["username"]: display_name_of(r) for r in rows}
 
 
 def branch_exists(con: sqlite3.Connection, name: str) -> bool:
@@ -716,8 +758,11 @@ UNSET = object()
 
 
 def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] = None,
-                password: Optional[str] = None, active: Optional[bool] = None, branch=UNSET) -> None:
+                password: Optional[str] = None, active: Optional[bool] = None, branch=UNSET,
+                display_name=UNSET) -> None:
     sets, vals = [], []
+    if display_name is not UNSET:
+        sets.append("display_name = ?"); vals.append((display_name or "").strip() or None)
     if branch is not UNSET:
         b = (branch or "").strip() or None
         if b and not branch_exists(con, b):

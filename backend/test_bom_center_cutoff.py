@@ -208,7 +208,7 @@ def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # n
     with pytest.raises(OR.LateSubmit) as e:
         OR.save_flow(*args, submit=True, now=LATE, as_of=AS_OF)
     assert e.value.cutoff_th == "วันจันทร์ 13:15" and e.value.cutoff_at == "2026-10-05T13:15:00+07:00"
-    assert "ค่าปรับล่าช้า" in str(e.value) and "คลังสินค้าภายนอก" in str(e.value)
+    assert "ค่าปรับล่าช้า" in str(e.value)
     con.rollback()
     out = OR.save_flow(*args, submit=True, ack_late=True, now=LATE, as_of=AS_OF)
     assert out["status"] == "submitted" and out["late"] == 1
@@ -299,7 +299,7 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     assert (r1["round_th"], r1["delivery"], r1["delivery_th"], r1["cutoff_th"], r1["cutoff_date"]) == \
         ("รอบ 1", "2026-10-07", "วันพุธ 7/10", "วันจันทร์ 13:15", "2026-10-05")
     assert r1["due_today"] is True and r1["late"] is False and r1["urgent"] is False and r1["status"] == "todo"
-    assert r1["detail"] == "เหลือ 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
+    assert r1["detail"] == "เหลือ 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ · ยืนยันใบตัดเบิกวันนี้ก่อน"
     assert r2["due_today"] is False and sal["due_today"] is False
     # under four hours left: urgent
     near = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=at(5, 10)))["order_due_1"]
@@ -307,11 +307,11 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     # past the cutoff and not sent: late, urgent, with the late-fee wording
     late = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert late["late"] is True and late["urgent"] is True and late["status"] == "todo"
-    assert late["detail"] == "เลยเวลาตัดรอบ มีค่าปรับล่าช้า หากยังต้องการสั่ง ให้ส่งใบสั่งซื้อโดยเร็ว · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
+    assert late["detail"] == "เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับล่าช้า · ยืนยันใบตัดเบิกวันนี้ก่อน"
     # a draft order says so; a sent one is done and no longer urgent
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'suggested')")
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
-        == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
+        == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ยืนยันใบตัดเบิกวันนี้ก่อน"
     slip(c)                                                                              # the slip is confirmed: the suffix goes
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
         == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง)"
@@ -329,7 +329,7 @@ def test_the_receive_task_uses_the_stored_delivery(udon):  # noqa: F811
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, delivery_date) VALUES"
               "(1, '2026-10-05', '1', 'processed', '2026-10-07')")
     items = {i["key"].split(":")[0]: i for i in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7), now=NOW)["items"]}
-    assert items["receive_pending"]["detail"].endswith("(รอบ 1 ส่ง 2026-10-07)")
+    assert items["receive_pending"]["detail"].endswith("(รอบ 1 ส่ง 7/10/2026)")
 
 
 # ── the HTTP layer ───────────────────────────────────────────────────────────
@@ -405,13 +405,13 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         ws = load_workbook(io.BytesIO(x.content), read_only=True)["ต่อสาขา"]
         rows = list(ws.iter_rows(values_only=True))
         head = next(rw for rw in rows if rw and rw[0] == "สาขา")
-        assert list(head) == ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"]
+        assert list(head) == ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบส่ง", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"]
         line = rows[rows.index(head) + 1]
-        assert line[1] == "2026-10-07" and line[2] == "2026-10-05" and line[10] == "ล่าช้า (ค่าปรับ)" and line[-1] == "ยังไม่คีย์"
+        assert line[1] == "2026-10-07" and line[2] == "2026-10-05" and line[10] == "ส่งล่าช้า (มีค่าปรับ)" and line[-1] == "ยังไม่คีย์"
         x = client.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-10-05&date_to=2026-10-05")
         rows = list(load_workbook(io.BytesIO(x.content), read_only=True).worksheets[0].iter_rows(values_only=True))
         head = next(rw for rw in rows if rw and rw[0] == "วันตัดรอบ")
-        assert head[-1] == "ล่าช้า" and any(rw and rw[-1] == "ล่าช้า (ค่าปรับ)" for rw in rows)
+        assert head[-1] == "ล่าช้า" and any(rw and rw[-1] == "ส่งล่าช้า (มีค่าปรับ)" for rw in rows)
         # ordering leaves no stock count behind (the month-end history can still be narrowed to the month counts)
         assert client.get(f"/api/bom-center/stock/counts?branch_id={bid}").json()["counts"] == []
         assert client.get(f"/api/bom-center/stock/counts?branch_id={bid}&kind=month").json()["counts"] == []

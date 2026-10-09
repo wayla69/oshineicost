@@ -38,24 +38,24 @@ def branch_line(items: list, today: date = None) -> dict:
             if done:
                 parts.append(f"ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} แล้ว")
             elif o.get("late"):
-                parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ล่าช้า มีค่าปรับ)")
+                parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ส่งล่าช้า มีค่าปรับ)")
                 pending = True
             else:
                 parts.append(f"ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} ภายในวันนี้ 13:15")
                 pending = True
         elif o.get("late") and not done:                   # the cutoff passed on an earlier day
-            parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ล่าช้า มีค่าปรับ)")
+            parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ส่งล่าช้า มีค่าปรับ)")
             pending = True
     if not parts and orders:
         nxt = min((o for o in orders if o["status"] != "done"), key=lambda o: o["cutoff_at"], default=None) \
             or min(orders, key=lambda o: o["cutoff_at"])
-        parts.append(f"ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่ง{nxt['delivery_th']} ภายใน{nxt['cutoff_th']})")
+        parts.append(f"ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่ง{nxt['delivery_th']} ภายใน {nxt['cutoff_th']})")
     slip = by.get("issue_today")
     if slip and slip.get("started"):                     # ใบตัดเบิก: yesterday's slip, only for a branch that has begun
         if slip.get("yesterday") in ("confirmed", "late"):
             parts.append("ใบตัดเบิกเมื่อวาน: ยืนยันแล้ว")
         else:
-            parts.append("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน (ล่าช้า)")
+            parts.append("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน")
             pending = True
     if recv and recv.get("count"):
         parts.append(f"รับสินค้าตามใบสั่งซื้อ {recv['count']} ใบ")
@@ -95,7 +95,7 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     if an.get("count"):
         any_work = True
         from .issue_reports import OVER_PCT, STREAK_DAYS
-        lines.append(f"<b>Ops</b>: เบิกเกิน BoM มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
+        lines.append(f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินสูตรมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
                      + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
     tail = f"หน้างาน: {html.escape(app_url.rstrip('/'))}/" if app_url else ""
@@ -121,9 +121,9 @@ def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> 
     if not missed and not n:
         return None
     lines = [f"<b>ตัดรอบ 13:15 · {thai_date(today)}</b>"]
-    lines += [f"{html.escape(m['name'])}: ยังไม่ส่งใบสั่งซื้อรอบส่ง{m['delivery_th']} (ล่าช้า มีค่าปรับ)" for m in missed]
+    lines += [f"{html.escape(m['name'])}: ยังไม่ส่งใบสั่งซื้อรอบส่ง{m['delivery_th']} (ส่งล่าช้า มีค่าปรับ)" for m in missed]
     if n:
-        lines.append(f"คลัง: ใบสั่งซื้อค้างคิว {n} ใบ ระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ"
+        lines.append(f"คลัง: ใบสั่งซื้อค้างคิว {n} ใบ ยืนยันยอดส่งภายใน 14:00 ของวันตัดรอบ"
                      + (f" · ส่งล่าช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""))
     if app_url:
         lines.append(f"คิวใบสั่งซื้อ: {html.escape(app_url.rstrip('/'))}/")

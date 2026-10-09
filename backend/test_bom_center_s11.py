@@ -153,7 +153,7 @@ def test_deliveries_then_counts_close_the_month(udon):
     assert (v["begin_date"], v["end_date"], v["receipts"]) == ("2026-09-01", "2026-10-01", 1)
     assert crab["begin"] == 5000.0 and crab["received"] == 25000.0 and crab["end"] == 2000.0
     assert crab["actual"] == 28000.0 and crab["bom"] > 0
-    with pytest.raises(ValueError, match="นับปิดแล้ว"):                          # the month is closed now
+    with pytest.raises(ValueError, match="งวดที่ปิดแล้ว"):                          # the month is closed now
         VA.delete_receipt(udon, 1, rec[0]["receipt_id"], "ss")
     again = CE.deliveries(udon, p, "ss", dry_run=True)
     assert "แทนที่ใบรับไม่ได้" in {x["code"]: x for x in again["branches"]}["C1001"]["error"]

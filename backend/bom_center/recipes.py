@@ -144,10 +144,10 @@ def match_blocks(con, blocks: list) -> list:
         o = owner.get(b["sku_code"])
         if o is None or rank[b["method"]] > rank[o["method"]]:
             if o is not None:
-                o.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับบล็อกอื่นแล้ว ({b['th'] or b['en']})")
+                o.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับสูตรอื่นแล้ว ({b['th'] or b['en']})")
             owner[b["sku_code"]] = b
         else:
-            b.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับบล็อกอื่นแล้ว ({o['th'] or o['en']})")
+            b.update(sku_code=None, method=None, why=f"รหัสนี้ถูกใช้กับสูตรอื่นแล้ว ({o['th'] or o['en']})")
     return blocks
 
 
@@ -160,7 +160,7 @@ def get_or_create_draft(con, label: str, effective_month: str, price_month: str,
     r = con.execute("SELECT release_id, status FROM bc_release WHERE label=?", (label,)).fetchone()
     if r:
         if r[1] not in ("draft", "review"):
-            raise ValueError(f"release {label} ปล่อยแล้วจึงแก้ไขไม่ได้ กรุณาสร้าง draft ใหม่")
+            raise ValueError(f"release {label} ประกาศใช้แล้ว แก้ไขไม่ได้ · สร้างร่างใหม่")
         if r[1] == "review" and modules is not None and "bom.center" not in modules:
             raise ValueError(REVIEW_LOCKED)
         con.execute("UPDATE bc_release SET effective_month=?, price_month=? WHERE release_id=?",
@@ -238,7 +238,7 @@ def write_recipe(con, release_id: int, sku_code: str, lines: list, *, source: st
             add_from_purchase(con, code, ln.get("_product") or ln.get("ingredient_name"), ln.get("unit"), who)
             con.execute("UPDATE bc_ingredient SET kind=?, family=?, note=? WHERE code=? AND updated_by=?",
                         (kind_of(code, ln.get("ingredient_name") or ""), family_of(code),
-                         "เพิ่มจากสูตร Cost-RW กรุณาตรวจสอบหน่วยและราคา", code, who))
+                         "เพิ่มจากสูตร Cost-RW · ตรวจหน่วยและราคา", code, who))
             known.add(code)
         con.execute("INSERT INTO bc_recipe_line(release_id, sku_code, seq, ingredient_code, ingredient_name, qty, unit,"
                     " prep_note, zero_by_design, loss_pct) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -292,7 +292,7 @@ def apply_mapping(con, release_id: int, ref: str, sku_code: str, who: str, modul
     r = con.execute("SELECT message FROM bc_release_check WHERE release_id=? AND check_code='unmatched' AND ref=?",
                     (release_id, ref)).fetchone()
     if not r:
-        raise ValueError("ไม่พบบล็อกนี้ในรายการที่ยังไม่จับคู่")
+        raise ValueError("ไม่พบสูตรนี้ในรายการที่ยังไม่จับคู่")
     if sku_code != SKIP and not con.execute("SELECT 1 FROM skus WHERE sku_code=?", (sku_code,)).fetchone():
         raise ValueError(f"ไม่มีรหัส {sku_code} ใน POS")
     b = json.loads(r[0])
@@ -395,8 +395,7 @@ def release_row(con, release_id: int) -> dict:
     return dict(zip(cols, r)) if r else None
 
 
-REVIEW_LOCKED = ("ฉบับร่างนี้อยู่ระหว่างการตรวจของฝ่ายวิเคราะห์ จึงแก้ไขสูตรไม่ได้ "
-                 "จนกว่าฝ่ายวิเคราะห์จะส่งกลับให้แก้ไข")
+REVIEW_LOCKED = "ร่างนี้อยู่ระหว่างตรวจของฝ่ายวิเคราะห์ แก้ไขสูตรไม่ได้จนกว่าจะส่งกลับ"
 
 
 def assert_editable(rel: dict, modules=None):
@@ -404,7 +403,7 @@ def assert_editable(rel: dict, modules=None):
     submitted it for review only the analyst (bom.center) may still edit.
     `modules=None` = no permission context (internal callers, tests)."""
     if not rel or rel["status"] not in ("draft", "review"):
-        raise ValueError("แก้ไขได้เฉพาะเวอร์ชันที่ยังเป็นฉบับร่าง")
+        raise ValueError("แก้ไขได้เฉพาะเวอร์ชันที่ยังเป็นร่าง")
     if rel["status"] == "review" and modules is not None and "bom.center" not in modules:
         raise ValueError(REVIEW_LOCKED)
 
@@ -547,7 +546,7 @@ def export_flat(con, release_id: int):
 
 
 # ── blank template: many menus in one file (PR-C, owner 2026-10-09) ───────────
-_SAMPLE = "(ตัวอย่าง กรุณาลบ)"
+_SAMPLE = "(ตัวอย่าง ลบก่อนนำเข้า)"
 TEMPLATE_SAMPLE = [
     ["ตัวอย่าง-001", f"เมนูตัวอย่าง A {_SAMPLE}", 459, 1, "ตัวอย่าง-01", f"วัตถุดิบตัวอย่าง 1 {_SAMPLE}", 80, "กรัม",
      None, "", "หั่นชิ้นพอดีคำ"],
@@ -557,12 +556,12 @@ TEMPLATE_SAMPLE = [
      2.5, "", None],
 ]
 TEMPLATE_HOWTO = [
-    "กรอกสูตรหลายเมนูในไฟล์เดียวที่ sheet “สูตร” บรรทัดละ 1 วัตถุดิบ เมนูเดียวกันใช้รหัส POS เดียวกันทุกบรรทัด",
-    "รหัส POS ต้องตรงกับ sheet “รหัส POS” และรหัสวัตถุดิบต้องตรงกับ sheet “รหัสวัตถุดิบ” (คัดลอกได้)",
-    "หน่วย: กรัม / มิลลิลิตร / ชิ้น ตามหน่วยฐาน หรือกิโลกรัม ลิตร แพ็ค (ระบบแปลงให้)",
+    "กรอกสูตรที่แผ่นงาน “สูตร” บรรทัดละ 1 วัตถุดิบ เมนูเดียวกันใช้รหัส POS เดียวกันทุกบรรทัด",
+    "รหัส POS ต้องตรงกับแผ่นงาน “รหัส POS” และรหัสวัตถุดิบต้องตรงกับแผ่นงาน “รหัสวัตถุดิบ” (คัดลอกได้)",
+    "หน่วย: กรัม / มิลลิลิตร / ชิ้น ตามหน่วยฐาน หรือกิโลกรัม ลิตร แพ็ค (แปลงเป็นหน่วยฐานตอนนำเข้า)",
     "สูญเสีย % เว้นว่าง = ใช้ค่าตามทะเบียนวัตถุดิบ · “ตั้งใจเป็น 0” ใส่ ใช่ เมื่อบรรทัดนั้นไม่มีต้นทุนโดยเจตนา",
-    "เมื่อนำเข้า สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร เมนูที่ไม่อยู่ในไฟล์ไม่เปลี่ยน · กรุณาลบแถวตัวอย่างก่อนนำเข้า",
-    "ระบบแสดงผลให้ตรวจสอบก่อนบันทึก (dry run) ทุกครั้ง · เมื่อครบแล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์",
+    "นำเข้าแล้ว สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร เมนูที่ไม่อยู่ในไฟล์ไม่เปลี่ยน · ลบแถวตัวอย่างก่อนนำเข้า",
+    "ดูตัวอย่างก่อนบันทึกทุกครั้ง · เมื่อครบแล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์",
 ]
 _KIND_TH = {"raw": "วัตถุดิบ", "prepared": "ของที่ผลิตเอง", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น 0"}
 
@@ -602,7 +601,7 @@ def template_flat(con, release_id: int = None):
     _style_flat_sheet(ws)
     ws = wb.create_sheet("รหัส POS")
     # A1 must NOT read "รหัส POS": import_flat takes every sheet whose A1 is that text for recipe rows
-    ws.append(["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในฉบับร่างแล้ว"])
+    ws.append(["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในร่างแล้ว"])
     for code, desc, tier, has_rec in pos_sku_rows(con, release_id):
         ws.append([code, desc, tier, "มี" if has_rec else ""])
     _style_header(ws, (16, 40, 8, 20))

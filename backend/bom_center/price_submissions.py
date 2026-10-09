@@ -119,10 +119,10 @@ def decide(con, sub_id: int, status: str, who: str, note: str = None, applied=No
     if not h:
         raise ValueError("ไม่พบไฟล์ราคาที่ส่งมา")
     if h["status"] != "pending":
-        raise ValueError(f"ไฟล์นี้ตัดสินแล้ว ({STATUS_TH.get(h['status'], h['status'])})")
+        raise ValueError(f"ไฟล์นี้พิจารณาแล้ว ({STATUS_TH.get(h['status'], h['status'])})")
     note = (note or "").strip() or None
     if status == "rejected" and not note:
-        raise ValueError("กรุณาระบุเหตุผลที่ไม่รับไฟล์นี้")
+        raise ValueError("ระบุเหตุผลที่ส่งกลับ")
     con.execute("UPDATE bc_price_submission SET status=?, decided_by=?, decided_at=?, decision_note=? WHERE sub_id=?",
                 (status, who, now(), note, sub_id))
     audit(con, who, "price_submit_" + ("import" if status == "imported" else "reject"), "bc_price_submission",
