@@ -1651,6 +1651,58 @@ async function bmcLoadCalendar() {
       <td class="pr-2">${sel(r.branch_id, '2', r.r2.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '2', r.r2.cutoff_th)}</td>
       <td class="pr-2">${sel(r.branch_id, 'salmon', r.rsalmon.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, 'salmon', r.rsalmon.cutoff_th)}</td>
       <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '') : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+  const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
+  if (bulk) bulk.style.display = w ? '' : 'none';
+}
+// ── bulk delivery days from a file: template → preview (dry run) → save ──
+let _bmcCalBulkFile = null;
+function bmcCalTemplate() { window.open(`${API}/api/bom-center/order-calendar/template.xlsx`, '_blank'); }
+function _bmcCalBulkClear() {
+  _bmcCalBulkFile = null;
+  const f = document.getElementById('bmcCalBulkFile'); if (f) f.value = '';
+  const p = document.getElementById('bmcCalBulkPreview'); if (p) p.innerHTML = '';
+}
+async function bmcCalBulkPick(input) {
+  const file = input && input.files && input.files[0];
+  const box = document.getElementById('bmcCalBulkPreview');
+  if (!file || !box) return;
+  _bmcCalBulkFile = file;
+  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังตรวจไฟล์…</div>';
+  try {
+    const fd = new FormData(); fd.append('file', file, file.name);
+    const d = await _bmcJson(`${API}/api/bom-center/order-calendar/import?dry_run=true`, { method: 'POST', body: fd });
+    const cell = c => c.changed
+      ? `<span style="background:var(--accent-soft);color:var(--text-primary);border-radius:4px;padding:1px 6px;font-weight:600">${esc(c.was_th)} → ${esc(c.now_th)}</span> <span class="text-[10.5px]" style="color:var(--text-muted)">ตัดรอบ ${esc(c.cutoff_th)}</span>`
+      : `${esc(c.now_th)}`;
+    const errs = d.errors.length
+      ? `<div class="text-xs mb-2" style="color:var(--bad-ink)"><b>พบ ${d.errors.length} รายการที่ไม่ถูกต้อง</b> (แก้ไขไฟล์แล้วเลือกใหม่ จึงจะบันทึกได้)<ul class="list-disc pl-5">${
+          d.errors.slice(0, 50).map(e => `<li>แถวที่ ${e.line} · ${esc(e.branch)} — ${esc(e.why)}</li>`).join('')}</ul></div>` : '';
+    const rows = d.rows.filter(r => r.change);
+    box.innerHTML = `${errs}<div class="text-xs mb-2" style="color:var(--text-secondary)">ไฟล์มี ${d.branches} สาขา · เปลี่ยน <b>${d.changed_branches}</b> สาขา (${d.changed_rounds} รอบ) · ที่เหลือเหมือนเดิม</div>
+      ${rows.length ? `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+        <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">แซลมอนสด วันส่ง</th></tr></thead>
+        <tbody>${rows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
+          <td class="pr-2">${cell(r.r1)}</td><td class="pr-2">${cell(r.r2)}</td><td class="pr-2">${cell(r.rsalmon)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="mt-3 flex items-center gap-2">
+        <button onclick="bmcCalBulkSave()" ${(d.errors.length || !d.changed_branches) ? 'disabled' : ''} style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer;${(d.errors.length || !d.changed_branches) ? 'opacity:.5;cursor:not-allowed' : ''}">บันทึก ${d.changed_branches} สาขา</button>
+        <button onclick="_bmcCalBulkClear()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">ยกเลิก</button></div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">ตรวจไฟล์ไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
+  }
+}
+async function bmcCalBulkSave() {
+  if (!_bmcCalBulkFile) return;
+  try {
+    const fd = new FormData(); fd.append('file', _bmcCalBulkFile, _bmcCalBulkFile.name);
+    const d = await _bmcJson(`${API}/api/bom-center/order-calendar/import?dry_run=false`, { method: 'POST', body: fd });
+    const msg = `✓ บันทึกรอบส่งแล้ว ${d.changed_branches} สาขา (${d.saved} รอบ)`;
+    _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
+    _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
+    _bmcCalBulkClear();
+    bmcLoadCalendar();
+  } catch (e) {
+    _bmcStatus('bmcCalStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+  }
 }
 // the read-only ตัดรอบ cell follows the weekday picked (the server derives the same: delivery − 2 days, a Sunday moves to Saturday)
 function _bmcCutoffTh(wd) {

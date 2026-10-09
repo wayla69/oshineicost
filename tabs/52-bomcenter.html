@@ -134,6 +134,16 @@
   <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
   <div id="bmc-pane-cal" style="display:none">
     <div id="bmcFcCal" class="card p-4 mb-3"></div>
+    <div id="bmcCalBulk" class="card p-4 mb-3" style="display:none">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">ตั้งวันส่งหลายสาขาจากไฟล์</div>
+      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">ใช้เมื่อต้องตั้งวันส่งของหลายสาขาพร้อมกัน ดาวน์โหลดแม่แบบ (มีวันส่งปัจจุบันของทุกสาขา) แก้ไขเฉพาะวันที่ต้องการเปลี่ยน แล้วเลือกไฟล์กลับเข้ามา ระบบแสดงรายการที่จะเปลี่ยนให้ตรวจก่อนบันทึก · เซลล์ที่เว้นว่างจะไม่เปลี่ยน</div>
+      <div class="flex flex-wrap items-center gap-3">
+        <a href="#" onclick="bmcCalTemplate();return false" style="color:var(--accent);font-size:13px;text-decoration:underline">ดาวน์โหลดแม่แบบ</a>
+        <label class="text-xs" style="color:var(--text-muted)">เลือกไฟล์ที่กรอกแล้ว (.xlsx หรือ .csv)
+          <input type="file" id="bmcCalBulkFile" accept=".xlsx,.xlsm,.csv" onchange="bmcCalBulkPick(this)" class="ml-1 text-xs"></label>
+      </div>
+      <div id="bmcCalBulkPreview" class="mt-3"></div>
+    </div>
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
   </div>
 
