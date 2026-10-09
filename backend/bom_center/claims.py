@@ -223,10 +223,20 @@ def _head(con, claim_id):
     return d
 
 
+def _delivery(con, h: dict):
+    """PR-M4: the delivery day of the claim's order — a claim is read as "round · delivery day · N lines", not by its id."""
+    from .hub import delivery_of
+    if not h.get("cycle_date"):
+        return None
+    dd = con.execute("SELECT delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
+    return delivery_of(con, h["branch_id"], h["round"], h["cycle_date"], dd[0] if dd else None)
+
+
 def detail(con, claim_id: int) -> dict:
     d = _head(con, claim_id)
     if not d:
         raise ValueError("ไม่พบรายการเคลม")
+    d["delivery"] = _delivery(con, d)
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (d["order_id"],))}
     recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
@@ -258,11 +268,9 @@ def listing(con, branch_id=None, status=None, limit: int = 50) -> list:
         sql += " AND c.status=?"; args.append(status)
     rows = [r[0] for r in con.execute(sql + " ORDER BY (c.status='submitted') DESC, c.claim_id DESC LIMIT ?", args + [limit])]
     out = []
-    from .hub import delivery_of                 # PR-M4: a claim is read as "round · delivery day · N lines", not by its id
     for cid in rows:
         h = _head(con, cid)
-        dd = con.execute("SELECT delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
-        h["delivery"] = delivery_of(con, h["branch_id"], h["round"], h["cycle_date"], dd[0] if dd else None) if h["cycle_date"] else None
+        h["delivery"] = _delivery(con, h)
         h["lines"] = con.execute("SELECT COUNT(*) FROM bc_claim_line WHERE claim_id=?", (cid,)).fetchone()[0]
         h["photos"] = con.execute("SELECT COUNT(*) FROM bc_claim_photo WHERE claim_id=?", (cid,)).fetchone()[0]
         out.append(h)

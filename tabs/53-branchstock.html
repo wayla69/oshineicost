@@ -103,7 +103,7 @@
     </div>
     <details id="brnHowTo" class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
       <p><b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง)</p>
-      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · บันทึกร่างให้ขณะกรอก ·ครบแล้วกด “ส่งผลตรวจนับ” · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
+      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · ต้องนับรายการ “บังคับ” ให้ครบทุกรายการก่อนกด “ส่งผลตรวจนับ” · เครื่องหมาย ✓ ที่โซน = นับรายการบังคับของโซนนั้นครบ · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
     </div></details>
   </div>
 
@@ -137,6 +137,7 @@
          The ids brnClaimCard / brnClaimMsg / brnClaimList / brnClaimForm are kept: the หน้างาน link anchors here. ── -->
     <div id="brnClaimCard" class="card p-3 mb-3" style="border-left:4px solid var(--amber-ink)">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งเคลมสินค้า</div>
+      <div class="text-sm" style="color:var(--text-primary)">ส่งรูปทางไลน์ถึงประสานงานขาย</div>
       <div id="brnClaimMsg" class="text-xs mb-1"></div>
       <div id="brnClaimList" class="text-xs" style="color:var(--text-secondary)"></div>
       <div id="brnClaimForm" class="mt-2" style="display:none"></div>
@@ -146,25 +147,25 @@
       <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
     <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: จำนวนที่คลังส่งกรอกไว้ให้แล้ว หากรับน้อยกว่าที่ส่ง ให้แก้ช่อง “รับจริง” และเลือกสาเหตุ ส่วนต่างเป็นเคลมอัตโนมัติ ส่งรูปทางไลน์ให้ประสานงานขาย</p>
+      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: ตอบ “รับครบ” หากได้รับตามที่คลังส่งทุกรายการ · หากรายการใดไม่ครบ ตอบ “มีรายการไม่ครบ” แล้วเลือกรายการนั้น ใส่ “รับจริง” และเลือกสาเหตุ ส่วนต่างเป็นเคลมอัตโนมัติ ส่งรูปทางไลน์ให้ประสานงานขาย</p>
       <p>บันทึกสินค้าที่รับเอง: บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
-      <p>แจ้งเคลมภายหลัง: เลือกใบที่รับแล้ว ใส่จำนวนเฉพาะรายการที่มีปัญหา (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
+      <p>แจ้งเคลมภายหลัง: เลือกใบที่รับแล้ว ค้นหาและเลือกเฉพาะรายการที่มีปัญหา ใส่จำนวน (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
     </div></details>
   </div>
 
   <!-- ── ผลต่างของฉัน ── -->
   <div id="brn-pane-var" style="display:none">
     <!-- สามมุมมอง: รายงวด (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบสูตร) · สิ้นเดือน (คงเหลือตามระบบเทียบนับจริง) -->
-    <div id="brnVarTabs" class="flex flex-wrap gap-1 mb-3"></div>
+    <div id="brnVarTabs" class="flex gap-1 mb-3"></div>
 
     <div id="brnVar-period">
       <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-          งวด <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
-          <label class="flex items-center gap-1"><input type="checkbox" id="brnVarAll" onchange="brnRenderVariance()"> แสดงทุกรายการ</label>
+          งวด <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
         </div>
         <div id="brnVarHead" class="text-xs mt-2"></div>
+        <span id="brnVarStatus" class="brn-status" role="status"></span>
       </div>
       <div id="brnVarList" class="card p-3 mb-3"></div>
     </div>
@@ -195,8 +196,10 @@
       <div id="brnRcList" class="card p-3 mb-3"></div>
     </div>
     <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>รายงวด: ใช้จริงเทียบกับยอดตามสูตร · รายการที่เกินเกณฑ์ต้องเลือกเหตุผลและกด “บันทึก”</p>
-      <p>รายวัน: มูลค่าเบิกจริงเทียบตามสูตร · ชั้น A ที่เกินสูตรเกิน 20% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · กดที่วันเพื่อดูรายการ</p>
+      <p>รายงวด: ใช้จริงเทียบกับยอดตามสูตร · ให้เหตุผลเฉพาะรายการมูลค่าสูง (กลุ่มมูลค่าสูง และ 20 รายการที่ผลต่างเป็นเงินมากที่สุด) · รายการอื่นแสดงไว้ใน “รายการอื่น” ไม่ต้องให้เหตุผล</p>
+      <p>ติ๊กหลายรายการแล้วกด “ใช้เหตุผลเดียวกันกับที่เลือก” เพื่อบันทึกเหตุผลเดียวกันพร้อมกัน</p>
+      <p>ถ้าบันทึกรับสินค้าไม่ครบ ผลจะแสดงเป็น “ใช้น้อยกว่าสูตร” · ตรวจสอบการรับสินค้าก่อนกด “ยืนยันรับสินค้าครบ”</p>
+      <p>รายวัน: ยอดเบิกเทียบกับยอดตามสูตรของแต่ละวัน · กลุ่มมูลค่าสูงที่เบิกเกินสูตรเกิน 20% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · แตะที่วันเพื่อดูรายการ</p>
       <p>สิ้นเดือน: คงเหลือตามระบบเทียบกับนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล</p>
     </div></details>
   </div>
