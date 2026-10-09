@@ -4,12 +4,23 @@
     <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
   </div>
 
+  <!-- PR-M5: ONE month for the whole tab (supplyCtx().month, shared with วัตถุดิบ & ราคา, หน้างาน and ผลต่างของสาขา); shown on the panes
+       that work by month (ใบตัดเบิกสาขา, ผลต่างตัดเบิกรายวัน, ปิดงวดเดือน, สรุปผลต่างรายเดือน) -->
+  <div id="ohbMonthBar" class="card p-3 mb-3 flex flex-wrap items-center gap-3" style="display:none">
+    <label class="text-xs" style="color:var(--text-muted)">เดือน
+      <select id="ohbMonth" class="supply-month" onchange="ohbMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    </label>
+  </div>
+
   <!-- ── queue ── -->
   <div id="ohb-pane-queue">
     <div class="card p-3 mb-3">
       <div id="ohbStatusChips" class="flex flex-wrap gap-1"></div>
+      <!-- the date range, the consolidation, the Excel and the accounting marks are the centre's (ประสานงานขาย, ฝ่ายวิเคราะห์, ผู้บริหาร); the warehouse does not see them -->
+      <div id="ohbQCentre">
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
-        <label>ตัดรอบตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <span style="padding-bottom:8px">ตัดรอบ</span>
+        <label>ตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
@@ -22,6 +33,7 @@
         <a href="#" onclick="ohbMarkKeyed(false);return false" style="color:var(--accent)">ยกเลิกคีย์บัญชี</a>
         <span id="ohbKeyStatus"></span>
       </span>
+      </div>
     </div>
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbDetail" class="card p-3 mb-3" style="display:none"></div>
@@ -47,7 +59,7 @@
         <label>สาขา<br><select id="ohbIsBranch" data-branch-picker onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <label>เดือนของไฟล์ Excel<br><input type="month" id="ohbIsMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <span class="text-xs" style="padding-bottom:8px;color:var(--text-secondary)">ดาวน์โหลด เดือน<b id="ohbIsDlMonth"></b>:</span>
         <button onclick="ohbIsXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกที่ยืนยันแล้ว (Excel)</button>
         <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
         <span id="ohbIsStatus" style="padding-bottom:6px"></span>
@@ -65,7 +77,6 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbIvBranch" data-branch-picker onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
-        <label>เดือน<br><input type="month" id="ohbIvMonth" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <a href="#" onclick="ohbIvXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
         <span id="ohbIvStatus" style="padding-bottom:6px"></span>
       </div>
@@ -105,9 +116,7 @@
        is pre-set to the branch and the date the checklist says is missing. ── -->
   <div id="ohb-pane-central" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
-      <span class="text-sm font-semibold" style="color:var(--text-primary)">ปิดงวดเดือน</span>
-      <label class="text-xs" style="color:var(--text-muted)">เดือน
-        <input type="month" id="ohbCloseMonth" onchange="ohbCloseMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <span class="text-sm font-semibold" style="color:var(--text-primary)">ปิดงวดเดือน <span id="ohbCloseMonthLbl"></span></span>
       <span id="ohbCloseSummary" class="text-xs" style="color:var(--text-secondary)"></span>
       <span id="ohbCloseStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
@@ -202,8 +211,7 @@
   <!-- ── monthly ── -->
   <div id="ohb-pane-month" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-muted)">
-      เดือน <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      <a href="#" id="ohbMonthIssueLink" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" class="ml-2" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
+      <a href="#" id="ohbMonthIssueLink" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>
     <div id="ohbHelp-month"></div>
