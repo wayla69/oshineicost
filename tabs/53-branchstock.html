@@ -10,13 +10,39 @@
     </div>
   </div>
 
-  <!-- ── นับสต๊อก ── -->
-  <div id="brn-pane-count">
+  <!-- ── นับและสั่ง (the count is part of the order: counted on hand → suggestion → order, one page) ── -->
+  <div id="brn-pane-order">
+    <div class="card p-3 mb-3">
+      <div id="brnOrdDeliv" class="flex flex-wrap gap-1"></div>
+      <div id="brnOrdPages" class="flex flex-wrap gap-1 mt-2"></div>
+      <div id="brnOrdHead" class="text-xs mt-2"></div>
+      <div id="brnOrdBanner" class="mt-2" style="display:none"></div>
+      <div id="brnOrdBuffer" class="mt-2" style="border-top:1px solid var(--border-soft);padding-top:8px"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะรายการที่ต้องสั่ง</label>
+        <input type="search" id="brnOrdQ" placeholder="ค้นหา…" oninput="brnRenderOrder()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
+      </div>
+    </div>
+    <div id="brnOrdList" class="card p-3 mb-3"></div>
+    <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
+      <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
+      <span id="brnOrdStatus" class="text-xs"></span>
+    </div>
+    <div id="brnOrdDetail" class="card p-3 mb-3" style="display:none"></div>
+    <div class="card p-3 mb-3">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ใบสั่งซื้อล่าสุด</div>
+      <div id="brnOrdHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- ── ตรวจนับสิ้นเดือน (ต้นงวด / ปลายงวด) ── -->
+  <div id="brn-pane-count" style="display:none">
     <div class="card p-3 mb-3">
       <p class="text-xs" style="color:var(--text-secondary)">
-        ตรวจนับสินค้าคงเหลือทีละโซน <b>ก่อนเปิดร้านและก่อนรับสินค้า</b> กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบจะแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
-        การตรวจนับครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของรอบถัดไปโดยอัตโนมัติ ·
-        ระบบบันทึกร่างไว้ระหว่างกรอก ข้อมูลไม่สูญหายแม้สัญญาณขาด เมื่อครบแล้วกด “ส่งผลตรวจนับ”
+        <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น การนับก่อนสั่งทำในหน้า “นับและสั่ง” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
+        ครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของเดือนถัดไปโดยอัตโนมัติ ·
+        ระบบบันทึกร่างไว้ระหว่างกรอก เมื่อครบแล้วกด “ส่งผลตรวจนับ”
       </p>
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
     </div>
@@ -46,31 +72,6 @@
     <div class="card p-3 mb-3">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการตรวจนับ</div>
       <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
-    </div>
-  </div>
-
-  <!-- ── สั่งของ ── -->
-  <div id="brn-pane-order" style="display:none">
-    <div class="card p-3 mb-3">
-      <div id="brnOrdRounds" class="flex flex-wrap gap-1"></div>
-      <div id="brnOrdPages" class="flex flex-wrap gap-1 mt-2"></div>
-      <div id="brnOrdHead" class="text-xs mt-2"></div>
-      <div id="brnOrdBuffer" class="mt-2" style="border-top:1px solid var(--border-soft);padding-top:8px"></div>
-      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะรายการที่ต้องสั่ง</label>
-        <input type="search" id="brnOrdQ" placeholder="ค้นหา…" oninput="brnRenderOrder()"
-               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
-      </div>
-    </div>
-    <div id="brnOrdList" class="card p-3 mb-3"></div>
-    <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
-      <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
-      <span id="brnOrdStatus" class="text-xs"></span>
-    </div>
-    <div id="brnOrdDetail" class="card p-3 mb-3" style="display:none"></div>
-    <div class="card p-3 mb-3">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ใบสั่งซื้อล่าสุด</div>
-      <div id="brnOrdHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
   </div>
 

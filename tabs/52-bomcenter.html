@@ -112,8 +112,8 @@
         <select id="bmcFcBranch" onchange="supplyCtxSet({branch_id: Number(this.value) || null})" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <label class="text-xs" style="color:var(--text-muted)">รอบ<br>
         <select id="bmcFcRound" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-          <option value="1">รอบ 1 (อังคาร/พุธ)</option><option value="2">รอบ 2 (ศุกร์/เสาร์)</option><option value="salmon">แซลมอนสด (สั่งล่วงหน้า 1 สัปดาห์)</option></select></label>
-      <label class="text-xs" style="color:var(--text-muted)">วันที่จะสั่ง<br>
+          <option value="1">รอบ 1</option><option value="2">รอบ 2</option><option value="salmon">แซลมอนสด</option></select></label>
+      <label class="text-xs" style="color:var(--text-muted)" title="ระบบเลือกรอบส่งที่ยังไม่ถึงเวลาตัดรอบ ณ วันนี้">วันที่จะสั่ง (ก่อนตัดรอบ)<br>
         <input type="date" id="bmcFcDay" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"><input type="checkbox" id="bmcFcSeason" checked> ปรับตามเทศกาลและข้อมูลปีก่อน</label>
       <button onclick="bmcRunForecast()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">คำนวณยอดแนะนำ</button>
@@ -127,7 +127,7 @@
     <div id="bmcFcRuns" class="card p-4 mb-3"></div>
   </div>
 
-  <!-- ── order calendar (ตั้งค่า → รอบสั่งของสาขา) ─────────────────────── -->
+  <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
   <div id="bmc-pane-cal" style="display:none">
     <div id="bmcFcCal" class="card p-4 mb-3"></div>
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>

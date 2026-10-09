@@ -1933,7 +1933,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     ws = wb.active
     br = c["branches"]
     _sheet(ws, "รวมตามผู้จำหน่าย", ["วันส่ง", "ผู้จำหน่าย", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
-           f"ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”" + (f" วันสั่ง {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
+           f"ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”" + (f" วันตัดรอบ {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
            + " สรุปรวมตามผู้จำหน่าย × วันส่ง (ใช้ยอดที่ Sales Support ดำเนินการ หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:

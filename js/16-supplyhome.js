@@ -13,7 +13,7 @@ const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
   bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
   ohbCenStatus: 'central_report', ohbLinkStatus: 'code_links', ohbDelStatus: 'deliveries', ohbCntStatus: 'begin_count',
-  brnStatus: 'count_today', brnOrdStatus: 'order_today_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
+  brnStatus: 'count_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
   ohbDStatus: 'queue_pending' };
 
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js): this tab has one view; a month from a link lands in the strip.
@@ -131,7 +131,10 @@ function _shmOpen(go) {
   if (!go || !go.tab) return;
   if (!tabAllowed(go.tab)) { notifyError('บทบาทของคุณไม่มีสิทธิ์เปิดหน้านี้'); return; }
   const x = go.extra || {};
-  if (x.round && typeof _brnRound !== 'undefined') { _brnRound = x.round; _brnRoundKeep = true; }   // survives the page's branch reset
+  if (x.round && typeof _brnRound !== 'undefined') {
+    _brnRound = x.round; _brnRoundKeep = true;                         // survives the page's branch reset
+    if (x.delivery) { _brnDelivery = x.delivery; _brnDeliveryKeep = true; }   // the delivery day the task names
+  }
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);
@@ -152,7 +155,7 @@ function _shmOpen(go) {
 // starts with ✓; the next open item after the one that save completes is shown as
 // a toast that opens it. One toast per 2 s — a save may write two status lines.
 function shmAfterStatus(id) {
-  const k = id === 'brnOrdStatus' && typeof _brnRound !== 'undefined' && _brnRound ? 'order_today_' + _brnRound : _SHM_STATUS_KEY[id];
+  const k = id === 'brnOrdStatus' && typeof _brnRound !== 'undefined' && _brnRound ? 'order_due_' + _brnRound : _SHM_STATUS_KEY[id];
   if (k) shmAfter(k);
 }
 async function shmAfter(key) {

@@ -48,7 +48,10 @@ async function _bmcJson(url, opt) {
   const t = await r.text();
   let j = null;
   try { j = JSON.parse(t); } catch (e) { /* not json */ }
-  if (!r.ok) throw new Error((j && j.detail) || t.slice(0, 200));
+  if (!r.ok) {
+    const d = j && j.detail;                       // a string, or an object such as the late-order {code, message, …}
+    throw Object.assign(new Error(typeof d === 'string' ? d : (d && d.message) || t.slice(0, 200)), { detail: d });
+  }
   return j;
 }
 function _bmcStatus(id, msg, ink) {
@@ -1412,13 +1415,13 @@ function bmcRenderForecast() {
   document.getElementById('bmcFcHead').innerHTML = `<div class="card p-4">
     <div class="flex flex-wrap gap-4 items-baseline">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.branch)} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round}</div>
-      <div class="text-xs" style="color:var(--text-secondary)">สั่ง <b>${f.order_weekday} ${esc(f.order_day)}</b> · สินค้าถึง <b>${esc(f.delivery)}</b> · ต้องเพียงพอสำหรับ <b>${esc(f.cover_from)} ถึง ${esc(f.cover_to)}</b> (${f.cover_days} วัน)</div>
+      <div class="text-xs" style="color:var(--text-secondary)">ตัดรอบ <b>${f.order_weekday} ${esc(f.order_day)}</b> · สินค้าถึง <b>${esc(f.delivery)}</b> · ต้องเพียงพอสำหรับ <b>${esc(f.cover_from)} ถึง ${esc(f.cover_to)}</b> (${f.cover_days} วัน)</div>
       <div class="ml-auto text-right"><div class="text-[11px]" style="color:var(--text-muted)">มูลค่าแนะนำ</div><div class="text-lg font-bold" style="color:var(--text-primary)">฿${_bmcNum(f.value_total, 0)}</div></div>
     </div>
     <div class="text-[11px] mt-2" style="color:var(--text-muted)">ใช้ยอดขาย ${esc(f.history_from)} ถึง ${esc(f.history_to)} (${f.trading_days} วันที่มีการขาย · เฉพาะช่วงเมนูใหม่) ·
       สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ปล่อยแล้ว (${f.stats.release_skus} เมนู) + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ ·
       เทศกาล ×${(f.season?.factor || 1).toFixed(2)}${f.season?.reason ? ' (' + esc(f.season.reason) + ')' : ''}
-      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบสั่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบสั่ง →</a>'}</div>
+      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบส่งของสาขานี้ ระบบใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a>'}</div>
     <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
       ยอดแนะนำการสั่ง = ปริมาณที่คาดว่าจะใช้ + สต๊อกสำรองกันขาด <b>ยังไม่หักสต๊อกคงเหลือในสาขา</b> (หน้าสั่งสินค้าของสาขาหักให้เมื่อสาขามีผลตรวจนับ) · ใช้เป็นตัวเลขตั้งต้น ไม่ใช่ใบสั่งซื้อที่พร้อมใช้</div>
     ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">มี ${f.stats.missed_lines} บรรทัดสูตรในเมนูที่สาขานี้ขายที่ยังคำนวณไม่ได้ (แปลงหน่วยไม่ได้) <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
@@ -1464,27 +1467,36 @@ async function bmcBacktest() {
 async function bmcLoadCalendar() {
   try { _bmcCal = await _bmcJson(`${API}/api/bom-center/order-calendar`); } catch (e) { return; }
   const w = _bmcFcCanWrite();
-  const sel = (bid, rnd, field, val, opts) => w
-    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="${field}" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1'" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
-        ${opts.map(o => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${_BMC_WD[o]}</option>`).join('')}</select>`
+  // the sales team sets the DELIVERY weekday only; the cutoff (13:15, two days before — a Tuesday delivery: Saturday) is derived
+  const sel = (bid, rnd, val) => w
+    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="delivery_weekday" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1';bmcCalCutoff(this)" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
+        ${_BMC_WD.map((n, o) => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${n}</option>`).join('')}</select>`
     : _BMC_WD[val];
-  const lead = (bid, rnd, val) => w ? `<input data-bid="${bid}" data-rnd="${rnd}" data-f="lead_days" type="number" min="0" max="14" value="${val ?? ''}" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1'"
-        style="width:46px;border:1px solid var(--border);border-radius:4px;font-size:11.5px;text-align:right;background:var(--bg-input);color:var(--text-primary)">` : (val ?? '');
+  const cut = (bid, rnd, th) => `<span id="bmcCut_${bid}_${rnd}">${esc(th || '')}</span>`;
   const pilot = _bmcCal.pilot || [];
   const calRows = (_bmcCalPilotOnly && pilot.length) ? _bmcCal.rows.filter(r => pilot.includes(r.branch)) : _bmcCal.rows;
-  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบสั่งสินค้าของแต่ละสาขา</div>
+  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
       ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
       <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
-      ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบสั่ง</button>` : ''}</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ฝ่ายขายกรอกข้อมูลรายสาขา: รอบ 1 สั่งวันอังคารหรือพุธ · รอบ 2 สั่งวันศุกร์หรือเสาร์ · แซลมอนสดสั่งล่วงหน้าสัปดาห์ละครั้ง (วันส่งถึง = วันสั่ง + ระยะส่ง)</div>
+      ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบส่ง</button>` : ''}</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ฝ่ายขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน ${esc(_bmcCal.cutoff_time || '13:15')} สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ ${esc(_bmcCal.cutoff_time || '13:15')}) · มีผลตั้งแต่รอบถัดไป</div>
     <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
-      <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1</th><th class="pr-2">ระยะส่ง (วัน)</th><th class="pr-2">รอบ 2</th><th class="pr-2">ระยะส่ง</th>
-      <th class="pr-2">แซลมอนสด</th><th class="pr-2">ระยะส่ง</th><th>ตั้งโดย</th></tr></thead>
+      <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">ตัดรอบ</th>
+      <th class="pr-2">แซลมอนสด วันส่ง</th><th class="pr-2">ตัดรอบ</th><th>ตั้งโดย</th></tr></thead>
     <tbody>${calRows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
-      <td class="pr-2">${sel(r.branch_id, '1', 'order_weekday', r.r1.order_weekday, [2, 3])}</td><td class="pr-2">${lead(r.branch_id, '1', r.r1.lead_days)}</td>
-      <td class="pr-2">${sel(r.branch_id, '2', 'order_weekday', r.r2.order_weekday, [5, 6])}</td><td class="pr-2">${lead(r.branch_id, '2', r.r2.lead_days)}</td>
-      <td class="pr-2">${sel(r.branch_id, 'salmon', 'order_weekday', r.rsalmon.order_weekday, [0, 1, 2, 3, 4, 5, 6])}</td><td class="pr-2">${lead(r.branch_id, 'salmon', r.rsalmon.lead_days)}</td>
+      <td class="pr-2">${sel(r.branch_id, '1', r.r1.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '1', r.r1.cutoff_th)}</td>
+      <td class="pr-2">${sel(r.branch_id, '2', r.r2.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '2', r.r2.cutoff_th)}</td>
+      <td class="pr-2">${sel(r.branch_id, 'salmon', r.rsalmon.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, 'salmon', r.rsalmon.cutoff_th)}</td>
       <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '') : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+}
+// the read-only ตัดรอบ cell follows the weekday picked (the server derives the same: delivery − 2 days, a Sunday moves to Saturday)
+function _bmcCutoffTh(wd) {
+  const cw = (Number(wd) + 5) % 7;
+  return `วัน${_BMC_WD[cw === 0 ? 6 : cw]} ${(_bmcCal && _bmcCal.cutoff_time) || '13:15'}`;
+}
+function bmcCalCutoff(el) {
+  const c = document.getElementById(`bmcCut_${el.dataset.bid}_${el.dataset.rnd}`);
+  if (c) c.textContent = _bmcCutoffTh(el.value);
 }
 async function bmcSaveCalendar() {
   // only the (branch, round) groups someone touched are sent — the others keep
@@ -1504,7 +1516,7 @@ async function bmcSaveCalendar() {
   }
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changed) });
-    const msg = `✓ บันทึกรอบสั่งแล้ว ${(r && r.rows) || changed.length} รายการ`;
+    const msg = `✓ บันทึกรอบส่งแล้ว ${(r && r.rows) || changed.length} รายการ`;
     _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
     _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
     bmcLoadCalendar();
@@ -1518,7 +1530,7 @@ async function bmcLoadRuns() {
     const d = await _bmcJson(`${API}/api/bom-center/forecast/runs?limit=20`);
     document.getElementById('bmcFcRuns').innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รอบสั่งที่บันทึกไว้</div>` +
       (d.rows.map(r => `<div class="text-[11.5px] py-0.5 border-b" style="border-color:var(--border-soft);color:var(--text-secondary)">#${r.run_id} · ${esc(r.branch || '')} ·
-        ${r.round === 'salmon' ? 'แซลมอน' : 'รอบ ' + r.round} · สั่ง ${esc(r.order_day)} · ใช้ ${esc(r.cover_from)}–${esc(r.cover_to)} · ${r.lines} รายการ · ฿${_bmcNum(r.value, 0)} ·
+        ${r.round === 'salmon' ? 'แซลมอน' : 'รอบ ' + r.round} · ตัดรอบ ${esc(r.order_day)} · ใช้ ${esc(r.cover_from)}–${esc(r.cover_to)} · ${r.lines} รายการ · ฿${_bmcNum(r.value, 0)} ·
         ${esc(r.created_by || '-')} ${esc(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</div>`).join('')
         || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบสั่งที่บันทึกไว้</div>');
   } catch (e) { /* list is a nicety */ }
