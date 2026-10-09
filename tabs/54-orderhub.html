@@ -2,9 +2,6 @@
 
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
     <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
-    <p class="text-xs mt-1" style="color:var(--text-secondary)">
-      คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · ยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล · สาขาส่งก่อน 13:15 สองวันก่อนวันส่ง ส่งหลังเวลามีค่าปรับ (ป้าย “ส่งล่าช้า”) · ประสานงานขายพิจารณาเคลมและคีย์ใบสั่งซื้อเข้าระบบบัญชี · ฝ่ายปฏิบัติการตรวจสอบการสั่ง: ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง
-    </p>
   </div>
 
   <!-- ── queue ── -->
@@ -16,7 +13,7 @@
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
-        <span class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)">ใช้สถานะที่เลือกด้านบน</span>
+        <span id="ohbQStatus" class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)"></span>
       </div>
       <!-- ประสานงานขาย: คีย์บัญชีแล้ว (ติ๊กเฉพาะใบที่คลังจัดส่งแล้วหรือสาขารับแล้ว) -->
       <span class="ohb-key-only flex flex-wrap items-center gap-2 mt-2 text-xs" style="display:none;color:var(--text-secondary)">
@@ -29,24 +26,23 @@
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbQueue" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-queue"></div>
   </div>
 
   <!-- ── เคลมสินค้า (owner 2026-10-08) ── -->
   <div id="ohb-pane-claims" style="display:none">
     <div class="card p-3 mb-3">
-      <div class="text-xs mb-2" style="color:var(--text-secondary)">ตรวจรูปที่สาขาส่งทางไลน์ แล้วอนุมัติหรือไม่อนุมัติพร้อมเหตุผล</div>
       <div id="ohbClaimChips" class="flex flex-wrap gap-1"></div>
     </div>
     <div id="ohbClaimDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbClaimList" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-claims"></div>
   </div>
 
   <!-- ── ใบตัดเบิกสาขา (PR-J4): ประสานงานขาย follows the branches' daily slips, reopens one with a reason;
        Accounting downloads the confirmed ones (docs/pilot/accounting_guide.html) ── -->
   <div id="ohb-pane-issues" style="display:none">
     <div class="card p-3 mb-3">
-      <div class="text-xs mb-2" style="color:var(--text-secondary)">ใบที่ยืนยันแล้วแก้ไม่ได้ · ประสานงานขายเปิดแก้ไขพร้อมเหตุผล · ใบที่ยืนยันหลังวันที่ของใบ = “ล่าช้า” · Excel รวมเฉพาะใบที่ยืนยันแล้ว ·
-        คู่มือบัญชี: <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">ใบสรุปตัดเบิกและใบตัดเบิกรายวัน</a></div>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbIsBranch" data-branch-picker onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -61,12 +57,12 @@
     <div id="ohbIsDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbIsList" class="card p-3 mb-3"></div>
     <div id="ohbIsSummary" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-issues"></div>
   </div>
 
   <!-- ── ผลต่างตัดเบิกรายวัน (PR-J3) ── -->
   <div id="ohb-pane-issuevar" style="display:none">
     <div class="card p-3 mb-3">
-      <div class="text-xs mb-2" style="color:var(--text-secondary)">มูลค่าเบิกจริงเทียบตามสูตร · ชั้น A เกิน 20% ติดกัน 3 วันขาย = เตือน · กดวันเพื่อดูรายการ</div>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbIvBranch" data-branch-picker onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>เดือน<br><input type="month" id="ohbIvMonth" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -77,6 +73,7 @@
     </div>
     <div id="ohbIvList" class="card p-3 mb-3"></div>
     <div id="ohbIvDetail" class="card p-3 mb-3" style="display:none"></div>
+    <div id="ohbHelp-issuevar"></div>
   </div>
 
   <!-- ── compliance ── -->
@@ -86,24 +83,19 @@
         <label>ตั้งแต่<br><input type="date" id="ohbCFrom" onchange="ohbLoadComp()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbCTo" onchange="ohbLoadComp()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <a href="#" onclick="ohbDownloadComp();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <span id="ohbCStatus" class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)"></span>
       </div>
       <div id="ohbCChips" class="flex flex-wrap gap-1 mt-2"></div>
     </div>
     <div id="ohbComp" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-comp"></div>
   </div>
 
   <!-- ── pilot ── -->
   <div id="ohb-pane-pilot" style="display:none">
-    <div class="card p-3 mb-3 text-xs" style="color:var(--text-secondary)">
-      สาขานำร่อง 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง) · เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% ·
-      ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์ชั้น A ≤ 15% ·
-      คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> ·
-      <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> ·
-      <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> ·
-      <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>
-    </div>
     <div id="ohbPilotReady" class="card p-3 mb-3"></div>
     <div id="ohbPilotScore" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-pilot"></div>
   </div>
 
   <!-- ── S11: the central list, a month's deliveries, a month closed later ── -->
@@ -136,13 +128,12 @@
         <span class="text-sm font-semibold" style="color:var(--text-primary)">นำเข้ารายงานของไดกิโตะ กรุ๊ปประจำเดือน</span>
         <span id="ohbSt2" class="ml-auto"></span>
       </div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">นำเข้าครั้งเดียวได้ทั้ง <b>บัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป</b> (หน่วย ราคา รายการนอกบัญชีเป็น “สาขาซื้อเอง”) และ<b>ใบรับสินค้าประจำเดือนของแต่ละสาขา</b> · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก</p>
       <div id="ohbCenStat" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
         <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer">นำเข้ารายงานไดกิโตะ กรุ๊ป (.xlsx)
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbMonthPick(this)"></label>
         <label class="flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" id="ohbSetLocal" checked> รายการนอกบัญชีให้สาขาซื้อเอง</label>
-        <a href="#" onclick="window.location.href=API+'/api/bom-center/central.xlsx';return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (.xlsx)</a>
+        <a href="#" onclick="ohbCentralXlsx();return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (.xlsx)</a>
       </div>
       <span id="ohbCenStatus" class="text-xs"></span>
       <div id="ohbCenReport" class="mt-2"></div>
@@ -156,7 +147,6 @@
         <span class="text-sm font-semibold" style="color:var(--text-primary)">จับคู่รหัสในสูตรกับรหัสสินค้าของไดกิโตะ กรุ๊ป</span>
         <span id="ohbSt3" class="ml-auto"></span>
       </div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">จับคู่รหัสเดิมในสูตรกับรหัสของไดกิโตะ กรุ๊ป (มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน)</p>
       <span id="ohbLinkStatus" class="text-xs"></span>
       <div id="ohbLinks" class="mt-2"></div>
     </div>
@@ -167,7 +157,6 @@
         <span class="text-sm font-semibold" style="color:var(--text-primary)">ผลตรวจนับต้นงวดและปลายงวดจากแบบฟอร์ม</span>
         <span id="ohbSt4" class="ml-auto"></span>
       </div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">นับก่อนเปิดร้านวันที่ 1 · นำเข้าต้นงวดก่อนปลายงวด</p>
       <div id="ohbSt4Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbCntBranch" data-branch-picker onchange="ohbCntBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
@@ -186,7 +175,6 @@
         <span class="text-sm font-semibold" style="color:var(--text-primary)">ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง</span>
         <span id="ohbSt5" class="ml-auto"></span>
       </div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">สาขายืนยันรับครบและระบุเหตุผลผลต่าง (หรือประสานงานขาย / ฝ่ายวิเคราะห์ทำแทน)</p>
       <div id="ohbSt5Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
     </div>
 
@@ -196,9 +184,8 @@
         <span class="text-sm font-semibold" style="color:var(--text-primary)">ใบสรุปตัดเบิก (บัญชี)</span>
         <span id="ohbSt6" class="ml-auto"></span>
       </div>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">บัญชีดาวน์โหลดแล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”</p>
       <div id="ohbSt6Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
-      <div class="text-xs mt-1"><a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',month:_ohbCloseMonth()});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิก →</a></div>
+      <div id="ohbSt6Link" class="text-xs mt-1"><a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',month:_ohbCloseMonth()});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิก →</a></div>
     </div>
 
     <div class="card p-3 mb-3">
@@ -209,15 +196,16 @@
       </div>
       <div class="text-xs mt-1" style="color:var(--text-secondary)">ดูที่ <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน →</a></div>
     </div>
+    <div id="ohbHelp-central"></div>
   </div>
 
   <!-- ── monthly ── -->
   <div id="ohb-pane-month" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-muted)">
       เดือน <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      <span class="ml-2">งวดที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบยอดตามสูตร · แสดงในรายงานผู้บริหาร (รายเดือน) ข้อ 13A ด้วย</span>
-      <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" class="ml-2" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
+      <a href="#" id="ohbMonthIssueLink" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" class="ml-2" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>
+    <div id="ohbHelp-month"></div>
   </div>
 </div>

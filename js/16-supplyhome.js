@@ -2,6 +2,8 @@
 // to do now and where the month stands, from GET /api/bom-center/todo; every card
 // opens its task through supplyGo (01-core.js) with the month and branch already
 // chosen. After a save on any supply page, "ขั้นตอนถัดไป" names the next open item.
+// PR-M2 (2026-10-10): each role sees its own work — "งานของฉัน" is the one open block, the month-close list is shown
+// only to a role that owns a step (and only its steps), "งานของฝ่ายอื่น" is a folded, capped list for the centre roles.
 // Shares the global scope of slices 01-15 (uses _bmcJson, _bmcChip, _bmcStatus, esc,
 // hasModule, tabAllowed, supplyCtx / supplyCtxSet, supplyGo). Every name starts with `shm`.
 
@@ -10,8 +12,8 @@ let _shmToastAt = 0;
 const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
                   blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงาน', 'var(--text-muted)'] };
 // the status line each save writes → the to-do item it completes (shmAfterStatus)
-const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
-  bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
+const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcIngSummary: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
+  bmcSubStatus: 'price_submit', bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
   ohbCenStatus: 'central_report', ohbLinkStatus: 'code_links', ohbDelStatus: 'deliveries', ohbCntStatus: 'begin_count',
   brnStatus: 'end_count', brnIssStatus: 'issue_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
   ohbDStatus: 'queue_pending' };
@@ -23,7 +25,12 @@ _SUPPLY_PANE.supplyhome = { get: () => null, set: () => {}, show: () => loadSupp
 // "mine" by role (owner_th names the department), not by module: management holds every
 // module and would otherwise own every branch's count; a role without a word falls back to modules
 const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['ประสานงานขาย'], analyst: ['ฝ่ายวิเคราะห์'],
-  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'] };
+  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'],
+  warehouse: ['คลัง'] };
+// the roles that see the month-close list (they own a step of it), and the roles that may look at other departments' work
+const _SHM_CLOSE_ROLES = ['analyst', 'salessupport', 'accounting', 'management'];
+const _SHM_CENTRE_ROLES = ['analyst', 'salessupport', 'management', 'operation'];
+function _shmRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
 function _shmMine(it) {
   const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
   const words = role && _SHM_ROLE_OWNERS[role];
@@ -60,7 +67,14 @@ async function loadSupplyHome() {
     }
   }
   supplyCtxSet({ month: d.month, branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
-  document.getElementById('shmNote').textContent = `วันนี้ ${fmtDay(d.today)} · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}`;
+  // the branch is named ONCE, in the header (a branch login has one); the version of the recipes in force is the analyst's
+  // and the manager's line only
+  const bn = document.getElementById('shmBranchName');
+  const mine = d.scoped && d.branches && d.branches[0];
+  if (bn) { bn.textContent = mine ? mine.name : ''; bn.style.display = mine ? '' : 'none'; }
+  const role = _shmRole();
+  document.getElementById('shmNote').textContent = `วันนี้ ${fmtDay(d.today)}` +
+    (role === 'analyst' || role === 'management' ? ` · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}` : '');
   _shmRender(d);
   _bmcStatus('shmStatus', '');
 }
@@ -70,24 +84,99 @@ function shmCtxChanged() {
   loadSupplyHome();
 }
 
+// A branch login reads its list by urgency: an order past its cutoff, then today's duties, then what is coming, and the days
+// it left behind last. Other roles keep the order of the centre's list (urgent first, then the step order).
+function _shmRank(it) {
+  const k = String(it.key || '').split(':')[0];                       // a per-branch key ends in ":<branch id>"
+  if (it.late && !k.startsWith('issue_')) return 0;                  // an order that is past its cutoff
+  if (k.startsWith('issue_missing_')) return 3;                       // a day left behind
+  if (k === 'issue_today' || it.due_today) return 1;                  // today's duty
+  return 2;
+}
+function _shmSortMine(role) {
+  const st = { todo: 0, blocked: 1, done: 2, na: 3 };
+  return role === 'branch'
+    ? (a, b) => (st[a.status] - st[b.status]) || (_shmRank(a) - _shmRank(b)) || (a.seq - b.seq)
+    : (a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (st[a.status] - st[b.status]) || (a.seq - b.seq);
+}
+// other departments' per-branch duties are one line each, not one card per branch and day
+const _SHM_GROUP_TITLE = { slip: 'สาขาที่ยังไม่ยืนยันใบตัดเบิก', order_due: 'สาขาที่ยังไม่ส่งใบสั่งซื้อ',
+  receive_pending: 'สาขาที่ยังไม่บันทึกรับสินค้า', variance_open: 'สาขาที่ยังไม่ระบุเหตุผลผลต่าง' };
+function _shmGroupKey(it) {
+  if (!it.branch_id) return null;
+  const k = String(it.key).split(':')[0];
+  if (k === 'issue_today' || k.startsWith('issue_missing_')) return 'slip';
+  return k.replace(/_(1|2|salmon)$/, '');
+}
+const _SHM_OTHERS_CAP = 6;
+function _shmOthersHtml(others) {
+  const open = others.filter(it => it.status === 'todo' || it.status === 'blocked');
+  const groups = {}, singles = [];
+  open.forEach(it => { const g = _shmGroupKey(it); if (g) (groups[g] = groups[g] || []).push(it); else singles.push(it); });
+  const lines = singles.map(it => ({ seq: it.seq, urgent: !!it.urgent, html: _shmCard(it) }));
+  Object.entries(groups).forEach(([g, list]) => {
+    const names = new Set(list.map(x => x.branch_id));
+    const first = list[0];
+    // the slip duty opens the centre's list of slips; any other group opens its first item
+    const go = g === 'slip' ? { tab: 'orderhub', pane: 'issues' } : first.go;
+    const hit = go && go.tab ? _supplyItemOf(go.tab, go.pane) : null;
+    const openable = go && go.tab && tabAllowed(go.tab) && (g !== 'slip' || (hit && _supplyItemAllowed(hit.item)));
+    const title = _SHM_GROUP_TITLE[g] || first.title;
+    const act = openable ? `<a href="#" onclick="_shmOpen(${esc(JSON.stringify(go))});return false" class="text-[11px] whitespace-nowrap" style="color:var(--accent)">ดูรายการ →</a>` : '';
+    lines.push({ seq: first.seq, urgent: list.some(x => x.urgent), html: `<div class="flex items-start gap-3 py-2" style="border-top:1px solid var(--border-soft)">
+      <div class="flex-1 min-w-0"><div class="text-sm" style="color:var(--text-primary)">${esc(title)} ${_bmcChip(`${names.size} สาขา`, list.some(x => x.urgent) ? 'var(--bad-ink)' : 'var(--amber-ink)')}</div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${esc(first.owner_th || '')}</div></div>${act}</div>` });
+  });
+  lines.sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
+  const shown = lines.slice(0, _SHM_OTHERS_CAP);
+  return shown.map(l => l.html).join('')
+    + (lines.length > shown.length ? `<div class="text-[11px] py-2" style="color:var(--text-muted);border-top:1px solid var(--border-soft)">และอีก ${lines.length - shown.length} เรื่อง</div>` : '')
+    + (!lines.length ? '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานค้าง</div>' : '');
+}
+
 function _shmRender(d) {
+  const role = _shmRole();
   const items = d.items || [];
-  const mine = items.filter(_shmMine), others = items.filter(it => !_shmMine(it));
-  const order = { todo: 0, blocked: 1, done: 2, na: 3 };
-  const sortf = (a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (order[a.status] - order[b.status]) || (a.seq - b.seq);
-  mine.sort(sortf); others.sort(sortf);
+  const c = d.close || { steps: [], branches: [] };
+  const steps = c.steps || [];
+  const mineItems = items.filter(_shmMine), others = items.filter(it => !_shmMine(it));
+  mineItems.sort(_shmSortMine(role));
+  const showClose = _SHM_CLOSE_ROLES.includes(role) && steps.length > 0;
+  // a role that owns steps of the close sees those; the manager reads the whole list (the whole month is the manager's overview)
+  const mineSteps = showClose ? (role === 'management' ? steps.slice() : steps.filter(_shmMine)) : [];
+  const stepsAhead = mineSteps.filter(s => s.status === 'todo' || s.status === 'blocked');
+  // "งานของฉัน": my open items first, then my open steps of the close (accounting's step 8 is its whole work)
+  const mine = mineItems.concat(role === 'management' ? [] : stepsAhead);
   const open = mine.filter(it => it.status === 'todo' || it.status === 'blocked').length;
   document.getElementById('shmMineCount').textContent = mine.length ? `รอทำ ${open} จาก ${mine.length}` : '';
-  document.getElementById('shmMine').innerHTML = mine.length ? mine.map(it => _shmCard(it)).join('')
-    : '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานค้าง</div>';
-  document.getElementById('shmOthersCount').textContent = others.length ? `(${others.filter(it => it.status === 'todo' || it.status === 'blocked').length} รอทำ จาก ${others.length})` : '(ไม่มี)';
-  document.getElementById('shmOthersBody').innerHTML = others.map(it => _shmCard(it)).join('');
-  const c = d.close || { steps: [] };
-  document.getElementById('shmCloseMonth').textContent = fmtMonthTh(c.month || '');
-  document.getElementById('shmCloseCount').textContent = c.steps.length ? `เสร็จ ${c.done} จาก ${c.total} ขั้นตอน` : '';
-  document.getElementById('shmClose').innerHTML = c.steps.map(s => _shmCard(s, s.seq)).join('');
+  // what is open is listed; what is finished is one folded line, so the list is what is left to do
+  const isOpen = it => it.status === 'todo' || it.status === 'blocked';
+  const card = it => _shmCard(it, it.group === 'close' ? it.seq : undefined, true);
+  const finished = mine.filter(it => !isOpen(it));
+  document.getElementById('shmMine').innerHTML = (open ? mine.filter(isOpen).map(card).join('')
+    : '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานค้าง</div>')
+    + (finished.length ? `<details class="mt-1"><summary class="text-[11px] cursor-pointer py-1" style="color:var(--text-muted)">เสร็จแล้ว ${finished.length} รายการ</summary>${finished.map(card).join('')}</details>` : '');
+  // the close list: collapsed, only the steps of this role; the rest is one grey line
+  const closeCard = document.getElementById('shmCloseCard');
+  closeCard.style.display = showClose ? '' : 'none';
+  if (showClose) {
+    document.getElementById('shmCloseMonth').textContent = fmtMonthTh(c.month || '');
+    document.getElementById('shmCloseCount').textContent = ` · เสร็จ ${c.done} จาก ${c.total} ขั้นตอน`;
+    const rest = steps.length - mineSteps.length;
+    document.getElementById('shmClose').innerHTML = mineSteps.map(s => _shmCard(s, s.seq)).join('')
+      + (rest > 0 ? `<div class="text-[11px] py-2" style="color:var(--text-muted);border-top:1px solid var(--border-soft)">ขั้นตอนของฝ่ายอื่น ${rest}</div>` : '');
+  }
+  // other departments' work: for the centre roles only, folded and capped (never for a branch, the warehouse, the kitchen, accounting)
+  const othersCard = document.getElementById('shmOthers');
+  const showOthers = _SHM_CENTRE_ROLES.includes(role);
+  othersCard.style.display = showOthers ? '' : 'none';
+  if (showOthers) {
+    const waiting = others.filter(it => it.status === 'todo' || it.status === 'blocked').length;
+    document.getElementById('shmOthersCount').textContent = waiting ? `(${waiting} รอทำ)` : '(ไม่มี)';
+    document.getElementById('shmOthersBody').innerHTML = _shmOthersHtml(others);
+  }
 }
-function _shmCard(it, n) {
+function _shmCard(it, n, mineBlock) {
   const [lbl, ink] = _SHM_ST[it.status] || _SHM_ST.todo;
   const openable = it.go && it.go.tab && tabAllowed(it.go.tab);   // another department's step shows its owner, not a button
   const act = !openable ? '' : it.status === 'done' || it.status === 'na'
@@ -97,12 +186,15 @@ function _shmCard(it, n) {
   const per = (it.branches || []).length > 1
     ? `<div class="text-[11px] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">${it.branches.map(b => `<span style="color:${(_SHM_ST[b.status] || _SHM_ST.todo)[1]}">${b.status === 'done' ? '✓' : '•'} ${esc(b.branch)}: ${esc(b.detail)}</span>`).join('')}</div>`
     : (it.detail ? `<div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(it.detail)}</div>` : '');
+  // the branch is written once: in the header of a branch login, so a card of its own list does not repeat it
+  const scoped = !!(_shmData && _shmData.scoped);
+  const owner = [it.owner_th, it.branch && !(it.branches || []).length && !scoped ? it.branch : ''].filter(Boolean).join(' · ');
   return `<div class="flex items-start gap-3 py-2" style="border-top:1px solid var(--border-soft);opacity:${dim ? .75 : 1}">
     ${n ? `<span class="text-xs font-semibold" style="color:var(--text-muted);min-width:18px">${n}.</span>` : ''}
     <div class="flex-1 min-w-0">
       <div class="text-sm" style="color:var(--text-primary)">${esc(it.title)} ${_bmcChip(lbl, it.urgent ? 'var(--bad-ink)' : ink)}${it.count ? ' ' + _bmcChip(`${it.count} รายการ`, ink) : ''}</div>
       ${per}
-      ${it.owner_th ? `<div class="text-[11px]" style="color:var(--text-muted)">${esc(it.owner_th)}${it.branch && !(it.branches || []).length ? ' · ' + esc(it.branch) : ''}</div>` : ''}
+      ${owner && !(scoped && mineBlock) ? `<div class="text-[11px]" style="color:var(--text-muted)">${esc(owner)}</div>` : ''}
     </div>${act}</div>`;
 }
 
@@ -164,9 +256,13 @@ function _shmOpen(go) {
 // _bmcStatus (13-bom-center.js) calls shmAfterStatus(id) whenever a status line
 // starts with ✓; the next open item after the one that save completes is shown as
 // a toast that opens it. One toast per 2 s — a save may write two status lines.
+// PR-M2: only a step of the person's own work, whose page the person's role holds — never another department's task.
 function shmAfterStatus(id) {
   const k = id === 'brnOrdStatus' && typeof _brnRound !== 'undefined' && _brnRound ? 'order_due_' + _brnRound : _SHM_STATUS_KEY[id];
   if (k) shmAfter(k);
+}
+function _shmToastOk(it) {
+  return _shmMine(it) && ((it.owner_modules || []).length === 0 || it.owner_modules.some(hasModule)) && !!(it.go && it.go.tab && tabAllowed(it.go.tab));
 }
 async function shmAfter(key) {
   if (!key || Date.now() - _shmToastAt < 2000) return;
@@ -177,19 +273,19 @@ async function shmAfter(key) {
     const all = [...(d.items || []), ...((d.close && d.close.steps) || [])];
     const me = all.find(i => i.key === key || i.key.startsWith(key));
     const open = all.filter(i => (i.status === 'todo' || i.status === 'blocked') && i !== me && (!me || i.group !== me.group || i.seq > me.seq));
-    const nx = open.find(it => _shmMine(it) && (!me || it.group === me.group)) || open.find(_shmMine) || open[0];
+    const mineOpen = open.filter(_shmToastOk);
+    const nx = mineOpen.find(it => !me || it.group === me.group) || mineOpen[0];
     if (nx) _shmToast(nx);
   } catch (e) { /* a hint only */ }
 }
 function _shmToast(it) {
   document.querySelectorAll('.shm-toast').forEach(e => e.remove());
-  const mine = _shmMine(it);
   const el = document.createElement('div');
   el.className = 'shm-toast';
   el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:60;max-width:360px;background:var(--bg-card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--r-md, 10px);box-shadow:0 6px 20px rgba(0,0,0,.12);padding:10px 12px';
-  el.innerHTML = `<div class="text-[11px]" style="color:var(--text-muted)">ขั้นตอนถัดไป${mine ? '' : ' (' + esc(it.owner_th || 'ฝ่ายอื่น') + ')'}</div>
+  el.innerHTML = `<div class="text-[11px]" style="color:var(--text-muted)">ขั้นตอนถัดไป</div>
     <div class="text-sm" style="color:var(--text-primary)">${esc(it.title)}</div>
-    <div class="flex gap-2 mt-2">${mine && it.go && it.go.tab ? `<button onclick="this.closest('.shm-toast').remove();_shmOpen(${esc(JSON.stringify(it.go))})" class="text-xs rounded-lg px-3 py-1" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>` : ''}
+    <div class="flex gap-2 mt-2">${it.go && it.go.tab ? `<button onclick="this.closest('.shm-toast').remove();_shmOpen(${esc(JSON.stringify(it.go))})" class="text-xs rounded-lg px-3 py-1" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>` : ''}
       <button onclick="this.closest('.shm-toast').remove()" class="text-xs rounded-lg px-3 py-1" style="border:1px solid var(--border);color:var(--text-secondary);background:transparent;cursor:pointer">ปิด</button></div>`;
   document.body.appendChild(el);
   setTimeout(() => { try { el.remove(); } catch (e) {} }, 12000);

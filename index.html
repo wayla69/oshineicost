@@ -1446,6 +1446,13 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 #msNav button .ic { font-size: 19px; line-height: 1; }
 #msNav button.active { color: var(--accent); font-weight: 700; }
 @media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
+/* วิธีใช้หน้านี้ (PR-M2): the explanation of a วัตถุดิบและใบสั่งซื้อ page sits folded at the bottom of the page, never above the controls */
+.bmc-help { margin: 0 0 12px; padding: 8px 12px; border: 1px dashed var(--border); border-radius: var(--r-md, 12px); }
+.bmc-help > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.bmc-help > div, .bmc-help > p { font-size: 12px; line-height: 1.6; margin-top: 6px; color: var(--text-secondary); }
+.bmc-help > div > p + p { margin-top: 4px; }
+/* status line that follows a save or a download (bmcStatus) */
+.bmc-status { font-size: 13px; }
 /* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
    หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
    give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
