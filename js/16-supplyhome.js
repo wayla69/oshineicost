@@ -20,7 +20,7 @@ const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcIngSummary: 'master_
 
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js): this tab has one view; a month from a link lands in the strip.
 _SUPPLY_PANE.supplyhome = { get: () => null, set: () => {}, show: () => loadSupplyHome(),
-  month: m => { const el = document.getElementById('shmMonth'); if (el) el.value = m; } };
+  month: m => { supplyMonthPut(document.getElementById('shmMonth'), m); } };
 
 // "mine" by role (owner_th names the department), not by module: management holds every
 // module and would otherwise own every branch's count; a role without a word falls back to modules
@@ -37,6 +37,9 @@ function _shmMine(it) {
   if (words && it.owner_th) return words.some(w => it.owner_th.includes(w));
   return (it.owner_modules || []).some(hasModule);
 }
+// the month หน้างาน starts at when nobody has chosen: this month; a role that works the month being closed (it owns a step of the close
+// list) starts at the previous month, which is the month those steps and the price file belong to
+function _shmStartsPrev() { return _SHM_CLOSE_ROLES.includes(_shmRole()); }
 function _shmQuery() {
   const qs = new URLSearchParams();
   const m = document.getElementById('shmMonth'), b = document.getElementById('shmBranch');
@@ -50,23 +53,26 @@ function _shmQuery() {
 async function loadSupplyHome() {
   const ctx = supplyCtx();
   const m = document.getElementById('shmMonth');
-  if (m && !m.value && ctx.month) m.value = ctx.month;
+  if (m) supplyMonthPick(m, _shmStartsPrev());
   _bmcStatus('shmStatus', 'กำลังโหลด…');
   try {
     _shmData = await _bmcJson(`${API}/api/bom-center/todo?${_shmQuery()}`);
   } catch (e) { _bmcStatus('shmStatus', String(e.message || e), 'var(--bad-ink)'); return; }
   const d = _shmData;
-  if (m && !m.value) m.value = d.month;
+  if (m && !m.value) supplyMonthPut(m, d.month);
   const b = document.getElementById('shmBranch'), wrap = document.getElementById('shmBranchWrap');
   if (d.scoped || !b) { if (wrap) wrap.style.display = 'none'; }     // a pinned login has no picker element at all (stripBranchPickers)
   else {
     wrap.style.display = '';
-    if (!b.options.length) {
-      b.innerHTML = '<option value="">ทุกสาขา</option>' + d.branches.map(x => `<option value="${x.branch_id}">${esc(x.name)}</option>`).join('');
-      b.value = d.branch ? String(d.branch.branch_id) : '';
-    }
+    // PR-M5: only the branches that have data in the month are listed
+    let rows = d.branches;
+    try { rows = await supplyBranchesWithData(d.month); } catch (e) { /* the full list stands */ }
+    const cur = b.value || (d.branch ? String(d.branch.branch_id) : '');
+    b.innerHTML = supplyBranchOptions(rows, 'ทุกสาขา');
+    b.value = rows.some(x => String(x.branch_id) === cur) ? cur : '';
   }
-  supplyCtxSet({ month: d.month, branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
+  // the month is written to the shared choice only when a person changes it (shmCtxChanged); the branch follows the page
+  supplyCtxSet({ branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
   // the branch is named ONCE, in the header (a branch login has one); the version of the recipes in force is the analyst's
   // and the manager's line only
   const bn = document.getElementById('shmBranchName');

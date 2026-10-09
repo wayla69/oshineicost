@@ -1257,9 +1257,11 @@ function brnDayItemsHtml(d, closeJs) {
       <th class="py-1 pr-2">รายการ</th><th class="py-1 pr-2 text-right">เบิก / ตามสูตร</th><th class="py-1 text-right">ผลต่าง</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
 }
+// PR-M5: the month of the daily variance is the module's month (supplyCtx), this month until somebody chooses
+function brnVarDayMonthChanged() { supplyCtxSet({ month: document.getElementById('brnVarDayMonth').value }); brnLoadVarDaily(); }
 async function brnLoadVarDaily() {
   const m = document.getElementById('brnVarDayMonth');
-  if (!m.value) m.value = _ohbIso(new Date()).slice(0, 7);
+  supplyMonthPick(m, false);
   document.getElementById('brnVarDayDetail').style.display = 'none';
   const chips = document.getElementById('brnVarDayChips');
   if (_brnNeedBranch('brnVarDayList')) { chips.innerHTML = ''; return; }

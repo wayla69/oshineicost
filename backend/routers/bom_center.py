@@ -1684,8 +1684,9 @@ def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
 
 
 @router.get("/api/bom-center/stock/me")
-def bc_stock_me(request: Request):
-    """Who is counting: a branch login gets its branch; the centre gets the branch list."""
+def bc_stock_me(request: Request, month: Optional[str] = Query(None)):
+    """Who is counting: a branch login gets its branch; the centre gets the branch list. With `month` (YYYY-MM, PR-M5) the
+    list holds only the branches that have a slip, order, count or receipt dated in that month."""
     with get_db() as con:
         _ensure(con)
         scoped = _auth.scope_branch(request)
@@ -1696,6 +1697,12 @@ def bc_stock_me(request: Request):
         branches = [{"branch_id": r[0], "name": r[1]} for r in rows]
         if scoped:
             branches = [b for b in branches if b["name"] == scoped]
+        elif month:
+            try:
+                with_data = _st.branches_with_data(con, month)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            branches = [b for b in branches if b["branch_id"] in with_data]
         return {"scoped": bool(scoped), "branch": scoped, "branches": branches,
                 "zones": [{"zone": z, "label": t} for z, t in _st.zones(con)]}
 
