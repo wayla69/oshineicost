@@ -12,9 +12,12 @@ Each round, per branch (all branches at once, released together by a barrier):
     หน้างาน  GET  /api/bom-center/todo
     plan     GET  /api/bom-center/order/plan?round=            (the page opens; the delivery chips come back)
              GET  /api/bom-center/order/plan?round=&delivery=  (the branch picks a chip)
-    draft    POST /api/bom-center/order/save  {counts}          (the count autosave)
-    plan     GET  /api/bom-center/order/plan?round=&delivery=   (suggestion net of the count)
-    submit   POST /api/bom-center/order/save  {lines, counts, submit}   (a 400 `late` is confirmed with ack_late)
+    slip     GET  /api/bom-center/issues/sheet                  (ตัดเบิก: today's sheet, once per day)
+             POST /api/bom-center/issues/save  {lines}          (the draft autosave)
+             POST /api/bom-center/issues/save  {lines, submit}  (confirm: the order needs today's slip confirmed)
+    draft    POST /api/bom-center/order/save  {round, delivery} (the order autosave)
+    plan     GET  /api/bom-center/order/plan?round=&delivery=   (suggestion net of the system stock)
+    submit   POST /api/bom-center/order/save  {lines, submit}   (a 400 `late` is confirmed with ack_late)
 then ONE warehouse session, in turn, for every submitted order:
              POST /api/bom-center/hub/process/{id}              (needs X-Upload-Token)
 then every branch at once:
@@ -200,8 +203,27 @@ def heavy_loop(base, stats, stop, user, pw, branches, seq):
 
 
 # ── one branch ──────────────────────────────────────────────────────────────
+def confirm_slip(c, rng):
+    """The branch page's ตัดเบิก pane: open today's sheet, key what the kitchen used (and one item wasted), confirm.
+    A slip already confirmed today (a later round) is left alone. Returns None, or why it could not be done."""
+    sh = jget(c.call("GET", "/api/bom-center/issues/sheet", "GET issues/sheet"))
+    if (sh.get("status") or {}).get("status") in ("confirmed", "late"):
+        return None
+    items = [i for z in sh.get("zones") or [] for i in z["items"]]
+    if not items:
+        return "the issue sheet is empty"
+    lines = [{"code": i["code"], "qty_used": rng.choice([0.5, 1, 2]), "unit": i["count_unit"]} for i in items[:25]]
+    lines[0]["qty_waste"] = 0.5                                    # one wasted item, with its reason
+    lines[0]["waste_reason"] = "waste"
+    c.call("POST", "/api/bom-center/issues/save", "POST issues/save (draft)", json={"lines": lines, "submit": False})
+    r = c.call("POST", "/api/bom-center/issues/save", "POST issues/save (confirm)", json={"lines": lines, "submit": True})
+    if r is None or r.status_code != 200:
+        return f"slip confirm failed: {None if r is None else r.status_code} {None if r is None else r.text[:120]}"
+    return None
+
+
 def branch_order(c, rng, used, round_pref):
-    """หน้างาน → plan → draft count → plan → submit. Returns (order_id, info) or (None, why)."""
+    """หน้างาน → plan → today's issue slip → draft → plan → submit. Returns (order_id, info) or (None, why)."""
     c.call("GET", "/api/bom-center/todo", "GET todo")
     p0 = jget(c.call("GET", "/api/bom-center/order/plan", "GET order/plan (open)", params={"round": round_pref}))
     dels = [d for d in p0.get("deliveries") or [] if (d["round"], d["delivery"]) not in used]
@@ -215,17 +237,20 @@ def branch_order(c, rng, used, round_pref):
     rows = plan.get("rows") or []
     if not rows:
         return None, f"empty plan for {rnd} {dlv}"
-    counts = [{"code": r["code"], "qty": rng.choice([0.5, 1, 2, 3]), "unit": r["count_unit"]} for r in rows]
-    r1 = c.call("POST", "/api/bom-center/order/save", "POST order/save (draft+counts)",
-                json={"round": rnd, "delivery": dlv, "lines": [], "counts": counts, "submit": False})
+    # ใบตัดเบิก: the order can be submitted only once today's issue slip is confirmed — do that first
+    why = confirm_slip(c, rng)
+    if why:
+        return None, why
+    r1 = c.call("POST", "/api/bom-center/order/save", "POST order/save (draft)",
+                json={"round": rnd, "delivery": dlv, "lines": [], "submit": False})
     if r1 is None or r1.status_code != 200:
         return None, f"draft save failed: {rnd} {dlv} -> {None if r1 is None else r1.status_code} {None if r1 is None else r1.text[:90]}"
-    plan = jget(c.call("GET", "/api/bom-center/order/plan", "GET order/plan (after count)", params={"round": rnd, "delivery": dlv}))
+    plan = jget(c.call("GET", "/api/bom-center/order/plan", "GET order/plan (after slip)", params={"round": rnd, "delivery": dlv}))
     rows = plan.get("rows") or []
     lines = [{"code": r["code"], "confirmed_units": r["order_units"]} for r in rows if (r.get("order_units") or 0) > 0]
     if not lines and rows:                                         # nothing suggested: order one unit with a reason
         lines = [{"code": rows[0]["code"], "confirmed_units": 1, "reason_code": "event", "note": "load test"}]
-    body = {"round": rnd, "delivery": dlv, "lines": lines, "counts": counts, "submit": True}
+    body = {"round": rnd, "delivery": dlv, "lines": lines, "submit": True}
     r2 = c.call("POST", "/api/bom-center/order/save", "POST order/save (submit)", expected_400="late", json=body)
     late = False
     if r2 is not None and r2.status_code == 400 and isinstance(jget(r2).get("detail"), dict) and jget(r2)["detail"].get("code") == "late":
