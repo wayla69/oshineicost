@@ -12,6 +12,7 @@ from typing import Optional
 import html
 
 from . import todo as _td
+from .clock import now_bkk, today as bkk_today
 from .pilot import pilot_branches
 
 WD_TH = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]      # date.weekday(): Mon = 0
@@ -58,7 +59,7 @@ def branch_line(items: list, today: date = None) -> dict:
 def morning(con, today: date = None, app_url: str = "") -> dict:
     """The day's duties per pilot branch plus the centre's queue. `any_work` is
     False on a day nobody has to do anything (no message is worth sending)."""
-    today = today or _td.bkk_today()
+    today = today or bkk_today()
     centre = {it["key"]: it for it in _td.build(con, today=today)["items"]}
     lines, branches, any_work = [], [], False
     for b in pilot_branches(con):
@@ -88,7 +89,7 @@ def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> 
     """After 13:15: the pilot branches that did not submit today's order in time, and the orders waiting
     in the warehouse queue — None when no branch missed it and the queue is empty."""
     if now is None and today is None:
-        now = _td.now_bkk()
+        now = now_bkk()
     today = today or now.date()
     centre = {it["key"]: it for it in _td.build(con, today=today, now=now)["items"]}
     q = centre.get("queue_pending") or {}

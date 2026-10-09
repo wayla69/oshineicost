@@ -18,7 +18,7 @@ writes do not invalidate the cache, and this list must be right straight after a
 """
 from datetime import date, timedelta
 
-from .clock import now_bkk, today as bkk_today
+from .clock import now_bkk
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th

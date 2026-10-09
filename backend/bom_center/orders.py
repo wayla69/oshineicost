@@ -479,7 +479,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     spot count, draft or submitted); None = the one linked to the cycle's order, else the latest
     submitted count. `buffer_pct` (PR-19): the branch's expectation to apply; None = the cycle's
     order's own, if any. `now` is the clock (tests pass it)."""
-    from .forecast import (_now_for, cover_for_delivery, cutoff_for, cutoff_th, day_th, next_deliveries, suggest)
+    from .forecast import _now_for, cover_for_delivery, cutoff_for, day_th, next_deliveries, suggest
     from .stock import count_row, count_units
     cyc_d, dlv, _cf, _ct = cover_for_delivery(con, branch_id, rnd, delivery)
     cyc = cyc_d.isoformat()
