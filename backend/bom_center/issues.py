@@ -227,6 +227,9 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
         raise ValueError("ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า")
     if (today - d).days > MAX_BACKDATE_DAYS:
         raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน {MAX_BACKDATE_DAYS} วัน")
+    if submit:                                               # confirming changes a posted period's numbers
+        from .variance import assert_not_posted
+        assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
     lc = _last_count_date(con, branch_id)
     if lc and d.isoformat() < lc:
         raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกินวันตรวจนับสิ้นเดือนล่าสุด ({lc})")
@@ -330,6 +333,8 @@ def reopen(con, slip_id: int, who: str, note: str, now: datetime = None) -> dict
         raise ValueError("ไม่พบใบตัดเบิก")
     if row["status"] != "confirmed":
         raise ValueError("เปิดแก้ไขได้เฉพาะใบตัดเบิกที่ยืนยันแล้ว")
+    from .variance import assert_not_posted
+    assert_not_posted(con, row["branch_id"], row["slip_date"], "ใบตัดเบิก")     # Accounting has keyed this period
     note = (note or "").strip()
     if not note:
         raise ValueError("กรุณาระบุเหตุผลในการเปิดแก้ไขใบตัดเบิก")

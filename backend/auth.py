@@ -331,6 +331,8 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     ("W",   "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/issues/reopen",           {"supply.ordering", "bom.center"}),
+    # PR-J4: the confirmed slips as Excel (Accounting posts from it); a branch login gets its own branch only (the router pins it)
+    ("GET", "/api/bom-center/issues/export",           {"cost.analysis", "supply.ordering", "bom.center", "ops.report", "branch.stock"}),
     # PR-J3 issue-slip reports (system stock vs count, daily issue vs BoM): read-only; a branch login is pinned to its own branch
     ("GET", "/api/bom-center/issue-reports",           {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them

@@ -86,6 +86,17 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     if cl.get("count"):
         any_work = True
         lines.append(f"<b>ประสานงานขาย</b>: เคลมสินค้ารอพิจารณา {cl['count']} เรื่อง")
+    im = centre.get("issue_missing") or {}
+    if im.get("count"):                                      # ใบตัดเบิกของเมื่อวาน
+        any_work = True
+        lines.append(f"<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน {im['count']} สาขา · "
+                     + html.escape(" · ".join(im.get("branch_names") or [])))
+    an = centre.get("issue_anomaly") or {}
+    if an.get("count"):
+        any_work = True
+        from .issue_reports import OVER_PCT, STREAK_DAYS
+        lines.append(f"<b>Ops</b>: เบิกเกิน BoM มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
+                     + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
     tail = f"หน้างาน: {html.escape(app_url.rstrip('/'))}/" if app_url else ""
     text = "\n".join([head] + lines + ([tail] if tail else []))

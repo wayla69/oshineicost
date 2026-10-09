@@ -293,7 +293,8 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         r = acc.get(f"/api/bom-center/issue-summary.xlsx?{q}")
         assert r.status_code == 200 and "bom_center_issue_summary_b1_2026-09.xlsx" in r.headers["content-disposition"]
         wb = load_workbook(io.BytesIO(r.content))
-        ws = wb.worksheets[0]
+        assert wb.sheetnames == ["ใบตัดเบิกรายวัน", "กระทบยอด", "สรุปเคลื่อนไหว"]               # PR-J4: three sheets
+        ws = wb["สรุปเคลื่อนไหว"]
         rows = list(ws.iter_rows(values_only=True))
         assert "ใบสรุปตัดเบิกวัตถุดิบ สาขาBranchA งวด 2026-09-01 ถึง 2026-10-01 (เดือน 2026-09)" in rows[0][0]
         from routers.bom_center import ISSUE_HEADERS
@@ -301,11 +302,12 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         crab = next(r for r in rows[2:] if r[0] == "T-ISS1")
         assert crab[3:10] == (10, 5, 0, 6, 9, 2.5, 22.5) and crab[10] == "ซื้อจริง (2026-09)" and crab[11] == "ผู้จำหน่าย ก"
         assert rows[-1][1] == "รวม" and rows[-1][9] == pytest.approx(22.5)
-        # the all-branches workbook: a summary sheet, one sheet for the confirmed period, the other one listed
+        # the all-branches workbook: a summary sheet, the daily slips, the confirmed period's two sheets; the other branch is only listed
         r = acc.get("/api/bom-center/issue-summary-all.xlsx?month=2026-09")
         assert r.status_code == 200 and "bom_center_issue_summary_all_2026-09.xlsx" in r.headers["content-disposition"]
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames[0] == "สรุปทุกสาขา" and len(wb.sheetnames) == 2 and all(len(n) <= 31 for n in wb.sheetnames)
+        assert wb.sheetnames == ["สรุปทุกสาขา", "ใบตัดเบิกรายวัน", "BranchA", "กระทบยอด BranchA"]
+        assert all(len(n) <= 31 for n in wb.sheetnames)
         summ = list(wb["สรุปทุกสาขา"].iter_rows(values_only=True))
         assert list(summ[1]) == ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ",
                                  "มูลค่าตัดเบิก", "ไม่มีราคา", "สถานะบัญชี"]
