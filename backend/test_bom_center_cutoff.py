@@ -407,9 +407,9 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         ws = load_workbook(io.BytesIO(x.content), read_only=True)["ต่อสาขา"]
         rows = list(ws.iter_rows(values_only=True))
         head = next(rw for rw in rows if rw and rw[0] == "สาขา")
-        assert list(head) == ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า"]
+        assert list(head) == ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"]
         line = rows[rows.index(head) + 1]
-        assert line[1] == "2026-10-07" and line[2] == "2026-10-05" and line[-1] == "ล่าช้า (ค่าปรับ)"
+        assert line[1] == "2026-10-07" and line[2] == "2026-10-05" and line[10] == "ล่าช้า (ค่าปรับ)" and line[-1] == "ยังไม่คีย์"
         x = client.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-10-05&date_to=2026-10-05")
         rows = list(load_workbook(io.BytesIO(x.content), read_only=True).worksheets[0].iter_rows(values_only=True))
         head = next(rw for rw in rows if rw and rw[0] == "วันตัดรอบ")

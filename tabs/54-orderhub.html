@@ -4,7 +4,7 @@
     <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
     <p class="text-xs mt-1" style="color:var(--text-secondary)">
       ใบสั่งซื้อที่สาขาส่งมาจะเข้าคิวที่หน้านี้ · คลังระบุยอดที่จะจัดส่งจริง แล้วกด “ดำเนินการแล้ว” หากยอดต่างจากที่สาขายืนยัน ต้องระบุเหตุผล · ประสานงานขาย (Sales Support) พิจารณาเคลมสินค้าที่สาขาแจ้ง ·
-      สาขาส่งใบสั่งซื้อก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) ใบที่ส่งหลังเวลาตัดรอบมีค่าปรับล่าช้าและแสดงป้าย “ส่งล่าช้า” · คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง
+      สาขาส่งใบสั่งซื้อก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) ใบที่ส่งหลังเวลาตัดรอบมีค่าปรับล่าช้าและแสดงป้าย “ส่งล่าช้า” · คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ · Ops ตรวจสอบการสั่ง 4 ค่า: ยอดแนะนำ · สาขายืนยัน · ส่วนกลางดำเนินการ · รับจริง · ประสานงานขายดาวน์โหลด Excel แล้วคีย์ใบสั่งซื้อเข้าระบบบัญชี และทำเครื่องหมายใบที่คีย์แล้ว
     </p>
   </div>
 
@@ -20,6 +20,13 @@
         <label class="flex items-center gap-1" style="padding-bottom:6px;color:var(--text-secondary)"><input type="checkbox" id="ohbSplit"> แยก sheet ตามผู้จำหน่าย</label>
         <span class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)">สรุปและไฟล์ใช้สถานะที่เลือกด้านบน</span>
       </div>
+      <!-- ประสานงานขาย: ทำเครื่องหมายใบสั่งซื้อที่คีย์เข้าระบบบัญชีแล้ว (ติ๊กเฉพาะใบที่ดำเนินการแล้วหรือสาขารับแล้ว) -->
+      <span class="ohb-key-only flex flex-wrap items-center gap-2 mt-2 text-xs" style="display:none;color:var(--text-secondary)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="ohbKeyAll" onchange="ohbKeySelectAll(this.checked)"> เลือกทั้งหมดที่แสดง</label>
+        <button onclick="ohbMarkKeyed(true)" style="border:0;border-radius:var(--r-sm);padding:7px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">ทำเครื่องหมายว่าคีย์เข้าระบบบัญชีแล้ว</button>
+        <a href="#" onclick="ohbMarkKeyed(false);return false" style="color:var(--accent)">ยกเลิกเครื่องหมาย</a>
+        <span id="ohbKeyStatus"></span>
+      </span>
     </div>
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbDetail" class="card p-3 mb-3" style="display:none"></div>

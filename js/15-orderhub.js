@@ -13,7 +13,11 @@ _SUPPLY_PANE.orderhub = {
 let _ohbQ = null;             // /api/bom-center/hub/queue
 let _ohbOrder = null;         // the order open in the detail panel
 const _OHB_RND = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอน' };
-const _OHB_ST = [['submitted', 'รอดำเนินการ'], ['processed', 'ดำเนินการแล้ว'], ['received', 'สาขารับแล้ว'], ['all', 'ทั้งหมด']];
+const _OHB_ST = [['submitted', 'รอดำเนินการ'], ['processed', 'ดำเนินการแล้ว'], ['received', 'สาขารับแล้ว'], ['unkeyed', 'ยังไม่คีย์บัญชี'], ['all', 'ทั้งหมด']];
+// owner 2026-10-09: Sales Support keys the processed orders into the accounting system and ticks them here
+const _ohbKeyedSel = new Set();      // order ids ticked in the queue
+function _ohbCanKey() { return hasModule('supply.ordering'); }
+function _ohbKeyable(o) { return ['processed', 'received'].includes(o.status); }
 // owner 2026-10-08: the WAREHOUSE updates what is sent (the queue's ส่งจริง + ดำเนินการแล้ว); Sales Support decides claims
 function _ohbCanWork() { return hasModule('supply.warehouse'); }
 function _ohbIso(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
@@ -29,6 +33,7 @@ function loadOrderHub() {
   set('ohbCFrom', _ohbIso(new Date(t.getTime() - 13 * 864e5)));
   set('ohbCTo', _ohbIso(t));
   set('ohbMonth', supplyCtx().month || _ohbIso(new Date(t.getFullYear(), t.getMonth() - 1, 15)).slice(0, 7));
+  document.querySelectorAll('.ohb-key-only').forEach(el => { el.style.display = _ohbCanKey() ? '' : 'none'; });
   ohbSetSub(_ohbSub);
 }
 function ohbSetSub(k) {
@@ -248,10 +253,15 @@ async function ohbCntImport(input) {
 }
 
 // ── queue ────────────────────────────────────────────────────────────────────
-function ohbSetStatus(s) { _ohbStatus = s; ohbLoadQueue(); }
+function ohbSetStatus(s) { _ohbStatus = s; _ohbKeyedSel.clear(); ohbLoadQueue(); }
 function _ohbRange() { return `date_from=${document.getElementById('ohbFrom').value}&date_to=${document.getElementById('ohbTo').value}`; }
 // the consolidation and the workbook follow the status chip (open = pending + processed is the server's default)
-function _ohbExportQS() { return `${_ohbRange()}&status=${_ohbStatus}`; }
+// "ยังไม่คีย์บัญชี" exports exactly the processed / received orders listed (by id), the ones still to key
+function _ohbExportQS() {
+  if (_ohbStatus !== 'unkeyed') return `${_ohbRange()}&status=${_ohbStatus}`;
+  const ids = ((_ohbQ && _ohbQ.orders) || []).map(o => o.order_id);
+  return ids.length ? `ids=${ids.join(',')}&status=all` : `${_ohbRange()}&status=all`;
+}
 async function ohbLoadQueue() {
   document.getElementById('ohbStatusChips').innerHTML = _OHB_ST.map(([k, t]) => {
     const on = k === _ohbStatus;
@@ -260,12 +270,17 @@ async function ohbLoadQueue() {
   const box = document.getElementById('ohbQueue');
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
   try {
-    _ohbQ = await _bmcJson(`${API}/api/bom-center/hub/queue?status=${_ohbStatus}&${_ohbRange()}`);
+    const unkeyed = _ohbStatus === 'unkeyed';
+    _ohbQ = await _bmcJson(`${API}/api/bom-center/hub/queue?status=${unkeyed ? 'all&keyed=0' : _ohbStatus}&${_ohbRange()}`);
+    if (unkeyed) _ohbQ.orders = _ohbQ.orders.filter(_ohbKeyable);          // only a processed / received order can be keyed
+    const shown = new Set(_ohbQ.orders.map(o => o.order_id));
+    [..._ohbKeyedSel].forEach(i => { if (!shown.has(i)) _ohbKeyedSel.delete(i); });
     const byDay = {};
     _ohbQ.orders.forEach(o => { (byDay[o.delivery] = byDay[o.delivery] || []).push(o); });
     const days = Object.keys(byDay).sort();
     box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(d)} · ${byDay[d].length} ใบสั่งซื้อ · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
       byDay[d].map(o => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
+        ${_ohbCanKey() && _ohbKeyable(o) ? `<input type="checkbox" aria-label="เลือกใบสั่งซื้อ #${o.order_id}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)">` : ''}
         <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">#${o.order_id} ${esc(o.branch)}</a>
         <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(o.cycle_date)}</span><span>${o.lines} รายการ · ฿${_bmcNum(o.value, 0)}</span>
         ${o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : ''}
@@ -275,9 +290,37 @@ async function ohbLoadQueue() {
         ${o.processed_on_time === false ? _bmcChip('ดำเนินการหลัง 14:00', 'var(--bad-ink)') : ''}
         ${o.status === 'processed' ? _bmcChip(`ดำเนินการแล้ว${o.po_ref ? ' · ' + o.po_ref : ''}`, 'var(--good-ink)') : ''}
         ${o.status === 'received' ? _bmcChip('สาขารับแล้ว', 'var(--good-ink)') : ''}
+        ${o.accounting_keyed ? _bmcChip(`คีย์บัญชีแล้ว ${esc(o.accounting_keyed_date || '')}`, 'var(--good-ink)') : (_ohbKeyable(o) ? _bmcChip('ยังไม่คีย์บัญชี', 'var(--amber-ink)') : '')}
         ${o.claims_pending ? _bmcChip('มีเคลม รอพิจารณา', 'var(--amber-ink)') : (o.claims ? _bmcChip('มีเคลม', 'var(--text-muted)') : '')}</div>`).join('')).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งซื้อในช่วงนี้</span>';
+    _ohbKeySync();
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── ทำเครื่องหมายใบที่คีย์เข้าระบบบัญชีแล้ว (ประสานงานขาย) ──
+function _ohbKeySync() {
+  const all = document.getElementById('ohbKeyAll');
+  const keyable = ((_ohbQ && _ohbQ.orders) || []).filter(_ohbKeyable);
+  if (all) all.checked = keyable.length > 0 && keyable.every(o => _ohbKeyedSel.has(o.order_id));
+}
+function ohbKeyToggle(id, on) { if (on) _ohbKeyedSel.add(id); else _ohbKeyedSel.delete(id); _ohbKeySync(); }
+function ohbKeySelectAll(on) {
+  ((_ohbQ && _ohbQ.orders) || []).filter(_ohbKeyable).forEach(o => { if (on) _ohbKeyedSel.add(o.order_id); else _ohbKeyedSel.delete(o.order_id); });
+  document.querySelectorAll('#ohbQueue input[type=checkbox]').forEach(c => { c.checked = !!on; });
+  _ohbKeySync();
+}
+async function ohbMarkKeyed(keyed) {
+  const ids = [..._ohbKeyedSel];
+  if (!ids.length) { _bmcStatus('ohbKeyStatus', 'กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ', 'var(--bad-ink)'); return; }
+  if (!await uiConfirm(`ยืนยันว่าใบสั่งซื้อ ${ids.length} ใบ ${keyed ? 'คีย์เข้าระบบบัญชีแล้ว' : 'ยังไม่ได้คีย์เข้าระบบบัญชี'}`)) { _bmcStatus('ohbKeyStatus', 'ยกเลิกแล้ว'); return; }
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/hub/keyed`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_ids: ids, keyed }) });
+    _ohbKeyedSel.clear();
+    await ohbLoadQueue();
+    _bmcStatus('ohbKeyStatus', `✓ ทำเครื่องหมาย ${r.updated} ใบ`, 'var(--good-ink)');
+    if (_ohbOrder && ids.includes(_ohbOrder.order_id)) ohbOpen(_ohbOrder.order_id);
+  } catch (e) { _bmcStatus('ohbKeyStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 
 async function ohbOpen(id) {
@@ -310,7 +353,7 @@ function ohbRenderDetail() {
       <div class="text-sm font-semibold" style="color:var(--text-primary)">#${o.order_id} ${esc(o.branch || '')} · ${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(o.cycle_date)} · วันส่ง ${esc(o.delivery)}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (ค่าปรับ)', 'var(--bad-ink)') : ''}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}
-      ${o.stock_count_id ? 'ยอดแนะนำหักยอดคงเหลือแล้ว' : 'สาขาไม่ได้ตรวจนับ ยอดแนะนำจึงไม่หักยอดคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · ดำเนินการโดย ${esc(o.processed_by)}` : ''}</div>
+      ${o.stock_count_id ? 'ยอดแนะนำหักยอดคงเหลือแล้ว' : 'สาขาไม่ได้ตรวจนับ ยอดแนะนำจึงไม่หักยอดคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · ดำเนินการโดย ${esc(o.processed_by)}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(o.accounting_keyed_date || '')} โดย ${esc(o.accounting_keyed_by || '')}` : ''}</div>
     ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `#${c.claim_id} ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">

@@ -2065,6 +2065,7 @@ def bc_hub_order(order_id: int):
             raise HTTPException(404, str(e))
         o["branch"] = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
         o["claims"] = _cl.for_order(con, order_id)
+        o["accounting_keyed_date"] = _hub.keyed_date(o.get("accounting_keyed_at"))
         return o
 
 
