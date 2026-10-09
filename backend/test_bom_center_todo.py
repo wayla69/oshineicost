@@ -68,7 +68,7 @@ def test_the_month_flow_from_prices_to_acknowledgement(udon):
                 " VALUES('T 2026-11', 'monthly', '2026-11', 'draft', '2026-09', 't')")
     rid = c.execute("SELECT MAX(release_id) FROM bc_release").fetchone()[0]
     it = _by(TD.build(c, M, None, None, today=TODAY))
-    assert it["draft"]["status"] == "done" and it["draft"]["go"]["extra"]["release_id"] == rid
+    assert it["draft"]["status"] == "todo" and it["draft"]["go"]["extra"]["release_id"] == rid   # the kitchen still has to submit it
     assert it["checks"]["status"] == "todo" and "ยังไม่ได้ตรวจ" in it["checks"]["detail"]
     assert it["release"]["status"] == "blocked"
     c.execute("INSERT INTO bc_release_check(release_id, check_code, ref, severity, message)"

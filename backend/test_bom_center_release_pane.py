@@ -91,7 +91,7 @@ def test_the_endpoints_preview_and_next_step(client):
         c.close()
         assert client.get(f"/api/bom-center/release-checks?release_id={rid}").json()["fresh"] is False
         rel = [x for x in client.get("/api/bom-center/releases").json()["releases"] if x["release_id"] == rid][0]
-        assert rel["next_step"] == "release"
+        assert rel["next_step"] == "submit"                     # PR-C: the kitchen submits a draft before the analyst releases
         r = client.post("/api/bom-center/release-act/accept-many",
                         json={"release_id": rid, "check_code": "C05", "refs": ["nope"], "reason": "x"})
         assert r.status_code == 400                             # no such finding, even after the run is saved

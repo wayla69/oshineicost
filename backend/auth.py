@@ -288,6 +288,10 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/release-act/acknowledge", {"bom.audit"}),
     ("W",   "/api/bom-center/release-act/retire",      {"bom.release", "bom.audit"}),
     ("W",   "/api/bom-center/release-act/accept",      {"bom.release"}),
+    # PR-C: the kitchen (bom.recipes) opens a draft and submits it for review; only the analyst sends it back
+    ("W",   "/api/bom-center/release-act/new-draft",   {"bom.center", "bom.recipes"}),
+    ("W",   "/api/bom-center/release-act/submit-review", {"bom.center", "bom.recipes"}),
+    ("W",   "/api/bom-center/release-act/send-back",   {"bom.release"}),
     # the order calendar is the sales team's to fill (owner §10-7); Sales Support runs suggestions
     ("W",   "/api/bom-center/order-calendar",          {"supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/forecast",                {"supply.ordering", "bom.center"}),

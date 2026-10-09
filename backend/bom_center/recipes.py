@@ -152,7 +152,7 @@ def match_blocks(con, blocks: list) -> list:
 
 
 # ── release rows ─────────────────────────────────────────────────────────────
-def get_or_create_draft(con, label: str, effective_month: str, price_month: str, who: str) -> int:
+def get_or_create_draft(con, label: str, effective_month: str, price_month: str, who: str, modules=None) -> int:
     ensure(con)
     from .dated import CUTOVER_MONTH
     if effective_month < CUTOVER_MONTH:
@@ -161,6 +161,8 @@ def get_or_create_draft(con, label: str, effective_month: str, price_month: str,
     if r:
         if r[1] not in ("draft", "review"):
             raise ValueError(f"release {label} ปล่อยแล้วจึงแก้ไขไม่ได้ กรุณาสร้าง draft ใหม่")
+        if r[1] == "review" and modules is not None and "bom.center" not in modules:
+            raise ValueError(REVIEW_LOCKED)
         con.execute("UPDATE bc_release SET effective_month=?, price_month=? WHERE release_id=?",
                     (effective_month, price_month, r[0]))
         return r[0]
@@ -282,8 +284,11 @@ def import_cost_rw(con, parsed: dict, release_id: int, who: str) -> dict:
     return stats
 
 
-def apply_mapping(con, release_id: int, ref: str, sku_code: str, who: str) -> dict:
+def apply_mapping(con, release_id: int, ref: str, sku_code: str, who: str, modules=None) -> dict:
     """The analyst answered an unmatched block: remember it, apply the block now."""
+    rel = release_row(con, release_id)
+    if rel and rel["status"] == "review" and modules is not None and "bom.center" not in modules:
+        raise ValueError(REVIEW_LOCKED)      # a release in review is the analyst's to change, not the kitchen's
     r = con.execute("SELECT message FROM bc_release_check WHERE release_id=? AND check_code='unmatched' AND ref=?",
                     (release_id, ref)).fetchone()
     if not r:
@@ -384,9 +389,24 @@ def recipe_lines(con, release_id: int, sku_code: str) -> list:
 
 def release_row(con, release_id: int) -> dict:
     cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
-            "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "parent_release_id", "notes")
+            "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "parent_release_id", "notes",
+            "submitted_by", "submitted_at")
     r = con.execute(f"SELECT {', '.join(cols)} FROM bc_release WHERE release_id=?", (release_id,)).fetchone()
     return dict(zip(cols, r)) if r else None
+
+
+REVIEW_LOCKED = ("ฉบับร่างนี้อยู่ระหว่างการตรวจของฝ่ายวิเคราะห์ จึงแก้ไขสูตรไม่ได้ "
+                 "จนกว่าฝ่ายวิเคราะห์จะส่งกลับให้แก้ไข")
+
+
+def assert_editable(rel: dict, modules=None):
+    """A recipe may change only while its release is a draft; once the kitchen has
+    submitted it for review only the analyst (bom.center) may still edit.
+    `modules=None` = no permission context (internal callers, tests)."""
+    if not rel or rel["status"] not in ("draft", "review"):
+        raise ValueError("แก้ไขได้เฉพาะเวอร์ชันที่ยังเป็นฉบับร่าง")
+    if rel["status"] == "review" and modules is not None and "bom.center" not in modules:
+        raise ValueError(REVIEW_LOCKED)
 
 
 def cost_recipe(con, release_id: int, sku_code: str, coster: "Coster" = None) -> dict:
@@ -461,10 +481,8 @@ def tier_view(con, release_id: int, tier: int = None) -> dict:
             "sheet_mismatch": sum(1 for r in rows if r["sheet_diff"] is not None and abs(r["sheet_diff"]) > 0.01)}
 
 
-def save_lines(con, release_id: int, sku_code: str, lines: list, who: str):
-    rel = release_row(con, release_id)
-    if not rel or rel["status"] not in ("draft", "review"):
-        raise ValueError("แก้ไขได้เฉพาะ release ที่ยังเป็น draft")
+def save_lines(con, release_id: int, sku_code: str, lines: list, who: str, modules=None):
+    assert_editable(release_row(con, release_id), modules)
     old = recipe_lines(con, release_id, sku_code)
     keep = con.execute("SELECT source_cost, source_ref FROM bc_recipe WHERE release_id=? AND sku_code=?",
                        (release_id, sku_code)).fetchone()
@@ -491,9 +509,22 @@ FLAT_HEADERS = ["รหัส POS", "ชื่อเมนู", "Tier", "ลำ�
                 "สูญเสีย % (เว้นว่าง = ตามทะเบียน)", "ตั้งใจเป็น 0", "หมายเหตุการเตรียม"]
 
 
+def _style_header(ws, widths=None):
+    """Bold white-on-navy header row (row 1) and optional column widths."""
+    from openpyxl.styles import Font, PatternFill
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="1F3A6B")
+    for col, w in zip("ABCDEFGHIJKLMNOP", widths or ()):
+        ws.column_dimensions[col].width = w
+
+
+def _style_flat_sheet(ws):
+    _style_header(ws, (16, 34, 7, 6, 13, 30, 9, 10, 12, 10, 30))
+
+
 def export_flat(con, release_id: int):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     wb.remove(wb.active)
     view = tier_view(con, release_id)
@@ -503,23 +534,95 @@ def export_flat(con, release_id: int):
     for t in sorted(by_tier):
         ws = wb.create_sheet(f"BF_{t}" if t else "BF_ไม่มีTier")
         ws.append(FLAT_HEADERS)
-        for c in ws[1]:
-            c.font = Font(bold=True, color="FFFFFF")
-            c.fill = PatternFill("solid", fgColor="1F3A6B")
         for r in by_tier[t]:
             for ln in recipe_lines(con, release_id, r["sku_code"]):
                 ws.append([r["sku_code"], r["name"], t, ln["seq"], ln["ingredient_code"], ln["ingredient_name"],
                            ln["qty"], ln["unit"], ln["loss_pct"], "ใช่" if ln["zero_by_design"] else "", ln["prep_note"]])
-        for col, w in zip("ABCDEFGHIJK", (16, 34, 7, 6, 13, 30, 9, 10, 12, 10, 30)):
-            ws.column_dimensions[col].width = w
+        _style_flat_sheet(ws)
     if not wb.sheetnames:
-        wb.create_sheet("BF").append(FLAT_HEADERS)
+        ws = wb.create_sheet("BF")
+        ws.append(FLAT_HEADERS)
+        _style_flat_sheet(ws)
     return wb
 
 
-def import_flat(con, data: bytes, release_id: int, who: str) -> dict:
+# ── blank template: many menus in one file (PR-C, owner 2026-10-09) ───────────
+_SAMPLE = "(ตัวอย่าง กรุณาลบ)"
+TEMPLATE_SAMPLE = [
+    ["ตัวอย่าง-001", f"เมนูตัวอย่าง A {_SAMPLE}", 459, 1, "ตัวอย่าง-01", f"วัตถุดิบตัวอย่าง 1 {_SAMPLE}", 80, "กรัม",
+     None, "", "หั่นชิ้นพอดีคำ"],
+    ["ตัวอย่าง-001", f"เมนูตัวอย่าง A {_SAMPLE}", 459, 2, "ตัวอย่าง-02", f"วัตถุดิบตัวอย่าง 2 {_SAMPLE}", 15, "มิลลิลิตร",
+     None, "", None],
+    ["ตัวอย่าง-002", f"เมนูตัวอย่าง B {_SAMPLE}", 629, 1, "ตัวอย่าง-01", f"วัตถุดิบตัวอย่าง 1 {_SAMPLE}", 1, "ชิ้น",
+     2.5, "", None],
+]
+TEMPLATE_HOWTO = [
+    "กรอกสูตรหลายเมนูในไฟล์เดียวที่ sheet “สูตร” บรรทัดละ 1 วัตถุดิบ เมนูเดียวกันใช้รหัส POS เดียวกันทุกบรรทัด",
+    "รหัส POS ต้องตรงกับ sheet “รหัส POS” และรหัสวัตถุดิบต้องตรงกับ sheet “รหัสวัตถุดิบ” (คัดลอกได้)",
+    "หน่วย: กรัม / มิลลิลิตร / ชิ้น ตามหน่วยฐาน หรือกิโลกรัม ลิตร แพ็ค (ระบบแปลงให้)",
+    "สูญเสีย % เว้นว่าง = ใช้ค่าตามทะเบียนวัตถุดิบ · “ตั้งใจเป็น 0” ใส่ ใช่ เมื่อบรรทัดนั้นไม่มีต้นทุนโดยเจตนา",
+    "เมื่อนำเข้า สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร เมนูที่ไม่อยู่ในไฟล์ไม่เปลี่ยน · กรุณาลบแถวตัวอย่างก่อนนำเข้า",
+    "ระบบแสดงผลให้ตรวจสอบก่อนบันทึก (dry run) ทุกครั้ง · เมื่อครบแล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์",
+]
+_KIND_TH = {"raw": "วัตถุดิบ", "prepared": "ของที่ผลิตเอง", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น 0"}
+
+
+def pos_sku_rows(con, release_id: int = None) -> list:
+    """[(sku_code, description, tier, has_recipe)] — the POS menus a recipe may be written for."""
+    have = {c for (c,) in con.execute("SELECT sku_code FROM bc_recipe WHERE release_id=?", (release_id or -1,))}
+    has = lambda t: bool(con.execute("SELECT 1 FROM sqlite_master WHERE name=?", (t,)).fetchone())
+    active = ""
+    if "active" in {r[1] for r in con.execute("PRAGMA table_info(skus)")}:
+        active = " AND COALESCE(active,1)=1"
+    if has("sku_tier"):
+        tier = dict(con.execute("SELECT s.sku_code, t.tier FROM sku_tier t JOIN skus s USING(sku_id)"))
+    else:
+        tier = dict(con.execute("SELECT ds.sku_code, d.min_tier FROM bc_dish_sku ds JOIN bc_dish d USING(dish_id)"))
+    return [(c, d, tier.get(c), c in have) for c, d in con.execute(
+        "SELECT sku_code, description FROM skus WHERE (sku_code LIKE 'OTHBF%' OR sku_code LIKE 'OTHAL%')"
+        f"{active} ORDER BY sku_code")]
+
+
+def ingredient_rows(con) -> list:
+    """[(code, name_th, base_unit, kind_th)] — the ingredient register a recipe line may point at."""
+    return [(c, n, u, _KIND_TH.get(k, k)) for c, n, u, k in con.execute(
+        "SELECT code, name_th, base_unit, kind FROM bc_ingredient WHERE COALESCE(active,1)=1 ORDER BY code")]
+
+
+def template_flat(con, release_id: int = None):
+    """A blank workbook for the kitchen: sheet “สูตร” (the flat layout, two sample menus), the POS menus,
+    the ingredient codes and how to fill it. Only “สูตร” has A1 = “รหัส POS”, so import_flat reads it alone."""
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "สูตร"
+    ws.append(FLAT_HEADERS)
+    for row in TEMPLATE_SAMPLE:
+        ws.append(list(row))
+    _style_flat_sheet(ws)
+    ws = wb.create_sheet("รหัส POS")
+    # A1 must NOT read "รหัส POS": import_flat takes every sheet whose A1 is that text for recipe rows
+    ws.append(["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในฉบับร่างแล้ว"])
+    for code, desc, tier, has_rec in pos_sku_rows(con, release_id):
+        ws.append([code, desc, tier, "มี" if has_rec else ""])
+    _style_header(ws, (16, 40, 8, 20))
+    ws = wb.create_sheet("รหัสวัตถุดิบ")
+    ws.append(["รหัสวัตถุดิบ", "ชื่อวัตถุดิบ", "หน่วยฐาน", "ชนิด"])
+    for row in ingredient_rows(con):
+        ws.append(list(row))
+    _style_header(ws, (16, 40, 12, 18))
+    ws = wb.create_sheet("วิธีใช้")
+    ws.append(["วิธีใช้แม่แบบสูตร"])
+    for i, t in enumerate(TEMPLATE_HOWTO, start=1):
+        ws.append([f"{i}. {t}"])
+    _style_header(ws, (120,))
+    return wb
+
+
+def import_flat(con, data: bytes, release_id: int, who: str, modules=None) -> dict:
     """The flat template back into a draft: every SKU it mentions is replaced."""
     import openpyxl
+    assert_editable(release_row(con, release_id), modules)
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     recipes, errors = {}, []
     for ws in wb.worksheets:
@@ -553,6 +656,6 @@ def import_flat(con, data: bytes, release_id: int, who: str) -> dict:
         errors.append({"sku": s, "why": "ไม่มีรหัส POS นี้"})
     for sku, lines in recipes.items():
         if sku in known:
-            save_lines(con, release_id, sku, lines, who)
+            save_lines(con, release_id, sku, lines, who, modules=modules)
     return {"recipes": len(recipes) - len(unknown), "lines": sum(len(v) for k, v in recipes.items() if k in known),
             "errors": errors[:200]}

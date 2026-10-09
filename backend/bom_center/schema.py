@@ -232,6 +232,9 @@ MIGRATIONS = (
     ("bc_claim", "origin", "TEXT"),              # 'receive' = raised while receiving; 'after'/NULL = raised later
     ("bc_order", "ack_at", "TEXT"),              # the branch confirmed it checked condition and quantity
     ("bc_order", "ack_by", "TEXT"),
+    # PR-C — the kitchen submits a draft for the analyst's review
+    ("bc_release", "submitted_by", "TEXT"),
+    ("bc_release", "submitted_at", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
