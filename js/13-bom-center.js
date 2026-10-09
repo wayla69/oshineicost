@@ -91,6 +91,9 @@ async function loadBomCenter() {
     const can = el.closest('#bmc-pane-price, #bmc-pane-conv') ? _bmcCanPrices() : el.closest('#bmc-pane-rec, #bmc-pane-prep, #bmc-pane-rel') ? _bmcCanRecipes() : _bmcCanWrite();
     el.style.display = can ? '' : 'none';
   });
+  // Sales Support (and the analyst) send / follow the month's price file (PR-D)
+  const ssPrice = hasModule('supply.ordering') || _bmcCanPrices();
+  document.querySelectorAll('#tab-bomcenter .bmc-ss-only').forEach(el => { el.style.display = ssPrice ? '' : 'none'; });
   bmcSetSub(_bmcSub);
 }
 
@@ -419,6 +422,9 @@ async function bmcImportIng(input) {
 // ── monthly prices ──────────────────────────────────────────────────────────
 async function bmcLoadPrices(force) {
   document.getElementById('bmcPriceMonthLbl').textContent = _bmcMonth();
+  const sml = document.getElementById('bmcSubMonthLbl');
+  if (sml) sml.textContent = _bmcMonth();
+  bmcLoadPriceSubs();
   if (_bmcPrices.length && !force) { bmcRenderPrices(); return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/prices?month=${_bmcMonth()}`);
@@ -514,7 +520,7 @@ async function bmcPriceCommit() {
     document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(d, true);
     _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : ''), 'var(--good-ink)');
     _bmcPrices = []; _bmcIng = []; _bmcPricePre = null; _bmcChosenRules = [];
-    bmcLoadPrices(true);
+    bmcLoadPrices(true);                      // (also reloads the files Sales Support sent: one just became “นำเข้าแล้ว”)
   } catch (e) { _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 function _bmcPreviewHtml(p, applied) {
@@ -579,6 +585,80 @@ async function bmcImportPrices(input) {
     return _bmcJson(`${API}/api/bom-center/prices/import?dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST', body: fd }); };
   await _bmcRunPriceImport(send, `ไฟล์ ${file.name}`);
   input.value = '';
+}
+
+// ── the price file Sales Support sends to the analyst (price_submissions.py) ──
+async function bmcSubmitPriceFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const m = _bmcMonth();
+  try {
+    if (!await uiConfirm(`ยืนยันการส่งไฟล์ ${file.name} สำหรับเดือน ${m} ให้ฝ่ายวิเคราะห์`)) {
+      _bmcStatus('bmcSubStatus', 'ยังไม่ได้ส่งไฟล์');
+      return;
+    }
+    _bmcStatus('bmcSubStatus', 'กำลังตรวจไฟล์…');
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    fd.append('month', m);
+    const note = (document.getElementById('bmcSubNote')?.value || '').trim();
+    if (note) fd.append('note', note);
+    await _bmcJson(`${API}/api/bom-center/prices/submit`, { method: 'POST', body: fd });
+    const n = document.getElementById('bmcSubNote');
+    if (n) n.value = '';
+    _bmcStatus('bmcSubStatus', '✓ ส่งไฟล์แล้ว ฝ่ายวิเคราะห์จะตรวจและนำเข้า', 'var(--good-ink)');
+    bmcLoadPriceSubs();
+  } catch (e) {
+    _bmcStatus('bmcSubStatus', 'ส่งไฟล์ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+  } finally { input.value = ''; }
+}
+const _BMC_SUB_ST = { pending: 'var(--amber-ink)', imported: 'var(--good-ink)', rejected: 'var(--bad-ink)' };
+async function bmcLoadPriceSubs() {
+  const box = document.getElementById('bmcPriceSubList');
+  if (!box) return;
+  if (!(hasModule('supply.ordering') || _bmcCanPrices())) { box.style.display = 'none'; return; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/prices/submissions?limit=20`);
+    const w = _bmcCanPrices(), at = s => esc(String(s || '').replace('T', ' ').slice(0, 16));
+    const rows = (d.submissions || []).map(s => {
+      const p = s.preview || {};
+      const verdict = s.status === 'imported' ? `นำเข้าแล้ว เมื่อ ${at(s.decided_at)} โดย ${esc(s.decided_by || '-')}`
+        : s.status === 'rejected' ? `ไม่รับ: ${esc(s.decision_note || '-')}` : 'รอฝ่ายวิเคราะห์ตรวจ';
+      return `<div class="py-2 border-b" style="border-color:var(--border-soft)">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold" style="color:var(--text-primary)">${esc(s.month)} · ${esc(s.filename || '')}</span>
+          <span class="text-[11px]" style="color:var(--text-muted)">${_bmcNum(s.size / 1024, 0)} KB · ส่งโดย ${esc(s.submitted_by || '-')} เมื่อ ${at(s.submitted_at)}</span>
+          ${_bmcChip(s.status_th || s.status, _BMC_SUB_ST[s.status] || 'var(--text-muted)')}
+          ${w && s.status === 'pending' ? `<span class="ml-auto flex flex-wrap gap-2">
+            <button onclick="bmcSubPreview(${s.sub_id})" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ตรวจ (ดูผลก่อนบันทึก)</button>
+            <button onclick="window.open(API + '/api/bom-center/prices/submissions/${s.sub_id}/file','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">เปิดไฟล์</button>
+            <button onclick="bmcSubReject(${s.sub_id})" style="background:var(--bg-input);color:var(--bad-ink);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ไม่รับ</button></span>` : ''}
+        </div>
+        <div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">สรุป: ${_bmcNum(p.lines, 0)} บรรทัด คิดราคาได้ ${_bmcNum(p.priced, 0)} รายการ ใช้ไม่ได้ ${_bmcNum(p.issues, 0)}
+          · <span style="color:${_BMC_SUB_ST[s.status] || 'inherit'}">${verdict}</span>${s.note ? ' · หมายเหตุ: ' + esc(s.note) : ''}</div></div>`;
+    }).join('');
+    box.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ราคาที่ประสานงานขายส่งมา</div>`
+      + (rows || '<div class="text-[11px]" style="color:var(--text-muted)">ยังไม่มีไฟล์ที่ส่งมา</div>');
+    box.style.display = '';
+  } catch (e) {
+    box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`;
+    box.style.display = '';
+  }
+}
+async function bmcSubPreview(id) {
+  const send = (dry, rules) => { const fd = new FormData(); fd.append('rules', JSON.stringify(rules || []));
+    return _bmcJson(`${API}/api/bom-center/prices/submissions/${id}/import?dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST', body: fd }); };
+  await _bmcRunPriceImport(send, `ไฟล์ที่ประสานงานขายส่งมา (ลำดับที่ ${id})`);
+}
+async function bmcSubReject(id) {
+  const note = await uiPrompt('กรุณาระบุเหตุผลที่ไม่รับไฟล์นี้ (จำเป็น) ประสานงานขายจะเห็นข้อความนี้');
+  if (!note || !note.trim()) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/prices/submissions/${id}/reject`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note.trim() }) });
+    _bmcStatus('bmcPriceStatus', '✓ ส่งกลับให้ประสานงานขายแล้ว', 'var(--good-ink)');
+    bmcLoadPriceSubs();
+  } catch (e) { _bmcStatus('bmcPriceStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function bmcPricesFromReq() {
   const sel = document.getElementById('bmcReqMonth');

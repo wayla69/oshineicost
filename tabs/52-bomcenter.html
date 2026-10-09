@@ -193,6 +193,20 @@
       </select>
       <span id="bmcPriceSummary" class="text-xs" style="color:var(--text-muted)"></span>
     </div>
+    <div id="bmcPriceSubmitCard" class="card p-3 mb-3 bmc-ss-only" style="display:none">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ส่งไฟล์ราคาเดือน <b id="bmcSubMonthLbl"></b> ให้ฝ่ายวิเคราะห์</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ประสานงานขายส่งไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด ระบบตรวจว่าอ่านได้ก่อนรับไฟล์ ฝ่ายวิเคราะห์จะตรวจและนำเข้าราคา</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">
+          เลือกไฟล์และส่ง
+          <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcSubmitPriceFile(this)">
+        </label>
+        <input type="text" id="bmcSubNote" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:240px">
+        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบยอดซื้อรายบรรทัด</button>
+        <span id="bmcSubStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+      </div>
+    </div>
     <div class="card p-3 mb-3 bc-write">
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">นำเข้าราคาซื้อจริงของเดือน</div>
       <div class="flex flex-wrap items-center gap-2">
@@ -213,6 +227,7 @@
         <span id="bmcPriceStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
       </div>
     </div>
+    <div id="bmcPriceSubList" class="card p-3 mb-3" style="display:none"></div>
     <div id="bmcPricePreview" class="mb-3"></div>
     <div class="card p-4 overflow-x-auto">
       <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
