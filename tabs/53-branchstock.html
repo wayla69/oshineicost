@@ -12,7 +12,7 @@
   <!-- ── ตัดเบิก (ใบตัดเบิกประจำวัน, management 2026-10-09): used + wasted per item, confirmed once a day ── -->
   <div id="brn-pane-issue">
     <div class="card p-3 mb-3">
-      <div id="brnIssDays" class="flex flex-wrap gap-1"></div>
+      <div id="brnIssDays" class="brn-daystrip"></div>
       <div id="brnIssHead" class="text-sm mt-2"></div>
       <div id="brnIssBanner" class="mt-2" style="display:none"></div>
     </div>
@@ -28,18 +28,23 @@
     <div id="brnIssList" class="card p-3 mb-3"></div>
     <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div id="brnIssActions" class="flex flex-wrap items-center gap-2"></div>
-      <span id="brnIssStatus" class="text-xs"></span>
+      <span id="brnIssStatus" class="brn-status" role="status"></span>
     </div>
     <div class="card p-3 mb-3">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติใบตัดเบิก</div>
       <div id="brnIssHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>กรอกเฉพาะรายการที่ใช้หรือทิ้งในวันนั้น · ช่องที่เว้นว่างถือว่าไม่ได้เบิก · รายการที่เบิกบ่อยใน 14 วันล่าสุดอยู่บนสุดของแต่ละโซน</p>
+      <p>ตัวเลขเทาในช่อง เช่น “เมื่อวาน 3” คือจำนวนในใบตัดเบิกที่ยืนยันครั้งก่อน · ของเสียต้องเลือกสาเหตุ</p>
+      <p>เครื่องหมาย ✓ ที่โซน = กรอกรายการบังคับของโซนนั้นครบทุกรายการ · ร่างบันทึกเองหลังพิมพ์ครบ 2–3 วินาที · ยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย</p>
+    </div></details>
   </div>
 
   <!-- ── สั่งสินค้า (the suggestion is net of the system stock after the issue slip; today's slip must be confirmed before sending) ── -->
   <div id="brn-pane-order" style="display:none">
     <div class="card p-3 mb-3">
-      <div id="brnOrdDeliv" class="flex flex-wrap gap-1"></div>
+      <div id="brnOrdDeliv" class="brn-delivlist"></div>
       <div id="brnOrdPages" class="flex flex-wrap gap-1 mt-2"></div>
       <div id="brnOrdHead" class="text-xs mt-2"></div>
       <div id="brnOrdBanner" class="mt-2" style="display:none"></div>
@@ -54,7 +59,7 @@
     <div id="brnOrdList" class="card p-3 mb-3"></div>
     <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
-      <span id="brnOrdStatus" class="text-xs"></span>
+      <span id="brnOrdStatus" class="brn-status" role="status"></span>
     </div>
     <div id="brnOrdDetail" class="card p-3 mb-3" style="display:none"></div>
     <div class="card p-3 mb-3">
