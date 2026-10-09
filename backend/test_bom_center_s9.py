@@ -93,8 +93,11 @@ def test_sla_in_bangkok_time():
 def test_compliance_places_the_gap(con):  # noqa: F811
     oid, sug, q = _submitted(con, confirm_factor=2.0, reason="event")
     HB.process(con, oid, [{"code": "13-01-009", "processed_units": q - 1, "reason": "short"}], "ss")
-    OR.receive(con, 1, oid, [{"code": "13-01-009", "received_units": q - 2}], "udon", receipt_date="2026-10-07")
+    OR.receive(con, 1, oid, [{"code": "13-01-009", "received_units": q - 2, "reason": "short"}], "udon",
+               receipt_date="2026-10-07", ack=True)
     con.commit()
+    qr = HB.queue(con, "received")[0]                              # the gap was claimed in the same save
+    assert qr["claims"] == 1 and qr["claims_pending"] == 1
     c = HB.compliance(con, "2026-09-22", "2026-10-06", branch_id=1)
     by = {(r["cycle_date"], r["round"]): r for r in c["rows"]}
     r = by[("2026-10-05", "1")]                                    # keyed by the cutoff date (a Monday for Wednesday)

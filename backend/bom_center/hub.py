@@ -104,7 +104,9 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
          " o.processed_at, o.processed_by, o.po_ref, o.stock_count_id, o.buffer_pct, o.buffer_reason,"
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0),"
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND l.reason_code IS NOT NULL),"
-         " COALESCE(o.late,0), o.cutoff_at, o.delivery_date"
+         " COALESCE(o.late,0), o.cutoff_at, o.delivery_date,"
+         " (SELECT COUNT(*) FROM bc_claim c WHERE c.order_id=o.order_id AND c.status<>'cancelled'),"
+         " (SELECT COUNT(*) FROM bc_claim c WHERE c.order_id=o.order_id AND c.status='submitted')"
          f" FROM bc_order o JOIN branches b USING(branch_id) WHERE o.status IN ({','.join('?' * len(sts))})")
     args = list(sts)
     if date_from:
@@ -118,7 +120,7 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     for r in con.execute(q, args).fetchall():
         d = dict(zip(("order_id", "branch_id", "branch", "cycle_date", "round", "status", "value", "submitted_at",
                       "processed_at", "processed_by", "po_ref", "stock_count_id", "buffer_pct", "buffer_reason",
-                      "lines", "branch_changes", "late", "cutoff_at", "delivery_date"), r))
+                      "lines", "branch_changes", "late", "cutoff_at", "delivery_date", "claims", "claims_pending"), r))
         from .orders import BUFFER_REASON_TH
         d["buffer_reason_th"] = BUFFER_REASON_TH.get(d["buffer_reason"]) if d["buffer_reason"] else None
         d["delivery"] = delivery_of(con, d["branch_id"], d["round"], d["cycle_date"], d.pop("delivery_date"))

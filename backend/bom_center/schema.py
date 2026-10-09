@@ -228,6 +228,10 @@ MIGRATIONS = (
     ("bc_order", "delivery_date", "TEXT"),       # the delivery day this order is for
     ("bc_order", "cutoff_at", "TEXT"),           # ISO time the order had to be submitted by (Bangkok)
     ("bc_order", "late", "INTEGER DEFAULT 0"),   # 1 = submitted after the cutoff (late fee at the outside warehouse)
+    # PR-B — claims raised inside the receive form, and the branch's acknowledgement of its check
+    ("bc_claim", "origin", "TEXT"),              # 'receive' = raised while receiving; 'after'/NULL = raised later
+    ("bc_order", "ack_at", "TEXT"),              # the branch confirmed it checked condition and quantity
+    ("bc_order", "ack_by", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

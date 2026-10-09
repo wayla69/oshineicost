@@ -163,7 +163,7 @@ def on_order(con, branch_id: int, before: date) -> dict:
 def _order_row(con, order_id: int) -> dict:
     cols = ("order_id", "branch_id", "cycle_date", "round", "run_id", "status", "confirmed_by", "confirmed_at",
             "submitted_at", "processed_by", "processed_at", "po_ref", "received_at", "note", "stock_count_id", "value",
-            "buffer_pct", "buffer_reason", "buffer_note", "delivery_date", "cutoff_at", "late")
+            "buffer_pct", "buffer_reason", "buffer_note", "delivery_date", "cutoff_at", "late", "ack_at", "ack_by")
     r = con.execute(f"SELECT {', '.join(cols)} FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     return dict(zip(cols, r)) if r else None
 
@@ -394,14 +394,24 @@ def cancel(con, branch_id: int, order_id: int, who: str):
     audit(con, who, "order_cancel", "bc_order", str(order_id))
 
 
-def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_date: str = None) -> dict:
-    """The branch confirms what arrived; this also books a goods receipt for the variance (S7)."""
+def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_date: str = None,
+            ack: bool = False, claim_note: str = None) -> dict:
+    """The branch confirms what arrived; this also books a goods receipt for the variance (S7).
+
+    PR-B (owner 2026-10-09): the receipt is booked at what was RECEIVED, and where that is less than what the
+    warehouse sent (processed_units, else confirmed_units) the line carries a reason and the gap becomes one
+    claim (origin 'receive') in the same save. The branch must acknowledge that it checked the condition and
+    the quantity (`ack`) — enforced here, so no caller can skip it. More than was sent is allowed and
+    reported in `over`."""
     from .variance import add_receipt
+    from . import claims as _cl
     o = _order_row(con, order_id)
     if not o or o["branch_id"] != branch_id:
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("submitted", "processed"):
         raise ValueError(f"รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+    if not ack:
+        raise ValueError("กรุณายืนยันว่าสาขาได้ตรวจสอบสภาพสินค้าและจำนวนครบถ้วนแล้ว ก่อนบันทึกรับสินค้า")
     got = {}
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
@@ -411,24 +421,43 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
             raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
             raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
-        got[c] = q
-    units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?",
-                                          (order_id,))}
+        got[c] = (q, (ln.get("reason") or "").strip(), (ln.get("note") or "").strip() or None)
+    units, sent = {}, {}
+    for c, u, pu, cf in con.execute("SELECT ingredient_code, order_unit, processed_units, confirmed_units"
+                                    " FROM bc_order_line WHERE order_id=?", (order_id,)):
+        units[c] = u
+        sent[c] = float(pu if pu is not None else (cf or 0))
     recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
     base = {c: b for c, b in con.execute("SELECT code, base_unit FROM bc_ingredient")}
-    rlines = []
-    for c, q in got.items():
+    rlines, short, over = [], [], []
+    for c, (q, reason, note) in got.items():
         if c not in units:
             raise ValueError(f"{c} ไม่อยู่ในใบสั่งซื้อนี้")
+        gap = sent[c] - q
+        if gap > 1e-9:
+            if reason not in _cl.REASON_TH:
+                raise ValueError(f"{c}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) กรุณาเลือกสาเหตุของส่วนต่าง")
+            if reason == "other" and not note:
+                raise ValueError(f"{c}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
+            short.append({"code": c, "claim_units": round(gap, 6), "reason": reason, "note": note,
+                          "sent_units": sent[c], "received_units": q})
+        elif gap < -1e-9:
+            over.append({"code": c, "sent_units": sent[c], "received_units": q, "over_units": round(-gap, 6)})
+    for c, (q, _r, _n) in got.items():
         con.execute("UPDATE bc_order_line SET received_units=? WHERE order_id=? AND ingredient_code=?", (q, order_id, c))
         if q > 0:
             u = units[c]
             rlines.append({"code": c, "qty": q, "unit": (recv.get(c) if u and u != "base" else base.get(c))})
     rd = receipt_date or bkk_today().isoformat()
     rec = add_receipt(con, branch_id, rd, rlines, who, ref=f"ORDER-{order_id}", source="order") if rlines else None
-    con.execute("UPDATE bc_order SET status='received', received_at=? WHERE order_id=?", (now(), order_id))
-    audit(con, who, "order_receive", "bc_order", str(order_id), None, {"lines": len(rlines)})
-    return {"order_id": order_id, "status": "received", "receipt_id": rec and rec["receipt_id"]}
+    stamp = now()
+    con.execute("UPDATE bc_order SET status='received', received_at=?, ack_at=?, ack_by=? WHERE order_id=?",
+                (stamp, stamp, who, order_id))
+    cl = _cl.create_from_receive(con, branch_id, order_id, short, claim_note, who) if short else None
+    audit(con, who, "order_receive", "bc_order", str(order_id), None,
+          {"lines": len(rlines), "short": len(short), "over": over, "claim_id": cl and cl["claim_id"], "ack": True})
+    return {"order_id": order_id, "status": "received", "receipt_id": rec and rec["receipt_id"],
+            "claim_id": cl and cl["claim_id"], "claim_lines": cl["lines"] if cl else 0, "over": over}
 
 
 def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:

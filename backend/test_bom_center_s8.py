@@ -104,7 +104,7 @@ def test_confirm_submit_reopen_receive(con):  # noqa: F811
     with pytest.raises(ValueError):
         OR.receive(con, 2, out["order_id"], [], "udon")          # another branch
     rec = OR.receive(con, 1, out["order_id"], [{"code": "13-01-009", "received_units": sug}], "udon",
-                     receipt_date="2026-10-07")
+                     receipt_date="2026-10-07", ack=True)
     assert rec["status"] == "received" and rec["receipt_id"]
     r = next(x for x in VA.receipts(con, 1) if x["receipt_id"] == rec["receipt_id"])
     assert r["source"] == "order" and r["ref"] == f"ORDER-{out['order_id']}"
