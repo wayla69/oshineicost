@@ -258,6 +258,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/_admin/seed-db") \
             or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
             or path.startswith("/api/_admin/bc-sku-cost-month") \
+            or path.startswith("/api/_admin/backup/") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
         # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
@@ -1055,6 +1056,81 @@ def _bc_sku_cost_month(_tok: str = Depends(_seed_token_or_404)):
     with get_db() as con:
         rows = _bcd.export_rows(con)
     return {"columns": ["sku_code", "month", "unit_cost", "release_id", "built_at"], "rows": rows}
+
+
+# /api/_admin/backup/owner-data.{sqlite,json} — the nightly off-site copy of the owner-data
+# tables as a ready-to-open SQLite file (full DDL + indexes + rows; scripts/backup_owner_tables.py,
+# docs/BACKUP_OWNER_DATA.md). The file holds password hashes, so the gate is the admin token
+# ALONE and it fails closed: OSHINEI_SEED_TOKEN unset, missing or wrong -> 403, whatever the
+# session (a login cookie, any role, never opens it - core.require_write_token's branch-session
+# bypass and its "no token configured = open" dev mode are deliberately NOT used here).
+# Header only (X-Seed-Token or X-Upload-Token); never the URL.
+def _backup_token_or_403(x_seed_token: str = Header(None), x_upload_token: str = Header(None)) -> str:
+    import hmac as _hmac
+    tok = (x_seed_token or x_upload_token or "").strip()
+    # The file carries password hashes, so only the owner's own token opens it: the bare token or the
+    # one labelled "admin" (docs/TOKEN_ROTATION.md). The per-person tokens staff type into the
+    # browser's "รหัส" button (Patcharee, Arnan, AR ...) are good for data edits, not for this.
+    owner = {t for t, label in _accepted_tokens().items() if label.lower() in ("", "admin")}
+    if not tok or not any(_hmac.compare_digest(tok, t) for t in owner):
+        raise HTTPException(status_code=403, detail="A valid admin token is required.",
+                            headers={"X-Denied": "token"})
+    return tok
+
+
+_backup_lock = threading.Lock()
+
+
+def _build_owner_backup(tmp_dir: str) -> tuple:
+    """Build the file inside tmp_dir (one build at a time: it copies every owner table).
+    Returns (path, info, stamp)."""
+    import datetime as _dt
+    from core import export_owner_data as _export
+    if not _backup_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="A backup export is already running; try again in a minute.")
+    try:
+        stamp = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).strftime("%Y%m%d_%H%M")      # Bangkok
+        path = _os_db.path.join(tmp_dir, f"oshinei_owner_data_{stamp}.sqlite")
+        info = _export(str(DB_PATH), path)
+    finally:
+        _backup_lock.release()
+    if info["integrity"] != "ok":
+        raise HTTPException(status_code=500, detail=f"backup integrity_check failed: {info['integrity']}")
+    return path, info, stamp
+
+
+@app.get("/api/_admin/backup/owner-data.sqlite", include_in_schema=False)
+def _backup_owner_data(_tok: str = Depends(_backup_token_or_403)):
+    import json as _json, shutil as _shutil, tempfile as _tempfile
+    from fastapi.responses import FileResponse as _File
+    from starlette.background import BackgroundTask as _Bg
+    tmp = _tempfile.mkdtemp(prefix="owner_backup_")
+    try:
+        path, info, stamp = _build_owner_backup(tmp)
+    except BaseException:
+        _shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    counts = {t["name"]: t["rows"] for t in info["tables"]}
+    return _File(path, media_type="application/vnd.sqlite3",
+                 headers={"Content-Disposition": f"attachment; filename=oshinei_owner_data_{stamp}.sqlite",
+                          "X-Backup-Counts": _json.dumps(counts, separators=(",", ":")),    # the exact snapshot the file holds
+                          "Cache-Control": "no-store"},
+                 background=_Bg(_shutil.rmtree, tmp, True))
+
+
+@app.get("/api/_admin/backup/owner-data.json", include_in_schema=False)
+def _backup_owner_data_json(_tok: str = Depends(_backup_token_or_403)):
+    """What the export holds right now - for monitoring and --dry-run. Builds the file in a
+    temp dir and discards it, so the numbers are exactly what a download would contain."""
+    import datetime as _dt, shutil as _shutil, tempfile as _tempfile
+    tmp = _tempfile.mkdtemp(prefix="owner_backup_")
+    try:
+        _path, info, _stamp = _build_owner_backup(tmp)
+    finally:
+        _shutil.rmtree(tmp, ignore_errors=True)
+    return {"tables": info["tables"], "bytes": info["bytes"],
+            "rows": sum(t["rows"] for t in info["tables"]),
+            "generated_at": (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")}
 
 
 @app.get("/api/_admin/export-state", include_in_schema=False)

@@ -352,6 +352,11 @@ MODULE_RULES = [
     ("W",   "/api/closed_hours",             {"system.settings"}),
     ("W",   "/api/upload",                   {"data.upload"}),
     ("W",   "/api/_admin/seed-db",           {"data.upload"}),
+    # The off-site backup of the owner-data tables (password hashes included) is a machine
+    # endpoint gated by the admin token ALONE (main._backup_token_or_403, which the login
+    # middleware lets through). An empty module set = no role, not even an admin, may reach
+    # it with a session: if the middleware bypass is ever removed, it fails closed.
+    ("*",   "/api/_admin/backup",            set()),
     ("*",   "/api/auth/users",               {"system.admin"}),
 ]
 
