@@ -100,6 +100,45 @@ def day_th(d: date) -> str:
     return f"วัน{WD_TH[_wd(d)]} {d.day}/{d.month}"
 
 
+_WD_WORDS = {                                                # SQLite %w: Sunday = 0 … Saturday = 6
+    0: ("อาทิตย์", "อา", "sun", "sunday"),
+    1: ("จันทร์", "จ", "mon", "monday"),
+    2: ("อังคาร", "อ", "tue", "tues", "tuesday"),
+    3: ("พุธ", "พ", "wed", "wednesday"),
+    4: ("พฤหัสบดี", "พฤหัส", "พฤ", "thu", "thur", "thurs", "thursday"),
+    5: ("ศุกร์", "ศ", "fri", "friday"),
+    6: ("เสาร์", "ส", "sat", "saturday"),
+}
+_WD_LOOKUP = {w: k for k, ws in _WD_WORDS.items() for w in ws}
+
+
+def parse_weekday(v):
+    """A delivery-day cell -> 0..6 (SQLite %w, Sunday = 0); None for a blank cell.
+
+    Accepts the Thai names (with or without the leading «วัน», the short «พฤหัส» and the long
+    «พฤหัสบดี»), the usual abbreviations, English names, and a number 0-6. Anything else raises ValueError
+    so a typo is reported instead of guessed."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        raise ValueError("วันส่งต้องเป็นชื่อวัน (อาทิตย์–เสาร์) หรือเลข 0–6")
+    if isinstance(v, (int, float)):
+        if float(v) == int(v) and 0 <= int(v) <= 6:
+            return int(v)
+        raise ValueError(f"วันส่ง “{v}” ไม่ถูกต้อง ต้องเป็นชื่อวัน (อาทิตย์–เสาร์) หรือเลข 0–6")
+    t = str(v).strip()
+    if not t:
+        return None
+    key = t.lower().replace(" ", "").replace(".", "")
+    if key.startswith("วัน"):
+        key = key[len("วัน"):]
+    if key in _WD_LOOKUP:
+        return _WD_LOOKUP[key]
+    if key.isdigit() and 0 <= int(key) <= 6:
+        return int(key)
+    raise ValueError(f"วันส่ง “{t}” ไม่ถูกต้อง ต้องเป็นชื่อวัน (อาทิตย์–เสาร์) หรือเลข 0–6")
+
+
 def _now_for(today: date = None, now: datetime = None) -> datetime:
     """A test (or a caller that knows the date only) passes `today`: the clock then reads 08:00 that morning."""
     if now:

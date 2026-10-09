@@ -1288,29 +1288,168 @@ class CalRow(BaseModel):
     lead_days: Optional[int] = None              # ignored: derived
 
 
+def _calendar_put(con, who: str, branch_id: int, rnd: str, dw: int, old=None) -> None:
+    """One (branch, round) delivery day. The single write path of the page save and the file import:
+    the cutoff weekday and the lead are derived, and the change is audited."""
+    from datetime import datetime as _dt, timezone as _tz
+    if rnd not in _fc.DEFAULT_CAL:
+        raise ValueError(f"ไม่พบรอบ {rnd} ในระบบ")
+    if dw is None or not (0 <= int(dw) <= 6):
+        raise ValueError("กรุณาระบุวันส่งของรอบ (อาทิตย์–เสาร์)")
+    dw = int(dw)
+    cw = _fc.cutoff_weekday(dw)                          # the weekday the branch has to order by (13:15)
+    con.execute("INSERT OR REPLACE INTO bc_order_calendar(branch_id, round, order_weekday, delivery_weekday,"
+                " lead_days, filled_by, updated_at) VALUES(?,?,?,?,?,?,?)",
+                (branch_id, rnd, cw, dw, (dw - cw) % 7, who, _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S")))
+    _m.audit(con, who, "order_calendar", "bc_order_calendar", f"{branch_id}|{rnd}",
+             None if old is None else f"delivery {old}", f"delivery {dw} / cutoff {cw}")
+
+
 @router.post("/api/bom-center/order-calendar", dependencies=[Depends(require_write_token)])
 def bc_order_calendar_save(rows: List[CalRow], request: Request):
-    from datetime import datetime as _dt, timezone as _tz
     who = _who(request)
-    now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     def go():
         for r in rows:
-            if r.round not in _fc.DEFAULT_CAL:
-                raise ValueError(f"ไม่พบรอบ {r.round} ในระบบ")
-            if r.delivery_weekday is None or not (0 <= int(r.delivery_weekday) <= 6):
-                raise ValueError("กรุณาระบุวันส่งของรอบ (อาทิตย์–เสาร์)")
-            dw = int(r.delivery_weekday)
-            cw = _fc.cutoff_weekday(dw)                  # the weekday the branch has to order by (13:15)
-            con.execute("INSERT OR REPLACE INTO bc_order_calendar(branch_id, round, order_weekday, delivery_weekday,"
-                        " lead_days, filled_by, updated_at) VALUES(?,?,?,?,?,?,?)",
-                        (r.branch_id, r.round, cw, dw, (dw - cw) % 7, who, now))
-            _m.audit(con, who, "order_calendar", "bc_order_calendar", f"{r.branch_id}|{r.round}", None,
-                     f"delivery {dw} / cutoff {cw}")
+            _calendar_put(con, who, r.branch_id, r.round, r.delivery_weekday)
     with get_db() as con:
         _ensure(con)
         _write(con, go)
     return {"ok": True, "rows": len(rows)}
+
+
+# ── bulk delivery days from a file (30-branch onboarding): template + dry-run preview + save ──
+_CAL_ROUNDS = ("1", "2", "salmon")
+_CAL_HEADERS = ["สาขา", "รอบ 1 วันส่ง", "รอบ 2 วันส่ง", "แซลมอนสด วันส่ง"]
+_CAL_ALIASES = {
+    "branch": ("สาขา", "branch"),
+    "1":      ("รอบ 1 วันส่ง", "รอบ 1", "round 1", "r1"),
+    "2":      ("รอบ 2 วันส่ง", "รอบ 2", "round 2", "r2"),
+    "salmon": ("แซลมอนสด วันส่ง", "แซลมอนสด", "แซลมอน", "salmon"),
+}
+
+
+def _calendar_branches(con) -> list:
+    """[(branch_id, name)] of the active branches, as the calendar page lists them."""
+    return [(b, n) for b, n in con.execute("SELECT branch_id, name FROM branches WHERE name != 'ALL'"
+                                           " AND COALESCE(active, 1) = 1 ORDER BY name")]
+
+
+@router.get("/api/bom-center/order-calendar/template.xlsx")
+def bc_order_calendar_template():
+    """Every active branch with its delivery days as they stand now, to edit and send back."""
+    from openpyxl import Workbook
+    from openpyxl.worksheet.datavalidation import DataValidation
+    wb = Workbook()
+    ws = wb.active
+    ct = f"{_fc.cutoff_time():%H:%M}"
+    _sheet(ws, "วันส่งของสาขา", _CAL_HEADERS,
+           f"ตั้งวันส่งของแต่ละรอบรายสาขา เลือกหรือพิมพ์ อาทิตย์ จันทร์ อังคาร พุธ พฤหัส ศุกร์ เสาร์ · เว้นว่างหมายถึงไม่เปลี่ยน · "
+           f"ไม่ต้องกรอกเวลาตัดรอบ ระบบคำนวณให้: สาขาต้องส่งใบสั่งซื้อก่อน {ct} สองวันก่อนวันส่ง "
+           f"(รอบส่งวันอังคาร ตัดรอบวันเสาร์ {ct}) · ห้ามแก้ชื่อสาขา")
+    with get_db() as con:
+        _ensure(con)
+        for bid, name in _calendar_branches(con):
+            cal = _fc.calendar(con, bid)
+            ws.append([name] + [_fc.WD_TH[cal[k]["delivery_weekday"]] for k in _CAL_ROUNDS])
+        last = ws.max_row
+    dv = DataValidation(type="list", formula1='"' + ",".join(_fc.WD_TH) + '"', allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(f"B3:D{max(last, 3)}")
+    ws.column_dimensions["A"].width = 24
+    ws.freeze_panes = "B3"
+    ref = wb.create_sheet("วันส่งและวันตัดรอบ")                 # a lookup for the person filling the file
+    ref.append(["วันส่ง", f"วันตัดรอบ (เวลา {ct})"])
+    for wd in range(7):
+        ref.append([_fc.WD_TH[wd], _fc.WD_TH[_fc.cutoff_weekday(wd)]])
+    ref.column_dimensions["A"].width = 14
+    ref.column_dimensions["B"].width = 26
+    return _xlsx(wb, "ORDER_CALENDAR_TEMPLATE.xlsx")
+
+
+def _branch_key(name) -> str:
+    t = str(name or "").strip()
+    return t[len("สาขา"):].strip() if t.startswith("สาขา") else t
+
+
+def _calendar_plan(con, rows: list, hmap: dict) -> dict:
+    """The file's rows against the calendar as it stands. Reads only; nothing is written here.
+
+    A blank cell leaves that round as it is. A row counts as a change when its day differs from the current one."""
+    branches = _calendar_branches(con)
+    by_name = {_branch_key(n): (b, n) for b, n in branches}
+    all_names = {_branch_key(n): (b, n, a) for b, n, a in con.execute(
+        "SELECT branch_id, name, COALESCE(active, 1) FROM branches WHERE name != 'ALL'")}
+    out, errors, seen = [], [], set()
+    for i, r in enumerate(rows):
+        line = i + 1
+        raw_branch = r.get("branch")
+        if raw_branch in (None, "") or not str(raw_branch).strip():
+            continue
+        key = _branch_key(raw_branch)
+        label = str(raw_branch).strip()
+        if key not in by_name:
+            why = "สาขานี้ปิดใช้งานอยู่" if key in all_names else "ไม่พบสาขานี้ในระบบ ตรวจชื่อให้ตรงกับที่ระบบแสดง"
+            errors.append({"line": line, "branch": label, "why": why})
+            continue
+        bid, name = by_name[key]
+        if bid in seen:
+            errors.append({"line": line, "branch": name, "why": "สาขานี้ปรากฏซ้ำในไฟล์ กรุณาเหลือแถวเดียว"})
+            continue
+        seen.add(bid)
+        cal = _fc.calendar(con, bid)
+        row = {"branch_id": bid, "branch": name, "change": False, "errors": 0}
+        for k in _CAL_ROUNDS:
+            was = int(cal[k]["delivery_weekday"])
+            try:
+                new = _fc.parse_weekday(r.get(k)) if k in hmap else None
+            except ValueError as e:
+                errors.append({"line": line, "branch": name, "round": k, "why": f"{_fc.ROUND_TH[k]}: {e}"})
+                row["errors"] += 1
+                new = None
+            now = was if new is None else new
+            changed = new is not None and new != was
+            row[f"r{k}"] = {"was": was, "now": now, "was_th": _fc.WD_TH[was], "now_th": _fc.WD_TH[now],
+                            "cutoff_th": f"วัน{_fc.WD_TH[_fc.cutoff_weekday(now)]} {_fc.cutoff_time():%H:%M}",
+                            "changed": changed, "default": not cal[k]["filled"]}
+            row["change"] = row["change"] or changed
+        out.append(row)
+    return {"rows": out, "errors": errors}
+
+
+@router.post("/api/bom-center/order-calendar/import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_order_calendar_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
+    """Delivery days for many branches from the template. dry_run=true returns what would change and writes
+    nothing; a real save writes the changed rounds only, and refuses a file that has errors."""
+    from .ingredients import _read_upload_table
+    rows, hmap, sheet = await _read_upload_table(file, _CAL_ALIASES, optional=_CAL_ROUNDS)
+    if "branch" not in hmap or not any(k in hmap for k in _CAL_ROUNDS):
+        raise HTTPException(400, "ไม่พบคอลัมน์ สาขา และวันส่ง กรุณาใช้แม่แบบที่ดาวน์โหลดจากระบบ")
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        plan = _calendar_plan(con, rows, hmap)
+        changed = [r for r in plan["rows"] if r["change"]]
+        n_rounds = sum(1 for r in changed for k in _CAL_ROUNDS if r[f"r{k}"]["changed"])
+        out = {"dry_run": dry_run, "sheet": sheet, "rows": plan["rows"], "errors": plan["errors"],
+               "branches": len(plan["rows"]), "changed_branches": len(changed), "changed_rounds": n_rounds,
+               "saved": 0}
+        if dry_run:
+            return out
+        if plan["errors"]:
+            raise HTTPException(400, f"ไฟล์มี {len(plan['errors'])} รายการที่ไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วนำเข้าใหม่ "
+                                     f"(แถวแรก: {plan['errors'][0]['branch']} — {plan['errors'][0]['why']})")
+
+        def go():
+            for r in changed:
+                for k in _CAL_ROUNDS:
+                    if r[f"r{k}"]["changed"]:
+                        _calendar_put(con, who, r["branch_id"], k, r[f"r{k}"]["now"], old=r[f"r{k}"]["was"])
+            _m.audit(con, who, "order_calendar_import", "bc_order_calendar", file.filename, None,
+                     f"{len(changed)} branches / {n_rounds} rounds")
+        _write(con, go)
+        out["saved"] = n_rounds
+    return out
 
 
 @router.get("/api/bom-center/forecast")

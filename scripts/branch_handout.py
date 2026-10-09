@@ -1,36 +1,52 @@
 # -*- coding: utf-8 -*-
-"""Branch handout: one ready-to-send message and one printable card per pilot branch.
+"""Branch handout: one ready-to-send message and one printable card per branch.
 
-The four pilot branch logins (วัตถุดิบและใบสั่งซื้อ) exist with the system's default
-password and must change it at first sign-in. This script writes what each branch needs
-to get started — address, username, starting password, the five first steps — so the
-owner can send it through the channel the branch already uses (LINE, a printed card).
+The branch logins (วัตถุดิบและใบสั่งซื้อ) exist with the system's default password and must change
+it at first sign-in. This script writes what each branch needs to get started - address, username,
+starting password, the first steps - so the owner can send it through the channel the branch already
+uses (LINE, a printed card).
 
-It sends NOTHING by itself and it never touches the live system. The starting password is
-read from backend/auth.py at run time (never copied into the repo); the output folder is
-OUTSIDE the repo for that reason. A branch login saves without the owner write-token
-(2026-10-08), so no unlock step or code is part of any handout.
+It sends NOTHING by itself and it never touches the live system. The starting password is read from
+backend/auth.py at run time (never copied into the repo); the output folder is OUTSIDE the repo for that
+reason. A branch login saves without the owner write-token (2026-10-08), so no unlock step or code is
+part of any handout.
 
-    py -3.12 scripts/branch_handout.py                 # → ~/Oshinei_branch_handout/
-    py -3.12 scripts/branch_handout.py --out D:/handout
-    py -3.12 scripts/branch_handout.py --only udon     # a single branch
+Which branches (the list is the same file branch_accounts.py reads):
+
+    py -3.12 scripts/branch_handout.py --template            # writes branch_list_template.xlsx (the 4 pilot rows filled)
+    py -3.12 scripts/branch_handout.py --list D:/onboarding/branches.xlsx        # one handout per row
+    py -3.12 scripts/branch_handout.py --list D:/onboarding/accounts_result.csv  # the result of branch_accounts.py --yes
+    py -3.12 scripts/branch_handout.py --all --db D:/copy/oshinei.db             # every active branch of a DB copy
+    py -3.12 scripts/branch_handout.py                       # no option: the four pilot branches
+    py -3.12 scripts/branch_handout.py --list ... --only udon                    # a single branch
+
+    --out DIR     default ~/Oshinei_branch_handout
+    --db FILE     a COPY of the database: resolves branch ids for rows whose username is blank (branch_<id>)
+
+A blank username needs the branch id (--db), or take it from accounts_result.csv, which branch_accounts.py
+fills in. Rows that branch_accounts.py marked ไม่สำเร็จ are skipped, and so are rows marked มีอยู่แล้ว
+(that login may already have its own password; add --include-existing to write them anyway).
 """
 import argparse
-import sys as _sys
 import html
 import re
+import sqlite3
 import sys
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import branch_list as BL  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 URL = "https://oshinei-dashboard.fly.dev"
-BRANCHES = [                       # (key, branch name, username) — the accounts created on 2026-10-07
+BRANCHES = [                       # (key, branch name, username) - the accounts created on 2026-10-07
     ("ubon", "อุบลราชธานี", "branch_ubon"),
     ("udon", "อุดรธานี", "branch_udon"),
     ("khonkaen", "ขอนแก่น", "branch_khonkaen"),
     ("rayong", "ระยอง", "branch_rayong"),
 ]
+PER_PAGE = 4                       # cards on one A4 page (2 x 2)
 
 
 def default_password() -> str:
@@ -74,7 +90,7 @@ def card(name: str, user: str, pw: str) -> str:
   <p class="eyebrow">OSHINEI · วัตถุดิบและใบสั่งซื้อ</p>
   <h2>สาขา{e(name)}</h2>
   <table>
-    <tr><th>ที่อยู่ระบบ</th><td>{e(URL)}</td></tr>
+    <tr><th>ที่อยู่ระบบ</th><td class="url">{e(URL)}</td></tr>
     <tr><th>ชื่อผู้ใช้</th><td class="mono">{e(user)}</td></tr>
     <tr><th>รหัสผ่านเริ่มต้น</th><td class="mono">{e(pw)}</td></tr>
   </table>
@@ -87,49 +103,124 @@ def card(name: str, user: str, pw: str) -> str:
 </section>"""
 
 
-PAGE = """<!doctype html><html lang="th"><head><meta charset="utf-8"><title>บัตรเริ่มใช้งานสาขานำร่อง</title>
+# A4 portrait, four cards a page (2 x 2, each 105 x 148.5 mm). One .sheet per page, so any number of branches prints cleanly.
+PAGE = """<!doctype html><html lang="th"><head><meta charset="utf-8"><title>บัตรเริ่มใช้งานสาขา</title>
 <style>
+  * {{ box-sizing: border-box; }}
   body {{ font-family: 'Prompt', 'Noto Sans Thai', Tahoma, sans-serif; margin: 0; color: #0f172a; }}
-  .sheet {{ display: grid; grid-template-columns: 1fr 1fr; gap: 0; }}
-  .card {{ box-sizing: border-box; padding: 14mm 12mm; border: 1px dashed #94a3b8; height: 148mm; page-break-inside: avoid; }}
-  .eyebrow {{ font-size: 10pt; letter-spacing: 1px; color: #1f3a6b; font-weight: 600; margin: 0; }}
-  h2 {{ font-size: 20pt; margin: 4mm 0 6mm; color: #1f3a6b; }}
-  table {{ border-collapse: collapse; width: 100%; margin-bottom: 5mm; }}
-  th {{ text-align: left; font-weight: 600; width: 34%; padding: 2mm 0; font-size: 11pt; color: #475569; }}
-  td {{ padding: 2mm 0; font-size: 12pt; }}
-  .mono {{ font-family: Consolas, 'Courier New', monospace; font-size: 13pt; font-weight: 700; }}
-  ol {{ font-size: 11pt; line-height: 1.6; padding-left: 5mm; margin: 0 0 4mm; }}
-  .note {{ font-size: 10pt; color: #475569; margin: 0; }}
-  @page {{ size: A4 landscape; margin: 0; }}
-</style></head><body><div class="sheet">
-{cards}
-</div></body></html>
+  .sheet {{ width: 210mm; height: 297mm; display: grid; grid-template-columns: 105mm 105mm; grid-template-rows: 148.5mm 148.5mm; }}
+  .sheet + .sheet {{ page-break-before: always; }}
+  .card {{ padding: 9mm 8mm; border: 1px dashed #94a3b8; overflow: hidden; page-break-inside: avoid; }}
+  .eyebrow {{ font-size: 8.5pt; letter-spacing: 1px; color: #1f3a6b; font-weight: 600; margin: 0; }}
+  h2 {{ font-size: 16pt; margin: 3mm 0 4mm; color: #1f3a6b; }}
+  table {{ border-collapse: collapse; width: 100%; margin-bottom: 4mm; }}
+  th {{ text-align: left; font-weight: 600; width: 32%; padding: 1.5mm 0; font-size: 9.5pt; color: #475569; vertical-align: top; }}
+  td {{ padding: 1.5mm 0; font-size: 10pt; }}
+  .url {{ word-break: break-all; font-size: 9pt; }}
+  .mono {{ font-family: Consolas, 'Courier New', monospace; font-size: 11pt; font-weight: 700; word-break: break-all; }}
+  ol {{ font-size: 9.5pt; line-height: 1.55; padding-left: 5mm; margin: 0 0 3mm; }}
+  .note {{ font-size: 8.5pt; color: #475569; margin: 0; }}
+  @page {{ size: A4 portrait; margin: 0; }}
+</style></head><body>
+{sheets}
+</body></html>
 """
 
 
-def main() -> None:
-    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+def sheets_html(cards: list) -> str:
+    pages = [cards[i:i + PER_PAGE] for i in range(0, len(cards), PER_PAGE)]
+    return "\n".join('<div class="sheet">\n' + "\n".join(p) + "\n</div>" for p in pages)
+
+
+def db_branches(db: str) -> list:
+    """[(branch_id, name)] of the active branches of a database COPY, opened read-only."""
+    if not Path(db).exists():
+        sys.exit(f"ไม่พบไฟล์ฐานข้อมูล: {db}")
+    con = sqlite3.connect(f"file:{Path(db).as_posix()}?mode=ro", uri=True)
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
+        where = " AND COALESCE(active, 1) = 1" if "active" in cols else ""
+        return [(r[0], r[1]) for r in con.execute(f"SELECT branch_id, name FROM branches WHERE name <> 'ALL'{where} ORDER BY name")]
+    finally:
+        con.close()
+
+
+def build_entries(a) -> list:
+    """-> [{branch, username, recipient}] for the chosen source; exits with a plain Thai message when a login name cannot be known."""
+    ids = {n: b for b, n in db_branches(a.db)} if a.db else {}
+    if a.all:
+        if not a.db:
+            sys.exit("--all ต้องระบุ --db (ไฟล์ฐานข้อมูลสำเนา) เพื่ออ่านรายชื่อสาขา")
+        rows = [{"branch": n, "username": "", "recipient": "", "result": ""} for n in ids]
+    elif a.list:
+        rows = BL.read_list(a.list)
+    else:
+        rows = [{"branch": n, "username": u, "recipient": "", "result": ""} for _, n, u in BRANCHES]
+    out, skipped, missing = [], [], []
+    for r in rows:
+        if r.get("result") == BL.R_FAILED:
+            skipped.append(f"{r['branch']} (สร้างบัญชีไม่สำเร็จ)")
+            continue
+        if r.get("result") == BL.R_EXISTS and not a.include_existing:
+            skipped.append(f"{r['branch']} (มีบัญชีอยู่แล้ว อาจเปลี่ยนรหัสผ่านไปแล้ว ใช้ --include-existing หากต้องการสร้างข้อความ)")
+            continue
+        user = r["username"] or BL.username_for(r["branch"], ids.get(r["branch"]))
+        if not user:
+            missing.append(r["branch"])
+            continue
+        out.append({"branch": r["branch"], "username": user, "recipient": r.get("recipient", "")})
+    if missing:
+        sys.exit("ไม่ทราบชื่อผู้ใช้ของสาขา: " + ", ".join(missing) +
+                 "\nระบุ --db (ไฟล์ฐานข้อมูลสำเนา) เพื่อใช้ branch_<รหัสสาขา> หรือใช้ accounts_result.csv ที่ branch_accounts.py สร้างให้")
+    if a.only:
+        key = a.only.strip().lower()
+        out = [e for e in out if key in (e["username"].lower(), e["branch"].lower(), e["username"].lower().replace("branch_", ""))]
+        if not out:
+            sys.exit(f"ไม่พบสาขาที่ตรงกับ --only {a.only}")
+    for s in skipped:
+        print(f"  ข้าม: {s}")
+    return out
+
+
+def main(argv=None) -> None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default=str(Path.home() / "Oshinei_branch_handout"))
-    ap.add_argument("--only", choices=[k for k, _, _ in BRANCHES])
-    a = ap.parse_args()
+    ap.add_argument("--list", help="รายชื่อสาขา (.xlsx หรือ .csv) คอลัมน์ สาขา · ชื่อผู้ใช้ · LINE/ผู้รับ")
+    ap.add_argument("--all", action="store_true", help="ทุกสาขาที่เปิดใช้งานในฐานข้อมูลสำเนาที่ระบุด้วย --db")
+    ap.add_argument("--db", help="ไฟล์ฐานข้อมูลสำเนา (อ่านอย่างเดียว) ใช้หา branch_<รหัสสาขา>")
+    ap.add_argument("--only", help="เฉพาะสาขาเดียว (ชื่อผู้ใช้ ชื่อสาขา หรือชื่อย่อ เช่น udon)")
+    ap.add_argument("--include-existing", action="store_true", help="สร้างข้อความให้บัญชีที่มีอยู่แล้วด้วย")
+    ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 4 แถว) แล้วจบ")
+    a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    if a.template:
+        p = BL.write_template(out / "branch_list_template.xlsx")
+        print(f"wrote {p}")
+        return
+    if a.list and a.all:
+        sys.exit("เลือกอย่างใดอย่างหนึ่ง: --list หรือ --all")
     pw = default_password()
-    todo = [b for b in BRANCHES if not a.only or b[0] == a.only]
-    for key, name, user in todo:
-        (out / f"{user}.txt").write_text(message(name, user, pw), encoding="utf-8")
-    (out / "cards.html").write_text(PAGE.format(cards="\n".join(card(n, u, pw) for _, n, u in todo)), encoding="utf-8")
-    (out / "README.txt").write_text(
-        f"สร้างเมื่อ {date.today().isoformat()} · {len(todo)} สาขา\n"
-        "- <ชื่อผู้ใช้>.txt = ข้อความพร้อมส่ง (LINE/อีเมล) ส่งให้เฉพาะสาขานั้น\n"
-        "- cards.html = บัตรพิมพ์ A4 แนวนอน 4 ใบ เปิดในเบราว์เซอร์แล้วสั่งพิมพ์ ตัดตามเส้นประ\n"
-        "- โฟลเดอร์นี้มีรหัสผ่านเริ่มต้น ลบหลังแจกเสร็จ ห้ามอัปโหลดขึ้น GitHub\n"
-        "- สาขาไม่ต้องปลดล็อกเครื่อง: บัญชีสาขาบันทึกได้ทันที (ตั้งแต่ 8 ต.ค. 2569)\n", encoding="utf-8")
+    todo = build_entries(a)
+    if not todo:
+        sys.exit("ไม่มีสาขาให้สร้างข้อความ")
+    for e in todo:
+        (out / f"{e['username']}.txt").write_text(message(e["branch"], e["username"], pw), encoding="utf-8")
+    (out / "cards.html").write_text(PAGE.format(sheets=sheets_html([card(e["branch"], e["username"], pw) for e in todo])), encoding="utf-8")
+    pages = -(-len(todo) // PER_PAGE)
+    lines = [f"สร้างเมื่อ {date.today().isoformat()} · {len(todo)} สาขา",
+             "- <ชื่อผู้ใช้>.txt = ข้อความพร้อมส่ง (LINE/อีเมล) ส่งให้เฉพาะสาขานั้น",
+             f"- cards.html = บัตรพิมพ์ A4 แนวตั้ง หน้าละ {PER_PAGE} ใบ ({pages} หน้า) เปิดในเบราว์เซอร์แล้วสั่งพิมพ์ ตัดตามเส้นประ",
+             "- โฟลเดอร์นี้มีรหัสผ่านเริ่มต้น ลบหลังแจกเสร็จ ห้ามอัปโหลดขึ้น GitHub",
+             "- สาขาไม่ต้องปลดล็อกเครื่อง: บัญชีสาขาบันทึกได้ทันที (ตั้งแต่ 8 ต.ค. 2569)",
+             "", "ไฟล์ · สาขา · ส่งถึง"]
+    lines += [f"{e['username']}.txt · {e['branch']} · {e['recipient'] or '-'}" for e in todo]
+    (out / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {len(todo)} handouts → {out}")
-    for _, name, user in todo:
-        print(f"  {name}: {user}.txt")
-    print("  cards.html (print), README.txt")
+    for e in todo:
+        print(f"  {e['branch']}: {e['username']}.txt" + (f"  → {e['recipient']}" if e["recipient"] else ""))
+    print(f"  cards.html (print, {pages} page{'s' if pages != 1 else ''}), README.txt")
 
 
 if __name__ == "__main__":
