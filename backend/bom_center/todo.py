@@ -421,12 +421,29 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
             return {"branch_id": bid, "branch": b["name"], "status": "done", "detail": f"ยืนยันโดย {conf} · เหตุผล {reasons} รายการ", "go": go}
         return {"branch_id": bid, "branch": b["name"], "status": "todo", "detail": f"ยังไม่ยืนยัน · เหตุผลที่บันทึก {reasons}", "go": go}
 
+    def issue(b):
+        bid = b["branch_id"]
+        e = count_in(bid, m1)
+        go = {"tab": "bomcenter", "pane": "issue", "month": month, "branch": bid}
+        if not e or not count_in(bid, m0):
+            return {"branch_id": bid, "branch": b["name"], "status": "blocked", "detail": "รอผลตรวจนับต้นงวดและปลายงวด", "go": go}
+        row = con.execute("SELECT receipts_confirmed_by, accounting_posted_at, accounting_posted_by FROM bc_variance_period"
+                          " WHERE end_count_id=?", (e[0],)).fetchone()
+        if not row:
+            return {"branch_id": bid, "branch": b["name"], "status": "blocked", "detail": "รอยืนยันรับสินค้าครบก่อน", "go": go}
+        if row[1]:
+            return {"branch_id": bid, "branch": b["name"], "status": "done",
+                    "detail": f"บันทึกแล้ว {row[1][:10]} โดย {row[2]}", "go": go}
+        return {"branch_id": bid, "branch": b["name"], "status": "todo",
+                "detail": "ยืนยันรับสินค้าครบแล้ว รอบัญชีดาวน์โหลดและบันทึก", "go": go}
+
     per_branch("deliveries", 4, f"บันทึกรับสินค้าประจำเดือน {month}", ("supply.ordering", "bom.center"), "Sales Support", deliveries)
     per_branch("begin_count", 5, f"ผลตรวจนับต้นงวด 1 {month}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("begin", m0))
     per_branch("end_count", 6, f"ผลตรวจนับปลายงวด 1 {_month_add(month, 1)}", ("supply.ordering", "bom.center", "branch.stock"), "ส่วนกลาง / สาขา", count_step("end", m1))
     per_branch("receipts_confirm", 7, "ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง", ("branch.stock", "supply.ordering", "bom.center"), "สาขา", confirm)
     conf_done = branches and steps[-1]["status"] == "done"
-    steps.append(_e("monthly_summary", 8, "close", f"สรุปผลต่างรายเดือน {month}", "done" if conf_done else "todo",
+    per_branch("issue_posted", 8, "ดาวน์โหลดใบสรุปตัดเบิกและบันทึกเข้าระบบบัญชี", ("cost.analysis", "bom.center"), "บัญชี", issue)
+    steps.append(_e("monthly_summary", 9, "close", f"สรุปผลต่างรายเดือน {month}", "done" if conf_done else "todo",
                     "ดูผลต่างการใช้ของทุกสาขา และข้อ 13A ในรายงานผู้บริหาร" if conf_done else "รอขั้นตอนก่อนหน้าครบทุกสาขา",
                     owner=("ops.report", "bom.center", "supply.ordering"), owner_th="Ops / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "month", "month": month}))

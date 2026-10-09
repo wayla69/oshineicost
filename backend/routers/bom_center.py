@@ -1687,6 +1687,154 @@ def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional
     return {"ok": True}
 
 
+# ── ใบสรุปตัดเบิก: the period's actual usage, downloaded by Accounting and ticked as posted ──
+ISSUE_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "คงเหลือ (ปลายงวด)",
+                 "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา", "ผู้จำหน่าย"]
+ISSUE_ALL_HEADERS = ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ", "มูลค่าตัดเบิก",
+                     "ไม่มีราคา", "สถานะบัญชี"]
+
+
+class PostedBody(BaseModel):
+    end_count_id: int
+    posted: bool = True
+
+
+def _issue_note(s: dict) -> str:
+    p, st = s["period"], s["status"]
+    note = (f"ใบสรุปตัดเบิกวัตถุดิบ สาขา{s['branch']['name']} งวด {p['begin_date']} ถึง {p['end_date']} (เดือน {p['month']})"
+            " · จัดทำจากผลตรวจนับต้นงวด/ปลายงวดและใบรับสินค้าในระบบ"
+            " · ตัดเบิก = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ"
+            f" · ราคาต่อหน่วย = ราคาซื้อจริงเดือน {p['month']}")
+    if st.get("receipts_confirmed_by"):
+        note += f" · ยืนยันรับสินค้าครบโดย {st['receipts_confirmed_by']}"
+    return note
+
+
+def _issue_sheet(ws, title: str, s: dict) -> None:
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Font
+    _sheet(ws, title, ISSUE_HEADERS, _issue_note(s))
+    for ln in s["lines"]:
+        ws.append([ln["code"], ln["name"], ln["base_unit"], ln["begin"], ln["received"], ln["claims"], ln["end"],
+                   ln["used"], ln["unit_price"], ln["value"], ln["price_source"], ln["supplier"]])
+        if ln["note"]:
+            ws.cell(row=ws.max_row, column=8).comment = Comment(ln["note"], "ระบบ")
+    ws.append(["", "รวม", "", "", "", "", "", "", "", s["totals"]["used_value"]])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[3:8]:
+            c.number_format = "#,##0.###"
+        row[8].number_format = "#,##0.0000"
+        row[9].number_format = "#,##0.00"
+    ws.column_dimensions["B"].width = 44
+    ws.column_dimensions["K"].width = 24
+    ws.column_dimensions["L"].width = 24
+    ws.freeze_panes = "A3"
+
+
+def _issue_or_400(con, bid: int, end_count_id: int) -> dict:
+    try:
+        s = _va.issue_summary(con, bid, end_count_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    if not s["status"]["receipts_confirmed"]:
+        raise HTTPException(400, "รอบนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้ "
+                                 "กรุณาให้สาขาหรือ Sales Support ยืนยันก่อน")
+    return s
+
+
+@router.get("/api/bom-center/issue-summary/periods")
+def bc_issue_periods(request: Request, branch_id: Optional[int] = Query(None)):
+    """Every counting branch's begin/end periods with their confirmation and posting state (a branch login: its own)."""
+    with get_db() as con:
+        _ensure(con)
+        if _auth.scope_branch(request) or branch_id is not None:
+            branch_id = _stock_branch(con, request, branch_id)
+        return {"branches": _va.issue_periods(con, branch_id)}
+
+
+@router.get("/api/bom-center/issue-summary")
+def bc_issue_summary(request: Request, end_count_id: int = Query(...), branch_id: Optional[int] = Query(None)):
+    """The ใบสรุปตัดเบิก of one period as JSON (a preview is allowed before the receipts are confirmed)."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return _va.issue_summary(con, bid, end_count_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+
+@router.get("/api/bom-center/issue-summary.xlsx")
+def bc_issue_summary_xlsx(request: Request, end_count_id: int = Query(...), branch_id: Optional[int] = Query(None)):
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        s = _issue_or_400(con, bid, end_count_id)
+    wb = Workbook()
+    _issue_sheet(wb.active, _sheet_title(f"ตัดเบิก {s['branch']['name']}", set()), s)
+    return _xlsx(wb, f"bom_center_issue_summary_b{bid}_{s['period']['month']}.xlsx")
+
+
+@router.get("/api/bom-center/issue-summary-all.xlsx")
+def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
+    """One workbook for the month: a summary sheet and one sheet per branch period that is confirmed."""
+    from openpyxl import Workbook
+    _month_or_400(month)
+    if _auth.scope_branch(request):
+        raise HTTPException(403, detail="บัญชีสาขาดาวน์โหลดได้เฉพาะใบสรุปตัดเบิกของสาขาตัวเอง", headers={"X-Denied": "role"})
+    with get_db() as con:
+        _ensure(con)
+        jobs = []
+        for b in _va.issue_periods(con):
+            for p in b["periods"]:
+                if p["month"] == month:
+                    jobs.append((b, p))
+        done = {p["end_count_id"]: _va.issue_summary(con, b["branch_id"], p["end_count_id"])
+                for b, p in jobs if p["receipts_confirmed"]}
+    if not done:
+        raise HTTPException(400, f"ยังไม่มีรอบที่ยืนยันรับสินค้าครบในเดือน {month}")
+    wb = Workbook()
+    used = set()
+    ws = wb.active
+    _sheet(ws, _sheet_title("สรุปทุกสาขา", used), ISSUE_ALL_HEADERS,
+           f"สรุปใบสรุปตัดเบิกวัตถุดิบทุกสาขา เดือน {month} · แต่ละสาขามีแผ่นงานรายการของตัวเอง · "
+           "ตัดเบิก = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่งวดสิ้นสุด")
+    sheets = []
+    for b, p in jobs:
+        if p["receipts_confirmed"]:
+            s = done[p["end_count_id"]]
+            t = s["totals"]
+            posted = p["accounting_posted_at"]
+            ws.append([b["name"], p["begin_date"], p["end_date"], t["lines"], t["received_value"], t["claims_value"],
+                       t["used_value"], t["unpriced"], f"บันทึกแล้ว {posted[:10]}" if posted else "ยังไม่บันทึก"])
+            sheets.append(s)
+        else:
+            ws.append([b["name"], p["begin_date"], p["end_date"], None, None, None, None, None,
+                       "ยังไม่ยืนยันรับสินค้าครบ (ไม่มีแผ่นงาน)"])
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[4:7]:
+            c.number_format = "#,##0.00"
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["I"].width = 40
+    for s in sheets:
+        _issue_sheet(wb.create_sheet(), _sheet_title(s["branch"]["name"], used), s)
+    return _xlsx(wb, f"bom_center_issue_summary_all_{month}.xlsx")
+
+
+@router.post("/api/bom-center/issue-summary/posted", dependencies=[Depends(require_write_token)])
+def bc_issue_posted(body: PostedBody, request: Request):
+    """Accounting: the ใบสรุปตัดเบิก of this period is posted (or no longer posted) in the accounting system."""
+    with get_db() as con:
+        _ensure(con)
+        pinned = _stock_branch(con, request, None) if _auth.scope_branch(request) else None
+        out = _write(con, lambda: _va.set_posted(con, body.end_count_id, body.posted, _who(request), pinned))
+    invalidate_cache("bc_")
+    return out
+
+
 # ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
 def _round_or_400(r: str) -> str:
     if r not in ("1", "2", "salmon"):

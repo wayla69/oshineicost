@@ -42,7 +42,7 @@ def _steps(d):
 def test_shape_owners_and_links(udon):
     d = TD.build(udon, M, None, None, today=TODAY)
     assert d["month"] == M and d["today"] == "2026-10-07" and d["scoped"] is False and d["branch"] is None
-    assert [s["seq"] for s in d["close"]["steps"]] == list(range(1, 9))
+    assert [s["seq"] for s in d["close"]["steps"]] == list(range(1, 10))
     for e in d["items"] + d["close"]["steps"]:
         assert e["status"] in ("done", "todo", "blocked", "na"), e
         assert set(e["owner_modules"]) <= ALL_MODULES, e["key"]
