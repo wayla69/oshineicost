@@ -238,6 +238,9 @@ MIGRATIONS = (
     # PR-E — Sales Support marks the orders it has keyed into the external accounting system
     ("bc_order", "accounting_keyed_at", "TEXT"),
     ("bc_order", "accounting_keyed_by", "TEXT"),
+    # PR-F — Accounting marks the ใบสรุปตัดเบิก of a period as posted into the accounting system
+    ("bc_variance_period", "accounting_posted_at", "TEXT"),
+    ("bc_variance_period", "accounting_posted_by", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

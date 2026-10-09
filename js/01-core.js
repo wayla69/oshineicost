@@ -253,7 +253,7 @@ const TAB_MODULE = {
 // first_time), on top of the home page; "เข้าใจแล้ว" dismisses it for good.
 const ROLE_START = {
   management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
-  accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['bomcenter', 'นำเข้าราคาซื้อจริงรายเดือนจากรายงานจ่ายสินค้าของฝ่ายบัญชี', 'price'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
+  accounting: [['bomcenter', 'ดาวน์โหลดใบสรุปตัดเบิกรายสาขาหลังตรวจนับปลายงวด เพื่อบันทึกเข้าระบบบัญชี', 'issue'], ['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
   operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจสอบว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · ยืนยัน · ดำเนินการ · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
   analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานของฉันวันนี้และสถานะปิดงวดเดือน พร้อมลิงก์เข้าแต่ละงาน'], ['cost', 'ต้นทุนและ food cost']],
@@ -2453,7 +2453,8 @@ const SUPPLY_CHIPS = [
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
     { tab: 'orderhub', pane: 'central', label: 'สินค้าส่วนกลางและนำเข้าข้อมูล', mods: _SUPPLY_CENTRE },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE }] },
+    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE },
+    { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'order', label: 'นับและสั่ง' },
     { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า' },
@@ -2560,7 +2561,7 @@ let _supplyChip = null;      // the level-1 chip the user is in (derived from th
 const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) whose work the role does daily
   branch: { chip: 'branch' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
   warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
-  operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'master', tab: 'bomcenter', pane: 'price' },
+  operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'close', tab: 'bomcenter', pane: 'issue' },
 };
 function _supplyLastKey() { return 'supply:last:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 function _supplyLastGet() { try { return JSON.parse(localStorage.getItem(_supplyLastKey()) || '{}') || {}; } catch (e) { return {}; } }

@@ -64,6 +64,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
         clean[code] = (q, unit, qb)
     if not clean:
         raise ValueError("ยังไม่มีรายการรับสินค้า")
+    _refuse_if_posted(con, branch_id, receipt_date)
     if bad:
         raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " กรุณาแจ้งส่วนกลางให้เพิ่มกฎหน่วย")
     cur = con.execute("INSERT INTO bc_receipt(branch_id, receipt_date, source, ref, note, entered_by, created_at)"
@@ -74,6 +75,21 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
     audit(con, who, "receipt", "bc_receipt", str(rid), None, {"branch_id": branch_id, "date": receipt_date,
                                                              "lines": len(clean)})
     return {"receipt_id": rid, "lines": len(clean)}
+
+
+def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
+    """A receipt dated inside a period whose ใบสรุปตัดเบิก Accounting has posted would change numbers it
+    already keyed: refuse until Accounting un-posts it (this also locks claim approvals in that period)."""
+    from .stock import periods as _p
+    posted = {r[0] for r in con.execute(
+        "SELECT end_count_id FROM bc_variance_period WHERE branch_id=? AND accounting_posted_at IS NOT NULL",
+        (branch_id,))}
+    if not posted:
+        return
+    for b, e in _p(con, branch_id):
+        if e["count_id"] in posted and b["date"] <= receipt_date < e["date"]:
+            raise ValueError(f"ใบรับสินค้าวันที่ {receipt_date} อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว "
+                             f"({b['date']} ถึง {e['date']}) จึงเพิ่มไม่ได้ กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
 
 
 def _closed_through(con, branch_id: int):
@@ -121,6 +137,30 @@ def _count_lines(con, count_id: int) -> dict:
         "SELECT ingredient_code, qty_base FROM bc_stock_count_line WHERE count_id=?", (count_id,)) if qb is not None}
 
 
+def _price_month(begin_date: str, end_date: str) -> str:
+    """The month a period is priced in: the month of the day BEFORE its end count (end - 1 day)."""
+    last_day = date.fromisoformat(end_date) - timedelta(days=1)
+    return f"{last_day.year:04d}-{last_day.month:02d}"
+
+
+def _movements(con, branch_id: int, b: dict, e: dict) -> dict:
+    """Everything that moved stock in [begin date, end date): both counts, deliveries and claim adjustments.
+
+    'claims' = receipts booked by a claim decision (source 'claim'; negative when goods were short,
+    positive when a receive-time claim was rejected); 'received' = every other receipt."""
+    received, claims = {}, {}
+    for c, is_claim, qb in con.execute(
+            "SELECT l.ingredient_code, r.source='claim', SUM(l.qty_base) FROM bc_receipt r"
+            " JOIN bc_receipt_line l USING(receipt_id)"
+            " WHERE r.branch_id=? AND r.receipt_date>=? AND r.receipt_date<?"
+            " GROUP BY l.ingredient_code, r.source='claim'", (branch_id, b["date"], e["date"])):
+        (claims if is_claim else received)[c] = qb or 0.0
+    n_receipts = con.execute("SELECT COUNT(*) FROM bc_receipt WHERE branch_id=? AND receipt_date>=? AND receipt_date<?",
+                             (branch_id, b["date"], e["date"])).fetchone()[0]
+    return {"begin": _count_lines(con, b["count_id"]), "end": _count_lines(con, e["count_id"]),
+            "received": received, "claims": claims, "n_receipts": n_receipts}
+
+
 def periods(con, branch_id: int) -> list:
     """Every measured period of a branch, newest first, with its headline numbers."""
     from .stock import periods as _p
@@ -145,16 +185,11 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
     b, e = pair
     d0, d1 = date.fromisoformat(b["date"]), date.fromisoformat(e["date"])
     last_day = d1 - timedelta(days=1)
-    month = f"{last_day.year:04d}-{last_day.month:02d}"
-    begin, end = _count_lines(con, b["count_id"]), _count_lines(con, e["count_id"])
-    rec = {}
-    for c, qb in con.execute(
-            "SELECT l.ingredient_code, SUM(l.qty_base) FROM bc_receipt r JOIN bc_receipt_line l USING(receipt_id)"
-            " WHERE r.branch_id=? AND r.receipt_date>=? AND r.receipt_date<? GROUP BY l.ingredient_code",
-            (branch_id, b["date"], e["date"])):
-        rec[c] = qb or 0.0
-    n_receipts = con.execute("SELECT COUNT(*) FROM bc_receipt WHERE branch_id=? AND receipt_date>=? AND receipt_date<?",
-                             (branch_id, b["date"], e["date"])).fetchone()[0]
+    month = _price_month(b["date"], e["date"])
+    mv = _movements(con, branch_id, b, e)
+    begin, end, n_receipts = mv["begin"], mv["end"], mv["n_receipts"]
+    rec = {c: mv["received"].get(c, 0.0) + mv["claims"].get(c, 0.0)
+           for c in set(mv["received"]) | set(mv["claims"])}
     theo, days = {}, []
     if last_day >= d0:
         use, days, _ = usage_history(con, branch_id, d0, last_day, month)
@@ -243,10 +278,17 @@ def confirm_receipts(con, branch_id: int, end_count_id: int, who: str, undo: boo
     if not con.execute("SELECT 1 FROM bc_stock_count WHERE count_id=? AND branch_id=?", (end_count_id, branch_id)).fetchone():
         raise ValueError("ไม่พบรอบนี้ของสาขา")
     if undo:
+        posted = con.execute("SELECT 1 FROM bc_variance_period WHERE end_count_id=? AND accounting_posted_at IS NOT NULL",
+                             (end_count_id,)).fetchone()
+        if posted:
+            raise ValueError("บัญชีบันทึกใบสรุปตัดเบิกของรอบนี้เข้าระบบบัญชีแล้ว ยกเลิกการยืนยันไม่ได้ "
+                             "กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
         con.execute("DELETE FROM bc_variance_period WHERE end_count_id=?", (end_count_id,))
-    else:
-        con.execute("INSERT OR REPLACE INTO bc_variance_period(end_count_id, branch_id, receipts_confirmed_by,"
-                    " receipts_confirmed_at) VALUES(?,?,?,?)", (end_count_id, branch_id, who, now()))
+    else:                                                    # an UPSERT: re-confirming keeps the accounting mark
+        con.execute("INSERT INTO bc_variance_period(end_count_id, branch_id, receipts_confirmed_by,"
+                    " receipts_confirmed_at) VALUES(?,?,?,?) ON CONFLICT(end_count_id) DO UPDATE SET"
+                    " receipts_confirmed_by=excluded.receipts_confirmed_by,"
+                    " receipts_confirmed_at=excluded.receipts_confirmed_at", (end_count_id, branch_id, who, now()))
     audit(con, who, "receipts_confirm" if not undo else "receipts_unconfirm", "bc_variance_period", str(end_count_id))
 
 
@@ -265,3 +307,128 @@ def overview(con) -> list:
         s["last_count"] = last
         out.append(s)
     return out
+
+
+# ── ใบสรุปตัดเบิก: the period's actual usage, for Accounting to post ─────────────
+PRICE_SOURCE_TH = {"purchase_avg": "ซื้อจริง", "carry_forward": "ยกมา", "manual": "กำหนดเอง",
+                   "list_ref": "ใบเสนอราคา", "snapshot": "สูตรเดิม"}
+
+
+def _pair_for_end(con, branch_id: int, end_count_id):
+    """The (begin, end) pair of this branch whose END count is `end_count_id`, else None."""
+    from .stock import periods as _p
+    try:
+        eid = int(end_count_id)
+    except (TypeError, ValueError):
+        return None
+    return next((p for p in _p(con, branch_id) if p[1]["count_id"] == eid), None)
+
+
+def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
+    """The ใบสรุปตัดเบิก of one period: per item  used = begin + received + claims − end,
+    valued at the purchase price of the month the period ends in."""
+    from .prices import price_for
+    pair = _pair_for_end(con, branch_id, end_count_id)
+    if pair is None:
+        raise ValueError("ไม่พบรอบต้นงวด/ปลายงวดนี้ของสาขา")
+    b, e = pair
+    d0, d1 = date.fromisoformat(b["date"]), date.fromisoformat(e["date"])
+    month = _price_month(b["date"], e["date"])
+    mv = _movements(con, branch_id, b, e)
+    begin, end, received, claims = mv["begin"], mv["end"], mv["received"], mv["claims"]
+    reasons = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_variance_reason WHERE end_count_id=?",
+                                         (e["count_id"],))}
+    info = {c: (n, u, s, f) for c, n, u, s, f in con.execute(
+        "SELECT code, name_th, base_unit, supplier, family FROM bc_ingredient")}
+    lines, excluded = [], []
+    for c in sorted(set(begin) | set(end) | set(received) | set(claims)):
+        r, cl = received.get(c, 0.0), claims.get(c, 0.0)
+        n, u, sup, fam = info.get(c) or (None, None, None, None)
+        if c not in received and c not in claims and not begin.get(c) and not end.get(c):
+            excluded.append({"code": c, "name": n})          # counted at zero and nothing arrived: nothing moved
+            continue
+        pr = price_for(con, c, month)
+        unit_price = pr[0] if pr else None
+        src = f"{PRICE_SOURCE_TH.get(pr[1], pr[1])} ({pr[2]})" if pr else None
+        ln = {"code": c, "name": n, "base_unit": u, "supplier": sup, "family": fam,
+              "begin": begin.get(c), "received": round(r, 3), "claims": round(cl, 3), "end": end.get(c),
+              "unit_price": unit_price, "price_source": src, "has_reason": c in reasons,
+              "used": None, "value": None, "status": "ok", "note": None}
+        if c not in begin or c not in end:
+            miss = [t for t, d in (("ต้นงวด", begin), ("ปลายงวด", end)) if c not in d]
+            ln.update(status="not_counted", note="ไม่พบในผลตรวจนับ" + "และ".join(miss))
+        else:
+            used = begin[c] + r + cl - end[c]
+            ln["used"] = round(used, 3)
+            ln["value"] = round(used * unit_price, 2) if unit_price is not None else None
+            if used < -1e-9:
+                ln["status"] = "negative"
+        lines.append(ln)
+    lines.sort(key=lambda x: (x["family"] or "~", x["code"]))
+    excluded.sort(key=lambda x: x["code"])
+
+    def val(key):
+        return round(sum(x[key] * x["unit_price"] for x in lines if x["unit_price"] is not None), 2)
+    conf = con.execute("SELECT receipts_confirmed_by, receipts_confirmed_at, accounting_posted_at, accounting_posted_by"
+                       " FROM bc_variance_period WHERE end_count_id=?", (e["count_id"],)).fetchone()
+    try:
+        reasons_done = period(con, branch_id, e["count_id"], summary_only=True)["needs_reason"] == 0
+    except ValueError:
+        reasons_done = False
+    name = (con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone() or [None])[0]
+    return {
+        "branch": {"branch_id": branch_id, "name": name},
+        "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
+                   "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days},
+        "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,
+                   "receipts_confirmed_at": conf[1] if conf else None, "reasons_done": reasons_done,
+                   "accounting_posted_at": conf[2] if conf else None,
+                   "accounting_posted_by": conf[3] if conf else None, "receipts": mv["n_receipts"]},
+        "lines": lines, "excluded": excluded,
+        "totals": {"lines": len(lines), "received_value": val("received"), "claims_value": val("claims"),
+                   "used_value": round(sum(x["value"] or 0.0 for x in lines), 2),
+                   "unpriced": sum(1 for x in lines if x["unit_price"] is None),
+                   "not_counted": sum(1 for x in lines if x["status"] == "not_counted")},
+    }
+
+
+def issue_periods(con, branch_id: int = None) -> list:
+    """Every branch's begin/end periods (newest first) with their confirmation and posting state — no prices."""
+    from .stock import periods as _p
+    conf = {r[0]: r[1:] for r in con.execute(
+        "SELECT end_count_id, receipts_confirmed_by, receipts_confirmed_at, accounting_posted_at, accounting_posted_by"
+        " FROM bc_variance_period")}
+    q = "SELECT DISTINCT c.branch_id, b.name FROM bc_stock_count c JOIN branches b USING(branch_id)"
+    args = ()
+    if branch_id is not None:
+        q += " WHERE c.branch_id=?"
+        args = (branch_id,)
+    out = []
+    for bid, name in con.execute(q + " ORDER BY b.name", args).fetchall():
+        ps = []
+        for b, e in reversed(_p(con, bid)):
+            cf = conf.get(e["count_id"])
+            ps.append({"begin_count_id": b["count_id"], "end_count_id": e["count_id"], "begin_date": b["date"],
+                       "end_date": e["date"], "month": _price_month(b["date"], e["date"]),
+                       "receipts_confirmed": bool(cf), "receipts_confirmed_by": cf[0] if cf else None,
+                       "accounting_posted_at": cf[2] if cf else None, "accounting_posted_by": cf[3] if cf else None})
+        out.append({"branch_id": bid, "name": name, "periods": ps})
+    return out
+
+
+def set_posted(con, end_count_id: int, posted: bool, who: str, branch_id: int = None) -> dict:
+    """Accounting: the ใบสรุปตัดเบิก of this period is (or is no longer) posted in the accounting system."""
+    row = con.execute("SELECT branch_id FROM bc_stock_count WHERE count_id=?", (end_count_id,)).fetchone()
+    if (not row or (branch_id is not None and int(row[0]) != int(branch_id))
+            or _pair_for_end(con, row[0], end_count_id) is None):
+        raise ValueError("ไม่พบรอบนี้ของสาขา")
+    conf = con.execute("SELECT 1 FROM bc_variance_period WHERE end_count_id=?", (end_count_id,)).fetchone()
+    if posted and not conf:
+        raise ValueError("ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้")
+    at = now() if posted else None
+    if conf:
+        con.execute("UPDATE bc_variance_period SET accounting_posted_at=?, accounting_posted_by=? WHERE end_count_id=?",
+                    (at, who if posted else None, end_count_id))
+    audit(con, who, "issue_posted" if posted else "issue_unposted", "bc_variance_period", str(end_count_id))
+    return {"end_count_id": int(end_count_id), "posted": bool(posted), "accounting_posted_at": at,
+            "accounting_posted_by": who if posted else None}
