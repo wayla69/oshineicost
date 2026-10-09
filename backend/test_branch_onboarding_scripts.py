@@ -239,9 +239,11 @@ class _ClientApi:
 
 def test_creating_logins_against_the_app(client, app_db):
     import main
-    names = [b["name"] for b in client.get("/api/branches").json()][:2]
+    names = ["ทดสอบสาขาใหม่ก", "ทดสอบสาขาใหม่ข"]                           # two new branches: no login can exist for them yet
     rows = [_row(names[0], "pi_script_a"), _row(names[1], "pi_script_b")]
     c = sqlite3.connect(str(main.DB_PATH))
+    c.executemany("INSERT INTO branches(branch_id, name, active) VALUES(?,?,1)", [(9101, names[0]), (9102, names[1])])
+    c.commit()
     try:
         plan = AC.run(_ClientApi(client), rows, apply=True)
         assert [p["result"] for p in plan] == [BL.R_CREATED, BL.R_CREATED]
@@ -252,5 +254,6 @@ def test_creating_logins_against_the_app(client, app_db):
         assert auth.verify_password(PW, *c.execute("SELECT pw_hash, pw_salt FROM app_user WHERE username='pi_script_a'").fetchone())
     finally:
         c.execute("DELETE FROM app_user WHERE username LIKE 'pi_script_%'")
+        c.execute("DELETE FROM branches WHERE branch_id IN (9101, 9102)")
         c.commit()
         c.close()
