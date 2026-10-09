@@ -34,7 +34,7 @@ def test_bangkok_day_not_the_servers(monkeypatch):
 
 def test_a_count_without_a_date_is_bangkoks_today(con, monkeypatch):  # noqa: F811
     monkeypatch.setattr(ST, "bkk_today", lambda: date(2026, 10, 7))
-    out = ST.save(con, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True)
+    out = ST.save(con, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True, require_all=False)
     assert ST.detail(con, out["count_id"])["count_date"] == "2026-10-07"
 
 
@@ -52,7 +52,7 @@ def test_readiness(con):  # noqa: F811
     for rnd, wd in (("1", 2), ("2", 5), ("salmon", 1)):
         con.execute("INSERT INTO bc_order_calendar(branch_id, round, order_weekday, filled_by) VALUES(1,?,?, 'sales')",
                     (rnd, wd))
-    ST.save(con, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True, count_date="2026-09-22")
+    ST.save(con, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True, count_date="2026-09-22", require_all=False)
     b = PL.readiness(con)["branches"][0]
     assert b["ready"] and b["first_count"] == "2026-09-22" and b["accounts"][0]["username"] == "udon_branch"
 
@@ -61,7 +61,7 @@ def test_scorecard_against_the_pass_criteria(con):  # noqa: F811
     def count(day, crab):
         return ST.save(con, 1, [{"code": "13-01-009", "qty": crab, "unit": "กรัม"},
                                 {"code": "02-01-001", "qty": 9000, "unit": "กรัม"}], "udon",
-                       submit=True, count_date=day)["count_id"]
+                       submit=True, count_date=day, require_all=False)["count_id"]
     def slip(day, confirm_on=None):
         """A daily issue slip; `confirm_on` = the day it is confirmed (a later day makes it late); None = a draft."""
         d = date.fromisoformat(day)

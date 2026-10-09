@@ -59,7 +59,7 @@ def test_without_a_count_the_forecast_alone(con):  # noqa: F811
 
 def test_the_system_stock_is_deducted(con):  # noqa: F811
     ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
-            count_date="2026-10-05")
+            count_date="2026-10-05", require_all=False)
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     r = _crab(p)
     assert p["stock"]["deducted"] and p["stock"]["basis"]["date"] == "2026-10-05" and p["stock"]["through"] == "2026-10-05"
@@ -73,7 +73,7 @@ def test_the_system_stock_is_deducted(con):  # noqa: F811
     assert r["pre_cover_use"] > 0                                # Tuesday 6th is used before Wednesday's delivery
     # a full shelf means nothing to order
     ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
-            count_date="2026-10-05")
+            count_date="2026-10-05", require_all=False)
     r = _crab(OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW))
     assert r["need"] == 0 and r["order_units"] == 0
 

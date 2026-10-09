@@ -101,10 +101,10 @@ def test_the_close_steps_follow_the_data_per_branch(udon):
     assert st["deliveries"]["status"] == "done" and st["deliveries"]["branches"][0]["branch"] == "อุดรธานี"
     assert st["begin_count"]["status"] == "todo" and st["begin_count"]["go"]["extra"] == {"count_date": "2026-09-01"}
     assert st["end_count"]["status"] == "blocked" and st["receipts_confirm"]["status"] == "blocked"
-    ST.save(c, 1, PACK, "u", submit=True, count_date="2026-09-01")
+    ST.save(c, 1, PACK, "u", submit=True, count_date="2026-09-01", require_all=False)
     st = _steps(TD.build(c, M, None, None, today=TODAY))
     assert st["begin_count"]["status"] == "done" and st["end_count"]["status"] == "todo"
-    out = ST.save(c, 1, [{"code": "13-01-009", "qty": 1, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-01")
+    out = ST.save(c, 1, [{"code": "13-01-009", "qty": 1, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-01", require_all=False)
     st = _steps(TD.build(c, M, None, None, today=TODAY))
     assert st["end_count"]["status"] == "done" and st["receipts_confirm"]["status"] == "todo"
     assert st["receipts_confirm"]["go"] == {"tab": "branchstock", "pane": "var", "branch": 1, "extra": {"end_count_id": out["count_id"]}}

@@ -124,7 +124,7 @@ def test_a_draft_is_not_submitted(con):  # noqa: F811
 def test_monthly_summary(con):  # noqa: F811
     def count(day, lines):
         return ST.save(con, 1, [{"code": c, "qty": q, "unit": "กรัม"} for c, q in lines.items()], "udon",
-                       submit=True, count_date=day)["count_id"]
+                       submit=True, count_date=day, require_all=False)["count_id"]
     count("2026-09-08", {"13-01-009": 10000, "02-01-001": 5000})
     e = count("2026-09-15", {"13-01-009": 1000, "02-01-001": 2360})      # crab: far more used than the recipes
     VA.set_reason(con, 1, e, "13-01-009", "waste", None, "udon")
