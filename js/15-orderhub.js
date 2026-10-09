@@ -492,6 +492,7 @@ const _ISR_ST = { ok: ['ตรงกัน (ในเกณฑ์)', 'var(--good
   under: ['นับได้น้อยกว่าระบบ', 'var(--bad-ink)'], not_counted: ['ตรวจนับไม่ครบ', 'var(--text-muted)'] };
 function _isrDm(iso) { const p = String(iso || '').split('-'); return p.length === 3 ? `${Number(p[2])}/${Number(p[1])}` : String(iso || ''); }
 function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
+function _isrMoney(v) { return v == null ? '—' : `${v < 0 ? '−' : ''}฿${_bmcNum(Math.abs(v), 0)}`; }
 function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)">—</span>' : _bmcNum(v, 0); }
 function isrFlagChips(d) {
   const t = d.totals;
@@ -558,8 +559,8 @@ function isrReconHead(r) {
       ${miss.length ? _bmcChip(`ขาดใบตัดเบิก ${miss.length} วัน`, 'var(--bad-ink)') : ''}
       ${sl.draft_days.length ? _bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
       ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}</div>
-    <div class="mt-1 text-sm">ผลต่างรวม <b style="color:${t.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(t.diff_value, 0)}</b> ·
-      นับได้น้อยกว่าระบบ ฿${_bmcNum(t.under_value, 0)} · นับได้มากกว่าระบบ ฿${_bmcNum(t.over_value, 0)} · เกินเกณฑ์ ${t.flagged} รายการ ·
+    <div class="mt-1 text-sm">ผลต่างรวม <b style="color:${t.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(t.diff_value)}</b> ·
+      นับได้น้อยกว่าระบบ ${_isrMoney(t.under_value)} · นับได้มากกว่าระบบ ${_isrMoney(t.over_value)} · เกินเกณฑ์ ${t.flagged} รายการ ·
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
     ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) คงเหลือตามระบบจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
 }
@@ -578,7 +579,7 @@ function isrReconTable(r, o) {
     return `<div style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ชั้น ${esc(x.class)} (เกณฑ์ ±${r.thresholds[x.class]}%)</span>
-        <span style="margin-left:auto" class="text-sm">${x.diff_value != null ? `<b style="color:${x.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(x.diff_value, 0)}</b>` : ''}</span></div>
+        <span style="margin-left:auto" class="text-sm">${x.diff_value != null ? `<b style="color:${x.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(x.diff_value)}</b>` : ''}</span></div>
       <div class="text-xs mt-0.5" style="color:var(--text-secondary)">ยกมา ${q(x.begin, x.base_unit)} + รับ ${q(x.received, x.base_unit)} + เคลม/ปรับ ${q(x.claims, x.base_unit)} − ตัดเบิก ${q(x.used, x.base_unit)} − ของเสีย ${q(x.waste, x.base_unit)}
         = คงเหลือตามระบบ <b>${q(x.system, x.base_unit)}</b> · นับจริง <b>${q(x.count, x.base_unit)}</b>${x.diff != null ? ` · ผลต่าง ${sg(x.diff)}${x.diff_pct != null ? ` (${_isrPct(x.diff_pct)})` : ''}` : ''}</div>
       ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลตรวจนับต้นงวดหรือปลายงวด จึงยังเปรียบเทียบไม่ได้</div>' : ''}
