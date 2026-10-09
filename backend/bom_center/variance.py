@@ -77,9 +77,11 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
     return {"receipt_id": rid, "lines": len(clean)}
 
 
-def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
-    """A receipt dated inside a period whose ใบสรุปตัดเบิก Accounting has posted would change numbers it
-    already keyed: refuse until Accounting un-posts it (this also locks claim approvals in that period)."""
+def assert_not_posted(con, branch_id: int, day: str, what: str = "ใบรับสินค้า") -> None:
+    """A document dated inside a period whose ใบสรุปตัดเบิก Accounting has posted would change numbers it
+    already keyed: refuse until Accounting un-posts it. A period is [begin count date, end count date) — the
+    month-end count is taken before trading, so the end date itself belongs to the NEXT period. Used for
+    receipts (this also locks claim approvals in that period) and for confirming / reopening an issue slip."""
     from .stock import periods as _p
     posted = {r[0] for r in con.execute(
         "SELECT end_count_id FROM bc_variance_period WHERE branch_id=? AND accounting_posted_at IS NOT NULL",
@@ -87,9 +89,13 @@ def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
     if not posted:
         return
     for b, e in _p(con, branch_id):
-        if e["count_id"] in posted and b["date"] <= receipt_date < e["date"]:
-            raise ValueError(f"ใบรับสินค้าวันที่ {receipt_date} อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว "
-                             f"({b['date']} ถึง {e['date']}) จึงเพิ่มไม่ได้ กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
+        if e["count_id"] in posted and b["date"] <= day < e["date"]:
+            raise ValueError(f"{what}วันที่ {day} อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว "
+                             f"({b['date']} ถึง {e['date']}) จึงแก้ไขไม่ได้ กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
+
+
+def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
+    assert_not_posted(con, branch_id, receipt_date, "ใบรับสินค้า")
 
 
 def _closed_through(con, branch_id: int):
@@ -376,8 +382,10 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
     except ValueError:
         reasons_done = False
     name = (con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone() or [None])[0]
+    from .issue_reports import slip_coverage             # a warning for Accounting, not a lock
     return {
         "branch": {"branch_id": branch_id, "name": name},
+        "slips": slip_coverage(con, branch_id, d0, d1),
         "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
                    "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days},
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,

@@ -4,8 +4,8 @@
 The promises:
   * a slip is one day, one branch: used (เบิกใช้) and wasted (ของเสีย, with a reason) per item, saved
     as a draft and CONFIRMED once; a slip for a day that is over is accepted but marked late, on the
-    FIRST confirm only; none for a future day, none older than 60 days, none before the latest
-    month-end count;
+    FIRST confirm only; none for a future day, none older than 60 days (a slip before the latest
+    month-end count stays allowed: only Accounting's posting of its period locks it);
   * a confirmed slip is locked; Sales Support reopens it with a reason, the branch edits and confirms
     again, and every create / confirm / reopen / reconfirm is on the record;
   * the system stock = the latest month-end count + goods received − CONFIRMED slips (the count date
@@ -140,13 +140,10 @@ def test_validations(con, day, lines, submit, msg):  # noqa: F811
     assert con.execute("SELECT COUNT(*) FROM bc_issue_line").fetchone()[0] == 0
 
 
-def test_a_slip_cannot_pre_date_the_month_end_count_and_a_confirmed_one_is_locked(con):  # noqa: F811
+def test_a_confirmed_slip_is_locked_and_lines_with_zero_quantity_go(con):  # noqa: F811
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")
     con.commit()
-    with pytest.raises(ValueError, match=r"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกินวันตรวจนับสิ้นเดือนล่าสุด \(2026-10-02\)"):
-        IS.save(con, 1, "2026-10-01", [used()], "udon", now=NOW)
-    con.rollback()
-    assert IS.save(con, 1, "2026-10-02", [used()], "udon", submit=True, now=NOW)["status"] == "confirmed"   # the count date itself is allowed
+    assert IS.save(con, 1, "2026-10-02", [used()], "udon", submit=True, now=NOW)["status"] == "confirmed"
     with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2026-10-02 ยืนยันแล้ว หากต้องแก้ไข กรุณาแจ้งประสานงานขายให้เปิดแก้ไข"):
         IS.save(con, 1, "2026-10-02", [used(qty=1)], "udon", now=NOW)
     # both quantities zero removes a line; a waste line without a reason is refused only when it has waste
@@ -154,6 +151,36 @@ def test_a_slip_cannot_pre_date_the_month_end_count_and_a_confirmed_one_is_locke
     assert d["lines"] == 2
     assert IS.save(con, 1, "2026-10-04", [used(qty=0)], "udon", now=NOW)["lines"] == 1
     assert IS.save(con, 1, "2026-10-04", [used("V-007", 0, note="x")], "udon", now=NOW)["lines"] == 0
+
+
+def test_a_slip_before_the_latest_count_can_be_confirmed_and_reconfirmed_and_belongs_to_its_own_period(con):  # noqa: F811
+    """An error found after the count must be fixable: the slip of 1 Oct (before the 2 Oct end count) is accepted,
+    reopened, edited and confirmed again; the reconciliation of THAT period counts it; the stock now is unchanged."""
+    from bom_center import issue_reports as IR
+    ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-09-01")
+    end = ST.save(con, 1, [{"code": CRAB, "qty": 8, "unit": PACK}], "udon", submit=True, count_date="2026-10-02")["count_id"]
+    con.commit()
+    before = ST.system_position(con, 1, date(2026, 10, 5))["qty"]
+    out = IS.save(con, 1, "2026-10-01", [used(qty=1000)], "udon", submit=True, now=NOW)
+    assert out["status"] == "confirmed" and out["late"] == 1                      # first confirm after the day: late
+    assert ST.system_position(con, 1, date(2026, 10, 5))["qty"] == before          # the count is the basis: stock unchanged
+    assert IR.issued(con, 1, date(2026, 9, 1), date(2026, 10, 2))[CRAB]["used"] == 1000
+    assert IR.reconcile(con, 1, end)["rows"][0]["used"] == 1000
+    sid = out["slip_id"]
+    IS.reopen(con, sid, "ss", "ใส่จำนวนผิด", now=NOW)
+    assert IR.issued(con, 1, date(2026, 9, 1), date(2026, 10, 2)) == {}               # a reopened slip is not issued
+    again = IS.save(con, 1, "2026-10-01", [used(qty=1500)], "udon", submit=True, now=NOW)
+    assert again["status"] == "confirmed" and again["confirm_count"] == 2 and again["late"] == 1
+    assert IR.reconcile(con, 1, end)["rows"][0]["used"] == 1500
+    assert ST.system_position(con, 1, date(2026, 10, 5))["qty"] == before
+    assert [r[0] for r in con.execute("SELECT action FROM bc_issue_log WHERE slip_id=? ORDER BY log_id", (sid,))] ==         ["create", "confirm", "reopen", "save", "reconfirm"]
+    # Accounting's posting is the only lock on that period
+    VA.confirm_receipts(con, 1, end, "udon")
+    VA.set_posted(con, end, True, "accounting1")
+    with pytest.raises(ValueError, match="อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
+        IS.reopen(con, sid, "ss", "อีกครั้ง", now=NOW)
+    with pytest.raises(ValueError, match="อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
+        IS.save(con, 1, "2026-09-30", [used()], "udon", submit=True, now=NOW)
 
 
 # ── 4 · lock → reopen → reconfirm, and the log ───────────────────────────────

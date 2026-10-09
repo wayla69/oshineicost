@@ -38,7 +38,8 @@ function loadOrderHub() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar', 'issues'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  if (k === 'issues') ohbLoadIssues();
   if (k === 'issuevar') ohbLoadIssueVar();
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
@@ -425,6 +426,7 @@ async function ohbLoadComp() {
           <td class="py-1 pr-2 text-right">${r.received != null ? _bmcNum(r.received, 0) : ''} <span style="color:var(--text-muted)">${pct(r.delivery_gap_pct)}</span></td>
           <td class="py-1">${r.order_id ? (r.late ? _bmcChip('ส่งล่าช้า (ค่าปรับ)', 'var(--bad-ink)') : '') + (r.processed_on_time === false ? _bmcChip('ดำเนินการช้า', 'var(--bad-ink)') : '') : ''}</td></tr>`; }).join('') + '</tbody></table></div>'
       : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่ตรวจนับหรือสั่งสินค้าผ่านระบบ รายการจะแสดงเมื่อสาขาเริ่มใช้งาน</span>';
+    if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadComp() { window.location.href = `${API}/api/bom-center/hub/compliance.xlsx?${_ohbCRange()}`; }
@@ -630,6 +632,162 @@ function ohbIvXlsx() {
   const b = document.getElementById('ohbIvBranch').value;
   if (!b) { _bmcStatus('ohbIvStatus', 'กรุณาเลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
   window.location.href = `${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${document.getElementById('ohbIvMonth').value}`;
+}
+
+// ── ใบตัดเบิกสาขา (PR-J4): the branches' daily slips as a log; Sales Support reopens one with a reason ───────
+// The list comes from the lateness log (issue-reports/log): per branch and day, how the slip was handled. A row
+// with a slip opens its detail (lines, history, export, reopen). Accounting reads the same and downloads the file.
+let _ohbIsSt = 'all';
+let _ohbIs = null;            // /api/bom-center/issue-reports/log
+let _ohbIsSlip = null;        // the slip in the detail panel
+const _OHB_IS_ST = [['all', 'ทั้งหมด'], ['on_time', 'ยืนยันตรงวัน'], ['late', 'ล่าช้า'], ['draft', 'ยังไม่ยืนยัน'], ['missing', 'ไม่มีใบ']];
+const _OHB_IS_INK = { on_time: 'var(--good-ink)', late: 'var(--amber-ink)', draft: 'var(--amber-ink)', missing: 'var(--bad-ink)', closed: 'var(--text-muted)' };
+const _OHB_IS_ACT = { create: 'สร้างใบ', save: 'บันทึกหลังเปิดแก้ไข', confirm: 'ยืนยัน', reconfirm: 'ยืนยันซ้ำ', reopen: 'เปิดแก้ไข' };
+function _ohbIsCanReopen() { return hasModule('supply.ordering') || hasModule('bom.center'); }
+function _ohbIsDt(ts) {       // a stored UTC stamp as the branch's clock (Bangkok): d/m HH:MM
+  if (!ts) return '';
+  const d = new Date(ts);
+  return isNaN(d) ? '' : d.toLocaleString('th-TH', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+}
+function ohbIsSetStatus(s) { _ohbIsSt = s; ohbIsRender(); }
+async function ohbLoadIssues() {
+  const sel = document.getElementById('ohbIsBranch');
+  const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value) el.value = v; };
+  const t = new Date();
+  set('ohbIsFrom', _ohbIso(new Date(t.getTime() - 6 * 864e5)));
+  set('ohbIsTo', _ohbIso(t));
+  set('ohbIsMonth', _ohbIso(t).slice(0, 7));
+  document.getElementById('ohbIsDetail').style.display = 'none';
+  const list = document.getElementById('ohbIsList');
+  list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    if (!sel.options.length) {
+      const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
+      sel.innerHTML = '<option value="">ทุกสาขา</option>' + me.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+    }
+    const q = `date_from=${document.getElementById('ohbIsFrom').value}&date_to=${document.getElementById('ohbIsTo').value}${sel.value ? '&branch_id=' + sel.value : ''}`;
+    _ohbIs = await _bmcJson(`${API}/api/bom-center/issue-reports/log?${q}`);
+    ohbIsRender();
+  } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function ohbIsSummaryTable(rows) {
+  if (!rows.length) return '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่เริ่มทำใบตัดเบิกในช่วงนี้</span>';
+  const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
+  const pct = v => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)}%`;
+  const n = (v, ink) => v ? `<b style="color:${ink}">${v}</b>` : '<span style="color:var(--text-muted)">0</span>';
+  return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      ${th('สาขา')}${th('วันขาย', 1)}${th('ยืนยันตรงวัน', 1)}${th('ล่าช้า', 1)}${th('ยังไม่ยืนยัน', 1)}${th('ไม่มีใบ', 1)}${th('ตรงวัน %', 1)}${th('มีใบ %', 1)}${th('เปิดแก้ไข', 1)}${th('ยืนยันซ้ำ', 1)}${th('ใบสั่งซื้อล่าช้า', 1)}${th('เคลม', 1)}</tr></thead><tbody>` +
+    rows.map(s => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch || '')}</td>
+      <td class="py-1 pr-2 text-right">${s.trading_days}</td><td class="py-1 pr-2 text-right">${n(s.on_time, 'var(--good-ink)')}</td><td class="py-1 pr-2 text-right">${n(s.late, 'var(--amber-ink)')}</td>
+      <td class="py-1 pr-2 text-right">${n(s.draft, 'var(--amber-ink)')}</td><td class="py-1 pr-2 text-right">${n(s.missing, 'var(--bad-ink)')}</td>
+      <td class="py-1 pr-2 text-right">${pct(s.on_time_pct)}</td><td class="py-1 pr-2 text-right">${pct(s.coverage_pct)}</td>
+      <td class="py-1 pr-2 text-right">${s.reopens || 0}</td><td class="py-1 pr-2 text-right">${s.reconfirms || 0}</td>
+      <td class="py-1 pr-2 text-right">${n(s.late_orders, 'var(--amber-ink)')}</td><td class="py-1 pr-2 text-right">${s.claims || 0}</td></tr>`).join('') +
+    `</tbody></table></div><div class="text-[11px] mt-2" style="color:var(--text-muted)">ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย · นับเฉพาะวันที่สาขามียอดขายและตั้งแต่วันที่สาขาเริ่มใช้งาน</div>`;
+}
+function ohbIsRender() {
+  const d = _ohbIs;
+  if (!d) return;
+  const count = k => k === 'all' ? d.rows.length : d.rows.filter(r => r.status === k).length;
+  document.getElementById('ohbIsChips').innerHTML = _OHB_IS_ST.map(([k, t]) => {
+    const on = k === _ohbIsSt;
+    return `<button onclick="ohbIsSetStatus('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t} ${count(k)}</button>`;
+  }).join('');
+  const rows = d.rows.filter(r => _ohbIsSt === 'all' || r.status === _ohbIsSt);
+  const box = document.getElementById('ohbIsList');
+  if (!rows.length) { box.innerHTML = '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีรายการในสถานะนี้ในช่วงวันที่เลือก</span>'; }
+  else {
+    let day = null, html = '';
+    rows.forEach(r => {
+      if (r.date !== day) { day = r.date; html += `<div class="text-xs font-semibold" style="color:var(--text-primary);margin-top:10px">วัน${esc(r.weekday_th)}ที่ ${_isrDm(r.date)}</div>`; }
+      const chips = [r.reopens ? _bmcChip(`เปิดแก้ไข ${r.reopens} ครั้ง`, 'var(--navy-ink)') : '', r.reconfirms ? _bmcChip(`ยืนยันซ้ำ ${r.reconfirms} ครั้ง`, 'var(--text-muted)') : '',
+        r.late_orders ? _bmcChip(`ใบสั่งซื้อส่งล่าช้า ${r.late_orders} ใบ`, 'var(--amber-ink)') : '', r.claims ? _bmcChip(`เคลม ${r.claims} เรื่อง`, 'var(--text-muted)') : ''].filter(Boolean).join(' ');
+      const conf = r.confirmed_at ? `ยืนยัน ${esc(r.confirmed_at.slice(r.confirmed_at.slice(0, 10) === r.date ? 11 : 5))} โดย ${esc(r.confirmed_by || '-')}` : esc(r.status_note || '');
+      html += `<div style="border-top:1px solid var(--border);padding:5px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
+          <b style="min-width:120px">${esc(r.branch || '')}</b>${_bmcChip(r.status_th, _OHB_IS_INK[r.status] || 'var(--text-muted)')}
+          <span style="color:var(--text-secondary)">${conf}</span>${chips}
+          ${r.slip_id ? `<a href="#" onclick="ohbIsOpen(${r.slip_id});return false" style="color:var(--accent);margin-left:auto">ดูใบตัดเบิก${r.lines ? ` (${r.lines} รายการ)` : ''}</a>` : ''}</div>`;
+    });
+    box.innerHTML = html;
+  }
+  document.getElementById('ohbIsSummary').innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สรุปต่อสาขา ${esc(_isrDm(d.from))}–${esc(_isrDm(d.to))}</div>${ohbIsSummaryTable(d.summary)}`;
+}
+async function ohbIsOpen(id) {
+  const box = document.getElementById('ohbIsDetail');
+  box.style.display = '';
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    _ohbIsSlip = await _bmcJson(`${API}/api/bom-center/issues/${id}`);
+    ohbIsRenderSlip();
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function ohbIsRenderSlip() {
+  const s = _ohbIsSlip;
+  const key = s.status_key, conf = key === 'confirmed' || key === 'late';
+  const ink = { confirmed: 'var(--good-ink)', late: 'var(--amber-ink)', draft: 'var(--amber-ink)' }[key] || 'var(--text-muted)';
+  const q = (v, u) => v ? `${_bmcNum(v, 3)} ${esc(u || '')}` : '<span style="color:var(--text-muted)">—</span>';
+  const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
+  document.getElementById('ohbIsDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">ใบตัดเบิก ${esc(s.branch || '')} · วันที่ ${_isrDm(s.date)} · เลขที่ใบ ${s.slip_id} ${_bmcChip(s.status_th, ink)}</div>
+      <div>${conf ? `<a href="${API}/api/bom-center/issues/export/${s.slip_id}.xlsx" style="color:var(--accent);font-size:12px;margin-right:12px">ดาวน์โหลดใบนี้ (Excel)</a>` : ''}${_ohbBtn('ปิด', "document.getElementById('ohbIsDetail').style.display='none'")}</div></div>
+    <div class="text-xs mt-1" style="color:var(--text-secondary)">${conf ? `ยืนยันเมื่อ ${esc(_ohbIsDt(s.confirmed_at))} โดย ${esc(s.confirmed_by || '-')}` : 'ยังไม่ยืนยัน'}${s.reopen_note ? ` · เปิดแก้ไขล่าสุดโดย ${esc(s.reopened_by || '-')}: ${esc(s.reopen_note)}` : ''}</div>
+    <div id="ohbIsResult" class="text-xs mt-1"></div>
+    <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">เบิกใช้</th><th class="py-1 pr-2 text-right">ของเสีย</th><th class="py-1">สาเหตุของเสีย</th></tr></thead><tbody>
+      ${s.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
+        <td class="py-1 pr-2 text-right">${l.qty_used ? _bmcNum(l.qty_used, 3) + ' ' + esc(l.unit || '') : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td class="py-1 pr-2 text-right">${l.qty_waste ? _bmcNum(l.qty_waste, 3) + ' ' + esc(l.unit || '') : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td class="py-1">${l.waste_reason_th ? esc(l.waste_reason_th) + (l.note ? ' · ' + esc(l.note) : '') : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="py-2" style="color:var(--text-muted)">ไม่มีรายการ</td></tr>'}</tbody></table></div>
+    <div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">ประวัติของใบ</div>
+    ${s.log.map(h => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0;color:var(--text-secondary)">${esc(_ohbIsDt(h.at))} · ${esc(_OHB_IS_ACT[h.action] || h.action)} · ${esc(h.who || '-')}${h.action === 'confirm' && h.late ? ' · ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${h.lines != null ? ` · ${h.lines} รายการ` : ''}${h.note ? ' · เหตุผล: ' + esc(h.note) : ''}</div>`).join('')}
+    ${conf && _ohbIsCanReopen() ? `<textarea id="ohbIsReopenNote" rows="2" placeholder="เหตุผลที่เปิดแก้ไข (จำเป็น)" style="width:100%;margin-top:10px;padding:8px;font-size:13px;${field}"></textarea>
+      <div class="flex flex-wrap items-center gap-2 mt-2">${_ohbBtn('เปิดให้สาขาแก้ไข', 'ohbIsReopen()', true)}<span id="ohbIsReopenStatus" class="text-xs"></span></div>
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">ใบจะกลับเป็นฉบับร่างและไม่นับในรายงานจนกว่าสาขาจะยืนยันใหม่ · ใบที่อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว เปิดแก้ไขไม่ได้</div>`
+      : (conf ? '<div class="text-[11px] mt-2" style="color:var(--text-muted)">ประสานงานขายเป็นผู้เปิดแก้ไขใบที่ยืนยันแล้ว</div>' : '')}`;
+}
+async function ohbIsReopen() {
+  const s = _ohbIsSlip;
+  if (!s) return;
+  const note = (document.getElementById('ohbIsReopenNote').value || '').trim();
+  if (!note) { _bmcStatus('ohbIsReopenStatus', 'กรุณาระบุเหตุผลที่เปิดแก้ไข', 'var(--amber-ink)'); return; }
+  if (!await uiConfirm(`เปิดใบตัดเบิก ${s.branch || ''} วันที่ ${_isrDm(s.date)} ให้สาขาแก้ไข?\nใบจะกลับเป็นฉบับร่างและไม่นับในรายงานจนกว่าสาขาจะยืนยันใหม่`)) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/issues/reopen`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slip_id: s.slip_id, note }) });
+    await ohbIsOpen(s.slip_id);
+    _bmcStatus('ohbIsResult', '✓ เปิดแก้ไขใบตัดเบิกแล้ว สาขาแก้ไขและยืนยันใหม่ได้', 'var(--good-ink)');
+    ohbLoadIssues();
+  } catch (e) { _bmcStatus('ohbIsReopenStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+}
+// a download that reports the server's reason (no confirmed slip in that month …) instead of opening a JSON page
+async function _ohbIsDownload(url, name, statusId) {
+  statusId = statusId || 'ohbIsStatus';
+  _bmcStatus(statusId, 'กำลังจัดทำไฟล์…');
+  try {
+    const r = await fetch(url);
+    if (!r.ok) {
+      let m = '';
+      try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : ''; } catch (e) { /* not json */ }
+      throw new Error(m || 'ดาวน์โหลดไม่สำเร็จ');
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    _bmcStatus(statusId, '✓ ดาวน์โหลดแล้ว', 'var(--good-ink)');
+  } catch (e) { _bmcStatus(statusId, String(e.message || e).slice(0, 220), 'var(--amber-ink)'); }
+}
+function ohbIsXlsx() {
+  const m = document.getElementById('ohbIsMonth').value, b = document.getElementById('ohbIsBranch').value;
+  if (!m) { _bmcStatus('ohbIsStatus', 'กรุณาเลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_slips_${m}.xlsx`);
+}
+function ohbIsLogXlsx() {
+  const m = document.getElementById('ohbIsMonth').value, b = document.getElementById('ohbIsBranch').value;
+  if (!m) { _bmcStatus('ohbIsStatus', 'กรุณาเลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  _ohbIsDownload(`${API}/api/bom-center/issue-reports/log.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_log_${m}.xlsx`);
 }
 
 // ── เคลมสินค้า (owner 2026-10-08, 2026-10-09): Sales Support decides; the photos arrive by LINE ───────────

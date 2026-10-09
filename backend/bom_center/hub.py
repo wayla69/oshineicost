@@ -264,7 +264,9 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None) -> dict
     for r in rows:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     rows.sort(key=lambda r: (r["cycle_date"], r["branch"] or "", r["round"]))
-    return {"from": date_from, "to": date_to, "rows": rows, "counts": counts, "tolerance_pct": TOL_PCT}
+    from .issue_reports import log as _slip_log          # the daily issue slips beside the orders (PR-J4)
+    issues = _slip_log(con, d0, d1, branch_id, today)["summary"]
+    return {"from": date_from, "to": date_to, "rows": rows, "counts": counts, "tolerance_pct": TOL_PCT, "issues": issues}
 
 
 def _cycle(con, bid, bname, rnd, cyc, today) -> dict:

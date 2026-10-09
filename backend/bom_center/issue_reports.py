@@ -4,6 +4,9 @@
   reconcile()  month-end:  system stock (from the slips)  vs  the physical count   (R1)
   daily()      every day:  what the branch issued (cost)  vs  the BoM of what it sold (R2)
   anomalies()  the branches whose class-A items run over the BoM for days in a row
+  log()        PR-J4 (R3): per branch and day, how the slip was handled — on time, late, reopened, reconfirmed —
+               with the late purchase orders and the claims beside it; log_monthly() is one month of it
+  slip_rows()  PR-J4 (R4): the confirmed slips as priced lines, for the Excel Accounting posts from
 
 Rules (shared with issues.py):
   * "issued" is CONFIRMED slips only — a draft is not an issue;
@@ -21,7 +24,7 @@ from datetime import date, datetime, timedelta, timezone
 from . import forecast as FC
 from . import issues as IS
 from . import variance as VA
-from .clock import now_bkk
+from .clock import BKK, now_bkk
 
 OVER_PCT = 20.0            # a class-A item issued more than this % over its BoM that day is "over"
 STREAK_DAYS = 3            # … and that many trading days in a row is a flag
@@ -29,6 +32,8 @@ SLIP_STATUS_TH = {"on_time": "ยืนยันตรงวัน", "late": "�
                   "closed": "ไม่มียอดขาย"}
 RECON_STATUS_TH = {"ok": "ตรงกัน (ในเกณฑ์)", "over": "นับได้มากกว่าระบบ", "under": "นับได้น้อยกว่าระบบ",
                    "not_counted": "ตรวจนับไม่ครบ"}
+SLIP_NOTE_TH = {"on_time": "", "late": "ยืนยันหลังวันที่ของใบ", "draft": "มีร่างแล้ว ยังไม่ยืนยัน",
+                "missing": "ยังไม่มีใบตัดเบิก", "closed": "ไม่มียอดขายและไม่มีใบตัดเบิก"}
 SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เบิกเกินต่อเนื่อง"}
 _EPS = 1e-6
 
@@ -479,4 +484,166 @@ def anomalies(con, as_of, lookback: int = 7, today: date = None, commit: bool = 
                         "max_pct": max(f["max_pct"] for f in s["flags"]),
                         "items": [f["name"] for f in s["flags"]]})
     out.sort(key=lambda x: (-x["max_pct"], x["branch_id"]))
+    return out
+
+
+# ── R3 · the lateness log ────────────────────────────────────────────────────
+def _bkk(ts):
+    """A stored UTC ISO timestamp as Bangkok time -> (date, 'YYYY-MM-DD HH:MM', 'HH:MM'); (None, None, None) if empty."""
+    if not ts:
+        return None, None, None
+    try:
+        t = datetime.fromisoformat(str(ts))
+    except ValueError:
+        return None, None, None
+    t = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(BKK)
+    return t.date(), t.strftime("%Y-%m-%d %H:%M"), t.strftime("%H:%M")
+
+
+def _started(con, branch_id: int):
+    """The first day the branch is held to the slip: its first submitted month-end count or its first slip."""
+    r = con.execute("SELECT MIN(d) FROM (SELECT MIN(count_date) AS d FROM bc_stock_count WHERE branch_id=?"
+                    " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
+                    " UNION ALL SELECT MIN(slip_date) FROM bc_issue_slip WHERE branch_id=?)", (branch_id, branch_id)).fetchone()
+    return r[0] if r else None
+
+
+def log(con, d0, d1, branch_id: int = None, today: date = None) -> dict:
+    """R3: for every branch and every day from d0 to d1 (clipped at today) on which it traded or has a slip —
+    the slip's state (on_time / late / draft / missing, or closed = no sales and no slip but something else
+    happened), when and by whom it was confirmed, how often it was confirmed again or reopened (with the
+    reasons), the purchase orders of that cutoff day sent late, and the claims raised. Days before the branch
+    started (its first month-end count or slip) are not held against it, and today without a slip is left
+    open. `summary` is one line per branch:  on_time_pct = on_time ÷ confirmed slips (the pilot's
+    'confirmed within the day'),  coverage_pct = confirmed slips ÷ trading days (the pilot's coverage)."""
+    a, b = _d(d0), _d(d1)
+    today = today or now_bkk().date()
+    last = min(b, today)
+    if branch_id is not None:
+        ids = [int(branch_id)]
+    else:
+        ids = sorted({r[0] for r in con.execute("SELECT branch_id FROM bc_stock_count UNION SELECT branch_id FROM bc_order"
+                                                 " UNION SELECT branch_id FROM bc_issue_slip")})
+    names = dict(con.execute("SELECT branch_id, name FROM branches"))
+    lo, hi = a.isoformat(), b.isoformat()
+    reopens = {}
+    q = ("SELECT branch_id, slip_date, at, who, note FROM bc_issue_log WHERE action='reopen' AND slip_date BETWEEN ? AND ?"
+         + (" AND branch_id=?" if branch_id is not None else "") + " ORDER BY log_id")
+    for bid, day, at, who, note in con.execute(q, (lo, hi) + ((int(branch_id),) if branch_id is not None else ())):
+        reopens.setdefault((bid, day), []).append({"at": _bkk(at)[1], "who": who, "note": note})
+    late_orders = {}
+    for bid, day, n in con.execute(
+            "SELECT branch_id, cycle_date, COUNT(*) FROM bc_order WHERE COALESCE(late,0)=1 AND status<>'cancelled'"
+            " AND cycle_date BETWEEN ? AND ? GROUP BY branch_id, cycle_date", (lo, hi)):
+        late_orders[(bid, day)] = n
+    claims = {}
+    for bid, ts in con.execute("SELECT branch_id, created_at FROM bc_claim WHERE status<>'cancelled'"):
+        day = _bkk(ts)[0]
+        if day and a <= day <= b:
+            claims[(bid, day.isoformat())] = claims.get((bid, day.isoformat()), 0) + 1
+    rows, summary = [], []
+    for bid in ids:
+        start = _started(con, bid)
+        trading = set(_trading_days(con, bid, a, b)) if last >= a else set()
+        st = {s["date"]: s for s in IS.status_days(con, bid, a, last)} if last >= a else {}
+        confirms = {day: cc for day, cc in con.execute(
+            "SELECT slip_date, confirm_count FROM bc_issue_slip WHERE branch_id=? AND slip_date BETWEEN ? AND ?",
+            (bid, lo, hi))}
+        cnt = {"trading_days": 0, "on_time": 0, "late": 0, "draft": 0, "missing": 0, "reopens": 0, "reconfirms": 0,
+               "late_orders": 0, "claims": 0}
+        had = False
+        days = set(st) | {k[1] for k in late_orders if k[0] == bid} | {k[1] for k in claims if k[0] == bid}
+        for day in sorted(days):
+            s = st.get(day) or IS.status_of(con, bid, day)
+            have_slip = s["status"] != "missing"
+            is_trading = day in trading
+            ro = reopens.get((bid, day), [])
+            lo_n, cl_n = late_orders.get((bid, day), 0), claims.get((bid, day), 0)
+            if start and day < start and not have_slip:
+                continue                                       # before the branch began: not held against it
+            if not have_slip and not is_trading and not (ro or lo_n or cl_n):
+                continue
+            if not have_slip and is_trading and day >= today.isoformat():
+                continue                                       # today is still open
+            key = _slip_key(s) if (have_slip or is_trading) else "closed"
+            ct = confirms.get(day, 0) if have_slip else 0
+            conf_at, conf_hm = _bkk(s["confirmed_at"])[1:] if IS.is_confirmed(s) else (None, None)
+            row = {"date": day, "weekday_th": FC.WD_TH[FC._wd(date.fromisoformat(day))], "branch_id": bid,
+                   "branch": names.get(bid), "trading": is_trading, "status": key, "status_th": SLIP_STATUS_TH[key],
+                   "slip_id": s["slip_id"], "lines": s["lines"], "late": int(s["late"] or 0), "confirmed_at": conf_at,
+                   "confirmed_time": conf_hm, "confirmed_by": s["confirmed_by"] if conf_at else None,
+                   "reconfirms": max(int(ct or 0) - 1, 0), "reopens": len(ro), "reopen_notes": ro,
+                   "late_orders": lo_n, "claims": cl_n, "status_note": SLIP_NOTE_TH[key],
+                   "note": "; ".join(f"{x['at']} {x['who'] or '-'}: {x['note']}" for x in ro) or None}
+            rows.append(row)
+            had = True
+            cnt["reopens"] += row["reopens"]
+            cnt["reconfirms"] += row["reconfirms"]
+            cnt["late_orders"] += lo_n
+            cnt["claims"] += cl_n
+            if is_trading and key in ("on_time", "late", "draft", "missing"):
+                cnt["trading_days"] += 1
+                cnt[key] += 1
+        if had or branch_id is not None:
+            ok = cnt["on_time"] + cnt["late"]
+            summary.append({"branch_id": bid, "branch": names.get(bid), **cnt,
+                            "on_time_pct": round(100.0 * cnt["on_time"] / ok, 1) if ok else None,
+                            "coverage_pct": round(100.0 * ok / cnt["trading_days"], 1) if cnt["trading_days"] else None})
+    rows.sort(key=lambda r: (r["date"], r["branch"] or ""), reverse=True)
+    summary.sort(key=lambda r: r["branch"] or "")
+    tot = {k: sum(s[k] for s in summary) for k in ("trading_days", "on_time", "late", "draft", "missing", "reopens",
+                                                   "reconfirms", "late_orders", "claims")}
+    return {"from": lo, "to": hi, "branch_id": branch_id, "rows": rows, "summary": summary, "totals": tot,
+            "status_th": SLIP_STATUS_TH}
+
+
+def log_monthly(con, month: str, branch_id: int = None, today: date = None) -> dict:
+    first, last = _month_bounds(month)
+    out = log(con, first, last, branch_id, today)
+    out["month"] = month
+    return out
+
+
+# ── R4 · the confirmed slips as lines, for Accounting's program ──────────────
+def slip_rows(con, month: str = None, branch_id: int = None, slip_id: int = None, d0=None, d1=None) -> list:
+    """One row per line of every CONFIRMED slip — of a month, of a date range, of one branch, or of one slip —
+    in base units, priced at the purchase price of the slip's own month. Sorted by date, branch, code."""
+    from .prices import price_for
+    sql = ("SELECT s.slip_id, s.slip_date, s.branch_id, b.name, s.confirmed_at, s.confirmed_by, s.late, l.ingredient_code,"
+           " l.qty_used_base, l.qty_waste_base, l.waste_reason, l.note FROM bc_issue_line l"
+           " JOIN bc_issue_slip s USING(slip_id) LEFT JOIN branches b ON b.branch_id=s.branch_id"
+           " WHERE s.status='confirmed'")
+    args = []
+    if slip_id is not None:
+        sql += " AND s.slip_id=?"
+        args.append(int(slip_id))
+    else:
+        if month:
+            d0, d1 = _month_bounds(month)
+        if d0 is not None:
+            sql += " AND s.slip_date>=?"
+            args.append(_d(d0).isoformat())
+        if d1 is not None:
+            sql += " AND s.slip_date<=?"
+            args.append(_d(d1).isoformat())
+    if branch_id is not None:
+        sql += " AND s.branch_id=?"
+        args.append(int(branch_id))
+    names = _names(con)
+    cache, out = {}, []
+    for sid, day, bid, bname, conf, by, late, code, ub, wb, rs, nt in con.execute(
+            sql + " ORDER BY s.slip_date, b.name, s.slip_id, l.ingredient_code", args):
+        m = day[:7]
+        if (code, m) not in cache:
+            pr = price_for(con, code, m)
+            cache[(code, m)] = pr[0] if pr else None
+        p = cache[(code, m)]
+        used, waste = ub or 0.0, wb or 0.0
+        n, u = names.get(code) or (code, None)
+        out.append({"date": day, "slip_id": sid, "branch_id": bid, "branch": bname, "code": code, "name": n, "base_unit": u,
+                    "qty_used": round(used, 3), "qty_waste": round(waste, 3), "waste_reason": rs,
+                    "waste_reason_th": IS.WASTE_REASON_TH.get(rs) if rs else None, "note": nt, "unit_price": p,
+                    "used_value": _round(used * p) if p is not None else None,
+                    "waste_value": _round(waste * p) if p is not None else None,
+                    "confirmed_at": _bkk(conf)[1], "confirmed_by": by, "late": int(late or 0), "month": m})
     return out

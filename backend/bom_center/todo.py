@@ -282,7 +282,24 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       ("ยังไม่ยืนยัน: " + " · ".join(open_y)) if open_y else "ทุกสาขาที่เริ่มใช้งานแล้วยืนยันใบตัดเบิกของเมื่อวานแล้ว",
                       count=len(open_y) or None, owner=("supply.ordering", "ops.report"),
                       owner_th="ประสานงานขาย (Sales Support)", urgent=bool(open_y), branch_names=open_y,
-                      go={"tab": "orderhub", "pane": "queue"}))
+                      go={"tab": "orderhub", "pane": "issues", "extra": {"day": (today - timedelta(days=1)).isoformat()}}))
+        # ใบตัดเบิก vs BoM: a branch issuing far over the recipes day after day (waste or loss) — Ops follows it up
+        odd = []
+        try:
+            from .issue_reports import OVER_PCT, STREAK_DAYS, anomalies
+            odd = anomalies(con, today - timedelta(days=1), 7, today=today)
+        except Exception:                                    # the list must open even if the report cannot be built
+            odd = []
+        shown = " · ".join(f"{a['branch']} ({', '.join(a['items'][:3])})" for a in odd)
+        out.append(_e("issue_anomaly", 229, "week", "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน",
+                      "todo" if odd else "done",
+                      (f"เบิกเกิน BoM มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}") if odd
+                      else "ไม่พบการเบิกเกินสูตรติดต่อกันใน 7 วันล่าสุด",
+                      count=len(odd) or None, owner=("supply.ordering", "ops.report"),
+                      owner_th="ประสานงานขาย / Ops", urgent=bool(odd), branch_names=[a["branch"] for a in odd],
+                      anomalies=[{"branch_id": a["branch_id"], "branch": a["branch"], "items": a["items"][:3],
+                                  "max_pct": a["max_pct"]} for a in odd],
+                      go={"tab": "orderhub", "pane": "issuevar", **({"branch": odd[0]["branch_id"]} if odd else {})}))
     for b in branches:
         bid = b["branch_id"]
         info = slips[bid]

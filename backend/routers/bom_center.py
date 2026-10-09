@@ -1715,6 +1715,101 @@ def bc_issues_list(request: Request, branch_id: Optional[int] = Query(None), dat
         return {"slips": rows, "statuses": [{"code": c, "label": t} for c, t in _is.STATUS_TH.items()]}
 
 
+# The confirmed slips as an Excel file, for Accounting's program (declared before /issues/{slip_id}).
+SLIP_EXPORT_HEADERS = ["วันที่", "สาขา", "รหัส", "วัตถุดิบ", "หน่วย", "เบิกใช้", "ของเสีย", "สาเหตุของเสีย", "ราคาต่อหน่วย",
+                       "มูลค่าเบิกใช้", "มูลค่าของเสีย", "เลขที่ใบ", "ยืนยันเมื่อ", "ล่าช้า"]
+SLIP_SUMMARY_HEADERS = ["สาขา", "จำนวนใบ", "ใบที่ยืนยันล่าช้า", "จำนวนรายการ", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "มูลค่ารวม"]
+
+
+def _slip_lines_sheet(ws, title: str, rows: list, note: str) -> None:
+    """One row per slip line (confirmed slips only) — a clean table: no totals row, so a program can read it."""
+    _sheet(ws, title, SLIP_EXPORT_HEADERS, note)
+    for r in rows:
+        reason = None
+        if r["qty_waste"] and r["waste_reason_th"]:
+            reason = r["waste_reason_th"] + (f" — {r['note']}" if r["note"] else "")
+        ws.append([r["date"], r["branch"], r["code"], r["name"], r["base_unit"], r["qty_used"], r["qty_waste"], reason,
+                   r["unit_price"], r["used_value"], r["waste_value"], r["slip_id"], r["confirmed_at"],
+                   "ล่าช้า" if r["late"] else ""])
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[5:7]:
+            c.number_format = "#,##0.###"
+        row[8].number_format = "#,##0.0000"
+        row[9].number_format = "#,##0.00"
+        row[10].number_format = "#,##0.00"
+    ws.column_dimensions["D"].width = 44
+    ws.column_dimensions["H"].width = 30
+    ws.freeze_panes = "C3"
+
+
+def _slip_summary_sheet(ws, title: str, rows: list, note: str) -> None:
+    from openpyxl.styles import Font
+    _sheet(ws, title, SLIP_SUMMARY_HEADERS, note)
+    per = {}
+    for r in rows:
+        b = per.setdefault(r["branch"] or "-", {"slips": set(), "late": set(), "lines": 0, "used": 0.0, "waste": 0.0})
+        b["slips"].add(r["slip_id"])
+        if r["late"]:
+            b["late"].add(r["slip_id"])
+        b["lines"] += 1
+        b["used"] += r["used_value"] or 0.0
+        b["waste"] += r["waste_value"] or 0.0
+    tot = [0, 0, 0, 0.0, 0.0]
+    for name in sorted(per):
+        b = per[name]
+        vals = [len(b["slips"]), len(b["late"]), b["lines"], round(b["used"], 2), round(b["waste"], 2)]
+        ws.append([name] + vals + [round(b["used"] + b["waste"], 2)])
+        tot = [x + y for x, y in zip(tot, vals)]
+    ws.append(["รวม"] + [round(x, 2) if isinstance(x, float) else x for x in tot] + [round(tot[3] + tot[4], 2)])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[4:7]:
+            c.number_format = "#,##0.00"
+    ws.column_dimensions["A"].width = 28
+
+
+@router.get("/api/bom-center/issues/export.xlsx")
+def bc_issues_export(request: Request, month: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
+    """The confirmed slips of a month (one branch, or every branch for the centre / Accounting), priced at the
+    purchase price of each slip's month. Drafts are never in it."""
+    from openpyxl import Workbook
+    month = _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        rows = _ir.slip_rows(con, month=month, branch_id=bid)
+    if not rows:
+        raise HTTPException(400, f"ยังไม่มีใบตัดเบิกที่ยืนยันแล้วในเดือน {month}")
+    who = f"สาขา{rows[0]['branch']}" if bid is not None else "ทุกสาขา"
+    note = (f"ใบตัดเบิกที่ยืนยันแล้ว {who} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
+            "ไม่รวมใบที่ยังเป็นร่างหรือที่เปิดแก้ไขอยู่ · “ล่าช้า” = ใบที่ยืนยันหลังวันที่ของใบ")
+    wb = Workbook()
+    _slip_lines_sheet(wb.active, "ใบตัดเบิกที่ยืนยัน", rows, note)
+    _slip_summary_sheet(wb.create_sheet(), "สรุปต่อสาขา", rows, note)
+    return _xlsx(wb, f"bom_center_issue_slips_{'b%d_' % bid if bid is not None else ''}{month}.xlsx")
+
+
+@router.get("/api/bom-center/issues/export/{slip_id}.xlsx")
+def bc_issue_export_one(slip_id: int, request: Request):
+    """One confirmed slip as an Excel file."""
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        head = _is._row_by_id(con, slip_id)
+        if not head:
+            raise HTTPException(404, "ไม่พบใบตัดเบิก")
+        _stock_branch(con, request, head["branch_id"])
+        if head["status"] != "confirmed":
+            raise HTTPException(400, "ใบตัดเบิกนี้ยังไม่ยืนยัน จึงยังส่งออกไม่ได้")
+        rows = _ir.slip_rows(con, slip_id=slip_id)
+    wb = Workbook()
+    _slip_lines_sheet(wb.active, "ใบตัดเบิก", rows,
+                      f"ใบตัดเบิก สาขา{rows[0]['branch'] if rows else ''} วันที่ {head['slip_date']} เลขที่ใบ {slip_id} · "
+                      f"ยืนยันโดย {head['confirmed_by'] or '-'}")
+    return _xlsx(wb, f"bom_center_issue_slip_{slip_id}_{head['slip_date']}.xlsx")
+
+
 @router.get("/api/bom-center/issues/{slip_id}")
 def bc_issue_detail(slip_id: int, request: Request):
     with get_db() as con:
@@ -1870,6 +1965,20 @@ def _issue_sheet(ws, title: str, s: dict) -> None:
     ws.freeze_panes = "A3"
 
 
+def _period_slip_rows(con, bid: int, s: dict) -> list:
+    """The confirmed slips dated inside a ใบสรุปตัดเบิก period [begin, end) — the end day belongs to the next period."""
+    p = s["period"]
+    last = date.fromisoformat(p["end_date"]) - timedelta(days=1)
+    return _ir.slip_rows(con, branch_id=bid, d0=p["begin_date"], d1=last)
+
+
+def _period_slip_note(s: dict, recon: dict) -> str:
+    p, sl = s["period"], recon["slips"]
+    return (f"ใบตัดเบิกรายวันที่ยืนยันแล้ว สาขา{s['branch']['name']} งวด {p['begin_date']} ถึง {p['end_date']} (เดือน {p['month']}) · "
+            f"ใบตัดเบิกยืนยันแล้ว {sl['confirmed_days']}/{sl['trading_days']} วันขาย · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
+            "ไม่รวมใบที่ยังเป็นร่าง")
+
+
 def _issue_or_400(con, bid: int, end_count_id: int) -> dict:
     try:
         s = _va.issue_summary(con, bid, end_count_id)
@@ -1910,14 +2019,19 @@ def bc_issue_summary_xlsx(request: Request, end_count_id: int = Query(...), bran
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         s = _issue_or_400(con, bid, end_count_id)
+        slips = _period_slip_rows(con, bid, s)
+        recon = _ir.reconcile(con, bid, end_count_id)
     wb = Workbook()
-    _issue_sheet(wb.active, _sheet_title(f"ตัดเบิก {s['branch']['name']}", set()), s)
+    # three sheets (PR-J4): the daily slips of the period · system stock vs the count · the movement summary (PR-F)
+    _slip_lines_sheet(wb.active, "ใบตัดเบิกรายวัน", slips, _period_slip_note(s, recon))
+    _recon_sheet(wb.create_sheet(), "กระทบยอด", recon)
+    _issue_sheet(wb.create_sheet(), "สรุปเคลื่อนไหว", s)
     return _xlsx(wb, f"bom_center_issue_summary_b{bid}_{s['period']['month']}.xlsx")
 
 
 @router.get("/api/bom-center/issue-summary-all.xlsx")
 def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
-    """One workbook for the month: a summary sheet and one sheet per branch period that is confirmed."""
+    """One workbook for the month: a summary sheet, the daily slips, and per confirmed branch period its movement and reconciliation sheets."""
     from openpyxl import Workbook
     _month_or_400(month)
     if _auth.scope_branch(request):
@@ -1931,6 +2045,8 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
                     jobs.append((b, p))
         done = {p["end_count_id"]: _va.issue_summary(con, b["branch_id"], p["end_count_id"])
                 for b, p in jobs if p["receipts_confirmed"]}
+        slips = {k: _period_slip_rows(con, s["branch"]["branch_id"], s) for k, s in done.items()}
+        recons = {k: _ir.reconcile(con, s["branch"]["branch_id"], k) for k, s in done.items()}
     if not done:
         raise HTTPException(400, f"ยังไม่มีรอบที่ยืนยันรับสินค้าครบในเดือน {month}")
     wb = Workbook()
@@ -1956,8 +2072,14 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
             c.number_format = "#,##0.00"
     ws.column_dimensions["A"].width = 28
     ws.column_dimensions["I"].width = 40
+    # PR-J4: the daily slips of every confirmed period, then per branch its movement sheet and its reconciliation
+    all_slips = [r for s in sheets for r in slips[s["period"]["end_count_id"]]]
+    _slip_lines_sheet(wb.create_sheet(), _sheet_title("ใบตัดเบิกรายวัน", used), all_slips,
+                      f"ใบตัดเบิกรายวันที่ยืนยันแล้วของทุกสาขาในงวดที่ยืนยันรับสินค้าครบ เดือน {month} · ไม่รวมใบที่ยังเป็นร่าง")
     for s in sheets:
-        _issue_sheet(wb.create_sheet(), _sheet_title(s["branch"]["name"], used), s)
+        name = s["branch"]["name"]
+        _issue_sheet(wb.create_sheet(), _sheet_title(name, used), s)
+        _recon_sheet(wb.create_sheet(), _sheet_title(f"กระทบยอด {name}", used), recons[s["period"]["end_count_id"]])
     return _xlsx(wb, f"bom_center_issue_summary_all_{month}.xlsx")
 
 
@@ -2001,15 +2123,20 @@ def bc_ir_reconcile(request: Request, end_count_id: int = Query(...), branch_id:
 @router.get("/api/bom-center/issue-reports/reconcile.xlsx")
 def bc_ir_reconcile_xlsx(request: Request, end_count_id: int = Query(...), branch_id: Optional[int] = Query(None)):
     from openpyxl import Workbook
-    from openpyxl.styles import Font
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         r = _recon_or_404(con, bid, end_count_id)
-    p, sl = r["period"], r["slips"]
     wb = Workbook()
-    ws = wb.active
-    _sheet(ws, "กระทบยอด", RECON_HEADERS,
+    _recon_sheet(wb.active, "กระทบยอด", r)
+    return _xlsx(wb, f"bom_center_issue_reconcile_b{bid}_{r['period']['month']}.xlsx")
+
+
+def _recon_sheet(ws, title: str, r: dict) -> None:
+    """The reconciliation (system stock vs the count) of one period as a sheet; also used by the ใบสรุปตัดเบิก workbooks."""
+    from openpyxl.styles import Font
+    p, sl = r["period"], r["slips"]
+    _sheet(ws, title, RECON_HEADERS,
            f"รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขา{r['branch']['name']} งวด {p['begin_date']} ถึง "
            f"{p['end_date']} (เดือน {p['month']}) · คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย · "
            "ผลต่าง = นับจริง − คงเหลือตามระบบ · เกณฑ์ ชั้น A ±5% · B ±10% · C ±20% · "
@@ -2033,7 +2160,6 @@ def bc_ir_reconcile_xlsx(request: Request, end_count_id: int = Query(...), branc
     ws.column_dimensions["P"].width = 26
     ws.column_dimensions["Q"].width = 30
     ws.freeze_panes = "C3"
-    return _xlsx(wb, f"bom_center_issue_reconcile_b{bid}_{p['month']}.xlsx")
 
 
 @router.get("/api/bom-center/issue-reports/daily")
@@ -2107,6 +2233,87 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     w2.column_dimensions["C"].width = 44
     w2.freeze_panes = "D3"
     return _xlsx(wb, f"bom_center_issue_daily_b{bid}_{month}.xlsx")
+
+
+# ── PR-J4 · R3 the lateness log: how each branch handled its slips (issue_reports.log) ──
+LOG_HEADERS = ["วันที่", "สาขา", "สถานะใบตัดเบิก", "ยืนยันเมื่อ", "ผู้ยืนยัน", "ยืนยันซ้ำ (ครั้ง)", "เปิดแก้ไข (ครั้ง)",
+               "เหตุผลเปิดแก้ไข", "ใบสั่งซื้อส่งล่าช้า (ใบ)", "เคลม (เรื่อง)", "หมายเหตุ"]
+LOG_SUMMARY_HEADERS = ["สาขา", "วันขาย", "ยืนยันตรงวัน", "ล่าช้า", "ยังไม่ยืนยัน", "ไม่มีใบ", "ตรงวัน %", "มีใบ %",
+                       "เปิดแก้ไข (ครั้ง)", "ยืนยันซ้ำ (ครั้ง)", "ใบสั่งซื้อส่งล่าช้า (ใบ)", "เคลม (เรื่อง)"]
+
+
+def _log_range(date_from: Optional[str], date_to: Optional[str]) -> tuple:
+    d0, d1 = _dates_or_week(date_from, date_to)
+    if d0 > d1 or (date.fromisoformat(d1) - date.fromisoformat(d0)).days > 92:
+        raise HTTPException(400, "ช่วงวันที่ต้องไม่เกิน 92 วัน")
+    return d0, d1
+
+
+@router.get("/api/bom-center/issue-reports/log")
+def bc_ir_log(request: Request, date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+              branch_id: Optional[int] = Query(None)):
+    """R3: per branch and day — on time / late / draft / missing, reconfirms, reopens and why, late purchase orders, claims."""
+    d0, d1 = _log_range(date_from, date_to)
+    with get_db() as con:
+        _ensure(con)
+        return _ir.log(con, d0, d1, _claim_scope(con, request, branch_id))
+
+
+@router.get("/api/bom-center/issue-reports/log/monthly")
+def bc_ir_log_monthly(request: Request, month: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
+    month = _month_or_400(month) if month else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        return _ir.log_monthly(con, month, _claim_scope(con, request, branch_id))
+
+
+@router.get("/api/bom-center/issue-reports/log.xlsx")
+def bc_ir_log_xlsx(request: Request, date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                   month: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
+    """The lateness log as a workbook: the days (oldest first) and a summary per branch. `month` replaces the dates."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    if month:
+        _month_or_400(month)
+    else:
+        d0, d1 = _log_range(date_from, date_to)
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        lg = _ir.log_monthly(con, month, bid) if month else _ir.log(con, d0, d1, bid)
+    label = f"เดือน {month}" if month else f"{d0} ถึง {d1}"
+    note = (f"บันทึกความล่าช้าของใบตัดเบิก {label} · นับเฉพาะวันที่สาขามียอดขายหรือมีใบตัดเบิก ไม่นับวันก่อนสาขาเริ่มใช้งานและไม่นับวันนี้ที่ยังไม่ครบวัน · "
+            "ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย")
+    wb = Workbook()
+    ws = wb.active
+    _sheet(ws, "บันทึกความล่าช้า", LOG_HEADERS, note)
+    for r in sorted(lg["rows"], key=lambda x: (x["date"], x["branch"] or "")):
+        ws.append([r["date"], r["branch"], r["status_th"], r["confirmed_at"], r["confirmed_by"], r["reconfirms"] or None,
+                   r["reopens"] or None, r["note"], r["late_orders"] or None, r["claims"] or None, r["status_note"] or None])
+    ws.column_dimensions["D"].width = 18
+    ws.column_dimensions["H"].width = 48
+    ws.column_dimensions["K"].width = 32
+    ws.freeze_panes = "C3"
+    w2 = wb.create_sheet()
+    _sheet(w2, "สรุปต่อสาขา", LOG_SUMMARY_HEADERS, note)
+    for s in lg["summary"]:
+        w2.append([s["branch"], s["trading_days"], s["on_time"], s["late"], s["draft"], s["missing"], s["on_time_pct"],
+                   s["coverage_pct"], s["reopens"], s["reconfirms"], s["late_orders"], s["claims"]])
+    t = lg["totals"]
+    ok = t["on_time"] + t["late"]
+    w2.append(["รวม", t["trading_days"], t["on_time"], t["late"], t["draft"], t["missing"],
+               round(100.0 * t["on_time"] / ok, 1) if ok else None,
+               round(100.0 * ok / t["trading_days"], 1) if t["trading_days"] else None,
+               t["reopens"], t["reconfirms"], t["late_orders"], t["claims"]])
+    for c in w2[w2.max_row]:
+        c.font = Font(bold=True)
+    for row in w2.iter_rows(min_row=3, max_row=w2.max_row):
+        row[6].number_format = "0.0"
+        row[7].number_format = "0.0"
+    w2.column_dimensions["A"].width = 28
+    w2.freeze_panes = "B3"
+    tag = month or f"{d0}_{d1}"
+    return _xlsx(wb, f"bom_center_issue_log_{'b%d_' % bid if bid is not None else ''}{tag}.xlsx")
 
 
 # ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
@@ -2626,6 +2833,14 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
                    r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
                    "ล่าช้า (ค่าปรับ)" if r.get("late") else ""])
+    w2 = wb.create_sheet()                                   # PR-J4: how each branch kept its daily issue slips in the same dates
+    _sheet(w2, "ใบตัดเบิก", LOG_SUMMARY_HEADERS,
+           f"การทำใบตัดเบิกของแต่ละสาขา {d0} ถึง {d1} · นับเฉพาะวันที่สาขามียอดขาย · ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · "
+           "มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย")
+    for s in c["issues"]:
+        w2.append([s["branch"], s["trading_days"], s["on_time"], s["late"], s["draft"], s["missing"], s["on_time_pct"],
+                   s["coverage_pct"], s["reopens"], s["reconfirms"], s["late_orders"], s["claims"]])
+    w2.column_dimensions["A"].width = 28
     return _xlsx(wb, "bom_center_order_compliance.xlsx")
 
 
