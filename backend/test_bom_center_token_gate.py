@@ -75,6 +75,7 @@ def _cases():
         ("ingredients/import", "", _master_file),
         ("prices/import", "", _price_file),
         ("prices/from-requisition", "&month=2026-09", None),
+        ("prices/submissions/999999/import", "", None),     # PR-D: the analyst's preview of the file Sales Support sent
         ("recipes/import-cost-rw", "", _cost_rw_workbook),
         ("recipes/import-flat", "&release_id=999999", _master_file),
         ("prep/import-semi", "", _semi_sheet),
