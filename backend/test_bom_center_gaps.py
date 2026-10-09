@@ -82,7 +82,9 @@ def test_kitchen_writes_recipes_and_sub_recipes_only():
     assert auth.path_allowed("GET", "/api/bom-center/prices", kit)
     assert not auth.path_allowed("POST", "/api/bom-center/prices/import", kit)
     assert not auth.path_allowed("POST", "/api/bom-center/release-act/release", kit)
-    assert not auth.path_allowed("POST", "/api/bom-center/release-act/new-draft", kit)
+    assert auth.path_allowed("POST", "/api/bom-center/release-act/new-draft", kit)           # PR-C: the kitchen opens its own draft …
+    assert auth.path_allowed("POST", "/api/bom-center/release-act/submit-review", kit)       # … and submits it for review
+    assert not auth.path_allowed("POST", "/api/bom-center/release-act/send-back", kit)       # sending back is the analyst's
     assert not auth.path_allowed("POST", "/api/bom-center/central/import", kit)
     assert not auth.path_allowed("POST", "/api/bom-center/ingredients/import", kit)   # bom.edit alone is not the centre
 
