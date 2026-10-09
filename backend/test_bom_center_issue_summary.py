@@ -87,9 +87,13 @@ def test_variance_period_is_unchanged_by_the_refactor(con):  # noqa: F811
     assert crab["received"] == 4 and crab["actual"] == 8 and p["price_month"] == "2026-09" and p["receipts"] == 2
 
 
-def test_a_spot_count_makes_no_period(con):  # noqa: F811
+def test_a_slip_makes_no_period(con):  # noqa: F811
+    from datetime import datetime
+    from bom_center import issues as IS
+    from bom_center.clock import BKK
     end = _period(con)
-    ST.save(con, 1, [{"code": "13-01-009", "qty": 7, "unit": "กรัม"}], "udon", submit=True, count_date="2026-09-20", kind="spot")
+    IS.save(con, 1, "2026-10-02", [{"code": "13-01-009", "qty_used": 7, "unit": "กรัม"}], "udon", submit=True,
+            now=datetime(2026, 10, 2, 20, 0, tzinfo=BKK))               # a confirmed daily issue slip is not a count
     con.commit()
     assert [(b["date"], e["date"]) for b, e in ST.periods(con, 1)] == [("2026-09-01", "2026-10-01")]
     assert [p["end_count_id"] for p in VA.issue_periods(con, 1)[0]["periods"]] == [end]

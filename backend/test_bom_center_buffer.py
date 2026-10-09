@@ -68,8 +68,9 @@ def test_save_freezes_the_base_and_relaxes_the_rule_by_the_buffer(udon):
     assert code in r3["needs_reason"]
     # the history and the hub queue carry the buffer
     assert OR.history(c, 1)[0]["buffer_pct"] == 20
-    OR.save_flow(c, 1, "1", WED, [{"code": code, "confirmed_units": s}], [{"code": code, "qty": 0}], "u",
-                 submit=True, now=NOW)                                       # the ordered item is counted, then sent
+    from bom_center import issues as IS
+    IS.save(c, 1, "2026-10-05", [{"code": "V-007", "qty_used": 10, "unit": "กรัม"}], "u", submit=True, now=NOW)   # today's slip
+    OR.save_flow(c, 1, "1", WED, [{"code": code, "confirmed_units": s}], "u", submit=True, now=NOW)
     from bom_center import hub as HB
     q = HB.queue(c, "submitted")
     assert q and q[0]["buffer_pct"] == 20 and q[0]["buffer_reason_th"] == "โปรโมชัน"

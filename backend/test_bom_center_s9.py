@@ -19,6 +19,7 @@ import pytest
 
 import auth
 from bom_center import hub as HB
+from bom_center import issues as IS
 from bom_center import orders as OR
 from bom_center import stock as ST
 from bom_center import variance as VA
@@ -34,8 +35,9 @@ def _submitted(con, confirm_factor=1.0, reason=None):  # noqa: F811
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     crab = next(r for r in p["rows"] if r["code"] == "13-01-009")
     q = round(crab["order_units"] * confirm_factor)
+    IS.save(con, 1, "2026-10-05", [{"code": "V-007", "qty_used": 10, "unit": "กรัม"}], "udon", submit=True, now=NOW)  # today's slip
     out = OR.save_flow(con, 1, "1", WED, [{"code": "13-01-009", "confirmed_units": q, "reason_code": reason}],
-                       [{"code": "13-01-009", "qty": 0}], "udon", submit=True, now=NOW, as_of=AS_OF)
+                       "udon", submit=True, now=NOW, as_of=AS_OF)
     con.commit()
     return out["order_id"], crab["order_units"], q
 
