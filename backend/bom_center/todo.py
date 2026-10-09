@@ -123,8 +123,29 @@ def _month_items(con, month: str, today: date) -> list:
     last = con.execute("SELECT at, who FROM bc_audit WHERE action='price_import' ORDER BY id DESC LIMIT 1").fetchone()
     out.append(_e("price_month", 100, "month", f"นำเข้าราคาซื้อจริงงวด {month}", "done" if n else "todo",
                   (f"ราคาซื้อจริง {n:,} รหัส" + (f" · นำเข้าล่าสุด {str(last[0])[:16].replace('T', ' ')} โดย {last[1]}" if last else ""))
-                  if n else "จากรายงานจ่ายสินค้าภายในของฝ่ายบัญชี",
-                  owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ (ไฟล์ราคาจากบัญชี)", go={"tab": "bomcenter", "pane": "price", "month": month}))
+                  if n else "นำเข้าจากไฟล์ที่ประสานงานขายส่งมา หรืออัปโหลดเอง",
+                  owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ (ไฟล์ราคาจากประสานงานขาย)", go={"tab": "bomcenter", "pane": "price", "month": month}))
+    if _has(con, "bc_price_submission"):
+        subs = con.execute("SELECT COUNT(*), MAX(submitted_at) FROM bc_price_submission WHERE month=?", (month,)).fetchone()
+        n_sub = subs[0] or 0
+        if n_sub:
+            lastsub = con.execute("SELECT submitted_at, submitted_by FROM bc_price_submission WHERE month=?"
+                                  " ORDER BY sub_id DESC LIMIT 1", (month,)).fetchone()
+            sub_status, sub_detail = "done", (f"ส่งแล้ว {n_sub} ไฟล์ · ล่าสุด {str(lastsub[0] or '')[:16].replace('T', ' ')}"
+                                              f" โดย {lastsub[1] or '-'}")
+        elif n:
+            sub_status, sub_detail = "na", "นำเข้าราคาของเดือนนี้แล้ว ไม่ต้องส่งไฟล์"
+        else:
+            sub_status, sub_detail = "todo", "ไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด"
+        out.append(_e("price_submit", 95, "month", f"ส่งไฟล์ราคาเดือน {month} ให้ฝ่ายวิเคราะห์", sub_status, sub_detail,
+                      owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
+                      go={"tab": "bomcenter", "pane": "price", "month": month, "anchor": "bmcPriceSubmitCard"}))
+        pend = _scalar(con, "SELECT COUNT(*) FROM bc_price_submission WHERE status='pending'") or 0
+        if pend:
+            out.append(_e("price_review", 98, "month", f"ตรวจและนำเข้าไฟล์ราคาที่ประสานงานขายส่งมา ({pend} ไฟล์)", "todo",
+                          "ดูผลก่อนบันทึก แล้วนำเข้าหรือส่งกลับพร้อมเหตุผล", count=pend,
+                          owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์",
+                          go={"tab": "bomcenter", "pane": "price", "month": month, "anchor": "bmcPriceSubList"}))
     dr = con.execute("SELECT release_id, label, effective_month, status, price_month, submitted_by, submitted_at"
                      " FROM bc_release WHERE kind='monthly'"
                      " AND status IN ('draft','review') ORDER BY release_id DESC LIMIT 1").fetchone()

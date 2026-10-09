@@ -32,6 +32,7 @@ from bom_center import pilot as _pl
 from bom_center import prep as _pr
 from bom_center import todo as _td
 from bom_center import prices as _p
+from bom_center import price_submissions as _ps
 from bom_center import recipes as _r
 from bom_center import release as _rl
 from bom_center import stock as _st
@@ -489,11 +490,16 @@ def bc_prices_template():
 
 
 async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
-    """-> (lines, info, month). Accounting issue workbook (sheets 'Use XXX') or the template."""
-    raw = await file.read()
+    """-> (lines, info, month) for an uploaded file."""
+    return await _price_lines_from_bytes(await file.read(), file.filename, month)
+
+
+async def _price_lines_from_bytes(raw: bytes, filename: Optional[str], month: Optional[str]):
+    """-> (lines, info, month). Accounting issue workbook (sheets 'Use XXX') or the template.
+    Shared by the analyst's upload and by the file Sales Support sent (stored bytes)."""
     if not raw:
         raise HTTPException(400, "ไฟล์ไม่มีข้อมูล")
-    name = (file.filename or "").lower()
+    name = (filename or "").lower()
     if not name.endswith(".csv"):
         from openpyxl import load_workbook
         try:
@@ -514,8 +520,10 @@ async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
                      for ln in lines if ln["period_month"] == month]
             return lines, {"format": "รายงานจ่ายสินค้าภายใน", **info}, month
 
+    _fname = filename
+
     class _F:                                       # re-wrap the bytes for the shared reader
-        filename = file.filename
+        filename = _fname
 
         async def read(self):
             return raw
@@ -640,6 +648,110 @@ def bc_requisition_months():
         has = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='requisition_line'").fetchone()
         return {"months": [r[0] for r in con.execute(
             "SELECT DISTINCT period_month FROM requisition_line ORDER BY 1 DESC")] if has else []}
+
+
+# ── PR-D: Sales Support sends the month's price file, the analyst reviews and imports it ──
+def _parse_name(filename: Optional[str], mime: str) -> str:
+    """The file name the price reader decides by, matched to what the bytes really are."""
+    fn = (filename or "").strip() or "file"
+    if mime == _ps.CSV_MIME:
+        return fn if fn.lower().endswith(".csv") else fn + ".csv"
+    return fn if not fn.lower().endswith(".csv") else fn[:-4] + ".xlsx"
+
+
+def _sub_summary(res: dict) -> dict:
+    """What the analyst needs at a glance, kept with the file."""
+    return {"format": (res.get("source") or {}).get("format"), "lines": res.get("lines"),
+            "priced": res.get("priced"), "value_total": res.get("value_total"), "counts": res.get("counts"),
+            "issues": len(res.get("issues") or []), "unknown_codes": (res.get("unknown_codes") or [])[:50]}
+
+
+@router.post("/api/bom-center/prices/submit", dependencies=[Depends(require_write_token)])
+async def bc_prices_submit(request: Request, file: UploadFile = File(...), month: Optional[str] = Form(None),
+                           note: Optional[str] = Form(None)):
+    """Sales Support: send the month's price file to the analyst. The file must be readable (the same reader
+    as the import, run as a dry run); nothing is priced until the analyst imports it."""
+    _month_or_400(month)
+    raw = await file.read(_ps.MAX_BYTES + 1)
+    if not raw:
+        raise HTTPException(400, "ไฟล์ไม่มีข้อมูล")
+    if len(raw) > _ps.MAX_BYTES:
+        raise HTTPException(400, "ไฟล์ใหญ่เกิน 12 MB")
+    mime = _ps.sniff_xlsx(raw)
+    if not mime:
+        raise HTTPException(400, "ไฟล์ต้องเป็น Excel (.xlsx) หรือ CSV")
+    lines, info, month = await _price_lines_from_bytes(raw, _parse_name(file.filename, mime), month)
+    who = _who(request)
+    res = _import(lines, info, month, True, who, "ตรวจไฟล์ก่อนส่ง")
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _ps.create(con, month, file.filename, raw, note, who, _sub_summary(res)))
+    return {**out, "summary": _sub_summary(res)}
+
+
+@router.get("/api/bom-center/prices/submissions")
+def bc_price_submissions(status: Optional[str] = Query(None), month: Optional[str] = Query(None),
+                         limit: int = Query(50)):
+    if status and status not in _ps.STATUS_TH:
+        raise HTTPException(400, "status ต้องเป็น pending / imported / rejected")
+    if month:
+        _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        return {"submissions": _ps.listing(con, status, month, limit), "counts": _ps.counts(con),
+                "status_th": _ps.STATUS_TH}
+
+
+@router.get("/api/bom-center/prices/submissions/{sub_id}/file")
+def bc_price_submission_file(sub_id: int):
+    from urllib.parse import quote
+    with get_db() as con:
+        _ensure(con)
+        try:
+            fn, mime, data = _ps.blob(con, sub_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+    return Response(content=data, media_type=mime,
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fn)}",
+                             "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+
+
+@router.post("/api/bom-center/prices/submissions/{sub_id}/import",
+             dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_price_submission_import(sub_id: int, request: Request, dry_run: bool = Query(True),
+                                     add_unknown: bool = Query(False), rules: Optional[str] = Form(None)):
+    """The analyst reviews (dry run) and imports the file Sales Support sent: the same import as an upload."""
+    rl = _rules_or_400(rules)
+    with get_db() as con:
+        _ensure(con)
+        h = _ps.head(con, sub_id)
+        if not h:
+            raise HTTPException(404, "ไม่พบไฟล์ราคาที่ส่งมา")
+        if h["status"] != "pending":
+            raise HTTPException(400, f"ไฟล์นี้ตัดสินแล้ว ({_ps.STATUS_TH.get(h['status'], h['status'])})")
+        fn, mime, raw = _ps.blob(con, sub_id)
+    lines, info, month = await _price_lines_from_bytes(raw, _parse_name(fn, mime), h["month"])
+    who = _who(request)
+    out = _import(lines, info, month, dry_run, who, f"ไฟล์จากประสานงานขาย {fn}", add_unknown, rules=rl)
+    if not dry_run:
+        with get_db() as con:
+            _ensure(con)
+            _write(con, lambda: _ps.decide(con, sub_id, "imported", who, None, out.get("applied")))
+        out["submission"] = {"sub_id": sub_id, "status": "imported"}
+    return out
+
+
+class RejectSubmission(BaseModel):
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/prices/submissions/{sub_id}/reject", dependencies=[Depends(require_write_token)])
+def bc_price_submission_reject(sub_id: int, body: RejectSubmission, request: Request):
+    """The analyst does not accept the file: a reason is required, and Sales Support reads it."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _ps.decide(con, sub_id, "rejected", _who(request), body.note))
+    return out
 
 
 class ManualPrice(BaseModel):

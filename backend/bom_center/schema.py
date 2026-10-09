@@ -292,6 +292,7 @@ OWNED_TABLES = (
     "bc_central_item",            # Phase 2 S11: what a branch orders from the centre (central.py)
     "bc_code_link",               # S11: a recipe's older code -> the code the centre sends (central.py)
     "bc_claim", "bc_claim_line", "bc_claim_photo",   # เคลมสินค้า: branch claim + photos, decided by Sales Support (claims.py)
+    "bc_price_submission",        # the monthly price file Sales Support sends to the analyst (price_submissions.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day")
 TABLES = OWNED_TABLES + DERIVED_TABLES
@@ -307,7 +308,8 @@ def ensure(con, commit: bool = False) -> None:
     from .codes import DDL as CODES_DDL
     from .central import DDL as CENTRAL_DDL, LINK_DDL
     from .claims import DDL as CLAIMS_DDL
-    for ddl in DDL + EXTRA_DDL + (DATED_DDL, CODES_DDL, CENTRAL_DDL, LINK_DDL) + CLAIMS_DDL:
+    from .price_submissions import DDL as PRICE_SUB_DDL
+    for ddl in DDL + EXTRA_DDL + (DATED_DDL, CODES_DDL, CENTRAL_DDL, LINK_DDL) + CLAIMS_DDL + PRICE_SUB_DDL:
         con.execute(ddl)
     for table, col, typ in MIGRATIONS:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
