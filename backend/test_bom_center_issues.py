@@ -95,6 +95,72 @@ def test_the_sheet_shows_the_system_stock_before_the_day_the_average_and_the_rea
         IS.sheet(con, 1, "5/10/2026")
 
 
+SALMON = "02-01-001"
+
+
+def _zone_items(sh, *codes):
+    """The items of the zone that holds all `codes`, in the order the sheet lists them."""
+    for z in sh["zones"]:
+        have = [i["code"] for i in z["items"]]
+        if all(c in have for c in codes):
+            return z["items"]
+    raise AssertionError(f"no zone holds {codes}")
+
+
+# PR-M3 · usage first inside a zone, and yesterday's quantities as the hint
+def test_the_sheet_marks_recent_items_and_lists_them_first_in_their_zone(con):  # noqa: F811
+    build_stock(con)
+    zone = ST.zones(con)[0][0]
+    con.execute("UPDATE bc_ingredient SET storage_zone=? WHERE code IN (?, ?)", (zone, CRAB, SALMON))
+    con.commit()
+    sh = IS.sheet(con, 1, "2026-10-05", now=NOW)
+    items = _zone_items(sh, CRAB, SALMON)
+    flags = {i["code"]: i["recent"] for i in items}
+    assert flags[CRAB] is True and flags[SALMON] is False                  # CRAB is on confirmed slips of 1-3 Oct, salmon on none
+    assert [i["code"] for i in items].index(CRAB) < [i["code"] for i in items].index(SALMON)
+    # every recent item sits before every other item (the draft of 4 Oct counts for nothing)
+    assert [i["recent"] for i in items] == sorted((i["recent"] for i in items), reverse=True)
+    # the rule is "recent first", not a class order that happens to agree: a confirmed slip for the salmon puts IT first
+    slip(con, "2026-10-04", [{"code": SALMON, "qty_used": 500, "unit": "กรัม"}])      # confirms the 4th (its draft line stays)
+    con.commit()
+    again = _zone_items(IS.sheet(con, 1, "2026-10-05", now=NOW), CRAB, SALMON)
+    assert all(i["recent"] for i in again if i["code"] in (CRAB, SALMON))
+    # without any usage the order is the count list's own (required, then class, then name)
+    cold = _zone_items(IS.sheet(con, 1, "2026-10-01", now=NOW), CRAB, SALMON)
+    assert not any(i["recent"] for i in cold)
+    keys = [(not i["required"], {"A": 0, "B": 1, "C": 2}[i["class"]], i["name"]) for i in cold]
+    assert keys == sorted(keys)
+
+
+def test_recent_covers_the_14_days_before_the_day_and_confirmed_slips_only(con):  # noqa: F811
+    build_stock(con)                                       # confirmed 1-3 Oct (the 3rd is waste only), a draft on the 4th
+    crab = lambda d: next(i for z in IS.sheet(con, 1, d, now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)  # noqa: E731
+    assert crab("2026-10-01")["recent"] is False           # nothing before the first slip
+    assert crab("2026-10-02")["recent"] is True            # the slip of the day before
+    assert crab("2026-10-17")["recent"] is True            # 3 Oct is the 14th day before the 17th (a waste line counts)
+    assert crab("2026-10-18")["recent"] is False           # 15 days: out; the draft of the 4th never counts
+    slip(con, "2026-10-04", [], submit=True)               # confirming the draft brings the 4th into the window
+    con.commit()
+    assert crab("2026-10-18")["recent"] is True
+
+
+def test_the_previous_confirmed_slip_gives_prev_used_and_prev_waste_in_the_count_unit(con):  # noqa: F811
+    build_stock(con)                                       # 1 Oct used 1000 g · 2 Oct used 600 g · 3 Oct wasted 700 g · 4 Oct a draft
+    crab = lambda d: next(i for z in IS.sheet(con, 1, d, now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)  # noqa: E731
+    s5, c5 = IS.sheet(con, 1, "2026-10-05", now=NOW), crab("2026-10-05")
+    assert s5["prev_date"] == "2026-10-03"                 # the draft of the 4th is not a previous slip
+    assert c5["prev_used"] is None and c5["prev_waste"] == pytest.approx(0.7)       # grams on the slip, packs of 1 kg here
+    c3 = crab("2026-10-03")
+    assert IS.sheet(con, 1, "2026-10-03", now=NOW)["prev_date"] == "2026-10-02"
+    assert c3["prev_used"] == pytest.approx(0.6) and c3["prev_waste"] is None       # a zero is no hint
+    c1 = crab("2026-10-01")
+    assert c1["prev_used"] is None and c1["prev_waste"] is None
+    assert IS.sheet(con, 1, "2026-10-01", now=NOW)["prev_date"] is None
+    other = next(i for z in IS.sheet(con, 1, "2026-10-05", now=NOW)["zones"] for i in z["items"] if i["code"] != CRAB)
+    assert other["prev_used"] is None and other["prev_waste"] is None and other["recent"] is False
+    assert IS.sheet(con, 1, "2026-10-19", now=NOW)["prev_date"] is None            # older than 14 days: no hint
+
+
 # ── 2 · draft → confirm, and late ────────────────────────────────────────────
 def test_a_draft_is_confirmed_once_and_a_slip_for_a_past_day_is_late(con):  # noqa: F811
     d = IS.save(con, 1, "2026-10-05", [used()], "udon", now=NOW)
