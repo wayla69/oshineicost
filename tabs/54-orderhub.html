@@ -162,8 +162,19 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-center gap-2">
         <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">6</span>
-        <span class="text-sm font-semibold" style="color:var(--text-primary)">สรุปผลต่างรายเดือน</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">ใบสรุปตัดเบิก (บัญชี)</span>
         <span id="ohbSt6" class="ml-auto"></span>
+      </div>
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">เมื่อยืนยันรับสินค้าครบแล้ว บัญชีดาวน์โหลดใบสรุปตัดเบิกของสาขา (Excel) ไปบันทึกในระบบบัญชี แล้วติ๊ก “บันทึกเข้าระบบบัญชีแล้ว” ที่หน้าใบสรุปตัดเบิก</p>
+      <div id="ohbSt6Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
+      <div class="text-xs mt-1"><a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',month:_ohbCloseMonth()});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิก →</a></div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">7</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">สรุปผลต่างรายเดือน</span>
+        <span id="ohbSt7" class="ml-auto"></span>
       </div>
       <div class="text-xs mt-1" style="color:var(--text-secondary)">ผลต่างการใช้ของทุกสาขาในเดือนนี้ที่
         <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน →</a>
@@ -176,6 +187,7 @@
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-muted)">
       เดือนที่ปิดงวด <input type="month" id="ohbMonth" onchange="ohbLoadMonth()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
       <span class="ml-2">รอบตรวจนับที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร · ข้อมูลส่วนนี้แสดงใน Management Report (รายเดือน) ข้อ 13A ด้วย</span>
+      <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" class="ml-2" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>
   </div>

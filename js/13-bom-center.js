@@ -67,7 +67,7 @@ function _bmcChip(text, ink) {
 
 function bmcSetSub(k) {
   _bmcSub = k;
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'issue', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -76,6 +76,7 @@ function bmcSetSub(k) {
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
   if (k === 'cal') bmcLoadCalendar();
+  if (k === 'issue') bmcLoadIssue();
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
@@ -1696,4 +1697,134 @@ async function bmcLoadRuns() {
         ${esc(r.created_by || '-')} ${esc(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</div>`).join('')
         || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบสั่งที่บันทึกไว้</div>');
   } catch (e) { /* list is a nicety */ }
+}
+
+// ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads it and ticks "posted" ─────
+let _bmcIssPeriods = null;    // /issue-summary/periods → { branches: [{branch_id, name, periods: […]}] }
+let _bmcIssSum = null;        // the summary on screen
+// the server's write rule (auth.py): cost.analysis or bom.center. The class is not `.bc-write`: loadBomCenter hides that
+// one unless the user holds bom.center, and Accounting does not.
+function _bmcIssCanPost() { return hasModule('cost.analysis') || hasModule('bom.center'); }
+function _bmcIssSel() {
+  const b = document.getElementById('bmcIssBranch'), p = document.getElementById('bmcIssPeriod');
+  return { branch_id: b && b.value ? Number(b.value) : null, end_count_id: p && p.value ? Number(p.value) : null };
+}
+async function bmcLoadIssue() {
+  document.querySelectorAll('#tab-bomcenter .bmc-iss-write').forEach(el => { el.style.display = _bmcIssCanPost() ? '' : 'none'; });
+  try {
+    _bmcIssPeriods = await _bmcJson(`${API}/api/bom-center/issue-summary/periods`);
+  } catch (e) {
+    _bmcStatus('bmcIssStatus', 'โหลดรายการงวดไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+    return;
+  }
+  const bs = (_bmcIssPeriods.branches || []).filter(b => b.periods.length);
+  const sel = document.getElementById('bmcIssBranch');
+  if (!bs.length) {
+    sel.innerHTML = '';
+    document.getElementById('bmcIssPeriod').innerHTML = '';
+    document.getElementById('bmcIssChips').innerHTML = '';
+    document.getElementById('bmcIssTable').innerHTML = '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่ตรวจนับต้นงวดและปลายงวดครบ จึงยังไม่มีใบสรุปตัดเบิก</div>';
+    _bmcStatus('bmcIssStatus', '');
+    return;
+  }
+  const want = supplyCtx().branch_id;
+  sel.innerHTML = bs.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+  sel.value = String(bs.some(b => b.branch_id === want) ? want : bs[0].branch_id);
+  bmcIssBranchChanged();
+}
+function _bmcIssFillPeriods() {
+  const bid = _bmcIssSel().branch_id;
+  const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === bid);
+  const ps = b ? b.periods : [];                       // newest first
+  const tag = p => p.accounting_posted_at ? ' · บันทึกบัญชีแล้ว' : (p.receipts_confirmed ? ' · ยืนยันรับสินค้าครบแล้ว' : ' · ยังไม่ยืนยันรับสินค้าครบ');
+  document.getElementById('bmcIssPeriod').innerHTML = ps.map(p =>
+    `<option value="${p.end_count_id}">${esc(p.begin_date)} → ${esc(p.end_date)} (เดือน ${esc(p.month)})${tag(p)}</option>`).join('');
+  return ps;
+}
+function bmcIssBranchChanged() {
+  const bid = _bmcIssSel().branch_id;
+  if (bid != null) supplyCtxSet({ branch_id: bid });
+  const ps = _bmcIssFillPeriods();
+  const pick = ps.find(p => p.receipts_confirmed && !p.accounting_posted_at) || ps[0];   // newest waiting for Accounting, else the newest
+  if (pick) document.getElementById('bmcIssPeriod').value = String(pick.end_count_id);
+  bmcIssLoadSummary();
+}
+async function bmcIssLoadSummary() {
+  const s = _bmcIssSel();
+  if (s.branch_id == null || s.end_count_id == null) return;
+  const box = document.getElementById('bmcIssTable');
+  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</div>';
+  let d;
+  try {
+    d = _bmcIssSum = await _bmcJson(`${API}/api/bom-center/issue-summary?end_count_id=${s.end_count_id}&branch_id=${s.branch_id}`);
+  } catch (e) {
+    _bmcIssSum = null;
+    box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">โหลดใบสรุปตัดเบิกไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
+    return;
+  }
+  const st = d.status, t = d.totals;
+  document.getElementById('bmcIssAllLabel').textContent = d.period.month;
+  const chips = [st.receipts_confirmed ? _bmcChip('ยืนยันรับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')];
+  if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${String(st.accounting_posted_at).slice(0, 10)} โดย ${st.accounting_posted_by || '-'}`, 'var(--navy-ink)'));
+  if (t.unpriced) chips.push(_bmcChip(`ไม่มีราคา ${t.unpriced} รายการ`, 'var(--amber-ink)'));
+  document.getElementById('bmcIssChips').innerHTML = chips.join('');
+  const cb = document.getElementById('bmcIssPosted');
+  if (cb) {
+    cb.checked = !!st.accounting_posted_at;
+    cb.disabled = !st.receipts_confirmed;
+    cb.title = st.receipts_confirmed ? '' : 'ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้';
+  }
+  _bmcStatus('bmcIssStatus', '');
+  const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'คงเหลือ (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา', 'ผู้จำหน่าย'];
+  const num = (v, dp) => (v === null || v === undefined) ? '—' : _bmcNum(v, dp);
+  const rows = d.lines.map(l => {
+    const bad = l.status === 'negative';
+    const ink = bad ? 'color:var(--bad-ink)' : '';
+    const used = l.used === null || l.used === undefined
+      ? `<span title="${esc(l.note || '')}" style="color:var(--amber-ink)">—</span>` : `<b style="${ink}">${num(l.used, 3)}</b>`;
+    return `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 whitespace-nowrap">${esc(l.code)}</td><td class="pr-2">${esc(l.name || '')}</td>
+      <td class="pr-2">${esc(l.base_unit || '')}</td><td class="pr-2 text-right">${num(l.begin, 3)}</td><td class="pr-2 text-right">${num(l.received, 3)}</td>
+      <td class="pr-2 text-right">${num(l.claims, 3)}</td><td class="pr-2 text-right">${num(l.end, 3)}</td><td class="pr-2 text-right">${used}</td>
+      <td class="pr-2 text-right">${l.unit_price === null ? '—' : _bmcPrice(l.unit_price)}</td>
+      <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td>
+      <td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.supplier || '')}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ใบสรุปตัดเบิก สาขา${esc(d.branch.name || '')} · ${esc(d.period.begin_date)} ถึง ${esc(d.period.end_date)} (${d.period.days} วัน · เดือน ${esc(d.period.month)})</div>
+    ${d.lines.length ? `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+      <thead><tr class="text-left border-b" style="color:var(--text-muted)">${heads.map((h, i) => `<th class="pr-2 ${i >= 3 && i <= 9 ? 'text-right' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody></table>` : '<div class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเคลื่อนไหวในงวดนี้</div>'}
+    <div class="mt-2 text-sm" style="color:var(--text-primary)">รวมมูลค่าตัดเบิก <b>฿${_bmcNum(t.used_value, 2)}</b>
+      <span class="text-[11px]" style="color:var(--text-muted)"> · มูลค่ารับเข้า ฿${_bmcNum(t.received_value, 2)} · เคลม/ปรับ ฿${_bmcNum(t.claims_value, 2)}</span></div>
+    ${d.excluded.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">ไม่มีการเคลื่อนไหว ${d.excluded.length} รายการ (ไม่แสดงในใบสรุป)</div>` : ''}`;
+}
+function bmcIssXlsx() {
+  const d = _bmcIssSum;
+  if (!d) return;
+  if (!d.status.receipts_confirmed) { _bmcStatus('bmcIssStatus', 'รอบนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'var(--amber-ink)'); return; }
+  window.location.href = `${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`;
+}
+function bmcIssXlsxAll() {
+  const d = _bmcIssSum;
+  if (!d) return;
+  window.location.href = `${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.period.month)}`;
+}
+async function bmcIssTogglePosted(cb) {
+  const d = _bmcIssSum;
+  if (!d) return;
+  const want = cb.checked;
+  try {
+    await _bmcJson(`${API}/api/bom-center/issue-summary/posted`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end_count_id: d.period.end_count_id, posted: want }) });
+    _bmcStatus('bmcIssStatus', '✓ บันทึกสถานะแล้ว', 'var(--good-ink)');
+    const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === d.branch.branch_id);
+    const p = b && b.periods.find(x => x.end_count_id === d.period.end_count_id);
+    if (p) { p.accounting_posted_at = want ? new Date().toISOString() : null; }
+    _bmcIssFillPeriods();
+    document.getElementById('bmcIssPeriod').value = String(d.period.end_count_id);
+    await bmcIssLoadSummary();
+    _bmcStatus('bmcIssStatus', '✓ บันทึกสถานะแล้ว', 'var(--good-ink)');
+  } catch (e) {
+    cb.checked = !want;                              // revert: the server did not take it
+    _bmcStatus('bmcIssStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+  }
 }

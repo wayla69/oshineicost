@@ -97,7 +97,10 @@ async function ohbLoadCentral() {
     set(5, st.receipts_confirm && st.receipts_confirm.status);
     document.getElementById('ohbSt5Detail').innerHTML = st.receipts_confirm ? _ohbBranchLines(st.receipts_confirm,
       b => `<a href="#" onclick="supplyGo({tab:'branchstock',pane:'var',branch:${b.branch_id}});return false" style="color:var(--accent);text-decoration:underline">เปิดผลต่างของสาขา →</a>`) : '';
-    set(6, st.monthly_summary && st.monthly_summary.status);
+    set(6, st.issue_posted && st.issue_posted.status);
+    document.getElementById('ohbSt6Detail').innerHTML = st.issue_posted ? _ohbBranchLines(st.issue_posted,
+      b => `<a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',branch:${b.branch_id},month:'${esc(month)}'});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิกของสาขา →</a>`) : '';
+    set(7, st.monthly_summary && st.monthly_summary.status);
     // the count import: the branch from the shared context, the date the checklist says is missing
     const sel = document.getElementById('ohbCntBranch');
     if (!sel.options.length) {

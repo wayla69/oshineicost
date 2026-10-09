@@ -137,6 +137,24 @@
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
   </div>
 
+  <!-- ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads and ticks "posted" ─── -->
+  <div id="bmc-pane-issue" style="display:none">
+    <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
+        <select id="bmcIssBranch" onchange="bmcIssBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+      <label class="text-xs" style="color:var(--text-muted)">งวด (ต้นงวด → ปลายงวด)<br>
+        <select id="bmcIssPeriod" onchange="bmcIssLoadSummary()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+      <button onclick="bmcIssXlsx()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด Excel (สาขานี้)</button>
+      <button onclick="bmcIssXlsxAll()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ดาวน์โหลดทุกสาขา (เดือน <span id="bmcIssAllLabel">—</span>)</button>
+      <label class="bmc-iss-write text-xs flex items-center gap-1" style="color:var(--text-primary)" title="เมื่อติ๊กแล้ว ระบบไม่รับใบรับสินค้าเพิ่มในงวดนั้นและยกเลิกการยืนยันรับสินค้าครบไม่ได้ จนกว่าจะยกเลิกการบันทึก">
+        <input type="checkbox" id="bmcIssPosted" onchange="bmcIssTogglePosted(this)"> บันทึกเข้าระบบบัญชีแล้ว</label>
+      <span id="bmcIssStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="bmcIssChips" class="flex flex-wrap items-center gap-2 mb-2"></div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ตัดเบิก (ใช้จริง) = ยกมา (ต้นงวด) + รับเข้า + เคลม/ปรับ − คงเหลือ (ปลายงวด) · ราคาต่อหน่วยคือราคาซื้อจริงของเดือนที่งวดสิ้นสุด · ดาวน์โหลดได้เมื่อสาขาหรือ Sales Support ยืนยันรับสินค้าครบของรอบนั้นแล้ว</div>
+    <div id="bmcIssTable" class="card p-4 mb-3 overflow-x-auto"></div>
+  </div>
+
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
   <div id="bmc-pane-ing" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
