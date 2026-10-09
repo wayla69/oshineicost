@@ -277,14 +277,60 @@ def test_the_usage_history_is_computed_once_per_process_until_the_cache_generati
     stats1.pop("release_skus", None)                                     # callers pop from what they get …
     _u, days2, stats2 = F.usage_history(con, 1, date(2026, 9, 1), AS_OF, "2026-10")
     assert "x" not in days2 and "release_skus" in stats2                 # … without spoiling the cached copy
-    core.invalidate_cache("bc_")                                        # any invalidate_cache() starts afresh
-    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     n = len(calls)
-    assert n >= 2
+    # a PREFIXED invalidate_cache (what every order / slip / claim save calls at the cutoff hour) leaves it alone …
+    core.invalidate_cache("bc_")
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n
+    # … a FULL flush (sales / cost / bom data changed) and a data swap start afresh
+    monkeypatch.setattr(core, "_build_sku_effective_cost", lambda *a, **k: None)     # (not the point here)
+    core.invalidate_cache()
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n + 1
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n + 1
+    monkeypatch.setattr(core, "_db_gen", core._db_gen + 1)
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n + 2
+    # a recipe-side write clears it explicitly (the router calls this after release / recipes / prep / links / units …)
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n + 2
+    F.clear_usage_cache()
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert len(calls) == n + 3
     monkeypatch.setattr(F, "USAGE_CACHE_TTL", 0)                         # switched off (the tests' default): every call recomputes
     OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
-    assert len(calls) == n + 2
+    assert len(calls) == n + 5
+
+
+def test_the_router_clears_the_usage_cache_after_every_recipe_side_write():
+    import inspect
+    from routers import bom_center as RB
+    for fn in (RB.bc_release_do, RB.bc_release_retire, RB.bc_release_new_draft, RB.bc_release_submit_review,
+               RB.bc_release_send_back, RB.bc_recipe_save, RB.bc_recipes_map, RB.bc_recipes_import_flat,
+               RB.bc_recipes_import_cost_rw, RB.bc_code_review_decide, RB.bc_units_save, RB.bc_ingredients_save,
+               RB.bc_ingredients_seed, RB.bc_ingredients_import):
+        assert "clear_usage_cache()" in inspect.getsource(fn), fn.__name__
+    for fn in (RB.bc_order_save, RB.bc_issue_save, RB.bc_order_receive):                # the rush: never a flush of the usage cache
+        assert "clear_usage_cache" not in inspect.getsource(fn), fn.__name__
+
+
+def test_plans_share_a_few_cpu_slots(con, monkeypatch):  # noqa: F811
+    import threading
+    assert isinstance(F._plan_slots, type(threading.BoundedSemaphore()))
+    assert F.PLAN_CONCURRENCY >= 1 and F._plan_slots._value == F.PLAN_CONCURRENCY
+    taken = []
+
+    class Spy:
+        def __enter__(self):
+            taken.append("in")
+
+        def __exit__(self, *a):
+            taken.append("out")
+    monkeypatch.setattr(F, "_plan_slots", Spy())
+    OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert taken == ["in", "out"]                                        # only the suggest() computation is inside the slot
 
 
 def test_the_cache_is_on_by_default_and_off_in_the_tests():

@@ -169,6 +169,7 @@ def bc_code_review_decide(body: CodeDecision, request: Request):
         out = _write(con, lambda: _cr.decide(con, body.code, body.status, body.use_code, body.note, _who(request),
                                                      body.names))
     invalidate_cache()               # the order plan reads the decision
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -286,6 +287,7 @@ def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
             con.rollback()
             raise
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, **stats}
 
 
@@ -309,6 +311,7 @@ def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "before": before, "after": after, **stats}
 
 
@@ -403,6 +406,7 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "sheet": sheet, "columns": cols, "rows": len(rows),
             **{k: v for k, v in stats.items() if k != "skipped"}, "skipped": stats["skipped"][:200]}
 
@@ -427,6 +431,7 @@ def bc_units_save(rules: List[UnitRule], request: Request):
             raise HTTPException(400, str(e))
         con.commit()
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "rules": len(rules)}
 
 
@@ -923,6 +928,7 @@ def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, rel
                                           modules=mods))
         out = _r.cost_recipe(con, release_id, sku_code)
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "total": out["total"], "problems": out["problems"]}
 
 
@@ -972,6 +978,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "release_id": None if dry_run else rid, "label": lbl, "effective_month": eff,
             "price_month": pm, "sheets": parsed["sheets"], "skipped": parsed["skipped"], **stats,
             "costed": len(view["rows"]), "with_problems": view["problems"], "sheet_mismatch": view["sheet_mismatch"],
@@ -993,6 +1000,7 @@ def bc_recipes_map(body: MapBody, request: Request):
         out = _write(con, lambda: _r.apply_mapping(con, body.release_id, body.ref, body.sku_code.strip(),
                                                     _who(request), modules=mods))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, **out}
 
 
@@ -1017,6 +1025,7 @@ async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...),
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, **out}
 
 
@@ -1117,6 +1126,7 @@ def bc_release_do(request: Request, release_id: int = Query(...), body: Optional
         out = _write(con, lambda: _rl.do_release(con, release_id, _who(request),
                                                   backdate_reason=(body.backdate_reason if body else None)))
     invalidate_cache()          # a release changes COGS from its month on: every cached report is stale
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -1139,6 +1149,7 @@ def bc_release_retire(body: NoteBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.retire(con, body.release_id, _who(request), body.note or ""))
     invalidate_cache()          # the previous version's costs are back in every report
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1170,6 +1181,7 @@ def bc_release_new_draft(body: NewDraftBody, request: Request):
         _ensure(con)
         rid = _write(con, go)
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "release_id": rid, "label": label}
 
 
@@ -1184,6 +1196,7 @@ def bc_release_submit_review(body: ReleaseIdBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.submit_review(con, body.release_id, _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1194,6 +1207,7 @@ def bc_release_send_back(body: NoteBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.send_back(con, body.release_id, body.note or "", _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1401,6 +1415,7 @@ def bc_prep_save(code: str, body: PrepBody, request: Request):
         n = _write(con, lambda: _pr.save(con, code, body.yield_qty, body.yield_unit,
                                           [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ไขในหน้าเว็บ"))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "lines": n}
 
 
@@ -1425,6 +1440,7 @@ async def bc_prep_import_semi(request: Request, file: UploadFile = File(...), dr
             return {"dry_run": True, **plan}
         out = _write(con, lambda: _pr.apply_import(con, plan, _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": False, **plan, **out}
 
 
@@ -1456,6 +1472,7 @@ async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dr
         if not dry_run and not out["errors"]:
             con.commit()
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -2558,6 +2575,7 @@ def bc_central_links_save(body: List[LinkBody], request: Request):
         _ensure(con)
         _write(con, lambda: [_ce.set_link(con, b.old_code, b.new_code, who, b.note) for b in body])
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"saved": len(body)}
 
 

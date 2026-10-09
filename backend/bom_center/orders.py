@@ -493,7 +493,9 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     pct = float(buffer_pct or 0.0)
     if not (BUFFER_MIN <= pct <= BUFFER_MAX):
         raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
-    s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv)
+    from . import forecast as _fc
+    with _fc._plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
+        s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv)
     s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"]), "through": stock["through"],
                   # today's slip is reported on its own (slip_today); the days BEFORE it are the warning
                   "missing_days": [d for d in stock["missing_days"] if d != stock_day.isoformat()],

@@ -258,6 +258,8 @@ def _per_dish(con, month: str) -> tuple:
 
 USAGE_CACHE_TTL = float(os.environ.get("OSHINEI_USAGE_CACHE_TTL", "600"))     # seconds; 0 = off (tests)
 _USAGE_CACHE_MAX = 64
+PLAN_CONCURRENCY = max(1, int(os.environ.get("OSHINEI_PLAN_CONCURRENCY", "3")))
+_plan_slots = threading.BoundedSemaphore(PLAN_CONCURRENCY)
 _usage_cache: dict = {}                                    # key -> (stored at, (use, days, stats))
 _usage_lock = threading.Lock()
 
@@ -276,8 +278,10 @@ def _usage_key(con, branch_id, start, end, month):
     if not path:
         return None
     core = _loaded("core")
+    # _data_gen moves only on a FULL invalidate_cache() (sales / cost / bom data changed); the prefixed flushes of
+    # every order / slip / claim save leave the cache alone. Recipe-side writes call clear_usage_cache() explicitly.
     return (path, branch_id, start.isoformat(), end.isoformat(), month,
-            getattr(core, "_cache_gen", 0), getattr(core, "_db_gen", 0))
+            getattr(core, "_data_gen", 0), getattr(core, "_db_gen", 0))
 
 
 def usage_history(con, branch_id: int, start: date, end: date, month: str) -> tuple:
@@ -285,8 +289,15 @@ def usage_history(con, branch_id: int, start: date, end: date, month: str) -> tu
 
     Cached per process for USAGE_CACHE_TTL seconds (the plan of a branch asks for the same six weeks again
     and again, and the CPU-heavy walk over the sales used to run twice per plan). The key carries the
-    database file and core's cache / swap generations, so any invalidate_cache() or data swap starts afresh.
-    `days` and `stats` are copied on return because callers pop from them; `use` is read-only for callers."""
+    database file and core's DATA / swap generations: a full invalidate_cache() (no prefix) or a data swap
+    starts afresh, a prefixed one (what every order, slip or claim save calls) does not — usage depends on
+    sales, recipes, releases, sub-recipes, code links and unit rules, never on orders or slips. The router
+    calls clear_usage_cache() after every write to those recipe-side inputs.
+    `days` and `stats` are copied on return because callers pop from them; `use` is read-only for callers.
+
+    PLAN_CONCURRENCY (env OSHINEI_PLAN_CONCURRENCY, default 3) caps how many `suggest()` computations run
+    at once (`_plan_slots`, taken in orders.plan): the plan is CPU-bound Python, and thirty of them at the
+    cutoff hour starve the thread that holds the SQLite write lock of the GIL until busy_timeout expires."""
     ttl = USAGE_CACHE_TTL
     key = _usage_key(con, branch_id, start, end, month) if ttl and ttl > 0 else None
     if key is not None:
