@@ -303,7 +303,7 @@ const ROLE_LABEL_TH = {
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
   salessupport:'Sales Support (วัตถุดิบและใบสั่งซื้อ)',
   warehouse:'คลัง (ระบุยอดส่งจริงของใบสั่งซื้อ)',
-  branch:'สาขา (ตรวจนับ/สั่งสินค้า — 1 บัญชีต่อสาขา)',
+  branch:'สาขา (ตัดเบิก/สั่งสินค้า — 1 บัญชีต่อสาขา)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
 // so the owner can see what each role unlocks before assigning it. Only a FALLBACK:
