@@ -36,7 +36,7 @@ function _shmQuery() {
   const ctx = supplyCtx();
   if (m && m.value) qs.set('month', m.value); else if (ctx.month) qs.set('month', ctx.month);
   if (b && b.options.length) { if (b.value) qs.set('branch_id', b.value); }
-  else if (ctx.branch_id && !(window.AUTH && window.AUTH.enabled && window.AUTH.role === 'branch')) qs.set('branch_id', ctx.branch_id);   // a branch login is scoped by the server
+  else if (ctx.branch_id && !isPinnedSession()) qs.set('branch_id', ctx.branch_id);   // a pinned login is scoped by the server
   return qs;
 }
 
@@ -51,7 +51,7 @@ async function loadSupplyHome() {
   const d = _shmData;
   if (m && !m.value) m.value = d.month;
   const b = document.getElementById('shmBranch'), wrap = document.getElementById('shmBranchWrap');
-  if (d.scoped) { wrap.style.display = 'none'; }
+  if (d.scoped || !b) { if (wrap) wrap.style.display = 'none'; }     // a pinned login has no picker element at all (stripBranchPickers)
   else {
     wrap.style.display = '';
     if (!b.options.length) {

@@ -300,7 +300,9 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         from routers.bom_center import ISSUE_HEADERS
         assert list(rows[1]) == ISSUE_HEADERS
         crab = next(r for r in rows[2:] if r[0] == "T-ISS1")
-        assert crab[3:10] == (10, 5, 0, 6, 9, 2.5, 22.5) and crab[10] == "ซื้อจริง (2026-09)" and crab[11] == "ผู้จำหน่าย ก"
+        assert crab[3:10] == (10, 5, 0, 6, 9, 2.5, 22.5) and crab[10] == "ซื้อจริง (2026-09)"
+        assert "ผู้จำหน่าย" not in ISSUE_HEADERS and len(ISSUE_HEADERS) == 11 and len(crab) == 11   # PR-K: no supplier column
+        assert all("supplier" not in ln for ln in d["lines"])
         assert rows[-1][1] == "รวม" and rows[-1][9] == pytest.approx(22.5)
         # the all-branches workbook: a summary sheet, the daily slips, the confirmed period's two sheets; the other branch is only listed
         r = acc.get("/api/bom-center/issue-summary-all.xlsx?month=2026-09")

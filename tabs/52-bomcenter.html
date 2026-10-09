@@ -113,7 +113,7 @@
   <div id="bmc-pane-fc" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
       <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
-        <select id="bmcFcBranch" onchange="supplyCtxSet({branch_id: Number(this.value) || null})" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <select id="bmcFcBranch" data-branch-picker onchange="supplyCtxSet({branch_id: Number(this.value) || null})" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <label class="text-xs" style="color:var(--text-muted)">รอบ<br>
         <select id="bmcFcRound" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
           <option value="1">รอบ 1</option><option value="2">รอบ 2</option><option value="salmon">แซลมอนสด</option></select></label>
@@ -147,11 +147,28 @@
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
   </div>
 
+  <!-- ── storage zones (ตั้งค่า → โซนจัดเก็บ): the centre adds, renames, deletes and reorders the zones a branch counts by ─── -->
+  <div id="bmc-pane-zones" style="display:none">
+    <div class="card p-4 mb-3">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">โซนจัดเก็บ</div>
+      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">โซนที่สาขาใช้แบ่งรายการตอนตรวจนับสิ้นเดือนและบันทึกใบตัดเบิก ลำดับในรายการนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศรเพื่อเรียงใหม่) · เปลี่ยนชื่อโซนได้โดยวัตถุดิบยังอยู่ในโซนเดิม · โซนที่ยังมีวัตถุดิบอยู่ลบไม่ได้ ต้องเปลี่ยนชื่อหรือย้ายวัตถุดิบไปโซนอื่นก่อน (กำหนดโซนของวัตถุดิบที่ ข้อมูลตั้งต้น → ทะเบียนวัตถุดิบ) · โซน “อื่น ๆ” เป็นโซนสำรองของระบบ เปลี่ยนชื่อได้แต่ลบไม่ได้</div>
+      <div id="bmcZoneList"></div>
+      <div class="flex flex-wrap items-center gap-2 mt-3 bmc-zone-write">
+        <input id="bmcZoneNew" placeholder="ชื่อโซนใหม่ เช่น ตู้โชว์" onkeydown="if(event.key==='Enter'){event.preventDefault();bmcZoneAdd()}" maxlength="40"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
+        <button onclick="bmcZoneAdd()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">+ เพิ่มโซน</button>
+        <button onclick="bmcZonesSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;cursor:pointer">บันทึกโซน</button>
+        <button onclick="bmcLoadZones()" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ยกเลิกการแก้ไข</button>
+        <span id="bmcZoneStatus" class="text-[11px]"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads and ticks "posted" ─── -->
   <div id="bmc-pane-issue" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
       <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
-        <select id="bmcIssBranch" onchange="bmcIssBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <select id="bmcIssBranch" data-branch-picker onchange="bmcIssBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <label class="text-xs" style="color:var(--text-muted)">งวด (ต้นงวด → ปลายงวด)<br>
         <select id="bmcIssPeriod" onchange="bmcIssLoadSummary()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <button onclick="bmcIssXlsx()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด Excel (สาขานี้)</button>
@@ -206,6 +223,7 @@
           <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2">ชนิด</th>
           <th class="py-1.5 pr-2">หน่วยฐาน</th><th class="py-1.5 pr-2">หน่วยรับ</th>
           <th class="py-1.5 pr-2 text-right">ขนาดบรรจุ</th><th class="py-1.5 pr-2 text-right">สูญเสีย %</th>
+          <th class="py-1.5 pr-2">โซนจัดเก็บ</th><th class="py-1.5 pr-2">หน่วยที่นับ</th>
           <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2 text-right">ราคา/หน่วยรับ</th>
           <th class="py-1.5 pr-2 text-right">ใช้ในเมนู</th><th class="py-1.5 pr-2">บังคับสั่ง</th><th class="py-1.5">สถานะ</th>
         </tr></thead>

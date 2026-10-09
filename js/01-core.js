@@ -388,7 +388,7 @@ async function doLogin(ev) {
     }
     const data = await res.json();
     window.AUTH = { enabled:true, authenticated:true, username:data.username,
-                    role:data.role, modules:data.modules || [] };
+                    role:data.role, branch:data.branch || null, modules:data.modules || [] };
     _sessionExpiredShown = false;
     hideLogin();
     applyPermissions();
@@ -463,8 +463,9 @@ function renderUserChip() {
   if (!chip) return;
   if (window.AUTH && window.AUTH.enabled && window.AUTH.authenticated) {
     const role = window.AUTH.role || '';
-    document.getElementById('userChipName').textContent =
-      `${window.AUTH.username} · ${ROLE_LABEL_TH[role] || role}`;
+    const nameEl = document.getElementById('userChipName');
+    nameEl.textContent = isPinnedSession() ? window.AUTH.username : `${window.AUTH.username} · ${ROLE_LABEL_TH[role] || role}`;   // a pinned login's chip sits in the phone's tab strip: the name only
+    nameEl.title = ROLE_LABEL_TH[role] || role;
     chip.style.display = 'flex';
   } else {
     chip.style.display = 'none';
@@ -521,6 +522,32 @@ function applyPermissions() {
   // 6) The phone summary is the owner's sales view. A role without sales.overview
   //    (the branch login) gets its own pages on the phone instead — they are built 375-px first.
   if (window.AUTH && window.AUTH.enabled && !hasModule('sales.overview')) document.body.classList.add('force-desktop', 'no-mobile-app');
+  // 7) A pinned login (role branch / franchise) is shown its branch as text; no branch picker is left on any page
+  stripBranchPickers();
+}
+
+// PR-K (owner 2026-10-10): a pinned session — role `branch` or `franchise`, tied to one branch by the server —
+// sees NO branch selector anywhere: not hidden, not disabled. The pickers in the page fragments carry
+// data-branch-picker; here they are taken out of the DOM (the branch name stays as text) and the shell's own
+// filter (#selBranch) becomes a hidden field holding the branch. The branch-list endpoints are never called for
+// such a session (loadBranches, loadBranchStock and the hub panes check isPinnedSession first).
+const PINNED_ROLES = ['branch', 'franchise'];
+function isPinnedSession() { return !!(window.AUTH && window.AUTH.enabled && PINNED_ROLES.includes(window.AUTH.role)); }
+function pinnedBranchName() { return isPinnedSession() ? (window.AUTH.branch || '') : ''; }
+function stripBranchPickers() {
+  if (!isPinnedSession()) return;
+  const name = pinnedBranchName();
+  // a label that only held the picker goes with it; the pages show the branch name as text where it matters
+  document.querySelectorAll('select[data-branch-picker]').forEach(sel => (sel.closest('label') || sel).remove());
+  const g = document.getElementById('selBranch');
+  if (g && g.tagName === 'SELECT') {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.id = 'selBranch'; h.value = name; h.setAttribute('aria-hidden', 'true');
+    g.replaceWith(h);
+  }
+  document.getElementById('msBranch')?.remove();                  // the owner's phone summary picker
+  const nm = document.getElementById('brnBranchName');
+  if (nm && !nm.textContent) nm.textContent = name;
 }
 
 // ── User management (Settings → ผู้ใช้งาน) ──────────────────────────────────
@@ -2465,6 +2492,7 @@ const SUPPLY_CHIPS = [
     { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน' }] },
   { key: 'setup', label: 'ตั้งค่า', items: [
     { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา' },
+    { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', mods: ['bom.center', 'supply.ordering'] },
     { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ' },
     { tab: 'ordersetup', pane: 'cal', label: 'ปฏิทินเทศกาล' }] },
 ];

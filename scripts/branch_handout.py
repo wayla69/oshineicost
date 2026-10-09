@@ -21,10 +21,10 @@ Which branches (the list is the same file branch_accounts.py reads):
     py -3.12 scripts/branch_handout.py --list ... --only udon                    # a single branch
 
     --out DIR     default ~/Oshinei_branch_handout
-    --db FILE     a COPY of the database: resolves branch ids for rows whose username is blank (branch_<id>)
+    --db FILE     a COPY of the database: resolves branch ids for rows with neither a username nor an abbreviation (wh_<id>)
 
-A blank username needs the branch id (--db), or take it from accounts_result.csv, which branch_accounts.py
-fills in. Rows that branch_accounts.py marked ไม่สำเร็จ are skipped, and so are rows marked มีอยู่แล้ว
+The login is wh_<ตัวย่อ> (column ตัวย่อ of the list). A row with neither a username nor an abbreviation needs the
+branch id (--db), or take it from accounts_result.csv, which branch_accounts.py fills in. Rows that branch_accounts.py marked ไม่สำเร็จ are skipped, and so are rows marked มีอยู่แล้ว
 (that login may already have its own password; add --include-existing to write them anyway).
 """
 import argparse
@@ -40,12 +40,7 @@ import branch_list as BL  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 URL = "https://oshinei-dashboard.fly.dev"
-BRANCHES = [                       # (key, branch name, username) - the accounts created on 2026-10-07
-    ("ubon", "อุบลราชธานี", "branch_ubon"),
-    ("udon", "อุดรธานี", "branch_udon"),
-    ("khonkaen", "ขอนแก่น", "branch_khonkaen"),
-    ("rayong", "ระยอง", "branch_rayong"),
-]
+BRANCHES = [(abbr, name, BL.PREFIX + abbr) for name, abbr in BL.PILOT_ABBRS.items()]     # (key, branch name, username): the four pilot branches
 PER_PAGE = 4                       # cards on one A4 page (2 x 2)
 
 
@@ -164,17 +159,18 @@ def build_entries(a) -> list:
         if r.get("result") == BL.R_EXISTS and not a.include_existing:
             skipped.append(f"{r['branch']} (มีบัญชีอยู่แล้ว อาจเปลี่ยนรหัสผ่านไปแล้ว ใช้ --include-existing หากต้องการสร้างข้อความ)")
             continue
-        user = r["username"] or BL.username_for(r["branch"], ids.get(r["branch"]))
+        user = r["username"] or BL.username_for(r["branch"], ids.get(r["branch"]), r.get("abbr", ""))
         if not user:
             missing.append(r["branch"])
             continue
         out.append({"branch": r["branch"], "username": user, "recipient": r.get("recipient", "")})
     if missing:
         sys.exit("ไม่ทราบชื่อผู้ใช้ของสาขา: " + ", ".join(missing) +
-                 "\nระบุ --db (ไฟล์ฐานข้อมูลสำเนา) เพื่อใช้ branch_<รหัสสาขา> หรือใช้ accounts_result.csv ที่ branch_accounts.py สร้างให้")
+                 "\nกรอกคอลัมน์ ตัวย่อ ในไฟล์รายชื่อ หรือระบุ --db (ไฟล์ฐานข้อมูลสำเนา) เพื่อใช้ wh_<รหัสสาขา> หรือใช้ accounts_result.csv ที่ branch_accounts.py สร้างให้")
     if a.only:
         key = a.only.strip().lower()
-        out = [e for e in out if key in (e["username"].lower(), e["branch"].lower(), e["username"].lower().replace("branch_", ""))]
+        out = [e for e in out if key in (e["username"].lower(), e["branch"].lower(),
+                                         e["username"].lower().replace("wh_", "").replace("branch_", ""))]
         if not out:
             sys.exit(f"ไม่พบสาขาที่ตรงกับ --only {a.only}")
     for s in skipped:
@@ -186,9 +182,9 @@ def main(argv=None) -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default=str(Path.home() / "Oshinei_branch_handout"))
-    ap.add_argument("--list", help="รายชื่อสาขา (.xlsx หรือ .csv) คอลัมน์ สาขา · ชื่อผู้ใช้ · LINE/ผู้รับ")
+    ap.add_argument("--list", help="รายชื่อสาขา (.xlsx หรือ .csv) คอลัมน์ สาขา · ตัวย่อ · ชื่อผู้ใช้ · LINE/ผู้รับ")
     ap.add_argument("--all", action="store_true", help="ทุกสาขาที่เปิดใช้งานในฐานข้อมูลสำเนาที่ระบุด้วย --db")
-    ap.add_argument("--db", help="ไฟล์ฐานข้อมูลสำเนา (อ่านอย่างเดียว) ใช้หา branch_<รหัสสาขา>")
+    ap.add_argument("--db", help="ไฟล์ฐานข้อมูลสำเนา (อ่านอย่างเดียว) ใช้หา wh_<รหัสสาขา> เมื่อไม่มีตัวย่อ")
     ap.add_argument("--only", help="เฉพาะสาขาเดียว (ชื่อผู้ใช้ ชื่อสาขา หรือชื่อย่อ เช่น udon)")
     ap.add_argument("--include-existing", action="store_true", help="สร้างข้อความให้บัญชีที่มีอยู่แล้วด้วย")
     ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 4 แถว) แล้วจบ")

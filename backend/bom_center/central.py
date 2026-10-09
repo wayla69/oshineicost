@@ -54,6 +54,9 @@ NOT_GOODS = ("41-", "42-")             # delivery fees, other income: on the rep
 NON_FOOD = ("14-", "16-", "17-")       # tableware, uniforms, stationery: ordered, never in a recipe
 PREPARED = ("CK-", "HK-", "DK-")       # made in a kitchen from other items (sub-recipes)
 REF = "CENTRAL-{month}"
+# owner 2026-10-09: every central item comes from one company, so no screen, sheet or API names a supplier per item
+CENTRAL_SUPPLIER = "บริษัท ไดกิโตะ กรุ๊ป จำกัด"
+CENTRAL_SUPPLIER_SHORT = "ไดกิโตะ กรุ๊ป"
 
 
 def now() -> str:

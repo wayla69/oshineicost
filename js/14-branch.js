@@ -26,19 +26,25 @@ const _BRN_READONLY = 'บทบาทของคุณดูหน้านี
 
 async function loadBranchStock() {
   try {
-    _brnMe = await _bmcJson(`${API}/api/bom-center/stock/me`);
-    const sel = document.getElementById('brnBranch');
     const nm = document.getElementById('brnBranchName');
-    if (_brnMe.scoped) {
-      sel.style.display = 'none';
-      nm.textContent = _brnMe.branch || '';
+    if (isPinnedSession()) {
+      // a pinned login: its branch is text, there is no picker and the branch list is never fetched (the server pins every call)
+      _brnMe = { scoped: true, branch: pinnedBranchName(), branches: [], zones: [] };
+      nm.textContent = _brnMe.branch;
     } else {
-      const keep = sel.value || String(supplyCtx().branch_id || '');   // the module's shared branch
-      sel.innerHTML = '<option value="">— เลือกสาขา —</option>' +
-        _brnMe.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
-      if (keep && _brnMe.branches.some(b => String(b.branch_id) === keep)) sel.value = keep;
-      sel.style.display = '';
-      nm.textContent = '';
+      _brnMe = await _bmcJson(`${API}/api/bom-center/stock/me`);
+      const sel = document.getElementById('brnBranch');
+      if (_brnMe.scoped) {                      // a branch login the session does not know about (cannot happen with auth on)
+        if (sel) sel.remove();
+        nm.textContent = _brnMe.branch || '';
+      } else {
+        const keep = sel.value || String(supplyCtx().branch_id || '');   // the module's shared branch
+        sel.innerHTML = '<option value="">— เลือกสาขา —</option>' +
+          _brnMe.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+        if (keep && _brnMe.branches.some(b => String(b.branch_id) === keep)) sel.value = keep;
+        sel.style.display = '';
+        nm.textContent = '';
+      }
     }
     brnSetSub(_brnSub, true);       // show the remembered pane; brnBranchChanged loads it
     await brnBranchChanged();
@@ -70,6 +76,8 @@ async function brnLoadSheet() {
       (s.last_count ? `ตรวจนับล่าสุด ${s.last_count.count_date} (${s.last_count.kind === 'begin' ? 'ต้นงวด' : 'ปลายงวด'}) โดย ${s.last_count.counted_by || '-'}` : 'ยังไม่มีผลตรวจนับ') +
       (s.draft ? ` · มีร่างที่ยังไม่ส่ง (${String(s.draft.updated_at || '').slice(0, 16).replace('T', ' ')})` : '') +
       ` · ${s.items} รายการ (บังคับ ${s.required}) คัดจากการใช้จริง 4 สัปดาห์ ถึงวันที่ ${s.as_of}`;
+    const how = document.getElementById('brnHowTo');
+    if (how && !how.dataset.set) { how.dataset.set = '1'; how.open = !window.matchMedia('(max-width:700px)').matches; }   // folded on a phone
     brnRender();
     brnLoadHistory();
   } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -99,7 +107,7 @@ function brnRender() {
     const v = _brnQty[it.code] ?? '';
     const last = it.last_qty != null ? `ครั้งก่อน ${_bmcNum(it.last_qty, 2)} ${esc(it.last_unit || it.count_unit || '')}` : '';
     return `<div style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;border-top:1px solid var(--border);padding:8px 0">
-      <div style="flex:1 1 220px;min-width:0">
+      <div class="brn-namecol" style="flex:1 1 220px;min-width:0">
         <div class="text-sm" style="color:var(--text-primary);font-weight:600;overflow-wrap:anywhere">${esc(it.name)}${it.required ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
         <div class="text-[11px]" style="color:var(--text-muted)">${esc(it.code)}${it.per_count_unit && it.count_unit !== it.base_unit ? ` · 1 ${esc(it.count_unit)} = ${_bmcNum(it.per_count_unit)} ${esc(it.base_unit || '')}` : ''}${last ? ' · ' + last : ''} ${zoneSel(it)}</div>
       </div>
@@ -108,7 +116,7 @@ function brnRender() {
       <input inputmode="decimal" value="${esc(v)}" placeholder="${it.last_qty != null ? esc(String(it.last_qty)) : '0'}" oninput="brnSet(${_bmcQ(it.code)}, this.value)"
              style="width:68px;height:36px;text-align:center;font-size:16px;border:1px solid ${v !== '' ? 'var(--accent)' : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)">
       <button onclick="brnStep(${_bmcQ(it.code)}, 1)" aria-label="เพิ่ม" style="width:36px;height:36px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text-primary);font-size:18px;cursor:pointer">+</button>
-      <span class="text-xs" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(it.count_unit || it.base_unit || '')}</span>
+      <span class="text-xs brn-unit" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(it.count_unit || it.base_unit || '')}</span>
       </div>
     </div>`;
   }).join('') : '<span class="text-xs" style="color:var(--text-muted)">ไม่มีรายการในโซนนี้</span>';
@@ -337,21 +345,21 @@ function brnIssRender() {
   document.getElementById('brnIssList').innerHTML = items.length ? items.map(it => {
     const v = _brnIssQty[it.code] || { used: '', waste: '' };
     const unit = it.count_unit || it.base_unit || '';
-    const sys = it.system_qty == null ? '<span style="color:var(--text-muted)">ยังไม่มีผลตรวจนับสิ้นเดือน</span>'
+    const sys = it.system_qty == null ? `<span style="color:var(--text-muted)">ยังไม่มีผลตรวจนับสิ้นเดือน · หน่วย ${esc(unit)}</span>`
       : `คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}`;
     const avg = it.avg_used_7d != null ? ` · เฉลี่ย 7 วัน ${_bmcNum(it.avg_used_7d, 2)} ${esc(unit)}/วัน` : '';
     return `<div style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center">
-        <div style="flex:1 1 220px;min-width:0">
+        <div class="brn-namecol" style="flex:1 1 220px;min-width:0">
           <div class="text-sm" style="color:var(--text-primary);font-weight:600;overflow-wrap:anywhere">${esc(it.name)}${it.required ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
           <div class="text-[11px]" style="color:var(--text-muted)">${esc(it.code)} · ${sys}${avg}</div></div>
         <div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-left:auto">
           <label class="text-[11px]" style="display:flex;gap:4px;align-items:center;color:var(--text-muted)">เบิกใช้
             ${inp('brnIssU_' + esc(it.code), v.used, 'var(--accent)')} oninput="brnIssSetField(${_bmcQ(it.code)}, 'used', this.value)" title="จำนวนที่ครัวเบิกไปใช้ในวันนี้">
-            <span class="text-xs" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label>
+            <span class="text-xs brn-unit" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label>
           <label class="text-[11px]" style="display:flex;gap:4px;align-items:center;color:var(--text-muted)">ของเสีย
             ${inp('brnIssW_' + esc(it.code), v.waste, 'var(--amber-ink)')} oninput="brnIssSetField(${_bmcQ(it.code)}, 'waste', this.value)" title="จำนวนที่ทิ้ง เน่าเสีย หมดอายุ หรือเสียหาย">
-            <span class="text-xs" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label></div></div>
+            <span class="text-xs brn-unit" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label></div></div>
       <div id="brnIssX_${esc(it.code)}">${_brnIssReasonBox(it.code)}</div></div>`;
   }).join('') : `<span class="text-xs" style="color:var(--text-muted)">${usedOnly ? 'ยังไม่มีรายการที่กรอก' : 'ไม่มีรายการในโซนนี้'}</span>`;
   brnIssActions();
@@ -845,6 +853,7 @@ async function brnLoadVarPeriod() {
 }
 function brnPickBranch(id) {
   const sel = document.getElementById('brnBranch');
+  if (!sel) return;                       // a pinned login has no picker (and no other branch to pick)
   sel.value = String(id);
   brnBranchChanged();
 }
@@ -1162,9 +1171,9 @@ function brnRenderOrder() {
   if (editable) {
     const send = slipOk ? btn('ส่งให้ส่วนกลาง', 'brnOrderSave(true)', true)
       : `<button disabled title="ต้องยืนยันใบตัดเบิกของวันนี้ก่อน" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งให้ส่วนกลาง</button>`;
-    acts = btn('บันทึกร่าง', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', 'brnOrderAct("cancel")') : '');
+    acts = btn('บันทึกร่าง', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', "brnOrderAct('cancel')") : '');
   }
-  else if (o.status === 'submitted') acts = btn('เปิดแก้ไข', 'brnOrderAct("reopen")') + btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true);
+  else if (o.status === 'submitted') acts = btn('เปิดแก้ไข', "brnOrderAct('reopen')") + btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true);
   else if (o.status === 'processed') acts = btn('รับสินค้าที่มาถึง', 'brnStartReceive()', true);
   document.getElementById('brnOrdActions').innerHTML = acts;
 }

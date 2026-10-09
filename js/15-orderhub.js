@@ -105,6 +105,7 @@ async function ohbLoadCentral() {
     set(7, st.monthly_summary && st.monthly_summary.status);
     // the count import: the branch from the shared context, the date the checklist says is missing
     const sel = document.getElementById('ohbCntBranch');
+    if (!sel) return;                       // a pinned login never reaches this centre page, and has no picker
     if (!sel.options.length) {
       const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
       sel.innerHTML = me.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
@@ -390,8 +391,8 @@ async function ohbShowConsolidated() {
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังรวมข้อมูล…</span>';
   try {
     const c = await _bmcJson(`${API}/api/bom-center/hub/consolidated?${_ohbExportQS()}`);
-    box.innerHTML = `<div style="display:flex;justify-content:space-between"><div class="text-sm font-semibold" style="color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง (${esc(c.status_th || '')})</div>${_ohbBtn('ปิด', "document.getElementById('ohbConsolidated').style.display='none'")}</div>` +
-      (c.groups.length ? c.groups.map(g => `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">${esc(g.supplier)} · วันส่ง ${esc(g.delivery)}</div>
+    box.innerHTML = `<div style="display:flex;justify-content:space-between"><div class="text-sm font-semibold" style="color:var(--text-primary)">สรุปรวมตามวันส่ง (${esc(c.status_th || '')}) · สั่งจาก ${esc(c.supplier || '')}</div>${_ohbBtn('ปิด', "document.getElementById('ohbConsolidated').style.display='none'")}</div>` +
+      (c.groups.length ? c.groups.map(g => `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">วันส่ง ${esc(g.delivery)}</div>
         <div style="overflow-x:auto"><table class="w-full text-xs"><tbody>${g.items.map(it => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(it.name)} <span style="color:var(--text-muted)">${esc(it.code)}</span></td>
           <td class="py-1 pr-2 text-right"><b>${_bmcNum(it.total)}</b> ${esc(it.unit || '')}</td>
           <td class="py-1" style="color:var(--text-muted)">${Object.entries(it.by_branch).map(([b, q]) => `${esc(b)} ${_bmcNum(q)}`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>`).join('')
@@ -399,8 +400,7 @@ async function ohbShowConsolidated() {
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadConsolidated() {
-  const split = document.getElementById('ohbSplit')?.checked ? '&split=true' : '';
-  window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}${split}`;
+  window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}`;
 }
 
 // ── compliance ───────────────────────────────────────────────────────────────
@@ -600,6 +600,7 @@ function isrReconTable(r, o) {
 let _ohbIv = null;            // /api/bom-center/issue-reports/daily
 async function ohbLoadIssueVar() {
   const sel = document.getElementById('ohbIvBranch'), mon = document.getElementById('ohbIvMonth');
+  if (!sel) return;                         // no picker for a pinned login (centre page)
   if (!mon.value) mon.value = _ohbIso(new Date()).slice(0, 7);
   const list = document.getElementById('ohbIvList'), chips = document.getElementById('ohbIvChips');
   document.getElementById('ohbIvDetail').style.display = 'none';
@@ -652,6 +653,7 @@ function _ohbIsDt(ts) {       // a stored UTC stamp as the branch's clock (Bangk
 function ohbIsSetStatus(s) { _ohbIsSt = s; ohbIsRender(); }
 async function ohbLoadIssues() {
   const sel = document.getElementById('ohbIsBranch');
+  if (!sel) return;                         // no picker for a pinned login (centre page)
   const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value) el.value = v; };
   const t = new Date();
   set('ohbIsFrom', _ohbIso(new Date(t.getTime() - 6 * 864e5)));

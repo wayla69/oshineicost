@@ -18,7 +18,7 @@
 
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
     <label class="text-xs" style="color:var(--text-muted)">สาขา</label>
-    <select id="ipBranch" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
+    <select id="ipBranch" data-branch-picker onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
 
     <label class="text-xs" style="color:var(--text-muted)">ช่วง</label>
     <input type="date" id="ipFrom" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">

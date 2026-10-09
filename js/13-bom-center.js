@@ -7,6 +7,7 @@
 let _bmcSub = 'overview';
 let _bmcIng = [];            // rows from /api/bom-center/ingredients
 let _bmcIngEdits = {};       // code -> {field: value}
+let _bmcZones = [];          // the storage zones [{code, label, items, fallback}] (ตั้งค่า → โซนจัดเก็บ)
 let _bmcPrices = [];         // rows from /api/bom-center/prices
 let _bmcSummary = null;
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js) reads, sets and shows this tab's panes through here.
@@ -67,7 +68,7 @@ function _bmcChip(text, ink) {
 
 function bmcSetSub(k) {
   _bmcSub = k;
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'issue', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -76,6 +77,7 @@ function bmcSetSub(k) {
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
   if (k === 'cal') bmcLoadCalendar();
+  if (k === 'zones') bmcLoadZones();
   if (k === 'issue') bmcLoadIssue();
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') bmcLoadIng();
@@ -120,7 +122,7 @@ async function bmcLoadOverview() {
     if (!s.ingredients) {
       setup.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">เริ่มต้นใช้งาน</div>
         <p class="text-xs mb-2" style="color:var(--text-secondary)">ทะเบียนยังไม่มีข้อมูล กรุณากด “เติมจากข้อมูลในระบบ” เพื่อสร้างทะเบียนจากสูตร ขนาดบรรจุ และรายการบังคับสั่งของคลัง
-        จากนั้นนำเข้า sheet DATAP (ไฟล์ COST-RW) เพื่อระบุสูญเสีย % และผู้จำหน่าย แล้วนำเข้าราคาซื้อจริงของเดือนล่าสุด</p>
+        จากนั้นนำเข้า sheet DATAP (ไฟล์ COST-RW) เพื่อระบุสูญเสีย % แล้วนำเข้าราคาซื้อจริงของเดือนล่าสุด</p>
         ${_bmcCanWrite() ? '<button onclick="bmcSeed()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">เติมจากข้อมูลในระบบ</button>' : ''}`;
     } else {
       // each open item links to the list where it is fixed
@@ -314,14 +316,15 @@ async function bmcCrDecide(code, status, useCode, names) {
 // ── ingredient master ───────────────────────────────────────────────────────
 async function bmcLoadIng(force) {
   if (_bmcIng.length && !force) { bmcRenderIng(); return; }
-  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="12" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   try {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
+    try { _bmcZones = (await _bmcJson(`${API}/api/bom-center/zones`)).zones || []; } catch (e) { _bmcZones = _bmcZones || []; }
     _bmcIng = d.rows || [];
     _bmcIngEdits = {};
     bmcRenderIng();
   } catch (e) {
-    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="12" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
+    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="14" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
   }
 }
 function _bmcIngVal(r, f) { const e = _bmcIngEdits[r.code]; return e && f in e ? e[f] : r[f]; }
@@ -352,6 +355,15 @@ function bmcRenderIng() {
     ? `<select data-code="${esc(r.code)}" data-f="kind" onchange="bmcIngEdit(this)" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
         ${Object.entries(_BMC_KIND).map(([k, t]) => `<option value="${k}" ${_bmcIngVal(r, 'kind') === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`
     : (_BMC_KIND[r.kind] || r.kind);
+  // the storage zone is picked from the centre's zone list (ตั้งค่า → โซนจัดเก็บ); blank = the system's guess
+  const zoneSel = r => {
+    const cur = _bmcIngVal(r, 'storage_zone') || '';
+    const known = _bmcZones.some(z => z.code === cur);
+    const opts = [`<option value="">(ให้ระบบเดา)</option>`].concat(_bmcZones.map(z => `<option value="${esc(z.code)}" ${z.code === cur ? 'selected' : ''}>${esc(z.label)}</option>`),
+      cur && !known ? [`<option value="${esc(cur)}" selected>${esc(cur)}</option>`] : []);
+    return w ? `<select data-code="${esc(r.code)}" data-f="storage_zone" onchange="bmcIngEdit(this)" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);max-width:120px">${opts.join('')}</select>`
+      : esc((_bmcZones.find(z => z.code === cur) || {}).label || '—');
+  };
   const shown = rows.slice(0, 600);
   document.getElementById('bmcIngBody').innerHTML = shown.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
       <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}${r.aliases.length ? `<div class="text-[10px]" style="color:var(--text-muted)">รหัสคลัง: ${r.aliases.map(a => esc(a.alias)).join(', ')}</div>` : ''}</td>
@@ -361,12 +373,14 @@ function bmcRenderIng() {
       <td class="py-1 pr-2">${inp(r, 'recv_unit', 90)}</td>
       <td class="py-1 pr-2 text-right">${inp(r, 'qty_per_recv', 80, 'number')}</td>
       <td class="py-1 pr-2 text-right">${inp(r, 'loss_pct', 55, 'number')}</td>
+      <td class="py-1 pr-2">${zoneSel(r)}</td>
+      <td class="py-1 pr-2">${inp(r, 'count_unit', 80)}</td>
       <td class="py-1 pr-2 text-right">${_bmcPrice(r.price_per_base)}${r.price_source ? `<div>${_bmcChip(_BMC_SRC[r.price_source] || r.price_source, _BMC_SRC_INK[r.price_source] || 'var(--text-muted)')}</div>` : ''}</td>
       <td class="py-1 pr-2 text-right">${_bmcPrice(r.price_per_recv)}</td>
       <td class="py-1 pr-2 text-right">${r.used_in_menus || ''}</td>
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
       <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}</td>
-    </tr>`).join('') || '<tr><td colspan="12" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ หากทะเบียนยังไม่มีข้อมูล กรุณากด “เติมจากข้อมูลในระบบ”</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ หากทะเบียนยังไม่มีข้อมูล กรุณากด “เติมจากข้อมูลในระบบ”</td></tr>';
   const nProb = _bmcIng.filter(r => r.problems.length).length;
   if (!Object.keys(_bmcIngEdits).length) {
     _bmcStatus('bmcIngSummary', `${rows.length} จาก ${_bmcIng.length} รายการ · มีปัญหา ${nProb}` + (rows.length > shown.length ? ` · แสดง ${shown.length} รายการแรก (ใช้ช่องค้นหาเพื่อกรอง)` : ''));
@@ -383,6 +397,79 @@ async function bmcSaveIng() {
     _bmcStatus('bmcIngSummary', 'บันทึกไม่สำเร็จ:' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
   }
 }
+// ── storage zones (ตั้งค่า → โซนจัดเก็บ): add · rename · delete · reorder ───────────────────
+// The list is edited here and saved in one call (POST /api/bom-center/zones, in the order shown). A zone's code
+// never changes (the ingredients point at it); a new zone gets its code from the server. A zone with ingredients
+// cannot be deleted: the button says why, and the server refuses it too.
+let _bmcZoneDrag = null;
+function _bmcZoneCanWrite() { return hasModule('bom.center') || hasModule('supply.ordering'); }
+async function bmcLoadZones() {
+  document.querySelectorAll('#tab-bomcenter .bmc-zone-write').forEach(el => { el.style.display = _bmcZoneCanWrite() ? '' : 'none'; });
+  try {
+    _bmcZones = ((await _bmcJson(`${API}/api/bom-center/zones`)).zones || []).map(z => ({ ...z }));
+    bmcRenderZones();
+    _bmcStatus('bmcZoneStatus', '');
+  } catch (e) { document.getElementById('bmcZoneList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcRenderZones() {
+  const w = _bmcZoneCanWrite();
+  const btn = (t, onclick, dis, title) => `<button onclick="${onclick}" ${dis ? 'disabled' : ''} title="${esc(title || '')}" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 9px;font-size:13px;cursor:${dis ? 'not-allowed' : 'pointer'};background:transparent;color:${dis ? 'var(--text-muted)' : 'var(--text-primary)'};opacity:${dis ? .5 : 1}">${t}</button>`;
+  document.getElementById('bmcZoneList').innerHTML = _bmcZones.map((z, i) => {
+    const why = z.fallback ? 'ลบไม่ได้ เพราะเป็นโซนสำรองของระบบ' : (z.items ? `ลบไม่ได้ เพราะยังมีวัตถุดิบ ${z.items} รายการ` : '');
+    return `<div class="bmc-zone-row" ${w ? 'draggable="true"' : ''} ondragstart="_bmcZoneDrag=${i}" ondragover="event.preventDefault()" ondrop="bmcZoneDrop(${i})"
+        style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-top:1px solid var(--border-soft);padding:6px 0">
+      <span aria-hidden="true" style="cursor:${w ? 'grab' : 'default'};color:var(--text-muted)" title="ลากเพื่อเรียงลำดับ">⠿</span>
+      <span class="text-xs" style="width:22px;color:var(--text-muted)">${i + 1}.</span>
+      ${w ? `<input value="${esc(z.label)}" maxlength="40" aria-label="ชื่อโซน" oninput="_bmcZones[${i}].label=this.value;_bmcStatus('bmcZoneStatus','แก้ไขแล้ว ยังไม่บันทึก','var(--amber-ink)')"
+              style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:200px">`
+        : `<b class="text-sm" style="color:var(--text-primary)">${esc(z.label)}</b>`}
+      <span class="text-[11px]" style="color:var(--text-muted)">${z.code ? `รหัส ${esc(z.code)} · ` : 'โซนใหม่ · '}${z.items ? z.items + ' รายการ' : 'ไม่มีวัตถุดิบ'}</span>
+      ${w ? `<span style="margin-left:auto;display:flex;gap:4px">${btn('▲', `bmcZoneMove(${i},-1)`, i === 0, 'เลื่อนขึ้น')}${btn('▼', `bmcZoneMove(${i},1)`, i === _bmcZones.length - 1, 'เลื่อนลง')}${btn('ลบ', `bmcZoneDel(${i})`, !!why, why)}</span>` : ''}
+    </div>`;
+  }).join('') || '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีโซน</span>';
+}
+function bmcZoneAdd() {
+  const el = document.getElementById('bmcZoneNew'), v = (el.value || '').trim();
+  if (!v) return;
+  if (_bmcZones.some(z => z.label === v)) { _bmcStatus('bmcZoneStatus', `มีโซน “${v}” แล้ว`, 'var(--amber-ink)'); return; }
+  _bmcZones.push({ code: null, label: v, items: 0, fallback: false });
+  el.value = '';
+  bmcRenderZones();
+  _bmcStatus('bmcZoneStatus', 'เพิ่มโซนแล้ว ยังไม่บันทึก', 'var(--amber-ink)');
+}
+function bmcZoneMove(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= _bmcZones.length) return;
+  [_bmcZones[i], _bmcZones[j]] = [_bmcZones[j], _bmcZones[i]];
+  bmcRenderZones();
+  _bmcStatus('bmcZoneStatus', 'เรียงลำดับใหม่แล้ว ยังไม่บันทึก', 'var(--amber-ink)');
+}
+function bmcZoneDrop(to) {
+  const from = _bmcZoneDrag;
+  _bmcZoneDrag = null;
+  if (from === null || from === to) return;
+  _bmcZones.splice(to, 0, _bmcZones.splice(from, 1)[0]);
+  bmcRenderZones();
+  _bmcStatus('bmcZoneStatus', 'เรียงลำดับใหม่แล้ว ยังไม่บันทึก', 'var(--amber-ink)');
+}
+async function bmcZoneDel(i) {
+  const z = _bmcZones[i];
+  if (!z || !await uiConfirm(`ยืนยันลบโซน “${z.label}”?`)) return;
+  _bmcZones.splice(i, 1);
+  bmcRenderZones();
+  _bmcStatus('bmcZoneStatus', 'ลบโซนแล้ว ยังไม่บันทึก', 'var(--amber-ink)');
+}
+async function bmcZonesSave() {
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/zones`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_bmcZones.map(z => ({ code: z.code || null, label: (z.label || '').trim() }))) });
+    _bmcZones = (d.zones || []).map(z => ({ ...z }));
+    _bmcIng = [];                                    // the ingredient sheet lists the zones too
+    bmcRenderZones();
+    _bmcStatus('bmcZoneStatus', `✓ บันทึกโซนจัดเก็บแล้ว ${_bmcZones.length} โซน`, 'var(--good-ink)');
+  } catch (e) { _bmcStatus('bmcZoneStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+
 async function bmcSeed() {
   try {
     const pre = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=true`, { method: 'POST' });
@@ -683,7 +770,7 @@ async function bmcManual(code) {
   if (v === null) return;
   let note = '';
   if (v.trim() !== '') {
-    note = await uiPrompt('กรุณาระบุเหตุผล (จำเป็น) เช่น ผู้จำหน่ายแจ้งปรับราคา');
+    note = await uiPrompt('กรุณาระบุเหตุผล (จำเป็น) เช่น ไดกิโตะ กรุ๊ปแจ้งปรับราคา');
     if (!note) return;
   }
   try {
@@ -1552,6 +1639,7 @@ async function bmcLoadForecastPane() {
   if (!day.value) day.value = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);   // Bangkok's date
   await bmcLoadCalendar();
   const sel = document.getElementById('bmcFcBranch');
+  if (!sel) return;                          // a pinned login has no picker (and never reaches this centre page)
   if (!sel.options.length && _bmcCal) {
     sel.innerHTML = _bmcCal.rows.map(r => `<option value="${r.branch_id}">${esc(r.branch)}</option>`).join('');
     const ctx = supplyCtx().branch_id;   // the module's shared branch, when this list has it
@@ -1772,6 +1860,7 @@ async function bmcLoadIssue() {
   }
   const bs = (_bmcIssPeriods.branches || []).filter(b => b.periods.length);
   const sel = document.getElementById('bmcIssBranch');
+  if (!sel) return;                          // a pinned login has no picker (and never reaches this centre page)
   if (!bs.length) {
     sel.innerHTML = '';
     document.getElementById('bmcIssPeriod').innerHTML = '';
@@ -1844,7 +1933,7 @@ async function bmcIssLoadSummary() {
     cb.title = st.receipts_confirmed ? '' : 'ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้';
   }
   _bmcStatus('bmcIssStatus', '');
-  const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'คงเหลือ (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา', 'ผู้จำหน่าย'];
+  const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'คงเหลือ (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา'];
   const num = (v, dp) => (v === null || v === undefined) ? '—' : _bmcNum(v, dp);
   const rows = d.lines.map(l => {
     const bad = l.status === 'negative';
@@ -1855,8 +1944,7 @@ async function bmcIssLoadSummary() {
       <td class="pr-2">${esc(l.base_unit || '')}</td><td class="pr-2 text-right">${num(l.begin, 3)}</td><td class="pr-2 text-right">${num(l.received, 3)}</td>
       <td class="pr-2 text-right">${num(l.claims, 3)}</td><td class="pr-2 text-right">${num(l.end, 3)}</td><td class="pr-2 text-right">${used}</td>
       <td class="pr-2 text-right">${l.unit_price === null ? '—' : _bmcPrice(l.unit_price)}</td>
-      <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td>
-      <td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.supplier || '')}</td></tr>`;
+      <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td></tr>`;
   }).join('');
   box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ใบสรุปตัดเบิก สาขา${esc(d.branch.name || '')} · ${esc(d.period.begin_date)} ถึง ${esc(d.period.end_date)} (${d.period.days} วัน · เดือน ${esc(d.period.month)})</div>
     ${d.lines.length ? `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums">

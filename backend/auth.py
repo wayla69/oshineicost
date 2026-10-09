@@ -302,6 +302,8 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/stock",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/stock",                   {"branch.stock", "bom.center"}),
     ("W",   "/api/bom-center/stock/layout",            {"bom.center", "supply.ordering"}),
+    # PR-K: the storage zones (โซนจัดเก็บ) are the centre's to add / rename / delete / reorder; a branch only reads them
+    ("W",   "/api/bom-center/zones",                   {"bom.center", "supply.ordering"}),
     # a count FILE may come from the centre too (the retro close): the on-screen count stays the branch's
     ("W",   "/api/bom-center/stock/count-import",      {"branch.stock", "bom.center", "supply.ordering"}),
     # S7 usage variance: the branch reads its own and gives reasons; the centre reads every branch

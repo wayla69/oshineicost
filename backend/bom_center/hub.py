@@ -4,7 +4,7 @@
   * Sales Support's QUEUE: every submitted order, with its delivery day; Sales Support
     sets what will actually be sent (a change needs a reason — out of stock, substitute,
     pack size …), marks it processed with a PO reference, and works from a consolidated
-    view per supplier × delivery day (Excel). The cutoff: the branch submits before 13:15
+    view per delivery day (Excel; one supplier, central.CENTRAL_SUPPLIER). The cutoff: the branch submits before 13:15
     two days before the delivery day (`cycle_date` is that cutoff date); a later order is
     accepted but flagged `late` (late fee at the outside warehouse). The warehouse then
     processes it by 14:00 of the cutoff day (Bangkok time).
@@ -208,12 +208,14 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
 
 
 def consolidated(con, order_ids: list) -> dict:
-    """Per supplier × delivery day: each ingredient's total and its branches (processed, else confirmed)."""
+    """Per delivery day: each ingredient's total and its branches (processed, else confirmed). Every central
+    item comes from one company (central.CENTRAL_SUPPLIER), so there is one group per delivery day."""
+    from .central import CENTRAL_SUPPLIER
     if not order_ids:
-        return {"groups": [], "branches": []}
+        return {"supplier": CENTRAL_SUPPLIER, "groups": [], "branches": []}
     ph = ",".join("?" * len(order_ids))
-    ing = {c: (n, s, recv, base, per) for c, n, s, recv, base, per in con.execute(
-        "SELECT code, name_th, supplier, recv_unit, base_unit, qty_per_recv FROM bc_ingredient")}
+    ing = {c: (n, recv, base, per) for c, n, recv, base, per in con.execute(
+        "SELECT code, name_th, recv_unit, base_unit, qty_per_recv FROM bc_ingredient")}
     groups, branches = {}, set()
     for oid, bid, bname, cyc, rnd, c, conf, proc, unit, ddate in con.execute(
             "SELECT o.order_id, o.branch_id, b.name, o.cycle_date, o.round, l.ingredient_code, l.confirmed_units,"
@@ -222,20 +224,19 @@ def consolidated(con, order_ids: list) -> dict:
         q = proc if proc is not None else conf
         if not q:
             continue
-        n, sup, recv, base, per = ing.get(c, (c, None, None, None, None))
+        n, recv, base, per = ing.get(c, (c, None, None, None))
         dlv = delivery_of(con, bid, rnd, cyc, ddate)
-        key = (sup or "ไม่ระบุซัพพลายเออร์", dlv)
-        g = groups.setdefault(key, {"supplier": key[0], "delivery": dlv, "items": {}})
+        g = groups.setdefault(dlv, {"delivery": dlv, "items": {}})
         it = g["items"].setdefault(c, {"code": c, "name": n or c, "unit": recv if unit != "base" else base,
                                        "total": 0.0, "by_branch": {}})
         it["total"] += q
         it["by_branch"][bname] = it["by_branch"].get(bname, 0.0) + q
         branches.add(bname)
     out = []
-    for (sup, dlv), g in sorted(groups.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+    for dlv, g in sorted(groups.items()):
         g["items"] = sorted(g["items"].values(), key=lambda i: i["name"])
         out.append(g)
-    return {"groups": out, "branches": sorted(branches)}
+    return {"supplier": CENTRAL_SUPPLIER, "groups": out, "branches": sorted(branches)}
 
 
 # ── Ops: compliance ──────────────────────────────────────────────────────────

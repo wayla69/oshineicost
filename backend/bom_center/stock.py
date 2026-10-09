@@ -15,23 +15,120 @@ ingredients inside them. A-class (by ฿ used) and monitored items are "required
 A count is saved as a draft (the phone may lose signal half-way) and submitted
 once. Submitted counts are never edited; a recount is a new count.
 """
+import json
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
 from .master import audit
 from .units import Converter
 
-ZONES = (("frozen", "แช่แข็ง"), ("chilled", "แช่เย็น"), ("dry", "ของแห้ง"), ("bar", "บาร์น้ำ"), ("other", "อื่น ๆ"))
-ZONE_TH = dict(ZONES)
+# PR-K: the storage zones are the centre's to edit (app_settings key bc_zones = JSON [{code, label}]).
+# A code is stable (items point at it), a label may be renamed, the list order is the order a branch counts in.
+DEFAULT_ZONES = (("frozen", "แช่แข็ง"), ("chilled", "แช่เย็น"), ("dry", "ของแห้ง"), ("bar", "บาร์น้ำ"), ("other", "อื่น ๆ"))
+ZONES_KEY = "bc_zones"
+FALLBACK_ZONE = "other"                   # where a guess lands when its zone no longer exists; cannot be deleted
 LOOKBACK_DAYS = 28
+_ZONE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
+
+
+def zones(con) -> tuple:
+    """The configured zones as ((code, label), …) in count order; the 5 defaults when nothing valid is stored."""
+    try:
+        r = con.execute("SELECT value FROM app_settings WHERE key=?", (ZONES_KEY,)).fetchone()
+        raw = json.loads(r[0]) if r and r[0] else None
+    except Exception:
+        raw = None
+    out, seen = [], set()
+    for z in raw if isinstance(raw, list) else []:
+        code = str((z or {}).get("code") or "").strip()
+        label = str((z or {}).get("label") or "").strip()
+        if code and label and code not in seen:
+            seen.add(code)
+            out.append((code, label))
+    return tuple(out) or DEFAULT_ZONES
+
+
+def zone_labels(con) -> dict:
+    return dict(zones(con))
+
+
+def zone_usage(con) -> dict:
+    """{code: how many ingredients the centre has put in that zone}."""
+    return {z: n for z, n in con.execute(
+        "SELECT storage_zone, COUNT(*) FROM bc_ingredient WHERE COALESCE(storage_zone,'')<>'' GROUP BY storage_zone")}
+
+
+def set_zones(con, rows: list, who: str) -> tuple:
+    """Replace the zone list (add / rename / delete / reorder). Codes of existing zones are kept; a new zone
+    may omit its code (one is made). A zone that still holds ingredients cannot be dropped."""
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("ต้องมีโซนจัดเก็บอย่างน้อย 1 โซน")
+    old = dict(zones(con))
+    new, seen, labels = [], set(), set()
+    for i, r in enumerate(rows, 1):
+        label = re.sub(r"\s+", " ", str((r or {}).get("label") or "")).strip()
+        code = str((r or {}).get("code") or "").strip().lower()
+        if not label:
+            raise ValueError(f"โซนลำดับที่ {i}: กรุณาระบุชื่อโซน")
+        if len(label) > 40:
+            raise ValueError(f"โซน “{label[:20]}…”: ชื่อยาวเกิน 40 ตัวอักษร")
+        if label in labels:
+            raise ValueError(f"ชื่อโซน “{label}” ซ้ำกัน")
+        labels.add(label)
+        if not code:
+            n = 1
+            used = set(old) | {c for c, _ in new} | {str((x or {}).get("code") or "").strip().lower() for x in rows}
+            while f"zone{n}" in used:
+                n += 1
+            code = f"zone{n}"
+        if not _ZONE_CODE.match(code):
+            raise ValueError(f"รหัสโซน “{code}” ใช้ได้เฉพาะ a-z 0-9 _ และขึ้นต้นด้วยตัวอักษร")
+        if code in seen:
+            raise ValueError(f"รหัสโซน “{code}” ซ้ำกัน")
+        seen.add(code)
+        new.append((code, label))
+    use = zone_usage(con)
+    for code, label in old.items():
+        if code not in seen:
+            if code == FALLBACK_ZONE:
+                raise ValueError(f"ลบโซน “{label}” ไม่ได้ เพราะเป็นโซนสำรองของระบบ เปลี่ยนชื่อได้เท่านั้น")
+            if use.get(code):
+                raise ValueError(f"ลบโซน “{label}” ไม่ได้ เพราะยังมีวัตถุดิบ {use[code]} รายการ "
+                                 "กรุณาเปลี่ยนชื่อโซน หรือย้ายวัตถุดิบไปโซนอื่นก่อน")
+    dump = lambda zs: json.dumps([{"code": c, "label": t} for c, t in zs], ensure_ascii=False)  # noqa: E731
+    con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
+    con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES(?, ?)", (ZONES_KEY, dump(new)))
+    audit(con, who, "zones_set", "app_settings", ZONES_KEY, dump(old.items()), dump(new))
+    return tuple(new)
+
+
+def zone_code_for(con, value) -> str:
+    """A zone code from a code or a label (the master sheet carries the label). '' = none; ValueError when unknown."""
+    v = str(value or "").strip()
+    if not v:
+        return ""
+    zs = zones(con)
+    for c, t in zs:
+        if v.lower() == c or v == t:
+            return c
+    raise ValueError(f"ไม่พบโซนจัดเก็บ “{v}” (โซนที่มี: " + ", ".join(t for _, t in zs) + ")")
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def guess_zone(code: str, name: str, family: str, kind: str) -> str:
-    """A first guess until the centre sets bc_ingredient.storage_zone."""
+def guess_zone(code: str, name: str, family: str, kind: str, valid=None) -> str:
+    """A first guess until the centre sets bc_ingredient.storage_zone. `valid` = the configured zone codes:
+    a guess naming a zone the centre removed lands in the fallback zone (else the last one)."""
+    z = _guess(code, name, family, kind)
+    if valid is None or z in valid:
+        return z
+    return FALLBACK_ZONE if FALLBACK_ZONE in valid else list(valid)[-1]
+
+
+def _guess(code: str, name: str, family: str, kind: str) -> str:
     n = (name or "").lower()
     c = code or ""
     if "แช่แข็ง" in n or "frozen" in n:
@@ -148,7 +245,9 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     if dr:
         draft = {c: (q, u) for c, q, u in con.execute(
             "SELECT ingredient_code, qty_kitchen, unit FROM bc_stock_count_line WHERE count_id=?", (dr["count_id"],))}
-    zones = {z: [] for z, _ in ZONES}
+    zcfg = zones(con)
+    valid = [z for z, _ in zcfg]
+    by_zone = {z: [] for z in valid}
     conv = Converter(con)
     for c in sorted(codes):
         m = master.get(c)
@@ -156,10 +255,10 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
             continue
         name, fam, kind, base, recv, per, mon, zone, cu, _active = m
         unit, factor = (cu, conv.factor(c, cu)[0]) if cu else count_unit(base, recv, per)
-        z = zone or guess_zone(c, name, fam, kind)
+        z = zone if zone in by_zone else guess_zone(c, name, fam, kind, valid)
         k = klass.get(c, "C")
         pv = prev.get(c)
-        zones.setdefault(z, []).append({
+        by_zone[z].append({
             "code": c, "name": name or c, "base_unit": base, "count_unit": unit, "per_count_unit": factor,
             "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A", "monitored": bool(mon),
             "use_per_day": round(per_day.get(c, 0.0), 3),
@@ -167,8 +266,8 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
             "draft_qty": draft.get(c, (None,))[0]})
     order = {"A": 0, "B": 1, "C": 2}
     out_z = []
-    for z, label in ZONES:
-        items = sorted(zones.get(z, []), key=lambda r: (not r["required"], order[r["class"]], r["name"]))
+    for z, label in zcfg:
+        items = sorted(by_zone.get(z, []), key=lambda r: (not r["required"], order[r["class"]], r["name"]))
         if items:
             out_z.append({"zone": z, "label": label, "items": items})
     return {"branch_id": branch_id, "branch": bname, "as_of": as_of.isoformat(),
@@ -328,15 +427,15 @@ def periods(con, branch_id: int) -> list:
 def set_layout(con, rows: list, who: str) -> int:
     """The centre sets where an item is kept and the unit it is counted in."""
     n = 0
-    zones = {z for z, _ in ZONES}
+    zlabels = zone_labels(con)
     conv = Converter(con)
     for r in rows or []:
         code = (r.get("code") or "").strip()
         if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (code,)).fetchone():
             raise ValueError(f"ไม่พบรหัส {code}")
         z = (r.get("zone") or "").strip() or None
-        if z and z not in zones:
-            raise ValueError(f"{code}: โซนต้องเป็น {', '.join(sorted(zones))}")
+        if z and z not in zlabels:
+            raise ValueError(f"{code}: โซนต้องเป็น {', '.join(sorted(zlabels))}")
         cu = (r.get("count_unit") or "").strip() or None
         if cu and conv.factor(code, cu)[0] is None:
             raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน")

@@ -15,9 +15,8 @@
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label>ตัดรอบตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามผู้จำหน่ายและวันส่ง</button>
+        <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามวันส่ง</button>
         <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
-        <label class="flex items-center gap-1" style="padding-bottom:6px;color:var(--text-secondary)"><input type="checkbox" id="ohbSplit"> แยก sheet ตามผู้จำหน่าย</label>
         <span class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)">สรุปและไฟล์ใช้สถานะที่เลือกด้านบน</span>
       </div>
       <!-- ประสานงานขาย: ทำเครื่องหมายใบสั่งซื้อที่คีย์เข้าระบบบัญชีแล้ว (ติ๊กเฉพาะใบที่ดำเนินการแล้วหรือสาขารับแล้ว) -->
@@ -50,7 +49,7 @@
       <div class="text-xs mb-2" style="color:var(--text-secondary)">ใบตัดเบิกประจำวันที่สาขาบันทึก (เบิกใช้และของเสีย) · ใบที่ยืนยันแล้วแก้ไขไม่ได้ หากสาขาต้องแก้ไข ประสานงานขายเปิดแก้ไขพร้อมระบุเหตุผล ระบบบันทึกทุกครั้งที่เปิดแก้ไขและยืนยันซ้ำ · ใบที่ยืนยันหลังวันที่ของใบถือเป็น “ล่าช้า” · ไฟล์ Excel รวมเฉพาะใบที่ยืนยันแล้ว ·
         คู่มือบัญชี: <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">ใบสรุปตัดเบิกและใบตัดเบิกรายวัน</a></div>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
-        <label>สาขา<br><select id="ohbIsBranch" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
+        <label>สาขา<br><select id="ohbIsBranch" data-branch-picker onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>เดือนของไฟล์ Excel<br><input type="month" id="ohbIsMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -70,7 +69,7 @@
     <div class="card p-3 mb-3">
       <div class="text-xs mb-2" style="color:var(--text-secondary)">เปรียบเทียบมูลค่าที่สาขาเบิกจริงในใบตัดเบิกที่ยืนยันแล้ว (เบิกใช้ + ของเสีย) กับมูลค่าตามสูตร BoM จากยอดขายของวันนั้น · รายการชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นสัญญาณเตือนเพื่อให้ประสานงานขายและ Ops ตรวจสอบสาขา · คลิกที่วันเพื่อดูรายการวัตถุดิบ</div>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
-        <label>สาขา<br><select id="ohbIvBranch" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
+        <label>สาขา<br><select id="ohbIvBranch" data-branch-picker onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>เดือน<br><input type="month" id="ohbIvMonth" onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <a href="#" onclick="ohbIvXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
         <span id="ohbIvStatus" style="padding-bottom:6px"></span>
@@ -178,7 +177,7 @@
         ระบบเลือกสาขาและวันที่ที่ยังขาดให้แล้ว ดาวน์โหลดแบบฟอร์ม กรอกจำนวน แล้วนำเข้า</p>
       <div id="ohbSt4Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label>สาขา<br><select id="ohbCntBranch" onchange="ohbCntBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <label>สาขา<br><select id="ohbCntBranch" data-branch-picker onchange="ohbCntBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
         <label>วันที่ตรวจนับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแบบฟอร์มตรวจนับ</a>
         <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลตรวจนับ (.xlsx)

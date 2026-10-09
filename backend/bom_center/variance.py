@@ -344,19 +344,19 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
     begin, end, received, claims = mv["begin"], mv["end"], mv["received"], mv["claims"]
     reasons = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_variance_reason WHERE end_count_id=?",
                                          (e["count_id"],))}
-    info = {c: (n, u, s, f) for c, n, u, s, f in con.execute(
-        "SELECT code, name_th, base_unit, supplier, family FROM bc_ingredient")}
+    info = {c: (n, u, f) for c, n, u, f in con.execute(
+        "SELECT code, name_th, base_unit, family FROM bc_ingredient")}
     lines, excluded = [], []
     for c in sorted(set(begin) | set(end) | set(received) | set(claims)):
         r, cl = received.get(c, 0.0), claims.get(c, 0.0)
-        n, u, sup, fam = info.get(c) or (None, None, None, None)
+        n, u, fam = info.get(c) or (None, None, None)
         if c not in received and c not in claims and not begin.get(c) and not end.get(c):
             excluded.append({"code": c, "name": n})          # counted at zero and nothing arrived: nothing moved
             continue
         pr = price_for(con, c, month)
         unit_price = pr[0] if pr else None
         src = f"{PRICE_SOURCE_TH.get(pr[1], pr[1])} ({pr[2]})" if pr else None
-        ln = {"code": c, "name": n, "base_unit": u, "supplier": sup, "family": fam,
+        ln = {"code": c, "name": n, "base_unit": u, "family": fam,
               "begin": begin.get(c), "received": round(r, 3), "claims": round(cl, 3), "end": end.get(c),
               "unit_price": unit_price, "price_source": src, "has_reason": c in reasons,
               "used": None, "value": None, "status": "ok", "note": None}
