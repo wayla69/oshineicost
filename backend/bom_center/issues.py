@@ -37,6 +37,7 @@ WASTE_REASONS = (("waste", "ของเสีย / เน่าเสีย"), 
 WASTE_REASON_TH = dict(WASTE_REASONS)
 STATUS_TH = {"confirmed": "ยืนยันแล้ว", "late": "ยืนยันล่าช้า", "draft": "ร่าง", "missing": "ยังไม่บันทึก"}
 MAX_BACKDATE_DAYS = 60
+RECENT_DAYS = 14               # an item issued on a CONFIRMED slip in this many days before the day is "recent" (listed first)
 
 DDL = (
     """CREATE TABLE IF NOT EXISTS bc_issue_slip(
@@ -157,7 +158,11 @@ def _date_or_error(slip_date) -> date:
 
 def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
     """The list a branch issues from on one day: every item it keeps (the month-end count list), the system
-    stock before that day's issue, the 7-day average, and the slip's own lines."""
+    stock before that day's issue, the 7-day average, and the slip's own lines.
+
+    PR-M3: each item also carries `recent` (a confirmed slip of the last RECENT_DAYS days before this day has a line
+    for it) and `prev_used` / `prev_waste` (the quantity on the latest such confirmed slip, in the count unit, None
+    when 0); inside a zone the recent items come first. `prev_date` names that slip."""
     from .stock import sheet as stock_sheet, system_position
     d = _date_or_error(slip_date)
     today = _day(now)
@@ -185,6 +190,22 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
 
     def in_count(code, qb, factor):
         return None if qb is None else round(qb / (factor or 1.0), 6)
+    # PR-M3: what the branch really issues comes first inside a zone (it fills the same few lines every day), and
+    # the previous confirmed slip's quantity is the hint inside an empty box ("เมื่อวาน 3")
+    r0 = (d - timedelta(days=RECENT_DAYS)).isoformat()
+    recent = {c for c, in con.execute(
+        "SELECT DISTINCT l.ingredient_code FROM bc_issue_line l JOIN bc_issue_slip s USING(slip_id)"
+        " WHERE s.branch_id=? AND s.status='confirmed' AND s.slip_date BETWEEN ? AND ?"
+        " AND (l.qty_used>0 OR l.qty_waste>0)", (branch_id, r0, w1))}
+    pv = con.execute("SELECT slip_id, slip_date FROM bc_issue_slip WHERE branch_id=? AND status='confirmed'"
+                     " AND slip_date BETWEEN ? AND ? ORDER BY slip_date DESC LIMIT 1", (branch_id, r0, w1)).fetchone()
+    prev_lines = {}
+    if pv:
+        for c, qu, qw, unit, qub, qwb in con.execute(
+                "SELECT ingredient_code, qty_used, qty_waste, unit, qty_used_base, qty_waste_base FROM bc_issue_line"
+                " WHERE slip_id=?", (pv[0],)):
+            prev_lines[c] = (qu, qw, unit, qub, qwb)
+    klass_order = {"A": 0, "B": 1, "C": 2}
     for z in base["zones"]:
         for it in z["items"]:
             f = it["per_count_unit"] or 1.0
@@ -199,12 +220,23 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
                 it["waste_reason"], it["line_note"] = ln["waste_reason"], ln["note"]
             else:
                 it["used"] = it["waste"] = it["waste_reason"] = it["line_note"] = None
+            it["recent"] = it["code"] in recent
+            pl = prev_lines.get(it["code"])
+            it["prev_used"] = it["prev_waste"] = None
+            if pl:
+                same = (pl[2] or "") == (it["count_unit"] or "")
+                pu = pl[0] if same else in_count(it["code"], pl[3], f)
+                pw = pl[1] if same else in_count(it["code"], pl[4], f)
+                it["prev_used"] = pu if pu and pu > 0 else None
+                it["prev_waste"] = pw if pw and pw > 0 else None
+        # usage first, then the order the count list already uses (required, then class A/B/C, then the name)
+        z["items"].sort(key=lambda r: (not r["recent"], not r["required"], klass_order.get(r["class"], 3), r["name"]))
     st = status_of(con, branch_id, d)
     out = {k: base[k] for k in ("branch_id", "branch", "zones", "items", "required")}
     out.update({"date": d.isoformat(), "today": today.isoformat(), "status": st, "status_th": STATUS_TH[st["status"]],
                 "slip": row and {k: row[k] for k in ("slip_id", "note", "reopened_by", "reopened_at", "reopen_note")},
                 "editable": st["status"] not in ("confirmed", "late"),
-                "backdated": d < today, "basis": pos["basis"], "missing_days": pos["missing_days"],
+                "backdated": d < today, "prev_date": pv[1] if pv else None, "basis": pos["basis"], "missing_days": pos["missing_days"],
                 "earliest": (today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat(),
                 "lines": list(lines.values()),
                 "reasons": [{"code": c, "label": t} for c, t in WASTE_REASONS]})

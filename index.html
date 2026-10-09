@@ -1453,6 +1453,31 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .bmc-help > div > p + p { margin-top: 4px; }
 /* status line that follows a save or a download (bmcStatus) */
 .bmc-status { font-size: 13px; }
+/* ── PR-M3 · the branch's daily pages (ตัดเบิก · สั่งสินค้า) ──
+   a row = name (2 lines, code muted under it) + boxes with a caption under each (name · unit); a wrong value turns the
+   box red with a note under the row; the day strip and the round list are one line per entry */
+.brn-daystrip { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.brn-daystrip::-webkit-scrollbar { display: none; }
+.brn-delivlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px; }
+.brn-row .brn-name { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.brn-row .brn-boxes { display: flex; gap: 8px; flex: 0 0 auto; }
+.brn-row .brn-box { width: 76px; flex: 0 0 76px; }
+.brn-row .brn-qty { width: 100%; height: 36px; box-sizing: border-box; text-align: center; font-size: 16px; border: 1px solid var(--border-control); border-radius: 10px; background: var(--bg-input); color: var(--text-primary); }
+.brn-row .brn-qty[aria-invalid="true"], .brn-row .brn-qty[aria-invalid="true"]:focus { border-color: var(--bad-ink) !important; box-shadow: 0 0 0 3px rgba(185,28,28,0.15) !important; }   /* the global focus ring must not hide the red */
+.brn-row .brn-qty::placeholder { font-size: 11.5px; color: var(--text-muted); opacity: 1; }
+.brn-row .brn-cap { display: block; margin-top: 2px; font-size: 11px; line-height: 1.2; text-align: center; color: var(--text-secondary); overflow-wrap: anywhere; }
+.brn-row .brn-err { font-size: 12px; line-height: 1.3; color: var(--bad-ink); margin-top: 2px; }
+.brn-row .brn-err:empty { display: none; }
+.brn-row .brn-why { border: 0; background: none; padding: 2px 0; font-size: 12px; color: var(--accent); cursor: pointer; }
+.brn-reason select, .brn-reason input { font-size: 16px; }
+.brn-status { font-size: 14px; }
+.brn-status:empty { display: none; }
+/* the customer-count helper of สั่งสินค้า on a phone: a bottom sheet */
+.brn-sheet { display: none; position: fixed; inset: 0; z-index: 70; }
+.brn-sheet.open { display: block; }
+.brn-sheet-scrim { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+.brn-sheet-card { position: absolute; left: 0; right: 0; bottom: 0; max-height: 80vh; overflow-y: auto; background: var(--bg-card,#fff);
+  border-radius: 16px 16px 0 0; padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 24px rgba(0,0,0,.25); }
 /* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
    หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
    give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
@@ -1501,7 +1526,18 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   /* a row: the unit is already in the line under the name; the name takes the width the two boxes leave */
   body.supply-phone #tab-branchstock .brn-unit { display: none; }
   body.supply-phone #tab-branchstock #brnList .brn-namecol { flex: 1 1 130px !important; }
-  body.supply-phone #brnList > div, body.supply-phone #brnIssList > div { padding-top: 4px !important; padding-bottom: 4px !important; }
+  body.supply-phone #brnList > div { padding-top: 4px !important; padding-bottom: 4px !important; }
+  /* PR-M3: the issue and order rows keep their units (a caption under each box), two name lines, one muted line under them */
+  body.supply-phone #brnIssList > div, body.supply-phone #brnOrdList > div { padding-top: 6px !important; padding-bottom: 6px !important; }
+  body.supply-phone .brn-row .brn-box { width: 72px; flex-basis: 72px; }
+  body.supply-phone .brn-row .brn-name { font-size: 13px; }
+  body.supply-phone #brnIssList .brn-sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }   /* never clipped: the system stock must be readable */
+  body.supply-phone #brnIssList .brn-sys { display: block; }                                                     /* "คงเหลือ 1 กล่อง" on its own line under the code */
+  body.supply-phone #brnIssList .brn-sys-sep { display: none; }
+  body.supply-phone #brnIssList .brn-avg { display: none; }
+  body.supply-phone #brnIssProgress { white-space: normal !important; display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.15; }
+  body.supply-phone .brn-reason select, body.supply-phone .brn-reason input { min-height: 44px; }
+  body.supply-phone .brn-delivlist button { min-height: 44px !important; }
   body.supply-phone #tab-branchstock .brn-namecol > div:first-child { font-size: 13px; line-height: 1.3; }
   body.supply-phone #tab-branchstock .brn-namecol > div:last-child { font-size: 10.5px; line-height: 1.3; }
   /* the sticky action row */
@@ -1512,6 +1548,10 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body.supply-phone .brn-sticky-bottom > div { display: flex; flex-wrap: nowrap !important; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   body.supply-phone .brn-sticky-bottom button { height: 40px; padding: 0 12px !important; font-size: 13.5px !important; white-space: nowrap; flex: 0 0 auto; }
   body.supply-phone .brn-sticky-bottom span[id$="Status"] { flex: 0 1 auto; min-width: 0; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  /* PR-M3: on the two daily pages the save status is 14 px on a line of its own ABOVE the buttons (it is the proof that the draft is kept) */
+  body.supply-phone #brn-pane-issue .brn-sticky-bottom, body.supply-phone #brn-pane-order .brn-sticky-bottom { flex-direction: column-reverse; align-items: stretch; height: auto; min-height: 52px; gap: 2px; }
+  body.supply-phone #brn-pane-order .brn-sticky-bottom > div { flex-wrap: wrap !important; overflow: visible; row-gap: 4px; }   /* the reason a button is off is a line under the buttons, not clipped beside them */
+  body.supply-phone #brn-pane-issue .brn-sticky-bottom span[id$="Status"], body.supply-phone #brn-pane-order .brn-sticky-bottom span[id$="Status"] { max-width: 100%; font-size: 14px; line-height: 20px; white-space: normal; overflow: visible; }
   /* every numeric box and its − / + buttons: 44 px */
   body.supply-phone #tab-branchstock input[inputmode="decimal"], body.supply-phone #tab-branchstock input[inputmode="numeric"],
   body.supply-phone #tab-branchstock input[type="number"] { min-height: 44px !important; font-size: 16px !important; }

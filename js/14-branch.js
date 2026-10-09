@@ -212,6 +212,7 @@ let _brnIssZone = null;
 let _brnIssQty = {};          // code -> {used, waste, reason, note} (strings) — the working copy
 let _brnIssDirty = false;
 let _brnIssTimer = null;
+let _brnIssLastSig = null;    // the lines last stored (or loaded): the autosave sends nothing when they have not changed
 const _BRN_ISS_WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 function _brnIssDm(iso) { return `${Number(String(iso).slice(8, 10))}/${Number(String(iso).slice(5, 7))}`; }
 function _brnIssWd(iso) { return _BRN_ISS_WD[new Date(String(iso) + 'T12:00:00Z').getUTCDay()]; }
@@ -233,7 +234,10 @@ async function brnIssLoad(opts) {
     ['brnIssDays', 'brnIssHead', 'brnIssZones', 'brnIssActions', 'brnIssHistory', 'brnIssProgress'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     return;
   }
-  if (!opts.quiet) document.getElementById('brnIssList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลดรายการ…</span>';
+  if (!opts.quiet) {
+    document.getElementById('brnIssList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลดรายการ…</span>';
+    _bmcStatus('brnIssStatus', '');                       // the previous day's "บันทึกร่างแล้ว" does not belong to this one
+  }
   try {
     const qs = _brnQS();
     const [st, sh] = await Promise.all([
@@ -251,25 +255,44 @@ async function brnIssLoad(opts) {
       }
     }));
     _brnIssDirty = false;
+    _brnIssLastSig = JSON.stringify(_brnIssLines().lines);
     if (!_brnIssZone || !sh.zones.some(z => z.zone === _brnIssZone)) _brnIssZone = (sh.zones[0] || {}).zone || null;
     brnIssRender();
     brnIssHistory();
   } catch (e) { document.getElementById('brnIssList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 
-// the last 7 days as chips: the dot says what the slip of that day is
+// PR-M3 · the day strip, in one row: today, then ONLY the days that still need a slip (amber "ยังไม่ทำ", or "ร่าง"),
+// and the days already confirmed folded into one grey chip "ยืนยันครบ N วัน" (it leads to the history list below).
+// The day on screen always has its own chip.
 function _brnIssDayChips() {
   const box = document.getElementById('brnIssDays');
   if (!box) return;
   const today = _brnIss ? _brnIss.today : '';
-  box.innerHTML = _brnIssStrip.map(d => {
+  const isOk = d => d.status === 'confirmed' || d.status === 'late';
+  const strip = _brnIssStrip.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const chip = (d, label, sub, ink) => {
     const on = d.date === _brnIssDate;
-    const [t, ink] = _BRN_ISS_ST[d.status] || _BRN_ISS_ST.missing;
-    return `<button onclick="brnIssSetDate('${d.date}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:6px 12px;font-size:13px;cursor:pointer;text-align:center;min-width:64px;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">
-      <span style="display:block">${esc(d.date === today ? 'วันนี้' : _brnIssWd(d.date))} ${esc(_brnIssDm(d.date))}</span>
-      <span style="display:block;font-size:11px;color:${on ? 'inherit' : ink}">● ${esc(t)}</span></button>`;
-  }).join('');
+    return `<button onclick="brnIssSetDate('${d.date}')" style="flex:0 0 auto;border:1px solid ${on ? 'var(--accent)' : ink};border-radius:12px;padding:3px 10px;font-size:13px;line-height:1.25;cursor:pointer;text-align:center;min-width:72px;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">
+      <span style="display:block">${esc(label)}</span><span style="display:block;font-size:11px;color:${on ? 'inherit' : ink}">${esc(sub)}</span></button>`;
+  };
+  const sub = (d, past) => d.status === 'missing' ? (past ? ['ยังไม่ทำ', 'var(--amber-ink)'] : ['ยังไม่บันทึก', 'var(--text-muted)'])
+    : (_BRN_ISS_ST[d.status] || _BRN_ISS_ST.missing);
+  const out = [];
+  const t = strip.find(d => d.date === today);
+  if (t) { const [s, ink] = sub(t, false); out.push(chip(t, 'วันนี้ ' + _brnIssDm(t.date), s, ink)); }
+  strip.filter(d => d.date !== today && !isOk(d)).forEach(d => {      // the days to do, oldest first
+    const [s, ink] = sub(d, true);
+    out.push(chip(d, _brnIssWd(d.date) + ' ' + _brnIssDm(d.date), s, ink));
+  });
+  const oldOpen = strip.find(d => d.date === _brnIssDate && d.date !== today && isOk(d));   // a confirmed day opened from the history
+  if (oldOpen) { const [s, ink] = sub(oldOpen, true); out.push(chip(oldOpen, _brnIssWd(oldOpen.date) + ' ' + _brnIssDm(oldOpen.date), s, ink)); }
+  const nOk = strip.filter(d => d.date !== today && isOk(d)).length;
+  if (nOk) out.push(`<button onclick="brnIssToHistory()" style="flex:0 0 auto;border:1px solid var(--border);border-radius:12px;padding:3px 10px;font-size:13px;line-height:1.25;cursor:pointer;text-align:center;min-width:72px;background:var(--bg-hover, transparent);color:var(--text-secondary)">
+      <span style="display:block">ยืนยันครบ ${nOk} วัน</span><span style="display:block;font-size:11px;color:var(--text-muted)">ดูประวัติ ↓</span></button>`);
+  box.innerHTML = out.join('');
 }
+function brnIssToHistory() { const el = document.getElementById('brnIssHistory'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 async function brnIssSetDate(d) {
   if (d === _brnIssDate) return;
   clearTimeout(_brnIssTimer);
@@ -280,35 +303,57 @@ async function brnIssSetDate(d) {
 }
 function brnIssSetZone(z) { _brnIssZone = z; brnIssRender(); window.scrollTo({ top: 0 }); }
 
+// a quantity box: empty, or a number ≥ 0 (anything else is refused on the spot and never sent)
+const _BRN_QTY_OK = /^(\d+\.?\d*|\.\d+)$/;
+function _brnIssBadVal(v) { return v !== '' && v != null && !_BRN_QTY_OK.test(String(v)); }
+function _brnIssBad(code) { const q = _brnIssQty[code]; return !!q && (_brnIssBadVal(q.used) || _brnIssBadVal(q.waste)); }
+const _BRN_QTY_ERR = 'จำนวนต้องเป็นตัวเลข ≥ 0';
 function _brnIssAny(code) { const q = _brnIssQty[code]; return !!q && (Number(q.used) > 0 || Number(q.waste) > 0); }
+// the border of one box and the note under the row follow what was typed (called on every keystroke)
+function _brnIssMark(code) {
+  const q = _brnIssQty[code] || {};
+  [['used', 'brnIssU_', 'var(--accent)'], ['waste', 'brnIssW_', 'var(--amber-ink)']].forEach(([f, id, ink]) => {
+    const el = document.getElementById(id + code);
+    if (!el) return;
+    const bad = _brnIssBadVal(q[f]);
+    el.style.borderColor = bad ? 'var(--bad-ink)' : (q[f] !== '' && q[f] != null ? ink : 'var(--border-control)');
+    el.setAttribute('aria-invalid', bad ? 'true' : 'false');
+  });
+  const e = document.getElementById('brnIssE_' + code);
+  if (e) e.textContent = _brnIssBad(code) ? _BRN_QTY_ERR : '';
+}
 function _brnIssReasonBox(code) {
   const q = _brnIssQty[code] || {};
   if (!(Number(q.waste) > 0)) return '';
   const ed = _brnIssEditable();
-  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)';
+  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
   const bad = !q.reason || (q.reason === 'other' && !String(q.note || '').trim());
-  return `<div class="flex flex-wrap gap-2 mt-1 text-xs"><select id="brnIssR_${esc(code)}" onchange="brnIssSetField(${_bmcQ(code)}, 'reason', this.value)" ${ed ? '' : 'disabled'}
+  return `<div class="flex flex-wrap gap-2 mt-1 brn-reason"><select id="brnIssR_${esc(code)}" onchange="brnIssSetField(${_bmcQ(code)}, 'reason', this.value)" ${ed ? '' : 'disabled'}
       style="${inp};border-color:${bad ? 'var(--amber-ink)' : 'var(--border-control)'}"><option value="">— สาเหตุของของเสีย —</option>${((_brnIss && _brnIss.reasons) || []).map(r => `<option value="${esc(r.code)}"${q.reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
     <input id="brnIssN_${esc(code)}" value="${esc(q.note || '')}" placeholder="${q.reason === 'other' ? 'ระบุคำอธิบาย (จำเป็น)' : 'หมายเหตุ'}" oninput="brnIssSetField(${_bmcQ(code)}, 'note', this.value)" ${ed ? '' : 'disabled'}
-      style="flex:1 1 140px;${inp}"></div>`;
+      style="flex:1 1 140px;min-width:0;${inp}"></div>`;
 }
+// "โซนนี้ครบ": the zone has required items (monitored, or class A) and every one of them is filled — a quantity above 0
+// in เบิกใช้ or ของเสีย (a 0 is not stored, so it cannot count after a reload)
+function _brnIssZoneDone(z) { const req = z.items.filter(i => i.required); return req.length > 0 && req.every(i => _brnIssAny(i.code)); }
 function _brnIssZoneChips() {
   const s = _brnIss;
   if (!s) return;
+  const searching = !!((document.getElementById('brnIssQ') || {}).value || '').trim();
   document.getElementById('brnIssZones').innerHTML = s.zones.map(z => {
-    const done = z.items.filter(i => _brnIssAny(i.code)).length;
-    const on = z.zone === _brnIssZone;
-    return `<button onclick="brnIssSetZone('${z.zone}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${esc(z.label)} ${done}/${z.items.length}</button>`;
+    const n = z.items.filter(i => _brnIssAny(i.code)).length;
+    const ok = _brnIssZoneDone(z);
+    const on = !searching && z.zone === _brnIssZone;
+    return `<button onclick="brnIssSetZone('${z.zone}')" ${ok ? 'title="โซนนี้ครบ"' : ''} style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${esc(z.label)}${n ? ' · ' + n : ''}${ok ? ` <span style="color:${on ? 'inherit' : 'var(--good-ink)'}" aria-label="โซนนี้ครบ">✓</span>` : ''}</button>`;
   }).join('');
 }
 function _brnIssProgress() {
   const s = _brnIss;
   if (!s) return;
   const all = s.zones.flatMap(z => z.items);
-  const nUsed = all.filter(i => Number((_brnIssQty[i.code] || {}).used) > 0).length;
   const nWaste = all.filter(i => Number((_brnIssQty[i.code] || {}).waste) > 0).length;
   document.getElementById('brnIssProgress').innerHTML =
-    `กรอกแล้ว <b style="color:var(--text-primary)">${all.filter(i => _brnIssAny(i.code)).length}/${all.length}</b> รายการ · เบิกใช้ <b style="color:var(--text-primary)">${nUsed}</b> · ของเสีย <b style="color:${nWaste ? 'var(--amber-ink)' : 'var(--text-primary)'}">${nWaste}</b>`;
+    `กรอกแล้ว <b style="color:var(--text-primary)">${all.filter(i => _brnIssAny(i.code)).length}</b> รายการ · ของเสีย <b style="color:${nWaste ? 'var(--amber-ink)' : 'var(--text-primary)'}">${nWaste}</b>`;
 }
 
 function brnIssRender() {
@@ -327,7 +372,7 @@ function brnIssRender() {
   if (s.backdated && !confirmed) parts.push(['var(--amber-ink)', 'ใบย้อนหลังนับเป็นล่าช้า']);
   if (confirmed) parts.push(['var(--text-secondary)', 'ยืนยันแล้ว แก้ไขไม่ได้ · ต้องการแก้ แจ้งประสานงานขาย']);
   const md = s.missing_days || [];
-  if (md.length) parts.push(['var(--amber-ink)', `ยังไม่ได้ทำใบตัดเบิก ${md.length} วัน (${md.slice(0, 6).map(_brnIssDm).join(', ')}${md.length > 6 ? ` และอีก ${md.length - 6} วัน` : ''}) · ทำใบของวันที่ขาดก่อน`]);
+  if (md.length) parts.push(['var(--amber-ink)', `ยังไม่ได้ทำใบตัดเบิก ${md.length} วัน (${md.slice(0, 6).map(_brnIssDm).join(', ')}${md.length > 6 ? ` และอีก ${md.length - 6} วัน` : ''}) · เลือกวันที่ยังไม่ทำจากแถบวันที่`]);
   const banner = document.getElementById('brnIssBanner');
   banner.style.display = parts.length ? '' : 'none';
   banner.innerHTML = parts.map(([ink, t]) => `<div class="text-xs mb-1" style="border:1px solid ${ink};border-radius:var(--r-sm);padding:6px 10px;color:${ink}">${esc(t)}</div>`).join('');
@@ -338,26 +383,28 @@ function brnIssRender() {
   const q = (document.getElementById('brnIssQ').value || '').trim().toLowerCase();
   const usedOnly = document.getElementById('brnIssUsedOnly').checked;
   const items = (q ? all : zone.items).filter(i => (!usedOnly || _brnIssAny(i.code)) && (!q || (i.code + ' ' + i.name).toLowerCase().includes(q)));
-  const inp = (id, v, ink) => `<input id="${id}" inputmode="decimal" value="${esc(v)}" ${ed ? '' : 'disabled'}
-      style="width:64px;height:36px;text-align:center;font-size:16px;border:1px solid ${v !== '' ? ink : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)"`;
+  // one box: the caption under it names the box and its unit; an empty box hints at the previous confirmed slip ("เมื่อวาน 3")
+  const prevWord = s.prev_date && s.prev_date === new Date(new Date(s.date + 'T12:00:00Z').getTime() - 86400000).toISOString().slice(0, 10) ? 'เมื่อวาน' : 'ครั้งก่อน';
+  const box = (it, f, label, ink, v, prev, unit) => {
+    const id = (f === 'used' ? 'brnIssU_' : 'brnIssW_') + esc(it.code);
+    const bad = _brnIssBadVal(v);
+    return `<div class="brn-box"><input id="${id}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${ed ? '' : 'disabled'} aria-label="${label} ${esc(it.name)}"
+        placeholder="${prev ? prevWord + ' ' + _bmcNum(prev, 2) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${bad ? 'aria-invalid="true"' : ''}
+        style="border-color:${bad ? 'var(--bad-ink)' : (v !== '' ? ink : 'var(--border-control)')}"><span class="brn-cap">${label} · ${esc(unit)}</span></div>`;
+  };
   document.getElementById('brnIssList').innerHTML = items.length ? items.map(it => {
     const v = _brnIssQty[it.code] || { used: '', waste: '' };
     const unit = it.count_unit || it.base_unit || '';
-    const sys = it.system_qty == null ? `<span style="color:var(--text-muted)">ยังไม่มีผลตรวจนับสิ้นเดือน · หน่วย ${esc(unit)}</span>`
-      : `คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}`;
-    const avg = it.avg_used_7d != null ? ` · เฉลี่ย 7 วัน ${_bmcNum(it.avg_used_7d, 2)} ${esc(unit)}/วัน` : '';
-    return `<div style="border-top:1px solid var(--border);padding:8px 0">
-      <div style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center">
-        <div class="brn-namecol" style="flex:1 1 220px;min-width:0">
-          <div class="text-sm" style="color:var(--text-primary);font-weight:600;overflow-wrap:anywhere">${esc(it.name)}${it.required ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
-          <div class="text-[11px]" style="color:var(--text-muted)">${esc(it.code)} · ${sys}${avg}</div></div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-left:auto">
-          <label class="text-[11px]" style="display:flex;gap:4px;align-items:center;color:var(--text-muted)">เบิกใช้
-            ${inp('brnIssU_' + esc(it.code), v.used, 'var(--accent)')} oninput="brnIssSetField(${_bmcQ(it.code)}, 'used', this.value)" title="จำนวนที่ครัวเบิกไปใช้ในวันนี้">
-            <span class="text-xs brn-unit" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label>
-          <label class="text-[11px]" style="display:flex;gap:4px;align-items:center;color:var(--text-muted)">ของเสีย
-            ${inp('brnIssW_' + esc(it.code), v.waste, 'var(--amber-ink)')} oninput="brnIssSetField(${_bmcQ(it.code)}, 'waste', this.value)" title="จำนวนที่ทิ้ง เน่าเสีย หมดอายุ หรือเสียหาย">
-            <span class="text-xs brn-unit" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(unit)}</span></label></div></div>
+    const sys = it.system_qty == null ? ''
+      : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}</span>`;
+    const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_bmcNum(it.avg_used_7d, 2)} ${esc(unit)}/วัน</span>` : '';
+    return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div class="brn-namecol" style="flex:1 1 0;min-width:0">
+          <div class="brn-name" title="${esc(it.name)}" style="color:var(--text-primary);font-weight:600">${esc(it.name)}</div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${it.required ? _bmcChip('บังคับ', 'var(--amber-ink)') + ' ' : ''}${esc(it.code)}${sys}${avg}</div></div>
+        <div class="brn-boxes">${box(it, 'used', 'เบิกใช้', 'var(--accent)', v.used, it.prev_used, unit)}${box(it, 'waste', 'ของเสีย', 'var(--amber-ink)', v.waste, it.prev_waste, unit)}</div></div>
+      <div id="brnIssE_${esc(it.code)}" class="brn-err" role="alert">${_brnIssBad(it.code) ? _BRN_QTY_ERR : ''}</div>
       <div id="brnIssX_${esc(it.code)}">${_brnIssReasonBox(it.code)}</div></div>`;
   }).join('') : `<span class="text-xs" style="color:var(--text-muted)">${usedOnly ? 'ยังไม่มีรายการที่กรอก' : 'ไม่มีรายการในโซนนี้'}</span>`;
   brnIssActions();
@@ -370,6 +417,7 @@ function brnIssSetField(code, field, v) {
   const q = _brnIssQty[code] || (_brnIssQty[code] = { used: '', waste: '', reason: '', note: '' });
   q[field] = String(v || '').replace(',', '.').trim();
   if (field === 'note') q.note = String(v || '');
+  if (field === 'used' || field === 'waste') _brnIssMark(code);       // a wrong value turns red at once, with its note under the row
   if (field === 'waste') {
     const x = document.getElementById('brnIssX_' + code);
     if (x && (Number(q.waste) > 0) !== !!x.firstElementChild) x.innerHTML = _brnIssReasonBox(code);
@@ -386,19 +434,20 @@ function brnIssSetField(code, field, v) {
 }
 
 // the lines to send. A line whose waste has no reason yet cannot be stored (the server refuses it): it is
-// listed in `incomplete`, and the autosave leaves it out until the reason is chosen
+// listed in `incomplete`, and the autosave leaves it out until the reason is chosen. A negative or non-numeric
+// quantity is listed in `invalid`: it is never sent
 function _brnIssLines() {
-  const lines = [], incomplete = [];
+  const lines = [], incomplete = [], invalid = [];
   Object.entries(_brnIssQty).forEach(([code, q]) => {
     const it = _brnIssItem(code);
     if (!it) return;
+    if (_brnIssBad(code)) { invalid.push(code); return; }
     const used = q.used === '' ? 0 : Number(q.used), waste = q.waste === '' ? 0 : Number(q.waste);
-    if (isNaN(used) || isNaN(waste) || used < 0 || waste < 0) { incomplete.push(code); return; }
     if (waste > 0 && (!q.reason || (q.reason === 'other' && !String(q.note || '').trim()))) { incomplete.push(code); return; }
     lines.push({ code, qty_used: used, qty_waste: waste, unit: it.count_unit || it.base_unit || null,
       waste_reason: waste > 0 ? q.reason : null, note: String(q.note || '').trim() || null });
   });
-  return { lines, incomplete };
+  return { lines, incomplete, invalid };
 }
 
 async function brnIssSave(submit, quiet) {
@@ -406,42 +455,58 @@ async function brnIssSave(submit, quiet) {
   if (!_brnIss || !_brnIss.editable) return;
   clearTimeout(_brnIssTimer);
   if (quiet && !_brnIssDirty) return;
-  const { lines, incomplete } = _brnIssLines();
-  if (incomplete.length && !quiet) {
-    const it = _brnIssItem(incomplete[0]), q = _brnIssQty[incomplete[0]] || {};
-    _bmcStatus('brnIssStatus', Number(q.waste) > 0 && q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${it.name}`
-      : Number(q.waste) > 0 ? `เลือกสาเหตุของของเสีย: ${it.name}` : `จำนวนไม่ถูกต้อง: ${it.name}`, 'var(--amber-ink)');
-    const el = document.getElementById('brnIssR_' + incomplete[0]) || document.getElementById('brnIssU_' + incomplete[0]);
+  const { lines, incomplete, invalid } = _brnIssLines();
+  if ((invalid.length || incomplete.length) && !quiet) {            // a button was pressed: say which row to fix and go to it
+    const code = invalid[0] || incomplete[0];
+    const it = _brnIssItem(code), q = _brnIssQty[code] || {};
+    _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${it.name}`
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${it.name}` : `เลือกสาเหตุของของเสีย: ${it.name}`,
+      invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
+    const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
+    return;
+  }
+  // the autosave sends only what is NEW: a wrong value (or a waste still without its reason) changes nothing that can be
+  // stored, so no request goes out for it — the status line says which rows are left out and why
+  const sig = JSON.stringify(lines);
+  if (quiet && (!lines.length || sig === _brnIssLastSig) && (invalid.length || incomplete.length)) {
+    _bmcStatus('brnIssStatus', invalid.length ? `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`
+      : `ยังไม่ได้บันทึก ${incomplete.length} รายการ · เลือกสาเหตุของของเสีย`, invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     return;
   }
   const nAny = lines.filter(l => l.qty_used > 0 || l.qty_waste > 0);
   if (submit) {
-    const nUsed = nAny.filter(l => l.qty_used > 0).length, nWaste = nAny.filter(l => l.qty_waste > 0).length;
+    const nWaste = nAny.filter(l => l.qty_waste > 0).length;
+    const nAll = _brnIss.zones.reduce((a, z) => a + z.items.length, 0);
     const late = _brnIss.backdated && !(_brnIss.status && _brnIss.status.confirm_count > 0);
     if (!await uiConfirm((late ? 'ใบย้อนหลังนับเป็นล่าช้า\n' : '')
-        + `ยืนยันใบตัดเบิก ${fmtDayShort(_brnIss.date)} · กรอก ${nAny.length} รายการ · เบิกใช้ ${nUsed} รายการ · ของเสีย ${nWaste} รายการ\nยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย`,
+        + `ยืนยันใบตัดเบิก ${fmtDayShort(_brnIss.date)} · กรอก ${nAny.length} รายการ · ของเสีย ${nWaste} รายการ · ไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ (ถือว่าไม่ได้เบิก)\nยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย`,
         { title: 'ยืนยันใบตัดเบิก', ok: 'ยืนยัน', cancel: 'กลับไปแก้' })) return;
   }
+  const clock = () => new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  _bmcStatus('brnIssStatus', 'กำลังบันทึก…', 'var(--text-muted)');
   try {
     const qs = _brnQS();
     const r = await _bmcJson(`${API}/api/bom-center/issues/save${qs ? '?' + qs : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: _brnIss.date, lines, submit: !!submit }) });
+    _brnIssLastSig = sig;
     if (quiet) {                                      // the autosave: the page stays where the person is
-      _brnIssDirty = incomplete.length > 0;
+      _brnIssDirty = incomplete.length > 0 || invalid.length > 0;
       const d = _brnIssStrip.find(x => x.date === _brnIss.date);
       if (d && d.status === 'missing') { d.status = 'draft'; _brnIssDayChips(); }
-      _bmcStatus('brnIssStatus', `✓ บันทึกร่าง ${r.lines} รายการ ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`
-        + (incomplete.length ? ` · รอเลือกสาเหตุของของเสีย ${incomplete.length} รายการ` : ''), incomplete.length ? 'var(--amber-ink)' : 'var(--text-muted)');
+      // never "saved" in plain words after a line was left out: the left-out rows are named
+      if (invalid.length) _bmcStatus('brnIssStatus', `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`, 'var(--bad-ink)');
+      else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกร่างแล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุของของเสีย)`, 'var(--amber-ink)');
+      else _bmcStatus('brnIssStatus', `บันทึกร่างแล้ว ${clock()}`, 'var(--good-ink)');
       return;
     }
     _brnIssDirty = false;
     _brnPlan = null;                                  // the order suggestion follows the slip: it is calculated again when that page opens
     await brnIssLoad({ quiet: true });
     _bmcStatus('brnIssStatus', submit ? `✓ ยืนยันใบตัดเบิกแล้ว ${r.lines} รายการ`
-      : `✓ บันทึกร่าง ${r.lines} รายการ ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`
+      : `✓ บันทึกร่างแล้ว ${clock()} · ${r.lines} รายการ`
         + (r.unconverted && r.unconverted.length ? ` · แปลงหน่วยไม่สำเร็จ ${r.unconverted.length} รายการ` : ''),
-      submit ? 'var(--good-ink)' : (r.unconverted && r.unconverted.length ? 'var(--amber-ink)' : 'var(--text-muted)'));
+      submit ? 'var(--good-ink)' : (r.unconverted && r.unconverted.length ? 'var(--amber-ink)' : 'var(--good-ink)'));
   } catch (e) { _bmcStatus('brnIssStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 
@@ -1011,20 +1076,32 @@ let _brnOrdEdited = new Set();                    // codes the person typed in t
 let _brnCovers = null;                            // /api/bom-center/order/covers
 const _BRN_ROUNDS = [['1', 'รอบ 1'], ['2', 'รอบ 2'], ['salmon', 'แซลมอนสด']];
 
-// the coming deliveries as chips: "รอบ 1 · ส่งวันพุธ 7/10" with "ตัดรอบ วันจันทร์ 13:15" under it (red once past)
+// PR-M3 · the coming deliveries, ONE line each: "รอบ 2 · ส่ง ส. 10/10 · สั่งภายใน พฤ. 13:15" and a state chip
+// (เปิดรับ · เลยเวลา · สั่งแล้ว). Rounds still open first, those past their cutoff after them (they stay selectable:
+// a late order is sent with the fee).
+let _brnOrdSent = [];         // the branch's recent orders (brnLoadOrderHistory): which deliveries are already ordered
+function _brnDelivState(d) {
+  const sent = _brnOrdSent.some(x => x.round === d.round && x.cycle_date === d.cycle_date && ['submitted', 'processed', 'received'].includes(x.status))
+    || (d.round === _brnRound && d.delivery === _brnDelivery && ['submitted', 'processed', 'received'].includes((((_brnPlan || {}).order) || {}).status));
+  return sent ? ['สั่งแล้ว', 'var(--good-ink)'] : d.late ? ['เลยเวลา', 'var(--bad-ink)'] : ['เปิดรับ', 'var(--navy-ink)'];
+}
 function _brnDelivChips() {
   const box = document.getElementById('brnOrdDeliv');
   if (!box) return;
-  // rounds still open first, those past their cutoff after them (they stay selectable: a late order is sent with the fee)
   const items = [...((_brnPlan && _brnPlan.deliveries) || [])].sort((a, b) => (a.late ? 1 : 0) - (b.late ? 1 : 0));
   box.innerHTML = items.map(d => {
     const on = d.round === _brnRound && d.delivery === _brnDelivery;
-    const sub = on ? 'inherit' : (d.late ? 'var(--bad-ink)' : 'var(--text-muted)');
-    return `<button onclick="brnSetDelivery('${d.round}','${d.delivery}')" style="border:1px solid ${on ? 'var(--accent)' : (d.late ? 'var(--bad-ink)' : 'var(--border)')};border-radius:12px;padding:6px 12px;font-size:13px;cursor:pointer;text-align:left;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">
-      <span style="display:block">${esc(d.round_th)} · ส่ง${esc(d.delivery_th)}</span>
-      <span style="display:block;font-size:11px;color:${sub}">ตัดรอบ ${esc(d.cutoff_th)}${d.late ? ' · เลยเวลาแล้ว' : ''}</span></button>`;
+    const [st, ink] = _brnDelivState(d);
+    const cut = String(d.cutoff_at || '');
+    return `<button onclick="brnSetDelivery('${d.round}','${d.delivery}')" style="display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center;justify-content:space-between;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:6px 12px;min-height:40px;font-size:13px;cursor:pointer;text-align:left;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">
+      <span>${esc(d.round_th)} · ส่ง ${esc(fmtDayShort(d.delivery))} · สั่งภายใน ${esc(_brnIssWd(cut.slice(0, 10)))} ${esc(cut.slice(11, 16))}</span>
+      <span style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid ${on ? 'currentColor' : 'var(--border)'};font-size:11px;white-space:nowrap;color:${on ? 'inherit' : ink}">${st}</span></button>`;
   }).join('');
 }
+let _brnOrdWhy = new Set();   // the rows whose "ดูที่มา" is open
+function brnOrdWhy(code) { if (_brnOrdWhy.has(code)) _brnOrdWhy.delete(code); else _brnOrdWhy.add(code); brnRenderOrder(); }
+let _brnBufOpen = false;      // "ยอดขายรอบนี้ต่างจากปกติ?" is folded until asked for
+function brnToggleBuffer() { _brnBufOpen = !_brnBufOpen; _brnRenderBuffer(_brnPlan, true); }
 function _brnBufQS() { return _brnBuf.pct ? 'buffer_pct=' + encodeURIComponent(_brnBuf.pct) : ''; }
 function _brnBufReasonTh(code) { return ((((_brnPlan || {}).buffer || {}).reasons || []).find(r => r.code === code) || {}).label || code || ''; }
 async function brnLoadOrder(opts) {
@@ -1087,17 +1164,21 @@ function _brnRenderPages(p) {
   const nLocal = (p.local_rows || []).filter(r => r.order_units > 0).length;
   const b = (k, t) => { const on = k === _brnOrdPage;
     return `<button onclick="brnSetOrdPage('${k}')" style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent-soft, transparent)' : 'transparent'};color:var(--text-primary);font-weight:${on ? 600 : 400}">${t}</button>`; };
-  box.innerHTML = b('central', `สั่งจากไดกิโตะ (${p.rows.filter(r => r.order_units > 0).length})`) + b('local', `สาขาซื้อเอง (${nLocal})`);
+  box.innerHTML = b('central', `สั่งจากไดกิโตะ (${p.rows.filter(r => r.order_units > 0).length})`) + b('local', `ซื้อเอง (${nLocal})`);
 }
+// a base quantity in the unit the branch counts in (กก. · แพ็ค …), whole numbers when it is large
+function _brnInCount(r, v) { return _bmcNum(Number(v || 0) / (r.per_count_unit || 1), 1); }
+function _brnCountUnit(r) { return r.count_unit || r.base_unit || ''; }
 function _brnRenderLocal(p) {
   const q = (document.getElementById('brnOrdQ').value || '').trim().toLowerCase();
   const only = document.getElementById('brnOrdOnly').checked;
   const rows = (p.local_rows || []).filter(r => (!only || r.order_units > 0) && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
-  document.getElementById('brnOrdList').innerHTML = `<div class="text-xs mb-1" style="color:var(--text-muted)">วัตถุดิบนอกบัญชีสินค้าส่วนกลาง สาขาซื้อเอง · ไม่ส่งเข้าใบสั่งซื้อ</div>` +
+  const analyst = hasModule('bom.center');                 // a missing sub-recipe is the analyst's work, not the branch's
+  document.getElementById('brnOrdList').innerHTML = `<div class="text-xs mb-1" style="color:var(--text-muted)">วัตถุดิบที่ไดกิโตะไม่ได้จัดส่ง สาขาซื้อเอง · ไม่ส่งเข้าใบสั่งซื้อ</div>` +
     (rows.map(r => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:baseline">
       <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(r.name)}
-        ${r.kind === 'prepared' ? _bmcChip('กึ่งสำเร็จ: ยังไม่มีสูตร', 'var(--amber-ink)') : ''}</div>
-        <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} · ต้องใช้ ${_bmcNum(r.need, 0)} ${esc(r.base_unit || '')}</div></div>
+        ${analyst && r.kind === 'prepared' ? _bmcChip('กึ่งสำเร็จ: ยังไม่มีสูตร', 'var(--amber-ink)') : ''}</div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ต้องใช้ ${_brnInCount(r, r.need)} ${esc(_brnCountUnit(r))}</div></div>
       <div class="text-sm" style="margin-left:auto;color:var(--text-primary)">แนะนำ <b>${_bmcNum(r.order_units, 0)}</b> ${esc(_brnUnitLabel(r))}</div></div>`).join('')
       || '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีรายการที่ต้องซื้อเอง</span>');
   document.getElementById('brnOrdActions').innerHTML = '';
@@ -1157,34 +1238,35 @@ function brnRenderOrder() {
   const rows = p.rows.filter(r => (!only || r.order_units > 0 || Number(_brnOrdQty[r.code] || 0) > 0)
     && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
   const line = o ? Object.fromEntries(o.lines.map(l => [l.code, l])) : {};
+  const analyst = hasModule('bom.center');                 // the notes about recipes are the analyst's, not the branch's
   const reasonSel = (code) => {
     const cur = _brnOrdReason[code] || {};
-    return `<div class="flex flex-wrap gap-2 mt-1 text-xs"><select onchange="_brnOrdReason[${_bmcQ(code)}]=Object.assign(_brnOrdReason[${_bmcQ(code)}]||{}, {reason_code:this.value});_brnOrdTouched()" ${editable ? '' : 'disabled'}
-        style="border:1px solid var(--amber-ink);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผลที่สั่งต่างจากยอดแนะนำ —</option>${p.reasons.map(x => `<option value="${x.code}"${cur.reason_code === x.code ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
+    return `<div class="flex flex-wrap gap-2 mt-1 text-xs brn-reason"><select onchange="_brnOrdReason[${_bmcQ(code)}]=Object.assign(_brnOrdReason[${_bmcQ(code)}]||{}, {reason_code:this.value});_brnOrdTouched()" ${editable ? '' : 'disabled'}
+        style="border:1px solid var(--amber-ink);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผลที่สั่งต่างจากยอดแนะนำ —</option>${p.reasons.map(x => `<option value="${x.code}"${cur.reason_code === x.code ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
       <input value="${esc(cur.note || '')}" placeholder="หมายเหตุ" oninput="_brnOrdReason[${_bmcQ(code)}]=Object.assign(_brnOrdReason[${_bmcQ(code)}]||{}, {note:this.value});_brnOrdTouched()" ${editable ? '' : 'disabled'}
-        style="flex:1 1 120px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></div>`;
+        style="flex:1 1 120px;min-width:0;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)"></div>`;
   };
   const html = rows.map(r => {
     const base = line[r.code] ? line[r.code].suggested_units : (r.order_units_base ?? r.order_units);
     const sugg = line[r.code] ? (up === 1 ? base : Math.round(base * up)) : r.order_units;
     const v = _brnOrdQty[r.code] ?? '';
     const dev = _brnOrdNeedsReason(sugg, v);
-    const detail = `พยากรณ์ ${_bmcNum(r.forecast, 0)} + สำรอง ${_bmcNum(r.safety, 0)}` +
-      (r.on_hand != null ? ` − คงเหลือคาดการณ์ ${_bmcNum(Math.max(r.projected, 0), 0)}` : '') +
-      (r.on_order ? ` (รวมค้างส่ง ${_bmcNum(r.on_order, 0)})` : '') + ` = ${_bmcNum(r.need, 0)} ${esc(r.base_unit || '')}`;
-    const sysBox = r.system_qty == null ? '' : `<span class="text-[11px]" style="color:var(--text-muted)">คงเหลือตามระบบ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(r.system_qty, 2)}</b> ${esc(r.system_unit || r.count_unit || r.base_unit || '')}</span>`;
-    return `<div style="border-top:1px solid var(--border);padding:8px 0">
-      <div style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center">
-        <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(r.name)}
-          ${r.monitored ? _bmcChip('บังคับ', 'var(--amber-ink)') : ''} ${(r.via || []).length ? _bmcChip('ใช้ใน ' + r.via.slice(0, 2).join(', '), 'var(--text-muted)') : ''}</div>
-          <div class="text-[11px]" style="color:var(--text-muted)">${esc(r.code)} · ชั้น ${r.class} · ${detail}</div></div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-left:auto">
-          ${sysBox}
-          <span class="text-xs" style="color:var(--text-muted)">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b>${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}</span>
-          <label class="text-[11px]" style="display:flex;gap:4px;align-items:center;color:var(--text-muted)">สั่ง
-          <input id="brnOrd_${esc(r.code)}" inputmode="decimal" value="${esc(v)}" ${editable ? '' : 'disabled'} oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"
-            style="width:64px;height:36px;text-align:center;font-size:16px;border:1px solid ${dev ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)">
-          <span class="text-xs" style="max-width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(_brnUnitLabel(r))}</span></label></div></div>
+    // where the suggestion comes from, in the unit the branch counts in (the engine works in grams / base units)
+    const cu = esc(_brnCountUnit(r));
+    const why = `${r.class ? `กลุ่มมูลค่า${{ A: 'สูง', B: 'กลาง', C: 'ต่ำ' }[r.class] || ''} · ` : ''}ยอดขายที่คาดไว้ใช้ ${_brnInCount(r, r.forecast)} + สำรอง ${_brnInCount(r, r.safety)}` +
+      (r.on_hand != null ? ` − คงเหลือคาดการณ์ ${_brnInCount(r, Math.max(r.projected, 0))}` : '') +
+      (r.on_order ? ` (รวมค้างส่ง ${_brnInCount(r, r.on_order)})` : '') + ` = ต้องการ ${_brnInCount(r, r.need)} ${cu}` +
+      (analyst && (r.via || []).length ? ` · ใช้ใน ${esc(r.via.slice(0, 2).join(', '))}` : '');
+    const open = _brnOrdWhy.has(r.code);
+    const sysBox = r.system_qty == null ? '' : ` · คงเหลือ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(r.system_qty, 2)}</b> ${esc(r.system_unit || r.count_unit || r.base_unit || '')}`;
+    return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div class="brn-namecol" style="flex:1 1 0;min-width:0"><div class="brn-name" title="${esc(r.name)}" style="color:var(--text-primary);font-weight:600">${esc(r.name)}${r.monitored ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
+          <div class="text-xs" style="color:var(--text-secondary);line-height:1.4">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b> ${esc(_brnUnitLabel(r))}${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}${sysBox}</div>
+          <button type="button" class="brn-why" aria-expanded="${open}" onclick="brnOrdWhy(${_bmcQ(r.code)})">${open ? 'ซ่อนที่มา ▴' : 'ดูที่มา ▾'}</button></div>
+        <div class="brn-box"><input id="brnOrd_${esc(r.code)}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${editable ? '' : 'disabled'} aria-label="สั่ง ${esc(r.name)}" oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"
+            style="border-color:${dev ? 'var(--amber-ink)' : 'var(--border-control)'}"><span class="brn-cap">สั่ง · ${esc(_brnUnitLabel(r))}</span></div></div>
+      ${open ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(r.code)} · ${why}</div>` : ''}
       ${dev ? reasonSel(r.code) : ''}</div>`;
   }).join('') + extra.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0" class="text-sm">${esc(l.name || l.code)} · สั่งเพิ่มนอกยอดแนะนำ ${_bmcNum(l.confirmed_units)} ${esc(l.order_unit === 'base' ? '' : 'แพ็ค')} ${l.reason_th ? '· ' + esc(l.reason_th) : ''}</div>`).join('');
   document.getElementById('brnOrdList').innerHTML = html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องสั่ง (คงเหลือเพียงพอ)</span>';
@@ -1213,19 +1295,37 @@ function _brnRenderBuffer(p, editable) {
     box.innerHTML = cur.pct ? `<div class="text-xs" style="color:var(--text-secondary)">สาขาปรับยอดพยากรณ์ <b>${sign(cur.pct)}</b> · ${esc(_brnBufReasonTh(cur.reason))}${cur.note ? ' · ' + esc(cur.note) : ''}</div>` : '';
     return;
   }
-  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)';
-  box.innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">คาดว่ายอดขายรอบนี้จะต่างจากปกติหรือไม่</div>
-    <div class="text-[11px] mb-1" style="color:var(--text-muted)">มีงานหรือโปรโมชัน ใส่ % ที่คาดว่าจะเพิ่มหรือลด</div>
+  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
+  // folded by default: most rounds go as the system suggests. The line says whether an adjustment is in use.
+  const head = `<button type="button" onclick="brnToggleBuffer()" aria-expanded="${_brnBufOpen}" style="display:flex;align-items:center;gap:8px;width:100%;min-height:40px;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--text-primary);font-size:13px;font-weight:600">
+      <span>ยอดขายรอบนี้ต่างจากปกติ?</span>${cur.pct ? _bmcChip(`ใช้อยู่ ${sign(cur.pct)}`, 'var(--navy-ink)') : ''}<span style="margin-left:auto;color:var(--text-muted)">${_brnBufOpen ? '▴' : '▾'}</span></button>`;
+  if (!_brnBufOpen) { box.innerHTML = head; return; }
+  box.innerHTML = head + `<div class="text-[11px] mb-1" style="color:var(--text-muted)">มีงานหรือโปรโมชัน ใส่ % ที่คาดว่าจะเพิ่มหรือลด</div>
     <div class="flex flex-wrap items-center gap-2 text-xs">
-      <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" style="width:72px;height:34px;text-align:center;font-size:15px;${inp}"><span style="color:var(--text-secondary)">%</span>
+      <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" style="width:72px;height:34px;text-align:center;${inp}"><span style="color:var(--text-secondary)">%</span>
       <select id="brnBufReason" style="${inp}"><option value="">— เหตุผล —</option>${(b.reasons || []).map(r => `<option value="${r.code}" ${r.code === cur.reason ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
-      <input id="brnBufNote" value="${esc(cur.note || '')}" placeholder="หมายเหตุ" style="flex:1 1 120px;${inp}">
+      <input id="brnBufNote" value="${esc(cur.note || '')}" placeholder="หมายเหตุ" style="flex:1 1 120px;min-width:0;${inp}">
       <button onclick="brnApplyBuffer()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer">ใช้กับยอดแนะนำ</button>
       <button onclick="brnToggleCovers()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">คำนวณจากจำนวนลูกค้า</button>
     </div>
-    ${cur.pct ? `<div class="text-[11px] mt-1" style="color:var(--navy-ink)">ใช้อยู่: ${sign(cur.pct)} · ${esc(_brnBufReasonTh(cur.reason))}</div>` : ''}
-    <div id="brnCovers" class="mt-2" style="display:none"></div>`;
+    ${_brnCovPhone() ? '' : '<div id="brnCovers" class="mt-2" style="display:none"></div>'}`;
 }
+// PR-M3 · on a phone the customer-count helper opens as a bottom sheet over the page (a seven-row table does not fit inside a card)
+function _brnCovPhone() { return document.body.classList.contains('supply-phone') && window.matchMedia('(max-width: 700px)').matches; }
+function _brnCovSheet() {
+  let s = document.getElementById('brnCovSheet');
+  if (!s) {
+    s = document.createElement('div');
+    s.id = 'brnCovSheet'; s.className = 'brn-sheet'; s.setAttribute('role', 'dialog'); s.setAttribute('aria-modal', 'true'); s.setAttribute('aria-label', 'คำนวณจากจำนวนลูกค้า');
+    s.innerHTML = `<div class="brn-sheet-scrim" onclick="brnCloseCovers()"></div><div class="brn-sheet-card">
+      <div class="flex items-center gap-2 mb-2"><b class="text-sm" style="color:var(--text-primary)">คำนวณจากจำนวนลูกค้า</b>
+        <button type="button" onclick="brnCloseCovers()" aria-label="ปิด" style="margin-left:auto;min-width:44px;min-height:44px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--text-secondary)">✕</button></div>
+      <div id="brnCovers"></div></div>`;
+    (document.getElementById('tab-branchstock') || document.body).appendChild(s);
+  }
+  return s;
+}
+function brnCloseCovers() { const s = document.getElementById('brnCovSheet'); if (s) s.classList.remove('open'); const c = document.getElementById('brnCovers'); if (c && !_brnCovPhone()) c.style.display = 'none'; }
 async function brnApplyBuffer() {
   const pct = Number(document.getElementById('brnBufPct').value || 0);
   const reason = document.getElementById('brnBufReason').value;
@@ -1240,10 +1340,14 @@ async function brnApplyBuffer() {
   _brnOrdTouched();                              // the draft keeps the buffer
 }
 async function brnToggleCovers() {
+  const phone = _brnCovPhone();
+  let sheet = null;
+  if (phone) { sheet = _brnCovSheet(); if (sheet.classList.contains('open')) { brnCloseCovers(); return; } }
   const box = document.getElementById('brnCovers');
   if (!box) return;
-  if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+  if (!phone && box.style.display !== 'none') { box.style.display = 'none'; return; }
   box.style.display = '';
+  if (sheet) sheet.classList.add('open');
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังดึงจำนวนลูกค้า…</span>';
   try {
     const qs = [_brnRound ? 'round=' + _brnRound : '', _brnPlan ? 'order_day=' + _brnPlan.order_day : '', _brnQS()].filter(Boolean).join('&');
@@ -1255,7 +1359,7 @@ function brnRenderCovers() {
   const c = _brnCovers, box = document.getElementById('brnCovers');
   if (!c || !box) return;
   if (!c.available) { box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูลจำนวนลูกค้าของสาขานี้ จึงคำนวณให้ไม่ได้ · ระบุ % เอง</span>'; return; }
-  const inp = 'width:64px;height:30px;text-align:center;font-size:13px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
+  const inp = 'width:72px;height:36px;text-align:center;font-size:16px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
   box.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">กรอกจำนวนลูกค้าที่คาด แล้วแปลงเป็น % (ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ ${esc(fmtDay(c.history_from))} ถึง ${esc(fmtDay(c.history_to))})</div>
     <table class="text-xs w-full"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">วันที่</th><th class="pr-2 text-right">ปกติ (คน)</th><th class="pr-2 text-right">ปีก่อน</th><th class="text-right">คาดว่า (คน)</th></tr></thead>
     <tbody>${c.days.map((d, i) => `<tr style="border-top:1px solid var(--border-soft)"><td class="pr-2 py-1">${esc(fmtDayShort(d.date))}</td><td class="pr-2 text-right">${_bmcNum(d.baseline_pax, 0)}</td>
@@ -1282,6 +1386,7 @@ function brnCoversUse() {
   const pct = _brnCoversPct();
   const el = document.getElementById('brnBufPct');
   if (el) el.value = Math.max(-50, Math.min(100, pct));
+  brnCloseCovers();
   _bmcStatus('brnOrdStatus', `ใส่ ${pct > 0 ? '+' : ''}${pct}% ให้แล้ว เลือกเหตุผลแล้วกด “ใช้กับยอดแนะนำ”`, 'var(--text-muted)');
 }
 
@@ -1358,6 +1463,8 @@ function _brnRoundLabel(r) { return (_BRN_ROUNDS.find(x => x[0] === r) || [0, r]
 async function brnLoadOrderHistory() {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/orders${_brnQS() ? '?' + _brnQS() : ''}`);
+    _brnOrdSent = d.orders || [];
+    _brnDelivChips();                                   // "สั่งแล้ว" on the deliveries that already have an order
     document.getElementById('brnOrdHistory').innerHTML = d.orders.length ? d.orders.map(x => `<div style="border-top:1px solid var(--border);padding:4px 0;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center">
         <span><a href="#" onclick="brnOpenOrder(${x.order_id});return false" style="color:var(--accent);font-weight:600">#${x.order_id}</a> · ตัดรอบ ${esc(fmtDay(x.cycle_date))} · ${esc(_brnRoundLabel(x.round))} · ${esc(x.status_th)} · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)}${x.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</span>
         ${x.status === 'processed' ? `<a href="#" onclick="brnSetSub('recv');setTimeout(() => brnOpenReceive(${x.order_id}), 200);return false" style="margin-left:auto;color:var(--accent)">รับสินค้าที่มาถึง →</a>` : ''}</div>`).join('') : 'ยังไม่มีข้อมูล';
