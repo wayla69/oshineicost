@@ -50,6 +50,13 @@ def branch_line(items: list, today: date = None) -> dict:
         nxt = min((o for o in orders if o["status"] != "done"), key=lambda o: o["cutoff_at"], default=None) \
             or min(orders, key=lambda o: o["cutoff_at"])
         parts.append(f"ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่ง{nxt['delivery_th']} ภายใน{nxt['cutoff_th']})")
+    slip = by.get("issue_today")
+    if slip and slip.get("started"):                     # ใบตัดเบิก: yesterday's slip, only for a branch that has begun
+        if slip.get("yesterday") in ("confirmed", "late"):
+            parts.append("ใบตัดเบิกเมื่อวาน: ยืนยันแล้ว")
+        else:
+            parts.append("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน (ล่าช้า)")
+            pending = True
     if recv and recv.get("count"):
         parts.append(f"รับสินค้าตามใบสั่งซื้อ {recv['count']} ใบ")
         pending = True

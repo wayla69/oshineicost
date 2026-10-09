@@ -4,18 +4,22 @@ receive (docs/BOM_CENTER_PLAN.md §6 step 5, §7.1-3/6/7, §7.2-3, §7.5).
 
 Stock the forecast deducts, per ingredient:
 
-    on hand now      = last count + received since − BoM use since (sales up to the last data day)
+    on hand now      = the system stock after today's issue slip (stock.system_position:
+                       last month-end count + goods received − confirmed ใบตัดเบิก)
     before the cover = what the days between now and the first covered day will use
     on order         = submitted / processed orders not yet received
     projected        = on hand now − before the cover + on order
     order            = forecast for the cover + safety − projected   → whole packs, never negative
 
-PR-A (2026-10-09): counting IS part of ordering. The branch counts what is on its shelf
-in the same page (a 'spot' count linked to the order, `save_flow`); an item that was not
-counted cannot be ordered, and the order must be submitted before 13:15 two days before
-its delivery day (`forecast.cutoff_for`). A later submit is accepted with a warning:
-the order is flagged `late` (the outside warehouse charges a late fee). `cycle_date` is
-the CUTOFF date; `delivery_date` / `cutoff_at` / `late` sit beside it.
+PR-A (2026-10-09): the order must be submitted before 13:15 two days before its delivery day
+(`forecast.cutoff_for`). A later submit is accepted with a warning: the order is flagged
+`late` (the outside warehouse charges a late fee). `cycle_date` is the CUTOFF date;
+`delivery_date` / `cutoff_at` / `late` sit beside it.
+
+PR-J1 (management change 2026-10-09 evening): the branch no longer counts before ordering; it
+confirms the daily issue slip (issues.py) and the order is made from the system stock after that
+slip. An order can be submitted only when the slip of the day is confirmed. Items that were not
+in the month-end count have no system figure and are ordered from the forecast alone.
 
 Order life: suggested (draft) → submitted (to Sales Support) → processed (Sales Support,
 S9) → received (the branch, which also books a goods receipt for the variance) — or
@@ -105,41 +109,15 @@ def backfill(con) -> None:
 
 
 # ── stock the forecast deducts ───────────────────────────────────────────────
-def stock_position(con, branch_id: int, as_of: date, order_day: date, count_id: int = None,
-                   until: date = None) -> dict:
-    """{"basis": {count_id, date} | None, "qty": {code: on hand now}, "on_order": {code: base qty}}
+def stock_position(con, branch_id: int, as_of: date, order_day: date) -> dict:
+    """The system stock behind an order (ใบตัดเบิก, PR-J1), as of `as_of` — the day of the order, after that
+    day's issue slip — plus what is already on order before `order_day`.
 
-    The basis is `count_id` when given (the count this order is made from, draft or submitted), else the
-    latest submitted count of ANY kind (month-end or a spot count) dated on or before `until` (default
-    the order day)."""
-    from .forecast import usage_history
-    if count_id:
-        r = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE count_id=? AND branch_id=?",
-                        (count_id, branch_id)).fetchone()
-    else:
-        r = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
-                        " AND COALESCE(status,'submitted')='submitted' AND count_date<=?"
-                        " ORDER BY count_date DESC, count_id DESC LIMIT 1",
-                        (branch_id, (until or order_day).isoformat())).fetchone()
-    out = {"basis": None, "qty": {}, "on_order": on_order(con, branch_id, order_day)}
-    if not r:
-        return out
-    cid, cdate = r
-    out["basis"] = {"count_id": cid, "date": cdate}
-    qty = {c: q for c, q in con.execute(
-        "SELECT ingredient_code, qty_base FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NOT NULL", (cid,))}
-    for c, q in con.execute(
-            "SELECT l.ingredient_code, SUM(l.qty_base) FROM bc_receipt r JOIN bc_receipt_line l USING(receipt_id)"
-            " WHERE r.branch_id=? AND r.receipt_date>=? AND r.receipt_date<=? GROUP BY l.ingredient_code",
-            (branch_id, cdate, order_day.isoformat())):
-        if c in qty:
-            qty[c] += q or 0.0
-    d0 = date.fromisoformat(cdate)
-    if as_of >= d0:                                         # sales since the count (the count is before that day's trading)
-        use, _, _ = usage_history(con, branch_id, d0, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
-        for c in qty:
-            qty[c] -= sum(use.get(c, {}).values())
-    out["qty"] = qty
+    -> {"basis": {count_id, date} | None, "qty": {code: base units}, "on_order": {code: base qty},
+        "missing_days": [iso], "through": iso}   (see stock.system_position; no BoM estimate is subtracted)"""
+    from .stock import system_position
+    out = system_position(con, branch_id, as_of)
+    out["on_order"] = on_order(con, branch_id, order_day)
     return out
 
 
@@ -222,24 +200,29 @@ def _cutoff_dt(con, o: dict) -> datetime:
 
 def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines: list, who: str,
          submit: bool = False, note: str = None, buffer: dict = None, ack_late: bool = False,
-         delivery: str = None, stock_count_id: int = None, now: datetime = None) -> dict:
+         delivery: str = None, now: datetime = None) -> dict:
     """Create (from the suggestion) or update the cycle's order; optionally submit it.
 
     The suggested quantities are taken from the suggestion when the order is first created and
-    follow it (the branch's count) while the order is a draft; from the moment it is submitted they
+    follow it (the system stock) while the order is a draft; from the moment it is submitted they
     are frozen — later edits change only what the branch confirms. `buffer` (PR-19, None = keep) is
     the branch's expectation {pct, reason, note}: the suggestion stays the engine's
     base number, the confirmed quantities start from the buffered one, and the
     deviation rule judges against base × (1 + pct/100).
 
-    PR-A: `cycle_date` is the cutoff date; `delivery` the delivery day. Every ordered line must
-    have a counted on-hand in the linked count (`stock_count_id`) before the order can be
-    submitted; a submit after the cutoff raises LateSubmit unless `ack_late`, and is flagged `late`."""
+    PR-A: `cycle_date` is the cutoff date; `delivery` the delivery day; a submit after the cutoff
+    raises LateSubmit unless `ack_late`, and is flagged `late`. PR-J1: the order is made from the system
+    stock (`stock_count_id` keeps the month-end count it starts from) and can be submitted only when the
+    branch has CONFIRMED its issue slip of the day.
+
+    This is where the order's write transaction begins: whatever is read before (the plan) holds no lock."""
     from .central import central_map
     from .forecast import _now_for, cutoff_for, cutoff_th
+    from . import issues as _is
     cmap = central_map(con)
     delivery = delivery or suggestion.get("delivery")
     cut_iso = suggestion.get("cutoff_at") or (cutoff_for(date.fromisoformat(delivery)).isoformat() if delivery else None)
+    basis_id = ((suggestion.get("stock") or {}).get("basis") or {}).get("count_id")
     oid = find(con, branch_id, rnd, cycle_date)
     if oid:
         o = _order_row(con, oid)
@@ -248,9 +231,8 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
                              + (" กรุณากดเปิดแก้ไขก่อน" if o["status"] == "submitted" else ""))
         con.execute("UPDATE bc_order SET delivery_date=COALESCE(?, delivery_date), cutoff_at=COALESCE(?, cutoff_at),"
                     " stock_count_id=COALESCE(?, stock_count_id) WHERE order_id=?",
-                    (delivery, cut_iso, stock_count_id, oid))
-        # while the order is a draft its suggestion follows the count the branch types (the first save
-        # is often made before the shelf is counted); it is frozen from the moment of submit
+                    (delivery, cut_iso, basis_id, oid))
+        # while the order is a draft its suggestion follows the system stock; it is frozen from the moment of submit
         known = {c for c, in con.execute("SELECT ingredient_code FROM bc_order_line WHERE order_id=?", (oid,))}
         for r in suggestion.get("rows") or []:
             base = r.get("order_units_base", r["order_units"])
@@ -261,14 +243,9 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
                 con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                             " order_unit) VALUES(?,?,?,?,?)", (oid, r["code"], base, r["order_units"], r["order_unit"]))
     else:
-        basis = (suggestion.get("stock") or {}).get("basis") or {}
-        bk = con.execute("SELECT kind FROM bc_stock_count WHERE count_id=?", (basis.get("count_id"),)).fetchone() \
-            if basis.get("count_id") else None
         cur = con.execute("INSERT INTO bc_order(branch_id, cycle_date, round, run_id, status, note, stock_count_id,"
                           " delivery_date, cutoff_at) VALUES(?,?,?,?, 'suggested', ?, ?, ?, ?)",
-                          (branch_id, cycle_date, rnd, suggestion.get("run_id"), note,
-                           # the count it was planned from — but another order's spot count is never shared
-                           stock_count_id or (basis.get("count_id") if bk and bk[0] != "spot" else None),
+                          (branch_id, cycle_date, rnd, suggestion.get("run_id"), note, basis_id,   # the month-end count it starts from
                            delivery, cut_iso))
         oid = cur.lastrowid
         con.executemany("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
@@ -321,24 +298,18 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     value = _value(con, oid, cycle_date)
     con.execute("UPDATE bc_order SET value=?, confirmed_by=?, confirmed_at=? WHERE order_id=?", (value, who, _ts(), oid))
     o2 = _order_row(con, oid)
-    # every ordered line needs a counted on-hand in the linked count — nothing is ordered blind
-    counted = {c for c, in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=?"
-                                       " AND qty_base IS NOT NULL", (o2["stock_count_id"],))} \
-        if o2["stock_count_id"] else set()
-    uncounted = sorted(c for c, in con.execute("SELECT ingredient_code FROM bc_order_line WHERE order_id=?"
-                                               " AND COALESCE(confirmed_units,0)>0", (oid,)) if c not in counted)
     cut = _cutoff_dt(con, o2)
+    slip_today = _is.status_of(con, branch_id, _now_for(None, now).date())
     out = {"order_id": oid, "status": "suggested", "needs_reason": sorted(set(missing)), "value": value,
            "late": int(o2["late"] or 0), "cutoff_at": cut.isoformat(), "delivery": o2["delivery_date"] or delivery,
-           "uncounted": uncounted}
+           "slip_today": slip_today}
     if submit:
         if missing:
             raise ValueError(f"จำนวนที่แก้ไขต่างจากที่แนะนำเกิน {DEVIATION_PCT:g}% กรุณาเลือกเหตุผล: " + ", ".join(sorted(set(missing))[:5]))
         if not con.execute("SELECT 1 FROM bc_order_line WHERE order_id=? AND confirmed_units>0", (oid,)).fetchone():
             raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
-        if uncounted:
-            raise ValueError(f"ยังไม่ได้นับยอดคงเหลือของรายการที่สั่ง {len(uncounted)} รายการ: " + ", ".join(uncounted[:10])
-                             + " กรุณากรอกช่อง “คงเหลือ” ก่อนส่ง")
+        if not _is.is_confirmed(slip_today):                # ใบตัดเบิก: the order is made from the stock AFTER today's issue
+            raise ValueError("ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ")
         late = _now_for(None, now) > cut
         if late and not ack_late:
             raise LateSubmit(cut.isoformat(), cutoff_th(cut))
@@ -349,7 +320,8 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
                                                                      "cycle_date": cycle_date, "value": value,
                                                                      "delivery": out["delivery"], "cutoff_at": cut.isoformat(),
                                                                      "late": 1 if late else 0,
-                                                                     "count_id": o2["stock_count_id"]})
+                                                                     "count_id": o2["stock_count_id"],
+                                                                     "slip_id": slip_today["slip_id"]})
         out.update(status="submitted", late=1 if late else 0)
     return out
 
@@ -374,9 +346,6 @@ def reopen(con, branch_id: int, order_id: int, who: str):
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] != "submitted":
         raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและส่วนกลางยังไม่ดำเนินการ (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
-    if o["stock_count_id"]:                                 # the spot count goes back to a draft with its order
-        from .stock import reopen_spot
-        reopen_spot(con, o["stock_count_id"], who)
     con.execute("UPDATE bc_order SET status='suggested', submitted_at=NULL, late=0 WHERE order_id=?", (order_id,))
     audit(con, who, "order_reopen", "bc_order", str(order_id))
 
@@ -387,10 +356,6 @@ def cancel(con, branch_id: int, order_id: int, who: str):
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("suggested", "confirmed", "submitted"):
         raise ValueError("ยกเลิกไม่ได้ เนื่องจากส่วนกลางดำเนินการแล้ว")
-    if o["stock_count_id"]:                                 # a spot count still in draft goes with the order
-        from .stock import delete_spot_draft
-        if delete_spot_draft(con, o["stock_count_id"], who):
-            con.execute("UPDATE bc_order SET stock_count_id=NULL WHERE order_id=?", (order_id,))
     con.execute("UPDATE bc_order SET status='cancelled' WHERE order_id=?", (order_id,))
     audit(con, who, "order_cancel", "bc_order", str(order_id))
 
@@ -502,27 +467,26 @@ def order_units(need: float, per, moq) -> tuple:
 
 
 def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buffer_pct: float = None,
-         now: datetime = None, count_id: int = None) -> dict:
-    """The suggestion for one delivery, net of the branch's count, ready to become an order.
+         now: datetime = None) -> dict:
+    """The suggestion for one delivery, net of the SYSTEM stock, ready to become an order.
 
-    `delivery` is the delivery day of the round. `count_id` is the count this order is made from (a
-    spot count, draft or submitted); None = the one linked to the cycle's order, else the latest
-    submitted count. `buffer_pct` (PR-19): the branch's expectation to apply; None = the cycle's
-    order's own, if any. `now` is the clock (tests pass it)."""
+    `delivery` is the delivery day of the round. The stock is the one the branch's issue slips leave on
+    `now`'s day (stock.system_position: last month-end count + goods received − confirmed slips, counted
+    items only); `as_of` is only the last day of sales the forecast reads. `buffer_pct` (PR-19): the
+    branch's expectation to apply; None = the cycle's order's own, if any. `now` is the clock (tests pass
+    it). Reads only — no write transaction is opened here."""
     from .forecast import _now_for, cover_for_delivery, cutoff_for, day_th, next_deliveries, suggest
-    from .stock import count_row, count_units
+    from .stock import count_units
+    from . import issues as _is
     cyc_d, dlv, _cf, _ct = cover_for_delivery(con, branch_id, rnd, delivery)
     cyc = cyc_d.isoformat()
     now_ = _now_for(None, now)
+    stock_day = now_.date()
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = as_of or (date.fromisoformat(last) if last else cyc_d - timedelta(days=1))
     oid0 = find(con, branch_id, rnd, cyc)
     o0 = _order_row(con, oid0) if oid0 else None
-    cid = count_id
-    if not cid and o0 and o0["stock_count_id"]:               # the order's own spot count (a month-end basis is re-picked)
-        cr0 = count_row(con, o0["stock_count_id"])
-        cid = cr0["count_id"] if cr0 and cr0["kind"] == "spot" else None
-    stock = stock_position(con, branch_id, as_of, cyc_d, count_id=cid, until=dlv)
+    stock = stock_position(con, branch_id, stock_day, cyc_d)
     from .central import central_map, unit_price
     if buffer_pct is None:
         buffer_pct = (o0 or {}).get("buffer_pct")
@@ -530,33 +494,25 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     if not (BUFFER_MIN <= pct <= BUFFER_MAX):
         raise ValueError(f"buffer ต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
     s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv)
-    s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"])}
+    s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"]), "through": stock["through"],
+                  # today's slip is reported on its own (slip_today); the days BEFORE it are the warning
+                  "missing_days": [d for d in stock["missing_days"] if d != stock_day.isoformat()],
+                  "slip_today": _is.status_of(con, branch_id, stock_day)}
     s["buffer"] = {"pct": pct, "min": BUFFER_MIN, "max": BUFFER_MAX,
                    "reasons": [{"code": k, "label": v} for k, v in BUFFER_REASONS]}
     cut = cutoff_for(dlv)
     s.update(delivery_th=day_th(dlv), late=now_ > cut, open=now_ <= cut,
              hours_left=round((cut - now_).total_seconds() / 3600.0, 1),
              deliveries=next_deliveries(con, branch_id, now_.date(), now=now_))
-    # the count this order is made from: what the branch typed for each item, in the unit it counts in
-    cnt, cnt_lines = None, {}
-    if cid:
-        cr = count_row(con, cid)
-        if cr and cr["branch_id"] == branch_id and cr["kind"] == "spot":
-            cnt_lines = {c: (q, u, qb) for c, q, u, qb in con.execute(
-                "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_stock_count_line WHERE count_id=?", (cid,))}
-            cnt = {"count_id": cid, "status": cr["status"],
-                   "lines": {c: {"qty": q, "unit": u} for c, (q, u, qb) in cnt_lines.items() if q is not None}}
-    s["count"] = cnt
     cu = count_units(con, [r["code"] for r in s["rows"]])
     cmap = central_map(con)
     month = s["order_day"][:7]
     for r in s["rows"]:
         unit, factor = cu.get(r["code"], (r.get("base_unit"), 1.0))
-        got = cnt_lines.get(r["code"])
         r["count_unit"], r["per_count_unit"] = unit, factor
-        r["counted"] = bool(got and got[2] is not None)
-        r["count_qty"] = None if not got else (got[0] if (got[1] or unit) == unit or not factor or got[2] is None
-                                                else round(got[2] / factor, 4))
+        sq = stock["qty"].get(r["code"])               # the system stock in the unit the kitchen counts in
+        r["system_qty"] = None if sq is None else round(sq / (factor or 1.0), 4)
+        r["system_unit"] = unit
         units, kind = order_units(r["need"], r.get("qty_per_recv"), r.get("moq"))
         r["order_units"] = units
         r["order_unit"] = kind
@@ -575,35 +531,23 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     return s
 
 
-def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, counts, who: str, submit: bool = False,
+def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: str, submit: bool = False,
               note: str = None, buffer: dict = None, ack_late: bool = False, now: datetime = None,
               as_of: date = None) -> dict:
-    """นับและสั่ง in one step: write the branch's count of what is on the shelf (a spot count linked to the
-    order), re-plan against it, save the order, and — on submit — submit the order and its count in the
-    same transaction. `counts` = [{code, qty, unit}] (a qty of None clears one); None leaves the count alone.
-    """
+    """Save (or submit) the branch's order for one delivery: status guard → plan → save.
+
+    The plan is computed BEFORE anything is written. It is the CPU-heavy part (the walk over the sales
+    behind the usage history); the load test of 2026-10-09 (docs/LOAD_TEST_30_BRANCHES.md) showed that
+    computing it AFTER a first write held the SQLite write lock for seconds and answered "database is
+    locked" to about 15 branches saving at once. The write transaction now begins inside `save()`."""
     from .forecast import cover_for_delivery
-    from .stock import count_row, save as stock_save
     cyc = cover_for_delivery(con, branch_id, rnd, delivery)[0].isoformat()
     oid = find(con, branch_id, rnd, cyc)
     o = _order_row(con, oid) if oid else None
     if o and o["status"] not in ("suggested", "confirmed"):
         raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
                          + (" กรุณากดเปิดแก้ไขก่อน" if o["status"] == "submitted" else ""))
-    cr = count_row(con, o["stock_count_id"]) if o and o["stock_count_id"] else None
-    cid = cr["count_id"] if cr and cr["kind"] == "spot" else None
-    unconverted = []
-    if counts is not None and (cid or counts):
-        r = stock_save(con, branch_id, [{"code": c.get("code"), "qty": c.get("qty"), "unit": c.get("unit")}
-                                        for c in counts], who, kind="spot", count_id=cid,
-                       count_date=now.date().isoformat() if now else None)
-        cid, unconverted = r["count_id"], r["unconverted"]
     pct = None if buffer is None else (buffer or {}).get("pct")
-    p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now, count_id=cid)
-    out = save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,
-               ack_late=ack_late, delivery=delivery.isoformat(), stock_count_id=cid, now=now)
-    if submit and cid:                                       # the count is submitted with its order
-        stock_save(con, branch_id, [], who, submit=True, kind="spot", count_id=cid)
-    out["count"] = None if not cid else {"count_id": cid, "unconverted": unconverted,
-                                         "status": count_row(con, cid)["status"]}
-    return out
+    p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now)
+    return save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,
+                ack_late=ack_late, delivery=delivery.isoformat(), now=now)

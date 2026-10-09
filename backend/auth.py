@@ -326,6 +326,11 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/claims",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/claims",                  {"branch.stock", "supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/claim-act",               {"supply.ordering"}),
+    # ใบตัดเบิก (2026-10-09): the branch records and confirms its daily issue slip; the supply roles, Ops and
+    # Accounting read; ONLY Sales Support / the analyst reopens a confirmed slip (the longer prefix beats the rule above it)
+    ("GET", "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
+    ("W",   "/api/bom-center/issues",                  {"branch.stock", "supply.ordering", "bom.center"}),
+    ("W",   "/api/bom-center/issues/reopen",           {"supply.ordering", "bom.center"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)

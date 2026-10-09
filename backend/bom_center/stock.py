@@ -63,7 +63,8 @@ def _branch_name(con, branch_id: int) -> str:
     return r[0]
 
 
-MONTH_KINDS = ("begin", "end")       # the month-end count; a 'spot' count belongs to one order (นับและสั่ง)
+MONTH_KINDS = ("begin", "end")       # the month-end count. A 'spot' count (PR-A, the count made while ordering) was
+                                     # retired in PR-J1: its rows and the CHECK stay, nothing writes or reads one any more
 
 
 def _in(kinds) -> str:
@@ -177,12 +178,9 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
 
 
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
-         note: str = None, kind: str = None, count_id: int = None) -> dict:
-    """Write the branch's draft (creating it) and optionally submit it.
-
-    `kind=None` is the month-end count (begin, then end). `kind="spot"` is the count a branch makes
-    while ordering (นับและสั่ง): one draft per order, `count_id` names the one already linked (None =
-    start a new one); it never touches the month-end draft or the begin/end sequence."""
+         note: str = None) -> dict:
+    """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
+    BEGIN stock, every later one the END of a period and the BEGIN of the next."""
     _branch_name(con, branch_id)
     conv = Converter(con)
     cdate = count_date or bkk_today().isoformat()
@@ -190,31 +188,17 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         date.fromisoformat(cdate)
     except ValueError:
         raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
-    if kind == "spot":
-        if count_id is not None:
-            cr = count_row(con, count_id)
-            if not cr or cr["branch_id"] != branch_id or cr["kind"] != "spot" or cr["status"] != "draft":
-                raise ValueError("ผลตรวจนับก่อนสั่งของใบสั่งซื้อนี้ส่งแล้ว กรุณากดเปิดแก้ไขใบสั่งซื้อก่อน")
-            cid = count_id
-            con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, count_date=?,"
-                        " note=COALESCE(?, note) WHERE count_id=?", (now(), who, cdate, note, cid))
-        else:
-            cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
-                              " status, updated_at) VALUES(?,?, 'spot', ?,?,?, 'draft', ?)",
-                              (branch_id, cdate, who, note or "นับก่อนสั่ง", now(), now()))
-            cid = cur.lastrowid
+    dr = draft_of(con, branch_id)
+    kind = "end" if last_submitted(con, branch_id) else "begin"
+    if dr:
+        cid = dr["count_id"]
+        con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, kind=?, count_date=?,"
+                    " note=COALESCE(?, note) WHERE count_id=?", (now(), who, kind, cdate, note, cid))
     else:
-        dr = draft_of(con, branch_id)
-        kind = "end" if last_submitted(con, branch_id) else "begin"
-        if dr:
-            cid = dr["count_id"]
-            con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, kind=?, count_date=?,"
-                        " note=COALESCE(?, note) WHERE count_id=?", (now(), who, kind, cdate, note, cid))
-        else:
-            cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
-                              " status, updated_at) VALUES(?,?,?,?,?,?, 'draft', ?)",
-                              (branch_id, cdate, kind, who, note, now(), now()))
-            cid = cur.lastrowid
+        cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
+                          " status, updated_at) VALUES(?,?,?,?,?,?, 'draft', ?)",
+                          (branch_id, cdate, kind, who, note, now(), now()))
+        cid = cur.lastrowid
     bad = []
     for ln in lines or []:
         code = (ln.get("code") or ln.get("ingredient_code") or "").strip()
@@ -255,25 +239,47 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     return out
 
 
-def reopen_spot(con, count_id: int, who: str) -> None:
-    """The order was reopened for editing: its count goes back to a draft with it."""
-    cr = count_row(con, count_id)
-    if not cr or cr["kind"] != "spot":
-        return
-    con.execute("UPDATE bc_stock_count SET status='draft', submitted_at=NULL, updated_at=? WHERE count_id=?",
-                (now(), count_id))
-    audit(con, who, "stock_reopen", "bc_stock_count", str(count_id), None, {"branch_id": cr["branch_id"]})
+def system_position(con, branch_id: int, as_of: date, issues_through: date = None) -> dict:
+    """The stock the SYSTEM says is on the shelf (ใบตัดเบิก, PR-J1):
 
+        latest submitted month-end count dated on or before `as_of`
+        + goods received from the count date up to `as_of` (all sources)
+        - CONFIRMED slips (used + waste, base units) from the count date up to `issues_through` (default `as_of`)
 
-def delete_spot_draft(con, count_id: int, who: str) -> bool:
-    """The order was cancelled: a spot count still in draft goes with it (a submitted one is kept)."""
-    cr = count_row(con, count_id)
-    if not cr or cr["kind"] != "spot" or cr["status"] != "draft":
-        return False
-    con.execute("DELETE FROM bc_stock_count_line WHERE count_id=?", (count_id,))
-    con.execute("DELETE FROM bc_stock_count WHERE count_id=?", (count_id,))
-    audit(con, who, "stock_discard", "bc_stock_count", str(count_id), None, {"kind": "spot"})
-    return True
+    The month-end count is made before trading, so the receipts and the slip OF the count date are in.
+    Only codes that were counted get a figure — the others are unknown and the forecast stands alone.
+    `missing_days` are the days from the count date to `issues_through` with no confirmed slip: the stock
+    shown is then higher than the real one.
+
+    -> {"basis": {count_id, date} | None, "qty": {code: base units}, "missing_days": [iso], "through": iso}"""
+    from .issues import missing_days
+    through = issues_through or as_of
+    out = {"basis": None, "qty": {}, "missing_days": [], "through": as_of.isoformat()}
+    r = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
+                    f" AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)} AND count_date<=?"
+                    " ORDER BY count_date DESC, count_id DESC LIMIT 1", (branch_id, as_of.isoformat())).fetchone()
+    if not r:
+        return out
+    cid, cdate = r
+    out["basis"] = {"count_id": cid, "date": cdate}
+    qty = {c: q for c, q in con.execute(
+        "SELECT ingredient_code, qty_base FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NOT NULL", (cid,))}
+    for c, q in con.execute(
+            "SELECT l.ingredient_code, SUM(l.qty_base) FROM bc_receipt r JOIN bc_receipt_line l USING(receipt_id)"
+            " WHERE r.branch_id=? AND r.receipt_date>=? AND r.receipt_date<=? GROUP BY l.ingredient_code",
+            (branch_id, cdate, as_of.isoformat())):
+        if c in qty:
+            qty[c] += q or 0.0
+    for c, q in con.execute(
+            "SELECT l.ingredient_code, SUM(COALESCE(l.qty_used_base, 0) + COALESCE(l.qty_waste_base, 0))"
+            " FROM bc_issue_slip s JOIN bc_issue_line l USING(slip_id) WHERE s.branch_id=? AND s.status='confirmed'"
+            " AND s.slip_date>=? AND s.slip_date<=? GROUP BY l.ingredient_code",
+            (branch_id, cdate, through.isoformat())):
+        if c in qty:
+            qty[c] -= q or 0.0
+    out["qty"] = qty
+    out["missing_days"] = missing_days(con, branch_id, cdate, through)
+    return out
 
 
 def history(con, branch_id: int, limit: int = 20, kinds=None) -> list:

@@ -20,8 +20,9 @@ What a branch should order on an order day, per ingredient:
   4. SAFETY STOCK — z × σ(daily usage around its weekday mean) × √cover days,
      z by ABC class on spend (A 1.65 ≈ 95 %, B 1.28 ≈ 90 %, C 1.04 ≈ 85 %);
      a fresh item never holds more than its shelf life.
-  5. SUGGESTION — forecast + safety − on hand (0 until branches count stock in
-     Phase 2) − on order, rounded UP to whole packs and the minimum order.
+  5. SUGGESTION — forecast + safety − on hand (the system stock after the order day's
+     issue slip, orders.stock_position; unknown = not deducted) − on order, rounded
+     UP to whole packs and the minimum order.
 
 A run can be saved (bc_forecast_run/_line): Phase 2's branch order screen and
 the compliance report judge against that frozen number, never a recomputation.
@@ -29,6 +30,9 @@ backtest() replays the last weeks to measure the forecast error (MAPE) by class.
 """
 import json
 import math
+import os
+import threading
+import time as _time
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -252,8 +256,56 @@ def _per_dish(con, month: str) -> tuple:
     return out, stats
 
 
+USAGE_CACHE_TTL = float(os.environ.get("OSHINEI_USAGE_CACHE_TTL", "600"))     # seconds; 0 = off (tests)
+_USAGE_CACHE_MAX = 64
+_usage_cache: dict = {}                                    # key -> (stored at, (use, days, stats))
+_usage_lock = threading.Lock()
+
+
+def clear_usage_cache() -> None:
+    with _usage_lock:
+        _usage_cache.clear()
+
+
+def _usage_key(con, branch_id, start, end, month):
+    """None when the connection has no file behind it (an in-memory database is never cached)."""
+    try:
+        path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
+    except Exception:
+        return None
+    if not path:
+        return None
+    core = _loaded("core")
+    return (path, branch_id, start.isoformat(), end.isoformat(), month,
+            getattr(core, "_cache_gen", 0), getattr(core, "_db_gen", 0))
+
+
 def usage_history(con, branch_id: int, start: date, end: date, month: str) -> tuple:
-    """({ingredient: {day: purchase qty}}, trading days, stats) — what the branch used each day."""
+    """({ingredient: {day: purchase qty}}, trading days, stats) — what the branch used each day.
+
+    Cached per process for USAGE_CACHE_TTL seconds (the plan of a branch asks for the same six weeks again
+    and again, and the CPU-heavy walk over the sales used to run twice per plan). The key carries the
+    database file and core's cache / swap generations, so any invalidate_cache() or data swap starts afresh.
+    `days` and `stats` are copied on return because callers pop from them; `use` is read-only for callers."""
+    ttl = USAGE_CACHE_TTL
+    key = _usage_key(con, branch_id, start, end, month) if ttl and ttl > 0 else None
+    if key is not None:
+        with _usage_lock:
+            hit = _usage_cache.get(key)
+        if hit and _time.monotonic() - hit[0] < ttl:
+            use, days, stats = hit[1]
+            return use, list(days), dict(stats)
+    use, days, stats = _usage_history_uncached(con, branch_id, start, end, month)
+    if key is not None:
+        with _usage_lock:
+            if len(_usage_cache) >= _USAGE_CACHE_MAX:
+                for k in sorted(_usage_cache, key=lambda k: _usage_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
+                    _usage_cache.pop(k, None)
+            _usage_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
+    return use, days, stats
+
+
+def _usage_history_uncached(con, branch_id: int, start: date, end: date, month: str) -> tuple:
     per, stats = _per_dish(con, month)
     sales = "v_sales_sku_daily" if con.execute("SELECT 1 FROM sqlite_master WHERE name='v_sales_sku_daily'").fetchone() \
         else "sales_sku_daily"
@@ -320,9 +372,9 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     the forecast of every item by 1.2 before safety and stock; every row also carries
     the unscaled `forecast_base` / `need_base` so the page can show "ปกติ".
 
-    `stock` (orders.stock_position, Phase 2): on hand at the last count, net of what
-    arrived and what the sales used since, plus what is on order — deducted per item
-    after projecting the use between now and the first covered day."""
+    `stock` (orders.stock_position): the system stock as of `through` (last month-end count + goods
+    received − confirmed issue slips), plus what is on order — deducted per item after projecting
+    the use between `through` and the first covered day."""
     from .prices import price_for
     if delivery:
         order_day, dlv, c_from, c_to = cover_for_delivery(con, branch_id, rnd, delivery)
@@ -354,8 +406,13 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     cmap = central_map(con)                               # S11: the centre's list decides what is ordered from it
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
     # the days between the stock figure and the first covered day still eat into it
+    # (the system stock is as of `through` — the day of the order, after that day's issue slip)
+    through = (stock or {}).get("through")
     basis = ((stock or {}).get("basis") or {}).get("date")
-    pre_from = max(as_of + timedelta(days=1), date.fromisoformat(basis)) if basis else as_of + timedelta(days=1)
+    if through:
+        pre_from = date.fromisoformat(through) + timedelta(days=1)
+    else:
+        pre_from = max(as_of + timedelta(days=1), date.fromisoformat(basis)) if basis else as_of + timedelta(days=1)
     pre_days = [pre_from + timedelta(days=i) for i in range(max((c_from - pre_from).days, 0))]
     # spend over the window for ABC
     spend = {}
