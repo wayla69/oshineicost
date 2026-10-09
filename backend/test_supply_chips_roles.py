@@ -1,0 +1,195 @@
+"""PR-M2 — the role-scoped bar of วัตถุดิบและใบสั่งซื้อ.
+
+SUPPLY_CHIPS (js/01-core.js) lists every page of the module. Since PR-M2 each item also names the ROLES whose bar shows
+it (`roles:`); `mods:` stays the permission floor. This test reads the JS the way test_role_modules_mirror.py does and
+pins, per role, the chips and pages the bar offers (plan: bom-ux-overhaul-phase3.md, PR-M2 §1):
+
+  accounting   หน้างาน · ใบสรุปตัดเบิก · ราคารายเดือน (read-only)
+  innovation   หน้างาน · สูตร · สูตรกึ่งสำเร็จ · ทะเบียนวัตถุดิบ (read-only)
+  warehouse    หน้างาน · คิวใบสั่งซื้อ
+  salessupport หน้างาน · ใบสั่งซื้อ · ไฟล์ราคา · ปิดงวดเดือน · ตั้งค่า (+ หน้าระบบเดิม)
+  operation    ตรวจสอบการสั่ง · ผลต่างตัดเบิกรายวัน · สรุปผลต่างรายเดือน · ใบตัดเบิกสาขา
+  analyst / management   everything (the older pages inside ตั้งค่า → หน้าระบบเดิม)
+The first row of the bar (LEVEL1) is what _renderSupplyBar draws: a chip holding one page is named by that page, and a role
+with SUPPLY_FLAT_MAX pages or fewer gets them as one flat row (so accounting's row is หน้างาน · ราคารายเดือน · ใบสรุปตัดเบิก).
+And that nothing is listed for a role that cannot open it (the floor), and that no page is left without a chip.
+"""
+import re
+from pathlib import Path
+
+import pytest
+
+import auth
+
+JS = (Path(__file__).resolve().parent.parent / "js" / "01-core.js").read_text(encoding="utf-8")
+
+
+def _chips():
+    m = re.search(r"const SUPPLY_CHIPS = \[(.*?)\n\];\nconst SUPPLY_LEGACY_LABEL", JS, re.S)
+    assert m, "SUPPLY_CHIPS not found in js/01-core.js"
+    chips, cur = [], None
+    for line in m.group(1).splitlines():
+        h = re.search(r"\{ key: '(\w+)', label: '([^']+)'", line)
+        if h:
+            cur = {"key": h.group(1), "label": h.group(2), "items": []}
+            chips.append(cur)
+        for it in re.finditer(r"\{ tab: '(\w+)'(.*?)\}(?=,|\]|\s*$)", line):
+            rest = it.group(2)
+            pane = re.search(r"pane: '(\w+)'", rest)
+            label = re.search(r"label: '([^']+)'", rest)
+            roles = re.search(r"roles: \[([^\]]*)\]", rest)
+            mods = re.search(r"mods: (_SUPPLY_CENTRE|\[[^\]]*\])", rest)
+            group = re.search(r"group: '(\w+)'", rest)
+            assert cur is not None and label
+            cur["items"].append({
+                "tab": it.group(1), "pane": pane.group(1) if pane else None, "label": label.group(1),
+                "roles": re.findall(r"'(\w+)'", roles.group(1)) if roles else None,
+                "mods": (re.findall(r"'([\w.]+)'", JS[JS.index("const _SUPPLY_CENTRE"):].split("\n", 1)[0]) if mods.group(1) == "_SUPPLY_CENTRE"
+                         else re.findall(r"'([\w.]+)'", mods.group(1))) if mods else None,
+                "group": group.group(1) if group else None})
+    return chips
+
+
+def _tab_modules():
+    body = re.search(r"const TAB_MODULE = \{(.*?)\n\};", JS, re.S).group(1)
+    out = {}
+    for name, single, many in re.findall(r"(\w+):\s*(?:'([\w.]+)'|\[([^\]]*)\])", body):
+        out[name] = [single] if single else re.findall(r"'([\w.]+)'", many)
+    return out
+
+
+def _visible(role):
+    """[(chip key, chip label, [item labels])] the bar offers `role` (roles and the permission floor), chips in order."""
+    mods = set(auth.MODULES) if role == "management" else set(auth.ROLE_MODULES.get(role, set()))
+    tabmod = _tab_modules()
+    out = []
+    for ch in _chips():
+        got = []
+        for it in ch["items"]:
+            if it["roles"] is not None and role not in it["roles"]:
+                continue
+            need = tabmod.get(it["tab"])
+            if need and not (set(need) & mods):
+                continue
+            if it["mods"] and not (set(it["mods"]) & mods):
+                continue
+            got.append(it["label"])
+        if got:
+            out.append((ch["key"], ch["label"], got))
+    return out
+
+
+def _bar(role):
+    """{chip label: [item labels]}"""
+    return {label: items for _, label, items in _visible(role)}
+
+
+def _level1(role):
+    """The first row of the bar, as _renderSupplyBar draws it: a chip holding one page is named by the page, and a role with
+    SUPPLY_FLAT_MAX pages or fewer gets one flat row of pages; หน้างาน and สาขาของฉัน keep their names."""
+    flat_max = int(re.search(r"const SUPPLY_FLAT_MAX = (\d+)", JS).group(1))
+    vis = _visible(role)
+    flat = sum(len(items) for _, _, items in vis) <= flat_max
+    row = []
+    for key, label, items in vis:
+        if key not in ("home", "branch") and (flat or len(items) == 1):
+            row += items
+        else:
+            row.append(label)
+    return row
+
+
+LEGACY = ["แผนสั่งวัตถุดิบ (ระบบเดิม)", "ยอดซื้อเทียบยอดขาย", "ขนาดบรรจุ", "ปฏิทินเทศกาล"]
+HOME = "งานของฉันและปิดงวดเดือน"
+PILOT = "สาขานำร่อง 4 สาขา"
+
+EXPECTED = {
+    "accounting": {"หน้างาน": [HOME], "ข้อมูลตั้งต้น": ["ราคารายเดือน"], "ปิดงวดเดือน": ["ใบสรุปตัดเบิก"]},
+    "innovation": {"หน้างาน": [HOME], "ข้อมูลตั้งต้น": ["ทะเบียนวัตถุดิบ"], "สูตรและการประกาศใช้": ["สูตรตามระดับราคา", "สูตรกึ่งสำเร็จ"]},
+    "warehouse": {"หน้างาน": [HOME], "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ"]},
+    "branch": {"หน้างาน": [HOME], "สาขาของฉัน": ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]},
+    "salessupport": {"หน้างาน": [HOME, PILOT], "ข้อมูลตั้งต้น": ["ไฟล์ราคา"],
+                     "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ", "เคลมสินค้า", "ยอดแนะนำรายรอบ", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน"],
+                     "ปิดงวดเดือน": ["นำเข้าข้อมูลปิดงวด", "สรุปผลต่างรายเดือน"],
+                     "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ"] + LEGACY},
+    "operation": {"หน้างาน": [HOME], "ใบสั่งซื้อ": ["ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน"], "ปิดงวดเดือน": ["สรุปผลต่างรายเดือน"]},
+    "marketing": {},
+    "franchise": {},
+}
+EVERYTHING = {
+    "หน้างาน": [HOME, PILOT],
+    "ข้อมูลตั้งต้น": ["ทะเบียนวัตถุดิบ", "ราคารายเดือน", "ไฟล์ราคา", "หน่วยและการแปลง", "ความพร้อมและรหัสสูตรเดิม"],
+    "สูตรและการประกาศใช้": ["สูตรตามระดับราคา", "สูตรกึ่งสำเร็จ", "ตรวจและประกาศใช้"],
+    "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ", "เคลมสินค้า", "ยอดแนะนำรายรอบ", "ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน"],
+    "ปิดงวดเดือน": ["นำเข้าข้อมูลปิดงวด", "สรุปผลต่างรายเดือน", "ใบสรุปตัดเบิก"],
+    "สาขาของฉัน": ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"],
+    "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ"] + LEGACY,
+}
+EXPECTED["management"] = EVERYTHING
+# the analyst holds neither ops.report nor supply.ordering, the floor of the plan and set-up tabs: of the older pages
+# only ยอดซื้อเทียบยอดขาย (cost.analysis) opens for it, as before PR-M2
+EXPECTED["analyst"] = {**EVERYTHING, "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ", "ยอดซื้อเทียบยอดขาย"]}
+
+
+@pytest.mark.parametrize("role", sorted(EXPECTED))
+def test_the_bar_each_role_gets(role):
+    assert _bar(role) == EXPECTED[role]
+
+
+# the first row of the bar per role: the plan's lists, read as chips
+LEVEL1 = {
+    "accounting": ["หน้างาน", "ราคารายเดือน", "ใบสรุปตัดเบิก"],
+    "innovation": ["หน้างาน", "ทะเบียนวัตถุดิบ", "สูตรตามระดับราคา", "สูตรกึ่งสำเร็จ"],
+    "warehouse": ["หน้างาน", "คิวใบสั่งซื้อ"],
+    "operation": ["หน้างาน", "ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", "สรุปผลต่างรายเดือน"],
+    "salessupport": ["หน้างาน", "ไฟล์ราคา", "ใบสั่งซื้อ", "ปิดงวดเดือน", "ตั้งค่า"],
+    "branch": ["หน้างาน", "สาขาของฉัน"],
+    "analyst": ["หน้างาน", "ข้อมูลตั้งต้น", "สูตรและการประกาศใช้", "ใบสั่งซื้อ", "ปิดงวดเดือน", "สาขาของฉัน", "ตั้งค่า"],
+    "management": ["หน้างาน", "ข้อมูลตั้งต้น", "สูตรและการประกาศใช้", "ใบสั่งซื้อ", "ปิดงวดเดือน", "สาขาของฉัน", "ตั้งค่า"],
+    "marketing": [], "franchise": [],
+}
+
+
+@pytest.mark.parametrize("role", sorted(LEVEL1))
+def test_the_first_row_of_the_bar(role):
+    assert _level1(role) == LEVEL1[role]
+
+
+def test_the_older_pages_are_one_group_inside_setup_and_nothing_is_deleted():
+    chips = {c["key"]: c for c in _chips()}
+    legacy = [i["label"] for c in chips.values() for i in c["items"] if i["group"] == "legacy"]
+    assert legacy == LEGACY and all(i["group"] == "legacy" for i in chips["setup"]["items"][2:])
+    assert [c["key"] for c in chips.values() if any(i["group"] == "legacy" for i in c["items"])] == ["setup"]
+    # four tabs of the old ordering screens, all still reachable (the owner's rule: regroup, never delete)
+    assert {(i["tab"], i["pane"]) for i in chips["setup"]["items"] if i["group"] == "legacy"} == {
+        ("ordering", None), ("ingpurchase", None), ("ordersetup", "pack"), ("ordersetup", "cal")}
+
+
+def test_every_page_is_in_the_bar_of_some_role_that_can_open_it():
+    seen = set()
+    for role in list(EXPECTED) + ["analyst", "management"]:
+        for items in _bar(role).values():
+            seen.update(items)
+    every = {i["label"] for c in _chips() for i in c["items"]}
+    assert every <= seen, f"no role's bar offers: {sorted(every - seen)}"
+
+
+def test_pricefile_is_a_pane_of_its_own_with_the_submit_card():
+    html = (Path(__file__).resolve().parent.parent / "tabs" / "52-bomcenter.html").read_text(encoding="utf-8")
+    pane = re.search(r'<div id="bmc-pane-pricefile".*?(?=\n  <!-- ──|\n</div>\s*$)', html, re.S)
+    assert pane and 'id="bmcPriceSubmitCard"' in pane.group(0) and 'id="bmcPriceFileList"' in pane.group(0)
+    price = re.search(r'<div id="bmc-pane-price".*?<div id="bmc-pane-pricefile"', html, re.S).group(0)
+    assert 'id="bmcPriceSubmitCard"' not in price and 'id="bmcPriceSubList"' in price      # the analyst keeps the pending list
+    assert "bmcPricePreview" in price and "bmcImportPrices" in price                          # ... and the import card
+
+
+def test_every_pane_has_its_help_folded_at_the_bottom():
+    """The explanation of a page is a <details class="bmc-help"> (closed: no `open`), never a paragraph above the controls."""
+    root = Path(__file__).resolve().parent.parent
+    for f in ("tabs/52-bomcenter.html", "tabs/53-branchstock.html"):
+        txt = (root / f).read_text(encoding="utf-8")
+        helps = re.findall(r"<details[^>]*class=\"[^\"]*bmc-help[^\"]*\"[^>]*>", txt)
+        assert helps and not any(re.search(r"\bopen\b", h) for h in helps), f
+    oh = (root / "tabs" / "54-orderhub.html").read_text(encoding="utf-8")
+    for pane in ("queue", "claims", "issues", "issuevar", "comp", "pilot", "central", "month"):
+        assert f'id="ohbHelp-{pane}"' in oh, pane
