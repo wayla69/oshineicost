@@ -27,6 +27,31 @@ REASONS = (("waste", "วัตถุดิบเสีย / ทิ้ง"), ("e
            ("overportion", "เสิร์ฟเกินปริมาณตามสูตร"), ("transfer", "โอนให้สาขาอื่น"), ("miscount", "ตรวจนับผิด"),
            ("receipt", "บันทึกรับสินค้าไม่ครบ"), ("other", "อื่น ๆ"))
 REASON_TH = dict(REASONS)
+FLAG_STATUS = ("over", "under", "negative", "no_bom")   # the statuses that are outside the threshold
+ASK_TOP = 20                                            # PR-M4 (owner Q3): a reason is asked for class A and for the top 20 by |฿|
+
+
+def ask_reason_codes(rows: list, top: int = ASK_TOP) -> set:
+    """The codes a branch is asked to explain (owner Q3, PR-M4): a flagged line (outside the threshold) that is class A, or
+    among the `top` flagged lines by |฿ variance|. Rows need `code`, `status`, `class` and `gap_value`."""
+    flagged = [r for r in rows if r["status"] in FLAG_STATUS]
+    biggest = {r["code"] for r in sorted((r for r in flagged if r.get("gap_value") is not None),
+                                         key=lambda r: (-abs(r["gap_value"]), r["code"]))[:top]}
+    return {r["code"] for r in flagged if r["class"] == "A" or r["code"] in biggest}
+
+
+def with_count_units(con, rows: list) -> list:
+    """Add `count_unit` and `per_count_unit` (base units in one count unit) to every row that has a `code`, so that a
+    branch page can show the quantity in the unit the kitchen counts in. Falls back to the base unit (factor 1)."""
+    from .stock import count_units
+    cu = count_units(con, {r["code"] for r in rows if r.get("code")})
+    for r in rows:
+        u, f = cu.get(r.get("code"), (None, None))
+        if u and f and f > 0:
+            r["count_unit"], r["per_count_unit"] = u, float(f)
+        else:
+            r["count_unit"], r["per_count_unit"] = r.get("base_unit"), 1.0
+    return rows
 
 
 def now() -> str:
@@ -242,9 +267,15 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
         rs = reasons.get(c)
         if rs:
             row.update(reason=rs[0], reason_th=REASON_TH.get(rs[0], rs[0]), reason_note=rs[1], reason_by=rs[2])
-        row["needs_reason"] = row["status"] in ("over", "under", "negative", "no_bom") and not rs
         rows.append(row)
-    flagged = [r for r in rows if r["status"] in ("over", "under", "negative", "no_bom")]
+    flagged = [r for r in rows if r["status"] in FLAG_STATUS]
+    # PR-M4 (owner Q3): only a high-value line is asked for a reason — class A, or among the top ASK_TOP by |฿ variance|.
+    # The other flagged lines are listed without a form; `needs_reason` follows (a line asked and not yet explained).
+    ask = ask_reason_codes(rows)
+    for r in rows:
+        r["ask_reason"] = r["code"] in ask
+        r["needs_reason"] = r["ask_reason"] and "reason" not in r
+    counted = [r for r in rows if r["status"] != "not_counted" and r.get("actual") is not None and r["price_per_base"] is not None]
     summary = {
         "branch_id": branch_id, "begin_count_id": b["count_id"], "end_count_id": e["count_id"],
         "begin_date": b["date"], "end_date": e["date"], "days": (d1 - d0).days, "trading_days": len(days),
@@ -256,13 +287,20 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
         "bom_value": round(sum(r["bom"] * (r["price_per_base"] or 0) for r in rows), 2),
         "flagged": len(flagged), "needs_reason": sum(1 for r in rows if r["needs_reason"]),
         "not_counted": sum(1 for r in rows if r["status"] == "not_counted" and r["bom"] > 0),
+        # PR-M4: the head of the branch page — what was used, what the recipes say for the same lines, and the gap
+        "actual_value": round(sum(r["actual"] * r["price_per_base"] for r in counted), 2),
+        "bom_value_counted": round(sum(r["bom"] * r["price_per_base"] for r in counted), 2),
+        "ask_reason": sum(1 for r in rows if r["ask_reason"]),
     }
+    summary["totals"] = {"ask_reason": summary["ask_reason"], "ask_reason_open": summary["needs_reason"],
+                         "flagged": summary["flagged"], "other_flagged": summary["flagged"] - summary["ask_reason"]}
     if summary["bom_value"]:
         summary["gap_pct"] = round(100.0 * summary["gap_value"] / summary["bom_value"], 1)
     if summary_only:
         return summary
     order = {"negative": 0, "over": 1, "under": 2, "no_bom": 3, "not_counted": 4, "ok": 5}
     rows.sort(key=lambda r: (order[r["status"]], -abs(r["gap_value"] or 0), r["code"]))
+    with_count_units(con, rows)
     return dict(summary, rows=rows, reasons=[{"code": k, "label": v} for k, v in REASONS],
                 thresholds=THRESHOLD)
 

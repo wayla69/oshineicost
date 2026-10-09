@@ -40,7 +40,7 @@ REASONS = [
 REASON_TH = dict(REASONS)
 STATUS_TH = {"submitted": "รอประสานงานขายพิจารณา", "approved": "อนุมัติรับเคลมแล้ว",
              "rejected": "ไม่อนุมัติ", "cancelled": "สาขายกเลิก"}
-ORIGIN_TH = {"receive": "แจ้งขณะรับสินค้า", "after": "แจ้งหลังรับสินค้า"}
+ORIGIN_TH = {"receive": "แจ้งขณะรับสินค้า", "after": "แจ้งภายหลัง"}
 OPEN = ("submitted", "approved")          # the statuses that use up a line's claimable quantity
 
 
@@ -258,8 +258,11 @@ def listing(con, branch_id=None, status=None, limit: int = 50) -> list:
         sql += " AND c.status=?"; args.append(status)
     rows = [r[0] for r in con.execute(sql + " ORDER BY (c.status='submitted') DESC, c.claim_id DESC LIMIT ?", args + [limit])]
     out = []
+    from .hub import delivery_of                 # PR-M4: a claim is read as "round · delivery day · N lines", not by its id
     for cid in rows:
         h = _head(con, cid)
+        dd = con.execute("SELECT delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
+        h["delivery"] = delivery_of(con, h["branch_id"], h["round"], h["cycle_date"], dd[0] if dd else None) if h["cycle_date"] else None
         h["lines"] = con.execute("SELECT COUNT(*) FROM bc_claim_line WHERE claim_id=?", (cid,)).fetchone()[0]
         h["photos"] = con.execute("SELECT COUNT(*) FROM bc_claim_photo WHERE claim_id=?", (cid,)).fetchone()[0]
         out.append(h)

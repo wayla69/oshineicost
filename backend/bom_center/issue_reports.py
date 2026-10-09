@@ -252,6 +252,7 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
         rows.append(row)
     order = {"under": 0, "over": 1, "not_counted": 2, "ok": 3}
     rows.sort(key=lambda x: (order[x["status"]], -abs(x["diff_value"] or 0), x["code"]))
+    VA.with_count_units(con, rows)                              # PR-M4: the branch page reads the quantities in count units
 
     def val(key, pred=lambda x: True):
         return round(sum(x[key] * x["price_per_base"] for x in rows
@@ -453,6 +454,7 @@ def daily_day(con, branch_id: int, day, today: date = None, commit: bool = True)
         it["waste_reason"] = r[0] if r else None
         it["waste_reason_th"] = IS.WASTE_REASON_TH.get(r[0]) if r and r[0] else None
         it["note"] = r[1] if r else None
+    VA.with_count_units(con, items)                             # PR-M4: count units for the branch page
     row = next((r for r in s["rows"] if r["date"] == iso), None)
     key = _slip_key(st)
     return {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "date": iso, "month": month,

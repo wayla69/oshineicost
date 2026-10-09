@@ -325,3 +325,13 @@ def _login_warehouse():
     r = mg.post("/api/auth/users", headers={"X-Upload-Token": "owner-token-xyz"}, json={"username": "wh_claim", "role": "warehouse"})
     assert r.status_code in (200, 409), r.text
     return _login("wh_claim")
+
+
+def test_the_claim_list_names_the_round_and_the_delivery_day(con):  # noqa: F811
+    """PR-M4 · a claim is read as "round · delivery day · N lines" (no id): the list carries the delivery day."""
+    oid, _ = _received(con)
+    _claim(con, oid, 1)
+    row = CL.listing(con, 1)[0]
+    assert row["order_id"] == oid and row["round"] and row["lines"] == 1
+    assert row["delivery"] and row["delivery"] >= row["cycle_date"]
+    assert row["origin_th"] == "แจ้งภายหลัง" and CL.ORIGIN_TH["receive"] == "แจ้งขณะรับสินค้า"

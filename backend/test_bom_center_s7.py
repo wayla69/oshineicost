@@ -132,7 +132,7 @@ def test_periods_list_and_overview(db):
 
 
 def test_one_count_is_not_a_period(con):  # noqa: F811
-    _count(con, "2026-09-08", {"13-01-009": 1})
+    _count(con, "2026-09-08", {"13-01-009": 1, "02-01-001": 1})
     with pytest.raises(ValueError):
         VA.period(con, 1)
 
