@@ -154,6 +154,16 @@ def _build_db(path: str):
     con.commit(); con.close()
 
 
+@pytest.fixture(autouse=True)
+def _no_usage_cache(monkeypatch):
+    """forecast.usage_history is cached per process in production (600 s); a test writes sales / recipes
+    and reads the answer straight back, so the cache is OFF unless a test turns it on."""
+    from bom_center import forecast
+    monkeypatch.setattr(forecast, "USAGE_CACHE_TTL", 0)
+    forecast.clear_usage_cache()
+    yield
+
+
 @pytest.fixture(scope="session")
 def app_db(tmp_path_factory):
     """Build the temp DB once and point main at it."""

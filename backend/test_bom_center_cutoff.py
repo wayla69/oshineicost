@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-"""PR-A — the delivery-day calendar, the 13:15 cutoff and count-and-order in one flow.
+"""PR-A — the delivery-day calendar and the 13:15 cutoff (PR-J1: the count made while ordering is gone).
 
 The promises:
   * the sales team sets the DELIVERY weekday; an order must be submitted before 13:15 two
     days before it (a Tuesday delivery: Saturday) — the cutoff weekday and the lead are derived,
     and a row saved the old way (order weekday + lead) reads as the delivery weekday it implies;
-  * the branch counts what is on its shelf while ordering: a 'spot' count linked to the order,
-    deducted from the suggestion, submitted with it, reopened with it, deleted with a cancelled
-    draft — and never the begin/end of a month-end period;
-  * an ordered item without a counted on-hand cannot be submitted;
+  * (PR-J1) the branch no longer counts while ordering: saving or submitting an order writes no
+    stock count, and a submit needs the issue slip of the day confirmed; 'spot' rows left by the
+    old flow are ignored by every month-end reader;
   * a submit after the cutoff is refused until the late fee is acknowledged, then accepted and
     flagged (queue, SLA, Excel);
   * the todo, the reminders and the exports speak the same cutoff.
@@ -22,6 +21,7 @@ from openpyxl import load_workbook
 
 from bom_center import forecast as F
 from bom_center import hub as HB
+from bom_center import issues as IS
 from bom_center import orders as OR
 from bom_center import schema as SC
 from bom_center import stock as ST
@@ -42,6 +42,13 @@ def at(d, h, m=0):
 
 NOW = at(5, 8)                       # Monday 08:00 — before round 1's cutoff
 LATE = at(5, 15)                     # Monday 15:00 — after it
+SLIP_LINE = [{"code": "V-007", "qty_used": 10, "unit": "กรัม"}]
+
+
+def slip(c, now=NOW):
+    """The branch confirms the issue slip of `now`'s day."""
+    IS.save(c, 1, now.date().isoformat(), SLIP_LINE, "udon", submit=True, now=now)
+    c.commit()
 
 
 # ── the rule ─────────────────────────────────────────────────────────────────
@@ -132,84 +139,72 @@ def test_plan_by_delivery_carries_the_cutoff_and_the_count_unit(con):  # noqa: F
     assert p["cycle_date"] == p["order_day"] == "2026-10-05" and p["delivery"] == "2026-10-07"
     assert p["cutoff_th"] == "วันจันทร์ 13:15" and p["delivery_th"] == "วันพุธ 7/10"
     assert p["cutoff_at"] == "2026-10-05T13:15:00+07:00" and p["open"] is True and p["late"] is False
-    assert [d["round"] for d in p["deliveries"]] == ["1", "2", "salmon", "1"] and p["count"] is None
+    assert [d["round"] for d in p["deliveries"]] == ["1", "2", "salmon", "1"] and "count" not in p
     crab = next(r for r in p["rows"] if r["code"] == CRAB)
-    assert crab["count_unit"] == "แพ็ค 1 กก." and crab["per_count_unit"] == 1000 and crab["counted"] is False
+    assert crab["count_unit"] == "แพ็ค 1 กก." and crab["per_count_unit"] == 1000 and crab["system_qty"] is None
     late = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=LATE)
     assert late["late"] is True and late["open"] is False and late["hours_left"] < 0
 
 
-# ── count and order in one flow ──────────────────────────────────────────────
-def test_the_count_is_a_linked_spot_draft_the_plan_deducts(con):  # noqa: F811
-    out = OR.save_flow(con, 1, "1", WED, [], [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon",
-                       now=NOW, as_of=AS_OF)
-    cid = out["count"]["count_id"]
-    assert out["count"]["status"] == "draft" and out["status"] == "suggested"
-    row = ST.count_row(con, cid)
-    assert row["kind"] == "spot" and row["status"] == "draft" and row["count_date"] == "2026-10-05"
-    assert con.execute("SELECT stock_count_id FROM bc_order WHERE order_id=?", (out["order_id"],)).fetchone()[0] == cid
-    # none of it is a month-end count
-    sh = ST.sheet(con, 1, AS_OF)
-    assert sh["next_kind"] == "begin" and sh["draft"] is None and sh["last_count"] is None
-    assert ST.draft_of(con, 1) is None and ST.periods(con, 1) == [] and ST.history(con, 1, kinds=ST.MONTH_KINDS) == []
-    assert [h["kind"] for h in ST.history(con, 1)] == ["spot"]
-    # the plan deducts the typed count, shows it back, and carries it in the order's own draft
-    p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
-    r = next(x for x in p["rows"] if x["code"] == CRAB)
-    assert p["stock"]["deducted"] and p["stock"]["basis"]["count_id"] == cid
-    assert r["counted"] is True and r["count_qty"] == 3 and r["on_hand"] is not None and r["on_hand"] < 3000
-    assert p["count"] == {"count_id": cid, "status": "draft", "lines": {CRAB: {"qty": 3.0, "unit": "แพ็ค 1 กก."}}}
-    # editing the count again updates the same draft; a blank clears the line
-    out2 = OR.save_flow(con, 1, "1", WED, [], [{"code": CRAB, "qty": None}], "udon", now=NOW, as_of=AS_OF)
-    assert out2["count"]["count_id"] == cid
-    assert con.execute("SELECT COUNT(*) FROM bc_stock_count_line WHERE count_id=?", (cid,)).fetchone()[0] == 0
-    # with no count typed at all, no empty draft is created
-    assert OR.save_flow(con, 1, "2", date(2026, 10, 10), [], [], "udon", now=NOW, as_of=AS_OF)["count"] is None
+# ── ordering without a count ─────────────────────────────────────────────────
+def test_saving_an_order_writes_no_stock_count(con):  # noqa: F811
+    out = OR.save_flow(con, 1, "1", WED, [], "udon", now=NOW, as_of=AS_OF)
+    assert out["status"] == "suggested" and out["slip_today"]["status"] == "missing" and "count" not in out
+    assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 0
+    assert con.execute("SELECT stock_count_id FROM bc_order WHERE order_id=?", (out["order_id"],)).fetchone()[0] is None
+    # a month-end count is the order's basis (the id is kept), still no count of its own
+    cid = ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05")["count_id"]
+    again = OR.save_flow(con, 1, "1", WED, [], "udon", now=NOW, as_of=AS_OF)
+    assert con.execute("SELECT stock_count_id FROM bc_order WHERE order_id=?", (again["order_id"],)).fetchone()[0] == cid
+    assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 1
 
 
-def test_an_uncounted_item_cannot_be_ordered_and_a_counted_one_can(con):  # noqa: F811
-    OR.save_flow(con, 1, "1", WED, [], [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", now=NOW, as_of=AS_OF)
-    con.commit()
+def test_an_order_needs_todays_confirmed_slip_and_an_earlier_gap_only_warns(con):  # noqa: F811
     line = [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}]
-    out = OR.save_flow(con, 1, "1", WED, line, None, "udon", now=NOW, as_of=AS_OF)       # saving a draft is fine …
-    assert out["uncounted"] == ["V-007"] and out["status"] == "suggested"
-    with pytest.raises(ValueError, match="V-007") as e:                                  # … sending it is not
-        OR.save_flow(con, 1, "1", WED, line, None, "udon", submit=True, now=NOW, as_of=AS_OF)
-    assert "ยังไม่ได้นับยอดคงเหลือของรายการที่สั่ง 1 รายการ" in str(e.value) and "“คงเหลือ”" in str(e.value)
+    OR.save_flow(con, 1, "1", WED, line, "udon", now=NOW, as_of=AS_OF)                    # saving a draft is fine …
+    con.commit()
+    with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):  # … sending it is not
+        OR.save_flow(con, 1, "1", WED, line, "udon", submit=True, now=NOW, as_of=AS_OF)
     con.rollback()
-    ok = OR.save_flow(con, 1, "1", WED, line, [{"code": "V-007", "qty": 0}], "udon", submit=True, now=NOW, as_of=AS_OF)
-    assert ok["status"] == "submitted" and ok["late"] == 0 and ok["uncounted"] == [] and ok["delivery"] == "2026-10-07"
-    assert ok["count"]["status"] == "submitted"
+    IS.save(con, 1, "2026-10-05", SLIP_LINE, "udon", now=NOW)                              # a draft slip is not enough
+    con.commit()
+    with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้"):
+        OR.save_flow(con, 1, "1", WED, line, "udon", submit=True, now=NOW, as_of=AS_OF)
+    con.rollback()
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02")
+    con.commit()                                                                          # 2, 3 and 4 Oct have no slip
+    p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    assert p["stock"]["missing_days"] == ["2026-10-02", "2026-10-03", "2026-10-04"]       # a warning, today is not in it
+    IS.save(con, 1, "2026-10-05", SLIP_LINE, "udon", submit=True, now=NOW)
+    crab = next(r for r in p["rows"] if r["code"] == CRAB)["order_units"]                  # the draft's crab line follows the stock
+    ok = OR.save_flow(con, 1, "1", WED, line + [{"code": CRAB, "confirmed_units": crab}], "udon", submit=True, now=NOW, as_of=AS_OF)
+    assert ok["status"] == "submitted" and ok["late"] == 0 and ok["delivery"] == "2026-10-07"
     con.commit()
     o = OR.detail(con, ok["order_id"])
     assert o["status"] == "submitted" and o["late"] == 0 and o["delivery"] == "2026-10-07"
     assert o["cutoff_at"] == "2026-10-05T13:15:00+07:00" and o["submitted_at"] == "2026-10-05T01:00:00+00:00"
-    assert ST.count_row(con, ok["count"]["count_id"])["status"] == "submitted"
-    # still not a month-end period
-    assert ST.sheet(con, 1, AS_OF)["next_kind"] == "begin" and ST.periods(con, 1) == []
-    # a submitted order's count is locked until the order is reopened
-    with pytest.raises(ValueError):
-        ST.save(con, 1, [{"code": CRAB, "qty": 9}], "udon", kind="spot", count_id=ok["count"]["count_id"])
-    con.rollback()
+    assert con.execute("SELECT COUNT(*) FROM bc_stock_count WHERE kind='spot'").fetchone()[0] == 0   # nothing from the order flow
+    assert ST.sheet(con, 1, AS_OF)["next_kind"] == "end"                                 # the month-end sequence is untouched
 
 
-def test_a_draft_suggestion_follows_the_count_and_is_frozen_when_sent(con):  # noqa: F811
-    first = OR.save_flow(con, 1, "1", WED, [], None, "udon", now=NOW, as_of=AS_OF)       # the draft is opened before counting
+def test_a_draft_suggestion_follows_the_system_stock_and_is_frozen_when_sent(con):  # noqa: F811
+    first = OR.save_flow(con, 1, "1", WED, [], "udon", now=NOW, as_of=AS_OF)
     crab = lambda: next(ln for ln in OR.detail(con, first["order_id"])["lines"] if ln["code"] == CRAB)  # noqa: E731
     s0 = crab()["suggested_units"]
     assert s0 > 0 and crab()["confirmed_units"] == s0
-    OR.save_flow(con, 1, "1", WED, [{"code": CRAB, "confirmed_units": 0}], [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}],
-                 "udon", now=NOW, as_of=AS_OF)                                         # a full shelf: nothing to order
+    ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-05")
+    OR.save_flow(con, 1, "1", WED, [{"code": CRAB, "confirmed_units": 0}], "udon", now=NOW, as_of=AS_OF)   # a full shelf: nothing to order
     assert crab()["suggested_units"] == 0 and crab()["confirmed_units"] == 0           # no reason is demanded for the change
-    out = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 1, "reason_code": "event"}],
-                       [{"code": "V-007", "qty": 0}], "udon", submit=True, now=NOW, as_of=AS_OF)
+    slip(con)
+    out = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 1, "reason_code": "event"}], "udon",
+                       submit=True, now=NOW, as_of=AS_OF)
     assert out["status"] == "submitted" and out["needs_reason"] == []
     assert crab()["suggested_units"] == 0
 
 
 def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # noqa: F811
-    args = (con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}],
-            [{"code": "V-007", "qty": 0}, {"code": CRAB, "qty": 0}], "udon")       # the suggested crab is ordered too: count it
+    slip(con, LATE)                                                                  # Monday's slip, confirmed at 15:00
+    args = (con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon")
     with pytest.raises(OR.LateSubmit) as e:
         OR.save_flow(*args, submit=True, now=LATE, as_of=AS_OF)
     assert e.value.cutoff_th == "วันจันทร์ 13:15" and e.value.cutoff_at == "2026-10-05T13:15:00+07:00"
@@ -226,64 +221,56 @@ def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # n
     OR.reopen(con, 1, out["order_id"], "udon")
     o = OR.detail(con, out["order_id"])
     assert o["status"] == "suggested" and o["late"] == 0
-    assert ST.count_row(con, o["stock_count_id"])["status"] == "draft"
     # an in-time submit after the reopen is not late
-    again = OR.save_flow(con, 1, "1", WED, [], None, "udon", submit=True, now=NOW, as_of=AS_OF)
+    again = OR.save_flow(con, 1, "1", WED, [], "udon", submit=True, now=NOW, as_of=AS_OF)
     assert again["late"] == 0
     assert HB.queue(con)[0]["late"] is False and HB.queue(con)[0]["submitted_on_time"] is True
 
 
-def test_cancel_deletes_a_draft_count_but_keeps_a_submitted_one(con):  # noqa: F811
-    a = OR.save_flow(con, 1, "1", WED, [], [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "udon", now=NOW, as_of=AS_OF)
-    cid = a["count"]["count_id"]
+def test_reopen_and_cancel_leave_the_stock_counts_and_the_slip_alone(con):  # noqa: F811
+    ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True, count_date="2026-10-02")
+    slip(con)
+    a = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon",
+                     submit=True, now=NOW, as_of=AS_OF)
+    OR.reopen(con, 1, a["order_id"], "udon")
     OR.cancel(con, 1, a["order_id"], "udon")
-    assert ST.count_row(con, cid) is None
-    assert con.execute("SELECT COUNT(*) FROM bc_stock_count_line WHERE count_id=?", (cid,)).fetchone()[0] == 0
     assert OR.detail(con, a["order_id"])["status"] == "cancelled"
-    b = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}],
-                     [{"code": "V-007", "qty": 0}, {"code": CRAB, "qty": 0}], "udon", submit=True, now=NOW, as_of=AS_OF)
-    OR.cancel(con, 1, b["order_id"], "udon")                                    # cancelled after being sent
-    assert ST.count_row(con, b["count"]["count_id"])["status"] == "submitted"
+    assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 1          # the month-end count, nothing else
+    assert IS.status_of(con, 1, "2026-10-05")["status"] == "confirmed"                  # the slip is the branch's, not the order's
 
 
-def test_month_end_counts_ignore_spot_counts(con):  # noqa: F811
-    ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02", kind="spot")
-    # the first month-end count is still the BEGIN, whatever spot counts exist
-    m = ST.save(con, 1, [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-02")
-    assert m["kind"] == "begin" and m["status"] == "draft"
-    assert ST.draft_of(con, 1)["count_id"] == m["count_id"]
-    assert ST.draft_of(con, 1, kinds=("spot",)) is None
-    ST.discard_draft(con, 1, "u")
-    # a spot count dated that day does not stop a month-end import for the same date
-    r = ST.import_count(con, 1, "2026-10-02", [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก.", "note": None}], "u",
-                        dry_run=False)
-    assert r["ok"] and r["kind"] == "begin"
-    with pytest.raises(ValueError, match="นำเข้าซ้ำไม่ได้"):                     # … but a second month-end one still is
-        ST.import_count(con, 1, "2026-10-02", [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก.", "note": None}], "u",
-                        dry_run=False)
-
-
-def test_the_close_step_is_not_satisfied_by_a_spot_count(udon):  # noqa: F811
+def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: F811
     c = udon
-    ST.save(c, 1, [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-09-01", kind="spot")
+    cur = c.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, status, submitted_at, created_at)"
+                    " VALUES(1, '2026-09-01', 'spot', 'old', 'submitted', '2026-09-01T01:00:00+00:00', '2026-09-01T01:00:00+00:00')")
+    c.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base) VALUES(?,?,?,?,?)",
+              (cur.lastrowid, CRAB, 2, "แพ็ค 1 กก.", 2000.0))
+    c.commit()
+    # not the begin stock, not a period, not the system stock's basis, not the close step
+    sh = ST.sheet(c, 1, AS_OF)
+    assert sh["next_kind"] == "begin" and sh["draft"] is None and sh["last_count"] is None
+    assert ST.periods(c, 1) == [] and ST.history(c, 1, kinds=ST.MONTH_KINDS) == []
+    assert ST.system_position(c, 1, AS_OF)["basis"] is None
+    assert [h["kind"] for h in ST.history(c, 1)] == ["spot"]                                # the row is still there to read
     st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
-    assert st["begin_count"]["status"] == "todo"                               # a count made while ordering is not the begin stock
-    ST.save(c, 1, [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-09-01")
+    assert st["begin_count"]["status"] == "todo"
+    # a month-end import for the same date is accepted, and is the begin
+    r = ST.import_count(c, 1, "2026-09-01", [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก.", "note": None}], "u", dry_run=False)
+    assert r["ok"] and r["kind"] == "begin"
     st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
     assert st["begin_count"]["status"] == "done"
+    with pytest.raises(TypeError):                                                         # the writer takes no kind any more
+        ST.save(c, 1, [], "u", kind="spot")
 
 
-def test_stock_position_uses_the_latest_count_of_any_kind_or_the_one_given(con):  # noqa: F811
-    x = ST.save(con, 1, [{"code": CRAB, "qty": 5, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02",
-                kind="spot")["count_id"]
-    y = ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-04", kind="spot")["count_id"]
-    z = ST.save(con, 1, [{"code": CRAB, "qty": 9, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-06",
-                kind="spot")["count_id"]
-    day = date(2026, 10, 5)
-    assert OR.stock_position(con, 1, AS_OF, day)["basis"] == {"count_id": x, "date": "2026-10-02"}   # the draft is not a basis
-    assert OR.stock_position(con, 1, AS_OF, day, count_id=y)["basis"]["count_id"] == y               # … unless it is the order's own
-    assert OR.stock_position(con, 1, AS_OF, day, until=date(2026, 10, 7))["basis"]["count_id"] == z # counted after the cutoff day
-    assert OR.stock_position(con, 1, AS_OF, day, count_id=y)["qty"][CRAB] != OR.stock_position(con, 1, AS_OF, day)["qty"][CRAB]
+def test_stock_position_is_the_system_stock_plus_what_is_on_order(con):  # noqa: F811
+    x = ST.save(con, 1, [{"code": CRAB, "qty": 5, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02")["count_id"]
+    ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-04")        # a draft is no basis
+    con.commit()
+    sp = OR.stock_position(con, 1, AS_OF, date(2026, 10, 5))
+    assert sp["basis"] == {"count_id": x, "date": "2026-10-02"} and sp["qty"][CRAB] == 5000.0
+    assert sp["through"] == "2026-10-05" and sp["on_order"] == {}
+    assert sp["missing_days"] == ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"]
 
 
 def test_sla_reads_the_stored_cutoff():
@@ -312,7 +299,7 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     assert (r1["round_th"], r1["delivery"], r1["delivery_th"], r1["cutoff_th"], r1["cutoff_date"]) == \
         ("รอบ 1", "2026-10-07", "วันพุธ 7/10", "วันจันทร์ 13:15", "2026-10-05")
     assert r1["due_today"] is True and r1["late"] is False and r1["urgent"] is False and r1["status"] == "todo"
-    assert r1["detail"] == "เหลือ 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ"
+    assert r1["detail"] == "เหลือ 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
     assert r2["due_today"] is False and sal["due_today"] is False
     # under four hours left: urgent
     near = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=at(5, 10)))["order_due_1"]
@@ -320,9 +307,12 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     # past the cutoff and not sent: late, urgent, with the late-fee wording
     late = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert late["late"] is True and late["urgent"] is True and late["status"] == "todo"
-    assert late["detail"] == "เลยเวลาตัดรอบ มีค่าปรับล่าช้า หากยังต้องการสั่ง ให้ส่งใบสั่งซื้อโดยเร็ว"
+    assert late["detail"] == "เลยเวลาตัดรอบ มีค่าปรับล่าช้า หากยังต้องการสั่ง ให้ส่งใบสั่งซื้อโดยเร็ว · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
     # a draft order says so; a sent one is done and no longer urgent
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'suggested')")
+    assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
+        == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
+    slip(c)                                                                              # the slip is confirmed: the suffix goes
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
         == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง)"
     c.execute("UPDATE bc_order SET status='submitted', late=1")
@@ -349,6 +339,7 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "t")
     hdr = {"X-Upload-Token": "t"}
     monkeypatch.setattr(F, "now_bkk", lambda: LATE)                    # the server's clock: Monday 15:00, past round 1's cutoff
+    monkeypatch.setattr(IS, "now_bkk", lambda: LATE)
     monkeypatch.setattr(RB, "bkk_today", lambda: date(2026, 10, 5))
     client.get("/api/bom-center/hub/queue")                            # creates the bc_* tables
     snap = _rows(main.DB_PATH)
@@ -386,7 +377,13 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         # a late submit: 400 with a structured detail, then 200 once the late fee is acknowledged
         body = {"round": "1", "delivery": "2026-10-07", "submit": True,
                 "lines": [{"code": "X-1", "confirmed_units": 1, "reason_code": "event"}],
-                "counts": [{"code": "X-1", "qty": 0, "unit": "กรัม"}]}
+                "counts": [{"code": "X-1", "qty": 0, "unit": "กรัม"}]}       # an old client still sends `counts`: ignored
+        r = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=body)
+        assert r.status_code == 400 and "ต้องยืนยันใบตัดเบิกของวันนี้" in r.json()["detail"], r.text   # no slip yet
+        # the branch confirms today's slip through the API, then orders
+        sl = client.post(f"/api/bom-center/issues/save?branch_id={bid}", headers=hdr,
+                         json={"date": "2026-10-05", "lines": [{"code": "X-1", "qty_used": 5, "unit": "กรัม"}], "submit": True})
+        assert sl.status_code == 200 and sl.json()["status"] == "confirmed" and sl.json()["late"] == 0, sl.text
         r = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=body)
         assert r.status_code == 400, r.text
         d = r.json()["detail"]
@@ -394,11 +391,12 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         assert d["cutoff_at"] == "2026-10-05T13:15:00+07:00"
         n = sqlite3.connect(str(main.DB_PATH))
         assert n.execute("SELECT COUNT(*) FROM bc_order").fetchone()[0] == 0                 # nothing was kept
-        assert n.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 0
+        assert n.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 0          # no count is written by ordering
+        assert n.execute("SELECT COUNT(*) FROM bc_issue_slip WHERE status='confirmed'").fetchone()[0] == 1   # the slip stays
         n.close()
         r = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=dict(body, ack_late=True))
         assert r.status_code == 200, r.text
-        assert r.json()["late"] == 1 and r.json()["status"] == "submitted" and r.json()["count"]["status"] == "submitted"
+        assert r.json()["late"] == 1 and r.json()["status"] == "submitted" and r.json()["slip_today"]["status"] == "confirmed"
         # the queue and the exports show it
         qj = client.get("/api/bom-center/hub/queue?status=submitted").json()
         assert qj["sla"] == {"cutoff_time": "13:15", "process_by": 14}
@@ -414,9 +412,8 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         rows = list(load_workbook(io.BytesIO(x.content), read_only=True).worksheets[0].iter_rows(values_only=True))
         head = next(rw for rw in rows if rw and rw[0] == "วันตัดรอบ")
         assert head[-1] == "ล่าช้า" and any(rw and rw[-1] == "ล่าช้า (ค่าปรับ)" for rw in rows)
-        # the month-end history can be narrowed to the month counts
-        h = client.get(f"/api/bom-center/stock/counts?branch_id={bid}").json()["counts"]
-        assert [k["kind"] for k in h] == ["spot"]
+        # ordering leaves no stock count behind (the month-end history can still be narrowed to the month counts)
+        assert client.get(f"/api/bom-center/stock/counts?branch_id={bid}").json()["counts"] == []
         assert client.get(f"/api/bom-center/stock/counts?branch_id={bid}&kind=month").json()["counts"] == []
     finally:
         _restore(main.DB_PATH, snap)

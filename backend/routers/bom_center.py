@@ -25,6 +25,7 @@ from bom_center import central as _ce
 from bom_center import claims as _cl
 from bom_center import codes as _cr
 from bom_center import hub as _hub
+from bom_center import issues as _is
 from bom_center.clock import today as bkk_today
 from bom_center import master as _m
 from bom_center import orders as _or
@@ -168,6 +169,7 @@ def bc_code_review_decide(body: CodeDecision, request: Request):
         out = _write(con, lambda: _cr.decide(con, body.code, body.status, body.use_code, body.note, _who(request),
                                                      body.names))
     invalidate_cache()               # the order plan reads the decision
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -285,6 +287,7 @@ def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
             con.rollback()
             raise
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, **stats}
 
 
@@ -308,6 +311,7 @@ def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "before": before, "after": after, **stats}
 
 
@@ -402,6 +406,7 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "sheet": sheet, "columns": cols, "rows": len(rows),
             **{k: v for k, v in stats.items() if k != "skipped"}, "skipped": stats["skipped"][:200]}
 
@@ -426,6 +431,7 @@ def bc_units_save(rules: List[UnitRule], request: Request):
             raise HTTPException(400, str(e))
         con.commit()
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "rules": len(rules)}
 
 
@@ -922,6 +928,7 @@ def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, rel
                                           modules=mods))
         out = _r.cost_recipe(con, release_id, sku_code)
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "total": out["total"], "problems": out["problems"]}
 
 
@@ -971,6 +978,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, "release_id": None if dry_run else rid, "label": lbl, "effective_month": eff,
             "price_month": pm, "sheets": parsed["sheets"], "skipped": parsed["skipped"], **stats,
             "costed": len(view["rows"]), "with_problems": view["problems"], "sheet_mismatch": view["sheet_mismatch"],
@@ -992,6 +1000,7 @@ def bc_recipes_map(body: MapBody, request: Request):
         out = _write(con, lambda: _r.apply_mapping(con, body.release_id, body.ref, body.sku_code.strip(),
                                                     _who(request), modules=mods))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, **out}
 
 
@@ -1016,6 +1025,7 @@ async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...),
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": dry_run, **out}
 
 
@@ -1116,6 +1126,7 @@ def bc_release_do(request: Request, release_id: int = Query(...), body: Optional
         out = _write(con, lambda: _rl.do_release(con, release_id, _who(request),
                                                   backdate_reason=(body.backdate_reason if body else None)))
     invalidate_cache()          # a release changes COGS from its month on: every cached report is stale
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -1138,6 +1149,7 @@ def bc_release_retire(body: NoteBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.retire(con, body.release_id, _who(request), body.note or ""))
     invalidate_cache()          # the previous version's costs are back in every report
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1169,6 +1181,7 @@ def bc_release_new_draft(body: NewDraftBody, request: Request):
         _ensure(con)
         rid = _write(con, go)
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "release_id": rid, "label": label}
 
 
@@ -1183,6 +1196,7 @@ def bc_release_submit_review(body: ReleaseIdBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.submit_review(con, body.release_id, _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1193,6 +1207,7 @@ def bc_release_send_back(body: NoteBody, request: Request):
         _ensure(con)
         _write(con, lambda: _rl.send_back(con, body.release_id, body.note or "", _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True}
 
 
@@ -1400,6 +1415,7 @@ def bc_prep_save(code: str, body: PrepBody, request: Request):
         n = _write(con, lambda: _pr.save(con, code, body.yield_qty, body.yield_unit,
                                           [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ไขในหน้าเว็บ"))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"ok": True, "lines": n}
 
 
@@ -1424,6 +1440,7 @@ async def bc_prep_import_semi(request: Request, file: UploadFile = File(...), dr
             return {"dry_run": True, **plan}
         out = _write(con, lambda: _pr.apply_import(con, plan, _who(request)))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"dry_run": False, **plan, **out}
 
 
@@ -1455,6 +1472,7 @@ async def bc_prep_import_flat(request: Request, file: UploadFile = File(...), dr
         if not dry_run and not out["errors"]:
             con.commit()
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return out
 
 
@@ -1588,6 +1606,99 @@ def bc_stock_layout(rows: List[LayoutRow], request: Request):
         _ensure(con)
         n = _write(con, lambda: _st.set_layout(con, [r.dict() for r in rows], _who(request)))
     return {"ok": True, "updated": n}
+
+
+# ── ใบตัดเบิก (issues.py): the branch's daily issue slip — used + wasted per item, confirmed once a day ──
+class IssueLine(BaseModel):
+    code: str
+    qty_used: Optional[float] = None        # in `unit` (default: the unit the item is counted in)
+    qty_waste: Optional[float] = None
+    waste_reason: Optional[str] = None      # required when qty_waste > 0 (issues.WASTE_REASONS)
+    unit: Optional[str] = None
+    note: Optional[str] = None
+
+
+class IssueBody(BaseModel):
+    date: Optional[str] = None              # the slip's day; omitted = today (Bangkok)
+    lines: List[IssueLine] = []
+    submit: bool = False                    # confirm the slip
+    note: Optional[str] = None
+
+
+class IssueReopenBody(BaseModel):
+    slip_id: int
+    note: str                               # why the confirmed slip is opened again (logged)
+
+
+@router.get("/api/bom-center/issues/sheet")
+def bc_issue_sheet(request: Request, branch_id: Optional[int] = Query(None), date: Optional[str] = Query(None)):
+    """The list a branch issues from on one day, with the system stock before that day's issue."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return _is.sheet(con, bid, date or bkk_today().isoformat())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@router.post("/api/bom-center/issues/save", dependencies=[Depends(require_write_token)])
+def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _write(con, lambda: _is.save(con, bid, body.date or bkk_today().isoformat(),
+                                            [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
+                                            note=body.note))
+
+
+@router.get("/api/bom-center/issues/status")
+def bc_issue_status(request: Request, branch_id: Optional[int] = Query(None), date_from: Optional[str] = Query(None),
+                    date_to: Optional[str] = Query(None)):
+    """One status per calendar day (confirmed / late / draft / missing) — the day strip of the branch page."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        d1 = _day_or_today(date_to)
+        d0 = _day_or_today(date_from) if date_from else d1 - timedelta(days=6)
+        if d0 > d1 or (d1 - d0).days > 92:
+            raise HTTPException(400, "ช่วงวันที่ต้องไม่เกิน 92 วัน")
+        return {"branch_id": bid, "date_from": d0.isoformat(), "date_to": d1.isoformat(),
+                "days": _is.status_days(con, bid, d0, d1)}
+
+
+@router.post("/api/bom-center/issues/reopen", dependencies=[Depends(require_write_token)])
+def bc_issue_reopen(body: IssueReopenBody, request: Request):
+    """Sales Support (or the analyst) opens a confirmed slip for the branch to edit; the reason is logged."""
+    with get_db() as con:
+        _ensure(con)
+        return _write(con, lambda: _is.reopen(con, body.slip_id, _who(request), body.note))
+
+
+@router.get("/api/bom-center/issues")
+def bc_issues_list(request: Request, branch_id: Optional[int] = Query(None), date_from: Optional[str] = Query(None),
+                   date_to: Optional[str] = Query(None), status: Optional[str] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        try:
+            rows = _is.listing(con, bid, _day_or_today(date_from) if date_from else None,
+                               _day_or_today(date_to) if date_to else None, status)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"slips": rows, "statuses": [{"code": c, "label": t} for c, t in _is.STATUS_TH.items()]}
+
+
+@router.get("/api/bom-center/issues/{slip_id}")
+def bc_issue_detail(slip_id: int, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            d = _is.detail(con, slip_id)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        _stock_branch(con, request, d["branch_id"])      # a branch login reads only its own slips
+        return d
 
 
 # ── Phase 2 · S7: goods received + usage variance (variance.py) ─────────────
@@ -1920,18 +2031,13 @@ class OrderLine(BaseModel):
     note: Optional[str] = None
 
 
-class CountLine(BaseModel):
-    code: str
-    qty: Optional[float] = None            # None clears the line
-    unit: Optional[str] = None
-
-
 class OrderBody(BaseModel):
+    # (a `counts` field used to sit here — the count made while ordering was retired in PR-J1; a client that
+    # still sends it is ignored, FastAPI drops unknown fields)
     round: str
     delivery: Optional[str] = None
     order_day: Optional[str] = None        # deprecated: "the window open on that day"
     lines: List[OrderLine] = []
-    counts: Optional[List[CountLine]] = None   # the on-hand the branch counted while ordering (None = leave as is)
     submit: bool = False
     note: Optional[str] = None
     buffer: Optional[dict] = None          # PR-19: {pct, reason, note}; absent = keep the order's own
@@ -1947,10 +2053,8 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
 
         def go():
             try:
-                return _or.save_flow(con, bid, rnd, dlv, [ln.dict() for ln in body.lines],
-                                     None if body.counts is None else [c.dict() for c in body.counts],
-                                     _who(request), submit=body.submit, note=body.note, buffer=body.buffer,
-                                     ack_late=body.ack_late)
+                return _or.save_flow(con, bid, rnd, dlv, [ln.dict() for ln in body.lines], _who(request),
+                                     submit=body.submit, note=body.note, buffer=body.buffer, ack_late=body.ack_late)
             except _or.LateSubmit as e:                      # the branch has to confirm the late fee first
                 con.rollback()
                 raise HTTPException(400, {"code": "late", "message": str(e), "cutoff_at": e.cutoff_at,
@@ -2471,6 +2575,7 @@ def bc_central_links_save(body: List[LinkBody], request: Request):
         _ensure(con)
         _write(con, lambda: [_ce.set_link(con, b.old_code, b.new_code, who, b.note) for b in body])
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
     return {"saved": len(body)}
 
 

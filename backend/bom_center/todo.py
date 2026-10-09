@@ -16,9 +16,9 @@ and at most ONE variance summary (only when a single branch is in context) — n
 the monthly summary, never the fuzzy code matching. Not cached on purpose: several
 writes do not invalidate the cache, and this list must be right straight after a save.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from .clock import now_bkk
+from .clock import BKK, now_bkk
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
@@ -214,11 +214,27 @@ def _month_items(con, month: str, today: date) -> list:
     return out
 
 
+def _slip_info(con, bid: int, today: date) -> dict:
+    """A branch's issue slips as หน้างาน needs them: today's and yesterday's status, whether the branch has
+    started (a month-end count or any slip), and the days since the last count / the last week it left open."""
+    from .issues import status_days
+    d_prev = today - timedelta(days=1)
+    t, y = status_days(con, bid, d_prev, today)[::-1]
+    last = con.execute("SELECT MAX(count_date) FROM bc_stock_count WHERE branch_id=? AND kind IN ('begin','end')"
+                       " AND COALESCE(status,'submitted')='submitted'", (bid,)).fetchone()[0]
+    started = bool(last) or bool(con.execute("SELECT 1 FROM bc_issue_slip WHERE branch_id=? LIMIT 1", (bid,)).fetchone())
+    lo = max(date.fromisoformat(last), today - timedelta(days=7)) if last else today - timedelta(days=7)
+    gaps = [x["date"] for x in status_days(con, bid, lo, d_prev) if x["status"] in ("missing", "draft")] \
+        if started and lo <= d_prev else []
+    return {"today": t, "yesterday": y, "started": started, "gaps": gaps}
+
+
 def _week_items(con, branches: list, today: date, single: bool, centre: bool, now=None) -> list:
     from .forecast import ROUND_TH, WD_TH, _wd, calendar, next_deliveries
     from .hub import delivery_of
     from .orders import STATUS_TH
     out = []
+    slips = {b["branch_id"]: _slip_info(con, b["branch_id"], today) for b in branches}
     if centre:
         from .pilot import pilot_branches
         users = {}
@@ -258,8 +274,39 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                           f"ยังไม่คีย์ {nk} ใบ · ดาวน์โหลด Excel แล้วทำเครื่องหมายเมื่อคีย์เสร็จ" if nk else "คีย์ครบทุกใบ",
                           count=nk or None, owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
                           go={"tab": "orderhub", "pane": "queue"}))
+        # ใบตัดเบิก: the branches that have started and did not confirm yesterday's slip
+        open_y = [b["name"] for b in branches if slips[b["branch_id"]]["started"]
+                  and slips[b["branch_id"]]["yesterday"]["status"] in ("missing", "draft")]
+        out.append(_e("issue_missing", 228, "week", "ติดตามสาขาที่ยังไม่ยืนยันใบตัดเบิกของเมื่อวาน",
+                      "todo" if open_y else "done",
+                      ("ยังไม่ยืนยัน: " + " · ".join(open_y)) if open_y else "ทุกสาขาที่เริ่มใช้งานแล้วยืนยันใบตัดเบิกของเมื่อวานแล้ว",
+                      count=len(open_y) or None, owner=("supply.ordering", "ops.report"),
+                      owner_th="ประสานงานขาย (Sales Support)", urgent=bool(open_y), branch_names=open_y,
+                      go={"tab": "orderhub", "pane": "queue"}))
     for b in branches:
         bid = b["branch_id"]
+        info = slips[bid]
+        st_today = info["today"]
+        slip_ok = st_today["status"] in ("confirmed", "late")
+        if st_today["status"] in ("confirmed", "late"):
+            at = st_today["confirmed_at"]
+            hhmm = datetime.fromisoformat(at).astimezone(BKK).strftime("%H:%M") if at else "-"
+            slip_detail = f"ยืนยันแล้ว เวลา {hhmm} โดย {st_today['confirmed_by'] or '-'}"
+        elif st_today["status"] == "draft":
+            slip_detail = "มีร่างแล้ว ยังไม่ยืนยัน · ต้องยืนยันก่อนส่งใบสั่งซื้อของวันนี้"
+        else:
+            slip_detail = "ยังไม่บันทึก · ต้องยืนยันก่อนส่งใบสั่งซื้อของวันนี้"
+        out.append(_e("issue_today", 305, "week", f"ยืนยันใบตัดเบิกประจำวันที่ {today.day}/{today.month}",
+                      "done" if slip_ok else "todo", slip_detail,
+                      owner=("branch.stock",), owner_th="สาขา", branch=b,
+                      yesterday=info["yesterday"]["status"], slip_status=st_today["status"], started=info["started"],
+                      go={"tab": "branchstock", "pane": "issue", "extra": {"date": today.isoformat()}}))
+        for gd in info["gaps"]:
+            g = date.fromisoformat(gd)
+            out.append(_e(f"issue_missing_{gd}", 306, "week", f"ยืนยันใบตัดเบิกประจำวันที่ {g.day}/{g.month} (ย้อนหลัง)",
+                          "todo", "ยังไม่ยืนยัน · บันทึกย้อนหลังได้ และจะถูกบันทึกว่าล่าช้า",
+                          owner=("branch.stock",), owner_th="สาขา", branch=b, urgent=True, slip_date=gd,
+                          go={"tab": "branchstock", "pane": "issue", "extra": {"date": gd}}))
         # one duty per round: the nearest delivery, and the cutoff the branch has to beat for it
         nearest = {}
         for it in next_deliveries(con, bid, today, horizon_days=7, now=now):
@@ -283,6 +330,8 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                 detail = f"เหลือ {hours} ชม. · สถานะ: {STATUS_TH.get(st, st)}"
             else:
                 detail = f"เหลือ {hours} ชม. · ยังไม่ได้เปิดใบสั่งซื้อ"
+            if not sent and not slip_ok:                     # the order is made from the stock after today's slip
+                detail += " · ต้องยืนยันใบตัดเบิกวันนี้ก่อน"
             what = "ส่งใบสั่งซื้อแซลมอนสด" if r == "salmon" else "ส่งใบสั่งซื้อ"
             out.append(_e(f"order_due_{r}", 310, "week",
                           f"{what}{' ' if r == 'salmon' else ''}รอบส่ง{dlv_par} ภายใน {it['cutoff_th']}",

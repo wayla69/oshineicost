@@ -5,15 +5,17 @@ The promises:
     runs in UTC and is still on yesterday until 07:00 in Bangkok;
   * readiness lists, for the centre and for each pilot branch, what is still to set up
     (master, prices, branch login, order calendar, first count);
-  * the scorecard measures each pilot branch against plan §7.3: counts on order days
-    ≥ 90 %, time to count ≤ 20 min, gaps with a reason ≥ 80 %, class-A forecast error ≤ 15 %.
+  * the scorecard measures each pilot branch: issue slips (ใบตัดเบิก) confirmed on ≥ 95 % of
+    days, ≥ 90 % of them on the day, gaps with a reason ≥ 80 %, class-A forecast error ≤ 15 %.
 """
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 
 import auth
 from bom_center import clock
+from bom_center import issues as IS
 from bom_center import pilot as PL
+from bom_center.clock import BKK
 from bom_center import stock as ST
 from bom_center import variance as VA
 from test_bom_center_s4b import con  # noqa: F401  (sales Sep–Oct 2026 at branch 1)
@@ -60,17 +62,31 @@ def test_scorecard_against_the_pass_criteria(con):  # noqa: F811
         return ST.save(con, 1, [{"code": "13-01-009", "qty": crab, "unit": "กรัม"},
                                 {"code": "02-01-001", "qty": 9000, "unit": "กรัม"}], "udon",
                        submit=True, count_date=day)["count_id"]
+    def slip(day, confirm_on=None):
+        """A daily issue slip; `confirm_on` = the day it is confirmed (a later day makes it late); None = a draft."""
+        d = date.fromisoformat(day)
+        at = datetime(d.year, d.month, d.day, 21, 0, tzinfo=BKK) + timedelta(days=(confirm_on or 0))
+        IS.save(con, 1, day, [{"code": "13-01-009", "qty_used": 100, "unit": "กรัม"}], "udon",
+                submit=confirm_on is not None, now=at)
     count("2026-09-24", 20000)
+    for day, late in (("2026-09-24", 0), ("2026-09-25", 1), ("2026-09-26", 1), ("2026-09-28", 0), ("2026-09-29", 0)):
+        slip(day, late)
+    slip("2026-09-27")                                             # a draft never confirmed; Sep 30 has no slip at all
     e = count("2026-10-01", 1000)                                  # far more crab used than the recipes
+    for day in ("2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"):
+        slip(day, 0)
     VA.set_reason(con, 1, e, "13-01-009", "waste", None, "udon")
     con.commit()
     assert PL.scorecard(con, 2, weeks=2, as_of=date(2026, 10, 5))["verdict"] == "not_started"
     s = PL.scorecard(con, 1, weeks=3, as_of=date(2026, 10, 5))
     assert s["from"] == "2026-09-24"                               # starts at the first count, not 3 weeks back
     assert s["cycles"] == 4                                        # cutoff days: Thu 24 Sep & 1 Oct (round 2), Mon 28 Sep & 5 Oct (round 1)
+    assert s["slips"] == {"days": 12, "confirmed": 8, "late": 2, "draft": 1, "missing": 1}
     m, p = s["metrics"], s["passes"]
-    assert m["count_coverage"] == 50.0 and p["count_coverage"] is False
-    assert m["count_minutes"] is not None and p["count_minutes"] is True
+    assert m["issue_coverage"] == 83.3 and p["issue_coverage"] is False      # 10 of 12 days
+    assert m["issue_on_time"] == 80.0 and p["issue_on_time"] is False        # 8 of those 10 on the day
+    assert "count_coverage" not in m and "count_minutes" not in m
+    assert PL.TARGETS == {"issue_coverage": 95.0, "issue_on_time": 90.0, "reason_coverage": 80.0, "mape_a": 15.0}
     assert m["reason_coverage"] is not None and s["flagged"] >= 1
     assert m["order_submission"] == 0.0
     assert s["verdict"] == "fail"

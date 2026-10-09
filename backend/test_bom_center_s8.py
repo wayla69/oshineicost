@@ -1,18 +1,20 @@
 """BoM Center — Phase 2 · Sprint S8: the branch order.
 
 The promises:
-  * the suggestion deducts what will still be on the shelf: the last count, plus what
-    arrived, minus what the sales used since, minus what the days before the cover will
-    use, plus what is already on order — never below zero, in whole packs;
-  * an item the branch did not count is not deducted, and a branch that never counted
-    orders on the forecast alone (the order says so) — counting is encouraged, not forced;
+  * the suggestion deducts what will still be on the shelf: the SYSTEM stock (the last
+    month-end count, plus what arrived, minus the confirmed issue slips — ใบตัดเบิก), minus
+    what the days before the cover will use, plus what is already on order — never below
+    zero, in whole packs;
+  * an item that was not in the month-end count is not deducted, and a branch without a
+    count orders on the forecast alone (the order says so);
   * the suggested quantities are frozen when the order is created; a confirmed quantity
     more than 20 % away needs a reason before it can be submitted;
   * submitted → (Sales Support) → received; a submitted order can be reopened, a
     received one books a goods receipt that the variance reads; an open order counts as
     "on order" for the next cycle;
   * PR-A: an order is made for a DELIVERY day (its cycle_date is the 13:15 cutoff two days
-    before), and the branch counts what is on its shelf in the same flow (`save_flow`);
+    before); PR-J1: it can be submitted only when the branch has confirmed the issue slip of
+    the day, and no count is made while ordering any more;
   * the branch login orders for its own branch only.
 """
 from datetime import date, datetime
@@ -23,6 +25,7 @@ import auth
 from bom_center import orders as OR
 from bom_center import stock as ST
 from bom_center import variance as VA
+from bom_center import issues as IS
 from bom_center.clock import BKK
 from test_bom_center_s4b import con  # noqa: F401  (sales to 5 Oct 2026 at branch 1; crab stick 1 kg packs)
 
@@ -36,34 +39,41 @@ def _crab(p):
     return next(r for r in p["rows"] if r["code"] == CRAB)
 
 
-def _counts(*codes):
-    """The shelf counted as empty: the suggestion is then the forecast alone."""
-    return [{"code": c, "qty": 0, "unit": None} for c in codes]
+def _slip(con, lines=None):  # noqa: F811
+    """The branch confirms today's (Monday 5 Oct) issue slip — an order cannot be submitted without it."""
+    IS.save(con, 1, "2026-10-05", lines or [{"code": "V-007", "qty_used": 10, "unit": "กรัม"}], "udon", submit=True, now=NOW)
+    con.commit()
 
 
 def test_without_a_count_the_forecast_alone(con):  # noqa: F811
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     r = _crab(p)
-    assert not p["stock"]["deducted"] and r["on_hand"] is None and r["counted"] is False
+    assert not p["stock"]["deducted"] and r["on_hand"] is None and r["system_qty"] is None
+    assert "counted" not in r and "count_qty" not in r and "count" not in p          # no count while ordering any more
+    assert p["stock"]["slip_today"]["status"] == "missing" and p["stock"]["missing_days"] == []
     assert r["need"] == pytest.approx(r["forecast"] + r["safety"], abs=0.02)
     assert r["order_unit"] == "pack" and r["order_units"] == pytest.approx(-(-r["need"] // 1000))
     assert p["order"] is None and p["order_day"] == "2026-10-05" and p["cycle_date"] == "2026-10-05"
     assert p["delivery"] == "2026-10-07" and p["cutoff_th"] == "วันจันทร์ 13:15" and p["late"] is False
 
 
-def test_the_count_is_deducted(con):  # noqa: F811
+def test_the_system_stock_is_deducted(con):  # noqa: F811
     ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
             count_date="2026-10-05")
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     r = _crab(p)
-    assert p["stock"]["deducted"] and p["stock"]["basis"]["date"] == "2026-10-05"
-    assert r["on_hand"] < 3000                                   # the 5th's sales came off the count
+    assert p["stock"]["deducted"] and p["stock"]["basis"]["date"] == "2026-10-05" and p["stock"]["through"] == "2026-10-05"
+    assert r["on_hand"] == 3000 and r["system_qty"] == 3 and r["system_unit"] == "แพ็ค 1 กก."    # no slip yet: the count as it is
+    _slip(con, [{"code": CRAB, "qty_used": 500, "unit": "กรัม"}])                           # the kitchen used 500 g today
+    p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
+    r = _crab(p)
+    assert r["on_hand"] == 2500 and r["system_qty"] == 2.5 and p["stock"]["slip_today"]["status"] == "confirmed"
     assert r["projected"] == pytest.approx(r["on_hand"] - r["pre_cover_use"] + r["on_order"], abs=0.02)
     assert r["need"] == pytest.approx(max(0.0, r["forecast"] + r["safety"] - max(r["projected"], 0.0)), abs=0.02)
     assert r["pre_cover_use"] > 0                                # Tuesday 6th is used before Wednesday's delivery
     # a full shelf means nothing to order
     ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
-            count_date="2026-10-06")
+            count_date="2026-10-05")
     r = _crab(OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW))
     assert r["need"] == 0 and r["order_units"] == 0
 
@@ -71,9 +81,7 @@ def test_the_count_is_deducted(con):  # noqa: F811
 def test_confirm_submit_reopen_receive(con):  # noqa: F811
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     sug = _crab(p)["order_units"]
-    cnt = _counts(CRAB, "V-007")                                  # an ordered line needs a counted on-hand
-    flow = lambda lines, **kw: OR.save_flow(con, 1, "1", WED, lines, kw.pop("counts", cnt), "udon",  # noqa: E731
-                                            now=NOW, as_of=AS_OF, **kw)
+    flow = lambda lines, **kw: OR.save_flow(con, 1, "1", WED, lines, "udon", now=NOW, as_of=AS_OF, **kw)  # noqa: E731
     out = flow([{"code": CRAB, "confirmed_units": sug * 3}])
     assert out["needs_reason"] == [CRAB]
     with pytest.raises(ValueError):
@@ -81,10 +89,15 @@ def test_confirm_submit_reopen_receive(con):  # noqa: F811
     with pytest.raises(ValueError):                              # "other" needs a note
         flow([{"code": CRAB, "confirmed_units": sug * 3, "reason_code": "other"}], submit=True)
     con.rollback()
-    out = flow([{"code": CRAB, "confirmed_units": sug * 3, "reason_code": "event", "note": "จองกลุ่ม 40 คน"},
-                {"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], submit=True)
-    assert out["status"] == "submitted" and out["value"] > 0 and out["late"] == 0 and out["uncounted"] == []
-    assert out["count"]["status"] == "submitted"                  # the count is submitted with its order
+    ok_lines = [{"code": CRAB, "confirmed_units": sug * 3, "reason_code": "event", "note": "จองกลุ่ม 40 คน"},
+                {"code": "V-007", "confirmed_units": 2, "reason_code": "event"}]
+    with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):   # no confirmed slip yet
+        flow(ok_lines, submit=True)
+    con.rollback()
+    _slip(con)
+    out = flow(ok_lines, submit=True)
+    assert out["status"] == "submitted" and out["value"] > 0 and out["late"] == 0
+    assert out["slip_today"]["status"] == "confirmed"
     con.commit()                                                 # each API call commits on its own
     o = OR.detail(con, out["order_id"])
     lines = {l["code"]: l for l in o["lines"]}
@@ -93,14 +106,14 @@ def test_confirm_submit_reopen_receive(con):  # noqa: F811
     assert lines["V-007"]["suggested_units"] == 0
     assert o["delivery"] == "2026-10-07" and o["cycle_date"] == "2026-10-05" and o["cutoff_at"].startswith("2026-10-05T13:15")
     with pytest.raises(ValueError):                              # submitted: no edits until reopened
-        flow([{"code": CRAB, "confirmed_units": 1}], counts=None)
+        flow([{"code": CRAB, "confirmed_units": 1}])
     con.rollback()
     # the plan now shows the order, and it is "on order" for a later cycle
     assert OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)["order"]["status"] == "submitted"
     assert OR.on_order(con, 1, date(2026, 10, 9))[CRAB] == pytest.approx(sug * 3 * 1000)
     OR.reopen(con, 1, out["order_id"], "udon")
     assert OR.detail(con, out["order_id"])["status"] == "suggested"
-    flow([{"code": CRAB, "confirmed_units": sug}], counts=None, submit=True)
+    flow([{"code": CRAB, "confirmed_units": sug}], submit=True)
     with pytest.raises(ValueError):
         OR.receive(con, 2, out["order_id"], [], "udon")          # another branch
     rec = OR.receive(con, 1, out["order_id"], [{"code": "13-01-009", "received_units": sug}], "udon",

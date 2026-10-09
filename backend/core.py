@@ -97,6 +97,9 @@ _refreshing: set = set()        # keys with a background refresh running
 _demand: dict = {}              # key -> [count, last monotonic ts, fn, args, kwargs]
 _DEMAND_MAX = 600
 _cache_gen = 0
+_data_gen = 0                   # bumped ONLY by a full flush (invalidate_cache() with no prefix: cost / bom / sales data
+                                # changed) — what forecast.usage_history's per-process cache keys on, so the prefixed
+                                # flushes every order / slip / claim save makes do not empty it
 _cache_bytes = 0
 
 
@@ -277,10 +280,11 @@ def invalidate_cache(*prefixes: str):
     Either way the generation moves on, so a computation already running on the
     old data cannot store its result afterwards.
     """
-    global _cache_gen, _cache_bytes
+    global _cache_gen, _cache_bytes, _data_gen
     with _cache_lock:
         _cache_gen += 1
         if not prefixes:
+            _data_gen += 1
             _resp_cache.clear()
             _cache_bytes = 0
         else:
@@ -302,6 +306,7 @@ def invalidate_cache(*prefixes: str):
         # generation on again (and drop anything stored meanwhile).
         with _cache_lock:
             _cache_gen += 1
+            _data_gen += 1
             _resp_cache.clear()
             _cache_bytes = 0
 

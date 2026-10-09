@@ -5,9 +5,9 @@ READINESS (before the pilot starts): is the centre set up (ingredient master, pr
 sub-recipes), and does each pilot branch have a branch login, an order calendar and
 its first (begin) count?
 
-SCORECARD (during the 4-week pilot), per branch, against the plan's pass criteria:
-    counts on order days   ≥ 90 %   (a submitted count on the order day of round 1 / 2)
-    time to count          ≤ 20 min (median: first draft save → submit)
+SCORECARD (during the 4-week pilot), per branch, against the pass criteria:
+    issue slips confirmed  ≥ 95 %   (days of the window with a confirmed ใบตัดเบิก)
+    slips confirmed on the day ≥ 90 %   (of the confirmed ones, those not marked late)
     gaps with a reason     ≥ 80 %   (flagged lines of periods ending in the window)
     forecast error, A      ≤ 15 %   (weekly MAPE of class-A ingredients, forecast backtest)
 plus the share of order cycles the branch actually submitted.
@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 from .clock import today as bkk_today
 
 PILOT = ("อุบลราชธานี", "อุดรธานี", "ขอนแก่น", "ระยอง")     # owner §10-11
-TARGETS = {"count_coverage": 90.0, "count_minutes": 20.0, "reason_coverage": 80.0, "mape_a": 15.0}
+TARGETS = {"issue_coverage": 95.0, "issue_on_time": 90.0, "reason_coverage": 80.0, "mape_a": 15.0}
 
 
 def pilot_branches(con) -> list:
@@ -87,13 +87,16 @@ def _minutes(a: str, b: str):
 
 def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
     from .forecast import _wd, backtest, calendar
+    from .issues import status_days
     from .stock import periods as _periods
     from .variance import period
     as_of = as_of or bkk_today()
     start = as_of - timedelta(days=7 * weeks - 1)
-    # the pilot starts at the branch's first count — days before it are not held against it
-    first = con.execute("SELECT MIN(count_date) FROM bc_stock_count WHERE branch_id=?"
-                        " AND COALESCE(status,'submitted')='submitted'", (branch_id,)).fetchone()[0]
+    # the pilot starts at the branch's first month-end count or first issue slip — days before it are not held against it
+    first = con.execute("SELECT MIN(d) FROM (SELECT MIN(count_date) AS d FROM bc_stock_count WHERE branch_id=?"
+                        " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
+                        " UNION ALL SELECT MIN(slip_date) FROM bc_issue_slip WHERE branch_id=?)",
+                        (branch_id, branch_id)).fetchone()[0]
     started = first is not None or con.execute(
         "SELECT 1 FROM bc_order WHERE branch_id=? AND status IN ('submitted','processed','received')",
         (branch_id,)).fetchone() is not None
@@ -108,15 +111,21 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
             if _wd(d) == int(cal[rnd]["order_weekday"]):
                 cycles.append((rnd, d.isoformat()))
         d += timedelta(days=1)
-    counted_days = {r[0] for r in con.execute(
-        "SELECT count_date FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted'"
-        " AND count_date BETWEEN ? AND ?", (branch_id, start.isoformat(), as_of.isoformat()))}
+    month_counts = con.execute(
+        "SELECT COUNT(*) FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted'"
+        " AND kind IN ('begin','end') AND count_date BETWEEN ? AND ?",
+        (branch_id, start.isoformat(), as_of.isoformat())).fetchone()[0]
+    # the daily issue slips: one verdict per calendar day of the window; the day still open (as_of, not yet
+    # confirmed) is not judged
+    days = status_days(con, branch_id, start, as_of) if start <= as_of else []
+    if days and days[-1]["status"] in ("missing", "draft") and days[-1]["date"] == as_of.isoformat():
+        days = days[:-1]
+    slips = {"days": len(days), "confirmed": sum(1 for x in days if x["status"] == "confirmed"),
+             "late": sum(1 for x in days if x["status"] == "late"), "draft": sum(1 for x in days if x["status"] == "draft"),
+             "missing": sum(1 for x in days if x["status"] == "missing")}
     submitted = {(r[0], r[1]) for r in con.execute(
         "SELECT round, cycle_date FROM bc_order WHERE branch_id=? AND status IN ('submitted','processed','received')"
         " AND cycle_date BETWEEN ? AND ?", (branch_id, start.isoformat(), as_of.isoformat()))}
-    mins = sorted(m for m in (_minutes(a, b) for a, b in con.execute(
-        "SELECT created_at, submitted_at FROM bc_stock_count WHERE branch_id=? AND status='submitted'"
-        " AND count_date BETWEEN ? AND ?", (branch_id, start.isoformat(), as_of.isoformat()))) if m is not None)
     flagged = with_reason = 0
     for b, e in _periods(con, branch_id):
         if start.isoformat() <= e["date"] <= as_of.isoformat():
@@ -135,21 +144,21 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
     def pct(a, b):
         return round(100.0 * a / b, 1) if b else None
     metrics = {
-        "count_coverage": pct(sum(1 for _, d in cycles if d in counted_days), len(cycles)),
-        "count_minutes": round(mins[len(mins) // 2], 1) if mins else None,
+        "issue_coverage": pct(slips["confirmed"] + slips["late"], slips["days"]),
+        "issue_on_time": pct(slips["confirmed"], slips["confirmed"] + slips["late"]),
         "reason_coverage": pct(with_reason, flagged) if flagged else None,
         "mape_a": mape_a,
         "order_submission": pct(sum(1 for c in cycles if c in submitted), len(cycles)),
     }
     passes = {
-        "count_coverage": None if metrics["count_coverage"] is None else metrics["count_coverage"] >= TARGETS["count_coverage"],
-        "count_minutes": None if metrics["count_minutes"] is None else metrics["count_minutes"] <= TARGETS["count_minutes"],
+        "issue_coverage": None if metrics["issue_coverage"] is None else metrics["issue_coverage"] >= TARGETS["issue_coverage"],
+        "issue_on_time": None if metrics["issue_on_time"] is None else metrics["issue_on_time"] >= TARGETS["issue_on_time"],
         "reason_coverage": None if metrics["reason_coverage"] is None else metrics["reason_coverage"] >= TARGETS["reason_coverage"],
         "mape_a": None if metrics["mape_a"] is None else metrics["mape_a"] <= TARGETS["mape_a"],
     }
     known = [v for v in passes.values() if v is not None]
     return {"branch_id": branch_id, "from": start.isoformat(), "to": as_of.isoformat(), "weeks": weeks,
-            "cycles": len(cycles), "counts": len(counted_days), "flagged": flagged, "metrics": metrics,
+            "cycles": len(cycles), "counts": month_counts, "slips": slips, "flagged": flagged, "metrics": metrics,
             "targets": TARGETS, "passes": passes,
             "started": started,
             "verdict": ("not_started" if not started else
