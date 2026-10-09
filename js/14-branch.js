@@ -315,7 +315,7 @@ function brnIssRender() {
   const confirmed = st.status === 'confirmed' || st.status === 'late';
   document.getElementById('brnIssHead').innerHTML =
     `<span style="color:var(--text-primary)">ใบตัดเบิกวันที่ <b>${esc(_brnIssDm(s.date))}</b></span> ${_bmcChip(_BRN_ISS_ST_LONG[st.status] || stT, stInk)}` +
-    (confirmed ? ` <span class="text-xs" style="color:var(--text-secondary)">ยืนยันแล้ว เวลา ${esc(_brnIssTime(st.confirmed_at))} โดย ${esc(st.confirmed_by || '-')}</span>` : '') +
+    (confirmed ? ` <span class="text-xs" style="color:var(--text-secondary)">เวลา ${esc(_brnIssTime(st.confirmed_at))} โดย ${esc(st.confirmed_by || '-')}</span>` : '') +
     (s.slip && s.slip.reopen_note && !confirmed ? ` <span class="text-xs" style="color:var(--amber-ink)">เปิดแก้ไขโดย ${esc(s.slip.reopened_by || '-')}: ${esc(s.slip.reopen_note)}</span>` : '');
   const parts = [];
   if (s.backdated && !confirmed) parts.push(['var(--amber-ink)', 'ใบตัดเบิกย้อนหลัง จะถูกบันทึกเป็นล่าช้า']);
@@ -482,7 +482,7 @@ async function brnIssHistory() {
       return `<div style="border-top:1px solid var(--border);padding:4px 0"><a href="#" onclick="brnIssSetDate('${x.date}');return false" style="color:var(--accent);font-weight:600">${esc(_brnIssDm(x.date))}</a>
         · ${_bmcChip(x.status_th, ink)} · ${_bmcNum(x.lines, 0)} รายการ · ของเสีย ${_bmcNum(x.waste_lines, 0)}
         ${x.confirmed_by && x.status !== 'draft' ? ' · โดย ' + esc(x.confirmed_by) : ''}${x.confirmed_at && x.status !== 'draft' ? ' · เวลา ' + esc(_brnIssTime(x.confirmed_at)) : ''}
-        ${x.late ? ' ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${reopens ? ' ' + _bmcChip(`เปิดแก้ไข ${reopens} ครั้ง`, 'var(--text-muted)') : ''}</div>`;
+        ${x.late && x.status !== 'late' ? ' ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${reopens ? ' ' + _bmcChip(`เปิดแก้ไข ${reopens} ครั้ง`, 'var(--text-muted)') : ''}</div>`;
     }).join('') : 'ยังไม่มีข้อมูล';
   } catch (e) { box.textContent = String(e.message || e); }
 }
