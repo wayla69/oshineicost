@@ -405,7 +405,6 @@ def _day_items(s: dict, day: str) -> list:
     conf = bool(st) and IS.is_confirmed(st)
     p, names, klass = s["price"], s["names"], s["klass"]
     flagged = set(s["flag_days"].get(day, []))
-    reasons = {}
     out = []
     for c in sorted(set(b) | set(i)):
         cell = i.get(c) or {}
