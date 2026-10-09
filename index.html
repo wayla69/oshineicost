@@ -1344,10 +1344,10 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .topbar-scope { flex: 1 1 0%; }
   .top-bar .tb-fold { display: inline-flex; align-self: flex-start; margin-left: auto; }
   .topbar-actions { flex-basis: 100%; }
-  body.role-branch .top-bar .tb-fold { display: none; }
-  body.tb-folded:not(.role-branch) .topbar-scope > :not(.page-title):not(#dataCoverageNote),
-  body.tb-folded:not(.role-branch) .topbar-actions,
-  body.tb-folded:not(.role-branch) #presetBar { display: none !important; }
+  body.role-branch .top-bar .tb-fold, body.role-franchise .top-bar .tb-fold { display: none; }
+  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote),
+  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-actions,
+  body.tb-folded:not(.role-branch):not(.role-franchise) #presetBar { display: none !important; }
   /* a page that blanks a control (visibility, switchTab) must not hold an empty row here */
   .top-bar .invisible { display: none !important; }
 
@@ -1514,8 +1514,25 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 @media (max-width: 700px) { body.supply-phone .brn-t-short { display: inline; } }
 /* the branch login's top bar keeps only the user chip (name · lock · logout) and the theme
    toggle — search, presets, exports and uploads are the sales dashboard's tools */
-body.role-branch .topbar-actions > :not(#userChip):not(#darkBtn) { display: none !important; }
-body.role-branch #presetBar { display: none !important; }
+body.role-branch .topbar-actions > :not(#userChip):not(#darkBtn),
+body.role-franchise .topbar-actions > :not(#userChip):not(#darkBtn) { display: none !important; }
+body.role-branch #presetBar, body.role-franchise #presetBar { display: none !important; }
+/* ร้านของฉัน (PR-L): the franchise owner's one page. Phone first: a single column of cards on the owner's summary
+   styles (.ms-*), the user chip beside the one tab-strip entry, nothing else in the chrome. */
+.frc-wrap { max-width: 600px; margin: 0 auto; }
+.frc-wrap .ms-section { padding: 0; }
+@media (max-width: 700px) {
+  body.franchise-phone .content-area { padding: 6px 12px 24px; }
+  body.franchise-phone #clusterBar { display: none !important; }
+  body.franchise-phone .top-bar { position: absolute; top: 0; right: 0; z-index: 55; width: auto; height: 39px; min-height: 0; margin: 0; padding: 0 4px;
+    background: transparent; border: 0; box-shadow: none; display: flex; align-items: center; flex-wrap: nowrap; }
+  body.franchise-phone .top-bar .topbar-actions { margin: 0; gap: 2px; flex-wrap: nowrap; flex-basis: auto; }
+  body.franchise-phone #darkBtn { display: none !important; }
+  body.franchise-phone #userChip { gap: 2px; padding: 0 0 0 6px !important; border: 0 !important; background: transparent; font-size: 11px !important; }
+  body.franchise-phone #userChipName { font-size: 11px; color: #c7d3e6 !important; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+  body.franchise-phone #userChip .topbar-icon-btn { width: 28px !important; height: 28px !important; background: transparent; border-color: rgba(255,255,255,.28); color: #c7d3e6; }
+  body.franchise-phone .top-bar .page-title, body.franchise-phone #pageTitle { display: none; }
+}
 /* ปลดล็อกการบันทึก as a lock icon beside the user name (shown on the branch phone, see above) */
 #supplyLockTop { display: none; align-items: center; }
 #supplyLockTop button { width: 26px; height: 26px; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
@@ -1932,6 +1949,11 @@ body.mgt-reading .content-area { padding-top: 10px; }
 
   <!-- Sidebar, regrouped 2026-10-01 (owner): one entry per question - each entry is a cluster's tabs[0]
        (TAB_CLUSTERS in js/01-core.js); the rest of a cluster is reached from the bar on the page. -->
+  <!-- ร้านของฉัน (PR-L): the franchise owner's only page; hidden for everyone else, shown by applyPermissions for that role -->
+  <div class="nav-item" id="nav-franchise" style="display:none" onclick="switchTab('franchise')" title="ร้านของฉัน · สรุปผลการดำเนินงานของสาขาตนเอง: ยอดขาย กำไรขั้นต้น วัตถุดิบ วินัยการทำงานของสาขา">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/><path d="M3 9a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0"/></svg>
+    <span class="nav-label">ร้านของฉัน</span>
+  </div>
   <div class="nav-item active" id="nav-home" onclick="switchTab('home')" title="Daily Brief · Yesterday vs target, alerts, forecast">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span class="nav-label">หน้าแรก</span>
@@ -2410,7 +2432,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
      global scope — load order 01→09 must be preserved). /app.js still serves
      the concatenation for any stale cached shell during rollout. -->
 <!-- Five slices load here: everything the login, the boot and the phone summary need.
-     The other fifteen (the desktop tabs' code) are inert data-lazy tags below, in the same
+     The other sixteen (the desktop tabs' code) are inert data-lazy tags below, in the same
      order; ensureSlicesLoaded() (js/01-core.js) turns them into scripts before the desktop
      shell boots. A phone that stays on the summary never downloads or parses them. -->
 <script src="/js/01-core.js"></script>
@@ -2433,5 +2455,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <script type="text/plain" class="lazy-slice" data-lazy="/js/14-branch.js"></script>
 <script type="text/plain" class="lazy-slice" data-lazy="/js/15-orderhub.js"></script>
 <script type="text/plain" class="lazy-slice" data-lazy="/js/16-supplyhome.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/17-franchise.js"></script>
 </body>
 </html>

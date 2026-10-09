@@ -165,3 +165,29 @@ def test_its_own_branch_still_works(world):
     assert b.get("/api/bom-center/stock/sheet?branch_id=1").status_code == 200
     assert b.get("/api/bom-center/stock/sheet").status_code == 200           # unspecified = its own
     assert b.get("/api/bom-center/stock/me").json()["branches"] == [{"branch_id": 1, "name": "BranchA"}]
+
+
+def test_a_franchise_owner_reaches_none_of_the_phase_2_routes(world):
+    """PR-L: the owner's login (role franchise, tied to BranchA) is pinned like a branch login, but holds no module of
+    these routes at all: every one of them - its own branch or another, read or write - is closed to it (403, role)."""
+    import main
+    _, ids = world
+    mg = _login("management1")
+    r = mg.post("/api/auth/users", headers={"X-Upload-Token": TOKEN},
+                json={"username": "own_scope_a", "password": "Temp@12345", "role": "franchise", "branch": "BranchA"})
+    assert r.status_code in (200, 409), r.text
+    try:
+        f = _login("own_scope_a", "Temp@12345")
+        swept, bad = 0, []
+        for m, route in _routes():
+            for bid in (None, 1, 2):
+                resp = _call(f, m, _url(route, ids, branch_id=bid))
+                swept += 1
+                if not (resp.status_code == 403 and resp.headers.get("X-Denied") == "role"):
+                    bad.append((m, route.path, bid, resp.status_code))
+        assert swept >= 90 and not bad, (swept, bad[:5])
+    finally:
+        c = sqlite3.connect(str(main.DB_PATH))
+        c.execute("DELETE FROM app_user WHERE username='own_scope_a'")
+        c.commit()
+        c.close()

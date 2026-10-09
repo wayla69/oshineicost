@@ -19,7 +19,7 @@ PER_SLICE = {'01-core.js': 'switchTab', '02-mgt-report.js': 'loadMgtReport', '03
              '09d-bom-tools.js': 'initBomDeepDive', '09e-menu-compare-bom.js': 'loadMenuCompare',
              '10-ordering.js': 'loadOrderPlan', '11-feedback.js': 'loadFeedback', '12-checklist.js': 'loadChecklist',
              '13-bom-center.js': 'loadBomCenter', '14-branch.js': 'loadBranchStock', '15-orderhub.js': 'loadOrderHub',
-             '16-supplyhome.js': 'loadSupplyHome'}
+             '16-supplyhome.js': 'loadSupplyHome', '17-franchise.js': 'loadFranchise'}
 checks = []
 
 

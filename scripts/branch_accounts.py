@@ -19,6 +19,11 @@ What it does, per row:
      read, sent or printed by this script (branch_handout.py puts it on the cards).
 409 from the server counts as "already exists". Writes accounts_result.csv next to the list (only with --yes).
 
+The franchise owners (PR-L): the same list with `--role franchise` creates ONE read-only login per branch, own_<ตัวย่อ>
+(role franchise, tied to the branch: it sees only the page ร้านของฉัน for that branch). Give it a list of the franchise
+branches only. A list's ชื่อผู้ใช้ column counts only when it starts with own_; the result file is
+owner_accounts_result.csv, and branch_handout.py --role franchise --list <that file> writes the owner messages.
+
 The four pilot logins created on 2026-10-07 are named branch_ubon branch_udon branch_khonkaen branch_rayong.
 With --yes --replace-pilot (and only then):
   * the pilot branches get a new wh_* login even though they already have the old one;
@@ -101,14 +106,15 @@ def sign_in(api, user: str, password: str) -> None:
         raise SystemExit(f"บัญชี {user} ยังใช้รหัสผ่านเริ่มต้น กรุณาเข้าสู่ระบบทางเบราว์เซอร์และตั้งรหัสผ่านใหม่ก่อน")
 
 
-def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = False) -> list:
+def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = False, role: str = "branch") -> list:
     """Decide each row: -> [{branch, abbr, username, recipient, action: create|exists|fail, retire, note}]. Pure, so it is tested
-    without a server. `retire` = the old pilot logins to switch off (only with replace_pilot, only once the new login exists)."""
+    without a server. `retire` = the old pilot logins to switch off (only with replace_pilot, only once the new login exists).
+    `role` is the kind of login the run makes: branch (wh_*) or franchise (own_*, one per branch, never retires anything)."""
     by_user = {u["username"]: u for u in users}
-    legacy = set(BL.LEGACY_PILOT_USERNAMES.values())
+    legacy = set(BL.LEGACY_PILOT_USERNAMES.values()) if role == "branch" else set()
     by_branch = {}
     for u in users:
-        if u.get("role") == "branch" and u.get("active", 1) and u.get("branch"):
+        if u.get("role") == role and u.get("active", 1) and u.get("branch"):
             if replace_pilot and u["username"] in legacy:
                 continue                                  # the old pilot login does not count as "this branch already has one"
             by_branch.setdefault(u["branch"], []).append(u["username"])
@@ -122,12 +128,12 @@ def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = Fal
             row["note"] = "ไม่พบสาขานี้ในรายชื่อสาขาที่เปิดใช้งาน ตรวจชื่อให้ตรงกับระบบ"
             continue
         have = by_branch.get(name, [])
-        wanted = r["username"] or BL.username_for(name, branches[name], r.get("abbr", ""))
+        wanted = BL.login_of(r, role) or BL.username_for(name, branches[name], r.get("abbr", ""), role)
         if replace_pilot:
             row["retire"] = [u["username"] for u in users if u["username"] in legacy and u.get("role") == "branch"
                              and u.get("branch") == name and u.get("active", 1)]
         if wanted and wanted in by_user:
-            if by_user[wanted].get("branch") != name or by_user[wanted].get("role") != "branch":
+            if by_user[wanted].get("branch") != name or by_user[wanted].get("role") != role:
                 row["username"], row["note"] = wanted, "ชื่อผู้ใช้นี้ถูกใช้กับบัญชีอื่นแล้ว"
                 continue
             row.update(username=wanted, action="exists", note="มีบัญชีนี้อยู่แล้ว")
@@ -148,7 +154,7 @@ def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = Fal
     return out
 
 
-def run(api, rows: list, apply: bool, replace_pilot: bool = False) -> list:
+def run(api, rows: list, apply: bool, replace_pilot: bool = False, role: str = "branch") -> list:
     """Fetch the branch list and the users, decide, and (apply=True) create. With replace_pilot the old pilot
     branch_* logins are switched off once the wh_* login exists. -> rows with `result`."""
     st, js, text = api.request("GET", "/api/branches")
@@ -158,7 +164,7 @@ def run(api, rows: list, apply: bool, replace_pilot: bool = False) -> list:
     st, js, text = api.request("GET", "/api/auth/users")
     if st != 200 or not isinstance(js, list):
         raise SystemExit(f"อ่านรายชื่อผู้ใช้ไม่ได้ ({_detail(st, js, text)}) ต้องเข้าสู่ระบบด้วยบัญชี Management")
-    plan = plan_rows(rows, branches, js, replace_pilot=replace_pilot)
+    plan = plan_rows(rows, branches, js, replace_pilot=replace_pilot, role=role)
     for p in plan:
         if p["action"] == "fail":
             p["result"] = BL.R_FAILED
@@ -167,7 +173,7 @@ def run(api, rows: list, apply: bool, replace_pilot: bool = False) -> list:
         elif not apply:
             p["result"] = BL.R_PLAN
         else:
-            st, js, text = api.request("POST", "/api/auth/users", {"username": p["username"], "role": "branch", "branch": p["branch"]})
+            st, js, text = api.request("POST", "/api/auth/users", {"username": p["username"], "role": role, "branch": p["branch"]})
             if st == 200:
                 p["result"] = BL.R_CREATED
             elif st == 409:
@@ -221,6 +227,8 @@ def main(argv=None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="แสดงแผนโดยไม่สร้างบัญชี (ค่าเริ่มต้น)")
     ap.add_argument("--replace-pilot", action="store_true",
                     help="สาขานำร่อง 4 แห่งได้บัญชี wh_* ใหม่ และบัญชี branch_* เดิมถูกปิดในการรันครั้งถัดไป (ใช้ร่วมกับ --yes เท่านั้น)")
+    ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
+                    help="branch = บัญชีสาขา wh_<ตัวย่อ> (ค่าเริ่มต้น) · franchise = บัญชีเจ้าของสาขา own_<ตัวย่อ> (ดูผลอย่างเดียว)")
     ap.add_argument("--admin-user", default=os.environ.get("OSHINEI_ADMIN_USER", "management1"),
                     help="บัญชี Management ที่ใช้เข้าสู่ระบบ (หรือ OSHINEI_ADMIN_USER)")
     ap.add_argument("--token-env", default="OSHINEI_SEED_TOKEN", help="ชื่อตัวแปรที่เก็บ write token")
@@ -231,12 +239,15 @@ def main(argv=None) -> int:
     if a.replace_pilot and not a.yes:
         print("--replace-pilot ใช้ได้เฉพาะพร้อม --yes (ถ้าไม่ระบุ --yes ได้เพียงแผน)", file=sys.stderr)
         return 2
+    if a.replace_pilot and a.role != "branch":
+        print("--replace-pilot ใช้ได้เฉพาะบัญชีสาขา (--role branch)", file=sys.stderr)
+        return 2
     try:
         rows = BL.read_list(a.list)
     except SystemExit as e:
         print(e, file=sys.stderr)
         return 2
-    print(f"{'สร้างบัญชีจริง' if a.yes else 'แผน (dry run) ไม่มีการสร้างบัญชี'} · {len(rows)} สาขา · {a.base}")
+    print(f"{'สร้างบัญชีจริง' if a.yes else 'แผน (dry run) ไม่มีการสร้างบัญชี'} · {'เจ้าของสาขา (own_*)' if a.role == 'franchise' else 'สาขา (wh_*)'} · {len(rows)} สาขา · {a.base}")
     pw = os.environ.get("OSHINEI_ADMIN_PASSWORD") or ""
     api = Api(a.base, resolve_token(a.token_env))
     st, js, _ = api.request("GET", "/api/auth/me")
@@ -245,18 +256,18 @@ def main(argv=None) -> int:
             pw = getpass.getpass(f"รหัสผ่านของ {a.admin_user}: ")
     try:
         sign_in(api, a.admin_user, pw)
-        plan = run(api, rows, apply=a.yes, replace_pilot=a.replace_pilot)
+        plan = run(api, rows, apply=a.yes, replace_pilot=a.replace_pilot, role=a.role)
     except SystemExit as e:
         print(e, file=sys.stderr)
         return 2
-    dest = Path(a.list).with_name("accounts_result.csv")
+    dest = Path(a.list).with_name("owner_accounts_result.csv" if a.role == "franchise" else "accounts_result.csv")
     if a.yes:
         keep_created(plan, dest)
     print_table(plan)
     if a.yes:
         out = BL.write_result(dest, plan)
         print(f"เขียนผลลัพธ์ที่ {out}")
-        print("ขั้นต่อไป: py -3.12 scripts\\branch_handout.py --list " + f'"{out}"')
+        print("ขั้นต่อไป: py -3.12 scripts\\branch_handout.py " + ("--role franchise " if a.role == "franchise" else "") + f'--list "{out}"')
     else:
         print("นี่คือแผนเท่านั้น ถ้าถูกต้องให้รันซ้ำพร้อม --yes")
     return 1 if any(p["result"] == BL.R_FAILED for p in plan) else 0

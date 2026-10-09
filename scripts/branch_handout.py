@@ -19,6 +19,8 @@ Which branches (the list is the same file branch_accounts.py reads):
     py -3.12 scripts/branch_handout.py --all --db D:/copy/oshinei.db             # every active branch of a DB copy
     py -3.12 scripts/branch_handout.py                       # no option: the four pilot branches
     py -3.12 scripts/branch_handout.py --list ... --only udon                    # a single branch
+    py -3.12 scripts/branch_handout.py --role franchise --list D:/onboarding/owner_accounts_result.csv
+                                                                                 # the franchise owners' messages and cards (own_<ตัวย่อ>, page ร้านของฉัน)
 
     --out DIR     default ~/Oshinei_branch_handout
     --db FILE     a COPY of the database: resolves branch ids for rows with neither a username nor an abbreviation (wh_<id>)
@@ -77,6 +79,56 @@ def message(name: str, user: str, pw: str) -> str:
 - สินค้าที่ได้รับน้อยกว่าที่คลังส่ง ให้แก้ช่อง "รับจริง" และเลือกสาเหตุในฟอร์มรับสินค้า ระบบแจ้งเคลมให้ประสานงานขายในครั้งเดียว · สินค้าที่พบว่าชำรุด เสีย หรือส่งผิดภายหลัง กด "แจ้งเคลม" ที่หน้ารับสินค้า · ส่งรูปถ่ายสินค้าที่เคลมให้ประสานงานขายทางไลน์
 - มีข้อสงสัย ติดต่อ Sales Support
 """
+
+
+def owner_message(name: str, user: str, pw: str) -> str:
+    """The franchise owner's variant (PR-L, --role franchise): what the page ร้านของฉัน shows and how to sign in."""
+    return f"""เรียน เจ้าของสาขา{name}
+
+ระบบ "ร้านของฉัน" พร้อมให้เจ้าของสาขาดูผลการดำเนินงานของสาขา{name}แล้ว ใช้บนโทรศัพท์ได้เลย
+
+ที่อยู่ระบบ: {URL}
+ชื่อผู้ใช้: {user}
+รหัสผ่านเริ่มต้น: {pw}
+
+เริ่มใช้ 3 ขั้นตอน (ประมาณ 3 นาที)
+1. เปิดที่อยู่ระบบด้านบนในเบราว์เซอร์ของโทรศัพท์ แล้วเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่านเริ่มต้น
+2. ระบบจะให้ตั้งรหัสผ่านใหม่ทันที ตั้งแล้วจดเก็บไว้เอง
+3. กดเมนูของเบราว์เซอร์ แล้วเลือก "เพิ่มไปยังหน้าจอหลัก" ครั้งต่อไปเปิดได้เหมือนแอป
+
+หน้า "ร้านของฉัน" แสดงผลของสาขาในเดือนที่เลือก (เลือกดูย้อนหลังรายเดือนได้)
+- สรุป "ดี / ควรดู / ต้องแก้" ของเดือน
+- ยอดขายสะสมเทียบเดือนก่อนและปีก่อน ยอดวันล่าสุด จำนวนบิล ยอดเฉลี่ยต่อบิล และกราฟยอดขาย 30 วัน
+- กำไรขั้นต้นและต้นทุนอาหาร
+- วัตถุดิบ: ส่วนต่างการใช้เทียบสูตรในรอบตรวจนับล่าสุด และสัดส่วนของเสีย
+- วินัยการทำงานของสาขา: ใบตัดเบิก ใบสั่งซื้อ การรับสินค้า และการแจ้งเคลม
+- เมนูขายดี 10 อันดับ และสัดส่วนส่วนลด
+
+ข้อควรทราบ
+- บัญชีนี้ดูได้เฉพาะสาขา{name} และดูได้อย่างเดียว ไม่มีข้อมูลบิลรายใบ สูตร ราคาวัตถุดิบ หรือสาขาอื่น และแก้ไขข้อมูลไม่ได้
+- รหัสผ่านเป็นของเจ้าของสาขา ไม่ส่งต่อทางแชตกลุ่มที่มีคนอื่น
+- ยอดขายไม่รวม VAT ข้อมูลของวันล่าสุดอาจยังไม่ครบ ระบบปรับตัวเลขทุกครั้งที่ได้รับข้อมูลใหม่
+- มีข้อสงสัย ติดต่อประสานงานขาย
+"""
+
+
+def owner_card(name: str, user: str, pw: str) -> str:
+    e = html.escape
+    return f"""<section class="card">
+  <p class="eyebrow">OSHINEI · ร้านของฉัน (เจ้าของสาขา)</p>
+  <h2>สาขา{e(name)}</h2>
+  <table>
+    <tr><th>ที่อยู่ระบบ</th><td class="url">{e(URL)}</td></tr>
+    <tr><th>ชื่อผู้ใช้</th><td class="mono">{e(user)}</td></tr>
+    <tr><th>รหัสผ่านเริ่มต้น</th><td class="mono">{e(pw)}</td></tr>
+  </table>
+  <ol>
+    <li>เปิดที่อยู่ระบบบนโทรศัพท์ เข้าสู่ระบบ แล้วตั้งรหัสผ่านใหม่</li>
+    <li>เมนูเบราว์เซอร์ → "เพิ่มไปยังหน้าจอหลัก"</li>
+    <li>เปิด "ร้านของฉัน" ดูยอดขาย กำไรขั้นต้น วัตถุดิบ และวินัยการทำงานของสาขา เลือกดูย้อนหลังรายเดือนได้</li>
+  </ol>
+  <p class="note">ดูได้เฉพาะสาขาของท่าน และดูได้อย่างเดียว · รหัสผ่านเป็นของเจ้าของสาขา ไม่ส่งต่อ · ติดต่อประสานงานขาย</p>
+</section>"""
 
 
 def card(name: str, user: str, pw: str) -> str:
@@ -142,7 +194,10 @@ def db_branches(db: str) -> list:
 
 def build_entries(a) -> list:
     """-> [{branch, username, recipient}] for the chosen source; exits with a plain Thai message when a login name cannot be known."""
+    role = getattr(a, "role", "branch")
     ids = {n: b for b, n in db_branches(a.db)} if a.db else {}
+    if role == "franchise" and not (a.all or a.list):
+        sys.exit("--role franchise ต้องระบุ --list (ไฟล์รายชื่อสาขาแฟรนไชส์ หรือ owner_accounts_result.csv) หรือ --all กับ --db")
     if a.all:
         if not a.db:
             sys.exit("--all ต้องระบุ --db (ไฟล์ฐานข้อมูลสำเนา) เพื่ออ่านรายชื่อสาขา")
@@ -159,7 +214,8 @@ def build_entries(a) -> list:
         if r.get("result") == BL.R_EXISTS and not a.include_existing:
             skipped.append(f"{r['branch']} (มีบัญชีอยู่แล้ว อาจเปลี่ยนรหัสผ่านไปแล้ว ใช้ --include-existing หากต้องการสร้างข้อความ)")
             continue
-        user = r["username"] or BL.username_for(r["branch"], ids.get(r["branch"]), r.get("abbr", ""))
+        user = BL.login_of(r, role) if role == "franchise" else r["username"]
+        user = user or BL.username_for(r["branch"], ids.get(r["branch"]), r.get("abbr", ""), role)
         if not user:
             missing.append(r["branch"])
             continue
@@ -170,7 +226,7 @@ def build_entries(a) -> list:
     if a.only:
         key = a.only.strip().lower()
         out = [e for e in out if key in (e["username"].lower(), e["branch"].lower(),
-                                         e["username"].lower().replace("wh_", "").replace("branch_", ""))]
+                                         e["username"].lower().replace("wh_", "").replace("own_", "").replace("branch_", ""))]
         if not out:
             sys.exit(f"ไม่พบสาขาที่ตรงกับ --only {a.only}")
     for s in skipped:
@@ -187,6 +243,8 @@ def main(argv=None) -> None:
     ap.add_argument("--db", help="ไฟล์ฐานข้อมูลสำเนา (อ่านอย่างเดียว) ใช้หา wh_<รหัสสาขา> เมื่อไม่มีตัวย่อ")
     ap.add_argument("--only", help="เฉพาะสาขาเดียว (ชื่อผู้ใช้ ชื่อสาขา หรือชื่อย่อ เช่น udon)")
     ap.add_argument("--include-existing", action="store_true", help="สร้างข้อความให้บัญชีที่มีอยู่แล้วด้วย")
+    ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
+                    help="branch = ข้อความและบัตรของทีมสาขา (ค่าเริ่มต้น) · franchise = ข้อความและบัตรของเจ้าของสาขา (own_<ตัวย่อ>, หน้า ร้านของฉัน)")
     ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 4 แถว) แล้วจบ")
     a = ap.parse_args(argv)
     out = Path(a.out)
@@ -201,15 +259,18 @@ def main(argv=None) -> None:
     todo = build_entries(a)
     if not todo:
         sys.exit("ไม่มีสาขาให้สร้างข้อความ")
+    owner = a.role == "franchise"
+    make_msg, make_card = (owner_message, owner_card) if owner else (message, card)
     for e in todo:
-        (out / f"{e['username']}.txt").write_text(message(e["branch"], e["username"], pw), encoding="utf-8")
-    (out / "cards.html").write_text(PAGE.format(sheets=sheets_html([card(e["branch"], e["username"], pw) for e in todo])), encoding="utf-8")
+        (out / f"{e['username']}.txt").write_text(make_msg(e["branch"], e["username"], pw), encoding="utf-8")
+    (out / "cards.html").write_text(PAGE.format(sheets=sheets_html([make_card(e["branch"], e["username"], pw) for e in todo])), encoding="utf-8")
     pages = -(-len(todo) // PER_PAGE)
     lines = [f"สร้างเมื่อ {date.today().isoformat()} · {len(todo)} สาขา",
              "- <ชื่อผู้ใช้>.txt = ข้อความพร้อมส่ง (LINE/อีเมล) ส่งให้เฉพาะสาขานั้น",
              f"- cards.html = บัตรพิมพ์ A4 แนวตั้ง หน้าละ {PER_PAGE} ใบ ({pages} หน้า) เปิดในเบราว์เซอร์แล้วสั่งพิมพ์ ตัดตามเส้นประ",
              "- โฟลเดอร์นี้มีรหัสผ่านเริ่มต้น ลบหลังแจกเสร็จ ห้ามอัปโหลดขึ้น GitHub",
-             "- สาขาไม่ต้องปลดล็อกเครื่อง: บัญชีสาขาบันทึกได้ทันที (ตั้งแต่ 8 ต.ค. 2569)",
+             ("- บัญชีเจ้าของสาขาดูผลของสาขาตนเองได้อย่างเดียว ไม่มีการบันทึกข้อมูล จึงไม่ต้องปลดล็อกเครื่อง" if owner else
+              "- สาขาไม่ต้องปลดล็อกเครื่อง: บัญชีสาขาบันทึกได้ทันที (ตั้งแต่ 8 ต.ค. 2569)"),
              "", "ไฟล์ · สาขา · ส่งถึง"]
     lines += [f"{e['username']}.txt · {e['branch']} · {e['recipient'] or '-'}" for e in todo]
     (out / "README.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")

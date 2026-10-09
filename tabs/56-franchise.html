@@ -1,0 +1,19 @@
+<div id="tab-franchise" style="display:none">
+
+  <!-- ร้านของฉัน (PR-L, 2026-10-10): the franchise owner's page - one branch, one month, read only.
+       GET /api/franchise/summary (backend/routers/franchise.py), drawn by js/17-franchise.js.
+       The branch is shown as text; there is no branch picker on this page (the account is tied to one branch). -->
+  <div class="frc-wrap">
+    <div id="frcHead" class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <div class="min-w-0">
+        <div class="text-[11px]" style="color:var(--text-muted)">ร้านของฉัน</div>
+        <div id="frcBranchName" class="text-base font-semibold" style="color:var(--text-primary)"></div>
+      </div>
+      <label class="text-xs ml-auto" style="color:var(--text-muted)">เดือน
+        <select id="frcMonth" onchange="frcMonthChanged()" aria-label="เลือกเดือน" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;min-height:40px;background:var(--bg-input);color:var(--text-primary)"></select>
+      </label>
+      <span id="frcStatus" class="text-[11px] w-full" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="frcBody"></div>
+  </div>
+</div>

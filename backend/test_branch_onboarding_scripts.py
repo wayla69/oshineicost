@@ -321,3 +321,56 @@ def test_creating_logins_against_the_app(client, app_db):
         c.execute("DELETE FROM branches WHERE branch_id IN (9101, 9102)")
         c.commit()
         c.close()
+
+
+# ── PR-L: the franchise owners (own_<ตัวย่อ>, role franchise) from the same list ───────────────
+def test_owner_logins_are_own_prefix_and_ignore_a_branch_username_exception():
+    assert BL.username_for("ชลบุรี", 1, "CBI", "franchise") == "own_cbi" and BL.username_for("ชลบุรี", 1, "", "franchise") == "own_1"
+    assert BL.username_for("อุดรธานี", 25, "", "franchise") == "own_udon"
+    assert BL.username_for("ชลบุรี", 1, "CBI") == "wh_cbi"                                  # the branch default is untouched
+    row = {"branch": "พัทยา", "abbr": "pty", "username": "wh_special"}
+    assert BL.login_of(row) == "wh_special" and BL.login_of(row, "franchise") == "own_pty"    # the column is the branch exception
+    assert BL.login_of({"branch": "พัทยา", "abbr": "", "username": "own_pattaya"}, "franchise") == "own_pattaya"
+    assert BL.login_of({"branch": "พัทยา"}, "franchise") == ""
+
+
+def test_owner_plan_counts_only_franchise_logins_and_creates_one_per_branch():
+    users = USERS + [{"username": "own_old", "role": "franchise", "active": 1, "branch": "ระยอง"}]
+    rows = [{"branch": "ชลบุรี", "abbr": "cbi", "username": "wh_cbi", "recipient": ""},         # the list's wh_* is not an owner login
+            {"branch": "อุดรธานี", "abbr": "udon", "username": "", "recipient": ""},              # has a branch login, not an owner login
+            {"branch": "ระยอง", "abbr": "rayong", "username": "", "recipient": ""},              # already has an owner login
+            {"branch": "พัทยา", "abbr": "", "username": "", "recipient": ""}]                    # no abbreviation: own_<id>
+    plan = {p["branch"]: p for p in AC.plan_rows(rows, BRANCHES, users, role="franchise")}
+    assert plan["ชลบุรี"]["action"] == "create" and plan["ชลบุรี"]["username"] == "own_cbi"
+    assert plan["อุดรธานี"]["action"] == "create" and plan["อุดรธานี"]["username"] == "own_udon"
+    assert plan["ระยอง"]["action"] == "exists" and plan["ระยอง"]["username"] == "own_old"      # no second owner login
+    assert plan["พัทยา"]["action"] == "create" and plan["พัทยา"]["username"] == "own_12"
+    assert all(not p["retire"] for p in plan.values())                                        # nothing is ever retired for owners
+
+
+def test_owner_accounts_post_the_franchise_role_and_never_a_password():
+    api = FakeApi()
+    plan = AC.run(api, [{"branch": "ชลบุรี", "abbr": "cbi", "username": "", "recipient": ""}], apply=True, role="franchise")
+    assert plan[0]["result"] == BL.R_CREATED
+    assert [c for c in api.calls if c[0] == "POST"] == [("POST", "/api/auth/users", {"username": "own_cbi", "role": "franchise", "branch": "ชลบุรี"})]
+
+
+def test_owner_run_refuses_replace_pilot(tmp_path):
+    p = _csv(tmp_path, "สาขา,ตัวย่อ\nชลบุรี,cbi\n")
+    assert AC.main(["--list", str(p), "--role", "franchise", "--replace-pilot", "--yes"]) == 2
+
+
+def test_owner_handout_is_the_owner_variant(tmp_path, capsys):
+    p = _csv(tmp_path, "สาขา,ตัวย่อ,ชื่อผู้ใช้,LINE/ผู้รับ,ผล\nชลบุรี,cbi,wh_cbi,เจ้าของชลบุรี,\nพัทยา,pty,own_pattaya,,สร้างแล้ว\n")
+    out = tmp_path / "o"
+    HO.main(["--role", "franchise", "--list", str(p), "--out", str(out)])
+    assert sorted(f.name for f in out.glob("*.txt") if f.name != "README.txt") == ["own_cbi.txt", "own_pattaya.txt"]
+    txt = (out / "own_cbi.txt").read_text(encoding="utf-8")
+    assert "ร้านของฉัน" in txt and "ชื่อผู้ใช้: own_cbi" in txt and PW in txt and "ชลบุรี" in txt
+    assert "ดูได้อย่างเดียว" in txt and "13:15" not in txt                                      # not the branch team's text
+    assert "OSHINEI · ร้านของฉัน" in (out / "cards.html").read_text(encoding="utf-8")
+    assert PW not in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        HO.main(["--role", "franchise", "--out", str(tmp_path / "o2")])                         # an owner handout needs a list
+    HO.main(["--role", "franchise", "--list", str(p), "--only", "pattaya", "--out", str(tmp_path / "o3")])
+    assert [f.name for f in (tmp_path / "o3").glob("own_*.txt")] == ["own_pattaya.txt"]

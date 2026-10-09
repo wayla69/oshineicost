@@ -48,6 +48,19 @@ def test_the_strip_is_wired_in_and_the_branch_list_is_skipped_for_a_pinned_login
     assert "if (isPinnedSession())" in brn and brn.index("if (isPinnedSession())") < brn.index("${API}/api/bom-center/stock/me")
 
 
+def test_the_franchise_page_has_no_branch_picker_and_never_asks_for_the_branch_list():
+    """PR-L: ร้านของฉัน shows the branch as text. Its fragment holds no <select> but the month picker, and its slice
+    never calls the branch-list endpoints; the one sidebar entry is the only one a franchise login keeps."""
+    html = (ROOT / "tabs" / "56-franchise.html").read_text(encoding="utf-8")
+    assert [m.group(1) for m in re.finditer(r"<select\b[^>]*\bid=\"([A-Za-z0-9]+)\"", html)] == ["frcMonth"]
+    assert "data-branch-picker" not in html and 'id="frcBranchName"' in html
+    js = (ROOT / "js" / "17-franchise.js").read_text(encoding="utf-8")
+    assert not re.search(r"/api/branches|/stock/me|branch_id|getBranch\(", js)
+    core = (ROOT / "js" / "01-core.js").read_text(encoding="utf-8")
+    assert "window.AUTH.role === 'franchise'" in core and "el.id === 'nav-franchise'" in core
+    assert "'branch', 'franchise'" in core
+
+
 # ── browser ──────────────────────────────────────────────────────────────────
 @pytest.fixture
 def auth_on(monkeypatch):
@@ -133,4 +146,41 @@ def test_a_pinned_branch_login_sees_no_branch_selector_anywhere(live_server):
         forbidden = [u for u in seen if re.search(r"/api/branches(\?|$)|/stock/me", u)]
         assert not forbidden, forbidden                                   # the branch list is never requested
         assert not [e for e in errors if "Branch" in e or "null" in e], errors
+        b.close()
+
+
+def test_a_pinned_franchise_login_sees_no_branch_selector_and_one_sidebar_entry(live_server):
+    """PR-L: the same rule for the owner's login - ร้านของฉัน is its only page, the branch is text, no picker."""
+    pw = pytest.importorskip("playwright.sync_api")
+    base = live_server
+    with pw.sync_playwright() as p:
+        b = _browser(p)
+        mg = b.new_context()
+        assert mg.request.post(base + "/api/auth/login", data={"username": "management1", "password": auth.DEFAULT_PASSWORD}).ok
+        r = mg.request.post(base + "/api/auth/users", headers={"X-Upload-Token": TOKEN},
+                            data={"username": "own_pin_b", "password": "Temp@12345", "role": "franchise", "branch": "BranchB"})
+        assert r.status in (200, 409), r.text()
+        ctx = b.new_context(viewport={"width": 375, "height": 812}, is_mobile=True, has_touch=True)
+        assert ctx.request.post(base + "/api/auth/login", data={"username": "own_pin_b", "password": "Temp@12345"}).ok
+        page = ctx.new_page()
+        seen, errors = [], []
+        page.on("request", lambda rq: seen.append(rq.url))
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(base + "/", wait_until="networkidle", timeout=90000)
+        page.wait_for_function("typeof switchTab === 'function' && window.AUTH && window.AUTH.role === 'franchise'", timeout=30000)
+        page.wait_for_function("document.getElementById('tab-franchise') && document.getElementById('tab-franchise').style.display !== 'none'", timeout=30000)
+        page.wait_for_timeout(2500)
+        bad = page.evaluate("""() => ({
+            naming: [...document.querySelectorAll('select')].filter(s => [...s.options].some(o => o.textContent.includes('BranchA'))).map(s => s.id || '(select)'),
+            pickers: [...document.querySelectorAll('select[data-branch-picker], #brnBranch, #ohbIvBranch, #bmcIssBranch, #bmcFcBranch, #shmBranch')].map(e => e.id),
+            nav: [...document.querySelectorAll('.sidebar-nav .nav-item')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.id),
+            shell: (document.getElementById('selBranch') || {}).tagName, name: document.getElementById('frcBranchName').textContent })""")
+        assert not bad["naming"] and not bad["pickers"], bad
+        assert bad["nav"] == ["nav-franchise"] and bad["shell"] == "INPUT" and bad["name"] == "BranchB", bad
+        page.evaluate("switchTab('home')")                                # no other page opens
+        page.wait_for_timeout(500)
+        assert page.evaluate("activeTab") == "franchise"
+        forbidden = [u for u in seen if re.search(r"/api/branches(\?|$)|/stock/me", u)]
+        assert not forbidden, forbidden
+        assert not errors, errors
         b.close()

@@ -111,6 +111,25 @@ py -3.12 scripts\branch_handout.py --list D:\onboarding\accounts_result.csv --ou
 
 เมื่อผ่านสัปดาห์แรก ให้ดูตัวชี้วัดของสาขานำร่องใน หน้างาน → สาขานำร่อง 4 สาขา ตามเกณฑ์ใน `docs/pilot/pilot_plan.html` (ใบตัดเบิกครบทุกวัน ไม่น้อยกว่า 95% · ยืนยันภายในวัน ไม่น้อยกว่า 90%)
 
+### 7. บัญชีเจ้าของสาขาแฟรนไชส์ (หน้า “ร้านของฉัน”)
+
+เจ้าของสาขาแฟรนไชส์ดูผลการดำเนินงานของสาขาตนเองได้ที่หน้าเดียวคือ “ร้านของฉัน” บนโทรศัพท์ (บทบาท `franchise` สิทธิ์ `franchise.view` ชื่อผู้ใช้ `own_<ตัวย่อ>`) ใช้ตัวย่อเดียวกับบัญชีสาขาในไฟล์รายชื่อ แต่ให้ทำไฟล์รายชื่อเฉพาะสาขาแฟรนไชส์ (บันทึกเป็น `D:\onboarding\owners.xlsx` ใช้คอลัมน์ `สาขา` · `ตัวย่อ` · `LINE/ผู้รับ` ส่วนคอลัมน์ `ชื่อผู้ใช้` ถ้าไม่ขึ้นต้นด้วย `own_` สคริปต์ไม่นำมาใช้)
+
+```powershell
+# แผนเท่านั้น
+py -3.12 scripts\branch_accounts.py --role franchise --list D:\onboarding\owners.xlsx
+# สร้างจริง (ได้ไฟล์ D:\onboarding\owner_accounts_result.csv)
+py -3.12 scripts\branch_accounts.py --role franchise --list D:\onboarding\owners.xlsx --yes
+# ข้อความและบัตรสำหรับเจ้าของสาขา
+py -3.12 scripts\branch_handout.py --role franchise --list D:\onboarding\owner_accounts_result.csv --out D:\onboarding\owner_handout
+```
+
+- หนึ่งสาขามีบัญชีเจ้าของสาขาได้หนึ่งบัญชี สคริปต์ไม่สร้างบัญชีที่สองให้สาขาเดิม และไม่ปิดหรือแก้บัญชีสาขา `wh_*`
+- บัญชีนี้ดูได้อย่างเดียวและดูได้เฉพาะสาขาของตนเอง: ไม่มีข้อมูลบิลรายใบ สูตร ราคาวัตถุดิบ สาขาอื่น ข้อมูลพนักงานหรือแคชเชียร์ ไฟล์ส่งออกของบัญชี และการตั้งค่า ไม่มีช่องเลือกสาขาในหน้านี้
+- รหัสผ่านเริ่มต้นและขั้นตอนการเปลี่ยนรหัสผ่านเหมือนบัญชีสาขา ข้อความที่ได้อธิบายสิ่งที่หน้า “ร้านของฉัน” แสดงและวิธีเข้าสู่ระบบ
+- เป้าของกำไรขั้นต้นตามกติกาเป้าของระบบ (`backend\targets.py`) คือกำไรขั้นต้นของสาขาเองในเดือนเดียวกันของปีก่อน (หน้าจอแสดง “เป้า = เดือนเดียวกันปีก่อน”) และใช้เดือนก่อนแทนเฉพาะเมื่อปีก่อนไม่มีข้อมูล (แสดง “เป้า = เดือนก่อน”) เพราะระบบยังไม่มีช่องกรอกเป้ากำไรขั้นต้น เกณฑ์ที่ใช้สรุป “ดี / ควรดู / ต้องแก้” อยู่ที่หัวไฟล์ `backend\routers\franchise.py`
+- ทดสอบ: `backend\test_franchise_role.py` · `scripts\verify_pinned.py`
+
 ## คำสั่งทั้งหมดตามลำดับ (สรุป)
 
 ```powershell
@@ -121,6 +140,9 @@ py -3.12 scripts\branch_accounts.py --list D:\onboarding\branches.xlsx --yes
 py -3.12 scripts\branch_handout.py --list D:\onboarding\accounts_result.csv --out D:\onboarding\handout
 # เปลี่ยนสาขานำร่องเป็น wh_*: เพิ่ม --replace-pilot ในคำสั่งสร้างบัญชี รันครั้งแรกสร้าง wh_* รันซ้ำหลังแจกข้อความเพื่อปิด branch_* เดิม
 # Sales Support: ตั้งค่า → รอบส่งของสาขา → ตั้งวันส่งหลายสาขาจากไฟล์
+# เจ้าของสาขาแฟรนไชส์ (หัวข้อที่ 7): เพิ่ม --role franchise และใช้ไฟล์รายชื่อเฉพาะสาขาแฟรนไชส์
+py -3.12 scripts\branch_accounts.py --role franchise --list D:\onboarding\owners.xlsx --yes
+py -3.12 scripts\branch_handout.py --role franchise --list D:\onboarding\owner_accounts_result.csv --out D:\onboarding\owner_handout
 ```
 
 ## ไฟล์ที่เกี่ยวข้อง

@@ -157,8 +157,9 @@ def test_the_centre_view_never_computes_a_variance(udon, monkeypatch):
 
 
 def test_every_role_but_marketing_may_read_it():
+    # marketing has no supply module; the franchise owner (PR-L) reads its own page only, never the work list
     for role, mods in auth.ROLE_MODULES.items():
-        assert auth.path_allowed("GET", "/api/bom-center/todo", mods) == (role != "marketing"), role
+        assert auth.path_allowed("GET", "/api/bom-center/todo", mods) == (role not in ("marketing", "franchise")), role
 
 
 def test_the_endpoint(client):
