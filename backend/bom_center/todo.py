@@ -250,6 +250,14 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       f"รออนุมัติ {nc} เรื่อง ตรวจสอบรายการและรูปถ่ายที่สาขาส่งทางไลน์ แล้วพิจารณา" if nc else "ไม่มีเคลมค้าง",
                       count=nc or None, owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
                       go={"tab": "orderhub", "pane": "claims"}))
+        if any(r[1] == "accounting_keyed_at" for r in con.execute("PRAGMA table_info(bc_order)")):
+            nk = _scalar(con, "SELECT COUNT(*) FROM bc_order WHERE status IN ('processed','received')"
+                              " AND accounting_keyed_at IS NULL")
+            out.append(_e("accounting_keyed", 227, "week", "คีย์ใบสั่งซื้อที่ดำเนินการแล้วเข้าระบบบัญชี",
+                          "todo" if nk else "done",
+                          f"ยังไม่คีย์ {nk} ใบ · ดาวน์โหลด Excel แล้วทำเครื่องหมายเมื่อคีย์เสร็จ" if nk else "คีย์ครบทุกใบ",
+                          count=nk or None, owner=("supply.ordering",), owner_th="ประสานงานขาย (Sales Support)",
+                          go={"tab": "orderhub", "pane": "queue"}))
     for b in branches:
         bid = b["branch_id"]
         # one duty per round: the nearest delivery, and the cutoff the branch has to beat for it

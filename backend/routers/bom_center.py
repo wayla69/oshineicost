@@ -2013,7 +2013,7 @@ def _hub_status_or_400(status: Optional[str]) -> str:
 
 
 def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: Optional[str],
-                   status: str = "open") -> list:
+                   status: str = "open", keyed: Optional[int] = None) -> list:
     """The orders to consolidate: named ids, else those of `status` in the date range
     (open = sent or processed, the ones Sales Support still buys for)."""
     if ids:
@@ -2024,7 +2024,7 @@ def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: O
     sts = ("submitted", "processed") if status == "open" else ("all",) if status == "all" else (status,)
     out = []
     for st in sts:
-        out += [r["order_id"] for r in _hub.queue(con, st, date_from, date_to)]
+        out += [r["order_id"] for r in _hub.queue(con, st, date_from, date_to, keyed)]
     return out
 
 
@@ -2043,12 +2043,14 @@ def _sheet_title(name: str, used: set) -> str:
 
 @router.get("/api/bom-center/hub/queue")
 def bc_hub_queue(status: str = Query("submitted"), date_from: Optional[str] = Query(None),
-                 date_to: Optional[str] = Query(None)):
+                 date_to: Optional[str] = Query(None), keyed: Optional[int] = Query(None)):
     if status not in ("submitted", "processed", "received", "all"):
         raise HTTPException(400, "status ต้องเป็น submitted / processed / received / all")
+    if keyed not in (None, 0, 1):
+        raise HTTPException(400, "keyed ต้องเป็น 0 หรือ 1")
     with get_db() as con:
         _ensure(con)
-        rows = _hub.queue(con, status, date_from, date_to)
+        rows = _hub.queue(con, status, date_from, date_to, keyed)
     return {"status": status, "orders": rows, "reasons": [{"code": k, "label": v} for k, v in _hub.SS_REASONS],
             "sla": {"cutoff_time": f"{_fc.cutoff_time():%H:%M}", "process_by": _hub.SLA_PROCESS_BY}}
 
@@ -2086,6 +2088,21 @@ def bc_hub_process(order_id: int, body: ProcessBody, request: Request):
                                                 po_ref=body.po_ref))
 
 
+class KeyedBody(BaseModel):
+    order_ids: List[int] = []
+    keyed: bool = True
+
+
+@router.post("/api/bom-center/hub/keyed", dependencies=[Depends(require_write_token)])
+def bc_hub_keyed(body: KeyedBody, request: Request):
+    """Sales Support marks (or unmarks) orders it has keyed into the external accounting system."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _hub.set_keyed(con, body.order_ids, body.keyed, _who(request)))
+    invalidate_cache()
+    return out
+
+
 @router.get("/api/bom-center/hub/consolidated")
 def bc_hub_consolidated(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
                         date_to: Optional[str] = Query(None), status: Optional[str] = Query(None)):
@@ -2119,7 +2136,9 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
                 if q:
                     per_branch.append([bname, dlv, o["cycle_date"], o["round"], ln["code"], ln["name"], q,
                                        "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"],
-                                       "ล่าช้า (ค่าปรับ)" if o.get("late") else ""])
+                                       "ล่าช้า (ค่าปรับ)" if o.get("late") else "",
+                                       (f"แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
+                                        if o.get("accounting_keyed_at") else "ยังไม่คีย์")])
     wb = Workbook()
     ws = wb.active
     br = c["branches"]
@@ -2131,7 +2150,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
             ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
                       [it["by_branch"].get(b) for b in br])
     ws2 = wb.create_sheet()
-    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า"],
+    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)

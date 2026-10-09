@@ -235,6 +235,9 @@ MIGRATIONS = (
     # PR-C — the kitchen submits a draft for the analyst's review
     ("bc_release", "submitted_by", "TEXT"),
     ("bc_release", "submitted_at", "TEXT"),
+    # PR-E — Sales Support marks the orders it has keyed into the external accounting system
+    ("bc_order", "accounting_keyed_at", "TEXT"),
+    ("bc_order", "accounting_keyed_by", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

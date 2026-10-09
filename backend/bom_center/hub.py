@@ -98,7 +98,7 @@ def sla(submitted_at: str, processed_at: str, cycle_date: str, cutoff_at: str = 
 
 
 # ── Sales Support's queue ────────────────────────────────────────────────────
-def queue(con, status: str = "submitted", date_from: str = None, date_to: str = None) -> list:
+def queue(con, status: str = "submitted", date_from: str = None, date_to: str = None, keyed: int = None) -> list:
     sts = ("submitted", "processed", "received") if status == "all" else (status,)
     q = ("SELECT o.order_id, o.branch_id, b.name, o.cycle_date, o.round, o.status, o.value, o.submitted_at,"
          " o.processed_at, o.processed_by, o.po_ref, o.stock_count_id, o.buffer_pct, o.buffer_reason,"
@@ -106,7 +106,8 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND l.reason_code IS NOT NULL),"
          " COALESCE(o.late,0), o.cutoff_at, o.delivery_date,"
          " (SELECT COUNT(*) FROM bc_claim c WHERE c.order_id=o.order_id AND c.status<>'cancelled'),"
-         " (SELECT COUNT(*) FROM bc_claim c WHERE c.order_id=o.order_id AND c.status='submitted')"
+         " (SELECT COUNT(*) FROM bc_claim c WHERE c.order_id=o.order_id AND c.status='submitted'),"
+         " o.accounting_keyed_at, o.accounting_keyed_by"
          f" FROM bc_order o JOIN branches b USING(branch_id) WHERE o.status IN ({','.join('?' * len(sts))})")
     args = list(sts)
     if date_from:
@@ -115,12 +116,18 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     if date_to:
         q += " AND o.cycle_date<=?"
         args.append(date_to)
+    if keyed is not None:
+        q += " AND (o.accounting_keyed_at IS NOT NULL)=?"
+        args.append(1 if keyed else 0)
     q += " ORDER BY o.cycle_date, b.name, o.round"
     out = []
     for r in con.execute(q, args).fetchall():
         d = dict(zip(("order_id", "branch_id", "branch", "cycle_date", "round", "status", "value", "submitted_at",
                       "processed_at", "processed_by", "po_ref", "stock_count_id", "buffer_pct", "buffer_reason",
-                      "lines", "branch_changes", "late", "cutoff_at", "delivery_date", "claims", "claims_pending"), r))
+                      "lines", "branch_changes", "late", "cutoff_at", "delivery_date", "claims", "claims_pending",
+                      "accounting_keyed_at", "accounting_keyed_by"), r))
+        d["accounting_keyed"] = d["accounting_keyed_at"] is not None
+        d["accounting_keyed_date"] = keyed_date(d["accounting_keyed_at"])
         from .orders import BUFFER_REASON_TH
         d["buffer_reason_th"] = BUFFER_REASON_TH.get(d["buffer_reason"]) if d["buffer_reason"] else None
         d["delivery"] = delivery_of(con, d["branch_id"], d["round"], d["cycle_date"], d.pop("delivery_date"))
@@ -130,6 +137,37 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
         d["stock_deducted"] = d.pop("stock_count_id") is not None
         out.append(d)
     return out
+
+
+def keyed_date(ts: str):
+    """The Bangkok date (YYYY-MM-DD) a keyed mark was set, or None."""
+    d = _bkk(ts)
+    return d.date().isoformat() if d else None
+
+
+def set_keyed(con, order_ids: list, keyed: bool, who: str) -> dict:
+    """Sales Support marks (or unmarks) orders it has keyed into the external accounting system.
+    Only an order the warehouse has processed (or the branch has received) can be keyed."""
+    ids = sorted({int(i) for i in (order_ids or [])})
+    if not ids:
+        raise ValueError("กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ")
+    rows = {oid: st for oid, st in con.execute(
+        f"SELECT order_id, status FROM bc_order WHERE order_id IN ({','.join('?' * len(ids))})", ids)}
+    missing = [i for i in ids if i not in rows]
+    if missing:
+        raise ValueError("ไม่พบใบสั่งซื้อ " + ", ".join(f"#{i}" for i in missing))
+    if keyed:
+        bad = [i for i in ids if rows[i] not in ("processed", "received")]
+        if bad:
+            raise ValueError("ใบสั่งซื้อ " + ", ".join(f"#{i}" for i in bad)
+                             + " ยังไม่ดำเนินการ จึงคีย์เข้าระบบบัญชีไม่ได้")
+    at = now() if keyed else None
+    by = who if keyed else None
+    action = "order_accounting_keyed" if keyed else "order_accounting_unkeyed"
+    for i in ids:
+        con.execute("UPDATE bc_order SET accounting_keyed_at=?, accounting_keyed_by=? WHERE order_id=?", (at, by, i))
+        audit(con, who, action, "bc_order", str(i), rows[i], None)
+    return {"updated": len(ids), "keyed": bool(keyed), "at": at}
 
 
 def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> dict:
