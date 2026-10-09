@@ -32,7 +32,7 @@ PY_FILES = sorted(str(p.relative_to(REPO)).replace("\\", "/") for p in (REPO / "
 # files read by the branch, the warehouse and the centre's desks — no analyst vocabulary there
 FLOOR_FILES = ["js/14-branch.js", "js/15-orderhub.js", "js/16-supplyhome.js", "tabs/53-branchstock.html", "tabs/54-orderhub.html",
                "tabs/55-supplyhome.html", "docs/pilot/branch_guide.html", "docs/pilot/warehouse_guide.html",
-               "docs/pilot/salessupport_guide.html", "docs/pilot/accounting_guide.html"]
+               "docs/pilot/salessupport_guide.html", "docs/pilot/accounting_guide.html", "docs/pilot/owner_guide.html"]
 
 # (name, regex, scope) — scope None = every scanned file, "floor" = FLOOR_FILES only
 RULES = [
