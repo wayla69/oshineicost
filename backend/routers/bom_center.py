@@ -2833,6 +2833,14 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
                    r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
                    "ล่าช้า (ค่าปรับ)" if r.get("late") else ""])
+    w2 = wb.create_sheet()                                   # PR-J4: how each branch kept its daily issue slips in the same dates
+    _sheet(w2, "ใบตัดเบิก", LOG_SUMMARY_HEADERS,
+           f"การทำใบตัดเบิกของแต่ละสาขา {d0} ถึง {d1} · นับเฉพาะวันที่สาขามียอดขาย · ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · "
+           "มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย")
+    for s in c["issues"]:
+        w2.append([s["branch"], s["trading_days"], s["on_time"], s["late"], s["draft"], s["missing"], s["on_time_pct"],
+                   s["coverage_pct"], s["reopens"], s["reconfirms"], s["late_orders"], s["claims"]])
+    w2.column_dimensions["A"].width = 28
     return _xlsx(wb, "bom_center_order_compliance.xlsx")
 
 

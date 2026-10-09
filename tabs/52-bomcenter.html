@@ -146,13 +146,19 @@
         <select id="bmcIssPeriod" onchange="bmcIssLoadSummary()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <button onclick="bmcIssXlsx()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด Excel (สาขานี้)</button>
       <button onclick="bmcIssXlsxAll()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ดาวน์โหลดทุกสาขา (เดือน <span id="bmcIssAllLabel">—</span>)</button>
-      <label class="bmc-iss-write text-xs flex items-center gap-1" style="color:var(--text-primary)" title="เมื่อติ๊กแล้ว ระบบไม่รับใบรับสินค้าเพิ่มในงวดนั้นและยกเลิกการยืนยันรับสินค้าครบไม่ได้ จนกว่าจะยกเลิกการบันทึก">
+      <button onclick="bmcIssSlipsXlsx()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer" title="ใบตัดเบิกรายวันที่สาขายืนยันแล้ว ทุกสาขา ตามเดือนของงวดที่เลือก (ไม่รวมใบที่ยังเป็นร่าง)">ใบตัดเบิกที่ยืนยันแล้วทั้งเดือน (Excel)</button>
+      <label class="bmc-iss-write text-xs flex items-center gap-1" style="color:var(--text-primary)" title="เมื่อติ๊กแล้ว ระบบไม่รับใบรับสินค้าเพิ่มในงวดนั้น ยกเลิกการยืนยันรับสินค้าครบไม่ได้ และเปิดแก้ไขใบตัดเบิกในงวดนั้นไม่ได้ จนกว่าจะยกเลิกการบันทึก">
         <input type="checkbox" id="bmcIssPosted" onchange="bmcIssTogglePosted(this)"> บันทึกเข้าระบบบัญชีแล้ว</label>
       <span id="bmcIssStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIssChips" class="flex flex-wrap items-center gap-2 mb-2"></div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ตัดเบิก (ใช้จริง) = ยกมา (ต้นงวด) + รับเข้า + เคลม/ปรับ − คงเหลือ (ปลายงวด) · ราคาต่อหน่วยคือราคาซื้อจริงของเดือนที่งวดสิ้นสุด · ดาวน์โหลดได้เมื่อสาขาหรือ Sales Support ยืนยันรับสินค้าครบของรอบนั้นแล้ว</div>
-    <div id="bmcIssTable" class="card p-4 mb-3 overflow-x-auto"></div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">หน้านี้เทียบสินค้าคงเหลือตามระบบ (ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิกและของเสียตามใบตัดเบิกที่ยืนยันแล้ว) กับสินค้าที่สาขานับจริงปลายงวด · ผลต่าง = นับจริง − คงเหลือตามระบบ · ไฟล์ Excel ของงวดมี 3 แผ่นงาน: ใบตัดเบิกรายวัน · กระทบยอด · สรุปเคลื่อนไหว (ตัดเบิก (ใช้จริง) = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ) · ราคาต่อหน่วยคือราคาซื้อจริงของเดือนที่งวดสิ้นสุด · ดาวน์โหลดได้เมื่อสาขาหรือ Sales Support ยืนยันรับสินค้าครบของรอบนั้นแล้ว ·
+      <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></div>
+    <div id="bmcIssRecon" class="card p-4 mb-3 overflow-x-auto"></div>
+    <details id="bmcIssMoveBox" class="card p-4 mb-3">
+      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">สรุปเคลื่อนไหว (ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ) — แผ่นงานเดิม</summary>
+      <div id="bmcIssTable" class="mt-3 overflow-x-auto"></div>
+    </details>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->

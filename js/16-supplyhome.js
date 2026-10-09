@@ -141,6 +141,9 @@ function _shmOpen(go) {
     else if (x.end_count_id) _brnVarTab = 'period';                       // the receipts step opens the period view
     if (x.day) { _brnVarTab = 'daily'; _shmWhen(() => typeof _brnVarDay !== 'undefined' && _brnVarDay, () => brnVarDayOpen(x.day)); }
   }
+  if (x.day && go.pane === 'issues') _shmWhen(() => document.getElementById('ohbIsFrom') && typeof ohbLoadIssues === 'function', () => {   // the day the task names, all branches
+    document.getElementById('ohbIsFrom').value = x.day; document.getElementById('ohbIsTo').value = x.day; ohbLoadIssues();
+  });
   if (x.day && go.pane === 'issuevar') _shmWhen(() => typeof _ohbIv !== 'undefined' && _ohbIv, () => ohbIvOpen(x.day));
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });

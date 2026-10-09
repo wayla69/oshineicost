@@ -43,6 +43,28 @@
     <div id="ohbClaimList" class="card p-3 mb-3"></div>
   </div>
 
+  <!-- ── ใบตัดเบิกสาขา (PR-J4): Sales Support follows the branches' daily slips, reopens one with a reason;
+       Accounting downloads the confirmed ones (docs/pilot/accounting_guide.html) ── -->
+  <div id="ohb-pane-issues" style="display:none">
+    <div class="card p-3 mb-3">
+      <div class="text-xs mb-2" style="color:var(--text-secondary)">ใบตัดเบิกประจำวันที่สาขาบันทึก (เบิกใช้และของเสีย) · ใบที่ยืนยันแล้วแก้ไขไม่ได้ หากสาขาต้องแก้ไข ประสานงานขายเปิดแก้ไขพร้อมระบุเหตุผล ระบบบันทึกทุกครั้งที่เปิดแก้ไขและยืนยันซ้ำ · ใบที่ยืนยันหลังวันที่ของใบถือเป็น “ล่าช้า” · ไฟล์ Excel รวมเฉพาะใบที่ยืนยันแล้ว ·
+        คู่มือบัญชี: <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">ใบสรุปตัดเบิกและใบตัดเบิกรายวัน</a></div>
+      <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
+        <label>สาขา<br><select id="ohbIsBranch" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
+        <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>เดือนของไฟล์ Excel<br><input type="month" id="ohbIsMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <button onclick="ohbIsXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกที่ยืนยันแล้ว (Excel)</button>
+        <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
+        <span id="ohbIsStatus" style="padding-bottom:6px"></span>
+      </div>
+      <div id="ohbIsChips" class="flex flex-wrap gap-1 mt-2"></div>
+    </div>
+    <div id="ohbIsDetail" class="card p-3 mb-3" style="display:none"></div>
+    <div id="ohbIsList" class="card p-3 mb-3"></div>
+    <div id="ohbIsSummary" class="card p-3 mb-3"></div>
+  </div>
+
   <!-- ── ผลต่างตัดเบิกรายวัน (PR-J3) ── -->
   <div id="ohb-pane-issuevar" style="display:none">
     <div class="card p-3 mb-3">
@@ -75,10 +97,11 @@
   <!-- ── pilot ── -->
   <div id="ohb-pane-pilot" style="display:none">
     <div class="card p-3 mb-3 text-xs" style="color:var(--text-secondary)">
-      Pilot 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง) · เกณฑ์ผ่าน: ตรวจนับครบ ≥ 90% ของวันสั่ง · เวลาตรวจนับ ≤ 20 นาที ·
+      Pilot 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง) · เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% ·
       ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์ชั้น A ≤ 15% ·
       คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> ·
       <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">Sales Support</a> ·
+      <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> ·
       <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผน Pilot และสคริปต์วิดีโอ</a>
     </div>
     <div id="ohbPilotReady" class="card p-3 mb-3"></div>

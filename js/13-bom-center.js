@@ -1702,6 +1702,7 @@ async function bmcLoadRuns() {
 // ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads it and ticks "posted" ─────
 let _bmcIssPeriods = null;    // /issue-summary/periods → { branches: [{branch_id, name, periods: […]}] }
 let _bmcIssSum = null;        // the summary on screen
+let _bmcIssRecon = null;      // issue-reports/reconcile of the same period (system stock vs the count) — PR-J4
 // the server's write rule (auth.py): cost.analysis or bom.center. The class is not `.bc-write`: loadBomCenter hides that
 // one unless the user holds bom.center, and Accounting does not.
 function _bmcIssCanPost() { return hasModule('cost.analysis') || hasModule('bom.center'); }
@@ -1754,20 +1755,36 @@ async function bmcIssLoadSummary() {
   if (s.branch_id == null || s.end_count_id == null) return;
   const box = document.getElementById('bmcIssTable');
   box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</div>';
-  let d;
+  const rbox = document.getElementById('bmcIssRecon');
+  rbox.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</div>';
+  let d, rc = null;
   try {
-    d = _bmcIssSum = await _bmcJson(`${API}/api/bom-center/issue-summary?end_count_id=${s.end_count_id}&branch_id=${s.branch_id}`);
+    const q = `end_count_id=${s.end_count_id}&branch_id=${s.branch_id}`;
+    [d, rc] = await Promise.all([_bmcJson(`${API}/api/bom-center/issue-summary?${q}`),
+                                 _bmcJson(`${API}/api/bom-center/issue-reports/reconcile?${q}`).catch(() => null)]);
+    _bmcIssSum = d;
+    _bmcIssRecon = rc;
   } catch (e) {
     _bmcIssSum = null;
+    _bmcIssRecon = null;
+    rbox.innerHTML = '';
     box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">โหลดใบสรุปตัดเบิกไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
     return;
   }
   const st = d.status, t = d.totals;
   document.getElementById('bmcIssAllLabel').textContent = d.period.month;
   const chips = [st.receipts_confirmed ? _bmcChip('ยืนยันรับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')];
+  const sl = d.slips;                                  // the slip coverage of the period: a warning, never a lock
+  if (sl) {
+    chips.push(_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)'));
+    if (sl.missing_days.length) chips.push(_bmcChip(`ขาดใบตัดเบิก ${sl.missing_days.length} วัน`, 'var(--bad-ink)'));
+    if (sl.draft_days.length) chips.push(_bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)'));
+  }
+  if (rc) chips.push(rc.totals.flagged ? _bmcChip(`ผลต่างเกินเกณฑ์ ${rc.totals.flagged} รายการ`, 'var(--bad-ink)') : _bmcChip('ผลต่างอยู่ในเกณฑ์ทุกรายการ', 'var(--good-ink)'));
   if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${String(st.accounting_posted_at).slice(0, 10)} โดย ${st.accounting_posted_by || '-'}`, 'var(--navy-ink)'));
   if (t.unpriced) chips.push(_bmcChip(`ไม่มีราคา ${t.unpriced} รายการ`, 'var(--amber-ink)'));
   document.getElementById('bmcIssChips').innerHTML = chips.join('');
+  bmcIssRenderRecon();
   const cb = document.getElementById('bmcIssPosted');
   if (cb) {
     cb.checked = !!st.accounting_posted_at;
@@ -1796,6 +1813,22 @@ async function bmcIssLoadSummary() {
     <div class="mt-2 text-sm" style="color:var(--text-primary)">รวมมูลค่าตัดเบิก <b>฿${_bmcNum(t.used_value, 2)}</b>
       <span class="text-[11px]" style="color:var(--text-muted)"> · มูลค่ารับเข้า ฿${_bmcNum(t.received_value, 2)} · เคลม/ปรับ ฿${_bmcNum(t.claims_value, 2)}</span></div>
     ${d.excluded.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">ไม่มีการเคลื่อนไหว ${d.excluded.length} รายการ (ไม่แสดงในใบสรุป)</div>` : ''}`;
+}
+// the reconciliation (system stock vs the count) — the same renderers as the branch page and the centre
+function bmcIssRenderRecon() {
+  const rbox = document.getElementById('bmcIssRecon'), rc = _bmcIssRecon;
+  if (!rbox) return;
+  if (!rc) { rbox.innerHTML = '<div class="text-xs" style="color:var(--amber-ink)">ยังไม่มีรายงานกระทบยอดของงวดนี้</div>'; return; }
+  const all = !!(document.getElementById('bmcIssAll') && document.getElementById('bmcIssAll').checked);
+  rbox.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">กระทบยอด สาขา${esc(rc.branch.name || '')} · สินค้าคงเหลือตามระบบเทียบกับนับจริง</div>${isrReconHead(rc)}
+    <label class="text-xs flex items-center gap-1 mt-2" style="color:var(--text-secondary)"><input type="checkbox" id="bmcIssAll" onchange="bmcIssRenderRecon()"${all ? ' checked' : ''}> แสดงทุกรายการ (${rc.rows.length}) ไม่เฉพาะที่ผลต่างเกินเกณฑ์</label>
+    <div class="mt-2">${isrReconTable(rc, { all, pfx: 'bmcIssRc' })}</div>`;
+}
+function bmcIssSlipsXlsx() {         // every confirmed daily slip of the period's month, all branches
+  const d = _bmcIssSum;
+  if (!d) return;
+  _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${encodeURIComponent(d.period.month)}`,
+    `bom_center_issue_slips_${d.period.month}.xlsx`, 'bmcIssStatus');
 }
 function bmcIssXlsx() {
   const d = _bmcIssSum;

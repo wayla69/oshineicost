@@ -282,8 +282,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       ("ยังไม่ยืนยัน: " + " · ".join(open_y)) if open_y else "ทุกสาขาที่เริ่มใช้งานแล้วยืนยันใบตัดเบิกของเมื่อวานแล้ว",
                       count=len(open_y) or None, owner=("supply.ordering", "ops.report"),
                       owner_th="ประสานงานขาย (Sales Support)", urgent=bool(open_y), branch_names=open_y,
-                      go={"tab": "orderhub", "pane": "issues",
-                          "extra": {"day": (today - timedelta(days=1)).isoformat(), "status": "open"}}))
+                      go={"tab": "orderhub", "pane": "issues", "extra": {"day": (today - timedelta(days=1)).isoformat()}}))
         # ใบตัดเบิก vs BoM: a branch issuing far over the recipes day after day (waste or loss) — Ops follows it up
         odd = []
         try:

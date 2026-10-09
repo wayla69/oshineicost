@@ -192,7 +192,7 @@ def test_the_centre_follows_up_missing_slips_and_over_issue(udon):  # noqa: F811
     items = lambda d, now: {i["key"]: i for i in TD.build(c, "2026-09", None, None, today=d, now=now)["items"]}  # noqa: E731
     cen = items(date(2026, 9, 6), at(6, 8))
     miss = cen["issue_missing"]
-    assert miss["go"] == {"tab": "orderhub", "pane": "issues", "extra": {"day": "2026-09-05", "status": "open"}}
+    assert miss["go"] == {"tab": "orderhub", "pane": "issues", "extra": {"day": "2026-09-05"}}
     assert miss["status"] == "todo" and "อุดรธานี" in miss["detail"]
     an = cen["issue_anomaly"]
     assert (an["seq"], an["title"], an["status"], an["urgent"]) == (229, "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน", "todo", True)
@@ -243,21 +243,21 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
     assert len(SLIP_EXPORT_HEADERS) == 14 and len(LOG_HEADERS) == 11 and len(LOG_SUMMARY_HEADERS) == 12
     client.get("/api/bom-center/hub/queue")                                              # creates the bc_* tables
     snap = _snap(main.DB_PATH)
-    ids = _seed(main.DB_PATH)                              # branch 1 + 2: counts 1 Sep / 1 Oct, +5 T-ISS1 on 10 Sep at branch 1
-    c = sqlite3.connect(str(main.DB_PATH))
-    c.execute("INSERT INTO bom_ingredients(sku_id, seq, ingredient_code, ingredient_name, qty_per_serving, unit, price_per_unit,"
-              " ingredient_cost, ingredient_type) VALUES(2, 1, 'T-ISS1', 'ของทดสอบ ก', 0.5, 'กรัม', 0, 0, 'x')")
-    c.executemany("INSERT INTO sales_sku_daily VALUES(1, ?, 2, 10, 0)", [("2026-09-07",), ("2026-09-08",)])
-    _sql_slip(c, 1, "2026-09-07", "T-ISS1", 5.5)
-    _sql_slip(c, 1, "2026-09-08", "T-ISS1", 9, status="draft")
-    c.execute("UPDATE bc_issue_line SET qty_waste=2, qty_waste_base=2, waste_reason='expired' WHERE ingredient_code='T-ISS1'"
-              " AND slip_id=(SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-07')")
-    c.commit()
-    sid = c.execute("SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-07'").fetchone()[0]
-    draft = c.execute("SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-08'").fetchone()[0]
-    c.close()
-    e1 = ids[1]
     try:
+        ids = _seed(main.DB_PATH)                              # branch 1 + 2: counts 1 Sep / 1 Oct, +5 T-ISS1 on 10 Sep at branch 1
+        c = sqlite3.connect(str(main.DB_PATH))
+        c.execute("INSERT OR REPLACE INTO bom_ingredients(sku_id, seq, ingredient_code, ingredient_name, qty_per_serving, unit, price_per_unit,"
+                  " ingredient_cost, ingredient_type) VALUES(2, 1, 'T-ISS1', 'ของทดสอบ ก', 0.5, 'กรัม', 0, 0, 'x')")
+        c.executemany("INSERT OR REPLACE INTO sales_sku_daily VALUES(1, ?, 2, 10, 0)", [("2026-09-07",), ("2026-09-08",)])
+        _sql_slip(c, 1, "2026-09-07", "T-ISS1", 5.5)
+        _sql_slip(c, 1, "2026-09-08", "T-ISS1", 9, status="draft")
+        c.execute("UPDATE bc_issue_line SET qty_waste=2, qty_waste_base=2, waste_reason='expired' WHERE ingredient_code='T-ISS1'"
+                  " AND slip_id=(SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-07')")
+        c.commit()
+        sid = c.execute("SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-07'").fetchone()[0]
+        draft = c.execute("SELECT slip_id FROM bc_issue_slip WHERE slip_date='2026-09-08'").fetchone()[0]
+        c.close()
+        e1 = ids[1]
         acc, mg, ss, op = _login("accounting1"), _login("management1"), _login("salessupport1"), _login("operation1")
         mg.post("/api/auth/users", headers=TOKEN, json={"username": "br_acc_test", "password": "Temp@12345",
                                                          "role": "branch", "branch": "BranchA"})
@@ -313,6 +313,14 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         assert list(sr[1]) == LOG_SUMMARY_HEADERS and sr[2][:8] == ("BranchA", 2, 1, 0, 1, 0, 100.0, 50.0) and sr[3][0] == "รวม"
         r = ss.get("/api/bom-center/issue-reports/log.xlsx?date_from=2026-09-01&date_to=2026-09-10")
         assert r.status_code == 200 and "bom_center_issue_log_2026-09-01_2026-09-10.xlsx" in r.headers["content-disposition"]
+        # compliance.xlsx carries the same summary as a second sheet
+        r = op.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-09-01&date_to=2026-09-10")
+        assert r.status_code == 200
+        wb = load_workbook(io.BytesIO(r.content))
+        assert wb.sheetnames == ["Compliance การสั่ง", "ใบตัดเบิก"]
+        cr = list(wb["ใบตัดเบิก"].iter_rows(values_only=True))
+        assert list(cr[1]) == LOG_SUMMARY_HEADERS and cr[2][:6] == ("BranchA", 2, 1, 0, 1, 0)
+        assert any(x["branch"] == "BranchA" for x in op.get("/api/bom-center/hub/compliance?date_from=2026-09-01&date_to=2026-09-10").json()["issues"])
         # the ใบสรุปตัดเบิก workbook: three sheets, the daily slips of the period first
         assert mg.post("/api/bom-center/variance/confirm-receipts?branch_id=1", json={"end_count_id": e1}, headers=TOKEN).status_code == 200
         r = acc.get(f"/api/bom-center/issue-summary.xlsx?end_count_id={e1}&branch_id=1")
@@ -345,4 +353,9 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         d7 = next(x for x in j["rows"] if x["date"] == "2026-09-07")
         assert d7["reopens"] == 2 and [n["note"] for n in d7["reopen_notes"]] == ["แก้ไข", "แก้ไขอีก"]
     finally:
+        c = sqlite3.connect(str(main.DB_PATH))                       # the rows outside bc_* that this test added
+        c.execute("DELETE FROM bom_ingredients WHERE ingredient_code='T-ISS1'")
+        c.execute("DELETE FROM sales_sku_daily WHERE branch_id=1 AND sku_id=2 AND day IN ('2026-09-07', '2026-09-08')")
+        c.commit()
+        c.close()
         _restore(main.DB_PATH, snap)
