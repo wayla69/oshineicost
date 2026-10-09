@@ -102,9 +102,9 @@ function _frcSales(s, disc) {
 function _frcGp(g) {
   if (!g || g.gp_pct == null) return _frcSection('กำไรขั้นต้นและต้นทุนอาหาร', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED}">ยังไม่มีข้อมูลต้นทุนของเดือนนี้</div></div>`);
   const delta = g.target_pct != null ? Math.round((g.gp_pct - g.target_pct) * 10) / 10 : null;
-  const sub = `<b>${_frcPct(g.gp_pct)}</b>` + (delta != null ? ` ${msPchip(delta, true, ' จุด')} <span style="font-size:12px;${_FRC_MUTED}">เทียบเดือนก่อน ${_frcPct(g.target_pct)}</span>` : '');
+  const ref = g.target_basis === 'last_year' ? 'เป้า = เดือนเดียวกันปีก่อน' : 'เป้า = เดือนก่อน';
   return _frcSection('กำไรขั้นต้นและต้นทุนอาหาร', `<div style="${_FRC_TILES};margin-top:0">`
-    + msKpiTile('กำไรขั้นต้น (GP)', _frcPct(g.gp_pct), '#10b981', delta != null ? `${msPchip(delta, true, ' จุด')} <span style="font-size:12px;${_FRC_MUTED}">เดือนก่อน ${_frcPct(g.target_pct)}</span>` : '')
+    + msKpiTile('กำไรขั้นต้น (GP)', _frcPct(g.gp_pct), '#10b981', delta != null ? `${msPchip(delta, true, ' จุด')} <span style="font-size:12px;${_FRC_MUTED}">${ref} ${_frcPct(g.target_pct)}</span>` : '')
     + msKpiTile('ต้นทุนอาหาร', _frcPct(g.food_cost_pct), '#f59e0b', 'ของยอดขาย (ตามสูตร ไม่รวมเมนูที่ยังไม่มีต้นทุน)')
     + `</div>`);
 }

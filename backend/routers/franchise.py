@@ -23,8 +23,12 @@ Definitions that are not a plain copy of an engine's field
   mtd_vs_last_month_pct   report pace.mom_pct: month-to-date against last month on the SAME elapsed days, weighted by
                           weekday while the month is still open (mom_basis 'dow'); a complete month: against the full month
   mtd_vs_last_year_pct    report headline.rev_yoy_pct (same dates a year earlier; null before the history is long enough)
-  gp.target_pct           there is no GP target in the system, so the reference is the branch's own GP % of the month
-                          before (report gp.gp_pct_prev); target_basis says so. The page labels it "เดือนก่อน"
+  gp.target_pct           the dashboard's standing target rule (targets.py: the branch's own actual in the same month a
+                          year earlier; a typed target wins). targets.py carries revenue and customer targets only, no
+                          GP %, so the rule is applied to GP %: the branch's GP % of targets.prev_year_month(month)
+                          (target_basis 'last_year'), and only when that month has no costed data the GP % of the month
+                          before (report gp.gp_pct_prev, target_basis 'prev_month'). The page labels it
+                          "เป้า = เดือนเดียวกันปีก่อน" / "เดือนก่อน"
   gp.food_cost_pct        100 - gp_pct: food cost over net sales on the same basis as the GP shown beside it (a floor
                           while some dishes have no costed recipe)
   ingredients.diff_pct    variance.period gap_pct: actual use (begin + received - end count) over the use the sales imply,
@@ -140,6 +144,21 @@ def _sales_and_gp(rep: dict, branch: str):
     gp = {"gp_pct": _num(gp_pct), "target_pct": _num(G.get("gp_pct_prev")), "target_basis": "prev_month",
           "food_cost_pct": _num(100.0 - gp_pct) if gp_pct is not None else None}
     return sales, gp, _num(H.get("discount_pct")), H.get("discount_policy_pct"), last
+
+
+def _gp_target(gp: dict, branch: str, month: str) -> None:
+    """The dashboard's standing target rule (targets.py): a branch's target is its own actual in the same month a year
+    earlier. targets.py holds revenue and customer targets only, so for GP % the same rule is applied here: the GP % of
+    the branch's report for targets.prev_year_month(month) (target_basis 'last_year'); only when that month has no
+    costed data does the previous month's GP % stay (target_basis 'prev_month', set in _sales_and_gp)."""
+    from targets import prev_year_month
+    want = prev_year_month(month)
+    ly = _safe("gp last year", lambda: _report(branch, want), {}) or {}
+    # the report falls back to another month when the one asked for has no data: only the month itself counts
+    ok = ly.get("available") and ly.get("selected_month") == want and ((ly.get("range") or [""])[0])[:7] == want
+    pct = (ly.get("gp") or {}).get("gp_pct") if ok else None
+    if pct is not None:
+        gp["target_pct"], gp["target_basis"] = _num(pct), "last_year"
 
 
 def _daily(con, sales: dict, branch: str, last_day: Optional[str]):
@@ -263,12 +282,13 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy) -> dict:
                 add("watch", f"{noun}ต่ำกว่าช่วงเดียวกันของปีก่อนร้อยละ {_pct_text(y)}")
     if gp and gp.get("gp_pct") is not None and gp.get("target_pct") is not None:
         d = gp["gp_pct"] - gp["target_pct"]
+        ref = "เดือนเดียวกันของปีก่อน" if gp.get("target_basis") == "last_year" else "เดือนก่อน"
         if d >= T_GP_GOOD:
-            add("good", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} สูงกว่าเดือนก่อน {_pct_text(d)} จุด")
+            add("good", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} สูงกว่า{ref} {_pct_text(d)} จุด")
         elif d <= T_GP_FIX:
-            add("fix", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} ต่ำกว่าเดือนก่อน {_pct_text(d)} จุด ควรตรวจสอบต้นทุนอาหาร")
+            add("fix", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} ต่ำกว่า{ref} {_pct_text(d)} จุด ควรตรวจสอบต้นทุนอาหาร")
         elif d <= T_GP_WATCH:
-            add("watch", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} ต่ำกว่าเดือนก่อน {_pct_text(d)} จุด")
+            add("watch", f"กำไรขั้นต้นร้อยละ {_pct_text(gp['gp_pct'])} ต่ำกว่า{ref} {_pct_text(d)} จุด")
     if ing:
         lp = ing.get("latest_period")
         if lp and lp.get("diff_pct") is not None:
@@ -343,6 +363,8 @@ def franchise_summary_data(branch_id: int, month: Optional[str] = None) -> dict:
         sel = rep.get("selected_month") or month
         if sales is not None:
             _safe("daily", lambda: _daily(con, sales, name, last_day))
+        if gp and gp.get("gp_pct") is not None and sel:
+            _gp_target(gp, name, sel)
         top = _safe("top menus", lambda: _top_menus(name, sel), []) if sel and sales is not None else []
         ing = _safe("ingredients", lambda: _ingredients(con, branch_id, sel), None) if sel else None
         disc = _safe("discipline", lambda: _discipline(con, branch_id, sel), None) if sel else None

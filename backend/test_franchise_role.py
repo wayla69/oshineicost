@@ -142,7 +142,8 @@ def test_summary_payload_has_the_agreed_keys_and_is_pinned(world):
     assert {"sales", "gp", "ingredients", "discipline", "top_menus", "discount_pct", "verdict", "months"} <= set(d)
     assert {"last_day", "mtd", "mtd_vs_last_month_pct", "mtd_vs_last_year_pct", "bills", "per_bill", "series_30d"} <= set(d["sales"])
     assert {"date", "revenue"} <= set(d["sales"]["last_day"]) and len(d["sales"]["series_30d"]) == 30
-    assert {"gp_pct", "target_pct", "food_cost_pct"} <= set(d["gp"])
+    assert {"gp_pct", "target_pct", "target_basis", "food_cost_pct"} <= set(d["gp"])
+    assert d["gp"]["target_basis"] == "prev_month"          # the test data has nothing a year earlier: the fallback
     assert {"latest_period", "waste_pct_month", "streak_flag"} <= set(d["ingredients"])
     assert {"slip_coverage_pct", "slip_on_time_pct", "orders_on_time_pct", "receipts_on_time", "claims_month"} <= set(d["discipline"])
     assert isinstance(d["top_menus"], list) and len(d["top_menus"]) <= 10
@@ -218,6 +219,35 @@ def test_the_payload_holds_no_bill_recipe_price_staff_or_other_branch(world):
         assert other not in text
         # the only branch name anywhere is the owner's own
         assert text.count('"branch"') == 1
+
+
+def test_gp_target_is_the_same_month_last_year_with_the_previous_month_as_fallback(monkeypatch):
+    """The standing target rule (targets.py): own actual of the same month a year earlier; last month only without it."""
+    from routers import franchise as F
+    asked = []
+
+    def fake(branch, month):
+        asked.append(month)
+        return {"available": True, "selected_month": month, "range": [month + "-01", month + "-30"], "gp": {"gp_pct": 41.5}}
+    monkeypatch.setattr(F, "_report", fake)
+    gp = {"gp_pct": 43.0, "target_pct": 40.0, "target_basis": "prev_month"}
+    F._gp_target(gp, "BranchB", "2026-09")
+    assert asked == ["2025-09"] and gp["target_pct"] == 41.5 and gp["target_basis"] == "last_year"
+    monkeypatch.setattr(F, "_report", lambda b, m: {"available": False})
+    gp = {"gp_pct": 43.0, "target_pct": 40.0, "target_basis": "prev_month"}
+    F._gp_target(gp, "BranchB", "2026-09")
+    assert gp["target_pct"] == 40.0 and gp["target_basis"] == "prev_month"
+    monkeypatch.setattr(F, "_report", lambda b, m: {"available": True, "selected_month": m, "range": [m + "-01", m + "-30"], "gp": {"gp_pct": None}})   # no costed data a year ago
+    F._gp_target(gp, "BranchB", "2026-09")
+    assert gp["target_basis"] == "prev_month"
+    monkeypatch.setattr(F, "_report", lambda b, m: {"available": True, "selected_month": "2026-06", "range": ["2026-06-01", "2026-06-30"], "gp": {"gp_pct": 30.0}})   # the report fell back to another month
+    F._gp_target(gp, "BranchB", "2026-09")
+    assert gp["target_pct"] == 40.0 and gp["target_basis"] == "prev_month"
+    # the verdict names the reference it compared with
+    v = F._verdict(None, {"gp_pct": 45.0, "target_pct": 41.5, "target_basis": "last_year"}, None, None, None, None)
+    assert any("เดือนเดียวกันของปีก่อน" in t for t in v["good"])
+    v = F._verdict(None, {"gp_pct": 45.0, "target_pct": 41.5, "target_basis": "prev_month"}, None, None, None, None)
+    assert any("สูงกว่าเดือนก่อน" in t for t in v["good"])
 
 
 def test_auth_off_the_endpoint_still_needs_a_branch(client):
