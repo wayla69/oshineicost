@@ -8,7 +8,6 @@
       <input type="month" id="bmcMonth" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
     </label>
     <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
-    <span class="text-[11px] ml-auto" style="color:var(--text-muted)" title="ราคา = มูลค่ารวม ÷ ปริมาณ · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก">ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี · ดูตัวอย่างก่อนบันทึกทุกครั้ง</span>
   </div>
 
   <!-- ── overview ──────────────────────────────────────────────────────── -->
@@ -16,6 +15,10 @@
     <div id="bmcKpis" class="grid gap-3 mb-3" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
     <div id="bmcSetupCard" class="card p-4 mb-3"></div>
     <div id="bmcIssuesCard" class="card p-4 mb-3"></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ความพร้อมของข้อมูลแสดงสิ่งที่ยังค้างก่อนใช้ข้อมูลตั้งต้น แต่ละข้อมีลิงก์ไปหน้าที่แก้ไข</p>
+      <p>ชื่อไม่ตรง หมายถึงรหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด ให้เลือก “วัตถุดิบเดียวกัน” หรือ “ใช้รหัสแนะนำ” · การตัดสินมีผลกับแผนสั่งเท่านั้น ไม่มีผลกับต้นทุน</p>
+    </div></details>
   </div>
 
   <!-- ── recipes by tier ────────────────────────────────────────────────── -->
@@ -66,14 +69,18 @@
       </table>
     </div>
     <div id="bmcEditor" class="card p-4 mt-3" style="display:none"></div>
+    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>“นำเข้าสูตรจากไฟล์ Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ก่อนนำเข้า</p>
+      <p>แม่แบบสูตรเปล่ามีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้าแม่แบบสูตร” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
+      <p>เมื่อสูตรครบ กด “ส่งตรวจ” ฝ่ายวิเคราะห์จะตรวจและประกาศใช้ที่หน้า “ตรวจและประกาศใช้”</p>
+    </div></details>
   </div>
 
   <!-- ── review & release ──────────────────────────────────────────────── -->
   <div id="bmc-pane-prep" style="display:none">
     <div class="card p-4 mb-3">
       <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรกึ่งสำเร็จ (CK / HK / DK)</div>
-      <p class="text-xs mb-2" style="color:var(--text-secondary)">1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อ · สูตรครบใช้ต้นทุนจากสูตร ไม่ครบใช้ราคาซื้อ</p>
-      <div class="flex flex-wrap items-center gap-2 bc-write">
+      <div class="flex flex-wrap items-center gap-2 bc-write mt-2">
         <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
           นำเข้าไฟล์ครัว (แผ่นงาน BoM_Semi)<input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcPrepImportSemi(this)"></label>
         <a href="#" onclick="bmcPrepTemplate();return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดสูตร / แม่แบบ</a>
@@ -92,6 +99,10 @@
       </div>
       <div id="bmcPrepList" class="text-xs"></div>
     </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>สูตรกึ่งสำเร็จ (CK / HK / DK) คือวัตถุดิบที่ครัวผลิตเองจากวัตถุดิบดิบ · 1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อ</p>
+      <p>สูตรที่ครบใช้ต้นทุนจากสูตร สูตรที่ไม่ครบใช้ราคาซื้อ · นำเข้าจากไฟล์ครัว (แผ่นงาน BoM_Semi) หรือดาวน์โหลดแม่แบบ กรอก แล้วนำเข้า · การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง</p>
+    </div></details>
   </div>
   <div id="bmc-pane-rel" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
@@ -105,6 +116,10 @@
     <div id="bmcRlEditor" class="card p-4 mb-3" style="display:none"></div>   <!-- a recipe opened from a finding, edited right here -->
     <div id="bmcRlCompare" class="card p-4 mb-3"></div>
     <div id="bmcRlHistory" class="card p-4 mb-3"></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ลำดับงาน: ครัวสร้างสูตรและส่งตรวจ → ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล → ผู้บริหารอ่านผลกระทบแล้วรับทราบหรือยกเลิกใช้</p>
+      <p>เมื่อประกาศใช้แล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อนกันยายน 2026 ใช้ต้นทุนระบบเดิมเสมอ) · ปุ่ม “ประกาศใช้” กดได้เมื่อไม่มีข้อที่ต้องแก้ไข</p>
+    </div></details>
   </div>
 
   <!-- ── forecast: suggested order per round ───────────────────────────── -->
@@ -127,6 +142,10 @@
     <div id="bmcFcHead" class="mb-3"></div>
     <div id="bmcFcTable" class="card p-4 mb-3 overflow-x-auto" style="display:none"></div>
     <div id="bmcFcRuns" class="card p-4 mb-3"></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ในรอบ + กันขาด · หน้านี้ยังไม่หักคงเหลือของสาขา (หน้าสั่งสินค้าของสาขาหักให้)</p>
+      <p>“บันทึกยอดแนะนำ” เก็บผลที่คำนวณไว้เป็นฐานเทียบในหน้าสั่งสินค้าและหน้าตรวจสอบการสั่ง · “ความแม่นยำย้อนหลัง” ทดสอบยอดแนะนำกับยอดใช้จริง 3 สัปดาห์ล่าสุด</p>
+    </div></details>
   </div>
 
   <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
@@ -134,8 +153,7 @@
     <div id="bmcFcCal" class="card p-4 mb-3"></div>
     <div id="bmcCalBulk" class="card p-4 mb-3" style="display:none">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ตั้งวันส่งหลายสาขาจากไฟล์</div>
-      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">ดาวน์โหลดแม่แบบ แก้เฉพาะวันที่เปลี่ยน แล้วนำเข้า · ช่องว่าง = ไม่เปลี่ยน</div>
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3 mt-2">
         <a href="#" onclick="bmcCalTemplate();return false" style="color:var(--accent);font-size:13px;text-decoration:underline">ดาวน์โหลดแม่แบบ</a>
         <label class="text-xs" style="color:var(--text-muted)">นำเข้าไฟล์ที่กรอกแล้ว (.xlsx หรือ .csv)
           <input type="file" id="bmcCalBulkFile" accept=".xlsx,.xlsm,.csv" onchange="bmcCalBulkPick(this)" class="ml-1 text-xs"></label>
@@ -143,13 +161,16 @@
       <div id="bmcCalBulkPreview" class="mt-3"></div>
     </div>
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ประสานงานขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) · มีผลตั้งแต่รอบถัดไป</p>
+      <p>ตั้งหลายสาขาพร้อมกัน: ดาวน์โหลดแม่แบบ แก้เฉพาะวันที่เปลี่ยน แล้วนำเข้า · ช่องว่าง = ไม่เปลี่ยน</p>
+    </div></details>
   </div>
 
   <!-- ── storage zones (ตั้งค่า → โซนจัดเก็บ): the centre adds, renames, deletes and reorders the zones a branch counts by ─── -->
   <div id="bmc-pane-zones" style="display:none">
     <div class="card p-4 mb-3">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">โซนจัดเก็บ</div>
-      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">โซนที่สาขาใช้แบ่งรายการตอนตรวจนับและตัดเบิก · ลำดับนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศร) · โซนที่ยังมีวัตถุดิบลบไม่ได้ · โซน “อื่น ๆ” ลบไม่ได้ เปลี่ยนชื่อได้</div>
+      <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">โซนจัดเก็บ</div>
       <div id="bmcZoneList"></div>
       <div class="flex flex-wrap items-center gap-2 mt-3 bmc-zone-write">
         <input id="bmcZoneNew" placeholder="ชื่อโซนใหม่ เช่น ตู้โชว์" onkeydown="if(event.key==='Enter'){event.preventDefault();bmcZoneAdd()}" maxlength="40"
@@ -160,6 +181,10 @@
         <span id="bmcZoneStatus" class="text-[11px]"></span>
       </div>
     </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>โซนที่สาขาใช้แบ่งรายการตอนตรวจนับและตัดเบิก · ลำดับนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศร)</p>
+      <p>โซนที่ยังมีวัตถุดิบลบไม่ได้ · โซน “อื่น ๆ” ลบไม่ได้ เปลี่ยนชื่อได้</p>
+    </div></details>
   </div>
 
   <!-- ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads and ticks "posted" ─── -->
@@ -177,13 +202,16 @@
       <span id="bmcIssStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIssChips" class="flex flex-wrap items-center gap-2 mb-2"></div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">คงเหลือตามระบบเทียบนับจริงปลายงวด · ดาวน์โหลดได้เมื่อยืนยันรับสินค้าครบ ·
-      <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></div>
     <div id="bmcIssRecon" class="card p-4 mb-3 overflow-x-auto"></div>
     <details id="bmcIssMoveBox" class="card p-4 mb-3">
       <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">สรุปเคลื่อนไหว (แบบเดิม)</summary>
       <div id="bmcIssTable" class="mt-3 overflow-x-auto"></div>
     </details>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>เทียบคงเหลือตามระบบ (ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิกและของเสียตามใบตัดเบิกที่ยืนยันแล้ว) กับนับจริงปลายงวด · ผลต่าง = นับจริง − คงเหลือตามระบบ</p>
+      <p>ดาวน์โหลดได้เมื่อสาขาหรือประสานงานขายยืนยันรับสินค้าครบของงวดนั้นแล้ว · เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้</p>
+      <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p>
+    </div></details>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
@@ -204,7 +232,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-2 mb-3 p-2 bc-write" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
       <span class="text-[11px] font-semibold" style="color:var(--text-primary)">แก้ไขหลายรายการด้วย Excel:</span>
-      <button onclick="window.open(API + '/api/bom-center/ingredients/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดทะเบียนเป็น Excel</button>
+      <button onclick="bmcDownloadIngTemplate()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดทะเบียนเป็น Excel</button>
       <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
              title="ไฟล์ทะเบียนที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP (เช่น Cost-RW)">
         นำเข้าทะเบียน (Excel)
@@ -228,6 +256,11 @@
         <tbody id="bmcIngBody"></tbody>
       </table>
     </div>
+    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>แก้ช่องในตารางได้โดยตรง แล้วกด “บันทึกการแก้ไข” · ชื่อต้องไม่ว่าง ตัวเลขต้องเป็นตัวเลขและไม่ติดลบ · แถวที่ไม่ผ่านจะมีข้อความสีแดง และระบบไม่บันทึกจนกว่าจะแก้</p>
+      <p>แก้หลายรายการด้วย Excel: ดาวน์โหลดทะเบียน แก้ แล้วนำเข้า · นำเข้าทะเบียนรับไฟล์ที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP เช่น Cost-RW</p>
+      <p>“เติมจากข้อมูลในระบบ” เพิ่มรหัสใหม่จากสูตร ขนาดบรรจุ และรายการบังคับสั่ง · ไม่เขียนทับค่าที่ตั้งไว้แล้ว</p>
+    </div></details>
   </div>
 
   <!-- ── monthly prices ────────────────────────────────────────────────── -->
@@ -243,20 +276,6 @@
       </select>
       <span id="bmcPriceSummary" class="text-xs" style="color:var(--text-muted)"></span>
     </div>
-    <div id="bmcPriceSubmitCard" class="card p-3 mb-3 bmc-ss-only" style="display:none">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ส่งไฟล์ราคาเดือน <b id="bmcSubMonthLbl"></b> ให้ฝ่ายวิเคราะห์</div>
-      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ส่งรายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบ ให้ฝ่ายวิเคราะห์นำเข้า</div>
-      <div class="flex flex-wrap items-center gap-2">
-        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">
-          ส่งไฟล์ราคา
-          <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcSubmitPriceFile(this)">
-        </label>
-        <input type="text" id="bmcSubNote" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)"
-               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:240px">
-        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบยอดซื้อรายบรรทัด</button>
-        <span id="bmcSubStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
-      </div>
-    </div>
     <div class="card p-3 mb-3 bc-write">
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">นำเข้าราคาซื้อจริงของเดือน</div>
       <div class="flex flex-wrap items-center gap-2">
@@ -268,7 +287,7 @@
         <span class="text-[11px]" style="color:var(--text-muted)">หรือรายงานที่นำเข้าไว้:</span>
         <select id="bmcReqMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)" title="เดือนของรายงานจ่ายสินค้าภายในที่นำเข้าไว้"></select>
         <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานเดือนนี้</button>
-        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบ</button>
+        <button onclick="bmcDownloadPriceTemplate()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบ</button>
         <button onclick="bmcCarry()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
                 title="เดือนที่ยังไม่มีไฟล์: ใช้ราคาล่าสุดของแต่ละวัตถุดิบ">ยกราคาเดือนก่อนมาใช้</button>
         <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"
@@ -291,6 +310,32 @@
       </table>
     </div>
     <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
+    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>
+      <p>การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง · “ยกราคาเดือนก่อนมาใช้” ใช้ราคาล่าสุดของแต่ละวัตถุดิบสำหรับเดือนที่ยังไม่มีไฟล์ · ไฟล์ที่ประสานงานขายส่งมารอตรวจแสดงเหนือตาราง</p>
+    </div></details>
+  </div>
+
+  <!-- ── ไฟล์ราคา (ประสานงานขาย): the price file Sales Support sends to the analyst, and the files she has sent ─── -->
+  <div id="bmc-pane-pricefile" style="display:none">
+    <div id="bmcPriceSubmitCard" class="card p-3 mb-3 bmc-ss-only" style="display:none">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">ส่งไฟล์ราคาเดือน <b id="bmcSubMonthLbl"></b> ให้ฝ่ายวิเคราะห์</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">
+          ส่งไฟล์ราคา
+          <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcSubmitPriceFile(this)">
+        </label>
+        <input type="text" id="bmcSubNote" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:240px">
+        <button onclick="bmcDownloadPriceTemplate('bmcSubStatus')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบยอดซื้อรายบรรทัด</button>
+        <span id="bmcSubStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+      </div>
+    </div>
+    <div id="bmcPriceFileList" class="card p-3 mb-3" style="display:none"></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ส่งรายงานจ่ายสินค้าภายในหรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด ให้ฝ่ายวิเคราะห์นำเข้า · เดือนของไฟล์คือเดือนที่เลือกด้านบน</p>
+      <p>ฝ่ายวิเคราะห์ตรวจไฟล์แล้วนำเข้า หรือส่งกลับพร้อมเหตุผล · ผลแสดงในรายการ “ไฟล์ที่ส่งแล้ว”</p>
+    </div></details>
   </div>
 
   <!-- ── unit converter ────────────────────────────────────────────────── -->
@@ -310,8 +355,7 @@
       <div id="bmcConvOut" class="text-sm mt-3" style="color:var(--text-primary)"></div>
     </div>
     <div class="card p-4 bc-write">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">กฎหน่วยครัวของวัตถุดิบ</div>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">กฎหน่วยครัว เช่น ปูอัด 1 แท่ง = 15 กรัม · กก. → กรัม และ ลิตร → มล. แปลงเอง · แพ็ค/ถุง/กล่อง ใช้ขนาดบรรจุในทะเบียน</p>
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">กฎหน่วยครัวของวัตถุดิบ</div>
       <div class="flex flex-wrap items-end gap-2">
         <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
           <input id="bmcRuleUnit" placeholder="แท่ง" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -322,5 +366,9 @@
       </div>
       <div id="bmcRuleList" class="mt-3 text-xs"></div>
     </div>
+    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>กฎหน่วยครัว เช่น ปูอัด 1 แท่ง = 15 กรัม · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองโดยไม่ต้องมีกฎ · แพ็ค ถุง กล่อง ใช้ขนาดบรรจุในทะเบียน</p>
+      <p>เครื่องมือแปลงหน่วยใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน</p>
+    </div></details>
   </div>
 </div>

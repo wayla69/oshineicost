@@ -2500,44 +2500,52 @@ function switchTab(name, direct) {
 // an item without one is a whole tab.
 // the centre's own panes: the warehouse (which only works the queue) must not be offered them
 const _SUPPLY_CENTRE = ['supply.ordering', 'ops.report', 'bom.center'];
+// PR-M2: each item also names the ROLES whose bar lists it (`roles`); `mods` stays the permission floor, so an item
+// shows only when the role is listed AND the person holds a module that opens it. No `roles` = every role that can open it.
+// The roles of the role-chip matrix test (backend/test_supply_chips_roles.py) are read from the words below.
 const SUPPLY_CHIPS = [
   { key: 'home', label: 'หน้างาน', items: [
     { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' },
-    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา', mods: _SUPPLY_CENTRE }] },
+    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา', mods: _SUPPLY_CENTRE, roles: ['analyst', 'management', 'salessupport'] }] },
   { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
-    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ' },
-    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน' },
-    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง' },
-    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม' }] },
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['analyst', 'management', 'innovation'] },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management', 'accounting'] },
+    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management', 'salessupport'] },
+    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
   { key: 'recipes', label: 'สูตรและการประกาศใช้', items: [
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา' },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ' },
-    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้' }] },
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['analyst', 'management', 'innovation'] },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management', 'innovation'] },
+    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
   { key: 'orders', label: 'ใบสั่งซื้อ', items: [
-    { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ' },
-    { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE },
-    { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ' },
-    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE },
-    { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', mods: _SUPPLY_CENTRE },
-    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE },
-    { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)' },
-    { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
+    { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', roles: ['warehouse', 'salessupport', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ', roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE, roles: ['operation', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
-    { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE },
-    { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'] }] },
+    { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'], roles: ['accounting', 'analyst', 'management'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
-    { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก' },
-    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า' },
-    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า' },
-    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้' },
-    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน' }] },
+    { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }] },
+  // ตั้งค่า: the delivery calendar and the zones, then ONE level-2 group "หน้าระบบเดิม" holding the four pages of the
+  // older ordering screens (owner 2026-10-10: regrouped, kept, never deleted)
   { key: 'setup', label: 'ตั้งค่า', items: [
-    { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา' },
-    { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', mods: ['bom.center', 'supply.ordering'] },
-    { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ' },
-    { tab: 'ordersetup', pane: 'cal', label: 'ปฏิทินเทศกาล' }] },
+    { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'ordersetup', pane: 'cal', label: 'ปฏิทินเทศกาล', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] }] },
 ];
+const SUPPLY_LEGACY_LABEL = 'หน้าระบบเดิม';
+const SUPPLY_FLAT_MAX = 5;     // a role with this many pages or fewer gets them as one flat row of chips
 
 // Lean-overhaul Phase 2: every analysis area is ONE sidebar entry + a cluster
 // bar of related views on the page itself. tabs[0] of each cluster is its
@@ -2631,6 +2639,8 @@ function _updateClusterBar(name) {
 // this file never reaches into a later one.
 const _SUPPLY_PANE = {};     // tab → { get(), set(pane), show(pane), month?(m) }
 let _supplyChip = null;      // the level-1 chip the user is in (derived from the open pane)
+let _supplyLegacyOpen = false;   // the "หน้าระบบเดิม" group of ตั้งค่า is unfolded
+function supplyLegacyToggle() { _supplyLegacyOpen = !_supplyLegacyOpen; _updateClusterBar(activeTab); }
 const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) whose work the role does daily
   branch: { chip: 'branch', tab: 'branchstock', pane: 'issue' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
   warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
@@ -2660,7 +2670,9 @@ function _supplyItemOf(tab, pane) {
   return null;
 }
 // an item opens when its tab does and, if it names `mods`, the user holds one of them
-function _supplyItemAllowed(it) { return tabAllowed(it.tab) && (!it.mods || it.mods.some(hasModule)); }
+// ... and, since PR-M2, when the person's role is one the item names (auth off: everything shows, as the role is management)
+function _supplyRoleOk(it) { return !it.roles || !window.AUTH || !window.AUTH.enabled || it.roles.includes(window.AUTH.role); }
+function _supplyItemAllowed(it) { return tabAllowed(it.tab) && (!it.mods || it.mods.some(hasModule)) && _supplyRoleOk(it); }
 function _supplyChipAllowed(ch) { return ch.items.some(_supplyItemAllowed); }
 
 // Open one item of the module. The pane is remembered BEFORE switchTab so the
@@ -2732,29 +2744,54 @@ function _renderSupplyBar(bar, cl, name) {
   const hit = _supplyItemOf(name, acc ? acc.get() : null);
   const chips = cl.chips.filter(_supplyChipAllowed);
   if (!chips.length) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
-  // the lit chip is the one holding the open pane; _supplyChip only decides when no chip lists it
-  let cur = hit ? chips.find(c => c.key === hit.chip.key) : null;
-  if (!cur) cur = chips.find(c => c.key === _supplyChip) || chips[0];
-  _supplyChip = cur.key;
-  const items = cur.items.filter(_supplyItemAllowed);
+  const goJs = it => `supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})`;
+  // PR-M2: the level-1 entries of THIS role. A chip holding one page is that page's own chip (named by the page), and a role with
+  // few pages in all (≤ SUPPLY_FLAT_MAX: the warehouse, accounting, the kitchen, operations) gets one flat row of pages, no second row.
+  // หน้างาน and สาขาของฉัน keep their own names.
+  const vis = chips.map(c => ({ chip: c, items: c.items.filter(_supplyItemAllowed) }));
+  const flat = vis.reduce((n, v) => n + v.items.length, 0) <= SUPPLY_FLAT_MAX;
+  const entries = [];
+  vis.forEach(v => {
+    const keep = v.chip.key === 'home' || v.chip.key === 'branch';
+    if (!keep && (flat || v.items.length === 1)) v.items.forEach(it => entries.push({ chip: v.chip, label: it.label, items: [it], page: it }));
+    else entries.push({ chip: v.chip, label: v.chip.label, items: v.items, page: null });
+  });
+  // the lit entry is the one holding the open pane; _supplyChip only decides when none lists it
+  let cur = hit ? entries.find(e => e.items.includes(hit.item)) : null;
+  if (!cur) cur = entries.find(e => e.chip.key === _supplyChip) || entries[0];
+  _supplyChip = cur.chip.key;
+  const items = cur.items;
   const btn = (lbl, on, onclick, small) => `<button onclick="${onclick}" class="text-xs rounded-lg ${small ? 'px-2.5 py-0.5' : 'px-3 py-1'} transition-colors" style="${on
     ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
     : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${_noEmoji(lbl)}</button>`;
   // a role with a single chip (the branch login) gets the level-2 row alone
-  const lvl1 = chips.length > 1
+  const lvl1 = entries.length > 1
     ? `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
-      chips.map(c => btn(c.label, c.key === cur.key, `supplyChipOpen('${c.key}')`, false)).join('')
+      entries.map(e => btn(e.label, e === cur, e.page ? goJs(e.page) : `supplyChipOpen('${e.chip.key}')`, false)).join('')
     : '';
   // the ปลดล็อกการบันทึก chip sits at the right end of the first row there is
   const lock = '<span id="supplyLock" class="ml-auto"></span>';
-  const lvl2 = items.length > 1
-    ? `<div class="flex flex-wrap items-center gap-1.5 w-full${chips.length > 1 ? ' mt-1' : ''}"><span class="text-[11px] mr-1" style="color:var(--text-muted)">${_noEmoji(cur.label)}:</span>${
-        items.map(it => btn(it.label, !!(hit && it === hit.item), `supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})`, true)).join('')}${lvl1 ? '' : lock}</div>`
+  // PR-M2: the older pages sit in ONE group of their own ("หน้าระบบเดิม"), folded behind a single button of the level-2 row;
+  // the group opens by itself when one of its pages is the open one
+  const main = items.filter(it => it.group !== 'legacy'), legacy = items.filter(it => it.group === 'legacy');
+  const legacyOn = !!(hit && legacy.includes(hit.item));
+  const legacyShown = legacyOn || _supplyLegacyOpen;
+  const legacyBtn = legacy.length
+    ? `<button id="supplyLegacyBtn" aria-expanded="${legacyShown}" onclick="supplyLegacyToggle()" class="text-xs rounded-lg px-2.5 py-0.5 transition-colors" style="${legacyOn
+        ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
+        : 'background:var(--bg-input);color:var(--text-secondary);border:1px dashed var(--border)'}">${SUPPLY_LEGACY_LABEL} ${legacyShown ? '▴' : '▾'}</button>`
+    : '';
+  const lvl2 = main.length + legacy.length > 1
+    ? `<div class="flex flex-wrap items-center gap-1.5 w-full${entries.length > 1 ? ' mt-1' : ''}"><span class="text-[11px] mr-1" style="color:var(--text-muted)">${_noEmoji(cur.label)}:</span>${
+        main.map(it => btn(it.label, !!(hit && it === hit.item), goJs(it), true)).join('')}${legacyBtn}${lvl1 ? '' : lock}</div>`
+      + (legacy.length && legacyShown
+        ? `<div id="supplyLegacyRow" class="flex flex-wrap items-center gap-1.5 w-full mt-1"><span class="text-[11px] mr-1" style="color:var(--text-muted)">${SUPPLY_LEGACY_LABEL}:</span>${
+            legacy.map(it => btn(it.label, !!(hit && it === hit.item), goJs(it), true)).join('')}</div>` : '')
     : '';
   bar.innerHTML = lvl1 ? lvl1 + lock + lvl2 : (lvl2 || lock);
   _renderLockChip();
   if (window.writeToken && window.writeToken.unlocked === null && window.writeToken.gated === null) verifyWriteToken();
-  const title = [cl.label, cur.label, items.length > 1 && hit ? hit.item.label : ''].filter(Boolean).map(_noEmoji).join(' · ');
+  const title = [cl.label, cur.page ? '' : cur.label, (items.length > 1 || cur.page) && hit ? hit.item.label : ''].filter(Boolean).map(_noEmoji).join(' · ');
   const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = title;
 }
 

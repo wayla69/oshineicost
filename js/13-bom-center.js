@@ -16,6 +16,8 @@ _SUPPLY_PANE.bomcenter = {
   month: m => { const el = document.getElementById('bmcMonth'); if (el && el.value !== m) { el.value = m; _bmcIng = []; _bmcPrices = []; } },
 };
 
+// the two values of an order (backend hub.with_values): what the branch ordered, what the warehouse sent
+const VALUE_ORDERED_TH = 'มูลค่าที่สั่ง', VALUE_SENT_TH = 'มูลค่าที่จัดส่ง';
 const _BMC_KIND = { raw: 'ดิบ', prepared: 'กึ่งสำเร็จ', consumable: 'วัสดุสิ้นเปลือง', zero_by_design: 'ตั้งใจเป็น 0' };
 const _BMC_SRC = { purchase_avg: 'ซื้อจริง', carry_forward: 'ยกมา', manual: 'กำหนดเอง', list_ref: 'ใบเสนอราคา', snapshot: 'สูตรเดิม' };
 const _BMC_SRC_INK = { purchase_avg: 'var(--good-ink)', carry_forward: 'var(--amber-ink)', manual: 'var(--navy-ink)',
@@ -62,6 +64,45 @@ function _bmcStatus(id, msg, ink) {
   // (an autosaved draft is not a step done: no toast until the person submits)
   if (msg && String(msg).startsWith('✓') && !/ร่าง/.test(String(msg)) && typeof shmAfterStatus === 'function') shmAfterStatus(id);
 }
+// ── PR-M2: ONE status line for every save and download ──────────────────────────
+// bmcStatus(el, ok, text): el = an element or its id · ok true = "✓ …" in green, false = "ไม่สำเร็จ: …" in red,
+// 'warn' = amber (a field to fix), anything else = grey progress. A save or a download always ends in one of the first two.
+function bmcStatus(el, ok, text) {
+  const node = typeof el === 'string' ? document.getElementById(el) : el;
+  if (!node) return;
+  let t = String(text == null ? '' : text);
+  if (t && ok === true && !t.startsWith('✓')) t = '✓ ' + t;
+  if (t && ok === false && !/^(ไม่สำเร็จ|ไม่ได้|ใส่|ระบุ|เลือก)/.test(t)) t = 'ไม่สำเร็จ: ' + t;
+  const ink = ok === true ? 'var(--good-ink)' : ok === false ? 'var(--bad-ink)' : ok === 'warn' ? 'var(--amber-ink)' : 'var(--text-muted)';
+  node.setAttribute('role', ok === false ? 'alert' : 'status');
+  if (node.id) _bmcStatus(node.id, t, ink); else { node.textContent = t; node.style.color = ink; }
+}
+// a file from the server saved in the browser, with the outcome on the status line (the server's reason when it refuses)
+async function bmcDownload(url, name, statusEl) {
+  bmcStatus(statusEl, null, 'กำลังสร้างไฟล์…');
+  try {
+    const r = await fetch(url);
+    if (!r.ok) {
+      let m = '';
+      try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : ''; } catch (e) { /* not json */ }
+      throw new Error(m || 'ดาวน์โหลดไม่สำเร็จ');
+    }
+    let fname = name || 'bom_center.xlsx';
+    const cd = r.headers.get('content-disposition') || '';
+    const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    if (m) { try { fname = decodeURIComponent(m[1]); } catch (e) { /* keep the given name */ } }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    bmcStatus(statusEl, true, 'ดาวน์โหลดแล้ว · ' + fname);
+  } catch (e) { bmcStatus(statusEl, 'warn', String(e.message || e).slice(0, 220)); }
+}
+// the help of a page: folded, at the bottom (never a paragraph above the controls). `html` is trusted markup of <p>s.
+function bmcHelpHtml(html) {
+  return `<details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>${html}</div></details>`;
+}
 // a version's name as people read it: the stored label may still end with the old "(draft)" tag (the status chip says it)
 function _bmcLbl(l) { return String(l == null ? '' : l).replace(/\s*\((?:draft|ร่าง)\)\s*$/i, ''); }
 function _bmcChip(text, ink) {
@@ -70,7 +111,7 @@ function _bmcChip(text, ink) {
 
 function bmcSetSub(k) {
   _bmcSub = k;
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -84,6 +125,7 @@ function bmcSetSub(k) {
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') bmcLoadIng();
   if (k === 'price') bmcLoadPrices();
+  if (k === 'pricefile') bmcLoadPriceFile();
   if (k === 'conv') bmcLoadConv();
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
@@ -318,20 +360,41 @@ async function bmcLoadIng(force) {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
     try { _bmcZones = (await _bmcJson(`${API}/api/bom-center/zones`)).zones || []; } catch (e) { _bmcZones = _bmcZones || []; }
     _bmcIng = d.rows || [];
-    _bmcIngEdits = {};
+    _bmcIngEdits = {}; _bmcIngErr = {};
     bmcRenderIng();
   } catch (e) {
     document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="14" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
   }
 }
 function _bmcIngVal(r, f) { const e = _bmcIngEdits[r.code]; return e && f in e ? e[f] : r[f]; }
+let _bmcIngErr = {};         // code -> messages of the last save the screen refused (shown in red under the row's status)
+// what is wrong with one row's edits: the name is not empty and has a letter, the numbers are numbers and not below 0
+function _bmcIngProblems(e) {
+  const out = [];
+  if ('name_th' in e) {
+    const n = String(e.name_th == null ? '' : e.name_th).trim();
+    if (!n) out.push('ชื่อต้องไม่ว่าง');
+    else if (!/[A-Za-zก-๙]/.test(n)) out.push('ชื่อต้องมีตัวอักษร');
+  }
+  for (const [f, lbl] of [['qty_per_recv', 'ขนาดบรรจุ'], ['loss_pct', 'สูญเสีย %']]) {
+    if (!(f in e) || e[f] === null) continue;
+    if (typeof e[f] !== 'number' || !Number.isFinite(e[f])) out.push(`${lbl}ต้องเป็นตัวเลข`);
+    else if (e[f] < 0) out.push(`${lbl}ต้องไม่ติดลบ`);
+    else if (f === 'qty_per_recv' && e[f] === 0) out.push('ขนาดบรรจุต้องมากกว่า 0');
+    else if (f === 'loss_pct' && e[f] >= 100) out.push('สูญเสีย % ต้องน้อยกว่า 100');
+  }
+  return out;
+}
 function bmcIngEdit(el) {
   const code = el.dataset.code, f = el.dataset.f;
   let v = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
   if (['qty_per_recv', 'loss_pct'].includes(f)) v = v === '' ? null : Number(v);
   (_bmcIngEdits[code] = _bmcIngEdits[code] || {})[f] = v;
-  el.style.background = 'var(--accent-soft)';
-  _bmcStatus('bmcIngSummary', `แก้ไขแล้ว ${Object.keys(_bmcIngEdits).length} รายการ (ยังไม่บันทึก)`, 'var(--amber-ink)');
+  const bad = _bmcIngProblems({ [f]: v }).length > 0;          // the field itself turns red as soon as it is wrong
+  el.style.background = bad ? 'var(--bad-soft, #fde8e8)' : 'var(--accent-soft)';
+  el.style.borderColor = bad ? 'var(--bad-ink)' : 'var(--border)';
+  delete _bmcIngErr[code];
+  bmcStatus('bmcIngSummary', 'warn', `แก้ไขแล้ว ${Object.keys(_bmcIngEdits).length} รายการ (ยังไม่บันทึก)`);
 }
 function bmcRenderIng() {
   const q = (document.getElementById('bmcIngQ').value || '').toLowerCase();
@@ -376,7 +439,8 @@ function bmcRenderIng() {
       <td class="py-1 pr-2 text-right">${_bmcPrice(r.price_per_recv)}</td>
       <td class="py-1 pr-2 text-right">${r.used_in_menus || ''}</td>
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
-      <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}</td>
+      <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}
+        ${(_bmcIngErr[r.code] || []).map(m => `<div class="text-[11px] bmc-rownote" role="alert" style="color:var(--bad-ink)">${esc(m)}</div>`).join('')}</td>
     </tr>`).join('') || '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
   const nProb = _bmcIng.filter(r => r.problems.length).length;
   if (!Object.keys(_bmcIngEdits).length) {
@@ -385,13 +449,27 @@ function bmcRenderIng() {
 }
 async function bmcSaveIng() {
   const rows = Object.entries(_bmcIngEdits).map(([code, e]) => ({ code, ...e }));
-  if (!rows.length) { _bmcStatus('bmcIngSummary', 'ยังไม่มีรายการที่แก้ไข'); return; }
+  if (!rows.length) { bmcStatus('bmcIngSummary', 'warn', 'ยังไม่มีรายการที่แก้ไข'); return; }
+  // validate first: a row with a wrong value is shown in red and nothing is saved until every row is right
+  _bmcIngErr = {};
+  rows.forEach(r => { const p = _bmcIngProblems(r); if (p.length) _bmcIngErr[r.code] = p; });
+  const bad = Object.keys(_bmcIngErr);
+  if (bad.length) {
+    bmcRenderIng();
+    bmcStatus('bmcIngSummary', 'warn', `ไม่ได้บันทึก · แก้ ${bad.length} รายการที่มีข้อความสีแดง: ${bad.slice(0, 3).map(c => c + ' ' + _bmcIngErr[c][0]).join(' · ')}${bad.length > 3 ? ' …' : ''}`);
+    const note = document.querySelector('#bmcIngBody .bmc-rownote');
+    if (note) note.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const codes = rows.map(r => r.code);
+  if (!await uiConfirm(`บันทึกการแก้ไข ${rows.length} รายการ?\n${codes.slice(0, 10).join(', ')}${codes.length > 10 ? ` และอีก ${codes.length - 10} รายการ` : ''}`,
+      { title: 'ยืนยันการบันทึกทะเบียนวัตถุดิบ', ok: 'บันทึกการแก้ไข', cancel: 'ยกเลิก' })) { bmcStatus('bmcIngSummary', null, 'ยังไม่บันทึก'); return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
-    _bmcStatus('bmcIngSummary', `✓ บันทึก ${d.updated + d.inserted} รายการแล้ว`, 'var(--good-ink)');
-    bmcLoadIng(true);
+    await bmcLoadIng(true);                         // the reload writes its own count line: say the result after it
+    bmcStatus('bmcIngSummary', true, `บันทึก ${d.updated + d.inserted} รายการแล้ว`);
   } catch (e) {
-    _bmcStatus('bmcIngSummary', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
+    bmcStatus('bmcIngSummary', false, String(e.message || e).slice(0, 160));
   }
 }
 // ── storage zones (ตั้งค่า → โซนจัดเก็บ): add · rename · delete · reorder ───────────────────
@@ -507,8 +585,6 @@ async function bmcImportIng(input) {
 // ── monthly prices ──────────────────────────────────────────────────────────
 async function bmcLoadPrices(force) {
   document.getElementById('bmcPriceMonthLbl').textContent = fmtMonthTh(_bmcMonth());
-  const sml = document.getElementById('bmcSubMonthLbl');
-  if (sml) sml.textContent = fmtMonthTh(_bmcMonth());
   bmcLoadPriceSubs();
   if (_bmcPrices.length && !force) { bmcRenderPrices(); return; }
   try {
@@ -698,37 +774,52 @@ async function bmcSubmitPriceFile(input) {
   } finally { input.value = ''; }
 }
 const _BMC_SUB_ST = { pending: 'var(--amber-ink)', imported: 'var(--good-ink)', rejected: 'var(--bad-ink)' };
+// PR-M2: two views of the same list. ไฟล์ราคา (ประสานงานขาย): every file she sent, with its verdict, no buttons.
+// ราคารายเดือน (ฝ่ายวิเคราะห์): only the files waiting for a decision, with ดูตัวอย่าง / เปิดไฟล์ / ส่งกลับ.
+function _bmcSubRow(s, withActions) {
+  const p = s.preview || {}, at = x => esc(fmtAt(x));
+  const verdict = s.status === 'imported' ? `นำเข้าแล้ว เมื่อ ${at(s.decided_at)} โดย ${esc(whoTh(s.decided_by))}`
+    : s.status === 'rejected' ? `ส่งกลับ: ${esc(s.decision_note || '-')}` : 'รอฝ่ายวิเคราะห์ตรวจ';
+  return `<div class="py-2 border-b" style="border-color:var(--border-soft)">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs font-semibold" style="color:var(--text-primary)">${fmtMonthTh(s.month)} · ${esc(s.filename || '')}</span>
+      <span class="text-[11px]" style="color:var(--text-muted)">${s.size < 1024 ? _bmcNum(s.size, 0) + ' ไบต์' : _bmcNum(s.size / 1024, 0) + ' KB'} · ส่งโดย ${esc(whoTh(s.submitted_by))} เมื่อ ${at(s.submitted_at)}</span>
+      ${_bmcChip(s.status_th || s.status, _BMC_SUB_ST[s.status] || 'var(--text-muted)')}
+      ${withActions && s.status === 'pending' ? `<span class="ml-auto flex flex-wrap gap-2">
+        <button onclick="bmcSubPreview(${s.sub_id})" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ดูตัวอย่าง</button>
+        <button onclick="window.open(API + '/api/bom-center/prices/submissions/${s.sub_id}/file','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">เปิดไฟล์</button>
+        <button onclick="bmcSubReject(${s.sub_id})" style="background:var(--bg-input);color:var(--bad-ink);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ส่งกลับ</button></span>` : ''}
+    </div>
+    <div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">สรุป: ${_bmcNum(p.lines, 0)} บรรทัด คิดราคาได้ ${_bmcNum(p.priced, 0)} รายการ ใช้ไม่ได้ ${_bmcNum(p.issues, 0)}
+      · <span style="color:${_BMC_SUB_ST[s.status] || 'inherit'}">${verdict}</span>${s.note ? ' · หมายเหตุ: ' + esc(s.note) : ''}</div></div>`;
+}
 async function bmcLoadPriceSubs() {
-  const box = document.getElementById('bmcPriceSubList');
-  if (!box) return;
-  if (!(hasModule('supply.ordering') || _bmcCanPrices())) { box.style.display = 'none'; return; }
+  const pending = document.getElementById('bmcPriceSubList'), all = document.getElementById('bmcPriceFileList');
+  if (!pending && !all) return;
+  const canSee = hasModule('supply.ordering') || _bmcCanPrices();
+  if (!canSee) { [pending, all].forEach(b => { if (b) b.style.display = 'none'; }); return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/prices/submissions?limit=20`);
-    const w = _bmcCanPrices(), at = s => esc(fmtAt(s));
-    const rows = (d.submissions || []).map(s => {
-      const p = s.preview || {};
-      const verdict = s.status === 'imported' ? `นำเข้าแล้ว เมื่อ ${at(s.decided_at)} โดย ${esc(whoTh(s.decided_by))}`
-        : s.status === 'rejected' ? `ส่งกลับ: ${esc(s.decision_note || '-')}` : 'รอฝ่ายวิเคราะห์ตรวจ';
-      return `<div class="py-2 border-b" style="border-color:var(--border-soft)">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-xs font-semibold" style="color:var(--text-primary)">${fmtMonthTh(s.month)} · ${esc(s.filename || '')}</span>
-          <span class="text-[11px]" style="color:var(--text-muted)">${s.size < 1024 ? _bmcNum(s.size, 0) + ' ไบต์' : _bmcNum(s.size / 1024, 0) + ' KB'} · ส่งโดย ${esc(whoTh(s.submitted_by))} เมื่อ ${at(s.submitted_at)}</span>
-          ${_bmcChip(s.status_th || s.status, _BMC_SUB_ST[s.status] || 'var(--text-muted)')}
-          ${w && s.status === 'pending' ? `<span class="ml-auto flex flex-wrap gap-2">
-            <button onclick="bmcSubPreview(${s.sub_id})" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ดูตัวอย่าง</button>
-            <button onclick="window.open(API + '/api/bom-center/prices/submissions/${s.sub_id}/file','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">เปิดไฟล์</button>
-            <button onclick="bmcSubReject(${s.sub_id})" style="background:var(--bg-input);color:var(--bad-ink);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ส่งกลับ</button></span>` : ''}
-        </div>
-        <div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">สรุป: ${_bmcNum(p.lines, 0)} บรรทัด คิดราคาได้ ${_bmcNum(p.priced, 0)} รายการ ใช้ไม่ได้ ${_bmcNum(p.issues, 0)}
-          · <span style="color:${_BMC_SUB_ST[s.status] || 'inherit'}">${verdict}</span>${s.note ? ' · หมายเหตุ: ' + esc(s.note) : ''}</div></div>`;
-    }).join('');
-    box.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ราคาที่ประสานงานขายส่งมา</div>`
-      + (rows || '<div class="text-[11px]" style="color:var(--text-muted)">ยังไม่มีไฟล์ที่ส่งมา</div>');
-    box.style.display = '';
+    const subs = d.submissions || [];
+    if (all) {
+      all.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ที่ส่งแล้ว</div>`
+        + (subs.map(s => _bmcSubRow(s, false)).join('') || '<div class="text-[11px]" style="color:var(--text-muted)">ยังไม่มีไฟล์ที่ส่งมา</div>');
+      all.style.display = '';
+    }
+    if (pending) {
+      const wait = subs.filter(s => s.status === 'pending');
+      pending.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ราคาที่รอตรวจ (${wait.length})</div>`
+        + wait.map(s => _bmcSubRow(s, _bmcCanPrices())).join('');
+      pending.style.display = wait.length && _bmcCanPrices() ? '' : 'none';
+    }
   } catch (e) {
-    box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`;
-    box.style.display = '';
+    [pending, all].forEach(b => { if (b) { b.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; b.style.display = ''; } });
   }
+}
+function bmcLoadPriceFile() {
+  const sml = document.getElementById('bmcSubMonthLbl');
+  if (sml) sml.textContent = fmtMonthTh(_bmcMonth());
+  bmcLoadPriceSubs();
 }
 async function bmcSubPreview(id) {
   const send = (dry, rules) => { const fd = new FormData(); fd.append('rules', JSON.stringify(rules || []));
@@ -958,7 +1049,7 @@ async function bmcPrepApply() {
     bmcLoadPrep();
   } catch (e) { _bmcStatus('bmcPrepApplyStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
-function bmcPrepTemplate() { window.location.href = `${API}/api/bom-center/prep/template.xlsx`; }
+function bmcPrepTemplate() { bmcDownload(`${API}/api/bom-center/prep/template.xlsx`, 'สูตรกึ่งสำเร็จ.xlsx', 'bmcPrepStatus'); }
 async function bmcPrepImportFlat(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -1334,7 +1425,7 @@ function bmcRenderRecBanner() {
   box.innerHTML = html;
 }
 function bmcDownloadTemplate() {
-  window.open(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), '_blank');
+  bmcDownload(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), 'แม่แบบสูตร.xlsx', 'bmcRecStatus');
 }
 async function bmcCreateDraft() {
   const sg = window._bmcRelSuggest || {};
@@ -1375,7 +1466,7 @@ async function bmcSendBack() {
 }
 function bmcExportRecipes() {
   if (!_bmcRel) return;
-  window.open(`${API}/api/bom-center/recipes-export.xlsx?release_id=${_bmcRel.release_id}`, '_blank');
+  bmcDownload(`${API}/api/bom-center/recipes-export.xlsx?release_id=${_bmcRel.release_id}`, 'สูตร.xlsx', 'bmcRecStatus');
 }
 async function bmcImportFlat(input) {
   const file = input?.files?.[0];
@@ -1430,8 +1521,10 @@ function bmcRenderRelHead(checks) {
     if (r.status === 'draft' && _bmcCanRecipes()) acts.push(btn('ส่งตรวจ', "bmcSubmitReview(_bmcRlRel, 'bmcRlStatus')", false, 'ส่งร่างนี้ให้ฝ่ายวิเคราะห์ตรวจ'));
     if (r.status === 'review' && can('bom.release')) acts.push(btn('ส่งกลับแก้ไข', 'bmcSendBack()', false, 'ส่งกลับให้ครัวแก้ไขพร้อมเหตุผล'));
     if (can('bom.center') || can('bom.release')) acts.push(btn('บันทึกผลตรวจ', 'bmcRunChecks()', false, 'บันทึกผลตรวจให้หน้างานใช้'));
-    if (can('bom.release')) acts.push(btn('ประกาศใช้เวอร์ชันนี้', 'bmcDoRelease()', !!(checks && checks.can_release),
-      checks && !checks.can_release ? 'ยังมีข้อที่ต้องแก้ไข' : 'ฝ่ายวิเคราะห์ประกาศใช้ ผู้บริหารรับทราบภายหลัง'));
+    // PR-M2: while a check item is open the button is off and says how many to fix (the server refuses it too)
+    if (can('bom.release')) acts.push(checks && !checks.can_release
+      ? `<button disabled aria-disabled="true" title="" style="font-size:12.5px;background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 14px;cursor:not-allowed;opacity:.8">ประกาศใช้ไม่ได้ · ต้องแก้ไข ${checks.open_blocks} ข้อ</button>`
+      : btn('ประกาศใช้เวอร์ชันนี้', 'bmcDoRelease()', !!(checks && checks.can_release), 'ฝ่ายวิเคราะห์ประกาศใช้ ผู้บริหารรับทราบภายหลัง'));
   }
   if (r.status === 'released') {
     if (!r.acknowledged_by && (hasModule('bom.audit'))) acts.push(btn('รับทราบ (ผู้บริหาร)', 'bmcAck()', true));
@@ -1452,10 +1545,7 @@ function bmcRenderRelHead(checks) {
     </div>
     ${r.status === 'review' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว</div>` : ''}
     ${r.status === 'draft' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ”${_bmcSendBackLine(r)}</div>` : ''}
-    ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหารอ่านผลกระทบด้านล่าง แล้วกด “รับทราบ”</div>` : ''}
-    <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
-      ลำดับงาน: ครัวสร้างสูตรและส่งตรวจ → ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล → ผู้บริหารอ่านผลกระทบแล้วรับทราบหรือยกเลิกใช้ ·
-      ประกาศใช้แล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อนกันยายน 2026 ใช้ต้นทุนระบบเดิมเสมอ)</div>`;
+    ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหารอ่านผลกระทบด้านล่าง แล้วกด “รับทราบ”</div>` : ''}`;
 }
 async function bmcLoadChecks() {
   try {
@@ -1626,6 +1716,7 @@ async function bmcLoadRelHistory() {
 // numbers are expected use + safety stock, NOT yet net of what is in the fridge
 // (branches start counting stock in Phase 2) — the page says so every time.
 let _bmcFc = null;
+let _bmcFcKey = '';            // the choice (branch, round, day, season) the calculation on screen was made for
 let _bmcCal = null;
 let _bmcCalPilotOnly = true;   // the calendar page: the pilot branches alone until the sales team asks for all
 const _BMC_WD = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'];
@@ -1653,6 +1744,7 @@ async function bmcRunForecast() {
   _bmcStatus('bmcFcStatus', 'กำลังคำนวณ…');
   try {
     _bmcFc = await _bmcJson(`${API}/api/bom-center/forecast?branch_id=${bid}&round=${rnd}&order_day=${day}&season=${season}`);
+    _bmcFcKey = `${bid}|${rnd}|${day}|${season}`;
     bmcRenderForecast();
     _bmcStatus('bmcFcStatus', '');
   } catch (e) { _bmcStatus('bmcFcStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
@@ -1695,13 +1787,21 @@ function bmcRenderForecast() {
 }
 async function bmcSaveForecast() {
   const bid = Number(document.getElementById('bmcFcBranch').value);
+  if (!bid) { bmcStatus('bmcFcStatus', 'warn', 'เลือกสาขาก่อนบันทึก'); return; }
   const body = { branch_id: bid, round: document.getElementById('bmcFcRound').value, order_day: document.getElementById('bmcFcDay').value,
     season: document.getElementById('bmcFcSeason').checked ? 'auto' : 'off' };
+  // the question carries the numbers of what is on the screen; without a calculation for this choice, calculate it first
+  const key = `${bid}|${body.round}|${body.order_day}|${body.season}`;
+  if (!_bmcFc || _bmcFcKey !== key) await bmcRunForecast();
+  if (!_bmcFc || _bmcFcKey !== key) return;
+  const f = _bmcFc;
+  if (!await uiConfirm(`บันทึกยอดแนะนำเป็นรอบสั่ง?\n${f.branch} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round} · ตัดรอบ ${f.order_weekday} ${fmtDay(f.order_day)} · ${f.rows.length} รายการ · ฿${_bmcNum(f.value_total, 0)}\nใช้เป็นฐานเทียบในหน้าสั่งสินค้าของสาขาและหน้าตรวจสอบการสั่ง`,
+      { title: 'ยืนยันการบันทึกยอดแนะนำ', ok: 'บันทึกเป็นรอบสั่ง', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcFcStatus', null, 'ยังไม่บันทึก'); return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/forecast/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    _bmcStatus('bmcFcStatus', `✓ บันทึกยอดแนะนำแล้ว · ${d.lines} รายการ · ฿${_bmcNum(d.value_total, 0)}`, 'var(--good-ink)');
+    bmcStatus('bmcFcStatus', true, `บันทึกยอดแนะนำแล้ว · ${d.lines} รายการ · ฿${_bmcNum(d.value_total, 0)}`);
     bmcLoadRuns();
-  } catch (e) { _bmcStatus('bmcFcStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+  } catch (e) { bmcStatus('bmcFcStatus', false, String(e.message || e)); }
 }
 async function bmcBacktest() {
   const bid = document.getElementById('bmcFcBranch').value;
@@ -1728,7 +1828,6 @@ async function bmcLoadCalendar() {
       ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
       <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
       ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบส่ง</button>` : ''}</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ประสานงานขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน ${esc(_bmcCal.cutoff_time || '13:15')} สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ ${esc(_bmcCal.cutoff_time || '13:15')}) · มีผลตั้งแต่รอบถัดไป</div>
     <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">ตัดรอบ</th>
       <th class="pr-2">แซลมอนสด วันส่ง</th><th class="pr-2">ตัดรอบ</th><th>ตั้งโดย</th></tr></thead>
@@ -1742,7 +1841,7 @@ async function bmcLoadCalendar() {
 }
 // ── bulk delivery days from a file: template → preview (dry run) → save ──
 let _bmcCalBulkFile = null;
-function bmcCalTemplate() { window.open(`${API}/api/bom-center/order-calendar/template.xlsx`, '_blank'); }
+function bmcCalTemplate() { bmcDownload(`${API}/api/bom-center/order-calendar/template.xlsx`, 'รอบส่งของสาขา.xlsx', 'bmcCalStatus'); }
 function _bmcCalBulkClear() {
   _bmcCalBulkFile = null;
   const f = document.getElementById('bmcCalBulkFile'); if (f) f.value = '';
@@ -1972,30 +2071,41 @@ function bmcIssXlsx() {
   const d = _bmcIssSum;
   if (!d) return;
   if (!d.status.receipts_confirmed) { _bmcStatus('bmcIssStatus', 'งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'var(--amber-ink)'); return; }
-  window.location.href = `${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`;
+  bmcDownload(`${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`,
+    `bom_center_issue_summary_${d.period.end_count_id}.xlsx`, 'bmcIssStatus');
 }
 function bmcIssXlsxAll() {
   const d = _bmcIssSum;
   if (!d) return;
-  window.location.href = `${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.period.month)}`;
+  bmcDownload(`${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.period.month)}`,
+    `bom_center_issue_summary_${d.period.month}.xlsx`, 'bmcIssStatus');
 }
+function bmcDownloadPriceTemplate(statusId) { bmcDownload(`${API}/api/bom-center/prices/template.xlsx`, 'แม่แบบยอดซื้อรายบรรทัด.xlsx', statusId || 'bmcPriceStatus'); }
+function bmcDownloadIngTemplate() { bmcDownload(`${API}/api/bom-center/ingredients/template.xlsx`, 'ทะเบียนวัตถุดิบ.xlsx', 'bmcIngStatus'); }
 async function bmcIssTogglePosted(cb) {
   const d = _bmcIssSum;
   if (!d) return;
   const want = cb.checked;
+  // the question says what is posted (branch, period, baht, lines) and what the lock does; the lock is lifted by the same box
+  const what = `สาขา${d.branch.name || ''} · ${fmtDay(d.period.begin_date)} ถึง ${fmtDay(d.period.end_date)} · ${d.lines.length} รายการ · มูลค่าตัดเบิก ฿${_bmcNum(d.totals.used_value, 2)}`;
+  const ok = want
+    ? await uiConfirm(`บันทึกใบสรุปตัดเบิกเข้าระบบบัญชีแล้ว?\n${what}\nเมื่อบันทึกแล้วงวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้`,
+      { title: 'ยืนยันการบันทึกเข้าระบบบัญชี', ok: 'บันทึกเข้าระบบบัญชีแล้ว', cancel: 'ยังไม่บันทึก' })
+    : await uiConfirm(`ยกเลิกการบันทึกบัญชีของงวดนี้?\n${what}\nงวดนี้จะปลดล็อก และแก้ไขใบรับสินค้าและใบตัดเบิกได้อีก`,
+      { title: 'ยืนยันการยกเลิกการบันทึกบัญชี', ok: 'ยกเลิกการบันทึกบัญชี', cancel: 'ไม่ยกเลิก' });
+  if (!ok) { cb.checked = !want; bmcStatus('bmcIssStatus', null, 'ยังไม่เปลี่ยนสถานะ'); return; }
   try {
     await _bmcJson(`${API}/api/bom-center/issue-summary/posted`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ end_count_id: d.period.end_count_id, posted: want }) });
-    _bmcStatus('bmcIssStatus', '✓ บันทึกสถานะแล้ว', 'var(--good-ink)');
     const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === d.branch.branch_id);
     const p = b && b.periods.find(x => x.end_count_id === d.period.end_count_id);
     if (p) { p.accounting_posted_at = want ? new Date().toISOString() : null; }
     _bmcIssFillPeriods();
     document.getElementById('bmcIssPeriod').value = String(d.period.end_count_id);
     await bmcIssLoadSummary();
-    _bmcStatus('bmcIssStatus', '✓ บันทึกสถานะแล้ว', 'var(--good-ink)');
+    bmcStatus('bmcIssStatus', true, want ? 'บันทึกเข้าระบบบัญชีแล้ว · งวดนี้ล็อก' : 'ยกเลิกการบันทึกบัญชีแล้ว · งวดนี้ปลดล็อก');
   } catch (e) {
     cb.checked = !want;                              // revert: the server did not take it
-    _bmcStatus('bmcIssStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+    bmcStatus('bmcIssStatus', false, String(e.message || e).slice(0, 200));
   }
 }

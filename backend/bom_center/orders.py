@@ -171,6 +171,8 @@ def detail(con, order_id: int) -> dict:
     from .hub import delivery_of
     o["delivery"] = delivery_of(con, o["branch_id"], o["round"], o["cycle_date"], o.get("delivery_date"))
     o["late"] = int(o.get("late") or 0)
+    from .hub import with_values
+    with_values(con, [o])                  # value / value_ordered / value_sent / value_label — see hub.with_values
     return o
 
 
@@ -300,6 +302,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     cut = _cutoff_dt(con, o2)
     slip_today = _is.status_of(con, branch_id, _now_for(None, now).date())
     out = {"order_id": oid, "status": "suggested", "needs_reason": sorted(set(missing)), "value": value,
+           "value_ordered": value, "value_label": _hub_label(),
            "late": int(o2["late"] or 0), "cutoff_at": cut.isoformat(), "delivery": o2["delivery_date"] or delivery,
            "slip_today": slip_today}
     if submit:
@@ -325,18 +328,15 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     return out
 
 
+def _hub_label() -> str:
+    from .hub import VALUE_ORDERED_TH
+    return VALUE_ORDERED_TH
+
+
 def _value(con, order_id: int, cycle_date: str) -> float:
-    from .central import central_map, unit_price
-    month = cycle_date[:7]
-    cmap = central_map(con)
-    per = {c: p for c, p in con.execute("SELECT code, qty_per_recv FROM bc_ingredient")}
-    v = 0.0
-    for c, q, u in con.execute("SELECT ingredient_code, confirmed_units, order_unit FROM bc_order_line WHERE order_id=?",
-                               (order_id,)):
-        p = unit_price(con, c, month, cmap)[0]
-        if p and q:
-            v += q * ((per.get(c) or 1.0) if u and u != "base" else 1.0) * p
-    return round(v, 2)
+    """What the branch ordered, in baht: the one pricing function of hub.py (the order value has no copy)."""
+    from .hub import _value as _hub_value
+    return _hub_value(con, order_id, "confirmed_units", cycle_date[:7])
 
 
 def reopen(con, branch_id: int, order_id: int, who: str):
@@ -445,7 +445,8 @@ def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
         d["status_th"] = STATUS_TH.get(d["status"], d["status"])
         d["delivery"] = delivery_of(con, branch_id, d["round"], d["cycle_date"], d.pop("delivery_date"))
         out.append(d)
-    return out
+    from .hub import with_values
+    return with_values(con, out)
 
 
 def next_round(con, branch_id: int, today: date, now: datetime = None) -> str:

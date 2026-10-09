@@ -50,6 +50,7 @@
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
       </div>
     </div>
+    <div id="brnOrdGate" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnOrdList" class="card p-3 mb-3"></div>
     <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div id="brnOrdActions" class="flex flex-wrap items-center gap-2"></div>
@@ -66,13 +67,6 @@
   <div id="brn-pane-count" style="display:none">
     <div class="card p-3 mb-3">
       <div class="text-xs"><span id="brnKind"></span></div>
-      <!-- the how-to is folded on a phone (brnLoadSheet opens it on a wide screen) -->
-      <details id="brnHowTo" class="mt-1">
-        <summary class="text-xs font-semibold" style="color:var(--accent);cursor:pointer">วิธีนับ</summary>
-        <p class="text-xs mt-1" style="color:var(--text-secondary)">
-          <b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) · ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · บันทึกร่างให้ขณะกรอก · ครบแล้วกด “ส่งผลตรวจนับ” · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”
-        </p>
-      </details>
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
     </div>
 
@@ -102,6 +96,10 @@
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการตรวจนับ</div>
       <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
+    <details id="brnHowTo" class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p><b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง)</p>
+      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · บันทึกร่างให้ขณะกรอก ·ครบแล้วกด “ส่งผลตรวจนับ” · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
+    </div></details>
   </div>
 
   <!-- ── รับของ ── -->
@@ -110,7 +108,7 @@
     <div id="brnRecvOpen" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnRecvOrder" class="card p-3 mb-3" style="display:none;border-left:4px solid var(--accent)"></div>
     <div class="card p-3 mb-3">
-      <p class="text-xs mb-2" style="color:var(--text-secondary)">บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
+      <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">บันทึกสินค้าที่รับเอง</div>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>วันที่รับ<br><input type="date" id="brnRecvDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>เลขที่ใบส่งสินค้า (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -142,6 +140,11 @@
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับสินค้าล่าสุด</div>
       <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: จำนวนที่คลังส่งกรอกไว้ให้แล้ว หากรับน้อยกว่าที่ส่ง ให้แก้ช่อง “รับจริง” และเลือกสาเหตุ ส่วนต่างเป็นเคลมอัตโนมัติ ส่งรูปทางไลน์ให้ประสานงานขาย</p>
+      <p>บันทึกสินค้าที่รับเอง: บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
+      <p>แจ้งเคลมภายหลัง: เลือกใบที่รับแล้ว ใส่จำนวนเฉพาะรายการที่มีปัญหา (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
+    </div></details>
   </div>
 
   <!-- ── ผลต่างของฉัน ── -->
@@ -163,10 +166,10 @@
 
     <div id="brnVar-daily" style="display:none">
       <div class="card p-3 mb-3">
-        <div class="text-xs mb-2" style="color:var(--text-secondary)">มูลค่าเบิกจริงเทียบตามสูตร · ชั้น A เกิน 20% ติดกัน 3 วัน = เตือน · กดวันเพื่อดูรายการ</div>
         <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
           <label>เดือน<br><input type="month" id="brnVarDayMonth" onchange="brnLoadVarDaily()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
           <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+          <span id="brnVarDayStatus" style="padding-bottom:6px"></span>
         </div>
         <div id="brnVarDayChips" class="flex flex-wrap gap-1 mt-2"></div>
       </div>
@@ -176,7 +179,6 @@
 
     <div id="brnVar-recon" style="display:none">
       <div class="card p-3 mb-3">
-        <div class="text-xs mb-2" style="color:var(--text-secondary)">คงเหลือตามระบบเทียบนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล</div>
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
           งวด <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
           <label class="flex items-center gap-1"><input type="checkbox" id="brnRcAll" onchange="brnRenderVarRecon()"> แสดงทุกรายการ</label>
@@ -187,5 +189,10 @@
       </div>
       <div id="brnRcList" class="card p-3 mb-3"></div>
     </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>รายงวด: ใช้จริงเทียบกับยอดตามสูตร · รายการที่เกินเกณฑ์ต้องเลือกเหตุผลและกด “บันทึก”</p>
+      <p>รายวัน: มูลค่าเบิกจริงเทียบตามสูตร · ชั้น A ที่เกินสูตรเกิน 20% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · กดที่วันเพื่อดูรายการ</p>
+      <p>สิ้นเดือน: คงเหลือตามระบบเทียบกับนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล</p>
+    </div></details>
   </div>
 </div>

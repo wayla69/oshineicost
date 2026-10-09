@@ -140,7 +140,7 @@ def _month_items(con, month: str, today: date) -> list:
             sub_status, sub_detail = "todo", "ไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด"
         out.append(_e("price_submit", 95, "month", f"ส่งไฟล์ราคาเดือน{_mth(month)} ให้ฝ่ายวิเคราะห์", sub_status, sub_detail,
                       owner=("supply.ordering",), owner_th="ประสานงานขาย",
-                      go={"tab": "bomcenter", "pane": "price", "month": month, "anchor": "bmcPriceSubmitCard"}))
+                      go={"tab": "bomcenter", "pane": "pricefile", "month": month, "anchor": "bmcPriceSubmitCard"}))
         pend = _scalar(con, "SELECT COUNT(*) FROM bc_price_submission WHERE status='pending'") or 0
         if pend:
             out.append(_e("price_review", 98, "month", f"ตรวจและนำเข้าไฟล์ราคาที่ประสานงานขายส่งมา ({pend} ไฟล์)", "todo",

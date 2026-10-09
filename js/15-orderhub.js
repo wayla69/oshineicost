@@ -25,6 +25,61 @@ function _ohbBtn(label, on, primary) {
   return `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:${primary ? '7px 14px' : '3px 10px'};font-size:${primary ? 13 : 12}px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
 }
 
+// ── วิธีใช้หน้านี้ (PR-M2): the explanation of each pane, folded at its bottom and written for the person who reads it ──
+// One block per pane; the warehouse is told what the warehouse does, ประสานงานขาย what it does (a role without its own
+// text gets the shared one under `_`). Nothing here sits above a control.
+const _OHB_ACC_GUIDE = '<a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a>';
+const _OHB_HELP = {
+  queue: {
+    warehouse: ['ระบุยอดส่งจริงของแต่ละรายการภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · กดที่เลขที่ใบเพื่อเปิดรายการ',
+      'ยอดที่ต่างจากที่สาขายืนยันต้องเลือกเหตุผลของรายการนั้น · เลขที่ PO ไม่บังคับ แต่ควรกรอกไว้ใช้ติดตาม',
+      'ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15 สองวันก่อนวันส่ง'],
+    salessupport: ['ใบสั่งซื้อที่คลังจัดส่งแล้ว: ดาวน์โหลด Excel เพื่อคีย์เข้าระบบบัญชี แล้วติ๊กใบที่คีย์แล้วและกด “คีย์บัญชีแล้ว”',
+      '“สรุปรวมตามวันส่ง” และไฟล์ Excel ใช้สถานะที่เลือกด้านบน · ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15',
+      'มูลค่าของใบที่รอคลังคือ “มูลค่าที่สั่ง” เมื่อคลังจัดส่งแล้วเป็น “มูลค่าที่จัดส่ง”'],
+    _: ['คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · ยอดที่ต่างจากที่สาขายืนยันต้องมีเหตุผล',
+      'ประสานงานขายดาวน์โหลด Excel ของใบที่คลังจัดส่งแล้ว เพื่อคีย์เข้าระบบบัญชี · มูลค่าที่สั่ง = ยอดที่สาขายืนยัน, มูลค่าที่จัดส่ง = ยอดที่คลังส่งจริง'] },
+  claims: {
+    _: ['ตรวจรูปที่สาขาส่งทางไลน์ แล้วอนุมัติหรือไม่อนุมัติ · การไม่อนุมัติต้องระบุเหตุผลให้สาขา',
+      'แจ้งขณะรับสินค้า: อนุมัติ = รับเข้าตามจริงอยู่แล้ว, ไม่อนุมัติ = นับส่วนที่เคลมเป็นรับเข้า',
+      'แจ้งภายหลัง: อนุมัติ = หักออกจากรับเข้า, ไม่อนุมัติ = นับเป็นรับเข้า'] },
+  issues: {
+    operation: ['อ่านอย่างเดียว: ดูว่าแต่ละสาขายืนยันใบตัดเบิกตรงวัน ล่าช้า ยังไม่ยืนยัน หรือไม่มีใบ',
+      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · Excel รวมเฉพาะใบที่ยืนยันแล้ว'],
+    _: ['ใบที่ยืนยันแล้วแก้ไขไม่ได้ · ประสานงานขายเปิดแก้ไขพร้อมเหตุผล แล้วสาขายืนยันใหม่',
+      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · Excel รวมเฉพาะใบที่ยืนยันแล้ว', _OHB_ACC_GUIDE] },
+  issuevar: {
+    _: ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
+      'วัตถุดิบชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'] },
+  comp: {
+    _: ['แต่ละแถวคือหนึ่งรอบสั่งของสาขา เทียบ 4 ค่า (฿): ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง',
+      'ป้ายสถานะบอกว่าส่วนต่างอยู่ที่สาขา (สั่งเกิน หรือสั่งขาด) ที่คลัง หรือในการจัดส่ง · “ไม่ได้สั่ง” คือรอบที่ตัดรอบไปแล้วโดยสาขาไม่ส่งใบสั่งซื้อ'] },
+  pilot: {
+    _: ['สาขานำร่อง 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง)',
+      'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์ชั้น A ≤ 15%',
+      'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
+  central: {
+    _: ['ขั้นที่ 2 นำเข้ารายงานของไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
+      'ขั้นที่ 3 จับคู่รหัสเดิมในสูตรกับรหัสของไดกิโตะ กรุ๊ป · มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน',
+      'ขั้นที่ 4 นับก่อนเปิดร้านวันที่ 1 · นำเข้าต้นงวดก่อนปลายงวด',
+      'ขั้นที่ 5 สาขายืนยันรับสินค้าครบและระบุเหตุผลผลต่าง (หรือประสานงานขายและฝ่ายวิเคราะห์ทำแทน)',
+      'ขั้นที่ 6 บัญชีดาวน์โหลดใบสรุปตัดเบิก แล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”'] },
+  month: {
+    _: ['รวมงวดที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร',
+      'ข้อมูลส่วนนี้แสดงในรายงานผู้บริหาร (รายเดือน) ด้วย · ชั้น A / B / C คือกลุ่มวัตถุดิบตามมูลค่า'] },
+};
+function _ohbRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
+function ohbRenderHelp(pane) {
+  const el = document.getElementById('ohbHelp-' + pane);
+  if (!el) return;
+  const role = _ohbRole();
+  if (el.dataset.role === role && el.firstChild) return;     // already there (a re-render would close it)
+  const h = _OHB_HELP[pane] || {};
+  const lines = h[role] || h._ || [];
+  el.dataset.role = role;
+  el.innerHTML = lines.length ? bmcHelpHtml(lines.map(l => `<p>${l}</p>`).join('')) : '';
+}
+
 function loadOrderHub() {
   const t = new Date();
   const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value) el.value = v; };
@@ -39,11 +94,16 @@ function loadOrderHub() {
 function ohbSetSub(k) {
   _ohbSub = k;
   ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar', 'issues'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ohbRenderHelp(k);
   if (k === 'issues') ohbLoadIssues();
   if (k === 'issuevar') ohbLoadIssueVar();
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
-  if (k === 'month') ohbLoadMonth();
+  if (k === 'month') {
+    const lk = document.getElementById('ohbMonthIssueLink'), hit = _supplyItemOf('bomcenter', 'issue');   // the link only for a role whose bar lists that page
+    if (lk) lk.style.display = hit && _supplyItemAllowed(hit.item) ? '' : 'none';
+    ohbLoadMonth();
+  }
   if (k === 'pilot') ohbLoadPilot();
   if (k === 'central') ohbLoadCentral();
   if (k === 'claims') ohbLoadClaims();
@@ -100,8 +160,10 @@ async function ohbLoadCentral() {
     document.getElementById('ohbSt5Detail').innerHTML = st.receipts_confirm ? _ohbBranchLines(st.receipts_confirm,
       b => `<a href="#" onclick="supplyGo({tab:'branchstock',pane:'var',branch:${b.branch_id}});return false" style="color:var(--accent);text-decoration:underline">เปิดผลต่างของสาขา →</a>`) : '';
     set(6, st.issue_posted && st.issue_posted.status);
+    const issueOk = (hit => !!hit && _supplyItemAllowed(hit.item))(_supplyItemOf('bomcenter', 'issue'));   // the link only for a role whose bar lists that page
+    const lk6 = document.getElementById('ohbSt6Link'); if (lk6) lk6.style.display = issueOk ? '' : 'none';
     document.getElementById('ohbSt6Detail').innerHTML = st.issue_posted ? _ohbBranchLines(st.issue_posted,
-      b => `<a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',branch:${b.branch_id},month:'${esc(month)}'});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิกของสาขา →</a>`) : '';
+      issueOk ? b => `<a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',branch:${b.branch_id},month:'${esc(month)}'});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิกของสาขา →</a>` : null) : '';
     set(7, st.monthly_summary && st.monthly_summary.status);
     // the count import: the branch from the shared context, the date the checklist says is missing
     const sel = document.getElementById('ohbCntBranch');
@@ -238,7 +300,8 @@ async function ohbMonthSave() {
 function _ohbCntQS() {
   return `branch_id=${document.getElementById('ohbCntBranch').value}&count_date=${document.getElementById('ohbCntDate').value}`;
 }
-function ohbCntTemplate() { window.location.href = `${API}/api/bom-center/stock/count-template.xlsx?${_ohbCntQS()}`; }
+function ohbCntTemplate() { bmcDownload(`${API}/api/bom-center/stock/count-template.xlsx?${_ohbCntQS()}`, 'แบบฟอร์มตรวจนับ.xlsx', 'ohbCntStatus'); }
+function ohbCentralXlsx() { bmcDownload(`${API}/api/bom-center/central.xlsx`, 'บัญชีสินค้าส่วนกลาง.xlsx', 'ohbCenStatus'); }
 async function ohbCntImport(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -280,16 +343,28 @@ async function ohbLoadQueue() {
     const unkeyed = _ohbStatus === 'unkeyed';
     _ohbQ = await _bmcJson(`${API}/api/bom-center/hub/queue?status=${unkeyed ? 'all&keyed=0' : _ohbStatus}&${_ohbRange()}`);
     if (unkeyed) _ohbQ.orders = _ohbQ.orders.filter(_ohbKeyable);          // only a processed / received order can be keyed
+    ohbRenderQueueList();
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+// The list of the queue. It is drawn from _ohbQ and is re-drawn alone after the warehouse confirms an order: the order stays
+// in the list with its new status (the list is filtered again only the next time it is loaded), so it never "vanishes".
+// The value of an order is ONE number from the server (hub.with_values) with the words that say which: ordered or sent.
+function ohbRenderQueueList() {
+  const box = document.getElementById('ohbQueue');
+  if (!box || !_ohbQ) return;
+  {
     const shown = new Set(_ohbQ.orders.map(o => o.order_id));
     [..._ohbKeyedSel].forEach(i => { if (!shown.has(i)) _ohbKeyedSel.delete(i); });
     const byDay = {};
     _ohbQ.orders.forEach(o => { (byDay[o.delivery] = byDay[o.delivery] || []).push(o); });
     const days = Object.keys(byDay).sort();
-    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(d))} · ${byDay[d].length} ใบสั่งซื้อ · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
+    const sumBy = (rows, lbl) => rows.filter(o => o.value_label === lbl).reduce((a, o) => a + (o.value || 0), 0);
+    const dayTotal = rows => [['มูลค่าที่สั่ง'], ['มูลค่าที่จัดส่ง']].map(([l]) => rows.some(o => o.value_label === l) ? `${l} ฿${_bmcNum(sumBy(rows, l), 0)}` : '').filter(Boolean).join(' · ');
+    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(d))} · ${byDay[d].length} ใบสั่งซื้อ · ${dayTotal(byDay[d])}</div>` +
       byDay[d].map(o => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
         ${_ohbCanKey() && _ohbKeyable(o) ? `<input type="checkbox" aria-label="เลือกใบสั่งซื้อ #${o.order_id}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)">` : ''}
         <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">#${o.order_id} ${esc(o.branch)}</a>
-        <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}</span><span>${o.lines} รายการ · ฿${_bmcNum(o.value, 0)}</span>
+        <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}</span><span>${o.lines} รายการ · ${esc(o.value_label || 'มูลค่า')} ฿${_bmcNum(o.value, 0)}</span>
         ${o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : ''}
         ${o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : ''}
         ${o.stock_deducted ? '' : _bmcChip('ไม่มีผลตรวจนับสิ้นเดือน', 'var(--text-muted)')}
@@ -301,7 +376,7 @@ async function ohbLoadQueue() {
         ${o.claims_pending ? _bmcChip('มีเคลม รอพิจารณา', 'var(--amber-ink)') : (o.claims ? _bmcChip('มีเคลม', 'var(--text-muted)') : '')}</div>`).join('')).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งซื้อในช่วงนี้</span>';
     _ohbKeySync();
-  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+  }
 }
 
 // ── ทำเครื่องหมายใบที่คีย์เข้าระบบบัญชีแล้ว (ประสานงานขาย) ──
@@ -350,8 +425,9 @@ function ohbRenderDetail() {
       <td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)} · ${l.order_unit === 'base' ? 'หน่วยฐาน' : 'แพ็ค'}</div></td>
       <td class="py-1 pr-2 text-right">${_bmcNum(l.suggested_units)}</td>
       <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.confirmed_units)}</b>${l.reason_th ? `<div class="text-[10.5px]" style="color:var(--amber-ink)">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</td>
-      <td class="py-1 pr-2 text-right">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" style="width:64px;text-align:center;border:1px solid var(--border-control);border-radius:6px;padding:3px;background:var(--bg-input);color:var(--text-primary)">` : _bmcNum(sent)}</td>
-      <td class="py-1">${work ? `<select id="ohbR_${esc(l.code)}" style="font-size:11px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล (หากส่งไม่ตรง) —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
+      <td class="py-1 pr-2 text-right">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)})" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:64px;text-align:center;border:1px solid var(--border-control);border-radius:6px;padding:3px;background:var(--bg-input);color:var(--text-primary)">
+        <div id="ohbPE_${esc(l.code)}" class="text-[11px]" role="alert" style="color:var(--bad-ink);text-align:right"></div>` : _bmcNum(sent)}</td>
+      <td class="py-1">${work ? `<select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" style="font-size:11px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล (หากส่งไม่ตรง) —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
         <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" style="width:110px;font-size:11px;border:1px solid var(--border-control);border-radius:6px;padding:2px 4px;background:var(--bg-input);color:var(--text-primary)">`
         : (l.ss_reason_th ? `<span class="text-[11px]" style="color:var(--amber-ink)">${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : '')}
         ${l.received_units != null ? `<div class="text-[10.5px]" style="color:var(--text-muted)">รับจริง ${_bmcNum(l.received_units)}</div>` : ''}</td></tr>`;
@@ -360,6 +436,7 @@ function ohbRenderDetail() {
       <div class="text-sm font-semibold" style="color:var(--text-primary)">#${o.order_id} ${esc(o.branch || '')} · ${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))} · วันส่ง ${esc(fmtDay(o.delivery))}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}
+      <b>${esc(VALUE_ORDERED_TH)} ฿${_bmcNum(o.value_ordered, 0)}</b>${o.value_sent != null ? ` · <b>${esc(VALUE_SENT_TH)} ฿${_bmcNum(o.value_sent, 0)}</b>` : ''} ·
       ${o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · คลังยืนยันโดย ${esc(whoTh(o.processed_by))}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(fmtDay(o.accounting_keyed_date || ''))} โดย ${esc(whoTh(o.accounting_keyed_by))}` : ''}</div>
     ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `#${c.claim_id} ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
@@ -370,21 +447,69 @@ function ohbRenderDetail() {
     ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
       ${_ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
 }
+// The typed ส่งจริง of one line: '' = left as the branch confirmed; otherwise a number not below 0. -> {q, err}
+function _ohbPRead(code) {
+  const el = document.getElementById('ohbP_' + code);
+  if (!el) return { q: null, err: '' };
+  const raw = String(el.value).trim().replace(',', '.');
+  if (raw === '') return { q: null, err: '' };
+  const q = Number(raw);
+  if (!Number.isFinite(q) || !/^-?\d+(\.\d+)?$/.test(raw)) return { q: null, err: 'ใส่ตัวเลข' };
+  if (q < 0) return { q: null, err: 'ต้องไม่ติดลบ' };
+  return { q, err: '' };
+}
+// the red note under a line: a wrong number, or a changed quantity without its reason (the server asks for the same)
+function _ohbPLine(l) {
+  const { q, err } = _ohbPRead(l.code);
+  let msg = err;
+  if (!msg && q !== null && Math.abs(q - Number(l.confirmed_units || 0)) > 1e-9) {
+    const r = document.getElementById('ohbR_' + l.code), n = document.getElementById('ohbN_' + l.code);
+    if (!r || !r.value) msg = 'เลือกเหตุผลที่ส่งไม่ตรงกับที่สาขายืนยัน';
+    else if (r.value === 'other' && !(n && n.value.trim())) msg = 'ระบุคำอธิบายของเหตุผล “อื่น ๆ”';
+  }
+  const note = document.getElementById('ohbPE_' + l.code), inp = document.getElementById('ohbP_' + l.code);
+  if (note) note.textContent = msg;
+  if (inp) inp.style.borderColor = msg ? 'var(--bad-ink)' : 'var(--border-control)';
+  return msg;
+}
+function ohbPLineFull(code) { const l = _ohbOrder && _ohbOrder.lines.find(x => x.code === code); if (l) _ohbPLine(l); }
+function ohbPLineCheck(code) {            // while typing: only a wrong number is shown (the reason is asked at the confirm)
+  const { err } = _ohbPRead(code);
+  const note = document.getElementById('ohbPE_' + code), inp = document.getElementById('ohbP_' + code);
+  if (note) note.textContent = err;
+  if (inp) inp.style.borderColor = err ? 'var(--bad-ink)' : 'var(--border-control)';
+}
 async function ohbProcess() {
   const o = _ohbOrder;
+  const bad = o.lines.filter(l => document.getElementById('ohbP_' + l.code)).map(l => [l, _ohbPLine(l)]).filter(([, m]) => m);
+  if (bad.length) {                       // nothing is saved until every line is right
+    bmcStatus('ohbDStatus', 'warn', `ไม่ได้บันทึก · แก้ ${bad.length} รายการที่มีข้อความสีแดง`);
+    const first = document.getElementById('ohbPE_' + bad[0][0].code);
+    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   const lines = o.lines.map(l => {
-    const q = document.getElementById('ohbP_' + l.code);
     const r = document.getElementById('ohbR_' + l.code);
     const n = document.getElementById('ohbN_' + l.code);
-    return { code: l.code, processed_units: q && q.value !== '' ? Number(q.value) : null, reason: r ? r.value || null : null, note: n ? n.value || null : null };
+    return { code: l.code, processed_units: _ohbPRead(l.code).q, reason: r ? r.value || null : null, note: n ? n.value || null : null };
   });
+  const po = (document.getElementById('ohbPo').value || '').trim();
+  const edit = o.status === 'processed';
+  const sent = o.lines.filter(l => (l.confirmed_units || 0) > 0 || (l.processed_units || 0) > 0 || (l.suggested_units || 0) > 0);
+  const changed = lines.filter((x, i) => x.processed_units !== null && Math.abs(x.processed_units - Number(o.lines[i].confirmed_units || 0)) > 1e-9).length;
+  if (!await uiConfirm(`${edit ? 'บันทึกการแก้ไขยอดส่ง' : 'ยืนยันการจัดส่ง'} · ใบสั่งซื้อ #${o.order_id} · สาขา${o.branch || ''} · ${sent.length} รายการ · ${po ? 'PO ' + po : 'ไม่ระบุ PO'}\n`
+      + `${VALUE_ORDERED_TH} ฿${_bmcNum(o.value_ordered, 0)}${changed ? ` · ส่งไม่ตรงกับที่สาขายืนยัน ${changed} รายการ` : ' · ส่งตรงกับที่สาขายืนยันทุกรายการ'}`
+      + (edit ? '' : '\nเมื่อยืนยันแล้ว สาขาเห็นว่าคลังจัดส่งแล้วและรับสินค้าได้'),
+      { title: edit ? 'ยืนยันการแก้ไขยอดส่ง' : 'ยืนยันการจัดส่ง', ok: edit ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', cancel: 'ยังไม่ยืนยัน' })) { bmcStatus('ohbDStatus', null, 'ยังไม่ยืนยัน'); return; }
   try {
     const r = await _bmcJson(`${API}/api/bom-center/hub/process/${o.order_id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lines, po_ref: document.getElementById('ohbPo').value || null }) });
-    await ohbOpen(o.order_id);
-    _bmcStatus('ohbDStatus', `✓ ยืนยันยอดส่งแล้ว · ฿${_bmcNum(r.value, 0)}`, 'var(--good-ink)');
-    ohbLoadQueue();
-  } catch (e) { _bmcStatus('ohbDStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+      body: JSON.stringify({ lines, po_ref: po || null }) });
+    await ohbOpen(o.order_id);            // the detail stays open, now with the status คลังจัดส่งแล้ว
+    // the list keeps the order too, with its new status and its sent value; it is filtered again on the next load
+    const row = _ohbQ && _ohbQ.orders.find(x => x.order_id === o.order_id);
+    if (row) { Object.assign(row, { status: 'processed', po_ref: po || null, value: r.value, value_sent: r.value_sent, value_ordered: r.value_ordered, value_label: r.value_label }); ohbRenderQueueList(); }
+    bmcStatus('ohbDStatus', true, `${edit ? 'บันทึกการแก้ไขยอดส่งแล้ว' : 'ยืนยันยอดส่งแล้ว · คลังจัดส่งแล้ว'} · ${r.value_label} ฿${_bmcNum(r.value, 0)}`);
+  } catch (e) { bmcStatus('ohbDStatus', false, String(e.message || e).slice(0, 220)); }
 }
 async function ohbShowConsolidated() {
   const box = document.getElementById('ohbConsolidated');
@@ -401,7 +526,7 @@ async function ohbShowConsolidated() {
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadConsolidated() {
-  window.location.href = `${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}`;
+  bmcDownload(`${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}`, 'สรุปใบสั่งซื้อตามวันส่ง.xlsx', 'ohbQStatus');
 }
 
 // ── compliance ───────────────────────────────────────────────────────────────
@@ -430,7 +555,7 @@ async function ohbLoadComp() {
     if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-function ohbDownloadComp() { window.location.href = `${API}/api/bom-center/hub/compliance.xlsx?${_ohbCRange()}`; }
+function ohbDownloadComp() { bmcDownload(`${API}/api/bom-center/hub/compliance.xlsx?${_ohbCRange()}`, 'ตรวจสอบการสั่ง.xlsx', 'ohbCStatus'); }
 
 // ── monthly ──────────────────────────────────────────────────────────────────
 async function ohbLoadMonth() {
@@ -633,7 +758,7 @@ async function ohbIvOpen(day) {
 function ohbIvXlsx() {
   const b = document.getElementById('ohbIvBranch').value;
   if (!b) { _bmcStatus('ohbIvStatus', 'เลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
-  window.location.href = `${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${document.getElementById('ohbIvMonth').value}`;
+  bmcDownload(`${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${document.getElementById('ohbIvMonth').value}`, 'ผลต่างตัดเบิกรายวัน.xlsx', 'ohbIvStatus');
 }
 
 // ── ใบตัดเบิกสาขา (PR-J4): the branches' daily slips as a log; Sales Support reopens one with a reason ───────
@@ -764,24 +889,7 @@ async function ohbIsReopen() {
   } catch (e) { _bmcStatus('ohbIsReopenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 // a download that reports the server's reason (no confirmed slip in that month …) instead of opening a JSON page
-async function _ohbIsDownload(url, name, statusId) {
-  statusId = statusId || 'ohbIsStatus';
-  _bmcStatus(statusId, 'กำลังสร้างไฟล์…');
-  try {
-    const r = await fetch(url);
-    if (!r.ok) {
-      let m = '';
-      try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : ''; } catch (e) { /* not json */ }
-      throw new Error(m || 'ดาวน์โหลดไม่สำเร็จ');
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(await r.blob());
-    a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    _bmcStatus(statusId, '✓ ดาวน์โหลดแล้ว', 'var(--good-ink)');
-  } catch (e) { _bmcStatus(statusId, String(e.message || e).slice(0, 220), 'var(--amber-ink)'); }
-}
+function _ohbIsDownload(url, name, statusId) { return bmcDownload(url, name, statusId || 'ohbIsStatus'); }
 function ohbIsXlsx() {
   const m = document.getElementById('ohbIsMonth').value, b = document.getElementById('ohbIsBranch').value;
   if (!m) { _bmcStatus('ohbIsStatus', 'เลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }

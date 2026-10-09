@@ -104,7 +104,7 @@ def test_todo_items_for_sales_support_and_the_analyst(udon):
     ps = it["price_submit"]
     assert ps["status"] == "todo" and ps["title"] == "ส่งไฟล์ราคาเดือน" + month_th(M) + " ให้ฝ่ายวิเคราะห์"
     assert ps["owner_modules"] == ["supply.ordering"] and "ประสานงานขาย" in ps["owner_th"]
-    assert ps["go"]["pane"] == "price" and ps["go"]["anchor"] == "bmcPriceSubmitCard"
+    assert ps["go"]["pane"] == "pricefile" and ps["go"]["anchor"] == "bmcPriceSubmitCard"   # PR-M2: her own page, ไฟล์ราคา
     assert "price_review" not in it
     assert it["price_month"]["owner_th"] == "ฝ่ายวิเคราะห์"
     assert it["price_month"]["detail"] == "นำเข้าจากไฟล์ที่ประสานงานขายส่งมา หรือนำเข้าเอง"
