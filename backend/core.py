@@ -524,6 +524,30 @@ def _carry_forward_and_verify(live_path: str, inc_path: str) -> tuple[bool, str]
     return True, "ok"
 
 
+def export_owner_data(live_path: str, dest_path: str) -> dict:
+    """Write a fresh SQLite file at `dest_path` holding ONLY the owner-data tables - the
+    ones a data swap carries across (_PRESERVED_EXACT / _PRESERVED_PREFIXES, plus the
+    hand-written rows of _MERGED_ROWS) - with their full DDL, indexes and rows. It
+    reuses the two swap helpers, so what is backed up is by construction what the swap
+    protects: a table added to the preserved list is backed up with no second edit.
+    Nothing is read that the swap would not copy (sales data is rebuilt from MSSQL).
+    Returns {"tables": [{"name", "rows"}], "bytes", "integrity"}."""
+    if _os_db.path.exists(dest_path):
+        _os_db.remove(dest_path)
+    sqlite3.connect(dest_path).close()                 # the helpers expect the staged file to exist
+    _carry_forward_preserved(live_path, dest_path)
+    _carry_forward_merged(live_path, dest_path)
+    con = sqlite3.connect(dest_path)
+    try:
+        integrity = con.execute("PRAGMA integrity_check").fetchone()[0]
+        names = sorted(r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'"))
+        tables = [{"name": n, "rows": con.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0]} for n in names]
+    finally:
+        con.close()
+    return {"tables": tables, "bytes": _os_db.path.getsize(dest_path), "integrity": integrity}
+
+
 def _maybe_swap_incoming_db():
     """Apply a staged DB refresh at startup, before any connection is opened.
 
