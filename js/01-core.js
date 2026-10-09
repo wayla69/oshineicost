@@ -2664,6 +2664,49 @@ function supplyCtxSet(patch) {
   try { localStorage.setItem(_supplyCtxKey(), JSON.stringify(c)); } catch (e) {}
   return c;
 }
+// ── PR-M5: ONE month control for the whole module ────────────────────────────────
+// A <select class="supply-month"> of the last 18 months (data-fwd="n" adds n months ahead), labelled "กันยายน 2026", value "2026-09".
+// Every month control of the module (วัตถุดิบ & ราคา, ใบสั่งซื้อ, หน้างาน, ผลต่างของสาขา) starts from supplyCtx().month; when nobody has
+// chosen yet it starts at this month on a working page and at the previous month on a page that closes a month
+// (ปิดงวดเดือน, ใบสรุปตัดเบิก, สรุปผลต่างรายเดือน). A choice made on one of them is the choice on all of them.
+const SUPPLY_MONTHS_BACK = 18;
+function supplyMonthNow() { return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 7); }
+function supplyMonthAdd(ym, n) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+  if (!m) return '';
+  const t = Number(m[1]) * 12 + Number(m[2]) - 1 + n;
+  return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
+}
+function supplyMonthDefault(prev) { return prev ? supplyMonthAdd(supplyMonthNow(), -1) : supplyMonthNow(); }
+function supplyMonthFill(el) {
+  if (!el) return;
+  const keep = el.value, fwd = Number(el.dataset.fwd || 0), now = supplyMonthNow();
+  const list = [];
+  for (let i = fwd; i > -SUPPLY_MONTHS_BACK; i--) list.push(supplyMonthAdd(now, i));
+  if (keep && /^\d{4}-\d{2}$/.test(keep) && !list.includes(keep)) { list.push(keep); list.sort().reverse(); }
+  el.innerHTML = list.map(m => `<option value="${m}">${fmtMonthTh(m)}</option>`).join('');
+  if (keep && list.includes(keep)) el.value = keep;
+}
+// set the value of a month control (adding the month to its list when it is an older one); '' leaves it empty
+function supplyMonthPut(el, m) {
+  if (!el) return '';
+  if (!el.options.length) supplyMonthFill(el);
+  if (m && /^\d{4}-\d{2}$/.test(m) && ![...el.options].some(o => o.value === m)) el.add(new Option(fmtMonthTh(m), m));   // older than the list: still the choice
+  el.value = m || '';
+  return el.value;
+}
+// the month a control starts at: the shared choice, else the default of the page (prev = a page that closes a month)
+function supplyMonthPick(el, prev) { return supplyMonthPut(el, supplyCtx().month || supplyMonthDefault(prev)); }
+// the branches that have data (slips, orders, counts, receipts) in a month — the centre's branch selects list these only
+const _supplyBrData = {};
+async function supplyBranchesWithData(month) {
+  const hit = _supplyBrData[month];
+  if (hit && Date.now() - hit.at < 60000) return hit.rows;
+  const d = await _bmcJson(`${API}/api/bom-center/stock/me?month=${encodeURIComponent(month)}`);
+  _supplyBrData[month] = { at: Date.now(), rows: d.branches || [] };
+  return _supplyBrData[month].rows;
+}
+function supplyBranchOptions(rows, first) { return (first ? `<option value="">${first}</option>` : '') + rows.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join(''); }
 function _supplyItemOf(tab, pane) {
   for (const ch of SUPPLY_CHIPS) {
     const it = ch.items.find(i => i.tab === tab && (!i.pane || i.pane === pane));

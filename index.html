@@ -1508,6 +1508,41 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .brn-daycard { display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 8px 10px; min-height: 56px; border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--r-md, 12px); background: transparent; cursor: pointer; font-size: 14px; }
 .brn-claimrow:focus-visible { outline: 2px solid var(--accent); }
 @media (min-width: 701px) { .brn-vrow .brn-reason select { flex: 0 0 auto !important; width: 320px; max-width: 100%; } .brn-vrow .brn-reason input { max-width: 360px; } }
+/* ── PR-M5 · the centre's desks ──
+   queue card and stacked line on a phone (the warehouse), the two-line claim row, the recipes menus, the price card's options,
+   the register's pager, the muted code suffix of a check */
+.ohb-card { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; padding: 10px 12px; min-height: 56px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r-md, 12px); cursor: pointer; background: var(--bg-card, transparent); }
+.ohb-card:focus-visible { outline: 2px solid var(--accent); }
+.ohb-card-chk { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 40px; min-height: 44px; margin: -6px 0 -6px -8px; }
+.ohb-card-chk input { width: 22px; height: 22px; }
+.ohb-card-main { flex: 1 1 0; min-width: 0; }
+.ohb-card-t { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.ohb-card-s { font-size: 14px; color: var(--text-secondary); }
+.ohb-card-v { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.ohb-card-c { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.ohb-line { padding: 10px 0; border-top: 1px solid var(--border); }
+.ohb-line-n { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--text-primary); overflow-wrap: anywhere; }
+.ohb-line-c { font-size: 12px; color: var(--text-muted); }
+.ohb-line-q { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+.ohb-line-f { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 14px; color: var(--text-primary); }
+.ohb-line .ohb-sent { width: 120px; min-height: 44px; box-sizing: border-box; text-align: center; font-size: 16px; border: 1px solid var(--border-control); border-radius: 10px; background: var(--bg-input); color: var(--text-primary); }
+.ohb-line .ohb-line-r { display: block; width: 100%; min-height: 44px; box-sizing: border-box; margin-top: 6px; padding: 0 10px; font-size: 16px; border: 1px solid var(--border-control); border-radius: 10px; background: var(--bg-input); color: var(--text-primary); }
+.ohb-line-e { font-size: 13px; color: var(--bad-ink); margin-top: 2px; }
+.ohb-line-e:empty { display: none; }
+.ohb-actbar .brn-act { min-height: 48px; flex: 1 1 100%; }
+@media (max-width: 700px) { .ohb-chipbtn { min-height: 44px; } }
+.ohb-claimrow { display: block; padding: 8px 0; border-top: 1px solid var(--border); text-decoration: none; }
+.ohb-claimrow:focus-visible { outline: 2px solid var(--accent); }
+.bmc-code { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.bmc-menu { position: relative; }
+.bmc-menu > summary { list-style: none; cursor: pointer; padding: 4px 12px; font-size: 12px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); }
+.bmc-menu > summary::-webkit-details-marker { display: none; }
+.bmc-menu[open] > summary { border-color: var(--accent); }
+.bmc-menu-pop { position: absolute; z-index: 20; left: 0; top: calc(100% + 4px); min-width: 260px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-md, 12px); background: var(--bg-card, #fff); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+.bmc-menu-item { display: block; padding: 7px 8px; font-size: 13px; color: var(--text-primary); border-radius: var(--r-sm); cursor: pointer; text-decoration: none; }
+.bmc-menu-item:hover { background: var(--bg-input); }
+.bmc-opts > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+select.supply-month { min-width: 150px; }
 /* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
    หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
    give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
