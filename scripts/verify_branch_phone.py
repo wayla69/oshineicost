@@ -30,6 +30,14 @@ import sys
 from playwright.sync_api import sync_playwright
 
 ISSUE_ROW = "#brnIssList .brn-row"
+# no child of a row's name column is wider than its box (the meta line wraps, it is never cut with an ellipsis), and where a
+# row has a system-stock span it takes height (it is on screen, not squeezed away)
+CLIP_JS = """(root) => { const clipped = []; let n = 0;
+  document.querySelectorAll(root + ' .brn-namecol').forEach(c => { n++;
+    c.querySelectorAll('*').forEach(e => { if (e.scrollWidth > e.clientWidth + 1 && e.clientWidth > 0 && getComputedStyle(e).display !== 'inline') clipped.push((e.className || e.tagName) + ' ' + e.scrollWidth + '>' + e.clientWidth + ' · ' + e.innerText.slice(0, 40)); });
+    c.querySelectorAll('.brn-sys').forEach(s => { if (!s.getClientRects().length || s.getBoundingClientRect().height < 8) clipped.push('hidden stock ' + s.innerText); });
+    const sub = c.querySelector('.brn-sub'); if (sub && (sub.scrollHeight > sub.clientHeight + 1 || getComputedStyle(sub).textOverflow === 'ellipsis')) clipped.push('sub cut ' + sub.innerText.slice(0, 40)); });
+  return { n, clipped }; }"""
 
 
 def main(argv=None) -> int:
@@ -129,6 +137,8 @@ def main(argv=None) -> int:
           return rows.map(r => { const ins = [...r.querySelectorAll('.brn-qty')]; const caps = [...r.querySelectorAll('.brn-cap')];
             return ins.map((i, k) => ({ below: caps[k].getBoundingClientRect().top >= i.getBoundingClientRect().bottom - 1, cap: caps[k].innerText, ph: i.placeholder })); }).flat(); }""")
         check(all(x["below"] and " · " in x["cap"] and len(x["cap"].split(" · ")[1].strip()) > 0 for x in c), f"every box has its unit under it: {[x['cap'] for x in c[:4]]}")
+        clip = page.evaluate(CLIP_JS, "#brnIssList")
+        check(clip["n"] > 0 and not clip["clipped"], f"no text in the name column is clipped ({clip['n']} rows; the system stock 'คงเหลือ' is readable)" + (f" — {clip['clipped'][:3]}" if clip["clipped"] else ""))
         hints = page.evaluate("[...document.querySelectorAll('#brnIssList .brn-qty')].map(i => i.placeholder).filter(Boolean)")
         check(any(h.startswith("เมื่อวาน") for h in hints) or not seeded, f"an empty box hints at yesterday's slip: {hints[:3]}")
         order = page.evaluate("_brnIss.zones.map(z => z.items.map(i => i.recent ? 1 : 0))")
@@ -253,6 +263,8 @@ def main(argv=None) -> int:
               return { t, cap: cap.innerText, below: cap.getBoundingClientRect().top >= q.getBoundingClientRect().bottom - 1, h: q.getBoundingClientRect().height }; }""")
             check("แนะนำ" in row["t"] and "ดูที่มา" in row["t"] and row["cap"].startswith("สั่ง · ") and row["below"] and row["h"] >= 43.5,
                   f"a row: name · แนะนำ · คงเหลือ · the order box with its unit ({row['cap']}) and 'ดูที่มา'")
+            clip = page.evaluate(CLIP_JS, "#brnOrdList")
+            check(not clip["clipped"], f"order rows: no text in the name column is clipped ({clip['n']} rows)" + (f" — {clip['clipped'][:3]}" if clip["clipped"] else ""))
             check("ชั้น " not in row["t"] and "ใช้ใน" not in row["t"] and "พยากรณ์" not in row["t"], "no class / recipe / formula text on the closed row")
             page.click("#brnOrdList .brn-why >> nth=0")
             page.wait_for_timeout(300)

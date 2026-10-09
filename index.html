@@ -1531,7 +1531,9 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   body.supply-phone #brnIssList > div, body.supply-phone #brnOrdList > div { padding-top: 6px !important; padding-bottom: 6px !important; }
   body.supply-phone .brn-row .brn-box { width: 72px; flex-basis: 72px; }
   body.supply-phone .brn-row .brn-name { font-size: 13px; }
-  body.supply-phone #brnIssList .brn-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.supply-phone #brnIssList .brn-sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }   /* never clipped: the system stock must be readable */
+  body.supply-phone #brnIssList .brn-sys { display: block; }                                                     /* "คงเหลือ 1 กล่อง" on its own line under the code */
+  body.supply-phone #brnIssList .brn-sys-sep { display: none; }
   body.supply-phone #brnIssList .brn-avg { display: none; }
   body.supply-phone #brnIssProgress { white-space: normal !important; display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.15; }
   body.supply-phone .brn-reason select, body.supply-phone .brn-reason input { min-height: 44px; }

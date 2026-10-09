@@ -396,7 +396,7 @@ function brnIssRender() {
     const v = _brnIssQty[it.code] || { used: '', waste: '' };
     const unit = it.count_unit || it.base_unit || '';
     const sys = it.system_qty == null ? ''
-      : ` · <span class="brn-sys">คงเหลือ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}</span>`;
+      : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}</span>`;
     const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_bmcNum(it.avg_used_7d, 2)} ${esc(unit)}/วัน</span>` : '';
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
