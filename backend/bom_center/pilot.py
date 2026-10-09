@@ -57,15 +57,16 @@ def readiness(con) -> dict:
         bid = b["branch_id"]
         cal = calendar(con, bid)
         first = con.execute("SELECT MIN(count_date), MAX(count_date), COUNT(*) FROM bc_stock_count WHERE branch_id=?"
-                            " AND COALESCE(status,'submitted')='submitted'", (bid,)).fetchone()
+                            " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')",
+                            (bid,)).fetchone()          # the month-end count; a count made while ordering is not the begin stock
         last_order = con.execute("SELECT MAX(cycle_date) FROM bc_order WHERE branch_id=? AND status<>'cancelled'",
                                  (bid,)).fetchone()[0]
         steps = [
             ("account", any(u["active"] for u in users.get(b["name"], [])),
              "สร้างบัญชีผู้ใช้ของสาขา (ตั้งค่า → ผู้ใช้งาน → บทบาท “สาขา” และเลือกสาขา)"),
             ("calendar", all(cal[r]["filled"] for r in ("1", "2", "salmon")),
-             "ฝ่ายขายกำหนดวันสั่ง 3 รอบ (BoM Center → แนะนำยอดสั่ง → ตารางรอบสั่ง)"),
-            ("begin_count", bool(first[0]), "สาขาตรวจนับสต๊อกต้นงวดครั้งแรก (สาขาของฉัน → นับสต๊อก)"),
+             "ฝ่ายขายกำหนดวันส่งของ 3 รอบ (ตั้งค่า → รอบส่งของสาขา)"),
+            ("begin_count", bool(first[0]), "สาขาตรวจนับต้นงวดครั้งแรก (สาขาของฉัน → ตรวจนับสิ้นเดือน)"),
         ]
         rows.append({"branch_id": bid, "branch": b["name"], "accounts": users.get(b["name"], []),
                      "first_count": first[0], "last_count": first[1], "counts": first[2], "last_order": last_order,

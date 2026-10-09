@@ -12,10 +12,11 @@ What a branch should order on an order day, per ingredient:
      window, the rule the MTD reports already use) × trend (last 14 days ÷ the
      14 before, clamped 0.7–1.3) × season/festival factor (the order plan's
      existing calendar + last-year logic).
-  3. COVER PERIOD — from the order calendar the sales team fills per branch
-     (owner §10-7): two regular rounds a week (round 1 Tue/Wed, round 2 Fri/Sat)
-     and a weekly fresh-salmon round ordered 7 days ahead (pre-order). A regular
-     delivery must last until the next regular delivery; salmon a week.
+  3. COVER PERIOD — from the delivery calendar the sales team fills per branch
+     (owner §10-7): two regular rounds a week and a weekly fresh-salmon round.
+     An order must be submitted before 13:15 two days before its delivery day
+     (a Tuesday delivery: Saturday 13:15 — cutoff_for). A regular delivery must
+     last until the next regular delivery; salmon a week.
   4. SAFETY STOCK — z × σ(daily usage around its weekday mean) × √cover days,
      z by ABC class on spend (A 1.65 ≈ 95 %, B 1.28 ≈ 90 %, C 1.04 ≈ 85 %);
      a fresh item never holds more than its shelf life.
@@ -29,15 +30,20 @@ backtest() replays the last weeks to measure the forecast error (MAPE) by class.
 import json
 import math
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
+from .clock import BKK, now_bkk
 from .units import Converter, to_order_units
 
 Z = {"A": 1.65, "B": 1.28, "C": 1.04}
-DEFAULT_CAL = {"1": {"order_weekday": 2, "lead_days": 1},          # Tue (SQLite %w: Sun=0)
-               "2": {"order_weekday": 5, "lead_days": 1},          # Fri
-               "salmon": {"order_weekday": 1, "lead_days": 7}}     # Mon, pre-order a week ahead
+# The calendar is keyed by the DELIVERY weekday (SQLite %w: Sun = 0); the cutoff follows from it.
+DEFAULT_CAL = {"1": {"delivery_weekday": 3},                       # Wed → cutoff Mon 13:15
+               "2": {"delivery_weekday": 6},                       # Sat → cutoff Thu 13:15
+               "salmon": {"delivery_weekday": 1}}                  # Mon → cutoff Sat 13:15
 WD_TH = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"]
+CUTOFF_TIME = time(13, 15)          # owner 2026-10-09: submit before 13:15 …
+CUTOFF_DAYS_BEFORE = 2              # … two days before the delivery day; a Tuesday delivery by Saturday
+ROUND_TH = {"1": "รอบ 1", "2": "รอบ 2", "salmon": "แซลมอนสด"}
 SALMON_DEFAULT = ("02-01-001",)                                     # fresh salmon (owner: weekly pre-order)
 
 
@@ -63,42 +69,110 @@ def _next_on_or_after(d: date, wd: int) -> date:
     return d + timedelta(days=(wd - _wd(d)) % 7)
 
 
+def cutoff_time() -> time:
+    """The one seam for the cutoff clock time (13:15, Bangkok)."""
+    return CUTOFF_TIME
+
+
+def cutoff_weekday(delivery_wd: int) -> int:
+    """SQLite %w in and out: the weekday the order must be in by; a Sunday cutoff moves to Saturday."""
+    d = (int(delivery_wd) - CUTOFF_DAYS_BEFORE) % 7
+    return 6 if d == 0 else d
+
+
+def cutoff_for(delivery: date, cutoff_time_: time = None) -> datetime:
+    """The moment an order for `delivery` must be submitted by (Bangkok): two days before, 13:15."""
+    d = delivery - timedelta(days=CUTOFF_DAYS_BEFORE)
+    if d.weekday() == 6:                                  # Sunday → the Saturday before (Tue delivery → Sat 13:15)
+        d -= timedelta(days=1)
+    return datetime.combine(d, cutoff_time_ or cutoff_time(), tzinfo=BKK)
+
+
+def cutoff_th(dt: datetime) -> str:
+    return f"วัน{WD_TH[_wd(dt.date())]} {dt:%H:%M}"
+
+
+def day_th(d: date) -> str:
+    return f"วัน{WD_TH[_wd(d)]} {d.day}/{d.month}"
+
+
+def _now_for(today: date = None, now: datetime = None) -> datetime:
+    """A test (or a caller that knows the date only) passes `today`: the clock then reads 08:00 that morning."""
+    if now:
+        return now
+    return datetime.combine(today, time(8, 0), tzinfo=BKK) if today else now_bkk()
+
+
 def calendar(con, branch_id: int) -> dict:
-    """{round: {order_weekday, delivery_weekday, lead_days, filled}} with defaults."""
+    """{round: {delivery_weekday, order_weekday, lead_days, cutoff_th, filled, filled_by}} with defaults.
+
+    The sales team fills the DELIVERY weekday; `order_weekday` is the cutoff weekday and `lead_days`
+    the days between them, both derived. A legacy row (delivery_weekday NULL) reads as
+    order_weekday + lead_days."""
     have = {r[0]: {"order_weekday": r[1], "delivery_weekday": r[2], "lead_days": r[3], "filled_by": r[4]}
             for r in con.execute("SELECT round, order_weekday, delivery_weekday, lead_days, filled_by"
                                  " FROM bc_order_calendar WHERE branch_id=?", (branch_id,))}
     out = {}
     for rnd, dflt in DEFAULT_CAL.items():
         c = have.get(rnd)
-        out[rnd] = {"order_weekday": c["order_weekday"] if c else dflt["order_weekday"],
-                    "delivery_weekday": c["delivery_weekday"] if c else None,
-                    "lead_days": (c["lead_days"] if c and c["lead_days"] is not None else dflt["lead_days"]),
+        if c and c["delivery_weekday"] is not None:
+            dw = int(c["delivery_weekday"])
+        elif c and c["order_weekday"] is not None:
+            dw = (int(c["order_weekday"]) + int(c["lead_days"] if c["lead_days"] is not None else 1)) % 7
+        else:
+            dw = dflt["delivery_weekday"]
+        cw = cutoff_weekday(dw)
+        out[rnd] = {"delivery_weekday": dw, "order_weekday": cw, "lead_days": (dw - cw) % 7,
+                    "cutoff_th": f"วัน{WD_TH[cw]} {cutoff_time():%H:%M}",
                     "filled": bool(c), "filled_by": c["filled_by"] if c else None}
     return out
 
 
-def _delivery(order_day: date, cal: dict) -> date:
-    if cal.get("delivery_weekday") is not None:
-        return _next_on_or_after(order_day + timedelta(days=1), int(cal["delivery_weekday"]))
-    return order_day + timedelta(days=int(cal.get("lead_days") or 1))
-
-
-def cover_period(con, branch_id: int, rnd: str, order_day: date) -> tuple:
-    """(order_day, delivery, cover_from, cover_to) — inclusive dates the order must last."""
+def cover_for_delivery(con, branch_id: int, rnd: str, delivery: date) -> tuple:
+    """(cutoff_date, delivery, cover_from, cover_to) — inclusive dates the order must last."""
     cal = calendar(con, branch_id)
-    c = cal[rnd]
-    if _wd(order_day) != int(c["order_weekday"]):
-        order_day = _next_on_or_after(order_day, int(c["order_weekday"]))
-    dlv = _delivery(order_day, c)
+    cut = cutoff_for(delivery).date()
     if rnd == "salmon":
-        return order_day, dlv, dlv, dlv + timedelta(days=6)
+        return cut, delivery, delivery, delivery + timedelta(days=6)
     other = "2" if rnd == "1" else "1"
-    nxt_order = _next_on_or_after(order_day + timedelta(days=1), int(cal[other]["order_weekday"]))
-    nxt_dlv = _delivery(nxt_order, cal[other])
-    if nxt_dlv <= dlv:                                   # a mis-set calendar: fall back to half a week
-        nxt_dlv = dlv + timedelta(days=4)
-    return order_day, dlv, dlv, nxt_dlv - timedelta(days=1)
+    nxt = _next_on_or_after(delivery + timedelta(days=1), int(cal[other]["delivery_weekday"]))
+    return cut, delivery, delivery, nxt - timedelta(days=1)
+
+
+def cover_period(con, branch_id: int, rnd: str, day: date) -> tuple:
+    """Deprecated wrapper: the window still open on `day` — the first delivery of the round whose
+    cutoff date is `day` or later. (cutoff_date, delivery, cover_from, cover_to)."""
+    cal = calendar(con, branch_id)
+    dlv = _next_on_or_after(day, int(cal[rnd]["delivery_weekday"]))
+    while cutoff_for(dlv).date() < day:
+        dlv += timedelta(days=7)
+    return cover_for_delivery(con, branch_id, rnd, dlv)
+
+
+def next_deliveries(con, branch_id: int, today: date, horizon_days: int = 10, now: datetime = None) -> list:
+    """The coming deliveries of every round (from tomorrow), each with its cutoff and whether it is
+    still open, sorted by delivery day then round."""
+    now = _now_for(today, now)
+    cal = calendar(con, branch_id)
+    out = []
+    for rnd in ("1", "2", "salmon"):
+        d = _next_on_or_after(today + timedelta(days=1), int(cal[rnd]["delivery_weekday"]))
+        while d <= today + timedelta(days=horizon_days):
+            cut = cutoff_for(d)
+            cyc, _dl, cf, ct = cover_for_delivery(con, branch_id, rnd, d)
+            left = (cut - now).total_seconds() / 3600.0
+            out.append({"round": rnd, "round_th": ROUND_TH[rnd], "delivery": d.isoformat(), "delivery_th": day_th(d),
+                        "cycle_date": cyc.isoformat(), "cutoff_at": cut.isoformat(), "cutoff_th": cutoff_th(cut),
+                        "open": now <= cut, "late": now > cut, "hours_left": round(left, 1),
+                        "cover_from": cf.isoformat(), "cover_to": ct.isoformat()})
+            d += timedelta(days=7)
+    out.sort(key=lambda x: (x["delivery"], x["round"]))
+    return out
+
+
+def pick_delivery(items: list) -> dict:
+    """The delivery a branch should be working on: the first one still open, else the first."""
+    return next((x for x in items if x["open"]), items[0] if items else None)
 
 
 # ── recipes per dish, in base purchase units ─────────────────────────────────
@@ -238,8 +312,9 @@ def _abc(values: dict) -> dict:
 
 
 def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, season: str = "auto",
-            as_of: date = None, stock: dict = None, uplift_pct: float = 0.0) -> dict:
-    """The suggestion for one branch, one round, one order day (nothing saved).
+            as_of: date = None, stock: dict = None, uplift_pct: float = 0.0, delivery: date = None) -> dict:
+    """The suggestion for one branch, one round, one delivery (nothing saved). `delivery` names
+    the delivery day; without it `order_day` is read as "the window open on that day".
 
     `uplift_pct` (PR-19): the branch's own expectation for the cover period — +20 scales
     the forecast of every item by 1.2 before safety and stock; every row also carries
@@ -249,7 +324,10 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     arrived and what the sales used since, plus what is on order — deducted per item
     after projecting the use between now and the first covered day."""
     from .prices import price_for
-    order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
+    if delivery:
+        order_day, dlv, c_from, c_to = cover_for_delivery(con, branch_id, rnd, delivery)
+    else:
+        order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
     last_data = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = as_of or (date.fromisoformat(last_data) if last_data else order_day - timedelta(days=1))
     start = era_start(as_of - timedelta(days=7 * weeks - 1), as_of)
@@ -333,7 +411,9 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     rows.sort(key=lambda r: -(r["value"] or 0))
     stats.pop("via", None)                                 # carried on each row instead
     cal = calendar(con, branch_id)[rnd]
+    cut = cutoff_for(dlv)
     return {"branch_id": branch_id, "branch": bname, "round": rnd, "order_day": order_day.isoformat(),
+            "cycle_date": order_day.isoformat(), "cutoff_at": cut.isoformat(), "cutoff_th": cutoff_th(cut),
             "order_weekday": WD_TH[_wd(order_day)], "delivery": dlv.isoformat(),
             "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "cover_days": len(cover),
             "calendar_filled": cal["filled"], "history_from": start.isoformat(), "history_to": as_of.isoformat(),
@@ -343,11 +423,14 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             "salmon_codes": sorted(salmon)}
 
 
-def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6) -> dict:
+def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, delivery: date = None) -> dict:
     """PR-19: the customers the cover period normally brings, day by day — the weekday
     mean of the last `weeks` weeks (the forecast's own baseline rule) and the same
     dates a year earlier — so a branch can turn "we expect N customers" into a buffer %."""
-    order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
+    if delivery:
+        order_day, dlv, c_from, c_to = cover_for_delivery(con, branch_id, rnd, delivery)
+    else:
+        order_day, dlv, c_from, c_to = cover_period(con, branch_id, rnd, order_day)
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
     out = {"branch_id": branch_id, "round": rnd, "order_day": order_day.isoformat(), "delivery": dlv.isoformat(),
            "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "available": False, "days": [],

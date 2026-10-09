@@ -4,8 +4,10 @@
   * Sales Support's QUEUE: every submitted order, with its delivery day; Sales Support
     sets what will actually be sent (a change needs a reason — out of stock, substitute,
     pack size …), marks it processed with a PO reference, and works from a consolidated
-    view per supplier × delivery day (Excel). SLA: submitted before 10:00 on the order
-    day → processed by 14:00 the same day (Bangkok time).
+    view per supplier × delivery day (Excel). The cutoff: the branch submits before 13:15
+    two days before the delivery day (`cycle_date` is that cutoff date); a later order is
+    accepted but flagged `late` (late fee at the outside warehouse). The warehouse then
+    processes it by 14:00 of the cutoff day (Bangkok time).
   * Ops' COMPLIANCE: for every cycle the order calendar expects, four numbers in ฿ —
     suggested · confirmed by the branch · processed by Sales Support · received — so a
     gap can be placed at the branch, at the centre, or in the delivery.
@@ -22,7 +24,7 @@ SS_REASONS = (("short", "ซัพพลายเออร์สินค้า�
               ("other", "อื่น ๆ"))
 SS_REASON_TH = dict(SS_REASONS)
 BKK = timezone(timedelta(hours=7))
-SLA_SUBMIT_BY, SLA_PROCESS_BY = 10, 14        # hours, Bangkok
+SLA_PROCESS_BY = 14                            # hour of the cutoff day, Bangkok (the branch cutoff itself: forecast.CUTOFF_TIME)
 TOL_PCT = 20.0                                 # compliance: confirmed vs suggested ฿ within ±20 % = ok
 
 
@@ -65,19 +67,28 @@ def _value(con, order_id: int, field: str, month: str) -> float:
     return round(v, 2)
 
 
-def delivery_of(con, branch_id: int, rnd: str, cycle_date: str) -> str:
-    from .forecast import cover_period
+def delivery_of(con, branch_id: int, rnd: str, cycle_date: str, delivery_date: str = None) -> str:
+    """The delivery day of an order: the stored one, else the first delivery of the round after its cutoff date."""
+    if delivery_date:
+        return delivery_date
+    from .forecast import _next_on_or_after, calendar
     try:
-        return cover_period(con, branch_id, rnd, date.fromisoformat(cycle_date))[1].isoformat()
+        dw = calendar(con, branch_id)[rnd]["delivery_weekday"]
+        return _next_on_or_after(date.fromisoformat(cycle_date) + timedelta(days=1), int(dw)).isoformat()
     except Exception:
         return cycle_date
 
 
-def sla(submitted_at: str, processed_at: str, cycle_date: str) -> dict:
+def sla(submitted_at: str, processed_at: str, cycle_date: str, cutoff_at: str = None) -> dict:
+    """On time = submitted by the cutoff (`cutoff_at`; without it 13:15 of `cycle_date`, the cutoff date).
+    The warehouse then has until 14:00 of the cutoff day."""
+    from .forecast import cutoff_time
     s, p = _bkk(submitted_at), _bkk(processed_at)
-    on_time_submit = bool(s and s.date().isoformat() <= cycle_date and
-                          (s.date().isoformat() < cycle_date or s.hour < SLA_SUBMIT_BY))
-    out = {"submitted_on_time": on_time_submit, "processed_on_time": None, "hours_to_process": None}
+    cut = datetime.fromisoformat(cutoff_at) if cutoff_at else \
+        datetime.combine(date.fromisoformat(cycle_date), cutoff_time(), tzinfo=BKK)
+    on_time_submit = bool(s and s <= cut)
+    out = {"submitted_on_time": on_time_submit, "late": bool(s and not on_time_submit),
+           "processed_on_time": None, "hours_to_process": None}
     if s and p:
         out["hours_to_process"] = round((p - s).total_seconds() / 3600.0, 1)
         if on_time_submit:
@@ -92,7 +103,8 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     q = ("SELECT o.order_id, o.branch_id, b.name, o.cycle_date, o.round, o.status, o.value, o.submitted_at,"
          " o.processed_at, o.processed_by, o.po_ref, o.stock_count_id, o.buffer_pct, o.buffer_reason,"
          " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND COALESCE(l.confirmed_units,0)>0),"
-         " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND l.reason_code IS NOT NULL)"
+         " (SELECT COUNT(*) FROM bc_order_line l WHERE l.order_id=o.order_id AND l.reason_code IS NOT NULL),"
+         " COALESCE(o.late,0), o.cutoff_at, o.delivery_date"
          f" FROM bc_order o JOIN branches b USING(branch_id) WHERE o.status IN ({','.join('?' * len(sts))})")
     args = list(sts)
     if date_from:
@@ -106,11 +118,13 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     for r in con.execute(q, args).fetchall():
         d = dict(zip(("order_id", "branch_id", "branch", "cycle_date", "round", "status", "value", "submitted_at",
                       "processed_at", "processed_by", "po_ref", "stock_count_id", "buffer_pct", "buffer_reason",
-                      "lines", "branch_changes"), r))
+                      "lines", "branch_changes", "late", "cutoff_at", "delivery_date"), r))
         from .orders import BUFFER_REASON_TH
         d["buffer_reason_th"] = BUFFER_REASON_TH.get(d["buffer_reason"]) if d["buffer_reason"] else None
-        d["delivery"] = delivery_of(con, d["branch_id"], d["round"], d["cycle_date"])
-        d.update(sla(d["submitted_at"], d["processed_at"], d["cycle_date"]))
+        d["delivery"] = delivery_of(con, d["branch_id"], d["round"], d["cycle_date"], d.pop("delivery_date"))
+        late = bool(d["late"])
+        d.update(sla(d["submitted_at"], d["processed_at"], d["cycle_date"], d["cutoff_at"]))
+        d["late"] = late                                  # the flag recorded when the order was submitted
         d["stock_deducted"] = d.pop("stock_count_id") is not None
         out.append(d)
     return out
@@ -161,15 +175,15 @@ def consolidated(con, order_ids: list) -> dict:
     ing = {c: (n, s, recv, base, per) for c, n, s, recv, base, per in con.execute(
         "SELECT code, name_th, supplier, recv_unit, base_unit, qty_per_recv FROM bc_ingredient")}
     groups, branches = {}, set()
-    for oid, bid, bname, cyc, rnd, c, conf, proc, unit in con.execute(
+    for oid, bid, bname, cyc, rnd, c, conf, proc, unit, ddate in con.execute(
             "SELECT o.order_id, o.branch_id, b.name, o.cycle_date, o.round, l.ingredient_code, l.confirmed_units,"
-            f" l.processed_units, l.order_unit FROM bc_order o JOIN branches b USING(branch_id) JOIN bc_order_line l"
-            f" USING(order_id) WHERE o.order_id IN ({ph})", order_ids).fetchall():
+            f" l.processed_units, l.order_unit, o.delivery_date FROM bc_order o JOIN branches b USING(branch_id)"
+            f" JOIN bc_order_line l USING(order_id) WHERE o.order_id IN ({ph})", order_ids).fetchall():
         q = proc if proc is not None else conf
         if not q:
             continue
         n, sup, recv, base, per = ing.get(c, (c, None, None, None, None))
-        dlv = delivery_of(con, bid, rnd, cyc)
+        dlv = delivery_of(con, bid, rnd, cyc, ddate)
         key = (sup or "ไม่ระบุซัพพลายเออร์", dlv)
         g = groups.setdefault(key, {"supplier": key[0], "delivery": dlv, "items": {}})
         it = g["items"].setdefault(c, {"code": c, "name": n or c, "unit": recv if unit != "base" else base,
@@ -214,14 +228,17 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None) -> dict
 
 
 def _cycle(con, bid, bname, rnd, cyc, today) -> dict:
-    r = con.execute("SELECT order_id, status, submitted_at, processed_at FROM bc_order WHERE branch_id=? AND round=?"
+    r = con.execute("SELECT order_id, status, submitted_at, processed_at, cutoff_at, COALESCE(late,0), delivery_date"
+                    " FROM bc_order WHERE branch_id=? AND round=?"
                     " AND cycle_date=? AND status<>'cancelled' ORDER BY order_id DESC LIMIT 1", (bid, rnd, cyc)).fetchone()
     row = {"branch_id": bid, "branch": bname, "round": rnd, "cycle_date": cyc, "order_id": None,
-           "suggested": None, "confirmed": None, "processed": None, "received": None}
+           "suggested": None, "confirmed": None, "processed": None, "received": None, "late": False,
+           "delivery": delivery_of(con, bid, rnd, cyc)}
     if not r:
         row["status"] = "not_ordered" if cyc < today.isoformat() else "upcoming"
         return row
-    oid, st, sub, proc = r
+    oid, st, sub, proc, cutoff_at, late, ddate = r
+    row["delivery"] = delivery_of(con, bid, rnd, cyc, ddate)
     m = cyc[:7]
     row.update(order_id=oid, order_status=st, suggested=_value(con, oid, "suggested_units", m),
                confirmed=_value(con, oid, "confirmed_units", m))
@@ -229,7 +246,8 @@ def _cycle(con, bid, bname, rnd, cyc, today) -> dict:
         row["processed"] = _value(con, oid, "processed_units", m)
     if st == "received":
         row["received"] = _value(con, oid, "received_units", m)
-    row.update(sla(sub, proc, cyc))
+    row.update(sla(sub, proc, cyc, cutoff_at))
+    row["late"] = bool(late)
     if st in ("suggested", "confirmed"):
         row["status"] = "not_submitted"
     else:

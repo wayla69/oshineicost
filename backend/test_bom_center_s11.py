@@ -98,12 +98,12 @@ def test_the_master_pack_is_a_last_resort_and_flagged(udon):
 
 def test_order_pages_central_and_local(udon):
     CE.apply_catalogue(udon, CE.parse_report(udon, _report(ITEMS[:1])), "ss")      # only the crab is central
-    p = OR.plan(udon, 1, "1", date(2026, 10, 6), as_of=date(2026, 10, 5))
+    p = OR.plan(udon, 1, "1", date(2026, 10, 7), as_of=date(2026, 10, 5))           # Wednesday's delivery
     assert p["central_list"] and [r["code"] for r in p["rows"]] == ["13-01-009"]
     crab = p["rows"][0]
     assert crab["price_source"] == "central" and crab["price_per_sale"] == 1500
     assert crab["order_unit"] == "pack" and crab["qty_per_recv"] == 10000.0
-    s = OR.plan(udon, 1, "salmon", date(2026, 10, 6), as_of=date(2026, 10, 5))
+    s = OR.plan(udon, 1, "salmon", date(2026, 10, 12), as_of=date(2026, 10, 5))     # Monday's salmon
     assert s["rows"] == [] and [r["code"] for r in s["local_rows"]] == ["02-01-001"]   # salmon: bought locally
     with pytest.raises(ValueError, match="ไม่อยู่ในบัญชีสินค้าส่วนกลาง"):
         OR.save(udon, 1, "1", p["order_day"], p, [{"code": "02-01-001", "confirmed_units": 1,
@@ -166,10 +166,10 @@ def test_a_recipes_older_code_is_counted_as_the_one_delivered(udon):
     v = CE.link_view(udon)
     assert v["suggestions"][0]["old_code"] == "13-01-009"
     assert v["suggestions"][0]["options"][0]["new_code"] == "13-01-777"
-    before = OR.plan(udon, 1, "1", date(2026, 10, 6), as_of=date(2026, 10, 5))
+    before = OR.plan(udon, 1, "1", date(2026, 10, 7), as_of=date(2026, 10, 5))
     assert before["rows"] == [] and [r["code"] for r in before["local_rows"]] == ["13-01-009"]
     CE.set_link(udon, "13-01-009", "13-01-777", "ss")
-    after = OR.plan(udon, 1, "1", date(2026, 10, 6), as_of=date(2026, 10, 5))
+    after = OR.plan(udon, 1, "1", date(2026, 10, 7), as_of=date(2026, 10, 5))
     assert [r["code"] for r in after["rows"]] == ["13-01-777"]                    # ordered from the centre now
     assert after["rows"][0]["forecast"] == pytest.approx(before["local_rows"][0]["forecast"])
     assert CE.link_view(udon)["links"][0]["new_code"] == "13-01-777"

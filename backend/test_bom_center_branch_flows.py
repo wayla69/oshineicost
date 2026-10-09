@@ -8,17 +8,21 @@ The promises:
     pane whatever today's cycle is;
   * an order's detail names its delivery day.
 """
-from datetime import date
+from datetime import date, datetime
 
 from bom_center import orders as OR
-from test_bom_center_s4b import con  # noqa: F401  (branch 1, default order calendar: Tue / Fri / Mon salmon)
+from bom_center.clock import BKK
+from test_bom_center_s4b import con  # noqa: F401  (branch 1, default delivery calendar: Wed / Sat / Mon salmon)
 
 
-def test_the_round_whose_order_day_comes_first(con):
-    assert OR.next_round(con, 1, date(2026, 10, 5)) == "salmon"   # Monday: salmon's own day
-    assert OR.next_round(con, 1, date(2026, 10, 6)) == "1"        # Tuesday
-    assert OR.next_round(con, 1, date(2026, 10, 7)) == "2"        # Wednesday: Friday is nearer than next Tuesday
-    assert OR.next_round(con, 1, date(2026, 10, 8)) == "2"        # Thursday
+def test_the_round_whose_cutoff_comes_first(con):
+    # the nearest delivery whose 13:15 cutoff has not passed (the clock reads 08:00 when only the day is given)
+    assert OR.next_round(con, 1, date(2026, 10, 5)) == "1"        # Monday morning: Wednesday's cutoff is today 13:15
+    assert OR.next_round(con, 1, date(2026, 10, 6)) == "2"        # Tuesday: Wednesday's cutoff has passed → Saturday
+    assert OR.next_round(con, 1, date(2026, 10, 7)) == "2"        # Wednesday
+    assert OR.next_round(con, 1, date(2026, 10, 8)) == "2"        # Thursday morning: Saturday's cutoff is today 13:15
+    thu_pm = datetime(2026, 10, 8, 14, 0, tzinfo=BKK)             # after it: Monday's salmon is the one still open
+    assert OR.next_round(con, 1, date(2026, 10, 8), now=thu_pm) == "salmon"
 
 
 def test_history_narrows_to_the_orders_awaiting_receipt(con):

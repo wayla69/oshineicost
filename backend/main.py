@@ -697,7 +697,8 @@ def _maybe_supply_reminder(now=None, send=None):
     """The first API request after 07:00 (Thai clock) each day builds the day's
     reminder (the pilot branches' duties and the queue, from the same facts as
     หน้างาน), stores it and sends it to Telegram when the bot is configured; the
-    first request after 10:00 adds the queue note when ใบสั่งซื้อ still wait.
+    first request after 13:15 (the branch order cutoff) adds a note of the branches
+    that missed it and the ใบสั่งซื้อ waiting in the warehouse queue.
     Best-effort and once a day each; a quiet day is stored but not sent."""
     try:
         from bom_center import reminders as _rem
@@ -714,10 +715,12 @@ def _maybe_supply_reminder(now=None, send=None):
             rec.update({"generated_at": now.strftime("%Y-%m-%d %H:%M"), "telegram_configured": configured, "sent": sent})
             _usage_meta_set("supply_reminder", _json.dumps(rec, ensure_ascii=False))
             out = rec
-        if now.hour >= 10 and _usage_meta_get("supply_sla_day") != day:
+        if (now.hour, now.minute) >= (13, 15) and _usage_meta_get("supply_sla_day") != day:
             _usage_meta_set("supply_sla_day", day)
+            from bom_center.clock import BKK as _BKK
             with get_db() as con:
-                rec2 = _rem.sla(con, today=now.date(), app_url=APP_URL)
+                rec2 = _rem.cutoff(con, today=now.date(), app_url=APP_URL,
+                                   now=now if now.tzinfo else now.replace(tzinfo=_BKK))
             if rec2:
                 configured, sent = _supply_reminder_send(rec2["text"], send)
                 rec2.update({"generated_at": now.strftime("%Y-%m-%d %H:%M"), "telegram_configured": configured, "sent": sent})

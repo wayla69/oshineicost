@@ -60,14 +60,14 @@ def test_scorecard_against_the_pass_criteria(con):  # noqa: F811
         return ST.save(con, 1, [{"code": "13-01-009", "qty": crab, "unit": "กรัม"},
                                 {"code": "02-01-001", "qty": 9000, "unit": "กรัม"}], "udon",
                        submit=True, count_date=day)["count_id"]
-    count("2026-09-22", 20000)
-    e = count("2026-09-29", 1000)                                  # far more crab used than the recipes
+    count("2026-09-24", 20000)
+    e = count("2026-10-01", 1000)                                  # far more crab used than the recipes
     VA.set_reason(con, 1, e, "13-01-009", "waste", None, "udon")
     con.commit()
     assert PL.scorecard(con, 2, weeks=2, as_of=date(2026, 10, 5))["verdict"] == "not_started"
     s = PL.scorecard(con, 1, weeks=3, as_of=date(2026, 10, 5))
-    assert s["from"] == "2026-09-22"                               # starts at the first count, not 3 weeks back
-    assert s["cycles"] == 4                                        # Tue 22 & 29 Sep, Fri 25 Sep & 2 Oct
+    assert s["from"] == "2026-09-24"                               # starts at the first count, not 3 weeks back
+    assert s["cycles"] == 4                                        # cutoff days: Thu 24 Sep & 1 Oct (round 2), Mon 28 Sep & 5 Oct (round 1)
     m, p = s["metrics"], s["passes"]
     assert m["count_coverage"] == 50.0 and p["count_coverage"] is False
     assert m["count_minutes"] is not None and p["count_minutes"] is True

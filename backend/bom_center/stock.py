@@ -63,17 +63,45 @@ def _branch_name(con, branch_id: int) -> str:
     return r[0]
 
 
-def last_submitted(con, branch_id: int):
+MONTH_KINDS = ("begin", "end")       # the month-end count; a 'spot' count belongs to one order (นับและสั่ง)
+
+
+def _in(kinds) -> str:
+    return "(" + ",".join(f"'{k}'" for k in kinds) + ")"
+
+
+def last_submitted(con, branch_id: int, kinds=MONTH_KINDS):
     r = con.execute("SELECT count_id, count_date, kind, submitted_at, counted_by FROM bc_stock_count"
-                    " WHERE branch_id=? AND COALESCE(status,'submitted')='submitted'"
+                    f" WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(kinds)}"
                     " ORDER BY count_date DESC, count_id DESC LIMIT 1", (branch_id,)).fetchone()
     return dict(zip(("count_id", "count_date", "kind", "submitted_at", "counted_by"), r)) if r else None
 
 
-def draft_of(con, branch_id: int):
+def draft_of(con, branch_id: int, kinds=MONTH_KINDS):
     r = con.execute("SELECT count_id, count_date, kind, updated_at, counted_by FROM bc_stock_count"
-                    " WHERE branch_id=? AND status='draft' ORDER BY count_id DESC LIMIT 1", (branch_id,)).fetchone()
+                    f" WHERE branch_id=? AND status='draft' AND kind IN {_in(kinds)}"
+                    " ORDER BY count_id DESC LIMIT 1", (branch_id,)).fetchone()
     return dict(zip(("count_id", "count_date", "kind", "updated_at", "counted_by"), r)) if r else None
+
+
+def count_row(con, count_id: int):
+    r = con.execute("SELECT count_id, branch_id, count_date, kind, COALESCE(status,'submitted') FROM bc_stock_count"
+                    " WHERE count_id=?", (count_id,)).fetchone()
+    return dict(zip(("count_id", "branch_id", "count_date", "kind", "status"), r)) if r else None
+
+
+def count_units(con, codes) -> dict:
+    """{code: (unit it is counted in, base units in one of it)} — the rule `sheet()` shows a branch."""
+    codes = set(codes)
+    if not codes:
+        return {}
+    conv = Converter(con)
+    out = {}
+    for c, base, recv, per, cu in con.execute(
+            "SELECT code, base_unit, recv_unit, qty_per_recv, count_unit FROM bc_ingredient"):
+        if c in codes:
+            out[c] = (cu, conv.factor(c, cu)[0]) if cu else count_unit(base, recv, per)
+    return out
 
 
 def _usage(con, branch_id: int, as_of: date) -> dict:
@@ -149,26 +177,44 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
 
 
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
-         note: str = None) -> dict:
-    """Write the branch's draft (creating it) and optionally submit it."""
+         note: str = None, kind: str = None, count_id: int = None) -> dict:
+    """Write the branch's draft (creating it) and optionally submit it.
+
+    `kind=None` is the month-end count (begin, then end). `kind="spot"` is the count a branch makes
+    while ordering (นับและสั่ง): one draft per order, `count_id` names the one already linked (None =
+    start a new one); it never touches the month-end draft or the begin/end sequence."""
     _branch_name(con, branch_id)
     conv = Converter(con)
-    dr = draft_of(con, branch_id)
-    kind = "end" if last_submitted(con, branch_id) else "begin"
     cdate = count_date or bkk_today().isoformat()
     try:
         date.fromisoformat(cdate)
     except ValueError:
         raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
-    if dr:
-        cid = dr["count_id"]
-        con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, kind=?, count_date=?,"
-                    " note=COALESCE(?, note) WHERE count_id=?", (now(), who, kind, cdate, note, cid))
+    if kind == "spot":
+        if count_id is not None:
+            cr = count_row(con, count_id)
+            if not cr or cr["branch_id"] != branch_id or cr["kind"] != "spot" or cr["status"] != "draft":
+                raise ValueError("ผลตรวจนับก่อนสั่งของใบสั่งซื้อนี้ส่งแล้ว กรุณากดเปิดแก้ไขใบสั่งซื้อก่อน")
+            cid = count_id
+            con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, count_date=?,"
+                        " note=COALESCE(?, note) WHERE count_id=?", (now(), who, cdate, note, cid))
+        else:
+            cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
+                              " status, updated_at) VALUES(?,?, 'spot', ?,?,?, 'draft', ?)",
+                              (branch_id, cdate, who, note or "นับก่อนสั่ง", now(), now()))
+            cid = cur.lastrowid
     else:
-        cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
-                          " status, updated_at) VALUES(?,?,?,?,?,?, 'draft', ?)",
-                          (branch_id, cdate, kind, who, note, now(), now()))
-        cid = cur.lastrowid
+        dr = draft_of(con, branch_id)
+        kind = "end" if last_submitted(con, branch_id) else "begin"
+        if dr:
+            cid = dr["count_id"]
+            con.execute("UPDATE bc_stock_count SET updated_at=?, counted_by=?, kind=?, count_date=?,"
+                        " note=COALESCE(?, note) WHERE count_id=?", (now(), who, kind, cdate, note, cid))
+        else:
+            cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at,"
+                              " status, updated_at) VALUES(?,?,?,?,?,?, 'draft', ?)",
+                              (branch_id, cdate, kind, who, note, now(), now()))
+            cid = cur.lastrowid
     bad = []
     for ln in lines or []:
         code = (ln.get("code") or ln.get("ingredient_code") or "").strip()
@@ -209,10 +255,32 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     return out
 
 
-def history(con, branch_id: int, limit: int = 20) -> list:
+def reopen_spot(con, count_id: int, who: str) -> None:
+    """The order was reopened for editing: its count goes back to a draft with it."""
+    cr = count_row(con, count_id)
+    if not cr or cr["kind"] != "spot":
+        return
+    con.execute("UPDATE bc_stock_count SET status='draft', submitted_at=NULL, updated_at=? WHERE count_id=?",
+                (now(), count_id))
+    audit(con, who, "stock_reopen", "bc_stock_count", str(count_id), None, {"branch_id": cr["branch_id"]})
+
+
+def delete_spot_draft(con, count_id: int, who: str) -> bool:
+    """The order was cancelled: a spot count still in draft goes with it (a submitted one is kept)."""
+    cr = count_row(con, count_id)
+    if not cr or cr["kind"] != "spot" or cr["status"] != "draft":
+        return False
+    con.execute("DELETE FROM bc_stock_count_line WHERE count_id=?", (count_id,))
+    con.execute("DELETE FROM bc_stock_count WHERE count_id=?", (count_id,))
+    audit(con, who, "stock_discard", "bc_stock_count", str(count_id), None, {"kind": "spot"})
+    return True
+
+
+def history(con, branch_id: int, limit: int = 20, kinds=None) -> list:
+    where = f" AND c.kind IN {_in(kinds)}" if kinds else ""
     rows = con.execute(
         "SELECT c.count_id, c.count_date, c.kind, c.status, c.counted_by, c.submitted_at, COUNT(l.ingredient_code)"
-        " FROM bc_stock_count c LEFT JOIN bc_stock_count_line l USING(count_id) WHERE c.branch_id=?"
+        f" FROM bc_stock_count c LEFT JOIN bc_stock_count_line l USING(count_id) WHERE c.branch_id=?{where}"
         " GROUP BY c.count_id ORDER BY c.count_date DESC, c.count_id DESC LIMIT ?", (branch_id, limit)).fetchall()
     return [dict(zip(("count_id", "count_date", "kind", "status", "counted_by", "submitted_at", "lines"), r))
             for r in rows]
@@ -245,7 +313,8 @@ def discard_draft(con, branch_id: int, who: str) -> bool:
 def periods(con, branch_id: int) -> list:
     """Consecutive submitted counts: [(begin_count, end_count)] — the periods S7 measures."""
     cs = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
-                     " AND COALESCE(status,'submitted')='submitted' ORDER BY count_date, count_id",
+                     f" AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
+                     " ORDER BY count_date, count_id",
                      (branch_id,)).fetchall()
     return [({"count_id": a[0], "date": a[1]}, {"count_id": b[0], "date": b[1]}) for a, b in zip(cs, cs[1:])]
 
@@ -324,7 +393,8 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     if draft_of(con, branch_id):
         raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ กรุณาส่งหรือลบร่างก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
-                   " COALESCE(status,'submitted')='submitted'", (branch_id, count_date)).fetchone():
+                   f" COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}",
+                   (branch_id, count_date)).fetchone():
         raise ValueError(f"วันที่ {count_date} มีผลตรวจนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
     conv = Converter(con)
     known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}

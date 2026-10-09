@@ -1059,37 +1059,37 @@ def bc_order_calendar():
             cal = _fc.calendar(con, bid)
             rows.append({"branch_id": bid, "branch": name, **{f"r{k}": v for k, v in cal.items()}})
     from bom_center.pilot import PILOT                       # the page can show the pilot branches alone
-    return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL, "pilot": list(PILOT)}
+    return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL, "pilot": list(PILOT),
+            "cutoff_time": f"{_fc.cutoff_time():%H:%M}"}
 
 
 class CalRow(BaseModel):
     branch_id: int
     round: str
-    order_weekday: int
-    delivery_weekday: Optional[int] = None
-    lead_days: Optional[int] = None
+    delivery_weekday: Optional[int] = None       # SQLite %w: Sunday = 0 … Saturday = 6 — the only value the sales team sets
+    order_weekday: Optional[int] = None          # ignored: derived from the delivery day (kept so an old client still posts)
+    lead_days: Optional[int] = None              # ignored: derived
 
 
 @router.post("/api/bom-center/order-calendar", dependencies=[Depends(require_write_token)])
 def bc_order_calendar_save(rows: List[CalRow], request: Request):
     from datetime import datetime as _dt, timezone as _tz
-    allowed = {"1": (2, 3), "2": (5, 6), "salmon": tuple(range(7))}            # owner: Tue/Wed · Fri/Sat
     who = _who(request)
     now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     def go():
         for r in rows:
-            if r.round not in allowed:
+            if r.round not in _fc.DEFAULT_CAL:
                 raise ValueError(f"ไม่พบรอบ {r.round} ในระบบ")
-            if r.order_weekday not in allowed[r.round]:
-                raise ValueError(f"รอบ {r.round} สั่งได้เฉพาะวัน {', '.join(_fc.WD_TH[i] for i in allowed[r.round])}")
-            if r.lead_days is not None and not (0 <= r.lead_days <= 14):
-                raise ValueError("ระยะส่งต้องอยู่ระหว่าง 0–14 วัน")
+            if r.delivery_weekday is None or not (0 <= int(r.delivery_weekday) <= 6):
+                raise ValueError("กรุณาระบุวันส่งของรอบ (อาทิตย์–เสาร์)")
+            dw = int(r.delivery_weekday)
+            cw = _fc.cutoff_weekday(dw)                  # the weekday the branch has to order by (13:15)
             con.execute("INSERT OR REPLACE INTO bc_order_calendar(branch_id, round, order_weekday, delivery_weekday,"
                         " lead_days, filled_by, updated_at) VALUES(?,?,?,?,?,?,?)",
-                        (r.branch_id, r.round, r.order_weekday, r.delivery_weekday, r.lead_days, who, now))
+                        (r.branch_id, r.round, cw, dw, (dw - cw) % 7, who, now))
             _m.audit(con, who, "order_calendar", "bc_order_calendar", f"{r.branch_id}|{r.round}", None,
-                     f"{r.order_weekday}/{r.delivery_weekday}/{r.lead_days}")
+                     f"delivery {dw} / cutoff {cw}")
     with get_db() as con:
         _ensure(con)
         _write(con, go)
@@ -1375,11 +1375,14 @@ def bc_stock_discard(request: Request, branch_id: Optional[int] = Query(None)):
 
 
 @router.get("/api/bom-center/stock/counts")
-def bc_stock_counts(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20)):
+def bc_stock_counts(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20),
+                    kind: Optional[str] = Query(None)):
+    """`kind=month` lists the month-end counts (begin / end) only; omitted = every count, spot ones included."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return {"branch_id": bid, "counts": _st.history(con, bid, max(1, min(limit, 200)))}
+        return {"branch_id": bid, "counts": _st.history(con, bid, max(1, min(limit, 200)),
+                                                       kinds=_st.MONTH_KINDS if kind == "month" else None)}
 
 
 @router.get("/api/bom-center/stock/count/{count_id}")
@@ -1521,19 +1524,47 @@ def _day_or_today(d: Optional[str]) -> date:
         raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
 
 
+def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str], order_day: Optional[str]) -> tuple:
+    """(round, delivery date) for a plan / save request. `delivery` names the delivery day (with its round);
+    the deprecated `order_day` means "the window open on that day"; neither = the delivery the branch should
+    be working on now — the nearest whose 13:15 cutoff has not passed (else the nearest)."""
+    if rnd:
+        _round_or_400(rnd)
+    if delivery:
+        d = _day_or_today(delivery)
+        if not rnd:                                           # the round whose calendar delivers on that day
+            rnd = next((x["round"] for x in _fc.next_deliveries(con, bid, bkk_today(), horizon_days=21)
+                        if x["delivery"] == d.isoformat()), None)
+            if not rnd:
+                raise HTTPException(400, "กรุณาระบุรอบของวันส่งนี้")
+        if _fc._wd(d) != int(_fc.calendar(con, bid)[rnd]["delivery_weekday"]):
+            raise HTTPException(400, "วันส่งไม่ตรงกับวันส่งที่กำหนดไว้ของรอบนี้ กรุณาเลือกจากรายการรอบส่ง")
+        return rnd, d
+    if order_day:
+        day = _day_or_today(order_day)
+        rnd = rnd or _or.next_round(con, bid, day)
+        return rnd, _fc.cover_period(con, bid, rnd, day)[1]
+    items = _fc.next_deliveries(con, bid, bkk_today())
+    if rnd:
+        items = [x for x in items if x["round"] == rnd]
+    pick = _fc.pick_delivery(items)
+    return pick["round"], date.fromisoformat(pick["delivery"])
+
+
 @router.get("/api/bom-center/order/plan")
-def bc_order_plan(request: Request, round: Optional[str] = Query(None), order_day: Optional[str] = Query(None),
-                  branch_id: Optional[int] = Query(None), buffer_pct: Optional[float] = Query(None)):
-    """This round's suggestion net of stock + the cycle's order if one exists. Without a
-    round, the one whose order day comes first — the branch page opens on it.
-    `buffer_pct` (PR-19) applies the branch's expectation; omitted = the order's own."""
+def bc_order_plan(request: Request, round: Optional[str] = Query(None), delivery: Optional[str] = Query(None),
+                  order_day: Optional[str] = Query(None), branch_id: Optional[int] = Query(None),
+                  buffer_pct: Optional[float] = Query(None)):
+    """The suggestion for one delivery, net of the count the branch typed + the cycle's order if one
+    exists. Without a delivery, the nearest one still open for ordering — the branch page opens on it.
+    `buffer_pct` (PR-19) applies the branch's expectation; omitted = the order's own.
+    `order_day` is deprecated: "the window open on that day"."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        day = _day_or_today(order_day)
-        rnd = _round_or_400(round) if round else _or.next_round(con, bid, day)
+        rnd, dlv = _resolve_delivery(con, bid, round, delivery, order_day)
         try:
-            out = _or.plan(con, bid, rnd, day, buffer_pct=buffer_pct)
+            out = _or.plan(con, bid, rnd, dlv, buffer_pct=buffer_pct)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         out["round"] = rnd
@@ -1541,16 +1572,15 @@ def bc_order_plan(request: Request, round: Optional[str] = Query(None), order_da
 
 
 @router.get("/api/bom-center/order/covers")
-def bc_order_covers(request: Request, round: Optional[str] = Query(None), order_day: Optional[str] = Query(None),
-                    branch_id: Optional[int] = Query(None)):
+def bc_order_covers(request: Request, round: Optional[str] = Query(None), delivery: Optional[str] = Query(None),
+                    order_day: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
     """PR-19: the customers the cover period normally brings, day by day (the forecast's
     weekday baseline and last year's same dates) — the helper behind "คำนวณจากจำนวนลูกค้า"."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        day = _day_or_today(order_day)
-        rnd = _round_or_400(round) if round else _or.next_round(con, bid, day)
-        out = _fc.covers(con, bid, rnd, day)
+        rnd, dlv = _resolve_delivery(con, bid, round, delivery, order_day)
+        out = _fc.covers(con, bid, rnd, bkk_today(), delivery=dlv)
         out["round"] = rnd
         return out
 
@@ -1562,13 +1592,22 @@ class OrderLine(BaseModel):
     note: Optional[str] = None
 
 
+class CountLine(BaseModel):
+    code: str
+    qty: Optional[float] = None            # None clears the line
+    unit: Optional[str] = None
+
+
 class OrderBody(BaseModel):
     round: str
-    order_day: Optional[str] = None
+    delivery: Optional[str] = None
+    order_day: Optional[str] = None        # deprecated: "the window open on that day"
     lines: List[OrderLine] = []
+    counts: Optional[List[CountLine]] = None   # the on-hand the branch counted while ordering (None = leave as is)
     submit: bool = False
     note: Optional[str] = None
     buffer: Optional[dict] = None          # PR-19: {pct, reason, note}; absent = keep the order's own
+    ack_late: bool = False                 # the branch confirmed the late fee for a submit after the cutoff
 
 
 @router.post("/api/bom-center/order/save", dependencies=[Depends(require_write_token)])
@@ -1576,14 +1615,19 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        rnd = _round_or_400(body.round)
-        try:
-            p = _or.plan(con, bid, rnd, _day_or_today(body.order_day),
-                         buffer_pct=(body.buffer or {}).get("pct") if body.buffer is not None else None)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        out = _write(con, lambda: _or.save(con, bid, rnd, p["order_day"], p, [ln.dict() for ln in body.lines],
-                                           _who(request), submit=body.submit, note=body.note, buffer=body.buffer))
+        rnd, dlv = _resolve_delivery(con, bid, body.round, body.delivery, body.order_day)
+
+        def go():
+            try:
+                return _or.save_flow(con, bid, rnd, dlv, [ln.dict() for ln in body.lines],
+                                     None if body.counts is None else [c.dict() for c in body.counts],
+                                     _who(request), submit=body.submit, note=body.note, buffer=body.buffer,
+                                     ack_late=body.ack_late)
+            except _or.LateSubmit as e:                      # the branch has to confirm the late fee first
+                con.rollback()
+                raise HTTPException(400, {"code": "late", "message": str(e), "cutoff_at": e.cutoff_at,
+                                          "cutoff_th": e.cutoff_th})
+        out = _write(con, go)
     return out
 
 
@@ -1815,7 +1859,7 @@ def bc_hub_queue(status: str = Query("submitted"), date_from: Optional[str] = Qu
         _ensure(con)
         rows = _hub.queue(con, status, date_from, date_to)
     return {"status": status, "orders": rows, "reasons": [{"code": k, "label": v} for k, v in _hub.SS_REASONS],
-            "sla": {"submit_by": _hub.SLA_SUBMIT_BY, "process_by": _hub.SLA_PROCESS_BY}}
+            "sla": {"cutoff_time": f"{_fc.cutoff_time():%H:%M}", "process_by": _hub.SLA_PROCESS_BY}}
 
 
 @router.get("/api/bom-center/hub/order/{order_id}")
@@ -1827,7 +1871,6 @@ def bc_hub_order(order_id: int):
         except ValueError as e:
             raise HTTPException(404, str(e))
         o["branch"] = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
-        o["delivery"] = _hub.delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
         return o
 
 
@@ -1878,12 +1921,13 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
         for oid in oids:
             o = _or.detail(con, oid)
             bname = (con.execute("SELECT name FROM branches WHERE branch_id=?", (o["branch_id"],)).fetchone() or [None])[0]
-            dlv = _hub.delivery_of(con, o["branch_id"], o["round"], o["cycle_date"])
+            dlv = o["delivery"]
             for ln in o["lines"]:
                 q = ln["processed_units"] if ln["processed_units"] is not None else ln["confirmed_units"]
                 if q:
                     per_branch.append([bname, dlv, o["cycle_date"], o["round"], ln["code"], ln["name"], q,
-                                       "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"]])
+                                       "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"],
+                                       "ล่าช้า (ค่าปรับ)" if o.get("late") else ""])
     wb = Workbook()
     ws = wb.active
     br = c["branches"]
@@ -1895,7 +1939,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
             ws.append([g["delivery"], g["supplier"], it["code"], it["name"], it["unit"], it["total"]] +
                       [it["by_branch"].get(b) for b in br])
     ws2 = wb.create_sheet()
-    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันสั่ง", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ"],
+    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
@@ -1946,13 +1990,15 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
           "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงกำหนด"}
     wb = Workbook()
     ws = wb.active
-    _sheet(ws, "Compliance การสั่ง", ["วันสั่ง", "สาขา", "รอบ", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่วนกลางดำเนินการ ฿",
-                                       "รับจริง ฿", "ยืนยัน vs แนะนำ %", "ส่วนกลางเปลี่ยน %", "ส่งขาด %", "ส่งทันเวลา", "ดำเนินการทันเวลา"],
+    _sheet(ws, "Compliance การสั่ง", ["วันตัดรอบ", "สาขา", "รอบ", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่วนกลางดำเนินการ ฿",
+                                       "รับจริง ฿", "ยืนยัน vs แนะนำ %", "ส่วนกลางเปลี่ยน %", "ส่งขาด %", "ส่งทันเวลา",
+                                       "ดำเนินการทันเวลา", "ล่าช้า"],
            f"รอบที่ปฏิทินกำหนด {d0} ถึง {d1} · สถานะ “ตามแนะนำ” หมายถึงยอดยืนยันต่างจากยอดแนะนำไม่เกิน ±{_hub.TOL_PCT:g}%")
     for r in c["rows"]:
         ws.append([r["cycle_date"], r["branch"], r["round"], th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
-                   r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time")])
+                   r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
+                   "ล่าช้า (ค่าปรับ)" if r.get("late") else ""])
     return _xlsx(wb, "bom_center_order_compliance.xlsx")
 
 

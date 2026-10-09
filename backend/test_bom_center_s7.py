@@ -121,6 +121,11 @@ def test_periods_list_and_overview(db):
     assert [p["end_date"] for p in ps] == ["2026-09-22", "2026-09-15"]
     ov = VA.overview(db)
     assert ov[0]["branch_id"] == 1 and ov[0]["end_date"] == "2026-09-22" and ov[0]["last_count"] == "2026-09-22"
+    # PR-A: a count made while ordering is not a period boundary — the periods stay as they were
+    ST.save(db, 1, [{"code": "13-01-009", "qty": 5, "unit": "กรัม"}], "udon", submit=True,
+            count_date="2026-09-25", kind="spot")
+    assert [p["end_date"] for p in VA.periods(db, 1)] == ["2026-09-22", "2026-09-15"]
+    assert ST.sheet(db, 1)["next_kind"] == "end"
 
 
 def test_one_count_is_not_a_period(con):  # noqa: F811
