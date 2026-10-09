@@ -424,6 +424,7 @@ async function initDataCoverageNote() {
 }
 
 async function loadBranches() {
+  if (isPinnedSession()) return;       // a pinned login never reads the branch list (its filter is a hidden field)
   try {
     const data = await api(`${API}/api/branches`);
     const sel = document.getElementById('selBranch');

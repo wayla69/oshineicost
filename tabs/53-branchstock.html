@@ -1,12 +1,11 @@
 <div id="tab-branchstock" style="display:none">
 
-  <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
+  <div class="card p-4 mb-3 brn-cluster" style="background:var(--accent-soft);border:1px solid var(--accent)">
     <h2 class="text-base font-bold" style="color:var(--accent)">สาขาของฉัน
       <a href="/docs/pilot/branch_guide.html" target="_blank" class="text-xs font-normal" style="color:var(--accent);margin-left:6px">คู่มือ 1 หน้า ↗</a></h2>
-    <div class="flex flex-wrap items-center gap-2 mt-2">
-      <select id="brnBranch" onchange="brnBranchChanged()" style="display:none;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select>
+    <div class="flex flex-wrap items-center gap-2 mt-2 brn-cluster-name">
+      <select id="brnBranch" data-branch-picker onchange="brnBranchChanged()" style="display:none;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select>
       <span id="brnBranchName" class="text-sm font-semibold" style="color:var(--text-primary)"></span>
-      <span id="brnKind" class="text-xs"></span>
     </div>
   </div>
 
@@ -17,10 +16,10 @@
       <div id="brnIssHead" class="text-sm mt-2"></div>
       <div id="brnIssBanner" class="mt-2" style="display:none"></div>
     </div>
-    <div class="card p-3 mb-3" style="position:sticky;top:0;z-index:5">
-      <div id="brnIssZones" class="flex flex-wrap gap-1"></div>
-      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnIssUsedOnly" onchange="brnIssRender()"> เฉพาะรายการที่กรอกแล้ว</label>
+    <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
+      <div id="brnIssZones" class="flex flex-wrap gap-1 brn-zones"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs brn-filterrow" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnIssUsedOnly" onchange="brnIssRender()"> <span class="brn-t-long">เฉพาะรายการที่กรอกแล้ว</span><span class="brn-t-short">ที่กรอกแล้ว</span></label>
         <input type="search" id="brnIssQ" placeholder="ค้นหา…" oninput="brnIssRender()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
         <span id="brnIssProgress"></span>
@@ -66,18 +65,23 @@
   <!-- ── ตรวจนับสิ้นเดือน (ต้นงวด / ปลายงวด) ── -->
   <div id="brn-pane-count" style="display:none">
     <div class="card p-3 mb-3">
-      <p class="text-xs" style="color:var(--text-secondary)">
-        <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น (ต้นงวด / ปลายงวด นับครบทุกรายการ) การเบิกใช้รายวันบันทึกในหน้า “ตัดเบิก” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
-        ครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของเดือนถัดไปโดยอัตโนมัติ ·
-        ระบบบันทึกร่างไว้ระหว่างกรอก เมื่อครบแล้วกด “ส่งผลตรวจนับ”
-      </p>
+      <div class="text-xs"><span id="brnKind"></span></div>
+      <!-- the how-to is folded on a phone (brnLoadSheet opens it on a wide screen) -->
+      <details id="brnHowTo" class="mt-1">
+        <summary class="text-xs font-semibold" style="color:var(--accent);cursor:pointer">วิธีนับ</summary>
+        <p class="text-xs mt-1" style="color:var(--text-secondary)">
+          <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น (ต้นงวด / ปลายงวด นับครบทุกรายการ) การเบิกใช้รายวันบันทึกในหน้า “ตัดเบิก” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
+          ครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของเดือนถัดไปโดยอัตโนมัติ ·
+          ระบบบันทึกร่างไว้ระหว่างกรอก เมื่อครบแล้วกด “ส่งผลตรวจนับ”
+        </p>
+      </details>
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
     </div>
 
-    <div class="card p-3 mb-3" style="position:sticky;top:0;z-index:5">
-      <div id="brnZones" class="flex flex-wrap gap-1"></div>
-      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> เฉพาะรายการบังคับ</label>
+    <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
+      <div id="brnZones" class="flex flex-wrap gap-1 brn-zones"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs brn-filterrow" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการบังคับ</span><span class="brn-t-short">บังคับ</span></label>
         <input type="search" id="brnQ" placeholder="ค้นหา…" oninput="brnRender()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
         <span id="brnProgress"></span>

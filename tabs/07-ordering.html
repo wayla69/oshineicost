@@ -17,7 +17,7 @@
 
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
     <label class="text-xs" style="color:var(--text-muted)">สาขา</label>
-    <select id="opBranch" onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
+    <select id="opBranch" data-branch-picker onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
 
     <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"
            title="ย้อนหลัง = นับถอยหลังจากวันข้อมูลล่าสุด (เลื่อนไปเรื่อยๆ) · เลือกช่วงเอง = ระบุวันเริ่ม–วันจบของรอบที่จะสั่ง">
