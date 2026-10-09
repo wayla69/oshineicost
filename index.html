@@ -2137,16 +2137,16 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <span class="nav-label">เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
   <!-- วัตถุดิบและใบสั่งซื้อ (BoM Center) is ONE entry, หน้างาน: the bar on the page lists its
-       7 questions (หน้างาน · ข้อมูลตั้งต้น · สูตรและการปล่อย · ใบสั่งซื้อ · ปิดงวดเดือน ·
+       7 questions (หน้างาน · ข้อมูลตั้งต้น · สูตรและการประกาศใช้ · ใบสั่งซื้อ · ปิดงวดเดือน ·
        สาขาของฉัน · ตั้งค่า) and the panes under each (SUPPLY_CHIPS, js/01-core.js).
        The module's other nav items stay in the DOM hidden; applyPermissions' safety
        net reveals one for a role that cannot open the entry. A branch login sees the
        entry as "สาขาของฉัน" (applyPermissions). -->
-  <div class="nav-item" id="nav-supplyhome" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · หน้างาน: งานของฉันและสถานะปิดงวดเดือน · ทะเบียนวัตถุดิบและราคา · สูตรและการปล่อยเวอร์ชัน · ใบสั่งซื้อของสาขาและส่วนกลาง · ปิดงวดเดือน · สาขาของฉัน · ตั้งค่า">
+  <div class="nav-item" id="nav-supplyhome" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · หน้างาน: งานของฉันและสถานะปิดงวดเดือน · ทะเบียนวัตถุดิบและราคา · สูตรและการประกาศใช้ · ใบสั่งซื้อและเคลม · ปิดงวดเดือน · สาขาของฉัน · ตั้งค่า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
     <span class="nav-label">วัตถุดิบและใบสั่งซื้อ</span>
   </div>
-  <div class="nav-item" id="nav-bomcenter" style="display:none" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · ทะเบียนวัตถุดิบและราคา · สูตรและการปล่อยเวอร์ชัน · ใบสั่งซื้อของสาขาและส่วนกลาง · ปิดงวดเดือน · สาขาของฉัน · ตั้งค่า">
+  <div class="nav-item" id="nav-bomcenter" style="display:none" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · ทะเบียนวัตถุดิบและราคา · สูตรและการประกาศใช้ · ใบสั่งซื้อและเคลม · ปิดงวดเดือน · สาขาของฉัน · ตั้งค่า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
     <span class="nav-label">วัตถุดิบและใบสั่งซื้อ</span>
   </div>
@@ -2154,7 +2154,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
     <span class="nav-label">สาขาของฉัน</span>
   </div>
-  <div class="nav-item" id="nav-orderhub" style="display:none" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · คิวใบสั่งซื้อจากสาขา (Sales Support) · ตรวจสอบการสั่ง (Ops) · สรุปผลต่างการใช้รายเดือน · สินค้าส่วนกลางและปิดงวดเดือน">
+  <div class="nav-item" id="nav-orderhub" style="display:none" onclick="supplyOpen()" title="วัตถุดิบและใบสั่งซื้อ · คิวใบสั่งซื้อจากสาขา · ตรวจสอบการสั่ง · สรุปผลต่างการใช้รายเดือน · ปิดงวดเดือน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 7h13l5 5v5h-3"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M3 7v10h2"/><line x1="9" y1="18" x2="15" y2="18"/></svg>
     <span class="nav-label">วัตถุดิบและใบสั่งซื้อ</span>
   </div>

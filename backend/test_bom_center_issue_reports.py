@@ -302,7 +302,7 @@ def test_reconcile_numbers_status_reason_and_totals(con):  # noqa: F811
     VA.confirm_receipts(con, 1, end, "udon")
     con.commit()
     assert IR.reconcile(con, 1, end)["status"]["receipts_confirmed_by"] == "udon"
-    with pytest.raises(ValueError, match="ไม่พบรอบต้นงวด/ปลายงวดนี้ของสาขา"):
+    with pytest.raises(ValueError, match="ไม่พบงวดนี้ของสาขา"):
         IR.reconcile(con, 1, end + 99)
     with pytest.raises(ValueError):
         IR.reconcile(con, 2, end)                                                                        # another branch's period

@@ -22,6 +22,7 @@ from openpyxl import Workbook
 import auth
 from bom_center import price_submissions as PS
 from bom_center import todo as TD
+from bom_center.fmt import month_th
 from test_bom_center_s11 import udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
 from test_bom_center_s4b import con  # noqa: F401  (schema ensured on a scratch DB)
 
@@ -87,7 +88,7 @@ def test_create_list_and_decide(con):
     assert h["status"] == "rejected" and h["decision_note"] == "คอลัมน์ไม่ครบ" and h["decided_by"] == "analyst1"
     assert h["status_th"] == "ไม่รับ (ส่งกลับ)"
     for st in ("imported", "rejected"):                                        # a decision is final
-        with pytest.raises(ValueError, match="ตัดสินแล้ว"):
+        with pytest.raises(ValueError, match="พิจารณาแล้ว"):
             PS.decide(con, sid, st, "analyst1", "x")
     s2 = PS.create(con, M, "b.csv", CSV, None, "ss")["sub_id"]
     PS.decide(con, s2, "imported", "analyst1", None, {"written": 1})
@@ -101,12 +102,12 @@ def test_todo_items_for_sales_support_and_the_analyst(udon):
     c = udon
     it = _by(TD.build(c, M, None, None, today=TODAY))
     ps = it["price_submit"]
-    assert ps["status"] == "todo" and ps["title"] == f"ส่งไฟล์ราคาเดือน {M} ให้ฝ่ายวิเคราะห์"
-    assert ps["owner_modules"] == ["supply.ordering"] and "Sales Support" in ps["owner_th"]
+    assert ps["status"] == "todo" and ps["title"] == "ส่งไฟล์ราคาเดือน" + month_th(M) + " ให้ฝ่ายวิเคราะห์"
+    assert ps["owner_modules"] == ["supply.ordering"] and "ประสานงานขาย" in ps["owner_th"]
     assert ps["go"]["pane"] == "price" and ps["go"]["anchor"] == "bmcPriceSubmitCard"
     assert "price_review" not in it
-    assert it["price_month"]["owner_th"] == "ฝ่ายวิเคราะห์ (ไฟล์ราคาจากประสานงานขาย)"
-    assert it["price_month"]["detail"] == "นำเข้าจากไฟล์ที่ประสานงานขายส่งมา หรืออัปโหลดเอง"
+    assert it["price_month"]["owner_th"] == "ฝ่ายวิเคราะห์"
+    assert it["price_month"]["detail"] == "นำเข้าจากไฟล์ที่ประสานงานขายส่งมา หรือนำเข้าเอง"
     sid = PS.create(c, M, "a.csv", CSV, None, "salessupport1")["sub_id"]
     it = _by(TD.build(c, M, None, None, today=TODAY))
     assert it["price_submit"]["status"] == "done" and it["price_submit"]["detail"].startswith("ส่งแล้ว 1 ไฟล์ · ล่าสุด")
@@ -199,7 +200,7 @@ def _http_flow(app_db):
                 data={"month": "2098-03"}, headers=TOKEN)
     assert r.status_code == 400 and "Excel" in r.json()["detail"]
     r = ss.post("/api/bom-center/prices/submit", files=files, data={"month": "98-3"}, headers=TOKEN)
-    assert r.status_code == 400 and "YYYY-MM" in r.json()["detail"]
+    assert r.status_code == 400 and "เดือนไม่ถูกต้อง" in r.json()["detail"]
     assert _db_count(app_db, "SELECT COUNT(*) FROM bc_price_submission") == 0
     r = ss.post("/api/bom-center/prices/submit", files=files, data={"month": "2098-03", "note": "ไฟล์เดือนมีนาคม"}, headers=TOKEN)
     assert r.status_code == 200, r.text
@@ -247,7 +248,7 @@ def _http_flow(app_db):
                   (f"/api/bom-center/prices/submissions/{sid}/import?dry_run=false", {"headers": TOKEN}),
                   (f"/api/bom-center/prices/submissions/{sid}/reject", {"json": {"note": "x"}, "headers": TOKEN})):
         d = an.post(p, **kw)
-        assert d.status_code == 400 and "ตัดสินแล้ว" in d.json()["detail"], p
+        assert d.status_code == 400 and "พิจารณาแล้ว" in d.json()["detail"], p
     # a second file is rejected with a reason Sales Support can read
     r2 = ss.post("/api/bom-center/prices/submit", files=files, data={"month": "2098-03"}, headers=TOKEN)
     sid2 = r2.json()["sub_id"]

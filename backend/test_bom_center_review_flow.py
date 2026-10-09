@@ -53,11 +53,11 @@ def test_the_template_holds_many_menus_and_imports_back(con):
             and [x.value for x in ws[1]][:len(R.FLAT_HEADERS)] == R.FLAT_HEADERS] == ["สูตร"]
     pos = {r[0].value: r for r in list(wb["รหัส POS"].iter_rows())[1:]}
     assert {"OTHBFSSM00020", "OTHBFGNT00010", "OTHBFSUS00033"} <= set(pos)
-    assert [x.value for x in wb["รหัส POS"][1]] == ["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในฉบับร่างแล้ว"]
+    assert [x.value for x in wb["รหัส POS"][1]] == ["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในร่างแล้ว"]
     assert [x.value for x in wb["รหัสวัตถุดิบ"][1]] == ["รหัสวัตถุดิบ", "ชื่อวัตถุดิบ", "หน่วยฐาน", "ชนิด"]
     assert "13-01-009" in {r[0].value for r in list(wb["รหัสวัตถุดิบ"].iter_rows())[1:]}
     samples = [r for r in wb["สูตร"].iter_rows(min_row=2, values_only=True)]
-    assert len(samples) == 3 and all("(ตัวอย่าง กรุณาลบ)" in r[1] for r in samples)
+    assert len(samples) == 3 and all("(ตัวอย่าง ลบก่อนนำเข้า)" in r[1] for r in samples)
     assert len({r[0] for r in samples}) == 2                                    # two menus, three lines
     # the sample rows left in by mistake import as errors, never as recipes
     buf = io.BytesIO()
@@ -89,13 +89,13 @@ def test_submit_review_locks_the_kitchen_out(con):
     RL.submit_review(c, rid, "innovation")
     rel = R.release_row(c, rid)
     assert rel["status"] == "review" and rel["submitted_by"] == "innovation" and rel["submitted_at"]
-    with pytest.raises(ValueError, match="ส่งตรวจได้เฉพาะฉบับร่าง"):
+    with pytest.raises(ValueError, match="ส่งตรวจได้เฉพาะร่าง"):
         RL.submit_review(c, rid, "innovation")                                  # already submitted
-    with pytest.raises(ValueError, match="อยู่ระหว่างการตรวจของฝ่ายวิเคราะห์"):
+    with pytest.raises(ValueError, match="อยู่ระหว่างตรวจของฝ่ายวิเคราะห์"):
         R.save_lines(c, rid, "OTHBFSSM00020", line, "innovation", modules=KITCHEN)
-    with pytest.raises(ValueError, match="อยู่ระหว่างการตรวจของฝ่ายวิเคราะห์"):
+    with pytest.raises(ValueError, match="อยู่ระหว่างตรวจของฝ่ายวิเคราะห์"):
         R.get_or_create_draft(c, "2026-11 draft", "2026-11", "2026-07", "innovation", modules=KITCHEN)
-    with pytest.raises(ValueError, match="อยู่ระหว่างการตรวจของฝ่ายวิเคราะห์"):
+    with pytest.raises(ValueError, match="อยู่ระหว่างตรวจของฝ่ายวิเคราะห์"):
         R.import_flat(c, _fill(R.template_flat(c, rid), []), rid, "innovation", modules=KITCHEN)
     R.save_lines(c, rid, "OTHBFSSM00020", line, "analyst", modules=ANALYST)     # the analyst may still edit
     R.save_lines(c, rid, "OTHBFSSM00020", line, "system", modules=None)         # no permission context: internal
@@ -262,14 +262,14 @@ def _http_flow(label):
     assert rel["status"] == "review" and rel["next_step"] == "release" and rel["submitted_by"] == "innovation1"
     # in review the kitchen cannot change a recipe, nor open the draft again; the analyst is not stopped by the lock
     put = kitchen.put(f"/api/bom-center/recipes/OTHBFX?release_id={rid}", json=[], headers=TOKEN)
-    assert put.status_code == 400 and "อยู่ระหว่างการตรวจ" in put.json()["detail"]
+    assert put.status_code == 400 and "อยู่ระหว่างตรวจ" in put.json()["detail"]
     again = kitchen.post("/api/bom-center/release-act/new-draft", json=body, headers=TOKEN)
-    assert again.status_code == 400 and "อยู่ระหว่างการตรวจ" in again.json()["detail"]
+    assert again.status_code == 400 and "อยู่ระหว่างตรวจ" in again.json()["detail"]
     imp = kitchen.post(f"/api/bom-center/recipes/import-flat?release_id={rid}&dry_run=true",
                        files={"file": ("t.xlsx", kitchen.get("/api/bom-center/recipes/template.xlsx").content)})
-    assert imp.status_code == 400 and "อยู่ระหว่างการตรวจ" in imp.json()["detail"]
+    assert imp.status_code == 400 and "อยู่ระหว่างตรวจ" in imp.json()["detail"]
     ok = analyst.put(f"/api/bom-center/recipes/OTHBFX?release_id={rid}", json=[], headers=TOKEN)
-    assert "อยู่ระหว่างการตรวจ" not in ok.text
+    assert "อยู่ระหว่างตรวจ" not in ok.text
     # send back needs a reason, then reopens the draft for the kitchen
     r = analyst.post("/api/bom-center/release-act/send-back", json={"release_id": rid, "note": " "}, headers=TOKEN)
     assert r.status_code == 400 and "ต้องระบุเหตุผล" in r.json()["detail"]
@@ -280,4 +280,4 @@ def _http_flow(label):
     assert rel["status"] == "draft" and rel["next_step"] == "submit" and rel["submitted_by"] is None
     assert "ส่งกลับแก้ไขโดย analyst1: ปริมาณสูงเกินไป" in rel["notes"]          # the kitchen can read why
     put = kitchen.put(f"/api/bom-center/recipes/OTHBFX?release_id={rid}", json=[], headers=TOKEN)
-    assert "อยู่ระหว่างการตรวจ" not in put.text
+    assert "อยู่ระหว่างตรวจ" not in put.text

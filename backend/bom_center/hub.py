@@ -19,8 +19,8 @@ from datetime import date, datetime, timedelta, timezone
 from .clock import today as bkk_today
 from .master import audit
 
-SS_REASONS = (("short", "ซัพพลายเออร์สินค้าขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
-              ("pack", "ปรับตามขนาดแพ็ค / ขั้นต่ำ"), ("merge", "รวมกับรอบอื่น"), ("stock", "ส่วนกลางจัดส่งสินค้าในสต็อกแทน"),
+SS_REASONS = (("short", "ผู้จำหน่ายสินค้าขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
+              ("pack", "ปรับตามขนาดแพ็ค / ขั้นต่ำ"), ("merge", "รวมกับรอบอื่น"), ("stock", "คลังส่งจากสต็อกแทน"),
               ("other", "อื่น ๆ"))
 SS_REASON_TH = dict(SS_REASONS)
 BKK = timezone(timedelta(hours=7))
@@ -150,7 +150,7 @@ def set_keyed(con, order_ids: list, keyed: bool, who: str) -> dict:
     Only an order the warehouse has processed (or the branch has received) can be keyed."""
     ids = sorted({int(i) for i in (order_ids or [])})
     if not ids:
-        raise ValueError("กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ")
+        raise ValueError("เลือกใบสั่งซื้ออย่างน้อย 1 ใบ")
     rows = {oid: st for oid, st in con.execute(
         f"SELECT order_id, status FROM bc_order WHERE order_id IN ({','.join('?' * len(ids))})", ids)}
     missing = [i for i in ids if i not in rows]
@@ -160,7 +160,7 @@ def set_keyed(con, order_ids: list, keyed: bool, who: str) -> dict:
         bad = [i for i in ids if rows[i] not in ("processed", "received")]
         if bad:
             raise ValueError("ใบสั่งซื้อ " + ", ".join(f"#{i}" for i in bad)
-                             + " ยังไม่ดำเนินการ จึงคีย์เข้าระบบบัญชีไม่ได้")
+                             + " คลังยังไม่ยืนยันยอดส่ง จึงคีย์เข้าระบบบัญชีไม่ได้")
     at = now() if keyed else None
     by = who if keyed else None
     action = "order_accounting_keyed" if keyed else "order_accounting_unkeyed"
@@ -176,7 +176,7 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
     if not o:
         raise ValueError("ไม่พบใบสั่งซื้อ")
     if o[0] not in ("submitted", "processed"):
-        raise ValueError("ดำเนินการได้เฉพาะใบสั่งซื้อที่สาขาส่งแล้ว")
+        raise ValueError("ยืนยันยอดส่งได้เฉพาะใบสั่งซื้อที่สาขาส่งแล้ว")
     given = {(ln.get("code") or "").strip(): ln for ln in lines or []}
     for c, conf in con.execute("SELECT ingredient_code, confirmed_units FROM bc_order_line WHERE order_id=?",
                                (order_id,)).fetchall():
@@ -192,7 +192,7 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
         note = ((ln or {}).get("note") or "").strip() or None
         if abs(q - float(conf or 0)) > 1e-9:
             if not rs:
-                raise ValueError(f"{c}: จำนวนส่งไม่ตรงกับที่สาขายืนยัน กรุณาเลือกเหตุผล")
+                raise ValueError(f"{c}: จำนวนส่งไม่ตรงกับที่สาขายืนยัน · เลือกเหตุผล")
             if rs not in SS_REASON_TH:
                 raise ValueError(f"{c}: เหตุผลไม่อยู่ในรายการ")
             if rs == "other" and not note:

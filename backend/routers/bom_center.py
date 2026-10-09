@@ -68,7 +68,7 @@ def _modules(request: Request) -> set:
 
 def _month_or_400(m: Optional[str]) -> str:
     if not m or not _MONTH.match(m):
-        raise HTTPException(400, "เดือนต้องอยู่ในรูปแบบ YYYY-MM")
+        raise HTTPException(400, "เดือนไม่ถูกต้อง (เช่น 2026-09)")
     return m
 
 
@@ -325,8 +325,8 @@ def bc_ingredients_template():
     """The whole master as a sheet: edit in Excel, import back (a row you delete is left alone)."""
     from openpyxl import Workbook
     heads = ["รหัส", "ชื่อวัตถุดิบ", "ชนิด", "หมวด", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ",
-             "สูญเสีย (%)", "ขั้นต่ำ", "Lead time", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง", "โซนจัดเก็บ", "หน่วยที่นับ"]
-    kind_th = {"raw": "ดิบ", "prepared": "กึ่งสำเร็จ", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น0"}
+             "สูญเสีย (%)", "ขั้นต่ำ", "ระยะส่ง (วัน)", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง", "โซนจัดเก็บ", "หน่วยที่นับ"]
+    kind_th = {"raw": "ดิบ", "prepared": "กึ่งสำเร็จ", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น 0"}
     wb = Workbook()
     ws = wb.active
     with get_db() as con:
@@ -334,9 +334,9 @@ def bc_ingredients_template():
         zl = _st.zone_labels(con)
         _sheet(ws, "ทะเบียนวัตถุดิบ", heads,
                "ห้ามแก้ไขคอลัมน์รหัส · ขนาดบรรจุ = จำนวนหน่วยฐานต่อ 1 หน่วยรับ (เช่น แซลมอน 1 กก. = 1000 กรัม) · "
-               "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น0 · ช่องทางสั่ง: ส่วนกลาง / สาขาซื้อเอง · "
-               "โซนจัดเก็บ: " + " / ".join(zl.values()) + " (เว้นว่างได้ ระบบจะเดาให้) · "
-               "หน่วยที่นับ = หน่วยที่สาขาใช้นับสต๊อก (เว้นว่างได้ ระบบใช้หน่วยรับหรือหน่วยฐาน) · "
+               "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น 0 · ช่องทางสั่ง: ไดกิโตะ กรุ๊ป / สาขาซื้อเอง · "
+               "โซนจัดเก็บ: " + " / ".join(zl.values()) + " (เว้นว่างได้) · "
+               "หน่วยที่นับ = หน่วยที่สาขาใช้นับสต็อก (เว้นว่างได้ ใช้หน่วยรับหรือหน่วยฐาน) · "
                "สินค้าส่วนกลางทุกรายการสั่งจาก " + _ce.CENTRAL_SUPPLIER)
         for r in con.execute("SELECT code, name_th, kind, category, base_unit, recv_unit, qty_per_recv,"
                              " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default, storage_zone, count_unit"
@@ -344,7 +344,7 @@ def bc_ingredients_template():
             r = list(r)
             r[2] = kind_th.get(r[2], r[2])
             r[11] = "ใช่" if r[11] else ""
-            r[12] = "สาขาซื้อเอง" if r[12] == "local" else "ส่วนกลาง"
+            r[12] = "สาขาซื้อเอง" if r[12] == "local" else "ไดกิโตะ กรุ๊ป"
             r[13] = zl.get(r[13], r[13] or "")
             ws.append(r)
     return _xlsx(wb, f"BOM_CENTER_INGREDIENTS_{date.today().isoformat()}.xlsx")
@@ -386,7 +386,7 @@ async def _read_master_file(file: UploadFile):
             head_at, hmap = i, m
             break
     if head_at < 0:
-        raise HTTPException(400, "ไม่พบหัวตาราง (ต้องมีคอลัมน์รหัส) กรุณาใช้ template ของระบบ หรือ sheet DATAP")
+        raise HTTPException(400, "ไม่พบหัวตาราง (ต้องมีคอลัมน์รหัส) ใช้แม่แบบของระบบ หรือแผ่นงาน DATAP")
     rows = []
     for row in grid[head_at + 1:]:
         if not any(str(c or "").strip() for c in row):
@@ -500,9 +500,9 @@ def bc_prices_template():
     from openpyxl import Workbook
     wb = Workbook()
     _sheet(wb.active, "ยอดซื้อรายบรรทัด", ["รหัส", "ชื่อสินค้า", "จำนวน", "หน่วย", "มูลค่ารวม", "สาขา", "เดือน"],
-           "1 แถว = 1 บรรทัดซื้อ/รับเข้า · มูลค่ารวมไม่รวม VAT · หน่วย: กิโลกรัม / กรัม / แพ็ค / ลิตร … (ระบบแปลงหน่วยให้) · "
-           "เดือน YYYY-MM · หรืออัปโหลดไฟล์ 'รายงานจ่ายสินค้าภายใน' ของฝ่ายบัญชีได้โดยตรง")
-    wb.active.append(["02-01-001", "ปลาแซลมอนเทร้านอร์เวย์ (ตัวอย่าง กรุณาลบแถวนี้)", 785.46, "กิโลกรัม", 294332.5,
+           "1 แถว = 1 บรรทัดซื้อ/รับเข้า · มูลค่ารวมไม่รวม VAT · หน่วย: กิโลกรัม / กรัม / แพ็ค / ลิตร … (แปลงหน่วยตอนนำเข้า) · "
+           "เดือน เช่น 2026-09 · หรือนำเข้า 'รายงานจ่ายสินค้าภายใน' ของบัญชีได้โดยตรง")
+    wb.active.append(["02-01-001", "ปลาแซลมอนเทร้านอร์เวย์ (ตัวอย่าง ลบแถวนี้ก่อนนำเข้า)", 785.46, "กิโลกรัม", 294332.5,
                       "ขอนแก่น", "2026-09"])
     return _xlsx(wb, "BOM_CENTER_PURCHASE_LINES_TEMPLATE.xlsx")
 
@@ -571,7 +571,7 @@ async def _price_lines_from_bytes(raw: bytes, filename: Optional[str], month: Op
                       "value": r.get("value"), "unit_price": r.get("unit_price"), "branch_id": bid})
     if not month:
         if len(months) != 1:
-            raise HTTPException(400, "กรุณาระบุเดือนที่จะนำเข้า (ไฟล์มีหลายเดือนหรือไม่มีคอลัมน์เดือน)")
+            raise HTTPException(400, "ระบุเดือนที่จะนำเข้า (ไฟล์มีหลายเดือนหรือไม่มีคอลัมน์เดือน)")
         month = months.pop()
     return lines, {"format": "template", "sheet": sheet, "columns": sorted(hmap)}, month
 
@@ -584,7 +584,7 @@ def _rules_or_400(raw) -> list:
     try:
         items = json.loads(raw) if isinstance(raw, str) else raw
     except ValueError:
-        raise HTTPException(400, "rules ต้องเป็น JSON")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     out = []
     for r in items or []:
         try:
@@ -612,7 +612,7 @@ def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=Non
                 con.rollback()
             else:
                 if not agg["codes"]:
-                    raise HTTPException(400, "ไม่มีรายการที่ใช้ได้ กรุณาตรวจสอบรายการที่แปลงหน่วยไม่ได้ด้านล่าง")
+                    raise HTTPException(400, "ไม่มีรายการที่ใช้ได้ · ตรวจรายการที่แปลงหน่วยไม่ได้ด้านล่าง")
                 result = _p.apply(con, month, agg, who, note)
                 con.commit()
         except Exception:
@@ -656,8 +656,8 @@ def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_ru
     if not rows:
         raise HTTPException(404, f"ยังไม่มีรายงานจ่ายสินค้าภายในเดือน {month} ในระบบ")
     lines = [dict(zip(("code", "name", "qty", "unit", "value", "unit_price", "branch_id"), r)) for r in rows]
-    return _import(lines, {"format": "requisition_line ในระบบ"}, month, dry_run, _who(request),
-                   "จากรายงานจ่ายสินค้าภายในที่อัปโหลดไว้", add_unknown, rules=rl)
+    return _import(lines, {"format": "รายงานจ่ายสินค้าภายใน (ที่นำเข้าไว้)"}, month, dry_run, _who(request),
+                   "จากรายงานจ่ายสินค้าภายในที่นำเข้าไว้", add_unknown, rules=rl)
 
 
 @router.get("/api/bom-center/prices/requisition-months")
@@ -711,7 +711,7 @@ async def bc_prices_submit(request: Request, file: UploadFile = File(...), month
 def bc_price_submissions(status: Optional[str] = Query(None), month: Optional[str] = Query(None),
                          limit: int = Query(50)):
     if status and status not in _ps.STATUS_TH:
-        raise HTTPException(400, "status ต้องเป็น pending / imported / rejected")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     if month:
         _month_or_400(month)
     with get_db() as con:
@@ -746,7 +746,7 @@ async def bc_price_submission_import(sub_id: int, request: Request, dry_run: boo
         if not h:
             raise HTTPException(404, "ไม่พบไฟล์ราคาที่ส่งมา")
         if h["status"] != "pending":
-            raise HTTPException(400, f"ไฟล์นี้ตัดสินแล้ว ({_ps.STATUS_TH.get(h['status'], h['status'])})")
+            raise HTTPException(400, f"ไฟล์นี้พิจารณาแล้ว ({_ps.STATUS_TH.get(h['status'], h['status'])})")
         fn, mime, raw = _ps.blob(con, sub_id)
     lines, info, month = await _price_lines_from_bytes(raw, _parse_name(fn, mime), h["month"])
     who = _who(request)
@@ -847,7 +847,7 @@ def bc_recipes(release_id: int = Query(...), tier: Optional[int] = Query(None)):
     with get_db() as con:
         _ensure(con)
         if not _r.release_row(con, release_id):
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         return _r.tier_view(con, release_id, tier)
 
 
@@ -857,7 +857,7 @@ def bc_recipes_export(release_id: int = Query(...)):
         _ensure(con)
         rel = _r.release_row(con, release_id)
         if not rel:
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         wb = _r.export_flat(con, release_id)
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", rel["label"])
     return _xlsx(wb, f"BOM_RECIPES_{safe}.xlsx")
@@ -894,7 +894,7 @@ def bc_recipe_detail(sku_code: str, release_id: int = Query(...)):
         _ensure(con)
         rel = _r.release_row(con, release_id)
         if not rel:
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         out = _r.cost_recipe(con, release_id, sku_code)
         names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
         for ln in out["lines"]:
@@ -970,7 +970,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
     except Exception as e:
         raise HTTPException(400, f"อ่านไฟล์ไม่ได้: {e}")
     if not parsed["blocks"]:
-        raise HTTPException(400, "ไม่พบ sheet สูตรบุฟเฟ่ต์ (BF_<tier>NET…) ในไฟล์นี้")
+        raise HTTPException(400, "ไม่พบแผ่นงานสูตรบุฟเฟ่ต์ (BF_…NET) ในไฟล์นี้")
     who = _who(request)
     mods = _modules(request)
     with get_db() as con:
@@ -980,9 +980,9 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
             r = con.execute("SELECT MAX(month) FROM bc_ingredient_price WHERE source IN ('purchase_avg','manual')").fetchone()
             pm = r[0] if r and r[0] else con.execute("SELECT MAX(month) FROM bc_ingredient_price").fetchone()[0]
         if not pm:
-            raise HTTPException(400, "ยังไม่มีราคาวัตถุดิบในระบบ กรุณานำเข้าทะเบียน/DATAP หรือราคาซื้อจริงก่อน")
+            raise HTTPException(400, "ยังไม่มีราคาวัตถุดิบ · นำเข้าทะเบียนหรือราคาซื้อจริงก่อน")
         _month_or_400(pm)
-        lbl = label or f"{eff} บุฟเฟ่ต์ (draft)"
+        lbl = label or f"{eff} บุฟเฟ่ต์ (ร่าง)"
         try:
             rid = _r.get_or_create_draft(con, lbl, eff, pm, who, modules=mods)
             stats = _r.import_cost_rw(con, parsed, rid, who)
@@ -1065,7 +1065,7 @@ def bc_release_checks(release_id: int = Query(...), recompute: bool = Query(Fals
         _ensure(con)
         rel = _r.release_row(con, release_id)
         if not rel:
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         fresh = False
         if recompute and rel["kind"] == "monthly" and rel["status"] in ("draft", "review"):
             try:
@@ -1088,7 +1088,7 @@ def bc_release_compare(release_id: int = Query(...), month: Optional[str] = Quer
     with get_db() as con:
         _ensure(con)
         if not _r.release_row(con, release_id):
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         out = _rl.compare(con, release_id, month)
     out["dishes"] = out["dishes"][:300]
     return out
@@ -1100,7 +1100,7 @@ def bc_release_run_checks(release_id: int = Query(...)):
         _ensure(con)
         rel = _r.release_row(con, release_id)
         if not rel or rel["kind"] != "monthly":
-            raise HTTPException(404, "ไม่พบ release รายเดือน")
+            raise HTTPException(404, "ไม่พบเวอร์ชันรายเดือน")
         return _write(con, lambda: _rl.run_checks(con, release_id))
 
 
@@ -1136,7 +1136,7 @@ def bc_release_accept_many(body: AcceptManyBody, request: Request):
     with get_db() as con:
         _ensure(con)
         if not _r.release_row(con, body.release_id):
-            raise HTTPException(404, "ไม่พบ release")
+            raise HTTPException(404, "ไม่พบเวอร์ชัน")
         out = _write(con, lambda: _rl.accept_many(con, body.release_id, body.check_code, body.refs, body.reason,
                                                   _who(request)))
     invalidate_cache("bc_")
@@ -1190,7 +1190,7 @@ class NewDraftBody(BaseModel):
 def bc_release_new_draft(body: NewDraftBody, request: Request):
     _month_or_400(body.effective_month)
     _month_or_400(body.price_month)
-    label = body.label or f"{body.effective_month} บุฟเฟ่ต์ (draft)"
+    label = body.label or f"{body.effective_month} บุฟเฟ่ต์ (ร่าง)"
     mods = _modules(request)
     who = _who(request)
 
@@ -1269,7 +1269,7 @@ def _parse_day(d: Optional[str]):
     try:
         return _d.fromisoformat(d)
     except ValueError:
-        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise HTTPException(400, "วันที่ไม่ถูกต้อง")
 
 
 @router.get("/api/bom-center/order-calendar")
@@ -1299,9 +1299,9 @@ def _calendar_put(con, who: str, branch_id: int, rnd: str, dw: int, old=None) ->
     the cutoff weekday and the lead are derived, and the change is audited."""
     from datetime import datetime as _dt, timezone as _tz
     if rnd not in _fc.DEFAULT_CAL:
-        raise ValueError(f"ไม่พบรอบ {rnd} ในระบบ")
+        raise ValueError(f"ไม่พบรอบ {rnd}")
     if dw is None or not (0 <= int(dw) <= 6):
-        raise ValueError("กรุณาระบุวันส่งของรอบ (อาทิตย์–เสาร์)")
+        raise ValueError("ระบุวันส่งของรอบ (อาทิตย์–เสาร์)")
     dw = int(dw)
     cw = _fc.cutoff_weekday(dw)                          # the weekday the branch has to order by (13:15)
     con.execute("INSERT OR REPLACE INTO bc_order_calendar(branch_id, round, order_weekday, delivery_weekday,"
@@ -1351,7 +1351,7 @@ def bc_order_calendar_template():
     ct = f"{_fc.cutoff_time():%H:%M}"
     _sheet(ws, "วันส่งของสาขา", _CAL_HEADERS,
            f"ตั้งวันส่งของแต่ละรอบรายสาขา เลือกหรือพิมพ์ อาทิตย์ จันทร์ อังคาร พุธ พฤหัส ศุกร์ เสาร์ · เว้นว่างหมายถึงไม่เปลี่ยน · "
-           f"ไม่ต้องกรอกเวลาตัดรอบ ระบบคำนวณให้: สาขาต้องส่งใบสั่งซื้อก่อน {ct} สองวันก่อนวันส่ง "
+           f"ไม่ต้องกรอกเวลาตัดรอบ (คำนวณจากวันส่ง): สาขาต้องส่งใบสั่งซื้อก่อน {ct} สองวันก่อนวันส่ง "
            f"(รอบส่งวันอังคาร ตัดรอบวันเสาร์ {ct}) · ห้ามแก้ชื่อสาขา")
     with get_db() as con:
         _ensure(con)
@@ -1400,7 +1400,7 @@ def _calendar_plan(con, rows: list, hmap: dict) -> dict:
             continue
         bid, name = by_name[key]
         if bid in seen:
-            errors.append({"line": line, "branch": name, "why": "สาขานี้ปรากฏซ้ำในไฟล์ กรุณาเหลือแถวเดียว"})
+            errors.append({"line": line, "branch": name, "why": "สาขานี้ปรากฏซ้ำในไฟล์ · เหลือแถวเดียว"})
             continue
         seen.add(bid)
         cal = _fc.calendar(con, bid)
@@ -1430,7 +1430,7 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
     from .ingredients import _read_upload_table
     rows, hmap, sheet = await _read_upload_table(file, _CAL_ALIASES, optional=_CAL_ROUNDS)
     if "branch" not in hmap or not any(k in hmap for k in _CAL_ROUNDS):
-        raise HTTPException(400, "ไม่พบคอลัมน์ สาขา และวันส่ง กรุณาใช้แม่แบบที่ดาวน์โหลดจากระบบ")
+        raise HTTPException(400, "ไม่พบคอลัมน์ สาขา และวันส่ง · ใช้แม่แบบที่ดาวน์โหลดจากหน้านี้")
     who = _who(request)
     with get_db() as con:
         _ensure(con)
@@ -1443,7 +1443,7 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
         if dry_run:
             return out
         if plan["errors"]:
-            raise HTTPException(400, f"ไฟล์มี {len(plan['errors'])} รายการที่ไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วนำเข้าใหม่ "
+            raise HTTPException(400, f"ไฟล์มี {len(plan['errors'])} รายการที่ไม่ถูกต้อง · แก้ไฟล์แล้วนำเข้าใหม่ "
                                      f"(แถวแรก: {plan['errors'][0]['branch']} — {plan['errors'][0]['why']})")
 
         def go():
@@ -1462,7 +1462,7 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
 def bc_forecast(branch_id: int = Query(...), round: str = Query("1"), order_day: Optional[str] = Query(None),
                 weeks: int = Query(6, ge=2, le=12), season: str = Query("auto")):
     if round not in ("1", "2", "salmon"):
-        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือ salmon")
+        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือแซลมอนสด")
     with get_db() as con:
         _ensure(con)
         return _fc.suggest(con, branch_id, round, _parse_day(order_day), weeks=weeks,
@@ -1481,7 +1481,7 @@ class RunBody(BaseModel):
 def bc_forecast_save(body: RunBody, request: Request):
     """Freeze a suggestion: Phase 2's order screen and compliance judge against it."""
     if body.round not in ("1", "2", "salmon"):
-        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือ salmon")
+        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือแซลมอนสด")
     with get_db() as con:
         _ensure(con)
         out = _fc.suggest(con, body.branch_id, body.round, _parse_day(body.order_day), weeks=body.weeks,
@@ -1547,7 +1547,7 @@ def bc_prep_template():
     wb = Workbook()
     ws = wb.active
     _sheet(ws, "สูตรกึ่งสำเร็จ", list(_pr.FLAT_COLS),
-           "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · batch_yield_qty และ batch_unit = ปริมาณที่ได้ต่อ 1 สูตร · การนำเข้าจะแทนที่สูตรของรหัสนั้นทั้งชุด")
+           "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · batch_yield_qty และ batch_unit = ปริมาณที่ได้ต่อ 1 สูตร · นำเข้าแล้วสูตรของรหัสนั้นถูกแทนที่ทั้งชุด")
     for r in rows:
         ws.append(r)
     return _xlsx(wb, "bom_center_sub_recipes.xlsx")
@@ -1672,12 +1672,12 @@ def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
     if scoped:
         r = con.execute("SELECT branch_id FROM branches WHERE name=?", (scoped,)).fetchone()
         if not r:
-            raise HTTPException(403, detail="บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ กรุณาแจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
+            raise HTTPException(403, detail="ผู้ใช้นี้ผูกกับสาขาที่ไม่พบ · แจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
         if branch_id is not None and int(branch_id) != int(r[0]):
             raise HTTPException(403, detail="บัญชีสาขาเข้าถึงได้เฉพาะสาขาของตัวเอง", headers={"X-Denied": "role"})
         return int(r[0])
     if branch_id is None:
-        raise HTTPException(400, "กรุณาเลือกสาขา")
+        raise HTTPException(400, "เลือกสาขา")
     if not con.execute("SELECT 1 FROM branches WHERE branch_id=?", (branch_id,)).fetchone():
         raise HTTPException(404, "ไม่พบสาขา")
     return int(branch_id)
@@ -2096,7 +2096,7 @@ def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional
 
 
 # ── ใบสรุปตัดเบิก: the period's actual usage, downloaded by Accounting and ticked as posted ──
-ISSUE_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "คงเหลือ (ปลายงวด)",
+ISSUE_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "นับจริง (ปลายงวด)",
                  "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา"]
 ISSUE_ALL_HEADERS = ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ", "มูลค่าตัดเบิก",
                      "ไม่มีราคา", "สถานะบัญชี"]
@@ -2110,7 +2110,7 @@ class PostedBody(BaseModel):
 def _issue_note(s: dict) -> str:
     p, st = s["period"], s["status"]
     note = (f"ใบสรุปตัดเบิกวัตถุดิบ สาขา{s['branch']['name']} งวด {p['begin_date']} ถึง {p['end_date']} (เดือน {p['month']})"
-            " · จัดทำจากผลตรวจนับต้นงวด/ปลายงวดและใบรับสินค้าในระบบ"
+            " · จัดทำจากผลตรวจนับต้นงวด/ปลายงวดและใบรับสินค้า"
             " · ตัดเบิก = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ"
             f" · ราคาต่อหน่วย = ราคาซื้อจริงเดือน {p['month']}")
     if st.get("receipts_confirmed_by"):
@@ -2160,8 +2160,8 @@ def _issue_or_400(con, bid: int, end_count_id: int) -> dict:
     except ValueError as e:
         raise HTTPException(404, str(e))
     if not s["status"]["receipts_confirmed"]:
-        raise HTTPException(400, "รอบนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้ "
-                                 "กรุณาให้สาขาหรือ Sales Support ยืนยันก่อน")
+        raise HTTPException(400, "งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้ "
+                                 "· ให้สาขาหรือประสานงานขายยืนยันก่อน")
     return s
 
 
@@ -2223,7 +2223,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
         slips = {k: _period_slip_rows(con, s["branch"]["branch_id"], s) for k, s in done.items()}
         recons = {k: _ir.reconcile(con, s["branch"]["branch_id"], k) for k, s in done.items()}
     if not done:
-        raise HTTPException(400, f"ยังไม่มีรอบที่ยืนยันรับสินค้าครบในเดือน {month}")
+        raise HTTPException(400, f"ยังไม่มีงวดที่ยืนยันรับสินค้าครบในเดือน {month}")
     wb = Workbook()
     used = set()
     ws = wb.active
@@ -2273,9 +2273,9 @@ def bc_issue_posted(body: PostedBody, request: Request):
 RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
                  "คงเหลือตามระบบ", "นับจริง (ปลายงวด)", "ผลต่าง (จำนวน)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "สถานะ", "เหตุผล",
                  "หมายเหตุ", "ราคาต่อหน่วย"]
-DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร BoM (มูลค่า)",
+DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
                  "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการชั้น A ที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
-DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร BoM",
+DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
                       "ผลต่าง (จำนวน)", "ผลต่าง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
 
 
@@ -2353,7 +2353,7 @@ def bc_ir_daily_day(request: Request, day: str = Query(...), branch_id: Optional
     try:
         date.fromisoformat(day)
     except ValueError:
-        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise HTTPException(400, "วันที่ไม่ถูกต้อง")
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
@@ -2374,7 +2374,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     wb = Workbook()
     ws = wb.active
     _sheet(ws, "รายวัน", DAILY_HEADERS,
-           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับตามสูตร BoM จากยอดขายของวันนั้น "
+           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
            f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · ชั้น A เบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นเบิกเกินต่อเนื่อง")
     for r in d["rows"]:
@@ -2395,7 +2395,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     w2 = wb.create_sheet()
     _sheet(w2, "รายการต่อวัน", DAILY_ITEM_HEADERS,
            f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
-           "ผลต่าง = รวมเบิก − ตามสูตร BoM · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
+           "ผลต่าง = รวมเบิก − ตามสูตร · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
     for it in items:
         w2.append([it["date"], it["code"], it["name"], it["base_unit"], it["class"], it["used"], it["waste"], it["issued"],
                    it["bom"], it["var_qty"], it["var_pct"], it["price_per_base"], it["var_value"], it["signal_th"]])
@@ -2494,7 +2494,7 @@ def bc_ir_log_xlsx(request: Request, date_from: Optional[str] = Query(None), dat
 # ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
 def _round_or_400(r: str) -> str:
     if r not in ("1", "2", "salmon"):
-        raise HTTPException(400, "รอบต้องเป็น 1 / 2 / salmon")
+        raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือแซลมอนสด")
     return r
 
 
@@ -2504,7 +2504,7 @@ def _day_or_today(d: Optional[str]) -> date:
     try:
         return date.fromisoformat(d)
     except ValueError:
-        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise HTTPException(400, "วันที่ไม่ถูกต้อง")
 
 
 def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str], order_day: Optional[str]) -> tuple:
@@ -2520,9 +2520,9 @@ def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str]
             rnd = next((x["round"] for x in _fc.next_deliveries(con, bid, now.date(), horizon_days=21, now=now)
                         if x["delivery"] == d.isoformat()), None)
             if not rnd:
-                raise HTTPException(400, "กรุณาระบุรอบของวันส่งนี้")
+                raise HTTPException(400, "ระบุรอบของวันส่งนี้")
         if _fc._wd(d) != int(_fc.calendar(con, bid)[rnd]["delivery_weekday"]):
-            raise HTTPException(400, "วันส่งไม่ตรงกับวันส่งที่กำหนดไว้ของรอบนี้ กรุณาเลือกจากรายการรอบส่ง")
+            raise HTTPException(400, "วันส่งไม่ตรงกับวันส่งที่กำหนดไว้ของรอบนี้ · เลือกจากรายการรอบส่ง")
         return rnd, d
     if order_day:
         day = _day_or_today(order_day)
@@ -2714,7 +2714,7 @@ def bc_claims_claimable(request: Request, order_id: int = Query(...), branch_id:
 def bc_claims_list(request: Request, status: Optional[str] = Query(None), branch_id: Optional[int] = Query(None),
                    limit: int = Query(50)):
     if status and status not in ("all", *_cl.STATUS_TH):
-        raise HTTPException(400, "status ต้องเป็น submitted / approved / rejected / cancelled / all")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     with get_db() as con:
         _ensure(con)
         bid = _claim_scope(con, request, branch_id)
@@ -2798,14 +2798,14 @@ def bc_claim_decide(body: ClaimDecision, request: Request):
 
 
 # ── Phase 2 · S9: the centre's side — Sales Support queue, Ops compliance, monthly (hub.py) ──
-_HUB_STATUS_TH = {"open": "รอดำเนินการและดำเนินการแล้ว", "submitted": "รอดำเนินการ", "processed": "ดำเนินการแล้ว",
+_HUB_STATUS_TH = {"open": "รอยืนยันยอดส่งและคลังจัดส่งแล้ว", "submitted": "รอยืนยันยอดส่ง", "processed": "คลังจัดส่งแล้ว",
                   "received": "สาขารับแล้ว", "all": "ทุกสถานะ"}
 
 
 def _hub_status_or_400(status: Optional[str]) -> str:
     st = status or "open"
     if st not in _HUB_STATUS_TH:
-        raise HTTPException(400, "status ต้องเป็น open / submitted / processed / received / all")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     return st
 
 
@@ -2817,7 +2817,7 @@ def _ids_or_filter(con, ids: Optional[str], date_from: Optional[str], date_to: O
         try:
             return [int(x) for x in ids.split(",") if x.strip()]
         except ValueError:
-            raise HTTPException(400, "ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
+            raise HTTPException(400, "คำขอไม่ถูกต้อง")
     sts = ("submitted", "processed") if status == "open" else ("all",) if status == "all" else (status,)
     out = []
     for st in sts:
@@ -2842,9 +2842,9 @@ def _sheet_title(name: str, used: set) -> str:
 def bc_hub_queue(status: str = Query("submitted"), date_from: Optional[str] = Query(None),
                  date_to: Optional[str] = Query(None), keyed: Optional[int] = Query(None)):
     if status not in ("submitted", "processed", "received", "all"):
-        raise HTTPException(400, "status ต้องเป็น submitted / processed / received / all")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     if keyed not in (None, 0, 1):
-        raise HTTPException(400, "keyed ต้องเป็น 0 หรือ 1")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     with get_db() as con:
         _ensure(con)
         rows = _hub.queue(con, status, date_from, date_to, keyed)
@@ -2935,8 +2935,8 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
                 if q:
                     per_branch.append([bname, dlv, o["cycle_date"], o["round"], ln["code"], ln["name"], q,
                                        "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"],
-                                       "ล่าช้า (ค่าปรับ)" if o.get("late") else "",
-                                       (f"แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
+                                       "ส่งล่าช้า (มีค่าปรับ)" if o.get("late") else "",
+                                       (f"คีย์แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
                                         if o.get("accounting_keyed_at") else "ยังไม่คีย์")])
     wb = Workbook()
     ws = wb.active
@@ -2944,13 +2944,13 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     _sheet(ws, "รวมตามวันส่ง", ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
            f"สินค้าส่วนกลางสั่งจาก {c['supplier']} · ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”"
            + (f" วันตัดรอบ {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
-           + " สรุปรวมตามวันส่ง (ใช้ยอดที่คลังระบุว่าส่งจริง หากยังไม่ดำเนินการ ใช้ยอดที่สาขายืนยัน)")
+           + " สรุปรวมตามวันส่ง (ใช้ยอดส่งจริงของคลัง ถ้ายังไม่มีใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:
             ws.append([g["delivery"], it["code"], it["name"], it["unit"], it["total"]] +
                       [it["by_branch"].get(b) for b in br])
     ws2 = wb.create_sheet()
-    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบ", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"],
+    _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบส่ง", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
@@ -2965,7 +2965,7 @@ def _dates_or_week(date_from: Optional[str], date_to: Optional[str]) -> tuple:
         try:
             date.fromisoformat(d)
         except ValueError:
-            raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+            raise HTTPException(400, "วันที่ไม่ถูกต้อง")
     return d0, d1
 
 
@@ -2989,15 +2989,15 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
           "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงกำหนด"}
     wb = Workbook()
     ws = wb.active
-    _sheet(ws, "Compliance การสั่ง", ["วันตัดรอบ", "สาขา", "รอบ", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่วนกลางดำเนินการ ฿",
-                                       "รับจริง ฿", "ยืนยัน vs แนะนำ %", "ส่วนกลางเปลี่ยน %", "ส่งขาด %", "ส่งทันเวลา",
-                                       "ดำเนินการทันเวลา", "ล่าช้า"],
-           f"รอบที่ปฏิทินกำหนด {d0} ถึง {d1} · สถานะ “ตามแนะนำ” หมายถึงยอดยืนยันต่างจากยอดแนะนำไม่เกิน ±{_hub.TOL_PCT:g}%")
+    _sheet(ws, "ตรวจสอบการสั่ง", ["วันตัดรอบ", "สาขา", "รอบส่ง", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่งจริง ฿",
+                                       "รับจริง ฿", "ยืนยันเทียบแนะนำ %", "คลังเปลี่ยน %", "ส่งขาด %", "ส่งทันเวลา",
+                                       "ยืนยันยอดส่งทันเวลา", "ล่าช้า"],
+           f"รอบส่งที่ปฏิทินกำหนด {d0} ถึง {d1} · สถานะ “ตามแนะนำ” หมายถึงยอดยืนยันต่างจากยอดแนะนำไม่เกิน ±{_hub.TOL_PCT:g}%")
     for r in c["rows"]:
         ws.append([r["cycle_date"], r["branch"], r["round"], th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
                    r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
-                   "ล่าช้า (ค่าปรับ)" if r.get("late") else ""])
+                   "ส่งล่าช้า (มีค่าปรับ)" if r.get("late") else ""])
     w2 = wb.create_sheet()                                   # PR-J4: how each branch kept its daily issue slips in the same dates
     _sheet(w2, "ใบตัดเบิก", LOG_SUMMARY_HEADERS,
            f"การทำใบตัดเบิกของแต่ละสาขา {d0} ถึง {d1} · นับเฉพาะวันที่สาขามียอดขาย · ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · "
@@ -3086,8 +3086,8 @@ def bc_central_xlsx():
     heads = ["ลำดับ", "รหัสสินค้า", "รายละเอียด", "หน่วยนับ", "ราคาขาย", "หน่วยขาย", "1 หน่วยขาย = หน่วยฐาน",
              "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของอัตราแปลง", "งวดราคา"]
     _sheet(wb.active, "บัญชีสินค้าส่วนกลาง", heads,
-           "บัญชีสินค้าที่สาขาสั่งจากส่วนกลาง หากอัตราแปลงไม่ถูกต้อง ให้แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง"
-           " · สินค้าที่ไม่อยู่ในบัญชีนี้ สาขาจัดซื้อในพื้นที่")
+           "บัญชีสินค้าที่สาขาสั่งจากไดกิโตะ กรุ๊ป · อัตราแปลงไม่ถูกต้อง: แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง"
+           " · สินค้าที่ไม่อยู่ในบัญชีนี้ สาขาซื้อเอง")
     ws = wb.active
     for i, r in enumerate(d["items"], 1):
         ws.append([i, r["code"], r["name"], r["unit_label"], r["price_per_sale"], r["sale_unit"], r["base_per_sale"],
@@ -3132,7 +3132,7 @@ async def bc_central_deliveries(request: Request, file: UploadFile = File(...), 
     try:
         ids = [int(x) for x in branch_ids.split(",") if x.strip()] if branch_ids else None
     except ValueError:
-        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     with get_db() as con:
         _ensure(con)
         p = _parse_central(con, raw, month)
@@ -3159,7 +3159,7 @@ async def bc_central_month_import(request: Request, file: UploadFile = File(...)
     try:
         ids = [int(x) for x in branch_ids.split(",") if x.strip()] if branch_ids else []
     except ValueError:
-        raise HTTPException(400, "branch_ids ต้องเป็นตัวเลขคั่นด้วยเครื่องหมายจุลภาค")
+        raise HTTPException(400, "คำขอไม่ถูกต้อง")
     who = _who(request)
     with get_db() as con:
         _ensure(con)
@@ -3169,7 +3169,7 @@ async def bc_central_month_import(request: Request, file: UploadFile = File(...)
             cat = _ce.apply_catalogue(con, p, who, set_local_others=set_local)
             if not p.get("month"):          # the list's own export: no month, no quantities → the list alone
                 if ids:
-                    raise ValueError("ไฟล์นี้ไม่มีงวดของรายงาน จึงสร้างใบรับสินค้าไม่ได้ (ระบุเดือนด้วย month=YYYY-MM หากต้องการ)")
+                    raise ValueError("ไฟล์นี้ไม่มีงวดของรายงาน จึงสร้างใบรับสินค้าไม่ได้ · เลือกเดือนของรายงาน")
                 dl = {"month": None, "receipt_date": None, "dry_run": dry_run, "branches": [],
                       "note": "ไฟล์นี้ไม่มีงวดและยอดจัดส่งรายสาขา จึงบันทึกเฉพาะบัญชีสินค้า"}
             elif dry_run:
@@ -3208,7 +3208,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
     heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ชั้น", "รายการบังคับนับ",
              "หมายเหตุ"]
     _sheet(wb.active, "ตรวจนับ", heads,
-           f"แบบฟอร์มตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดขายและก่อนรับสินค้าของวันนั้น)"
+           f"แบบฟอร์มตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดร้านและก่อนรับสินค้าของวันนั้น)"
            " · กรอกจำนวนตามหน่วยนับ (เปลี่ยนหน่วยได้ เช่น แพ็ค/กิโลกรัม) · ช่องที่เว้นว่างถือว่าไม่ได้ตรวจนับ")
     ws = wb.active
     for r in rows:

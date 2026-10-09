@@ -143,7 +143,7 @@ def seed_from_db(con, forced: dict = None, ref_month: str = "2026-07", who: str 
                                 "recv_unit": ounit or None, "qty_per_recv": _num(per),
                                 "moq": _num(moq)}, who, False, stats)
             if _num(price) and _num(per):
-                _set_ref_price(con, code, ref_month, _num(price) / _num(per), "ราคาตามใบเสนอ (DATAP)", who, stats)
+                _set_ref_price(con, code, ref_month, _num(price) / _num(per), "ราคาตามใบเสนอ (ทะเบียนเดิม)", who, stats)
 
     # 2. every code a recipe uses (name, unit, type) — one unit per code or flag it
     units = {}
@@ -198,7 +198,7 @@ IMPORT_ALIASES = {
 }
 IMPORT_OPTIONAL = tuple(k for k in IMPORT_ALIASES if k not in ("code", "name"))
 _KIND_TH = {"ดิบ": "raw", "วัตถุดิบ": "raw", "กึ่งสำเร็จ": "prepared", "วัสดุสิ้นเปลือง": "consumable",
-            "ตั้งใจ0": "zero_by_design", "ตั้งใจเป็น0": "zero_by_design"}
+            "ตั้งใจ0": "zero_by_design", "ตั้งใจเป็น0": "zero_by_design", "ตั้งใจเป็น 0": "zero_by_design"}
 
 
 def _month_of(v):
@@ -289,7 +289,7 @@ def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
         if src:
             vals["sourcing_default"] = "local" if src in ("local", "สาขาซื้อเอง", "สาขา") else "central"
         if vals["loss_pct"] is not None and not (0 <= vals["loss_pct"] < 100):
-            stats["skipped"].append({"row": i + 1, "code": code, "why": "LOSS % ต้องอยู่ระหว่าง 0–99"})
+            stats["skipped"].append({"row": i + 1, "code": code, "why": "สูญเสีย % ต้องอยู่ระหว่าง 0–99"})
             continue
         try:
             if str(r.get("zone") or "").strip():
@@ -308,7 +308,7 @@ def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
     for c, u in _check_count_units(con, pending):          # a count unit that cannot be converted: keep the old one
         z0, u0 = undo.get(c) or (None, None)
         con.execute("UPDATE bc_ingredient SET count_unit=? WHERE code=?", (u0, c))
-        stats["skipped"].append({"code": c, "why": f"หน่วยที่นับ “{u}” แปลงเป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน"})
+        stats["skipped"].append({"code": c, "why": f"หน่วยที่นับ “{u}” แปลงเป็นหน่วยฐานไม่ได้ · เพิ่มกฎหน่วยก่อน"})
     return stats
 
 
@@ -327,14 +327,14 @@ def update_rows(con, rows: list, who: str) -> dict:
             if k in vals:
                 vals[k] = _num(vals[k])
         if vals.get("loss_pct") is not None and not (0 <= vals["loss_pct"] < 100):
-            raise ValueError(f"{code}: LOSS % ต้องอยู่ระหว่าง 0–99")
+            raise ValueError(f"{code}: สูญเสีย % ต้องอยู่ระหว่าง 0–99")
         if vals.get("qty_per_recv") is not None and vals["qty_per_recv"] <= 0:
             raise ValueError(f"{code}: ขนาดบรรจุต้องมากกว่า 0")
         _upsert(con, code, vals, who, True, stats)
         _apply_layout(con, code, r, who, pending, True)
     bad = _check_count_units(con, pending)
     if bad:
-        raise ValueError("; ".join(f"{c}: ยังแปลง {u} เป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน" for c, u in bad[:3]))
+        raise ValueError("; ".join(f"{c}: ยังแปลง {u} เป็นหน่วยฐานไม่ได้ · เพิ่มกฎหน่วยก่อน" for c, u in bad[:3]))
     return stats
 
 
@@ -353,7 +353,7 @@ def add_from_purchase(con, code: str, name: str, unit: str, who: str) -> str:
         base = u or None
     stats = {"inserted": 0, "updated": 0, "unchanged": 0}
     _upsert(con, code, {"name_th": (str(name).strip() if name else None), "base_unit": base,
-                        "note": f"เพิ่มจากรายงานบัญชี (ซื้อเป็น {unit}) กรุณาตรวจสอบหน่วยฐานและขนาดบรรจุ"}, who, False, stats)
+                        "note": f"เพิ่มจากรายงานบัญชี (ซื้อเป็น {unit}) · ตรวจหน่วยฐานและขนาดบรรจุ"}, who, False, stats)
     if stats["inserted"]:
         audit(con, who, "add_from_purchase", "bc_ingredient", code, None, base)
     return base

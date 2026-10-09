@@ -20,6 +20,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
+from .fmt import day_th as _fmt_day
 from .master import audit
 from .units import Converter
 
@@ -70,7 +71,7 @@ def set_zones(con, rows: list, who: str) -> tuple:
         label = re.sub(r"\s+", " ", str((r or {}).get("label") or "")).strip()
         code = str((r or {}).get("code") or "").strip().lower()
         if not label:
-            raise ValueError(f"โซนลำดับที่ {i}: กรุณาระบุชื่อโซน")
+            raise ValueError(f"โซนลำดับที่ {i}: ระบุชื่อโซน")
         if len(label) > 40:
             raise ValueError(f"โซน “{label[:20]}…”: ชื่อยาวเกิน 40 ตัวอักษร")
         if label in labels:
@@ -92,10 +93,10 @@ def set_zones(con, rows: list, who: str) -> tuple:
     for code, label in old.items():
         if code not in seen:
             if code == FALLBACK_ZONE:
-                raise ValueError(f"ลบโซน “{label}” ไม่ได้ เพราะเป็นโซนสำรองของระบบ เปลี่ยนชื่อได้เท่านั้น")
+                raise ValueError(f"ลบโซน “{label}” ไม่ได้ เพราะเป็นโซนสำรอง เปลี่ยนชื่อได้เท่านั้น")
             if use.get(code):
                 raise ValueError(f"ลบโซน “{label}” ไม่ได้ เพราะยังมีวัตถุดิบ {use[code]} รายการ "
-                                 "กรุณาเปลี่ยนชื่อโซน หรือย้ายวัตถุดิบไปโซนอื่นก่อน")
+                                 "· เปลี่ยนชื่อโซน หรือย้ายวัตถุดิบไปโซนอื่นก่อน")
     dump = lambda zs: json.dumps([{"code": c, "label": t} for c, t in zs], ensure_ascii=False)  # noqa: E731
     con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
     con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES(?, ?)", (ZONES_KEY, dump(new)))
@@ -330,7 +331,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         bad = [f"{c}: แปลง {u} ไม่ได้" for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
         if bad:
-            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " กรุณาแจ้งส่วนกลางให้เพิ่มกฎหน่วย")
+            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
         con.execute("UPDATE bc_stock_count SET status='submitted', submitted_at=? WHERE count_id=?", (now(), cid))
         audit(con, who, "stock_submit", "bc_stock_count", str(cid), None,
               {"branch_id": branch_id, "kind": kind, "date": cdate, "lines": n})
@@ -438,7 +439,7 @@ def set_layout(con, rows: list, who: str) -> int:
             raise ValueError(f"{code}: โซนต้องเป็น {', '.join(sorted(zlabels))}")
         cu = (r.get("count_unit") or "").strip() or None
         if cu and conv.factor(code, cu)[0] is None:
-            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ กรุณาเพิ่มกฎหน่วยก่อน")
+            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ · เพิ่มกฎหน่วยก่อน")
         con.execute("UPDATE bc_ingredient SET storage_zone=?, count_unit=? WHERE code=?", (z, cu, code))
         audit(con, who, "stock_layout", "bc_ingredient", code, None, {"zone": z, "count_unit": cu})
         n += 1
@@ -463,7 +464,7 @@ def read_count_file(data: bytes) -> list:
     hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]
                and any(str(c or "").strip().startswith("จำนวน") for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) กรุณาใช้แบบฟอร์มตรวจนับของระบบ")
+        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) ใช้แบบฟอร์มตรวจนับจากหน้านี้")
     head = [str(c or "").strip() for c in grid[hi]]
     ci = head.index("รหัส")
     cq = next(i for i, h in enumerate(head) if h.startswith("จำนวน"))
@@ -496,11 +497,11 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     except (TypeError, ValueError):
         raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if draft_of(con, branch_id):
-        raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ กรุณาส่งหรือลบร่างก่อนนำเข้า")
+        raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ · ส่งหรือลบร่างก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
                    f" COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}",
                    (branch_id, count_date)).fetchone():
-        raise ValueError(f"วันที่ {count_date} มีผลตรวจนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
+        raise ValueError(f"วันที่ {_fmt_day(count_date)} มีผลตรวจนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
     conv = Converter(con)
     known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}
     unknown = sorted({ln["code"] for ln in lines if ln["code"] not in known})

@@ -42,7 +42,7 @@ def test_only_processed_or_received_orders_can_be_keyed(con):  # noqa: F811
     sub, proc, rec = _order(con, "submitted"), _order(con, "processed", "2026-10-06"), _order(con, "received", "2026-10-07")
     with pytest.raises(ValueError) as e:
         HB.set_keyed(con, [proc, sub], True, "ss")
-    assert f"#{sub}" in str(e.value) and "ยังไม่ดำเนินการ จึงคีย์เข้าระบบบัญชีไม่ได้" in str(e.value)
+    assert f"#{sub}" in str(e.value) and "คลังยังไม่ยืนยันยอดส่ง จึงคีย์เข้าระบบบัญชีไม่ได้" in str(e.value)
     con.rollback()
     assert con.execute("SELECT COUNT(*) FROM bc_order WHERE accounting_keyed_at IS NOT NULL").fetchone()[0] == 0
     out = HB.set_keyed(con, [proc, rec], True, "ss1")
@@ -64,7 +64,7 @@ def test_unkeying_clears_the_mark_and_is_audited(con):  # noqa: F811
 
 
 def test_empty_and_unknown_orders_are_refused(con):  # noqa: F811
-    with pytest.raises(ValueError, match="กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ"):
+    with pytest.raises(ValueError, match="เลือกใบสั่งซื้ออย่างน้อย 1 ใบ"):
         HB.set_keyed(con, [], True, "ss")
     proc = _order(con, "processed")
     with pytest.raises(ValueError, match="ไม่พบใบสั่งซื้อ #99999"):
@@ -95,9 +95,9 @@ def test_the_todo_counts_processed_orders_not_yet_keyed(con):  # noqa: F811
     _order(con, "submitted", "2026-10-07")                                          # not processed: not counted
     it = {i["key"]: i for i in TD.build(con, today=today)["items"]}["accounting_keyed"]
     assert it["status"] == "todo" and it["count"] == 2 and it["seq"] == 227
-    assert it["title"] == "คีย์ใบสั่งซื้อที่ดำเนินการแล้วเข้าระบบบัญชี"
-    assert it["detail"] == "ยังไม่คีย์ 2 ใบ · ดาวน์โหลด Excel แล้วทำเครื่องหมายเมื่อคีย์เสร็จ"
-    assert it["owner_modules"] == ["supply.ordering"] and it["owner_th"] == "ประสานงานขาย (Sales Support)"
+    assert it["title"] == "คีย์ใบสั่งซื้อที่คลังจัดส่งแล้วเข้าระบบบัญชี"
+    assert it["detail"] == "ยังไม่คีย์ 2 ใบ · ดาวน์โหลด Excel แล้วกด “คีย์บัญชีแล้ว”"
+    assert it["owner_modules"] == ["supply.ordering"] and it["owner_th"] == "ประสานงานขาย"
     assert it["go"] == {"tab": "orderhub", "pane": "queue"}
     HB.set_keyed(con, [a, b], True, "ss")
     it = {i["key"]: i for i in TD.build(con, today=today)["items"]}["accounting_keyed"]
@@ -188,7 +188,7 @@ def test_http_flow_roles_filter_and_excel(client, app_db, auth_on):
         assert ss.post("/api/bom-center/hub/process/0", json={}, headers=TOKEN).headers.get("X-Denied") == "role"
         # refusals are 400 with the Thai message
         r = ss.post("/api/bom-center/hub/keyed", json={"order_ids": [], "keyed": True}, headers=TOKEN)
-        assert r.status_code == 400 and "กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ" in r.json()["detail"]
+        assert r.status_code == 400 and "เลือกใบสั่งซื้ออย่างน้อย 1 ใบ" in r.json()["detail"]
         r = ss.post("/api/bom-center/hub/keyed", json={"order_ids": [sub], "keyed": True}, headers=TOKEN)
         assert r.status_code == 400 and "คีย์เข้าระบบบัญชีไม่ได้" in r.json()["detail"]
         # the queue says "not keyed" before, and the Excel ends with the column
@@ -210,7 +210,7 @@ def test_http_flow_roles_filter_and_excel(client, app_db, auth_on):
         wb = load_workbook(io.BytesIO(ss.get(f"/api/bom-center/hub/consolidated.xlsx?{q}&status=all").content), read_only=True)
         rows = list(wb["ต่อสาขา"].iter_rows(values_only=True))
         done = next(r for r in rows if r and r[9] == proc)
-        assert done[-1].startswith("แล้ว 20") and len(done[-1]) == len("แล้ว 2026-10-09")
+        assert done[-1].startswith("คีย์แล้ว 20") and len(done[-1]) == len("คีย์แล้ว 2026-10-09")
         # take it back
         r = ss.post("/api/bom-center/hub/keyed", json={"order_ids": [proc], "keyed": False}, headers=TOKEN)
         assert r.status_code == 200 and r.json()["keyed"] is False

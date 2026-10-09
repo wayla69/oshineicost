@@ -137,15 +137,15 @@ def _clean_lines(lines: list, limit: dict, over_msg) -> list:
             raise ValueError(over_msg(code, limit[code], q))
         rs = (ln.get("reason") or "").strip()
         if rs not in REASON_TH:
-            raise ValueError(f"{code}: กรุณาเลือกสาเหตุของการเคลม")
+            raise ValueError(f"{code}: เลือกสาเหตุของการเคลม")
         nt = (ln.get("note") or "").strip() or None
         if rs == "other" and not nt:
             raise ValueError(f"{code}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         clean.append((code, q, rs, nt))
     if not clean:
-        raise ValueError("กรุณาระบุรายการที่จะเคลมอย่างน้อย 1 รายการ")
+        raise ValueError("ระบุรายการที่จะเคลมอย่างน้อย 1 รายการ")
     if len({c for c, *_ in clean}) != len(clean):
-        raise ValueError("มีรายการซ้ำ กรุณารวมเป็นบรรทัดเดียว")
+        raise ValueError("มีรายการซ้ำ · รวมเป็นบรรทัดเดียว")
     return clean
 
 
@@ -308,7 +308,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
     if not h:
         raise ValueError("ไม่พบรายการเคลม")
     if h["status"] != "submitted":
-        raise ValueError(f"เคลมนี้ตัดสินแล้ว ({h['status_th']})")
+        raise ValueError(f"เคลมนี้พิจารณาแล้ว ({h['status_th']})")
     note = (note or "").strip() or None
     origin = h["origin"]
     units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (h["order_id"],))}
@@ -330,7 +330,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
 
     if decision == "reject":
         if not note:
-            raise ValueError("กรุณาระบุเหตุผลที่ไม่อนุมัติ เพื่อให้สาขาทราบ")
+            raise ValueError("ระบุเหตุผลที่ไม่อนุมัติ")
         rid = rdate = None
         restored = 0
         if origin == "receive":
@@ -346,7 +346,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
         return {"claim_id": claim_id, "status": "rejected", "origin": origin, "adjusted": 0, "restored": restored,
                 "receipt_id": rid, "receipt_date": rdate}
     if decision != "approve":
-        raise ValueError("การตัดสินต้องเป็น approve หรือ reject")
+        raise ValueError("คำขอไม่ถูกต้อง")
     given = {(ln.get("code") or "").strip(): ln.get("approved_units") for ln in lines or []}
     rows = con.execute("SELECT ingredient_code, claim_units FROM bc_claim_line WHERE claim_id=?", (claim_id,)).fetchall()
     approved = []
@@ -360,7 +360,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
             raise ValueError(f"{c}: อนุมัติได้ 0 ถึง {float(cu):g} (จำนวนที่สาขาเคลม)")
         approved.append((c, a))
     if not any(a > 0 for _, a in approved):
-        raise ValueError("กรุณาระบุจำนวนที่อนุมัติอย่างน้อย 1 รายการ หรือเลือก “ไม่อนุมัติ”")
+        raise ValueError("ระบุจำนวนที่อนุมัติอย่างน้อย 1 รายการ หรือเลือก “ไม่อนุมัติ”")
     for c, a in approved:
         con.execute("UPDATE bc_claim_line SET approved_units=? WHERE claim_id=? AND ingredient_code=?", (a, claim_id, c))
     rid = rdate = None

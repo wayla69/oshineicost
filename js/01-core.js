@@ -36,7 +36,7 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
 // browser pane throws on prompt() and answers confirm() with "cancel" without
 // showing anything), so a save there failed or was silently cancelled. Every
 // question the app asks goes through uiDialog instead:
-//   await uiConfirm(message)                      -> true / false
+//   await uiConfirm(message, {title, ok, cancel}) -> true / false
 //   await uiPrompt(message, value, {list, placeholder, required})  -> text or null
 // `list` = [{value, label}] offered as suggestions while typing (a datalist).
 window.uiDialog = function (opt) {
@@ -75,7 +75,7 @@ window.uiDialog = function (opt) {
       e.preventDefault();
       if (!input) return done(true);
       const v = input.value.trim();
-      if (o.input.required && !v) { wrap.querySelector('[data-el="err"]').textContent = 'กรุณากรอกข้อมูล'; input.focus(); return; }
+      if (o.input.required && !v) { wrap.querySelector('[data-el="err"]').textContent = 'ต้องกรอกข้อมูล'; input.focus(); return; }
       done(v);
     });
     wrap.querySelector('[data-act="cancel"]').addEventListener('click', () => done(input ? null : false));
@@ -84,7 +84,14 @@ window.uiDialog = function (opt) {
     setTimeout(() => (input || wrap.querySelector('[type="submit"]')).focus(), 0);
   });
 };
-window.uiConfirm = (message, opt) => window.uiDialog(Object.assign({ message }, opt || {}));
+// uiConfirm(message, {title, ok, cancel}): a specific title and button labels per question (PR-M1);
+// without them the dialog keeps the generic title and ยืนยัน / ยกเลิก (okText / cancelText still work).
+window.uiConfirm = (message, opt) => {
+  const o = Object.assign({ message }, opt || {});
+  if (o.ok != null && o.okText == null) o.okText = o.ok;
+  if (o.cancel != null && o.cancelText == null) o.cancelText = o.cancel;
+  return window.uiDialog(o);
+};
 window.uiPrompt = (message, value, opt) => {
   const o = opt || {};
   return window.uiDialog({ title: o.title || 'กรอกข้อมูล', message, okText: o.okText || 'ตกลง',
@@ -93,8 +100,8 @@ window.uiPrompt = (message, value, opt) => {
 // the owner token: several saves can hit 403 together and all wait for the one dialog
 window.askWriteToken = function (message) {
   if (window._askTokenPending) return window._askTokenPending;
-  return (window._askTokenPending = window.uiDialog({ title: 'ยืนยันสิทธิ์บันทึกข้อมูล', message,
-    input: { password: true, placeholder: 'Owner Write-Token' } })
+  return (window._askTokenPending = window.uiDialog({ title: 'กรอกรหัสปลดล็อก', message, okText: 'ปลดล็อก',
+    input: { password: true, placeholder: 'รหัสปลดล็อก' } })
     .then(v => v || '').finally(() => { window._askTokenPending = null; }));
 };
 
@@ -134,7 +141,7 @@ window.askWriteToken = function (message) {
         if (res.ok && stored && gatedCall && window.writeToken) _writeTokenState(true);
         return observe(url, res);
       }
-      const tok = await window.askWriteToken('การบันทึกข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
+      const tok = await window.askWriteToken('ต้องกรอกรหัสปลดล็อกก่อนบันทึก (ครั้งเดียวต่อเบราว์เซอร์)');
       if (!tok) return res;                       // cancelled → surface the 403
       localStorage.setItem(TOK_KEY, tok);
       return send(tok).then(res2 => {
@@ -173,12 +180,12 @@ async function verifyWriteToken() {
   return window.writeToken;
 }
 async function unlockWrites() {
-  const tok = await askWriteToken('การบันทึกข้อมูลต้องใช้ Owner Write-Token\nกรอกครั้งเดียว เบราว์เซอร์นี้จะจำไว้');
+  const tok = await askWriteToken('ต้องกรอกรหัสปลดล็อกก่อนบันทึก (ครั้งเดียวต่อเบราว์เซอร์)');
   if (!tok) return;
   try { localStorage.setItem('oshinei_upload_token', tok.trim()); } catch (e) {}
   const st = await verifyWriteToken();
-  if (st.unlocked) notifySuccess('ปลดล็อกการบันทึกแล้ว เบราว์เซอร์นี้บันทึกข้อมูลได้');
-  else notifyError('token ไม่ถูกต้อง กรุณาตรวจสอบแล้วกรอกใหม่');
+  if (st.unlocked) notifySuccess('✓ ปลดล็อกแล้ว บันทึกข้อมูลได้');
+  else notifyError('รหัสปลดล็อกไม่ถูกต้อง');
 }
 // The same state as a lock icon beside the user name — the branch phone hides the
 // chip bar (#supplyNav takes its place), so the lock lives up in the top bar there.
@@ -186,8 +193,8 @@ function _renderLockIcon(st, on) {
   const top = document.getElementById('supplyLockTop');
   if (!top) return;
   if (st.gated === false) { top.innerHTML = ''; return; }
-  const label = on ? 'ปลดล็อกการบันทึกแล้ว' : 'ยังไม่ปลดล็อกการบันทึก';
-  top.innerHTML = `<button onclick="unlockWrites()" aria-label="${label}" title="${label}${on ? '' : ' · กดเพื่อกรอก Owner Write-Token ครั้งเดียวต่อเครื่อง'}" style="color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/>${on ? '<path d="M8 11V7a4 4 0 017.6-1.8"/>' : '<path d="M8 11V7a4 4 0 018 0v4"/>'}</svg></button>`;
+  const label = on ? 'แก้ไขได้' : 'อ่านอย่างเดียว';
+  top.innerHTML = `<button onclick="unlockWrites()" aria-label="${label}" title="${label}${on ? '' : ' · กดเพื่อกรอกรหัสปลดล็อก'}" style="color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/>${on ? '<path d="M8 11V7a4 4 0 017.6-1.8"/>' : '<path d="M8 11V7a4 4 0 018 0v4"/>'}</svg></button>`;
 }
 function _renderLockChip() {
   const st = window.writeToken || {};
@@ -197,9 +204,9 @@ function _renderLockChip() {
   if (!el) return;
   if (st.gated === false) { el.innerHTML = ''; return; }
   el.innerHTML = `<button onclick="unlockWrites()" title="${on
-      ? 'เบราว์เซอร์นี้บันทึกข้อมูลได้แล้ว · กดเพื่อเปลี่ยน token'
-      : 'ดูข้อมูลและตรวจสอบก่อนบันทึกได้ทุกหน้า การบันทึกจริงต้องกรอก Owner Write-Token ครั้งเดียวต่อเบราว์เซอร์ · กดเพื่อกรอก'}"
-    class="text-[11px] rounded-full px-2.5 py-0.5" style="border:1px solid ${on ? 'var(--good-ink)' : 'var(--amber-ink)'};color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'};background:transparent;white-space:nowrap">${on ? 'ปลดล็อกการบันทึกแล้ว' : 'ยังไม่ปลดล็อกการบันทึก'}</button>`;
+      ? 'บันทึกข้อมูลได้ · กดเพื่อเปลี่ยนรหัสปลดล็อก'
+      : 'ดูตัวอย่างได้ทุกหน้า · บันทึกจริงต้องกรอกรหัสปลดล็อก · กดเพื่อกรอก'}"
+    class="text-[11px] rounded-full px-2.5 py-0.5" style="border:1px solid ${on ? 'var(--good-ink)' : 'var(--amber-ink)'};color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'};background:transparent;white-space:nowrap">${on ? 'แก้ไขได้' : 'อ่านอย่างเดียว'}</button>`;
 }
 
 // Session-expiry handler — re-open the login overlay (guarded so a burst of
@@ -210,7 +217,7 @@ function onSessionExpired() {
   _sessionExpiredShown = true;
   if (window.AUTH) window.AUTH.authenticated = false;
   const err = document.getElementById('loginError');
-  if (err) { err.textContent = 'เซสชันหมดอายุ — กรุณาเข้าสู่ระบบอีกครั้ง'; err.style.display = 'block'; }
+  if (err) { err.textContent = 'หมดเวลาเข้าสู่ระบบ · เข้าสู่ระบบอีกครั้ง'; err.style.display = 'block'; }
   if (typeof showLogin === 'function') showLogin();
 }
 
@@ -255,13 +262,13 @@ const TAB_MODULE = {
 const ROLE_START = {
   management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
   accounting: [['bomcenter', 'ดาวน์โหลดใบสรุปตัดเบิกรายสาขาหลังตรวจนับปลายงวด เพื่อบันทึกเข้าระบบบัญชี', 'issue'], ['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
-  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจสอบว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · ยืนยัน · ดำเนินการ · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
+  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · สาขายืนยัน · ส่งจริง · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
-  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานของฉันวันนี้และสถานะปิดงวดเดือน พร้อมลิงก์เข้าแต่ละงาน'], ['cost', 'ต้นทุนและ food cost']],
-  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'สร้างสูตรเดือนถัดไปจากแม่แบบ แล้วส่งตรวจให้ฝ่ายวิเคราะห์', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
-  salessupport: [['orderhub', 'ติดตามใบตัดเบิกของสาขา: สาขาที่ยังไม่ยืนยันหรือยืนยันล่าช้า และเปิดแก้ไขใบที่ยืนยันแล้วพร้อมระบุเหตุผล', 'issues'], ['orderhub', 'เคลมสินค้าที่สาขาแจ้ง: ดูรูป อนุมัติรับเคลมเพื่อปรับสินค้าของสาขา', 'claims'], ['orderhub', 'คิวใบสั่งซื้อจากสาขา: ดาวน์โหลด Excel คีย์เข้าระบบบัญชี แล้วทำเครื่องหมายใบที่คีย์แล้ว', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
-  warehouse: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง และกดดำเนินการแล้ว', 'queue']],
-  branch: [['branchstock', 'บันทึกใบตัดเบิกประจำวัน (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'สั่งสินค้าตามยอดแนะนำที่หักคงเหลือตามระบบแล้ว ส่งก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
+  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานวันนี้และสถานะปิดงวดเดือน'], ['cost', 'ต้นทุนและ food cost']],
+  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'สร้างสูตรเดือนถัดไปจากแม่แบบ แล้วส่งตรวจ', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
+  salessupport: [['orderhub', 'ติดตามใบตัดเบิกที่สาขายังไม่ยืนยันหรือยืนยันล่าช้า', 'issues'], ['orderhub', 'พิจารณาเคลมที่สาขาแจ้ง', 'claims'], ['orderhub', 'คีย์ใบสั่งซื้อเข้าระบบบัญชี', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
+  warehouse: [['orderhub', 'ระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง”', 'queue']],
+  branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง รวมที่สาขาซื้อเอง', 'recv']],
   franchise: [['franchise', 'สรุปผลการดำเนินงานของสาขาตนเองในเดือนนี้: ยอดขาย กำไรขั้นต้น วัตถุดิบ และวินัยการทำงานของสาขา']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
@@ -273,7 +280,7 @@ function _startTitle(t, pane) {
   return hit ? `${hit.chip.label} · ${hit.item.label}` : (PAGE_TITLES[t] || t);
 }
 function showStartCard(role) {
-  const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 3);
+  const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 5);   // every entry of a role shows (ประสานงานขาย has 5)
   // The branch role has no home page: the card sits on top of the page it landed on.
   const host = document.getElementById(tabAllowed('home') ? 'tab-home' : 'tab-' + activeTab); if (!host || !items.length) return;
   let card = document.getElementById('homeStartCard');
@@ -281,7 +288,7 @@ function showStartCard(role) {
   card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
   card.innerHTML = `<div class="flex items-start justify-between gap-3"><div>
       <div class="text-base font-bold" style="color:var(--text-primary)">เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
-      <div class="text-xs mt-1" style="color:var(--text-muted)">สามหน้าที่บทบาทนี้ใช้บ่อยที่สุด กดเปิดได้เลย — การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
+      <div class="text-xs mt-1" style="color:var(--text-muted)">หน้าที่ใช้บ่อย · การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
       <button onclick="dismissStartCard()" class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary)">เข้าใจแล้ว ✕</button></div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why, pane], i) => `<button onclick="${_startGo(t, pane)}" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
       <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(_startTitle(t, pane))}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
@@ -301,11 +308,11 @@ async function maybeShowStartCard() {
 }
 
 const ROLE_LABEL_TH = {
-  management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
-  analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
-  salessupport:'Sales Support (วัตถุดิบและใบสั่งซื้อ)',
-  warehouse:'คลัง (ระบุยอดส่งจริงของใบสั่งซื้อ)',
-  branch:'สาขา (ตัดเบิก/สั่งสินค้า — 1 บัญชีต่อสาขา)',
+  management:'ผู้บริหาร', marketing:'การตลาด', operation:'ฝ่ายปฏิบัติการ',
+  analyst:'ฝ่ายวิเคราะห์', accounting:'บัญชี', innovation:'ครัว',
+  salessupport:'ประสานงานขาย',
+  warehouse:'คลัง',
+  branch:'สาขา',
   franchise:'เจ้าของสาขา (ดูผลการดำเนินงานของสาขาตนเอง)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
@@ -315,13 +322,13 @@ const ROLE_LABEL_TH = {
 const MODULE_LABEL_TH = {
   'sales.overview':'ยอดขายภาพรวม', 'customer.buffet':'บุฟเฟ่ต์/ลูกค้า',
   'menu.analysis':'วิเคราะห์เมนู', 'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลองต้นทุน',
-  'bom.edit':'แก้ไข BoM', 'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ',
+  'bom.edit':'แก้ไขสูตร (ระบบเดิม)', 'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ',
   'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
   'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
-  'supply.ordering':'วัตถุดิบและใบสั่งซื้อ (ดำเนินการ)', 'customer.feedback':'เสียงลูกค้า',
-  'bom.center':'BoM Center (ข้อมูลและสูตร)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
-  'bom.prices':'BoM Center (ราคารายเดือน)', 'bom.recipes':'BoM Center (สูตร)',
+  'supply.ordering':'ประสานงานขาย: ใบสั่งซื้อ เคลม ใบตัดเบิก', 'customer.feedback':'เสียงลูกค้า',
+  'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'สูตร: ประกาศใช้', 'bom.audit':'สูตร: รับทราบ/ยกเลิกใช้',
+  'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร: แก้ไข',
   'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า',
   'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
   'franchise.view':'ร้านของฉัน: ดูผลการดำเนินงานของสาขาตนเอง',
@@ -355,6 +362,13 @@ function firstAllowedTab() {
   return order.find(tabAllowed) || 'manual';
 }
 
+// {login: name shown on screens} from /api/auth/me; whoTh() reads it (PR-M1)
+async function _loadAuthNames() {
+  try {
+    const j = await (await fetch(`${API}/api/auth/me`)).json();
+    if (window.AUTH && j) { window.AUTH.display_name = j.display_name || null; window.AUTH.names = j.names || {}; }
+  } catch (e) { /* the pages fall back to the login name */ }
+}
 async function bootstrapAuth() {
   try {
     const r = await fetch(`${API}/api/auth/me`);
@@ -395,6 +409,7 @@ async function doLogin(ev) {
     window.AUTH = { enabled:true, authenticated:true, username:data.username,
                     role:data.role, branch:data.branch || null, modules:data.modules || [] };
     _sessionExpiredShown = false;
+    await _loadAuthNames();
     hideLogin();
     applyPermissions();
     // Force a password change off the shared/temporary default before using the app.
@@ -425,7 +440,7 @@ function openPasswordChange(force) {
   document.getElementById('pwConfirm').value = '';
   document.getElementById('pwError').style.display = 'none';
   document.getElementById('pwHint').textContent = force
-    ? 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 10 ตัวอักษร) — ช่อง "รหัสผ่านปัจจุบัน" ใส่รหัสที่ได้รับมา'
+    ? 'ตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 10 ตัวอักษร) — ช่อง "รหัสผ่านปัจจุบัน" ใส่รหัสที่ได้รับมา'
     : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)';
   // When forced, no cancel — the user must set a password before continuing.
   document.getElementById('pwCancel').style.display = force ? 'none' : '';
@@ -469,7 +484,8 @@ function renderUserChip() {
   if (window.AUTH && window.AUTH.enabled && window.AUTH.authenticated) {
     const role = window.AUTH.role || '';
     const nameEl = document.getElementById('userChipName');
-    nameEl.textContent = isPinnedSession() ? window.AUTH.username : `${window.AUTH.username} · ${ROLE_LABEL_TH[role] || role}`;   // a pinned login's chip sits in the phone's tab strip: the name only
+    const _dn = window.AUTH.display_name || whoTh(window.AUTH.username);
+    nameEl.textContent = isPinnedSession() || _dn === (ROLE_LABEL_TH[role] || role) ? _dn : `${_dn} · ${ROLE_LABEL_TH[role] || role}`;   // a pinned login's chip sits in the phone's tab strip: the name only
     nameEl.title = ROLE_LABEL_TH[role] || role;
     chip.style.display = 'flex';
   } else {
@@ -641,11 +657,11 @@ function _renderPermMatrix(canEdit) {
   // Group modules for readability
   const MOD_GROUP = {
     'sales.overview':'ยอดขาย', 'customer.buffet':'ลูกค้า', 'menu.analysis':'เมนู',
-    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้ BoM',
+    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้สูตร (ระบบเดิม)',
     'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
     'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
-    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'BoM Center', 'bom.release':'ปล่อยสูตร', 'bom.audit':'รับทราบสูตร',
+    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
     'branch.stock':'สาขา: ตรวจนับ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร',
   };
 
@@ -1743,6 +1759,18 @@ let cache = {};
 
 // ── Security: HTML-escape any untrusted string before innerHTML interpolation.
 // Branch names and SKU descriptions are user-entered / CSV-uploaded — never trust them.
+// ── PR-M1: the shapes people read ─────────────────────────────────────────────
+// One date format on screen: 9/10/2026, day chips พ. 9/10, months กันยายน 2026, times 13:15.
+// ISO stays in the API, the Excel files and the database; these helpers only dress what a person reads.
+const _TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const _TH_WD_SHORT = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+function _isoParts(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso == null ? '' : iso)); return m ? [+m[1], +m[2], +m[3]] : null; }
+function fmtDay(iso) { const p = _isoParts(iso); return p ? `${p[2]}/${p[1]}/${p[0]}` : String(iso == null ? '' : iso); }
+function fmtDayShort(iso) { const p = _isoParts(iso); return p ? `${_TH_WD_SHORT[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()]} ${p[2]}/${p[1]}` : String(iso == null ? '' : iso); }
+function fmtMonthTh(ym) { const m = /^(\d{4})-(\d{2})/.exec(String(ym == null ? '' : ym)); return m && _TH_MONTHS[+m[2] - 1] ? `${_TH_MONTHS[+m[2] - 1]} ${m[1]}` : String(ym == null ? '' : ym); }
+function fmtAt(iso) { const s = String(iso == null ? '' : iso); const p = _isoParts(s); return p ? (fmtDay(s) + (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) ? ' ' + s.slice(11, 16) : '')) : s; }
+// the name a person recognises for a login (display name, else branch / role label); the login id itself is never shown
+function whoTh(login) { if (login == null || login === '') return '-'; const n = window.AUTH && window.AUTH.names; return (n && n[login]) || String(login); }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Safe interpolation into a single-quoted JS string inside an HTML attribute,
@@ -2481,10 +2509,10 @@ const SUPPLY_CHIPS = [
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน' },
     { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง' },
     { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม' }] },
-  { key: 'recipes', label: 'สูตรและการปล่อย', items: [
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตาม Tier' },
+  { key: 'recipes', label: 'สูตรและการประกาศใช้', items: [
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา' },
     { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ' },
-    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและปล่อยเวอร์ชัน' }] },
+    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้' }] },
   { key: 'orders', label: 'ใบสั่งซื้อ', items: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ' },
     { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE },
@@ -2495,7 +2523,7 @@ const SUPPLY_CHIPS = [
     { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)' },
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย' }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
-    { tab: 'orderhub', pane: 'central', label: 'สินค้าส่วนกลางและนำเข้าข้อมูล', mods: _SUPPLY_CENTRE },
+    { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE },
     { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE },
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [

@@ -36,13 +36,13 @@ def test_morning_names_the_duties_and_follows_them(udon):
     assert "ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 แล้ว" in line["text"] and line["pending"] is False
     assert rec["queue"]["count"] == 1 and "คลัง" in rec["text"] and "ค้างคิว 1 ใบ" in rec["text"]
     off = RM.morning(c, today=WED)
-    assert "ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่งวันเสาร์ 10/10 ภายในวันพฤหัส 13:15)" in _line(off)["text"]
+    assert "ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่งวันเสาร์ 10/10 ภายใน วันพฤหัส 13:15)" in _line(off)["text"]
 
 
 def test_a_missed_cutoff_is_named_with_the_late_fee(udon):
     rec = RM.morning(udon, today=TUE)                     # Tuesday morning: Wednesday's cutoff passed yesterday
     line = _line(rec)
-    assert line["pending"] and "ยังไม่ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 (ล่าช้า มีค่าปรับ)" in line["text"]
+    assert line["pending"] and "ยังไม่ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 (ส่งล่าช้า มีค่าปรับ)" in line["text"]
     c = udon
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, late) VALUES(1, '2026-10-05', '1', 'submitted', 1)")
     rec = RM.morning(c, today=TUE)
@@ -55,13 +55,13 @@ def test_cutoff_note_only_when_someone_missed_it_or_orders_wait(udon):
     s = RM.cutoff(c, today=MON, app_url="https://x.test", now=after)
     assert s["missed"] == [{"branch_id": 1, "name": "อุดรธานี", "delivery": "2026-10-07", "delivery_th": "วันพุธ 7/10"}]
     assert "<b>ตัดรอบ 13:15 · จันทร์ 5 ต.ค. 2569</b>" in s["text"]
-    assert "อุดรธานี: ยังไม่ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 (ล่าช้า มีค่าปรับ)" in s["text"] and "https://x.test/" in s["text"]
+    assert "อุดรธานี: ยังไม่ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 (ส่งล่าช้า มีค่าปรับ)" in s["text"] and "https://x.test/" in s["text"]
     assert RM.cutoff(c, today=MON, now=datetime(2026, 10, 5, 13, 0, tzinfo=BKK)) is None      # before the cutoff: nothing missed
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'processed')")
     assert RM.cutoff(c, today=MON, now=after) is None      # sent in time and already processed: nothing to say
     c.execute("UPDATE bc_order SET status='submitted'")
     q = RM.cutoff(c, today=MON, now=after)
-    assert q["missed"] == [] and q["count"] == 1 and "คลัง: ใบสั่งซื้อค้างคิว 1 ใบ ระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ" in q["text"]
+    assert q["missed"] == [] and q["count"] == 1 and "คลัง: ใบสั่งซื้อค้างคิว 1 ใบ ยืนยันยอดส่งภายใน 14:00 ของวันตัดรอบ" in q["text"]
 
 
 def test_trigger_once_a_day_after_seven_and_the_cutoff_note_once_after_1315(client, monkeypatch):

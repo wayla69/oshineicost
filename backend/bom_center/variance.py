@@ -18,6 +18,7 @@ plan: class A ±5 %, B ±10 %, C ±20 % (class = share of BoM ฿ in the period)
 """
 from datetime import date, datetime, timedelta, timezone
 
+from .fmt import day_th as _fmt_day
 from .master import audit
 from .units import Converter
 
@@ -58,7 +59,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
         prev = clean.get(code)
         if prev:                                             # the same item twice in one delivery: add up
             if prev[1] != unit:
-                raise ValueError(f"{code}: ระบุซ้ำด้วยหน่วยที่ต่างกัน ({prev[1]} / {unit}) กรุณารวมเป็นบรรทัดเดียว")
+                raise ValueError(f"{code}: ระบุซ้ำด้วยหน่วยที่ต่างกัน ({prev[1]} / {unit}) · รวมเป็นบรรทัดเดียว")
             q = prev[0] + q
             qb = None if qb is None or prev[2] is None else prev[2] + qb
         clean[code] = (q, unit, qb)
@@ -66,7 +67,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
         raise ValueError("ยังไม่มีรายการรับสินค้า")
     _refuse_if_posted(con, branch_id, receipt_date)
     if bad:
-        raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " กรุณาแจ้งส่วนกลางให้เพิ่มกฎหน่วย")
+        raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
     cur = con.execute("INSERT INTO bc_receipt(branch_id, receipt_date, source, ref, note, entered_by, created_at)"
                       " VALUES(?,?,?,?,?,?,?)", (branch_id, receipt_date, source, ref, note, who, now()))
     rid = cur.lastrowid
@@ -90,8 +91,8 @@ def assert_not_posted(con, branch_id: int, day: str, what: str = "ใบรั�
         return
     for b, e in _p(con, branch_id):
         if e["count_id"] in posted and b["date"] <= day < e["date"]:
-            raise ValueError(f"{what}วันที่ {day} อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว "
-                             f"({b['date']} ถึง {e['date']}) จึงแก้ไขไม่ได้ กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
+            raise ValueError(f"{what}วันที่ {_fmt_day(day)} อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว "
+                             f"({_fmt_day(b['date'])} ถึง {_fmt_day(e['date'])}) จึงแก้ไขไม่ได้ · แจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
 
 
 def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
@@ -114,7 +115,7 @@ def delete_receipt(con, branch_id: int, receipt_id: int, who: str) -> bool:
         raise ValueError("รายการนี้เกิดจากการอนุมัติเคลม ลบไม่ได้ หากต้องแก้ไขให้แจ้งประสานงานขาย")
     closed = _closed_through(con, branch_id)
     if closed and r[0] < closed:
-        raise ValueError(f"ใบรับสินค้าวันที่ {r[0]} อยู่ในรอบที่ตรวจนับปิดแล้ว ({closed}) จึงลบไม่ได้ กรุณาแจ้งส่วนกลาง")
+        raise ValueError(f"ใบรับสินค้าวันที่ {_fmt_day(r[0])} อยู่ในงวดที่ปิดแล้ว ({_fmt_day(closed)}) จึงลบไม่ได้ · แจ้งฝ่ายวิเคราะห์")
     con.execute("DELETE FROM bc_receipt_line WHERE receipt_id=?", (receipt_id,))
     con.execute("DELETE FROM bc_receipt WHERE receipt_id=?", (receipt_id,))
     audit(con, who, "receipt_delete", "bc_receipt", str(receipt_id), r[0], None)
@@ -184,10 +185,10 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
     from .stock import periods as _p
     ps = _p(con, branch_id)
     if not ps:
-        raise ValueError("ยังไม่มีรอบสำหรับเปรียบเทียบ ต้องตรวจนับอย่างน้อย 2 ครั้ง (ต้นงวดและปลายงวด)")
+        raise ValueError("ยังเทียบไม่ได้ · ต้องมีผลตรวจนับต้นงวดและปลายงวด")
     pair = ps[-1] if end_count_id is None else next((p for p in ps if p[1]["count_id"] == int(end_count_id)), None)
     if pair is None:
-        raise ValueError("ไม่พบรอบนี้")
+        raise ValueError("ไม่พบงวดนี้")
     b, e = pair
     d0, d1 = date.fromisoformat(b["date"]), date.fromisoformat(e["date"])
     last_day = d1 - timedelta(days=1)
@@ -268,11 +269,11 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
 
 def set_reason(con, branch_id: int, end_count_id: int, code: str, reason: str, note: str, who: str):
     if reason not in REASON_TH:
-        raise ValueError("กรุณาเลือกเหตุผลจากรายการ")
+        raise ValueError("เลือกเหตุผลจากรายการ")
     if reason == "other" and not (note or "").strip():
         raise ValueError("เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
     if not con.execute("SELECT 1 FROM bc_stock_count WHERE count_id=? AND branch_id=?", (end_count_id, branch_id)).fetchone():
-        raise ValueError("ไม่พบรอบนี้ของสาขา")
+        raise ValueError("ไม่พบงวดนี้ของสาขา")
     con.execute("INSERT INTO bc_variance_reason(end_count_id, ingredient_code, branch_id, reason_code, note, who, at)"
                 " VALUES(?,?,?,?,?,?,?) ON CONFLICT(end_count_id, ingredient_code) DO UPDATE SET"
                 " reason_code=excluded.reason_code, note=excluded.note, who=excluded.who, at=excluded.at",
@@ -282,13 +283,13 @@ def set_reason(con, branch_id: int, end_count_id: int, code: str, reason: str, n
 
 def confirm_receipts(con, branch_id: int, end_count_id: int, who: str, undo: bool = False):
     if not con.execute("SELECT 1 FROM bc_stock_count WHERE count_id=? AND branch_id=?", (end_count_id, branch_id)).fetchone():
-        raise ValueError("ไม่พบรอบนี้ของสาขา")
+        raise ValueError("ไม่พบงวดนี้ของสาขา")
     if undo:
         posted = con.execute("SELECT 1 FROM bc_variance_period WHERE end_count_id=? AND accounting_posted_at IS NOT NULL",
                              (end_count_id,)).fetchone()
         if posted:
-            raise ValueError("บัญชีบันทึกใบสรุปตัดเบิกของรอบนี้เข้าระบบบัญชีแล้ว ยกเลิกการยืนยันไม่ได้ "
-                             "กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
+            raise ValueError("บัญชีบันทึกใบสรุปตัดเบิกของงวดนี้เข้าระบบบัญชีแล้ว ยกเลิกการยืนยันไม่ได้ "
+                             "· แจ้งบัญชีให้ยกเลิกการบันทึกก่อน")
         con.execute("DELETE FROM bc_variance_period WHERE end_count_id=?", (end_count_id,))
     else:                                                    # an UPSERT: re-confirming keeps the accounting mark
         con.execute("INSERT INTO bc_variance_period(end_count_id, branch_id, receipts_confirmed_by,"
@@ -336,7 +337,7 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
     from .prices import price_for
     pair = _pair_for_end(con, branch_id, end_count_id)
     if pair is None:
-        raise ValueError("ไม่พบรอบต้นงวด/ปลายงวดนี้ของสาขา")
+        raise ValueError("ไม่พบงวดนี้ของสาขา")
     b, e = pair
     d0, d1 = date.fromisoformat(b["date"]), date.fromisoformat(e["date"])
     month = _price_month(b["date"], e["date"])
@@ -429,10 +430,10 @@ def set_posted(con, end_count_id: int, posted: bool, who: str, branch_id: int = 
     row = con.execute("SELECT branch_id FROM bc_stock_count WHERE count_id=?", (end_count_id,)).fetchone()
     if (not row or (branch_id is not None and int(row[0]) != int(branch_id))
             or _pair_for_end(con, row[0], end_count_id) is None):
-        raise ValueError("ไม่พบรอบนี้ของสาขา")
+        raise ValueError("ไม่พบงวดนี้ของสาขา")
     conf = con.execute("SELECT 1 FROM bc_variance_period WHERE end_count_id=?", (end_count_id,)).fetchone()
     if posted and not conf:
-        raise ValueError("ต้องยืนยันรับสินค้าครบของรอบนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้")
+        raise ValueError("ต้องยืนยันรับสินค้าครบของงวดนี้ก่อนจึงบันทึกเข้าระบบบัญชีได้")
     at = now() if posted else None
     if conf:
         con.execute("UPDATE bc_variance_period SET accounting_posted_at=?, accounting_posted_by=? WHERE end_count_id=?",

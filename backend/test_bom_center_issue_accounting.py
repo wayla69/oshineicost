@@ -151,18 +151,18 @@ def test_a_posted_period_locks_the_slips_inside_it(con):  # noqa: F811
     VA.confirm_receipts(con, 1, end, "udon")
     VA.set_posted(con, end, True, "accounting1")
     con.commit()
-    lock = r"อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว \(2026-09-01 ถึง 2026-10-01\) จึงแก้ไขไม่ได้ กรุณาแจ้งบัญชีให้ยกเลิกการบันทึกก่อน"
-    with pytest.raises(ValueError, match=r"ใบตัดเบิกวันที่ 2026-09-04 " + lock):
+    lock = r"อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว \(1/9/2026 ถึง 1/10/2026\) จึงแก้ไขไม่ได้ · แจ้งบัญชีให้ยกเลิกการบันทึกก่อน"
+    with pytest.raises(ValueError, match=r"ใบตัดเบิกวันที่ 4/9/2026 " + lock):
         IS.reopen(con, sid4, "ss", "แก้ไข", now=at(2, 9, 10))
     assert IS.status_of(con, 1, "2026-09-04")["status"] == "confirmed"                  # untouched
-    with pytest.raises(ValueError, match=r"ใบตัดเบิกวันที่ 2026-09-07 " + lock):          # the draft cannot be confirmed
+    with pytest.raises(ValueError, match=r"ใบตัดเบิกวันที่ 7/9/2026 " + lock):          # the draft cannot be confirmed
         IS.save(con, 1, "2026-09-07", [], "udon", submit=True, now=at(2, 21, 10))
     assert IS.status_of(con, 1, "2026-09-07")["status"] == "draft"
     # the end count's own day belongs to the next period
     ok = IS.save(con, 1, "2026-10-01", [g(CRAB, 1)], "udon", submit=True, now=at(2, 21, 10))
     assert ok["status"] == "confirmed"
     # the PR-F receipt lock still reads the same, with the same cause
-    with pytest.raises(ValueError, match=r"ใบรับสินค้าวันที่ 2026-09-20 อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
+    with pytest.raises(ValueError, match=r"ใบรับสินค้าวันที่ 20/9/2026 อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
         VA.add_receipt(con, 1, "2026-09-20", [{"code": CRAB, "qty": 1, "unit": "กรัม"}], "udon")
     VA.add_receipt(con, 1, "2026-10-02", [{"code": CRAB, "qty": 1, "unit": "กรัม"}], "udon")
     with pytest.raises(ValueError, match="อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
@@ -196,13 +196,13 @@ def test_the_centre_follows_up_missing_slips_and_over_issue(udon):  # noqa: F811
     assert miss["status"] == "todo" and "อุดรธานี" in miss["detail"]
     an = cen["issue_anomaly"]
     assert (an["seq"], an["title"], an["status"], an["urgent"]) == (229, "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน", "todo", True)
-    assert an["owner_modules"] == ["supply.ordering", "ops.report"] and an["owner_th"] == "ประสานงานขาย / Ops"
-    assert an["detail"] == "เบิกเกิน BoM มากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี (แซลมอน)"
+    assert an["owner_modules"] == ["supply.ordering", "ops.report"] and an["owner_th"] == "ประสานงานขาย / ฝ่ายปฏิบัติการ"
+    assert an["detail"] == "เบิกเกินสูตรมากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี (แซลมอน)"
     assert an["go"] == {"tab": "orderhub", "pane": "issuevar", "branch": 1} and an["count"] == 1
     # the morning message names both
     text = RM.morning(c, today=date(2026, 9, 6))["text"]
     assert "<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน 1 สาขา · อุดรธานี" in text
-    assert "<b>Ops</b>: เบิกเกิน BoM มากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี (แซลมอน)" in text
+    assert "<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินสูตรมากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี (แซลมอน)" in text
     # a week later the streak is out of the window: done, and no Ops line
     later = items(date(2026, 9, 20), at(20, 8))["issue_anomaly"]
     assert later["status"] == "done" and later["detail"] == "ไม่พบการเบิกเกินสูตรติดต่อกันใน 7 วันล่าสุด" and later["go"]["pane"] == "issuevar"
@@ -317,7 +317,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         r = op.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-09-01&date_to=2026-09-10")
         assert r.status_code == 200
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["Compliance การสั่ง", "ใบตัดเบิก"]
+        assert wb.sheetnames == ["ตรวจสอบการสั่ง", "ใบตัดเบิก"]
         cr = list(wb["ใบตัดเบิก"].iter_rows(values_only=True))
         assert list(cr[1]) == LOG_SUMMARY_HEADERS and cr[2][:6] == ("BranchA", 2, 1, 0, 1, 0)
         assert any(x["branch"] == "BranchA" for x in op.get("/api/bom-center/hub/compliance?date_from=2026-09-01&date_to=2026-09-10").json()["issues"])
@@ -341,7 +341,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         _sql_slip_confirm.close()
         assert acc.post("/api/bom-center/issue-summary/posted", json={"end_count_id": e1, "posted": True}, headers=TOKEN).status_code == 200
         r = ss.post("/api/bom-center/issues/reopen", json={"slip_id": sid, "note": "แก้ไขอีก"}, headers=TOKEN)
-        assert r.status_code == 400 and "อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว (2026-09-01 ถึง 2026-10-01)" in r.json()["detail"]
+        assert r.status_code == 400 and "อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว (1/9/2026 ถึง 1/10/2026)" in r.json()["detail"]
         assert ss.get(f"/api/bom-center/issues/{sid}").json()["status"] == "confirmed"
         r = acc.post("/api/bom-center/issues/reopen", json={"slip_id": sid, "note": "x"}, headers=TOKEN)
         assert r.status_code == 403 and r.headers.get("X-Denied") == "role"                  # Accounting never reopens

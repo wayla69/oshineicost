@@ -70,9 +70,7 @@
       <details id="brnHowTo" class="mt-1">
         <summary class="text-xs font-semibold" style="color:var(--accent);cursor:pointer">วิธีนับ</summary>
         <p class="text-xs mt-1" style="color:var(--text-secondary)">
-          <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น (ต้นงวด / ปลายงวด นับครบทุกรายการ) การเบิกใช้รายวันบันทึกในหน้า “ตัดเบิก” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
-          ครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของเดือนถัดไปโดยอัตโนมัติ ·
-          ระบบบันทึกร่างไว้ระหว่างกรอก เมื่อครบแล้วกด “ส่งผลตรวจนับ”
+          <b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) · ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · บันทึกร่างให้ขณะกรอก · ครบแล้วกด “ส่งผลตรวจนับ” · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”
         </p>
       </details>
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
@@ -112,8 +110,7 @@
     <div id="brnRecvOpen" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnRecvOrder" class="card p-3 mb-3" style="display:none;border-left:4px solid var(--accent)"></div>
     <div class="card p-3 mb-3">
-      <p class="text-xs mb-2" style="color:var(--text-secondary)">บันทึกสินค้าที่รับเข้าร้านทุกครั้ง ทั้งจากส่วนกลางและที่สาขาจัดซื้อเอง ผลต่างการใช้คำนวณจาก ต้นงวด + <b>รับเข้า</b> − ปลายงวด
-        หากไม่บันทึก ผลจะแสดงเป็น “ใช้น้อยกว่าสูตร” · สินค้าที่รับก่อนตรวจนับปลายงวด ให้ลงวันที่ก่อนวันตรวจนับ</p>
+      <p class="text-xs mb-2" style="color:var(--text-secondary)">บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>วันที่รับ<br><input type="date" id="brnRecvDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>เลขที่ใบส่งสินค้า (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -133,7 +130,7 @@
       </div>
     </div>
     <!-- ── แจ้งเคลมสินค้า (owner 2026-10-08, 2026-10-09): goods that arrived damaged or wrong, claimed with a reason
-         (photos go to Sales Support by LINE); the receive form above raises the claim for a shortfall itself.
+         (photos go to ประสานงานขาย by LINE); the receive form above raises the claim for a shortfall itself.
          The ids brnClaimCard / brnClaimMsg / brnClaimList / brnClaimForm are kept: the หน้างาน link anchors here. ── -->
     <div id="brnClaimCard" class="card p-3 mb-3" style="border-left:4px solid var(--amber-ink)">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งเคลมสินค้า</div>
@@ -149,14 +146,14 @@
 
   <!-- ── ผลต่างของฉัน ── -->
   <div id="brn-pane-var" style="display:none">
-    <!-- สามมุมมอง: รายงวด (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบ BoM) · สิ้นเดือน (คงเหลือตามระบบเทียบนับจริง) -->
+    <!-- สามมุมมอง: รายงวด (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบสูตร) · สิ้นเดือน (คงเหลือตามระบบเทียบนับจริง) -->
     <div id="brnVarTabs" class="flex flex-wrap gap-1 mb-3"></div>
 
     <div id="brnVar-period">
       <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-          รอบ <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          งวด <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
           <label class="flex items-center gap-1"><input type="checkbox" id="brnVarAll" onchange="brnRenderVariance()"> แสดงทุกรายการ</label>
         </div>
         <div id="brnVarHead" class="text-xs mt-2"></div>
@@ -166,7 +163,7 @@
 
     <div id="brnVar-daily" style="display:none">
       <div class="card p-3 mb-3">
-        <div class="text-xs mb-2" style="color:var(--text-secondary)">เปรียบเทียบมูลค่าที่เบิกจริงในใบตัดเบิกที่ยืนยันแล้ว (เบิกใช้ + ของเสีย) กับมูลค่าตามสูตร BoM จากยอดขายของวันนั้น · รายการชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป จะแสดงเป็นสัญญาณเตือน · คลิกที่วันเพื่อดูรายการวัตถุดิบ</div>
+        <div class="text-xs mb-2" style="color:var(--text-secondary)">มูลค่าเบิกจริงเทียบตามสูตร · ชั้น A เกิน 20% ติดกัน 3 วัน = เตือน · กดวันเพื่อดูรายการ</div>
         <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
           <label>เดือน<br><input type="month" id="brnVarDayMonth" onchange="brnLoadVarDaily()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
           <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
@@ -179,9 +176,9 @@
 
     <div id="brnVar-recon" style="display:none">
       <div class="card p-3 mb-3">
-        <div class="text-xs mb-2" style="color:var(--text-secondary)">คงเหลือตามระบบ = ยกมา (ต้นงวด) + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย เทียบกับสินค้านับจริงตอนปลายงวด · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · รายการที่เกินเกณฑ์ ต้องระบุเหตุผล</div>
+        <div class="text-xs mb-2" style="color:var(--text-secondary)">คงเหลือตามระบบเทียบนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล</div>
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-          รอบ <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          งวด <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
           <label class="flex items-center gap-1"><input type="checkbox" id="brnRcAll" onchange="brnRenderVarRecon()"> แสดงทุกรายการ</label>
           <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลด Excel</a>
         </div>

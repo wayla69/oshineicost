@@ -198,7 +198,7 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
     from .forecast import _abc
     pair = VA._pair_for_end(con, branch_id, end_count_id)
     if pair is None:
-        raise ValueError("ไม่พบรอบต้นงวด/ปลายงวดนี้ของสาขา")
+        raise ValueError("ไม่พบงวดนี้ของสาขา")
     b, e = pair
     d0, d1 = date.fromisoformat(b["date"]), date.fromisoformat(e["date"])
     month = VA._price_month(b["date"], e["date"])

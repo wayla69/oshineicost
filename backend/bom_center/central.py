@@ -21,6 +21,7 @@ import io
 import re
 from datetime import date, datetime, timedelta, timezone
 
+from .fmt import day_th as _fmt_day, month_th as _mth
 from .master import _upsert, audit, kind_of
 from .units import Converter, norm
 
@@ -126,7 +127,7 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
     grid = [list(r) for r in ws.iter_rows(values_only=True)]
     hi = next((i for i, r in enumerate(grid[:15]) if any(str(c or "").strip() == "รหัสสินค้า" for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” กรุณาใช้รายงานยอดสั่งสินค้าทุกสาขาของส่วนกลาง")
+        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” ใช้รายงานยอดสั่งสินค้าทุกสาขาของไดกิโตะ กรุ๊ป")
     head = [str(c or "").strip() for c in grid[hi]]
 
     def col(*names):
@@ -320,7 +321,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True) 
             if not con.execute("SELECT 1 FROM bc_unit_rule WHERE ingredient_code=? AND unit='แพ็ค'",
                                (r["code"],)).fetchone():
                 con.execute("INSERT INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label) VALUES(?,?,?,?)",
-                            (r["code"], "แพ็ค", f / r["inner_qty"], f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีส่วนกลาง)"))
+                            (r["code"], "แพ็ค", f / r["inner_qty"], f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีสินค้าส่วนกลาง)"))
         con.execute("INSERT INTO bc_central_item(code, name, unit_label, sale_unit, inner_qty, inner_unit, base_per_sale,"
                     " factor_how, price_per_sale, price_month, active, source_ref, updated_at, updated_by)"
                     " VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,"
@@ -381,10 +382,10 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
     from .variance import _closed_through, add_receipt
     month = parsed.get("month")
     if not month:
-        raise ValueError("ไม่พบงวดของรายงาน กรุณาระบุเดือน (YYYY-MM)")
+        raise ValueError("ไม่พบงวดของรายงาน ระบุเดือน (เช่น 2026-11)")
     rdate = receipt_date or _month_end(month)
     if rdate[:7] != month:
-        raise ValueError(f"วันที่ใบรับ {rdate} ไม่อยู่ในงวด {month}")
+        raise ValueError(f"วันที่ใบรับ {_fmt_day(rdate)} ไม่อยู่ในงวด {_mth(month)}")
     conv = Converter(con)
     pl = {r["code"]: r for r in plan_catalogue(con, parsed)["rows"]}
     want = {int(b) for b in branch_ids} if branch_ids else None
@@ -435,10 +436,10 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
             # the order unit must be in the master before the receipt converts it
             for ln in lines:
                 if conv.to_base(ln["code"], 1, ln["unit"])[0] is None:
-                    raise ValueError(f"{ln['code']}: กรุณานำเข้าบัญชีสินค้าส่วนกลางก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
+                    raise ValueError(f"{ln['code']}: นำเข้าบัญชีสินค้าส่วนกลางก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
             r = add_receipt(con, b["branch_id"], rdate, [{"code": ln["code"], "qty": ln["qty"], "unit": ln["unit"]}
                                                          for ln in lines], who, ref=ref,
-                            note=f"ยอดจัดส่งจากส่วนกลาง งวด {month} ({parsed.get('sheet') or ''})", source="central")
+                            note=f"ยอดจัดส่งจากไดกิโตะ กรุ๊ป งวด {month} ({parsed.get('sheet') or ''})", source="central")
             res["receipt_id"] = r["receipt_id"]
         out.append(res)
     return {"month": month, "receipt_date": rdate, "dry_run": dry_run, "branches": out}
@@ -548,7 +549,7 @@ def set_link(con, old_code: str, new_code, who: str, note: str = None):
     if new_code not in known:
         raise ValueError(f"ไม่พบรหัส {new_code}")
     if new_code == old_code:
-        raise ValueError("รหัสในสูตรและรหัสส่วนกลางเป็นรหัสเดียวกัน")
+        raise ValueError("รหัสในสูตรและรหัสของไดกิโตะ กรุ๊ปเป็นรหัสเดียวกัน")
     if con.execute("SELECT 1 FROM bc_code_link WHERE old_code=?", (new_code,)).fetchone():
         raise ValueError(f"{new_code} จับคู่กับรหัสอื่นอยู่แล้ว จึงจับคู่ต่อเนื่องไม่ได้")
     con.execute("INSERT INTO bc_code_link(old_code, new_code, note, who, at) VALUES(?,?,?,?,?)"

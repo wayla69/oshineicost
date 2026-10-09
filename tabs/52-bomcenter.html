@@ -8,7 +8,7 @@
       <input type="month" id="bmcMonth" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
     </label>
     <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
-    <span class="text-[11px] ml-auto" style="color:var(--text-muted)" title="ราคา = ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี (มูลค่ารวม ÷ ปริมาณ) · หน่วยฐาน = หน่วยที่ใช้ในสูตร ระบบแปลงกิโลกรัม แพ็ค และลิตรให้อัตโนมัติ · สูตรตาม Tier เก็บเฉพาะปริมาณ ต้นทุนคำนวณจากราคาของเดือนที่เลือก">ราคาซื้อจริงถัวเฉลี่ยรายเดือนจากฝ่ายบัญชี · การนำเข้าทุกครั้งแสดงผลให้ตรวจสอบก่อนบันทึก</span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)" title="ราคา = มูลค่ารวม ÷ ปริมาณ · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก">ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี · ดูตัวอย่างก่อนบันทึกทุกครั้ง</span>
   </div>
 
   <!-- ── overview ──────────────────────────────────────────────────────── -->
@@ -32,23 +32,23 @@
     </div>
     <div class="flex flex-wrap items-center gap-2 mb-3 p-2 bc-write" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
       <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-             title="ไฟล์ COST-RW (sheet BF_459NET ถึง BF_1,299NET) ใช้สร้างหรือปรับปรุงสูตรฉบับร่างของบุฟเฟ่ต์ ระบบแสดงผลให้ตรวจสอบก่อนบันทึก">
+             title="ไฟล์ Cost-RW (แผ่นงาน BF_459NET–BF_1,299NET) สำหรับสร้างหรือแก้สูตรร่างบุฟเฟ่ต์">
         นำเข้าสูตรจากไฟล์ Cost-RW
         <input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcImportCostRw(this)">
       </label>
-      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนที่เวอร์ชันนี้มีผล (ระบบเสนอเดือนถัดไป)">มีผลเดือน
+      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนที่เวอร์ชันนี้มีผล (ค่าเริ่มต้น: เดือนถัดไป)">มีผลเดือน
         <input type="month" id="bmcCrwEff" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
-      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนของราคาซื้อจริงที่ใช้คิดต้นทุน (ระบบเสนองวดล่าสุดที่บัญชีปิดแล้ว)">ราคาเดือน
+      <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนของราคาซื้อจริงที่ใช้คิดต้นทุน (ค่าเริ่มต้น: เดือนล่าสุดที่บัญชีปิดแล้ว)">ราคาเดือน
         <input type="month" id="bmcCrwPm" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
-      <button onclick="bmcDownloadTemplate()" title="ไฟล์เปล่าที่ใส่สูตรหลายเมนูได้ในไฟล์เดียว พร้อมรายการรหัส POS รหัสวัตถุดิบ และวิธีใช้"
-              style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดแม่แบบสูตร (หลายเมนูในไฟล์เดียว)</button>
-      <button onclick="bmcExportRecipes()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดสูตรเป็น Excel (1 sheet ต่อ Tier)</button>
+      <button onclick="bmcDownloadTemplate()" title="แม่แบบเปล่า มีรายการรหัส POS รหัสวัตถุดิบ และวิธีใช้"
+              style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดแม่แบบสูตร</button>
+      <button onclick="bmcExportRecipes()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดสูตร (Excel)</button>
       <label style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-             title="ใช้แม่แบบที่กรอกแล้ว หรือไฟล์ที่ดาวน์โหลดจากปุ่มก่อนหน้าแล้วแก้ไขใน Excel สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร">
-        นำเข้าแม่แบบ / Excel ที่แก้แล้ว
+             title="ใช้แม่แบบที่กรอกแล้ว หรือไฟล์สูตรที่ดาวน์โหลดไปแก้ · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร">
+        นำเข้าแม่แบบสูตร
         <input type="file" accept=".xlsx" style="display:none" onchange="bmcImportFlat(this)">
       </label>
-      <button id="bmcNewDraftBtn" onclick="bmcCreateDraft()" style="display:none;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">สร้างฉบับร่าง</button>
+      <button id="bmcNewDraftBtn" onclick="bmcCreateDraft()" style="display:none;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">สร้างร่าง</button>
       <button id="bmcSubmitBtn" onclick="bmcSubmitReview()" style="display:none;background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ส่งตรวจ</button>
       <span id="bmcRecStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
@@ -57,10 +57,10 @@
     <div class="card p-4 overflow-x-auto">
       <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
         <thead><tr class="text-left border-b" style="color:var(--text-muted)">
-          <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">รหัส POS</th>
+          <th class="py-1.5 pr-2">ระดับราคา</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">รหัส POS</th>
           <th class="py-1.5 pr-2">เสิร์ฟ</th><th class="py-1.5 pr-2 text-right">ต้นทุน/เสิร์ฟ</th>
-          <th class="py-1.5 pr-2 text-right">ในไฟล์ต้นทาง</th><th class="py-1.5 pr-2 text-right">ระบบปัจจุบัน (v0)</th>
-          <th class="py-1.5 pr-2 text-right">เทียบ v0</th><th class="py-1.5 pr-2 text-right">บรรทัด</th><th class="py-1.5">สถานะ</th>
+          <th class="py-1.5 pr-2 text-right">ในไฟล์ต้นทาง</th><th class="py-1.5 pr-2 text-right">ระบบเดิม</th>
+          <th class="py-1.5 pr-2 text-right">เทียบระบบเดิม</th><th class="py-1.5 pr-2 text-right">บรรทัด</th><th class="py-1.5">สถานะ</th>
         </tr></thead>
         <tbody id="bmcRecBody"></tbody>
       </table>
@@ -71,14 +71,12 @@
   <!-- ── review & release ──────────────────────────────────────────────── -->
   <div id="bmc-pane-prep" style="display:none">
     <div class="card p-4 mb-3">
-      <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรกึ่งสำเร็จ (CK / HK / DK): วัตถุดิบที่ครัวผลิตเองจากวัตถุดิบดิบ</div>
-      <p class="text-xs mb-2" style="color:var(--text-secondary)">1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อหรือต่อชุด (เช่น น้ำซุปใส 1 สูตร = 15,225 มล.) · ต้นทุนต่อหน่วยฐาน = ต้นทุนวัตถุดิบดิบในสูตร ÷ ปริมาณที่ได้ ·
-        รายการที่สูตรครบถ้วน <b>คิดต้นทุนจากสูตร</b> และ<b>แผนสั่งจะแนะนำให้สั่งวัตถุดิบดิบในสูตร</b>แทนตัวรายการ · รายการที่ยังไม่มีสูตรหรือสูตรไม่ครบ ใช้ราคาซื้อหรือราคาใบเสนอราคาไปก่อน ·
-        หากต้นทุนจากสูตรต่างจากราคาซื้อเกิน 5% ครัวควรตรวจสอบปริมาณที่ได้ · สูตรที่ใช้คิดต้นทุนจะบันทึกไว้กับเวอร์ชันที่ปล่อย การแก้ไขภายหลังไม่มีผลย้อนหลังกับเดือนที่ปล่อยแล้ว</p>
+      <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรกึ่งสำเร็จ (CK / HK / DK)</div>
+      <p class="text-xs mb-2" style="color:var(--text-secondary)">1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อ · สูตรครบใช้ต้นทุนจากสูตร ไม่ครบใช้ราคาซื้อ</p>
       <div class="flex flex-wrap items-center gap-2 bc-write">
         <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
-          นำเข้าไฟล์ครัว (sheet BoM_Semi)<input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcPrepImportSemi(this)"></label>
-        <a href="#" onclick="bmcPrepTemplate();return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดสูตรทั้งหมด / แม่แบบ (Excel)</a>
+          นำเข้าไฟล์ครัว (แผ่นงาน BoM_Semi)<input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcPrepImportSemi(this)"></label>
+        <a href="#" onclick="bmcPrepTemplate();return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดสูตร / แม่แบบ</a>
         <label class="text-xs" style="color:var(--accent);cursor:pointer">นำเข้าแม่แบบ<input type="file" accept=".xlsx" style="display:none" onchange="bmcPrepImportFlat(this)"></label>
         <span id="bmcPrepStatus" class="text-xs"></span>
       </div>
@@ -117,12 +115,12 @@
       <label class="text-xs" style="color:var(--text-muted)">รอบ<br>
         <select id="bmcFcRound" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
           <option value="1">รอบ 1</option><option value="2">รอบ 2</option><option value="salmon">แซลมอนสด</option></select></label>
-      <label class="text-xs" style="color:var(--text-muted)" title="ระบบเลือกรอบส่งที่ยังไม่ถึงเวลาตัดรอบ ณ วันนี้">วันที่จะสั่ง (ก่อนตัดรอบ)<br>
+      <label class="text-xs" style="color:var(--text-muted)" title="รอบส่งที่ยังไม่ตัดรอบ ณ วันนี้">วันที่จะสั่ง (ก่อนตัดรอบ)<br>
         <input type="date" id="bmcFcDay" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"><input type="checkbox" id="bmcFcSeason" checked> ปรับตามเทศกาลและข้อมูลปีก่อน</label>
       <button onclick="bmcRunForecast()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">คำนวณยอดแนะนำ</button>
       <button onclick="bmcSaveForecast()" class="bmc-fc-write" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer"
-              title="บันทึกตัวเลขชุดนี้เป็นรอบสั่ง หน้าสั่งสินค้าของสาขา และรายงาน compliance จะใช้เป็นฐานเปรียบเทียบ">บันทึกเป็นรอบสั่ง</button>
+              title="ใช้เป็นฐานเทียบในหน้าสั่งสินค้าและหน้าตรวจสอบการสั่ง">บันทึกยอดแนะนำ</button>
       <button onclick="bmcBacktest()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ความแม่นยำย้อนหลัง</button>
       <span id="bmcFcStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
@@ -136,10 +134,10 @@
     <div id="bmcFcCal" class="card p-4 mb-3"></div>
     <div id="bmcCalBulk" class="card p-4 mb-3" style="display:none">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ตั้งวันส่งหลายสาขาจากไฟล์</div>
-      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">ใช้เมื่อต้องตั้งวันส่งของหลายสาขาพร้อมกัน ดาวน์โหลดแม่แบบ (มีวันส่งปัจจุบันของทุกสาขา) แก้ไขเฉพาะวันที่ต้องการเปลี่ยน แล้วเลือกไฟล์กลับเข้ามา ระบบแสดงรายการที่จะเปลี่ยนให้ตรวจก่อนบันทึก · เซลล์ที่เว้นว่างจะไม่เปลี่ยน</div>
+      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">ดาวน์โหลดแม่แบบ แก้เฉพาะวันที่เปลี่ยน แล้วนำเข้า · ช่องว่าง = ไม่เปลี่ยน</div>
       <div class="flex flex-wrap items-center gap-3">
         <a href="#" onclick="bmcCalTemplate();return false" style="color:var(--accent);font-size:13px;text-decoration:underline">ดาวน์โหลดแม่แบบ</a>
-        <label class="text-xs" style="color:var(--text-muted)">เลือกไฟล์ที่กรอกแล้ว (.xlsx หรือ .csv)
+        <label class="text-xs" style="color:var(--text-muted)">นำเข้าไฟล์ที่กรอกแล้ว (.xlsx หรือ .csv)
           <input type="file" id="bmcCalBulkFile" accept=".xlsx,.xlsm,.csv" onchange="bmcCalBulkPick(this)" class="ml-1 text-xs"></label>
       </div>
       <div id="bmcCalBulkPreview" class="mt-3"></div>
@@ -151,7 +149,7 @@
   <div id="bmc-pane-zones" style="display:none">
     <div class="card p-4 mb-3">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">โซนจัดเก็บ</div>
-      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">โซนที่สาขาใช้แบ่งรายการตอนตรวจนับสิ้นเดือนและบันทึกใบตัดเบิก ลำดับในรายการนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศรเพื่อเรียงใหม่) · เปลี่ยนชื่อโซนได้โดยวัตถุดิบยังอยู่ในโซนเดิม · โซนที่ยังมีวัตถุดิบอยู่ลบไม่ได้ ต้องเปลี่ยนชื่อหรือย้ายวัตถุดิบไปโซนอื่นก่อน (กำหนดโซนของวัตถุดิบที่ ข้อมูลตั้งต้น → ทะเบียนวัตถุดิบ) · โซน “อื่น ๆ” เป็นโซนสำรองของระบบ เปลี่ยนชื่อได้แต่ลบไม่ได้</div>
+      <div class="text-[11px] mt-1 mb-2" style="color:var(--text-muted)">โซนที่สาขาใช้แบ่งรายการตอนตรวจนับและตัดเบิก · ลำดับนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศร) · โซนที่ยังมีวัตถุดิบลบไม่ได้ · โซน “อื่น ๆ” ลบไม่ได้ เปลี่ยนชื่อได้</div>
       <div id="bmcZoneList"></div>
       <div class="flex flex-wrap items-center gap-2 mt-3 bmc-zone-write">
         <input id="bmcZoneNew" placeholder="ชื่อโซนใหม่ เช่น ตู้โชว์" onkeydown="if(event.key==='Enter'){event.preventDefault();bmcZoneAdd()}" maxlength="40"
@@ -171,19 +169,19 @@
         <select id="bmcIssBranch" data-branch-picker onchange="bmcIssBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
       <label class="text-xs" style="color:var(--text-muted)">งวด (ต้นงวด → ปลายงวด)<br>
         <select id="bmcIssPeriod" onchange="bmcIssLoadSummary()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
-      <button onclick="bmcIssXlsx()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด Excel (สาขานี้)</button>
-      <button onclick="bmcIssXlsxAll()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ดาวน์โหลดทุกสาขา (เดือน <span id="bmcIssAllLabel">—</span>)</button>
-      <button onclick="bmcIssSlipsXlsx()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer" title="ใบตัดเบิกรายวันที่สาขายืนยันแล้ว ทุกสาขา ตามเดือนของงวดที่เลือก (ไม่รวมใบที่ยังเป็นร่าง)">ใบตัดเบิกที่ยืนยันแล้วทั้งเดือน (Excel)</button>
-      <label class="bmc-iss-write text-xs flex items-center gap-1" style="color:var(--text-primary)" title="เมื่อติ๊กแล้ว ระบบไม่รับใบรับสินค้าเพิ่มในงวดนั้น ยกเลิกการยืนยันรับสินค้าครบไม่ได้ และเปิดแก้ไขใบตัดเบิกในงวดนั้นไม่ได้ จนกว่าจะยกเลิกการบันทึก">
+      <button onclick="bmcIssXlsx()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ใบสรุปงวดนี้ (Excel)</button>
+      <button onclick="bmcIssXlsxAll()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ทุกสาขา เดือน <span id="bmcIssAllLabel">—</span> (Excel)</button>
+      <button onclick="bmcIssSlipsXlsx()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer" title="ใบตัดเบิกที่สาขายืนยันแล้ว ทุกสาขา ตามเดือนของงวดที่เลือก (ไม่รวมร่าง)">ใบตัดเบิกรายวันทั้งเดือน (Excel)</button>
+      <label class="bmc-iss-write text-xs flex items-center gap-1" style="color:var(--text-primary)" title="เมื่อทำเครื่องหมายแล้ว งวดนี้ล็อก: เพิ่มใบรับ แก้ใบตัดเบิก และยกเลิกยืนยันรับครบไม่ได้">
         <input type="checkbox" id="bmcIssPosted" onchange="bmcIssTogglePosted(this)"> บันทึกเข้าระบบบัญชีแล้ว</label>
       <span id="bmcIssStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIssChips" class="flex flex-wrap items-center gap-2 mb-2"></div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">หน้านี้เทียบสินค้าคงเหลือตามระบบ (ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิกและของเสียตามใบตัดเบิกที่ยืนยันแล้ว) กับสินค้าที่สาขานับจริงปลายงวด · ผลต่าง = นับจริง − คงเหลือตามระบบ · ไฟล์ Excel ของงวดมี 3 แผ่นงาน: ใบตัดเบิกรายวัน · กระทบยอด · สรุปเคลื่อนไหว (ตัดเบิก (ใช้จริง) = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ) · ราคาต่อหน่วยคือราคาซื้อจริงของเดือนที่งวดสิ้นสุด · ดาวน์โหลดได้เมื่อสาขาหรือ Sales Support ยืนยันรับสินค้าครบของรอบนั้นแล้ว ·
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">คงเหลือตามระบบเทียบนับจริงปลายงวด · ดาวน์โหลดได้เมื่อยืนยันรับสินค้าครบ ·
       <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></div>
     <div id="bmcIssRecon" class="card p-4 mb-3 overflow-x-auto"></div>
     <details id="bmcIssMoveBox" class="card p-4 mb-3">
-      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">สรุปเคลื่อนไหว (ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ) — แผ่นงานเดิม</summary>
+      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">สรุปเคลื่อนไหว (แบบเดิม)</summary>
       <div id="bmcIssTable" class="mt-3 overflow-x-auto"></div>
     </details>
   </div>
@@ -195,7 +193,7 @@
              style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
       <select id="bmcIngKind" onchange="bmcRenderIng()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
         <option value="">ทุกชนิด</option><option value="raw">ดิบ</option><option value="prepared">กึ่งสำเร็จ</option>
-        <option value="consumable">วัสดุสิ้นเปลือง</option><option value="zero_by_design">฿0 โดยเจตนา</option>
+        <option value="consumable">วัสดุสิ้นเปลือง</option><option value="zero_by_design">ตั้งใจเป็น 0</option>
       </select>
       <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)">
         <input type="checkbox" id="bmcIngIssues" onchange="bmcRenderIng()"> เฉพาะรายการที่มีปัญหา
@@ -208,12 +206,12 @@
       <span class="text-[11px] font-semibold" style="color:var(--text-primary)">แก้ไขหลายรายการด้วย Excel:</span>
       <button onclick="window.open(API + '/api/bom-center/ingredients/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดทะเบียนเป็น Excel</button>
       <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-             title="ใช้ไฟล์ template ของระบบ หรือไฟล์ที่มี sheet DATAP (เช่น COST-RW) ระบบแสดงผลให้ตรวจสอบก่อนบันทึกทุกครั้ง">
-        นำเข้าทะเบียน / DATAP
+             title="ไฟล์ทะเบียนที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP (เช่น Cost-RW)">
+        นำเข้าทะเบียน (Excel)
         <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcImportIng(this)">
       </label>
       <button onclick="bmcSeed()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-              title="เพิ่มรหัสใหม่จากสูตร ขนาดบรรจุ และรายการบังคับสั่งของคลัง โดยไม่เขียนทับค่าที่ตั้งไว้แล้ว">เติมจากข้อมูลในระบบ</button>
+              title="เพิ่มรหัสใหม่จากสูตร ขนาดบรรจุ และรายการบังคับสั่ง · ไม่เขียนทับค่าที่ตั้งไว้แล้ว">เติมจากข้อมูลในระบบ</button>
       <span id="bmcIngStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIngReport" class="mb-3"></div>
@@ -247,10 +245,10 @@
     </div>
     <div id="bmcPriceSubmitCard" class="card p-3 mb-3 bmc-ss-only" style="display:none">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ส่งไฟล์ราคาเดือน <b id="bmcSubMonthLbl"></b> ให้ฝ่ายวิเคราะห์</div>
-      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ประสานงานขายส่งไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด ระบบตรวจว่าอ่านได้ก่อนรับไฟล์ ฝ่ายวิเคราะห์จะตรวจและนำเข้าราคา</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ส่งรายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบ ให้ฝ่ายวิเคราะห์นำเข้า</div>
       <div class="flex flex-wrap items-center gap-2">
         <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">
-          เลือกไฟล์และส่ง
+          ส่งไฟล์ราคา
           <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcSubmitPriceFile(this)">
         </label>
         <input type="text" id="bmcSubNote" maxlength="300" placeholder="หมายเหตุ (ไม่บังคับ)"
@@ -263,18 +261,18 @@
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">นำเข้าราคาซื้อจริงของเดือน</div>
       <div class="flex flex-wrap items-center gap-2">
         <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
-               title="รองรับไฟล์รายงานจ่ายสินค้าภายในจากฝ่ายบัญชี (sheet Use KR1, Use CNX ฯลฯ) หรือ template ยอดซื้อรายบรรทัด">
-          อัปโหลดไฟล์บัญชี / template
+               title="รายงานจ่ายสินค้าภายในของบัญชี หรือแม่แบบยอดซื้อรายบรรทัด">
+          นำเข้าไฟล์ราคา
           <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcImportPrices(this)">
         </label>
-        <span class="text-[11px]" style="color:var(--text-muted)">หรือรายงานที่อัปโหลดไว้ในระบบ:</span>
-        <select id="bmcReqMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)" title="เดือนของรายงานจ่ายสินค้าภายในที่อัปโหลดไว้ในระบบ"></select>
+        <span class="text-[11px]" style="color:var(--text-muted)">หรือรายงานที่นำเข้าไว้:</span>
+        <select id="bmcReqMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)" title="เดือนของรายงานจ่ายสินค้าภายในที่นำเข้าไว้"></select>
         <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานเดือนนี้</button>
-        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลด template</button>
+        <button onclick="window.open(API + '/api/bom-center/prices/template.xlsx','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบ</button>
         <button onclick="bmcCarry()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer"
-                title="สำหรับเดือนที่ยังไม่มีไฟล์ ระบบใช้ราคาล่าสุดของแต่ละวัตถุดิบ พร้อมแสดงอายุของราคา">ยกราคาล่าสุดมาใช้</button>
+                title="เดือนที่ยังไม่มีไฟล์: ใช้ราคาล่าสุดของแต่ละวัตถุดิบ">ยกราคาเดือนก่อนมาใช้</button>
         <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"
-               title="รหัสที่มีในรายงานบัญชีแต่ยังไม่อยู่ในทะเบียน (เช่น ทุเรียน FV00043) จะถูกเพิ่ม โดยกำหนดหน่วยฐานโดยประมาณจากหน่วยที่ซื้อ กรุณาตรวจสอบที่ ทะเบียนวัตถุดิบ">
+               title="เพิ่มรหัสที่ยังไม่อยู่ในทะเบียน (หน่วยฐานเป็นค่าประมาณ ตรวจที่ทะเบียนวัตถุดิบ)">
           <input type="checkbox" id="bmcAddUnknown" checked> เพิ่มรหัสที่ยังไม่มีในทะเบียน</label>
         <span id="bmcPriceStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
       </div>
@@ -313,14 +311,13 @@
     </div>
     <div class="card p-4 bc-write">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">กฎหน่วยครัวของวัตถุดิบ</div>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">ใช้เมื่อครัวนับเป็นหน่วยที่ไม่ใช่น้ำหนัก เช่น ปูอัด 1 แท่ง = 15 กรัม · สาหร่าย 1 แผ่นเล็ก = 0.125 แผ่น ·
-        ระบบแปลงกิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตรให้อัตโนมัติ · หน่วยรับ (แพ็ค/ถุง/กล่อง) ใช้ขนาดบรรจุในทะเบียน</p>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">กฎหน่วยครัว เช่น ปูอัด 1 แท่ง = 15 กรัม · กก. → กรัม และ ลิตร → มล. แปลงเอง · แพ็ค/ถุง/กล่อง ใช้ขนาดบรรจุในทะเบียน</p>
       <div class="flex flex-wrap items-end gap-2">
         <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
           <input id="bmcRuleUnit" placeholder="แท่ง" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label class="text-xs" style="color:var(--text-muted)">เท่ากับกี่หน่วยฐาน<br>
           <input id="bmcRuleFactor" type="number" step="any" placeholder="15" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <button onclick="bmcSaveRule()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกกฎของรหัสด้านบน</button>
+        <button onclick="bmcSaveRule()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกกฎหน่วย</button>
         <span id="bmcRuleStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
       <div id="bmcRuleList" class="mt-3 text-xs"></div>

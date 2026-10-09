@@ -33,6 +33,7 @@ class _UserCreate(BaseModel):
     password: Optional[str] = None        # blank → shared default, forced change at first login
     role: str
     branch: Optional[str] = None          # E4: confine this login to one branch
+    display_name: Optional[str] = None    # the name screens show (blank → branch / role label)
 
 
 class _UserUpdate(BaseModel):
@@ -41,6 +42,7 @@ class _UserUpdate(BaseModel):
     reset_default: Optional[bool] = None  # True → back to the shared default, forced change
     active: Optional[bool] = None
     branch: Optional[str] = None          # "" clears the scope
+    display_name: Optional[str] = None    # "" clears it (screens then show the branch / role label)
 
 
 def _set_session_cookie(response: Response, request: Request, token: str,
@@ -181,8 +183,12 @@ def auth_me(request: Request):
         row = _auth.get_user(con, payload.get("u", ""))
     if not row or not row["active"]:
         return {"enabled": True, "authenticated": False, "modules": []}
+    with get_db() as con:
+        names = _auth.names_map(con, row["username"], row["role"])
     return {"enabled": True, "authenticated": True,
             "username": row["username"], "role": row["role"],
+            "display_name": _auth.display_name_of(row), "role_th": _auth.ROLE_TH.get(row["role"], row["role"]),
+            "names": names,                                  # {login: name shown on screens}, for whoTh() in the pages
             "branch": row["branch"] if "branch" in row.keys() else None,
             "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
@@ -209,6 +215,8 @@ def auth_users_create(body: _UserCreate, request: Request):
                 # No password typed → the seeding path: shared default + must_change,
                 # so the person sets their own on first login.
                 _auth.provision_user(con, body.username, body.role, branch=body.branch)
+            if body.display_name:
+                _auth.update_user(con, body.username, display_name=body.display_name)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True, "default_password": None if body.password else _auth.DEFAULT_PASSWORD}
@@ -240,7 +248,8 @@ def auth_users_update(username: str, body: _UserUpdate, request: Request):
                 _auth.provision_user(con, username, target["role"], reset_existing=True)
             _auth.update_user(con, username, role=body.role,
                               password=body.password, active=body.active,
-                              branch=(body.branch if body.branch is not None else _auth.UNSET))
+                              branch=(body.branch if body.branch is not None else _auth.UNSET),
+                              display_name=(body.display_name if body.display_name is not None else _auth.UNSET))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True}

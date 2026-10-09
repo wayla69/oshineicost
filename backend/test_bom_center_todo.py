@@ -82,7 +82,7 @@ def test_the_month_flow_from_prices_to_acknowledgement(udon):
     c.execute("UPDATE bc_release SET status='released', released_by='a' WHERE release_id=?", (rid,))
     it = _by(TD.build(c, M, None, None, today=TODAY))
     assert it["acknowledge"]["status"] == "todo" and it["acknowledge"]["go"]["extra"]["release_id"] == rid
-    assert it["draft"]["status"] == "done" and "ปล่อยแล้ว" in it["draft"]["detail"]
+    assert it["draft"]["status"] == "done" and "ประกาศใช้แล้ว" in it["draft"]["detail"]
     c.execute("UPDATE bc_release SET acknowledged_by='m', acknowledged_at='x' WHERE release_id=?", (rid,))
     assert _by(TD.build(c, M, None, None, today=TODAY))["acknowledge"]["status"] == "done"
 

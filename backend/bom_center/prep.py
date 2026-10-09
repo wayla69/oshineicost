@@ -115,7 +115,7 @@ def parse_bom_semi(data: bytes) -> dict:
             cpu.setdefault(nm, (code, norm(unit) if unit and unit != "รอถาม" else "", _num(r[jp]) if jp is not None else None))
         break
     if sheet_used is None:
-        raise ValueError("ไม่พบ sheet สูตรกึ่งสำเร็จ ต้องมีหัวคอลัมน์ Menu / Mat1 / Usage1 ตามรูปแบบ BoM_Semi")
+        raise ValueError("ไม่พบแผ่นงานสูตรกึ่งสำเร็จ (BoM_Semi) ต้องมีหัวคอลัมน์ Menu / Mat1 / Usage1")
     return {"sheet": sheet_used, "blocks": blocks, "cpu": cpu}
 
 
@@ -546,7 +546,7 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
     rows = list(ws.iter_rows(values_only=True))
     hdr = next((i for i, r in enumerate(rows[:5]) if "prepared_code" in [_clean(v) for v in r]), None)
     if hdr is None:
-        raise ValueError("ไม่พบหัวคอลัมน์ prepared_code กรุณาใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
+        raise ValueError("ไม่พบหัวคอลัมน์ prepared_code · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
     h = {_clean(v): j for j, v in enumerate(rows[hdr]) if v}
     grp, errors = {}, []
     for i, r in enumerate(rows[hdr + 1:], start=hdr + 2):

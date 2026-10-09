@@ -12,8 +12,8 @@ _SUPPLY_PANE.orderhub = {
 };
 let _ohbQ = null;             // /api/bom-center/hub/queue
 let _ohbOrder = null;         // the order open in the detail panel
-const _OHB_RND = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอน' };
-const _OHB_ST = [['submitted', 'รอดำเนินการ'], ['processed', 'ดำเนินการแล้ว'], ['received', 'สาขารับแล้ว'], ['unkeyed', 'ยังไม่คีย์บัญชี'], ['all', 'ทั้งหมด']];
+const _OHB_RND = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอนสด' };
+const _OHB_ST = [['submitted', 'รอยืนยันยอดส่ง'], ['processed', 'คลังจัดส่งแล้ว'], ['received', 'สาขารับแล้ว'], ['unkeyed', 'ยังไม่คีย์บัญชี'], ['all', 'ทั้งหมด']];
 // owner 2026-10-09: Sales Support keys the processed orders into the accounting system and ticks them here
 const _ohbKeyedSel = new Set();      // order ids ticked in the queue
 function _ohbCanKey() { return hasModule('supply.ordering'); }
@@ -57,8 +57,8 @@ function ohbSetSub(k) {
 let _ohbClose = null;          // the /todo answer for the stepper's month
 let _ohbMonthFile = null;      // the report picked in step 2
 let _ohbMonthPre = null;       // its preview
-const _OHB_STEP_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอดำเนินการ', 'var(--amber-ink)'],
-                       blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ยังไม่เกี่ยวข้อง', 'var(--text-muted)'] };
+const _OHB_STEP_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
+                       blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงาน', 'var(--text-muted)'] };
 
 function _ohbCloseMonth() {
   const el = document.getElementById('ohbCloseMonth');
@@ -87,9 +87,9 @@ async function ohbLoadCentral() {
     // step 2 = the list and the month's notes together
     set(2, st.central_report && st.deliveries ? (st.central_report.status === 'done' && st.deliveries.status === 'done' ? 'done' : 'todo') : 'todo');
     document.getElementById('ohbCenStat').innerHTML = (d.count
-      ? `บัญชีสินค้าส่วนกลาง <b>${d.count}</b> รายการ · สาขาจัดซื้อเอง ${d.local} รายการ${d.needs_factor ? ` · ${_bmcChip(d.needs_factor + ' รายการยังไม่ระบุอัตราแปลงหน่วย', 'var(--amber-ink)')}` : ''}`
-      : _bmcChip('ยังไม่มีบัญชีสินค้าส่วนกลาง ระบบจะแนะนำให้สั่งทุกรายการจากส่วนกลาง', 'var(--amber-ink)'))
-      + (st.deliveries ? `<div class="mt-1">ใบรับสินค้าประจำเดือน ${esc(month)}:${_ohbBranchLines(st.deliveries)}</div>` : '');
+      ? `บัญชีสินค้าส่วนกลาง <b>${d.count}</b> รายการ · สาขาซื้อเอง ${d.local} รายการ${d.needs_factor ? ` · ${_bmcChip(d.needs_factor + ' รายการยังไม่ระบุอัตราแปลงหน่วย', 'var(--amber-ink)')}` : ''}`
+      : _bmcChip('ยังไม่มีบัญชีสินค้าส่วนกลาง (ยอดแนะนำถือว่าสั่งจากไดกิโตะทุกรายการ)', 'var(--amber-ink)'))
+      + (st.deliveries ? `<div class="mt-1">ใบรับสินค้าประจำเดือน${fmtMonthTh(month)}:${_ohbBranchLines(st.deliveries)}</div>` : '');
     set(3, st.code_links && st.code_links.status);
     ohbLoadLinks();
     // step 4 = the two counts
@@ -136,31 +136,31 @@ async function ohbLoadLinks() {
     const d = await _bmcJson(`${API}/api/bom-center/central/links`);
     const kept = d.links.map(l => `<div class="text-xs" style="border-top:1px solid var(--border);padding:4px 0;color:var(--text-primary)">
         ${esc(l.old_code)} ${esc(l.old_name || '')} → <b>${esc(l.new_code)}</b> ${esc(l.new_name || '')}
-        <span style="color:var(--text-muted)">· ${esc(l.who || '')}</span>
+        <span style="color:var(--text-muted)">· ${esc(whoTh(l.who) === '-' ? '' : whoTh(l.who))}</span>
         <button onclick="ohbLinkSave([{old_code:${_bmcQ(l.old_code)},new_code:null}])" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ยกเลิกการจับคู่</button></div>`).join('');
     const sugg = d.suggestions.map(s => `<div class="text-xs" style="border-top:1px solid var(--border);padding:5px 0;color:var(--text-primary)">
-        รหัสในสูตร <b>${esc(s.old_code)}</b> ${esc(s.old_name || '')} (ไม่อยู่ในบัญชีส่วนกลาง) · รหัสส่วนกลางที่ใกล้เคียง:
+        รหัสในสูตร <b>${esc(s.old_code)}</b> ${esc(s.old_name || '')} (ไม่อยู่ในบัญชีสินค้าส่วนกลาง) · รหัสในบัญชีที่ใกล้เคียง:
         ${s.options.map(o => `<button onclick="ohbLinkSave([{old_code:${_bmcQ(s.old_code)},new_code:${_bmcQ(o.new_code)}}])" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 8px;margin:2px;font-size:11px;cursor:pointer;background:transparent;color:var(--text-primary)">
           ${esc(o.new_code)} ${esc((o.new_name || '').slice(0, 40))} <span style="color:var(--text-muted)">(${o.score})</span> · จับคู่</button>`).join('')}</div>`).join('');
     box.innerHTML = (d.links.length ? `<div class="text-xs font-semibold" style="color:var(--text-secondary)">จับคู่แล้ว ${d.links.length} รายการ</div>${kept}` : '') +
-      (d.suggestions.length ? `<div class="text-xs font-semibold mt-2" style="color:var(--amber-ink)">รายการที่ระบบเสนอให้ตรวจสอบ ${d.suggestions.length} คู่</div>${sugg}` : '') +
-      (d.orphans.length ? `<div class="text-[11px] mt-2" style="color:var(--text-muted)">สินค้าส่วนกลางที่ไม่มีสูตรใช้และไม่พบรหัสคู่ ${d.orphans.length} รายการ: ${d.orphans.slice(0, 20).map(o => esc(o.code)).join(', ')}${d.orphans.length > 20 ? ' …' : ''}</div>` : '') ||
+      (d.suggestions.length ? `<div class="text-xs font-semibold mt-2" style="color:var(--amber-ink)">คู่ที่แนะนำ ${d.suggestions.length} คู่</div>${sugg}` : '') +
+      (d.orphans.length ? `<div class="text-[11px] mt-2" style="color:var(--text-muted)">วัตถุดิบในบัญชีสินค้าส่วนกลางที่ไม่มีสูตรใช้และไม่พบรหัสคู่ ${d.orphans.length} รายการ: ${d.orphans.slice(0, 20).map(o => esc(o.code)).join(', ')}${d.orphans.length > 20 ? ' …' : ''}</div>` : '') ||
       '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีบัญชีสินค้าส่วนกลาง</span>';
   } catch (e) { box.textContent = String(e.message || e); }
 }
 async function ohbLinkSave(rows) {
   try {
     await _bmcJson(`${API}/api/bom-center/central/links`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows) });
-    _bmcStatus('ohbLinkStatus', '✓ บันทึกเรียบร้อย', 'var(--good-ink)');
+    _bmcStatus('ohbLinkStatus', '✓ บันทึกแล้ว', 'var(--good-ink)');
     ohbLoadLinks();
-  } catch (e) { _bmcStatus('ohbLinkStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbLinkStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 function _ohbFd(file) { const fd = new FormData(); fd.append('file', file, file.name); return fd; }
 function _ohbCenRow(r) {
   const flag = r.status === 'skip' ? _bmcChip('ไม่นำเข้า', 'var(--text-muted)')
     : r.status === 'needs_factor' ? _bmcChip('ต้องระบุอัตราแปลง', 'var(--bad-ink)')
     : r.pack_change ? _bmcChip('ขนาดบรรจุต่างจากทะเบียน', 'var(--amber-ink)')
-    : (r.factor_how || '').startsWith('จากทะเบียน') ? _bmcChip('ควรตรวจสอบ', 'var(--amber-ink)')
+    : (r.factor_how || '').startsWith('จากทะเบียน') ? _bmcChip('ควรตรวจ', 'var(--amber-ink)')
     : r.is_new ? _bmcChip('รหัสใหม่', 'var(--navy-ink)') : '';
   return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(r.code)}</td><td class="pr-2">${esc(r.name)}</td>
     <td class="pr-2">${esc(r.unit_label || '')}</td><td class="pr-2 text-right">${r.price_per_sale != null ? _bmcNum(r.price_per_sale, 0) : '–'}</td>
@@ -186,52 +186,53 @@ async function ohbMonthPreview() {
     _ohbMonthPre = pre;
     const c = pre.catalogue;
     const look = c.rows.filter(r => r.status !== 'ok' || r.pack_change || r.is_new || (r.factor_how || '').startsWith('จากทะเบียน'));
-    const monthWarn = pre.month && pre.month !== _ohbCloseMonth() ? ' ' + _bmcChip(`งวดในไฟล์ ${pre.month} ต่างจากงวดที่เลือก ${_ohbCloseMonth()}`, 'var(--amber-ink)') : '';
+    const monthWarn = pre.month && pre.month !== _ohbCloseMonth() ? ' ' + _bmcChip(`งวดในไฟล์ ${fmtMonthTh(pre.month)} ต่างจากงวดที่เลือก ${fmtMonthTh(_ohbCloseMonth())}`, 'var(--amber-ink)') : '';
     document.getElementById('ohbCenReport').innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">บัญชีสินค้าส่วนกลาง${monthWarn}</div>
-      <div class="text-xs" style="color:var(--text-secondary)">${esc(pre.sheet)} (${esc(pre.month || '?')}) · <b>${c.items}</b> รายการ · รหัสใหม่ ${c.new} · ขนาดบรรจุต่างจากทะเบียน ${c.pack_change} ·
-      ใช้ขนาดบรรจุตามทะเบียน (ควรตรวจสอบ) ${c.from_master} · ยังไม่ระบุอัตราแปลง ${c.needs_factor} · ไม่มีราคา ${c.no_price} · ไม่นำเข้า ${c.skipped} ·
-      <b>รหัสอื่นอีก ${c.to_local} รายการจะกำหนดเป็น “สาขาจัดซื้อเอง”</b></div>
+      <div class="text-xs" style="color:var(--text-secondary)">${esc(pre.sheet)} (${fmtMonthTh(pre.month || '?')}) · <b>${c.items}</b> รายการ · รหัสใหม่ ${c.new} · ขนาดบรรจุต่างจากทะเบียน ${c.pack_change} ·
+      ใช้ขนาดบรรจุตามทะเบียน (ควรตรวจ) ${c.from_master} · ยังไม่ระบุอัตราแปลง ${c.needs_factor} · ไม่มีราคา ${c.no_price} · ไม่นำเข้า ${c.skipped} ·
+      <b>รหัสอื่นอีก ${c.to_local} รายการจะกำหนดเป็น “สาขาซื้อเอง”</b></div>
       ${look.length ? `<div class="overflow-x-auto mt-2" style="max-height:300px;overflow-y:auto"><table class="w-full text-xs" style="color:var(--text-primary)">
-      <thead><tr style="color:var(--text-muted)" class="text-left"><th>รหัส</th><th>ชื่อสินค้า</th><th>หน่วยนับ</th><th class="text-right">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th></th></tr></thead>
+      <thead><tr style="color:var(--text-muted)" class="text-left"><th>รหัส</th><th>ชื่อวัตถุดิบ</th><th>หน่วยนับ</th><th class="text-right">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th></th></tr></thead>
       <tbody>${look.map(_ohbCenRow).join('')}</tbody></table></div>
-      <div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจสอบ · หากอัตราแปลงไม่ถูกต้อง ให้ดาวน์โหลดบัญชีสินค้าหลังบันทึก แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง</div>` : ''}`;
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจ · อัตราแปลงผิด: ดาวน์โหลดบัญชีสินค้า แก้ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าใหม่</div>` : ''}`;
     const dl = pre.deliveries;
     if (!dl.branches.length) {              // a file without a month or quantities (the list's own export)
       document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs mt-2" style="color:var(--text-muted)">${esc(dl.note || 'ไฟล์นี้ไม่มียอดจัดส่งรายสาขา จึงไม่สร้างใบรับสินค้า')}</div>
         <button onclick="ohbMonthSave()" class="mt-2" style="border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">บันทึกบัญชีสินค้า</button>`;
-      _bmcStatus('ohbCenStatus', 'ตรวจสอบผลด้านล่าง แล้วกดบันทึก');
+      _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
       return;
     }
-    document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs font-semibold mt-2" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน ${esc(dl.month)} · ลงวันที่ ${esc(dl.receipt_date)} · เลือกสาขาที่จะบันทึก</div>
+    document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs font-semibold mt-2" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(dl.month)} · ลงวันที่ ${esc(fmtDay(dl.receipt_date))} · เลือกสาขาที่จะบันทึก</div>
       ${dl.branches.map(b => `<label class="flex flex-wrap items-center gap-2 text-xs mt-1" style="color:var(--text-primary)">
         <input type="checkbox" data-bid="${b.branch_id || ''}" ${b.branch_id && !b.error && b.lines ? 'checked' : ''} ${b.branch_id && !b.error && b.lines ? '' : 'disabled'}>
         <b>${esc(b.code)} ${esc(b.branch || b.label)}</b> ${b.error ? _bmcChip(b.error, 'var(--bad-ink)') : ''}
-        ${b.branch_id ? `· ${b.lines} รายการ · ฿${_bmcNum(b.value_central, 0)} (ราคาขายส่วนกลาง)` : ''}
+        ${b.branch_id ? `· ${b.lines} รายการ · ฿${_bmcNum(b.value_central, 0)} (ราคาขายของไดกิโตะ กรุ๊ป)` : ''}
         ${b.replaced ? _bmcChip('แทนที่ใบรับเดิม ' + b.replaced + ' ใบ', 'var(--amber-ink)') : ''}
         ${b.skipped && b.skipped.length ? _bmcChip(b.skipped.length + ' รายการแปลงหน่วยไม่ได้ (ไม่บันทึก)', 'var(--amber-ink)') : ''}</label>`).join('')}
       <div class="flex flex-wrap items-center gap-2 mt-2">
         <button onclick="ohbMonthSave()" style="border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">บันทึกบัญชีสินค้าและใบรับสินค้าที่เลือก</button>
         <span class="text-[11px]" style="color:var(--text-muted)">ไม่เลือกสาขาใด = บันทึกเฉพาะบัญชีสินค้า</span></div>`;
-    _bmcStatus('ohbCenStatus', 'ตรวจสอบผลด้านล่าง แล้วกดบันทึก');
-  } catch (e) { _bmcStatus('ohbCenStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+    _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
+  } catch (e) { _bmcStatus('ohbCenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function ohbMonthSave() {
   if (!_ohbMonthFile || !_ohbMonthPre) return;
   const ids = [...document.querySelectorAll('#ohbDelReport input[data-bid]')].filter(x => x.checked).map(x => x.dataset.bid);
   const c = _ohbMonthPre.catalogue;
   const names = ids.map(id => (_ohbMonthPre.deliveries.branches.find(b => String(b.branch_id) === id) || {}).branch).filter(Boolean);
-  if (!await uiConfirm(`ยืนยันบันทึกบัญชีสินค้าส่วนกลาง ${c.items} รายการ (รหัสใหม่ ${c.new} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาจัดซื้อเอง” · หน่วยสั่งในทะเบียนจะเปลี่ยนเป็นหน่วยขายของส่วนกลาง)`
-      + (ids.length ? `\nและใบรับสินค้าประจำเดือน ${_ohbMonthPre.month} ของ ${names.join(', ')} (ใบเดิมของเดือนนี้จะถูกแทนที่)` : '\nไม่บันทึกใบรับสินค้า'))) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่มีการบันทึก'); return; }
+  if (!await uiConfirm(`บันทึกบัญชีสินค้าส่วนกลาง ${c.items} รายการ (รหัสใหม่ ${c.new} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาซื้อเอง” · หน่วยสั่งในทะเบียนเปลี่ยนเป็นหน่วยขายของไดกิโตะ กรุ๊ป)`
+      + (ids.length ? `\nและใบรับสินค้าประจำเดือน${fmtMonthTh(_ohbMonthPre.month)} ของ ${names.join(', ')} (ใบเดิมของเดือนนี้ถูกแทนที่)` : '\nไม่บันทึกใบรับสินค้า'),
+      { title: 'ยืนยันการบันทึกบัญชีสินค้า', ok: 'บันทึก', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่บันทึก'); return; }
   try {
     const setLocal = document.getElementById('ohbSetLocal').checked;
     const d = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=false&set_local=${setLocal}${ids.length ? '&branch_ids=' + ids.join(',') : ''}`, { method: 'POST', body: _ohbFd(_ohbMonthFile) });
     const dl = d.deliveries.branches.filter(b => ids.includes(String(b.branch_id)));
-    _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (รหัสใหม่ ${d.catalogue.inserted}) · สาขาจัดซื้อเอง ${d.catalogue.set_local} รายการ`
+    _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (รหัสใหม่ ${d.catalogue.inserted}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
       + (dl.length ? ' · ใบรับ: ' + dl.map(b => `${b.branch || b.label} ${b.receipt_id ? 'เลขที่ ' + b.receipt_id + ' (' + b.lines + ' รายการ)' : (b.error || 'ไม่มีรายการ')}`).join(' · ') : ''), 'var(--good-ink)');
     _ohbMonthFile = null; _ohbMonthPre = null;
     document.getElementById('ohbDelReport').innerHTML = '';
     ohbLoadCentral();
-  } catch (e) { _bmcStatus('ohbCenStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbCenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 // Step 4: a count from the template, dated the day it was counted.
 function _ohbCntQS() {
@@ -243,18 +244,18 @@ async function ohbCntImport(input) {
   if (!file) return;
   const day = document.getElementById('ohbCntDate').value;
   try {
-    if (!day) throw new Error('กรุณาเลือกวันที่ตรวจนับ');
+    if (!day) throw new Error('เลือกวันที่ตรวจนับ');
     const pre = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=true&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
-    document.getElementById('ohbCntReport').innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">วันที่ตรวจนับ ${esc(pre.count_date)} · ${pre.lines} รายการ
+    document.getElementById('ohbCntReport').innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">วันที่ตรวจนับ ${esc(fmtDay(pre.count_date))} · ${pre.lines} รายการ
       ${pre.unknown.length ? `<div style="color:var(--bad-ink)">ไม่พบรหัสในทะเบียน: ${pre.unknown.slice(0, 12).map(esc).join(', ')}</div>` : ''}
       ${pre.unconverted.length ? `<div style="color:var(--bad-ink)">แปลงหน่วยไม่ได้: ${pre.unconverted.slice(0, 8).map(esc).join(' · ')}</div>` : ''}</div>`;
-    if (!pre.ok) { _bmcStatus('ohbCntStatus', 'กรุณาแก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
+    if (!pre.ok) { _bmcStatus('ohbCntStatus', 'แก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
     const name = document.getElementById('ohbCntBranch').selectedOptions[0]?.textContent || '';
-    if (!await uiConfirm(`ยืนยันส่งผลตรวจนับ สาขา${name} วันที่ ${day} (${pre.lines} รายการ)\nเมื่อส่งแล้วจะแก้ไขไม่ได้ หากต้องนับใหม่ให้นำเข้าเป็นวันที่ใหม่`)) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
+    if (!await uiConfirm(`ส่งผลตรวจนับ สาขา${name} วันที่ ${fmtDay(day)} (${pre.lines} รายการ)\nส่งแล้วแก้ไม่ได้ ต้องการนับใหม่ให้นำเข้าเป็นวันที่ใหม่`, { title: 'ยืนยันการส่งผลตรวจนับ', ok: 'ส่งผลตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
     _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับเลขที่ ${d.count_id} (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.lines} รายการ`, 'var(--good-ink)');
     ohbLoadCentral();                       // the next missing date, the step statuses
-  } catch (e) { _bmcStatus('ohbCntStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
 }
 
@@ -284,19 +285,19 @@ async function ohbLoadQueue() {
     const byDay = {};
     _ohbQ.orders.forEach(o => { (byDay[o.delivery] = byDay[o.delivery] || []).push(o); });
     const days = Object.keys(byDay).sort();
-    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(d)} · ${byDay[d].length} ใบสั่งซื้อ · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
+    box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(d))} · ${byDay[d].length} ใบสั่งซื้อ · ฿${_bmcNum(byDay[d].reduce((a, o) => a + (o.value || 0), 0), 0)}</div>` +
       byDay[d].map(o => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
         ${_ohbCanKey() && _ohbKeyable(o) ? `<input type="checkbox" aria-label="เลือกใบสั่งซื้อ #${o.order_id}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)">` : ''}
         <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">#${o.order_id} ${esc(o.branch)}</a>
-        <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(o.cycle_date)}</span><span>${o.lines} รายการ · ฿${_bmcNum(o.value, 0)}</span>
+        <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}</span><span>${o.lines} รายการ · ฿${_bmcNum(o.value, 0)}</span>
         ${o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : ''}
         ${o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : ''}
         ${o.stock_deducted ? '' : _bmcChip('ไม่มีผลตรวจนับสิ้นเดือน', 'var(--text-muted)')}
-        ${o.late ? _bmcChip('ส่งล่าช้า (ค่าปรับ)', 'var(--bad-ink)') : ''}
-        ${o.processed_on_time === false ? _bmcChip('ดำเนินการหลัง 14:00', 'var(--bad-ink)') : ''}
-        ${o.status === 'processed' ? _bmcChip(`ดำเนินการแล้ว${o.po_ref ? ' · ' + o.po_ref : ''}`, 'var(--good-ink)') : ''}
+        ${o.late ? _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}
+        ${o.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งหลัง 14:00', 'var(--bad-ink)') : ''}
+        ${o.status === 'processed' ? _bmcChip(`คลังจัดส่งแล้ว${o.po_ref ? ' · ' + o.po_ref : ''}`, 'var(--good-ink)') : ''}
         ${o.status === 'received' ? _bmcChip('สาขารับแล้ว', 'var(--good-ink)') : ''}
-        ${o.accounting_keyed ? _bmcChip(`คีย์บัญชีแล้ว ${esc(o.accounting_keyed_date || '')}`, 'var(--good-ink)') : (_ohbKeyable(o) ? _bmcChip('ยังไม่คีย์บัญชี', 'var(--amber-ink)') : '')}
+        ${o.accounting_keyed ? _bmcChip(`คีย์บัญชีแล้ว ${esc(fmtDay(o.accounting_keyed_date || ''))}`, 'var(--good-ink)') : (_ohbKeyable(o) ? _bmcChip('ยังไม่คีย์บัญชี', 'var(--amber-ink)') : '')}
         ${o.claims_pending ? _bmcChip('มีเคลม รอพิจารณา', 'var(--amber-ink)') : (o.claims ? _bmcChip('มีเคลม', 'var(--text-muted)') : '')}</div>`).join('')).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งซื้อในช่วงนี้</span>';
     _ohbKeySync();
@@ -317,16 +318,16 @@ function ohbKeySelectAll(on) {
 }
 async function ohbMarkKeyed(keyed) {
   const ids = [..._ohbKeyedSel];
-  if (!ids.length) { _bmcStatus('ohbKeyStatus', 'กรุณาเลือกใบสั่งซื้ออย่างน้อย 1 ใบ', 'var(--bad-ink)'); return; }
-  if (!await uiConfirm(`ยืนยันว่าใบสั่งซื้อ ${ids.length} ใบ ${keyed ? 'คีย์เข้าระบบบัญชีแล้ว' : 'ยังไม่ได้คีย์เข้าระบบบัญชี'}`)) { _bmcStatus('ohbKeyStatus', 'ยกเลิกแล้ว'); return; }
+  if (!ids.length) { _bmcStatus('ohbKeyStatus', 'เลือกใบสั่งซื้ออย่างน้อย 1 ใบ', 'var(--bad-ink)'); return; }
+  if (!await uiConfirm(`ใบสั่งซื้อ ${ids.length} ใบ ${keyed ? 'คีย์เข้าระบบบัญชีแล้ว' : 'ยังไม่ได้คีย์เข้าระบบบัญชี'}?`, { title: keyed ? 'ยืนยันการคีย์บัญชี' : 'ยืนยันการยกเลิกคีย์บัญชี', ok: keyed ? 'คีย์บัญชีแล้ว' : 'ยกเลิกคีย์บัญชี', cancel: 'ยกเลิก' })) { _bmcStatus('ohbKeyStatus', 'ยกเลิกแล้ว'); return; }
   try {
     const r = await _bmcJson(`${API}/api/bom-center/hub/keyed`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order_ids: ids, keyed }) });
     _ohbKeyedSel.clear();
     await ohbLoadQueue();
-    _bmcStatus('ohbKeyStatus', `✓ ทำเครื่องหมาย ${r.updated} ใบ`, 'var(--good-ink)');
+    _bmcStatus('ohbKeyStatus', `✓ ${keyed ? 'คีย์บัญชีแล้ว' : 'ยกเลิกคีย์บัญชี'} ${r.updated} ใบ`, 'var(--good-ink)');
     if (_ohbOrder && ids.includes(_ohbOrder.order_id)) ohbOpen(_ohbOrder.order_id);
-  } catch (e) { _bmcStatus('ohbKeyStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbKeyStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 
 async function ohbOpen(id) {
@@ -356,18 +357,18 @@ function ohbRenderDetail() {
         ${l.received_units != null ? `<div class="text-[10.5px]" style="color:var(--text-muted)">รับจริง ${_bmcNum(l.received_units)}</div>` : ''}</td></tr>`;
   }).join('');
   document.getElementById('ohbDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">#${o.order_id} ${esc(o.branch || '')} · ${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(o.cycle_date)} · วันส่ง ${esc(o.delivery)}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (ค่าปรับ)', 'var(--bad-ink)') : ''}</div>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">#${o.order_id} ${esc(o.branch || '')} · ${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))} · วันส่ง ${esc(fmtDay(o.delivery))}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}
-      ${o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · ดำเนินการโดย ${esc(o.processed_by)}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(o.accounting_keyed_date || '')} โดย ${esc(o.accounting_keyed_by || '')}` : ''}</div>
+      ${o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · คลังยืนยันโดย ${esc(whoTh(o.processed_by))}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(fmtDay(o.accounting_keyed_date || ''))} โดย ${esc(whoTh(o.accounting_keyed_by))}` : ''}</div>
     ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `#${c.claim_id} ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ยอดแนะนำ</th><th class="py-1 pr-2 text-right">สาขายืนยัน</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1">เหตุผล (ส่วนกลาง)</th></tr></thead>
+      <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ยอดแนะนำ</th><th class="py-1 pr-2 text-right">สาขายืนยัน</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1">เหตุผล (คลัง)</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    ${!work && o.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">คลังเป็นผู้ระบุยอดส่งจริงและกด “ดำเนินการแล้ว”</div>' : ''}
+    ${!work && o.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">คลังเป็นผู้ระบุยอดส่งจริง</div>' : ''}
     ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      ${_ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ดำเนินการแล้ว', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
+      ${_ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
 }
 async function ohbProcess() {
   const o = _ohbOrder;
@@ -381,9 +382,9 @@ async function ohbProcess() {
     const r = await _bmcJson(`${API}/api/bom-center/hub/process/${o.order_id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lines, po_ref: document.getElementById('ohbPo').value || null }) });
     await ohbOpen(o.order_id);
-    _bmcStatus('ohbDStatus', `✓ ดำเนินการแล้ว · ฿${_bmcNum(r.value, 0)}`, 'var(--good-ink)');
+    _bmcStatus('ohbDStatus', `✓ ยืนยันยอดส่งแล้ว · ฿${_bmcNum(r.value, 0)}`, 'var(--good-ink)');
     ohbLoadQueue();
-  } catch (e) { _bmcStatus('ohbDStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbDStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 async function ohbShowConsolidated() {
   const box = document.getElementById('ohbConsolidated');
@@ -392,7 +393,7 @@ async function ohbShowConsolidated() {
   try {
     const c = await _bmcJson(`${API}/api/bom-center/hub/consolidated?${_ohbExportQS()}`);
     box.innerHTML = `<div style="display:flex;justify-content:space-between"><div class="text-sm font-semibold" style="color:var(--text-primary)">สรุปรวมตามวันส่ง (${esc(c.status_th || '')}) · สั่งจาก ${esc(c.supplier || '')}</div>${_ohbBtn('ปิด', "document.getElementById('ohbConsolidated').style.display='none'")}</div>` +
-      (c.groups.length ? c.groups.map(g => `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">วันส่ง ${esc(g.delivery)}</div>
+      (c.groups.length ? c.groups.map(g => `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(g.delivery))}</div>
         <div style="overflow-x:auto"><table class="w-full text-xs"><tbody>${g.items.map(it => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(it.name)} <span style="color:var(--text-muted)">${esc(it.code)}</span></td>
           <td class="py-1 pr-2 text-right"><b>${_bmcNum(it.total)}</b> ${esc(it.unit || '')}</td>
           <td class="py-1" style="color:var(--text-muted)">${Object.entries(it.by_branch).map(([b, q]) => `${esc(b)} ${_bmcNum(q)}`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>`).join('')
@@ -404,8 +405,8 @@ function ohbDownloadConsolidated() {
 }
 
 // ── compliance ───────────────────────────────────────────────────────────────
-const _OHB_CS = { ok: ['ตามยอดแนะนำ', 'var(--good-ink)'], over: ['สั่งเกินยอดแนะนำ', 'var(--amber-ink)'], under: ['สั่งต่ำกว่ายอดแนะนำ', 'var(--amber-ink)'],
-  not_ordered: ['ไม่ได้สั่ง', 'var(--bad-ink)'], not_submitted: ['ยังไม่ส่ง', 'var(--bad-ink)'], upcoming: ['ยังไม่ถึงวัน', 'var(--text-muted)'] };
+const _OHB_CS = { ok: ['ตามแนะนำ', 'var(--good-ink)'], over: ['สั่งเกิน', 'var(--amber-ink)'], under: ['สั่งขาด', 'var(--amber-ink)'],
+  not_ordered: ['ไม่ได้สั่ง', 'var(--bad-ink)'], not_submitted: ['ยังไม่ส่ง', 'var(--bad-ink)'], upcoming: ['ยังไม่ถึงกำหนด', 'var(--text-muted)'] };
 function _ohbCRange() { return `date_from=${document.getElementById('ohbCFrom').value}&date_to=${document.getElementById('ohbCTo').value}`; }
 async function ohbLoadComp() {
   const box = document.getElementById('ohbComp');
@@ -415,17 +416,17 @@ async function ohbLoadComp() {
     document.getElementById('ohbCChips').innerHTML = Object.entries(_OHB_CS).filter(([k]) => c.counts[k]).map(([k, [t, ink]]) => _bmcChip(`${t} ${c.counts[k]}`, ink)).join(' ');
     const pct = v => v == null ? '' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`;
     box.innerHTML = c.rows.length ? `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-        <th class="py-1 pr-2">ตัดรอบ</th><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2">รอบ</th><th class="py-1 pr-2">สถานะ</th>
-        <th class="py-1 pr-2 text-right">ยอดแนะนำ ฿</th><th class="py-1 pr-2 text-right">สาขายืนยัน ฿</th><th class="py-1 pr-2 text-right">ส่วนกลาง ฿</th><th class="py-1 pr-2 text-right">รับจริง ฿</th><th class="py-1">เวลา</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2">ตัดรอบ</th><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2">รอบส่ง</th><th class="py-1 pr-2">สถานะ</th>
+        <th class="py-1 pr-2 text-right">ยอดแนะนำ ฿</th><th class="py-1 pr-2 text-right">สาขายืนยัน ฿</th><th class="py-1 pr-2 text-right">ส่งจริง ฿</th><th class="py-1 pr-2 text-right">รับจริง ฿</th><th class="py-1">เวลา</th></tr></thead><tbody>` +
       c.rows.map(r => { const [t, ink] = _OHB_CS[r.status] || [r.status, 'var(--text-muted)'];
-        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(r.cycle_date)}</td><td class="py-1 pr-2">${esc(r.branch || '')}</td><td class="py-1 pr-2">${esc(_OHB_RND[r.round] || r.round)}</td>
+        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(fmtDay(r.cycle_date))}</td><td class="py-1 pr-2">${esc(r.branch || '')}</td><td class="py-1 pr-2">${esc(_OHB_RND[r.round] || r.round)}</td>
           <td class="py-1 pr-2">${_bmcChip(t, ink)}</td>
           <td class="py-1 pr-2 text-right">${r.suggested != null ? _bmcNum(r.suggested, 0) : ''}</td>
           <td class="py-1 pr-2 text-right">${r.confirmed != null ? _bmcNum(r.confirmed, 0) : ''} <span style="color:var(--text-muted)">${pct(r.confirmed_vs_suggested_pct)}</span></td>
           <td class="py-1 pr-2 text-right">${r.processed != null ? _bmcNum(r.processed, 0) : ''} <span style="color:var(--text-muted)">${pct(r.centre_change_pct)}</span></td>
           <td class="py-1 pr-2 text-right">${r.received != null ? _bmcNum(r.received, 0) : ''} <span style="color:var(--text-muted)">${pct(r.delivery_gap_pct)}</span></td>
-          <td class="py-1">${r.order_id ? (r.late ? _bmcChip('ส่งล่าช้า (ค่าปรับ)', 'var(--bad-ink)') : '') + (r.processed_on_time === false ? _bmcChip('ดำเนินการช้า', 'var(--bad-ink)') : '') : ''}</td></tr>`; }).join('') + '</tbody></table></div>'
-      : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่ตรวจนับหรือสั่งสินค้าผ่านระบบ รายการจะแสดงเมื่อสาขาเริ่มใช้งาน</span>';
+          <td class="py-1">${r.order_id ? (r.late ? _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : '') + (r.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งช้า', 'var(--bad-ink)') : '') : ''}</td></tr>`; }).join('') + '</tbody></table></div>'
+      : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล (สาขายังไม่เริ่มใช้งาน)</span>';
     if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -439,47 +440,47 @@ async function ohbLoadMonth() {
     const m = await _bmcJson(`${API}/api/bom-center/hub/monthly?month=${document.getElementById('ohbMonth').value}`);
     const pct = v => v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`;
     const t = m.total;
-    box.innerHTML = m.branches.length ? `<div class="text-sm" style="color:var(--text-primary)">${esc(m.month)} · ตามสูตร ฿${_bmcNum(t.bom_value, 0)} · ผลต่าง <b style="color:${t.gap_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(t.gap_value, 0)} (${pct(t.gap_pct)})</b> · ใช้เกินสูตร ฿${_bmcNum(t.over_value, 0)}
+    box.innerHTML = m.branches.length ? `<div class="text-sm" style="color:var(--text-primary)">${fmtMonthTh(m.month)} · ตามสูตร ฿${_bmcNum(t.bom_value, 0)} · ผลต่าง <b style="color:${t.gap_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(t.gap_value, 0)} (${pct(t.gap_pct)})</b> · ใช้เกินสูตร ฿${_bmcNum(t.over_value, 0)}
         ${m.previous && m.previous.total.bom_value ? ` <span class="text-xs" style="color:var(--text-muted)">เดือนก่อน ${pct(m.previous.total.gap_pct)}</span>` : ''}</div>
-      <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">รอบ</th>
-        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">ผลต่าง ฿</th><th class="py-1 pr-2 text-right">%</th><th class="py-1 pr-2 text-right">A / B / C ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้างดำเนินการ</th></tr></thead><tbody>` +
+      <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">งวด</th>
+        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">ผลต่าง ฿</th><th class="py-1 pr-2 text-right">%</th><th class="py-1 pr-2 text-right">A / B / C ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้าง</th></tr></thead><tbody>` +
       m.branches.map(b => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(b.branch)}</td><td class="py-1 pr-2 text-right">${b.periods}</td>
         <td class="py-1 pr-2 text-right">${_bmcNum(b.bom_value, 0)}</td><td class="py-1 pr-2 text-right" style="color:${b.gap_value > 0 ? 'var(--bad-ink)' : 'inherit'}">${_bmcNum(b.gap_value, 0)}</td>
         <td class="py-1 pr-2 text-right">${pct(b.gap_pct)}</td><td class="py-1 pr-2 text-right">${['A', 'B', 'C'].map(k => _bmcNum(b.by_class[k], 0)).join(' / ')}</td>
         <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${pct(b.prev_gap_pct)}</td>
-        <td class="py-1">${b.needs_reason ? _bmcChip(`ยังไม่ระบุเหตุผล ${b.needs_reason}`, 'var(--amber-ink)') : ''}${b.complete < b.periods ? _bmcChip('ยังไม่ยืนยันรับสินค้า', 'var(--text-muted)') : ''}</td></tr>`).join('') + '</tbody></table></div>' +
+        <td class="py-1">${b.needs_reason ? _bmcChip(`ยังไม่ระบุเหตุผล ${b.needs_reason}`, 'var(--amber-ink)') : ''}${b.complete < b.periods ? _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--text-muted)') : ''}</td></tr>`).join('') + '</tbody></table></div>' +
       (m.top_reasons.length ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">เหตุผลหลัก</div>` + m.top_reasons.map(r => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0">${esc(r.label)} · ${r.items} รายการ · ฿${_bmcNum(r.value, 0)}</div>`).join('') : '')
-      : `<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีรอบตรวจนับที่ปิดในเดือน ${esc(m.month)}</span>`;
+      : `<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีงวดที่ปิดในเดือน${fmtMonthTh(m.month)}</span>`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 
 // ── pilot (S10) ──────────────────────────────────────────────────────────────
 async function ohbLoadPilot() {
   const rb = document.getElementById('ohbPilotReady'), sb = document.getElementById('ohbPilotScore');
-  rb.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังตรวจสอบ…</span>';
+  rb.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังตรวจ…</span>';
   sb.innerHTML = '';
   try {
     const d = await _bmcJson(`${API}/api/bom-center/hub/pilot`);
     const R = d.readiness;
     const step = s => `<div class="text-xs py-0.5" style="color:${s.done ? 'var(--good-ink)' : 'var(--amber-ink)'}">${s.done ? '✓' : '•'} ${esc(s.todo)}</div>`;
     rb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ความพร้อม</div>
-      <div class="text-xs mb-1" style="color:var(--text-muted)">ส่วนกลาง: ทะเบียน ${_bmcNum(R.centre.ingredients, 0)} รายการ · ราคาเดือน ${esc((R.centre.price_months || []).join(', ') || '—')} · สูตรกึ่งสำเร็จ ${R.centre.sub_recipes} · release ที่เผยแพร่แล้ว ${R.centre.releases}</div>
+      <div class="text-xs mb-1" style="color:var(--text-muted)">ข้อมูลตั้งต้น: ทะเบียน ${_bmcNum(R.centre.ingredients, 0)} รายการ · ราคาเดือน ${esc((R.centre.price_months || []).map(fmtMonthTh).join(', ') || '—')} · สูตรกึ่งสำเร็จ ${R.centre.sub_recipes} · เวอร์ชันที่ประกาศใช้ ${R.centre.releases}</div>
       ${R.centre_steps.map(step).join('')}
       ${R.branches.map(b => `<div style="border-top:1px solid var(--border);padding:6px 0;margin-top:4px">
         <div class="text-sm"><b>${esc(b.branch)}</b> ${b.ready ? _bmcChip('พร้อม', 'var(--good-ink)') : _bmcChip('ยังไม่พร้อม', 'var(--amber-ink)')}
-          <span class="text-xs" style="color:var(--text-muted)">${b.accounts.length ? 'บัญชี: ' + b.accounts.map(a => esc(a.username)).join(', ') : ''}${b.first_count ? ` · ตรวจนับครั้งแรก ${esc(b.first_count)} · ล่าสุด ${esc(b.last_count)} (${b.counts} ครั้ง)` : ''}${b.last_order ? ` · ใบสั่งซื้อล่าสุด ${esc(b.last_order)}` : ''}</span></div>
+          <span class="text-xs" style="color:var(--text-muted)">${b.accounts.length ? 'ผู้ใช้: ' + b.accounts.map(a => esc(a.username)).join(', ') : ''}${b.first_count ? ` · ตรวจนับครั้งแรก ${esc(fmtDay(b.first_count))} · ล่าสุด ${esc(fmtDay(b.last_count))} (${b.counts} ครั้ง)` : ''}${b.last_order ? ` · ใบสั่งซื้อล่าสุด ${esc(fmtDay(b.last_order))}` : ''}</span></div>
         ${b.steps.map(step).join('')}</div>`).join('')}
       ${R.missing_branches.length ? `<div class="text-xs mt-1" style="color:var(--bad-ink)">ไม่พบสาขาในระบบ: ${R.missing_branches.map(esc).join(', ')}</div>` : ''}`;
     const T = d.scorecard.targets;
     const cell = (v, ok, unit) => v == null ? '<span style="color:var(--text-muted)">—</span>'
       : `<b style="color:${ok === false ? 'var(--bad-ink)' : ok ? 'var(--good-ink)' : 'var(--text-primary)'}">${_bmcNum(v, 1)}${unit}</b>`;
     const vd = { pass: ['ผ่าน', 'var(--good-ink)'], fail: ['ยังไม่ผ่าน', 'var(--bad-ink)'], pending: ['รอข้อมูล', 'var(--text-muted)'], not_started: ['ยังไม่เริ่ม', 'var(--text-muted)'] };
-    sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผล Pilot ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
+    sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผลนำร่อง ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
       <div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
         <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">ใบตัดเบิกครบทุกวัน (≥${T.issue_coverage}%)</th><th class="py-1 pr-2 text-right">ยืนยันภายในวัน (≥${T.issue_on_time}%)</th>
         <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์ชั้น A (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
       d.scorecard.branches.map(s => { const m = s.metrics, p = s.passes, [vt, vi] = vd[s.verdict];
-        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(s.from)} → ${esc(s.to)} · ${s.cycles} วันสั่ง · ใบตัดเบิก ${(s.slips ? s.slips.confirmed + s.slips.late : 0)} ใบ</div></td>
+        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(fmtDay(s.from))} → ${esc(fmtDay(s.to))} · ${s.cycles} วันสั่ง · ใบตัดเบิก ${(s.slips ? s.slips.confirmed + s.slips.late : 0)} ใบ</div></td>
           <td class="py-1 pr-2 text-right">${cell(m.issue_coverage, p.issue_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.issue_on_time, p.issue_on_time, '%')}</td>
           <td class="py-1 pr-2 text-right">${cell(m.reason_coverage, p.reason_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.mape_a, p.mape_a, '%')}</td>
           <td class="py-1 pr-2 text-right">${cell(m.order_submission, null, '%')}</td><td class="py-1">${_bmcChip(vt, vi)}</td></tr>`; }).join('') + '</tbody></table></div>';
@@ -521,22 +522,22 @@ function isrDailyTable(d, openFn) {
       <td class="py-1">${r.over_items.map(o => `${esc(o.name)} ${_isrPct(o.var_pct)}`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร BoM ฿', 1)}${th('ผลต่าง ฿', 1)}${th('ผลต่าง %', 1)}${th('ชั้น A ที่เบิกเกินเกณฑ์')}</tr></thead>
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('ผลต่าง ฿', 1)}${th('ผลต่าง %', 1)}${th('ชั้น A ที่เบิกเกินเกณฑ์')}</tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right" style="color:${t.var_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrBaht(t.var_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrPct(t.var_pct)}</td><td></td></tr></tfoot></table></div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน ${esc(d.price_month)} · เกณฑ์เตือน: ชั้น A เบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน${fmtMonthTh(d.price_month)} · เกณฑ์เตือน: ชั้น A เบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
 }
 function isrDayItems(d, closeJs) {
   const s = d.slip, conf = s.key === 'on_time' || s.key === 'late';
   const head = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
       <b class="text-sm" style="color:var(--text-primary)">วัน${esc(d.weekday_th)}ที่ ${_isrDm(d.date)} · ${esc(d.branch.name || '')}</b>
       ${_bmcChip(s.status_th, _ISR_SLIP_INK[s.key] || 'var(--text-muted)')}
-      ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(s.confirmed_by || '-')}</span>` : ''}
+      ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}</span>` : ''}
       ${closeJs ? `<button onclick="${closeJs}" style="margin-left:auto;font-size:12px;color:var(--text-muted);background:none;border:0;cursor:pointer">ปิด</button>` : ''}</div>`;
-  const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกของวันนี้ยังไม่ยืนยัน จึงยังเปรียบเทียบกับสูตรไม่ได้ ตารางแสดงเฉพาะปริมาณตามสูตร BoM</div>';
+  const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณตามสูตร</div>';
   const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPct(f.max_pct)})`, 'var(--bad-ink)')).join(' ')}</div>` : '';
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
@@ -549,13 +550,13 @@ function isrDayItems(d, closeJs) {
       <td class="py-1">${r.signal ? _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}</td></tr>`;
   }).join('');
   return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ตามสูตร BoM', 1)}${th('ผลต่าง', 1)}${th('ผลต่าง %', 1)}${th('ผลต่าง ฿', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
+      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ตามสูตร', 1)}${th('ผลต่าง', 1)}${th('ผลต่าง %', 1)}${th('ผลต่าง ฿', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
 }
 function isrReconHead(r) {
   const p = r.period, t = r.totals, sl = r.slips;
   const miss = sl.missing_days;
-  return `<div style="color:var(--text-secondary)">${esc(p.begin_date)} → ${esc(p.end_date)} · ${p.days} วัน · ราคาเดือน ${esc(p.month)}</div>
+  return `<div style="color:var(--text-secondary)">${esc(fmtDay(p.begin_date))} → ${esc(fmtDay(p.end_date))} · ${p.days} วัน · ราคาเดือน${fmtMonthTh(p.month)}</div>
     <div class="flex flex-wrap gap-1 mt-1">
       ${_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)')}
       ${miss.length ? _bmcChip(`ขาดใบตัดเบิก ${miss.length} วัน`, 'var(--bad-ink)') : ''}
@@ -589,8 +590,8 @@ function isrReconTable(r, o) {
         <select id="${pfx}Rs_${esc(x.code)}" style="border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
         <input id="${pfx}Rn_${esc(x.code)}" value="${esc(x.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 140px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
         <button onclick="${o.save}(${_bmcQ(x.code)}, true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึก</button>
-        ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(x.reason_by)}</span>` : ''}</div>`
-      : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(x.reason_by) : ''}</div>`
+        ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(whoTh(x.reason_by))}</span>` : ''}</div>`
+      : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(whoTh(x.reason_by)) : ''}</div>`
         : (flag ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
     </div>`;
   }).join('');
@@ -611,7 +612,7 @@ async function ohbLoadIssueVar() {
     }
     const keep = String(supplyCtx().branch_id || '');
     if (!sel.value && keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
-    if (!sel.value) { chips.innerHTML = ''; list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กรุณาเลือกสาขา</span>'; return; }
+    if (!sel.value) { chips.innerHTML = ''; list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">เลือกสาขา</span>'; return; }
     supplyCtxSet({ branch_id: Number(sel.value) });
     list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
     _ohbIv = await _bmcJson(`${API}/api/bom-center/issue-reports/daily?branch_id=${sel.value}&month=${mon.value}`);
@@ -631,7 +632,7 @@ async function ohbIvOpen(day) {
 }
 function ohbIvXlsx() {
   const b = document.getElementById('ohbIvBranch').value;
-  if (!b) { _bmcStatus('ohbIvStatus', 'กรุณาเลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  if (!b) { _bmcStatus('ohbIvStatus', 'เลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
   window.location.href = `${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${document.getElementById('ohbIvMonth').value}`;
 }
 
@@ -685,7 +686,7 @@ function ohbIsSummaryTable(rows) {
       <td class="py-1 pr-2 text-right">${pct(s.on_time_pct)}</td><td class="py-1 pr-2 text-right">${pct(s.coverage_pct)}</td>
       <td class="py-1 pr-2 text-right">${s.reopens || 0}</td><td class="py-1 pr-2 text-right">${s.reconfirms || 0}</td>
       <td class="py-1 pr-2 text-right">${n(s.late_orders, 'var(--amber-ink)')}</td><td class="py-1 pr-2 text-right">${s.claims || 0}</td></tr>`).join('') +
-    `</tbody></table></div><div class="text-[11px] mt-2" style="color:var(--text-muted)">ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย · นับเฉพาะวันที่สาขามียอดขายและตั้งแต่วันที่สาขาเริ่มใช้งาน</div>`;
+    `</tbody></table></div><div class="text-[11px] mt-2" style="color:var(--text-muted)">ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยัน · มีใบ % = ใบที่ยืนยัน ÷ วันขาย</div>`;
 }
 function ohbIsRender() {
   const d = _ohbIs;
@@ -701,10 +702,10 @@ function ohbIsRender() {
   else {
     let day = null, html = '';
     rows.forEach(r => {
-      if (r.date !== day) { day = r.date; html += `<div class="text-xs font-semibold" style="color:var(--text-primary);margin-top:10px">วัน${esc(r.weekday_th)}ที่ ${_isrDm(r.date)}</div>`; }
+      if (r.date !== day) { day = r.date; html += `<div class="text-xs font-semibold" style="color:var(--text-primary);margin-top:10px">วัน${esc(r.weekday_th)}ที่ ${esc(fmtDay(r.date))}</div>`; }
       const chips = [r.reopens ? _bmcChip(`เปิดแก้ไข ${r.reopens} ครั้ง`, 'var(--navy-ink)') : '', r.reconfirms ? _bmcChip(`ยืนยันซ้ำ ${r.reconfirms} ครั้ง`, 'var(--text-muted)') : '',
         r.late_orders ? _bmcChip(`ใบสั่งซื้อส่งล่าช้า ${r.late_orders} ใบ`, 'var(--amber-ink)') : '', r.claims ? _bmcChip(`เคลม ${r.claims} เรื่อง`, 'var(--text-muted)') : ''].filter(Boolean).join(' ');
-      const conf = r.confirmed_at ? `ยืนยัน ${esc(r.confirmed_at.slice(r.confirmed_at.slice(0, 10) === r.date ? 11 : 5))} โดย ${esc(r.confirmed_by || '-')}` : esc(r.status_note || '');
+      const conf = r.confirmed_at ? `ยืนยัน ${esc(_ohbIsDt(r.confirmed_at))} โดย ${esc(whoTh(r.confirmed_by))}` : esc(r.status_note || '');
       html += `<div style="border-top:1px solid var(--border);padding:5px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
           <b style="min-width:120px">${esc(r.branch || '')}</b>${_bmcChip(r.status_th, _OHB_IS_INK[r.status] || 'var(--text-muted)')}
           <span style="color:var(--text-secondary)">${conf}</span>${chips}
@@ -731,9 +732,9 @@ function ohbIsRenderSlip() {
   const q = (v, u) => v ? `${_bmcNum(v, 3)} ${esc(u || '')}` : '<span style="color:var(--text-muted)">—</span>';
   const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
   document.getElementById('ohbIsDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">ใบตัดเบิก ${esc(s.branch || '')} · วันที่ ${_isrDm(s.date)} · เลขที่ใบ ${s.slip_id} ${_bmcChip(s.status_th, ink)}</div>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">ใบตัดเบิก ${esc(s.branch || '')} · วันที่ ${esc(fmtDay(s.date))} ${_bmcChip(s.status_th, ink)}</div>
       <div>${conf ? `<a href="${API}/api/bom-center/issues/export/${s.slip_id}.xlsx" style="color:var(--accent);font-size:12px;margin-right:12px">ดาวน์โหลดใบนี้ (Excel)</a>` : ''}${_ohbBtn('ปิด', "document.getElementById('ohbIsDetail').style.display='none'")}</div></div>
-    <div class="text-xs mt-1" style="color:var(--text-secondary)">${conf ? `ยืนยันเมื่อ ${esc(_ohbIsDt(s.confirmed_at))} โดย ${esc(s.confirmed_by || '-')}` : 'ยังไม่ยืนยัน'}${s.reopen_note ? ` · เปิดแก้ไขล่าสุดโดย ${esc(s.reopened_by || '-')}: ${esc(s.reopen_note)}` : ''}</div>
+    <div class="text-xs mt-1" style="color:var(--text-secondary)">${conf ? `ยืนยันเมื่อ ${esc(_ohbIsDt(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}` : 'ยังไม่ยืนยัน'}${s.reopen_note ? ` · เปิดแก้ไขล่าสุดโดย ${esc(whoTh(s.reopened_by))}: ${esc(s.reopen_note)}` : ''}</div>
     <div id="ohbIsResult" class="text-xs mt-1"></div>
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">เบิกใช้</th><th class="py-1 pr-2 text-right">ของเสีย</th><th class="py-1">สาเหตุของเสีย</th></tr></thead><tbody>
@@ -742,30 +743,30 @@ function ohbIsRenderSlip() {
         <td class="py-1 pr-2 text-right">${l.qty_waste ? _bmcNum(l.qty_waste, 3) + ' ' + esc(l.unit || '') : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="py-1">${l.waste_reason_th ? esc(l.waste_reason_th) + (l.note ? ' · ' + esc(l.note) : '') : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="py-2" style="color:var(--text-muted)">ไม่มีรายการ</td></tr>'}</tbody></table></div>
     <div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">ประวัติของใบ</div>
-    ${s.log.map(h => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0;color:var(--text-secondary)">${esc(_ohbIsDt(h.at))} · ${esc(_OHB_IS_ACT[h.action] || h.action)} · ${esc(h.who || '-')}${h.action === 'confirm' && h.late ? ' · ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${h.lines != null ? ` · ${h.lines} รายการ` : ''}${h.note ? ' · เหตุผล: ' + esc(h.note) : ''}</div>`).join('')}
+    ${s.log.map(h => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0;color:var(--text-secondary)">${esc(_ohbIsDt(h.at))} · ${esc(_OHB_IS_ACT[h.action] || h.action)} · ${esc(whoTh(h.who))}${h.action === 'confirm' && h.late ? ' · ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${h.lines != null ? ` · ${h.lines} รายการ` : ''}${h.note ? ' · เหตุผล: ' + esc(h.note) : ''}</div>`).join('')}
     ${conf && _ohbIsCanReopen() ? `<textarea id="ohbIsReopenNote" rows="2" placeholder="เหตุผลที่เปิดแก้ไข (จำเป็น)" style="width:100%;margin-top:10px;padding:8px;font-size:13px;${field}"></textarea>
-      <div class="flex flex-wrap items-center gap-2 mt-2">${_ohbBtn('เปิดให้สาขาแก้ไข', 'ohbIsReopen()', true)}<span id="ohbIsReopenStatus" class="text-xs"></span></div>
-      <div class="text-[11px] mt-1" style="color:var(--text-muted)">ใบจะกลับเป็นฉบับร่างและไม่นับในรายงานจนกว่าสาขาจะยืนยันใหม่ · ใบที่อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว เปิดแก้ไขไม่ได้</div>`
+      <div class="flex flex-wrap items-center gap-2 mt-2">${_ohbBtn('เปิดแก้ไข', 'ohbIsReopen()', true)}<span id="ohbIsReopenStatus" class="text-xs"></span></div>
+      <div class="text-[11px] mt-1" style="color:var(--text-muted)">ใบกลับเป็นร่างจนสาขายืนยันใหม่ · งวดที่บัญชีบันทึกแล้วเปิดแก้ไขไม่ได้</div>`
       : (conf ? '<div class="text-[11px] mt-2" style="color:var(--text-muted)">ประสานงานขายเป็นผู้เปิดแก้ไขใบที่ยืนยันแล้ว</div>' : '')}`;
 }
 async function ohbIsReopen() {
   const s = _ohbIsSlip;
   if (!s) return;
   const note = (document.getElementById('ohbIsReopenNote').value || '').trim();
-  if (!note) { _bmcStatus('ohbIsReopenStatus', 'กรุณาระบุเหตุผลที่เปิดแก้ไข', 'var(--amber-ink)'); return; }
-  if (!await uiConfirm(`เปิดใบตัดเบิก ${s.branch || ''} วันที่ ${_isrDm(s.date)} ให้สาขาแก้ไข?\nใบจะกลับเป็นฉบับร่างและไม่นับในรายงานจนกว่าสาขาจะยืนยันใหม่`)) return;
+  if (!note) { _bmcStatus('ohbIsReopenStatus', 'ระบุเหตุผลที่เปิดแก้ไข', 'var(--amber-ink)'); return; }
+  if (!await uiConfirm(`เปิดใบตัดเบิก ${s.branch || ''} วันที่ ${fmtDay(s.date)} ให้สาขาแก้ไข?\nใบกลับเป็นร่างจนสาขายืนยันใหม่`, { title: 'ยืนยันการเปิดแก้ไขใบตัดเบิก', ok: 'เปิดแก้ไข', cancel: 'ไม่เปิด' })) return;
   try {
     await _bmcJson(`${API}/api/bom-center/issues/reopen`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slip_id: s.slip_id, note }) });
     await ohbIsOpen(s.slip_id);
-    _bmcStatus('ohbIsResult', '✓ เปิดแก้ไขใบตัดเบิกแล้ว สาขาแก้ไขและยืนยันใหม่ได้', 'var(--good-ink)');
+    _bmcStatus('ohbIsResult', '✓ เปิดแก้ไขแล้ว · สาขาแก้ไขและยืนยันใหม่ได้', 'var(--good-ink)');
     ohbLoadIssues();
-  } catch (e) { _bmcStatus('ohbIsReopenStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbIsReopenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 // a download that reports the server's reason (no confirmed slip in that month …) instead of opening a JSON page
 async function _ohbIsDownload(url, name, statusId) {
   statusId = statusId || 'ohbIsStatus';
-  _bmcStatus(statusId, 'กำลังจัดทำไฟล์…');
+  _bmcStatus(statusId, 'กำลังสร้างไฟล์…');
   try {
     const r = await fetch(url);
     if (!r.ok) {
@@ -783,12 +784,12 @@ async function _ohbIsDownload(url, name, statusId) {
 }
 function ohbIsXlsx() {
   const m = document.getElementById('ohbIsMonth').value, b = document.getElementById('ohbIsBranch').value;
-  if (!m) { _bmcStatus('ohbIsStatus', 'กรุณาเลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  if (!m) { _bmcStatus('ohbIsStatus', 'เลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
   _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_slips_${m}.xlsx`);
 }
 function ohbIsLogXlsx() {
   const m = document.getElementById('ohbIsMonth').value, b = document.getElementById('ohbIsBranch').value;
-  if (!m) { _bmcStatus('ohbIsStatus', 'กรุณาเลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
+  if (!m) { _bmcStatus('ohbIsStatus', 'เลือกเดือนของไฟล์ก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
   _ohbIsDownload(`${API}/api/bom-center/issue-reports/log.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_log_${m}.xlsx`);
 }
 
@@ -814,8 +815,8 @@ async function ohbLoadClaims() {
     const d = await _bmcJson(`${API}/api/bom-center/claims?status=${_ohbClaimSt}&limit=100`);
     box.innerHTML = d.claims.length ? d.claims.map(c => `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
         <a href="#" onclick="ohbClaimView(${c.claim_id});return false" style="color:var(--accent);font-weight:600">เคลม #${c.claim_id} ${esc(c.branch || '')}</a>
-        <span>ใบสั่งซื้อ #${c.order_id} · ${esc(_OHB_RND[c.round] || c.round || '')} · สั่ง ${esc(c.cycle_date || '')}</span>
-        <span>${c.lines} รายการ · ${c.photos > 0 ? c.photos + ' รูป · ' : ''}แจ้ง ${esc(String(c.created_at || '').slice(0, 10))}${c.created_by && c.created_by !== '-' ? ' โดย ' + esc(c.created_by) : ''}</span>
+        <span>ใบสั่งซื้อ #${c.order_id} · ${esc(_OHB_RND[c.round] || c.round || '')} · สั่ง ${esc(fmtDay(c.cycle_date || ''))}</span>
+        <span>${c.lines} รายการ · ${c.photos > 0 ? c.photos + ' รูป · ' : ''}แจ้ง ${esc(fmtDay(c.created_at))}${c.created_by && c.created_by !== '-' ? ' โดย ' + esc(whoTh(c.created_by)) : ''}</span>
         ${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')}
         ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}</div>`).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีเคลมในสถานะนี้</span>';
@@ -836,17 +837,17 @@ function ohbClaimRender() {
   const act = _ohbCanDecide() && c.status === 'submitted';
   const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
   document.getElementById('ohbClaimDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">เคลม #${c.claim_id} · ${esc(c.branch || '')} · ใบสั่งซื้อ #${c.order_id} · สั่ง ${esc(c.cycle_date || '')}</div>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">เคลม #${c.claim_id} · ${esc(c.branch || '')} · ใบสั่งซื้อ #${c.order_id} · สั่ง ${esc(fmtDay(c.cycle_date || ''))}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbClaimDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')} ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}
-      แจ้งโดย ${esc(c.created_by || '-')} เมื่อ ${esc(String(c.created_at || '').replace('T', ' ').slice(0, 16))}${c.note ? ' · ' + esc(c.note) : ''}
-      ${c.decided_by ? ` · พิจารณาโดย ${esc(c.decided_by)}${c.decision_note ? ': ' + esc(c.decision_note) : ''}` : ''}</div>
+      แจ้งโดย ${esc(whoTh(c.created_by))} เมื่อ ${esc(fmtAt(c.created_at))}${c.note ? ' · ' + esc(c.note) : ''}
+      ${c.decided_by ? ` · พิจารณาโดย ${esc(whoTh(c.decided_by))}${c.decision_note ? ': ' + esc(c.decision_note) : ''}` : ''}</div>
     ${c.photos.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">${c.photos.map((p, i) => `<img src="${API}/api/bom-center/claims/${c.claim_id}/photo/${p.photo_id}" alt="รูปเคลมที่ ${i + 1}" loading="lazy" onclick="brnClaimLight(this.src)" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in">`).join('')}</div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">กดที่รูปเพื่อดูภาพขยาย</div>`
       : '<div class="text-xs mt-2" style="color:var(--text-muted)">รูปถ่ายส่งทางไลน์</div>'}
     <div id="ohbClaimResult" class="text-xs mt-1"></div>
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      <th class="py-1 pr-2">สินค้า</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1 pr-2 text-right">รับแล้ว</th><th class="py-1 pr-2 text-right">สาขาเคลม</th><th class="py-1 pr-2">สาเหตุ</th><th class="py-1 text-right">${act ? 'อนุมัติ' : 'อนุมัติแล้ว'}</th></tr></thead><tbody>
+      <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1 pr-2 text-right">รับแล้ว</th><th class="py-1 pr-2 text-right">สาขาเคลม</th><th class="py-1 pr-2">สาเหตุ</th><th class="py-1 text-right">${act ? 'อนุมัติ' : 'อนุมัติแล้ว'}</th></tr></thead><tbody>
       ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
         <td class="py-1 pr-2 text-right">${_bmcNum(l.sent_units)}</td><td class="py-1 pr-2 text-right">${_bmcNum(l.received_units)}</td>
         <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.claim_units)}</b> ${esc(l.unit || '')}</td>
@@ -854,10 +855,10 @@ function ohbClaimRender() {
         <td class="py-1 text-right">${act ? `<input inputmode="decimal" id="ohbCA_${esc(l.code)}" value="${esc(String(l.claim_units))}" style="width:70px;text-align:center;padding:3px;${field}">` : (l.approved_units == null ? '—' : _bmcNum(l.approved_units))}</td></tr>`).join('')}</tbody></table></div>
     ${act ? `<textarea id="ohbClaimNote" rows="2" placeholder="หมายเหตุถึงสาขา (จำเป็นเมื่อไม่อนุมัติ)" style="width:100%;margin-top:8px;padding:8px;font-size:13px;${field}"></textarea>
       <div class="flex flex-wrap items-center gap-2 mt-2">
-        ${_ohbBtn(c.origin === 'receive' ? 'อนุมัติรับเคลม' : 'อนุมัติรับเคลมและปรับสินค้า', "ohbClaimDecide('approve')", true)}${_ohbBtn('ไม่อนุมัติ', "ohbClaimDecide('reject')")}<span id="ohbClaimStatus" class="text-xs"></span></div>
+        ${_ohbBtn('อนุมัติ', "ohbClaimDecide('approve')", true)}${_ohbBtn('ไม่อนุมัติ', "ohbClaimDecide('reject')")}<span id="ohbClaimStatus" class="text-xs"></span></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">${c.origin === 'receive'
-        ? 'เคลมนี้แจ้งขณะรับสินค้า สาขาบันทึกรับเข้าเฉพาะจำนวนที่ได้รับจริงแล้ว เมื่ออนุมัติระบบจะไม่ปรับสินค้าซ้ำ · จำนวนที่ไม่อนุมัติ ระบบจะบันทึกเป็นรับเข้าเพิ่มให้สาขา เนื่องจากถือว่าสาขาได้รับสินค้านั้นแล้ว'
-        : 'เมื่ออนุมัติ ระบบหักจำนวนที่อนุมัติออกจากสินค้าที่สาขารับ ผลต่างการใช้ของสาขาจึงไม่รวมของที่เคลมได้'}</div>`
+        ? 'แจ้งขณะรับสินค้า · อนุมัติ = รับเข้าตามจริงอยู่แล้ว · ไม่อนุมัติ = นับส่วนที่เคลมเป็นรับเข้า'
+        : 'อนุมัติ = หักออกจากรับเข้า · ไม่อนุมัติ = นับเป็นรับเข้า'}</div>`
       : (c.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">ประสานงานขายเป็นผู้พิจารณาเคลม</div>' : '')}`;
 }
 async function ohbClaimDecide(decision) {
@@ -866,23 +867,26 @@ async function ohbClaimDecide(decision) {
   const note = (document.getElementById('ohbClaimNote').value || '').trim();
   const lines = c.lines.map(l => { const el = document.getElementById('ohbCA_' + l.code);
     return { code: l.code, approved_units: el && el.value !== '' ? Number(String(el.value).replace(',', '.')) : l.claim_units }; });
-  if (decision === 'reject' && !note) { _bmcStatus('ohbClaimStatus', 'กรุณาระบุเหตุผลที่ไม่อนุมัติ เพื่อให้สาขาทราบ', 'var(--amber-ink)'); return; }
+  if (decision === 'reject' && !note) { _bmcStatus('ohbClaimStatus', 'ระบุเหตุผลที่ไม่อนุมัติ', 'var(--amber-ink)'); return; }
   const n = lines.filter(l => l.approved_units > 0).length;
   const recv = c.origin === 'receive';
   const partial = c.lines.some((l, i) => lines[i].approved_units < l.claim_units - 1e-9);
-  if (!await uiConfirm(decision === 'approve'
-      ? (recv ? `อนุมัติรับเคลม #${c.claim_id} · ${n} รายการ?\nสาขาบันทึกรับสินค้าตามจำนวนที่ได้รับจริงแล้ว ระบบจะไม่ปรับสินค้าซ้ำ`
-          + (partial ? '\nจำนวนที่ไม่อนุมัติ ระบบจะบันทึกเป็นรับเข้าเพิ่มให้สาขา' : '')
-        : `อนุมัติรับเคลม #${c.claim_id} · ${n} รายการ?\nระบบจะปรับสินค้าของสาขา${c.branch || ''} (หักออกจากสินค้าที่รับ)`)
-      : `ไม่อนุมัติเคลม #${c.claim_id}?\nสาขาจะเห็นเหตุผลที่ระบุ` + (recv ? '\nระบบจะบันทึกจำนวนที่เคลมเป็นรับเข้าเพิ่มให้สาขา เนื่องจากถือว่าสาขาได้รับสินค้านั้น' : ''))) return;
+  const ask = decision === 'approve'
+    ? (recv ? `อนุมัติเคลม #${c.claim_id} · ${n} รายการ?\nรับเข้าตามจริงอยู่แล้ว`
+        + (partial ? '\nส่วนที่ไม่อนุมัติบันทึกเป็นรับเข้า' : '')
+      : `อนุมัติเคลม #${c.claim_id} · ${n} รายการ?\nหักออกจากรับเข้าของสาขา${c.branch || ''}`)
+    : `ไม่อนุมัติเคลม #${c.claim_id}?\nสาขาจะเห็นเหตุผลที่ระบุ` + (recv ? '\nบันทึกจำนวนที่เคลมเป็นรับเข้า' : '');
+  if (!await uiConfirm(ask, decision === 'approve'
+    ? { title: 'ยืนยันการอนุมัติเคลม', ok: 'อนุมัติ', cancel: 'ยกเลิก' }
+    : { title: 'ยืนยันการไม่อนุมัติเคลม', ok: 'ไม่อนุมัติ', cancel: 'ยกเลิก' })) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/claim-act/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ claim_id: c.claim_id, decision, lines, note: note || null }) });
     await ohbClaimView(c.claim_id);
     _bmcStatus('ohbClaimResult', decision === 'approve'
-      ? '✓ อนุมัติแล้ว' + (r.adjusted ? ` · ปรับสินค้าของสาขา ${r.adjusted} รายการ (ลงวันที่ ${r.receipt_date})` : '')
+      ? '✓ อนุมัติแล้ว' + (r.adjusted ? ` · ปรับสินค้าของสาขา ${r.adjusted} รายการ (ลงวันที่ ${fmtDay(r.receipt_date)})` : '')
         + (r.restored ? ` · บันทึกส่วนที่ไม่อนุมัติเป็นรับเข้า ${r.restored} รายการ` : '')
       : '✓ บันทึกการไม่อนุมัติแล้ว' + (r.restored ? ` · บันทึกเป็นรับเข้า ${r.restored} รายการ` : ''), 'var(--good-ink)');
     ohbLoadClaims();
-  } catch (e) { _bmcStatus('ohbClaimStatus', 'ดำเนินการไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+  } catch (e) { _bmcStatus('ohbClaimStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }

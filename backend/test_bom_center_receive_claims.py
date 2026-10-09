@@ -58,7 +58,7 @@ def test_the_acknowledgement_is_required_and_stored(con):  # noqa: F811
     oid, q = _sent(con)
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q, reason=None, ack=False)
-    assert "ยืนยันว่าสาขาได้ตรวจสอบสภาพสินค้าและจำนวนครบถ้วนแล้ว" in str(e.value)
+    assert "ทำเครื่องหมายยืนยันการตรวจสินค้า" in str(e.value)
     con.rollback()
     assert OR.detail(con, oid)["status"] == "processed"               # nothing was saved
     out = _receive(con, oid, q, reason=None)
@@ -77,7 +77,7 @@ def test_a_short_receipt_needs_a_reason(con):  # noqa: F811
         con.rollback()
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q - 2, reason=None)
-    assert "กรุณาเลือกสาเหตุของส่วนต่าง" in str(e.value)
+    assert "เลือกสาเหตุของส่วนต่าง" in str(e.value)
     con.rollback()
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q - 2, reason="other")
@@ -221,7 +221,7 @@ def test_the_todo_text_points_at_line(con):  # noqa: F811
     _receive(con, oid, q - 2)
     it = {i["key"]: i for i in TD.build(con)["items"]}["claims_pending"]
     assert it["status"] == "todo" and it["count"] == 1
-    assert "รูปถ่ายที่สาขาส่งทางไลน์" in it["detail"]
+    assert "รอพิจารณา 1 เรื่อง" in it["detail"]
 
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -254,10 +254,10 @@ def _http_flow(oid):
     body = {"lines": [{"code": "T-CL1", "received_units": 3, "reason": "short", "note": None}],
             "receipt_date": "2026-10-07", "claim_note": "ส่งรูปทางไลน์แล้ว"}
     no_ack = a.post(f"/api/bom-center/order/{oid}/receive", json=body)
-    assert no_ack.status_code == 400 and "ยืนยันว่าสาขาได้ตรวจสอบ" in no_ack.json()["detail"], no_ack.text
+    assert no_ack.status_code == 400 and "ทำเครื่องหมายยืนยันการตรวจสินค้า" in no_ack.json()["detail"], no_ack.text
     no_reason = a.post(f"/api/bom-center/order/{oid}/receive",
                        json={**body, "ack": True, "lines": [{"code": "T-CL1", "received_units": 3}]})
-    assert no_reason.status_code == 400 and "กรุณาเลือกสาเหตุของส่วนต่าง" in no_reason.json()["detail"]
+    assert no_reason.status_code == 400 and "เลือกสาเหตุของส่วนต่าง" in no_reason.json()["detail"]
     assert a.get(f"/api/bom-center/order/{oid}").json()["status"] == "processed"      # both refusals saved nothing
     r = a.post(f"/api/bom-center/order/{oid}/receive", json={**body, "ack": True})
     assert r.status_code == 200, r.text
