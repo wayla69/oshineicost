@@ -2352,7 +2352,7 @@ def bc_hub_keyed(body: KeyedBody, request: Request):
     with get_db() as con:
         _ensure(con)
         out = _write(con, lambda: _hub.set_keyed(con, body.order_ids, body.keyed, _who(request)))
-    invalidate_cache()
+    invalidate_cache("bc_")
     return out
 
 

@@ -260,7 +260,7 @@ const ROLE_START = {
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'สร้างสูตรเดือนถัดไปจากแม่แบบ แล้วส่งตรวจให้ฝ่ายวิเคราะห์', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
   salessupport: [['orderhub', 'เคลมสินค้าที่สาขาแจ้ง: ดูรูป อนุมัติรับเคลมเพื่อปรับสินค้าของสาขา', 'claims'], ['orderhub', 'คิวใบสั่งซื้อจากสาขา: ดาวน์โหลด Excel คีย์เข้าระบบบัญชี แล้วทำเครื่องหมายใบที่คีย์แล้ว', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำรายรอบให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
   warehouse: [['orderhub', 'คิวใบสั่งซื้อจากสาขา: ระบุยอดส่งจริง และกดดำเนินการแล้ว', 'queue']],
-  branch: [['branchstock', 'นับยอดคงเหลือและสั่งสินค้าตามยอดแนะนำ ส่งใบสั่งซื้อก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv'], ['branchstock', 'ตรวจนับสิ้นเดือน (ต้นงวด / ปลายงวด) สำหรับปิดงวด', 'count']],
+  branch: [['branchstock', 'บันทึกใบตัดเบิกประจำวัน (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'สั่งสินค้าตามยอดแนะนำที่หักคงเหลือตามระบบแล้ว ส่งก่อนเวลาตัดรอบ 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง', 'recv']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 // An entry may name a pane of the วัตถุดิบและใบสั่งซื้อ module ([tab, why, pane]):
@@ -319,7 +319,7 @@ const MODULE_LABEL_TH = {
   'supply.ordering':'วัตถุดิบและใบสั่งซื้อ (ดำเนินการ)', 'customer.feedback':'เสียงลูกค้า',
   'bom.center':'BoM Center (ข้อมูลและสูตร)', 'bom.release':'BoM Center (ปล่อยเวอร์ชัน)', 'bom.audit':'BoM Center (รับทราบ/ย้อนกลับ)',
   'bom.prices':'BoM Center (ราคารายเดือน)', 'bom.recipes':'BoM Center (สูตร)',
-  'branch.stock':'สาขา: ตรวจนับและสั่งสินค้า',
+  'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า',
   'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
 };
 const ROLE_MODULES_TH = {
@@ -2456,7 +2456,8 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE },
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
-    { tab: 'branchstock', pane: 'order', label: 'นับและสั่ง' },
+    { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก' },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า' },
     { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า' },
     { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้' },
     { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน' }] },
@@ -2559,7 +2560,7 @@ function _updateClusterBar(name) {
 const _SUPPLY_PANE = {};     // tab → { get(), set(pane), show(pane), month?(m) }
 let _supplyChip = null;      // the level-1 chip the user is in (derived from the open pane)
 const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) whose work the role does daily
-  branch: { chip: 'branch' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
+  branch: { chip: 'branch', tab: 'branchstock', pane: 'issue' }, salessupport: { chip: 'orders' }, innovation: { chip: 'recipes' },
   warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
   operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'close', tab: 'bomcenter', pane: 'issue' },
 };
@@ -2638,10 +2639,10 @@ function supplyOpen() {
 // button is the open page. Every tap is a supplyGo deep link.
 const SUPPLY_PHONE_NAV = [
   { tab: 'supplyhome', label: 'หน้างาน', icon: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>' },
-  { tab: 'branchstock', pane: 'order', label: 'นับและสั่ง', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>' },
+  { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', icon: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><path d="M9 14l2 2 4-4"/>' },
+  { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>' },
   { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/>' },
   { tab: 'branchstock', pane: 'var', label: 'ผลต่าง', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>' },
-  { tab: 'branchstock', pane: 'count', label: 'สิ้นเดือน', icon: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="M8 11h8M8 15h5"/>' },
 ];
 function _renderSupplyNav(name) {
   const nav = document.getElementById('supplyNav');

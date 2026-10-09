@@ -10,8 +10,35 @@
     </div>
   </div>
 
-  <!-- ── นับและสั่ง (the count is part of the order: counted on hand → suggestion → order, one page) ── -->
-  <div id="brn-pane-order">
+  <!-- ── ตัดเบิก (ใบตัดเบิกประจำวัน, management 2026-10-09): used + wasted per item, confirmed once a day ── -->
+  <div id="brn-pane-issue">
+    <div class="card p-3 mb-3">
+      <div id="brnIssDays" class="flex flex-wrap gap-1"></div>
+      <div id="brnIssHead" class="text-sm mt-2"></div>
+      <div id="brnIssBanner" class="mt-2" style="display:none"></div>
+    </div>
+    <div class="card p-3 mb-3" style="position:sticky;top:0;z-index:5">
+      <div id="brnIssZones" class="flex flex-wrap gap-1"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnIssUsedOnly" onchange="brnIssRender()"> เฉพาะรายการที่กรอกแล้ว</label>
+        <input type="search" id="brnIssQ" placeholder="ค้นหา…" oninput="brnIssRender()"
+               style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
+        <span id="brnIssProgress"></span>
+      </div>
+    </div>
+    <div id="brnIssList" class="card p-3 mb-3"></div>
+    <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
+      <div id="brnIssActions" class="flex flex-wrap items-center gap-2"></div>
+      <span id="brnIssStatus" class="text-xs"></span>
+    </div>
+    <div class="card p-3 mb-3">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติใบตัดเบิก</div>
+      <div id="brnIssHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- ── สั่งสินค้า (the suggestion is net of the system stock after the issue slip; today's slip must be confirmed before sending) ── -->
+  <div id="brn-pane-order" style="display:none">
     <div class="card p-3 mb-3">
       <div id="brnOrdDeliv" class="flex flex-wrap gap-1"></div>
       <div id="brnOrdPages" class="flex flex-wrap gap-1 mt-2"></div>
@@ -40,7 +67,7 @@
   <div id="brn-pane-count" style="display:none">
     <div class="card p-3 mb-3">
       <p class="text-xs" style="color:var(--text-secondary)">
-        <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น การนับก่อนสั่งทำในหน้า “นับและสั่ง” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
+        <b>ตรวจนับสิ้นเดือน</b> — สำหรับปิดงวดเดือนเท่านั้น (ต้นงวด / ปลายงวด นับครบทุกรายการ) การเบิกใช้รายวันบันทึกในหน้า “ตัดเบิก” · ตรวจนับทีละโซนในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) กรอกตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง) ระบบแปลงเป็นหน่วยในสูตรโดยอัตโนมัติ ·
         ครั้งแรกเป็น <b>ต้นงวด</b> ครั้งต่อไปเป็น <b>ปลายงวด</b> และใช้เป็นต้นงวดของเดือนถัดไปโดยอัตโนมัติ ·
         ระบบบันทึกร่างไว้ระหว่างกรอก เมื่อครบแล้วกด “ส่งผลตรวจนับ”
       </p>
