@@ -1530,10 +1530,11 @@ def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str]
     be working on now — the nearest whose 13:15 cutoff has not passed (else the nearest)."""
     if rnd:
         _round_or_400(rnd)
+    now = _fc.now_bkk()
     if delivery:
         d = _day_or_today(delivery)
         if not rnd:                                           # the round whose calendar delivers on that day
-            rnd = next((x["round"] for x in _fc.next_deliveries(con, bid, bkk_today(), horizon_days=21)
+            rnd = next((x["round"] for x in _fc.next_deliveries(con, bid, now.date(), horizon_days=21, now=now)
                         if x["delivery"] == d.isoformat()), None)
             if not rnd:
                 raise HTTPException(400, "กรุณาระบุรอบของวันส่งนี้")
@@ -1544,7 +1545,7 @@ def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str]
         day = _day_or_today(order_day)
         rnd = rnd or _or.next_round(con, bid, day)
         return rnd, _fc.cover_period(con, bid, rnd, day)[1]
-    items = _fc.next_deliveries(con, bid, bkk_today())
+    items = _fc.next_deliveries(con, bid, now.date(), now=now)
     if rnd:
         items = [x for x in items if x["round"] == rnd]
     pick = _fc.pick_delivery(items)

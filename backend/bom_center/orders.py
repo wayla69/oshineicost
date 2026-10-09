@@ -224,8 +224,9 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
          delivery: str = None, stock_count_id: int = None, now: datetime = None) -> dict:
     """Create (from the suggestion) or update the cycle's order; optionally submit it.
 
-    The suggested quantities are frozen when the order is first created — later
-    edits change only what the branch confirms. `buffer` (PR-19, None = keep) is
+    The suggested quantities are taken from the suggestion when the order is first created and
+    follow it (the branch's count) while the order is a draft; from the moment it is submitted they
+    are frozen — later edits change only what the branch confirms. `buffer` (PR-19, None = keep) is
     the branch's expectation {pct, reason, note}: the suggestion stays the engine's
     base number, the confirmed quantities start from the buffered one, and the
     deviation rule judges against base × (1 + pct/100).
@@ -247,6 +248,17 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         con.execute("UPDATE bc_order SET delivery_date=COALESCE(?, delivery_date), cutoff_at=COALESCE(?, cutoff_at),"
                     " stock_count_id=COALESCE(?, stock_count_id) WHERE order_id=?",
                     (delivery, cut_iso, stock_count_id, oid))
+        # while the order is a draft its suggestion follows the count the branch types (the first save
+        # is often made before the shelf is counted); it is frozen from the moment of submit
+        known = {c for c, in con.execute("SELECT ingredient_code FROM bc_order_line WHERE order_id=?", (oid,))}
+        for r in suggestion.get("rows") or []:
+            base = r.get("order_units_base", r["order_units"])
+            if r["code"] in known:
+                con.execute("UPDATE bc_order_line SET suggested_units=? WHERE order_id=? AND ingredient_code=?",
+                            (base, oid, r["code"]))
+            else:
+                con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
+                            " order_unit) VALUES(?,?,?,?,?)", (oid, r["code"], base, r["order_units"], r["order_unit"]))
     else:
         basis = (suggestion.get("stock") or {}).get("basis") or {}
         bk = con.execute("SELECT kind FROM bc_stock_count WHERE count_id=?", (basis.get("count_id"),)).fetchone() \
