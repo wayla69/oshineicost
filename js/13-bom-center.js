@@ -870,7 +870,14 @@ let _bmcRecView = null;      // /api/bom-center/recipes
 let _bmcEdit = null;         // {sku, d, lines}
 const _BMC_TIERS = [459, 629, 789, 999, 1299];
 
-function _bmcEditableFor(rel) { return !!(rel && ['draft', 'review'].includes(rel.status) && _bmcCanRecipes()); }
+// a draft is the kitchen's (bom.recipes) or the analyst's; once submitted (review) only the analyst's (bom.center) — recipes.assert_editable
+function _bmcCanEditRel(rel) {
+  if (!rel) return false;
+  if (rel.status === 'draft') return _bmcCanRecipes();
+  if (rel.status === 'review') return hasModule('bom.center');
+  return false;
+}
+function _bmcEditableFor(rel) { return _bmcCanEditRel(rel); }
 function _bmcRelEditable() { return _bmcEditableFor(_bmcRel); }
 function _bmcEdRel() { return (_bmcEdit && _bmcEdit.rel) || _bmcRel; }   // the release the open editor belongs to
 
@@ -885,7 +892,7 @@ async function bmcLoadReleases(keepId) {
     if (pm && !pm.value) pm.value = (d.suggest || {}).price_month || '';
     const sel = document.getElementById('bmcRel');
     const cur = keepId || Number(sel.value) || (_bmcRels.find(r => r.kind === 'monthly') || _bmcRels[0] || {}).release_id;
-    const st = { draft: 'ฉบับร่าง', review: 'รอตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้' };
+    const st = { draft: 'ฉบับร่าง', review: 'รอฝ่ายวิเคราะห์ตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้' };
     sel.innerHTML = _bmcRels.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''}>${esc(r.label)} · ${st[r.status] || r.status}`
       + (r.kind === 'baseline' ? ' (ระบบเดิม)' : ` · มีผล ${esc(r.effective_month)} · ราคา ${esc(r.price_month || '-')}`) + `</option>`).join('')
       || '<option value="">ยังไม่มีเวอร์ชัน กรุณานำเข้าไฟล์ Cost-RW</option>';
@@ -899,6 +906,7 @@ async function bmcLoadRecipes() {
   const id = Number(document.getElementById('bmcRel').value);
   _bmcRel = _bmcRels.find(r => r.release_id === id) || null;
   document.getElementById('bmcEditor').style.display = 'none';
+  bmcRenderRecBanner();
   if (!_bmcRel) { document.getElementById('bmcRecBody').innerHTML = '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ยังไม่มีสูตร กรุณากด “นำเข้าสูตรจากไฟล์ Cost-RW”</td></tr>'; return; }
   document.getElementById('bmcRecBody').innerHTML = '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">กำลังคำนวณต้นทุน…</td></tr>';
   try {
@@ -1128,6 +1136,70 @@ async function bmcImportCostRw(input) {
   } catch (e) { _bmcStatus('bmcRecStatus', 'นำเข้าไม่สำเร็จ:' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
 }
+// what the version waits for, and the kitchen's two buttons (สร้างฉบับร่าง / ส่งตรวจ) — the banner sits first in #bmcRecReport
+function bmcRenderRecBanner() {
+  const host = document.getElementById('bmcRecReport');
+  if (!host) return;
+  let box = document.getElementById('bmcRecBanner');
+  if (!box || box.parentNode !== host) { box = document.createElement('div'); box.id = 'bmcRecBanner'; host.insertBefore(box, host.firstChild); }
+  const r = _bmcRel, sg = window._bmcRelSuggest || {};
+  const monthly = !!(r && r.kind === 'monthly');
+  const hasDraft = _bmcRels.some(x => x.kind === 'monthly' && ['draft', 'review'].includes(x.status));
+  const sb = document.getElementById('bmcSubmitBtn'), nb = document.getElementById('bmcNewDraftBtn');
+  if (sb) sb.style.display = (monthly && r.status === 'draft' && _bmcCanRecipes()) ? '' : 'none';
+  if (nb) { nb.style.display = (!hasDraft && _bmcCanRecipes()) ? '' : 'none'; nb.textContent = `สร้างฉบับร่างเดือน ${sg.effective_month || ''}`.trim(); }
+  const card = (ink, html) => `<div class="text-xs p-2 mb-2" style="border-left:3px solid ${ink};background:var(--bg-subtle);color:var(--text-primary)">${html}</div>`;
+  let html = '';
+  if (monthly && r.status === 'review') {
+    html = card('var(--amber-ink)', `<b>รอฝ่ายวิเคราะห์ตรวจ</b> · ส่งตรวจโดย ${esc(r.submitted_by || '-')} เมื่อ ${esc(String(r.submitted_at || '').slice(0, 16).replace('T', ' ') || '-')}`
+      + (hasModule('bom.center') ? '' : ' · ระหว่างการตรวจ ครัวแก้ไขสูตรไม่ได้ จนกว่าฝ่ายวิเคราะห์จะส่งกลับ'));
+  } else if (monthly && r.status === 'draft') {
+    html = card('var(--accent)', '<b>ฉบับร่าง</b> · ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์');
+  } else if (!hasDraft && _bmcCanRecipes()) {
+    html = card('var(--accent)', `ยังไม่มีฉบับร่างของเดือน ${esc(sg.effective_month || '')} · ดาวน์โหลดแม่แบบ กรอกสูตรหลายเมนูแล้วนำเข้า หรือสร้างฉบับร่างก่อน`);
+  }
+  box.innerHTML = html;
+}
+function bmcDownloadTemplate() {
+  window.open(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), '_blank');
+}
+async function bmcCreateDraft() {
+  const sg = window._bmcRelSuggest || {};
+  const eff = document.getElementById('bmcCrwEff')?.value || sg.effective_month || '';
+  const pm = document.getElementById('bmcCrwPm')?.value || sg.price_month || '';
+  if (!eff || !pm) { _bmcStatus('bmcRecStatus', 'กรุณาระบุเดือนที่มีผลและเดือนราคาในช่องข้างปุ่มก่อน', 'var(--amber-ink)'); return; }
+  if (!await uiConfirm(`ยืนยันการสร้างฉบับร่างสูตร มีผลเดือน ${eff} คิดต้นทุนด้วยราคาเดือน ${pm}`)) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/release-act/new-draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ effective_month: eff, price_month: pm }) });
+    _bmcStatus('bmcRecStatus', `✓ สร้างฉบับร่าง ${d.label}`, 'var(--good-ink)');
+    await bmcLoadReleases(d.release_id);
+  } catch (e) { _bmcStatus('bmcRecStatus', 'สร้างฉบับร่างไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+// the kitchen hands a finished draft to the analyst (from the recipes pane, or from the release pane's header)
+async function bmcSubmitReview(rel, statusId) {
+  const r = rel || _bmcRel, sid = statusId || 'bmcRecStatus';
+  if (!r) return;
+  if (!await uiConfirm(`ยืนยันการส่งฉบับร่าง “${r.label}” ให้ฝ่ายวิเคราะห์ตรวจ\nระหว่างการตรวจ ครัวจะแก้ไขสูตรไม่ได้ จนกว่าฝ่ายวิเคราะห์จะส่งกลับ`)) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/release-act/submit-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: r.release_id }) });
+    _bmcStatus(sid, '✓ ส่งตรวจแล้ว', 'var(--good-ink)');
+    if (sid === 'bmcRlStatus') await bmcLoadReleasePane(r.release_id); else await bmcLoadReleases(r.release_id);
+  } catch (e) { _bmcStatus(sid, 'ส่งตรวจไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+async function bmcSendBack() {
+  const r = _bmcRlRel;
+  if (!r) return;
+  const reason = await uiPrompt('กรุณาระบุเหตุผลที่ส่งกลับให้ครัวแก้ไข (จำเป็น)');
+  if (!reason) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/release-act/send-back`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ release_id: r.release_id, note: reason }) });
+    _bmcStatus('bmcRlStatus', '✓ ส่งกลับให้แก้ไขแล้ว', 'var(--good-ink)');
+    bmcLoadReleasePane(r.release_id);
+  } catch (e) { _bmcStatus('bmcRlStatus', 'ส่งกลับไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
 function bmcExportRecipes() {
   if (!_bmcRel) return;
   window.open(`${API}/api/bom-center/recipes-export.xlsx?release_id=${_bmcRel.release_id}`, '_blank');
@@ -1152,7 +1224,7 @@ async function bmcImportFlat(input) {
 // comparison and acknowledges, or rolls back (bom.audit). Releasing does not yet
 // change report COGS — that is the S4 cut-over; the page says so.
 let _bmcRlRel = null;
-const _BMC_STATUS_TH = { draft: 'ฉบับร่าง', review: 'รอตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้/ย้อนกลับ' };
+const _BMC_STATUS_TH = { draft: 'ฉบับร่าง', review: 'รอฝ่ายวิเคราะห์ตรวจ', released: 'ปล่อยแล้ว', retired: 'เลิกใช้/ย้อนกลับ' };
 
 async function bmcLoadReleasePane(keepId) {
   try {
@@ -1177,11 +1249,13 @@ async function bmcLoadRelease() {
 }
 function bmcRenderRelHead(checks) {
   const r = _bmcRlRel;
-  const can = m => hasModule(m) || (m === 'bom.center' && hasModule('bom.edit'));   // release and accept: bom.release only (auth.py)
+  const can = m => hasModule(m);                       // the server's rule (auth.py): release, accept and send back = bom.release
   const btn = (label, fn, primary, title) => `<button onclick="${fn}" title="${esc(title || '')}" style="font-size:12.5px;${primary
     ? 'background:var(--accent);color:var(--on-accent);border:0' : 'background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control)'};border-radius:var(--r-sm);padding:5px 14px;cursor:pointer">${label}</button>`;
   const acts = [];
   if (['draft', 'review'].includes(r.status)) {
+    if (r.status === 'draft' && _bmcCanRecipes()) acts.push(btn('ส่งตรวจ', "bmcSubmitReview(_bmcRlRel, 'bmcRlStatus')", false, 'ส่งฉบับร่างนี้ให้ฝ่ายวิเคราะห์ตรวจ'));
+    if (r.status === 'review' && can('bom.release')) acts.push(btn('ส่งกลับแก้ไข', 'bmcSendBack()', false, 'ส่งกลับให้ครัวแก้ไขพร้อมเหตุผล'));
     if (can('bom.center') || can('bom.release')) acts.push(btn('บันทึกผลตรวจ', 'bmcRunChecks()', false, 'ผลตรวจคำนวณใหม่ทุกครั้งที่เปิดหน้า ปุ่มนี้บันทึกผลชุดนี้ไว้ในระบบ (หน้างานอ่านสถานะจากที่บันทึก)'));
     if (can('bom.release')) acts.push(btn('ปล่อยเวอร์ชันนี้', 'bmcDoRelease()', !!(checks && checks.can_release),
       checks && !checks.can_release ? 'ยังมีข้อที่ต้องแก้ไข' : 'analyst ปล่อยสูตร และ management รับทราบภายหลัง'));
@@ -1203,9 +1277,11 @@ function bmcRenderRelHead(checks) {
             : ' · <span style="color:var(--amber-ink)">รอ management รับทราบ</span>') : ''}</div></div>
       <div class="ml-auto flex flex-wrap gap-2">${acts.join('')}</div>
     </div>
+    ${r.status === 'review' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ฝ่ายวิเคราะห์ตรวจด่าน 12 ข้อ แก้ไขหรือยอมรับข้อที่ติด แล้วปล่อยเวอร์ชัน หรือส่งกลับให้ครัวแก้ไข</div>` : ''}
+    ${r.status === 'draft' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ”</div>` : ''}
     ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหาร (management) อ่านผลกระทบด้านล่าง แล้วกด “รับทราบ” — เปิดได้จากหน้างาน</div>` : ''}
     <div class="text-[11px] mt-3 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-muted)">
-      ลำดับงาน: (1) ผลตรวจ 12 ข้อแสดงทันทีเมื่อเปิดหน้า (2) แก้ไขข้อที่ต้องแก้ได้ในหน้านี้ (“เปิดสูตร”) หรือยืนยันข้อที่ยอมรับได้ทีละรายการหรือทั้งกลุ่มพร้อมเหตุผล (3) ปล่อยสูตรภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล (4) management อ่านผลกระทบด้านล่าง แล้วรับทราบหรือย้อนกลับ ·
+      ลำดับงาน: (0) ครัวสร้างสูตรและส่งตรวจ (1) ผลตรวจ 12 ข้อแสดงทันทีเมื่อเปิดหน้า (2) แก้ไขข้อที่ต้องแก้ได้ในหน้านี้ (“เปิดสูตร”) หรือยืนยันข้อที่ยอมรับได้ทีละรายการหรือทั้งกลุ่มพร้อมเหตุผล (3) ปล่อยสูตรภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล (4) management อ่านผลกระทบด้านล่าง แล้วรับทราบหรือย้อนกลับ ·
       เมื่อปล่อยแล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลจะเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อน ก.ย. 2569 ใช้ต้นทุนระบบเดิมเสมอ)</div>`;
 }
 async function bmcLoadChecks() {
