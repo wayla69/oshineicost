@@ -5,7 +5,7 @@
        The strip holds the module's shared month and branch (supplyCtx, 01-core.js). -->
   <div id="shmCtxBar" class="card p-3 mb-3 flex flex-wrap items-center gap-3" style="position:sticky;top:0;z-index:5">
     <span class="text-sm font-semibold" style="color:var(--text-primary)">หน้างาน</span>
-    <label class="text-xs" style="color:var(--text-muted)">งวดเดือน
+    <label class="text-xs" style="color:var(--text-muted)">เดือน
       <input type="month" id="shmMonth" onchange="shmCtxChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
     </label>
     <label class="text-xs" id="shmBranchWrap" style="color:var(--text-muted)">สาขา
@@ -21,7 +21,7 @@
         <div class="section-title mb-0">งานของฉัน</div>
         <span id="shmMineCount" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-[11px] mt-1 mb-1" style="color:var(--text-muted)">งานของวันนี้และของงวดนี้ที่บทบาทของคุณรับผิดชอบ กด “ไปที่งาน” เพื่อเปิดหน้านั้นโดยเลือกเดือนและสาขาให้แล้ว</p>
+      <p class="text-[11px] mt-1 mb-1" style="color:var(--text-muted)">งานวันนี้และงวดนี้ของคุณ · กด “ไปที่งาน”</p>
       <div id="shmMine"></div>
     </div>
     <div class="card p-4" id="shmCloseCard">
@@ -29,7 +29,7 @@
         <div class="section-title mb-0">ปิดงวดเดือน <span id="shmCloseMonth"></span></div>
         <span id="shmCloseCount" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-[11px] mt-1 mb-1" style="color:var(--text-muted)">ลำดับขั้นตอนของการปิดงวดย้อนหลัง สถานะอ่านจากข้อมูลจริงในระบบ</p>
+      <p class="text-[11px] mt-1 mb-1" style="color:var(--text-muted)">ขั้นตอนปิดงวดของเดือนที่เลือก</p>
       <div id="shmClose"></div>
     </div>
   </div>

@@ -7,8 +7,8 @@
 
 let _shmData = null;
 let _shmToastAt = 0;
-const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอดำเนินการ', 'var(--amber-ink)'],
-                  blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงานวันนี้', 'var(--text-muted)'] };
+const _SHM_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
+                  blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงาน', 'var(--text-muted)'] };
 // the status line each save writes → the to-do item it completes (shmAfterStatus)
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
   bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
@@ -22,8 +22,8 @@ _SUPPLY_PANE.supplyhome = { get: () => null, set: () => {}, show: () => loadSupp
 
 // "mine" by role (owner_th names the department), not by module: management holds every
 // module and would otherwise own every branch's count; a role without a word falls back to modules
-const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['Sales Support', 'ฝ่ายขาย'], analyst: ['ฝ่ายวิเคราะห์'],
-  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['Ops'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'] };
+const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['ประสานงานขาย'], analyst: ['ฝ่ายวิเคราะห์'],
+  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'] };
 function _shmMine(it) {
   const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
   const words = role && _SHM_ROLE_OWNERS[role];
@@ -60,7 +60,7 @@ async function loadSupplyHome() {
     }
   }
   supplyCtxSet({ month: d.month, branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
-  document.getElementById('shmNote').textContent = `วันนี้ ${d.today} · เวอร์ชันสูตรงวดถัดไป ${d.release.effective_month} · ${d.release.in_force}`;
+  document.getElementById('shmNote').textContent = `วันนี้ ${fmtDay(d.today)} · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}`;
   _shmRender(d);
   _bmcStatus('shmStatus', '');
 }
@@ -77,13 +77,13 @@ function _shmRender(d) {
   const sortf = (a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (order[a.status] - order[b.status]) || (a.seq - b.seq);
   mine.sort(sortf); others.sort(sortf);
   const open = mine.filter(it => it.status === 'todo' || it.status === 'blocked').length;
-  document.getElementById('shmMineCount').textContent = mine.length ? `รอดำเนินการ ${open} จาก ${mine.length}` : '';
+  document.getElementById('shmMineCount').textContent = mine.length ? `รอทำ ${open} จาก ${mine.length}` : '';
   document.getElementById('shmMine').innerHTML = mine.length ? mine.map(it => _shmCard(it)).join('')
-    : '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานที่บทบาทของคุณต้องทำในขณะนี้</div>';
-  document.getElementById('shmOthersCount').textContent = others.length ? `(${others.filter(it => it.status === 'todo' || it.status === 'blocked').length} รอดำเนินการ จาก ${others.length})` : '(ไม่มี)';
+    : '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานค้าง</div>';
+  document.getElementById('shmOthersCount').textContent = others.length ? `(${others.filter(it => it.status === 'todo' || it.status === 'blocked').length} รอทำ จาก ${others.length})` : '(ไม่มี)';
   document.getElementById('shmOthersBody').innerHTML = others.map(it => _shmCard(it)).join('');
   const c = d.close || { steps: [] };
-  document.getElementById('shmCloseMonth').textContent = c.month || '';
+  document.getElementById('shmCloseMonth').textContent = fmtMonthTh(c.month || '');
   document.getElementById('shmCloseCount').textContent = c.steps.length ? `เสร็จ ${c.done} จาก ${c.total} ขั้นตอน` : '';
   document.getElementById('shmClose').innerHTML = c.steps.map(s => _shmCard(s, s.seq)).join('');
 }

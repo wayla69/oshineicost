@@ -134,12 +134,12 @@ async function loadOrderPlan(force) {
   // say so, otherwise "28 วัน" looks like it undercounted
   const partial = (m.branch && m.trading_days && m.trading_days < m.days)
     ? ` · ⓘ ${m.branch} เปิดขายจริง ${m.trading_days}/${m.days} วัน (เฉลี่ยจากวันที่ขายจริง)` : '';
-  if (st) st.textContent = `อ้างอิงยอดขายจริง ${m.date_from} ถึง ${m.date_to} (${m.days} วัน) · `
+  if (st) st.textContent = `อ้างอิงยอดขายจริง ${fmtDay(m.date_from)} ถึง ${fmtDay(m.date_to)} (${m.days} วัน) · `
     + `ฐาน ${m.basis === 'recent' ? '7 วันล่าสุด' : 'เฉลี่ยทั้งช่วง'} · เผื่อ ${m.buffer_pct}%` + partial;
-  document.getElementById('opScopeNote').textContent = `· ${brLabel} · ${m.date_from} → ${m.date_to}`;
+  document.getElementById('opScopeNote').textContent = `· ${brLabel} · ${fmtDay(m.date_from)} → ${fmtDay(m.date_to)}`;
 
   document.getElementById('opKpis').innerHTML = [
-    { l:'รายการวัตถุดิบ', v:fmtN(t.ingredients||0), s:'ที่มีสูตร BoM รองรับ', c:'#0f766e' },
+    { l:'รายการวัตถุดิบ', v:fmtN(t.ingredients||0), s:'ที่มีสูตรรองรับ', c:'#0f766e' },
     { l:'มูลค่าสั่ง/สัปดาห์', v:'฿'+fmt(t.value_week||0), s:brLabel, c:'#0891b2' },
     { l:'มูลค่าสั่ง/เดือน',  v:'฿'+fmt(t.value_month||0), s:'รวมเผื่อ '+(m.buffer_pct||0)+'%', c:'#7a66b8' },
     { l:'ครอบคลุมสูตร',     v:(cov.pct!=null?cov.pct+'%':'—'), s:'ของจำนวนจานที่ขาย', c:(cov.pct>=70?'#10b981':'#f59e0b') },
@@ -149,7 +149,7 @@ async function loadOrderPlan(force) {
   const miss = cov.top_missing || [];
   document.getElementById('opCoverage').innerHTML = miss.length
     ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
-        <b>เมนูที่ยังไม่มีสูตร BoM จึงไม่อยู่ในแผนสั่งนี้</b> (${cov.pct}% ของจานที่ขายมีสูตรแล้ว) —
+        <b>เมนูที่ยังไม่มีสูตรไม่อยู่ในแผนสั่งนี้</b> (${cov.pct}% ของจานที่ขายมีสูตรแล้ว) —
         ${miss.slice(0,5).map(x => `${esc(x.name || x.code)} (${fmtN(x.qty)} จาน)`).join(' · ')}
        </div>` : '';
 
@@ -208,7 +208,7 @@ async function loadOrderPlan(force) {
     return `<tr class="border-b" style="border-color:var(--border);${central ? '' : 'opacity:.55'}">
       <td class="py-1.5 pr-2 text-center"><input type="checkbox" ${central ? 'checked' : ''}
           onchange="opSetSourcing('${jsAttr(r.code)}', this.checked)"
-          title="${central ? 'แนะนำให้สั่งผ่านส่วนกลาง' : 'สาขาซื้อเอง — ไม่อยู่ในจดหมาย'}"></td>
+          title="${central ? 'แนะนำให้สั่งจากไดกิโตะ' : 'สาขาซื้อเอง — ไม่อยู่ในจดหมาย'}"></td>
       <td class="py-1.5 pr-2" style="font-family:monospace;font-size:10.5px;color:var(--text-muted)">${esc(r.code)}</td>
       <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}${opForcedBadge(r)}${r.no_usage ? ' <span style="font-size:10px;padding:1px 6px;border-radius:999px;background:var(--bg-subtle);color:var(--text-muted);white-space:nowrap">ไม่มีการใช้ในช่วงนี้</span>' : ''}${
         (r.forced_name && r.forced_name !== r.name) ? `<div style="font-size:10px;color:var(--text-muted)">ใบคลัง: ${esc(r.forced_name)}${r.forced_as ? ` (${esc(r.forced_as)})` : ''}</div>` : ''}</td>
@@ -297,7 +297,7 @@ function opExportXlsx() {
 }
 
 
-// Toggle one ingredient between 'สั่งส่วนกลาง' and 'สาขาซื้อเอง'. With a branch
+// Toggle one ingredient between 'สั่งจากไดกิโตะ' and 'สาขาซื้อเอง'. With a branch
 // selected the change applies to that branch only (posting mode for that branch);
 // with "ทุกสาขา" it sets the chain-wide default.
 async function opSetSourcing(code, central) {
@@ -314,7 +314,7 @@ async function opSetSourcing(code, central) {
     });
     if (!r.ok) throw new Error(await r.text());
     await loadOrderPlan(true);          // reload first — it rewrites opStatus
-    if (st) st.textContent = (central ? '✓ ตั้งเป็น "สั่งส่วนกลาง"' : '✓ ตั้งเป็น "สาขาซื้อเอง"')
+    if (st) st.textContent = (central ? '✓ ตั้งเป็น "สั่งจากไดกิโตะ"' : '✓ ตั้งเป็น "สาขาซื้อเอง"')
       + ` · ${code}` + (branch ? ` (เฉพาะ ${branch})` : ' (ทุกสาขา)');
   } catch (e) {
     if (st) st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e).slice(0, 120);
@@ -325,13 +325,13 @@ async function opSetSourcing(code, central) {
 
 // ── forced-order list (บังคับสั่ง) ────────────────────────────────────────
 // backend/data/forced_order_*.csv = the central warehouse's own sheet. A listed
-// ingredient defaults to "สั่งส่วนกลาง" (monitored), everything else to "สาขาซื้อเอง";
+// ingredient defaults to "สั่งจากไดกิโตะ" (monitored), everything else to "สาขาซื้อเอง";
 // the tick box still overrides either way. The badge says WHY a row is ticked,
 // and the note names the listed items no recipe uses - those cannot be monitored.
 function opForcedBadge(r) {
   if (!r.forced) return '';
   const imp = r.forced_group === 'import';
-  const tip = (imp ? 'ซื้อต่างประเทศ — ส่วนกลางสั่งล็อตใหญ่ สาขาต้องสั่งจากส่วนกลาง' : 'รายการบังคับสั่งจากส่วนกลาง')
+  const tip = (imp ? 'ซื้อต่างประเทศ — ส่วนกลางสั่งล็อตใหญ่ สาขาต้องสั่งจากไดกิโตะ' : 'รายการบังคับสั่งจากไดกิโตะ')
     + (r.forced_name ? ` · ในใบคลัง: ${r.forced_name}` : '') + (r.forced_as ? ` (รหัส ${r.forced_as})` : '');
   return ` <span title="${esc(tip)}" style="font-size:10px;padding:1px 6px;border-radius:999px;white-space:nowrap;${imp
     ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' : 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'}">บังคับสั่ง${imp ? ' · ตปท.' : ''}</span>`;
@@ -346,15 +346,15 @@ async function opLoadForcedNote(meta) {
   try { d = await api(`${API}/api/ingredients/forced-order`); } catch(e) { el.innerHTML = ''; return; }
   const sm = d.summary || {}, miss = (d.items || []).filter(i => !i.in_recipes);
   el.innerHTML = `<div class="card p-3 text-xs mb-3" style="background:#f0fdfa;border:1px solid #0f766e;color:#134e4a">
-    <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลังส่วนกลาง —
-    ติ๊ก “สั่งส่วนกลาง” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
+    <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลัง —
+    ติ๊ก “สั่งจากไดกิโตะ” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
     · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
     ${miss.length ? `<div class="mt-1" style="color:var(--amber-ink)">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
     <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
 }
 
 // ── bulk sourcing ───────────────────────────────────────────────────────────
-// All 256 ingredients default to 'สั่งส่วนกลาง', so "monitor only the main
+// All 256 ingredients default to 'สั่งจากไดกิโตะ', so "monitor only the main
 // ones" meant unticking some 200 boxes one at a time. These set many at once.
 //
 // Family mode is refused throughout: rolling up by name blanks `code`, and the
@@ -427,7 +427,7 @@ function opBulkSourcing(central) {
   const rows = _opBulkGuard();
   if (!rows) return;
   const branch = document.getElementById('opBranch')?.value || '';
-  const word = central ? 'สั่งส่วนกลาง (ติดตาม)' : 'สาขาซื้อเอง (ไม่ติดตาม)';
+  const word = central ? 'สั่งจากไดกิโตะ (ติดตาม)' : 'สาขาซื้อเอง (ไม่ติดตาม)';
   const scope = branch ? 'เฉพาะสาขา ' + branch : 'ทุกสาขา';
   if (!confirm('ตั้ง ' + rows.length + ' วัตถุดิบที่แสดงอยู่ เป็น “' + word + '”\n'
              + 'ขอบเขต: ' + scope + '\n\nยืนยันหรือไม่?')) return;
@@ -594,8 +594,8 @@ async function osLoadCalendar() {
   document.getElementById('osCalBody').innerHTML = (d.rows || []).map(r => `
     <tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2 font-semibold">${esc(r.name)}</td>
-      <td class="py-1.5 pr-2">${esc(r.date_from)}</td>
-      <td class="py-1.5 pr-2">${esc(r.date_to)}</td>
+      <td class="py-1.5 pr-2">${esc(fmtDay(r.date_from))}</td>
+      <td class="py-1.5 pr-2">${esc(fmtDay(r.date_to))}</td>
       <td class="py-1.5 pr-2">${esc(r.branch || 'ทุกสาขา')}</td>
       <td class="py-1.5 pr-2 text-right">${r.factor ? '×' + r.factor : '<span style="color:var(--text-muted)">คิดจากปีก่อน</span>'}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(r.note || '')}</td>
@@ -677,7 +677,7 @@ async function opLoadCycles() {
       : `<span style="color:var(--bad-ink);font-weight:600">⚠ ต้องแจ้งเตือน</span>`;
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:var(--teal-ink);font-weight:600">${esc(r.branch)}</a></td>
-      <td class="py-1.5 pr-2">${esc(r.period_start)} → ${esc(r.period_end)}</td>
+      <td class="py-1.5 pr-2">${esc(fmtDay(r.period_start))} → ${esc(fmtDay(r.period_end))}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(String(r.issued_at || '').slice(0, 16))}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(c.lines)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:${c.not_ordered ? 'var(--bad-ink)' : 'var(--text-muted)'}">${fmtN(c.not_ordered)}</td>
@@ -702,7 +702,7 @@ async function opOpenCycle(issueId) {
   el.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
       <h3 class="text-sm font-bold" style="color:var(--text-primary)">
-        ${esc(i.branch)} · รอบ ${esc(i.period_start)} → ${esc(i.period_end)}</h3>
+        ${esc(i.branch)} · รอบ ${esc(fmtDay(i.period_start))} → ${esc(fmtDay(i.period_end))}</h3>
       <div class="flex items-center gap-2">
         <span class="text-xs" style="color:var(--text-muted)">
           ไม่ได้สั่ง ${fmtN(s.not_ordered)} · ต่ำกว่าแผน ${fmtN(s.under)} · ครบ ${fmtN(s.ok)}</span>
@@ -989,7 +989,7 @@ async function loadIngPurchase(force) {
   const fEl = document.getElementById('ipFrom'), tEl = document.getElementById('ipTo');
   if (fEl && !fEl.value) fEl.value = m.date_from;
   if (tEl && !tEl.value) tEl.value = m.date_to;
-  if (st) st.textContent = `สัปดาห์ ${m.week_from} → ${m.week_to} · ${m.branch || 'ทุกสาขา'} · `
+  if (st) st.textContent = `สัปดาห์ ${fmtDay(m.week_from)} → ${fmtDay(m.week_to)} · ${m.branch || 'ทุกสาขา'} · `
     + `นำเข้าแล้ว ${fmtN(m.imported_weeks || 0)} ช่อง · ยังไม่นำเข้า ${fmtN(m.missing_weeks || 0)} ช่อง`;
 
   const pctCol = v => v == null ? '#94a3b8' : v >= 40 ? '#dc2626' : v >= 33 ? '#f59e0b' : '#059669';
@@ -1007,7 +1007,7 @@ async function loadIngPurchase(force) {
     ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
         <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> — สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ
         จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด:
-        ${gaps.slice(0, 6).map(g => `${esc(g.branch)} ${esc(g.week_start)}`).join(' · ')}${gaps.length > 6 ? ' …' : ''}
+        ${gaps.slice(0, 6).map(g => `${esc(g.branch)} ${esc(fmtDay(g.week_start))}`).join(' · ')}${gaps.length > 6 ? ' …' : ''}
        </div>` : '';
 
   // ── per-branch summary ──
@@ -1024,12 +1024,12 @@ async function loadIngPurchase(force) {
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(b.weeks)}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:${b.weeks_missing ? 'var(--amber-ink)' : 'var(--text-muted)'}">${fmtN(b.weeks_missing)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีข้อมูล — โหลด template แล้วนำเข้ายอดซื้อ</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีข้อมูล — ดาวน์โหลดแม่แบบ แล้วนำเข้ายอดซื้อ</td></tr>';
 
   // ── week × branch, with the amount editable in place ──
   document.getElementById('ipWeekBody').innerHTML = (d.rows || []).map(r => `
     <tr class="border-b" style="border-color:var(--border)">
-      <td class="py-1.5 pr-2 tabular-nums">${esc(r.week_start)}</td>
+      <td class="py-1.5 pr-2 tabular-nums">${esc(fmtDay(r.week_start))}</td>
       <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2 text-right" data-sort="${r.amount == null ? '' : r.amount}">
         <input type="number" step="0.01" min="0" value="${r.amount == null ? '' : r.amount}"
@@ -1124,13 +1124,13 @@ function _ipRenderCharts(d) {
   // ── D: heatmap — the only honest way to show 28 branches × N weeks at once ──
   if (heat) {
     if (empty) {
-      heat.innerHTML = `<p class="text-sm py-6 text-center" style="color:var(--text-muted)">ยังไม่มียอดซื้อที่นำเข้าในช่วงนี้ — กด <b>โหลด template</b> กรอกยอดซื้อรายสัปดาห์ แล้ว <b>นำเข้าไฟล์</b> กราฟและแผนที่ความร้อนจะขึ้นทันที</p>`;
+      heat.innerHTML = `<p class="text-sm py-6 text-center" style="color:var(--text-muted)">ยังไม่มียอดซื้อที่นำเข้าในช่วงนี้ — กด <b>ดาวน์โหลดแม่แบบ</b> กรอกยอดซื้อรายสัปดาห์ แล้ว <b>นำเข้าไฟล์</b> กราฟและแผนที่ความร้อนจะขึ้นทันที</p>`;
     } else {
       const at = {}; rows.forEach(r => { at[r.branch + '|' + r.week_start] = r; });
       const order = (d.branches || []).slice().sort((x, y) => (y.pct ?? -1) - (x.pct ?? -1));
       const cell = r => (!r || r.amount == null)
         ? `<td class="text-center" style="background:var(--bg-subtle);color:var(--text-muted);font-size:10px">—</td>`
-        : `<td class="text-center tabular-nums" style="background:${PCT_BG(r.pct)};color:#0f172a;font-weight:${r.pct >= 40 ? 700 : 500}" title="${esc(r.branch)} ${esc(r.week_start)} · ซื้อ ฿${fmtN(r.amount)} / ขาย ฿${fmtN(r.revenue)}">${r.pct == null ? '—' : r.pct.toFixed(0)}</td>`;
+        : `<td class="text-center tabular-nums" style="background:${PCT_BG(r.pct)};color:#0f172a;font-weight:${r.pct >= 40 ? 700 : 500}" title="${esc(r.branch)} ${esc(fmtDay(r.week_start))} · ซื้อ ฿${fmtN(r.amount)} / ขาย ฿${fmtN(r.revenue)}">${r.pct == null ? '—' : r.pct.toFixed(0)}</td>`;
       heat.innerHTML = `<table class="text-[11px]" style="border-collapse:separate;border-spacing:2px;min-width:100%"><thead><tr style="color:var(--text-muted)">
           <th class="text-left pr-2" style="position:sticky;left:0;background:var(--bg-card)">สาขา</th>${weeks.map(w => `<th class="text-center px-1 font-normal">${wkLbl(w)}</th>`).join('')}<th class="text-center pl-2">ทั้งช่วง</th></tr></thead><tbody>${
         order.map(b => `<tr><td class="text-left pr-2 font-medium whitespace-nowrap" style="position:sticky;left:0;background:var(--bg-card)">${esc(b.branch)}</td>${

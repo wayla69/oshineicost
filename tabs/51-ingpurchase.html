@@ -9,7 +9,7 @@
         <p class="text-xs text-slate-600 mt-1">
           <b>ยอดซื้อวัตถุดิบ</b> นำเข้าจากระบบจัดซื้อเป็นไฟล์ Excel (สาขา + สัปดาห์ + ยอดรวม) ·
           <b>ยอดขาย</b> เป็นตัวเลขของระบบนี้เอง → ได้ <b>% ยอดซื้อต่อยอดขาย</b> ของแต่ละสาขา
-          <br><b style="color:var(--amber-ink)">⚠ คนละตัวกับ Food cost (BoM)</b> — BoM คือ “ตามสูตรควรใช้เท่าไร”, หน้านี้คือ “<b>ซื้อเข้าจริงเท่าไร</b>”
+          <br><b style="color:var(--amber-ink)">คนละตัวกับ % ต้นทุนอาหาร</b> — ตามสูตร คือ “ควรใช้เท่าไร”, หน้านี้คือ “<b>ซื้อเข้าจริงเท่าไร</b>”
           การซื้อมาก่อนขาย (ตุนของ/รอบส่งของ) ทำให้รายสัปดาห์แกว่งได้มาก จึงควรอ่านคู่กับค่าเฉลี่ยรวมช่วง
         </p>
       </div>
@@ -26,10 +26,10 @@
     <input type="date" id="ipTo" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
 
     <span class="ml-auto flex flex-wrap items-center gap-2">
-      <label class="text-xs" style="color:var(--text-muted)">จำนวนสัปดาห์ใน template</label>
+      <label class="text-xs" style="color:var(--text-muted)">จำนวนสัปดาห์ในแม่แบบ</label>
       <input type="number" id="ipWeeks" value="8" min="1" max="52" style="width:56px;border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <button onclick="ipTemplate()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer"
-              title="ไฟล์มีสาขา × สัปดาห์ พร้อมยอดขายของสัปดาห์นั้นไว้ให้ตรวจทาน — กรอกแค่ช่องยอดซื้อ">โหลด template</button>
+              title="ไฟล์มีสาขา × สัปดาห์ พร้อมยอดขายของสัปดาห์นั้นไว้ให้ตรวจทาน — กรอกแค่ช่องยอดซื้อ">ดาวน์โหลดแม่แบบ</button>
       <label style="background:#0f766e;color:#fff;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">
         นำเข้าไฟล์
         <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="ipImport(this)">
