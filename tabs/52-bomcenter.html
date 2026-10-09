@@ -40,12 +40,16 @@
         <input type="month" id="bmcCrwEff" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนของราคาซื้อจริงที่ใช้คิดต้นทุน (ระบบเสนองวดล่าสุดที่บัญชีปิดแล้ว)">ราคาเดือน
         <input type="month" id="bmcCrwPm" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <button onclick="bmcDownloadTemplate()" title="ไฟล์เปล่าที่ใส่สูตรหลายเมนูได้ในไฟล์เดียว พร้อมรายการรหัส POS รหัสวัตถุดิบ และวิธีใช้"
+              style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดแม่แบบสูตร (หลายเมนูในไฟล์เดียว)</button>
       <button onclick="bmcExportRecipes()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ดาวน์โหลดสูตรเป็น Excel (1 sheet ต่อ Tier)</button>
       <label style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
-             title="ใช้ไฟล์ที่ดาวน์โหลดจากปุ่มก่อนหน้า แก้ไขใน Excel แล้วนำเข้ากลับ สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร">
-        นำเข้า Excel ที่แก้แล้ว
+             title="ใช้แม่แบบที่กรอกแล้ว หรือไฟล์ที่ดาวน์โหลดจากปุ่มก่อนหน้าแล้วแก้ไขใน Excel สูตรของเมนูที่อยู่ในไฟล์จะถูกแทนที่ทั้งสูตร">
+        นำเข้าแม่แบบ / Excel ที่แก้แล้ว
         <input type="file" accept=".xlsx" style="display:none" onchange="bmcImportFlat(this)">
       </label>
+      <button id="bmcNewDraftBtn" onclick="bmcCreateDraft()" style="display:none;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">สร้างฉบับร่าง</button>
+      <button id="bmcSubmitBtn" onclick="bmcSubmitReview()" style="display:none;background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ส่งตรวจ</button>
       <span id="bmcRecStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcRecReport" class="mb-3"></div>

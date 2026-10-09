@@ -428,6 +428,33 @@ def retire(con, release_id: int, who: str, reason: str):
     audit(con, who, "retire", "bc_release", str(release_id), "released", reason)
 
 
+def submit_review(con, release_id: int, who: str):
+    """The kitchen hands a finished monthly draft to the analyst: status review."""
+    rel = release_row(con, release_id)
+    if not rel or rel["kind"] != "monthly" or rel["status"] != "draft":
+        raise ValueError(f"ส่งตรวจได้เฉพาะฉบับร่าง (สถานะปัจจุบัน: {rel['status'] if rel else 'ไม่พบ'})")
+    n = con.execute("SELECT COUNT(*) FROM bc_recipe WHERE release_id=?", (release_id,)).fetchone()[0]
+    if not n:
+        raise ValueError("ฉบับร่างยังไม่มีสูตร กรุณานำเข้าหรือสร้างสูตรก่อนส่งตรวจ")
+    con.execute("UPDATE bc_release SET status='review', submitted_by=?, submitted_at=? WHERE release_id=?",
+                (who, now(), release_id))
+    audit(con, who, "release_submit_review", "bc_release", str(release_id), "draft",
+          json.dumps({"recipes": n}, ensure_ascii=False))
+
+
+def send_back(con, release_id: int, reason: str, who: str):
+    """The analyst returns a release in review to the kitchen, with the reason."""
+    rel = release_row(con, release_id)
+    if not rel or rel["kind"] != "monthly" or rel["status"] != "review":
+        raise ValueError("ส่งกลับได้เฉพาะเวอร์ชันที่รอตรวจ")
+    if not (reason or "").strip():
+        raise ValueError("ต้องระบุเหตุผลที่ส่งกลับ")
+    con.execute("UPDATE bc_release SET status='draft', submitted_by=NULL, submitted_at=NULL,"
+                " notes=COALESCE(notes,'') || ? WHERE release_id=?",
+                (f" · ส่งกลับแก้ไขโดย {who}: {reason.strip()}", release_id))
+    audit(con, who, "release_send_back", "bc_release", str(release_id), "review", reason.strip())
+
+
 def new_draft_from(con, src_id: int, label: str, effective_month: str, price_month: str, who: str) -> int:
     """Next month's draft: every recipe of `src_id` copied, priced at a new month."""
     src = release_row(con, src_id)

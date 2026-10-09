@@ -50,6 +50,19 @@ def _who(request: Request) -> str:
         return "-"
 
 
+def _modules(request: Request) -> set:
+    """The live module set of the signed-in user — same answer main.enforce_auth gives. Every module when auth is off."""
+    if not _auth.auth_enabled():
+        return set(_auth.MODULES)
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}
+    try:
+        with get_db() as con:
+            row = _auth.get_user(con, payload.get("u", ""))
+    except Exception:
+        row = None
+    return _auth.modules_for_role(row["role"]) if row and row["active"] else set()
+
+
 def _month_or_400(m: Optional[str]) -> str:
     if not m or not _MONTH.match(m):
         raise HTTPException(400, "เดือนต้องอยู่ในรูปแบบ YYYY-MM")
@@ -678,7 +691,8 @@ def bc_releases():
                            " created_at, released_by, released_at, acknowledged_by, acknowledged_at,"
                            " (SELECT COUNT(*) FROM bc_recipe r WHERE r.release_id=b.release_id),"
                            " (SELECT COUNT(*) FROM bc_release_check c WHERE c.release_id=b.release_id"
-                           "   AND c.check_code='unmatched')"
+                           "   AND c.check_code='unmatched'),"
+                           " submitted_by, submitted_at, notes"
                            " FROM bc_release b ORDER BY (kind='baseline'), effective_month DESC, release_id DESC").fetchall()
         priced = [r[0] for r in con.execute("SELECT DISTINCT month FROM bc_ingredient_price ORDER BY month DESC")]
         # costs follow ACTUAL purchase prices (owner decision): suggest the latest month the accounts
@@ -686,10 +700,12 @@ def bc_releases():
         actual = con.execute("SELECT MAX(month) FROM bc_ingredient_price"
                              " WHERE source IN ('purchase_avg','manual')").fetchone()[0]
     cols = ("release_id", "label", "kind", "effective_month", "status", "scope", "price_month", "created_by",
-            "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched")
+            "created_at", "released_by", "released_at", "acknowledged_by", "acknowledged_at", "recipes", "unmatched",
+            "submitted_by", "submitted_at", "notes")
     rels = [dict(zip(cols, r)) for r in rows]
     for r in rels:               # what the version waits for (หน้างาน and the pane read it)
-        r["next_step"] = ("release" if r["kind"] == "monthly" and r["status"] in ("draft", "review")
+        r["next_step"] = ("submit" if r["kind"] == "monthly" and r["status"] == "draft"
+                          else "release" if r["kind"] == "monthly" and r["status"] == "review"
                           else "acknowledge" if r["status"] == "released" and not r["acknowledged_at"] else None)
     return {"releases": rels, "price_months": priced,
             "suggest": {"effective_month": _next_month(_this_month()),
@@ -715,6 +731,16 @@ def bc_recipes_export(release_id: int = Query(...)):
         wb = _r.export_flat(con, release_id)
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", rel["label"])
     return _xlsx(wb, f"BOM_RECIPES_{safe}.xlsx")
+
+
+# declared before /recipes/{sku_code}: "template.xlsx" would otherwise be read as a SKU code
+@router.get("/api/bom-center/recipes/template.xlsx")
+def bc_recipes_template(release_id: Optional[int] = Query(None)):
+    """The blank multi-menu recipe template for the kitchen (many menus in one file)."""
+    with get_db() as con:
+        _ensure(con)
+        wb = _r.template_flat(con, release_id)
+    return _xlsx(wb, "BOM_RECIPES_TEMPLATE.xlsx")
 
 
 @router.get("/api/bom-center/buffet-skus")
@@ -777,9 +803,11 @@ def _write(con, fn):
 
 @router.put("/api/bom-center/recipes/{sku_code}", dependencies=[Depends(require_write_token)])
 def bc_recipe_save(sku_code: str, lines: List[RecipeLine], request: Request, release_id: int = Query(...)):
+    mods = _modules(request)
     with get_db() as con:
         _ensure(con)
-        _write(con, lambda: _r.save_lines(con, release_id, sku_code, [ln.dict() for ln in lines], _who(request)))
+        _write(con, lambda: _r.save_lines(con, release_id, sku_code, [ln.dict() for ln in lines], _who(request),
+                                          modules=mods))
         out = _r.cost_recipe(con, release_id, sku_code)
     invalidate_cache("bc_")
     return {"ok": True, "total": out["total"], "problems": out["problems"]}
@@ -804,6 +832,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
     if not parsed["blocks"]:
         raise HTTPException(400, "ไม่พบ sheet สูตรบุฟเฟ่ต์ (BF_<tier>NET…) ในไฟล์นี้")
     who = _who(request)
+    mods = _modules(request)
     with get_db() as con:
         _ensure(con)
         pm = price_month
@@ -815,7 +844,7 @@ async def bc_recipes_import_cost_rw(request: Request, file: UploadFile = File(..
         _month_or_400(pm)
         lbl = label or f"{eff} บุฟเฟ่ต์ (draft)"
         try:
-            rid = _r.get_or_create_draft(con, lbl, eff, pm, who)
+            rid = _r.get_or_create_draft(con, lbl, eff, pm, who, modules=mods)
             stats = _r.import_cost_rw(con, parsed, rid, who)
             view = _r.tier_view(con, rid)
             if dry_run:
@@ -845,10 +874,11 @@ class MapBody(BaseModel):
 
 @router.post("/api/bom-center/recipes/map", dependencies=[Depends(require_write_token)])
 def bc_recipes_map(body: MapBody, request: Request):
+    mods = _modules(request)
     with get_db() as con:
         _ensure(con)
         out = _write(con, lambda: _r.apply_mapping(con, body.release_id, body.ref, body.sku_code.strip(),
-                                                    _who(request)))
+                                                    _who(request), modules=mods))
     invalidate_cache("bc_")
     return {"ok": True, **out}
 
@@ -857,10 +887,11 @@ def bc_recipes_map(body: MapBody, request: Request):
 async def bc_recipes_import_flat(request: Request, file: UploadFile = File(...), release_id: int = Query(...),
                                  dry_run: bool = Query(True)):
     raw = await file.read()
+    mods = _modules(request)
     with get_db() as con:
         _ensure(con)
         try:
-            out = _r.import_flat(con, raw, release_id, _who(request))
+            out = _r.import_flat(con, raw, release_id, _who(request), modules=mods)
             if dry_run:
                 con.rollback()
             else:
@@ -999,7 +1030,7 @@ def bc_release_retire(body: NoteBody, request: Request):
 
 
 class NewDraftBody(BaseModel):
-    from_release_id: int
+    from_release_id: Optional[int] = None        # None = a fresh draft (the kitchen builds it from the template)
     effective_month: str
     price_month: str
     label: Optional[str] = None
@@ -1010,11 +1041,47 @@ def bc_release_new_draft(body: NewDraftBody, request: Request):
     _month_or_400(body.effective_month)
     _month_or_400(body.price_month)
     label = body.label or f"{body.effective_month} บุฟเฟ่ต์ (draft)"
+    mods = _modules(request)
+    who = _who(request)
+
+    def go():
+        if body.from_release_id is not None:
+            return _rl.new_draft_from(con, body.from_release_id, label, body.effective_month, body.price_month, who)
+        existed = con.execute("SELECT 1 FROM bc_release WHERE label=?", (label,)).fetchone()
+        rid = _r.get_or_create_draft(con, label, body.effective_month, body.price_month, who, modules=mods)
+        if not existed:
+            _m.audit(con, who, "new_draft", "bc_release", str(rid), None, body.effective_month)
+        return rid
+
     with get_db() as con:
         _ensure(con)
-        rid = _write(con, lambda: _rl.new_draft_from(con, body.from_release_id, label, body.effective_month,
-                                                      body.price_month, _who(request)))
+        rid = _write(con, go)
+    invalidate_cache("bc_")
     return {"ok": True, "release_id": rid, "label": label}
+
+
+class ReleaseIdBody(BaseModel):
+    release_id: int
+
+
+@router.post("/api/bom-center/release-act/submit-review", dependencies=[Depends(require_write_token)])
+def bc_release_submit_review(body: ReleaseIdBody, request: Request):
+    """The kitchen hands a finished draft to the analyst."""
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _rl.submit_review(con, body.release_id, _who(request)))
+    invalidate_cache("bc_")
+    return {"ok": True}
+
+
+@router.post("/api/bom-center/release-act/send-back", dependencies=[Depends(require_write_token)])
+def bc_release_send_back(body: NoteBody, request: Request):
+    """The analyst returns a release in review to the kitchen, with the reason."""
+    with get_db() as con:
+        _ensure(con)
+        _write(con, lambda: _rl.send_back(con, body.release_id, body.note or "", _who(request)))
+    invalidate_cache("bc_")
+    return {"ok": True}
 
 
 @router.get("/api/bom-center/release-history")

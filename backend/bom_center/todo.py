@@ -125,15 +125,26 @@ def _month_items(con, month: str, today: date) -> list:
                   (f"ราคาซื้อจริง {n:,} รหัส" + (f" · นำเข้าล่าสุด {str(last[0])[:16].replace('T', ' ')} โดย {last[1]}" if last else ""))
                   if n else "จากรายงานจ่ายสินค้าภายในของฝ่ายบัญชี",
                   owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ (ไฟล์ราคาจากบัญชี)", go={"tab": "bomcenter", "pane": "price", "month": month}))
-    dr = con.execute("SELECT release_id, label, effective_month, status, price_month FROM bc_release WHERE kind='monthly'"
+    dr = con.execute("SELECT release_id, label, effective_month, status, price_month, submitted_by, submitted_at"
+                     " FROM bc_release WHERE kind='monthly'"
                      " AND status IN ('draft','review') ORDER BY release_id DESC LIMIT 1").fetchone()
     released_eff = _scalar(con, "SELECT release_id FROM bc_release WHERE kind='monthly' AND status='released'"
                                 " AND effective_month=?", (eff,))
     if dr:
-        rid, label, deff, _st, pm = dr
-        out.append(_e("draft", 110, "month", f"ฉบับร่าง {label}", "done",
-                      f"มีผลเดือน {deff} · คิดต้นทุนด้วยราคาเดือน {pm or '-'}",
-                      owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rel", "extra": {"release_id": rid}}))
+        rid, label, deff, rstatus, pm, sub_by, sub_at = dr
+        n_rec = _scalar(con, "SELECT COUNT(*) FROM bc_recipe WHERE release_id=?", (rid,)) or 0
+        kitchen = dict(owner=("bom.recipes",), owner_th="ครัว (นวัตกรรม)",
+                       go={"tab": "bomcenter", "pane": "rec", "extra": {"release_id": rid}})
+        if rstatus == "review":
+            out.append(_e("draft", 110, "month", f"สร้างสูตรเดือน {deff} และส่งตรวจ", "done",
+                          f"ส่งตรวจแล้ว {str(sub_at or '')[:16].replace('T', ' ')} โดย {sub_by or '-'}", **kitchen))
+            out.append(_e("review_pending", 115, "month", f"สูตรรอตรวจ: {label}", "todo",
+                          f"มีผลเดือน {deff} · ตรวจด่าน แก้ไข หรือส่งกลับให้ครัว",
+                          owner=("bom.release",), owner_th="ฝ่ายวิเคราะห์",
+                          go={"tab": "bomcenter", "pane": "rel", "extra": {"release_id": rid}}))
+        else:
+            out.append(_e("draft", 110, "month", f"สร้างสูตรเดือน {deff} และส่งตรวจ", "todo",
+                          f"ฉบับร่าง {label} · {n_rec} สูตร · เมื่อครบแล้วกด “ส่งตรวจ”", **kitchen))
         unm = _scalar(con, "SELECT COUNT(*) FROM bc_release_check WHERE release_id=? AND check_code='unmatched'", (rid,)) or 0
         out.append(_e("unmatched_pos", 120, "month", "จับคู่เมนูในสูตรกับรหัส POS", "done" if not unm else "todo",
                       f"ยังไม่จับคู่ {unm} เมนู" if unm else "จับคู่ครบแล้ว", count=unm or None,
@@ -168,9 +179,9 @@ def _month_items(con, month: str, today: date) -> list:
         out.append(_e("draft", 110, "month", f"เวอร์ชันสูตรเดือน {eff}", "done", "ปล่อยแล้ว",
                       owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rel"}))
     else:
-        out.append(_e("draft", 110, "month", f"สร้างฉบับร่างสูตรเดือน {eff}", "todo",
-                      "นำเข้าจากไฟล์ Cost-RW หรือสร้างจากเวอร์ชันที่ปล่อยแล้ว",
-                      owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rec"}))
+        out.append(_e("draft", 110, "month", f"สร้างสูตรเดือน {eff} และส่งตรวจ", "todo",
+                      "ดาวน์โหลดแม่แบบ กรอกสูตรหลายเมนูในไฟล์เดียวแล้วนำเข้า หรือสร้างฉบับร่างจากเวอร์ชันที่ปล่อยแล้ว",
+                      owner=("bom.recipes",), owner_th="ครัว (นวัตกรรม)", go={"tab": "bomcenter", "pane": "rec"}))
     ack = con.execute("SELECT release_id, label, released_by FROM bc_release WHERE kind='monthly' AND status='released'"
                       " AND acknowledged_at IS NULL ORDER BY release_id DESC LIMIT 1").fetchone()
     any_rel = _scalar(con, "SELECT COUNT(*) FROM bc_release WHERE kind='monthly' AND status='released'") or 0
