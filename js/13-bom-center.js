@@ -597,7 +597,7 @@ async function bmcPriceCommit() {
       (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ (บรรทัดที่ติดกฎจะคิดราคาได้ในการบันทึกนี้)` : '') +
       (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (ตรวจหน่วยฐานภายหลัง)` : '') +
       (pre.counts.flag ? `\nราคาเปลี่ยน ≥25% ${pre.counts.flag} รายการ · ตรวจในตารางก่อน` : '') +
-      (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : ''), { title: 'ยืนยันการบันทึกราคา', ok: 'บันทึกราคา', cancel: 'ยกเลิก' })) {
+      (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : ''), { title: 'ยืนยันการนำเข้าราคา', ok: 'บันทึกราคา', cancel: 'ยกเลิก' })) {
     _bmcStatus('bmcPriceStatus', 'ยังไม่บันทึก'); return;
   }
   try {

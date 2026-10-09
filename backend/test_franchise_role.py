@@ -126,6 +126,32 @@ def test_login_reports_the_role_the_module_and_the_branch(world):
     assert me["role"] == "franchise" and me["branch"] == "BranchB" and me["modules"] == ["franchise.view"]
 
 
+def test_auth_me_names_hold_no_other_branch_or_franchise_login(world):
+    """A pinned session gets its own login and the centre people's names only; a centre session gets all of them."""
+    r = world["mg"].post("/api/auth/users", headers={"X-Upload-Token": TOKEN},
+                         json={"username": "br_names_x", "password": "Temp@12345", "role": "branch", "branch": "BranchA"})
+    assert r.status_code in (200, 409), r.text
+    try:
+        pinned_logins = {"own_t_a", "own_t_b", "br_names_x", "branch1", "branch2"}
+        # a franchise login
+        names = world["b"].get("/api/auth/me").json()["names"]
+        assert "own_t_b" in names and not (pinned_logins - {"own_t_b"}) & set(names)
+        assert "salessupport1" in names and "analyst1" in names          # the centre names its screens show
+        # a branch login
+        names = _login("br_names_x", "Temp@12345").get("/api/auth/me").json()["names"]
+        assert "br_names_x" in names and not (pinned_logins - {"br_names_x"}) & set(names)
+        assert "warehouse1" in names
+        # a centre login keeps the full map
+        names = _login("salessupport1").get("/api/auth/me").json()["names"]
+        assert {"own_t_a", "own_t_b", "br_names_x", "branch1"} <= set(names)
+    finally:
+        import main
+        c = sqlite3.connect(str(main.DB_PATH))
+        c.execute("DELETE FROM app_user WHERE username='br_names_x'")
+        c.commit()
+        c.close()
+
+
 def test_the_api_refuses_a_franchise_account_without_a_branch(world):
     r = world["mg"].post("/api/auth/users", headers={"X-Upload-Token": TOKEN},
                          json={"username": "own_t_x", "password": "Temp@12345", "role": "franchise"})

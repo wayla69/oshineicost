@@ -184,7 +184,7 @@ def auth_me(request: Request):
     if not row or not row["active"]:
         return {"enabled": True, "authenticated": False, "modules": []}
     with get_db() as con:
-        names = _auth.names_map(con)
+        names = _auth.names_map(con, row["username"], row["role"])
     return {"enabled": True, "authenticated": True,
             "username": row["username"], "role": row["role"],
             "display_name": _auth.display_name_of(row), "role_th": _auth.ROLE_TH.get(row["role"], row["role"]),

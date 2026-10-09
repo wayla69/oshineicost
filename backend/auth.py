@@ -720,13 +720,20 @@ def display_name_for(con: sqlite3.Connection, username: str) -> Optional[str]:
     return display_name_of(row) if row else None
 
 
-def names_map(con: sqlite3.Connection) -> Dict[str, str]:
-    """{username: display name} for every account — the audit lines of the screens read names, not logins."""
+def names_map(con: sqlite3.Connection, viewer_login: Optional[str] = None,
+              viewer_role: Optional[str] = None) -> Dict[str, str]:
+    """{username: display name} — the audit lines of the screens read names, not logins.
+
+    A pinned session (branch / franchise) gets only its own login plus the centre accounts whose names its
+    screens show; it never receives another branch's or franchise's login (a login name is half a credential).
+    A centre role (and a call with no viewer) gets the full map."""
     try:
         rows = con.execute("SELECT * FROM app_user").fetchall()
     except sqlite3.OperationalError:
         return {}
-    return {r["username"]: display_name_of(r) for r in rows}
+    pinned = viewer_role in PINNED_ROLES
+    return {r["username"]: display_name_of(r) for r in rows
+            if not pinned or r["username"] == viewer_login or r["role"] not in PINNED_ROLES}
 
 
 def branch_exists(con: sqlite3.Connection, name: str) -> bool:
