@@ -329,6 +329,8 @@ def ensure(con, commit: bool = False) -> None:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    from .issues import widen_log       # PR-M7: bc_issue_log.action gained 'append' (rebuilt once on a DB that has the old CHECK)
+    widen_log(con)
     from .orders import backfill        # PR-A: delivery weekday / delivery date of rows saved before it (idempotent)
     backfill(con)
     if commit:

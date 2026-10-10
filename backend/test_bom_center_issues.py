@@ -615,3 +615,184 @@ def test_the_http_flow_sheet_save_status_list_detail_reopen(client, monkeypatch)
         assert [x["action"] for x in d["log"]] == ["create", "confirm", "reopen", "save", "reconfirm"]
     finally:
         _restore(main.DB_PATH, snap)
+
+
+# ── 13 · PR-M7 — เบิกเพิ่ม (append to the slip of today) and the wider log ──────────────────────────────────────────
+def _todays_slip(con, qty=1000):  # noqa: F811
+    """build_stock, then today's (5 Oct) slip confirmed at 09:00 with `qty` g of crab stick."""
+    build_stock(con)
+    out = slip(con, "2026-10-05", [used(qty=qty)], now=at(5, 9))
+    con.commit()
+    return out
+
+
+def test_append_adds_to_the_line_inserts_new_ones_and_logs_it(con):  # noqa: F811
+    s = _todays_slip(con)
+    assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 11700                          # 12700 - 1000
+    out = IS.append(con, 1, "2026-10-05", [used(qty=500), {"code": SALMON, "qty_used": 250, "qty_waste": 100, "unit": "กรัม",
+                                                           "waste_reason": "expired"}, used("V-007", 0)], "udon", now=at(5, 15))
+    con.commit()
+    assert out["added"] == 2 and out["status"] == "confirmed" and out["late"] == 0 and out["appends"] == 1 and out["lines"] == 2
+    d = IS.detail(con, s["slip_id"])
+    assert d["status_key"] == "confirmed" and d["confirm_count"] == 1 and d["late"] == 0       # still confirmed, nothing re-counted
+    lines = {x["code"]: x for x in d["lines"]}
+    assert lines[CRAB]["qty_used"] == 1500 and lines[CRAB]["qty_used_base"] == 1500
+    assert lines[SALMON]["qty_used"] == 250 and lines[SALMON]["qty_waste"] == 100 and lines[SALMON]["waste_reason"] == "expired"
+    assert [x["action"] for x in d["log"]] == ["create", "confirm", "append"] and d["appends"] == 1
+    assert d["log"][2]["lines"] == 2 and d["log"][2]["who"] == "udon" and "เบิกใช้ 2 รายการ" in d["log"][2]["note"]
+    assert "ของเสีย 1 รายการ" in d["log"][2]["note"]
+    assert con.execute("SELECT COUNT(*) FROM bc_audit WHERE action='issue_append'").fetchone()[0] == 1
+    # a second append adds again; the waste of a line that already has some keeps the first reason and notes the second
+    IS.append(con, 1, "2026-10-05", [{"code": SALMON, "qty_waste": 50, "unit": "กรัม", "waste_reason": "spill"}], "udon", now=at(5, 16))
+    con.commit()
+    again = {x["code"]: x for x in IS.detail(con, s["slip_id"])["lines"]}[SALMON]
+    assert again["qty_waste"] == 150 and again["waste_reason"] == "expired" and "หก / ตก / แตก" in (again["note"] or "")
+    # status, listing and the sheet expose the count
+    assert IS.status_of(con, 1, "2026-10-05")["appends"] == 2
+    assert [x["appends"] for x in IS.listing(con, 1, "2026-10-05", "2026-10-05")] == [2]
+    assert IS.status_days(con, 1, date(2026, 10, 4), date(2026, 10, 5))[1]["appends"] == 2
+    sh = IS.sheet(con, 1, "2026-10-05", now=at(5, 17))
+    assert sh["can_append"] is True and sh["editable"] is False and sh["status"]["appends"] == 2
+    assert IS.sheet(con, 1, "2026-10-03", now=at(5, 17))["can_append"] is False
+    # the system stock follows (it reads the confirmed lines)
+    assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 11200
+
+
+@pytest.mark.parametrize("day, lines, now, msg", [
+    ("2026-10-03", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # a confirmed slip of yesterday's
+    ("2026-10-06", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # no slip
+    ("2026-10-05", [], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
+    ("2026-10-05", [used(qty=0)], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม"}], at(5, 15), f"{CRAB}: เลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม", "waste_reason": "other"}], at(5, 15), f"{CRAB}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
+    ("2026-10-05", [used(qty=-1)], at(5, 15), f"{CRAB}: จำนวนต้องไม่ติดลบ"),
+    ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], at(5, 15), "แปลงหน่วยไม่ได้"),
+    ("2026-10-05", [used(qty=1)], at(6, 0, 30), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),        # after midnight it is yesterday's slip
+])
+def test_append_refusals_change_nothing(con, day, lines, now, msg):  # noqa: F811
+    _todays_slip(con)
+    before = con.execute("SELECT COUNT(*), SUM(qty_used) FROM bc_issue_line").fetchone()
+    with pytest.raises(ValueError, match=msg):
+        IS.append(con, 1, day, lines, "udon", now=now)
+    con.rollback()
+    assert con.execute("SELECT COUNT(*), SUM(qty_used) FROM bc_issue_line").fetchone() == before
+    assert con.execute("SELECT COUNT(*) FROM bc_issue_log WHERE action='append'").fetchone()[0] == 0
+
+
+def test_append_is_refused_on_a_draft_and_on_a_reopened_slip(con):  # noqa: F811
+    build_stock(con)
+    slip(con, "2026-10-05", [used()], submit=False, now=at(5, 9))                           # today's draft
+    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"):
+        IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 10))
+    s = IS.save(con, 1, "2026-10-05", [], "udon", submit=True, now=at(5, 11))
+    IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 12))                    # confirmed: accepted
+    IS.reopen(con, s["slip_id"], "ss", "แก้ไข", now=at(5, 13))
+    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"):
+        IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 14))                # a draft again: the branch edits it itself
+
+
+def test_append_is_refused_inside_a_period_accounting_has_posted(con):  # noqa: F811
+    """A period is [begin count, end count): today's slip sits in a posted one when the end count lies after today."""
+    ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-10-01", require_all=False)
+    con.commit()
+    s = slip(con, "2026-10-05", [used()], now=at(5, 9))
+    end = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, status, created_at)"
+                      " VALUES(1, '2026-10-20', 'end', 'udon', 'submitted', '2026-10-20T01:00:00+00:00')").lastrowid
+    con.execute("INSERT INTO bc_variance_period(end_count_id, branch_id, receipts_confirmed_by, receipts_confirmed_at,"
+                " accounting_posted_at, accounting_posted_by) VALUES(?, 1, 'udon', '2026-10-20', '2026-10-21', 'accounting1')", (end,))
+    con.commit()
+    with pytest.raises(ValueError, match="อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
+        IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 15))
+    assert IS.detail(con, s["slip_id"])["lines"][0]["qty_used"] == 1000
+
+
+def test_the_sheet_carries_the_waste_reason_of_the_previous_slip(con):  # noqa: F811
+    build_stock(con)                                         # 3 Oct: CRAB wasted 700 g, reason spill
+    crab = next(i for z in IS.sheet(con, 1, "2026-10-05", now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)
+    assert crab["prev_waste"] == pytest.approx(0.7) and crab["prev_waste_reason"] == "spill" and crab["prev_note"] is None
+    other = next(i for z in IS.sheet(con, 1, "2026-10-05", now=NOW)["zones"] for i in z["items"] if i["code"] != CRAB)
+    assert other["prev_waste_reason"] is None
+    slip(con, "2026-10-04", [{"code": CRAB, "qty_waste": 100, "unit": "กรัม", "waste_reason": "other", "note": "ตกพื้น"}])
+    c4 = next(i for z in IS.sheet(con, 1, "2026-10-05", now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)
+    assert c4["prev_waste_reason"] == "other" and c4["prev_note"] == "ตกพื้น"
+
+
+OLD_LOG_DDL = """CREATE TABLE bc_issue_log(
+         log_id INTEGER PRIMARY KEY AUTOINCREMENT, slip_id INTEGER NOT NULL, branch_id INTEGER NOT NULL,
+         slip_date TEXT NOT NULL, at TEXT NOT NULL, who TEXT,
+         action TEXT NOT NULL CHECK(action IN ('create','save','confirm','reconfirm','reopen')),
+         late INTEGER NOT NULL DEFAULT 0, lines INTEGER, note TEXT)"""
+
+
+def test_ensure_rebuilds_an_old_issue_log_keeping_its_rows_and_is_idempotent():
+    from bom_center import schema as SC
+    c = sqlite3.connect(":memory:")
+    c.execute(OLD_LOG_DDL)
+    c.execute("CREATE INDEX ix_bc_issue_log_branch ON bc_issue_log(branch_id, slip_date)")
+    rows = [(1, 7, 1, "2026-10-01", "2026-10-01T02:00:00+00:00", "udon", "create", 0, 3, None),
+            (2, 7, 1, "2026-10-01", "2026-10-01T03:00:00+00:00", "udon", "confirm", 0, 3, None),
+            (5, 7, 1, "2026-10-01", "2026-10-02T03:00:00+00:00", "ss", "reopen", 1, 3, "แก้ไข")]
+    c.executemany("INSERT INTO bc_issue_log VALUES(?,?,?,?,?,?,?,?,?,?)", rows)
+    c.commit()
+    with pytest.raises(sqlite3.IntegrityError):                                # the old list refuses 'append'
+        c.execute("INSERT INTO bc_issue_log(slip_id, branch_id, slip_date, at, action) VALUES(7,1,'2026-10-01','x','append')")
+    c.rollback()
+    SC.ensure(c, commit=True)
+    assert "'append'" in c.execute("SELECT sql FROM sqlite_master WHERE name='bc_issue_log'").fetchone()[0]
+    assert c.execute("SELECT * FROM bc_issue_log ORDER BY log_id").fetchall() == rows
+    assert c.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name='ix_bc_issue_log_branch'").fetchone()
+    assert not c.execute("SELECT 1 FROM sqlite_master WHERE name='bc_issue_log_new'").fetchone()
+    c.execute("INSERT INTO bc_issue_log(slip_id, branch_id, slip_date, at, action) VALUES(7,1,'2026-10-01','x','append')")
+    assert c.execute("SELECT MAX(log_id) FROM bc_issue_log").fetchone()[0] == 6                # the sequence carries on after the copied ids
+    c.commit()
+    SC.ensure(c, commit=True)                                                  # a second run changes nothing
+    assert c.execute("SELECT COUNT(*) FROM bc_issue_log").fetchone()[0] == 4
+    assert IS.widen_log(c) is False
+
+
+def test_the_http_append_flow_and_the_branch_pin(client, monkeypatch):
+    import main
+    from routers import bom_center as RB
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "t")
+    hdr = {"X-Upload-Token": "t"}
+    monkeypatch.setattr(IS, "now_bkk", lambda: at(5, 20))
+    monkeypatch.setattr(RB, "bkk_today", lambda: date(2026, 10, 5))
+    client.get("/api/bom-center/hub/queue")
+    snap = _rows(main.DB_PATH)
+    c = sqlite3.connect(str(main.DB_PATH))
+    bid = c.execute("SELECT branch_id FROM branches WHERE name<>'ALL' ORDER BY branch_id LIMIT 1").fetchone()[0]
+    c_name = c.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()[0]
+    other = c.execute("SELECT branch_id FROM branches WHERE name<>'ALL' AND branch_id<>? ORDER BY branch_id LIMIT 1", (bid,)).fetchone()
+    c.execute("INSERT OR REPLACE INTO bc_ingredient(code, name_th, kind, base_unit, recv_unit, qty_per_recv, supplier, active)"
+              " VALUES('X-1', 'ของ ก', 'raw', 'กรัม', 'แพ็ค', 1000, 'ผู้จำหน่าย ก', 1)")
+    c.commit()
+    c.close()
+    try:
+        body = {"date": "2026-10-05", "lines": [{"code": "X-1", "qty_used": 5, "unit": "กรัม"}], "submit": True}
+        ap = {"date": "2026-10-05", "lines": [{"code": "X-1", "qty_used": 3, "unit": "กรัม"}]}
+        url = f"/api/bom-center/issues/append?branch_id={bid}"
+        assert client.post(url, json=ap).status_code in (401, 403)                         # the token gate
+        no = client.post(url, headers=hdr, json=ap)                                         # nothing confirmed yet
+        assert no.status_code == 400 and "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว" in no.json()["detail"]
+        assert client.post(f"/api/bom-center/issues/save?branch_id={bid}", headers=hdr, json=body).status_code == 200
+        ok = client.post(url, headers=hdr, json=ap)
+        assert ok.status_code == 200 and ok.json()["added"] == 1 and ok.json()["appends"] == 1 and ok.json()["status"] == "confirmed", ok.text
+        sid = ok.json()["slip_id"]
+        d = client.get(f"/api/bom-center/issues/{sid}").json()
+        assert d["lines"][0]["qty_used"] == 8 and d["appends"] == 1 and [x["action"] for x in d["log"]] == ["create", "confirm", "append"]
+        assert client.post(url, headers=hdr, json=dict(ap, date="2026-10-04")).status_code == 400      # a day that is not today
+        # a branch login is pinned to its own branch: another branch's id is refused with 403
+        monkeypatch.setattr(RB._auth, "scope_branch", lambda request: c_name)
+        if other:
+            assert client.post(f"/api/bom-center/issues/append?branch_id={other[0]}", headers=hdr, json=ap).status_code == 403
+        assert client.post(url, headers=hdr, json=ap).status_code == 200                    # its own branch passes
+        assert client.post("/api/bom-center/issues/append", headers=hdr, json=ap).status_code == 200      # no id: the pinned branch
+    finally:
+        _restore(main.DB_PATH, snap)
+
+
+def test_who_may_append():
+    R = auth.ROLE_MODULES
+    can = lambda role: auth.path_allowed("POST", "/api/bom-center/issues/append", R[role])  # noqa: E731
+    assert can("branch") and can("salessupport") and can("analyst")                  # the roles that write a slip
+    assert not can("operation") and not can("accounting") and not can("warehouse")
