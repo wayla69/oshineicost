@@ -18,7 +18,8 @@
   table.long { page-break-inside: auto; }
   thead { display: table-header-group; }
   h2, h3 { page-break-inside: avoid; }
-  h2 + p, h3 + p, h2 + table, h3 + table, h3 + div { page-break-before: avoid; }
+  h2 + p, h3 + p, h2 + table, h3 + table, h3 + div, h2 + ul, h3 + ul, h2 + ol, h3 + ol, h2 + h3 { page-break-before: avoid; }
+  ul, ol { page-break-inside: avoid; }
   @page land { size: A4 landscape; margin: 14mm 14mm 16mm 14mm; }
   .landscape { page: land; page-break-before: always; page-break-after: always; }
   .landscape svg { width: 100%; height: auto; display: block; }
