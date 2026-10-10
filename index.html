@@ -1637,6 +1637,8 @@ select.supply-month { min-width: 150px; }
 .brn-big-btn { display: none; flex: 0 0 auto; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 999px; padding: 2px 10px; font-size: 12px; line-height: 1.4; cursor: pointer; white-space: nowrap; }
 .brn-big-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 body.supply-phone .brn-big-btn { display: inline-flex; align-items: center; }
+body.supply-phone #brnOrdQuick { margin-bottom: 8px; }
+body.supply-phone #brnOrdQuick > span { display: none; }       /* on the phone the button alone: the page is already long */
 body.supply-phone #tab-branchstock > .brn-cluster .brn-big-btn { min-height: 26px; }
 /* ตัวอักษรใหญ่: the text the branch reads grows to x1.15 (rem-based text through html, the fixed-size row text below); the 44 px boxes and the
    sticky row keep their size, so a screen still shows the same rows' worth of work */
