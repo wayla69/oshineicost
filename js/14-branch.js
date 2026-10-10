@@ -1517,8 +1517,11 @@ function brnRenderOrder() {
         style="flex:1 1 120px;min-width:0;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)"></div>`;
   };
   const html = rows.map(r => {
-    const base = line[r.code] ? line[r.code].suggested_units : (r.order_units_base ?? r.order_units);
-    const sugg = line[r.code] ? (up === 1 ? base : Math.round(base * up)) : r.order_units;
+    // a draft follows the live plan (the system stock moves with every confirmed slip; the save refreshes the
+    // stored suggestion the same way) — only a submitted order keeps the suggestion it was sent with
+    const frozen = line[r.code] && !editable;
+    const base = frozen ? line[r.code].suggested_units : (r.order_units_base ?? r.order_units);
+    const sugg = frozen ? (up === 1 ? base : Math.round(base * up)) : r.order_units;
     const v = _brnOrdQty[r.code] ?? '';
     const dev = _brnOrdNeedsReason(sugg, v);
     // where the suggestion comes from, in the unit the branch counts in (the engine works in grams / base units)
