@@ -663,12 +663,12 @@ function _renderPermMatrix(canEdit) {
   // Group modules for readability
   const MOD_GROUP = {
     'sales.overview':'ยอดขาย', 'customer.buffet':'ลูกค้า', 'menu.analysis':'เมนู',
-    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้สูตร (ระบบเดิม)',
-    'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
-    'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
-    'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
-    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
-    'branch.stock':'สาขา: ตรวจนับ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร',
+    'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลอง', 'bom.edit':'แก้สูตร (ระบบเดิม)',
+    'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ', 'ops.discounts':'ส่วนลด',
+    'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'รายละเอียด POS',
+    'report.export':'ส่งออกรายงาน', 'system.settings':'ตั้งค่า', 'system.admin':'ผู้ดูแลระบบ',
+    'data.upload':'อัปโหลดข้อมูล', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
+    'branch.stock':'สาขา: ตัดเบิก ตรวจนับ สั่งสินค้า', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
@@ -680,7 +680,7 @@ function _renderPermMatrix(canEdit) {
     const roleMods = new Set(permissions[role] || []);
     const cells = modules.map(m => {
       const checked = roleMods.has(m);
-      const dis = (role === 'management' && m === 'system.admin') ? ' title="management เสมอ"' : '';
+      const dis = (role === 'management' && m === 'system.admin') ? ' title="ผู้บริหารมีสิทธิ์นี้เสมอ"' : '';
       const inp = canEdit
         ? `<input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''} ${dis}
              onchange="_permToggle(this)" class="w-3.5 h-3.5 accent-indigo-600">`
@@ -688,8 +688,8 @@ function _renderPermMatrix(canEdit) {
       return `<td class="py-1.5 px-2 text-center">${inp}</td>`;
     }).join('');
     return `<tr class="border-b" style="border-color:var(--border)">
-      <td class="py-1.5 pr-4 text-sm font-medium sticky left-0" style="background:var(--bg-card);color:var(--text-primary)">
-        ${ROLE_LABEL_TH[role]||role} <span class="text-xs" style="color:var(--text-muted)">(${role})</span>
+      <td class="py-1.5 pr-4 text-sm font-medium sticky left-0" style="background:var(--bg-card);color:var(--text-primary)" title="รหัสบทบาทในระบบ: ${role}">
+        ${ROLE_LABEL_TH[role]||role}
       </td>${cells}</tr>`;
   }).join('');
 
