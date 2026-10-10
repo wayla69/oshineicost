@@ -140,8 +140,88 @@ function _shmOthersHtml(others) {
     + (!lines.length ? '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงานค้าง</div>' : '');
 }
 
+// ── PR-M7 · "วันนี้เหลือทำอะไร" (a branch login, หน้างาน only) ──────────────────────────────────────────────
+// Three lines — ตัดเบิก · สั่งสินค้า · รับสินค้า — each with a ✓ (nothing left) or ● (something to do) and a link to the task. The
+// statuses are read from the same to-do items as the cards below (issue_today, the nearest order_due_*, receive_pending).
+const _SHM_WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+function _shmTodayRows(d) {
+  const items = d.items || [];
+  const base = it => String(it.key || '').split(':')[0];
+  const rows = [];
+  // ตัดเบิก
+  const iss = items.find(it => base(it) === 'issue_today');
+  const gaps = items.filter(it => base(it).startsWith('issue_missing_') && it.status === 'todo').length;
+  if (iss) {
+    const ok = iss.status === 'done';
+    const txt = ok ? `ยืนยันแล้ว ${iss.confirmed_hhmm || ''}`.trim() + (iss.appends ? ` · เบิกเพิ่ม ${iss.appends} ครั้ง` : '')
+      : `รอยืนยัน · ${iss.slip_status === 'draft' ? 'มีร่างแล้ว' : 'ยังไม่ได้กรอก'}`;
+    rows.push({ k: 'issue', label: 'ตัดเบิก', ok: ok && !gaps, text: txt + (gaps ? ` · ค้างย้อนหลัง ${gaps} วัน` : ''), go: iss.go });
+  }
+  // สั่งสินค้า: the pending round whose cutoff is today and nearest; else "ส่งแล้ว"; else nothing is due today
+  const ord = items.filter(it => base(it).startsWith('order_due_'));
+  const today = ord.filter(it => it.due_today);
+  const pend = today.filter(it => it.status === 'todo').sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
+  if (pend.length) {
+    const it = pend[0];
+    const ms = new Date(it.cutoff_at).getTime() - Date.now();
+    const left = isNaN(ms) ? '' : ms >= 3600000 ? ` (เหลือ ${Math.floor(ms / 3600000)} ชม.)` : ms > 0 ? ` (เหลือ ${Math.max(Math.ceil(ms / 60000), 1)} นาที)` : '';
+    const wd = _SHM_WD[new Date(String(it.cutoff_at).slice(0, 10) + 'T12:00:00Z').getUTCDay()] || '';
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: false, bad: !!it.late,
+      text: it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `ส่งภายใน ${wd} ${String(it.cutoff_at).slice(11, 16)}${left}`, go: it.go });
+  } else if (today.length) {
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: today[0].go });
+  } else {
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ไม่มีรอบที่ต้องส่งวันนี้', go: (ord[0] && ord[0].go) || { tab: 'branchstock', pane: 'order' } });
+  }
+  // รับสินค้า
+  const rec = items.find(it => base(it) === 'receive_pending');
+  rows.push(rec ? { k: 'recv', label: 'รับสินค้า', ok: false, text: `มีใบรอรับ ${rec.count || 1} ใบ`, go: rec.go }
+    : { k: 'recv', label: 'รับสินค้า', ok: true, text: 'ไม่มีใบรอรับ', go: { tab: 'branchstock', pane: 'recv' } });
+  return rows;
+}
+function _shmTodayStrip(d, role) {
+  const card = document.getElementById('shmToday');
+  if (!card) return;
+  card.style.display = role === 'branch' ? '' : 'none';
+  if (role !== 'branch') return;
+  document.getElementById('shmTodayRows').innerHTML = _shmTodayRows(d).map(r => {
+    const ink = r.ok ? 'var(--good-ink)' : (r.bad ? 'var(--bad-ink)' : 'var(--amber-ink)');
+    return `<div class="shm-today-row flex items-center gap-2" data-k="${r.k}" style="border-top:1px solid var(--border-soft);min-height:44px">
+      <span aria-hidden="true" style="color:${ink};font-size:16px;width:18px;text-align:center">${r.ok ? '✓' : '●'}</span>
+      <div class="flex-1 min-w-0 text-sm" style="color:var(--text-primary)"><b>${r.label}</b> · <span style="color:${ink}">${esc(r.text)}</span></div>
+      <a href="#" onclick="_shmOpen(${esc(JSON.stringify(r.go))});return false" class="text-xs whitespace-nowrap" style="color:var(--accent);padding:12px 0 12px 6px">ไปที่งาน →</a></div>`;
+  }).join('');
+}
+
+// ── PR-M7 · ติดตั้งเป็นแอป (a branch login): reuses the install event and helpers of the owner's phone summary (09c-mobile.js) ──
+const _SHM_INSTALL_KEY = 'oshinei_brn_install_dismiss';
+function _shmInstallSnoozed() { try { return Date.now() < (+localStorage.getItem(_SHM_INSTALL_KEY) || 0); } catch (e) { return false; } }
+function _shmIosSafari() { const ua = navigator.userAgent || ''; return /iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua); }
+function shmInstallRefresh() {
+  const w = document.getElementById('shmInstall');
+  if (!w) return;
+  const standalone = typeof _msStandalone === 'function' && _msStandalone();
+  const evt = typeof _installEvt !== 'undefined' && _installEvt;
+  const show = _shmRole() === 'branch' && !standalone && !_shmInstallSnoozed() && (!!evt || _shmIosSafari());
+  w.style.display = show ? '' : 'none';
+  if (!show) return;
+  const btn = document.getElementById('shmInstallBtn'), hint = document.getElementById('shmInstallHint');
+  if (evt) { btn.style.display = ''; hint.textContent = 'เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ'; }
+  else { btn.style.display = 'none'; hint.textContent = 'กดปุ่มแชร์ แล้วเลือก “เพิ่มไปยังหน้าจอโฮม”'; }
+}
+async function shmInstallApp() {
+  if (typeof msInstallApp === 'function') await msInstallApp();
+  shmInstallRefresh();
+}
+function shmInstallDismiss() {
+  try { localStorage.setItem(_SHM_INSTALL_KEY, String(Date.now() + 30 * 86400000)); } catch (e) { /* the card then returns on the next visit */ }
+  shmInstallRefresh();
+}
+
 function _shmRender(d) {
   const role = _shmRole();
+  _shmTodayStrip(d, role);
+  shmInstallRefresh();
   const items = d.items || [];
   const c = d.close || { steps: [], branches: [] };
   const steps = c.steps || [];

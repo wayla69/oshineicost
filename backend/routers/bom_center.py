@@ -1834,6 +1834,11 @@ class IssueBody(BaseModel):
     note: Optional[str] = None
 
 
+class IssueAppendBody(BaseModel):
+    date: Optional[str] = None              # the slip's day (must be today and confirmed); omitted = today (Bangkok)
+    lines: List[IssueLine] = []             # quantities ADDED to the confirmed slip of the day (PR-M7)
+
+
 class IssueReopenBody(BaseModel):
     slip_id: int
     note: str                               # why the confirmed slip is opened again (logged)
@@ -1859,6 +1864,16 @@ def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = 
         return _write(con, lambda: _is.save(con, bid, body.date or bkk_today().isoformat(),
                                             [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
                                             note=body.note))
+
+
+@router.post("/api/bom-center/issues/append", dependencies=[Depends(require_write_token)])
+def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional[int] = Query(None)):
+    """PR-M7 · เบิกเพิ่ม: add lines to the slip of TODAY that is already confirmed (no reopen). Logged as 'append'."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _write(con, lambda: _is.append(con, bid, body.date or bkk_today().isoformat(),
+                                              [ln.dict() for ln in body.lines], _who(request)))
 
 
 @router.get("/api/bom-center/issues/status")

@@ -33,6 +33,12 @@ Phone (390x844):
   * ตรวจนับ: the zone chip gets a ✓ when every required item is counted, the submit is refused with only a "กลับไปนับ" button
     (no request leaves) and the server refuses the same way; the 6th strip entry shows on days 1–3 (Bangkok clock) only.
 Desktop (1440): the same pages still list, save and ask.
+PR-M7 (phone, runs last because it confirms today's slip): เบิกเหมือนเมื่อวาน fills the empty boxes from the previous slip and leaves a
+typed box alone, its status names the slip and the count, the autosave then runs; สั่งตามยอดแนะนำทั้งหมด sets every box to the live
+suggestion (a confirm names the edited rows first); เบิกเพิ่ม on today's confirmed slip: empty boxes, a note, บันทึกการเบิกเพิ่ม + ยกเลิก,
+the confirm dialog, the line grows by the amount typed, the log ends with 'append', yesterday's slip is refused; the วันนี้เหลือทำอะไร
+strip has three lines (dot, status, link); the install card (fake beforeinstallprompt, an iPhone Safari user agent, × remembered);
+ตัวอักษรใหญ่ (x1.15, remembered, at least 5 rows per screen, the sticky row still above the strip).
 """
 import argparse
 import datetime as dt
@@ -76,6 +82,340 @@ def fresh_processed_order(db_path):
         con.close()
 
 
+DLG_JS = """() => { const m = document.querySelector('[data-el=msg]'); if (!m) return null;
+  return { title: document.querySelector('[data-el=title]').textContent, msg: m.textContent,
+           ok: m.closest('form').querySelector('[type=submit]').textContent, cancel: document.querySelector('[data-act=cancel]').textContent }; }"""
+
+
+def m7_checks(a, b, session, check, shot, nums):
+    """PR-M7 — the six usability items, on the branch phone (390x844): เบิกเหมือนเมื่อวาน · สั่งตามยอดแนะนำทั้งหมด · เบิกเพิ่ม ·
+    the วันนี้เหลือทำอะไร strip · the install card and ตัวอักษรใหญ่. Runs LAST: it confirms today's slip of the scratch copy."""
+    ctx, page, errors = session(b, True)
+    posts = []
+    page.on("request", lambda rq: posts.append((rq.method, rq.url)) if rq.method == "POST" else None)
+    n_posts = lambda frag: len([1 for m_, u in posts if frag in u])  # noqa: E731
+    today = page.evaluate("new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })")
+    sheet = ctx.request.get(f"{a.base}/api/bom-center/issues/sheet?date={today}").json()
+    already = sheet["status"]["status"] in ("confirmed", "late")
+
+    def dlg():
+        page.wait_for_selector("[data-el=msg]", timeout=8000)
+        return page.evaluate(DLG_JS)
+
+    # ── 1 · เบิกเหมือนเมื่อวาน ──
+    print("== phone · M7 · เบิกเหมือนเมื่อวาน")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'issue'})")
+    page.wait_for_selector(ISSUE_ROW, timeout=60000)
+    page.wait_for_timeout(1200)
+    if already:
+        print("note: today's slip is already confirmed in this copy — the fill check is skipped (run on a fresh copy)")
+    else:
+        btn = page.query_selector("#brnIssFillBtn")
+        check(btn is not None and btn.is_visible() and "เบิกเหมือนเมื่อวาน" in btn.inner_text(), "the head card has the button 'เบิกเหมือนเมื่อวาน' while the slip is a draft")
+        left = page.evaluate("""() => _brnIss.zones.flatMap(z => z.items).filter(i => { const c = _brnIssQty[i.code] || { used: '', waste: '' };
+            return (i.prev_used > 0 && c.used === '') || (i.prev_waste > 0 && c.waste === ''); }).length""")
+        if btn and not left:
+            print("note: every box that has a hint is already filled in this copy (a second run) — the fill check is skipped")
+        if btn and left:
+            exp = page.evaluate("""() => { const q = _brnIssQty; let n = 0; const first = []; _brnIss.zones.forEach(z => z.items.forEach(i => {
+                const c = q[i.code] || { used: '', waste: '' };
+                if ((i.prev_used > 0 && c.used === '') || (i.prev_waste > 0 && c.waste === '')) n++;
+                if (i.prev_used > 0) first.push(i.code); })); return { n, first }; }""")
+            typed_code = exp["first"][0]
+            typed = page.query_selector(f"#brnIssU_{typed_code}")
+            typed.scroll_into_view_if_needed()
+            typed.fill("9")
+            page.wait_for_timeout(200)
+            exp = page.evaluate("""() => { const q = _brnIssQty; let n = 0; _brnIss.zones.forEach(z => z.items.forEach(i => {
+                const c = q[i.code] || { used: '', waste: '' };
+                if ((i.prev_used > 0 && c.used === '') || (i.prev_waste > 0 && c.waste === '')) n++; })); return n; }""")
+            before = n_posts("/issues/save")
+            page.evaluate("window.scrollTo(0,0); document.querySelector('main.content-area').scrollTop = 0")
+            page.click("#brnIssFillBtn")
+            page.wait_for_timeout(300)
+            st = page.inner_text("#brnIssStatus")
+            check(re.match(r"^เติมจากใบวันที่ \d+/\d+ แล้ว \d+ รายการ · แก้เฉพาะรายการที่ต่าง$", st) is not None and f"แล้ว {exp} รายการ" in st,
+                  f"the status reads '{st}' (expected {exp} items)")
+            kept = page.evaluate(f"document.getElementById('brnIssU_{typed_code}').value")
+            check(kept == "9", f"a box the person already typed is left alone (still {kept!r})")
+            filled = page.evaluate("""(tc) => _brnIss.zones.flatMap(z => z.items).filter(i => i.prev_used > 0 && i.code !== tc).slice(0, 3)
+                .map(i => [i.prev_used, (_brnIssQty[i.code] || {}).used])""", typed_code)
+            check(all(float(u or 0) == float(p_) for p_, u in filled), f"the empty boxes took yesterday's quantities: {filled}")
+            shot(page, "m7_fill_status.png")
+            page.wait_for_function("/บันทึกร่างแล้ว \\d\\d:\\d\\d/.test(document.getElementById('brnIssStatus').innerText)", timeout=9000)
+            st2 = page.inner_text("#brnIssStatus")
+            check(n_posts("/issues/save") == before + 1 and "เติมจากใบวันที่" in st2, f"the normal autosave then runs once and keeps the note: '{st2}'")
+            # a second tap changes nothing (no empty box is left that has a hint)
+            page.click("#brnIssFillBtn")
+            page.wait_for_timeout(200)
+            check(page.inner_text("#brnIssStatus").startswith("ไม่มีช่องว่างที่ต้องเติม") or "แล้ว 0 รายการ" not in page.inner_text("#brnIssStatus"),
+                  "a second tap fills nothing more: " + page.inner_text("#brnIssStatus"))
+            fill_w = page.evaluate("document.querySelector('#brn-pane-issue .brn-sticky-bottom').getBoundingClientRect().width")
+            check(fill_w > 300, "the sticky action row is unchanged in width")
+
+    # ── 2 · สั่งตามยอดแนะนำทั้งหมด ──
+    print("== phone · M7 · สั่งตามยอดแนะนำทั้งหมด")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'order'})")
+    page.wait_for_selector("#brnOrdList .brn-row", timeout=90000)
+    page.wait_for_timeout(1500)
+    ob = page.query_selector("#brnOrdFillBtn")
+    editable = page.evaluate("!_brnPlan.order || ['suggested','confirmed'].includes(_brnPlan.order.status)")
+    if not editable or ob is None:
+        print("note: the order of this round is already sent — the fill-all check is skipped")
+    else:
+        check(ob.is_visible() and ob.inner_text().strip() == "สั่งตามยอดแนะนำทั้งหมด", "the order page has the button 'สั่งตามยอดแนะนำทั้งหมด' for an editable draft")
+        code = page.evaluate("_brnPlan.rows.find(r => r.order_units > 0).code")
+        box = page.query_selector(f"#brnOrd_{code}")
+        box.scroll_into_view_if_needed()
+        box.fill("7")
+        page.wait_for_timeout(100)
+        page.evaluate("document.querySelector('main.content-area').scrollTop = 0; window.scrollTo(0,0)")
+        # nothing is edited elsewhere in this draft, so the dialog counts exactly the rows that differ
+        n_diff = page.evaluate("_brnPlan.rows.filter(r => Number(_brnOrdQty[r.code] || 0) !== Number(r.order_units)).length")
+        page.click("#brnOrdFillBtn")
+        d = dlg()
+        check(d["title"] == "ใส่ยอดแนะนำทั้งหมด" and d["ok"] == "ใส่ยอดแนะนำ" and d["msg"] == f"ยืนยันการใส่ยอดแนะนำทับ {n_diff} รายการที่แก้ไว้?",
+              f"an edited row asks first: '{d['title']}' · '{d['msg']}' · [{d['ok']}]")
+        shot(page, "m7_fill_all_confirm.png")
+        page.click("form:has([data-el=msg]) [type=submit]")
+        page.wait_for_timeout(500)
+        st = page.inner_text("#brnOrdStatus")
+        check(st == "ใส่ยอดแนะนำให้ทุกรายการแล้ว · แก้เฉพาะรายการที่ต่าง", f"the status reads '{st}'")
+        same = page.evaluate("_brnPlan.rows.every(r => Number(_brnOrdQty[r.code]) === Number(r.order_units))")
+        shown = page.evaluate("[...document.querySelectorAll('#brnOrdList .brn-qty')].every(i => Number(i.value) === Number(_brnPlan.rows.find(r => i.id === 'brnOrd_' + r.code).order_units))")
+        dev = page.evaluate("[...document.querySelectorAll('#brnOrdList .brn-qty')].filter(i => i.style.borderColor.includes('amber')).length")
+        check(same and shown and dev == 0, "every row's box now holds the live suggestion and none is marked as deviating")
+        shot(page, "m7_fill_all_done.png")
+        sv = n_posts("/order/save")
+        page.wait_for_function("/บันทึกร่างแล้ว/.test(document.getElementById('brnOrdStatus').innerText)", timeout=9000)
+        check(n_posts("/order/save") == sv + 1, "the draft saved itself once")
+        page.click("#brnOrdFillBtn")
+        page.wait_for_timeout(400)
+        check(page.query_selector("[data-el=msg]") is None, "with nothing edited the button asks nothing")
+
+    # ── 3 · เบิกเพิ่ม ──
+    print("== phone · M7 · เบิกเพิ่ม")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'issue'})")
+    page.wait_for_selector(ISSUE_ROW, timeout=60000)
+    page.wait_for_timeout(1000)
+    if not already:
+        if page.evaluate("!_brnIssAny(_brnIss.zones[0].items[0].code)"):
+            page.fill("#brnIssList .brn-qty >> nth=0", "4")
+        page.evaluate("brnIssSave(false)")
+        page.wait_for_timeout(600)
+        page.evaluate("void brnIssSave(true)")                  # it waits for the dialog: do not await it here
+        d = dlg()
+        check(d["title"] == "ยืนยันใบตัดเบิก", "the slip is confirmed (the normal dialog)")
+        page.click("form:has([data-el=msg]) [type=submit]")
+        page.wait_for_function("_brnIss && _brnIss.status.status !== 'draft' && !_brnIss.editable", timeout=15000)
+        page.wait_for_timeout(600)
+    sheet = ctx.request.get(f"{a.base}/api/bom-center/issues/sheet?date={today}").json()
+    check(sheet["can_append"] is True, "the server offers เบิกเพิ่ม on today's confirmed slip")
+    ap = page.query_selector("#brnIssActions button:has-text('เบิกเพิ่ม')")
+    check(ap is not None and ap.is_visible(), "the sticky row of a confirmed slip has the button 'เบิกเพิ่ม'")
+    bx = ap.bounding_box() if ap else None
+    check(bx is not None and bx["x"] + bx["width"] <= 390, f"the button is inside the 390 px screen ({bx})")
+    shot(page, "m7_append_button.png")
+    lines0 = {l["code"]: l for l in sheet["lines"]}
+    code = next(iter(lines0))
+    base_used = lines0[code]["qty_used"]
+    ap.click()
+    page.wait_for_timeout(500)
+    banner = page.inner_text("#brnIssBanner")
+    ph = page.evaluate("[...document.querySelectorAll('#brnIssList .brn-qty')].slice(0, 6).map(i => [i.placeholder, i.value, i.disabled])")
+    check("รายการที่กรอกจะถูกบวกเพิ่มในใบของวันนี้ที่ยืนยันแล้ว" in banner, "the head note says the entries are added to the confirmed slip")
+    check(all(p_[0] == "เพิ่ม" and p_[1] == "" and p_[2] is False for p_ in ph), f"all boxes are empty and open, placeholder 'เพิ่ม': {ph[:2]}")
+    acts = page.evaluate("[...document.querySelectorAll('#brnIssActions button')].map(b => b.innerText.trim())")
+    check(acts == ["บันทึกการเบิกเพิ่ม", "ยกเลิก"], f"the sticky row is {acts}")
+    shot(page, "m7_append_mode.png")
+    page.click("#brnIssActions button:has-text('ยกเลิก')")
+    page.wait_for_timeout(300)
+    check(page.evaluate("!_brnIssAppend && document.querySelector('#brnIssList .brn-qty').disabled"), "ยกเลิก leaves the append mode (boxes locked again)")
+    page.click("#brnIssActions button:has-text('เบิกเพิ่ม')")
+    page.wait_for_timeout(300)
+    n_app = n_posts("/issues/append")
+    page.click("#brnIssActions button:has-text('บันทึกการเบิกเพิ่ม')")
+    page.wait_for_timeout(300)
+    check(n_posts("/issues/append") == n_app and "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ" in page.inner_text("#brnIssStatus"), "saving with nothing typed sends no request")
+    if not page.query_selector(f"#brnIssU_{code}"):
+        # the item sits in another zone: open that zone first
+        page.evaluate(f"brnIssSetZone(_brnIss.zones.find(z => z.items.some(i => i.code === {code!r})).zone)")
+        page.wait_for_timeout(200)
+    page.fill(f"#brnIssU_{code}", "2")
+    page.click("#brnIssActions button:has-text('บันทึกการเบิกเพิ่ม')")
+    d = dlg()
+    dm = f"{int(today[8:10])}/{int(today[5:7])}"
+    check(d["title"] == "ยืนยันการเบิกเพิ่ม" and d["ok"] == "บันทึก" and d["msg"].startswith(f"บันทึกการเบิกเพิ่ม 1 รายการ ในใบตัดเบิก {dm}?"),
+          f"the dialog: '{d['title']}' · '{d['msg'].splitlines()[0]}' · [{d['ok']}]")
+    shot(page, "m7_append_confirm.png")
+    page.click("form:has([data-el=msg]) [type=submit]")
+    page.wait_for_function("/เบิกเพิ่มแล้ว 1 รายการ/.test(document.getElementById('brnIssStatus').innerText)", timeout=15000)
+    check(page.inner_text("#brnIssStatus") == "✓ เบิกเพิ่มแล้ว 1 รายการ", "status: " + page.inner_text("#brnIssStatus"))
+    page.wait_for_timeout(500)
+    sheet2 = ctx.request.get(f"{a.base}/api/bom-center/issues/sheet?date={today}").json()
+    l2 = {l["code"]: l for l in sheet2["lines"]}[code]
+    check(abs(l2["qty_used"] - (base_used + 2)) < 1e-9, f"the line grew from {base_used} to {l2['qty_used']} (+2)")
+    check(page.evaluate("document.getElementById('brnIssHead').innerText").count("เบิกเพิ่ม 1 ครั้ง") == 1 and sheet2["status"]["appends"] == 1 and sheet2["status"]["status"] in ("confirmed", "late"),
+          "the slip stays confirmed and its head says 'เบิกเพิ่ม 1 ครั้ง'")
+    check(page.evaluate("!_brnIssAppend && _brnIss.status.confirm_count === " + str(sheet["status"]["confirm_count"])), "the page reloaded the locked slip; nothing was re-confirmed")
+    shot(page, "m7_append_done.png")
+    det = ctx.request.get(f"{a.base}/api/bom-center/issues/{sheet2['slip']['slip_id']}").json()
+    check([x["action"] for x in det["log"]][-1] == "append" and det["appends"] == 1, f"the log ends with an 'append' row: {[x['action'] for x in det['log']]}")
+    # the 400 for a day that is not today
+    y = (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()
+    r = ctx.request.post(f"{a.base}/api/bom-center/issues/append", data={"date": y, "lines": [{"code": code, "qty_used": 1}]})
+    check(r.status == 400 and "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว" in r.text(), f"yesterday's slip is refused: {r.status}")
+
+    # ── 4 · วันนี้เหลือทำอะไร ──
+    print("== phone · M7 · วันนี้เหลือทำอะไร")
+    page.evaluate("supplyGo({tab:'supplyhome'})")
+    page.wait_for_selector(".shm-today-row", timeout=60000)
+    page.wait_for_timeout(1000)
+    rows = page.evaluate("[...document.querySelectorAll('#shmToday .shm-today-row')].map(r => ({ t: r.innerText.replace(/\\s+/g, ' ').trim(), link: !!r.querySelector('a'), dot: r.querySelector('span').innerText.trim(), h: r.getBoundingClientRect().height }))")
+    print("     ", [r["t"] for r in rows])
+    check(len(rows) == 3, f"the strip has three lines ({len(rows)})")
+    # the dot is ● while an earlier day is still open (a backlog the copy may hold), ✓ when nothing is left
+    check(len(rows) == 3 and re.match(r"^[✓●] ตัดเบิก · ยืนยันแล้ว \d\d:\d\d", rows[0]["t"]) is not None and "เบิกเพิ่ม 1 ครั้ง" in rows[0]["t"], f"line 1 reads '{rows[0]['t'] if rows else ''}'")
+    check(len(rows) == 3 and rows[1]["t"].split(" ", 1)[1].startswith("สั่งสินค้า · ") and rows[2]["t"].split(" ", 1)[1].startswith("รับสินค้า · "), "lines 2 and 3 are สั่งสินค้า and รับสินค้า")
+    check(all(r["link"] and r["t"].endswith("ไปที่งาน →") and r["dot"] in ("✓", "●") and r["h"] >= 43 for r in rows), "each line has a ✓/● dot, the link 'ไปที่งาน →' and is 44 px high")
+    pos = page.evaluate("document.getElementById('shmToday').getBoundingClientRect().top < document.getElementById('shmMineCard').getBoundingClientRect().top")
+    check(pos, "the strip sits above the task cards")
+    ver = page.evaluate("document.getElementById('shmNote').innerText")
+    check("สูตร" not in ver, f"no version line for the branch: '{ver}'")
+    shot(page, "m7_today_strip.png")
+    page.click("#shmToday .shm-today-row[data-k=recv] a")
+    page.wait_for_function("document.getElementById('brn-pane-recv').style.display !== 'none'", timeout=15000)
+    check(True, "the link of a line opens its page (รับสินค้า)")
+
+    # ── 5a · the install card ──
+    print("== phone · M7 · ติดตั้งเป็นแอป")
+    page.evaluate("supplyGo({tab:'supplyhome'})")
+    page.wait_for_selector(".shm-today-row", timeout=30000)
+    page.evaluate("localStorage.removeItem('oshinei_brn_install_dismiss')")
+    check(page.evaluate("document.getElementById('shmInstall').style.display === 'none'"), "no install card when the browser offers nothing (desktop Chrome here)")
+    page.evaluate("""() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => { window.__prompted = true; }; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); }""")
+    page.wait_for_timeout(300)
+    vis = page.evaluate("({ shown: document.getElementById('shmInstall').style.display !== 'none', title: document.querySelector('#shmInstall .font-semibold').innerText, btn: getComputedStyle(document.getElementById('shmInstallBtn')).display !== 'none' })")
+    check(vis["shown"] and vis["title"] == "ติดตั้งเป็นแอปบนหน้าจอโทรศัพท์" and vis["btn"], f"the card appears with the install button: {vis}")
+    shot(page, "m7_install_card.png")
+    page.click("#shmInstallBtn")
+    page.wait_for_timeout(300)
+    check(page.evaluate("window.__prompted === true"), "the button calls the browser's install prompt")
+    page.evaluate("""() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => {}; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); }""")
+    page.wait_for_timeout(200)
+    page.click("#shmInstall button[aria-label=ปิด]")
+    page.wait_for_timeout(200)
+    check(page.evaluate("document.getElementById('shmInstall').style.display === 'none' && Number(localStorage.getItem('oshinei_brn_install_dismiss')) > Date.now()"), "× hides the card and remembers it on this device")
+    page.reload(wait_until="networkidle")
+    page.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=60000)
+    page.evaluate("supplyGo({tab:'supplyhome'})")
+    page.wait_for_selector(".shm-today-row", timeout=30000)
+    page.evaluate("""() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => {}; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); }""")
+    page.wait_for_timeout(300)
+    check(page.evaluate("document.getElementById('shmInstall').style.display === 'none'"), "after a reload the dismissed card stays away")
+    page.evaluate("localStorage.removeItem('oshinei_brn_install_dismiss')")
+    ctx.close()
+    # iPhone Safari: no event, a one-line instruction instead
+    c3 = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, locale="th-TH",
+                       user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1")
+    c3.add_init_script("try{localStorage.setItem('oshinei_upload_token','local-test-token')}catch(e){}")
+    c3.request.post(a.base + "/api/auth/login", data={"username": a.user, "password": a.password})
+    p3 = c3.new_page()
+    p3.goto(a.base + "/", wait_until="networkidle", timeout=120000)
+    p3.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=60000)
+    p3.evaluate("supplyGo({tab:'supplyhome'})")
+    p3.wait_for_selector(".shm-today-row", timeout=30000)
+    p3.wait_for_timeout(500)
+    ios = p3.evaluate("({ shown: document.getElementById('shmInstall').style.display !== 'none', hint: document.getElementById('shmInstallHint').innerText, btn: getComputedStyle(document.getElementById('shmInstallBtn')).display })")
+    check(ios["shown"] and ios["btn"] == "none" and "เพิ่มไปยังหน้าจอโฮม" in ios["hint"], f"iPhone Safari: no button, the line reads '{ios['hint']}'")
+    if a.shots:
+        p3.screenshot(path=os.path.join(a.shots, "m7_install_ios.png"))
+    c3.close()
+
+    # ── 5b · ตัวอักษรใหญ่ ──
+    print("== phone · M7 · ตัวอักษรใหญ่")
+    ctx, page, errors2 = session(b, True)
+    errors += errors2
+    page.evaluate("localStorage.removeItem('oshinei_brn_big')")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'issue'})")
+    page.wait_for_selector(ISSUE_ROW, timeout=60000)
+    page.wait_for_timeout(1000)
+    big = page.query_selector("#brnBigBtn")
+    bb = big.bounding_box() if big else None
+    check(big is not None and big.is_visible() and bb["x"] + bb["width"] <= 390 and "ตัวอักษรใหญ่" in big.inner_text(), f"the cluster line has the toggle 'ตัวอักษรใหญ่' inside the screen ({bb})")
+    f0 = page.evaluate("getComputedStyle(document.documentElement).fontSize")
+    shot(page, "m7_font_normal.png")
+
+    def rows_per_screen():
+        page.evaluate("document.querySelector('main.content-area').scrollTop = 700")
+        page.wait_for_timeout(400)
+        r = page.evaluate("""() => { const top = document.querySelector('.brn-zonebar').getBoundingClientRect().bottom;
+          const bot = document.querySelector('#brn-pane-issue .brn-sticky-bottom').getBoundingClientRect().top;
+          return [...document.querySelectorAll('#brnIssList .brn-row')].filter(r => { const x = r.getBoundingClientRect(); return x.top >= top - 1 && x.bottom <= bot + 1; }).length; }""")
+        page.evaluate("document.querySelector('main.content-area').scrollTop = 0")
+        return r
+    n0 = rows_per_screen()
+    page.click("#brnBigBtn")
+    page.wait_for_timeout(400)
+    st = page.evaluate("({ cls: document.documentElement.classList.contains('brn-big'), fs: getComputedStyle(document.documentElement).fontSize, pressed: document.getElementById('brnBigBtn').getAttribute('aria-pressed'), key: localStorage.getItem('oshinei_brn_big'), name: parseFloat(getComputedStyle(document.querySelector('#brnIssList .brn-name')).fontSize) })")
+    check(st["cls"] and abs(float(st["fs"][:-2]) / float(f0[:-2]) - 1.15) < 0.01 and st["pressed"] == "true" and st["key"] == "1" and st["name"] >= 14.9,
+          f"the toggle sets x1.15 ({f0} -> {st['fs']}, the item name {st['name']}px) and remembers it ({st['key']})")
+    n1 = rows_per_screen()
+    nums["rows_per_screen_big"] = n1
+    check(n1 >= 5, f"{n1} rows per screen with the big font (normal: {n0}) at 390x844")
+    shot(page, "m7_font_big.png")
+    page.evaluate("document.querySelector('main.content-area').scrollTop = 700")
+    page.wait_for_timeout(300)
+    shot(page, "m7_font_big_scrolled.png")
+    stick = page.evaluate("""() => { const s = document.querySelector('#brn-pane-issue .brn-sticky-bottom').getBoundingClientRect(); const nav = document.getElementById('supplyNav').getBoundingClientRect();
+      return { bottom: s.bottom, navTop: nav.top, h: s.height, w: s.width }; }""")
+    check(stick["bottom"] <= stick["navTop"] + 1 and stick["w"] <= 390, f"the sticky row still sits above the bottom strip ({stick})")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'order'})")
+    page.wait_for_selector("#brnOrdList .brn-row", timeout=60000)
+    page.wait_for_timeout(600)
+    shot(page, "m7_font_big_order.png")
+    page.reload(wait_until="networkidle")
+    page.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=60000)
+    page.wait_for_timeout(500)
+    check(page.evaluate("document.documentElement.classList.contains('brn-big')"), "after a reload the big font is still on (remembered on this device)")
+    page.evaluate("supplyGo({tab:'branchstock', pane:'issue'})")
+    page.wait_for_selector(ISSUE_ROW, timeout=60000)
+    page.click("#brnBigBtn")
+    page.wait_for_timeout(300)
+    check(page.evaluate("!document.documentElement.classList.contains('brn-big') && localStorage.getItem('oshinei_brn_big') === '0'"), "a second tap turns it off")
+    check(not errors, "M7: no page error" + (f" — {errors[:2]}" if errors else ""))
+    ctx.close()
+
+    # ── 6 · the centre's view of the slip: ใบตัดเบิกสาขา shows "เบิกเพิ่ม N ครั้ง" and the log line (Sales Support, desktop) ──
+    print("== desktop · M7 · ใบตัดเบิกสาขา")
+    c4 = b.new_context(viewport={"width": 1440, "height": 900}, locale="th-TH")
+    c4.add_init_script("try{localStorage.setItem('oshinei_upload_token','local-test-token')}catch(e){}")
+    if c4.request.post(a.base + "/api/auth/login", data={"username": "salessupport1", "password": a.password}).ok:
+        p4 = c4.new_page()
+        p4.goto(a.base + "/", wait_until="networkidle", timeout=120000)
+        p4.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role", timeout=60000)
+        sid = ctx_slip_id(a, b, today)
+        p4.evaluate("supplyGo({tab:'orderhub', pane:'issues'})")
+        p4.wait_for_selector("#ohbIsDetail", state="attached", timeout=30000)
+        p4.evaluate(f"ohbIsOpen({sid})")
+        p4.wait_for_function("document.getElementById('ohbIsDetail').innerText.includes('ประวัติของใบ')", timeout=30000)
+        txt = p4.inner_text("#ohbIsDetail")
+        check("เบิกเพิ่ม 1 ครั้ง" in txt and re.search(r"เบิกเพิ่ม · .+ · \d+ รายการ · เบิกใช้ \d+ รายการ", txt) is not None,
+              "the slip detail of ใบตัดเบิกสาขา shows 'เบิกเพิ่ม 1 ครั้ง' and the log line: " + re.sub(r"\s+", " ", txt)[-150:])
+        if a.shots:
+            p4.screenshot(path=os.path.join(a.shots, "m7_centre_slip_detail.png"))
+    c4.close()
+
+
+def ctx_slip_id(a, b, today):
+    """The id of the branch's slip of `today` (read with the branch's own login)."""
+    c = b.new_context(locale="th-TH")
+    c.request.post(a.base + "/api/auth/login", data={"username": a.user, "password": a.password})
+    sid = c.request.get(f"{a.base}/api/bom-center/issues/sheet?date={today}").json()["status"]["slip_id"]
+    c.close()
+    return sid
+
+
 def main(argv=None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -84,6 +424,7 @@ def main(argv=None) -> int:
     ap.add_argument("--shots", default="")
     ap.add_argument("--user", default="branch1")
     ap.add_argument("--db", default="", help="the scratch DB copy the server runs on: the receive checks make their own sent orders in it")
+    ap.add_argument("--only-m7", action="store_true", help="run only the PR-M7 section (it confirms today's slip of the scratch copy)")
     a = ap.parse_args(argv)
     if not a.password:
         m = re.search(r'^DEFAULT_PASSWORD\s*=\s*"([^"]+)"', open(os.path.join(os.path.dirname(__file__), "..", "backend", "auth.py"), encoding="utf-8").read(), re.M)
@@ -135,6 +476,16 @@ def main(argv=None) -> int:
             b = p.chromium.launch(channel="chrome", headless=True)
         except Exception:
             b = p.chromium.launch(headless=True)
+
+        if a.only_m7:                                           # the PR-M7 section alone (it needs yesterday's slip, which it seeds itself)
+            c0, _p0, _e0 = session(b, True)
+            seed_yesterday(c0)
+            c0.close()
+            m7_checks(a, b, session, check, shot, nums)
+            b.close()
+            print("numbers:", nums)
+            print("PASS" if not bad else f"FAIL ({len(bad)})")
+            return 0 if not bad else 1
 
         # ══════════════ phone ══════════════
         ctx, page, errors = session(b, True)
@@ -723,6 +1074,7 @@ def main(argv=None) -> int:
         shot(page, "desktop_count.png")
         check(not errors, "desktop: no page error" + (f" — {errors[:2]}" if errors else ""))
         ctx.close()
+        m7_checks(a, b, session, check, shot, nums)          # PR-M7: runs last, it confirms today's slip of the scratch copy
         b.close()
     print("numbers:", nums)
     print("PASS" if not bad else f"FAIL ({len(bad)})")

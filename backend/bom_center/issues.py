@@ -23,6 +23,8 @@ Rules (shared by every PR of the series):
   * a confirmed slip is locked. Sales Support reopens it with a reason; the branch edits and
     confirms again. Every create / confirm / reconfirm / reopen (and the first save after a
     reopen) is written to bc_issue_log and to the audit trail;
+  * PR-M7: a slip CONFIRMED TODAY takes more lines without a reopen (append): the quantities are added to the lines
+    it has, the slip stays confirmed and `late` stays as it was, and each append is one row of bc_issue_log;
   * "issued" in any report means CONFIRMED slips only.
 """
 from datetime import date, datetime, timedelta, timezone
@@ -39,6 +41,32 @@ STATUS_TH = {"confirmed": "ยืนยันแล้ว", "late": "ยืน�
 MAX_BACKDATE_DAYS = 60
 RECENT_DAYS = 14               # an item issued on a CONFIRMED slip in this many days before the day is "recent" (listed first)
 
+# PR-M7: the CHECK list of `action` gained 'append'. A table created before it keeps the old list (CREATE … IF NOT EXISTS leaves it
+# alone), so schema.ensure() calls widen_log() which rebuilds it once, rows kept.
+LOG_DDL = """CREATE TABLE IF NOT EXISTS bc_issue_log(
+         log_id INTEGER PRIMARY KEY AUTOINCREMENT, slip_id INTEGER NOT NULL, branch_id INTEGER NOT NULL,
+         slip_date TEXT NOT NULL, at TEXT NOT NULL, who TEXT,
+         action TEXT NOT NULL CHECK(action IN ('create','save','confirm','reconfirm','reopen','append')),
+         late INTEGER NOT NULL DEFAULT 0, lines INTEGER, note TEXT)"""
+LOG_INDEX_DDL = "CREATE INDEX IF NOT EXISTS ix_bc_issue_log_branch ON bc_issue_log(branch_id, slip_date)"
+_LOG_COLS = "log_id, slip_id, branch_id, slip_date, at, who, action, late, lines, note"
+
+
+def widen_log(con) -> bool:
+    """Rebuild bc_issue_log with the CHECK list that includes 'append' when the stored DDL lacks it. Idempotent; every row
+    is copied (log_id kept, so the AUTOINCREMENT sequence carries on). Returns True when it rebuilt the table."""
+    r = con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='bc_issue_log'").fetchone()
+    if not r or "'append'" in (r[0] or ""):
+        return False
+    con.execute("DROP TABLE IF EXISTS bc_issue_log_new")
+    con.execute(LOG_DDL.replace("IF NOT EXISTS bc_issue_log(", "bc_issue_log_new(", 1))
+    con.execute(f"INSERT INTO bc_issue_log_new({_LOG_COLS}) SELECT {_LOG_COLS} FROM bc_issue_log")
+    con.execute("DROP TABLE bc_issue_log")
+    con.execute("ALTER TABLE bc_issue_log_new RENAME TO bc_issue_log")
+    con.execute(LOG_INDEX_DDL)
+    return True
+
+
 DDL = (
     """CREATE TABLE IF NOT EXISTS bc_issue_slip(
          slip_id INTEGER PRIMARY KEY AUTOINCREMENT, branch_id INTEGER NOT NULL, slip_date TEXT NOT NULL,
@@ -52,12 +80,8 @@ DDL = (
          qty_used REAL NOT NULL DEFAULT 0, qty_waste REAL NOT NULL DEFAULT 0, unit TEXT,
          qty_used_base REAL, qty_waste_base REAL, waste_reason TEXT, note TEXT,
          PRIMARY KEY (slip_id, ingredient_code))""",
-    """CREATE TABLE IF NOT EXISTS bc_issue_log(
-         log_id INTEGER PRIMARY KEY AUTOINCREMENT, slip_id INTEGER NOT NULL, branch_id INTEGER NOT NULL,
-         slip_date TEXT NOT NULL, at TEXT NOT NULL, who TEXT,
-         action TEXT NOT NULL CHECK(action IN ('create','save','confirm','reconfirm','reopen')),
-         late INTEGER NOT NULL DEFAULT 0, lines INTEGER, note TEXT)""",
-    "CREATE INDEX IF NOT EXISTS ix_bc_issue_log_branch ON bc_issue_log(branch_id, slip_date)",
+    LOG_DDL,
+    LOG_INDEX_DDL,
 )
 
 _COLS = ("slip_id", "branch_id", "slip_date", "status", "created_by", "created_at", "updated_at", "confirmed_by",
@@ -96,17 +120,17 @@ def _log(con, row: dict, who: str, action: str, late: int = 0, lines: int = None
                 (row["slip_id"], row["branch_id"], row["slip_date"], _stamp(now), who, action, int(late or 0), lines, note))
 
 
-def _status_dict(day: str, row: dict, lines: int = 0) -> dict:
+def _status_dict(day: str, row: dict, lines: int = 0, appends: int = 0) -> dict:
     if not row:
         return {"date": day, "slip_id": None, "status": "missing", "confirmed_at": None, "confirmed_by": None,
-                "late": 0, "lines": 0, "confirm_count": 0}
+                "late": 0, "lines": 0, "confirm_count": 0, "appends": 0}
     if row["status"] == "confirmed":
         st = "late" if row["late"] else "confirmed"
     else:
         st = "draft"
     return {"date": day, "slip_id": row["slip_id"], "status": st, "confirmed_at": row["confirmed_at"],
             "confirmed_by": row["confirmed_by"], "late": int(row["late"] or 0), "lines": lines,
-            "confirm_count": int(row["confirm_count"] or 0)}
+            "confirm_count": int(row["confirm_count"] or 0), "appends": int(appends or 0)}
 
 
 def is_confirmed(st: dict) -> bool:
@@ -114,12 +138,17 @@ def is_confirmed(st: dict) -> bool:
     return bool(st) and st.get("status") in ("confirmed", "late")
 
 
+def _appends_of(con, slip_id: int) -> int:
+    """How many times lines were added to the slip after it was confirmed (PR-M7)."""
+    return con.execute("SELECT COUNT(*) FROM bc_issue_log WHERE slip_id=? AND action='append'", (slip_id,)).fetchone()[0]
+
+
 def status_of(con, branch_id: int, day) -> dict:
-    """{date, slip_id, status 'confirmed'|'late'|'draft'|'missing', confirmed_at, confirmed_by, late, lines, confirm_count}"""
+    """{date, slip_id, status 'confirmed'|'late'|'draft'|'missing', confirmed_at, confirmed_by, late, lines, confirm_count, appends}"""
     d = _iso(day)
     row = _row(con, branch_id, d)
     n = con.execute("SELECT COUNT(*) FROM bc_issue_line WHERE slip_id=?", (row["slip_id"],)).fetchone()[0] if row else 0
-    return _status_dict(d, row, n)
+    return _status_dict(d, row, n, _appends_of(con, row["slip_id"]) if row else 0)
 
 
 def status_days(con, branch_id: int, d0, d1) -> list:
@@ -131,11 +160,15 @@ def status_days(con, branch_id: int, d0, d1) -> list:
     lines = {sid: n for sid, n in con.execute(
         "SELECT l.slip_id, COUNT(*) FROM bc_issue_line l JOIN bc_issue_slip s USING(slip_id)"
         " WHERE s.branch_id=? AND s.slip_date BETWEEN ? AND ? GROUP BY l.slip_id", (branch_id, a.isoformat(), b.isoformat()))}
+    apps = {sid: n for sid, n in con.execute(
+        "SELECT g.slip_id, COUNT(*) FROM bc_issue_log g JOIN bc_issue_slip s USING(slip_id)"
+        " WHERE s.branch_id=? AND s.slip_date BETWEEN ? AND ? AND g.action='append' GROUP BY g.slip_id",
+        (branch_id, a.isoformat(), b.isoformat()))}
     out, d = [], a
     while d <= b:
         iso = d.isoformat()
         row = rows.get(iso)
-        out.append(_status_dict(iso, row, lines.get(row["slip_id"], 0) if row else 0))
+        out.append(_status_dict(iso, row, lines.get(row["slip_id"], 0) if row else 0, apps.get(row["slip_id"], 0) if row else 0))
         d += timedelta(days=1)
     return out
 
@@ -162,7 +195,8 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
 
     PR-M3: each item also carries `recent` (a confirmed slip of the last RECENT_DAYS days before this day has a line
     for it) and `prev_used` / `prev_waste` (the quantity on the latest such confirmed slip, in the count unit, None
-    when 0); inside a zone the recent items come first. `prev_date` names that slip."""
+    when 0); inside a zone the recent items come first. `prev_date` names that slip. PR-M7: `prev_waste_reason` and
+    `prev_note` are what that slip said about its waste (they let "เบิกเหมือนเมื่อวาน" copy the waste with its reason)."""
     from .stock import sheet as stock_sheet, system_position
     d = _date_or_error(slip_date)
     today = _day(now)
@@ -201,10 +235,10 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
                      " AND slip_date BETWEEN ? AND ? ORDER BY slip_date DESC LIMIT 1", (branch_id, r0, w1)).fetchone()
     prev_lines = {}
     if pv:
-        for c, qu, qw, unit, qub, qwb in con.execute(
-                "SELECT ingredient_code, qty_used, qty_waste, unit, qty_used_base, qty_waste_base FROM bc_issue_line"
-                " WHERE slip_id=?", (pv[0],)):
-            prev_lines[c] = (qu, qw, unit, qub, qwb)
+        for c, qu, qw, unit, qub, qwb, rs, nt in con.execute(
+                "SELECT ingredient_code, qty_used, qty_waste, unit, qty_used_base, qty_waste_base, waste_reason, note"
+                " FROM bc_issue_line WHERE slip_id=?", (pv[0],)):
+            prev_lines[c] = (qu, qw, unit, qub, qwb, rs, nt)
     klass_order = {"A": 0, "B": 1, "C": 2}
     for z in base["zones"]:
         for it in z["items"]:
@@ -222,13 +256,15 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
                 it["used"] = it["waste"] = it["waste_reason"] = it["line_note"] = None
             it["recent"] = it["code"] in recent
             pl = prev_lines.get(it["code"])
-            it["prev_used"] = it["prev_waste"] = None
+            it["prev_used"] = it["prev_waste"] = it["prev_waste_reason"] = it["prev_note"] = None
             if pl:
                 same = (pl[2] or "") == (it["count_unit"] or "")
                 pu = pl[0] if same else in_count(it["code"], pl[3], f)
                 pw = pl[1] if same else in_count(it["code"], pl[4], f)
                 it["prev_used"] = pu if pu and pu > 0 else None
                 it["prev_waste"] = pw if pw and pw > 0 else None
+                if it["prev_waste"]:
+                    it["prev_waste_reason"], it["prev_note"] = pl[5], pl[6]
         # usage first, then the order the count list already uses (required, then class A/B/C, then the name)
         z["items"].sort(key=lambda r: (not r["recent"], not r["required"], klass_order.get(r["class"], 3), r["name"]))
     st = status_of(con, branch_id, d)
@@ -236,6 +272,7 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
     out.update({"date": d.isoformat(), "today": today.isoformat(), "status": st, "status_th": STATUS_TH[st["status"]],
                 "slip": row and {k: row[k] for k in ("slip_id", "note", "reopened_by", "reopened_at", "reopen_note")},
                 "editable": st["status"] not in ("confirmed", "late"),
+                "can_append": st["status"] in ("confirmed", "late") and d == today,       # PR-M7: เบิกเพิ่ม is open on today's confirmed slip
                 "backdated": d < today, "prev_date": pv[1] if pv else None, "basis": pos["basis"], "missing_days": pos["missing_days"],
                 "earliest": (today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat(),
                 "lines": list(lines.values()),
@@ -244,25 +281,10 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
 
 
 # ── writing ──────────────────────────────────────────────────────────────────
-def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = False, note: str = None,
-         now: datetime = None) -> dict:
-    """Write the day's draft (creating it) and optionally confirm it. Lines sent are upserted (both quantities
-    zero removes the line); lines not sent stay."""
-    from .stock import _branch_name, count_units
-    _branch_name(con, branch_id)
-    d = _date_or_error(slip_date)
-    today = _day(now)
-    if d > today:
-        raise ValueError("ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า")
-    if (today - d).days > MAX_BACKDATE_DAYS:
-        raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน {MAX_BACKDATE_DAYS} วัน")
-    if submit:                                               # confirming changes a posted period's numbers
-        from .variance import assert_not_posted
-        assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
-    iso = d.isoformat()
-    row = _row(con, branch_id, iso)
-    if row and row["status"] == "confirmed":
-        raise ValueError(f"ใบตัดเบิกวันที่ {_fmt_day(iso)} ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข")
+def _clean_lines(con, lines: list):
+    """The lines a branch sent, checked and converted to base units: ([(code, None | (used, waste, unit, used_base,
+    waste_base, reason, note))], [unconvertible messages]). A line with both quantities 0 is (code, None)."""
+    from .stock import count_units
     conv = Converter(con)
     cu = count_units(con, {(ln.get("code") or ln.get("ingredient_code") or "").strip() for ln in lines or []})
     clean, bad = [], []
@@ -302,6 +324,29 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
         if ub is None or wb is None:
             bad.append(f"{code}: {how if ub is None else how2}")
         clean.append((code, (used, waste, unit, ub, wb, reason, lnote)))
+    return clean, bad
+
+
+def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = False, note: str = None,
+         now: datetime = None) -> dict:
+    """Write the day's draft (creating it) and optionally confirm it. Lines sent are upserted (both quantities
+    zero removes the line); lines not sent stay."""
+    from .stock import _branch_name
+    _branch_name(con, branch_id)
+    d = _date_or_error(slip_date)
+    today = _day(now)
+    if d > today:
+        raise ValueError("ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า")
+    if (today - d).days > MAX_BACKDATE_DAYS:
+        raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน {MAX_BACKDATE_DAYS} วัน")
+    if submit:                                               # confirming changes a posted period's numbers
+        from .variance import assert_not_posted
+        assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
+    iso = d.isoformat()
+    row = _row(con, branch_id, iso)
+    if row and row["status"] == "confirmed":
+        raise ValueError(f"ใบตัดเบิกวันที่ {_fmt_day(iso)} ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข")
+    clean, bad = _clean_lines(con, lines)
     created = False
     if not row:
         cur = con.execute("INSERT INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at)"
@@ -352,6 +397,68 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     return out
 
 
+def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime = None) -> dict:
+    """PR-M7 · เบิกเพิ่ม: more lines on the slip of TODAY that is already confirmed, without a reopen. Each quantity is ADDED
+    to the line the slip has for that item (or the line is inserted); waste still needs its reason. The slip stays
+    confirmed and `late` is not touched. One bc_issue_log row ('append', lines = lines added) and one audit row."""
+    from .stock import _branch_name
+    from .variance import assert_not_posted
+    _branch_name(con, branch_id)
+    d = _date_or_error(slip_date)
+    iso = d.isoformat()
+    row = _row(con, branch_id, iso)
+    if not row or row["status"] != "confirmed" or d != _day(now):
+        raise ValueError("เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว")
+    assert_not_posted(con, branch_id, iso, "ใบตัดเบิก")
+    clean, bad = _clean_lines(con, lines)
+    if bad:
+        raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
+    todo = [(c, v) for c, v in clean if v is not None]
+    if not todo:
+        raise ValueError("ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ")
+    sid = row["slip_id"]
+    conv = Converter(con)
+    n_used = n_waste = 0
+    for code, (used, waste, unit, ub, wb, reason, lnote) in todo:
+        cur = con.execute("SELECT qty_used, qty_waste, unit, qty_used_base, qty_waste_base, waste_reason, note FROM bc_issue_line"
+                          " WHERE slip_id=? AND ingredient_code=?", (sid, code)).fetchone()
+        if not cur:
+            con.execute("INSERT INTO bc_issue_line(slip_id, ingredient_code, qty_used, qty_waste, unit, qty_used_base,"
+                        " qty_waste_base, waste_reason, note) VALUES(?,?,?,?,?,?,?,?,?)",
+                        (sid, code, used, waste, unit, ub, wb, reason, lnote))
+        else:
+            qu, qw, cunit, qub, qwb, crs, cnt = cur
+            if (cunit or "") != (unit or ""):                  # the new quantity in the unit the line already has
+                f, _how = conv.to_base(code, 1, cunit or conv.base_unit(code))
+                if not f:
+                    raise ValueError(f"{code}: แปลงหน่วย {cunit or '-'} ไม่ได้")
+                used, waste = ub / f, wb / f
+            qu, qw = (qu or 0) + used, (qw or 0) + waste
+            qub, qwb = (qub or 0) + ub, (qwb or 0) + wb
+            new_rs, new_nt = crs, cnt
+            if waste > 0:
+                if not (cur[1] or 0) > 0:                      # the line had no waste before: this reason is its reason
+                    new_rs, new_nt = reason, lnote or cnt
+                elif reason != crs or lnote:                   # a second reason on the same item stays on the record in the note
+                    extra = f"เบิกเพิ่ม: {WASTE_REASON_TH.get(reason, reason)}" + (f" – {lnote}" if lnote else "")
+                    new_nt = f"{cnt} · {extra}" if cnt else extra
+            elif lnote:
+                new_nt = f"{cnt} · เบิกเพิ่ม: {lnote}" if cnt else f"เบิกเพิ่ม: {lnote}"
+            con.execute("UPDATE bc_issue_line SET qty_used=?, qty_waste=?, qty_used_base=?, qty_waste_base=?, waste_reason=?, note=?"
+                        " WHERE slip_id=? AND ingredient_code=?", (qu, qw, qub, qwb, new_rs, new_nt, sid, code))
+        n_used += 1 if used > 0 else 0
+        n_waste += 1 if waste > 0 else 0
+    con.execute("UPDATE bc_issue_slip SET updated_at=? WHERE slip_id=?", (_stamp(now), sid))
+    row = _row_by_id(con, sid)
+    summary = f"เบิกใช้ {n_used} รายการ · ของเสีย {n_waste} รายการ"
+    _log(con, row, who, "append", late=row["late"], lines=len(todo), note=summary, now=now)
+    audit(con, who, "issue_append", "bc_issue_slip", str(sid), None,
+          {"branch_id": branch_id, "date": iso, "lines": len(todo), "codes": [c for c, _ in todo][:20]})
+    st = status_of(con, branch_id, iso)
+    return {"slip_id": sid, "date": iso, "status": st["status"], "added": len(todo), "lines": st["lines"],
+            "appends": st["appends"], "late": int(row["late"] or 0), "slip": st}
+
+
 def reopen(con, slip_id: int, who: str, note: str, now: datetime = None) -> dict:
     """Sales Support opens a confirmed slip for the branch to edit; `late` and the confirm count stay."""
     row = _row_by_id(con, slip_id)
@@ -389,7 +496,8 @@ def listing(con, branch_id: int = None, date_from=None, date_to=None, status: st
     d0 = date.fromisoformat(_iso(date_from)) if date_from else d1 - timedelta(days=30)
     sql = ("SELECT " + ", ".join("s." + c for c in _COLS) + ", b.name,"
            " (SELECT COUNT(*) FROM bc_issue_line l WHERE l.slip_id=s.slip_id),"
-           " (SELECT COUNT(*) FROM bc_issue_line l WHERE l.slip_id=s.slip_id AND l.qty_waste>0)"
+           " (SELECT COUNT(*) FROM bc_issue_line l WHERE l.slip_id=s.slip_id AND l.qty_waste>0),"
+           " (SELECT COUNT(*) FROM bc_issue_log g WHERE g.slip_id=s.slip_id AND g.action='append')"
            " FROM bc_issue_slip s LEFT JOIN branches b ON b.branch_id=s.branch_id WHERE s.slip_date BETWEEN ? AND ?")
     args = [d0.isoformat(), d1.isoformat()]
     if branch_id is not None:
@@ -405,7 +513,7 @@ def listing(con, branch_id: int = None, date_from=None, date_to=None, status: st
                     "date": row["slip_date"], "status": st, "status_th": STATUS_TH[st], "late": int(row["late"] or 0),
                     "lines": r[len(_COLS) + 1], "waste_lines": r[len(_COLS) + 2], "confirmed_by": row["confirmed_by"],
                     "confirmed_at": row["confirmed_at"], "confirm_count": int(row["confirm_count"] or 0),
-                    "reopened_at": row["reopened_at"]})
+                    "reopened_at": row["reopened_at"], "appends": r[len(_COLS) + 3]})
         if len(out) >= limit:
             break
     return out
@@ -428,4 +536,5 @@ def detail(con, slip_id: int) -> dict:
                         " FROM bc_issue_line WHERE slip_id=? ORDER BY ingredient_code", (slip_id,))]
     out["log"] = [dict(zip(("at", "who", "action", "late", "lines", "note"), r)) for r in con.execute(
         "SELECT at, who, action, late, lines, note FROM bc_issue_log WHERE slip_id=? ORDER BY log_id", (slip_id,))]
+    out["appends"] = sum(1 for x in out["log"] if x["action"] == "append")      # PR-M7: lines added to the confirmed slip of its day
     return out

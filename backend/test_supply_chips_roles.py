@@ -9,7 +9,9 @@ pins, per role, the chips and pages the bar offers (plan: bom-ux-overhaul-phase3
   warehouse    หน้างาน · คิวใบสั่งซื้อ
   salessupport หน้างาน · ใบสั่งซื้อ · ไฟล์ราคา · ปิดงวดเดือน · ตั้งค่า (+ หน้าระบบเดิม)
   operation    ตรวจสอบการสั่ง · ผลต่างตัดเบิกรายวัน · สรุปผลต่างรายเดือน · ใบตัดเบิกสาขา
-  analyst / management   everything (the older pages inside ตั้งค่า → หน้าระบบเดิม)
+  analyst / management   PR-M7: หน้างาน · งานประจำเดือน (ไฟล์ราคา, ราคารายเดือน, สูตรตามระดับราคา, สูตรกึ่งสำเร็จ, ตรวจและประกาศใช้) ·
+                         ใบสั่งซื้อ · ปิดงวดเดือน · ข้อมูลตั้งต้น (ทะเบียนวัตถุดิบ, หน่วยและการแปลง, ความพร้อมและรหัสสูตรเดิม) ·
+                         สาขาของฉัน · ตั้งค่า (the older pages inside ตั้งค่า → หน้าระบบเดิม)
 The first row of the bar (LEVEL1) is what _renderSupplyBar draws: a chip holding one page is named by that page, and a role
 with SUPPLY_FLAT_MAX pages or fewer gets them as one flat row (so accounting's row is หน้างาน · ราคารายเดือน · ใบสรุปตัดเบิก).
 And that nothing is listed for a role that cannot open it (the floor), and that no page is left without a chip.
@@ -118,8 +120,8 @@ EXPECTED = {
 }
 EVERYTHING = {
     "หน้างาน": [HOME, PILOT],
-    "ข้อมูลตั้งต้น": ["ทะเบียนวัตถุดิบ", "ราคารายเดือน", "ไฟล์ราคา", "หน่วยและการแปลง", "ความพร้อมและรหัสสูตรเดิม"],
-    "สูตรและการประกาศใช้": ["สูตรตามระดับราคา", "สูตรกึ่งสำเร็จ", "ตรวจและประกาศใช้"],
+    "งานประจำเดือน": ["ไฟล์ราคา", "ราคารายเดือน", "สูตรตามระดับราคา", "สูตรกึ่งสำเร็จ", "ตรวจและประกาศใช้"],
+    "ข้อมูลตั้งต้น": ["ทะเบียนวัตถุดิบ", "หน่วยและการแปลง", "ความพร้อมและรหัสสูตรเดิม"],
     "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ", "เคลมสินค้า", "ยอดแนะนำรายรอบ", "ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน"],
     "ปิดงวดเดือน": ["นำเข้าข้อมูลปิดงวด", "สรุปผลต่างรายเดือน", "ใบสรุปตัดเบิก"],
     "สาขาของฉัน": ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"],
@@ -144,8 +146,8 @@ LEVEL1 = {
     "operation": ["หน้างาน", "ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", "สรุปผลต่างรายเดือน"],
     "salessupport": ["หน้างาน", "ไฟล์ราคา", "ใบสั่งซื้อ", "ปิดงวดเดือน", "ตั้งค่า"],
     "branch": ["หน้างาน", "สาขาของฉัน"],
-    "analyst": ["หน้างาน", "ข้อมูลตั้งต้น", "สูตรและการประกาศใช้", "ใบสั่งซื้อ", "ปิดงวดเดือน", "สาขาของฉัน", "ตั้งค่า"],
-    "management": ["หน้างาน", "ข้อมูลตั้งต้น", "สูตรและการประกาศใช้", "ใบสั่งซื้อ", "ปิดงวดเดือน", "สาขาของฉัน", "ตั้งค่า"],
+    "analyst": ["หน้างาน", "งานประจำเดือน", "ใบสั่งซื้อ", "ปิดงวดเดือน", "ข้อมูลตั้งต้น", "สาขาของฉัน", "ตั้งค่า"],
+    "management": ["หน้างาน", "งานประจำเดือน", "ใบสั่งซื้อ", "ปิดงวดเดือน", "ข้อมูลตั้งต้น", "สาขาของฉัน", "ตั้งค่า"],
     "marketing": [], "franchise": [],
 }
 
@@ -193,3 +195,18 @@ def test_every_pane_has_its_help_folded_at_the_bottom():
     oh = (root / "tabs" / "54-orderhub.html").read_text(encoding="utf-8")
     for pane in ("queue", "claims", "issues", "issuevar", "comp", "pilot", "central", "month"):
         assert f'id="ohbHelp-{pane}"' in oh, pane
+
+
+def test_a_page_in_two_chips_is_listed_for_one_role_only():
+    """PR-M7: ไฟล์ราคา, ราคารายเดือน, ทะเบียนวัตถุดิบ and the two recipe pages sit in two chips; the roles of the two copies never overlap,
+    so no role's bar lists a page twice and the other roles' bars are the ones they had before."""
+    seen = {}
+    for ch in _chips():
+        for it in ch["items"]:
+            for role in it["roles"] or ["*"]:
+                key = (role, it["tab"], it["pane"])
+                assert key not in seen, f"{key} is listed in {seen[key]} and in {ch['key']}"
+                seen[key] = ch["key"]
+    for role in ("analyst", "management"):
+        labels = [x for items in _bar(role).values() for x in items]
+        assert len(labels) == len(set(labels)), role

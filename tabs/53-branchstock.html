@@ -6,6 +6,8 @@
     <div class="flex flex-wrap items-center gap-2 mt-2 brn-cluster-name">
       <select id="brnBranch" data-branch-picker onchange="brnBranchChanged()" style="display:none;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select>
       <span id="brnBranchName" class="text-sm font-semibold" style="color:var(--text-primary)"></span>
+      <!-- PR-M7: ตัวอักษรใหญ่ — the branch's phone reads at x1.15, remembered on this device (brnBigFont, js/14-branch.js) -->
+      <button type="button" id="brnBigBtn" class="brn-big-btn" onclick="brnBigFontToggle()" aria-pressed="false">ตัวอักษรใหญ่</button>
     </div>
   </div>
 
@@ -15,6 +17,8 @@
       <div id="brnIssDays" class="brn-daystrip"></div>
       <div id="brnIssHead" class="text-sm mt-2"></div>
       <div id="brnIssBanner" class="mt-2" style="display:none"></div>
+      <!-- PR-M7: เบิกเหมือนเมื่อวาน — fills the empty boxes from the previous confirmed slip -->
+      <div id="brnIssQuick" class="brn-quick mt-2" style="display:none"></div>
     </div>
     <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
       <div id="brnIssZones" class="flex flex-wrap gap-1 brn-zones"></div>
@@ -55,6 +59,8 @@
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
       </div>
     </div>
+    <!-- PR-M7: สั่งตามยอดแนะนำทั้งหมด -->
+    <div id="brnOrdQuick" class="brn-quick mb-3" style="display:none"></div>
     <div id="brnOrdGate" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnOrdList" class="card p-3 mb-3"></div>
     <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">

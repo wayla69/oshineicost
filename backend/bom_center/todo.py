@@ -306,6 +306,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         info = slips[bid]
         st_today = info["today"]
         slip_ok = st_today["status"] in ("confirmed", "late")
+        hhmm = None
         if st_today["status"] in ("confirmed", "late"):
             at = st_today["confirmed_at"]
             hhmm = datetime.fromisoformat(at).astimezone(BKK).strftime("%H:%M") if at else "-"
@@ -318,6 +319,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       "done" if slip_ok else "todo", slip_detail,
                       owner=("branch.stock",), owner_th="สาขา", branch=b,
                       yesterday=info["yesterday"]["status"], slip_status=st_today["status"], started=info["started"],
+                      confirmed_hhmm=hhmm, appends=int(st_today.get("appends") or 0),     # PR-M7: the branch's "วันนี้เหลือทำอะไร" strip
                       go={"tab": "branchstock", "pane": "issue", "extra": {"date": today.isoformat()}}))
         for gd in info["gaps"]:
             g = date.fromisoformat(gd)

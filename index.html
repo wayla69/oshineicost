@@ -1631,6 +1631,29 @@ select.supply-month { min-width: 150px; }
 }
 .brn-t-short { display: none; }
 @media (max-width: 700px) { body.supply-phone .brn-t-short { display: inline; } }
+/* PR-M7 · เบิกเหมือนเมื่อวาน · สั่งตามยอดแนะนำทั้งหมด (one outlined button each) and ตัวอักษรใหญ่ (the branch's x1.15 toggle) */
+.brn-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.brn-quick button { border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: var(--r-sm); padding: 8px 14px; min-height: 44px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.brn-big-btn { display: none; flex: 0 0 auto; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 999px; padding: 2px 10px; font-size: 12px; line-height: 1.4; cursor: pointer; white-space: nowrap; }
+.brn-big-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+body.supply-phone .brn-big-btn { display: inline-flex; align-items: center; }
+body.supply-phone #brnOrdQuick { margin-bottom: 8px; }
+body.supply-phone #brnOrdQuick > span { display: none; }       /* on the phone the button alone: the page is already long */
+body.supply-phone #tab-branchstock > .brn-cluster .brn-big-btn { min-height: 26px; }
+/* ตัวอักษรใหญ่: the text the branch reads grows to x1.15 (rem-based text through html, the fixed-size row text below); the 44 px boxes and the
+   sticky row keep their size, so a screen still shows the same rows' worth of work */
+html.brn-big { font-size: 115%; }
+@media (max-width: 700px) {
+  html.brn-big body.supply-phone .brn-row .brn-name, html.brn-big body.supply-phone #tab-branchstock .brn-namecol > div:first-child { font-size: 15px; }
+  html.brn-big body.supply-phone #tab-branchstock .brn-namecol > div:last-child, html.brn-big body.supply-phone #brnIssList .brn-sub { font-size: 12px; }
+  html.brn-big body.supply-phone .brn-row .brn-cap { font-size: 12.5px; }
+  html.brn-big body.supply-phone .brn-row .brn-qty::placeholder { font-size: 13px; }
+  html.brn-big body.supply-phone .brn-row .brn-box { width: 80px; flex-basis: 80px; }
+  html.brn-big body.supply-phone .brn-row .brn-err, html.brn-big body.supply-phone .brn-row .brn-why { font-size: 13.5px; }
+  html.brn-big body.supply-phone .brn-sticky-bottom button { font-size: 15px !important; }
+  html.brn-big body.supply-phone #brn-pane-issue .brn-sticky-bottom span[id$="Status"], html.brn-big body.supply-phone #brn-pane-order .brn-sticky-bottom span[id$="Status"] { font-size: 16px; line-height: 22px; }
+  html.brn-big body.supply-phone #tab-branchstock > .brn-cluster h2 { font-size: 14px; }
+}
 /* the branch login's top bar keeps only the user chip (name · lock · logout) and the theme
    toggle — search, presets, exports and uploads are the sales dashboard's tools */
 body.role-branch .topbar-actions > :not(#userChip):not(#darkBtn),
@@ -2256,8 +2279,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <span class="nav-label">เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
   <!-- วัตถุดิบและใบสั่งซื้อ (BoM Center) is ONE entry, หน้างาน: the bar on the page lists its
-       7 questions (หน้างาน · ข้อมูลตั้งต้น · สูตรและการประกาศใช้ · ใบสั่งซื้อ · ปิดงวดเดือน ·
-       สาขาของฉัน · ตั้งค่า) and the panes under each (SUPPLY_CHIPS, js/01-core.js).
+       7 questions (หน้างาน · งานประจำเดือน · ใบสั่งซื้อ · ปิดงวดเดือน · ข้อมูลตั้งต้น ·
+       สาขาของฉัน · ตั้งค่า, as the analyst reads it; the other roles see fewer) and the panes under each (SUPPLY_CHIPS, js/01-core.js).
        The module's other nav items stay in the DOM hidden; applyPermissions' safety
        net reveals one for a role that cannot open the entry. A branch login sees the
        entry as "สาขาของฉัน" (applyPermissions). -->

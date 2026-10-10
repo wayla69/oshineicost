@@ -24,8 +24,23 @@ function _brnCanOrder() { return hasModule('branch.stock') || hasModule('bom.cen
 function _brnCanVariance() { return hasModule('branch.stock') || hasModule('bom.center') || hasModule('supply.ordering'); }   // close step 5 (owner 2026-10-07)
 const _BRN_READONLY = 'บทบาทของคุณดูหน้านี้ได้ แต่บันทึกแทนสาขาไม่ได้';
 
+// PR-M7 · ตัวอักษรใหญ่: the branch's phone reads at x1.15 (html.brn-big, index.html). The choice is remembered on this device.
+const _BRN_BIG_KEY = 'oshinei_brn_big';
+function brnBigFontGet() { try { return localStorage.getItem(_BRN_BIG_KEY) === '1'; } catch (e) { return false; } }
+function brnBigFontApply(on) {
+  document.documentElement.classList.toggle('brn-big', !!on && document.body.classList.contains('supply-phone'));   // the branch login only
+  const b = document.getElementById('brnBigBtn');
+  if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+function brnBigFontToggle() {
+  const on = !brnBigFontGet();
+  try { localStorage.setItem(_BRN_BIG_KEY, on ? '1' : '0'); } catch (e) { /* the choice then lasts until the page is closed */ }
+  brnBigFontApply(on);
+}
+
 async function loadBranchStock() {
   try {
+    brnBigFontApply(brnBigFontGet());                       // the toggle shows the device's choice (the class itself is set at login)
     const nm = document.getElementById('brnBranchName');
     if (isPinnedSession()) {
       // a pinned login: its branch is text, there is no picker and the branch list is never fetched (the server pins every call)
@@ -228,6 +243,9 @@ let _brnIssQty = {};          // code -> {used, waste, reason, note} (strings) �
 let _brnIssDirty = false;
 let _brnIssTimer = null;
 let _brnIssLastSig = null;    // the lines last stored (or loaded): the autosave sends nothing when they have not changed
+let _brnIssAppend = false;    // PR-M7 · เบิกเพิ่ม: the confirmed slip of today takes more lines; the boxes are the quantities to ADD
+let _brnIssKeep = null;       // the slip's own quantities while the append boxes are on screen
+let _brnIssFill = null;       // PR-M7 · เบิกเหมือนเมื่อวาน: {date, n} of the last fill, named in the status line until the day changes
 const _BRN_ISS_WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 function _brnIssDm(iso) { return `${Number(String(iso).slice(8, 10))}/${Number(String(iso).slice(5, 7))}`; }
 function _brnIssWd(iso) { return _BRN_ISS_WD[new Date(String(iso) + 'T12:00:00Z').getUTCDay()]; }
@@ -237,7 +255,7 @@ function _brnIssTime(iso) {      // a stored UTC stamp as the branch's clock (Ba
   return isNaN(d) ? '' : d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
 }
 function _brnIssCanReopen() { return hasModule('supply.ordering') || hasModule('bom.center'); }
-function _brnIssEditable() { return !!(_brnIss && _brnIss.editable) && _brnCanOrder(); }
+function _brnIssEditable() { return !!(_brnIss && (_brnIss.editable || _brnIssAppend)) && _brnCanOrder(); }
 const _BRN_ISS_ST = { confirmed: ['ยืนยันแล้ว', 'var(--good-ink)'], late: ['ยืนยันล่าช้า', 'var(--amber-ink)'],
   draft: ['ร่าง', 'var(--amber-ink)'], missing: ['ยังไม่บันทึก', 'var(--bad-ink)'] };
 const _BRN_ISS_ST_LONG = { confirmed: 'ยืนยันแล้ว', late: 'ยืนยันล่าช้า', draft: 'ร่าง', missing: 'ยังไม่บันทึก' };
@@ -249,9 +267,11 @@ async function brnIssLoad(opts) {
     ['brnIssDays', 'brnIssHead', 'brnIssZones', 'brnIssActions', 'brnIssHistory', 'brnIssProgress'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
     return;
   }
+  _brnIssAppend = false; _brnIssKeep = null;              // a load always leaves the เบิกเพิ่ม boxes
   if (!opts.quiet) {
     document.getElementById('brnIssList').innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลดรายการ…</span>';
     _bmcStatus('brnIssStatus', '');                       // the previous day's "บันทึกร่างแล้ว" does not belong to this one
+    _brnIssFill = null;
   }
   try {
     const qs = _brnQS();
@@ -357,7 +377,7 @@ function _brnIssZoneChips() {
   const searching = !!((document.getElementById('brnIssQ') || {}).value || '').trim();
   document.getElementById('brnIssZones').innerHTML = s.zones.map(z => {
     const n = z.items.filter(i => _brnIssAny(i.code)).length;
-    const ok = _brnIssZoneDone(z);
+    const ok = !_brnIssAppend && _brnIssZoneDone(z);
     const on = !searching && z.zone === _brnIssZone;
     return `<button onclick="brnIssSetZone('${z.zone}')" ${ok ? 'title="โซนนี้ครบ"' : ''} style="border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${esc(z.label)}${n ? ' · ' + n : ''}${ok ? ` <span style="color:${on ? 'inherit' : 'var(--good-ink)'}" aria-label="โซนนี้ครบ">✓</span>` : ''}</button>`;
   }).join('');
@@ -368,7 +388,7 @@ function _brnIssProgress() {
   const all = s.zones.flatMap(z => z.items);
   const nWaste = all.filter(i => Number((_brnIssQty[i.code] || {}).waste) > 0).length;
   document.getElementById('brnIssProgress').innerHTML =
-    `กรอกแล้ว <b style="color:var(--text-primary)">${all.filter(i => _brnIssAny(i.code)).length}</b> รายการ · ของเสีย <b style="color:${nWaste ? 'var(--amber-ink)' : 'var(--text-primary)'}">${nWaste}</b>`;
+    `${_brnIssAppend ? 'เบิกเพิ่ม' : 'กรอกแล้ว'} <b style="color:var(--text-primary)">${all.filter(i => _brnIssAny(i.code)).length}</b> รายการ · ของเสีย <b style="color:${nWaste ? 'var(--amber-ink)' : 'var(--text-primary)'}">${nWaste}</b>`;
 }
 
 function brnIssRender() {
@@ -382,10 +402,12 @@ function brnIssRender() {
   document.getElementById('brnIssHead').innerHTML =
     `<span style="color:var(--text-primary)">ใบตัดเบิกวันที่ <b>${esc(fmtDay(s.date))}</b></span> ${_bmcChip(_BRN_ISS_ST_LONG[st.status] || stT, stInk)}` +
     (confirmed ? ` <span class="text-xs" style="color:var(--text-secondary)">เวลา ${esc(_brnIssTime(st.confirmed_at))} โดย ${esc(whoTh(st.confirmed_by))}</span>` : '') +
+    (st.appends ? ' ' + _bmcChip(`เบิกเพิ่ม ${st.appends} ครั้ง`, 'var(--navy-ink)') : '') +
     (s.slip && s.slip.reopen_note && !confirmed ? ` <span class="text-xs" style="color:var(--amber-ink)">เปิดแก้ไขโดย ${esc(whoTh(s.slip.reopened_by))}: ${esc(s.slip.reopen_note)}</span>` : '');
   const parts = [];
   if (s.backdated && !confirmed) parts.push(['var(--amber-ink)', 'ใบย้อนหลังนับเป็นล่าช้า']);
-  if (confirmed) parts.push(['var(--text-secondary)', 'ยืนยันแล้ว แก้ไขไม่ได้ · ต้องการแก้ แจ้งประสานงานขาย']);
+  if (_brnIssAppend) parts.push(['var(--navy-ink)', 'รายการที่กรอกจะถูกบวกเพิ่มในใบของวันนี้ที่ยืนยันแล้ว']);
+  else if (confirmed) parts.push(['var(--text-secondary)', 'ยืนยันแล้ว แก้ไขไม่ได้ · ต้องการแก้ แจ้งประสานงานขาย' + (s.can_append && _brnCanOrder() ? ' · ลืมรายการ กด “เบิกเพิ่ม” เพื่อบวกเพิ่มในใบของวันนี้' : '')]);
   const md = s.missing_days || [];
   if (md.length) parts.push(['var(--amber-ink)', `ยังไม่ได้ทำใบตัดเบิก ${md.length} วัน (${md.slice(0, 6).map(_brnIssDm).join(', ')}${md.length > 6 ? ` และอีก ${md.length - 6} วัน` : ''}) · เลือกวันที่ยังไม่ทำจากแถบวันที่`]);
   const banner = document.getElementById('brnIssBanner');
@@ -400,11 +422,19 @@ function brnIssRender() {
   const items = (q ? all : zone.items).filter(i => (!usedOnly || _brnIssAny(i.code)) && (!q || (i.code + ' ' + i.name).toLowerCase().includes(q)));
   // one box: the caption under it names the box and its unit; an empty box hints at the previous confirmed slip ("เมื่อวาน 3")
   const prevWord = s.prev_date && s.prev_date === new Date(new Date(s.date + 'T12:00:00Z').getTime() - 86400000).toISOString().slice(0, 10) ? 'เมื่อวาน' : 'ครั้งก่อน';
+  // PR-M7 · เบิกเหมือนเมื่อวาน: one button in the head card while the slip is a draft and a previous confirmed slip has quantities
+  const quick = document.getElementById('brnIssQuick');
+  if (quick) {
+    const nPrev = ed && !_brnIssAppend ? all.filter(i => i.prev_used || i.prev_waste).length : 0;
+    quick.style.display = nPrev ? '' : 'none';
+    quick.innerHTML = nPrev ? `<button type="button" id="brnIssFillBtn" onclick="brnIssFillPrev()">เบิกเหมือน${prevWord === 'เมื่อวาน' ? 'เมื่อวาน' : 'ใบครั้งก่อน'}</button>
+      <span class="text-xs" style="color:var(--text-muted)">ใบวันที่ ${esc(_brnIssDm(s.prev_date))} · ${nPrev} รายการ · เติมเฉพาะช่องที่ยังว่าง</span>` : '';
+  }
   const box = (it, f, label, ink, v, prev, unit) => {
     const id = (f === 'used' ? 'brnIssU_' : 'brnIssW_') + esc(it.code);
     const bad = _brnIssBadVal(v);
     return `<div class="brn-box"><input id="${id}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${ed ? '' : 'disabled'} aria-label="${label} ${esc(it.name)}"
-        placeholder="${prev ? prevWord + ' ' + _bmcNum(prev, 2) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${bad ? 'aria-invalid="true"' : ''}
+        placeholder="${_brnIssAppend ? 'เพิ่ม' : prev ? prevWord + ' ' + _bmcNum(prev, 2) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${bad ? 'aria-invalid="true"' : ''}
         style="border-color:${bad ? 'var(--bad-ink)' : (v !== '' ? ink : 'var(--border-control)')}"><span class="brn-cap">${label} · ${esc(unit)}</span></div>`;
   };
   document.getElementById('brnIssList').innerHTML = items.length ? items.map(it => {
@@ -413,11 +443,14 @@ function brnIssRender() {
     const sys = it.system_qty == null ? ''
       : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(it.system_qty, 2)}</b> ${esc(unit)}</span>`;
     const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_bmcNum(it.avg_used_7d, 2)} ${esc(unit)}/วัน</span>` : '';
+    // เบิกเพิ่ม: what the confirmed slip already holds for the item, so the box holds only the quantity to add
+    const have = _brnIssAppend && (it.used > 0 || it.waste > 0)
+      ? `<div class="text-[11px]" style="color:var(--navy-ink)">ในใบแล้ว${it.used > 0 ? ` เบิกใช้ ${_bmcNum(it.used, 2)}` : ''}${it.waste > 0 ? ` ของเสีย ${_bmcNum(it.waste, 2)}` : ''} ${esc(unit)}</div>` : '';
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" title="${esc(it.name)}" style="color:var(--text-primary);font-weight:600">${esc(it.name)}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${it.required ? _bmcChip('บังคับ', 'var(--amber-ink)') + ' ' : ''}${esc(it.code)}${sys}${avg}</div></div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${it.required ? _bmcChip('บังคับ', 'var(--amber-ink)') + ' ' : ''}${esc(it.code)}${sys}${avg}</div>${have}</div>
         <div class="brn-boxes">${box(it, 'used', 'เบิกใช้', 'var(--accent)', v.used, it.prev_used, unit)}${box(it, 'waste', 'ของเสีย', 'var(--amber-ink)', v.waste, it.prev_waste, unit)}</div></div>
       <div id="brnIssE_${esc(it.code)}" class="brn-err" role="alert">${_brnIssBad(it.code) ? _BRN_QTY_ERR : ''}</div>
       <div id="brnIssX_${esc(it.code)}">${_brnIssReasonBox(it.code)}</div></div>`;
@@ -443,10 +476,41 @@ function brnIssSetField(code, field, v) {
   }
   _brnIssZoneChips();
   _brnIssProgress();
+  if (_brnIssAppend) return;                                            // the เบิกเพิ่ม boxes are sent by their own button, never autosaved
   _brnIssDirty = true;
   clearTimeout(_brnIssTimer);
   _brnIssTimer = setTimeout(() => brnIssSave(false, true), 2500);       // autosave the draft — a lost signal loses nothing
 }
+
+// PR-M7 · เบิกเหมือนเมื่อวาน: every EMPTY box takes the quantity of the previous confirmed slip (a box already typed is left
+// alone); the waste comes with its reason. Nothing is sent here: the normal autosave stores the draft, and every box stays editable.
+function brnIssFillPrev() {
+  const s = _brnIss;
+  if (!s || !_brnIssEditable() || _brnIssAppend) return;
+  const dm = _brnIssDm(s.prev_date);
+  let n = 0;
+  s.zones.flatMap(z => z.items).forEach(it => {
+    if (!(it.prev_used > 0) && !(it.prev_waste > 0)) return;
+    const q = _brnIssQty[it.code] || (_brnIssQty[it.code] = { used: '', waste: '', reason: '', note: '' });
+    let did = false;
+    if (it.prev_used > 0 && q.used === '') { q.used = String(it.prev_used); did = true; }
+    if (it.prev_waste > 0 && q.waste === '') {
+      q.waste = String(it.prev_waste); did = true;
+      if (!q.reason && it.prev_waste_reason) q.reason = it.prev_waste_reason;
+      if (!q.note && it.prev_note) q.note = it.prev_note;
+    }
+    if (did) n++;
+    else if (!_brnIssAny(it.code) && q.used === '' && q.waste === '') delete _brnIssQty[it.code];
+  });
+  if (!n) { _bmcStatus('brnIssStatus', 'ไม่มีช่องว่างที่ต้องเติม · ช่องที่กรอกแล้วไม่ถูกเปลี่ยน', 'var(--text-muted)'); return; }
+  _brnIssFill = { dm, n };
+  brnIssRender();
+  _bmcStatus('brnIssStatus', `เติมจากใบวันที่ ${dm} แล้ว ${n} รายการ · แก้เฉพาะรายการที่ต่าง`, 'var(--good-ink)');
+  _brnIssDirty = true;
+  clearTimeout(_brnIssTimer);
+  _brnIssTimer = setTimeout(() => brnIssSave(false, true), 2500);
+}
+const _brnIssFillNote = () => (_brnIssFill ? ` · เติมจากใบวันที่ ${_brnIssFill.dm} แล้ว ${_brnIssFill.n} รายการ · แก้เฉพาะรายการที่ต่าง` : '');
 
 // the lines to send. A line whose waste has no reason yet cannot be stored (the server refuses it): it is
 // listed in `incomplete`, and the autosave leaves it out until the reason is chosen. A negative or non-numeric
@@ -512,7 +576,7 @@ async function brnIssSave(submit, quiet) {
       // never "saved" in plain words after a line was left out: the left-out rows are named
       if (invalid.length) _bmcStatus('brnIssStatus', `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`, 'var(--bad-ink)');
       else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกร่างแล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุของของเสีย)`, 'var(--amber-ink)');
-      else _bmcStatus('brnIssStatus', `บันทึกร่างแล้ว ${clock()}`, 'var(--good-ink)');
+      else _bmcStatus('brnIssStatus', `บันทึกร่างแล้ว ${clock()}${_brnIssFillNote()}`, 'var(--good-ink)');
       return;
     }
     _brnIssDirty = false;
@@ -532,10 +596,59 @@ function brnIssActions() {
   const st = _brnIss.status || {};
   const confirmed = st.status === 'confirmed' || st.status === 'late';
   if (!_brnCanOrder()) box.innerHTML = `<span class="text-xs" style="color:var(--text-muted)">${esc(_BRN_READONLY)}</span>`;
+  else if (_brnIssAppend) box.innerHTML = btn('บันทึกการเบิกเพิ่ม', 'brnIssAppendSave()', true) + btn('ยกเลิก', 'brnIssAppendStop()');
   else if (confirmed) box.innerHTML = _bmcChip(_BRN_ISS_ST_LONG[st.status], st.status === 'late' ? 'var(--amber-ink)' : 'var(--good-ink)')
-    + `<span class="text-xs" style="color:var(--text-secondary)">ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข</span>`
+    + (_brnIss.can_append ? btn('เบิกเพิ่ม', 'brnIssAppendStart()', true) : '')
+    + `<span class="text-xs" style="color:var(--text-secondary)">${_brnIss.can_append ? 'แก้รายการเดิม แจ้งประสานงานขาย' : 'ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข'}</span>`
     + (_brnIssCanReopen() ? btn('เปิดแก้ไข', 'brnIssReopen()') : '');
   else box.innerHTML = btn('บันทึกร่าง', 'brnIssSave(false)') + btn('ยืนยันใบตัดเบิก', 'brnIssSave(true)', true);
+}
+
+// PR-M7 · เบิกเพิ่ม: the confirmed slip of TODAY takes more lines without a reopen. The list switches to empty boxes (the quantities to ADD),
+// the sticky row is "บันทึกการเบิกเพิ่ม" + "ยกเลิก", and the save adds the quantities to the slip on the server (logged as เบิกเพิ่ม).
+function brnIssAppendStart() {
+  if (!_brnIss || !_brnIss.can_append || !_brnCanOrder()) return;
+  _brnIssKeep = _brnIssQty;
+  _brnIssQty = {};
+  _brnIssAppend = true;
+  _bmcStatus('brnIssStatus', '');
+  brnIssRender();
+  window.scrollTo({ top: 0 });
+}
+function brnIssAppendStop() {
+  if (!_brnIssAppend) return;
+  _brnIssAppend = false;
+  _brnIssQty = _brnIssKeep || {};
+  _brnIssKeep = null;
+  _bmcStatus('brnIssStatus', '');
+  brnIssRender();
+}
+async function brnIssAppendSave() {
+  if (!_brnIssAppend || !_brnIss) return;
+  const { lines, incomplete, invalid } = _brnIssLines();
+  if (invalid.length || incomplete.length) {                       // say which row to fix and go to it
+    const code = invalid[0] || incomplete[0];
+    const it = _brnIssItem(code), q = _brnIssQty[code] || {};
+    _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${it.name}`
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${it.name}` : `เลือกสาเหตุของของเสีย: ${it.name}`,
+      invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
+    const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
+    if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
+    return;
+  }
+  const add = lines.filter(l => l.qty_used > 0 || l.qty_waste > 0);
+  if (!add.length) { _bmcStatus('brnIssStatus', 'ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ', 'var(--amber-ink)'); return; }
+  if (!await uiConfirm(`บันทึกการเบิกเพิ่ม ${add.length} รายการ ในใบตัดเบิก ${_brnIssDm(_brnIss.date)}?\nจำนวนที่กรอกจะบวกเพิ่มในใบที่ยืนยันแล้ว และบันทึกไว้ในประวัติของใบ`,
+      { title: 'ยืนยันการเบิกเพิ่ม', ok: 'บันทึก', cancel: 'ยกเลิก' })) return;
+  _bmcStatus('brnIssStatus', 'กำลังบันทึก…', 'var(--text-muted)');
+  try {
+    const qs = _brnQS();
+    const r = await _bmcJson(`${API}/api/bom-center/issues/append${qs ? '?' + qs : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: _brnIss.date, lines: add }) });
+    _brnPlan = null;                                              // the system stock moved: the order suggestion is calculated again
+    await brnIssLoad({ quiet: true });
+    _bmcStatus('brnIssStatus', `✓ เบิกเพิ่มแล้ว ${r.added} รายการ`, 'var(--good-ink)');
+  } catch (e) { _bmcStatus('brnIssStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }
 
 // Sales Support (or the analyst) opens a confirmed slip for the branch to edit again; the reason is logged
@@ -1452,6 +1565,31 @@ function _brnRenderLocal(p) {
       <div class="text-sm" style="margin-left:auto;color:var(--text-primary)">แนะนำ <b>${_bmcNum(r.order_units, 0)}</b> ${esc(_brnUnitLabel(r))}</div></div>`).join('')
       || '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีรายการที่ต้องซื้อเอง</span>');
   document.getElementById('brnOrdActions').innerHTML = '';
+  _brnOrdQuick(false);
+}
+
+// PR-M7 · สั่งตามยอดแนะนำทั้งหมด: one button above the list of an editable draft
+function _brnOrdQuick(show) {
+  const q = document.getElementById('brnOrdQuick');
+  if (!q) return;
+  q.style.display = show ? '' : 'none';
+  q.innerHTML = show ? `<button type="button" id="brnOrdFillBtn" onclick="brnOrdFillAll()">สั่งตามยอดแนะนำทั้งหมด</button>
+    <span class="text-xs" style="color:var(--text-muted)">ใส่ยอดแนะนำให้ทุกรายการในรอบนี้ · แก้เฉพาะรายการที่ต่าง</span>` : '';
+}
+async function brnOrdFillAll() {
+  const p = _brnPlan;
+  if (!p || !p.rows || !_brnCanOrder()) return;
+  if (p.order && !['suggested', 'confirmed'].includes(p.order.status)) return;      // sent already: nothing to fill
+  // a row the person (or the saved draft) holds at another figure than the live suggestion is an edited row
+  const edited = p.rows.filter(r => Number(_brnOrdQty[r.code] || 0) !== Number(r.order_units));
+  if (edited.length && !await uiConfirm(`ยืนยันการใส่ยอดแนะนำทับ ${edited.length} รายการที่แก้ไว้?`,
+      { title: 'ใส่ยอดแนะนำทั้งหมด', ok: 'ใส่ยอดแนะนำ', cancel: 'ยกเลิก' })) return;
+  p.rows.forEach(r => { _brnOrdQty[r.code] = String(r.order_units); });
+  edited.forEach(r => { delete _brnOrdReason[r.code]; });                         // the reason belonged to the old figure
+  _brnOrdEdited.clear();
+  brnRenderOrder();
+  _brnOrdTouched();                                                               // the draft saves itself like any other change
+  _bmcStatus('brnOrdStatus', 'ใส่ยอดแนะนำให้ทุกรายการแล้ว · แก้เฉพาะรายการที่ต่าง', 'var(--good-ink)');
 }
 
 function brnRenderOrder() {
@@ -1461,6 +1599,7 @@ function brnRenderOrder() {
   if (_brnOrdPage === 'local' && p.central_list) { _brnRenderLocal(p); return; }
   const o = p.order;
   const editable = !o || ['suggested', 'confirmed'].includes(o.status);
+  _brnOrdQuick(editable && p.rows.some(r => r.order_units > 0));
   _brnRenderBuffer(p, editable);
   const up = 1 + ((p.buffer || {}).pct || 0) / 100;
   const stk = p.stock || {};
