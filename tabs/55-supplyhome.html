@@ -17,6 +17,22 @@
     <span id="shmStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
   </div>
 
+  <!-- PR-M7 (branch login only): "วันนี้เหลือทำอะไร" — ตัดเบิก · สั่งสินค้า · รับสินค้า, one line each, from the same to-do items as the cards below -->
+  <div class="card p-3 mb-3" id="shmToday" style="display:none">
+    <div class="section-title mb-1">วันนี้เหลือทำอะไร</div>
+    <div id="shmTodayRows"></div>
+  </div>
+
+  <!-- PR-M7 (branch login only): install as an app on the phone's home screen; × keeps it away on this device -->
+  <div class="card p-3 mb-3" id="shmInstall" style="display:none">
+    <div class="flex items-center gap-2">
+      <div class="flex-1 min-w-0"><div class="text-sm font-semibold" style="color:var(--text-primary)">ติดตั้งเป็นแอปบนหน้าจอโทรศัพท์</div>
+        <div id="shmInstallHint" class="text-xs" style="color:var(--text-secondary)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</div></div>
+      <button type="button" id="shmInstallBtn" onclick="shmInstallApp()" class="rounded-lg px-3" style="min-height:44px;background:var(--accent);color:var(--on-accent);border:0;font-size:14px;font-weight:600;cursor:pointer;flex-shrink:0">ติดตั้ง</button>
+      <button type="button" onclick="shmInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted);font-size:20px;cursor:pointer;flex-shrink:0">×</button>
+    </div>
+  </div>
+
   <div class="card p-4 mb-3" id="shmMineCard">
     <div class="flex items-baseline justify-between gap-2">
       <div class="section-title mb-0">งานของฉัน</div>

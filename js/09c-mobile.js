@@ -263,8 +263,8 @@ function msInstallDismiss(days) {
   try { localStorage.setItem('oshinei_install_snooze', String(Date.now() + (days || 30) * 86400000)); } catch (e) {}
   const w = document.getElementById('msInstall'); if (w) w.style.display = 'none';
 }
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installEvt = e; msShowInstall('prompt'); });
-window.addEventListener('appinstalled', () => msInstallDismiss(365));
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installEvt = e; msShowInstall('prompt'); try { shmInstallRefresh(); } catch (err) { /* หน้างาน (branch) is not loaded yet */ } });
+window.addEventListener('appinstalled', () => { msInstallDismiss(365); try { shmInstallRefresh(); } catch (err) { /* idem */ } });
 (function () {
   const ua = navigator.userAgent || '';
   if (/iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua)) msShowInstall('ios');
