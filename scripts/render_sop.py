@@ -9,7 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "docs", "sop", "WP-SCM-001_ingredient_order_procedure.html"))
 PDF = SRC[:-5] + ".pdf"
 FOOT = ('<div style="width:100%;font-family:\'Leelawadee UI\',Tahoma;font-size:8pt;color:#5b6b82;padding:0 16mm;display:flex;justify-content:space-between">'
-        '<span>WP-SCM-001 ฉบับที่ 1.0 · คู่มือการทำงาน กระบวนการบริหารวัตถุดิบและใบสั่งซื้อสาขา · เอกสารควบคุม</span>'
+        '<span>WP-SCM-001 ฉบับที่ 1.0 · คู่มือการทำงาน กระบวนการบริหารวัตถุดิบและใบสั่งซื้อสาขา · ฉบับร่าง รอการอนุมัติ</span>'
         '<span>หน้า <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 with sync_playwright() as p:
     b = p.chromium.launch(channel="chrome", headless=True)
