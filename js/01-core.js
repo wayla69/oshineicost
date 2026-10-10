@@ -530,7 +530,10 @@ function applyPermissions() {
   // the branch login's entry to วัตถุดิบและใบสั่งซื้อ is its own page: call it so
   if (window.AUTH.role === 'branch') { const l = document.querySelector('#nav-supplyhome .nav-label'); if (l) l.textContent = 'สาขาของฉัน'; }
   // ... and on a phone its pages sit on a bottom strip (#supplyNav) instead of the chip rows
-  if (window.AUTH.role === 'branch') { document.body.classList.add('supply-phone'); _renderSupplyNav(activeTab); }
+  if (window.AUTH.role === 'branch') {
+    document.body.classList.add('supply-phone'); _renderSupplyNav(activeTab);
+    try { brnBigFontApply(brnBigFontGet()); } catch (e) { /* ตัวอักษรใหญ่ (PR-M7) is read from this device's choice once the branch slice is loaded */ }
+  }
   // 2) Collapse nav-section headers whose items are all hidden
   document.querySelectorAll('.nav-section').forEach(sec => {
     let n = sec.nextElementSibling, anyVisible = false;
@@ -2513,16 +2516,22 @@ const SUPPLY_CHIPS = [
   { key: 'home', label: 'หน้างาน', items: [
     { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' },
     { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา', mods: _SUPPLY_CENTRE, roles: ['analyst', 'management', 'salessupport'] }] },
+  // ข้อมูลตั้งต้น, as the roles OTHER than the analyst / manager read it: the kitchen's register, Accounting's price page and Sales Support's price file
+  // (PR-M7: for the analyst and the manager these pages sit in งานประจำเดือน and the second ข้อมูลตั้งต้น below)
   { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
-    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['analyst', 'management', 'innovation'] },
-    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management', 'accounting'] },
-    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management', 'salessupport'] },
-    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
-  { key: 'recipes', label: 'สูตรและการประกาศใช้', items: [
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['analyst', 'management', 'innovation'] },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management', 'innovation'] },
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['innovation'] },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['accounting'] },
+    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['salessupport'] }] },
+  // PR-M7 · งานประจำเดือน (the analyst and the manager): what is done once a month, in the order it is done
+  { key: 'monthly', label: 'งานประจำเดือน', items: [
+    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
+  { key: 'recipes', label: 'สูตรและการประกาศใช้', items: [
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['innovation'] },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['innovation'] }] },
   { key: 'orders', label: 'ใบสั่งซื้อ', items: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', roles: ['warehouse', 'salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
@@ -2534,6 +2543,11 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'], roles: ['accounting', 'analyst', 'management'] }] },
+  // PR-M7 · ข้อมูลตั้งต้น (the analyst and the manager): the register, the units and the readiness of the older codes - set up rarely
+  { key: 'base', label: 'ข้อมูลตั้งต้น', items: [
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', roles: ['branch', 'analyst', 'management'] },
     { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] },
@@ -2708,19 +2722,23 @@ async function supplyBranchesWithData(month) {
 }
 function supplyBranchOptions(rows, first) { return (first ? `<option value="">${first}</option>` : '') + rows.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join(''); }
 function _supplyItemOf(tab, pane) {
-  for (const ch of SUPPLY_CHIPS) {
-    const it = ch.items.find(i => i.tab === tab && (!i.pane || i.pane === pane));
-    if (it) return { chip: ch, item: it };
-  }
-  for (const ch of SUPPLY_CHIPS) {        // a pane no chip lists: light the tab's first item
-    const it = ch.items.find(i => i.tab === tab);
-    if (it) return { chip: ch, item: it };
+  // PR-M7: a page can sit in two chips (one per role: the analyst's งานประจำเดือน, Accounting's ข้อมูลตั้งต้น), so the item the
+  // person's role lists is looked for first; only then any item of the page
+  for (const mine of [true, false]) {
+    for (const ch of SUPPLY_CHIPS) {
+      const it = ch.items.find(i => i.tab === tab && (!i.pane || i.pane === pane) && (!mine || _supplyRoleOk(i)));
+      if (it) return { chip: ch, item: it };
+    }
+    for (const ch of SUPPLY_CHIPS) {        // a pane no chip lists: light the tab's first item
+      const it = ch.items.find(i => i.tab === tab && (!mine || _supplyRoleOk(i)));
+      if (it) return { chip: ch, item: it };
+    }
   }
   return null;
 }
 // an item opens when its tab does and, if it names `mods`, the user holds one of them
 // ... and, since PR-M2, when the person's role is one the item names (auth off: everything shows, as the role is management)
-function _supplyRoleOk(it) { return !it.roles || !window.AUTH || !window.AUTH.enabled || it.roles.includes(window.AUTH.role); }
+function _supplyRoleOk(it) { return !it.roles || it.roles.includes((window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'); }   // auth off = the manager's bar
 function _supplyItemAllowed(it) { return tabAllowed(it.tab) && (!it.mods || it.mods.some(hasModule)) && _supplyRoleOk(it); }
 function _supplyChipAllowed(ch) { return ch.items.some(_supplyItemAllowed); }
 

@@ -495,6 +495,9 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     d = build(branch_id=1)
     it = _issue_items(d)
     assert it["issue_today"]["status"] == "done" and it["issue_today"]["detail"] == "ยืนยันแล้ว เวลา 08:00 โดย udon"
+    assert it["issue_today"]["confirmed_hhmm"] == "08:00" and it["issue_today"]["appends"] == 0       # PR-M7: the branch's strip reads these
+    IS.append(c, 1, "2026-10-05", [used(qty=1)], "udon", now=NOW)
+    assert _issue_items(build(branch_id=1))["issue_today"]["appends"] == 1
     assert it["issue_today"]["yesterday"] == "late" and "issue_missing_2026-10-04" not in it
     assert not it["order_due_1"]["detail"].endswith("ต้องยืนยันใบตัดเบิกวันนี้ก่อน")
     assert "ใบตัดเบิกเมื่อวาน: ยืนยันแล้ว" in RM.branch_line(d["items"])["text"]
