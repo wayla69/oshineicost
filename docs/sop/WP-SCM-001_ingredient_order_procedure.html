@@ -113,7 +113,7 @@
 <table>
   <thead><tr><th style="width:12%">ฉบับที่</th><th style="width:20%">วันที่</th><th>รายละเอียดการแก้ไข</th><th style="width:18%">ผู้จัดทำ</th></tr></thead><tbody>
   <tr><td>1.0</td><td>10 ต.ค. 2026</td><td>ประกาศใช้ครั้งแรก ครอบคลุมใบตัดเบิกรายวัน การสั่งซื้อตามรอบส่ง การรับสินค้าและเคลม การปิดงวดเดือน 9 ขั้น และบัญชีเจ้าของสาขา</td><td>ฝ่ายวิเคราะห์</td></tr>
-  <tr><td>1.1</td><td>11 ต.ค. 2026</td><td>ข้อ 7.2 และการควบคุม C2: จำนวนที่เบิกเพิ่มจะต้องเป็นจำนวนเต็ม ระบบปัดทศนิยมขึ้นเป็นจำนวนเต็มถัดไปโดยอัตโนมัติ</td><td>ฝ่ายวิเคราะห์</td></tr>
+  <tr><td>1.1</td><td>11 ต.ค. 2026</td><td>ข้อ 7.2 และการควบคุม C2: จำนวนที่เบิกเพิ่มจะต้องเป็นจำนวนเต็ม ระบบปัดทศนิยมขึ้นเป็นจำนวนเต็มถัดไปโดยอัตโนมัติ · ข้อ 6.3 จัดทำผังงานแบบ swim lane ใหม่ทั้งภาพ</td><td>ฝ่ายวิเคราะห์</td></tr>
 </tbody></table>
 
 <h2>1. วัตถุประสงค์</h2>
@@ -205,74 +205,97 @@
 
 <div class="landscape">
 <h3 style="margin-top:0">6.3 ผังงานแบบ swim lane: ใครทำอะไร เมื่อใด</h3>
-<svg viewBox="0 0 1006 512" xmlns="http://www.w3.org/2000/svg" font-family="Leelawadee UI, Tahoma, sans-serif">
+<svg viewBox="0 0 1000 544" xmlns="http://www.w3.org/2000/svg" font-family="Leelawadee UI, Tahoma, sans-serif">
 <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#1f3a6b"/></marker></defs>
-<rect x="0" y="46" width="1000" height="92" fill="#f5f8fc" stroke="#b9c4d6"/>
-<rect x="0" y="46" width="118" height="92" fill="#e8eef7" stroke="#b9c4d6"/>
-<text x="59.0" y="89.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">ครัว /</text>
-<text x="59.0" y="103.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">ฝ่ายวิเคราะห์</text>
-<rect x="0" y="138" width="1000" height="92" fill="#ffffff" stroke="#b9c4d6"/>
-<rect x="0" y="138" width="118" height="92" fill="#e8eef7" stroke="#b9c4d6"/>
-<text x="59.0" y="188.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">ประสานงานขาย</text>
-<rect x="0" y="230" width="1000" height="92" fill="#f5f8fc" stroke="#b9c4d6"/>
-<rect x="0" y="230" width="118" height="92" fill="#e8eef7" stroke="#b9c4d6"/>
-<text x="59.0" y="280.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">สาขา</text>
-<rect x="0" y="322" width="1000" height="92" fill="#ffffff" stroke="#b9c4d6"/>
-<rect x="0" y="322" width="118" height="92" fill="#e8eef7" stroke="#b9c4d6"/>
-<text x="59.0" y="372.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">คลัง</text>
-<rect x="0" y="414" width="1000" height="92" fill="#f5f8fc" stroke="#b9c4d6"/>
-<rect x="0" y="414" width="118" height="92" fill="#e8eef7" stroke="#b9c4d6"/>
-<text x="59.0" y="457.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">บัญชี / ปฏิบัติการ</text>
-<text x="59.0" y="471.0" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b">/ ผู้บริหาร</text>
-<rect x="124" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="197.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">① ตั้งต้น (รายเดือน)</text>
-<rect x="270" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="343.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">② ทุกวันที่เปิดขาย</text>
-<line x1="270" y1="46" x2="270" y2="506" stroke="#d6dde8" stroke-dasharray="3 3"/>
-<rect x="416" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="489.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">③ ก่อนตัดรอบ 13:15</text>
-<line x1="416" y1="46" x2="416" y2="506" stroke="#d6dde8" stroke-dasharray="3 3"/>
-<rect x="562" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="635.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">④ วันตัดรอบ → วันส่ง</text>
-<line x1="562" y1="46" x2="562" y2="506" stroke="#d6dde8" stroke-dasharray="3 3"/>
-<rect x="708" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="781.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">⑤ หลังรับสินค้า</text>
-<line x1="708" y1="46" x2="708" y2="506" stroke="#d6dde8" stroke-dasharray="3 3"/>
-<rect x="854" y="0" width="146" height="40" fill="#1f3a6b"/>
-<text x="927.0" y="24.0" text-anchor="middle" font-size="9.3" font-weight="700" fill="#ffffff">⑥ ปิดงวดเดือน</text>
-<line x1="854" y1="46" x2="854" y2="506" stroke="#d6dde8" stroke-dasharray="3 3"/>
-<rect x="133.0" y="50.0" width="128" height="40" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="197.0" y="67.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" dy="0">ครัว: สร้างสูตรจากแม่แบบ</tspan><tspan x="197.0" dy="13">→ ส่งตรวจ</tspan></text>
-<rect x="133.0" y="87.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="197.0" y="105.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" dy="0">ฝ่ายวิเคราะห์: ตรวจ 14 ข้อ</tspan><tspan x="197.0" dy="13">แก้ไข/ส่งกลับ → ประกาศใช้</tspan><tspan x="197.0" dy="13">(ผู้บริหารรับทราบ)</tspan></text>
-<line x1="197.0" y1="90.0" x2="197.0" y2="87.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<rect x="133.0" y="164.0" width="128" height="40" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="197.0" y="181.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" dy="0">ส่งไฟล์ราคารายเดือน</tspan><tspan x="197.0" dy="13">ของไดกิโตะ กรุ๊ป</tspan></text>
-<polyline points="261.0,184.0 269.0,184.0 269.0,116.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<text x="271.0" y="160.0" font-size="8" fill="#b45309">ตรวจ · นำเข้า</text>
-<rect x="279.0" y="249.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="343.0" y="267.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="343.0" dy="0">ใบตัดเบิกรายวัน</tspan><tspan x="343.0" dy="13">เบิกใช้ + ของเสีย (สาเหตุ)</tspan><tspan x="343.0" dy="13">→ ยืนยัน (ล็อก)</tspan></text>
-<rect x="279.0" y="157.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="343.0" y="175.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="343.0" dy="0">ติดตามสาขาที่ยังไม่ยืนยัน</tspan><tspan x="343.0" dy="13">เปิดแก้ไขเมื่อสาขาแจ้ง</tspan><tspan x="343.0" dy="13">พร้อมเหตุผล (บันทึก)</tspan></text>
-<line x1="343.0" y1="249.0" x2="343.0" y2="211.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)" stroke-dasharray="4 3"/><text x="343.0" y="227.0" text-anchor="middle" font-size="8" fill="#b45309">ยังไม่ยืนยัน / ขอแก้ไข</text>
-<polygon points="489.0,232.0 549.0,256.0 489.0,280.0 429.0,256.0" fill="#fff8ec" stroke="#b45309" stroke-width="1.3"/><text x="489.0" y="253.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="489.0" dy="0">ยืนยันใบตัดเบิก</tspan><tspan x="489.0" dy="13">วันนี้แล้ว?</tspan></text>
-<rect x="425.0" y="273.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="489.0" y="291.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="489.0" dy="0">สั่งสินค้าตามยอดแนะนำ</tspan><tspan x="489.0" dy="13">เหตุผลเมื่อต่าง ±20%</tspan><tspan x="489.0" dy="13">ส่งก่อน 13:15 (ล่าช้ามีค่าปรับ)</tspan></text>
-<line x1="407.0" y1="276.0" x2="427.0" y2="256.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<line x1="489.0" y1="274.0" x2="489.0" y2="273.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/><text x="489.0" y="270.5" text-anchor="middle" font-size="8" fill="#b45309">ใช่</text>
-<rect x="571.0" y="341.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="635.0" y="359.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" dy="0">ยืนยันยอดส่ง + เหตุผล + PO</tspan><tspan x="635.0" dy="13">ภายใน 14:00 ของวันตัดรอบ</tspan><tspan x="635.0" dy="13">→ คลังจัดส่งแล้ว</tspan></text>
-<polyline points="553.0,300.0 565.0,300.0 565.0,368.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<rect x="571.0" y="249.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="635.0" y="267.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" dy="0">รับสินค้า: รับครบ / ไม่ครบ</tspan><tspan x="635.0" dy="13">+ สาเหตุ → เคลมอัตโนมัติ</tspan><tspan x="635.0" dy="13">ยืนยันตรวจสภาพ</tspan></text>
-<line x1="635.0" y1="341.0" x2="635.0" y2="303.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<rect x="571.0" y="157.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="635.0" y="175.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" dy="0">ดาวน์โหลด Excel</tspan><tspan x="635.0" dy="13">บันทึกใบสั่งซื้อเข้าระบบบัญชี</tspan><tspan x="635.0" dy="13">→ ทำเครื่องหมาย “คีย์บัญชีแล้ว”</tspan></text>
-<polyline points="699.0,368.0 705.0,368.0 705.0,211.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<rect x="717.0" y="157.5" width="128" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="781.0" y="175.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" dy="0">พิจารณาเคลม</tspan><tspan x="781.0" dy="13">อนุมัติ / ไม่อนุมัติ (เหตุผล)</tspan><tspan x="781.0" dy="13">→ ปรับสต๊อกสาขา</tspan></text>
-<line x1="699.0" y1="276.0" x2="717.0" y2="194.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<text x="719.0" y="228.0" font-size="8" fill="#b45309">ส่วนต่าง / เคลมภายหลัง</text>
-<rect x="717.0" y="256.0" width="128" height="40" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="781.0" y="273.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" dy="0">ผลต่างรายวันเทียบสูตร</tspan><tspan x="781.0" dy="13">(ระบบคำนวณจากใบตัดเบิก)</tspan></text>
-<rect x="717.0" y="440.0" width="128" height="40" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="781.0" y="457.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" dy="0">ฝ่ายปฏิบัติการ: ตรวจสัญญาณ</tspan><tspan x="781.0" dy="13">เบิกเกิน >20% ติดต่อกัน 3 วัน</tspan></text>
-<line x1="781.0" y1="296.0" x2="781.0" y2="440.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)" stroke-dasharray="4 3"/>
-<rect x="857.0" y="249.5" width="140" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="927.0" y="267.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" dy="0">ตรวจนับสิ้นเดือน วันที่ 1–3</tspan><tspan x="927.0" dy="13">ครบรายการบังคับ → ส่งผล</tspan><tspan x="927.0" dy="13">ให้เหตุผลผลต่าง (A / 20 อันดับ)</tspan></text>
-<rect x="857.0" y="157.5" width="140" height="53" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="927.0" y="175.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" dy="0">นำเข้ารายงานไดกิโตะ กรุ๊ป</tspan><tspan x="927.0" dy="13">จับคู่รหัส · บันทึกรับครบ</tspan><tspan x="927.0" dy="13">ยืนยันรับสินค้าครบ</tspan></text>
-<rect x="854.0" y="433.5" width="146" height="53" rx="26.5" fill="#e8f4ec" stroke="#15803d" stroke-width="1.3"/><text x="927.0" y="451.0" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" dy="0">บัญชี: ใบสรุปตัดเบิก (Excel)</tspan><tspan x="927.0" dy="13">บันทึกเข้าระบบบัญชี → ล็อกงวด</tspan><tspan x="927.0" dy="13">ผู้บริหาร: สรุปผลต่างรายเดือน</tspan></text>
-<line x1="845.0" y1="276.0" x2="857.0" y2="276.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
-<line x1="927.0" y1="211.0" x2="927.0" y2="249.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/><text x="927.0" y="227.0" text-anchor="middle" font-size="8" fill="#b45309">ขั้น 2–4, 7</text>
-<line x1="927.0" y1="303.0" x2="927.0" y2="433.0" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/><text x="927.0" y="365.0" text-anchor="middle" font-size="8" fill="#b45309">ขั้น 5–7 เสร็จ</text>
-<rect x="862.0" y="72.0" width="130" height="40" rx="5" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/><text x="927.0" y="89.5" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" dy="0">ฝ่ายวิเคราะห์: สูตรเวอร์ชัน</tspan><tspan x="927.0" dy="13">ที่มีผลเดือนนั้น (ขั้น 1)</tspan></text>
+<rect x="124" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="197.0" y="18.5">① ตั้งต้น (รายเดือน)</tspan></text>
+<rect x="270" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="343.0" y="18.5">② ทุกวันที่เปิดขาย</tspan></text>
+<rect x="416" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="489.0" y="18.5">③ ก่อนตัดรอบ 13:15</tspan></text>
+<rect x="562" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="635.0" y="18.5">④ วันตัดรอบ → วันส่ง</tspan></text>
+<rect x="708" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="781.0" y="18.5">⑤ หลังรับสินค้า</tspan></text>
+<rect x="854" y="0" width="146" height="30" fill="#1f3a6b" stroke="#ffffff" stroke-width="1"/>
+<text class="ht" text-anchor="middle" font-size="9.6" font-weight="700" fill="#ffffff"><tspan x="927.0" y="18.5">⑥ ปิดงวดเดือน</tspan></text>
+<rect data-lane="kitchen" x="0" y="34" width="1000" height="118" fill="#f5f8fc" stroke="#b9c4d6"/>
+<rect x="0" y="34" width="118" height="118" fill="#e8eef7" stroke="#b9c4d6"/>
+<text class="lt" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b"><tspan x="59.0" y="90.1">ครัว /</tspan><tspan x="59.0" y="103.1">ฝ่ายวิเคราะห์</tspan></text>
+<rect data-lane="ss" x="0" y="152" width="1000" height="78" fill="#ffffff" stroke="#b9c4d6"/>
+<rect x="0" y="152" width="118" height="78" fill="#e8eef7" stroke="#b9c4d6"/>
+<text class="lt" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b"><tspan x="59.0" y="194.6">ประสานงานขาย</tspan></text>
+<rect data-lane="branch" x="0" y="230" width="1000" height="170" fill="#f5f8fc" stroke="#b9c4d6"/>
+<rect x="0" y="230" width="118" height="170" fill="#e8eef7" stroke="#b9c4d6"/>
+<text class="lt" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b"><tspan x="59.0" y="318.6">สาขา</tspan></text>
+<rect data-lane="wh" x="0" y="400" width="1000" height="70" fill="#ffffff" stroke="#b9c4d6"/>
+<rect x="0" y="400" width="118" height="70" fill="#e8eef7" stroke="#b9c4d6"/>
+<text class="lt" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b"><tspan x="59.0" y="438.6">คลัง</tspan></text>
+<rect data-lane="acc" x="0" y="470" width="1000" height="70" fill="#f5f8fc" stroke="#b9c4d6"/>
+<rect x="0" y="470" width="118" height="70" fill="#e8eef7" stroke="#b9c4d6"/>
+<text class="lt" text-anchor="middle" font-size="10" font-weight="700" fill="#1f3a6b"><tspan x="59.0" y="502.1">บัญชี / ปฏิบัติการ</tspan><tspan x="59.0" y="515.1">/ ผู้บริหาร</tspan></text>
+<line x1="270" y1="34" x2="270" y2="540" stroke="#d6dde8" stroke-dasharray="3 3"/>
+<line x1="416" y1="34" x2="416" y2="540" stroke="#d6dde8" stroke-dasharray="3 3"/>
+<line x1="562" y1="34" x2="562" y2="540" stroke="#d6dde8" stroke-dasharray="3 3"/>
+<line x1="708" y1="34" x2="708" y2="540" stroke="#d6dde8" stroke-dasharray="3 3"/>
+<line x1="854" y1="34" x2="854" y2="540" stroke="#d6dde8" stroke-dasharray="3 3"/>
+<polyline data-c="0" points="197.0,80.0 197.0,94.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="1" points="197.0,174.0 197.0,147.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="2" points="343.0,262.0 343.0,217.5" fill="none" stroke="#1f3a6b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<polyline data-c="3" points="407.0,295.0 431.0,295.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="4" points="489.0,269.0 489.0,246.0 383.0,246.0 383.0,262.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="5" points="489.0,321.0 489.0,341.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="6" points="553.0,367.5 562.0,367.5 562.0,191.0 571.0,191.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="7" points="562.0,367.5 562.0,435.0 571.0,435.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="8" points="635.0,408.5 635.0,323.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="9" points="699.0,296.5 708.0,296.5 708.0,191.0 717.0,191.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="10" points="781.0,316.5 781.0,485.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<polyline data-c="11" points="845.0,296.5 863.0,296.5" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="12" points="927.0,217.5 927.0,270.0" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polyline data-c="13" points="927.0,323.0 927.0,478.5" fill="none" stroke="#1f3a6b" stroke-width="1.2" marker-end="url(#ah)"/>
+<polygon points="489.0,269.0 547.0,295.0 489.0,321.0 431.0,295.0" fill="#fff8ec" stroke="#b45309" stroke-width="1.3"/>
+<text class="dt" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="489.0" y="291.8">ยืนยันใบตัดเบิก</tspan><tspan x="489.0" y="304.8">วันนี้แล้ว?</tspan></text>
+<rect data-box="k_new" x="133.0" y="40.0" width="128" height="40" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="k_new" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" y="56.8">ครัว: สร้างสูตรจากแม่แบบ</tspan><tspan x="197.0" y="69.8">แล้วส่งตรวจ</tspan></text>
+<rect data-box="k_rel" x="133.0" y="94.0" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="k_rel" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" y="110.8">ฝ่ายวิเคราะห์: ตรวจ 14 ข้อ</tspan><tspan x="197.0" y="123.8">แก้ไข / ส่งกลับ → ประกาศใช้</tspan><tspan x="197.0" y="136.8">(ผู้บริหารรับทราบ)</tspan></text>
+<rect data-box="k_ver" x="863.0" y="73.0" width="128" height="40" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="k_ver" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" y="89.8">ฝ่ายวิเคราะห์: สูตรเวอร์ชัน</tspan><tspan x="927.0" y="102.8">ที่มีผลเดือนนั้น (ขั้น 1)</tspan></text>
+<rect data-box="s_price" x="133.0" y="174.0" width="128" height="40" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="s_price" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="197.0" y="190.8">ส่งไฟล์ราคาซื้อจริง</tspan><tspan x="197.0" y="203.8">รายเดือนของไดกิโตะ กรุ๊ป</tspan></text>
+<rect data-box="s_follow" x="279.0" y="164.5" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="s_follow" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="343.0" y="181.3">ติดตามสาขาที่ยังไม่ยืนยัน</tspan><tspan x="343.0" y="194.3">เปิดแก้ไขเมื่อสาขาแจ้ง</tspan><tspan x="343.0" y="207.3">พร้อมเหตุผล (บันทึก)</tspan></text>
+<rect data-box="s_key" x="571.0" y="164.5" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="s_key" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" y="181.3">ดาวน์โหลด Excel ใบสั่งซื้อ</tspan><tspan x="635.0" y="194.3">บันทึกเข้าระบบบัญชี</tspan><tspan x="635.0" y="207.3">แล้วทำเครื่องหมายคีย์แล้ว</tspan></text>
+<rect data-box="s_claim" x="717.0" y="164.5" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="s_claim" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" y="181.3">พิจารณาเคลม</tspan><tspan x="781.0" y="194.3">อนุมัติ / ไม่อนุมัติ (เหตุผล)</tspan><tspan x="781.0" y="207.3">→ ปรับสต๊อกสาขา</tspan></text>
+<rect data-box="s_close" x="863.0" y="164.5" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="s_close" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" y="181.3">นำเข้ารายงานไดกิโตะ กรุ๊ป</tspan><tspan x="927.0" y="194.3">จับคู่รหัส · บันทึกรับครบ</tspan><tspan x="927.0" y="207.3">ยืนยันรับสินค้าครบ</tspan></text>
+<rect data-box="b_slip" x="279.0" y="262.0" width="128" height="66" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="b_slip" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="343.0" y="278.8">ใบตัดเบิกรายวัน</tspan><tspan x="343.0" y="291.8">เบิกใช้ + ของเสีย (สาเหตุ)</tspan><tspan x="343.0" y="304.8">→ ยืนยัน (ล็อก)</tspan><tspan x="343.0" y="317.8">เบิกเพิ่มได้ในวันเดียวกัน</tspan></text>
+<rect data-box="b_order" x="425.0" y="341.0" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="b_order" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="489.0" y="357.8">สั่งสินค้าตามยอดแนะนำ</tspan><tspan x="489.0" y="370.8">เหตุผลเมื่อต่าง ±20%</tspan><tspan x="489.0" y="383.8">ส่งก่อน 13:15 (ล่าช้ามีค่าปรับ)</tspan></text>
+<rect data-box="b_recv" x="571.0" y="270.0" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="b_recv" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" y="286.8">รับสินค้า: รับครบ / ไม่ครบ</tspan><tspan x="635.0" y="299.8">+ สาเหตุ → เคลมอัตโนมัติ</tspan><tspan x="635.0" y="312.8">ยืนยันตรวจสภาพ</tspan></text>
+<rect data-box="b_var" x="717.0" y="276.5" width="128" height="40" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="b_var" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" y="293.3">ผลต่างรายวันเทียบสูตร</tspan><tspan x="781.0" y="306.3">(ระบบคำนวณจากใบตัดเบิก)</tspan></text>
+<rect data-box="b_count" x="863.0" y="270.0" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="b_count" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" y="286.8">ตรวจนับสิ้นเดือน วันที่ 1–3</tspan><tspan x="927.0" y="299.8">ครบรายการบังคับ → ส่งผล</tspan><tspan x="927.0" y="312.8">เหตุผลผลต่าง (A / 20 อันดับ)</tspan></text>
+<rect data-box="w_conf" x="571.0" y="408.5" width="128" height="53" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="w_conf" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="635.0" y="425.3">ยืนยันยอดส่ง + เหตุผล + PO</tspan><tspan x="635.0" y="438.3">ภายใน 14:00 ของวันตัดรอบ</tspan><tspan x="635.0" y="451.3">→ คลังจัดส่งแล้ว</tspan></text>
+<rect data-box="a_ops" x="717.0" y="485.0" width="128" height="40" rx="5.0" fill="#ffffff" stroke="#1f3a6b" stroke-width="1.3"/>
+<text class="bt" data-in="a_ops" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="781.0" y="501.8">ฝ่ายปฏิบัติการ: ตรวจสัญญาณ</tspan><tspan x="781.0" y="514.8">เบิกเกิน 20% ติดต่อกัน 3 วัน</tspan></text>
+<rect data-box="a_end" x="857.0" y="478.5" width="140" height="53" rx="26.5" fill="#e8f4ec" stroke="#15803d" stroke-width="1.3"/>
+<text class="bt" data-in="a_end" text-anchor="middle" font-size="9.2" fill="#1b2a41"><tspan x="927.0" y="495.3">บัญชี: ใบสรุปตัดเบิก (Excel)</tspan><tspan x="927.0" y="508.3">บันทึกเข้าระบบบัญชี → ล็อกงวด</tspan><tspan x="927.0" y="521.3">ผู้บริหาร: สรุปผลต่างรายเดือน</tspan></text>
+<text class="lb" data-c="1" x="203.0" y="163.5" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ตรวจ · นำเข้า</text>
+<text class="lb" data-c="2" x="337.0" y="242.8" text-anchor="end" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ยังไม่ยืนยัน / ขอแก้ไข</text>
+<text class="lb" data-c="4" x="485.0" y="242.0" text-anchor="end" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ไม่: ยังส่งใบสั่งซื้อไม่ได้</text>
+<text class="lb" data-c="5" x="495.0" y="334.0" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ใช่</text>
+<text class="lb" data-c="8" x="641.0" y="368.8" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ส่งของ</text>
+<text class="lb" data-c="9" x="713.0" y="243.0" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ส่วนต่าง / เคลมภายหลัง</text>
+<text class="lb" data-c="10" x="787.0" y="438.0" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">สัญญาณเบิกเกิน</text>
+<text class="lb" data-c="12" x="933.0" y="246.8" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ขั้น 2–4, 7</text>
+<text class="lb" data-c="13" x="933.0" y="438.0" text-anchor="start" font-size="8" fill="#b45309" paint-order="stroke" stroke="#ffffff" stroke-width="3" stroke-linejoin="round">ขั้น 5–7 เสร็จ</text>
 </svg>
 <p class="legend">แถว = ฝ่ายผู้ปฏิบัติ · คอลัมน์ = ช่วงเวลา · กรอบสี่เหลี่ยม = ขั้นตอน · ข้าวหลามตัด = เงื่อนไขที่ระบบบังคับ · กรอบมน = จุดสิ้นสุดของงวด · เส้นประ = การติดตาม/แจ้งเตือน · ตัวเลขในวงเล็บ “ขั้น” อ้างถึงขั้นปิดงวดเดือนในข้อ 7.7</p>
 </div>
