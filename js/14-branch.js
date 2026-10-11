@@ -434,7 +434,7 @@ function brnIssRender() {
     const id = (f === 'used' ? 'brnIssU_' : 'brnIssW_') + esc(it.code);
     const bad = _brnIssBadVal(v);
     return `<div class="brn-box"><input id="${id}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${ed ? '' : 'disabled'} aria-label="${label} ${esc(it.name)}"
-        placeholder="${_brnIssAppend ? 'เพิ่ม' : prev ? prevWord + ' ' + _bmcNum(prev, 2) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${bad ? 'aria-invalid="true"' : ''}
+        placeholder="${_brnIssAppend ? 'เพิ่ม' : prev ? prevWord + ' ' + _bmcNum(prev, 2) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${_brnIssAppend ? `onchange="brnIssWholeUp(${_bmcQ(it.code)}, '${f}', this)"` : ''} ${bad ? 'aria-invalid="true"' : ''}
         style="border-color:${bad ? 'var(--bad-ink)' : (v !== '' ? ink : 'var(--border-control)')}"><span class="brn-cap">${label} · ${esc(unit)}</span></div>`;
   };
   document.getElementById('brnIssList').innerHTML = items.length ? items.map(it => {
@@ -458,6 +458,16 @@ function brnIssRender() {
   brnIssActions();
 }
 
+// เบิกเพิ่ม: the quantity to add is always a whole number, rounded UP (3.2 → 4); float dust such as 3.0000001 stays 3
+function _brnWholeUp(v) {
+  const n = Number(String(v || '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? String(Math.ceil(Math.round(n * 1e6) / 1e6)) : String(v || '');
+}
+function brnIssWholeUp(code, field, el) {
+  if (!_brnIssAppend) return;
+  const w = _brnWholeUp(el.value);
+  if (w !== el.value) { el.value = w; brnIssSetField(code, field, w); }
+}
 function _brnIssItem(code) { return _brnIss ? _brnIss.zones.flatMap(z => z.items).find(i => i.code === code) : null; }
 // a box was typed in: update in place (the focus stays), open or close the waste-reason block, autosave the draft
 function brnIssSetField(code, field, v) {
@@ -625,6 +635,7 @@ function brnIssAppendStop() {
 }
 async function brnIssAppendSave() {
   if (!_brnIssAppend || !_brnIss) return;
+  Object.values(_brnIssQty).forEach(q => { q.used = _brnWholeUp(q.used); q.waste = _brnWholeUp(q.waste); });   // a box still in focus is rounded too
   const { lines, incomplete, invalid } = _brnIssLines();
   if (invalid.length || incomplete.length) {                       // say which row to fix and go to it
     const code = invalid[0] || incomplete[0];
