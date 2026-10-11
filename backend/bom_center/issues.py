@@ -27,6 +27,7 @@ Rules (shared by every PR of the series):
     it has, the slip stays confirmed and `late` stays as it was, and each append is one row of bc_issue_log;
   * "issued" in any report means CONFIRMED slips only.
 """
+import math
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import BKK, now_bkk
@@ -281,9 +282,10 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
 
 
 # ── writing ──────────────────────────────────────────────────────────────────
-def _clean_lines(con, lines: list):
+def _clean_lines(con, lines: list, whole_up: bool = False):
     """The lines a branch sent, checked and converted to base units: ([(code, None | (used, waste, unit, used_base,
-    waste_base, reason, note))], [unconvertible messages]). A line with both quantities 0 is (code, None)."""
+    waste_base, reason, note))], [unconvertible messages]). A line with both quantities 0 is (code, None).
+    `whole_up` (เบิกเพิ่ม): every quantity is rounded UP to a whole number in the unit it was entered in."""
     from .stock import count_units
     conv = Converter(con)
     cu = count_units(con, {(ln.get("code") or ln.get("ingredient_code") or "").strip() for ln in lines or []})
@@ -304,6 +306,8 @@ def _clean_lines(con, lines: list):
                 raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลข")
             if q < 0:
                 raise ValueError(f"{code}: จำนวนต้องไม่ติดลบ")
+            if whole_up:
+                q = float(math.ceil(round(q, 6)))              # 3.47 → 4 · 3.0000001 → 3 (float dust is not a fraction)
             vals.append(q)
         used, waste = vals
         reason = (ln.get("waste_reason") or "").strip() or None
@@ -410,10 +414,10 @@ def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime 
     if not row or row["status"] != "confirmed" or d != _day(now):
         raise ValueError("เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว")
     assert_not_posted(con, branch_id, iso, "ใบตัดเบิก")
-    clean, bad = _clean_lines(con, lines)
+    clean, bad = _clean_lines(con, lines, whole_up=True)
     if bad:
         raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
-    todo = [(c, v) for c, v in clean if v is not None]
+    todo =[(c, v) for c, v in clean if v is not None]
     if not todo:
         raise ValueError("ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ")
     sid = row["slip_id"]
@@ -433,8 +437,8 @@ def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime 
                 if not f:
                     raise ValueError(f"{code}: แปลงหน่วย {cunit or '-'} ไม่ได้")
                 used, waste = ub / f, wb / f
-            qu, qw = (qu or 0) + used, (qw or 0) + waste
-            qub, qwb = (qub or 0) + ub, (qwb or 0) + wb
+            qu, qw = round((qu or 0) + used, 6), round((qw or 0) + waste, 6)
+            qub, qwb = round((qub or 0) + ub, 6), round((qwb or 0) + wb, 6)
             new_rs, new_nt = crs, cnt
             if waste > 0:
                 if not (cur[1] or 0) > 0:                      # the line had no waste before: this reason is its reason

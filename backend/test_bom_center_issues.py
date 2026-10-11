@@ -661,6 +661,20 @@ def test_append_adds_to_the_line_inserts_new_ones_and_logs_it(con):  # noqa: F81
     assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 11200
 
 
+def test_append_rounds_every_quantity_up_to_a_whole_number(con):  # noqa: F811
+    s = _todays_slip(con, qty=1000)
+    IS.append(con, 1, "2026-10-05", [used(qty=0.2)], "udon", now=at(5, 15))                 # 0.2 → 1
+    IS.append(con, 1, "2026-10-05", [used(qty=2.0000001)], "udon", now=at(5, 16))           # float dust is not a fraction → 2
+    IS.append(con, 1, "2026-10-05", [{"code": SALMON, "qty_used": 3.47, "qty_waste": 0.5, "unit": "กรัม",
+                                      "waste_reason": "spill"}], "udon", now=at(5, 17))      # 3.47 → 4 · 0.5 → 1
+    con.commit()
+    lines = {x["code"]: x for x in IS.detail(con, s["slip_id"])["lines"]}
+    assert lines[CRAB]["qty_used"] == 1003 and lines[CRAB]["qty_used_base"] == 1003
+    assert lines[SALMON]["qty_used"] == 4 and lines[SALMON]["qty_waste"] == 1 and lines[SALMON]["qty_waste_base"] == 1
+    # the normal slip keeps its decimals: only เบิกเพิ่ม is whole-number
+    assert IS._clean_lines(con, [used(qty=3.47)])[0][0][1][0] == 3.47
+
+
 @pytest.mark.parametrize("day, lines, now, msg", [
     ("2026-10-03", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # a confirmed slip of yesterday's
     ("2026-10-06", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # no slip
