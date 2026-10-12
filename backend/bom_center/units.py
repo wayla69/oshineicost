@@ -17,10 +17,12 @@ Resolution order for (code, qty, unit):
      metric step (กิโลกรัม → กรัม) is universal and does not count as a step.
   3. a universal metric step (กิโลกรัม -> กรัม, ลิตร -> มิลลิลิตร)     -> × 1000
   4. the receiving unit (แพ็ค / ถุง / กล่อง … or the master's own
-     recv_unit) and the master knows qty_per_recv                     -> × qty_per_recv
+     recv_unit — by the label as written or by its unit word, see unit_word: "กล่อง (10 แพ็ค)" is a กล่อง)
+     and the master knows qty_per_recv                                -> × qty_per_recv
   otherwise: not convertible — the caller reports it, never guesses.
 """
 import math
+import re
 
 # spellings -> one canonical name
 _SYN = {
@@ -69,6 +71,23 @@ def norm(unit) -> str:
         return _SYN[u]
     k2 = key.rstrip(".")                        # "KG." / "ลิตร." -> the plain spelling
     return _SYN.get(k2, u)
+
+
+_WORD_STOP = re.compile(r"[^\s()\[\]{}（）0-9๐-๙]+")
+
+
+def unit_word(label) -> str:
+    """The unit WORD of a receiving-unit label: the first word before a space, a bracket or a digit, spelled the canonical way.
+
+    The register keeps labels that carry their contents — "กล่อง (10 แพ็ค)", "แพ็ค 10 กก.", "กล่อง (20 กิโลกรัม)" — beside plain
+    ones ("กิโลกรัม", "กระสอบ"). Matching a unit NAME against the receiving unit, and writing the unit after a quantity, both
+    use this word: "กล่อง (10 แพ็ค)" -> "กล่อง", "แพ็ค 10 กก." -> "แพ็ค", "กิโลกรัม" -> "กิโลกรัม", "" -> "". The stored label is
+    never rewritten."""
+    t = str(label or "").strip()
+    if not t:
+        return ""
+    m = _WORD_STOP.search(t)
+    return norm(m.group(0)) if m else ""
 
 
 def _is_pack_word(u: str) -> bool:
@@ -375,8 +394,9 @@ class Converter:
             return f, text
         if base and (u, base) in _METRIC:
             return _METRIC[(u, base)], f"{u} → {base}"
-        recv_n = norm(recv)
-        if per and (u == recv_n or _is_pack_word(u)):
+        recv_n = norm(recv)                          # the label as written ("กล่อง (10 แพ็ค)") …
+        recv_w = unit_word(recv)                     # … and the unit word it starts with ("กล่อง")
+        if per and (u == recv_n or (recv_w and u == recv_w) or _is_pack_word(u)):
             self.last_kind = "pack"           # a generic pack word: the caller may sanity-check it
             return per, f"1 {u} = {per:g} {base}"
         if not base:

@@ -1123,7 +1123,7 @@ async function bmcLoadLadder() {
   if (!code) { _bmcLad = null; box.innerHTML = '<span style="color:var(--text-muted)">ระบุรหัสหรือชื่อวัตถุดิบด้านบนเพื่อดูและแก้บันไดหน่วย</span>'; return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/units/ladder?code=${encodeURIComponent(code)}`);
-    _bmcLad = { code: d.code, name: d.name, base_unit: d.base_unit, recv_unit: d.recv_unit, qty_per_recv: d.qty_per_recv,
+    _bmcLad = { code: d.code, name: d.name, base_unit: d.base_unit, recv_unit: d.recv_unit, recv_word: d.recv_word, qty_per_recv: d.qty_per_recv,
       rows: d.ladder.map(r => ({ unit: r.unit, qty: r.qty_in_parent, parent: r.parent_unit === d.base_unit ? '' : r.parent_unit,
         kind: r.kind, rmin: r.range_min ?? '', rmax: r.range_max ?? '', how: r.how, approx: r.approx })),
       problems: d.problems || [], server: '' };
@@ -1171,12 +1171,14 @@ function bmcRenderLadder() {
       ${w ? `<button onclick="_bmcLad.rows.splice(${i},1);bmcRenderLadder()" style="margin-left:auto;font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>` : ''}
     </div>`;
   }).join('');
-  const recvHit = L.rows.findIndex(r => (r.unit || '').trim() && (r.unit.trim() === (L.recv_unit || '').trim()));
+  // PR-W: the register's receiving unit may carry its contents ("กล่อง (10 แพ็ค)"); the unit in the ladder is its first word ("กล่อง")
+  const recvWord = (L.recv_word || L.recv_unit || '').trim(), recvLbl = (L.recv_unit || '').trim();
+  const recvHit = L.rows.findIndex(r => (r.unit || '').trim() && (r.unit.trim() === recvWord || r.unit.trim() === recvLbl));
   const problems = [...(L.problems || []), ...(L.server ? [L.server] : [])];
   box.innerHTML = `<div style="color:var(--text-secondary)"><b>${esc(L.code)}</b> ${esc(L.name || '')} · หน่วยฐาน <b>${esc(L.base_unit || '—')}</b>` +
-    (L.qty_per_recv ? ` · 1 ${esc(L.recv_unit || 'หน่วยรับ')} = ${_bmcNum(L.qty_per_recv)} ${esc(L.base_unit || '')}` : ' · ยังไม่มีขนาดบรรจุ') + `</div>` +
+    (L.qty_per_recv ? ` · 1 ${esc(recvWord || 'หน่วยรับ')} = ${_bmcNum(L.qty_per_recv)} ${esc(L.base_unit || '')}${recvWord && recvLbl && recvWord !== recvLbl ? ` <span style="color:var(--text-muted)">(ทะเบียนเขียนว่า “${esc(recvLbl)}”)</span>` : ''}` : ' · ยังไม่มีขนาดบรรจุ') + `</div>` +
     (L.rows.length ? rows : '<div style="color:var(--text-muted)" class="mt-1">ยังไม่มีบันไดหน่วย · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองอยู่แล้ว</div>') +
-    (recvHit >= 0 ? `<div class="mt-1" style="color:var(--text-muted)">หน่วยรับ “${esc(L.recv_unit)}” อยู่ในบันได ขนาดบรรจุในทะเบียนจะปรับตามเมื่อบันทึก</div>` : '') +
+    (recvHit >= 0 ? `<div class="mt-1" style="color:var(--text-muted)">หน่วยรับ “${esc(recvWord)}” อยู่ในบันได ขนาดบรรจุในทะเบียนจะปรับตามเมื่อบันทึก</div>` : '') +
     (problems.length ? `<div class="mt-2" style="color:var(--bad-ink)" role="alert">${problems.map(esc).join('<br>')}</div>` : '') +
     (w ? `<div class="flex flex-wrap items-center gap-2 mt-2">
       ${L.rows.length < _BMC_MAX_STEPS ? _bmcBtn('เพิ่มขั้น', "bmcLadAdd()") : ''}
@@ -1432,11 +1434,15 @@ function bmcPortPreview() {
     if (!raw || !unit || !(Number(qty) > 0) || !(Number(pieces) > 0)) { box.innerHTML = '<span style="color:var(--text-muted)">ใส่วัตถุดิบ จำนวนที่ใช้ และจำนวนชิ้นที่ได้ เพื่อดูต้นทุนต่อชิ้น</span>'; return; }
     try {
       const d = await _bmcJson(`${API}/api/bom-center/prep/portion/preview?raw_code=${encodeURIComponent(raw)}&qty=${qty}&unit=${encodeURIComponent(unit)}&pieces=${pieces}`);
-      const ap = d.approx ? '≈ ' : '';
-      const rg = d.range ? ` (ช่วง ${_bmcNum(d.range.per_piece_min, 1)}–${_bmcNum(d.range.per_piece_max, 1)})` : '';
-      box.innerHTML = `<div>${esc(d.how)} = ${ap}${_bmcNum(d.qty_base, 2)} ${esc(d.base_unit)}</div>
-        <div><b>→ ${_bmcNum(d.pieces, 2)} ชิ้น</b> · ชิ้นละ ${ap}${_bmcNum(d.base_per_piece, 2)} ${esc(d.base_unit)}${rg} ·
-        ต้นทุนชิ้นละ ${d.cost_per_piece != null ? `<b>${ap}฿${_bmcNum(d.cost_per_piece, 2)}</b> (ราคาเดือน${fmtMonthTh(d.price_month)})` : '<span style="color:var(--amber-ink)">ยังไม่มีราคา</span>'}</div>`;
+      const ap = d.approx ? '≈ ' : '', sh = u => ({ กิโลกรัม: 'กก.', มิลลิลิตร: 'มล.' }[u] || u);
+      // ONE plain line: 1 ตัว ≈ 4.5 กก. (4–5 กก.) → 225 ชิ้น · ชิ้นละ ≈ 20 กรัม · ต้นทุนชิ้นละ ≈ ฿7.43 (ราคาเดือนตุลาคม 2026); the whole chain is the tooltip
+      const lad = ((_bmcIng.find(x => x.code === raw) || {}).unit_rules || []).find(x => x.unit === d.unit);
+      const per = lad && lad.parent_unit ? ` ${d.approx ? '≈' : '='} ${_bmcNum(lad.qty_in_parent, 2)} ${esc(sh(lad.parent_unit))}` : '';
+      const lr = lad && lad.range_min != null && lad.range_max != null ? ` (${_bmcNum(lad.range_min, 2)}–${_bmcNum(lad.range_max, 2)} ${esc(sh(lad.parent_unit))})` : '';
+      const head = lad ? `${_bmcNum(d.qty, 2)} ${esc(d.unit)}${per}${lr}` : `${_bmcNum(d.qty, 2)} ${esc(d.unit)} = ${ap}${_bmcNum(d.qty_base, 2)} ${esc(sh(d.base_unit))}`;
+      const full = `${d.how} = ${ap}${_bmcNum(d.qty_base, 2)} ${d.base_unit}` + (d.range ? ` · ชิ้นละ ช่วง ${_bmcNum(d.range.per_piece_min, 1)}–${_bmcNum(d.range.per_piece_max, 1)} ${d.base_unit}` : '');
+      box.innerHTML = `<div title="${esc(full)}">${head} <b>→ ${_bmcNum(d.pieces, 2)} ชิ้น</b> · ชิ้นละ ${ap}${_bmcNum(d.base_per_piece, 2)} ${esc(sh(d.base_unit))} ·
+        ต้นทุนชิ้นละ ${d.cost_per_piece != null ? `<b>${ap}฿${Number(d.cost_per_piece).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b> (ราคาเดือน${fmtMonthTh(d.price_month)})` : '<span style="color:var(--amber-ink)">ยังไม่มีราคา</span>'}</div>`;
     } catch (e) { box.innerHTML = `<span style="color:var(--amber-ink)">${esc(String(e.message || e))}</span>`; }
   }, 250);
 }
