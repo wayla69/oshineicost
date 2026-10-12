@@ -310,9 +310,10 @@ _usage_lock = threading.Lock()
 def clear_usage_cache() -> None:
     with _usage_lock:
         _usage_cache.clear()
-    try:                                                   # PR-V: the per-฿100,000 report is built on this usage
-        from . import per_sales
+    try:                                                   # PR-V: the per-฿100,000 report is built on this usage (PR-X: so is the recipe check)
+        from . import per_sales, recipe_check
         per_sales.clear_cache()
+        recipe_check.clear_cache()
     except Exception:
         pass
 
@@ -486,14 +487,20 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         n_ = _ps.normal_from(sales_day, days, as_of, cover, factor)["total"]
         sales_normal = round(n_, 2) if n_ > 0 else None
     ref_mode = None
-    if ref_branch and int(ref_branch) != int(branch_id) and len(days) < _ps.NEW_BRANCH_DAYS:
-        rb = _ps.reference_basis(con, int(ref_branch), month, weeks=weeks, cover=cover, factor=factor)
+    is_bench = ref_branch == _ps.BENCH
+    if ref_branch and (is_bench or int(ref_branch) != int(branch_id)) and len(days) < _ps.NEW_BRANCH_DAYS:
+        if is_bench:                                       # PR-X: the median of the company branches
+            rb = _ps.benchmark_basis(con, branch_id, month, weeks=weeks, cover=cover, factor=factor)
+        else:
+            rb = _ps.reference_basis(con, int(ref_branch), month, weeks=weeks, cover=cover, factor=factor)
         exp = float(expected_sales or 0.0)
         ref_mode = {"active": True, "branch_id": rb["branch_id"], "name": rb["name"], "own_days": len(days),
                     "min_days": _ps.NEW_BRANCH_DAYS, "expected_sales": exp or None, "ref_sales_normal": rb["sales_normal"],
-                    "needs_sales": exp <= 0, "ref_ok": rb["ok"], "label": f"คำนวณจากสาขาอ้างอิง {rb['name']}",
+                    "needs_sales": exp <= 0, "ref_ok": rb["ok"], "benchmark": bool(is_bench),
+                    "label": rb.get("label") or f"คำนวณจากสาขาอ้างอิง {rb['name']}",
                     "message": _ps.NEED_SALES_TH if exp <= 0 else (
-                        "" if rb["ok"] else f"สาขาอ้างอิง {rb['name']} ยังไม่มีประวัติการขายพอ")}
+                        "" if rb["ok"] else (f"{rb['name']} ยังไม่มีประวัติการขายพอ" if is_bench
+                                             else f"สาขาอ้างอิง {rb['name']} ยังไม่มีประวัติการขายพอ"))}
         sales_normal = None
         if exp > 0 and rb["ok"]:
             use, ps_items = rb["use"], rb["items"]

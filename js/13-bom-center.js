@@ -117,7 +117,7 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   _bmcMonthSync(k);
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -133,6 +133,9 @@ function bmcSetSub(k) {
   if (k === 'price') bmcLoadPrices();
   if (k === 'pricefile') bmcLoadPriceFile();
   if (k === 'conv') bmcLoadConv();
+  if (k === 'rcheck') bmcLoadRcheck();
+  const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases)
+  if (strip) strip.style.display = k === 'rcheck' ? 'none' : '';
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 // The month strip sits above every pane: a change reloads the pane that is open.
@@ -2189,14 +2192,14 @@ async function bmcLoadCalendar() {
   // PR-V · สาขาอ้างอิงสำหรับสาขาใหม่: saved as soon as it is chosen (it is not one of the delivery days)
   const refSel = (r) => w
     ? `<select onchange="bmcSetRefBranch(${r.branch_id}, this)" aria-label="สาขาอ้างอิงของ${esc(r.branch)}" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);max-width:150px">
-        <option value="">ไม่ใช้</option>${_bmcCal.rows.filter(x => x.branch_id !== r.branch_id).map(x => `<option value="${x.branch_id}" ${Number(r.ref_branch_id) === x.branch_id ? 'selected' : ''}>${esc(x.branch)}</option>`).join('')}</select>`
-    : esc(((_bmcCal.rows.find(x => x.branch_id === r.ref_branch_id) || {}).branch) || '–');
+        <option value="benchmark" ${r.ref_mode === 'benchmark' ? 'selected' : ''}>ค่ากลางสาขาของบริษัท</option><option value="none" ${r.ref_mode === 'none' ? 'selected' : ''}>ไม่ใช้</option>${_bmcCal.rows.filter(x => x.branch_id !== r.branch_id).map(x => `<option value="${x.branch_id}" ${Number(r.ref_branch_id) === x.branch_id ? 'selected' : ''}>${esc(x.branch)}</option>`).join('')}</select>`
+    : (r.ref_mode === 'benchmark' ? 'ค่ากลางสาขาของบริษัท' : r.ref_mode === 'none' ? 'ไม่ใช้' : esc(((_bmcCal.rows.find(x => x.branch_id === r.ref_branch_id) || {}).branch) || '–'));
   const pilot = _bmcCal.pilot || [];
   const calRows = (_bmcCalPilotOnly && pilot.length) ? _bmcCal.rows.filter(r => pilot.includes(r.branch)) : _bmcCal.rows;
   document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
       ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
       <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
-      <span class="text-[11px] w-full" style="color:var(--text-muted)">สาขาอ้างอิง: สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน จะคำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · เลือกแล้วบันทึกทันที</span>
+      <span class="text-[11px] w-full" style="color:var(--text-muted)">สาขาอ้างอิง: สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน จะคำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง) · เลือกแล้วบันทึกทันที</span>
       ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบส่ง</button>` : ''}</div>
     <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">ตัดรอบ</th>
@@ -2209,6 +2212,112 @@ async function bmcLoadCalendar() {
       <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
+  bmcLoadBenchmark();
+}
+// ── PR-X · สาขาของบริษัทที่ใช้เป็นค่ากลาง: which branches make the benchmark, and the temporary stock buffer ──
+let _bmcBm = null;
+async function bmcLoadBenchmark() {
+  const box = document.getElementById('bmcBmCard');
+  if (!box) return;
+  try { _bmcBm = await _bmcJson(`${API}/api/bom-center/benchmark`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  const b = _bmcBm, w = _bmcFcCanWrite();
+  const typ = t => t === 'master' ? 'สาขาของบริษัท' : 'แฟรนไชส์';
+  box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">สาขาของบริษัทที่ใช้เป็นค่ากลาง</div>
+    <p class="text-xs mt-1 mb-2" style="color:var(--text-secondary)">ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย · ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 ในหน้าตรวจสูตรด้วยยอดซื้อ และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>
+    <div class="flex flex-wrap gap-x-4 gap-y-1" id="bmcBmList">${b.branches.filter(x => x.active).map(x => `<label class="text-xs flex items-center gap-1" style="color:var(--text-primary)">
+      <input type="checkbox" value="${x.branch_id}" ${x.selected ? 'checked' : ''} ${w ? '' : 'disabled'}> ${esc(x.name)} <span class="text-[10.5px]" style="color:var(--text-muted)">${typ(x.branch_type)}</span></label>`).join('')}</div>
+    <div class="flex flex-wrap items-end gap-3 mt-3">
+      <label class="text-xs" style="color:var(--text-muted)">ช่วงยอมรับสำหรับสต็อกต้นงวดและปลายงวด (%)<br>
+        <input id="bmcBmBuf" type="number" min="${b.buffer_min}" max="${b.buffer_max}" step="1" value="${b.buffer_pct}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:90px;background:var(--bg-input);color:var(--text-primary)"></label>
+      ${w ? `<button onclick="bmcSaveBenchmark()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึกค่ากลาง</button>` : ''}
+      <span id="bmcBmStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">${esc(b.buffer_note)} · สาขาที่มีผลตรวจนับต้นงวดและปลายงวดครบจะใช้ยอดซื้อปรับด้วยส่วนต่างของสต็อก และเกณฑ์ผลต่างปกติแทนช่วงยอมรับนี้${b.is_default ? ' · ขณะนี้ใช้ค่าเริ่มต้น: ' + esc(b.names_default.join(' · ')) : ''}</div>`;
+}
+async function bmcSaveBenchmark() {
+  const ids = [...document.querySelectorAll('#bmcBmList input:checked')].map(x => Number(x.value));
+  const buf = Number(document.getElementById('bmcBmBuf').value);
+  if (ids.length < ((_bmcBm && _bmcBm.min_branches) || 2)) { bmcStatus('bmcBmStatus', 'warn', `เลือกสาขาอย่างน้อย ${(_bmcBm && _bmcBm.min_branches) || 2} สาขา`); return; }
+  if (!(buf >= 0 && buf <= 50)) { bmcStatus('bmcBmStatus', 'warn', 'ช่วงยอมรับต้องอยู่ระหว่าง 0 ถึง 50'); return; }
+  if (!await uiConfirm(`บันทึกสาขาที่ใช้เป็นค่ากลาง ${ids.length} สาขา และช่วงยอมรับ ±${buf}%?\nรายงานต่อยอดขาย ฿100,000 และหน้าตรวจสูตรด้วยยอดซื้อจะคำนวณใหม่ตามนี้`,
+    { title: 'ยืนยันการบันทึกค่ากลาง', ok: 'บันทึกค่ากลาง', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcBmStatus', null, 'ยังไม่บันทึก'); return; }
+  try {
+    _bmcBm = await _bmcJson(`${API}/api/bom-center/benchmark`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_ids: ids, buffer_pct: buf }) });
+    bmcStatus('bmcBmStatus', true, `บันทึกค่ากลางแล้ว · ${ids.length} สาขา · ช่วงยอมรับ ±${buf}%`);
+    bmcLoadBenchmark();
+  } catch (e) { bmcStatus('bmcBmStatus', false, String(e.message || e)); }
+}
+// ── PR-X · ตรวจสูตรและหน่วยด้วยยอดซื้อจริง (analyst / management): what the company branches bought against what the recipes say ──
+let _bmcRc = null, _bmcRcFilter = 'all', _bmcRcAll = false;
+const _BMC_RC_ST = [['x10', 'ต่างกันเกิน 10 เท่า · ตรวจหน่วย', 'var(--bad-ink)'], ['no_recipe', 'มีการซื้อ แต่ไม่มีในสูตร', 'var(--amber-ink)'],
+  ['no_buy', 'มีในสูตร แต่ไม่มีการซื้อ · ตรวจรหัส', 'var(--amber-ink)'], ['more', 'ซื้อมากกว่าสูตร', 'var(--amber-ink)'],
+  ['less', 'ซื้อน้อยกว่าสูตร', 'var(--amber-ink)'], ['ok', 'ในเกณฑ์', 'var(--good-ink)']];
+function _bmcRcMonthEl() { return document.getElementById('bmcRcMonth'); }
+async function bmcLoadRcheck(month) {
+  const body = document.getElementById('bmcRcBody');
+  if (!body) return;
+  const el = _bmcRcMonthEl();
+  const m = month || (el && el.value) || '';
+  body.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+  try {
+    _bmcRc = await _bmcJson(`${API}/api/bom-center/recipe-check${m ? '?month=' + encodeURIComponent(m) : ''}`);
+  } catch (e) { body.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  const r = _bmcRc;
+  if (el) {
+    el.innerHTML = (r.months || []).map(x => `<option value="${x.month}" ${x.month === r.month ? 'selected' : ''}>${esc(fmtMonthTh(x.month))} · ${x.branches} สาขา${x.complete ? '' : ' (เดือนยังไม่จบ)'}</option>`).join('')
+      || '<option value="">ยังไม่มียอดซื้อรายสาขา</option>';
+  }
+  bmcRenderRcheck();
+}
+function bmcRcSetFilter(k) { _bmcRcFilter = k; _bmcRcAll = false; bmcRenderRcheck(); }
+function bmcRcOpenUnit(code) {
+  supplyGo({ tab: 'bomcenter', pane: 'conv' });
+  setTimeout(() => { const el = document.getElementById('bmcConvCode'); if (el) { el.value = code; bmcLoadLadder(); } }, 500);
+}
+function bmcRcOpenIng(code) {
+  supplyGo({ tab: 'bomcenter', pane: 'ing' });
+  setTimeout(() => { const q = document.getElementById('bmcIngQ'); if (q) { q.value = code; if (typeof bmcIngFilter === 'function') bmcIngFilter(); } }, 700);
+}
+function bmcRcXlsx() {
+  const m = (_bmcRcMonthEl() || {}).value || '';
+  bmcDownload(`${API}/api/bom-center/recipe-check.xlsx${m ? '?month=' + encodeURIComponent(m) : ''}`, 'ตรวจสูตรด้วยยอดซื้อ.xlsx', 'bmcRcStatus');
+}
+function bmcRenderRcheck() {
+  const r = _bmcRc, body = document.getElementById('bmcRcBody'), chips = document.getElementById('bmcRcChips'), notes = document.getElementById('bmcRcNotes');
+  if (!r || !body) return;
+  if (!r.month || !r.enough) {
+    chips.innerHTML = ''; notes.innerHTML = '';
+    body.innerHTML = `<span class="text-xs" style="color:var(--text-muted)">${esc(r.message || 'ยังไม่มีข้อมูลพอ')}${(r.skipped_branches || []).length ? ' · ' + r.skipped_branches.map(x => esc((x.branch || '') + ': ' + x.why)).join(' · ') : ''}</span>`;
+    return;
+  }
+  const c = r.counts || {};
+  chips.innerHTML = [['all', 'ทั้งหมด', r.rows.length, 'var(--navy-ink)']].concat(_BMC_RC_ST.map(([k, t, ink]) => [k, t, c[k] || 0, ink])).map(([k, t, n, ink]) =>
+    `<button onclick="bmcRcSetFilter('${k}')" style="border:1px solid ${_bmcRcFilter === k ? ink : 'var(--border)'};background:${_bmcRcFilter === k ? 'var(--accent-soft)' : 'transparent'};color:${ink};border-radius:999px;padding:2px 10px;font-size:11.5px;cursor:pointer">${esc(t)} ${n}</button>`).join(' ');
+  const lines = [];
+  lines.push(`ค่ากลางสาขาของบริษัท = มัธยฐานของ ${r.branches.map(b => esc(b.branch)).join(' · ')} · ยอดขายไม่รวมภาษีมูลค่าเพิ่มและค่าบริการ · หน่วยเป็นหน่วยฐาน`);
+  if (r.scaled) lines.push(`<b>ปรับยอดซื้อตามวันที่มียอดขายรายวัน</b>: ไฟล์ราคาเป็นยอดซื้อทั้งเดือน แต่ยอดขายรายวันมีไม่ครบทุกวัน จึงคูณยอดซื้อด้วย (วันที่มียอดขาย ÷ วันในเดือน) · ${r.branches.filter(b => b.scaled).map(b => `${esc(b.branch)} ${b.sales_days}/${b.month_days} วัน`).join(' · ')}`);
+  if (r.partial_month) lines.push('เดือนนี้ยังไม่สิ้นสุด ยอดซื้อและยอดขายยังไม่ครบเดือน ผลตรวจอาจคลาดเคลื่อน');
+  lines.push(`ช่วงยอมรับ ±${_bmcNum(r.buffer_pct, 0)}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา${r.stock_adjusted_branches ? ` · ${r.stock_adjusted_branches} สาขามีผลตรวจนับครบ ใช้ยอดซื้อปรับด้วยสต็อกและเกณฑ์ผลต่างปกติ` : ''}`);
+  if (r.skipped_branches.length) lines.push('ไม่นับ: ' + r.skipped_branches.map(x => esc((x.branch || '') + ' (' + x.why + ')')).join(' · '));
+  if (r.skipped_items) lines.push(`ไม่แสดง ${r.skipped_items} รายการที่มีข้อมูลไม่ถึง 2 สาขา`);
+  notes.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+  let rows = _bmcRcFilter === 'all' ? r.rows : r.rows.filter(x => x.status === _bmcRcFilter);
+  const total = rows.length;
+  if (!_bmcRcAll) rows = rows.slice(0, 80);
+  const num = v => v == null ? '<span style="color:var(--text-muted)">–</span>' : _bmcNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
+  const ink = Object.fromEntries(_BMC_RC_ST.map(([k, , i]) => [k, i]));
+  const per = x => x.branches.map(b => `<span title="${esc(b.branch)}: ซื้อ ${b.bought == null ? '–' : _bmcNum(b.bought, 1)} · สูตร ${b.recipe == null ? '–' : _bmcNum(b.recipe, 1)}"
+      style="white-space:nowrap">${esc((b.branch || '').slice(0, 4))} ${b.bought == null ? '–' : num(b.bought)}/${b.recipe == null ? '–' : num(b.recipe)}${b.adjusted ? '*' : ''}</span>`).join(' · ');
+  body.innerHTML = `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วยฐาน</th><th class="pr-2 text-right">ซื้อจริง (ค่ากลาง)</th><th class="pr-2 text-right">ตามสูตร (ค่ากลาง)</th>
+      <th class="pr-2 text-right">ส่วนต่าง</th><th class="pr-2">ผลตรวจ</th><th class="pr-2">รายสาขา ซื้อ/สูตร</th><th>ไปที่</th></tr></thead>
+    <tbody>${rows.map(x => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1" title="${esc(x.code)}">${esc(x.name)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(x.code)}</div></td>
+      <td class="pr-2" style="color:var(--text-secondary)">${esc(x.base_unit || '')}</td><td class="pr-2 text-right font-semibold">${num(x.bought)}</td><td class="pr-2 text-right">${num(x.recipe)}</td>
+      <td class="pr-2 text-right">${x.diff_pct == null ? '<span style="color:var(--text-muted)">–</span>' : (x.diff_pct > 0 ? '+' : '') + _bmcNum(x.diff_pct, 1) + '%'}</td>
+      <td class="pr-2">${_bmcChip(x.status_th, ink[x.status])}</td><td class="pr-2 text-[11px]" style="color:var(--text-secondary)">${per(x)}</td>
+      <td class="whitespace-nowrap"><a href="#" onclick="bmcRcOpenUnit('${esc(x.code)}');return false" style="color:var(--accent)">หน่วยและการแปลง</a> · <a href="#" onclick="bmcRcOpenIng('${esc(x.code)}');return false" style="color:var(--accent)">ทะเบียน</a></td></tr>`).join('')
+      || '<tr><td colspan="8" class="py-3" style="color:var(--text-muted)">ไม่มีรายการในกลุ่มนี้</td></tr>'}</tbody></table></div>
+    ${total > 80 ? `<div class="mt-2 text-xs"><a href="#" onclick="_bmcRcAll=!_bmcRcAll;bmcRenderRcheck();return false" style="color:var(--accent)">${_bmcRcAll ? 'แสดงเฉพาะ 80 รายการแรก' : 'แสดงทั้งหมด ' + total + ' รายการ'}</a></div>` : ''}
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">เรียงตามมูลค่าส่วนต่างต่อยอดขาย ฿100,000 · เครื่องหมาย * = สาขานั้นใช้ยอดซื้อปรับด้วยสต็อกต้นงวดและปลายงวด</div>`;
 }
 // ── bulk delivery days from a file: template → preview (dry run) → save ──
 let _bmcCalBulkFile = null;
@@ -2261,12 +2370,14 @@ async function bmcCalBulkSave() {
   }
 }
 async function bmcSetRefBranch(bid, el) {
-  const v = el.value === '' ? null : Number(el.value);
+  // PR-X: 'benchmark' (the default: the median of the company branches) · 'none' · one branch
+  const mode = el.value === 'none' ? 'none' : el.value === 'benchmark' || el.value === '' ? 'benchmark' : 'branch';
+  const v = mode === 'branch' ? Number(el.value) : null;
   try {
-    await _bmcJson(`${API}/api/bom-center/order-calendar/ref-branch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_id: bid, ref_branch_id: v }) });
+    await _bmcJson(`${API}/api/bom-center/order-calendar/ref-branch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_id: bid, ref_branch_id: v, ref_mode: mode === 'none' ? 'none' : null }) });
     const row = (_bmcCal.rows || []).find(x => x.branch_id === bid);
-    if (row) row.ref_branch_id = v;
-    const msg = `✓ บันทึกสาขาอ้างอิงแล้ว${v ? '' : ' (ไม่ใช้สาขาอ้างอิง)'}`;
+    if (row) { row.ref_branch_id = v; row.ref_mode = mode; }
+    const msg = `✓ บันทึกสาขาอ้างอิงแล้ว${mode === 'none' ? ' (ไม่ใช้สาขาอ้างอิง)' : mode === 'benchmark' ? ' (ค่ากลางสาขาของบริษัท)' : ''}`;
     _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
     _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
   } catch (e) {

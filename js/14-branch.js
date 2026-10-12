@@ -2007,19 +2007,20 @@ function brnBufPctInput() {                       // a % typed by hand is no lon
 // ฿100,000 x the sales this branch expects, so the card asks for the baht instead of a %
 function _brnRenderRefCard(box, p, editable) {
   const rm = p.ref_mode, cur = _brnBuf;
+  const refTxt = rm.benchmark ? esc(rm.name) : `สาขาอ้างอิง ${esc(rm.name)}`, refOf = rm.benchmark ? esc(rm.name) : `สาขา${esc(rm.name)}`;   // PR-X: the benchmark names no branch
   const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
   if (!editable) {
-    box.innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">สาขาใหม่ · คำนวณจากสาขาอ้างอิง <b>${esc(rm.name)}</b>${cur.sales ? ` · ยอดขายที่คาด <b>฿${_bmcNum(cur.sales, 0)}</b>` : ''}</div>`;
+    box.innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">สาขาใหม่ · คำนวณจาก<b>${refTxt}</b>${cur.sales ? ` · ยอดขายที่คาด <b>฿${_bmcNum(cur.sales, 0)}</b>` : ''}</div>`;
     return;
   }
-  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">สาขาใหม่ · คำนวณจากสาขาอ้างอิง ${esc(rm.name)}</div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน) ระบบจึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขา${esc(rm.name)} คูณยอดขายที่คาดของรอบนี้</div>
+  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">สาขาใหม่ · คำนวณจาก${refTxt}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน) ระบบจึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</div>
     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
       <label style="color:var(--text-secondary)">ยอดขายที่คาดของรอบนี้ (บาท)
         <input id="brnRefSales" type="text" inputmode="numeric" autocomplete="off" value="${rm.expected_sales ? esc(String(rm.expected_sales)) : ''}" style="width:130px;height:36px;margin-left:6px;text-align:right;${inp}"></label>
       <button onclick="brnApplyRefSales()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:13px;cursor:pointer;min-height:36px">คำนวณยอดแนะนำ</button>
     </div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">ยอดขายไม่รวมภาษีมูลค่าเพิ่ม${rm.ref_sales_normal ? ` · สาขา${esc(rm.name)}ขายปกติในช่วงนี้ ≈ ฿${_bmcNum(rm.ref_sales_normal, 0)}` : ''}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">ยอดขายไม่รวมภาษีมูลค่าเพิ่ม${rm.ref_sales_normal ? ` · ${rm.benchmark ? 'ค่ากลางสาขาของบริษัท' : 'สาขา' + esc(rm.name)}ขายปกติในช่วงนี้ ≈ ฿${_bmcNum(rm.ref_sales_normal, 0)}` : ''}</div>
     ${rm.needs_sales || rm.message ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">${esc(rm.message || '')}</div>` : ''}`;
 }
 async function brnApplyRefSales() {

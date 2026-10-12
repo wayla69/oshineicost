@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
+from bom_center import benchmark as _bm
 from bom_center import central as _ce
 from bom_center import claims as _cl
 from bom_center import codes as _cr
@@ -36,6 +37,7 @@ from bom_center import prep as _pr
 from bom_center import todo as _td
 from bom_center import prices as _p
 from bom_center import price_submissions as _ps
+from bom_center import recipe_check as _rc
 from bom_center import recipes as _r
 from bom_center import release as _rl
 from bom_center import stock as _st
@@ -1501,16 +1503,22 @@ def bc_order_calendar():
         for bid, name in con.execute("SELECT branch_id, name FROM branches WHERE name != 'ALL'"
                                      " AND COALESCE(active, 1) = 1 ORDER BY name"):
             cal = _fc.calendar(con, bid)
+            spec = _pv.reference_spec(con, bid)
             rows.append({"branch_id": bid, "branch": name, "ref_branch_id": _pv.reference_for(con, bid),
+                         "ref_mode": spec["mode"],           # PR-X: 'benchmark' (the default) / 'branch' / 'none'
                          **{f"r{k}": v for k, v in cal.items()}})
+        bm = _bm.settings(con)
     from bom_center.pilot import PILOT                       # the page can show the pilot branches alone
     return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL, "pilot": list(PILOT),
-            "cutoff_time": f"{_fc.cutoff_time():%H:%M}", "new_branch_days": _pv.NEW_BRANCH_DAYS}
+            "cutoff_time": f"{_fc.cutoff_time():%H:%M}", "new_branch_days": _pv.NEW_BRANCH_DAYS,
+            "benchmark": {"label": bm["label"], "selected": bm["selected"],
+                          "names": [b["name"] for b in bm["branches"] if b["selected"]]}}
 
 
 class RefBranchBody(BaseModel):
     branch_id: int
-    ref_branch_id: Optional[int] = None         # None = no reference branch
+    ref_branch_id: Optional[int] = None         # a branch = that one branch; None = the default, the benchmark (PR-X) ...
+    ref_mode: Optional[str] = None              # ... unless 'none' (no reference: today's behaviour) is asked for
 
 
 @router.post("/api/bom-center/order-calendar/ref-branch", dependencies=[Depends(require_write_token)])
@@ -1520,9 +1528,39 @@ def bc_order_calendar_ref(body: RefBranchBody, request: Request):
     with get_db() as con:
         _ensure(con)
         try:
-            out = _write(con, lambda: _pv.set_reference(con, _who(request), body.branch_id, body.ref_branch_id))
+            if body.ref_mode not in (None, "", "none", "benchmark", "branch"):
+                raise HTTPException(400, "รูปแบบสาขาอ้างอิงไม่ถูกต้อง")
+            out = _write(con, lambda: _pv.set_reference(con, _who(request), body.branch_id, body.ref_branch_id,
+                                                        mode="none" if body.ref_mode == "none" else None))
         except ValueError as e:
             raise HTTPException(400, str(e))
+    invalidate_cache("bc_")
+    return out
+
+
+# ── PR-X · ค่ากลางจากสาขาของบริษัท (benchmark.py): which branches count, and the temporary stock buffer ──
+class BenchmarkBody(BaseModel):
+    branch_ids: Optional[List[int]] = None       # None = leave the set as it is
+    buffer_pct: Optional[float] = None           # None = leave the buffer as it is
+
+
+@router.get("/api/bom-center/benchmark")
+def bc_benchmark(request: Request):
+    """The settings card: every branch (with its type) and whether it counts as a company branch, the stock buffer and the
+    default four. The centre's (supply.ordering / bom.center); a branch login never reaches it (auth + this check)."""
+    if _auth.scope_branch(request):
+        raise HTTPException(403, "ผู้ใช้ของสาขาไม่มีสิทธิ์ดูค่ากลางของสาขาอื่น")
+    with get_db() as con:
+        _ensure(con)
+        return _bm.settings(con)
+
+
+@router.post("/api/bom-center/benchmark", dependencies=[Depends(require_write_token)])
+def bc_benchmark_save(body: BenchmarkBody, request: Request):
+    """Save the branches that make the benchmark and / or the buffer % (0-50). The sales team's, like the calendar."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _bm.set_benchmark(con, _who(request), body.branch_ids, body.buffer_pct))
     invalidate_cache("bc_")
     return out
 
@@ -2991,7 +3029,21 @@ PER_SALES_COMPARE = "เทียบสาขา"
 
 def _per_sales_headers(weeks: int) -> list:
     return ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", f"ต่อยอดขาย ฿100,000 ({weeks} สัปดาห์ล่าสุด)", f"{weeks} สัปดาห์ก่อนหน้า",
-            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "หมายเหตุ"]
+            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "การใช้ตามสูตรเทียบค่ากลาง %", "ยอดซื้อเทียบค่ากลาง %", "หมายเหตุ"]
+
+
+def _strip_benchmark(out: dict) -> dict:
+    """A branch login never sees the other branches, and the benchmark is made of them: leave it (and every comparison with it)
+    out of what a pinned session gets (PR-X)."""
+    out = dict(out, benchmark=None, purchase_benchmark=None, chain=None)
+    bs = []
+    for b in out.get("branches") or []:
+        b = dict(b, is_benchmark=None, vs_benchmark_pct=None, below_benchmark=False, below_benchmark_th=None, no_purchase_th=None,
+                 purchase_per_100k_value=None, purchase_source=None, purchase_days=None, purchase_vs_benchmark_pct=None)
+        b["items"] = [dict(it, bench_per_100k=None, vs_benchmark_pct=None) for it in b["items"]]
+        bs.append(b)
+    out["branches"] = bs
+    return out
 
 
 def _per_sales_note(it: dict) -> str:
@@ -3016,6 +3068,8 @@ def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks
         out = _pv.report(con, weeks, [bid] if bid is not None else None)
         if bid is not None:
             out = dict(out, chain=None)
+        if _auth.scope_branch(request):
+            out = _strip_benchmark(out)
         out = dict(out, scoped=bool(_auth.scope_branch(request)))
         return out
 
@@ -3027,7 +3081,10 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
         _ensure(con)
         bid = _claim_scope(con, request, branch_id)
         r = _pv.report(con, weeks, [bid] if bid is not None else None)
+        if _auth.scope_branch(request):
+            r = _strip_benchmark(r)
     chain = r["chain"] if bid is None else None
+    bench = r.get("benchmark")
     wb = Workbook()
     ws = wb.active
     cur, prv = r["current"], r["previous"]
@@ -3035,28 +3092,49 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
            f"วัตถุดิบที่ใช้ต่อยอดขาย ฿100,000 (ไม่รวมภาษีมูลค่าเพิ่ม) · {r['weeks']} สัปดาห์ล่าสุด {cur['from']} ถึง {cur['to']}"
            + (f" เทียบ {prv['from']} ถึง {prv['to']}" if prv else "") + " · ปริมาณใช้ตามสูตรเดียวกับยอดแนะนำ (รวมส่วนสูญเสีย) "
            f"· มูลค่าตามราคาเดือน {r['month']} · แกว่งต่อสัปดาห์ = ส่วนเบี่ยงเบนมาตรฐานของอัตรารายสัปดาห์ ÷ ค่าเฉลี่ย "
-           f"ถ้าเกิน {r['steady_pct']:g}% ถือว่าใช้ไม่สม่ำเสมอ")
-    blocks = [(b["branch"], b["items"]) for b in r["branches"]] + ([("ทั้งเครือ", chain["items"])] if chain else [])
+           f"ถ้าเกิน {r['steady_pct']:g}% ถือว่าใช้ไม่สม่ำเสมอ"
+           + (f" · {_bm.LABEL} = ค่ากลาง (มัธยฐาน) ของ {', '.join(x['name'] for x in bench['branches'])} · “การใช้ตามสูตรเทียบค่ากลาง %” = ส่วนต่างของปริมาณใช้ตามสูตรจากค่ากลาง · “ยอดซื้อเทียบค่ากลาง %” = ส่วนต่างของมูลค่าที่ซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 จากค่ากลาง (ป้ายเตือนใช้ตัวเลขนี้)"
+              f" · ช่วงยอมรับสต็อก ±{r['buffer_pct']:g}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา · แถว “ทั้งเครือ” คือผลรวมทุกสาขา" if bench else ""))
+    blocks = [(b["branch"], b["items"]) for b in r["branches"]] + ([(_bm.LABEL, bench["items"])] if bench else []) \
+        + ([("ทั้งเครือ", chain["items"])] if chain else [])
+    pbench = r.get("purchase_benchmark")
+    bymap = {b["branch"]: b for b in r["branches"]}
+    src_th = {"price_file": "ไฟล์ราคารายสาขา", "orders": "ใบสั่งซื้อที่ส่งจากไดกิโตะ กรุ๊ป"}
     for name, items in blocks:
+        b = bymap.get(name)
+        if (bench or pbench) and (b or name == _bm.LABEL):      # one summary line per block: the value, and what it BUYS from the centre
+            if b:
+                if b.get("purchase_per_100k_value") is not None:
+                    note = (f"ยอดซื้อจากไดกิโตะ กรุ๊ป ฿{b['purchase_per_100k_value']:,.0f} ต่อยอดขาย ฿100,000 (ที่มา {src_th.get(b['purchase_source'])} · {b['purchase_days']} วันขาย)"
+                            + (f" · {_pv.BELOW_TH}: ต่ำกว่าค่ากลางเกิน {r['buffer_pct']:g}%" if b.get("below_benchmark") else ""))
+                else:
+                    note = b.get("no_purchase_th") or ""
+                ws.append([name, None, "สรุปมูลค่าต่อยอดขาย ฿100,000", None, None, None, None, None, b["value_per_100k"],
+                           b.get("vs_benchmark_pct"), b.get("purchase_vs_benchmark_pct"), note])
+            else:
+                ws.append([name, None, "สรุปมูลค่าต่อยอดขาย ฿100,000", None, None, None, None, None, bench["value_per_100k"], None, None,
+                           (f"ยอดซื้อจากไดกิโตะ กรุ๊ป ฿{pbench['per_100k_value']:,.0f} ต่อยอดขาย ฿100,000 (มัธยฐานของ {pbench['n']} สาขา)" if pbench else "")])
         for it in items:
             ws.append([name, it["code"], it["name"], it["unit"], it["per_100k"], it["prev_per_100k"], it["change_pct"],
-                       it["swing_pct"], it["value_per_100k"], _per_sales_note(it)])
+                       it["swing_pct"], it["value_per_100k"], it.get("vs_benchmark_pct"), None, _per_sales_note(it)])
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for c in row[4:6]:
             c.number_format = "#,##0.00"
         row[6].number_format = "0.0"
         row[7].number_format = "0.0"
         row[8].number_format = "#,##0.00"
-    ws.column_dimensions["A"].width = 22
+        row[9].number_format = "0.0"
+        row[10].number_format = "0.0"
+    ws.column_dimensions["A"].width = 24
     ws.column_dimensions["C"].width = 40
-    ws.column_dimensions["J"].width = 44
+    ws.column_dimensions["L"].width = 60
     ws.freeze_panes = "D3"
     w2 = wb.create_sheet()
-    heads = [b["branch"] for b in r["branches"]] + (["ทั้งเครือ"] if chain else [])
+    heads = [b["branch"] for b in r["branches"]] + ([_bm.LABEL] if bench else []) + (["ทั้งเครือ"] if chain else [])
     _sheet(w2, PER_SALES_COMPARE, ["รหัส", "วัตถุดิบ", "หน่วย"] + heads,
            f"ปริมาณที่ใช้ต่อยอดขาย ฿100,000 ของ {r['weeks']} สัปดาห์ล่าสุด เทียบรายสาขา (หน่วยเดียวกับแผ่นแรก)")
     tables = [{it["code"]: it for it in b["items"]} for b in r["branches"]] \
-        + ([{it["code"]: it for it in chain["items"]}] if chain else [])
+        + ([{it["code"]: it for it in bench["items"]}] if bench else []) + ([{it["code"]: it for it in chain["items"]}] if chain else [])
     first = {}
     for t in tables:
         for code, it in t.items():
@@ -3070,6 +3148,65 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
     w2.column_dimensions["B"].width = 40
     w2.freeze_panes = "D3"
     return _xlsx(wb, f"bom_center_per_sales_{'b%d_' % bid if bid is not None else ''}{r['end']}.xlsx")
+
+
+# ── PR-X · ตรวจสูตรและหน่วยด้วยยอดซื้อจริง (recipe_check.py): analyst / management only ──────────────
+RECIPE_CHECK_HEADS = ["รหัส", "วัตถุดิบ", "หน่วยฐาน", "ซื้อจริงต่อยอดขาย ฿100,000 (ค่ากลาง)", "ตามสูตรต่อยอดขาย ฿100,000 (ค่ากลาง)",
+                      "ส่วนต่าง %", "ช่วงยอมรับ ±%", "ผลตรวจ", "มูลค่าส่วนต่างต่อยอดขาย ฿100,000"]
+
+
+def _recipe_check_or_403(request: Request, month: Optional[str]) -> dict:
+    if _auth.scope_branch(request):
+        raise HTTPException(403, "ผู้ใช้ของสาขาเข้าถึงหน้าตรวจสูตรด้วยยอดซื้อไม่ได้")
+    if month and not _MONTH.match(month):
+        raise HTTPException(400, "เดือนต้องอยู่ในรูปแบบ YYYY-MM")
+    with get_db() as con:
+        _ensure(con)
+        return _rc.check(con, month or None)
+
+
+@router.get("/api/bom-center/recipe-check")
+def bc_recipe_check(request: Request, month: Optional[str] = Query(None)):
+    """ตรวจสูตรและหน่วยด้วยยอดซื้อจริง: per ingredient what the benchmark branches bought per ฿100,000 of sales against what the
+    recipes say, for one month (default: the newest finished month with purchases). Read-only: nothing is changed."""
+    return _recipe_check_or_403(request, month)
+
+
+@router.get("/api/bom-center/recipe-check.xlsx")
+def bc_recipe_check_xlsx(request: Request, month: Optional[str] = Query(None)):
+    from openpyxl import Workbook
+    r = _recipe_check_or_403(request, month)
+    br = [b["branch"] for b in r["branches"]]
+    heads = RECIPE_CHECK_HEADS + [f"{n} · {k}" for n in br for k in ("ซื้อจริง", "ตามสูตร", "ส่วนต่าง %")] + ["หมายเหตุ"]
+    wb = Workbook()
+    ws = wb.active
+    notes = [f"ตรวจสูตรและหน่วยด้วยยอดซื้อจริง · เดือน {r['month']} · ค่ากลางสาขาของบริษัท = มัธยฐานของ {', '.join(br) or '-'}"
+             " · ยอดขายไม่รวมภาษีมูลค่าเพิ่มและค่าบริการ · หน่วยเป็นหน่วยฐานของวัตถุดิบ"]
+    if r["scaled"]:
+        notes.append("ยอดซื้อของทั้งเดือนถูกปรับตามสัดส่วนวันที่มียอดขายรายวัน ("
+                     + ", ".join(f"{b['branch']} {b['sales_days']}/{b['month_days']} วัน" for b in r["branches"] if b["scaled"]) + ")")
+    notes.append(f"ช่วงยอมรับ ±{r['buffer_pct']:g}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา · สาขาที่มีผลตรวจนับครบใช้ยอดซื้อปรับด้วยสต็อกและเกณฑ์ผลต่างปกติ")
+    _sheet(ws, _rc.SHEET, heads, " · ".join(notes))
+    for x in r["rows"]:
+        row = [x["code"], x["name"], x["base_unit"], x["bought"], x["recipe"], x["diff_pct"], x["tolerance_pct"], x["status_th"],
+               x["impact_value"]]
+        by = {b["branch_id"]: b for b in x["branches"]}
+        for b in r["branches"]:
+            y = by.get(b["branch_id"]) or {}
+            row += [y.get("bought"), y.get("recipe"), y.get("diff_pct")]
+        row.append("ตรวจหน่วยของวัตถุดิบ (หน่วยและการแปลง)" if x["status"] == "x10" else
+                   "ตรวจรหัสและสูตรที่ใช้วัตถุดิบนี้" if x["status"] in ("no_buy", "no_recipe") else "")
+        ws.append(row)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[3:5]:
+            c.number_format = "#,##0.00"
+        row[5].number_format = "0.0"
+        row[8].number_format = "#,##0.00"
+        for c in row[9:-1]:
+            c.number_format = "#,##0.00"
+    ws.column_dimensions["B"].width = 42
+    ws.freeze_panes = "D3"
+    return _xlsx(wb, f"bom_center_recipe_check_{r['month'] or 'none'}.xlsx")
 
 
 # ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with a reason (photos go by LINE); Sales Support decides ──

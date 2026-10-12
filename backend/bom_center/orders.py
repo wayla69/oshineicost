@@ -604,7 +604,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         expected_sales = (o0 or {}).get("buffer_sales")
     with _fc._plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
         s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv,
-                    ref_branch=_ps.reference_for(con, branch_id), expected_sales=expected_sales)
+                    ref_branch=_ps.resolved_reference(con, branch_id), expected_sales=expected_sales)
     if s.get("ref_mode"):                  # a new branch: the expected sales ARE the expectation, no % on top
         pct = 0.0
     s["expected_sales"] = expected_sales
