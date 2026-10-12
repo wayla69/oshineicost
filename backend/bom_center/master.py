@@ -74,7 +74,13 @@ def _num(v):
 
 _FIELDS = ("name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
            "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored",
-           "sourcing_default", "active", "note")
+           "sourcing_default", "active", "note", "short_name")
+
+
+def _short_name(v):
+    """4.1: the short display name a branch reads - one line, no more than 40 characters; empty -> None (the full name is shown)."""
+    t = re.sub(r"\s+", " ", str(v or "")).strip()
+    return t[:40] or None
 
 
 def _upsert(con, code: str, vals: dict, who: str, overwrite: bool, stats: dict):
@@ -180,6 +186,7 @@ def seed_from_db(con, forced: dict = None, ref_month: str = "2026-07", who: str 
 IMPORT_ALIASES = {
     "code":       ("itemcode(acc)", "itemcodeacc", "รหัส", "รหัสวัตถุดิบ", "รหัสสินค้า", "code"),
     "name":       ("productdetails", "ชื่อวัตถุดิบ", "ชื่อสินค้า", "รายละเอียด", "name", "name_th"),
+    "short_name": ("ชื่อสั้น", "ชื่อสั้นบนหน้าสาขา", "short_name", "shortname"),      # 4.1 (optional)
     "category":   ("category", "หมวด", "หมวดหมู่"),
     "base_unit":  ("unitreceived", "หน่วยฐาน", "หน่วยนับ", "base_unit", "baseunit"),
     "recv_unit":  ("หน่วยรับ", "หน่วยสั่ง", "recv_unit", "recvunit", "orderunit"),
@@ -305,7 +312,7 @@ def import_rows(con, rows: list, who: str, default_month: str = None, choices: d
                 "base_unit": norm(r.get("base_unit")) or None, "recv_unit": r.get("recv_unit") or None,
                 "qty_per_recv": _num(r.get("qty_per_recv")), "loss_pct": _num(r.get("loss_pct")),
                 "lead_days": _num(r.get("lead_days")), "shelf_days": _num(r.get("shelf_days")),
-                "moq": _num(r.get("moq"))}
+                "moq": _num(r.get("moq")), "short_name": _short_name(r.get("short_name"))}
         k = str(r.get("kind") or "").replace(" ", "")
         if k:
             vals["kind"] = _KIND_TH.get(k, k if k in ("raw", "prepared", "consumable", "zero_by_design") else None)
@@ -355,6 +362,9 @@ def update_rows(con, rows: list, who: str) -> dict:
             if not re.search(r"[A-Za-zก-๙]", name):
                 raise ValueError(f"{code}: ชื่อต้องมีตัวอักษร")
             vals["name_th"] = name
+        clear_short = "short_name" in vals and not str(vals["short_name"] or "").strip()
+        if "short_name" in vals:                     # 4.1: typed on the screen; an empty box takes it away again
+            vals["short_name"] = _short_name(vals["short_name"])
         if "base_unit" in vals:
             vals["base_unit"] = norm(vals["base_unit"]) or None
         for k in ("qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days"):
@@ -365,6 +375,10 @@ def update_rows(con, rows: list, who: str) -> dict:
         if vals.get("qty_per_recv") is not None and vals["qty_per_recv"] <= 0:
             raise ValueError(f"{code}: ขนาดบรรจุต้องมากกว่า 0")
         _upsert(con, code, vals, who, True, stats)
+        if clear_short and con.execute("SELECT 1 FROM bc_ingredient WHERE code=? AND COALESCE(short_name,'')<>''", (code,)).fetchone():
+            con.execute("UPDATE bc_ingredient SET short_name=NULL, updated_at=?, updated_by=? WHERE code=?", (now(), who, code))
+            audit(con, who, "update", "bc_ingredient", code, {"short_name": "…"}, {"short_name": None})
+            stats["updated"] += 1
         _apply_layout(con, code, r, who, pending, True)
     bad = _check_count_units(con, pending)
     if bad:

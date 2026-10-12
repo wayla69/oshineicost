@@ -87,11 +87,93 @@ def item(src, code) -> str:
     names = getattr(src, "names", None)
     if names is not None:
         return names.get(c) or c
-    try:
-        r = src.execute("SELECT name_th FROM bc_ingredient WHERE code=?", (c,)).fetchone()
+    try:                                                   # 4.1: the short name when the register has one
+        r = src.execute("SELECT COALESCE(NULLIF(TRIM(short_name), ''), name_th) FROM bc_ingredient WHERE code=?", (c,)).fetchone()
     except Exception:
-        r = None
+        try:
+            r = src.execute("SELECT name_th FROM bc_ingredient WHERE code=?", (c,)).fetchone()
+        except Exception:
+            r = None
     return (r[0] if r and r[0] else None) or c
+
+
+def short_names(con) -> dict:
+    """{code: short name} of the register items that have one (4.1). Empty when the column does not exist yet."""
+    try:
+        return {c: s.strip() for c, s in con.execute(
+            "SELECT code, short_name FROM bc_ingredient WHERE short_name IS NOT NULL AND TRIM(short_name) <> ''")}
+    except Exception:
+        return {}
+
+
+def add_short(con, obj, _map=None):
+    """4.1: put `short_name` beside `name` in every dict of a payload that names an ingredient (it has `code` and `name`) — the
+    branch screens write the short name when there is one and the full name otherwise, with the code under "ดูที่มา". The payload
+    is changed in place and returned; a dict whose code has no short name is left as it is."""
+    m = short_names(con) if _map is None else _map
+    if not m:
+        return obj
+    if isinstance(obj, dict):
+        c = obj.get("code")
+        if "name" in obj and c in m:
+            obj["short_name"] = m[c]
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                add_short(con, v, m)
+    elif isinstance(obj, list):
+        for v in obj:
+            if isinstance(v, (dict, list)):
+                add_short(con, v, m)
+    return obj
+
+
+def round_day_th(round_key, delivery) -> str:
+    """4.2: how a worker names an order: "รอบ 2 (ส่ง 10/10)" - the round and its delivery day, never ORDER-8 / #9."""
+    from .forecast import ROUND_TH
+    d = _d(delivery)
+    return f"{ROUND_TH.get(str(round_key), str(round_key))}" + (f" (ส่ง {d.day}/{d.month})" if d else "")
+
+
+# 4.6: a gap in words. The sign of "ผลต่าง −฿16,197 −8.1%" is read the wrong way round as often as the right one; the words carry the
+# direction instead: "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)". kind: use = what the branch used against the recipes, issue = what the slip issued
+# against the recipes, count = the physical count against the system stock. The Excel files keep the signed numbers.
+GAP_WORDS = {"use": ("ใช้มากกว่าสูตร", "ใช้น้อยกว่าสูตร", "ใช้ตามสูตร"),
+             "issue": ("เบิกมากกว่าสูตร", "เบิกน้อยกว่าสูตร", "เบิกตามสูตร"),
+             "count": ("นับได้มากกว่าระบบ", "นับได้น้อยกว่าระบบ", "นับตรงกับระบบ")}
+
+
+def gap_dir(value, pct=None) -> int:
+    """+1 more, -1 less, 0 the same (a baht gap under ฿0.5 and a % under 0.05 are the same). `value` wins when both are given."""
+    try:
+        v = None if value is None else float(value)
+        p = None if pct is None else float(pct)
+    except (TypeError, ValueError):
+        return 0
+    if v is not None:
+        if abs(v) < 0.5 and (p is None or abs(p) < 0.05):
+            return 0
+        if v != 0:
+            return 1 if v > 0 else -1
+    if p is None or abs(p) < 0.05:
+        return 0
+    return 1 if p > 0 else -1
+
+
+def gap_th(value, pct=None, kind="use") -> str:
+    """"ใช้น้อยกว่าสูตร ฿16,197 (8.1%)" from the baht gap and the % (either may be None); "ใช้ตามสูตร" when there is none."""
+    more, less, same = GAP_WORDS.get(kind, GAP_WORDS["use"])
+    d = gap_dir(value, pct)
+    if d == 0:
+        return same
+    out = more if d > 0 else less
+    has_baht = value is not None and abs(float(value)) >= 0.5                  # ฿0 is not written
+    if has_baht:
+        out += f" ฿{abs(float(value)):,.0f}"
+    if pct is not None and abs(float(pct)) >= 0.05:
+        p = abs(float(pct))
+        t = f"{p:.0f}%" if p >= 10 else f"{p:.1f}%"
+        out += f" ({t})" if has_baht else f" {t}"
+    return out
 
 
 def no_unit(src, code, unit=None) -> str:

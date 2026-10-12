@@ -24,7 +24,7 @@ from .fmt import day_th as _fmt_day
 from .fmt import item as _item
 from .fmt import no_unit as _no_unit
 from .master import audit
-from .units import Converter
+from .units import Converter, _is_pack_word, unit_word
 
 # PR-K: the storage zones are the centre's to edit (app_settings key bc_zones = JSON [{code, label}]).
 # A code is stable (items point at it), a label may be renamed, the list order is the order a branch counts in.
@@ -32,6 +32,7 @@ DEFAULT_ZONES = (("frozen", "แช่แข็ง"), ("chilled", "แช่เ�
 ZONES_KEY = "bc_zones"
 FALLBACK_ZONE = "other"                   # where a guess lands when its zone no longer exists; cannot be deleted
 LOOKBACK_DAYS = 28
+RECENT_USE_DAYS = 14               # 3.2: an item the recipes used within this many days is on the default slip
 _ZONE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
 
@@ -169,6 +170,41 @@ def count_unit(base: str, recv: str, per) -> tuple:
     return base or "", 1.0
 
 
+def entry_unit(conv, code: str, base, recv, per, explicit=None) -> tuple:
+    """PR-B2 (3.1): (the unit a branch types a quantity in, base units in one of it).
+
+    The analyst's own `count_unit` (set on the stock layout or in the register file) is kept as it is. Without one the entry unit
+    is the SMALLEST SEALED unit of the item (units.Converter.sealed): an item received by the box ("กล่อง (10 แพ็ค)") with a
+    แพ็ค on its ladder is issued and counted in แพ็ค, a use of 0.3 box a day being 3 packs. An item whose receiving unit is loose
+    (กิโลกรัม, ชิ้น) or has no pack size keeps the unit it always had."""
+    if explicit:
+        return explicit, conv.factor(code, explicit)[0]
+    unit, factor = count_unit(base, recv, per)
+    w = unit_word(recv)
+    if per and recv and w and _is_pack_word(w):
+        sealed = conv.sealed(code)
+        if sealed:
+            u = sealed[0]
+            return (u["label"] if u["source"] == "recv" else u["unit"]), u["factor"]
+    return unit, factor
+
+
+def big_unit(conv, code: str, unit: str, factor) -> dict:
+    """PR-B2 (3.1): the next sealed unit above the entry unit when it holds a whole number of them — {unit, label, per, factor} for
+    a box of 10 packs — else None. The month-end count offers it as a second box (กล่อง + แพ็ค) that sums to base units."""
+    w = unit_word(unit)
+    if not factor or not w or not _is_pack_word(w):
+        return None
+    above = [u for u in conv.sealed(code) if u["factor"] > factor * (1 + 1e-9)]
+    if not above:
+        return None
+    u = above[0]
+    ratio = u["factor"] / factor
+    if round(ratio) < 2 or abs(ratio - round(ratio)) > 1e-6:
+        return None
+    return {"unit": u["unit"], "label": u["label"], "per": int(round(ratio)), "factor": u["factor"]}
+
+
 def _branch_name(con, branch_id: int) -> str:
     r = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()
     if not r:
@@ -214,17 +250,22 @@ def count_units(con, codes) -> dict:
     for c, base, recv, per, cu in con.execute(
             "SELECT code, base_unit, recv_unit, qty_per_recv, count_unit FROM bc_ingredient"):
         if c in codes:
-            out[c] = (cu, conv.factor(c, cu)[0]) if cu else count_unit(base, recv, per)
+            out[c] = entry_unit(conv, c, base, recv, per, cu)
     return out
 
 
-def _usage(con, branch_id: int, as_of: date) -> dict:
-    """{code: average base units a trading day} over the lookback window."""
+def _usage(con, branch_id: int, as_of: date, with_recent: bool = False):
+    """{code: average base units a trading day} over the lookback window. `with_recent` -> (that, the set of codes the recipes
+    used on a day of the last RECENT_USE_DAYS days up to `as_of`): the items a branch is still using (3.2)."""
     from .forecast import era_start, usage_history
     start = era_start(as_of - timedelta(days=LOOKBACK_DAYS - 1), as_of)
     use, days, _ = usage_history(con, branch_id, start, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
     n = max(len(days), 1)
-    return {c: sum(s.values()) / n for c, s in use.items() if sum(s.values()) > 0}
+    avg = {c: sum(s.values()) / n for c, s in use.items() if sum(s.values()) > 0}
+    if not with_recent:
+        return avg
+    since = (as_of - timedelta(days=RECENT_USE_DAYS - 1)).isoformat()
+    return avg, {c for c, s in use.items() if any(d >= since and (q or 0) > 0 for d, q in s.items())}
 
 
 def sheet(con, branch_id: int, as_of: date = None) -> dict:
@@ -235,7 +276,7 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = as_of or (date.fromisoformat(last) if last else bkk_today())
     month = f"{as_of.year:04d}-{as_of.month:02d}"
-    per_day = _usage(con, branch_id, as_of)
+    per_day, used_recent = _usage(con, branch_id, as_of, with_recent=True)
     spend = {}
     for c, q in per_day.items():
         p = price_for(con, c, month)
@@ -259,8 +300,8 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     dr = draft_of(con, branch_id)
     draft = {}
     if dr:
-        draft = {c: (q, u) for c, q, u in con.execute(
-            "SELECT ingredient_code, qty_kitchen, unit FROM bc_stock_count_line WHERE count_id=?", (dr["count_id"],))}
+        draft = {c: (q, u, qb) for c, q, u, qb in con.execute(
+            "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_stock_count_line WHERE count_id=?", (dr["count_id"],))}
     zcfg = zones(con)
     valid = [z for z, _ in zcfg]
     by_zone = {z: [] for z in valid}
@@ -270,7 +311,7 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         if not m:
             continue
         name, fam, kind, base, recv, per, mon, zone, cu, _active = m
-        unit, factor = (cu, conv.factor(c, cu)[0]) if cu else count_unit(base, recv, per)
+        unit, factor = entry_unit(conv, c, base, recv, per, cu)
         z = zone if zone in by_zone else guess_zone(c, name, fam, kind, valid)
         k = klass.get(c, "C")
         pv = prev.get(c)
@@ -278,13 +319,17 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         # "ครั้งก่อน" is read in the unit the item is counted in now: a previous count typed in another unit is converted
         if pv and pv[2] is not None and factor and (last_u or unit) != unit:
             last_q, last_u = round(pv[2] / factor, 3), unit
+        dq = draft.get(c)                         # a draft typed in another unit (before the entry unit changed) is read in this one
+        if dq and dq[2] is not None and factor and (dq[1] or unit) != unit:
+            dq = (round(dq[2] / factor, 4),)
         by_zone[z].append({
             "code": c, "name": name or c, "base_unit": base, "count_unit": unit, "per_count_unit": factor,
+            "unit_big": big_unit(conv, c, unit, factor),                    # 3.1: a second box (กล่อง) on the month-end count
             "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A", "monitored": bool(mon),
-            "use_per_day": round(per_day.get(c, 0.0), 3),
+            "use_per_day": round(per_day.get(c, 0.0), 3), "used_recent": c in used_recent,
             "pieces_unit": (conv.weight_avg_step(c) or {}).get("unit"),     # PR-U2: a manual receipt may carry the pieces counted
             "last_qty": last_q, "last_unit": last_u, "last_base": pv[2] if pv else None,
-            "draft_qty": draft.get(c, (None,))[0]})
+            "draft_qty": dq[0] if dq else None})
     order = {"A": 0, "B": 1, "C": 2}
     out_z = []
     for z, label in zcfg:
@@ -302,6 +347,35 @@ def uncounted_required(con, branch_id: int, count_id: int) -> list:
     have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=?", (count_id,))}
     return [(it["code"], it["name"]) for z in sheet(con, branch_id)["zones"] for it in z["items"]
             if it["required"] and it["code"] not in have]
+
+
+def _sum_parts(con, conv, code: str, parts: list, bad: list) -> tuple:
+    """(quantity in the entry unit, that unit, base units) of a count typed in several boxes — [{qty, unit}, …]. An empty box is 0;
+    no box with a number at all -> (None, None, None). Base units are the SUM of each box converted on its own, so 2 กล่อง and
+    3 แพ็ค are exact whatever the entry unit is. A box whose unit cannot be converted is listed in `bad` -> (0, None, None)."""
+    total_b, any_part = 0.0, False
+    for p in parts:
+        raw = (p or {}).get("qty")
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            q = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
+        if q < 0:
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
+        u = (p.get("unit") or "").strip() or conv.base_unit(code)
+        pb, _how = conv.to_base(code, q, u)
+        if pb is None:
+            bad.append(_no_unit(con, code, u))
+            return 0, None, None
+        total_b += pb
+        any_part = True
+    if not any_part:
+        return None, None, None
+    m = con.execute("SELECT base_unit, recv_unit, qty_per_recv, count_unit FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+    unit, factor = entry_unit(conv, code, *m) if m else (conv.base_unit(code), 1.0)
+    return (total_b / factor if factor else total_b), (unit or conv.base_unit(code)), total_b
 
 
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
@@ -334,20 +408,28 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         code = (ln.get("code") or ln.get("ingredient_code") or "").strip()
         if not code:
             continue
-        q = ln.get("qty")
-        if q is None or q == "":
-            con.execute("DELETE FROM bc_stock_count_line WHERE count_id=? AND ingredient_code=?", (cid, code))
-            continue
-        try:
-            q = float(q)
-        except (TypeError, ValueError):
-            raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
-        if q < 0:
-            raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
-        unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
-        qb, how = conv.to_base(code, q, unit)
-        if qb is None:
-            bad.append(_no_unit(con, code, unit))
+        parts = ln.get("parts")
+        if parts:                                  # 3.1: "2 กล่อง + 3 แพ็ค" - each part to base units, summed; kept in the entry unit
+            q, unit, qb = _sum_parts(con, conv, code, parts, bad)
+            if unit is None:
+                if q is None and not bad:          # no part carries a number: the line is cleared like an empty single box
+                    con.execute("DELETE FROM bc_stock_count_line WHERE count_id=? AND ingredient_code=?", (cid, code))
+                continue
+        else:
+            q = ln.get("qty")
+            if q is None or q == "":
+                con.execute("DELETE FROM bc_stock_count_line WHERE count_id=? AND ingredient_code=?", (cid, code))
+                continue
+            try:
+                q = float(q)
+            except (TypeError, ValueError):
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
+            if q < 0:
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
+            unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
+            qb, how = conv.to_base(code, q, unit)
+            if qb is None:
+                bad.append(_no_unit(con, code, unit))
         con.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, note)"
                     " VALUES(?,?,?,?,?,?) ON CONFLICT(count_id, ingredient_code) DO UPDATE SET"
                     " qty_kitchen=excluded.qty_kitchen, unit=excluded.unit, qty_base=excluded.qty_base,"

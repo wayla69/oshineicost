@@ -332,6 +332,10 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
     units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (h["order_id"],))}
     recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
     base = {c: b for c, b in con.execute("SELECT code, base_unit FROM bc_ingredient")}
+    from .fmt import round_day_th                         # 4.2: a note names the order by its round and delivery day, never a number
+    from .hub import delivery_of
+    ob = con.execute("SELECT round, cycle_date, delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
+    lbl = round_day_th(ob[0], delivery_of(con, h["branch_id"], ob[0], ob[1], ob[2])) if ob else "ใบสั่งซื้อ"
 
     def _book(sign, qtys, note_txt):
         """One 'claim' receipt dated the order's receipt, so the same variance period sees it."""
@@ -355,7 +359,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
             back = [(c, float(cu)) for c, cu in con.execute(
                 "SELECT ingredient_code, claim_units FROM bc_claim_line WHERE claim_id=? AND claim_units>0", (claim_id,))]
             if back:
-                rid, rdate = _book(+1, back, f"สินค้าตามเคลม #{claim_id} ที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
+                rid, rdate = _book(+1, back, f"สินค้าตามเคลม {lbl} ที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
                 restored = len(back)
         con.execute("UPDATE bc_claim SET status='rejected', decided_by=?, decided_at=?, decision_note=?,"
                     " adjust_receipt_id=? WHERE claim_id=?", (who, now(), note, rid, claim_id))
@@ -386,14 +390,14 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
     if origin == "after":
         # the adjustment: dated the receipt of the order, so the same variance period loses these goods
         plus = [(c, a) for c, a in approved if a > 0]
-        rid, rdate = _book(-1, plus, f"ปรับสินค้าตามเคลม #{claim_id}")
+        rid, rdate = _book(-1, plus, f"ปรับสินค้าตามเคลม {lbl}")
         adjusted = len(plus)
     else:
         # already received at the lower quantity: nothing comes out; the part not approved goes back in
         cl = dict(rows)
         back = [(c, round(float(cl[c]) - a, 6)) for c, a in approved if float(cl[c]) - a > 1e-9]
         if back:
-            rid, rdate = _book(+1, back, f"สินค้าตามเคลม #{claim_id} ส่วนที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
+            rid, rdate = _book(+1, back, f"สินค้าตามเคลม {lbl} ส่วนที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
             restored = len(back)
     con.execute("UPDATE bc_claim SET status='approved', decided_by=?, decided_at=?, decision_note=?, adjust_receipt_id=?"
                 " WHERE claim_id=?", (who, now(), note, rid, claim_id))

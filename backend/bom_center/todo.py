@@ -19,7 +19,7 @@ writes do not invalidate the cache, and this list must be right straight after a
 from datetime import date, datetime, timedelta
 
 from .clock import BKK, now_bkk
-from .fmt import at_th as _fmt_at, day_th as _fmt_day, lbl as _lbl, left_th as _left_th, month_th as _mth, who as _who
+from .fmt import at_th as _fmt_at, day_th as _fmt_day, lbl as _lbl, left_th as _left_th, month_th as _mth, round_day_th as _round_day, who as _who
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
@@ -297,7 +297,7 @@ def _slip_info(con, bid: int, today: date) -> dict:
 
 
 def _week_items(con, branches: list, today: date, single: bool, centre: bool, now=None) -> list:
-    from .forecast import ROUND_TH, WD_TH, _wd, calendar, next_deliveries
+    from .forecast import WD_TH, _wd, calendar, next_deliveries
     from .hub import delivery_of
     from .orders import STATUS_TH
     out = []
@@ -435,7 +435,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                 due.append((oid, r, dlv))
         if due:
             out.append(_e("receive_pending", 320, "week", "บันทึกรับสินค้าตามใบสั่งซื้อที่ส่งถึงแล้ว", "todo",
-                          "ใบสั่งซื้อ " + " · ".join(f"#{o} ({ROUND_TH[r]} ส่ง {_fmt_day(d)})" for o, r, d in due),
+                          " · ".join(_round_day(r, d) for o, r, d in due),             # 4.2: the round and the delivery day, never "#9"
                           count=len(due), owner=("branch.stock",), owner_th="สาขา", branch=b,
                           go={"tab": "branchstock", "pane": "recv", "extra": {"order_id": due[0][0]}}))
         nc_b = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE branch_id=? AND status='submitted'", (bid,)) \

@@ -259,9 +259,12 @@ class Converter:
         self.last_approx = False          # True after a conversion that passed an average step (PR-U)
         self.master = {}
         self.names = {}                   # code -> name_th: what a message to the floor calls the item (fmt.item)
-        has_name = "name_th" in {r[1] for r in con.execute("PRAGMA table_info(bc_ingredient)")}
+        cols = {r[1] for r in con.execute("PRAGMA table_info(bc_ingredient)")}
+        name_sql = "name_th" if "name_th" in cols else "NULL"
+        if "short_name" in cols:                      # 4.1: a message to the floor says the short name when the register has one
+            name_sql = f"COALESCE(NULLIF(TRIM(short_name), ''), {name_sql})"
         for code, base, recv, per, nm in con.execute(
-                "SELECT code, base_unit, recv_unit, qty_per_recv, " + ("name_th" if has_name else "NULL") + " FROM bc_ingredient"):
+                "SELECT code, base_unit, recv_unit, qty_per_recv, " + name_sql + " FROM bc_ingredient"):
             self.master[code] = (norm(base), str(recv or "").strip(), float(per) if per else None)
             self.names[code] = nm or ""
         self.rules = {}                   # (code, unit) -> factor_to_base — kept for the readers that look a rule up
@@ -339,6 +342,34 @@ class Converter:
                     "rmin": r["range_min"], "rmax": r["range_max"], "factor_to_base": r["factor_to_base"], "level": r["level"]}
             break                                         # ladder() is ordered lowest level first
         return best
+
+    def sealed(self, code: str) -> list:
+        """PR-B2 (3.1): the SEALED units of an item, smallest first — the packs a person holds in the hand: [{unit, label, factor,
+        source}] (`factor` = base units in one; `label` is how the unit is written on the screen: a receiving unit that carries its
+        contents, "แพ็ค 1 กก.", keeps it). They are the base unit when it is itself a pack word (an item stocked in แพ็ค), every
+        EXACT ladder unit that is a pack word (แพ็ค, ขวด, ถุง, แกลลอน …) and the master's receiving unit when that is one (กล่อง
+        (10 แพ็ค) -> กล่อง). A piece that differs in weight (ตัว ≈ 4.5 กก.), a loose weight (กิโลกรัม) and a piece word (ชิ้น) are not sealed."""
+        m = self.master.get(code)
+        if m is None:
+            return []
+        base, recv, per = m
+        out = []
+        if base and _is_pack_word(base):
+            out.append({"unit": base, "label": base, "factor": 1.0, "source": "base"})
+        for r in self.ladder(code):
+            f = r["factor_to_base"]
+            if r["kind"] == KIND_AVG or not f or f <= 0 or r["unit"] == base or not _is_pack_word(r["unit"]):
+                continue
+            out.append({"unit": r["unit"], "label": r["unit"], "factor": float(f), "source": "ladder"})
+        w = unit_word(recv)
+        if per and recv and w and _is_pack_word(w):
+            same = next((o for o in out if o["unit"] == w and abs(o["factor"] - float(per)) < 1e-9), None)
+            if same:
+                same["label"] = recv
+            else:
+                out.append({"unit": w, "label": recv, "factor": float(per), "source": "recv"})
+        out.sort(key=lambda o: o["factor"])               # a stable sort: a tie keeps the ladder's own order
+        return out
 
     def span(self, code: str, unit):
         """(lightest, heaviest) base units in ONE `unit` when the conversion passes an average step that carries a range

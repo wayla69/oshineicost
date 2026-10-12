@@ -48,6 +48,7 @@ window.uiDialog = function (opt) {
     wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
     const field = 'width:100%;box-sizing:border-box;border:1px solid var(--border-control, var(--border));border-radius:var(--r-sm, 8px);padding:8px 10px;font-size:14px;background:var(--bg-input, #fff);color:var(--text-primary)';
     const listId = 'uiDlgList' + Date.now();
+    const btnH = (window.matchMedia && window.matchMedia('(max-width: 700px), (pointer: coarse)').matches) ? 44 : 0;      // 4.4: a phone's buttons are 44 px tall
     wrap.innerHTML = `<form style="width:100%;max-width:440px;max-height:90vh;overflow:auto;background:var(--bg-card, var(--bg-input, #fff));color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
         <div data-el="title" style="font-weight:600;font-size:15px;margin-bottom:6px"></div>
         <div data-el="msg" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;white-space:pre-line"></div>
@@ -55,8 +56,8 @@ window.uiDialog = function (opt) {
           ${o.input.list ? `<datalist id="${listId}"></datalist>` : ''}
           <div data-el="err" style="font-size:12px;color:var(--bad-ink);margin-top:4px"></div>` : ''}
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-          <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)"></button>
-          <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)"></button>
+          <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;min-height:${btnH}px;font-size:${btnH ? 14 : 13}px;cursor:pointer;background:transparent;color:var(--text-primary)"></button>
+          <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;min-height:${btnH}px;font-size:${btnH ? 14 : 13}px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)"></button>
         </div></form>`;
     wrap.querySelector('[data-el="title"]').textContent = o.title || 'ยืนยันการดำเนินการ';
     wrap.querySelector('[data-el="msg"]').textContent = o.message || '';

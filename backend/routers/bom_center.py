@@ -31,6 +31,7 @@ from bom_center import issues as _is
 from bom_center import issue_reports as _ir
 from bom_center.clock import today as bkk_today
 from bom_center.fmt import CLASS_SHORT_TH as _CLASS_SHORT
+from bom_center.fmt import add_short as _short
 from bom_center import master as _m
 from bom_center import orders as _or
 from bom_center import per_sales as _pv
@@ -238,7 +239,7 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
                                 " GROUP BY ingredient_code"))
         cols = ["code", "name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
                 "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored", "sourcing_default",
-                "active", "note", "storage_zone", "count_unit", "updated_at", "updated_by"]
+                "active", "note", "storage_zone", "count_unit", "short_name", "updated_at", "updated_by"]
         rows = [dict(zip(cols, r)) for r in con.execute(f"SELECT {', '.join(cols)} FROM bc_ingredient ORDER BY code")]
     ql = (q or "").strip().lower()
     out = []
@@ -290,6 +291,7 @@ class IngredientEdit(BaseModel):
     note: Optional[str] = None
     storage_zone: Optional[str] = None       # a zone code (or its label); "" = back to the automatic guess
     count_unit: Optional[str] = None         # the unit a branch counts in; "" = the pack / base unit
+    short_name: Optional[str] = None         # 4.1: the name the branch screens show; "" = back to the register name
 
 
 @router.post("/api/bom-center/ingredients", dependencies=[Depends(require_write_token)])
@@ -348,7 +350,7 @@ def bc_ingredients_template():
     """The whole master as a sheet: edit in Excel, import back (a row you delete is left alone)."""
     from openpyxl import Workbook
     heads = ["รหัส", "ชื่อวัตถุดิบ", "ชนิด", "หมวด", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ",
-             "สูญเสีย (%)", "ขั้นต่ำ", "ระยะส่ง (วัน)", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง", "โซนจัดเก็บ", "หน่วยที่นับ"]
+             "สูญเสีย (%)", "ขั้นต่ำ", "ระยะส่ง (วัน)", "อายุเก็บ (วัน)", "บังคับสั่ง", "ช่องทางสั่ง", "ชื่อสั้น", "โซนจัดเก็บ", "หน่วยที่นับ"]
     kind_th = {"raw": "ดิบ", "prepared": "กึ่งสำเร็จ", "consumable": "วัสดุสิ้นเปลือง", "zero_by_design": "ตั้งใจเป็น 0"}
     wb = Workbook()
     ws = wb.active
@@ -360,15 +362,16 @@ def bc_ingredients_template():
                "ชนิด: ดิบ / กึ่งสำเร็จ / วัสดุสิ้นเปลือง / ตั้งใจเป็น 0 · ช่องทางสั่ง: ไดกิโตะ กรุ๊ป / สาขาซื้อเอง · "
                "โซนจัดเก็บ: " + " / ".join(zl.values()) + " (เว้นว่างได้) · "
                "หน่วยที่นับ = หน่วยที่สาขาใช้นับสต็อก (เว้นว่างได้ ใช้หน่วยรับหรือหน่วยฐาน) · "
+               "ชื่อสั้น = ชื่อที่หน้าสาขาแสดง (เว้นว่างได้ ไม่เกิน 40 ตัวอักษร ถ้าว่างหน้าสาขาแสดงชื่อวัตถุดิบเต็ม) · "
                "สินค้าส่วนกลางทุกรายการสั่งจาก " + _ce.CENTRAL_SUPPLIER)
         for r in con.execute("SELECT code, name_th, kind, category, base_unit, recv_unit, qty_per_recv,"
-                             " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default, storage_zone, count_unit"
+                             " loss_pct, moq, lead_days, shelf_days, monitored, sourcing_default, short_name, storage_zone, count_unit"
                              " FROM bc_ingredient WHERE active=1 ORDER BY code"):
             r = list(r)
             r[2] = kind_th.get(r[2], r[2])
             r[11] = "ใช่" if r[11] else ""
             r[12] = "สาขาซื้อเอง" if r[12] == "local" else "ไดกิโตะ กรุ๊ป"
-            r[13] = zl.get(r[13], r[13] or "")
+            r[14] = zl.get(r[14], r[14] or "")
             ws.append(r)
     return _xlsx(wb, f"BOM_CENTER_INGREDIENTS_{date.today().isoformat()}.xlsx")
 
@@ -2179,9 +2182,14 @@ def bc_stock_sheet(request: Request, branch_id: Optional[int] = Query(None)):
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _st.sheet(con, bid)
+            return _short(con, _st.sheet(con, bid))
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+
+class StockPart(BaseModel):
+    qty: Optional[float] = None
+    unit: Optional[str] = None
 
 
 class StockLine(BaseModel):
@@ -2189,6 +2197,7 @@ class StockLine(BaseModel):
     qty: Optional[float] = None
     unit: Optional[str] = None
     note: Optional[str] = None
+    parts: Optional[List[StockPart]] = None      # 3.1: the boxes of a two-step item (กล่อง + แพ็ค); summed in base units
 
 
 class StockBody(BaseModel):
@@ -2317,7 +2326,7 @@ def bc_issue_sheet(request: Request, branch_id: Optional[int] = Query(None), dat
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _is.sheet(con, bid, date or bkk_today().isoformat())
+            return _short(con, _is.sheet(con, bid, date or bkk_today().isoformat()))
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -2508,7 +2517,7 @@ def bc_receipts(request: Request, branch_id: Optional[int] = Query(None), limit:
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return {"branch_id": bid, "receipts": _va.receipts(con, bid, max(1, min(limit, 200)))}
+        return {"branch_id": bid, "receipts": _short(con, _va.receipts(con, bid, max(1, min(limit, 200))))}
 
 
 @router.post("/api/bom-center/stock/receipt", dependencies=[Depends(require_write_token)])
@@ -2543,7 +2552,7 @@ def bc_variance_period(request: Request, branch_id: Optional[int] = Query(None),
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _va.period(con, bid, end_count_id)
+            return _short(con, _va.period(con, bid, end_count_id))
         except ValueError as e:
             raise HTTPException(404, str(e))
 
@@ -2785,7 +2794,7 @@ def bc_ir_reconcile(request: Request, end_count_id: int = Query(...), branch_id:
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _recon_or_404(con, bid, end_count_id)
+        return _short(con, _recon_or_404(con, bid, end_count_id))
 
 
 @router.get("/api/bom-center/issue-reports/reconcile.xlsx")
@@ -2837,7 +2846,7 @@ def bc_ir_daily(request: Request, branch_id: Optional[int] = Query(None), month:
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _ir.daily(con, bid, month)
+        return _short(con, _ir.daily(con, bid, month))
 
 
 @router.get("/api/bom-center/issue-reports/daily/day")
@@ -2850,7 +2859,7 @@ def bc_ir_daily_day(request: Request, day: str = Query(...), branch_id: Optional
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _ir.daily_day(con, bid, day)
+        return _short(con, _ir.daily_day(con, bid, day))
 
 
 @router.get("/api/bom-center/issue-reports/daily.xlsx")
@@ -3047,7 +3056,7 @@ def bc_order_plan(request: Request, round: Optional[str] = Query(None), delivery
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         out["round"] = rnd
-        return out
+        return _short(con, out)
 
 
 @router.get("/api/bom-center/order/covers")
@@ -3125,7 +3134,7 @@ def bc_order_detail(order_id: int, request: Request):
         _stock_branch(con, request, o["branch_id"])
         o["claim_reasons"] = [{"code": c, "label": t} for c, t in _cl.REASONS]
         o["claims"] = _cl.for_order(con, order_id)
-        return o
+        return _short(con, o)
 
 
 @router.post("/api/bom-center/order/{order_id}/reopen", dependencies=[Depends(require_write_token)])
@@ -3388,8 +3397,8 @@ def bc_claims_claimable(request: Request, order_id: int = Query(...), branch_id:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return {**_cl.claimable(con, bid, order_id), "reasons": [{"code": c, "label": t} for c, t in _cl.REASONS],
-                    "max_photos": _cl.MAX_PHOTOS}
+            return _short(con, {**_cl.claimable(con, bid, order_id), "reasons": [{"code": c, "label": t} for c, t in _cl.REASONS],
+                                "max_photos": _cl.MAX_PHOTOS})
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -3413,7 +3422,7 @@ def bc_claim_detail(claim_id: int, request: Request):
     with get_db() as con:
         _ensure(con)
         _claim_head_or_403(con, request, claim_id)
-        return _cl.detail(con, claim_id)
+        return _short(con, _cl.detail(con, claim_id))
 
 
 @router.get("/api/bom-center/claims/{claim_id}/photo/{photo_id}")

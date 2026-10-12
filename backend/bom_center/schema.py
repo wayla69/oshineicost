@@ -278,6 +278,8 @@ MIGRATIONS = (
     ("bc_ingredient_alias", "is_current", "INTEGER DEFAULT 0"),
     ("bc_ingredient_alias", "created_by", "TEXT"),
     ("bc_ingredient_alias", "created_at", "TEXT"),
+    # PR-B2 (4.1) — a short display name for the branch screens (the register name is the supplier's spec and runs to 2-3 lines)
+    ("bc_ingredient", "short_name", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

@@ -40,13 +40,17 @@ function _shmMine(it) {
 // the month หน้างาน starts at when nobody has chosen: this month; a role that works the month being closed (it owns a step of the close
 // list) starts at the previous month, which is the month those steps and the price file belong to
 function _shmStartsPrev() { return _SHM_CLOSE_ROLES.includes(_shmRole()); }
+// 4.5 · a pinned branch login and the warehouse and accounting have ONE job on this page: no month and no branch to choose (the month is the
+// one their work belongs to - this month, or for accounting the month being closed - and a branch login is scoped by the server)
+const _SHM_NO_PICKER_ROLES = ['warehouse', 'accounting'];
+function _shmNoPickers() { return isPinnedSession() || _SHM_NO_PICKER_ROLES.includes(_shmRole()); }
 function _shmQuery() {
   const qs = new URLSearchParams();
   const m = document.getElementById('shmMonth'), b = document.getElementById('shmBranch');
-  const ctx = supplyCtx();
-  if (m && m.value) qs.set('month', m.value); else if (ctx.month) qs.set('month', ctx.month);
+  const ctx = supplyCtx(), bare = _shmNoPickers();
+  if (m && m.value) qs.set('month', m.value); else if (ctx.month && !bare) qs.set('month', ctx.month);
   if (b && b.options.length) { if (b.value) qs.set('branch_id', b.value); }
-  else if (ctx.branch_id && !isPinnedSession()) qs.set('branch_id', ctx.branch_id);   // a pinned login is scoped by the server
+  else if (ctx.branch_id && !bare) qs.set('branch_id', ctx.branch_id);   // a pinned login is scoped by the server
   return qs;
 }
 
@@ -61,7 +65,9 @@ async function loadSupplyHome() {
   const d = _shmData;
   if (m && !m.value) supplyMonthPut(m, d.month);
   const b = document.getElementById('shmBranch'), wrap = document.getElementById('shmBranchWrap');
-  if (d.scoped || !b) { if (wrap) wrap.style.display = 'none'; }     // a pinned login has no picker element at all (stripBranchPickers)
+  const bare = _shmNoPickers(), mw = document.getElementById('shmMonthWrap');
+  if (mw) mw.style.display = bare ? 'none' : '';
+  if (d.scoped || !b || bare) { if (wrap) wrap.style.display = 'none'; }     // a pinned login has no picker element at all (stripBranchPickers)
   else {
     wrap.style.display = '';
     // PR-M5: only the branches that have data in the month are listed
@@ -72,7 +78,7 @@ async function loadSupplyHome() {
     b.value = rows.some(x => String(x.branch_id) === cur) ? cur : '';
   }
   // the month is written to the shared choice only when a person changes it (shmCtxChanged); the branch follows the page
-  supplyCtxSet({ branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
+  if (!bare) supplyCtxSet({ branch_id: d.branch ? d.branch.branch_id : (d.scoped ? ctx.branch_id : (b && b.value ? Number(b.value) : null)) });
   // the branch is named ONCE, in the header (a branch login has one); the version of the recipes in force is the analyst's
   // and the manager's line only
   const bn = document.getElementById('shmBranchName');
@@ -158,20 +164,21 @@ function _shmTodayRows(d) {
       : (iss.slip_status === 'draft' ? 'ร่าง' : 'ยังไม่ทำ');
     rows.push({ k: 'issue', label: 'ตัดเบิกวันนี้', ok: ok && !gaps, text: txt + (gaps ? ` · ค้าง ${gaps} วัน` : ''), go: iss.go });
   }
-  // สั่งสินค้า: the pending round whose cutoff is today and nearest; else "ส่งแล้ว"; else nothing is due today
+  // สั่งสินค้า: the NEXT order due - the open round whose cutoff comes first (a round past its cutoff first of all). "ส่งแล้ว" only when
+  // no round is waiting: while another order is still open the strip names it, never a ✓ for the one that went (2.3)
   const ord = items.filter(it => base(it).startsWith('order_due_'));
-  const today = ord.filter(it => it.due_today);
-  const pend = today.filter(it => it.status === 'todo').sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
+  const pend = ord.filter(it => it.status === 'todo').sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
   if (pend.length) {
     const it = pend[0];
     const ms = new Date(it.cutoff_at).getTime() - Date.now();
     const left = isNaN(ms) || ms <= 0 ? '' : ` (${fmtLeft(ms / 3600000)})`;
+    const more = pend.length > 1 ? ` · รออีก ${pend.length - 1} รอบ` : '';
     rows.push({ k: 'order', label: 'สั่งสินค้า', ok: false, bad: !!it.late,
-      text: it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`, go: it.go });
-  } else if (today.length) {
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: today[0].go });
+      text: (it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `${it.round_th === 'แซลมอนสด' ? 'แซลมอนสด · ' : ''}รอบส่ง ${fmtDayShort(it.delivery)} · ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`) + more, go: it.go });
+  } else if (ord.length) {
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: ord[0].go });
   } else {
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ไม่มีรอบที่ต้องส่งวันนี้', go: (ord[0] && ord[0].go) || { tab: 'branchstock', pane: 'order' } });
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ไม่มีรอบที่ต้องส่ง', go: { tab: 'branchstock', pane: 'order' } });
   }
   // รับสินค้า
   const rec = items.find(it => base(it) === 'receive_pending');
@@ -225,7 +232,7 @@ function _shmRender(d) {
   const items = d.items || [];
   const c = d.close || { steps: [], branches: [] };
   const steps = c.steps || [];
-  const mineItems = items.filter(_shmMine), others = items.filter(it => !_shmMine(it));
+  const mineItems = _shmCollapseBacklog(items.filter(_shmMine)), others = items.filter(it => !_shmMine(it));
   mineItems.sort(_shmSortMine(role));
   const showClose = _SHM_CLOSE_ROLES.includes(role) && steps.length > 0;
   // a role that owns steps of the close sees those; the manager reads the whole list (the whole month is the manager's overview)
@@ -261,6 +268,17 @@ function _shmRender(d) {
     document.getElementById('shmOthersCount').textContent = waiting ? `(${waiting} รอทำ)` : '(ไม่มี)';
     document.getElementById('shmOthersBody').innerHTML = _shmOthersHtml(others);
   }
+}
+// 2.3 · the days a branch left behind are ONE row - "ใบตัดเบิกค้าง 4 วัน (8–11/10)" - not a card each. The row keeps the key of the oldest day,
+// so its button opens that day's slip. `_brnIssRuns` (14-branch.js) writes the days as ranges.
+function _shmCollapseBacklog(items) {
+  const isGap = it => String(it.key || '').split(':')[0].startsWith('issue_missing_') && it.status === 'todo';
+  const gaps = items.filter(isGap);
+  if (!gaps.length) return items;
+  const oldest = gaps.slice().sort((a, b) => String(a.slip_date).localeCompare(String(b.slip_date)))[0];
+  const row = Object.assign({}, oldest, { title: `ใบตัดเบิกค้าง ${gaps.length} วัน (${_brnIssRuns(gaps.map(g => g.slip_date).filter(Boolean))})`,
+    detail: 'ทำภายหลังได้ · เริ่มจากวันที่ค้างนานที่สุด', count: null });
+  return items.filter(it => !isGap(it) || it === oldest).map(it => (it === oldest ? row : it));
 }
 function _shmCard(it, n, mineBlock) {
   const [lbl, ink] = _SHM_ST[it.status] || _SHM_ST.todo;
