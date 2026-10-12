@@ -254,7 +254,7 @@ def test_a_branch_without_purchase_data_gets_the_muted_text_and_no_chip(ps_buy):
     b8 = {x["branch_id"]: x for x in r["branches"]}[8]
     assert b8["purchase_per_100k_value"] is None and b8["purchase_source"] is None and b8["purchase_vs_benchmark_pct"] is None
     assert b8["below_benchmark"] is False and b8["below_benchmark_th"] is None
-    assert b8["no_purchase_th"] == "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
+    assert b8["no_purchase_th"] == "ยังไม่มียอดซื้อจากไดกิโตะ กรุ๊ป ในช่วงนี้"
     # a benchmark branch without purchases is simply left out of the median (and shows no muted text); two are still needed
     BM.set_benchmark(ps_buy, "t", [1, 3, 8])
     pb = PS.report(ps_buy, 4, today=date(2026, 10, 6))["purchase_benchmark"]
@@ -636,7 +636,7 @@ def test_http_roles_pages_workbook_and_pinning(client, app_db, auth_on, monkeypa
         pb = j["purchase_benchmark"]                                                                  # what the company branches bought from the centre
         assert pb["n"] == 3 and pb["sources"] == ["price_file"] and pb["per_100k_value"] == pytest.approx(1000.0, rel=1e-2)   # 500 g x ฿2 per ฿100,000
         assert {b["branch"]: b for b in j["branches"]}["BranchA"]["purchase_vs_benchmark_pct"] == pytest.approx(0.0, abs=1.0)
-        assert {b["branch"]: b for b in j["branches"]}["BranchB"]["no_purchase_th"] == "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
+        assert {b["branch"]: b for b in j["branches"]}["BranchB"]["no_purchase_th"] == "ยังไม่มียอดซื้อจากไดกิโตะ กรุ๊ป ในช่วงนี้"
         mine_ps = br.get("/api/bom-center/per-sales?weeks=2").json()
         assert mine_ps["purchase_benchmark"] is None and mine_ps["branches"][0]["purchase_per_100k_value"] is None
         assert mine_ps["branches"][0]["no_purchase_th"] is None and mine_ps["branches"][0]["below_benchmark"] is False

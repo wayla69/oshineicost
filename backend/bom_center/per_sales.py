@@ -36,7 +36,7 @@ REF_KEY = "bc_ref_branch"
 BENCH = "benchmark"           # PR-X: the reference of a new branch can be the median of the company branches (the default)
 BUFFER_MIN, BUFFER_MAX = -50.0, 100.0
 BELOW_TH = "ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก"
-NO_PURCHASE_TH = "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
+NO_PURCHASE_TH = "ยังไม่มียอดซื้อจากไดกิโตะ กรุ๊ป ในช่วงนี้"
 NEED_SALES_TH ="ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้"
 
 
