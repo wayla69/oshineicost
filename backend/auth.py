@@ -377,6 +377,9 @@ MODULE_RULES = [
     ("W",   "/api/settings",                 {"system.settings"}),
     ("W",   "/api/targets",                  {"system.settings"}),
     ("GET", "/api/franchise",                {"franchise.view"}),   # PR-L: ร้านของฉัน (read-only; the role has no W rule anywhere)
+    # batch 3 (2.1): a phone turns on the reminders of its own login's work. Every endpoint answers for the caller's own devices; the
+    # branch login and the warehouse hold no sales.overview, so they are named here (the franchise owner stays closed out)
+    ("*",   "/api/push",                     {"sales.overview", "branch.stock", "supply.warehouse"}),
     ("W",   "/api/branches",                 {"system.settings"}),
     ("W",   "/api/closed_hours",             {"system.settings"}),
     ("W",   "/api/upload",                   {"data.upload"}),

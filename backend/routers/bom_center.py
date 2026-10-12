@@ -2529,12 +2529,28 @@ def bc_receipt_add(body: ReceiptBody, request: Request, branch_id: Optional[int]
                                                    _who(request), ref=body.ref, note=body.note))
 
 
+class ReceiptCancelBody(BaseModel):
+    reason: Optional[str] = None
+
+
 @router.delete("/api/bom-center/stock/receipt/{receipt_id}", dependencies=[Depends(require_write_token)])
-def bc_receipt_delete(receipt_id: int, request: Request, branch_id: Optional[int] = Query(None)):
+def bc_receipt_delete(receipt_id: int, request: Request, body: Optional[ReceiptCancelBody] = None,
+                      branch_id: Optional[int] = Query(None)):
+    """ยกเลิกใบรับสินค้า (batch 3, 3.6): the reason is required (400 without it); the receipt is kept in bc_receipt_cancel."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return {"deleted": _write(con, lambda: _va.delete_receipt(con, bid, receipt_id, _who(request)))}
+        reason = body.reason if body else None
+        return {"deleted": _write(con, lambda: _va.delete_receipt(con, bid, receipt_id, _who(request), reason))}
+
+
+@router.get("/api/bom-center/hub/cancelled-receipts")
+def bc_hub_cancelled_receipts(days: int = Query(7, ge=1, le=60)):
+    """ใบรับสินค้าที่สาขายกเลิก: the last `days` days with the reasons, for Sales Support. The centre's prefix (/hub):
+    a branch login is refused by the path rule."""
+    with get_db() as con:
+        _ensure(con)
+        return {"days": days, "rows": _va.cancelled_receipts(con, days)}
 
 
 @router.get("/api/bom-center/variance/periods")
@@ -3718,6 +3734,19 @@ def bc_hub_pilot(weeks: int = Query(4)):
     with get_db() as con:
         _ensure(con)
         return {"readiness": _pl.readiness(con), "scorecard": _pl.overview(con, max(1, min(weeks, 8)))}
+
+
+# ── batch 3 · 4.7: the all-branches adoption grid (adoption.py) ──────────────────
+@router.get("/api/bom-center/hub/adoption")
+def bc_hub_adoption():
+    """One row per active branch account for the last 7 days: ใบตัดเบิกตรงวัน · ส่งใบสั่งซื้อตรงเวลา · รับสินค้าบันทึกแล้ว · ใช้งานล่าสุด,
+    with a traffic light. The centre's prefix (/hub): a branch login is refused by the path rule (403)."""
+    from bom_center import adoption as _ad
+    with get_db() as con:
+        _ensure(con)
+        g = _ad.grid(con)
+        g["line"] = _ad.summary_line(g)
+        return g
 
 
 # ── Phase 2 · S11: the central list, the month's deliveries, counts from a file ──

@@ -55,8 +55,16 @@ DISC_MIN_BAHT = 3000.0                          # … and at least this many bah
 
 # what a device can switch off, one by one (push_subscription.off holds the muted ids, comma-separated)
 KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("weekly", "สรุปรายสัปดาห์ เช้าวันจันทร์"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
-         ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ")]
+         ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ"),
+         ("supply", "งานวัตถุดิบและใบสั่งซื้อ (ตอนเช้า และเตือนก่อนตัดรอบ)")]
 KIND_IDS = [k for k, _ in KINDS]
+# batch 3 (2026-10-12): the supply reminders reach the phones of the branch accounts and of the centre roles that own a line.
+# A device that belongs to a branch-scoped login, or to a role that cannot read the chain's sales (the warehouse), is offered
+# this kind alone and never receives the others (send_to_all chain_only) — they carry the chain's sales figures.
+SUPPLY_MORNING = (8, 0)                         # Thai clock: the morning line of each branch and of the centre roles
+PRECUTOFF_AT = (11, 0)                          # two hours before the 13:15 cutoff
+CUTOFF_AT = (13, 15)                            # the missed-cutoff note, Sales Support only
+CUTOFF_UNTIL_HOUR = 20                          # … and not at all after that (a restart at night must not announce it)
 
 TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 TH_DOW = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.']   # Python weekday(): Monday = 0
@@ -103,6 +111,37 @@ def _meta_get(con, key: str):
 def _meta_set(con, key: str, value: str) -> None:
     con.execute("INSERT INTO usage_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, value))
+
+
+def _chain_ok(con, username: str) -> bool:
+    """May this login read the chain's sales? The chain-wide kinds (morning, weekly, drop, stale, cash, disc) carry
+    revenue figures, so a device of a role without sales.overview (the warehouse, accounting, a branch) never
+    receives them. Always true when sign-in is off."""
+    if not _auth.auth_enabled() or not username:
+        return True
+    try:
+        u = _auth.get_user(con, username)
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(u and u["active"] and "sales.overview" in _auth.modules_for_role(u["role"]))
+
+
+SUPPLY_ROLES = ("branch", "warehouse", "salessupport", "operation", "accounting")      # the logins that receive kind "supply"
+
+
+def _kinds_for(con, user: str, request) -> list:
+    """The kinds a login is offered: the chain's kinds when it may read the chain's sales (not a branch-scoped login), and
+    "supply" when its role owns supply work (a branch account, the warehouse, Sales Support, Operations, Accounting)."""
+    chain = _chain_ok(con, user) and not _auth.scope_branch(request)
+    role = ""
+    if _auth.auth_enabled() and user:
+        try:
+            u = _auth.get_user(con, user)
+            role = (u["role"] if u else "") or ""
+        except Exception:  # noqa: BLE001
+            role = ""
+    supply = role in SUPPLY_ROLES
+    return [kv for kv in KINDS if (kv[0] != "supply" and chain) or (kv[0] == "supply" and supply)]
 
 
 def _caller(request: Request) -> str:
@@ -176,9 +215,11 @@ def push_status(request: Request):
         total = con.execute("SELECT COUNT(*) FROM push_subscription").fetchone()[0]
         mine = con.execute("SELECT COUNT(*) FROM push_subscription WHERE username = ?", (user,)).fetchone()[0]
         last = _meta_get(con, "push_morning")
-    return {"configured": c["configured"], "devices": total, "my_devices": mine,
+        chain = _chain_ok(con, user) and not _auth.scope_branch(request)
+    # the last morning record carries the chain's revenue figures and the device total: only a login that reads the chain sees them
+    return {"configured": c["configured"], "devices": total if chain else mine, "my_devices": mine,
             "send_at": f"{MORNING_HOUR:02d}:{MORNING_MINUTE:02d}",
-            "last": json.loads(last) if last else None}
+            "last": json.loads(last) if (last and chain) else None}
 
 
 class _PrefsBody(BaseModel):
@@ -204,7 +245,8 @@ def push_prefs(body: _PrefsBody, request: Request):
             con.commit()
         else:
             off = [k for k in (row[0] or "").split(",") if k in KIND_IDS]
-    return {"kinds": [{"id": k, "label": lbl} for k, lbl in KINDS], "off": off}
+        shown = _kinds_for(con, user, request)
+    return {"kinds": [{"id": k, "label": lbl} for k, lbl in shown], "off": off}
 
 
 @router.post("/api/push/test", include_in_schema=False)
@@ -214,10 +256,12 @@ def push_test(request: Request):
     c = vapid_config()
     if not c["configured"]:
         raise HTTPException(status_code=503, detail="ยังไม่ได้ตั้งค่าคีย์แจ้งเตือน (VAPID) บนเซิร์ฟเวอร์")
-    payload = {"title": "Oshinei · ทดสอบการแจ้งเตือน", "body": f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}",
-               "url": "/", "tag": "oshinei-test"}
     with get_db() as con:
         ensure(con)
+        chain = _chain_ok(con, user) and not _auth.scope_branch(request)
+        body = (f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if chain
+                else "เครื่องนี้จะได้รับการแจ้งเตือนงานวัตถุดิบและใบสั่งซื้อ")
+        payload = {"title": "Oshinei · ทดสอบการแจ้งเตือน", "body": body, "url": "/", "tag": "oshinei-test"}
         r = send_to_all(con, payload, only_user=user)
         con.commit()
     if not r["targets"]:
@@ -243,18 +287,26 @@ def _default_send(sub_info: dict, data: str) -> int:
 
 
 def send_to_all(con, payload: dict, send=None, only_user: Optional[str] = None,
-                chain_only: bool = False, kind: Optional[str] = None) -> dict:
-    """Push `payload` to every stored device (or one user's). 404/410 = the browser
+                chain_only: bool = False, kind: Optional[str] = None, only_users: Optional[list] = None) -> dict:
+    """Push `payload` to every stored device (or one user's, or a list of users'). 404/410 = the browser
     dropped the subscription → row deleted; other failures count, MAX_FAILS drops it.
-    `chain_only` skips devices of branch-scoped logins (the payload is chain-wide); `kind`
-    skips devices that muted that kind (push_prefs)."""
+    `chain_only` skips devices of branch-scoped logins and of roles that cannot read the chain's sales (the payload
+    is chain-wide); `kind` skips devices that muted that kind (push_prefs)."""
     send = send or _default_send
-    q, params = "SELECT id, endpoint, p256dh, auth, fails, off FROM push_subscription", ()
+    q, params = "SELECT id, endpoint, p256dh, auth, fails, off, username FROM push_subscription", ()
     if only_user is not None:
         q, params = q + " WHERE username = ?", (only_user,)
+    elif only_users is not None:
+        names = [str(u) for u in only_users]
+        if not names:
+            return {"targets": 0, "sent": 0, "gone": 0, "failed": 0, "statuses": [], "muted": 0}
+        q, params = q + f" WHERE username IN ({','.join('?' * len(names))})", tuple(names)
     elif chain_only:
         q = q + " WHERE branch = ''"
     rows = con.execute(q, params).fetchall()
+    if chain_only:
+        ok = {u: _chain_ok(con, u) for u in {r[6] for r in rows}}
+        rows = [r for r in rows if ok.get(r[6], True)]
     data = json.dumps(payload, ensure_ascii=False)
     muted = [r for r in rows if kind and kind in (r[5] or "").split(",")]
     rows = [r for r in rows if r not in muted]
@@ -536,6 +588,162 @@ def maybe_send_weekly(now=None, send=None, force: bool = False, data=None) -> Op
         _meta_set(con, "push_weekly", json.dumps(rec, ensure_ascii=False))
         con.commit()
     print(f"[push] weekly {rec['week']}: {rec.get('sent')}/{rec.get('targets')} sent")
+    return rec
+
+
+# ── วัตถุดิบและใบสั่งซื้อ: reminders that reach the people who own them (batch 3, 2026-10-12) ─────────────────
+# Kind "supply". Three sends, each claimed first in usage_meta (one per day, so one per user per day):
+#   push_supply_day      08:00  the branch's morning line to the devices of that branch's accounts; the warehouse, Sales
+#                               Support, Operations and Accounting get the lines they own (bom_center/reminders.py)
+#   push_supply_pre_day  11:00  "ส่งใบสั่งซื้อรอบส่ง… ภายในวันนี้ 13:15 (อีก 2 ชม.)" to each branch whose cutoff is today and
+#                               whose order is not yet submitted
+#   push_supply_cut_day  13:15  the branches that missed the cutoff, to Sales Support only
+# A tap opens the page (url /?go=supply&tab=…&pane=…, js/01-core.js supplyDeepLink).
+def _devices_by_user(con) -> dict:
+    """{username: (role, branch)} for every active login that holds at least one device."""
+    try:
+        rows = con.execute("SELECT DISTINCT u.username, u.role, COALESCE(u.branch, '') FROM push_subscription s"
+                           " JOIN app_user u ON u.username = s.username WHERE u.active = 1").fetchall()
+    except Exception:  # noqa: BLE001 — sign-in off, no user table
+        return {}
+    return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def _supply_claim(con, key: str, day: str, force: bool) -> bool:
+    if not force and _meta_get(con, key) == day:
+        return False
+    _meta_set(con, key, day)                 # claim first: two ticks never send twice
+    con.commit()
+    return True
+
+
+def _supply_rec(con, meta: str, rec: dict) -> dict:
+    _meta_set(con, meta, json.dumps(rec, ensure_ascii=False))
+    con.commit()
+    return rec
+
+
+def _send_groups(con, groups: list, send, rec: dict) -> None:
+    """groups = [(label, usernames, payload)] → one send_to_all per group; the totals go into rec."""
+    rec.setdefault("groups", [])
+    for label, users, payload in groups:
+        r = send_to_all(con, payload, send=send, only_users=users, kind="supply")
+        con.commit()
+        rec["groups"].append({"label": label, "users": len(users), **{k: r[k] for k in ("targets", "sent", "gone", "failed", "muted")}})
+    for k in ("targets", "sent", "gone", "failed", "muted"):
+        rec[k] = sum(g[k] for g in rec["groups"])
+
+
+def maybe_send_supply(now=None, send=None, force: bool = False) -> Optional[dict]:
+    """08:00 Thai, once a day: each branch account's line (nothing on a day with nothing due or open) and the centre
+    roles' lines. Returns the stored record, or None when it was not time / already done."""
+    now = now or _thai_now()
+    if not force and (now.hour, now.minute) < SUPPLY_MORNING:
+        return None
+    day = now.strftime("%Y-%m-%d")
+    with get_db() as con:
+        ensure(con)
+        if not _supply_claim(con, "push_supply_day", day, force):
+            return None
+        c = vapid_config()
+        rec = {"day": day, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "configured": c["configured"], "groups": []}
+        try:
+            devices = _devices_by_user(con) if c["configured"] else {}
+            if devices:
+                from bom_center import reminders as RM
+                from bom_center.pilot import branch_accounts
+                groups = []
+                by_branch = {b["name"]: b for b in branch_accounts(con)}
+                for name, br in sorted(by_branch.items()):
+                    users = sorted(u for u, (role, b) in devices.items() if role == "branch" and b == name)
+                    if not users:
+                        continue
+                    try:
+                        payload = RM.branch_morning(con, br, today=now.date(), now=now)
+                    except Exception as e:  # noqa: BLE001 — one branch never stops the others
+                        rec.setdefault("errors", []).append(f"{name}: {e}")
+                        continue
+                    if payload:
+                        groups.append((name, users, payload))
+                if any(role in RM.CENTRE_ROLES for role, _ in devices.values()):
+                    centre = RM.centre_morning(con, today=now.date(), now=now)
+                    for role, v in sorted(centre.items()):
+                        users = sorted(u for u, (r, _) in devices.items() if r == role)
+                        if users:
+                            groups.append((role, users, RM.centre_payload(role, v)))
+                _send_groups(con, groups, send, rec)
+        except Exception as e:  # noqa: BLE001
+            rec["error"] = str(e)
+            print(f"[push] supply: {e}")
+        _supply_rec(con, "push_supply", rec)
+    print(f"[push] supply {day}: {rec.get('sent', 0)}/{rec.get('targets', 0)} sent" + (f" ({rec['error']})" if rec.get("error") else ""))
+    return rec
+
+
+def maybe_send_precutoff(now=None, send=None, force: bool = False) -> Optional[dict]:
+    """11:00 Thai (until the 13:15 cutoff), once a day: the branches whose cutoff is today and whose order is not yet
+    submitted are told how long is left. Returns the stored record, or None when it was not time / already done."""
+    now = now or _thai_now()
+    if not force and not (PRECUTOFF_AT <= (now.hour, now.minute) < CUTOFF_AT):
+        return None
+    day = now.strftime("%Y-%m-%d")
+    with get_db() as con:
+        ensure(con)
+        if not _supply_claim(con, "push_supply_pre_day", day, force):
+            return None
+        c = vapid_config()
+        rec = {"day": day, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "configured": c["configured"], "groups": []}
+        try:
+            devices = _devices_by_user(con) if c["configured"] else {}
+            if devices:
+                from bom_center import reminders as RM
+                from bom_center.pilot import branch_accounts
+                groups = []
+                for br in branch_accounts(con):
+                    users = sorted(u for u, (role, b) in devices.items() if role == "branch" and b == br["name"])
+                    if not users:
+                        continue
+                    try:
+                        payload = RM.branch_precutoff(con, br, today=now.date(), now=now)
+                    except Exception as e:  # noqa: BLE001
+                        rec.setdefault("errors", []).append(f"{br['name']}: {e}")
+                        continue
+                    if payload:
+                        groups.append((br["name"], users, payload))
+                _send_groups(con, groups, send, rec)
+        except Exception as e:  # noqa: BLE001
+            rec["error"] = str(e)
+            print(f"[push] pre-cutoff: {e}")
+        _supply_rec(con, "push_supply_pre", rec)
+    print(f"[push] pre-cutoff {day}: {rec.get('sent', 0)}/{rec.get('targets', 0)} sent")
+    return rec
+
+
+def maybe_send_cutoff(now=None, send=None, force: bool = False) -> Optional[dict]:
+    """13:15 Thai (until 20:00), once a day: the branches that missed today's cutoff, to Sales Support only."""
+    now = now or _thai_now()
+    if not force and not (CUTOFF_AT <= (now.hour, now.minute) and now.hour < CUTOFF_UNTIL_HOUR):
+        return None
+    day = now.strftime("%Y-%m-%d")
+    with get_db() as con:
+        ensure(con)
+        if not _supply_claim(con, "push_supply_cut_day", day, force):
+            return None
+        c = vapid_config()
+        rec = {"day": day, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "configured": c["configured"], "groups": []}
+        try:
+            devices = _devices_by_user(con) if c["configured"] else {}
+            users = sorted(u for u, (role, _) in devices.items() if role == "salessupport")
+            if users:
+                from bom_center import reminders as RM
+                payload = RM.cutoff_payload(RM.cutoff(con, today=now.date(), now=RM._aware(now)))
+                if payload:
+                    _send_groups(con, [("salessupport", users, payload)], send, rec)
+        except Exception as e:  # noqa: BLE001
+            rec["error"] = str(e)
+            print(f"[push] cutoff: {e}")
+        _supply_rec(con, "push_supply_cut", rec)
+    print(f"[push] cutoff {day}: {rec.get('sent', 0)}/{rec.get('targets', 0)} sent")
     return rec
 
 

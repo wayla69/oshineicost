@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Order reminders (PR-18, reworked for the 13:15 cutoff in PR-A): the facts of หน้างาน
-(todo.build) for the pilot branches and Sales Support as one Telegram message a day —
-sent when the bot is configured (notify.telegram_config), stored either way.
+"""Order reminders (PR-18, reworked for the 13:15 cutoff in PR-A, batch 3 2026-10-12): the facts of หน้างาน
+(todo.build) for EVERY active branch account (not the four pilot branches) and the centre, as one Telegram message
+a day — sent when the bot is configured (notify.telegram_config), stored either way — and as Web Push to the phones
+of the people who own each line (routers/push_api.maybe_send_supply: kind "supply").
 
 main._maybe_supply_reminder calls `morning` on the first API request after 07:00 (Thai
 clock) each day and `cutoff` on the first after 13:15: the branches that did not beat
@@ -13,8 +14,10 @@ import html
 
 from . import todo as _td
 from .clock import now_bkk, today as bkk_today
-from .pilot import pilot_branches
+from .pilot import branch_accounts
 
+SUPPLY_TAG = "oshinei-supply"
+TELEGRAM_MAX = 3800          # a Telegram message holds 4096 characters
 WD_TH = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]      # date.weekday(): Mon = 0
 MON_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
 
@@ -64,17 +67,19 @@ def branch_line(items: list, today: date = None) -> dict:
 
 
 def morning(con, today: date = None, app_url: str = "") -> dict:
-    """The day's duties per pilot branch plus the centre's queue. `any_work` is
-    False on a day nobody has to do anything (no message is worth sending)."""
+    """The day's duties per branch account plus the centre's queue. `any_work` is
+    False on a day nobody has to do anything (no message is worth sending). The text names only the branches with
+    something to do (30 branches would not fit one Telegram message); `branches` lists them all."""
     today = today or bkk_today()
     centre = {it["key"]: it for it in _td.build(con, today=today)["items"]}
-    lines, branches, any_work = [], [], False
-    for b in pilot_branches(con):
+    lines, blines, branches, any_work = [], [], [], False
+    for b in branch_accounts(con):
         d = _td.build(con, branch_id=b["branch_id"], today=today)
         bl = branch_line(d["items"], today)
         branches.append({"branch_id": b["branch_id"], "name": b["name"], **bl})
         any_work = any_work or bl["due_today"] or bl["pending"]
-        lines.append(f"<b>{html.escape(b['name'])}</b>: {html.escape(bl['text'])}")
+        if bl["due_today"] or bl["pending"]:
+            blines.append(f"<b>{html.escape(b['name'])}</b>: {html.escape(bl['text'])}")
     q = centre.get("queue_pending") or {}
     queue = {"count": q.get("count") or 0, "late": bool(q.get("urgent")), "late_orders": q.get("late_orders") or 0}
     if queue["count"]:
@@ -99,12 +104,18 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
                      + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
     tail = f"หน้างาน: {html.escape(app_url.rstrip('/'))}/" if app_url else ""
-    text = "\n".join([head] + lines + ([tail] if tail else []))
+    dropped = 0                                              # one Telegram message holds 4096 characters: the rest stays in หน้างาน
+    while blines and len("\n".join([head] + blines + lines + ([tail] if tail else []))) > TELEGRAM_MAX:
+        blines.pop()
+        dropped += 1
+    if dropped:
+        blines.append(f"และอีก {dropped} สาขา ดูที่หน้างาน")
+    text = "\n".join([head] + blines + lines + ([tail] if tail else []))
     return {"today": today.isoformat(), "text": text, "any_work": any_work, "branches": branches, "queue": queue}
 
 
 def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> Optional[dict]:
-    """After 13:15: the pilot branches that did not submit today's order in time, and the orders waiting
+    """After 13:15: the branches that did not submit today's order in time, and the orders waiting
     in the warehouse queue — None when no branch missed it and the queue is empty."""
     if now is None and today is None:
         now = now_bkk()
@@ -112,7 +123,7 @@ def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> 
     centre = {it["key"]: it for it in _td.build(con, today=today, now=now)["items"]}
     q = centre.get("queue_pending") or {}
     missed = []
-    for b in pilot_branches(con):
+    for b in branch_accounts(con):
         for it in _td.build(con, branch_id=b["branch_id"], today=today, now=now)["items"]:
             if it["key"].startswith("order_due_") and it.get("due_today") and it.get("late") and it["status"] != "done":
                 missed.append({"branch_id": b["branch_id"], "name": b["name"], "delivery": it["delivery"],
@@ -129,3 +140,125 @@ def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> 
         lines.append(f"คิวใบสั่งซื้อ: {html.escape(app_url.rstrip('/'))}/")
     return {"today": today.isoformat(), "text": "\n".join(lines), "count": n, "late": bool(q.get("urgent")),
             "missed": missed}
+
+
+# ── Web Push (batch 3, 2026-10-12): who gets which line ─────────────────────────────────────────────────────────
+# routers/push_api.maybe_send_supply / maybe_send_precutoff / maybe_send_cutoff call these and send the payloads to
+# the devices of the people who own the line (kind "supply"). Everything here is pure reading: no push is sent.
+def supply_url(tab: str, pane: str = None) -> str:
+    """The address a tap opens: js/01-core.js supplyDeepLink reads go=supply&tab=…&pane=… and calls supplyGo."""
+    return f"/?go=supply&tab={tab}" + (f"&pane={pane}" if pane else "")
+
+
+def _aware(now: datetime = None) -> datetime:
+    from .clock import BKK
+    if now is None:
+        return now_bkk()
+    return now if now.tzinfo else now.replace(tzinfo=BKK)
+
+
+def branch_morning(con, branch: dict, today: date = None, now: datetime = None) -> Optional[dict]:
+    """The branch's morning line as a notification; None on a day nothing is open for it (an order already sent, a slip
+    already confirmed, nothing to receive: the line would only say so)."""
+    now = _aware(now)
+    today = today or now.date()
+    d = _td.build(con, branch_id=branch["branch_id"], today=today, now=now)
+    bl = branch_line(d["items"], today)
+    if not bl["pending"] or not bl["text"]:
+        return None
+    return {"title": f"{branch['name']} · งานวัตถุดิบและใบสั่งซื้อวันนี้", "body": bl["text"],
+            "url": supply_url("supplyhome"), "tag": SUPPLY_TAG}
+
+
+# the roles that own each centre line, in the words of todo.owner_th (js/16-supplyhome.js _SHM_ROLE_OWNERS)
+CENTRE_ROLES = {"warehouse": "คลัง", "salessupport": "ประสานงานขาย", "operation": "ฝ่ายปฏิบัติการ", "accounting": "บัญชี"}
+
+
+def centre_morning(con, today: date = None, now: datetime = None) -> dict:
+    """{role: {"lines": [...], "url": ...}} — the centre's open work, split by the role that owns it: the queue to the
+    warehouse; the claims, the slips not confirmed and the orders not yet keyed to Sales Support; the over-issue
+    streaks to Operations; the close step "ใบสรุปตัดเบิก" to Accounting. A role with nothing open is not listed."""
+    now = _aware(now)
+    today = today or now.date()
+    d = _td.build(con, today=today, now=now)
+    items = {it["key"]: it for it in d["items"]}
+    out: dict = {}
+
+    def add(role, line, url):
+        out.setdefault(role, {"lines": [], "urls": []})
+        out[role]["lines"].append(line)
+        out[role]["urls"].append(url)
+
+    q = items.get("queue_pending") or {}
+    if q.get("count"):
+        add("warehouse", f"ใบสั่งซื้อค้างคิว {q['count']} ใบ ยืนยันยอดส่งภายใน 14:00 ของวันตัดรอบ"
+            + (f" · ส่งล่าช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""), supply_url("orderhub", "queue"))
+    cl = items.get("claims_pending") or {}
+    if cl.get("count"):
+        add("salessupport", f"เคลมสินค้ารอพิจารณา {cl['count']} เรื่อง", supply_url("orderhub", "claims"))
+    im = items.get("issue_missing") or {}
+    if im.get("count"):
+        add("salessupport", f"ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน {im['count']} สาขา: " + " · ".join(im.get("branch_names") or []),
+            supply_url("orderhub", "issues"))
+    ak = items.get("accounting_keyed") or {}
+    if ak.get("count"):
+        add("salessupport", f"ใบสั่งซื้อที่คลังจัดส่งแล้วยังไม่คีย์บัญชี {ak['count']} ใบ", supply_url("orderhub", "queue"))
+    an = items.get("issue_anomaly") or {}
+    if an.get("count"):
+        add("operation", f"เบิกเกินสูตรติดต่อกัน {an['count']} สาขา: " + " · ".join(an.get("branch_names") or []),
+            supply_url("orderhub", "issuevar"))
+    step = next((s for s in (d.get("close") or {}).get("steps") or [] if s["key"] == "issue_posted"), None)
+    if step:
+        ready = [r for r in step.get("branches") or [] if r["status"] == "todo"]
+        if ready:
+            from .fmt import month_th
+            add("accounting", f"ปิดงวดเดือน{month_th(d['close']['month'])}: ใบสรุปตัดเบิกรอดาวน์โหลดและบันทึกเข้าระบบบัญชี {len(ready)} สาขา",
+                supply_url("bomcenter", "issue"))
+    for role, v in out.items():
+        urls = list(dict.fromkeys(v["urls"]))
+        v["url"] = urls[0] if len(urls) == 1 else supply_url("supplyhome")      # two kinds of work: the page that lists both
+        del v["urls"]
+    return out
+
+
+def centre_payload(role: str, rec: dict) -> dict:
+    return {"title": f"{CENTRE_ROLES.get(role, 'ศูนย์')} · งานวัตถุดิบและใบสั่งซื้อวันนี้", "body": " · ".join(rec["lines"]),
+            "url": rec["url"], "tag": SUPPLY_TAG}
+
+
+def _left(minutes: int) -> str:
+    return f"อีก {minutes // 60} ชม." if minutes >= 60 else f"อีก {max(minutes, 1)} นาที"
+
+
+def branch_precutoff(con, branch: dict, today: date = None, now: datetime = None) -> Optional[dict]:
+    """2.2 · 11:00, two hours before the 13:15 cutoff: the rounds whose cutoff is TODAY and whose order is not yet
+    submitted. None when every order due today is in (or nothing is due, or the cutoff has passed)."""
+    from .clock import BKK
+    now = _aware(now)
+    today = today or now.date()
+    d = _td.build(con, branch_id=branch["branch_id"], today=today, now=now)
+    lines = []
+    for it in d["items"]:
+        if not (it["key"].startswith("order_due_") and it.get("due_today") and it["status"] != "done" and not it.get("late")):
+            continue
+        cut = datetime.fromisoformat(it["cutoff_at"])
+        cut = cut if cut.tzinfo else cut.replace(tzinfo=BKK)
+        minutes = int((cut - now).total_seconds() // 60)
+        if minutes <= 0:
+            continue
+        lines.append(f"ส่งใบสั่งซื้อรอบส่ง{it['delivery_th']} ภายในวันนี้ 13:15 ({_left(minutes)})")
+    if not lines:
+        return None
+    return {"title": f"{branch['name']} · ใกล้ถึงเวลาตัดรอบ 13:15", "body": " · ".join(lines),
+            "url": supply_url("branchstock", "order"), "tag": SUPPLY_TAG + "-cutoff"}
+
+
+def cutoff_payload(rec: dict) -> Optional[dict]:
+    """The 13:15 message, for Sales Support only: the branches that missed the cutoff (cutoff() above). None when
+    nobody missed it (the warehouse queue is told in the morning line)."""
+    missed = (rec or {}).get("missed") or []
+    if not missed:
+        return None
+    names = " · ".join(f"{m['name']} (รอบส่ง{m['delivery_th']})" for m in missed)
+    return {"title": f"ตัดรอบ 13:15 · ยังไม่ส่งใบสั่งซื้อ {len(missed)} สาขา", "body": names + " · ส่งล่าช้า มีค่าปรับ",
+            "url": supply_url("supplyhome"), "tag": SUPPLY_TAG + "-missed"}

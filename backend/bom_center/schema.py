@@ -306,6 +306,14 @@ EXTRA_DDL = (
          receipt_id INTEGER NOT NULL, ingredient_code TEXT NOT NULL,
          qty REAL NOT NULL, unit TEXT, qty_base REAL,
          PRIMARY KEY (receipt_id, ingredient_code))""",
+    # batch 3 (3.6) — a receipt the branch cancelled: the whole receipt (snapshot = header + every line as JSON), the reason, who and
+    # when. Append-only: written before the receipt is deleted, never updated or deleted (variance.delete_receipt)
+    """CREATE TABLE IF NOT EXISTS bc_receipt_cancel(
+         cancel_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         receipt_id INTEGER NOT NULL, branch_id INTEGER NOT NULL, receipt_date TEXT, source TEXT, ref TEXT,
+         entered_by TEXT, created_at TEXT, line_count INTEGER,
+         cancel_reason TEXT NOT NULL, cancelled_by TEXT, cancelled_at TEXT NOT NULL, snapshot TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_receipt_cancel ON bc_receipt_cancel(cancelled_at)",
     # the branch's reason for a gap in one period (keyed by the period's END count)
     """CREATE TABLE IF NOT EXISTS bc_variance_reason(
          end_count_id INTEGER NOT NULL, ingredient_code TEXT NOT NULL, branch_id INTEGER NOT NULL,
@@ -363,6 +371,7 @@ OWNED_TABLES = (
     "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
     "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)
     "bc_receipt", "bc_receipt_line", "bc_variance_reason", "bc_variance_period",   # Phase 2 S7 (variance.py)
+    "bc_receipt_cancel",          # batch 3: a cancelled receipt, kept with its reason (variance.py)
     "bc_central_item",            # Phase 2 S11: what a branch orders from the centre (central.py)
     "bc_code_link",               # S11: a recipe's older code -> the code the centre sends (central.py)
     "bc_claim", "bc_claim_line", "bc_claim_photo",   # เคลมสินค้า: branch claim + photos, decided by Sales Support (claims.py)

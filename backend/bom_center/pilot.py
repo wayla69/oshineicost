@@ -29,6 +29,26 @@ def pilot_branches(con) -> list:
     return out
 
 
+def branch_accounts(con) -> list:
+    """Every ACTIVE branch account (role 'branch' with a branch) -> [{branch_id, name, usernames}], one row per branch,
+    sorted by name. Batch 3 (30-branch rollout): the reminders and the adoption grid follow the accounts that exist,
+    not the four pilot branches. A branch that has no active account is not listed; an account whose branch is
+    unknown or inactive is skipped."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
+    try:
+        users = con.execute("SELECT username, branch FROM app_user WHERE role='branch' AND COALESCE(active,1)=1"
+                            " AND COALESCE(branch,'')<>'' ORDER BY username").fetchall()
+    except Exception:                                         # no user table (a fixture without auth)
+        return []
+    by_name = {}
+    for u, b in users:
+        by_name.setdefault(b, []).append(u)
+    sql = "SELECT branch_id, name FROM branches WHERE name<>'ALL'" + (" AND COALESCE(active,1)=1" if "active" in cols else "")
+    out = [{"branch_id": r[0], "name": r[1], "usernames": by_name[r[1]]}
+           for r in con.execute(sql + " ORDER BY name") if r[1] in by_name]
+    return out
+
+
 def _has(con, table: str) -> bool:
     return bool(con.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone())
 

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>บัตรงานสาขา · สั่งสินค้า</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: #0f172a; font: 16pt/1.5 "Leelawadee UI", "Noto Sans Thai", "Sarabun", Tahoma, sans-serif; background: #fff; }
+  .page { width: 210mm; height: 296mm; padding: 14mm 16mm 12mm; display: flex; flex-direction: column; overflow: hidden; }
+  .eyebrow { margin: 0; font-size: 10pt; letter-spacing: .5px; color: #1f3a6b; font-weight: 700; }
+  h1 { margin: 3mm 0 1mm; font-size: 30pt; line-height: 1.2; color: #1f3a6b; display: flex; align-items: center; gap: 5mm; }
+  h1 .no { flex: none; width: 15mm; height: 15mm; border-radius: 50%; background: #1f3a6b; color: #fff; font-size: 22pt; display: flex; align-items: center; justify-content: center; }
+  .when { margin: 0 0 5mm; padding: 2mm 4mm; border-radius: 3mm; background: #e8edf7; color: #1f3a6b; font-weight: 600; font-size: 13pt; }
+  ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  li { counter-increment: s; position: relative; padding: 0 0 0 13mm; margin: 0 0 4.2mm; min-height: 9mm; }
+  li::before { content: counter(s); position: absolute; left: 0; top: .3mm; width: 9mm; height: 9mm; border-radius: 50%; border: 0.6mm solid #1f3a6b;
+               color: #1f3a6b; font-weight: 700; font-size: 13pt; display: flex; align-items: center; justify-content: center; }
+  b { color: #1f3a6b; }
+  .box { margin: 2mm 0 0; padding: 3mm 4.5mm; border-radius: 3mm; font-size: 13.5pt; line-height: 1.5; }
+  .warn { background: #fdf1dc; color: #7c4a00; border: 0.4mm solid #e0a43a; }
+  .warn b { color: #7c4a00; }
+  .note { background: #f1f5f9; color: #334155; }
+  .foot { margin-top: auto; padding-top: 3mm; border-top: 0.3mm solid #cbd5e1; font-size: 10.5pt; color: #475569; display: flex; justify-content: space-between; gap: 6mm; }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">OSHINEI · วัตถุดิบและใบสั่งซื้อ · บัตรงานของสาขา</p>
+  <h1><span class="no">2</span>สั่งสินค้า</h1>
+  <p class="when">ทุกรอบสั่ง · ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง</p>
+  <ol>
+    <li>แตะ <b>สั่งสินค้า</b> ที่แถบล่าง แถวบนสุดบอกรอบ วันส่ง และเวลาที่ต้องส่งใบสั่งซื้อ พร้อมสถานะ <b>เปิดรับ</b> · <b>เลยเวลา</b> · <b>สั่งแล้ว</b></li>
+    <li>ถ้าเห็น “ยืนยันใบตัดเบิกวันนี้แล้วส่งใบสั่งซื้อได้” แตะ <b>ไปที่ตัดเบิก</b> ยืนยันของวันนี้ก่อน แล้วกลับมา</li>
+    <li>ดูช่อง “แนะนำ” และ “คงเหลือ” ของแต่ละรายการ ช่อง <b>สั่ง</b> ตั้งต้นเท่ายอดแนะนำ เห็นด้วยไม่ต้องแก้</li>
+    <li>แก้ช่อง <b>สั่ง</b> เฉพาะรายการที่ไม่เห็นด้วย ต่างจากยอดแนะนำเกิน 20% ให้เลือกเหตุผลใต้รายการ</li>
+    <li>รู้ว่ารอบนี้ลูกค้าจะต่างจากปกติ แตะ <b>ยอดขายรอบนี้ต่างจากปกติ?</b> ใส่ % และเหตุผล แล้วแตะ <b>ใช้กับยอดแนะนำ</b></li>
+    <li>แตะ <b>ส่งใบสั่งซื้อ</b> คำถามยืนยันบอกจำนวนรายการ มูลค่า และเทียบกับรอบก่อน แตะ <b>ส่งใบสั่งซื้อ</b></li>
+  </ol>
+  <p class="box warn">เลยเวลาตัดรอบ 13:15 ยังส่งได้ แต่มีค่าปรับล่าช้าที่ต้องชำระให้คลังภายนอก · เวลา 11:00 ถ้ายังไม่ส่ง โทรศัพท์ที่เปิดการแจ้งเตือนไว้จะเตือนว่าเหลืออีกประมาณ 2 ชั่วโมง</p>
+  <p class="box note">ส่งแล้วแตะ <b>เปิดแก้ไข</b> ได้จนกว่าคลังจะยืนยันยอดส่ง · สาขาใหม่ที่ขายไม่ถึง 14 วัน ให้กรอกยอดขายที่คาดของรอบนี้ก่อนส่ง</p>
+  <div class="foot"><span>รับการแจ้งเตือนบนมือถือ: เปิด <b>หน้างาน</b> แตะ <b>เปิดการแจ้งเตือน</b> ในการ์ด “รับการแจ้งเตือนบนมือถือ”</span><span>มีข้อสงสัย ติดต่อประสานงานขาย · คู่มือ: /docs/pilot/branch_guide.html</span></div>
+</div>
+</body>
+</html>

@@ -2524,8 +2524,9 @@ const _SUPPLY_CENTRE = ['supply.ordering', 'ops.report', 'bom.center'];
 // The roles of the role-chip matrix test (backend/test_supply_chips_roles.py) are read from the words below.
 const SUPPLY_CHIPS = [
   { key: 'home', label: 'หน้างาน', items: [
-    { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' },
-    { tab: 'orderhub', pane: 'pilot', label: 'สาขานำร่อง 4 สาขา', mods: _SUPPLY_CENTRE, roles: ['analyst', 'management', 'salessupport'] }] },
+    // batch 3 (4.7): the entry "สาขานำร่อง 4 สาขา" is gone - หน้างาน carries a one-line summary of the all-branches grid instead,
+    // and the pilot pane (ความพร้อมและผลนำร่อง) is opened from the foot of that grid
+    { tab: 'supplyhome', label: 'งานของฉันและปิดงวดเดือน' }] },
   // ข้อมูลตั้งต้น, as the roles OTHER than the analyst / manager read it: the kitchen's register, Accounting's price page and Sales Support's price file
   // (PR-M7: for the analyst and the manager these pages sit in งานประจำเดือน and the second ข้อมูลตั้งต้น below)
   { key: 'master', label: 'ข้อมูลตั้งต้น', items: [
@@ -2549,7 +2550,9 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE, roles: ['operation', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
-    { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
+    { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    // batch 3 (4.7): every branch account on one grid, the last 7 days, worst first (replaces the หน้างาน entry "สาขานำร่อง 4 สาขา")
+    { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
@@ -2780,6 +2783,20 @@ function supplyGo(o) {
   if (activeTab === tab && acc && pane) acc.show(pane);   // same tab: move to the pane, don't reload the whole tab
   else switchTab(tab);
   if (o.anchor) setTimeout(() => { const el = document.getElementById(o.anchor); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 400);
+}
+// batch 3 (2.1) · a tap on a supply notification opens "/?go=supply&tab=<tab>&pane=<pane>" (routers/push_api.py, bom_center/reminders.py supply_url).
+// The address is read once at load (09c-mobile.js keeps it here and drops it from the bar) or handed over by sw.js when the app is already open;
+// it is applied when the shell has booted (ensureDesktopBooted). An unknown tab or pane falls back to หน้างาน; a role without the tab lands on its first page.
+let _supplyPendingLink = '';
+function supplyDeepLink(link) {
+  let q;
+  try { q = new URLSearchParams(String(link).includes('?') ? String(link).split('?')[1] : String(link)); } catch (e) { return false; }
+  if (q.get('go') !== 'supply') return false;
+  let tab = q.get('tab') || 'supplyhome', pane = q.get('pane') || null;
+  if (!SUPPLY_CHIPS.some(c => c.items.some(i => i.tab === tab))) tab = 'supplyhome';
+  if (pane && !_supplyItemOf(tab, pane)) pane = null;
+  supplyGo({ tab, pane });
+  return true;
 }
 // A level-1 chip: reopen the item last used there, else its first item the role can open.
 function supplyChipOpen(key) {

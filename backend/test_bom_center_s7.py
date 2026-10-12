@@ -108,10 +108,10 @@ def test_receipts_validate_and_lock(db):
     old = min(rs)                                                 # 8 Sep — inside the measured period
     assert rs[old]["locked"]
     with pytest.raises(ValueError):
-        VA.delete_receipt(db, 1, old, "udon")
-    assert VA.delete_receipt(db, 1, out["receipt_id"], "udon")
+        VA.delete_receipt(db, 1, old, "udon", "ทดสอบ")
+    assert VA.delete_receipt(db, 1, out["receipt_id"], "udon", "ทดสอบ")
     with pytest.raises(ValueError):
-        VA.delete_receipt(db, 2, old, "udon")
+        VA.delete_receipt(db, 2, old, "udon", "ทดสอบ")
 
 
 def test_periods_list_and_overview(db):

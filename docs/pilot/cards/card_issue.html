@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>บัตรงานสาขา · ตัดเบิก</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: #0f172a; font: 16pt/1.5 "Leelawadee UI", "Noto Sans Thai", "Sarabun", Tahoma, sans-serif; background: #fff; }
+  .page { width: 210mm; height: 296mm; padding: 14mm 16mm 12mm; display: flex; flex-direction: column; overflow: hidden; }
+  .eyebrow { margin: 0; font-size: 10pt; letter-spacing: .5px; color: #1f3a6b; font-weight: 700; }
+  h1 { margin: 3mm 0 1mm; font-size: 30pt; line-height: 1.2; color: #1f3a6b; display: flex; align-items: center; gap: 5mm; }
+  h1 .no { flex: none; width: 15mm; height: 15mm; border-radius: 50%; background: #1f3a6b; color: #fff; font-size: 22pt; display: flex; align-items: center; justify-content: center; }
+  .when { margin: 0 0 5mm; padding: 2mm 4mm; border-radius: 3mm; background: #e8edf7; color: #1f3a6b; font-weight: 600; font-size: 13pt; }
+  ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  li { counter-increment: s; position: relative; padding: 0 0 0 13mm; margin: 0 0 4.2mm; min-height: 9mm; }
+  li::before { content: counter(s); position: absolute; left: 0; top: .3mm; width: 9mm; height: 9mm; border-radius: 50%; border: 0.6mm solid #1f3a6b;
+               color: #1f3a6b; font-weight: 700; font-size: 13pt; display: flex; align-items: center; justify-content: center; }
+  b { color: #1f3a6b; }
+  .box { margin: 2mm 0 0; padding: 3mm 4.5mm; border-radius: 3mm; font-size: 13.5pt; line-height: 1.5; }
+  .warn { background: #fdf1dc; color: #7c4a00; border: 0.4mm solid #e0a43a; }
+  .warn b { color: #7c4a00; }
+  .note { background: #f1f5f9; color: #334155; }
+  .foot { margin-top: auto; padding-top: 3mm; border-top: 0.3mm solid #cbd5e1; font-size: 10.5pt; color: #475569; display: flex; justify-content: space-between; gap: 6mm; }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">OSHINEI · วัตถุดิบและใบสั่งซื้อ · บัตรงานของสาขา</p>
+  <h1><span class="no">1</span>ตัดเบิก</h1>
+  <p class="when">ทุกวัน · ยืนยันก่อนส่งใบสั่งซื้อของวันนั้น</p>
+  <ol>
+    <li>แตะ <b>ตัดเบิก</b> ที่แถบล่าง แถบวันแสดง <b>วันนี้</b> และวันที่ยังไม่ทำ (สีส้ม)</li>
+    <li>แตะโซนทีละโซน: <b>แช่แข็ง</b> · <b>แช่เย็น</b> · <b>ของแห้ง</b> · <b>บาร์น้ำ</b> · <b>อื่น ๆ</b> รายการที่ไม่ได้ใช้ใน 14 วันซ่อนอยู่ แตะ <b>แสดงทั้งหมด</b></li>
+    <li>ช่อง <b>เบิกใช้</b>: ใส่จำนวนที่ครัวใช้ในวันนั้นตามหน่วยใต้ช่อง ไม่ได้ใช้ให้เว้นว่าง</li>
+    <li>วันที่ใช้ใกล้เคียงเมื่อวาน แตะ <b>เบิกเหมือนเมื่อวาน</b> แล้วแก้เฉพาะรายการที่ต่าง</li>
+    <li>ช่อง <b>ของเสีย</b>: ใส่จำนวนที่ทิ้ง แล้วเลือกสาเหตุ (ถ้าเลือก “อื่น ๆ” ต้องพิมพ์คำอธิบาย)</li>
+    <li>แตะ <b>ยืนยันใบตัดเบิก</b> คำถามบอกจำนวนรายการที่กรอก แตะ <b>ยืนยัน</b></li>
+  </ol>
+  <p class="box warn">ยืนยันแล้วแก้เองไม่ได้ ลืมรายการในวันเดียวกัน แตะ <b>เบิกเพิ่ม</b> แล้วกรอกเฉพาะจำนวนที่ต้องบวกเพิ่ม (เป็นจำนวนเต็ม) ต้องแก้รายการเดิม แจ้งประสานงานขายให้เปิดแก้ไข</p>
+  <p class="box note">วันที่ลืมทำ แตะวันนั้นในแถบวัน ทำย้อนหลังได้ แต่นับเป็น “ยืนยันล่าช้า” · ใบตัดเบิกของวันนี้ต้องยืนยันก่อนจึงส่งใบสั่งซื้อได้</p>
+  <div class="foot"><span>รับการแจ้งเตือนบนมือถือ: เปิด <b>หน้างาน</b> แตะ <b>เปิดการแจ้งเตือน</b> ในการ์ด “รับการแจ้งเตือนบนมือถือ”</span><span>มีข้อสงสัย ติดต่อประสานงานขาย · คู่มือ: /docs/pilot/branch_guide.html</span></div>
+</div>
+</body>
+</html>

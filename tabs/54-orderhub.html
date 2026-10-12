@@ -48,6 +48,8 @@
     </div>
     <div id="ohbClaimDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbClaimList" class="card p-3 mb-3"></div>
+    <!-- batch 3 (3.6): the receipts a branch cancelled in the last 7 days, with the reason (ohbLoadCancelledReceipts) -->
+    <div id="ohbCancelledReceipts" class="card p-3 mb-3"></div>
     <div id="ohbHelp-claims"></div>
   </div>
 
@@ -117,6 +119,18 @@
     </div>
     <div id="ohbComp" class="card p-3 mb-3"></div>
     <div id="ohbHelp-comp"></div>
+  </div>
+
+  <!-- ── batch 3 (4.7): every branch account on one grid, the last 7 days, worst first (ohbLoadAdoption; GET /hub/adoption).
+       Centre roles only - a branch login is refused by the server. ── -->
+  <div id="ohb-pane-adoption" style="display:none">
+    <div class="card p-3 mb-3">
+      <div id="ohbAdSummary" class="flex flex-wrap items-center gap-2"></div>
+      <div id="ohbAdRange" class="text-xs mt-1" style="color:var(--text-muted)"></div>
+    </div>
+    <div id="ohbAdList" class="card p-3 mb-3"></div>
+    <div class="text-xs mb-3" style="color:var(--text-secondary)"><a href="#" onclick="ohbSetSub('pilot');return false" style="color:var(--accent)">ความพร้อมและผลนำร่อง 4 สาขา →</a></div>
+    <div id="ohbHelp-adoption"></div>
   </div>
 
   <!-- ── pilot ── -->

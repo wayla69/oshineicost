@@ -508,6 +508,9 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     assert cen["seq"] == 228 and cen["title"] == "ติดตามสาขาที่ยังไม่ยืนยันใบตัดเบิกของเมื่อวาน" and cen["status"] == "todo"
     assert cen["owner_modules"] == ["supply.ordering", "ops.report"] and cen["owner_th"] == "ประสานงานขาย"
     assert cen["count"] == 1 and "อุดรธานี" in cen["detail"] and cen["urgent"] is True
+    import auth                                                    # batch 3: the reminders follow the branch accounts
+    auth.init_auth(c)
+    c.execute("INSERT INTO app_user(username, pw_hash, pw_salt, role, branch) VALUES('br_udon', 'x', 'y', 'branch', 'อุดรธานี')")
     morning = RM.morning(c, today=date(2026, 10, 5))
     assert any("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in b["text"] for b in morning["branches"]) \
         and "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in morning["text"]
