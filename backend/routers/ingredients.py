@@ -1822,46 +1822,89 @@ _SEASON_MIN_COVER = 0.6         # need this share of days present in both window
 _SEASON_CLAMP = (0.5, 3.0)      # refuse absurd factors from thin data
 
 
-def _ing_daily_pax(con, branch: Optional[str], start: str, end: str):
-    """(avg daily covers, days present) for a branch (or the chain) in a window."""
+_SEASON_SHIFT_DAYS = 364        # last year's window: 52 whole weeks back, so the weekdays line up
+
+
+def _ing_pax_by_day(con, branch: Optional[str], start: str, end: str) -> Dict[str, float]:
+    """{date: covers} for a branch (or the chain) in a window; days without covers are left out."""
     f = ["date(t.sold_at) BETWEEN :s AND :e", "b.name != 'ALL'"]
     p: Dict = {"s": start, "e": end}
     if branch:
         f.append("b.name = :branch")
         p["branch"] = branch
-    row = con.execute(f"""
-        SELECT AVG(pax) AS avg_pax, COUNT(*) AS nd FROM (
-            SELECT date(t.sold_at) AS d, SUM(t.customer_count) AS pax
-              FROM sales_transaction t JOIN branches b ON b.branch_id = t.branch_id
-             WHERE {' AND '.join(f)} GROUP BY date(t.sold_at))
-    """, p).fetchone()
-    return float(row["avg_pax"] or 0), int(row["nd"] or 0)
+    rows = con.execute(f"""
+        SELECT date(t.sold_at) AS d, SUM(t.customer_count) AS pax
+          FROM sales_transaction t JOIN branches b ON b.branch_id = t.branch_id
+         WHERE {' AND '.join(f)} GROUP BY date(t.sold_at)
+    """, p).fetchall()
+    return {r["d"]: float(r["pax"]) for r in rows if r["pax"] and r["pax"] > 0}
 
 
 def _ing_season_factor(con, branch: Optional[str], start: str, end: str):
-    """How much busier the same calendar dates were last year vs normal.
+    """How much busier last year's comparable days were than a normal day of the same weekday.
+
+    Method `weekday_364`: every day of the window is paired with the day 364 days earlier (the same weekday);
+    a public holiday (thai_holidays) is paired with the same holiday of last year instead (23/10 with 23/10), and a
+    plain day that falls on a holiday of last year is left out, so a holiday is never compared with a plain day.
+    Each last-year day is judged against the mean of the SAME WEEKDAY over a 56-day baseline that ends 14 days before
+    the window (holidays left out of the baseline): factor = sum of covers / sum of those weekday means. The weekday
+    pattern (weekend peak) therefore cancels, which the order forecast already handles with its own weekday means.
 
     Returns a dict that always carries `factor` (1.0 when it cannot be measured)
     plus the evidence, so the UI and the letter can show WHY it was scaled."""
-    ly_start = con.execute("SELECT date(:d,'-1 year')", {"d": start}).fetchone()[0]
-    ly_end = con.execute("SELECT date(:d,'-1 year')", {"d": end}).fetchone()[0]
-    base_end = con.execute("SELECT date(:d, :g)", {"d": ly_start,
-                                                   "g": f"-{_SEASON_GAP_DAYS} day"}).fetchone()[0]
-    base_start = con.execute("SELECT date(:d, :g)", {"d": base_end,
-                                                     "g": f"-{_SEASON_BASELINE_DAYS - 1} day"}).fetchone()[0]
-    want_t = (datetime.strptime(ly_end, "%Y-%m-%d") - datetime.strptime(ly_start, "%Y-%m-%d")).days + 1
-    out = {"factor": 1.0, "available": False, "scope": branch or "chain",
-           "ly_from": ly_start, "ly_to": ly_end,
-           "baseline_from": base_start, "baseline_to": base_end}
+    import thai_holidays as TH
+    from datetime import date, timedelta
+    s0, e0 = date.fromisoformat(start), date.fromisoformat(end)
+    shift = timedelta(days=_SEASON_SHIFT_DAYS)
+    ly_s, ly_e = s0 - shift, e0 - shift
+    base_e = ly_s - timedelta(days=_SEASON_GAP_DAYS)
+    base_s = base_e - timedelta(days=_SEASON_BASELINE_DAYS - 1)
+    want_t = (e0 - s0).days + 1
+    out = {"factor": 1.0, "available": False, "scope": branch or "chain", "method": "weekday_364",
+           "ly_from": ly_s.isoformat(), "ly_to": ly_e.isoformat(),
+           "baseline_from": base_s.isoformat(), "baseline_to": base_e.isoformat()}
+
+    pairs, skipped = [], []                      # (day, last year's day, holiday name | None)
+    for d in TH.days(s0, e0):
+        h = TH.holiday_on(d)
+        if h:
+            ly = TH.same_holiday_last_year(d)
+            if ly is None:
+                skipped.append({"date": d.isoformat(), "reason": "holiday_no_counterpart"})
+                continue
+        else:
+            ly = d - shift
+            if TH.is_holiday(ly):
+                skipped.append({"date": d.isoformat(), "reason": "last_year_was_holiday"})
+                continue
+        pairs.append((d, ly, h.name if h else None))
+    if not pairs:
+        out["skipped"] = skipped
+        return out
+    lo, hi = min(p[1] for p in pairs), max(p[1] for p in pairs)
 
     def measure(scope):
-        t_pax, t_nd = _ing_daily_pax(con, scope, ly_start, ly_end)
-        b_pax, b_nd = _ing_daily_pax(con, scope, base_start, base_end)
-        if t_nd < max(1, want_t * _SEASON_MIN_COVER) or b_nd < _SEASON_BASELINE_DAYS * _SEASON_MIN_COVER:
+        ly_pax = _ing_pax_by_day(con, scope, lo.isoformat(), hi.isoformat())
+        base = _ing_pax_by_day(con, scope, base_s.isoformat(), base_e.isoformat())
+        if len(base) < _SEASON_BASELINE_DAYS * _SEASON_MIN_COVER:
             return None
-        if b_pax <= 0 or t_pax <= 0:
+        by_wd: Dict[int, list] = {}
+        for ds, p in base.items():
+            bd = date.fromisoformat(ds)
+            if not TH.is_holiday(bd):
+                by_wd.setdefault(bd.weekday(), []).append(p)
+        actual = expected = 0.0
+        used = []
+        for d, ly, name in pairs:
+            p, wd = ly_pax.get(ly.isoformat()), by_wd.get(ly.weekday())
+            if not p or not wd:
+                continue
+            actual += p
+            expected += sum(wd) / len(wd)
+            used.append((d, ly, name))
+        if len(used) < max(1, want_t * _SEASON_MIN_COVER) or actual <= 0 or expected <= 0:
             return None
-        return t_pax, b_pax
+        return actual, expected, used
 
     m = measure(branch) if branch else None
     if m:
@@ -1871,12 +1914,17 @@ def _ing_season_factor(con, branch: Optional[str], start: str, end: str):
         m = measure(None)
         out["scope"] = "chain" if m else (branch or "chain")
     if not m:
+        out["skipped"] = skipped
         return out
-    t_pax, b_pax = m
-    raw = t_pax / b_pax
+    actual, expected, used = m
+    n = len(used)
+    raw = actual / expected
     out.update({"factor": round(max(_SEASON_CLAMP[0], min(raw, _SEASON_CLAMP[1])), 3),
                 "raw_factor": round(raw, 3), "available": True,
-                "ly_pax_per_day": round(t_pax, 1), "baseline_pax_per_day": round(b_pax, 1),
+                "ly_pax_per_day": round(actual / n, 1), "baseline_pax_per_day": round(expected / n, 1),
+                "days_compared": n, "skipped": skipped,
+                "holidays": [{"date": d.isoformat(), "ly_date": ly.isoformat(), "name": name}
+                             for d, ly, name in used if name],
                 "clamped": not (_SEASON_CLAMP[0] <= raw <= _SEASON_CLAMP[1])})
     return out
 
@@ -1908,9 +1956,9 @@ def _ing_season_resolve(con, branch: Optional[str], start: str, end: str, mode: 
                 "reason": "ไม่มีข้อมูลปีก่อนมากพอ จึงไม่ปรับ", "detail": s}
     label = (ev["name"] + " · ") if ev else ""
     return {"factor": s["factor"], "mode": "auto", "event": (ev or {}).get("name", ""),
-            "reason": (f"{label}อ้างอิงยอดลูกค้าช่วงเดียวกันปีก่อน "
+            "reason": (f"{label}อ้างอิงยอดลูกค้าวันเดียวกันของปีก่อน "
                        f"({s['ly_from']}–{s['ly_to']} เฉลี่ย {s['ly_pax_per_day']:,.0f} คน/วัน "
-                       f"เทียบช่วงปกติ {s['baseline_pax_per_day']:,.0f} คน/วัน)"),
+                       f"เทียบวันปกติในวันเดียวกันของสัปดาห์ {s['baseline_pax_per_day']:,.0f} คน/วัน)"),
             "window": win, "detail": s}
 
 

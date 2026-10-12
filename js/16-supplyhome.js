@@ -153,9 +153,10 @@ function _shmTodayRows(d) {
   const gaps = items.filter(it => base(it).startsWith('issue_missing_') && it.status === 'todo').length;
   if (iss) {
     const ok = iss.status === 'done';
+    // 5.4: ONE status for today's slip (ยืนยันแล้ว · ร่าง · ยังไม่ทำ), then the backlog as a count
     const txt = ok ? `ยืนยันแล้ว ${iss.confirmed_hhmm || ''}`.trim() + (iss.appends ? ` · เบิกเพิ่ม ${iss.appends} ครั้ง` : '')
-      : `รอยืนยัน · ${iss.slip_status === 'draft' ? 'มีร่างแล้ว' : 'ยังไม่ได้กรอก'}`;
-    rows.push({ k: 'issue', label: 'ตัดเบิก', ok: ok && !gaps, text: txt + (gaps ? ` · ค้างย้อนหลัง ${gaps} วัน` : ''), go: iss.go });
+      : (iss.slip_status === 'draft' ? 'ร่าง' : 'ยังไม่ทำ');
+    rows.push({ k: 'issue', label: 'ตัดเบิกวันนี้', ok: ok && !gaps, text: txt + (gaps ? ` · ค้าง ${gaps} วัน` : ''), go: iss.go });
   }
   // สั่งสินค้า: the pending round whose cutoff is today and nearest; else "ส่งแล้ว"; else nothing is due today
   const ord = items.filter(it => base(it).startsWith('order_due_'));
@@ -164,10 +165,9 @@ function _shmTodayRows(d) {
   if (pend.length) {
     const it = pend[0];
     const ms = new Date(it.cutoff_at).getTime() - Date.now();
-    const left = isNaN(ms) ? '' : ms >= 3600000 ? ` (เหลือ ${Math.floor(ms / 3600000)} ชม.)` : ms > 0 ? ` (เหลือ ${Math.max(Math.ceil(ms / 60000), 1)} นาที)` : '';
-    const wd = _SHM_WD[new Date(String(it.cutoff_at).slice(0, 10) + 'T12:00:00Z').getUTCDay()] || '';
+    const left = isNaN(ms) || ms <= 0 ? '' : ` (${fmtLeft(ms / 3600000)})`;
     rows.push({ k: 'order', label: 'สั่งสินค้า', ok: false, bad: !!it.late,
-      text: it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `ส่งภายใน ${wd} ${String(it.cutoff_at).slice(11, 16)}${left}`, go: it.go });
+      text: it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`, go: it.go });
   } else if (today.length) {
     rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: today[0].go });
   } else {
@@ -188,7 +188,7 @@ function _shmTodayStrip(d, role) {
     const ink = r.ok ? 'var(--good-ink)' : (r.bad ? 'var(--bad-ink)' : 'var(--amber-ink)');
     return `<div class="shm-today-row flex items-center gap-2" data-k="${r.k}" style="border-top:1px solid var(--border-soft);min-height:44px">
       <span aria-hidden="true" style="color:${ink};font-size:16px;width:18px;text-align:center">${r.ok ? '✓' : '●'}</span>
-      <div class="flex-1 min-w-0 text-sm" style="color:var(--text-primary)"><b>${r.label}</b> · <span style="color:${ink}">${esc(r.text)}</span></div>
+      <div class="flex-1 min-w-0 text-sm" style="color:var(--text-primary)"><b>${r.label}</b>: <span style="color:${ink}">${esc(r.text)}</span></div>
       <a href="#" onclick="_shmOpen(${esc(JSON.stringify(r.go))});return false" class="text-xs whitespace-nowrap" style="color:var(--accent);padding:12px 0 12px 6px">ไปที่งาน →</a></div>`;
   }).join('');
 }

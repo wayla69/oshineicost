@@ -258,9 +258,12 @@ class Converter:
         self.last_kind = "exact"          # "pack" after a generic pack-word conversion
         self.last_approx = False          # True after a conversion that passed an average step (PR-U)
         self.master = {}
-        for code, base, recv, per in con.execute(
-                "SELECT code, base_unit, recv_unit, qty_per_recv FROM bc_ingredient"):
+        self.names = {}                   # code -> name_th: what a message to the floor calls the item (fmt.item)
+        has_name = "name_th" in {r[1] for r in con.execute("PRAGMA table_info(bc_ingredient)")}
+        for code, base, recv, per, nm in con.execute(
+                "SELECT code, base_unit, recv_unit, qty_per_recv, " + ("name_th" if has_name else "NULL") + " FROM bc_ingredient"):
             self.master[code] = (norm(base), str(recv or "").strip(), float(per) if per else None)
+            self.names[code] = nm or ""
         self.rules = {}                   # (code, unit) -> factor_to_base — kept for the readers that look a rule up
         self.ladders = {}                 # code -> {unit: {parent, qty, kind, rmin, rmax, factor}}
         cols = {r[1] for r in con.execute("PRAGMA table_info(bc_unit_rule)")}

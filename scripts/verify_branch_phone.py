@@ -275,8 +275,8 @@ def m7_checks(a, b, session, check, shot, nums):
     print("     ", [r["t"] for r in rows])
     check(len(rows) == 3, f"the strip has three lines ({len(rows)})")
     # the dot is ● while an earlier day is still open (a backlog the copy may hold), ✓ when nothing is left
-    check(len(rows) == 3 and re.match(r"^[✓●] ตัดเบิก · ยืนยันแล้ว \d\d:\d\d", rows[0]["t"]) is not None and "เบิกเพิ่ม 1 ครั้ง" in rows[0]["t"], f"line 1 reads '{rows[0]['t'] if rows else ''}'")
-    check(len(rows) == 3 and rows[1]["t"].split(" ", 1)[1].startswith("สั่งสินค้า · ") and rows[2]["t"].split(" ", 1)[1].startswith("รับสินค้า · "), "lines 2 and 3 are สั่งสินค้า and รับสินค้า")
+    check(len(rows) == 3 and re.match(r"^[✓●] ตัดเบิกวันนี้: ยืนยันแล้ว \d\d:\d\d", rows[0]["t"]) is not None and "เบิกเพิ่ม 1 ครั้ง" in rows[0]["t"], f"line 1 reads '{rows[0]['t'] if rows else ''}'")
+    check(len(rows) == 3 and rows[1]["t"].split(" ", 1)[1].startswith("สั่งสินค้า: ") and rows[2]["t"].split(" ", 1)[1].startswith("รับสินค้า: "), "lines 2 and 3 are สั่งสินค้า and รับสินค้า")
     check(all(r["link"] and r["t"].endswith("ไปที่งาน →") and r["dot"] in ("✓", "●") and r["h"] >= 43 for r in rows), "each line has a ✓/● dot, the link 'ไปที่งาน →' and is 44 px high")
     pos = page.evaluate("document.getElementById('shmToday').getBoundingClientRect().top < document.getElementById('shmMineCard').getBoundingClientRect().top")
     check(pos, "the strip sits above the task cards")
@@ -592,7 +592,7 @@ def main(argv=None) -> int:
         page.wait_for_selector("form [data-el=msg]", timeout=5000)
         dlg = page.evaluate("() => ({ title: document.querySelector('[data-el=title]').textContent, msg: document.querySelector('[data-el=msg]').textContent, ok: document.querySelector('[data-el=msg]').closest('form').querySelector('[type=submit]').textContent, cancel: document.querySelector('[data-act=cancel]').textContent })")
         print("     dialog:", dlg["msg"].replace("\n", " ⏎ "))
-        check("ไม่ได้กรอก" in dlg["msg"] and re.search(r"กรอก \d+ รายการ · ของเสีย \d+ รายการ · ไม่ได้กรอก \d+ รายการ \(ถือว่าไม่ได้เบิก\)", dlg["msg"]) is not None,
+        check("ไม่ได้กรอก" in dlg["msg"] and re.search(r"กรอก \d+ รายการ · ของเสีย \d+ รายการ\s+ยังไม่ได้กรอก \d+ รายการ ถือว่าไม่ได้เบิก คงเหลือตามระบบจึงไม่ลดลง", dlg["msg"]) is not None,
               "the confirm dialog states how many items were filled, wasted and left empty")
         check((dlg["title"], dlg["ok"], dlg["cancel"]) == ("ยืนยันใบตัดเบิก", "ยืนยัน", "กลับไปแก้"), f"title / buttons: {dlg['title']} · {dlg['ok']} · {dlg['cancel']}")
         shot(page, "issue_confirm.png")
@@ -639,11 +639,11 @@ def main(argv=None) -> int:
           pages: [...document.querySelectorAll('#brnOrdPages button')].map(b => b.innerText.trim()),
           rows: document.querySelectorAll('#brnOrdList .brn-row').length })""")
         print("     rounds:", [r["t"] for r in o["rounds"]])
-        check(len(o["rounds"]) > 0 and all(re.search(r"^.+ · ส่ง .+ · สั่งภายใน .+ \d\d:\d\d (เปิดรับ|เลยเวลา|สั่งแล้ว)$", r["t"]) for r in o["rounds"]),
-              "every round is one line 'รอบ · ส่ง … · สั่งภายใน …' with a state chip")
+        check(len(o["rounds"]) > 0 and all(re.search(r"^.+ · .+ · ส่งใบสั่งซื้อภายใน .+ เวลา \d\d:\d\d (เปิดรับ|เลยเวลา|สั่งแล้ว)$", r["t"]) for r in o["rounds"]),
+              "every round is one line 'รอบ · วันส่ง · ส่งใบสั่งซื้อภายใน …' with a state chip")
         check("ยอดขายรอบนี้ต่างจากปกติ?" in o["buf"] and not o["bufInput"], "the buffer card is folded under 'ยอดขายรอบนี้ต่างจากปกติ?'")
         if o["pages"]:
-            check(o["pages"][0].startswith("สั่งจากไดกิโตะ") and o["pages"][1].startswith("ซื้อเอง"), f"sub-tabs: {o['pages']}")
+            check(o["pages"][0].startswith("สั่งจากไดกิโตะ กรุ๊ป") and o["pages"][1].startswith("ซื้อเอง"), f"sub-tabs: {o['pages']}")
         shot(page, "order_top.png")
         if o["rows"]:
             row = page.evaluate("""() => { const r = document.querySelector('#brnOrdList .brn-row'); const t = r.innerText.replace(/\\s+/g, ' ');
@@ -990,14 +990,14 @@ def main(argv=None) -> int:
         page.wait_for_selector("form [data-el=msg]", timeout=5000)
         dlg = dialog()
         print("     dialog:", dlg["msg"])
-        check(missing > 0 and re.match(rf"^ยังไม่นับรายการบังคับ {missing} รายการ \(เช่น .+\) นับให้ครบก่อนส่ง$", dlg["msg"]) is not None and dlg["ok"] == "กลับไปนับ" and not dlg["cancelShown"],
+        check(missing > 0 and re.match(rf"^ยังมีรายการที่ต้องนับ {missing} รายการ ที่ยังไม่ได้นับ \(เช่น .+\) นับให้ครบก่อนส่ง$", dlg["msg"]) is not None and dlg["ok"] == "กลับไปนับ" and not dlg["cancelShown"],
               f"the submit is refused with only a 'กลับไปนับ' button: {dlg['msg']}")
         shot(page, "count_refuse.png")
         page.click("form:has([data-el=msg]) [type=submit]")
         page.wait_for_timeout(400)
         check(len(posts("/stock/count")) == n_save0, "the refused submit sends no request")
         sv = ctx.request.post(a.base + "/api/bom-center/stock/count", data={"lines": [{"code": req[0]["code"], "qty": 1, "unit": req[0]["count_unit"]}], "submit": True})
-        check(sv.status == 400 and "ยังไม่นับรายการบังคับ" in sv.text() and "นับให้ครบก่อนส่ง" in sv.text(), f"the server refuses the same way: {sv.status} {sv.text()[:110]}")
+        check(sv.status == 400 and "ยังมีรายการที่ต้องนับ" in sv.text() and "นับให้ครบก่อนส่ง" in sv.text(), f"the server refuses the same way: {sv.status} {sv.text()[:110]}")
 
         # ── the 6th entry of the strip, days 1–3 only ──
         print("== phone · แถบล่าง")

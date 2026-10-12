@@ -68,6 +68,12 @@ RULES = [
     ("คงเหลือ (ปลายงวด)", r"คงเหลือ \(ปลายงวด\)", None),
     ("ส่วนกลาง for a team", r"(?<!บัญชีสินค้า)(?<!สินค้า)(?<!รายงาน)(?<!รหัส)ส่วนกลาง", None),
     ("กรุณา in a status or field message", r"กรุณา", None),
+    # batch 1 (2026-10-12): the cutoff is "ส่งใบสั่งซื้อภายใน …" everywhere; the floor reads the value class as a group, never the
+    # analyst's unit-rule word, and cancels (not deletes) a receipt
+    ("สั่งภายใน / ส่งภายใน (it is ส่งใบสั่งซื้อภายใน)", r"(?<!ยอด)(?:สั่ง|ส่ง)ภายใน", None),
+    ("กฎหน่วย on a floor page", r"กฎหน่วย", "floor"),
+    ("ชั้น A/B/C on a floor page", r"ชั้น ?[ABC](?![A-Za-z])", "floor"),
+    ("ลบใบรับ (it is ยกเลิกใบรับสินค้า)", r"ลบใบรับ", None),
 ]
 
 

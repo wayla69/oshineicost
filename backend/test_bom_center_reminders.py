@@ -36,7 +36,7 @@ def test_morning_names_the_duties_and_follows_them(udon):
     assert "ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 แล้ว" in line["text"] and line["pending"] is False
     assert rec["queue"]["count"] == 1 and "คลัง" in rec["text"] and "ค้างคิว 1 ใบ" in rec["text"]
     off = RM.morning(c, today=WED)
-    assert "ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป รอบส่งวันเสาร์ 10/10 ภายใน วันพฤหัส 13:15)" in _line(off)["text"]
+    assert "ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป ส่งใบสั่งซื้อภายใน พฤ. 8/10 เวลา 13:15 · รอบส่งวันเสาร์ 10/10)" in _line(off)["text"]
 
 
 def test_a_missed_cutoff_is_named_with_the_late_fee(udon):

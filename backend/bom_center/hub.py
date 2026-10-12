@@ -17,6 +17,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
+from .fmt import item as _item
 from .master import audit
 
 SS_REASONS = (("short", "ผู้จำหน่ายสินค้าขาด / ส่งได้ไม่ครบ"), ("substitute", "เปลี่ยนเป็นสินค้าทดแทน"),
@@ -244,18 +245,18 @@ def process(con, order_id: int, lines: list, who: str, po_ref: str = None) -> di
         try:
             q = float(q or 0)
         except (TypeError, ValueError):
-            raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
-            raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องไม่ติดลบ")
         rs = ((ln or {}).get("reason") or "").strip() or None
         note = ((ln or {}).get("note") or "").strip() or None
         if abs(q - float(conf or 0)) > 1e-9:
             if not rs:
-                raise ValueError(f"{c}: จำนวนส่งไม่ตรงกับที่สาขายืนยัน · เลือกเหตุผล")
+                raise ValueError(f"{_item(con, c)}: จำนวนส่งไม่ตรงกับที่สาขายืนยัน · เลือกเหตุผล")
             if rs not in SS_REASON_TH:
-                raise ValueError(f"{c}: เหตุผลไม่อยู่ในรายการ")
+                raise ValueError(f"{_item(con, c)}: เหตุผลไม่อยู่ในรายการ")
             if rs == "other" and not note:
-                raise ValueError(f"{c}: เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
+                raise ValueError(f"{_item(con, c)}: เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย")
         else:
             rs = note = None
         con.execute("UPDATE bc_order_line SET processed_units=?, ss_reason=?, ss_note=? WHERE order_id=?"

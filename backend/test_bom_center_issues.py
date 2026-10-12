@@ -36,6 +36,7 @@ from test_bom_center_s11 import udon  # noqa: F401  (branch 1 = อุดรธ�
 from test_bom_center_s4b import con  # noqa: F401  (sales to 5 Oct 2026 at branch 1; crab stick 1 kg packs)
 
 CRAB = "13-01-009"
+CRAB_NM = "ปูอัด"                                    # its name in the register: the branch never reads the code
 PACK = "แพ็ค 1 กก."
 AS_OF = date(2026, 10, 5)
 WED = date(2026, 10, 7)
@@ -83,7 +84,7 @@ def test_the_sheet_shows_the_system_stock_before_the_day_the_average_and_the_rea
     assert sh["editable"] is True and sh["backdated"] is True               # today (NOW) is 5 Oct
     assert sh["basis"] == {"count_id": cid, "date": "2026-10-01"} and sh["missing_days"] == []
     assert [r["code"] for r in sh["reasons"]] == ["waste", "expired", "spill", "prep_loss", "other"]
-    assert sh["reasons"][0]["label"] == "ของเสีย / เน่าเสีย"
+    assert sh["reasons"][0]["label"] == "วัตถุดิบเสีย / ทิ้ง"
     done = IS.sheet(con, 1, "2026-10-03", now=NOW)                          # a confirmed day reads back converted, locked
     c3 = next(i for z in done["zones"] for i in z["items"] if i["code"] == CRAB)
     assert done["editable"] is False and done["status"]["status"] == "confirmed"
@@ -191,13 +192,13 @@ def test_a_draft_is_confirmed_once_and_a_slip_for_a_past_day_is_late(con):  # no
     ("5/10/2026", [], False, "วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD"),
     ("2026-10-06", [], False, "ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า"),
     ("2026-08-01", [], False, "บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน 60 วัน"),
-    ("2026-10-05", [used(qty="abc")], False, f"{CRAB}: จำนวนต้องเป็นตัวเลข"),
-    ("2026-10-05", [used(qty=-1)], False, f"{CRAB}: จำนวนต้องไม่ติดลบ"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม"}], False, f"{CRAB}: เลือกสาเหตุของของเสีย"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "zzz"}], False, f"{CRAB}: เลือกสาเหตุของของเสีย"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "other"}], False, f"{CRAB}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
+    ("2026-10-05", [used(qty="abc")], False, f"{CRAB_NM}: จำนวนต้องเป็นตัวเลข"),
+    ("2026-10-05", [used(qty=-1)], False, f"{CRAB_NM}: จำนวนต้องไม่ติดลบ"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม"}], False, f"{CRAB_NM}: เลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "zzz"}], False, f"{CRAB_NM}: เลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 1, "unit": "กรัม", "waste_reason": "other"}], False, f"{CRAB_NM}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
     ("2026-10-05", [], True, "ยังไม่มีรายการในใบตัดเบิก"),
-    ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], True, "แปลงหน่วยไม่ได้"),
+    ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], True, "ยังไม่ได้ตั้งหน่วย"),
 ])
 def test_validations(con, day, lines, submit, msg):  # noqa: F811
     with pytest.raises(ValueError, match=msg):
@@ -680,10 +681,10 @@ def test_append_rounds_every_quantity_up_to_a_whole_number(con):  # noqa: F811
     ("2026-10-06", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # no slip
     ("2026-10-05", [], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
     ("2026-10-05", [used(qty=0)], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม"}], at(5, 15), f"{CRAB}: เลือกสาเหตุของของเสีย"),
-    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม", "waste_reason": "other"}], at(5, 15), f"{CRAB}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
-    ("2026-10-05", [used(qty=-1)], at(5, 15), f"{CRAB}: จำนวนต้องไม่ติดลบ"),
-    ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], at(5, 15), "แปลงหน่วยไม่ได้"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม"}], at(5, 15), f"{CRAB_NM}: เลือกสาเหตุของของเสีย"),
+    ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม", "waste_reason": "other"}], at(5, 15), f"{CRAB_NM}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
+    ("2026-10-05", [used(qty=-1)], at(5, 15), f"{CRAB_NM}: จำนวนต้องไม่ติดลบ"),
+    ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], at(5, 15), "ยังไม่ได้ตั้งหน่วย"),
     ("2026-10-05", [used(qty=1)], at(6, 0, 30), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),        # after midnight it is yesterday's slip
 ])
 def test_append_refusals_change_nothing(con, day, lines, now, msg):  # noqa: F811

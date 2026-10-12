@@ -30,6 +30,7 @@ from bom_center import hub as _hub
 from bom_center import issues as _is
 from bom_center import issue_reports as _ir
 from bom_center.clock import today as bkk_today
+from bom_center.fmt import CLASS_SHORT_TH as _CLASS_SHORT
 from bom_center import master as _m
 from bom_center import orders as _or
 from bom_center import per_sales as _pv
@@ -2762,12 +2763,12 @@ def bc_issue_posted(body: PostedBody, request: Request):
 
 
 # ── PR-J3 · issue-slip reports: system stock vs count, daily issue vs BoM (issue_reports.py) ──
-RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
+RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
                  "คงเหลือตามระบบ", "นับจริง (ปลายงวด)", "ผลต่าง (จำนวน)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "สถานะ", "เหตุผล",
                  "หมายเหตุ", "ราคาต่อหน่วย"]
 DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
-                 "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการชั้น A ที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
-DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ชั้น", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
+                 "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
+DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
                       "ผลต่าง (จำนวน)", "ผลต่าง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
 
 
@@ -2806,10 +2807,10 @@ def _recon_sheet(ws, title: str, r: dict) -> None:
     _sheet(ws, title, RECON_HEADERS,
            f"รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขา{r['branch']['name']} งวด {p['begin_date']} ถึง "
            f"{p['end_date']} (เดือน {p['month']}) · คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย · "
-           "ผลต่าง = นับจริง − คงเหลือตามระบบ · เกณฑ์ ชั้น A ±5% · B ±10% · C ±20% · "
+           "ผลต่าง = นับจริง − คงเหลือตามระบบ · เกณฑ์ กลุ่มมูลค่าสูง ±5% · กลาง ±10% · ต่ำ ±20% · "
            f"ใบตัดเบิกยืนยันแล้ว {sl['confirmed_days']}/{sl['trading_days']} วัน")
     for x in r["rows"]:
-        ws.append([x["code"], x["name"], x["base_unit"], x["class"], x["begin"], x["received"], x["claims"], x["used"],
+        ws.append([x["code"], x["name"], x["base_unit"], _CLASS_SHORT.get(x["class"], x["class"]), x["begin"], x["received"], x["claims"], x["used"],
                    x["waste"], x["system"], x["count"], x["diff"], x["diff_value"], x["diff_pct"], x["status_th"],
                    x.get("reason_th"), x.get("reason_note"), x["price_per_base"]])
     t = r["totals"]
@@ -2867,7 +2868,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     ws = wb.active
     _sheet(ws, "รายวัน", DAILY_HEADERS,
            f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
-           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · ชั้น A เบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
+           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นเบิกเกินต่อเนื่อง")
     for r in d["rows"]:
         ws.append([r["date"], r["weekday_th"], r["slip_status_th"], r["used_value"], r["waste_value"], r["issued_value"],
@@ -2889,7 +2890,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
            f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
            "ผลต่าง = รวมเบิก − ตามสูตร · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
     for it in items:
-        w2.append([it["date"], it["code"], it["name"], it["base_unit"], it["class"], it["used"], it["waste"], it["issued"],
+        w2.append([it["date"], it["code"], it["name"], it["base_unit"], _CLASS_SHORT.get(it["class"], it["class"]), it["used"], it["waste"], it["issued"],
                    it["bom"], it["var_qty"], it["var_pct"], it["price_per_base"], it["var_value"], it["signal_th"]])
     for row in w2.iter_rows(min_row=3, max_row=w2.max_row):
         for c in row[5:10]:
@@ -3899,7 +3900,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
         name = con.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()[0]
         rows = _st.template_rows(con, bid)
     wb = Workbook()
-    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ชั้น", "รายการบังคับนับ",
+    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "กลุ่มมูลค่า", "ต้องนับ",
              "หมายเหตุ"]
     _sheet(wb.active, "ตรวจนับ", heads,
            f"แบบฟอร์มตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดร้านและก่อนรับสินค้าของวันนั้น)"
@@ -3907,7 +3908,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
     ws = wb.active
     for r in rows:
         ws.append([r["zone"], r["code"], r["name"], r["count_unit"], None, r["per_count_unit"], r["base_unit"],
-                   r["class"], "บังคับ" if r["required"] else "", None])
+                   _CLASS_SHORT.get(r["class"], r["class"]), "ต้องนับ" if r["required"] else "", None])
     ws.column_dimensions["C"].width = 44
     ws.freeze_panes = "A3"
     safe = re.sub(r"[^\w-]", "_", f"{bid}_{count_date or 'date'}")

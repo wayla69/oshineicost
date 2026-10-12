@@ -59,7 +59,7 @@ def test_cutoff_is_1315_two_days_before_and_a_sunday_moves_to_saturday():
     assert F.cutoff_for(date(2026, 10, 12)) == at(10, 13, 15)          # Monday -> Saturday
     assert F.cutoff_for(WED).isoformat() == "2026-10-05T13:15:00+07:00"
     assert (F.cutoff_weekday(2), F.cutoff_weekday(3), F.cutoff_weekday(0)) == (6, 1, 5)
-    assert F.cutoff_th(F.cutoff_for(WED)) == "วันจันทร์ 13:15" and F.day_th(WED) == "วันพุธ 7/10"
+    assert F.cutoff_th(F.cutoff_for(WED)) == "จ. 5/10 เวลา 13:15" and F.day_th(WED) == "วันพุธ 7/10"
     assert f"{F.cutoff_time():%H:%M}" == "13:15"
 
 
@@ -120,7 +120,7 @@ def test_next_deliveries_and_the_one_to_work_on(con):  # noqa: F811
                                                             ("salmon", "2026-10-12"), ("1", "2026-10-14")]
     first = items[0]
     assert first["round_th"] == "รอบ 1" and first["delivery_th"] == "วันพุธ 7/10" and first["cycle_date"] == "2026-10-05"
-    assert first["cutoff_at"] == "2026-10-05T13:15:00+07:00" and first["cutoff_th"] == "วันจันทร์ 13:15"
+    assert first["cutoff_at"] == "2026-10-05T13:15:00+07:00" and first["cutoff_th"] == "จ. 5/10 เวลา 13:15"
     assert first["open"] is True and first["late"] is False and 5.2 <= first["hours_left"] <= 5.3
     assert (first["cover_from"], first["cover_to"]) == ("2026-10-07", "2026-10-09")
     assert F.pick_delivery(items)["round"] == "1"
@@ -137,7 +137,7 @@ def test_next_deliveries_and_the_one_to_work_on(con):  # noqa: F811
 def test_plan_by_delivery_carries_the_cutoff_and_the_count_unit(con):  # noqa: F811
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     assert p["cycle_date"] == p["order_day"] == "2026-10-05" and p["delivery"] == "2026-10-07"
-    assert p["cutoff_th"] == "วันจันทร์ 13:15" and p["delivery_th"] == "วันพุธ 7/10"
+    assert p["cutoff_th"] == "จ. 5/10 เวลา 13:15" and p["delivery_th"] == "วันพุธ 7/10"
     assert p["cutoff_at"] == "2026-10-05T13:15:00+07:00" and p["open"] is True and p["late"] is False
     assert [d["round"] for d in p["deliveries"]] == ["1", "2", "salmon", "1"] and "count" not in p
     crab = next(r for r in p["rows"] if r["code"] == CRAB)
@@ -207,7 +207,7 @@ def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # n
     args = (con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon")
     with pytest.raises(OR.LateSubmit) as e:
         OR.save_flow(*args, submit=True, now=LATE, as_of=AS_OF)
-    assert e.value.cutoff_th == "วันจันทร์ 13:15" and e.value.cutoff_at == "2026-10-05T13:15:00+07:00"
+    assert e.value.cutoff_th == "จ. 5/10 เวลา 13:15" and e.value.cutoff_at == "2026-10-05T13:15:00+07:00"
     assert "ค่าปรับล่าช้า" in str(e.value)
     con.rollback()
     out = OR.save_flow(*args, submit=True, ack_late=True, now=LATE, as_of=AS_OF)
@@ -292,14 +292,14 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     d = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))
     assert set(d) == {"order_due_1", "order_due_2", "order_due_salmon"}
     r1, r2, sal = d["order_due_1"], d["order_due_2"], d["order_due_salmon"]
-    assert r1["title"] == "ส่งใบสั่งซื้อรอบส่งวันพุธ (7/10) ภายใน วันจันทร์ 13:15"
-    assert sal["title"] == "ส่งใบสั่งซื้อแซลมอนสด รอบส่งวันจันทร์ (12/10) ภายใน วันเสาร์ 13:15"
+    assert r1["title"] == "ส่งใบสั่งซื้อภายใน จ. 5/10 เวลา 13:15 · รอบส่งวันพุธ (7/10)"
+    assert sal["title"] == "ส่งใบสั่งซื้อแซลมอนสด ภายใน ส. 10/10 เวลา 13:15 · รอบส่งวันจันทร์ (12/10)"
     assert r1["seq"] == 310 and r1["owner_modules"] == ["branch.stock"] and r1["owner_th"] == "สาขา" and r1["branch_id"] == 1
     assert r1["go"] == {"tab": "branchstock", "pane": "order", "extra": {"round": "1", "delivery": "2026-10-07"}, "branch": 1}
     assert (r1["round_th"], r1["delivery"], r1["delivery_th"], r1["cutoff_th"], r1["cutoff_date"]) == \
-        ("รอบ 1", "2026-10-07", "วันพุธ 7/10", "วันจันทร์ 13:15", "2026-10-05")
+        ("รอบ 1", "2026-10-07", "วันพุธ 7/10", "จ. 5/10 เวลา 13:15", "2026-10-05")
     assert r1["due_today"] is True and r1["late"] is False and r1["urgent"] is False and r1["status"] == "todo"
-    assert r1["detail"] == "เหลือ 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ · ยืนยันใบตัดเบิกวันนี้ก่อน"
+    assert r1["detail"] == "อีก 5 ชม. · ยังไม่ได้เปิดใบสั่งซื้อ · ยืนยันใบตัดเบิกวันนี้ก่อน"
     assert r2["due_today"] is False and sal["due_today"] is False
     # under four hours left: urgent
     near = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=at(5, 10)))["order_due_1"]
@@ -311,10 +311,10 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     # a draft order says so; a sent one is done and no longer urgent
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'suggested')")
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
-        == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ยืนยันใบตัดเบิกวันนี้ก่อน"
+        == "อีก 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ยืนยันใบตัดเบิกวันนี้ก่อน"
     slip(c)                                                                              # the slip is confirmed: the suffix goes
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
-        == "เหลือ 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง)"
+        == "อีก 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง)"
     c.execute("UPDATE bc_order SET status='submitted', late=1")
     done = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert done["status"] == "done" and done["urgent"] is False and done["detail"].startswith("สถานะ: ")
@@ -370,7 +370,7 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         assert p.status_code == 200, p.text
         j = p.json()
         assert j["round"] == "1" and j["delivery"] == "2026-10-07" and j["cycle_date"] == "2026-10-05"
-        assert j["cutoff_th"] == "วันจันทร์ 13:15" and j["late"] is True and j["deliveries"]
+        assert j["cutoff_th"] == "จ. 5/10 เวลา 13:15" and j["late"] is True and j["deliveries"]
         assert client.get(f"/api/bom-center/order/plan?branch_id={bid}&round=1&delivery=2026-10-08").status_code == 400
         # no delivery named: the nearest one still open (round 1's is past its cutoff now)
         assert client.get(f"/api/bom-center/order/plan?branch_id={bid}").json()["round"] == "2"
@@ -387,7 +387,7 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         r = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=body)
         assert r.status_code == 400, r.text
         d = r.json()["detail"]
-        assert d["code"] == "late" and d["cutoff_th"] == "วันจันทร์ 13:15" and "ค่าปรับล่าช้า" in d["message"]
+        assert d["code"] == "late" and d["cutoff_th"] == "จ. 5/10 เวลา 13:15" and "ค่าปรับล่าช้า" in d["message"]
         assert d["cutoff_at"] == "2026-10-05T13:15:00+07:00"
         n = sqlite3.connect(str(main.DB_PATH))
         assert n.execute("SELECT COUNT(*) FROM bc_order").fetchone()[0] == 0                 # nothing was kept

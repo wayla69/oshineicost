@@ -24,6 +24,7 @@ served only to the branch that sent them and to the supply roles.
 import json
 
 from .clock import today as bkk_today
+from .fmt import item as _item
 from .master import audit
 from .variance import now
 
@@ -120,7 +121,7 @@ def claimable(con, branch_id: int, order_id: int) -> dict:
     return {"order_id": order_id, "cycle_date": o["cycle_date"], "round": o["round"], "lines": lines}
 
 
-def _clean_lines(lines: list, limit: dict, over_msg) -> list:
+def _clean_lines(lines: list, limit: dict, over_msg, con=None) -> list:
     """Validate claim lines → [(code, qty, reason, note)]. `limit` = {code: most that may be claimed};
     a code outside it, or a quantity above it, raises with `over_msg(code, cap, qty)`."""
     clean = []
@@ -131,19 +132,19 @@ def _clean_lines(lines: list, limit: dict, over_msg) -> list:
         try:
             q = float(ln.get("claim_units"))
         except (TypeError, ValueError):
-            raise ValueError(f"{code}: จำนวนที่เคลมต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, code)}: จำนวนที่เคลมต้องเป็นตัวเลข")
         if q <= 0:
             continue
         if code not in limit:
-            raise ValueError(f"{code} ไม่ได้อยู่ในรายการที่รับของใบสั่งซื้อนี้")
+            raise ValueError(f"{_item(con, code)} ไม่ได้อยู่ในรายการที่รับของใบสั่งซื้อนี้")
         if q > limit[code] + 1e-9:
             raise ValueError(over_msg(code, limit[code], q))
         rs = (ln.get("reason") or "").strip()
         if rs not in REASON_TH:
-            raise ValueError(f"{code}: เลือกสาเหตุของการเคลม")
+            raise ValueError(f"{_item(con, code)}: เลือกสาเหตุของการเคลม")
         nt = (ln.get("note") or "").strip() or None
         if rs == "other" and not nt:
-            raise ValueError(f"{code}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
+            raise ValueError(f"{_item(con, code)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         clean.append((code, q, rs, nt))
     if not clean:
         raise ValueError("ระบุรายการที่จะเคลมอย่างน้อย 1 รายการ")
@@ -177,7 +178,7 @@ def create(con, branch_id: int, order_id: int, lines: list, photos: list, note: 
         return (f"{code}: เคลมได้ไม่เกิน {cap:g} (รับแล้ว {can[code]['received_units']:g}"
                 + (f" · เคลมไปแล้ว {can[code]['claimed_units']:g}" if can[code]["claimed_units"] else "") + ")")
 
-    clean = _clean_lines(lines, {c: ln["remaining_units"] for c, ln in can.items()}, over)
+    clean = _clean_lines(lines, {c: ln["remaining_units"] for c, ln in can.items()}, over, con)
     photos = photos or []
     if len(photos) > MAX_PHOTOS:
         raise ValueError(f"แนบรูปได้ไม่เกิน {MAX_PHOTOS} รูป")
@@ -206,7 +207,7 @@ def create_from_receive(con, branch_id: int, order_id: int, lines: list, note: s
     def over(code, limit, q):
         return f"{code}: เคลมขณะรับสินค้าได้ไม่เกินส่วนต่างระหว่างที่คลังส่งกับที่รับจริง ({limit:g})"
 
-    clean = _clean_lines(lines, cap, over)
+    clean = _clean_lines(lines, cap, over, con)
     cid = _insert(con, branch_id, order_id, "receive", clean, [], note, who)
     return {"claim_id": cid, "lines": len(clean), "photos": 0, "origin": "receive"}
 
@@ -372,9 +373,9 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
         try:
             a = float(cu if v is None or v == "" else v)
         except (TypeError, ValueError):
-            raise ValueError(f"{c}: จำนวนที่อนุมัติต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, c)}: จำนวนที่อนุมัติต้องเป็นตัวเลข")
         if a < 0 or a > float(cu) + 1e-9:
-            raise ValueError(f"{c}: อนุมัติได้ 0 ถึง {float(cu):g} (จำนวนที่สาขาเคลม)")
+            raise ValueError(f"{_item(con, c)}: อนุมัติได้ 0 ถึง {float(cu):g} (จำนวนที่สาขาเคลม)")
         approved.append((c, a))
     if not any(a > 0 for _, a in approved):
         raise ValueError("ระบุจำนวนที่อนุมัติอย่างน้อย 1 รายการ หรือเลือก “ไม่อนุมัติ”")

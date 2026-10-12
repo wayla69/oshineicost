@@ -2157,7 +2157,7 @@ function _bmcFcFormula(f) {
   const weeks = Math.max(1, Math.round(((new Date(f.history_to).getTime() - new Date(f.history_from).getTime()) / 864e5 + 1) / 7));
   const d = se.detail || {};
   const src = se.mode === 'calendar-manual' ? `ปฏิทินตั้งไว้สำหรับ${se.event ? ' ' + se.event : 'ช่วงนี้'}`
-    : se.mode === 'auto' && d.ly_from ? `${se.event ? se.event + ' · ' : ''}ปีก่อน ${fmtDay(d.ly_from)} – ${fmtDay(d.ly_to)} ลูกค้าเฉลี่ย ${_bmcNum(d.ly_pax_per_day, 0)} คน/วัน เทียบช่วงปกติ ${_bmcNum(d.baseline_pax_per_day, 0)} คน/วัน`
+    : se.mode === 'auto' && d.ly_from ? `${se.event ? se.event + ' · ' : ''}ปีก่อน ${fmtDay(d.ly_from)} – ${fmtDay(d.ly_to)} ลูกค้าเฉลี่ย ${_bmcNum(d.ly_pax_per_day, 0)} คน/วัน เทียบวันปกติในวันเดียวกันของสัปดาห์ ${_bmcNum(d.baseline_pax_per_day, 0)} คน/วัน`
     : (se.reason ? String(se.reason).replace(/[()]/g, '') : '');
   return `ยอดแนะนำ = ยอดขาย ${weeks} สัปดาห์ × ปฏิทิน ×${cal.toFixed(2)} × ปีก่อน ×${ly.toFixed(2)}`
     + (src ? `<span style="color:var(--text-muted)"> · ${esc(src)}</span>` : '');
@@ -2351,7 +2351,7 @@ function bmcRenderRcheck() {
   if (!_bmcRcAll) rows = rows.slice(0, 80);
   const num = v => v == null ? '<span style="color:var(--text-muted)">–</span>' : _bmcNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
   const ink = Object.fromEntries(_BMC_RC_ST.map(([k, , i]) => [k, i]));
-  const per = x => x.branches.map(b => `<span title="${esc(b.branch)}: ซื้อ ${b.bought == null ? '–' : _bmcNum(b.bought, 1)} · สูตร ${b.recipe == null ? '–' : _bmcNum(b.recipe, 1)}"
+  const per = x => x.branches.map(b => `<span title="${esc(b.branch)}: ซื้อ ${b.bought == null ? '–' : _bmcNum(b.bought, 1)} · ตามสูตร ${b.recipe == null ? '–' : _bmcNum(b.recipe, 1)}"
       style="white-space:nowrap">${esc((b.branch || '').slice(0, 4))} ${b.bought == null ? '–' : num(b.bought)}/${b.recipe == null ? '–' : num(b.recipe)}${b.adjusted ? '*' : ''}</span>`).join(' · ');
   body.innerHTML = `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วยฐาน</th><th class="pr-2 text-right">ซื้อจริง (ค่ากลาง)</th><th class="pr-2 text-right">ตามสูตร (ค่ากลาง)</th>

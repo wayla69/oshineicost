@@ -21,6 +21,8 @@ from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
 from .fmt import day_th as _fmt_day
+from .fmt import item as _item
+from .fmt import no_unit as _no_unit
 from .master import audit
 from .units import Converter
 
@@ -339,13 +341,13 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         try:
             q = float(q)
         except (TypeError, ValueError):
-            raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
-            raise ValueError(f"{code}: จำนวนต้องไม่ติดลบ")
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
         unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
         qb, how = conv.to_base(code, q, unit)
         if qb is None:
-            bad.append(f"{code}: {how}")
+            bad.append(_no_unit(con, code, unit))
         con.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, note)"
                     " VALUES(?,?,?,?,?,?) ON CONFLICT(count_id, ingredient_code) DO UPDATE SET"
                     " qty_kitchen=excluded.qty_kitchen, unit=excluded.unit, qty_base=excluded.qty_base,"
@@ -358,12 +360,12 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         if require_all:
             miss = uncounted_required(con, branch_id, cid)
             if miss:
-                raise ValueError(f"ยังไม่นับรายการบังคับ {len(miss)} รายการ (เช่น {', '.join(n for _, n in miss[:3])}) นับให้ครบก่อนส่ง")
+                raise ValueError(f"ยังมีรายการที่ต้องนับ {len(miss)} รายการ ที่ยังไม่ได้นับ (เช่น {', '.join(n for _, n in miss[:3])}) นับให้ครบก่อนส่ง")
         # every line of the draft, not only the ones sent now, must have reached the base unit
-        bad = [f"{c}: แปลง {u} ไม่ได้" for c, u in con.execute(
+        bad = [_no_unit(con, c, u) for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
         if bad:
-            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
+            raise ValueError("บันทึกไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์")
         con.execute("UPDATE bc_stock_count SET status='submitted', submitted_at=? WHERE count_id=?", (now(), cid))
         audit(con, who, "stock_submit", "bc_stock_count", str(cid), None,
               {"branch_id": branch_id, "kind": kind, "date": cdate, "lines": n})
