@@ -1,0 +1,4 @@
+# Lines that legitimately carry a word the glossary forbids elsewhere: `relative/path|text that must appear on the line`
+# PR-X: the sentence the owner chose for a branch that has no purchase data from the centre (the centre = ส่วนกลาง here, not a team)
+backend/bom_center/per_sales.py|ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้
+tabs/47-manual.html|ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้

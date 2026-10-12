@@ -3029,16 +3029,17 @@ PER_SALES_COMPARE = "เทียบสาขา"
 
 def _per_sales_headers(weeks: int) -> list:
     return ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", f"ต่อยอดขาย ฿100,000 ({weeks} สัปดาห์ล่าสุด)", f"{weeks} สัปดาห์ก่อนหน้า",
-            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "เทียบค่ากลาง %", "หมายเหตุ"]
+            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "การใช้ตามสูตรเทียบค่ากลาง %", "ยอดซื้อเทียบค่ากลาง %", "หมายเหตุ"]
 
 
 def _strip_benchmark(out: dict) -> dict:
     """A branch login never sees the other branches, and the benchmark is made of them: leave it (and every comparison with it)
     out of what a pinned session gets (PR-X)."""
-    out = dict(out, benchmark=None, chain=None)
+    out = dict(out, benchmark=None, purchase_benchmark=None, chain=None)
     bs = []
     for b in out.get("branches") or []:
-        b = dict(b, is_benchmark=None, vs_benchmark_pct=None, below_benchmark=False, below_benchmark_th=None)
+        b = dict(b, is_benchmark=None, vs_benchmark_pct=None, below_benchmark=False, below_benchmark_th=None, no_purchase_th=None,
+                 purchase_per_100k_value=None, purchase_source=None, purchase_days=None, purchase_vs_benchmark_pct=None)
         b["items"] = [dict(it, bench_per_100k=None, vs_benchmark_pct=None) for it in b["items"]]
         bs.append(b)
     out["branches"] = bs
@@ -3092,19 +3093,30 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
            + (f" เทียบ {prv['from']} ถึง {prv['to']}" if prv else "") + " · ปริมาณใช้ตามสูตรเดียวกับยอดแนะนำ (รวมส่วนสูญเสีย) "
            f"· มูลค่าตามราคาเดือน {r['month']} · แกว่งต่อสัปดาห์ = ส่วนเบี่ยงเบนมาตรฐานของอัตรารายสัปดาห์ ÷ ค่าเฉลี่ย "
            f"ถ้าเกิน {r['steady_pct']:g}% ถือว่าใช้ไม่สม่ำเสมอ"
-           + (f" · {_bm.LABEL} = ค่ากลาง (มัธยฐาน) ของ {', '.join(x['name'] for x in bench['branches'])} · “เทียบค่ากลาง %” = ส่วนต่างจากค่ากลาง"
+           + (f" · {_bm.LABEL} = ค่ากลาง (มัธยฐาน) ของ {', '.join(x['name'] for x in bench['branches'])} · “การใช้ตามสูตรเทียบค่ากลาง %” = ส่วนต่างของปริมาณใช้ตามสูตรจากค่ากลาง · “ยอดซื้อเทียบค่ากลาง %” = ส่วนต่างของมูลค่าที่ซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 จากค่ากลาง (ป้ายเตือนใช้ตัวเลขนี้)"
               f" · ช่วงยอมรับสต็อก ±{r['buffer_pct']:g}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา · แถว “ทั้งเครือ” คือผลรวมทุกสาขา" if bench else ""))
     blocks = [(b["branch"], b["items"]) for b in r["branches"]] + ([(_bm.LABEL, bench["items"])] if bench else []) \
         + ([("ทั้งเครือ", chain["items"])] if chain else [])
-    below = {b["branch"]: b for b in r["branches"] if b.get("below_benchmark")}
+    pbench = r.get("purchase_benchmark")
+    bymap = {b["branch"]: b for b in r["branches"]}
+    src_th = {"price_file": "ไฟล์ราคารายสาขา", "orders": "ใบสั่งซื้อที่ส่งจากไดกิโตะ กรุ๊ป"}
     for name, items in blocks:
-        if name in below:                                # the chip of a branch outside the benchmark
-            b = below[name]
-            ws.append([name, None, _pv.BELOW_TH, None, None, None, None, None, b["value_per_100k"], b["vs_benchmark_pct"],
-                       f"มูลค่าต่อยอดขาย ฿100,000 ต่ำกว่าค่ากลางเกิน {r['buffer_pct']:g}%"])
+        b = bymap.get(name)
+        if (bench or pbench) and (b or name == _bm.LABEL):      # one summary line per block: the value, and what it BUYS from the centre
+            if b:
+                if b.get("purchase_per_100k_value") is not None:
+                    note = (f"ยอดซื้อจากไดกิโตะ กรุ๊ป ฿{b['purchase_per_100k_value']:,.0f} ต่อยอดขาย ฿100,000 (ที่มา {src_th.get(b['purchase_source'])} · {b['purchase_days']} วันขาย)"
+                            + (f" · {_pv.BELOW_TH}: ต่ำกว่าค่ากลางเกิน {r['buffer_pct']:g}%" if b.get("below_benchmark") else ""))
+                else:
+                    note = b.get("no_purchase_th") or ""
+                ws.append([name, None, "สรุปมูลค่าต่อยอดขาย ฿100,000", None, None, None, None, None, b["value_per_100k"],
+                           b.get("vs_benchmark_pct"), b.get("purchase_vs_benchmark_pct"), note])
+            else:
+                ws.append([name, None, "สรุปมูลค่าต่อยอดขาย ฿100,000", None, None, None, None, None, bench["value_per_100k"], None, None,
+                           (f"ยอดซื้อจากไดกิโตะ กรุ๊ป ฿{pbench['per_100k_value']:,.0f} ต่อยอดขาย ฿100,000 (มัธยฐานของ {pbench['n']} สาขา)" if pbench else "")])
         for it in items:
             ws.append([name, it["code"], it["name"], it["unit"], it["per_100k"], it["prev_per_100k"], it["change_pct"],
-                       it["swing_pct"], it["value_per_100k"], it.get("vs_benchmark_pct"), _per_sales_note(it)])
+                       it["swing_pct"], it["value_per_100k"], it.get("vs_benchmark_pct"), None, _per_sales_note(it)])
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for c in row[4:6]:
             c.number_format = "#,##0.00"
@@ -3112,9 +3124,10 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
         row[7].number_format = "0.0"
         row[8].number_format = "#,##0.00"
         row[9].number_format = "0.0"
+        row[10].number_format = "0.0"
     ws.column_dimensions["A"].width = 24
     ws.column_dimensions["C"].width = 40
-    ws.column_dimensions["K"].width = 44
+    ws.column_dimensions["L"].width = 60
     ws.freeze_panes = "D3"
     w2 = wb.create_sheet()
     heads = [b["branch"] for b in r["branches"]] + ([_bm.LABEL] if bench else []) + (["ทั้งเครือ"] if chain else [])

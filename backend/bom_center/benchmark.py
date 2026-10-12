@@ -195,6 +195,70 @@ def adjusted_use(con, branch_id: int, month: str, bought: dict) -> tuple:
     return use, adjusted, per
 
 
+def purchase_per_100k(con, branch_id: int, d0, d1, sales_day: dict, price_of) -> dict:
+    """What a branch BUYS FROM THE CENTRE per ฿100,000 of sales over [d0, d1] (฿ at price_of(code, month)) - the figure that can
+    show a branch also buying elsewhere (recipe usage cannot). `sales_day` = {iso day: ฿ sales ex VAT} of the branch.
+      1. the price file's per-branch rows (bc_ingredient_price_branch) of the months the window touches, each month pro-rated by
+         (days with sales in the window ÷ days in the month); only months that have rows count, and the sales are those months' days;
+      2. else the central orders (bc_order, status processed / received, processed units in base units, delivered inside the window),
+         against the sales of the whole window.
+    -> {source: 'price_file' | 'orders', value, sales, days, per_100k_value} or None when the branch has no purchase data."""
+    a, b = str(d0)[:10], str(d1)[:10]
+    days = {d: v for d, v in sales_day.items() if a <= d <= b and v > 0}
+    if not days:
+        return None
+    by_month = {}
+    for d in days:
+        by_month.setdefault(d[:7], []).append(d)
+    value = sales = 0.0
+    ndays = 0
+    for m, ds in by_month.items():
+        rows = con.execute("SELECT ingredient_code, qty_bought FROM bc_ingredient_price_branch WHERE branch_id=? AND month=?"
+                           " AND COALESCE(qty_bought, 0) > 0", (branch_id, m)).fetchall()
+        if not rows:
+            continue
+        m0, m1 = month_days(m)
+        frac = min(1.0, len(ds) / ((m1 - m0).days + 1))
+        value += sum(q * (price_of(c, m) or 0.0) for c, q in rows) * frac
+        sales += sum(days[d] for d in ds)
+        ndays += len(ds)
+    if value > 0 and sales > 0:
+        return {"source": "price_file", "value": round(value, 2), "sales": round(sales, 2), "days": ndays,
+                "per_100k_value": round(value / sales * 1e5, 2)}
+    try:                                                    # the central orders delivered inside the window
+        from .hub import delivery_of
+        from .units import Converter
+        conv = Converter(con)
+        info = {c: (p, r) for c, p, r in con.execute("SELECT code, qty_per_recv, recv_unit FROM bc_ingredient")}
+        lo = (date.fromisoformat(a) - timedelta(days=21)).isoformat()
+        value = 0.0
+        for rnd, cyc, dd, code, unit, q in con.execute(
+                "SELECT o.round, o.cycle_date, o.delivery_date, l.ingredient_code, l.order_unit, l.processed_units FROM bc_order o"
+                " JOIN bc_order_line l USING(order_id) WHERE o.branch_id=? AND o.status IN ('processed','received')"
+                " AND o.cycle_date BETWEEN ? AND ? AND COALESCE(l.processed_units, 0) > 0", (branch_id, lo, b)):
+            dlv = delivery_of(con, branch_id, rnd, cyc, dd)
+            if not (a <= dlv <= b):
+                continue
+            per, recv = info.get(code, (None, None))
+            if unit == "base":
+                qb = float(q)
+            elif per:
+                qb = float(q) * float(per)
+            else:
+                f = conv.factor(code, recv)[0] if recv else None
+                if not f:
+                    continue
+                qb = float(q) * f
+            value += qb * (price_of(code, dlv[:7]) or 0.0)
+    except Exception:
+        return None
+    tot = sum(days.values())
+    if value > 0 and tot > 0:
+        return {"source": "orders", "value": round(value, 2), "sales": round(tot, 2), "days": len(days),
+                "per_100k_value": round(value / tot * 1e5, 2)}
+    return None
+
+
 def tolerance(klass: str, adjusted: bool, buf: float) -> float:
     """The ± band a figure is judged by: the normal variance threshold of its ABC class when the branch's counts are in,
     else the temporary buffer."""

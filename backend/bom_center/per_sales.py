@@ -36,7 +36,8 @@ REF_KEY = "bc_ref_branch"
 BENCH = "benchmark"           # PR-X: the reference of a new branch can be the median of the company branches (the default)
 BUFFER_MIN, BUFFER_MAX = -50.0, 100.0
 BELOW_TH = "ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก"
-NEED_SALES_TH = "ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้"
+NO_PURCHASE_TH = "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
+NEED_SALES_TH ="ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้"
 
 
 def _iso(d) -> str:
@@ -338,6 +339,16 @@ def _closed_end(con, today=None) -> date:
     return min(_d(last), t) if last else t
 
 
+def _purchase_signature(con) -> tuple:
+    """What the purchase figures are built from, so a new price file or a processed order drops the cached report."""
+    try:
+        a = con.execute("SELECT COUNT(*), COALESCE(SUM(qty_bought), 0) FROM bc_ingredient_price_branch").fetchone()
+        b = con.execute("SELECT COUNT(*), COALESCE(MAX(order_id), 0), COALESCE(SUM(status IN ('processed','received')), 0) FROM bc_order").fetchone()
+        return (tuple(a), tuple(b))
+    except Exception:
+        return ()
+
+
 def _pct(new, old):
     return None if not old else round((new - old) / old * 100.0, 1)
 
@@ -360,7 +371,7 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
         path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
         core = FC._loaded("core")
         key = (path, tuple(branch_ids) if branch_ids is not None else None, end.isoformat(), weeks,
-               tuple(BM.branch_ids(con)), BM.buffer_pct(con),
+               tuple(BM.branch_ids(con)), BM.buffer_pct(con), _purchase_signature(con),
                getattr(core, "_data_gen", 0), getattr(core, "_db_gen", 0)) if path and FC.USAGE_CACHE_TTL else None
     except Exception:
         key = None
@@ -391,12 +402,24 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
 
     branches, tot = [], {"cur": {"sales": 0.0, "use": defaultdict(float)}, "prv": {"sales": 0.0, "use": defaultdict(float)}}
     bench_cur, bench_prv = {}, {}                              # PR-X: the benchmark branches' ratios (even when they are not listed)
+    purchases = {}                                              # PR-X: branch -> what it buys from the centre per ฿100,000 (benchmark.purchase_per_100k)
+    mprices = {}
+
+    def price_in(code, m):
+        if (code, m) not in mprices:
+            p = price_for(con, code, m)
+            mprices[(code, m)] = p[0] if p else None
+        return mprices[(code, m)]
+
     for bid in list(ids) + [b for b in bench_ids if b not in ids and b in bnames]:
         with FC._plan_slots:
             use, _days, _st = FC.usage_history(con, bid, min(prv0, cur0), cur1, month)
         sales_day = sales_by_day(con, bid, min(prv0, cur0), cur1)
         cur = ratio_from(use, sales_day, cur0, cur1)
         prv = ratio_from(use, sales_day, prv0, prv1) if prv0 <= prv1 else {"sales": 0.0, "items": {}, "weeks": 0, "days": 0}
+        pur = BM.purchase_per_100k(con, bid, cur0, cur1, sales_day, price_in)
+        if pur:
+            purchases[bid] = pur
         if bid in bench_ids and cur["sales"] > 0:
             bench_cur[bid] = cur
             bench_prv[bid] = prv
@@ -433,6 +456,12 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
                 "swing_pct": swing, "steady": steady,
                 "value_per_100k": round(per * p, 2) if per is not None and p else None}
 
+    # PR-X: the benchmark PURCHASE = the median, over the benchmark branches that have purchase data (at least MIN_BRANCHES)
+    pur_vals = {i: purchases[i]["per_100k_value"] for i in bench_ids if i in purchases}
+    pur_median = BM.median_of(pur_vals.values())
+    purchase_benchmark = None if pur_median is None else {
+        "per_100k_value": round(pur_median, 2), "n": len(pur_vals), "branches": [{"branch_id": i, "name": bnames.get(i)} for i in pur_vals],
+        "sources": sorted({purchases[i]["source"] for i in pur_vals})}
     bench_value = None
     benchmark = None
     if bench_now:
@@ -460,10 +489,17 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
         b["value_per_100k"] = round(sum(x["value_per_100k"] or 0 for x in items), 2)
         b["is_benchmark"] = b["branch_id"] in bench_ids
         b["vs_benchmark_pct"] = BM.vs_pct(b["value_per_100k"], bench_value) if benchmark and b["sales"] > 0 else None
-        # a branch outside the benchmark that uses clearly less per ฿100,000 than the company branches: it may buy elsewhere
-        b["below_benchmark"] = bool(benchmark and not b["is_benchmark"] and b["sales"] > 0 and b["vs_benchmark_pct"] is not None
-                                    and b["vs_benchmark_pct"] < -buf)
+        # what the branch BUYS FROM THE CENTRE per ฿100,000 against the benchmark branches' (recipe usage cannot show a branch that
+        # also buys elsewhere): a branch outside the benchmark that buys clearly less may buy from outside
+        pur = purchases.get(b["branch_id"])
+        b["purchase_per_100k_value"] = pur["per_100k_value"] if pur else None
+        b["purchase_source"] = pur["source"] if pur else None
+        b["purchase_days"] = pur["days"] if pur else None
+        b["purchase_vs_benchmark_pct"] = BM.vs_pct(pur["per_100k_value"], pur_median) if pur and pur_median else None
+        b["below_benchmark"] = bool(purchase_benchmark and not b["is_benchmark"] and b["purchase_vs_benchmark_pct"] is not None
+                                    and b["purchase_vs_benchmark_pct"] < -buf)
         b["below_benchmark_th"] = BELOW_TH if b["below_benchmark"] else None
+        b["no_purchase_th"] = NO_PURCHASE_TH if (purchase_benchmark and not pur and not b["is_benchmark"]) else None
         del b["_cur"], b["_prv"]
     chain = None
     if len(ids) > 0 and tot["cur"]["sales"] > 0:
@@ -478,7 +514,7 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
     out = {"weeks": weeks, "end": end.isoformat(), "current": {"from": cur0.isoformat(), "to": cur1.isoformat()},
            "previous": {"from": prv0.isoformat(), "to": prv1.isoformat()} if prv0 <= prv1 else None,
            "steady_pct": STEADY_PCT, "month": month, "branches": branches, "chain": chain,
-           "benchmark": benchmark, "buffer_pct": buf, "buffer_note": BM.BUFFER_NOTE}
+           "benchmark": benchmark, "purchase_benchmark": purchase_benchmark, "buffer_pct": buf, "buffer_note": BM.BUFFER_NOTE}
     if key is not None:
         if len(_report_cache) >= 16:
             _report_cache.pop(min(_report_cache, key=lambda k: _report_cache[k][0]))

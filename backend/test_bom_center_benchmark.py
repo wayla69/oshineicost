@@ -187,23 +187,134 @@ def test_report_carries_the_median_the_comparison_and_the_chip(ps):
     assert b[3]["vs_benchmark_pct"] == 0.0 and b[6]["vs_benchmark_pct"] == 0.0
     # the odd company branch is far above the median and is NOT chipped (it is part of it)
     assert b[4]["vs_benchmark_pct"] > 15 and b[4]["below_benchmark"] is False
-    # franchise 5 uses 25 % less value per ฿100,000: below the benchmark by more than the buffer
-    assert b[5]["vs_benchmark_pct"] == pytest.approx(-25.0, abs=0.1) and b[5]["below_benchmark"] is True
-    assert b[5]["below_benchmark_th"] == "ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก" and b[6]["below_benchmark"] is False
+    # franchise 5's recipe USAGE is 25 % lower (it sells the crab dish at ฿200) - that is no sign of buying outside: no chip, and with
+    # no purchase data anywhere there is no purchase benchmark either
+    assert b[5]["vs_benchmark_pct"] == pytest.approx(-25.0, abs=0.1) and b[5]["below_benchmark"] is False
+    assert r["purchase_benchmark"] is None and b[5]["purchase_per_100k_value"] is None and b[5]["no_purchase_th"] is None
     c5 = {x["code"]: x for x in b[5]["items"]}[CRAB]
     assert c5["bench_per_100k"] == pytest.approx(15.0) and c5["vs_benchmark_pct"] == pytest.approx(-25.0, abs=0.1)
     # a company branch's own item is compared as well
     assert {x["code"]: x for x in b[4]["items"]}[CRAB]["vs_benchmark_pct"] == pytest.approx(200.0)
     # the all-branch total is still there, as its own line
     assert r["chain"] is not None and r["chain"]["branches"] == len(r["branches"])
-    # the chip follows the buffer: with 30 % the 25 % gap is inside it
-    BM.set_benchmark(ps, "t", None, 30)
-    assert {x["branch_id"]: x for x in PS.report(ps, 4, today=date(2026, 10, 6))["branches"]}[5]["below_benchmark"] is False
 
 
-def test_one_branch_asked_for_still_reads_the_whole_benchmark(ps):
-    r = PS.report(ps, 4, [5], today=date(2026, 10, 6))
-    assert [x["branch_id"] for x in r["branches"]] == [5] and r["benchmark"]["n"] == 3
+# ── 4b · the chip reads what a branch BUYS FROM THE CENTRE ───────────────────────────────────────
+def _window_sales(c, bid):
+    """Branch sales (฿) of the report window 8 Sep - 5 Oct and of its September days (8 - 30 Sep)."""
+    s = PS.sales_by_day(c, bid, date(2026, 9, 8), AS_OF)
+    return sum(s.values()), sum(v for d, v in s.items() if d.startswith("2026-09"))
+
+
+def _buy(c, bid, per_100k_value, month="2026-09"):
+    """The price file's September purchases of branch `bid` (crab, ฿0.15 a gram) so that, pro-rated to the 23 window days
+    of September (23 / 30), they come to `per_100k_value` ฿ per ฿100,000 of the branch's sales in those days."""
+    _all, sep = _window_sales(c, bid)
+    value_month = per_100k_value * sep / 1e5 * 30 / 23
+    c.execute("INSERT OR REPLACE INTO bc_ingredient_price_branch VALUES(?, ?, ?, 0.15, ?, ?)", (CRAB, month, bid, value_month / 0.15, value_month))
+
+
+@pytest.fixture
+def ps_buy(ps):
+    """The report fixture with September purchases: company branches 10,000 · 10,000 · 12,000 ฿ per ฿100,000 (median 10,000),
+    franchise 5 at 7,000 (-30 %), franchise 6 at 9,000 (-10 %), franchise 8 sells but has no purchase data."""
+    _branch(ps, 8, "Fr8", "franchise")
+    _sell(ps, 8, date(2026, 9, 1), AS_OF)
+    ps.commit()
+    for bid, v in ((1, 10000), (3, 10000), (4, 12000), (5, 7000), (6, 9000)):
+        _buy(ps, bid, v)
+    ps.commit()
+    return ps
+
+
+def test_a_franchise_branch_30_percent_below_the_benchmark_purchases_gets_the_chip(ps_buy):
+    r = PS.report(ps_buy, 4, today=date(2026, 10, 6))
+    pb = r["purchase_benchmark"]
+    assert pb["per_100k_value"] == pytest.approx(10000.0, rel=1e-3) and pb["n"] == 3 and pb["sources"] == ["price_file"]
+    b = {x["branch_id"]: x for x in r["branches"]}
+    assert b[5]["purchase_per_100k_value"] == pytest.approx(7000.0, rel=1e-3) and b[5]["purchase_source"] == "price_file"
+    assert b[5]["purchase_days"] == 23 and b[5]["purchase_vs_benchmark_pct"] == pytest.approx(-30.0, abs=0.1)
+    assert b[5]["below_benchmark"] is True and b[5]["below_benchmark_th"] == "ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก" and b[5]["no_purchase_th"] is None
+    # a company branch far above the median (or below it) is never chipped: it is part of the benchmark
+    assert b[4]["purchase_vs_benchmark_pct"] == pytest.approx(20.0, abs=0.1) and b[4]["below_benchmark"] is False
+
+
+def test_a_franchise_branch_within_the_buffer_gets_no_chip(ps_buy):
+    b = {x["branch_id"]: x for x in PS.report(ps_buy, 4, today=date(2026, 10, 6))["branches"]}
+    assert b[6]["purchase_vs_benchmark_pct"] == pytest.approx(-10.0, abs=0.1)                      # inside the 15 % buffer
+    assert b[6]["below_benchmark"] is False and b[6]["below_benchmark_th"] is None and b[6]["no_purchase_th"] is None
+    BM.set_benchmark(ps_buy, "t", None, 35)                                                        # the chip follows the buffer
+    assert {x["branch_id"]: x for x in PS.report(ps_buy, 4, today=date(2026, 10, 6))["branches"]}[5]["below_benchmark"] is False
+    BM.set_benchmark(ps_buy, "t", None, 5)
+    assert {x["branch_id"]: x for x in PS.report(ps_buy, 4, today=date(2026, 10, 6))["branches"]}[6]["below_benchmark"] is True
+
+
+def test_a_branch_without_purchase_data_gets_the_muted_text_and_no_chip(ps_buy):
+    r = PS.report(ps_buy, 4, today=date(2026, 10, 6))
+    b8 = {x["branch_id"]: x for x in r["branches"]}[8]
+    assert b8["purchase_per_100k_value"] is None and b8["purchase_source"] is None and b8["purchase_vs_benchmark_pct"] is None
+    assert b8["below_benchmark"] is False and b8["below_benchmark_th"] is None
+    assert b8["no_purchase_th"] == "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
+    # a benchmark branch without purchases is simply left out of the median (and shows no muted text); two are still needed
+    BM.set_benchmark(ps_buy, "t", [1, 3, 8])
+    pb = PS.report(ps_buy, 4, today=date(2026, 10, 6))["purchase_benchmark"]
+    assert pb["n"] == 2 and pb["per_100k_value"] == pytest.approx(10000.0, rel=1e-3)
+    BM.set_benchmark(ps_buy, "t", [1, 8])
+    r2 = PS.report(ps_buy, 4, today=date(2026, 10, 6))
+    assert r2["purchase_benchmark"] is None and all(x["below_benchmark"] is False and x["no_purchase_th"] is None for x in r2["branches"])
+
+
+def test_the_price_file_wins_over_the_orders(ps_buy):
+    # branch 5 also has processed central orders worth far more: the price file is the source used
+    ps_buy.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, delivery_date) VALUES(5, '2026-09-28', '1', 'received', '2026-09-30')")
+    oid = ps_buy.execute("SELECT MAX(order_id) FROM bc_order").fetchone()[0]
+    ps_buy.execute("INSERT INTO bc_order_line(order_id, ingredient_code, processed_units, order_unit) VALUES(?, ?, 500, 'pack')", (oid, CRAB))
+    ps_buy.commit()
+    b5 = {x["branch_id"]: x for x in PS.report(ps_buy, 4, today=date(2026, 10, 6))["branches"]}[5]
+    assert b5["purchase_source"] == "price_file" and b5["purchase_per_100k_value"] == pytest.approx(7000.0, rel=1e-3)
+
+
+def test_central_orders_are_the_source_when_there_is_no_price_file(ps_buy):
+    ps_buy.execute("DELETE FROM bc_ingredient_price_branch WHERE branch_id=6")
+    mk = lambda cyc, st, dlv, units: (                                                                  # noqa: E731
+        ps_buy.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, delivery_date) VALUES(6, ?, '1', ?, ?)", (cyc, st, dlv)),
+        ps_buy.execute("INSERT INTO bc_order_line(order_id, ingredient_code, processed_units, order_unit)"
+                       " VALUES((SELECT MAX(order_id) FROM bc_order), ?, ?, 'pack')", (CRAB, units)))
+    mk("2026-09-28", "received", "2026-09-30", 20)           # delivered inside the window: 20 packs of 1 kg x ฿0.15 a gram = ฿3,000
+    mk("2026-09-14", "processed", "2026-09-16", 10)          # and another: ฿1,500
+    mk("2026-09-21", "submitted", "2026-09-23", 999)         # not processed yet: not a purchase
+    mk("2026-07-20", "received", "2026-07-22", 999)          # delivered before the window
+    ps_buy.commit()
+    r = PS.report(ps_buy, 4, today=date(2026, 10, 6))
+    b6 = {x["branch_id"]: x for x in r["branches"]}[6]
+    sales, _sep = _window_sales(ps_buy, 6)
+    assert b6["purchase_source"] == "orders" and b6["purchase_days"] == 28
+    assert b6["purchase_per_100k_value"] == pytest.approx(4500.0 / sales * 1e5, rel=1e-3)
+    assert b6["purchase_vs_benchmark_pct"] < -15 and b6["below_benchmark"] is True                  # 4,500 / 84,000 x 100,000 = 5,357 < 10,000 - 15 %
+    assert r["purchase_benchmark"]["sources"] == ["price_file"]                                     # the benchmark branches are all from the price file
+
+
+def test_purchases_are_pro_rated_across_two_months(ps):
+    price_of = lambda c, m: 1.0                                                                        # noqa: E731
+    sales_day = PS.sales_by_day(ps, 5, date(2026, 9, 8), AS_OF)                                        # 28 days x ฿4,000
+    ps.execute("INSERT INTO bc_ingredient_price_branch VALUES(?, '2026-09', 5, 1, 30000, 30000)", (CRAB,))
+    ps.execute("INSERT INTO bc_ingredient_price_branch VALUES(?, '2026-10', 5, 1, 31000, 31000)", (CRAB,))
+    p = BM.purchase_per_100k(ps, 5, date(2026, 9, 8), AS_OF, sales_day, price_of)
+    # 8-30 Sep is 23 of 30 days, 1-5 Oct is 5 of 31: 30,000 x 23/30 + 31,000 x 5/31 = 23,000 + 5,000
+    assert p["source"] == "price_file" and p["days"] == 28 and p["value"] == pytest.approx(28000.0)
+    assert p["sales"] == pytest.approx(112000.0) and p["per_100k_value"] == pytest.approx(25000.0)
+    # only the months that HAVE rows count, and the sales are those months' days
+    ps.execute("DELETE FROM bc_ingredient_price_branch WHERE month='2026-09'")
+    q = BM.purchase_per_100k(ps, 5, date(2026, 9, 8), AS_OF, sales_day, price_of)
+    assert q["days"] == 5 and q["value"] == pytest.approx(5000.0) and q["sales"] == pytest.approx(20000.0) and q["per_100k_value"] == pytest.approx(25000.0)
+    assert BM.purchase_per_100k(ps, 5, date(2026, 9, 8), AS_OF, {}, price_of) is None                # no sales, no figure
+    ps.execute("DELETE FROM bc_ingredient_price_branch")
+    assert BM.purchase_per_100k(ps, 5, date(2026, 9, 8), AS_OF, sales_day, price_of) is None         # neither a price file nor orders
+
+
+def test_one_branch_asked_for_still_reads_the_whole_benchmark(ps_buy):
+    r = PS.report(ps_buy, 4, [5], today=date(2026, 10, 6))
+    assert [x["branch_id"] for x in r["branches"]] == [5] and r["benchmark"]["n"] == 3 and r["purchase_benchmark"]["n"] == 3
     assert r["branches"][0]["below_benchmark"] is True and r["chain"]["branches"] == 1
 
 
@@ -522,7 +633,13 @@ def test_http_roles_pages_workbook_and_pinning(client, app_db, auth_on, monkeypa
         j = mg.get("/api/bom-center/per-sales?weeks=2").json()
         assert j["benchmark"]["n"] == 3 and {x["code"]: x for x in j["benchmark"]["items"]}["T-BM1"]["per_100k"] == pytest.approx(500.0)
         assert {b["branch"]: b for b in j["branches"]}["BranchB"]["is_benchmark"] is False
+        pb = j["purchase_benchmark"]                                                                  # what the company branches bought from the centre
+        assert pb["n"] == 3 and pb["sources"] == ["price_file"] and pb["per_100k_value"] == pytest.approx(1000.0, rel=1e-2)   # 500 g x ฿2 per ฿100,000
+        assert {b["branch"]: b for b in j["branches"]}["BranchA"]["purchase_vs_benchmark_pct"] == pytest.approx(0.0, abs=1.0)
+        assert {b["branch"]: b for b in j["branches"]}["BranchB"]["no_purchase_th"] == "ยังไม่มียอดซื้อจากส่วนกลางในช่วงนี้"
         mine_ps = br.get("/api/bom-center/per-sales?weeks=2").json()
+        assert mine_ps["purchase_benchmark"] is None and mine_ps["branches"][0]["purchase_per_100k_value"] is None
+        assert mine_ps["branches"][0]["no_purchase_th"] is None and mine_ps["branches"][0]["below_benchmark"] is False
         assert mine_ps["benchmark"] is None and mine_ps["chain"] is None and [b["branch"] for b in mine_ps["branches"]] == ["BranchA"]
         assert mine_ps["branches"][0]["vs_benchmark_pct"] is None and mine_ps["branches"][0]["is_benchmark"] is None
         assert all(i["vs_benchmark_pct"] is None and i["bench_per_100k"] is None for i in mine_ps["branches"][0]["items"])
