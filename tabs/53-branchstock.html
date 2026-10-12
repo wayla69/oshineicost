@@ -129,6 +129,7 @@
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:100%;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>จำนวน<br><input id="brnRecvQty" inputmode="decimal" onkeydown="if(event.key==='Enter'){event.preventDefault();brnRecvAdd()}" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
         <span id="brnRecvUnit" style="padding-bottom:8px;color:var(--text-secondary)"></span>
+        <label id="brnRecvPcsW" style="display:none">จำนวน<span id="brnRecvPcsU"></span> (ถ้านับ)<br><input id="brnRecvPcs" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();brnRecvAdd()}" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="brnRecvAdd()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">+ เพิ่ม</button>
       </div>
       <datalist id="brnItemList"></datalist>

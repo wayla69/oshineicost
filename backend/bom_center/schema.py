@@ -260,6 +260,14 @@ MIGRATIONS = (
     ("bc_prep_line", "no_loss", "INTEGER DEFAULT 0"),   # 1 = the yield already counts only usable pieces: no trim loss on top
     ("bc_rel_prep_recipe", "mode", "TEXT"),
     ("bc_rel_prep_line", "no_loss", "INTEGER DEFAULT 0"),
+    # PR-U2 — the number of whole pieces the branch counted when it received goods sold by weight (a salmon), so the real
+    # average weight per piece can be learned from receipts …
+    ("bc_order_line", "received_pieces", "REAL"),
+    ("bc_receipt_line", "pieces", "REAL"),
+    ("bc_receipt_line", "pieces_unit", "TEXT"),
+    # … and a released month stays frozen when an average changes later: the factor (base units in ONE unit of the line) a
+    # released sub-recipe line was costed with is kept with the release (L6)
+    ("bc_rel_prep_line", "factor_base", "REAL"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -299,6 +307,25 @@ EXTRA_DDL = (
          release_id INTEGER NOT NULL, prepared_code TEXT NOT NULL, seq INTEGER NOT NULL,
          ingredient_code TEXT NOT NULL, qty REAL NOT NULL, unit TEXT, note TEXT,
          PRIMARY KEY (release_id, prepared_code, seq))""",
+    # PR-U2 — the analyst's decision on an average weight per piece learned from real receipts (applied | kept);
+    # last_receipt_id = the newest receipt the decision looked at: a new proposal needs a newer one
+    """CREATE TABLE IF NOT EXISTS bc_unit_avg_decision(
+         decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         ingredient_code TEXT NOT NULL, unit TEXT NOT NULL,
+         current_avg REAL, observed_avg REAL, n_receipts INTEGER, n_pieces REAL,
+         window_from TEXT, window_to TEXT,
+         decision TEXT NOT NULL CHECK(decision IN ('applied','kept')),
+         note TEXT, decided_by TEXT, decided_at TEXT, last_receipt_id INTEGER)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_unit_avg_decision ON bc_unit_avg_decision(ingredient_code, unit)",
+    # PR-U2 — a branch reports that a pack is not the size the register says; the analyst applies or rejects it
+    """CREATE TABLE IF NOT EXISTS bc_pack_report(
+         report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         branch_id INTEGER NOT NULL, order_id INTEGER, ingredient_code TEXT NOT NULL, unit TEXT NOT NULL,
+         reported_qty REAL NOT NULL, reported_parent TEXT,
+         current_qty REAL, current_parent TEXT, note TEXT,
+         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied','rejected')),
+         created_by TEXT, created_at TEXT, decided_by TEXT, decided_at TEXT, decision_note TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_pack_report ON bc_pack_report(status, ingredient_code)",
 )
 
 OWNED_TABLES = (
@@ -319,6 +346,8 @@ OWNED_TABLES = (
     "bc_claim", "bc_claim_line", "bc_claim_photo",   # เคลมสินค้า: branch claim + photos, decided by Sales Support (claims.py)
     "bc_price_submission",        # the monthly price file Sales Support sends to the analyst (price_submissions.py)
     "bc_issue_slip", "bc_issue_line", "bc_issue_log",   # ใบตัดเบิก: the branch's daily issue slip + its log (issues.py)
+    "bc_unit_avg_decision",       # PR-U2: the analyst's answer to "use the average weight learned from receipts?" (units.py)
+    "bc_pack_report",             # PR-U2: a branch reports a pack that is not the registered size (pack_reports.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES

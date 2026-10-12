@@ -297,6 +297,27 @@ class Converter:
                 return r["unit"], r["factor_to_base"]
         return None
 
+    def weight_avg_step(self, code: str):
+        """The item's lowest AVERAGE step that is stated in the item's own weight / volume (PR-U2) — 'ตัว ≈ 4.5 กิโลกรัม':
+        its parent is the base unit or a metric unit of it. Goods received by weight whose pieces differ in weight have one;
+        the branch counts the pieces at receiving and the real average is learned from them.
+        -> {unit, parent (name), parent_factor (base units in 1 parent), qty (average, in parent), rmin, rmax, factor_to_base,
+        level} or None."""
+        base = self.base_unit(code)
+        best = None
+        for r in self.ladder(code):
+            if r["kind"] != KIND_AVG or r["factor_to_base"] is None:
+                continue
+            row = (self.ladders.get(code) or {}).get(r["unit"]) or {}
+            parent = row.get("parent")
+            if parent and parent != base and (parent, base) not in _METRIC:
+                continue                                  # stated against another ladder unit: not a weight per piece
+            pf = 1.0 if (not parent or parent == base) else _METRIC[(parent, base)]
+            best = {"unit": r["unit"], "parent": parent or base, "parent_factor": pf, "qty": r["qty_in_parent"],
+                    "rmin": r["range_min"], "rmax": r["range_max"], "factor_to_base": r["factor_to_base"], "level": r["level"]}
+            break                                         # ladder() is ordered lowest level first
+        return best
+
     def span(self, code: str, unit):
         """(lightest, heaviest) base units in ONE `unit` when the conversion passes an average step that carries a range
         (1 ตัว of 4–5 กก. -> (4000, 5000)); None when the unit is exact or the average has no range."""
@@ -383,3 +404,152 @@ def to_order_units(qty_base: float, qty_per_order: float, moq: float = 1.0, step
     step = step if step and step > 0 else 1.0
     units = math.ceil(qty_base / qty_per_order / step - 1e-9) * step
     return max(units, moq or 0.0)
+
+
+# ── the average weight per piece, learned from real receipts (PR-U2) ─────────────────────────────────────────
+AVG_MIN_RECEIPTS, AVG_MIN_PIECES, AVG_MIN_DIFF_PCT = 3, 10, 3.0     # L5: when the observed average becomes a proposal
+AVG_WINDOW_DAYS = 90
+
+
+def _window(days: int, today=None) -> tuple:
+    from datetime import timedelta
+    from .clock import today as bkk_today
+    end = today or bkk_today()
+    return (end - timedelta(days=max(int(days), 1))).isoformat(), end.isoformat()
+
+
+def observed_avg(con, code: str, unit: str = None, days: int = AVG_WINDOW_DAYS, today=None, conv: "Converter" = None) -> dict:
+    """The real average weight of ONE piece of an item, from the receipts of every branch in the last `days` days (L4):
+    Σ received weight ÷ Σ pieces counted, in the parent unit of the average step (กิโลกรัม for a salmon).
+
+    -> {code, unit, parent, observed, n_receipts, n_pieces, min_receipt_avg, max_receipt_avg, current, range, diff_pct, since,
+        until, newest_receipt_id}; `observed` is None when no receipt of the window carries a piece count.
+    Only receipt lines that carry a piece count in the step's unit are read; a branch that did not count adds nothing."""
+    conv = conv or Converter(con)
+    step = conv.weight_avg_step(code)
+    out = {"code": code, "unit": unit or (step or {}).get("unit"), "parent": (step or {}).get("parent"), "observed": None,
+           "n_receipts": 0, "n_pieces": 0.0, "min_receipt_avg": None, "max_receipt_avg": None,
+           "current": (step or {}).get("qty"), "range": [step["rmin"], step["rmax"]] if step and step["rmin"] is not None else None,
+           "diff_pct": None, "newest_receipt_id": None}
+    out["since"], out["until"] = _window(days, today)
+    if step is None or (unit and norm(unit) != step["unit"]):
+        return out
+    pf = step["parent_factor"]
+    per, tot_b, tot_p, newest = [], 0.0, 0.0, 0
+    for rid, qb, pcs in con.execute(
+            "SELECT l.receipt_id, l.qty_base, l.pieces FROM bc_receipt_line l JOIN bc_receipt r USING(receipt_id)"
+            " WHERE l.ingredient_code=? AND l.pieces>0 AND l.qty_base>0 AND l.pieces_unit=?"
+            " AND r.receipt_date>=? AND r.receipt_date<=?", (code, step["unit"], out["since"], out["until"])):
+        per.append(qb / pcs / pf)
+        tot_b, tot_p, newest = tot_b + qb, tot_p + pcs, max(newest, rid)
+    if per:
+        out.update(observed=tot_b / tot_p / pf, n_receipts=len(per), n_pieces=tot_p, min_receipt_avg=min(per),
+                   max_receipt_avg=max(per), newest_receipt_id=newest)
+        if step["qty"]:
+            out["diff_pct"] = (out["observed"] - step["qty"]) / step["qty"] * 100.0
+    return out
+
+
+def _last_decision(con, code: str, unit: str):
+    r = con.execute("SELECT decision, note, decided_by, decided_at, last_receipt_id FROM bc_unit_avg_decision"
+                    " WHERE ingredient_code=? AND unit=? ORDER BY decision_id DESC LIMIT 1", (code, unit)).fetchone()
+    return dict(zip(("decision", "note", "decided_by", "decided_at", "last_receipt_id"), r)) if r else None
+
+
+def _judge(obs: dict, last: dict) -> dict:
+    """Does the observed average become a proposal (L5)? -> {enough, newer, proposal, state}."""
+    enough = obs["n_receipts"] >= AVG_MIN_RECEIPTS and obs["n_pieces"] >= AVG_MIN_PIECES
+    newer = last is None or (obs["newest_receipt_id"] or 0) > (last.get("last_receipt_id") or 0)
+    big = obs["diff_pct"] is not None and abs(obs["diff_pct"]) >= AVG_MIN_DIFF_PCT
+    proposal = bool(enough and big and newer)
+    state = "proposal" if proposal else ("insufficient" if not enough else ("decided" if big and not newer else "steady"))
+    return {"enough": enough, "newer": newer, "proposal": proposal, "state": state}
+
+
+def avg_proposals(con, days: int = AVG_WINDOW_DAYS, today=None) -> list:
+    """Every item with an average weight step, with what the receipts of the last `days` days say (observed_avg) and whether it
+    is a proposal for the analyst (L5: ≥ 3 receipts, ≥ 10 pieces, a difference of ≥ 3 %, and a receipt newer than the last decision).
+    Proposals first (largest difference first), then the rest by name."""
+    conv = Converter(con)
+    names = {c: (n, a) for c, n, a in con.execute("SELECT code, name_th, COALESCE(active, 1) FROM bc_ingredient")}
+    out = []
+    for code in sorted(conv.ladders):
+        if code not in names or not names[code][1]:
+            continue
+        step = conv.weight_avg_step(code)
+        if step is None:
+            continue
+        obs = observed_avg(con, code, step["unit"], days, today, conv)
+        last = _last_decision(con, code, step["unit"])
+        j = _judge(obs, last)
+        out.append({**obs, **j, "name": names[code][0], "parent_factor": step["parent_factor"], "last_decision": last,
+                    "need_text": f"ข้อมูลยังไม่พอ (ต้องรับอย่างน้อย {AVG_MIN_RECEIPTS} ครั้ง และ {AVG_MIN_PIECES} {step['unit']})"})
+    out.sort(key=lambda r: (not r["proposal"], -abs(r["diff_pct"] or 0.0) if r["proposal"] else 0.0, r["name"] or ""))
+    return out
+
+
+def avg_history(con, limit: int = 30) -> list:
+    names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
+    cols = ("decision_id", "ingredient_code", "unit", "current_avg", "observed_avg", "n_receipts", "n_pieces", "window_from",
+            "window_to", "decision", "note", "decided_by", "decided_at")
+    out = [dict(zip(cols, r)) for r in con.execute(
+        f"SELECT {', '.join(cols)} FROM bc_unit_avg_decision ORDER BY decision_id DESC LIMIT ?", (limit,))]
+    for r in out:
+        r["name"] = names.get(r["ingredient_code"])
+    return out
+
+
+def decide_avg(con, code: str, unit: str, decision: str, who: str, note: str = None, days: int = AVG_WINDOW_DAYS,
+               today=None) -> dict:
+    """The analyst's answer to a proposal (L5). 'applied' makes the observed average (rounded to 2 decimals, in the parent
+    unit) the average of the step — through master.set_ladder, so every reader follows — and widens the range when the new
+    value falls outside it; 'kept' leaves the ladder as it is and needs a note. Both are recorded. Caller commits."""
+    from .master import audit, set_ladder, _ladder_rows
+    if decision not in ("applied", "kept"):
+        raise ValueError("ตัดสินใจไม่ถูกต้อง · ใช้ค่านี้ หรือ คงค่าเดิม")
+    code, u = (code or "").strip(), norm(unit)
+    note = (note or "").strip() or None
+    if decision == "kept" and not note:
+        raise ValueError("คงค่าเดิมต้องระบุเหตุผล")
+    conv = Converter(con)
+    step = conv.weight_avg_step(code)
+    if step is None or step["unit"] != u:
+        raise ValueError(f"{code}: ไม่มีหน่วยเฉลี่ย “{unit}” ที่เรียนรู้จากการรับสินค้าได้")
+    obs = observed_avg(con, code, u, days, today, conv)
+    j = _judge(obs, _last_decision(con, code, u))
+    if not j["enough"]:
+        raise ValueError(f"ข้อมูลยังไม่พอ (ต้องรับอย่างน้อย {AVG_MIN_RECEIPTS} ครั้ง และ {AVG_MIN_PIECES} {u})")
+    if not j["proposal"]:
+        raise ValueError("ไม่มีข้อเสนอให้ตัดสินใจ · ค่าที่ใช้ใกล้เคียงกับที่รับจริง หรือตัดสินใจไปแล้วและยังไม่มีการรับใหม่")
+    new, widened, rng = None, False, None
+    if decision == "applied":
+        new = round(float(obs["observed"]), 2)
+        if new <= 0:
+            raise ValueError("ค่าเฉลี่ยที่รับจริงต้องมากกว่า 0")
+        rows = _ladder_rows(con, code)
+        for r in rows:
+            if norm(r["unit"]) != u:
+                continue
+            r["qty_in_parent"] = new
+            lo, hi = r.get("range_min"), r.get("range_max")
+            if lo is not None and hi is not None:
+                nlo, nhi = min(lo, new), max(hi, new)
+                widened = (nlo, nhi) != (lo, hi)
+                r["range_min"], r["range_max"] = nlo, nhi
+                rng = [nlo, nhi]
+        set_ladder(con, code, rows, who)
+        audit(con, who, "unit_avg_update", "bc_unit_rule", f"{code}|{u}", obs["current"],
+              {"new": new, "observed": obs["observed"], "n_receipts": obs["n_receipts"], "n_pieces": obs["n_pieces"],
+               "range": rng, "widened": widened})
+    else:
+        audit(con, who, "unit_avg_kept", "bc_unit_rule", f"{code}|{u}", obs["current"], {"observed": obs["observed"], "note": note})
+    from datetime import datetime, timezone
+    con.execute("INSERT INTO bc_unit_avg_decision(ingredient_code, unit, current_avg, observed_avg, n_receipts, n_pieces,"
+                " window_from, window_to, decision, note, decided_by, decided_at, last_receipt_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (code, u, obs["current"], obs["observed"], obs["n_receipts"], obs["n_pieces"], obs["since"], obs["until"],
+                 decision, note, who, datetime.now(timezone.utc).isoformat(timespec="seconds"), obs["newest_receipt_id"]))
+    msg = (f"✓ ใช้ค่าเฉลี่ยใหม่ 1 {u} = {fmt_num(new)} {step['parent']}"
+           + (f" และขยายช่วงเป็น {fmt_num(rng[0])}–{fmt_num(rng[1])} {step['parent']}" if widened else "")) \
+        if decision == "applied" else "✓ คงค่าเดิมแล้ว"
+    return {"decision": decision, "code": code, "unit": u, "current": obs["current"], "observed": obs["observed"], "new": new,
+            "widened": widened, "range": rng, "message": msg}

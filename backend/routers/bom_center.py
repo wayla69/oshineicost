@@ -509,6 +509,96 @@ def bc_units_ladder_save(body: LadderBody, request: Request):
     return {"ok": True, **out}
 
 
+# ── PR-U2: the average weight per piece learned from receipts, and "ขนาดบรรจุไม่ตรง" from the branch ──────────────
+@router.get("/api/bom-center/units/avg-proposals")
+def bc_units_avg_proposals(days: int = Query(90)):
+    """Every item with an average weight step: the step, what the receipts of the last `days` days say, and whether it is a
+    proposal for the analyst (≥ 3 receipts, ≥ 10 pieces, a difference of ≥ 3 %, a receipt newer than the last decision)."""
+    from bom_center import units as _u
+    days = max(7, min(int(days), 365))
+    with get_db() as con:
+        _ensure(con)
+        rows = _u.avg_proposals(con, days)
+        hist = _u.avg_history(con)
+    return {"days": days, "rows": rows, "proposals": sum(1 for r in rows if r["proposal"]), "history": hist,
+            "need": {"receipts": _u.AVG_MIN_RECEIPTS, "pieces": _u.AVG_MIN_PIECES, "diff_pct": _u.AVG_MIN_DIFF_PCT}}
+
+
+class AvgDecisionBody(BaseModel):
+    code: str
+    unit: str
+    decision: str                                  # applied | kept
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/units/avg-decision", dependencies=[Depends(require_write_token)])
+def bc_units_avg_decision(body: AvgDecisionBody, request: Request):
+    """The analyst's answer to a proposal: use the average the receipts show (the ladder changes through set_ladder), or keep
+    the current one with a reason. Released months stay frozen (prep.freeze keeps the factor of a released line)."""
+    from bom_center import units as _u
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _u.decide_avg(con, body.code, body.unit, body.decision, _who(request), note=body.note))
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out}
+
+
+class PackReportBody(BaseModel):
+    order_id: int
+    code: str
+    unit: str
+    qty: float
+    parent: str
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/units/pack-report", dependencies=[Depends(require_write_token)])
+def bc_units_pack_report(body: PackReportBody, request: Request, branch_id: Optional[int] = Query(None)):
+    """A branch reports, from its receive form, that a pack is not the registered size. Pinned to the branch's own order; it
+    does not block or change the receipt and changes no register data (the analyst decides)."""
+    from bom_center import pack_reports as _pk
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            return _write(con, lambda: _pk.submit(con, bid, body.order_id, body.code, body.unit, body.qty, body.parent,
+                                                   body.note, _who(request)))
+        except PermissionError as e:
+            raise HTTPException(403, detail=str(e), headers={"X-Denied": "role"})
+
+
+@router.get("/api/bom-center/units/pack-reports")
+def bc_units_pack_reports(status: str = Query("pending")):
+    from bom_center import pack_reports as _pk
+    if status not in ("pending", "applied", "rejected", "all"):
+        raise HTTPException(400, "สถานะไม่ถูกต้อง")
+    with get_db() as con:
+        _ensure(con)
+        return {"status": status, "groups": _pk.listing(con, status), "pending": _pk.pending_count(con)}
+
+
+class PackDecideBody(BaseModel):
+    report_ids: List[int]
+    decision: str                                  # applied | rejected
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/units/pack-report/decide", dependencies=[Depends(require_write_token)])
+def bc_units_pack_report_decide(body: PackDecideBody, request: Request):
+    """The analyst's answer to one group of reports: apply the size (the ladder changes through set_ladder) or reject it
+    with a reason the branch reads on its receive history."""
+    from bom_center import pack_reports as _pk
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _pk.decide(con, body.report_ids, body.decision, body.note, _who(request)))
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out}
+
+
 @router.get("/api/bom-center/units/template.xlsx")
 def bc_units_template(all: int = Query(0)):
     """The unit ladders (and the portion recipes) as an Excel file; `all=1` adds an empty row for every item that has none."""
@@ -2194,6 +2284,7 @@ class ReceiptLine(BaseModel):
     code: str
     qty: float
     unit: Optional[str] = None
+    pieces: Optional[float] = None       # PR-U2: whole pieces counted, optional, for an item sold by weight (a salmon)
 
 
 class ReceiptBody(BaseModel):
@@ -2815,7 +2906,7 @@ def bc_order_detail(order_id: int, request: Request):
     with get_db() as con:
         _ensure(con)
         try:
-            o = _or.detail(con, order_id)
+            o = _or.detail(con, order_id, receive=True)
         except ValueError as e:
             raise HTTPException(404, str(e))
         _stock_branch(con, request, o["branch_id"])
@@ -2845,6 +2936,7 @@ def bc_order_cancel(order_id: int, request: Request, branch_id: Optional[int] = 
 class ReceiveLine(BaseModel):
     code: str
     received_units: float
+    pieces: Optional[float] = None      # PR-U2: whole pieces counted, required when the item is sold by weight and the quantity is > 0
     reason: Optional[str] = None        # why the received quantity is below what the warehouse sent
     note: Optional[str] = None
 

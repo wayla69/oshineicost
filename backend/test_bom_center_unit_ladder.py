@@ -420,8 +420,19 @@ def test_saving_a_portion_recipe_through_the_generic_editor_or_the_flat_file_kee
     wb.active.append(row)
     buf = io.BytesIO()
     wb.save(buf)
-    assert P.import_flat(con, buf.getvalue(), "k", dry_run=False)["saved"] == 1
+    # PR-U2: a file never replaces an existing portion recipe (it is skipped with a note); a NEW portion code in a file still
+    # arrives as a portion recipe
+    res = P.import_flat(con, buf.getvalue(), "k", dry_run=False)
+    assert res["saved"] == 0 and res["skipped"] == [{"code": "CK-801", "name": None, "note": P.PORTION_SKIP_NOTE}]
     assert P.book(con)["CK-801"]["mode"] == "portion" and P.book(con)["CK-801"]["lines"][0]["no_loss"] == 1
+    con.execute("INSERT INTO bc_ingredient(code, name_th, kind, base_unit) VALUES('CK-804','x','prepared','ชิ้น')")
+    wb2 = openpyxl.Workbook()
+    wb2.active.append(list(P.FLAT_COLS))
+    wb2.active.append(["CK-804"] + list(row[1:]))
+    buf2 = io.BytesIO()
+    wb2.save(buf2)
+    assert P.import_flat(con, buf2.getvalue(), "k", dry_run=False)["saved"] == 1
+    assert P.book(con)["CK-804"]["mode"] == "portion" and P.book(con)["CK-804"]["lines"][0]["no_loss"] == 1
     # a plain batch save (the BoM_Semi import) turns it back into a batch recipe
     P.save(con, "CK-801", 225, "ชิ้น", [{"ingredient_code": SALMON, "qty": 1, "unit": "ตัว"}], "k")
     assert P.book(con)["CK-801"]["mode"] == "batch" and P.book(con)["CK-801"]["lines"][0]["no_loss"] == 0
