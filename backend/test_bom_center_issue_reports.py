@@ -281,11 +281,12 @@ def test_reconcile_numbers_status_reason_and_totals(con):  # noqa: F811
     assert crab["class"] == "C" and crab["status"] == "under"       # the only item issued: its share is 100 %, class C (±20 %) and crab["status_th"] == "นับได้น้อยกว่าระบบ"
     assert crab["diff_value"] == pytest.approx(-0.3) and crab["price_per_base"] == pytest.approx(0.15)
     assert crab["movement"] == 8 and crab["movement_gap"] == 2                                          # the counts say 8 left; slips say 6
-    assert crab["needs_reason"] is True and "reason" not in crab
+    # batch 4b (3.3): 27 selling days of the period have no confirmed slip - the system stock cannot be judged, so the line is labelled, not asked
+    assert crab["data_incomplete"] is True and crab["incomplete_why"] == "slips" and crab["needs_reason"] is False and "reason" not in crab
     assert (veg["status"], veg["status_th"], veg["count"], veg["system"], veg["diff"]) == ("not_counted", "ตรวจนับไม่ครบ", None, 100, None)
     assert veg["needs_reason"] is False
     t = r["totals"]
-    assert (t["lines"], t["flagged"], t["needs_reason"], t["not_counted"], t["unpriced"]) == (2, 1, 1, 1, 0)
+    assert (t["lines"], t["flagged"], t["needs_reason"], t["not_counted"], t["unpriced"]) == (2, 1, 0, 1, 0)
     assert t["system_value"] == pytest.approx(1.2) and t["count_value"] == pytest.approx(0.9)
     assert t["diff_value"] == pytest.approx(-0.3) and t["under_value"] == pytest.approx(-0.3) and t["over_value"] == 0
     sl = r["slips"]
@@ -319,7 +320,8 @@ def test_reconcile_within_the_class_threshold_is_ok_and_a_surplus_is_over(con): 
     assert rows[CRAB]["class"] == "B" and rows[VEG]["class"] == "C"                                  # by the baht issued: 6.00 vs 0.40
     assert (rows[CRAB]["system"], rows[CRAB]["diff"], rows[CRAB]["diff_pct"], rows[CRAB]["status"]) == (60, -3, -5.0, "ok")   # inside B's ±10 %
     assert (rows[VEG]["system"], rows[VEG]["diff"], rows[VEG]["diff_pct"], rows[VEG]["status"]) == (90, 30, 33.3, "over")
-    assert rows[VEG]["status_th"] == "นับได้มากกว่าระบบ" and rows[VEG]["needs_reason"] is True and rows[CRAB]["needs_reason"] is False
+    assert rows[VEG]["status_th"] == "นับได้มากกว่าระบบ" and rows[CRAB]["needs_reason"] is False
+    assert rows[VEG]["data_incomplete"] is True and rows[VEG]["needs_reason"] is False      # batch 4b (3.3): one slip in a month of selling days
 
 
 # ── 4 · who may read ─────────────────────────────────────────────────────────
@@ -384,7 +386,7 @@ def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_
         assert r.status_code == 200 and "bom_center_issue_reconcile_b1_2026-09.xlsx" in r.headers["content-disposition"]
         ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
         rows = list(ws.iter_rows(values_only=True))
-        assert ws.title == "กระทบยอด" and list(rows[1]) == RECON_HEADERS and len(RECON_HEADERS) == 18
+        assert ws.title == "กระทบยอด" and list(rows[1]) == RECON_HEADERS and len(RECON_HEADERS) == 19
         assert rows[0][0].startswith("รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขาBranchA งวด 2026-09-01 ถึง 2026-10-01 (เดือน 2026-09)")
         assert "ใบตัดเบิกยืนยันแล้ว 1/2 วัน" in rows[0][0]
         row = next(x for x in rows[2:] if x[0] == "T-ISS1")

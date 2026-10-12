@@ -280,6 +280,11 @@ MIGRATIONS = (
     ("bc_ingredient_alias", "created_at", "TEXT"),
     # PR-B2 (4.1) — a short display name for the branch screens (the register name is the supplier's spec and runs to 2-3 lines)
     ("bc_ingredient", "short_name", "TEXT"),
+    # batch 4b (3.4) - a PARTIAL end count (stock.partial_close) is an ordinary 'end' count whose lines say where each figure came
+    # from: basis 'system' = the system stock carried to the date (not counted), 'cycle' = the latest weekly count carried to it,
+    # NULL = counted that day. partial = 1 on the count header. Both only added, so no existing row or CHECK is touched.
+    ("bc_stock_count", "partial", "INTEGER"),
+    ("bc_stock_count_line", "basis", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -348,6 +353,28 @@ EXTRA_DDL = (
     "CREATE INDEX IF NOT EXISTS ix_bc_pack_report ON bc_pack_report(status, ingredient_code)",
     # PR-Y — Sales Support reports that an item has a new code in another system; the analyst applies it (it becomes an alias)
     # or rejects it with a reason (aliases.py)
+    # batch 4b (3.4) - the weekly count of a branch's class-A items. A separate pair of tables, not a new kind in bc_stock_count: that
+    # table's CHECK(kind IN ('begin','end','spot')) cannot be widened in place in SQLite, and rebuilding the table that every period,
+    # reason and posted-period key points at would put the counts at risk. Month-end readers (periods, variance, reconcile, the
+    # accounting summary) read only bc_stock_count, so a cycle count never changes a period by itself.
+    """CREATE TABLE IF NOT EXISTS bc_cycle_count(
+         cycle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         branch_id INTEGER NOT NULL, count_date TEXT NOT NULL,
+         status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','submitted')),
+         counted_by TEXT, note TEXT, created_at TEXT, updated_at TEXT, submitted_at TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_cycle_count ON bc_cycle_count(branch_id, count_date)",
+    """CREATE TABLE IF NOT EXISTS bc_cycle_count_line(
+         cycle_id INTEGER NOT NULL REFERENCES bc_cycle_count(cycle_id),
+         ingredient_code TEXT NOT NULL,
+         qty_kitchen REAL, unit TEXT, qty_base REAL, note TEXT,
+         PRIMARY KEY (cycle_id, ingredient_code))""",
+    # batch 4b (2.6) - "I have read this task": an append-only record. A feedback task (feedback.py) is open while its rule still holds
+    # and nobody acknowledged it for that month; it closes by an acknowledgement or when the rule stops holding. Rows are never changed.
+    """CREATE TABLE IF NOT EXISTS bc_feedback_ack(
+         ack_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         rule TEXT NOT NULL, subject TEXT NOT NULL, month TEXT NOT NULL,
+         acked_by TEXT, acked_at TEXT NOT NULL, note TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_feedback_ack ON bc_feedback_ack(rule, subject, month)",
     """CREATE TABLE IF NOT EXISTS bc_code_request(
          request_id INTEGER PRIMARY KEY AUTOINCREMENT,
          old_code TEXT, new_code TEXT NOT NULL,
@@ -380,6 +407,8 @@ OWNED_TABLES = (
     "bc_unit_avg_decision",       # PR-U2: the analyst's answer to "use the average weight learned from receipts?" (units.py)
     "bc_pack_report",             # PR-U2: a branch reports a pack that is not the registered size (pack_reports.py)
     "bc_code_request",            # PR-Y: a new code of an existing item, asked by Sales Support, decided by the analyst (aliases.py)
+    "bc_cycle_count", "bc_cycle_count_line",   # batch 4b (3.4): the weekly count of the class-A items (stock.py)
+    "bc_feedback_ack",            # batch 4b (2.6): a task made from the variance reasons was read (feedback.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES

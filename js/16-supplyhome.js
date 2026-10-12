@@ -324,6 +324,11 @@ function _shmCard(it, n, mineBlock) {
   const gp = (it.gaps || []).length ? `<div class="text-[11px] mt-1">${it.gaps.map(g => `<div style="margin-top:2px">
       <a href="#" onclick="_shmOpen(${esc(JSON.stringify(g.go))});return false" style="color:var(--accent)">${esc(g.label)} ${g.count} รายการ →</a>${(g.items || []).length
         ? `<span style="color:var(--text-muted)"> · ซื้อมากที่สุด: ${g.items.slice(0, 3).map(i => esc(i.name)).join(', ')}</span>` : ''}</div>`).join('')}</div>` : '';
+  // 3.5 · the data-quality backlog: the top 10 by the plates each item touches
+  const bk = (it.backlog || []).length ? `<div class="mt-1">${bmcBacklogHtml({ top: it.backlog, total: it.backlog_total, note: 'จานที่กระทบคิดจากยอดขาย 30 วันล่าสุดของทุกสาขา แก้รายการบนสุดก่อน' }, 10)}</div>` : '';
+  // 2.6 · a task made from the variance reasons is closed by "รับทราบ" (or when the cause stops)
+  const fb = it.feedback_key && (it.ack_modules || []).some(hasModule)
+    ? `<button onclick="shmFbAck('${esc(it.rule)}', ${esc(JSON.stringify(it.subject))}, '${esc(it.month)}')" class="text-xs rounded-lg px-3 py-1 whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-primary);background:transparent;cursor:pointer;min-height:36px">รับทราบแล้ว</button>` : '';
   // the branch is written once: in the header of a branch login, so a card of its own list does not repeat it
   const scoped = !!(_shmData && _shmData.scoped);
   const owner = [it.owner_th, it.branch && !(it.branches || []).length && !scoped ? it.branch : ''].filter(Boolean).join(' · ');
@@ -331,11 +336,18 @@ function _shmCard(it, n, mineBlock) {
     ${n ? `<span class="text-xs font-semibold" style="color:var(--text-muted);min-width:18px">${n}.</span>` : ''}
     <div class="flex-1 min-w-0">
       <div class="text-sm" style="color:var(--text-primary)">${esc(it.title)} ${_bmcChip(lbl, it.urgent ? 'var(--bad-ink)' : ink)}${it.count ? ' ' + _bmcChip(`${it.count} รายการ`, ink) : ''}</div>
-      ${per}${gp}
+      ${per}${gp}${bk}
       ${owner && !(scoped && mineBlock) ? `<div class="text-[11px]" style="color:var(--text-muted)">${esc(owner)}</div>` : ''}
-    </div>${act}</div>`;
+    </div><div class="flex flex-col gap-1 items-end">${act}${fb}</div></div>`;
 }
 
+async function shmFbAck(rule, subject, month) {
+  if (!await uiConfirm('รับทราบงานนี้แล้ว?\nงานจะหายจากรายการ และกลับมาเมื่อขึ้นเดือนใหม่หากเหตุผลยังซ้ำ', { title: 'รับทราบงาน', ok: 'รับทราบ', cancel: 'ยังไม่รับทราบ' })) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/feedback/ack`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rule, subject, month }) });
+    loadSupplyHome();
+  } catch (e) { notifyError(String(e.message || e)); }
+}
 // ── deep links ──────────────────────────────────────────────────────────────
 function _shmFind(key) {
   const d = _shmData || {};
@@ -378,6 +390,7 @@ function _shmOpen(go) {
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);
+  if (x.item && go.pane === 'rcheck') { window._bmcRcItem = x.item; _shmWhen(() => typeof bmcRenderRcheck === 'function' && typeof _bmcRc !== 'undefined' && _bmcRc, () => bmcRenderRcheck()); }
   if (x.gap) setTimeout(() => { try { bmcGoIngGap(x.gap); } catch (e) {} }, 60);
   if (x.release_id) _shmWhen(() => { const s = document.getElementById('bmcRlSel'); return s && s.options.length; }, () => {
     const s = document.getElementById('bmcRlSel');

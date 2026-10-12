@@ -22,8 +22,12 @@ from pydantic import BaseModel
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
 from bom_center import aliases as _al
+from bom_center import backlog as _bl
 from bom_center import benchmark as _bm
 from bom_center import central as _ce
+from bom_center import close_settings as _cs
+from bom_center import feedback as _fb
+from bom_center import outcome as _oc
 from bom_center import claims as _cl
 from bom_center import codes as _cr
 from bom_center import hub as _hub
@@ -2293,15 +2297,35 @@ def bc_stock_me(request: Request, month: Optional[str] = Query(None)):
                 "zones": [{"zone": z, "label": t} for z, t in _st.zones(con)]}
 
 
+def _count_mode(mode: Optional[str]) -> str:
+    if mode in (None, "", "full"):
+        return "full"
+    if mode == "cycle":
+        return "cycle"
+    raise HTTPException(400, "ชนิดการตรวจนับไม่ถูกต้อง")
+
+
 @router.get("/api/bom-center/stock/sheet")
-def bc_stock_sheet(request: Request, branch_id: Optional[int] = Query(None)):
+def bc_stock_sheet(request: Request, branch_id: Optional[int] = Query(None), mode: Optional[str] = Query(None)):
+    """The count list. `mode=cycle` is the weekly count of the class-A items (batch 4b, 3.4); the answer always carries `plan`
+    (stock.count_plan) saying which count is due now."""
+    mode = _count_mode(mode)
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _short(con, _st.sheet(con, bid))
+            return _short(con, _st.sheet(con, bid, mode=mode))
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+
+@router.get("/api/bom-center/stock/plan")
+def bc_stock_plan(request: Request, branch_id: Optional[int] = Query(None)):
+    """Batch 4b (3.4): which count the branch makes now (full / weekly cycle), whether the month can be closed on a partial count."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        return _st.count_plan(con, bid)
 
 
 class StockPart(BaseModel):
@@ -2325,29 +2349,119 @@ class StockBody(BaseModel):
 
 
 @router.post("/api/bom-center/stock/count", dependencies=[Depends(require_write_token)])
-def bc_stock_save(body: StockBody, request: Request, branch_id: Optional[int] = Query(None)):
+def bc_stock_save(body: StockBody, request: Request, branch_id: Optional[int] = Query(None), mode: Optional[str] = Query(None)):
+    mode = _count_mode(mode)
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _write(con, lambda: _st.save(con, bid, [ln.dict() for ln in body.lines], _who(request),
-                                            submit=body.submit, count_date=body.count_date, note=body.note))
+        fn = _st.cycle_save if mode == "cycle" else _st.save
+        out = _write(con, lambda: fn(con, bid, [ln.dict() for ln in body.lines], _who(request),
+                                     submit=body.submit, count_date=body.count_date, note=body.note))
+    if body.submit:
+        invalidate_cache("bc_")
+    return out
 
 
 @router.delete("/api/bom-center/stock/draft", dependencies=[Depends(require_write_token)])
-def bc_stock_discard(request: Request, branch_id: Optional[int] = Query(None)):
+def bc_stock_discard(request: Request, branch_id: Optional[int] = Query(None), mode: Optional[str] = Query(None)):
+    mode = _count_mode(mode)
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return {"discarded": _write(con, lambda: _st.discard_draft(con, bid, _who(request)))}
+        fn = _st.cycle_discard if mode == "cycle" else _st.discard_draft
+        return {"discarded": _write(con, lambda: fn(con, bid, _who(request)))}
+
+
+class PartialCloseBody(BaseModel):
+    month: str                                  # the month to close (YYYY-MM)
+    accept_missing_slips: bool = False          # close although a selling day of the period has no confirmed slip
+
+
+@router.post("/api/bom-center/stock/partial-close", dependencies=[Depends(require_write_token)])
+def bc_stock_partial_close(body: PartialCloseBody, request: Request, branch_id: Optional[int] = Query(None)):
+    """Batch 4b (3.4): close a month that is not a quarter end on a PARTIAL end count dated the 1st of the next month - the latest weekly
+    counts of the class-A items plus the system stock (confirmed slips) for the rest, labelled "คงเหลือตามระบบ (ไม่ได้นับ)". Idempotent."""
+    _month_or_400(body.month)
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        out = _write(con, lambda: _st.partial_close(con, bid, body.month, _who(request), accept_missing_slips=body.accept_missing_slips))
+    invalidate_cache("bc_")
+    return out
+
+
+@router.get("/api/bom-center/close-settings")
+def bc_close_settings():
+    """The two settings of the month close (3.3 and 3.4): the baht floor of a variance reason and the cycle-count switch."""
+    with get_db() as con:
+        _ensure(con)
+        return _cs.settings(con)
+
+
+class CloseSettingsBody(BaseModel):
+    reason_min_baht: Optional[float] = None     # 0 to 100,000; None = leave it
+    cycle_counts: Optional[bool] = None         # None = leave it
+
+
+@router.post("/api/bom-center/close-settings", dependencies=[Depends(require_write_token)])
+def bc_close_settings_save(body: CloseSettingsBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _cs.save(con, _who(request), body.reason_min_baht, body.cycle_counts))
+    invalidate_cache("bc_")
+    return out
+
+
+# ── batch 4b (2.6) · งานที่เกิดจากเหตุผลผลต่าง ─────────────────────────────────────────────
+class FeedbackAckBody(BaseModel):
+    rule: str
+    subject: str
+    month: str
+    note: Optional[str] = None
+
+
+@router.get("/api/bom-center/feedback")
+def bc_feedback(include_acked: bool = Query(False)):
+    """The tasks the variance and order reasons make now (feedback.evaluate): recipes to check, counts to review, system stock to check."""
+    with get_db() as con:
+        _ensure(con)
+        return {"tasks": _fb.evaluate(con, include_acked=include_acked)}
+
+
+@router.post("/api/bom-center/feedback/ack", dependencies=[Depends(require_write_token)])
+def bc_feedback_ack(body: FeedbackAckBody, request: Request):
+    """Mark a task as read. Only a role that owns the task (or the analyst) may; the row is append-only."""
+    spec = _fb.RULES.get(body.rule)
+    if not spec:
+        raise HTTPException(400, "ไม่พบชนิดของงานนี้")
+    if _auth.auth_enabled() and not (set(spec["ack"]) & _modules(request)):
+        raise HTTPException(403, detail="ไม่มีสิทธิ์รับทราบงานนี้", headers={"X-Denied": "role"})
+    _month_or_400(body.month)
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _fb.acknowledge(con, body.rule, body.subject, body.month, _who(request), body.note))
+    return out
+
+
+# ── batch 4b (3.5) · งานแก้ข้อมูลค้างเรียงตามผลกระทบ ─────────────────────────────────────────
+@router.get("/api/bom-center/backlog")
+def bc_backlog(top: int = Query(_bl.TOP, ge=1, le=200)):
+    """The analyst's data-quality backlog ranked by the plates (and baht) each item touches (backlog.build)."""
+    with get_db() as con:
+        _ensure(con)
+        return _bl.build(con, top)
 
 
 @router.get("/api/bom-center/stock/counts")
 def bc_stock_counts(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20),
                     kind: Optional[str] = Query(None)):
-    """`kind=month` lists the month-end counts (begin / end) only; omitted = every count, spot ones included."""
+    """`kind=month` lists the month-end counts (begin / end) only; `kind=cycle` the weekly counts of the class-A items (batch 4b);
+    omitted = every month-end-table count, spot ones included."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
+        if kind == "cycle":
+            return {"branch_id": bid, "counts": _st.cycle_history(con, bid, max(1, min(limit, 200)))}
         return {"branch_id": bid, "counts": _st.history(con, bid, max(1, min(limit, 200)),
                                                        kinds=_st.MONTH_KINDS if kind == "month" else None)}
 
@@ -2749,7 +2863,7 @@ def bc_variance_confirm(body: ConfirmBody, request: Request, branch_id: Optional
 
 # ── ใบสรุปตัดเบิก: the period's actual usage, downloaded by Accounting and ticked as posted ──
 ISSUE_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "นับจริง (ปลายงวด)",
-                 "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา"]
+                 "ตัดเบิก (ใช้จริง)", "ราคาต่อหน่วย", "มูลค่าตัดเบิก", "ที่มาราคา", "ที่มาของคงเหลือปลายงวด"]
 ISSUE_ALL_HEADERS = ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ", "มูลค่าตัดเบิก",
                      "ไม่มีราคา", "สถานะบัญชี"]
 
@@ -2767,6 +2881,8 @@ def _issue_note(s: dict) -> str:
             f" · ราคาต่อหน่วย = ราคาซื้อจริงเดือน {p['month']}")
     if st.get("receipts_confirmed_by"):
         note += f" · ยืนยันรับสินค้าครบโดย {st['receipts_confirmed_by']}"
+    if p.get("partial_th"):
+        note += " · " + p["partial_th"]
     return note
 
 
@@ -2776,7 +2892,7 @@ def _issue_sheet(ws, title: str, s: dict) -> None:
     _sheet(ws, title, ISSUE_HEADERS, _issue_note(s))
     for ln in s["lines"]:
         ws.append([ln["code"], ln["name"], ln["base_unit"], ln["begin"], ln["received"], ln["claims"], ln["end"],
-                   ln["used"], ln["unit_price"], ln["value"], ln["price_source"]])
+                   ln["used"], ln["unit_price"], ln["value"], ln["price_source"], ln.get("basis_th")])
         if ln["note"]:
             ws.cell(row=ws.max_row, column=8).comment = Comment(ln["note"], "ระบบ")
     ws.append(["", "รวม", "", "", "", "", "", "", "", s["totals"]["used_value"]])
@@ -2789,6 +2905,7 @@ def _issue_sheet(ws, title: str, s: dict) -> None:
         row[9].number_format = "#,##0.00"
     ws.column_dimensions["B"].width = 44
     ws.column_dimensions["K"].width = 24
+    ws.column_dimensions["L"].width = 30
     ws.freeze_panes = "A3"
 
 
@@ -2926,7 +3043,7 @@ def bc_issue_posted(body: PostedBody, request: Request):
 # ── PR-J3 · issue-slip reports: system stock vs count, daily issue vs BoM (issue_reports.py) ──
 RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
                  "คงเหลือตามระบบ", "นับจริง (ปลายงวด)", "ผลต่าง (จำนวน)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "สถานะ", "เหตุผล",
-                 "หมายเหตุ", "ราคาต่อหน่วย"]
+                 "หมายเหตุ", "ราคาต่อหน่วย", "ที่มาของนับจริง / ข้อมูลไม่ครบ"]
 DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
                  "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
 DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
@@ -2973,7 +3090,7 @@ def _recon_sheet(ws, title: str, r: dict) -> None:
     for x in r["rows"]:
         ws.append([x["code"], x["name"], x["base_unit"], _CLASS_SHORT.get(x["class"], x["class"]), x["begin"], x["received"], x["claims"], x["used"],
                    x["waste"], x["system"], x["count"], x["diff"], x["diff_value"], x["diff_pct"], x["status_th"],
-                   x.get("reason_th"), x.get("reason_note"), x["price_per_base"]])
+                   x.get("reason_th"), x.get("reason_note"), x["price_per_base"], x.get("basis_th") or x.get("incomplete_th")])
     t = r["totals"]
     ws.append(["", "รวม", "", "", "", "", "", "", "", "", "", "", t["diff_value"]])
     for c in ws[ws.max_row]:
@@ -3825,6 +3942,20 @@ def bc_hub_compliance(date_from: Optional[str] = Query(None), date_to: Optional[
         return _hub.compliance(con, d0, d1, branch_id)
 
 
+@router.get("/api/bom-center/hub/outcome")
+def bc_hub_outcome(month: Optional[str] = Query(None), branch_id: Optional[int] = Query(None)):
+    """Batch 4b (2.5): what the orders achieved per branch and month - days of cover left when the next delivery arrives, and the ordered
+    items that ran out before it (outcome.month). Reads the system stock (stock.system_position); changes nothing."""
+    month = _month_or_400(month) if month else _this_month()
+    with get_db() as con:
+        _ensure(con)
+        return _oc.month(con, month, branch_id)
+
+
+OUTCOME_HEADERS = ["สาขา", "รอบส่ง", "วันที่ส่ง", "รอบส่งถัดไปถึง", "รายการที่วัด", "วันที่ของพอใช้ (มัธยฐาน)", "รายการที่หมดก่อนรอบถัดไป",
+                   "รายการที่หมด", "วันที่ประมาณจากยอดขาย", "หมายเหตุ"]
+
+
 @router.get("/api/bom-center/hub/compliance.xlsx")
 def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
     from openpyxl import Workbook
@@ -3832,6 +3963,7 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
     with get_db() as con:
         _ensure(con)
         c = _hub.compliance(con, d0, d1)
+        oc = _oc.month(con, d1[:7])
     th = {"ok": "ตามแนะนำ", "over": "สั่งเกิน", "under": "สั่งขาด", "not_ordered": "ไม่ได้สั่ง",
           "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงกำหนด"}
     wb = Workbook()
@@ -3853,6 +3985,17 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
         w2.append([s["branch"], s["trading_days"], s["on_time"], s["late"], s["draft"], s["missing"], s["on_time_pct"],
                    s["coverage_pct"], s["reopens"], s["reconfirms"], s["late_orders"], s["claims"]])
     w2.column_dimensions["A"].width = 28
+    w3 = wb.create_sheet()                                   # batch 4b (2.5): what the orders achieved in the month of the last date
+    _sheet(w3, "ผลของการสั่งจริง", OUTCOME_HEADERS,
+           f"ผลของการสั่งจริง เดือน {oc['month']} · วันที่ของพอใช้ = คงเหลือตามระบบของรายการในใบสั่งซื้อ ณ วันสุดท้ายที่ใบสั่งซื้อต้องใช้ให้ถึง "
+           "(ก่อนรอบส่งถัดไปถึง) หารด้วยการใช้เฉลี่ยต่อวัน · รายการที่หมด = คงเหลือตามระบบเป็นศูนย์หรือต่ำกว่า · "
+           "รอบส่งที่รอบถัดไปยังไม่ถึงไม่ถูกนับ")
+    for r in oc["rows"]:
+        w3.append([r["branch"], r["round_th"], r["delivery"], r.get("next_arrival"), r["items"] if r["measured"] else None, r["cover_days"],
+                   r["stockouts"] if r["measured"] else None, ", ".join(r["stockout_items"]), r["estimated_days"] if r["measured"] else None,
+                   r["why"] or ""])
+    w3.column_dimensions["A"].width = 28
+    w3.column_dimensions["H"].width = 44
     return _xlsx(wb, "bom_center_order_compliance.xlsx")
 
 

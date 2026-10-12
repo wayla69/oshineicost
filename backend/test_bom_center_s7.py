@@ -58,7 +58,8 @@ def test_actual_against_bom(db):
     assert crab["gap_value"] == pytest.approx(crab["gap"] * 0.15, abs=0.01)
     assert salmon["status"] == "ok" and salmon["gap"] == pytest.approx(0, abs=0.001)
     assert r["V-007"]["status"] == "not_counted" and r["V-007"]["actual"] is None   # counted at begin only
-    assert p["receipts"] == 1 and not p["complete"] and p["flagged"] == 1 and p["needs_reason"] == 1
+    # batch 4b (3.3): ฿267 of gap is under the default floor of ฿500 - flagged and listed, not asked
+    assert p["receipts"] == 1 and not p["complete"] and p["flagged"] == 1 and p["needs_reason"] == 0 and crab["ask_reason"] is False
     assert p["rows"][0]["code"] == "13-01-009"                    # flagged first
 
 

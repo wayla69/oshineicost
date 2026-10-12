@@ -305,7 +305,7 @@ def test_system_position_is_count_plus_receipts_minus_confirmed_slips(con):  # n
     VA.add_receipt(con, 1, "2026-10-02", [{"code": "02-01-001", "qty": 1, "unit": "กรัม"}], "udon")
     assert "02-01-001" not in ST.system_position(con, 1, AS_OF)["qty"]
     assert ST.system_position(con, 1, date(2026, 9, 30)) == {"basis": None, "qty": {}, "missing_days": [], "through": "2026-09-30",
-                                                              "estimated_days": [], "estimated_qty": {}}
+                                                              "estimated_days": [], "estimated_qty": {}, "cycle": {}}
     # a slip reopened is a draft again and stops counting
     IS.reopen(con, IS.status_of(con, 1, "2026-10-02")["slip_id"], "ss", "แก้ไข", now=NOW)
     assert ST.system_position(con, 1, AS_OF, estimate=False)["qty"][CRAB] == 13300

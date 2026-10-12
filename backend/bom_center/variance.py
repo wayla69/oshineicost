@@ -35,16 +35,33 @@ FLAG_STATUS = ("over", "under", "negative", "no_bom")   # the statuses that are 
 ASK_TOP = 20                                            # PR-M4 (owner Q3): a reason is asked for class A and for the top 20 by |฿|
 
 
+INCOMPLETE_TH = "ข้อมูลไม่ครบ"                           # batch 4b (3.3): a line the branch is not asked about, because the data cannot say
+SYSTEM_TH = "คงเหลือตามระบบ (ไม่ได้นับ)"                  # batch 4b (3.4): an end figure taken from the system stock, not from a count
+USED_ZERO_PCT = -99.95            # a gap that rounds to -100.0 % on the screen: the item was used 0 (the counts are the same) against a recipe
+_EPS = 1e-9
+
+
 def _gap_value_for_rank(r: dict):
     """The ฿ a line is ranked by when a reason is asked: its own, else - PR-B4a (1.6), an item with no price - the gap at the fallback
     price (`ref_value`). The ฿ shown on the screen stays `gap_value` (None for an unpriced item)."""
     return r.get("gap_value") if r.get("gap_value") is not None else r.get("ref_value")
 
 
-def ask_reason_codes(rows: list, top: int = ASK_TOP) -> set:
+def ask_reason_codes(rows: list, top: int = ASK_TOP, min_baht: float = 0.0) -> set:
     """The codes a branch is asked to explain (owner Q3, PR-M4): a flagged line (outside the threshold) that is class A, or
-    among the `top` flagged lines by |฿ variance|. Rows need `code`, `status`, `class` and `gap_value` (`ref_value` for an unpriced item)."""
-    flagged = [r for r in rows if r["status"] in FLAG_STATUS]
+    among the `top` flagged lines by |฿ variance|. Rows need `code`, `status`, `class` and `gap_value` (`ref_value` for an unpriced item).
+
+    Batch 4b (3.3): a line is asked only when it is ALSO at least `min_baht` baht off (the setting bc_reason_min_baht; 0 = no floor;
+    an item with no price at all cannot reach a baht floor) and the data can say something: a row marked `data_incomplete` (used 0
+    against a recipe, or a period with no receipt at all) or `system_basis` (the end figure was not counted) is labelled, not asked."""
+    flagged = [r for r in rows if r["status"] in FLAG_STATUS and not r.get("data_incomplete") and not r.get("system_basis")]
+
+    def big(r):
+        if not min_baht or min_baht <= 0:
+            return True
+        v = _gap_value_for_rank(r)
+        return v is not None and abs(v) >= min_baht
+    flagged = [r for r in flagged if big(r)]
     biggest = {r["code"] for r in sorted((r for r in flagged if _gap_value_for_rank(r) is not None),
                                          key=lambda r: (-abs(_gap_value_for_rank(r)), r["code"]))[:top]}
     return {r["code"] for r in flagged if r["class"] == "A" or r["code"] in biggest}
@@ -283,6 +300,16 @@ def _count_lines(con, count_id: int) -> dict:
         "SELECT ingredient_code, qty_base FROM bc_stock_count_line WHERE count_id=?", (count_id,)) if qb is not None}
 
 
+def _count_basis(con, count_id: int) -> dict:
+    """{code: 'system'|'cycle'} of the lines of a PARTIAL end count (stock.partial_close) that were not counted that day: 'system' =
+    the system stock carried to the date, 'cycle' = the latest weekly count of a class-A item carried to the date. A full count has none."""
+    try:
+        return {c: b for c, b in con.execute(
+            "SELECT ingredient_code, basis FROM bc_stock_count_line WHERE count_id=? AND basis IS NOT NULL", (count_id,))}
+    except Exception:                                   # a database that has not been migrated yet has no such column
+        return {}
+
+
 def _price_month(begin_date: str, end_date: str) -> str:
     """The month a period is priced in: the month of the day BEFORE its end count (end - 1 day)."""
     last_day = date.fromisoformat(end_date) - timedelta(days=1)
@@ -344,6 +371,9 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
                        (e["count_id"],)).fetchone()
     reasons = {c: (r, n, w, a) for c, r, n, w, a in con.execute(
         "SELECT ingredient_code, reason_code, note, who, at FROM bc_variance_reason WHERE end_count_id=?", (e["count_id"],))}
+    from .close_settings import reason_min_baht
+    min_baht = reason_min_baht(con)
+    end_basis, begin_basis = _count_basis(con, e["count_id"]), _count_basis(con, b["count_id"])
     price = {}
     from .prices import PriceBook
     pbook = PriceBook(con, month)                       # PR-B4a (1.6): ranks an unpriced item by a fallback price, shows none
@@ -383,6 +413,14 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
                 row["status"] = "ok"
             else:
                 row["status"] = "over" if gap > 0 else "under"
+        row["end_basis"] = end_basis.get(c) or "count"
+        row["begin_basis"] = begin_basis.get(c) or "count"
+        if row["end_basis"] == "system":                        # 3.4: not counted - the gap is the slips against the recipes
+            row.update(system_basis=True, basis_th=SYSTEM_TH)
+        if row["status"] in FLAG_STATUS and n_receipts == 0:            # 3.3: no delivery is recorded in the whole period - every gap would read as a shortage
+            row.update(data_incomplete=True, incomplete_th=INCOMPLETE_TH, incomplete_why="receipts")
+        elif row["status"] == "under" and row.get("gap_pct") is not None and row["gap_pct"] <= USED_ZERO_PCT and row["bom"] > 0:
+            row.update(data_incomplete=True, incomplete_th=INCOMPLETE_TH, incomplete_why="used_zero")      # -100 %: used (next to) nothing against a recipe
         rs = reasons.get(c)
         if rs:
             row.update(reason=rs[0], reason_th=REASON_TH.get(rs[0], rs[0]), reason_note=rs[1], reason_by=rs[2])
@@ -390,7 +428,7 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
     flagged = [r for r in rows if r["status"] in FLAG_STATUS]
     # PR-M4 (owner Q3): only a high-value line is asked for a reason — class A, or among the top ASK_TOP by |฿ variance|.
     # The other flagged lines are listed without a form; `needs_reason` follows (a line asked and not yet explained).
-    ask = ask_reason_codes(rows)
+    ask = ask_reason_codes(rows, min_baht=min_baht)
     for r in rows:
         r["ask_reason"] = r["code"] in ask
         r["needs_reason"] = r["ask_reason"] and "reason" not in r
@@ -410,9 +448,14 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
         "actual_value": round(sum(r["actual"] * r["price_per_base"] for r in counted), 2),
         "bom_value_counted": round(sum(r["bom"] * r["price_per_base"] for r in counted), 2),
         "ask_reason": sum(1 for r in rows if r["ask_reason"]),
+        "reason_min_baht": min_baht,
+        "data_incomplete": sum(1 for r in flagged if r.get("data_incomplete")),
+        "system_basis": sum(1 for r in rows if r.get("system_basis")),
+        "partial": bool(end_basis),
     }
     summary["totals"] = {"ask_reason": summary["ask_reason"], "ask_reason_open": summary["needs_reason"],
-                         "flagged": summary["flagged"], "other_flagged": summary["flagged"] - summary["ask_reason"]}
+                         "flagged": summary["flagged"], "other_flagged": summary["flagged"] - summary["ask_reason"],
+                         "incomplete": summary["data_incomplete"], "system_basis": summary["system_basis"]}
     if summary["bom_value"]:
         summary["gap_pct"] = round(100.0 * summary["gap_value"] / summary["bom_value"], 1)
     if summary_only:
@@ -504,6 +547,7 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
                                          (e["count_id"],))}
     info = {c: (n, u, f) for c, n, u, f in con.execute(
         "SELECT code, name_th, base_unit, family FROM bc_ingredient")}
+    end_basis = _count_basis(con, e["count_id"])                 # batch 4b (3.4): a partial end count says where each figure came from
     lines, excluded = [], []
     for c in sorted(set(begin) | set(end) | set(received) | set(claims)):
         r, cl = received.get(c, 0.0), claims.get(c, 0.0)
@@ -517,7 +561,9 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         ln = {"code": c, "name": n, "base_unit": u, "family": fam,
               "begin": begin.get(c), "received": round(r, 3), "claims": round(cl, 3), "end": end.get(c),
               "unit_price": unit_price, "price_source": src, "has_reason": c in reasons,
-              "used": None, "value": None, "status": "ok", "note": None}
+              "used": None, "value": None, "status": "ok", "note": None,
+              "end_basis": end_basis.get(c) or "count",
+              "basis_th": SYSTEM_TH if end_basis.get(c) == "system" else ("นับหมุนเวียนล่าสุด" if end_basis.get(c) == "cycle" else "นับจริง")}
         if c not in begin or c not in end:
             miss = [t for t, d in (("ต้นงวด", begin), ("ปลายงวด", end)) if c not in d]
             ln.update(status="not_counted", note="ไม่พบในผลตรวจนับ" + "และ".join(miss))
@@ -545,7 +591,10 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         "branch": {"branch_id": branch_id, "name": name},
         "slips": slip_coverage(con, branch_id, d0, d1),
         "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
-                   "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days},
+                   "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days, "partial": bool(end_basis),
+                   "partial_th": (f"ปิดงวดด้วยการตรวจนับหมุนเวียน · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับหมุนเวียนล่าสุด · "
+                                  f"อีก {sum(1 for v in end_basis.values() if v == 'system')} รายการเป็น{SYSTEM_TH} ใช้จริงจึงเท่ากับใบตัดเบิกที่ยืนยันแล้ว "
+                                  "ผลต่างจากการนับจริงจะปรากฏเมื่อตรวจนับครบทุกรายการที่สิ้นไตรมาส") if end_basis else None},
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,
                    "receipts_confirmed_at": conf[1] if conf else None, "reasons_done": reasons_done,
                    "accounting_posted_at": conf[2] if conf else None,
@@ -554,6 +603,7 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         "totals": {"lines": len(lines), "received_value": val("received"), "claims_value": val("claims"),
                    "used_value": round(sum(x["value"] or 0.0 for x in lines), 2),
                    "unpriced": sum(1 for x in lines if x["unit_price"] is None),
+                   "system_basis": sum(1 for x in lines if x["end_basis"] == "system"),
                    "not_counted": sum(1 for x in lines if x["status"] == "not_counted")},
     }
 
