@@ -271,6 +271,13 @@ MIGRATIONS = (
     # PR-V — the sales (฿, ex VAT) the branch typed for the cover period: the buffer in baht (the % is derived from it and
     # still drives the suggestion), or, for a new branch with a reference branch, the figure the suggestion is built on
     ("bc_order", "buffer_sales", "REAL"),
+    # PR-Y — a code from another system (accounting, warehouse, supplier) is an ALIAS of the register item: the recipes keep the
+    # register code. An alias is retired (active=0), never deleted; `is_current` marks the code to USE when writing to that system
+    ("bc_ingredient_alias", "valid_from", "TEXT"),
+    ("bc_ingredient_alias", "active", "INTEGER DEFAULT 1"),
+    ("bc_ingredient_alias", "is_current", "INTEGER DEFAULT 0"),
+    ("bc_ingredient_alias", "created_by", "TEXT"),
+    ("bc_ingredient_alias", "created_at", "TEXT"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -329,6 +336,16 @@ EXTRA_DDL = (
          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied','rejected')),
          created_by TEXT, created_at TEXT, decided_by TEXT, decided_at TEXT, decision_note TEXT)""",
     "CREATE INDEX IF NOT EXISTS ix_bc_pack_report ON bc_pack_report(status, ingredient_code)",
+    # PR-Y — Sales Support reports that an item has a new code in another system; the analyst applies it (it becomes an alias)
+    # or rejects it with a reason (aliases.py)
+    """CREATE TABLE IF NOT EXISTS bc_code_request(
+         request_id INTEGER PRIMARY KEY AUTOINCREMENT,
+         old_code TEXT, new_code TEXT NOT NULL,
+         system TEXT NOT NULL DEFAULT 'acc' CHECK(system IN ('acc','warehouse','supplier','other')),
+         name TEXT, ingredient_code TEXT NOT NULL, valid_from TEXT, note TEXT,
+         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied','rejected')),
+         requested_by TEXT, requested_at TEXT, decided_by TEXT, decided_at TEXT, decision_note TEXT)""",
+    "CREATE INDEX IF NOT EXISTS ix_bc_code_request ON bc_code_request(status, new_code)",
 )
 
 OWNED_TABLES = (
@@ -351,6 +368,7 @@ OWNED_TABLES = (
     "bc_issue_slip", "bc_issue_line", "bc_issue_log",   # ใบตัดเบิก: the branch's daily issue slip + its log (issues.py)
     "bc_unit_avg_decision",       # PR-U2: the analyst's answer to "use the average weight learned from receipts?" (units.py)
     "bc_pack_report",             # PR-U2: a branch reports a pack that is not the registered size (pack_reports.py)
+    "bc_code_request",            # PR-Y: a new code of an existing item, asked by Sales Support, decided by the analyst (aliases.py)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES

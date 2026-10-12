@@ -126,7 +126,8 @@ def parse(data: bytes) -> dict:
             code, unit = _clean(g("code")), _clean(g("unit"))
             if not code or not unit:
                 continue                                                    # an empty row (or an item with no unit) is not a ladder row
-            e = out["ladders"].setdefault(code, {"rows": [], "row_nos": [], "base_in_file": set()})
+            e = out["ladders"].setdefault(code, {"rows": [], "row_nos": [], "base_in_file": set(), "name": None})
+            e["name"] = e["name"] or _clean(g("name")) or None
             if _clean(g("base")):
                 e["base_in_file"].add(norm(g("base")))
             if _clean(g("qty")) and _mnum(g("qty")) is None:
@@ -162,9 +163,18 @@ def apply(con, parsed: dict, who: str, month: str = None) -> dict:
     for p in parsed["problems"]:
         pre.setdefault(p["code"], []).append(p["problem"])
     res, warnings, total = [], [], 0
-    for code, e in parsed["ladders"].items():
+    from .aliases import active_map, suggest_items          # PR-Y: a code that is an alias is its item; an unknown code is never added here
+    known = {r[0] for r in con.execute("SELECT code FROM bc_ingredient")}
+    amap = active_map(con)
+    for file_code, e in parsed["ladders"].items():
+        code = file_code if file_code in known else amap.get(file_code, file_code)
         plan = plan_ladder(con, code, e["rows"])
-        for pb in pre.get(code, []):
+        if code not in known:
+            hint = suggest_items(con, e.get("name"), code=file_code)
+            more = (" · อาจเป็นรหัสใหม่ของ " + " / ".join(f"{h['code']} {h['name']}" for h in hint) if hint
+                    else " · ถ้าเป็นรหัสใหม่ของวัตถุดิบเดิม") + " ให้ฝ่ายวิเคราะห์บันทึกเป็นรหัสในระบบอื่นก่อน"
+            plan["problems"] = [f"ไม่พบรหัส {file_code} ในทะเบียน{more}"]
+        for pb in pre.get(file_code, []):
             if pb not in plan["problems"]:
                 plan["problems"].insert(0, pb)
         base = plan.get("base_unit")
@@ -174,8 +184,8 @@ def apply(con, parsed: dict, who: str, month: str = None) -> dict:
         if not plan["problems"]:
             set_ladder(con, code, e["rows"], who)
         total += 1 if plan["problems"] else 0
-        res.append({"code": code, "name": plan["name"], "base_unit": base, "ladder": plan["ladder"], "problems": plan["problems"],
-                    "changes": plan["changes"], "qty_per_recv_change": plan["qty_per_recv_change"], "rows": e["row_nos"]})
+        res.append({"code": code, "file_code": file_code if file_code != code else None, "name": plan["name"], "base_unit": base,
+                    "ladder": plan["ladder"], "problems": plan["problems"], "changes": plan["changes"], "qty_per_recv_change": plan["qty_per_recv_change"], "rows": e["row_nos"]})
     seen, port = set(), []
     for p in parsed["portions"]:
         item = {"row": p["row"], "prepared_code": p["code"], "prepared_name": p["name"], "raw_code": p["raw"], "qty": _mnum(p["qty"]),
@@ -187,7 +197,8 @@ def apply(con, parsed: dict, who: str, month: str = None) -> dict:
                 raise ValueError(f"{p['code']}: สูตรแบ่งชิ้นมีวัตถุดิบได้ 1 บรรทัด · รหัสนี้อยู่ในไฟล์มากกว่า 1 แถว")
             seen.add(p["code"])
             # no savepoint: the caller rolls the whole file back when anything has a problem (and always on a dry run)
-            r = save_portion(con, p["code"], p["raw"], p["qty"], p["unit"], p["pieces"], p["out_unit"], who, note=p["note"],
+            raw_code = p["raw"] if p["raw"] in known else amap.get(p["raw"], p["raw"])      # PR-Y: an outside code of the raw item
+            r = save_portion(con, p["code"], raw_code, p["qty"], p["unit"], p["pieces"], p["out_unit"], who, note=p["note"],
                              name=p["name"], month=month)
             item.update(factor_base=r["factor_base"], approx=r["approx"], how=r["how"], base_unit=r["base_unit"],
                         base_per_piece=r["base_per_piece"], cost_per_piece=r["cost_per_piece"], price_month=r["price_month"],

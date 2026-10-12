@@ -175,7 +175,26 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
                       "sale_unit": str(r[c_sale] or "").strip() or outer, "price_per_sale": price or None,
                       "factor_given": fac,
                       "qty": {b["code"]: parse_qty(r[b["col"]], n) for b in branches if b["col"] < len(r)}})
-    return {"sheet": ws.title, "month": month or _month_of(ws.title), "branches": branches, "items": items}
+    out = {"sheet": ws.title, "month": month or _month_of(ws.title), "branches": branches, "items": items}
+    resolve_parsed(con, out)
+    return out
+
+
+def resolve_parsed(con, parsed: dict) -> int:
+    """PR-Y: a code the report carries that is an ACTIVE ALIAS of a register item is that item (its register code is used from
+    here on; the report's own code stays in `file_code`). Idempotent. -> how many items were resolved."""
+    from .aliases import active_map
+    amap = active_map(con)
+    if not amap:
+        return 0
+    known = {r[0] for r in con.execute("SELECT code FROM bc_ingredient")}
+    n = 0
+    for it in parsed["items"]:
+        c = it["code"]
+        if c not in known and c in amap:
+            it["file_code"], it["code"] = c, amap[c]
+            n += 1
+    return n
 
 
 # ── sale unit -> base units ──────────────────────────────────────────────────
@@ -257,7 +276,7 @@ def _factor(conv, master: dict, it) -> tuple:
     return None, f"ยังไม่ระบุว่า 1 {sale_th(it)} เท่ากับกี่{base}", None
 
 
-def plan_catalogue(con, parsed: dict) -> dict:
+def plan_catalogue(con, parsed: dict, suggestions: bool = True) -> dict:
     conv = Converter(con)
     master = {c: (b, r, p) for c, b, r, p in con.execute(
         "SELECT code, base_unit, recv_unit, qty_per_recv FROM bc_ingredient")}
@@ -269,7 +288,7 @@ def plan_catalogue(con, parsed: dict) -> dict:
             continue
         f, how, new_base = _factor(conv, master, it)
         m = master.get(it["code"])
-        row = {**_brief(it), "is_new": m is None, "master_name": names.get(it["code"]),
+        row = {**_brief(it), "is_new": m is None, "master_name": names.get(it["code"]), "aliased_from": it.get("file_code"),
                "base_unit": (m[0] if m and m[0] else new_base), "set_base": bool(new_base),
                "base_per_sale": f, "factor_how": how,
                "recv_label": recv_label(it), "old_recv": m[1] if m else None, "old_per": m[2] if m else None,
@@ -279,6 +298,11 @@ def plan_catalogue(con, parsed: dict) -> dict:
         if m and m[2] and f and abs(m[2] - f) > 0.005 * max(m[2], f):
             row["pack_change"] = True
         rows.append(row)
+    # PR-Y: a code the register does not know may be the NEW code of an item it already has — name the likely items
+    from .aliases import suggest_items
+    new_rows = [r for r in rows if r.get("is_new") and r["status"] != "skip"]
+    for i, r in enumerate(new_rows):
+        r["suggestions"] = suggest_items(con, r["name"], code=r["code"], unit=r.get("base_unit") or r.get("inner")) if suggestions and i < 100 else []
     goods = [r for r in rows if r["status"] != "skip"]
     in_list = {r["code"] for r in goods}
     local = [c for c, in con.execute("SELECT code FROM bc_ingredient WHERE COALESCE(active,1)=1")
@@ -296,10 +320,32 @@ def _brief(it) -> dict:
     return {k: it[k] for k in ("code", "name", "unit_label", "sale_unit", "inner_qty", "inner", "price_per_sale")}
 
 
-def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True) -> dict:
-    """Write the list: the central items, their order unit in the master, and sourcing for every code."""
+def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, choices: dict = None,
+                    can_alias: bool = True, system: str = "acc") -> dict:
+    """Write the list: the central items, their order unit in the master, and sourcing for every code.
+
+    `choices` (PR-Y) = the person's answer per code the register does not know ({code: {'as': 'alias', 'item': …} | {'as': 'new'}}).
+    None = the old behaviour (a code the register does not know is added). A dict = every unknown code needs its answer: an
+    alias is recorded (or, when the importer may not decide, filed as a request), 'new' adds the item, and a code with no answer
+    is left out of this run and reported in `open_codes` - never added on its own."""
     ensure(con)
-    pl = plan_catalogue(con, parsed)
+    pl = plan_catalogue(con, parsed, suggestions=False)          # the preview already showed the suggestions; saving needs none
+    aliased = requested = 0
+    open_codes = []
+    if choices is not None:
+        from .aliases import apply_choices
+        unknown = [{"code": r["code"], "name": r["name"], "unit": r.get("inner")} for r in pl["rows"]
+                   if r.get("is_new") and r["status"] != "skip"]
+        res = apply_choices(con, unknown, choices, who, can_alias, system=system, note="จากรายงานบัญชีสินค้าส่วนกลาง")
+        aliased, requested, open_codes = len(res["aliased"]), len(res["requested"]), res["open"]
+        left_out = set(open_codes) | set(res["requested"])
+        parsed["_held"] = left_out               # the month's quantities of these codes are not booked either (deliveries)
+        if res["aliased"]:
+            resolve_parsed(con, parsed)
+            pl = plan_catalogue(con, parsed, suggestions=False)
+        for r in pl["rows"]:                      # not chosen yet, or waiting for the analyst: not part of this run
+            if r.get("is_new") and r["code"] in left_out and r["status"] != "skip":
+                r["status"], r["factor_how"] = "skip", "รอเลือกรหัส" if r["code"] in open_codes else "รอฝ่ายวิเคราะห์ตรวจรหัส"
     stats = {"inserted": 0, "updated": 0, "unchanged": 0}
     month = parsed.get("month")
     in_list = set()
@@ -346,7 +392,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True) 
     audit(con, who, "central_list", "bc_central_item", month or "", None,
           {"items": len(in_list), "new": stats["inserted"], "to_local": to_local, "dropped": off})
     return {**pl["counts"], "saved": len(in_list), "inserted": stats["inserted"], "set_local": to_local,
-            "dropped": off, "month": month}
+            "dropped": off, "month": month, "aliased": aliased, "requested": requested, "open_codes": list(open_codes)}
 
 
 def items(con) -> dict:
@@ -390,7 +436,7 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
     if rdate[:7] != month:
         raise ValueError(f"วันที่ใบรับ {_fmt_day(rdate)} ไม่อยู่ในงวด {_mth(month)}")
     conv = Converter(con)
-    pl = {r["code"]: r for r in plan_catalogue(con, parsed)["rows"]}
+    pl = {r["code"]: r for r in plan_catalogue(con, parsed, suggestions=False)["rows"]}
     want = {int(b) for b in branch_ids} if branch_ids else None
     out = []
     for b in parsed["branches"]:
@@ -407,6 +453,9 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
             q = it["qty"].get(b["code"])
             p = pl.get(it["code"])
             if not q or q <= 0 or not p or p["status"] == "skip":
+                continue
+            if it["code"] in (parsed.get("_held") or ()):
+                res["skipped"].append({"code": it["code"], "name": it["name"], "qty": q, "why": "รหัสนี้ยังไม่ได้เลือกว่าเป็นรหัสใหม่ของวัตถุดิบเดิมหรือวัตถุดิบใหม่"})
                 continue
             f = p["base_per_sale"]
             if not f:

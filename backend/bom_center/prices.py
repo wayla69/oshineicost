@@ -95,7 +95,8 @@ def aggregate(con, lines: list, add_unknown: bool = False, who: str = "-", month
     — inside the caller's transaction, so a dry run rolls them back with the rest.
     -> {'codes': {code: {...}}, 'branches': {(code, bid): {...}}, 'issues': [...], 'added': [...]}"""
     known = {r[0] for r in con.execute("SELECT code FROM bc_ingredient")}
-    aliases = dict(con.execute("SELECT alias_code, ingredient_code FROM bc_ingredient_alias"))
+    from .aliases import active_map          # PR-Y: a retired alias no longer resolves
+    aliases = active_map(con)
     added = []
     if add_unknown:
         from .master import add_from_purchase
@@ -210,6 +211,14 @@ def preview(con, month: str, agg: dict) -> dict:
     never = [c for c in carried if not price_for(con, c, month)]
     counts = {k: sum(1 for r in rows if r["flag"] == k) for k in ("ok", "warn", "flag", "new")}
     unknown = sorted({i["code"] for i in agg["issues"] if i["why"] == "ไม่มีในทะเบียนวัตถุดิบ"})
+    # PR-Y: each unknown code with the register items it could be a new code of — the person chooses per code, nothing is added
+    # on its own (no sheet line is lost: it stays an issue until the code is aliased or registered)
+    from .aliases import UNKNOWN_WHY, unknown_in, with_suggestions
+    unk_lines = [i for i in agg["issues"] if i["why"] == UNKNOWN_WHY]
+    unknown_items = with_suggestions(con, unknown_in(con, unk_lines))
+    for u in unknown_items:
+        u["value"] = round(sum(i.get("value") or 0 for i in unk_lines if i["code"] == u["code"]), 2)
+    unknown_items.sort(key=lambda u: -u["value"])
     # the pack guard's suggestions, one per (code, unit): median factor, how
     # consistent the lines were, and the money they carry — so the analyst can set
     # them in one pass and re-import, instead of one prompt per line
@@ -227,7 +236,8 @@ def preview(con, month: str, agg: dict) -> dict:
                           "consistent": fs[0] > 0 and fs[-1] / fs[0] <= 1.05})
     suggested.sort(key=lambda r: -r["value"])
     return {"month": month, "rows": rows, "issues": agg["issues"], "counts": counts,
-            "added_codes": agg.get("added", []), "unknown_codes": unknown, "suggested_rules": suggested,
+            "added_codes": agg.get("added", []), "unknown_codes": unknown, "unknown_items": unknown_items[:200],
+            "suggested_rules": suggested,
             "unknown_value": round(sum(i.get("value") or 0 for i in agg["issues"]
                                        if i["why"] == "ไม่มีในทะเบียนวัตถุดิบ"), 2),
             "priced": len(rows), "carry_forward": will_carry, "never_priced": len(never),

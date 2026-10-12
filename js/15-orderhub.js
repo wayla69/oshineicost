@@ -279,6 +279,7 @@ function ohbMonthPick(input) {
   if (!file) return;
   _ohbMonthFile = file;
   input.value = '';
+  bmcUcReset('ohbUcCentral');                    // PR-Y: a new file starts with no answers
   ohbMonthPreview();
 }
 async function ohbMonthPreview() {
@@ -289,6 +290,9 @@ async function ohbMonthPreview() {
     const pre = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=true&set_local=${setLocal}`, { method: 'POST', body: _ohbFd(_ohbMonthFile) });
     _ohbMonthPre = pre;
     const c = pre.catalogue;
+    // PR-Y: a code the register does not know may be a new code of an item it has - the person answers per code before anything is added
+    const fresh = c.rows.filter(r => r.is_new && r.status !== 'skip').map(r => ({ code: r.code, name: r.name, unit: r.unit_label, suggestions: r.suggestions || [] }));
+    await bmcUcRender('ohbUcCentral', fresh, { mode: 'central', needAll: true, prefillNew: true });
     const look = c.rows.filter(r => r.status !== 'ok' || r.pack_change || r.is_new || (r.factor_how || '').startsWith('จากทะเบียน'));
     const monthWarn = pre.month && pre.month !== _ohbCloseMonth() ? ' ' + _bmcChip(`งวดในไฟล์ ${fmtMonthTh(pre.month)} ต่างจากงวดที่เลือก ${fmtMonthTh(_ohbCloseMonth())}`, 'var(--amber-ink)') : '';
     document.getElementById('ohbCenReport').innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">บัญชีสินค้าส่วนกลาง${monthWarn}</div>
@@ -321,19 +325,30 @@ async function ohbMonthPreview() {
 }
 async function ohbMonthSave() {
   if (!_ohbMonthFile || !_ohbMonthPre) return;
+  const open = bmcUcOpen('ohbUcCentral');
+  if (open.length) {
+    _bmcStatus('ohbCenStatus', `ยังไม่ได้เลือก ${open.length} รหัสในรายการ “รหัสที่ระบบไม่รู้จัก”: ${open.slice(0, 4).join(', ')}${open.length > 4 ? ' …' : ''}`, 'var(--amber-ink)');
+    const box = document.getElementById('ohbUcCentral'); if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  const choices = bmcUcChoices('ohbUcCentral'), cs = bmcUcSummary('ohbUcCentral');
   const ids = [...document.querySelectorAll('#ohbDelReport input[data-bid]')].filter(x => x.checked).map(x => x.dataset.bid);
   const c = _ohbMonthPre.catalogue;
   const names = ids.map(id => (_ohbMonthPre.deliveries.branches.find(b => String(b.branch_id) === id) || {}).branch).filter(Boolean);
-  if (!await uiConfirm(`บันทึกบัญชีสินค้าส่วนกลาง ${c.items} รายการ (รหัสใหม่ ${c.new} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาซื้อเอง” · หน่วยสั่งในทะเบียนเปลี่ยนเป็นหน่วยขายของไดกิโตะ กรุ๊ป)`
+  if (!await uiConfirm(`บันทึกบัญชีสินค้าส่วนกลาง ${c.items} รายการ (วัตถุดิบใหม่ ${c.new - cs.alias} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาซื้อเอง” · หน่วยสั่งในทะเบียนเปลี่ยนเป็นหน่วยขายของไดกิโตะ กรุ๊ป)`
+      + (cs.alias ? `\n${cs.alias} รหัสเป็นรหัสใหม่ของวัตถุดิบเดิม ${_bmcCanPrices() ? 'บันทึกเป็นรหัสในระบบอื่นทันที' : 'ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ และยังไม่นำเข้าในครั้งนี้'}` : '')
       + (ids.length ? `\nและใบรับสินค้าประจำเดือน${fmtMonthTh(_ohbMonthPre.month)} ของ ${names.join(', ')} (ใบเดิมของเดือนนี้ถูกแทนที่)` : '\nไม่บันทึกใบรับสินค้า'),
       { title: 'ยืนยันการบันทึกบัญชีสินค้า', ok: 'บันทึก', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่บันทึก'); return; }
   try {
     const setLocal = document.getElementById('ohbSetLocal').checked;
-    const d = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=false&set_local=${setLocal}${ids.length ? '&branch_ids=' + ids.join(',') : ''}`, { method: 'POST', body: _ohbFd(_ohbMonthFile) });
+    const fd = _ohbFd(_ohbMonthFile);
+    fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', bmcUcSystem('ohbUcCentral'));
+    const d = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=false&set_local=${setLocal}${ids.length ? '&branch_ids=' + ids.join(',') : ''}`, { method: 'POST', body: fd });
     const dl = d.deliveries.branches.filter(b => ids.includes(String(b.branch_id)));
-    _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (รหัสใหม่ ${d.catalogue.inserted}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
+    _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (วัตถุดิบใหม่ ${d.catalogue.inserted}${d.catalogue.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.catalogue.aliased}` : ''}${d.catalogue.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.catalogue.requested}` : ''}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
       + (dl.length ? ' · ใบรับ: ' + dl.map(b => `${b.branch || b.label} ${b.receipt_id ? 'เลขที่ ' + b.receipt_id + ' (' + b.lines + ' รายการ)' : (b.error || 'ไม่มีรายการ')}`).join(' · ') : ''), 'var(--good-ink)');
     _ohbMonthFile = null; _ohbMonthPre = null;
+    bmcUcReset('ohbUcCentral');
     document.getElementById('ohbDelReport').innerHTML = '';
     ohbLoadCentral();
   } catch (e) { _bmcStatus('ohbCenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }

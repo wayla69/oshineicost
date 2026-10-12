@@ -257,10 +257,34 @@ def _check_count_units(con, pending: list) -> list:
     return [(c, u) for c, u in pending if conv.factor(c, u)[0] is None]
 
 
-def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
-    """Apply parsed sheet rows (dicts keyed by IMPORT_ALIASES). Caller commits."""
-    stats = {"inserted": 0, "updated": 0, "unchanged": 0, "ref_prices": 0, "skipped": []}
+def import_rows(con, rows: list, who: str, default_month: str = None, choices: dict = None, can_alias: bool = True,
+                system: str = "acc") -> dict:
+    """Apply parsed sheet rows (dicts keyed by IMPORT_ALIASES). Caller commits.
+
+    PR-Y: a row whose code is an active alias of a register item is that item (no second item is created). A code the register
+    does not know is listed in `new_codes` with the items it could be a new code of. `choices` None = the old behaviour (it is
+    added); a dict = the person's answer per code: alias (recorded, or filed as a request when the importer may not decide),
+    'new' (added), and a code with no answer is skipped and reported."""
+    from .aliases import active_map, apply_choices, unknown_in, with_suggestions
+    stats = {"inserted": 0, "updated": 0, "unchanged": 0, "ref_prices": 0, "skipped": [], "aliased": 0, "requested": 0}
     pending, undo = [], {}
+    known = {c for (c,) in con.execute("SELECT code FROM bc_ingredient")}
+    amap = active_map(con)
+    rows = [dict(r) for r in rows]
+    for r in rows:
+        c = str(r.get("code") or "").strip()
+        if c and c not in known and c in amap:
+            r["code"] = amap[c]
+    unknown = unknown_in(con, [{"code": str(r.get("code") or "").strip(), "name": r.get("name"), "unit": r.get("base_unit")}
+                               for r in rows if str(r.get("code") or "").strip() not in ("#N/A", "None")])
+    stats["new_codes"] = with_suggestions(con, unknown) if choices is None else []
+    held = {}
+    if choices is not None and unknown:
+        res = apply_choices(con, unknown, choices, who, can_alias, system=system, note="จากไฟล์นำเข้าทะเบียน")
+        stats["aliased"], stats["requested"] = len(res["aliased"]), len(res["requested"])
+        held = {**{c: "รอเลือกรหัส · เลือกว่าเป็นรหัสใหม่ของวัตถุดิบเดิม หรือเป็นวัตถุดิบใหม่" for c in res["open"]},
+                **{c: "รอฝ่ายวิเคราะห์ตรวจรหัสที่แจ้ง" for c in res["requested"]},
+                **{c: "บันทึกเป็นรหัสในระบบอื่นของวัตถุดิบเดิมแล้ว" for c in res["aliased"]}}
     before = {c: (z, u) for c, z, u in con.execute("SELECT code, storage_zone, count_unit FROM bc_ingredient")}
     if not default_month:
         # a quote sheet dates most rows (DATAP: 23-07-2569); the rows it leaves undated belong
@@ -272,6 +296,9 @@ def import_rows(con, rows: list, who: str, default_month: str = None) -> dict:
         code = str(r.get("code") or "").strip()
         if not code or code in ("#N/A", "None"):
             stats["skipped"].append({"row": i + 1, "why": "ไม่มีรหัส"})
+            continue
+        if code in held:
+            stats["skipped"].append({"row": i + 1, "code": code, "why": held[code]})
             continue
         vals = {"name_th": (str(r["name"]).strip() if r.get("name") else None),
                 "category": r.get("category") or None,

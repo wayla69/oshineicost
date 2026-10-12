@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 import auth as _auth
 from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
+from bom_center import aliases as _al
 from bom_center import benchmark as _bm
 from bom_center import central as _ce
 from bom_center import claims as _cl
@@ -87,6 +88,13 @@ def _forced():
         return _forced_order()
     except Exception:
         return None
+
+
+def _for_accounting(wb) -> None:
+    """PR-Y: a file for the accounting system shows the code that system uses now; the register code is kept in the last column."""
+    with get_db() as con:
+        _ensure(con)
+        _al.recode_workbook(wb, _al.current_map(con, "acc"))
 
 
 def _xlsx(wb, filename: str):
@@ -219,9 +227,12 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
                     "parent_unit": r["parent_unit"], "qty_in_parent": r["qty_in_parent"], "kind": r["kind"],
                     "range_min": r["range_min"], "range_max": r["range_max"], "level": r["level"],
                     "approx": r["approx"], "how": r["how"]})
-        aliases = {}
-        for a, c, s in con.execute("SELECT alias_code, ingredient_code, system FROM bc_ingredient_alias"):
-            aliases.setdefault(c, []).append({"alias": a, "system": s})
+        aliases = {}                                      # PR-Y: only the codes in use; each says which system and whether it is the one to use
+        live = _al.in_use(con)
+        for a, c, s, vf in con.execute("SELECT alias_code, ingredient_code, system, valid_from FROM bc_ingredient_alias"
+                                       " WHERE COALESCE(active,1)=1 ORDER BY alias_code"):
+            aliases.setdefault(c, []).append({"alias": a, "system": s, "system_th": _al.SYSTEM_TH.get(s, s or ""), "valid_from": vf,
+                                              "in_use": a in live})
         used = dict(con.execute("SELECT ingredient_code, COUNT(DISTINCT sku_id) FROM bom_ingredients"
                                 " GROUP BY ingredient_code"))
         cols = ["code", "name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
@@ -233,7 +244,7 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
     for r in rows:
         if kind and r["kind"] != kind:
             continue
-        if ql and ql not in f"{r['code']} {r['name_th'] or ''} {r['name_en'] or ''}".lower():
+        if ql and ql not in f"{r['code']} {r['name_th'] or ''} {r['name_en'] or ''} {' '.join(a['alias'] for a in aliases.get(r['code'], []))}".lower():
             continue
         p = price.get(r["code"]) or {}
         r.update({"price_per_base": p.get("price_per_base"), "price_source": p.get("source"),
@@ -406,16 +417,34 @@ async def _read_master_file(file: UploadFile):
     return rows, sheet, sorted(hmap)
 
 
+# ── PR-Y: a new code of an existing item is an alias; the recipes keep the register code ─────────────────────
+def _can_alias(request: Request) -> bool:
+    """Who may record an alias at once (the analyst, and Accounting through the price page); everyone else files a request."""
+    return bool({"bom.center", "bom.prices"} & _modules(request))
+
+
+def _choices_or_400(raw):
+    """The per-code answers a screen sends with an import ({code: {as, item}}); None = it sent none (the old behaviour)."""
+    try:
+        return _al.choices_from(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/api/bom-center/ingredients/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_ingredients_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
-                                month: Optional[str] = Query(None)):
-    """Import the master template or a DATAP sheet. Values in the file overwrite."""
+                                month: Optional[str] = Query(None), code_choices: Optional[str] = Form(None),
+                                alias_system: str = Form("acc")):
+    """Import the master template or a DATAP sheet. Values in the file overwrite. A code the register does not know is listed
+    with the items it could be a new code of; `code_choices` is the answer per code (alias of an existing item / a new item)."""
     rows, sheet, cols = await _read_master_file(file)
+    choices = _choices_or_400(code_choices)
     with get_db() as con:
         _ensure(con)
         try:
             stats = _m.import_rows(con, rows, _who(request),
-                                   default_month=month if month and _MONTH.match(month) else None)
+                                   default_month=month if month and _MONTH.match(month) else None,
+                                   choices=choices, can_alias=_can_alias(request), system=alias_system)
             if dry_run:
                 con.rollback()
             else:
@@ -431,6 +460,110 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
         _drop_bom_days()             # … and so does the BoM day cache of the issue reports
     return {"dry_run": dry_run, "sheet": sheet, "columns": cols, "rows": len(rows),
             **{k: v for k, v in stats.items() if k != "skipped"}, "skipped": stats["skipped"][:200]}
+
+
+class CodeRequestBody(BaseModel):
+    new_code: str
+    ingredient_code: str
+    system: Optional[str] = "acc"
+    old_code: Optional[str] = None
+    name: Optional[str] = None
+    valid_from: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/codes/request", dependencies=[Depends(require_write_token)])
+def bc_code_request(body: CodeRequestBody, request: Request):
+    """Sales Support: this register item has a new code in another system. Files ONE request for the analyst; the register
+    and the recipes are untouched."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _al.request(con, body.new_code, body.system, body.ingredient_code, _who(request),
+                                              old_code=body.old_code, name=body.name, valid_from=body.valid_from, note=body.note))
+    return {"ok": True, **out}
+
+
+@router.get("/api/bom-center/codes/requests")
+def bc_code_requests(status: str = Query("pending")):
+    if status not in ("pending", "applied", "rejected", "all"):
+        raise HTTPException(400, "สถานะไม่ถูกต้อง")
+    with get_db() as con:
+        _ensure(con)
+        return {"status": status, "requests": _al.listing(con, status), "pending": _al.pending_count(con),
+                "systems": [{"code": c, "label": t} for c, t in _al.SYSTEMS]}
+
+
+class CodeDecideBody(BaseModel):
+    request_id: int
+    decision: str                                  # applied | rejected
+    note: Optional[str] = None
+
+
+@router.post("/api/bom-center/codes/request/decide", dependencies=[Depends(require_write_token)])
+def bc_code_request_decide(body: CodeDecideBody, request: Request):
+    """The analyst's answer: record the new code as an alias of the item (current for its system), or reject it with a reason
+    Sales Support reads. The recipes are not edited: they keep the register code."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _al.decide(con, body.request_id, body.decision, body.note, _who(request)))
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out}
+
+
+@router.get("/api/bom-center/codes/suggest")
+def bc_code_suggest(name: str = Query(""), code: Optional[str] = Query(None), unit: Optional[str] = Query(None)):
+    """The register items a name (and the unit it is bought in) could belong to - best three first."""
+    with get_db() as con:
+        _ensure(con)
+        return {"suggestions": _al.suggest_items(con, name, code=code, unit=unit)}
+
+
+@router.get("/api/bom-center/ingredients/{code}/aliases")
+def bc_ingredient_aliases(code: str):
+    with get_db() as con:
+        _ensure(con)
+        try:
+            return _al.aliases_of(con, code)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+
+class AliasBody(BaseModel):
+    action: str                                    # add | retire | current | register
+    alias: Optional[str] = None
+    system: Optional[str] = "acc"
+    valid_from: Optional[str] = None
+    note: Optional[str] = None
+    make_current: Optional[bool] = True
+
+
+@router.post("/api/bom-center/ingredients/{code}/aliases", dependencies=[Depends(require_write_token)])
+def bc_ingredient_aliases_save(code: str, body: AliasBody, request: Request):
+    """The analyst records, retires or switches the outside codes of one register item. An alias is retired (active=0), never deleted."""
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+
+        def run():
+            if body.action == "add":
+                return _al.add_alias(con, code, body.alias, body.system, body.valid_from, body.note, who,
+                                     make_current=bool(body.make_current))
+            if body.action == "register":
+                return _al.use_register_code(con, code, body.system, who)
+            if body.action in ("retire", "current"):
+                r = con.execute("SELECT ingredient_code FROM bc_ingredient_alias WHERE alias_code=?", (_al._code(body.alias),)).fetchone()
+                if not r or r[0] != code:
+                    raise ValueError("รหัสนี้ไม่ใช่รหัสในระบบอื่นของรายการนี้")
+                return _al.retire(con, body.alias, who) if body.action == "retire" else _al.set_current(con, body.alias, who)
+            raise ValueError("คำสั่งไม่ถูกต้อง · ใช้ add / retire / current / register")
+        out = _write(con, run)
+        now_state = _al.aliases_of(con, code)
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out, "state": now_state}
 
 
 # ── M2 Material Converter ────────────────────────────────────────────────────
@@ -817,7 +950,8 @@ def _rules_or_400(raw) -> list:
     return out
 
 
-def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=None):
+def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=None, choices=None, can_alias=True,
+            alias_system="acc"):
     """Preview, and unless dry_run, write. get_db() hands out a long-lived
     per-thread connection, so a dry run must ROLL BACK explicitly — otherwise the
     codes add_unknown registered would ride along with the next request's commit.
@@ -828,6 +962,10 @@ def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=Non
         try:
             for r in rules or []:
                 _m.set_unit_rule(con, r["code"], r["unit"], r["factor_to_base"], "จากการนำเข้าราคา", who)
+            decided = None
+            if choices is not None:        # PR-Y: the person's answer per unknown code - alias of an item / a new item; no answer = left out
+                decided = _al.apply_choices(con, _al.unknown_in(con, lines), choices, who, can_alias, system=alias_system,
+                                            note=note, add_new=lambda c, u: _m.add_from_purchase(con, c, u.get("name"), u.get("unit"), who))
             agg = _p.aggregate(con, lines, add_unknown=add_unknown, who=who, month=month)
             pv = _p.preview(con, month, agg)
             result = None
@@ -845,24 +983,28 @@ def _import(lines, info, month, dry_run, who, note, add_unknown=False, rules=Non
         invalidate_cache("bc_")
     pv["issues"] = pv["issues"][:300]
     return {"dry_run": dry_run, "source": info, "lines": len(lines), **pv, "applied": result,
-            "rules_applied": len(rules or [])}
+            "rules_applied": len(rules or []), "codes_decided": decided}
 
 
 class RulesBody(BaseModel):
     rules: List[UnitRule] = []
+    code_choices: Optional[dict] = None             # PR-Y: {code: {as: alias|new, item}}
+    alias_system: Optional[str] = "acc"
 
 
 @router.post("/api/bom-center/prices/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_prices_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
                            dry_run: bool = Query(True), add_unknown: bool = Query(False),
-                           rules: Optional[str] = Form(None)):
+                           rules: Optional[str] = Form(None), code_choices: Optional[str] = Form(None),
+                           alias_system: str = Form("acc")):
     """A month of purchase lines -> weighted-average actual price per ingredient.
     `rules` (a JSON list in the form) are the pack guard's suggestions the person ticked."""
     if month:
         _month_or_400(month)
     rl = _rules_or_400(rules)
     lines, info, month = await _price_lines_from_file(file, month)
-    return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown, rules=rl)
+    return _import(lines, info, month, dry_run, _who(request), f"ไฟล์ {file.filename}", add_unknown, rules=rl,
+                   choices=_choices_or_400(code_choices), can_alias=_can_alias(request), alias_system=alias_system)
 
 
 @router.post("/api/bom-center/prices/from-requisition", dependencies=[Depends(require_write_token_unless_dry_run)])
@@ -880,7 +1022,9 @@ def bc_prices_from_requisition(request: Request, month: str = Query(...), dry_ru
         raise HTTPException(404, f"ยังไม่มีรายงานจ่ายสินค้าภายในเดือน {month} ในระบบ")
     lines = [dict(zip(("code", "name", "qty", "unit", "value", "unit_price", "branch_id"), r)) for r in rows]
     return _import(lines, {"format": "รายงานจ่ายสินค้าภายใน (ที่นำเข้าไว้)"}, month, dry_run, _who(request),
-                   "จากรายงานจ่ายสินค้าภายในที่นำเข้าไว้", add_unknown, rules=rl)
+                   "จากรายงานจ่ายสินค้าภายในที่นำเข้าไว้", add_unknown, rules=rl,
+                   choices=_choices_or_400(body.code_choices if body else None), can_alias=_can_alias(request),
+                   alias_system=(body.alias_system if body else None) or "acc")
 
 
 @router.get("/api/bom-center/prices/requisition-months")
@@ -927,7 +1071,7 @@ async def bc_prices_submit(request: Request, file: UploadFile = File(...), month
     with get_db() as con:
         _ensure(con)
         out = _write(con, lambda: _ps.create(con, month, file.filename, raw, note, who, _sub_summary(res)))
-    return {**out, "summary": _sub_summary(res)}
+    return {**out, "summary": _sub_summary(res), "unknown_items": res.get("unknown_items") or []}
 
 
 @router.get("/api/bom-center/prices/submissions")
@@ -960,7 +1104,8 @@ def bc_price_submission_file(sub_id: int):
 @router.post("/api/bom-center/prices/submissions/{sub_id}/import",
              dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_price_submission_import(sub_id: int, request: Request, dry_run: bool = Query(True),
-                                     add_unknown: bool = Query(False), rules: Optional[str] = Form(None)):
+                                     add_unknown: bool = Query(False), rules: Optional[str] = Form(None),
+                                     code_choices: Optional[str] = Form(None), alias_system: str = Form("acc")):
     """The analyst reviews (dry run) and imports the file Sales Support sent: the same import as an upload."""
     rl = _rules_or_400(rules)
     with get_db() as con:
@@ -973,7 +1118,8 @@ async def bc_price_submission_import(sub_id: int, request: Request, dry_run: boo
         fn, mime, raw = _ps.blob(con, sub_id)
     lines, info, month = await _price_lines_from_bytes(raw, _parse_name(fn, mime), h["month"])
     who = _who(request)
-    out = _import(lines, info, month, dry_run, who, f"ไฟล์จากประสานงานขาย {fn}", add_unknown, rules=rl)
+    out = _import(lines, info, month, dry_run, who, f"ไฟล์จากประสานงานขาย {fn}", add_unknown, rules=rl,
+                  choices=_choices_or_400(code_choices), can_alias=_can_alias(request), alias_system=alias_system)
     if not dry_run:
         with get_db() as con:
             _ensure(con)
@@ -2304,6 +2450,7 @@ def bc_issues_export(request: Request, month: Optional[str] = Query(None), branc
     wb = Workbook()
     _slip_lines_sheet(wb.active, "ใบตัดเบิกที่ยืนยัน", rows, note)
     _slip_summary_sheet(wb.create_sheet(), "สรุปต่อสาขา", rows, note)
+    _for_accounting(wb)
     return _xlsx(wb, f"bom_center_issue_slips_{'b%d_' % bid if bid is not None else ''}{month}.xlsx")
 
 
@@ -2324,6 +2471,7 @@ def bc_issue_export_one(slip_id: int, request: Request):
     _slip_lines_sheet(wb.active, "ใบตัดเบิก", rows,
                       f"ใบตัดเบิก สาขา{rows[0]['branch'] if rows else ''} วันที่ {head['slip_date']} เลขที่ใบ {slip_id} · "
                       f"ยืนยันโดย {head['confirmed_by'] or '-'}")
+    _for_accounting(wb)
     return _xlsx(wb, f"bom_center_issue_slip_{slip_id}_{head['slip_date']}.xlsx")
 
 
@@ -2543,6 +2691,7 @@ def bc_issue_summary_xlsx(request: Request, end_count_id: int = Query(...), bran
     _slip_lines_sheet(wb.active, "ใบตัดเบิกรายวัน", slips, _period_slip_note(s, recon))
     _recon_sheet(wb.create_sheet(), "กระทบยอด", recon)
     _issue_sheet(wb.create_sheet(), "สรุปเคลื่อนไหว", s)
+    _for_accounting(wb)
     return _xlsx(wb, f"bom_center_issue_summary_b{bid}_{s['period']['month']}.xlsx")
 
 
@@ -2597,6 +2746,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
         name = s["branch"]["name"]
         _issue_sheet(wb.create_sheet(), _sheet_title(name, used), s)
         _recon_sheet(wb.create_sheet(), _sheet_title(f"กระทบยอด {name}", used), recons[s["period"]["end_count_id"]])
+    _for_accounting(wb)
     return _xlsx(wb, f"bom_center_issue_summary_all_{month}.xlsx")
 
 
@@ -3487,6 +3637,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
     for r in per_branch:
         ws2.append(r)
+    _for_accounting(wb)
     return _xlsx(wb, f"bom_center_orders_{st}_{date_from or 'all'}_{date_to or 'all'}.xlsx")
 
 
@@ -3592,10 +3743,12 @@ def bc_central():
 
 @router.post("/api/bom-center/central/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_central_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
-                            set_local: bool = Query(True), month: Optional[str] = Query(None)):
+                            set_local: bool = Query(True), month: Optional[str] = Query(None),
+                            code_choices: Optional[str] = Form(None), alias_system: str = Form("acc")):
     """The centre's monthly report (or this list's own export) -> the central list.
     Everything not on it becomes 'local' (the branch buys it itself)."""
     raw = await _read_xlsx(file)
+    choices = _choices_or_400(code_choices)
     with get_db() as con:
         _ensure(con)
         p = _parse_central(con, raw, month)
@@ -3603,8 +3756,11 @@ async def bc_central_import(request: Request, file: UploadFile = File(...), dry_
             pl = _ce.plan_catalogue(con, p)
             return {"dry_run": True, "month": p["month"], "sheet": p["sheet"], "branches": p["branches"],
                     **pl["counts"], "rows": pl["rows"]}
-        out = _write(con, lambda: _ce.apply_catalogue(con, p, _who(request), set_local_others=set_local))
+        out = _write(con, lambda: _ce.apply_catalogue(con, p, _who(request), set_local_others=set_local, choices=choices,
+                                                      can_alias=_can_alias(request), system=alias_system))
     invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # an alias recorded by the import changes how the usage model reads a code
+    _drop_bom_days()
     return {"dry_run": False, **out}
 
 
@@ -3683,7 +3839,8 @@ async def bc_central_deliveries(request: Request, file: UploadFile = File(...), 
 @router.post("/api/bom-center/central/month-import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_central_month_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True),
                                   set_local: bool = Query(True), month: Optional[str] = Query(None),
-                                  branch_ids: Optional[str] = Query(None), receipt_date: Optional[str] = Query(None)):
+                                  branch_ids: Optional[str] = Query(None), receipt_date: Optional[str] = Query(None),
+                                  code_choices: Optional[str] = Form(None), alias_system: str = Form("acc")):
     """The centre's monthly report ONCE: the central list AND one goods-received note per
     branch, previewed together and saved in one transaction — the list first, so the
     notes convert with the order units it puts in the master. The preview shows every
@@ -3694,12 +3851,14 @@ async def bc_central_month_import(request: Request, file: UploadFile = File(...)
     except ValueError:
         raise HTTPException(400, "คำขอไม่ถูกต้อง")
     who = _who(request)
+    choices = _choices_or_400(code_choices)
     with get_db() as con:
         _ensure(con)
         p = _parse_central(con, raw, month)
         try:
             rows = _ce.plan_catalogue(con, p)["rows"] if dry_run else []
-            cat = _ce.apply_catalogue(con, p, who, set_local_others=set_local)
+            cat = _ce.apply_catalogue(con, p, who, set_local_others=set_local, choices=choices,
+                                      can_alias=_can_alias(request), system=alias_system)
             if not p.get("month"):          # the list's own export: no month, no quantities → the list alone
                 if ids:
                     raise ValueError("ไฟล์นี้ไม่มีงวดของรายงาน จึงสร้างใบรับสินค้าไม่ได้ · เลือกเดือนของรายงาน")
@@ -3723,6 +3882,8 @@ async def bc_central_month_import(request: Request, file: UploadFile = File(...)
             raise
     if not dry_run:
         invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # an alias recorded by the import changes how the usage model reads a code
+        _drop_bom_days()
     return {"dry_run": dry_run, "month": p["month"], "sheet": p["sheet"], "catalogue": {**cat, "rows": rows},
             "deliveries": dl}
 
