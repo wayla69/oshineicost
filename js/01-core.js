@@ -2548,6 +2548,7 @@ const SUPPLY_CHIPS = [
   { key: 'base', label: 'ข้อมูลตั้งต้น', items: [
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'rcheck', label: 'ตรวจสูตรด้วยยอดซื้อ', mods: ['bom.center'], roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', roles: ['branch', 'analyst', 'management'] },

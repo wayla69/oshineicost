@@ -151,6 +151,19 @@ def _unit_review_items(con) -> list:
     return out
 
 
+def _recipe_check_items(con, today: date) -> list:
+    """PR-X — the analyst's check of the units against real purchases: present only while a month that has the company
+    branches' purchases holds an ingredient bought ten times more (or less) than its recipes say."""
+    from .recipe_check import x10_rows
+    rows, m = x10_rows(con, today)
+    if not rows:
+        return []
+    shown = " · ".join(f"{r['name']}: ซื้อ {r['bought']:,.0f} · สูตร {r['recipe']:,.0f} {r['base_unit'] or ''}".rstrip() for r in rows[:3])
+    return [_e("recipe_check_units", 26, "setup", f"ตรวจหน่วยของวัตถุดิบที่ยอดซื้อต่างจากสูตรเกิน 10 เท่า ({len(rows)} รายการ)", "todo",
+               f"เดือน{_mth(m)} · {shown}" + (f" · และอีก {len(rows) - 3} รายการ" if len(rows) > 3 else ""), count=len(rows),
+               owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rcheck", "month": m})]
+
+
 def _month_items(con, month: str, today: date) -> list:
     from .release import checks_summary
     out = []
@@ -588,6 +601,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     if centre:
         items += _setup_items(con)
         items += _unit_review_items(con)
+        items += _recipe_check_items(con, today)
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
     close = _close_steps(con, month, close_br, scoped=bool(scoped_branch))

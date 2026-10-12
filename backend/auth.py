@@ -354,6 +354,11 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/issue-reports",           {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     # PR-V ingredient usage per ฿100,000 of sales (report + Excel): read-only; a branch login is pinned to its own branch (the router)
     ("GET", "/api/bom-center/per-sales",              {"branch.stock", "supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
+    # PR-X the benchmark from the company-owned branches: the settings card is the sales team's / the analyst's (a branch login reaches
+    # neither); the recipe-and-unit check against real purchases is the analyst's / management's alone (they hold bom.center)
+    ("GET", "/api/bom-center/benchmark",              {"supply.ordering", "bom.center", "ops.report"}),
+    ("W",   "/api/bom-center/benchmark",              {"supply.ordering", "bom.center"}),
+    ("GET", "/api/bom-center/recipe-check",           {"bom.center"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)

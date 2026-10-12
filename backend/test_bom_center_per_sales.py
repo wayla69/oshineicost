@@ -342,7 +342,7 @@ def test_http_report_workbook_pinning_and_the_reference_setting(client, app_db, 
         assert wb.sheetnames == ["ต่อยอดขาย 100000", "เทียบสาขา"] == [PER_SALES_SHEET, PER_SALES_COMPARE]
         rows = list(wb[PER_SALES_SHEET].iter_rows(values_only=True))
         assert list(rows[1]) == ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", "ต่อยอดขาย ฿100,000 (4 สัปดาห์ล่าสุด)", "4 สัปดาห์ก่อนหน้า",
-                                 "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "หมายเหตุ"] == _per_sales_headers(4)
+                                 "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "เทียบค่ากลาง %", "หมายเหตุ"] == _per_sales_headers(4)
         assert [x[0] for x in rows[2:] if x[1] == "T-PS1"] == ["BranchA", "BranchB", "ทั้งเครือ"]
         chain = next(x for x in rows[2:] if x[0] == "ทั้งเครือ" and x[1] == "T-PS1")
         assert chain[4] == pytest.approx(750.0) and chain[3] == "กรัม"

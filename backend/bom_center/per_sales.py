@@ -14,7 +14,10 @@
              (last 14 days ÷ the 14 before, clamped 0.7–1.3) × the same season factor (forecast._daily_model).
 
 A new branch (fewer than NEW_BRANCH_DAYS trading days of sales) with a reference branch (app_settings `bc_ref_branch`, JSON
-{branch_id: reference branch id}) is ordered from the reference branch's per_100k × the sales the branch expects.
+{branch_id: reference branch id | "none"}) is ordered from the reference branch's per_100k × the sales the branch expects.
+PR-X: with nothing set the reference is the BENCHMARK (benchmark.py: the median of the company branches, when at least two
+others are configured), and `report` carries that benchmark, "เทียบค่ากลาง %" on every branch and item, and the chip of a branch
+outside the benchmark that uses clearly less per ฿100,000 (below the benchmark by more than the buffer).
 """
 import json
 import statistics
@@ -22,6 +25,7 @@ import time as _time
 from collections import defaultdict
 from datetime import date, timedelta
 
+from . import benchmark as BM
 from . import forecast as FC
 from .clock import today as bkk_today
 
@@ -29,7 +33,9 @@ MIN_WEEK_DAYS = 5              # a block of 7 days is a "whole week" only when t
 STEADY_PCT = 15.0              # a weekly ratio that swings more than this (±%) is "ใช้ไม่สม่ำเสมอ"
 NEW_BRANCH_DAYS = 14           # fewer trading days of sales than this → the reference branch is used (when one is set)
 REF_KEY = "bc_ref_branch"
+BENCH = "benchmark"           # PR-X: the reference of a new branch can be the median of the company branches (the default)
 BUFFER_MIN, BUFFER_MAX = -50.0, 100.0
+BELOW_TH = "ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก"
 NEED_SALES_TH = "ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้"
 
 
@@ -182,8 +188,8 @@ def sales_clean(raw):
 
 
 # ── the reference branch of a new branch ────────────────────────────────────
-def reference_map(con) -> dict:
-    """{branch_id: reference branch_id} from app_settings (a bad value reads as none)."""
+def _raw_refs(con) -> dict:
+    """{branch_id: int reference branch id | 'none'} as stored (a bad value reads as unset)."""
     try:
         r = con.execute("SELECT value FROM app_settings WHERE key=?", (REF_KEY,)).fetchone()
     except Exception:
@@ -197,25 +203,58 @@ def reference_map(con) -> dict:
     out = {}
     for k, v in (raw.items() if isinstance(raw, dict) else []):
         try:
-            out[int(k)] = int(v)
+            out[int(k)] = "none" if v == "none" else int(v)
         except (TypeError, ValueError):
             continue
     return out
 
 
+def reference_map(con) -> dict:
+    """{branch_id: reference branch_id} of the branches given ONE reference branch (a bad value reads as none)."""
+    return {k: v for k, v in _raw_refs(con).items() if v != "none"}
+
+
 def reference_for(con, branch_id: int):
+    """The single reference branch chosen for a branch, or None (see reference_spec for the default and the opt-out)."""
     rid = reference_map(con).get(int(branch_id))
     return rid if rid and rid != int(branch_id) else None
 
 
-def set_reference(con, who: str, branch_id: int, ref_id) -> dict:
-    """Set (or clear, ref_id None) the reference branch of a branch: app_settings `bc_ref_branch`, audited."""
+def reference_spec(con, branch_id: int) -> dict:
+    """What a new branch borrows from: {mode, ref_branch_id}. mode = 'branch' (one chosen branch), 'none' (the sales team opted
+    out) or 'benchmark' (PR-X: the default - the median of the company branches)."""
+    raw = _raw_refs(con).get(int(branch_id))
+    if raw == "none":
+        return {"mode": "none", "ref_branch_id": None}
+    if raw and raw != int(branch_id):
+        return {"mode": "branch", "ref_branch_id": raw}
+    return {"mode": "benchmark", "ref_branch_id": None}
+
+
+def resolved_reference(con, branch_id: int):
+    """What suggest() is given as `ref_branch`: a branch id, BENCH (the benchmark - only when at least MIN_BRANCHES other company
+    branches are configured), or None (no reference: today's behaviour)."""
+    from . import benchmark as BM
+    spec = reference_spec(con, branch_id)
+    if spec["mode"] == "branch":
+        return spec["ref_branch_id"]
+    if spec["mode"] == "benchmark" and len([i for i in BM.branch_ids(con) if i != int(branch_id)]) >= BM.MIN_BRANCHES:
+        return BENCH
+    return None
+
+
+def set_reference(con, who: str, branch_id: int, ref_id, mode: str = None) -> dict:
+    """Set a branch's reference: one branch (ref_id), the benchmark (ref_id None / mode 'benchmark' - the default, stored as
+    nothing) or none (mode 'none'). app_settings `bc_ref_branch`, audited."""
     from .master import audit
     if not con.execute("SELECT 1 FROM branches WHERE branch_id=? AND name<>'ALL'", (branch_id,)).fetchone():
         raise ValueError("ไม่พบสาขา")
-    cur = reference_map(con)
+    cur = _raw_refs(con)
     old = cur.get(int(branch_id))
-    if ref_id in (None, "", 0):
+    if mode == "none":
+        cur[int(branch_id)] = "none"
+        ref_id = None
+    elif ref_id in (None, "", 0):
         cur.pop(int(branch_id), None)
         ref_id = None
     else:
@@ -229,7 +268,7 @@ def set_reference(con, who: str, branch_id: int, ref_id) -> dict:
     con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
     con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES(?, ?)",
                 (REF_KEY, json.dumps({str(k): v for k, v in sorted(cur.items())}, ensure_ascii=False)))
-    audit(con, who, "ref_branch_set", "app_settings", f"{REF_KEY}|{branch_id}", old, ref_id)
+    audit(con, who, "ref_branch_set", "app_settings", f"{REF_KEY}|{branch_id}", old, "none" if mode == "none" else ref_id)
     return {"branch_id": int(branch_id), "ref_branch_id": ref_id}
 
 
@@ -251,6 +290,36 @@ def reference_basis(con, ref_id: int, month: str, weeks: int = 6, cover: list = 
                history_to=as_of.isoformat(), trading_days=len(days))
     if cover and days:
         out["sales_normal"] = round(normal_from(sales_day, days, as_of, cover, factor)["total"], 2)
+    return out
+
+
+def benchmark_basis(con, branch_id: int, month: str, weeks: int = 6, cover: list = None, factor: float = 1.0) -> dict:
+    """PR-X · what a new branch borrows when its reference is the benchmark: for every item the MEDIAN of the company branches'
+    usage per ฿100,000 (the branch itself left out; an item needs MIN_BRANCHES branches that use it), and the median of their
+    "ปกติ" sales for the cover days as the hint. Same shape as reference_basis."""
+    from . import benchmark as BM
+    ids = [i for i in BM.branch_ids(con) if i != int(branch_id)]
+    bases = [reference_basis(con, i, month, weeks=weeks, cover=cover, factor=factor) for i in ids]
+    ok = [b for b in bases if b["ok"]]
+    out = {"branch_id": None, "name": BM.LABEL, "label": f"คำนวณจาก{BM.LABEL}", "benchmark": True, "items": {}, "use": {},
+           "stats": {}, "sales": 0.0, "ok": False, "sales_normal": None, "branches": [b["name"] for b in ok]}
+    if len(ok) < BM.MIN_BRANCHES:
+        return out
+    items, via = {}, {}
+    for code in set().union(*[set(b["items"]) for b in ok]):
+        med = BM.median_of(b["items"][code]["per_100k"] for b in ok if code in b["items"])
+        if not med or med <= 0:
+            continue
+        swing = BM.median_of_any(b["items"][code]["swing_pct"] for b in ok if code in b["items"])
+        items[code] = {"usage": med, "per_100k": med, "weekly": [], "swing_pct": None if swing is None else round(swing, 1),
+                       "steady": None if swing is None else swing <= STEADY_PCT}
+        for b in ok:
+            for v in ((b["stats"] or {}).get("via", {}).get(code) or []):
+                via.setdefault(code, set()).add(v)
+    normals = [b["sales_normal"] for b in ok if b["sales_normal"]]
+    out.update(items=items, use={c: {"median": it["per_100k"]} for c, it in items.items()}, ok=bool(items),
+               stats={"via": {c: sorted(v) for c, v in via.items()}}, sales=sum(b["sales"] for b in ok),
+               sales_normal=round(BM.median_of_any(normals), 2) if normals else None)
     return out
 
 
@@ -291,6 +360,7 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
         path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
         core = FC._loaded("core")
         key = (path, tuple(branch_ids) if branch_ids is not None else None, end.isoformat(), weeks,
+               tuple(BM.branch_ids(con)), BM.buffer_pct(con),
                getattr(core, "_data_gen", 0), getattr(core, "_db_gen", 0)) if path and FC.USAGE_CACHE_TTL else None
     except Exception:
         key = None
@@ -300,6 +370,8 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
             return hit[1]
     from .prices import price_for
     from .stock import count_units
+    buf = BM.buffer_pct(con)
+    bench_ids = BM.branch_ids(con)
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     bnames = {b: nm for b, nm in con.execute("SELECT branch_id, name FROM branches WHERE name<>'ALL'")}
     if branch_ids is None:
@@ -318,19 +390,36 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
         return prices[code]
 
     branches, tot = [], {"cur": {"sales": 0.0, "use": defaultdict(float)}, "prv": {"sales": 0.0, "use": defaultdict(float)}}
-    for bid in ids:
+    bench_cur, bench_prv = {}, {}                              # PR-X: the benchmark branches' ratios (even when they are not listed)
+    for bid in list(ids) + [b for b in bench_ids if b not in ids and b in bnames]:
         with FC._plan_slots:
             use, _days, _st = FC.usage_history(con, bid, min(prv0, cur0), cur1, month)
         sales_day = sales_by_day(con, bid, min(prv0, cur0), cur1)
         cur = ratio_from(use, sales_day, cur0, cur1)
         prv = ratio_from(use, sales_day, prv0, prv1) if prv0 <= prv1 else {"sales": 0.0, "items": {}, "weeks": 0, "days": 0}
+        if bid in bench_ids and cur["sales"] > 0:
+            bench_cur[bid] = cur
+            bench_prv[bid] = prv
+        if bid not in ids:
+            continue
         for w, r in (("cur", cur), ("prv", prv)):
             tot[w]["sales"] += r["sales"]
             for c, it in r["items"].items():
                 tot[w]["use"][c] += it["usage"]
         branches.append({"branch_id": bid, "branch": bnames[bid], "sales": cur["sales"], "sales_prev": prv["sales"],
                          "days": cur["days"], "weeks_prev": prv["weeks"], "_cur": cur["items"], "_prv": prv["items"]})
-    codes = set()
+    # PR-X: the benchmark = per item the median over the benchmark branches that use it (at least MIN_BRANCHES), now and before
+    bench_now, bench_before = {}, {}
+    if len(bench_cur) >= BM.MIN_BRANCHES:
+        for code in set().union(*[set(r["items"]) for r in bench_cur.values()]):
+            m = BM.median_of(r["items"][code]["per_100k"] for r in bench_cur.values() if code in r["items"])
+            if m is not None:
+                bench_now[code] = m
+        for code in set().union(*[set(r["items"]) for r in bench_prv.values()]):
+            m = BM.median_of(r["items"][code]["per_100k"] for r in bench_prv.values() if code in r["items"])
+            if m is not None:
+                bench_before[code] = m
+    codes = set(bench_now) | set(bench_before)
     for b in branches:
         codes |= set(b["_cur"]) | set(b["_prv"])
     cu = count_units(con, codes)
@@ -344,15 +433,37 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
                 "swing_pct": swing, "steady": steady,
                 "value_per_100k": round(per * p, 2) if per is not None and p else None}
 
+    bench_value = None
+    benchmark = None
+    if bench_now:
+        bitems = [line(c, bench_now[c], bench_before.get(c), None, None) for c in bench_now]
+        bitems.sort(key=lambda x: (-(x["value_per_100k"] or 0), x["code"]))
+        bench_value = round(sum(x["value_per_100k"] or 0 for x in bitems), 2)
+        benchmark = {"label": BM.LABEL, "branches": [{"branch_id": i, "name": bnames.get(i)} for i in bench_cur],
+                     "n": len(bench_cur), "buffer_pct": buf, "items": bitems, "value_per_100k": bench_value,
+                     "sales": round(BM.median_of_any(r["sales"] for r in bench_cur.values()) or 0.0, 2)}
     for b in branches:
         items = []
         for code in set(b["_cur"]) | set(b["_prv"]):
             c, p = b["_cur"].get(code), b["_prv"].get(code)
-            items.append(line(code, c["per_100k"] if c else 0.0, p["per_100k"] if p else None,
-                              c["swing_pct"] if c else None, c["steady"] if c else None))
+            it = line(code, c["per_100k"] if c else 0.0, p["per_100k"] if p else None,
+                      c["swing_pct"] if c else None, c["steady"] if c else None)
+            if code in bench_now:                                                      # PR-X: against the benchmark
+                f = (cu.get(code, (None, 1.0))[1] or 1.0)
+                it["bench_per_100k"] = round(bench_now[code] / f, 4)
+                it["vs_benchmark_pct"] = BM.vs_pct(c["per_100k"] if c else 0.0, bench_now[code])
+            else:
+                it["bench_per_100k"] = it["vs_benchmark_pct"] = None
+            items.append(it)
         items.sort(key=lambda x: (-(x["value_per_100k"] or 0), x["code"]))
         b["items"] = items
         b["value_per_100k"] = round(sum(x["value_per_100k"] or 0 for x in items), 2)
+        b["is_benchmark"] = b["branch_id"] in bench_ids
+        b["vs_benchmark_pct"] = BM.vs_pct(b["value_per_100k"], bench_value) if benchmark and b["sales"] > 0 else None
+        # a branch outside the benchmark that uses clearly less per ฿100,000 than the company branches: it may buy elsewhere
+        b["below_benchmark"] = bool(benchmark and not b["is_benchmark"] and b["sales"] > 0 and b["vs_benchmark_pct"] is not None
+                                    and b["vs_benchmark_pct"] < -buf)
+        b["below_benchmark_th"] = BELOW_TH if b["below_benchmark"] else None
         del b["_cur"], b["_prv"]
     chain = None
     if len(ids) > 0 and tot["cur"]["sales"] > 0:
@@ -366,7 +477,8 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
                  "items": items, "value_per_100k": round(sum(x["value_per_100k"] or 0 for x in items), 2)}
     out = {"weeks": weeks, "end": end.isoformat(), "current": {"from": cur0.isoformat(), "to": cur1.isoformat()},
            "previous": {"from": prv0.isoformat(), "to": prv1.isoformat()} if prv0 <= prv1 else None,
-           "steady_pct": STEADY_PCT, "month": month, "branches": branches, "chain": chain}
+           "steady_pct": STEADY_PCT, "month": month, "branches": branches, "chain": chain,
+           "benchmark": benchmark, "buffer_pct": buf, "buffer_note": BM.BUFFER_NOTE}
     if key is not None:
         if len(_report_cache) >= 16:
             _report_cache.pop(min(_report_cache, key=lambda k: _report_cache[k][0]))

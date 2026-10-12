@@ -3,7 +3,7 @@
   <!-- The month strip is visible on every pane: one price month for the whole tab.
        Pane switching lives in the bar on the page (SUPPLY_CHIPS, js/01-core.js);
        the old sub-tab bar below is kept in the markup, hidden. -->
-  <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+  <div id="bmcMonthStrip" class="card p-3 mb-3 flex flex-wrap items-center gap-3">
     <label class="text-xs" style="color:var(--text-muted)">เดือน
       <select id="bmcMonth" class="supply-month" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
     </label>
@@ -189,6 +189,8 @@
   <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
   <div id="bmc-pane-cal" style="display:none">
     <div id="bmcFcCal" class="card p-4 mb-3"></div>
+    <!-- PR-X: the company branches that make the benchmark (ค่ากลาง) and the temporary stock buffer -->
+    <div id="bmcBmCard" class="card p-4 mb-3"></div>
     <div id="bmcCalBulk" class="card p-4 mb-3" style="display:none">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ตั้งวันส่งหลายสาขาจากไฟล์</div>
       <div class="flex flex-wrap items-center gap-3 mt-2">
@@ -202,6 +204,7 @@
     <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
       <p>ประสานงานขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) · มีผลตั้งแต่รอบถัดไป</p>
       <p>ตั้งหลายสาขาพร้อมกัน: ดาวน์โหลดแม่แบบ แก้เฉพาะวันที่เปลี่ยน แล้วนำเข้า · ช่องว่าง = ไม่เปลี่ยน</p>
+      <p>สาขาของบริษัทที่ใช้เป็นค่ากลาง: ค่ากลางคือมัธยฐานของสาขาที่เลือก ใช้เป็นเกณฑ์เทียบปริมาณวัตถุดิบต่อยอดขาย ฿100,000 และเป็นสาขาอ้างอิงเริ่มต้นของสาขาใหม่ · ช่วงยอมรับสำหรับสต็อกใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา เมื่อสาขาใดมีผลตรวจนับต้นงวดและปลายงวดครบ ระบบใช้ยอดซื้อปรับด้วยส่วนต่างของสต็อกและเกณฑ์ผลต่างปกติของสาขานั้น</p>
     </div></details>
   </div>
 
@@ -444,6 +447,25 @@
       <p>ช่อง “ทดลองแปลง” ใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน · การนำเข้าไฟล์แสดงตัวอย่างก่อนบันทึกทุกครั้ง และนำเข้าแล้วบันไดหน่วยของรหัสที่อยู่ในไฟล์ถูกแทนที่ทั้งรายการ</p>
       <p>ค่าเฉลี่ยจากการรับจริง: ตอนรับสินค้าที่ขายเป็นน้ำหนักแต่ใช้เป็นตัว สาขานับจำนวนตัวที่ได้รับพร้อมน้ำหนัก ระบบหาน้ำหนักเฉลี่ยต่อตัวจากการรับของทุกสาขาใน 90 วัน เสนอเมื่อมีการรับอย่างน้อย 3 ครั้ง นับได้อย่างน้อย 10 ตัว และต่างจากค่าที่ใช้ตั้งแต่ 3% ขึ้นไป · “ใช้ค่านี้” เปลี่ยนค่าเฉลี่ยในบันไดหน่วย (ปัดเป็นทศนิยม 2 ตำแหน่ง และขยายช่วงให้ครอบคลุมเมื่อจำเป็น) · “คงค่าเดิม” ต้องระบุเหตุผล · ค่าเฉลี่ยเปลี่ยนต้นทุนของเดือนที่ยังไม่ประกาศใช้เท่านั้น เดือนที่ประกาศใช้แล้วไม่เปลี่ยน</p>
       <p>ขนาดบรรจุที่สาขาแจ้ง: สาขาพบว่าของที่รับมีขนาดบรรจุไม่ตรงกับทะเบียน แจ้งจากฟอร์มรับสินค้า และไม่กระทบการรับสินค้า · ตรวจกับฉลากหรือผู้จำหน่ายแล้วกด “ใช้ค่านี้” เพื่อปรับบันไดหน่วย หรือ “ไม่ใช้” พร้อมเหตุผลที่สาขาอ่านได้</p>
+    </div></details>
+  </div>
+
+  <!-- ── PR-X · ตรวจสูตรด้วยยอดซื้อ (ข้อมูลตั้งต้น): the recipes and the units read against what the company branches bought ── -->
+  <div id="bmc-pane-rcheck" style="display:none">
+    <div class="card p-3 mb-3">
+      <div class="flex flex-wrap items-end gap-3 text-xs" style="color:var(--text-muted)">
+        <label>เดือนของไฟล์ราคา<br><select id="bmcRcMonth" onchange="bmcLoadRcheck(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:280px"></select></label>
+        <a href="#" onclick="bmcRcXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <span id="bmcRcStatus" style="padding-bottom:6px"></span>
+      </div>
+      <div id="bmcRcChips" class="flex flex-wrap gap-1 mt-2"></div>
+      <div id="bmcRcNotes" class="text-[11px] mt-2" style="color:var(--text-muted)"></div>
+    </div>
+    <div class="card p-3 mb-3"><div id="bmcRcBody"></div></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>หน้านี้เทียบปริมาณที่สาขาของบริษัทซื้อจริง (จากไฟล์ราคารายสาขา) กับปริมาณที่สูตรบอกว่าใช้ โดยเทียบต่อยอดขาย ฿100,000 ของเดือนเดียวกัน แล้วใช้ค่ากลาง (มัธยฐานของสาขาที่เลือกไว้ในตั้งค่า → รอบส่งของสาขา) ของทั้งสองฝั่ง</p>
+      <p>“ต่างกันเกิน 10 เท่า” มักหมายถึงหน่วยหรืออัตราแปลงผิด ให้ไปตรวจที่หน่วยและการแปลง · “มีการซื้อ แต่ไม่มีในสูตร” อาจเป็นของที่ใช้ในสูตรกึ่งสำเร็จซึ่งยังไม่ได้เชื่อมกับสูตร · “มีในสูตร แต่ไม่มีการซื้อ” มักเป็นรหัสที่ซื้อภายใต้รหัสอื่น</p>
+      <p>ไฟล์ราคาเป็นยอดซื้อทั้งเดือน ถ้ายอดขายรายวันมีไม่ครบทุกวัน ระบบปรับยอดซื้อตามสัดส่วนวันและแจ้งไว้ในหน้า · หน้านี้ไม่เปลี่ยนข้อมูลใด ๆ แต่ละแถวมีลิงก์ไปแก้ที่หน่วยและการแปลงหรือทะเบียนวัตถุดิบ</p>
     </div></details>
   </div>
 </div>
