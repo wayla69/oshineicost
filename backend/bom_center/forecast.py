@@ -224,7 +224,8 @@ def _per_dish(con, month: str) -> tuple:
     from .engine import release_in_force
     conv = Converter(con)
     loss = dict(con.execute("SELECT code, loss_pct FROM bc_ingredient"))
-    aliases = dict(con.execute("SELECT alias_code, ingredient_code FROM bc_ingredient_alias"))
+    from .aliases import active_map                       # PR-Y: a retired alias no longer resolves
+    aliases = active_map(con)
     sku_id = dict(con.execute("SELECT sku_code, sku_id FROM skus"))
     out, stats = {}, {"release_skus": 0, "legacy_skus": 0, "unconverted_lines": 0, "exploded_lines": 0}
     bad = {}                                              # sku_id -> [(code, unit, why)] lines that cannot be counted

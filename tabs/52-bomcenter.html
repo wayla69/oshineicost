@@ -268,6 +268,7 @@
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
   <div id="bmc-pane-ing" style="display:none">
+    <div id="bmcCodeReqCard" class="card p-4 mb-3" style="display:none"></div>
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
       <input type="search" id="bmcIngQ" placeholder="ค้นหารหัส/ชื่อวัตถุดิบ…" oninput="bmcIngFilter()"
              style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
@@ -314,6 +315,7 @@
       <p>แก้ช่องในตารางได้โดยตรง แล้วกด “บันทึกการแก้ไข” · ชื่อต้องไม่ว่าง ตัวเลขต้องเป็นตัวเลขและไม่ติดลบ · แถวที่ไม่ผ่านจะมีข้อความสีแดง และระบบไม่บันทึกจนกว่าจะแก้</p>
       <p>แก้หลายรายการด้วย Excel: ดาวน์โหลดทะเบียน แก้ แล้วนำเข้า · นำเข้าทะเบียนรับไฟล์ที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP เช่น Cost-RW</p>
       <p>“เติมจากข้อมูลในระบบ” เพิ่มรหัสใหม่จากสูตร ขนาดบรรจุ และรายการบังคับสั่ง · ไม่เขียนทับค่าที่ตั้งไว้แล้ว</p>
+      <p>“รหัสในระบบอื่น” ใต้รหัสของแต่ละแถว ใช้ดูและจัดการรหัสที่ระบบบัญชี คลัง หรือผู้จำหน่ายใช้กับวัตถุดิบนี้ · รหัสในทะเบียนและสูตรไม่เปลี่ยน · รหัสใหม่ที่ประสานงานขายแจ้งมาแสดงในการ์ด “รหัสใหม่ที่รออนุมัติ” ด้านบน · ค้นหาด้วยรหัสในระบบอื่นได้</p>
     </div></details>
   </div>
 
@@ -347,9 +349,6 @@
           <span class="text-[11px]" style="color:var(--text-muted)">รายงานที่นำเข้าไว้:</span>
           <select id="bmcReqMonth" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)" title="เดือนของรายงานจ่ายสินค้าภายในที่นำเข้าไว้"></select>
           <button id="bmcFromReqBtn" onclick="bmcPricesFromReq()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ใช้รายงานเดือนนี้</button>
-          <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"
-                 title="เพิ่มรหัสที่ยังไม่อยู่ในทะเบียน (หน่วยฐานเป็นค่าประมาณ ตรวจที่ทะเบียนวัตถุดิบ)">
-            <input type="checkbox" id="bmcAddUnknown" checked> เพิ่มรหัสที่ยังไม่มีในทะเบียน</label>
           <a href="#" onclick="bmcDownloadPriceTemplate();return false" style="color:var(--accent);font-size:12px;text-decoration:underline">ดาวน์โหลดแม่แบบยอดซื้อรายบรรทัด</a>
         </div>
       </details>
@@ -370,7 +369,8 @@
     <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
     <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
       <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>
-      <p>การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง · “ยกราคาเดือนก่อนมาใช้” ใช้ราคาล่าสุดของแต่ละวัตถุดิบสำหรับเดือนที่ยังไม่มีไฟล์ · ตัวเลือก: นำเข้าจากรายงานที่มีอยู่ในระบบ เพิ่มรหัสที่ยังไม่มีในทะเบียน และดาวน์โหลดแม่แบบ · ไฟล์ที่ประสานงานขายส่งมารอตรวจแสดงเหนือตาราง</p>
+      <p>การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง · “ยกราคาเดือนก่อนมาใช้” ใช้ราคาล่าสุดของแต่ละวัตถุดิบสำหรับเดือนที่ยังไม่มีไฟล์ · ตัวเลือก: นำเข้าจากรายงานที่มีอยู่ในระบบ และดาวน์โหลดแม่แบบ · ไฟล์ที่ประสานงานขายส่งมารอตรวจแสดงเหนือตาราง</p>
+      <p>รหัสในไฟล์ที่ทะเบียนไม่รู้จักจะไม่ถูกเพิ่มเอง: ระบบแสดงวัตถุดิบที่ชื่อใกล้เคียง แล้วเลือกรายการละรหัสว่า “เป็นรหัสใหม่ของวัตถุดิบเดิม” (สูตรไม่ต้องแก้) หรือ “เป็นวัตถุดิบใหม่” · รหัสที่ไม่เลือกจะไม่ถูกนำเข้า</p>
     </div></details>
   </div>
 
@@ -388,11 +388,13 @@
         <button onclick="bmcDownloadPriceTemplate('bmcSubStatus')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 12px;font-size:12px;cursor:pointer">ดาวน์โหลดแม่แบบยอดซื้อรายบรรทัด</button>
         <span id="bmcSubStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
       </div>
+      <div id="bmcSubUnknown" class="mt-3" style="display:none"></div>
     </div>
     <div id="bmcPriceFileList" class="card p-3 mb-3" style="display:none"></div>
     <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
       <p>ส่งรายงานจ่ายสินค้าภายในหรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด ให้ฝ่ายวิเคราะห์นำเข้า · เดือนของไฟล์คือเดือนที่เลือกด้านบน</p>
       <p>ฝ่ายวิเคราะห์ตรวจไฟล์แล้วนำเข้า หรือส่งกลับพร้อมเหตุผล · ผลแสดงในรายการ “ไฟล์ที่ส่งแล้ว”</p>
+      <p>ถ้าไฟล์มีรหัสที่ทะเบียนไม่รู้จัก ระบบแสดงรายการใต้ปุ่มส่ง พร้อมวัตถุดิบที่ชื่อใกล้เคียง · ถ้ารหัสนั้นเป็นรหัสใหม่ของวัตถุดิบเดิม เลือกวัตถุดิบแล้วกด “ส่งคำขอให้ฝ่ายวิเคราะห์” · ไฟล์ราคายังส่งได้ตามปกติ</p>
     </div></details>
   </div>
 
@@ -447,6 +449,48 @@
       <p>ช่อง “ทดลองแปลง” ใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน · การนำเข้าไฟล์แสดงตัวอย่างก่อนบันทึกทุกครั้ง และนำเข้าแล้วบันไดหน่วยของรหัสที่อยู่ในไฟล์ถูกแทนที่ทั้งรายการ</p>
       <p>ค่าเฉลี่ยจากการรับจริง: ตอนรับสินค้าที่ขายเป็นน้ำหนักแต่ใช้เป็นตัว สาขานับจำนวนตัวที่ได้รับพร้อมน้ำหนัก ระบบหาน้ำหนักเฉลี่ยต่อตัวจากการรับของทุกสาขาใน 90 วัน เสนอเมื่อมีการรับอย่างน้อย 3 ครั้ง นับได้อย่างน้อย 10 ตัว และต่างจากค่าที่ใช้ตั้งแต่ 3% ขึ้นไป · “ใช้ค่านี้” เปลี่ยนค่าเฉลี่ยในบันไดหน่วย (ปัดเป็นทศนิยม 2 ตำแหน่ง และขยายช่วงให้ครอบคลุมเมื่อจำเป็น) · “คงค่าเดิม” ต้องระบุเหตุผล · ค่าเฉลี่ยเปลี่ยนต้นทุนของเดือนที่ยังไม่ประกาศใช้เท่านั้น เดือนที่ประกาศใช้แล้วไม่เปลี่ยน</p>
       <p>ขนาดบรรจุที่สาขาแจ้ง: สาขาพบว่าของที่รับมีขนาดบรรจุไม่ตรงกับทะเบียน แจ้งจากฟอร์มรับสินค้า และไม่กระทบการรับสินค้า · ตรวจกับฉลากหรือผู้จำหน่ายแล้วกด “ใช้ค่านี้” เพื่อปรับบันไดหน่วย หรือ “ไม่ใช้” พร้อมเหตุผลที่สาขาอ่านได้</p>
+    </div></details>
+  </div>
+
+  <!-- ── PR-Y · แจ้งเปลี่ยนรหัสสินค้า (ตั้งค่า): Sales Support reports that a register item has a new code in another system ── -->
+  <div id="bmc-pane-codereq" style="display:none">
+    <div id="bmcCrqForm" class="card p-4 mb-3">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">แจ้งเปลี่ยนรหัสสินค้า</div>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="text-xs" style="color:var(--text-muted)">รหัสใหม่<br>
+          <input id="bmcCrqNew" maxlength="40" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:160px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">ระบบ<br>
+          <select id="bmcCrqSys" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+            <option value="acc">ระบบบัญชี</option><option value="warehouse">ระบบคลัง</option><option value="supplier">ผู้จำหน่าย</option><option value="other">ระบบอื่น</option></select></label>
+        <label class="text-xs" style="color:var(--text-muted)">ชื่อตามระบบอื่น (ถ้ามี)<br>
+          <input id="bmcCrqName" maxlength="120" onchange="bmcCrqSuggest()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:260px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <button type="button" onclick="bmcCrqSuggest()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 12px;font-size:12px;cursor:pointer">ค้นหาวัตถุดิบที่ใกล้เคียง</button>
+      </div>
+      <div id="bmcCrqSug" class="text-[11.5px] mt-2" style="color:var(--text-secondary)"></div>
+      <div class="flex flex-wrap items-end gap-3 mt-2">
+        <label class="text-xs" style="color:var(--text-muted)">วัตถุดิบเดิมในทะเบียน<br>
+          <input id="bmcCrqItem" list="bmcUcList" placeholder="รหัสหรือชื่อวัตถุดิบ" onchange="bmcCrqPicked()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:260px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <span id="bmcCrqItemName" class="text-xs" style="color:var(--text-secondary);padding-bottom:6px"></span>
+        <label class="text-xs" style="color:var(--text-muted)">รหัสเดิม<br>
+          <input id="bmcCrqOld" maxlength="40" oninput="this.dataset.touched=1" placeholder="รหัสที่ใช้อยู่" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:160px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">เริ่มใช้วันที่ (ถ้ามี)<br>
+          <input id="bmcCrqFrom" type="date" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">หมายเหตุ<br>
+          <input id="bmcCrqNote" maxlength="200" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:220px;background:var(--bg-input);color:var(--text-primary)"></label>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 mt-3">
+        <button onclick="bmcCrqSend()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">ส่งให้ฝ่ายวิเคราะห์</button>
+        <span id="bmcCrqStatus" class="text-xs" role="status"></span>
+      </div>
+    </div>
+    <div class="card p-4 mb-3">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">คำขอที่ส่งแล้ว</div>
+      <div id="bmcCrqList" class="text-xs"></div>
+    </div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ใช้เมื่อระบบบัญชี คลัง หรือผู้จำหน่ายเปลี่ยนรหัสของวัตถุดิบที่มีอยู่แล้ว · รหัสที่สูตรใช้ในทะเบียนไม่เปลี่ยน รหัสใหม่ถูกบันทึกเป็น “รหัสในระบบอื่น” ของวัตถุดิบเดิม สูตรจึงไม่ต้องแก้</p>
+      <p>กรอกรหัสใหม่ เลือกระบบ และเลือกวัตถุดิบเดิม (ใส่ชื่อตามระบบอื่นแล้วกด “ค้นหาวัตถุดิบที่ใกล้เคียง” เพื่อให้ระบบแนะนำ) · ใส่วันที่เริ่มใช้ถ้ารหัสใหม่ยังไม่เริ่มใช้ในวันนี้</p>
+      <p>ฝ่ายวิเคราะห์ตรวจแล้วกด “ใช้” หรือ “ไม่ใช้” พร้อมเหตุผล · ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น · ผลแสดงในรายการ “คำขอที่ส่งแล้ว” · ไฟล์ที่ส่งให้ระบบบัญชีแสดงรหัสใหม่หลังอนุมัติ</p>
     </div></details>
   </div>
 

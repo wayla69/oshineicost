@@ -2561,6 +2561,7 @@ const SUPPLY_CHIPS = [
   { key: 'setup', label: 'ตั้งค่า', items: [
     { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'codereq', label: 'แจ้งเปลี่ยนรหัสสินค้า', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },

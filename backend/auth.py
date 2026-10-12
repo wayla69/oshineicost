@@ -299,6 +299,10 @@ MODULE_RULES = [
     # router); the analyst's decision on it follows the /units writers above
     ("W",   "/api/bom-center/units/pack-report",       {"branch.stock", "bom.center"}),
     ("W",   "/api/bom-center/units/pack-report/decide", {"bom.center", "bom.prices"}),
+    # PR-Y: Sales Support (and the analyst) report a new code of an existing item; the analyst decides (the /units writers' rule).
+    # Recording, retiring or switching an alias on the register row is the analyst's alone (the general /api/bom-center rule)
+    ("W",   "/api/bom-center/codes/request",           {"supply.ordering", "bom.center"}),
+    ("W",   "/api/bom-center/codes/request/decide",    {"bom.center", "bom.prices"}),
     ("W",   "/api/bom-center/recipes",                 {"bom.center", "bom.recipes"}),
     ("W",   "/api/bom-center/prep",                    {"bom.center", "bom.recipes"}),
     # release workflow (owner 2026-10-06): the analyst releases, management acknowledges / rolls back

@@ -151,6 +151,22 @@ def _unit_review_items(con) -> list:
     return out
 
 
+def _code_request_items(con) -> list:
+    """PR-Y — the analyst's queue of new codes for existing items that Sales Support reported; present only while one waits."""
+    from .aliases import listing, pending_count
+    try:
+        n = pending_count(con)
+        rows = listing(con, "pending", limit=3) if n else []
+    except Exception:                                      # the list must open even if the table cannot be read
+        return []
+    if not n:
+        return []
+    det = " · ".join(f"{r['item_name'] or r['ingredient_code']}: {r['old_code'] or '-'} → {r['new_code']} ({r['system_th']})" for r in rows)
+    return [_e("code_request_review", 27, "setup", f"ตรวจรหัสใหม่ที่ประสานงานขายแจ้ง ({n} เรื่อง)", "todo",
+               det + (f" · และอีก {n - 3} เรื่อง" if n > 3 else ""), count=n, owner=("bom.center", "bom.prices"),
+               owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "ing", "anchor": "bmcCodeReqCard"})]
+
+
 def _recipe_check_items(con, today: date) -> list:
     """PR-X — the analyst's check of the units against real purchases: present only while a month that has the company
     branches' purchases holds an ingredient bought ten times more (or less) than its recipes say."""
@@ -601,6 +617,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     if centre:
         items += _setup_items(con)
         items += _unit_review_items(con)
+        items += _code_request_items(con)
         items += _recipe_check_items(con, today)
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)

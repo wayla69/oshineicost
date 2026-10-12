@@ -105,6 +105,7 @@ LEGACY = ["แผนสั่งวัตถุดิบ (ระบบเดิ�
 HOME = "งานของฉันและปิดงวดเดือน"
 PILOT = "สาขานำร่อง 4 สาขา"
 PERSALES = "ใช้วัตถุดิบต่อยอดขาย"                      # PR-V
+CODEREQ = "แจ้งเปลี่ยนรหัสสินค้า"                        # PR-Y: Sales Support reports a new code of an existing item
 
 EXPECTED = {
     "accounting": {"หน้างาน": [HOME], "ข้อมูลตั้งต้น": ["ราคารายเดือน"], "ปิดงวดเดือน": ["ใบสรุปตัดเบิก"]},
@@ -114,7 +115,7 @@ EXPECTED = {
     "salessupport": {"หน้างาน": [HOME, PILOT], "ข้อมูลตั้งต้น": ["ไฟล์ราคา"],
                      "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ", "เคลมสินค้า", "ยอดแนะนำรายรอบ", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", PERSALES],
                      "ปิดงวดเดือน": ["นำเข้าข้อมูลปิดงวด", "สรุปผลต่างรายเดือน"],
-                     "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ"] + LEGACY},
+                     "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ", CODEREQ] + LEGACY},
     "operation": {"หน้างาน": [HOME], "ใบสั่งซื้อ": ["ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", PERSALES], "ปิดงวดเดือน": ["สรุปผลต่างรายเดือน"]},
     "marketing": {},
     "franchise": {},
@@ -126,12 +127,12 @@ EVERYTHING = {
     "ใบสั่งซื้อ": ["คิวใบสั่งซื้อ", "เคลมสินค้า", "ยอดแนะนำรายรอบ", "ตรวจสอบการสั่ง", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", PERSALES],
     "ปิดงวดเดือน": ["นำเข้าข้อมูลปิดงวด", "สรุปผลต่างรายเดือน", "ใบสรุปตัดเบิก"],
     "สาขาของฉัน": ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"],
-    "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ"] + LEGACY,
+    "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ", CODEREQ] + LEGACY,
 }
 EXPECTED["management"] = EVERYTHING
 # the analyst holds neither ops.report nor supply.ordering, the floor of the plan and set-up tabs: of the older pages
 # only ยอดซื้อเทียบยอดขาย (cost.analysis) opens for it, as before PR-M2
-EXPECTED["analyst"] = {**EVERYTHING, "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ", "ยอดซื้อเทียบยอดขาย"]}
+EXPECTED["analyst"] = {**EVERYTHING, "ตั้งค่า": ["รอบส่งของสาขา", "โซนจัดเก็บ", CODEREQ, "ยอดซื้อเทียบยอดขาย"]}
 
 
 @pytest.mark.parametrize("role", sorted(EXPECTED))
@@ -161,7 +162,7 @@ def test_the_first_row_of_the_bar(role):
 def test_the_older_pages_are_one_group_inside_setup_and_nothing_is_deleted():
     chips = {c["key"]: c for c in _chips()}
     legacy = [i["label"] for c in chips.values() for i in c["items"] if i["group"] == "legacy"]
-    assert legacy == LEGACY and all(i["group"] == "legacy" for i in chips["setup"]["items"][2:])
+    assert legacy == LEGACY and all(i["group"] == "legacy" for i in chips["setup"]["items"][3:])
     assert [c["key"] for c in chips.values() if any(i["group"] == "legacy" for i in c["items"])] == ["setup"]
     # four tabs of the old ordering screens, all still reachable (the owner's rule: regroup, never delete)
     assert {(i["tab"], i["pane"]) for i in chips["setup"]["items"] if i["group"] == "legacy"} == {

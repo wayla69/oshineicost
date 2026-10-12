@@ -36,7 +36,6 @@ function _bmcMonthSync(k) {
   supplyMonthPick(el, k === 'issue');
   if (before && el.value !== before) { _bmcIng = []; _bmcPrices = []; }
 }
-function _bmcAddUnknown() { const el = document.getElementById('bmcAddUnknown'); return !!(el && el.checked); }
 // the server's write rules (auth.py): the centre's data = bom.center; the monthly price
 // (and the unit rules a price file needs) = bom.prices too; recipes and sub-recipes = bom.recipes too
 function _bmcCanWrite() { return hasModule('bom.center'); }
@@ -117,7 +116,7 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   _bmcMonthSync(k);
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -129,13 +128,14 @@ function bmcSetSub(k) {
   if (k === 'zones') bmcLoadZones();
   if (k === 'issue') bmcLoadIssue();
   if (k === 'prep') bmcLoadPrep();
-  if (k === 'ing') bmcLoadIng();
+  if (k === 'ing') { bmcLoadIng(); bmcLoadCodeReqCard(); }
   if (k === 'price') bmcLoadPrices();
   if (k === 'pricefile') bmcLoadPriceFile();
   if (k === 'conv') bmcLoadConv();
   if (k === 'rcheck') bmcLoadRcheck();
-  const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases)
-  if (strip) strip.style.display = k === 'rcheck' ? 'none' : '';
+  if (k === 'codereq') bmcLoadCodeReq();
+  const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases); a code request has none
+  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq') ? 'none' : '';
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 // The month strip sits above every pane: a change reloads the pane that is open.
@@ -424,7 +424,7 @@ function bmcRenderIng() {
     ? `${_bmcChip('แสดงเฉพาะ: ' + _bmcIngProb, 'var(--amber-ink)')} <a href="#" onclick="_bmcIngProb='';bmcRenderIng();return false" style="color:var(--accent)">แสดงทุกปัญหา</a>` : '';
   const rows = _bmcIng.filter(r => (!kind || r.kind === kind) && (!only || r.problems.length)
     && (!only || !_bmcIngProb || r.problems.includes(_bmcIngProb))
-    && (!q || `${r.code} ${r.name_th || ''}`.toLowerCase().includes(q)));
+    && (!q || `${r.code} ${r.name_th || ''} ${(r.aliases || []).map(a => a.alias).join(' ')}`.toLowerCase().includes(q)));
   const w = _bmcCanWrite();
   const inp = (r, f, width, type) => w
     ? `<input data-code="${esc(r.code)}" data-f="${f}" ${type ? `type="${type}" step="any"` : ''} value="${esc(_bmcIngVal(r, f) ?? '')}" onchange="bmcIngEdit(this)"
@@ -450,7 +450,7 @@ function bmcRenderIng() {
   const pager = _bmcPagerHtml(_bmcIngPage, pages, rows.length ? from + 1 : 0, from + shown.length, rows.length);
   ['bmcIngPagerTop', 'bmcIngPager'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = pager; });
   document.getElementById('bmcIngBody').innerHTML = shown.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
-      <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}${r.aliases.length ? `<div class="text-[10px]" style="color:var(--text-muted)">รหัสคลัง: ${r.aliases.map(a => esc(a.alias)).join(', ')}</div>` : ''}</td>
+      <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}<div class="text-[10px]"><a href="#" onclick="bmcAlToggle(${_bmcQ(r.code)});return false" style="color:var(--accent)">รหัสในระบบอื่น${r.aliases.length ? ` (${r.aliases.length})` : ''}</a></div>${r.aliases.length ? `<div class="text-[10px]" style="color:var(--text-muted)">${r.aliases.map(a => a.in_use ? `<b>${esc(a.alias)}</b>` : esc(a.alias)).join(', ')}</div>` : ''}</td>
       <td class="py-1 pr-2">${inp(r, 'name_th', 210)}</td>
       <td class="py-1 pr-2">${kindSel(r)}</td>
       <td class="py-1 pr-2">${inp(r, 'base_unit', 70)}</td>
@@ -465,7 +465,8 @@ function bmcRenderIng() {
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
       <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}
         ${(_bmcIngErr[r.code] || []).map(m => `<div class="text-[11px] bmc-rownote" role="alert" style="color:var(--bad-ink)">${esc(m)}</div>`).join('')}</td>
-    </tr>`).join('') || '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
+    </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="14" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
+  if (_bmcAlOpen && document.getElementById('bmcAlCell')) { if (_bmcAlState && _bmcAlState.code === _bmcAlOpen) bmcAlRender(_bmcAlState); else bmcAlLoad(_bmcAlOpen); }
   const nProb = _bmcIng.filter(r => r.problems.length).length;
   if (!Object.keys(_bmcIngEdits).length) {
     _bmcStatus('bmcIngSummary', `${rows.length} จาก ${_bmcIng.length} รายการ · มีปัญหา ${nProb}`);
@@ -588,18 +589,39 @@ async function bmcSeed() {
 async function bmcImportIng(input) {
   const file = input?.files?.[0];
   if (!file) return;
-  const send = dry => { const fd = new FormData(); fd.append('file', file, file.name);
+  const send = (dry, choices, sys) => { const fd = new FormData(); fd.append('file', file, file.name);
+    if (choices) { fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', sys || 'acc'); }
     return _bmcJson(`${API}/api/bom-center/ingredients/import?dry_run=${dry}`, { method: 'POST', body: fd }); };
   try {
     _bmcStatus('bmcIngStatus', 'กำลังอ่านไฟล์ Cost-RW…');
-    const pre = await send(true);
+    bmcUcReset('bmcUcIng');
+    const pre = await send(true, null);
     document.getElementById('bmcIngReport').innerHTML = `<div class="card p-3 text-xs" style="color:var(--text-secondary)">
       แผ่นงาน <b>${esc(pre.sheet)}</b> · อ่าน ${pre.rows} แถว · ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} · ไม่เปลี่ยน ${pre.unchanged} · ราคาใบเสนอราคา ${pre.ref_prices}
-      ${pre.skipped.length ? `<div class="mt-1" style="color:var(--amber-ink)">ข้าม ${pre.skipped.length} แถว: ${pre.skipped.slice(0, 8).map(s => `แถว ${s.row}${s.code ? ' ' + esc(s.code) : ''} (${esc(s.why)})`).join(' · ')}</div>` : ''}</div>`;
+      ${pre.skipped.length ? `<div class="mt-1" style="color:var(--amber-ink)">ข้าม ${pre.skipped.length} แถว: ${pre.skipped.slice(0, 8).map(s => `แถว ${s.row}${s.code ? ' ' + esc(s.code) : ''} (${esc(s.why)})`).join(' · ')}</div>` : ''}
+      <div id="bmcUcIng" class="mt-2" style="display:none"></div></div>`;
     if (!(pre.inserted + pre.updated + pre.ref_prices)) { _bmcStatus('bmcIngStatus', 'ไม่มีรายการเปลี่ยนแปลง'); return; }
-    if (!await uiConfirm(`นำเข้า ${file.name}: ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม`, { title: 'ยืนยันการนำเข้าทะเบียน', ok: 'นำเข้า', cancel: 'ยกเลิก' })) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
-    const d = await send(false);
-    _bmcStatus('bmcIngStatus', `✓ นำเข้าแล้ว ใหม่ ${d.inserted} · แก้ไข ${d.updated}`, 'var(--good-ink)');
+    // PR-Y: a code the register does not know may be a new code of an item it has - the person answers per code before anything is added
+    const fresh = (pre.new_codes || []).filter(n => (n.suggestions || []).length);
+    let choices = null, sys = 'acc';
+    if (fresh.length) {
+      let go = null;
+      const footer = _bmcBtn('นำเข้า', 'window._bmcIngGo(true)', true) + _bmcBtn('ยกเลิก', 'window._bmcIngGo(false)');
+      await bmcUcRender('bmcUcIng', pre.new_codes, { mode: 'master', needAll: true, prefillNew: true, footer });
+      _bmcStatus('bmcIngStatus', `มีรหัสที่ยังไม่อยู่ในทะเบียน ${pre.new_codes.length} รหัส และ ${fresh.length} รหัสมีวัตถุดิบเดิมที่ใกล้เคียง: เลือกให้ครบ แล้วกด “นำเข้า”`, 'var(--amber-ink)');
+      for (;;) {                                   // wait for the person; a press with codes still unanswered says which and waits again
+        go = await new Promise(res => { window._bmcIngGo = res; });
+        if (!go) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
+        const open = bmcUcOpen('bmcUcIng');
+        if (!open.length) break;
+        _bmcStatus('bmcIngStatus', `ยังไม่ได้เลือก ${open.length} รหัส: ${open.slice(0, 4).join(', ')}${open.length > 4 ? ' …' : ''}`, 'var(--amber-ink)');
+      }
+      choices = bmcUcChoices('bmcUcIng'); sys = bmcUcSystem('bmcUcIng');
+    }
+    const cs = choices ? bmcUcSummary('bmcUcIng') : { alias: 0, fresh: 0 };
+    if (!await uiConfirm(`นำเข้า ${file.name}: ใหม่ ${pre.inserted - cs.alias} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม` + (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส` : ''), { title: 'ยืนยันการนำเข้าทะเบียน', ok: 'นำเข้า', cancel: 'ยกเลิก' })) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
+    const d = await send(false, choices, sys);
+    _bmcStatus('bmcIngStatus', `✓ นำเข้าแล้ว ใหม่ ${d.inserted} · แก้ไข ${d.updated}` + (d.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.aliased}` : '') + (d.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.requested}` : ''), 'var(--good-ink)');
     bmcLoadIng(true);
   } catch (e) {
     _bmcStatus('bmcIngStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
@@ -678,32 +700,45 @@ function _bmcRulesToSend() {
   const sel = _bmcSelectedRules(), seen = new Set(sel.map(r => r.code + '|' + r.unit));
   return sel.concat(_bmcChosenRules.filter(r => !seen.has(r.code + '|' + r.unit)));
 }
+// PR-Y: the answers to "which unknown code is a new code of an existing item"; null = none given
+function _bmcPriceChoices() { const c = bmcUcChoices('bmcUcPrice'); return Object.keys(c).length ? c : null; }
+function _bmcShowPrice(p, applied) {
+  document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(p, applied);
+  if (applied) { bmcUcReset('bmcUcPrice'); return; }
+  bmcUcRender('bmcUcPrice', p.unknown_items || [], { mode: 'price', onRecalc: 'bmcPriceRepreview()' });
+}
 async function bmcPriceRepreview() {
   if (!_bmcPriceSend) return;
   _bmcChosenRules = _bmcRulesToSend();
   try {
     _bmcStatus('bmcPriceStatus', 'กำลังคำนวณใหม่…');
-    _bmcPricePre = await _bmcPriceSend(true, _bmcChosenRules);
-    document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(_bmcPricePre, false);
-    _bmcStatus('bmcPriceStatus', `คำนวณด้วยกฎหน่วย ${_bmcChosenRules.length} รายการแล้ว · ตรวจผล แล้วกด “บันทึกราคา”`);
+    _bmcPricePre = await _bmcPriceSend(true, _bmcChosenRules, _bmcPriceChoices());
+    _bmcShowPrice(_bmcPricePre, false);
+    _bmcStatus('bmcPriceStatus', `คำนวณด้วยกฎหน่วย ${_bmcChosenRules.length} รายการและรหัสที่เลือกแล้ว · ตรวจผล แล้วกด “บันทึกราคา”`);
   } catch (e) { _bmcStatus('bmcPriceStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function bmcPriceCommit() {
   const pre = _bmcPricePre;
   if (!pre || !_bmcPriceSend) return;
-  const rules = _bmcRulesToSend();
-  if (!pre.priced && !rules.length) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
+  const rules = _bmcRulesToSend(), choices = _bmcPriceChoices(), cs = bmcUcSummary('bmcUcPrice'), open = bmcUcOpen('bmcUcPrice').length;
+  if (!pre.priced && !rules.length && !choices) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
   if (!await uiConfirm(`${_bmcPriceLabel}\nเดือน${fmtMonthTh(pre.month)}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
       (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ (บรรทัดที่ติดกฎจะคิดราคาได้ในการบันทึกนี้)` : '') +
+      (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส (สูตรไม่ต้องแก้)` : '') +
+      (cs.fresh ? `\nเพิ่มเป็นวัตถุดิบใหม่ ${cs.fresh} รหัส (ตรวจหน่วยฐานภายหลัง)` : '') +
+      (open ? `\nรหัสที่ยังไม่เลือก ${open} รหัส ไม่ถูกนำเข้าในครั้งนี้` : '') +
       (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (ตรวจหน่วยฐานภายหลัง)` : '') +
       (pre.counts.flag ? `\nราคาเปลี่ยน ≥25% ${pre.counts.flag} รายการ · ตรวจในตารางก่อน` : '') +
       (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : ''), { title: 'ยืนยันการนำเข้าราคา', ok: 'บันทึกราคา', cancel: 'ยกเลิก' })) {
     _bmcStatus('bmcPriceStatus', 'ยังไม่บันทึก'); return;
   }
   try {
-    const d = await _bmcPriceSend(false, rules);
-    document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(d, true);
-    _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : ''), 'var(--good-ink)');
+    const d = await _bmcPriceSend(false, rules, choices);
+    _bmcShowPrice(d, true);
+    const dc = d.codes_decided || {};
+    _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : '')
+      + ((dc.aliased || []).length ? ` · รหัสใหม่ของวัตถุดิบเดิม ${dc.aliased.length}` : '') + ((dc.requested || []).length ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${dc.requested.length}` : ''), 'var(--good-ink)');
+    _bmcIng = [];
     _bmcPrices = []; _bmcIng = []; _bmcPricePre = null; _bmcChosenRules = [];
     bmcLoadPrices(true);                      // (also reloads the files ประสานงานขาย sent: one just became “นำเข้าแล้ว”)
   } catch (e) { _bmcStatus('bmcPriceStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
@@ -718,7 +753,7 @@ function _bmcPreviewHtml(p, applied) {
       เปลี่ยน ≥25% <b style="color:var(--bad-ink)">${p.counts.flag}</b> · ≥10% <b style="color:var(--amber-ink)">${p.counts.warn}</b> · ใหม่ ${p.counts.new} ·
       ยกราคาเดิมมา ${p.carry_forward} · ยังไม่เคยมีราคา ${p.never_priced}
       ${p.added_codes?.length ? ` · <b style="color:var(--navy-ink)">${applied ? 'เพิ่ม' : 'จะเพิ่ม'}รหัสใหม่ในทะเบียน ${p.added_codes.length}</b>` : ''}
-      ${p.unknown_codes?.length ? ` · <b style="color:var(--amber-ink)">รหัสที่ไม่อยู่ในทะเบียน ${p.unknown_codes.length} (฿${_bmcNum(p.unknown_value, 0)}) · เลือก “เพิ่มรหัสที่ยังไม่มีในทะเบียน”</b>` : ''}
+      ${p.unknown_codes?.length ? ` · <b style="color:var(--amber-ink)">รหัสที่ไม่อยู่ในทะเบียน ${p.unknown_codes.length} (฿${_bmcNum(p.unknown_value, 0)}) · เลือกรายการละรหัสด้านล่าง</b>` : ''}
       ${p.issues.length ? ` · <b style="color:var(--amber-ink)">ใช้ไม่ได้ ${p.issues.length} บรรทัด (฿${_bmcNum(p.value_unused, 0)})</b>` : ''}</div>
     <div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">รหัส</th><th class="pr-2">วัตถุดิบ</th>
@@ -736,6 +771,7 @@ function _bmcPreviewHtml(p, applied) {
         <td class="pr-2">${esc(i.code)}</td><td class="pr-2">${esc(i.name || '')}</td><td class="pr-2 text-right">${_bmcNum(i.qty)} ${esc(i.unit || '')}</td>
         <td class="pr-2 text-right">฿${_bmcNum(i.value, 0)}</td><td style="color:var(--amber-ink)">${esc(i.why)}
         </td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${applied ? '' : '<div id="bmcUcPrice" class="mt-3" style="display:none"></div>'}
     ${_bmcSuggestedHtml(p.suggested_rules)}
     ${applied || !_bmcCanPrices() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button onclick="bmcPriceCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกราคา${(p.suggested_rules || []).length || _bmcChosenRules.length ? 'พร้อมกฎที่เลือก' : ''}</button>
       <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่บันทึก</span></div>`}
@@ -745,15 +781,19 @@ function _bmcPreviewHtml(p, applied) {
 // saves the prices AND the rules. Without suggestions the confirm comes straight after the preview.
 async function _bmcRunPriceImport(send, label) {
   const box = document.getElementById('bmcPricePreview');
-  _bmcPriceSend = send; _bmcPriceLabel = label; _bmcChosenRules = []; _bmcPricePre = null;
+  _bmcPriceSend = send; _bmcPriceLabel = label; _bmcChosenRules = []; _bmcPricePre = null; bmcUcReset('bmcUcPrice');
   try {
     _bmcStatus('bmcPriceStatus', 'กำลังคำนวณ…');
-    const pre = await send(true, []);
+    const pre = await send(true, [], null);
     _bmcPricePre = pre;
-    box.innerHTML = _bmcPreviewHtml(pre, false);
+    _bmcShowPrice(pre, false);
     if (pre.month !== _bmcMonth()) { const el = document.getElementById('bmcMonth'); if (el) supplyMonthPut(el, pre.month); supplyCtxSet({ month: pre.month }); }
     if ((pre.suggested_rules || []).length) {
       _bmcStatus('bmcPriceStatus', 'มีกฎหน่วยที่แนะนำ: กด “คำนวณใหม่ด้วยกฎที่เลือก” หรือ “บันทึกราคาพร้อมกฎที่เลือก”', 'var(--amber-ink)');
+      return;
+    }
+    if ((pre.unknown_items || []).length) {      // PR-Y: nothing is added on its own - the person answers per code first
+      _bmcStatus('bmcPriceStatus', `มีรหัสที่ระบบไม่รู้จัก ${pre.unknown_items.length} รหัส: เลือกรายการละรหัสด้านล่าง แล้วกด “บันทึกราคา” (รหัสที่ไม่เลือกจะไม่ถูกนำเข้า)`, 'var(--amber-ink)');
       return;
     }
     if (!pre.priced) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
@@ -765,9 +805,10 @@ async function _bmcRunPriceImport(send, label) {
 async function bmcImportPrices(input) {
   const file = input?.files?.[0];
   if (!file) return;
-  const send = (dry, rules) => { const fd = new FormData(); fd.append('file', file, file.name);
+  const send = (dry, rules, choices) => { const fd = new FormData(); fd.append('file', file, file.name);
     if (rules && rules.length) fd.append('rules', JSON.stringify(rules));
-    return _bmcJson(`${API}/api/bom-center/prices/import?dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST', body: fd }); };
+    if (choices) { fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', bmcUcSystem('bmcUcPrice')); }
+    return _bmcJson(`${API}/api/bom-center/prices/import?dry_run=${dry}`, { method: 'POST', body: fd }); };
   await _bmcRunPriceImport(send, `ไฟล์ ${file.name}`);
   input.value = '';
 }
@@ -788,10 +829,13 @@ async function bmcSubmitPriceFile(input) {
     fd.append('month', m);
     const note = (document.getElementById('bmcSubNote')?.value || '').trim();
     if (note) fd.append('note', note);
-    await _bmcJson(`${API}/api/bom-center/prices/submit`, { method: 'POST', body: fd });
+    const sent = await _bmcJson(`${API}/api/bom-center/prices/submit`, { method: 'POST', body: fd });
     const n = document.getElementById('bmcSubNote');
     if (n) n.value = '';
-    _bmcStatus('bmcSubStatus', '✓ ส่งไฟล์ราคาแล้ว · รอฝ่ายวิเคราะห์ตรวจ', 'var(--good-ink)');
+    const unk = sent.unknown_items || [];
+    _bmcStatus('bmcSubStatus', '✓ ส่งไฟล์ราคาแล้ว · รอฝ่ายวิเคราะห์ตรวจ' + (unk.length ? ` · มีรหัสที่ระบบไม่รู้จัก ${unk.length} รหัส ดูด้านล่าง` : ''), 'var(--good-ink)');
+    bmcUcReset('bmcSubUnknown');
+    if (unk.length) bmcUcRender('bmcSubUnknown', unk, { mode: 'request', system: 'acc' });
     bmcLoadPriceSubs();
   } catch (e) {
     _bmcStatus('bmcSubStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
@@ -846,8 +890,9 @@ function bmcLoadPriceFile() {
   bmcLoadPriceSubs();
 }
 async function bmcSubPreview(id) {
-  const send = (dry, rules) => { const fd = new FormData(); fd.append('rules', JSON.stringify(rules || []));
-    return _bmcJson(`${API}/api/bom-center/prices/submissions/${id}/import?dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`, { method: 'POST', body: fd }); };
+  const send = (dry, rules, choices) => { const fd = new FormData(); fd.append('rules', JSON.stringify(rules || []));
+    if (choices) { fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', bmcUcSystem('bmcUcPrice')); }
+    return _bmcJson(`${API}/api/bom-center/prices/submissions/${id}/import?dry_run=${dry}`, { method: 'POST', body: fd }); };
   await _bmcRunPriceImport(send, `ไฟล์ที่ประสานงานขายส่งมา (ลำดับที่ ${id})`);
 }
 async function bmcSubReject(id) {
@@ -864,8 +909,9 @@ async function bmcPricesFromReq() {
   const sel = document.getElementById('bmcReqMonth');
   const m = (sel && sel.value) || _bmcMonth();
   if (!m) { _bmcStatus('bmcPriceStatus', 'ยังไม่มีรายงานจ่ายสินค้าภายใน', 'var(--amber-ink)'); return; }
-  await _bmcRunPriceImport((dry, rules) => _bmcJson(`${API}/api/bom-center/prices/from-requisition?month=${m}&dry_run=${dry}&add_unknown=${_bmcAddUnknown()}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules: rules || [] }) }), `รายงานจ่ายสินค้าภายในเดือน${fmtMonthTh(m)} ที่นำเข้าไว้`);
+  await _bmcRunPriceImport((dry, rules, choices) => _bmcJson(`${API}/api/bom-center/prices/from-requisition?month=${m}&dry_run=${dry}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules: rules || [], code_choices: choices || null, alias_system: bmcUcSystem('bmcUcPrice') }) }), `รายงานจ่ายสินค้าภายในเดือน${fmtMonthTh(m)} ที่นำเข้าไว้`);
 }
 async function bmcCarry() {
   const m = _bmcMonth();
@@ -1357,7 +1403,7 @@ async function bmcUnitsImportPick(input) {
     const fd = new FormData(); fd.append('file', file, file.name);
     const p = await _bmcJson(`${API}/api/bom-center/units/import?dry_run=true`, { method: 'POST', body: fd });
     const lad = p.ladders.map(c => `<div style="border-top:1px solid var(--border);padding:5px 0">
-        <b>${esc(c.code)}</b> ${esc(c.name || '')} · หน่วยฐาน ${esc(c.base_unit || '—')}
+        <b>${esc(c.code)}</b> ${esc(c.name || '')}${c.file_code ? ` <span style="color:var(--text-muted)">(รหัสในไฟล์ ${esc(c.file_code)})</span>` : ''} · หน่วยฐาน ${esc(c.base_unit || '—')}
         ${c.changes.map(x => _bmcChip({ add: 'เพิ่ม', edit: 'แก้', remove: 'ลบ' }[x.change] + ' ' + x.unit, 'var(--text-muted)')).join(' ')}
         ${c.qty_per_recv_change ? _bmcChip(`ขนาดบรรจุ ${_bmcNum(c.qty_per_recv_change.from, 4)} → ${_bmcNum(c.qty_per_recv_change.to, 4)}`, 'var(--amber-ink)') : ''}
         ${c.ladder.map(r => `<div style="color:var(--text-secondary)">${esc(r.how)} = ${r.approx ? '≈ ' : ''}${_bmcNum(r.factor_to_base, 4)} ${esc(c.base_unit || '')}</div>`).join('')}
@@ -2632,6 +2678,306 @@ async function bmcIssPost(want) {
     bmcStatus('bmcIssStatus', false, String(e.message || e).slice(0, 200));          // the server did not take it: the button stays as it was
   }
 }
+// ── PR-Y · รหัสใหม่ของวัตถุดิบเดิม ──────────────────────────────────────────────
+// The code the recipes use never changes: a code from another system (accounting, warehouse, supplier) is an alias of the register
+// item. Sales Support reports it, the analyst decides; an import lists the codes it does not know with the register items they could
+// belong to, and the person chooses per code. Nothing in the register changes without the analyst.
+const _BMC_SYS = [['acc', 'ระบบบัญชี'], ['warehouse', 'ระบบคลัง'], ['supplier', 'ผู้จำหน่าย'], ['other', 'ระบบอื่น']];
+const _BMC_SYS_TH = Object.fromEntries(_BMC_SYS);
+const _bmcSysSel = (id, cur, extra) => `<select id="${id}" ${extra || ''} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">${
+  _BMC_SYS.map(([k, t]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+const _BMC_FIELD = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)';
+
+// the register items for the pickers (the list the register page already holds, else read it once)
+async function _bmcUcRegister() {
+  if (!_bmcIng.length) {
+    try { _bmcIng = (await _bmcJson(`${API}/api/bom-center/ingredients`)).rows || []; } catch (e) { /* the pickers still work from the suggestions */ }
+  }
+  let dl = document.getElementById('bmcUcList');
+  if (!dl) { dl = document.createElement('datalist'); dl.id = 'bmcUcList'; document.body.appendChild(dl); }
+  if (_bmcIng.length && dl.children.length !== _bmcIng.length) dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}</option>`).join('');
+}
+function _bmcItemOf(text) {                                   // a typed code or exact name -> the register code, else ''
+  const t = String(text || '').trim();
+  if (!t) return '';
+  const hit = _bmcIng.find(x => x.code === t) || _bmcIng.find(x => (x.name_th || '') === t);
+  return hit ? hit.code : '';
+}
+function _bmcItemName(code) { const h = _bmcIng.find(x => x.code === code); return h ? (h.name_th || '') : ''; }
+
+// ── the unknown codes of an import: one answer per code ─────────────────────────────────────────
+// _bmcUc[box] = {items: [{code, name, unit, lines, value, suggestions}], choice: {code: {as: 'alias'|'new', item, other}}, opts}
+const _bmcUc = {};
+function bmcUcReset(boxId) { delete _bmcUc[boxId]; const b = document.getElementById(boxId); if (b) { b.innerHTML = ''; b.style.display = 'none'; } }
+async function bmcUcRender(boxId, items, opts) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const st = _bmcUc[boxId] = Object.assign(_bmcUc[boxId] || { choice: {} }, { items: items || [], opts: opts || {} });
+  const o = st.opts;
+  if (!st.items.length) {                         // everything answered (a recalculation resolved the codes): keep the answers in view
+    const got = Object.entries(bmcUcChoices(boxId));
+    box.style.display = got.length ? '' : 'none';
+    box.innerHTML = got.length ? `<div class="text-[11.5px] p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--text-secondary)"><b>รหัสที่เลือกไว้:</b> ${
+      got.map(([c, a]) => a.as === 'new' ? `${esc(c)} → วัตถุดิบใหม่` : `${esc(c)} → รหัสใหม่ของ ${esc(a.item)} ${esc(_bmcItemName(a.item))}`).join(' · ')}</div>` : '';
+    return;
+  }
+  await _bmcUcRegister();
+  if (o.prefillNew) st.items.forEach(u => { if (!st.choice[u.code] && !(u.suggestions || []).length) st.choice[u.code] = { as: 'new' }; });
+  const decide = o.mode !== 'request' && _bmcCanPrices();
+  const ans = u => st.choice[u.code];
+  const row = u => {
+    const c = ans(u), sg = u.suggestions || [];
+    const cur = !c ? '' : c.as === 'new' ? 'new' : c.other ? 'alias:*' : 'alias:' + c.item;
+    const opt = (v, t) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(t)}</option>`;
+    return `<tr style="border-top:1px solid var(--border);vertical-align:top">
+      <td class="py-1 pr-2 whitespace-nowrap"><b>${esc(u.code)}</b></td>
+      <td class="py-1 pr-2">${esc(u.name || '—')}<div style="color:var(--text-muted)">${[u.unit ? esc(u.unit) : '', u.lines ? u.lines + ' บรรทัด' : '', u.value ? '฿' + _bmcNum(u.value, 0) : ''].filter(Boolean).join(' · ')}</div></td>
+      <td class="py-1">
+        <select aria-label="เลือกว่ารหัส ${esc(u.code)} เป็นอะไร" onchange="bmcUcPick(${_bmcQ(boxId)},${_bmcQ(u.code)},this.value)" style="${_BMC_FIELD};max-width:360px">
+          <option value="">เลือก…</option>
+          ${sg.map(s => opt('alias:' + s.code, `เป็นรหัสใหม่ของวัตถุดิบเดิม: ${s.code} ${s.name || ''}${s.same_unit === false ? ' (หน่วยต่างกัน)' : ''}`)).join('')}
+          ${opt('alias:*', 'เป็นรหัสใหม่ของวัตถุดิบเดิม: เลือกรายการอื่น…')}
+          ${o.mode === 'request' ? '' : opt('new', 'เป็นวัตถุดิบใหม่')}
+        </select>
+        ${c && c.as === 'alias' && c.other ? `<div class="mt-1"><input list="bmcUcList" placeholder="รหัสหรือชื่อวัตถุดิบเดิม" value="${esc(c.item || '')}" onchange="bmcUcOther(${_bmcQ(boxId)},${_bmcQ(u.code)},this.value)" style="${_BMC_FIELD};width:260px">
+          ${c.item ? `<span style="color:var(--good-ink)"> ${esc(_bmcItemName(c.item))}</span>` : ''}${c.bad ? '<span style="color:var(--bad-ink)"> ไม่พบรหัสหรือชื่อนี้ในทะเบียน</span>' : ''}</div>` : ''}
+      </td></tr>`;
+  };
+  const left = st.items.filter(u => { const c = ans(u); return !c || (c.as === 'alias' && !c.item); }).length;
+  const hint = o.mode === 'request'
+    ? 'เลือกวัตถุดิบเดิมของแต่ละรหัสที่เป็นรหัสใหม่ แล้วส่งคำขอให้ฝ่ายวิเคราะห์ · ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น และสูตรไม่ต้องแก้'
+    : (o.needAll ? 'เลือกให้ครบทุกรหัสก่อนบันทึก · ' : 'รหัสที่ยังไม่เลือกจะไม่ถูกนำเข้า · ')
+      + (decide ? '“เป็นรหัสใหม่ของวัตถุดิบเดิม” บันทึกรหัสนี้เป็นรหัสในระบบอื่นของวัตถุดิบเดิมทันที สูตรไม่ต้องแก้' : '“เป็นรหัสใหม่ของวัตถุดิบเดิม” ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ตรวจ และรหัสนั้นยังไม่ถูกนำเข้าในครั้งนี้');
+  box.style.display = '';
+  box.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
+    <div class="text-xs font-semibold" style="color:var(--amber-ink)">รหัสที่ระบบไม่รู้จัก (${st.items.length} รหัส)${left ? ` · ยังไม่ได้เลือก ${left}` : ' · เลือกครบแล้ว'}</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">${hint}</div>
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      ${o.mode === 'request' ? '' : `<label class="text-[11px]" style="color:var(--text-muted)">ระบบของรหัสใหม่ ${_bmcSysSel(boxId + 'Sys', st.system || 'acc', `onchange="_bmcUc[${_bmcQ(boxId)}].system=this.value"`)}</label>`}
+      ${o.mode === 'request' ? '' : _bmcBtn('เป็นวัตถุดิบใหม่ทั้งหมดที่ไม่มีรายการใกล้เคียง', `bmcUcAllNew(${_bmcQ(boxId)})`)}
+      ${o.onRecalc ? _bmcBtn('คำนวณใหม่ด้วยรหัสที่เลือก', o.onRecalc) : ''}
+    </div>
+    <div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:560px"><tbody>${st.items.map(row).join('')}</tbody></table></div>
+    ${o.mode === 'request' ? `<div class="flex flex-wrap items-center gap-2 mt-2">${_bmcBtn('ส่งคำขอให้ฝ่ายวิเคราะห์', `bmcUcSendRequests(${_bmcQ(boxId)})`, true)}<span id="${boxId}Status" class="text-[11px]"></span></div>` : ''}
+    ${o.footer ? `<div class="flex flex-wrap items-center gap-2 mt-2">${o.footer}</div>` : ''}
+  </div>`;
+}
+function bmcUcPick(boxId, code, v) {
+  const st = _bmcUc[boxId];
+  if (!st) return;
+  if (!v) delete st.choice[code];
+  else if (v === 'new') st.choice[code] = { as: 'new' };
+  else if (v === 'alias:*') st.choice[code] = { as: 'alias', item: '', other: true };
+  else st.choice[code] = { as: 'alias', item: v.slice(6) };
+  bmcUcRender(boxId, st.items, st.opts);
+}
+function bmcUcOther(boxId, code, text) {
+  const st = _bmcUc[boxId];
+  if (!st) return;
+  const item = _bmcItemOf(text);
+  st.choice[code] = { as: 'alias', item, other: true, bad: !item && !!String(text || '').trim() };
+  bmcUcRender(boxId, st.items, st.opts);
+}
+function bmcUcAllNew(boxId) {
+  const st = _bmcUc[boxId];
+  if (!st) return;
+  st.items.forEach(u => { if (!st.choice[u.code] && !(u.suggestions || []).length) st.choice[u.code] = { as: 'new' }; });
+  bmcUcRender(boxId, st.items, st.opts);
+}
+function bmcUcChoices(boxId) {                    // the complete answers, as the server takes them ({} = none yet)
+  const st = _bmcUc[boxId], out = {};
+  if (!st) return out;
+  Object.entries(st.choice).forEach(([c, a]) => { if (a.as === 'new') out[c] = { as: 'new' }; else if (a.item) out[c] = { as: 'alias', item: a.item }; });
+  return out;
+}
+function bmcUcOpen(boxId) {                        // the unknown codes with no complete answer
+  const st = _bmcUc[boxId];
+  if (!st) return [];
+  const got = bmcUcChoices(boxId);
+  return st.items.filter(u => !got[u.code]).map(u => u.code);
+}
+function bmcUcSystem(boxId) { const el = document.getElementById(boxId + 'Sys'); return (el && el.value) || 'acc'; }
+function bmcUcSummary(boxId) {
+  const got = Object.values(bmcUcChoices(boxId));
+  return { alias: got.filter(a => a.as === 'alias').length, fresh: got.filter(a => a.as === 'new').length };
+}
+// Sales Support: the answers become requests for the analyst (nothing is added or changed)
+async function bmcUcSendRequests(boxId) {
+  const st = _bmcUc[boxId], got = bmcUcChoices(boxId);
+  const mine = (st ? st.items : []).filter(u => got[u.code] && got[u.code].as === 'alias');
+  if (!mine.length) { bmcStatus(boxId + 'Status', 'warn', 'เลือกวัตถุดิบเดิมของรหัสที่เป็นรหัสใหม่อย่างน้อย 1 รหัสก่อน'); return; }
+  if (!await uiConfirm(`ส่งคำขอให้ฝ่ายวิเคราะห์ ${mine.length} รหัส\n${mine.slice(0, 6).map(u => `${u.code} เป็นรหัสใหม่ของ ${got[u.code].item} ${_bmcItemName(got[u.code].item)}`).join('\n')}`,
+      { title: 'ยืนยันการแจ้งเปลี่ยนรหัสสินค้า', ok: 'ส่งคำขอ', cancel: 'ยกเลิก' })) return;
+  let ok = 0, fail = [];
+  for (const u of mine) {
+    try {
+      await _bmcJson(`${API}/api/bom-center/codes/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_code: u.code, ingredient_code: got[u.code].item, system: st.opts.system || 'acc', name: u.name || null, note: 'จากไฟล์ราคาที่ส่ง' }) });
+      ok++;
+    } catch (e) { fail.push(`${u.code}: ${String(e.message || e).slice(0, 120)}`); }
+  }
+  if (ok) mine.forEach(u => { delete st.choice[u.code]; });
+  st.items = st.items.filter(u => !(got[u.code] && got[u.code].as === 'alias' && !fail.some(f => f.startsWith(u.code + ':'))));
+  await bmcUcRender(boxId, st.items, st.opts);
+  bmcStatus(boxId + 'Status', fail.length ? 'warn' : true, `ส่งคำขอแล้ว ${ok} รหัส${fail.length ? ' · ไม่สำเร็จ: ' + fail.join(' · ') : ''}`);
+  if (typeof bmcLoadCodeReq === 'function') bmcLoadCodeReq();
+}
+
+// ── the register row: รหัสในระบบอื่น ────────────────────────────────────────────────────────────
+let _bmcAlOpen = '';                                // the register code whose detail is open
+let _bmcAlState = null;                             // its last answer (the table redraws from it without asking again)
+function bmcAlToggle(code) { _bmcAlOpen = _bmcAlOpen === code ? '' : code; _bmcAlState = null; bmcRenderIng(); }
+async function bmcAlLoad(code) {
+  const cell = document.getElementById('bmcAlCell');
+  if (!cell) return;
+  try { _bmcAlState = await _bmcJson(`${API}/api/bom-center/ingredients/${encodeURIComponent(code)}/aliases`); bmcAlRender(_bmcAlState); }
+  catch (e) { cell.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcAlRender(d) {
+  const cell = document.getElementById('bmcAlCell');
+  if (!cell || d.code !== _bmcAlOpen) return;
+  const w = _bmcCanWrite();
+  const chip = a => !a.active ? _bmcChip('เลิกใช้แล้ว', 'var(--amber-ink)') : a.in_use ? _bmcChip('ใช้อยู่', 'var(--good-ink)') : _bmcChip('รหัสสำรอง', 'var(--text-muted)');
+  const act = a => !w ? '' : !a.active
+    ? _bmcBtn('ใช้อีกครั้ง', `bmcAlAct(${_bmcQ(d.code)},{action:'add',alias:${_bmcQ(a.alias)},system:${_bmcQ(a.system)},valid_from:${_bmcQ(a.valid_from)},make_current:false},'ใช้รหัสนี้อีกครั้งแล้ว')`)
+    : `<span class="flex flex-wrap gap-1">${a.in_use ? '' : _bmcBtn('ตั้งเป็นรหัสปัจจุบัน', `bmcAlAct(${_bmcQ(d.code)},{action:'current',alias:${_bmcQ(a.alias)}},'ตั้งเป็นรหัสปัจจุบันแล้ว')`)}${_bmcBtn('เลิกใช้', `bmcAlRetire(${_bmcQ(d.code)},${_bmcQ(a.alias)})`)}</span>`;
+  const sysLine = d.current.map(c => `<span class="mr-3">${esc(c.system_th)}: ใช้รหัส <b>${esc(c.code)}</b>${c.is_alias ? '' : ' (รหัสในทะเบียน)'}${c.is_alias && w ? ` ${_bmcBtn('ใช้รหัสในทะเบียนแทน', `bmcAlAct(${_bmcQ(d.code)},{action:'register',system:${_bmcQ(c.system)}},'กลับไปใช้รหัสในทะเบียนแล้ว')`)}` : ''}</span>`).join('');
+  cell.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
+    <div class="text-xs font-semibold" style="color:var(--text-primary)">รหัสในระบบอื่นของ ${esc(d.code)} ${esc(d.name || '')}</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">รหัสในทะเบียนไม่เปลี่ยน และสูตรใช้รหัสนี้ต่อไป · รหัสในระบบอื่นใช้รับไฟล์เข้าและแสดงในไฟล์ที่ส่งให้ระบบนั้น</div>
+    <div class="text-[11.5px] mb-2">${sysLine}</div>
+    ${d.aliases.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:520px"><thead><tr class="text-left" style="color:var(--text-muted)">
+      <th class="pr-2">ระบบ</th><th class="pr-2">รหัส</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">สถานะ</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${d.aliases.map(a => `
+      <tr style="border-top:1px solid var(--border);vertical-align:top"><td class="py-1 pr-2">${esc(a.system_th)}</td><td class="py-1 pr-2"><b>${esc(a.alias)}</b></td>
+      <td class="py-1 pr-2">${a.valid_from ? esc(fmtDay(a.valid_from)) : '—'}</td><td class="py-1 pr-2">${chip(a)}</td>
+      <td class="py-1 pr-2">${esc(a.note || '')}${a.created_by ? `<div style="color:var(--text-muted)">${esc(whoTh(a.created_by))}</div>` : ''}</td><td class="py-1">${act(a)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="text-[11.5px]" style="color:var(--text-muted)">ยังไม่มีรหัสในระบบอื่น</div>'}
+    ${w ? `<div class="flex flex-wrap items-end gap-2 mt-3">
+      <label class="text-[11px]" style="color:var(--text-muted)">รหัสใหม่<br><input id="bmcAlNew" maxlength="40" style="${_BMC_FIELD};width:150px"></label>
+      <label class="text-[11px]" style="color:var(--text-muted)">ระบบ<br>${_bmcSysSel('bmcAlSys', 'acc')}</label>
+      <label class="text-[11px]" style="color:var(--text-muted)">เริ่มใช้วันที่ (ถ้ามี)<br><input id="bmcAlFrom" type="date" style="${_BMC_FIELD}"></label>
+      <label class="text-[11px]" style="color:var(--text-muted)">หมายเหตุ<br><input id="bmcAlNote" maxlength="200" style="${_BMC_FIELD};width:200px"></label>
+      <label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary);padding-bottom:6px"><input type="checkbox" id="bmcAlCur" checked> ตั้งเป็นรหัสปัจจุบันของระบบนี้</label>
+      ${_bmcBtn('เพิ่มรหัส', `bmcAlAdd(${_bmcQ(d.code)})`, true)}</div>` : ''}
+    <div id="bmcAlStatus" class="text-[11px] mt-2" role="status"></div></div>`;
+}
+async function bmcAlAct(code, body, okText) {
+  try {
+    const out = await _bmcJson(`${API}/api/bom-center/ingredients/${encodeURIComponent(code)}/aliases`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    _bmcAlState = out.state;
+    await bmcLoadIng(true);                          // the register list shows the codes in use; the open detail redraws from the answer
+    bmcStatus('bmcAlStatus', true, okText || 'บันทึกแล้ว');
+  } catch (e) { bmcStatus('bmcAlStatus', false, String(e.message || e).slice(0, 220)); }
+}
+async function bmcAlAdd(code) {
+  const alias = (document.getElementById('bmcAlNew').value || '').trim();
+  if (!alias) { bmcStatus('bmcAlStatus', 'warn', 'ระบุรหัสใหม่'); return; }
+  const sys = document.getElementById('bmcAlSys').value, cur = document.getElementById('bmcAlCur').checked;
+  if (!await uiConfirm(`บันทึก ${alias} เป็นรหัสในระบบอื่นของ ${code} ${_bmcItemName(code)}\n${_BMC_SYS_TH[sys]}${cur ? ' · ตั้งเป็นรหัสปัจจุบัน' : ''}\nรหัสในทะเบียนและสูตรไม่เปลี่ยน`,
+      { title: 'ยืนยันการเพิ่มรหัสในระบบอื่น', ok: 'เพิ่มรหัส', cancel: 'ยกเลิก' })) return;
+  await bmcAlAct(code, { action: 'add', alias, system: sys, valid_from: document.getElementById('bmcAlFrom').value || null,
+    note: (document.getElementById('bmcAlNote').value || '').trim() || null, make_current: cur }, `เพิ่มรหัส ${alias} แล้ว`);
+}
+async function bmcAlRetire(code, alias) {
+  if (!await uiConfirm(`เลิกใช้รหัส ${alias} ของ ${code}\nรหัสนี้ไม่ถูกใช้รับไฟล์เข้าอีก · ข้อมูลยังเก็บไว้และใช้อีกครั้งได้`,
+      { title: 'ยืนยันการเลิกใช้รหัส', ok: 'เลิกใช้', cancel: 'ยกเลิก' })) return;
+  await bmcAlAct(code, { action: 'retire', alias }, `เลิกใช้รหัส ${alias} แล้ว`);
+}
+
+// ── แจ้งเปลี่ยนรหัสสินค้า (ประสานงานขาย) ────────────────────────────────────────────────────────
+async function bmcLoadCodeReq() {
+  const form = document.getElementById('bmcCrqForm');
+  if (!form) return;
+  form.style.display = (hasModule('supply.ordering') || hasModule('bom.center')) ? '' : 'none';
+  _bmcUcRegister();
+  const box = document.getElementById('bmcCrqList');
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/codes/requests?status=all`);
+    box.innerHTML = d.requests.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
+        <th class="pr-2">วันที่แจ้ง</th><th class="pr-2">วัตถุดิบ</th><th class="pr-2">รหัสเดิม → รหัสใหม่</th><th class="pr-2">ระบบ</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">สถานะ</th></tr></thead><tbody>${
+      d.requests.slice(0, 60).map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">
+        <td class="py-1 pr-2">${esc(fmtAt(r.requested_at))}<div style="color:var(--text-muted)">${esc(whoTh(r.requested_by))}</div></td>
+        <td class="py-1 pr-2"><b>${esc(r.item_name || r.ingredient_code)}</b><div style="color:var(--text-muted)">${esc(r.ingredient_code)}</div></td>
+        <td class="py-1 pr-2">${esc(r.old_code || '—')} → <b>${esc(r.new_code)}</b>${r.note ? `<div style="color:var(--text-muted)">${esc(r.note)}</div>` : ''}</td>
+        <td class="py-1 pr-2">${esc(r.system_th)}</td><td class="py-1 pr-2">${r.valid_from ? esc(fmtDay(r.valid_from)) : '—'}</td>
+        <td class="py-1 pr-2">${_bmcChip(r.status_th, r.status === 'applied' ? 'var(--good-ink)' : r.status === 'rejected' ? 'var(--bad-ink)' : 'var(--amber-ink)')}${r.decision_note ? `<div style="color:var(--text-muted)">${esc(r.decision_note)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      : '<span style="color:var(--text-muted)">ยังไม่มีคำขอ</span>';
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcCrqSuggest() {
+  const name = (document.getElementById('bmcCrqName').value || '').trim(), box = document.getElementById('bmcCrqSug');
+  if (!name) { box.innerHTML = '<span style="color:var(--text-muted)">ใส่ชื่อตามระบบอื่นก่อน แล้วกดค้นหาวัตถุดิบที่ใกล้เคียง</span>'; return; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/codes/suggest?name=${encodeURIComponent(name)}&code=${encodeURIComponent((document.getElementById('bmcCrqNew').value || '').trim())}`);
+    box.innerHTML = d.suggestions.length ? 'วัตถุดิบที่ใกล้เคียง: ' + d.suggestions.map(s => `<button type="button" onclick="document.getElementById('bmcCrqItem').value=${_bmcQ(s.code)};bmcCrqPicked()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 8px;margin:2px;font-size:11px;cursor:pointer;background:transparent;color:var(--text-primary)">${esc(s.code)} ${esc(s.name || '')}</button>`).join('')
+      : '<span style="color:var(--text-muted)">ไม่พบวัตถุดิบที่ชื่อใกล้เคียง · พิมพ์รหัสหรือชื่อในช่องวัตถุดิบเดิมเพื่อค้นหา</span>';
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function bmcCrqPicked() {                           // the chosen item: show its name, and the code in use as the old code
+  const el = document.getElementById('bmcCrqItem'), code = _bmcItemOf(el.value);
+  document.getElementById('bmcCrqItemName').textContent = code ? `${_bmcItemName(code)}` : (el.value.trim() ? 'ไม่พบรหัสหรือชื่อนี้ในทะเบียน' : '');
+  if (code) el.value = code;
+  const old = document.getElementById('bmcCrqOld');
+  if (old && !old.dataset.touched) old.value = code || '';
+}
+async function bmcCrqSend() {
+  const v = id => (document.getElementById(id).value || '').trim();
+  const item = _bmcItemOf(v('bmcCrqItem'));
+  if (!v('bmcCrqNew')) { bmcStatus('bmcCrqStatus', 'warn', 'ระบุรหัสใหม่'); return; }
+  if (!item) { bmcStatus('bmcCrqStatus', 'warn', 'เลือกวัตถุดิบเดิมในทะเบียน'); return; }
+  const sys = document.getElementById('bmcCrqSys').value;
+  if (!await uiConfirm(`แจ้งว่า ${item} ${_bmcItemName(item)} ใช้รหัสใหม่ ${v('bmcCrqNew')} ใน${_BMC_SYS_TH[sys]}\nฝ่ายวิเคราะห์ตรวจก่อนบันทึก · รหัสในทะเบียนและสูตรไม่เปลี่ยน`,
+      { title: 'ยืนยันการแจ้งเปลี่ยนรหัสสินค้า', ok: 'ส่งให้ฝ่ายวิเคราะห์', cancel: 'ยกเลิก' })) return;
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/codes/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      new_code: v('bmcCrqNew'), ingredient_code: item, system: sys, old_code: v('bmcCrqOld') || null, name: v('bmcCrqName') || null,
+      valid_from: document.getElementById('bmcCrqFrom').value || null, note: v('bmcCrqNote') || null }) });
+    ['bmcCrqNew', 'bmcCrqName', 'bmcCrqItem', 'bmcCrqOld', 'bmcCrqNote', 'bmcCrqFrom'].forEach(id => { const e = document.getElementById(id); if (e) { e.value = ''; delete e.dataset.touched; } });
+    document.getElementById('bmcCrqSug').innerHTML = ''; document.getElementById('bmcCrqItemName').textContent = '';
+    bmcStatus('bmcCrqStatus', true, String(r.message || 'ส่งคำขอแล้ว').replace(/^✓\s*/, ''));
+    bmcLoadCodeReq();
+  } catch (e) { bmcStatus('bmcCrqStatus', false, String(e.message || e).slice(0, 220)); }
+}
+
+// the analyst: รหัสใหม่ที่รออนุมัติ (at the top of ทะเบียนวัตถุดิบ)
+async function bmcLoadCodeReqCard() {
+  const card = document.getElementById('bmcCodeReqCard');
+  if (!card) return;
+  if (!_bmcCanPrices()) { card.style.display = 'none'; return; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/codes/requests?status=pending`);
+    if (!d.requests.length) { card.style.display = 'none'; card.innerHTML = ''; return; }
+    card.style.display = '';
+    card.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รหัสใหม่ที่รออนุมัติ (${d.requests.length})</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ประสานงานขายแจ้งว่าวัตถุดิบเดิมมีรหัสใหม่ในระบบอื่น · “ใช้” บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น สูตรไม่ต้องแก้ · “ไม่ใช้” ต้องระบุเหตุผล <span id="bmcCodeReqStatus" class="ml-2"></span></div>
+      <div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:620px"><thead><tr class="text-left" style="color:var(--text-muted)">
+        <th class="pr-2">วัตถุดิบ</th><th class="pr-2">รหัสเดิม → รหัสใหม่</th><th class="pr-2">ระบบ</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">แจ้งโดย</th><th></th></tr></thead><tbody>${
+      d.requests.map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">
+        <td class="py-1 pr-2"><b style="color:var(--text-primary)">${esc(r.item_name || r.ingredient_code)}</b><div style="color:var(--text-muted)">${esc(r.ingredient_code)}</div></td>
+        <td class="py-1 pr-2">${esc(r.old_code || '—')} → <b>${esc(r.new_code)}</b>${r.name ? `<div style="color:var(--text-muted)">ชื่อตามระบบอื่น: ${esc(r.name)}</div>` : ''}${r.note ? `<div style="color:var(--text-muted)">${esc(r.note)}</div>` : ''}</td>
+        <td class="py-1 pr-2">${esc(r.system_th)}</td><td class="py-1 pr-2">${r.valid_from ? esc(fmtDay(r.valid_from)) : '—'}</td>
+        <td class="py-1 pr-2">${esc(whoTh(r.requested_by))}<div style="color:var(--text-muted)">${esc(fmtAt(r.requested_at))}</div></td>
+        <td class="py-1"><div class="flex flex-wrap gap-1">${_bmcBtn('ใช้', `bmcCodeReqDecide(${r.request_id},'applied',${_bmcQ(r.new_code)},${_bmcQ(r.item_name || r.ingredient_code)},${_bmcQ(r.system_th)})`, true)}${_bmcBtn('ไม่ใช้', `bmcCodeReqDecide(${r.request_id},'rejected',${_bmcQ(r.new_code)},${_bmcQ(r.item_name || r.ingredient_code)},${_bmcQ(r.system_th)})`)}</div></td></tr>`).join('')}</tbody></table></div>`;
+  } catch (e) { card.style.display = ''; card.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcCodeReqDecide(id, decision, code, name, system) {
+  let note = null;
+  if (decision === 'rejected') {
+    note = await uiPrompt(`เหตุผลที่ไม่ใช้รหัส ${code} ของ ${name} (จำเป็น · ประสานงานขายอ่านได้)`, '', { title: 'ไม่ใช้รหัสที่แจ้ง', okText: 'ไม่ใช้' });
+    if (!note || !String(note).trim()) return;
+  } else if (!await uiConfirm(`บันทึก ${code} เป็นรหัสใหม่ของ ${name} ใน${system}\nรหัสในทะเบียนและสูตรไม่เปลี่ยน · ไฟล์ที่ส่งให้ระบบนั้นแสดงรหัสใหม่`,
+    { title: 'ยืนยันการใช้รหัสใหม่', ok: 'ใช้รหัสนี้', cancel: 'ยกเลิก' })) return;
+  try {
+    const out = await _bmcJson(`${API}/api/bom-center/codes/request/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: id, decision, note }) });
+    _bmcIng = [];
+    await bmcLoadCodeReqCard();
+    bmcStatus('bmcCodeReqStatus', true, String(out.message || '').replace(/^✓\s*/, ''));
+    if (decision === 'applied') bmcLoadIng(true);
+  } catch (e) { bmcStatus('bmcCodeReqStatus', false, String(e.message || e).slice(0, 220)); }
+}
+
 // the menus of the recipes toolbar (นำเข้า ▾ · ดาวน์โหลด ▾) close on a click outside, on a chosen file and on a chosen download
 document.addEventListener('click', e => {
   document.querySelectorAll('details.bmc-menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
