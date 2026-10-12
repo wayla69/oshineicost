@@ -21,7 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from .fmt import day_th as _fmt_day
 from .master import audit
-from .units import Converter
+from .units import Converter, unit_word
 
 THRESHOLD = {"A": 5.0, "B": 10.0, "C": 20.0}
 REASONS = (("waste", "วัตถุดิบเสีย / ทิ้ง"), ("expired", "หมดอายุ"), ("staff", "ชิม / อาหารพนักงาน"),
@@ -173,7 +173,7 @@ def receipts(con, branch_id: int, limit: int = 30) -> list:
     for rid, d, src, ref, by in con.execute(
             "SELECT receipt_id, receipt_date, source, ref, entered_by FROM bc_receipt WHERE branch_id=?"
             " ORDER BY receipt_date DESC, receipt_id DESC LIMIT ?", (branch_id, limit)).fetchall():
-        lines = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "qty_base": qb, "pieces": pc, "pieces_unit": pu}
+        lines = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "unit_word": unit_word(u), "qty_base": qb, "pieces": pc, "pieces_unit": pu}
                  for c, q, u, qb, pc, pu in con.execute(
                      "SELECT ingredient_code, qty, unit, qty_base, pieces, pieces_unit FROM bc_receipt_line WHERE receipt_id=?"
                      " ORDER BY ingredient_code", (rid,))]

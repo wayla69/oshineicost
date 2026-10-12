@@ -15,7 +15,7 @@ Several branches reporting the same real size are one decision: reports are grou
 from datetime import datetime, timezone
 
 from .master import _ladder_rows, audit, set_ladder
-from .units import Converter, check_ladder, fmt_num, metric_units, norm
+from .units import Converter, check_ladder, fmt_num, metric_units, norm, unit_word
 
 STATUS_TH = {"pending": "รอฝ่ายวิเคราะห์ตรวจ", "applied": "ใช้ค่าที่แจ้งแล้ว", "rejected": "ไม่ใช้"}
 
@@ -31,9 +31,26 @@ def _num(v):
         return None
 
 
+_EASIER_PARENT = {"กรัม": "กิโลกรัม", "มิลลิลิตร": "ลิตร"}      # what a person weighs or measures a pack in
+
+
+def default_parent(base: str, ladder: list, unit: str) -> str:
+    """The unit a pack-size report is stated in at first (PR-W): the NEXT UNIT DOWN of the item's ladder - a box of packs says
+    "1 กล่อง = ? แพ็ค" - else กิโลกรัม for a กรัม item (ลิตร for มิลลิลิตร), never the bare base unit unless the item has nothing
+    easier. `ladder` = Converter.ladder(code). A unit that is in the ladder uses its own parent when that is a ladder unit; a unit
+    that is not (the receiving unit กล่อง of an item whose ladder has only แพ็ค) uses the top step of the ladder."""
+    names = {r["unit"] for r in ladder}
+    easier = _EASIER_PARENT.get(base) or base
+    mine = next((r for r in ladder if r["unit"] == unit), None)
+    if mine is not None:
+        return mine["parent_unit"] if mine["parent_unit"] in names else easier
+    below = [r for r in ladder if r["unit"] != unit]
+    return max(below, key=lambda r: (r["level"], r["unit"]))["unit"] if below else easier
+
+
 def item_info(con, code: str, conv: Converter = None) -> dict:
-    """What the receive form needs to offer the report of one item: the units it can be about, the parents it can be stated in,
-    and what the register says now ('1 กล่อง = 10 แพ็ค')."""
+    """What the receive form needs to offer the report of one item: the units it can be about (each with the unit the report is
+    stated in at first, `default_parent`), the parents it can be stated in, and what the register says now ('1 กล่อง = 10 แพ็ค')."""
     conv = conv or Converter(con)
     m = con.execute("SELECT name_th, base_unit, recv_unit, qty_per_recv FROM bc_ingredient WHERE code=?", (code,)).fetchone()
     if not m:
@@ -41,16 +58,21 @@ def item_info(con, code: str, conv: Converter = None) -> dict:
     name, base_raw, recv, per = m
     base = norm(base_raw)
     lad = conv.ladder(code)
-    recv_n = norm(recv)
+    recv_n = unit_word(recv)                     # the register's label may carry its contents ("กล่อง (10 แพ็ค)"): the unit is its word
+    label = str(recv or "").strip()
     units = []
     for r in lad:
         units.append({"unit": r["unit"], "qty": r["qty_in_parent"], "parent": r["parent_unit"],
-                      "current": f"1 {r['unit']} = {fmt_num(r['qty_in_parent'])} {r['parent_unit']}"})
+                      "current": f"1 {r['unit']} = {fmt_num(r['qty_in_parent'])} {r['parent_unit']}",
+                      "label": label if r["unit"] == recv_n and label != recv_n else None})
     if recv_n and recv_n != base and recv_n not in {u["unit"] for u in units} and recv_n not in metric_units(base):
         cur = (f"1 {recv_n} = {fmt_num(per)} {base}" if per else "ยังไม่ระบุขนาดในทะเบียน")
-        units.append({"unit": recv_n, "qty": per, "parent": base, "current": cur})
+        units.append({"unit": recv_n, "qty": per, "parent": base, "current": cur, "label": label if label != recv_n else None})
+    for u in units:
+        u["default_parent"] = default_parent(base, lad, u["unit"])
     parents = [base] + sorted(metric_units(base)) + [r["unit"] for r in lad]
-    return {"code": code, "name": name, "base_unit": base, "recv_unit": recv_n or None, "units": units, "parents": parents}
+    return {"code": code, "name": name, "base_unit": base, "recv_unit": recv_n or None, "recv_label": str(recv or "").strip() or None,
+            "units": units, "parents": parents}
 
 
 def _proposed(con, code: str, unit: str, qty: float, parent: str) -> tuple:
@@ -65,7 +87,7 @@ def _proposed(con, code: str, unit: str, qty: float, parent: str) -> tuple:
             r["qty_in_parent"], r["parent_unit"] = qty, None if parent == base else parent
             hit = True
     if not hit:
-        if unit == norm(m[1]) and m[2]:
+        if unit and unit == unit_word(m[1]) and m[2]:
             cur_q, cur_p = float(m[2]), base
         rows.append({"unit": unit, "parent_unit": None if parent == base else parent, "qty_in_parent": qty, "conv_kind": "exact",
                      "range_min": None, "range_max": None, "label": None})

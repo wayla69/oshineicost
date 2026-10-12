@@ -494,8 +494,9 @@ def bc_units_ladder(code: str = Query(...)):
         problems = check_ladder(m[1], [{"unit": r["unit"], "parent_unit": r["parent_unit"], "qty_in_parent": r["qty_in_parent"],
                                         "conv_kind": r["kind"], "range_min": r["range_min"], "range_max": r["range_max"]}
                                        for r in lad]) if lad else []
-    return {"code": code.strip(), "name": m[0], "base_unit": m[1], "recv_unit": m[2], "qty_per_recv": m[3], "count_unit": m[4],
-            "ladder": lad, "problems": problems, "max_steps": MAX_STEPS}
+    from bom_center.units import unit_word
+    return {"code": code.strip(), "name": m[0], "base_unit": m[1], "recv_unit": m[2], "recv_word": unit_word(m[2]) or None,
+            "qty_per_recv": m[3], "count_unit": m[4], "ladder": lad, "problems": problems, "max_steps": MAX_STEPS}
 
 
 @router.post("/api/bom-center/units/ladder", dependencies=[Depends(require_write_token)])
@@ -2958,7 +2959,8 @@ def bc_order_cancel(order_id: int, request: Request, branch_id: Optional[int] = 
 
 class ReceiveLine(BaseModel):
     code: str
-    received_units: float
+    received_units: Optional[float] = None   # in the line's order unit; ignored when `weight` is given
+    weight: Optional[float] = None      # PR-W: the weight weighed at receiving (in the unit of the item's average, กิโลกรัม); it IS the received quantity
     pieces: Optional[float] = None      # PR-U2: whole pieces counted, required when the item is sold by weight and the quantity is > 0
     reason: Optional[str] = None        # why the received quantity is below what the warehouse sent
     note: Optional[str] = None

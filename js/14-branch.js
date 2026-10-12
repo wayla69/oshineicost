@@ -762,7 +762,7 @@ function _brnRecvCard(x) {
   const rows = x.lines.map(l => `<tr style="border-top:1px solid var(--border)">
       <td class="py-1 pr-2" style="color:var(--text-primary)">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
       <td class="py-1 pr-2 text-right" style="white-space:nowrap;color:var(--text-primary)">${_bmcNum(l.qty)}</td>
-      <td class="py-1" style="color:var(--text-secondary)">${esc(l.unit || '')}${l.pieces ? ` · ${_bmcNum(l.pieces, 0)} ${esc(l.pieces_unit || '')}` : ''}${l.qty_base == null ? ' ' + _bmcChip('แปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</td></tr>`).join('');
+      <td class="py-1" style="color:var(--text-secondary)">${esc(l.unit_word || l.unit || '')}${l.pieces ? ` · ${_bmcNum(l.pieces, 0)} ${esc(l.pieces_unit || '')}` : ''}${l.qty_base == null ? ' ' + _bmcChip('แปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</td></tr>`).join('');
   // PR-U2: what the analyst answered to "ขนาดบรรจุไม่ตรง" on this order (the reason is read here when the answer is no)
   const packs = (x.pack_reports || []).map(r => `<div class="text-xs mt-1" style="color:${r.status === 'rejected' ? 'var(--amber-ink)' : r.status === 'applied' ? 'var(--good-ink)' : 'var(--text-secondary)'}">${
     r.status === 'rejected' ? `แจ้งขนาดบรรจุ: ไม่ใช้ — ${esc(r.decision_note || '')}` : `แจ้งขนาดบรรจุ: ${esc(r.name || r.ingredient_code)} ${esc(r.text)} · ${esc(r.status_th)}`}</div>`).join('');
@@ -882,7 +882,7 @@ async function brnRecvDelete(id) {
 //   มีรายการไม่ครบ     → search and pick the lines that are short; only those open (รับจริง · ส่วนต่าง · สาเหตุ · หมายเหตุ)
 // The server contract is unchanged: every line is sent, a line that was not picked at the quantity the warehouse sent.
 let _brnRecvOrd = null;
-let _brnRcv = { mode: null, picked: [], vals: {}, q: '', pcs: {}, pk: {} };      // the form's working state: the answer, the picked lines, what was typed, the pieces counted, the pack-size reports
+let _brnRcv = { mode: null, picked: [], vals: {}, q: '', pcs: {}, pk: {}, wts: {}, auto: [], autoMode: false };      // the form's working state: the answer, the picked lines, what was typed, the pieces counted, the pack-size reports, the weights weighed (PR-W) and the lines picked by a weight alone
 const _brnRcvDismissed = new Set();                              // orders whose form was closed by hand: not opened again by itself
 const _BRN_ACK_TERMS = 'ตรวจสภาพและจำนวนครบทุกรายการแล้ว รายการที่ไม่แจ้งเคลมวันนี้ถือว่ารับครบ เคลมภายหลังอาจไม่ได้รับพิจารณา';
 
@@ -908,12 +908,17 @@ async function brnLoadRecvOpen() {
 }
 // what the warehouse sent for a line (the centre's processed quantity, else what the branch confirmed) and its unit label
 function _brnRcvSent(l) { return Number(l.processed_units ?? l.confirmed_units ?? 0); }
-function _brnRcvUnit(l) { return l.order_unit === 'base' ? '' : 'แพ็ค'; }
+// PR-W: the unit WORD of the item's receiving unit (the payload's `unit_word`: "กล่อง (10 แพ็ค)" -> กล่อง, "กิโลกรัม", "กระสอบ"), never a fixed "แพ็ค"
+function _brnRcvUnit(l) { return l.unit_word || (l.order_unit === 'base' ? '' : 'แพ็ค'); }
 function _brnRcvLines() { return _brnRecvOrd ? _brnRecvOrd.lines.filter(l => _brnRcvSent(l) > 0 || l.received_units) : []; }
 function _brnRcvLine(code) { return _brnRcvLines().find(l => l.code === code); }
 function _brnRcvRaw(code) { return String(((_brnRcv.vals[code] || {}).q) ?? '').trim().replace(',', '.'); }
 // the "รับจริง" of a line: the quantity typed on a picked line, the quantity sent on any other; null when it is empty or not a number
 function _brnRcvTyped(l) {
+  if (_brnWtLine(l)) {                                           // PR-W: a line received by weight - the weight weighed IS the quantity (in the order unit)
+    const w = _brnWtVal(l);
+    return w === null ? null : Math.round(w * (l.pieces_parent_factor || 1) / (l.base_per_order_unit || 1) * 1e6) / 1e6;
+  }
   if (!_brnRcv.picked.includes(l.code)) return _brnRcvSent(l);
   const raw = _brnRcvRaw(l.code);
   if (raw === '') return null;
@@ -923,7 +928,35 @@ function _brnRcvTyped(l) {
 // the gap of a line = sent − received; below zero it is an over-delivery (a note only, nothing to claim)
 function _brnRcvGap(l) {
   const q = _brnRcvTyped(l);
-  return q === null ? 0 : Math.round((_brnRcvSent(l) - q) * 1e6) / 1e6;
+  if (q === null) return 0;
+  if (_brnWtLine(l) && _brnWtShort(l).within) return 0;           // PR-W: up to the tolerance below the weight sent is no shortage
+  return Math.round((_brnRcvSent(l) - q) * 1e6) / 1e6;
+}
+
+// ── PR-W: the weight weighed at receiving ──────────────────────────────────────────────────────────────────
+// A line sold by weight whose pieces differ (a whole salmon) is received BY WEIGHT: the branch weighs what arrived (the box is
+// prefilled with the weight the warehouse sent) and counts the pieces. The weight IS the received quantity (converted to the line's
+// order unit), so the average weight per piece learned from receipts is the branch's own. A shortfall of up to the tolerance
+// (3 % of the weight sent, orders.WEIGHT_TOLERANCE_PCT) is accepted with no claim; a bigger one makes the line a short line
+// (reason + claim). More than was sent is accepted. The server checks the same (orders.receive).
+function _brnWtLine(l) { return !!l.pieces_unit && l.sent_weight != null; }
+function _brnWtTol() { return _brnRecvOrd && _brnRecvOrd.weight_tolerance_pct != null ? Number(_brnRecvOrd.weight_tolerance_pct) : 3; }
+function _brnWtRaw(l) {
+  const v = _brnRcv.wts[l.code];
+  return String(v === undefined ? +Number(l.sent_weight).toFixed(6) : v).trim().replace(',', '.');
+}
+function _brnWtVal(l) {
+  const raw = _brnWtRaw(l);
+  if (raw === '') return null;
+  const w = Number(raw);
+  return Number.isFinite(w) && w >= 0 ? w : null;
+}
+// how far below the weight sent: {pct (> 0 = below), within (a shortfall up to the tolerance), beyond (more than the tolerance)}
+function _brnWtShort(l) {
+  const w = _brnWtVal(l), s = Number(l.sent_weight);
+  if (w === null || !(s > 0)) return { pct: 0, within: false, beyond: false };
+  const pct = (s - w) / s * 100, tol = _brnWtTol();
+  return { pct, within: pct > 1e-9 && pct <= tol + 1e-9, beyond: pct > tol + 1e-9 };
 }
 
 // ── PR-U2: goods sold by weight whose pieces differ (a whole salmon, ตัว ≈ 4.5 กก.) ─────────────────────────────
@@ -958,26 +991,61 @@ function brnRcvPcsUpdate(code) {
   if (h) { const msg = need && raw !== '' && !ok ? `กรอกจำนวน${l.pieces_unit}เป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป` : ht.text; h.textContent = (h.dataset.sep && msg ? ' · ' : '') + msg; h.style.color = (need && raw !== '' && !ok) ? 'var(--bad-ink)' : ht.warn ? 'var(--amber-ink)' : 'var(--text-secondary)'; }
 }
 function brnRcvPcsTyped(code, v) { _brnRcv.pcs[code] = String(v || ''); brnRcvPcsUpdate(code); brnRecvAckChanged(); }
-// the lines NOT picked as short that are sold by weight: one box each, under the answer (a picked line has its box in its own row)
+// the weight box and the pieces box of a line sold by weight (PR-W): one row under the name, in the "รับครบ" block and in a picked row alike
+function _brnWtBoxes(l) {
+  const c = esc(l.code), cq = _bmcQ(l.code), nm = esc(l.name || l.code), pu = esc(l.pieces_unit), wu = esc(_brnShortUnit(l.pieces_parent_unit));
+  return `<div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px">
+      <div class="brn-box" style="width:124px;flex:0 0 124px"><input id="brnRcvW_${c}" class="brn-qty" style="height:44px" inputmode="decimal" autocomplete="off" value="${esc(_brnWtRaw(l))}"
+          aria-label="น้ำหนักที่ชั่งได้ (${wu}) ${nm}" oninput="brnRcvWtTyped(${cq}, this.value)"><span class="brn-cap">น้ำหนักที่ชั่งได้ (${wu})</span></div>
+      <div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(_brnRcv.pcs[l.code] ?? '')}"
+          aria-label="จำนวน${pu} ${nm}" oninput="brnRcvPcsTyped(${cq}, this.value)"><span class="brn-cap">จำนวน${pu}</span></div></div>
+    <div id="brnRcvWM_${c}" class="text-xs" role="status" style="margin-top:4px"></div>`;
+}
+// the box follows what is typed: the quantity under the name, the red/amber/muted note, the pieces box and the gap block
+function brnRcvWtTyped(code, v) {
+  _brnRcv.wts[code] = String(v ?? '');
+  brnRecvDiff(code);
+  brnRecvAckChanged();
+  clearTimeout(_brnWtTimers[code]);
+  _brnWtTimers[code] = setTimeout(() => brnRcvWtSettle(code), 650);       // the line follows the weight once typing pauses
+}
+const _brnWtTimers = {};
+// a weight below the tolerance turns the line into a short line (reason + claim); back within it, a line picked by the weight alone goes back
+function brnRcvWtSettle(code) {
+  const l = _brnRcvLine(code);
+  if (!l || !_brnRecvOrd || !_brnWtLine(l)) return;
+  const sh = _brnWtShort(l), st = _brnRcv, picked = st.picked.includes(code);
+  const el0 = /** @type {HTMLInputElement|null} */ (document.getElementById('brnRcvW_' + code));
+  const had = !!el0 && document.activeElement === el0, caret = el0 ? el0.selectionStart : null;
+  if (sh.beyond && !picked) {
+    if (st.mode !== 'some') { st.mode = 'some'; st.autoMode = true; }
+    st.picked.push(code); st.auto.push(code);
+    st.vals[code] = { q: String(_brnRcvSent(l)), r: 'short', n: '' };
+  } else if (!sh.beyond && picked && st.auto.includes(code)) {
+    st.picked = st.picked.filter(c => c !== code); st.auto = st.auto.filter(c => c !== code);
+    if (!st.picked.length && st.autoMode) { st.mode = 'all'; st.autoMode = false; }
+  } else return;
+  brnRcvRender();
+  if (had) { const el = document.getElementById('brnRcvW_' + code); if (el) { el.focus(); try { el.setSelectionRange(caret, caret); } catch (e) { /* not a text box */ } } }
+}
+// the lines NOT picked as short that are sold by weight: weight + pieces, under the answer (a picked line has them in its own row)
 function brnRcvPcsRender() {
   const box = document.getElementById('brnRcvPcs');
   if (!box) return;
   const st = _brnRcv;
-  const lines = st.mode ? _brnRcvLines().filter(l => l.pieces_unit && !st.picked.includes(l.code) && (_brnRcvTyped(l) || 0) > 0) : [];
+  const lines = st.mode ? _brnRcvLines().filter(l => l.pieces_unit && !st.picked.includes(l.code) && _brnRcvSent(l) > 0) : [];
   if (!lines.length) { box.innerHTML = ''; return; }
   const us = [...new Set(lines.map(l => l.pieces_unit))].join(' / ');
-  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">นับจำนวน${esc(us)}ของรายการที่ขายเป็น${esc(us)}</div>`
+  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">ชั่งน้ำหนักและนับจำนวน${esc(us)}ของรายการที่ขายเป็น${esc(us)}</div>`
     + lines.map(l => {
-      const c = esc(l.code), cq = _bmcQ(l.code);
+      const c = esc(l.code);
       return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0;margin-top:6px">
-        <div style="display:flex;gap:8px;align-items:flex-start">
-          <div class="brn-namecol" style="flex:1 1 0;min-width:0"><div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(l.name || l.code)}</div>
-            <div class="brn-sub text-[11px]" style="color:var(--text-muted)">รับ <b style="color:var(--text-primary)">${_bmcNum(_brnRcvTyped(l))}</b> ${esc(_brnRcvUnit(l))}<span id="brnRcvPH_${c}" data-sep="1"></span></div></div>
-          <div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(st.pcs[l.code] ?? '')}"
-              aria-label="จำนวน${esc(l.pieces_unit)} ${esc(l.name || l.code)}" oninput="brnRcvPcsTyped(${cq}, this.value)"><span class="brn-cap">จำนวน${esc(l.pieces_unit)}</span></div></div>
+        <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(l.name || l.code)}</div>
+        <div class="brn-sub text-[11px]" style="color:var(--text-muted)">รับ <b id="brnRcvWQ_${c}" style="color:var(--text-primary)"></b> ${esc(_brnShortUnit(l.pieces_parent_unit))}<span id="brnRcvPH_${c}" data-sep="1"></span></div>
+        ${_brnWtBoxes(l)}
         ${st.mode === 'some' ? brnPkBtn(l.code) : ''}</div>`;
     }).join('');
-  lines.forEach(l => { brnRcvPcsUpdate(l.code); brnPkRender(l.code); });
+  lines.forEach(l => { brnRecvDiff(l.code); brnPkRender(l.code); });
 }
 
 // ── PR-U2: "ขนาดบรรจุไม่ตรง" — the branch tells the analyst a pack is not the registered size; the receipt is not touched ──
@@ -1008,21 +1076,22 @@ function brnPkRender(code) {
   const units = l.pack.units || [];
   if (!p.unit || !units.find(u => u.unit === p.unit)) p.unit = (units.find(u => u.unit === l.pack.recv_unit) || units[0]).unit;
   const cur = units.find(u => u.unit === p.unit);
-  if (!p.parent) p.parent = cur.parent;
-  const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;min-height:44px;background:var(--bg-input);color:var(--text-primary)';
+  // the reference unit starts at the NEXT UNIT DOWN of the item's ladder (กล่อง -> แพ็ค), else กิโลกรัม / ลิตร - never the bare base unit
+  if (!p.parent) p.parent = cur.default_parent || cur.parent;
+  const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 4px;font-size:16px;min-height:44px;background:var(--bg-input);color:var(--text-primary)';
   const c = esc(code), cq = _bmcQ(code);
   const opt = (arr, v) => arr.map(o => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('');
   box.innerHTML = `<div style="margin-top:6px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg-input)">
-    <div class="text-xs" style="color:var(--text-secondary)">ในระบบ: <b style="color:var(--text-primary)">${esc(cur.current)}</b></div>
+    <div class="text-xs" style="color:var(--text-secondary)">ในระบบ: <b style="color:var(--text-primary)">${esc(cur.current)}</b>${cur.label ? ` <span style="color:var(--text-muted)">(ทะเบียนเขียนว่า “${esc(cur.label)}”)</span>` : ''}</div>
+    <div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:center;margin-top:6px;min-width:0">
+      <span>1</span><select aria-label="หน่วยที่ขนาดไม่ตรง" style="${sel};flex:1 1 0;min-width:0" onchange="brnPkField(${cq}, 'unit', this.value)">${opt(units.map(u => u.unit), p.unit)}</select>
+      <span style="white-space:nowrap">มีจริง</span><input id="brnPkQ_${c}" inputmode="decimal" autocomplete="off" value="${esc(p.qty || '')}" aria-label="จำนวนที่มีจริง" oninput="brnPkField(${cq}, 'qty', this.value)" style="${sel};flex:0 0 56px;width:56px;min-width:0;padding:6px 2px;text-align:center">
+      <select aria-label="หน่วยที่ใช้เทียบ" style="${sel};flex:1 1 0;min-width:0" onchange="brnPkField(${cq}, 'parent', this.value)">${opt(l.pack.parents || [], p.parent)}</select></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px">
-      <span>1</span><select aria-label="หน่วยที่ขนาดไม่ตรง" style="${sel}" onchange="brnPkField(${cq}, 'unit', this.value)">${opt(units.map(u => u.unit), p.unit)}</select>
-      <span>มีจริง</span><input id="brnPkQ_${c}" inputmode="decimal" autocomplete="off" value="${esc(p.qty || '')}" aria-label="จำนวนที่มีจริง" oninput="brnPkField(${cq}, 'qty', this.value)" style="${sel};width:84px;text-align:center">
-      <select aria-label="หน่วยที่ใช้เทียบ" style="${sel}" onchange="brnPkField(${cq}, 'parent', this.value)">${opt(l.pack.parents || [], p.parent)}</select></div>
-    <input value="${esc(p.note || '')}" placeholder="หมายเหตุ (ถ้ามี)" aria-label="หมายเหตุ" oninput="brnPkField(${cq}, 'note', this.value)" style="${sel};width:100%;box-sizing:border-box;margin-top:6px">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-      <button type="button" class="brn-act" id="brnPkGo_${c}" onclick="brnPkSend(${cq})">ส่งให้ฝ่ายวิเคราะห์</button>
-      <button type="button" class="brn-act brn-act-line" onclick="brnPkToggle(${cq})">ยกเลิก</button>
-      <span id="brnPkM_${c}" class="text-xs" role="alert" style="color:var(--bad-ink)"></span></div></div>`;
+      <input value="${esc(p.note || '')}" placeholder="หมายเหตุ (ถ้ามี)" aria-label="หมายเหตุ" oninput="brnPkField(${cq}, 'note', this.value)" style="${sel};padding:6px 8px;flex:1 1 150px;min-width:0;box-sizing:border-box">
+      <span style="display:flex;gap:6px;flex:0 0 auto"><button type="button" class="brn-act" id="brnPkGo_${c}" onclick="brnPkSend(${cq})">ส่งให้ฝ่ายวิเคราะห์</button>
+        <button type="button" class="brn-act brn-act-line" onclick="brnPkToggle(${cq})">ยกเลิก</button></span>
+      <span id="brnPkM_${c}" class="text-xs" role="alert" style="color:var(--bad-ink);flex:1 1 100%"></span></div></div>`;
 }
 async function brnPkSend(code) {
   const o = _brnRecvOrd, p = _brnRcv.pk[code];
@@ -1048,7 +1117,7 @@ async function brnOpenReceive(id, quiet) {
   try {
     _brnRecvOrd = await _bmcJson(`${API}/api/bom-center/order/${id}`);
     const o = _brnRecvOrd;
-    _brnRcv = { mode: null, picked: [], vals: {}, q: '', pcs: {}, pk: {} };
+    _brnRcv = { mode: null, picked: [], vals: {}, q: '', pcs: {}, pk: {}, wts: {}, auto: [], autoMode: false };
     const today =new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const day = o.delivery && o.delivery <= today ? o.delivery : today;
     const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
@@ -1088,7 +1157,8 @@ function brnRecvClose() {
 function brnRcvTerms() { const t = document.getElementById('brnRcvTerms'); if (t) t.style.display = t.style.display === 'none' ? '' : 'none'; }
 function brnRcvMode(m) {
   _brnRcv.mode = m;
-  if (m === 'all') _brnRcv.picked = [];                    // everything arrived: nothing to adjust
+  _brnRcv.autoMode = false;
+  if (m === 'all') { _brnRcv.picked = []; _brnRcv.auto = []; _brnRcv.wts = {}; }      // everything arrived: nothing to adjust (the weights go back to the weight sent)
   brnRcvRender();
 }
 function brnRcvRender() {
@@ -1099,7 +1169,9 @@ function brnRcvRender() {
   const body = document.getElementById('brnRcvBody');
   if (!st.mode) body.innerHTML = '';
   else if (st.mode === 'all') {
+    const hasPack = lines.some(l => l.pack && (l.pack.units || []).length);
     body.innerHTML = `<div class="text-sm" style="color:var(--text-primary);font-weight:600">รับครบ ${lines.length} รายการ</div>
+      ${hasPack ? '<div class="text-xs" style="color:var(--text-muted);margin-top:2px">ขนาดบรรจุไม่ตรง? เปิด “ดูรายการที่คลังส่ง” แล้วแตะที่รายการนั้น</div>' : ''}
       <details class="mt-1"><summary class="text-xs" style="color:var(--accent);cursor:pointer;min-height:32px">ดูรายการที่คลังส่ง</summary>
         <div style="max-height:260px;overflow:auto">${lines.map(l => `<div class="text-xs" style="border-top:1px solid var(--border);padding:4px 0"><div style="display:flex;gap:8px"><span style="flex:1 1 0;min-width:0;overflow-wrap:anywhere">${esc(l.name || l.code)}</span><span style="white-space:nowrap;color:var(--text-secondary)">${_bmcNum(_brnRcvSent(l))} ${esc(_brnRcvUnit(l))}</span></div>${brnPkBtn(l.code)}</div>`).join('')}</div></details>`;
     lines.forEach(l => brnPkRender(l.code));
@@ -1133,10 +1205,12 @@ function brnRcvPick(code) {
   _brnRcv.q = '';
   const qi = document.getElementById('brnRcvQ'); if (qi) qi.value = '';
   brnRcvResults(); brnRcvPickedRender(); brnRcvPcsRender(); brnRecvDiff(code); brnRecvAckChanged();
-  setTimeout(() => { const el = /** @type {HTMLInputElement|null} */ (document.getElementById('brnRcvO_' + code)); if (el) { el.focus(); el.select(); } }, 30);
+  setTimeout(() => { const el = /** @type {HTMLInputElement|null} */ (document.getElementById((_brnWtLine(l) ? 'brnRcvW_' : 'brnRcvO_') + code)); if (el) { el.focus(); el.select(); } }, 30);
 }
 function brnRcvUnpick(code) {
   _brnRcv.picked = _brnRcv.picked.filter(c => c !== code);
+  _brnRcv.auto = _brnRcv.auto.filter(c => c !== code);
+  delete _brnRcv.wts[code];                                // taking a line out of the short lines puts its weight back to the weight sent
   brnRcvResults(); brnRcvPickedRender(); brnRcvPcsRender(); brnRecvDiffAll(); brnRecvAckChanged();
 }
 // the picked lines, expanded: รับจริง (44 px) · the gap · the reason · a note
@@ -1147,17 +1221,18 @@ function brnRcvPickedRender() {
   const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
   box.innerHTML = _brnRcv.picked.map(code => {
     const l = _brnRcvLine(code); if (!l) return '';
-    const c = esc(code), v = _brnRcv.vals[code] || {}, unit = esc(_brnRcvUnit(l)), cq = _bmcQ(code);
+    const c = esc(code), v = _brnRcv.vals[code] || {}, unit = esc(_brnRcvUnit(l)), cq = _bmcQ(code), wl = _brnWtLine(l);
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(l.name || code)}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${c} · ส่งจริง <b style="color:var(--text-primary)">${_bmcNum(_brnRcvSent(l))}</b> ${unit}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
-        <div class="brn-box"><input id="brnRcvO_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q ?? '')}" aria-label="รับจริง ${esc(l.name || code)}" oninput="brnRcvTyped(${cq}, this.value)"
-            style="border-color:var(--good-ink)"><span class="brn-cap">รับจริง · ${unit || 'หน่วยฐาน'}</span></div>
-        ${l.pieces_unit ? `<div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(_brnRcv.pcs[code] ?? '')}"
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${c} · ส่งจริง <b style="color:var(--text-primary)">${_bmcNum(_brnRcvSent(l))}</b> ${unit}${wl && Math.abs(Number(l.sent_weight) - _brnRcvSent(l)) > 1e-9 ? ` (${_bmcNum(l.sent_weight, 3)} ${esc(_brnShortUnit(l.pieces_parent_unit))})` : ''}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
+        ${wl ? '' : `<div class="brn-box"><input id="brnRcvO_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q ?? '')}" aria-label="รับจริง ${esc(l.name || code)}" oninput="brnRcvTyped(${cq}, this.value)"
+            style="border-color:var(--good-ink)"><span class="brn-cap">รับจริง · ${unit || 'หน่วยฐาน'}</span></div>`}
+        ${l.pieces_unit && !wl ? `<div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(_brnRcv.pcs[code] ?? '')}"
             aria-label="จำนวน${esc(l.pieces_unit)} ${esc(l.name || code)}" oninput="brnRcvPcsTyped(${cq}, this.value)"><span class="brn-cap">จำนวน${esc(l.pieces_unit)}</span></div>` : ''}
         <button type="button" class="brn-x" aria-label="เอาออก ${esc(l.name || code)}" onclick="brnRcvUnpick(${cq})">✕</button></div>
+      ${wl ? _brnWtBoxes(l) : ''}
       <div id="brnRcvE_${c}" class="brn-err" role="alert"></div>
       ${l.pieces_unit ? `<span id="brnRcvPH_${c}" class="text-xs" style="display:block"></span>` : ''}
       ${brnPkBtn(code)}
@@ -1182,11 +1257,21 @@ function brnRecvDiff(code) {
   if (!o) return;
   const l = code && o.lines.find(x => x.code === code);
   if (l) {
-    const raw = _brnRcvRaw(code), q = _brnRcvTyped(l);
+    const wl = _brnWtLine(l);
+    const raw = wl ? _brnWtRaw(l) : _brnRcvRaw(code), q = _brnRcvTyped(l);
     const bad = raw === '' || q === null || q < 0;                 // empty, a word or a negative number: red at once, the note under the row
-    const inp = document.getElementById('brnRcvO_' + code), er = document.getElementById('brnRcvE_' + code);
+    const inp = document.getElementById((wl ? 'brnRcvW_' : 'brnRcvO_') + code), er = document.getElementById('brnRcvE_' + code);
     if (inp) { inp.style.borderColor = bad ? 'var(--bad-ink)' : 'var(--good-ink)'; inp.setAttribute('aria-invalid', bad ? 'true' : 'false'); }
-    if (er) er.textContent = bad ? 'จำนวนต้องเป็นตัวเลข ≥ 0' : '';
+    if (er) er.textContent = bad && !wl ? 'จำนวนต้องเป็นตัวเลข ≥ 0' : '';          // a weight's note is the one under its box
+    if (wl) {                                                      // PR-W: the quantity under the name and the note about the tolerance
+      const qt = document.getElementById('brnRcvWQ_' + code), ms = document.getElementById('brnRcvWM_' + code), sh = _brnWtShort(l), tol = _bmcNum(_brnWtTol(), 1);
+      if (qt) qt.textContent = bad ? '—' : _bmcNum(_brnWtVal(l), 3);
+      if (ms) {
+        ms.style.color = bad ? 'var(--bad-ink)' : sh.beyond ? 'var(--amber-ink)' : 'var(--text-muted)';
+        ms.textContent = bad ? 'น้ำหนักต้องเป็นตัวเลข ≥ 0' : sh.beyond ? `น้อยกว่าที่คลังส่งเกิน ${tol}% · เลือกสาเหตุของส่วนต่าง`
+          : sh.within ? `น้อยกว่าที่คลังส่ง ${_bmcNum(sh.pct, 1)}% ไม่เกิน ${tol}% จึงไม่ต้องแจ้งเคลม` : '';
+      }
+    }
     brnRcvPcsUpdate(code);                                         // the pieces box follows the quantity: no quantity, no count to give
     const gap = bad ? 0 : _brnRcvGap(l);
     const d = document.getElementById('brnRcvD_' + code), ov = document.getElementById('brnRcvOver_' + code), n = document.getElementById('brnRcvDn_' + code);
@@ -1224,16 +1309,17 @@ async function brnReceiveOrder() {
   if (!_brnRcv.mode) { warn('เลือก “รับครบ” หรือ “มีรายการไม่ครบ” ก่อน'); return; }
   if (!document.getElementById('brnRecvAck').checked) { warn('ทำเครื่องหมายยืนยันการตรวจสินค้าก่อน'); return; }
   const lines = [];
-  let short = 0, over = 0, pcsN = 0;
+  let short = 0, over = 0, pcsN = 0, within = 0;
   const pcsUnits = new Set();
   for (const l of _brnRcvLines()) {
     const q = _brnRcvTyped(l), nm = l.name || l.code;
     if (q === null || q < 0) {
       warn(`${nm}: จำนวนต้องเป็นตัวเลขและไม่ติดลบ`);
-      const el = document.getElementById('brnRcvO_' + l.code); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
+      const el = document.getElementById((_brnWtLine(l) ? 'brnRcvW_' : 'brnRcvO_') + l.code); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
       return;
     }
     const row = { code: l.code, received_units: q };
+    if (_brnWtLine(l)) { row.weight = _brnWtVal(l); if (_brnWtShort(l).within) within++; }      // PR-W: the weight weighed; the server derives the quantity from it
     if (q > 0 && l.pieces_unit) {                                  // PR-U2: the pieces counted, a whole number >= 1
       const pc = _brnPcsVal(l.code);
       if (pc === null) {
@@ -1259,7 +1345,8 @@ async function brnReceiveOrder() {
   const claimNote = String((document.getElementById('brnRecvClaimNote') || {}).value || '').trim();
   if (!await uiConfirm(`บันทึกรับสินค้าตามใบสั่งซื้อ #${o.order_id} · ${n} รายการ · วันที่ ${fmtDay(day)}`
       + (_brnRcv.mode === 'all' ? ' · รับครบทุกรายการ' : '')
-      + (pcsN ? ` · นับจำนวน${[...pcsUnits].join(' / ')} ${pcsN} รายการ` : '')
+      + (pcsN ? ` · ชั่งน้ำหนักและนับจำนวน${[...pcsUnits].join(' / ')} ${pcsN} รายการ` : '')
+      + (within ? ` · น้ำหนักน้อยกว่าที่ส่งไม่เกิน ${_bmcNum(_brnWtTol(), 1)}% ${within} รายการ รับตามน้ำหนักที่ชั่งโดยไม่แจ้งเคลม` : '')
       + (short ? ` · แจ้งเคลมส่วนต่าง ${short} รายการให้ประสานงานขาย` : '') + (over ? ` · รับเกินที่ส่ง ${over} รายการ` : ''), { title: 'ยืนยันการบันทึกรับสินค้า', ok: 'บันทึกรับสินค้า', cancel: 'กลับไปแก้' })) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/receive${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1842,7 +1929,7 @@ function brnRenderOrder() {
     const perSales = ps ? `<div class="mt-1">ปกติใช้ <b>${_bmcNum(Number(ps.per_100k) / (r.per_count_unit || 1), Number(ps.per_100k) / (r.per_count_unit || 1) >= 10 ? 1 : 2)}</b> ${cu} ต่อยอดขาย ฿100,000${ps.steady === false ? ` · <span style="color:var(--amber-ink)">ใช้ไม่สม่ำเสมอ (แกว่ง ±${_bmcNum(ps.swing_pct, 0)}% ต่อสัปดาห์)</span>` : ''}${r.ref_label ? ` · ${esc(r.ref_label)}` : ''}</div>` : '';
     // PR-U: an item bought by weight but used by the whole piece (ปลาแซลมอนทั้งตัว) shows the pieces too, as an estimate
     const approxPcs = (r.approx_unit && r.approx_per_unit > 0 && sugg > 0)
-      ? ` · ≈ ${_bmcNum(sugg * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) / r.approx_per_unit, 1)} ${esc(r.approx_unit)}` : '';
+      ? ` · ≈ ${(pcs => _bmcNum(pcs, pcs >= 10 ? 0 : 1))(sugg * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) / r.approx_per_unit)} ${esc(r.approx_unit)}` : '';   // PR-W: a whole number from 10 up, one decimal below
     const sysBox = r.system_qty == null ? '' : ` · คงเหลือ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(r.system_qty, 2)}</b> ${esc(r.system_unit || r.count_unit || r.base_unit || '')}`;
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
@@ -1854,7 +1941,7 @@ function brnRenderOrder() {
             style="border-color:${dev ? 'var(--amber-ink)' : 'var(--border-control)'}"><span class="brn-cap">สั่ง · ${esc(_brnUnitLabel(r))}</span></div></div>
       ${open ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(r.code)} · ${why}${perSales}</div>` : ''}
       ${dev ? reasonSel(r.code) : ''}</div>`;
-  }).join('') + extra.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0" class="text-sm">${esc(l.name || l.code)} · สั่งเพิ่มนอกยอดแนะนำ ${_bmcNum(l.confirmed_units)} ${esc(l.order_unit === 'base' ? '' : 'แพ็ค')} ${l.reason_th ? '· ' + esc(l.reason_th) : ''}</div>`).join('');
+  }).join('') + extra.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0" class="text-sm">${esc(l.name || l.code)} · สั่งเพิ่มนอกยอดแนะนำ ${_bmcNum(l.confirmed_units)} ${esc(l.unit_word || (l.order_unit === 'base' ? '' : 'แพ็ค'))} ${l.reason_th ? '· ' + esc(l.reason_th) : ''}</div>`).join('');
   const needSales = !!(p.ref_mode && p.ref_mode.needs_sales);                 // PR-V: a new branch that has not said what it expects to sell
   document.getElementById('brnOrdList').innerHTML = needSales ? `<span class="text-xs" style="color:var(--amber-ink)">${esc(p.ref_mode.message || '')}</span>`
     : html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องสั่ง (คงเหลือเพียงพอ)</span>';
@@ -1885,15 +1972,31 @@ function _brnPctFromSales(expected, normal) {
   return { pct: Math.round(pct * 10) / 10, clamped, raw,
            msg: clamped ? `ยอดขายที่คาดต่างจากปกติ ${sg(raw)} เกินช่วงที่ปรับได้ (${lo}% ถึง +${hi}%) ระบบใช้ ${sg(pct)} แทน` : '' };
 }
-function brnBufBahtInput() {
-  const el = document.getElementById('brnBufBaht'), pe = document.getElementById('brnBufPct'), hint = document.getElementById('brnBufCalc');
+// PR-W: the baht box shows thousands separators while typing (digits and one decimal point); the request keeps the raw number
+function _brnBahtFmt(v) {
+  const t = String(v ?? '').replace(/[^0-9.]/g, '');
+  const i = t.indexOf('.'), ip = (i < 0 ? t : t.slice(0, i)).replace(/^0+(?=\d)/, ''), dp = i < 0 ? '' : '.' + t.slice(i + 1).replace(/\./g, '').slice(0, 2);
+  return ip.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + dp;
+}
+function brnBufBahtInput(init) {
+  const el = /** @type {HTMLInputElement|null} */ (document.getElementById('brnBufBaht')), pe = /** @type {HTMLInputElement|null} */ (document.getElementById('brnBufPct')), hint = document.getElementById('brnBufCalc');
   if (!el || !pe || !hint) return;
+  const digitsBefore = String(el.value).slice(0, el.selectionStart ?? 0).replace(/[^0-9.]/g, '').length;      // keep the caret after the same digit
+  const f = _brnBahtFmt(el.value);
+  if (f !== el.value) {
+    el.value = f;
+    let n = 0, pos = f.length;
+    for (let k = 0; k < f.length; k++) { if (n === digitsBefore) { pos = k; break; } if (/[0-9.]/.test(f[k])) n++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) { /* not a text box */ }
+  }
   if (String(el.value).trim() === '') { hint.textContent = ''; return; }
   const r = _brnPctFromSales(el.value, (_brnPlan || {}).sales_normal);
   if (r.pct === null) { hint.style.color = 'var(--amber-ink)'; hint.textContent = r.msg; return; }
-  pe.value = r.pct;
+  if (!init) pe.value = r.pct;                    // the % box follows the baht typed; on opening the card it keeps what was applied
+  // = ลด 56% จากปกติ · ระบบใช้ −50%   /   = เพิ่ม 20% จากปกติ
+  const rw = r.raw ?? r.pct, nn = v => _bmcNum(v, v >= 10 ? 0 : 1), sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + nn(Math.abs(v)) + '%';
   hint.style.color = r.clamped ? 'var(--amber-ink)' : 'var(--text-secondary)';
-  hint.textContent = r.clamped ? r.msg : (r.pct ? `= ${r.pct > 0 ? 'เพิ่ม' : 'ลด'} ${_bmcNum(Math.abs(r.pct), 1)}% จากปกติ` : '= เท่ากับปกติ (0%)');
+  hint.textContent = !(Math.abs(rw) > 0) ? '= เท่ากับปกติ (0%)' : `= ${rw > 0 ? 'เพิ่ม' : 'ลด'} ${nn(Math.abs(rw))}% จากปกติ` + (r.clamped ? ` · ระบบใช้ ${sg(r.pct)}` : '');
 }
 function brnBufPctInput() {                       // a % typed by hand is no longer the baht typed before
   const el = document.getElementById('brnBufBaht'), hint = document.getElementById('brnBufCalc');
@@ -1944,20 +2047,23 @@ function _brnRenderBuffer(p, editable) {
   const head = `<button type="button" onclick="brnToggleBuffer()" aria-expanded="${_brnBufOpen}" style="display:flex;align-items:center;gap:8px;width:100%;min-height:40px;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--text-primary);font-size:13px;font-weight:600">
       <span>ยอดขายรอบนี้ต่างจากปกติ?</span>${cur.pct ? _bmcChip(`ใช้อยู่ ${sign(cur.pct)}`, 'var(--navy-ink)') : ''}<span style="margin-left:auto;color:var(--text-muted)">${_brnBufOpen ? '▴' : '▾'}</span></button>`;
   if (!_brnBufOpen) { box.innerHTML = head; return; }
+  // PR-W: the usual sales of the period sit right above the baht box, so the figure to compare with is in front of the person typing
   box.innerHTML = head + `<div class="text-[11px] mb-1" style="color:var(--text-muted)">มีงานหรือโปรโมชัน ใส่ % ที่คาดว่าจะเพิ่มหรือลด หรือใส่ยอดขายที่คาดของรอบนี้เป็นบาท</div>
-    <div class="flex flex-wrap items-center gap-2 text-xs">
+    <div class="text-xs mb-1" style="color:var(--text-secondary)">${p.sales_normal ? `ยอดขายปกติของช่วงนี้ ≈ <b style="color:var(--text-primary)">฿${_bmcNum(p.sales_normal, 0)}</b> (ไม่รวมภาษี)` : 'ยังไม่มียอดขายปกติของช่วงนี้ให้เทียบ'}</div>
+    <div class="flex flex-wrap items-start gap-2 text-xs">
       <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" oninput="brnBufPctInput()" style="width:72px;height:34px;text-align:center;${inp}"><span style="color:var(--text-secondary)">%</span>
       <span style="color:var(--text-muted)">หรือ</span>
-      <label style="color:var(--text-secondary)">คาดยอดขายรอบนี้ (บาท)
-        <input id="brnBufBaht" type="text" inputmode="numeric" autocomplete="off" value="${cur.sales ? esc(String(cur.sales)) : ''}" oninput="brnBufBahtInput()" style="width:120px;height:34px;margin-left:6px;text-align:right;${inp}"></label>
+      <div style="flex:1 1 220px;min-width:0"><label style="color:var(--text-secondary)">คาดยอดขายรอบนี้ (บาท)
+        <input id="brnBufBaht" type="text" inputmode="numeric" autocomplete="off" value="${cur.sales ? esc(_brnBahtFmt(cur.sales)) : ''}" oninput="brnBufBahtInput()" style="width:130px;height:34px;margin-left:6px;text-align:right;${inp}"></label>
+        <div id="brnBufCalc" class="text-[11px] mt-1" style="color:var(--text-secondary)"></div></div></div>
+    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
       <select id="brnBufReason" style="${inp}"><option value="">— เหตุผล —</option>${(b.reasons || []).map(r => `<option value="${r.code}" ${r.code === cur.reason ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
       <input id="brnBufNote" value="${esc(cur.note || '')}" placeholder="หมายเหตุ" style="flex:1 1 120px;min-width:0;${inp}">
       <button onclick="brnApplyBuffer()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer">ใช้กับยอดแนะนำ</button>
       <button onclick="brnToggleCovers()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">คำนวณจากจำนวนลูกค้า</button>
     </div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${p.sales_normal ? `ยอดขายปกติของช่วงนี้ ≈ <b>฿${_bmcNum(p.sales_normal, 0)}</b> (ไม่รวมภาษี)` : 'ยังไม่มียอดขายปกติของช่วงนี้ให้เทียบ'}</div>
-    <div id="brnBufCalc" class="text-[11px] mt-1" style="color:var(--text-secondary)"></div>
     ${_brnCovPhone() ? '' : '<div id="brnCovers" class="mt-2" style="display:none"></div>'}`;
+  if (cur.sales) brnBufBahtInput(true);               // the change the baht stands for, next to the box, from the first look
 }
 // PR-M3 · on a phone the customer-count helper opens as a bottom sheet over the page (a seven-row table does not fit inside a card)
 function _brnCovPhone() { return document.body.classList.contains('supply-phone') && window.matchMedia('(max-width: 700px)').matches; }
@@ -2136,7 +2242,7 @@ async function brnOpenOrder(id) {
         <button onclick="document.getElementById('brnOrdDetail').style.display='none'" class="ml-auto" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ปิด</button></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">${o.po_ref ? 'PO ' + esc(o.po_ref) + ' · ' : ''}${o.processed_by ? 'คลังยืนยันยอดส่งโดย ' + esc(whoTh(o.processed_by)) : ''}</div>
       <table class="w-full text-xs mt-2"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">รายการ</th><th class="pr-2 text-right">แนะนำ</th><th class="pr-2 text-right">สั่ง</th><th class="pr-2 text-right">ส่งจริง</th><th class="text-right">รับจริง</th></tr></thead>
-      <tbody>${o.lines.filter(l => l.confirmed_units || l.processed_units || l.received_units).map(l => `<tr style="border-top:1px solid var(--border-soft)"><td class="pr-2 py-1">${esc(l.name)}${l.reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.reason_th)}</span>` : ''}</td>
+      <tbody>${o.lines.filter(l => l.confirmed_units || l.processed_units || l.received_units).map(l => `<tr style="border-top:1px solid var(--border-soft)"><td class="pr-2 py-1">${esc(l.name)}${l.unit_word ? ` <span class="text-[10.5px]" style="color:var(--text-muted)">· หน่วย ${esc(l.unit_word)}</span>` : ''}${l.reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.reason_th)}</span>` : ''}</td>
         <td class="pr-2 text-right">${_bmcNum(l.suggested_units, 0)}</td><td class="pr-2 text-right">${_bmcNum(l.confirmed_units, 0)}</td><td class="pr-2 text-right">${l.processed_units != null ? _bmcNum(l.processed_units, 0) : '–'}</td><td class="text-right">${l.received_units != null ? _bmcNum(l.received_units, 0) : '–'}</td></tr>`).join('')}</tbody></table>`;
   } catch (e) { box.style.display = ''; box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -2177,7 +2283,7 @@ async function brnLoadClaims() {
 
 function _brnClLines() { return _brnClaimOrd ? _brnClaimOrd.lines.filter(l => l.remaining_units > 0) : []; }
 function _brnClLine(code) { return _brnClLines().find(l => l.code === code); }
-function _brnClUnit(l) { return l.order_unit === 'base' ? 'หน่วยฐาน' : 'แพ็ค'; }
+function _brnClUnit(l) { return l.unit_word || (l.order_unit === 'base' ? 'หน่วยฐาน' : 'แพ็ค'); }      // PR-W: the item's receiving unit word
 async function brnClaimOpen(orderId) {
   const box = document.getElementById('brnClaimForm');
   if (!box) return;
@@ -2312,7 +2418,7 @@ async function brnClaimView(id) {
       ${c.decision_note ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">ผลพิจารณา${c.decided_by ? ' โดย ' + esc(whoTh(c.decided_by)) : ''}: ${esc(c.decision_note)}</div>` : ''}
       ${_brnClaimEffect(c)}
       <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="pr-2">วัตถุดิบ</th><th class="pr-2 text-right">ส่งจริง</th><th class="pr-2 text-right">รับแล้ว</th><th class="pr-2 text-right">เคลม</th><th class="pr-2 text-right">อนุมัติ</th><th>สาเหตุ</th></tr></thead><tbody>
-        ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
+        ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}${l.unit ? ' · หน่วย ' + esc(l.unit) : ''}</div></td>
           <td class="py-1 pr-2 text-right">${_bmcNum(l.sent_units)}</td><td class="py-1 pr-2 text-right">${_bmcNum(l.received_units)}</td>
           <td class="py-1 pr-2 text-right">${_bmcNum(l.claim_units)}</td><td class="py-1 pr-2 text-right">${l.approved_units == null ? '—' : _bmcNum(l.approved_units)}</td>
           <td class="py-1">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</td></tr>`).join('')}</tbody></table></div>

@@ -425,8 +425,9 @@ def plan_ladder(con, code: str, rows: list) -> dict:
     for u in old:
         if u not in table:
             out["changes"].append({"unit": u, "change": "remove"})
-    recv_n = norm(recv)
-    hit = next((r for r in out["ladder"] if r["unit"] == recv_n), None)
+    from .units import unit_word
+    recv_n, recv_w = norm(recv), unit_word(recv)            # "กล่อง (10 แพ็ค)" is the ladder unit "กล่อง"
+    hit = next((r for r in out["ladder"] if r["unit"] == recv_n or (recv_w and r["unit"] == recv_w)), None)
     if hit and (per is None or abs(float(per) - hit["factor_to_base"]) > 1e-9):
         out["qty_per_recv_change"] = {"recv_unit": recv, "from": per, "to": hit["factor_to_base"], "approx": hit["approx"]}
     return out

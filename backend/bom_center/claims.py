@@ -106,12 +106,15 @@ def claimable(con, branch_id: int, order_id: int) -> dict:
             " AND COALESCE(c.origin,'after')='after'", (order_id,)):
         taken[c] = taken.get(c, 0.0) + float(au if st == "approved" and au is not None else cu)
     lines = []
+    from .orders import unit_of_line
+    meta = {c: (r, b) for c, r, b in con.execute("SELECT code, recv_unit, base_unit FROM bc_ingredient")}
     for c, u, recv, pu, cf in con.execute(
             "SELECT ingredient_code, order_unit, received_units, processed_units, confirmed_units FROM bc_order_line"
             " WHERE order_id=? AND COALESCE(received_units,0)>0 ORDER BY ingredient_code", (order_id,)):
         left = round(float(recv) - taken.get(c, 0.0), 6)
         sent = pu if pu is not None else cf
-        lines.append({"code": c, "name": names.get(c), "order_unit": u, "received_units": float(recv),
+        lbl, word = unit_of_line(*(meta.get(c) or (None, None)), u)      # PR-W: the unit word, never a hard-coded "แพ็ค"
+        lines.append({"code": c, "name": names.get(c), "order_unit": u, "unit_word": word, "unit_label": lbl, "received_units": float(recv),
                       "sent_units": float(sent or 0), "claimed_units": round(taken.get(c, 0.0), 6),
                       "remaining_units": max(left, 0.0)})
     return {"order_id": order_id, "cycle_date": o["cycle_date"], "round": o["round"], "lines": lines}
@@ -246,10 +249,13 @@ def detail(con, claim_id: int) -> dict:
                                      " FROM bc_order_line WHERE order_id=?", (d["order_id"],)):
         sent[c] = float((pu if pu is not None else cf) or 0)
         got[c] = float(rc or 0)
+    from .orders import unit_of_line
     d["lines"] = [{"code": c, "name": names.get(c), "claim_units": q, "approved_units": au, "reason": rs,
                    "reason_th": REASON_TH.get(rs, rs), "note": nt,
                    "sent_units": sent.get(c), "received_units": got.get(c),
-                   "unit": (recv.get(c) if units.get(c) and units.get(c) != "base" else base.get(c))}
+                   # PR-W: `unit` is the unit WORD ("กล่อง"), `unit_label` the register's whole label ("กล่อง (10 แพ็ค)")
+                   "unit": unit_of_line(recv.get(c), base.get(c), units.get(c) or "base")[1],
+                   "unit_label": unit_of_line(recv.get(c), base.get(c), units.get(c) or "base")[0]}
                   for c, q, rs, nt, au in con.execute(
                       "SELECT ingredient_code, claim_units, reason_code, note, approved_units FROM bc_claim_line"
                       " WHERE claim_id=? ORDER BY ingredient_code", (claim_id,))]

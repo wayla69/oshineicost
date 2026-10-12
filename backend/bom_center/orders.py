@@ -30,8 +30,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
 from .master import audit
-from .units import Converter
+from .units import Converter, unit_word
 
+WEIGHT_TOLERANCE_PCT = 3.0    # PR-W: a line received by WEIGHT (a whole fish) that weighs up to this much less than what was sent is no shortage
 DEVIATION_PCT = 20.0          # a confirmed quantity further than this from the suggestion needs a reason
 REASONS = (("stock_more", "คงเหลือจริงมากกว่าตามระบบ"), ("stock_less", "คงเหลือจริงน้อยกว่าตามระบบ"),
            ("event", "มีงาน / โปรโมชัน / ลูกค้าจองกลุ่ม"), ("space", "พื้นที่จัดเก็บไม่เพียงพอ"),
@@ -161,6 +162,7 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
     if not o:
         raise ValueError("ไม่พบใบสั่งซื้อ")
     names = {c: (n, b) for c, n, b in con.execute("SELECT code, name_th, base_unit FROM bc_ingredient")}
+    recv_lbl = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
     from .hub import SS_REASON_TH
     o["lines"] = [{"code": c, "name": (names.get(c) or (c,))[0], "suggested_units": s, "confirmed_units": cf,
                    "processed_units": p, "received_units": rc, "order_unit": u, "reason_code": rs,
@@ -171,6 +173,9 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
                       "SELECT ingredient_code, suggested_units, confirmed_units, processed_units, received_units,"
                       " order_unit, reason_code, note, ss_reason, ss_note, received_pieces FROM bc_order_line WHERE order_id=?"
                       " ORDER BY ingredient_code", (order_id,))]
+    for ln in o["lines"]:                      # PR-W: the unit WORD every quantity of the line is written in (never the whole label)
+        ln["unit_label"], ln["unit_word"] = unit_of_line(recv_lbl.get(ln["code"]), (names.get(ln["code"]) or (None, None))[1],
+                                                         ln["order_unit"])
     if receive:
         _receive_fields(con, o)
     o["status_th"] = STATUS_TH.get(o["status"], o["status"])
@@ -183,17 +188,32 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
     return o
 
 
+def unit_of_line(recv_label, base_unit, order_unit) -> tuple:
+    """(label, word) of the unit an order line is counted in: the item's receiving unit for a pack line ("กล่อง (10 แพ็ค)" ->
+    word "กล่อง"; a pack line of an item with no receiving unit says "แพ็ค"), the base unit for a base line."""
+    if order_unit == "base":
+        b = str(base_unit or "").strip()
+        return b or None, unit_word(b)
+    lbl = str(recv_label or "").strip()
+    return lbl or None, unit_word(lbl) or "แพ็ค"
+
+
 def _receive_fields(con, o: dict) -> None:
     from . import pack_reports as _pk
     conv = Converter(con)
     per = {c: p for c, p in con.execute("SELECT code, qty_per_recv FROM bc_ingredient")}
+    o["weight_tolerance_pct"] = WEIGHT_TOLERANCE_PCT
     for ln in o["lines"]:
         c = ln["code"]
         step = conv.weight_avg_step(c)
         if step:
+            bpo = (per.get(c) or 1.0) if ln["order_unit"] != "base" else 1.0
+            sent = ln["processed_units"] if ln["processed_units"] is not None else ln["confirmed_units"]
             ln.update(pieces_unit=step["unit"], pieces_range=[step["rmin"], step["rmax"]] if step["rmin"] is not None else None,
                       pieces_avg=step["qty"], pieces_parent_unit=step["parent"], pieces_parent_factor=step["parent_factor"],
-                      base_per_order_unit=(per.get(c) or 1.0) if ln["order_unit"] != "base" else 1.0)
+                      base_per_order_unit=bpo,
+                      # PR-W: the weight the warehouse sent, in the unit the average is stated in (กิโลกรัม): what the branch weighs against
+                      sent_weight=round(float(sent or 0) * bpo / step["parent_factor"], 6))
         else:
             ln["pieces_unit"] = None
         try:
@@ -425,13 +445,15 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     got = {}
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
+        if ln.get("received_units") is None and ln.get("weight") is None:
+            raise ValueError(f"{c}: ต้องระบุจำนวนที่รับ")
         try:
             q = float(ln.get("received_units") or 0)
         except (TypeError, ValueError):
             raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
             raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
-        got[c] = (q, (ln.get("reason") or "").strip(), (ln.get("note") or "").strip() or None, ln.get("pieces"))
+        got[c] = (q, (ln.get("reason") or "").strip(), (ln.get("note") or "").strip() or None, ln.get("pieces"), ln.get("weight"))
     units, sent = {}, {}
     for c, u, pu, cf in con.execute("SELECT ingredient_code, order_unit, processed_units, confirmed_units"
                                     " FROM bc_order_line WHERE order_id=?", (order_id,)):
@@ -443,13 +465,37 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     conv = Converter(con)
     pieces = {}
     rlines, short, over = [], [], []
-    for c, (q, reason, note, pcs_raw) in got.items():
+    per = {c: p for c, p in con.execute("SELECT code, qty_per_recv FROM bc_ingredient")}
+    tolerated = []
+    for c, (q, reason, note, pcs_raw, wt_raw) in list(got.items()):
         if c not in units:
             raise ValueError(f"{c} ไม่อยู่ในใบสั่งซื้อนี้")
         step = conv.weight_avg_step(c)
+        within = False
+        if wt_raw is not None and str(wt_raw).strip() != "":
+            # PR-W: a line received by weight - the branch weighs what arrived; that weight IS the received quantity (in the
+            # line's order unit). A shortfall of up to WEIGHT_TOLERANCE_PCT of the weight sent is not a shortage.
+            nm = names.get(c) or c
+            if not step:
+                raise ValueError(f"{nm}: รายการนี้ไม่ต้องกรอกน้ำหนักที่ชั่งได้")
+            try:
+                w = float(str(wt_raw).replace(",", "").strip())
+            except (TypeError, ValueError):
+                raise ValueError(f"{nm}: น้ำหนักที่ชั่งได้ต้องเป็นตัวเลข")
+            if w < 0:
+                raise ValueError(f"{nm}: น้ำหนักที่ชั่งได้ต้องไม่ติดลบ")
+            bpo = (per.get(c) or 1.0) if units[c] != "base" else 1.0
+            q = round(w * step["parent_factor"] / bpo, 6)
+            got[c] = (q, reason, note, pcs_raw, wt_raw)
+            gap_pct = (sent[c] - q) / sent[c] * 100.0 if sent[c] > 0 else 0.0
+            within = 0 < gap_pct <= WEIGHT_TOLERANCE_PCT + 1e-9
+            if within:
+                tolerated.append({"code": c, "sent_units": sent[c], "received_units": q, "short_pct": round(gap_pct, 2)})
         if step and q > 0:                    # PR-U2 (L1): goods sold by weight whose pieces differ — the branch counts the pieces
             pieces[c] = _pieces(names.get(c) or c, step["unit"], pcs_raw)
         gap = sent[c] - q
+        if within:
+            continue                          # PR-W: booked at the weight received, no reason and no claim
         if gap > 1e-9:
             if reason not in _cl.REASON_TH:
                 raise ValueError(f"{c}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุของส่วนต่าง")
@@ -459,7 +505,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
                           "sent_units": sent[c], "received_units": q})
         elif gap < -1e-9:
             over.append({"code": c, "sent_units": sent[c], "received_units": q, "over_units": round(-gap, 6)})
-    for c, (q, _r, _n, _p) in got.items():
+    for c, (q, _r, _n, _p, _w) in got.items():
         con.execute("UPDATE bc_order_line SET received_units=?, received_pieces=? WHERE order_id=? AND ingredient_code=?",
                     (q, pieces.get(c), order_id, c))
         if q > 0:
@@ -473,9 +519,11 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
                 (stamp, stamp, who, order_id))
     cl = _cl.create_from_receive(con, branch_id, order_id, short, claim_note, who) if short else None
     audit(con, who, "order_receive", "bc_order", str(order_id), None,
-          {"lines": len(rlines), "short": len(short), "over": over, "claim_id": cl and cl["claim_id"], "ack": True})
+          {"lines": len(rlines), "short": len(short), "over": over, "within_tolerance": tolerated,
+           "claim_id": cl and cl["claim_id"], "ack": True})
     return {"order_id": order_id, "status": "received", "receipt_id": rec and rec["receipt_id"],
-            "claim_id": cl and cl["claim_id"], "claim_lines": cl["lines"] if cl else 0, "over": over}
+            "claim_id": cl and cl["claim_id"], "claim_lines": cl["lines"] if cl else 0, "over": over,
+            "within_tolerance": tolerated}
 
 
 def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
