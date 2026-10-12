@@ -17,7 +17,6 @@ It changes nothing: each row points at the ladder of the ingredient or at the re
 """
 import threading
 import time as _time
-from datetime import date
 
 from . import benchmark as BM
 from . import forecast as FC
