@@ -22,7 +22,7 @@ const API = 'oshinei-api-v1';
 const API_MAX = 80;
 
 const API_OK = [
-  /^\/api\/reports\/management(\?|$)/, /^\/api\/home\/brief(\?|$)/, /^\/api\/home\/branch-scorecard(\?|$)/,
+  /^\/api\/reports\/management(\/months)?(\?|$)/, /^\/api\/home\/brief(\?|$)/, /^\/api\/home\/branch-scorecard(\?|$)/,
   /^\/api\/sales\/daily(\?|$)/, /^\/api\/sales\/top_ordered(\?|$)/, /^\/api\/sales\/cost-per-head(\?|$)/,
   /^\/api\/forecast(\?|$)/, /^\/api\/analysis\/(table-turnover|daypart-economics)(\?|$)/,
   /^\/api\/feedback\/items(\?|$)/, /^\/api\/months(\?|$)/, /^\/api\/branches(\?|$)/,
