@@ -1557,6 +1557,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     focus = None
     has_prev = None
     has_yoy = None
+    is_mtd = False
     label = None
     latest_day = None
     maxd = None
@@ -1655,6 +1656,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
         days_in_period = (ce - cs).days + 1
         ref_anchor = ce
         selected_month = sel
+        is_mtd = bool(sel == mtd_month)
         if th:
             label = f"เดือน {MON[sm-1]} {sy}" + (f" (1–{ce.day})" if sel == mtd_month else "")
             comp_label = "เดือนก่อนหน้า" + (f" (วันที่ 1–{ce.day})" if sel == mtd_month else "")
@@ -1719,7 +1721,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     else:
         ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
     has_yoy = ys.isoformat() >= mind
-    return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "weeks": weeks, "ye": ye, "ys": ys}
+    return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "is_mtd": is_mtd, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "weeks": weeks, "ye": ye, "ys": ys}
 
 
 def _mgt_agg(con, where, params, s, e):
@@ -1741,7 +1743,46 @@ def _mgt_agg(con, where, params, s, e):
             "avg_ticket":   round(rev/bills, 1) if bills else None}
 
 
-def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where, ye, ys):
+def _mgt_dow_baseline(con, where, params, prev_month, month_first, n_days, by_branch=False):
+    """The weekday-fair baseline of a PART month (the report's §3): `prev_month`'s per-weekday
+    daily averages summed over the `n_days` elapsed dates of the month starting `month_first`
+    (a weekday that month never had takes the mean of the weekday averages it did have).
+    Early in the month a raw same-days compare reads a holiday Monday as a collapse; this does
+    not. ONE definition for every month-to-date comparison on the phone and in the report:
+    the headline chips, the branch league, the month-by-month series.
+    → {revenue, customers, bills} (or {branch: {...}} with `by_branch`), None when the month
+    has no sales."""
+    import datetime as _dt
+    rows = con.execute(f"""
+        SELECT {"b.name branch, " if by_branch else ""}CAST(strftime('%w', st.sold_at) AS INT) wd,
+               {net_revenue_sum('st')} rev,
+               COALESCE(SUM(st.customer_count),0) cust,
+               COUNT(*) bills,
+               COUNT(DISTINCT date(st.sold_at)) days
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+        GROUP BY {"b.name, wd" if by_branch else "wd"}""", {**params, "month": prev_month}).fetchall()
+    wds = [int((month_first + _dt.timedelta(days=i)).strftime("%w")) for i in range(n_days)]
+
+    def build(rs):
+        avg = {r["wd"]: ((r["rev"] or 0) / r["days"], (r["cust"] or 0) / r["days"], (r["bills"] or 0) / r["days"])
+               for r in rs if r["days"]}
+        if not avg or not n_days:
+            return None
+        fb = tuple(sum(v[i] for v in avg.values()) / len(avg) for i in range(3))
+        return {"revenue": round(sum(avg.get(x, fb)[0] for x in wds), 2),
+                "customers": round(sum(avg.get(x, fb)[1] for x in wds), 1),
+                "bills": round(sum(avg.get(x, fb)[2] for x in wds), 1)}
+
+    if not by_branch:
+        return build(rows)
+    grouped: dict = {}
+    for r in rows:
+        grouped.setdefault(r["branch"], []).append(r)
+    return {nm: b for nm, rs in grouped.items() if (b := build(rs))}
+
+
+def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, is_mtd=False, params, pct, pe, ps, where, ye, ys):
     # names this section hands on; None where a period path never assigns one
     cur = None
     headline = None
@@ -1766,6 +1807,24 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where,
         headline["bills_wow_pct"] = pct(cur["bills"], prev["bills"])
         headline["rph_wow_pct"]   = pct(cur["rev_per_head"] or 0, prev["rev_per_head"]) if prev["rev_per_head"] else None
         headline["ticket_wow_pct"]= pct(cur["avg_ticket"] or 0, prev["avg_ticket"]) if prev["avg_ticket"] else None
+        if is_mtd:
+            # a month in progress is compared on the weekday-fair baseline (the owner's rule,
+            # report §3), never against the same raw elapsed days of last month - the phone
+            # chips, the §3 line, the daily tile and the month-by-month series then all agree
+            headline["mom_basis"] = "same_days"
+            base = _mgt_dow_baseline(con, where, params, ps.strftime("%Y-%m"), cs, ce.day)
+            if base:
+                headline["mom_basis"] = "dow"
+                headline["baseline"] = base
+                c_rph = (cur["revenue"] / cur["customers"]) if cur["customers"] else 0
+                b_rph = (base["revenue"] / base["customers"]) if base["customers"] else None
+                c_tk = (cur["revenue"] / cur["bills"]) if cur["bills"] else 0
+                b_tk = (base["revenue"] / base["bills"]) if base["bills"] else None
+                headline["rev_wow_pct"]   = pct(cur["revenue"], base["revenue"])
+                headline["cust_wow_pct"]  = pct(cur["customers"], base["customers"])
+                headline["bills_wow_pct"] = pct(cur["bills"], base["bills"])
+                headline["rph_wow_pct"]   = pct(c_rph, b_rph) if b_rph else None
+                headline["ticket_wow_pct"] = pct(c_tk, b_tk) if b_tk else None
     yoy = agg(ys, ye) if has_yoy else None
     if yoy:
         headline["yoy"] = yoy
@@ -1775,7 +1834,7 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where,
     return {"cur": cur, "headline": headline, "prev": prev}
 
 
-def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, params, pct, pe, period, ps, where, ye, ys):
+def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False, params, pct, pe, period, ps, where, ye, ys):
     # names this section hands on; None where a period path never assigns one
     branches = None
     # ---- branch league table -----------------------------------------
@@ -1801,6 +1860,9 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, params, pct,
     tgt_b = ({t["branch"]: t for t in targets_for_month(con, cs.strftime("%Y-%m"), branch, group)}
              if period == "monthly" else {})
     tot_rev = sum((r["rev"] or 0) for r in cur_b.values()) or 0
+    # month in progress: each branch against its own weekday-fair baseline (same rule as the headline)
+    dow_b = (_mgt_dow_baseline(con, where, params, ps.strftime("%Y-%m"), cs, ce.day, by_branch=True)
+             if (is_mtd and has_prev) else None)
     branches = []
     for nm, r in cur_b.items():
         rev = r["rev"] or 0; cust = r["cust"] or 0
@@ -1812,7 +1874,8 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, params, pct,
             "branch": nm, "revenue": rev, "customers": cust, "bills": r["bills"],
             "rev_per_head": round(rev/cust, 1) if cust else None,
             "share_pct": round(rev/tot_rev*100, 1) if tot_rev else None,
-            "wow_pct": pct(rev, p["rev"] or 0) if p else None,
+            "wow_pct": ((pct(rev, dow_b[nm]["revenue"]) if nm in dow_b else None) if dow_b is not None
+                        else (pct(rev, p["rev"] or 0) if p else None)),
             "yoy_pct": pct(rev, y["rev"] or 0) if (y and (y["rev"] or 0) > 0) else None,
             "target": round(t["revenue_target"]) if has_t else None,
             "target_source": (t["source"] if t else None) if period == "monthly" else None,
@@ -1914,18 +1977,27 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
     return {"cash_heavy": cash_heavy, "heavy": heavy, "leak": leak, "reprint": reprint}
 
 
-def _mgt_all_cost(con, sw, sp, eff_cost, s, e, source):
+def _mgt_all_cost(con, sw, sp, s, e, source):
     """COGS of EVERYTHING sold in [s, e] (drinks, desserts and delivery included, packages
     at 0), from the day-granular or the month-granular SKU roll-up. Gross profit subtracts
-    this. The report's §4 and the phone month-by-month series both read it here."""
+    this. The report's §4 and the phone month-by-month series both read it here.
+
+    The cost is `_unified_cogs_expr` - the SAME expression the P&L, Profit, GP-by-branch and
+    every other COGS page multiplies by, so a month's GP% cannot differ between pages. In
+    particular it looks up the RELEASED cost of a month from the Grand Menu cut-over on
+    (rules.dated_cost_sql): the report used to multiply by the undated cost, so September
+    2026 read 43.3 % here and 40.24 % on the P&L page. The day roll-up has no `source` or
+    `period_month` column, so it is wrapped to supply both (it is Easy-only)."""
     if source == "daily":
         return con.execute(f"""
-            SELECT SUM(d.qty * {eff_cost}) FROM v_sales_sku_daily d
+            SELECT SUM({_unified_cogs_expr('d', 'sk')})
+            FROM (SELECT *, 'Easy' AS source, substr(day, 1, 7) AS period_month
+                  FROM v_sales_sku_daily) d
             JOIN branches b ON b.branch_id=d.branch_id
             WHERE {sw} AND d.day BETWEEN :s AND :e""",
             {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()[0] or 0.0
     return con.execute(f"""
-        SELECT SUM(d.qty * {eff_cost}) FROM v_sales_sku_monthly d
+        SELECT SUM({_unified_cogs_expr('d', 'sk')}) FROM v_sales_sku_monthly d
         JOIN branches b ON b.branch_id=d.branch_id
         WHERE {sw} AND d.period_month BETWEEN :s AND :e""",
         {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchone()[0] or 0.0
@@ -1975,7 +2047,10 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
     sb = ["b.name!='ALL'"]; sp: dict = {}
     scope_filter(sb, sp, branch, group)
     sw = " AND ".join(sb)
-    _eff_cost = effective_unit_cost_sql('d')
+    # the dish list prices each sale at the cost in force for ITS month (released cost from
+    # the Grand Menu cut-over on) - the same lookup _mgt_all_cost / the P&L use
+    _eff_cost_d = effective_unit_cost_sql('d', "substr(d.day, 1, 7)")      # day roll-up
+    _eff_cost_mo = effective_unit_cost_sql('d', 'd.period_month')          # month roll-up
     # sales_sku_daily is a ROLLING window (currently starts 2026-03-22) while
     # sales_sku_monthly carries full history. Reading daily blindly made every
     # pre-coverage month report ฿0 food cost — i.e. GP 100% — instead of saying
@@ -1999,10 +2074,10 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
         every bill. Until 2026-10-01 GP subtracted the food dishes only, so GP% read
         high and disagreed with the same report's food cost %."""
         if s.isoformat() >= daily_min:
-            all_cost = _mgt_all_cost(con, sw, sp, _eff_cost, s, e, "daily")
+            all_cost = _mgt_all_cost(con, sw, sp, s, e, "daily")
             rows = con.execute(f"""
                 SELECT d.sku_id, s.description, s.sku_code,
-                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost_d}) cost
                 FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
                 JOIN skus s ON s.sku_id=d.sku_id
                 WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
@@ -2010,10 +2085,10 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
                 {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
             return {r["sku_id"]: r for r in rows}, "daily", all_cost
         if _whole_months(s, e):
-            all_cost = _mgt_all_cost(con, sw, sp, _eff_cost, s, e, "monthly")
+            all_cost = _mgt_all_cost(con, sw, sp, s, e, "monthly")
             rows = con.execute(f"""
                 SELECT d.sku_id, s.description, s.sku_code,
-                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost_mo}) cost
                 FROM v_sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
                 JOIN skus s ON s.sku_id=d.sku_id
                 WHERE {sw} AND d.period_month BETWEEN :s AND :e
@@ -2553,7 +2628,7 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
     # `est_food_cost_pct` prices the uncosted plates at the average cost of the
     # plates we DO cost — a first-order estimate, flagged as such, never booked.
     # same effective-cost expression, aliased for sales_sku_monthly (`s.`)
-    _eff_cost_m = effective_unit_cost_sql('s')
+    _eff_cost_m = effective_unit_cost_sql('s', 's.period_month')
     cost_coverage = None
     try:
         # the app-wide coverage scope (rules.needs_cost_sql — what home, P&L and the
@@ -3001,9 +3076,9 @@ def report_management(
         if out.get("available") is False:
             return out
         ctx.update(out)
-        out = _mgt_headline(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
+        out = _mgt_headline(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), is_mtd=ctx.get("is_mtd"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
-        out = _mgt_branches(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), period=ctx.get("period"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
+        out = _mgt_branches(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), is_mtd=ctx.get("is_mtd"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), period=ctx.get("period"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
         out = _mgt_leak(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
         ctx.update(out)
@@ -3266,7 +3341,6 @@ def report_management_months(
         # ---- cost source, resolved per window exactly as the report does (§4) ----
         _dmin = con.execute("SELECT MIN(day) d FROM v_sales_sku_daily").fetchone()
         daily_min = (_dmin["d"] if _dmin else None) or "9999-99-99"
-        eff_cost = effective_unit_cost_sql('d')
 
         def whole_months(s, e):
             return s.day == 1 and e == _dt.date(e.year, e.month, _cal.monthrange(e.year, e.month)[1])
@@ -3288,9 +3362,9 @@ def report_management_months(
                 out = (0.0, "unavailable")
                 try:
                     if s.isoformat() >= daily_min:
-                        out = (_mgt_all_cost(con, sw, sp, eff_cost, s, e, "daily"), "daily")
+                        out = (_mgt_all_cost(con, sw, sp, s, e, "daily"), "daily")
                     elif whole_months(s, e):
-                        out = (_mgt_all_cost(con, sw, sp, eff_cost, s, e, "monthly"), "monthly")
+                        out = (_mgt_all_cost(con, sw, sp, s, e, "monthly"), "monthly")
                 except Exception:
                     out = (0.0, "unavailable")
                 if out[1] != "unavailable" and not out[0]:
@@ -3306,24 +3380,9 @@ def report_management_months(
             return round(gp / rev * 100, 1), gp, round(cost), src
 
         def dow_baseline(prev_month, month_first, n_days):
-            """The report's weekday-fair baseline (§3): last month's per-weekday daily
-            averages summed over the same n elapsed dates. → (revenue, covers) or None."""
-            rows = con.execute(f"""
-                SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
-                       {net_revenue_sum('st')} rev,
-                       COALESCE(SUM(st.customer_count),0) cust,
-                       COUNT(DISTINCT date(st.sold_at)) days
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-                GROUP BY wd""", {**params, "month": prev_month}).fetchall()
-            avg = {r["wd"]: ((r["rev"] or 0) / r["days"], (r["cust"] or 0) / r["days"])
-                   for r in rows if r["days"]}
-            if not avg or not n_days:
-                return None
-            fb = (sum(v[0] for v in avg.values()) / len(avg), sum(v[1] for v in avg.values()) / len(avg))
-            wds = [int((month_first + _dt.timedelta(days=i)).strftime("%w")) for i in range(n_days)]
-            return (round(sum(avg.get(x, fb)[0] for x in wds), 2),
-                    round(sum(avg.get(x, fb)[1] for x in wds), 1))
+            """(revenue, covers) of the report's weekday-fair baseline (§3), or None."""
+            b = _mgt_dow_baseline(con, where, params, prev_month, month_first, n_days)
+            return (b["revenue"], b["customers"]) if b else None
 
         rows_out = []
         for sel in sel_months:
