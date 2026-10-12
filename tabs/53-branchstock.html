@@ -41,7 +41,7 @@
     <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
       <p>กรอกเฉพาะรายการที่ใช้หรือทิ้งในวันนั้น · ช่องที่เว้นว่างถือว่าไม่ได้เบิก · รายการที่เบิกบ่อยใน 14 วันล่าสุดอยู่บนสุดของแต่ละโซน</p>
       <p>ตัวเลขเทาในช่อง เช่น “เมื่อวาน 3” คือจำนวนในใบตัดเบิกที่ยืนยันครั้งก่อน · ของเสียต้องเลือกสาเหตุ</p>
-      <p>เครื่องหมาย ✓ ที่โซน = กรอกรายการบังคับของโซนนั้นครบทุกรายการ · ร่างบันทึกเองหลังพิมพ์ครบ 2–3 วินาที · ยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย</p>
+      <p>เครื่องหมาย ✓ ที่โซน = กรอกรายการที่ต้องนับของโซนนั้นครบทุกรายการ · ร่างบันทึกเองหลังพิมพ์ครบ 2–3 วินาที · ยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย</p>
     </div></details>
   </div>
 
@@ -84,7 +84,7 @@
     <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
       <div id="brnZones" class="flex flex-wrap gap-1 brn-zones"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs brn-filterrow" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการบังคับ</span><span class="brn-t-short">บังคับ</span></label>
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการที่ต้องนับ</span><span class="brn-t-short">ต้องนับ</span></label>
         <input type="search" id="brnQ" placeholder="ค้นหา…" oninput="brnRender()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
         <span id="brnProgress"></span>
@@ -109,7 +109,7 @@
     </div>
     <details id="brnHowTo" class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
       <p><b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง)</p>
-      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · ต้องนับรายการ “บังคับ” ให้ครบทุกรายการก่อนกด “ส่งผลตรวจนับ” · เครื่องหมาย ✓ ที่โซน = นับรายการบังคับของโซนนั้นครบ · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
+      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · ต้องนับรายการที่มีป้าย “ต้องนับ” ให้ครบทุกรายการก่อนกด “ส่งผลตรวจนับ” · เครื่องหมาย ✓ ที่โซน = นับรายการที่ต้องนับของโซนนั้นครบ · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
     </div></details>
   </div>
 

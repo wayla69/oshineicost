@@ -53,7 +53,7 @@ def test_shape_owners_and_links(udon):
     assert it["draft"]["status"] == "todo" and it["draft"]["go"]["pane"] == "rec"
     assert it["acknowledge"]["status"] == "na"
     due = it["order_due_2"]                                      # Wednesday: Saturday's delivery is the nearest
-    assert due["status"] == "todo" and due["title"] == "ส่งใบสั่งซื้อรอบส่งวันเสาร์ (10/10) ภายใน วันพฤหัส 13:15"
+    assert due["status"] == "todo" and due["title"] == "ส่งใบสั่งซื้อภายใน พฤ. 8/10 เวลา 13:15 · รอบส่งวันเสาร์ (10/10)"
     assert due["go"]["extra"] == {"round": "2", "delivery": "2026-10-10"} and due["owner_modules"] == ["branch.stock"]
     assert d["close"]["branches"] == []                          # nobody has started closing September
     assert _steps(d)["deliveries"]["status"] == "todo" and _steps(d)["release_in_force"]["status"] == "todo"

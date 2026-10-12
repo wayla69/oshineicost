@@ -93,7 +93,7 @@
              style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <button onclick="opPrintLetter()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">ออกจดหมายแจ้งสาขา</button>
       <button onclick="opPrintLetter(true)" title="เปิดดูจดหมายก่อนพิมพ์" style="background:var(--bg-input);color:var(--teal-ink);border:1px solid #5eead4;border-radius:var(--r-sm);padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer">ดูร่างก่อน</button>
-      <button onclick="opExportByBranch()" title="Excel 1 แผ่นต่อสาขา — ปริมาณที่ควรสั่งเป็นจำนวนเต็ม ปัดขึ้นทุกรายการ (เฉพาะรายการที่สั่งจากไดกิโตะ เว้นแต่เลือกตัวกรองอื่น)" style="background:var(--bg-input);color:var(--teal-ink);border:1px solid #5eead4;border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer">Excel แยกสาขา</button>
+      <button onclick="opExportByBranch()" title="Excel 1 แผ่นต่อสาขา — ปริมาณที่ควรสั่งเป็นจำนวนเต็ม ปัดขึ้นทุกรายการ (เฉพาะรายการที่สั่งจากไดกิโตะ กรุ๊ป เว้นแต่เลือกตัวกรองอื่น)" style="background:var(--bg-input);color:var(--teal-ink);border:1px solid #5eead4;border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer">Excel แยกสาขา</button>
       <button onclick="opExportXlsx()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer">Excel</button>
     </span>
     <span id="opStatus" class="text-xs w-full" style="color:var(--text-muted)"></span>
@@ -130,7 +130,7 @@
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">
       ตัวเลขที่แนะนำจะถูก <b>บันทึกแช่แข็งไว้ ณ วันที่ออกรอบ</b> — คำนวณใหม่ภายหลังจะไม่เปลี่ยนสิ่งที่สาขาถูกเทียบด้วย
-      · เกณฑ์แจ้งเตือน = ไม่ได้สั่งจากไดกิโตะ หรือสั่งต่ำกว่าแผนเกิน <b id="opTolLabel">20</b>%
+      · เกณฑ์แจ้งเตือน = ไม่ได้สั่งจากไดกิโตะ กรุ๊ป หรือสั่งต่ำกว่าแผนเกิน <b id="opTolLabel">20</b>%
     </p>
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <label class="text-xs" style="color:var(--text-muted)">รอบเริ่ม</label>
@@ -207,7 +207,7 @@
     <div class="flex flex-wrap items-center gap-2 mb-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
       <span class="text-[11px] font-semibold" style="color:var(--text-primary)">เลือกเป็นชุด:</span>
       <button onclick="opBulkSourcing(true)" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
-              title="ตั้งทุกรายการที่แสดงอยู่เป็น สั่งจากไดกิโตะ">✓ ติดตามทั้งหมดที่แสดง</button>
+              title="ตั้งทุกรายการที่แสดงอยู่เป็น สั่งจากไดกิโตะ กรุ๊ป">✓ ติดตามทั้งหมดที่แสดง</button>
       <button onclick="opBulkSourcing(false)" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
               title="ตั้งทุกรายการที่แสดงอยู่เป็น สาขาซื้อเอง">✕ ไม่ติดตามทั้งหมดที่แสดง</button>
       <span style="width:1px;height:18px;background:var(--border)"></span>
@@ -221,7 +221,7 @@
     </div>
     <table class="text-xs w-full" id="opTable">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)">
-        <th class="py-1.5 pr-2 text-center" data-nosort title="ติ๊ก = แนะนำให้สั่งจากไดกิโตะ (จะอยู่ในจดหมาย) · เอาออก = สาขาซื้อเอง">แนะนำ</th>
+        <th class="py-1.5 pr-2 text-center" data-nosort title="ติ๊ก = แนะนำให้สั่งจากไดกิโตะ กรุ๊ป (จะอยู่ในจดหมาย) · เอาออก = สาขาซื้อเอง">แนะนำ</th>
         <th class="py-1.5 pr-2">รหัส</th>
         <th class="py-1.5 pr-2">วัตถุดิบ</th>
         <th class="py-1.5 pr-2">ประเภท</th>

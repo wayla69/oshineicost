@@ -181,7 +181,7 @@ def test_a_count_with_an_uncounted_required_item_is_refused(db):
         ST.save(db, 1, [], "udon", submit=True, count_date="2026-10-01")
     msg = str(e.value)
     n = len(req) - 1
-    assert msg.startswith(f"ยังไม่นับรายการบังคับ {n} รายการ (เช่น ") and msg.endswith(") นับให้ครบก่อนส่ง")
+    assert msg.startswith(f"ยังมีรายการที่ต้องนับ {n} รายการ ที่ยังไม่ได้นับ (เช่น ") and msg.endswith(") นับให้ครบก่อนส่ง")
     assert req[1]["name"] in msg and first["name"] not in msg
     db.rollback()
     assert ST.draft_of(db, 1) is None                     # the refused call stored nothing (the router rolls back too)

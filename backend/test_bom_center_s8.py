@@ -54,7 +54,7 @@ def test_without_a_count_the_forecast_alone(con):  # noqa: F811
     assert r["need"] == pytest.approx(r["forecast"] + r["safety"], abs=0.02)
     assert r["order_unit"] == "pack" and r["order_units"] == pytest.approx(-(-r["need"] // 1000))
     assert p["order"] is None and p["order_day"] == "2026-10-05" and p["cycle_date"] == "2026-10-05"
-    assert p["delivery"] == "2026-10-07" and p["cutoff_th"] == "วันจันทร์ 13:15" and p["late"] is False
+    assert p["delivery"] == "2026-10-07" and p["cutoff_th"] == "จ. 5/10 เวลา 13:15" and p["late"] is False
 
 
 def test_the_system_stock_is_deducted(con):  # noqa: F811

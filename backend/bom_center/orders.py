@@ -29,6 +29,7 @@ import math
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
+from .fmt import item as _item
 from .master import audit
 from .units import Converter, unit_word
 
@@ -322,17 +323,17 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
             try:
                 q = float(q)
             except (TypeError, ValueError):
-                raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
+                raise ValueError(f"{_item(con, c)}: จำนวนต้องเป็นตัวเลข")
             if q < 0:
-                raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
+                raise ValueError(f"{_item(con, c)}: จำนวนต้องไม่ติดลบ")
         rs = (ln.get("reason_code") or "").strip() or None
         if rs and rs not in REASON_TH:
-            raise ValueError(f"{c}: เหตุผลไม่อยู่ในรายการ")
+            raise ValueError(f"{_item(con, c)}: เหตุผลไม่อยู่ในรายการ")
         if c not in have:                                   # an item the suggestion did not include
             if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (c,)).fetchone():
                 raise ValueError(f"ไม่พบรหัส {c} ในทะเบียน")
             if cmap and c not in cmap:
-                raise ValueError(f"{c} ไม่อยู่ในบัญชีสินค้าส่วนกลาง · สาขาซื้อเอง")
+                raise ValueError(f"{_item(con, c)} ไม่อยู่ในบัญชีสินค้าส่วนกลาง · สาขาซื้อเอง")
             con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                         " order_unit, reason_code, note) VALUES(?,?,0,?,?,?,?)",
                         (oid, c, q, unit_of.get(c) or ln.get("order_unit") or "base", rs, ln.get("note")))
@@ -446,13 +447,13 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
         if ln.get("received_units") is None and ln.get("weight") is None:
-            raise ValueError(f"{c}: ต้องระบุจำนวนที่รับ")
+            raise ValueError(f"{_item(con, c)}: ต้องระบุจำนวนที่รับ")
         try:
             q = float(ln.get("received_units") or 0)
         except (TypeError, ValueError):
-            raise ValueError(f"{c}: จำนวนต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องเป็นตัวเลข")
         if q < 0:
-            raise ValueError(f"{c}: จำนวนต้องไม่ติดลบ")
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องไม่ติดลบ")
         got[c] = (q, (ln.get("reason") or "").strip(), (ln.get("note") or "").strip() or None, ln.get("pieces"), ln.get("weight"))
     units, sent = {}, {}
     for c, u, pu, cf in con.execute("SELECT ingredient_code, order_unit, processed_units, confirmed_units"
@@ -469,7 +470,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     tolerated = []
     for c, (q, reason, note, pcs_raw, wt_raw) in list(got.items()):
         if c not in units:
-            raise ValueError(f"{c} ไม่อยู่ในใบสั่งซื้อนี้")
+            raise ValueError(f"{_item(con, c)} ไม่อยู่ในใบสั่งซื้อนี้")
         step = conv.weight_avg_step(c)
         within = False
         if wt_raw is not None and str(wt_raw).strip() != "":
@@ -498,9 +499,9 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
             continue                          # PR-W: booked at the weight received, no reason and no claim
         if gap > 1e-9:
             if reason not in _cl.REASON_TH:
-                raise ValueError(f"{c}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุของส่วนต่าง")
+                raise ValueError(f"{_item(con, c)}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุของส่วนต่าง")
             if reason == "other" and not note:
-                raise ValueError(f"{c}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
+                raise ValueError(f"{_item(con, c)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
             short.append({"code": c, "claim_units": round(gap, 6), "reason": reason, "note": note,
                           "sent_units": sent[c], "received_units": q})
         elif gap < -1e-9:

@@ -20,13 +20,14 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from .fmt import day_th as _fmt_day
+from .fmt import item as _item
+from .fmt import no_unit as _no_unit
+from .fmt import reasons as _reasons
 from .master import audit
 from .units import Converter, unit_word
 
 THRESHOLD = {"A": 5.0, "B": 10.0, "C": 20.0}
-REASONS = (("waste", "วัตถุดิบเสีย / ทิ้ง"), ("expired", "หมดอายุ"), ("staff", "ชิม / อาหารพนักงาน"),
-           ("overportion", "เสิร์ฟเกินปริมาณตามสูตร"), ("transfer", "โอนให้สาขาอื่น"), ("miscount", "ตรวจนับผิด"),
-           ("receipt", "บันทึกรับสินค้าไม่ครบ"), ("other", "อื่น ๆ"))
+REASONS = _reasons("waste", "expired", "staff", "overportion", "transfer", "miscount", "receipt", "other")   # fmt.REASON_LABEL
 REASON_TH = dict(REASONS)
 FLAG_STATUS = ("over", "under", "negative", "no_bom")   # the statuses that are outside the threshold
 ASK_TOP = 20                                            # PR-M4 (owner Q3): a reason is asked for class A and for the top 20 by |฿|
@@ -68,9 +69,9 @@ def _pieces_of(conv, code: str, raw):
     try:
         p = float(str(raw).replace(",", "").strip())
     except (TypeError, ValueError):
-        raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลขจำนวนเต็ม")
+        raise ValueError(f"{_item(conv, code)}: จำนวนต้องเป็นตัวเลขจำนวนเต็ม")
     if p != int(p) or p < 1:
-        raise ValueError(f"{code}: จำนวนที่นับต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป")
+        raise ValueError(f"{_item(conv, code)}: จำนวนที่นับต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป")
     return float(int(p))
 
 
@@ -89,17 +90,17 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
         try:
             q = float(ln.get("qty"))
         except (TypeError, ValueError):
-            raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
         if q <= 0:
-            raise ValueError(f"{code}: จำนวนต้องมากกว่า 0")
+            raise ValueError(f"{_item(con, code)}: จำนวนต้องมากกว่า 0")
         unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
         qb, how = conv.to_base(code, q, unit)
         if qb is None:
-            bad.append(f"{code}: {how}")
+            bad.append(_no_unit(con, code, unit))
         prev = clean.get(code)
         if prev:                                             # the same item twice in one delivery: add up
             if prev[1] != unit:
-                raise ValueError(f"{code}: ระบุซ้ำด้วยหน่วยที่ต่างกัน ({prev[1]} / {unit}) · รวมเป็นบรรทัดเดียว")
+                raise ValueError(f"{_item(con, code)}: ระบุซ้ำด้วยหน่วยที่ต่างกัน ({prev[1]} / {unit}) · รวมเป็นบรรทัดเดียว")
             q = prev[0] + q
             qb = None if qb is None or prev[2] is None else prev[2] + qb
         pcs = _pieces_of(conv, code, ln.get("pieces"))
@@ -110,7 +111,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
         raise ValueError("ยังไม่มีรายการรับสินค้า")
     _refuse_if_posted(con, branch_id, receipt_date)
     if bad:
-        raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
+        raise ValueError("บันทึกไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์")
     cur = con.execute("INSERT INTO bc_receipt(branch_id, receipt_date, source, ref, note, entered_by, created_at)"
                       " VALUES(?,?,?,?,?,?,?)", (branch_id, receipt_date, source, ref, note, who, now()))
     rid = cur.lastrowid
@@ -167,6 +168,35 @@ def delete_receipt(con, branch_id: int, receipt_id: int, who: str) -> bool:
     return True
 
 
+def _ref_th(con, branch_id: int, ref, source=None):
+    """How a receipt is named on the branch's screen (string 10): "รับตามใบสั่งซื้อ รอบ 2 (ส่ง 10/10)" for ORDER-8, "ปรับตามเคลม รอบ 2
+    (ส่ง 10/10)" for CLAIM-1, "รายงานไดกิโตะ กรุ๊ป เดือนกันยายน 2026" for CENTRAL-2026-09; None for a reference the person typed (shown as written)."""
+    from .fmt import month_th
+    from .forecast import ROUND_TH
+    from .hub import delivery_of
+    r = str(ref or "")
+
+    def of_order(oid):
+        o = con.execute("SELECT round, cycle_date, delivery_date FROM bc_order WHERE order_id=?", (oid,)).fetchone()
+        if not o:
+            return None
+        d = date.fromisoformat(delivery_of(con, branch_id, o[0], o[1], o[2]))
+        return f"{ROUND_TH.get(o[0], o[0])} (ส่ง {d.day}/{d.month})"
+    m = re.fullmatch(r"ORDER-(\d+)", r)
+    if m:
+        t = of_order(int(m.group(1)))
+        return f"รับตามใบสั่งซื้อ {t}" if t else "รับตามใบสั่งซื้อ"
+    m = re.fullmatch(r"CLAIM-(\d+)", r)
+    if m:
+        row = con.execute("SELECT order_id FROM bc_claim WHERE claim_id=?", (int(m.group(1)),)).fetchone()
+        t = of_order(row[0]) if row else None
+        return f"ปรับตามเคลม {t}" if t else "ปรับตามเคลม"
+    m = re.fullmatch(r"CENTRAL-(\d{4}-\d{2})", r)
+    if m:
+        return f"รายงานไดกิโตะ กรุ๊ป เดือน{month_th(m.group(1))}"
+    return None
+
+
 def receipts(con, branch_id: int, limit: int = 30) -> list:
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     out = []
@@ -185,6 +215,7 @@ def receipts(con, branch_id: int, limit: int = 30) -> list:
         r["locked"] = bool(closed and r["receipt_date"] < closed)
         m = re.fullmatch(r"ORDER-(\d+)", r["ref"] or "")
         r["pack_reports"] = reports.get(int(m.group(1)), []) if m else []
+        r["ref_th"] = _ref_th(con, branch_id, r["ref"], r["source"])
     return out
 
 

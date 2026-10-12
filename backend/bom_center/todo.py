@@ -19,7 +19,7 @@ writes do not invalidate the cache, and this list must be right straight after a
 from datetime import date, datetime, timedelta
 
 from .clock import BKK, now_bkk
-from .fmt import at_th as _fmt_at, day_th as _fmt_day, lbl as _lbl, month_th as _mth, who as _who
+from .fmt import at_th as _fmt_at, day_th as _fmt_day, lbl as _lbl, left_th as _left_th, month_th as _mth, who as _who
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
@@ -174,9 +174,10 @@ def _recipe_check_items(con, today: date) -> list:
     rows, m = x10_rows(con, today)
     if not rows:
         return []
-    shown = " · ".join(f"{r['name']}: ซื้อ {r['bought']:,.0f} · สูตร {r['recipe']:,.0f} {r['base_unit'] or ''}".rstrip() for r in rows[:3])
+    shown = " · ".join(f"{r['name']}: ซื้อ {r['bought']:,.0f} {r['base_unit'] or ''} · ตามสูตร {r['recipe']:,.0f} {r['base_unit'] or ''}".replace("  ", " ").rstrip()
+                       for r in rows[:3])
     return [_e("recipe_check_units", 26, "setup", f"ตรวจหน่วยของวัตถุดิบที่ยอดซื้อต่างจากสูตรเกิน 10 เท่า ({len(rows)} รายการ)", "todo",
-               f"เดือน{_mth(m)} · {shown}" + (f" · และอีก {len(rows) - 3} รายการ" if len(rows) > 3 else ""), count=len(rows),
+               f"เดือน{_mth(m)} · ต่อยอดขาย ฿100,000 · {shown}" + (f" · และอีก {len(rows) - 3} รายการ" if len(rows) > 3 else ""), count=len(rows),
                owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rcheck", "month": m})]
 
 
@@ -406,20 +407,19 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
             dlv = date.fromisoformat(it["delivery"])
             dlv_par = f"วัน{WD_TH[_wd(dlv)]} ({dlv.day}/{dlv.month})"
             late_now = it["late"] and not sent
-            hours = int(max(it["hours_left"], 0))
             if sent:
                 detail = f"สถานะ: {STATUS_TH.get(st, st)}"
             elif late_now:
                 detail = "เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับล่าช้า"
             elif st:
-                detail = f"เหลือ {hours} ชม. · สถานะ: {STATUS_TH.get(st, st)}"
+                detail = f"{_left_th(it['hours_left'])} · สถานะ: {STATUS_TH.get(st, st)}"
             else:
-                detail = f"เหลือ {hours} ชม. · ยังไม่ได้เปิดใบสั่งซื้อ"
+                detail = f"{_left_th(it['hours_left'])} · ยังไม่ได้เปิดใบสั่งซื้อ"
             if not sent and not slip_ok:                     # the order is made from the stock after today's slip
                 detail += " · ยืนยันใบตัดเบิกวันนี้ก่อน"
             what = "ส่งใบสั่งซื้อแซลมอนสด" if r == "salmon" else "ส่งใบสั่งซื้อ"
             out.append(_e(f"order_due_{r}", 310, "week",
-                          f"{what}{' ' if r == 'salmon' else ''}รอบส่ง{dlv_par} ภายใน {it['cutoff_th']}",
+                          f"{what}{' ' if r == 'salmon' else ''}ภายใน {it['cutoff_th']} · รอบส่ง{dlv_par}",
                           "done" if sent else "todo", detail,
                           owner=("branch.stock",), owner_th="สาขา", branch=b,
                           urgent=bool(not sent and (it["late"] or 0 <= it["hours_left"] < 4)),

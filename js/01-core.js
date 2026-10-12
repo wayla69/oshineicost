@@ -1776,6 +1776,15 @@ const _TH_WD_SHORT = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
 function _isoParts(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso == null ? '' : iso)); return m ? [+m[1], +m[2], +m[3]] : null; }
 function fmtDay(iso) { const p = _isoParts(iso); return p ? `${p[2]}/${p[1]}/${p[0]}` : String(iso == null ? '' : iso); }
 function fmtDayShort(iso) { const p = _isoParts(iso); return p ? `${_TH_WD_SHORT[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()]} ${p[2]}/${p[1]}` : String(iso == null ? '' : iso); }
+// 5.1: a cutoff written ONE way, after "ส่งใบสั่งซื้อภายใน": "พฤ. 15/10 เวลา 13:15" (the iso stamp's own clock is the branch's)
+function fmtCutoff(iso) { const s = String(iso == null ? '' : iso); return /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) ? `${fmtDayShort(s.slice(0, 10))} เวลา ${s.slice(11, 16)}` : s; }
+// 5.1: the time left: "อีก 2 วัน 19 ชม." from 24 hours up, hours only under 24 ("อีก 5 ชม."), minutes under an hour
+function fmtLeft(hours) {
+  const h = Math.max(Number(hours) || 0, 0);
+  if (h < 1) return `อีก ${Math.round(h * 60)} นาที`;
+  const whole = Math.floor(h), d = Math.floor(whole / 24), r = whole % 24;
+  return d === 0 ? `อีก ${r} ชม.` : `อีก ${d} วัน${r ? ` ${r} ชม.` : ''}`;
+}
 function fmtMonthTh(ym) { const m = /^(\d{4})-(\d{2})/.exec(String(ym == null ? '' : ym)); return m && _TH_MONTHS[+m[2] - 1] ? `${_TH_MONTHS[+m[2] - 1]} ${m[1]}` : String(ym == null ? '' : ym); }
 function fmtAt(iso) { const s = String(iso == null ? '' : iso); const p = _isoParts(s); return p ? (fmtDay(s) + (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) ? ' ' + s.slice(11, 16) : '')) : s; }
 // the name a person recognises for a login (display name, else branch / role label); the login id itself is never shown

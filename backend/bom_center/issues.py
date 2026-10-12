@@ -32,11 +32,13 @@ from datetime import date, datetime, timedelta, timezone
 
 from .clock import BKK, now_bkk
 from .fmt import day_th as _fmt_day
+from .fmt import item as _item
+from .fmt import no_unit as _no_unit
+from .fmt import reasons as _reasons
 from .master import audit
 from .units import Converter
 
-WASTE_REASONS = (("waste", "ของเสีย / เน่าเสีย"), ("expired", "หมดอายุ"), ("spill", "หก / ตก / แตก"),
-                 ("prep_loss", "ตัดแต่งเกินสูตร"), ("other", "อื่น ๆ (ระบุ)"))
+WASTE_REASONS = _reasons("waste", "expired", "spill", "prep_loss", "other")      # fmt.REASON_LABEL: the words variance uses too
 WASTE_REASON_TH = dict(WASTE_REASONS)
 STATUS_TH = {"confirmed": "ยืนยันแล้ว", "late": "ยืนยันล่าช้า", "draft": "ร่าง", "missing": "ยังไม่บันทึก"}
 MAX_BACKDATE_DAYS = 60
@@ -303,9 +305,9 @@ def _clean_lines(con, lines: list, whole_up: bool = False):
             try:
                 q = float(v)
             except (TypeError, ValueError):
-                raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลข")
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
             if q < 0:
-                raise ValueError(f"{code}: จำนวนต้องไม่ติดลบ")
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
             if whole_up:
                 q = float(math.ceil(round(q, 6)))              # 3.47 → 4 · 3.0000001 → 3 (float dust is not a fraction)
             vals.append(q)
@@ -317,16 +319,16 @@ def _clean_lines(con, lines: list, whole_up: bool = False):
             continue
         if waste > 0:
             if reason not in WASTE_REASON_TH:
-                raise ValueError(f"{code}: เลือกสาเหตุของของเสีย")
+                raise ValueError(f"{_item(con, code)}: เลือกสาเหตุของของเสีย")
             if reason == "other" and not lnote:
-                raise ValueError(f"{code}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
+                raise ValueError(f"{_item(con, code)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         else:
             reason = None
         unit = (ln.get("unit") or "").strip() or (cu.get(code) or ("",))[0] or conv.base_unit(code)
         ub, how = conv.to_base(code, used, unit)
         wb, how2 = conv.to_base(code, waste, unit)
         if ub is None or wb is None:
-            bad.append(f"{code}: {how if ub is None else how2}")
+            bad.append(_no_unit(con, code, unit))
         clean.append((code, (used, waste, unit, ub, wb, reason, lnote)))
     return clean, bad
 
@@ -381,11 +383,11 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     if submit:
         if not n:
             raise ValueError("ยังไม่มีรายการในใบตัดเบิก")
-        unconv = [f"{c}: แปลง {u or '-'} ไม่ได้" for c, u in con.execute(
+        unconv = [_no_unit(con, c, u) for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_issue_line WHERE slip_id=? AND (qty_used_base IS NULL"
             " OR qty_waste_base IS NULL)", (sid,))]
         if unconv:
-            raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(unconv[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
+            raise ValueError("บันทึกไม่ได้: " + "; ".join(unconv[:3]) + " · แจ้งฝ่ายวิเคราะห์")
         first = int(row["confirm_count"] or 0) == 0
         late = 1 if (first and today > d) else int(row["late"] or 0)
         con.execute("UPDATE bc_issue_slip SET status='confirmed', confirmed_by=?, confirmed_at=?, late=?,"
@@ -416,7 +418,7 @@ def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime 
     assert_not_posted(con, branch_id, iso, "ใบตัดเบิก")
     clean, bad = _clean_lines(con, lines, whole_up=True)
     if bad:
-        raise ValueError("แปลงหน่วยไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์ให้เพิ่มกฎหน่วย")
+        raise ValueError("บันทึกไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์")
     todo =[(c, v) for c, v in clean if v is not None]
     if not todo:
         raise ValueError("ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ")
@@ -435,7 +437,7 @@ def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime 
             if (cunit or "") != (unit or ""):                  # the new quantity in the unit the line already has
                 f, _how = conv.to_base(code, 1, cunit or conv.base_unit(code))
                 if not f:
-                    raise ValueError(f"{code}: แปลงหน่วย {cunit or '-'} ไม่ได้")
+                    raise ValueError("บันทึกไม่ได้: " + _no_unit(con, code, cunit) + " · แจ้งฝ่ายวิเคราะห์")
                 used, waste = ub / f, wb / f
             qu, qw = round((qu or 0) + used, 6), round((qw or 0) + waste, 6)
             qub, qwb = round((qub or 0) + ub, 6), round((qwb or 0) + wb, 6)

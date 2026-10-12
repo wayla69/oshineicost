@@ -93,7 +93,9 @@ def cutoff_for(delivery: date, cutoff_time_: time = None) -> datetime:
 
 
 def cutoff_th(dt: datetime) -> str:
-    return f"วัน{WD_TH[_wd(dt.date())]} {dt:%H:%M}"
+    """The cutoff as every screen writes it after "ส่งใบสั่งซื้อภายใน": พฤ. 15/10 เวลา 13:15 (fmt.cutoff_label)."""
+    from .fmt import cutoff_label
+    return cutoff_label(dt)
 
 
 def day_th(d: date) -> str:
