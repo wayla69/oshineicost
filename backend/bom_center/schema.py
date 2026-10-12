@@ -268,6 +268,9 @@ MIGRATIONS = (
     # … and a released month stays frozen when an average changes later: the factor (base units in ONE unit of the line) a
     # released sub-recipe line was costed with is kept with the release (L6)
     ("bc_rel_prep_line", "factor_base", "REAL"),
+    # PR-V — the sales (฿, ex VAT) the branch typed for the cover period: the buffer in baht (the % is derived from it and
+    # still drives the suggestion), or, for a new branch with a reference branch, the figure the suggestion is built on
+    ("bc_order", "buffer_sales", "REAL"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports

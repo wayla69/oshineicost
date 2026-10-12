@@ -30,6 +30,7 @@ from bom_center import issue_reports as _ir
 from bom_center.clock import today as bkk_today
 from bom_center import master as _m
 from bom_center import orders as _or
+from bom_center import per_sales as _pv
 from bom_center import pilot as _pl
 from bom_center import prep as _pr
 from bom_center import todo as _td
@@ -1499,10 +1500,30 @@ def bc_order_calendar():
         for bid, name in con.execute("SELECT branch_id, name FROM branches WHERE name != 'ALL'"
                                      " AND COALESCE(active, 1) = 1 ORDER BY name"):
             cal = _fc.calendar(con, bid)
-            rows.append({"branch_id": bid, "branch": name, **{f"r{k}": v for k, v in cal.items()}})
+            rows.append({"branch_id": bid, "branch": name, "ref_branch_id": _pv.reference_for(con, bid),
+                         **{f"r{k}": v for k, v in cal.items()}})
     from bom_center.pilot import PILOT                       # the page can show the pilot branches alone
     return {"rows": rows, "weekdays": _fc.WD_TH, "defaults": _fc.DEFAULT_CAL, "pilot": list(PILOT),
-            "cutoff_time": f"{_fc.cutoff_time():%H:%M}"}
+            "cutoff_time": f"{_fc.cutoff_time():%H:%M}", "new_branch_days": _pv.NEW_BRANCH_DAYS}
+
+
+class RefBranchBody(BaseModel):
+    branch_id: int
+    ref_branch_id: Optional[int] = None         # None = no reference branch
+
+
+@router.post("/api/bom-center/order-calendar/ref-branch", dependencies=[Depends(require_write_token)])
+def bc_order_calendar_ref(body: RefBranchBody, request: Request):
+    """สาขาอ้างอิงสำหรับสาขาใหม่ (PR-V): a branch with fewer than 14 trading days of sales is planned from this branch's usage
+    per ฿100,000 of sales x the sales it expects. app_settings `bc_ref_branch`; the sales team's, like the calendar."""
+    with get_db() as con:
+        _ensure(con)
+        try:
+            out = _write(con, lambda: _pv.set_reference(con, _who(request), body.branch_id, body.ref_branch_id))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    invalidate_cache("bc_")
+    return out
 
 
 class CalRow(BaseModel):
@@ -2820,17 +2841,19 @@ def _resolve_delivery(con, bid: int, rnd: Optional[str], delivery: Optional[str]
 @router.get("/api/bom-center/order/plan")
 def bc_order_plan(request: Request, round: Optional[str] = Query(None), delivery: Optional[str] = Query(None),
                   order_day: Optional[str] = Query(None), branch_id: Optional[int] = Query(None),
-                  buffer_pct: Optional[float] = Query(None)):
+                  buffer_pct: Optional[float] = Query(None), expected_sales: Optional[float] = Query(None)):
     """The suggestion for one delivery, net of the count the branch typed + the cycle's order if one
     exists. Without a delivery, the nearest one still open for ordering — the branch page opens on it.
     `buffer_pct` (PR-19) applies the branch's expectation; omitted = the order's own.
+    `expected_sales` (PR-V, baht ex VAT for the cover period) matters only to a new branch with a reference branch.
     `order_day` is deprecated: "the window open on that day"."""
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         rnd, dlv = _resolve_delivery(con, bid, round, delivery, order_day)
         try:
-            out = _or.plan(con, bid, rnd, dlv, buffer_pct=buffer_pct)
+            out = _or.plan(con, bid, rnd, dlv, buffer_pct=buffer_pct,
+                           expected_sales=(expected_sales if expected_sales and expected_sales > 0 else None))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         out["round"] = rnd
@@ -2957,6 +2980,94 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
                                               receipt_date=body.receipt_date, ack=body.ack, claim_note=body.claim_note))
     invalidate_cache("bc_")
     return out
+
+
+# ── PR-V · วัตถุดิบที่ใช้ต่อยอดขาย ฿100,000 (per_sales.py): a second way to read the same usage ──
+PER_SALES_SHEET = "ต่อยอดขาย 100000"
+PER_SALES_COMPARE = "เทียบสาขา"
+
+
+def _per_sales_headers(weeks: int) -> list:
+    return ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", f"ต่อยอดขาย ฿100,000 ({weeks} สัปดาห์ล่าสุด)", f"{weeks} สัปดาห์ก่อนหน้า",
+            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "หมายเหตุ"]
+
+
+def _per_sales_note(it: dict) -> str:
+    parts = []
+    if it.get("steady") is False:
+        parts.append(f"ใช้ไม่สม่ำเสมอ (แกว่ง ±{it['swing_pct']:g}% ต่อสัปดาห์)")
+    elif it.get("steady") is None and it.get("swing_pct") is None and it.get("per_100k"):
+        parts.append("ข้อมูลยังไม่พอ")
+    if it.get("prev_per_100k") is None:
+        parts.append("ไม่มีข้อมูลช่วงก่อนหน้า")
+    return " · ".join(parts)
+
+
+@router.get("/api/bom-center/per-sales")
+def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(4, ge=1, le=8)):
+    """The last `weeks` weeks against the `weeks` before: per branch the usage of each ingredient per ฿100,000 of sales (ex VAT),
+    items by value, the change, the weekly swing and whether it is steady; plus the chain total (sum of usage / sum of sales).
+    A branch login gets its own branch only."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        out = _pv.report(con, weeks, [bid] if bid is not None else None)
+        if bid is not None:
+            out = dict(out, chain=None)
+        out = dict(out, scoped=bool(_auth.scope_branch(request)))
+        return out
+
+
+@router.get("/api/bom-center/per-sales.xlsx")
+def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(4, ge=1, le=8)):
+    from openpyxl import Workbook
+    with get_db() as con:
+        _ensure(con)
+        bid = _claim_scope(con, request, branch_id)
+        r = _pv.report(con, weeks, [bid] if bid is not None else None)
+    chain = r["chain"] if bid is None else None
+    wb = Workbook()
+    ws = wb.active
+    cur, prv = r["current"], r["previous"]
+    _sheet(ws, PER_SALES_SHEET, _per_sales_headers(r["weeks"]),
+           f"วัตถุดิบที่ใช้ต่อยอดขาย ฿100,000 (ไม่รวมภาษีมูลค่าเพิ่ม) · {r['weeks']} สัปดาห์ล่าสุด {cur['from']} ถึง {cur['to']}"
+           + (f" เทียบ {prv['from']} ถึง {prv['to']}" if prv else "") + " · ปริมาณใช้ตามสูตรเดียวกับยอดแนะนำ (รวมส่วนสูญเสีย) "
+           f"· มูลค่าตามราคาเดือน {r['month']} · แกว่งต่อสัปดาห์ = ส่วนเบี่ยงเบนมาตรฐานของอัตรารายสัปดาห์ ÷ ค่าเฉลี่ย "
+           f"ถ้าเกิน {r['steady_pct']:g}% ถือว่าใช้ไม่สม่ำเสมอ")
+    blocks = [(b["branch"], b["items"]) for b in r["branches"]] + ([("ทั้งเครือ", chain["items"])] if chain else [])
+    for name, items in blocks:
+        for it in items:
+            ws.append([name, it["code"], it["name"], it["unit"], it["per_100k"], it["prev_per_100k"], it["change_pct"],
+                       it["swing_pct"], it["value_per_100k"], _per_sales_note(it)])
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[4:6]:
+            c.number_format = "#,##0.00"
+        row[6].number_format = "0.0"
+        row[7].number_format = "0.0"
+        row[8].number_format = "#,##0.00"
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["C"].width = 40
+    ws.column_dimensions["J"].width = 44
+    ws.freeze_panes = "D3"
+    w2 = wb.create_sheet()
+    heads = [b["branch"] for b in r["branches"]] + (["ทั้งเครือ"] if chain else [])
+    _sheet(w2, PER_SALES_COMPARE, ["รหัส", "วัตถุดิบ", "หน่วย"] + heads,
+           f"ปริมาณที่ใช้ต่อยอดขาย ฿100,000 ของ {r['weeks']} สัปดาห์ล่าสุด เทียบรายสาขา (หน่วยเดียวกับแผ่นแรก)")
+    tables = [{it["code"]: it for it in b["items"]} for b in r["branches"]] \
+        + ([{it["code"]: it for it in chain["items"]}] if chain else [])
+    first = {}
+    for t in tables:
+        for code, it in t.items():
+            first.setdefault(code, it)
+    order = sorted(first, key=lambda c: -max((t[c]["value_per_100k"] or 0) for t in tables if c in t))
+    for code in order:
+        w2.append([code, first[code]["name"], first[code]["unit"]] + [t[code]["per_100k"] if code in t else None for t in tables])
+    for row in w2.iter_rows(min_row=3, max_row=w2.max_row):
+        for c in row[3:]:
+            c.number_format = "#,##0.00"
+    w2.column_dimensions["B"].width = 40
+    w2.freeze_panes = "D3"
+    return _xlsx(wb, f"bom_center_per_sales_{'b%d_' % bid if bid is not None else ''}{r['end']}.xlsx")
 
 
 # ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with a reason (photos go by LINE); Sales Support decides ──

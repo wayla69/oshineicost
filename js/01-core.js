@@ -2538,7 +2538,8 @@ const SUPPLY_CHIPS = [
     { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ', roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', mods: _SUPPLY_CENTRE, roles: ['operation', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
-    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
+    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },

@@ -142,7 +142,7 @@ def _order_row(con, order_id: int) -> dict:
     cols = ("order_id", "branch_id", "cycle_date", "round", "run_id", "status", "confirmed_by", "confirmed_at",
             "submitted_at", "processed_by", "processed_at", "po_ref", "received_at", "note", "stock_count_id", "value",
             "buffer_pct", "buffer_reason", "buffer_note", "delivery_date", "cutoff_at", "late", "ack_at", "ack_by",
-            "accounting_keyed_at", "accounting_keyed_by")
+            "accounting_keyed_at", "accounting_keyed_by", "buffer_sales")
     r = con.execute(f"SELECT {', '.join(cols)} FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
     return dict(zip(cols, r)) if r else None
 
@@ -243,11 +243,16 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     stock (`stock_count_id` keeps the month-end count it starts from) and can be submitted only when the
     branch has CONFIRMED its issue slip of the day.
 
+    PR-V: `buffer` may carry `sales` — the sales (฿, ex VAT) the branch expects for the cover period, kept on the order
+    (`buffer_sales`). For a new branch planned from its reference branch it is the figure the rows were built on.
+
     This is where the order's write transaction begins: whatever is read before (the plan) holds no lock."""
     from .central import central_map
     from .forecast import _now_for, cutoff_for, cutoff_th
     from . import issues as _is
     cmap = central_map(con)
+    if (suggestion.get("ref_mode") or {}).get("needs_sales"):          # a new branch cannot order without saying what it expects to sell
+        raise ValueError(suggestion["ref_mode"]["message"])
     delivery = delivery or suggestion.get("delivery")
     cut_iso = suggestion.get("cutoff_at") or (cutoff_for(date.fromisoformat(delivery)).isoformat() if delivery else None)
     basis_id = ((suggestion.get("stock") or {}).get("basis") or {}).get("count_id")
@@ -282,8 +287,9 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
                          for r in suggestion["rows"]])
     if buffer is not None:
         pct, reason, bnote = buffer_clean(buffer)
-        con.execute("UPDATE bc_order SET buffer_pct=?, buffer_reason=?, buffer_note=? WHERE order_id=?",
-                    (pct or None, reason, bnote, oid))
+        from .per_sales import sales_clean
+        con.execute("UPDATE bc_order SET buffer_pct=?, buffer_reason=?, buffer_note=?, buffer_sales=? WHERE order_id=?",
+                    (pct or None, reason, bnote, sales_clean((buffer or {}).get("sales")), oid))
     up = 1.0 + float(con.execute("SELECT COALESCE(buffer_pct, 0) FROM bc_order WHERE order_id=?", (oid,)).fetchone()[0]) / 100.0
     have = {c: s for c, s in con.execute("SELECT ingredient_code, suggested_units FROM bc_order_line WHERE order_id=?", (oid,))}
     unit_of = {r["code"]: r["order_unit"] for r in suggestion.get("rows", [])}
@@ -514,14 +520,18 @@ def order_units(need: float, per, moq) -> tuple:
 
 
 def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buffer_pct: float = None,
-         now: datetime = None) -> dict:
+         now: datetime = None, expected_sales: float = None) -> dict:
     """The suggestion for one delivery, net of the SYSTEM stock, ready to become an order.
 
     `delivery` is the delivery day of the round. The stock is the one the branch's issue slips leave on
     `now`'s day (stock.system_position: last month-end count + goods received − confirmed slips, counted
     items only); `as_of` is only the last day of sales the forecast reads. `buffer_pct` (PR-19): the
     branch's expectation to apply; None = the cycle's order's own, if any. `now` is the clock (tests pass
-    it). Reads only — no write transaction is opened here."""
+    it). Reads only — no write transaction is opened here.
+
+    PR-V: `expected_sales` (฿ ex VAT for the cover period, None = the cycle's order's own `buffer_sales`) is used only by a
+    new branch (fewer than 14 trading days of sales) that has a reference branch set (per_sales.REF_KEY): its rows are then
+    the reference branch's usage per ฿100,000 × this figure, and `ref_mode` says so (`needs_sales` while it is missing)."""
     from .forecast import _now_for, cover_for_delivery, cutoff_for, day_th, next_deliveries, suggest
     from .stock import count_units
     from . import issues as _is
@@ -541,8 +551,15 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     if not (BUFFER_MIN <= pct <= BUFFER_MAX):
         raise ValueError(f"% ที่ปรับต้องอยู่ระหว่าง {BUFFER_MIN:g}% ถึง +{BUFFER_MAX:g}%")
     from . import forecast as _fc
+    from . import per_sales as _ps
+    if expected_sales is None:
+        expected_sales = (o0 or {}).get("buffer_sales")
     with _fc._plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
-        s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv)
+        s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv,
+                    ref_branch=_ps.reference_for(con, branch_id), expected_sales=expected_sales)
+    if s.get("ref_mode"):                  # a new branch: the expected sales ARE the expectation, no % on top
+        pct = 0.0
+    s["expected_sales"] = expected_sales
     s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"]), "through": stock["through"],
                   # today's slip is reported on its own (slip_today); the days BEFORE it are the warning
                   "missing_days": [d for d in stock["missing_days"] if d != stock_day.isoformat()],
@@ -586,6 +603,15 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     return s
 
 
+def _sales_of(buffer):
+    """The sales (฿) a buffer dict carries, or None (a bad value is refused later by save())."""
+    try:
+        from .per_sales import sales_clean
+        return sales_clean((buffer or {}).get("sales"))
+    except ValueError:
+        return None
+
+
 def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: str, submit: bool = False,
               note: str = None, buffer: dict = None, ack_late: bool = False, now: datetime = None,
               as_of: date = None) -> dict:
@@ -603,6 +629,7 @@ def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: s
         raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
                          + (" · กด “เปิดแก้ไข” ก่อน" if o["status"] == "submitted" else ""))
     pct = None if buffer is None else (buffer or {}).get("pct")
-    p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now)
+    p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now,
+             expected_sales=_sales_of(buffer))
     return save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,
                 ack_late=ack_late, delivery=delivery.isoformat(), now=now)

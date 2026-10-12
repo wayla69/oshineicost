@@ -1620,7 +1620,7 @@ let _brnPlan = null;          // /api/bom-center/order/plan
 let _brnOrdQty = {};          // code -> confirmed units (string)
 let _brnOrdReason = {};       // code -> {reason_code, note}
 let _brnOrdDirty = false;     // anything unsaved on the order page
-let _brnBuf = { pct: 0, reason: '', note: '' };   // PR-19: the branch's expectation for the cover period
+let _brnBuf = { pct: 0, reason: '', note: '', sales: null };   // PR-19: the branch's expectation for the cover period; PR-V: `sales` = the baht it expects (a new branch: the figure the order is built on)
 let _brnOrdEdited = new Set();                    // codes the person typed in this session (kept when the buffer changes)
 let _brnCovers = null;                            // /api/bom-center/order/covers
 const _BRN_ROUNDS = [['1', 'รอบ 1'], ['2', 'รอบ 2'], ['salmon', 'แซลมอนสด']];
@@ -1651,7 +1651,7 @@ let _brnOrdWhy = new Set();   // the rows whose "ดูที่มา" is open
 function brnOrdWhy(code) { if (_brnOrdWhy.has(code)) _brnOrdWhy.delete(code); else _brnOrdWhy.add(code); brnRenderOrder(); }
 let _brnBufOpen = false;      // "ยอดขายรอบนี้ต่างจากปกติ?" is folded until asked for
 function brnToggleBuffer() { _brnBufOpen = !_brnBufOpen; _brnRenderBuffer(_brnPlan, true); }
-function _brnBufQS() { return _brnBuf.pct ? 'buffer_pct=' + encodeURIComponent(_brnBuf.pct) : ''; }
+function _brnBufQS() { return [_brnBuf.pct ? 'buffer_pct=' + encodeURIComponent(_brnBuf.pct) : '', _brnBuf.sales ? 'expected_sales=' + encodeURIComponent(_brnBuf.sales) : ''].filter(Boolean).join('&'); }
 function _brnBufReasonTh(code) { return ((((_brnPlan || {}).buffer || {}).reasons || []).find(r => r.code === code) || {}).label || code || ''; }
 async function brnLoadOrder(opts) {
   opts = opts || {};
@@ -1683,7 +1683,8 @@ async function brnLoadOrder(opts) {
     } else { _brnOrdDirty = false; }
     const pb = _brnPlan.buffer || {};
     _brnBuf = { pct: Number(pb.pct) || 0, reason: o && o.buffer_reason ? o.buffer_reason : (opts.withBuffer ? _brnBuf.reason : ''),
-                note: o && o.buffer_note ? o.buffer_note : (opts.withBuffer ? _brnBuf.note : '') };
+                note: o && o.buffer_note ? o.buffer_note : (opts.withBuffer ? _brnBuf.note : ''),
+                sales: opts.withBuffer ? _brnBuf.sales : (o && o.buffer_sales ? Number(o.buffer_sales) : null) };
     brnRenderOrder();
     brnLoadOrderHistory();
   } catch (e) { document.getElementById('brnOrdList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -1836,6 +1837,9 @@ function brnRenderOrder() {
       (r.on_order ? ` (รวมค้างส่ง ${_brnInCount(r, r.on_order)})` : '') + ` = ต้องการ ${_brnInCount(r, r.need)} ${cu}` +
       (analyst && (r.via || []).length ? ` · ใช้ใน ${esc(r.via.slice(0, 2).join(', '))}` : '');
     const open = _brnOrdWhy.has(r.code);
+    // PR-V: the second reading of the same history - what this item normally uses per ฿100,000 of sales
+    const ps = r.per_sales;
+    const perSales = ps ? `<div class="mt-1">ปกติใช้ <b>${_bmcNum(Number(ps.per_100k) / (r.per_count_unit || 1), Number(ps.per_100k) / (r.per_count_unit || 1) >= 10 ? 1 : 2)}</b> ${cu} ต่อยอดขาย ฿100,000${ps.steady === false ? ` · <span style="color:var(--amber-ink)">ใช้ไม่สม่ำเสมอ (แกว่ง ±${_bmcNum(ps.swing_pct, 0)}% ต่อสัปดาห์)</span>` : ''}${r.ref_label ? ` · ${esc(r.ref_label)}` : ''}</div>` : '';
     // PR-U: an item bought by weight but used by the whole piece (ปลาแซลมอนทั้งตัว) shows the pieces too, as an estimate
     const approxPcs = (r.approx_unit && r.approx_per_unit > 0 && sugg > 0)
       ? ` · ≈ ${_bmcNum(sugg * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) / r.approx_per_unit, 1)} ${esc(r.approx_unit)}` : '';
@@ -1844,16 +1848,20 @@ function brnRenderOrder() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0"><div class="brn-name" title="${esc(r.name)}" style="color:var(--text-primary);font-weight:600">${esc(r.name)}${r.monitored ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
           <div class="text-xs" style="color:var(--text-secondary);line-height:1.4">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b> ${esc(_brnUnitLabel(r))}${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}${approxPcs}${sysBox}</div>
+          ${r.ref_label ? `<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.ref_label)}</div>` : ''}
           <button type="button" class="brn-why" aria-expanded="${open}" onclick="brnOrdWhy(${_bmcQ(r.code)})">${open ? 'ซ่อนที่มา ▴' : 'ดูที่มา ▾'}</button></div>
         <div class="brn-box"><input id="brnOrd_${esc(r.code)}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${editable ? '' : 'disabled'} aria-label="สั่ง ${esc(r.name)}" oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"
             style="border-color:${dev ? 'var(--amber-ink)' : 'var(--border-control)'}"><span class="brn-cap">สั่ง · ${esc(_brnUnitLabel(r))}</span></div></div>
-      ${open ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(r.code)} · ${why}</div>` : ''}
+      ${open ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(r.code)} · ${why}${perSales}</div>` : ''}
       ${dev ? reasonSel(r.code) : ''}</div>`;
   }).join('') + extra.map(l => `<div style="border-top:1px solid var(--border);padding:8px 0" class="text-sm">${esc(l.name || l.code)} · สั่งเพิ่มนอกยอดแนะนำ ${_bmcNum(l.confirmed_units)} ${esc(l.order_unit === 'base' ? '' : 'แพ็ค')} ${l.reason_th ? '· ' + esc(l.reason_th) : ''}</div>`).join('');
-  document.getElementById('brnOrdList').innerHTML = html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องสั่ง (คงเหลือเพียงพอ)</span>';
+  const needSales = !!(p.ref_mode && p.ref_mode.needs_sales);                 // PR-V: a new branch that has not said what it expects to sell
+  document.getElementById('brnOrdList').innerHTML = needSales ? `<span class="text-xs" style="color:var(--amber-ink)">${esc(p.ref_mode.message || '')}</span>`
+    : html || '<span class="text-xs" style="color:var(--good-ink)">✓ รอบนี้ไม่มีรายการที่ต้องสั่ง (คงเหลือเพียงพอ)</span>';
   const btn = (label, on, primary) => `<button onclick="${on}" style="border:${primary ? '0' : '1px solid var(--border)'};border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:${primary ? 'var(--accent)' : 'transparent'};color:${primary ? 'var(--on-accent)' : 'var(--text-primary)'}">${label}</button>`;
   let acts = '';
-  if (editable) {
+  if (editable && needSales) acts = '';
+  else if (editable) {
     // the reason a button is off is TEXT under it (a hover title does not exist on a phone)
     const send = slipOk ? btn('ส่งใบสั่งซื้อ', 'brnOrderSave(true)', true)
       : `<button disabled aria-describedby="brnOrdWhy" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งใบสั่งซื้อ</button>`;
@@ -1866,14 +1874,69 @@ function brnRenderOrder() {
   document.getElementById('brnOrdActions').innerHTML = acts;
 }
 // ── PR-19: the buffer card — "คาดว่ายอดขายรอบนี้จะต่างจากปกติหรือไม่" ─────────────
+// PR-V · baht -> % (mirrors per_sales.pct_from_sales): (expected / normal - 1) x 100, held to the buffer's range
+function _brnPctFromSales(expected, normal) {
+  const e = Number(String(expected).replace(/,/g, '')), n = Number(normal);
+  if (!isFinite(e) || e < 0 || String(expected).trim() === '') return { pct: null, msg: 'ยอดขายที่คาดต้องเป็นตัวเลขและไม่ติดลบ' };
+  if (!(n > 0)) return { pct: null, msg: 'ยังไม่มียอดขายปกติของช่วงนี้ให้เทียบ · ใส่ % เอง' };
+  const b = (_brnPlan && _brnPlan.buffer) || {}, lo = b.min ?? -50, hi = b.max ?? 100;
+  const raw = (e / n - 1) * 100, pct = Math.max(lo, Math.min(hi, raw));
+  const clamped = Math.abs(pct - raw) > 1e-9, sg = v => (v > 0 ? '+' : '') + _bmcNum(v, 0) + '%';
+  return { pct: Math.round(pct * 10) / 10, clamped, raw,
+           msg: clamped ? `ยอดขายที่คาดต่างจากปกติ ${sg(raw)} เกินช่วงที่ปรับได้ (${lo}% ถึง +${hi}%) ระบบใช้ ${sg(pct)} แทน` : '' };
+}
+function brnBufBahtInput() {
+  const el = document.getElementById('brnBufBaht'), pe = document.getElementById('brnBufPct'), hint = document.getElementById('brnBufCalc');
+  if (!el || !pe || !hint) return;
+  if (String(el.value).trim() === '') { hint.textContent = ''; return; }
+  const r = _brnPctFromSales(el.value, (_brnPlan || {}).sales_normal);
+  if (r.pct === null) { hint.style.color = 'var(--amber-ink)'; hint.textContent = r.msg; return; }
+  pe.value = r.pct;
+  hint.style.color = r.clamped ? 'var(--amber-ink)' : 'var(--text-secondary)';
+  hint.textContent = r.clamped ? r.msg : (r.pct ? `= ${r.pct > 0 ? 'เพิ่ม' : 'ลด'} ${_bmcNum(Math.abs(r.pct), 1)}% จากปกติ` : '= เท่ากับปกติ (0%)');
+}
+function brnBufPctInput() {                       // a % typed by hand is no longer the baht typed before
+  const el = document.getElementById('brnBufBaht'), hint = document.getElementById('brnBufCalc');
+  if (el) el.value = '';
+  if (hint) hint.textContent = '';
+}
+// PR-V · a new branch (fewer than 14 trading days) with a reference branch: the order is built from that branch's usage per
+// ฿100,000 x the sales this branch expects, so the card asks for the baht instead of a %
+function _brnRenderRefCard(box, p, editable) {
+  const rm = p.ref_mode, cur = _brnBuf;
+  const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
+  if (!editable) {
+    box.innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">สาขาใหม่ · คำนวณจากสาขาอ้างอิง <b>${esc(rm.name)}</b>${cur.sales ? ` · ยอดขายที่คาด <b>฿${_bmcNum(cur.sales, 0)}</b>` : ''}</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">สาขาใหม่ · คำนวณจากสาขาอ้างอิง ${esc(rm.name)}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน) ระบบจึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขา${esc(rm.name)} คูณยอดขายที่คาดของรอบนี้</div>
+    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+      <label style="color:var(--text-secondary)">ยอดขายที่คาดของรอบนี้ (บาท)
+        <input id="brnRefSales" type="text" inputmode="numeric" autocomplete="off" value="${rm.expected_sales ? esc(String(rm.expected_sales)) : ''}" style="width:130px;height:36px;margin-left:6px;text-align:right;${inp}"></label>
+      <button onclick="brnApplyRefSales()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:13px;cursor:pointer;min-height:36px">คำนวณยอดแนะนำ</button>
+    </div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">ยอดขายไม่รวมภาษีมูลค่าเพิ่ม${rm.ref_sales_normal ? ` · สาขา${esc(rm.name)}ขายปกติในช่วงนี้ ≈ ฿${_bmcNum(rm.ref_sales_normal, 0)}` : ''}</div>
+    ${rm.needs_sales || rm.message ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">${esc(rm.message || '')}</div>` : ''}`;
+}
+async function brnApplyRefSales() {
+  const raw = String((document.getElementById('brnRefSales') || {}).value || '').replace(/,/g, '').trim();
+  const v = Number(raw);
+  if (!raw || !isFinite(v) || v <= 0) { _bmcStatus('brnOrdStatus', 'ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้ (ตัวเลขมากกว่า 0)', 'var(--amber-ink)'); return; }
+  _brnBuf = Object.assign({}, _brnBuf, { pct: 0, reason: '', note: '', sales: v });
+  await brnLoadOrder({ withBuffer: true, keepEdits: true });
+  _bmcStatus('brnOrdStatus', `คำนวณยอดแนะนำจากยอดขายที่คาด ฿${_bmcNum(v, 0)} แล้ว`, 'var(--good-ink)');
+  _brnOrdTouched();
+}
 function _brnRenderBuffer(p, editable) {
   const box = document.getElementById('brnOrdBuffer');
   if (!box) return;
+  if (p.ref_mode && p.ref_mode.active) { _brnRenderRefCard(box, p, editable); return; }
   const b = p.buffer || { pct: 0, reasons: [] };
   const cur = _brnBuf;
   const sign = v => (Number(v) > 0 ? '+' : '') + _bmcNum(v, 0) + '%';
   if (!editable) {
-    box.innerHTML = cur.pct ? `<div class="text-xs" style="color:var(--text-secondary)">สาขาปรับยอดพยากรณ์ <b>${sign(cur.pct)}</b> · ${esc(_brnBufReasonTh(cur.reason))}${cur.note ? ' · ' + esc(cur.note) : ''}</div>` : '';
+    box.innerHTML = cur.pct ? `<div class="text-xs" style="color:var(--text-secondary)">สาขาปรับยอดพยากรณ์ <b>${sign(cur.pct)}</b>${cur.sales ? ` (คาดยอดขาย ฿${_bmcNum(cur.sales, 0)})` : ''} · ${esc(_brnBufReasonTh(cur.reason))}${cur.note ? ' · ' + esc(cur.note) : ''}</div>` : '';
     return;
   }
   const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
@@ -1881,14 +1944,19 @@ function _brnRenderBuffer(p, editable) {
   const head = `<button type="button" onclick="brnToggleBuffer()" aria-expanded="${_brnBufOpen}" style="display:flex;align-items:center;gap:8px;width:100%;min-height:40px;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--text-primary);font-size:13px;font-weight:600">
       <span>ยอดขายรอบนี้ต่างจากปกติ?</span>${cur.pct ? _bmcChip(`ใช้อยู่ ${sign(cur.pct)}`, 'var(--navy-ink)') : ''}<span style="margin-left:auto;color:var(--text-muted)">${_brnBufOpen ? '▴' : '▾'}</span></button>`;
   if (!_brnBufOpen) { box.innerHTML = head; return; }
-  box.innerHTML = head + `<div class="text-[11px] mb-1" style="color:var(--text-muted)">มีงานหรือโปรโมชัน ใส่ % ที่คาดว่าจะเพิ่มหรือลด</div>
+  box.innerHTML = head + `<div class="text-[11px] mb-1" style="color:var(--text-muted)">มีงานหรือโปรโมชัน ใส่ % ที่คาดว่าจะเพิ่มหรือลด หรือใส่ยอดขายที่คาดของรอบนี้เป็นบาท</div>
     <div class="flex flex-wrap items-center gap-2 text-xs">
-      <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" style="width:72px;height:34px;text-align:center;${inp}"><span style="color:var(--text-secondary)">%</span>
+      <input id="brnBufPct" type="number" inputmode="numeric" step="5" min="${b.min ?? -50}" max="${b.max ?? 100}" value="${cur.pct || 0}" oninput="brnBufPctInput()" style="width:72px;height:34px;text-align:center;${inp}"><span style="color:var(--text-secondary)">%</span>
+      <span style="color:var(--text-muted)">หรือ</span>
+      <label style="color:var(--text-secondary)">คาดยอดขายรอบนี้ (บาท)
+        <input id="brnBufBaht" type="text" inputmode="numeric" autocomplete="off" value="${cur.sales ? esc(String(cur.sales)) : ''}" oninput="brnBufBahtInput()" style="width:120px;height:34px;margin-left:6px;text-align:right;${inp}"></label>
       <select id="brnBufReason" style="${inp}"><option value="">— เหตุผล —</option>${(b.reasons || []).map(r => `<option value="${r.code}" ${r.code === cur.reason ? 'selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
       <input id="brnBufNote" value="${esc(cur.note || '')}" placeholder="หมายเหตุ" style="flex:1 1 120px;min-width:0;${inp}">
       <button onclick="brnApplyBuffer()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer">ใช้กับยอดแนะนำ</button>
       <button onclick="brnToggleCovers()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">คำนวณจากจำนวนลูกค้า</button>
     </div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${p.sales_normal ? `ยอดขายปกติของช่วงนี้ ≈ <b>฿${_bmcNum(p.sales_normal, 0)}</b> (ไม่รวมภาษี)` : 'ยังไม่มียอดขายปกติของช่วงนี้ให้เทียบ'}</div>
+    <div id="brnBufCalc" class="text-[11px] mt-1" style="color:var(--text-secondary)"></div>
     ${_brnCovPhone() ? '' : '<div id="brnCovers" class="mt-2" style="display:none"></div>'}`;
 }
 // PR-M3 · on a phone the customer-count helper opens as a bottom sheet over the page (a seven-row table does not fit inside a card)
@@ -1915,7 +1983,9 @@ async function brnApplyBuffer() {
   if (pct < (b.min ?? -50) || pct > (b.max ?? 100)) { _bmcStatus('brnOrdStatus', `% ต้องอยู่ระหว่าง ${b.min ?? -50} ถึง +${b.max ?? 100}`, 'var(--bad-ink)'); return; }
   if (pct && !reason) { _bmcStatus('brnOrdStatus', 'เลือกเหตุผลที่คาดว่ายอดขายจะต่างจากปกติ', 'var(--bad-ink)'); return; }
   if (pct && reason === 'other' && !note) { _bmcStatus('brnOrdStatus', 'เหตุผล “อื่น ๆ” ต้องระบุหมายเหตุ', 'var(--bad-ink)'); return; }
-  _brnBuf = { pct, reason: pct ? reason : '', note: pct ? note : '' };
+  const bahtRaw = String((document.getElementById('brnBufBaht') || {}).value || '').replace(/,/g, '').trim();
+  const sales = bahtRaw && isFinite(Number(bahtRaw)) && Number(bahtRaw) > 0 ? Number(bahtRaw) : null;
+  _brnBuf = { pct, reason: pct ? reason : '', note: pct ? note : '', sales };
   await brnLoadOrder({ withBuffer: true, keepEdits: true });
   _bmcStatus('brnOrdStatus', pct ? `ปรับยอดแนะนำตามที่คาด ${pct > 0 ? '+' : ''}${_bmcNum(pct, 0)}% แล้ว (${_brnBufReasonTh(reason)})` : 'กลับมาใช้ยอดพยากรณ์ปกติแล้ว', 'var(--good-ink)');
   _brnOrdTouched();                              // the draft keeps the buffer
@@ -1989,6 +2059,10 @@ async function brnOrderSave(submit, quiet, ackLate) {
   const cur = _brnPlan.order;
   if (cur && !['suggested', 'confirmed'].includes(cur.status)) return;      // sent already: nothing to save
   const p = _brnPlan;
+  if (p.ref_mode && p.ref_mode.needs_sales) {                              // PR-V: a new branch orders from the sales it expects
+    if (!quiet) _bmcStatus('brnOrdStatus', p.ref_mode.message || 'ยังไม่มีประวัติการขายพอ กรอกยอดขายที่คาดของรอบนี้', 'var(--amber-ink)');
+    return;
+  }
   if (submit && !ackLate) {
     if (!_brnSlipOk(p)) {                                                   // the order is made from the stock after today's issue
       _bmcStatus('brnOrdStatus', 'ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ', 'var(--amber-ink)');
@@ -2002,7 +2076,8 @@ async function brnOrderSave(submit, quiet, ackLate) {
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/save${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ round: _brnRound, delivery: p.delivery, lines: _brnOrdLines(), submit,
-                             buffer: _brnBuf.pct ? { pct: _brnBuf.pct, reason: _brnBuf.reason, note: _brnBuf.note } : { pct: 0 },
+                             buffer: p.ref_mode && p.ref_mode.active ? { pct: 0, sales: _brnBuf.sales }
+                               : (_brnBuf.pct ? { pct: _brnBuf.pct, reason: _brnBuf.reason, note: _brnBuf.note, sales: _brnBuf.sales } : { pct: 0, sales: _brnBuf.sales }),
                              ack_late: !!ackLate }) });
     if (quiet) {                                 // the autosave: the page stays where the person is
       const created = !_brnPlan.order;
