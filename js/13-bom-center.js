@@ -928,8 +928,10 @@ async function bmcLoadPrep() {
     if (!_bmcIng.length) bmcLoadIng(true).then(() => {
       const dl = document.getElementById('bmcCodeList');
       if (dl && !dl.children.length) dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}</option>`).join('');
+      bmcPortInit();
     }).catch(() => {});
     bmcRenderPrep();
+    bmcPortInit();
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function bmcPrepView(v) { _bmcPrepView = v; bmcRenderPrep(); }
@@ -948,12 +950,12 @@ function bmcRenderPrep() {
   document.getElementById('bmcPrepList').innerHTML = rows.length ? rows.map(r => {
     const [label, ink] = _BMC_PREP[r.status];
     const cost = r.has_recipe
-      ? `1 สูตร = ${_bmcNum(r.yield_qty)} ${esc(r.yield_unit || '')} · ${_bmcNum(r.lines, 0)} วัตถุดิบ · จากสูตร <b>${r.per_base != null ? '฿' + _bmcPrice(r.per_base) : '—'}</b>/${esc(r.base_unit || '')}`
+      ? `${r.mode === 'portion' ? 'แบ่งได้' : '1 สูตร ='} ${_bmcNum(r.yield_qty)} ${esc(r.yield_unit || '')} · ${_bmcNum(r.lines, 0)} วัตถุดิบ · จากสูตร <b>${r.per_base != null ? (r.approx ? '≈ ' : '') + '฿' + _bmcPrice(r.per_base) : '—'}</b>/${esc(r.base_unit || '')}`
         + ` · ราคาซื้อ ${r.own_price != null ? '฿' + _bmcPrice(r.own_price) : '—'}${r.diff_pct != null ? ` (<b style="color:${Math.abs(r.diff_pct) > d.tolerance_pct ? 'var(--amber-ink)' : 'var(--good-ink)'}">${r.diff_pct > 0 ? '+' : ''}${_bmcNum(r.diff_pct, 1)}%</b>)` : ''}`
       : `ใช้ราคาซื้อ ${r.own_price != null ? '฿' + _bmcPrice(r.own_price) + '/' + esc(r.base_unit || '') : 'ไม่มีราคา'}${r.qty_per_recv ? ` · ขนาดบรรจุ ${_bmcNum(r.qty_per_recv)} ${esc(r.base_unit || '')}` : ''}`;
     return `<div style="border-top:1px solid var(--border);padding:7px 0">
       <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b style="color:var(--text-primary)">${esc(r.code)}</b>
-        <span style="color:var(--text-primary)">${esc(r.name || '')}</span>${_bmcChip(label, ink)}
+        <span style="color:var(--text-primary)">${esc(r.name || '')}</span>${_bmcChip(label, ink)}${r.mode === 'portion' ? ' ' + _bmcChip('แบ่งชิ้น', 'var(--navy-ink)') : ''}${r.approx ? ' ' + _bmcChip('ต้นทุนโดยประมาณ', 'var(--amber-ink)') : ''}
         <span style="margin-left:auto">${_bmcBtn(r.has_recipe ? 'เปิดสูตร' : (_bmcCanRecipes() ? 'เพิ่มสูตร' : 'ดู'), `bmcOpenPrep(${_bmcQ(r.code)})`)}</span></div>
       <div class="mt-0.5" style="color:var(--text-secondary)">${cost}</div>
       ${(r.problems || []).length ? `<div class="mt-0.5" style="color:var(--bad-ink)">${r.problems.slice(0, 3).map(esc).join(' · ')}${r.n_problems > 3 ? ` +${r.n_problems - 3}` : ''}</div>` : ''}
@@ -969,7 +971,8 @@ async function bmcOpenPrep(code) {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/prep/${encodeURIComponent(code)}`);
     _bmcPrepEdit = { code, yield_qty: d.yield_qty || d.qty_per_recv || '', yield_unit: d.yield_unit || d.base_unit || '',
-      lines: (d.lines || []).map(l => ({ ingredient_code: l.ingredient_code || '', qty: l.qty, unit: l.unit || '', note: l.note || '',
+      mode: d.mode === 'portion' ? 'portion' : null, note: d.recipe_note || null,
+      lines: (d.lines || []).map(l => ({ ingredient_code: l.ingredient_code || '', qty: l.qty, unit: l.unit || '', note: l.note || '', no_loss: l.no_loss ? 1 : 0, approx: l.approx,
         ingredient_name: l.ingredient_name, cost: l.cost, price_per_base: l.price_per_base, source: l.source, problem: l.problem })), d };
     bmcRenderPrepEdit();
     box.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -985,7 +988,7 @@ function bmcRenderPrepEdit() {
           + _bmcInput(`value="${esc(l.unit)}" placeholder="หน่วย" onchange="_bmcPrepEdit.lines[${i}].unit=this.value"`, '80px')
         : `<b>${esc(l.ingredient_code || '—')}</b> ${_bmcNum(l.qty)} ${esc(l.unit)}`}
       <span style="color:var(--text-secondary);min-width:120px">${esc(l.ingredient_name || l.note || '')}</span>
-      <span style="color:var(--text-muted)">${l.cost != null ? '฿' + _bmcNum(l.cost, 2) + (l.source === 'sub_recipe' ? ' (จากสูตรย่อย)' : '') : ''}</span>
+      <span style="color:var(--text-muted)">${l.cost != null ? (l.approx ? '≈ ' : '') + '฿' + _bmcNum(l.cost, 2) + (l.source === 'sub_recipe' ? ' (จากสูตรย่อย)' : '') : ''}</span>
       ${l.problem ? `<span style="color:var(--bad-ink)">${esc(l.problem)}</span>` : ''}
       ${w ? `<button onclick="_bmcPrepEdit.lines.splice(${i},1);bmcRenderPrepEdit()" style="margin-left:auto;font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>` : ''}
     </div>`).join('');
@@ -996,11 +999,12 @@ function bmcRenderPrepEdit() {
     <div class="text-xs mt-1" style="color:var(--text-secondary)">หน่วยฐาน ${esc(d.base_unit || '—')}${d.qty_per_recv ? ` · ขนาดบรรจุในทะเบียน ${_bmcNum(d.qty_per_recv)}` : ''} ·
       ราคาซื้อ ${d.own_price != null ? '฿' + _bmcPrice(d.own_price) : '—'} · จากสูตร ${d.per_base != null ? '<b>฿' + _bmcPrice(d.per_base) + '</b>' : '—'}
       ${d.batch_cost != null && d.has_recipe ? ` · ต้นทุนต่อ 1 สูตร ฿${_bmcNum(d.batch_cost, 2)}` : ''}${d.source_cost != null ? ` (ไฟล์ครัว ฿${_bmcNum(d.source_cost, 2)})` : ''} · ราคาเดือน${fmtMonthTh(d.month)}</div>
-    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs" style="color:var(--text-muted)">1 สูตร ได้
+    ${e.mode === 'portion' ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip('แบ่งชิ้น', 'var(--navy-ink)')} จำนวนชิ้นที่ได้นับเฉพาะชิ้นที่ใช้ได้ ต้นทุนจึงไม่บวกส่วนสูญเสียซ้ำ · หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้${e.note ? ' · หมายเหตุ: ' + esc(e.note) : ''}</div>` : ''}
+    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs" style="color:var(--text-muted)">${e.mode === 'portion' ? 'แบ่งได้' : '1 สูตร ได้'}
       ${w ? _bmcInput(`type="number" step="any" value="${e.yield_qty}" onchange="_bmcPrepEdit.yield_qty=this.value"`, '100px') + _bmcInput(`value="${esc(e.yield_unit)}" onchange="_bmcPrepEdit.yield_unit=this.value"`, '90px')
         : `<b>${_bmcNum(e.yield_qty)} ${esc(e.yield_unit)}</b>`}</div>
     <div class="text-xs mt-2">${lines || '<span style="color:var(--text-muted)">ยังไม่มีวัตถุดิบในสูตร</span>'}</div>
-    ${w ? `<div class="flex flex-wrap gap-2 mt-2">${_bmcBtn('+ เพิ่มวัตถุดิบ', "_bmcPrepEdit.lines.push({ingredient_code:'',qty:'',unit:'',note:''});bmcRenderPrepEdit()")}
+    ${w ? `<div class="flex flex-wrap gap-2 mt-2">${e.mode === 'portion' ? '' : _bmcBtn('+ เพิ่มวัตถุดิบ', "_bmcPrepEdit.lines.push({ingredient_code:'',qty:'',unit:'',note:''});bmcRenderPrepEdit()")}
       ${_bmcBtn('บันทึกสูตร', 'bmcSavePrep()', true)}<span id="bmcPrepEditStatus" class="text-xs"></span></div>` : ''}
     ${(d.problems || []).length ? `<div class="text-xs mt-2" style="color:var(--bad-ink)">ยังคิดต้นทุนจากสูตรไม่ได้: ${d.problems.slice(0, 5).map(esc).join(' · ')} · ใช้ราคาซื้อแทน</div>` : ''}
     ${raw ? `<div class="text-[11px] mt-2" style="color:var(--text-secondary)">ใน 1 ${esc(d.base_unit || 'หน่วย')} มีวัตถุดิบดิบ (แผนสั่งใช้ตัวเลขนี้): ${raw}</div>` : ''}`;
@@ -1009,8 +1013,8 @@ async function bmcSavePrep() {
   const e = _bmcPrepEdit;
   try {
     await _bmcJson(`${API}/api/bom-center/prep/${encodeURIComponent(e.code)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yield_qty: Number(e.yield_qty), yield_unit: e.yield_unit,
-        lines: e.lines.map(l => ({ ingredient_code: l.ingredient_code || null, qty: l.qty === '' ? null : Number(l.qty), unit: l.unit || null, note: l.note || null })) }) });
+      body: JSON.stringify({ yield_qty: Number(e.yield_qty), yield_unit: e.yield_unit, mode: e.mode || null, note: e.note || null,
+        lines: e.lines.map(l => ({ ingredient_code: l.ingredient_code || null, qty: l.qty === '' ? null : Number(l.qty), unit: l.unit || null, note: l.note || null, no_loss: l.no_loss ? 1 : 0 })) }) });
     await bmcOpenPrep(e.code);
     _bmcStatus('bmcPrepEditStatus', '✓ บันทึกแล้ว', 'var(--good-ink)');
     bmcLoadPrep();
@@ -1088,55 +1092,269 @@ async function bmcPrepImportFlat(input) {
 }
 
 // ── unit converter ──────────────────────────────────────────────────────────
+// The unit ladder (PR-U): up to 3 units above the base unit, each stated against the one below it. The editor shows the
+// factor of every row live; the server (units.check_ladder / climb) is the authority and its reasons are shown as they are.
+let _bmcLad = null;           // {code, name, base_unit, recv_unit, qty_per_recv, rows:[{unit, qty, parent, kind, rmin, rmax}], problems:[]}
+const _BMC_METRIC = {          // the universal steps of a base unit (mirrors units._METRIC; the server decides)
+  กรัม: { กิโลกรัม: 1000, ขีด: 100 }, มิลลิลิตร: { ลิตร: 1000 }, กิโลกรัม: { กรัม: 0.001 }, ลิตร: { มิลลิลิตร: 0.001 }, ขีด: { กิโลกรัม: 10 } };
+const _BMC_MAX_STEPS = 3;
+
 async function bmcLoadConv() {
   if (!_bmcIng.length) await bmcLoadIng(true);
   const dl = document.getElementById('bmcCodeList');
   if (dl && !dl.children.length) dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}</option>`).join('');
-  bmcRenderRules();
+  bmcLoadLadder();
 }
-function bmcRenderRules() {
-  const code = (document.getElementById('bmcConvCode').value || '').trim();
-  const r = _bmcIng.find(x => x.code === code);
-  const box = document.getElementById('bmcRuleList');
-  if (!r) { box.innerHTML = '<span style="color:var(--text-muted)">ระบุรหัสด้านบนเพื่อดูกฎหน่วยของวัตถุดิบ</span>'; return; }
-  box.innerHTML = `<div style="color:var(--text-secondary)"><b>${esc(r.code)}</b> ${esc(r.name_th || '')} · หน่วยฐาน <b>${esc(r.base_unit || '—')}</b>` +
-    (r.qty_per_recv ? ` · 1 ${esc(r.recv_unit || 'หน่วยรับ')} = ${_bmcNum(r.qty_per_recv)} ${esc(r.base_unit || '')}` : ' · ยังไม่มีขนาดบรรจุ') + `</div>` +
-    (r.unit_rules.length ? r.unit_rules.map(u => `<div class="py-0.5">1 ${esc(u.unit)} = ${_bmcNum(u.factor, 4)} ${esc(r.base_unit || '')}
-      ${_bmcCanPrices() ? `<button onclick="bmcDelRule('${esc(r.code)}','${esc(u.unit)}')" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>` : ''}</div>`).join('')
-      : '<div style="color:var(--text-muted)">ยังไม่มีกฎหน่วยครัว</div>');
+function _bmcLadCode() {
+  const t = (document.getElementById('bmcConvCode').value || '').trim();
+  if (!t) return '';
+  const hit = _bmcIng.find(x => x.code === t) || _bmcIng.find(x => (x.name_th || '') === t);
+  return hit ? hit.code : t;
+}
+async function bmcLoadLadder() {
+  const box = document.getElementById('bmcLadder');
+  const code = _bmcLadCode();
+  if (!code) { _bmcLad = null; box.innerHTML = '<span style="color:var(--text-muted)">ระบุรหัสหรือชื่อวัตถุดิบด้านบนเพื่อดูและแก้บันไดหน่วย</span>'; return; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/units/ladder?code=${encodeURIComponent(code)}`);
+    _bmcLad = { code: d.code, name: d.name, base_unit: d.base_unit, recv_unit: d.recv_unit, qty_per_recv: d.qty_per_recv,
+      rows: d.ladder.map(r => ({ unit: r.unit, qty: r.qty_in_parent, parent: r.parent_unit === d.base_unit ? '' : r.parent_unit,
+        kind: r.kind, rmin: r.range_min ?? '', rmax: r.range_max ?? '', how: r.how, approx: r.approx })),
+      problems: d.problems || [], server: '' };
+    bmcRenderLadder();
+  } catch (e) { _bmcLad = null; box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+// the factor of one row to the base unit, worked out in the browser while typing: {f, approx} or null
+function _bmcLadFactor(L, i, depth = 0) {
+  const r = L.rows[i];
+  const q = Number(r.qty);
+  if (!(q > 0) || depth > _BMC_MAX_STEPS) return null;
+  const pu = (r.parent || '').trim();
+  const avg = r.kind === 'avg';
+  if (!pu || pu === L.base_unit) return { f: q, approx: avg };
+  const j = L.rows.findIndex((x, k) => k !== i && (x.unit || '').trim() === pu);
+  if (j >= 0) { const p = _bmcLadFactor(L, j, depth + 1); return p ? { f: q * p.f, approx: avg || p.approx } : null; }
+  const m = (_BMC_METRIC[L.base_unit] || {})[pu];
+  return m ? { f: q * m, approx: avg } : null;
+}
+function bmcRenderLadder() {
+  const L = _bmcLad, box = document.getElementById('bmcLadder');
+  if (!L) return;
+  const w = _bmcCanPrices();
+  const metric = Object.keys(_BMC_METRIC[L.base_unit] || {});
+  const sel = (i, cur) => {
+    const opts = [L.base_unit, ...metric, ...L.rows.filter((x, k) => k !== i && (x.unit || '').trim()).map(x => x.unit.trim())];
+    return `<select ${w ? '' : 'disabled'} onchange="_bmcLad.rows[${i}].parent=this.value===_bmcLad.base_unit?'':this.value;bmcRenderLadder()"
+      style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:3px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">${
+      [...new Set(opts)].map(o => `<option value="${esc(o)}"${(cur || L.base_unit) === o ? ' selected' : ''}>${esc(o)}${o === L.base_unit ? ' (หน่วยฐาน)' : ''}</option>`).join('')}</select>`;
+  };
+  const rows = L.rows.map((r, i) => {
+    const fx = _bmcLadFactor(L, i);
+    const avg = r.kind === 'avg';
+    return `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--border);padding:6px 0">
+      ${w ? _bmcInput(`value="${esc(r.unit)}" placeholder="หน่วย เช่น ตัว" onchange="_bmcLad.rows[${i}].unit=this.value.trim();bmcRenderLadder()"`, '90px') : `<b>${esc(r.unit)}</b>`}
+      <span style="color:var(--text-muted)">1 หน่วยนี้ =</span>
+      ${w ? _bmcInput(`type="number" step="any" min="0" value="${r.qty ?? ''}" onchange="_bmcLad.rows[${i}].qty=this.value;bmcRenderLadder()"`, '80px') : _bmcNum(r.qty, 4)}
+      ${sel(i, r.parent)}
+      <select ${w ? '' : 'disabled'} onchange="_bmcLad.rows[${i}].kind=this.value;bmcRenderLadder()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:3px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+        <option value="exact"${avg ? '' : ' selected'}>แน่นอน</option><option value="avg"${avg ? ' selected' : ''}>เฉลี่ย</option></select>
+      ${avg ? `<span style="color:var(--text-muted)">ช่วง</span>${w ? _bmcInput(`type="number" step="any" min="0" value="${r.rmin ?? ''}" placeholder="ต่ำสุด" onchange="bmcLadRange(${i},'rmin',this.value)"`, '70px')
+          + '–' + _bmcInput(`type="number" step="any" min="0" value="${r.rmax ?? ''}" placeholder="สูงสุด" onchange="bmcLadRange(${i},'rmax',this.value)"`, '70px')
+          : `${_bmcNum(r.rmin, 4)}–${_bmcNum(r.rmax, 4)}`}` : ''}
+      <span style="color:var(--text-primary)">${fx ? `= <b>${fx.approx ? '≈ ' : ''}${_bmcNum(fx.f, 4)}</b> ${esc(L.base_unit || '')}` : '<span style="color:var(--text-muted)">= —</span>'}</span>
+      ${w ? `<button onclick="_bmcLad.rows.splice(${i},1);bmcRenderLadder()" style="margin-left:auto;font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ลบ</button>` : ''}
+    </div>`;
+  }).join('');
+  const recvHit = L.rows.findIndex(r => (r.unit || '').trim() && (r.unit.trim() === (L.recv_unit || '').trim()));
+  const problems = [...(L.problems || []), ...(L.server ? [L.server] : [])];
+  box.innerHTML = `<div style="color:var(--text-secondary)"><b>${esc(L.code)}</b> ${esc(L.name || '')} · หน่วยฐาน <b>${esc(L.base_unit || '—')}</b>` +
+    (L.qty_per_recv ? ` · 1 ${esc(L.recv_unit || 'หน่วยรับ')} = ${_bmcNum(L.qty_per_recv)} ${esc(L.base_unit || '')}` : ' · ยังไม่มีขนาดบรรจุ') + `</div>` +
+    (L.rows.length ? rows : '<div style="color:var(--text-muted)" class="mt-1">ยังไม่มีบันไดหน่วย · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองอยู่แล้ว</div>') +
+    (recvHit >= 0 ? `<div class="mt-1" style="color:var(--text-muted)">หน่วยรับ “${esc(L.recv_unit)}” อยู่ในบันได ขนาดบรรจุในทะเบียนจะปรับตามเมื่อบันทึก</div>` : '') +
+    (problems.length ? `<div class="mt-2" style="color:var(--bad-ink)" role="alert">${problems.map(esc).join('<br>')}</div>` : '') +
+    (w ? `<div class="flex flex-wrap items-center gap-2 mt-2">
+      ${L.rows.length < _BMC_MAX_STEPS ? _bmcBtn('เพิ่มขั้น', "bmcLadAdd()") : ''}
+      ${_bmcBtn('บันทึกบันไดหน่วย', 'bmcLadSave()', true)}<span id="bmcLadStatus" class="text-xs"></span></div>` : '');
+}
+function bmcLadAdd() {
+  if (_bmcLad.rows.length >= _BMC_MAX_STEPS) return;
+  _bmcLad.rows.push({ unit: '', qty: '', parent: '', kind: 'exact', rmin: '', rmax: '' });
+  bmcRenderLadder();
+}
+// a range typed for an average fills the average with its midpoint while the average is still empty
+function bmcLadRange(i, key, v) {
+  const r = _bmcLad.rows[i];
+  r[key] = v;
+  const a = Number(r.rmin), b = Number(r.rmax);
+  if ((r.qty === '' || r.qty == null) && r.rmin !== '' && r.rmax !== '' && a > 0 && b > 0) r.qty = String((a + b) / 2);
+  bmcRenderLadder();
+}
+async function bmcLadSave() {
+  const L = _bmcLad;
+  if (!L) return;
+  const rows = L.rows.filter(r => (r.unit || '').trim() || r.qty !== '').map(r => ({
+    unit: (r.unit || '').trim(), qty_in_parent: r.qty === '' ? null : Number(r.qty), parent_unit: r.parent || null, conv_kind: r.kind || 'exact',
+    range_min: r.kind === 'avg' && r.rmin !== '' ? Number(r.rmin) : null, range_max: r.kind === 'avg' && r.rmax !== '' ? Number(r.rmax) : null }));
+  const lines = rows.map(r => `1 ${r.unit} = ${r.qty_in_parent ?? '?'} ${r.parent_unit || L.base_unit}${r.conv_kind === 'avg' ? ' (เฉลี่ย)' : ''}`);
+  if (!await uiConfirm(`บันทึกบันไดหน่วยของ ${L.code} ${L.name || ''}\n${lines.join('\n') || 'ไม่มีหน่วย (ลบบันไดหน่วยทั้งหมด)'}`,
+    { title: 'ยืนยันการบันทึกบันไดหน่วย', ok: 'บันทึก', cancel: 'ยกเลิก' })) return;
+  try {
+    const r = await _bmcJson(`${API}/api/bom-center/units/ladder`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: L.code, rows }) });
+    await bmcLoadIng(true);
+    await bmcLoadLadder();
+    bmcStatus('bmcLadStatus', true, 'บันทึกบันไดหน่วยแล้ว' + (r.qty_per_recv_change ? ` · ขนาดบรรจุปรับเป็น ${_bmcNum(r.qty_per_recv_change.to, 4)}` : ''));
+  } catch (e) {
+    L.server = String(e.message || e);
+    bmcRenderLadder();
+  }
 }
 async function bmcConvert() {
-  const code = (document.getElementById('bmcConvCode').value || '').trim();
+  const code = _bmcLadCode();
   const qty = document.getElementById('bmcConvQty').value || 1;
   const unit = (document.getElementById('bmcConvUnit').value || '').trim();
   const out = document.getElementById('bmcConvOut');
-  bmcRenderRules();
   if (!code || !unit) { out.textContent = 'ระบุรหัสและหน่วย'; return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/convert?code=${encodeURIComponent(code)}&qty=${qty}&unit=${encodeURIComponent(unit)}&month=${_bmcMonth()}`);
+    const ap = d.approx ? '≈ ' : '';
+    let back = '';
+    if (d.qty_base != null && d.qty_base > 0) {                          // and the way back: this much of the base unit in each unit of the ladder
+      const L = _bmcLad && _bmcLad.code === code ? _bmcLad : null;
+      const f = x => `${_bmcNum(d.qty_base / x, 4)}`;
+      if (L) back = L.rows.map((r, i) => { const fx = _bmcLadFactor(L, i); return fx && r.unit !== d.unit ? ` · ${fx.approx ? '≈ ' : ''}${f(fx.f)} ${esc(r.unit)}` : ''; }).join('');
+    }
     out.innerHTML = d.qty_base == null
       ? `<span style="color:var(--amber-ink)">แปลงหน่วยไม่ได้: ${esc(d.how)}</span>`
-      : `${_bmcNum(d.qty)} ${esc(d.unit)} = <b>${_bmcNum(d.qty_base, 3)} ${esc(d.base_unit)}</b> <span style="color:var(--text-muted)">(${esc(d.how)})</span>` +
-        (d.cost != null ? ` · ต้นทุน <b>฿${_bmcNum(d.cost, 3)}</b> ที่ราคา ${_bmcPrice(d.price_per_base)}/${esc(d.base_unit)} เดือน${fmtMonthTh(d.month)}` : ' · ยังไม่มีราคา');
+      : `${_bmcNum(d.qty)} ${esc(d.unit)} = <b>${ap}${_bmcNum(d.qty_base, 3)} ${esc(d.base_unit)}</b>${d.range_base ? ` <span style="color:var(--text-muted)">(ช่วง ${_bmcNum(d.range_base[0], 1)}–${_bmcNum(d.range_base[1], 1)})</span>` : ''}${back ? `<span style="color:var(--text-secondary)">${back}</span>` : ''}
+        <div class="text-xs" style="color:var(--text-muted)">${esc(d.how)}</div>` +
+        (d.cost != null ? `<div>ต้นทุน <b>${ap}฿${_bmcNum(d.cost, 3)}</b> ที่ราคา ${_bmcPrice(d.price_per_base)}/${esc(d.base_unit)} เดือน${fmtMonthTh(d.month)}</div>` : '<div>ยังไม่มีราคา</div>');
   } catch (e) { out.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-async function _bmcPostRule(code, unit, factor) {
-  await _bmcJson(`${API}/api/bom-center/units`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify([{ code, unit, factor_to_base: factor }]) });
-  await bmcLoadIng(true);
-  bmcRenderRules();
+
+// ── the unit ladder as an Excel file ────────────────────────────────────────
+let _bmcUnitsFile = null;
+function bmcUnitsTemplate(all) { bmcDownload(`${API}/api/bom-center/units/template.xlsx?all=${all ? 1 : 0}`, 'แม่แบบหน่วย.xlsx', 'bmcUnitsStatus'); }
+async function bmcUnitsImportPick(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  _bmcUnitsFile = file;
+  input.value = '';
+  const box = document.getElementById('bmcUnitsImport');
+  box.style.display = '';
+  box.innerHTML = '<span style="color:var(--text-muted)">กำลังอ่านไฟล์…</span>';
+  try {
+    const fd = new FormData(); fd.append('file', file, file.name);
+    const p = await _bmcJson(`${API}/api/bom-center/units/import?dry_run=true`, { method: 'POST', body: fd });
+    const lad = p.ladders.map(c => `<div style="border-top:1px solid var(--border);padding:5px 0">
+        <b>${esc(c.code)}</b> ${esc(c.name || '')} · หน่วยฐาน ${esc(c.base_unit || '—')}
+        ${c.changes.map(x => _bmcChip({ add: 'เพิ่ม', edit: 'แก้', remove: 'ลบ' }[x.change] + ' ' + x.unit, 'var(--text-muted)')).join(' ')}
+        ${c.qty_per_recv_change ? _bmcChip(`ขนาดบรรจุ ${_bmcNum(c.qty_per_recv_change.from, 4)} → ${_bmcNum(c.qty_per_recv_change.to, 4)}`, 'var(--amber-ink)') : ''}
+        ${c.ladder.map(r => `<div style="color:var(--text-secondary)">${esc(r.how)} = ${r.approx ? '≈ ' : ''}${_bmcNum(r.factor_to_base, 4)} ${esc(c.base_unit || '')}</div>`).join('')}
+        ${c.problems.map(x => `<div style="color:var(--bad-ink)">${esc(x)}</div>`).join('')}</div>`).join('');
+    const port = p.portion_rows.map(c => `<div style="border-top:1px solid var(--border);padding:5px 0">
+        แถว ${c.row}: <b>${esc(c.prepared_code)}</b> ${esc(c.prepared_name || '')} ← ${esc(c.raw_code)} ${_bmcNum(c.qty, 4)} ${esc(c.unit)} → ${_bmcNum(c.pieces, 4)} ${esc(c.out_unit)}
+        ${c.problems.length ? c.problems.map(x => `<div style="color:var(--bad-ink)">${esc(x)}</div>`).join('')
+          : `<div style="color:var(--text-secondary)">ชิ้นละ ${c.approx ? '≈ ' : ''}${_bmcNum(c.base_per_piece, 2)} ${esc(c.base_unit || '')} · ต้นทุนชิ้นละ ${c.cost_per_piece != null ? (c.approx ? '≈ ' : '') + '฿' + _bmcNum(c.cost_per_piece, 2) : '—'}${c.created ? ' · สร้างรหัสใหม่' : ''}${c.replaced ? ' · แทนสูตรเดิม' : ''}</div>`}</div>`).join('');
+    const ok = !p.problems;
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ดูตัวอย่างก่อนบันทึก: ${esc(file.name)}</div>
+      <p class="mt-1" style="color:var(--text-secondary)">วัตถุดิบในไฟล์ ${p.codes} รหัส (ใช้ได้ ${p.codes_ok}) · สูตรแบ่งชิ้น ${p.portions} รายการ ·
+        ${ok ? 'บันทึกได้ บันไดหน่วยของรหัสที่อยู่ในไฟล์จะถูกแทนที่ทั้งรายการ' : `<span style="color:var(--bad-ink)">มีรายการที่ต้องแก้ไข ${p.problems} รายการ จึงยังไม่บันทึก · แก้ไฟล์แล้วนำเข้าใหม่</span>`}</p>
+      ${(p.warnings || []).map(x => `<div style="color:var(--amber-ink)">${esc(x)}</div>`).join('')}
+      <div class="flex gap-2 my-2">${ok ? _bmcBtn('บันทึก', 'bmcUnitsImportApply()', true) : ''}${_bmcBtn('ยกเลิก', "document.getElementById('bmcUnitsImport').style.display='none'")}<span id="bmcUnitsApplyStatus" class="text-xs"></span></div>
+      ${lad}${port ? `<div class="font-semibold mt-3" style="color:var(--text-primary)">สูตรแบ่งชิ้น</div>${port}` : ''}`;
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-async function bmcSaveRule() {
-  const code = (document.getElementById('bmcConvCode').value || '').trim();
-  const unit = (document.getElementById('bmcRuleUnit').value || '').trim();
-  const f = Number(document.getElementById('bmcRuleFactor').value);
-  if (!code || !unit || !(f > 0)) { _bmcStatus('bmcRuleStatus', 'ระบุรหัส หน่วย และตัวคูณที่มากกว่า 0', 'var(--bad-ink)'); return; }
-  try { await _bmcPostRule(code, unit, f); _bmcStatus('bmcRuleStatus', `✓ 1 ${unit} = ${f}`, 'var(--good-ink)'); }
-  catch (e) { _bmcStatus('bmcRuleStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+async function bmcUnitsImportApply() {
+  if (!await uiConfirm('บันไดหน่วยของรหัสที่อยู่ในไฟล์จะถูกแทนที่ทั้งรายการ', { title: 'ยืนยันการนำเข้าบันไดหน่วย', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
+  try {
+    const fd = new FormData(); fd.append('file', _bmcUnitsFile, _bmcUnitsFile.name);
+    const r = await _bmcJson(`${API}/api/bom-center/units/import?dry_run=false`, { method: 'POST', body: fd });
+    document.getElementById('bmcUnitsImport').style.display = 'none';
+    bmcStatus('bmcUnitsStatus', true, `บันทึกบันไดหน่วย ${r.codes} รหัส` + (r.portions ? ` และสูตรแบ่งชิ้น ${r.portions} รายการ` : ''));
+    await bmcLoadIng(true);
+    bmcLoadLadder();
+  } catch (e) { bmcStatus('bmcUnitsApplyStatus', false, String(e.message || e).slice(0, 220)); }
 }
-async function bmcDelRule(code, unit) {
-  if (!await uiConfirm(`ลบกฎ 1 ${unit} ของ ${code}?`, { title: 'ยืนยันการลบกฎหน่วย', ok: 'ลบกฎ', cancel: 'ไม่ลบ' })) return;
-  try { await _bmcPostRule(code, unit, null); } catch (e) { _bmcStatus('bmcRuleStatus', String(e.message || e), 'var(--bad-ink)'); }
+
+// ── สูตรแบ่งชิ้นจากวัตถุดิบทั้งตัว (the card on the sub-recipe page) ─────────
+let _bmcPortTimer = null;
+function bmcPortInit() {
+  const sel = document.getElementById('bmcPortSel');
+  if (!sel) return;
+  const keep = sel.value;
+  const prepared = ((_bmcPrep && _bmcPrep.rows) || []).map(r => ({ code: r.code, name: r.name, mode: r.mode }));
+  sel.innerHTML = '<option value="">เลือกสินค้ากึ่งสำเร็จ</option><option value="__new">+ สร้างรหัสใหม่</option>'
+    + prepared.map(r => `<option value="${esc(r.code)}">${esc(r.code)} ${esc(r.name || '')}${r.mode === 'portion' ? ' · แบ่งชิ้น' : ''}</option>`).join('');
+  if (keep) sel.value = keep;
+  // raw items: the ones with an average ladder unit first (a salmon bought by weight, used by the piece)
+  const raws = _bmcIng.filter(r => r.kind !== 'prepared' && r.active !== 0);
+  const avgOf = r => (r.unit_rules || []).find(u => u.approx);
+  raws.sort((a, b) => (avgOf(b) ? 1 : 0) - (avgOf(a) ? 1 : 0) || a.code.localeCompare(b.code));
+  const dl = document.getElementById('bmcPortRawList');
+  if (dl) dl.innerHTML = raws.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}${avgOf(r) ? ` · มีหน่วยเฉลี่ย (${esc(avgOf(r).unit)})` : ''}</option>`).join('');
+  bmcPortChanged();
+}
+function bmcPortChanged() {
+  const isNew = document.getElementById('bmcPortSel').value === '__new';
+  document.querySelectorAll('#bmcPortion .bmc-port-new').forEach(el => { el.style.display = isNew ? '' : 'none'; });
+  bmcPortPreview();
+}
+function _bmcPortRawCode() {
+  const t = (document.getElementById('bmcPortRaw').value || '').trim();
+  const hit = _bmcIng.find(x => x.code === t) || _bmcIng.find(x => (x.name_th || '') === t);
+  return hit ? hit.code : t;
+}
+// the units a person may pick for the whole piece: the item's ladder units first, then the base unit and its metric units
+function bmcPortRawChanged() {
+  const code = _bmcPortRawCode();
+  const r = _bmcIng.find(x => x.code === code);
+  const u = document.getElementById('bmcPortUnit');
+  if (!r) { u.innerHTML = ''; bmcPortPreview(); return; }
+  const units = [...(r.unit_rules || []).map(x => x.unit), r.base_unit, ...Object.keys(_BMC_METRIC[r.base_unit] || {})].filter(Boolean);
+  u.innerHTML = [...new Set(units)].map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  const avg = (r.unit_rules || []).find(x => x.approx);
+  if (avg) u.value = avg.unit;
+  bmcPortPreview();
+}
+function bmcPortPreview() {
+  clearTimeout(_bmcPortTimer);
+  _bmcPortTimer = setTimeout(async () => {
+    const box = document.getElementById('bmcPortPreview');
+    if (!box) return;
+    const raw = _bmcPortRawCode(), qty = document.getElementById('bmcPortQty').value, unit = document.getElementById('bmcPortUnit').value;
+    const pieces = document.getElementById('bmcPortPieces').value;
+    if (!raw || !unit || !(Number(qty) > 0) || !(Number(pieces) > 0)) { box.innerHTML = '<span style="color:var(--text-muted)">ใส่วัตถุดิบ จำนวนที่ใช้ และจำนวนชิ้นที่ได้ เพื่อดูต้นทุนต่อชิ้น</span>'; return; }
+    try {
+      const d = await _bmcJson(`${API}/api/bom-center/prep/portion/preview?raw_code=${encodeURIComponent(raw)}&qty=${qty}&unit=${encodeURIComponent(unit)}&pieces=${pieces}`);
+      const ap = d.approx ? '≈ ' : '';
+      const rg = d.range ? ` (ช่วง ${_bmcNum(d.range.per_piece_min, 1)}–${_bmcNum(d.range.per_piece_max, 1)})` : '';
+      box.innerHTML = `<div>${esc(d.how)} = ${ap}${_bmcNum(d.qty_base, 2)} ${esc(d.base_unit)}</div>
+        <div><b>→ ${_bmcNum(d.pieces, 2)} ชิ้น</b> · ชิ้นละ ${ap}${_bmcNum(d.base_per_piece, 2)} ${esc(d.base_unit)}${rg} ·
+        ต้นทุนชิ้นละ ${d.cost_per_piece != null ? `<b>${ap}฿${_bmcNum(d.cost_per_piece, 2)}</b> (ราคาเดือน${fmtMonthTh(d.price_month)})` : '<span style="color:var(--amber-ink)">ยังไม่มีราคา</span>'}</div>`;
+    } catch (e) { box.innerHTML = `<span style="color:var(--amber-ink)">${esc(String(e.message || e))}</span>`; }
+  }, 250);
+}
+async function bmcPortSave() {
+  const isNew = document.getElementById('bmcPortSel').value === '__new';
+  const code = isNew ? (document.getElementById('bmcPortNewCode').value || '').trim() : document.getElementById('bmcPortSel').value;
+  const name = (document.getElementById('bmcPortNewName').value || '').trim();
+  const raw = _bmcPortRawCode(), qty = Number(document.getElementById('bmcPortQty').value), unit = document.getElementById('bmcPortUnit').value;
+  const pieces = Number(document.getElementById('bmcPortPieces').value), note = (document.getElementById('bmcPortNote').value || '').trim();
+  const st = 'bmcPortStatus';
+  if (!code) return bmcStatus(st, false, 'เลือกสินค้ากึ่งสำเร็จ หรือสร้างรหัสใหม่');
+  if (isNew && !name) return bmcStatus(st, false, 'ใส่ชื่อของสินค้ากึ่งสำเร็จที่สร้างใหม่');
+  if (!raw) return bmcStatus(st, false, 'เลือกวัตถุดิบทั้งตัวที่นำมาแบ่ง');
+  if (!(qty > 0) || !(pieces > 0)) return bmcStatus(st, false, 'จำนวนที่ใช้และจำนวนชิ้นที่ได้ต้องมากกว่า 0');
+  const had = ((_bmcPrep && _bmcPrep.rows) || []).find(r => r.code === code && r.has_recipe);
+  if (had && !await uiConfirm(`${code} มีสูตรอยู่แล้ว การบันทึกจะแทนที่สูตรเดิมทั้งสูตร`, { title: 'ยืนยันการแทนที่สูตร', ok: 'แทนที่สูตร', cancel: 'ยกเลิก' })) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/prep/portion`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, name: isNew ? name : null, raw_code: raw, qty, unit, pieces, out_unit: 'ชิ้น', note: note || null }) });
+    bmcStatus(st, true, 'บันทึกสูตรแบ่งชิ้นแล้ว');
+    await bmcLoadIng(true);
+    await bmcLoadPrep();
+  } catch (e) { bmcStatus(st, false, String(e.message || e).slice(0, 220)); }
 }
 
 // ── recipes by tier (Sprint S2) ─────────────────────────────────────────────

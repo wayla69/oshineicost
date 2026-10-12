@@ -273,9 +273,15 @@ def plan_import(con, parsed: dict) -> dict:
             "prepared_without": m["prepared_without"], "unresolved_lines": unresolved, "no_yield": len(no_yield)}
 
 
+MODE_PORTION = "portion"          # สูตรแบ่งชิ้น: one whole piece (a salmon) -> N pieces (PR-U); anything else is a batch
+MODE_TH = {"batch": "สูตรผลิตเป็นชุด", "portion": "แบ่งชิ้น"}
+
+
 def save(con, code: str, yield_qty, yield_unit, lines: list, who: str, source_ref: str = None,
-         source_cost=None):
-    """Replace one prepared item's sub-recipe."""
+         source_cost=None, mode: str = None, note: str = None):
+    """Replace one prepared item's sub-recipe. `mode='portion'` marks a portion recipe: ONE line whose trim loss is not
+    applied again (the yield already counts only the usable pieces); any other value stores a plain batch recipe."""
+    mode = MODE_PORTION if mode == MODE_PORTION else None
     yq = _num(yield_qty)
     if not yq or yq <= 0:
         raise ValueError(f"{code}: ต้องระบุปริมาณที่ได้ต่อ 1 สูตร (> 0)")
@@ -293,18 +299,23 @@ def save(con, code: str, yield_qty, yield_unit, lines: list, who: str, source_re
             raise ValueError(f"{code} บรรทัด {i}: ปริมาณต้องมากกว่า 0")
         if ic == code:
             raise ValueError(f"{code} บรรทัด {i}: ไม่สามารถใช้รายการนี้เป็นส่วนผสมของตัวเองได้")
-        clean.append((len(clean) + 1, ic, q, norm(ln.get("unit")) or None, _clean(ln.get("note")) or None))
+        clean.append((len(clean) + 1, ic, q, norm(ln.get("unit")) or None, _clean(ln.get("note")) or None,
+                      1 if mode else (1 if ln.get("no_loss") else 0)))
+    if mode and len(clean) != 1:
+        raise ValueError(f"{code}: สูตรแบ่งชิ้นต้องมีวัตถุดิบ 1 บรรทัด (ของทั้งตัวที่นำมาแบ่ง)")
     old = con.execute("SELECT batch_yield_qty, batch_unit FROM bc_prep_recipe WHERE prepared_code=?", (code,)).fetchone()
     con.execute("INSERT INTO bc_prep_recipe(prepared_code, batch_yield_qty, batch_unit, note, updated_at, source_cost,"
-                " source_ref, updated_by) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(prepared_code) DO UPDATE SET"
+                " source_ref, updated_by, mode) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(prepared_code) DO UPDATE SET"
                 " batch_yield_qty=excluded.batch_yield_qty, batch_unit=excluded.batch_unit, updated_at=excluded.updated_at,"
-                " source_cost=excluded.source_cost, source_ref=excluded.source_ref, updated_by=excluded.updated_by",
-                (code, yq, norm(yield_unit), None, now(), _num(source_cost), source_ref, who))
+                " source_cost=excluded.source_cost, source_ref=excluded.source_ref, updated_by=excluded.updated_by,"
+                " mode=excluded.mode, note=CASE WHEN excluded.mode IS NOT NULL THEN excluded.note"
+                " ELSE COALESCE(excluded.note, bc_prep_recipe.note) END",
+                (code, yq, norm(yield_unit), _clean(note) or None, now(), _num(source_cost), source_ref, who, mode))
     con.execute("DELETE FROM bc_prep_line WHERE prepared_code=?", (code,))
-    con.executemany("INSERT INTO bc_prep_line(prepared_code, seq, ingredient_code, qty, unit, note) VALUES(?,?,?,?,?,?)",
+    con.executemany("INSERT INTO bc_prep_line(prepared_code, seq, ingredient_code, qty, unit, note, no_loss) VALUES(?,?,?,?,?,?,?)",
                     [(code,) + c for c in clean])
     audit(con, who, "prep_save", "bc_prep_recipe", code, old, {"yield": [yq, norm(yield_unit)], "lines": len(clean),
-                                                                 "source": source_ref})
+                                                                 "source": source_ref, "mode": mode or "batch"})
     return len(clean)
 
 
@@ -335,14 +346,21 @@ def set_map(con, src_name: str, code: str, who: str):
 # ── the set of sub-recipes a cost uses ───────────────────────────────────────
 def _read(con, where: str, args: tuple, rtable: str, ltable: str) -> dict:
     book = {}
-    for code, yq, yu in con.execute(f"SELECT prepared_code, batch_yield_qty, batch_unit FROM {rtable}{where}", args):
-        book[code] = {"yield_qty": yq, "yield_unit": yu, "lines": []}
-    for code, seq, ic, q, u, note in con.execute(
-            f"SELECT prepared_code, seq, ingredient_code, qty, unit, note FROM {ltable}{where} ORDER BY prepared_code, seq",
+    mcol = "mode" if _has_col(con, rtable, "mode") else "NULL"
+    ncol = "no_loss" if _has_col(con, ltable, "no_loss") else "0"
+    for code, yq, yu, mode in con.execute(f"SELECT prepared_code, batch_yield_qty, batch_unit, {mcol} FROM {rtable}{where}", args):
+        book[code] = {"yield_qty": yq, "yield_unit": yu, "mode": mode or "batch", "lines": []}
+    for code, seq, ic, q, u, note, nl in con.execute(
+            f"SELECT prepared_code, seq, ingredient_code, qty, unit, note, {ncol} FROM {ltable}{where} ORDER BY prepared_code, seq",
             args):
         if code in book:
-            book[code]["lines"].append({"seq": seq, "ingredient_code": ic, "qty": q, "unit": u, "note": note})
+            book[code]["lines"].append({"seq": seq, "ingredient_code": ic, "qty": q, "unit": u, "note": note,
+                                        "no_loss": 1 if nl else 0})
     return book
+
+
+def _has_col(con, table: str, col: str) -> bool:
+    return any(r[1] == col for r in con.execute(f"PRAGMA table_info({table})"))
 
 
 def book(con, release_id: int = None) -> dict:
@@ -362,10 +380,11 @@ def freeze(con, release_id: int) -> int:
     """Copy the live sub-recipes into a release (at release time)."""
     con.execute("DELETE FROM bc_rel_prep_line WHERE release_id=?", (release_id,))
     con.execute("DELETE FROM bc_rel_prep_recipe WHERE release_id=?", (release_id,))
-    con.execute("INSERT INTO bc_rel_prep_recipe(release_id, prepared_code, batch_yield_qty, batch_unit)"
-                " SELECT ?, prepared_code, batch_yield_qty, batch_unit FROM bc_prep_recipe", (release_id,))
-    con.execute("INSERT INTO bc_rel_prep_line(release_id, prepared_code, seq, ingredient_code, qty, unit, note)"
-                " SELECT ?, prepared_code, seq, ingredient_code, qty, unit, note FROM bc_prep_line", (release_id,))
+    con.execute("INSERT INTO bc_rel_prep_recipe(release_id, prepared_code, batch_yield_qty, batch_unit, mode)"
+                " SELECT ?, prepared_code, batch_yield_qty, batch_unit, mode FROM bc_prep_recipe", (release_id,))
+    con.execute("INSERT INTO bc_rel_prep_line(release_id, prepared_code, seq, ingredient_code, qty, unit, note, no_loss)"
+                " SELECT ?, prepared_code, seq, ingredient_code, qty, unit, note, COALESCE(no_loss, 0) FROM bc_prep_line",
+                (release_id,))
     return con.execute("SELECT COUNT(*) FROM bc_rel_prep_recipe WHERE release_id=?", (release_id,)).fetchone()[0]
 
 
@@ -389,7 +408,8 @@ class PrepCoster:
         if code in self._memo:
             return self._memo[code]
         r = self.book.get(code)
-        out = {"code": code, "per_base": None, "batch_cost": 0.0, "yield_base": None, "problems": [], "lines": []}
+        out = {"code": code, "per_base": None, "batch_cost": 0.0, "yield_base": None, "problems": [], "lines": [],
+               "mode": (r or {}).get("mode"), "approx": False}
         if r is None:
             out["problems"].append("ไม่มีสูตรย่อย")
             return out
@@ -402,7 +422,8 @@ class PrepCoster:
         out["yield_base"] = yb
         for ln in r["lines"]:
             ic = ln["ingredient_code"]
-            row = dict(ln, cost=None, price_per_base=None, qty_base=None, source=None, problem=None)
+            row = dict(ln, cost=None, price_per_base=None, qty_base=None, source=None, problem=None, approx=False,
+                       no_loss=1 if ln.get("no_loss") else 0)
             if not ic:
                 row["problem"] = f"ไม่พบรหัสวัตถุดิบของ “{ln.get('note') or ''}”"
             else:
@@ -411,9 +432,11 @@ class PrepCoster:
                     row["problem"] = f"{ic}: {how}"
                 else:
                     row["qty_base"] = qb
+                    row["approx"], row["how"] = self.conv.last_approx, how    # an average step is part of the chain
                     if ic in self.book:
                         sub = self.cost(ic, _stack + (code,))
                         p, src = sub["per_base"], "sub_recipe"
+                        row["approx"] = row["approx"] or bool(sub.get("approx"))
                         if p is None:
                             row["problem"] = f"{ic}: คำนวณต้นทุนสูตรย่อยไม่ครบ: " + "; ".join(sub["problems"][:2])
                     else:
@@ -422,11 +445,13 @@ class PrepCoster:
                         if p is None:
                             row["problem"] = f"{ic}: ไม่มีราคาเดือน {self.month}"
                     if p is not None:
-                        loss = min(self.loss.get(ic) or 0.0, 99.0)
+                        # a portion line (PR-U) is the whole piece and its yield already counts only usable pieces: no trim loss on top
+                        loss = 0.0 if row["no_loss"] else min(self.loss.get(ic) or 0.0, 99.0)
                         row.update(price_per_base=p, source=src, cost=qb * p / (1.0 - loss / 100.0))
                         out["batch_cost"] += row["cost"]
             if row["problem"]:
                 out["problems"].append(row["problem"])
+            out["approx"] = out["approx"] or row["approx"]
             out["lines"].append(row)
         if not out["problems"] and yb:
             out["per_base"] = out["batch_cost"] / yb
@@ -434,18 +459,21 @@ class PrepCoster:
         return out
 
 
-def explode(book_: dict, conv: Converter, code: str, _stack: tuple = (), _memo: dict = None) -> tuple:
-    """Raw ingredients in ONE base unit of a prepared item: ({raw_code: qty_base}, problems)."""
+def explode_parts(book_: dict, conv: Converter, code: str, _stack: tuple = (), _memo: dict = None) -> tuple:
+    """Raw ingredients in ONE base unit of a prepared item, split by whether the raw ingredient's trim loss still has to be
+    added on top: ({raw_code: qty that takes the loss}, {raw_code: qty that does not}, problems). The second dict holds
+    the quantities that come through a portion line (`no_loss`): a salmon cut into 225 pieces already counts only the
+    usable meat, so ordering must not gross it up by the salmon's 40 % trim loss a second time (PR-U)."""
     _memo = {} if _memo is None else _memo
     if code in _memo:
         return _memo[code]
     r = book_.get(code)
     if r is None or code in _stack:
-        return {}, ["ไม่มีสูตรย่อย" if r is None else "สูตรย่อยอ้างอิงวนกลับมาที่ตัวเอง"]
+        return {}, {}, ["ไม่มีสูตรย่อย" if r is None else "สูตรย่อยอ้างอิงวนกลับมาที่ตัวเอง"]
     yb, _ = conv.to_base(code, r["yield_qty"], r["yield_unit"])
     if not yb:
-        return {}, ["แปลงปริมาณที่ได้ต่อสูตรไม่ได้"]
-    out, probs = {}, []
+        return {}, {}, ["แปลงปริมาณที่ได้ต่อสูตรไม่ได้"]
+    lossy, flat, probs = {}, {}, []
     for ln in r["lines"]:
         ic = ln["ingredient_code"]
         qb, _ = conv.to_base(ic, ln["qty"], ln["unit"]) if ic else (None, None)
@@ -453,16 +481,30 @@ def explode(book_: dict, conv: Converter, code: str, _stack: tuple = (), _memo: 
             probs.append(ln.get("note") or ic or "?")
             continue
         if ic in book_:
-            sub, p2 = explode(book_, conv, ic, _stack + (code,), _memo)
-            if not sub:
+            sl, sf, p2 = explode_parts(book_, conv, ic, _stack + (code,), _memo)
+            if not sl and not sf:
                 probs.append(ic)
                 continue
             probs += p2
-            for k, v in sub.items():
-                out[k] = out.get(k, 0.0) + v * qb / yb
+            for k, v in sl.items():
+                lossy[k] = lossy.get(k, 0.0) + v * qb / yb
+            for k, v in sf.items():
+                flat[k] = flat.get(k, 0.0) + v * qb / yb
+        elif ln.get("no_loss"):
+            flat[ic] = flat.get(ic, 0.0) + qb / yb
         else:
-            out[ic] = out.get(ic, 0.0) + qb / yb
-    _memo[code] = (out, probs)
+            lossy[ic] = lossy.get(ic, 0.0) + qb / yb
+    _memo[code] = (lossy, flat, probs)
+    return lossy, flat, probs
+
+
+def explode(book_: dict, conv: Converter, code: str, _stack: tuple = (), _memo: dict = None) -> tuple:
+    """Raw ingredients in ONE base unit of a prepared item: ({raw_code: qty_base}, problems). Trim loss is not in this
+    number (see explode_parts for the split the order plan needs)."""
+    lossy, flat, probs = explode_parts(book_, conv, code, _stack, _memo)
+    out = dict(lossy)
+    for k, v in flat.items():
+        out[k] = out.get(k, 0.0) + v
     return out, probs
 
 
@@ -487,7 +529,8 @@ def overview(con, month: str) -> list:
                        per_base=c["per_base"], batch_cost=round(c["batch_cost"], 4), problems=c["problems"][:5],
                        n_problems=len(c["problems"]), source_ref=meta[0] if meta else None,
                        source_cost=meta[1] if meta else None, updated_at=meta[2] if meta else None,
-                       updated_by=meta[3] if meta else None)
+                       updated_by=meta[3] if meta else None, mode=r.get("mode") or "batch",
+                       mode_th=MODE_TH.get(r.get("mode") or "batch"), approx=bool(c["approx"]))
             if c["per_base"] and row["own_price"]:
                 row["diff_pct"] = round(100.0 * (c["per_base"] - row["own_price"]) / row["own_price"], 1)
         row["status"] = ("none" if not r else "incomplete" if row.get("n_problems") else
@@ -519,13 +562,15 @@ def detail(con, code: str, month: str) -> dict:
         meta = con.execute("SELECT source_ref, source_cost, updated_at, updated_by FROM bc_prep_recipe"
                            " WHERE prepared_code=?", (code,)).fetchone()
         out.update(dict(zip(("source_ref", "source_cost", "updated_at", "updated_by"), meta)))
+        out.update(mode=r.get("mode") or "batch", mode_th=MODE_TH.get(r.get("mode") or "batch"), approx=bool(c["approx"]),
+                   recipe_note=con.execute("SELECT note FROM bc_prep_recipe WHERE prepared_code=?", (code,)).fetchone()[0])
     own = price_for(con, code, month)
     out["own_price"] = own[0] if own else None
     return out
 
 
 FLAT_COLS = ("prepared_code", "prepared_name", "batch_yield_qty", "batch_unit", "seq", "ingredient_code",
-             "ingredient_name", "qty", "unit", "note")
+             "ingredient_name", "qty", "unit", "note", "mode", "no_loss")     # mode / no_loss (PR-U): a portion recipe survives the round trip
 
 
 def export_flat(con) -> list:
@@ -534,7 +579,8 @@ def export_flat(con) -> list:
     for code, r in sorted(book(con).items()):
         for ln in r["lines"] or [{"seq": None, "ingredient_code": None, "qty": None, "unit": None, "note": None}]:
             rows.append([code, names.get(code), r["yield_qty"], r["yield_unit"], ln["seq"], ln["ingredient_code"],
-                         names.get(ln["ingredient_code"]), ln["qty"], ln["unit"], ln["note"]])
+                         names.get(ln["ingredient_code"]), ln["qty"], ln["unit"], ln["note"],
+                         MODE_PORTION if r.get("mode") == MODE_PORTION else None, 1 if ln.get("no_loss") else None])
     return rows
 
 
@@ -556,17 +602,117 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
         code = _clean(g("prepared_code"))
         if not code:
             continue
-        e = grp.setdefault(code, {"yield_qty": g("batch_yield_qty"), "yield_unit": g("batch_unit"), "lines": []})
+        e = grp.setdefault(code, {"yield_qty": g("batch_yield_qty"), "yield_unit": g("batch_unit"), "lines": [],
+                                  "mode": MODE_PORTION if _clean(g("mode")).lower() in (MODE_PORTION, "แบ่งชิ้น") else None})
         if _num(g("qty")) or _clean(g("ingredient_code")):
             e["lines"].append({"ingredient_code": g("ingredient_code"), "qty": g("qty"), "unit": g("unit"),
-                               "note": g("note") or g("ingredient_name")})
+                               "note": g("note") or g("ingredient_name"), "no_loss": 1 if _num(g("no_loss")) else 0})
     saved = 0
     for code, e in grp.items():
         try:
-            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากแม่แบบ (Excel)")
+            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากแม่แบบ (Excel)",
+                 mode=e["mode"])
             saved += 1
         except ValueError as ex:
             errors.append(str(ex))
     if dry_run or errors:
         con.rollback()
     return {"codes": len(grp), "saved": 0 if (dry_run or errors) else saved, "errors": errors, "dry_run": dry_run}
+
+
+# ── สูตรแบ่งชิ้น: one whole piece (a salmon) cut into N pieces (PR-U) ────────────────────────────────────
+def latest_price_month(con) -> str:
+    r = con.execute("SELECT MAX(month) FROM bc_ingredient_price").fetchone()
+    return r[0] if r and r[0] else now()[:7]
+
+
+def _portion_inputs(con, raw_code, qty, unit, pieces):
+    """Validate one portion input and convert it: -> (Converter, qty, pieces, factor, approx, how, raw row)."""
+    q, n = _num(qty), _num(pieces)
+    raw_code = _clean(raw_code)
+    if not raw_code:
+        raise ValueError("เลือกวัตถุดิบที่นำมาแบ่ง")
+    if not q or q <= 0:
+        raise ValueError("จำนวนที่ใช้ต้องมากกว่า 0")
+    if not n or n <= 0:
+        raise ValueError("จำนวนชิ้นที่ได้ต้องมากกว่า 0")
+    row = con.execute("SELECT name_th, kind, base_unit FROM bc_ingredient WHERE code=?", (raw_code,)).fetchone()
+    if not row:
+        raise ValueError(f"ไม่พบรหัส {raw_code} ในทะเบียน")
+    if row[1] == "prepared":
+        raise ValueError(f"{raw_code} เป็นสินค้ากึ่งสำเร็จ · สูตรแบ่งชิ้นใช้วัตถุดิบดิบเท่านั้น")
+    if not _clean(unit):
+        raise ValueError("ระบุหน่วยที่ใช้")
+    conv = Converter(con)
+    f, how = conv.factor(raw_code, unit)
+    if f is None:
+        raise ValueError(f"{raw_code}: แปลงหน่วย {_clean(unit)} เป็นหน่วยฐานไม่ได้ ({how}) · เพิ่มหน่วยในหน้าหน่วยและการแปลงก่อน")
+    return conv, q, n, f, conv.last_approx, how, row
+
+
+def portion_preview(con, raw_code, qty, unit, pieces, month: str = None) -> dict:
+    """What a portion recipe means, before it is saved: {factor_base, approx, how, range, base_per_piece, cost_per_piece, ...}.
+    Cost per piece = price per base × factor(unit) × qty ÷ pieces — the raw item's trim loss is NOT added (the piece
+    count already counts only the usable pieces)."""
+    conv, q, n, f, approx, how, row = _portion_inputs(con, raw_code, qty, unit, pieces)
+    raw_code = _clean(raw_code)
+    month = month or latest_price_month(con)
+    qb = q * f
+    out = {"raw_code": raw_code, "raw_name": row[0], "qty": q, "unit": norm(unit), "pieces": n, "base_unit": conv.base_unit(raw_code),
+           "factor_base": f, "qty_base": qb, "approx": bool(approx), "how": how, "base_per_piece": qb / n,
+           "range": None, "cost_per_piece": None, "batch_cost": None, "price_per_base": None, "price_month": None,
+           "price_source": None, "month": month}
+    sp = conv.span(raw_code, unit)
+    if sp:
+        out["range"] = {"qty_base_min": q * sp[0], "qty_base_max": q * sp[1],
+                        "per_piece_min": q * sp[0] / n, "per_piece_max": q * sp[1] / n}
+    pr = price_for(con, raw_code, month)
+    if pr:
+        out.update(price_per_base=pr[0], price_source=pr[1], price_month=pr[2], batch_cost=qb * pr[0],
+                   cost_per_piece=qb * pr[0] / n)
+        if sp:
+            out["range"].update(cost_per_piece_min=q * sp[0] * pr[0] / n, cost_per_piece_max=q * sp[1] * pr[0] / n)
+    return out
+
+
+def ensure_prepared(con, code: str, name: str, base_unit: str, who: str) -> bool:
+    """A prepared item the master does not have yet is created for a portion recipe (kind prepared, family CK, base unit =
+    the unit the pieces are counted in, bought locally). -> True when it was created."""
+    from .master import _upsert
+    code = _clean(code)
+    if not code:
+        raise ValueError("ระบุรหัสสินค้ากึ่งสำเร็จ")
+    row = con.execute("SELECT kind FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+    if row:
+        if row[0] != "prepared":
+            raise ValueError(f"{code} ไม่ใช่สินค้ากึ่งสำเร็จ · เลือกรหัสกึ่งสำเร็จ หรือสร้างรหัสใหม่")
+        return False
+    nm = _clean(name)
+    if not nm:
+        raise ValueError("ใส่ชื่อของสินค้ากึ่งสำเร็จที่สร้างใหม่")
+    stats = {"inserted": 0, "updated": 0, "unchanged": 0}
+    _upsert(con, code, {"name_th": nm, "kind": "prepared", "family": "CK", "base_unit": norm(base_unit) or "ชิ้น",
+                        "sourcing_default": "local", "note": "สร้างจากสูตรแบ่งชิ้น"}, who, False, stats)
+    audit(con, who, "prep_portion_new_item", "bc_ingredient", code, None, nm)
+    return True
+
+
+def save_portion(con, code: str, raw_code: str, qty, unit, pieces, out_unit, who: str, note: str = None, name: str = None,
+                 month: str = None) -> dict:
+    """Write a portion recipe: ONE line (the whole piece) -> N pieces of the prepared item. Replaces any recipe the code had.
+    Returns the preview (see portion_preview) plus {code, created, replaced}. Caller commits."""
+    code, out_unit = _clean(code), norm(out_unit) or "ชิ้น"
+    if code == _clean(raw_code):
+        raise ValueError("สินค้ากึ่งสำเร็จต้องเป็นคนละรหัสกับวัตถุดิบที่นำมาแบ่ง")
+    _portion_inputs(con, raw_code, qty, unit, pieces)
+    created = ensure_prepared(con, code, name, out_unit, who)
+    if Converter(con).factor(code, out_unit)[0] is None:
+        raise ValueError(f"{code}: หน่วยที่ได้ “{out_unit}” ไม่ตรงกับหน่วยฐานของสินค้ากึ่งสำเร็จ")
+    replaced = con.execute("SELECT 1 FROM bc_prep_recipe WHERE prepared_code=?", (code,)).fetchone() is not None
+    save(con, code, pieces, out_unit, [{"ingredient_code": _clean(raw_code), "qty": qty, "unit": unit}], who,
+         source_ref="สูตรแบ่งชิ้น", mode=MODE_PORTION, note=note)
+    audit(con, who, "prep_portion", "bc_prep_recipe", code, None,
+          {"from": _clean(raw_code), "qty": _num(qty), "unit": norm(unit), "pieces": _num(pieces), "created": created})
+    out = portion_preview(con, raw_code, qty, unit, pieces, month)
+    out.update(code=code, created=created, replaced=replaced)
+    return out

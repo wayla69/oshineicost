@@ -509,6 +509,12 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     cu = count_units(con, [r["code"] for r in s["rows"]])
     cmap = central_map(con)
     month = s["order_day"][:7]
+    from .units import Converter
+    conv = Converter(con)
+    for r in list(s["rows"]) + list(s.get("local_rows") or []):
+        au = conv.approx_unit(r["code"]) if r["code"] in conv.ladders else None
+        if au:                                           # PR-U: "≈ 2.1 ตัว" beside a weight ordered for whole pieces
+            r["approx_unit"], r["approx_per_unit"] = au
     for r in s["rows"]:
         unit, factor = cu.get(r["code"], (r.get("base_unit"), 1.0))
         r["count_unit"], r["per_count_unit"] = unit, factor

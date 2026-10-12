@@ -247,6 +247,19 @@ MIGRATIONS = (
     # PR-F — Accounting marks the ใบสรุปตัดเบิก of a period as posted into the accounting system
     ("bc_variance_period", "accounting_posted_at", "TEXT"),
     ("bc_variance_period", "accounting_posted_by", "TEXT"),
+    # PR-U — the unit ladder (up to 3 units above the base unit, each stated against the one below it) …
+    ("bc_unit_rule", "parent_unit", "TEXT"),      # the unit this one is stated in; NULL = the item's base unit
+    ("bc_unit_rule", "qty_in_parent", "REAL"),    # 1 <unit> = qty_in_parent <parent_unit> (the average when conv_kind='avg')
+    ("bc_unit_rule", "conv_kind", "TEXT"),        # 'exact' | 'avg' (pieces that differ in weight); NULL is read as 'exact'
+    ("bc_unit_rule", "range_min", "REAL"),        # avg only: the lightest / heaviest piece, in parent_unit
+    ("bc_unit_rule", "range_max", "REAL"),
+    ("bc_unit_rule", "updated_at", "TEXT"),
+    ("bc_unit_rule", "updated_by", "TEXT"),
+    # … and the portion recipe: one whole piece (a salmon) cut into N pieces
+    ("bc_prep_recipe", "mode", "TEXT"),           # 'portion' = สูตรแบ่งชิ้น; NULL is read as 'batch'
+    ("bc_prep_line", "no_loss", "INTEGER DEFAULT 0"),   # 1 = the yield already counts only usable pieces: no trim loss on top
+    ("bc_rel_prep_recipe", "mode", "TEXT"),
+    ("bc_rel_prep_line", "no_loss", "INTEGER DEFAULT 0"),
 )
 EXTRA_DDL = (
     # a person's answer to "which POS code is this recipe block?" — kept across imports
@@ -329,7 +342,11 @@ def ensure(con, commit: bool = False) -> None:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
-    from .issues import widen_log       # PR-M7: bc_issue_log.action gained 'append' (rebuilt once on a DB that has the old CHECK)
+    # PR-U: every rule written before the ladder is a level-1 exact step on the base unit (idempotent; reads first so a
+    # plain GET never opens a write transaction when there is nothing to fill)
+    if con.execute("SELECT 1 FROM bc_unit_rule WHERE qty_in_parent IS NULL LIMIT 1").fetchone():
+        con.execute("UPDATE bc_unit_rule SET qty_in_parent=factor_to_base WHERE qty_in_parent IS NULL")
+    from .issues import widen_log      # PR-M7: bc_issue_log.action gained 'append' (rebuilt once on a DB that has the old CHECK)
     widen_log(con)
     from .orders import backfill        # PR-A: delivery weekday / delivery date of rows saved before it (idempotent)
     backfill(con)

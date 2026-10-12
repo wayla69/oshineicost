@@ -230,7 +230,7 @@ def _per_dish(con, month: str) -> tuple:
     bad = {}                                              # sku_id -> [(code, unit, why)] lines that cannot be counted
     # Phase 1.5: a prepared item with a sub-recipe is ordered as the raw ingredients in it —
     # planning reads the kitchen's CURRENT sub-recipes (costs read the ones frozen into a release)
-    from .prep import book as _prep_book, explode
+    from .prep import book as _prep_book, explode_parts
     pbook, emem, via = _prep_book(con), {}, {}
     from .central import links as _links
     link = _links(con)                                    # S11: a recipe's older code -> the code the centre sends
@@ -247,13 +247,17 @@ def _per_dish(con, month: str) -> tuple:
         lp = line_loss if line_loss is not None else (loss.get(code) or 0.0)
         q = qb / (1.0 - min(lp, 99.0) / 100.0)
         if code in pbook:
-            raw, gaps = explode(pbook, conv, code, _memo=emem)
-            if raw:
+            lossy, flat, gaps = explode_parts(pbook, conv, code, _memo=emem)
+            if lossy or flat:
                 stats["exploded_lines"] += 1
-                for rc, per in raw.items():
+                for rc, per in lossy.items():
                     rc = link.get(rc, rc)
                     rl = min(loss.get(rc) or 0.0, 99.0)
                     out.setdefault(sid, []).append((rc, q * per / (1.0 - rl / 100.0)))
+                    via.setdefault(rc, set()).add(code)
+                for rc, per in flat.items():              # a portion line (PR-U): the yield already counts usable pieces only
+                    rc = link.get(rc, rc)
+                    out.setdefault(sid, []).append((rc, q * per))
                     via.setdefault(rc, set()).add(code)
                 if gaps:                                  # part of the sub-recipe cannot be counted
                     bad.setdefault(sid, []).append((code, unit, "สูตรย่อยไม่สมบูรณ์: " + ", ".join(map(str, gaps[:3]))))

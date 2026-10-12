@@ -1681,11 +1681,14 @@ function brnRenderOrder() {
       (r.on_order ? ` (รวมค้างส่ง ${_brnInCount(r, r.on_order)})` : '') + ` = ต้องการ ${_brnInCount(r, r.need)} ${cu}` +
       (analyst && (r.via || []).length ? ` · ใช้ใน ${esc(r.via.slice(0, 2).join(', '))}` : '');
     const open = _brnOrdWhy.has(r.code);
+    // PR-U: an item bought by weight but used by the whole piece (ปลาแซลมอนทั้งตัว) shows the pieces too, as an estimate
+    const approxPcs = (r.approx_unit && r.approx_per_unit > 0 && sugg > 0)
+      ? ` · ≈ ${_bmcNum(sugg * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) / r.approx_per_unit, 1)} ${esc(r.approx_unit)}` : '';
     const sysBox = r.system_qty == null ? '' : ` · คงเหลือ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_bmcNum(r.system_qty, 2)}</b> ${esc(r.system_unit || r.count_unit || r.base_unit || '')}`;
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0"><div class="brn-name" title="${esc(r.name)}" style="color:var(--text-primary);font-weight:600">${esc(r.name)}${r.monitored ? ' ' + _bmcChip('บังคับ', 'var(--amber-ink)') : ''}</div>
-          <div class="text-xs" style="color:var(--text-secondary);line-height:1.4">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b> ${esc(_brnUnitLabel(r))}${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}${sysBox}</div>
+          <div class="text-xs" style="color:var(--text-secondary);line-height:1.4">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b> ${esc(_brnUnitLabel(r))}${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}${approxPcs}${sysBox}</div>
           <button type="button" class="brn-why" aria-expanded="${open}" onclick="brnOrdWhy(${_bmcQ(r.code)})">${open ? 'ซ่อนที่มา ▴' : 'ดูที่มา ▾'}</button></div>
         <div class="brn-box"><input id="brnOrd_${esc(r.code)}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${editable ? '' : 'disabled'} aria-label="สั่ง ${esc(r.name)}" oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"
             style="border-color:${dev ? 'var(--amber-ink)' : 'var(--border-control)'}"><span class="brn-cap">สั่ง · ${esc(_brnUnitLabel(r))}</span></div></div>
