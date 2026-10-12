@@ -6,13 +6,14 @@ from fastapi import Query
 from typing import Optional
 import json as _json
 from rules import (
-    EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL,
     discount_base_row,
     discount_excess,
     discount_policy_pct,
+    effective_unit_cost_sql,
     net_revenue_row,
     net_revenue_sum,
     scope_filter,
+    tier_code_sql,
 )
 from core import (
     _apply_period_filter,
@@ -538,9 +539,11 @@ def analysis_discount_bills(
         # definition as บิลขาดทุน GP, NOT net − discount.
         if "sale_bill_item" in tabs:
             _build_sku_effective_cost(con, force=False)   # ensure the unit-cost lookup exists
-            _live_cogs = (f"(SELECT SUM(i.qty * CASE WHEN s2.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0 "
-                          f"ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec "
-                          f"WHERE sec.sku_id=i.sku_id),0) END) "
+            # each line is priced for the month of ITS bill (st.sold_at), through the
+            # P&L's own effective_unit_cost_sql, so a released cost reaches the bill
+            # column as it does the P&L; months before the cut-over keep the old chain.
+            _live_cogs = (f"(SELECT SUM(i.qty * CASE WHEN {tier_code_sql('s2.sku_code')} THEN 0 "
+                          f"ELSE {effective_unit_cost_sql('i', 'substr(st.sold_at, 1, 7)')} END) "
                           f"FROM sale_bill_item i JOIN skus s2 ON s2.sku_id=i.sku_id "
                           f"WHERE i.receipt_no=st.receipt_no)")
         else:

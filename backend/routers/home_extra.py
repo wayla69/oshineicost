@@ -725,7 +725,7 @@ def _cost_health(con, month, branch, food_pct, mtd_rev):
         r = con.execute(f"""
             SELECT {coverage_sums_sql('s')},
                    SUM(CASE WHEN {needs_cost_sql()} AND s.qty > 0
-                            THEN s.qty * {effective_unit_cost_sql('s')} ELSE 0 END) AS cg
+                            THEN s.qty * {effective_unit_cost_sql('s', 's.period_month')} ELSE 0 END) AS cg
               FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
               JOIN branches b ON b.branch_id = s.branch_id
              WHERE s.period_month = :m AND b.name != 'ALL' {bf}
@@ -742,6 +742,8 @@ def _cost_health(con, month, branch, food_pct, mtd_rev):
     except Exception:
         pass
     try:
+        # UNDATED ON PURPOSE: this prices the proposals awaiting confirmation at the
+        # cost the proposal itself carries (sku_effective_cost), not at a released cost.
         r = con.execute("""
             SELECT COUNT(*) AS n,
                    SUM(COALESCE(e.recipe_cost, 0) * COALESCE((SELECT SUM(m.qty) FROM sales_sku_monthly m
@@ -756,9 +758,8 @@ def _cost_health(con, month, branch, food_pct, mtd_rev):
         # given away: the dish's own name says so. Costed now, so it finally has a price tag.
         rows = con.execute(f"""
             SELECT COALESCE(sk.description, sk.sku_code) AS name, SUM(s.qty) AS q,
-                   SUM(s.qty * COALESCE(e.recipe_cost, 0)) AS v
+                   SUM(s.qty * {effective_unit_cost_sql('s', 's.period_month')}) AS v
               FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
-              LEFT JOIN sku_effective_cost e ON e.sku_id = s.sku_id
               JOIN branches b ON b.branch_id = s.branch_id
              WHERE s.period_month = :m AND b.name != 'ALL' {bf} AND s.qty > 0
                AND (sk.description LIKE '%ฟรี%' OR sk.description LIKE '%Free%' OR sk.description LIKE '%แถม%')
