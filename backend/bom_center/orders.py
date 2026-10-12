@@ -551,6 +551,37 @@ def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
     return with_values(con, out)
 
 
+def previous(con, branch_id: int, rnd: str, cycle_date: str) -> dict:
+    """1.9: the last order of the SAME round the branch actually sent (submitted, processed or received) before this cycle — what the
+    confirm dialog compares the order to: "88 รายการ · ฿281,292 · รอบก่อน ฿262,700 (+7%)". None when the round has no earlier order.
+
+    -> {round, round_th, delivery, delivery_th, cycle_date, value (the value ordered), n (lines ordered), lines: [{code, name,
+    units, unit_word, value}]}; every line is priced for the month of `cycle_date`, the month of the order being checked, so a
+    difference between two lines is a difference of quantity."""
+    from .forecast import ROUND_TH
+    from .fmt import day_th
+    from .hub import _base, _pricer, delivery_of
+    r = con.execute("SELECT order_id, delivery_date FROM bc_order WHERE branch_id=? AND round=? AND cycle_date<?"
+                    " AND status IN ('submitted','processed','received') ORDER BY cycle_date DESC, order_id DESC LIMIT 1",
+                    (branch_id, rnd, cycle_date)).fetchone()
+    if not r:
+        return None
+    o = detail(con, r[0])
+    per, price = _pricer(con)
+    month = str(cycle_date)[:7]
+    lines = []
+    for ln in o["lines"]:
+        u = float(ln["confirmed_units"] or 0)
+        if u <= 0:
+            continue
+        p = price(ln["code"], month)
+        lines.append({"code": ln["code"], "name": ln["name"], "units": u, "unit_word": ln["unit_word"],
+                      "value": round(_base(u, ln["order_unit"], per.get(ln["code"])) * p, 2) if p else 0.0})
+    d = delivery_of(con, branch_id, rnd, o["cycle_date"], o.get("delivery_date"))
+    return {"round": rnd, "round_th": ROUND_TH.get(rnd, rnd), "delivery": d, "delivery_th": day_th(d), "cycle_date": o["cycle_date"],
+            "value": o["value_ordered"], "n": len(lines), "lines": lines}
+
+
 def next_round(con, branch_id: int, today: date, now: datetime = None) -> str:
     """The round of the delivery a branch should be working on from `today`: the nearest delivery
     whose cutoff has not passed (else the nearest). What the branch page opens on when nobody picked."""
@@ -647,6 +678,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     s["rows"] = [r for r in s["rows"] if r.get("sourcing") != "local"]
     oid = find(con, branch_id, rnd, s["order_day"])
     s["order"] = detail(con, oid) if oid else None
+    s["previous"] = previous(con, branch_id, rnd, s["order_day"])           # 1.9: the order the confirm dialog compares this one to
     s["reasons"] = [{"code": k, "label": v} for k, v in REASONS]
     s["deviation_pct"] = DEVIATION_PCT
     return s

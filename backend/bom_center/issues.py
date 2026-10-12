@@ -192,6 +192,15 @@ def _date_or_error(slip_date) -> date:
         raise ValueError("วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD")
 
 
+def default_list(it: dict) -> bool:
+    """3.2 (owner decision 2026-10-12): the slip a branch opens with lists only the items it is still working with — one issued on a
+    confirmed slip or used by the recipes within the last RECENT_DAYS days (`recent`, `used_recent`), one with system stock above 0,
+    one that must be counted (`required`, ต้องนับ), and any item this slip already has a quantity for (a saved draft is never hidden).
+    The rest is behind "แสดงทั้งหมด"; a search always looks at every item."""
+    return bool(it.get("recent") or it.get("used_recent") or it.get("required") or (it.get("system_qty") or 0) > 0
+                or (it.get("used") or 0) > 0 or (it.get("waste") or 0) > 0)
+
+
 def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
     """The list a branch issues from on one day: every item it keeps (the month-end count list), the system
     stock before that day's issue, the 7-day average, and the slip's own lines.
@@ -258,6 +267,7 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
             else:
                 it["used"] = it["waste"] = it["waste_reason"] = it["line_note"] = None
             it["recent"] = it["code"] in recent
+            it["in_default"] = default_list(it)                  # 3.2: on the short slip a branch opens with
             pl = prev_lines.get(it["code"])
             it["prev_used"] = it["prev_waste"] = it["prev_waste_reason"] = it["prev_note"] = None
             if pl:
@@ -272,6 +282,7 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
         z["items"].sort(key=lambda r: (not r["recent"], not r["required"], klass_order.get(r["class"], 3), r["name"]))
     st = status_of(con, branch_id, d)
     out = {k: base[k] for k in ("branch_id", "branch", "zones", "items", "required")}
+    out["items_default"] = sum(1 for z in base["zones"] for it in z["items"] if it["in_default"])
     out.update({"date": d.isoformat(), "today": today.isoformat(), "status": st, "status_th": STATUS_TH[st["status"]],
                 "slip": row and {k: row[k] for k in ("slip_id", "note", "reopened_by", "reopened_at", "reopen_note")},
                 "editable": st["status"] not in ("confirmed", "late"),

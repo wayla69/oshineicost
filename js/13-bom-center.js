@@ -45,6 +45,39 @@ function _bmcNum(v, d = 2) {
   if (v === null || v === undefined || v === '' || isNaN(v)) return '—';
   return Number(v).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: d });
 }
+// 4.6 · a gap in words (mirrors bom_center/fmt.py gap_th). "ผลต่าง −฿16,197 −8.1%" is read the wrong way round as often as the right
+// one, so the words carry the direction: "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)". kind: use = what the branch used against the recipes, issue =
+// what the slip issued against the recipes, count = the physical count against the system stock. Excel keeps the signed numbers.
+const _BMC_GAP_WORDS = { use: ['ใช้มากกว่าสูตร', 'ใช้น้อยกว่าสูตร', 'ใช้ตามสูตร'], issue: ['เบิกมากกว่าสูตร', 'เบิกน้อยกว่าสูตร', 'เบิกตามสูตร'],
+  count: ['นับได้มากกว่าระบบ', 'นับได้น้อยกว่าระบบ', 'นับตรงกับระบบ'] };
+const _BMC_GAP_SHORT = ['มากกว่า', 'น้อยกว่า', 'ตรง'];
+function bmcGapDir(value, pct) {                      // +1 more · -1 less · 0 the same (under ฿0.5 and 0.05 %); the baht gap wins when both are given
+  const v = value === null || value === undefined || value === '' ? null : Number(value);
+  const p = pct === null || pct === undefined || pct === '' ? null : Number(pct);
+  if (v !== null && !isNaN(v)) {
+    if (Math.abs(v) < 0.5 && (p === null || isNaN(p) || Math.abs(p) < 0.05)) return 0;
+    if (v !== 0) return v > 0 ? 1 : -1;
+  }
+  if (p === null || isNaN(p) || Math.abs(p) < 0.05) return 0;
+  return p > 0 ? 1 : -1;
+}
+// the pieces of the sentence and the ink of its direction: {dir, label, baht ('฿16,197' or ''), pct ('8.1%' or ''), ink, text}
+function bmcGapParts(value, pct, kind, short) {
+  const k = _BMC_GAP_WORDS[kind] ? kind : 'use';
+  const d = bmcGapDir(value, pct);
+  const w = short ? _BMC_GAP_SHORT : _BMC_GAP_WORDS[k];
+  const label = d > 0 ? w[0] : d < 0 ? w[1] : w[2];
+  const hasV = value !== null && value !== undefined && value !== '' && !isNaN(value), hasP = pct !== null && pct !== undefined && pct !== '' && !isNaN(pct);
+  const baht = d !== 0 && hasV && Math.abs(Number(value)) >= 0.5 ? `฿${_bmcNum(Math.abs(Number(value)), 0)}` : '';
+  const pc = d !== 0 && hasP && Math.abs(Number(pct)) >= 0.05 ? `${_bmcNum(Math.abs(Number(pct)), Math.abs(Number(pct)) >= 10 ? 0 : 1)}%` : '';
+  // the ink: more than the recipes (or less than the system stock) is the loss; the other direction is amber; the same is good
+  const bad = k === 'count' ? d < 0 : d > 0;
+  const ink = d === 0 ? 'var(--good-ink)' : bad ? 'var(--bad-ink)' : 'var(--amber-ink)';
+  const text = d === 0 ? label : label + (baht ? ' ' + baht : '') + (pc ? (baht ? ` (${pc})` : ' ' + pc) : '');
+  return { dir: d, label, baht, pct: pc, ink, text };
+}
+function bmcGapWords(value, pct, kind, short) { return bmcGapParts(value, pct, kind, short).text; }
+function bmcGapHtml(value, pct, kind, short) { const g = bmcGapParts(value, pct, kind, short); return `<span style="color:${g.ink}">${esc(g.text)}</span>`; }
 function _bmcPrice(v) {
   if (v === null || v === undefined) return '—';
   const n = Number(v);
@@ -364,7 +397,7 @@ async function bmcCrDecide(code, status, useCode, names) {
 // ── ingredient master ───────────────────────────────────────────────────────
 async function bmcLoadIng(force) {
   if (_bmcIng.length && !force) { bmcRenderIng(); return; }
-  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="15" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   try {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
     try { _bmcZones = (await _bmcJson(`${API}/api/bom-center/zones`)).zones || []; } catch (e) { _bmcZones = _bmcZones || []; }
@@ -372,7 +405,7 @@ async function bmcLoadIng(force) {
     _bmcIngEdits = {}; _bmcIngErr = {}; _bmcIngPage = 0;
     bmcRenderIng();
   } catch (e) {
-    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="14" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
+    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="15" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
   }
 }
 function _bmcIngVal(r, f) { const e = _bmcIngEdits[r.code]; return e && f in e ? e[f] : r[f]; }
@@ -385,6 +418,7 @@ function _bmcIngProblems(e) {
     if (!n) out.push('ชื่อต้องไม่ว่าง');
     else if (!/[A-Za-zก-๙]/.test(n)) out.push('ชื่อต้องมีตัวอักษร');
   }
+  if ('short_name' in e && String(e.short_name == null ? '' : e.short_name).trim().length > 40) out.push('ชื่อสั้นต้องไม่เกิน 40 ตัวอักษร');
   for (const [f, lbl] of [['qty_per_recv', 'ขนาดบรรจุ'], ['loss_pct', 'สูญเสีย %']]) {
     if (!(f in e) || e[f] === null) continue;
     if (typeof e[f] !== 'number' || !Number.isFinite(e[f])) out.push(`${lbl}ต้องเป็นตัวเลข`);
@@ -424,7 +458,7 @@ function bmcRenderIng() {
     ? `${_bmcChip('แสดงเฉพาะ: ' + _bmcIngProb, 'var(--amber-ink)')} <a href="#" onclick="_bmcIngProb='';bmcRenderIng();return false" style="color:var(--accent)">แสดงทุกปัญหา</a>` : '';
   const rows = _bmcIng.filter(r => (!kind || r.kind === kind) && (!only || r.problems.length)
     && (!only || !_bmcIngProb || r.problems.includes(_bmcIngProb))
-    && (!q || `${r.code} ${r.name_th || ''} ${(r.aliases || []).map(a => a.alias).join(' ')}`.toLowerCase().includes(q)));
+    && (!q || `${r.code} ${r.name_th || ''} ${r.short_name || ''} ${(r.aliases || []).map(a => a.alias).join(' ')}`.toLowerCase().includes(q)));
   const w = _bmcCanWrite();
   const inp = (r, f, width, type) => w
     ? `<input data-code="${esc(r.code)}" data-f="${f}" ${type ? `type="${type}" step="any"` : ''} value="${esc(_bmcIngVal(r, f) ?? '')}" onchange="bmcIngEdit(this)"
@@ -452,6 +486,7 @@ function bmcRenderIng() {
   document.getElementById('bmcIngBody').innerHTML = shown.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
       <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}<div class="text-[10px]"><a href="#" onclick="bmcAlToggle(${_bmcQ(r.code)});return false" style="color:var(--accent)">รหัสในระบบอื่น${r.aliases.length ? ` (${r.aliases.length})` : ''}</a></div>${r.aliases.length ? `<div class="text-[10px]" style="color:var(--text-muted)">${r.aliases.map(a => a.in_use ? `<b>${esc(a.alias)}</b>` : esc(a.alias)).join(', ')}</div>` : ''}</td>
       <td class="py-1 pr-2">${inp(r, 'name_th', 210)}</td>
+      <td class="py-1 pr-2">${w ? inp(r, 'short_name', 130).replace('<input ', '<input maxlength="40" placeholder="ชื่อเต็ม" ') : esc(r.short_name || '—')}</td>
       <td class="py-1 pr-2">${kindSel(r)}</td>
       <td class="py-1 pr-2">${inp(r, 'base_unit', 70)}</td>
       <td class="py-1 pr-2">${inp(r, 'recv_unit', 90)}</td>
@@ -465,7 +500,7 @@ function bmcRenderIng() {
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
       <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}
         ${(_bmcIngErr[r.code] || []).map(m => `<div class="text-[11px] bmc-rownote" role="alert" style="color:var(--bad-ink)">${esc(m)}</div>`).join('')}</td>
-    </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="14" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="14" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
+    </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="15" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="15" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
   if (_bmcAlOpen && document.getElementById('bmcAlCell')) { if (_bmcAlState && _bmcAlState.code === _bmcAlOpen) bmcAlRender(_bmcAlState); else bmcAlLoad(_bmcAlOpen); }
   const nProb = _bmcIng.filter(r => r.problems.length).length;
   if (!Object.keys(_bmcIngEdits).length) {

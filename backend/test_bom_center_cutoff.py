@@ -329,7 +329,7 @@ def test_the_receive_task_uses_the_stored_delivery(udon):  # noqa: F811
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, delivery_date) VALUES"
               "(1, '2026-10-05', '1', 'processed', '2026-10-07')")
     items = {i["key"].split(":")[0]: i for i in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7), now=NOW)["items"]}
-    assert items["receive_pending"]["detail"].endswith("(รอบ 1 ส่ง 7/10/2026)")
+    assert items["receive_pending"]["detail"] == "รอบ 1 (ส่ง 7/10)"            # 4.2: the round and the delivery day, never an order number
 
 
 # ── the HTTP layer ───────────────────────────────────────────────────────────

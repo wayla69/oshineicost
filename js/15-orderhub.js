@@ -670,14 +670,14 @@ async function ohbLoadMonth() {
     const m = await _bmcJson(`${API}/api/bom-center/hub/monthly?month=${_ohbMonthVal()}`);
     const pct = v => v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`;
     const t = m.total;
-    box.innerHTML = m.branches.length ? `<div class="text-sm" style="color:var(--text-primary)">${fmtMonthTh(m.month)} · ตามสูตร ฿${_bmcNum(t.bom_value, 0)} · ผลต่าง <b style="color:${t.gap_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">฿${_bmcNum(t.gap_value, 0)} (${pct(t.gap_pct)})</b> · ใช้เกินสูตร ฿${_bmcNum(t.over_value, 0)}
-        ${m.previous && m.previous.total.bom_value ? ` <span class="text-xs" style="color:var(--text-muted)">เดือนก่อน ${pct(m.previous.total.gap_pct)}</span>` : ''}</div>
+    box.innerHTML = m.branches.length ? `<div class="text-sm" style="color:var(--text-primary)">${fmtMonthTh(m.month)} · ตามสูตร ฿${_bmcNum(t.bom_value, 0)} · <b>${bmcGapHtml(t.gap_value, t.gap_pct, 'use')}</b> · ใช้เกินสูตร ฿${_bmcNum(t.over_value, 0)}
+        ${m.previous && m.previous.total.bom_value ? ` <span class="text-xs" style="color:var(--text-muted)">เดือนก่อน ${bmcGapWords(null, m.previous.total.gap_pct, 'use')}</span>` : ''}</div>
       <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">งวด</th>
-        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">ผลต่าง ฿</th><th class="py-1 pr-2 text-right">%</th><th class="py-1 pr-2 text-right">A / B / C ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้าง</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">เทียบสูตร</th><th class="py-1 pr-2 text-right">กลุ่มมูลค่าสูง / กลาง / ต่ำ ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้าง</th></tr></thead><tbody>` +
       m.branches.map(b => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(b.branch)}</td><td class="py-1 pr-2 text-right">${b.periods}</td>
-        <td class="py-1 pr-2 text-right">${_bmcNum(b.bom_value, 0)}</td><td class="py-1 pr-2 text-right" style="color:${b.gap_value > 0 ? 'var(--bad-ink)' : 'inherit'}">${_bmcNum(b.gap_value, 0)}</td>
-        <td class="py-1 pr-2 text-right">${pct(b.gap_pct)}</td><td class="py-1 pr-2 text-right">${['A', 'B', 'C'].map(k => _bmcNum(b.by_class[k], 0)).join(' / ')}</td>
-        <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${pct(b.prev_gap_pct)}</td>
+        <td class="py-1 pr-2 text-right">${_bmcNum(b.bom_value, 0)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(b.gap_value, b.gap_pct, 'use')}</td>
+        <td class="py-1 pr-2 text-right">${['A', 'B', 'C'].map(k => _bmcNum(b.by_class[k], 0)).join(' / ')}</td>
+        <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${b.prev_gap_pct == null ? '' : bmcGapWords(null, b.prev_gap_pct, 'use', true)}</td>
         <td class="py-1">${b.needs_reason ? _bmcChip(`ยังไม่ระบุเหตุผล ${b.needs_reason}`, 'var(--amber-ink)') : ''}${b.complete < b.periods ? _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--text-muted)') : ''}</td></tr>`).join('') + '</tbody></table></div>' +
       (m.top_reasons.length ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">เหตุผลหลัก</div>` + m.top_reasons.map(r => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0">${esc(r.label)} · ${r.items} รายการ · ฿${_bmcNum(r.value, 0)}</div>`).join('') : '')
       : `<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีงวดที่ปิดในเดือน${fmtMonthTh(m.month)}</span>`;
@@ -728,6 +728,7 @@ function _isrDm(iso) { const p = String(iso || '').split('-'); return p.length =
 const _ISR_CLASS_TH = { A: 'กลุ่มมูลค่าสูง', B: 'กลุ่มมูลค่ากลาง', C: 'กลุ่มมูลค่าต่ำ' };
 function _isrClassTh(c) { return _ISR_CLASS_TH[c] || String(c == null ? '' : c); }
 function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
+function _isrPctAbs(v) { return v == null ? '—' : `${_bmcNum(Math.abs(v), 1)}%`; }      // 4.6: where the words already say more / less
 function _isrMoney(v) { return v == null ? '—' : `${v < 0 ? '−' : ''}฿${_bmcNum(Math.abs(v), 0)}`; }
 function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)">—</span>' : _bmcNum(v, 0); }
 function isrFlagChips(d) {
@@ -737,7 +738,7 @@ function isrFlagChips(d) {
   if (t.draft_days) chips.push(_bmcChip(`ยังไม่ยืนยัน ${t.draft_days} วัน`, 'var(--amber-ink)'));
   if (t.missing_days) chips.push(_bmcChip(`ไม่มีใบ ${t.missing_days} วัน`, 'var(--bad-ink)'));
   if (!d.flags.length) chips.push(_bmcChip('✓ ไม่พบการเบิกเกินสูตรต่อเนื่อง', 'var(--good-ink)'));
-  d.flags.forEach(f => chips.push(_bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPct(f.max_pct)}) ${_isrDm(f.from)}–${_isrDm(f.to)}`, 'var(--bad-ink)')));
+  d.flags.forEach(f => chips.push(_bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)}) ${_isrDm(f.from)}–${_isrDm(f.to)}`, 'var(--bad-ink)')));
   return chips.join(' ');
 }
 function isrDailyTable(d, openFn) {
@@ -745,22 +746,20 @@ function isrDailyTable(d, openFn) {
   const t = d.totals;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
   const body = d.rows.map(r => {
-    const ink = r.var_pct != null && r.var_pct > 0 ? 'var(--bad-ink)' : 'var(--text-primary)';
     return `<tr style="border-top:1px solid var(--border);cursor:pointer${r.flagged ? ';background:var(--bg-input)' : ''}" onclick="${openFn}('${r.date}')">
       <td class="py-1 pr-2" style="white-space:nowrap"><a href="#" onclick="return false" style="color:var(--accent);font-weight:600">${_isrDm(r.date)}</a> ${esc(r.weekday_th)}</td>
       <td class="py-1 pr-2">${_bmcChip(r.slip_status_th, _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)')}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(r.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(r.waste_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(r.issued_value)}</td><td class="py-1 pr-2 text-right">${r.trading ? _isrBaht(r.bom_value) : '<span style="color:var(--text-muted)">—</span>'}</td>
-      <td class="py-1 pr-2 text-right" style="color:${ink}">${_isrBaht(r.var_value)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${_isrPct(r.var_pct)}</td>
-      <td class="py-1">${r.over_items.map(o => `${esc(o.name)} ${_isrPct(o.var_pct)}`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}</td></tr>`;
+      <td class="py-1 pr-2 text-right">${r.confirmed ? bmcGapHtml(r.var_value, r.var_pct, 'issue') : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td class="py-1">${r.over_items.map(o => `${esc(o.name)} (${bmcGapWords(null, o.var_pct, 'issue', true)})`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('ผลต่าง ฿', 1)}${th('ผลต่าง %', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์')}</tr></thead>
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('เทียบสูตร', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์')}</tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
-      <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right" style="color:${t.var_value > 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrBaht(t.var_value)}</td>
-      <td class="py-1 pr-2 text-right">${_isrPct(t.var_pct)}</td><td></td></tr></tfoot></table></div>
+      <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(t.var_value, t.var_pct, 'issue')}</td><td></td></tr></tfoot></table></div>
     <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน${fmtMonthTh(d.price_month)} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
 }
 function isrDayItems(d, closeJs) {
@@ -771,19 +770,17 @@ function isrDayItems(d, closeJs) {
       ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}</span>` : ''}
       ${closeJs ? `<button onclick="${closeJs}" style="margin-left:auto;font-size:12px;color:var(--text-muted);background:none;border:0;cursor:pointer">ปิด</button>` : ''}</div>`;
   const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณตามสูตร</div>';
-  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPct(f.max_pct)})`, 'var(--bad-ink)')).join(' ')}</div>` : '';
+  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})`, 'var(--bad-ink)')).join(' ')}</div>` : '';
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
   const rows = d.rows.map(r => {
-    const ink = r.var_pct != null && r.var_pct > 0 ? 'var(--bad-ink)' : 'var(--text-primary)';
     return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(r.name)}</b><div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.code)} · ${esc(_isrClassTh(r.class))}${r.waste_reason_th ? ' · ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : ''}</div></td>
       <td class="py-1 pr-2 text-right">${q(r.used, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.waste, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.issued, r.base_unit)}</td>
-      <td class="py-1 pr-2 text-right">${q(r.bom, r.base_unit)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${r.var_qty == null ? '—' : (r.var_qty > 0 ? '+' : '') + _bmcNum(r.var_qty, 1)}</td>
-      <td class="py-1 pr-2 text-right" style="color:${ink}">${_isrPct(r.var_pct)}</td><td class="py-1 pr-2 text-right" style="color:${ink}">${_isrBaht(r.var_value)}</td>
+      <td class="py-1 pr-2 text-right">${q(r.bom, r.base_unit)}</td><td class="py-1 pr-2 text-right">${r.var_qty == null && r.var_value == null ? '—' : bmcGapHtml(r.var_value, r.var_pct, 'issue')}${r.var_qty == null || !r.var_qty ? '' : `<div class="text-[10.5px]" style="color:var(--text-muted)">${_bmcNum(Math.abs(r.var_qty), 1)} ${esc(r.base_unit || '')}</div>`}</td>
       <td class="py-1">${r.signal ? _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}</td></tr>`;
   }).join('');
   return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ตามสูตร', 1)}${th('ผลต่าง', 1)}${th('ผลต่าง %', 1)}${th('ผลต่าง ฿', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
+      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ตามสูตร', 1)}${th('เทียบสูตร', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
 }
 function isrReconHead(r) {
@@ -795,8 +792,8 @@ function isrReconHead(r) {
       ${miss.length ? _bmcChip(`ขาดใบตัดเบิก ${miss.length} วัน`, 'var(--bad-ink)') : ''}
       ${sl.draft_days.length ? _bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
       ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}</div>
-    <div class="mt-1 text-sm">ผลต่างรวม <b style="color:${t.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(t.diff_value)}</b> ·
-      นับได้น้อยกว่าระบบ ${_isrMoney(t.under_value)} · นับได้มากกว่าระบบ ${_isrMoney(t.over_value)} · เกินเกณฑ์ ${t.flagged} รายการ ·
+    <div class="mt-1 text-sm">สุทธิ <b>${bmcGapHtml(t.diff_value, null, 'count')}</b> ·
+      รายการที่นับได้น้อยกว่าระบบรวม ${_isrMoney(Math.abs(t.under_value || 0))} · รายการที่นับได้มากกว่าระบบรวม ${_isrMoney(Math.abs(t.over_value || 0))} · เกินเกณฑ์ ${t.flagged} รายการ ·
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
     ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) คงเหลือตามระบบจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
 }
@@ -810,7 +807,6 @@ function isrReconTable(r, o) {
   if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในเกณฑ์</span>';
   const pfx = o.pfx || 'isrRc';
   const q = (v, x) => v == null ? '—' : o.qty ? o.qty(v, x) : `${_bmcNum(v, 1)} ${esc(x.base_unit || '')}`;
-  const sg = (v, x) => v == null ? '—' : o.qty ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${o.qty(Math.abs(v), x)}` : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}`;
   return rows.map(x => {
     const [label, ink] = _ISR_ST[x.status] || [x.status_th, 'var(--text-muted)'];
     const flag = x.status === 'over' || x.status === 'under';
@@ -818,9 +814,9 @@ function isrReconTable(r, o) {
     return `<div style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ${esc(_isrClassTh(x.class))} (เกณฑ์ ±${r.thresholds[x.class]}%)</span>
-        <span style="margin-left:auto" class="text-sm">${x.diff_value != null ? `<b style="color:${x.diff_value < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_isrMoney(x.diff_value)}</b>` : ''}</span></div>
+        <span style="margin-left:auto" class="text-sm">${x.diff_value != null && bmcGapDir(x.diff_value) !== 0 ? `<b style="color:${bmcGapParts(x.diff_value, null, 'count').ink}">${bmcGapParts(x.diff_value, null, 'count').baht}</b>` : ''}</span></div>
       <div class="text-xs mt-0.5" style="color:var(--text-secondary)">${o.brief ? '' : `ยกมา ${q(x.begin, x)} + รับ ${q(x.received, x)} + เคลม/ปรับ ${q(x.claims, x)} − ตัดเบิก ${q(x.used, x)} − ของเสีย ${q(x.waste, x)}
-        = `}คงเหลือตามระบบ <b>${q(x.system, x)}</b> · นับจริง <b>${q(x.count, x)}</b>${x.diff != null ? ` · ผลต่าง <b class="isr-diff" style="color:${x.diff < 0 ? 'var(--bad-ink)' : x.diff > 0 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${sg(x.diff, x)}${x.diff_pct != null ? ` (${_isrPct(x.diff_pct)})` : ''}</b>` : ''}</div>
+        = `}คงเหลือตามระบบ <b>${q(x.system, x)}</b> · นับจริง <b>${q(x.count, x)}</b>${x.diff != null ? ` · ${(g => g.dir ? `${esc(g.label)} <b class="isr-diff" style="color:${g.ink}">${q(Math.abs(x.diff), x)}${g.pct ? ` (${g.pct})` : ''}</b>` : `<b class="isr-diff" style="color:${g.ink}">${esc(g.label)}</b>`)(bmcGapParts(x.diff, x.diff_pct, 'count'))}` : ''}</div>
       ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลตรวจนับต้นงวดหรือปลายงวด จึงยังเปรียบเทียบไม่ได้</div>' : ''}
       ${flag && o.edit ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs${o.qty ? ' brn-reason' : ''}">
         <select id="${pfx}Rs_${esc(x.code)}" style="${o.qty ? 'flex:1 1 100%;' : ''}border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
@@ -930,9 +926,10 @@ function ohbRenderPerSales() {
         <th class="pr-2">สาขา</th><th class="pr-2 text-right">ยอดขาย (฿)</th><th class="pr-2 text-right">มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 (฿)</th>${cmp ? '<th class="pr-2 text-right">การใช้ตามสูตรเทียบค่ากลาง</th><th class="pr-2 text-right">ยอดซื้อเทียบค่ากลาง</th>' : ''}<th class="pr-2 text-right">รายการที่ใช้ไม่สม่ำเสมอ</th></tr></thead>
       <tbody>${d.branches.map(b => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1"><a href="#" onclick="ohbPsPick(${b.branch_id});return false" style="color:var(--accent);text-decoration:underline">${esc(b.branch)}</a>${b.is_benchmark ? ' ' + _bmcChip('ค่ากลาง', 'var(--navy-ink)') : ''}${b.below_benchmark ? ' ' + _bmcChip(b.below_benchmark_th, 'var(--amber-ink)') : ''}${b.no_purchase_th ? ` <span class="text-[10.5px]" style="color:var(--text-muted)">${esc(b.no_purchase_th)}</span>` : ''}</td>
         <td class="pr-2 text-right">${_bmcNum(b.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(b.value_per_100k, 0)}</td>${cmp ? `<td class="pr-2 text-right" style="color:var(--text-secondary)">${pvs(b.vs_benchmark_pct)}</td><td class="pr-2 text-right" style="color:${b.below_benchmark ? 'var(--amber-ink)' : 'var(--text-secondary)'}" title="${b.purchase_per_100k_value == null ? '' : 'ยอดซื้อ ฿' + _bmcNum(b.purchase_per_100k_value, 0) + ' ต่อยอดขาย ฿100,000 · ที่มา ' + (psrc[b.purchase_source] || '') + ' · ' + b.purchase_days + ' วันขาย'}">${pvs(b.purchase_vs_benchmark_pct)}</td>` : ''}
-        <td class="pr-2 text-right" style="color:${b.items.some(i => i.steady === false) ? 'var(--amber-ink)' : 'var(--text-muted)'}">${b.items.filter(i => i.steady === false).length}</td></tr>`).join('')}
+        <td class="pr-2 text-right" style="color:${b.items.some(i => i.steady === false) ? 'var(--amber-ink)' : 'var(--text-muted)'}">${b.items.some(i => i.steady === false) ? `<a href="#" onclick="ohbPsUnsteady(${b.branch_id});return false" style="color:var(--accent);text-decoration:underline" title="ดู 5 รายการที่มูลค่าสูงสุด">${b.items.filter(i => i.steady === false).length}</a>` : 0}</td></tr>`).join('')}
         ${d.benchmark ? `<tr style="border-top:1px solid var(--border)"><td class="pr-2 py-1 font-semibold">${esc(d.benchmark.label)} <span class="text-[10.5px]" style="color:var(--text-muted)">(มัธยฐานของ ${d.benchmark.n} สาขา)</span></td><td class="pr-2 text-right font-semibold">${_bmcNum(d.benchmark.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(d.benchmark.value_per_100k, 0)}</td><td class="pr-2 text-right">–</td><td class="pr-2 text-right" style="color:var(--text-secondary)">${d.purchase_benchmark ? 'ซื้อ ฿' + _bmcNum(d.purchase_benchmark.per_100k_value, 0) : '–'}</td><td></td></tr>` : ''}
         ${d.chain ? `<tr style="border-top:1px solid var(--border)"><td class="pr-2 py-1 font-semibold">ทั้งเครือ <span class="text-[10.5px]" style="color:var(--text-muted)">(ทุกสาขารวมกัน)</span></td><td class="pr-2 text-right font-semibold">${_bmcNum(d.chain.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(d.chain.value_per_100k, 0)}</td>${cmp ? '<td></td><td></td>' : ''}<td></td></tr>` : ''}</tbody></table></div>
+      <div id="ohbPsTop" class="mt-2"></div>
       ${cmp ? `<div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่ากลางคือมัธยฐานของสาขาของบริษัท ใช้เป็นเกณฑ์เทียบ · “ยอดซื้อเทียบค่ากลาง” เทียบมูลค่าที่แต่ละสาขาซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 (ไฟล์ราคารายสาขา ถ้าไม่มีใช้ใบสั่งซื้อที่ส่งจากไดกิโตะ กรุ๊ป) · สาขาที่ไม่อยู่ในค่ากลางและซื้อต่ำกว่าค่ากลางเกิน ${_bmcNum(d.buffer_pct, 0)}% มีป้ายเตือน · สาขาที่ไม่มียอดซื้อไม่มีป้าย · ${esc(d.buffer_note || '')}</div>` : ''}`;
     const useBench = !!d.benchmark && _ohbPsView === 'bench';
     const src = useBench ? d.benchmark : d.chain;
@@ -946,6 +943,18 @@ function ohbRenderPerSales() {
     ${b.is_benchmark ? _bmcChip('สาขาที่ใช้เป็นค่ากลาง', 'var(--navy-ink)') : ''}${b.below_benchmark ? _bmcChip(b.below_benchmark_th, 'var(--amber-ink)') : ''}
     ${b.vs_benchmark_pct != null ? `<span class="text-xs font-normal" style="color:var(--text-secondary)"> · การใช้ตามสูตรเทียบค่ากลาง ${pvs(b.vs_benchmark_pct)}</span>` : ''}
     ${b.purchase_per_100k_value != null ? `<span class="text-xs font-normal" style="color:var(--text-secondary)"> · ซื้อจากไดกิโตะ กรุ๊ป ฿${_bmcNum(b.purchase_per_100k_value, 0)} ต่อยอดขาย ฿100,000${b.purchase_vs_benchmark_pct != null ? ' (ยอดซื้อเทียบค่ากลาง ' + pvs(b.purchase_vs_benchmark_pct) + ')' : ''} · ที่มา ${psrc[b.purchase_source] || ''} ${b.purchase_days} วันขาย</span>` : (b.no_purchase_th ? `<span class="text-xs font-normal" style="color:var(--text-muted)"> · ${esc(b.no_purchase_th)}</span>` : '')}</div>${_ohbPsTable(b.items, undefined, !!d.benchmark)}`;
+}
+// 4.5 · "รายการที่ใช้ไม่สม่ำเสมอ N" of a branch is a link: the 5 such items of the most baht (value of one ฿100,000 of sales), and the way to the whole list
+function ohbPsUnsteady(id) {
+  const d = _ohbPs, box = document.getElementById('ohbPsTop');
+  const b = d && (d.branches || []).find(x => x.branch_id === id);
+  if (!b || !box) return;
+  const bad = b.items.filter(i => i.steady === false).sort((x, y) => (y.value_per_100k || 0) - (x.value_per_100k || 0));
+  box.innerHTML = `<div class="card p-2" style="border-left:4px solid var(--amber-ink)"><div class="flex flex-wrap items-center gap-2"><b class="text-sm" style="color:var(--text-primary)">${esc(b.branch)} · ใช้ไม่สม่ำเสมอ ${bad.length} รายการ · แสดง ${Math.min(5, bad.length)} รายการที่มูลค่าสูงสุด</b>
+      <a href="#" onclick="ohbPsPick(${id});return false" class="text-xs" style="color:var(--accent)">ดูทุกรายการของสาขานี้ →</a>
+      <button type="button" onclick="document.getElementById('ohbPsTop').innerHTML=''" class="text-xs" style="margin-left:auto;border:0;background:none;color:var(--text-muted);cursor:pointer">ปิด</button></div>
+    <table class="text-xs w-full mt-1"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">วัตถุดิบ</th><th class="pr-2 text-right">มูลค่า (฿) ต่อยอดขาย ฿100,000</th><th class="text-right">แกว่งต่อสัปดาห์</th></tr></thead>
+      <tbody>${bad.slice(0, 5).map(it => `<tr class="border-t" style="border-color:var(--border-soft)"><td class="pr-2 py-1" title="${esc(it.code)}">${esc(it.name)}</td><td class="pr-2 text-right">${it.value_per_100k == null ? '–' : _bmcNum(it.value_per_100k, 0)}</td><td class="text-right" style="color:var(--amber-ink)">±${_bmcNum(it.swing_pct, 0)}%</td></tr>`).join('')}</tbody></table></div>`;
 }
 function ohbPsPick(id) { const sel = document.getElementById('ohbPsBranch'); if (sel) { sel.value = String(id); ohbLoadPerSales(); } }
 async function ohbLoadPerSales() {
