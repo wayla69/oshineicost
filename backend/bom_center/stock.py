@@ -280,6 +280,7 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
             "code": c, "name": name or c, "base_unit": base, "count_unit": unit, "per_count_unit": factor,
             "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A", "monitored": bool(mon),
             "use_per_day": round(per_day.get(c, 0.0), 3),
+            "pieces_unit": (conv.weight_avg_step(c) or {}).get("unit"),     # PR-U2: a manual receipt may carry the pieces counted
             "last_qty": last_q, "last_unit": last_u, "last_base": pv[2] if pv else None,
             "draft_qty": draft.get(c, (None,))[0]})
     order = {"A": 0, "B": 1, "C": 2}

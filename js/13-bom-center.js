@@ -1041,6 +1041,7 @@ async function bmcPrepPreview() {
         <b>${esc(w.prepared_code)}</b> ${esc(w.prepared_name || '')} ← <span style="color:var(--text-secondary)">แถว ${w.row}: ${esc(w.src_code)} ${esc(w.src_name)} (${esc(w.yield_text || '')})</span>
         ${_bmcChip(methodTh[w.method] || w.method, w.score >= 1.1 || w.method === 'map' ? 'var(--good-ink)' : 'var(--amber-ink)')}
         ${w.replaces ? _bmcChip('แทนสูตรเดิม', 'var(--text-muted)') : ''}
+        ${w.portion_skip ? _bmcChip('ข้าม', 'var(--amber-ink)') + ' <span style="color:var(--amber-ink)">' + esc(w.note_th || '') + '</span>' : ''}
         ${w.unresolved ? `<span style="color:var(--bad-ink)"> · ไม่พบรหัส ${w.unresolved}:${w.lines.filter(l => !l.ingredient_code).map(l => esc(l.note)).join(', ')}</span>` : ''}</div>`).join('');
     const um = p.unmatched.map(u => `<div style="border-top:1px solid var(--border);padding:5px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <span>แถว ${u.row}: <b>${esc(u.src_code)} ${esc(u.name)}</b> <span style="color:var(--text-muted)">${esc(u.yield_text || '')}</span></span>
@@ -1051,7 +1052,7 @@ async function bmcPrepPreview() {
       <p class="text-xs mt-1" style="color:var(--text-secondary)">สูตรในไฟล์ ${p.rows} สูตร · บันทึกได้ <b>${p.writes.length}</b> รหัสในทะเบียน (จับคู่ด้วยชื่อและปริมาณที่ได้ต่อสูตร ไม่ใช้รหัสในไฟล์เนื่องจากเป็นชุดรหัสเก่า) ·
         ไม่พบรหัสวัตถุดิบ ${p.unresolved_lines} บรรทัด (บันทึกได้ และระบุรหัสภายหลังในหน้าสูตร) · สูตรในไฟล์ที่ยังจับคู่รหัสไม่ได้ ${p.unmatched.length} ·
         รหัสกึ่งสำเร็จที่ยังไม่มีสูตร ${p.prepared_without.length}</p>
-      ${_bmcCanRecipes() ? `<div class="flex gap-2 my-2">${_bmcBtn(`บันทึก ${p.writes.length} สูตร`, 'bmcPrepApply()', true)}${_bmcBtn('ยกเลิก', "document.getElementById('bmcPrepImport').style.display='none'")}<span id="bmcPrepApplyStatus" class="text-xs"></span></div>` : ''}
+      ${_bmcCanRecipes() ? `<div class="flex gap-2 my-2">${_bmcBtn(`บันทึก ${p.writes.filter(w => !w.portion_skip).length} สูตร`, 'bmcPrepApply()', true)}${_bmcBtn('ยกเลิก', "document.getElementById('bmcPrepImport').style.display='none'")}<span id="bmcPrepApplyStatus" class="text-xs"></span></div>` : ''}
       ${um ? `<div class="text-xs font-semibold mt-2" style="color:var(--text-primary)">สูตรในไฟล์ที่ยังจับคู่รหัสไม่ได้: ระบุรหัส หรือกด “ไม่ใช่รายการของร้าน”</div><div class="text-xs">${um}</div>` : ''}
       <div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">รายการที่จะบันทึก (สีเหลือง = ชื่อไม่ตรงกันทั้งหมด ควรตรวจ)</div><div class="text-xs">${writes}</div>`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -1070,7 +1071,7 @@ async function bmcPrepApply() {
     const fd = new FormData(); fd.append('file', _bmcPrepFile, _bmcPrepFile.name);
     const r = await _bmcJson(`${API}/api/bom-center/prep/import-semi?dry_run=false`, { method: 'POST', body: fd });
     document.getElementById('bmcPrepImport').style.display = 'none';
-    _bmcStatus('bmcPrepStatus', `✓ บันทึกสูตรกึ่งสำเร็จ ${r.saved} รหัส`, 'var(--good-ink)');
+    _bmcStatus('bmcPrepStatus', `✓ บันทึกสูตรกึ่งสำเร็จ ${r.saved} รหัส` + ((r.skipped || []).length ? ` · ข้ามสูตรแบ่งชิ้น ${r.skipped.length} รหัส (แก้ไขที่การ์ดสูตรแบ่งชิ้น)` : ''), 'var(--good-ink)');
     bmcLoadPrep();
   } catch (e) { _bmcStatus('bmcPrepApplyStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
@@ -1084,9 +1085,12 @@ async function bmcPrepImportFlat(input) {
   try {
     const pre = await send(true);
     if (pre.errors.length) { _bmcStatus('bmcPrepStatus', 'ไฟล์มีปัญหา: ' + pre.errors.slice(0, 3).join(' · '), 'var(--bad-ink)'); return; }
-    if (!await uiConfirm(`นำเข้าแม่แบบ: สูตรของ ${pre.codes} รหัสจะถูกแทนที่`, { title: 'ยืนยันการนำเข้าแม่แบบสูตรกึ่งสำเร็จ', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
+    const sk = pre.skipped || [];
+    if (!await uiConfirm(`นำเข้าแม่แบบ: สูตรของ ${pre.codes - sk.length} รหัสจะถูกแทนที่`
+      + (sk.length ? `\n${sk.length} รหัสเป็นสูตรแบ่งชิ้น จะข้าม (${sk.map(x => x.code).join(', ')})\n${sk[0].note}` : ''),
+      { title: 'ยืนยันการนำเข้าแม่แบบสูตรกึ่งสำเร็จ', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
     const r = await send(false);
-    _bmcStatus('bmcPrepStatus', `✓ บันทึก ${r.saved} รหัส`, 'var(--good-ink)');
+    _bmcStatus('bmcPrepStatus', `✓ บันทึก ${r.saved} รหัส` + (sk.length ? ` · ข้ามสูตรแบ่งชิ้น ${sk.length} รหัส` : ''), 'var(--good-ink)');
     bmcLoadPrep();
   } catch (e) { _bmcStatus('bmcPrepStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
@@ -1104,6 +1108,8 @@ async function bmcLoadConv() {
   const dl = document.getElementById('bmcCodeList');
   if (dl && !dl.children.length) dl.innerHTML = _bmcIng.map(r => `<option value="${esc(r.code)}">${esc(r.name_th || '')}</option>`).join('');
   bmcLoadLadder();
+  bmcLoadAvg();
+  bmcLoadPack();
 }
 function _bmcLadCode() {
   const t = (document.getElementById('bmcConvCode').value || '').trim();
@@ -1230,6 +1236,105 @@ async function bmcConvert() {
         <div class="text-xs" style="color:var(--text-muted)">${esc(d.how)}</div>` +
         (d.cost != null ? `<div>ต้นทุน <b>${ap}฿${_bmcNum(d.cost, 3)}</b> ที่ราคา ${_bmcPrice(d.price_per_base)}/${esc(d.base_unit)} เดือน${fmtMonthTh(d.month)}</div>` : '<div>ยังไม่มีราคา</div>');
   } catch (e) { out.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
+// ── PR-U2 · ค่าเฉลี่ยจากการรับจริง: the average weight per piece the branches' receipts show ─────────────────
+// The branch counts the pieces it receives next to the weight; the server works out Σ weight ÷ Σ pieces (90 days, every branch) and
+// proposes it when there are enough receipts and it differs. The analyst uses it or keeps the old value with a reason — nothing changes silently.
+let _bmcAvgRows = {};
+const _BMC_SHORT = { กิโลกรัม: 'กก.', มิลลิลิตร: 'มล.' };
+async function bmcLoadAvg() {
+  const box = document.getElementById('bmcAvgBody'), hist = document.getElementById('bmcAvgHist');
+  if (!box) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/units/avg-proposals?days=90`);
+    const w = _bmcCanPrices();
+    _bmcAvgRows = {};
+    d.rows.forEach(r => { _bmcAvgRows[r.code + '|' + r.unit] = r; });
+    const su = u => _BMC_SHORT[u] || u || '';
+    const rows = d.rows.map(r => {
+      const rg = r.range ? ` (ช่วง ${_bmcNum(r.range[0], 2)}–${_bmcNum(r.range[1], 2)})` : '';
+      const obs = r.observed == null
+        ? '<span style="color:var(--text-muted)">ยังไม่มีการนับจำนวนตอนรับ</span>'
+        : `<b>≈ ${_bmcNum(r.observed, 2)} ${esc(su(r.parent))}</b><div style="color:var(--text-muted)">${r.n_receipts} ครั้ง · ${_bmcNum(r.n_pieces, 0)} ${esc(r.unit)} · ต่อครั้ง ${_bmcNum(r.min_receipt_avg, 2)}–${_bmcNum(r.max_receipt_avg, 2)}</div>`;
+      const state = r.proposal ? '' : !r.enough ? `<div style="color:var(--amber-ink)">${esc(r.need_text)}</div>`
+        : r.state === 'decided' ? '<div style="color:var(--text-muted)">ตัดสินใจแล้ว รอการรับครั้งใหม่</div>' : '<div style="color:var(--text-muted)">ใกล้เคียงค่าที่ใช้</div>';
+      const diff = r.diff_pct == null ? '—' : `<b style="color:${r.proposal ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${Math.abs(r.diff_pct) < 0.05 ? '0' : (r.diff_pct > 0 ? '+' : '') + _bmcNum(r.diff_pct, 1)}%</b>`;
+      const btn = r.proposal && w ? `<div class="flex flex-wrap gap-1">${_bmcBtn('ใช้ค่านี้', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'applied')`, true)}${_bmcBtn('คงค่าเดิม', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'kept')`)}</div>` : '';
+      return `<tr style="border-top:1px solid var(--border);vertical-align:top"${r.proposal ? ' class="bmc-avg-proposal"' : ''}>
+        <td class="py-1 pr-2"><b style="color:var(--text-primary)">${esc(r.name || r.code)}</b><div style="color:var(--text-muted)">${esc(r.code)}</div></td>
+        <td class="py-1 pr-2">${esc(r.unit)}</td>
+        <td class="py-1 pr-2">${_bmcNum(r.current, 2)} ${esc(su(r.parent))}${rg}</td>
+        <td class="py-1 pr-2">${obs}${state}</td><td class="py-1 pr-2">${diff}</td><td class="py-1">${btn}</td></tr>`;
+    }).join('');
+    box.innerHTML = d.rows.length
+      ? `<div class="mb-2">${d.proposals ? `มี ${d.proposals} รายการที่ค่าจากการรับจริงต่างจากค่าที่ใช้ รอฝ่ายวิเคราะห์ตัดสินใจ` : 'ยังไม่มีรายการที่ต้องตัดสินใจ'} <span id="bmcAvgStatus" class="ml-2"></span></div>
+        <div style="overflow-x:auto"><table class="w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
+          <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2">ค่าที่ใช้ (ช่วง)</th><th class="pr-2">จากการรับจริง</th><th class="pr-2">ต่าง %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : 'ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย (เช่น 1 ตัว ≈ 4.5 กิโลกรัม) · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับสินค้า';
+    if (hist) hist.innerHTML = d.history.length ? d.history.map(h => `<div style="border-top:1px solid var(--border);padding:4px 0">
+        ${esc(fmtDay((h.decided_at || '').slice(0, 10)))} · <b>${esc(h.name || h.ingredient_code)}</b> ${esc(h.unit)} · ${h.decision === 'applied' ? 'ใช้ค่าที่รับจริง' : 'คงค่าเดิม'}
+        · ใช้ ${_bmcNum(h.current_avg, 2)} → รับจริง ≈ ${_bmcNum(h.observed_avg, 2)} (${h.n_receipts} ครั้ง ${_bmcNum(h.n_pieces, 0)} ${esc(h.unit)})${h.note ? ' · ' + esc(h.note) : ''} · ${esc(whoTh(h.decided_by))}</div>`).join('')
+      : '<span style="color:var(--text-muted)">ยังไม่มีการตัดสินใจ</span>';
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcAvgDecide(code, unit, decision) {
+  const r = _bmcAvgRows[code + '|' + unit];
+  if (!r) return;
+  let note = null;
+  if (decision === 'kept') {
+    note = await uiPrompt(`เหตุผลที่คงค่าเดิมของ ${r.name || code} (จำเป็น)`, '', { title: 'คงค่าเดิม', okText: 'คงค่าเดิม' });
+    if (!note || !String(note).trim()) return;
+  } else if (!await uiConfirm(`ใช้ค่าที่รับจริงของ ${r.name || code}\n1 ${unit} จาก ${_bmcNum(r.current, 2)} เป็น ${_bmcNum(r.observed, 2)} ${_BMC_SHORT[r.parent] || r.parent}\nต้นทุนของเดือนที่ยังไม่ประกาศใช้เปลี่ยนตาม · เดือนที่ประกาศใช้แล้วไม่เปลี่ยน`,
+    { title: 'ยืนยันการใช้ค่าเฉลี่ยใหม่', ok: 'ใช้ค่านี้', cancel: 'ยกเลิก' })) return;
+  try {
+    const out = await _bmcJson(`${API}/api/bom-center/units/avg-decision`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, unit, decision, note }) });
+    await bmcLoadAvg();
+    bmcStatus('bmcAvgStatus', true, String(out.message || '').replace(/^✓\s*/, ''));
+    if (decision === 'applied') { await bmcLoadIng(true); bmcLoadLadder(); }
+  } catch (e) { bmcStatus('bmcAvgStatus', false, String(e.message || e).slice(0, 220)); }
+}
+
+// ── PR-U2 · ขนาดบรรจุที่สาขาแจ้ง: "ขนาดบรรจุไม่ตรง" reported from the receive form, grouped by item × unit × reported size ──
+async function bmcLoadPack() {
+  const box = document.getElementById('bmcPackBody'), hist = document.getElementById('bmcPackHist');
+  if (!box) return;
+  try {
+    const [p, a] = await Promise.all([_bmcJson(`${API}/api/bom-center/units/pack-reports?status=pending`), _bmcJson(`${API}/api/bom-center/units/pack-reports?status=all`)]);
+    const w = _bmcCanPrices();
+    const rows = p.groups.map(g => `<tr style="border-top:1px solid var(--border);vertical-align:top">
+        <td class="py-1 pr-2"><b style="color:var(--text-primary)">${esc(g.name || g.ingredient_code)}</b><div style="color:var(--text-muted)">${esc(g.ingredient_code)}</div></td>
+        <td class="py-1 pr-2">${esc(g.system_text)}</td><td class="py-1 pr-2"><b>${esc(g.reported_text)}</b></td>
+        <td class="py-1 pr-2">${g.n_branches} สาขา / ${g.n_reports} ครั้ง</td>
+        <td class="py-1 pr-2">${g.branches.map(b => `${esc(b.branch)} ${esc(fmtDay(b.date))}`).join('<br>')}</td>
+        <td class="py-1 pr-2">${g.notes.length ? g.notes.map(n => `${esc(n.branch)}: ${esc(n.note)}`).join('<br>') : '—'}</td>
+        <td class="py-1">${w ? `<div class="flex flex-wrap gap-1">${_bmcBtn('ใช้ค่านี้', `bmcPackDecide(${_bmcQ(g.report_ids)},'applied',${_bmcQ(g.name || g.ingredient_code)},${_bmcQ(g.reported_text)})`, true)}${_bmcBtn('ไม่ใช้', `bmcPackDecide(${_bmcQ(g.report_ids)},'rejected',${_bmcQ(g.name || g.ingredient_code)},${_bmcQ(g.reported_text)})`)}</div>` : ''}</td></tr>`).join('');
+    box.innerHTML = p.groups.length
+      ? `<div class="mb-2">รอตัดสินใจ ${p.groups.length} เรื่อง · ตรวจกับฉลากที่สาขาถ่ายส่งทางไลน์ แล้วเลือกใช้ค่าที่แจ้งหรือไม่ใช้ <span id="bmcPackStatus" class="ml-2"></span></div>
+        <div style="overflow-x:auto"><table class="w-full" style="min-width:680px"><thead><tr class="text-left" style="color:var(--text-muted)">
+          <th class="pr-2">วัตถุดิบ</th><th class="pr-2">ในระบบ</th><th class="pr-2">สาขาแจ้ง</th><th class="pr-2">จำนวน</th><th class="pr-2">สาขา วันที่</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : '<span id="bmcPackStatus"></span>ไม่มีเรื่องที่รอตัดสินใจ · สาขาแจ้งได้จากฟอร์มรับสินค้า ปุ่ม “ขนาดบรรจุไม่ตรง”';
+    const done = a.groups.filter(g => g.status !== 'pending');
+    if (hist) hist.innerHTML = done.length ? done.slice(0, 40).map(g => `<div style="border-top:1px solid var(--border);padding:4px 0">
+        <b>${esc(g.name || g.ingredient_code)}</b> · ${esc(g.system_text)} → ${esc(g.reported_text)} · ${g.status === 'applied' ? 'ใช้ค่าที่แจ้ง' : 'ไม่ใช้'}${g.decision_note ? ' — ' + esc(g.decision_note) : ''} · ${g.n_branches} สาขา</div>`).join('')
+      : '<span style="color:var(--text-muted)">ยังไม่มีเรื่องที่ตัดสินใจแล้ว</span>';
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+async function bmcPackDecide(ids, decision, name, text) {
+  let note = null;
+  if (decision === 'rejected') {
+    note = await uiPrompt(`เหตุผลที่ไม่ใช้ค่าที่แจ้งของ ${name} (จำเป็น · สาขาอ่านได้ที่ประวัติรับสินค้า)`, '', { title: 'ไม่ใช้ค่าที่สาขาแจ้ง', okText: 'ไม่ใช้' });
+    if (!note || !String(note).trim()) return;
+  } else if (!await uiConfirm(`ปรับทะเบียนของ ${name} เป็น ${text}\nบันไดหน่วยของรายการนี้เปลี่ยน ต้นทุนของเดือนที่ยังไม่ประกาศใช้เปลี่ยนตาม`,
+    { title: 'ยืนยันการปรับขนาดบรรจุ', ok: 'ใช้ค่านี้', cancel: 'ยกเลิก' })) return;
+  try {
+    const out = await _bmcJson(`${API}/api/bom-center/units/pack-report/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report_ids: ids, decision, note }) });
+    await bmcLoadPack();
+    bmcStatus('bmcPackStatus', true, String(out.message || '').replace(/^✓\s*/, ''));
+    if (decision === 'applied') { await bmcLoadIng(true); bmcLoadLadder(); }
+  } catch (e) { bmcStatus('bmcPackStatus', false, String(e.message || e).slice(0, 220)); }
 }
 
 // ── the unit ladder as an Excel file ────────────────────────────────────────

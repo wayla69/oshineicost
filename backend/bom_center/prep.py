@@ -246,6 +246,7 @@ def plan_import(con, parsed: dict) -> dict:
     m = match_blocks(con, parsed["blocks"])
     resolve = _resolver(con, m["blocks"], parsed.get("cpu") or {})
     have = {r[0] for r in con.execute("SELECT prepared_code FROM bc_prep_recipe")}
+    portion = portion_codes(con)
     base_of = {c: norm(u) for c, u in con.execute("SELECT code, base_unit FROM bc_ingredient")}
     writes, unresolved = [], 0
     for b in m["blocks"]:
@@ -264,8 +265,9 @@ def plan_import(con, parsed: dict) -> dict:
             writes.append({"prepared_code": c["code"], "prepared_name": c["name"], "method": c["method"],
                            "score": c["score"], "src_name": b["name"], "src_code": b["src_code"], "row": b["row"],
                            "yield_qty": b["yield_qty"], "yield_unit": b["yield_unit"], "yield_text": b["yield_text"],
-                           "net_cost": b["net_cost"], "lines": lines, "replaces": c["code"] in have,
-                           "unresolved": sum(1 for ln in lines if not ln["ingredient_code"])})
+                           "net_cost": b["net_cost"], "lines": lines, "replaces": c["code"] in have and c["code"] not in portion,
+                           "unresolved": sum(1 for ln in lines if not ln["ingredient_code"]),
+                           "portion_skip": c["code"] in portion, "note_th": PORTION_SKIP_NOTE if c["code"] in portion else None})
     no_yield = [w for w in writes if not w["yield_qty"]]
     return {"sheet": parsed.get("sheet"), "rows": len(m["blocks"]), "writes": writes,
             "unmatched": [{"name": b["name"], "src_code": b["src_code"], "row": b["row"], "yield_text": b["yield_text"],
@@ -319,15 +321,27 @@ def save(con, code: str, yield_qty, yield_unit, lines: list, who: str, source_re
     return len(clean)
 
 
+PORTION_SKIP_NOTE = "สูตรแบ่งชิ้น ไม่ถูกแทนที่โดยไฟล์นำเข้า แก้ไขที่การ์ดสูตรแบ่งชิ้น"
+
+
+def portion_codes(con) -> set:
+    """The prepared codes whose recipe is a portion recipe (PR-U2). A file import (BoM_Semi or the flat template) never replaces
+    one: it would turn "1 ตัว → 225 ชิ้น" back into a batch recipe with the trim loss added; the card is where it is edited."""
+    return {c for (c,) in con.execute("SELECT prepared_code FROM bc_prep_recipe WHERE mode=?", (MODE_PORTION,))}
+
+
 def apply_import(con, plan: dict, who: str) -> dict:
-    n = 0
+    n, skipped = 0, []
     for w in plan["writes"]:
+        if w.get("portion_skip"):
+            skipped.append({"code": w["prepared_code"], "name": w.get("prepared_name"), "note": PORTION_SKIP_NOTE})
+            continue
         if not w["yield_qty"]:
             continue
         save(con, w["prepared_code"], w["yield_qty"], w["yield_unit"], w["lines"], who,
              source_ref=f"BoM_Semi แถว {w['row']}: {w['src_code']} {w['src_name']}", source_cost=w["net_cost"])
         n += 1
-    return {"saved": n}
+    return {"saved": n, "skipped": skipped}
 
 
 def set_map(con, src_name: str, code: str, who: str):
@@ -348,14 +362,15 @@ def _read(con, where: str, args: tuple, rtable: str, ltable: str) -> dict:
     book = {}
     mcol = "mode" if _has_col(con, rtable, "mode") else "NULL"
     ncol = "no_loss" if _has_col(con, ltable, "no_loss") else "0"
+    fcol = "factor_base" if _has_col(con, ltable, "factor_base") else "NULL"      # PR-U2: frozen with a released version
     for code, yq, yu, mode in con.execute(f"SELECT prepared_code, batch_yield_qty, batch_unit, {mcol} FROM {rtable}{where}", args):
         book[code] = {"yield_qty": yq, "yield_unit": yu, "mode": mode or "batch", "lines": []}
-    for code, seq, ic, q, u, note, nl in con.execute(
-            f"SELECT prepared_code, seq, ingredient_code, qty, unit, note, {ncol} FROM {ltable}{where} ORDER BY prepared_code, seq",
-            args):
+    for code, seq, ic, q, u, note, nl, fb in con.execute(
+            f"SELECT prepared_code, seq, ingredient_code, qty, unit, note, {ncol}, {fcol} FROM {ltable}{where}"
+            f" ORDER BY prepared_code, seq", args):
         if code in book:
             book[code]["lines"].append({"seq": seq, "ingredient_code": ic, "qty": q, "unit": u, "note": note,
-                                        "no_loss": 1 if nl else 0})
+                                        "no_loss": 1 if nl else 0, "factor_base": fb})
     return book
 
 
@@ -385,6 +400,16 @@ def freeze(con, release_id: int) -> int:
     con.execute("INSERT INTO bc_rel_prep_line(release_id, prepared_code, seq, ingredient_code, qty, unit, note, no_loss)"
                 " SELECT ?, prepared_code, seq, ingredient_code, qty, unit, note, COALESCE(no_loss, 0) FROM bc_prep_line",
                 (release_id,))
+    # L6 (PR-U2): a line that passes an average step (or is a portion line) keeps the factor it is costed with, so a later
+    # change of the average (learned from receipts, approved by the analyst) never moves a released month
+    conv = Converter(con)
+    for seq, code, ic, unit, nl in con.execute(
+            "SELECT seq, prepared_code, ingredient_code, unit, COALESCE(no_loss, 0) FROM bc_rel_prep_line WHERE release_id=?",
+            (release_id,)).fetchall():
+        f, _how = conv.factor(ic, unit) if ic and unit else (None, None)
+        if f is not None and (nl or conv.last_approx):
+            con.execute("UPDATE bc_rel_prep_line SET factor_base=? WHERE release_id=? AND prepared_code=? AND seq=?",
+                        (f, release_id, code, seq))
     return con.execute("SELECT COUNT(*) FROM bc_rel_prep_recipe WHERE release_id=?", (release_id,)).fetchone()[0]
 
 
@@ -428,6 +453,8 @@ class PrepCoster:
                 row["problem"] = f"ไม่พบรหัสวัตถุดิบของ “{ln.get('note') or ''}”"
             else:
                 qb, how = self.conv.to_base(ic, ln["qty"], ln["unit"])
+                if ln.get("factor_base"):                          # frozen with a released version (L6): the live average does not count
+                    qb, how = float(ln["qty"]) * float(ln["factor_base"]), "ค่าที่ตรึงไว้ตามเวอร์ชันที่ประกาศใช้"
                 if qb is None:
                     row["problem"] = f"{ic}: {how}"
                 else:
@@ -477,6 +504,8 @@ def explode_parts(book_: dict, conv: Converter, code: str, _stack: tuple = (), _
     for ln in r["lines"]:
         ic = ln["ingredient_code"]
         qb, _ = conv.to_base(ic, ln["qty"], ln["unit"]) if ic else (None, None)
+        if ic and ln.get("factor_base"):
+            qb = float(ln["qty"]) * float(ln["factor_base"])      # frozen with a released version (L6)
         if qb is None:
             probs.append(ln.get("note") or ic or "?")
             continue
@@ -607,8 +636,12 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
         if _num(g("qty")) or _clean(g("ingredient_code")):
             e["lines"].append({"ingredient_code": g("ingredient_code"), "qty": g("qty"), "unit": g("unit"),
                                "note": g("note") or g("ingredient_name"), "no_loss": 1 if _num(g("no_loss")) else 0})
-    saved = 0
+    saved, skipped = 0, []
+    portion = portion_codes(con)
     for code, e in grp.items():
+        if code in portion:                                  # a portion recipe is edited on its own card, never by a file
+            skipped.append({"code": code, "name": None, "note": PORTION_SKIP_NOTE})
+            continue
         try:
             save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากแม่แบบ (Excel)",
                  mode=e["mode"])
@@ -617,7 +650,8 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
             errors.append(str(ex))
     if dry_run or errors:
         con.rollback()
-    return {"codes": len(grp), "saved": 0 if (dry_run or errors) else saved, "errors": errors, "dry_run": dry_run}
+    return {"codes": len(grp), "saved": 0 if (dry_run or errors) else saved, "errors": errors, "dry_run": dry_run,
+            "skipped": skipped}
 
 
 # ── สูตรแบ่งชิ้น: one whole piece (a salmon) cut into N pieces (PR-U) ────────────────────────────────────

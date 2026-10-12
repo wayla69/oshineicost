@@ -115,6 +115,42 @@ def _setup_items(con) -> list:
     return out
 
 
+_SHORT_UNIT = {"กิโลกรัม": "กก.", "มิลลิลิตร": "มล."}
+
+
+def _unit_review_items(con) -> list:
+    """PR-U2 — the analyst's two review queues of the unit register, each present only while something waits:
+    the average weight per piece the receipts disagree with, and the pack sizes the branches reported."""
+    from .pack_reports import listing, pending_count
+    from .units import avg_proposals, fmt_num
+    out = []
+    owner = dict(owner=("bom.center", "bom.prices"), owner_th="ฝ่ายวิเคราะห์")
+    try:
+        props = [r for r in avg_proposals(con) if r["proposal"]]
+    except Exception:                                      # the list must open even if the receipts cannot be read
+        props = []
+    if props:
+        def one(r):
+            u = _SHORT_UNIT.get(r["parent"], r["parent"])
+            return (f"{r['name']}: ใช้ {fmt_num(round(r['current'], 2))} {u} · รับจริง ≈ {fmt_num(round(r['observed'], 2))} {u}"
+                    f" ({r['diff_pct']:+.1f}%)")
+        out.append(_e("unit_avg_review", 24, "setup", f"ตรวจค่าเฉลี่ยน้ำหนักต่อชิ้นจากการรับจริง ({len(props)} รายการ)", "todo",
+                      " · ".join(one(r) for r in props[:3]) + (f" · และอีก {len(props) - 3} รายการ" if len(props) > 3 else ""),
+                      count=len(props), go={"tab": "bomcenter", "pane": "conv", "anchor": "bmcAvgCard"}, **owner))
+    try:
+        n = pending_count(con)
+        groups = listing(con, "pending") if n else []
+    except Exception:
+        n, groups = 0, []
+    if n:
+        det = " · ".join(f"{g['name'] or g['ingredient_code']}: ในระบบ {g['system_text']} · สาขาแจ้ง {g['reported_text']}"
+                         for g in groups[:3])
+        out.append(_e("pack_report_review", 25, "setup", f"ตรวจขนาดบรรจุที่สาขาแจ้ง ({n} เรื่อง)", "todo",
+                      det + (f" · และอีก {n - 3} เรื่อง" if n > 3 else ""), count=n,
+                      go={"tab": "bomcenter", "pane": "conv", "anchor": "bmcPackCard"}, **owner))
+    return out
+
+
 def _month_items(con, month: str, today: date) -> list:
     from .release import checks_summary
     out = []
@@ -551,6 +587,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     items = []
     if centre:
         items += _setup_items(con)
+        items += _unit_review_items(con)
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
     close = _close_steps(con, month, close_br, scoped=bool(scoped_branch))

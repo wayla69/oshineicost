@@ -295,6 +295,10 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/prices/submit",           {"supply.ordering", "bom.center", "bom.prices"}),
     ("W",   "/api/bom-center/prices/submissions",      {"bom.center", "bom.prices"}),
     ("W",   "/api/bom-center/units",                   {"bom.center", "bom.prices"}),
+    # PR-U2: a branch reports a pack that is not the registered size from its receive form (pinned to its own order in the
+    # router); the analyst's decision on it follows the /units writers above
+    ("W",   "/api/bom-center/units/pack-report",       {"branch.stock", "bom.center"}),
+    ("W",   "/api/bom-center/units/pack-report/decide", {"bom.center", "bom.prices"}),
     ("W",   "/api/bom-center/recipes",                 {"bom.center", "bom.recipes"}),
     ("W",   "/api/bom-center/prep",                    {"bom.center", "bom.recipes"}),
     # release workflow (owner 2026-10-06): the analyst releases, management acknowledges / rolls back

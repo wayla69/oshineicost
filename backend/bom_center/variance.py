@@ -16,6 +16,7 @@ period whose deliveries the branch has not confirmed as complete is shown as
 INCOMPLETE (a missing delivery would read as a shortage). Thresholds follow the
 plan: class A ±5 %, B ±10 %, C ±20 % (class = share of BoM ฿ in the period).
 """
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from .fmt import day_th as _fmt_day
@@ -59,6 +60,20 @@ def now() -> str:
 
 
 # ── goods received ───────────────────────────────────────────────────────────
+def _pieces_of(conv, code: str, raw):
+    """The whole pieces a branch counted for an item sold by weight (PR-U2): a whole number >= 1, kept only for an item that has
+    an average weight step (a salmon, ตัว ≈ 4.5 กก.); None when nothing was counted or the item has no such step."""
+    if raw is None or str(raw).strip() == "" or conv.weight_avg_step(code) is None:
+        return None
+    try:
+        p = float(str(raw).replace(",", "").strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"{code}: จำนวนต้องเป็นตัวเลขจำนวนเต็ม")
+    if p != int(p) or p < 1:
+        raise ValueError(f"{code}: จำนวนที่นับต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป")
+    return float(int(p))
+
+
 def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, ref: str = None,
                 note: str = None, source: str = "branch") -> dict:
     try:
@@ -87,7 +102,10 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
                 raise ValueError(f"{code}: ระบุซ้ำด้วยหน่วยที่ต่างกัน ({prev[1]} / {unit}) · รวมเป็นบรรทัดเดียว")
             q = prev[0] + q
             qb = None if qb is None or prev[2] is None else prev[2] + qb
-        clean[code] = (q, unit, qb)
+        pcs = _pieces_of(conv, code, ln.get("pieces"))
+        if prev and (prev[3] or pcs):
+            pcs = (prev[3] or 0.0) + (pcs or 0.0)
+        clean[code] = (q, unit, qb, pcs)
     if not clean:
         raise ValueError("ยังไม่มีรายการรับสินค้า")
     _refuse_if_posted(con, branch_id, receipt_date)
@@ -96,8 +114,10 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
     cur = con.execute("INSERT INTO bc_receipt(branch_id, receipt_date, source, ref, note, entered_by, created_at)"
                       " VALUES(?,?,?,?,?,?,?)", (branch_id, receipt_date, source, ref, note, who, now()))
     rid = cur.lastrowid
-    con.executemany("INSERT INTO bc_receipt_line(receipt_id, ingredient_code, qty, unit, qty_base) VALUES(?,?,?,?,?)",
-                    [(rid, c, q, u, qb) for c, (q, u, qb) in clean.items()])
+    con.executemany("INSERT INTO bc_receipt_line(receipt_id, ingredient_code, qty, unit, qty_base, pieces, pieces_unit)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    [(rid, c, q, u, qb, pcs, (conv.weight_avg_step(c) or {}).get("unit") if pcs else None)
+                     for c, (q, u, qb, pcs) in clean.items()])
     audit(con, who, "receipt", "bc_receipt", str(rid), None, {"branch_id": branch_id, "date": receipt_date,
                                                              "lines": len(clean)})
     return {"receipt_id": rid, "lines": len(clean)}
@@ -153,13 +173,18 @@ def receipts(con, branch_id: int, limit: int = 30) -> list:
     for rid, d, src, ref, by in con.execute(
             "SELECT receipt_id, receipt_date, source, ref, entered_by FROM bc_receipt WHERE branch_id=?"
             " ORDER BY receipt_date DESC, receipt_id DESC LIMIT ?", (branch_id, limit)).fetchall():
-        lines = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "qty_base": qb} for c, q, u, qb in con.execute(
-            "SELECT ingredient_code, qty, unit, qty_base FROM bc_receipt_line WHERE receipt_id=? ORDER BY ingredient_code",
-            (rid,))]
+        lines = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "qty_base": qb, "pieces": pc, "pieces_unit": pu}
+                 for c, q, u, qb, pc, pu in con.execute(
+                     "SELECT ingredient_code, qty, unit, qty_base, pieces, pieces_unit FROM bc_receipt_line WHERE receipt_id=?"
+                     " ORDER BY ingredient_code", (rid,))]
         out.append({"receipt_id": rid, "receipt_date": d, "source": src, "ref": ref, "entered_by": by, "lines": lines})
     closed = _closed_through(con, branch_id)
+    from .pack_reports import for_orders          # PR-U2: what the analyst answered to "ขนาดบรรจุไม่ตรง", read on the receive history
+    reports = for_orders(con, branch_id)
     for r in out:
         r["locked"] = bool(closed and r["receipt_date"] < closed)
+        m = re.fullmatch(r"ORDER-(\d+)", r["ref"] or "")
+        r["pack_reports"] = reports.get(int(m.group(1)), []) if m else []
     return out
 
 
