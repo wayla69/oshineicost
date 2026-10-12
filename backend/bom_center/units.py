@@ -460,6 +460,56 @@ def to_order_units(qty_base: float, qty_per_order: float, moq: float = 1.0, step
     return max(units, moq or 0.0)
 
 
+# ── PR-B4a (1.7): a BIG pack is not rounded up for a small remainder ─────────────────────────────────────────
+ROUND_DOWN_FRACTION = 0.20      # the remainder under this share of ONE pack may be left unordered (owner decision 1.7, 2026-10-12)
+BIG_PACK_KG = 5.0               # a pack of at least this weight is a big pack …
+BIG_PACK_INNER = 10             # … and so is one that holds at least this many sealed inner units (กล่อง (10 แพ็ค))
+
+
+def pack_size(conv: "Converter", code: str, per) -> dict:
+    """{kg, inner} of ONE receiving pack of `per` base units: its weight in kilograms when the base unit is a mass (None otherwise)
+    and the number of the next smaller sealed unit it holds (the 10 แพ็ค of a box; None when there is none)."""
+    out = {"kg": None, "inner": None}
+    if not per or per <= 0:
+        return out
+    base = conv.base_unit(code)
+    f = 1.0 if base == "กิโลกรัม" else _METRIC.get(("กิโลกรัม", base))
+    if f:
+        out["kg"] = float(per) / f
+    smaller = [u for u in conv.sealed(code) if u["factor"] < per * (1 - 1e-9)]
+    if smaller:
+        out["inner"] = float(per) / smaller[-1]["factor"]
+    return out
+
+
+def is_big_pack(conv: "Converter", code: str, per) -> bool:
+    """Apply the round-down rule to this pack? ≥ BIG_PACK_KG kilograms, or ≥ BIG_PACK_INNER sealed inner units."""
+    s = pack_size(conv, code, per)
+    return bool((s["kg"] or 0) >= BIG_PACK_KG or (s["inner"] or 0) >= BIG_PACK_INNER - 1e-9)
+
+
+def to_order_units_ex(qty_base: float, qty_per_order: float, moq: float = 1.0, step: float = 1.0, safety: float = 0.0,
+                      big: bool = False) -> tuple:
+    """(units, rounded_down) - to_order_units, except that a BIG pack is rounded DOWN when the remainder is under ROUND_DOWN_FRACTION
+    of one pack and the part left unordered is covered by the safety stock (`safety`, base units): the stock at the end of the cover
+    period, forecast use already taken out, then stays at or above 0. `qty_base` is forecast + safety − stock, so the shortfall that
+    rounding down leaves is exactly the remainder and it is taken out of the safety stock only; "stays ≥ safety stock" read
+    literally could never hold, the need already containing the whole of it. A pack below the big-pack size, a remainder of
+    ROUND_DOWN_FRACTION or more, a remainder the safety stock does not cover, and a minimum order above the rounded-down quantity
+    all keep the rounding up of to_order_units."""
+    up = to_order_units(qty_base, qty_per_order, moq, step)
+    if not big or up <= 0 or not qty_per_order or qty_per_order <= 0:
+        return up, False
+    step = step if step and step > 0 else 1.0
+    floor_u = math.floor(qty_base / qty_per_order / step + 1e-9) * step
+    rem = qty_base - floor_u * qty_per_order
+    if rem <= 1e-9 or rem >= ROUND_DOWN_FRACTION * qty_per_order - 1e-9 or rem > (safety or 0.0) + 1e-9:
+        return up, False
+    if floor_u > 0 and floor_u < (moq or 0.0):
+        return up, False
+    return float(floor_u), True
+
+
 # ── the average weight per piece, learned from real receipts (PR-U2) ─────────────────────────────────────────
 AVG_MIN_RECEIPTS, AVG_MIN_PIECES, AVG_MIN_DIFF_PCT = 3, 10, 3.0     # L5: when the observed average becomes a proposal
 AVG_WINDOW_DAYS = 90

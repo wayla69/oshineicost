@@ -116,7 +116,8 @@ def stock_position(con, branch_id: int, as_of: date, order_day: date) -> dict:
     day's issue slip — plus what is already on order before `order_day`.
 
     -> {"basis": {count_id, date} | None, "qty": {code: base units}, "on_order": {code: base qty},
-        "missing_days": [iso], "through": iso}   (see stock.system_position; no BoM estimate is subtracted)"""
+        "missing_days": [iso], "through": iso, "estimated_days": [iso], "estimated_qty": {code: base qty}}
+    (see stock.system_position: a past day with sales and no confirmed slip is deducted at the BoM of its sales - PR-B4a, 1.3)"""
     from .stock import system_position
     out = system_position(con, branch_id, as_of)
     out["on_order"] = on_order(con, branch_id, order_day)
@@ -589,14 +590,22 @@ def next_round(con, branch_id: int, today: date, now: datetime = None) -> str:
     return pick_delivery(next_deliveries(con, branch_id, today, now=now))["round"]
 
 
-def order_units(need: float, per, moq) -> tuple:
-    """(units, unit) — whole packs when the pack size is known, else base units rounded up."""
-    from .units import to_order_units
+def order_units(need: float, per, moq, safety: float = 0.0, big: bool = False) -> tuple:
+    """(units, unit) — whole packs when the pack size is known, else base units rounded up.
+    A BIG pack (`big`) is rounded down for a small remainder the safety stock covers: see order_units_ex."""
+    return order_units_ex(need, per, moq, safety, big)[:2]
+
+
+def order_units_ex(need: float, per, moq, safety: float = 0.0, big: bool = False) -> tuple:
+    """(units, unit, rounded_down) — PR-B4a (1.7): units.to_order_units_ex for a pack of known size (a remainder under
+    units.ROUND_DOWN_FRACTION of a big pack that the safety stock covers is not ordered), base units rounded up otherwise."""
+    from .units import to_order_units_ex
     if need <= 0:
-        return 0.0, ("pack" if per else "base")
+        return 0.0, ("pack" if per else "base"), False
     if per:
-        return float(to_order_units(need, per, moq or 1)), "pack"
-    return float(math.ceil(need)), "base"
+        u, down = to_order_units_ex(need, per, moq or 1, safety=safety, big=big)
+        return float(u), "pack", down
+    return float(math.ceil(need)), "base", False
 
 
 def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buffer_pct: float = None,
@@ -643,6 +652,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     s["stock"] = {"basis": stock["basis"], "deducted": bool(stock["basis"]), "through": stock["through"],
                   # today's slip is reported on its own (slip_today); the days BEFORE it are the warning
                   "missing_days": [d for d in stock["missing_days"] if d != stock_day.isoformat()],
+                  "estimated_days": stock["estimated_days"],           # PR-B4a (1.3): of those, the days deducted at the BoM of the sales
                   "slip_today": _is.status_of(con, branch_id, stock_day)}
     s["buffer"] = {"pct": pct, "min": BUFFER_MIN, "max": BUFFER_MAX,
                    "reasons": [{"code": k, "label": v} for k, v in BUFFER_REASONS]}
@@ -665,10 +675,17 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         sq = stock["qty"].get(r["code"])               # the system stock in the unit the kitchen counts in
         r["system_qty"] = None if sq is None else round(sq / (factor or 1.0), 4)
         r["system_unit"] = unit
-        units, kind = order_units(r["need"], r.get("qty_per_recv"), r.get("moq"))
+        eq = stock["estimated_qty"].get(r["code"])     # PR-B4a (1.3): how much of that figure is the BoM of sales, not a confirmed slip
+        r["estimated_qty"] = round(eq / (factor or 1.0), 4) if eq else None
+        units, kind, down = order_units_ex(r["need"], r.get("qty_per_recv"), r.get("moq"), r.get("safety") or 0.0, r.get("big_pack"))
         r["order_units"] = units
         r["order_unit"] = kind
-        r["order_units_base"] = order_units(r.get("need_base", r["need"]), r.get("qty_per_recv"), r.get("moq"))[0] if pct else units
+        ne = r.get("need_no_est")                          # 1.3 · does the estimate change what is ordered? (packs with it ≠ packs without it)
+        r["estimate_changes"] = bool(ne is not None and order_units_ex(ne, r.get("qty_per_recv"), r.get("moq"), r.get("safety") or 0.0,
+                                                                        r.get("big_pack"))[0] != units)
+        r["round_down"] = down                              # 1.7 · "ปัดลง (เหลือพอ)": a remainder under 20 % of a big pack was left unordered
+        r["order_units_base"] = order_units(r.get("need_base", r["need"]), r.get("qty_per_recv"), r.get("moq"),
+                                            r.get("safety") or 0.0, r.get("big_pack"))[0] if pct else units
         if r["code"] in cmap:
             r["price_per_base"], r["price_source"] = unit_price(con, r["code"], month, cmap)
             r["price_per_sale"] = cmap[r["code"]][1]

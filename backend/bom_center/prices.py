@@ -345,3 +345,114 @@ def history(con, code: str, limit: int = 24) -> list:
                                      " bc_ingredient_price_branch WHERE ingredient_code=? AND month=?"
                                      " ORDER BY branch_id", (code, r["month"]))]
     return out
+
+
+# ── PR-B4a (1.6): a price for an item that has none - for RANKING and SAFETY only, never written back ───────────
+class PriceBook:
+    """What an ingredient is worth for the ABC class, the safety stock and the choice of variance reasons when it has no price:
+
+        1. the price in force (price_for) - used as it is, no mark;
+        1b. else the price of the centre's order list (central.central_map): the order screen already values the row at it, so the
+           item is priced - without this step 19 of 88 rows of อุดรธานี round 1 were ranked as free (class C) while the screen showed
+           their ฿ - no mark;
+        2. else the LAST KNOWN price of the item, of whatever month (the nearest later month when none is earlier - the price file
+           of a later month is still the best evidence of what the item costs);
+        3. else the MEDIAN price the benchmark branches paid (bc_ingredient_price_branch, the setting `bc_benchmark_branches`),
+           the branch's latest month up to `month`, else its latest month at all;
+        4. else None (the item stays valueless).
+
+    `ref(code)` is the figure to rank with (0 when there is none); `info(code)` is None for an item that has its own price, else
+    {price, kind 'last' | 'bench' | None, month, label} - the words of the chip "ไม่มีราคา (ใช้ราคา …)". The fallback is read at the moment
+    of the question and written NOWHERE: the price table and every ฿ shown on a screen keep the real price (or no price)."""
+
+    LABEL_LAST = "ล่าสุด"
+    LABEL_BENCH = "ค่ากลางสาขาบริษัท"
+
+    def __init__(self, con, month: str, cmap: dict = None):
+        self.con, self.month = con, month
+        self._memo = {}
+        self._bench = None
+        if cmap is None:
+            try:
+                from .central import central_map
+                cmap = central_map(con)
+            except Exception:
+                cmap = {}
+        self._cmap = cmap or {}
+
+    def _bench_ids(self) -> list:
+        if self._bench is None:
+            try:
+                from .benchmark import branch_ids
+                self._bench = list(branch_ids(self.con))
+            except Exception:
+                self._bench = []
+        return self._bench
+
+    def _last_known(self, code):
+        r = self.con.execute("SELECT price_per_base, month FROM bc_ingredient_price WHERE ingredient_code=?"
+                             " AND price_per_base > 0 ORDER BY (month<=?) DESC, month DESC LIMIT 1",
+                             (code, self.month)).fetchone()
+        if not r:
+            return None
+        if r[1] > self.month:                          # none earlier: the NEAREST later month
+            r = self.con.execute("SELECT price_per_base, month FROM bc_ingredient_price WHERE ingredient_code=?"
+                                 " AND price_per_base > 0 AND month>? ORDER BY month LIMIT 1", (code, self.month)).fetchone()
+        return (float(r[0]), r[1]) if r else None
+
+    def _bench_median(self, code):
+        ids = self._bench_ids()
+        if not ids:
+            return None
+        import statistics
+        got = []
+        for b in ids:
+            r = self.con.execute("SELECT price_per_base FROM bc_ingredient_price_branch WHERE ingredient_code=? AND branch_id=?"
+                                 " AND price_per_base > 0 ORDER BY (month<=?) DESC, month DESC LIMIT 1",
+                                 (code, b, self.month)).fetchone()
+            if r:
+                got.append(float(r[0]))
+        return statistics.median(got) if got else None
+
+    def _own(self, code: str):
+        """The item's own price per base unit: the price in force, else the centre's list price; None when it has neither."""
+        p = price_for(self.con, code, self.month)
+        if p:
+            return p[0]
+        f, pr = self._cmap.get(code, (None, None))
+        return pr / f if f and pr else None
+
+    def info(self, code: str):
+        if code not in self._memo:
+            if self._own(code) is not None:
+                self._memo[code] = None
+            else:
+                last = self._last_known(code)
+                if last:
+                    self._memo[code] = {"price": last[0], "kind": "last", "month": last[1], "label": self.LABEL_LAST}
+                else:
+                    med = self._bench_median(code)
+                    self._memo[code] = ({"price": med, "kind": "bench", "month": None, "label": self.LABEL_BENCH} if med
+                                        else {"price": None, "kind": None, "month": None, "label": None})
+        return self._memo[code]
+
+    def ref(self, code: str) -> float:
+        """The price to rank / weigh the item with: its own, else the fallback, else 0."""
+        i = self.info(code)
+        if i is None:
+            return self._own(code) or 0.0
+        return i["price"] or 0.0
+
+    def chip(self, code: str, unit: str = None):
+        """The words for an item without a price: 'ไม่มีราคา (ใช้ราคาล่าสุด 2026-10 ฿12.5 ต่อกรัม)', or just 'ไม่มีราคา' when no fallback
+        exists; None when the item has its own price."""
+        i = self.info(code)
+        if i is None:
+            return None
+        if not i["price"]:
+            return "ไม่มีราคา"
+        v = float(i["price"])
+        shown = f"{v:,.0f}" if v >= 1000 else f"{v:,.2f}".rstrip("0").rstrip(".")
+        when = f" {i['month']}" if i["month"] else ""
+        per = f" ต่อ{unit}" if unit else ""
+        return f"ไม่มีราคา (ใช้ราคา{i['label']}{when} ฿{shown}{per})"

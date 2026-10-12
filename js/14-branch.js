@@ -529,7 +529,9 @@ function brnIssRender() {
   if (_brnIssAppend) parts.push(['var(--navy-ink)', 'รายการที่กรอกจะถูกบวกเพิ่มในใบของวันนี้ที่ยืนยันแล้ว']);
   else if (confirmed) parts.push(['var(--text-secondary)', 'ยืนยันแล้ว แก้ไขไม่ได้ · ต้องการแก้ แจ้งประสานงานขาย' + (s.can_append && _brnCanOrder() ? ' · ลืมรายการ กด “เบิกเพิ่ม” เพื่อบวกเพิ่มในใบของวันนี้' : '')]);
   const md = s.missing_days || [];
-  if (md.length) parts.push(['var(--amber-ink)', `ใบที่ค้าง ${md.length} วัน (${_brnIssRuns(md)}) · เลือกวันที่ยังไม่ทำจากแถบวันที่`]);
+  const nEst = (s.estimated_days || []).length;                          // 1.3 · the days without a slip that were taken out at the BoM of the sales
+  if (md.length) parts.push(['var(--amber-ink)', `ใบที่ค้าง ${md.length} วัน (${_brnIssRuns(md)}) · เลือกวันที่ยังไม่ทำจากแถบวันที่`
+    + (nEst ? ` · คงเหลือตามระบบหักตามสูตรจากยอดขาย ${nEst} วัน (${_brnIssRuns(s.estimated_days)}) ไว้ก่อน เมื่อยืนยันใบของวันนั้น ตัวเลขในใบจะใช้แทน` : '')]);
   const banner = document.getElementById('brnIssBanner');
   banner.style.display = parts.length ? '' : 'none';
   banner.innerHTML = parts.map(([ink, t]) => `<div class="text-xs mb-1" style="border:1px solid ${ink};border-radius:var(--r-sm);padding:6px 10px;color:${ink}">${esc(t)}</div>`).join('');
@@ -562,7 +564,8 @@ function brnIssRender() {
     const v = _brnIssQty[it.code] || { used: '', waste: '' };
     const unit = it.count_unit || it.base_unit || '';
     const sys = it.system_qty == null ? ''
-      : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`;
+      : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`
+        + (it.estimate_matters && nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)') : '');
     const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_brnNice(it.avg_used_7d)} ${esc(_brnUnitW(unit))}/วัน</span>` : '';
     // เบิกเพิ่ม: what the confirmed slip already holds for the item, so the box holds only the quantity to add
     const have = _brnIssAppend && (it.used > 0 || it.waste > 0)
@@ -689,8 +692,16 @@ async function brnIssSave(submit, quiet) {
     const nWaste = nAny.filter(l => l.qty_waste > 0).length;
     const nAll = _brnIss.zones.reduce((a, z) => a + z.items.length, 0);
     const late = _brnIss.backdated && !(_brnIss.status && _brnIss.status.confirm_count > 0);
+    // 1.4 · the high-value items the sales of the day say were used and the slip leaves blank (8 at most, the most valuable first)
+    let blankTxt = '';
+    try {
+      const qs0 = _brnQS();
+      const b = await _bmcJson(`${API}/api/bom-center/issues/blank${qs0 ? '?' + qs0 : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: _brnIss.date, codes: nAny.map(l => l.code) }) });
+      if (b && b.items && b.items.length) blankTxt = `\nรายการที่ขายแล้วแต่ยังว่าง: ${b.items.map(_brnNm).join(', ')}${b.total > b.items.length ? ` และอีก ${b.total - b.items.length} รายการ` : ''}`;
+    } catch (e) { /* the list is a help: the confirm goes on without it */ }
     if (!await uiConfirm((late ? 'ใบย้อนหลังนับเป็นล่าช้า\n' : '')
-        + `ยืนยันใบตัดเบิก ${fmtDayShort(_brnIss.date)} · กรอก ${nAny.length} รายการ · ของเสีย ${nWaste} รายการ\nยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก คงเหลือตามระบบจึงไม่ลดลง\nยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย`,
+        + `ยืนยันใบตัดเบิก ${fmtDayShort(_brnIss.date)} · กรอก ${nAny.length} รายการ · ของเสีย ${nWaste} รายการ\nยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก คงเหลือตามระบบจึงไม่ลดลง${blankTxt}\nยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย`,
         { title: 'ยืนยันใบตัดเบิก', ok: 'ยืนยัน', cancel: 'กลับไปแก้' })) return;
   }
   const clock = () => new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -1983,6 +1994,17 @@ async function brnOrdFillAll() {
 
 let _brnMissLater = false;     // 2.4: "ทำภายหลัง" hides the backlog line until the page is reloaded
 function brnMissLater() { _brnMissLater = true; brnRenderOrder(); }
+// PR-B4a · why a suggested figure is not the plain forecast, one chip each (1.3 estimate · 1.5 shelf life · 1.6 no price · 1.7 round down · 1.8 lead time and short shipments)
+function _brnRowFlags(r, nEst) {
+  const c = [];
+  if (r.estimate_changes && nEst) c.push(_bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)'));   // only when it changes the packs ordered; the head says it once
+  if (r.shelf_cap_days) c.push(_bmcChip(`จำกัดตามอายุการเก็บ ${r.shelf_cap_days} วัน`, 'var(--navy-ink)'));
+  if (r.round_down) c.push(_bmcChip('ปัดลง (เหลือพอ)', 'var(--navy-ink)'));
+  if (r.price_note) c.push(_bmcChip(r.price_note, 'var(--text-muted)'));
+  if (r.lead_extra_days) c.push(_bmcChip(`สั่งให้พอเพิ่ม ${r.lead_extra_days} วัน (ระยะส่ง ${r.lead_days} วัน)`, 'var(--navy-ink)'));
+  if (r.short_ship_skipped) c.push(_bmcChip(`ไม่นับ ${r.short_ship_skipped} วันที่คลังส่งไม่ครบ`, 'var(--text-muted)'));
+  return c.length ? `<div class="flex flex-wrap gap-1 mt-0.5">${c.join('')}</div>` : '';
+}
 function brnRenderOrder() {
   const p = _brnPlan;
   if (!p) return;
@@ -1997,13 +2019,14 @@ function brnRenderOrder() {
   const slip = stk.slip_today || {};
   const slipOk = _brnSlipOk(p);
   const md = stk.missing_days || [];
+  const nEst = (stk.estimated_days || []).length;                         // 1.3 · missing slips taken out at the BoM of the sales
   const stockLine = (stk.deducted
-    ? `${_bmcChip('หักคงเหลือตามระบบแล้ว', 'var(--good-ink)')}${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
+    ? `${_bmcChip('หักคงเหลือตามระบบแล้ว', 'var(--good-ink)')}${nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน (${_brnIssRuns(stk.estimated_days)})`, 'var(--amber-ink)') : ''}${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
     : `${_bmcChip('ไม่มีผลตรวจนับสิ้นเดือน', 'var(--text-muted)')} ยังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`);
   // the one thing that blocks sending is an action card of its own above the list (not a line inside the header)
   // 2.4: only TODAY's slip blocks the order; the days behind it can be made later ("ทำภายหลัง" hides that line for this session)
   const missLine = md.length && !_brnMissLater
-    ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">ใบที่ค้าง ${md.length} วัน (${esc(_brnIssRuns(md))}) ทำภายหลังได้ · <a href="#" onclick="brnMissLater();return false" style="text-decoration:underline;color:inherit">ทำภายหลัง</a></div>` : '';
+    ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">ใบที่ค้าง ${md.length} วัน (${esc(_brnIssRuns(md))}) ทำภายหลังได้ · <a href="#" onclick="brnMissLater();return false" style="text-decoration:underline;color:inherit">ทำภายหลัง</a>${nEst ? `<br>คงเหลือตามระบบหักตามสูตรจากยอดขาย ${nEst} วันไว้ก่อน เมื่อยืนยันใบของวันนั้น ตัวเลขในใบจะใช้แทน` : ''}</div>` : '';
   const gate = document.getElementById('brnOrdGate');
   if (gate) {
     const show = !slipOk && editable;
@@ -2075,6 +2098,7 @@ function brnRenderOrder() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0"><div class="brn-name" title="${esc(r.name)}" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(r))}${r.monitored ? ' ' + _bmcChip('ต้องนับ', 'var(--amber-ink)') : ''}</div>
           <div class="text-xs" style="color:var(--text-secondary);line-height:1.4">แนะนำ <b style="color:var(--text-primary)">${_bmcNum(sugg, 0)}</b> ${esc(_brnUnitLabel(r))}${up !== 1 ? ` <span class="text-[10.5px]">(ปกติ ${_bmcNum(base, 0)})</span>` : ''}${approxPcs}${sysBox}</div>
+          ${frozen ? '' : _brnRowFlags(r, nEst)}
           ${r.ref_label ? `<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.ref_label)}</div>` : ''}
           <button type="button" class="brn-why" aria-expanded="${open}" onclick="brnOrdWhy(${_bmcQ(r.code)})">${open ? 'ซ่อนที่มา ▴' : 'ดูที่มา ▾'}</button></div>
         <div class="brn-box"><input id="brnOrd_${esc(r.code)}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${editable ? '' : 'disabled'} aria-label="สั่ง ${esc(_brnNm(r))}" oninput="_brnOrdQty[${_bmcQ(r.code)}]=this.value;_brnOrdEdited.add(${_bmcQ(r.code)});brnRenderOrderDeferred()"

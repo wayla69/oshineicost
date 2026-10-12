@@ -33,6 +33,7 @@ from bom_center.clock import today as bkk_today
 from bom_center.fmt import CLASS_SHORT_TH as _CLASS_SHORT
 from bom_center.fmt import add_short as _short
 from bom_center import master as _m
+from bom_center import master_gaps as _mg
 from bom_center import orders as _or
 from bom_center import per_sales as _pv
 from bom_center import pilot as _pl
@@ -239,7 +240,7 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
                                 " GROUP BY ingredient_code"))
         cols = ["code", "name_th", "name_en", "family", "kind", "category", "base_unit", "recv_unit",
                 "qty_per_recv", "loss_pct", "moq", "lead_days", "shelf_days", "monitored", "sourcing_default",
-                "active", "note", "storage_zone", "count_unit", "short_name", "updated_at", "updated_by"]
+                "active", "note", "storage_zone", "count_unit", "short_name", "updated_at", "updated_by"]  # `family` stays in: the gaps read it
         rows = [dict(zip(cols, r)) for r in con.execute(f"SELECT {', '.join(cols)} FROM bc_ingredient ORDER BY code")]
     ql = (q or "").strip().lower()
     out = []
@@ -265,6 +266,7 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
         elif (r["price_age_months"] or 0) > 2:
             problems.append(f"ราคาเก่า {r['price_age_months']} เดือน")
         r["problems"] = problems
+        r["gaps"] = _mg.row_gaps(r)                      # PR-B4a (1.5): blank fields the order logic reads (never a "problem": most rows have them)
         if issues and not problems:
             continue
         out.append(r)
@@ -1715,6 +1717,121 @@ def bc_benchmark_save(body: BenchmarkBody, request: Request):
     return out
 
 
+# ── 1.8 · ปฏิทินเทศกาลและวันหยุด: the events the forecast reads (demand_calendar) and the public holidays it already knows ──
+class EventBody(BaseModel):
+    event_id: Optional[int] = None
+    name: str
+    date_from: str
+    date_to: str
+    branch_id: Optional[int] = None          # None = every branch
+    uplift_pct: Optional[float] = None       # +20 = 20 % more than a normal day; None = take it from the same days last year
+    note: Optional[str] = None
+
+
+UPLIFT_MIN, UPLIFT_MAX = -50.0, 200.0        # the factor stored is 1 + pct/100, inside the 0.5 – 3 the season logic accepts
+
+
+def _event_rows(con, d0: str, d1: str) -> list:
+    from .ingredients import _ING_CAL_DDL
+    con.execute(_ING_CAL_DDL)
+    names = {n: b for b, n in con.execute("SELECT branch_id, name FROM branches")}
+    out = []
+    for eid, nm, a, b, br, f, note in con.execute(
+            "SELECT event_id, name, date_from, date_to, branch, factor, note FROM demand_calendar"
+            " WHERE date_to >= ? AND date_from <= ? ORDER BY date_from, event_id", (d0, d1)):
+        out.append({"event_id": eid, "name": nm, "date_from": a, "date_to": b, "branch": br or "",
+                    "branch_id": names.get(br) if br else None, "factor": f,
+                    "uplift_pct": None if f is None else round((float(f) - 1.0) * 100.0, 1), "note": note or ""})
+    return out
+
+
+@router.get("/api/bom-center/event-calendar")
+def bc_event_calendar(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+    """The calendar the forecast reads: events (promotions, festivals; each with an uplift % or "from last year") and, read only,
+    the Thai public holidays of the range (backend/thai_holidays.py) - the season factor already treats those days as holidays.
+    Default range: from the start of this month, 15 months ahead."""
+    import thai_holidays as TH
+    today = bkk_today()
+    try:
+        a = date.fromisoformat(date_from) if date_from else date(today.year, today.month, 1)
+        b = date.fromisoformat(date_to) if date_to else a + timedelta(days=456)
+    except ValueError:
+        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+    if b < a or (b - a).days > 800:
+        raise HTTPException(400, "ช่วงวันที่ไม่ถูกต้อง")
+    with get_db() as con:
+        _ensure(con)
+        events = _event_rows(con, a.isoformat(), b.isoformat())
+        branches = [{"branch_id": bid, "name": nm} for bid, nm in _calendar_branches(con)]
+    holidays = [{"date": d.isoformat(), "name": h.name, "weekday": (d.weekday() + 1) % 7, "weekday_th": _fc.WD_TH[(d.weekday() + 1) % 7]}
+                for d in TH.days(a, b) for h in [TH.holiday_on(d)] if h]
+    return {"from": a.isoformat(), "to": b.isoformat(), "events": events, "holidays": holidays, "branches": branches,
+            "uplift_min": UPLIFT_MIN, "uplift_max": UPLIFT_MAX, "holiday_years": list(TH.YEARS)}
+
+
+@router.post("/api/bom-center/event-calendar", dependencies=[Depends(require_write_token)])
+def bc_event_calendar_save(body: EventBody, request: Request):
+    """Add or change one event. The sales team's, like the delivery calendar. Stored in demand_calendar (which the season factor reads)."""
+    who = _who(request)
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(400, "ระบุชื่อช่วงเทศกาลหรือโปรโมชัน")
+    try:
+        a, b = date.fromisoformat(body.date_from), date.fromisoformat(body.date_to)
+    except ValueError:
+        raise HTTPException(400, "วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD")
+    if b < a or (b - a).days > 120:
+        raise HTTPException(400, "ช่วงวันที่ไม่ถูกต้อง (ยาวได้ไม่เกิน 120 วัน)")
+    factor = None
+    if body.uplift_pct is not None:
+        if not (UPLIFT_MIN <= float(body.uplift_pct) <= UPLIFT_MAX):
+            raise HTTPException(400, f"% ที่เพิ่มต้องอยู่ระหว่าง {UPLIFT_MIN:g}% ถึง +{UPLIFT_MAX:g}%")
+        factor = round(1.0 + float(body.uplift_pct) / 100.0, 4)
+    from .ingredients import _ING_CAL_DDL
+
+    def go():
+        con.execute(_ING_CAL_DDL)
+        bname = ""
+        if body.branch_id is not None:
+            r = con.execute("SELECT name FROM branches WHERE branch_id=?", (body.branch_id,)).fetchone()
+            if not r:
+                raise ValueError("ไม่พบสาขา")
+            bname = r[0]
+        if body.event_id:
+            con.execute("UPDATE demand_calendar SET name=?, date_from=?, date_to=?, branch=?, factor=?, note=?,"
+                        " updated_at=CURRENT_TIMESTAMP WHERE event_id=?",
+                        (name, a.isoformat(), b.isoformat(), bname, factor, (body.note or "").strip() or None, body.event_id))
+            eid = body.event_id
+        else:
+            cur = con.execute("INSERT INTO demand_calendar(name, date_from, date_to, branch, factor, note) VALUES(?,?,?,?,?,?)",
+                              (name, a.isoformat(), b.isoformat(), bname, factor, (body.note or "").strip() or None))
+            eid = cur.lastrowid
+        _m.audit(con, who, "event_calendar", "demand_calendar", str(eid), None,
+                 f"{name} {a.isoformat()}..{b.isoformat()} {bname or 'ทุกสาขา'} {('+%g%%' % body.uplift_pct) if factor else 'จากปีก่อน'}")
+        return eid
+    with get_db() as con:
+        _ensure(con)
+        eid = _write(con, go)
+    invalidate_cache()
+    return {"ok": True, "event_id": eid}
+
+
+@router.delete("/api/bom-center/event-calendar/{event_id}", dependencies=[Depends(require_write_token)])
+def bc_event_calendar_delete(event_id: int, request: Request):
+    who = _who(request)
+    from .ingredients import _ING_CAL_DDL
+
+    def go():
+        con.execute(_ING_CAL_DDL)
+        con.execute("DELETE FROM demand_calendar WHERE event_id=?", (event_id,))
+        _m.audit(con, who, "event_calendar_delete", "demand_calendar", str(event_id), None, None)
+    with get_db() as con:
+        _ensure(con)
+        _write(con, go)
+    invalidate_cache()
+    return {"ok": True}
+
+
 class CalRow(BaseModel):
     branch_id: int
     round: str
@@ -2341,6 +2458,25 @@ def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = 
                                             note=body.note))
 
 
+class IssueBlankBody(BaseModel):
+    date: Optional[str] = None              # the slip's day; omitted = today (Bangkok)
+    codes: List[str] = []                   # the items the slip has a quantity for (used or waste above 0)
+
+
+@router.post("/api/bom-center/issues/blank")
+def bc_issue_blank(body: IssueBlankBody, request: Request, branch_id: Optional[int] = Query(None)):
+    """PR-B4a (1.4): before a branch confirms, the high-value (class A) items the sales of that day say were used and that the slip
+    leaves blank - the 8 most valuable, with the count. Reads only; the sheet itself is not changed."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            day = date.fromisoformat(body.date) if body.date else bkk_today()
+        except ValueError:
+            raise HTTPException(400, "วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        return _short(con, _ir.blank_class_a(con, bid, day, set(body.codes or [])))
+
+
 @router.post("/api/bom-center/issues/append", dependencies=[Depends(require_write_token)])
 def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional[int] = Query(None)):
     """PR-M7 · เบิกเพิ่ม: add lines to the slip of TODAY that is already confirmed (no reopen). Logged as 'append'."""
@@ -2898,7 +3034,8 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     for r in d["rows"]:
         ws.append([r["date"], r["weekday_th"], r["slip_status_th"], r["used_value"], r["waste_value"], r["issued_value"],
                    r["bom_value"] if r["trading"] else None, r["var_value"], r["var_pct"],
-                   ", ".join(f"{x['name']} ({x['var_pct']:+.1f}%)" for x in r["over_items"]), ", ".join(r["streak"])])
+                   ", ".join(f"{x['name']} ({x['var_pct']:+.1f}%)" for x in r["over_items"]),
+                   ", ".join(list(r["streak"]) + [f"{n} (น้อยกว่าสูตร)" for n in r["under_streak"]])])
     ws.append(["รวม", "", "", t["used_value"], t["waste_value"], t["issued_value"], t["bom_value"], t["var_value"],
                t["var_pct"]])
     for c in ws[ws.max_row]:

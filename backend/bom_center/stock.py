@@ -455,7 +455,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     return out
 
 
-def system_position(con, branch_id: int, as_of: date, issues_through: date = None) -> dict:
+def system_position(con, branch_id: int, as_of: date, issues_through: date = None, estimate: bool = True) -> dict:
     """The stock the SYSTEM says is on the shelf (ใบตัดเบิก, PR-J1):
 
         latest submitted month-end count dated on or before `as_of`
@@ -464,13 +464,21 @@ def system_position(con, branch_id: int, as_of: date, issues_through: date = Non
 
     The month-end count is made before trading, so the receipts and the slip OF the count date are in.
     Only codes that were counted get a figure — the others are unknown and the forecast stands alone.
-    `missing_days` are the days from the count date to `issues_through` with no confirmed slip: the stock
-    shown is then higher than the real one.
+    `missing_days` are the days from the count date to `issues_through` with no confirmed slip.
 
-    -> {"basis": {count_id, date} | None, "qty": {code: base units}, "missing_days": [iso], "through": iso}"""
+    PR-B4a (1.3): a missing day on which the branch SOLD something (and that is over: before `as_of`) is no longer left
+    out - the BoM usage of its sales (issue_reports.bom_days, the same per-day figure the daily report compares a slip
+    with) is deducted instead, so the stock is not higher than the real one for the days nobody wrote a slip. The day is
+    listed in `estimated_days` and the quantity per item in `estimated_qty`; once the branch confirms the slip of that day it
+    is a confirmed day and the slip replaces the estimate. A day without sales (closed) deducts nothing. `estimate=False`
+    gives the confirmed-slips-only figure.
+
+    -> {"basis": {count_id, date} | None, "qty": {code: base units}, "missing_days": [iso], "through": iso,
+        "estimated_days": [iso], "estimated_qty": {code: base units}}"""
     from .issues import missing_days
     through = issues_through or as_of
-    out = {"basis": None, "qty": {}, "missing_days": [], "through": as_of.isoformat()}
+    out = {"basis": None, "qty": {}, "missing_days": [], "through": as_of.isoformat(), "estimated_days": [],
+           "estimated_qty": {}}
     r = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
                     f" AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)} AND count_date<=?"
                     " ORDER BY count_date DESC, count_id DESC LIMIT 1", (branch_id, as_of.isoformat())).fetchone()
@@ -495,7 +503,35 @@ def system_position(con, branch_id: int, as_of: date, issues_through: date = Non
             qty[c] -= q or 0.0
     out["qty"] = qty
     out["missing_days"] = missing_days(con, branch_id, cdate, through)
+    if estimate and out["missing_days"]:
+        days, est = estimated_use(con, branch_id, [d for d in out["missing_days"] if d < as_of.isoformat()])
+        out["estimated_days"] = days
+        for c, q in est.items():
+            if c in qty:                                   # an uncounted item has no figure to lower
+                qty[c] -= q
+                out["estimated_qty"][c] = q
     return out
+
+
+def estimated_use(con, branch_id: int, days: list) -> tuple:
+    """PR-B4a (1.3): ({days that had sales}, {code: base units}) - the BoM usage of the given days' sales, summed. The per-day
+    figure is issue_reports.bom_days (cached in bcd_demand_day, rebuilt when the sales or the release changed); a day without
+    sales is not in it, so a closed day deducts nothing."""
+    if not days:
+        return [], {}
+    from .issue_reports import bom_days
+    by_month = {}
+    for d in sorted(days):
+        by_month.setdefault(d[:7], []).append(d)
+    got, est = [], {}
+    for month, ds in by_month.items():
+        bom = bom_days(con, branch_id, ds[0], ds[-1], month)
+        for d in ds:
+            if d in bom:
+                got.append(d)
+                for c, q in bom[d].items():
+                    est[c] = est.get(c, 0.0) + (q or 0.0)
+    return got, est
 
 
 def history(con, branch_id: int, limit: int = 20, kinds=None) -> list:

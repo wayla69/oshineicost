@@ -316,6 +316,7 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/release-act/send-back",   {"bom.release"}),
     # the order calendar is the sales team's to fill (owner §10-7); Sales Support runs suggestions
     ("W",   "/api/bom-center/order-calendar",          {"supply.ordering", "bom.center"}),
+    ("W",   "/api/bom-center/event-calendar",          {"supply.ordering", "bom.center"}),   # PR-B4a (1.8): festivals / promotions, the sales team's too
     ("W",   "/api/bom-center/forecast",                {"supply.ordering", "bom.center"}),
     # Phase 2: a branch counts its own stock; the centre reads every branch's and sets zones/units
     ("GET", "/api/bom-center/stock",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),

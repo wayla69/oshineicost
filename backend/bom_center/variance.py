@@ -35,12 +35,18 @@ FLAG_STATUS = ("over", "under", "negative", "no_bom")   # the statuses that are 
 ASK_TOP = 20                                            # PR-M4 (owner Q3): a reason is asked for class A and for the top 20 by |฿|
 
 
+def _gap_value_for_rank(r: dict):
+    """The ฿ a line is ranked by when a reason is asked: its own, else - PR-B4a (1.6), an item with no price - the gap at the fallback
+    price (`ref_value`). The ฿ shown on the screen stays `gap_value` (None for an unpriced item)."""
+    return r.get("gap_value") if r.get("gap_value") is not None else r.get("ref_value")
+
+
 def ask_reason_codes(rows: list, top: int = ASK_TOP) -> set:
     """The codes a branch is asked to explain (owner Q3, PR-M4): a flagged line (outside the threshold) that is class A, or
-    among the `top` flagged lines by |฿ variance|. Rows need `code`, `status`, `class` and `gap_value`."""
+    among the `top` flagged lines by |฿ variance|. Rows need `code`, `status`, `class` and `gap_value` (`ref_value` for an unpriced item)."""
     flagged = [r for r in rows if r["status"] in FLAG_STATUS]
-    biggest = {r["code"] for r in sorted((r for r in flagged if r.get("gap_value") is not None),
-                                         key=lambda r: (-abs(r["gap_value"]), r["code"]))[:top]}
+    biggest = {r["code"] for r in sorted((r for r in flagged if _gap_value_for_rank(r) is not None),
+                                         key=lambda r: (-abs(_gap_value_for_rank(r)), r["code"]))[:top]}
     return {r["code"] for r in flagged if r["class"] == "A" or r["code"] in biggest}
 
 
@@ -339,13 +345,15 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
     reasons = {c: (r, n, w, a) for c, r, n, w, a in con.execute(
         "SELECT ingredient_code, reason_code, note, who, at FROM bc_variance_reason WHERE end_count_id=?", (e["count_id"],))}
     price = {}
+    from .prices import PriceBook
+    pbook = PriceBook(con, month)                       # PR-B4a (1.6): ranks an unpriced item by a fallback price, shows none
 
     def p(c):
         if c not in price:
             pr = price_for(con, c, month)
             price[c] = pr[0] if pr else None
         return price[c]
-    klass = _abc({c: q * (p(c) or 0.0) for c, q in theo.items()})
+    klass = _abc({c: q * pbook.ref(c) for c, q in theo.items()})
     names = {c: (n, u) for c, n, u in con.execute("SELECT code, name_th, base_unit FROM bc_ingredient")}
     rows = []
     for c in sorted(set(begin) | set(end) | set(theo) | set(rec)):
@@ -364,6 +372,9 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
             pv = p(c)
             row.update(actual=round(act, 3), gap=round(gap, 3), gap_pct=round(pct, 1) if pct is not None else None,
                        gap_value=round(gap * pv, 2) if pv is not None else None)
+            if pv is None:                                  # PR-B4a (1.6): "ไม่มีราคา (ใช้ราคา …)" - the gap at the fallback, for the ranking only
+                row.update(price_note=pbook.chip(c, row["base_unit"]),
+                           ref_value=round(gap * pbook.ref(c), 2) if pbook.ref(c) else None)
             if act < 0:
                 row["status"] = "negative"                   # more on the shelf than began + arrived: a missing receipt or a miscount
             elif t <= 0:

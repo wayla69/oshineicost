@@ -787,14 +787,21 @@ function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v
 function _isrPctAbs(v) { return v == null ? '—' : `${_bmcNum(Math.abs(v), 1)}%`; }      // 4.6: where the words already say more / less
 function _isrMoney(v) { return v == null ? '—' : `${v < 0 ? '−' : ''}฿${_bmcNum(Math.abs(v), 0)}`; }
 function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)">—</span>' : _bmcNum(v, 0); }
+// 1.4 · a streak flag in words: over the recipe (red) or UNDER it (amber - the slip left blank or short)
+function _isrFlagChip(f, withDates) {
+  const under = f.direction === 'under';
+  const dates = withDates ? ` ${_isrDm(f.from)}–${_isrDm(f.to)}` : '';
+  return _bmcChip(under ? `${f.name} เบิกน้อยกว่าสูตร ${f.days} วันติดต่อกัน (ต่ำสุด ${_isrPctAbs(f.max_pct)})${dates}`
+    : `${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)');
+}
 function isrFlagChips(d) {
   const t = d.totals;
   const chips = [_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${t.confirmed_days}/${t.trading_days} วัน`, t.trading_days && t.confirmed_days >= t.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)')];
   if (t.late_days) chips.push(_bmcChip(`ยืนยันล่าช้า ${t.late_days} วัน`, 'var(--amber-ink)'));
   if (t.draft_days) chips.push(_bmcChip(`ยังไม่ยืนยัน ${t.draft_days} วัน`, 'var(--amber-ink)'));
   if (t.missing_days) chips.push(_bmcChip(`ไม่มีใบ ${t.missing_days} วัน`, 'var(--bad-ink)'));
-  if (!d.flags.length) chips.push(_bmcChip('✓ ไม่พบการเบิกเกินสูตรต่อเนื่อง', 'var(--good-ink)'));
-  d.flags.forEach(f => chips.push(_bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)}) ${_isrDm(f.from)}–${_isrDm(f.to)}`, 'var(--bad-ink)')));
+  if (!d.flags.length) chips.push(_bmcChip('✓ ไม่พบการเบิกเกินหรือน้อยกว่าสูตรต่อเนื่อง', 'var(--good-ink)'));
+  d.flags.forEach(f => chips.push(_isrFlagChip(f, true)));
   return chips.join(' ');
 }
 function isrDailyTable(d, openFn) {
@@ -808,7 +815,7 @@ function isrDailyTable(d, openFn) {
       <td class="py-1 pr-2 text-right">${_isrBaht(r.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(r.waste_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(r.issued_value)}</td><td class="py-1 pr-2 text-right">${r.trading ? _isrBaht(r.bom_value) : '<span style="color:var(--text-muted)">—</span>'}</td>
       <td class="py-1 pr-2 text-right">${r.confirmed ? bmcGapHtml(r.var_value, r.var_pct, 'issue') : '<span style="color:var(--text-muted)">—</span>'}</td>
-      <td class="py-1">${r.over_items.map(o => `${esc(o.name)} (${bmcGapWords(null, o.var_pct, 'issue', true)})`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}</td></tr>`;
+      <td class="py-1">${r.over_items.map(o => `${esc(o.name)} (${bmcGapWords(null, o.var_pct, 'issue', true)})`).join(', ')}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? ' ' + _bmcChip('เบิกน้อยกว่าสูตรต่อเนื่อง', 'var(--amber-ink)') : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('เทียบสูตร', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์')}</tr></thead>
@@ -816,7 +823,7 @@ function isrDailyTable(d, openFn) {
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(t.var_value, t.var_pct, 'issue')}</td><td></td></tr></tfoot></table></div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน${fmtMonthTh(d.price_month)} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ · ราคาซื้อเดือน${fmtMonthTh(d.price_month)} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% หรือน้อยกว่าสูตรเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</div>`;
 }
 function isrDayItems(d, closeJs) {
   const s = d.slip, conf = s.key === 'on_time' || s.key === 'late';
@@ -826,7 +833,7 @@ function isrDayItems(d, closeJs) {
       ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}</span>` : ''}
       ${closeJs ? `<button onclick="${closeJs}" style="margin-left:auto;font-size:12px;color:var(--text-muted);background:none;border:0;cursor:pointer">ปิด</button>` : ''}</div>`;
   const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณตามสูตร</div>';
-  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})`, 'var(--bad-ink)')).join(' ')}</div>` : '';
+  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _isrFlagChip(f, false)).join(' ')}</div>` : '';
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
   const rows = d.rows.map(r => {
