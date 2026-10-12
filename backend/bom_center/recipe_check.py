@@ -61,9 +61,14 @@ def default_month(con):
 
 
 def _signature(con, month: str, ids) -> tuple:
-    a = con.execute("SELECT COUNT(*), COALESCE(SUM(qty_bought), 0) FROM bc_ingredient_price_branch WHERE month=?", (month,)).fetchone()
-    b = con.execute("SELECT COUNT(*), COALESCE(MAX(count_id), 0) FROM bc_stock_count").fetchone()
-    return (tuple(a), tuple(b))
+    # a re-imported price file keeps the same row count: its values are part of the signature; a count keeps its id when
+    # it is submitted (NULL status = submitted): the submitted state and time are part of it too
+    a = con.execute("SELECT COUNT(*), COALESCE(SUM(qty_bought), 0), COALESCE(SUM(price_per_base), 0), COALESCE(SUM(value_bought), 0)"
+                    " FROM bc_ingredient_price_branch WHERE month=?", (month,)).fetchone()
+    b = con.execute("SELECT COUNT(*), COALESCE(MAX(count_id), 0), COALESCE(SUM(COALESCE(status, 'submitted') = 'submitted'), 0),"
+                    " COALESCE(MAX(submitted_at), '') FROM bc_stock_count").fetchone()
+    c = con.execute("SELECT COUNT(*), COALESCE(SUM(price_per_base), 0) FROM bc_ingredient_price WHERE month=?", (month,)).fetchone()
+    return (tuple(a), tuple(b), tuple(c))
 
 
 def check(con, month: str = None, today=None) -> dict:

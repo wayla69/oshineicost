@@ -235,6 +235,11 @@ def write_recipe(con, release_id: int, sku_code: str, lines: list, *, source: st
     for n, ln in enumerate(lines, start=1):
         code = (ln.get("ingredient_code") or "").strip() or None
         if code and register_codes and code not in known:
+            from .aliases import resolve
+            res = resolve(con, code, known)          # an ACTIVE alias of a register item is that item: use it, register nothing
+            if res in known:
+                code = res
+        if code and register_codes and code not in known:
             add_from_purchase(con, code, ln.get("_product") or ln.get("ingredient_name"), ln.get("unit"), who)
             con.execute("UPDATE bc_ingredient SET kind=?, family=?, note=? WHERE code=? AND updated_by=?",
                         (kind_of(code, ln.get("ingredient_name") or ""), family_of(code),
