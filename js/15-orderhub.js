@@ -25,6 +25,7 @@ window.addEventListener('resize', () => {
   const p = _ohbPhone();
   if (_ohbWasPhone === null || p === _ohbWasPhone) return;
   _ohbWasPhone = p;
+  if (typeof activeTab !== 'undefined' && activeTab === 'orderhub' && _ohbSub === 'adoption') ohbLoadAdoption();
   if (typeof activeTab !== 'undefined' && activeTab === 'orderhub' && _ohbSub === 'queue' && _ohbQ) { ohbRenderQueueList(); if (_ohbOrder && document.getElementById('ohbDetail').style.display !== 'none') ohbRenderDetail(); }
 });
 // owner 2026-10-09: Sales Support keys the processed orders into the accounting system and ticks them here
@@ -71,6 +72,11 @@ const _OHB_HELP = {
   comp: {
     _: ['แต่ละแถวคือหนึ่งรอบสั่งของสาขา เทียบ 4 ค่า (฿): ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง',
       'ป้ายสถานะบอกว่าส่วนต่างอยู่ที่สาขา (สั่งเกิน หรือสั่งขาด) ที่คลัง หรือในการจัดส่ง · “ไม่ได้สั่ง” คือรอบที่ตัดรอบไปแล้วโดยสาขาไม่ส่งใบสั่งซื้อ'] },
+  adoption: {
+    _: ['หนึ่งแถวต่อหนึ่งสาขาที่มีบัญชีผู้ใช้ ดูย้อนหลัง 7 วันรวมวันนี้ · เรียงสาขาที่ต้องตามก่อนไว้บนสุด · กดที่แถวเพื่อเปิดใบตัดเบิกของสาขานั้น',
+      'ใบตัดเบิกตรงวัน = จำนวนวันที่สาขาขายและยืนยันใบตัดเบิกภายในวันนั้น ÷ จำนวนวันที่สาขาขาย · ส่งใบสั่งซื้อตรงเวลา = จำนวนรอบที่ส่งก่อน 13:15 ÷ จำนวนรอบที่ถึงกำหนด · รับสินค้าบันทึกแล้ว = ใบสั่งซื้อที่ถึงวันส่งและสาขาบันทึกรับแล้ว ÷ ใบที่คลังจัดส่งแล้ว',
+      'สีเขียว 90% ขึ้นไป · สีเหลือง 60–89% · สีแดงต่ำกว่า 60% หรือไม่มีการใช้งานใน 7 วัน · สีของสาขาคือสีของช่องที่ต่ำสุด',
+      'ใช้งานล่าสุด = เวลาเข้าสู่ระบบหรือบันทึกข้อมูลล่าสุดของสาขา (เวลาประเทศไทย)'] },
   pilot: {
     _: ['สาขานำร่อง 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง)',
       'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
@@ -137,7 +143,7 @@ function ohbMonthChanged() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar', 'issues', 'persales'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot', 'adoption', 'central', 'claims', 'issuevar', 'issues', 'persales'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   _ohbMonthSync(k);
   ohbRenderHelp(k);
   if (k === 'issues') ohbLoadIssues();
@@ -151,6 +157,7 @@ function ohbSetSub(k) {
     ohbLoadMonth();
   }
   if (k === 'pilot') ohbLoadPilot();
+  if (k === 'adoption') ohbLoadAdoption();
   if (k === 'central') ohbLoadCentral();
   if (k === 'claims') ohbLoadClaims();
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
@@ -684,6 +691,55 @@ async function ohbLoadMonth() {
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 
+// ── การใช้งานทุกสาขา (batch 3 · 4.7): one row per branch account, the last 7 days, worst first ──────────────────
+const _OHB_LIGHT = { green: ['เขียว', 'var(--good-ink)'], yellow: ['เหลือง', 'var(--amber-ink)'], red: ['แดง', 'var(--bad-ink)'] };
+function _ohbAdCell(c, a, b) {      // "5/7 (71%)" in the ink of its light; a column with nothing to judge is a dash
+  if (!b) return '<span style="color:var(--text-muted)">—</span>';
+  const ink = (_OHB_LIGHT[c.light] || ['', 'var(--text-primary)'])[1];
+  return `<b style="color:${ink}">${a}/${b}</b> <span class="text-[11px]" style="color:var(--text-muted)">${_bmcNum(c.pct, 0)}%</span>`;
+}
+function _ohbAdLast(r) {
+  if (!r.last_active) return '<span style="color:var(--bad-ink)">ยังไม่เคยใช้งาน</span>';
+  return `${esc(fmtAt(r.last_active))}<span class="text-[11px]" style="color:var(--text-muted)"> · ${esc(r.last_active_kind || '')}</span>`;
+}
+function ohbAdOpen(branchId) {      // a row opens that branch's slips (ใบตัดเบิกสาขา), the branch already chosen
+  supplyGo({ tab: 'orderhub', pane: 'issues', branch: branchId });
+}
+async function ohbLoadAdoption() {
+  const sum = document.getElementById('ohbAdSummary'), list = document.getElementById('ohbAdList'), rng = document.getElementById('ohbAdRange');
+  list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  try {
+    const g = await _bmcJson(`${API}/api/bom-center/hub/adoption`);
+    sum.innerHTML = `<span class="text-sm font-semibold" style="color:var(--text-primary)">ทั้งหมด ${g.total} สาขา</span>` +
+      ['green', 'yellow', 'red'].map(k => _bmcChip(`${_OHB_LIGHT[k][0]} ${g.counts[k]}`, _OHB_LIGHT[k][1])).join(' ');
+    rng.textContent = `ช่วง ${fmtDay(g.from)} – ${fmtDay(g.to)} (7 วัน) · ตัวเลขของวันนี้ที่ยังไม่ครบกำหนดยังไม่นับ`;
+    if (!g.rows.length) { list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่มีบัญชีผู้ใช้ (ตั้งค่า → ผู้ใช้งาน → บทบาท “สาขา”)</span>'; return; }
+    const phone = _ohbPhone();
+    const lt = r => { const [t, ink] = _OHB_LIGHT[r.status]; return `<span style="color:${ink};font-weight:600"><span aria-hidden="true">●</span> ${t}</span>`; };
+    if (phone) {       // a card per branch: the name and light, the three figures, the last use
+      list.innerHTML = g.rows.map(r => `<a href="#" class="ohb-adrow" onclick="ohbAdOpen(${r.branch_id});return false" style="display:block;border-top:1px solid var(--border-soft);padding:10px 0;min-height:44px;color:inherit;text-decoration:none">
+          <div class="flex items-center justify-between gap-2"><span class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(r.branch)}</span>${lt(r)}</div>
+          <div class="text-xs mt-1" style="display:grid;grid-template-columns:1fr auto;gap:2px 10px;color:var(--text-secondary)">
+            <span>ใบตัดเบิกตรงวัน</span><span>${_ohbAdCell(r.issues, r.issues.on_time, r.issues.days)}</span>
+            <span>ส่งใบสั่งซื้อตรงเวลา</span><span>${_ohbAdCell(r.orders, r.orders.on_time, r.orders.due)}</span>
+            <span>รับสินค้าบันทึกแล้ว</span><span>${_ohbAdCell(r.receive, r.receive.received, r.receive.delivered)}</span>
+            <span>ใช้งานล่าสุด</span><span>${_ohbAdLast(r)}</span></div>
+          ${r.why ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(r.why)}</div>` : ''}</a>`).join('');
+      return;
+    }
+    list.innerHTML = `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+        <th class="py-1 pr-2">สถานะ</th><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">ใบตัดเบิกตรงวัน</th>
+        <th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อตรงเวลา</th><th class="py-1 pr-2 text-right">รับสินค้าบันทึกแล้ว</th><th class="py-1">ใช้งานล่าสุด</th></tr></thead><tbody>` +
+      g.rows.map(r => `<tr class="ohb-adrow" style="border-top:1px solid var(--border);cursor:pointer" onclick="ohbAdOpen(${r.branch_id})">
+          <td class="py-2 pr-2" style="white-space:nowrap">${lt(r)}</td>
+          <td class="py-2 pr-2 font-semibold" style="color:var(--text-primary)">${esc(r.branch)}${r.why ? `<div class="text-[11px] font-normal" style="color:var(--text-muted)">${esc(r.why)}</div>` : ''}</td>
+          <td class="py-2 pr-2 text-right">${_ohbAdCell(r.issues, r.issues.on_time, r.issues.days)}</td>
+          <td class="py-2 pr-2 text-right">${_ohbAdCell(r.orders, r.orders.on_time, r.orders.due)}</td>
+          <td class="py-2 pr-2 text-right">${_ohbAdCell(r.receive, r.receive.received, r.receive.delivered)}</td>
+          <td class="py-2">${_ohbAdLast(r)}</td></tr>`).join('') + '</tbody></table></div>';
+  } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
 // ── pilot (S10) ──────────────────────────────────────────────────────────────
 async function ohbLoadPilot() {
   const rb = document.getElementById('ohbPilotReady'), sb = document.getElementById('ohbPilotScore');
@@ -1144,6 +1200,22 @@ async function ohbLoadClaims() {
         <div class="mt-0.5">${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')}
           ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}</div></a>`).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีเคลมในสถานะนี้</span>';
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+  ohbLoadCancelledReceipts();
+}
+// batch 3 (3.6) · ใบรับสินค้าที่สาขายกเลิก 7 วันล่าสุด: what a branch took back out of its stock, and why. The receipt itself is kept
+// in full on the server (bc_receipt_cancel); this is the short list Sales Support reads.
+async function ohbLoadCancelledReceipts() {
+  const box = document.getElementById('ohbCancelledReceipts');
+  if (!box) return;
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/hub/cancelled-receipts?days=7`);
+    box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ใบรับสินค้าที่สาขายกเลิก 7 วันล่าสุด ${d.rows.length ? _bmcChip(`${d.rows.length} ใบ`, 'var(--amber-ink)') : ''}</div>` +
+      (d.rows.length ? d.rows.map(r => `<div class="py-2" style="border-top:1px solid var(--border-soft)">
+          <div class="text-sm" style="color:var(--text-primary)"><b>${esc(r.branch || '')}</b> · ใบรับสินค้าวันที่ ${esc(fmtDay(r.receipt_date))} · ${r.lines} รายการ${r.ref_th ? ' · ' + esc(r.ref_th) : ''}</div>
+          <div class="text-xs" style="color:var(--amber-ink)">เหตุผล: ${esc(r.reason || '')}</div>
+          <div class="text-[11px]" style="color:var(--text-muted)">ยกเลิกโดย ${esc(whoTh(r.cancelled_by))} เมื่อ ${esc(fmtAt(r.cancelled_at))}</div></div>`).join('')
+        : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบรับสินค้าที่สาขายกเลิกใน 7 วันล่าสุด</span>');
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 async function ohbClaimView(id) {

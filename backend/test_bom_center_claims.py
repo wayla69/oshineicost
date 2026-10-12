@@ -161,7 +161,7 @@ def test_the_branch_cannot_delete_the_adjustment(con):  # noqa: F811
     c = _claim(con, oid, 1)
     out = CL.decide(con, c["claim_id"], "approve", [], None, "ss")
     with pytest.raises(ValueError):
-        VA.delete_receipt(con, 1, out["receipt_id"], "udon")
+        VA.delete_receipt(con, 1, out["receipt_id"], "udon", "ทดสอบ")
 
 
 def test_a_cancelled_claim_cannot_be_decided(con):  # noqa: F811

@@ -225,10 +225,40 @@ function shmInstallDismiss() {
   shmInstallRefresh();
 }
 
+// ── batch 3 · 2.1 รับการแจ้งเตือนบนมือถือ: the push card of this page, for the logins that receive kind "supply" (a branch account,
+// the warehouse, Sales Support, Operations, Accounting). The functions are the owner's phone summary ones (09c-mobile.js, prefix shmPush).
+const _SHM_PUSH_ROLES = ['branch', 'warehouse', 'salessupport', 'operation', 'accounting'];
+async function shmPushInit() {
+  const card = document.getElementById('shmPush');
+  if (!card) return;
+  const hide = () => { card.style.display = 'none'; };
+  if (!(window.AUTH && window.AUTH.enabled) || !_SHM_PUSH_ROLES.includes(_shmRole())) return hide();
+  if (typeof _msPushSupported !== 'function' || !_msPushSupported()) return hide();
+  if (!await msPushVapid()) return hide();
+  card.style.display = '';
+  await msPushRender(undefined, 'shmPush');
+}
+// ── batch 3 · 4.7 the all-branches grid as one line (the centre roles; the pane is การใช้งานทุกสาขา under ใบสั่งซื้อ) ──
+const _SHM_LIGHT = { green: ['เขียว', 'var(--good-ink)'], yellow: ['เหลือง', 'var(--amber-ink)'], red: ['แดง', 'var(--bad-ink)'] };
+async function shmAdoptionLoad(role) {
+  const card = document.getElementById('shmAdoption'), line = document.getElementById('shmAdoptionLine');
+  if (!card || !line) return;
+  const hit = _supplyItemOf('orderhub', 'adoption');
+  const show = !!(hit && _supplyItemAllowed(hit.item)) && _SHM_CENTRE_ROLES.includes(role);
+  card.style.display = show ? '' : 'none';
+  if (!show) return;
+  try {
+    const g = await _bmcJson(`${API}/api/bom-center/hub/adoption`);
+    line.innerHTML = `ทั้งหมด ${g.total} สาขา ` + ['green', 'yellow', 'red'].map(k => _bmcChip(`${_SHM_LIGHT[k][0]} ${g.counts[k]}`, _SHM_LIGHT[k][1])).join(' ');
+  } catch (e) { line.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e).slice(0, 120))}</span>`; }
+}
+
 function _shmRender(d) {
   const role = _shmRole();
   _shmTodayStrip(d, role);
   shmInstallRefresh();
+  shmPushInit();
+  shmAdoptionLoad(role);
   const items = d.items || [];
   const c = d.close || { steps: [], branches: [] };
   const steps = c.steps || [];

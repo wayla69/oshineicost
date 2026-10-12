@@ -307,14 +307,17 @@ def _phase2_branches(con) -> list:
         "SELECT branch_id FROM bc_stock_count UNION SELECT branch_id FROM bc_order ORDER BY 1")]
 
 
-def compliance(con, date_from: str, date_to: str, branch_id: int = None) -> dict:
-    """Every cycle the calendar expects between the dates, for every branch already on Phase 2."""
+def compliance(con, date_from: str, date_to: str, branch_id: int = None, branch_ids: list = None,
+               with_issues: bool = True) -> dict:
+    """Every cycle the calendar expects between the dates, for every branch already on Phase 2 (or the one branch, or the
+    `branch_ids` named - batch 3: the adoption grid asks for every branch account). `with_issues=False` leaves out the
+    daily-slip summary (the grid reads that itself)."""
     from .forecast import calendar, _wd
     d0, d1 = date.fromisoformat(date_from), date.fromisoformat(date_to)
     today = bkk_today()
     names = dict(con.execute("SELECT branch_id, name FROM branches"))
     rows = []
-    for bid in ([branch_id] if branch_id else _phase2_branches(con)):
+    for bid in ([branch_id] if branch_id else list(branch_ids) if branch_ids is not None else _phase2_branches(con)):
         cal = calendar(con, bid)
         for rnd in ("1", "2", "salmon"):
             wd = cal[rnd]["order_weekday"]
@@ -328,7 +331,7 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None) -> dict
         counts[r["status"]] = counts.get(r["status"], 0) + 1
     rows.sort(key=lambda r: (r["cycle_date"], r["branch"] or "", r["round"]))
     from .issue_reports import log as _slip_log          # the daily issue slips beside the orders (PR-J4)
-    issues = _slip_log(con, d0, d1, branch_id, today)["summary"]
+    issues = _slip_log(con, d0, d1, branch_id, today)["summary"] if with_issues else []
     return {"from": date_from, "to": date_to, "rows": rows, "counts": counts, "tolerance_pct": TOL_PCT, "issues": issues}
 
 

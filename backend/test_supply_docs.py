@@ -61,7 +61,7 @@ def test_a_role_that_has_a_bar_names_each_of_its_pages_in_the_manual():
     rows = _manual_rows()
     assert "ทุกหน้าเหมือนแถวของฝ่ายวิเคราะห์" in MANUAL          # the manager holds every page: one sentence instead of 23 names
     for role in ("branch", "warehouse", "salessupport", "operation", "analyst", "innovation", "accounting"):
-        bar_pages = {p for chip, items in T._bar(role).items() for p in items if p not in (T.HOME, T.PILOT) and p not in T.LEGACY}
+        bar_pages = {p for chip, items in T._bar(role).items() for p in items if p != T.HOME and p not in T.LEGACY}
         named = set(rows[role]["pages"]) | set(rows[role]["chips"])
         # a flat bar or a one-page button is named by its page; the pages inside a chip are listed under it
         missing = bar_pages - named

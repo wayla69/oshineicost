@@ -25,14 +25,15 @@ THAI = re.compile("[฀-๿]")
 JS_FILES = ["js/01-core.js", "js/13-bom-center.js", "js/14-branch.js", "js/15-orderhub.js", "js/16-supplyhome.js"]
 TAB_FILES = ["tabs/07-ordering.html", "tabs/08-ordersetup.html", "tabs/47-manual.html", "tabs/51-ingpurchase.html",
              "tabs/52-bomcenter.html", "tabs/53-branchstock.html", "tabs/54-orderhub.html", "tabs/55-supplyhome.html"]
-DOC_FILES = sorted(str(p.relative_to(REPO)).replace("\\", "/") for p in (REPO / "docs" / "pilot").glob("*.html"))
+DOC_FILES = sorted(str(p.relative_to(REPO)).replace("\\", "/") for p in (REPO / "docs" / "pilot").glob("*.html"))     + sorted(str(p.relative_to(REPO)).replace("\\", "/") for p in (REPO / "docs" / "pilot" / "cards").glob("*.html"))     # batch 3: the task cards
 PY_FILES = sorted(str(p.relative_to(REPO)).replace("\\", "/") for p in (REPO / "backend" / "bom_center").glob("*.py")) \
-    + ["backend/routers/bom_center.py", "scripts/branch_handout.py"]
+    + ["backend/routers/bom_center.py", "scripts/branch_handout.py", "scripts/branch_task_cards.py"]
 
 # files read by the branch, the warehouse and the centre's desks — no analyst vocabulary there
 FLOOR_FILES = ["js/14-branch.js", "js/15-orderhub.js", "js/16-supplyhome.js", "tabs/53-branchstock.html", "tabs/54-orderhub.html",
                "tabs/55-supplyhome.html", "docs/pilot/branch_guide.html", "docs/pilot/warehouse_guide.html",
-               "docs/pilot/salessupport_guide.html", "docs/pilot/accounting_guide.html", "docs/pilot/owner_guide.html"]
+               "docs/pilot/salessupport_guide.html", "docs/pilot/accounting_guide.html", "docs/pilot/owner_guide.html",
+               "docs/pilot/cards/card_issue.html", "docs/pilot/cards/card_order.html", "docs/pilot/cards/card_receive.html", "docs/pilot/cards/card_count.html"]
 
 # (name, regex, scope) — scope None = every scanned file, "floor" = FLOOR_FILES only
 RULES = [

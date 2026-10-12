@@ -680,7 +680,7 @@ def _maybe_weekly_adoption_digest(now=None, send=None):
         return None
 
 
-# ── order-day reminders for the pilot (วัตถุดิบและใบสั่งซื้อ) ─────────────────
+# ── order-day reminders (วัตถุดิบและใบสั่งซื้อ): Telegram, optional; the Web Push side is routers/push_api.maybe_send_supply ──
 def _supply_reminder_send(text: str, send=None) -> tuple:
     """(telegram_configured, sent) — the same delivery as the adoption digest."""
     import notify as _notify
@@ -696,7 +696,7 @@ def _supply_reminder_send(text: str, send=None) -> tuple:
 
 def _maybe_supply_reminder(now=None, send=None):
     """The first API request after 07:00 (Thai clock) each day builds the day's
-    reminder (the pilot branches' duties and the queue, from the same facts as
+    reminder (every branch account's duties and the queue, from the same facts as
     หน้างาน), stores it and sends it to Telegram when the bot is configured; the
     first request after 13:15 (the branch order cutoff) adds a note of the branches
     that missed it and the ใบสั่งซื้อ waiting in the warehouse queue.
@@ -2310,12 +2310,14 @@ def _push_scheduler_loop():
     never stops (min_machines_running = 1), so nobody has to open the app for it."""
     import time as _time
     while True:
-        try:
-            _push_api.maybe_send_morning()
-            _push_api.maybe_send_alerts()
-            _push_api.maybe_send_weekly()
-        except Exception as e:  # noqa: BLE001 — never let the loop die
-            print(f"[push] scheduler: {e}")
+        for step in (_push_api.maybe_send_morning, _push_api.maybe_send_alerts, _push_api.maybe_send_weekly,
+                     _push_api.maybe_send_supply,        # 08:00 · the branch's morning line, the centre roles' lines (kind "supply")
+                     _push_api.maybe_send_precutoff,     # 11:00 · branches that have not yet submitted today's order
+                     _push_api.maybe_send_cutoff):       # 13:15 · Sales Support: the branches that missed it
+            try:                                         # one failing step never stops the next, and the loop never dies
+                step()
+            except Exception as e:  # noqa: BLE001
+                print(f"[push] scheduler {getattr(step, '__name__', step)}: {e}")
         _time.sleep(60)
 
 

@@ -989,10 +989,16 @@ async function brnRecvSave() {
     brnLoadRecv();
   } catch (e) { _bmcStatus('brnRecvStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
+// 3.6 · cancelling a receipt needs a reason (at least 3 characters); the server keeps the whole receipt with it and Sales Support reads
+// the list of the last 7 days (ใบรับสินค้าที่สาขายกเลิก)
 async function brnRecvDelete(id) {
-  if (!await uiConfirm('ยกเลิกใบรับสินค้านี้?', { title: 'ยืนยันการยกเลิกใบรับสินค้า', ok: 'ยกเลิกใบรับสินค้า', cancel: 'ไม่ยกเลิก' })) return;
+  const reason = await uiPrompt('ยกเลิกใบรับสินค้านี้ คงเหลือตามระบบลดลงเท่าจำนวนที่รับในใบ\nประสานงานขายอ่านเหตุผลที่ระบุได้ · เหตุผล (จำเป็น)', '',
+    { title: 'ยกเลิกใบรับสินค้า', okText: 'ยกเลิกใบรับสินค้า', required: true, placeholder: 'เช่น บันทึกซ้ำ หรือบันทึกผิดวัน' });
+  if (reason == null) return;
+  if (reason.length < 3) { _bmcStatus('brnRecvStatus', 'ต้องระบุเหตุผลอย่างน้อย 3 ตัวอักษร', 'var(--bad-ink)'); return; }
   try {
-    await _bmcJson(`${API}/api/bom-center/stock/receipt/${id}?${_brnQS()}`, { method: 'DELETE' });
+    await _bmcJson(`${API}/api/bom-center/stock/receipt/${id}?${_brnQS()}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }) });
     brnLoadRecv();
   } catch (e) { _bmcStatus('brnRecvStatus', 'ยกเลิกไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }

@@ -75,7 +75,12 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   navigator.serviceWorker.addEventListener('message', e => {
     const d = e.data || {};
     if (d.type === 'offline-fallback') { _msOfflineAt = d.cachedAt || _msOfflineAt; _msOfflineShow(_msOfflineAt); }
-    if (d.type === 'notification-open') { try { _msPendingLink = d.url || ''; showMobileSummary(); } catch (err) {} }
+    if (d.type === 'notification-open') {
+      try {
+        if (String(d.url || '').includes('go=supply')) { if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
+        else { _msPendingLink = d.url || ''; showMobileSummary(); }
+      } catch (err) {}
+    }
   });
 }
 window.addEventListener('offline', () => _msOfflineShow(_msOfflineAt));
@@ -89,7 +94,10 @@ let _msPendingLink = '';
 (function () {
   try {
     const q = new URLSearchParams(location.search);
-    if (q.get('go')) { _msPendingLink = location.search; history.replaceState(null, '', location.pathname + location.hash); }
+    if (q.get('go')) {
+      if (q.get('go') === 'supply') _supplyPendingLink = location.search; else _msPendingLink = location.search;     // supply reminders (batch 3) open a supply page
+      history.replaceState(null, '', location.pathname + location.hash);
+    }
   } catch (e) {}
 })();
 function msDeepLink(link) {
@@ -111,12 +119,16 @@ function msDeepLink(link) {
 let _msVapid = null;
 function _msPushSupported() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
 function _msB64ToU8(s) { const pad = '='.repeat((4 - (s.length % 4)) % 4); const raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/')); const out = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out; }
-async function msPushInit() {
-  const card = document.getElementById('msPush'); if (!card) return;
-  if (!_msPushSupported()) { card.style.display = 'none'; return; }
+async function msPushVapid() {       // the server's public key ('' = push is not set up there)
   try {
     if (_msVapid === null) { const j = await api(`${API}/api/push/vapid-public`); _msVapid = (j && j.configured && j.key) ? j.key : ''; }
   } catch (e) { _msVapid = ''; }
+  return _msVapid;
+}
+async function msPushInit() {
+  const card = document.getElementById('msPush'); if (!card) return;
+  if (!_msPushSupported()) { card.style.display = 'none'; return; }
+  await msPushVapid();
   if (!_msVapid) { card.style.display = 'none'; return; }
   // "ไว้ก่อน" keeps the card away for 30 days; once this device is subscribed the card
   // stays out of the way too (a small ตั้งค่าการแจ้งเตือน link at the bottom brings it back)
@@ -146,8 +158,12 @@ function msPushReopen() {
   msPushInit();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-async function msPushRender(note) {
-  const st = document.getElementById('msPushState'), on = document.getElementById('msPushOn'), off = document.getElementById('msPushOff'), test = document.getElementById('msPushTest');
+// `p` is the id prefix of the card: 'msPush' = the owner's phone summary, 'shmPush' = หน้างาน of the supply module (batch 3, 2.1), where
+// branch and centre logins turn on the reminders of their own work (kind "supply"). Same functions, same server calls.
+function _pushSupplyCard(p) { return p === 'shmPush'; }
+async function msPushRender(note, p) {
+  p = p || 'msPush';
+  const st = document.getElementById(p + 'State'), on = document.getElementById(p + 'On'), off = document.getElementById(p + 'Off'), test = document.getElementById(p + 'Test');
   if (!st) return;
   let sub = null;
   try { const reg = await navigator.serviceWorker.ready; sub = await reg.pushManager.getSubscription(); } catch (e) {}
@@ -163,19 +179,21 @@ async function msPushRender(note) {
     } catch (e) {}
   }
   const denied = Notification.permission === 'denied';
-  if (sub) st.textContent = note || 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30';
+  const sup = _pushSupplyCard(p);
+  if (sub) st.textContent = note || (sup ? 'เปิดอยู่ · เครื่องนี้จะได้รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15' : 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30');
   else if (denied) st.textContent = 'ถูกปิดไว้ในการตั้งค่าของเบราว์เซอร์ — เปิดการแจ้งเตือนให้เว็บนี้ก่อน';
-  else st.textContent = note || 'ยังไม่เปิด · รับสรุปเมื่อวานทุกเช้า 08:30 บนเครื่องนี้';
+  else st.textContent = note || (sup ? 'ยังไม่เปิด · รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15 บนเครื่องนี้' : 'ยังไม่เปิด · รับสรุปเมื่อวานทุกเช้า 08:30 บนเครื่องนี้');
   if (on) on.style.display = sub || denied ? 'none' : '';
   if (off) off.style.display = sub ? '' : 'none';
   if (test) test.style.display = sub ? '' : 'none';
-  const later = document.getElementById('msPushLater');
+  const later = document.getElementById(p + 'Later');
   if (later) { later.textContent = sub ? 'ซ่อน' : 'ไว้ก่อน'; later.setAttribute('onclick', sub ? 'msPushHide()' : 'msPushLater()'); }
-  msPushKinds(sub);
+  msPushKinds(sub, p);
 }
 // one checkbox per kind of notification, saved on the server per device (push_subscription.off)
-async function msPushKinds(sub) {
-  const box = document.getElementById('msPushKinds'); if (!box) return;
+async function msPushKinds(sub, p) {
+  p = p || 'msPush';
+  const box = document.getElementById(p + 'Kinds'); if (!box) return;
   if (!sub) { box.style.display = 'none'; box.innerHTML = ''; return; }
   let j;
   try {
@@ -184,11 +202,12 @@ async function msPushKinds(sub) {
     j = await r.json();
   } catch (e) { box.style.display = 'none'; return; }
   box.innerHTML = '<div style="font-size:12px;color:var(--text-muted,#64748b);margin:10px 0 0">ชนิดที่ต้องการรับ</div>' +
-    j.kinds.map(k => `<label style="display:flex;align-items:center;gap:10px;min-height:44px;font-size:13px;color:var(--text-primary,#1e293b)"><input type="checkbox" data-kind="${esc(k.id)}" ${(j.off || []).includes(k.id) ? '' : 'checked'} onchange="msPushKindsSave()" style="width:20px;height:20px;accent-color:var(--accent)">${esc(k.label)}</label>`).join('');
+    j.kinds.map(k => `<label style="display:flex;align-items:center;gap:10px;min-height:44px;font-size:13px;color:var(--text-primary,#1e293b)"><input type="checkbox" data-kind="${esc(k.id)}" ${(j.off || []).includes(k.id) ? '' : 'checked'} onchange="msPushKindsSave('${p}')" style="width:20px;height:20px;accent-color:var(--accent)">${esc(k.label)}</label>`).join('');
   box.style.display = '';
 }
-async function msPushKindsSave() {
-  const box = document.getElementById('msPushKinds'), st = document.getElementById('msPushState');
+async function msPushKindsSave(p) {
+  p = p || 'msPush';
+  const box = document.getElementById(p + 'Kinds'), st = document.getElementById(p + 'State');
   if (!box) return;
   const off = [...box.querySelectorAll('input[data-kind]')].filter(i => !i.checked).map(i => i.dataset.kind);
   try {
@@ -199,11 +218,13 @@ async function msPushKindsSave() {
     if (st) st.textContent = off.length ? `บันทึกแล้ว · ปิดอยู่ ${off.length} ชนิด` : 'บันทึกแล้ว · รับครบทุกชนิด';
   } catch (e) { if (st) st.textContent = 'บันทึกไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
-async function msPushEnable() {
-  const st = document.getElementById('msPushState');
+async function msPushEnable(p) {
+  p = p || 'msPush';
+  const st = document.getElementById(p + 'State');
   try {
+    if (_msVapid === null) await msPushVapid();
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { await msPushRender(perm === 'denied' ? '' : 'ยังไม่ได้อนุญาต'); return; }
+    if (perm !== 'granted') { await msPushRender(perm === 'denied' ? '' : 'ยังไม่ได้อนุญาต', p); return; }
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _msB64ToU8(_msVapid) });
     const r = await fetch(`${API}/api/push/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -214,10 +235,10 @@ async function msPushEnable() {
       throw new Error(d.detail || ('HTTP ' + r.status));
     }
     _msPushOpen = true;      // stay visible so ส่งทดสอบ can be tried; ซ่อน tucks it away
-    await msPushRender();
+    await msPushRender(undefined, p);
   } catch (e) { if (st) st.textContent = 'เปิดไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
-async function msPushDisable() {
+async function msPushDisable(p) {
   try {
     const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
     if (sub) {
@@ -225,10 +246,11 @@ async function msPushDisable() {
       await sub.unsubscribe();
     }
   } catch (e) {}
-  await msPushRender('ปิดแล้ว');
+  await msPushRender('ปิดแล้ว', p);
 }
-async function msPushTest() {
-  const st = document.getElementById('msPushState');
+async function msPushTest(p) {
+  p = p || 'msPush';
+  const st = document.getElementById(p + 'State');
   if (st) st.textContent = 'กำลังส่งทดสอบ…';
   try {
     const r = await fetch(`${API}/api/push/test`, { method: 'POST' });
@@ -236,7 +258,7 @@ async function msPushTest() {
     if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
     const codes = (d.statuses || []).join(', ');
     await msPushRender(d.sent ? `ส่งทดสอบแล้ว · ดูการแจ้งเตือนบนเครื่อง (push service ตอบ ${codes})`
-                             : `ส่งไม่ถึง (${d.failed || 0} ล้มเหลว, ${d.gone || 0} หมดอายุ · push service ตอบ ${codes || 'ไม่มี'})`);
+                             : `ส่งไม่ถึง (${d.failed || 0} ล้มเหลว, ${d.gone || 0} หมดอายุ · push service ตอบ ${codes || 'ไม่มี'})`, p);
   } catch (e) { if (st) st.textContent = 'ส่งทดสอบไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
 }
 

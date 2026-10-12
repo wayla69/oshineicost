@@ -1,13 +1,25 @@
 # -*- coding: utf-8 -*-
 """Order reminders (bom_center/reminders.py + main._maybe_supply_reminder):
-the day's duties per pilot branch and the queue, once a day after 07:00 on the
+the day's duties per branch account and the queue, once a day after 07:00 on the
 Thai clock, the cutoff note once after 13:15, sent only when Telegram is set up."""
 from datetime import date, datetime
+
+import auth
+import pytest
 
 from bom_center import reminders as RM
 from bom_center.clock import BKK
 from test_bom_center_s11 import _report, udon  # noqa: F401  (branch 1 = อุดรธานี)
 from test_bom_center_s4b import con  # noqa: F401
+
+
+@pytest.fixture
+def acct_udon(udon):  # noqa: F811
+    """Batch 3: the reminders follow the branch ACCOUNTS (role 'branch' with a branch), not a list of four pilot names."""
+    auth.init_auth(udon)
+    udon.execute("INSERT INTO app_user(username, pw_hash, pw_salt, role, branch) VALUES('br_udon', 'x', 'y', 'branch', 'อุดรธานี')")
+    return udon
+
 
 MON = date(2026, 10, 5)        # round 1's cutoff day (Wednesday's delivery, 13:15)
 TUE = date(2026, 10, 6)        # that cutoff has passed
@@ -22,8 +34,8 @@ def test_thai_date():
     assert RM.thai_date(TUE) == "อังคาร 6 ต.ค. 2569"
 
 
-def test_morning_names_the_duties_and_follows_them(udon):
-    c = udon
+def test_morning_names_the_duties_and_follows_them(acct_udon):
+    c = acct_udon
     rec = RM.morning(c, today=MON, app_url="https://x.test")
     assert rec["any_work"] is True and "จันทร์ 5 ต.ค. 2569" in rec["text"]
     line = _line(rec)
@@ -39,18 +51,18 @@ def test_morning_names_the_duties_and_follows_them(udon):
     assert "ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป ส่งใบสั่งซื้อภายใน พฤ. 8/10 เวลา 13:15 · รอบส่งวันเสาร์ 10/10)" in _line(off)["text"]
 
 
-def test_a_missed_cutoff_is_named_with_the_late_fee(udon):
-    rec = RM.morning(udon, today=TUE)                     # Tuesday morning: Wednesday's cutoff passed yesterday
+def test_a_missed_cutoff_is_named_with_the_late_fee(acct_udon):
+    rec = RM.morning(acct_udon, today=TUE)                     # Tuesday morning: Wednesday's cutoff passed yesterday
     line = _line(rec)
     assert line["pending"] and "ยังไม่ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 (ส่งล่าช้า มีค่าปรับ)" in line["text"]
-    c = udon
+    c = acct_udon
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status, late) VALUES(1, '2026-10-05', '1', 'submitted', 1)")
     rec = RM.morning(c, today=TUE)
     assert "ส่งล่าช้า 1 ใบ (มีค่าปรับ)" in rec["text"] and rec["queue"]["late_orders"] == 1
 
 
-def test_cutoff_note_only_when_someone_missed_it_or_orders_wait(udon):
-    c = udon
+def test_cutoff_note_only_when_someone_missed_it_or_orders_wait(acct_udon):
+    c = acct_udon
     after = datetime(2026, 10, 5, 13, 20, tzinfo=BKK)
     s = RM.cutoff(c, today=MON, app_url="https://x.test", now=after)
     assert s["missed"] == [{"branch_id": 1, "name": "อุดรธานี", "delivery": "2026-10-07", "delivery_th": "วันพุธ 7/10"}]

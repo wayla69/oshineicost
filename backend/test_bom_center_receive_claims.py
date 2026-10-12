@@ -149,7 +149,7 @@ def test_the_unapproved_part_is_added_back_and_cannot_be_deleted(con):  # noqa: 
     assert _received_qty_base(con) == pytest.approx(before + rows[0][1])
     assert CL.detail(con, cid)["adjust_receipt_id"] == out["receipt_id"]
     with pytest.raises(ValueError):                                    # the branch cannot take it back out
-        VA.delete_receipt(con, 1, out["receipt_id"], "udon")
+        VA.delete_receipt(con, 1, out["receipt_id"], "udon", "ทดสอบ")
 
 
 def test_rejecting_a_receive_claim_adds_the_goods_back(con):  # noqa: F811
@@ -167,7 +167,7 @@ def test_rejecting_a_receive_claim_adds_the_goods_back(con):  # noqa: F811
     assert len(rows) == 1 and rows[0][0] == 2 and rows[0][2] == "claim"        # all of the claimed 2 comes back
     assert _received_qty_base(con) == pytest.approx(before + rows[0][1])
     with pytest.raises(ValueError):
-        VA.delete_receipt(con, 1, out["receipt_id"], "udon")
+        VA.delete_receipt(con, 1, out["receipt_id"], "udon", "ทดสอบ")
 
 
 def test_rejecting_a_later_claim_still_changes_no_stock(con):  # noqa: F811

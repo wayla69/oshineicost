@@ -33,6 +33,29 @@
     </div>
   </div>
 
+  <!-- batch 3 (2.1): turn on the reminders of this login's own work on this phone - the same card logic as the owner's summary
+       (09c-mobile.js msPush*, with the id prefix shmPush); kind "supply": the morning line, the 11:00 warning, the centre lines.
+       Hidden where push is not available (an iPhone tab that is not installed, a server without the key). -->
+  <div class="card p-3 mb-3" id="shmPush" style="display:none">
+    <div class="text-sm font-semibold" style="color:var(--text-primary)">รับการแจ้งเตือนบนมือถือ</div>
+    <p id="shmPushState" class="text-xs" style="color:var(--text-secondary);margin-top:2px">กำลังตรวจสอบ…</p>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button id="shmPushOn" onclick="msPushEnable('shmPush')" style="min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);cursor:pointer">เปิดการแจ้งเตือน</button>
+      <button id="shmPushOff" onclick="msPushDisable('shmPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ปิด</button>
+      <button id="shmPushTest" onclick="msPushTest('shmPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ส่งทดสอบ</button>
+    </div>
+    <div id="shmPushKinds" style="display:none"></div>
+  </div>
+
+  <!-- batch 3 (4.7): the all-branches grid in one line, for the centre roles (loadSupplyHome → shmAdoptionLoad) -->
+  <div class="card p-3 mb-3" id="shmAdoption" style="display:none">
+    <div class="flex items-center gap-3">
+      <div class="flex-1 min-w-0"><div class="text-sm font-semibold" style="color:var(--text-primary)">การใช้งานทุกสาขา (7 วันล่าสุด)</div>
+        <div id="shmAdoptionLine" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div></div>
+      <a href="#" onclick="supplyGo({tab:'orderhub',pane:'adoption'});return false" class="text-xs whitespace-nowrap" style="color:var(--accent);padding:12px 0 12px 6px">ดูรายสาขา →</a>
+    </div>
+  </div>
+
   <div class="card p-4 mb-3" id="shmMineCard">
     <div class="flex items-baseline justify-between gap-2">
       <div class="section-title mb-0">งานของฉัน</div>

@@ -16,14 +16,16 @@ period whose deliveries the branch has not confirmed as complete is shown as
 INCOMPLETE (a missing delivery would read as a shortage). Thresholds follow the
 plan: class A ±5 %, B ±10 %, C ±20 % (class = share of BoM ฿ in the period).
 """
+import json
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from .fmt import day_th as _fmt_day
 from .fmt import item as _item
 from .fmt import no_unit as _no_unit
 from .fmt import reasons as _reasons
 from .master import audit
+from .master import now as _now
 from .units import Converter, unit_word
 
 THRESHOLD = {"A": 5.0, "B": 10.0, "C": 20.0}
@@ -152,8 +154,20 @@ def _closed_through(con, branch_id: int):
     return r[0] if r else None
 
 
-def delete_receipt(con, branch_id: int, receipt_id: int, who: str) -> bool:
-    r = con.execute("SELECT receipt_date, source FROM bc_receipt WHERE receipt_id=? AND branch_id=?",
+CANCEL_REASON_MIN = 3
+CANCEL_REASON_MAX = 300
+
+
+def delete_receipt(con, branch_id: int, receipt_id: int, who: str, reason: str) -> bool:
+    """Cancel a receipt (batch 3, 3.6: the button is "ยกเลิกใบรับสินค้า"). The receipt row is really deleted, as before — the
+    stock figures read bc_receipt — but a reason is REQUIRED and the whole receipt (header and every line) is first written to
+    bc_receipt_cancel and to the audit log, so what was cancelled, by whom, when and why is never lost. Sales Support reads the
+    last 7 days (cancelled_receipts)."""
+    why = " ".join(str(reason or "").split())
+    if len(why) < CANCEL_REASON_MIN:
+        raise ValueError("ต้องระบุเหตุผลในการยกเลิกใบรับสินค้า")
+    why = why[:CANCEL_REASON_MAX]
+    r = con.execute("SELECT receipt_date, source, ref, note, entered_by, created_at FROM bc_receipt WHERE receipt_id=? AND branch_id=?",
                     (receipt_id, branch_id)).fetchone()
     if not r:
         raise ValueError("ไม่พบใบรับสินค้านี้")
@@ -162,10 +176,48 @@ def delete_receipt(con, branch_id: int, receipt_id: int, who: str) -> bool:
     closed = _closed_through(con, branch_id)
     if closed and r[0] < closed:
         raise ValueError(f"ใบรับสินค้าวันที่ {_fmt_day(r[0])} อยู่ในงวดที่ปิดแล้ว ({_fmt_day(closed)}) จึงลบไม่ได้ · แจ้งฝ่ายวิเคราะห์")
+    cur = con.execute("SELECT * FROM bc_receipt_line WHERE receipt_id=? ORDER BY ingredient_code", (receipt_id,))
+    cols = [d[0] for d in cur.description]
+    lines = [dict(zip(cols, row)) for row in cur.fetchall()]
+    snap = {"receipt_id": receipt_id, "branch_id": branch_id, "receipt_date": r[0], "source": r[1], "ref": r[2], "note": r[3],
+            "entered_by": r[4], "created_at": r[5], "lines": lines}
+    blob = json.dumps(snap, ensure_ascii=False, default=str)
+    con.execute("INSERT INTO bc_receipt_cancel(receipt_id, branch_id, receipt_date, source, ref, entered_by, created_at, line_count,"
+                " cancel_reason, cancelled_by, cancelled_at, snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (receipt_id, branch_id, r[0], r[1], r[2], r[4], r[5], len(lines), why, who, _now(), blob))
+    audit(con, who, "receipt_cancel", "bc_receipt", str(receipt_id), blob, why)      # the record first, then the delete
     con.execute("DELETE FROM bc_receipt_line WHERE receipt_id=?", (receipt_id,))
     con.execute("DELETE FROM bc_receipt WHERE receipt_id=?", (receipt_id,))
-    audit(con, who, "receipt_delete", "bc_receipt", str(receipt_id), r[0], None)
     return True
+
+
+def cancelled_receipts(con, days: int = 7, branch_id: int = None, today=None) -> list:
+    """The receipts a branch cancelled in the last `days` days (newest first), with the reason, who and when, for Sales
+    Support's claims / slips pane: [{cancel_id, branch_id, branch, receipt_date, ref_th, lines, reason, cancelled_by, cancelled_at}]."""
+    from .clock import BKK, today as _today
+    t = today or _today()
+    first = t - timedelta(days=max(int(days), 1) - 1)                        # midnight Bangkok of the first day, as the UTC stamp stored
+    since = datetime.combine(first, time.min, BKK).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    q = ("SELECT cancel_id, branch_id, receipt_id, receipt_date, source, ref, line_count, cancel_reason, cancelled_by, cancelled_at"
+         " FROM bc_receipt_cancel WHERE cancelled_at >= ?" + (" AND branch_id=?" if branch_id else "")
+         + " ORDER BY cancel_id DESC")
+    names = dict(con.execute("SELECT branch_id, name FROM branches"))
+    out = []
+    for cid, bid, rid, rdate, src, ref, n, why, by, at in con.execute(q, (since,) + ((int(branch_id),) if branch_id else ())).fetchall():
+        out.append({"cancel_id": cid, "branch_id": bid, "branch": names.get(bid), "receipt_id": rid, "receipt_date": rdate,
+                    "source": src, "ref_th": _ref_th(con, bid, ref, src), "lines": n, "reason": why, "cancelled_by": by,
+                    "cancelled_at": _bkk_stamp(at)})
+    return out
+
+
+def _bkk_stamp(ts) -> str:
+    """A stored UTC stamp as the branch's clock: 'YYYY-MM-DD HH:MM' (Bangkok)."""
+    from .clock import BKK
+    try:
+        t = datetime.fromisoformat(str(ts))
+    except ValueError:
+        return str(ts or "")
+    return (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(BKK).strftime("%Y-%m-%d %H:%M")
 
 
 def _ref_th(con, branch_id: int, ref, source=None):

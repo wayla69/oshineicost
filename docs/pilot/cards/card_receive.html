@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>บัตรงานสาขา · รับสินค้าและแจ้งเคลม</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: #0f172a; font: 16pt/1.5 "Leelawadee UI", "Noto Sans Thai", "Sarabun", Tahoma, sans-serif; background: #fff; }
+  .page { width: 210mm; height: 296mm; padding: 14mm 16mm 12mm; display: flex; flex-direction: column; overflow: hidden; }
+  .eyebrow { margin: 0; font-size: 10pt; letter-spacing: .5px; color: #1f3a6b; font-weight: 700; }
+  h1 { margin: 3mm 0 1mm; font-size: 30pt; line-height: 1.2; color: #1f3a6b; display: flex; align-items: center; gap: 5mm; }
+  h1 .no { flex: none; width: 15mm; height: 15mm; border-radius: 50%; background: #1f3a6b; color: #fff; font-size: 22pt; display: flex; align-items: center; justify-content: center; }
+  .when { margin: 0 0 5mm; padding: 2mm 4mm; border-radius: 3mm; background: #e8edf7; color: #1f3a6b; font-weight: 600; font-size: 13pt; }
+  ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+  li { counter-increment: s; position: relative; padding: 0 0 0 13mm; margin: 0 0 4.2mm; min-height: 9mm; }
+  li::before { content: counter(s); position: absolute; left: 0; top: .3mm; width: 9mm; height: 9mm; border-radius: 50%; border: 0.6mm solid #1f3a6b;
+               color: #1f3a6b; font-weight: 700; font-size: 13pt; display: flex; align-items: center; justify-content: center; }
+  b { color: #1f3a6b; }
+  .box { margin: 2mm 0 0; padding: 3mm 4.5mm; border-radius: 3mm; font-size: 13.5pt; line-height: 1.5; }
+  .warn { background: #fdf1dc; color: #7c4a00; border: 0.4mm solid #e0a43a; }
+  .warn b { color: #7c4a00; }
+  .note { background: #f1f5f9; color: #334155; }
+  .foot { margin-top: auto; padding-top: 3mm; border-top: 0.3mm solid #cbd5e1; font-size: 10.5pt; color: #475569; display: flex; justify-content: space-between; gap: 6mm; }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="eyebrow">OSHINEI · วัตถุดิบและใบสั่งซื้อ · บัตรงานของสาขา</p>
+  <h1><span class="no">3</span>รับสินค้าและแจ้งเคลม</h1>
+  <p class="when">ทุกครั้งที่สินค้ามาถึง · ของเสียหายที่พบภายหลังแจ้งเคลม</p>
+  <ol>
+    <li>แตะ <b>รับสินค้า</b> ที่แถบล่าง หัวข้อ “ใบสั่งซื้อที่คลังจัดส่งแล้ว” มีหลายใบ แตะ <b>รับสินค้า</b> ที่ใบที่ของมาถึง</li>
+    <li>ตอบคำถามเดียว <b>รับครบตามที่คลังส่งทุกรายการ?</b> ครบแตะ <b>รับครบ</b></li>
+    <li>ไม่ครบแตะ <b>มีรายการไม่ครบ</b> พิมพ์ชื่อวัตถุดิบ แตะ <b>เลือก</b> แก้ช่อง <b>รับจริง</b> และเลือกสาเหตุ รายการอื่นนับว่ารับครบ</li>
+    <li>ปลาทั้งตัว: กรอกจำนวนตัวที่ได้รับเป็นจำนวนเต็มข้างน้ำหนัก ขนาดบรรจุไม่ตรงกับระบบ แตะ <b>ขนาดบรรจุไม่ตรง</b></li>
+    <li>ติ๊ก <b>ตรวจสภาพและจำนวนครบแล้ว</b> แล้วแตะ <b>บันทึกรับสินค้า</b> และแตะ <b>บันทึกรับสินค้า</b> ในคำถามยืนยัน</li>
+    <li>พบของเสียหายภายหลัง: การ์ด <b>แจ้งเคลมสินค้า</b> → <b>แจ้งเคลม</b> ที่ใบนั้น → เลือกรายการ ใส่จำนวนและสาเหตุ → <b>ส่งแจ้งเคลม</b> แล้วส่งรูปถ่ายทางไลน์ถึงประสานงานขาย</li>
+  </ol>
+  <p class="box warn">ระบบไม่รับรูปถ่าย ส่งทางไลน์ถึงประสานงานขายเท่านั้น · รายการที่รับครบโดยไม่แจ้งในวันรับ อาจไม่ได้รับพิจารณา</p>
+  <p class="box note">บันทึกผิดใบ แตะ <b>ยกเลิกใบรับสินค้า</b> ต้องระบุเหตุผลและประสานงานขายเห็นเหตุผลนั้น · ใบที่เกิดจากการอนุมัติเคลม และใบในงวดที่ปิดแล้ว ยกเลิกไม่ได้</p>
+  <div class="foot"><span>รับการแจ้งเตือนบนมือถือ: เปิด <b>หน้างาน</b> แตะ <b>เปิดการแจ้งเตือน</b> ในการ์ด “รับการแจ้งเตือนบนมือถือ”</span><span>มีข้อสงสัย ติดต่อประสานงานขาย · คู่มือ: /docs/pilot/branch_guide.html</span></div>
+</div>
+</body>
+</html>
