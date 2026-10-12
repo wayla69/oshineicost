@@ -64,6 +64,10 @@ const _OHB_HELP = {
   issuevar: {
     _: ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
       'วัตถุดิบชั้น A ที่เบิกเกินสูตรมากกว่า 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'] },
+  persales: {
+    _: ['เทียบปริมาณวัตถุดิบที่ใช้กับยอดขาย (ไม่รวมภาษีมูลค่าเพิ่ม) ใช้ปริมาณเดียวกับที่ใช้คำนวณยอดแนะนำ เป็นอีกวิธีหนึ่งที่ใช้ดูควบคู่กัน ไม่ได้ใช้แทนการคำนวณตามเมนู',
+      'แต่ละสาขาใช้ไม่เท่ากัน จึงดูเป็นรายสาขา · แกว่งต่อสัปดาห์ = ความผันผวนของอัตรารายสัปดาห์ ถ้าเกิน 15% แสดงว่าใช้ไม่สม่ำเสมอ ไม่ควรใช้ตัวเลขนี้เป็นเกณฑ์',
+      'ช่วงก่อนหน้าไม่นับย้อนก่อนเปลี่ยนเป็นเมนูใหม่ (1 กันยายน 2026) · แถวทั้งเครือคือปริมาณรวมทุกสาขาหารด้วยยอดขายรวมทุกสาขา'] },
   comp: {
     _: ['แต่ละแถวคือหนึ่งรอบสั่งของสาขา เทียบ 4 ค่า (฿): ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง',
       'ป้ายสถานะบอกว่าส่วนต่างอยู่ที่สาขา (สั่งเกิน หรือสั่งขาด) ที่คลัง หรือในการจัดส่ง · “ไม่ได้สั่ง” คือรอบที่ตัดรอบไปแล้วโดยสาขาไม่ส่งใบสั่งซื้อ'] },
@@ -133,11 +137,12 @@ function ohbMonthChanged() {
 }
 function ohbSetSub(k) {
   _ohbSub = k;
-  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar', 'issues'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
+  ['queue', 'comp', 'month', 'pilot', 'central', 'claims', 'issuevar', 'issues', 'persales'].forEach(p => { const el = document.getElementById('ohb-pane-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   _ohbMonthSync(k);
   ohbRenderHelp(k);
   if (k === 'issues') ohbLoadIssues();
   if (k === 'issuevar') ohbLoadIssueVar();
+  if (k === 'persales') ohbLoadPerSales();
   if (k === 'queue') ohbLoadQueue();
   if (k === 'comp') ohbLoadComp();
   if (k === 'month') {
@@ -842,6 +847,76 @@ function ohbIvXlsx() {
   if (!b) { _bmcStatus('ohbIvStatus', 'เลือกสาขาก่อนดาวน์โหลด', 'var(--amber-ink)'); return; }
   bmcDownload(`${API}/api/bom-center/issue-reports/daily.xlsx?branch_id=${b}&month=${_ohbMonthVal()}`, 'ผลต่างตัดเบิกรายวัน.xlsx', 'ohbIvStatus');
 }
+
+// ── ใช้วัตถุดิบต่อยอดขาย ฿100,000 (PR-V): the usage the forecast reads, set against the sales of the same days ──
+let _ohbPs = null;            // /api/bom-center/per-sales
+let _ohbPsAll = false;        // show every item, not the first 60
+const _OHB_PS_ROWS = 60;
+function _ohbPsQS() {
+  const sel = document.getElementById('ohbPsBranch'), w = document.getElementById('ohbPsWeeks');
+  return `weeks=${w ? w.value : 4}${sel && sel.value ? '&branch_id=' + sel.value : ''}`;
+}
+function _ohbPsNote(it) {
+  if (it.steady === false) return _bmcChip(`ใช้ไม่สม่ำเสมอ (แกว่ง ±${_bmcNum(it.swing_pct, 0)}%)`, 'var(--amber-ink)');
+  if (it.steady === null && it.per_100k) return _bmcChip('ข้อมูลยังไม่พอ', 'var(--text-muted)');
+  return it.swing_pct != null ? `<span class="text-[11px]" style="color:var(--text-muted)">±${_bmcNum(it.swing_pct, 0)}%</span>` : '';
+}
+function _ohbPsTable(items, note) {
+  if (!items.length) return '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูลการใช้ในช่วงนี้</span>';
+  const shown = _ohbPsAll ? items : items.slice(0, _OHB_PS_ROWS);
+  const num = v => v == null ? '<span style="color:var(--text-muted)">–</span>' : _bmcNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
+  const chg = v => v == null ? '<span style="color:var(--text-muted)">–</span>'
+    : `<span style="color:${Math.abs(v) >= 20 ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%</span>`;
+  return `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2 text-right">ต่อยอดขาย ฿100,000</th><th class="pr-2 text-right">ช่วงก่อนหน้า</th>
+      <th class="pr-2 text-right">เปลี่ยนแปลง</th><th class="pr-2 text-right">มูลค่า (฿)</th><th>${esc(note || 'ความสม่ำเสมอ')}</th></tr></thead>
+    <tbody>${shown.map(it => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1" title="${esc(it.code)}">${esc(it.name)}</td>
+      <td class="pr-2" style="color:var(--text-secondary)">${esc(it.unit || '')}</td><td class="pr-2 text-right font-semibold">${num(it.per_100k)}</td>
+      <td class="pr-2 text-right" style="color:var(--text-secondary)">${num(it.prev_per_100k)}</td><td class="pr-2 text-right">${chg(it.change_pct)}</td>
+      <td class="pr-2 text-right">${it.value_per_100k == null ? '<span style="color:var(--text-muted)">–</span>' : _bmcNum(it.value_per_100k, 0)}</td><td>${it.swing_pct === undefined ? '' : _ohbPsNote(it)}</td></tr>`).join('')}</tbody></table></div>
+    ${items.length > _OHB_PS_ROWS ? `<div class="mt-2 text-xs"><a href="#" onclick="_ohbPsAll=!_ohbPsAll;ohbRenderPerSales();return false" style="color:var(--accent)">${_ohbPsAll ? 'แสดงเฉพาะ ' + _OHB_PS_ROWS + ' รายการแรก' : 'แสดงทั้งหมด ' + items.length + ' รายการ'}</a></div>` : ''}`;
+}
+function ohbRenderPerSales() {
+  const d = _ohbPs, list = document.getElementById('ohbPsList'), chips = document.getElementById('ohbPsChips'), box = document.getElementById('ohbPsBranches');
+  if (!d || !list) return;
+  const sel = document.getElementById('ohbPsBranch'), one = !!(sel && sel.value) || d.scoped;
+  const cur = d.current, prv = d.previous;
+  chips.innerHTML = `${_bmcChip(`${d.weeks} สัปดาห์ล่าสุด ${fmtDay(cur.from)} ถึง ${fmtDay(cur.to)}`, 'var(--navy-ink)')}
+    ${prv ? _bmcChip(`เทียบ ${fmtDay(prv.from)} ถึง ${fmtDay(prv.to)}`, 'var(--text-muted)') : _bmcChip('ไม่มีช่วงก่อนหน้า (ก่อนเมนูใหม่ 1 ก.ย.)', 'var(--text-muted)')}
+    ${_bmcChip(`เกณฑ์ใช้สม่ำเสมอ ≤ ${d.steady_pct}%`, 'var(--text-muted)')}`;
+  if (!d.branches.length) { box.style.display = 'none'; list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดขายในช่วงนี้</span>'; return; }
+  // the centre without a branch chosen: one line per branch (pick one to open its items), then the chain's items
+  if (!one) {
+    box.style.display = '';
+    box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">เปรียบเทียบรายสาขา</div>
+      <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+        <th class="pr-2">สาขา</th><th class="pr-2 text-right">ยอดขาย (฿)</th><th class="pr-2 text-right">มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 (฿)</th><th class="pr-2 text-right">รายการที่ใช้ไม่สม่ำเสมอ</th></tr></thead>
+      <tbody>${d.branches.map(b => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1"><a href="#" onclick="ohbPsPick(${b.branch_id});return false" style="color:var(--accent);text-decoration:underline">${esc(b.branch)}</a></td>
+        <td class="pr-2 text-right">${_bmcNum(b.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(b.value_per_100k, 0)}</td>
+        <td class="pr-2 text-right" style="color:${b.items.some(i => i.steady === false) ? 'var(--amber-ink)' : 'var(--text-muted)'}">${b.items.filter(i => i.steady === false).length}</td></tr>`).join('')}
+        ${d.chain ? `<tr style="border-top:1px solid var(--border)"><td class="pr-2 py-1 font-semibold">ทั้งเครือ</td><td class="pr-2 text-right font-semibold">${_bmcNum(d.chain.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(d.chain.value_per_100k, 0)}</td><td></td></tr>` : ''}</tbody></table></div>`;
+    list.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ทั้งเครือ · ปริมาณรวมทุกสาขา ÷ ยอดขายรวมทุกสาขา</div>${d.chain ? _ohbPsTable(d.chain.items.map(i => Object.assign({}, i, { swing_pct: undefined })), ' ') : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดขายในช่วงนี้</span>'}`;
+    return;
+  }
+  box.style.display = 'none';
+  const b = d.branches[0];
+  list.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${esc(b.branch)} · ยอดขาย ฿${_bmcNum(b.sales, 0)} (${b.days} วันขาย) · มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 ≈ ฿${_bmcNum(b.value_per_100k, 0)}</div>${_ohbPsTable(b.items)}`;
+}
+function ohbPsPick(id) { const sel = document.getElementById('ohbPsBranch'); if (sel) { sel.value = String(id); ohbLoadPerSales(); } }
+async function ohbLoadPerSales() {
+  const sel = document.getElementById('ohbPsBranch'), list = document.getElementById('ohbPsList');
+  if (!list) return;
+  try {
+    if (sel && !sel.options.length) {                         // no picker for a pinned login (it never sees this pane)
+      const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
+      sel.innerHTML = supplyBranchOptions(me.branches || [], 'ทั้งเครือ (เปรียบเทียบรายสาขา)');
+    }
+    list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+    _ohbPs = await _bmcJson(`${API}/api/bom-center/per-sales?${_ohbPsQS()}`);
+    ohbRenderPerSales();
+  } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function ohbPsXlsx() { bmcDownload(`${API}/api/bom-center/per-sales.xlsx?${_ohbPsQS()}`, 'วัตถุดิบต่อยอดขาย 100000.xlsx', 'ohbPsStatus'); }
 
 // ── ใบตัดเบิกสาขา (PR-J4): the branches' daily slips as a log; Sales Support reopens one with a reason ───────
 // The list comes from the lateness log (issue-reports/log): per branch and day, how the slip was handled. A row

@@ -310,6 +310,11 @@ _usage_lock = threading.Lock()
 def clear_usage_cache() -> None:
     with _usage_lock:
         _usage_cache.clear()
+    try:                                                   # PR-V: the per-฿100,000 report is built on this usage
+        from . import per_sales
+        per_sales.clear_cache()
+    except Exception:
+        pass
 
 
 def _usage_key(con, branch_id, start, end, month):
@@ -417,8 +422,19 @@ def _abc(values: dict) -> dict:
     return out
 
 
+def season_factor(con, branch_id: int, c_from: date, c_to: date) -> dict:
+    """{factor, mode, reason} — the season / festival factor the order plan applies over the cover days
+    (the calendar and last-year logic of routers.ingredients); 1.0 when it cannot be resolved."""
+    bname = (con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone() or [None])[0]
+    try:
+        return _loaded("routers.ingredients")._ing_season_resolve(con, bname, c_from.isoformat(), c_to.isoformat(), "auto")
+    except Exception:
+        return {"factor": 1.0, "mode": "off", "reason": ""}
+
+
 def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, season: str = "auto",
-            as_of: date = None, stock: dict = None, uplift_pct: float = 0.0, delivery: date = None) -> dict:
+            as_of: date = None, stock: dict = None, uplift_pct: float = 0.0, delivery: date = None,
+            ref_branch: int = None, expected_sales: float = None) -> dict:
     """The suggestion for one branch, one round, one delivery (nothing saved). `delivery` names
     the delivery day; without it `order_day` is read as "the window open on that day".
 
@@ -428,8 +444,15 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
 
     `stock` (orders.stock_position): the system stock as of `through` (last month-end count + goods
     received − confirmed issue slips), plus what is on order — deducted per item after projecting
-    the use between `through` and the first covered day."""
+    the use between `through` and the first covered day.
+
+    PR-V: every row also carries `per_sales` (its usage per ฿100,000 of the branch's sales over the same history) and the
+    answer `sales_normal` (the "ปกติ" sales of the cover days: weekday-fair mean × trend × season). A branch with fewer than
+    per_sales.NEW_BRANCH_DAYS trading days of sales AND a `ref_branch` is planned from that branch's usage per ฿100,000 ×
+    `expected_sales` (what the branch itself expects to sell over the cover period; trend, season and the buffer % do not
+    apply — the figure already is the expectation); without `expected_sales` there are no rows and `ref_mode.needs_sales`."""
     from .prices import price_for
+    from . import per_sales as _ps
     if delivery:
         order_day, dlv, c_from, c_to = cover_for_delivery(con, branch_id, rnd, delivery)
     else:
@@ -442,11 +465,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     bname = (con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone() or [None])[0]
     sf = {"factor": 1.0, "mode": "off", "reason": ""}
     if season == "auto":
-        try:
-            sf = _loaded("routers.ingredients")._ing_season_resolve(con, bname, c_from.isoformat(),
-                                                                     c_to.isoformat(), "auto")
-        except Exception:
-            pass
+        sf = season_factor(con, branch_id, c_from, c_to)
     factor = float(sf.get("factor") or 1.0)
     up = 1.0 + float(uplift_pct or 0.0) / 100.0            # the branch's buffer on top of the season factor
     master = {r[0]: r[1:] for r in con.execute(
@@ -459,6 +478,29 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     from .central import central_map
     cmap = central_map(con)                               # S11: the centre's list decides what is ordered from it
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
+    # PR-V · usage per ฿100,000 of sales (own history), and the "ปกติ" sales the forecast assumes for the cover days
+    sales_day = _ps.sales_by_day(con, branch_id, start, as_of)
+    ps_items = _ps.ratio_from(use, sales_day, start, as_of)["items"]
+    sales_normal = None
+    if days and sales_day:
+        n_ = _ps.normal_from(sales_day, days, as_of, cover, factor)["total"]
+        sales_normal = round(n_, 2) if n_ > 0 else None
+    ref_mode = None
+    if ref_branch and int(ref_branch) != int(branch_id) and len(days) < _ps.NEW_BRANCH_DAYS:
+        rb = _ps.reference_basis(con, int(ref_branch), month, weeks=weeks, cover=cover, factor=factor)
+        exp = float(expected_sales or 0.0)
+        ref_mode = {"active": True, "branch_id": rb["branch_id"], "name": rb["name"], "own_days": len(days),
+                    "min_days": _ps.NEW_BRANCH_DAYS, "expected_sales": exp or None, "ref_sales_normal": rb["sales_normal"],
+                    "needs_sales": exp <= 0, "ref_ok": rb["ok"], "label": f"คำนวณจากสาขาอ้างอิง {rb['name']}",
+                    "message": _ps.NEED_SALES_TH if exp <= 0 else (
+                        "" if rb["ok"] else f"สาขาอ้างอิง {rb['name']} ยังไม่มีประวัติการขายพอ")}
+        sales_normal = None
+        if exp > 0 and rb["ok"]:
+            use, ps_items = rb["use"], rb["items"]
+            stats["via"] = (rb["stats"] or {}).get("via", {})
+            factor, up = 1.0, 1.0
+        else:
+            use, ps_items = {}, {}
     # the days between the stock figure and the first covered day still eat into it
     # (the system stock is as of `through` — the day of the order, after that day's issue slip)
     through = (stock or {}).get("through")
@@ -478,7 +520,13 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     for code, s in use.items():
         if (code in salmon) != (rnd == "salmon"):
             continue
-        m = _daily_model(s, days, as_of)
+        if ref_mode:                                        # a new branch: the reference branch's usage per ฿100,000 × the expected sales
+            if code not in ps_items:
+                continue
+            m = {"mean_wd": {}, "overall": ps_items[code]["per_100k"] * float(expected_sales) / 1e5 / max(len(cover), 1),
+                 "trend": 1.0, "sigma": 0.0}
+        else:
+            m = _daily_model(s, days, as_of)
         if m["overall"] <= 0:
             continue
         per_day_base = [m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in cover]
@@ -518,6 +566,9 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "sigma": round(m["sigma"], 3), "recv_unit": recv, "qty_per_recv": per,
                      "suggested_units": units, "pack_known": bool(per),
                      "price_per_base": ppb, "via": stats.get("via", {}).get(code, []),
+                     "per_sales": ({"per_100k": round(ps_items[code]["per_100k"], 2), "steady": ps_items[code]["steady"],
+                                    "swing_pct": ps_items[code]["swing_pct"]} if code in ps_items else None),
+                     "ref_label": ref_mode["label"] if ref_mode else None,
                      "value": round((units * per if units else need) * ppb, 2) if ppb else None})
     rows.sort(key=lambda r: -(r["value"] or 0))
     stats.pop("via", None)                                 # carried on each row instead
@@ -531,7 +582,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             "trading_days": len(days), "season": sf, "stats": stats, "uplift_pct": round(float(uplift_pct or 0.0), 2),
             "on_hand_included": bool((stock or {}).get("basis")),
             "rows": rows, "value_total": round(sum(r["value"] or 0 for r in rows), 2),
-            "salmon_codes": sorted(salmon)}
+            "salmon_codes": sorted(salmon), "sales_normal": sales_normal, "ref_mode": ref_mode}
 
 
 def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, delivery: date = None) -> dict:

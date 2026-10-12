@@ -2180,19 +2180,26 @@ async function bmcLoadCalendar() {
         ${_BMC_WD.map((n, o) => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${n}</option>`).join('')}</select>`
     : _BMC_WD[val];
   const cut = (bid, rnd, th) => `<span id="bmcCut_${bid}_${rnd}">${esc(th || '')}</span>`;
+  // PR-V · สาขาอ้างอิงสำหรับสาขาใหม่: saved as soon as it is chosen (it is not one of the delivery days)
+  const refSel = (r) => w
+    ? `<select onchange="bmcSetRefBranch(${r.branch_id}, this)" aria-label="สาขาอ้างอิงของ${esc(r.branch)}" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);max-width:150px">
+        <option value="">ไม่ใช้</option>${_bmcCal.rows.filter(x => x.branch_id !== r.branch_id).map(x => `<option value="${x.branch_id}" ${Number(r.ref_branch_id) === x.branch_id ? 'selected' : ''}>${esc(x.branch)}</option>`).join('')}</select>`
+    : esc(((_bmcCal.rows.find(x => x.branch_id === r.ref_branch_id) || {}).branch) || '–');
   const pilot = _bmcCal.pilot || [];
   const calRows = (_bmcCalPilotOnly && pilot.length) ? _bmcCal.rows.filter(r => pilot.includes(r.branch)) : _bmcCal.rows;
   document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
       ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
       <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
+      <span class="text-[11px] w-full" style="color:var(--text-muted)">สาขาอ้างอิง: สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน จะคำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · เลือกแล้วบันทึกทันที</span>
       ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบส่ง</button>` : ''}</div>
     <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">ตัดรอบ</th>
-      <th class="pr-2">แซลมอนสด วันส่ง</th><th class="pr-2">ตัดรอบ</th><th>ตั้งโดย</th></tr></thead>
+      <th class="pr-2">แซลมอนสด วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">สาขาอ้างอิงสำหรับสาขาใหม่</th><th>ตั้งโดย</th></tr></thead>
     <tbody>${calRows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
       <td class="pr-2">${sel(r.branch_id, '1', r.r1.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '1', r.r1.cutoff_th)}</td>
       <td class="pr-2">${sel(r.branch_id, '2', r.r2.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '2', r.r2.cutoff_th)}</td>
       <td class="pr-2">${sel(r.branch_id, 'salmon', r.rsalmon.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, 'salmon', r.rsalmon.cutoff_th)}</td>
+      <td class="pr-2">${refSel(r)}</td>
       <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
@@ -2245,6 +2252,21 @@ async function bmcCalBulkSave() {
     bmcLoadCalendar();
   } catch (e) {
     _bmcStatus('bmcCalStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+  }
+}
+async function bmcSetRefBranch(bid, el) {
+  const v = el.value === '' ? null : Number(el.value);
+  try {
+    await _bmcJson(`${API}/api/bom-center/order-calendar/ref-branch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_id: bid, ref_branch_id: v }) });
+    const row = (_bmcCal.rows || []).find(x => x.branch_id === bid);
+    if (row) row.ref_branch_id = v;
+    const msg = `✓ บันทึกสาขาอ้างอิงแล้ว${v ? '' : ' (ไม่ใช้สาขาอ้างอิง)'}`;
+    _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
+    _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
+  } catch (e) {
+    _bmcStatus('bmcCalStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)');
+    _bmcStatus('bmcFcStatus', 'บันทึกไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)');
+    bmcLoadCalendar();
   }
 }
 // the read-only ตัดรอบ cell follows the weekday picked (the server derives the same: delivery − 2 days, a Sunday moves to Saturday)
