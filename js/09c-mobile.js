@@ -348,7 +348,10 @@ const msGlanceLine = html => html ? `<p style="font-size:12px;line-height:1.45;c
 function msColumns(vals, o) {
   const n = vals.length;
   if (n < 2) return '';
-  const W = 320, H = o.height || 100, top = 16, bottom = 14, plotH = H - top - bottom;
+  // o.under (optional): one {t, c} per column printed under its label (the month-by-month view
+  // prints the change on the previous month); o.allLabels labels every column, not just the ends
+  const under = Array.isArray(o.under) ? o.under : null;
+  const W = 320, H = o.height || 100, top = 16, bottom = under ? 31 : 14, plotH = H - top - bottom;
   const P = o.partial == null ? -1 : o.partial;
   const max = Math.max(1, ...vals.filter(v => v != null));
   const step = W / n, bw = Math.max(3, Math.min(22, step * 0.64));
@@ -388,9 +391,14 @@ function msColumns(vals, o) {
   if (hi >= 0 && hi !== last) g += lab(hi);
   if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="11" style="fill:var(--text-muted,#94a3b8)">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
   if (o.labels) {
-    g += txt(o.labels[0], cx(0), H - 2, 11, 400, 'var(--text-muted,#94a3b8)');
-    g += txt(o.labels[n - 1], cx(n - 1), H - 2, 11, 400, 'var(--text-muted,#94a3b8)');
+    const ly = under ? H - 17 : H - 2;
+    if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 11, i === last ? 700 : 400, i === last ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#94a3b8)'); });
+    else {
+      g += txt(o.labels[0], cx(0), ly, 11, 400, 'var(--text-muted,#94a3b8)');
+      g += txt(o.labels[n - 1], cx(n - 1), ly, 11, 400, 'var(--text-muted,#94a3b8)');
+    }
   }
+  if (under) under.forEach((u, i) => { if (u && u.t) g += txt(u.t, cx(i), H - 3, 11, 600, u.c || 'var(--text-muted,#94a3b8)'); });
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="${esc(o.aria || '')}">${g}</svg>`;
 }
 // Trend block = sentence + columns, for a trend array oldest→newest from /api/sales/daily.
@@ -455,6 +463,7 @@ async function msFetchRpt(branch, month) {
 function msRefresh() {
   Object.keys(_msRptCache).forEach(k => delete _msRptCache[k]);
   Object.keys(_msBriefCache).forEach(k => delete _msBriefCache[k]); _msScorecard = null;
+  Object.keys(_msMonthsCache).forEach(k => delete _msMonthsCache[k]);
   loadMobileSummary(true);
 }
 // a month-only report comes from the complete-month path unless the reader picked
@@ -759,8 +768,96 @@ function msSetSalesGran(g) {
   ['day', 'week', 'month'].forEach(x => document.getElementById('msGran' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', g === x));
   msLoadSales();
 }
+// ── ยอดขาย › รายเดือน: the last 12 closed months and the month in progress side by side, each with
+// its change on the previous month (owner request 2026-10-12). ONE call,
+// /api/reports/management/months, built from the management report's own functions, so a month
+// reads here exactly as it does in the report. The month in progress is month-to-date and is
+// compared on the report's weekday-fair baseline, never against a whole month. Tap a month → the
+// rest of the summary switches to it (the month picker above). ──
+const _msMonthsCache = {};
+async function msFetchMonths(branch) {
+  const key = branch || '';
+  if (_msMonthsCache[key]) return _msMonthsCache[key];
+  const q = new URLSearchParams({ lang: 'th' });
+  if (branch) q.set('branch', branch);
+  const d = await api(`${API}/api/reports/management/months?${q}`);
+  if (d && d.available) _msMonthsCache[key] = d;
+  return d;
+}
+// a change as inked text (theme good / bad inks, no chip): ▲ 5.7%  /  ▼ 2.1 pp
+function msMomTxt(v, goodUp = true, unit = '%') {
+  if (v == null) return `<span style="${_msMuted}">—</span>`;
+  if (v === 0) return `<span style="${_msMuted}">0${unit === '%' ? '%' : ' ' + unit}</span>`;
+  const good = goodUp ? v > 0 : v < 0;
+  return `<span style="color:var(${good ? '--good-ink' : '--bad-ink'});font-weight:600">${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}${unit === '%' ? '%' : ' ' + unit}</span>`;
+}
+const _msMomBasisNote = m => !m.mtd ? ''
+  : m.mom.basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน'
+  : m.mom.basis === 'same_days' ? 'เทียบวันเดียวกันของเดือนก่อน' : '';
+function msMonthCell(label, value, mom, yoy) {
+  return `<div style="min-width:0"><div style="font-size:12px;${_msMuted}">${label}</div>
+    <div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b);white-space:nowrap">${value}</div>
+    <div style="font-size:12px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:12px;white-space:nowrap"><span style="${_msMuted}">YoY</span> ${yoy}</div>` : ''}</div>`;
+}
+function msMonthsHtml(d, selected) {
+  const asc = d.months || [];
+  if (asc.length < 2) return '<div class="ms-row">ยังไม่มีข้อมูลหลายเดือน</div>';
+  const showGp = _msMod('cost.analysis') || _msMod('profit.pnl');
+  const part = asc.findIndex(m => m.mtd);
+  const labels = asc.map(m => msPeriodLabel(m.range[0], 'month'));
+  const vals = asc.map(m => m.revenue);
+  const [py, pm] = _msYmd(d.through || ''), dim = pm ? new Date(py, pm, 0).getDate() : 0;
+  const sentence = glanceTrendSentence(labels, vals, {
+    partial: part, note: part >= 0 && dim ? `${_msYmd(d.through)[2]}/${dim} วัน` : '', unit: 'เดือน', fmt });
+  const under = asc.map(m => {
+    const v = m.mom.revenue;
+    if (v == null) return { t: '—' };
+    const r = Math.round(v), t = (r > 0 ? '+' : r < 0 ? '−' : '') + Math.min(999, Math.abs(r));
+    return { t, c: r === 0 ? 'var(--text-muted,#94a3b8)' : `var(${r > 0 ? '--good-ink' : '--bad-ink'})` };
+  });
+  const chart = msColumns(vals, {
+    partial: part, labels: asc.map(m => _MS_TH_MON[+m.month.slice(5) - 1].replace(/\.$/, '')), allLabels: true,
+    under, fmt, grain: 'month', height: 138, aria: 'รายได้รายเดือน และ % เทียบเดือนก่อน' });
+  const cards = asc.slice().reverse().map(m => {
+    const on = m.month === selected, M = m.mom, Y = m.yoy;
+    const tag = m.mtd ? ` <span class="ms-chip" style="padding:1px 8px;font-size:12px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">สะสม ถึงวันที่ ${_msYmd(m.through)[2]}</span>` : '';
+    const note = _msMomBasisNote(m);
+    const gpCell = showGp ? msMonthCell('GP %', m.gp_pct != null ? m.gp_pct.toFixed(1) + '%' : '—', m.gp_pct != null ? msMomTxt(M.gp_pp, true, 'pp') : `<span style="${_msMuted}">ไม่มีต้นทุน</span>`, null) : '';
+    return `<div class="ms-mrow" role="button" tabindex="0" data-m="${esc(m.month)}" onclick="msPickMonth(this.dataset.m)" onkeydown="if(event.key==='Enter')msPickMonth(this.dataset.m)"
+        style="padding:10px 0 12px;min-height:44px;cursor:pointer;border-top:1px solid var(--border,#e2e8f0);${on ? 'box-shadow:inset 3px 0 0 var(--group, var(--accent,#1f3a6b));padding-left:10px;margin-left:-10px;' : ''}">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:14px;color:var(--text-primary,#1e293b)">${esc(msPeriodLabel(m.range[0], 'month'))}</b>${tag}<span style="flex:1"></span><span style="font-size:12px;${_msMuted}">แตะเพื่อดูสรุป ›</span></div>
+      ${note ? `<div style="font-size:12px;${_msMuted};margin:-2px 0 6px">${note}</div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(${showGp ? 4 : 3},1fr);gap:6px">
+        ${msMonthCell('รายได้', fmt(m.revenue), msMomTxt(M.revenue), Y ? msMomTxt(Y.revenue) : null)}
+        ${msMonthCell('ลูกค้า', fmtN(m.customers), msMomTxt(M.customers), Y ? msMomTxt(Y.customers) : null)}
+        ${msMonthCell('รายได้/หัว', m.rev_per_head != null ? fmt(m.rev_per_head) : '—', msMomTxt(M.rev_per_head), Y ? msMomTxt(Y.rev_per_head) : null)}
+        ${gpCell}
+      </div></div>`;
+  }).join('');
+  return `<div style="padding:10px 0 8px">${msGlanceLine(sentence)}${chart}</div>
+    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · YoY = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบกับฐานปกติตามวันในสัปดาห์ ไม่เทียบกับทั้งเดือน</p>
+    ${cards}
+    <p style="font-size:12px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · YoY แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
+}
+async function msLoadMonths(wrap) {
+  wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const br = msBranch();
+  let d; try { d = await msFetchMonths(br); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  if (_msSalesGran !== 'month' || br !== msBranch()) return;   // the reader moved on while this loaded
+  wrap.innerHTML = (d && d.available) ? msMonthsHtml(d, (_msRpt || {}).selected_month) : '<div class="ms-row">ยังไม่มีข้อมูลการขาย</div>';
+}
+// tap a month → the month picker takes it and the summary shows that month
+async function msPickMonth(m) {
+  const sel = document.getElementById('msMonthSel');
+  if (!sel || !m || ![...sel.options].some(o => o.value === m)) return;
+  sel.value = m;
+  await loadMobileSummary(true);
+  msSwitchView('summary');
+}
+
 async function msLoadSales() {
   const wrap = document.getElementById('msSalesTrend');
+  if (_msSalesGran === 'month') { msLoadMonths(wrap); return; }
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
   const gran = _msSalesGran;
   const q = new URLSearchParams({ gran, trend: gran === 'day' ? '14' : '12' });
