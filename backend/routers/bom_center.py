@@ -41,6 +41,7 @@ from bom_center import stock as _st
 from bom_center import variance as _va
 from bom_center.schema import ensure as _ensure
 from bom_center.units import Converter
+from bom_center.units import norm as _unit_norm
 
 router = APIRouter()
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -206,8 +207,15 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
         _ensure(con)
         price = {r["code"]: r for r in _p.month_table(con, month)}
         rules = {}
-        for code, unit, f, label in con.execute("SELECT ingredient_code, unit, factor_to_base, label FROM bc_unit_rule"):
-            rules.setdefault(code, []).append({"unit": unit, "factor": f, "label": label})
+        conv = Converter(con)
+        labels = {(c, _unit_norm(u)): lb for c, u, lb in con.execute("SELECT ingredient_code, unit, label FROM bc_unit_rule")}
+        for code in conv.ladders:                         # PR-U: each rule carries its ladder step and whether it is approximate
+            for r in conv.ladder(code):
+                rules.setdefault(code, []).append({
+                    "unit": r["unit"], "factor": r["factor_to_base"], "label": labels.get((code, r["unit"])),
+                    "parent_unit": r["parent_unit"], "qty_in_parent": r["qty_in_parent"], "kind": r["kind"],
+                    "range_min": r["range_min"], "range_max": r["range_max"], "level": r["level"],
+                    "approx": r["approx"], "how": r["how"]})
         aliases = {}
         for a, c, s in con.execute("SELECT alias_code, ingredient_code, system FROM bc_ingredient_alias"):
             aliases.setdefault(c, []).append({"alias": a, "system": s})
@@ -426,8 +434,14 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
 class UnitRule(BaseModel):
     code: str
     unit: str
-    factor_to_base: Optional[float] = None       # None deletes the rule
+    factor_to_base: Optional[float] = None       # None (and no qty_in_parent) deletes the rule
     label: Optional[str] = None
+    # PR-U — a step of the unit ladder: 1 <unit> = qty_in_parent <parent_unit> (parent empty = the base unit)
+    parent_unit: Optional[str] = None
+    qty_in_parent: Optional[float] = None
+    conv_kind: Optional[str] = None              # exact | avg (แน่นอน | เฉลี่ย)
+    range_min: Optional[float] = None
+    range_max: Optional[float] = None
 
 
 @router.post("/api/bom-center/units", dependencies=[Depends(require_write_token)])
@@ -436,7 +450,9 @@ def bc_units_save(rules: List[UnitRule], request: Request):
         _ensure(con)
         try:
             for r in rules:
-                _m.set_unit_rule(con, r.code.strip(), r.unit, r.factor_to_base, r.label, _who(request))
+                _m.set_unit_rule(con, r.code.strip(), r.unit, r.factor_to_base, r.label, _who(request),
+                                 parent_unit=r.parent_unit, qty_in_parent=r.qty_in_parent, conv_kind=r.conv_kind,
+                                 range_min=r.range_min, range_max=r.range_max)
         except ValueError as e:
             con.rollback()
             raise HTTPException(400, str(e))
@@ -447,18 +463,131 @@ def bc_units_save(rules: List[UnitRule], request: Request):
     return {"ok": True, "rules": len(rules)}
 
 
+class LadderRow(BaseModel):
+    unit: str
+    qty_in_parent: Optional[float] = None
+    parent_unit: Optional[str] = None            # empty = the item's base unit
+    conv_kind: Optional[str] = "exact"
+    range_min: Optional[float] = None
+    range_max: Optional[float] = None
+    label: Optional[str] = None
+
+
+class LadderBody(BaseModel):
+    code: str
+    rows: List[LadderRow]
+
+
+@router.get("/api/bom-center/units/ladder")
+def bc_units_ladder(code: str = Query(...)):
+    """One item's unit ladder, with the factors worked out: {code, name, base_unit, recv_unit, qty_per_recv, count_unit, ladder, problems}."""
+    from bom_center.units import MAX_STEPS, check_ladder
+    with get_db() as con:
+        _ensure(con)
+        m = con.execute("SELECT name_th, base_unit, recv_unit, qty_per_recv, count_unit FROM bc_ingredient WHERE code=?",
+                        (code.strip(),)).fetchone()
+        if not m:
+            raise HTTPException(404, f"ไม่พบรหัส {code} ในทะเบียน")
+        conv = Converter(con)
+        lad = conv.ladder(code.strip())
+        problems = check_ladder(m[1], [{"unit": r["unit"], "parent_unit": r["parent_unit"], "qty_in_parent": r["qty_in_parent"],
+                                        "conv_kind": r["kind"], "range_min": r["range_min"], "range_max": r["range_max"]}
+                                       for r in lad]) if lad else []
+    return {"code": code.strip(), "name": m[0], "base_unit": m[1], "recv_unit": m[2], "qty_per_recv": m[3], "count_unit": m[4],
+            "ladder": lad, "problems": problems, "max_steps": MAX_STEPS}
+
+
+@router.post("/api/bom-center/units/ladder", dependencies=[Depends(require_write_token)])
+def bc_units_ladder_save(body: LadderBody, request: Request):
+    """Replace the WHOLE ladder of one item (validated as a whole; nothing is written when anything is wrong)."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _m.set_ladder(con, body.code, [r.dict() for r in body.rows], _who(request)))
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out}
+
+
+@router.get("/api/bom-center/units/template.xlsx")
+def bc_units_template(all: int = Query(0)):
+    """The unit ladders (and the portion recipes) as an Excel file; `all=1` adds an empty row for every item that has none."""
+    from openpyxl import Workbook
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from bom_center import unit_sheet as _us
+    wb = Workbook()
+    ws = wb.active
+    with get_db() as con:
+        _ensure(con)
+        _sheet(ws, _us.SHEET, _us.HEADERS, _us.NOTE)
+        for r in _us.ladder_rows(con, bool(all)):
+            ws.append(r)
+        dv = DataValidation(type="list", formula1='"แน่นอน,เฉลี่ย"', allow_blank=True)
+        ws.add_data_validation(dv)
+        dv.add(f"G3:G{max(ws.max_row, 400)}")
+        ws2 = wb.create_sheet()
+        _sheet(ws2, _us.PORTION_SHEET, _us.PORTION_HEADERS, _us.PORTION_NOTE)
+        for r in _us.portion_rows(con):
+            ws2.append(r)
+    return _xlsx(wb, f"BOM_CENTER_UNITS_{date.today().isoformat()}.xlsx")
+
+
+@router.post("/api/bom-center/units/import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_units_import(request: Request, file: UploadFile = File(...), dry_run: bool = Query(True)):
+    """The unit-ladder file back in. A dry run shows, per code, the ladder with its factors and its problems and writes
+    nothing; the commit replaces the ladder of every code in the file, or refuses the whole file when any code has a problem."""
+    from bom_center import unit_sheet as _us
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ไม่มีข้อมูล")
+    if len(raw) > 30 * 1024 * 1024:
+        raise HTTPException(400, "ไฟล์มีขนาดเกิน 30 MB")
+    try:
+        parsed = _us.parse(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        try:
+            res = _us.apply(con, parsed, _who(request))
+            if dry_run:
+                con.rollback()
+            elif res["problems"]:
+                con.rollback()
+                raise HTTPException(400, f"มีรายการที่ต้องแก้ไข {res['problems']} รายการ จึงยังไม่บันทึก")
+            else:
+                con.commit()
+        except HTTPException:
+            raise
+        except Exception:
+            con.rollback()
+            raise
+    if not dry_run:
+        invalidate_cache("bc_")
+        _fc.clear_usage_cache()           # the order plan's usage model reads this
+        _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"dry_run": dry_run, "sheets": parsed["sheets"], "codes": len(res["ladders"]),
+            "codes_ok": sum(1 for r in res["ladders"] if not r["problems"]),
+            "portions": len(res["portions"]), "problems": res["problems"], "warnings": res["warnings"],
+            "ladders": res["ladders"], "portion_rows": res["portions"], "month": res["month"]}
+
+
 @router.get("/api/bom-center/convert")
 def bc_convert(code: str = Query(...), qty: float = Query(1.0), unit: str = Query(...),
                month: Optional[str] = Query(None)):
-    """'3 แท่ง of 13-01-009' -> base units, and what it costs at `month`'s price."""
+    """'3 แท่ง of 13-01-009' -> base units, and what it costs at `month`'s price. `approx` = the conversion passes an
+    average step (PR-U): every screen shows it with ≈."""
     month = month if month and _MONTH.match(month) else _this_month()
     with get_db() as con:
         _ensure(con)
         conv = Converter(con)
         qb, how = conv.to_base(code, qty, unit)
+        approx = bool(conv.last_approx) if qb is not None else False
+        sp = conv.span(code, unit) if approx else None
         p = _p.price_for(con, code, month)
     return {"code": code, "qty": qty, "unit": unit, "qty_base": qb, "base_unit": conv.base_unit(code),
-            "how": how, "price_per_base": p[0] if p else None,
+            "how": how, "approx": approx, "range_base": [qty * sp[0], qty * sp[1]] if sp else None,
+            "price_per_base": p[0] if p else None,
             "cost": round(qb * p[0], 4) if (qb is not None and p) else None, "month": month}
 
 
@@ -1568,12 +1697,51 @@ class PrepLine(BaseModel):
     qty: Optional[float] = None
     unit: Optional[str] = None
     note: Optional[str] = None
+    no_loss: Optional[int] = 0
 
 
 class PrepBody(BaseModel):
     yield_qty: float
     yield_unit: str
     lines: List[PrepLine]
+    mode: Optional[str] = None                   # 'portion' keeps a portion recipe a portion recipe when the generic editor saves it
+    note: Optional[str] = None
+
+
+class PortionBody(BaseModel):
+    code: str                                    # the prepared item (existing, or a new code with `name`)
+    name: Optional[str] = None                   # required when the code is not in the master yet
+    raw_code: str
+    qty: float
+    unit: str
+    pieces: float
+    out_unit: Optional[str] = "ชิ้น"
+    note: Optional[str] = None
+
+
+@router.get("/api/bom-center/prep/portion/preview")
+def bc_prep_portion_preview(raw_code: str = Query(...), qty: float = Query(...), unit: str = Query(...),
+                            pieces: float = Query(...), month: Optional[str] = Query(None)):
+    """'1 ตัว of 02-01-001 -> 225 ชิ้น': the factor, whether it is approximate, grams per piece and the cost per piece."""
+    with get_db() as con:
+        _ensure(con)
+        try:
+            return _pr.portion_preview(con, raw_code, qty, unit, pieces, _prep_month(con, month))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+
+@router.post("/api/bom-center/prep/portion", dependencies=[Depends(require_write_token)])
+def bc_prep_portion_save(body: PortionBody, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _pr.save_portion(con, body.code, body.raw_code, body.qty, body.unit, body.pieces,
+                                                    body.out_unit, _who(request), note=body.note, name=body.name,
+                                                    month=_prep_month(con, None)))
+    invalidate_cache("bc_")
+    _fc.clear_usage_cache()           # the order plan's usage model reads this
+    _drop_bom_days()             # … and so does the BoM day cache of the issue reports
+    return {"ok": True, **out}
 
 
 @router.put("/api/bom-center/prep/{code}", dependencies=[Depends(require_write_token)])
@@ -1581,7 +1749,8 @@ def bc_prep_save(code: str, body: PrepBody, request: Request):
     with get_db() as con:
         _ensure(con)
         n = _write(con, lambda: _pr.save(con, code, body.yield_qty, body.yield_unit,
-                                          [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ไขในหน้าเว็บ"))
+                                          [ln.dict() for ln in body.lines], _who(request), source_ref="แก้ไขในหน้าเว็บ",
+                                          mode=body.mode, note=body.note))
     invalidate_cache("bc_")
     _fc.clear_usage_cache()           # the order plan's usage model reads this
     _drop_bom_days()             # … and so does the BoM day cache of the issue reports

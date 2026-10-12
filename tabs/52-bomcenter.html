@@ -91,6 +91,41 @@
         <span id="bmcPrepStatus" class="text-xs"></span>
       </div>
     </div>
+    <div class="card p-4 mb-3 bc-write" id="bmcPortion">
+      <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรแบ่งชิ้นจากวัตถุดิบทั้งตัว</div>
+      <div class="text-xs" style="color:var(--text-secondary)">ใช้กับวัตถุดิบที่รับเป็นน้ำหนักแต่ใช้เป็นชิ้น เช่น แซลมอนทั้งตัว 1 ตัวแล่เป็นกี่ชิ้น</div>
+      <div class="flex flex-wrap items-end gap-2 mt-2">
+        <label class="text-xs" style="color:var(--text-muted)">สินค้ากึ่งสำเร็จ<br>
+          <select id="bmcPortSel" onchange="bmcPortChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;max-width:260px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <label class="text-xs bmc-port-new" style="color:var(--text-muted);display:none">รหัสใหม่<br>
+          <input id="bmcPortNewCode" placeholder="เช่น CK-801" oninput="bmcPortPreview()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:120px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs bmc-port-new" style="color:var(--text-muted);display:none">ชื่อสินค้ากึ่งสำเร็จ<br>
+          <input id="bmcPortNewName" placeholder="เช่น แซลมอนแล่ชิ้น" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:180px;background:var(--bg-input);color:var(--text-primary)"></label>
+      </div>
+      <div class="flex flex-wrap items-end gap-2 mt-2">
+        <label class="text-xs" style="color:var(--text-muted)">วัตถุดิบทั้งตัว<br>
+          <input id="bmcPortRaw" list="bmcPortRawList" placeholder="ค้นหารหัสหรือชื่อ" onchange="bmcPortRawChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:200px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <datalist id="bmcPortRawList"></datalist>
+        <label class="text-xs" style="color:var(--text-muted)">ใช้<br>
+          <input id="bmcPortQty" type="number" step="any" value="1" min="0" oninput="bmcPortPreview()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:80px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
+          <select id="bmcPortUnit" onchange="bmcPortPreview()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
+        <label class="text-xs" style="color:var(--text-muted)">ได้ (ชิ้น)<br>
+          <input id="bmcPortPieces" type="number" step="any" min="0" placeholder="เช่น 225" oninput="bmcPortPreview()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:90px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">หมายเหตุ (ส่วนที่เหลือ เช่น หัว หนัง)<br>
+          <input id="bmcPortNote" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:220px;background:var(--bg-input);color:var(--text-primary)"></label>
+      </div>
+      <div id="bmcPortPreview" class="text-sm mt-2" style="color:var(--text-primary)"></div>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <button onclick="bmcPortSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกสูตรแบ่งชิ้น</button>
+        <span id="bmcPortStatus" class="text-xs"></span>
+      </div>
+      <details class="bmc-help mt-2"><summary>วิธีใช้สูตรแบ่งชิ้น</summary><div>
+        <p>ใส่ของทั้งตัวที่นำมาแบ่ง (เช่น 1 ตัว) และจำนวนชิ้นที่ได้จริง ระบบคำนวณน้ำหนักต่อชิ้นและต้นทุนต่อชิ้นให้ตามสูตรที่ใส่ไว้ · หน่วยของของทั้งตัว (เช่น ตัว) ต้องตั้งไว้ในหน้าหน่วยและการแปลงก่อน · ถ้าตั้งเป็นแบบเฉลี่ย (เช่น 1 ตัว ≈ 4.5 กิโลกรัม) ต้นทุนต่อชิ้นเป็นค่าโดยประมาณ</p>
+        <p>จำนวนชิ้นที่ได้ ครัวควรชั่งและยืนยันจากการแล่จริง · จำนวนนี้นับเฉพาะชิ้นที่ใช้ได้ ระบบจึงไม่บวกส่วนสูญเสียของวัตถุดิบซ้ำ ทั้งในต้นทุนและในแผนสั่งวัตถุดิบ</p>
+        <p>หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้</p>
+      </div></details>
+    </div>
     <div id="bmcPrepImport" class="card p-4 mb-3" style="display:none"></div>
     <div id="bmcPrepDetail" class="card p-4 mb-3" style="display:none"></div>
     <div class="card p-4 mb-3">
@@ -361,34 +396,41 @@
   <!-- ── unit converter ────────────────────────────────────────────────── -->
   <div id="bmc-pane-conv" style="display:none">
     <div class="card p-4 mb-3">
-      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">เครื่องมือแปลงหน่วย</div>
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">บันไดหน่วยของวัตถุดิบ</div>
       <div class="flex flex-wrap items-end gap-2">
-        <label class="text-xs" style="color:var(--text-muted)">รหัสวัตถุดิบ<br>
-          <input id="bmcConvCode" list="bmcCodeList" placeholder="เช่น 13-01-009" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:160px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-xs" style="color:var(--text-muted)">รหัสหรือชื่อวัตถุดิบ<br>
+          <input id="bmcConvCode" list="bmcCodeList" placeholder="เช่น 02-01-001" onchange="bmcLoadLadder()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:200px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <button onclick="bmcLoadLadder()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">เปิดบันไดหน่วย</button>
+      </div>
+      <datalist id="bmcCodeList"></datalist>
+      <div id="bmcLadder" class="mt-3 text-xs"></div>
+    </div>
+    <div class="card p-4 mb-3">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">ทดลองแปลง</div>
+      <div class="flex flex-wrap items-end gap-2">
         <label class="text-xs" style="color:var(--text-muted)">ปริมาณ<br>
           <input id="bmcConvQty" type="number" step="any" value="1" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:90px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
           <input id="bmcConvUnit" placeholder="แท่ง / กิโลกรัม / แพ็ค" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:140px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="bmcConvert()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">คำนวณ</button>
       </div>
-      <datalist id="bmcCodeList"></datalist>
       <div id="bmcConvOut" class="text-sm mt-3" style="color:var(--text-primary)"></div>
     </div>
-    <div class="card p-4 bc-write">
-      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">กฎหน่วยครัวของวัตถุดิบ</div>
-      <div class="flex flex-wrap items-end gap-2">
-        <label class="text-xs" style="color:var(--text-muted)">หน่วย<br>
-          <input id="bmcRuleUnit" placeholder="แท่ง" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <label class="text-xs" style="color:var(--text-muted)">เท่ากับกี่หน่วยฐาน<br>
-          <input id="bmcRuleFactor" type="number" step="any" placeholder="15" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:110px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <button onclick="bmcSaveRule()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกกฎหน่วย</button>
-        <span id="bmcRuleStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <div class="card p-4 mb-3 bc-write">
+      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">ไฟล์ Excel ของบันไดหน่วย</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="#" onclick="bmcUnitsTemplate(0);return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดแม่แบบหน่วย (Excel)</a>
+        <a href="#" onclick="bmcUnitsTemplate(1);return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดพร้อมวัตถุดิบที่ยังไม่มีบันไดหน่วย</a>
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
+          นำเข้าไฟล์บันไดหน่วย<input type="file" accept=".xlsx" style="display:none" onchange="bmcUnitsImportPick(this)"></label>
+        <span id="bmcUnitsStatus" class="text-xs"></span>
       </div>
-      <div id="bmcRuleList" class="mt-3 text-xs"></div>
+      <div id="bmcUnitsImport" class="mt-3 text-xs" style="display:none"></div>
     </div>
     <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>กฎหน่วยครัว เช่น ปูอัด 1 แท่ง = 15 กรัม · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองโดยไม่ต้องมีกฎ · แพ็ค ถุง กล่อง ใช้ขนาดบรรจุในทะเบียน</p>
-      <p>เครื่องมือแปลงหน่วยใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน</p>
+      <p>บันไดหน่วยบอกว่าวัตถุดิบหนึ่งรายการรับหรือนับเป็นหน่วยอะไรได้บ้าง แต่ละหน่วยระบุเทียบกับหน่วยที่อยู่ถัดลงไป เช่น 1 กล่อง = 10 แพ็ค และ 1 แพ็ค = 1,000 กรัม · ตั้งได้ไม่เกิน 3 หน่วยต่อวัตถุดิบ · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองโดยไม่นับเป็นขั้น</p>
+      <p>ชนิด “แน่นอน” ใช้กับของที่บรรจุคงที่ เช่น ปูอัด 1 แท่ง = 15 กรัม · ชนิด “เฉลี่ย” ใช้กับของที่แต่ละชิ้นหนักไม่เท่ากัน เช่น แซลมอนทั้งตัว 1 ตัว ≈ 4.5 กิโลกรัม (ช่วง 4–5) ผลการแปลงที่ผ่านขั้นเฉลี่ยเป็นค่าโดยประมาณ จึงแสดงเครื่องหมาย ≈ เสมอ</p>
+      <p>ช่อง “ทดลองแปลง” ใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน · การนำเข้าไฟล์แสดงตัวอย่างก่อนบันทึกทุกครั้ง และนำเข้าแล้วบันไดหน่วยของรหัสที่อยู่ในไฟล์ถูกแทนที่ทั้งรายการ</p>
     </div></details>
   </div>
 </div>

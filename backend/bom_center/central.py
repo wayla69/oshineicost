@@ -22,7 +22,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from .fmt import day_th as _fmt_day, month_th as _mth
-from .master import _upsert, audit, kind_of
+from .master import _upsert, audit, kind_of, set_unit_rule
 from .units import Converter, norm
 
 DDL = """CREATE TABLE IF NOT EXISTS bc_central_item(
@@ -320,8 +320,11 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True) 
         if f and (r["inner"] or "") == "PK" and (r["inner_qty"] or 1) > 1:
             if not con.execute("SELECT 1 FROM bc_unit_rule WHERE ingredient_code=? AND unit='แพ็ค'",
                                (r["code"],)).fetchone():
-                con.execute("INSERT INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label) VALUES(?,?,?,?)",
-                            (r["code"], "แพ็ค", f / r["inner_qty"], f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีสินค้าส่วนกลาง)"))
+                try:                      # PR-U: through the ladder writer (a step on the base unit, exact)
+                    set_unit_rule(con, r["code"], "แพ็ค", f / r["inner_qty"],
+                                  f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีสินค้าส่วนกลาง)", who)
+                except ValueError:        # a convenience rule: an item whose base unit is already the pack does not need it
+                    pass
         con.execute("INSERT INTO bc_central_item(code, name, unit_label, sale_unit, inner_qty, inner_unit, base_per_sale,"
                     " factor_how, price_per_sale, price_month, active, source_ref, updated_at, updated_by)"
                     " VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(code) DO UPDATE SET name=excluded.name,"

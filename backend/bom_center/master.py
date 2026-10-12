@@ -366,17 +366,137 @@ def add_from_purchase(con, code: str, name: str, unit: str, who: str) -> str:
     return base
 
 
-def set_unit_rule(con, code: str, unit: str, factor: float, label: str, who: str):
+def _ladder_rows(con, code: str) -> list:
+    """The stored ladder of one item in the shape check_ladder / set_ladder take."""
+    return [{"unit": u, "parent_unit": p, "qty_in_parent": q if q is not None else f, "conv_kind": k or "exact",
+             "range_min": a, "range_max": b, "label": lb}
+            for u, f, p, q, k, a, b, lb in con.execute(
+                "SELECT unit, factor_to_base, parent_unit, qty_in_parent, conv_kind, range_min, range_max, label"
+                " FROM bc_unit_rule WHERE ingredient_code=? ORDER BY rowid", (code,))]
+
+
+def _norm_ladder_row(r: dict) -> dict:
+    """One ladder row cleaned (units normalised, numbers parsed). An average with no number takes the midpoint of its range."""
+    from .units import kind_of
+    kind = kind_of(r.get("conv_kind"))
+    parent = norm(r.get("parent_unit")) or None
+    q, a, b = _num(r.get("qty_in_parent")), _num(r.get("range_min")), _num(r.get("range_max"))
+    if q is None and kind == "avg" and a is not None and b is not None:
+        q = (a + b) / 2.0
+    return {"unit": norm(r.get("unit")), "parent_unit": parent, "qty_in_parent": q, "conv_kind": kind or r.get("conv_kind"),
+            "range_min": a, "range_max": b, "label": (str(r.get("label")).strip() or None) if r.get("label") else None}
+
+
+def plan_ladder(con, code: str, rows: list) -> dict:
+    """What set_ladder WOULD write for one item (nothing is written): {code, name, base_unit, ladder, problems,
+    changes, qty_per_recv_change}. `ladder` carries the recomputed factors, so a preview shows 1 ตัว ≈ 4,500 กรัม."""
+    from .units import MAX_STEPS, check_ladder, climb, chain_text
+    m = con.execute("SELECT name_th, base_unit, recv_unit, qty_per_recv FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+    if not m:
+        return {"code": code, "name": None, "base_unit": None, "ladder": [], "problems": [f"ไม่พบรหัส {code} ในทะเบียน"],
+                "changes": [], "qty_per_recv_change": None}
+    name, base_raw, recv, per = m
+    base = norm(base_raw)
+    new = [_norm_ladder_row(r) for r in rows or []]
+    problems = check_ladder(base, new)
+    out = {"code": code, "name": name, "base_unit": base, "ladder": [], "problems": problems, "changes": [],
+           "qty_per_recv_change": None, "max_steps": MAX_STEPS}
+    if problems:
+        return out
+    table = {r["unit"]: {"parent": r["parent_unit"], "qty": r["qty_in_parent"], "kind": r["conv_kind"], "rmin": r["range_min"],
+                         "rmax": r["range_max"], "factor": r["qty_in_parent"]} for r in new}
+    for r in new:
+        f, approx, parts, why = climb(base, table, r["unit"])
+        if f is None:
+            problems.append(why)
+            continue
+        out["ladder"].append({**r, "parent_unit": r["parent_unit"] or base, "factor_to_base": f, "approx": bool(approx),
+                              "level": sum(1 for p in parts if not p.get("metric")), "how": chain_text(parts)})
+    if problems:
+        return out
+    old = {r["unit"]: r for r in _ladder_rows(con, code)}
+    for r in out["ladder"]:
+        o = old.get(r["unit"])
+        if o is None:
+            out["changes"].append({"unit": r["unit"], "change": "add"})
+        elif any((o.get(k) or None) != (r.get(k) or None) for k in ("qty_in_parent", "conv_kind", "range_min", "range_max")) \
+                or (norm(o.get("parent_unit")) or base) != r["parent_unit"]:
+            out["changes"].append({"unit": r["unit"], "change": "edit"})
+    for u in old:
+        if u not in table:
+            out["changes"].append({"unit": u, "change": "remove"})
+    recv_n = norm(recv)
+    hit = next((r for r in out["ladder"] if r["unit"] == recv_n), None)
+    if hit and (per is None or abs(float(per) - hit["factor_to_base"]) > 1e-9):
+        out["qty_per_recv_change"] = {"recv_unit": recv, "from": per, "to": hit["factor_to_base"], "approx": hit["approx"]}
+    return out
+
+
+def set_ladder(con, code: str, rows: list, who: str) -> dict:
+    """Replace the WHOLE ladder of one item (PR-U). Validated as a whole (units.check_ladder); every row is stored with
+    factor_to_base recomputed through the ladder, so every reader of the old single-step rule keeps working. When the
+    item's receiving unit is one of the ladder units, its pack size (qty_per_recv) follows the ladder. Caller commits."""
+    code = (code or "").strip()
+    if not code:
+        raise ValueError("ต้องระบุรหัส")
+    plan = plan_ladder(con, code, rows)
+    if plan["problems"]:
+        raise ValueError("; ".join(plan["problems"][:4]))
+    old = _ladder_rows(con, code)
+    keep = {r["unit"] for r in plan["ladder"]}
+    for r in old:
+        if norm(r["unit"]) not in keep:
+            con.execute("DELETE FROM bc_unit_rule WHERE ingredient_code=? AND unit=?", (code, r["unit"]))
+    prev = {norm(r["unit"]): r for r in old}
+    for r in plan["ladder"]:
+        label = r.get("label") or (prev.get(r["unit"]) or {}).get("label")
+        parent = None if r["parent_unit"] == plan["base_unit"] else r["parent_unit"]
+        con.execute(
+            "INSERT INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label, parent_unit, qty_in_parent, conv_kind,"
+            " range_min, range_max, updated_at, updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT(ingredient_code, unit) DO UPDATE SET factor_to_base=excluded.factor_to_base, label=excluded.label,"
+            " parent_unit=excluded.parent_unit, qty_in_parent=excluded.qty_in_parent, conv_kind=excluded.conv_kind,"
+            " range_min=excluded.range_min, range_max=excluded.range_max, updated_at=excluded.updated_at,"
+            " updated_by=excluded.updated_by",
+            (code, r["unit"], r["factor_to_base"], label, parent, r["qty_in_parent"], r["conv_kind"],
+             r["range_min"], r["range_max"], now(), who))
+    ch = plan["qty_per_recv_change"]
+    if ch:
+        con.execute("UPDATE bc_ingredient SET qty_per_recv=?, updated_at=?, updated_by=? WHERE code=?",
+                    (ch["to"], now(), who, code))
+    brief = lambda rs: [f"{r['unit']}={r['qty_in_parent']:g} {r.get('parent_unit') or 'หน่วยฐาน'} ({r.get('conv_kind') or 'exact'})"  # noqa: E731
+                        for r in rs]
+    audit(con, who, "unit_ladder", "bc_unit_rule", code, brief(old),
+          {"ladder": brief(plan["ladder"]), "qty_per_recv": ch and [ch["from"], ch["to"]]})
+    return {"code": code, "ladder": plan["ladder"], "qty_per_recv_change": ch, "changes": plan["changes"]}
+
+
+def set_unit_rule(con, code: str, unit: str, factor: float, label: str, who: str, parent_unit: str = None,
+                  qty_in_parent: float = None, conv_kind: str = None, range_min: float = None, range_max: float = None):
+    """One rule of the ladder: the existing rows of the item + this one (or minus it when `factor` is None), validated as a
+    whole. With only `factor` it is the old single step on the base unit. A code not in the master is written as it
+    always was (there is no base unit to check against)."""
     u = norm(unit)
     if not code or not u:
         raise ValueError("ต้องระบุรหัสและหน่วย")
-    if factor is None:
+    known = con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+    if factor is None and qty_in_parent is None:       # delete one rule — unless another unit is stated against it
+        kids = [r["unit"] for r in _ladder_rows(con, code) if norm(r["parent_unit"]) == u]
+        if kids:
+            raise ValueError(f"{u}: ยังมีหน่วย {', '.join(kids)} อ้างอิงหน่วยนี้อยู่ · ลบหรือแก้หน่วยนั้นก่อน")
         old = con.execute("SELECT factor_to_base FROM bc_unit_rule WHERE ingredient_code=? AND unit=?", (code, u)).fetchone()
         con.execute("DELETE FROM bc_unit_rule WHERE ingredient_code=? AND unit=?", (code, u))
         audit(con, who, "delete", "bc_unit_rule", f"{code}|{u}", old[0] if old else None, None)
         return
-    if factor <= 0:
+    q = qty_in_parent if qty_in_parent is not None else factor
+    if q is None or q <= 0:
         raise ValueError("ตัวคูณต้องมากกว่า 0")
-    con.execute("INSERT OR REPLACE INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label) VALUES(?,?,?,?)",
-                (code, u, float(factor), label or None))
-    audit(con, who, "set", "bc_unit_rule", f"{code}|{u}", None, factor)
+    if not known:
+        con.execute("INSERT OR REPLACE INTO bc_unit_rule(ingredient_code, unit, factor_to_base, label, qty_in_parent, updated_at,"
+                    " updated_by) VALUES(?,?,?,?,?,?,?)", (code, u, float(q), label or None, float(q), now(), who))
+        audit(con, who, "set", "bc_unit_rule", f"{code}|{u}", None, q)
+        return
+    rest = [r for r in _ladder_rows(con, code) if norm(r["unit"]) != u]
+    rest.append({"unit": u, "parent_unit": parent_unit, "qty_in_parent": q, "conv_kind": conv_kind or "exact",
+                 "range_min": range_min, "range_max": range_max, "label": label})
+    set_ladder(con, code, rest, who)
