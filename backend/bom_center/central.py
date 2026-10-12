@@ -19,6 +19,7 @@ sale unit cannot be put into base units is listed for a person to answer.
 """
 import io
 import re
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
 from .fmt import day_th as _fmt_day, month_th as _mth
@@ -276,7 +277,7 @@ def _factor(conv, master: dict, it) -> tuple:
     return None, f"ยังไม่ระบุว่า 1 {sale_th(it)} เท่ากับกี่{base}", None
 
 
-def plan_catalogue(con, parsed: dict, suggestions: bool = True) -> dict:
+def plan_catalogue(con, parsed: dict, suggestions: bool = True, system: str = "acc") -> dict:
     conv = Converter(con)
     master = {c: (b, r, p) for c, b, r, p in con.execute(
         "SELECT code, base_unit, recv_unit, qty_per_recv FROM bc_ingredient")}
@@ -289,6 +290,7 @@ def plan_catalogue(con, parsed: dict, suggestions: bool = True) -> dict:
         f, how, new_base = _factor(conv, master, it)
         m = master.get(it["code"])
         row = {**_brief(it), "is_new": m is None, "master_name": names.get(it["code"]), "aliased_from": it.get("file_code"),
+               "file_code": it.get("file_code") or it["code"],
                "base_unit": (m[0] if m and m[0] else new_base), "set_base": bool(new_base),
                "base_per_sale": f, "factor_how": how,
                "recv_label": recv_label(it), "old_recv": m[1] if m else None, "old_per": m[2] if m else None,
@@ -298,12 +300,13 @@ def plan_catalogue(con, parsed: dict, suggestions: bool = True) -> dict:
         if m and m[2] and f and abs(m[2] - f) > 0.005 * max(m[2], f):
             row["pack_change"] = True
         rows.append(row)
+    _pick_pack_rows(con, rows, system)
     # PR-Y: a code the register does not know may be the NEW code of an item it already has — name the likely items
     from .aliases import suggest_items
     new_rows = [r for r in rows if r.get("is_new") and r["status"] != "skip"]
     for i, r in enumerate(new_rows):
         r["suggestions"] = suggest_items(con, r["name"], code=r["code"], unit=r.get("base_unit") or r.get("inner")) if suggestions and i < 100 else []
-    goods = [r for r in rows if r["status"] != "skip"]
+    goods = [r for r in rows if r["status"] != "skip" and not r.get("alt_pack")]
     in_list = {r["code"] for r in goods}
     local = [c for c, in con.execute("SELECT code FROM bc_ingredient WHERE COALESCE(active,1)=1")
              if c not in in_list]
@@ -314,6 +317,26 @@ def plan_catalogue(con, parsed: dict, suggestions: bool = True) -> dict:
                        "from_master": sum(1 for r in goods if (r["factor_how"] or "").startswith("จากทะเบียน")),
                        "no_price": sum(1 for r in goods if not r["price_per_sale"]),
                        "to_local": len(local), "skipped": len(rows) - len(goods)}}
+
+
+def _pick_pack_rows(con, rows: list, system: str = "acc") -> None:
+    """Two file rows can name ONE register item (the old code and its active alias in the same report). The register and the
+    central list hold one pack size per item, so ONE row speaks for it: the row written under the item's current accounting
+    code, else the one written under the register code, else the first - never the file order. The other rows are marked
+    `alt_pack`: they stay in the preview and keep their own factor for the month's deliveries, but write nothing."""
+    from .aliases import current_code
+    groups = {}
+    for r in rows:
+        if r["status"] != "skip":
+            groups.setdefault(r["code"], []).append(r)
+    for code, grp in groups.items():
+        if len(grp) < 2:
+            continue
+        cur = current_code(con, code, system)
+        first = (next((r for r in grp if r["file_code"] == cur), None) or next((r for r in grp if r["file_code"] == code), None)
+                 or grp[0])
+        for r in grp:
+            r["alt_pack"] = r is not first
 
 
 def _brief(it) -> dict:
@@ -329,7 +352,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
     alias is recorded (or, when the importer may not decide, filed as a request), 'new' adds the item, and a code with no answer
     is left out of this run and reported in `open_codes` - never added on its own."""
     ensure(con)
-    pl = plan_catalogue(con, parsed, suggestions=False)          # the preview already showed the suggestions; saving needs none
+    pl = plan_catalogue(con, parsed, suggestions=False, system=system)          # the preview already showed the suggestions; saving needs none
     aliased = requested = 0
     open_codes = []
     if choices is not None:
@@ -342,7 +365,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
         parsed["_held"] = left_out               # the month's quantities of these codes are not booked either (deliveries)
         if res["aliased"]:
             resolve_parsed(con, parsed)
-            pl = plan_catalogue(con, parsed, suggestions=False)
+            pl = plan_catalogue(con, parsed, suggestions=False, system=system)
         for r in pl["rows"]:                      # not chosen yet, or waiting for the analyst: not part of this run
             if r.get("is_new") and r["code"] in left_out and r["status"] != "skip":
                 r["status"], r["factor_how"] = "skip", "รอเลือกรหัส" if r["code"] in open_codes else "รอฝ่ายวิเคราะห์ตรวจรหัส"
@@ -353,6 +376,8 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
         if r["status"] == "skip":
             continue
         in_list.add(r["code"])
+        if r.get("alt_pack"):                 # another row of the same item speaks for it (see _pick_pack_rows)
+            continue
         f = r["base_per_sale"]
         vals = {"sourcing_default": "central", "active": 1}
         if r["is_new"]:
@@ -436,7 +461,12 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
     if rdate[:7] != month:
         raise ValueError(f"วันที่ใบรับ {_fmt_day(rdate)} ไม่อยู่ในงวด {_mth(month)}")
     conv = Converter(con)
-    pl = {r["code"]: r for r in plan_catalogue(con, parsed, suggestions=False)["rows"]}
+    # one plan row per report row, in the same order: two rows that name one register item (its old code and its alias)
+    # each keep their OWN pack size, so each line is converted with its own factor
+    plan = plan_catalogue(con, parsed, suggestions=False)["rows"]
+    pls = dict(zip(map(id, parsed["items"]), plan))
+    base_unit = {c: u for c, u in con.execute("SELECT code, base_unit FROM bc_ingredient")}
+    twice = {c for c, n in Counter(it["code"] for it in parsed["items"]).items() if n > 1}
     want = {int(b) for b in branch_ids} if branch_ids else None
     out = []
     for b in parsed["branches"]:
@@ -451,7 +481,7 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
         lines = []
         for it in parsed["items"]:
             q = it["qty"].get(b["code"])
-            p = pl.get(it["code"])
+            p = pls.get(id(it))
             if not q or q <= 0 or not p or p["status"] == "skip":
                 continue
             if it["code"] in (parsed.get("_held") or ()):
@@ -461,8 +491,12 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
             if not f:
                 res["skipped"].append({"code": it["code"], "name": it["name"], "qty": q, "why": p["factor_how"]})
                 continue
-            lines.append({"code": it["code"], "qty": round(q, 4), "unit": p["recv_label"], "qty_base": q * f,
-                          "price_per_sale": it["price_per_sale"]})
+            if it["code"] in twice and base_unit.get(it["code"]):
+                # the item is on the report twice: both lines go to the receipt in its base unit (they add up there)
+                ln = {"code": it["code"], "qty": round(q * f, 4), "unit": base_unit[it["code"]]}
+            else:
+                ln = {"code": it["code"], "qty": round(q, 4), "unit": p["recv_label"]}
+            lines.append({**ln, "qty_base": q * f, "price_per_sale": it["price_per_sale"]})
             res["value_central"] += q * (it["price_per_sale"] or 0.0)
         res["lines"] = len(lines)
         res["value_central"] = round(res["value_central"], 2)

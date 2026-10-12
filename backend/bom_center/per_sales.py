@@ -342,9 +342,11 @@ def _closed_end(con, today=None) -> date:
 def _purchase_signature(con) -> tuple:
     """What the purchase figures are built from, so a new price file or a processed order drops the cached report."""
     try:
-        a = con.execute("SELECT COUNT(*), COALESCE(SUM(qty_bought), 0) FROM bc_ingredient_price_branch").fetchone()
+        a = con.execute("SELECT COUNT(*), COALESCE(SUM(qty_bought), 0), COALESCE(SUM(price_per_base), 0), COALESCE(SUM(value_bought), 0)"
+                        " FROM bc_ingredient_price_branch").fetchone()
         b = con.execute("SELECT COUNT(*), COALESCE(MAX(order_id), 0), COALESCE(SUM(status IN ('processed','received')), 0) FROM bc_order").fetchone()
-        return (tuple(a), tuple(b))
+        c = con.execute("SELECT COUNT(*), COALESCE(SUM(price_per_base), 0) FROM bc_ingredient_price").fetchone()
+        return (tuple(a), tuple(b), tuple(c))
     except Exception:
         return ()
 
