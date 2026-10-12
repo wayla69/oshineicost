@@ -622,9 +622,13 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         oh = (stock or {}).get("qty", {}).get(code)
         onord = (stock or {}).get("on_order", {}).get(code, 0.0)
         pre = projected = None
+        need_no_est = None
         if oh is not None:                                  # counted: deduct what will still be there
             pre = sum(m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in pre_days)
             projected = oh - pre + onord
+            est = (stock or {}).get("estimated_qty", {}).get(code, 0.0)
+            if est:                                         # PR-B4a (1.3): the same need without the estimate - orders.plan compares the packs
+                need_no_est = max(0.0, fc + safety - max(projected + est, 0.0))
             need = max(0.0, need - max(projected, 0.0))
             need_base = max(0.0, need_base - max(projected, 0.0))
         elif onord:
@@ -643,7 +647,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "monitored": bool(mon),
                      "sourcing": ("central" if code in cmap else "local") if cmap else (src or "central"),
                      "per_day": round(fc / len(cover_i), 3) if cover_i else 0, "forecast": round(fc, 2),
-                     "forecast_base": round(fc_base, 2), "need_base": round(need_base, 2),
+                     "forecast_base": round(fc_base, 2), "need_base": round(need_base, 2), "need_no_est": need_no_est,
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
                      "on_hand": None if oh is None else round(oh, 2), "on_order": round(onord, 2),
                      "pre_cover_use": None if pre is None else round(pre, 2),

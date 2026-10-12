@@ -680,6 +680,9 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         units, kind, down = order_units_ex(r["need"], r.get("qty_per_recv"), r.get("moq"), r.get("safety") or 0.0, r.get("big_pack"))
         r["order_units"] = units
         r["order_unit"] = kind
+        ne = r.get("need_no_est")                          # 1.3 · does the estimate change what is ordered? (packs with it ≠ packs without it)
+        r["estimate_changes"] = bool(ne is not None and order_units_ex(ne, r.get("qty_per_recv"), r.get("moq"), r.get("safety") or 0.0,
+                                                                        r.get("big_pack"))[0] != units)
         r["round_down"] = down                              # 1.7 · "ปัดลง (เหลือพอ)": a remainder under 20 % of a big pack was left unordered
         r["order_units_base"] = order_units(r.get("need_base", r["need"]), r.get("qty_per_recv"), r.get("moq"),
                                             r.get("safety") or 0.0, r.get("big_pack"))[0] if pct else units

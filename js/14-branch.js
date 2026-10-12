@@ -531,7 +531,7 @@ function brnIssRender() {
   const md = s.missing_days || [];
   const nEst = (s.estimated_days || []).length;                          // 1.3 · the days without a slip that were taken out at the BoM of the sales
   if (md.length) parts.push(['var(--amber-ink)', `ใบที่ค้าง ${md.length} วัน (${_brnIssRuns(md)}) · เลือกวันที่ยังไม่ทำจากแถบวันที่`
-    + (nEst ? ` · คงเหลือตามระบบหักตามสูตรจากยอดขาย ${nEst} วันไว้ก่อน เมื่อยืนยันใบของวันนั้น ตัวเลขในใบจะใช้แทน` : '')]);
+    + (nEst ? ` · คงเหลือตามระบบหักตามสูตรจากยอดขาย ${nEst} วัน (${_brnIssRuns(s.estimated_days)}) ไว้ก่อน เมื่อยืนยันใบของวันนั้น ตัวเลขในใบจะใช้แทน` : '')]);
   const banner = document.getElementById('brnIssBanner');
   banner.style.display = parts.length ? '' : 'none';
   banner.innerHTML = parts.map(([ink, t]) => `<div class="text-xs mb-1" style="border:1px solid ${ink};border-radius:var(--r-sm);padding:6px 10px;color:${ink}">${esc(t)}</div>`).join('');
@@ -565,7 +565,7 @@ function brnIssRender() {
     const unit = it.count_unit || it.base_unit || '';
     const sys = it.system_qty == null ? ''
       : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`
-        + (it.estimated_qty && nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)') : '');
+        + (it.estimate_matters && nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)') : '');
     const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_brnNice(it.avg_used_7d)} ${esc(_brnUnitW(unit))}/วัน</span>` : '';
     // เบิกเพิ่ม: what the confirmed slip already holds for the item, so the box holds only the quantity to add
     const have = _brnIssAppend && (it.used > 0 || it.waste > 0)
@@ -1997,7 +1997,7 @@ function brnMissLater() { _brnMissLater = true; brnRenderOrder(); }
 // PR-B4a · why a suggested figure is not the plain forecast, one chip each (1.3 estimate · 1.5 shelf life · 1.6 no price · 1.7 round down · 1.8 lead time and short shipments)
 function _brnRowFlags(r, nEst) {
   const c = [];
-  if (r.estimated_qty && nEst) c.push(_bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)'));
+  if (r.estimate_changes && nEst) c.push(_bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)'));   // only when it changes the packs ordered; the head says it once
   if (r.shelf_cap_days) c.push(_bmcChip(`จำกัดตามอายุการเก็บ ${r.shelf_cap_days} วัน`, 'var(--navy-ink)'));
   if (r.round_down) c.push(_bmcChip('ปัดลง (เหลือพอ)', 'var(--navy-ink)'));
   if (r.price_note) c.push(_bmcChip(r.price_note, 'var(--text-muted)'));
@@ -2021,7 +2021,7 @@ function brnRenderOrder() {
   const md = stk.missing_days || [];
   const nEst = (stk.estimated_days || []).length;                         // 1.3 · missing slips taken out at the BoM of the sales
   const stockLine = (stk.deducted
-    ? `${_bmcChip('หักคงเหลือตามระบบแล้ว', 'var(--good-ink)')}${nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)') : ''}${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
+    ? `${_bmcChip('หักคงเหลือตามระบบแล้ว', 'var(--good-ink)')}${nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน (${_brnIssRuns(stk.estimated_days)})`, 'var(--amber-ink)') : ''}${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
     : `${_bmcChip('ไม่มีผลตรวจนับสิ้นเดือน', 'var(--text-muted)')} ยังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ${slipOk ? ` · ใบตัดเบิกวันนี้: ยืนยันแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`);
   // the one thing that blocks sending is an action card of its own above the list (not a line inside the header)
   // 2.4: only TODAY's slip blocks the order; the days behind it can be made later ("ทำภายหลัง" hides that line for this session)

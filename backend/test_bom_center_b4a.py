@@ -92,6 +92,25 @@ def test_the_plan_and_the_slip_sheet_carry_the_estimate(con):  # noqa: F811
     assert crab["estimated_qty"] == pytest.approx(r["estimated_qty"]) and crab["system_qty"] == pytest.approx(r["system_qty"])
 
 
+def test_a_row_says_estimate_only_when_it_changes_the_packs_ordered(con):  # noqa: F811
+    ST.save(con, 1, [{"code": CRAB, "qty": 6, "unit": PACK}], "udon", submit=True, count_date="2026-10-01", require_all=False)   # 6 packs, 4.6 estimated
+    con.commit()
+    p = OR.plan(con, 1, "1", date(2026, 10, 7), as_of=AS_OF, now=NOW)
+    r = next(x for x in p["rows"] if x["code"] == CRAB)
+    assert r["estimated_qty"] and r["estimate_changes"] is True
+    ne = OR.order_units(r["need_no_est"], r["qty_per_recv"], r["moq"], r["safety"], r["big_pack"])[0]
+    assert ne != r["order_units"]
+    con.execute("DELETE FROM bc_stock_count_line")                                  # 10,000 packs: the estimate is a drop in it
+    con.execute("DELETE FROM bc_stock_count")
+    ST.save(con, 1, [{"code": CRAB, "qty": 10000, "unit": PACK}], "udon", submit=True, count_date="2026-10-01", require_all=False)
+    con.commit()
+    r2 = next(x for x in OR.plan(con, 1, "1", date(2026, 10, 7), as_of=AS_OF, now=NOW)["rows"] if x["code"] == CRAB)
+    assert r2["estimated_qty"] and r2["estimate_changes"] is False and r2["order_units"] == 0
+    sh = IS.sheet(con, 1, "2026-10-05", now=NOW)                                    # slip page: the stock is nowhere near 0
+    crab = next(i for z in sh["zones"] for i in z["items"] if i["code"] == CRAB)
+    assert crab["estimated_qty"] and crab["estimate_matters"] is False
+
+
 def test_the_month_end_reconciliation_still_reads_confirmed_slips_only():
     src = inspect.getsource(IR.reconcile)
     assert "system_position" not in src and "estimated_use" not in src and "estimate" not in src

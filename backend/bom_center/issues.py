@@ -259,6 +259,8 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
             it["system_qty"] = in_count(it["code"], sq, f)
             eq = pos["estimated_qty"].get(it["code"])               # PR-B4a (1.3): the part of the figure that is the BoM of sales, not a slip
             it["estimated_qty"] = in_count(it["code"], eq, f) if eq else None
+            # the estimate matters on the slip when it takes the stock from something to nothing (without it the shelf would look stocked)
+            it["estimate_matters"] = bool(eq and sq is not None and sq <= 0 < sq + eq)
             it["avg_used_7d"] = round(sums[it["code"]] / days_n / f, 6) if days_n and it["code"] in sums else None
             ln = lines.get(it["code"])
             if ln:
