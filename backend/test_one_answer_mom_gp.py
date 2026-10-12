@@ -153,10 +153,47 @@ def test_months_before_the_cutover_keep_the_old_cost(oa):
     assert rep["food_cost"] == pytest.approx(_sku3_qty(db, "daily", "2026-08") * 10.0, abs=1)   # sku_cost, untouched
 
 
-def test_the_report_never_multiplies_by_an_undated_unit_cost():
+ROUTERS = HERE / "routers"
+
+
+def _code_lines(path):
+    """Source lines that are code: no whole-line Python (#) or SQL (--) comment."""
+    return [ln for ln in path.read_text(encoding="utf-8").splitlines() if not ln.lstrip().startswith(("#", "--"))]
+
+
+def test_no_router_multiplies_by_an_undated_unit_cost():
     """Drift guard: a sales line is priced at the cost in force for ITS month. A bare
     effective_unit_cost_sql('x') - no month - skips the released cost, which is how the
-    report and the P&L page came to disagree. Coverage tests (> 0) live in rules.py."""
-    src = (HERE / "routers" / "reports.py").read_text(encoding="utf-8")
-    bare = re.findall(r"effective_unit_cost_sql\(\s*'[a-z_0-9]+'\s*\)", src)
+    management report, the day-range menu compare, the home estimate and the per-bill
+    COGS came to disagree with the P&L page (test_dated_cost_sites.py proves each fix).
+    Coverage tests (cost > 0) live in rules.py and stay undated: they are the P&L's own."""
+    bare = {}
+    for p in sorted(ROUTERS.glob("*.py")):
+        hits = re.findall(r"effective_unit_cost_sql\(\s*(?:'[^']*'|\"[^\"]*\"|[A-Za-z_][\w.]*)\s*\)",
+                          "\n".join(_code_lines(p)))
+        if hits:
+            bare[p.name] = hits
     assert not bare, bare
+
+
+# A direct read of sku_effective_cost in a router is today's cost, on purpose. Each one is
+# listed here with its reason; a new one fails the test below: decide, then add it with a
+# reason - or price the line through rules.effective_unit_cost_sql(row, month) instead.
+UNDATED_ON_PURPOSE = {
+    # cost worklist, suggestions, scenario baseline and savings, proposal review: they edit
+    # or judge the cost table AS IT STANDS today - the number the owner is about to change
+    "cost_bom.py": 5,
+    # pending_review: proposals awaiting confirmation, valued at the cost the proposal carries
+    "home_extra.py": 1,
+    # _pt_bom_dishes_by_tier: the tier menu's current recipe cost per dish (no sales line at all)
+    "reports.py": 1,
+}
+
+
+def test_direct_reads_of_the_undated_cost_are_the_documented_ones():
+    found = {}
+    for p in sorted(ROUTERS.glob("*.py")):
+        n = sum(len(re.findall(r"(?<![A-Za-z_])sku_effective_cost", ln)) for ln in _code_lines(p))
+        if n:
+            found[p.name] = n
+    assert found == UNDATED_ON_PURPOSE

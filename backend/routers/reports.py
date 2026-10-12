@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
 from targets import target_revenue_total, targets_for_month
 from core import (
@@ -1349,9 +1349,10 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
     """Menu lines for a single (loss-making) bill: qty, per-unit cost, ex-VAT revenue,
     COGS and per-line gross profit — so you can see exactly what the customer ordered
     that drove COGS above revenue. Source: sale_bill_item (qty/rev staged by the sync
-    for LOSS bills only). COGS is recomputed LIVE per line as qty × sku_effective_cost
-    (cost-management table first) so the drill always reflects current costs, not the
-    snapshot frozen at sync time. `synced` is False until the next sync builds the table."""
+    for LOSS bills only). COGS is recomputed LIVE per line as qty × the unit cost in force
+    for the month the bill was sold (rules.effective_unit_cost_sql, the P&L's own
+    lookup: a released BoM Center cost from the Grand Menu cut-over, the old chain
+    before it), not the snapshot frozen at sync time. `synced` is False until the next sync builds the table."""
     with get_db() as con:
         synced = con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_bill_item'").fetchone() is not None
@@ -1376,6 +1377,12 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
         items = []
         if synced:
             _build_sku_effective_cost(con, force=False)   # ensure the lookup exists
+            # the bill's lines are priced for the month the bill was SOLD, through the
+            # P&L's own effective_unit_cost_sql (released cost from the Grand Menu
+            # cut-over on, the old chain before it) - not at today's cost
+            _bill_month = "(SELECT substr(t0.sold_at, 1, 7) FROM sales_transaction t0 WHERE t0.receipt_no = :r LIMIT 1)"
+            _uc = (f"CASE WHEN {tier_code_sql('s.sku_code')} THEN 0 "
+                   f"ELSE {effective_unit_cost_sql('i', _bill_month)} END")
             items = [{"menu": (x["description"] or x["sku_code"] or "—").replace("(B) ", "").replace("(A) ", ""),
                       "sku_code": x["sku_code"], "qty": x["qty"] or 0,
                       "unit_cost": round(x["uc"] or 0, 2), "rev": x["rev"] or 0,
@@ -1383,12 +1390,8 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
                      for x in con.execute(
                         f"""SELECT s.description, s.sku_code, ROUND(SUM(i.qty),2) qty,
                                   ROUND(SUM(i.rev)) rev,
-                                  CASE WHEN s.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
-                                       ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec
-                                            WHERE sec.sku_id=i.sku_id), 0) END uc,
-                                  ROUND(SUM(i.qty) * CASE WHEN s.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
-                                       ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec
-                                            WHERE sec.sku_id=i.sku_id), 0) END) cogs
+                                  {_uc} uc,
+                                  ROUND(SUM(i.qty) * {_uc}) cogs
                            FROM sale_bill_item i JOIN skus s ON s.sku_id=i.sku_id
                            WHERE i.receipt_no=:r GROUP BY i.sku_id ORDER BY cogs DESC, rev DESC""",
                         {"r": receipt}).fetchall()]

@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, closed_day_clause, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter
+from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter, tier_code_sql
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -725,15 +725,12 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
         if dto:   base.append("d.day<=:dt"); p["dt"] = dto
         # sales_sku_daily has no `source` column (it's Easy-only), so use a daily-specific
         # COGS expr that drops the source check but keeps buffet-tier=0.
-        # Chain mirrors _unified_cogs_expr: cost-management (non-zero) → BoM → alias → 0.
-        cogs = (f"CASE WHEN (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=d.sku_id) "
-                f"IN {_EASY_TIER_CODES_SQL} THEN 0 ELSE d.qty * COALESCE("
-                f"(SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id AND sec.recipe_cost>0), "
-                f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=d.sku_id), "
-                f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
-                f"JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id "
-                f"JOIN skus s_al ON s_al.sku_id=d.sku_id WHERE a.bom_sku_code=s_al.sku_code), "
-                f"0) END")
+        # The unit cost is the P&L's own (rules.effective_unit_cost_sql) looked up for the
+        # month of the day sold, so from the Grand Menu cut-over a released cost reaches
+        # the day-range compare as it does the month-range one; earlier months run the
+        # old chain untouched.
+        cogs = (f"CASE WHEN {tier_code_sql('(SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=d.sku_id)')} "
+                f"THEN 0 ELSE d.qty * {effective_unit_cost_sql('d', 'substr(d.day, 1, 7)')} END")
         sql = (f"SELECT {gb_select}, ROUND(SUM(d.qty),2) qty, ROUND(SUM(d.subtotal_ex_vat),2) rev, "
                f"ROUND(SUM({cogs}),2) cogs FROM v_sales_sku_daily d "
                f"JOIN branches b ON b.branch_id=d.branch_id JOIN skus sk ON sk.sku_id=d.sku_id "
