@@ -107,12 +107,38 @@ def _setup_items(con) -> list:
                   go={"tab": "bomcenter", "pane": "overview", "anchor": "bmcIssuesCard"}))
     missing_prep = _scalar(con, "SELECT COUNT(*) FROM bc_ingredient WHERE COALESCE(active,1)=1 AND kind='prepared'"
                                 " AND code NOT IN (SELECT prepared_code FROM bc_prep_recipe)") or 0
+    out.append(_master_gaps_item(con))
     out.append(_e("sub_recipes", 40, "setup", "นำเข้าสูตรกึ่งสำเร็จจากไฟล์ครัว (ไม่บังคับ)",
                   "done" if not missing_prep else "todo",
                   f"ยังไม่มีสูตร {missing_prep} รายการ · ช่วยให้แผนสั่งแนะนำวัตถุดิบดิบในสูตรได้" if missing_prep else "มีสูตรครบ",
                   count=missing_prep or None, owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์ / ครัว",
                   go={"tab": "bomcenter", "pane": "prep"}))
     return out
+
+
+GAP_LABEL = {"fresh_no_shelf": "ของสด / แช่เย็นที่ยังไม่มีอายุการเก็บ", "no_moq": "รายการที่ยังไม่มีขั้นต่ำการสั่ง",
+             "loss_zero": "เนื้อสัตว์ / ผักที่สูญเสีย 0%"}
+
+
+def _master_gaps_item(con) -> dict:
+    """PR-B4a (1.5): the card "ข้อมูลตั้งต้นที่ยังว่าง" - how many items the order logic reads a blank field of, with a link to the
+    register filtered to them and the items that cost the most first (master_gaps). No value is filled in by the system."""
+    from .master_gaps import gaps
+    g = gaps(con)
+    c = g["counts"]
+    n = c["items"]
+    lines = []
+    for k in ("fresh_no_shelf", "no_moq", "loss_zero"):
+        lst = g["lists"][k]
+        lines.append({"key": k, "label": GAP_LABEL[k], "count": lst["count"], "items": lst["items"],
+                      "go": {"tab": "bomcenter", "pane": "ing", "extra": {"gap": k}}})
+    return _e("master_gaps", 35, "setup", "ข้อมูลตั้งต้นที่ยังว่าง",
+              "todo" if n else "done",
+              "ยอดแนะนำอ่านค่าเหล่านี้ · แต่ละกลุ่มเรียงตามมูลค่าที่ซื้อมากที่สุดก่อน" if n else "กรอกครบทุกรายการ",
+              count=n or None, owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์",
+              go={"tab": "bomcenter", "pane": "ing", "extra": {"gap": "fresh_no_shelf" if c["fresh_no_shelf"] else
+                                                                "no_moq" if c["no_moq"] else "loss_zero"}},
+              gaps=lines)
 
 
 _SHORT_UNIT = {"กิโลกรัม": "กก.", "มิลลิลิตร": "มล."}
@@ -367,6 +393,24 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                       anomalies=[{"branch_id": a["branch_id"], "branch": a["branch"], "items": a["items"][:3],
                                   "max_pct": a["max_pct"]} for a in odd],
                       go={"tab": "orderhub", "pane": "issuevar", **({"branch": odd[0]["branch_id"]} if odd else {})}))
+        # PR-B4a (1.4): the other direction - a class-A item issued far UNDER the recipes day after day (the slip left blank, or the
+        # branch used the item without writing it) makes the system stock run high and the next order too small
+        low = []
+        try:
+            from .issue_reports import STREAK_DAYS as _SD, UNDER_PCT
+            low = anomalies(con, today - timedelta(days=1), 7, today=today, direction="under")
+        except Exception:
+            low = []
+        shown_low = " · ".join(f"{a['branch']} ({', '.join(a['items'][:3])})" for a in low)
+        out.append(_e("issue_under", 230, "week", "ตรวจสอบสาขาที่เบิกน้อยกว่าสูตรติดต่อกัน",
+                      "todo" if low else "done",
+                      (f"เบิกน้อยกว่าสูตรเกิน {UNDER_PCT:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}") if low
+                      else "ไม่พบการเบิกน้อยกว่าสูตรติดต่อกันใน 7 วันล่าสุด",
+                      count=len(low) or None, owner=("supply.ordering", "ops.report"),
+                      owner_th="ประสานงานขาย / ฝ่ายปฏิบัติการ", urgent=False, branch_names=[a["branch"] for a in low],
+                      anomalies=[{"branch_id": a["branch_id"], "branch": a["branch"], "items": a["items"][:3],
+                                  "max_pct": a["max_pct"]} for a in low],
+                      go={"tab": "orderhub", "pane": "issuevar", **({"branch": low[0]["branch_id"]} if low else {})}))
     for b in branches:
         bid = b["branch_id"]
         info = slips[bid]

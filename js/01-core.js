@@ -2573,12 +2573,13 @@ const SUPPLY_CHIPS = [
   // older ordering screens (owner 2026-10-10: regrouped, kept, never deleted)
   { key: 'setup', label: 'ตั้งค่า', items: [
     { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', roles: ['salessupport', 'analyst', 'management'] },
+    // PR-B4a (1.8): the festival / promotion editor moved here from หน้าระบบเดิม, with the public holidays beside it (read only)
+    { tab: 'bomcenter', pane: 'events', label: 'ปฏิทินเทศกาลและวันหยุด', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'codereq', label: 'แจ้งเปลี่ยนรหัสสินค้า', mods: ['bom.center', 'supply.ordering'], roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'ordering', label: 'แผนสั่งวัตถุดิบ (ระบบเดิม)', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
     { tab: 'ingpurchase', label: 'ยอดซื้อเทียบยอดขาย', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
-    { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] },
-    { tab: 'ordersetup', pane: 'cal', label: 'ปฏิทินเทศกาล', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] }] },
+    { tab: 'ordersetup', pane: 'pack', label: 'ขนาดบรรจุ', group: 'legacy', roles: ['salessupport', 'analyst', 'management'] }] },
 ];
 const SUPPLY_LEGACY_LABEL = 'หน้าระบบเดิม';
 const SUPPLY_FLAT_MAX = 5;     // a role with this many pages or fewer gets them as one flat row of chips

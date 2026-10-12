@@ -268,9 +268,12 @@ def test_stock_position_is_the_system_stock_plus_what_is_on_order(con):  # noqa:
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-04")        # a draft is no basis
     con.commit()
     sp = OR.stock_position(con, 1, AS_OF, date(2026, 10, 5))
-    assert sp["basis"] == {"count_id": x, "date": "2026-10-02"} and sp["qty"][CRAB] == 5000.0
+    assert sp["basis"] == {"count_id": x, "date": "2026-10-02"}
     assert sp["through"] == "2026-10-05" and sp["on_order"] == {}
     assert sp["missing_days"] == ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05"]
+    # PR-B4a (1.3): no slip was written, so 2-4 Oct are deducted at the BoM of their sales (Fri 20 + Sat 40 + Sun 30 plates × 45 g)
+    assert sp["estimated_days"] == ["2026-10-02", "2026-10-03", "2026-10-04"] and sp["estimated_qty"][CRAB] == 4050.0
+    assert sp["qty"][CRAB] == 5000.0 - 4050.0
 
 
 def test_sla_reads_the_stored_cutoff():

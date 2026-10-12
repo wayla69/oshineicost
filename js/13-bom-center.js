@@ -149,7 +149,7 @@ function _bmcChip(text, ink) {
 function bmcSetSub(k) {
   _bmcSub = k;
   _bmcMonthSync(k);
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'events', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -158,6 +158,7 @@ function bmcSetSub(k) {
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
   if (k === 'cal') bmcLoadCalendar();
+  if (k === 'events') bmcLoadEvents();
   if (k === 'zones') bmcLoadZones();
   if (k === 'issue') bmcLoadIssue();
   if (k === 'prep') bmcLoadPrep();
@@ -168,7 +169,7 @@ function bmcSetSub(k) {
   if (k === 'rcheck') bmcLoadRcheck();
   if (k === 'codereq') bmcLoadCodeReq();
   const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases); a code request has none
-  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq') ? 'none' : '';
+  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq' || k === 'events') ? 'none' : '';
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 // The month strip sits above every pane: a change reloads the pane that is open.
@@ -264,11 +265,22 @@ function bmcGoIssues() {
   setTimeout(() => { const el = document.getElementById('bmcIssuesCard'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
 }
 let _bmcIngProb = '';         // the ingredient tab shows only rows with this problem ('' = any)
+let _bmcIngGap = '';          // 1.5 · … or only rows with this blank field the order logic reads (fresh_no_shelf | no_moq | loss_zero)
+const _BMC_GAP_TH = { fresh_no_shelf: 'ของสด / แช่เย็นที่ยังไม่มีอายุการเก็บ', no_moq: 'ยังไม่มีขั้นต่ำการสั่ง', loss_zero: 'เนื้อสัตว์ / ผักที่สูญเสีย 0%' };
 function bmcGoIng(prob) {
   _bmcIngProb = prob || '';
+  _bmcIngGap = '';
   bmcSetSub('ing');
   const cb = document.getElementById('bmcIngIssues');
   if (cb) cb.checked = !!prob;
+  bmcLoadIng(false);
+}
+function bmcGoIngGap(gap) {
+  _bmcIngProb = '';
+  _bmcIngGap = gap || '';
+  bmcSetSub('ing');
+  const cb = document.getElementById('bmcIngIssues');
+  if (cb) cb.checked = false;
   bmcLoadIng(false);
 }
 // master items for "รหัสอื่น…": names close to the recipe's names first (the master is not
@@ -397,7 +409,7 @@ async function bmcCrDecide(code, status, useCode, names) {
 // ── ingredient master ───────────────────────────────────────────────────────
 async function bmcLoadIng(force) {
   if (_bmcIng.length && !force) { bmcRenderIng(); return; }
-  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="15" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="18" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   try {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
     try { _bmcZones = (await _bmcJson(`${API}/api/bom-center/zones`)).zones || []; } catch (e) { _bmcZones = _bmcZones || []; }
@@ -405,7 +417,7 @@ async function bmcLoadIng(force) {
     _bmcIngEdits = {}; _bmcIngErr = {}; _bmcIngPage = 0;
     bmcRenderIng();
   } catch (e) {
-    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="15" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
+    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="18" class="py-3" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
   }
 }
 function _bmcIngVal(r, f) { const e = _bmcIngEdits[r.code]; return e && f in e ? e[f] : r[f]; }
@@ -419,7 +431,7 @@ function _bmcIngProblems(e) {
     else if (!/[A-Za-zก-๙]/.test(n)) out.push('ชื่อต้องมีตัวอักษร');
   }
   if ('short_name' in e && String(e.short_name == null ? '' : e.short_name).trim().length > 40) out.push('ชื่อสั้นต้องไม่เกิน 40 ตัวอักษร');
-  for (const [f, lbl] of [['qty_per_recv', 'ขนาดบรรจุ'], ['loss_pct', 'สูญเสีย %']]) {
+  for (const [f, lbl] of [['qty_per_recv', 'ขนาดบรรจุ'], ['loss_pct', 'สูญเสีย %'], ['moq', 'ขั้นต่ำการสั่ง'], ['shelf_days', 'อายุการเก็บ'], ['lead_days', 'ระยะส่ง']]) {
     if (!(f in e) || e[f] === null) continue;
     if (typeof e[f] !== 'number' || !Number.isFinite(e[f])) out.push(`${lbl}ต้องเป็นตัวเลข`);
     else if (e[f] < 0) out.push(`${lbl}ต้องไม่ติดลบ`);
@@ -441,7 +453,7 @@ function _bmcPagerHtml(page, pages, from, to, total) {
 function bmcIngEdit(el) {
   const code = el.dataset.code, f = el.dataset.f;
   let v = el.type === 'checkbox' ? (el.checked ? 1 : 0) : el.value;
-  if (['qty_per_recv', 'loss_pct'].includes(f)) v = v === '' ? null : Number(v);
+  if (['qty_per_recv', 'loss_pct', 'moq', 'shelf_days', 'lead_days'].includes(f)) v = v === '' ? null : Number(v);
   (_bmcIngEdits[code] = _bmcIngEdits[code] || {})[f] = v;
   const bad = _bmcIngProblems({ [f]: v }).length > 0;          // the field itself turns red as soon as it is wrong
   el.style.background = bad ? 'var(--bad-soft, #fde8e8)' : 'var(--accent-soft)';
@@ -454,9 +466,12 @@ function bmcRenderIng() {
   const kind = document.getElementById('bmcIngKind').value;
   const only = document.getElementById('bmcIngIssues').checked;
   const bar = document.getElementById('bmcIngProbBar');
-  if (bar) bar.innerHTML = _bmcIngProb && only
+  if (bar) bar.innerHTML = _bmcIngGap
+    ? `${_bmcChip('แสดงเฉพาะ: ' + (_BMC_GAP_TH[_bmcIngGap] || _bmcIngGap), 'var(--amber-ink)')} <a href="#" onclick="_bmcIngGap='';bmcRenderIng();return false" style="color:var(--accent)">แสดงทุกรายการ</a>`
+    : _bmcIngProb && only
     ? `${_bmcChip('แสดงเฉพาะ: ' + _bmcIngProb, 'var(--amber-ink)')} <a href="#" onclick="_bmcIngProb='';bmcRenderIng();return false" style="color:var(--accent)">แสดงทุกปัญหา</a>` : '';
   const rows = _bmcIng.filter(r => (!kind || r.kind === kind) && (!only || r.problems.length)
+    && (!_bmcIngGap || (r.gaps || []).includes(_bmcIngGap))
     && (!only || !_bmcIngProb || r.problems.includes(_bmcIngProb))
     && (!q || `${r.code} ${r.name_th || ''} ${r.short_name || ''} ${(r.aliases || []).map(a => a.alias).join(' ')}`.toLowerCase().includes(q)));
   const w = _bmcCanWrite();
@@ -492,6 +507,9 @@ function bmcRenderIng() {
       <td class="py-1 pr-2">${inp(r, 'recv_unit', 90)}</td>
       <td class="py-1 pr-2 text-right">${inp(r, 'qty_per_recv', 80, 'number')}</td>
       <td class="py-1 pr-2 text-right">${inp(r, 'loss_pct', 55, 'number')}</td>
+      <td class="py-1 pr-2 text-right">${inp(r, 'moq', 55, 'number')}</td>
+      <td class="py-1 pr-2 text-right">${inp(r, 'shelf_days', 55, 'number')}</td>
+      <td class="py-1 pr-2 text-right">${inp(r, 'lead_days', 55, 'number')}</td>
       <td class="py-1 pr-2">${zoneSel(r)}</td>
       <td class="py-1 pr-2">${inp(r, 'count_unit', 80)}</td>
       <td class="py-1 pr-2 text-right">${_bmcPrice(r.price_per_base)}${r.price_source ? `<div>${_bmcChip(_BMC_SRC[r.price_source] || r.price_source, _BMC_SRC_INK[r.price_source] || 'var(--text-muted)')}</div>` : ''}</td>
@@ -500,7 +518,7 @@ function bmcRenderIng() {
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
       <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}
         ${(_bmcIngErr[r.code] || []).map(m => `<div class="text-[11px] bmc-rownote" role="alert" style="color:var(--bad-ink)">${esc(m)}</div>`).join('')}</td>
-    </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="15" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="15" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
+    </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="18" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="18" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
   if (_bmcAlOpen && document.getElementById('bmcAlCell')) { if (_bmcAlState && _bmcAlState.code === _bmcAlOpen) bmcAlRender(_bmcAlState); else bmcAlLoad(_bmcAlOpen); }
   const nProb = _bmcIng.filter(r => r.problems.length).length;
   if (!Object.keys(_bmcIngEdits).length) {
@@ -2230,7 +2248,10 @@ function bmcRenderForecast() {
       <td class="pr-2 text-right font-semibold">${r.suggested_units != null ? `${_bmcNum(r.suggested_units, 0)} ${esc(r.recv_unit || '')}` : fmtQ(r.need, r.base_unit) + ' ' + _bmcChip('ไม่มีขนาดบรรจุ', 'var(--amber-ink)')}</td>
       <td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
       <td class="pr-2 text-right" style="color:${r.trend > 1.05 ? 'var(--amber-ink)' : r.trend < 0.95 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.trend > 1 ? '+' : ''}${Math.round((r.trend - 1) * 100)}%</td>
-      <td>${r.monitored ? _bmcChip('บังคับสั่ง', 'var(--navy-ink)') : ''} ${r.sourcing === 'local' ? _bmcChip('สาขาซื้อเอง', 'var(--text-muted)') : ''}</td></tr>`).join('')
+      <td>${r.monitored ? _bmcChip('บังคับสั่ง', 'var(--navy-ink)') : ''} ${r.sourcing === 'local' ? _bmcChip('สาขาซื้อเอง', 'var(--text-muted)') : ''}
+        ${r.shelf_cap_days ? _bmcChip(`จำกัดตามอายุการเก็บ ${r.shelf_cap_days} วัน`, 'var(--navy-ink)') : ''}${r.round_down ? ' ' + _bmcChip('ปัดลง (เหลือพอ)', 'var(--navy-ink)') : ''}
+        ${r.price_note ? _bmcChip(r.price_note, 'var(--text-muted)') : ''}${r.lead_extra_days ? ' ' + _bmcChip(`สั่งให้พอเพิ่ม ${r.lead_extra_days} วัน (ระยะส่ง ${r.lead_days} วัน)`, 'var(--navy-ink)') : ''}
+        ${r.short_ship_skipped ? _bmcChip(`ไม่นับ ${r.short_ship_skipped} วันที่คลังส่งไม่ครบ`, 'var(--text-muted)') : ''}</td></tr>`).join('')
       || '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ไม่มีวัตถุดิบในรอบนี้</td></tr>'}</tbody></table>`;
 }
 async function bmcSaveForecast() {
@@ -2294,6 +2315,77 @@ async function bmcLoadCalendar() {
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
   bmcLoadBenchmark();
+}
+// ── PR-B4a (1.8) · ปฏิทินเทศกาลและวันหยุด: the events (promotions, festivals) the forecast reads, and the public holidays, read only ──
+let _bmcEv = null, _bmcEvEditId = null;
+function _bmcEvCanWrite() { return hasModule('supply.ordering') || hasModule('bom.center'); }
+function _bmcEvPctTxt(e) { return e.uplift_pct == null ? 'ใช้ยอดลูกค้าปีก่อน' : `${e.uplift_pct > 0 ? '+' : ''}${_bmcNum(e.uplift_pct, 0)}%`; }
+async function bmcLoadEvents() {
+  const form = document.getElementById('bmcEvForm');
+  if (form) form.style.display = _bmcEvCanWrite() ? '' : 'none';
+  try { _bmcEv = await _bmcJson(`${API}/api/bom-center/event-calendar`); }
+  catch (e) { document.getElementById('bmcEvList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  const sel = document.getElementById('bmcEvBranch');
+  if (sel && !sel.options.length) sel.innerHTML = '<option value="">ทุกสาขา</option>' + _bmcEv.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
+  const w = _bmcEvCanWrite();
+  document.getElementById('bmcEvList').innerHTML = _bmcEv.events.length
+    ? `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">ชื่อ</th><th class="pr-2">ตั้งแต่</th><th class="pr-2">ถึง</th><th class="pr-2">สาขา</th><th class="pr-2">ลูกค้าเพิ่มจากวันปกติ</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${
+      _bmcEv.events.map(e => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1 font-semibold">${esc(e.name)}</td><td class="pr-2">${esc(fmtDay(e.date_from))}</td><td class="pr-2">${esc(fmtDay(e.date_to))}</td>
+        <td class="pr-2">${esc(e.branch || 'ทุกสาขา')}</td><td class="pr-2">${esc(_bmcEvPctTxt(e))}</td><td class="pr-2" style="color:var(--text-muted)">${esc(e.note || '')}</td>
+        <td class="text-right whitespace-nowrap">${w ? `<a href="#" onclick="bmcEvEdit(${e.event_id});return false" style="color:var(--accent)">แก้ไข</a> · <a href="#" onclick="bmcEvDel(${e.event_id});return false" style="color:var(--bad-ink)">ลบ</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+    : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีช่วงเทศกาลหรือโปรโมชันในช่วงนี้</span>';
+  const byMonth = {};
+  _bmcEv.holidays.forEach(h => { (byMonth[h.date.slice(0, 7)] = byMonth[h.date.slice(0, 7)] || []).push(h); });
+  document.getElementById('bmcEvHol').innerHTML = Object.keys(byMonth).length
+    ? Object.entries(byMonth).map(([m, hs]) => `<div class="mb-2"><div class="text-[11px] font-semibold" style="color:var(--text-secondary)">${esc(fmtMonthTh(m))}</div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">${hs.map(h => `<span class="text-xs" style="color:var(--text-primary)">${esc(fmtDayShort(h.date))} ${esc(h.weekday_th)} · ${esc(h.name)} ${_bmcChip('วันหยุด', 'var(--navy-ink)')}</span>`).join('')}</div></div>`).join('')
+    : '<span class="text-xs" style="color:var(--text-muted)">ไม่มีวันหยุดราชการในช่วงนี้ (ตารางวันหยุดของระบบครอบคลุม พ.ศ. 2567–2570)</span>';
+}
+function bmcEvReset() {
+  _bmcEvEditId = null;
+  ['bmcEvName', 'bmcEvFrom', 'bmcEvTo', 'bmcEvPct', 'bmcEvNote'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('bmcEvBranch').value = '';
+  document.getElementById('bmcEvFormTitle').textContent = 'เพิ่มช่วงเทศกาลหรือโปรโมชัน';
+  document.getElementById('bmcEvSave').textContent = 'เพิ่ม';
+  document.getElementById('bmcEvCancel').style.display = 'none';
+}
+function bmcEvEdit(id) {
+  const e = (_bmcEv.events || []).find(x => x.event_id === id);
+  if (!e) return;
+  _bmcEvEditId = id;
+  document.getElementById('bmcEvName').value = e.name;
+  document.getElementById('bmcEvFrom').value = e.date_from;
+  document.getElementById('bmcEvTo').value = e.date_to;
+  document.getElementById('bmcEvBranch').value = e.branch_id == null ? '' : String(e.branch_id);
+  document.getElementById('bmcEvPct').value = e.uplift_pct == null ? '' : e.uplift_pct;
+  document.getElementById('bmcEvNote').value = e.note || '';
+  document.getElementById('bmcEvFormTitle').textContent = 'แก้ไขช่วงเทศกาลหรือโปรโมชัน';
+  document.getElementById('bmcEvSave').textContent = 'บันทึกการแก้ไข';
+  document.getElementById('bmcEvCancel').style.display = '';
+  document.getElementById('bmcEvName').scrollIntoView({ block: 'center' });
+}
+async function bmcEvSave() {
+  const name = document.getElementById('bmcEvName').value.trim(), from = document.getElementById('bmcEvFrom').value, to = document.getElementById('bmcEvTo').value;
+  if (!name || !from || !to) { bmcStatus('bmcEvStatus', 'warn', 'กรอกชื่อและช่วงวันที่ให้ครบ'); return; }
+  if (to < from) { bmcStatus('bmcEvStatus', 'warn', 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม'); return; }
+  const pctRaw = document.getElementById('bmcEvPct').value.trim();
+  const pct = pctRaw === '' ? null : Number(pctRaw);
+  if (pct !== null && !(pct >= -50 && pct <= 200)) { bmcStatus('bmcEvStatus', 'warn', '% ที่เพิ่มต้องอยู่ระหว่าง -50 ถึง +200'); return; }
+  const bid = document.getElementById('bmcEvBranch').value;
+  try {
+    await _bmcJson(`${API}/api/bom-center/event-calendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: _bmcEvEditId, name, date_from: from, date_to: to, branch_id: bid ? Number(bid) : null, uplift_pct: pct,
+        note: document.getElementById('bmcEvNote').value.trim() || null }) });
+    bmcEvReset();
+    bmcStatus('bmcEvStatus', true, 'บันทึกแล้ว · ยอดแนะนำที่คำนวณใหม่ใช้ช่วงนี้');
+    bmcLoadEvents();
+  } catch (e) { bmcStatus('bmcEvStatus', false, 'ไม่ได้บันทึก: ' + String(e.message || e).slice(0, 160)); }
+}
+async function bmcEvDel(id) {
+  const e = (_bmcEv.events || []).find(x => x.event_id === id);
+  if (!await uiConfirm(`ลบช่วง “${e ? e.name : ''}” ออกจากปฏิทิน?`, { title: 'ลบช่วงเทศกาล', ok: 'ลบ', cancel: 'ไม่ลบ' })) return;
+  try { await _bmcJson(`${API}/api/bom-center/event-calendar/${id}`, { method: 'DELETE' }); bmcLoadEvents(); }
+  catch (er) { bmcStatus('bmcEvStatus', false, 'ไม่ได้ลบ: ' + String(er.message || er).slice(0, 160)); }
 }
 // ── PR-X · สาขาของบริษัทที่ใช้เป็นค่ากลาง: which branches make the benchmark, and the temporary stock buffer ──
 let _bmcBm = null;

@@ -320,6 +320,10 @@ function _shmCard(it, n, mineBlock) {
   const per = (it.branches || []).length > 1
     ? `<div class="text-[11px] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">${it.branches.map(b => `<span style="color:${(_SHM_ST[b.status] || _SHM_ST.todo)[1]}">${b.status === 'done' ? '✓' : '•'} ${esc(b.branch)}: ${esc(b.detail)}</span>`).join('')}</div>`
     : (it.detail ? `<div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(it.detail)}</div>` : '');
+  // 1.5 · the card "ข้อมูลตั้งต้นที่ยังว่าง": one link per blank field, with the items that are bought for the most ฿ named beside it
+  const gp = (it.gaps || []).length ? `<div class="text-[11px] mt-1">${it.gaps.map(g => `<div style="margin-top:2px">
+      <a href="#" onclick="_shmOpen(${esc(JSON.stringify(g.go))});return false" style="color:var(--accent)">${esc(g.label)} ${g.count} รายการ →</a>${(g.items || []).length
+        ? `<span style="color:var(--text-muted)"> · ซื้อมากที่สุด: ${g.items.slice(0, 3).map(i => esc(i.name)).join(', ')}</span>` : ''}</div>`).join('')}</div>` : '';
   // the branch is written once: in the header of a branch login, so a card of its own list does not repeat it
   const scoped = !!(_shmData && _shmData.scoped);
   const owner = [it.owner_th, it.branch && !(it.branches || []).length && !scoped ? it.branch : ''].filter(Boolean).join(' · ');
@@ -327,7 +331,7 @@ function _shmCard(it, n, mineBlock) {
     ${n ? `<span class="text-xs font-semibold" style="color:var(--text-muted);min-width:18px">${n}.</span>` : ''}
     <div class="flex-1 min-w-0">
       <div class="text-sm" style="color:var(--text-primary)">${esc(it.title)} ${_bmcChip(lbl, it.urgent ? 'var(--bad-ink)' : ink)}${it.count ? ' ' + _bmcChip(`${it.count} รายการ`, ink) : ''}</div>
-      ${per}
+      ${per}${gp}
       ${owner && !(scoped && mineBlock) ? `<div class="text-[11px]" style="color:var(--text-muted)">${esc(owner)}</div>` : ''}
     </div>${act}</div>`;
 }
@@ -374,6 +378,7 @@ function _shmOpen(go) {
   if (go.tab === 'settings') { switchTab('settings'); if (go.pane) { try { switchSettingsTab(go.pane); } catch (e) {} } return; }
   supplyGo({ tab: go.tab, pane: go.pane, month: go.month, branch: go.branch, anchor: go.anchor });
   if (x.prob) setTimeout(() => { try { bmcGoIng(x.prob); } catch (e) {} }, 60);
+  if (x.gap) setTimeout(() => { try { bmcGoIngGap(x.gap); } catch (e) {} }, 60);
   if (x.release_id) _shmWhen(() => { const s = document.getElementById('bmcRlSel'); return s && s.options.length; }, () => {
     const s = document.getElementById('bmcRlSel');
     if (String(s.value) !== String(x.release_id) && [...s.options].some(o => o.value === String(x.release_id))) { s.value = String(x.release_id); bmcLoadRelease(); }

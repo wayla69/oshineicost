@@ -292,20 +292,23 @@ def test_reopen_reconfirm_and_the_log(con):  # noqa: F811
 # ── 5 · the system stock ─────────────────────────────────────────────────────
 def test_system_position_is_count_plus_receipts_minus_confirmed_slips(con):  # noqa: F811
     cid = build_stock(con)
-    sp = ST.system_position(con, 1, AS_OF)
+    sp = ST.system_position(con, 1, AS_OF, estimate=False)               # PR-B4a (1.3): the confirmed-slips-only figure; the default estimates the missing days
     assert sp["basis"] == {"count_id": cid, "date": "2026-10-01"}
     assert sp["qty"][CRAB] == 12700                                       # 10000 + 5000 - 1000 - 600 - 700; the draft is ignored
     assert sp["through"] == "2026-10-05" and sp["missing_days"] == ["2026-10-04", "2026-10-05"]
+    est = ST.system_position(con, 1, AS_OF)                               # 4 Oct (a draft, with sales) is deducted at the BoM of its sales: Sunday 30 plates × 45 g
+    assert est["estimated_days"] == ["2026-10-04"] and est["estimated_qty"][CRAB] == 1350 and est["qty"][CRAB] == 12700 - 1350
     # the count date's own receipts and slip are in; a later issue day is not
     assert ST.system_position(con, 1, date(2026, 10, 2), issues_through=date(2026, 10, 1))["qty"][CRAB] == 14000
     assert ST.system_position(con, 1, date(2026, 10, 2))["qty"][CRAB] == 13400
     # an item that was not counted has no figure; before the count there is no basis at all
     VA.add_receipt(con, 1, "2026-10-02", [{"code": "02-01-001", "qty": 1, "unit": "กรัม"}], "udon")
     assert "02-01-001" not in ST.system_position(con, 1, AS_OF)["qty"]
-    assert ST.system_position(con, 1, date(2026, 9, 30)) == {"basis": None, "qty": {}, "missing_days": [], "through": "2026-09-30"}
+    assert ST.system_position(con, 1, date(2026, 9, 30)) == {"basis": None, "qty": {}, "missing_days": [], "through": "2026-09-30",
+                                                              "estimated_days": [], "estimated_qty": {}}
     # a slip reopened is a draft again and stops counting
     IS.reopen(con, IS.status_of(con, 1, "2026-10-02")["slip_id"], "ss", "แก้ไข", now=NOW)
-    assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 13300
+    assert ST.system_position(con, 1, AS_OF, estimate=False)["qty"][CRAB] == 13300
 
 
 # ── 6 · the plan ─────────────────────────────────────────────────────────────
@@ -635,7 +638,7 @@ def _todays_slip(con, qty=1000):  # noqa: F811
 
 def test_append_adds_to_the_line_inserts_new_ones_and_logs_it(con):  # noqa: F811
     s = _todays_slip(con)
-    assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 11700                          # 12700 - 1000
+    assert ST.system_position(con, 1, AS_OF, estimate=False)["qty"][CRAB] == 11700         # 12700 - 1000
     out = IS.append(con, 1, "2026-10-05", [used(qty=500), {"code": SALMON, "qty_used": 250, "qty_waste": 100, "unit": "กรัม",
                                                            "waste_reason": "expired"}, used("V-007", 0)], "udon", now=at(5, 15))
     con.commit()
@@ -662,7 +665,7 @@ def test_append_adds_to_the_line_inserts_new_ones_and_logs_it(con):  # noqa: F81
     assert sh["can_append"] is True and sh["editable"] is False and sh["status"]["appends"] == 2
     assert IS.sheet(con, 1, "2026-10-03", now=at(5, 17))["can_append"] is False
     # the system stock follows (it reads the confirmed lines)
-    assert ST.system_position(con, 1, AS_OF)["qty"][CRAB] == 11200
+    assert ST.system_position(con, 1, AS_OF, estimate=False)["qty"][CRAB] == 11200
 
 
 def test_append_rounds_every_quantity_up_to_a_whole_number(con):  # noqa: F811

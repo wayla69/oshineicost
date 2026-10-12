@@ -257,6 +257,8 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
             f = it["per_count_unit"] or 1.0
             sq = pos["qty"].get(it["code"])
             it["system_qty"] = in_count(it["code"], sq, f)
+            eq = pos["estimated_qty"].get(it["code"])               # PR-B4a (1.3): the part of the figure that is the BoM of sales, not a slip
+            it["estimated_qty"] = in_count(it["code"], eq, f) if eq else None
             it["avg_used_7d"] = round(sums[it["code"]] / days_n / f, 6) if days_n and it["code"] in sums else None
             ln = lines.get(it["code"])
             if ln:
@@ -288,6 +290,7 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
                 "editable": st["status"] not in ("confirmed", "late"),
                 "can_append": st["status"] in ("confirmed", "late") and d == today,       # PR-M7: เบิกเพิ่ม is open on today's confirmed slip
                 "backdated": d < today, "prev_date": pv[1] if pv else None, "basis": pos["basis"], "missing_days": pos["missing_days"],
+                "estimated_days": pos["estimated_days"],
                 "earliest": (today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat(),
                 "lines": list(lines.values()),
                 "reasons": [{"code": c, "label": t} for c, t in WASTE_REASONS]})

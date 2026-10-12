@@ -37,7 +37,8 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 
 from .clock import BKK, now_bkk
-from .units import Converter, to_order_units
+from .prices import PriceBook
+from .units import Converter, is_big_pack, to_order_units_ex
 
 Z = {"A": 1.65, "B": 1.28, "C": 1.04}
 # The calendar is keyed by the DELIVERY weekday (SQLite %w: Sun = 0); the cutoff follows from it.
@@ -399,8 +400,20 @@ def era_start(start: date, as_of: date) -> date:
     return max(start, cut) if as_of >= cut else start
 
 
-def _daily_model(series: dict, days: list, as_of: date) -> dict:
-    """weekday means, trend, residual σ for one ingredient over the trading days."""
+MIN_DAYS_AFTER_SKIP = 7             # PR-B4a (1.8): fewer trading days than this would be left once the short-shipped days are out - keep them all
+
+
+def _daily_model(series: dict, days: list, as_of: date, skip=None) -> dict:
+    """weekday means, trend, residual σ for one ingredient over the trading days.
+
+    PR-B4a (1.8): `skip` = days to leave out of THIS item's figures - the delivery windows in which the warehouse short-shipped it
+    (short_ship_days). A day the item could not be had is not a day nobody wanted it. When fewer than MIN_DAYS_AFTER_SKIP days
+    would be left, nothing is left out (a thin history is worse than a biased one). `skipped` counts the days left out."""
+    skipped = 0
+    if skip:
+        kept = [d for d in days if d not in skip]
+        if len(kept) >= MIN_DAYS_AFTER_SKIP and len(kept) < len(days):
+            skipped, days = len(days) - len(kept), kept
     by_wd = defaultdict(list)
     for d in days:
         by_wd[_wd(date.fromisoformat(d))].append(series.get(d, 0.0))
@@ -414,7 +427,51 @@ def _daily_model(series: dict, days: list, as_of: date) -> dict:
         trend = max(0.7, min(1.3, (sum(last) / len(last)) / (sum(prev) / len(prev))))
     resid = [series.get(d, 0.0) - mean_wd.get(_wd(date.fromisoformat(d)), overall) for d in days]
     sigma = math.sqrt(sum(r * r for r in resid) / (len(resid) - 1)) if len(resid) > 1 else 0.0
-    return {"mean_wd": mean_wd, "overall": overall, "trend": trend, "sigma": sigma}
+    return {"mean_wd": mean_wd, "overall": overall, "trend": trend, "sigma": sigma, "skipped": skipped}
+
+
+# 1.8 · the reasons on which the warehouse did NOT send what the branch confirmed because it did not have it (hub.SS_REASONS):
+# "short" (supplier short / could not send in full) and "substitute" (another product sent instead). The others - pack size, merged
+# with another round, sent from the warehouse's own stock, other - do not say the branch was left without the item.
+SHORT_SHIP_REASONS = ("short", "substitute")
+
+
+def short_ship_days(con, branch_id: int, start: date, end: date) -> dict:
+    """PR-B4a (1.8): {ingredient_code: {iso day}} - the days of the delivery window that FOLLOWS a short shipment of the item to this
+    branch (processed units below what the branch confirmed, reason in SHORT_SHIP_REASONS), inside [start, end].
+
+    Why this and not the days the stock was 0: the usage the forecast learns from is the BoM of what was SOLD, so a day on which the
+    item ran out shows as low use only when the dish could not be sold. The system stock per day would tell it, but only as well as
+    the slips behind it are confirmed - and during the roll-out most days are not (the stock figure then runs high or, with the
+    estimate of 1.3, is itself an estimate). The warehouse's reason on a short line is a person's statement that the item was not
+    sent, so it is the signal used. The window is the cover the short order was meant for (cover_for_delivery): from its delivery
+    day to the day before the next regular delivery (a week for the salmon round)."""
+    out = {}
+    try:
+        rows = con.execute(
+            "SELECT o.round, o.cycle_date, o.delivery_date, l.ingredient_code FROM bc_order o JOIN bc_order_line l USING(order_id)"
+            " WHERE o.branch_id=? AND o.status IN ('processed','received') AND l.ss_reason IN (%s)"
+            " AND COALESCE(l.processed_units, 0) < COALESCE(l.confirmed_units, 0)" % ",".join("?" * len(SHORT_SHIP_REASONS)),
+            (branch_id,) + SHORT_SHIP_REASONS).fetchall()
+    except Exception:
+        return out
+    if not rows:
+        return out
+    from .hub import delivery_of
+    s0, s1 = start.isoformat(), end.isoformat()
+    for rnd, cyc, dd, code in rows:
+        try:
+            dlv = date.fromisoformat(delivery_of(con, branch_id, rnd, cyc, dd))
+            _c, _d, cf, ct = cover_for_delivery(con, branch_id, rnd, dlv)
+        except (KeyError, TypeError, ValueError):
+            continue
+        d = cf
+        while d <= ct:
+            iso = d.isoformat()
+            if s0 <= iso <= s1:
+                out.setdefault(code, set()).add(iso)
+            d += timedelta(days=1)
+    return out
 
 
 def _abc(values: dict) -> dict:
@@ -474,7 +531,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     up = 1.0 + float(uplift_pct or 0.0) / 100.0            # the branch's buffer on top of the season factor
     master = {r[0]: r[1:] for r in con.execute(
         "SELECT code, name_th, base_unit, recv_unit, qty_per_recv, moq, shelf_days, kind, monitored,"
-        " sourcing_default FROM bc_ingredient")}
+        " sourcing_default, lead_days FROM bc_ingredient")}
     has_round_col = "order_round" in {r[1] for r in con.execute("PRAGMA table_info(bc_ingredient)")}
     salmon = {r[0] for r in con.execute("SELECT code FROM bc_ingredient WHERE order_round='salmon'")} \
         if has_round_col else set()
@@ -520,12 +577,17 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     else:
         pre_from = max(as_of + timedelta(days=1), date.fromisoformat(basis)) if basis else as_of + timedelta(days=1)
     pre_days = [pre_from + timedelta(days=i) for i in range(max((c_from - pre_from).days, 0))]
-    # spend over the window for ABC
+    # spend over the window for ABC. PR-B4a (1.6): an item with no price is weighed at its last known price, else the benchmark
+    # branches' median (prices.PriceBook) - not at 0, which put every unpriced item in class C (a small safety stock, and no reason
+    # ever asked). Only the class (and so the safety stock) reads the fallback; the price and ฿ shown stay the real ones.
+    pbook = PriceBook(con, month, cmap)
     spend = {}
     for code, s in use.items():
-        p = price_for(con, code, month)
-        spend[code] = sum(s.values()) * (p[0] if p else 0.0)
+        spend[code] = sum(s.values()) * pbook.ref(code)
     klass = _abc(spend)
+    conv = Converter(con)                                  # 1.7 · is this pack a big one?
+    skip_map = {} if ref_mode else short_ship_days(con, branch_id, start, as_of)         # 1.8 · days an item was short-shipped
+    std_lead = int(calendar(con, branch_id)[rnd]["lead_days"])
     rows = []
     for code, s in use.items():
         if (code in salmon) != (rnd == "salmon"):
@@ -536,17 +598,24 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             m = {"mean_wd": {}, "overall": ps_items[code]["per_100k"] * float(expected_sales) / 1e5 / max(len(cover), 1),
                  "trend": 1.0, "sigma": 0.0}
         else:
-            m = _daily_model(s, days, as_of)
+            m = _daily_model(s, days, as_of, skip=skip_map.get(code))
         if m["overall"] <= 0:
             continue
-        per_day_base = [m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in cover]
+        name, base, recv, per, moq, shelf, kind, mon, src, lead = master.get(code, (None,) * 10)
+        # PR-B4a (1.8): an item whose own lead time is longer than the round's standard (cutoff → delivery) cannot be topped up by the
+        # next cutoff in time: it must last the extra days beyond the next delivery. extra = lead_days − the round's standard lead, when positive.
+        extra = 0 if (ref_mode or not lead) else max(0, int(lead) - std_lead)
+        cover_i = cover + [c_to + timedelta(days=i) for i in range(1, extra + 1)]
+        # PR-B4a (1.5): never order past the shelf life - the cover days beyond it are not ordered (a delivery keeps `shelf` days)
+        cap = None
+        if shelf and int(shelf) > 0 and len(cover_i) > int(shelf):
+            cap = int(shelf)
+            cover_i = cover_i[:cap]
+        per_day_base = [m["mean_wd"].get(_wd(d), m["overall"]) * m["trend"] * factor for d in cover_i]
         fc_base = sum(per_day_base)
         fc = fc_base * up
-        name, base, recv, per, moq, shelf, kind, mon, src = master.get(code, (None,) * 9)
         k = klass.get(code, "C")
-        days_n = len(cover)
-        if shelf:
-            days_n = min(days_n, int(shelf))
+        days_n = len(cover_i)
         safety = Z[k] * m["sigma"] * math.sqrt(max(days_n, 1))
         need = fc + safety
         need_base = fc_base + safety
@@ -561,13 +630,19 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
         elif onord:
             need = max(0.0, need - onord)
             need_base = max(0.0, need_base - onord)
-        units = to_order_units(need, per, moq or 1) if per else None
+        big = bool(per) and is_big_pack(conv, code, per)
+        down = False
+        if per:                                             # 1.7 · a big pack is not rounded up for a remainder the safety stock covers
+            units, down = to_order_units_ex(need, per, moq or 1, safety=safety, big=big)
+        else:
+            units = None
         p = price_for(con, code, month)
         ppb = p[0] if p else None
+        pchip = pbook.chip(code, base)
         rows.append({"code": code, "name": name or code, "base_unit": base, "class": k, "kind": kind,
                      "monitored": bool(mon),
                      "sourcing": ("central" if code in cmap else "local") if cmap else (src or "central"),
-                     "per_day": round(fc / len(cover), 3) if cover else 0, "forecast": round(fc, 2),
+                     "per_day": round(fc / len(cover_i), 3) if cover_i else 0, "forecast": round(fc, 2),
                      "forecast_base": round(fc_base, 2), "need_base": round(need_base, 2),
                      "safety": round(safety, 2), "need": round(need, 2), "trend": round(m["trend"], 3),
                      "on_hand": None if oh is None else round(oh, 2), "on_order": round(onord, 2),
@@ -579,6 +654,13 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "per_sales": ({"per_100k": round(ps_items[code]["per_100k"], 2), "steady": ps_items[code]["steady"],
                                     "swing_pct": ps_items[code]["swing_pct"]} if code in ps_items else None),
                      "ref_label": ref_mode["label"] if ref_mode else None,
+                     # PR-B4a: why a figure is not the plain forecast
+                     "shelf_days": int(shelf) if shelf else None, "shelf_cap_days": cap,        # 1.5 · "จำกัดตามอายุการเก็บ N วัน"
+                     "price_missing": pbook.info(code) is not None, "price_note": pchip,                          # 1.6 · "ไม่มีราคา (ใช้ราคา …)"
+                     "price_fallback": pbook.info(code),
+                     "big_pack": big, "round_down": down,                                         # 1.7 · "ปัดลง (เหลือพอ)"
+                     "lead_days": int(lead) if lead else None, "lead_extra_days": extra,         # 1.8 · the cover is longer by `extra` days
+                     "short_ship_skipped": m.get("skipped", 0),                                   # 1.8 · days left out of the means
                      "value": round((units * per if units else need) * ppb, 2) if ppb else None})
     rows.sort(key=lambda r: -(r["value"] or 0))
     stats.pop("via", None)                                 # carried on each row instead

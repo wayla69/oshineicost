@@ -3,7 +3,8 @@
 
   reconcile()  month-end:  system stock (from the slips)  vs  the physical count   (R1)
   daily()      every day:  what the branch issued (cost)  vs  the BoM of what it sold (R2)
-  anomalies()  the branches whose class-A items run over the BoM for days in a row
+  anomalies()  the branches whose class-A items run over the BoM for days in a row (PR-B4a, 1.4: or under it - direction='under')
+  blank_class_a()  PR-B4a (1.4): the high-value items the sales say were used that day and that the slip leaves blank
   log()        PR-J4 (R3): per branch and day, how the slip was handled — on time, late, reopened, reconfirmed —
                with the late purchase orders and the claims beside it; log_monthly() is one month of it
   slip_rows()  PR-J4 (R4): the confirmed slips as priced lines, for the Excel Accounting posts from
@@ -28,13 +29,15 @@ from .clock import BKK, now_bkk
 
 OVER_PCT = 20.0            # a class-A item issued more than this % over its BoM that day is "over"
 STREAK_DAYS = 3            # … and that many trading days in a row is a flag
+UNDER_PCT = 30.0           # PR-B4a (1.4): a class-A item issued more than this % UNDER its BoM that day is "under" (3 days in a row = a flag)
+BLANK_TOP = 8              # PR-B4a (1.4): the confirm dialog names this many blank class-A items, the most valuable first
 SLIP_STATUS_TH = {"on_time": "ยืนยันตรงวัน", "late": "ล่าช้า", "draft": "ยังไม่ยืนยัน", "missing": "ไม่มีใบ",
                   "closed": "ไม่มียอดขาย"}
 RECON_STATUS_TH = {"ok": "ตรงกัน (ในเกณฑ์)", "over": "นับได้มากกว่าระบบ", "under": "นับได้น้อยกว่าระบบ",
                    "not_counted": "ตรวจนับไม่ครบ"}
 SLIP_NOTE_TH = {"on_time": "", "late": "ยืนยันหลังวันที่ของใบ", "draft": "มีร่างแล้ว ยังไม่ยืนยัน",
                 "missing": "ยังไม่มีใบตัดเบิก", "closed": "ไม่มียอดขายและไม่มีใบตัดเบิก"}
-SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เบิกเกินต่อเนื่อง"}
+SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เบิกเกินต่อเนื่อง", "under_streak": "เบิกน้อยกว่าสูตรต่อเนื่อง"}
 _EPS = 1e-6
 
 
@@ -181,6 +184,13 @@ def _prices(con, month: str):
     return p
 
 
+def _price_ref(con, month: str):
+    """PR-B4a (1.6): price_ref(code) = the price used to RANK items (ABC class): the real price, else the last known price, else the
+    median the benchmark branches paid, else 0. Values shown on a screen keep the real price (_prices)."""
+    from .prices import PriceBook
+    return PriceBook(con, month).ref
+
+
 def _names(con) -> dict:
     return {c: (n, u) for c, n, u in con.execute("SELECT code, name_th, base_unit FROM bc_ingredient")}
 
@@ -209,8 +219,9 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
         "SELECT ingredient_code, reason_code, note, who FROM bc_variance_reason WHERE end_count_id=?", (e["count_id"],))}
     price = _prices(con, month)
     names = _names(con)
-    klass = _abc({c: (v["used"] + v["waste"]) * price(c) for c, v in iss.items()
-                  if (v["used"] + v["waste"]) > 0 and price(c)})
+    pref = _price_ref(con, month)                                # PR-B4a (1.6): an unpriced item is ranked by a fallback price, never shown with one
+    klass = _abc({c: (v["used"] + v["waste"]) * pref(c) for c, v in iss.items()
+                  if (v["used"] + v["waste"]) > 0 and pref(c)})
     rows, excluded = [], []
     for c in sorted(set(begin) | set(end) | set(received) | set(claims) | set(iss)):
         cell = iss.get(c) or {}
@@ -286,17 +297,18 @@ def _pct(issue_v: float, bom_v: float):
     return round(100.0 * (issue_v - bom_v) / bom_v, 1) if bom_v and bom_v > _EPS else None
 
 
-def _streaks(series: list, threshold: float = OVER_PCT, n: int = STREAK_DAYS) -> list:
+def _streaks(series: list, threshold: float = OVER_PCT, n: int = STREAK_DAYS, below: bool = False) -> list:
     """`series` = [(day, pct or None)] in trading-day order. Runs of at least `n` consecutive entries above the
-    threshold; a day with no comparable figure ends a run. -> [{days, from, to, max_pct, last_pct}]"""
+    threshold (BELOW it with `below`, PR-B4a 1.4: under-issue); a day with no comparable figure ends a run.
+    -> [{days, from, to, max_pct, last_pct}] (`max_pct` is the deepest figure of the run: the largest, or with `below` the lowest)"""
     runs, cur = [], []
     for day, pct in series + [(None, None)]:
-        if pct is not None and pct > threshold:
+        if pct is not None and (pct < threshold if below else pct > threshold):
             cur.append((day, pct))
             continue
         if len(cur) >= n:
             runs.append({"days": len(cur), "from": cur[0][0], "to": cur[-1][0],
-                         "max_pct": max(p for _, p in cur), "last_pct": cur[-1][1]})
+                         "max_pct": (min if below else max)(p for _, p in cur), "last_pct": cur[-1][1]})
         cur = []
     return runs
 
@@ -323,7 +335,7 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
     price = _prices(con, month)
     names = _names(con)
     empty = {"days": [], "rows": [], "flags": [], "bom": {}, "iss": {}, "st": {}, "klass": {}, "price": price,
-             "names": names, "flag_days": {}, "comparable": {}}
+             "names": names, "flag_days": {}, "under_days": {}, "comparable": {}}
     if last < d0:
         return empty
     bom = bom_days(con, branch_id, d0, last, month, commit=commit)
@@ -331,9 +343,9 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
     st = {s["date"]: s for s in IS.status_days(con, branch_id, d0, last)}
     days = [d for d in sorted(set(bom) | set(st))
             if (d in bom and d < today.isoformat()) or st[d]["status"] != "missing"]
-    klass = _month_class({d: bom[d] for d in days if d in bom}, price)
+    klass = _month_class({d: bom[d] for d in days if d in bom}, _price_ref(con, month))
     a_codes = sorted(c for c, k in klass.items() if k == "A")
-    rows, per_code = [], {}                                     # per_code: code -> [(day, pct)]
+    rows, per_code, per_code_u = [], {}, {}                     # per_code: code -> [(day, pct)] · per_code_u: the same for the under-issue streak
     for d in days:
         b, i, s = bom.get(d, {}), iss.get(d, {}), st[d]
         conf = IS.is_confirmed(s)
@@ -346,6 +358,7 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
             pct = _pct(iq, b.get(c, 0.0)) if conf else None
             if d in bom:                                        # a streak runs over TRADING days only
                 per_code.setdefault(c, []).append((d, pct))
+                per_code_u.setdefault(c, []).append((d, pct))
             if pct is not None and pct > OVER_PCT:
                 over.append({"code": c, "name": (names.get(c) or (c,))[0], "var_pct": pct})
         wd = FC._wd(date.fromisoformat(d))
@@ -357,24 +370,33 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
                "var_value": round(used_v + waste_v - bom_v, 2) if conf else None,
                "var_pct": _pct(used_v + waste_v, bom_v) if conf else None, "over_items": over}
         rows.append(row)
-    flags, flag_days = [], {}
+    flags, flag_days, under_days = [], {}, {}
     total_series = [(r["date"], r["var_pct"]) for r in rows if r["trading"]]
     for run in _streaks(total_series):
-        flags.append(dict(run, kind="total", code=None, name="รวมทุกรายการ"))
+        flags.append(dict(run, kind="total", code=None, name="รวมทุกรายการ", direction="over"))
     for c in sorted(per_code):
         for run in _streaks(per_code[c]):
-            flags.append(dict(run, kind="item", code=c, name=(names.get(c) or (c,))[0]))
+            flags.append(dict(run, kind="item", code=c, name=(names.get(c) or (c,))[0], direction="over"))
+    # PR-B4a (1.4): the other direction - a class-A item issued more than UNDER_PCT under its BoM on STREAK_DAYS trading days in a row
+    # (the kitchen used it and nobody wrote it on the slip, or wrote less). Items only: the total is already watched by the over flag.
+    for c in sorted(per_code_u):
+        for run in _streaks(per_code_u[c], threshold=-UNDER_PCT, below=True):
+            flags.append(dict(run, kind="item", code=c, name=(names.get(c) or (c,))[0], direction="under"))
     for f in flags:
+        into = under_days if f["direction"] == "under" else flag_days
         for r in rows:
             if f["from"] <= r["date"] <= f["to"]:
-                flag_days.setdefault(r["date"], []).append(f["code"] or "*")
+                into.setdefault(r["date"], []).append(f["code"] or "*")
     for r in rows:
         codes = flag_days.get(r["date"], [])
         r["streak"] = [("รวมทุกรายการ" if c == "*" else (names.get(c) or (c,))[0]) for c in codes]
         r["flagged"] = bool(codes)
-    flags.sort(key=lambda f: (-f["max_pct"], f["code"] or ""))
+        ucodes = under_days.get(r["date"], [])
+        r["under_streak"] = [(names.get(c) or (c,))[0] for c in ucodes]
+        r["under_flagged"] = bool(ucodes)
+    flags.sort(key=lambda f: (-abs(f["max_pct"]), f["code"] or ""))
     return {"days": days, "rows": rows, "flags": flags, "bom": bom, "iss": iss, "st": st, "klass": klass,
-            "price": price, "names": names, "flag_days": flag_days}
+            "price": price, "names": names, "flag_days": flag_days, "under_days": under_days}
 
 
 def _totals(rows: list) -> dict:
@@ -389,7 +411,8 @@ def _totals(rows: list) -> dict:
             "used_value": round(sum(r["used_value"] for r in conf), 2),
             "waste_value": round(sum(r["waste_value"] for r in conf), 2), "issued_value": round(iss_v, 2),
             "bom_value": round(bom_v, 2), "var_value": round(iss_v - bom_v, 2), "var_pct": _pct(iss_v, bom_v),
-            "flagged_days": sum(1 for r in rows if r["flagged"]), "over_days": sum(1 for r in rows if r["over_items"])}
+            "flagged_days": sum(1 for r in rows if r["flagged"]), "over_days": sum(1 for r in rows if r["over_items"]),
+            "under_flagged_days": sum(1 for r in rows if r.get("under_flagged"))}
 
 
 def daily(con, branch_id: int, month: str, today: date = None, commit: bool = True) -> dict:
@@ -402,7 +425,8 @@ def daily(con, branch_id: int, month: str, today: date = None, commit: bool = Tr
     s = _span(con, branch_id, first, last, month, today, commit)
     return {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "month": month,
             "price_month": month, "rows": s["rows"], "flags": s["flags"], "totals": _totals(s["rows"]),
-            "thresholds": {"over_pct": OVER_PCT, "streak_days": STREAK_DAYS}, "slip_status_th": SLIP_STATUS_TH}
+            "thresholds": {"over_pct": OVER_PCT, "streak_days": STREAK_DAYS, "under_pct": UNDER_PCT},
+            "slip_status_th": SLIP_STATUS_TH}
 
 
 def _day_items(s: dict, day: str) -> list:
@@ -411,6 +435,7 @@ def _day_items(s: dict, day: str) -> list:
     conf = bool(st) and IS.is_confirmed(st)
     p, names, klass = s["price"], s["names"], s["klass"]
     flagged = set(s["flag_days"].get(day, []))
+    under_flagged = set(s["under_days"].get(day, []))
     out = []
     for c in sorted(set(b) | set(i)):
         cell = i.get(c) or {}
@@ -423,6 +448,8 @@ def _day_items(s: dict, day: str) -> list:
         signal = None
         if conf and c in flagged:
             signal = "streak"
+        elif conf and c in under_flagged:
+            signal = "under_streak"
         elif conf and k == "A" and pct is not None and pct > OVER_PCT:
             signal = "over"
         out.append({"date": day, "code": c, "name": n, "base_unit": u, "class": k,
@@ -431,7 +458,7 @@ def _day_items(s: dict, day: str) -> list:
                     "var_qty": round(used + waste - bq, 3) if conf else None, "var_pct": pct, "price_per_base": pv,
                     "var_value": _round((used + waste - bq) * pv) if conf and pv is not None else None,
                     "signal": signal, "signal_th": SIGNAL_TH.get(signal)})
-    rank = {"streak": 0, "over": 1, None: 2}
+    rank = {"streak": 0, "under_streak": 0, "over": 1, None: 2}
     out.sort(key=lambda r: (rank[r["signal"]], -abs(r["var_value"] or 0), r["code"]))
     return out
 
@@ -469,9 +496,10 @@ def daily_items(con, branch_id: int, month: str, today: date = None, commit: boo
     return [it for d in s["days"] for it in _day_items(s, d)]
 
 
-def anomalies(con, as_of, lookback: int = 7, today: date = None, commit: bool = True) -> list:
+def anomalies(con, as_of, lookback: int = 7, today: date = None, commit: bool = True, direction: str = "over") -> list:
     """The branches whose confirmed issues ran more than OVER_PCT over the BoM on STREAK_DAYS consecutive
-    trading days (class-A items, or the total) inside the `lookback` days ending at `as_of`."""
+    trading days (class-A items, or the total) inside the `lookback` days ending at `as_of`.
+    PR-B4a (1.4): `direction='under'` lists the branches whose class-A items ran more than UNDER_PCT UNDER the BoM instead."""
     end = _d(as_of)
     start = end - timedelta(days=int(lookback) - 1)
     month = f"{end.year:04d}-{end.month:02d}"
@@ -481,11 +509,43 @@ def anomalies(con, as_of, lookback: int = 7, today: date = None, commit: bool = 
         " ORDER BY branch_id", (start.isoformat(), end.isoformat()))]
     for bid in ids:
         s = _span(con, bid, start, end, month, today or end + timedelta(days=1), commit)
-        if s["flags"]:
-            out.append({"branch_id": bid, "branch": _branch_name(con, bid), "flags": s["flags"],
-                        "max_pct": max(f["max_pct"] for f in s["flags"]),
-                        "items": [f["name"] for f in s["flags"]]})
-    out.sort(key=lambda x: (-x["max_pct"], x["branch_id"]))
+        flags = [f for f in s["flags"] if f["direction"] == direction]
+        if flags:
+            out.append({"branch_id": bid, "branch": _branch_name(con, bid), "flags": flags,
+                        "max_pct": (min if direction == "under" else max)(f["max_pct"] for f in flags),
+                        "items": [f["name"] for f in flags]})
+    out.sort(key=lambda x: (-abs(x["max_pct"]), x["branch_id"]))
+    return out
+
+
+def blank_class_a(con, branch_id: int, day, filled, today: date = None, top: int = BLANK_TOP, commit: bool = True) -> dict:
+    """PR-B4a (1.4): the class-A items the sales of `day` say were used (BoM > 0) that have no used / waste quantity on the slip.
+
+    `filled` = the codes the slip has a quantity for (the confirm dialog sends what is on the screen). Class A is the class of the
+    month so far (the daily report's own: the items that make 80 % of the BoM ฿). The list is cut to the `top` most valuable (BoM
+    ฿); `total` is how many there are. Nothing is written except the BoM-day cache bom_days keeps anyway.
+    -> {date, items: [{code, name, bom, base_unit, value}], total, shown}"""
+    d = _d(day)
+    month = f"{d.year:04d}-{d.month:02d}"
+    first, _last = _month_bounds(month)
+    out = {"date": d.isoformat(), "items": [], "total": 0, "shown": 0}
+    if d < first:
+        return out
+    bom = bom_days(con, branch_id, first, d, month, commit=commit)
+    today_bom = bom.get(d.isoformat()) or {}
+    if not today_bom:
+        return out
+    price = _prices(con, month)
+    klass = _month_class(bom, _price_ref(con, month))
+    names = _names(con)
+    have = set(filled or ())
+    rows = []
+    for c, q in today_bom.items():
+        if q and q > _EPS and klass.get(c) == "A" and c not in have:
+            n, u = names.get(c) or (c, None)
+            rows.append({"code": c, "name": n, "bom": round(q, 3), "base_unit": u, "value": _round(q * (price(c) or 0.0))})
+    rows.sort(key=lambda r: (-(r["value"] or 0), r["code"]))
+    out.update(items=rows[:max(int(top), 0)], total=len(rows), shown=min(len(rows), max(int(top), 0)))
     return out
 
 

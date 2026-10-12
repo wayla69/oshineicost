@@ -208,6 +208,39 @@
     </div></details>
   </div>
 
+  <!-- ── PR-B4a (1.8) · ปฏิทินเทศกาลและวันหยุด (ตั้งค่า → ปฏิทินเทศกาลและวันหยุด): events the forecast reads + the public holidays, read only ─── -->
+  <div id="bmc-pane-events" style="display:none">
+    <div class="card p-4 mb-3 bmc-ev-write" id="bmcEvForm">
+      <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)" id="bmcEvFormTitle">เพิ่มช่วงเทศกาลหรือโปรโมชัน</div>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="text-[11px]" style="color:var(--text-muted)">ชื่อ<br>
+          <input id="bmcEvName" maxlength="60" placeholder="เช่น โปรโมชันวันแม่" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:200px"></label>
+        <label class="text-[11px]" style="color:var(--text-muted)">ตั้งแต่<br>
+          <input type="date" id="bmcEvFrom" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-[11px]" style="color:var(--text-muted)">ถึง<br>
+          <input type="date" id="bmcEvTo" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label class="text-[11px]" style="color:var(--text-muted)">สาขา<br>
+          <select id="bmcEvBranch" data-branch-picker style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:150px"></select></label>
+        <label class="text-[11px]" style="color:var(--text-muted)">ลูกค้าเพิ่มจากวันปกติ (%)<br>
+          <input type="number" id="bmcEvPct" step="1" min="-50" max="200" placeholder="ว่าง = ใช้ปีก่อน" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:130px"></label>
+        <label class="text-[11px]" style="color:var(--text-muted)">หมายเหตุ<br>
+          <input id="bmcEvNote" maxlength="120" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:200px"></label>
+        <button id="bmcEvSave" onclick="bmcEvSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;cursor:pointer;min-height:36px">เพิ่ม</button>
+        <button id="bmcEvCancel" onclick="bmcEvReset()" style="display:none;border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ยกเลิกการแก้ไข</button>
+        <span id="bmcEvStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-[11px] mt-2" style="color:var(--text-muted)">เว้นช่อง % ไว้ ยอดแนะนำใช้ยอดลูกค้าวันเดียวกันของปีก่อนเทียบวันปกติในวันเดียวกันของสัปดาห์ · กรอก % เมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน (+20 คือลูกค้ามากกว่าวันปกติ 20%)</p>
+    </div>
+    <div class="card p-4 mb-3"><div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ช่วงเทศกาลและโปรโมชัน</div><div id="bmcEvList"></div></div>
+    <div class="card p-4 mb-3"><div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">วันหยุดราชการ <span class="text-[11px] font-normal" style="color:var(--text-muted)">· อ่านอย่างเดียว</span></div>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">ยอดแนะนำรู้วันหยุดเหล่านี้อยู่แล้ว (เทียบกับวันหยุดเดียวกันของปีก่อน) ไม่ต้องเพิ่มซ้ำ · เพิ่มเฉพาะโปรโมชันและงานที่ทำให้ลูกค้าต่างจากปกติ</p>
+      <div id="bmcEvHol"></div></div>
+    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
+      <p>ประสานงานขายเพิ่มช่วงโปรโมชันหรืองานที่มีผลกับจำนวนลูกค้า เลือกสาขาหรือทุกสาขา และใส่ % ที่ลูกค้าเพิ่มจากวันปกติ · ยอดแนะนำที่รอบส่งคลุมช่วงนั้นจะปรับตามเมื่อคำนวณใหม่</p>
+      <p>วันหยุดราชการมาจากตารางวันหยุดของระบบ (พ.ศ. 2567–2570) แก้ไม่ได้ที่หน้านี้</p>
+    </div></details>
+  </div>
+
   <!-- ── storage zones (ตั้งค่า → โซนจัดเก็บ): the centre adds, renames, deletes and reorders the zones a branch counts by ─── -->
   <div id="bmc-pane-zones" style="display:none">
     <div class="card p-4 mb-3">
@@ -303,6 +336,9 @@
           <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2" title="ชื่อที่หน้าสาขาแสดง · เว้นว่างแล้วหน้าสาขาแสดงชื่อเต็ม">ชื่อสั้น</th><th class="py-1.5 pr-2">ชนิด</th>
           <th class="py-1.5 pr-2">หน่วยฐาน</th><th class="py-1.5 pr-2">หน่วยรับ</th>
           <th class="py-1.5 pr-2 text-right">ขนาดบรรจุ</th><th class="py-1.5 pr-2 text-right">สูญเสีย %</th>
+          <th class="py-1.5 pr-2 text-right" title="จำนวนหน่วยรับขั้นต่ำที่สั่งได้ · ว่าง = ไม่กำหนด">ขั้นต่ำสั่ง</th>
+          <th class="py-1.5 pr-2 text-right" title="สั่งแล้วเก็บได้กี่วัน · ยอดแนะนำไม่สั่งเกินอายุนี้ · ว่าง = ไม่จำกัด">อายุเก็บ (วัน)</th>
+          <th class="py-1.5 pr-2 text-right" title="จากสั่งถึงของมาถึงกี่วัน · มากกว่ามาตรฐานของรอบ ยอดแนะนำสั่งให้พอเพิ่ม">ระยะส่ง (วัน)</th>
           <th class="py-1.5 pr-2">โซนจัดเก็บ</th><th class="py-1.5 pr-2">หน่วยที่นับ</th>
           <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2 text-right">ราคา/หน่วยรับ</th>
           <th class="py-1.5 pr-2 text-right">ใช้ในเมนู</th><th class="py-1.5 pr-2">บังคับสั่ง</th><th class="py-1.5">สถานะ</th>
