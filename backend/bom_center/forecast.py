@@ -315,9 +315,10 @@ def clear_usage_cache() -> None:
     with _usage_lock:
         _usage_cache.clear()
     try:                                                   # PR-V: the per-฿100,000 report is built on this usage (PR-X: so is the recipe check)
-        from . import per_sales, recipe_check
+        from . import backlog, per_sales, recipe_check
         per_sales.clear_cache()
         recipe_check.clear_cache()
+        backlog.clear_cache()                              # batch 4b (3.5): the ranked data-quality backlog is built on the same usage
     except Exception:
         pass
 

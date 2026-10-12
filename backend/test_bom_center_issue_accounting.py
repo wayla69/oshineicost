@@ -317,7 +317,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         r = op.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-09-01&date_to=2026-09-10")
         assert r.status_code == 200
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["ตรวจสอบการสั่ง", "ใบตัดเบิก"]
+        assert wb.sheetnames == ["ตรวจสอบการสั่ง", "ใบตัดเบิก", "ผลของการสั่งจริง"]       # batch 4b (2.5): the order outcome is the third sheet
         cr = list(wb["ใบตัดเบิก"].iter_rows(values_only=True))
         assert list(cr[1]) == LOG_SUMMARY_HEADERS and cr[2][:6] == ("BranchA", 2, 1, 0, 1, 0)
         assert any(x["branch"] == "BranchA" for x in op.get("/api/bom-center/hub/compliance?date_from=2026-09-01&date_to=2026-09-10").json()["issues"])

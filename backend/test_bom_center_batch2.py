@@ -472,7 +472,7 @@ def test_every_branch_screen_writes_the_short_name_and_hides_the_code_behind_the
     for fn in ("_brnNm", "_brnSrc", "brnSrc"):
         assert f"function {fn}(" in BRN
     assert BRN.count("_brnNm(") >= 40 and BRN.count("_brnSrc(") >= 8
-    for rel, needle in (("backend/routers/bom_center.py", "_short(con, _st.sheet(con, bid))"), ("backend/routers/bom_center.py", "_short(con, _is.sheet("),
+    for rel, needle in (("backend/routers/bom_center.py", "_short(con, _st.sheet(con, bid, mode=mode))"), ("backend/routers/bom_center.py", "_short(con, _is.sheet("),
                         ("backend/routers/bom_center.py", "_short(con, out)"), ("backend/routers/bom_center.py", "_short(con, _va.period("),
                         ("backend/routers/bom_center.py", "_short(con, _cl.detail("), ("backend/routers/bom_center.py", "_short(con, o)")):
         assert needle in _src(rel), needle

@@ -666,6 +666,31 @@ async function ohbLoadComp() {
       : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล (สาขายังไม่เริ่มใช้งาน)</span>';
     if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+  ohbLoadOutcome();
+}
+// ── batch 4b (2.5) · ผลของการสั่งจริง: days of cover left when the next delivery arrives, and the ordered items that ran out before it ──
+async function ohbLoadOutcome() {
+  const box = document.getElementById('ohbOutcome');
+  if (!box) return;
+  const month = ((document.getElementById('ohbCTo') || {}).value || '').slice(0, 7);
+  box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+  try {
+    const o = await _bmcJson(`${API}/api/bom-center/hub/outcome${month ? '?month=' + month : ''}`);
+    const t = o.total, cover = v => v == null ? '<span style="color:var(--text-muted)">—</span>' : `<b style="color:${v < 1 ? 'var(--bad-ink)' : v < 2 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${_bmcNum(v, 1)} วัน</b>`;
+    const out = n => `<b style="color:${n ? 'var(--bad-ink)' : 'var(--good-ink)'}">${n}</b>`;
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ผลของการสั่งจริง · ${esc(fmtMonthTh(o.month))}</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">คงเหลือตามระบบของรายการในใบสั่งซื้อ ณ วันก่อนรอบส่งถัดไปถึง เทียบกับการใช้เฉลี่ยต่อวัน · ใช้คู่กับความคลาดเคลื่อนของยอดแนะนำที่หน้าความพร้อมและผลนำร่อง · รอบส่งที่รอบถัดไปยังไม่ถึงไม่ถูกนับ</div>
+      ${o.branches.length ? `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+        <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">รอบส่งที่วัดได้</th><th class="py-1 pr-2 text-right">วันที่ของพอใช้ตอนรอบถัดไปถึง</th>
+        <th class="py-1 pr-2 text-right">รายการที่หมดก่อนรอบถัดไป</th><th class="py-1 pr-2 text-right">รอบที่มีของหมด</th><th class="py-1">รายการที่หมด</th></tr></thead><tbody>
+        ${o.branches.map(b => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(b.branch)}</td><td class="py-1 pr-2 text-right">${b.measured}/${b.deliveries}</td>
+          <td class="py-1 pr-2 text-right">${cover(b.cover_days)}</td><td class="py-1 pr-2 text-right">${b.measured ? out(b.stockouts) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td class="py-1 pr-2 text-right">${b.measured ? out(b.stockout_rounds) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td class="py-1" style="color:var(--text-secondary)">${esc([...new Set(o.rows.filter(r => r.branch_id === b.branch_id).flatMap(r => r.stockout_items))].slice(0, 5).join(', '))}</td></tr>`).join('')}
+        <tr style="border-top:2px solid var(--border)"><td class="py-1 pr-2 font-semibold">ทุกสาขา</td><td class="py-1 pr-2 text-right">${t.measured}/${t.deliveries}</td><td class="py-1 pr-2 text-right">${cover(t.cover_days)}</td>
+          <td class="py-1 pr-2 text-right">${out(t.stockouts)}</td><td class="py-1 pr-2 text-right">${out(t.stockout_rounds)}</td><td></td></tr></tbody></table></div>`
+        : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีใบสั่งซื้อที่ส่งแล้วในเดือนนี้</span>'}`;
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadComp() { bmcDownload(`${API}/api/bom-center/hub/compliance.xlsx?${_ohbCRange()}`, 'ตรวจสอบการสั่ง.xlsx', 'ohbCStatus'); }
 
@@ -764,11 +789,12 @@ async function ohbLoadPilot() {
     sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผลนำร่อง ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
       <div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
         <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">ใบตัดเบิกครบทุกวัน (≥${T.issue_coverage}%)</th><th class="py-1 pr-2 text-right">ยืนยันภายในวัน (≥${T.issue_on_time}%)</th>
-        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์กลุ่มมูลค่าสูง (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์กลุ่มมูลค่าสูง (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">วันที่ของพอใช้ตอนรอบถัดไปถึง</th><th class="py-1 pr-2 text-right">รายการที่หมดก่อนรอบถัดไป</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
       d.scorecard.branches.map(s => { const m = s.metrics, p = s.passes, [vt, vi] = vd[s.verdict];
         return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(fmtDay(s.from))} → ${esc(fmtDay(s.to))} · ${s.cycles} วันสั่ง · ใบตัดเบิก ${(s.slips ? s.slips.confirmed + s.slips.late : 0)} ใบ</div></td>
           <td class="py-1 pr-2 text-right">${cell(m.issue_coverage, p.issue_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.issue_on_time, p.issue_on_time, '%')}</td>
           <td class="py-1 pr-2 text-right">${cell(m.reason_coverage, p.reason_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.mape_a, p.mape_a, '%')}</td>
+          <td class="py-1 pr-2 text-right">${cell(m.cover_days, null, ' วัน')}</td><td class="py-1 pr-2 text-right">${m.stockouts == null ? '<span style="color:var(--text-muted)">—</span>' : `<b style="color:${m.stockouts ? 'var(--bad-ink)' : 'var(--good-ink)'}">${m.stockouts}</b>`}</td>
           <td class="py-1 pr-2 text-right">${cell(m.order_submission, null, '%')}</td><td class="py-1">${_bmcChip(vt, vi)}</td></tr>`; }).join('') + '</tbody></table></div>';
   } catch (e) { rb.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -854,7 +880,9 @@ function isrReconHead(r) {
       ${_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)')}
       ${miss.length ? _bmcChip(`ขาดใบตัดเบิก ${miss.length} วัน`, 'var(--bad-ink)') : ''}
       ${sl.draft_days.length ? _bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
-      ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}</div>
+      ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}
+      ${t.incomplete ? _bmcChip(`ข้อมูลไม่ครบ ${t.incomplete} รายการ (ไม่ถามเหตุผล)`, 'var(--text-muted)') : ''}
+      ${r.partial ? _bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)') : ''}</div>
     <div class="mt-1 text-sm">สุทธิ <b>${bmcGapHtml(t.diff_value, null, 'count')}</b> ·
       รายการที่นับได้น้อยกว่าระบบรวม ${_isrMoney(Math.abs(t.under_value || 0))} · รายการที่นับได้มากกว่าระบบรวม ${_isrMoney(Math.abs(t.over_value || 0))} · เกินเกณฑ์ ${t.flagged} รายการ ·
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
@@ -879,16 +907,17 @@ function isrReconTable(r, o) {
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ${esc(_isrClassTh(x.class))} (เกณฑ์ ±${r.thresholds[x.class]}%)</span>
         <span style="margin-left:auto" class="text-sm">${x.diff_value != null && bmcGapDir(x.diff_value) !== 0 ? `<b style="color:${bmcGapParts(x.diff_value, null, 'count').ink}">${bmcGapParts(x.diff_value, null, 'count').baht}</b>` : ''}</span></div>
       <div class="text-xs mt-0.5" style="color:var(--text-secondary)">${o.brief ? '' : `ยกมา ${q(x.begin, x)} + รับ ${q(x.received, x)} + เคลม/ปรับ ${q(x.claims, x)} − ตัดเบิก ${q(x.used, x)} − ของเสีย ${q(x.waste, x)}
-        = `}คงเหลือตามระบบ <b>${q(x.system, x)}</b> · นับจริง <b>${q(x.count, x)}</b>${x.diff != null ? ` · ${(g => g.dir ? `${esc(g.label)} <b class="isr-diff" style="color:${g.ink}">${q(Math.abs(x.diff), x)}${g.pct ? ` (${g.pct})` : ''}</b>` : `<b class="isr-diff" style="color:${g.ink}">${esc(g.label)}</b>`)(bmcGapParts(x.diff, x.diff_pct, 'count'))}` : ''}</div>
+        = `}คงเหลือตามระบบ <b>${q(x.system, x)}</b> · ${x.system_basis ? `<span style="color:var(--text-muted)">${esc(x.basis_th)}</span>` : `นับจริง <b>${q(x.count, x)}</b>`}${x.diff != null ? ` · ${(g => g.dir ? `${esc(g.label)} <b class="isr-diff" style="color:${g.ink}">${q(Math.abs(x.diff), x)}${g.pct ? ` (${g.pct})` : ''}</b>` : `<b class="isr-diff" style="color:${g.ink}">${esc(g.label)}</b>`)(bmcGapParts(x.diff, x.diff_pct, 'count'))}` : ''}</div>
       ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลตรวจนับต้นงวดหรือปลายงวด จึงยังเปรียบเทียบไม่ได้</div>' : ''}
-      ${flag && o.edit ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs${o.qty ? ' brn-reason' : ''}">
+      ${flag && !x.ask_reason && !x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-muted)">${x.data_incomplete ? _bmcChip(x.incomplete_th || 'ข้อมูลไม่ครบ', 'var(--text-muted)') + ' ไม่ถามเหตุผล เพราะ' + (x.incomplete_why === 'slips' ? 'งวดนี้ยังขาดใบตัดเบิกบางวัน' : 'งวดนี้ไม่มีใบรับสินค้า') : (r.reason_min_baht ? `ผลต่างต่ำกว่า ฿${_bmcNum(r.reason_min_baht, 0)} ไม่ต้องให้เหตุผล` : '')}</div>` : ''}
+      ${flag && o.edit && (x.ask_reason || x.reason_th) ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs${o.qty ? ' brn-reason' : ''}">
         <select id="${pfx}Rs_${esc(x.code)}" style="${o.qty ? 'flex:1 1 100%;' : ''}border:1px solid ${x.needs_reason ? 'var(--amber-ink)' : 'var(--border-control)'};border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${opts}</select>
         <input id="${pfx}Rn_${esc(x.code)}" value="${esc(x.reason_note || '')}" placeholder="หมายเหตุ" style="flex:1 1 ${o.qty ? '0' : '140px'};min-width:0;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
         <button${o.qty ? ' class="brn-act brn-act-line"' : ''} onclick="${o.save}(${_bmcQ(x.code)}, true)" style="${o.qty ? '' : 'border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 10px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)'}">บันทึก</button>
         ${x.reason_by ? `<span style="color:var(--text-muted)">${esc(whoTh(x.reason_by))}</span>` : ''}</div>
       <div id="${pfx}E_${esc(x.code)}" class="brn-err" role="alert"></div>`
       : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(whoTh(x.reason_by)) : ''}</div>`
-        : (flag ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
+        : (flag && x.needs_reason ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
     </div>`;
   }).join('');
 }

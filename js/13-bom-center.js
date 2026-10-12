@@ -188,8 +188,33 @@ async function loadBomCenter() {
 }
 
 // ── overview ────────────────────────────────────────────────────────────────
+// ── batch 4b (3.5) · งานแก้ข้อมูลค้างเรียงตามผลกระทบ: the top 10 by the plates each item touches (backlog.py) ──
+// Shared by หน้างาน (16-supplyhome.js) and the readiness page below. `b` = {top | items, note, counts, total, unimpacted}.
+function bmcBacklogHtml(b, n) {
+  const rows = (b.top || b.items || []).slice(0, n || 10);
+  if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีงานแก้ข้อมูลค้าง</span>';
+  return (b.note ? `<div class="text-[11px] mb-1" style="color:var(--text-muted)">${esc(b.note)}</div>` : '') + rows.map((d, i) =>
+    `<div style="border-top:1px solid var(--border-soft);padding:6px 0;display:flex;gap:8px;align-items:flex-start">
+      <span class="text-xs font-semibold" style="min-width:20px;color:var(--text-muted)">${i + 1}.</span>
+      <div style="flex:1 1 0;min-width:0"><div class="text-sm" style="color:var(--text-primary)">${esc(d.title)} ${_bmcChip(d.kind_th, 'var(--text-muted)')}</div>
+        <div class="text-[11px]" style="color:var(--text-secondary)"><b>${esc(d.impact_th)}</b>${d.detail ? ' · ' + esc(d.detail) : ''}</div></div>
+      <button onclick="_shmOpen(${esc(JSON.stringify(d.go))})" class="text-xs rounded-lg px-3 py-1 whitespace-nowrap" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer;min-height:36px">ไปแก้ →</button></div>`).join('')
+    + ((b.total || 0) > rows.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">และอีก ${b.total - rows.length} รายการที่กระทบน้อยกว่า${b.unimpacted ? ` · ไม่กระทบยอดขายใน 30 วันล่าสุด ${b.unimpacted} รายการ` : ''}</div>` : '');
+}
+async function bmcLoadBacklog() {
+  const box = document.getElementById('bmcBacklogCard');
+  if (!box) return;
+  try {
+    const b = await _bmcJson(`${API}/api/bom-center/backlog`);
+    box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">งานแก้ข้อมูลค้างเรียงตามผลกระทบ <span class="text-xs font-normal" style="color:var(--text-muted)">${b.total} รายการ</span></div>
+      <div class="flex flex-wrap gap-1 mb-1">${Object.entries(b.counts || {}).filter(([, n]) => n).map(([k, n]) => _bmcChip(`${(b.kind_th || {})[k] || k} ${n}`, 'var(--text-muted)')).join(' ')}</div>
+      ${bmcBacklogHtml(b, 10)}`;
+  } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+
 async function bmcLoadOverview() {
   const m = _bmcMonth();
+  bmcLoadBacklog();
   try {
     const s = _bmcSummary = await _bmcJson(`${API}/api/bom-center/summary?month=${m}`);
     const tile = (label, val, sub, ink) => `<div class="card p-3"><div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
@@ -2315,6 +2340,35 @@ async function bmcLoadCalendar() {
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
   bmcLoadBenchmark();
+  bmcLoadCloseSettings();
+}
+// ── batch 4b (3.3 · 3.4) · เกณฑ์ผลต่างและการตรวจนับ: the baht floor of a variance reason, and the weekly-count switch ──
+let _bmcCs = null;
+async function bmcLoadCloseSettings() {
+  const box = document.getElementById('bmcCloseCard');
+  if (!box) return;
+  try { _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  const c = _bmcCs, w = hasModule('bom.center');
+  box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">เกณฑ์ผลต่างและการตรวจนับ</div>
+    <p class="text-xs mt-1 mb-2" style="color:var(--text-secondary)">สาขาให้เหตุผลผลต่างเฉพาะรายการที่เกินเกณฑ์ร้อยละของกลุ่มมูลค่า และต่างตั้งแต่จำนวนบาทนี้ขึ้นไป · รายการที่ใช้จริงเป็น 0 หรืองวดที่ไม่มีใบรับสินค้าหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม</p>
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="text-xs" style="color:var(--text-muted)">ผลต่างขั้นต่ำที่ต้องให้เหตุผล (บาท)<br>
+        <input id="bmcCsBaht" type="number" min="${c.reason_min_baht_min}" max="${c.reason_min_baht_max}" step="50" value="${c.reason_min_baht}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:120px;background:var(--bg-input);color:var(--text-primary)"></label>
+      <label class="text-xs flex items-center gap-2" style="color:var(--text-primary)"><input id="bmcCsCycle" type="checkbox" ${c.cycle_counts ? 'checked' : ''} ${w ? '' : 'disabled'}>
+        ตรวจนับหมุนเวียน: กลุ่มมูลค่าสูงนับทุกสัปดาห์ รายการอื่นนับสิ้นไตรมาส</label>
+      ${w ? `<button onclick="bmcSaveCloseSettings()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึก</button>` : ''}
+      <span id="bmcCsStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · เมื่อปิดการตรวจนับหมุนเวียน ทุกเดือนปิดงวดด้วยการตรวจนับครบทุกรายการเหมือนเดิม โดยไม่ต้องแก้ข้อมูลใด ๆ</div>`;
+}
+async function bmcSaveCloseSettings() {
+  const baht = Number(document.getElementById('bmcCsBaht').value), cyc = document.getElementById('bmcCsCycle').checked;
+  if (!(baht >= _bmcCs.reason_min_baht_min && baht <= _bmcCs.reason_min_baht_max)) { bmcStatus('bmcCsStatus', 'warn', `เกณฑ์บาทต้องอยู่ระหว่าง ${_bmcNum(_bmcCs.reason_min_baht_min, 0)} ถึง ${_bmcNum(_bmcCs.reason_min_baht_max, 0)}`); return; }
+  if (!await uiConfirm(`บันทึกเกณฑ์ผลต่างขั้นต่ำ ฿${_bmcNum(baht, 0)} และ${cyc ? 'เปิด' : 'ปิด'}การตรวจนับหมุนเวียน?\nผลต่างที่ยังไม่ได้ให้เหตุผลจะนับใหม่ตามเกณฑ์นี้`,
+    { title: 'ยืนยันการบันทึกเกณฑ์', ok: 'บันทึก', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcCsStatus', null, 'ยังไม่บันทึก'); return; }
+  try {
+    _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason_min_baht: baht, cycle_counts: cyc }) });
+    bmcStatus('bmcCsStatus', true, `บันทึกแล้ว · ผลต่างขั้นต่ำ ฿${_bmcNum(baht, 0)} · ตรวจนับหมุนเวียน${cyc ? 'เปิด' : 'ปิด'}`);
+  } catch (e) { bmcStatus('bmcCsStatus', false, String(e.message || e)); }
 }
 // ── PR-B4a (1.8) · ปฏิทินเทศกาลและวันหยุด: the events (promotions, festivals) the forecast reads, and the public holidays, read only ──
 let _bmcEv = null, _bmcEvEditId = null;
@@ -2474,6 +2528,11 @@ function bmcRenderRcheck() {
   if (r.skipped_items) lines.push(`ไม่แสดง ${r.skipped_items} รายการที่มีข้อมูลไม่ถึง 2 สาขา`);
   notes.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
   let rows = _bmcRcFilter === 'all' ? r.rows : r.rows.filter(x => x.status === _bmcRcFilter);
+  if (window._bmcRcItem) {                                  // 2.6 · a task "ตรวจสูตร: …" opens this page on that one item
+    const it = window._bmcRcItem;
+    rows = r.rows.filter(x => x.code === it);
+    notes.innerHTML += `<div style="color:var(--text-primary)"><b>แสดงเฉพาะ ${esc((rows[0] || {}).name || it)}</b> ${rows.length ? '' : '· รายการนี้ไม่อยู่ในผลตรวจของเดือนนี้ (มีข้อมูลซื้อไม่ถึง 2 สาขา)'} <a href="#" onclick="window._bmcRcItem=null;bmcRenderRcheck();return false" style="color:var(--accent)">แสดงทั้งหมด</a></div>`;
+  }
   const total = rows.length;
   if (!_bmcRcAll) rows = rows.slice(0, 80);
   const num = v => v == null ? '<span style="color:var(--text-muted)">–</span>' : _bmcNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
@@ -2723,12 +2782,13 @@ async function bmcIssLoadSummary() {
   if (rc) chips.push(rc.totals.flagged ? _bmcChip(`ผลต่างเกินเกณฑ์ ${rc.totals.flagged} รายการ`, 'var(--bad-ink)') : _bmcChip('ผลต่างอยู่ในเกณฑ์ทุกรายการ', 'var(--good-ink)'));
   if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${fmtDay(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)}`, 'var(--navy-ink)'));
   if (t.unpriced) chips.push(_bmcChip(`ไม่มีราคา ${t.unpriced} รายการ`, 'var(--amber-ink)'));
+  if (d.period.partial) chips.push(_bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)'));
   document.getElementById('bmcIssChips').innerHTML = chips.join('');
   bmcIssRenderRecon();
   bmcIssRenderPost(st);
   if (_bmcIssFallback) bmcStatus('bmcIssStatus', 'warn', 'สาขานี้ไม่มีงวดของเดือนที่เลือก · แสดงงวดล่าสุดแทน');
   else _bmcStatus('bmcIssStatus', '');
-  const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'นับจริง (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา'];
+  const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'นับจริง (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา'].concat(d.period.partial ? ['ที่มาของคงเหลือปลายงวด'] : []);
   const num = (v, dp) => (v === null || v === undefined) ? '—' : _bmcNum(v, dp);
   const rows = d.lines.map(l => {
     const bad = l.status === 'negative';
@@ -2739,9 +2799,10 @@ async function bmcIssLoadSummary() {
       <td class="pr-2">${esc(l.base_unit || '')}</td><td class="pr-2 text-right">${num(l.begin, 3)}</td><td class="pr-2 text-right">${num(l.received, 3)}</td>
       <td class="pr-2 text-right">${num(l.claims, 3)}</td><td class="pr-2 text-right">${num(l.end, 3)}</td><td class="pr-2 text-right">${used}</td>
       <td class="pr-2 text-right">${l.unit_price === null ? '—' : _bmcPrice(l.unit_price)}</td>
-      <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td></tr>`;
+      <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td>${d.period.partial ? `<td class="pr-2 text-[10.5px]" style="color:${l.end_basis === 'system' ? 'var(--navy-ink)' : 'var(--text-muted)'}">${esc(l.basis_th || '')}</td>` : ''}</tr>`;
   }).join('');
   box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ใบสรุปตัดเบิก สาขา${esc(d.branch.name || '')} · ${esc(fmtDay(d.period.begin_date))} ถึง ${esc(fmtDay(d.period.end_date))} (${d.period.days} วัน · เดือน${fmtMonthTh(d.period.month)})</div>
+    ${d.period.partial_th ? `<div class="text-xs mb-2" style="color:var(--text-secondary)">${esc(d.period.partial_th)}</div>` : ''}
     ${d.lines.length ? `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)">${heads.map((h, i) => `<th class="pr-2 ${i >= 3 && i <= 9 ? 'text-right' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${rows}</tbody></table>` : '<div class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเคลื่อนไหวในงวดนี้</div>'}

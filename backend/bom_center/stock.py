@@ -268,9 +268,15 @@ def _usage(con, branch_id: int, as_of: date, with_recent: bool = False):
     return avg, {c for c, s in use.items() if any(d >= since and (q or 0) > 0 for d, q in s.items())}
 
 
-def sheet(con, branch_id: int, as_of: date = None) -> dict:
-    """The list a branch counts, grouped by zone, with the last count shown faintly."""
+def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
+    """The list a branch counts, grouped by zone, with the last count shown faintly.
+
+    Batch 4b (3.4): `mode="cycle"` is the weekly count - only the branch's class-A items (the same classes as below), all of them
+    required, the draft and "ครั้งก่อน" read from the branch's cycle counts (the month-end count when it has none yet)."""
     from .forecast import _abc
+    cyc = mode == "cycle"
+    if cyc and not cycle_on(con):
+        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ตรวจนับครบทุกรายการ")
     from .prices import price_for
     bname = _branch_name(con, branch_id)
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
@@ -293,14 +299,19 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
     codes |= {c for c in central_map(con) if c in master and not c.startswith(NON_FOOD)}
     prev = {}
     lc = last_submitted(con, branch_id)
-    if lc:
+    lcy = cycle_last(con, branch_id) if cyc else None
+    if lcy:
+        prev = {c: (q, u, qb) for c, q, u, qb in con.execute(
+            "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_cycle_count_line WHERE cycle_id=?", (lcy["count_id"],))}
+    elif lc:
         prev = {c: (q, u, qb) for c, q, u, qb in con.execute(
             "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_stock_count_line WHERE count_id=?",
             (lc["count_id"],))}
-    dr = draft_of(con, branch_id)
+    dr = cycle_draft_of(con, branch_id) if cyc else draft_of(con, branch_id)
     draft = {}
     if dr:
         draft = {c: (q, u, qb) for c, q, u, qb in con.execute(
+            "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_cycle_count_line WHERE cycle_id=?" if cyc else
             "SELECT ingredient_code, qty_kitchen, unit, qty_base FROM bc_stock_count_line WHERE count_id=?", (dr["count_id"],))}
     zcfg = zones(con)
     valid = [z for z, _ in zcfg]
@@ -314,6 +325,8 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         unit, factor = entry_unit(conv, c, base, recv, per, cu)
         z = zone if zone in by_zone else guess_zone(c, name, fam, kind, valid)
         k = klass.get(c, "C")
+        if cyc and k != "A":                      # the weekly count is the class-A list only
+            continue
         pv = prev.get(c)
         last_q, last_u = (pv[0], pv[1]) if pv else (None, None)
         # "ครั้งก่อน" is read in the unit the item is counted in now: a previous count typed in another unit is converted
@@ -325,7 +338,7 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         by_zone[z].append({
             "code": c, "name": name or c, "base_unit": base, "count_unit": unit, "per_count_unit": factor,
             "unit_big": big_unit(conv, c, unit, factor),                    # 3.1: a second box (กล่อง) on the month-end count
-            "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A", "monitored": bool(mon),
+            "zone_guessed": not zone, "class": k, "required": bool(mon) or k == "A" or cyc, "monitored": bool(mon),
             "use_per_day": round(per_day.get(c, 0.0), 3), "used_recent": c in used_recent,
             "pieces_unit": (conv.weight_avg_step(c) or {}).get("unit"),     # PR-U2: a manual receipt may carry the pieces counted
             "last_qty": last_q, "last_unit": last_u, "last_base": pv[2] if pv else None,
@@ -336,10 +349,11 @@ def sheet(con, branch_id: int, as_of: date = None) -> dict:
         items = sorted(by_zone.get(z, []), key=lambda r: (not r["required"], order[r["class"]], r["name"]))
         if items:
             out_z.append({"zone": z, "label": label, "items": items})
-    return {"branch_id": branch_id, "branch": bname, "as_of": as_of.isoformat(),
-            "next_kind": "end" if lc else "begin", "last_count": lc, "draft": dr, "zones": out_z,
+    return {"branch_id": branch_id, "branch": bname, "as_of": as_of.isoformat(), "mode": "cycle" if cyc else "full",
+            "next_kind": "cycle" if cyc else ("end" if lc else "begin"),
+            "last_count": (dict(lcy, kind="cycle") if lcy else lc) if cyc else lc, "draft": dr, "zones": out_z,
             "items": sum(len(z["items"]) for z in out_z),
-            "required": sum(1 for z in out_z for r in z["items"] if r["required"])}
+            "required": sum(1 for z in out_z for r in z["items"] if r["required"]), "plan": count_plan(con, branch_id)}
 
 
 def uncounted_required(con, branch_id: int, count_id: int) -> list:
@@ -378,6 +392,42 @@ def _sum_parts(con, conv, code: str, parts: list, bad: list) -> tuple:
     return (total_b / factor if factor else total_b), (unit or conv.base_unit(code)), total_b
 
 
+def _write_lines(con, conv, line_table: str, id_col: str, cid: int, lines: list, bad: list) -> None:
+    """Write the typed lines of a count draft (a month-end count or a cycle count - the same columns): a quantity in the entry unit, or
+    the boxes of a two-step item summed in base units (3.1); an empty line clears the row; a unit that cannot reach the base unit goes
+    to `bad` and the row is kept with no base quantity so submit refuses it."""
+    for ln in lines or []:
+        code = (ln.get("code") or ln.get("ingredient_code") or "").strip()
+        if not code:
+            continue
+        parts = ln.get("parts")
+        if parts:                                  # 3.1: "2 กล่อง + 3 แพ็ค" - each part to base units, summed; kept in the entry unit
+            q, unit, qb = _sum_parts(con, conv, code, parts, bad)
+            if unit is None:
+                if q is None and not bad:          # no part carries a number: the line is cleared like an empty single box
+                    con.execute(f"DELETE FROM {line_table} WHERE {id_col}=? AND ingredient_code=?", (cid, code))
+                continue
+        else:
+            q = ln.get("qty")
+            if q is None or q == "":
+                con.execute(f"DELETE FROM {line_table} WHERE {id_col}=? AND ingredient_code=?", (cid, code))
+                continue
+            try:
+                q = float(q)
+            except (TypeError, ValueError):
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
+            if q < 0:
+                raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
+            unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
+            qb, how = conv.to_base(code, q, unit)
+            if qb is None:
+                bad.append(_no_unit(con, code, unit))
+        con.execute(f"INSERT INTO {line_table}({id_col}, ingredient_code, qty_kitchen, unit, qty_base, note)"
+                    f" VALUES(?,?,?,?,?,?) ON CONFLICT({id_col}, ingredient_code) DO UPDATE SET"
+                    " qty_kitchen=excluded.qty_kitchen, unit=excluded.unit, qty_base=excluded.qty_base,"
+                    " note=excluded.note", (cid, code, q, unit, qb, (ln.get("note") or None)))
+
+
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
          note: str = None, require_all: bool = True) -> dict:
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
@@ -404,36 +454,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
                           (branch_id, cdate, kind, who, note, now(), now()))
         cid = cur.lastrowid
     bad = []
-    for ln in lines or []:
-        code = (ln.get("code") or ln.get("ingredient_code") or "").strip()
-        if not code:
-            continue
-        parts = ln.get("parts")
-        if parts:                                  # 3.1: "2 กล่อง + 3 แพ็ค" - each part to base units, summed; kept in the entry unit
-            q, unit, qb = _sum_parts(con, conv, code, parts, bad)
-            if unit is None:
-                if q is None and not bad:          # no part carries a number: the line is cleared like an empty single box
-                    con.execute("DELETE FROM bc_stock_count_line WHERE count_id=? AND ingredient_code=?", (cid, code))
-                continue
-        else:
-            q = ln.get("qty")
-            if q is None or q == "":
-                con.execute("DELETE FROM bc_stock_count_line WHERE count_id=? AND ingredient_code=?", (cid, code))
-                continue
-            try:
-                q = float(q)
-            except (TypeError, ValueError):
-                raise ValueError(f"{_item(con, code)}: จำนวนต้องเป็นตัวเลข")
-            if q < 0:
-                raise ValueError(f"{_item(con, code)}: จำนวนต้องไม่ติดลบ")
-            unit = (ln.get("unit") or "").strip() or conv.base_unit(code)
-            qb, how = conv.to_base(code, q, unit)
-            if qb is None:
-                bad.append(_no_unit(con, code, unit))
-        con.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, note)"
-                    " VALUES(?,?,?,?,?,?) ON CONFLICT(count_id, ingredient_code) DO UPDATE SET"
-                    " qty_kitchen=excluded.qty_kitchen, unit=excluded.unit, qty_base=excluded.qty_base,"
-                    " note=excluded.note", (cid, code, q, unit, qb, (ln.get("note") or None)))
+    _write_lines(con, conv, "bc_stock_count_line", "count_id", cid, lines, bad)
     n = con.execute("SELECT COUNT(*) FROM bc_stock_count_line WHERE count_id=?", (cid,)).fetchone()[0]
     out = {"count_id": cid, "kind": kind, "lines": n, "status": "draft", "unconverted": bad}
     if submit:
@@ -478,7 +499,7 @@ def system_position(con, branch_id: int, as_of: date, issues_through: date = Non
     from .issues import missing_days
     through = issues_through or as_of
     out = {"basis": None, "qty": {}, "missing_days": [], "through": as_of.isoformat(), "estimated_days": [],
-           "estimated_qty": {}}
+           "estimated_qty": {}, "cycle": {}}
     r = con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
                     f" AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)} AND count_date<=?"
                     " ORDER BY count_date DESC, count_id DESC LIMIT 1", (branch_id, as_of.isoformat())).fetchone()
@@ -510,6 +531,13 @@ def system_position(con, branch_id: int, as_of: date, issues_through: date = Non
             if c in qty:                                   # an uncounted item has no figure to lower
                 qty[c] -= q
                 out["estimated_qty"][c] = q
+    for c, (q, cd, e) in _cycle_rebase(con, branch_id, cid, cdate, as_of, through, out["estimated_days"], estimate).items():
+        qty[c] = q                                         # batch 4b (3.4): the latest weekly count of a class-A item replaces the month-end figure
+        if e:
+            out["estimated_qty"][c] = e
+        else:
+            out["estimated_qty"].pop(c, None)
+        out["cycle"][c] = cd
     return out
 
 
@@ -537,10 +565,10 @@ def estimated_use(con, branch_id: int, days: list) -> tuple:
 def history(con, branch_id: int, limit: int = 20, kinds=None) -> list:
     where = f" AND c.kind IN {_in(kinds)}" if kinds else ""
     rows = con.execute(
-        "SELECT c.count_id, c.count_date, c.kind, c.status, c.counted_by, c.submitted_at, COUNT(l.ingredient_code)"
+        "SELECT c.count_id, c.count_date, c.kind, c.status, c.counted_by, c.submitted_at, COUNT(l.ingredient_code), COALESCE(c.partial, 0)"
         f" FROM bc_stock_count c LEFT JOIN bc_stock_count_line l USING(count_id) WHERE c.branch_id=?{where}"
         " GROUP BY c.count_id ORDER BY c.count_date DESC, c.count_id DESC LIMIT ?", (branch_id, limit)).fetchall()
-    return [dict(zip(("count_id", "count_date", "kind", "status", "counted_by", "submitted_at", "lines"), r))
+    return [dict(zip(("count_id", "count_date", "kind", "status", "counted_by", "submitted_at", "lines", "partial"), r))
             for r in rows]
 
 
@@ -596,6 +624,269 @@ def set_layout(con, rows: list, who: str) -> int:
         audit(con, who, "stock_layout", "bc_ingredient", code, None, {"zone": z, "count_unit": cu})
         n += 1
     return n
+
+
+# ── batch 4b (3.4): cycle counts and the partial month close ─────────────────────────────────
+# The owner's decision (2026-10-12, as proposed): the class-A items of a branch are counted every week, everything else at the end of
+# a quarter; every other month closes on a PARTIAL end count - the latest weekly counts of the class-A items plus the system stock
+# (confirmed slips) for the rest, labelled "คงเหลือตามระบบ (ไม่ได้นับ)". The switch bc_cycle_counts (ตั้งค่า) returns every month to
+# the full count with no code change. A partial end count is an ordinary 'end' count (so periods, variance, the reconciliation, the
+# accounting summary and the posted-period lock read it unchanged) whose lines carry `basis`.
+QUARTER_END_MONTHS = (3, 6, 9, 12)
+FULL_WINDOW_DAYS = 14               # the full count of a new quarter is "due" this many days from the 1st
+PARTIAL_WINDOW_DAYS = 25            # a month can be closed on a partial count until this many days into the next month
+PARTIAL_TOLERANCE_DAYS = 2          # a month-end count dated up to two days after the 1st is that month's close (todo.CLOSE_TOLERANCE_DAYS)
+PARTIAL_NOTE = "คงเหลือตามระบบ (ไม่ได้นับ) ยกเว้นรายการกลุ่มมูลค่าสูงที่นับหมุนเวียน"
+
+
+def cycle_on(con) -> bool:
+    from .close_settings import cycle_counts_on
+    return cycle_counts_on(con)
+
+
+def is_quarter_end(month: str) -> bool:
+    """True for a month whose close needs the full count: March, June, September, December ('YYYY-MM')."""
+    return int(month[5:7]) in QUARTER_END_MONTHS
+
+
+def month_first(month: str) -> date:
+    return date(int(month[:4]), int(month[5:7]), 1)
+
+
+def next_month_first(month: str) -> date:
+    y, m = int(month[:4]), int(month[5:7])
+    return date(y + (m == 12), 1 if m == 12 else m + 1, 1)
+
+
+def prev_month(d: date) -> str:
+    y, m = d.year - (d.month == 1), 12 if d.month == 1 else d.month - 1
+    return f"{y:04d}-{m:02d}"
+
+
+def cycle_last(con, branch_id: int):
+    r = con.execute("SELECT cycle_id, count_date, submitted_at, counted_by FROM bc_cycle_count WHERE branch_id=? AND status='submitted'"
+                    " ORDER BY count_date DESC, cycle_id DESC LIMIT 1", (branch_id,)).fetchone()
+    return dict(zip(("count_id", "count_date", "submitted_at", "counted_by"), r)) if r else None
+
+
+def cycle_draft_of(con, branch_id: int):
+    r = con.execute("SELECT cycle_id, count_date, updated_at, counted_by FROM bc_cycle_count WHERE branch_id=? AND status='draft'"
+                    " ORDER BY cycle_id DESC LIMIT 1", (branch_id,)).fetchone()
+    return dict(zip(("count_id", "count_date", "updated_at", "counted_by"), r)) if r else None
+
+
+def count_plan(con, branch_id: int, today: date = None) -> dict:
+    """What the branch counts NOW (the count page opens on `mode`):
+
+      full   - the first count of the branch, or the quarter-end count (the first FULL_WINDOW_DAYS days of Jan / Apr / Jul / Oct, until a
+               full count dated in the new quarter is submitted), or every month while the switch is off;
+      cycle  - otherwise the weekly count of the class-A items.
+
+    `partial_month` = the month that can be closed now on a partial end count (not a quarter-end month, no month-end count dated at
+    its end yet), else None. `cycle_due` = no weekly count yet in the current week (Monday to Sunday)."""
+    today = today or bkk_today()
+    on = cycle_on(con)
+    lc = last_submitted(con, branch_id)
+    ws = today - timedelta(days=today.weekday())
+    q0 = date(today.year, ((today.month - 1) // 3) * 3 + 1, 1)
+    plan = {"cycle_counts": on, "mode": "full", "first": lc is None, "full_due": False, "full_overdue": False,
+            "quarter_start": q0.isoformat(), "partial_month": None, "partial_date": None, "cycle_due": False,
+            "cycle_last": None, "week_start": ws.isoformat()}
+    if not on or lc is None:
+        return plan
+    cl = cycle_last(con, branch_id)
+    plan["cycle_last"] = cl["count_date"] if cl else None
+    full_done = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
+                            " AND COALESCE(partial,0)=0 AND count_date>=? AND count_date<=?", (branch_id, q0.isoformat(), today.isoformat())).fetchone()
+    if not full_done:
+        if (today - q0).days <= FULL_WINDOW_DAYS:
+            plan["full_due"], plan["mode"] = True, "full"
+        else:
+            plan["full_overdue"] = True
+    if not plan["full_due"]:
+        plan["mode"] = "cycle"
+        plan["cycle_due"] = not con.execute("SELECT 1 FROM bc_cycle_count WHERE branch_id=? AND status='submitted' AND count_date>=?",
+                                            (branch_id, ws.isoformat())).fetchone()
+    d0 = date(today.year, today.month, 1)
+    m = prev_month(today)
+    if (today - d0).days <= PARTIAL_WINDOW_DAYS and not is_quarter_end(m):
+        has_close = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
+                                " AND count_date>=?", (branch_id, d0.isoformat())).fetchone()
+        has_basis = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
+                                " AND count_date<?", (branch_id, d0.isoformat())).fetchone()
+        if not has_close and has_basis:
+            plan["partial_month"], plan["partial_date"] = m, d0.isoformat()
+    return plan
+
+
+def cycle_save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
+               note: str = None, require_all: bool = True) -> dict:
+    """The weekly count of the class-A items: a draft saved as often as the branch likes, submitted once and never edited (a recount is a
+    new count). It does not make a period; the system stock takes the figure as the newer basis of that item (system_position) and the
+    next partial month close carries it (partial_close)."""
+    _branch_name(con, branch_id)
+    if not cycle_on(con):
+        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ตรวจนับครบทุกรายการ")
+    if last_submitted(con, branch_id) is None:
+        raise ValueError("ต้องตรวจนับครบทุกรายการเป็นต้นงวดครั้งแรกก่อน จึงตรวจนับหมุนเวียนได้")
+    conv = Converter(con)
+    cdate = count_date or bkk_today().isoformat()
+    try:
+        d = date.fromisoformat(cdate)
+    except ValueError:
+        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
+    if d > bkk_today():
+        raise ValueError("วันที่ตรวจนับต้องไม่เป็นวันในอนาคต")
+    dr = cycle_draft_of(con, branch_id)
+    if dr:
+        cid = dr["count_id"]
+        con.execute("UPDATE bc_cycle_count SET updated_at=?, counted_by=?, count_date=?, note=COALESCE(?, note) WHERE cycle_id=?",
+                    (now(), who, cdate, note, cid))
+    else:
+        cid = con.execute("INSERT INTO bc_cycle_count(branch_id, count_date, status, counted_by, note, created_at, updated_at)"
+                          " VALUES(?,?, 'draft', ?,?,?,?)", (branch_id, cdate, who, note, now(), now())).lastrowid
+    bad = []
+    _write_lines(con, conv, "bc_cycle_count_line", "cycle_id", cid, lines, bad)
+    n = con.execute("SELECT COUNT(*) FROM bc_cycle_count_line WHERE cycle_id=?", (cid,)).fetchone()[0]
+    out = {"count_id": cid, "kind": "cycle", "lines": n, "status": "draft", "unconverted": bad}
+    if submit:
+        if not n:
+            raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
+        if require_all:
+            have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_cycle_count_line WHERE cycle_id=? AND qty_base IS NOT NULL", (cid,))}
+            miss = [it["name"] for z in sheet(con, branch_id, mode="cycle")["zones"] for it in z["items"] if it["code"] not in have]
+            if miss:
+                raise ValueError(f"ยังมีรายการที่ต้องนับ {len(miss)} รายการ ที่ยังไม่ได้นับ (เช่น {', '.join(miss[:3])}) นับให้ครบก่อนส่ง")
+        bad = [_no_unit(con, c, u) for c, u in con.execute(
+            "SELECT ingredient_code, unit FROM bc_cycle_count_line WHERE cycle_id=? AND qty_base IS NULL", (cid,))]
+        if bad:
+            raise ValueError("บันทึกไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์")
+        con.execute("UPDATE bc_cycle_count SET status='submitted', submitted_at=? WHERE cycle_id=?", (now(), cid))
+        audit(con, who, "cycle_submit", "bc_cycle_count", str(cid), None, {"branch_id": branch_id, "date": cdate, "lines": n})
+        out["status"] = "submitted"
+    return out
+
+
+def cycle_discard(con, branch_id: int, who: str) -> bool:
+    dr = cycle_draft_of(con, branch_id)
+    if not dr:
+        return False
+    con.execute("DELETE FROM bc_cycle_count_line WHERE cycle_id=?", (dr["count_id"],))
+    con.execute("DELETE FROM bc_cycle_count WHERE cycle_id=?", (dr["count_id"],))
+    audit(con, who, "cycle_discard", "bc_cycle_count", str(dr["count_id"]), None, None)
+    return True
+
+
+def cycle_history(con, branch_id: int, limit: int = 20) -> list:
+    rows = con.execute(
+        "SELECT c.cycle_id, c.count_date, c.status, c.counted_by, c.submitted_at, COUNT(l.ingredient_code)"
+        " FROM bc_cycle_count c LEFT JOIN bc_cycle_count_line l USING(cycle_id) WHERE c.branch_id=?"
+        " GROUP BY c.cycle_id ORDER BY c.count_date DESC, c.cycle_id DESC LIMIT ?", (branch_id, limit)).fetchall()
+    return [dict(zip(("count_id", "count_date", "status", "counted_by", "submitted_at", "lines"), r), kind="cycle") for r in rows]
+
+
+def _cycle_rebase(con, branch_id: int, basis_id: int, cdate: str, as_of: date, through: date, estimated_days: list, estimate: bool) -> dict:
+    """{code: (system quantity, date of the weekly count, estimated use)} for the items counted by a weekly count since the month-end
+    basis: the latest weekly figure + goods received from its date to `as_of` - confirmed slips from its date to `through` - (with
+    `estimate`) the BoM use of the days since that have sales and no slip. Same rules as the month-end basis, started later."""
+    if not cycle_on(con):
+        return {}
+    rows = con.execute("SELECT c.count_date, c.cycle_id, l.ingredient_code, l.qty_base FROM bc_cycle_count c JOIN bc_cycle_count_line l USING(cycle_id)"
+                       " WHERE c.branch_id=? AND c.status='submitted' AND c.count_date>=? AND c.count_date<=? AND l.qty_base IS NOT NULL"
+                       " ORDER BY c.count_date, c.cycle_id", (branch_id, cdate, as_of.isoformat())).fetchall()
+    if not rows:
+        return {}
+    counted_on_basis = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=? AND basis IS NULL", (basis_id,))}
+    latest = {}
+    for cd, _cid, c, q in rows:
+        if cd == cdate and c in counted_on_basis:           # a full count of the same day is the count
+            continue
+        latest[c] = (cd, q)
+    by_date = {}
+    for c, (cd, q) in latest.items():
+        by_date.setdefault(cd, {})[c] = q
+    out = {}
+    for cd, items in by_date.items():
+        codes = list(items)
+        marks = ",".join("?" * len(codes))
+        rec = {c: q or 0.0 for c, q in con.execute(
+            "SELECT l.ingredient_code, SUM(l.qty_base) FROM bc_receipt r JOIN bc_receipt_line l USING(receipt_id)"
+            f" WHERE r.branch_id=? AND r.receipt_date>=? AND r.receipt_date<=? AND l.ingredient_code IN ({marks}) GROUP BY l.ingredient_code",
+            (branch_id, cd, as_of.isoformat(), *codes))}
+        iss = {c: q or 0.0 for c, q in con.execute(
+            "SELECT l.ingredient_code, SUM(COALESCE(l.qty_used_base, 0) + COALESCE(l.qty_waste_base, 0))"
+            " FROM bc_issue_slip s JOIN bc_issue_line l USING(slip_id) WHERE s.branch_id=? AND s.status='confirmed'"
+            f" AND s.slip_date>=? AND s.slip_date<=? AND l.ingredient_code IN ({marks}) GROUP BY l.ingredient_code",
+            (branch_id, cd, through.isoformat(), *codes))}
+        est = {}
+        if estimate and estimated_days:
+            ds = [d for d in estimated_days if d >= cd]
+            if ds:
+                est = estimated_use(con, branch_id, ds)[1]
+        for c, q in items.items():
+            e = est.get(c, 0.0)
+            out[c] = (q + rec.get(c, 0.0) - iss.get(c, 0.0) - e, cd, e)
+    return out
+
+
+def partial_close(con, branch_id: int, month: str, who: str, today: date = None, accept_missing_slips: bool = False) -> dict:
+    """Close `month` (YYYY-MM) of a branch on a PARTIAL end count dated the 1st of the next month: every item of the system stock
+    at the end of the last day of the month (confirmed slips only, as the month-end reconciliation and the accounting summary read
+    them), the class-A items from their latest weekly count carried forward. Idempotent: a month-end count already dated within
+    two days of the 1st is returned as it is. Refused for a quarter-end month (a full count), while the switch is off, before the
+    1st, with no earlier count, and - unless `accept_missing_slips` - when a selling day of the period has no confirmed slip, since
+    the items not counted would then show less use than there was.
+
+    -> {"count_id", "date", "created", "lines", "counted", "system", "missing_slip_days"}"""
+    today = today or bkk_today()
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month or ""):
+        raise ValueError("เดือนต้องอยู่ในรูปแบบ YYYY-MM")
+    if not cycle_on(con):
+        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ปิดงวดด้วยการตรวจนับครบทุกรายการ")
+    if is_quarter_end(month):
+        raise ValueError(f"เดือน{_month_th(month)}เป็นสิ้นไตรมาส ต้องตรวจนับครบทุกรายการ")
+    d = next_month_first(month)
+    if d > today:
+        raise ValueError(f"ปิดงวดได้ตั้งแต่วันที่ {_fmt_day(d.isoformat())}")
+    _branch_name(con, branch_id)
+    near = con.execute(f"SELECT count_id, count_date, COALESCE(partial,0) FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted'"
+                       f" AND kind IN {_in(MONTH_KINDS)} AND count_date>=? AND count_date<=? ORDER BY count_date, count_id LIMIT 1",
+                       (branch_id, d.isoformat(), (d + timedelta(days=PARTIAL_TOLERANCE_DAYS)).isoformat())).fetchone()
+    if near:
+        return {"count_id": near[0], "date": near[1], "created": False, "partial": bool(near[2]), "lines": None}
+    if con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
+                   " AND count_date>?", (branch_id, d.isoformat())).fetchone():
+        raise ValueError("มีผลตรวจนับหลังวันที่ปิดงวดแล้ว จึงปิดงวดย้อนหลังด้วยการนับหมุนเวียนไม่ได้")
+    last = d - timedelta(days=1)
+    sp = system_position(con, branch_id, last, issues_through=last, estimate=False)
+    if not sp["basis"]:
+        raise ValueError("ยังไม่มีผลตรวจนับครั้งแรกของสาขานี้ ต้องตรวจนับครบทุกรายการก่อน")
+    from .issue_reports import slip_coverage
+    cov = slip_coverage(con, branch_id, sp["basis"]["date"], d.isoformat())
+    gaps = cov["missing_days"] + cov["draft_days"]
+    if gaps and not accept_missing_slips:
+        raise ValueError(f"ยังมีวันขายที่ไม่มีใบตัดเบิกที่ยืนยัน {len(gaps)} วัน (เช่น {_fmt_day(gaps[0])}) รายการที่ไม่ได้นับจะแสดงการใช้น้อยกว่าจริง "
+                         "ให้สาขายืนยันใบตัดเบิกก่อน หรือยืนยันปิดงวดทั้งที่ยังขาดใบ")
+    cycle = sp.get("cycle") or {}
+    cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at, status, updated_at, submitted_at, partial)"
+                      " VALUES(?,?,'end',?,?,?, 'submitted', ?,?, 1)",
+                      (branch_id, d.isoformat(), who, PARTIAL_NOTE, now(), now(), now()))
+    cid = cur.lastrowid
+    conv = Converter(con)
+    rows = []
+    for c, q in sorted(sp["qty"].items()):
+        rows.append((cid, c, max(float(q), 0.0), conv.base_unit(c), max(float(q), 0.0), "cycle" if c in cycle else "system"))
+    con.executemany("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, basis) VALUES(?,?,?,?,?,?)", rows)
+    n_cycle = sum(1 for r in rows if r[5] == "cycle")
+    audit(con, who, "partial_close", "bc_stock_count", str(cid), None,
+          {"branch_id": branch_id, "month": month, "date": d.isoformat(), "lines": len(rows), "counted": n_cycle, "missing_slip_days": len(gaps)})
+    return {"count_id": cid, "date": d.isoformat(), "created": True, "partial": True, "lines": len(rows), "counted": n_cycle,
+            "system": len(rows) - n_cycle, "missing_slip_days": gaps}
+
+
+def _month_th(month: str) -> str:
+    from .fmt import month_th
+    return month_th(month)
 
 
 # ── S11: a count from a spreadsheet (a month closed after the fact) ──────────

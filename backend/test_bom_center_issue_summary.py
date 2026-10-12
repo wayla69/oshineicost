@@ -52,7 +52,7 @@ def test_the_summary_numbers_prices_and_totals(con):  # noqa: F811
     end = _period(con)
     s = VA.issue_summary(con, 1, end)
     assert s["period"] == {"begin_date": "2026-09-01", "end_date": "2026-10-01", "begin_count_id": s["period"]["begin_count_id"],
-                           "end_count_id": end, "month": "2026-09", "days": 30}
+                           "end_count_id": end, "month": "2026-09", "days": 30, "partial": False, "partial_th": None}
     assert s["branch"]["branch_id"] == 1 and s["branch"]["name"]
     lines = {ln["code"]: ln for ln in s["lines"]}
     crab = lines["13-01-009"]
@@ -301,7 +301,7 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         assert list(rows[1]) == ISSUE_HEADERS
         crab = next(r for r in rows[2:] if r[0] == "T-ISS1")
         assert crab[3:10] == (10, 5, 0, 6, 9, 2.5, 22.5) and crab[10] == "ซื้อจริง (2026-09)"
-        assert "ผู้จำหน่าย" not in ISSUE_HEADERS and len(ISSUE_HEADERS) == 11 and len(crab) == 11   # PR-K: no supplier column
+        assert "ผู้จำหน่าย" not in ISSUE_HEADERS and len(ISSUE_HEADERS) == 12 and len(crab) == 12   # PR-K: no supplier column
         assert all("supplier" not in ln for ln in d["lines"])
         assert rows[-1][1] == "รวม" and rows[-1][9] == pytest.approx(22.5)
         # the all-branches workbook: a summary sheet, the daily slips, the confirmed period's two sheets; the other branch is only listed

@@ -217,6 +217,13 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
     iss = issued(con, branch_id, d0, d1)
     reasons = {c: (r, n, w) for c, r, n, w in con.execute(
         "SELECT ingredient_code, reason_code, note, who FROM bc_variance_reason WHERE end_count_id=?", (e["count_id"],))}
+    # batch 4b (3.3): a difference is explained only when the data can say something - the period has receipts and every
+    # trading day of it has a confirmed slip - and when it is at least bc_reason_min_baht baht; else it is labelled
+    from .close_settings import reason_min_baht
+    min_baht = reason_min_baht(con)
+    slips = slip_coverage(con, branch_id, d0, d1)
+    incomplete_why = "receipts" if mv["n_receipts"] == 0 else ("slips" if slips["missing_days"] or slips["draft_days"] else None)
+    end_basis = VA._count_basis(con, e["count_id"])
     price = _prices(con, month)
     names = _names(con)
     pref = _price_ref(con, month)                                # PR-B4a (1.6): an unpriced item is ranked by a fallback price, never shown with one
@@ -259,7 +266,15 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
         rs = reasons.get(c)
         if rs:
             row.update(reason=rs[0], reason_th=VA.REASON_TH.get(rs[0], rs[0]), reason_note=rs[1], reason_by=rs[2])
-        row["needs_reason"] = row["status"] in ("over", "under") and not rs
+        flagged_row = row["status"] in ("over", "under")
+        row["end_basis"] = end_basis.get(c) or "count"
+        if row["end_basis"] == "system":                                    # 3.4: carried from the system stock, not counted
+            row.update(system_basis=True, basis_th=VA.SYSTEM_TH)
+        if flagged_row and incomplete_why:
+            row.update(data_incomplete=True, incomplete_th=VA.INCOMPLETE_TH, incomplete_why=incomplete_why)
+        big = (not min_baht) or (row["diff_value"] is not None and abs(row["diff_value"]) >= min_baht)
+        row["ask_reason"] = bool(flagged_row and big and not row.get("data_incomplete") and not row.get("system_basis"))
+        row["needs_reason"] = row["ask_reason"] and not rs
         rows.append(row)
     order = {"under": 0, "over": 1, "not_counted": 2, "ok": 3}
     rows.sort(key=lambda x: (order[x["status"]], -abs(x["diff_value"] or 0), x["code"]))
@@ -278,13 +293,15 @@ def reconcile(con, branch_id: int, end_count_id) -> dict:
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,
                    "receipts_confirmed_at": conf[1] if conf else None,
                    "accounting_posted_at": conf[2] if conf else None, "accounting_posted_by": conf[3] if conf else None},
-        "slips": slip_coverage(con, branch_id, d0, d1),
+        "slips": slips, "partial": bool(end_basis), "incomplete_why": incomplete_why, "reason_min_baht": min_baht,
         "rows": rows, "excluded": sorted(excluded, key=lambda x: x["code"]),
         "totals": {"lines": len(rows), "system_value": val("system", counted), "count_value": val("count", counted),
                    "diff_value": val("diff"), "over_value": val("diff", lambda x: x["status"] == "over"),
                    "under_value": val("diff", lambda x: x["status"] == "under"),
                    "flagged": sum(1 for x in rows if x["status"] in ("over", "under")),
                    "needs_reason": sum(1 for x in rows if x["needs_reason"]),
+                   "incomplete": sum(1 for x in rows if x.get("data_incomplete")),
+                   "system_basis": sum(1 for x in rows if x.get("system_basis")),
                    "not_counted": sum(1 for x in rows if x["status"] == "not_counted"),
                    "unpriced": sum(1 for x in rows if x["price_per_base"] is None)},
         "reasons": [{"code": c, "label": t} for c, t in VA.REASONS],

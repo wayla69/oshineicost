@@ -160,6 +160,12 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
     except Exception:
         bt = {"available": False}
     mape_a = (bt.get("mape_by_class") or {}).get("A") if bt.get("available") else None
+    try:                                                   # batch 4b (2.5): what the orders achieved, beside the forecast error
+        from .outcome import window as _outcome
+        oc = _outcome(con, branch_id, start, as_of, as_of)
+        oc.pop("rows", None)
+    except Exception:
+        oc = {"deliveries": 0, "measured": 0, "cover_days": None, "stockouts": 0, "stockout_rounds": 0}
 
     def pct(a, b):
         return round(100.0 * a / b, 1) if b else None
@@ -168,6 +174,8 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
         "issue_on_time": pct(slips["confirmed"], slips["confirmed"] + slips["late"]),
         "reason_coverage": pct(with_reason, flagged) if flagged else None,
         "mape_a": mape_a,
+        "cover_days": oc["cover_days"],
+        "stockouts": oc["stockouts"] if oc["measured"] else None,
         "order_submission": pct(sum(1 for c in cycles if c in submitted), len(cycles)),
     }
     passes = {
@@ -178,7 +186,7 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
     }
     known = [v for v in passes.values() if v is not None]
     return {"branch_id": branch_id, "from": start.isoformat(), "to": as_of.isoformat(), "weeks": weeks,
-            "cycles": len(cycles), "counts": month_counts, "slips": slips, "flagged": flagged, "metrics": metrics,
+            "cycles": len(cycles), "counts": month_counts, "slips": slips, "flagged": flagged, "metrics": metrics, "outcome": oc,
             "targets": TARGETS, "passes": passes,
             "started": started,
             "verdict": ("not_started" if not started else

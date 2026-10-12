@@ -41,6 +41,7 @@ def test_ask_reason_codes_class_a_and_the_top_twenty():
 
 def test_the_period_marks_the_lines_to_explain(db):  # noqa: F811
     db, end = db
+    db.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('bc_reason_min_baht', '0')")      # batch 4b (3.3): the old rule - no baht floor
     p = VA.period(db, 1)
     r = _rows(p)
     crab, salmon = r["13-01-009"], r["02-01-001"]

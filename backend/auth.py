@@ -364,6 +364,14 @@ MODULE_RULES = [
     ("GET", "/api/bom-center/benchmark",              {"supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/benchmark",              {"supply.ordering", "bom.center"}),
     ("GET", "/api/bom-center/recipe-check",           {"bom.center"}),
+    # batch 4b: the baht floor of a variance reason and the cycle-count switch (the analyst edits, the supply roles read); a partial month
+    # close is the branch's, the analyst's or Sales Support's (the longer prefix beats the /stock rule); the tasks made from the reasons
+    # are read and acknowledged by the roles that own them (the router checks which); the ranked data-quality backlog is the analyst's
+    ("GET", "/api/bom-center/close-settings",         {"supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
+    ("W",   "/api/bom-center/close-settings",         {"bom.center"}),
+    ("W",   "/api/bom-center/stock/partial-close",    {"branch.stock", "bom.center", "supply.ordering"}),
+    ("*",   "/api/bom-center/feedback",               {"bom.center", "bom.recipes", "ops.report", "supply.ordering"}),
+    ("GET", "/api/bom-center/backlog",                {"bom.center", "bom.prices", "bom.recipes"}),
     # S11 the central list and the month's deliveries: the analyst or Sales Support keeps them
     ("W",   "/api/bom-center/central",                 {"supply.ordering", "bom.center"}),   # bom.edit (the kitchen) is not the centre
     # the list and the code links are read by Ops too (the close stepper opens on them)
