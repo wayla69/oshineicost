@@ -138,6 +138,7 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
         return None
     c_code, c_name, c_unit = col("รหัสสินค้า"), col("รายละเอียด", "ชื่อสินค้า"), col("หน่วยนับ")
     c_price, c_sale, c_factor = col("ราคาขาย"), col("หน่วยขาย"), col("1 หน่วยขาย = หน่วยฐาน")
+    c_pmonth = col("งวดราคา")                  # the list's own export (M3): the month each price was last set
     if None in (c_code, c_unit, c_sale):
         raise ValueError("ต้องมีคอลัมน์ รหัสสินค้า · หน่วยนับ · หน่วยขาย")
     sub = grid[hi + 1] if hi + 1 < len(grid) else []
@@ -171,7 +172,9 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
                 fac = float(r[c_factor]) if r[c_factor] not in (None, "") else None
             except (TypeError, ValueError):
                 fac = None
+        pm = str(r[c_pmonth]).strip() if c_pmonth is not None and c_pmonth < len(r) and r[c_pmonth] not in (None, "") else None
         items.append({"code": code, "name": str(r[c_name] or "").strip() if c_name is not None else "",
+                      "price_month_given": pm if pm and re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", pm) else None,
                       "unit_label": str(r[c_unit] or "").strip(), "outer": outer, "inner_qty": n, "inner": inner,
                       "sale_unit": str(r[c_sale] or "").strip() or outer, "price_per_sale": price or None,
                       "factor_given": fac,
@@ -232,13 +235,19 @@ def name_hint(name: str, base: str) -> dict:
     return out
 
 
-def _factor(conv, master: dict, it) -> tuple:
+def _factor(conv, master: dict, it, stored: dict = None) -> tuple:
     """(base per sale unit or None, how, base unit to set when the master has none).
 
     Order: a factor written in the file > the inner unit by an exact route (base /
-    unit rule / kg->g) > a pack size written in the name > the master's own pack."""
+    unit rule / kg->g) > a pack size written in the name > the master's own pack.
+    M3: a file factor equal to the one already on the list (the list's own export, imported unchanged) keeps its stored "how" -
+    "ระบุในไฟล์" is only for a factor a person typed that differs."""
     if it.get("factor_given"):
-        return float(it["factor_given"]), "ระบุในไฟล์", None
+        fg = float(it["factor_given"])
+        old = (stored or {}).get(it["code"])
+        if old and old[0] and old[1] and abs(float(old[0]) - fg) <= 1e-9 * max(1.0, abs(fg)):
+            return fg, old[1], None
+        return fg, "ระบุในไฟล์", None
     n = it["inner_qty"] or 1.0
     inner = INNER_TH.get(it["inner"] or "", it["inner"] or "")
     m = master.get(it["code"])
@@ -282,12 +291,14 @@ def plan_catalogue(con, parsed: dict, suggestions: bool = True, system: str = "a
     master = {c: (b, r, p) for c, b, r, p in con.execute(
         "SELECT code, base_unit, recv_unit, qty_per_recv FROM bc_ingredient")}
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
+    stored = ({c: (f, h) for c, f, h in con.execute("SELECT code, base_per_sale, factor_how FROM bc_central_item")}
+              if con.execute("SELECT 1 FROM sqlite_master WHERE name='bc_central_item'").fetchone() else {})
     rows = []
     for it in parsed["items"]:
         if it["code"].startswith(NOT_GOODS):
             rows.append({**_brief(it), "status": "skip", "factor_how": "ไม่ใช่สินค้า (ค่าขนส่ง/รายได้อื่น)"})
             continue
-        f, how, new_base = _factor(conv, master, it)
+        f, how, new_base = _factor(conv, master, it, stored)
         m = master.get(it["code"])
         row = {**_brief(it), "is_new": m is None, "master_name": names.get(it["code"]), "aliased_from": it.get("file_code"),
                "file_code": it.get("file_code") or it["code"],
@@ -340,7 +351,8 @@ def _pick_pack_rows(con, rows: list, system: str = "acc") -> None:
 
 
 def _brief(it) -> dict:
-    return {k: it[k] for k in ("code", "name", "unit_label", "sale_unit", "inner_qty", "inner", "price_per_sale")}
+    return {k: it[k] for k in ("code", "name", "unit_label", "sale_unit", "inner_qty", "inner", "price_per_sale")} | \
+           {"price_month_given": it.get("price_month_given")}
 
 
 def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, choices: dict = None,
@@ -403,10 +415,10 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
                     " inner_unit=excluded.inner_unit, base_per_sale=excluded.base_per_sale, factor_how=excluded.factor_how,"
                     " price_per_sale=COALESCE(excluded.price_per_sale, bc_central_item.price_per_sale),"
                     " price_month=CASE WHEN excluded.price_per_sale IS NULL THEN bc_central_item.price_month"
-                    " ELSE excluded.price_month END, active=1, source_ref=excluded.source_ref,"
+                    " ELSE COALESCE(excluded.price_month, bc_central_item.price_month) END, active=1, source_ref=excluded.source_ref,"
                     " updated_at=excluded.updated_at, updated_by=excluded.updated_by",
                     (r["code"], r["name"], r["unit_label"], r["sale_unit"], r["inner_qty"], r["inner"], f,
-                     r["factor_how"], r["price_per_sale"], month, parsed.get("sheet"), now(), who))
+                     r["factor_how"], r["price_per_sale"], month or r.get("price_month_given"), parsed.get("sheet"), now(), who))
     off = con.execute(f"UPDATE bc_central_item SET active=0, updated_at=?, updated_by=? WHERE active=1 AND code NOT IN"
                       f" ({','.join('?' * len(in_list)) or 'NULL'})", [now(), who] + sorted(in_list)).rowcount
     to_local = 0

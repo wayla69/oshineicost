@@ -53,7 +53,7 @@ def test_shape_owners_and_links(udon):
     assert it["draft"]["status"] == "todo" and it["draft"]["go"]["pane"] == "rec"
     assert it["acknowledge"]["status"] == "na"
     due = it["order_due_2"]                                      # Wednesday: Saturday's delivery is the nearest
-    assert due["status"] == "todo" and due["title"] == "ส่งใบสั่งซื้อภายใน พฤ. 8/10 เวลา 13:15 · รอบส่งวันเสาร์ (10/10)"
+    assert due["status"] == "todo" and due["title"] == "ส่งใบสั่งซื้อภายใน พฤ. 8/10 เวลา 13:15 · รอบ 2 (ส่ง 10/10)"
     assert due["go"]["extra"] == {"round": "2", "delivery": "2026-10-10"} and due["owner_modules"] == ["branch.stock"]
     assert d["close"]["branches"] == []                          # nobody has started closing September
     assert _steps(d)["deliveries"]["status"] == "todo" and _steps(d)["release_in_force"]["status"] == "todo"
@@ -114,6 +114,35 @@ def test_the_close_steps_follow_the_data_per_branch(udon):
     st = _steps(d)
     assert st["receipts_confirm"]["status"] == "done" and st["monthly_summary"]["status"] == "done"
     assert d["close"]["done"] >= 5
+
+
+def test_the_close_steps_use_the_period_rule_of_the_issue_summary(udon):
+    """QA 2026-10-13 H1: an end count dated the LAST day of the month closes it, exactly as the ใบสรุปตัดเบิก periods say."""
+    c = udon
+    ST.save(c, 1, PACK, "u", submit=True, count_date="2026-09-01", require_all=False)
+    out = ST.save(c, 1, [{"code": "13-01-009", "qty": 1, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-09-30", require_all=False)
+    per = VA.issue_periods(c, 1)[0]["periods"][0]
+    assert per["month"] == M and per["end_date"] == "2026-09-30"          # the summary accepts this period
+    st = _steps(TD.build(c, M, None, None, today=TODAY))
+    assert st["begin_count"]["status"] == "done" and st["end_count"]["status"] == "done"
+    assert st["receipts_confirm"]["status"] == "todo" and "รอผลตรวจนับ" not in st["receipts_confirm"]["detail"]
+    assert st["receipts_confirm"]["go"]["extra"] == {"end_count_id": out["count_id"]}
+    assert st["issue_posted"]["status"] == "blocked" and "รอยืนยันรับสินค้าครบ" in st["issue_posted"]["detail"]
+    VA.confirm_receipts(c, 1, out["count_id"], "u")
+    st = _steps(TD.build(c, M, None, None, today=TODAY))
+    assert st["receipts_confirm"]["status"] == "done"
+    assert st["issue_posted"]["status"] == "todo" and "รอบัญชี" in st["issue_posted"]["detail"]
+    # the same month, the 1st of the next month: the same answer, and VA.month_period is the one function behind both
+    pb, pe = VA.month_period(c, 1, M)
+    assert (pb["date"], pe["date"]) == ("2026-09-01", "2026-09-30")
+    c.execute("UPDATE bc_stock_count SET count_date='2026-10-01' WHERE count_id=?", (out["count_id"],))
+    assert VA.issue_periods(c, 1)[0]["periods"][0]["month"] == M
+    st = _steps(TD.build(c, M, None, None, today=TODAY))
+    assert st["end_count"]["status"] == "done" and st["receipts_confirm"]["status"] == "done"
+    # a count dated the 3rd closes October, not September: say so instead of "waiting"
+    c.execute("UPDATE bc_stock_count SET count_date='2026-10-03' WHERE count_id=?", (out["count_id"],))
+    st = _steps(TD.build(c, M, None, None, today=TODAY))
+    assert st["end_count"]["status"] == "todo" and "ใช้ปิดงวดถัดไป" in st["end_count"]["detail"]
 
 
 def test_a_cutoff_day_asks_for_the_order_and_the_queue(udon):

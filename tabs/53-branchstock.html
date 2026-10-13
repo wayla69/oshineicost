@@ -82,12 +82,11 @@
       <div class="text-xs"><span id="brnKind"></span></div>
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
     </div>
-    <div id="brnPartial"></div>
 
     <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
       <div id="brnZones" class="flex flex-wrap gap-1 brn-zones"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs brn-filterrow" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการที่ต้องนับ</span><span class="brn-t-short">ต้องนับ</span></label>
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการที่ยังไม่ได้นับ</span><span class="brn-t-short">ยังไม่นับ</span></label>
         <input type="search" id="brnQ" placeholder="ค้นหา…" oninput="brnRender()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
         <span id="brnProgress"></span>

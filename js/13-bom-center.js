@@ -292,6 +292,7 @@ function bmcGoIssues() {
 let _bmcIngProb = '';         // the ingredient tab shows only rows with this problem ('' = any)
 let _bmcIngGap = '';          // 1.5 · … or only rows with this blank field the order logic reads (fresh_no_shelf | no_moq | loss_zero)
 const _BMC_GAP_TH = { fresh_no_shelf: 'ของสด / แช่เย็นที่ยังไม่มีอายุการเก็บ', no_moq: 'ยังไม่มีขั้นต่ำการสั่ง', loss_zero: 'เนื้อสัตว์ / ผักที่สูญเสีย 0%' };
+const _BMC_ROW_GAP_TH = { fresh_no_shelf: 'ไม่มีอายุเก็บ', no_moq: 'ไม่มีขั้นต่ำสั่ง', loss_zero: 'สูญเสียเป็น 0' };     // QA L2: softer flags, apart from the problems
 function bmcGoIng(prob) {
   _bmcIngProb = prob || '';
   _bmcIngGap = '';
@@ -542,6 +543,7 @@ function bmcRenderIng() {
       <td class="py-1 pr-2 text-right">${r.used_in_menus || ''}</td>
       <td class="py-1 pr-2 text-center">${w ? `<input type="checkbox" data-code="${esc(r.code)}" data-f="monitored" ${_bmcIngVal(r, 'monitored') ? 'checked' : ''} onchange="bmcIngEdit(this)">` : (r.monitored ? '✓' : '')}</td>
       <td class="py-1">${r.problems.length ? r.problems.map(p => _bmcChip(p, 'var(--amber-ink)')).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}
+        ${(r.notes || []).concat((r.gaps || []).map(g => _BMC_ROW_GAP_TH[g] || g)).map(n => _bmcChip(n, 'var(--text-muted)')).join(' ')}
         ${(_bmcIngErr[r.code] || []).map(m => `<div class="text-[11px] bmc-rownote" role="alert" style="color:var(--bad-ink)">${esc(m)}</div>`).join('')}</td>
     </tr>${_bmcAlOpen === r.code ? '<tr><td colspan="18" id="bmcAlCell" class="pb-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>' : ''}`).join('') || '<tr><td colspan="18" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ · ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ”</td></tr>';
   if (_bmcAlOpen && document.getElementById('bmcAlCell')) { if (_bmcAlState && _bmcAlState.code === _bmcAlOpen) bmcAlRender(_bmcAlState); else bmcAlLoad(_bmcAlOpen); }
@@ -1402,7 +1404,7 @@ async function bmcLoadAvg() {
           <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2">ค่าที่ใช้ (ช่วง)</th><th class="pr-2">จากการรับจริง</th><th class="pr-2">ต่าง %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : 'ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย (เช่น 1 ตัว ≈ 4.5 กิโลกรัม) · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับสินค้า';
     if (hist) hist.innerHTML = d.history.length ? d.history.map(h => `<div style="border-top:1px solid var(--border);padding:4px 0">
-        ${esc(fmtDay((h.decided_at || '').slice(0, 10)))} · <b>${esc(h.name || h.ingredient_code)}</b> ${esc(h.unit)} · ${h.decision === 'applied' ? 'ใช้ค่าที่รับจริง' : 'คงค่าเดิม'}
+        ${esc(fmtDayAt(h.decided_at || ''))} · <b>${esc(h.name || h.ingredient_code)}</b> ${esc(h.unit)} · ${h.decision === 'applied' ? 'ใช้ค่าที่รับจริง' : 'คงค่าเดิม'}
         · ใช้ ${_bmcNum(h.current_avg, 2)} → รับจริง ≈ ${_bmcNum(h.observed_avg, 2)} (${h.n_receipts} ครั้ง ${_bmcNum(h.n_pieces, 0)} ${esc(h.unit)})${h.note ? ' · ' + esc(h.note) : ''} · ${esc(whoTh(h.decided_by))}</div>`).join('')
       : '<span style="color:var(--text-muted)">ยังไม่มีการตัดสินใจ</span>';
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -2355,15 +2357,15 @@ async function bmcLoadCloseSettings() {
       <label class="text-xs" style="color:var(--text-muted)">ผลต่างขั้นต่ำที่ต้องให้เหตุผล (บาท)<br>
         <input id="bmcCsBaht" type="number" min="${c.reason_min_baht_min}" max="${c.reason_min_baht_max}" step="50" value="${c.reason_min_baht}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:120px;background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="text-xs flex items-center gap-2" style="color:var(--text-primary)"><input id="bmcCsCycle" type="checkbox" ${c.cycle_counts ? 'checked' : ''} ${w ? '' : 'disabled'}>
-        ตรวจนับหมุนเวียน: กลุ่มมูลค่าสูงนับทุกสัปดาห์ รายการอื่นนับสิ้นไตรมาส</label>
+        ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด): กลุ่มมูลค่าสูงนับเสริมทุกสัปดาห์ · ปิดงวดสิ้นเดือนต้องนับครบทุกรายการเสมอ</label>
       ${w ? `<button onclick="bmcSaveCloseSettings()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึก</button>` : ''}
       <span id="bmcCsStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · เมื่อปิดการตรวจนับหมุนเวียน ทุกเดือนปิดงวดด้วยการตรวจนับครบทุกรายการเหมือนเดิม โดยไม่ต้องแก้ข้อมูลใด ๆ</div>`;
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ ไม่ว่าจะเปิดหรือปิดการตรวจนับหมุนเวียน (มติเจ้าของ 13/10/2026)</div>`;
 }
 async function bmcSaveCloseSettings() {
   const baht = Number(document.getElementById('bmcCsBaht').value), cyc = document.getElementById('bmcCsCycle').checked;
   if (!(baht >= _bmcCs.reason_min_baht_min && baht <= _bmcCs.reason_min_baht_max)) { bmcStatus('bmcCsStatus', 'warn', `เกณฑ์บาทต้องอยู่ระหว่าง ${_bmcNum(_bmcCs.reason_min_baht_min, 0)} ถึง ${_bmcNum(_bmcCs.reason_min_baht_max, 0)}`); return; }
-  if (!await uiConfirm(`บันทึกเกณฑ์ผลต่างขั้นต่ำ ฿${_bmcNum(baht, 0)} และ${cyc ? 'เปิด' : 'ปิด'}การตรวจนับหมุนเวียน?\nผลต่างที่ยังไม่ได้ให้เหตุผลจะนับใหม่ตามเกณฑ์นี้`,
+  if (!await uiConfirm(`บันทึกเกณฑ์ผลต่างขั้นต่ำ ฿${_bmcNum(baht, 0)} และ${cyc ? 'เปิด' : 'ปิด'}การตรวจนับหมุนเวียนเสริม (ไม่ใช่การปิดงวด)?\nผลต่างที่ยังไม่ได้ให้เหตุผลจะนับใหม่ตามเกณฑ์นี้`,
     { title: 'ยืนยันการบันทึกเกณฑ์', ok: 'บันทึก', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcCsStatus', null, 'ยังไม่บันทึก'); return; }
   try {
     _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason_min_baht: baht, cycle_counts: cyc }) });
@@ -2743,7 +2745,7 @@ function bmcIssRenderPost(st) {
   un.style.display = posted ? '' : 'none';
   btn.disabled = !posted && !st.receipts_confirmed;
   btn.style.opacity = btn.disabled ? .5 : 1; btn.style.cursor = btn.disabled ? 'not-allowed' : 'pointer';
-  note.textContent = posted ? `บันทึกเข้าระบบบัญชีแล้ว เมื่อ ${fmtDay(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)} · งวดนี้ล็อกอยู่`
+  note.textContent = posted ? `บันทึกเข้าระบบบัญชีแล้ว เมื่อ ${fmtDayAt(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)} · งวดนี้ล็อกอยู่`
     : st.receipts_confirmed ? 'กดเมื่อคีย์ใบสรุปเข้าระบบบัญชีแล้ว · เมื่อกดแล้วงวดนี้ล็อก'
     : 'ต้องยืนยันรับสินค้าครบของงวดนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้';
 }
@@ -2780,9 +2782,9 @@ async function bmcIssLoadSummary() {
     if (sl.draft_days.length) chips.push(_bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)'));
   }
   if (rc) chips.push(rc.totals.flagged ? _bmcChip(`ผลต่างเกินเกณฑ์ ${rc.totals.flagged} รายการ`, 'var(--bad-ink)') : _bmcChip('ผลต่างอยู่ในเกณฑ์ทุกรายการ', 'var(--good-ink)'));
-  if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${fmtDay(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)}`, 'var(--navy-ink)'));
+  if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${fmtDayAt(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)}`, 'var(--navy-ink)'));
   if (t.unpriced) chips.push(_bmcChip(`ไม่มีราคา ${t.unpriced} รายการ`, 'var(--amber-ink)'));
-  if (d.period.partial) chips.push(_bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)'));
+  if (d.period.partial) chips.push(_bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน (รายการเดิม) · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)'));
   document.getElementById('bmcIssChips').innerHTML = chips.join('');
   bmcIssRenderRecon();
   bmcIssRenderPost(st);
@@ -2846,8 +2848,11 @@ async function bmcIssPost(want) {
   if (!d) return;
   // the question says what is posted (branch, period, baht, lines) and what the lock does; the lock is lifted by the same box
   const what = `สาขา${d.branch.name || ''} · ${fmtDay(d.period.begin_date)} ถึง ${fmtDay(d.period.end_date)} · ${d.lines.length} รายการ · มูลค่าตัดเบิก ฿${_bmcNum(d.totals.used_value, 2)}`;
+  // QA L4h: a period posted with confirmed slips missing says so in the question ("ขาดใบตัดเบิก N วัน") - a warning, never a block
+  const sl = d.slips || {}, nMiss = (sl.missing_days || []).length + (sl.draft_days || []).length;
+  const warn = want && nMiss ? `\nขาดใบตัดเบิก ${nMiss} วัน (${[...(sl.missing_days || []), ...(sl.draft_days || [])].sort().slice(0, 3).map(fmtDay).join(', ')}${nMiss > 3 ? ' …' : ''}) ผลต่างของวันเหล่านี้จึงยังไม่ครบ` : '';
   const ok = want
-    ? await uiConfirm(`บันทึกใบสรุปตัดเบิกเข้าระบบบัญชีแล้ว?\n${what}\nเมื่อบันทึกแล้วงวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้`,
+    ? await uiConfirm(`บันทึกใบสรุปตัดเบิกเข้าระบบบัญชีแล้ว?\n${what}${warn}\nเมื่อบันทึกแล้วงวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้`,
       { title: 'ยืนยันการบันทึกเข้าระบบบัญชี', ok: 'บันทึกเข้าระบบบัญชีแล้ว', cancel: 'ยังไม่บันทึก' })
     : await uiConfirm(`ยกเลิกการบันทึกบัญชีของงวดนี้?\n${what}\nงวดนี้จะปลดล็อก และแก้ไขใบรับสินค้าและใบตัดเบิกได้อีก`,
       { title: 'ยืนยันการยกเลิกการบันทึกบัญชี', ok: 'ยกเลิกการบันทึกบัญชี', cancel: 'ไม่ยกเลิก' });

@@ -561,6 +561,12 @@ function applyPermissions() {
   // 6) The phone summary is the owner's sales view. A role without sales.overview
   //    (the branch login) gets its own pages on the phone instead — they are built 375-px first.
   if (window.AUTH && window.AUTH.enabled && !hasModule('sales.overview')) document.body.classList.add('force-desktop', 'no-mobile-app');
+  // QA 2026-10-13 M4 · a role whose daily work is a supply page (Sales Support, the kitchen, operation, accounting) opens on it on a phone too,
+  // not on the owner's sales summary - unless the person chose the summary themselves (showMobileSummary). The summary stays one tap away
+  // (the phone button) and carries a link back to หน้างาน (#msSupply). What the role may SEE is unchanged: only which page opens first.
+  else if (_supplyPhoneRole() && _phoneModeSaved() !== 'summary') document.body.classList.add('force-desktop');
+  const msSupply = document.getElementById('msSupply');
+  if (msSupply) msSupply.style.display = _supplyPhoneRole() ? '' : 'none';
   // 7) A pinned login (role branch / franchise) is shown its branch as text; no branch picker is left on any page
   stripBranchPickers();
 }
@@ -1787,7 +1793,24 @@ function fmtLeft(hours) {
   return d === 0 ? `อีก ${r} ชม.` : `อีก ${d} วัน${r ? ` ${r} ชม.` : ''}`;
 }
 function fmtMonthTh(ym) { const m = /^(\d{4})-(\d{2})/.exec(String(ym == null ? '' : ym)); return m && _TH_MONTHS[+m[2] - 1] ? `${_TH_MONTHS[+m[2] - 1]} ${m[1]}` : String(ym == null ? '' : ym); }
-function fmtAt(iso) { const s = String(iso == null ? '' : iso); const p = _isoParts(s); return p ? (fmtDay(s) + (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) ? ' ' + s.slice(11, 16) : '')) : s; }
+// QA 2026-10-13 M1 · a stored stamp as the Bangkok clock. The tables hold UTC: "2026-10-09T06:15:42" (naive, as master.now() writes it) or
+// "...+00:00" / "...Z" (aware, any offset is honoured); a stamp written with a SPACE ("2026-10-09 13:15", the reports' own format and the
+// checklist's) already is the branch's clock and is kept as it is. -> {y, mo, d, h, mi, hhmm, iso} or null when there is no time part.
+function _bkkClock(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})([T ])(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/.exec(String(iso == null ? '' : iso).trim());
+  if (!m) return null;
+  let ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[5], +m[6], +(m[7] || 0));
+  const z = m[8];
+  if (z && z !== 'Z') { const dg = z.slice(1).replace(':', ''), off = (+dg.slice(0, 2)) * 60 + (+(dg.slice(2, 4) || 0)); ms -= (z[0] === '-' ? -1 : 1) * off * 60000; }
+  if (z || m[4] === 'T') ms += 7 * 3600000;                 // UTC (or an explicit offset) -> Bangkok; a space-separated stamp is Bangkok already
+  const t = new Date(ms), p2 = n => String(n).padStart(2, '0');
+  const c = { y: t.getUTCFullYear(), mo: t.getUTCMonth() + 1, d: t.getUTCDate(), h: t.getUTCHours(), mi: t.getUTCMinutes() };
+  c.hhmm = p2(c.h) + ':' + p2(c.mi);
+  c.iso = `${c.y}-${p2(c.mo)}-${p2(c.d)}`;
+  return c;
+}
+function fmtDayAt(iso) { const c = _bkkClock(iso); return c ? `${c.d}/${c.mo}/${c.y}` : fmtDay(iso); }   // the Bangkok day of a stored stamp
+function fmtAt(iso) { const s = String(iso == null ? '' : iso); const c = _bkkClock(s); return c ? `${c.d}/${c.mo}/${c.y} ${c.hhmm}` : (_isoParts(s) ? fmtDay(s) : s); }
 // the name a person recognises for a login (display name, else branch / role label); the login id itself is never shown
 function whoTh(login) { if (login == null || login === '') return '-'; const n = window.AUTH && window.AUTH.names; return (n && n[login]) || String(login); }
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -2683,6 +2706,12 @@ const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) wh
   warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
   operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'close', tab: 'bomcenter', pane: 'issue' },
 };
+// a login whose _SUPPLY_LANDING names its daily supply page and who may open หน้างาน
+function _supplyPhoneRole() {
+  const r = window.AUTH && window.AUTH.enabled && window.AUTH.role;
+  return !!(r && _SUPPLY_LANDING[r] && tabAllowed('supplyhome'));
+}
+function _phoneModeSaved() { try { return localStorage.getItem('oshinei_phone_mode') || ''; } catch (e) { return ''; } }
 function _supplyLastKey() { return 'supply:last:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 function _supplyLastGet() { try { return JSON.parse(localStorage.getItem(_supplyLastKey()) || '{}') || {}; } catch (e) { return {}; } }
 // One month and one branch for the whole module (localStorage): every picker
@@ -2731,6 +2760,8 @@ function supplyMonthPick(el, prev) { return supplyMonthPut(el, supplyCtx().month
 // the branches that have data (slips, orders, counts, receipts) in a month — the centre's branch selects list these only
 const _supplyBrData = {};
 async function supplyBranchesWithData(month) {
+  // QA L4a: GET /api/bom-center/stock/* is open to these modules only - a role without one (the kitchen) never calls it (no console 403)
+  if (!['branch.stock', 'supply.ordering', 'bom.center', 'ops.report'].some(hasModule)) throw new Error('no stock module');
   const hit = _supplyBrData[month];
   if (hit && Date.now() - hit.at < 60000) return hit.rows;
   const d = await _bmcJson(`${API}/api/bom-center/stock/me?month=${encodeURIComponent(month)}`);

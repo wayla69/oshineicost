@@ -356,6 +356,17 @@ def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
             "required": sum(1 for z in out_z for r in z["items"] if r["required"]), "plan": count_plan(con, branch_id)}
 
 
+def uncounted_items(con, branch_id: int, count_id: int) -> list:
+    """Owner decision 2026-10-13: EVERY item of the branch's count sheet must have a value for a count to become ต้นงวด / ปลายงวด
+    (a 0 is a value, a blank is not): [(code, name)] of the items the count `count_id` has no quantity for."""
+    have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NOT NULL", (count_id,))}
+    return [(it["code"], it["name"]) for z in sheet(con, branch_id)["zones"] for it in z["items"] if it["code"] not in have]
+
+
+def incomplete_th(miss: list) -> str:
+    return f"ยังไม่ได้นับ {len(miss)} รายการ {CLOSE_FULL_TH} (เช่น {', '.join(n for _, n in miss[:5])})"
+
+
 def uncounted_required(con, branch_id: int, count_id: int) -> list:
     """The required (บังคับ) items of the branch's sheet that the count `count_id` has no quantity for: [(code, name)]."""
     have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=?", (count_id,))}
@@ -433,8 +444,8 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
     BEGIN stock, every later one the END of a period and the BEGIN of the next.
 
-    PR-M4 (owner rule "ทุกรายการที่สั่งต้องนับ"): a count is submitted only when every required (บังคับ) item has a
-    quantity — `require_all=False` is for a historical count loaded from a file (import_count), never for a branch."""
+    Owner decision 2026-10-13 ("ปิดงวดสิ้นเดือนต้องนับ 100%"): a count is submitted only when EVERY item of the branch's sheet has a
+    quantity (0 counts, blank does not) - no override. `require_all=False` exists for the tests' fixtures only; no endpoint passes it."""
     _branch_name(con, branch_id)
     conv = Converter(con)
     cdate = count_date or bkk_today().isoformat()
@@ -461,9 +472,9 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
         if not n:
             raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
         if require_all:
-            miss = uncounted_required(con, branch_id, cid)
+            miss = uncounted_items(con, branch_id, cid)
             if miss:
-                raise ValueError(f"ยังมีรายการที่ต้องนับ {len(miss)} รายการ ที่ยังไม่ได้นับ (เช่น {', '.join(n for _, n in miss[:3])}) นับให้ครบก่อนส่ง")
+                raise ValueError(incomplete_th(miss))
         # every line of the draft, not only the ones sent now, must have reached the base unit
         bad = [_no_unit(con, c, u) for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
@@ -626,41 +637,18 @@ def set_layout(con, rows: list, who: str) -> int:
     return n
 
 
-# ── batch 4b (3.4): cycle counts and the partial month close ─────────────────────────────────
-# The owner's decision (2026-10-12, as proposed): the class-A items of a branch are counted every week, everything else at the end of
-# a quarter; every other month closes on a PARTIAL end count - the latest weekly counts of the class-A items plus the system stock
-# (confirmed slips) for the rest, labelled "คงเหลือตามระบบ (ไม่ได้นับ)". The switch bc_cycle_counts (ตั้งค่า) returns every month to
-# the full count with no code change. A partial end count is an ordinary 'end' count (so periods, variance, the reconciliation, the
-# accounting summary and the posted-period lock read it unchanged) whose lines carry `basis`.
-QUARTER_END_MONTHS = (3, 6, 9, 12)
-FULL_WINDOW_DAYS = 14               # the full count of a new quarter is "due" this many days from the 1st
-PARTIAL_WINDOW_DAYS = 25            # a month can be closed on a partial count until this many days into the next month
-PARTIAL_TOLERANCE_DAYS = 2          # a month-end count dated up to two days after the 1st is that month's close (todo.CLOSE_TOLERANCE_DAYS)
-PARTIAL_NOTE = "คงเหลือตามระบบ (ไม่ได้นับ) ยกเว้นรายการกลุ่มมูลค่าสูงที่นับหมุนเวียน"
+# ── batch 4b (3.4): the optional weekly cycle count ──────────────────────────────────────────
+# The class-A items of a branch MAY be counted every week (the switch bc_cycle_counts, OFF by default). It is a mid-month check that feeds the
+# system stock (system_position) and NEVER closes a period: the owner's decision of 2026-10-13 is that a month-end close is a full count of
+# every item. The partial close of batch 4b (stock.partial_close) is withdrawn; its rows (bc_stock_count.partial = 1, lines with `basis`)
+# remain readable as they were written.
+CLOSE_FULL_TH = "ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"
+CYCLE_TH = "ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด)"
 
 
 def cycle_on(con) -> bool:
     from .close_settings import cycle_counts_on
     return cycle_counts_on(con)
-
-
-def is_quarter_end(month: str) -> bool:
-    """True for a month whose close needs the full count: March, June, September, December ('YYYY-MM')."""
-    return int(month[5:7]) in QUARTER_END_MONTHS
-
-
-def month_first(month: str) -> date:
-    return date(int(month[:4]), int(month[5:7]), 1)
-
-
-def next_month_first(month: str) -> date:
-    y, m = int(month[:4]), int(month[5:7])
-    return date(y + (m == 12), 1 if m == 12 else m + 1, 1)
-
-
-def prev_month(d: date) -> str:
-    y, m = d.year - (d.month == 1), 12 if d.month == 1 else d.month - 1
-    return f"{y:04d}-{m:02d}"
 
 
 def cycle_last(con, branch_id: int):
@@ -676,54 +664,30 @@ def cycle_draft_of(con, branch_id: int):
 
 
 def count_plan(con, branch_id: int, today: date = None) -> dict:
-    """What the branch counts NOW (the count page opens on `mode`):
-
-      full   - the first count of the branch, or the quarter-end count (the first FULL_WINDOW_DAYS days of Jan / Apr / Jul / Oct, until a
-               full count dated in the new quarter is submitted), or every month while the switch is off;
-      cycle  - otherwise the weekly count of the class-A items.
-
-    `partial_month` = the month that can be closed now on a partial end count (not a quarter-end month, no month-end count dated at
-    its end yet), else None. `cycle_due` = no weekly count yet in the current week (Monday to Sunday)."""
+    """What the branch counts NOW. The month-end count (ต้นงวด / ปลายงวด) is ALWAYS the full count of every item (`mode` = "full").
+    When the optional switch is on, the weekly count of the class-A items is offered besides it as a mid-month check
+    (`cycle_due` = none yet in the current week, Monday to Sunday); it never closes a period. `partial_month` stays in the answer
+    (always None) for the screens of an older build."""
     today = today or bkk_today()
     on = cycle_on(con)
     lc = last_submitted(con, branch_id)
     ws = today - timedelta(days=today.weekday())
-    q0 = date(today.year, ((today.month - 1) // 3) * 3 + 1, 1)
     plan = {"cycle_counts": on, "mode": "full", "first": lc is None, "full_due": False, "full_overdue": False,
-            "quarter_start": q0.isoformat(), "partial_month": None, "partial_date": None, "cycle_due": False,
-            "cycle_last": None, "week_start": ws.isoformat()}
+            "partial_month": None, "partial_date": None, "cycle_due": False, "cycle_last": None, "week_start": ws.isoformat()}
     if not on or lc is None:
         return plan
     cl = cycle_last(con, branch_id)
     plan["cycle_last"] = cl["count_date"] if cl else None
-    full_done = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
-                            " AND COALESCE(partial,0)=0 AND count_date>=? AND count_date<=?", (branch_id, q0.isoformat(), today.isoformat())).fetchone()
-    if not full_done:
-        if (today - q0).days <= FULL_WINDOW_DAYS:
-            plan["full_due"], plan["mode"] = True, "full"
-        else:
-            plan["full_overdue"] = True
-    if not plan["full_due"]:
-        plan["mode"] = "cycle"
-        plan["cycle_due"] = not con.execute("SELECT 1 FROM bc_cycle_count WHERE branch_id=? AND status='submitted' AND count_date>=?",
-                                            (branch_id, ws.isoformat())).fetchone()
-    d0 = date(today.year, today.month, 1)
-    m = prev_month(today)
-    if (today - d0).days <= PARTIAL_WINDOW_DAYS and not is_quarter_end(m):
-        has_close = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
-                                " AND count_date>=?", (branch_id, d0.isoformat())).fetchone()
-        has_basis = con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
-                                " AND count_date<?", (branch_id, d0.isoformat())).fetchone()
-        if not has_close and has_basis:
-            plan["partial_month"], plan["partial_date"] = m, d0.isoformat()
+    plan["cycle_due"] = not con.execute("SELECT 1 FROM bc_cycle_count WHERE branch_id=? AND status='submitted' AND count_date>=?",
+                                        (branch_id, ws.isoformat())).fetchone()
     return plan
 
 
 def cycle_save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
                note: str = None, require_all: bool = True) -> dict:
     """The weekly count of the class-A items: a draft saved as often as the branch likes, submitted once and never edited (a recount is a
-    new count). It does not make a period; the system stock takes the figure as the newer basis of that item (system_position) and the
-    next partial month close carries it (partial_close)."""
+    new count). It does not make a period and never closes one; the system stock takes the figure as the newer basis of that item
+    (system_position)."""
     _branch_name(con, branch_id)
     if not cycle_on(con):
         raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ตรวจนับครบทุกรายการ")
@@ -830,58 +794,9 @@ def _cycle_rebase(con, branch_id: int, basis_id: int, cdate: str, as_of: date, t
 
 
 def partial_close(con, branch_id: int, month: str, who: str, today: date = None, accept_missing_slips: bool = False) -> dict:
-    """Close `month` (YYYY-MM) of a branch on a PARTIAL end count dated the 1st of the next month: every item of the system stock
-    at the end of the last day of the month (confirmed slips only, as the month-end reconciliation and the accounting summary read
-    them), the class-A items from their latest weekly count carried forward. Idempotent: a month-end count already dated within
-    two days of the 1st is returned as it is. Refused for a quarter-end month (a full count), while the switch is off, before the
-    1st, with no earlier count, and - unless `accept_missing_slips` - when a selling day of the period has no confirmed slip, since
-    the items not counted would then show less use than there was.
-
-    -> {"count_id", "date", "created", "lines", "counted", "system", "missing_slip_days"}"""
-    today = today or bkk_today()
-    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month or ""):
-        raise ValueError("เดือนต้องอยู่ในรูปแบบ YYYY-MM")
-    if not cycle_on(con):
-        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ปิดงวดด้วยการตรวจนับครบทุกรายการ")
-    if is_quarter_end(month):
-        raise ValueError(f"เดือน{_month_th(month)}เป็นสิ้นไตรมาส ต้องตรวจนับครบทุกรายการ")
-    d = next_month_first(month)
-    if d > today:
-        raise ValueError(f"ปิดงวดได้ตั้งแต่วันที่ {_fmt_day(d.isoformat())}")
-    _branch_name(con, branch_id)
-    near = con.execute(f"SELECT count_id, count_date, COALESCE(partial,0) FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted'"
-                       f" AND kind IN {_in(MONTH_KINDS)} AND count_date>=? AND count_date<=? ORDER BY count_date, count_id LIMIT 1",
-                       (branch_id, d.isoformat(), (d + timedelta(days=PARTIAL_TOLERANCE_DAYS)).isoformat())).fetchone()
-    if near:
-        return {"count_id": near[0], "date": near[1], "created": False, "partial": bool(near[2]), "lines": None}
-    if con.execute(f"SELECT 1 FROM bc_stock_count WHERE branch_id=? AND COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}"
-                   " AND count_date>?", (branch_id, d.isoformat())).fetchone():
-        raise ValueError("มีผลตรวจนับหลังวันที่ปิดงวดแล้ว จึงปิดงวดย้อนหลังด้วยการนับหมุนเวียนไม่ได้")
-    last = d - timedelta(days=1)
-    sp = system_position(con, branch_id, last, issues_through=last, estimate=False)
-    if not sp["basis"]:
-        raise ValueError("ยังไม่มีผลตรวจนับครั้งแรกของสาขานี้ ต้องตรวจนับครบทุกรายการก่อน")
-    from .issue_reports import slip_coverage
-    cov = slip_coverage(con, branch_id, sp["basis"]["date"], d.isoformat())
-    gaps = cov["missing_days"] + cov["draft_days"]
-    if gaps and not accept_missing_slips:
-        raise ValueError(f"ยังมีวันขายที่ไม่มีใบตัดเบิกที่ยืนยัน {len(gaps)} วัน (เช่น {_fmt_day(gaps[0])}) รายการที่ไม่ได้นับจะแสดงการใช้น้อยกว่าจริง "
-                         "ให้สาขายืนยันใบตัดเบิกก่อน หรือยืนยันปิดงวดทั้งที่ยังขาดใบ")
-    cycle = sp.get("cycle") or {}
-    cur = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at, status, updated_at, submitted_at, partial)"
-                      " VALUES(?,?,'end',?,?,?, 'submitted', ?,?, 1)",
-                      (branch_id, d.isoformat(), who, PARTIAL_NOTE, now(), now(), now()))
-    cid = cur.lastrowid
-    conv = Converter(con)
-    rows = []
-    for c, q in sorted(sp["qty"].items()):
-        rows.append((cid, c, max(float(q), 0.0), conv.base_unit(c), max(float(q), 0.0), "cycle" if c in cycle else "system"))
-    con.executemany("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, basis) VALUES(?,?,?,?,?,?)", rows)
-    n_cycle = sum(1 for r in rows if r[5] == "cycle")
-    audit(con, who, "partial_close", "bc_stock_count", str(cid), None,
-          {"branch_id": branch_id, "month": month, "date": d.isoformat(), "lines": len(rows), "counted": n_cycle, "missing_slip_days": len(gaps)})
-    return {"count_id": cid, "date": d.isoformat(), "created": True, "partial": True, "lines": len(rows), "counted": n_cycle,
-            "system": len(rows) - n_cycle, "missing_slip_days": gaps}
+    """Owner decision 2026-10-13 ("ปิดงวดสิ้นเดือนต้องนับ 100%"): a month is closed ONLY by a full count of every item. A partial close is
+    refused for every month. The rows an earlier partial close wrote (stock_count.partial = 1) stay as they are, labelled on the screens."""
+    raise ValueError(CLOSE_FULL_TH)
 
 
 def _month_th(month: str) -> str:
@@ -934,7 +849,12 @@ def read_count_file(data: bytes) -> list:
 
 
 def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dry_run: bool = True) -> dict:
-    """Save a whole count from a file and submit it, dated the day it was counted."""
+    """Save a whole count from a file and submit it, dated the day it was counted.
+
+    QA 2026-10-13 M5 · the answer says what the file BECOMES (the first count = ต้นงวด; any later one = ปลายงวด of the period since the last
+    count, and the ต้นงวด of the next) and how many of the sheet's items it carries ("นับมา 3 จาก 248 รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ").
+    Owner decision 2026-10-13: a file that leaves ANY item of the sheet blank is REFUSED (dry run: ok=False, incomplete=True; saving:
+    ValueError) - a close is a count of every item, with no override."""
     try:
         date.fromisoformat(count_date)
     except (TypeError, ValueError):
@@ -952,8 +872,25 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
            and conv.to_base(ln["code"], ln["qty"], ln["unit"] or conv.base_unit(ln["code"]))[0] is None]
     out = {"branch_id": branch_id, "count_date": count_date, "lines": len(lines) - len(unknown),
            "unknown": unknown, "unconverted": bad, "dry_run": dry_run, "ok": not unknown and not bad}
+    prev = last_submitted(con, branch_id)
+    out["kind"] = "end" if prev else "begin"
+    out["kind_th"] = "ปลายงวด" if prev else "ต้นงวด"
+    out["closes"] = {"begin_date": prev["count_date"], "end_date": count_date} if prev else None
+    out["role_th"] = (f"ผลนับนี้เป็นปลายงวด ปิดงวดที่เริ่มนับวันที่ {_fmt_day(prev['count_date'])} ถึงวันที่ {_fmt_day(count_date)} และเป็นต้นงวดของงวดถัดไป"
+                      if prev else "ผลนับนี้เป็นต้นงวด (ผลตรวจนับครั้งแรกของสาขา) ยังไม่ปิดงวดใด")
+    sheet_rows = template_rows(con, branch_id)
+    on_sheet = {r["code"] for r in sheet_rows}
+    counted = {ln["code"] for ln in lines} & on_sheet
+    miss = [r for r in sheet_rows if r["code"] not in counted]
+    out.update(sheet_total=len(sheet_rows), counted=len(counted), blank=len(miss), missing=[{"code": r["code"], "name": r["name"]} for r in miss[:12]],
+               counted_th=f"นับมา {len(counted)} จาก {len(sheet_rows)} รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ")
+    out["incomplete"] = bool(miss)
+    if miss:
+        out["ok"] = False
+        out["incomplete_th"] = incomplete_th([(r["code"], r["name"]) for r in miss])
+        if not dry_run:
+            raise ValueError(out["incomplete_th"])
     if out["ok"] and not dry_run:
-        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ",
-                 require_all=False)
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ")
         out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
     return out

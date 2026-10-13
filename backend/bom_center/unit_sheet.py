@@ -18,7 +18,7 @@ import io
 from .master import _num as _mnum
 from .master import plan_ladder, set_ladder
 from .prep import MODE_PORTION, _clean, latest_price_month, save_portion
-from .units import KIND_TH, Converter, norm
+from .units import KIND_TH, Converter, is_identity_step, norm
 
 SHEET = "หน่วยและการแปลง"
 HEADERS = ["รหัส", "ชื่อวัตถุดิบ", "หน่วยฐาน", "หน่วย", "1 หน่วยนี้ =", "หน่วยที่อ้างอิง", "ชนิดการแปลง", "ต่ำสุด", "สูงสุด", "หมายเหตุ"]
@@ -54,7 +54,7 @@ def ladder_rows(con, all_items: bool = False) -> list:
     for c in codes:
         if c not in names:
             continue
-        lad = conv.ladder(c)
+        lad = [r for r in conv.ladder(c) if not is_identity_step(conv.base_unit(c), r)]       # M2: no "แพ็ค = 1 แพ็ค" step in the file
         if not lad:
             if names[c][2]:
                 out.append([c, names[c][0], conv.base_unit(c), None, None, None, None, None, None, None])
@@ -168,6 +168,11 @@ def apply(con, parsed: dict, who: str, month: str = None) -> dict:
     amap = active_map(con)
     for file_code, e in parsed["ladders"].items():
         code = file_code if file_code in known else amap.get(file_code, file_code)
+        base0 = con.execute("SELECT base_unit FROM bc_ingredient WHERE code=?", (code,)).fetchone()
+        e_rows = [r for r in e["rows"] if not (base0 and is_identity_step(base0[0], {"unit": r["unit"], "parent_unit": r["parent_unit"], "qty_in_parent": r["qty_in_parent"]}))]
+        if not e_rows and code in known:
+            continue                                            # M2: a code whose only rows are identity steps keeps its ladder untouched
+        e = dict(e, rows=e_rows)
         plan = plan_ladder(con, code, e["rows"])
         if code not in known:
             hint = suggest_items(con, e.get("name"), code=file_code)

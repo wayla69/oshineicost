@@ -85,10 +85,12 @@
     <div class="card p-4 mb-3">
       <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรกึ่งสำเร็จ (CK / HK / DK)</div>
       <div class="flex flex-wrap items-center gap-2 bc-write mt-2">
-        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
+        <!-- QA L4g: the three file actions are buttons of the same size and weight (the template import was a 16 px text link) -->
+        <label style="display:inline-flex;align-items:center;min-height:40px;background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
           นำเข้าไฟล์ครัว (แผ่นงาน BoM_Semi)<input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="bmcPrepImportSemi(this)"></label>
-        <a href="#" onclick="bmcPrepTemplate();return false" class="text-xs" style="color:var(--accent)">ดาวน์โหลดสูตร / แม่แบบ</a>
-        <label class="text-xs" style="color:var(--accent);cursor:pointer">นำเข้าแม่แบบ<input type="file" accept=".xlsx" style="display:none" onchange="bmcPrepImportFlat(this)"></label>
+        <label style="display:inline-flex;align-items:center;min-height:40px;background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">
+          นำเข้าแม่แบบสูตรกึ่งสำเร็จ<input type="file" accept=".xlsx" style="display:none" onchange="bmcPrepImportFlat(this)"></label>
+        <button type="button" onclick="bmcPrepTemplate()" style="display:inline-flex;align-items:center;min-height:40px;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">ดาวน์โหลดสูตร / แม่แบบ</button>
         <span id="bmcPrepStatus" class="text-xs"></span>
       </div>
     </div>

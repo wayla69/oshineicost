@@ -373,14 +373,22 @@ async function ohbCntImport(input) {
   try {
     if (!day) throw new Error('เลือกวันที่ตรวจนับ');
     const pre = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=true&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
+    // M5 · what the file becomes (ต้นงวด / ปลายงวด), how many items it counts, and what it leaves blank
     document.getElementById('ohbCntReport').innerHTML = `<div class="text-xs" style="color:var(--text-secondary)">วันที่ตรวจนับ ${esc(fmtDay(pre.count_date))} · ${pre.lines} รายการ
+      <div><b>${esc(pre.kind_th || '')}</b> · ${esc(pre.role_th || '')}</div>
+      <div>${esc(pre.counted_th || '')}${pre.blank ? ` · <span style="color:var(--bad-ink)">ยังไม่ได้นับ ${pre.blank} รายการ</span>` : ''}</div>
+      ${(pre.missing || []).length ? `<div style="color:var(--bad-ink)">ปิดงวดต้องตรวจนับครบทุกรายการ · ยังไม่ได้กรอก: ${pre.missing.slice(0, 8).map(m => esc(m.name || m.code)).join(' · ')}${pre.blank > 8 ? ' …' : ''}</div>` : ''}
       ${pre.unknown.length ? `<div style="color:var(--bad-ink)">ไม่พบรหัสในทะเบียน: ${pre.unknown.slice(0, 12).map(esc).join(', ')}</div>` : ''}
       ${pre.unconverted.length ? `<div style="color:var(--bad-ink)">แปลงหน่วยไม่ได้: ${pre.unconverted.slice(0, 8).map(esc).join(' · ')}</div>` : ''}</div>`;
+    // owner decision 2026-10-13: a file that leaves ANY item blank is not imported - there is no "send anyway"
+    if (pre.incomplete) { _bmcStatus('ohbCntStatus', pre.incomplete_th, 'var(--bad-ink)'); return; }
     if (!pre.ok) { _bmcStatus('ohbCntStatus', 'แก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
     const name = document.getElementById('ohbCntBranch').selectedOptions[0]?.textContent || '';
-    if (!await uiConfirm(`ส่งผลตรวจนับ สาขา${name} วันที่ ${fmtDay(day)} (${pre.lines} รายการ)\nส่งแล้วแก้ไม่ได้ ต้องการนับใหม่ให้นำเข้าเป็นวันที่ใหม่`, { title: 'ยืนยันการส่งผลตรวจนับ', ok: 'ส่งผลตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
+    if (!await uiConfirm(`ส่งผลตรวจนับ สาขา${name} วันที่ ${fmtDay(day)}\n${pre.kind_th ? 'ผลนี้เป็น' + pre.kind_th + ' · ' : ''}${pre.role_th || ''}\n${pre.counted_th || ''}`
+        + '\nส่งแล้วแก้ไม่ได้ ต้องการนับใหม่ให้นำเข้าเป็นวันที่ใหม่',
+        { title: 'ยืนยันการส่งผลตรวจนับ', ok: 'ส่งผลตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
-    _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับเลขที่ ${d.count_id} (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.lines} รายการ`, 'var(--good-ink)');
+    _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับเลขที่ ${d.count_id} (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
     ohbLoadCentral();                       // the next missing date, the step statuses
   } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
@@ -524,10 +532,11 @@ function ohbRenderDetail() {
       <div class="ohb-line-n">${esc(l.name || l.code)}</div>
       <div class="ohb-line-c">${esc(l.code)}</div>
       <div class="ohb-line-q">สั่ง <b>${_bmcNum(l.confirmed_units)}</b> ${esc(_ohbUnitFull(l))} <span style="color:var(--text-muted)">· ยอดแนะนำ ${_bmcNum(l.suggested_units)}</span>${l.reason_th ? `<div style="color:var(--amber-ink)">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</div>
-      ${work ? `<label class="ohb-line-f">ส่งจริง <input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)})" aria-label="ส่งจริง ${esc(l.name || l.code)}" class="ohb-sent"> ${esc(_ohbUnitWord(l))}</label>
+      ${work ? `<label class="ohb-line-f">ส่งจริง <input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" class="ohb-sent"> ${esc(_ohbUnitWord(l))}</label>
         <div id="ohbPE_${esc(l.code)}" class="ohb-line-e" role="alert"></div>
-        <select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" class="ohb-line-r" aria-label="เหตุผลของ ${esc(l.name || l.code)}"><option value="">— เหตุผล (หากส่งไม่ตรง) —</option>${opts}</select>
-        <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" class="ohb-line-r" aria-label="หมายเหตุของ ${esc(l.name || l.code)}">`
+        <div id="ohbX_${esc(l.code)}"${sent != null && Math.abs(Number(sent) - Number(l.confirmed_units || 0)) > 1e-9 ? '' : ' hidden'}>
+        <select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" class="ohb-line-r" aria-label="เหตุผลของ ${esc(l.name || l.code)}"><option value="">— เหตุผล (ส่งไม่ตรงกับที่สาขายืนยัน) —</option>${opts}</select>
+        <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" class="ohb-line-r" aria-label="หมายเหตุของ ${esc(l.name || l.code)}"></div>`
         : `<div class="ohb-line-q">ส่งจริง <b>${_bmcNum(sent)}</b> ${esc(_ohbUnitWord(l))}${l.ss_reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : ''}</div>`}
       ${l.received_units != null ? `<div class="ohb-line-c">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</div>`;
   }).join('');
@@ -537,7 +546,7 @@ function ohbRenderDetail() {
       <td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)} · หน่วยสั่ง ${esc(_ohbUnitFull(l))}</div></td>
       <td class="py-1 pr-2 text-right">${_bmcNum(l.suggested_units)}</td>
       <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.confirmed_units)}</b>${l.reason_th ? `<div class="text-[10.5px]" style="color:var(--amber-ink)">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</td>
-      <td class="py-1 pr-2 text-right">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)})" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:64px;text-align:center;border:1px solid var(--border-control);border-radius:6px;padding:3px;background:var(--bg-input);color:var(--text-primary)">
+      <td class="py-1 pr-2 text-right">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:64px;text-align:center;border:1px solid var(--border-control);border-radius:6px;padding:3px;background:var(--bg-input);color:var(--text-primary)">
         <div id="ohbPE_${esc(l.code)}" class="text-[11px]" role="alert" style="color:var(--bad-ink);text-align:right"></div>` : _bmcNum(sent)}</td>
       <td class="py-1">${work ? `<select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" style="font-size:11px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล (หากส่งไม่ตรง) —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
         <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" style="width:110px;font-size:11px;border:1px solid var(--border-control);border-radius:6px;padding:2px 4px;background:var(--bg-input);color:var(--text-primary)">`
@@ -552,12 +561,13 @@ function ohbRenderDetail() {
       ${o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · คลังยืนยันโดย ${esc(whoTh(o.processed_by))}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(fmtDay(o.accounting_keyed_date || ''))} โดย ${esc(whoTh(o.accounting_keyed_by))}` : ''}</div>
     ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `#${c.claim_id} ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
-    ${phone ? `<div class="mt-2">${blocks}</div>` : `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+    ${phone ? `${work ? `<div class="mt-2"><button type="button" onclick="ohbFillAll()" class="brn-act brn-act-line" style="width:100%">ส่งตามที่สาขายืนยันทั้งหมด</button>
+      <div class="text-xs mt-1" style="color:var(--text-muted)">เติมช่องส่งจริงของทุกรายการที่ยังไม่ได้แก้ให้เท่ากับยอดที่สาขายืนยัน · ช่องเหตุผลจะแสดงเมื่อส่งจริงไม่ตรงกับที่สาขายืนยัน</div></div>` : ''}<div class="mt-2">${blocks}</div>` : `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ยอดแนะนำ</th><th class="py-1 pr-2 text-right">สาขายืนยัน</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1">เหตุผล (คลัง)</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`}
     ${!work && o.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">คลังเป็นผู้ระบุยอดส่งจริง</div>' : ''}
-    ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs${phone ? ' ohb-actbar' : ''}">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:150px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:${phone ? 16 : 13}px;min-height:${phone ? 44 : 0}px;background:var(--bg-input);color:var(--text-primary)">
-      ${phone ? `<button onclick="ohbProcess()" class="brn-act">${o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง'}</button>` : _ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
+    ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs${phone ? ' ohb-actbar' : ''}"><label class="ohb-po">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:${phone ? 110 : 150}px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:${phone ? 16 : 13}px;min-height:${phone ? 44 : 0}px;background:var(--bg-input);color:var(--text-primary)"></label>
+      ${phone ? `<button onclick="ohbProcess()" class="brn-act">${o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง'}</button>` : _ohbBtn('ส่งตามที่สาขายืนยันทั้งหมด', 'ohbFillAll()') + _ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
 }
 // The typed ส่งจริง of one line: '' = left as the branch confirmed; otherwise a number not below 0. -> {q, err}
 function _ohbPRead(code) {
@@ -585,11 +595,37 @@ function _ohbPLine(l) {
   return msg;
 }
 function ohbPLineFull(code) { const l = _ohbOrder && _ohbOrder.lines.find(x => x.code === code); if (l) _ohbPLine(l); }
-function ohbPLineCheck(code) {            // while typing: only a wrong number is shown (the reason is asked at the confirm)
+function ohbPLineCheck(code, typed) {     // while typing: only a wrong number is shown (the reason is asked at the confirm)
   const { err } = _ohbPRead(code);
   const note = document.getElementById('ohbPE_' + code), inp = document.getElementById('ohbP_' + code);
   if (note) note.textContent = err;
-  if (inp) inp.style.borderColor = err ? 'var(--bad-ink)' : 'var(--border-control)';
+  if (inp) { inp.style.borderColor = err ? 'var(--bad-ink)' : 'var(--border-control)'; if (typed) inp.dataset.touched = '1'; }
+  _ohbPXToggle(code);
+}
+// QA 2026-10-13 H2 · a phone shows the reason and the note of a line only when its ส่งจริง differs from what the branch confirmed
+function _ohbDiffers(l) { const { q } = _ohbPRead(l.code); return q !== null && Math.abs(q - Number(l.confirmed_units || 0)) > 1e-9; }
+function _ohbPXToggle(code) {
+  const x = document.getElementById('ohbX_' + code), l = _ohbOrder && _ohbOrder.lines.find(y => y.code === code);
+  if (x && l) x.hidden = !_ohbDiffers(l);
+}
+// ส่งตามที่สาขายืนยันทั้งหมด: every line whose ส่งจริง was not typed by hand is set to the branch's confirmed quantity (its reason and note cleared)
+function ohbFillAll() {
+  const o = _ohbOrder;
+  if (!o) return;
+  let set = 0, kept = 0;
+  o.lines.forEach(l => {
+    const el = document.getElementById('ohbP_' + l.code);
+    if (!el) return;
+    if (el.dataset.touched === '1') { kept++; return; }
+    el.value = String(l.confirmed_units ?? '');
+    const r = document.getElementById('ohbR_' + l.code), n = document.getElementById('ohbN_' + l.code);
+    if (r) r.value = '';
+    if (n) n.value = '';
+    ohbPLineCheck(l.code);
+    ohbPLineFull(l.code);
+    set++;
+  });
+  bmcStatus('ohbDStatus', true, `ตั้งส่งจริงตามที่สาขายืนยัน ${set} รายการ${kept ? ` · ${kept} รายการที่แก้เองไม่ถูกเปลี่ยน` : ''}`);
 }
 async function ohbProcess() {
   const o = _ohbOrder;
@@ -603,7 +639,8 @@ async function ohbProcess() {
   const lines = o.lines.map(l => {
     const r = document.getElementById('ohbR_' + l.code);
     const n = document.getElementById('ohbN_' + l.code);
-    return { code: l.code, processed_units: _ohbPRead(l.code).q, reason: r ? r.value || null : null, note: n ? n.value || null : null };
+    const x = document.getElementById('ohbX_' + l.code), hidden = !!(x && x.hidden);      // a phone hides the reason of a line that is sent as confirmed
+    return { code: l.code, processed_units: _ohbPRead(l.code).q, reason: r && !hidden ? r.value || null : null, note: n && !hidden ? n.value || null : null };
   });
   const po = (document.getElementById('ohbPo').value || '').trim();
   const edit = o.status === 'processed';
@@ -882,7 +919,7 @@ function isrReconHead(r) {
       ${sl.draft_days.length ? _bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
       ${r.status.receipts_confirmed ? _bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')}
       ${t.incomplete ? _bmcChip(`ข้อมูลไม่ครบ ${t.incomplete} รายการ (ไม่ถามเหตุผล)`, 'var(--text-muted)') : ''}
-      ${r.partial ? _bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)') : ''}</div>
+      ${r.partial ? _bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน (รายการเดิม) · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)') : ''}</div>
     <div class="mt-1 text-sm">สุทธิ <b>${bmcGapHtml(t.diff_value, null, 'count')}</b> ·
       รายการที่นับได้น้อยกว่าระบบรวม ${_isrMoney(Math.abs(t.under_value || 0))} · รายการที่นับได้มากกว่าระบบรวม ${_isrMoney(Math.abs(t.over_value || 0))} · เกินเกณฑ์ ${t.flagged} รายการ ·
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · ตรวจนับไม่ครบ ${t.not_counted}` : ''}</div>
@@ -1074,10 +1111,9 @@ const _OHB_IS_ST = [['all', 'ทั้งหมด'], ['on_time', 'ยืนย�
 const _OHB_IS_INK = { on_time: 'var(--good-ink)', late: 'var(--amber-ink)', draft: 'var(--amber-ink)', missing: 'var(--bad-ink)', closed: 'var(--text-muted)' };
 const _OHB_IS_ACT = { create: 'สร้างใบ', save: 'บันทึกหลังเปิดแก้ไข', confirm: 'ยืนยัน', reconfirm: 'ยืนยันซ้ำ', reopen: 'เปิดแก้ไข', append: 'เบิกเพิ่ม' };
 function _ohbIsCanReopen() { return hasModule('supply.ordering') || hasModule('bom.center'); }
-function _ohbIsDt(ts) {       // a stored UTC stamp as the branch's clock (Bangkok): d/m HH:MM
-  if (!ts) return '';
-  const d = new Date(ts);
-  return isNaN(d) ? '' : d.toLocaleString('th-TH', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+function _ohbIsDt(ts) {       // a stored UTC stamp as the branch's clock (Bangkok): d/m HH:MM (a naive stamp is UTC too, M1)
+  const c = ts ? _bkkClock(ts) : null;
+  return c ? `${c.d}/${c.mo} ${c.hhmm}` : '';
 }
 function ohbIsSetStatus(s) { _ohbIsSt = s; ohbIsRender(); }
 async function ohbLoadIssues() {

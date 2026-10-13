@@ -3,8 +3,9 @@
 
   bc_reason_min_baht   a branch is asked for a variance reason only when the line is outside its class threshold AND the gap is at
                        least this many baht (default 500, 0 to 100,000; 0 = no baht floor, the old behaviour);
-  bc_cycle_counts      1 = class-A items are counted every week and the rest at quarter end, the other months close on a partial
-                       end count (stock.partial_close); 0 = every month ends with a full count, as before. Default 1.
+  bc_cycle_counts      1 = the class-A items may be counted every week as a mid-month check ("ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด)"): it
+                       feeds the system stock and NEVER closes a period. Default 0. Owner 2026-10-13: every month-end close is a
+                       full count of every item, whatever this switch says.
 
 Both are the centre's to edit (ตั้งค่า); every change is audited. Nothing is read from a request body without a range check.
 """
@@ -14,7 +15,7 @@ KEY_MIN_BAHT = "bc_reason_min_baht"
 KEY_CYCLE = "bc_cycle_counts"
 MIN_BAHT_DEFAULT = 500.0
 MIN_BAHT_MIN, MIN_BAHT_MAX = 0.0, 100000.0
-CYCLE_DEFAULT = True
+CYCLE_DEFAULT = False
 
 
 def _get(con, key):

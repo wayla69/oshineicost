@@ -18,6 +18,11 @@ async function showFullDashboard(tab) {
     else if (!first) { if (!activeTab) switchTab('home'); else loadActiveTab(); }
   } catch (e) {}
 }
+// QA M4 · the link on the phone summary of a supply role: the full shell, opened on หน้างาน
+async function msOpenSupply() {
+  await showFullDashboard();
+  try { supplyOpen(); } catch (e) { console.warn('supply open:', e); }
+}
 function showMobileSummary() {
   document.body.classList.remove('force-desktop');
   try { localStorage.setItem('oshinei_phone_mode', 'summary'); } catch (e) {}

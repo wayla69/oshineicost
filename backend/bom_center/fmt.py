@@ -6,7 +6,9 @@ months `กันยายน 2026`. ISO stays in the API fields, the Excel file
 built here (todo details, ValueError messages, status lines) use these. `who()` turns a login name into the
 name a person recognises (app_user.display_name, else the branch / role label), never `salessupport1`.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
+
+_BKK = timezone(timedelta(hours=7))
 
 MONTH_TH = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
             "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
@@ -46,16 +48,40 @@ def month_th(m) -> str:
         return s
 
 
+def bkk_stamp(v):
+    """A stored stamp as the Bangkok clock (QA 2026-10-13 M1): -> datetime in Asia/Bangkok, or None when `v` has no time part.
+    The tables hold UTC: "2026-10-09T06:15:42" (naive, as master.now() writes it) or "2026-10-09T06:15:42+00:00" (aware); a stamp written
+    with a SPACE ("2026-10-09 13:15", the reports' own format) is already the branch's clock and is kept as it is."""
+    s = str(v or "").strip()
+    if len(s) < 16 or s[10] not in "T ":
+        return None
+    try:
+        t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        if s[10] == " ":
+            return t.replace(tzinfo=_BKK)
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(_BKK)
+
+
+def day_at_th(v) -> str:
+    """The Bangkok day of a stored stamp: 2026-10-09T18:30:00+00:00 -> 10/10/2026."""
+    t = bkk_stamp(v)
+    return day_th(t.date()) if t else day_th(v)
+
+
 def at_th(v) -> str:
-    """2026-10-09T13:15:42+07:00 → 9/10/2026 13:15 (a bare date has no time part)."""
+    """2026-10-09T06:15:42+00:00 → 9/10/2026 13:15 (Bangkok clock; a bare date has no time part)."""
     if not v:
         return "-"
     s = str(v)
     d = _d(s)
     if not d:
         return s
-    t = s[11:16] if len(s) >= 16 and s[10] in "T " else ""
-    return f"{day_th(d)} {t}".strip()
+    t = bkk_stamp(s)
+    return f"{day_th(t.date())} {t:%H:%M}" if t else day_th(d)
 
 
 def lbl(label) -> str:

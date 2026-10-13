@@ -464,7 +464,7 @@ def plan_ladder(con, code: str, rows: list) -> dict:
                 or (norm(o.get("parent_unit")) or base) != r["parent_unit"]:
             out["changes"].append({"unit": r["unit"], "change": "edit"})
     for u in old:
-        if u not in table:
+        if u not in table and norm(u) != base:                 # the identity rule of a base unit (M2) is never a change a file makes
             out["changes"].append({"unit": u, "change": "remove"})
     from .units import unit_word
     recv_n, recv_w = norm(recv), unit_word(recv)            # "กล่อง (10 แพ็ค)" is the ladder unit "กล่อง"
@@ -487,7 +487,7 @@ def set_ladder(con, code: str, rows: list, who: str) -> dict:
     old = _ladder_rows(con, code)
     keep = {r["unit"] for r in plan["ladder"]}
     for r in old:
-        if norm(r["unit"]) not in keep:
+        if norm(r["unit"]) not in keep and norm(r["unit"]) != plan["base_unit"]:       # M2: the identity rule of the base unit stays
             con.execute("DELETE FROM bc_unit_rule WHERE ingredient_code=? AND unit=?", (code, r["unit"]))
     prev = {norm(r["unit"]): r for r in old}
     for r in plan["ladder"]:
