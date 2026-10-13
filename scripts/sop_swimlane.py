@@ -68,7 +68,7 @@ box("b_recv", "branch", 3, ["รับสินค้า: รับครบ / �
 box("b_var", "branch", 4, ["ผลต่างรายวันเทียบสูตร", "(ระบบคำนวณจากใบตัดเบิก)"], y=46.5)
 box("b_count", "branch", 5, ["ตรวจนับสิ้นเดือนครบทุกรายการ", "(ปิดงวดต้องนับ 100%) → ส่งผล", "เหตุผลผลต่างเกิน ฿500"], y=40)
 box("w_conf", "wh", 3, ["ยืนยันยอดส่ง + เหตุผล + PO", "ภายใน 14:00 ของวันตัดรอบ", "→ คลังจัดส่งแล้ว"])
-box("a_ops", "acc", 4, ["ฝ่ายปฏิบัติการ: ตรวจสัญญาณ", "เบิกเกิน 20% ติดต่อกัน 3 วัน"])
+box("a_ops", "acc", 4, ["ฝ่ายปฏิบัติการ: ตรวจสัญญาณ", "เบิกผิดสูตรต่อเนื่อง 3 วัน"])
 box("a_end", "acc", 5, ["บัญชี: ใบสรุปตัดเบิก (Excel)", "บันทึกเข้าระบบบัญชี → ล็อกงวด", "ผู้บริหาร: สรุปผลต่างรายเดือน"], kind="end")
 
 # the decision: centred in column 2 of the branch lane, level with the slip box
@@ -115,7 +115,7 @@ sc = B["s_claim"]
 line([mid(br, "right"), (xr, mid(br, "right")[1]), (xr, mid(sc, "left")[1]), mid(sc, "left")], ["b_recv", "s_claim"],
      label="ส่วนต่าง / เคลมภายหลัง", lpos=(xr + 5, LANE_Y["branch"][0] + 13, "start"))
 bv, ao, bc = B["b_var"], B["a_ops"], B["b_count"]
-line([mid(bv, "bottom"), mid(ao, "top")], ["b_var", "a_ops"], dashed=True, label="สัญญาณเบิกเกิน", lpos=(cx(4) + 6, (LANE_Y["wh"][0] + LANE_Y["wh"][1]) / 2 + 3, "start"))
+line([mid(bv, "bottom"), mid(ao, "top")], ["b_var", "a_ops"], dashed=True, label="สัญญาณเบิกผิดสูตร", lpos=(cx(4) + 6, (LANE_Y["wh"][0] + LANE_Y["wh"][1]) / 2 + 3, "start"))
 line([mid(bv, "right"), mid(bc, "left")], ["b_var", "b_count"])
 scl, ae = B["s_close"], B["a_end"]
 line([mid(scl, "bottom"), mid(bc, "top")], ["s_close", "b_count"], label="ขั้น 2–4, 7", lpos=(cx(5) + 6, (scl["y"] + scl["h"] + bc["y"]) / 2 + 3, "start"))
