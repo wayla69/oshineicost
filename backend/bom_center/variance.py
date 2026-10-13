@@ -592,9 +592,9 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         "slips": slip_coverage(con, branch_id, d0, d1),
         "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
                    "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days, "partial": bool(end_basis),
-                   "partial_th": (f"ปิดงวดด้วยการตรวจนับหมุนเวียน · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับหมุนเวียนล่าสุด · "
+                   "partial_th": (f"ปิดงวดด้วยการตรวจนับหมุนเวียน (รายการเดิม ก่อนมีมติให้นับครบทุกรายการ) · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับหมุนเวียนล่าสุด · "
                                   f"อีก {sum(1 for v in end_basis.values() if v == 'system')} รายการเป็น{SYSTEM_TH} ใช้จริงจึงเท่ากับใบตัดเบิกที่ยืนยันแล้ว "
-                                  "ผลต่างจากการนับจริงจะปรากฏเมื่อตรวจนับครบทุกรายการที่สิ้นไตรมาส") if end_basis else None},
+                                  "ผลต่างจากการนับจริงจะปรากฏเมื่อปิดงวดถัดไปด้วยการตรวจนับครบทุกรายการ") if end_basis else None},
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,
                    "receipts_confirmed_at": conf[1] if conf else None, "reasons_done": reasons_done,
                    "accounting_posted_at": conf[2] if conf else None,
@@ -608,9 +608,22 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
     }
 
 
+def branch_periods(con, branch_id: int) -> list:
+    """THE period rule (QA 2026-10-13, H1): [(begin_count, end_count, month)] oldest first. A period is two consecutive submitted month counts
+    and is priced in the month of the day BEFORE its end count - so an end count dated the last day of a month and one dated the 1st of the
+    next both close that month. The ใบสรุปตัดเบิก periods and the หน้างาน close steps both read this one function."""
+    from .stock import periods as _p
+    return [(b, e, _price_month(b["date"], e["date"])) for b, e in _p(con, branch_id)]
+
+
+def month_period(con, branch_id: int, month: str):
+    """(begin_count, end_count) of the period priced in `month` (the newest if several), or None."""
+    hit = [(b, e) for b, e, m in branch_periods(con, branch_id) if m == month]
+    return hit[-1] if hit else None
+
+
 def issue_periods(con, branch_id: int = None) -> list:
     """Every branch's begin/end periods (newest first) with their confirmation and posting state — no prices."""
-    from .stock import periods as _p
     conf = {r[0]: r[1:] for r in con.execute(
         "SELECT end_count_id, receipts_confirmed_by, receipts_confirmed_at, accounting_posted_at, accounting_posted_by"
         " FROM bc_variance_period")}
@@ -622,10 +635,10 @@ def issue_periods(con, branch_id: int = None) -> list:
     out = []
     for bid, name in con.execute(q + " ORDER BY b.name", args).fetchall():
         ps = []
-        for b, e in reversed(_p(con, bid)):
+        for b, e, month in reversed(branch_periods(con, bid)):
             cf = conf.get(e["count_id"])
             ps.append({"begin_count_id": b["count_id"], "end_count_id": e["count_id"], "begin_date": b["date"],
-                       "end_date": e["date"], "month": _price_month(b["date"], e["date"]),
+                       "end_date": e["date"], "month": month,
                        "receipts_confirmed": bool(cf), "receipts_confirmed_by": cf[0] if cf else None,
                        "accounting_posted_at": cf[2] if cf else None, "accounting_posted_by": cf[3] if cf else None})
         out.append({"branch_id": bid, "name": name, "periods": ps})

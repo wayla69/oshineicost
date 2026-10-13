@@ -1533,7 +1533,15 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ohb-line .ohb-line-r { display: block; width: 100%; min-height: 44px; box-sizing: border-box; margin-top: 6px; padding: 0 10px; font-size: 16px; border: 1px solid var(--border-control); border-radius: 10px; background: var(--bg-input); color: var(--text-primary); }
 .ohb-line-e { font-size: 13px; color: var(--bad-ink); margin-top: 2px; }
 .ohb-line-e:empty { display: none; }
-.ohb-actbar .brn-act { min-height: 48px; flex: 1 1 100%; }
+.ohb-actbar .brn-act { min-height: 48px; flex: 1 1 140px; }
+/* QA 2026-10-13 H2: the warehouse's confirm bar stays on screen over an 84-line order (as the branch pages' sticky rows do) */
+body.supply-phone .ohb-actbar { bottom: calc(56px - 76px + env(safe-area-inset-bottom, 0px)); }
+.ohb-actbar { position: sticky; bottom: 0; z-index: 5; flex-wrap: wrap; margin: 8px -4px 6px; padding: 8px 10px;
+  background: var(--bg-card, #fff); border-top: 1px solid var(--border); border-radius: var(--r-sm); }
+@media (max-width: 700px) { #ohbDetail { overflow: visible !important; } }       /* a scroll container would keep the sticky bar from sticking to the page */
+.ohb-po { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.ohb-actbar #ohbDStatus { flex: 1 1 100%; font-size: 14px; line-height: 20px; }
+.ohb-actbar #ohbDStatus:empty { display: none; }
 @media (max-width: 700px) { .ohb-chipbtn { min-height: 44px; } }
 .ohb-claimrow { display: block; padding: 8px 0; border-top: 1px solid var(--border); text-decoration: none; }
 .ohb-claimrow:focus-visible { outline: 2px solid var(--accent); }
@@ -1635,6 +1643,31 @@ select.supply-month { min-width: 150px; }
 }
 .brn-t-short { display: none; }
 @media (max-width: 700px) { body.supply-phone .brn-t-short { display: inline; } }
+/* QA 2026-10-13 L1 · every supply page on a phone: text at least 12 px, every control at least 44 px (the box captions on ตัดเบิก were 11 px,
+   the zone chips 26, the search box 28, ยืนยันใบตัดเบิก / ส่งใบสั่งซื้อ / บันทึกร่าง 40, "ไปที่งาน →" 40 and 24). Dense inline links ("ดูที่มา",
+   "รหัสในระบบอื่น") get the 44 px hit area from a negative margin, so a row keeps its height. */
+@media (max-width: 700px) {
+  .brn-row .brn-cap, .brn-srcbtn, .bmc-code { font-size: 12px; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is([class*="text-[10px]"], [class*="text-[10.5px]"], [class*="text-[11px]"],
+      [style*="font-size:10px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size:11.5px"], [style*="font-size: 11px"],
+      #brnIssProgress, #brnProgress, #brnIssProgress b, #brnProgress b) { font-size: 12px !important; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, textarea, summary, [role="button"],
+      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])) { min-height: 44px; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, [role="button"]) { min-width: 44px; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) label:has(> input[type="file"]) { display: inline-flex; align-items: center; min-height: 44px; }
+  /* every link: a 44 px box (a long link may wrap, so no negative margin) ... */
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) a[href]:not(.ohb-claimrow):not(.nav-item) { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  /* ... except the short links inside a line of text, which keep the line's height and borrow the 44 px from the lines around them */
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(.brn-why, .brn-srcbtn, a.whitespace-nowrap, a.text-xs, a[class*="text-["], [class*="text-["] > a,
+      [class*="text-["] > span > a, td > a:not(.ohb-claimrow), li > a:not(.ohb-claimrow)) { margin-block: -13px; }
+  body.supply-phone .brn-sticky-bottom { height: auto; min-height: 56px; }
+  body.supply-phone .brn-sticky-bottom button { height: auto; min-height: 44px; }
+  body.supply-phone #brn-pane-issue .brn-sticky-bottom, body.supply-phone #brn-pane-order .brn-sticky-bottom { min-height: 56px; }
+  body.supply-phone .brn-filterrow { height: auto; min-height: 48px; overflow: visible; flex-wrap: wrap; }
+  body.supply-phone .brn-filterrow input[type="search"] { min-height: 44px; }
+  body.supply-phone .brn-zonebar .brn-zones button { min-height: 44px; }
+  body.supply-phone #tab-branchstock > .brn-cluster .brn-big-btn { min-height: 44px; }
+}
 /* PR-M7 · เบิกเหมือนเมื่อวาน · สั่งตามยอดแนะนำทั้งหมด (one outlined button each) and ตัวอักษรใหญ่ (the branch's x1.15 toggle) */
 .brn-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .brn-quick button { border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: var(--r-sm); padding: 8px 14px; min-height: 44px; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -1912,6 +1945,14 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ</b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
       <button id="msInstallBtn" onclick="msInstallApp()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">ติดตั้ง</button>
       <button onclick="msInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted,#64748b);font-size:20px;flex-shrink:0">×</button>
+    </div>
+  </div>
+
+  <!-- QA M4: a supply role's way back to its own work (shown by applyPermissions, 01-core.js) -->
+  <div id="msSupply" class="ms-section" style="display:none;margin-top:10px">
+    <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>วัตถุดิบและใบสั่งซื้อ</b><br><span style="font-size:12px;color:var(--text-muted,#64748b)">งานของฉัน ใบสั่งซื้อ และปิดงวดเดือน</span></span>
+      <button onclick="msOpenSupply()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">หน้างาน →</button>
     </div>
   </div>
 

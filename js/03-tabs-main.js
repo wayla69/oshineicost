@@ -373,7 +373,10 @@ async function startApp() {
       await initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date
       loadMobileSummary();
     } else {
+      const deepLinked = !!_supplyPendingLink;
       await ensureDesktopBooted();
+      // QA M4 · on a phone a supply role starts on หน้างาน, not on the Daily Brief the desktop shell opens with
+      try { if (!deepLinked && window.matchMedia('(max-width:700px)').matches && _supplyPhoneRole() && _phoneModeSaved() !== 'summary') supplyOpen(); } catch (e) { console.warn('supply landing:', e); }
       initDataCoverageNote();
       // First login of a person: the role's three tabs, on top of the home page
       try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }

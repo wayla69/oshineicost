@@ -59,11 +59,11 @@ def test_the_template_holds_many_menus_and_imports_back(con):
     samples = [r for r in wb["สูตร"].iter_rows(min_row=2, values_only=True)]
     assert len(samples) == 3 and all("(ตัวอย่าง ลบก่อนนำเข้า)" in r[1] for r in samples)
     assert len({r[0] for r in samples}) == 2                                    # two menus, three lines
-    # the sample rows left in by mistake import as errors, never as recipes
+    # QA L4d: the sample rows left in by mistake are skipped (no recipe, no error)
     buf = io.BytesIO()
     wb.save(buf)
     out = R.import_flat(c, buf.getvalue(), rid, "innovation", modules=KITCHEN)
-    assert out["recipes"] == 0 and len(out["errors"]) == 2
+    assert out["recipes"] == 0 and out["errors"] == [] and out["lines"] == 0
     # filled in: two menus, three lines
     filled = _fill(R.template_flat(c, rid), [
         ["OTHBFSSM00020", "ซาชิมิปูอัด", 459, 1, "13-01-009", "ปูอัด", 45, "กรัม", None, "", None],

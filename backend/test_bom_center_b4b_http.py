@@ -7,7 +7,7 @@ from openpyxl import load_workbook
 
 def test_the_endpoints_answer_and_refuse(client):
     r = client.get("/api/bom-center/close-settings").json()
-    assert r["reason_min_baht"] == 500 and r["cycle_counts"] is True and r["reason_min_baht_max"] == 100000
+    assert r["reason_min_baht"] == 500 and r["cycle_counts"] is False and r["reason_min_baht_max"] == 100000
     assert client.post("/api/bom-center/close-settings", json={"reason_min_baht": 100001}).status_code == 400
     assert client.post("/api/bom-center/close-settings", json={"reason_min_baht": -5}).status_code == 400
     ok = client.post("/api/bom-center/close-settings", json={"reason_min_baht": 800, "cycle_counts": False})
@@ -18,7 +18,9 @@ def test_the_endpoints_answer_and_refuse(client):
     assert client.get("/api/bom-center/stock/plan").status_code == 400                    # the centre must name a branch
     assert client.get("/api/bom-center/stock/sheet?branch_id=1&mode=weekly").status_code == 400
     assert client.post("/api/bom-center/stock/partial-close?branch_id=1", json={"month": "2026-13"}).status_code == 400
-    assert client.post("/api/bom-center/stock/partial-close?branch_id=1", json={"month": "2026-09"}).status_code == 400      # a quarter end
+    for m in ("2026-09", "2026-10"):                                                       # withdrawn 2026-10-13: no month is closed on a partial count
+        x = client.post("/api/bom-center/stock/partial-close?branch_id=1", json={"month": m})
+        assert x.status_code == 400 and "ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ" in x.json()["detail"]
     b = client.get("/api/bom-center/backlog?top=3").json()
     assert set(b) >= {"window", "items", "top", "counts", "total", "kind_th", "note"} and len(b["top"]) <= 3
     assert client.get("/api/bom-center/feedback").json() == {"tasks": []}

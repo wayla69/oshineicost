@@ -6,8 +6,8 @@ The promises, one block per proposal item:
   3.3  a reason is asked only when a line is outside its class threshold AND at least `bc_reason_min_baht` baht off (default 500); a line
        at -100 % (used 0 against a recipe), a period with no receipt, a reconciliation period with a selling day that has no confirmed slip
        are labelled "ข้อมูลไม่ครบ" and not asked; the same rule counts `needs_reason` in the variance period, the reconciliation, หน้างาน;
-  3.4  the class-A items are counted every week (cycle counts, their own tables); a month that is not a quarter end closes on a PARTIAL end
-       count (the latest weekly counts + the system stock, labelled), a quarter end keeps the full count; one setting turns it all off;
+  3.4  the class-A items MAY be counted every week (cycle counts, their own tables, off by default): an extra check that never closes a
+       period. The partial month close of the first draft was withdrawn on 2026-10-13 (owner: month-end close = a count of every item);
   2.6  the reasons make tasks: the same item over the recipe in 2 branches or 2 months, a branch that miscounts 3 times, an item ordered
        less 3 rounds because the shelf had more; a task closes by an acknowledgement (append-only) or when the cause stops;
   3.5  the data-quality backlog is ranked by the plates each item touches, the top 10 on หน้างาน;

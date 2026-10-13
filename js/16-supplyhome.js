@@ -440,5 +440,21 @@ function _shmToast(it) {
     <div class="flex gap-2 mt-2">${it.go && it.go.tab ? `<button onclick="this.closest('.shm-toast').remove();_shmOpen(${esc(JSON.stringify(it.go))})" class="text-xs rounded-lg px-3 py-1" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>` : ''}
       <button onclick="this.closest('.shm-toast').remove()" class="text-xs rounded-lg px-3 py-1" style="border:1px solid var(--border);color:var(--text-secondary);background:transparent;cursor:pointer">ปิด</button></div>`;
   document.body.appendChild(el);
+  _shmToastPlace(el);
   setTimeout(() => { try { el.remove(); } catch (e) {} }, 12000);
+}
+// QA 2026-10-13 M7 · on a phone the toast sits ABOVE the page's sticky action bar (ส่งใบสั่งซื้อ, ยืนยันใบตัดเบิก, ยืนยันยอดส่ง, ...), whatever
+// its height, so it never covers a button or the first input; without such a bar it clears the bottom strip as before.
+function _shmToastPlace(el) {
+  let phone = false;
+  try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
+  if (!phone) return;
+  el.style.left = '12px'; el.style.right = '12px'; el.style.maxWidth = 'none';
+  const bars = [...document.querySelectorAll('.brn-sticky-bottom, .brn-rcv-bar, .ohb-actbar')].filter(b => {
+    const r = b.getBoundingClientRect();
+    return r.height > 0 && r.top < window.innerHeight && r.bottom > 0;
+  });
+  if (!bars.length) return;
+  const top = Math.min(...bars.map(b => b.getBoundingClientRect().top));
+  el.style.setProperty('bottom', Math.round(window.innerHeight - top + 8) + 'px', 'important');
 }

@@ -1589,7 +1589,7 @@ async function saveCostRow(skuId, skuCode) {
 }
 
 async function initCostCategories() {
-  if (!hasModule('sales.overview')) return;      // the branch login never sees the cost pages — skip the 403
+  if (!hasModule('cost.analysis')) return;       // GET /api/cost needs cost.analysis (QA L4a: Sales Support and operation do not hold it) — skip the 403
   const data = await api(`${API}/api/cost`);
   const cats = [...new Set(data.map(r => r.category))].sort();
   const sel  = document.getElementById('costCatFilter');

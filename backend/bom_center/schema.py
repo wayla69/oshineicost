@@ -280,7 +280,7 @@ MIGRATIONS = (
     ("bc_ingredient_alias", "created_at", "TEXT"),
     # PR-B2 (4.1) — a short display name for the branch screens (the register name is the supplier's spec and runs to 2-3 lines)
     ("bc_ingredient", "short_name", "TEXT"),
-    # batch 4b (3.4) - a PARTIAL end count (stock.partial_close) is an ordinary 'end' count whose lines say where each figure came
+    # batch 4b (3.4) - a PARTIAL end count (stock.partial_close, withdrawn 2026-10-13: old rows only) is an ordinary 'end' count whose lines say where each figure came
     # from: basis 'system' = the system stock carried to the date (not counted), 'cycle' = the latest weekly count carried to it,
     # NULL = counted that day. partial = 1 on the count header. Both only added, so no existing row or CHECK is touched.
     ("bc_stock_count", "partial", "INTEGER"),

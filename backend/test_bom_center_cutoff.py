@@ -255,7 +255,9 @@ def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: 
     st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
     assert st["begin_count"]["status"] == "todo"
     # a month-end import for the same date is accepted, and is the begin
-    r = ST.import_count(c, 1, "2026-09-01", [{"code": CRAB, "qty": 2, "unit": "แพ็ค 1 กก.", "note": None}], "u", dry_run=False)
+    every = [{"code": it["code"], "qty": 2 if it["code"] == CRAB else 0, "unit": "แพ็ค 1 กก." if it["code"] == CRAB else it["count_unit"], "note": None}
+             for z in ST.sheet(c, 1)["zones"] for it in z["items"]]
+    r = ST.import_count(c, 1, "2026-09-01", every, "u", dry_run=False)
     assert r["ok"] and r["kind"] == "begin"
     st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
     assert st["begin_count"]["status"] == "done"
@@ -295,8 +297,8 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     d = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))
     assert set(d) == {"order_due_1", "order_due_2", "order_due_salmon"}
     r1, r2, sal = d["order_due_1"], d["order_due_2"], d["order_due_salmon"]
-    assert r1["title"] == "ส่งใบสั่งซื้อภายใน จ. 5/10 เวลา 13:15 · รอบส่งวันพุธ (7/10)"
-    assert sal["title"] == "ส่งใบสั่งซื้อแซลมอนสด ภายใน ส. 10/10 เวลา 13:15 · รอบส่งวันจันทร์ (12/10)"
+    assert r1["title"] == "ส่งใบสั่งซื้อภายใน จ. 5/10 เวลา 13:15 · รอบ 1 (ส่ง 7/10)"
+    assert sal["title"] == "ส่งใบสั่งซื้อภายใน ส. 10/10 เวลา 13:15 · แซลมอนสด (ส่ง 12/10)"
     assert r1["seq"] == 310 and r1["owner_modules"] == ["branch.stock"] and r1["owner_th"] == "สาขา" and r1["branch_id"] == 1
     assert r1["go"] == {"tab": "branchstock", "pane": "order", "extra": {"round": "1", "delivery": "2026-10-07"}, "branch": 1}
     assert (r1["round_th"], r1["delivery"], r1["delivery_th"], r1["cutoff_th"], r1["cutoff_date"]) == \

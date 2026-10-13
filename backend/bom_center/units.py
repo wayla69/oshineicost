@@ -182,6 +182,16 @@ def chain_text(parts: list) -> str:
     return f"≈ {t} (เฉลี่ย" + (" " + " · ".join(notes) if notes else "") + ")"
 
 
+def is_identity_step(base_unit, row: dict) -> bool:
+    """QA 2026-10-13 M2 · "แพ็ค = 1 แพ็ค" on an item whose base unit IS แพ็ค (the central catalogue stores one to carry a label): it
+    converts nothing, so a file never needs it - the export leaves it out and the import skips it without a word."""
+    u = norm(row.get("unit"))
+    if not u or u != norm(base_unit):
+        return False
+    parent = norm(row.get("parent_unit")) or None
+    return (parent is None or parent == u) and _num(row.get("qty_in_parent")) == 1.0
+
+
 def check_ladder(base_unit: str, rows: list) -> list:
     """Problems of one item's WHOLE ladder (pure; an empty list = acceptable). rows = [{unit, parent_unit, qty_in_parent,
     conv_kind, range_min, range_max}] — the stored column names."""

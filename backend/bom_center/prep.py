@@ -602,6 +602,17 @@ FLAT_COLS = ("prepared_code", "prepared_name", "batch_yield_qty", "batch_unit", 
              "ingredient_name", "qty", "unit", "note", "mode", "no_loss")     # mode / no_loss (PR-U): a portion recipe survives the round trip
 
 
+# QA 2026-10-13 L4b · the template's headers are Thai; the importer reads the Thai and the old English names alike
+FLAT_HEADERS_TH = ("รหัสสินค้ากึ่งสำเร็จ", "ชื่อสินค้ากึ่งสำเร็จ", "ปริมาณที่ได้ต่อ 1 สูตร", "หน่วยที่ได้", "ลำดับ", "รหัสวัตถุดิบ",
+                   "ชื่อวัตถุดิบ", "จำนวนที่ใช้", "หน่วยที่ใช้", "หมายเหตุ", "ชนิดสูตร", "ไม่คิดส่วนสูญเสีย")
+_FLAT_ALIAS = {th.replace(" ", ""): en for th, en in zip(FLAT_HEADERS_TH, FLAT_COLS)}
+
+
+def _flat_key(v) -> str:
+    k = _clean(v).replace(" ", "")
+    return _FLAT_ALIAS.get(k, _clean(v))
+
+
 def export_flat(con) -> list:
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     rows = []
@@ -619,10 +630,10 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
     wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     ws = wb.worksheets[0]
     rows = list(ws.iter_rows(values_only=True))
-    hdr = next((i for i, r in enumerate(rows[:5]) if "prepared_code" in [_clean(v) for v in r]), None)
+    hdr = next((i for i, r in enumerate(rows[:5]) if "prepared_code" in [_flat_key(v) for v in r]), None)
     if hdr is None:
-        raise ValueError("ไม่พบหัวคอลัมน์ prepared_code · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
-    h = {_clean(v): j for j, v in enumerate(rows[hdr]) if v}
+        raise ValueError("ไม่พบหัวคอลัมน์ รหัสสินค้ากึ่งสำเร็จ · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
+    h = {_flat_key(v): j for j, v in enumerate(rows[hdr]) if v}
     grp, errors = {}, []
     for i, r in enumerate(rows[hdr + 1:], start=hdr + 2):
         def g(k):

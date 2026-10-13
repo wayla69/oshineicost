@@ -167,34 +167,59 @@ def test_a_branch_login_is_pinned_to_its_branch(db, monkeypatch):
     assert RB._stock_branch(db, None, 1) == 1
 
 
-# ── PR-M4 · "ทุกรายการที่สั่งต้องนับ": a count is submitted only with every required item counted ──
+# ── owner 2026-10-13 · "ปิดงวดสิ้นเดือนต้องนับ 100%": a count is submitted only with EVERY item of the sheet counted ──
 def _required(sh):
     return [i for z in sh["zones"] for i in z["items"] if i["required"]]
 
 
-def test_a_count_with_an_uncounted_required_item_is_refused(db):
-    req = _required(ST.sheet(db, 1, AS_OF))
-    assert len(req) >= 2, "the fixture must have a few required items (monitored or class A)"
-    first = req[0]
-    ST.save(db, 1, [{"code": first["code"], "qty": 1, "unit": first["count_unit"]}], "udon", count_date="2026-10-01")
+def _everything(sh):
+    return [i for z in sh["zones"] for i in z["items"]]
+
+
+def _zeros(sh, qty=0):
+    return [{"code": i["code"], "qty": qty, "unit": i["count_unit"]} for i in _everything(sh)]
+
+
+def test_a_count_with_an_uncounted_item_is_refused(db):
+    items = _everything(ST.sheet(db, 1, AS_OF))
+    assert len(items) >= 3, "the fixture must have a few items on the sheet"
+    first = items[0]
+    ST.save(db, 1, [{"code": first["code"], "qty": 1, "unit": first["count_unit"]}], "udon", count_date="2026-10-01")      # a draft is always allowed
     with pytest.raises(ValueError) as e:
         ST.save(db, 1, [], "udon", submit=True, count_date="2026-10-01")
     msg = str(e.value)
-    n = len(req) - 1
-    assert msg.startswith(f"ยังมีรายการที่ต้องนับ {n} รายการ ที่ยังไม่ได้นับ (เช่น ") and msg.endswith(") นับให้ครบก่อนส่ง")
-    assert req[1]["name"] in msg and first["name"] not in msg
+    n = len(items) - 1
+    assert msg.startswith(f"ยังไม่ได้นับ {n} รายการ ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ (เช่น ") and msg.endswith(")")
+    assert items[1]["name"] in msg and first["name"] not in msg
     db.rollback()
     assert ST.draft_of(db, 1) is None                     # the refused call stored nothing (the router rolls back too)
-    # a 0 is a count: every required item at 0 is accepted
-    out = ST.save(db, 1, [{"code": i["code"], "qty": 0, "unit": i["count_unit"]} for i in req], "udon", submit=True,
-                  count_date="2026-10-01")
-    assert out["status"] == "submitted" and out["lines"] == len(req)
+    # a 0 is a count: every item at 0 is accepted
+    out = ST.save(db, 1, _zeros(ST.sheet(db, 1, AS_OF)), "udon", submit=True, count_date="2026-10-01")
+    assert out["status"] == "submitted" and out["lines"] == len(items)
 
 
-def test_a_file_import_for_a_closed_month_is_not_held_to_the_required_list(db):
-    out = ST.import_count(db, 1, "2026-09-01", [{"code": "S-011", "qty": 2.0, "unit": "ถุง 1 กก.", "note": None}],
-                          "analyst", dry_run=False)
+def test_a_file_import_must_carry_every_item_and_says_what_it_becomes(db):
+    """Owner 2026-10-13 (replaces QA M5's "refuse unless confirmed"): a file that leaves ANY item of the sheet blank is refused, dry run and
+    saving alike, with no override; the answer says whether the file is the ต้นงวด or the ปลายงวด and how many items it counts."""
+    part = [{"code": "S-011", "qty": 2.0, "unit": "ถุง 1 กก.", "note": None}]
+    pre = ST.import_count(db, 1, "2026-09-01", part, "analyst")
+    sheet_n = len(_everything(ST.sheet(db, 1)))
+    assert pre["incomplete"] and not pre["ok"] and pre["blank"] == sheet_n - 1 and pre["kind"] == "begin" and pre["kind_th"] == "ต้นงวด"
+    assert pre["counted_th"] == f"นับมา 1 จาก {sheet_n} รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ"
+    assert pre["incomplete_th"].startswith(f"ยังไม่ได้นับ {sheet_n - 1} รายการ ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ (เช่น ") and pre["missing"]
+    with pytest.raises(ValueError, match="ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"):
+        ST.import_count(db, 1, "2026-09-01", part, "analyst", dry_run=False)
+    with pytest.raises(TypeError):                                                           # there is no accept_partial any more
+        ST.import_count(db, 1, "2026-09-01", part, "analyst", accept_partial=True)
+    assert ST.draft_of(db, 1) is None and ST.last_submitted(db, 1) is None
+    full = [{**ln, "unit": ln["unit"], "note": None} for ln in _zeros(ST.sheet(db, 1), 2)]
+    ok = ST.import_count(db, 1, "2026-09-01", full, "analyst")
+    assert ok["ok"] and not ok["incomplete"] and ok["blank"] == 0 and ok["counted"] == sheet_n
+    out = ST.import_count(db, 1, "2026-09-01", full, "analyst", dry_run=False)
     assert out["ok"] and out["status"] == "submitted"
+    nxt = ST.import_count(db, 1, "2026-10-01", full, "analyst")                              # the second file is the END of the period
+    assert nxt["kind"] == "end" and nxt["kind_th"] == "ปลายงวด" and nxt["closes"] == {"begin_date": "2026-09-01", "end_date": "2026-10-01"}
+    assert "ปิดงวด" in nxt["role_th"] and "1/9/2026" in nxt["role_th"] and nxt["ok"]
 
 
 def test_last_count_is_read_in_the_unit_counted_now(db):

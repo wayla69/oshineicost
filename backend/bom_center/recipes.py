@@ -638,6 +638,8 @@ def import_flat(con, data: bytes, release_id: int, who: str, modules=None) -> di
             sku = str(r[0] or "").strip()
             if not sku:
                 continue
+            if "(ตัวอย่าง" in " ".join(str(c) for c in r if c):
+                continue                        # QA L4d: the template's example rows ("(ตัวอย่าง ลบก่อนนำเข้า)", and the older wording) are never recipes
             try:
                 qty = float(r[6] or 0)
             except (TypeError, ValueError):

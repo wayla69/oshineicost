@@ -267,9 +267,10 @@ def bc_ingredients(month: Optional[str] = Query(None), q: Optional[str] = Query(
             problems.append("ไม่มีขนาดบรรจุ")
         if r["price_per_base"] is None and r["kind"] != "zero_by_design":
             problems.append("ไม่มีราคา")
-        elif (r["price_age_months"] or 0) > 2:
-            problems.append(f"ราคาเก่า {r['price_age_months']} เดือน")
-        r["problems"] = problems
+        r["problems"] = problems                         # QA L2: only what blocks costing - a missing base unit, pack size or price
+        # … and the softer flags, apart: a price carried forward from an older month is normal until the next price file (most of the
+        # register in the middle of a month), so it is a note, not a problem; a blank minimum order / shelf life is in `gaps` below
+        r["notes"] = [f"ราคายกมา {r['price_age_months']} เดือน"] if (r["price_age_months"] or 0) > 2 else []
         r["gaps"] = _mg.row_gaps(r)                      # PR-B4a (1.5): blank fields the order logic reads (never a "problem": most rows have them)
         if issues and not problems:
             continue
@@ -2096,8 +2097,8 @@ def bc_prep_template():
         rows = _pr.export_flat(con)
     wb = Workbook()
     ws = wb.active
-    _sheet(ws, "สูตรกึ่งสำเร็จ", list(_pr.FLAT_COLS),
-           "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · batch_yield_qty และ batch_unit = ปริมาณที่ได้ต่อ 1 สูตร · นำเข้าแล้วสูตรของรหัสนั้นถูกแทนที่ทั้งชุด")
+    _sheet(ws, "สูตรกึ่งสำเร็จ", list(_pr.FLAT_HEADERS_TH),
+           "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · “ปริมาณที่ได้ต่อ 1 สูตร” และ “หน่วยที่ได้” = ปริมาณที่ได้ต่อ 1 สูตร · นำเข้าแล้วสูตรของรหัสนั้นถูกแทนที่ทั้งชุด")
     for r in rows:
         ws.append(r)
     return _xlsx(wb, "bom_center_sub_recipes.xlsx")
@@ -2379,8 +2380,8 @@ class PartialCloseBody(BaseModel):
 
 @router.post("/api/bom-center/stock/partial-close", dependencies=[Depends(require_write_token)])
 def bc_stock_partial_close(body: PartialCloseBody, request: Request, branch_id: Optional[int] = Query(None)):
-    """Batch 4b (3.4): close a month that is not a quarter end on a PARTIAL end count dated the 1st of the next month - the latest weekly
-    counts of the class-A items plus the system stock (confirmed slips) for the rest, labelled "คงเหลือตามระบบ (ไม่ได้นับ)". Idempotent."""
+    """Withdrawn by the owner's decision of 2026-10-13 ("ปิดงวดสิ้นเดือนต้องนับ 100%"): every call is refused with 400 - a month is closed
+    only by a full count of every item (POST /stock/count or /stock/count-import)."""
     _month_or_400(body.month)
     with get_db() as con:
         _ensure(con)
@@ -3896,7 +3897,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
             for ln in o["lines"]:
                 q = ln["processed_units"] if ln["processed_units"] is not None else ln["confirmed_units"]
                 if q:
-                    per_branch.append([bname, dlv, o["cycle_date"], o["round"], ln["code"], ln["name"], q,
+                    per_branch.append([bname, dlv, o["cycle_date"], _fc.ROUND_TH.get(str(o["round"]), o["round"]), ln["code"], ln["name"], q,
                                        "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"],
                                        "ส่งล่าช้า (มีค่าปรับ)" if o.get("late") else "",
                                        (f"คีย์แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
@@ -3973,7 +3974,7 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
                                        "ยืนยันยอดส่งทันเวลา", "ล่าช้า"],
            f"รอบส่งที่ปฏิทินกำหนด {d0} ถึง {d1} · สถานะ “ตามแนะนำ” หมายถึงยอดยืนยันต่างจากยอดแนะนำไม่เกิน ±{_hub.TOL_PCT:g}%")
     for r in c["rows"]:
-        ws.append([r["cycle_date"], r["branch"], r["round"], th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
+        ws.append([r["cycle_date"], r["branch"], _fc.ROUND_TH.get(str(r["round"]), r["round"]), th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
                    r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
                    "ส่งล่าช้า (มีค่าปรับ)" if r.get("late") else ""])
@@ -4086,10 +4087,14 @@ async def bc_central_import(request: Request, file: UploadFile = File(...), dry_
 @router.get("/api/bom-center/central.xlsx")
 def bc_central_xlsx():
     """The list in the report's own layout + the base-unit factor: edit it and import it back."""
-    from openpyxl import Workbook
     with get_db() as con:
         _ensure(con)
         d = _ce.items(con)
+    return _xlsx(_central_workbook(d), "bom_center_central_list.xlsx")
+
+
+def _central_workbook(d: dict):
+    from openpyxl import Workbook
     wb = Workbook()
     heads = ["ลำดับ", "รหัสสินค้า", "รายละเอียด", "หน่วยนับ", "ราคาขาย", "หน่วยขาย", "1 หน่วยขาย = หน่วยฐาน",
              "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของอัตราแปลง", "งวดราคา"]
@@ -4102,7 +4107,7 @@ def bc_central_xlsx():
                    r["base_unit"], r["recv_unit"], r["factor_how"], r["price_month"]])
     for col, w in (("C", 48), ("I", 22), ("J", 52)):
         ws.column_dimensions[col].width = w
-    return _xlsx(wb, "bom_center_central_list.xlsx")
+    return wb
 
 
 @router.get("/api/bom-center/central/links")
@@ -4236,7 +4241,8 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
 @router.post("/api/bom-center/stock/count-import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_stock_count_import(request: Request, file: UploadFile = File(...), count_date: str = Query(...),
                                 branch_id: Optional[int] = Query(None), dry_run: bool = Query(True)):
-    """A whole count from the template, submitted with the date it was counted."""
+    """A whole count from the template, submitted with the date it was counted. The answer says whether the file becomes the ต้นงวด or the
+    ปลายงวด (closing a period) and how many items it counts; a file that leaves any item of the sheet blank is refused (no override)."""
     raw = await _read_xlsx(file)
     try:
         lines = _st.read_count_file(raw)
