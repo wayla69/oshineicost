@@ -487,7 +487,7 @@ def test_no_branch_screen_writes_a_record_number():
         src = _src(rel)
         assert not re.search(r"ORDER-|CLAIM-|CENTRAL-", src), rel
         assert not re.search(r"#\$\{|#\{|ใบสั่งซื้อ #\d|เคลม #\d", src), rel
-    assert "_brnRoundDay(" in BRN and BRN.count("_brnRoundDay(") >= 5
+    assert "_bmcRoundDay(" in BRN and BRN.count("_bmcRoundDay(") >= 5                    # the one helper now lives in 13-bom-center.js
     todo = _src("backend/bom_center/todo.py")
     assert not re.search(r"f\"[^\"\n]*#\{", todo)                                        # no "#9" in a sentence the floor reads
     claims = _src("backend/bom_center/claims.py")
@@ -496,8 +496,8 @@ def test_no_branch_screen_writes_a_record_number():
 
 @needs_node
 def test_an_order_is_named_by_its_round_and_day():
-    pre = _fn(BRN, "_brnIssDm") + "const _BRN_ROUNDS = [['1','รอบ 1'],['2','รอบ 2'],['salmon','แซลมอนสด']];\n" + _fn(BRN, "_brnRoundLabel") + _fn(BRN, "_brnRoundDay")
-    assert _node(pre, "[_brnRoundDay({round:'2', delivery:'2026-10-10'}), _brnRoundDay({round:'salmon', cycle_date:'2026-10-17'}), _brnRoundDay({round:'1'})]") \
+    pre = _fn(_src("js/01-core.js"), "_isoParts") + _const(BMC, "_BMC_ROUND_TH") + _fn(BMC, "_bmcDm") + _fn(BMC, "_bmcRoundDay")
+    assert _node(pre, "[_bmcRoundDay({round:'2', delivery:'2026-10-10'}), _bmcRoundDay({round:'salmon', cycle_date:'2026-10-17'}), _bmcRoundDay({round:'1'})]") \
         == ["รอบ 2 (ส่ง 10/10)", "แซลมอนสด (ส่ง 17/10)", "รอบ 1"]
 
 

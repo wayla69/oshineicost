@@ -45,7 +45,7 @@ function _ohbBtn(label, on, primary) {
 const _OHB_ACC_GUIDE = '<a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a>';
 const _OHB_HELP = {
   queue: {
-    warehouse: ['ระบุยอดส่งจริงของแต่ละรายการภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · กดที่เลขที่ใบเพื่อเปิดรายการ',
+    warehouse: ['ระบุยอดส่งจริงของแต่ละรายการภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · กดที่ชื่อสาขาเพื่อเปิดรายการ',
       'ยอดที่ต่างจากที่สาขายืนยันต้องเลือกเหตุผลของรายการนั้น · เลขที่ PO ไม่บังคับ แต่ควรกรอกไว้ใช้ติดตาม',
       'ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15 สองวันก่อนวันส่ง'],
     salessupport: ['ใบสั่งซื้อที่คลังจัดส่งแล้ว: ดาวน์โหลด Excel เพื่อคีย์เข้าระบบบัญชี แล้วติ๊กใบที่คีย์แล้วและกด “คีย์บัญชีแล้ว”',
@@ -353,7 +353,7 @@ async function ohbMonthSave() {
     const d = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=false&set_local=${setLocal}${ids.length ? '&branch_ids=' + ids.join(',') : ''}`, { method: 'POST', body: fd });
     const dl = d.deliveries.branches.filter(b => ids.includes(String(b.branch_id)));
     _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (วัตถุดิบใหม่ ${d.catalogue.inserted}${d.catalogue.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.catalogue.aliased}` : ''}${d.catalogue.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.catalogue.requested}` : ''}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
-      + (dl.length ? ' · ใบรับ: ' + dl.map(b => `${b.branch || b.label} ${b.receipt_id ? 'เลขที่ ' + b.receipt_id + ' (' + b.lines + ' รายการ)' : (b.error || 'ไม่มีรายการ')}`).join(' · ') : ''), 'var(--good-ink)');
+      + (dl.length ? ' · ใบรับ: ' + dl.map(b => `${b.branch || b.label} ${b.receipt_id ? b.lines + ' รายการ' : (b.error || 'ไม่มีรายการ')}`).join(' · ') : ''), 'var(--good-ink)');
     _ohbMonthFile = null; _ohbMonthPre = null;
     bmcUcReset('ohbUcCentral');
     document.getElementById('ohbDelReport').innerHTML = '';
@@ -388,7 +388,7 @@ async function ohbCntImport(input) {
         + '\nส่งแล้วแก้ไม่ได้ ต้องการนับใหม่ให้นำเข้าเป็นวันที่ใหม่',
         { title: 'ยืนยันการส่งผลตรวจนับ', ok: 'ส่งผลตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
-    _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับเลขที่ ${d.count_id} (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
+    _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับวันที่ ${fmtDay(day)} แล้ว (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
     ohbLoadCentral();                       // the next missing date, the step statuses
   } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
@@ -435,7 +435,7 @@ function _ohbCard(o) {
     ${_ohbCanKey() && _ohbKeyable(o) ? `<label class="ohb-card-chk" onclick="event.stopPropagation()"><input type="checkbox" aria-label="เลือกใบสั่งซื้อของ${esc(o.branch)}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)"></label>` : ''}
     <div class="ohb-card-main">
       <div class="ohb-card-t">${esc(o.branch)}</div>
-      <div class="ohb-card-s">${esc(_OHB_RND[o.round] || o.round)} · ${o.lines} รายการ</div>
+      <div class="ohb-card-s">${esc(_bmcRoundDay(o))} · ${o.lines} รายการ</div>
       <div class="ohb-card-v">${esc(o.value_label || 'มูลค่า')} ฿${_bmcNum(o.value, 0)}</div>
       <div class="ohb-card-c">${chips}</div></div></div>`;
 }
@@ -456,9 +456,9 @@ function ohbRenderQueueList() {
     const phone = _ohbPhone();
     box.innerHTML = days.length ? days.map(d => `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(d))} · ${byDay[d].length} ใบสั่งซื้อ · ${dayTotal(byDay[d])}</div>` +
       byDay[d].map(o => phone ? _ohbCard(o) : `<div style="border-top:1px solid var(--border);padding:6px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" class="text-xs">
-        ${_ohbCanKey() && _ohbKeyable(o) ? `<input type="checkbox" aria-label="เลือกใบสั่งซื้อ #${o.order_id}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)">` : ''}
-        <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">#${o.order_id} ${esc(o.branch)}</a>
-        <span>${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}</span><span>${o.lines} รายการ · ${esc(o.value_label || 'มูลค่า')} ฿${_bmcNum(o.value, 0)}</span>
+        ${_ohbCanKey() && _ohbKeyable(o) ? `<input type="checkbox" aria-label="เลือกใบสั่งซื้อ ${esc(_bmcOrderTitle(o))}" ${_ohbKeyedSel.has(o.order_id) ? 'checked' : ''} onchange="ohbKeyToggle(${o.order_id},this.checked)">` : ''}
+        <a href="#" onclick="ohbOpen(${o.order_id});return false" style="color:var(--accent);font-weight:600">${esc(_bmcOrderTitle(o))}</a>
+        <span>ตัดรอบ ${esc(fmtDay(o.cycle_date))}</span><span>${o.lines} รายการ · ${esc(o.value_label || 'มูลค่า')} ฿${_bmcNum(o.value, 0)}</span>
         ${o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : ''}
         ${o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : ''}
         ${o.stock_deducted ? '' : _bmcChip('ไม่มีผลตรวจนับสิ้นเดือน', 'var(--text-muted)')}
@@ -554,12 +554,12 @@ function ohbRenderDetail() {
         ${l.received_units != null ? `<div class="text-[10.5px]" style="color:var(--text-muted)">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</td></tr>`;
   }).join('');
   document.getElementById('ohbDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">${phone ? '' : '#' + o.order_id + ' '}${esc(o.branch || '')} · ${esc(_OHB_RND[o.round] || o.round)} · ตัดรอบ ${esc(fmtDay(o.cycle_date))} · วันส่ง ${esc(fmtDay(o.delivery))}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_bmcOrderTitle(o))} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}
       <b>${esc(VALUE_ORDERED_TH)} ฿${_bmcNum(o.value_ordered, 0)}</b>${o.value_sent != null ? ` · <b>${esc(VALUE_SENT_TH)} ฿${_bmcNum(o.value_sent, 0)}</b>` : ''} ·
       ${o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลตรวจนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ'}${o.note ? ' · ' + esc(o.note) : ''}${o.processed_by ? ` · คลังยืนยันโดย ${esc(whoTh(o.processed_by))}` : ''}${o.accounting_keyed_at ? ` · คีย์บัญชีแล้ว ${esc(fmtDay(o.accounting_keyed_date || ''))} โดย ${esc(whoTh(o.accounting_keyed_by))}` : ''}</div>
-    ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `#${c.claim_id} ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
+    ${(o.claims || []).length ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เคลมของใบสั่งซื้อนี้: ${o.claims.map(c => `${esc(_bmcClaimWhen(c))} · ${esc(c.origin_th || '')} · ${esc(c.status_th || '')}`).join(' ; ')}</div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
     ${phone ? `${work ? `<div class="mt-2"><button type="button" onclick="ohbFillAll()" class="brn-act brn-act-line" style="width:100%">ส่งตามที่สาขายืนยันทั้งหมด</button>
       <div class="text-xs mt-1" style="color:var(--text-muted)">เติมช่องส่งจริงของทุกรายการที่ยังไม่ได้แก้ให้เท่ากับยอดที่สาขายืนยัน · ช่องเหตุผลจะแสดงเมื่อส่งจริงไม่ตรงกับที่สาขายืนยัน</div></div>` : ''}<div class="mt-2">${blocks}</div>` : `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
@@ -646,7 +646,7 @@ async function ohbProcess() {
   const edit = o.status === 'processed';
   const sent = o.lines.filter(l => (l.confirmed_units || 0) > 0 || (l.processed_units || 0) > 0 || (l.suggested_units || 0) > 0);
   const changed = lines.filter((x, i) => x.processed_units !== null && Math.abs(x.processed_units - Number(o.lines[i].confirmed_units || 0)) > 1e-9).length;
-  if (!await uiConfirm(`${edit ? 'บันทึกการแก้ไขยอดส่ง' : 'ยืนยันการจัดส่ง'} · ใบสั่งซื้อ #${o.order_id} · สาขา${o.branch || ''} · ${sent.length} รายการ · ${po ? 'PO ' + po : 'ไม่ระบุ PO'}\n`
+  if (!await uiConfirm(`${edit ? 'บันทึกการแก้ไขยอดส่ง' : 'ยืนยันการจัดส่ง'} · ใบสั่งซื้อ ${_bmcOrderTitle(o)} · ${sent.length} รายการ · ${po ? 'PO ' + po : 'ไม่ระบุ PO'}\n`
       + `${VALUE_ORDERED_TH} ฿${_bmcNum(o.value_ordered, 0)}${changed ? ` · ส่งไม่ตรงกับที่สาขายืนยัน ${changed} รายการ` : ' · ส่งตรงกับที่สาขายืนยันทุกรายการ'}`
       + (edit ? '' : '\nเมื่อยืนยันแล้ว สาขาเห็นว่าคลังจัดส่งแล้วและรับสินค้าได้'),
       { title: edit ? 'ยืนยันการแก้ไขยอดส่ง' : 'ยืนยันการจัดส่ง', ok: edit ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', cancel: 'ยังไม่ยืนยัน' })) { bmcStatus('ohbDStatus', null, 'ยังไม่ยืนยัน'); return; }
@@ -1268,7 +1268,7 @@ async function ohbLoadClaims() {
     const d = await _bmcJson(`${API}/api/bom-center/claims?status=${_ohbClaimSt}&limit=100`);
     // PR-M5: two lines — "สาขา · รอบ ส่ง d/m · N รายการ", then where it was raised and what became of it (no ids, no login)
     box.innerHTML = d.claims.length ? d.claims.map(c => `<a href="#" class="ohb-claimrow" data-claim="${c.claim_id}" onclick="ohbClaimView(${c.claim_id});return false">
-        <div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(c.branch || '')} · ${esc(_OHB_RND[c.round] || c.round || '')} ส่ง ${esc(_isrDm(c.delivery || c.cycle_date || ''))} · ${c.lines} รายการ</div>
+        <div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_bmcClaimTitle(c))} · ${c.lines} รายการ</div>
         <div class="mt-0.5">${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')}
           ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}</div></a>`).join('')
       : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีเคลมในสถานะนี้</span>';
@@ -1305,7 +1305,7 @@ function ohbClaimRender() {
   const act = _ohbCanDecide() && c.status === 'submitted';
   const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
   document.getElementById('ohbClaimDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">เคลม #${c.claim_id} · ${esc(c.branch || '')} · ใบสั่งซื้อ #${c.order_id} · สั่ง ${esc(fmtDay(c.cycle_date || ''))}</div>
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_bmcClaimTitle(c))}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbClaimDetail').style.display='none'")}</div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')} ${_bmcChip(c.status_th, _OHB_CLAIM_INK[c.status] || 'var(--text-muted)')}
       แจ้งโดย ${esc(whoTh(c.created_by))} เมื่อ ${esc(fmtAt(c.created_at))}${c.note ? ' · ' + esc(c.note) : ''}
@@ -1340,10 +1340,10 @@ async function ohbClaimDecide(decision) {
   const recv = c.origin === 'receive';
   const partial = c.lines.some((l, i) => lines[i].approved_units < l.claim_units - 1e-9);
   const ask = decision === 'approve'
-    ? (recv ? `อนุมัติเคลม #${c.claim_id} · ${n} รายการ?\nรับเข้าตามจริงอยู่แล้ว`
+    ? (recv ? `อนุมัติ${_bmcClaimTitle(c)} · ${n} รายการ?\nรับเข้าตามจริงอยู่แล้ว`
         + (partial ? '\nส่วนที่ไม่อนุมัติบันทึกเป็นรับเข้า' : '')
-      : `อนุมัติเคลม #${c.claim_id} · ${n} รายการ?\nหักออกจากรับเข้าของสาขา${c.branch || ''}`)
-    : `ไม่อนุมัติเคลม #${c.claim_id}?\nสาขาจะเห็นเหตุผลที่ระบุ` + (recv ? '\nบันทึกจำนวนที่เคลมเป็นรับเข้า' : '');
+      : `อนุมัติ${_bmcClaimTitle(c)} · ${n} รายการ?\nหักออกจากรับเข้าของสาขา${c.branch || ''}`)
+    : `ไม่อนุมัติ${_bmcClaimTitle(c)}?\nสาขาจะเห็นเหตุผลที่ระบุ` + (recv ? '\nบันทึกจำนวนที่เคลมเป็นรับเข้า' : '');
   if (!await uiConfirm(ask, decision === 'approve'
     ? { title: 'ยืนยันการอนุมัติเคลม', ok: 'อนุมัติ', cancel: 'ยกเลิก' }
     : { title: 'ยืนยันการไม่อนุมัติเคลม', ok: 'ไม่อนุมัติ', cancel: 'ยกเลิก' })) return;

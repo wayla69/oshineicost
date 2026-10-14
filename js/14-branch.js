@@ -42,8 +42,7 @@ function brnSrc(btn) {
   v.hidden = !v.hidden;
   btn.setAttribute('aria-expanded', v.hidden ? 'false' : 'true');
 }
-// 4.2 · an order is named by its round and delivery day, never by a number: "รอบ 2 (ส่ง 10/10)"
-function _brnRoundDay(o) { return `${_brnRoundLabel(o.round)}${o.delivery || o.cycle_date ? ` (ส่ง ${_brnIssDm(o.delivery || o.cycle_date)})` : ''}`; }
+// 4.2 · an order is named by its round and delivery day, never by a number: "รอบ 2 (ส่ง 10/10)" - _bmcRoundDay (13-bom-center.js)
 // 3.1 · a quantity read off the system or off the last count: one decimal at most, never 0.005; a figure between 0 and 1 of a unit is
 // "น้อยกว่า 1 แพ็ค". A placeholder uses the same figure, so it never shows more than the box would hold.
 function _brnNice(v) {
@@ -1513,7 +1512,7 @@ async function brnReceiveOrder() {
   const n = lines.filter(l => l.received_units > 0).length;
   const day = document.getElementById('brnRecvOrdDate').value;
   const claimNote = String((document.getElementById('brnRecvClaimNote') || {}).value || '').trim();
-  if (!await uiConfirm(`บันทึกรับสินค้า${_brnRoundDay(o)} · ${n} รายการ · วันที่ ${fmtDay(day)}`
+  if (!await uiConfirm(`บันทึกรับสินค้า${_bmcRoundDay(o)} · ${n} รายการ · วันที่ ${fmtDay(day)}`
       + (_brnRcv.mode === 'all' ? ' · รับครบทุกรายการ' : '')
       + (pcsN ? ` · ชั่งน้ำหนักและนับจำนวน${[...pcsUnits].join(' / ')} ${pcsN} รายการ` : '')
       + (within ? ` · น้ำหนักน้อยกว่าที่ส่งไม่เกิน ${_bmcNum(_brnWtTol(), 1)}% ${within} รายการ รับตามน้ำหนักที่ชั่งโดยไม่แจ้งเคลม` : '')
@@ -2084,7 +2083,7 @@ function brnRenderOrder() {
   document.getElementById('brnOrdHead').innerHTML = `<div style="color:var(--text-primary)" class="text-sm">รอบส่ง <b>${esc(fmtDayShort(p.delivery))}</b> · ส่งใบสั่งซื้อภายใน <b>${esc(p.cutoff_th)}</b>${left} ·
       สั่งให้พอใช้ ${esc(_brnIssRunTxt(p.cover_from, p.cover_to))} (${p.cover_days} วัน)</div>
     <div class="mt-1" style="color:var(--text-secondary)">${stockLine}</div>${gapLine}
-    <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่งซื้อ ${_brnRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}` : _bmcChip('ยังไม่มีใบสั่งซื้อรอบนี้', 'var(--text-muted)')}
+    <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่งซื้อ ${_bmcRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}` : _bmcChip('ยังไม่มีใบสั่งซื้อรอบนี้', 'var(--text-muted)')}
       · ${o && !editable   // a sent order: the two values come from the server (the same numbers as the list and the queue)
         ? `${VALUE_ORDERED_TH} <b>฿${_bmcNum(o.value_ordered, 0)}</b>${o.value_sent != null ? ` · ${VALUE_SENT_TH} <b>฿${_bmcNum(o.value_sent, 0)}</b>` : ''}`
         : `${VALUE_ORDERED_TH} ≈ <b>฿${_bmcNum(total, 0)}</b>`}${p.calendar_filled ? '' : ' · <span style="color:var(--amber-ink)">ใช้วันส่งค่าเริ่มต้น</span>'}</div>`;
@@ -2419,7 +2418,7 @@ async function brnOrderSave(submit, quiet, ackLate) {
       return;
     }
     await brnLoadOrder();
-    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งใบสั่งซื้อ ${_brnRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} แล้ว · ฿${_bmcNum(r.value, 0)}${r.late ? ' · ส่งล่าช้า มีค่าปรับ' : ''}` :
+    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งใบสั่งซื้อ ${_bmcRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} แล้ว · ฿${_bmcNum(r.value, 0)}${r.late ? ' · ส่งล่าช้า มีค่าปรับ' : ''}` :
       `✓ บันทึกร่าง${r.needs_reason.length ? ` · ต้องระบุเหตุผล ${r.needs_reason.length} รายการก่อนส่ง` : ''}`, r.needs_reason.length && !submit ? 'var(--amber-ink)' : 'var(--good-ink)');
   } catch (e) {
     if (e.detail && e.detail.code === 'late' && !ackLate) {        // the server's clock says the cutoff has passed: ask once, then send with the late fee
@@ -2452,7 +2451,7 @@ async function brnLoadOrderHistory() {
     _brnOrdSent = d.orders || [];
     _brnDelivChips();                                   // "สั่งแล้ว" on the deliveries that already have an order
     document.getElementById('brnOrdHistory').innerHTML = d.orders.length ? d.orders.map(x => `<div style="border-top:1px solid var(--border);padding:4px 0;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center">
-        <span><a href="#" onclick="brnOpenOrder(${x.order_id});return false" style="color:var(--accent);font-weight:600">${esc(_brnRoundDay(x))}</a> · ตัดรอบ ${esc(fmtDay(x.cycle_date))} · ${esc(x.status_th)} · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)}${x.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</span>
+        <span><a href="#" onclick="brnOpenOrder(${x.order_id});return false" style="color:var(--accent);font-weight:600">${esc(_bmcRoundDay(x))}</a> · ตัดรอบ ${esc(fmtDay(x.cycle_date))} · ${esc(x.status_th)} · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)}${x.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</span>
         ${x.status === 'processed' ? `<a href="#" onclick="brnSetSub('recv');setTimeout(() => brnOpenReceive(${x.order_id}), 200);return false" style="margin-left:auto;color:var(--accent)">รับสินค้าที่มาถึง →</a>` : ''}</div>`).join('') : 'ยังไม่มีข้อมูล';
   } catch (e) { document.getElementById('brnOrdHistory').textContent = String(e.message || e); }
 }
@@ -2462,7 +2461,7 @@ async function brnOpenOrder(id) {
   try {
     const o = await _bmcJson(`${API}/api/bom-center/order/${id}`);
     box.style.display = '';
-    box.innerHTML = `<div class="flex flex-wrap items-center gap-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">ใบสั่งซื้อ ${esc(_brnRoundDay(o))} · ตัดรอบ ${esc(fmtDay(o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
+    box.innerHTML = `<div class="flex flex-wrap items-center gap-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">ใบสั่งซื้อ ${esc(_bmcRoundDay(o))} · ตัดรอบ ${esc(fmtDay(o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
         <button onclick="document.getElementById('brnOrdDetail').style.display='none'" class="ml-auto" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ปิด</button></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">${o.po_ref ? 'PO ' + esc(o.po_ref) + ' · ' : ''}${o.processed_by ? 'คลังยืนยันยอดส่งโดย ' + esc(whoTh(o.processed_by)) : ''}</div>
       <table class="w-full text-xs mt-2"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">รายการ</th><th class="pr-2 text-right">แนะนำ</th><th class="pr-2 text-right">สั่ง</th><th class="pr-2 text-right">ส่งจริง</th><th class="text-right">รับจริง</th></tr></thead>
@@ -2498,7 +2497,7 @@ async function brnLoadClaims() {
         ${_brnCanClaim() ? `<button class="brn-act brn-act-line" onclick="brnClaimOpen(${o.order_id})">แจ้งเคลม</button>` : ''}</div>`).join('');
     const mine = cl.claims.map(c => { const st = _BRN_CLAIM_ST[c.status] || [c.status, 'var(--text-muted)'];
       return `<a href="#" class="brn-claimrow" onclick="brnClaimView(${c.claim_id});return false" style="display:block;border-top:1px solid var(--border);padding:8px 0;text-decoration:none">
-        <div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_brnRoundLabel(c.round))} · ส่ง ${esc(_brnIssDm(c.delivery || c.cycle_date))} · ${c.lines} รายการ</div>
+        <div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_brnRoundLabel(c.round))} · ส่ง ${esc(_brnIssDm(c.delivery || c.cycle_date))} · ${c.lines} รายการ · ${esc(_bmcClaimWhen(c))}</div>
         <div class="text-xs mt-0.5">${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')} ${_bmcChip(st[0], st[1])}</div></a>`; }).join('');
     box.innerHTML = (recent || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีใบสั่งซื้อที่บันทึกรับสินค้าแล้ว</div>')
       + (mine ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">เคลมที่แจ้งไว้</div>${mine}` : '');
@@ -2637,7 +2636,7 @@ async function brnClaimView(id) {
   try {
     const c = await _bmcJson(`${API}/api/bom-center/claims/${id}${_brnQS() ? '?' + _brnQS() : ''}`);
     const st = _BRN_CLAIM_ST[c.status] || [c.status_th, 'var(--text-muted)'];
-    box.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_brnRoundLabel(c.round))} · ส่ง ${esc(_brnIssDm(c.delivery || c.cycle_date))} ${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')} ${_bmcChip(st[0], st[1])}</div>
+    box.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_brnRoundLabel(c.round))} · ส่ง ${esc(_brnIssDm(c.delivery || c.cycle_date))} · ${esc(_bmcClaimWhen(c))} ${_bmcChip(c.origin_th || '', c.origin === 'receive' ? 'var(--navy-ink)' : 'var(--text-muted)')} ${_bmcChip(st[0], st[1])}</div>
         <button onclick="brnClaimClose()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer;background:transparent;color:var(--text-primary)">ปิด</button></div>
       ${c.decision_note ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">ผลพิจารณา${c.decided_by ? ' โดย ' + esc(whoTh(c.decided_by)) : ''}: ${esc(c.decision_note)}</div>` : ''}
       ${_brnClaimEffect(c)}

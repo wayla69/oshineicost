@@ -142,6 +142,19 @@ function bmcHelpHtml(html) {
 }
 // a version's name as people read it: the stored label may still end with the old "(draft)" tag (the status chip says it)
 function _bmcLbl(l) { return String(l == null ? '' : l).replace(/\s*\((?:draft|ร่าง)\)\s*$/i, ''); }
+// 4.2 (centre) · how a screen names an order and a claim: by branch, round and day, never by a number. An order is
+// "ขอนแก่น · รอบ 2 (ส่ง 17/10)" (salmon: "แซลมอนสด (ส่ง 19/10)"); a claim is "เคลมของ ขอนแก่น · รอบ 2 (ส่ง 17/10) · แจ้ง 12/10 14:05"
+// (Bangkok clock) and, when its order has 2 or more claims, "· ครั้งที่ 2". The numbers stay in the API, the audit log and the
+// Excel files that key into accounting.
+const _BMC_ROUND_TH = { '1': 'รอบ 1', '2': 'รอบ 2', salmon: 'แซลมอนสด' };
+function _bmcDm(iso) { const p = _isoParts(iso); return p ? `${p[2]}/${p[1]}` : ''; }
+function _bmcRoundDay(o) { const d = o.delivery || o.cycle_date; return `${_BMC_ROUND_TH[o.round] || o.round || ''}${d ? ` (ส่ง ${_bmcDm(d)})` : ''}`; }
+function _bmcOrderTitle(o) { return [o.branch, _bmcRoundDay(o)].filter(Boolean).join(' · '); }
+function _bmcClaimWhen(c) {
+  const k = _bkkClock(c.created_at);
+  return [k ? `แจ้ง ${k.d}/${k.mo} ${k.hhmm}` : '', c.of_order > 1 ? `ครั้งที่ ${c.nth}` : ''].filter(Boolean).join(' · ');
+}
+function _bmcClaimTitle(c) { return [`เคลมของ ${c.branch || ''}`.trim(), _bmcRoundDay(c), _bmcClaimWhen(c)].filter(Boolean).join(' · '); }
 function _bmcChip(text, ink) {
   return `<span style="display:inline-block;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:10.5px;white-space:nowrap">${esc(text)}</span>`;
 }

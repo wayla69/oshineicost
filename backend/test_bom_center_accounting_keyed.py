@@ -42,7 +42,7 @@ def test_only_processed_or_received_orders_can_be_keyed(con):  # noqa: F811
     sub, proc, rec = _order(con, "submitted"), _order(con, "processed", "2026-10-06"), _order(con, "received", "2026-10-07")
     with pytest.raises(ValueError) as e:
         HB.set_keyed(con, [proc, sub], True, "ss")
-    assert f"#{sub}" in str(e.value) and "คลังยังไม่ยืนยันยอดส่ง จึงคีย์เข้าระบบบัญชีไม่ได้" in str(e.value)
+    assert HB.order_label_th(con, sub) in str(e.value) and f"#{sub}" not in str(e.value) and "คลังยังไม่ยืนยันยอดส่ง จึงคีย์เข้าระบบบัญชีไม่ได้" in str(e.value)
     con.rollback()
     assert con.execute("SELECT COUNT(*) FROM bc_order WHERE accounting_keyed_at IS NOT NULL").fetchone()[0] == 0
     out = HB.set_keyed(con, [proc, rec], True, "ss1")
@@ -67,7 +67,7 @@ def test_empty_and_unknown_orders_are_refused(con):  # noqa: F811
     with pytest.raises(ValueError, match="เลือกใบสั่งซื้ออย่างน้อย 1 ใบ"):
         HB.set_keyed(con, [], True, "ss")
     proc = _order(con, "processed")
-    with pytest.raises(ValueError, match="ไม่พบใบสั่งซื้อ #99999"):
+    with pytest.raises(ValueError, match="ไม่พบใบสั่งซื้อที่เลือก"):
         HB.set_keyed(con, [proc, 99999], True, "ss")
     con.rollback()
 

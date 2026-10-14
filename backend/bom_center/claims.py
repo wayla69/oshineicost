@@ -224,6 +224,11 @@ def _head(con, claim_id):
     d["status_th"] = STATUS_TH.get(d["status"], d["status"])
     d["origin"] = _origin(d["origin"])
     d["origin_th"] = ORIGIN_TH[d["origin"]]
+    # 4.2 (centre): two claims on one order are told apart by when they were raised, never by a number - `nth` is this claim's place
+    # among the order's claims (oldest = 1, any status) and `of_order` how many the order has; the screens write "ครั้งที่ 2" from 2 up
+    d["nth"], d["of_order"] = con.execute(
+        "SELECT (SELECT COUNT(*) FROM bc_claim WHERE order_id=? AND claim_id<=?), (SELECT COUNT(*) FROM bc_claim WHERE order_id=?)",
+        (d["order_id"], claim_id, d["order_id"])).fetchone()
     return d
 
 
@@ -291,7 +296,8 @@ def for_order(con, order_id: int) -> list:
                               " ORDER BY claim_id", (order_id,)).fetchall():
         d = detail(con, cid)
         out.append({"claim_id": cid, "status": d["status"], "status_th": d["status_th"], "origin": d["origin"],
-                    "origin_th": d["origin_th"], "lines": d["lines"]})
+                    "origin_th": d["origin_th"], "lines": d["lines"], "created_at": d["created_at"],
+                    "nth": d["nth"], "of_order": d["of_order"]})
     return out
 
 
