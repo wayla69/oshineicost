@@ -199,6 +199,16 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
     return with_values(con, out)             # the stored snapshot (o.value) is replaced by the one live value
 
 
+def order_label_th(con, order_id: int) -> str:
+    """4.2: an order as a sentence names it - "ขอนแก่น · รอบ 2 (ส่ง 17/10)", never "#9" (the number stays in the API and the audit log)."""
+    from .fmt import round_day_th
+    r = con.execute("SELECT b.name, o.branch_id, o.round, o.cycle_date, o.delivery_date FROM bc_order o"
+                    " LEFT JOIN branches b USING(branch_id) WHERE o.order_id=?", (order_id,)).fetchone()
+    if not r:
+        return "ใบสั่งซื้อ"
+    return f"{r[0] or ''} · {round_day_th(r[2], delivery_of(con, r[1], r[2], r[3], r[4]))}".strip(" ·")
+
+
 def keyed_date(ts: str):
     """The Bangkok date (YYYY-MM-DD) a keyed mark was set, or None."""
     d = _bkk(ts)
@@ -215,11 +225,11 @@ def set_keyed(con, order_ids: list, keyed: bool, who: str) -> dict:
         f"SELECT order_id, status FROM bc_order WHERE order_id IN ({','.join('?' * len(ids))})", ids)}
     missing = [i for i in ids if i not in rows]
     if missing:
-        raise ValueError("ไม่พบใบสั่งซื้อ " + ", ".join(f"#{i}" for i in missing))
+        raise ValueError("ไม่พบใบสั่งซื้อที่เลือก · โหลดรายการใหม่แล้วเลือกอีกครั้ง")        # 4.2: an order that is gone has no round to name
     if keyed:
         bad = [i for i in ids if rows[i] not in ("processed", "received")]
         if bad:
-            raise ValueError("ใบสั่งซื้อ " + ", ".join(f"#{i}" for i in bad)
+            raise ValueError("ใบสั่งซื้อ " + ", ".join(order_label_th(con, i) for i in bad)
                              + " คลังยังไม่ยืนยันยอดส่ง จึงคีย์เข้าระบบบัญชีไม่ได้")
     at = now() if keyed else None
     by = who if keyed else None

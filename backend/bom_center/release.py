@@ -30,7 +30,7 @@ from datetime import date, datetime, timezone
 from .clock import today as bkk_today
 from .master import audit
 from .recipes import Coster, cost_recipe, recipe_lines, release_row, release_costs, write_recipe
-from .fmt import day_th, month_th as _mth
+from .fmt import day_th, lbl, month_th as _mth
 from .schema import ensure
 
 # a recipe version's state as people read it (PR-M1; the codes stay in the database)
@@ -391,7 +391,7 @@ def do_release(con, release_id: int, who: str, backdate_reason: str = None, toda
     # an earlier release of the same month steps aside
     con.execute("UPDATE bc_release SET status='retired', notes=COALESCE(notes,'') || ? WHERE kind='monthly' AND"
                 " status='released' AND effective_month=? AND release_id<>?",
-                (f" · แทนที่โดยเวอร์ชันเลขที่ {release_id} ({now()})", eff, release_id))
+                (f" · แทนที่โดยเวอร์ชัน {lbl(rel['label'])} ({now()})", eff, release_id))
     from .prep import freeze
     n_prep = freeze(con, release_id)              # the sub-recipes this release is costed with, kept with it
     con.execute("UPDATE bc_release SET status='released', released_by=?, released_at=?, acknowledged_by=NULL,"
