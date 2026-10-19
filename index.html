@@ -50,6 +50,21 @@
    Everything below consumes those CSS variables. */
 * { font-family: 'KIRA UI', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
 body { background: var(--bg-page); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
+/* ── app-wide type (owner 2026-10-19: "ตัวอักษรใหญ่และหนาขึ้นทั้งแอพ") ──
+   body text is KIRA UI Medium (500) instead of Regular; the small Tailwind sizes get a floor (12px→13px, 14px→15px,
+   10–11px→12.5px); bold/semibold stay as they were, font-normal stays 400. Table heads and section titles grow too
+   (their rules further down are lifted by the block at the end of this <style>). `body .x` beats Tailwind's runtime .x
+   and loses to the supply tabs' own floor (#tab-… .x, 14px). */
+@media screen {
+body { font-weight: 500; }
+#mgtRptBody { font-weight: 400; }   /* the A4 report keeps its own tuned type */
+body .text-xs:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px; line-height: 1.5; }
+body .text-sm:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 15px; line-height: 1.5; }
+body .text-base:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 16.5px; }
+body :is(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px; line-height: 1.45; }
+:is([style*="font-size:9px"], [style*="font-size:10px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size: 10px"], [style*="font-size: 11px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px !important; }
+:is([style*="font-size:11.5px"], [style*="font-size:12px"], [style*="font-size: 12px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px !important; }
+}
 
 .card {
   background: var(--bg-card);
@@ -1906,6 +1921,11 @@ body.mgt-reading .content-area { padding-top: 10px; }
      dropping the rest. Print swaps in the every-tier stack. */
   #mgtTierDrivers { display: none !important; }
   #mgtTierDriversPrint { display: block !important; }
+}
+/* app-wide type (2026-10-19): table heads and section titles — after their base rules so these win (screen only, not the A4 report) */
+@media screen {
+  thead th:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px; letter-spacing: 0.02em; }
+  .section-title:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px; }
 }
 </style>
 <!-- Formal theme: loaded last so it restyles the classes above (see the file header). -->
