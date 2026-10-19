@@ -2308,40 +2308,53 @@ function bmcRenderForecast() {
   const f = _bmcFc;
   const kInk = { A: 'var(--bad-ink)', B: 'var(--amber-ink)', C: 'var(--text-muted)' };
   const fmtQ = (v, u) => v == null ? '—' : (u === 'กรัม' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' กก.' : u === 'มิลลิลิตร' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' ลิตร' : _bmcNum(v, 1) + ' ' + (u || ''));
+  // 2026-10-19: the round as tiles, the sources folded, and the table leads with แนะนำสั่ง; a search box filters the rows
   document.getElementById('bmcFcHead').innerHTML = `<div class="card p-4">
-    <div class="flex flex-wrap gap-4 items-baseline">
-      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.branch)} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round}</div>
-      <div class="text-xs" style="color:var(--text-secondary)">ตัดรอบ <b>${f.order_weekday} ${esc(fmtDay(f.order_day))}</b> · สินค้าถึง <b>${esc(fmtDay(f.delivery))}</b> · ต้องเพียงพอสำหรับ <b>${esc(fmtDay(f.cover_from))} ถึง ${esc(fmtDay(f.cover_to))}</b> (${f.cover_days} วัน)</div>
-      <div class="ml-auto text-right"><div class="text-[11px]" style="color:var(--text-muted)">มูลค่าแนะนำ</div><div class="text-lg font-bold" style="color:var(--text-primary)">฿${_bmcNum(f.value_total, 0)}</div></div>
-    </div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ใช้ยอดขาย ${esc(fmtDay(f.history_from))} ถึง ${esc(fmtDay(f.history_to))} · ${f.trading_days} วันที่มีการขาย · เฉพาะช่วงเมนูใหม่ ·
-      สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ประกาศใช้แล้ว ${f.stats.release_skus} เมนู + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ
-      ${f.calendar_filled ? '' : ' · <b style="color:var(--amber-ink)">ยังไม่ได้ตั้งรอบส่งของสาขานี้ · ใช้ค่าเริ่มต้น</b> <a href="#" onclick="supplyGo({tab:\'bomcenter\',pane:\'cal\'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a>'}</div>
-    <div id="bmcFcFormula" class="text-xs mt-2" style="color:var(--text-primary)">${_bmcFcFormula(f)}</div>
-    <div class="text-[11px] mt-1 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">
-      ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · <b>ยังไม่หักคงเหลือของสาขา</b> หน้าสั่งสินค้าหักให้</div>
-    ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-[11px] cursor-pointer" style="color:var(--amber-ink)">แปลงหน่วยไม่ได้ ${f.stats.missed_lines} บรรทัด <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
-      <div class="text-[11px] mt-1" style="color:var(--text-secondary)">${f.stats.missed.map(m => `${esc(m.code)} (${esc(m.unit)}) · ${_bmcNum(m.plates, 0)} จาน · ${esc(m.why)}`).join('<br>')}</div></details>` : ''}
+    <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.branch)} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round}</div>
+    ${bmcStats([['ตัดรอบ', `${f.order_weekday} ${esc(fmtDay(f.order_day))}`], ['สินค้าถึง', esc(fmtDay(f.delivery))], ['ต้องพอใช้', `${f.cover_days} วัน`],
+      ['รายการ', f.rows.length], ['มูลค่าแนะนำ', '฿' + _bmcNum(f.value_total, 0)]])}
+    <div class="text-sm" style="color:var(--text-secondary)">ใช้ ${esc(fmtDay(f.cover_from))} ถึง ${esc(fmtDay(f.cover_to))}</div>
+    ${f.calendar_filled ? '' : `<div class="text-sm mt-1" style="color:var(--amber-ink)"><b>ยังไม่ได้ตั้งรอบส่งของสาขานี้ (ใช้ค่าเริ่มต้น)</b> <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'cal'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a></div>`}
+    <div id="bmcFcFormula" class="text-sm mt-2" style="color:var(--text-primary)">${_bmcFcFormula(f)}</div>
+    <div class="text-sm mt-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · <b>ยังไม่หักคงเหลือของสาขา</b> (หน้าสั่งสินค้าหักให้)</div>
+    <details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--text-secondary)">ที่มาของตัวเลข</summary>
+      <div class="text-sm mt-1" style="color:var(--text-secondary)">${bmcLines([`ยอดขาย ${esc(fmtDay(f.history_from))} ถึง ${esc(fmtDay(f.history_to))} (${f.trading_days} วันที่มีการขาย, เฉพาะช่วงเมนูใหม่)`,
+        `สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ประกาศใช้แล้ว ${f.stats.release_skus} เมนู + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ`])}</div></details>
+    ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--amber-ink)">แปลงหน่วยไม่ได้ ${f.stats.missed_lines} บรรทัด <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
+      <div class="wt-wrap mt-1" style="max-height:280px"><table class="wt"><thead><tr><th>รหัส</th><th>หน่วย</th><th class="wt-num">จาน</th><th>สาเหตุ</th></tr></thead><tbody>
+      ${f.stats.missed.map(m => `<tr><td class="wt-code" data-l="รหัส">${esc(m.code)}</td><td data-l="หน่วย">${esc(m.unit)}</td><td class="wt-num" data-l="จาน">${_bmcNum(m.plates, 0)}</td><td data-l="สาเหตุ">${esc(m.why)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
   </div>`;
-  const box = document.getElementById('bmcFcTable');
+  bmcRenderFcTable();
+}
+let _bmcFcFind = '';
+function bmcFcFind(q) { _bmcFcFind = q; bmcRenderFcTable(true); }
+function bmcRenderFcTable(keepFocus) {
+  const f = _bmcFc, box = document.getElementById('bmcFcTable');
+  if (!f || !box) return;
+  const kInk = { A: 'var(--bad-ink)', B: 'var(--amber-ink)', C: 'var(--text-muted)' };
+  const fmtQ = (v, u) => v == null ? '—' : (u === 'กรัม' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' กก.' : u === 'มิลลิลิตร' && v >= 1000 ? _bmcNum(v / 1000, 2) + ' ลิตร' : _bmcNum(v, 1) + ' ' + (u || ''));
+  const q = _bmcFcFind.trim().toLowerCase();
+  const rows = f.rows.filter(r => !q || (r.code + ' ' + (r.name || '')).toLowerCase().includes(q));
+  const notes = r => [r.monitored ? _bmcChip('บังคับสั่ง', 'var(--navy-ink)') : '', r.sourcing === 'local' ? _bmcChip('สาขาซื้อเอง', 'var(--text-muted)') : '',
+    r.shelf_cap_days ? _bmcChip(`จำกัดตามอายุการเก็บ ${r.shelf_cap_days} วัน`, 'var(--navy-ink)') : '', r.round_down ? _bmcChip('ปัดลง (เหลือพอ)', 'var(--navy-ink)') : '',
+    r.price_note ? _bmcChip(r.price_note, 'var(--text-muted)') : '', r.lead_extra_days ? _bmcChip(`สั่งให้พอเพิ่ม ${r.lead_extra_days} วัน (ระยะส่ง ${r.lead_days} วัน)`, 'var(--navy-ink)') : '',
+    r.short_ship_skipped ? _bmcChip(`ไม่นับ ${r.short_ship_skipped} วันที่คลังส่งไม่ครบ`, 'var(--text-muted)') : ''].filter(Boolean).join(' ');
   box.style.display = '';
-  box.innerHTML = `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
-      <th class="pr-2">รหัส</th><th class="pr-2">วัตถุดิบ</th><th class="pr-2">ชั้น</th><th class="pr-2 text-right">ใช้/วัน</th>
-      <th class="pr-2 text-right">ต้องใช้ทั้งรอบ</th><th class="pr-2 text-right">กันขาด</th><th class="pr-2 text-right">แนะนำสั่ง</th>
-      <th class="pr-2 text-right">มูลค่า</th><th class="pr-2 text-right">แนวโน้ม</th><th></th></tr></thead>
-    <tbody>${f.rows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
-      <td class="pr-2 py-1 whitespace-nowrap">${esc(r.code)}</td><td class="pr-2">${esc(r.name || '')}</td>
-      <td class="pr-2">${_bmcChip(r.class, kInk[r.class])}</td>
-      <td class="pr-2 text-right">${fmtQ(r.per_day, r.base_unit)}</td><td class="pr-2 text-right">${fmtQ(r.forecast, r.base_unit)}</td>
-      <td class="pr-2 text-right">${fmtQ(r.safety, r.base_unit)}</td>
-      <td class="pr-2 text-right font-semibold">${r.suggested_units != null ? `${_bmcNum(r.suggested_units, 0)} ${esc(r.recv_unit || '')}` : fmtQ(r.need, r.base_unit) + ' ' + _bmcChip('ไม่มีขนาดบรรจุ', 'var(--amber-ink)')}</td>
-      <td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
-      <td class="pr-2 text-right" style="color:${r.trend > 1.05 ? 'var(--amber-ink)' : r.trend < 0.95 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.trend > 1 ? '+' : ''}${Math.round((r.trend - 1) * 100)}%</td>
-      <td>${r.monitored ? _bmcChip('บังคับสั่ง', 'var(--navy-ink)') : ''} ${r.sourcing === 'local' ? _bmcChip('สาขาซื้อเอง', 'var(--text-muted)') : ''}
-        ${r.shelf_cap_days ? _bmcChip(`จำกัดตามอายุการเก็บ ${r.shelf_cap_days} วัน`, 'var(--navy-ink)') : ''}${r.round_down ? ' ' + _bmcChip('ปัดลง (เหลือพอ)', 'var(--navy-ink)') : ''}
-        ${r.price_note ? _bmcChip(r.price_note, 'var(--text-muted)') : ''}${r.lead_extra_days ? ' ' + _bmcChip(`สั่งให้พอเพิ่ม ${r.lead_extra_days} วัน (ระยะส่ง ${r.lead_days} วัน)`, 'var(--navy-ink)') : ''}
-        ${r.short_ship_skipped ? _bmcChip(`ไม่นับ ${r.short_ship_skipped} วันที่คลังส่งไม่ครบ`, 'var(--text-muted)') : ''}</td></tr>`).join('')
-      || '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ไม่มีวัตถุดิบในรอบนี้</td></tr>'}</tbody></table>`;
+  box.innerHTML = `<div class="wt-bar"><input id="bmcFcFindBox" class="wt-find" type="search" placeholder="ค้นหารหัสหรือชื่อวัตถุดิบ" value="${esc(_bmcFcFind)}" oninput="bmcFcFind(this.value)">
+      <span class="text-sm" style="color:var(--text-muted)">${q ? `พบ ${rows.length} จาก ` : ''}${f.rows.length} รายการ · กลุ่ม A = มูลค่าสูง</span></div>
+    <div class="wt-wrap" style="max-height:70vh"><table class="wt"><thead><tr>
+      <th>รหัส</th><th>วัตถุดิบ</th><th>กลุ่ม</th><th class="wt-num">แนะนำสั่ง</th><th class="wt-num">มูลค่า ฿</th>
+      <th class="wt-num">ใช้/วัน</th><th class="wt-num">ทั้งรอบ</th><th class="wt-num">กันขาด</th><th class="wt-num">แนวโน้ม</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td class="wt-code" data-l="รหัส">${esc(r.code)}</td><td data-l="วัตถุดิบ" style="min-width:200px">${esc(r.name || '')}${notes(r) ? `<div class="mt-1" style="display:flex;gap:4px;flex-wrap:wrap">${notes(r)}</div>` : ''}</td>
+      <td data-l="กลุ่ม">${_bmcChip(r.class, kInk[r.class])}</td>
+      <td class="wt-num" data-l="แนะนำสั่ง" style="font-weight:700;font-size:15px">${r.suggested_units != null ? `${_bmcNum(r.suggested_units, 0)} <span style="font-weight:500;font-size:13px">${esc(r.recv_unit || '')}</span>` : fmtQ(r.need, r.base_unit) + `<div>${_bmcChip('ไม่มีขนาดบรรจุ', 'var(--amber-ink)')}</div>`}</td>
+      <td class="wt-num" data-l="มูลค่า ฿">${_bmcNum(r.value, 0)}</td>
+      <td class="wt-num wt-muted" data-l="ใช้/วัน">${fmtQ(r.per_day, r.base_unit)}</td><td class="wt-num wt-muted" data-l="ทั้งรอบ">${fmtQ(r.forecast, r.base_unit)}</td>
+      <td class="wt-num wt-muted" data-l="กันขาด">${fmtQ(r.safety, r.base_unit)}</td>
+      <td class="wt-num" data-l="แนวโน้ม" style="color:${r.trend > 1.05 ? 'var(--amber-ink)' : r.trend < 0.95 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.trend > 1 ? '+' : ''}${Math.round((r.trend - 1) * 100)}%</td></tr>`).join('')
+      || `<tr><td colspan="9" class="wt-empty">${q ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่มีวัตถุดิบในรอบนี้'}</td></tr>`}</tbody></table></div>`;
+  if (keepFocus) { const el = document.getElementById('bmcFcFindBox'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
 }
 async function bmcSaveForecast() {
   const bid = Number(document.getElementById('bmcFcBranch').value);
@@ -2376,31 +2389,32 @@ async function bmcLoadCalendar() {
   const w = _bmcFcCanWrite();
   // the sales team sets the DELIVERY weekday only; the cutoff (13:15, two days before — a Tuesday delivery: Saturday) is derived
   const sel = (bid, rnd, val) => w
-    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="delivery_weekday" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1';bmcCalCutoff(this)" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
+    ? `<select data-bid="${bid}" data-rnd="${rnd}" data-f="delivery_weekday" onchange="this.style.background='var(--accent-soft)';this.dataset.dirty='1';bmcCalCutoff(this)" aria-label="วันส่ง" style="border:1px solid var(--border-control);border-radius:8px;font-size:14px;min-height:34px;padding:0 6px;background:var(--bg-input);color:var(--text-primary)">
         ${_BMC_WD.map((n, o) => `<option value="${o}" ${Number(val) === o ? 'selected' : ''}>${n}</option>`).join('')}</select>`
     : _BMC_WD[val];
-  const cut = (bid, rnd, th) => `<span id="bmcCut_${bid}_${rnd}">${esc(th || '')}</span>`;
+  const cut = (bid, rnd, th) => `<div class="wt-muted" style="font-size:13px;white-space:nowrap">ตัดรอบ <span id="bmcCut_${bid}_${rnd}">${esc(th || '')}</span></div>`;
   // PR-V · สาขาอ้างอิงสำหรับสาขาใหม่: saved as soon as it is chosen (it is not one of the delivery days)
   const refSel = (r) => w
-    ? `<select onchange="bmcSetRefBranch(${r.branch_id}, this)" aria-label="สาขาอ้างอิงของ${esc(r.branch)}" style="border:1px solid var(--border);border-radius:4px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary);max-width:150px">
+    ? `<select onchange="bmcSetRefBranch(${r.branch_id}, this)" aria-label="สาขาอ้างอิงของ${esc(r.branch)}" style="border:1px solid var(--border-control);border-radius:8px;font-size:14px;min-height:34px;background:var(--bg-input);color:var(--text-primary);max-width:200px">
         <option value="benchmark" ${r.ref_mode === 'benchmark' ? 'selected' : ''}>ค่ากลางสาขาของบริษัท</option><option value="none" ${r.ref_mode === 'none' ? 'selected' : ''}>ไม่ใช้</option>${_bmcCal.rows.filter(x => x.branch_id !== r.branch_id).map(x => `<option value="${x.branch_id}" ${Number(r.ref_branch_id) === x.branch_id ? 'selected' : ''}>${esc(x.branch)}</option>`).join('')}</select>`
     : (r.ref_mode === 'benchmark' ? 'ค่ากลางสาขาของบริษัท' : r.ref_mode === 'none' ? 'ไม่ใช้' : esc(((_bmcCal.rows.find(x => x.branch_id === r.ref_branch_id) || {}).branch) || '–'));
   const pilot = _bmcCal.pilot || [];
   const calRows = (_bmcCalPilotOnly && pilot.length) ? _bmcCal.rows.filter(r => pilot.includes(r.branch)) : _bmcCal.rows;
-  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
-      ${pilot.length ? `<label class="text-[11px] flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
-      <span class="text-[11px]" style="color:var(--text-muted)">แสดง ${calRows.length} จาก ${_bmcCal.rows.length} สาขา · บันทึกเฉพาะแถวที่แก้ไข</span>
-      <span class="text-[11px] w-full" style="color:var(--text-muted)">สาขาอ้างอิง: สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน จะคำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง) · เลือกแล้วบันทึกทันที</span>
-      ${w ? `<button onclick="bmcSaveCalendar()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">บันทึกรอบส่ง</button>` : ''}</div>
-    <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
-      <th class="pr-2">สาขา</th><th class="pr-2">รอบ 1 วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">รอบ 2 วันส่ง</th><th class="pr-2">ตัดรอบ</th>
-      <th class="pr-2">แซลมอนสด วันส่ง</th><th class="pr-2">ตัดรอบ</th><th class="pr-2">สาขาอ้างอิงสำหรับสาขาใหม่</th><th>ตั้งโดย</th></tr></thead>
-    <tbody>${calRows.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1">${esc(r.branch)}</td>
-      <td class="pr-2">${sel(r.branch_id, '1', r.r1.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '1', r.r1.cutoff_th)}</td>
-      <td class="pr-2">${sel(r.branch_id, '2', r.r2.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, '2', r.r2.cutoff_th)}</td>
-      <td class="pr-2">${sel(r.branch_id, 'salmon', r.rsalmon.delivery_weekday)}</td><td class="pr-2">${cut(r.branch_id, 'salmon', r.rsalmon.cutoff_th)}</td>
-      <td class="pr-2">${refSel(r)}</td>
-      <td class="text-[10.5px]" style="color:var(--text-muted)">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+  // 2026-10-19: one cell per round (วันส่ง, ตัดรอบ under it), the explanation folded, the save button on the title row
+  const rnd = (r, k, x) => `<td data-l="${k === '1' ? 'รอบ 1' : k === '2' ? 'รอบ 2' : 'แซลมอนสด'}">${sel(r.branch_id, k, x.delivery_weekday)}${cut(r.branch_id, k, x.cutoff_th)}</td>`;
+  document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-3 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
+      ${pilot.length ? `<label class="text-sm flex items-center gap-2" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()" style="width:18px;height:18px"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
+      <span class="text-sm" style="color:var(--text-muted)">${calRows.length} จาก ${_bmcCal.rows.length} สาขา</span>
+      ${w ? `<button type="button" class="wt-btn is-primary ml-auto" onclick="bmcSaveCalendar()">บันทึกรอบส่ง</button>` : ''}</div>
+    ${w ? '<div class="wt-note mb-2">เลือกวันส่ง แล้วกด “บันทึกรอบส่ง” (บันทึกเฉพาะแถวที่แก้ไข) · เวลาตัดรอบคำนวณให้เอง · สาขาอ้างอิงบันทึกทันทีที่เลือก</div>' : ''}
+    <div class="wt-wrap" style="max-height:70vh"><table class="wt"><thead><tr>
+      <th>สาขา</th><th>รอบ 1</th><th>รอบ 2</th><th>แซลมอนสด</th><th>สาขาอ้างอิง (สาขาใหม่)</th><th>ตั้งโดย</th></tr></thead>
+    <tbody>${calRows.map(r => `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(r.branch)}</td>
+      ${rnd(r, '1', r.r1)}${rnd(r, '2', r.r2)}${rnd(r, 'salmon', r.rsalmon)}
+      <td data-l="สาขาอ้างอิง">${refSel(r)}</td>
+      <td data-l="ตั้งโดย" class="wt-muted" style="white-space:nowrap">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--text-secondary)">สาขาอ้างอิงคืออะไร</summary>
+      <div class="text-sm mt-1" style="color:var(--text-secondary)">สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน คำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง)</div></details>`;
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
   bmcLoadBenchmark();
