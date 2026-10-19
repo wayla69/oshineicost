@@ -1285,7 +1285,8 @@ function setupChartDefaults() {
   if (typeof Chart === 'undefined') return;
   const FONT = "'KIRA UI','Noto Sans Thai',-apple-system,'Segoe UI',sans-serif";
   Chart.defaults.font.family = FONT;
-  Chart.defaults.font.size = 11.5;
+  Chart.defaults.font.size = 12.5;          // owner 2026-10-19: larger, bolder text across the app
+  Chart.defaults.font.weight = 500;
   Chart.defaults.color = '#475569';
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
 
