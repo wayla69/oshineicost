@@ -62,8 +62,8 @@ body .text-xs:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px; line-he
 body .text-sm:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 15px; line-height: 1.5; }
 body .text-base:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 16.5px; }
 body :is(.text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px; line-height: 1.45; }
-:is([style*="font-size:9px"], [style*="font-size:10px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size: 10px"], [style*="font-size: 11px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px !important; }
-:is([style*="font-size:11.5px"], [style*="font-size:12px"], [style*="font-size: 12px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px !important; }
+:is([style*="font-size:9px"], [style*="font-size: 9px"], [style*="font-size:9.5px"], [style*="font-size: 9.5px"], [style*="font-size:10px"], [style*="font-size: 10px"], [style*="font-size:10.5px"], [style*="font-size: 10.5px"], [style*="font-size:11px"], [style*="font-size: 11px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px !important; }
+:is([style*="font-size:11.5px"], [style*="font-size: 11.5px"], [style*="font-size:12px"], [style*="font-size: 12px"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px !important; }
 }
 
 .card {
@@ -1576,12 +1576,12 @@ select.supply-month { min-width: 150px; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.text-xs) { font-size: 14px; line-height: 1.55; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]) { font-size: 13px; line-height: 1.5; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) .text-sm { font-size: 15px; line-height: 1.55; }
-:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is([style*="font-size:10px"], [style*="font-size:11.5px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size: 10px"], [style*="font-size: 11px"]) { font-size: 13px !important; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is([style*="font-size:9px"], [style*="font-size: 9px"], [style*="font-size:9.5px"], [style*="font-size: 9.5px"], [style*="font-size:10px"], [style*="font-size: 10px"], [style*="font-size:10.5px"], [style*="font-size: 10.5px"], [style*="font-size:11px"], [style*="font-size: 11px"], [style*="font-size:11.5px"], [style*="font-size: 11.5px"]) { font-size: 13px !important; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(table.text-xs, .text-xs table) td { padding-top: 6px; padding-bottom: 6px; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) thead th { font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) .section-title { font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--text-primary); }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.bmc-help > summary, .bmc-help > div, .bmc-help > p) { font-size: 14px; }
-:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(button, label, select, input)[style*="font-size:11.5px"], :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(button, label)[style*="font-size:12px"] { font-size: 13.5px !important; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(button, label, select, input):is([style*="font-size:11.5px"], [style*="font-size: 11.5px"], [style*="font-size:12px"], [style*="font-size: 12px"]) { font-size: 13.5px !important; }
 #clusterBar.supply-bar :is(button, span) { font-size: 14px; }
 #clusterBar.supply-bar button { min-height: 34px; }
 /* ── supply tabs: one look for every table (2026-10-19, owner: "ดูต่อง่าย"): roomy rows, headers that stay on screen,

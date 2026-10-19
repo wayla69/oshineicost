@@ -2287,6 +2287,7 @@ async function bmcRunForecast() {
   _bmcStatus('bmcFcStatus', 'กำลังคำนวณ…');
   try {
     _bmcFc = await _bmcJson(`${API}/api/bom-center/forecast?branch_id=${bid}&round=${rnd}&order_day=${day}&season=${season}`);
+    if (_bmcFcKey.split('|').slice(0, 2).join('|') !== `${bid}|${rnd}`) _bmcFcFind = '';   // another branch or round: no search carried over
     _bmcFcKey = `${bid}|${rnd}|${day}|${season}`;
     bmcRenderForecast();
     _bmcStatus('bmcFcStatus', '');

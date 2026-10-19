@@ -182,6 +182,7 @@ function _ohbBranchLines(step, linkFn) {
 async function ohbLoadCentral() {
   const month = _ohbCloseMonth();
   const mlbl = document.getElementById('ohbCloseMonthLbl'); if (mlbl) mlbl.textContent = fmtMonthTh(month);
+  if (_ohbLinkMonth !== month) { _ohbLinkFind = ''; _ohbLinkMonth = month; }   // a new month starts with no search in step 3
   _bmcStatus('ohbCloseStatus', 'กำลังโหลด…');
   try {
     const [d, t] = await Promise.all([_bmcJson(`${API}/api/bom-center/central`),
@@ -197,7 +198,7 @@ async function ohbLoadCentral() {
     document.getElementById('ohbCenStat').innerHTML = (d.count
       ? bmcStats([['บัญชีสินค้าส่วนกลาง (รายการ)', d.count], ['สาขาซื้อเอง (รายการ)', d.local],
           ['ยังไม่ระบุอัตราแปลงหน่วย', d.needs_factor || 0, d.needs_factor ? 'var(--amber-ink)' : null]])
-      : _bmcChip('ยังไม่มีบัญชีสินค้าส่วนกลาง (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)', 'var(--amber-ink)'))
+      : '<div class="text-sm" style="color:var(--amber-ink)">ยังไม่มีบัญชีสินค้าส่วนกลาง (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)</div>')
       + (st.deliveries ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(month)}</div>${_ohbBranchLines(st.deliveries)}` : '');
     set(3, st.code_links && st.code_links.status);
     ohbLoadLinks();
@@ -247,6 +248,7 @@ function ohbCntBranchChanged(quiet) {
 let _ohbLinkData = null;
 let _ohbLinkView = null;        // 'sugg' | 'kept' | 'orphan' — null = the first list that has rows
 let _ohbLinkFind = '';
+let _ohbLinkMonth = null;
 function _ohbTag(text, ink) { return `<span class="wt-tag" style="color:${ink}">${esc(text)}</span>`; }
 // codes.py: a score of 1.0 or more = one name contains the other; below that = similar letters only
 function _ohbScoreTag(s) { return s >= 1 ? _ohbTag('ชื่อตรงกัน', 'var(--good-ink)') : _ohbTag('ชื่อคล้ายกัน', 'var(--amber-ink)'); }
@@ -442,7 +444,7 @@ async function ohbCntImport(input) {
       ${bmcStats([['รายการในไฟล์', pre.lines], ['ยังไม่ได้นับ', pre.blank || 0, pre.blank ? 'var(--bad-ink)' : null], ['ไม่พบรหัส', (pre.unknown || []).length, (pre.unknown || []).length ? 'var(--bad-ink)' : null],
         ['แปลงหน่วยไม่ได้', (pre.unconverted || []).length, (pre.unconverted || []).length ? 'var(--bad-ink)' : null]])}
       ${probs.length ? `<div class="wt-wrap mt-1" style="max-height:320px"><table class="wt"><thead><tr><th>ต้องแก้</th><th>รายการ</th></tr></thead><tbody>
-        ${probs.map(([t, list, n]) => `<tr><td data-l="ต้องแก้" style="color:var(--bad-ink);font-weight:600">${t}</td><td data-l="รายการ">${bmcLines(list.slice(0, 20))}${n > 20 ? `<div class="wt-muted">และอีก ${n - 20} รายการ</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+        ${probs.map(([t, list, n]) => `<tr><td data-l="ต้องแก้" style="color:var(--bad-ink);font-weight:600">${t}</td><td data-l="รายการ">${bmcLines(list.slice(0, 20))}${n > Math.min(list.length, 20) ? `<div class="wt-muted">และอีก ${n - Math.min(list.length, 20)} รายการ</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
     // owner decision 2026-10-13: a file that leaves ANY item blank is not imported - there is no "send anyway"
     if (pre.incomplete) { _bmcStatus('ohbCntStatus', pre.incomplete_th, 'var(--bad-ink)'); return; }
     if (!pre.ok) { _bmcStatus('ohbCntStatus', 'แก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
