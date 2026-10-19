@@ -1594,6 +1594,11 @@ select.supply-month { min-width: 150px; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) td.text-right, :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) th.text-right { white-space: nowrap; }
 :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) td input, :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) td select { min-height: 34px; font-size: 14px; }
 @media (max-width: 700px) { :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) th, :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) td { padding: 6px 8px; } }
+/* dark mode (owner 2026-10-19 "dark mode สีอ่านยาก"): a status chip is a tint of its own ink, not a hairline outline on navy;
+   table heads and the zebra stripe separate a little more */
+body.dark :is(.bmc-chip, .wt-tag) { background: color-mix(in srgb, currentColor 16%, transparent); border-color: color-mix(in srgb, currentColor 50%, transparent) !important; font-weight: 600; }
+body.dark .wt th { background: #1a2742; color: var(--text-primary); }
+body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
 /* ── work table (.wt): a list people work through row by row — 14px text, one item per row, codes in their own column,
    the action at the row's end; on a phone each row stacks into a card with the column name before each value ── */
 .wt-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: var(--r-md, 12px); }
