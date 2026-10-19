@@ -300,7 +300,7 @@ function ohbRenderLinks(keepFocus) {
     shown = rows.length;
     body = `<table class="wt"><thead><tr><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้า</th></tr></thead><tbody>${rows.map(o => `<tr>
       <td class="wt-code" data-l="รหัสไดกิโตะ กรุ๊ป">${esc(o.code)}</td><td data-l="ชื่อสินค้า">${esc(o.name || '')}</td></tr>`).join('')}</tbody></table>`;
-    note = 'สินค้าในบัญชีส่วนกลางที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่';
+    note = 'สินค้าในบัญชีสินค้าส่วนกลางที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่';
   }
   if (!shown) body = `<div class="wt-empty">${q ? 'ไม่พบรายการที่ตรงกับคำค้น' : v === 'kept' ? 'ยังไม่มีรหัสที่จับคู่' : 'ไม่มีรายการ'}</div>`;
   box.innerHTML = `<div class="wt-bar"><div class="wt-seg">${seg}</div>
