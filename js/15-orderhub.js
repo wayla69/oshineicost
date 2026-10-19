@@ -609,18 +609,24 @@ function ohbRenderDetail() {
         : `<div class="ohb-line-q">ส่งจริง <b>${_bmcNum(sent)}</b> ${esc(_ohbUnitWord(l))}${l.ss_reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : ''}</div>`}
       ${l.received_units != null ? `<div class="ohb-line-c">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</div>`;
   }).join('');
+  // desktop (2026-10-19): สาขายืนยัน is the figure to send, ส่งจริง a large box beside it, the reason only when the two differ (as on a phone)
+  const fld = 'border:1px solid var(--border-control);border-radius:8px;background:var(--bg-input);color:var(--text-primary);font-size:14px;min-height:36px';
   const rows = shown.map(l => {
     const sent = l.processed_units != null ? l.processed_units : l.confirmed_units;
-    return `<tr style="border-top:1px solid var(--border)">
-      <td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)} · หน่วยสั่ง ${esc(_ohbUnitFull(l))}</div></td>
-      <td class="py-1 pr-2 text-right">${_bmcNum(l.suggested_units)}</td>
-      <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.confirmed_units)}</b>${l.reason_th ? `<div class="text-[10.5px]" style="color:var(--amber-ink)">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</td>
-      <td class="py-1 pr-2 text-right">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:64px;text-align:center;border:1px solid var(--border-control);border-radius:6px;padding:3px;background:var(--bg-input);color:var(--text-primary)">
-        <div id="ohbPE_${esc(l.code)}" class="text-[11px]" role="alert" style="color:var(--bad-ink);text-align:right"></div>` : _bmcNum(sent)}</td>
-      <td class="py-1">${work ? `<select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" style="font-size:11px;border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล (หากส่งไม่ตรง) —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
-        <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" style="width:110px;font-size:11px;border:1px solid var(--border-control);border-radius:6px;padding:2px 4px;background:var(--bg-input);color:var(--text-primary)">`
-        : (l.ss_reason_th ? `<span class="text-[11px]" style="color:var(--amber-ink)">${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : '')}
-        ${l.received_units != null ? `<div class="text-[10.5px]" style="color:var(--text-muted)">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</td></tr>`;
+    const differs = sent != null && Math.abs(Number(sent) - Number(l.confirmed_units || 0)) > 1e-9;
+    return `<tr>
+      <td class="wt-code" data-l="รหัส">${esc(l.code)}</td>
+      <td data-l="วัตถุดิบ" style="min-width:200px"><div style="font-weight:600">${esc(l.name || l.code)}</div>${l.reason_th ? `<div style="font-size:13px;color:var(--amber-ink)">สาขา: ${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</td>
+      <td class="wt-num wt-muted" data-l="ยอดแนะนำ">${_bmcNum(l.suggested_units)}</td>
+      <td class="wt-num" data-l="สาขายืนยัน" style="font-weight:700;font-size:15px">${_bmcNum(l.confirmed_units)}</td>
+      <td class="wt-num" data-l="ส่งจริง">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:96px;text-align:center;font-weight:700;${fld}">
+        <div id="ohbPE_${esc(l.code)}" role="alert" style="font-size:13px;color:var(--bad-ink)"></div>` : `<b>${_bmcNum(sent)}</b>`}</td>
+      <td data-l="หน่วย" style="white-space:nowrap">${esc(_ohbUnitFull(l))}</td>
+      <td data-l="เหตุผล (คลัง)">${work ? `<div id="ohbX_${esc(l.code)}"${differs ? '' : ' hidden'}><div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
+          <select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" style="${fld}"><option value="">— เลือกเหตุผล —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
+          <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" style="padding:2px 8px;${fld}"></div></div>`
+        : (l.ss_reason_th ? `<span style="color:var(--amber-ink)">${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : '')}
+        ${l.received_units != null ? `<div class="wt-muted" style="font-size:13px">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</td></tr>`;
   }).join('');
   document.getElementById('ohbDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_bmcOrderTitle(o))} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}${o.late ? ' ' + _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
@@ -634,9 +640,10 @@ function ohbRenderDetail() {
       ${o.claims.map(c => `<tr><td data-l="แจ้งเมื่อ">${esc(_bmcClaimWhen(c))}</td><td data-l="แจ้งตอน">${esc(c.origin_th || '')}</td><td data-l="สถานะ">${esc(c.status_th || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${o.buffer_pct ? `<div class="text-xs mt-1" style="color:var(--navy-ink)">สาขาปรับยอดพยากรณ์ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% · ${esc(o.buffer_reason_th || '')}${o.buffer_note ? ' · ' + esc(o.buffer_note) : ''} (ยอดแนะนำในตารางคือยอดปกติก่อนปรับ)</div>` : ''}
     ${phone ? `${work ? `<div class="mt-2"><button type="button" onclick="ohbFillAll()" class="brn-act brn-act-line" style="width:100%">ส่งตามที่สาขายืนยันทั้งหมด</button>
-      <div class="text-xs mt-1" style="color:var(--text-muted)">เติมช่องส่งจริงของทุกรายการที่ยังไม่ได้แก้ให้เท่ากับยอดที่สาขายืนยัน · ช่องเหตุผลจะแสดงเมื่อส่งจริงไม่ตรงกับที่สาขายืนยัน</div></div>` : ''}<div class="mt-2">${blocks}</div>` : `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ยอดแนะนำ</th><th class="py-1 pr-2 text-right">สาขายืนยัน</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1">เหตุผล (คลัง)</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`}
+      <div class="text-xs mt-1" style="color:var(--text-muted)">เติมช่องส่งจริงของทุกรายการที่ยังไม่ได้แก้ให้เท่ากับยอดที่สาขายืนยัน · ช่องเหตุผลจะแสดงเมื่อส่งจริงไม่ตรงกับที่สาขายืนยัน</div></div>` : ''}<div class="mt-2">${blocks}</div>` : `<div class="wt-wrap mt-2" style="max-height:70vh"><table class="wt"><thead><tr>
+      <th>รหัส</th><th>วัตถุดิบ</th><th class="wt-num">ยอดแนะนำ</th><th class="wt-num">สาขายืนยัน</th><th class="wt-num">ส่งจริง</th><th>หน่วย</th><th>เหตุผล (เมื่อส่งไม่ตรง)</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      ${work ? '<div class="wt-note">ช่องเหตุผลแสดงเมื่อส่งจริงไม่ตรงกับที่สาขายืนยัน</div>' : ''}`}
     ${!work && o.status === 'submitted' ? '<div class="text-xs mt-2" style="color:var(--text-muted)">คลังเป็นผู้ระบุยอดส่งจริง</div>' : ''}
     ${work ? `<div class="flex flex-wrap items-center gap-2 mt-2 text-xs${phone ? ' ohb-actbar' : ''}"><label class="ohb-po">เลขที่ PO <input id="ohbPo" value="${esc(o.po_ref || '')}" style="width:${phone ? 110 : 150}px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:${phone ? 16 : 13}px;min-height:${phone ? 44 : 0}px;background:var(--bg-input);color:var(--text-primary)"></label>
       ${phone ? `<button onclick="ohbProcess()" class="brn-act">${o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง'}</button>` : _ohbBtn('ส่งตามที่สาขายืนยันทั้งหมด', 'ohbFillAll()') + _ohbBtn(o.status === 'processed' ? 'บันทึกการแก้ไข' : 'ยืนยันยอดส่ง', 'ohbProcess()', true)}<span id="ohbDStatus"></span></div>` : ''}`;
@@ -754,28 +761,45 @@ function ohbDownloadConsolidated() {
 const _OHB_CS = { ok: ['ตามแนะนำ', 'var(--good-ink)'], over: ['สั่งเกิน', 'var(--amber-ink)'], under: ['สั่งขาด', 'var(--amber-ink)'],
   not_ordered: ['ไม่ได้สั่ง', 'var(--bad-ink)'], not_submitted: ['ยังไม่ส่ง', 'var(--bad-ink)'], upcoming: ['ยังไม่ถึงกำหนด', 'var(--text-muted)'] };
 function _ohbCRange() { return `date_from=${document.getElementById('ohbCFrom').value}&date_to=${document.getElementById('ohbCTo').value}`; }
+// 2026-10-19: the status counts are the filter (ต้องดู first), each ฿ figure carries its % change on a second line, coloured
+let _ohbComp = null, _ohbCFilter = 'look';
+const _OHB_C_LOOK = ['over', 'under', 'not_ordered', 'not_submitted'];
 async function ohbLoadComp() {
   const box = document.getElementById('ohbComp');
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
   try {
-    const c = await _bmcJson(`${API}/api/bom-center/hub/compliance?${_ohbCRange()}`);
-    document.getElementById('ohbCChips').innerHTML = Object.entries(_OHB_CS).filter(([k]) => c.counts[k]).map(([k, [t, ink]]) => _bmcChip(`${t} ${c.counts[k]}`, ink)).join(' ');
-    const pct = v => v == null ? '' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`;
-    box.innerHTML = c.rows.length ? `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-        <th class="py-1 pr-2">ตัดรอบ</th><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2">รอบส่ง</th><th class="py-1 pr-2">สถานะ</th>
-        <th class="py-1 pr-2 text-right">ยอดแนะนำ ฿</th><th class="py-1 pr-2 text-right">สาขายืนยัน ฿</th><th class="py-1 pr-2 text-right">ส่งจริง ฿</th><th class="py-1 pr-2 text-right">รับจริง ฿</th><th class="py-1">เวลา</th></tr></thead><tbody>` +
-      c.rows.map(r => { const [t, ink] = _OHB_CS[r.status] || [r.status, 'var(--text-muted)'];
-        return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(fmtDay(r.cycle_date))}</td><td class="py-1 pr-2">${esc(r.branch || '')}</td><td class="py-1 pr-2">${esc(_OHB_RND[r.round] || r.round)}</td>
-          <td class="py-1 pr-2">${_bmcChip(t, ink)}</td>
-          <td class="py-1 pr-2 text-right">${r.suggested != null ? _bmcNum(r.suggested, 0) : ''}</td>
-          <td class="py-1 pr-2 text-right">${r.confirmed != null ? _bmcNum(r.confirmed, 0) : ''} <span style="color:var(--text-muted)">${pct(r.confirmed_vs_suggested_pct)}</span></td>
-          <td class="py-1 pr-2 text-right">${r.processed != null ? _bmcNum(r.processed, 0) : ''} <span style="color:var(--text-muted)">${pct(r.centre_change_pct)}</span></td>
-          <td class="py-1 pr-2 text-right">${r.received != null ? _bmcNum(r.received, 0) : ''} <span style="color:var(--text-muted)">${pct(r.delivery_gap_pct)}</span></td>
-          <td class="py-1">${r.order_id ? (r.late ? _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : '') + (r.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งช้า', 'var(--bad-ink)') : '') : ''}</td></tr>`; }).join('') + '</tbody></table></div>'
-      : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล (สาขายังไม่เริ่มใช้งาน)</span>';
-    if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
+    _ohbComp = await _bmcJson(`${API}/api/bom-center/hub/compliance?${_ohbCRange()}`);
+    ohbRenderComp();
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
   ohbLoadOutcome();
+}
+function ohbCompFilter(k) { _ohbCFilter = k; ohbRenderComp(); }
+function ohbRenderComp() {
+  const c = _ohbComp, box = document.getElementById('ohbComp');
+  if (!c || !box) return;
+  const look = c.rows.filter(r => _OHB_C_LOOK.includes(r.status)).length;
+  if (_ohbCFilter !== 'all' && _ohbCFilter !== 'look' && !c.counts[_ohbCFilter]) _ohbCFilter = 'look';
+  const seg = [['look', 'ต้องดู', look], ['all', 'ทั้งหมด', c.rows.length]].concat(Object.entries(_OHB_CS).filter(([k]) => c.counts[k]).map(([k, [t]]) => [k, t, c.counts[k]]))
+    .map(([k, t, n]) => `<button type="button" class="${_ohbCFilter === k ? 'is-on' : ''}" onclick="ohbCompFilter('${k}')">${t}<span class="wt-n">${n}</span></button>`).join('');
+  document.getElementById('ohbCChips').innerHTML = `<div class="wt-seg" style="flex-wrap:wrap">${seg}</div>`;
+  const rows = c.rows.filter(r => _ohbCFilter === 'all' || (_ohbCFilter === 'look' ? _OHB_C_LOOK.includes(r.status) : r.status === _ohbCFilter));
+  const fig = (v, p, lbl) => v == null ? '<span class="wt-muted">–</span>' : `${_bmcNum(v, 0)}${p == null ? '' : `<div style="font-size:13px;color:${Math.abs(p) >= 10 ? 'var(--amber-ink)' : 'var(--text-muted)'}">${p > 0 ? '+' : ''}${_bmcNum(p, 1)}% ${lbl}</div>`}`;
+  box.innerHTML = c.rows.length ? `<div class="wt-wrap" style="max-height:70vh"><table class="wt"><thead><tr>
+        <th>ตัดรอบ</th><th>สาขา · รอบ</th><th>สถานะ</th>
+        <th class="wt-num">ยอดแนะนำ ฿</th><th class="wt-num">สาขายืนยัน ฿</th><th class="wt-num">ส่งจริง ฿</th><th class="wt-num">รับจริง ฿</th></tr></thead><tbody>` +
+      (rows.map(r => { const [t, ink] = _OHB_CS[r.status] || [r.status, 'var(--text-muted)'];
+        const late = r.order_id ? [r.late ? _bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)') : '', r.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งช้า', 'var(--bad-ink)') : ''].filter(Boolean).join('') : '';
+        return `<tr><td data-l="ตัดรอบ" style="white-space:nowrap">${esc(fmtDay(r.cycle_date))}</td>
+          <td data-l="สาขา · รอบ"><div style="font-weight:600">${esc(r.branch || '')}</div><div class="wt-muted" style="font-size:13px">${esc(_OHB_RND[r.round] || r.round)}</div></td>
+          <td data-l="สถานะ"><div style="display:flex;gap:4px;flex-wrap:wrap">${_bmcChip(t, ink)}${late}</div></td>
+          <td class="wt-num wt-muted" data-l="ยอดแนะนำ ฿">${fig(r.suggested, null)}</td>
+          <td class="wt-num" data-l="สาขายืนยัน ฿" style="font-weight:600">${fig(r.confirmed, r.confirmed_vs_suggested_pct, 'จากแนะนำ')}</td>
+          <td class="wt-num" data-l="ส่งจริง ฿">${fig(r.processed, r.centre_change_pct, 'จากยืนยัน')}</td>
+          <td class="wt-num" data-l="รับจริง ฿">${fig(r.received, r.delivery_gap_pct, 'จากส่ง')}</td></tr>`; }).join('')
+        || `<tr><td colspan="7" class="wt-empty" style="color:var(--good-ink)">✓ ไม่มีรอบที่ต้องดูในช่วงนี้</td></tr>`) + '</tbody></table></div>'
+      + '<div class="wt-note">ตัวเลขสีเหลือง = ต่างกันตั้งแต่ 10% ขึ้นไป</div>'
+      : '<div class="wt-empty">ยังไม่มีข้อมูล (สาขายังไม่เริ่มใช้งาน)</div>';
+  if (c.issues && c.issues.length) box.innerHTML += `<div class="text-sm font-semibold mt-4 mb-1" style="color:var(--text-primary)">การทำใบตัดเบิกในช่วงวันเดียวกัน</div>${ohbIsSummaryTable(c.issues)}`;
 }
 // ── batch 4b (2.5) · ผลของการสั่งจริง: days of cover left when the next delivery arrives, and the ordered items that ran out before it ──
 async function ohbLoadOutcome() {
