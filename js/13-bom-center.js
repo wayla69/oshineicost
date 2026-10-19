@@ -156,7 +156,28 @@ function _bmcClaimWhen(c) {
 }
 function _bmcClaimTitle(c) { return [`เคลมของ ${c.branch || ''}`.trim(), _bmcRoundDay(c), _bmcClaimWhen(c)].filter(Boolean).join(' · '); }
 function _bmcChip(text, ink) {
-  return `<span style="display:inline-block;padding:1px 6px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:10.5px;white-space:nowrap">${esc(text)}</span>`;
+  return `<span class="bmc-chip" style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:nowrap;vertical-align:middle">${esc(text)}</span>`;
+}
+// One row per branch (2026-10-19, owner: no run-on "✓ อุดรธานี: … · ✓ อุบลราชธานี: …" lines): สาขา · สถานะ · รายละเอียด · the link.
+// `branches` = [{branch, status, detail, ...}] as /todo gives them; `linkFn(b)` returns the row's action html (or '').
+const _BMC_BR_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
+                     blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงาน', 'var(--text-muted)'] };
+// numbers as tiles instead of "a 12 · b 3 · c 0" sentences: [[label, value, ink?], ...]; a null value is left out
+function bmcStats(list) {
+  return `<div class="wt-stats">${list.filter(x => x && x[1] != null).map(([l, v, ink]) => `<div class="wt-stat"><div class="wt-stat-l">${l}</div>
+    <div class="wt-stat-v"${ink ? ` style="color:${ink}"` : ''}>${typeof v === 'number' ? _bmcNum(v, 0) : v}</div></div>`).join('')}</div>`;
+}
+function bmcBranchTable(branches, linkFn) {
+  const list = branches || [];
+  if (!list.length) return '';
+  const acts = list.map(b => (linkFn && b.status !== 'done' ? linkFn(b) || '' : ''));
+  const anyAct = acts.some(Boolean);
+  return `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt"><thead><tr><th>สาขา</th><th>สถานะ</th><th>รายละเอียด</th>${anyAct ? '<th></th>' : ''}</tr></thead><tbody>${list.map((b, i) => {
+    const [lbl, ink] = _BMC_BR_ST[b.status] || _BMC_BR_ST.todo;
+    return `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(b.branch || '')}</td>
+      <td data-l="สถานะ"><span class="wt-tag" style="color:${ink}">${lbl}</span></td>
+      <td data-l="รายละเอียด" style="color:var(--text-secondary)">${esc(b.detail || '')}</td>${anyAct ? `<td class="wt-act">${acts[i]}</td>` : ''}</tr>`;
+  }).join('')}</tbody></table></div>`;
 }
 
 function bmcSetSub(k) {
@@ -690,8 +711,12 @@ async function bmcImportIng(input) {
     bmcUcReset('bmcUcIng');
     const pre = await send(true, null);
     document.getElementById('bmcIngReport').innerHTML = `<div class="card p-3 text-xs" style="color:var(--text-secondary)">
-      แผ่นงาน <b>${esc(pre.sheet)}</b> · อ่าน ${pre.rows} แถว · ใหม่ ${pre.inserted} · แก้ไข ${pre.updated} · ไม่เปลี่ยน ${pre.unchanged} · ราคาใบเสนอราคา ${pre.ref_prices}
-      ${pre.skipped.length ? `<div class="mt-1" style="color:var(--amber-ink)">ข้าม ${pre.skipped.length} แถว: ${pre.skipped.slice(0, 8).map(s => `แถว ${s.row}${s.code ? ' ' + esc(s.code) : ''} (${esc(s.why)})`).join(' · ')}</div>` : ''}
+      แผ่นงาน <b>${esc(pre.sheet)}</b>
+      ${bmcStats([['อ่าน (แถว)', pre.rows], ['ใหม่', pre.inserted], ['แก้ไข', pre.updated], ['ไม่เปลี่ยน', pre.unchanged], ['ราคาใบเสนอราคา', pre.ref_prices],
+        ['ข้าม (แถว)', pre.skipped.length, pre.skipped.length ? 'var(--amber-ink)' : null]])}
+      ${pre.skipped.length ? `<div class="wt-wrap mt-2" style="max-height:260px"><table class="wt"><thead><tr><th class="wt-num">แถว</th><th>รหัส</th><th>เหตุที่ข้าม</th></tr></thead><tbody>
+        ${pre.skipped.slice(0, 50).map(s => `<tr><td class="wt-num" data-l="แถว">${s.row}</td><td class="wt-code" data-l="รหัส">${esc(s.code || '')}</td><td data-l="เหตุที่ข้าม" style="color:var(--amber-ink)">${esc(s.why)}</td></tr>`).join('')}</tbody></table></div>
+        ${pre.skipped.length > 50 ? `<div class="wt-note">แสดง 50 จาก ${pre.skipped.length} แถว</div>` : ''}` : ''}
       <div id="bmcUcIng" class="mt-2" style="display:none"></div></div>`;
     if (!(pre.inserted + pre.updated + pre.ref_prices)) { _bmcStatus('bmcIngStatus', 'ไม่มีรายการเปลี่ยนแปลง'); return; }
     // PR-Y: a code the register does not know may be a new code of an item it has - the person answers per code before anything is added
@@ -2673,10 +2698,12 @@ async function bmcLoadRuns() {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/forecast/runs?limit=20`);
     document.getElementById('bmcFcRuns').innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ยอดแนะนำที่บันทึกไว้</div>` +
-      (d.rows.map(r => `<div class="text-[11.5px] py-0.5 border-b" style="border-color:var(--border-soft);color:var(--text-secondary)">${esc(r.branch || '')} ·
-        ${r.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + r.round} · ตัดรอบ ${esc(fmtDay(r.order_day))} · ใช้ ${esc(fmtDay(r.cover_from))}–${esc(fmtDay(r.cover_to))} · ${r.lines} รายการ · ฿${_bmcNum(r.value, 0)} ·
-        ${esc(whoTh(r.created_by))} ${esc(fmtAt(r.created_at))}</div>`).join('')
-        || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดแนะนำที่บันทึกไว้</div>');
+      (d.rows.length ? `<div class="wt-wrap" style="max-height:360px"><table class="wt"><thead><tr><th>สาขา</th><th>รอบ</th><th>ตัดรอบ</th><th>ช่วงที่ใช้</th><th class="wt-num">รายการ</th><th class="wt-num">มูลค่า</th><th>ผู้บันทึก</th></tr></thead><tbody>
+        ${d.rows.map(r => `<tr><td data-l="สาขา" style="font-weight:600">${esc(r.branch || '')}</td><td data-l="รอบ">${r.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + esc(r.round)}</td>
+          <td data-l="ตัดรอบ">${esc(fmtDay(r.order_day))}</td><td data-l="ช่วงที่ใช้">${esc(fmtDay(r.cover_from))}–${esc(fmtDay(r.cover_to))}</td>
+          <td class="wt-num" data-l="รายการ">${r.lines}</td><td class="wt-num" data-l="มูลค่า">฿${_bmcNum(r.value, 0)}</td>
+          <td class="wt-muted" data-l="ผู้บันทึก">${esc(whoTh(r.created_by))} ${esc(fmtAt(r.created_at))}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="wt-empty">ยังไม่มียอดแนะนำที่บันทึกไว้</div>');
   } catch (e) { /* list is a nicety */ }
 }
 

@@ -318,7 +318,7 @@ function _shmCard(it, n, mineBlock) {
     : `<button onclick="shmGo('${esc(it.key)}')" class="text-xs rounded-lg px-3 py-1 whitespace-nowrap" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>`;
   const dim = it.status === 'done' || it.status === 'na';
   const per = (it.branches || []).length > 1
-    ? `<div class="text-[11px] mt-1 flex flex-wrap gap-x-3 gap-y-0.5">${it.branches.map(b => `<span style="color:${(_SHM_ST[b.status] || _SHM_ST.todo)[1]}">${b.status === 'done' ? '✓' : '•'} ${esc(b.branch)}: ${esc(b.detail)}</span>`).join('')}</div>`
+    ? bmcBranchTable(it.branches)
     : (it.detail ? `<div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(it.detail)}</div>` : '');
   // 1.5 · the card "ข้อมูลตั้งต้นที่ยังว่าง": one link per blank field, with the items that are bought for the most ฿ named beside it
   const gp = (it.gaps || []).length ? `<div class="text-[11px] mt-1">${it.gaps.map(g => `<div style="margin-top:2px">
