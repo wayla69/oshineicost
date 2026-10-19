@@ -2672,6 +2672,7 @@ function _updateClusterBar(name) {
   }
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
+  bar.classList.toggle('supply-bar', !!cl.chips);       // the supply bar's chips read at 14px (index.html)
   if (cl.chips) { _renderSupplyBar(bar, cl, name); return; }   // วัตถุดิบและใบสั่งซื้อ: chips are panes
   const allowed = cl.tabs.filter(([t]) => tabAllowed(t));
   const shown = allowed.filter(([t]) => !SOFT_KILL.has(t));

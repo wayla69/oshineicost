@@ -176,9 +176,8 @@ const _OHB_STEP_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'],
 function _ohbCloseMonth() { return _ohbMonthVal(); }
 function _ohbStChip(s) { const m = _OHB_STEP_ST[s] || _OHB_STEP_ST.na; return _bmcChip(m[0], m[1]); }
 function _ohbBranchLines(step, linkFn) {
-  const ink = s => s === 'done' ? 'var(--good-ink)' : s === 'todo' ? 'var(--amber-ink)' : 'var(--text-muted)';
-  return (step.branches || []).map(b => `<div style="color:${ink(b.status)}">${b.status === 'done' ? '✓' : '•'} ${esc(b.branch)}: ${esc(b.detail)}${linkFn && b.status !== 'done' ? ' ' + linkFn(b) : ''}</div>`).join('')
-    || `<div style="color:var(--text-muted)">${esc(step.detail || '')}</div>`;
+  return bmcBranchTable(step.branches, linkFn)
+    || `<div class="text-sm mt-1" style="color:var(--text-muted)">${esc(step.detail || '')}</div>`;
 }
 async function ohbLoadCentral() {
   const month = _ohbCloseMonth();
@@ -196,23 +195,24 @@ async function ohbLoadCentral() {
     // step 2 = the list and the month's notes together
     set(2, st.central_report && st.deliveries ? (st.central_report.status === 'done' && st.deliveries.status === 'done' ? 'done' : 'todo') : 'todo');
     document.getElementById('ohbCenStat').innerHTML = (d.count
-      ? `บัญชีสินค้าส่วนกลาง <b>${d.count}</b> รายการ · สาขาซื้อเอง ${d.local} รายการ${d.needs_factor ? ` · ${_bmcChip(d.needs_factor + ' รายการยังไม่ระบุอัตราแปลงหน่วย', 'var(--amber-ink)')}` : ''}`
+      ? bmcStats([['บัญชีสินค้าส่วนกลาง (รายการ)', d.count], ['สาขาซื้อเอง (รายการ)', d.local],
+          ['ยังไม่ระบุอัตราแปลงหน่วย', d.needs_factor || 0, d.needs_factor ? 'var(--amber-ink)' : null]])
       : _bmcChip('ยังไม่มีบัญชีสินค้าส่วนกลาง (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)', 'var(--amber-ink)'))
-      + (st.deliveries ? `<div class="mt-1">ใบรับสินค้าประจำเดือน${fmtMonthTh(month)}:${_ohbBranchLines(st.deliveries)}</div>` : '');
+      + (st.deliveries ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(month)}</div>${_ohbBranchLines(st.deliveries)}` : '');
     set(3, st.code_links && st.code_links.status);
     ohbLoadLinks();
     // step 4 = the two counts
     const c4 = [st.begin_count, st.end_count].filter(Boolean);
     set(4, c4.length ? (c4.every(s => s.status === 'done') ? 'done' : c4.some(s => s.status === 'todo') ? 'todo' : 'blocked') : null);
-    document.getElementById('ohbSt4Detail').innerHTML = c4.map(s => `<div class="mt-1"><b>${esc(s.title)}</b> ${_ohbStChip(s.status)}${_ohbBranchLines(s)}</div>`).join('');
+    document.getElementById('ohbSt4Detail').innerHTML = c4.map(s => `<div class="mt-3"><span class="text-sm font-semibold" style="color:var(--text-primary)">${esc(s.title)}</span> ${_ohbStChip(s.status)}${_ohbBranchLines(s)}</div>`).join('');
     set(5, st.receipts_confirm && st.receipts_confirm.status);
     document.getElementById('ohbSt5Detail').innerHTML = st.receipts_confirm ? _ohbBranchLines(st.receipts_confirm,
-      b => `<a href="#" onclick="supplyGo({tab:'branchstock',pane:'var',branch:${b.branch_id}});return false" style="color:var(--accent);text-decoration:underline">เปิดผลต่างของสาขา →</a>`) : '';
+      b => `<button type="button" class="wt-btn" onclick="supplyGo({tab:'branchstock',pane:'var',branch:${b.branch_id}})">เปิดผลต่าง →</button>`) : '';
     set(6, st.issue_posted && st.issue_posted.status);
     const issueOk = (hit => !!hit && _supplyItemAllowed(hit.item))(_supplyItemOf('bomcenter', 'issue'));   // the link only for a role whose bar lists that page
     const lk6 = document.getElementById('ohbSt6Link'); if (lk6) lk6.style.display = issueOk ? '' : 'none';
     document.getElementById('ohbSt6Detail').innerHTML = st.issue_posted ? _ohbBranchLines(st.issue_posted,
-      issueOk ? b => `<a href="#" onclick="supplyGo({tab:'bomcenter',pane:'issue',branch:${b.branch_id},month:'${esc(month)}'});return false" style="color:var(--accent);text-decoration:underline">เปิดใบสรุปตัดเบิกของสาขา →</a>` : null) : '';
+      issueOk ? b => `<button type="button" class="wt-btn" onclick="supplyGo({tab:'bomcenter',pane:'issue',branch:${b.branch_id},month:'${esc(month)}'})">เปิดใบสรุปตัดเบิก →</button>` : null) : '';
     set(7, st.monthly_summary && st.monthly_summary.status);
     // the count import: the branch from the shared context, the date the checklist says is missing
     const sel = document.getElementById('ohbCntBranch');
@@ -241,23 +241,78 @@ function ohbCntBranchChanged(quiet) {
   const want = pend && pend.go && pend.go.extra ? pend.go.extra.count_date : '';
   if (want) day.value = want;
 }
+// Step 3 as three lists behind one switch (2026-10-19, owner: "เขียนติดๆ กันคนทำงานล้าสายตา"): ต้องตัดสินใจ (the suggested
+// pairs, one row per recipe code with its options under each other), จับคู่แล้ว (a table, the undo at the row's end) and
+// ไม่มีสูตรใช้; a search box filters the open list by code or name.
+let _ohbLinkData = null;
+let _ohbLinkView = null;        // 'sugg' | 'kept' | 'orphan' — null = the first list that has rows
+let _ohbLinkFind = '';
+function _ohbTag(text, ink) { return `<span class="wt-tag" style="color:${ink}">${esc(text)}</span>`; }
+// codes.py: a score of 1.0 or more = one name contains the other; below that = similar letters only
+function _ohbScoreTag(s) { return s >= 1 ? _ohbTag('ชื่อตรงกัน', 'var(--good-ink)') : _ohbTag('ชื่อคล้ายกัน', 'var(--amber-ink)'); }
 async function ohbLoadLinks() {
   const box = document.getElementById('ohbLinks');
   try {
-    const d = await _bmcJson(`${API}/api/bom-center/central/links`);
-    const kept = d.links.map(l => `<div class="text-xs" style="border-top:1px solid var(--border);padding:4px 0;color:var(--text-primary)">
-        ${esc(l.old_code)} ${esc(l.old_name || '')} → <b>${esc(l.new_code)}</b> ${esc(l.new_name || '')}
-        <span style="color:var(--text-muted)">· ${esc(whoTh(l.who) === '-' ? '' : whoTh(l.who))}</span>
-        <button onclick="ohbLinkSave([{old_code:${_bmcQ(l.old_code)},new_code:null}])" style="font-size:11px;color:var(--bad-ink);background:none;border:0;cursor:pointer">ยกเลิกการจับคู่</button></div>`).join('');
-    const sugg = d.suggestions.map(s => `<div class="text-xs" style="border-top:1px solid var(--border);padding:5px 0;color:var(--text-primary)">
-        รหัสในสูตร <b>${esc(s.old_code)}</b> ${esc(s.old_name || '')} (ไม่อยู่ในบัญชีสินค้าส่วนกลาง) · รหัสในบัญชีที่ใกล้เคียง:
-        ${s.options.map(o => `<button onclick="ohbLinkSave([{old_code:${_bmcQ(s.old_code)},new_code:${_bmcQ(o.new_code)}}])" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 8px;margin:2px;font-size:11px;cursor:pointer;background:transparent;color:var(--text-primary)">
-          ${esc(o.new_code)} ${esc((o.new_name || '').slice(0, 40))} <span style="color:var(--text-muted)">(${o.score})</span> · จับคู่</button>`).join('')}</div>`).join('');
-    box.innerHTML = (d.links.length ? `<div class="text-xs font-semibold" style="color:var(--text-secondary)">จับคู่แล้ว ${d.links.length} รายการ</div>${kept}` : '') +
-      (d.suggestions.length ? `<div class="text-xs font-semibold mt-2" style="color:var(--amber-ink)">คู่ที่แนะนำ ${d.suggestions.length} คู่</div>${sugg}` : '') +
-      (d.orphans.length ? `<div class="text-[11px] mt-2" style="color:var(--text-muted)">วัตถุดิบในบัญชีสินค้าส่วนกลางที่ไม่มีสูตรใช้และไม่พบรหัสคู่ ${d.orphans.length} รายการ: ${d.orphans.slice(0, 20).map(o => esc(o.code)).join(', ')}${d.orphans.length > 20 ? ' …' : ''}</div>` : '') ||
-      '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีบัญชีสินค้าส่วนกลาง</span>';
+    _ohbLinkData = await _bmcJson(`${API}/api/bom-center/central/links`);
+    ohbRenderLinks();
   } catch (e) { box.textContent = String(e.message || e); }
+}
+function ohbLinkView(v) { _ohbLinkView = v; ohbRenderLinks(); }
+function ohbLinkFind(q) { _ohbLinkFind = q; ohbRenderLinks(true); }
+function ohbRenderLinks(keepFocus) {
+  const box = document.getElementById('ohbLinks'), d = _ohbLinkData;
+  if (!box || !d) return;
+  if (!d.links.length && !d.suggestions.length && !d.orphans.length) {
+    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้าส่วนกลาง · นำเข้ารายงานในขั้นที่ 2 ก่อน</div>';
+    return;
+  }
+  const n = { sugg: d.suggestions.length, kept: d.links.length, orphan: d.orphans.length };
+  let v = _ohbLinkView;
+  if (!v || (!n[v] && v !== 'kept')) v = n.sugg ? 'sugg' : 'kept';
+  const q = _ohbLinkFind.trim().toLowerCase();
+  const hit = (...xs) => !q || xs.some(x => String(x || '').toLowerCase().includes(q));
+  const seg = [['sugg', 'ต้องตัดสินใจ'], ['kept', 'จับคู่แล้ว'], ['orphan', 'ไม่มีสูตรใช้']].filter(([k]) => n[k] || k === 'kept')
+    .map(([k, l]) => `<button type="button" class="${k === v ? 'is-on' : ''}" onclick="ohbLinkView('${k}')">${l}<span class="wt-n">${n[k]}</span></button>`).join('');
+  let body = '', note = '', shown = 0;
+  if (v === 'sugg') {
+    const rows = d.suggestions.filter(s => hit(s.old_code, s.old_name, ...s.options.flatMap(o => [o.new_code, o.new_name])));
+    shown = rows.length;
+    body = `<table class="wt"><thead><tr><th>รหัสในสูตร</th><th>ชื่อในสูตร</th><th>สินค้าในบัญชีไดกิโตะ กรุ๊ปที่ใกล้เคียง</th></tr></thead><tbody>${rows.map(s => `<tr>
+      <td class="wt-code" data-l="รหัสในสูตร">${esc(s.old_code)}</td>
+      <td data-l="ชื่อในสูตร">${esc(s.old_name || '')}</td>
+      <td data-l="เลือกสินค้าที่ตรงกัน">${s.options.map(o => `<div class="wt-opt">
+        <span class="wt-code">${esc(o.new_code)}</span><span class="wt-opt-name">${esc(o.new_name || '')}</span>${_ohbScoreTag(o.score)}
+        <button type="button" class="wt-btn is-primary" onclick="ohbLinkSave([{old_code:${_bmcQ(s.old_code)},new_code:${_bmcQ(o.new_code)}}])">จับคู่</button></div>`).join('')}</td></tr>`).join('')}</tbody></table>`;
+    note = 'รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้าส่วนกลาง เลือกสินค้าที่เป็นของชนิดเดียวกันแล้วกด “จับคู่” · ถ้าไม่ตรงกันเลย ไม่ต้องจับคู่';
+  } else if (v === 'kept') {
+    const rows = d.links.filter(l => hit(l.old_code, l.old_name, l.new_code, l.new_name));
+    shown = rows.length;
+    body = `<table class="wt"><thead><tr><th>รหัสในสูตร</th><th>ชื่อในสูตร</th><th></th><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้าไดกิโตะ กรุ๊ป</th><th>ผู้จับคู่</th><th></th></tr></thead><tbody>${rows.map(l => `<tr>
+      <td class="wt-code" data-l="รหัสในสูตร">${esc(l.old_code)}</td>
+      <td data-l="ชื่อในสูตร">${esc(l.old_name || '')}</td>
+      <td class="wt-arrow">→</td>
+      <td class="wt-code" data-l="รหัสไดกิโตะ กรุ๊ป">${esc(l.new_code)}</td>
+      <td data-l="ชื่อสินค้าไดกิโตะ กรุ๊ป">${esc(l.new_name || '')}</td>
+      <td class="wt-muted" data-l="ผู้จับคู่">${esc(whoTh(l.who) === '-' ? '' : whoTh(l.who))}</td>
+      <td class="wt-act"><button type="button" class="wt-btn is-bad" onclick="ohbLinkUndo(${_bmcQ(l.old_code)},${_bmcQ(l.new_code)})">ยกเลิก</button></td></tr>`).join('')}</tbody></table>`;
+  } else {
+    const rows = d.orphans.filter(o => hit(o.code, o.name));
+    shown = rows.length;
+    body = `<table class="wt"><thead><tr><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้า</th></tr></thead><tbody>${rows.map(o => `<tr>
+      <td class="wt-code" data-l="รหัสไดกิโตะ กรุ๊ป">${esc(o.code)}</td><td data-l="ชื่อสินค้า">${esc(o.name || '')}</td></tr>`).join('')}</tbody></table>`;
+    note = 'สินค้าในบัญชีส่วนกลางที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่';
+  }
+  if (!shown) body = `<div class="wt-empty">${q ? 'ไม่พบรายการที่ตรงกับคำค้น' : v === 'kept' ? 'ยังไม่มีรหัสที่จับคู่' : 'ไม่มีรายการ'}</div>`;
+  box.innerHTML = `<div class="wt-bar"><div class="wt-seg">${seg}</div>
+      <input id="ohbLinkFindBox" class="wt-find" type="search" placeholder="ค้นหารหัสหรือชื่อ" value="${esc(_ohbLinkFind)}" oninput="ohbLinkFind(this.value)">
+      ${q ? `<span class="text-sm" style="color:var(--text-muted)">พบ ${shown} รายการ</span>` : ''}</div>
+    <div class="wt-wrap">${body}</div>${note ? `<div class="wt-note">${note}</div>` : ''}`;
+  if (keepFocus) { const f = document.getElementById('ohbLinkFindBox'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
+}
+async function ohbLinkUndo(oldCode, newCode) {
+  if (!await uiConfirm(`ยกเลิกการจับคู่ ${oldCode} → ${newCode}?\nรหัสในสูตรจะกลับไปอยู่ในรายการ “ต้องตัดสินใจ”`,
+      { title: 'ยกเลิกการจับคู่', ok: 'ยกเลิกการจับคู่', cancel: 'ไม่ยกเลิก' })) return;
+  ohbLinkSave([{ old_code: oldCode, new_code: null }]);
 }
 async function ohbLinkSave(rows) {
   try {
@@ -273,11 +328,11 @@ function _ohbCenRow(r) {
     : r.pack_change ? _bmcChip('ขนาดบรรจุต่างจากทะเบียน', 'var(--amber-ink)')
     : (r.factor_how || '').startsWith('จากทะเบียน') ? _bmcChip('ควรตรวจ', 'var(--amber-ink)')
     : r.is_new ? _bmcChip('รหัสใหม่', 'var(--navy-ink)') : '';
-  return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(r.code)}</td><td class="pr-2">${esc(r.name)}</td>
-    <td class="pr-2">${esc(r.unit_label || '')}</td><td class="pr-2 text-right">${r.price_per_sale != null ? _bmcNum(r.price_per_sale, 0) : '–'}</td>
-    <td class="pr-2">1 ${esc(r.sale_unit || '')} = ${r.base_per_sale != null ? _bmcNum(r.base_per_sale, 0) + ' ' + esc(r.base_unit || '') : '?'}
-      ${r.old_per && r.base_per_sale && r.pack_change ? `<span style="color:var(--text-muted)">(ทะเบียน ${_bmcNum(r.old_per, 0)})</span>` : ''}</td>
-    <td class="pr-2" style="color:var(--text-muted)">${esc(r.factor_how || '')}</td><td>${flag}</td></tr>`;
+  return `<tr><td class="wt-code" data-l="รหัส">${esc(r.code)}</td><td data-l="ชื่อวัตถุดิบ">${esc(r.name)}</td>
+    <td data-l="หน่วยนับ">${esc(r.unit_label || '')}</td><td class="wt-num" data-l="ราคา">${r.price_per_sale != null ? _bmcNum(r.price_per_sale, 0) : '–'}</td>
+    <td data-l="อัตราแปลงหน่วย">1 ${esc(r.sale_unit || '')} = ${r.base_per_sale != null ? _bmcNum(r.base_per_sale, 0) + ' ' + esc(r.base_unit || '') : '?'}
+      ${r.old_per && r.base_per_sale && r.pack_change ? `<span class="wt-muted">(ทะเบียน ${_bmcNum(r.old_per, 0)})</span>` : ''}</td>
+    <td class="wt-muted" data-l="ที่มา">${esc(r.factor_how || '')}</td><td data-l="ตรวจ">${flag}</td></tr>`;
 }
 // Step 2: the report once. One preview shows the list's changes AND the notes per branch;
 // the checkboxes only choose which branches the one save books (no re-upload per toggle).
@@ -303,13 +358,14 @@ async function ohbMonthPreview() {
     const look = c.rows.filter(r => r.status !== 'ok' || r.pack_change || r.is_new || (r.factor_how || '').startsWith('จากทะเบียน'));
     const monthWarn = pre.month && pre.month !== _ohbCloseMonth() ? ' ' + _bmcChip(`งวดในไฟล์ ${fmtMonthTh(pre.month)} ต่างจากงวดที่เลือก ${fmtMonthTh(_ohbCloseMonth())}`, 'var(--amber-ink)') : '';
     document.getElementById('ohbCenReport').innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">บัญชีสินค้าส่วนกลาง${monthWarn}</div>
-      <div class="text-xs" style="color:var(--text-secondary)">${esc(pre.sheet)} (${fmtMonthTh(pre.month || '?')}) · <b>${c.items}</b> รายการ · รหัสใหม่ ${c.new} · ขนาดบรรจุต่างจากทะเบียน ${c.pack_change} ·
-      ใช้ขนาดบรรจุตามทะเบียน (ควรตรวจ) ${c.from_master} · ยังไม่ระบุอัตราแปลง ${c.needs_factor} · ไม่มีราคา ${c.no_price} · ไม่นำเข้า ${c.skipped} ·
-      <b>รหัสอื่นอีก ${c.to_local} รายการจะกำหนดเป็น “สาขาซื้อเอง”</b></div>
-      ${look.length ? `<div class="overflow-x-auto mt-2" style="max-height:300px;overflow-y:auto"><table class="w-full text-xs" style="color:var(--text-primary)">
-      <thead><tr style="color:var(--text-muted)" class="text-left"><th>รหัส</th><th>ชื่อวัตถุดิบ</th><th>หน่วยนับ</th><th class="text-right">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th></th></tr></thead>
+      <div class="text-sm" style="color:var(--text-secondary)">${esc(pre.sheet)} (${fmtMonthTh(pre.month || '?')})</div>
+      ${bmcStats([['รายการในไฟล์', c.items], ['รหัสใหม่', c.new, c.new ? 'var(--navy-ink)' : null], ['ขนาดบรรจุต่างจากทะเบียน', c.pack_change, c.pack_change ? 'var(--amber-ink)' : null],
+        ['ใช้ขนาดบรรจุตามทะเบียน (ควรตรวจ)', c.from_master, c.from_master ? 'var(--amber-ink)' : null], ['ยังไม่ระบุอัตราแปลง', c.needs_factor, c.needs_factor ? 'var(--bad-ink)' : null],
+        ['ไม่มีราคา', c.no_price, c.no_price ? 'var(--amber-ink)' : null], ['ไม่นำเข้า', c.skipped], ['จะกำหนดเป็น “สาขาซื้อเอง”', c.to_local]])}
+      ${look.length ? `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt">
+      <thead><tr><th>รหัส</th><th>ชื่อวัตถุดิบ</th><th>หน่วยนับ</th><th class="wt-num">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th>ตรวจ</th></tr></thead>
       <tbody>${look.map(_ohbCenRow).join('')}</tbody></table></div>
-      <div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจ · อัตราแปลงผิด: ดาวน์โหลดบัญชีสินค้า แก้ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าใหม่</div>` : ''}`;
+      <div class="wt-note">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจ · อัตราแปลงผิด: ดาวน์โหลดบัญชีสินค้า แก้ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าใหม่</div>` : ''}`;
     const dl = pre.deliveries;
     if (!dl.branches.length) {              // a file without a month or quantities (the list's own export)
       document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs mt-2" style="color:var(--text-muted)">${esc(dl.note || 'ไฟล์นี้ไม่มียอดจัดส่งรายสาขา จึงไม่สร้างใบรับสินค้า')}</div>
@@ -317,16 +373,19 @@ async function ohbMonthPreview() {
       _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
       return;
     }
-    document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs font-semibold mt-2" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(dl.month)} · ลงวันที่ ${esc(fmtDay(dl.receipt_date))} · เลือกสาขาที่จะบันทึก</div>
-      ${dl.branches.map(b => `<label class="flex flex-wrap items-center gap-2 text-xs mt-1" style="color:var(--text-primary)">
-        <input type="checkbox" data-bid="${b.branch_id || ''}" ${b.branch_id && !b.error && b.lines ? 'checked' : ''} ${b.branch_id && !b.error && b.lines ? '' : 'disabled'}>
-        <b>${esc(b.code)} ${esc(b.branch || b.label)}</b> ${b.error ? _bmcChip(b.error, 'var(--bad-ink)') : ''}
-        ${b.branch_id ? `· ${b.lines} รายการ · ฿${_bmcNum(b.value_central, 0)} (ราคาขายของไดกิโตะ กรุ๊ป)` : ''}
-        ${b.replaced ? _bmcChip('แทนที่ใบรับเดิม ' + b.replaced + ' ใบ', 'var(--amber-ink)') : ''}
-        ${b.skipped && b.skipped.length ? _bmcChip(b.skipped.length + ' รายการแปลงหน่วยไม่ได้ (ไม่บันทึก)', 'var(--amber-ink)') : ''}</label>`).join('')}
-      <div class="flex flex-wrap items-center gap-2 mt-2">
-        <button onclick="ohbMonthSave()" style="border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">บันทึกบัญชีสินค้าและใบรับสินค้าที่เลือก</button>
-        <span class="text-[11px]" style="color:var(--text-muted)">ไม่เลือกสาขาใด = บันทึกเฉพาะบัญชีสินค้า</span></div>`;
+    document.getElementById('ohbDelReport').innerHTML = `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(dl.month)} · ลงวันที่ ${esc(fmtDay(dl.receipt_date))} · เลือกสาขาที่จะบันทึก</div>
+      <div class="wt-wrap mt-2"><table class="wt"><thead><tr><th class="wt-chk"></th><th>สาขา</th><th class="wt-num">รายการ</th><th class="wt-num">มูลค่า (ราคาขายไดกิโตะ กรุ๊ป)</th><th>หมายเหตุ</th></tr></thead><tbody>
+      ${dl.branches.map(b => { const ok = b.branch_id && !b.error && b.lines; return `<tr>
+        <td class="wt-chk"><input type="checkbox" data-bid="${b.branch_id || ''}" ${ok ? 'checked' : 'disabled'} aria-label="${esc(b.branch || b.label || '')}"></td>
+        <td data-l="สาขา"><span class="wt-code">${esc(b.code)}</span> ${esc(b.branch || b.label)}</td>
+        <td class="wt-num" data-l="รายการ">${b.branch_id ? b.lines : '–'}</td>
+        <td class="wt-num" data-l="มูลค่า">${b.branch_id ? '฿' + _bmcNum(b.value_central, 0) : '–'}</td>
+        <td data-l="หมายเหตุ">${[b.error ? _ohbTag(b.error, 'var(--bad-ink)') : '', b.replaced ? _ohbTag('แทนที่ใบรับเดิม ' + b.replaced + ' ใบ', 'var(--amber-ink)') : '',
+          b.skipped && b.skipped.length ? _ohbTag(b.skipped.length + ' รายการแปลงหน่วยไม่ได้ (ไม่บันทึก)', 'var(--amber-ink)') : ''].filter(Boolean).join(' ')}</td></tr>`; }).join('')}
+      </tbody></table></div>
+      <div class="flex flex-wrap items-center gap-3 mt-3">
+        <button type="button" class="wt-btn is-primary" onclick="ohbMonthSave()">บันทึกบัญชีสินค้าและใบรับสินค้าที่เลือก</button>
+        <span class="text-sm" style="color:var(--text-muted)">ไม่เลือกสาขาใด = บันทึกเฉพาะบัญชีสินค้า</span></div>`;
     _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
   } catch (e) { _bmcStatus('ohbCenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
@@ -1213,7 +1272,11 @@ function ohbIsRenderSlip() {
         <td class="py-1 pr-2 text-right">${l.qty_waste ? _bmcNum(l.qty_waste, 3) + ' ' + esc(l.unit || '') : '<span style="color:var(--text-muted)">—</span>'}</td>
         <td class="py-1">${l.waste_reason_th ? esc(l.waste_reason_th) + (l.note ? ' · ' + esc(l.note) : '') : ''}</td></tr>`).join('') || '<tr><td colspan="4" class="py-2" style="color:var(--text-muted)">ไม่มีรายการ</td></tr>'}</tbody></table></div>
     <div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">ประวัติของใบ</div>
-    ${s.log.map(h => `<div class="text-xs" style="border-top:1px solid var(--border);padding:3px 0;color:var(--text-secondary)">${esc(_ohbIsDt(h.at))} · ${esc(_OHB_IS_ACT[h.action] || h.action)} · ${esc(whoTh(h.who))}${h.action === 'confirm' && h.late ? ' · ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}${h.lines != null ? ` · ${h.lines} รายการ` : ''}${h.note ? (h.action === 'append' ? ' · ' : ' · เหตุผล: ') + esc(h.note) : ''}</div>`).join('')}
+    ${s.log.length ? `<div class="wt-wrap mt-1" style="max-height:300px"><table class="wt"><thead><tr><th>เวลา</th><th>การทำงาน</th><th>ผู้ทำ</th><th class="wt-num">รายการ</th><th>หมายเหตุ</th></tr></thead><tbody>
+      ${s.log.map(h => `<tr><td data-l="เวลา" style="white-space:nowrap">${esc(_ohbIsDt(h.at))}</td>
+        <td data-l="การทำงาน">${esc(_OHB_IS_ACT[h.action] || h.action)}${h.action === 'confirm' && h.late ? ' ' + _bmcChip('ยืนยันล่าช้า', 'var(--amber-ink)') : ''}</td>
+        <td data-l="ผู้ทำ">${esc(whoTh(h.who))}</td><td class="wt-num" data-l="รายการ">${h.lines != null ? h.lines : ''}</td>
+        <td data-l="หมายเหตุ" style="color:var(--text-secondary)">${h.note ? (h.action === 'append' ? '' : 'เหตุผล: ') + esc(h.note) : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${conf && _ohbIsCanReopen() ? `<textarea id="ohbIsReopenNote" rows="2" placeholder="เหตุผลที่เปิดแก้ไข (จำเป็น)" style="width:100%;margin-top:10px;padding:8px;font-size:13px;${field}"></textarea>
       <div class="flex flex-wrap items-center gap-2 mt-2">${_ohbBtn('เปิดให้สาขาแก้ไข', 'ohbIsReopen()', true)}<span id="ohbIsReopenStatus" class="text-xs"></span></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">ใบกลับเป็นร่างจนสาขายืนยันใหม่ · งวดที่บัญชีบันทึกแล้วเปิดแก้ไขไม่ได้</div>`

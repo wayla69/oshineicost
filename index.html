@@ -1555,6 +1555,68 @@ body.supply-phone .ohb-actbar { bottom: calc(56px - 76px + env(safe-area-inset-b
 .bmc-menu-item:hover { background: var(--bg-input); }
 .bmc-opts > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 select.supply-month { min-width: 150px; }
+/* ── supply tabs type floor (2026-10-19, owner: small run-on text tires the people who work these pages all day):
+   inside the seven วัตถุดิบและใบสั่งซื้อ tabs no working text is under 13px; 12px Tailwind text reads at 14px with room
+   between lines. Inline 10–11px styles written by the JS are lifted the same way. */
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.text-xs) { font-size: 14px; line-height: 1.55; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.text-\[10px\], .text-\[10\.5px\], .text-\[11px\], .text-\[11\.5px\]) { font-size: 13px; line-height: 1.5; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) .text-sm { font-size: 15px; line-height: 1.55; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is([style*="font-size:10px"], [style*="font-size:11.5px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size: 10px"], [style*="font-size: 11px"]) { font-size: 13px !important; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(table.text-xs, .text-xs table) td { padding-top: 6px; padding-bottom: 6px; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) thead th { font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text-secondary); }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) .section-title { font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--text-primary); }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(.bmc-help > summary, .bmc-help > div, .bmc-help > p) { font-size: 14px; }
+:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(button, label, select, input)[style*="font-size:11.5px"], :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) :is(button, label)[style*="font-size:12px"] { font-size: 13.5px !important; }
+#clusterBar.supply-bar :is(button, span) { font-size: 14px; }
+#clusterBar.supply-bar button { min-height: 34px; }
+/* ── work table (.wt): a list people work through row by row — 14px text, one item per row, codes in their own column,
+   the action at the row's end; on a phone each row stacks into a card with the column name before each value ── */
+.wt-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: var(--r-md, 12px); }
+.wt { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.4; color: var(--text-primary); }
+.wt th { position: sticky; top: 0; z-index: 1; background: var(--bg-input); color: var(--text-secondary); font-size: 13px; font-weight: 600; text-align: left; padding: 8px 12px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.wt td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+.wt tbody tr:first-child td { border-top: 0; }
+.wt tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-input) 45%, transparent); }
+.wt tbody tr:hover td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.wt .wt-code { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.wt .wt-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wt .wt-muted { color: var(--text-muted); }
+.wt .wt-arrow { color: var(--text-muted); text-align: center; width: 28px; padding-left: 0; padding-right: 0; }
+.wt .wt-act { text-align: right; white-space: nowrap; }
+.wt .wt-chk { width: 40px; text-align: center; }
+.wt .wt-chk input { width: 18px; height: 18px; }
+.wt-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; border: 1px solid currentColor; }
+.wt-btn { min-height: 34px; padding: 4px 14px; font-size: 13.5px; border-radius: var(--r-sm); cursor: pointer; border: 1px solid var(--border-control); background: var(--bg-card, transparent); color: var(--text-primary); white-space: nowrap; }
+.wt-btn:hover { border-color: var(--accent); }
+.wt-btn.is-primary { border: 0; background: var(--accent); color: var(--on-accent); }
+.wt-btn.is-bad { color: var(--bad-ink); }
+.wt-btn.is-bad:hover { border-color: var(--bad-ink); }
+.wt-opt { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.wt-opt + .wt-opt { border-top: 1px dashed var(--border); }
+.wt-opt-name { flex: 1 1 auto; min-width: 0; }
+.wt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.wt-seg { display: inline-flex; border: 1px solid var(--border-control); border-radius: var(--r-sm); overflow: hidden; }
+.wt-seg button { min-height: 36px; padding: 4px 14px; font-size: 14px; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.wt-seg button + button { border-left: 1px solid var(--border-control); }
+.wt-seg button.is-on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.wt-seg .wt-n { font-variant-numeric: tabular-nums; margin-left: 6px; font-weight: 700; }
+.wt-find { min-height: 36px; min-width: 220px; padding: 4px 10px; font-size: 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); }
+.wt-note { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+.wt-empty { padding: 18px 12px; font-size: 14px; color: var(--text-muted); text-align: center; }
+.wt-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0; }
+.wt-stat { border: 1px solid var(--border); border-radius: var(--r-md, 12px); padding: 8px 12px; }
+.wt-stat-l { font-size: 12.5px; color: var(--text-muted); }
+.wt-stat-v { font-size: 20px; font-weight: 700; line-height: 1.25; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) {
+  .wt-wrap { max-height: none; border: 0; }
+  .wt thead { display: none; }
+  .wt, .wt tbody, .wt tr, .wt td { display: block; width: 100%; }
+  .wt tr { border: 1px solid var(--border); border-radius: var(--r-md, 12px); margin-bottom: 8px; padding: 6px 4px; }
+  .wt td { border: 0; padding: 4px 10px; background: transparent !important; text-align: left !important; }
+  .wt td[data-l]::before { content: attr(data-l); display: block; font-size: 12px; color: var(--text-muted); }
+  .wt .wt-arrow { display: none; }
+  .wt-find { flex: 1 1 100%; min-width: 0; }
+}
 /* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
    หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
    give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
