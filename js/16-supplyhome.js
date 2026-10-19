@@ -321,9 +321,10 @@ function _shmCard(it, n, mineBlock) {
     ? bmcBranchTable(it.branches)
     : (it.detail ? `<div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(it.detail)}</div>` : '');
   // 1.5 · the card "ข้อมูลตั้งต้นที่ยังว่าง": one link per blank field, with the items that are bought for the most ฿ named beside it
-  const gp = (it.gaps || []).length ? `<div class="text-[11px] mt-1">${it.gaps.map(g => `<div style="margin-top:2px">
-      <a href="#" onclick="_shmOpen(${esc(JSON.stringify(g.go))});return false" style="color:var(--accent)">${esc(g.label)} ${g.count} รายการ →</a>${(g.items || []).length
-        ? `<span style="color:var(--text-muted)"> · ซื้อมากที่สุด: ${g.items.slice(0, 3).map(i => esc(i.name)).join(', ')}</span>` : ''}</div>`).join('')}</div>` : '';
+  const gp = (it.gaps || []).length ? `<div class="wt-wrap mt-2"><table class="wt"><thead><tr><th>ข้อมูลที่ยังว่าง</th><th class="wt-num">รายการ</th><th>ซื้อมากที่สุด</th><th></th></tr></thead><tbody>${it.gaps.map(g => `<tr>
+      <td data-l="ข้อมูลที่ยังว่าง" style="font-weight:600">${esc(g.label)}</td><td class="wt-num" data-l="รายการ">${g.count}</td>
+      <td data-l="ซื้อมากที่สุด" style="color:var(--text-secondary)">${bmcLines((g.items || []).slice(0, 3).map(i => esc(i.name)))}</td>
+      <td class="wt-act"><button type="button" class="wt-btn" onclick="_shmOpen(${esc(JSON.stringify(g.go))})">ไปแก้ →</button></td></tr>`).join('')}</tbody></table></div>` : '';
   // 3.5 · the data-quality backlog: the top 10 by the plates each item touches
   const bk = (it.backlog || []).length ? `<div class="mt-1">${bmcBacklogHtml({ top: it.backlog, total: it.backlog_total, note: 'จานที่กระทบคิดจากยอดขาย 30 วันล่าสุดของทุกสาขา แก้รายการบนสุดก่อน' }, 10)}</div>` : '';
   // 2.6 · a task made from the variance reasons is closed by "รับทราบ" (or when the cause stops)
