@@ -149,8 +149,8 @@ async function loadOrderPlan(force) {
   const miss = cov.top_missing || [];
   document.getElementById('opCoverage').innerHTML = miss.length
     ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
-        <b>เมนูที่ยังไม่มีสูตรไม่อยู่ในแผนสั่งนี้</b> (${cov.pct}% ของจานที่ขายมีสูตรแล้ว) —
-        ${miss.slice(0,5).map(x => `${esc(x.name || x.code)} (${fmtN(x.qty)} จาน)`).join(' · ')}
+        <b>เมนูที่ยังไม่มีสูตรไม่อยู่ในแผนสั่งนี้</b> (${cov.pct}% ของจานที่ขายมีสูตรแล้ว)
+        <ul style="margin:4px 0 0;padding-left:20px;list-style:disc">${miss.slice(0,5).map(x => `<li>${esc(x.name || x.code)} (${fmtN(x.qty)} จาน)</li>`).join('')}</ul>
        </div>` : '';
 
   const sn = m.season || {};
@@ -349,7 +349,7 @@ async function opLoadForcedNote(meta) {
     <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลัง —
     ติ๊ก “สั่งจากไดกิโตะ” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
     · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
-    ${miss.length ? `<div class="mt-1" style="color:var(--amber-ink)">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
+    ${miss.length ? `<div class="mt-1" style="color:var(--amber-ink)">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ ระบบจึงคำนวณและติดตามให้ไม่ได้<ul style="margin:4px 0 0;padding-left:20px;list-style:disc">${miss.map(i => `<li><b>${esc(i.code)}</b> ${esc(i.name)}</li>`).join('')}</ul></div>` : ''}
     <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
 }
 
@@ -1006,8 +1006,8 @@ async function loadIngPurchase(force) {
   document.getElementById('ipGaps').innerHTML = gaps.length
     ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
         <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> — สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ
-        จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด:
-        ${gaps.slice(0, 6).map(g => `${esc(g.branch)} ${esc(fmtDay(g.week_start))}`).join(' · ')}${gaps.length > 6 ? ' …' : ''}
+        จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด
+        <ul style="margin:4px 0 0;padding-left:20px;list-style:disc">${gaps.slice(0, 6).map(g => `<li>${esc(g.branch)} สัปดาห์ ${esc(fmtDay(g.week_start))}</li>`).join('')}${gaps.length > 6 ? `<li>และอีก ${gaps.length - 6} ช่อง</li>` : ''}</ul>
        </div>` : '';
 
   // ── per-branch summary ──
