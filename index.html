@@ -1606,6 +1606,22 @@ select.supply-month { min-width: 150px; }
 body.dark :is(.bmc-chip, .wt-tag) { background: color-mix(in srgb, currentColor 16%, transparent); border-color: color-mix(in srgb, currentColor 50%, transparent) !important; font-weight: 600; }
 body.dark .wt th { background: #1a2742; color: var(--text-primary); }
 body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+/* ── every table outside the supply tabs gets the work-table rhythm (UX review item 2, 2026-10-20); the A4 report,
+   heatmaps and the .wt tables keep their own. Wide tables (8+ columns) keep the name column on screen (.tbl-stick),
+   show the key figure in bold (.tbl-key) and may fold supporting columns (.tbl-fold-bar, wideTablesScan in 06-features.js). ── */
+@media screen {
+  [id^="tab-"]:not(#tab-mgtreport) table:not(.wt):not(.heatmap-table) td { padding-top: 7px; padding-bottom: 7px; vertical-align: middle; font-variant-numeric: tabular-nums; }
+  [id^="tab-"]:not(#tab-mgtreport) table:not(.wt):not(.heatmap-table) th { white-space: nowrap; }
+  table.tbl-wide .tbl-stick { position: sticky; z-index: 2; background: var(--bg-card); box-shadow: inset -1px 0 0 var(--border); }
+  table.tbl-wide thead .tbl-stick { z-index: 3; background: var(--bg-subtle, var(--bg-card)); }
+  table.tbl-wide td.tbl-key { font-weight: 700; color: var(--text-primary); }
+  table.tbl-wide tfoot :is(td, th) { z-index: 4; }       /* a pinned totals row stays above the fixed name column */
+  table.tbl-wide th.tbl-key { color: var(--text-primary); }
+  .tbl-fold-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 8px; }
+  .tbl-fold-btn { min-height: 32px; padding: 4px 12px; font-size: 13px; border-radius: var(--r-sm); border: 1px solid var(--border-control); background: var(--bg-card); color: var(--text-primary); cursor: pointer; }
+  .tbl-fold-btn:hover { border-color: var(--accent); }
+  .tbl-fold-names { font-size: 12.5px; color: var(--text-muted); }
+}
 /* ── work table (.wt): a list people work through row by row — 14px text, one item per row, codes in their own column,
    the action at the row's end; on a phone each row stacks into a card with the column name before each value ── */
 .wt-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--border); border-radius: var(--r-md, 12px); }

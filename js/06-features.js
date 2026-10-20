@@ -2464,3 +2464,74 @@ function _bbomRenderCoverage(d) {
     `BoM coverage: ${wbr.toLocaleString('th-TH')} / ${tot.toLocaleString('th-TH')} เมนูมีสูตร (${cov.toFixed(1)}%) · ` +
     `วัตถุดิบที่ระบุได้คิดเป็น ${ingCoveragePct.toFixed(1)}% ของต้นทุนสาขา`;
 }
+
+// ── Wide tables (UX review item 2, 2026-10-20) ─────────────────────────────────
+// A table with 8 or more columns keeps its name column on screen while it scrolls sideways, shows
+// its key figure in bold, and - where a table is listed below - folds its supporting columns behind
+// "แสดงอีก N คอลัมน์" (each viewer's choice is remembered). Column numbers count from 0 in the
+// header row; the table is left alone when a body row does not have one cell per header cell.
+const _WIDE_TABLES = {
+  pnlbTable:       { key: [6] },                    // P&L รายสาขา · กำไรดำเนินงาน
+  benchmarkTable:  { key: [10], fold: [6, 7, 8, 9] },  // เทียบสาขา · คะแนน; its 4 weighted parts fold
+  orderedTable:    { key: [5], fold: [7, 9], stick: [3] },   // เมนู · จำนวนขาย; the two running % fold; the menu name stays
+  costItemTable:   { key: [9], fold: [5, 7] },        // ต้นทุน · อัตรากำไร; the two mix % fold
+  profitBandTable: { key: [5], fold: [8] },           // กำไร · กำไร; BoM per bill folds
+  staffTable:      { key: [9], fold: [7] },           // พนักงาน · % ส่วนลด
+  pbLossTable:     { key: [5], fold: [8] },           // P&L ต่อบิล · ขาดทุน
+};
+function _wideFoldKey(id) { return 'oshinei_wide_open:' + id; }
+function _wideIsOpen(id) { try { return localStorage.getItem(_wideFoldKey(id)) === '1'; } catch (e) { return false; } }
+function wideToggle(id) {
+  try { localStorage.setItem(_wideFoldKey(id), _wideIsOpen(id) ? '0' : '1'); } catch (e) { /* the toggle still works this visit */ }
+  const t = document.getElementById(id); if (t) { t.dataset.wideSig = ''; _wideApply(t); }
+}
+function _wideApply(t) {
+  const head = t.tHead && t.tHead.rows[t.tHead.rows.length - 1];
+  if (!head || head.cells.length < 8) return;
+  const n = head.cells.length, body = t.tBodies[0] ? [...t.tBodies[0].rows] : [];
+  const sig = n + ':' + body.length + ':' + (body[0] ? body[0].cells.length : 0) + ':' + _wideIsOpen(t.id);
+  const fresh = !!(body[0] && body[0].cells[0] && !body[0].cells[0].classList.contains('tbl-stick'));   // rows rebuilt (a sort, a reload)
+  if (t.dataset.wideSig === sig && !fresh) return;       // nothing changed since the last pass
+  t.dataset.wideSig = sig;
+  t.classList.add('tbl-wide');
+  const cfg = _WIDE_TABLES[t.id] || {};
+  const regular = body.every(r => r.cells.length === n || r.cells.length === 1);   // 1 = an empty / loading row
+  const rows = [...(t.tHead ? t.tHead.rows : [])].filter(r => r.cells.length === n).concat(body.filter(r => r.cells.length === n));
+  // the name column: the first, or the second when the first is only a rank number
+  const h0 = (head.cells[0].textContent || '').trim();
+  const stick = cfg.stick || (/^(#|อันดับ|ลำดับ)?$/.test(h0) && n > 1 ? [0, 1] : [0]);
+  let left = 0;
+  stick.forEach(c => {
+    rows.forEach(r => { const cell = r.cells[c]; if (cell) { cell.classList.add('tbl-stick'); cell.style.left = left + 'px'; } });
+    left += head.cells[c].getBoundingClientRect().width || 0;
+  });
+  if (!regular) return;
+  (cfg.key || []).forEach(c => rows.forEach(r => r.cells[c] && r.cells[c].classList.add('tbl-key')));
+  const fold = cfg.fold || [];
+  if (!fold.length) return;
+  const open = _wideIsOpen(t.id);
+  rows.forEach(r => fold.forEach(c => { if (r.cells[c]) r.cells[c].style.display = open ? '' : 'none'; }));
+  let bar = document.querySelector('.tbl-fold-bar[data-for="' + t.id + '"]');
+  const host = t.closest('.overflow-x-auto, [style*="overflow"]') || t;
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'tbl-fold-bar'; bar.dataset.for = t.id;
+    host.parentElement.insertBefore(bar, host);
+  }
+  const firstText = el => { const n = [...el.childNodes].find(x => x.nodeType === 3 && x.textContent.trim()); return (n ? n.textContent : el.textContent || '').replace(/[▲▼↕]/g, '').trim(); };
+  const names = fold.map(c => firstText(head.cells[c])).filter(Boolean);
+  bar.innerHTML = `<button type="button" class="tbl-fold-btn" onclick="wideToggle('${t.id}')" aria-expanded="${open}">${open ? 'ซ่อนคอลัมน์ประกอบ' : `แสดงอีก ${fold.length} คอลัมน์`}</button>`
+    + `<span class="tbl-fold-names">${esc(names.join(' · '))}</span>`;
+}
+function wideTablesScan(root) {
+  (root || document).querySelectorAll('[id^="tab-"] table:not(.wt):not(.heatmap-table)').forEach(t => {
+    if (t.offsetParent === null || t.closest('#mgtRptBody, #tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock')) return;
+    try { _wideApply(t); } catch (e) { /* a table it cannot read is left as it was */ }
+  });
+}
+// re-run when a page renders or re-renders its rows (debounced; only the visible tab is scanned)
+let _wideT = null;
+new MutationObserver(() => {
+  clearTimeout(_wideT);
+  _wideT = setTimeout(() => { const tab = typeof activeTab !== 'undefined' && document.getElementById('tab-' + activeTab); if (tab) wideTablesScan(tab); }, 250);
+}).observe(document.body, { childList: true, subtree: true });
