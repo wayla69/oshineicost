@@ -325,7 +325,7 @@ function renderHomeForecast(fc) {
   if (per) per.textContent = `${typeof fmtMonth === 'function' ? fmtMonth(fc.period) : fc.period} · วันที่ ${fc.days_elapsed} จาก ${fc.days_total}`;
   const prog = Math.round(fc.days_elapsed / fc.days_total * 100);
   document.getElementById('home-forecast-kpis').innerHTML = [
-    { label: 'MTD', value: fmt(fc.mtd), color: '#4a70b0' },
+    { label: 'ตั้งแต่ต้นเดือน', value: fmt(fc.mtd), color: '#4a70b0' },
     { label: 'คาดจบเดือน', value: fmt(fc.projected), color: 'var(--good-ink)' },
     { label: 'ความคืบหน้า', value: `${prog}%`, color: '#0891b2' },
   ].map(k => `<div class="text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
@@ -2763,7 +2763,7 @@ async function renderMarketBenchmark(b) {
         } else if (rel.length >= 2) {                 // else MoM vs prior reliable month
           const prev = rel[rel.length - 2];
           ourPct = (byMonth[last] - byMonth[prev]) / byMonth[prev] * 100;
-          label = `รายได้ ${last} เทียบเดือนก่อน (MoM)`;
+          label = `รายได้ ${last} เทียบเดือนก่อน`;
         }
       }
     }

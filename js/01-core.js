@@ -1264,7 +1264,7 @@ function glancePeriods(labels, go) {
 }
 const _glancePartial = chart => (chart.$gi && chart.$gi.partial >= 0) ? chart.$gi.partial : -1;
 const _glanceActual = ds => !(ds.borderDash || []).length && !_GLANCE_REF_RE.test(ds.label || '');
-const _glanceTag = chart => (chart.$gi && chart.$gi.grain === 'day') ? ' วันนี้' : ' MTD';
+const _glanceTag = chart => (chart.$gi && chart.$gi.grain === 'day') ? ' วันนี้' : ' ถึงวันนี้';
 
 // ── Headline (one sentence above the chart) ──
 const _glanceLab = (chart, i) => {
@@ -1441,7 +1441,7 @@ const GLANCE_PLUGIN = {
     if (!ends.length || ends.length > 4) return;
     const narrow = ((chart.canvas.parentElement && chart.canvas.parentElement.clientWidth) || 999) < 520;
     const n = (cfg.data.labels || []).length;
-    const tag = _glanceInfo(chart).partial >= 0 ? ' MTD' : '';
+    const tag = _glanceInfo(chart).partial >= 0 ? ' ถึงวันนี้' : '';
     let need = 0;
     const ctx = chart.ctx;
     ctx.save();
