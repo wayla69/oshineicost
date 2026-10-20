@@ -2044,7 +2044,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
     then refresh this page.
   </div>
   <button class="retry-btn" onclick="retryConnection()">↻ เชื่อมต่อใหม่</button>
-  <p style="font-size:12px;color:var(--text-muted);margin-top:4px">Auto-retrying every 5 seconds…</p>
+  <p style="font-size:12px;color:var(--text-muted);margin-top:4px">ลองเชื่อมต่อใหม่ทุก 5 วินาที…</p>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
@@ -2499,7 +2499,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <div class="sidebar-footer">
     <button class="toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar">
       <svg class="nav-icon" id="toggleIcon" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-      <span class="toggle-label">Collapse</span>
+      <span class="toggle-label">ย่อเมนู</span>
     </button>
   </div>
 </aside>
@@ -2608,7 +2608,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <!-- DB connection status -->
       <div id="dbStatus" class="db-status checking" title="Database connection status">
         <span class="db-dot"></span>
-        <span id="dbStatusText">Connecting…</span>
+        <span id="dbStatusText">กำลังเชื่อมต่อ…</span>
       </div>
       <button onclick="openMonthlyPackDialog()" class="topbar-icon-btn" aria-label="ส่งออกแพ็กรายงานรายเดือน (Excel/PDF)" title="Export Monthly Review Pack (Excel/PDF)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
       <button onclick="printReport()" class="topbar-icon-btn" aria-label="พิมพ์ หรือ บันทึก PDF" title="พิมพ์ / บันทึก PDF (Ctrl+P)"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
@@ -2634,7 +2634,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 
   <!-- Preset chips bar -->
   <div id="presetBar" class="hidden px-6 py-2.5 flex items-center gap-2 flex-wrap" style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
-    <span class="text-xs text-slate-500 font-medium mr-1">Quick load:</span>
+    <span class="text-xs text-slate-500 font-medium mr-1">เลือกเร็ว:</span>
     <button onclick="loadPresetRange('this_month')" class="preset-chip">เดือนนี้</button>
     <button onclick="loadPresetRange('last_month')" class="preset-chip">เดือนที่แล้ว</button>
     <button onclick="loadPresetRange('last_3m')" class="preset-chip">3 เดือนล่าสุด</button>
@@ -2658,7 +2658,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <span id="customRangeMsg" class="text-xs text-red-500"></span>
     </span>
     <span class="text-slate-300 mx-1">|</span>
-    <span class="text-xs text-slate-500 font-medium">My presets:</span>
+    <span class="text-xs text-slate-500 font-medium">ช่วงที่บันทึกไว้:</span>
     <div id="userPresets" class="flex items-center gap-1.5 flex-wrap"></div>
     <button onclick="saveCurrentAsPreset()" class="preset-chip" style="background:#d1fae5;color:#065f46">+ บันทึกค่าปัจจุบัน</button>
   </div>
