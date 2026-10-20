@@ -948,14 +948,14 @@ function chartTheme(force) {
   // Management Report keeps a white-paper look in dark mode) themes as light.
   const dark = force ? force === 'dark' : document.body.classList.contains('dark');
   return {
-    text:     dark ? '#cbd5e1' : '#64748b',
-    textDim:  dark ? '#94a3b8' : '#94a3b8',
-    grid:     dark ? 'rgba(148,163,184,0.12)' : '#f1f5f9',
+    text:     dark ? '#dbe3ee' : '#64748b',      // dark: brighter axis text (owner 2026-10-19)
+    textDim:  dark ? '#a8b4c6' : '#94a3b8',
+    grid:     dark ? 'rgba(148,163,184,0.16)' : '#f1f5f9',
     labelStrong: dark ? '#f1f5f9' : '#1e293b',
     bg:       dark ? '#1e293b' : '#ffffff',
     // Legend / title ink. Chart.defaults.color is a fixed #475569, which is
     // 2.3:1 on the dark card, so each chart gets a theme-aware default.
-    ink:      dark ? '#94a3b8' : '#475569',
+    ink:      dark ? '#c3cddb' : '#475569',
   };
 }
 const _CHART_SLATE = ['#64748b', '#94a3b8', '#334155', '#475569'];

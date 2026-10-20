@@ -77,13 +77,13 @@ body.dark {
   --bg-topbar:  #0f1a2e;
   --bg-hover:   #1a2742;
   --text-primary:   #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-secondary: #c3cddb;   /* owner 2026-10-19 "dark mode อ่านยาก": was #94a3b8 (7:1); now 11:1 on the card */
   /* NOT the light theme's muted/secondary pair swapped over - inverting a hierarchy
      that works on white does not preserve contrast on near-black. #8595a9 clears
      4.5 on EVERY dark surface: card 5.69 · page 6.30 · subtle 5.80 · hover 4.86. */
-  --text-muted:     #8595a9;
-  --border:         #2b3b55;
-  --border-soft:    #1c2a42;
+  --text-muted:     #a8b4c6;   /* was #8595a9 (5.7:1 on the card); now 8.3:1 - long runs of muted text read as fog at 5-6:1 */
+  --border:         #34476a;   /* was #2b3b55: cards and table rows separate more clearly */
+  --border-soft:    #25365a;   /* was #1c2a42 */
   --border-control: #63738d;   /* 3.43:1 on the dark input */
   --accent:       #93b4e6;     /* 8.2:1 on the dark card */
   --accent-hover: #b7cbee;
