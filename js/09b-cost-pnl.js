@@ -478,7 +478,7 @@ async function openPnlDrill(branch) {
     const msel = document.getElementById('pnlMonthSel');
     if (msel) month = [...msel.options].map(o => o.value).find(v => v) || '';
   }
-  if (!month) { alert('ยังไม่มีข้อมูลเดือนให้แสดง — โหลดข้อมูลก่อน'); return; }
+  if (!month) { uiNotice('ยังไม่มีข้อมูลเดือนให้แสดง — โหลดข้อมูลก่อน'); return; }
   title.textContent = `${branch} · ${typeof fmtPeriod==='function'?fmtPeriod(month):month}`;
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.classList.remove('hidden');

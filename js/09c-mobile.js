@@ -557,13 +557,13 @@ async function msLoadVoice() {
     </div>`).join('') : `<div style="font-size:12px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ</div>`;
 }
 async function msVoiceHandled(id) {
-  const note = prompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ) — เว้นว่างได้');
+  const note = await uiPrompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ) — เว้นว่างได้');
   if (note === null) return;
   try {
     const r = await fetch(`${API}/api/feedback/${id}/handled`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     msLoadVoice();
-  } catch (e) { alert('บันทึกไม่สำเร็จ: ' + e.message); }
+  } catch (e) { uiNotice('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 
 // ── shared pieces (the summary view and the branch sheet print the same cards) ──

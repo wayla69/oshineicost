@@ -1495,8 +1495,8 @@ function setMenuFilterState(s) {
   if (document.getElementById('costBizTypeFilter')) document.getElementById('costBizTypeFilter').value = s.biz_type || '';
 }
 
-function saveMenuPreset() {
-  const name = prompt('Name this menu filter:', 'My filter');
+async function saveMenuPreset() {
+  const name = await uiPrompt('Name this menu filter:', 'My filter');
   if (!name) return;
   const presets = JSON.parse(localStorage.getItem('oshinei_menu_presets') || '[]');
   presets.push({ name, state: getMenuFilterState() });
@@ -1528,10 +1528,10 @@ function renderMenuPresetSelect() {
   sel.innerHTML = '<option value="">— Load saved filter —</option>' +
     presets.map((p, i) => `<option value="${i}">★ ${p.name}</option>`).join('') +
     (presets.length ? '<option disabled>──────</option><option value="__delete">Delete a preset…</option>' : '');
-  sel.onchange = (e) => {
+  sel.onchange = async (e) => {
     if (e.target.value === '__delete') {
       const names = presets.map((p, i) => `${i+1}. ${p.name}`).join('\n');
-      const idx = prompt('Delete which preset? Enter number:\n\n' + names);
+      const idx = await uiPrompt('Delete which preset? Enter number:\n\n' + names);
       const n = parseInt(idx, 10);
       if (!isNaN(n) && n >= 1 && n <= presets.length) {
         presets.splice(n - 1, 1);
@@ -2271,7 +2271,7 @@ async function loadActionCenter() {
 // ════════════════════════════════════════════════════════════════
 function exportTable(tableId, filename = 'export.csv') {
   const table = document.getElementById(tableId);
-  if (!table) { alert('Nothing to export'); return; }
+  if (!table) { uiNotice('Nothing to export'); return; }
   const rows = [];
   table.querySelectorAll('tr').forEach(tr => {
     const cells = [];

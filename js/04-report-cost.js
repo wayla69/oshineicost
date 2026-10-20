@@ -1332,7 +1332,7 @@ async function downloadCostTemplate() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   } catch(e) {
-    alert('Download failed: ' + e.message);
+    uiNotice('Download failed: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = origText; }
   }
@@ -1468,13 +1468,13 @@ async function saveMonthlyCostEdits() {
 }
 
 async function deleteMcRow(sku) {
-  if (!confirm(`ลบ monthly override ของ ${sku} เดือน ${_mcCurrentMonth()} ?`)) return;
+  if (!await uiConfirm(`ลบ monthly override ของ ${sku} เดือน ${_mcCurrentMonth()} ?`)) return;
   const month = _mcCurrentMonth();
   try {
     const res = await fetch(`${API}/api/cost/monthly?sku=${encodeURIComponent(sku)}&month=${month}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('delete failed');
     await loadMonthlyCost();
-  } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
+  } catch(e) { uiNotice('ลบไม่สำเร็จ: ' + e.message); }
 }
 
 async function downloadMonthlyTemplate() {
@@ -1489,7 +1489,7 @@ async function downloadMonthlyTemplate() {
     });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  } catch(e) { alert('ดาวน์โหลดไม่สำเร็จ: ' + e.message); }
+  } catch(e) { uiNotice('ดาวน์โหลดไม่สำเร็จ: ' + e.message); }
 }
 
 function onMonthlyCsvSelected(ev) {
@@ -1529,8 +1529,8 @@ function onMonthlyCsvSelected(ev) {
       if (isNaN(uc) || uc < 0) { skip.push(sku_code); continue; }
       payload.push({ sku_code, period_month: pm, unit_cost: uc, notes: notes || null });
     }
-    if (!payload.length) { alert(`ไม่มีแถวที่ใช้ได้ (skipped ${skip.length})`); ev.target.value=''; return; }
-    if (!confirm(`อัปโหลด ${payload.length} แถว (skip ${skip.length}) เดือน ${month} ?`)) { ev.target.value=''; return; }
+    if (!payload.length) { uiNotice(`ไม่มีแถวที่ใช้ได้ (skipped ${skip.length})`); ev.target.value=''; return; }
+    if (!await uiConfirm(`อัปโหลด ${payload.length} แถว (skip ${skip.length}) เดือน ${month} ?`)) { ev.target.value=''; return; }
     try {
       const res = await fetch(`${API}/api/cost/monthly`, {
         method: 'POST',
@@ -1539,10 +1539,10 @@ function onMonthlyCsvSelected(ev) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'upload failed');
-      alert(`✓ บันทึก ${data.written}\n• unknown SKUs: ${data.unknown_skus?.length||0}\n• invalid months: ${data.invalid_months?.length||0}`);
+      uiNotice(`✓ บันทึก ${data.written}\n• unknown SKUs: ${data.unknown_skus?.length||0}\n• invalid months: ${data.invalid_months?.length||0}`);
       await loadMonthlyCost();
     } catch(err) {
-      alert('อัปโหลดไม่สำเร็จ: ' + err.message);
+      uiNotice('อัปโหลดไม่สำเร็จ: ' + err.message);
     } finally {
       ev.target.value = '';
     }
@@ -1555,7 +1555,7 @@ function onMonthlyCsvSelected(ev) {
 async function onSalesDataSelected(ev) {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
-  if (!confirm(`อัพโหลดไฟล์ยอดขาย "${file.name}" เข้าฐานข้อมูล?\n(จะแทนที่ข้อมูลของเดือนนั้น — curated cost ไม่ถูกแตะ)`)) {
+  if (!await uiConfirm(`อัพโหลดไฟล์ยอดขาย "${file.name}" เข้าฐานข้อมูล?\n(จะแทนที่ข้อมูลของเดือนนั้น — curated cost ไม่ถูกแตะ)`)) {
     ev.target.value = ''; return;
   }
   const fd = new FormData();
@@ -1578,10 +1578,10 @@ async function onSalesDataSelected(ev) {
       if (res.status === 403 && res.headers.get('X-Denied') !== 'role') localStorage.removeItem('oshinei_upload_token');
       throw new Error(data.detail || 'upload failed');
     }
-    alert(`✓ อัพโหลดสำเร็จ\n• ไฟล์: ${data.file}\n• ชนิด: ${data.file_type}\n• เดือน: ${data.period}\n• สาขา: ${data.branch}\n• แถว: ${data.rows_ingested}`);
+    await uiNotice(`✓ อัพโหลดสำเร็จ\n• ไฟล์: ${data.file}\n• ชนิด: ${data.file_type}\n• เดือน: ${data.period}\n• สาขา: ${data.branch}\n• แถว: ${data.rows_ingested}`);
     location.reload();
   } catch (err) {
-    alert('อัพโหลดไม่สำเร็จ: ' + err.message);
+    uiNotice('อัพโหลดไม่สำเร็จ: ' + err.message);
   } finally {
     ev.target.value = '';
   }

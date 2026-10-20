@@ -982,6 +982,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 #offlineOverlay .retry-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(31,58,107,0.35); }
 
 /* ── Tab loading bar ── */
+/* UX batch A (2026-10-20): a page that takes longer than 1.5 s says so, instead of looking frozen */
+#slowNotice { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9998; display: none; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 999px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0,0,0,.15); font-size: 14px; font-weight: 500; max-width: calc(100vw - 32px); }
+#slowNotice .sn-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--accent); flex: 0 0 auto; animation: snPulse 1s ease-in-out infinite; }
+#slowNotice .sn-sub { color: var(--text-secondary); font-weight: 400; font-size: 13px; }
+@keyframes snPulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 #loadingBar {
   position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 9999;
   background:#4a70b0;
@@ -1949,6 +1956,25 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <!-- Formal theme: loaded last so it restyles the classes above (see the file header). -->
 <link rel="stylesheet" href="/docs/ui-kit/theme-formal.css">
 <link rel="stylesheet" href="/docs/ui-kit/theme-groups.css"><!-- group colours (2026-10-01); drop to go back to all-navy -->
+<style>
+/* ── UX batch A (2026-10-20): the text floor reaches the class-based sizes too. After theme-formal.css on purpose:
+   that file sets body .section-title to 11px, which beat the 12.5px lift above. Screen only; the A4 report, the
+   heatmap grids and the hour strip keep their tuned sizes. ── */
+@media screen {
+  body .section-title:where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px; letter-spacing: .03em; }
+  body .nav-section { font-size: 11.5px; }
+  body :is(.kpi-label, .dive-section-title):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12.5px; }
+  body :is(.kpi-sub, .preset-chip, .period-preset, .see-full, .dive-action-btn):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 13px; }
+  body :is(.pill, .drill-branch-btn, .db-status, .bmc-code, .search-group-title):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12px; }
+  body .search-item .badge { font-size: 11.5px; }
+  body #globalSearch { font-size: 13px; }
+  body .tbl-top60 th .sub { font-size: 11px; }
+  body #tab-menuimpact :is(thead th, .mi-kpi .mi-kpi-label) { font-size: 12px; }
+  body #tab-menuimpact .mi-kpi .mi-kpi-sub { font-size: 12.5px; }
+  body #tab-menuimpact .mi-flag { font-size: 11.5px; }
+  body #tab-feedback .fb-chip { font-size: 12.5px; }
+}
+</style>
 </head>
 <body>
 

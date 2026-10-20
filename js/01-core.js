@@ -97,7 +97,7 @@ window.uiConfirm = (message, opt) => {
 // uiNotice(message, {title, ok}): a refusal with a single button (PR-M4: "นับให้ครบก่อนส่ง" → กลับไปนับ)
 window.uiNotice = (message, opt) => {
   const o = opt || {};
-  return window.uiDialog({ message, title: o.title, okText: o.ok || 'ตกลง', noCancel: true });
+  return window.uiDialog({ message, title: o.title || 'แจ้งเตือน', okText: o.ok || 'ตกลง', noCancel: true });
 };
 window.uiPrompt = (message, value, opt) => {
   const o = opt || {};
@@ -2240,7 +2240,7 @@ function setYearRange(year, fullYear = true) {
   const yStr = String(year);
   const inYear = months.filter(m => m.startsWith(yStr));
   if (!inYear.length) {
-    alert(`ไม่มีข้อมูลในปี ${yStr}`);
+    uiNotice(`ไม่มีข้อมูลในปี ${yStr}`);
     return;
   }
   const from = fullYear ? `${yStr}-01` : inYear[0];
@@ -2527,7 +2527,28 @@ function switchTab(name, direct) {
   // Re-size remaining (now just this tab's) charts so any rendered while hidden
   // get correct dimensions.
   setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
-  Promise.resolve(loadActiveTab()).finally(() => hideLoadingBar());
+  // UX batch A (2026-10-20): past 1.5 s the page says it is still working (ปรับเมนู / พนักงาน take 10 s or more)
+  const _slowMine = ++_slowSeq;
+  const _slowTimer = setTimeout(() => { if (_slowMine === _slowSeq) _slowNotice(_noEmoji(PAGE_TITLES[name] || name)); }, 1500);
+  Promise.resolve(loadActiveTab()).finally(() => {
+    hideLoadingBar();
+    clearTimeout(_slowTimer);
+    if (_slowMine === _slowSeq) _slowNotice(null);
+  });
+}
+let _slowSeq = 0;
+function _slowNotice(title) {
+  let el = document.getElementById('slowNotice');
+  if (!title) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'slowNotice';
+    el.setAttribute('role', 'status');
+    el.innerHTML = '<span class="sn-dot" aria-hidden="true"></span><span><span class="sn-t"></span> <span class="sn-sub">หน้านี้คำนวณข้อมูลมาก อาจใช้เวลาสักครู่</span></span>';
+    document.body.appendChild(el);
+  }
+  el.querySelector('.sn-t').textContent = `กำลังโหลด ${title}…`;
+  el.style.display = 'flex';
 }
 
 // ── วัตถุดิบและใบสั่งซื้อ (BoM Center): one entry, a two-level bar ──────────
@@ -3116,7 +3137,7 @@ async function addDowntime() {
 async function deleteDowntime(id) {
   // Deleting brings the days back as unexplained rather than losing them — say so,
   // so nobody reads this button as "delete the sales data".
-  if (!confirm('ลบรายการนี้? วันเหล่านั้นจะกลับไปอยู่หมวด “ยังไม่ทราบสาเหตุ” ในการตรวจสุขภาพข้อมูล')) return;
+  if (!await uiConfirm('ลบรายการนี้? วันเหล่านั้นจะกลับไปอยู่หมวด “ยังไม่ทราบสาเหตุ” ในการตรวจสุขภาพข้อมูล')) return;
   const st = document.getElementById('dtStatus');
   try {
     const r = await fetch(`${API}/api/branch-downtime/${id}`, { method: 'DELETE' });

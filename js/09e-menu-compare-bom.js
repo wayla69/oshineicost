@@ -838,7 +838,7 @@ async function bcLoadCompareRun() {
   const sel = document.getElementById('bcCmpSel');
   bcCompareSelection = Array.from(sel.selectedOptions).map(o => o.value);
   if (bcCompareSelection.length < 2 || bcCompareSelection.length > 5) {
-    alert('โปรดเลือก 2–5 สาขา'); return;
+    uiNotice('โปรดเลือก 2–5 สาขา'); return;
   }
   const { mf, mt } = bcPeriod();
   const qp = new URLSearchParams({ branches: bcCompareSelection.join(',') });
@@ -1149,11 +1149,11 @@ function bcImportTemplate(input) {
   reader.onload = e => {
     try {
       const rows = _parseCSV(String(e.target.result));
-      if (rows.length < 2) { alert('ไฟล์ว่างหรือรูปแบบไม่ถูกต้อง'); return; }
+      if (rows.length < 2) { uiNotice('ไฟล์ว่างหรือรูปแบบไม่ถูกต้อง'); return; }
       const hdr = rows[0].map(h => h.trim().toLowerCase());
       const ix = n => hdr.findIndex(h => h.startsWith(n));
       const iSku = ix('sku_code'), iCost = ix('new_unit_cost'), iQty = ix('new_qty'), iClose = ix('close');
-      if (iSku < 0 || iCost < 0) { alert('ไม่พบคอลัมน์ sku_code / new_unit_cost — กรุณาใช้ template ที่ export'); return; }
+      if (iSku < 0 || iCost < 0) { uiNotice('ไม่พบคอลัมน์ sku_code / new_unit_cost — กรุณาใช้ template ที่ export'); return; }
       const cur = {}; (bcSimBase.skus||[]).forEach(r => { cur[r.sku_code] = r; });
       let nCost = 0, nQty = 0, nClose = 0, unknown = 0;
       bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};   // template replaces current scenario
@@ -1167,16 +1167,16 @@ function bcImportTemplate(input) {
         if (iClose >= 0) { const cl = String(r[iClose]).trim(); if (cl === '1' || cl.toLowerCase() === 'true' || cl === 'ปิด') { bcSimDisabled[sku] = true; nClose++; } }
       }
       bcRenderSimEditor(); bcRecomputeKpis();
-      alert(`อัปโหลดสำเร็จ ✓\nปรับต้นทุน ${nCost} · จำนวนเสิร์ฟ ${nQty} · ปิดเมนู ${nClose}` + (unknown ? `\n(ข้าม ${unknown} แถวที่ไม่รู้จัก SKU)` : ''));
-    } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+      uiNotice(`อัปโหลดสำเร็จ ✓\nปรับต้นทุน ${nCost} · จำนวนเสิร์ฟ ${nQty} · ปิดเมนู ${nClose}` + (unknown ? `\n(ข้าม ${unknown} แถวที่ไม่รู้จัก SKU)` : ''));
+    } catch (err) { uiNotice('อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
     finally { input.value = ''; }
   };
   reader.readAsText(file, 'utf-8');
 }
 async function bcSaveScenario() {
-  const name = prompt('ชื่อ Scenario:', 'My scenario');
+  const name = await uiPrompt('ชื่อ Scenario:', 'My scenario');
   if (!name) return;
-  const desc = prompt('คำอธิบาย (optional):', '');
+  const desc = await uiPrompt('คำอธิบาย (optional):', '');
   // union of all changed SKUs (cost / qty / disabled). unit_cost is always sent
   // (current cost when only qty/disable changed) because the column is NOT NULL.
   const curCost = {}; (bcSimBase?.skus || []).forEach(r => { curCost[r.sku_code] = r.current_unit_cost; });
@@ -1187,12 +1187,12 @@ async function bcSaveScenario() {
     qty: bcSimQty[sku_code] != null ? bcSimQty[sku_code] : null,
     disabled: !!bcSimDisabled[sku_code],
   }));
-  if (!overrides.length) { alert('ยังไม่มีการปรับ (ต้นทุน/จำนวน/ปิดเมนู)'); return; }
+  if (!overrides.length) { uiNotice('ยังไม่มีการปรับ (ต้นทุน/จำนวน/ปิดเมนู)'); return; }
   const r = await api(`${API}/api/bom-cost/scenarios`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name, description: desc, overrides})
   });
-  alert(`บันทึก Scenario #${r.id} สำเร็จ (${r.items_inserted} items)`);
+  uiNotice(`บันทึก Scenario #${r.id} สำเร็จ (${r.items_inserted} items)`);
   bcLoadSimulator();
 }
 async function bcLoadScenario(id) {
@@ -1211,8 +1211,8 @@ async function bcLoadScenario(id) {
 }
 async function bcDeleteScenario() {
   const id = document.getElementById('bcScenSel')?.value;
-  if (!id) { alert('เลือก scenario ก่อน'); return; }
-  if (!confirm('ลบ scenario นี้?')) return;
+  if (!id) { uiNotice('เลือก scenario ก่อน'); return; }
+  if (!await uiConfirm('ลบ scenario นี้?')) return;
   await fetch(`${API}/api/bom-cost/scenarios/${id}`, {method:'DELETE'});
   bcLoadSimulator();
 }
@@ -1220,23 +1220,23 @@ async function bcDeleteScenario() {
 // ── Phase B: adopt a scenario + show its realized-savings (ROI) ledger ─────────
 async function bcAdoptScenario() {
   const id = document.getElementById('bcScenSel')?.value;
-  if (!id) { alert('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด Save current)'); return; }
-  if (!confirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
+  if (!id) { uiNotice('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด Save current)'); return; }
+  if (!await uiConfirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
   const r = await fetch(`${API}/api/bom-cost/scenarios/${id}/adopt`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
   });
-  if (!r.ok) { alert('Adopt ไม่สำเร็จ'); return; }
+  if (!r.ok) { uiNotice('Adopt ไม่สำเร็จ'); return; }
   bcShowRoi();
 }
 async function bcUnadopt(id) {
-  if (!confirm('ยกเลิกการ adopt? (ล้าง baseline และผลประหยัดสะสม)')) return;
+  if (!await uiConfirm('ยกเลิกการ adopt? (ล้าง baseline และผลประหยัดสะสม)')) return;
   await fetch(`${API}/api/bom-cost/scenarios/${id}/unadopt`, { method: 'POST' });
   bcShowRoi();
 }
 async function bcShowRoi() {
   const id = document.getElementById('bcScenSel')?.value;
   const panel = document.getElementById('bcRoiPanel'); if (!panel) return;
-  if (!id) { alert('เลือก scenario ก่อน'); return; }
+  if (!id) { uiNotice('เลือก scenario ก่อน'); return; }
   panel.classList.remove('hidden');
   panel.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
   let d; try { d = await api(`${API}/api/bom-cost/scenarios/${id}/savings`); }

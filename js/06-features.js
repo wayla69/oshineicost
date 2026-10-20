@@ -941,8 +941,8 @@ function applyCustomRange() {
   onFilterChange();
 }
 
-function saveCurrentAsPreset() {
-  const name = prompt('Name this preset:', 'My preset');
+async function saveCurrentAsPreset() {
+  const name = await uiPrompt('Name this preset:', 'My preset');
   if (!name) return;
   const preset = {
     name,
@@ -2103,7 +2103,7 @@ async function uploadRequisition(input) {
 
 async function enterStockCount(branchId, branchName) {
   const m = document.getElementById('reqMonthTo')?.value;
-  const v = prompt(`มูลค่าสต๊อกวัตถุดิบคงเหลือสิ้นเดือน ${m} ของ ${branchName} (บาท)\n\nต้องมีทั้งเดือนนี้และเดือนก่อนหน้า ระบบจึงจะคิดเป็น "ใช้จริง"`);
+  const v = await uiPrompt(`มูลค่าสต๊อกวัตถุดิบคงเหลือสิ้นเดือน ${m} ของ ${branchName} (บาท)\n\nต้องมีทั้งเดือนนี้และเดือนก่อนหน้า ระบบจึงจะคิดเป็น "ใช้จริง"`);
   if (v == null || v.trim() === '') return;
   const n = parseFloat(v.replace(/,/g, ''));
   if (!(n >= 0)) { showToast('กรอกเป็นตัวเลข', 'error'); return; }

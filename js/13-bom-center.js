@@ -1245,7 +1245,7 @@ async function bmcPrepMap(name, code) {
     await _bmcJson(`${API}/api/bom-center/prep/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ src_name: name, prepared_code: code }) });
     await bmcPrepPreview();
-  } catch (e) { alert('ไม่สำเร็จ: ' + String(e.message || e)); }
+  } catch (e) { uiNotice('ไม่สำเร็จ: ' + String(e.message || e)); }
 }
 async function bmcPrepApply() {
   try {

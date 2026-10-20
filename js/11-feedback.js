@@ -241,19 +241,19 @@ async function loadFeedbackQueue() {
       </div></div>`).join('') + (items.length >= 80 ? '<p class="text-[11px] mt-2" style="color:var(--text-muted)">แสดง 80 รายการแรก — ตอบให้หมดแล้วรีเฟรช</p>' : '');
 }
 async function markFeedbackHandled(id) {
-  const note = prompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ บันทึกไว้เป็นคำตอบ) — เว้นว่างได้');
+  const note = await uiPrompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ บันทึกไว้เป็นคำตอบ) — เว้นว่างได้');
   if (note === null) return;
   try { await _fbPost(`/api/feedback/${id}/handled`, { note }); loadFeedback(true); }
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 async function flagFeedback(id, on) {
   let note = '';
-  if (on) { note = prompt('ปักหมุดเรื่องร้ายแรง — ระบุเหตุผล (เช่น อาหารเป็นพิษ ทุจริต คุกคาม)') || ''; if (!note.trim()) return; }
+  if (on) { note = await uiPrompt('ปักหมุดเรื่องร้ายแรง — ระบุเหตุผล (เช่น อาหารเป็นพิษ ทุจริต คุกคาม)') || ''; if (!note.trim()) return; }
   try { await _fbPost(`/api/feedback/${id}/flag`, { flag: on, note }); loadFeedback(true); }
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 async function toggleContacted(id, on) {
-  const by = on ? (prompt('ใครโทรกลับ (ชื่อ/ตำแหน่ง) — เว้นว่างได้') || '') : '';
+  const by = on ? (await uiPrompt('ใครโทรกลับ (ชื่อ/ตำแหน่ง) — เว้นว่างได้') || '') : '';
   try { await _fbPost(`/api/feedback/${id}/contacted`, { contacted: on, by }); loadFeedback(true); }
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }
@@ -291,7 +291,7 @@ async function exportFeedbackCsv() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `feedback_${getMonthFrom() || 'all'}_${getMonthTo() || 'all'}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 function toggleFeedbackImport() { const el = document.getElementById('fbImport'); el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-function fbCopy(btn, text) { const done = () => { const o = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => { btn.textContent = o; }, 1500); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => alert(text)); else alert(text); }
+function fbCopy(btn, text) { const done = () => { const o = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => { btn.textContent = o; }, 1500); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => uiNotice(text)); else uiNotice(text); }
 
 /* ── sources card ── */
 async function loadFeedbackSources() {
@@ -334,12 +334,12 @@ async function uploadFeedback() {
   } catch (e) { st.textContent = 'ไม่สำเร็จ: ' + e.message; }
 }
 async function deleteFeedback(id) {
-  if (!confirm('ลบรายการนี้?')) return;
+  if (!await uiConfirm('ลบรายการนี้?')) return;
   try {
     const r = await api(`${API}/api/feedback/${id}`, { method: 'DELETE' });
     if (r.detail) throw new Error(r.detail);
     loadFeedback(true);
-  } catch (e) { alert('ไม่สำเร็จ: ' + e.message); }
+  } catch (e) { uiNotice('ไม่สำเร็จ: ' + e.message); }
 }
 
 /* ── replies: draft in the panel, queue it, the nightly fetcher posts it ── */
@@ -390,7 +390,7 @@ async function cancelFeedbackReply(id) {
     const r = await api(`${API}/api/feedback/${id}/reply`, { method: 'DELETE' });
     if (r.detail) throw new Error(r.detail);
     loadFeedback(true);
-  } catch (e) { alert('ไม่สำเร็จ: ' + e.message); }
+  } catch (e) { uiNotice('ไม่สำเร็จ: ' + e.message); }
 }
 
 /* ── the chain's own channel: a QR survey per branch (routers/survey.py) ── */
@@ -418,8 +418,8 @@ async function _fbSurveySave(body) {
 function createSurveyLink(bid) { _fbSurveySave({ branch_id: bid }); }
 function createSurveyLinksAll() { _fbSurveySave({ all: true }); }
 function saveSurveyUrl(bid) { _fbSurveySave({ branch_id: bid, google_review_url: (document.getElementById('fbGurl-' + bid) || {}).value || '' }); }
-function toggleSurveyLink(bid, on) {
-  if (!on && !confirm('ปิดลิงก์นี้? QR ที่พิมพ์ไว้จะใช้ไม่ได้จนกว่าจะเปิดใหม่')) return;
+async function toggleSurveyLink(bid, on) {
+  if (!on && !await uiConfirm('ปิดลิงก์นี้? QR ที่พิมพ์ไว้จะใช้ไม่ได้จนกว่าจะเปิดใหม่')) return;
   _fbSurveySave({ branch_id: bid, active: on });
 }
 
@@ -488,16 +488,16 @@ async function saveFeedbackAction(fromId) {
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 async function setActionStatus(id, status) {
-  if (status === 'dropped' && !confirm('ยกเลิกงานนี้?')) return;
+  if (status === 'dropped' && !await uiConfirm('ยกเลิกงานนี้?')) return;
   let note;
-  if (status === 'done') { note = prompt('เสร็จแล้ว — สรุปสั้น ๆ ว่าทำอะไรไป (เว้นว่างได้)'); if (note === null) return; }
+  if (status === 'done') { note = await uiPrompt('เสร็จแล้ว — สรุปสั้น ๆ ว่าทำอะไรไป (เว้นว่างได้)'); if (note === null) return; }
   try { await _fbPost(`/api/feedback/actions/${id}`, note !== undefined ? { status, note } : { status }); loadFeedbackActions(); }
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 async function editFeedbackAction(id) {
-  const owner = prompt('ผู้รับผิดชอบ (เว้นว่าง = ไม่เปลี่ยน)'); if (owner === null) return;
-  const due = prompt('กำหนดเสร็จ YYYY-MM-DD (เว้นว่าง = ไม่เปลี่ยน)'); if (due === null) return;
-  const note = prompt('บันทึกความคืบหน้า (เว้นว่าง = ไม่เปลี่ยน)'); if (note === null) return;
+  const owner = await uiPrompt('ผู้รับผิดชอบ (เว้นว่าง = ไม่เปลี่ยน)'); if (owner === null) return;
+  const due = await uiPrompt('กำหนดเสร็จ YYYY-MM-DD (เว้นว่าง = ไม่เปลี่ยน)'); if (due === null) return;
+  const note = await uiPrompt('บันทึกความคืบหน้า (เว้นว่าง = ไม่เปลี่ยน)'); if (note === null) return;
   const body = {}; if (owner.trim()) body.owner = owner.trim(); if (due.trim()) body.due = due.trim(); if (note.trim()) body.note = note.trim();
   if (!Object.keys(body).length) return;
   try { await _fbPost(`/api/feedback/actions/${id}`, body); loadFeedbackActions(); }
@@ -659,7 +659,7 @@ async function saveCompSettings() {
 }
 async function clearCompSettings() {
   const branch = (document.getElementById('fbCompBranchSel') || {}).value || '';
-  if (!branch || !confirm(`ล้างค่าเฉพาะของ ${branch} แล้วกลับไปใช้ค่าเริ่มต้นของเครือ?`)) return;
+  if (!branch || !await uiConfirm(`ล้างค่าเฉพาะของ ${branch} แล้วกลับไปใช้ค่าเริ่มต้นของเครือ?`)) return;
   try {
     const p = new URLSearchParams({ branch });
     await _fbPost(`/api/feedback/competitors/settings?${p}`, { clear: true });

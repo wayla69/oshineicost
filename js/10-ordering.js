@@ -404,7 +404,7 @@ async function _opPostSourcing(rows, label) {
 // worth the sum of its parts, not its largest part.
 function _opBulkGuard() {
   if (document.getElementById('opFamily')?.checked) {
-    alert('โหมด “รวมชื่อคล้ายกัน” รวมหลายรหัสเข้าเป็นบรรทัดเดียว จึงไม่มีรหัสให้บันทึก\n'
+    uiNotice('โหมด “รวมชื่อคล้ายกัน” รวมหลายรหัสเข้าเป็นบรรทัดเดียว จึงไม่มีรหัสให้บันทึก\n'
         + 'กรุณาปิดโหมดนี้ก่อนเลือกเป็นชุด');
     return null;
   }
@@ -417,19 +417,19 @@ function _opBulkGuard() {
                           value_month: r.value_month || 0, units: 1 });
   }
   const rows = [...by.values()].sort((a, b) => b.value_month - a.value_month);
-  if (!rows.length) { alert('ไม่มีรายการให้ตั้งค่า'); return null; }
+  if (!rows.length) { uiNotice('ไม่มีรายการให้ตั้งค่า'); return null; }
   return rows;
 }
 
 // Apply to every row currently listed — the type / search / include filters
 // above the table are how you scope this to a subset.
-function opBulkSourcing(central) {
+async function opBulkSourcing(central) {
   const rows = _opBulkGuard();
   if (!rows) return;
   const branch = document.getElementById('opBranch')?.value || '';
   const word = central ? 'สั่งจากไดกิโตะ (ติดตาม)' : 'สาขาซื้อเอง (ไม่ติดตาม)';
   const scope = branch ? 'เฉพาะสาขา ' + branch : 'ทุกสาขา';
-  if (!confirm('ตั้ง ' + rows.length + ' วัตถุดิบที่แสดงอยู่ เป็น “' + word + '”\n'
+  if (!await uiConfirm('ตั้ง ' + rows.length + ' วัตถุดิบที่แสดงอยู่ เป็น “' + word + '”\n'
              + 'ขอบเขต: ' + scope + '\n\nยืนยันหรือไม่?')) return;
   _opPostSourcing(rows.map(r => ({ ingredient_code: r.code, branch,
                                    mode: central ? 'central' : 'local' })),
@@ -440,21 +440,21 @@ function opBulkSourcing(central) {
 // arrives sorted by ฿/เดือน descending, so "top N" is the first N rows — but
 // only while nothing is filtering them, or the ranking would be over a subset
 // and the tail silently spared.
-function opKeepTopN() {
+async function opKeepTopN() {
   const rows = _opBulkGuard();
   if (!rows) return;
   const inc = document.getElementById('opInclude')?.value || 'all';
   const q   = (document.getElementById('opQ')?.value || '').trim();
   const typ = document.getElementById('opType')?.value || '';
   if (inc !== 'all' || q || typ) {
-    alert('อันดับต้องคิดจากวัตถุดิบทั้งหมด\n'
+    uiNotice('อันดับต้องคิดจากวัตถุดิบทั้งหมด\n'
         + 'กรุณาตั้ง “ทุกรายการ” และล้างตัวกรองประเภท/คำค้นก่อน');
     return;
   }
   const n = parseInt(document.getElementById('opTopN')?.value, 10);
-  if (!n || n < 1) { alert('ใส่จำนวนรายการที่ต้องการติดตาม'); return; }
+  if (!n || n < 1) { uiNotice('ใส่จำนวนรายการที่ต้องการติดตาม'); return; }
   if (n >= rows.length) {
-    alert('มีวัตถุดิบทั้งหมด ' + rows.length + ' รายการ — ใส่จำนวนที่น้อยกว่านี้');
+    uiNotice('มีวัตถุดิบทั้งหมด ' + rows.length + ' รายการ — ใส่จำนวนที่น้อยกว่านี้');
     return;
   }
   const branch = document.getElementById('opBranch')?.value || '';
@@ -463,7 +463,7 @@ function opKeepTopN() {
   const tv = rows.reduce((a, r) => a + (r.value_month || 0), 0);
   const share = tv ? Math.round(kv / tv * 100) : 0;
   const split = rows.filter(r => r.units > 1).length;
-  if (!confirm('ติดตาม ' + keep.length + ' วัตถุดิบที่มูลค่าสูงสุด (คิดเป็น ' + share + '% ของมูลค่าสั่งทั้งหมด)\n'
+  if (!await uiConfirm('ติดตาม ' + keep.length + ' วัตถุดิบที่มูลค่าสูงสุด (คิดเป็น ' + share + '% ของมูลค่าสั่งทั้งหมด)\n'
              + 'อีก ' + drop.length + ' รายการตั้งเป็น “สาขาซื้อเอง”\n'
              + (split ? 'มี ' + split + ' รหัสที่แยกหลายหน่วยในตาราง — รวมเป็นรายการเดียวแล้ว\n' : '')
              + 'ขอบเขต: ' + (branch ? 'เฉพาะสาขา ' + branch : 'ทุกสาขา') + '\n\nยืนยันหรือไม่?')) return;
@@ -551,7 +551,7 @@ async function osSavePacks() {
   if (!rows.length) { document.getElementById('osPackSummary').textContent = 'ยังไม่มีรายการที่แก้ไข'; return; }
   const bad = rows.filter(r => !(r.qty_per_order > 0));
   if (bad.length) {
-    alert('ขนาดบรรจุต้องมากกว่า 0 — ตรวจสอบ: ' + bad.map(b => b.ingredient_code).join(', '));
+    uiNotice('ขนาดบรรจุต้องมากกว่า 0 — ตรวจสอบ: ' + bad.map(b => b.ingredient_code).join(', '));
     return;
   }
   try {
@@ -626,7 +626,7 @@ async function osAddEvent() {
 }
 
 async function osDelEvent(id) {
-  if (!confirm('ลบช่วงนี้ออกจากปฏิทิน?')) return;
+  if (!await uiConfirm('ลบช่วงนี้ออกจากปฏิทิน?')) return;
   try { await fetch(`${API}/api/ingredients/demand-calendar/${id}`, { method: 'DELETE' }); } catch (e) {}
   osLoadCalendar();
 }
@@ -640,7 +640,7 @@ async function opIssueCycle() {
   const branch = document.getElementById('opBranch')?.value || '';
   const st = document.getElementById('opCycleStatus');
   const scope = branch || 'ทุกสาขา';
-  if (!confirm(`ออกรอบสั่งสำหรับ ${scope}?\n\nระบบจะบันทึกตัวเลขที่แนะนำ ณ ตอนนี้ไว้เป็นหลักฐาน `
+  if (!await uiConfirm(`ออกรอบสั่งสำหรับ ${scope}?\n\nระบบจะบันทึกตัวเลขที่แนะนำ ณ ตอนนี้ไว้เป็นหลักฐาน `
              + `เพื่อใช้เทียบกับที่สาขาสั่งจริง (ออกซ้ำรอบเดิม = เขียนทับของเดิม)`)) return;
   st.textContent = 'กำลังออกรอบสั่ง…';
   try {
@@ -838,7 +838,7 @@ async function _opImportFile(input, url, statusId, reportId, after) {
       input.value = '';
       return;
     }
-    if (errs.length && !confirm(`อ่านไฟล์ได้ ${n} แถว แต่มี ${errs.length} แถวที่มีปัญหาและจะถูกข้าม\n\n`
+    if (errs.length && !await uiConfirm(`อ่านไฟล์ได้ ${n} แถว แต่มี ${errs.length} แถวที่มีปัญหาและจะถูกข้าม\n\n`
         + errs.slice(0, 5).map(e => `• แถว ${e.row || '-'}: ${e.why}`).join('\n')
         + `\n\nต้องการนำเข้า ${n} แถวที่เหลือหรือไม่?`)) {
       show('ยกเลิกการนำเข้า');
@@ -928,7 +928,7 @@ async function opLoadAccuracy() {
 }
 
 function opApplySuggestedBuffer() {
-  if (_opAccSuggested == null) { alert('ยังไม่มีค่าที่แนะนำ — ต้องมีรอบสั่งที่ปิดแล้วอย่างน้อย 1 รอบ'); return; }
+  if (_opAccSuggested == null) { uiNotice('ยังไม่มีค่าที่แนะนำ — ต้องมีรอบสั่งที่ปิดแล้วอย่างน้อย 1 รอบ'); return; }
   const el = document.getElementById('opBuffer');
   if (el) { el.value = _opAccSuggested; loadOrderPlan(true); }
 }
