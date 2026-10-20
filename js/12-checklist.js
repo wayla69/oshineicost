@@ -54,8 +54,8 @@ function clCopy(btn, ev) {
   if (ev) ev.stopPropagation();
   const text = btn.getAttribute('data-copy') || '';
   const done = () => { const old = btn.textContent; btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => { btn.textContent = old; }, 1500); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => alert(text));
-  else alert(text);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => uiNotice(text));
+  else uiNotice(text);
 }
 
 /* ── load ── */
@@ -250,7 +250,7 @@ function setChecklistTask(id, fields) {
 function setChecklistStart(v) { if (!v) return; _clAct(() => _clPost(`/api/checklist/${CL_NAME}/meta`, _clBody({ start: v }))); }
 
 async function completeChecklist() {
-  if (!confirm('ยืนยันปิดสมบูรณ์? ระบบจะตรวจว่าทุกขั้นตอนถูกติ๊กครบ แล้วล็อกรายการนี้ (ผู้บริหารเปิดแก้ไขอีกครั้งได้)')) return;
+  if (!await uiConfirm('ยืนยันปิดสมบูรณ์? ระบบจะตรวจว่าทุกขั้นตอนถูกติ๊กครบ แล้วล็อกรายการนี้ (ผู้บริหารเปิดแก้ไขอีกครั้งได้)')) return;
   try {
     const r = await _clPost(`/api/checklist/${CL_NAME}/complete`, _clBody({}));
     _clState = await getJSON(`/api/checklist/${CL_NAME}`); _clRender();
@@ -262,7 +262,7 @@ async function completeChecklist() {
   }
 }
 async function reopenChecklist() {
-  const reason = prompt('เหตุผลที่เปิดแก้ไขอีกครั้ง (บันทึกในประวัติ)') || '';
+  const reason = await uiPrompt('เหตุผลที่เปิดแก้ไขอีกครั้ง (บันทึกในประวัติ)') || '';
   _clAct(() => _clPost(`/api/checklist/${CL_NAME}/reopen`, _clBody({ reason })));
 }
 

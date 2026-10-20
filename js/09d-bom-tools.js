@@ -386,7 +386,7 @@ async function recalibSave() {
     status.className = 'text-xs text-slate-500';
     return;
   }
-  if (!confirm(`บันทึก ${updates.length} SKU? unit_cost เดิมจะถูกแทนที่`)) return;
+  if (!await uiConfirm(`บันทึก ${updates.length} SKU? unit_cost เดิมจะถูกแทนที่`)) return;
   status.textContent = 'saving…';
   status.className = 'text-xs text-amber-700';
   try {
@@ -451,7 +451,7 @@ function openMonthlyPackDialog() {
 function downloadMonthlyPack() {
   const month = document.getElementById('mpackMonth').value;
   if (!month || month.length !== 7) {
-    alert('กรุณาเลือกเดือน (YYYY-MM)');
+    uiNotice('กรุณาเลือกเดือน (YYYY-MM)');
     return;
   }
   const fmt = document.querySelector('input[name="mpackFmt"]:checked')?.value || 'xlsx';
@@ -498,7 +498,7 @@ async function updateBizType(skuCode, newType, el) {
     const m = BIZ_TYPE_META[newType] || BIZ_TYPE_META.other;
     if (el) { el.className = `text-xs ${m.bg} ${m.text} font-medium border-0 rounded-full px-2 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400`; }
   } catch(e) {
-    alert('Failed to update: ' + e.message);
+    uiNotice('Failed to update: ' + e.message);
   }
 }
 

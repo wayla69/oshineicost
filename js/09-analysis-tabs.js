@@ -593,7 +593,7 @@ async function loadChildBuffet() {
 let DISC_REASON_DATA = [];
 function exportDiscountReasons() {
   const s = DISC_REASON_DATA || [];
-  if (!s.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  if (!s.length) return uiNotice('ไม่มีข้อมูลให้ส่งออก');
   const rows = [['เหตุผล', 'บิล', 'มูลค่าลด', '%ของเงินลด'].join(',')];
   s.forEach(r => {
     const cells = [r.reason, r.bills, r.amount, r.pct];
@@ -727,7 +727,7 @@ async function loadCouponSeries(params, gen) {
 let COUPON_SERIES_DATA = [], COUPON_SERIES_MOM = null;
 function exportCouponSeries() {
   const s = COUPON_SERIES_DATA || [];
-  if (!s.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  if (!s.length) return uiNotice('ไม่มีข้อมูลให้ส่งออก');
   const momLbl = COUPON_SERIES_MOM ? `MoM%_${COUPON_SERIES_MOM.cur}_vs_${COUPON_SERIES_MOM.prev}` : 'MoM%';
   const rows = [['อันดับ', 'ชุดคูปอง', 'รหัส', 'ใช้งานอยู่', 'ครั้งที่ใช้', 'มูลค่าลด', 'เฉลี่ย/ครั้ง', '%ของคูปอง', momLbl].join(',')];
   s.forEach((r, i) => {

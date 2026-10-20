@@ -272,7 +272,7 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   })();
   ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad')
     .filter(a => !a.period || !_cut || String(a.period).slice(0, 7) >= _cut).slice(0, 3)
-    .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠', text: esc(a.message) }));
+    .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠', text: esc(String(a.message || '').replace(/^\s*⚠\s*/, '')) }));   // the message may carry its own ⚠
   const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
   if (up && up.vs_avg_pct >= 10)
     A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
@@ -281,9 +281,21 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
     const isMine = i => typeof _shmMine === 'function' ? _shmMine(i) : (i.owner_modules || []).some(hasModule);
     const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && isMine(i));
     mine.sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
-    mine.slice(0, 3).forEach(i => A.push({ p: i.urgent ? 1 : 5, sev: i.urgent ? 'red' : 'amber', icon: '',
-      text: `${esc(i.title)}${i.detail ? ' — ' + esc(i.detail) : ''}${i.branch ? ' (' + esc(i.branch) + ')' : ''}`,
-      act: 'ไปที่งาน', go: `shmGoFromHome('${esc(i.key)}')` }));
+    // UX batch A (2026-10-20): the same duty for several branches is ONE row naming the branches, not a row each
+    const groups = [];
+    mine.forEach(i => {
+      const k = String(i.key || '').split(':')[0] + '|' + (i.title || '');
+      const g = groups.find(x => x.k === k);
+      if (g) { if (i.branch && !g.branches.includes(i.branch)) g.branches.push(i.branch); g.urgent = g.urgent || !!i.urgent; }
+      else groups.push({ k, first: i, branches: i.branch ? [i.branch] : [], urgent: !!i.urgent });
+    });
+    groups.slice(0, 3).forEach(g => {
+      const i = g.first, n = g.branches.length;
+      const who = n > 1 ? ` · ${n} สาขา: ${g.branches.slice(0, 4).map(esc).join(', ')}${n > 4 ? ` และอีก ${n - 4}` : ''}` : (n ? ` (${esc(g.branches[0])})` : '');
+      A.push({ p: g.urgent ? 1 : 5, sev: g.urgent ? 'red' : 'amber', icon: '',
+        text: `${esc(i.title)}${who}${i.detail ? `<div style="font-size:13px;color:var(--text-secondary)">${esc(i.detail)}</div>` : ''}`,
+        act: 'ไปที่งาน', go: `shmGoFromHome('${esc(i.key)}')` });
+    });
   }
   A.sort((a, b) => a.p - b.p);
 
@@ -295,9 +307,10 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
     return;
   }
   const sevc = { red: { a: '#ef4444', t: 'rgba(239,68,68,0.06)' }, amber: { a: '#f59e0b', t: 'rgba(245,158,11,0.07)' }, green: { a: '#10b981', t: 'rgba(16,185,129,0.06)' } };
+  // UX batch A: a neutral card with a coloured bar at the left; only red keeps its tint, so the urgent rows stand out
   el.innerHTML = A.slice(0, 8).map(a => {
     const c = sevc[a.sev];
-    return `<div class="flex items-center gap-3 p-3 rounded-lg" style="background:${c.t};border:1px solid ${c.a}">
+    return `<div class="flex items-center gap-3 p-3 rounded-lg" style="background:${a.sev === 'red' ? c.t : 'var(--bg-card)'};border:1px solid var(--border);border-left:4px solid ${c.a}">
       <span class="text-base">${a.icon}</span>
       <span class="flex-1 text-sm" style="color:var(--text-primary)">${a.text}</span>
       ${a.go ? `<button onclick="${a.go}" class="text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary);background:var(--bg-card)">${a.act || 'ดู'} →</button>` : ''}
