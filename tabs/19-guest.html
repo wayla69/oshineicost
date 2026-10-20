@@ -70,27 +70,27 @@
     <p class="text-xs text-slate-400 mb-4">Revenue &amp; qty share by buffet price tier — ตามเมนูของแต่ละเดือน (ถึง ส.ค. 2026: 350 / 500 / 590 / 799 · ตั้งแต่ 1 ก.ย. 2026: ราคา NET 459 / 629 / 789 / 999 / 1,299)</p>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div>
-        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Revenue Share</p>
+        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">สัดส่วนรายได้</p>
         <div style="height:200px"><canvas id="chartBuffetRevPie"></canvas></div>
       </div>
       <div>
-        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Qty Share</p>
+        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">สัดส่วนจำนวน</p>
         <div style="height:200px"><canvas id="chartBuffetQtyPie"></canvas></div>
       </div>
       <div>
-        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Tier Detail</p>
+        <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">รายละเอียดระดับราคา</p>
         <table class="text-xs w-full" id="buffetTierTable">
           <thead><tr class="text-left border-b border-slate-200">
-            <th class="py-1 pr-2">Tier</th>
-            <th class="py-1 pr-2 text-right">Revenue</th>
-            <th class="py-1 text-right">Rev %</th>
+            <th class="py-1 pr-2">ระดับราคา</th>
+            <th class="py-1 pr-2 text-right">รายได้</th>
+            <th class="py-1 text-right">รายได้ %</th>
           </tr></thead>
           <tbody id="buffetTierBody"></tbody>
         </table>
       </div>
     </div>
     <div class="mt-4">
-      <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Monthly Tier Mix Trend</p>
+      <p class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">แนวโน้มสัดส่วนระดับราคารายเดือน</p>
       <div style="height:130px"><canvas id="chartBuffetTrend"></canvas></div>
     </div>
   </div>

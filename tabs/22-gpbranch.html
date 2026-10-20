@@ -8,10 +8,10 @@
     <div class="flex items-start gap-3">
       <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold text-emerald-900">GP รายสาขา (Gross Profit by Branch)</h2>
+        <h2 class="text-base font-bold text-emerald-900">GP รายสาขา</h2>
         <p class="text-xs text-slate-600 mt-1">
           <b>ภาพรวม — รวมทุก SKU ทั้งบุฟเฟ่ต์และอลาคาท</b> · ใช้สูตร BoM: ตัด tier SKU (BUFFET350/500/590/799/CHILD) ออก เพราะนับซ้ำกับ B0xxx
-          <br>เป้าหมาย Food Cost: <b id="gpbTargetText">55-70%</b> · สถานะ ในเป้า · ⚠ ใกล้ขอบ · เกินเป้า
+          <br>เป้าหมาย ต้นทุนอาหาร: <b id="gpbTargetText">55-70%</b> · สถานะ ในเป้า · ⚠ ใกล้ขอบ · เกินเป้า
         </p>
       </div>
     </div>
@@ -54,7 +54,7 @@
   <!-- GP% bar chart -->
   <div class="card p-5 mb-4">
     <h2 class="section-title mb-1">GP% รายสาขา <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
-    <p class="text-xs text-slate-400 mb-3">เปอร์เซ็นต์กำไรขั้นต้นของแต่ละสาขา · พื้นที่เขียวคือเป้าหมาย (Food Cost 55-70% = GP 45-55%)</p>
+    <p class="text-xs text-slate-400 mb-3">เปอร์เซ็นต์กำไรขั้นต้นของแต่ละสาขา · พื้นที่เขียวคือเป้าหมาย (ต้นทุนอาหาร 55-70% = GP 45-55%)</p>
     <div id="gpbBarWrap" style="position:relative;height:560px"><canvas id="gpbBarChart"></canvas></div>
   </div>
 
@@ -70,10 +70,10 @@
           <tr style="background:var(--bg-subtle);border-bottom:2px solid var(--border)">
             <th class="px-3 py-2 text-left cursor-pointer" onclick="_gpbSort('branch')">สาขา</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_revenue')">รายได้ ()</th>
-            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_cogs')">BoM Cost ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_cogs')">ต้นทุน BoM ()</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_gp')">GP ()</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_gp_pct')">GP %</th>
-            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_food_cost_pct')">Food Cost %</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_food_cost_pct')">ต้นทุนอาหาร %</th>
             <th class="px-3 py-2 text-center">สถานะ</th>
           </tr>
         </thead>
@@ -84,7 +84,7 @@
 
   <!-- Heatmap -->
   <div class="card p-5 mb-4">
-    <h2 class="section-title mb-1">Heatmap GP% รายเดือน × รายสาขา</h2>
+    <h2 class="section-title mb-1">แผนภาพความร้อน GP% รายเดือน × รายสาขา</h2>
     <p class="text-xs text-slate-400 mb-3">สีเขียว = GP สูง · สีแดง = GP ต่ำ/ขาดทุน · เลื่อนเมาส์เพื่อดูรายละเอียด</p>
     <div id="gpbHeatmap" style="overflow:auto"></div>
   </div>

@@ -76,8 +76,8 @@ function renderPnlTrend(monthly) {
     data: {
       labels: monthly.map(m => fmtPeriod(m.period_month)),
       datasets: [
-        { type:'bar',  label:'รายได้ (ก่อน VAT)', data: monthly.map(m => m.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.45)', order:3 },
-        { type:'bar',  label:'ต้นทุน (COGS)',     data: monthly.map(m => m.cogs||0),           backgroundColor:'rgba(239,68,68,0.65)', order:3 },
+        { type:'bar',  label:'รายได้ (ไม่รวม VAT)', data: monthly.map(m => m.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.45)', order:3 },
+        { type:'bar',  label:'ต้นทุนขาย',     data: monthly.map(m => m.cogs||0),           backgroundColor:'rgba(239,68,68,0.65)', order:3 },
         { type:'line', label:'กำไรขั้นต้น',       data: monthly.map(m => m.gross_profit||0),   borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.12)', tension:0.3, fill:true, order:1 },
         { type:'line', label:'% กำไรขั้นต้น',     data: monthly.map(m => m.margin_pct),        borderColor:'#f59e0b', borderDash:[4,3], backgroundColor:'transparent', tension:0.25, yAxisID:'y1', order:0, fill:false },
       ],
@@ -109,7 +109,7 @@ function renderPnlBillDistChain(dist) {
   if (note) note.textContent = `Est. GP/bill · Margin rate used: ${dist.margin_pct_used}% · ${fmtN(dist.total_tx)} bills`;
   mkChart('chartPnlBillDist', {
     type:'bar',
-    data:{ labels: dist.buckets.map(b=>b.label), datasets:[{ label:'Bills', data:dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8', borderRadius:3, borderWidth:0 }] },
+    data:{ labels: dist.buckets.map(b=>b.label), datasets:[{ label:'บิล', data:dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8', borderRadius:3, borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
       scales:{x:{ticks:{color:chartTheme().text}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
@@ -189,7 +189,7 @@ function populatePnlDeepBranchSelector(branches) {
   const sel = document.getElementById('pnlDeepBranchSel');
   if (!sel) return;
   const prev = pnlDeepBranch || sel.value;
-  sel.innerHTML = '<option value="">— Select a branch —</option>' +
+  sel.innerHTML = '<option value="">— เลือกสาขา —</option>' +
     branches.map(b => `<option value="${esc(b.branch)}"${b.branch === prev ? ' selected' : ''}>${esc(b.branch)}</option>`).join('');
 }
 
@@ -233,9 +233,9 @@ function renderPnlDeepTrend(monthly) {
       labels: monthly.map(m => fmtPeriod(m.period_month)),
       datasets:[
         { type:'bar',  label:'รายได้',      data:monthly.map(m=>m.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.35)', order:2 },
-        { type:'bar',  label:'COGS',         data:monthly.map(m=>m.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)',  order:2 },
-        { type:'line', label:'Gross Profit', data:monthly.map(m=>m.gross_profit||0),   borderColor:'#10b981', tension:0.3, fill:false, order:1, pointRadius:3 },
-        { type:'line', label:'GP/Bill',      data:monthly.map(m=>m.profit_per_bill),   borderColor:'#7a66b8', borderDash:[4,2], tension:0.3, fill:false, order:0, yAxisID:'y1', pointRadius:2 },
+        { type:'bar',  label:'ต้นทุนขาย',         data:monthly.map(m=>m.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)',  order:2 },
+        { type:'line', label:'กำไรขั้นต้น', data:monthly.map(m=>m.gross_profit||0),   borderColor:'#10b981', tension:0.3, fill:false, order:1, pointRadius:3 },
+        { type:'line', label:'GP/บิล',      data:monthly.map(m=>m.profit_per_bill),   borderColor:'#7a66b8', borderDash:[4,2], tension:0.3, fill:false, order:0, yAxisID:'y1', pointRadius:2 },
       ],
     },
     options:{
@@ -272,8 +272,8 @@ function renderPnlDeepBillStats(stats) {
     <thead><tr class="border-b border-slate-200 text-slate-500">
       <th class="text-left py-1 pr-2"></th>
       <th class="text-right py-1 pr-2">P10</th><th class="text-right py-1 pr-2">P25</th>
-      <th class="text-right py-1 pr-2">Median</th><th class="text-right py-1 pr-2">P75</th>
-      <th class="text-right py-1 pr-2">P90</th><th class="text-right py-1">Avg</th>
+      <th class="text-right py-1 pr-2">ค่ากลาง (มัธยฐาน)</th><th class="text-right py-1 pr-2">P75</th>
+      <th class="text-right py-1 pr-2">P90</th><th class="text-right py-1">เฉลี่ย</th>
     </tr></thead>
     <tbody>
       <tr class="border-b border-slate-100">
@@ -292,7 +292,7 @@ function renderPnlDeepBillStats(stats) {
   // Revenue histogram
   mkChart('chartPnlDeepBillDist', {
     type:'bar',
-    data:{ labels:stats.buckets.map(b=>b.label+' '), datasets:[{ label:'Bills', data:stats.buckets.map(b=>b.count), backgroundColor:'#4a70b0', borderRadius:3, borderWidth:0 }] },
+    data:{ labels:stats.buckets.map(b=>b.label+' '), datasets:[{ label:'บิล', data:stats.buckets.map(b=>b.count), backgroundColor:'#4a70b0', borderRadius:3, borderWidth:0 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
       scales:{x:{ticks:{color:chartTheme().text,font:{size:9}}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
@@ -304,7 +304,7 @@ function renderPnlDeepBillStats(stats) {
     mkChart('chartPnlDeepProfitDist', {
       type:'bar',
       data:{ labels:stats.profit_buckets.map(b=>b.label+' '),
-        datasets:[{ label:'Bills', data:stats.profit_buckets.map(b=>b.count),
+        datasets:[{ label:'บิล', data:stats.profit_buckets.map(b=>b.count),
           backgroundColor: stats.profit_buckets.map((b,i)=>i===0?'rgba(239,68,68,0.7)':'rgba(16,185,129,0.7)'), borderRadius:3, borderWidth:0 }] },
       options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
         scales:{x:{ticks:{color:chartTheme().text,font:{size:9}}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
@@ -479,10 +479,10 @@ async function loadFoodCostTrend() {
   const overall = d.overall;
   mkChart('chartFoodCostTrend', {
     data: { labels: d.months, datasets: [
-      { type:'bar',  label:'รายได้ (ex-VAT)',  data: overall.map(o => o.revenue),  backgroundColor:'rgba(31,58,107,0.55)',  borderRadius:3, order:3, yAxisID:'y'  },
-      { type:'bar',  label:'CoGS (BoM)',        data: overall.map(o => o.cost),     backgroundColor:'rgba(220,38,38,0.7)',   borderRadius:3, order:3, yAxisID:'y'  },
+      { type:'bar',  label:'รายได้ (ไม่รวม VAT)',  data: overall.map(o => o.revenue),  backgroundColor:'rgba(31,58,107,0.55)',  borderRadius:3, order:3, yAxisID:'y'  },
+      { type:'bar',  label:'ต้นทุนขาย (BoM)',        data: overall.map(o => o.cost),     backgroundColor:'rgba(220,38,38,0.7)',   borderRadius:3, order:3, yAxisID:'y'  },
       { type:'line', label:'จำนวนเสิร์ฟ',       data: overall.map(o => o.servings), borderColor:'#0891b2', backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.3, order:1, yAxisID:'y2' },
-      { type:'line', label:'% Food Cost',       data: overall.map(o => o.cost_pct), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.10)', borderWidth:2, borderDash:[4,3], pointRadius:3, tension:0.25, fill:true, order:0, yAxisID:'y1' },
+      { type:'line', label:'ต้นทุนอาหาร %',       data: overall.map(o => o.cost_pct), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.10)', borderWidth:2, borderDash:[4,3], pointRadius:3, tension:0.25, fill:true, order:0, yAxisID:'y1' },
       { type:'line', label:`Threshold (${threshold}%)`, data: d.months.map(() => parseFloat(threshold)), borderColor:'#ef4444', borderWidth:1, borderDash:[6,3], pointRadius:0, fill:false, yAxisID:'y1' },
     ] },
     options: {
@@ -526,7 +526,7 @@ async function loadFoodCostTrend() {
           <p class="text-base font-bold text-indigo-700">${fmt(last.revenue)}</p>
         </div>
         <div class="rounded-lg border border-red-100 bg-red-50/50 px-3 py-2">
-          <p class="text-[10px] text-red-600 font-semibold">CoGS (BoM)</p>
+          <p class="text-[10px] text-red-600 font-semibold">ต้นทุนขาย (BoM)</p>
           <p class="text-base font-bold text-red-700">${fmt(last.cost)}</p>
         </div>
         <div class="rounded-lg border border-cyan-100 bg-cyan-50/50 px-3 py-2">
@@ -535,7 +535,7 @@ async function loadFoodCostTrend() {
           <p class="text-[10px] text-slate-500">รายได้/เสิร์ฟ ${fmtN(last.rev_per_serving || 0)}</p>
         </div>
         <div class="rounded-lg border px-3 py-2 on-light" style="background:${(last.cost_pct||0)>parseFloat(threshold)?'#fef2f2':'#f0fdf4'};border-color:${(last.cost_pct||0)>parseFloat(threshold)?'#fecaca':'#bbf7d0'}">
-          <p class="text-[10px] font-semibold" style="color:${textInk((last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857')}">% Food Cost</p>
+          <p class="text-[10px] font-semibold" style="color:${textInk((last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857')}">ต้นทุนอาหาร %</p>
           <p class="text-base font-bold" style="color:${textInk((last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857')}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
           ${dPct != null ? `<p class="text-[10px]" style="color:${textInk(trendColor)}">${trendIcon} ${Math.abs(dPct).toFixed(1)}pp เทียบเดือนก่อน</p>` : ''}
         </div>
@@ -559,9 +559,9 @@ function renderCostOverview() {
 
   document.getElementById('costKpis').innerHTML = [
     { label:'รายได้รวม',  value:fmt(s.total_revenue),      sub: fmtN(s.total_skus)+' items sold',     color:'#4a70b0' },
-    { label:'Total COGS',     value: hasCosts ? fmt(s.total_cogs) : '—',
+    { label:'ต้นทุนขายรวม',     value: hasCosts ? fmt(s.total_cogs) : '—',
                                sub: hasCosts ? s.costed_skus+' SKUs costed' : 'no costs entered', color:'#ef4444' },
-    { label:'Gross Profit',   value: hasCosts ? fmt(s.total_gross_profit) : '—',
+    { label:'กำไรขั้นต้น',   value: hasCosts ? fmt(s.total_gross_profit) : '—',
                                sub: hasCosts ? 'Revenue (ex-VAT) minus COGS' : 'requires cost data', color:'#10b981' },
     { label:'Overall Margin', value: s.overall_margin_pct != null ? s.overall_margin_pct.toFixed(1)+'%' : '—',
                                sub: hasCosts ? 'weighted gross margin' : 'requires cost data', color: marginColor },
@@ -762,8 +762,8 @@ function renderCostOverview() {
       data: {
         labels: revPoints.map((r, i) => '#' + (i+1)),
         datasets: [
-          { type:'bar',  label:'Revenue %', data: revPoints.map(r => r.revenue_mix_pct || 0), backgroundColor:'rgba(31,58,107,0.7)', order:2 },
-          { type:'line', label:'Cumulative %', data: revPoints.map(r => r.cum_revenue_pct || 0), borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.25, yAxisID:'y1', order:1 },
+          { type:'bar',  label:'รายได้ %', data: revPoints.map(r => r.revenue_mix_pct || 0), backgroundColor:'rgba(31,58,107,0.7)', order:2 },
+          { type:'line', label:'% สะสม', data: revPoints.map(r => r.cum_revenue_pct || 0), borderColor:'#ef4444', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.25, yAxisID:'y1', order:1 },
         ],
       },
       options: { responsive:true, maintainAspectRatio:false,
@@ -781,7 +781,7 @@ function renderCostOverview() {
           labels: costPoints.map((r, i) => '#' + (i+1)),
           datasets: [
             { type:'bar',  label:'Cost ', data: costPoints.map(r => r.cogs || 0), backgroundColor:'rgba(239,68,68,0.7)', order:2 },
-            { type:'line', label:'Cumulative %', data: costPoints.map(r => r._cum_cost_pct || 0), borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.25, yAxisID:'y1', order:1 },
+            { type:'line', label:'% สะสม', data: costPoints.map(r => r._cum_cost_pct || 0), borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.25, yAxisID:'y1', order:1 },
           ],
         },
         options: { responsive:true, maintainAspectRatio:false,
@@ -1218,7 +1218,7 @@ function renderSuggestions() {
     if (longTailCount > 20) {
       cards.push(`
         <div class="card p-5" style="border:1px solid #94a3b8">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-700">Menu Simplification Opportunity</h3></div>
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-700">โอกาสลดจำนวนเมนู</h3></div>
           <p class="text-sm text-slate-600 mb-2"><strong>${longTailCount} items</strong> (${(longTailCount/items.length*100).toFixed(0)}% of your menu) together contribute only 10% of revenue. A focused menu improves kitchen speed, reduces waste, and sharpens your brand.</p>
           <ul class="space-y-1 text-sm text-slate-600">
             <li>• Industry research shows menus with 50–80 items outperform larger menus on execution quality</li>
@@ -1240,7 +1240,7 @@ function renderSuggestions() {
     const highest_margin = sorted.reduce((mx, r) => (r.margin_pct || 0) > (mx.margin_pct || 0) ? r : mx, sorted[0]);
     cards.push(`
       <div class="card p-5" style="border:1px solid #ec4899;background:#fdf2f8">
-        <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-pink-800">เจาะลึกบุฟเฟ่ต์ — Core Business Analysis</h3></div>
+        <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-pink-800">เจาะลึกบุฟเฟ่ต์ — วิเคราะห์ธุรกิจหลัก</h3></div>
         <p class="text-sm text-slate-700 mb-3">บุฟเฟ่ต์เป็น <b>${buffetPct}%</b> ของยอดขาย แต่ใช้ <b>${buffetCostPct}%</b> ของต้นทุนรวม — อัตรากำไรขั้นต้น <b>${buffetGPPct}%</b></p>
         <div class="space-y-2 text-sm">
           <div class="bg-white rounded-lg p-3 border border-pink-100">
@@ -1393,7 +1393,7 @@ async function suggestTargets() {
   document.querySelectorAll('.target-cust-input').forEach(inp => {
     const s = map[inp.dataset.branch]; if (s) inp.value = s.customer_target || '';
   });
-  status.innerHTML = `✓ เติมจากเฉลี่ย ${d.lookback} เดือน (${(d.trailing_months||[]).map(fmtMonth).join(', ')}) ×${d.uplift} — ตรวจแล้วกด <b>Save Targets</b>`;
+  status.innerHTML = `✓ เติมจากเฉลี่ย ${d.lookback} เดือน (${(d.trailing_months||[]).map(fmtMonth).join(', ')}) ×${d.uplift} — ตรวจแล้วกด <b>บันทึกเป้าหมาย</b>`;
   status.className = 'text-sm text-violet-700';
 }
 
@@ -1525,7 +1525,7 @@ function renderMenuPresetSelect() {
   const sel = document.getElementById('costPresetSel');
   if (!sel) return;
   const presets = JSON.parse(localStorage.getItem('oshinei_menu_presets') || '[]');
-  sel.innerHTML = '<option value="">— Load saved filter —</option>' +
+  sel.innerHTML = '<option value="">— เรียกตัวกรองที่บันทึกไว้ —</option>' +
     presets.map((p, i) => `<option value="${i}">★ ${p.name}</option>`).join('') +
     (presets.length ? '<option disabled>──────</option><option value="__delete">Delete a preset…</option>' : '');
   sel.onchange = async (e) => {
@@ -1616,14 +1616,14 @@ async function loadBranchConfig() {
       <td class="py-2.5 pr-4">
         <select id="branch-type-${b.id}"
           class="border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="master"    ${b.branch_type === 'master'    ? 'selected' : ''}>Master</option>
-          <option value="franchise" ${b.branch_type === 'franchise' ? 'selected' : ''}>Franchise</option>
+          <option value="master"    ${b.branch_type === 'master'    ? 'selected' : ''}>สาขาหลัก</option>
+          <option value="franchise" ${b.branch_type === 'franchise' ? 'selected' : ''}>แฟรนไชส์</option>
         </select>
       </td>
       <td class="py-2.5 text-right">
         <button onclick="saveBranch(${b.id})"
           class="px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium rounded-lg transition-colors">
-          Save
+          บันทึก
         </button>
         <span id="branch-status-${b.id}" class="text-xs ml-2"></span>
       </td>
@@ -1969,7 +1969,7 @@ function renderComparison(data) {
   ).join('');
   document.getElementById('cmpKpiHead').innerHTML =
     `<tr class="text-xs border-b-2 border-slate-200" style="background:var(--bg-subtle)">
-       <th class="py-2 px-3 text-left text-slate-500">Metric</th>
+       <th class="py-2 px-3 text-left text-slate-500">ตัวชี้วัด</th>
        ${headValCols}${headDeltaCols}
      </tr>`;
 
@@ -2066,7 +2066,7 @@ function renderComparison(data) {
         <tr class="text-xs border-b-2 border-slate-200" style="background:var(--bg-subtle)">
           <th class="py-2 px-3 text-left text-slate-500">สาขา</th>
           ${rankHeadCols}
-          ${hasShift ? '<th class="py-2 px-2 text-center text-slate-400">A→B Shift</th><th class="py-2 px-2 text-right text-slate-400">Δ A-B</th>' : ''}
+          ${hasShift ? '<th class="py-2 px-2 text-center text-slate-400">ย้าย A→B</th><th class="py-2 px-2 text-right text-slate-400">Δ A-B</th>' : ''}
         </tr>
       </thead>
       <tbody>

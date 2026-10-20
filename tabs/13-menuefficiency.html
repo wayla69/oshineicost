@@ -11,7 +11,7 @@
   <!-- Quadrant scatter + legend -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">Quadrant: เสิร์ฟ × ต้นทุน</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">กลุ่ม: เสิร์ฟ × ต้นทุน</h2>
       <div class="flex gap-3 text-[11px]" style="color:var(--text-muted)">
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:3px"></span>เสิร์ฟเยอะ + ต้นทุนสูง (ลดก่อน)</span>
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:3px"></span>เสิร์ฟน้อย + ต้นทุนสูง (ตัดเมนู?)</span>
@@ -41,7 +41,7 @@
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost',-1)" title="เรียงตามต้นทุนรวม">ต้นทุนรวม ↕</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_pct',-1)" title="เรียงตาม % ต้นทุน">%ต้นทุน ↕</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_per_serving',-1)" title="เรียงตามต้นทุน/จาน">฿/จาน ↕</th>
-            <th class="py-1.5 text-right text-[10px]" title="Food Cost % = cost/revenue×100">FC%</th>
+            <th class="py-1.5 text-right text-[10px]" title="ต้นทุนอาหาร % = cost/revenue×100">FC%</th>
           </tr>
         </thead>
         <tbody id="mce2Body"><tr><td colspan="11" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
@@ -55,7 +55,7 @@
     <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>
-        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 วัตถุดิบ (ตามต้นทุนรวม)</p>
+        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">20 อันดับวัตถุดิบ (ตามต้นทุนรวม)</p>
         <div style="height:380px"><canvas id="mce2IngBar"></canvas></div>
       </div>
       <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
@@ -88,11 +88,11 @@
 
   <!-- What-If savings calculator -->
   <div class="card p-5 mb-4" style="border:1px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">What-If: ลดต้นทุนแล้วประหยัดได้เท่าไร?</h2>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สถานการณ์จำลอง: ลดต้นทุนแล้วประหยัดได้เท่าไร?</h2>
     <p class="text-[11px] mb-4" style="color:var(--text-muted)">เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p>
     <div class="flex flex-wrap items-center gap-4 mb-4">
       <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
-        เป้าหมาย Top
+        เป้าหมายอันดับต้น
         <select id="mce2WifN" onchange="renderMce2Whatif()" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
           <option value="3">3</option><option value="5" selected>5</option><option value="8">8</option>
           <option value="10">10</option><option value="15">15</option><option value="20">20</option>
@@ -115,7 +115,7 @@
   <!-- Monthly cost trend (top 8 dishes) -->
   <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">Cost Drift — เมนูไหนแพงขึ้น/ถูกลงตามเวลา?</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">ต้นทุนเปลี่ยน — เมนูไหนแพงขึ้น/ถูกลงตามเวลา?</h2>
       <span id="mce2TrendStatus" class="text-[11px]" style="color:var(--text-muted)">กำลังโหลด…</span>
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">% ต้นทุนรายเมนูต่อเดือน (Top 8 เมนูที่กินต้นทุนสูงสุด) · เส้นที่พุ่งขึ้น = เมนูที่ต้องจัดการด่วน</p>
@@ -151,7 +151,7 @@
               <th class="py-1.5 pr-2 text-right">ต้นทุน</th>
               <th class="py-1.5 pr-2 text-right">%ต้นทุน</th>
               <th class="py-1.5 pr-2 text-right">FC%</th>
-              <th class="py-1.5 text-right">avg ฿/จาน</th>
+              <th class="py-1.5 text-right">เฉลี่ย ฿/จาน</th>
             </tr>
           </thead>
           <tbody id="mce2CatBody"><tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
@@ -162,7 +162,7 @@
 
   <!-- Card B — Recipe coverage / engineering potential -->
   <div class="card p-5 mb-4" style="border:1px solid #ef4444">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">Engineering Potential — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">โอกาสปรับสูตร — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่ไม่มีสูตร BoM = ปรับต้นทุนได้จำกัด · เมนูที่ไม่มีข้อมูลต้นทุนเลย = blind spot</p>
     <div id="mce2CovKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -186,7 +186,7 @@
 
   <!-- Card C — Priority action list -->
   <div class="card p-5 mb-4" style="border:1px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สิ่งที่ควรทำต่อไป (Auto-generated from data)</h2>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สิ่งที่ควรทำต่อไป (สร้างจากข้อมูล)</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">วิเคราะห์จากข้อมูลจริง — ลำดับความสำคัญสูงสุดก่อน</p>
     <div id="mce2Actions" class="space-y-2 mt-2"></div>
   </div>

@@ -417,7 +417,7 @@ async function initDataCoverageNote() {
       el.style.background = '#fef3c7';
       el.style.color = '#92400e';   // fixed light badge (#fef3c7) in both themes: 6.4:1
       el.title = `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
-               + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น Food Cost % กระทบน้อย. `
+               + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น ต้นทุนอาหาร % กระทบน้อย. `
                + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`;
     } else {
       el.textContent = `ข้อมูลถึง ${human}`;
@@ -688,7 +688,7 @@ async function renderExecSummary() {
   host.classList.remove('hidden');
   host.innerHTML = `<div class="card p-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">สรุปผู้บริหาร (Executive Summary)</h2>
+      <h2 class="section-title mb-0">สรุปผู้บริหาร</h2>
       <span class="text-[11px]" style="color:var(--text-muted)">${getBranch() || 'ทุกสาขา'} · อัปเดตตามข้อมูลล่าสุด</span>
     </div>
     <div class="flex flex-wrap gap-5 mb-2">
@@ -2234,7 +2234,7 @@ async function loadPersona() {
     type: 'bar',
     data: {
       labels: ps.map(r => r.label + (r.size>=6?' people+':' '+(r.size===1?'person':'people'))),
-      datasets: [{ label:'Receipts', data: ps.map(r=>r.tx_count), backgroundColor:'#4a70b0', borderRadius:4 }]
+      datasets: [{ label:'ใบเสร็จ', data: ps.map(r=>r.tx_count), backgroundColor:'#4a70b0', borderRadius:4 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -2363,9 +2363,9 @@ async function loadGrossProfit(){
     data: {
       labels,
       datasets: [
-        { label:'COGS',         data: rows.map(r=>r.cogs||0),         backgroundColor:'rgba(245,158,11,0.75)', stack:'rev', borderRadius:3 },
-        { label:'Gross Profit', data: rows.map(r=>r.gross_profit||0), backgroundColor:'rgba(16,185,129,0.85)', stack:'rev', borderRadius:3 },
-        { label:'Margin %',     data: rows.map(r=>r.margin_pct||0),   type:'line', borderColor:'#4a70b0',
+        { label:'ต้นทุนขาย',         data: rows.map(r=>r.cogs||0),         backgroundColor:'rgba(245,158,11,0.75)', stack:'rev', borderRadius:3 },
+        { label:'กำไรขั้นต้น', data: rows.map(r=>r.gross_profit||0), backgroundColor:'rgba(16,185,129,0.85)', stack:'rev', borderRadius:3 },
+        { label:'อัตรากำไร %',     data: rows.map(r=>r.margin_pct||0),   type:'line', borderColor:'#4a70b0',
           backgroundColor:'rgba(31,58,107,0.1)', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'yPct', fill:false },
       ]
     },

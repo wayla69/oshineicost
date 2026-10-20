@@ -671,7 +671,7 @@ function renderMgtReport(j, jM, jF) {
        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
        <p class="text-2xl font-bold text-slate-800">${value}</p>
        <p class="text-xs text-slate-500 mt-1">${sub || ''}</p>
-       ${(w !== undefined || y != null) ? `<p class="text-[11px] mt-1 flex items-center gap-1 flex-wrap">${w !== undefined ? '<span class="text-slate-400">' + dLbl + '</span>' + wow(w) : ''}${(w !== undefined && y != null) ? '<span class="text-slate-300">·</span>' : ''}${y != null ? '<span class="text-slate-400">YoY</span>' + wow(y) : ''}</p>` : ''}
+       ${(w !== undefined || y != null) ? `<p class="text-[11px] mt-1 flex items-center gap-1 flex-wrap">${w !== undefined ? '<span class="text-slate-400">' + dLbl + '</span>' + wow(w) : ''}${(w !== undefined && y != null) ? '<span class="text-slate-300">·</span>' : ''}${y != null ? '<span class="text-slate-400">เทียบปีก่อน</span>' + wow(y) : ''}</p>` : ''}
      </div>`;
 
   // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
@@ -2120,7 +2120,7 @@ function renderMgtReport(j, jM, jF) {
             backgroundColor: vals.map((_, i) => i === li ? currC : histC),
             borderRadius: 5, categoryPercentage: 0.8, barPercentage: 0.74, order: 2,
             datalabels: { display: false } },
-          { type: 'line', label: 'Trend', data: movingAvg(vals, 3),
+          { type: 'line', label: 'แนวโน้ม', data: movingAvg(vals, 3),
             borderColor: C_LINE, backgroundColor: 'transparent',
             borderWidth: 2, tension: 0.35, fill: false, order: 1,
             pointRadius: 0, datalabels: { display: false } },
@@ -2146,7 +2146,7 @@ function renderMgtReport(j, jM, jF) {
                             weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
             formatter: v => v ? fmtM(v) : '',
           } },
-        { type: 'line', label: 'Trend', data: movingAvg(vals, 3),
+        { type: 'line', label: 'แนวโน้ม', data: movingAvg(vals, 3),
           borderColor: C_LINE, backgroundColor: 'transparent',
           borderWidth: 2, tension: 0.35, fill: false, order: 1,
           pointRadius: 3, pointBackgroundColor: C_LINE,

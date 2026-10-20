@@ -8,7 +8,7 @@
     <div class="flex items-start gap-3">
       <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold" style="color:#86198f">BoM วิเคราะห์รายสาขา (Per-Branch Cost Deep-Dive)</h2>
+        <h2 class="text-base font-bold" style="color:#86198f">BoM วิเคราะห์รายสาขา</h2>
         <p class="text-xs text-slate-600 mt-1">
           เลือกสาขา → ดูต้นทุนทุกเมนูในสาขานั้น · เมนูใดคิดเป็นกี่ % ของต้นทุน · เทรนด์รายเดือน · ลงลึกถึงระดับวัตถุดิบ
           <br>ใช้สูตร BoM เดียวกับ <b>GP รายสาขา</b> (ตัด tier SKU ออก · รวมทุก SKU บุฟเฟ่ต์ + อลาคาท)
@@ -47,8 +47,8 @@
   <!-- Per-branch summary table (chain mode only) -->
   <div id="bbomBranchSummary" class="card p-5 mb-4" style="display:none">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">สรุปภาพรวมทุกสาขา — รายได้ · ต้นทุน · กำไรขั้นต้น · Food Cost%</h2>
-      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียง · เป้า Food Cost 55-70%</span>
+      <h2 class="section-title mb-0">สรุปภาพรวมทุกสาขา — รายได้ · ต้นทุน · กำไรขั้นต้น · ต้นทุนอาหาร %</h2>
+      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียง · เป้า ต้นทุนอาหาร 55-70%</span>
     </div>
     <div style="max-height:480px;overflow:auto">
       <table class="w-full text-sm">
@@ -58,7 +58,7 @@
           <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_cogs')">ต้นทุน BoM</th>
           <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_gp')">กำไรขั้นต้น</th>
           <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_gp_pct')">GP%</th>
-          <th class="py-1.5 text-right cursor-pointer" onclick="_bbomSortBranches('total_food_cost_pct')">Food Cost%</th>
+          <th class="py-1.5 text-right cursor-pointer" onclick="_bbomSortBranches('total_food_cost_pct')">ต้นทุนอาหาร %</th>
         </tr></thead>
         <tbody id="bbomBranchSummaryBody"></tbody>
         <tfoot id="bbomBranchSummaryFoot" class="font-semibold border-t-2 border-slate-200 bg-slate-50"></tfoot>
@@ -92,9 +92,9 @@
             <th class="px-3 py-2 text-left">ชื่อเมนู</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('qty')">จำนวน</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('unit_cost')">ต้นทุน/หน่วย ()</th>
-            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('total_cogs')">COGS รวม ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('total_cogs')">ต้นทุนขายรวม ()</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('pct_of_branch_cogs')">% ของสาขา</th>
-            <th class="px-3 py-2 text-center">Sparkline</th>
+            <th class="px-3 py-2 text-center">แนวโน้ม</th>
             <th class="px-3 py-2 text-center">BoM</th>
           </tr>
         </thead>
@@ -106,7 +106,7 @@
   <!-- Top ingredients bar chart -->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="card p-5 lg:col-span-2">
-      <h2 class="section-title mb-1">Top 25 วัตถุดิบที่มีต้นทุนมากที่สุด</h2>
+      <h2 class="section-title mb-1">25 อันดับวัตถุดิบที่มีต้นทุนมากที่สุด</h2>
       <p class="text-xs text-slate-400 mb-3">เรียงตามต้นทุนรวม · สีแถบ = ชนิดวัตถุดิบ · ความยาวแถบ = สัดส่วนต้นทุน</p>
       <div class="overflow-y-auto" style="max-height:560px"><div id="bbomIngList"></div></div>
     </div>

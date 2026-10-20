@@ -9,7 +9,7 @@
   <!-- Prime Cost = Food% + Labor% (the two biggest controllable costs) -->
   <div class="card p-5 mb-5" style="border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">Prime Cost · ต้นทุนหลัก (Food% + Labor%)</h2>
+      <h2 class="section-title mb-0">ต้นทุนหลัก (ต้นทุนอาหาร % + ค่าแรง %)</h2>
       <span id="primeChain" class="text-[11px]" style="color:var(--text-muted)"></span>
     </div>
     <p class="text-xs text-slate-400 mb-3">ต้นทุน<b>ที่ควบคุมได้</b>ที่ใหญ่สุด 2 ตัว · Food% (BoM จริง) + Labor% (จาก Settings) · เกณฑ์บุฟเฟ่ต์ AYCE: ดี &lt;70% · เฝ้าระวัง 70-78% · สูง &gt;78%</p>
@@ -18,9 +18,9 @@
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">สาขา</th>
         <th class="py-1.5 pr-2 text-right">รายได้</th>
-        <th class="py-1.5 pr-2 text-right">Food %</th>
-        <th class="py-1.5 pr-2 text-right">Labor %</th>
-        <th class="py-1.5 pr-2 text-right">Prime %</th>
+        <th class="py-1.5 pr-2 text-right">ต้นทุนอาหาร %</th>
+        <th class="py-1.5 pr-2 text-right">ค่าแรง %</th>
+        <th class="py-1.5 pr-2 text-right">ต้นทุนหลัก %</th>
         <th class="py-1.5 text-right">กำไรดำเนินงาน %</th>
       </tr></thead><tbody id="primeBody"></tbody></table>
     </div>

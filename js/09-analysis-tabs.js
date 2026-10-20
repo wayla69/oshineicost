@@ -33,10 +33,10 @@ async function loadEngineering() {
 
   // Quadrant summary cards
   const QUADS = [
-    { key: 'star',      label: 'Stars',      color: '#10b981', bg: '#f0fdf4', advice: 'Maintain & promote' },
-    { key: 'plowhorse', label: 'Plowhorses', color: '#f59e0b', bg: '#fffbeb', advice: 'Reprice or reduce cost' },
-    { key: 'puzzle',    label: 'Puzzles',    color: '#4a70b0', bg: '#e8eef7', advice: 'Reposition or bundle' },
-    { key: 'dog',       label: 'Dogs',       color: '#ef4444', bg: '#fef2f2', advice: 'Review or discontinue' },
+    { key: 'star',      label: 'ดาวเด่น',      color: '#10b981', bg: '#f0fdf4', advice: 'Maintain & promote' },
+    { key: 'plowhorse', label: 'ม้างาน', color: '#f59e0b', bg: '#fffbeb', advice: 'Reprice or reduce cost' },
+    { key: 'puzzle',    label: 'เพชรในตม',    color: '#4a70b0', bg: '#e8eef7', advice: 'Reposition or bundle' },
+    { key: 'dog',       label: 'ตัวถ่วง',       color: '#ef4444', bg: '#fef2f2', advice: 'Review or discontinue' },
   ];
   const costedItems = _engData.filter(i => i.has_cost);
   document.getElementById('engSummaryCards').innerHTML = QUADS.map(q => {
@@ -60,10 +60,10 @@ async function loadEngineering() {
 
   // Scatter chart
   const QUADS_MAP = [
-    { key: 'star',      label: 'Stars',      color: '#10b981' },
-    { key: 'plowhorse', label: 'Plowhorses', color: '#f59e0b' },
-    { key: 'puzzle',    label: 'Puzzles',    color: '#4a70b0' },
-    { key: 'dog',       label: 'Dogs',       color: '#ef4444' },
+    { key: 'star',      label: 'ดาวเด่น',      color: '#10b981' },
+    { key: 'plowhorse', label: 'ม้างาน', color: '#f59e0b' },
+    { key: 'puzzle',    label: 'เพชรในตม',    color: '#4a70b0' },
+    { key: 'dog',       label: 'ตัวถ่วง',       color: '#ef4444' },
   ];
   const datasets = [
     ...QUADS_MAP.map(q => ({
@@ -232,9 +232,9 @@ async function openBillItems(row = {}) {
   const tot = items.reduce((a, it) => ({ rev: a.rev + it.rev, cogs: a.cogs + it.cogs, margin: a.margin + it.margin }), { rev: 0, cogs: 0, margin: 0 });
   body.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
       <th class="py-2 pr-3">เมนู</th><th class="py-2 pr-3">SKU</th>
-      <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">@BoM (ทุน/หน่วย)</th>
+      <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">@BoM (ต้นทุน/หน่วย)</th>
       <th class="py-2 pr-3 text-right">รายได้</th>
-      <th class="py-2 pr-3 text-right">COGS (BoM)</th><th class="py-2 text-right">กำไรขั้นต้น</th></tr></thead>
+      <th class="py-2 pr-3 text-right">ต้นทุนขาย (BoM)</th><th class="py-2 text-right">กำไรขั้นต้น</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="border-t-2 border-slate-200 font-bold">
       <td class="py-2 pr-3" colspan="4">รวม ${fmtN(items.length)} เมนู</td>
@@ -479,7 +479,7 @@ async function loadStaff() {
     type: 'bar',
     data: {
       labels: top10.map(r => r.cashier),
-      datasets: [{ label: 'Discount Rate %', data: top10.map(r => r.discount_rate || 0),
+      datasets: [{ label: 'อัตราส่วนลด %', data: top10.map(r => r.discount_rate || 0),
         backgroundColor: top10.map(r => (r.discount_rate||0) > 20 ? '#ef4444' : (r.discount_rate||0) > 10 ? '#f59e0b' : '#10b981'),
         borderRadius: 4 }]
     },
@@ -557,7 +557,7 @@ async function loadChildBuffet() {
     data: {
       labels: ytd.map(t => fmtMonth(t.month)),
       datasets: [
-        { label: 'covers เด็ก', data: ytd.map(t => t.covers), borderColor: '#ec4899',
+        { label: 'ลูกค้าเด็ก', data: ytd.map(t => t.covers), borderColor: '#ec4899',
           backgroundColor: 'rgba(236,72,153,0.10)', borderWidth: 2.5, pointRadius: 3, fill: true, tension: 0.3, yAxisID: 'y' },
         { label: 'รายได้', data: ytd.map(t => t.revenue), borderColor: '#7a66b8',
           borderWidth: 2, borderDash: [5, 4], pointRadius: 2, fill: false, tension: 0.3, yAxisID: 'yRev' },
@@ -1531,7 +1531,7 @@ async function loadTableTurnover() {
       labels: byBranch.map(b => b.branch),
       datasets: [
         { label: 'Table Occasions', data: byBranch.map(b => b.turns), backgroundColor: PALETTE_6[0] + 'cc', borderRadius: 4, yAxisID: 'turns' },
-        { label: 'Avg Turn Time (min)', data: byBranch.map(b => b.avg_turn_min), type: 'line', borderColor: PALETTE_6[1], backgroundColor: 'transparent', tension: 0.3, pointRadius: 4, yAxisID: 'dwell' },
+        { label: 'เวลานั่งเฉลี่ย (นาที)', data: byBranch.map(b => b.avg_turn_min), type: 'line', borderColor: PALETTE_6[1], backgroundColor: 'transparent', tension: 0.3, pointRadius: 4, yAxisID: 'dwell' },
       ]
     },
     options: {
@@ -1640,7 +1640,7 @@ function tfCellClick(dow, hour, value, rank) {
           <p class="text-xs text-slate-400 mt-0.5">${metricName}</p>
         </div>
         <div class="text-right">
-          <p class="text-xs text-slate-500">Rank</p>
+          <p class="text-xs text-slate-500">อันดับ</p>
           <p class="text-xl font-bold text-amber-600">#${rank} <span class="text-xs font-normal text-slate-400">of ${totalCells}</span></p>
           <p class="text-xs text-slate-400 mt-0.5">${pctOfPeak}% of peak</p>
         </div>

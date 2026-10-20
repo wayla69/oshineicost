@@ -221,9 +221,9 @@ function diveInChart(chartId) {
           ${analysisHtml}
           <div class="dive-section" id="diveActionsSection">
             <div class="dive-section-title">Actions</div>
-            <button onclick="exportChartData('${chartId}')" class="dive-action-btn">Export this chart data (CSV)</button>
-            <button onclick="if(chartInstances['zoomChart'])chartInstances['zoomChart'].resetZoom&&chartInstances['zoomChart'].resetZoom()" class="dive-action-btn">⟳ Reset zoom &amp; pan</button>
-            <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button>
+            <button onclick="exportChartData('${chartId}')" class="dive-action-btn">ส่งออกข้อมูลกราฟนี้ (CSV)</button>
+            <button onclick="if(chartInstances['zoomChart'])chartInstances['zoomChart'].resetZoom&&chartInstances['zoomChart'].resetZoom()" class="dive-action-btn">⟳ ล้างการซูมและเลื่อน</button>
+            <button onclick="closeDive()" class="dive-action-btn">✕ ปิด (Esc)</button>
           </div>
         </div>
       </div>`;
@@ -344,8 +344,8 @@ async function diveMostOrdered() {
         ${analysisHtml}
         <div class="dive-section">
           <div class="dive-section-title">Actions</div>
-          <button onclick="exportChartData('chartMostOrdered')" class="dive-action-btn">Export this chart data (CSV)</button>
-          <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button>
+          <button onclick="exportChartData('chartMostOrdered')" class="dive-action-btn">ส่งออกข้อมูลกราฟนี้ (CSV)</button>
+          <button onclick="closeDive()" class="dive-action-btn">✕ ปิด (Esc)</button>
         </div>
       </div>
     </div>`;
@@ -359,7 +359,7 @@ async function diveMostOrdered() {
       type: 'bar',
       data: {
         labels: items.map(r => clean(r.description).slice(0, 28)),
-        datasets: [{ label: 'Qty', data: nums, backgroundColor: nums.map(v => v === maxV ? '#ef4444' : '#10b981'), borderRadius: 4 }]
+        datasets: [{ label: 'จำนวน', data: nums, backgroundColor: nums.map(v => v === maxV ? '#ef4444' : '#10b981'), borderRadius: 4 }]
       },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -402,7 +402,7 @@ async function gpbSkuDrill(code) {
     const r = await fetch(`${API}/api/bom/composition?sku=${encodeURIComponent(code)}`);
     if (r.status === 404) {
       body.innerHTML = `<div style="padding:24px"><p class="text-sm text-slate-500">SKU <b>${esc(code)}</b> ไม่มีสูตร BoM (ใช้ต้นทุนแบบ flat จาก <code>sku_cost</code>) — จึงไม่มีรายละเอียดส่วนผสม</p>
-        <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
+        <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ ปิด (Esc)</button></div>`;
       return;
     }
     d = await r.json();
@@ -431,7 +431,7 @@ async function gpbSkuDrill(code) {
     <div class="dive-insight-bar dive-side">
       ${_diveSection('สัดส่วนต้นทุนตามประเภท', '', typeBars)}
       <div class="dive-section"><div class="dive-section-title">Actions</div>
-        <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
+        <button onclick="closeDive()" class="dive-action-btn">✕ ปิด (Esc)</button></div>
     </div></div>`;
 }
 
@@ -462,7 +462,7 @@ function gpbCostDriverDive() {
     <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative"><canvas id="zoomChart"></canvas></div>
     <div class="dive-insight-bar dive-side">${analysis}
       <div class="dive-section"><div class="dive-section-title">Actions <span class="text-[10px] font-normal text-slate-400">· คลิกแท่งเพื่อดูส่วนผสม</span></div>
-        <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
+        <button onclick="closeDive()" class="dive-action-btn">✕ ปิด (Esc)</button></div>
     </div></div>`;
   modal.classList.remove('hidden');
   setTimeout(() => {
@@ -473,7 +473,7 @@ function gpbCostDriverDive() {
     chartInstances['zoomChart'] = new Chart(cv, {
       type: 'bar',
       data: { labels: top.map(s => s.sku_code),
-        datasets: [{ label: 'BoM Cost', data: nums,
+        datasets: [{ label: 'ต้นทุน BoM', data: nums,
           backgroundColor: nums.map(v => v === mx ? '#ef4444' : '#f97316'), borderRadius: 4 }] },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -1035,7 +1035,7 @@ function renderSearchResults(data, q) {
   }
   let html = '';
   if (data.branches.length) {
-    html += '<div class="search-group-title">Branches</div>';
+    html += '<div class="search-group-title">สาขา</div>';
     html += data.branches.map(b => `
       <div class="search-item" onclick="selectSearchBranch('${jsAttr(b.name)}')">
         <span class="badge">BRANCH</span>
@@ -1376,11 +1376,11 @@ async function loadAffinity() {
     <table class="text-xs w-full" id="affinityTable">
       <thead><tr class="text-left text-slate-500 border-b border-slate-200">
         <th class="py-2 pr-3">SKU</th>
-        <th class="py-2 pr-3">Description</th>
-        <th class="py-2 pr-3 text-right">Baskets</th>
-        <th class="py-2 pr-3 text-right">Co-revenue</th>
-        <th class="py-2 pr-3 text-right">Co-qty</th>
-        <th class="py-2 text-right">Lift</th>
+        <th class="py-2 pr-3">รายละเอียด</th>
+        <th class="py-2 pr-3 text-right">บิล</th>
+        <th class="py-2 pr-3 text-right">รายได้ร่วม</th>
+        <th class="py-2 pr-3 text-right">จำนวนร่วม</th>
+        <th class="py-2 text-right">ค่า Lift</th>
       </tr></thead>
       <tbody>${d.items.map(r => `
         <tr class="border-t border-slate-100">
@@ -1441,7 +1441,7 @@ function renderWhatIf() {
   document.getElementById('whatifResult').innerHTML = `
     <div class="card p-3"><p class="kpi-label">Projected Revenue</p><p class="kpi-value text-indigo-600">${fmt(newRev)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(drev)}</p></div>
     <div class="card p-3"><p class="kpi-label">Projected Profit</p><p class="kpi-value" style="color:var(--good-ink)">${fmt(newProfit)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(dprof)}</p></div>
-    <div class="card p-3"><p class="kpi-label">Margin %</p><p class="kpi-value" style="color:var(--teal-ink)">${newMarg.toFixed(1)}%</p><p class="text-xs mt-1">${fmtDelta(newMarg - _wiBase.margin, true)} vs base</p></div>
+    <div class="card p-3"><p class="kpi-label">อัตรากำไร %</p><p class="kpi-value" style="color:var(--teal-ink)">${newMarg.toFixed(1)}%</p><p class="text-xs mt-1">${fmtDelta(newMarg - _wiBase.margin, true)} vs base</p></div>
     <div class="card p-3"><p class="kpi-label">Tx · Avg Ticket</p><p class="text-sm font-semibold">${fmtN(newTx)} × ${fmtN(newAvg)}</p><p class="text-xs text-slate-500 mt-1">${(newRev/_wiBase.revenue*100).toFixed(1)}% of base</p></div>
   `;
   mkChart('chartWhatIf', {
@@ -1674,7 +1674,7 @@ function _gpbRenderSummary(data) {
     card('BoM Cost รวม',       fmtB(g.cogs),    'ตามสูตร BoM ใหม่',           '#f59e0b'),
     card('GP รวม',             fmtB(g.gp),      (g.gp >= 0 ? 'กำไร' : 'ขาดทุน'), g.gp >= 0 ? '#10b981' : '#ef4444'),
     card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#7a66b8'),
-    card('Food Cost %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
+    card('ต้นทุนอาหาร %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
   ].join('');
 }
 
@@ -1696,11 +1696,11 @@ function _gpbRenderNarrative(data) {
   const fcCol = (g.food_cost_pct > hi) ? 'var(--bad-ink)' : (g.food_cost_pct < lo) ? '#0ea5e9' : 'var(--good-ink)';
   const fmtB = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
   const lines = [
-    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${textInk(fcCol)}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
+    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · ต้นทุนอาหาร <b style="color:${textInk(fcCol)}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
     `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
     overFc.length
-      ? `⚠ <b style="color:var(--bad-ink)">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
-      : `ทุกสาขา Food Cost อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
+      ? `⚠ <b style="color:var(--bad-ink)">${overFc.length} สาขา</b> ต้นทุนอาหาร เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
+      : `ทุกสาขา ต้นทุนอาหาร อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
     `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
   ];
   el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
@@ -1750,7 +1750,7 @@ function _gpbRenderBoxes() {
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${textInk(gpColor)}">${b.cur.toFixed(1)}%</p>
       <p class="text-[11px] text-slate-400 mt-0.5">GP% · ${b.lastM || ''}</p>
       <p class="text-xs font-semibold mt-1" style="color:${textInk(dColor)}">${dTxt}</p>
-      <p class="text-[11px] text-slate-400 mt-0.5">Food cost ${b.fc != null ? b.fc.toFixed(1) + '%' : '—'}</p>
+      <p class="text-[11px] text-slate-400 mt-0.5">ต้นทุนอาหาร ${b.fc != null ? b.fc.toFixed(1) + '%' : '—'}</p>
     </div>`;
   }).join('');
 }
@@ -1863,7 +1863,7 @@ function _gpbRenderBarChart() {
               const r = rows[ctx.dataIndex];
               return [
                 `GP%: ${(r.total_gp_pct ?? 0).toFixed(1)}%`,
-                `Food Cost: ${(r.total_food_cost_pct ?? 0).toFixed(1)}%`,
+                `ต้นทุนอาหาร: ${(r.total_food_cost_pct ?? 0).toFixed(1)}%`,
                 `รายได้: ${Number(r.total_revenue||0).toLocaleString('th-TH')} `,
                 `GP: ${Number(r.total_gp||0).toLocaleString('th-TH')} `,
               ];
@@ -2075,8 +2075,8 @@ async function loadRequisitionGap() {
     <div style="overflow-x:auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-400 text-xs border-b">
       <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">คนทาน</th>
       <th class="py-1.5 pr-2 text-right">เบิก/ใช้จริง ต่อหัว</th><th class="py-1.5 pr-2 text-right">ตามสูตร ต่อหัว</th>
-      <th class="py-1.5 pr-2 text-right">เท่า</th><th class="py-1.5 pr-2 text-right">Food% (จริง)</th>
-      <th class="py-1.5 pr-2 text-right">Food% (สูตร)</th><th class="py-1.5 pr-2 text-right">ส่วนต่าง ฿</th><th></th>
+      <th class="py-1.5 pr-2 text-right">เท่า</th><th class="py-1.5 pr-2 text-right">ต้นทุนอาหาร % (จริง)</th>
+      <th class="py-1.5 pr-2 text-right">ต้นทุนอาหาร % (สูตร)</th><th class="py-1.5 pr-2 text-right">ส่วนต่าง ฿</th><th></th>
     </tr></thead><tbody>${d.branches.map(r => row(r, false)).join('')}${row(d.total, true)}</tbody></table></div>
     <p class="text-[11px] mt-2 p-2 rounded" style="color:#9a3412;background:#fff7ed">⚠ ${esc(d.caveat)}</p>
     <div class="text-xs font-semibold text-slate-600 mt-4 mb-1">วัตถุดิบที่ส่วนต่างสูงสุด (เบิก − ที่สูตรคิดไว้) · วัตถุดิบที่ไม่อยู่ในสูตรใดเลยรวม ${b(d.not_in_any_recipe)}</div>
@@ -2241,7 +2241,7 @@ function _bbomRenderSummary(d) {
     card('รายได้',            _bbomFmtB(t.revenue),    `${d.period.months || 0} เดือน · ${esc(d.branch)}`, '#4a70b0'),
     card('ต้นทุนรวม',          _bbomFmtB(t.cogs),       `${(t.menus_with_cost||0).toLocaleString('th-TH')} เมนูมีต้นทุน`, '#0891b2'),
     card('Gross Profit',      _bbomFmtB(t.gp),         `GP ${_bbomFmtPct(t.gp_pct)}`, gpColor),
-    card('Food Cost %',       _bbomFmtPct(t.food_cost_pct), `เป้า ${lo}-${hi}%`, fcColor),
+    card('ต้นทุนอาหาร %',       _bbomFmtPct(t.food_cost_pct), `เป้า ${lo}-${hi}%`, fcColor),
     card('เมนูที่มีสูตร BoM', `${(t.menus_with_bom_recipe||0).toLocaleString('th-TH')}`, `จากทั้งหมด ${(t.menus_in_period||0).toLocaleString('th-TH')} เมนู`, '#d946ef'),
   ].join('');
 }
@@ -2257,7 +2257,7 @@ function _bbomRenderConcentration(d) {
   wrap.querySelector('p').innerHTML =
     `<b>Top 5 เมนู</b> คิดเป็น <b>${_bbomFmtPct(c.top_5_menus_pct_of_cogs)}</b> ของต้นทุนสาขา · ` +
     `<b>Top 10</b> = <b>${_bbomFmtPct(c.top_10_menus_pct_of_cogs)}</b> · ` +
-    `<b>Top 20</b> = <b>${_bbomFmtPct(c.top_20_menus_pct_of_cogs)}</b>`;
+    `<b>20 อันดับ</b> = <b>${_bbomFmtPct(c.top_20_menus_pct_of_cogs)}</b>`;
 }
 
 function _bbomRenderTrend(d) {
@@ -2283,7 +2283,7 @@ function _bbomRenderTrend(d) {
       labels,
       datasets: [
         { label:'รายได้', data:t.map(r => r.revenue), borderColor:'#4a70b0', backgroundColor: chartType==='line' ? '#4a70b020' : '#4a70b0cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
-        { label:'COGS',  data:t.map(r => r.cogs),    borderColor:'#ef4444', backgroundColor: chartType==='line' ? '#ef444420' : '#ef4444cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
+        { label:'ต้นทุนขาย',  data:t.map(r => r.cogs),    borderColor:'#ef4444', backgroundColor: chartType==='line' ? '#ef444420' : '#ef4444cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
         { label:'GP',    data:t.map(r => r.gp),      borderColor:'#10b981', backgroundColor: chartType==='line' ? '#10b98120' : '#10b981cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
       ],
     },

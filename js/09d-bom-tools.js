@@ -309,7 +309,7 @@ function _renderRecalibSummary() {
       <p class="text-sm font-bold text-rose-600">${(d.current_cogs/1e6).toFixed(1)}M</p>
     </div>
     <div class="bg-white rounded-lg p-2.5 border border-amber-200 text-center">
-      <p class="text-[10px] text-slate-500">Food cost %</p>
+      <p class="text-[10px] text-slate-500">ต้นทุนอาหาร %</p>
       <p class="text-base font-bold" style="color:${textInk(curColor)}">${cur.toFixed(1)}%</p>
     </div>
     <div class="bg-white rounded-lg p-2.5 border border-amber-200 text-center">
@@ -423,7 +423,7 @@ function openMonthlyPackDialog() {
   dlg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
   dlg.innerHTML = `
     <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:var(--r-md);padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
-      <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">Export Monthly Review Pack</h3>
+      <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">ส่งออกชุดทบทวนรายเดือน</h3>
       <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px">รายงานสรุปรายเดือน — ภาพรวม, P&L รายสาขา, Top SKU, วัตถุดิบ, alerts, action items</p>
       <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px">เดือน (YYYY-MM)</label>
       <input id="mpackMonth" type="month" value="${defMonth}"
@@ -558,7 +558,7 @@ function simhubBuildTier() {
     <div class="card p-5">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 class="text-base font-bold" style="color:var(--accent)">Tier Upgrade Simulator</h2>
+          <h2 class="text-base font-bold" style="color:var(--accent)">ตัวจำลองอัปเกรดระดับราคา</h2>
           <p class="text-xs text-slate-400 mt-0.5">จำลองการดันลูกค้าขึ้น tier สูงกว่าแล้วดู GP ที่เพิ่ม — คู่ tier ใช้ตามเมนูที่ขายจริงในช่วงที่เลือก (ถึง ส.ค. 2026 = ฿590 → ฿799 · ตั้งแต่ 1 ก.ย. 2026 = ฿629 → ฿789)</p>
           <p id="simScenarioNote" class="text-[11px] text-indigo-500 mt-0.5"></p>
         </div>

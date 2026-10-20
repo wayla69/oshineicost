@@ -20,7 +20,7 @@
   <!-- Discount risk Alert Center -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">ส่วนลดที่ต้องระวัง (Alert Center)</h2>
+      <h2 class="section-title mb-0">ส่วนลดที่ต้องระวัง</h2>
       <div class="flex items-center gap-2">
         <span id="disc-alert-meta" class="text-xs text-slate-400"></span>
         <button onclick="document.getElementById('disc-alert-config').classList.toggle('hidden')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">เกณฑ์</button>
@@ -34,7 +34,7 @@
   <!-- Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">ส่วนลด &amp; จุดรั่วรายสาขา (Discounts &amp; Leakage by Branch)</h2>
+      <h2 class="section-title mb-0">ส่วนลดและจุดรั่วรายสาขา</h2>
       <span id="disc-leak-meta" class="text-xs text-slate-400"></span>
     </div>
     <p class="text-xs text-slate-400 mb-3">% = ส่วนลดรวม ÷ ยอดขาย<b>ก่อนหักส่วนลด</b> (ฐานคำนวณจริง รวมค่าบุฟเฟต์ต่อหัว) · เทียบกับค่าเฉลี่ยทุกสาขา · = ใช้ส่วนลดสูงผิดปกติ · คลิกกล่องเพื่อดูบิล</p>
@@ -116,7 +116,7 @@
   <!-- Coupon / promotion by SERIES (CouponSeries name) -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">คูปอง/โปรโมชัน (แยกตามชุด series)</h2>
+      <h2 class="section-title mb-0">คูปอง/โปรโมชัน (แยกตามชุด)</h2>
       <div class="flex items-center gap-2">
         <span id="coupon-series-note" class="text-xs text-slate-400"></span>
         <button onclick="exportCouponSeries()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
@@ -127,9 +127,9 @@
     <div id="coupon-series-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
     <div style="max-height:380px;overflow:auto"><table class="tbl-top60 w-full text-xs">
       <thead><tr>
-        <th class="num">#</th><th>ชุดคูปอง (series)</th><th class="num">ครั้งที่ใช้</th>
+        <th class="num">#</th><th>ชุดคูปอง</th><th class="num">ครั้งที่ใช้</th>
         <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th>
-        <th class="num">MoM</th><th>สัดส่วน</th><th></th>
+        <th class="num">เทียบเดือนก่อน</th><th>สัดส่วน</th><th></th>
       </tr></thead>
       <tbody id="coupon-series-body"></tbody>
     </table></div>
@@ -148,14 +148,14 @@
     <table class="text-xs w-full">
       <thead>
         <tr class="text-left border-b border-slate-200">
-          <th class="py-2 pr-3">Cashier</th>
+          <th class="py-2 pr-3">แคชเชียร์</th>
           <th class="py-2 pr-3">สาขา</th>
           <th class="py-2 pr-3 text-right">Tx</th>
-          <th class="py-2 pr-3 text-right">Discount Tx</th>
-          <th class="py-2 pr-3 text-right">Rate</th>
+          <th class="py-2 pr-3 text-right">บิลส่วนลด</th>
+          <th class="py-2 pr-3 text-right">อัตรา</th>
           <th class="py-2 pr-3 text-right">% ยอดขาย</th>
-          <th class="py-2 pr-3 text-right">Total Discount</th>
-          <th class="py-2 text-right">Avg Discount</th>
+          <th class="py-2 pr-3 text-right">ส่วนลดรวม</th>
+          <th class="py-2 text-right">ส่วนลดเฉลี่ย</th>
         </tr>
       </thead>
       <tbody id="discCashierBody"></tbody>
