@@ -355,7 +355,7 @@ async function loadPrimeCost() {
   const bn = document.getElementById('primeBanner');
   if (bn) {
     if (!ch.branches_with_labor) {
-      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">Settings → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
+      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">ตั้งค่า → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
     } else if (ch.branches_with_labor < ch.branch_count) {
       bn.innerHTML = `<div class="text-xs" style="color:var(--text-muted)">ใส่ค่าแรงแล้ว ${ch.branches_with_labor}/${ch.branch_count} สาขา — ที่เหลือแสดงเฉพาะ Food%</div>`;
     } else { bn.innerHTML = ''; }
@@ -454,7 +454,7 @@ function _pnlWaterfallHtml(b, scopeLabel) {
   const opCol = (b.operating_profit||0) >= 0 ? '#0891b2' : '#e11d48';
   const beCovers = b.breakeven_covers ? `จุดคุ้มทุน ~${fmtN(b.breakeven_covers)} ที่นั่ง/ลูกค้า (จริง ${fmtN(b.covers||0)})` : '';
   return `<div class="card p-4 mb-4">
-    <h4 class="text-sm font-bold text-slate-700 mb-2">งบกำไรขาดทุน (P&L Waterfall) <span class="font-normal text-xs text-slate-400">· ${esc(scopeLabel||'')}</span></h4>
+    <h4 class="text-sm font-bold text-slate-700 mb-2">งบกำไรขาดทุน <span class="font-normal text-xs text-slate-400">· ${esc(scopeLabel||'')}</span></h4>
     ${row('รายได้ (ex-VAT)', rev, '#4a70b0', {bold:true})}
     ${row('ต้นทุน BoM', b.cogs||0, '#f59e0b', {minus:true})}
     ${row('กำไรขั้นต้น', b.gross_profit||0, '#10b981', {eq:true, bold:true})}
@@ -518,7 +518,7 @@ async function openPnlDrill(branch) {
       ${kpi('รายได้ '+deltaChip, fmtN(s.revenue), '#4a70b0')}
       ${kpi('ต้นทุน BoM', fmtN(s.cogs), '#f59e0b')}
       ${kpi('กำไรขั้นต้น', fmtN(s.gross_profit)+' · '+(s.gp_margin_pct??'—')+'%', '#10b981')}
-      ${kpi('Food Cost %', (s.food_cost_pct??'—')+'%', '#ef4444')}
+      ${kpi('ต้นทุนอาหาร %', (s.food_cost_pct??'—')+'%', '#ef4444')}
     </div>
     ${_pnlWaterfallHtml(_pnlBranchRows[branch], (function(){ const ps=document.getElementById('pnlMonthSel')?.value; return ps?fmtPeriod(ps):(getMonthFrom()?`${fmtMonth(getMonthFrom())}–${fmtMonth(getMonthTo()||getMonthFrom())}`:'ทุกเดือนรวม'); })())}
     <div class="card p-4 mb-4">
@@ -527,7 +527,7 @@ async function openPnlDrill(branch) {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>
-        <h4 class="text-sm font-semibold text-slate-700 mb-2">ต้นทุน BoM ประกอบด้วยเมนู (Top 40 · % ของต้นทุนเดือนนี้)</h4>
+        <h4 class="text-sm font-semibold text-slate-700 mb-2">ต้นทุน BoM ประกอบด้วยเมนู (40 อันดับ · % ของต้นทุนเดือนนี้)</h4>
         <div style="max-height:340px;overflow:auto"><table class="w-full text-xs">
           <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 border-b">
             <th class="py-1 pr-2">#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2 text-right">เสิร์ฟ</th>

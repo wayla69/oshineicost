@@ -7,7 +7,7 @@
   <!-- Food-cost benchmark: each branch vs chain peer median + target band -->
   <div class="card p-5 mb-5" id="benchFoodCostCard">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">Benchmark ต้นทุนอาหารรายสาขา</h2>
+      <h2 class="section-title mb-0">เทียบสาขา ต้นทุนอาหาร</h2>
       <span id="benchFcSummary" class="text-[11px] text-slate-500"></span>
     </div>
     <p class="text-xs text-slate-400 mb-3">% ต้นทุนอาหารแต่ละสาขา เทียบ <b>ค่ากลางเครือ (peer)</b> และ <b>ช่วงเป้า</b> · เขียว = ดีกว่าเพื่อน (quartile บน), แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p>
@@ -19,7 +19,7 @@
     <div class="flex items-start gap-3">
       <div style="font-size:24px;line-height:1"></div>
       <div class="flex-1">
-        <p class="font-semibold text-sm text-slate-800 mb-1">วิธีคำนวณคะแนนสาขา (Health Score 0–100)</p>
+        <p class="font-semibold text-sm text-slate-800 mb-1">วิธีคำนวณคะแนนสาขา (0–100)</p>
         <p class="text-xs text-slate-600 mb-2">คะแนนรวมจาก 4 องค์ประกอบ ถ่วงน้ำหนักตามความสำคัญต่อผลประกอบการ</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
@@ -76,7 +76,7 @@
     </div>
     <!-- Health bar -->
     <div class="card p-5">
-      <h2 class="section-title mb-3">คะแนนสาขา (Health Score)</h2>
+      <h2 class="section-title mb-3">คะแนนสาขา</h2>
       <p class="text-xs text-slate-400 -mt-2 mb-2">เขียว ≥70 ดี · เหลือง 50–69 ระวัง · แดง &lt;50 ต้องปรับปรุง</p>
       <div style="height:220px"><canvas id="chartBenchHealth"></canvas></div>
     </div>

@@ -6,7 +6,7 @@
   <!-- Period pickers -->
   <div class="card p-4 mb-5 flex flex-wrap items-center gap-4">
     <div class="flex items-center gap-2">
-      <span class="text-sm text-slate-500 font-medium">Compare</span>
+      <span class="text-sm text-slate-500 font-medium">เปรียบเทียบ</span>
       <select id="cmpMonth" onchange="loadTrend()"
         class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"></select>
     </div>
@@ -20,25 +20,25 @@
   <!-- Delta KPI cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5" id="deltaCards">
     <div class="card cmp-card p-4" id="deltaRev">
-      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">Revenue</p>
+      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">รายได้</p>
       <p id="deltaRevCurrent" class="text-xl font-bold text-slate-700">—</p>
       <p id="deltaRevPrior" class="text-sm text-slate-400 mt-0.5">vs —</p>
       <span id="deltaRevBadge" class="inline-block mt-2 px-2 py-0.5 text-xs font-semibold rounded-full pill pill-neu">—</span>
     </div>
     <div class="card cmp-card p-4" id="deltaTx">
-      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">Transactions</p>
+      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">จำนวนบิล</p>
       <p id="deltaTxCurrent" class="text-xl font-bold text-slate-700">—</p>
       <p id="deltaTxPrior" class="text-sm text-slate-400 mt-0.5">vs —</p>
       <span id="deltaTxBadge" class="inline-block mt-2 px-2 py-0.5 text-xs font-semibold rounded-full pill pill-neu">—</span>
     </div>
     <div class="card cmp-card p-4" id="deltaCust">
-      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">Customers</p>
+      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">ลูกค้า</p>
       <p id="deltaCustCurrent" class="text-xl font-bold text-slate-700">—</p>
       <p id="deltaCustPrior" class="text-sm text-slate-400 mt-0.5">vs —</p>
       <span id="deltaCustBadge" class="inline-block mt-2 px-2 py-0.5 text-xs font-semibold rounded-full pill pill-neu">—</span>
     </div>
     <div class="card cmp-card p-4" id="deltaTicket">
-      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">Avg Ticket</p>
+      <p class="text-xs text-slate-500 uppercase tracking-wide mb-2">ยอดเฉลี่ยต่อบิล</p>
       <p id="deltaTicketCurrent" class="text-xl font-bold text-slate-700">—</p>
       <p id="deltaTicketPrior" class="text-sm text-slate-400 mt-0.5">vs —</p>
       <span id="deltaTicketBadge" class="inline-block mt-2 px-2 py-0.5 text-xs font-semibold rounded-full pill pill-neu">—</span>
@@ -48,18 +48,18 @@
   <!-- Side-by-side bar + daily chart -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <div class="card p-5">
-      <h2 class="section-title">Month-over-Month Change</h2>
+      <h2 class="section-title">เปลี่ยนแปลงเทียบเดือนก่อน</h2>
       <div style="height:240px"><canvas id="chartCmpBar"></canvas></div>
     </div>
     <div class="card p-5">
-      <h2 class="section-title">Daily Revenue — Selected Month</h2>
+      <h2 class="section-title">รายได้รายวัน — เดือนที่เลือก</h2>
       <div style="height:240px"><canvas id="chartDaily"></canvas></div>
     </div>
   </div>
 
   <!-- Day-of-week chart -->
   <div class="card p-5">
-    <h2 class="section-title">Day-of-Week Pattern <span class="font-normal text-slate-400 normal-case">(selected month)</span> <a class="see-full no-print" onclick="switchTab('timeflow')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ Time &amp; Flow →</a></h2>
+    <h2 class="section-title">รูปแบบตามวันในสัปดาห์ <span class="font-normal text-slate-400 normal-case">(selected month)</span> <a class="see-full no-print" onclick="switchTab('timeflow')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ Time &amp; Flow →</a></h2>
     <div style="height:200px"><canvas id="chartDow"></canvas></div>
   </div>
 
@@ -77,10 +77,10 @@
       </div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-xs">
-      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">รายได้ (ex-VAT)</div><div id="gpKpiRev" class="text-lg font-bold text-slate-700">—</div></div>
-      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">COGS</div><div id="gpKpiCogs" class="text-lg font-bold text-amber-600">—</div></div>
-      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">Gross Profit</div><div id="gpKpiGp" class="text-lg font-bold text-emerald-600">—</div></div>
-      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">Margin %</div><div id="gpKpiPct" class="text-lg font-bold text-indigo-600">—</div></div>
+      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">รายได้ (ไม่รวม VAT)</div><div id="gpKpiRev" class="text-lg font-bold text-slate-700">—</div></div>
+      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">ต้นทุนขาย</div><div id="gpKpiCogs" class="text-lg font-bold text-amber-600">—</div></div>
+      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">กำไรขั้นต้น</div><div id="gpKpiGp" class="text-lg font-bold text-emerald-600">—</div></div>
+      <div class="rounded p-2 bg-slate-50"><div class="text-slate-500">อัตรากำไร %</div><div id="gpKpiPct" class="text-lg font-bold text-indigo-600">—</div></div>
     </div>
     <div style="height:280px"><canvas id="chartGrossProfit"></canvas></div>
   </div>

@@ -13,7 +13,7 @@
       <span class="text-xs font-semibold" style="color:var(--text-secondary)">มุมมอง:</span>
       <div id="pbViewTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
         <button class="gran-btn gran-active" data-v="gm"   onclick="pbSetView('gm')">กำไร (GM)</button>
-        <button class="gran-btn"             data-v="cogs" onclick="pbSetView('cogs')">ต้นทุน (COGS)</button>
+        <button class="gran-btn"             data-v="cogs" onclick="pbSetView('cogs')">ต้นทุนขาย</button>
       </div>
     </div>
     <span id="pbRange" class="text-[11px]" style="color:var(--text-muted)"></span>
@@ -22,7 +22,7 @@
   <div id="pbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
     <div class="card p-5">
-      <h2 class="section-title mb-3" id="pbDistTitle">การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)</h2>
+      <h2 class="section-title mb-3" id="pbDistTitle">การกระจายอัตรากำไรขั้นต้นต่อบิล</h2>
       <div id="pbDist"></div>
     </div>
     <div class="card p-5 overflow-x-auto">
@@ -42,7 +42,7 @@
       <h2 class="section-title mb-0">เจาะลึกช่วง <span id="pbDrillBand" style="color:var(--indigo)"></span></h2>
       <div class="flex items-center gap-3">
         <button onclick="exportTable('pbDrillTable','drill_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
-        <button onclick="pbCloseDrill()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">✕ ปิด (zoom out)</button>
+        <button onclick="pbCloseDrill()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">✕ ปิด (ย่อกลับ)</button>
       </div>
     </div>
     <div id="pbDrillStat" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4"></div>
@@ -50,7 +50,7 @@
       <table class="text-xs w-full" id="pbDrillTable">
         <thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
           <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
-          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS (BoM)</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">ต้นทุนขาย (BoM)</th>
           <th class="py-1.5 pr-2 text-right">กำไร</th><th class="py-1.5 pr-2 text-right">ส่วนลด</th>
           <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 text-right" id="pbDrillMetric">GM%</th>
         </tr></thead><tbody id="pbDrillBody"></tbody></table>
@@ -58,7 +58,7 @@
   </div>
   <div class="card p-5 overflow-x-auto">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="section-title mb-0">บิลขาดทุนทั้งหมด (COGS &gt; รายได้)</h2>
+      <h2 class="section-title mb-0">บิลขาดทุนทั้งหมด (ต้นทุนขาย &gt; รายได้)</h2>
       <div class="flex items-center gap-3">
         <span id="pbLossSummary" class="text-[11px]" style="color:var(--text-muted)"></span>
         <button onclick="exportTable('pbLossTable','loss_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
@@ -68,7 +68,7 @@
       <table class="text-xs w-full" id="pbLossTable">
         <thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
           <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
-          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS (BoM)</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">ต้นทุนขาย (BoM)</th>
           <th class="py-1.5 pr-2 text-right">ขาดทุน</th><th class="py-1.5 pr-2 text-right">ส่วนลด</th>
           <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right" title="เวลาตั้งแต่เปิดโต๊ะถึงปิดบิล (จาก POS)">นั่ง</th><th class="py-1.5 text-right" id="pbLossMetric">GM%</th>
         </tr></thead><tbody id="pbLoss"></tbody></table>

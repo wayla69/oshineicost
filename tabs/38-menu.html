@@ -40,8 +40,8 @@
 
   <div class="subtab-bar">
     <button class="subtab-btn active" onclick="switchSubtab('mostOrdered')">สั่งบ่อยที่สุด</button>
-    <button class="subtab-btn" onclick="switchSubtab('mostCost')">Most Revenue</button>
-    <button class="subtab-btn" onclick="switchSubtab('engineering')">Menu Engineering</button>
+    <button class="subtab-btn" onclick="switchSubtab('mostCost')">รายได้สูงสุด</button>
+    <button class="subtab-btn" onclick="switchSubtab('engineering')">วิเคราะห์เมนู</button>
     <button class="subtab-btn" onclick="switchSubtab('persona')">ลักษณะลูกค้า</button>
   </div>
 
@@ -63,7 +63,7 @@
             <th class="num">% เทียบยอดรวม</th>
             <th class="num">% สะสม<span class="sub">Pareto</span></th>
             <th class="num">ต้นทุนรวม<span class="sub">฿ · BoM</span></th>
-            <th class="num">% สะสม COGS<span class="sub">Pareto</span></th>
+            <th class="num">% สะสมต้นทุนขาย<span class="sub">Pareto</span></th>
             <th class="num">เปลี่ยนแปลง %<span class="sub">จำนวนขาย</span></th>
           </tr></thead>
           <tbody id="orderedBody"></tbody>
@@ -100,12 +100,12 @@
   <!-- Sub: Most Revenue (à la carte only) -->
   <div id="sub-mostCost" class="hidden">
     <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
-      <h2 class="text-base font-bold text-slate-800 mb-1">à la carte · รายได้ & กำไรขั้นต้น</h2>
+      <h2 class="text-base font-bold text-slate-800 mb-1">à la carte · รายได้และกำไรขั้นต้น</h2>
       <p class="text-xs text-slate-600">เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div class="card p-5">
-        <h2 class="section-title" id="mostRevChartTitle">Top 15 รายได้สูงสุด</h2>
+        <h2 class="section-title" id="mostRevChartTitle">15 อันดับรายได้สูงสุด</h2>
         <div style="height:360px"><canvas id="chartMostRev"></canvas></div>
       </div>
       <div class="card p-5">
@@ -185,7 +185,7 @@
       <div class="flex items-center gap-3 mb-3 flex-wrap">
         <h2 class="section-title mb-0">ตารางเมนูทั้งหมด (เรียง/ค้นได้)</h2>
         <span id="meTableCount" class="text-xs text-slate-400 ml-auto"></span>
-        <button onclick="exportMenuEngTable()" class="text-xs border border-slate-200 hover:border-indigo-500 text-slate-600 hover:text-indigo-600 rounded px-2 py-1 transition-colors">Export CSV</button>
+        <button onclick="exportMenuEngTable()" class="text-xs border border-slate-200 hover:border-indigo-500 text-slate-600 hover:text-indigo-600 rounded px-2 py-1 transition-colors">ส่งออก CSV</button>
       </div>
       <div class="overflow-auto" style="max-height:500px">
         <table class="text-xs w-full">
@@ -209,7 +209,7 @@
     <!-- Velocity bands breakdown -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div class="card p-4">
-        <h3 class="text-sm font-bold text-emerald-700 mb-2">ขายดีที่สุด (top 10%)</h3>
+        <h3 class="text-sm font-bold text-emerald-700 mb-2">ขายดีที่สุด (10% แรก)</h3>
         <ul id="meFastList" class="space-y-1 text-xs text-slate-600"></ul>
       </div>
       <div class="card p-4">
@@ -238,7 +238,7 @@
         <p class="text-xs text-slate-400">ต่อคน</p>
       </div>
       <div class="card p-4 text-center">
-        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Avg Ticket</p>
+        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">ยอดเฉลี่ยต่อบิล</p>
         <p id="pAvgTicket" class="text-3xl font-bold text-indigo-600">—</p>
         <p class="text-xs text-slate-400">ต่อโต๊ะ</p>
       </div>
@@ -272,10 +272,10 @@
       <h2 class="section-title" style="margin-bottom:12px">ค่าใช้จ่ายตามขนาดกลุ่ม</h2>
       <table class="text-sm text-slate-700">
         <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide">
-          <th class="py-2 pr-6">Party Size</th>
-          <th class="py-2 pr-6 text-right">Receipts</th>
-          <th class="py-2 pr-6 text-right">Avg Bill </th>
-          <th class="py-2 text-right">Avg / Head </th>
+          <th class="py-2 pr-6">จำนวนคนต่อโต๊ะ</th>
+          <th class="py-2 pr-6 text-right">ใบเสร็จ</th>
+          <th class="py-2 pr-6 text-right">ยอดเฉลี่ยต่อบิล </th>
+          <th class="py-2 text-right">เฉลี่ย/หัว </th>
         </tr></thead>
         <tbody id="partyBody"></tbody>
       </table>

@@ -863,6 +863,18 @@ def _period_label(mf, mt, df, dt):
 # ---------------------------------------------------------------------------
 # /api/analysis/anomalies   -  z-score outliers
 # ---------------------------------------------------------------------------
+_TH_MON_FULL = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+
+def _th_ym(ym) -> str:
+    """'2026-10' -> ' ตุลาคม 2026' (leading space; the raw value when it is not a month)."""
+    try:
+        y, m = str(ym)[:7].split("-")
+        return f" {_TH_MON_FULL[int(m) - 1]} {y}"
+    except Exception:
+        return f" {ym}"
+
+
 @router.get("/api/analysis/anomalies")
 @ttl_cache
 def analysis_anomalies(
@@ -926,7 +938,7 @@ def analysis_anomalies(
             _y, _m, _d = (int(x) for x in maxday.split("-"))
             if _d < _cal.monthrange(_y, _m)[1]:   # latest month is partial
                 day_clause = f" AND CAST(strftime('%d', st.sold_at) AS INT) <= {_d}"
-                mtd_note = f" (เทียบ 1–{_d} วันเท่ากัน · MTD)"
+                mtd_note = f" (เทียบวันที่ 1–{_d} เท่ากัน)"
 
         easy_monthly = con.execute(
             f"""
@@ -989,14 +1001,14 @@ def analysis_anomalies(
                     "type": "spike", "severity": "good",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
-                    "message": f"รายได้เดือน {last['month']} โต {mom_pct:+.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f}){mtd_note}",
+                    "message": f"รายได้เดือน{_th_ym(last['month'])} โต {mom_pct:+.1f}% จากเดือน{_th_ym(prev['month'])} — ฿{last_rev:,.0f} (ก่อนหน้า ฿{prev_rev:,.0f}){mtd_note}",
                 })
             elif mom_pct <= -_thr:
                 insights.append({
                     "type": "dip", "severity": "bad",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
-                    "message": f"รายได้เดือน {last['month']} ลด {mom_pct:.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f}){mtd_note}",
+                    "message": f"รายได้เดือน{_th_ym(last['month'])} ลด {abs(mom_pct):.1f}% จากเดือน{_th_ym(prev['month'])} — ฿{last_rev:,.0f} (ก่อนหน้า ฿{prev_rev:,.0f}){mtd_note}",
                 })
 
     # Branch MoM growth
@@ -1021,14 +1033,14 @@ def analysis_anomalies(
             insights.append({
                 "type": "growth", "severity": "good", "metric": "branch_mom",
                 "branch": top["branch"], "value": top["growth_pct"],
-                "message": f"เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% MoM ({top['last_revenue']:,.0f}){mtd_note}",
+                "message": f"เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% เทียบเดือนก่อน (฿{top['last_revenue']:,.0f}){mtd_note}",
             })
         worst = growths[-1]
         if worst["growth_pct"] < -_thr:
             insights.append({
                 "type": "drop", "severity": "bad", "metric": "branch_mom",
                 "branch": worst["branch"], "value": worst["growth_pct"],
-                "message": f"⚠ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% MoM ({worst['last_revenue']:,.0f}){mtd_note}",
+                "message": f"⚠ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% เทียบเดือนก่อน (฿{worst['last_revenue']:,.0f}){mtd_note}",
             })
 
     # BoM cost % spike / dip detection (MoM delta >= 5 pp)
@@ -1065,14 +1077,14 @@ def analysis_anomalies(
                     "type": "cost_spike", "severity": "bad",
                     "metric": "bom_cost_pct", "period": m,
                     "value": round(curr_pct, 1),
-                    "message": f"⚠ ต้นทุน BoM พุ่งในเดือน {m} — {curr_pct:.1f}% of revenue (+{delta:.1f}pp จากเดือนก่อน)",
+                    "message": f"⚠ ต้นทุน BoM พุ่งในเดือน{_th_ym(m)} — {curr_pct:.1f}% ของรายได้ (+{delta:.1f} จุดจากเดือนก่อน)",
                 })
             elif delta <= -_thr:
                 insights.append({
                     "type": "cost_drop", "severity": "good",
                     "metric": "bom_cost_pct", "period": m,
                     "value": round(curr_pct, 1),
-                    "message": f"ต้นทุน BoM ลดในเดือน {m} — {curr_pct:.1f}% of revenue ({delta:.1f}pp จากเดือนก่อน)",
+                    "message": f"ต้นทุน BoM ลดในเดือน{_th_ym(m)} — {curr_pct:.1f}% ของรายได้ ({delta:.1f} จุดจากเดือนก่อน)",
                 })
     except Exception as e:
         # one bad month must not blank every insight — say which one broke
@@ -1956,7 +1968,7 @@ def food_cost_trend(
                 alerts.append({
                     "branch": br, "period": last_mo,
                     "cost_pct": pct, "threshold": alert_threshold,
-                    "message": f"⚠ {br}: food cost {pct}% exceeds {alert_threshold}% threshold in {last_mo}",
+                    "message": f"⚠ {br}: ต้นทุนอาหาร {pct}% เกินเกณฑ์ {alert_threshold}% ในเดือน{_th_ym(last_mo)}",
                 })
 
     return {

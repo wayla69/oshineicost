@@ -9,30 +9,30 @@
   <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
        style="background:#1f3a6b">
     <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
-      <span class="text-sm font-semibold truncate" id="mgtSlimLabel">Management Summary Report</span>
+      <span class="text-sm font-semibold truncate" id="mgtSlimLabel">รายงานสรุปผู้บริหาร</span>
       <button onclick="toggleMgtCover(false)" class="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0"
               style="background:rgba(0,0,0,0.18)">▼ เมนูรายงาน</button>
     </div>
     <div class="mgt-full flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
-        <h1 id="mgtTitle" class="text-3xl font-bold leading-tight">Management Summary Report</h1>
+        <h1 id="mgtTitle" class="text-3xl font-bold leading-tight">รายงานสรุปผู้บริหาร</h1>
         <p id="mgtPeriodLabel" class="text-sm opacity-90 mt-2">—</p>
         <p id="mgtBranchLabel" class="text-sm opacity-90">—</p>
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
-        <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(0,0,0,0.18);backdrop-filter:blur(4px)">Export Excel</button>
-        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(0,0,0,0.18);backdrop-filter:blur(4px)">Print / Export PDF</button>
+        <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(0,0,0,0.18);backdrop-filter:blur(4px)">ส่งออก Excel</button>
+        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(0,0,0,0.18);backdrop-filter:blur(4px)">พิมพ์ / ส่งออก PDF</button>
         <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
                 style="background:rgba(0,0,0,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
       </div>
     </div>
     <div class="mgt-full no-print mt-5 flex flex-wrap items-center gap-3">
       <div class="inline-flex rounded-lg overflow-hidden" style="background:rgba(0,0,0,0.12)">
-        <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
-        <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
-        <button id="mgtTabMonthly" onclick="setMgtPeriod('monthly')" class="px-6 py-2 text-sm font-semibold transition">Monthly</button>
+        <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">รายวัน</button>
+        <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">รายสัปดาห์</button>
+        <button id="mgtTabMonthly" onclick="setMgtPeriod('monthly')" class="px-6 py-2 text-sm font-semibold transition">รายเดือน</button>
       </div>
       <input id="mgtDayPicker" type="date" onchange="onMgtDayChange(this.value)"
              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"

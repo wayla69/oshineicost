@@ -16,8 +16,8 @@
           <span class="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-semibold">Primary</span>
         </div>
         <select id="cmpA_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2">
-          <option value="month">Month range</option>
-          <option value="date">Date range</option>
+          <option value="month">ช่วงเดือน</option>
+          <option value="date">ช่วงวันที่</option>
         </select>
         <div id="cmpA_month" class="flex items-center gap-1">
           <select id="cmpA_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
@@ -35,11 +35,11 @@
       <div class="border-2 border-amber-300 rounded-xl p-4" style="background:#fef3c7">
         <div class="flex items-center justify-between mb-2">
           <span class="text-xs font-bold text-amber-700 tracking-widest">◉ B</span>
-          <span class="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-semibold">Baseline</span>
+          <span class="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-semibold">ฐานเดิม</span>
         </div>
         <select id="cmpB_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2">
-          <option value="month">Month range</option>
-          <option value="date">Date range</option>
+          <option value="month">ช่วงเดือน</option>
+          <option value="date">ช่วงวันที่</option>
         </select>
         <div id="cmpB_month" class="flex items-center gap-1">
           <select id="cmpB_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
@@ -63,8 +63,8 @@
           </label>
         </div>
         <select id="cmpC_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2" disabled>
-          <option value="month">Month range</option>
-          <option value="date">Date range</option>
+          <option value="month">ช่วงเดือน</option>
+          <option value="date">ช่วงวันที่</option>
         </select>
         <div id="cmpC_month" class="flex items-center gap-1">
           <select id="cmpC_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
@@ -88,8 +88,8 @@
           </label>
         </div>
         <select id="cmpD_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2" disabled>
-          <option value="month">Month range</option>
-          <option value="date">Date range</option>
+          <option value="month">ช่วงเดือน</option>
+          <option value="date">ช่วงวันที่</option>
         </select>
         <div id="cmpD_month" class="flex items-center gap-1">
           <select id="cmpD_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
@@ -106,9 +106,9 @@
 
     <div class="flex items-center gap-2 mt-4 flex-wrap">
       <button onclick="runComparison()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg flex items-center gap-2">
-        Compare
+        เปรียบเทียบ
       </button>
-      <button onclick="exportComparison()" class="px-3 py-2 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">Export CSV</button>
+      <button onclick="exportComparison()" class="px-3 py-2 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">ส่งออก CSV</button>
       <span id="cmpStatus" class="text-xs text-slate-400 ml-2"></span>
     </div>
   </div>
@@ -131,7 +131,7 @@
         <div style="height:320px"><canvas id="cmpBranchChart"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title">Top SKUs — Revenue by Period</h2>
+        <h2 class="section-title">SKU ยอดนิยม — รายได้ตามช่วงเวลา</h2>
         <div class="overflow-x-auto">
           <table class="text-xs w-full" id="cmpSkuTable">
             <thead id="cmpSkuHead"></thead>
@@ -142,7 +142,7 @@
     </div>
 
     <div class="card p-5 mt-5">
-      <h2 class="section-title">Branch Detail &amp; Rank Shift</h2>
+      <h2 class="section-title">รายละเอียดสาขาและการเปลี่ยนอันดับ</h2>
       <div id="cmpRankShift" class="overflow-x-auto"></div>
     </div>
   </div>

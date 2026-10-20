@@ -7,14 +7,14 @@
     <button onclick="bcSetMode('overview')"  id="bc-mode-overview"  class="subtab-btn active text-sm px-4 py-1.5">ภาพรวม</button>
     <button onclick="bcSetMode('branch')"    id="bc-mode-branch"    class="subtab-btn text-sm px-4 py-1.5">รายสาขา</button>
     <button onclick="bcSetMode('compare')"   id="bc-mode-compare"   class="subtab-btn text-sm px-4 py-1.5">เปรียบเทียบ</button>
-    <button onclick="switchTab('simhub'); simhubSetMode('bomcost')" id="bc-mode-simulator" class="subtab-btn text-sm px-4 py-1.5" title="ย้ายไปที่หน้า Simulators แล้ว">Simulator ↗</button>
+    <button onclick="switchTab('simhub'); simhubSetMode('bomcost')" id="bc-mode-simulator" class="subtab-btn text-sm px-4 py-1.5" title="ย้ายไปที่หน้า Simulators แล้ว">ตัวจำลอง ↗</button>
   </div>
 
   <!-- Period + granularity controls -->
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3 text-xs">
-    <label>From <input type="month" id="bcMonthFrom" class="border border-slate-300 rounded-lg px-2 py-1"></label>
+    <label>จาก <input type="month" id="bcMonthFrom" class="border border-slate-300 rounded-lg px-2 py-1"></label>
     <label>To <input type="month" id="bcMonthTo" class="border border-slate-300 rounded-lg px-2 py-1"></label>
-    <label>Granularity
+    <label>ระดับรายละเอียด
       <select id="bcGranularity" class="border border-slate-300 rounded-lg px-2 py-1">
         <option value="month">เดือน</option>
         <option value="week">สัปดาห์</option>
@@ -22,7 +22,7 @@
       </select>
     </label>
     <button onclick="loadBomCostTab()" class="px-3 py-1 bg-indigo-600 text-white rounded-lg font-medium">โหลด</button>
-    <label class="flex items-center gap-1.5 cursor-pointer select-none" title="นับ service charge (ex-VAT) เป็นรายได้ และรวมในตัวหาร Food Cost % — มีผลทุกหน้าวิเคราะห์">
+    <label class="flex items-center gap-1.5 cursor-pointer select-none" title="นับ service charge (ex-VAT) เป็นรายได้ และรวมในตัวหาร ต้นทุนอาหาร % — มีผลทุกหน้าวิเคราะห์">
       <input type="checkbox" id="bcInclServiceChk" onchange="setInclService(this.checked)">
       <span>รวม Service Charge เป็นรายได้</span>
     </label>

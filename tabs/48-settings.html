@@ -1,15 +1,15 @@
 <div id="tab-settings" class="hidden">
 
   <div class="subtab-bar mb-6" style="max-width:900px">
-    <button class="subtab-btn active" onclick="switchSettingsTab('targets')">Monthly Targets</button>
-    <button class="subtab-btn" onclick="switchSettingsTab('costs')">Cost Management</button>
-    <button class="subtab-btn" onclick="switchSettingsTab('fixedcosts')">Fixed Costs</button>
-    <button class="subtab-btn" onclick="switchSettingsTab('branches')">Branches</button>
+    <button class="subtab-btn active" onclick="switchSettingsTab('targets')">เป้าหมายรายเดือน</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('costs')">จัดการต้นทุน</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('fixedcosts')">ค่าใช้จ่ายคงที่</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('branches')">สาขา</button>
     <button class="subtab-btn" onclick="switchSettingsTab('hours')">ชั่วโมงเปิดทำการ</button>
     <button class="subtab-btn" onclick="switchSettingsTab('downtime')">วันที่สาขาปิด</button>
-    <button class="subtab-btn" onclick="switchSettingsTab('prefs')">Preferences</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('prefs')">การตั้งค่าส่วนตัว</button>
     <button class="subtab-btn" onclick="switchSettingsTab('usage')">การใช้งานจริง</button>
-    <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">Deactivate</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">ปิดใช้งาน</button>
     <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">ผู้ใช้งาน</button>
   </div>
 
@@ -57,7 +57,7 @@
   <div id="settab-usage" class="hidden">
     <div class="card p-5" style="max-width:980px">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h3 class="text-base font-bold" style="color:var(--text-primary)">การใช้งานจริง (Usage Telemetry)</h3>
+        <h3 class="text-base font-bold" style="color:var(--text-primary)">การใช้งานจริง</h3>
         <select id="usageDays" onchange="loadUsageStats()" class="border rounded-lg px-2 py-1 text-xs" style="border-color:var(--border)">
           <option value="30">30 วันล่าสุด</option><option value="60">60 วันล่าสุด</option><option value="90">90 วันล่าสุด</option>
         </select>
@@ -122,7 +122,7 @@
         </button>
         <button onclick="saveTargets()"
           class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
-          Save Targets
+          บันทึกเป้าหมาย
         </button>
         <span id="targetSaveStatus" class="text-sm"></span>
       </div>
@@ -132,11 +132,11 @@
             <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
               <th class="py-2 pr-4">สาขา</th>
               <th class="py-2 pr-4">ที่มาของเป้า</th>
-              <th class="py-2 pr-4 text-right">Revenue Target </th>
-              <th class="py-2 pr-4 text-right">Customer Target</th>
-              <th class="py-2 pr-4 text-right">Actual Revenue</th>
-              <th class="py-2 pr-4 text-right">Actual Customers</th>
-              <th class="py-2 text-right">Achievement</th>
+              <th class="py-2 pr-4 text-right">เป้ารายได้ </th>
+              <th class="py-2 pr-4 text-right">เป้าลูกค้า</th>
+              <th class="py-2 pr-4 text-right">รายได้จริง</th>
+              <th class="py-2 pr-4 text-right">ลูกค้าจริง</th>
+              <th class="py-2 text-right">% ทำได้</th>
             </tr>
           </thead>
           <tbody id="targetBody"></tbody>
@@ -152,22 +152,22 @@
     <div class="card p-5 mb-4" style="border:2px solid #f59e0b;background:#fef3c7">
       <div class="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div>
-          <h3 class="text-base font-bold text-amber-900">Cost Recalibration — แก้ unit_cost ให้ตรงต้นทุนจริง</h3>
+          <h3 class="text-base font-bold text-amber-900">ปรับต้นทุน — แก้ unit_cost ให้ตรงต้นทุนจริง</h3>
           <p class="text-xs text-amber-800 mt-1">แสดง Top 30 SKU ที่ขับ COGS มากที่สุด · ตั้ง target food cost % แล้วระบบจะ suggest unit_cost ใหม่ · แก้ทีละตัวหรือ apply ทั้งหมดเลย</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
-          <label class="text-xs text-amber-900 font-semibold">Target food cost:</label>
+          <label class="text-xs text-amber-900 font-semibold">เป้าต้นทุนอาหาร:</label>
           <input id="recalibTarget" type="number" min="20" max="100" step="1" value="65"
             class="border border-amber-300 rounded-lg px-2 py-1.5 text-sm w-16 text-right">
           <span class="text-xs text-amber-900">%</span>
           <select id="recalibLimit" class="border border-amber-300 rounded-lg px-2 py-1.5 text-xs">
-            <option value="20">Top 20</option>
-            <option value="30">Top 30</option>
-            <option value="50" selected>Top 50</option>
-            <option value="100">Top 100</option>
+            <option value="20">20 อันดับ</option>
+            <option value="30">30 อันดับ</option>
+            <option value="50" selected>50 อันดับ</option>
+            <option value="100">100 อันดับ</option>
           </select>
           <button onclick="loadRecalibration()"
-            class="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium">Refresh</button>
+            class="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium">รีเฟรช</button>
         </div>
       </div>
       <!-- Summary cards -->
@@ -181,12 +181,12 @@
             <tr class="text-left text-amber-900 border-b border-amber-300">
               <th class="py-2 px-2">SKU</th>
               <th class="py-2 px-2">เมนู</th>
-              <th class="py-2 px-2 text-right">qty</th>
-              <th class="py-2 px-2 text-right">avg sell</th>
-              <th class="py-2 px-2 text-right">current cost</th>
-              <th class="py-2 px-2 text-right" style="background:#fde68a">→ new cost</th>
-              <th class="py-2 px-2 text-right">COGS</th>
-              <th class="py-2 px-2 text-right">% total</th>
+              <th class="py-2 px-2 text-right">จำนวน</th>
+              <th class="py-2 px-2 text-right">ราคาขายเฉลี่ย</th>
+              <th class="py-2 px-2 text-right">ต้นทุนปัจจุบัน</th>
+              <th class="py-2 px-2 text-right" style="background:#fde68a">→ ต้นทุนใหม่</th>
+              <th class="py-2 px-2 text-right">ต้นทุนขาย</th>
+              <th class="py-2 px-2 text-right">% ของรวม</th>
               <th class="py-2 px-2">flag</th>
             </tr>
           </thead>
@@ -200,12 +200,12 @@
         </p>
         <div class="flex items-center gap-2">
           <button onclick="recalibApplyAllSuggested()"
-            class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="คัดลอก suggested ทุกตัวลงช่อง new cost">Use all suggested</button>
+            class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="คัดลอก suggested ทุกตัวลงช่อง new cost">ใช้ค่าที่แนะนำทั้งหมด</button>
           <button onclick="recalibResetEdits()"
-            class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">↺ Reset edits</button>
+            class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">↺ ล้างการแก้ไข</button>
           <span id="recalibSaveStatus" class="text-xs"></span>
           <button onclick="recalibSave()"
-            class="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold">Save changes</button>
+            class="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold">บันทึกการแก้ไข</button>
         </div>
       </div>
     </div>
@@ -214,13 +214,13 @@
       <!-- ── Template download banner ── -->
       <div class="flex items-center justify-between gap-4 mb-5 p-4 rounded-xl border border-indigo-200 flex-wrap" style="background:var(--indigo-soft)">
         <div>
-          <p class="text-sm font-semibold text-indigo-800">Download Template</p>
+          <p class="text-sm font-semibold text-indigo-800">ดาวน์โหลดแบบฟอร์ม</p>
           <p class="text-xs text-indigo-600 mt-0.5">Get a pre-filled CSV with all your SKUs, descriptions, categories &amp; reference sales data. Fill in the <code class="bg-indigo-100 px-1 rounded font-mono">unit_cost</code> column then upload.</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button onclick="downloadCostTemplate()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download Template
+            ดาวน์โหลดแบบฟอร์ม
           </button>
           <button onclick="openCostModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -235,25 +235,25 @@
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-400">
         <select id="costPresetSel" onchange="loadMenuPreset(this.value)"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm">
-          <option value="">— Load saved filter —</option>
+          <option value="">— เรียกตัวกรองที่บันทึกไว้ —</option>
         </select>
-        <button onclick="saveMenuPreset()" class="px-3 py-2 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg font-medium">Save current filter</button>
-        <button onclick="resetMenuFilters()" class="px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">↺ Reset</button>
+        <button onclick="saveMenuPreset()" class="px-3 py-2 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg font-medium">บันทึกตัวกรองปัจจุบัน</button>
+        <button onclick="resetMenuFilters()" class="px-3 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">↺ ล้างค่า</button>
         <span id="costTotal" class="text-xs text-slate-400 ml-auto"></span>
       </div>
       <!-- Row 2: category + priced + min rev + sort -->
       <div class="flex items-center gap-3 mb-4 flex-wrap text-xs">
-        <label class="flex items-center gap-1.5"><span class="text-slate-500 font-medium">Category</span>
+        <label class="flex items-center gap-1.5"><span class="text-slate-500 font-medium">หมวด</span>
           <select id="costCatFilter" onchange="loadCosts()"
             class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
-            <option value="">All</option>
+            <option value="">ทั้งหมด</option>
           </select>
         </label>
         <label class="flex items-center gap-1.5"><span class="text-slate-500 font-medium">Cost status</span>
           <select id="costPricedFilter" onchange="loadCosts()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
-            <option value="">All</option>
-            <option value="yes">✓ Priced</option>
-            <option value="no">✗ Without cost</option>
+            <option value="">ทั้งหมด</option>
+            <option value="yes">✓ มีต้นทุน</option>
+            <option value="no">✗ ไม่มีต้นทุน</option>
           </select>
         </label>
         <label class="flex items-center gap-1.5"><span class="text-slate-500 font-medium">ประเภท</span>
@@ -274,26 +274,26 @@
         </label>
         <label class="flex items-center gap-1.5"><span class="text-slate-500 font-medium">Sort by</span>
           <select id="costSortBy" onchange="loadCosts()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
-            <option value="">Default (cat · code)</option>
-            <option value="revenue">Revenue (high → low)</option>
-            <option value="qty">Qty sold (high → low)</option>
-            <option value="cost">Unit cost (high → low)</option>
-            <option value="code">SKU code</option>
+            <option value="">ค่าเริ่มต้น (หมวด · รหัส)</option>
+            <option value="revenue">รายได้ (มาก → น้อย)</option>
+            <option value="qty">จำนวนขาย (มาก → น้อย)</option>
+            <option value="cost">ต้นทุนต่อหน่วย (มาก → น้อย)</option>
+            <option value="code">รหัส SKU</option>
           </select>
         </label>
-        <button onclick="exportTable('costDetailTable','menu_filtered.csv')" class="px-3 py-1.5 text-xs border border-slate-300 rounded-lg ml-auto">Export filtered</button>
+        <button onclick="exportTable('costDetailTable','menu_filtered.csv')" class="px-3 py-1.5 text-xs border border-slate-300 rounded-lg ml-auto">ส่งออกตามตัวกรอง</button>
       </div>
       <div class="overflow-x-auto">
         <table class="text-sm w-full" id="costDetailTable">
           <thead>
             <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
               <th class="py-2 pr-3">SKU</th>
-              <th class="py-2 pr-3">Description</th>
+              <th class="py-2 pr-3">รายละเอียด</th>
               <th class="py-2 pr-3">ประเภท</th>
-              <th class="py-2 pr-3">Category</th>
-              <th class="py-2 pr-3 text-right">Unit Cost </th>
-              <th class="py-2 pr-3 text-right">Revenue</th>
-              <th class="py-2 text-right">Qty Sold</th>
+              <th class="py-2 pr-3">หมวด</th>
+              <th class="py-2 pr-3 text-right">ต้นทุนต่อหน่วย </th>
+              <th class="py-2 pr-3 text-right">รายได้</th>
+              <th class="py-2 text-right">จำนวนขาย</th>
             </tr>
           </thead>
           <tbody id="costDetailBody"></tbody>
@@ -306,22 +306,22 @@
     <div class="card p-5 mt-5" style="border:1px solid #f97316">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-orange-900">BoM Cost Audit — ตรวจสอบ unit_cost</h3>
+          <h3 class="text-sm font-bold text-orange-900">ตรวจสอบต้นทุน BoM — ตรวจสอบ unit_cost</h3>
           <p class="text-xs text-slate-500 mt-0.5">ตรวจหา SKU ที่ unit_cost เป็นราคาขาย (error) หรือสูงผิดปกติ (warning) เพื่อแก้ไขให้ถูกต้อง</p>
         </div>
-        <button onclick="loadBomAudit(true)" class="px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg font-medium">↺ Refresh</button>
+        <button onclick="loadBomAudit(true)" class="px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg font-medium">↺ รีเฟรช</button>
       </div>
       <div id="bomAuditKpis" class="flex flex-wrap gap-3 mb-4"></div>
       <div class="overflow-x-auto">
         <table class="text-xs w-full">
           <thead><tr class="text-left text-slate-500 border-b border-slate-200">
             <th class="py-2 pr-3">SKU</th>
-            <th class="py-2 pr-3">Description</th>
-            <th class="py-2 pr-3">Category</th>
-            <th class="py-2 pr-3 text-right">Unit Cost</th>
-            <th class="py-2 pr-3 text-right">Avg Sell Price</th>
-            <th class="py-2 pr-3 text-right">Cost/Price %</th>
-            <th class="py-2 text-right">Status</th>
+            <th class="py-2 pr-3">รายละเอียด</th>
+            <th class="py-2 pr-3">หมวด</th>
+            <th class="py-2 pr-3 text-right">ต้นทุนต่อหน่วย</th>
+            <th class="py-2 pr-3 text-right">ราคาขายเฉลี่ย</th>
+            <th class="py-2 pr-3 text-right">ต้นทุน/ราคา %</th>
+            <th class="py-2 text-right">สถานะ</th>
           </tr></thead>
           <tbody id="bomAuditBody"><tr><td colspan="7" class="py-4 text-center text-slate-400">กดเลือกแท็บ Cost Management เพื่อโหลด</td></tr></tbody>
         </table>
@@ -332,14 +332,14 @@
     <div class="card p-5 mt-5" style="border:1px solid var(--accent)">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-indigo-900">ต้นทุนรายเดือน (Monthly Cost Overrides)</h3>
+          <h3 class="text-sm font-bold text-indigo-900">ต้นทุนรายเดือน</h3>
           <p class="text-xs text-slate-500 mt-0.5">กำหนด unit_cost ต่อ SKU ในแต่ละเดือน สำหรับวัตถุดิบที่ราคาผันผวน — ระบบจะใช้ค่าเดือนที่ระบุ ถ้าไม่มีจะย้อนไปใช้เดือนก่อนหน้า ถ้าไม่มีอีกใช้ค่า default</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs text-slate-500 font-medium">เดือน</label>
           <input id="mcMonth" type="month" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
           <button onclick="loadMonthlyCost()" class="px-3 py-1.5 text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg font-medium">↻ โหลด</button>
-          <button onclick="downloadMonthlyTemplate()" class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium">Template CSV</button>
+          <button onclick="downloadMonthlyTemplate()" class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium">แบบฟอร์ม CSV</button>
           <label class="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg font-medium cursor-pointer">
             อัปโหลด CSV
             <input id="mcCsvFile" type="file" accept=".csv" class="hidden" onchange="onMonthlyCsvSelected(event)">
@@ -353,10 +353,10 @@
         <label class="flex items-center gap-1.5"><span class="text-slate-500">แหล่ง</span>
           <select id="mcSourceFilter" onchange="renderMonthlyCostTable()" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
             <option value="">ทั้งหมด</option>
-            <option value="monthly">monthly (ระบุเอง)</option>
-            <option value="inherited">inherited (เดือนก่อน)</option>
-            <option value="default">default (lifetime)</option>
-            <option value="none">none (ยังไม่มี cost)</option>
+            <option value="monthly">รายเดือน (ระบุเอง)</option>
+            <option value="inherited">ใช้ค่าเดือนก่อน</option>
+            <option value="default">ค่าเริ่มต้น (ตลอดอายุ)</option>
+            <option value="none">ไม่มี (ยังไม่มีต้นทุน)</option>
           </select>
         </label>
         <span id="mcostStatus" class="text-xs text-slate-400 ml-auto"></span>
@@ -366,7 +366,7 @@
           <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
             <th class="py-2 pr-3">SKU</th>
             <th class="py-2 pr-3">รายละเอียด</th>
-            <th class="py-2 pr-3 text-right">Default</th>
+            <th class="py-2 pr-3 text-right">ค่าเริ่มต้น</th>
             <th class="py-2 pr-3 text-right">เดือนนี้</th>
             <th class="py-2 pr-3 text-right">Effective</th>
             <th class="py-2 pr-3">แหล่ง</th>
@@ -410,11 +410,11 @@
     <div class="card p-5">
       <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-slate-800">ค่าแรง + ค่าใช้จ่ายคงที่ ต่อสาขา (Labor + Fixed Costs / month)</h3>
+          <h3 class="text-sm font-bold text-slate-800">ค่าแรง + ค่าใช้จ่ายคงที่ ต่อสาขา (ต่อเดือน)</h3>
           <p class="text-xs text-slate-500 mt-0.5">ใส่ <b>ค่าแรงแยกต่างหาก</b> (controllable cost ที่ใหญ่สุด) จากค่าเช่า/น้ำไฟ → ปลดล็อก <b>Prime Cost = Food% + Labor%</b> ในแท็บ P&amp;L รายสาขา · ใช้คำนวณ Net Profit ด้วย</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="saveFixedCosts()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg">Save</button>
+          <button onclick="saveFixedCosts()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg">บันทึก</button>
           <span id="fixedCostStatus" class="text-sm self-center"></span>
         </div>
       </div>
@@ -432,9 +432,9 @@
         <thead>
           <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
             <th class="py-2 pr-4">ID</th>
-            <th class="py-2 pr-4">Branch Name</th>
-            <th class="py-2 pr-4">Group</th>
-            <th class="py-2 text-right">Action</th>
+            <th class="py-2 pr-4">ชื่อสาขา</th>
+            <th class="py-2 pr-4">กลุ่ม</th>
+            <th class="py-2 text-right">สิ่งที่ควรทำ</th>
           </tr>
         </thead>
         <tbody id="branchConfigBody"></tbody>
@@ -451,7 +451,7 @@
           class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"></select>
         <button onclick="saveClosedHours()"
           class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg ml-auto">
-          Save Hours
+          บันทึกชั่วโมง
         </button>
         <span id="hoursSaveStatus" class="text-sm"></span>
       </div>
@@ -467,7 +467,7 @@
       <div class="space-y-5">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">Default Branch</p>
+            <p class="text-sm font-medium text-slate-700">สาขาเริ่มต้น</p>
             <p class="text-xs text-slate-400 mt-0.5">Pre-selected branch on page load</p>
           </div>
           <select id="prefDefaultBranch"
@@ -477,26 +477,26 @@
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">Default Period</p>
+            <p class="text-sm font-medium text-slate-700">ช่วงเวลาเริ่มต้น</p>
             <p class="text-xs text-slate-400 mt-0.5">Which month to show on load</p>
           </div>
           <select id="prefDefaultMonth"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            <option value="">All months</option>
-            <option value="latest">Latest month</option>
+            <option value="">ทุกเดือน</option>
+            <option value="latest">เดือนล่าสุด</option>
           </select>
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">Fiscal Year Start</p>
+            <p class="text-sm font-medium text-slate-700">เดือนเริ่มปีบัญชี</p>
             <p class="text-xs text-slate-400 mt-0.5">First month of your fiscal year</p>
           </div>
           <select id="prefFiscalStart"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            <option value="1">January</option>
-            <option value="4">April</option>
-            <option value="7">July</option>
-            <option value="10">October</option>
+            <option value="1">มกราคม</option>
+            <option value="4">เมษายน</option>
+            <option value="7">กรกฎาคม</option>
+            <option value="10">ตุลาคม</option>
           </select>
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
@@ -523,7 +523,7 @@
         <div class="border-t border-slate-100 pt-5 flex items-center gap-3">
           <button onclick="savePreferences()"
             class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
-            Save Preferences
+            บันทึกการตั้งค่า
           </button>
           <span id="prefSaveStatus" class="text-sm"></span>
         </div>
@@ -537,7 +537,7 @@
 
       <!-- Branches section -->
       <div class="card p-5">
-        <h3 class="font-semibold text-slate-700 mb-1">Branches</h3>
+        <h3 class="font-semibold text-slate-700 mb-1">สาขา</h3>
         <p class="text-xs text-slate-400 mb-4">Deactivated branches are hidden from all filters and excluded from every chart and analysis.</p>
         <div id="deactivateBranchList" class="space-y-2"></div>
       </div>
@@ -545,7 +545,7 @@
       <!-- Menu items section -->
       <div class="card p-5">
         <div class="flex items-center gap-3 mb-3 flex-wrap">
-          <h3 class="font-semibold text-slate-700">Menu Items</h3>
+          <h3 class="font-semibold text-slate-700">รายการเมนู</h3>
           <input id="deactivateSkuSearch" type="text" placeholder="Filter by SKU or description…"
             oninput="renderSkuDeactivateList()"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-400 ml-auto">

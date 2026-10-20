@@ -444,7 +444,7 @@ function msColumns(vals, o) {
   // priority: the latest complete value, then the period in progress (just its
   // tag - the figure is in the list/tile), then the peak
   if (last >= 0) g += lab(last);
-  if (P >= 0 && vals[P] != null) g += lab(P, o.grain === 'day' ? 'วันนี้' : 'MTD');
+  if (P >= 0 && vals[P] != null) g += lab(P, o.grain === 'day' ? 'วันนี้' : 'เดือนนี้');
   if (hi >= 0 && hi !== last) g += lab(hi);
   if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="11" style="fill:var(--text-muted,#94a3b8)">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
   if (o.labels) {
@@ -559,7 +559,7 @@ async function loadMobileSummary(force) {
     _msMonthsFilled = true;
   }
   document.getElementById('msSubtitle').textContent = (br || 'ทุกสาขา') + ' · ' + (j.label || '');
-  if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day || ''}` + (_msFetchedAt ? ` · โหลดล่าสุด ${msClock(_msFetchedAt)}` : '');
+  if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day ? fmtDateTh(j.latest_day) : ''}` + (_msFetchedAt ? ` · โหลดล่าสุด ${msClock(_msFetchedAt)}` : '');
   msRenderActive();
   msLoadVoice();
   if (_msPendingLink) { const l = _msPendingLink; _msPendingLink = ''; msDeepLink(l); }
@@ -613,7 +613,7 @@ function msKpiTile(l, v, c, sub, span) {
 // headline KPIs: revenue (+8-period columns), covers, spend/head, GP, discounts — MoM and YoY chips
 function msKpisHtml(j) {
   const H = j.headline || {}, G = j.gp || {}, yoy = _msYoyOk(j);
-  const chips = (m, y, vs) => msPchip(m) + (vs ? ` <span style="${_msMuted};font-size:12px">vs เดือนก่อน</span>` : '') + (yoy && y != null ? ` <span style="font-size:12px;${_msMuted}">· YoY</span> ${msPchip(y)}` : '');
+  const chips = (m, y, vs) => msPchip(m) + (vs ? ` <span style="${_msMuted};font-size:12px">เทียบเดือนก่อน</span>` : '') + (yoy && y != null ? ` <span style="font-size:12px;${_msMuted}">· เทียบปีก่อน</span> ${msPchip(y)}` : '');
   const tr = j.trend || [];
   const cols = tr.length >= 3 ? `<div style="margin-top:10px">${msColumns(tr.map(x => x.revenue ?? null), { partial: j.partial ? tr.length - 1 : -1, labels: tr.map(x => x.label), fmt, grain: 'month', height: 92, aria: 'รายได้รายเดือน' })}</div>` : '';
   return `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">รายได้${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk('#4a70b0')}">${fmt(H.revenue || 0)}</p><p class="sub">${chips(H.rev_wow_pct, H.rev_yoy_pct, true)}</p>${cols}</div>`
@@ -813,7 +813,7 @@ function msRenderBranches() {
       : S === 'tgt'
       ? `<span style="font-size:12px;${_msMuted}">${b.target != null ? 'เป้า ' + fmt(b.target) : ''}</span><span class="ms-chip" style="background:${_msTgtCol(b.vs_target_pct)}22;color:${textInk(_msTgtCol(b.vs_target_pct))}">${b.vs_target_pct != null ? b.vs_target_pct.toFixed(0) + '%' : '—'}</span>`
       : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.wow_pct)}`;
-    const sub = [yoy && b.yoy_pct != null ? `YoY ${b.yoy_pct > 0 ? '+' : ''}${b.yoy_pct}%` : '',
+    const sub = [yoy && b.yoy_pct != null ? `เทียบปีก่อน ${b.yoy_pct > 0 ? '+' : ''}${b.yoy_pct}%` : '',
                  b.vs_target_pct != null && S !== 'tgt' ? `<span style="color:${textInk(_msTgtCol(b.vs_target_pct))}">เป้า ${b.vs_target_pct.toFixed(0)}%</span>` : ''].filter(Boolean).join(' · ');
     return `<div class="ms-row" data-br="${esc(b.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
       <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}${sub ? ` <span style="font-size:12px;font-weight:400;${_msMuted}">${sub}</span>` : ''}</span>
@@ -858,7 +858,7 @@ const _msMomBasisNote = m => !m.mtd ? ''
 function msMonthCell(label, value, mom, yoy) {
   return `<div style="min-width:0"><div style="font-size:12px;${_msMuted}">${label}</div>
     <div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b);white-space:nowrap">${value}</div>
-    <div style="font-size:12px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:12px;white-space:nowrap"><span style="${_msMuted}">YoY</span> ${yoy}</div>` : ''}</div>`;
+    <div style="font-size:12px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:12px;white-space:nowrap"><span style="${_msMuted}">เทียบปีก่อน</span> ${yoy}</div>` : ''}</div>`;
 }
 function msMonthsHtml(d, selected) {
   const asc = d.months || [];
@@ -896,9 +896,9 @@ function msMonthsHtml(d, selected) {
       </div></div>`;
   }).join('');
   return `<div style="padding:10px 0 8px">${msGlanceLine(sentence)}${chart}</div>
-    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · YoY = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบกับฐานปกติตามวันในสัปดาห์ ไม่เทียบกับทั้งเดือน</p>
+    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบกับฐานปกติตามวันในสัปดาห์ ไม่เทียบกับทั้งเดือน</p>
     ${cards}
-    <p style="font-size:12px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · YoY แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
+    <p style="font-size:12px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · เทียบปีก่อน แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
 }
 async function msLoadMonths(wrap) {
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
@@ -1017,7 +1017,7 @@ function msProfitKpisHtml(j) {
   const fcPrev = P.food_cost_pct_prev;
   return [
     { l: 'GP %', v: G.gp_pct != null ? G.gp_pct.toFixed(1) + '%' : '—', c: '#10b981', s: G.gp_pct_delta_pp != null ? `${G.gp_pct_delta_pp > 0 ? '+' : ''}${G.gp_pct_delta_pp}pp vs เดือนก่อน` : (G.cost_basis === 'unavailable' ? 'ไม่มีข้อมูลต้นทุน' : '') },
-    { l: 'Food cost % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: fcPrev != null ? `เดือนก่อน ${fcPrev.toFixed(1)}%` : '' },
+    { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: fcPrev != null ? `เดือนก่อน ${fcPrev.toFixed(1)}%` : '' },
     { l: 'ต้นทุนอาหาร/หัว', v: M.total_cph != null ? fmt(M.total_cph) : '—', c: '#ef4444', s: M.total_cph_delta != null ? `${M.total_cph_delta > 0 ? '+' : M.total_cph_delta < 0 ? '−' : ''}฿${Math.abs(M.total_cph_delta).toFixed(1)} vs เดือนก่อน` : '' },
     { l: 'GP/หัว', v: G.gp_per_head != null ? fmt(G.gp_per_head) : '—', c: '#0891b2', s: H.rev_per_head != null ? `รายได้/หัว ${fmt(H.rev_per_head)}` : '' },
   ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p><p class="sub" style="font-size:12px;${_msMuted}">${k.s}</p></div>`).join('');
@@ -1048,7 +1048,7 @@ async function msRenderProfit() {
   const branches = (d.branches || []).filter(r => r.cost_pct != null).sort((a, b2) => b2.cost_pct - a.cost_pct);   // worst first
   const over = branches.filter(r => r.cost_pct >= 55).length;
   const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(r => r.branch), branches.map(r => r.cost_pct), { pct: true, fmt: v => v + '%' }) : '';
-  br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`Food cost ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขา ≥ 55%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row" data-br="${esc(r.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
+  br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`ต้นทุนอาหาร ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขา ≥ 55%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row" data-br="${esc(r.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
       <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
       <span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
       <span class="ms-chip" style="background:${_msCpCol(r.cost_pct)}22;color:${textInk(_msCpCol(r.cost_pct))}">${r.cost_pct}%</span>
@@ -1268,7 +1268,7 @@ async function loadMoreAnalytics() {
     chips.push({ icon:'', label:'ช่วงทำเงินสูงสุด', val:esc(topRev.label),
                  sub:`${fmt(topRev.revenue)} · ${topRev.revenue_pct}% ของรายได้`, c:'#4a70b0' });
     const wGp = dayparts.filter(x=>x.est_gp_margin_pct!=null).sort((a,b)=>b.est_gp_margin_pct-a.est_gp_margin_pct)[0];
-    if (wGp) chips.push({ icon:'', label:'กำไร(margin)ดีสุด', val:esc(wGp.label),
+    if (wGp) chips.push({ icon:'', label:'อัตรากำไรดีสุด', val:esc(wGp.label),
                  sub:`GP ${wGp.est_gp_margin_pct}% · ดื่ม ${wGp.drink_pct}%`, c:'#10b981' });
   }
   if (tbr.length) {

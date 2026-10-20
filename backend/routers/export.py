@@ -239,7 +239,7 @@ def _mpack_collect(month: str) -> dict:
         if fc_p is not None and fc_p > 70.0:
             alerts.append({
                 "branch": r["branch"], "severity": "high",
-                "message": f"Food cost {fc_p:.1f}% เกิน 70% (เป้า {target_lo}-{target_hi}%)",
+                "message": f"ต้นทุนอาหาร {fc_p:.1f}% เกิน 70% (เป้า {target_lo}-{target_hi}%)",
             })
         if gp is not None and gp < 0:
             alerts.append({

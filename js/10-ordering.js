@@ -1114,7 +1114,7 @@ function _ipRenderCharts(d) {
   _ipChartAmt = mkChart('ipChartAmt', {
     type: 'bar',
     data: { labels: weeks.map(wkLbl), datasets: [
-      { label: 'ยอดขาย (ex-VAT)', data: wkRevAll, backgroundColor: '#0891b2', maxBarThickness: 26 },
+      { label: 'ยอดขาย (ไม่รวม VAT)', data: wkRevAll, backgroundColor: '#0891b2', maxBarThickness: 26 },
       { label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: weeks.map((w, i) => wkN[i] ? wkAmt[i] : null), backgroundColor: '#7a66b8', maxBarThickness: 26 }] },
     options: { responsive: true, maintainAspectRatio: false,
       scales: { y: { title: { display: true, text: '฿' }, beginAtZero: true, ticks: { callback: v => fmt(v) } } },

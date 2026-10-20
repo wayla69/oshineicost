@@ -41,7 +41,7 @@ async function renderReportCost(branch) {
   const totalQtyTop  = top60.reduce((s,r)=>s+(r.qty||0),0);
 
   kpis.innerHTML = [
-    { label:'Total COGS (เดือนนี้)', value:fmtN(Math.round(totalCogsAll)), color:'#dc2626' },
+    { label:'ต้นทุนขายรวม (เดือนนี้)', value:fmtN(Math.round(totalCogsAll)), color:'#dc2626' },
     { label:`Top 60 = ${totalCogsAll ? (totalCogsTop/totalCogsAll*100).toFixed(1) : '—'}% ของต้นทุน`, value:fmtN(Math.round(totalCogsTop)), color:'#f59e0b' },
     { label:'ลูกค้า (หัว)', value:fmtN(cur.total_covers||0), color:'#4a70b0' },
     { label:'ต้นทุน/หัว', value:cur.total_covers ? fmtN(Math.round(totalCogsAll/cur.total_covers)) : '—', color:'#64748b' },
@@ -128,11 +128,11 @@ async function renderReportTier(month) {
   const bullets = (d.insights || []).slice(0, 4).map(t => `<li>${esc(t)}</li>`).join('');
   block.innerHTML = `<table class="text-sm text-slate-700 w-full">
       <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
-        <th class="py-2 pr-4">Tier</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
+        <th class="py-2 pr-4">ระดับราคา</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
         <th class="py-2 pr-4 text-right">Δ คนทาน</th><th class="py-2 pr-4 text-right">สัดส่วน (Δpp)</th>
         <th class="py-2 pr-4 text-right">รายได้/หัว</th><th class="py-2 pr-4 text-right">ต้นทุน/หัว (Δ)</th>
         <th class="py-2 pr-4 text-right">BoM เฉลี่ย/จาน</th>
-        <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
+        <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">ต้นทุนอาหาร %</th>
       </tr></thead><tbody>${rows}</tbody></table>
     ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
     <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ วิเคราะห์วัตถุดิบ → วิเคราะห์ Tier ราคาขาย</p>`;
@@ -603,7 +603,7 @@ async function loadReport() {
       <table class="text-xs w-full">
         <thead><tr class="text-left text-slate-400 border-b border-slate-100">
           <th class="py-1.5 pr-3">สาขา</th>
-          <th class="py-1.5 pr-3 text-right">AOV</th>
+          <th class="py-1.5 pr-3 text-right">ยอดเฉลี่ยต่อบิล</th>
           <th class="py-1.5 pr-3 text-right">ส่วนลด</th>
           <th class="py-1.5 pr-3 text-right">คน/บิล</th>
           <th class="py-1.5 pr-3 text-right">รายได้</th>
@@ -838,7 +838,7 @@ async function loadReport() {
       <div>
         <p class="text-xs font-semibold text-slate-600 mb-2">Revenue by Hour (avg/day · เรียงมาก→น้อย)</p>
         <table class="text-xs w-full">
-          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">ชั่วโมง</th><th class="py-1 text-right">Avg/วัน</th><th class="py-1 text-right">Share</th><th class="py-1 text-right">สะสม</th></tr></thead>
+          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">ชั่วโมง</th><th class="py-1 text-right">เฉลี่ย/วัน</th><th class="py-1 text-right">สัดส่วน</th><th class="py-1 text-right">สะสม</th></tr></thead>
           <tbody>${hrsByRev.map(h=>{ const sh = hrAvg(h)/totalHrAvg*100; _hrCum += sh; return `
             <tr class="border-t border-slate-50">
               <td class="py-1 font-mono">${h.hour}:00</td>
@@ -852,7 +852,7 @@ async function loadReport() {
         <p class="text-xs font-semibold text-slate-600 mb-2">Revenue by Day of Week (avg/day)</p>
         <div style="position:relative;height:140px" class="mb-3"><canvas id="rptDowChart"></canvas></div>
         <table class="text-xs w-full">
-          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">วัน</th><th class="py-1 text-right">Avg/วัน</th><th class="py-1 text-right">Share</th><th class="py-1 text-right">vs เฉลี่ยสัปดาห์</th></tr></thead>
+          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">วัน</th><th class="py-1 text-right">เฉลี่ย/วัน</th><th class="py-1 text-right">สัดส่วน</th><th class="py-1 text-right">vs เฉลี่ยสัปดาห์</th></tr></thead>
           <tbody>${[...dowSorted].sort((a,b)=>(b.avg_revenue||0)-(a.avg_revenue||0)).map(d=>{
             const avgOfWk = dowTotal/7;
             const dd = avgOfWk ? ((d.avg_revenue||0)-avgOfWk)/avgOfWk*100 : 0;
@@ -1051,7 +1051,7 @@ async function loadReport() {
       <p class="text-lg font-bold" style="color:${textInk(color||'#1e293b')}">${valHtml}</p>
       <p class="text-[11px] text-slate-400">${sub}</p></div>`;
     scEl.innerHTML =
-      card('คาดสิ้นเดือน', fmtN(proj), 'run-rate projection', '#4a70b0') +
+      card('คาดสิ้นเดือน', fmtN(proj), 'คาดจากยอดขายต่อวัน', '#4a70b0') +
       card('vs เดือนก่อน (MoM)', pctChip(momPct), 'projected vs last month', '#1e293b') +
       card('vs ปีก่อน (YoY)', yoyPct==null?'—':(yoyPct>=0?'+':'')+yoyPct.toFixed(1)+'%',
            latestYoy?`${latestYoy.period_month} vs ${latestYoy.ly_period}`:'ไม่มีข้อมูล',
@@ -1065,11 +1065,11 @@ async function loadReport() {
     const scRange = (scHi - scLo) || 1;
     const scBasePct = Math.min(100, Math.max(0, (scBase - scLo) / scRange * 100));
     const scPriorPct = (prior != null && prior >= scLo && prior <= scHi) ? (prior - scLo) / scRange * 100 : null;
-    scenEl.innerHTML = `<h3 class="text-sm font-bold text-slate-600 mb-2">สถานการณ์จำลอง (Scenario)</h3>
+    scenEl.innerHTML = `<h3 class="text-sm font-bold text-slate-600 mb-2">สถานการณ์จำลอง</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         ${[
           ['ดีสุด (Best)',  forecast.hi,        '#059669', 'วันหยุด/โปรช่วยดันยอด · +1SD'],
-          ['ฐาน (Base)',    forecast.projected, '#4a70b0', 'คงอัตราปัจจุบัน (run-rate)'],
+          ['ฐาน (Base)',    forecast.projected, '#4a70b0', 'คงยอดขายต่อวันเท่าปัจจุบัน'],
           ['แย่สุด (Worst)', forecast.lo,        '#dc2626', 'สาขาขาช้า/สภาพอากาศ · −1SD'],
         ].map(([t,v,c,assume]) => `<div class="p-4 rounded-xl border" style="border-color:${c}33;background:${c}0a">
           <p class="text-xs font-semibold mb-1" style="color:${textInk(c)}">${t}</p>
@@ -1721,7 +1721,7 @@ async function loadBuffetPerBill() {
         { type:'bar',  label:'เฉลี่ย/บิล: รายได้', data: rows.map(r => r.avg_per_bill_rev),    backgroundColor:'rgba(31,58,107,0.55)', borderRadius:3, yAxisID:'y' },
         { type:'bar',  label:'เฉลี่ย/บิล: BoM',     data: rows.map(r => r.avg_per_bill_cost),   backgroundColor:'rgba(220,38,38,0.65)', borderRadius:3, yAxisID:'y' },
         { type:'line', label:'เฉลี่ย/บิล: กำไร',    data: rows.map(r => r.avg_per_bill_profit), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.15)', tension:0.3, fill:true, yAxisID:'y' },
-        { type:'line', label:'% Margin',            data: rows.map(r => r.margin_pct),          borderColor:'#f59e0b', borderDash:[4,3], backgroundColor:'transparent', tension:0.25, yAxisID:'y1', pointRadius:3 },
+        { type:'line', label:'อัตรากำไร %',            data: rows.map(r => r.margin_pct),          borderColor:'#f59e0b', borderDash:[4,3], backgroundColor:'transparent', tension:0.25, yAxisID:'y1', pointRadius:3 },
       ],
     },
     options: {
@@ -1851,9 +1851,9 @@ async function loadProfitAnalysis() {
     data: {
       labels: trend.map(t => fmtPeriod(t.period_month)),
       datasets: [
-        { type:'bar',  label:'COGS',         data: trend.map(t=>t.cogs),                  backgroundColor:'rgba(239,68,68,0.7)',  stack:'stack1', order:2 },
-        { type:'bar',  label:'Gross Profit', data: trend.map(t=>t.gross_profit),          backgroundColor:'rgba(16,185,129,0.7)', stack:'stack1', order:2 },
-        { type:'line', label:'Margin %',     data: trend.map(t=>t.margin_pct),            yAxisID:'y1', borderColor:'#06b6d4', backgroundColor:'#06b6d4', tension:0.25, order:1, fill:false },
+        { type:'bar',  label:'ต้นทุนขาย',         data: trend.map(t=>t.cogs),                  backgroundColor:'rgba(239,68,68,0.7)',  stack:'stack1', order:2 },
+        { type:'bar',  label:'กำไรขั้นต้น', data: trend.map(t=>t.gross_profit),          backgroundColor:'rgba(16,185,129,0.7)', stack:'stack1', order:2 },
+        { type:'line', label:'อัตรากำไร %',     data: trend.map(t=>t.margin_pct),            yAxisID:'y1', borderColor:'#06b6d4', backgroundColor:'#06b6d4', tension:0.25, order:1, fill:false },
       ],
     },
     options: {
@@ -1873,7 +1873,7 @@ async function loadProfitAnalysis() {
     type: 'bar',
     data: {
       labels: dist.buckets.map(b=>b.label),
-      datasets: [{ label:'Bills', data: dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8' }],
+      datasets: [{ label:'บิล', data: dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8' }],
     },
     options: {
       responsive:true, maintainAspectRatio:false,
@@ -1892,9 +1892,9 @@ async function loadProfitAnalysis() {
     data: {
       labels: byBranch.map(b=>b.branch),
       datasets: [
-        { label:'Revenue (ex-VAT)', data: byBranch.map(b=>b.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.6)' },
-        { label:'COGS',             data: byBranch.map(b=>b.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)' },
-        { label:'Gross Profit',     data: byBranch.map(b=>b.gross_profit||0),   backgroundColor:'rgba(16,185,129,0.6)' },
+        { label:'รายได้ (ไม่รวม VAT)', data: byBranch.map(b=>b.revenue_ex_vat||0), backgroundColor:'rgba(31,58,107,0.6)' },
+        { label:'ต้นทุนขาย',             data: byBranch.map(b=>b.cogs||0),           backgroundColor:'rgba(239,68,68,0.6)' },
+        { label:'กำไรขั้นต้น',     data: byBranch.map(b=>b.gross_profit||0),   backgroundColor:'rgba(16,185,129,0.6)' },
       ],
     },
     options: {

@@ -338,7 +338,7 @@ function mcRenderTrend() {
   if (!tr.length || typeof mkChart !== 'function') return;
   mkChart('mcDrillChart', { type: 'line', data: { labels: tr.map(x => x.month), datasets: [
     { label: 'จำนวนขาย', data: tr.map(x => x.qty), borderColor: '#4a70b0', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y' },
-    { label: 'ต้นทุน (COGS)', data: tr.map(x => x.cogs), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y1' },
+    { label: 'ต้นทุนขาย', data: tr.map(x => x.cogs), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y1' },
   ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: { display: false } },
     scales: { y: { position: 'left', ticks: { callback: v => fmtN(v) } }, y1: { position: 'right', grid: { display: false }, ticks: { callback: v => fmt(v) } } } } });
 }
@@ -459,10 +459,10 @@ function bcCostDriverTable(cd, scopeLabel, extraNote) {
       <div class="overflow-x-auto" style="max-height:520px;overflow-y:auto">
       <table class="text-xs w-full">
         <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
-          <th class="py-2 pr-2">#</th><th class="py-2 pr-2">SKU</th><th class="py-2 pr-2">Description</th>
-          <th class="py-2 pr-2">ประเภท</th><th class="py-2 pr-2 text-right">Qty</th>
-          <th class="py-2 pr-2 text-right">Unit cost</th><th class="py-2 pr-2 text-right">Total COGS</th>
-          <th class="py-2 pr-2 text-right">${pctLabel}</th><th class="py-2 pr-2 text-right">MoM</th><th class="py-2 text-center">Recipe</th>
+          <th class="py-2 pr-2">#</th><th class="py-2 pr-2">SKU</th><th class="py-2 pr-2">รายละเอียด</th>
+          <th class="py-2 pr-2">ประเภท</th><th class="py-2 pr-2 text-right">จำนวน</th>
+          <th class="py-2 pr-2 text-right">ต้นทุนต่อหน่วย</th><th class="py-2 pr-2 text-right">ต้นทุนขายรวม</th>
+          <th class="py-2 pr-2 text-right">${pctLabel}</th><th class="py-2 pr-2 text-right">เทียบเดือนก่อน</th><th class="py-2 text-center">สูตร</th>
         </tr></thead>
         <tbody>${rows}${totalRow}</tbody>
       </table>
@@ -501,7 +501,7 @@ async function bcLoadOverview() {
       ${bcKpiCard('Total COGS',     bcFmtN(t.cogs),          'BoM/Unit Cost',          '#dc2626')}
       ${bcKpiCard('Total GP',       bcFmtN(t.gp),            `${bcFmtPct(t.gp_pct)}`,  t.gp>=0?'#10b981':'#ef4444')}
       ${bcKpiCard('GP %',           bcFmtPct(t.gp_pct),      '',                        '#10b981')}
-      ${bcKpiCard('Food Cost %',    bcFmtPct(t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
+      ${bcKpiCard('ต้นทุนอาหาร %',    bcFmtPct(t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
                                     (fc!=null && fc>70)?'#dc2626':(fc!=null && fc>=55)?'#10b981':'#f59e0b')}
     </div>`;
 
@@ -526,7 +526,7 @@ async function bcLoadOverview() {
   };
   const heatmapHtml = `
     <div class="card p-4 mb-5">
-      <h3 class="font-semibold mb-3">Heatmap · สาขา × เดือน · Food Cost %</h3>
+      <h3 class="font-semibold mb-3">แผนภาพความร้อน · สาขา × เดือน · ต้นทุนอาหาร %</h3>
       <div class="overflow-x-auto">
       <table class="text-[10px]">
         <thead><tr><th class="px-2 py-1 text-left text-slate-500">สาขา</th>
@@ -570,7 +570,7 @@ function bcRenderFoodCostBoxes(mom) {
   const monLbl = mom && mom.month ? mom.month : '';
   const prevLbl = mom && mom.prev_month ? mom.prev_month : '';
   if (!brs.length) {
-    return `<div class="card p-4 mb-5"><h3 class="font-semibold mb-1">Branch Breakdown · Food Cost %</h3>
+    return `<div class="card p-4 mb-5"><h3 class="font-semibold mb-1">แยกสาขา · ต้นทุนอาหาร %</h3>
       <p class="text-xs text-slate-400">ไม่มีข้อมูล</p></div>`;
   }
   const boxes = brs.map((r, i) => {
@@ -579,7 +579,7 @@ function bcRenderFoodCostBoxes(mom) {
     const dp   = r.delta_pp;
     let momHtml = '<span class="text-[10px] text-slate-400">— ไม่มีเดือนก่อน</span>';
     if (dp != null) {
-      // Food cost: lower = better → a drop is good (green), a rise is bad (red)
+      // ต้นทุนอาหาร: lower = better → a drop is good (green), a rise is bad (red)
       const good = dp < 0;
       const col  = dp === 0 ? '#64748b' : (good ? 'var(--good-ink)' : 'var(--bad-ink)');
       const arr  = dp === 0 ? '→' : (dp > 0 ? '▲' : '▼');
@@ -600,7 +600,7 @@ function bcRenderFoodCostBoxes(mom) {
 
   return `<div class="card p-4 mb-5">
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
-      <h3 class="font-semibold">Branch Breakdown · Food Cost % <span class="text-xs font-normal text-slate-400">(เป้า 55–70%)</span></h3>
+      <h3 class="font-semibold">แยกสาขา · ต้นทุนอาหาร % <span class="text-xs font-normal text-slate-400">(เป้า 55–70%)</span></h3>
       <span class="text-xs text-slate-500">${monLbl}${prevLbl?` เทียบ ${prevLbl}`:''} · คลิกสาขาเพื่อดูรายละเอียด</span>
     </div>
     <p class="text-[10px] text-slate-400 mb-3">
@@ -660,17 +660,17 @@ function bcDrillBranch(idx) {
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-center">
         <div class="bg-white rounded p-2 border border-slate-100">
-          <div class="text-[10px] text-slate-400">Food Cost %</div>
+          <div class="text-[10px] text-slate-400">ต้นทุนอาหาร %</div>
           <div class="text-lg font-bold" style="color:${textInk(bcFoodPctHex(r.food_cost_pct))}">${bcFmtPct(r.food_cost_pct)}</div>
           <div class="text-[10px] text-slate-400">ก่อน ${bcFmtPct(r.prev_food_cost_pct)}</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
-          <div class="text-[10px] text-slate-400">MoM</div>
+          <div class="text-[10px] text-slate-400">เทียบเดือนก่อน</div>
           <div class="text-lg font-bold" style="color:${textInk(dpCol)}">${dpTxt}</div>
           <div class="text-[10px] text-slate-400">เป้า 55–70%</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
-          <div class="text-[10px] text-slate-400">COGS</div>
+          <div class="text-[10px] text-slate-400">ต้นทุนขาย</div>
           <div class="text-base font-bold">${bcFmtN(r.cogs)}</div>
           <div class="text-[10px]" style="color:${textInk(cogsDeltaCol)}">${r.cogs_delta>0?'+':''}${bcFmtN(r.cogs_delta)} MoM</div>
         </div>
@@ -748,19 +748,19 @@ async function bcLoadBranch() {
       ${bcKpiCard('Revenue',      bcFmtN(t.revenue),       'ex-VAT', '#0284c7')}
       ${bcKpiCard('COGS',         bcFmtN(t.cogs),          '',        '#dc2626')}
       ${bcKpiCard('GP',           bcFmtN(t.gp),            bcFmtPct(t.gp_pct), t.gp>=0?'#10b981':'#ef4444')}
-      ${bcKpiCard('Food Cost %',  bcFmtPct(t.food_cost_pct), '(เป้า 55–70%)', '#f59e0b')}
+      ${bcKpiCard('ต้นทุนอาหาร %',  bcFmtPct(t.food_cost_pct), '(เป้า 55–70%)', '#f59e0b')}
       ${bcKpiCard('Menus',        bcFmtN(t.menus_with_cost), `/ ${bcFmtN(t.menus_total)} ทั้งหมด`, '#4a70b0')}
     </div>
     ${cd ? bcCostDriverTable(cd, '· ' + esc(useBranch)) : '<div class="card p-4 mb-5 text-sm text-slate-400">ไม่มีข้อมูล cost-driver</div>'}
     <div class="card p-4 mb-5">
-      <h3 class="font-semibold mb-3">Top 25 Ingredients</h3>
+      <h3 class="font-semibold mb-3">25 อันดับวัตถุดิบ</h3>
       <div class="overflow-x-auto">
         <table class="text-xs w-full">
           <thead><tr class="text-left text-slate-500 border-b">
-            <th class="py-1 pr-2">Code</th><th class="py-1 pr-2">Name</th>
-            <th class="py-1 pr-2">Type</th>
-            <th class="py-1 pr-2 text-right">Qty</th><th class="py-1 pr-2 text-right">Cost</th>
-            <th class="py-1 pr-2 text-right">% branch</th>
+            <th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2">ชื่อ</th>
+            <th class="py-1 pr-2">ประเภท</th>
+            <th class="py-1 pr-2 text-right">จำนวน</th><th class="py-1 pr-2 text-right">ต้นทุน</th>
+            <th class="py-1 pr-2 text-right">% ของสาขา</th>
           </tr></thead>
           <tbody>
             ${(data.top_ingredients_by_cost||[]).map(r => `<tr class="border-t border-slate-100">
@@ -776,7 +776,7 @@ async function bcLoadBranch() {
       </div>
     </div>
     <div class="card p-4 mb-5">
-      <h3 class="font-semibold mb-3">Cost by Ingredient Type</h3>
+      <h3 class="font-semibold mb-3">ต้นทุนตามประเภทวัตถุดิบ</h3>
       <div class="flex flex-wrap gap-2">
         ${Object.entries(data.cost_by_ingredient_type||{}).sort((a,b)=>b[1]-a[1]).map(([k,v]) =>
           `<span class="px-3 py-1 bg-slate-100 rounded-full text-xs"><b>${k}</b>: ${bcFmtN(v)}</span>`).join('')}
@@ -798,7 +798,7 @@ async function bcShowRecipe(skuCode) {
         ${data.has_recipe ? `
           <div class="text-xs text-slate-500 mb-3">Total recipe cost / serving: <b class="text-base text-slate-900">${bcFmtN(data.total_cost)}</b></div>
           <table class="text-xs w-full">
-            <thead><tr class="text-left text-slate-500 border-b"><th class="py-1">Ingredient</th><th class="py-1">Type</th><th class="py-1 text-right">Qty/serv</th><th class="py-1">Unit</th><th class="py-1 text-right">Price</th><th class="py-1 text-right">Cost</th></tr></thead>
+            <thead><tr class="text-left text-slate-500 border-b"><th class="py-1">วัตถุดิบ</th><th class="py-1">ประเภท</th><th class="py-1 text-right">จำนวน/เสิร์ฟ</th><th class="py-1">หน่วย</th><th class="py-1 text-right">ราคา</th><th class="py-1 text-right">ต้นทุน</th></tr></thead>
             <tbody>${(data.ingredients||[]).map(r => `<tr class="border-t border-slate-100">
               <td class="py-1">${r.ingredient_name}</td>
               <td class="py-1 text-slate-500">${r.ingredient_type||''}</td>
@@ -861,19 +861,19 @@ async function bcLoadCompareRun() {
   body.innerHTML = `
     <div class="card p-4 mb-4 overflow-x-auto">
       <table class="text-xs w-full">
-        <thead><tr class="border-b"><th class="text-left py-2 pr-3">Metric</th>
+        <thead><tr class="border-b"><th class="text-left py-2 pr-3">ตัวชี้วัด</th>
           ${res.map(r => `<th class="text-right py-2 pr-3">${esc(r.branch)}</th>`).join('')}
         </tr></thead>
         <tbody>
-          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">Revenue</td>
+          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">รายได้</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right ${flag(ofRev, r.branch)}">${bcFmtN(r.revenue)}</td>`).join('')}</tr>
-          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">COGS</td>
+          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">ต้นทุนขาย</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right ${flag(ofCogs, r.branch)}">${bcFmtN(r.cogs)}</td>`).join('')}</tr>
           <tr class="border-t"><td class="py-1 pr-3 text-slate-500">GP</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right">${bcFmtN(r.gp)}</td>`).join('')}</tr>
           <tr class="border-t"><td class="py-1 pr-3 text-slate-500">GP %</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right ${flag(ofGp, r.branch)}">${bcFmtPct(r.gp_pct)}</td>`).join('')}</tr>
-          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">Food Cost %</td>
+          <tr class="border-t"><td class="py-1 pr-3 text-slate-500">ต้นทุนอาหาร %</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right ${flag(ofFc, r.branch)} ${bcFoodPctColor(r.food_cost_pct)}">${bcFmtPct(r.food_cost_pct)}</td>`).join('')}</tr>
           <tr class="border-t"><td class="py-1 pr-3 text-slate-500">Uncosted SKUs</td>
             ${res.map(r => `<td class="py-1 pr-3 text-right">${bcFmtN(r.uncosted_skus)}</td>`).join('')}</tr>
@@ -889,10 +889,10 @@ async function bcLoadCompareRun() {
       <p class="text-[10px] text-slate-400 mt-2">เซลล์สีเหลือง = ค่าเบี่ยงเบนจากค่าเฉลี่ยกลุ่ม ≥ 10%</p>
     </div>
     <div class="card p-4 mb-4">
-      <h3 class="font-semibold mb-3">Cost by Ingredient Type (per branch)</h3>
+      <h3 class="font-semibold mb-3">ต้นทุนตามประเภทวัตถุดิบ (รายสาขา)</h3>
       <div class="overflow-x-auto">
         <table class="text-xs w-full">
-          <thead><tr class="border-b"><th class="text-left py-1 pr-3">Type</th>
+          <thead><tr class="border-b"><th class="text-left py-1 pr-3">ประเภท</th>
             ${res.map(r => `<th class="text-right py-1 pr-3">${esc(r.branch)}</th>`).join('')}
           </tr></thead>
           <tbody>
@@ -916,7 +916,7 @@ async function bcLoadCompareRun() {
     if (mf) q.set('month_from', mf); if (mt) q.set('month_to', mt);
     return api(`${API}/api/bom-cost/cost-drivers?${q}`).catch(() => null);
   }));
-  let cdHtml = '<h3 class="font-semibold mb-2 mt-2">Top 60 Cost-Driver SKUs · แยกรายสาขา</h3>';
+  let cdHtml = '<h3 class="font-semibold mb-2 mt-2">Top 60 SKU ที่ใช้ต้นทุนสูงสุด · แยกรายสาขา</h3>';
   bcCompareSelection.forEach((br, i) => { if (cds[i]) cdHtml += bcCostDriverTable(cds[i], '· ' + esc(br)); });
   body.insertAdjacentHTML('beforeend', cdHtml);
 }
@@ -941,21 +941,21 @@ async function bcLoadSimulator() {
           ${scenList.map(s => `<option value="${s.id}">${esc(s.name)} (${s.n_items})</option>`).join('')}
         </select>
       </label>
-      <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">Save current</button>
-      <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">Delete</button>
-      <button onclick="bcAdoptScenario()" class="px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg font-medium" title="บันทึกว่าใช้จริง แล้วติดตามเงินที่ประหยัดได้สะสม">Adopt & Track ROI</button>
+      <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">บันทึกค่าปัจจุบัน</button>
+      <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">ลบ</button>
+      <button onclick="bcAdoptScenario()" class="px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg font-medium" title="บันทึกว่าใช้จริง แล้วติดตามเงินที่ประหยัดได้สะสม">นำไปใช้และติดตามผล</button>
       <button onclick="bcShowRoi()" class="px-3 py-1.5 text-xs bg-violet-100 text-violet-700 rounded-lg font-medium" title="ดูผลประหยัดสะสมของ scenario ที่ adopt">ROI</button>
-      <button onclick="bcResetOverrides()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg">↺ Reset</button>
+      <button onclick="bcResetOverrides()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg">↺ ล้างค่า</button>
       <span class="border-l border-slate-200 h-5 mx-1"></span>
-      <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">Export template</button>
-      <button onclick="document.getElementById('bcTplFile').click()" class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg font-medium">Upload template</button>
+      <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">ส่งออกแบบฟอร์ม</button>
+      <button onclick="document.getElementById('bcTplFile').click()" class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg font-medium">อัปโหลดแบบฟอร์ม</button>
       <input type="file" id="bcTplFile" accept=".csv,text/csv" style="display:none" onchange="bcImportTemplate(this)">
       <span class="text-xs text-slate-400 ml-auto" id="bcSimMeta">SKUs ในตาราง: ${data.skus.length}</span>
     </div>
     <div id="bcRoiPanel" class="card p-4 mb-4 hidden" style="border:1px solid var(--accent)"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card p-4">
-        <h3 class="font-semibold mb-3">Editor — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
+        <h3 class="font-semibold mb-3">แก้ไข — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
         <div class="flex flex-wrap gap-2 mb-3 text-xs">
           <input id="bcSimSearch" placeholder="Search SKU/description" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
           <select id="bcSimBizFilter" onchange="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1">
@@ -964,16 +964,16 @@ async function bcLoadSimulator() {
           </select>
         </div>
         <div class="flex flex-wrap gap-2 mb-3 text-xs">
-          <button onclick="bcApplyPct(-5)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−5% all</button>
-          <button onclick="bcApplyPct(-10)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−10% all</button>
-          <button onclick="bcApplyPct(10)" class="px-2 py-1 bg-rose-100 text-rose-700 rounded">+10% all</button>
-          <button onclick="bcApplyTargetFood()" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded">ตั้งเป้า Food% =
+          <button onclick="bcApplyPct(-5)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−5% ทั้งหมด</button>
+          <button onclick="bcApplyPct(-10)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−10% ทั้งหมด</button>
+          <button onclick="bcApplyPct(10)" class="px-2 py-1 bg-rose-100 text-rose-700 rounded">+10% ทั้งหมด</button>
+          <button onclick="bcApplyTargetFood()" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded">ตั้งเป้าต้นทุนอาหาร % =
             <input id="bcTargetFood" type="number" value="65" class="w-12 border border-indigo-300 rounded px-1" onclick="event.stopPropagation()"></button>
         </div>
         <div id="bcSimEditor" style="max-height:520px;overflow-y:auto"></div>
       </div>
       <div class="card p-4">
-        <h3 class="font-semibold mb-3">Live KPI Impact</h3>
+        <h3 class="font-semibold mb-3">ผลต่อ KPI ทันที</h3>
         <div id="bcSimKpis"></div>
       </div>
     </div>`;
@@ -993,7 +993,7 @@ function bcRenderSimEditor() {
   const el = document.getElementById('bcSimEditor');
   el.innerHTML = `<table class="text-xs w-full">
     <thead class="sticky top-0 bg-white"><tr class="border-b text-slate-500">
-      <th class="text-left py-1 pr-2">SKU</th><th class="text-left py-1 pr-2">Description</th>
+      <th class="text-left py-1 pr-2">SKU</th><th class="text-left py-1 pr-2">รายละเอียด</th>
       <th class="text-right py-1 pr-2">ต้นทุน/หน่วย<br><span class="font-normal text-[9px]">เดิม → ใหม่</span></th>
       <th class="text-right py-1 pr-2">จำนวนเสิร์ฟ<br><span class="font-normal text-[9px]">เดิม → ใหม่</span></th>
       <th class="text-center py-1">ปิด</th></tr></thead>
@@ -1077,13 +1077,13 @@ function bcRecomputeKpis() {
   const nOv = Object.keys(bcSimOverrides).length, nQ = Object.keys(bcSimQty).length, nD = Object.keys(bcSimDisabled).length;
   document.getElementById('bcSimKpis').innerHTML = `
     <table class="text-sm w-full">
-      <thead><tr class="text-xs text-slate-500 border-b"><th class="text-left py-1">Metric</th><th class="text-right py-1">Baseline</th><th class="text-right py-1">Scenario</th><th class="text-right py-1">Δ</th></tr></thead>
+      <thead><tr class="text-xs text-slate-500 border-b"><th class="text-left py-1">ตัวชี้วัด</th><th class="text-right py-1">ฐานเดิม</th><th class="text-right py-1">สถานการณ์จำลอง</th><th class="text-right py-1">Δ</th></tr></thead>
       <tbody>
-        <tr class="border-t"><td class="py-1">Revenue</td><td class="text-right">${bcFmtN(b.revenue)}</td><td class="text-right font-semibold">${bcFmtN(scenRev)}</td><td class="text-right ${dR>=0?'text-emerald-600':'text-red-600'}">${Math.abs(dR)<1?'—':(dR>0?'+':'')+bcFmtN(dR)}</td></tr>
-        <tr class="border-t"><td class="py-1">COGS</td><td class="text-right">${bcFmtN(b.cogs)}</td><td class="text-right font-semibold">${bcFmtN(scenCogs)}</td><td class="text-right ${dC>0?'text-red-600':'text-emerald-600'}">${Math.abs(dC)<1?'—':(dC>0?'+':'')+bcFmtN(dC)}</td></tr>
+        <tr class="border-t"><td class="py-1">รายได้</td><td class="text-right">${bcFmtN(b.revenue)}</td><td class="text-right font-semibold">${bcFmtN(scenRev)}</td><td class="text-right ${dR>=0?'text-emerald-600':'text-red-600'}">${Math.abs(dR)<1?'—':(dR>0?'+':'')+bcFmtN(dR)}</td></tr>
+        <tr class="border-t"><td class="py-1">ต้นทุนขาย</td><td class="text-right">${bcFmtN(b.cogs)}</td><td class="text-right font-semibold">${bcFmtN(scenCogs)}</td><td class="text-right ${dC>0?'text-red-600':'text-emerald-600'}">${Math.abs(dC)<1?'—':(dC>0?'+':'')+bcFmtN(dC)}</td></tr>
         <tr class="border-t"><td class="py-1">GP</td><td class="text-right">${bcFmtN(b.gp)}</td><td class="text-right font-semibold">${bcFmtN(scenGp)}</td><td class="text-right ${dG>=0?'text-emerald-600':'text-red-600'}">${Math.abs(dG)<1?'—':(dG>=0?'+':'')+bcFmtN(dG)}</td></tr>
         <tr class="border-t"><td class="py-1">GP %</td><td class="text-right">${bcFmtPct(b.gp_pct)}</td><td class="text-right font-semibold">${bcFmtPct(scenGpPct)}</td><td class="text-right">${scenGpPct!=null&&b.gp_pct!=null?((scenGpPct-b.gp_pct>=0?'+':'')+(scenGpPct-b.gp_pct).toFixed(2)+'pp'):''}</td></tr>
-        <tr class="border-t"><td class="py-1">Food Cost %</td><td class="text-right ${bcFoodPctColor(b.food_cost_pct)}">${bcFmtPct(b.food_cost_pct)}</td><td class="text-right font-semibold ${bcFoodPctColor(scenFood)}">${bcFmtPct(scenFood)}</td><td class="text-right">${scenFood!=null&&b.food_cost_pct!=null?((scenFood-b.food_cost_pct>=0?'+':'')+(scenFood-b.food_cost_pct).toFixed(2)+'pp'):''}</td></tr>
+        <tr class="border-t"><td class="py-1">ต้นทุนอาหาร %</td><td class="text-right ${bcFoodPctColor(b.food_cost_pct)}">${bcFmtPct(b.food_cost_pct)}</td><td class="text-right font-semibold ${bcFoodPctColor(scenFood)}">${bcFmtPct(scenFood)}</td><td class="text-right">${scenFood!=null&&b.food_cost_pct!=null?((scenFood-b.food_cost_pct>=0?'+':'')+(scenFood-b.food_cost_pct).toFixed(2)+'pp'):''}</td></tr>
       </tbody>
     </table>
     <p class="text-[10px] text-slate-400 mt-3">ปรับใช้: ต้นทุน ${nOv} · จำนวนเสิร์ฟ ${nQ} · ปิดเมนู ${nD} · preview client-side · COGS=BoM เท่านั้น</p>
@@ -1247,7 +1247,7 @@ function bcRenderRoi(d, id) {
   const panel = document.getElementById('bcRoiPanel'); if (!panel) return;
   const close = `<button onclick="document.getElementById('bcRoiPanel').classList.add('hidden')" class="topbar-icon-btn" aria-label="ปิด">✕</button>`;
   if (!d.adopted) {
-    panel.innerHTML = `<div class="flex items-center justify-between"><h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI)</h3>${close}</div>
+    panel.innerHTML = `<div class="flex items-center justify-between"><h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง</h3>${close}</div>
       <p class="text-sm text-slate-500 mt-2">scenario นี้ยังไม่ได้ adopt — กด <b>Adopt &amp; Track ROI</b> เพื่อเริ่มจับ baseline แล้วติดตามเงินที่ประหยัดได้จริง</p>`;
     return;
   }
@@ -1269,7 +1269,7 @@ function bcRenderRoi(d, id) {
       <h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI) — ${esc(sc.name||'')}</h3>
       <div class="flex items-center gap-2">
         <span class="text-[11px] text-slate-400">adopt ${esc((sc.adopted_at||'').slice(0,10))} · baseline ${esc(sc.baseline_month||'')} · ${t.months_tracked||0} เดือน</span>
-        <button onclick="bcUnadopt('${id}')" class="text-[11px] border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">ยกเลิก adopt</button>
+        <button onclick="bcUnadopt('${id}')" class="text-[11px] border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">ยกเลิกการนำไปใช้</button>
         ${close}
       </div>
     </div>
@@ -1288,8 +1288,8 @@ function bcRenderRoi(d, id) {
     <div class="overflow-auto" style="max-height:300px">
       <table class="text-xs w-full"><thead><tr style="color:var(--text-muted)" class="border-b">
         <th class="py-1 pr-2 text-left">SKU</th><th class="py-1 pr-2 text-left">เมนู</th>
-        <th class="py-1 pr-2 text-right">baseline→ปัจจุบัน</th><th class="py-1 pr-2 text-right">เป้า</th>
-        <th class="py-1 pr-2 text-right">ขาย(หลัง adopt)</th><th class="py-1 pr-2 text-right">ประหยัดจริง</th><th class="py-1 text-right">คืบหน้า</th>
+        <th class="py-1 pr-2 text-right">ฐานเดิม→ปัจจุบัน</th><th class="py-1 pr-2 text-right">เป้า</th>
+        <th class="py-1 pr-2 text-right">ขาย (หลังนำไปใช้)</th><th class="py-1 pr-2 text-right">ประหยัดจริง</th><th class="py-1 text-right">คืบหน้า</th>
       </tr></thead><tbody>${rows || '<tr><td colspan="7" class="py-3 text-center text-slate-400">ไม่มีรายการ</td></tr>'}</tbody></table>
     </div>`;
 }

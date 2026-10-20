@@ -4,9 +4,9 @@
 <div id="tab-cost" class="hidden">
 
   <div class="subtab-bar mb-6" style="max-width:480px">
-    <button class="subtab-btn active" onclick="switchCostTab('overview')">Overview</button>
+    <button class="subtab-btn active" onclick="switchCostTab('overview')">ภาพรวม</button>
     <button class="subtab-btn" onclick="switchCostTab('detail')">รายละเอียดเมนู</button>
-    <button class="subtab-btn" onclick="switchCostTab('suggestions')">Suggestions</button>
+    <button class="subtab-btn" onclick="switchCostTab('suggestions')">ข้อเสนอแนะ</button>
   </div>
 
   <!-- ── Overview ── -->
@@ -19,7 +19,7 @@
       <svg class="flex-shrink-0 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       <div>
         <p id="costNoBannerText" class="text-sm font-semibold text-amber-800"></p>
-        <p class="text-xs text-amber-700 mt-0.5">Go to <button onclick="switchTab('settings');switchSettingsTab('costs')" class="underline font-medium">Settings → Cost Management</button> to enter unit costs and unlock the full margin analysis.</p>
+        <p class="text-xs text-amber-700 mt-0.5">Go to <button onclick="switchTab('settings');switchSettingsTab('costs')" class="underline font-medium">ตั้งค่า → จัดการต้นทุน</button> to enter unit costs and unlock the full margin analysis.</p>
       </div>
     </div>
 
@@ -27,10 +27,10 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
       <div class="card p-5 lg:col-span-2">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="section-title mb-0" id="scatterTitle">Revenue × Popularity</h2>
+          <h2 class="section-title mb-0" id="scatterTitle">รายได้ × ความนิยม</h2>
           <div class="flex items-center gap-2">
             <span id="scatterMode" class="pill pill-neu text-xs">no cost data</span>
-            <button onclick="resetZoom('chartMenuScatter')" class="text-xs text-slate-400 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5 transition-colors">&#x27F3; Reset</button>
+            <button onclick="resetZoom('chartMenuScatter')" class="text-xs text-slate-400 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5 transition-colors">&#x27F3; ล้างค่า</button>
           </div>
         </div>
         <p id="scatterSubtitle" class="text-xs text-slate-400 mb-3">Each dot = one menu item. Size = revenue share. Color = category.</p>
@@ -52,7 +52,7 @@
       <div class="card p-4" style="border-top:3px solid #10b981">
         <div class="flex items-center gap-1.5 mb-2">
           <span class="text-base">★</span>
-          <span class="text-xs font-bold text-emerald-700">Stars</span>
+          <span class="text-xs font-bold text-emerald-700">ดาวเด่น</span>
           <span id="starCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
         <p class="text-xs text-slate-400 mb-2">High volume · High margin</p>
@@ -62,7 +62,7 @@
       <div class="card p-4" style="border-top:3px solid var(--accent)">
         <div class="flex items-center gap-1.5 mb-2">
           <span class="text-base"></span>
-          <span class="text-xs font-bold text-indigo-700">Puzzles</span>
+          <span class="text-xs font-bold text-indigo-700">เพชรในตม</span>
           <span id="puzzleCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
         <p class="text-xs text-slate-400 mb-2">Low volume · High margin</p>
@@ -72,7 +72,7 @@
       <div class="card p-4" style="border-top:3px solid #f59e0b">
         <div class="flex items-center gap-1.5 mb-2">
           <span class="text-base"></span>
-          <span class="text-xs font-bold text-amber-700">Plowhorses</span>
+          <span class="text-xs font-bold text-amber-700">ม้างาน</span>
           <span id="plowhorseCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
         <p class="text-xs text-slate-400 mb-2">High volume · Low margin</p>
@@ -82,7 +82,7 @@
       <div class="card p-4" style="border-top:3px solid #ef4444">
         <div class="flex items-center gap-1.5 mb-2">
           <span class="text-base"></span>
-          <span class="text-xs font-bold text-red-600">Dogs</span>
+          <span class="text-xs font-bold text-red-600">ตัวถ่วง</span>
           <span id="dogCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
         <p class="text-xs text-slate-400 mb-2">Low volume · Low margin</p>
@@ -92,7 +92,7 @@
 
     <!-- Pareto insight bar -->
     <div class="card p-5" id="paretoCard">
-      <h2 class="section-title">Pareto — Revenue Concentration</h2>
+      <h2 class="section-title">Pareto — การกระจุกตัวของรายได้</h2>
       <div id="paretoContent"></div>
     </div>
 
@@ -116,12 +116,12 @@
         </select>
         <select id="costItemQuadrant" onchange="filterCostDetail()"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-          <option value="">All Quadrants</option>
-          <option value="star">Stars</option>
-          <option value="puzzle">Puzzles</option>
-          <option value="plowhorse">Plowhorses</option>
-          <option value="dog">Dogs</option>
-          <option value="uncosted">Uncosted</option>
+          <option value="">ทุกกลุ่ม</option>
+          <option value="star">ดาวเด่น</option>
+          <option value="puzzle">เพชรในตม</option>
+          <option value="plowhorse">ม้างาน</option>
+          <option value="dog">ตัวถ่วง</option>
+          <option value="uncosted">ไม่มีต้นทุน</option>
         </select>
         <span id="costItemCount" class="text-xs text-slate-400 ml-auto"></span>
       </div>
@@ -131,15 +131,15 @@
             <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
               <th class="py-2 pr-2">#</th>
               <th class="py-2 pr-3">SKU</th>
-              <th class="py-2 pr-3">Description</th>
-              <th class="py-2 pr-3">Category</th>
-              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('qty')">Qty ↕</th>
-              <th class="py-2 pr-3 text-right">Qty Mix</th>
-              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('revenue')">Revenue ↕</th>
-              <th class="py-2 pr-3 text-right">Rev Mix</th>
-              <th class="py-2 pr-3 text-right">Unit Cost</th>
-              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('margin_pct')">Margin % ↕</th>
-              <th class="py-2 text-center">Quadrant</th>
+              <th class="py-2 pr-3">รายละเอียด</th>
+              <th class="py-2 pr-3">หมวด</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('qty')">จำนวน ↕</th>
+              <th class="py-2 pr-3 text-right">สัดส่วนจำนวน</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('revenue')">รายได้ ↕</th>
+              <th class="py-2 pr-3 text-right">สัดส่วนรายได้</th>
+              <th class="py-2 pr-3 text-right">ต้นทุนต่อหน่วย</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('margin_pct')">อัตรากำไร % ↕</th>
+              <th class="py-2 text-center">กลุ่ม</th>
             </tr>
           </thead>
           <tbody id="costItemBody"></tbody>
@@ -153,12 +153,12 @@
     <div id="suggestionsContent" class="space-y-4"></div>
   </div>
 
-  <!-- Food Cost % Trend section -->
+  <!-- ต้นทุนอาหาร % Trend section -->
   <div class="card p-5 mb-5" id="foodCostTrendCard">
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <div>
-        <h2 class="section-title mb-0">รายได้ vs ต้นทุน BoM vs จำนวนเสิร์ฟ · รายเดือน <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
-        <p class="text-xs text-slate-400 mt-1">เปรียบเทียบรายได้ ex-VAT, CoGS ตามต้นทุน BoM, จำนวนเสิร์ฟ และ % Food Cost</p>
+        <h2 class="section-title mb-0">รายได้ เทียบ ต้นทุน BoM เทียบ จำนวนเสิร์ฟ · รายเดือน <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
+        <p class="text-xs text-slate-400 mt-1">เปรียบเทียบรายได้ ex-VAT, CoGS ตามต้นทุน BoM, จำนวนเสิร์ฟ และ % ต้นทุนอาหาร</p>
       </div>
       <div class="flex items-center gap-2">
         <label class="text-xs text-slate-500">เกณฑ์เตือน:</label>

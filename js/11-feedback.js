@@ -114,7 +114,7 @@ function renderFeedback(d) {
   const empty = document.getElementById('fbEmpty');
   if (!d.total) {
     empty.style.display = '';
-    empty.innerHTML = `<div class="fb-empty"><div class="text-3xl"></div><p class="font-semibold mt-1">ยังไม่มีเสียงลูกค้าในช่วงนี้</p><p class="text-xs mt-1">เปิดการดึงอัตโนมัติจาก Google / Facebook / Instagram ตาม Checklist หรือวาง/อัปโหลดรีวิวเองด้านล่าง${_fbBranchLocal || _fbKind ? ' · หรือลองล้างตัวกรองสาขา/ประเภท' : ''}</p><div class="flex justify-center gap-2 mt-3"><button class="fb-btn" onclick="switchTab('checklist')">ไปที่ Checklist เปิดใช้</button><button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button></div></div>`;
+    empty.innerHTML = `<div class="fb-empty"><div class="text-3xl"></div><p class="font-semibold mt-1">ยังไม่มีเสียงลูกค้าในช่วงนี้</p><p class="text-xs mt-1">เปิดการดึงอัตโนมัติจาก Google / Facebook / Instagram ตาม Checklist หรือวาง/อัปโหลดรีวิวเองด้านล่าง${_fbBranchLocal || _fbKind ? ' · หรือลองล้างตัวกรองสาขา/ประเภท' : ''}</p><div class="flex justify-center gap-2 mt-3"><button class="fb-btn" onclick="switchTab('checklist')">ไปที่รายการตรวจสอบการเปิดใช้</button><button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button></div></div>`;
   } else { empty.style.display = 'none'; empty.innerHTML = ''; }
   // KPI tiles
   const s = d.sentiment || {};
@@ -300,7 +300,7 @@ async function loadFeedbackSources() {
   let d;
   try { d = await api(`${API}/api/feedback/sources`); } catch (e) { el.textContent = 'โหลดแหล่งข้อมูลไม่สำเร็จ'; return; }
   const rows = d.sources || [];
-  if (!rows.length) { el.innerHTML = 'ยังไม่มีรีวิวจากแหล่งใด — ตั้งค่าการดึงอัตโนมัติตาม <a href="#" onclick="switchTab(\'checklist\');return false;" style="color:var(--sky-ink);text-decoration:underline">Checklist เปิดใช้</a> หรืออัปโหลด/วางรีวิวด้านบน'; return; }
+  if (!rows.length) { el.innerHTML = 'ยังไม่มีรีวิวจากแหล่งใด — ตั้งค่าการดึงอัตโนมัติตาม <a href="#" onclick="switchTab(\'checklist\');return false;" style="color:var(--sky-ink);text-decoration:underline">รายการตรวจสอบการเปิดใช้</a> หรืออัปโหลด/วางรีวิวด้านบน'; return; }
   el.innerHTML = `<table class="fb-t"><thead><tr><th>แหล่ง</th><th style="text-align:right">รีวิว</th><th style="text-align:right">ดึงอัตโนมัติ</th><th>รีวิวล่าสุด</th><th style="text-align:right">รอสาขาตอบ</th><th>ดึงล่าสุด</th><th>ผล</th></tr></thead><tbody>` +
     rows.map(s => { const lr = s.last_run, ok = lr && lr.status === 'ok';
       const result = lr ? (ok ? `✓ ใหม่ ${lr.inserted} · อัปเดต ${lr.updated}${lr.message ? ' · ' + _fbEsc(lr.message) : ''}` : '✗ ' + _fbEsc(lr.message || 'ล้มเหลว')) : '';
