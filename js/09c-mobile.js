@@ -141,6 +141,9 @@ async function msPushInit() {
   let snoozed = false; try { snoozed = Date.now() < (+localStorage.getItem('oshinei_push_snooze') || 0); } catch (e) {}
   const reopen = document.getElementById('msPushReopen');
   if (sub && !_msPushOpen) { card.style.display = 'none'; if (reopen) reopen.style.display = ''; return; }
+  // 2026-10-20: blocked in this browser's settings - the card cannot do anything about it, so it does not sit at the top;
+  // the bottom link opens it on purpose, with the steps to unblock (msPushRender)
+  if (!sub && Notification.permission === 'denied' && !_msPushOpen) { card.style.display = 'none'; if (reopen) reopen.style.display = ''; _msPushWatchPermission(); return; }
   if (!sub && snoozed) { card.style.display = 'none'; if (reopen) reopen.style.display = ''; return; }
   card.style.display = '';
   if (reopen) reopen.style.display = 'none';
@@ -186,7 +189,7 @@ async function msPushRender(note, p) {
   const denied = Notification.permission === 'denied';
   const sup = _pushSupplyCard(p);
   if (sub) st.textContent = note || (sup ? 'เปิดอยู่ · เครื่องนี้จะได้รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15' : 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30');
-  else if (denied) st.textContent = 'ถูกปิดไว้ในการตั้งค่าของเบราว์เซอร์ — เปิดการแจ้งเตือนให้เว็บนี้ก่อน';
+  else if (denied) { st.innerHTML = _msPushBlockedHelp(p); _msPushWatchPermission(); }
   else st.textContent = note || (sup ? 'ยังไม่เปิด · รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15 บนเครื่องนี้' : 'ยังไม่เปิด · รับสรุปเมื่อวานทุกเช้า 08:30 บนเครื่องนี้');
   if (on) on.style.display = sub || denied ? 'none' : '';
   if (off) off.style.display = sub ? '' : 'none';
@@ -194,6 +197,33 @@ async function msPushRender(note, p) {
   const later = document.getElementById(p + 'Later');
   if (later) { later.textContent = sub ? 'ซ่อน' : 'ไว้ก่อน'; later.setAttribute('onclick', sub ? 'msPushHide()' : 'msPushLater()'); }
   msPushKinds(sub, p);
+}
+// Blocked (Notification.permission 'denied'): only the person can lift it, in the browser's own settings. Say where, for
+// this kind of device, and offer ตรวจอีกครั้ง; the permission watcher also re-renders by itself when it changes.
+function _msPushBlockedHelp(p) {
+  const ua = navigator.userAgent || '';
+  const how = /iPhone|iPad|iPod/.test(ua)
+    ? 'เปิด ตั้งค่า › การแจ้งเตือน › Oshinei แล้วเปิด “อนุญาตการแจ้งเตือน” (ต้องเปิดแอปจากไอคอนบนหน้าจอโฮม)'
+    : /Android/.test(ua)
+      ? 'แตะไอคอนแม่กุญแจหรือ ⓘ ข้างที่อยู่เว็บ › สิทธิ์ › การแจ้งเตือน › อนุญาต'
+      : 'คลิกไอคอนแม่กุญแจข้างที่อยู่เว็บ › การแจ้งเตือน › อนุญาต';
+  return `การแจ้งเตือนถูกปิดไว้ในการตั้งค่าของเครื่องนี้<br><b style="color:var(--text-primary)">วิธีเปิด:</b> ${how}`
+    + `<br><button type="button" onclick="msPushRecheck('${p}')" style="margin-top:8px;min-height:40px;padding:8px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);cursor:pointer">ตรวจอีกครั้ง</button>`;
+}
+function msPushRecheck(p) {
+  if ((p || 'msPush') === 'msPush') { _msPushOpen = true; msPushInit(); }
+  else msPushRender(undefined, p);
+}
+let _msPermWatched = false;
+function _msPushWatchPermission() {        // re-render both cards when the person changes the permission
+  if (_msPermWatched || !(navigator.permissions && navigator.permissions.query)) return;
+  _msPermWatched = true;
+  navigator.permissions.query({ name: 'notifications' }).then(st => {
+    st.onchange = () => {
+      if (document.getElementById('msPush')) { _msPushOpen = true; msPushInit(); }
+      if (document.getElementById('shmPushState')) msPushRender(undefined, 'shmPush');
+    };
+  }).catch(() => { _msPermWatched = false; });
 }
 // one checkbox per kind of notification, saved on the server per device (push_subscription.off)
 async function msPushKinds(sub, p) {
