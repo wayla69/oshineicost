@@ -10,6 +10,7 @@
     <button class="subtab-btn" onclick="switchSettingsTab('prefs')">การตั้งค่าส่วนตัว</button>
     <button class="subtab-btn" onclick="switchSettingsTab('usage')">การใช้งานจริง</button>
     <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">ปิดใช้งาน</button>
+    <button class="subtab-btn" id="settabbtn-cloudsync" onclick="switchSettingsTab('cloudsync')">ข้อมูลจาก POS</button>
     <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">ผู้ใช้งาน</button>
   </div>
 
@@ -64,6 +65,31 @@
       </div>
       <p class="text-xs mb-4" style="color:var(--text-muted)">เก็บอัตโนมัติจากการเปิดแท็บและการเรียก API (เริ่มนับหลัง deploy เวอร์ชันนี้) — ใช้ตัดสินว่าแท็บไหนควร เก็บ/รวม/ตัด ตามแผน Lean Overhaul Phase 2 (docs/LEAN_OVERHAUL_PLAN.md)</p>
       <div id="usageStatsBody" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div>
+    </div>
+  </div>
+
+  <!-- ── The cloud pull of Easy POS (backend/cloud_sync.py, docs/CLOUD_SYNC.md · Management only) ──
+       Labels and numbers only; the explanation is behind the "?" (PR-D6). -->
+  <div id="settab-cloudsync" class="hidden">
+    <div class="card p-5" style="max-width:760px">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h3 class="text-base font-bold" style="color:var(--text-primary)">การดึงข้อมูลจาก POS (cloud)
+          <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="csHelp">?</button></h3>
+        <button type="button" id="csRunBtn" onclick="cloudSyncRun()"
+                class="text-sm px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">ดึงข้อมูลตอนนี้</button>
+      </div>
+      <div id="cloudSyncBody" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div>
+      <template id="csHelp" data-title="การดึงข้อมูลจาก POS บนคลาวด์">
+        <p>ระบบบนคลาวด์ดึงยอดขายจาก POS (MSSQL) เอง ตามเวลาประเทศไทย ไม่ต้องเปิดคอมพิวเตอร์สำนักงานค้างไว้</p>
+        <ul>
+          <li><b>06:00</b> ดึงใหม่ทั้งหมด</li>
+          <li><b>12:00 และ 16:00</b> ดึงข้อมูล 45 วันล่าสุด (ดึงใหม่ทั้งหมดทุก 7 วัน)</li>
+          <li>ถ้าเครื่องเริ่มใหม่ข้ามรอบ ระบบดึงให้หนึ่งครั้งหลังเริ่มเครื่อง</li>
+        </ul>
+        <p><b>ผ่านการตรวจเทียบ</b> หมายถึงยอดเดือนที่ปิดแล้วตรงกับข้อมูลเดิม ถ้าไม่ผ่านระบบจะไม่เปลี่ยนข้อมูลที่ใช้อยู่</p>
+        <p><b>พื้นที่ไม่พอ</b> ต้องมีที่ว่างอย่างน้อย 2.5 เท่าของไฟล์ฐานข้อมูล ให้ขยายดิสก์ของเครื่อง</p>
+        <p>เปิดใช้โดยตั้งค่า OSHINEI_CLOUD_SYNC=1 และรหัสเชื่อมต่อ POS (OSH_SVR, OSH_PORT, OSH_USER, OSH_PWD, OSH_DB) ที่ Fly ขั้นตอนอยู่ใน docs/CLOUD_SYNC.md</p>
+      </template>
     </div>
   </div>
 

@@ -760,6 +760,8 @@ function applyPermissions() {
   // 4) Settings → ผู้ใช้งาน sub-tab visible to admins only
   const uBtn = document.getElementById('settabbtn-users');
   if (uBtn) uBtn.style.display = hasModule('system.admin') ? '' : 'none';
+  const csBtn = document.getElementById('settabbtn-cloudsync');       // the cloud pull of Easy POS: Management only
+  if (csBtn) csBtn.style.display = hasModule('system.admin') ? '' : 'none';
   // 5) If the current/landing tab isn't allowed, jump to the first allowed one
   if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
   // 6) The phone summary is the owner's sales view. A role without sales.overview
@@ -3387,10 +3389,10 @@ let costSearchTimer = null;
 function switchSettingsTab(name) {
   activeSettingsTab = name;
   document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
-    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','users'];
+    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','users'];
     b.classList.toggle('active', subs[i] === name);
   });
-  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','users'].forEach(s => {
+  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','users'].forEach(s => {
     document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
   });
   loadSettingsSubtab();
@@ -3472,6 +3474,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();
   if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
+  if (activeSettingsTab === 'cloudsync') loadCloudSync();
   if (activeSettingsTab === 'usage')    loadUsageStats();
   if (activeSettingsTab === 'downtime') loadDowntime();
 }
@@ -3624,6 +3627,57 @@ async function sendAdoptionDigest() {
     if (st) st.textContent = `✓ สัปดาห์ ${fmtWeekTh(r.week)}: ${r.sent ? 'ส่ง Telegram แล้ว' : (r.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'เก็บในแอปแล้ว (ยังไม่มี Telegram)')}`;
     setTimeout(loadUsageStats, 1500);
   } catch (e) { if (st) st.textContent = '✗ ' + (e.message || e); }
+}
+
+// ── Settings → ข้อมูลจาก POS: the cloud pull of Easy POS (backend/cloud_sync.py · docs/CLOUD_SYNC.md) ──
+// Labels and numbers only (PR-D6): the explanation sits behind the "?" in the card's header. Management only.
+const CS_RESULT_TH = { ok: 'สำเร็จ', failed: 'ไม่สำเร็จ', reconcile_failed: 'ไม่ผ่านการตรวจเทียบ', locked: 'ข้ามรอบ (มีงานอื่นทำอยู่)',
+                       no_space: 'พื้นที่ไม่พอ', creds_missing: 'ยังไม่ตั้งรหัสเชื่อมต่อ POS' };
+let _csTimer = null;
+function _csWhen(iso) {                       // 2026-10-21T06:12:05+07:00 -> 21/10 06:12
+  const m = /^\d{4}-(\d\d)-(\d\d)T(\d\d:\d\d)/.exec(iso || '');
+  return m ? `${m[2]}/${m[1]} ${m[3]}` : '—';
+}
+async function loadCloudSync() {
+  const el = document.getElementById('cloudSyncBody');
+  if (!el) return;
+  clearTimeout(_csTimer);
+  let d = null;
+  try { const r = await fetch(`${API}/api/admin/cloud-sync/status`); d = r.ok ? await r.json() : null; } catch (e) { d = null; }
+  if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  const s = d.status || {};
+  const bad = s.result && s.result !== 'ok';
+  const chip = s.result
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:var(${bad ? '--bad-ink' : '--good-ink'});border:1px solid currentColor">${esc(CS_RESULT_TH[s.result] || s.result)}</span>`
+    : '—';
+  const row = (k, v) => `<div class="flex justify-between gap-3 py-1.5 border-b" style="border-color:var(--border)"><span style="color:var(--text-muted)">${k}</span><span class="text-right font-semibold" style="color:var(--text-primary)">${v}</span></div>`;
+  const num = n => (n == null ? '—' : (+n).toLocaleString());
+  el.innerHTML =
+    row('สถานะ', d.running ? 'กำลังดึงข้อมูล' : (d.enabled ? 'เปิดใช้' : 'ปิดอยู่')) +
+    row('ผลรอบล่าสุด', chip) +
+    row('เริ่ม', esc(_csWhen(s.last_start))) +
+    row('จบ', esc(_csWhen(s.last_end)) + (s.duration_s != null ? ` · ${Math.round(s.duration_s / 60)} นาที` : '')) +
+    row('สำเร็จล่าสุด', esc(_csWhen(s.last_ok))) +
+    row('จำนวนบิลหลังดึง', num(s.tx_count)) +
+    row('รอบถัดไป', d.enabled ? `${esc(_csWhen(d.next_run))} · ${d.next_kind === 'full' ? 'ดึงใหม่ทั้งหมด' : '45 วันล่าสุด'}` : '—') +
+    row('พื้นที่ว่าง / ที่ต้องการ', d.free_gb == null ? '—' : `${d.free_gb} / ${d.need_gb} GB`) +
+    row('หน่วยความจำสูงสุด', s.peak_rss_mb ? `${num(s.peak_rss_mb)} MB` : '—') +
+    row('รหัสเชื่อมต่อ POS', d.creds_present ? 'ตั้งแล้ว' : 'ยังไม่ตั้ง') +
+    ((s.log_tail || []).length ? `<details class="mt-3"><summary class="text-xs cursor-pointer" style="color:var(--text-muted)">บันทึกล่าสุด (${s.log_tail.length} บรรทัด)</summary><pre class="text-[11px] mt-2 p-2 rounded-lg overflow-x-auto" style="background:var(--bg-input);color:var(--text-secondary);white-space:pre-wrap">${esc(s.log_tail.join('\n'))}</pre></details>` : '');
+  const btn = document.getElementById('csRunBtn');
+  if (btn) { btn.disabled = !d.enabled || !!d.running; btn.style.opacity = btn.disabled ? '.5' : ''; }
+  if (d.running) _csTimer = setTimeout(() => { if (activeSettingsTab === 'cloudsync') loadCloudSync(); }, 15000);
+}
+async function cloudSyncRun() {
+  const btn = document.getElementById('csRunBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/admin/cloud-sync/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) uiToast('เริ่มดึงข้อมูลแล้ว', 'success');
+    else uiToast(j.detail || ('ดึงข้อมูลไม่ได้ (' + r.status + ')'), 'error');
+  } catch (e) { uiToast('ดึงข้อมูลไม่ได้: ' + (e.message || e), 'error'); }
+  setTimeout(loadCloudSync, 1500);
 }
 
 

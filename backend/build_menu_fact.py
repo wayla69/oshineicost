@@ -99,6 +99,11 @@ def _pull_confirmed_costs(sq, cost_sources, api=None, timeout=25):
     token, or an older deploy without the endpoint just means the fact tables lag
     the app by those dishes until the next run — never a failed sync."""
     import json, urllib.parse, urllib.request
+    if os.environ.get("OSHINEI_SYNC_ON_LIVE") == "1":
+        # the cloud sync copies the LIVE database, which already holds cost_override (a preserved
+        # table) - the request would be to ourselves, for the rows we already have
+        print("[0/4] confirmed costs: the staging copy is the live DB - using its own")
+        return 0
     try:
         import refresh_fly_db as _r
         token = os.environ.get("OSHINEI_SEED_TOKEN", "").strip()

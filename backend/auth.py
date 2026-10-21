@@ -400,6 +400,8 @@ MODULE_RULES = [
     # it with a session: if the middleware bypass is ever removed, it fails closed.
     ("*",   "/api/_admin/backup",            set()),
     ("*",   "/api/auth/users",               {"system.admin"}),
+    # the cloud pull of Easy POS (backend/cloud_sync.py): its status and the "pull now" button are Management's alone
+    ("*",   "/api/admin/cloud-sync",         {"system.admin"}),
 ]
 
 
