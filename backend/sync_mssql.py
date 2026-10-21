@@ -29,8 +29,12 @@ from pathlib import Path
 from sync_lock import sync_lock
 
 HERE = Path(__file__).resolve().parent
-DB        = HERE / "oshinei.db"
-INCOMING  = HERE / "oshinei.db.incoming"
+# OSHINEI_DB moves the whole pipeline (current DB, .incoming, the private build) to another
+# folder - the cloud sync (cloud_sync.py) runs this script on the Fly machine with
+# OSHINEI_DB=/data/oshinei.db so every file lands on the volume, on the same filesystem as the
+# live DB (the publish below is an atomic os.replace). Unset on the office PC: unchanged.
+DB        = Path(os.environ["OSHINEI_DB"]) if os.environ.get("OSHINEI_DB") else HERE / "oshinei.db"
+INCOMING  = Path(str(DB) + ".incoming")
 
 # ── load .env (no external dep) ──────────────────────────────────────────────
 def load_env():
@@ -319,7 +323,14 @@ def apply_local_swap():
 # that stays blocked, exit with a message that names the fix (close the local
 # dashboard) instead of a raw traceback.
 
-STAGE_FALLBACK = HERE / "oshinei.db.incoming.new"
+STAGE_FALLBACK = Path(str(DB) + ".incoming.new")
+
+# On the Fly machine the web app polls <DB>.incoming every 60 s and hot-swaps whatever it finds
+# there. A build written straight into .incoming would be validated and swapped HALF BUILT (on
+# Linux os.replace succeeds even while this process still holds the file open). OSHINEI_SYNC_STAGE_PRIVATE=1
+# (set by cloud_sync.py) builds under the private name and publishes over .incoming only once the
+# build is complete and reconciled - the same path the Windows lock fallback already uses.
+_STAGE_PRIVATE = lambda: os.environ.get("OSHINEI_SYNC_STAGE_PRIVATE") == "1"
 
 _CLAIM_WAITS   = (1, 2, 4, 8)          # ~15 s — rides out one poller validation pass
 _PUBLISH_WAITS = (2, 5, 10, 15, 30)    # ~1 min — covers a full 60 s poller cycle
@@ -384,6 +395,11 @@ def prepare_staging():
     """Claim INCOMING for the build, falling back to STAGE_FALLBACK when locked.
     Returns the Path the sync must build into (publish_staging() moves a
     fallback build onto INCOMING at the end)."""
+    if _STAGE_PRIVATE():
+        ok, blocker = _claim_staging(STAGE_FALLBACK)
+        if not ok:
+            sys.exit(f"[1/6] ✗ private staging file {STAGE_FALLBACK.name} is locked ({blocker}).")
+        return STAGE_FALLBACK
     blocker = None
     for i, wait in enumerate((0,) + _CLAIM_WAITS):
         if wait:
@@ -475,6 +491,35 @@ def _month_windows(since, today=None):
     return wins
 
 
+def _chunk_iter(mc, sql_tmpl, windows, col="s.SaleDate"):
+    """The month-by-month form of _chunk(): yields (lo, hi, rows) for each window, so a
+    caller that can insert (or aggregate) a month at a time never holds the whole history.
+
+    WHY (2026-10, cloud sync): _chunk() concatenates every month before returning. For the
+    per-bill queries that is ~800 k header rows + ~1.8 M discount-bill lines + ~830 k payment
+    lines as Python dicts - over 1.3 GB at peak, fine on the office PC, an OOM kill on the
+    2 GB Fly machine that also serves the app. Each window's `rows` is only valid until the
+    next one is requested (the cursor reuses its buffer): consume it, don't keep it.
+
+    The SQL is validated and the template substituted EAGERLY (a bad template raises at
+    the call, not at the first iteration)."""
+    pred = f"{col} >= %s AND {col} < %s"
+    # A template written as a plain string may carry the doubled {{RANGE}} an
+    # f-string needs: 2026-09-04 five of them had lost their f-prefix to a lint
+    # pass and the sync died at [4b/6] with "Incorrect syntax near '>'" — the
+    # fake-cursor tests never execute SQL. Accept both, and refuse to send a
+    # brace to the server; test_sync_main.py / test_sync_staging.py assert the same.
+    sql = sql_tmpl.replace("{{RANGE}}", "{RANGE}").replace("{RANGE}", pred)
+    if "{" in sql or "}" in sql:
+        raise ValueError(f"SQL template still carries a brace after the {{RANGE}} substitution: {sql[:200]!r}")
+
+    def _gen():
+        for lo, hi in windows:
+            mc.execute(sql, (lo, hi))
+            yield lo, hi, mc.fetchall()
+    return _gen()
+
+
 def _chunk(mc, sql_tmpl, windows, col="s.SaleDate"):
     """Run `sql_tmpl` once per month window and concatenate the rows. `sql_tmpl`
     must contain a single `{RANGE}` token, replaced with
@@ -487,20 +532,11 @@ def _chunk(mc, sql_tmpl, windows, col="s.SaleDate"):
     query to ONE month keeps it short (~30s), so a drop costs at most one cheap
     month-retry instead of the whole scan. Every chunked query GROUPs BY a date
     expression (or is keyed by a single-dated Sale), so the per-month result sets
-    are disjoint and concatenation is identical to the full-range query."""
-    pred = f"{col} >= %s AND {col} < %s"
-    # A template written as a plain string may carry the doubled {{RANGE}} an
-    # f-string needs: 2026-09-04 five of them had lost their f-prefix to a lint
-    # pass and the sync died at [4b/6] with "Incorrect syntax near '>'" — the
-    # fake-cursor tests never execute SQL. Accept both, and refuse to send a
-    # brace to the server; test_sync_main.py / test_sync_staging.py assert the same.
-    sql = sql_tmpl.replace("{{RANGE}}", "{RANGE}").replace("{RANGE}", pred)
-    if "{" in sql or "}" in sql:
-        raise ValueError(f"SQL template still carries a brace after the {{RANGE}} substitution: {sql[:200]!r}")
+    are disjoint and concatenation is identical to the full-range query.
+    For the big per-bill queries use _chunk_iter() and insert a month at a time."""
     out = []
-    for lo, hi in windows:
-        mc.execute(sql, (lo, hi))
-        out.extend(mc.fetchall())
+    for _lo, _hi, rows in _chunk_iter(mc, sql_tmpl, windows, col):
+        out.extend(rows)
     return out
 
 
@@ -568,6 +604,22 @@ def _sync_cutoff(*, args):
     return {"_dtm": _dtm, "incr_from": incr_from, "windows": windows}
 
 
+def snapshot_copy(src_path, dst_path):
+    """Copy a database that other connections are using RIGHT NOW (the Fly machine's live DB) as one consistent
+    snapshot. shutil.copy2 of the main file misses what is still in the -wal and can tear if a checkpoint lands
+    mid-copy; SQLite's online backup reads under a read transaction, so writers carry on and the copy is the DB
+    as of one instant. Only the cloud sync needs it - on the office PC nothing else holds the DB while it runs."""
+    src = sqlite3.connect(str(src_path))
+    try:
+        dst = sqlite3.connect(str(dst_path))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+    finally:
+        src.close()
+
+
 def _sync_copy():
     # names this section hands on; None where a path never assigns one
     code2sid = None
@@ -582,7 +634,10 @@ def _sync_copy():
     # Claims .incoming (retrying/falling back if the dashboard holds it locked —
     # WinError 32) and clears orphan -wal/-shm (#72). See prepare_staging().
     staging = prepare_staging()
-    shutil.copy2(DB, staging)
+    if os.environ.get("OSHINEI_SYNC_ON_LIVE") == "1":
+        snapshot_copy(DB, staging)       # the base IS the running site's DB: a consistent snapshot, WAL included
+    else:
+        shutil.copy2(DB, staging)
 
     sq = sqlite3.connect(str(staging)); sq.row_factory = sqlite3.Row
     # idempotent column adds — mirror backend/main.py startup migration so a sync
@@ -680,7 +735,17 @@ def _sync_masters(*, code2sid, name2bid, sq):
 
 def _sync_sku_monthly(*, bid_map, code2sid, incr_from, item_map, itemid2code, itemid2name, max_sid, mc, new_skus, sq, windows):
     print(f"[3/6] aggregate sales_sku_monthly (server-side GROUP BY · {len(windows)} monthly chunks)")
-    skum_rows = _chunk(mc, f"""
+    if incr_from:
+        # whole months only — see the snap note above
+        sq.execute("DELETE FROM sales_sku_monthly WHERE period_month >= ?", (incr_from[:7],))
+    else:
+        sq.execute("DELETE FROM sales_sku_monthly")
+    # The old rows go first and the new ones are inserted a month at a time (the staging copy is
+    # thrown away if the run dies, so the order is safe) - see _chunk_iter for why nothing may
+    # hold the whole history.
+    n_rows = 0
+    skipped_rev = 0.0
+    for _lo, _hi, rows in _chunk_iter(mc, f"""
         SELECT si.BranchId AS bid, si.ItemId AS iid,
                CONVERT(char(7), s.SaleDate, 126) AS ym,
                SUM({QTY_SANE})                       AS qty,
@@ -690,33 +755,28 @@ def _sync_sku_monthly(*, bid_map, code2sid, incr_from, item_map, itemid2code, it
         JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(7), s.SaleDate, 126)
-    """, windows)
-    skum = []
-    skipped_rev = 0.0
-    for r in skum_rows:
-        bid = bid_map.get(r["bid"])
-        if bid is None:
-            skipped_rev += (r["sub_exvat"] or 0); continue
-        sid = item_map.get(r["iid"])
-        if sid is None:                              # lazy stub: item with sales but not in skus
-            code = itemid2code.get(r["iid"])
-            if not code:
+    """, windows):
+        skum = []
+        for r in rows:
+            bid = bid_map.get(r["bid"])
+            if bid is None:
                 skipped_rev += (r["sub_exvat"] or 0); continue
-            max_sid += 1
-            sq.execute("INSERT INTO skus(sku_id,sku_code,description,category_id,active,business_type) "
-                       "VALUES (?,?,?,?,1,?)",
-                       (max_sid, code, itemid2name.get(r["iid"], code), None, None))
-            code2sid[code] = max_sid; item_map[r["iid"]] = max_sid; sid = max_sid; new_skus += 1
-        sub = round(r["sub_exvat"] or 0, 2); tax = round(r["tax"] or 0, 2)
-        skum.append((bid, r["ym"], sid, round(r["qty"] or 0, 2), sub, tax, round(sub + tax, 2), "Easy"))
-    if incr_from:
-        # whole months only — see the snap note above
-        sq.execute("DELETE FROM sales_sku_monthly WHERE period_month >= ?", (incr_from[:7],))
-    else:
-        sq.execute("DELETE FROM sales_sku_monthly")
-    sq.executemany("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source) "
-                   "VALUES (?,?,?,?,?,?,?,?)", skum)
-    print(f"      inserted {len(skum):,} rows · new stub skus={new_skus} · skipped revenue (unmapped branch)=฿{skipped_rev:,.0f}")
+            sid = item_map.get(r["iid"])
+            if sid is None:                              # lazy stub: item with sales but not in skus
+                code = itemid2code.get(r["iid"])
+                if not code:
+                    skipped_rev += (r["sub_exvat"] or 0); continue
+                max_sid += 1
+                sq.execute("INSERT INTO skus(sku_id,sku_code,description,category_id,active,business_type) "
+                           "VALUES (?,?,?,?,1,?)",
+                           (max_sid, code, itemid2name.get(r["iid"], code), None, None))
+                code2sid[code] = max_sid; item_map[r["iid"]] = max_sid; sid = max_sid; new_skus += 1
+            sub = round(r["sub_exvat"] or 0, 2); tax = round(r["tax"] or 0, 2)
+            skum.append((bid, r["ym"], sid, round(r["qty"] or 0, 2), sub, tax, round(sub + tax, 2), "Easy"))
+        sq.executemany("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source) "
+                       "VALUES (?,?,?,?,?,?,?,?)", skum)
+        n_rows += len(skum)
+    print(f"      inserted {n_rows:,} rows · new stub skus={new_skus} · skipped revenue (unmapped branch)=฿{skipped_rev:,.0f}")
     return {}
 
 
@@ -726,7 +786,7 @@ def _sync_transactions(*, bid_map, cat_bucket, incr_from, mc, sq, windows):
     drink_ids = [c for c, b in cat_bucket.items() if b == "drink"]
     other_ids = [c for c, b in cat_bucket.items() if b == "other"]
     def inlist(ids): return "(" + ",".join(str(int(i)) for i in ids) + ")" if ids else "(-1)"
-    split_rows = _chunk(mc, f"""
+    split_sql = f"""
         SELECT si.SaleId AS sid, si.BranchId AS bid,
           SUM(CASE WHEN si.CategoryId IN {inlist(drink_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) AS drink,
           SUM(CASE WHEN si.CategoryId IN {inlist(other_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) AS other,
@@ -734,37 +794,26 @@ def _sync_transactions(*, bid_map, cat_bucket, incr_from, mc, sq, windows):
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.SaleId, si.BranchId
-    """, windows)
-    split = {(r["bid"], r["sid"]): (r["food"] or 0, r["drink"] or 0, r["other"] or 0) for r in split_rows}
+    """
 
     # coupon series applied per sale (keep the largest-discount coupon per bill)
-    coupon_rows = _chunk(mc, f"""SELECT c.SaleId AS sid, c.BranchId AS bid, c.CouponSeriesId AS cs,
+    coupon_sql = f"""SELECT c.SaleId AS sid, c.BranchId AS bid, c.CouponSeriesId AS cs,
                  SUM(CAST(ISNULL(c.DiscountAmount,0) AS float)) AS amt
                  FROM CouponCardOutsideSystemUsed c
                  JOIN Sale s ON s.SaleId=c.SaleId AND s.BranchId=c.BranchId
                  WHERE {SALE_FILTER} AND {{RANGE}}
-                 GROUP BY c.SaleId, c.BranchId, c.CouponSeriesId""", windows)
-    sale_coupon = {}   # (bid,sid) -> coupon_series_id with the biggest discount
-    for r in coupon_rows:
-        k = (r["bid"], r["sid"]); cur = sale_coupon.get(k)
-        if cur is None or (r["amt"] or 0) > cur[1]:
-            sale_coupon[k] = (r["cs"], r["amt"] or 0)
+                 GROUP BY c.SaleId, c.BranchId, c.CouponSeriesId"""
 
     # per-bill sitting duration (เวลานั่ง) = first table OPEN → last table CLOSE,
     # from SaleTab (StartTime/EndTime). A bill may span several tab rows (split/join/
     # move) so we take MIN(StartTime)..MAX(EndTime). Cap to [0,360] min — drop tables
     # never properly closed (~0.27% with absurd dwell, e.g. days). Avg of the kept
     # band is ~92 min, matching pos_table_turn_day's avg_turn_min.
-    dwell_rows = _chunk(mc, """SELECT st.SaleId AS sid, st.BranchId AS bid,
+    dwell_sql = """SELECT st.SaleId AS sid, st.BranchId AS bid,
                  DATEDIFF(minute, MIN(st.StartTime), MAX(st.EndTime)) AS dwell
                  FROM SaleTab st
                  WHERE ISNULL(st.IsCancel,0)=0 AND st.EndTime > st.StartTime AND {RANGE}
-                 GROUP BY st.SaleId, st.BranchId""", windows, col="st.StartTime")
-    dwell_map = {}     # (bid,sid) -> dwell minutes
-    for r in dwell_rows:
-        dv = r["dwell"]
-        if dv is not None and 0 <= dv <= 360:
-            dwell_map[(r["bid"], r["sid"])] = int(dv)
+                 GROUP BY st.SaleId, st.BranchId"""
 
     # PrintTimes is optional — older Easy POS schemas don't have it. Probe once and degrade to 0.
     mc.execute("SELECT 1 AS ok FROM INFORMATION_SCHEMA.COLUMNS "
@@ -790,7 +839,7 @@ def _sync_transactions(*, bid_map, cat_bucket, incr_from, mc, sq, windows):
                    "(only UserId = bill owner) — per-bill approver not available in this POS")
     except Exception as _e:
         print(f"      [probe] approver-column probe skipped: {_e}")
-    tx_rows = _chunk(mc, f"""
+    tx_sql = f"""
         SELECT s.BranchId AS bid, s.SaleId AS sid, s.SaleNum AS num, s.SaleDate AS dt,
                s.NumOfCust AS cust, CAST(s.Discount AS float) AS disc, s.DiscountReasonId AS rid,
                CAST(ISNULL(s.ServiceChargeAmount,0) AS float) AS svc,
@@ -799,32 +848,77 @@ def _sync_transactions(*, bid_map, cat_bucket, incr_from, mc, sq, windows):
                {ptimes_expr} AS ptimes
         FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
         WHERE {SALE_FILTER} AND {{RANGE}}
-    """, windows)
-    txr = []
-    for r in tx_rows:
-        bid = bid_map.get(r["bid"])
-        if bid is None:
-            continue
-        f, d, o = split.get((r["bid"], r["sid"]), (0, 0, 0))
-        dt = r["dt"]
-        sold = dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else str(dt)
-        receipt = f"{sold[:10]}-{r['num']}-{r['sid']}"
-        cs = sale_coupon.get((r["bid"], r["sid"]))
-        txr.append((bid, receipt, sold, r["cashier"] or "", "", r["cust"] or 0,
-                    round(f, 2), round(d, 2), round(o, 2), round(r["tip"] or 0, 2),
-                    0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy",
-                    (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0),
-                    dwell_map.get((r["bid"], r["sid"]))))
+    """
+
+    # The old rows go first; the new ones are built and inserted ONE MONTH AT A TIME (the staging
+    # copy is thrown away if the run dies, so the order is safe). Until 2026-10 this pulled the
+    # split / coupon / dwell / header rows for the whole history into dicts first - ~800 k bills,
+    # a peak well over 1 GB (see _chunk_iter).
     if incr_from:
         sq.execute("DELETE FROM sales_transaction WHERE date(sold_at) >= ?", (incr_from,))
     else:
         sq.execute("DELETE FROM sales_transaction")
-    sq.executemany("""INSERT INTO sales_transaction
-        (branch_id,receipt_no,sold_at,cashier,table_no,customer_count,food_subtotal,drink_subtotal,
-         other_subtotal,tip,sp_discount,discount,service_charge,total_inc_vat,source,
-         discount_reason_id,coupon_series_id,print_times,dwell_min)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
-    print(f"      inserted {len(txr):,} transactions")
+
+    # A bill's tab can start in the month BEFORE its SaleDate (dinner opened on the 31st, billed
+    # after midnight). The old whole-history dict let the LATEST window win for a (branch, sale),
+    # so a month's dwell lookup is the merge of the windows around it, later over earlier.
+    def _dwell_month(rows):
+        out = {}
+        for r in rows:
+            dv = r["dwell"]
+            if dv is not None and 0 <= dv <= 360:
+                out[(r["bid"], r["sid"])] = int(dv)
+        return out
+
+    dwell_it = _chunk_iter(mc, dwell_sql, windows, col="st.StartTime")
+    dwell_win = []                                    # dwell map of each window fetched so far
+
+    def _dwell_upto(i):
+        while len(dwell_win) <= i:
+            try:
+                dwell_win.append(_dwell_month(next(dwell_it)[2]))
+            except StopIteration:
+                dwell_win.append({})
+        return dwell_win[i]
+
+    n_tx = 0
+    for wi, (lo, hi) in enumerate(windows):
+        split = {(r["bid"], r["sid"]): (r["food"] or 0, r["drink"] or 0, r["other"] or 0)
+                 for r in _chunk(mc, split_sql, [(lo, hi)])}
+        sale_coupon = {}   # (bid,sid) -> coupon_series_id with the biggest discount
+        for r in _chunk(mc, coupon_sql, [(lo, hi)]):
+            k = (r["bid"], r["sid"]); cur = sale_coupon.get(k)
+            if cur is None or (r["amt"] or 0) > cur[1]:
+                sale_coupon[k] = (r["cs"], r["amt"] or 0)
+        dwell_map = {}
+        if wi > 0:
+            dwell_map.update(_dwell_upto(wi - 1))
+        dwell_map.update(_dwell_upto(wi))
+        dwell_map.update(_dwell_upto(wi + 1))
+        if wi >= 1:
+            dwell_win[wi - 1] = None                  # no later month looks back that far
+        txr = []
+        for r in _chunk(mc, tx_sql, [(lo, hi)]):
+            bid = bid_map.get(r["bid"])
+            if bid is None:
+                continue
+            f, d, o = split.get((r["bid"], r["sid"]), (0, 0, 0))
+            dt = r["dt"]
+            sold = dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else str(dt)
+            receipt = f"{sold[:10]}-{r['num']}-{r['sid']}"
+            cs = sale_coupon.get((r["bid"], r["sid"]))
+            txr.append((bid, receipt, sold, r["cashier"] or "", "", r["cust"] or 0,
+                        round(f, 2), round(d, 2), round(o, 2), round(r["tip"] or 0, 2),
+                        0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy",
+                        (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0),
+                        dwell_map.get((r["bid"], r["sid"]))))
+        sq.executemany("""INSERT INTO sales_transaction
+            (branch_id,receipt_no,sold_at,cashier,table_no,customer_count,food_subtotal,drink_subtotal,
+             other_subtotal,tip,sp_discount,discount,service_charge,total_inc_vat,source,
+             discount_reason_id,coupon_series_id,print_times,dwell_min)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
+        n_tx += len(txr)
+    print(f"      inserted {n_tx:,} transactions")
     return {}
 
 
@@ -887,21 +981,23 @@ def _sync_publish(*, _dtm, args, incr_from, staging):
     # over .incoming only NOW, fully built + reconciled — the poller/refresh_fly
     # never see a half-written file. Exit non-zero if the lock never cleared so
     # the scheduler bat aborts instead of pushing/applying a STALE .incoming.
-    if not publish_staging(staging):
-        sys.exit(4)
-
     # Only a FULL run resets the clock — that is what the --full-every-days guard
     # measures against, and an incremental run cannot stand in for it: it never
-    # looked at the months it skipped.
+    # looked at the months it skipped. Recorded in the build BEFORE it is published:
+    # on the Fly machine the web app's poller may swap .incoming into the live DB
+    # seconds after the publish, and a write made afterwards could land in either file.
     if not incr_from:
         try:
-            sq2 = sqlite3.connect(str(INCOMING if INCOMING.exists() else DB))
+            sq2 = sqlite3.connect(str(staging))
             sq2.execute("CREATE TABLE IF NOT EXISTS sync_state(k TEXT PRIMARY KEY, v TEXT)")
             sq2.execute("INSERT OR REPLACE INTO sync_state(k, v) VALUES('last_full_sync', ?)",
                         (_dtm.date.today().isoformat(),))
             sq2.commit(); sq2.close()
         except Exception as e:
             print(f"      [incremental] could not record last_full_sync: {e}")
+
+    if not publish_staging(staging):
+        sys.exit(4)
 
     if args.apply_local:
         print("[6/6] reconciled → applying to local oshinei.db")
@@ -1045,7 +1141,7 @@ def _stage_channel_tab(*, F, bid_map, incr_from, run, sq):
     return {}
 
 
-def _stage_coupon(*, F, bid_map, incr_from, run, sq):
+def _stage_coupon(*, F, bid_map, incr_from, run, run_iter, sq):
     # ── sale_payment: per-RECEIPT payment lines (powers the discount-bill drill) ──
     # Same SalePayment source as pos_payment_month, but kept per receipt instead of
     # rolled up — a bill can have >1 row (split payment: e.g. cash + credit).
@@ -1053,16 +1149,18 @@ def _stage_coupon(*, F, bid_map, incr_from, run, sq):
     # see the header build above) so it joins 1:1.
     _reset_table(sq, "sale_payment", incr_from, "substr(receipt_no,1,10)",
                  "branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL")
-    rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, s.SaleNum num, s.SaleId sid,
+    n_pay = 0
+    for _lo, _hi, rows in run_iter(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, s.SaleNum num, s.SaleId sid,
                  p.PaymentCode pc, SUM(CAST(p.Amount AS float)) amt
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
                  WHERE {F} AND {{RANGE}} AND ISNULL(p.Active,1)=1
-                 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""", col="s.SaleDate")
-    sq.executemany("INSERT INTO sale_payment VALUES(?,?,?,?)",
-        [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', _norm_paycode(r["pc"]), round(r["amt"] or 0, 2))
-         for r in rows if bid_map.get(r["bid"])])
+                 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""", col="s.SaleDate"):
+        sq.executemany("INSERT INTO sale_payment VALUES(?,?,?,?)",
+            [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', _norm_paycode(r["pc"]), round(r["amt"] or 0, 2))
+             for r in rows if bid_map.get(r["bid"])])
+        n_pay += len(rows)
     sq.execute("CREATE INDEX IF NOT EXISTS ix_salepay ON sale_payment(branch_id, receipt_no)")
-    print(f"        sale_payment: {len(rows)} rows (per receipt × code)")
+    print(f"        sale_payment: {n_pay} rows (per receipt × code)")
 
     # ── pos_table_turn_day: turnover / dwell ──
     _reset_table(sq, "pos_table_turn_day", incr_from, "day",
@@ -1201,18 +1299,20 @@ def _stage_daily(*, F, bid_map, item_map, mc, since, sq):
                   f"{(r['code'] or '').strip()} qty={r['qty']:,.0f}")
     sq.executescript("DROP TABLE IF EXISTS sales_sku_daily; CREATE TABLE sales_sku_daily("
                      "branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);")
-    drows = _chunk(mc, f"""
+    n_daily = 0
+    for _lo, _hi, drows in _chunk_iter(mc, f"""
         SELECT si.BranchId bid, si.ItemId iid, CONVERT(char(10), s.SaleDate, 126) d,
                SUM({QTY_SANE}) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(10), s.SaleDate, 126)
-    """, _month_windows(dly_since))
-    sq.executemany("INSERT INTO sales_sku_daily VALUES(?,?,?,?,?)",
-        [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), round(r["qty"] or 0,2), round(r["rev"] or 0,2))
-         for r in drows if bid_map.get(r["bid"]) and item_map.get(r["iid"])])
+    """, _month_windows(dly_since)):
+        sq.executemany("INSERT INTO sales_sku_daily VALUES(?,?,?,?,?)",
+            [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), round(r["qty"] or 0,2), round(r["rev"] or 0,2))
+             for r in drows if bid_map.get(r["bid"]) and item_map.get(r["iid"])])
+        n_daily += len(drows)
     sq.execute("CREATE INDEX IF NOT EXISTS ix_ssd ON sales_sku_daily(branch_id, day, sku_id)")
-    print(f"        sales_sku_daily: {len(drows)} rows (since {dly_since})")
+    print(f"        sales_sku_daily: {n_daily} rows (since {dly_since})")
     return {"_dt": _dt, "dly_since": dly_since, "mx": mx}
 
 
@@ -1243,89 +1343,115 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
     dated_by_month = {}                      # month -> {sku_id: cost}, resolved once per month
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
-    bill_rows = _chunk(mc, f"""
+
+    # The loss-bill scope compares each bill's COGS with its revenue. Only the bills of the
+    # rolling window are ever looked up, so read just those receipts (until 2026-10 this was a
+    # dict of EVERY receipt in the history - ~800 k entries held for ~50 k lookups).
+    revmap = {row["receipt_no"]: (row["t"] or 0) / 1.07 for row in
+              sq.execute("SELECT receipt_no, total_inc_vat t FROM sales_transaction "
+                         "WHERE total_inc_vat>0 AND substr(receipt_no,1,10) >= ?", (bill_since,))}
+
+    # The 31-day pull, a month at a time: the raw per-line rows of a month are folded into the
+    # per-bill totals and dropped. `bills` (one small list per receipt, ~50 k) and `lines` (the
+    # per-menu-line detail the loss-bill drill keeps) are all that is held across months.
+    bills = {}
+    lines = []   # (receipt_no, sku_id, qty, rev, bom_cost) — per-menu-line detail, kept for the loss-bill drill
+    for _lo, _hi, bill_rows in _chunk_iter(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
                si.ItemId iid, SUM({QTY_SANE}) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
-    """, _month_windows(bill_since))
-    bills = {}
-    lines = []   # (receipt_no, sku_id, qty, rev, bom_cost) — per-menu-line detail, kept for the loss-bill drill
-    for r in bill_rows:
-        bid = bid_map.get(r["bid"])
-        if bid is None:
-            continue
-        sid_local = item_map.get(r["iid"])
-        c = costmap.get(sid_local, 0.0)
-        if r["d"] and r["d"][:7] >= _bc_dated.CUTOVER_MONTH:
-            mc_ = dated_by_month.get(r["d"][:7])
-            if mc_ is None:
-                mc_ = dated_by_month[r["d"][:7]] = _bc_dated.costs_for(dated_costs, r["d"][:7])
-            c = mc_.get(sid_local, c)
-        qty = r["qty"] or 0
-        rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
-        b = bills.get(rcpt)
-        if b is None:
-            bills[rcpt] = [bid, r["d"], qty * c]
-        else:
-            b[2] += qty * c
-        if sid_local is not None:
-            lines.append((rcpt, sid_local, round(qty, 2), round(r["rev"] or 0, 2), round(qty * c, 4)))
+    """, _month_windows(bill_since)):
+        for r in bill_rows:
+            bid = bid_map.get(r["bid"])
+            if bid is None:
+                continue
+            sid_local = item_map.get(r["iid"])
+            c = costmap.get(sid_local, 0.0)
+            if r["d"] and r["d"][:7] >= _bc_dated.CUTOVER_MONTH:
+                mc_ = dated_by_month.get(r["d"][:7])
+                if mc_ is None:
+                    mc_ = dated_by_month[r["d"][:7]] = _bc_dated.costs_for(dated_costs, r["d"][:7])
+                c = mc_.get(sid_local, c)
+            qty = r["qty"] or 0
+            rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
+            b = bills.get(rcpt)
+            if b is None:
+                bills[rcpt] = [bid, r["d"], qty * c]
+            else:
+                b[2] += qty * c
+            if sid_local is not None:
+                lines.append((rcpt, sid_local, round(qty, 2), round(r["rev"] or 0, 2), round(qty * c, 4)))
     sq.executemany("INSERT OR REPLACE INTO sale_bill_cogs VALUES(?,?,?,?)",
         [(rc, v[0], v[1], round(v[2], 2)) for rc, v in bills.items()])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
     print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
+    loss_set = {rc for rc, v in bills.items() if v[2] > revmap.get(rc, float("inf"))}
+    # de-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount
+    # would otherwise emit the same line twice → double-count in the P&L SUM.
+    loss_lines = {(ln[0], ln[1]): ln for ln in lines if ln[0] in loss_set}     # loss bills only
+    del bills, lines
 
     # ── sale_bill_item: per-receipt MENU LINES for LOSS bills (31d) + DISCOUNT bills ──
     #    Powers the per-bill P&L drill (🧾 P&L ต่อบิล) reached from the บิลขาดทุน table
     #    AND from clicking any row in the บิลส่วนลด drill. Two line sources, de-duped:
     #      · LOSS bills in the rolling 31-day window (COGS > revenue) — the existing
-    #        "บิลขาดทุน" scope, from `lines` already pulled above.
+    #        "บิลขาดทุน" scope, from the lines pulled above.
     #      · ALL DISCOUNT bills across the FULL synced history (Sale.Discount>0) — so a
     #        manager can open the P&L of any discounted bill, not just recent loss ones.
     #    Discount bills are ~7–8% of bills; this keeps the table bounded (NOT every bill).
     #    rev = SUM(ExtendedPrice) treated ex-VAT (consistent with sales_sku_daily);
     #    bom_cost = qty × per-SKU BoM unit cost (BUFFET tier = 0; IRON RULE: BoM only).
-    revmap = {row["receipt_no"]: (row["t"] or 0) / 1.07 for row in
-              sq.execute("SELECT receipt_no, total_inc_vat t FROM sales_transaction WHERE total_inc_vat>0")}
-    loss_set = {rc for rc, v in bills.items() if v[2] > revmap.get(rc, float("inf"))}
-    # de-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount
-    # would otherwise emit the same line twice → double-count in the P&L SUM.
-    item_rows = {(ln[0], ln[1]): ln for ln in lines if ln[0] in loss_set}
-    # full-history per-line pull for discount bills (same shape/grouping as bill_rows).
-    disc_line_rows = _chunk(mc, f"""
-        SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM({QTY_SANE}) qty,
-               SUM(CAST(si.ExtendedPrice AS float)) rev
-        FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.Discount>0 AND {{RANGE}}
-        GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
-    """, windows)
-    disc_bill_set = set()
-    for r in disc_line_rows:
-        if bid_map.get(r["bid"]) is None:
-            continue
-        sid_local = item_map.get(r["iid"])
-        if sid_local is None:
-            continue
-        qty = r["qty"] or 0
-        c = costmap.get(sid_local, 0.0)
-        rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
-        disc_bill_set.add(rcpt)
-        item_rows[(rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
-                                        round(r["rev"] or 0, 2), round(qty * c, 4))
     _reset_table(sq, "sale_bill_item", incr_from, "substr(receipt_no,1,10)",
                  "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL")
     if incr_from is not None:
         # the loss-bill lines reach back 31 days from the last sale — earlier than
         # the window can be — so replace those receipts too, never duplicate them
         sq.executemany("DELETE FROM sale_bill_item WHERE receipt_no=?",
-                       [(rc,) for rc in {k[0] for k in item_rows}])
-    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", list(item_rows.values()))
+                       [(rc,) for rc in {k[0] for k in loss_lines}])
+    # full-history per-line pull for discount bills (same shape/grouping as bill_rows), a month at
+    # a time: ~1.8 M lines as Python dicts were the largest single allocation of the whole sync.
+    # De-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount would otherwise
+    # emit the same line twice → double-count in the P&L SUM. The discount line wins, as before.
+    disc_bill_set = set()
+    n_lines = 0
+    placed = set()                           # loss lines already written with their month
+    for lo, hi, disc_line_rows in _chunk_iter(mc, f"""
+        SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
+               si.ItemId iid, SUM({QTY_SANE}) qty,
+               SUM(CAST(si.ExtendedPrice AS float)) rev
+        FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.Discount>0 AND {{RANGE}}
+        GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
+    """, windows):
+        month_items = {}
+        for r in disc_line_rows:
+            if bid_map.get(r["bid"]) is None:
+                continue
+            sid_local = item_map.get(r["iid"])
+            if sid_local is None:
+                continue
+            if not (lo <= r["d"] < hi):          # the query cannot return a row outside its window;
+                continue                          # a source that does would otherwise insert it twice
+            qty = r["qty"] or 0
+            c = costmap.get(sid_local, 0.0)
+            rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
+            disc_bill_set.add(rcpt)
+            month_items[(rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
+                                              round(r["rev"] or 0, 2), round(qty * c, 4))
+        for key, ln in loss_lines.items():
+            if key not in placed and lo <= key[0][:10] < hi:
+                placed.add(key)
+                month_items.setdefault(key, ln)
+        sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", list(month_items.values()))
+        n_lines += len(month_items)
+    rest = [ln for key, ln in loss_lines.items() if key not in placed]     # outside every month window
+    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", rest)
+    n_lines += len(rest)
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbi ON sale_bill_item(receipt_no)")
-    print(f"        sale_bill_item: {len(item_rows)} lines across "
+    print(f"        sale_bill_item: {n_lines} lines across "
           f"{len(loss_set | disc_bill_set)} bills ({len(loss_set)} loss + {len(disc_bill_set)} discount)")
 
     # ── Extra POS-deep-dive tables (separate "Extra" report group) ──
@@ -1350,14 +1476,19 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows, incr_from
             return _chunk(mc, sql, windows, col)
         mc.execute(sql, params or (since,)); return mc.fetchall()
 
+    def run_iter(sql, col):
+        # the month-at-a-time form of run(col=...): for the tables with hundreds of
+        # thousands of rows (see _chunk_iter) - the caller inserts each month and moves on
+        return _chunk_iter(mc, sql, windows, col)
+
     # Each table family is its own stage (_stage_*, Phase 6b 2026-09) — the
     # [k/6] steps the log already names. They run in order and hand forward
     # through `ctx`; backend/test_sync_golden.py pins every table they write.
-    ctx = {"F": F, "bid_map": bid_map, "incr_from": incr_from, "item_map": item_map, "mc": mc, "name2bid": name2bid, "run": run, "since": since, "sq": sq, "windows": windows}
+    ctx = {"F": F, "bid_map": bid_map, "incr_from": incr_from, "item_map": item_map, "mc": mc, "name2bid": name2bid, "run": run, "run_iter": run_iter, "since": since, "sq": sq, "windows": windows}
     ctx.update(_stage_void(bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), item_map=ctx.get("item_map"), run=ctx.get("run"), sq=ctx.get("sq")))
     ctx.update(_stage_payment(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
     ctx.update(_stage_channel_tab(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_coupon(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_coupon(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), run_iter=ctx.get("run_iter"), sq=ctx.get("sq")))
     ctx.update(_stage_cashcount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
     ctx.update(_stage_discount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), mc=ctx.get("mc"), run=ctx.get("run"), sq=ctx.get("sq")))
     ctx.update(_stage_daily(F=ctx.get("F"), bid_map=ctx.get("bid_map"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), since=ctx.get("since"), sq=ctx.get("sq")))
@@ -1665,5 +1796,10 @@ def reconcile(sq):
     return ok
 
 if __name__ == "__main__":
-    with sync_lock("sync_mssql"):   # one job at a time on .incoming - see sync_lock.py
+    if os.environ.get("OSHINEI_SYNC_LOCK_HELD") == "1":
+        # cloud_sync.py (the parent web process) already holds the sync lock for this run; a second
+        # flock from this child would wait on its own parent. Nothing else changes.
         main()
+    else:
+        with sync_lock("sync_mssql"):   # one job at a time on .incoming - see sync_lock.py
+            main()

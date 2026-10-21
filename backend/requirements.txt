@@ -15,4 +15,5 @@ numpy==2.5.2
 pillow==12.3.0
 segno==1.6.6         # the printed survey QR, drawn server-side so a CDN outage cannot print a blank card
 pywebpush==2.5.0     # the morning brief as a Web Push notification (routers/push_api.py)
+pymssql==2.3.13      # the cloud sync (cloud_sync.py -> sync_mssql.py) reads Easy POS from the Fly machine; the same version the office PC runs. A manylinux wheel with FreeTDS inside: no apt package
 pytest==9.1.1        # dev: run `python -m pytest backend`

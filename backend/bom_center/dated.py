@@ -115,6 +115,11 @@ def pull_from_live(sq, api: str = None, timeout: int = 25) -> int:
     from pathlib import Path
     try:
         ensure(sq)
+        if os.environ.get("OSHINEI_SYNC_ON_LIVE") == "1":
+            # the cloud sync copies the LIVE database, which already holds this table (bc_ is preserved):
+            # asking the site for its own rows would be a request to ourselves for what we already have
+            print("      dated costs: the staging copy is the live DB - using its own")
+            return 0
         import refresh_fly_db as _r
         token = os.environ.get("OSHINEI_SEED_TOKEN", "").strip()
         if ":" in token:

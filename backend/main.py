@@ -819,6 +819,22 @@ if DOCS.exists():
     app.mount("/docs", StaticFiles(directory=str(DOCS), html=True), name="docs")
 
 
+def _swap_incoming_and_warm() -> bool:
+    """Apply a staged `.incoming` and refresh what depends on the data. The ONE swap path: the poller
+    below calls it, and so does the cloud sync (cloud_sync.py) on a machine where the poller is off."""
+    if not _apply_incoming_live():
+        return False
+    # The staged DB carries whatever sku_effective_cost it was
+    # synced with (sync_mssql doesn't rebuild it) — flush the
+    # response cache AND force-rebuild the effective-cost lookup
+    # so post-swap COGS reflects the current sku_cost/BoM chain.
+    invalidate_cache()
+    # then recompute the most-requested reports in the background,
+    # one at a time, so nobody pays the cold query after a sync
+    warm_cache_async()
+    return True
+
+
 def _autoswap_poller():
     """Background daemon: apply a fresh `.incoming` to the running app, no restart."""
     import time as _t
@@ -827,15 +843,7 @@ def _autoswap_poller():
         _t.sleep(interval)
         try:
             if Path(str(DB_PATH) + ".incoming").exists():
-                if _apply_incoming_live():
-                    # The staged DB carries whatever sku_effective_cost it was
-                    # synced with (sync_mssql doesn't rebuild it) — flush the
-                    # response cache AND force-rebuild the effective-cost lookup
-                    # so post-swap COGS reflects the current sku_cost/BoM chain.
-                    invalidate_cache()
-                    # then recompute the most-requested reports in the background,
-                    # one at a time, so nobody pays the cold query after a sync
-                    warm_cache_async()
+                _swap_incoming_and_warm()
         except Exception as e:
             print(f"[hot-swap] poller error: {e}")
 
@@ -2332,6 +2340,20 @@ def _push_startup():
     import os as _os, sys as _sys
     if _os.environ.get("OSHINEI_PUSH_SCHEDULER", "1") == "1" and "pytest" not in _sys.modules:
         threading.Thread(target=_push_scheduler_loop, name="push-morning", daemon=True).start()
+
+
+@app.on_event("startup")
+def _cloud_sync_startup():
+    """The Fly machine pulls Easy POS MSSQL itself (backend/cloud_sync.py, docs/CLOUD_SYNC.md). OFF unless
+    OSHINEI_CLOUD_SYNC=1: without it nothing here starts a thread or touches the database."""
+    import os as _os, sys as _sys
+    if "pytest" in _sys.modules or _os.environ.get("OSHINEI_CLOUD_SYNC", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return
+    try:
+        import cloud_sync as _cloud_sync
+        _cloud_sync.start(apply_fn=_swap_incoming_and_warm)
+    except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
+        print(f"[cloud-sync] could not start: {e}")
 if __package__:
     from .routers.cost_bom import router as _cost_bom_router
     from .routers.cost_bom import get_cost_detail, branch_bom_analysis  # noqa: F401
@@ -2387,6 +2409,11 @@ try:
 except ImportError:
     from routers.nav import router as _nav_router
 app.include_router(_nav_router)     # GET /api/nav/badges (PR-D4): the red task counts of the department menu
+try:
+    from .routers.cloud_sync_api import router as _cloud_sync_router
+except ImportError:
+    from routers.cloud_sync_api import router as _cloud_sync_router
+app.include_router(_cloud_sync_router)     # /api/admin/cloud-sync/{status,run}: the cloud pull of Easy POS (docs/CLOUD_SYNC.md)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Ingredient ordering — per-branch purchase planning (แผนสั่งวัตถุดิบรายสาขา)

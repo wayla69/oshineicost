@@ -29,7 +29,7 @@ whole chain; a branch-scoped login's devices are skipped.
 """
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import quote
 
@@ -441,11 +441,59 @@ def read_scorecard() -> dict:
     return _plain(_he.home_branch_scorecard(date=None, group=None))
 
 
-def alert_payloads(sc: dict, now) -> list:
+# The cloud pull of Easy POS (backend/cloud_sync.py) reports through the same "stale" kind: a person who muted the
+# stuck-sync alert mutes this too. Plain words for the result codes it stores in app_settings['cloud_sync_status'].
+CLOUD_LABEL = {"ok": "ปกติ", "failed": "ดึงข้อมูลไม่สำเร็จ", "reconcile_failed": "ข้อมูลที่ดึงมาไม่ผ่านการตรวจเทียบ",
+               "locked": "ข้ามรอบ เพราะมีงานซิงก์อื่นทำอยู่", "no_space": "พื้นที่เก็บข้อมูลไม่พอ",
+               "creds_missing": "ยังไม่ได้ตั้งรหัสเชื่อมต่อ POS"}
+CLOUD_ALERT_RESULTS = ("failed", "no_space", "creds_missing")      # reconcile_failed joins them on its second run in a row
+CLOUD_ALERT_MAX_AGE_H = 24                                           # an older failure is the stale alert's business
+
+
+def _cloud_end(cloud: dict):
+    """When the last pull ended, as the naive Bangkok time `now` uses (None if unknown)."""
+    try:
+        end = datetime.fromisoformat(cloud.get("last_end") or "")
+    except (TypeError, ValueError):
+        return None
+    return end.astimezone(timezone(timedelta(hours=7))).replace(tzinfo=None) if end.tzinfo else end
+
+
+def cloud_sync_hint(cloud: Optional[dict]) -> str:
+    """The cloud half of the stuck-sync message, or the old advice when the cloud pull is not in use."""
+    if cloud is None:
+        return "การซิงก์อาจค้าง ตรวจที่เครื่องซิงก์หรือตัวเฝ้าระวังงาน"
+    res = cloud.get("result")
+    if not res:
+        return "การดึงข้อมูลบนคลาวด์ยังไม่เคยรัน — ตรวจที่ ตั้งค่า > ข้อมูลจาก POS"
+    end = _cloud_end(cloud)
+    when = f" (รอบ {end.day} {TH_MON[end.month - 1]} {end:%H:%M})" if end else ""
+    return f"การดึงข้อมูลบนคลาวด์: {CLOUD_LABEL.get(res, res)}{when} — ตรวจที่ ตั้งค่า > ข้อมูลจาก POS"
+
+
+def cloud_sync_payloads(cloud: Optional[dict], now) -> list:
+    """[(key, payload)] when the cloud pull failed in a way a person must act on: it failed, the volume is full, the
+    MSSQL login is missing, or the reconcile gate refused it twice running (once is a normal late-delivery day).
+    Pure like alert_payloads. One push per result per day (the key), kind "stale"."""
+    if not cloud or cloud.get("running"):
+        return []
+    res = cloud.get("result")
+    if not (res in CLOUD_ALERT_RESULTS or (res == "reconcile_failed" and (cloud.get("streak") or 0) >= 2)):
+        return []
+    end = _cloud_end(cloud)
+    if end is None or now - end > timedelta(hours=CLOUD_ALERT_MAX_AGE_H):
+        return []
+    return [(f"stale:cloud:{res}:{now.strftime('%Y-%m-%d')}",
+             {"title": "ดึงข้อมูลจาก POS ไม่สำเร็จ", "body": cloud_sync_hint(cloud),
+              "url": "/?go=summary", "tag": "oshinei-stale"})]
+
+
+def alert_payloads(sc: dict, now, cloud: Optional[dict] = None) -> list:
     """[(key, payload)] for the conditions in the scorecard right now. Pure: no I/O, so the
     rules are testable. A drop is a branch ≥40% under its 7-day average AND its same weekday last week on the last settled
     day (and big enough to matter); data is stale when that settled day is older than
-    yesterday once the early-afternoon sync is done."""
+    yesterday once the early-afternoon sync is done. `cloud` is the stored status of the cloud pull
+    (None when that is not in use): the stale message then names what it last did."""
     out = []
     day = (sc or {}).get("date")
     if not day:
@@ -474,7 +522,7 @@ def alert_payloads(sc: dict, now) -> list:
         gap = (datetime.strptime(yesterday, "%Y-%m-%d") - datetime.strptime(day, "%Y-%m-%d")).days
         out.append((f"stale:{today}",
                     {"title": "ข้อมูลขายยังไม่เข้า",
-                     "body": f"ข้อมูลครบถึง {_th_day(day)} (ขาด {gap} วัน) — การซิงก์อาจค้าง ตรวจที่เครื่องซิงก์หรือตัวเฝ้าระวังงาน",
+                     "body": f"ข้อมูลครบถึง {_th_day(day)} (ขาด {gap} วัน) — {cloud_sync_hint(cloud)}",
                      "url": "/?go=summary", "tag": "oshinei-stale"}))
     return out
 
@@ -832,13 +880,24 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
         _meta_set(con, "push_alert_check", stamp)    # claim first, like the morning guard
         con.commit()
         rec = {"checked": stamp, "sent": []}
+        cloud = None
+        try:                                          # the cloud pull's status, only while that is switched on
+            import cloud_sync as _cloud_sync
+            if _cloud_sync.enabled():
+                cloud = _cloud_sync.status_from_con(con)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] alerts cloud status: {e}")
         try:
             sc = scorecard if scorecard is not None else read_scorecard()
-            todo = alert_payloads(sc, now)
+            todo = alert_payloads(sc, now, cloud=cloud)
         except Exception as e:  # noqa: BLE001
             rec["error"] = f"scorecard: {e}"
             print(f"[push] alerts: {e}")
             todo = []
+        try:
+            todo += cloud_sync_payloads(cloud, now)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] alerts cloud: {e}")
         try:                                          # a failure in one source never hides the other
             todo += cash_discount_payloads(cashdata if cashdata is not None else cash_discount_rows(con))
         except Exception as e:  # noqa: BLE001
