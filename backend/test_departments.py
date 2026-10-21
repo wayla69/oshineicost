@@ -1,4 +1,7 @@
-"""PR-D1 (owner 2026-10-21): the department launcher - one registry (DEPARTMENTS in js/01-core.js), หน้าแรก for every role on a
+"""PR-D2 (owner 2026-10-21) is at the end: the department workspace - a breadcrumb, the department's band and its icon tabs above every page
+(replacing the cluster bar and the supply chips on a desktop) and the icon rail.
+
+PR-D1 (owner 2026-10-21): the department launcher - one registry (DEPARTMENTS in js/01-core.js), หน้าแรก for every role on a
 desktop, the sidebar by department and หน้ารายงานทั้งหมด.
 
 Static checks (always run) pin the contract the shell relies on; the registry check is the same script scripts/check-js.sh runs
@@ -152,4 +155,132 @@ def test_every_tile_and_every_all_pages_link_opens_its_page_and_a_phone_is_uncha
         page.wait_for_timeout(2500)
         assert page.evaluate("[...document.querySelectorAll('.dept-entry')].filter(e => getComputedStyle(e).display !== 'none').length") == 0
         assert page.evaluate("activeTab") != "launcher"
+        b.close()
+
+
+# ── PR-D2: the department workspace and the icon rail ─────────────────────────────────────────────────────────
+def test_the_workspace_header_and_the_rail_are_wired_in_the_shell():
+    html, core, js, tokens = _src("index.html"), _src("js/01-core.js"), _src("js/18-launcher.js"), _src("docs/ui-kit/tokens.css")
+    assert 'id="deptHead"' in html and "railToggle()" in html
+    assert re.search(r"@media \(min-width: 701px\) \{\s*#clusterBar \{ display: none !important; \}", html)      # a desktop: no cluster bar, no chips
+    assert re.search(r"@media \(max-width: 700px\) \{ #deptHead \{ display: none !important; \} \}", html)       # a phone: unchanged (PR-D3)
+    # paper and reading mode never carry the header or the rail
+    assert re.search(r"@media print \{\s*\.sidebar, #deptHead, \.top-bar", html)
+    assert "body.mgt-reading #deptHead" in html
+    assert "if (typeof renderDeptHead === 'function') renderDeptHead(name)" in core                 # every page or pane change redraws it
+    assert "'supplyLock', 'deptLock'" in core                                                          # the unlock chip moves into the header
+    assert 'role="tablist"' in js and 'role="tab"' in js and "aria-selected" in js and "oshinei_dept'" in js
+    for tok in ("--rail-ink", "--rail-active-bg", "--rail-active-ink", "--rail-line"):
+        assert tok + ":" in tokens, tok
+    # the data the cluster bar and the chips draw from stays (scripts and the all-pages list read it)
+    assert "const TAB_CLUSTERS = [" in core and "const SUPPLY_CHIPS = [" in core
+
+
+def test_the_workspace_text_colours_are_tokens_not_raw_hex():
+    html = _src("index.html")
+    block = html[html.index("PR-D2 (2026-10-21): the department workspace"):]
+    block = block[:block.index("</style>")]
+    for m in re.finditer(r"(?<![-\w])color:\s*(#[0-9a-fA-F]{3,8})", block):
+        pytest.fail(f"raw hex text colour {m.group(1)} in the D2 block")
+
+
+def _head(page):
+    return page.evaluate("""() => { const h = document.getElementById('deptHead');
+      return { shown: getComputedStyle(h).display !== 'none', crumb: (h.querySelector('.dh-crumb') || {}).innerText || '',
+        name: (h.querySelector('.dh-name') || {}).textContent || '',
+        tabs: [...h.querySelectorAll('[role=tab]')].map(t => ({ label: t.textContent.trim(), sel: t.getAttribute('aria-selected'), h: Math.round(t.getBoundingClientRect().height) })),
+        bar: getComputedStyle(document.getElementById('clusterBar')).display,
+        rail: Math.round(document.getElementById('sidebar').getBoundingClientRect().width) } }""")
+
+
+def test_a_page_of_a_department_shows_its_band_and_icon_tabs_and_the_bar_is_gone(live_server):
+    pw = pytest.importorskip("playwright.sync_api")
+    base = live_server
+    with pw.sync_playwright() as p:
+        b = _browser(p)
+        ctx, page, errors = _login(b, base, "salessupport1", auth.DEFAULT_PASSWORD, {"width": 1440, "height": 900})
+        page.wait_for_function("activeTab === 'launcher'", timeout=30000)
+        assert not _head(page)["shown"]                                                                  # the launcher has its own page
+        page.click("#nav-dept-ss")                                                                       # the rail opens the department's workspace
+        page.wait_for_function("activeTab === 'orderhub'", timeout=30000)
+        page.wait_for_timeout(1200)
+        h = _head(page)
+        assert h["shown"] and h["name"] == "ประสานงานขาย" and h["crumb"].replace("\n", " ").startswith("หน้าแรก › ประสานงานขาย › คิวใบสั่งซื้อ")
+        assert h["bar"] == "none" and h["rail"] == 96                                                    # no chips; the sidebar is the icon rail
+        assert [t["sel"] for t in h["tabs"]].count("true") == 1 and h["tabs"][0]["label"] == "คิวใบสั่งซื้อ" and h["tabs"][0]["sel"] == "true"
+        assert min(t["h"] for t in h["tabs"]) >= 44
+        assert page.evaluate("document.querySelector('#deptHead [role=tablist]').getAttribute('aria-label')").startswith("หน้าของแผนก")
+        # a tab opens its pane through supplyGo, and the header follows the pane
+        page.click("#deptHead [role=tab]:has-text('เคลมสินค้า')")
+        page.wait_for_timeout(1200)
+        assert page.evaluate("[activeTab, _SUPPLY_PANE[activeTab].get()]") == ["orderhub", "claims"]
+        assert [t["label"] for t in _head(page)["tabs"] if t["sel"] == "true"] == ["เคลมสินค้า"]
+        assert page.evaluate("document.activeElement.textContent.trim()") == "เคลมสินค้า"                # focus stays on the tab
+        page.keyboard.press("ArrowRight")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(1200)
+        assert page.evaluate("[activeTab, _SUPPLY_PANE[activeTab].get()]") == ["bomcenter", "fc"]
+        # a supplyGo from elsewhere (a task's `go`) keeps the department the person is in
+        page.evaluate("supplyGo({tab: 'orderhub', pane: 'queue'})")
+        page.wait_for_timeout(1200)
+        assert _head(page)["name"] == "ประสานงานขาย"
+        assert page.evaluate("[_deptCur, localStorage.getItem('oshinei_dept')]") == ["ss", "ss"]
+        # the rail toggle: icon + full label row, then back
+        page.click(".toggle-btn")
+        page.wait_for_timeout(500)                                                                       # the width eases over 0.22 s
+        assert _head(page)["rail"] == 224
+        page.click(".toggle-btn")
+        page.wait_for_timeout(500)
+        assert _head(page)["rail"] == 96
+        # a page of no department keeps a plain breadcrumb
+        page.evaluate("switchTab('manual')")
+        page.wait_for_timeout(600)
+        h = _head(page)
+        assert h["shown"] and h["tabs"] == [] and h["crumb"].replace("\n", " ").startswith("หน้าแรก › หน้ารายงานทั้งหมด › ")
+        assert not errors, errors
+        b.close()
+
+
+def test_the_header_and_the_rail_never_print_and_pinned_roles_see_only_their_own_department(live_server):
+    pw = pytest.importorskip("playwright.sync_api")
+    base = live_server
+    with pw.sync_playwright() as p:
+        b = _browser(p)
+        mg = b.new_context()
+        assert mg.request.post(base + "/api/auth/login", data={"username": "management1", "password": auth.DEFAULT_PASSWORD}).ok
+        r = mg.request.post(base + "/api/auth/users", headers={"X-Upload-Token": TOKEN},
+                            data={"username": "br_d2_a", "password": "Temp@12345", "role": "branch", "branch": "BranchA"})
+        assert r.status in (200, 409), r.text()
+        ctx, page, errors = _login(b, base, "management1", auth.DEFAULT_PASSWORD, {"width": 1440, "height": 900})
+        page.evaluate("deptGo('mgmt', 0)")                                                               # รายงานผู้บริหาร
+        page.wait_for_function("activeTab === 'mgtreport'", timeout=30000)
+        page.wait_for_timeout(1500)
+        assert _head(page)["shown"]
+        page.emulate_media(media="print")
+        gone = page.evaluate("['deptHead', 'sidebar'].map(id => getComputedStyle(document.getElementById(id)).display)")
+        assert gone == ["none", "none"], gone
+        page.emulate_media(media="screen")
+        page.evaluate("toggleMgtCover(true)")                                                            # reading mode folds the chrome, header included
+        assert page.evaluate("getComputedStyle(document.getElementById('deptHead')).display") == "none"
+        ctx.close()
+        ctx, page, errors = _login(b, base, "br_d2_a", "Temp@12345", {"width": 1440, "height": 900})
+        page.evaluate("switchTab('launcher')")
+        page.click("#nav-dept-brn")
+        page.wait_for_function("activeTab === 'branchstock'", timeout=30000)
+        page.wait_for_timeout(1200)
+        h = _head(page)
+        assert h["name"] == "สาขา" and [t["label"] for t in h["tabs"]] == ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]
+        assert page.evaluate("[...document.querySelectorAll('#sidebar .rail-item')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.id)") \
+            == ["nav-launcher", "nav-dept-brn", "nav-manual"]
+        assert not errors, errors
+        ctx.close()
+        # a phone keeps the bar and has no header
+        ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+        assert ctx.request.post(base + "/api/auth/login", data={"username": "management1", "password": auth.DEFAULT_PASSWORD}).ok
+        page = ctx.new_page()
+        page.goto(base + "/", wait_until="networkidle", timeout=90000)
+        page.wait_for_function("typeof switchTab === 'function' && window.AUTH && window.AUTH.authenticated", timeout=60000)
+        page.wait_for_timeout(1500)
+        assert page.evaluate("getComputedStyle(document.getElementById('deptHead')).display") == "none"
+        assert "collapsed" not in page.evaluate("document.getElementById('sidebar').className")
         b.close()
