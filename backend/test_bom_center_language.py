@@ -210,7 +210,8 @@ def test_fact_every_start_card_entry_of_salessupport_is_rendered():
 def test_fact_na_has_one_label():
     a = (REPO / "js" / "15-orderhub.js").read_text(encoding="utf-8")
     b = (REPO / "js" / "16-supplyhome.js").read_text(encoding="utf-8")
-    assert "na: ['ไม่มีงาน'" in a and "na: ['ไม่มีงาน'" in b
+    # ศูนย์สั่งของ keeps "ไม่มีงาน"; หน้างาน (PR-TF) has no status chip any more: a task of status na is เสร็จแล้ว there (state done)
+    assert "na: ['ไม่มีงาน'" in a and "st === 'done' || st === 'na' ? 'done'" in b and "done: 'เสร็จแล้ว'" in b
 
 
 # ── display names, dates ────────────────────────────────────────────────────────────────────────────────

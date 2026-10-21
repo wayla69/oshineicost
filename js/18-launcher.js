@@ -129,12 +129,46 @@ async function loadLauncher() {
   await lnchLoadTasks();
 }
 
-// ── งานของฉันวันนี้: the open items of หน้างาน that belong to this role (same filter as หน้างาน and the Daily Brief) ──
-let _lnchTodo = [];
-async function lnchLoadTasks() {
-  const rows = document.getElementById('lnchTaskRows'), cnt = document.getElementById('lnchTaskCount'), all = document.getElementById('lnchTaskAll');
+// ── งานของฉันวันนี้: the items of หน้างาน that belong to this role (same filter as หน้างาน and the Daily Brief), by state (PR-TF) ──
+// Three tabs - ยังไม่เสร็จ · รอตรวจ · เสร็จแล้ว - each with its count; the choice is the one of หน้างาน (shmFilterGet / shmFilterSet,
+// localStorage `oshinei_task_filter`), "ทั้งหมด" there shows as ยังไม่เสร็จ here. At most 5 rows; "ดูทั้งหมด" opens หน้างาน on the same tab.
+const _LNCH_TABS = [['todo', 'ยังไม่เสร็จ'], ['review', 'รอตรวจ'], ['done', 'เสร็จแล้ว']];
+let _lnchGroups = { todo: [], review: [], done: [] };    // the rows by state: the same duty of several branches is ONE row naming how many
+let _lnchShown = [];
+function _lnchFilter() { const f = shmFilterGet(); return f === 'all' ? 'todo' : f; }
+function _lnchGroup(list) {
+  const groups = [];
+  list.slice().sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq)).forEach(i => {
+    const k = String(i.key || '').split(':')[0] + '|' + (i.title || '');
+    const g = groups.find(x => x.k === k);
+    if (g) { if (i.branch && !g.branches.includes(i.branch)) g.branches.push(i.branch); g.urgent = g.urgent || !!i.urgent; }
+    else groups.push({ k, first: i, branches: i.branch ? [i.branch] : [], urgent: !!i.urgent });
+  });
+  return groups;
+}
+function _lnchTabsHtml(f) {
+  return _LNCH_TABS.map(([k, t]) => `<button type="button" class="lnch-tab" data-f="${k}" aria-pressed="${f === k}" onclick="lnchTaskFilter('${k}')">${t} <span class="lnch-tab-n">(${_lnchGroups[k].length})</span></button>`).join('');
+}
+function lnchRenderTasks() {
+  const rows = document.getElementById('lnchTaskRows'), tabs = document.getElementById('lnchTaskTabs');
   if (!rows) return;
-  cnt.style.display = 'none'; all.style.display = 'none';
+  const f = _lnchFilter(), groups = _lnchGroups[f];
+  tabs.style.display = ''; tabs.innerHTML = _lnchTabsHtml(f);
+  _lnchShown = groups.slice(0, 5);
+  if (!groups.length) { rows.innerHTML = `<div class="lnch-empty">${f === 'todo' ? 'ไม่มีงานค้างวันนี้' : 'ไม่มีงานในสถานะนี้'}</div>`; return; }
+  rows.innerHTML = _lnchShown.map((g, n) => {
+    const it = g.first, go = it.go && it.go.tab && tabAllowed(it.go.tab) ? it.go : null;
+    const who = g.branches.length > 1 ? ` · ${g.branches.length} สาขา` : (g.branches.length ? ` (${g.branches[0]})` : '');
+    return `<div class="lnch-row"><span class="lnch-dot${g.urgent && f !== 'done' ? ' is-urgent' : ''}${f === 'review' ? ' is-review' : ''}${f === 'done' ? ' is-done' : ''}" aria-hidden="true"></span>`
+      + `<span class="lnch-row-title">${esc(it.title)}${esc(who)}</span><span class="lnch-row-dept">${esc(it.owner_th || '')}</span>`
+      + (go ? `<a href="#" class="lnch-go" onclick="lnchTaskGo(${n});return false">${f === 'done' ? 'ดู' : 'ไปที่งาน'}</a>` : '') + `</div>`;
+  }).join('') + (groups.length > _lnchShown.length ? `<div class="lnch-empty">และอีก ${groups.length - _lnchShown.length} เรื่อง</div>` : '');
+}
+function lnchTaskFilter(k) { shmFilterSet(k); lnchRenderTasks(); }
+async function lnchLoadTasks() {
+  const rows = document.getElementById('lnchTaskRows'), tabs = document.getElementById('lnchTaskTabs'), all = document.getElementById('lnchTaskAll');
+  if (!rows) return;
+  tabs.style.display = 'none'; all.style.display = 'none';
   // a role with no supply module has no task list: the Daily Brief (or, for the branch owner, the shop's own summary) stands in
   if (!tabAllowed('supplyhome')) {
     const alt = [['home', 'สรุปประจำวันและสิ่งที่ต้องดูวันนี้'], ['franchise', 'สรุปผลการดำเนินงานของร้านตนเอง']].find(x => tabAllowed(x[0]));
@@ -149,30 +183,14 @@ async function lnchLoadTasks() {
   try { todo = await api(`${API}/api/bom-center/todo`); } catch (e) { todo = null; }
   if (activeTab !== 'launcher') return;                       // the person already moved on
   if (!todo || !Array.isArray(todo.items)) { rows.innerHTML = '<div class="lnch-empty">โหลดรายการงานไม่ได้ ลองเปิดหน้าใหม่อีกครั้ง</div>'; return; }
-  const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && _shmMine(i))
-    .sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
-  // the same duty for several branches is ONE row naming how many (as the Daily Brief does)
-  const groups = [];
-  mine.forEach(i => {
-    const k = String(i.key || '').split(':')[0] + '|' + (i.title || '');
-    const g = groups.find(x => x.k === k);
-    if (g) { if (i.branch && !g.branches.includes(i.branch)) g.branches.push(i.branch); g.urgent = g.urgent || !!i.urgent; }
-    else groups.push({ k, first: i, branches: i.branch ? [i.branch] : [], urgent: !!i.urgent });
-  });
-  _lnchTodo = groups;
+  const mine = todo.items.filter(_shmMine);
+  _lnchGroups = { todo: [], review: [], done: [] };
+  _LNCH_TABS.forEach(([k]) => { _lnchGroups[k] = _lnchGroup(mine.filter(i => shmState(i) === k)); });
   all.style.display = ''; all.textContent = 'ดูทั้งหมด';
-  if (!groups.length) { rows.innerHTML = '<div class="lnch-empty">ไม่มีงานค้างวันนี้</div>'; return; }
-  cnt.style.display = ''; cnt.textContent = `${groups.length} งาน`;
-  rows.innerHTML = groups.slice(0, 5).map((g, n) => {
-    const it = g.first, go = it.go && it.go.tab && tabAllowed(it.go.tab) ? it.go : null;
-    const who = g.branches.length > 1 ? ` · ${g.branches.length} สาขา` : (g.branches.length ? ` (${g.branches[0]})` : '');
-    return `<div class="lnch-row"><span class="lnch-dot${g.urgent ? ' is-urgent' : ''}" aria-hidden="true"></span>`
-      + `<span class="lnch-row-title">${esc(it.title)}${esc(who)}</span><span class="lnch-row-dept">${esc(it.owner_th || '')}</span>`
-      + (go ? `<a href="#" class="lnch-go" onclick="lnchTaskGo(${n});return false">ไปที่งาน</a>` : '') + `</div>`;
-  }).join('');
+  lnchRenderTasks();
 }
-function lnchTaskGo(n) { const g = _lnchTodo[n]; if (g && g.first.go) { _deptFocus = null; _shmOpen(g.first.go); } }
-function lnchTasksAll() { _deptFocus = null; supplyGo({ tab: 'supplyhome' }); }
+function lnchTaskGo(n) { const g = _lnchShown[n]; if (g && g.first.go) { _deptFocus = null; _shmOpen(g.first.go); } }
+function lnchTasksAll() { _deptFocus = null; shmFilterSet(_lnchFilter()); supplyGo({ tab: 'supplyhome' }); }
 
 // ── หน้ารายงานทั้งหมด ────────────────────────────────────────────────────────────────────────────────────────
 function alpGo(tab, pane) { _deptFocus = null; if (pane) supplyGo({ tab, pane }); else switchTab(tab); }
