@@ -33,7 +33,7 @@ ANALYST = {"bom.center", "bom.release"}
 
 def _fill(wb, rows):
     """The template with its sample rows replaced by `rows`, as bytes ready for import_flat."""
-    ws = wb["สูตร"]
+    ws = wb["สูตรตามระดับราคา"]
     ws.delete_rows(2, ws.max_row)
     for r in rows:
         ws.append(r)
@@ -47,16 +47,16 @@ def test_the_template_holds_many_menus_and_imports_back(con):
     c = con
     rid = R.get_or_create_draft(c, "2026-11 draft", "2026-11", "2026-07", "innovation")
     wb = R.template_flat(c, rid)
-    assert wb.sheetnames == ["สูตร", "รหัส POS", "รหัสวัตถุดิบ", "วิธีใช้"]
-    # only “สูตร” opens with “รหัส POS” in A1: the other sheets are for reading
+    assert wb.sheetnames == ["สูตรตามระดับราคา", "รหัส POS", "รหัสวัตถุดิบ", "วิธีใช้"]
+    # only “สูตรตามระดับราคา” opens with “รหัส POS” in A1: the other sheets are for reading
     assert [ws.title for ws in wb.worksheets if str(ws["A1"].value).strip() == R.FLAT_HEADERS[0]
-            and [x.value for x in ws[1]][:len(R.FLAT_HEADERS)] == R.FLAT_HEADERS] == ["สูตร"]
+            and [x.value for x in ws[1]][:len(R.FLAT_HEADERS)] == R.FLAT_HEADERS] == ["สูตรตามระดับราคา"]
     pos = {r[0].value: r for r in list(wb["รหัส POS"].iter_rows())[1:]}
     assert {"OTHBFSSM00020", "OTHBFGNT00010", "OTHBFSUS00033"} <= set(pos)
     assert [x.value for x in wb["รหัส POS"][1]] == ["รหัสเมนู POS", "ชื่อเมนู", "Tier", "มีสูตรในร่างแล้ว"]
     assert [x.value for x in wb["รหัสวัตถุดิบ"][1]] == ["รหัสวัตถุดิบ", "ชื่อวัตถุดิบ", "หน่วยฐาน", "ชนิด"]
     assert "13-01-009" in {r[0].value for r in list(wb["รหัสวัตถุดิบ"].iter_rows())[1:]}
-    samples = [r for r in wb["สูตร"].iter_rows(min_row=2, values_only=True)]
+    samples = [r for r in wb["สูตรตามระดับราคา"].iter_rows(min_row=2, values_only=True)]
     assert len(samples) == 3 and all("(ตัวอย่าง ลบก่อนนำเข้า)" in r[1] for r in samples)
     assert len({r[0] for r in samples}) == 2                                    # two menus, three lines
     # QA L4d: the sample rows left in by mistake are skipped (no recipe, no error)
@@ -230,7 +230,7 @@ def _http_flow(label):
     r = kitchen.get("/api/bom-center/recipes/template.xlsx")
     assert r.status_code == 200 and "spreadsheetml" in r.headers["content-type"]
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert wb.sheetnames == ["สูตร", "รหัส POS", "รหัสวัตถุดิบ", "วิธีใช้"]
+    assert wb.sheetnames == ["สูตรตามระดับราคา", "รหัส POS", "รหัสวัตถุดิบ", "วิธีใช้"]
     # the kitchen opens a fresh draft (no source release) and cannot send it back, release it or run checks
     body = {"effective_month": "2099-01", "price_month": "2026-07", "label": label}
     assert kitchen.post("/api/bom-center/release-act/new-draft", json=body).headers.get("X-Denied") == "token"

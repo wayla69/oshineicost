@@ -48,20 +48,20 @@ const _OHB_HELP = {
     warehouse: ['ระบุยอดส่งจริงของแต่ละรายการภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · กดที่ชื่อสาขาเพื่อเปิดรายการ',
       'ยอดที่ต่างจากที่สาขายืนยันต้องเลือกเหตุผลของรายการนั้น · เลขที่ PO ไม่บังคับ แต่ควรกรอกไว้ใช้ติดตาม',
       'ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15 สองวันก่อนวันส่ง'],
-    salessupport: ['ใบสั่งซื้อที่คลังจัดส่งแล้ว: ดาวน์โหลด Excel เพื่อคีย์เข้าระบบบัญชี แล้วติ๊กใบที่คีย์แล้วและกด “คีย์บัญชีแล้ว”',
-      '“สรุปรวมตามวันส่ง” และไฟล์ Excel ใช้สถานะที่เลือกด้านบน · ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15',
+    salessupport: ['ใบสั่งซื้อที่คลังจัดส่งแล้ว: ดาวน์โหลดสรุปรวมตามวันส่ง (Excel) เพื่อคีย์เข้าระบบบัญชี แล้วติ๊กใบที่คีย์แล้วและกด “คีย์บัญชีแล้ว”',
+      '“สรุปรวมตามวันส่ง” และไฟล์สรุปรวมตามวันส่ง (Excel) ใช้สถานะที่เลือกด้านบน · ป้าย “ส่งล่าช้า (มีค่าปรับ)” คือใบที่สาขาส่งหลัง 13:15',
       'มูลค่าของใบที่รอคลังคือ “มูลค่าที่สั่ง” เมื่อคลังจัดส่งแล้วเป็น “มูลค่าที่จัดส่ง”'],
     _: ['คลังระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง” · ยอดที่ต่างจากที่สาขายืนยันต้องมีเหตุผล',
-      'ประสานงานขายดาวน์โหลด Excel ของใบที่คลังจัดส่งแล้ว เพื่อคีย์เข้าระบบบัญชี · มูลค่าที่สั่ง = ยอดที่สาขายืนยัน, มูลค่าที่จัดส่ง = ยอดที่คลังส่งจริง'] },
+      'ประสานงานขายดาวน์โหลดสรุปรวมตามวันส่ง (Excel) ของใบที่คลังจัดส่งแล้ว เพื่อคีย์เข้าระบบบัญชี · มูลค่าที่สั่ง = ยอดที่สาขายืนยัน, มูลค่าที่จัดส่ง = ยอดที่คลังส่งจริง'] },
   claims: {
     _: ['ตรวจรูปที่สาขาส่งทางไลน์ แล้วอนุมัติหรือไม่อนุมัติ · การไม่อนุมัติต้องระบุเหตุผลให้สาขา',
       'แจ้งขณะรับสินค้า: อนุมัติ = รับเข้าตามจริงอยู่แล้ว, ไม่อนุมัติ = นับส่วนที่เคลมเป็นรับเข้า',
       'แจ้งภายหลัง: อนุมัติ = หักออกจากรับเข้า, ไม่อนุมัติ = นับเป็นรับเข้า'] },
   issues: {
     operation: ['อ่านอย่างเดียว: ดูว่าแต่ละสาขายืนยันใบตัดเบิกตรงวัน ล่าช้า ยังไม่ยืนยัน หรือไม่มีใบ',
-      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · Excel รวมเฉพาะใบที่ยืนยันแล้ว'],
+      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · ไฟล์ใบตัดเบิกสาขา (Excel) รวมเฉพาะใบที่ยืนยันแล้ว'],
     _: ['ใบที่ยืนยันแล้วแก้ไขไม่ได้ · ประสานงานขายเปิดแก้ไขพร้อมเหตุผล แล้วสาขายืนยันใหม่',
-      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · Excel รวมเฉพาะใบที่ยืนยันแล้ว', _OHB_ACC_GUIDE] },
+      'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · ไฟล์ใบตัดเบิกสาขา (Excel) รวมเฉพาะใบที่ยืนยันแล้ว', _OHB_ACC_GUIDE] },
   issuevar: {
     _: ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
       'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'] },
@@ -82,7 +82,7 @@ const _OHB_HELP = {
       'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
       'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
   central: {
-    _: ['ขั้นที่ 2 นำเข้ารายงานของไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
+    _: ['ขั้นที่ 2 นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
       'ขั้นที่ 3 จับคู่รหัสเดิมในสูตรกับรหัสของไดกิโตะ กรุ๊ป · มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน',
       'ขั้นที่ 4 นับก่อนเปิดร้านวันที่ 1 · นำเข้าต้นงวดก่อนปลายงวด',
       'ขั้นที่ 5 สาขายืนยันรับสินค้าครบและระบุเหตุผลผลต่าง (หรือประสานงานขายและฝ่ายวิเคราะห์ทำแทน)',
@@ -196,9 +196,9 @@ async function ohbLoadCentral() {
     // step 2 = the list and the month's notes together
     set(2, st.central_report && st.deliveries ? (st.central_report.status === 'done' && st.deliveries.status === 'done' ? 'done' : 'todo') : 'todo');
     document.getElementById('ohbCenStat').innerHTML = (d.count
-      ? bmcStats([['บัญชีสินค้าส่วนกลาง (รายการ)', d.count], ['สาขาซื้อเอง (รายการ)', d.local],
+      ? bmcStats([['บัญชีสินค้า (รายการ)', d.count], ['สาขาซื้อเอง (รายการ)', d.local],
           ['ยังไม่ระบุอัตราแปลงหน่วย', d.needs_factor || 0, d.needs_factor ? 'var(--amber-ink)' : null]])
-      : '<div class="text-sm" style="color:var(--amber-ink)">ยังไม่มีบัญชีสินค้าส่วนกลาง (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)</div>')
+      : '<div class="text-sm" style="color:var(--amber-ink)">ยังไม่มีบัญชีสินค้า (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)</div>')
       + (st.deliveries ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับสินค้าประจำเดือน${fmtMonthTh(month)}</div>${_ohbBranchLines(st.deliveries)}` : '');
     set(3, st.code_links && st.code_links.status);
     ohbLoadLinks();
@@ -265,7 +265,7 @@ function ohbRenderLinks(keepFocus) {
   const box = document.getElementById('ohbLinks'), d = _ohbLinkData;
   if (!box || !d) return;
   if (!d.links.length && !d.suggestions.length && !d.orphans.length) {
-    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้าส่วนกลาง · นำเข้ารายงานในขั้นที่ 2 ก่อน</div>';
+    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้า · นำเข้ารายงานไดกิโตะ กรุ๊ปในขั้นที่ 2 ก่อน</div>';
     return;
   }
   const n = { sugg: d.suggestions.length, kept: d.links.length, orphan: d.orphans.length };
@@ -285,7 +285,7 @@ function ohbRenderLinks(keepFocus) {
       <td data-l="เลือกสินค้าที่ตรงกัน">${s.options.map(o => `<div class="wt-opt">
         <span class="wt-code">${esc(o.new_code)}</span><span class="wt-opt-name">${esc(o.new_name || '')}</span>${_ohbScoreTag(o.score)}
         <button type="button" class="wt-btn is-primary" onclick="ohbLinkSave([{old_code:${_bmcQ(s.old_code)},new_code:${_bmcQ(o.new_code)}}])">จับคู่</button></div>`).join('')}</td></tr>`).join('')}</tbody></table>`;
-    note = 'รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้าส่วนกลาง เลือกสินค้าที่เป็นของชนิดเดียวกันแล้วกด “จับคู่” · ถ้าไม่ตรงกันเลย ไม่ต้องจับคู่';
+    note = 'รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้า เลือกสินค้าที่เป็นของชนิดเดียวกันแล้วกด “จับคู่” · ถ้าไม่ตรงกันเลย ไม่ต้องจับคู่';
   } else if (v === 'kept') {
     const rows = d.links.filter(l => hit(l.old_code, l.old_name, l.new_code, l.new_name));
     shown = rows.length;
@@ -302,7 +302,7 @@ function ohbRenderLinks(keepFocus) {
     shown = rows.length;
     body = `<table class="wt"><thead><tr><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้า</th></tr></thead><tbody>${rows.map(o => `<tr>
       <td class="wt-code" data-l="รหัสไดกิโตะ กรุ๊ป">${esc(o.code)}</td><td data-l="ชื่อสินค้า">${esc(o.name || '')}</td></tr>`).join('')}</tbody></table>`;
-    note = 'สินค้าในบัญชีสินค้าส่วนกลางที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่';
+    note = 'สินค้าในบัญชีสินค้าที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่';
   }
   if (!shown) body = `<div class="wt-empty">${q ? 'ไม่พบรายการที่ตรงกับคำค้น' : v === 'kept' ? 'ยังไม่มีรหัสที่จับคู่' : 'ไม่มีรายการ'}</div>`;
   box.innerHTML = `<div class="wt-bar"><div class="wt-seg">${seg}</div>
@@ -350,7 +350,7 @@ async function ohbMonthPreview() {
   if (!_ohbMonthFile) return;
   const setLocal = document.getElementById('ohbSetLocal').checked;
   try {
-    _bmcStatus('ohbCenStatus', 'กำลังอ่านไฟล์…');
+    _bmcStatus('ohbCenStatus', 'กำลังอ่านไฟล์รายงานไดกิโตะ กรุ๊ป…');
     const pre = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=true&set_local=${setLocal}`, { method: 'POST', body: _ohbFd(_ohbMonthFile) });
     _ohbMonthPre = pre;
     const c = pre.catalogue;
@@ -359,7 +359,7 @@ async function ohbMonthPreview() {
     await bmcUcRender('ohbUcCentral', fresh, { mode: 'central', needAll: true, prefillNew: true });
     const look = c.rows.filter(r => r.status !== 'ok' || r.pack_change || r.is_new || (r.factor_how || '').startsWith('จากทะเบียน'));
     const monthWarn = pre.month && pre.month !== _ohbCloseMonth() ? ' ' + _bmcChip(`งวดในไฟล์ ${fmtMonthTh(pre.month)} ต่างจากงวดที่เลือก ${fmtMonthTh(_ohbCloseMonth())}`, 'var(--amber-ink)') : '';
-    document.getElementById('ohbCenReport').innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">บัญชีสินค้าส่วนกลาง${monthWarn}</div>
+    document.getElementById('ohbCenReport').innerHTML = `<div class="text-xs font-semibold" style="color:var(--text-primary)">รายงานไดกิโตะ กรุ๊ป · บัญชีสินค้า${monthWarn}</div>
       <div class="text-sm" style="color:var(--text-secondary)">${esc(pre.sheet)} (${fmtMonthTh(pre.month || '?')})</div>
       ${bmcStats([['รายการในไฟล์', c.items], ['รหัสใหม่', c.new, c.new ? 'var(--navy-ink)' : null], ['ขนาดบรรจุต่างจากทะเบียน', c.pack_change, c.pack_change ? 'var(--amber-ink)' : null],
         ['ใช้ขนาดบรรจุตามทะเบียน (ควรตรวจ)', c.from_master, c.from_master ? 'var(--amber-ink)' : null], ['ยังไม่ระบุอัตราแปลง', c.needs_factor, c.needs_factor ? 'var(--bad-ink)' : null],
@@ -367,11 +367,11 @@ async function ohbMonthPreview() {
       ${look.length ? `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt">
       <thead><tr><th>รหัส</th><th>ชื่อวัตถุดิบ</th><th>หน่วยนับ</th><th class="wt-num">ราคา</th><th>อัตราแปลงหน่วย</th><th>ที่มา</th><th>ตรวจ</th></tr></thead>
       <tbody>${look.map(_ohbCenRow).join('')}</tbody></table></div>
-      <div class="wt-note">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจ · อัตราแปลงผิด: ดาวน์โหลดบัญชีสินค้า แก้ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าใหม่</div>` : ''}`;
+      <div class="wt-note">แสดงเฉพาะ ${look.length} รายการที่ควรตรวจ · อัตราแปลงผิด: ดาวน์โหลดบัญชีสินค้า (Excel) แก้ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปใหม่</div>` : ''}`;
     const dl = pre.deliveries;
     if (!dl.branches.length) {              // a file without a month or quantities (the list's own export)
       document.getElementById('ohbDelReport').innerHTML = `<div class="text-xs mt-2" style="color:var(--text-muted)">${esc(dl.note || 'ไฟล์นี้ไม่มียอดจัดส่งรายสาขา จึงไม่สร้างใบรับสินค้า')}</div>
-        <button onclick="ohbMonthSave()" class="mt-2" style="border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">บันทึกบัญชีสินค้า</button>`;
+        <button onclick="ohbMonthSave()" class="mt-2" style="border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer;background:var(--accent);color:var(--on-accent)">นำเข้ารายงานไดกิโตะ กรุ๊ป</button>`;
       _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
       return;
     }
@@ -386,7 +386,7 @@ async function ohbMonthPreview() {
           b.skipped && b.skipped.length ? _ohbTag(b.skipped.length + ' รายการแปลงหน่วยไม่ได้ (ไม่บันทึก)', 'var(--amber-ink)') : ''].filter(Boolean).join(' ')}</td></tr>`; }).join('')}
       </tbody></table></div>
       <div class="flex flex-wrap items-center gap-3 mt-3">
-        <button type="button" class="wt-btn is-primary" onclick="ohbMonthSave()">บันทึกบัญชีสินค้าและใบรับสินค้าที่เลือก</button>
+        <button type="button" class="wt-btn is-primary" onclick="ohbMonthSave()">นำเข้ารายงานไดกิโตะ กรุ๊ป</button>
         <span class="text-sm" style="color:var(--text-muted)">ไม่เลือกสาขาใด = บันทึกเฉพาะบัญชีสินค้า</span></div>`;
     _bmcStatus('ohbCenStatus', 'ดูตัวอย่างด้านล่าง แล้วกดบันทึก');
   } catch (e) { _bmcStatus('ohbCenStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
@@ -403,17 +403,17 @@ async function ohbMonthSave() {
   const ids = [...document.querySelectorAll('#ohbDelReport input[data-bid]')].filter(x => x.checked).map(x => x.dataset.bid);
   const c = _ohbMonthPre.catalogue;
   const names = ids.map(id => (_ohbMonthPre.deliveries.branches.find(b => String(b.branch_id) === id) || {}).branch).filter(Boolean);
-  if (!await uiConfirm(`บันทึกบัญชีสินค้าส่วนกลาง ${c.items} รายการ (วัตถุดิบใหม่ ${c.new - cs.alias} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาซื้อเอง” · หน่วยสั่งในทะเบียนเปลี่ยนเป็นหน่วยขายของไดกิโตะ กรุ๊ป)`
+  if (!await uiConfirm(`นำเข้ารายงานไดกิโตะ กรุ๊ป: บัญชีสินค้า ${c.items} รายการ (วัตถุดิบใหม่ ${c.new - cs.alias} · รหัสอื่นอีก ${c.to_local} รายการเป็น “สาขาซื้อเอง” · หน่วยสั่งในทะเบียนเปลี่ยนเป็นหน่วยขายของไดกิโตะ กรุ๊ป)`
       + (cs.alias ? `\n${cs.alias} รหัสเป็นรหัสใหม่ของวัตถุดิบเดิม ${_bmcCanPrices() ? 'บันทึกเป็นรหัสในระบบอื่นทันที' : 'ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ และยังไม่นำเข้าในครั้งนี้'}` : '')
       + (ids.length ? `\nและใบรับสินค้าประจำเดือน${fmtMonthTh(_ohbMonthPre.month)} ของ ${names.join(', ')} (ใบเดิมของเดือนนี้ถูกแทนที่)` : '\nไม่บันทึกใบรับสินค้า'),
-      { title: 'ยืนยันการบันทึกบัญชีสินค้า', ok: 'บันทึก', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่บันทึก'); return; }
+      { title: 'ยืนยันการนำเข้ารายงานไดกิโตะ กรุ๊ป', ok: 'นำเข้ารายงาน', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCenStatus', 'ยกเลิกแล้ว ยังไม่บันทึก'); return; }
   try {
     const setLocal = document.getElementById('ohbSetLocal').checked;
     const fd = _ohbFd(_ohbMonthFile);
     fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', bmcUcSystem('ohbUcCentral'));
     const d = await _bmcJson(`${API}/api/bom-center/central/month-import?dry_run=false&set_local=${setLocal}${ids.length ? '&branch_ids=' + ids.join(',') : ''}`, { method: 'POST', body: fd });
     const dl = d.deliveries.branches.filter(b => ids.includes(String(b.branch_id)));
-    _bmcStatus('ohbCenStatus', `✓ บัญชีสินค้า ${d.catalogue.saved} รายการ (วัตถุดิบใหม่ ${d.catalogue.inserted}${d.catalogue.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.catalogue.aliased}` : ''}${d.catalogue.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.catalogue.requested}` : ''}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
+    _bmcStatus('ohbCenStatus', `✓ นำเข้ารายงานไดกิโตะ กรุ๊ปแล้ว · บัญชีสินค้า ${d.catalogue.saved} รายการ (วัตถุดิบใหม่ ${d.catalogue.inserted}${d.catalogue.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.catalogue.aliased}` : ''}${d.catalogue.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.catalogue.requested}` : ''}) · สาขาซื้อเอง ${d.catalogue.set_local} รายการ`
       + (dl.length ? ' · ใบรับ: ' + dl.map(b => `${b.branch || b.label} ${b.receipt_id ? b.lines + ' รายการ' : (b.error || 'ไม่มีรายการ')}`).join(' · ') : ''), 'var(--good-ink)');
     _ohbMonthFile = null; _ohbMonthPre = null;
     bmcUcReset('ohbUcCentral');
@@ -425,8 +425,8 @@ async function ohbMonthSave() {
 function _ohbCntQS() {
   return `branch_id=${document.getElementById('ohbCntBranch').value}&count_date=${document.getElementById('ohbCntDate').value}`;
 }
-function ohbCntTemplate() { bmcDownload(`${API}/api/bom-center/stock/count-template.xlsx?${_ohbCntQS()}`, 'แบบฟอร์มตรวจนับ.xlsx', 'ohbCntStatus'); }
-function ohbCentralXlsx() { bmcDownload(`${API}/api/bom-center/central.xlsx`, 'บัญชีสินค้าส่วนกลาง.xlsx', 'ohbCenStatus'); }
+function ohbCntTemplate() { bmcDownload(`${API}/api/bom-center/stock/count-template.xlsx?${_ohbCntQS()}`, 'แม่แบบ_ใบตรวจนับ.xlsx', 'ohbCntStatus'); }
+function ohbCentralXlsx() { bmcDownload(`${API}/api/bom-center/central.xlsx`, 'บัญชีสินค้า.xlsx', 'ohbCenStatus'); }
 async function ohbCntImport(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -449,11 +449,11 @@ async function ohbCntImport(input) {
     if (pre.incomplete) { _bmcStatus('ohbCntStatus', pre.incomplete_th, 'var(--bad-ink)'); return; }
     if (!pre.ok) { _bmcStatus('ohbCntStatus', 'แก้ไขไฟล์ก่อนนำเข้า', 'var(--bad-ink)'); return; }
     const name = document.getElementById('ohbCntBranch').selectedOptions[0]?.textContent || '';
-    if (!await uiConfirm(`ส่งผลตรวจนับ สาขา${name} วันที่ ${fmtDay(day)}\n${pre.kind_th ? 'ผลนี้เป็น' + pre.kind_th + ' · ' : ''}${pre.role_th || ''}\n${pre.counted_th || ''}`
+    if (!await uiConfirm(`นำเข้าใบตรวจนับ สาขา${name} วันที่ ${fmtDay(day)}\n${pre.kind_th ? 'ผลนี้เป็น' + pre.kind_th + ' · ' : ''}${pre.role_th || ''}\n${pre.counted_th || ''}`
         + '\nส่งแล้วแก้ไม่ได้ ต้องการนับใหม่ให้นำเข้าเป็นวันที่ใหม่',
-        { title: 'ยืนยันการส่งผลตรวจนับ', ok: 'ส่งผลตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
+        { title: 'ยืนยันการนำเข้าใบตรวจนับ', ok: 'นำเข้าใบตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
-    _bmcStatus('ohbCntStatus', `✓ ส่งผลตรวจนับวันที่ ${fmtDay(day)} แล้ว (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
+    _bmcStatus('ohbCntStatus', `✓ นำเข้าใบตรวจนับวันที่ ${fmtDay(day)} แล้ว (${d.kind === 'begin' ? 'ต้นงวดแรก' : 'ปลายงวด'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
     ohbLoadCentral();                       // the next missing date, the step statuses
   } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
@@ -756,7 +756,7 @@ async function ohbShowConsolidated() {
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function ohbDownloadConsolidated() {
-  bmcDownload(`${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}`, 'สรุปใบสั่งซื้อตามวันส่ง.xlsx', 'ohbQStatus');
+  bmcDownload(`${API}/api/bom-center/hub/consolidated.xlsx?${_ohbExportQS()}`, 'สรุปรวมตามวันส่ง.xlsx', 'ohbQStatus');
 }
 
 // ── compliance ───────────────────────────────────────────────────────────────
@@ -1202,7 +1202,7 @@ async function ohbLoadPerSales() {
     ohbRenderPerSales();
   } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-function ohbPsXlsx() { bmcDownload(`${API}/api/bom-center/per-sales.xlsx?${_ohbPsQS()}`, 'วัตถุดิบต่อยอดขาย 100000.xlsx', 'ohbPsStatus'); }
+function ohbPsXlsx() { bmcDownload(`${API}/api/bom-center/per-sales.xlsx?${_ohbPsQS()}`, 'ใช้วัตถุดิบต่อยอดขาย.xlsx', 'ohbPsStatus'); }
 
 // ── ใบตัดเบิกสาขา (PR-J4): the branches' daily slips as a log; Sales Support reopens one with a reason ───────
 // The list comes from the lateness log (issue-reports/log): per branch and day, how the slip was handled. A row
@@ -1306,7 +1306,7 @@ function ohbIsRenderSlip() {
   const field = 'border:1px solid var(--border-control);border-radius:6px;background:var(--bg-input);color:var(--text-primary)';
   document.getElementById('ohbIsDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ใบตัดเบิก ${esc(s.branch || '')} · วันที่ ${esc(fmtDay(s.date))} ${_bmcChip(s.status_th, ink)}${s.appends ? ' ' + _bmcChip(`เบิกเพิ่ม ${s.appends} ครั้ง`, 'var(--navy-ink)') : ''}</div>
-      <div>${conf ? `<a href="${API}/api/bom-center/issues/export/${s.slip_id}.xlsx" style="color:var(--accent);font-size:12px;margin-right:12px">ดาวน์โหลดใบนี้ (Excel)</a>` : ''}${_ohbBtn('ปิด', "document.getElementById('ohbIsDetail').style.display='none'")}</div></div>
+      <div>${conf ? `<a href="${API}/api/bom-center/issues/export/${s.slip_id}.xlsx" style="color:var(--accent);font-size:12px;margin-right:12px">ดาวน์โหลดใบตัดเบิกใบนี้ (Excel)</a>` : ''}${_ohbBtn('ปิด', "document.getElementById('ohbIsDetail').style.display='none'")}</div></div>
     <div class="text-xs mt-1" style="color:var(--text-secondary)">${conf ? `ยืนยันเมื่อ ${esc(_ohbIsDt(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}` : 'ยังไม่ยืนยัน'}${s.reopened_at ? ` · เปิดแก้ไขล่าสุดเมื่อ ${esc(_ohbIsDt(s.reopened_at))} โดย ${esc(whoTh(s.reopened_by))}` : ''}</div>
     <div id="ohbIsResult" class="text-xs mt-1"></div>
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
@@ -1346,11 +1346,11 @@ async function ohbIsReopen() {
 function _ohbIsDownload(url, name, statusId) { return bmcDownload(url, name, statusId || 'ohbIsStatus'); }
 function ohbIsXlsx() {
   const m = _ohbMonthVal(), b = document.getElementById('ohbIsBranch').value;
-  _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_slips_${m}.xlsx`);
+  _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `ใบตัดเบิกสาขา_${m}.xlsx`);
 }
 function ohbIsLogXlsx() {
   const m = _ohbMonthVal(), b = document.getElementById('ohbIsBranch').value;
-  _ohbIsDownload(`${API}/api/bom-center/issue-reports/log.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `bom_center_issue_log_${m}.xlsx`);
+  _ohbIsDownload(`${API}/api/bom-center/issue-reports/log.xlsx?month=${m}${b ? '&branch_id=' + b : ''}`, `บันทึกความล่าช้า_${m}.xlsx`);
 }
 
 // ── เคลมสินค้า (owner 2026-10-08, 2026-10-09): Sales Support decides; the photos arrive by LINE ───────────

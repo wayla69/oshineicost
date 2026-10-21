@@ -104,12 +104,35 @@ def _for_accounting(wb) -> None:
         _al.recode_workbook(wb, _al.current_map(con, "acc"))
 
 
+def _fname(*parts, ext: str = "xlsx") -> str:
+    """A download's name: the name the page shows for the thing, then what tells one file from the next (branch, month, date),
+    joined by "_". Thai is kept; what Windows refuses in a file name (and any space) becomes "_"."""
+    keep = [re.sub(r'[\\/:*?"<>|\s]+', "_", str(p)).strip("_") for p in parts if p not in (None, "")]
+    return "_".join(k for k in keep if k) + "." + ext
+
+
+def _bname(bid) -> str:
+    """The branch's name for a file name ('' when unknown)."""
+    if bid is None:
+        return ""
+    with get_db() as con:
+        r = con.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()
+    return (r[0] if r else "") or ""
+
+
 def _xlsx(wb, filename: str):
+    """`filename` is the Thai name people see. It goes out as filename* (UTF-8, what browsers use) with an ASCII filename
+    beside it for old clients: the ASCII part of the name, or `download.xlsx` when nothing of it is ASCII."""
+    from urllib.parse import quote
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
+    stem = filename.rsplit(".", 1)[0]
+    ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("_.-")
+    fallback = (ascii_stem if re.search(r"[A-Za-z]", ascii_stem) else "download") + ".xlsx"
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+                             headers={"Content-Disposition":
+                                      f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename)}"})
 
 
 def _sheet(ws, title: str, headers: list, note: str):
@@ -213,7 +236,7 @@ def bc_code_review_xlsx(all: bool = Query(True)):
             ws.append([r["code"], n["name"], n["unit"], n["dishes"], r["master_name"],
                        _CR_STATUS_TH.get(n["status"], n["status"]), sg.get("code") if bad else None,
                        sg.get("name") if bad else None, n.get("use_code"), n.get("note"), n.get("who")])
-    return _xlsx(wb, "bom_center_code_review.xlsx")
+    return _xlsx(wb, _fname("ตรวจรหัสสูตรเดิม"))
 
 
 # ── M1 ingredient master ─────────────────────────────────────────────────────
@@ -380,7 +403,7 @@ def bc_ingredients_template():
             r[12] = "สาขาซื้อเอง" if r[12] == "local" else "ไดกิโตะ กรุ๊ป"
             r[14] = zl.get(r[14], r[14] or "")
             ws.append(r)
-    return _xlsx(wb, f"BOM_CENTER_INGREDIENTS_{date.today().isoformat()}.xlsx")
+    return _xlsx(wb, _fname("ทะเบียนวัตถุดิบ", date.today().isoformat()))
 
 
 async def _read_master_file(file: UploadFile):
@@ -419,7 +442,7 @@ async def _read_master_file(file: UploadFile):
             head_at, hmap = i, m
             break
     if head_at < 0:
-        raise HTTPException(400, "ไม่พบหัวตาราง (ต้องมีคอลัมน์รหัส) ใช้แม่แบบของระบบ หรือแผ่นงาน DATAP")
+        raise HTTPException(400, "ไม่พบหัวตาราง (ต้องมีคอลัมน์รหัส) ใช้ไฟล์ทะเบียนวัตถุดิบที่ดาวน์โหลดจากหน้านี้ หรือแผ่นงาน DATAP")
     rows = []
     for row in grid[head_at + 1:]:
         if not any(str(c or "").strip() for c in row):
@@ -767,7 +790,7 @@ def bc_units_template(all: int = Query(0)):
         _sheet(ws2, _us.PORTION_SHEET, _us.PORTION_HEADERS, _us.PORTION_NOTE)
         for r in _us.portion_rows(con):
             ws2.append(r)
-    return _xlsx(wb, f"BOM_CENTER_UNITS_{date.today().isoformat()}.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", _us.SHEET))
 
 
 @router.post("/api/bom-center/units/import", dependencies=[Depends(require_write_token_unless_dry_run)])
@@ -862,16 +885,22 @@ _PRICE_ALIASES = {
 }
 
 
+_PRICE_FILE_NAMES = ("ราคารายเดือน", "ไฟล์ราคา")        # the two pages that hand this template out (analyst / Sales Support)
+
+
 @router.get("/api/bom-center/prices/template.xlsx")
-def bc_prices_template():
+def bc_prices_template(page: str = Query("ราคารายเดือน")):
+    """The purchase-lines template, named for the page it is downloaded from: the file, its main sheet and the link say the same."""
     from openpyxl import Workbook
+    if page not in _PRICE_FILE_NAMES:
+        page = _PRICE_FILE_NAMES[0]
     wb = Workbook()
-    _sheet(wb.active, "ยอดซื้อรายบรรทัด", ["รหัส", "ชื่อสินค้า", "จำนวน", "หน่วย", "มูลค่ารวม", "สาขา", "เดือน"],
+    _sheet(wb.active, page, ["รหัส", "ชื่อสินค้า", "จำนวน", "หน่วย", "มูลค่ารวม", "สาขา", "เดือน"],
            "1 แถว = 1 บรรทัดซื้อ/รับเข้า · มูลค่ารวมไม่รวม VAT · หน่วย: กิโลกรัม / กรัม / แพ็ค / ลิตร … (แปลงหน่วยตอนนำเข้า) · "
            "เดือน เช่น 2026-09 · หรือนำเข้า 'รายงานจ่ายสินค้าภายใน' ของบัญชีได้โดยตรง")
     wb.active.append(["02-01-001", "ปลาแซลมอนเทร้านอร์เวย์ (ตัวอย่าง ลบแถวนี้ก่อนนำเข้า)", 785.46, "กิโลกรัม", 294332.5,
                       "ขอนแก่น", "2026-09"])
-    return _xlsx(wb, "BOM_CENTER_PURCHASE_LINES_TEMPLATE.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", page))
 
 
 async def _price_lines_from_file(file: UploadFile, month: Optional[str]):
@@ -1239,8 +1268,7 @@ def bc_recipes_export(release_id: int = Query(...)):
         if not rel:
             raise HTTPException(404, "ไม่พบเวอร์ชัน")
         wb = _r.export_flat(con, release_id)
-    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", rel["label"])
-    return _xlsx(wb, f"BOM_RECIPES_{safe}.xlsx")
+    return _xlsx(wb, _fname("สูตรตามระดับราคา", re.sub(r"\s*\((?:draft|ร่าง)\)\s*$", "", rel["label"] or "")))
 
 
 # declared before /recipes/{sku_code}: "template.xlsx" would otherwise be read as a SKU code
@@ -1250,7 +1278,7 @@ def bc_recipes_template(release_id: Optional[int] = Query(None)):
     with get_db() as con:
         _ensure(con)
         wb = _r.template_flat(con, release_id)
-    return _xlsx(wb, "BOM_RECIPES_TEMPLATE.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", _r.TEMPLATE_SHEET))
 
 
 @router.get("/api/bom-center/buffet-skus")
@@ -1900,7 +1928,7 @@ def bc_order_calendar_template():
     wb = Workbook()
     ws = wb.active
     ct = f"{_fc.cutoff_time():%H:%M}"
-    _sheet(ws, "วันส่งของสาขา", _CAL_HEADERS,
+    _sheet(ws, "รอบส่งของสาขา", _CAL_HEADERS,
            f"ตั้งวันส่งของแต่ละรอบรายสาขา เลือกหรือพิมพ์ อาทิตย์ จันทร์ อังคาร พุธ พฤหัส ศุกร์ เสาร์ · เว้นว่างหมายถึงไม่เปลี่ยน · "
            f"ไม่ต้องกรอกเวลาตัดรอบ (คำนวณจากวันส่ง): สาขาต้องส่งใบสั่งซื้อก่อน {ct} สองวันก่อนวันส่ง "
            f"(รอบส่งวันอังคาร ตัดรอบวันเสาร์ {ct}) · ห้ามแก้ชื่อสาขา")
@@ -1921,7 +1949,7 @@ def bc_order_calendar_template():
         ref.append([_fc.WD_TH[wd], _fc.WD_TH[_fc.cutoff_weekday(wd)]])
     ref.column_dimensions["A"].width = 14
     ref.column_dimensions["B"].width = 26
-    return _xlsx(wb, "ORDER_CALENDAR_TEMPLATE.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", "รอบส่งของสาขา"))
 
 
 def _branch_key(name) -> str:
@@ -1981,7 +2009,7 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
     from .ingredients import _read_upload_table
     rows, hmap, sheet = await _read_upload_table(file, _CAL_ALIASES, optional=_CAL_ROUNDS)
     if "branch" not in hmap or not any(k in hmap for k in _CAL_ROUNDS):
-        raise HTTPException(400, "ไม่พบคอลัมน์ สาขา และวันส่ง · ใช้แม่แบบที่ดาวน์โหลดจากหน้านี้")
+        raise HTTPException(400, "ไม่พบคอลัมน์ สาขา และวันส่ง · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบรอบส่งของสาขา (Excel)”")
     who = _who(request)
     with get_db() as con:
         _ensure(con)
@@ -2101,7 +2129,7 @@ def bc_prep_template():
            "หนึ่งแถวต่อวัตถุดิบ 1 บรรทัด · “ปริมาณที่ได้ต่อ 1 สูตร” และ “หน่วยที่ได้” = ปริมาณที่ได้ต่อ 1 สูตร · นำเข้าแล้วสูตรของรหัสนั้นถูกแทนที่ทั้งชุด")
     for r in rows:
         ws.append(r)
-    return _xlsx(wb, "bom_center_sub_recipes.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", "สูตรกึ่งสำเร็จ"))
 
 
 @router.get("/api/bom-center/prep/{code}")
@@ -2709,10 +2737,10 @@ def bc_issues_export(request: Request, month: Optional[str] = Query(None), branc
     note = (f"ใบตัดเบิกที่ยืนยันแล้ว {who} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
             "ไม่รวมใบที่ยังเป็นร่างหรือที่เปิดแก้ไขอยู่ · “ล่าช้า” = ใบที่ยืนยันหลังวันที่ของใบ")
     wb = Workbook()
-    _slip_lines_sheet(wb.active, "ใบตัดเบิกที่ยืนยัน", rows, note)
+    _slip_lines_sheet(wb.active, "ใบตัดเบิกสาขา", rows, note)
     _slip_summary_sheet(wb.create_sheet(), "สรุปต่อสาขา", rows, note)
     _for_accounting(wb)
-    return _xlsx(wb, f"bom_center_issue_slips_{'b%d_' % bid if bid is not None else ''}{month}.xlsx")
+    return _xlsx(wb, _fname("ใบตัดเบิกสาขา", _bname(bid), month))
 
 
 @router.get("/api/bom-center/issues/export/{slip_id}.xlsx")
@@ -2733,7 +2761,7 @@ def bc_issue_export_one(slip_id: int, request: Request):
                       f"ใบตัดเบิก สาขา{rows[0]['branch'] if rows else ''} วันที่ {head['slip_date']} เลขที่ใบ {slip_id} · "
                       f"ยืนยันโดย {head['confirmed_by'] or '-'}")
     _for_accounting(wb)
-    return _xlsx(wb, f"bom_center_issue_slip_{slip_id}_{head['slip_date']}.xlsx")
+    return _xlsx(wb, _fname("ใบตัดเบิก", rows[0]["branch"] if rows else "", head["slip_date"]))
 
 
 @router.get("/api/bom-center/issues/{slip_id}")
@@ -2972,7 +3000,7 @@ def bc_issue_summary_xlsx(request: Request, end_count_id: int = Query(...), bran
     _recon_sheet(wb.create_sheet(), "กระทบยอด", recon)
     _issue_sheet(wb.create_sheet(), "สรุปเคลื่อนไหว", s)
     _for_accounting(wb)
-    return _xlsx(wb, f"bom_center_issue_summary_b{bid}_{s['period']['month']}.xlsx")
+    return _xlsx(wb, _fname("ใบสรุปตัดเบิก", s["branch"]["name"], s["period"]["month"]))
 
 
 @router.get("/api/bom-center/issue-summary-all.xlsx")
@@ -2998,7 +3026,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
     wb = Workbook()
     used = set()
     ws = wb.active
-    _sheet(ws, _sheet_title("สรุปทุกสาขา", used), ISSUE_ALL_HEADERS,
+    _sheet(ws, _sheet_title("ใบสรุปตัดเบิกทุกสาขา", used), ISSUE_ALL_HEADERS,
            f"สรุปใบสรุปตัดเบิกวัตถุดิบทุกสาขา เดือน {month} · แต่ละสาขามีแผ่นงานรายการของตัวเอง · "
            "ตัดเบิก = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่งวดสิ้นสุด")
     sheets = []
@@ -3027,7 +3055,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
         _issue_sheet(wb.create_sheet(), _sheet_title(name, used), s)
         _recon_sheet(wb.create_sheet(), _sheet_title(f"กระทบยอด {name}", used), recons[s["period"]["end_count_id"]])
     _for_accounting(wb)
-    return _xlsx(wb, f"bom_center_issue_summary_all_{month}.xlsx")
+    return _xlsx(wb, _fname("ใบสรุปตัดเบิก", "ทุกสาขา", month))
 
 
 @router.post("/api/bom-center/issue-summary/posted", dependencies=[Depends(require_write_token)])
@@ -3076,7 +3104,7 @@ def bc_ir_reconcile_xlsx(request: Request, end_count_id: int = Query(...), branc
         r = _recon_or_404(con, bid, end_count_id)
     wb = Workbook()
     _recon_sheet(wb.active, "กระทบยอด", r)
-    return _xlsx(wb, f"bom_center_issue_reconcile_b{bid}_{r['period']['month']}.xlsx")
+    return _xlsx(wb, _fname("กระทบยอด", _bname(bid), r["period"]["month"]))
 
 
 def _recon_sheet(ws, title: str, r: dict) -> None:
@@ -3145,7 +3173,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     t = d["totals"]
     wb = Workbook()
     ws = wb.active
-    _sheet(ws, "รายวัน", DAILY_HEADERS,
+    _sheet(ws, "ผลต่างตัดเบิกรายวัน", DAILY_HEADERS,
            f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
            f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นเบิกเกินต่อเนื่อง")
@@ -3180,7 +3208,7 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
         row[12].number_format = "#,##0.00"
     w2.column_dimensions["C"].width = 44
     w2.freeze_panes = "D3"
-    return _xlsx(wb, f"bom_center_issue_daily_b{bid}_{month}.xlsx")
+    return _xlsx(wb, _fname("ผลต่างตัดเบิกรายวัน", d["branch"]["name"], month))
 
 
 # ── PR-J4 · R3 the lateness log: how each branch handled its slips (issue_reports.log) ──
@@ -3261,7 +3289,7 @@ def bc_ir_log_xlsx(request: Request, date_from: Optional[str] = Query(None), dat
     w2.column_dimensions["A"].width = 28
     w2.freeze_panes = "B3"
     tag = month or f"{d0}_{d1}"
-    return _xlsx(wb, f"bom_center_issue_log_{'b%d_' % bid if bid is not None else ''}{tag}.xlsx")
+    return _xlsx(wb, _fname("บันทึกความล่าช้า", _bname(bid), tag))
 
 
 # ── Phase 2 · S8: the branch order (orders.py) ──────────────────────────────
@@ -3454,7 +3482,7 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
 
 
 # ── PR-V · วัตถุดิบที่ใช้ต่อยอดขาย ฿100,000 (per_sales.py): a second way to read the same usage ──
-PER_SALES_SHEET = "ต่อยอดขาย 100000"
+PER_SALES_SHEET = "ใช้วัตถุดิบต่อยอดขาย"
 PER_SALES_COMPARE = "เทียบสาขา"
 
 
@@ -3578,7 +3606,7 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
             c.number_format = "#,##0.00"
     w2.column_dimensions["B"].width = 40
     w2.freeze_panes = "D3"
-    return _xlsx(wb, f"bom_center_per_sales_{'b%d_' % bid if bid is not None else ''}{r['end']}.xlsx")
+    return _xlsx(wb, _fname(PER_SALES_SHEET, _bname(bid) or "ทุกสาขา", r["end"]))
 
 
 # ── PR-X · ตรวจสูตรและหน่วยด้วยยอดซื้อจริง (recipe_check.py): analyst / management only ──────────────
@@ -3637,7 +3665,7 @@ def bc_recipe_check_xlsx(request: Request, month: Optional[str] = Query(None)):
             c.number_format = "#,##0.00"
     ws.column_dimensions["B"].width = 42
     ws.freeze_panes = "D3"
-    return _xlsx(wb, f"bom_center_recipe_check_{r['month'] or 'none'}.xlsx")
+    return _xlsx(wb, _fname(_rc.SHEET, r["month"]))
 
 
 # ── เคลมสินค้า (owner 2026-10-08): the branch reports goods that arrived wrong, with a reason (photos go by LINE); Sales Support decides ──
@@ -3764,6 +3792,8 @@ def bc_claim_decide(body: ClaimDecision, request: Request):
 # ── Phase 2 · S9: the centre's side — Sales Support queue, Ops compliance, monthly (hub.py) ──
 _HUB_STATUS_TH = {"open": "รอยืนยันยอดส่งและคลังจัดส่งแล้ว", "submitted": "รอยืนยันยอดส่ง", "processed": "คลังจัดส่งแล้ว",
                   "received": "สาขารับแล้ว", "all": "ทุกสถานะ"}
+_HUB_STATUS_FILE = {"open": "รอดำเนินการ", "submitted": "รอยืนยันยอดส่ง", "processed": "คลังจัดส่งแล้ว",      # the short form, for a file name
+                    "received": "สาขารับแล้ว", "all": "ทุกสถานะ"}
 
 
 def _hub_status_or_400(status: Optional[str]) -> str:
@@ -3905,7 +3935,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     wb = Workbook()
     ws = wb.active
     br = c["branches"]
-    _sheet(ws, "รวมตามวันส่ง", ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
+    _sheet(ws, "สรุปรวมตามวันส่ง", ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] + br,
            f"สินค้าส่วนกลางสั่งจาก {c['supplier']} · ใบสั่งซื้อสถานะ “{_HUB_STATUS_TH[st]}”"
            + (f" วันตัดรอบ {date_from or '…'} ถึง {date_to or '…'}" if (date_from or date_to) else "")
            + " สรุปรวมตามวันส่ง (ใช้ยอดส่งจริงของคลัง ถ้ายังไม่มีใช้ยอดที่สาขายืนยัน)")
@@ -3919,7 +3949,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
     for r in per_branch:
         ws2.append(r)
     _for_accounting(wb)
-    return _xlsx(wb, f"bom_center_orders_{st}_{date_from or 'all'}_{date_to or 'all'}.xlsx")
+    return _xlsx(wb, _fname("สรุปรวมตามวันส่ง", _HUB_STATUS_FILE[st], date_from or "ทั้งหมด", date_to or "ทั้งหมด"))
 
 
 def _dates_or_week(date_from: Optional[str], date_to: Optional[str]) -> tuple:
@@ -3997,7 +4027,7 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
                    r["why"] or ""])
     w3.column_dimensions["A"].width = 28
     w3.column_dimensions["H"].width = 44
-    return _xlsx(wb, "bom_center_order_compliance.xlsx")
+    return _xlsx(wb, _fname("ตรวจสอบการสั่ง", d0, d1))
 
 
 @router.get("/api/bom-center/hub/monthly")
@@ -4090,7 +4120,7 @@ def bc_central_xlsx():
     with get_db() as con:
         _ensure(con)
         d = _ce.items(con)
-    return _xlsx(_central_workbook(d), "bom_center_central_list.xlsx")
+    return _xlsx(_central_workbook(d), _fname("บัญชีสินค้า", bkk_today().isoformat()))
 
 
 def _central_workbook(d: dict):
@@ -4098,7 +4128,7 @@ def _central_workbook(d: dict):
     wb = Workbook()
     heads = ["ลำดับ", "รหัสสินค้า", "รายละเอียด", "หน่วยนับ", "ราคาขาย", "หน่วยขาย", "1 หน่วยขาย = หน่วยฐาน",
              "หน่วยฐาน", "หน่วยสั่งในระบบ", "ที่มาของอัตราแปลง", "งวดราคา"]
-    _sheet(wb.active, "บัญชีสินค้าส่วนกลาง", heads,
+    _sheet(wb.active, "บัญชีสินค้า", heads,
            "บัญชีสินค้าที่สาขาสั่งจากไดกิโตะ กรุ๊ป · อัตราแปลงไม่ถูกต้อง: แก้คอลัมน์ “1 หน่วยขาย = หน่วยฐาน” แล้วนำเข้าอีกครั้ง"
            " · สินค้าที่ไม่อยู่ในบัญชีนี้ สาขาซื้อเอง")
     ws = wb.active
@@ -4225,8 +4255,8 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
     wb = Workbook()
     heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "กลุ่มมูลค่า", "ต้องนับ",
              "หมายเหตุ"]
-    _sheet(wb.active, "ตรวจนับ", heads,
-           f"แบบฟอร์มตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดร้านและก่อนรับสินค้าของวันนั้น)"
+    _sheet(wb.active, "ใบตรวจนับ", heads,
+           f"ใบตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดร้านและก่อนรับสินค้าของวันนั้น)"
            " · กรอกจำนวนตามหน่วยนับ (เปลี่ยนหน่วยได้ เช่น แพ็ค/กิโลกรัม) · ช่องที่เว้นว่างถือว่าไม่ได้ตรวจนับ")
     ws = wb.active
     for r in rows:
@@ -4234,8 +4264,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
                    _CLASS_SHORT.get(r["class"], r["class"]), "ต้องนับ" if r["required"] else "", None])
     ws.column_dimensions["C"].width = 44
     ws.freeze_panes = "A3"
-    safe = re.sub(r"[^\w-]", "_", f"{bid}_{count_date or 'date'}")
-    return _xlsx(wb, f"stock_count_{safe}.xlsx")
+    return _xlsx(wb, _fname("แม่แบบ", "ใบตรวจนับ", name, count_date))
 
 
 @router.post("/api/bom-center/stock/count-import", dependencies=[Depends(require_write_token_unless_dry_run)])

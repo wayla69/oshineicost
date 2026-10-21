@@ -19,6 +19,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from openpyxl import load_workbook
+from conftest import dl_name
 
 import auth
 from bom_center import benchmark as BM
@@ -619,7 +620,7 @@ def test_http_roles_pages_workbook_and_pinning(client, app_db, auth_on, monkeypa
             assert who.get("/api/bom-center/recipe-check").status_code == 403, who
             assert who.get("/api/bom-center/recipe-check.xlsx").status_code == 403
         r = an.get("/api/bom-center/recipe-check.xlsx?month=2026-09")
-        assert r.status_code == 200 and "bom_center_recipe_check_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r) == "ตรวจสูตรด้วยยอดซื้อ_2026-09.xlsx"
         wb = load_workbook(io.BytesIO(r.content))
         assert wb.sheetnames == ["ตรวจสูตรด้วยยอดซื้อ"] == [RC.SHEET]
         rows = list(wb[RC.SHEET].iter_rows(values_only=True))
@@ -645,10 +646,11 @@ def test_http_roles_pages_workbook_and_pinning(client, app_db, auth_on, monkeypa
         assert all(i["vs_benchmark_pct"] is None and i["bench_per_100k"] is None for i in mine_ps["branches"][0]["items"])
         assert "benchmark" in str(ss.get("/api/bom-center/per-sales?weeks=2").json().keys())
         x = load_workbook(io.BytesIO(mg.get("/api/bom-center/per-sales.xlsx").content))
-        names = {r_[0] for r_ in x["ต่อยอดขาย 100000"].iter_rows(min_row=3, values_only=True)}
+        from routers.bom_center import PER_SALES_SHEET
+        names = {r_[0] for r_ in x[PER_SALES_SHEET].iter_rows(min_row=3, values_only=True)}
         assert "ค่ากลางสาขาของบริษัท" in names and "ทั้งเครือ" in names
         xb = load_workbook(io.BytesIO(br.get("/api/bom-center/per-sales.xlsx").content))
-        assert {r_[0] for r_ in xb["ต่อยอดขาย 100000"].iter_rows(min_row=3, values_only=True)} == {"BranchA"}
+        assert {r_[0] for r_ in xb[PER_SALES_SHEET].iter_rows(min_row=3, values_only=True)} == {"BranchA"}
         # หน้างาน: nothing for a branch login
         assert "recipe_check_units" not in {i["key"] for i in br.get("/api/bom-center/todo").json()["items"]}
     finally:

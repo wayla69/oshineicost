@@ -822,7 +822,7 @@ def read_count_file(data: bytes) -> list:
     hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]
                and any(str(c or "").strip().startswith("จำนวน") for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) ใช้แบบฟอร์มตรวจนับจากหน้านี้")
+        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบใบตรวจนับ (Excel)”")
     head = [str(c or "").strip() for c in grid[hi]]
     ci = head.index("รหัส")
     cq = next(i for i, h in enumerate(head) if h.startswith("จำนวน"))
@@ -891,6 +891,6 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
         if not dry_run:
             raise ValueError(out["incomplete_th"])
     if out["ok"] and not dry_run:
-        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากแบบฟอร์มตรวจนับ")
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากไฟล์ใบตรวจนับ")
         out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
     return out

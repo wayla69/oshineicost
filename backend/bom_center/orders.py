@@ -334,7 +334,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
             if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (c,)).fetchone():
                 raise ValueError(f"ไม่พบรหัส {c} ในทะเบียน")
             if cmap and c not in cmap:
-                raise ValueError(f"{_item(con, c)} ไม่อยู่ในบัญชีสินค้าส่วนกลาง · สาขาซื้อเอง")
+                raise ValueError(f"{_item(con, c)} ไม่อยู่ในบัญชีสินค้า · สาขาซื้อเอง")
             con.execute("INSERT INTO bc_order_line(order_id, ingredient_code, suggested_units, confirmed_units,"
                         " order_unit, reason_code, note) VALUES(?,?,0,?,?,?,?)",
                         (oid, c, q, unit_of.get(c) or ln.get("order_unit") or "base", rs, ln.get("note")))

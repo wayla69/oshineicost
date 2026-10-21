@@ -560,8 +560,9 @@ TEMPLATE_SAMPLE = [
     ["ตัวอย่าง-002", f"เมนูตัวอย่าง B {_SAMPLE}", 629, 1, "ตัวอย่าง-01", f"วัตถุดิบตัวอย่าง 1 {_SAMPLE}", 1, "ชิ้น",
      2.5, "", None],
 ]
+TEMPLATE_SHEET = "สูตรตามระดับราคา"          # the main sheet of the template: the name the page, the link and the file carry
 TEMPLATE_HOWTO = [
-    "กรอกสูตรที่แผ่นงาน “สูตร” บรรทัดละ 1 วัตถุดิบ เมนูเดียวกันใช้รหัส POS เดียวกันทุกบรรทัด",
+    f"กรอกสูตรที่แผ่นงาน “{TEMPLATE_SHEET}” บรรทัดละ 1 วัตถุดิบ เมนูเดียวกันใช้รหัส POS เดียวกันทุกบรรทัด",
     "รหัส POS ต้องตรงกับแผ่นงาน “รหัส POS” และรหัสวัตถุดิบต้องตรงกับแผ่นงาน “รหัสวัตถุดิบ” (คัดลอกได้)",
     "หน่วย: กรัม / มิลลิลิตร / ชิ้น ตามหน่วยฐาน หรือกิโลกรัม ลิตร แพ็ค (แปลงเป็นหน่วยฐานตอนนำเข้า)",
     "สูญเสีย % เว้นว่าง = ใช้ค่าตามทะเบียนวัตถุดิบ · “ตั้งใจเป็น 0” ใส่ ใช่ เมื่อบรรทัดนั้นไม่มีต้นทุนโดยเจตนา",
@@ -594,12 +595,12 @@ def ingredient_rows(con) -> list:
 
 
 def template_flat(con, release_id: int = None):
-    """A blank workbook for the kitchen: sheet “สูตร” (the flat layout, two sample menus), the POS menus,
-    the ingredient codes and how to fill it. Only “สูตร” has A1 = “รหัส POS”, so import_flat reads it alone."""
+    """A blank workbook for the kitchen: sheet “สูตรตามระดับราคา” (the flat layout, two sample menus), the POS menus,
+    the ingredient codes and how to fill it. Only “สูตรตามระดับราคา” has A1 = “รหัส POS”, so import_flat reads it alone."""
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
-    ws.title = "สูตร"
+    ws.title = TEMPLATE_SHEET
     ws.append(FLAT_HEADERS)
     for row in TEMPLATE_SAMPLE:
         ws.append(list(row))
@@ -616,7 +617,7 @@ def template_flat(con, release_id: int = None):
         ws.append(list(row))
     _style_header(ws, (16, 40, 12, 18))
     ws = wb.create_sheet("วิธีใช้")
-    ws.append(["วิธีใช้แม่แบบสูตร"])
+    ws.append([f"วิธีใช้แม่แบบ{TEMPLATE_SHEET}"])
     for i, t in enumerate(TEMPLATE_HOWTO, start=1):
         ws.append([f"{i}. {t}"])
     _style_header(ws, (120,))

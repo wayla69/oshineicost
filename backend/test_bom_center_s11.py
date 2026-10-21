@@ -105,7 +105,7 @@ def test_order_pages_central_and_local(udon):
     assert crab["order_unit"] == "pack" and crab["qty_per_recv"] == 10000.0
     s = OR.plan(udon, 1, "salmon", date(2026, 10, 12), as_of=date(2026, 10, 5))     # Monday's salmon
     assert s["rows"] == [] and [r["code"] for r in s["local_rows"]] == ["02-01-001"]   # salmon: bought locally
-    with pytest.raises(ValueError, match="ไม่อยู่ในบัญชีสินค้าส่วนกลาง"):
+    with pytest.raises(ValueError, match="ไม่อยู่ในบัญชีสินค้า"):
         OR.save(udon, 1, "1", p["order_day"], p, [{"code": "02-01-001", "confirmed_units": 1,
                                                     "reason_code": "event"}], "udon")
 

@@ -19,6 +19,7 @@ from datetime import date
 
 import pytest
 from openpyxl import load_workbook
+from conftest import dl_name
 
 import auth
 from bom_center import hub as HUB
@@ -264,10 +265,10 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         br = _login("br_acc_test", "Temp@12345")
         # the month's workbook: confirmed lines only, the exact headers, the waste reason in words, a clean table
         r = acc.get("/api/bom-center/issues/export.xlsx?month=2026-09")
-        assert r.status_code == 200 and "bom_center_issue_slips_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r) == "ใบตัดเบิกสาขา_2026-09.xlsx"
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["ใบตัดเบิกที่ยืนยัน", "สรุปต่อสาขา"]
-        rows = list(wb["ใบตัดเบิกที่ยืนยัน"].iter_rows(values_only=True))
+        assert wb.sheetnames == ["ใบตัดเบิกสาขา", "สรุปต่อสาขา"]
+        rows = list(wb["ใบตัดเบิกสาขา"].iter_rows(values_only=True))
         assert list(rows[1]) == SLIP_EXPORT_HEADERS and len(rows) == 3                       # note, headers, ONE line (the draft is out)
         assert rows[2][:9] == ("2026-09-07", "BranchA", "T-ISS1", "ของทดสอบ ก", "กรัม", 5.5, 2, "หมดอายุ", 2.5)
         assert rows[2][9:12] == (13.75, 5.0, sid) and rows[2][12] and rows[2][13] in (None, "")
@@ -287,7 +288,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         assert _login("warehouse1").get("/api/bom-center/issues/export.xlsx?month=2026-09").status_code == 403
         # one slip
         r = ss.get(f"/api/bom-center/issues/export/{sid}.xlsx")
-        assert r.status_code == 200 and f"bom_center_issue_slip_{sid}_2026-09-07.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r).startswith("ใบตัดเบิก_") and dl_name(r).endswith("_2026-09-07.xlsx")
         one = load_workbook(io.BytesIO(r.content))
         assert one.sheetnames == ["ใบตัดเบิก"] and len(list(one.worksheets[0].iter_rows())) == 3
         r = ss.get(f"/api/bom-center/issues/export/{draft}.xlsx")
@@ -303,7 +304,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         assert [s["branch"] for s in br.get("/api/bom-center/issue-reports/log/monthly?month=2026-09").json()["summary"]] == ["BranchA"]
         assert acc.get("/api/bom-center/issue-reports/log/monthly?month=bad").status_code == 400
         r = ss.get("/api/bom-center/issue-reports/log.xlsx?month=2026-09&branch_id=1")
-        assert r.status_code == 200 and "bom_center_issue_log_b1_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r).startswith("บันทึกความล่าช้า_") and dl_name(r).endswith("_2026-09.xlsx")
         wb = load_workbook(io.BytesIO(r.content))
         assert wb.sheetnames == ["บันทึกความล่าช้า", "สรุปต่อสาขา"]
         lr = list(wb["บันทึกความล่าช้า"].iter_rows(values_only=True))
@@ -312,7 +313,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         sr = list(wb["สรุปต่อสาขา"].iter_rows(values_only=True))
         assert list(sr[1]) == LOG_SUMMARY_HEADERS and sr[2][:8] == ("BranchA", 2, 1, 0, 1, 0, 100.0, 50.0) and sr[3][0] == "รวม"
         r = ss.get("/api/bom-center/issue-reports/log.xlsx?date_from=2026-09-01&date_to=2026-09-10")
-        assert r.status_code == 200 and "bom_center_issue_log_2026-09-01_2026-09-10.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r) == "บันทึกความล่าช้า_2026-09-01_2026-09-10.xlsx"
         # compliance.xlsx carries the same summary as a second sheet
         r = op.get("/api/bom-center/hub/compliance.xlsx?date_from=2026-09-01&date_to=2026-09-10")
         assert r.status_code == 200

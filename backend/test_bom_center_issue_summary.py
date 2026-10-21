@@ -20,6 +20,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
+from conftest import dl_name
 
 import auth
 from bom_center import stock as ST
@@ -291,7 +292,7 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         r = mg.post("/api/bom-center/variance/confirm-receipts?branch_id=1", json={"end_count_id": e1}, headers=TOKEN)
         assert r.status_code == 200, r.text
         r = acc.get(f"/api/bom-center/issue-summary.xlsx?{q}")
-        assert r.status_code == 200 and "bom_center_issue_summary_b1_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r).startswith("ใบสรุปตัดเบิก_") and dl_name(r).endswith("_2026-09.xlsx")
         wb = load_workbook(io.BytesIO(r.content))
         assert wb.sheetnames == ["ใบตัดเบิกรายวัน", "กระทบยอด", "สรุปเคลื่อนไหว"]               # PR-J4: three sheets
         ws = wb["สรุปเคลื่อนไหว"]
@@ -306,11 +307,11 @@ def test_http_flow_download_post_lock_and_roles(client, app_db, auth_on):
         assert rows[-1][1] == "รวม" and rows[-1][9] == pytest.approx(22.5)
         # the all-branches workbook: a summary sheet, the daily slips, the confirmed period's two sheets; the other branch is only listed
         r = acc.get("/api/bom-center/issue-summary-all.xlsx?month=2026-09")
-        assert r.status_code == 200 and "bom_center_issue_summary_all_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r) == "ใบสรุปตัดเบิก_ทุกสาขา_2026-09.xlsx"
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["สรุปทุกสาขา", "ใบตัดเบิกรายวัน", "BranchA", "กระทบยอด BranchA"]
+        assert wb.sheetnames == ["ใบสรุปตัดเบิกทุกสาขา", "ใบตัดเบิกรายวัน", "BranchA", "กระทบยอด BranchA"]
         assert all(len(n) <= 31 for n in wb.sheetnames)
-        summ = list(wb["สรุปทุกสาขา"].iter_rows(values_only=True))
+        summ = list(wb["ใบสรุปตัดเบิกทุกสาขา"].iter_rows(values_only=True))
         assert list(summ[1]) == ["สาขา", "งวดเริ่ม", "งวดสิ้นสุด", "จำนวนรายการ", "มูลค่ารับเข้า", "มูลค่าเคลม/ปรับ",
                                  "มูลค่าตัดเบิก", "ไม่มีราคา", "สถานะบัญชี"]
         by = {r[0]: r for r in summ[2:] if r[0]}

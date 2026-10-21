@@ -124,7 +124,7 @@ async function bmcDownload(url, name, statusEl) {
       try { const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : ''; } catch (e) { /* not json */ }
       throw new Error(m || 'ดาวน์โหลดไม่สำเร็จ');
     }
-    let fname = name || 'bom_center.xlsx';
+    let fname = name || 'วัตถุดิบและใบสั่งซื้อ.xlsx';
     const cd = r.headers.get('content-disposition') || '';
     const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
     if (m) { try { fname = decodeURIComponent(m[1]); } catch (e) { /* keep the given name */ } }
@@ -442,7 +442,7 @@ function bmcRenderCodeReview() {
     .map(([k, l, n]) => `<button type="button" class="${_bmcCrView === k ? 'is-on' : ''}" onclick="bmcCrView('${k}')">${l}${n != null ? `<span class="wt-n">${n}</span>` : ''}</button>`).join('');
   iss.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ตรวจรหัสสูตรเดิม: รหัสเดียวกันแต่ชื่อไม่ตรง</div>
-      <a href="${API}/api/bom-center/code-review.xlsx?all=true" class="text-xs" style="color:var(--accent)">ดาวน์โหลด Excel (ทุกรหัส)</a></div>
+      <a href="${API}/api/bom-center/code-review.xlsx?all=true" class="text-xs" style="color:var(--accent)">ดาวน์โหลดตรวจรหัสสูตรเดิม ทุกรหัส (Excel)</a></div>
     ${bmcStats([['รหัสที่สูตรเดิมใช้', d.used], ['ชื่อตรงกับทะเบียน', c.ok, 'var(--good-ink)'], ['ชื่อไม่ตรง', c.conflict, c.conflict ? 'var(--bad-ink)' : null],
       ['ไม่อยู่ในทะเบียน', c.missing, c.missing ? 'var(--amber-ink)' : null], ['ตรวจแล้ว', done]])}
     <div class="wt-note mb-2">ชื่อไม่ตรง = รหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด · เลือก <b>วัตถุดิบเดียวกัน</b> หรือ <b>ใช้รหัสแนะนำ</b> · มีผลกับแผนสั่งเท่านั้น</div>
@@ -716,7 +716,7 @@ async function bmcImportIng(input) {
     if (choices) { fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', sys || 'acc'); }
     return _bmcJson(`${API}/api/bom-center/ingredients/import?dry_run=${dry}`, { method: 'POST', body: fd }); };
   try {
-    _bmcStatus('bmcIngStatus', 'กำลังอ่านไฟล์ Cost-RW…');
+    _bmcStatus('bmcIngStatus', 'กำลังอ่านไฟล์ทะเบียนวัตถุดิบ…');
     bmcUcReset('bmcUcIng');
     const pre = await send(true, null);
     document.getElementById('bmcIngReport').innerHTML = `<div class="card p-3 text-xs" style="color:var(--text-secondary)">
@@ -746,9 +746,9 @@ async function bmcImportIng(input) {
       choices = bmcUcChoices('bmcUcIng'); sys = bmcUcSystem('bmcUcIng');
     }
     const cs = choices ? bmcUcSummary('bmcUcIng') : { alias: 0, fresh: 0 };
-    if (!await uiConfirm(`นำเข้า ${file.name}: ใหม่ ${pre.inserted - cs.alias} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม` + (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส` : ''), { title: 'ยืนยันการนำเข้าทะเบียน', ok: 'นำเข้า', cancel: 'ยกเลิก' })) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
+    if (!await uiConfirm(`นำเข้าไฟล์ทะเบียนวัตถุดิบ ${file.name}: ใหม่ ${pre.inserted - cs.alias} · แก้ไข ${pre.updated} รายการ\nค่าในไฟล์จะเขียนทับค่าเดิม` + (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส` : ''), { title: 'ยืนยันการนำเข้าทะเบียนวัตถุดิบ', ok: 'นำเข้า', cancel: 'ยกเลิก' })) { _bmcStatus('bmcIngStatus', 'ยกเลิกแล้ว'); return; }
     const d = await send(false, choices, sys);
-    _bmcStatus('bmcIngStatus', `✓ นำเข้าแล้ว ใหม่ ${d.inserted} · แก้ไข ${d.updated}` + (d.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.aliased}` : '') + (d.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.requested}` : ''), 'var(--good-ink)');
+    _bmcStatus('bmcIngStatus', `✓ นำเข้าทะเบียนวัตถุดิบแล้ว ใหม่ ${d.inserted} · แก้ไข ${d.updated}` + (d.aliased ? ` · รหัสใหม่ของวัตถุดิบเดิม ${d.aliased}` : '') + (d.requested ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${d.requested}` : ''), 'var(--good-ink)');
     bmcLoadIng(true);
   } catch (e) {
     _bmcStatus('bmcIngStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 160), 'var(--bad-ink)');
@@ -856,14 +856,14 @@ async function bmcPriceCommit() {
       (open ? `\nรหัสที่ยังไม่เลือก ${open} รหัส ไม่ถูกนำเข้าในครั้งนี้` : '') +
       (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (ตรวจหน่วยฐานภายหลัง)` : '') +
       (pre.counts.flag ? `\nราคาเปลี่ยน ≥25% ${pre.counts.flag} รายการ · ตรวจในตารางก่อน` : '') +
-      (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : ''), { title: 'ยืนยันการนำเข้าราคา', ok: 'บันทึกราคา', cancel: 'ยกเลิก' })) {
+      (pre.issues.length ? `\n${pre.issues.length} บรรทัดใช้ไม่ได้และจะถูกข้าม` : ''), { title: 'ยืนยันการนำเข้าไฟล์ราคารายเดือน', ok: 'บันทึกราคา', cancel: 'ยกเลิก' })) {
     _bmcStatus('bmcPriceStatus', 'ยังไม่บันทึก'); return;
   }
   try {
     const d = await _bmcPriceSend(false, rules, choices);
     _bmcShowPrice(d, true);
     const dc = d.codes_decided || {};
-    _bmcStatus('bmcPriceStatus', `✓ บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : '')
+    _bmcStatus('bmcPriceStatus', `✓ นำเข้าไฟล์ราคารายเดือนแล้ว · บันทึก ${d.applied.written} · ยกมา ${d.applied.carried_forward} · คงราคาที่กำหนดเอง ${d.applied.kept_manual}` + (d.rules_applied ? ` · กฎหน่วย ${d.rules_applied}` : '')
       + ((dc.aliased || []).length ? ` · รหัสใหม่ของวัตถุดิบเดิม ${dc.aliased.length}` : '') + ((dc.requested || []).length ? ` · ส่งคำขอให้ฝ่ายวิเคราะห์ ${dc.requested.length}` : ''), 'var(--good-ink)');
     _bmcIng = [];
     _bmcPrices = []; _bmcIng = []; _bmcPricePre = null; _bmcChosenRules = [];
@@ -875,7 +875,7 @@ function _bmcPreviewHtml(p, applied) {
   const flagTh = { flag: 'เปลี่ยน ≥25%', warn: 'เปลี่ยน ≥10%', new: 'ใหม่', ok: 'ปกติ' };
   const top = p.rows.filter(r => r.flag !== 'ok').concat(p.rows.filter(r => r.flag === 'ok')).slice(0, 60);
   return `<div class="card p-4">
-    <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${applied ? '✓ บันทึกแล้ว' : 'ตัวอย่างก่อนบันทึก'}: ราคาซื้อจริงเดือน${fmtMonthTh(p.month)}</div>
+    <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${applied ? '✓ บันทึกแล้ว' : 'ตัวอย่างก่อนบันทึก'}: ไฟล์ราคารายเดือน · ราคาซื้อจริงเดือน${fmtMonthTh(p.month)}</div>
     <div class="text-xs mb-2" style="color:var(--text-secondary)">${esc(p.source?.format || '')} · ${p.lines} บรรทัด · คิดราคาได้ ${p.priced} วัตถุดิบ (มูลค่า ฿${_bmcNum(p.value_total, 0)}) ·
       เปลี่ยน ≥25% <b style="color:var(--bad-ink)">${p.counts.flag}</b> · ≥10% <b style="color:var(--amber-ink)">${p.counts.warn}</b> · ใหม่ ${p.counts.new} ·
       ยกราคาเดิมมา ${p.carry_forward} · ยังไม่เคยมีราคา ${p.never_priced}
@@ -936,7 +936,7 @@ async function bmcImportPrices(input) {
     if (rules && rules.length) fd.append('rules', JSON.stringify(rules));
     if (choices) { fd.append('code_choices', JSON.stringify(choices)); fd.append('alias_system', bmcUcSystem('bmcUcPrice')); }
     return _bmcJson(`${API}/api/bom-center/prices/import?dry_run=${dry}`, { method: 'POST', body: fd }); };
-  await _bmcRunPriceImport(send, `ไฟล์ ${file.name}`);
+  await _bmcRunPriceImport(send, `ไฟล์ราคารายเดือน ${file.name}`);
   input.value = '';
 }
 
@@ -1256,7 +1256,7 @@ async function bmcPrepApply() {
     bmcLoadPrep();
   } catch (e) { _bmcStatus('bmcPrepApplyStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
-function bmcPrepTemplate() { bmcDownload(`${API}/api/bom-center/prep/template.xlsx`, 'สูตรกึ่งสำเร็จ.xlsx', 'bmcPrepStatus'); }
+function bmcPrepTemplate() { bmcDownload(`${API}/api/bom-center/prep/template.xlsx`, 'แม่แบบ_สูตรกึ่งสำเร็จ.xlsx', 'bmcPrepStatus'); }
 async function bmcPrepImportFlat(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -1267,11 +1267,11 @@ async function bmcPrepImportFlat(input) {
     const pre = await send(true);
     if (pre.errors.length) { _bmcStatus('bmcPrepStatus', 'ไฟล์มีปัญหา: ' + pre.errors.slice(0, 3).join(' · '), 'var(--bad-ink)'); return; }
     const sk = pre.skipped || [];
-    if (!await uiConfirm(`นำเข้าแม่แบบ: สูตรของ ${pre.codes - sk.length} รหัสจะถูกแทนที่`
+    if (!await uiConfirm(`นำเข้าไฟล์สูตรกึ่งสำเร็จ: สูตรของ ${pre.codes - sk.length} รหัสจะถูกแทนที่`
       + (sk.length ? `\n${sk.length} รหัสเป็นสูตรแบ่งชิ้น จะข้าม (${sk.map(x => x.code).join(', ')})\n${sk[0].note}` : ''),
-      { title: 'ยืนยันการนำเข้าแม่แบบสูตรกึ่งสำเร็จ', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
+      { title: 'ยืนยันการนำเข้าสูตรกึ่งสำเร็จ', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
     const r = await send(false);
-    _bmcStatus('bmcPrepStatus', `✓ บันทึก ${r.saved} รหัส` + (sk.length ? ` · ข้ามสูตรแบ่งชิ้น ${sk.length} รหัส` : ''), 'var(--good-ink)');
+    _bmcStatus('bmcPrepStatus', `✓ นำเข้าสูตรกึ่งสำเร็จแล้ว · บันทึก ${r.saved} รหัส` + (sk.length ? ` · ข้ามสูตรแบ่งชิ้น ${sk.length} รหัส` : ''), 'var(--good-ink)');
     bmcLoadPrep();
   } catch (e) { _bmcStatus('bmcPrepStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
@@ -1524,9 +1524,9 @@ async function bmcPackDecide(ids, decision, name, text) {
   } catch (e) { bmcStatus('bmcPackStatus', false, String(e.message || e).slice(0, 220)); }
 }
 
-// ── the unit ladder as an Excel file ────────────────────────────────────────
+// ── หน่วยและการแปลง (the unit ladder) as an Excel file ────────────────────────────────────────
 let _bmcUnitsFile = null;
-function bmcUnitsTemplate(all) { bmcDownload(`${API}/api/bom-center/units/template.xlsx?all=${all ? 1 : 0}`, 'แม่แบบหน่วย.xlsx', 'bmcUnitsStatus'); }
+function bmcUnitsTemplate(all) { bmcDownload(`${API}/api/bom-center/units/template.xlsx?all=${all ? 1 : 0}`, 'แม่แบบ_หน่วยและการแปลง.xlsx', 'bmcUnitsStatus'); }
 async function bmcUnitsImportPick(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -1534,7 +1534,7 @@ async function bmcUnitsImportPick(input) {
   input.value = '';
   const box = document.getElementById('bmcUnitsImport');
   box.style.display = '';
-  box.innerHTML = '<span style="color:var(--text-muted)">กำลังอ่านไฟล์…</span>';
+  box.innerHTML = '<span style="color:var(--text-muted)">กำลังอ่านไฟล์หน่วยและการแปลง…</span>';
   try {
     const fd = new FormData(); fd.append('file', file, file.name);
     const p = await _bmcJson(`${API}/api/bom-center/units/import?dry_run=true`, { method: 'POST', body: fd });
@@ -1551,7 +1551,7 @@ async function bmcUnitsImportPick(input) {
         <td data-l="ชิ้นละ / ต้นทุน">${c.problems.length ? `<span style="color:var(--bad-ink)">${bmcLines(c.problems.map(esc))}</span>`
           : bmcLines([`${c.approx ? '≈ ' : ''}${_bmcNum(c.base_per_piece, 2)} ${esc(c.base_unit || '')}`, c.cost_per_piece != null ? `${c.approx ? '≈ ' : ''}฿${_bmcNum(c.cost_per_piece, 2)}` : '—'])}</td></tr>`).join('')}</tbody></table></div>` : '';
     const ok = !p.problems;
-    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ดูตัวอย่างก่อนบันทึก: ${esc(file.name)}</div>
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ดูตัวอย่างไฟล์หน่วยและการแปลงก่อนบันทึก: ${esc(file.name)}</div>
       ${bmcStats([['วัตถุดิบในไฟล์ (รหัส)', p.codes], ['ใช้ได้', p.codes_ok, 'var(--good-ink)'], ['สูตรแบ่งชิ้น', p.portions], ['ต้องแก้ไข', p.problems || 0, p.problems ? 'var(--bad-ink)' : null]])}
       <div class="text-sm" style="color:${ok ? 'var(--text-secondary)' : 'var(--bad-ink)'}">${ok ? 'บันทึกได้ บันไดหน่วยของรหัสที่อยู่ในไฟล์จะถูกแทนที่ทั้งรายการ' : 'มีรายการที่ต้องแก้ไข จึงยังไม่บันทึก · แก้ไฟล์แล้วนำเข้าใหม่'}</div>
       ${(p.warnings || []).map(x => `<div style="color:var(--amber-ink)">${esc(x)}</div>`).join('')}
@@ -1560,12 +1560,12 @@ async function bmcUnitsImportPick(input) {
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 async function bmcUnitsImportApply() {
-  if (!await uiConfirm('บันไดหน่วยของรหัสที่อยู่ในไฟล์จะถูกแทนที่ทั้งรายการ', { title: 'ยืนยันการนำเข้าบันไดหน่วย', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
+  if (!await uiConfirm('บันไดหน่วยของรหัสที่อยู่ในไฟล์จะถูกแทนที่ทั้งรายการ', { title: 'ยืนยันการนำเข้าหน่วยและการแปลง', ok: 'นำเข้า', cancel: 'ยกเลิก' })) return;
   try {
     const fd = new FormData(); fd.append('file', _bmcUnitsFile, _bmcUnitsFile.name);
     const r = await _bmcJson(`${API}/api/bom-center/units/import?dry_run=false`, { method: 'POST', body: fd });
     document.getElementById('bmcUnitsImport').style.display = 'none';
-    bmcStatus('bmcUnitsStatus', true, `บันทึกบันไดหน่วย ${r.codes} รหัส` + (r.portions ? ` และสูตรแบ่งชิ้น ${r.portions} รายการ` : ''));
+    bmcStatus('bmcUnitsStatus', true, `นำเข้าหน่วยและการแปลงแล้ว ${r.codes} รหัส` + (r.portions ? ` และสูตรแบ่งชิ้น ${r.portions} รายการ` : ''));
     await bmcLoadIng(true);
     bmcLoadLadder();
   } catch (e) { bmcStatus('bmcUnitsApplyStatus', false, String(e.message || e).slice(0, 220)); }
@@ -1962,12 +1962,12 @@ function bmcRenderRecBanner() {
   } else if (monthly && r.status === 'draft') {
     html = card('var(--accent)', '<b>ร่าง</b> · ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์' + _bmcSendBackLine(r));
   } else if (!hasDraft && _bmcCanRecipes()) {
-    html = card('var(--accent)', `ยังไม่มีร่างของเดือน${fmtMonthTh(sg.effective_month || '')} · ดาวน์โหลดแม่แบบ กรอกสูตรหลายเมนูแล้วนำเข้า หรือสร้างร่างก่อน`);
+    html = card('var(--accent)', `ยังไม่มีร่างของเดือน${fmtMonthTh(sg.effective_month || '')} · ดาวน์โหลดแม่แบบสูตรตามระดับราคา กรอกสูตรหลายเมนูแล้วนำเข้าไฟล์สูตรตามระดับราคา หรือสร้างร่างก่อน`);
   }
   box.innerHTML = html;
 }
 function bmcDownloadTemplate() {
-  bmcDownload(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), 'แม่แบบสูตร.xlsx', 'bmcRecStatus');
+  bmcDownload(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), 'แม่แบบ_สูตรตามระดับราคา.xlsx', 'bmcRecStatus');
 }
 async function bmcCreateDraft() {
   const sg = window._bmcRelSuggest || {};
@@ -2008,7 +2008,7 @@ async function bmcSendBack() {
 }
 function bmcExportRecipes() {
   if (!_bmcRel) return;
-  bmcDownload(`${API}/api/bom-center/recipes-export.xlsx?release_id=${_bmcRel.release_id}`, 'สูตร.xlsx', 'bmcRecStatus');
+  bmcDownload(`${API}/api/bom-center/recipes-export.xlsx?release_id=${_bmcRel.release_id}`, 'สูตรตามระดับราคา.xlsx', 'bmcRecStatus');
 }
 async function bmcImportFlat(input) {
   const file = input?.files?.[0];
@@ -2017,9 +2017,9 @@ async function bmcImportFlat(input) {
     return _bmcJson(`${API}/api/bom-center/recipes/import-flat?release_id=${_bmcRel.release_id}&dry_run=${dry}`, { method: 'POST', body: fd }); };
   try {
     const pre = await send(true);
-    if (!await uiConfirm(`แทนที่สูตร ${pre.recipes} เมนู (${pre.lines} บรรทัด) ใน “${_bmcLbl(_bmcRel.label)}”?` + (pre.errors.length ? `\nข้าม ${pre.errors.length} แถว: ` + pre.errors.slice(0, 4).map(e => e.why).join(', ') : ''), { title: 'ยืนยันการแทนที่สูตร', ok: 'แทนที่สูตร', cancel: 'ยกเลิก' })) return;
+    if (!await uiConfirm(`แทนที่สูตร ${pre.recipes} เมนู (${pre.lines} บรรทัด) ใน “${_bmcLbl(_bmcRel.label)}”?` + (pre.errors.length ? `\nข้าม ${pre.errors.length} แถว: ` + pre.errors.slice(0, 4).map(e => e.why).join(', ') : ''), { title: 'ยืนยันการนำเข้าไฟล์สูตรตามระดับราคา', ok: 'แทนที่สูตร', cancel: 'ยกเลิก' })) return;
     const d = await send(false);
-    _bmcStatus('bmcRecStatus', `✓ แทนที่สูตร ${d.recipes} เมนู`, 'var(--good-ink)');
+    _bmcStatus('bmcRecStatus', `✓ นำเข้าไฟล์สูตรตามระดับราคาแล้ว · แทนที่สูตร ${d.recipes} เมนู`, 'var(--good-ink)');
     bmcLoadRecipes();
   } catch (e) { _bmcStatus('bmcRecStatus', 'นำเข้าไม่สำเร็จ:' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
@@ -2633,7 +2633,7 @@ function bmcRenderRcheck() {
 }
 // ── bulk delivery days from a file: template → preview (dry run) → save ──
 let _bmcCalBulkFile = null;
-function bmcCalTemplate() { bmcDownload(`${API}/api/bom-center/order-calendar/template.xlsx`, 'รอบส่งของสาขา.xlsx', 'bmcCalStatus'); }
+function bmcCalTemplate() { bmcDownload(`${API}/api/bom-center/order-calendar/template.xlsx`, 'แม่แบบ_รอบส่งของสาขา.xlsx', 'bmcCalStatus'); }
 function _bmcCalBulkClear() {
   _bmcCalBulkFile = null;
   const f = document.getElementById('bmcCalBulkFile'); if (f) f.value = '';
@@ -2644,7 +2644,7 @@ async function bmcCalBulkPick(input) {
   const box = document.getElementById('bmcCalBulkPreview');
   if (!file || !box) return;
   _bmcCalBulkFile = file;
-  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังตรวจไฟล์…</div>';
+  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังตรวจไฟล์รอบส่งของสาขา…</div>';
   try {
     const fd = new FormData(); fd.append('file', file, file.name);
     const d = await _bmcJson(`${API}/api/bom-center/order-calendar/import?dry_run=true`, { method: 'POST', body: fd });
@@ -2664,7 +2664,7 @@ async function bmcCalBulkPick(input) {
         <button onclick="bmcCalBulkSave()" ${(d.errors.length || !d.changed_branches) ? 'disabled' : ''} style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer;${(d.errors.length || !d.changed_branches) ? 'opacity:.5;cursor:not-allowed' : ''}">บันทึก ${d.changed_branches} สาขา</button>
         <button onclick="_bmcCalBulkClear()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 14px;font-size:12.5px;cursor:pointer">ยกเลิก</button></div>`;
   } catch (e) {
-    box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">ตรวจไฟล์ไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
+    box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">ตรวจไฟล์รอบส่งของสาขาไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
   }
 }
 async function bmcCalBulkSave() {
@@ -2672,7 +2672,7 @@ async function bmcCalBulkSave() {
   try {
     const fd = new FormData(); fd.append('file', _bmcCalBulkFile, _bmcCalBulkFile.name);
     const d = await _bmcJson(`${API}/api/bom-center/order-calendar/import?dry_run=false`, { method: 'POST', body: fd });
-    const msg = `✓ บันทึกรอบส่งแล้ว ${d.changed_branches} สาขา (${d.saved} รอบ)`;
+    const msg = `✓ นำเข้าไฟล์รอบส่งของสาขาแล้ว · บันทึก ${d.changed_branches} สาขา (${d.saved} รอบ)`;
     _bmcStatus('bmcCalStatus', msg, 'var(--good-ink)');
     _bmcStatus('bmcFcStatus', msg, 'var(--good-ink)');
     _bmcCalBulkClear();
@@ -2906,22 +2906,26 @@ function bmcIssSlipsXlsx() {         // every confirmed daily slip of the period
   const d = _bmcIssSum;
   if (!d) return;
   _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${encodeURIComponent(d.period.month)}`,
-    `bom_center_issue_slips_${d.period.month}.xlsx`, 'bmcIssStatus');
+    `ใบตัดเบิกสาขา_${d.period.month}.xlsx`, 'bmcIssStatus');
 }
 function bmcIssXlsx() {
   const d = _bmcIssSum;
   if (!d) return;
   if (!d.status.receipts_confirmed) { _bmcStatus('bmcIssStatus', 'งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'var(--amber-ink)'); return; }
   bmcDownload(`${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`,
-    `bom_center_issue_summary_${d.period.end_count_id}.xlsx`, 'bmcIssStatus');
+    `ใบสรุปตัดเบิก_${d.branch.name || ''}_${d.period.month}.xlsx`, 'bmcIssStatus');
 }
 function bmcIssXlsxAll() {
   const d = _bmcIssSum;
   if (!d) return;
   bmcDownload(`${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.period.month)}`,
-    `bom_center_issue_summary_${d.period.month}.xlsx`, 'bmcIssStatus');
+    `ใบสรุปตัดเบิก_ทุกสาขา_${d.period.month}.xlsx`, 'bmcIssStatus');
 }
-function bmcDownloadPriceTemplate(statusId) { bmcDownload(`${API}/api/bom-center/prices/template.xlsx`, 'แม่แบบยอดซื้อรายบรรทัด.xlsx', statusId || 'bmcPriceStatus'); }
+// one template, named for the page it is downloaded from: ราคารายเดือน (the analyst) or ไฟล์ราคา (Sales Support)
+function bmcDownloadPriceTemplate(statusId, page) {
+  const p = page || 'ราคารายเดือน';
+  bmcDownload(`${API}/api/bom-center/prices/template.xlsx?page=${encodeURIComponent(p)}`, `แม่แบบ_${p}.xlsx`, statusId || 'bmcPriceStatus');
+}
 function bmcDownloadIngTemplate() { bmcDownload(`${API}/api/bom-center/ingredients/template.xlsx`, 'ทะเบียนวัตถุดิบ.xlsx', 'bmcIngStatus'); }
 async function bmcIssPost(want) {
   const d = _bmcIssSum;

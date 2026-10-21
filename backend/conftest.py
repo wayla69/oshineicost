@@ -19,6 +19,15 @@ HERE = Path(__file__).parent.resolve()
 sys.path.insert(0, str(HERE))
 
 
+def dl_name(resp) -> str:
+    """The name a browser saves a download under: the decoded filename* of Content-Disposition (the Thai name people see)."""
+    import re
+    from urllib.parse import unquote
+    m = re.search(r"filename\*=UTF-8''([^;]+)", resp.headers["content-disposition"])
+    assert m, resp.headers["content-disposition"]
+    return unquote(m.group(1))
+
+
 # Latest day is mid-month → the MTD (equal-period) path is exercised.
 LATEST_MONTH, PREV_MONTH = "2026-06", "2026-05"
 # A third, monthly-only month so ≥3-point series exist (forecast endpoints).
