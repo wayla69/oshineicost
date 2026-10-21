@@ -23,7 +23,7 @@
         <label>ตั้งแต่<br><input type="date" id="ohbFrom" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbTo" onchange="ohbLoadQueue()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <button onclick="ohbShowConsolidated()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">สรุปรวมตามวันส่ง</button>
-        <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <a href="#" onclick="ohbDownloadConsolidated();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดสรุปรวมตามวันส่ง (Excel)</a>
         <span id="ohbQStatus" class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)"></span>
       </div>
       <!-- ประสานงานขาย: คีย์บัญชีแล้ว (ติ๊กเฉพาะใบที่คลังจัดส่งแล้วหรือสาขารับแล้ว) -->
@@ -62,7 +62,7 @@
         <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <span class="text-xs" style="padding-bottom:8px;color:var(--text-secondary)">ดาวน์โหลด เดือน<b id="ohbIsDlMonth"></b>:</span>
-        <button onclick="ohbIsXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกที่ยืนยันแล้ว (Excel)</button>
+        <button onclick="ohbIsXlsx()" title="เฉพาะใบที่สาขายืนยันแล้ว ไม่รวมร่าง" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกสาขา (Excel)</button>
         <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
         <span id="ohbIsStatus" style="padding-bottom:6px"></span>
       </div>
@@ -79,7 +79,7 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbIvBranch" data-branch-picker onchange="ohbLoadIssueVar()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
-        <a href="#" onclick="ohbIvXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <a href="#" onclick="ohbIvXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดผลต่างตัดเบิกรายวัน (Excel)</a>
         <span id="ohbIvStatus" style="padding-bottom:6px"></span>
       </div>
       <div id="ohbIvChips" class="flex flex-wrap gap-1 mt-2"></div>
@@ -96,7 +96,7 @@
         <label>สาขา<br><select id="ohbPsBranch" data-branch-picker onchange="ohbLoadPerSales()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
         <label>ช่วงเวลา<br><select id="ohbPsWeeks" onchange="ohbLoadPerSales()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
           <option value="2">2 สัปดาห์ล่าสุด</option><option value="4" selected>4 สัปดาห์ล่าสุด</option><option value="6">6 สัปดาห์ล่าสุด</option><option value="8">8 สัปดาห์ล่าสุด</option></select></label>
-        <a href="#" onclick="ohbPsXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <a href="#" onclick="ohbPsXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดไฟล์ใช้วัตถุดิบต่อยอดขาย (Excel)</a>
         <span id="ohbPsStatus" style="padding-bottom:6px"></span>
       </div>
       <div id="ohbPsChips" class="flex flex-wrap gap-1 mt-2"></div>
@@ -112,7 +112,7 @@
       <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
         <label>ตั้งแต่<br><input type="date" id="ohbCFrom" onchange="ohbLoadComp()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbCTo" onchange="ohbLoadComp()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <a href="#" onclick="ohbDownloadComp();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+        <a href="#" onclick="ohbDownloadComp();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดไฟล์ตรวจสอบการสั่ง (Excel)</a>
         <span id="ohbCStatus" class="text-[11px]" style="padding-bottom:6px;color:var(--text-muted)"></span>
       </div>
       <div id="ohbCChips" class="flex flex-wrap gap-1 mt-2"></div>
@@ -167,15 +167,15 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-center gap-2">
         <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">2</span>
-        <span class="text-sm font-semibold" style="color:var(--text-primary)">นำเข้ารายงานของไดกิโตะ กรุ๊ปประจำเดือน</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">นำเข้ารายงานไดกิโตะ กรุ๊ปประจำเดือน</span>
         <span id="ohbSt2" class="ml-auto"></span>
       </div>
       <div id="ohbCenStat" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs">
-        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer">นำเข้ารายงานไดกิโตะ กรุ๊ป (.xlsx)
+        <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer">นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ป
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbMonthPick(this)"></label>
         <label class="flex items-center gap-1" style="color:var(--text-secondary)"><input type="checkbox" id="ohbSetLocal" checked> รายการนอกบัญชีให้สาขาซื้อเอง</label>
-        <a href="#" onclick="ohbCentralXlsx();return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (.xlsx)</a>
+        <a href="#" onclick="ohbCentralXlsx();return false" style="color:var(--accent)">ดาวน์โหลดบัญชีสินค้า (Excel)</a>
       </div>
       <span id="ohbCenStatus" class="text-xs"></span>
       <div id="ohbCenReport" class="mt-2"></div>
@@ -197,15 +197,15 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-center gap-2">
         <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">4</span>
-        <span class="text-sm font-semibold" style="color:var(--text-primary)">ผลตรวจนับต้นงวดและปลายงวดจากแบบฟอร์ม</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">ใบตรวจนับต้นงวดและปลายงวด</span>
         <span id="ohbSt4" class="ml-auto"></span>
       </div>
       <div id="ohbSt4Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
       <div class="flex flex-wrap items-end gap-3 mt-2 text-xs" style="color:var(--text-muted)">
         <label>สาขา<br><select id="ohbCntBranch" data-branch-picker onchange="ohbCntBranchChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select></label>
         <label>วันที่ตรวจนับ<br><input type="date" id="ohbCntDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแบบฟอร์มตรวจนับ</a>
-        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าผลตรวจนับ (.xlsx)
+        <a href="#" onclick="ohbCntTemplate();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดแม่แบบใบตรวจนับ (Excel)</a>
+        <label style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;cursor:pointer;color:var(--text-primary)">นำเข้าไฟล์ใบตรวจนับ
           <input type="file" accept=".xlsx" style="display:none" onchange="ohbCntImport(this)"></label>
       </div>
       <span id="ohbCntStatus" class="text-xs"></span>

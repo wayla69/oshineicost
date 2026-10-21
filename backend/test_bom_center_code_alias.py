@@ -626,7 +626,7 @@ def test_http_the_consolidated_file_shows_the_accounting_code_and_keeps_the_regi
         assert head[-1] == "คีย์บัญชี" and "รหัสในทะเบียน" not in head                       # no new code anywhere: the file is as it was
         r = ana.post("/api/bom-center/ingredients/T-KEY1/aliases", json={"action": "add", "alias": "TKEY-ACC", "system": "acc"}, headers=TOK)
         assert r.status_code == 200, r.text
-        for name in ("ต่อสาขา", "รวมตามวันส่ง"):
+        for name in ("ต่อสาขา", "สรุปรวมตามวันส่ง"):
             rows = sheet(name)
             head = next(r for r in rows if r[0] in ("สาขา", "วันส่ง"))
             assert head[-1] == "รหัสในทะเบียน" and head[head.index("รหัส")] == "รหัส", name

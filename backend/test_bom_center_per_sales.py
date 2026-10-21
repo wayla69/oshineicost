@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from openpyxl import load_workbook
+from conftest import dl_name
 
 import auth
 from bom_center import forecast as FC
@@ -337,9 +338,9 @@ def test_http_report_workbook_pinning_and_the_reference_setting(client, app_db, 
         assert [x["branch"] for x in mg.get("/api/bom-center/per-sales?weeks=2&branch_id=2").json()["branches"]] == ["BranchB"]
         # the workbook
         r = mg.get("/api/bom-center/per-sales.xlsx")
-        assert r.status_code == 200 and "bom_center_per_sales_2026-10-04.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r) == "ใช้วัตถุดิบต่อยอดขาย_ทุกสาขา_2026-10-04.xlsx"
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["ต่อยอดขาย 100000", "เทียบสาขา"] == [PER_SALES_SHEET, PER_SALES_COMPARE]
+        assert wb.sheetnames == ["ใช้วัตถุดิบต่อยอดขาย", "เทียบสาขา"] == [PER_SALES_SHEET, PER_SALES_COMPARE]
         rows = list(wb[PER_SALES_SHEET].iter_rows(values_only=True))
         assert list(rows[1]) == ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", "ต่อยอดขาย ฿100,000 (4 สัปดาห์ล่าสุด)", "4 สัปดาห์ก่อนหน้า",
                                  "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "การใช้ตามสูตรเทียบค่ากลาง %", "ยอดซื้อเทียบค่ากลาง %", "หมายเหตุ"] == _per_sales_headers(4)

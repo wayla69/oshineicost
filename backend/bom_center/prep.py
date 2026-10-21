@@ -632,7 +632,7 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
     rows = list(ws.iter_rows(values_only=True))
     hdr = next((i for i, r in enumerate(rows[:5]) if "prepared_code" in [_flat_key(v) for v in r]), None)
     if hdr is None:
-        raise ValueError("ไม่พบหัวคอลัมน์ รหัสสินค้ากึ่งสำเร็จ · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบ”")
+        raise ValueError("ไม่พบหัวคอลัมน์ รหัสสินค้ากึ่งสำเร็จ · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบสูตรกึ่งสำเร็จ (Excel)”")
     h = {_flat_key(v): j for j, v in enumerate(rows[hdr]) if v}
     grp, errors = {}, []
     for i, r in enumerate(rows[hdr + 1:], start=hdr + 2):
@@ -654,7 +654,7 @@ def import_flat(con, data: bytes, who: str, dry_run: bool = True) -> dict:
             skipped.append({"code": code, "name": None, "note": PORTION_SKIP_NOTE})
             continue
         try:
-            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากแม่แบบ (Excel)",
+            save(con, code, e["yield_qty"], e["yield_unit"], e["lines"], who, source_ref="นำเข้าจากไฟล์สูตรกึ่งสำเร็จ",
                  mode=e["mode"])
             saved += 1
         except ValueError as ex:

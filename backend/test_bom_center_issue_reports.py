@@ -18,6 +18,7 @@ from datetime import date, datetime
 
 import pytest
 from openpyxl import load_workbook
+from conftest import dl_name
 
 import auth
 from bom_center import forecast as F
@@ -383,7 +384,7 @@ def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_
         j = br.get(f"/api/bom-center/issue-reports/reconcile?end_count_id={e1}").json()
         assert j["totals"]["needs_reason"] == 0 and next(x for x in j["rows"] if x["code"] == "T-ISS1")["reason_th"] == "ตรวจนับผิด"
         r = acc.get(f"/api/bom-center/issue-reports/reconcile.xlsx?end_count_id={e1}&branch_id=1")
-        assert r.status_code == 200 and "bom_center_issue_reconcile_b1_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r).startswith("กระทบยอด_") and dl_name(r).endswith("_2026-09.xlsx")
         ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
         rows = list(ws.iter_rows(values_only=True))
         assert ws.title == "กระทบยอด" and list(rows[1]) == RECON_HEADERS and len(RECON_HEADERS) == 19
@@ -406,12 +407,12 @@ def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_
         assert dd["slip"]["key"] == "on_time" and dd["rows"][0]["code"] == "T-ISS1" and dd["rows"][0]["var_pct"] == 10.0
         assert ss.get("/api/bom-center/issue-reports/daily/day?branch_id=1&day=7-9").status_code == 400
         r = ss.get("/api/bom-center/issue-reports/daily.xlsx?branch_id=1&month=2026-09")
-        assert r.status_code == 200 and "bom_center_issue_daily_b1_2026-09.xlsx" in r.headers["content-disposition"]
+        assert r.status_code == 200 and dl_name(r).startswith("ผลต่างตัดเบิกรายวัน_") and dl_name(r).endswith("_2026-09.xlsx")
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["รายวัน", "รายการต่อวัน"]
-        assert list(next(wb["รายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS and len(DAILY_HEADERS) == 11
+        assert wb.sheetnames == ["ผลต่างตัดเบิกรายวัน", "รายการต่อวัน"]
+        assert list(next(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS and len(DAILY_HEADERS) == 11
         assert list(next(wb["รายการต่อวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_ITEM_HEADERS and len(DAILY_ITEM_HEADERS) == 14
-        first = list(wb["รายวัน"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        first = list(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
         assert first[:9] == ("2026-09-07", "จันทร์", "ยืนยันตรงวัน", 13.75, 0, 13.75, 12.5, 1.25, 10.0)
         # the cache was written by the reads, and a release-side write clears it
         cc = sqlite3.connect(str(main.DB_PATH))

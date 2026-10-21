@@ -96,7 +96,7 @@ def test_the_todo_counts_processed_orders_not_yet_keyed(con):  # noqa: F811
     it = {i["key"]: i for i in TD.build(con, today=today)["items"]}["accounting_keyed"]
     assert it["status"] == "todo" and it["count"] == 2 and it["seq"] == 227
     assert it["title"] == "คีย์ใบสั่งซื้อที่คลังจัดส่งแล้วเข้าระบบบัญชี"
-    assert it["detail"] == "ยังไม่คีย์ 2 ใบ · ดาวน์โหลด Excel แล้วกด “คีย์บัญชีแล้ว”"
+    assert it["detail"] == "ยังไม่คีย์ 2 ใบ · ดาวน์โหลดสรุปรวมตามวันส่ง (Excel) แล้วกด “คีย์บัญชีแล้ว”"
     assert it["owner_modules"] == ["supply.ordering"] and it["owner_th"] == "ประสานงานขาย"
     assert it["go"] == {"tab": "orderhub", "pane": "queue"}
     HB.set_keyed(con, [a, b], True, "ss")

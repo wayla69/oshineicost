@@ -183,7 +183,7 @@
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
           <label>เดือน<br><select id="brnVarDayMonth" class="supply-month" onchange="brnVarDayMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></select></label>
-          <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลด Excel</a>
+          <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดผลต่างตัดเบิกรายวัน (Excel)</a>
           <span id="brnVarDayStatus" style="padding-bottom:6px"></span>
         </div>
         <div id="brnVarDayChips" class="flex flex-wrap gap-1 mt-2"></div>
@@ -197,7 +197,7 @@
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
           งวด <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
           <label class="flex items-center gap-1"><input type="checkbox" id="brnRcAll" onchange="brnRenderVarRecon()"> แสดงทุกรายการ</label>
-          <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลด Excel</a>
+          <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลดกระทบยอด (Excel)</a>
         </div>
         <div id="brnRcHead" class="text-xs mt-2"></div>
         <span id="brnRcStatus" class="text-xs"></span>

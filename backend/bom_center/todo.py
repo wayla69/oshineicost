@@ -268,7 +268,7 @@ def _month_items(con, month: str, today: date) -> list:
         elif n:
             sub_status, sub_detail = "na", "นำเข้าราคาของเดือนนี้แล้ว ไม่ต้องส่งไฟล์"
         else:
-            sub_status, sub_detail = "todo", "ไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบยอดซื้อรายบรรทัด"
+            sub_status, sub_detail = "todo", "ไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบไฟล์ราคา"
         out.append(_e("price_submit", 95, "month", f"ส่งไฟล์ราคาเดือน{_mth(month)} ให้ฝ่ายวิเคราะห์", sub_status, sub_detail,
                       owner=("supply.ordering",), owner_th="ประสานงานขาย",
                       go={"tab": "bomcenter", "pane": "pricefile", "month": month, "anchor": "bmcPriceSubmitCard"}))
@@ -333,7 +333,7 @@ def _month_items(con, month: str, today: date) -> list:
                       owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rel"}))
     else:
         out.append(_e("draft", 110, "month", f"สร้างสูตรเดือน{_mth(eff)} และส่งตรวจ", "todo",
-                      "ดาวน์โหลดแม่แบบ กรอกสูตรแล้วนำเข้า หรือสร้างร่างจากเวอร์ชันที่ประกาศใช้แล้ว",
+                      "ดาวน์โหลดแม่แบบสูตรตามระดับราคา กรอกสูตรแล้วนำเข้าไฟล์สูตรตามระดับราคา หรือสร้างร่างจากเวอร์ชันที่ประกาศใช้แล้ว",
                       owner=("bom.recipes",), owner_th="ครัว", go={"tab": "bomcenter", "pane": "rec"}))
     ack = con.execute("SELECT release_id, label, released_by FROM bc_release WHERE kind='monthly' AND status='released'"
                       " AND acknowledged_at IS NULL ORDER BY release_id DESC LIMIT 1").fetchone()
@@ -422,7 +422,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                               " AND accounting_keyed_at IS NULL")
             out.append(_e("accounting_keyed", 227, "week", "คีย์ใบสั่งซื้อที่คลังจัดส่งแล้วเข้าระบบบัญชี",
                           "todo" if nk else "done",
-                          f"ยังไม่คีย์ {nk} ใบ · ดาวน์โหลด Excel แล้วกด “คีย์บัญชีแล้ว”" if nk else "คีย์ครบทุกใบ",
+                          f"ยังไม่คีย์ {nk} ใบ · ดาวน์โหลดสรุปรวมตามวันส่ง (Excel) แล้วกด “คีย์บัญชีแล้ว”" if nk else "คีย์ครบทุกใบ",
                           count=nk or None, owner=("supply.ordering",), owner_th="ประสานงานขาย",
                           go={"tab": "orderhub", "pane": "queue"}))
         # ใบตัดเบิก: the branches that have started and did not confirm yesterday's slip
@@ -583,17 +583,17 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
                     f"ใช้เวอร์ชัน {_lbl(lbl)}" if rid else "ยังไม่มีเวอร์ชันที่ประกาศใช้และมีผลถึงเดือนนี้",
                     owner=("bom.release",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "rel"}))
     ci = central_items(con)
-    steps.append(_e("central_report", 2, "close", "นำเข้ารายงานของไดกิโตะ กรุ๊ปประจำเดือน (บัญชีสินค้าและใบรับสินค้า)",
+    steps.append(_e("central_report", 2, "close", "นำเข้ารายงานไดกิโตะ กรุ๊ปประจำเดือน (บัญชีสินค้าและใบรับสินค้า)",
                     "done" if ci["count"] and not ci["needs_factor"] else "todo",
-                    (f"บัญชีสินค้าส่วนกลาง {ci['count']} รายการ" + (f" · ยังไม่ระบุอัตราแปลงหน่วย {ci['needs_factor']} รายการ" if ci["needs_factor"] else ""))
-                    if ci["count"] else "ยังไม่มีบัญชีสินค้าส่วนกลาง",
+                    (f"บัญชีสินค้า {ci['count']} รายการ" + (f" · ยังไม่ระบุอัตราแปลงหน่วย {ci['needs_factor']} รายการ" if ci["needs_factor"] else ""))
+                    if ci["count"] else "ยังไม่มีบัญชีสินค้า",
                     count=ci["needs_factor"] or None, owner=("supply.ordering", "bom.center"), owner_th="ประสานงานขาย / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "central", "month": month, "anchor": "ohbCenStat"}))
     lc = link_counts(con)
     steps.append(_e("code_links", 3, "close", "จับคู่รหัสในสูตรกับรหัสสินค้าของไดกิโตะ กรุ๊ป",
                     "na" if not ci["count"] else ("todo" if (lc["candidates"] and not lc["links"]) else "done"),
-                    f"จับคู่แล้ว {lc['links']} · รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้าส่วนกลาง {lc['candidates']} (สาขาซื้อเอง หรือรอจับคู่)"
-                    if ci["count"] else "รอบัญชีสินค้าส่วนกลางก่อน",
+                    f"จับคู่แล้ว {lc['links']} · รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้า {lc['candidates']} (สาขาซื้อเอง หรือรอจับคู่)"
+                    if ci["count"] else "รอบัญชีสินค้าก่อน",
                     owner=("supply.ordering", "bom.center"), owner_th="ประสานงานขาย / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "central", "anchor": "ohbLinks"}))
 
@@ -620,7 +620,7 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
         go = {"tab": "branchstock", "pane": "recv", "branch": bid} if scoped else \
              {"tab": "orderhub", "pane": "central", "month": month, "branch": bid, "anchor": "ohbDelReport"}
         if n:
-            return {"branch_id": bid, "branch": b["name"], "status": "done", "detail": f"จากรายงานของไดกิโตะ กรุ๊ป {n} รายการ", "go": go}
+            return {"branch_id": bid, "branch": b["name"], "status": "done", "detail": f"จากรายงานไดกิโตะ กรุ๊ป {n} รายการ", "go": go}
         if own:
             return {"branch_id": bid, "branch": b["name"], "status": "done", "detail": f"สาขาบันทึกรับสินค้าเอง {own} ใบ (ไม่ต้องนำเข้าซ้ำ)", "go": go}
         return {"branch_id": bid, "branch": b["name"], "status": "todo", "detail": "ยังไม่บันทึกรับสินค้าของเดือนนี้", "go": go}
