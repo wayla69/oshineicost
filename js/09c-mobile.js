@@ -230,8 +230,15 @@ async function phLoadYesterday() {
 }
 
 // ── งานของฉันวันนี้: the open items of หน้างาน that belong to this role (the same filter as หน้างาน and the desktop launcher) ──
+// PR-TF: every task carries `state` (todo | review | done) for the signed-in role; the phone shows ยังไม่เสร็จ only (the default of หน้างาน), so done
+// and waiting-for-review items are not drawn. An answer without `state` (an old cache) is read from the status, as shmState does in js/16.
+function _phState(it) {
+  if (it && (it.state === 'todo' || it.state === 'review' || it.state === 'done')) return it.state;
+  const st = it && it.status;
+  return st === 'done' || st === 'na' ? 'done' : (st === 'blocked' ? 'review' : 'todo');
+}
 function _phGroups(items) {
-  const mine = items.filter(i => (i.status === 'todo' || i.status === 'blocked') && _shmMine(i))
+  const mine = items.filter(i => _phState(i) === 'todo' && _shmMine(i))
     .sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
   const groups = [];
   mine.forEach(i => {                                                    // the same duty for several branches is ONE row naming how many

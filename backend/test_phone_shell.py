@@ -111,13 +111,15 @@ def test_the_bottom_navigation_per_role():
 def test_the_tasks_are_the_roles_open_items_grouped_like_the_desk():
     owners = re.search(r"const _SHM_ROLE_OWNERS = \{.*?\};", CORE, re.S).group(0)
     pre = ("const hasModule = () => false;\n"
-           "const window = { AUTH: { enabled: true, role: 'branch' } };\n" + owners + "\n" + _fn(CORE, "_shmMine") + "\n" + _fn(SHELL, "_phGroups"))
+           "const window = { AUTH: { enabled: true, role: 'branch' } };\n" + owners + "\n" + _fn(CORE, "_shmMine") + "\n" + _fn(SHELL, "_phState") + "\n" + _fn(SHELL, "_phGroups"))
     items = [
         {"key": "issue_today", "title": "ยืนยันใบตัดเบิก", "status": "todo", "owner_th": "สาขา", "seq": 2, "branch": "A"},
         {"key": "order_due_1", "title": "ส่งใบสั่งซื้อ", "status": "todo", "owner_th": "สาขา", "seq": 1, "urgent": True, "branch": "A"},
         {"key": "order_due_1", "title": "ส่งใบสั่งซื้อ", "status": "todo", "owner_th": "สาขา", "seq": 1, "urgent": False, "branch": "B"},
         {"key": "price", "title": "ราคา", "status": "todo", "owner_th": "ฝ่ายวิเคราะห์", "seq": 3},          # another desk's
         {"key": "done", "title": "เสร็จ", "status": "done", "owner_th": "สาขา", "seq": 4},               # not open
+        {"key": "wait", "title": "รอตรวจ", "status": "blocked", "state": "review", "owner_th": "สาขา", "seq": 5},   # waiting for review: hidden by default (PR-TF)
+        {"key": "fin", "title": "เสร็จ2", "status": "todo", "state": "done", "owner_th": "สาขา", "seq": 6},
     ]
     out = _node(pre, f"_phGroups({json.dumps(items, ensure_ascii=False)}).map(g => [g.first.key, g.branches, g.urgent])")
     assert out == [["order_due_1", ["A", "B"], True], ["issue_today", ["A"], False]]                    # urgent first; one row per duty
