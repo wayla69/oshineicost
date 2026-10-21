@@ -356,6 +356,11 @@ function phMeRender() {
   }
   ['phMePw', 'phMeOut'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = !signed; });
 }
+function phHelpToggle(btn) {   // the "?" of a card: its explanation is folded until asked for
+  const card = btn.closest('.ms-section'); if (!card) return;
+  const on = card.classList.toggle('ph-open');
+  btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
 function phDarkSync() {
   const on = document.body.classList.contains('dark'), b = document.getElementById('phMeDark');
   if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false');

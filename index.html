@@ -1972,6 +1972,12 @@ body.mgt-reading .content-area { padding-top: 10px; }
   font: inherit; font-size: 15px; font-weight: 600; color: var(--bad-ink); cursor: pointer; }
 #phv-me .ms-section { padding: 0; margin-top: 0; }
 #phv-me #msPushLater { display: none !important; }
+/* a card on a phone is a title and at most one short line; the rest sits behind its "?" button (owner rule 2026-10-21) */
+.ph-help { min-width: 44px; min-height: 44px; margin: -12px -8px -12px 0; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 700; color: var(--accent); cursor: pointer; }
+#phv-me .ms-section:not(.ph-open) :is(#msPushState, #msInstallHint, #msPushKinds) { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+#phv-me .ms-section:not(.ph-open) #msPushKinds { display: none !important; }
+#phv-me .ms-section:not(.ph-open) br { display: none; }
+.ph-todo-d { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #phBusy { position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 41; padding: 10px 18px; border-radius: 999px;
   background: #1f3a6b; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 4px 14px rgba(15,23,42,.3); }
 #phNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; box-sizing: border-box; height: calc(56px + env(safe-area-inset-bottom, 0px)); padding: 0 4px env(safe-area-inset-bottom, 0px);
@@ -2368,7 +2374,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <section id="phv-home" class="ph-view" aria-label="หน้าแรก"></section>
   <section id="phv-dept" class="ph-view" aria-label="แผนก" hidden></section>
   <section id="phv-search" class="ph-view" aria-label="ค้นหา" hidden>
-    <header class="ph-head ph-head-navy"><div class="ph-head-t"><h1>ค้นหา</h1><p>พิมพ์ชื่อหน้าหรือรายงาน</p></div></header>
+    <header class="ph-head ph-head-navy"><div class="ph-head-t"><h1>ค้นหา</h1></div></header>
     <div class="ph-body">
       <input id="phSearchInput" class="ph-search" type="search" placeholder="ค้นหาหน้าหรือรายงาน" aria-label="ค้นหาหน้าหรือรายงาน" autocomplete="off" enterkeyhint="search" oninput="phSearchRender()">
       <div id="phSearchRes"></div>
@@ -2386,7 +2392,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <!-- install offer: beforeinstallprompt, or the iOS hint (msShowInstall, 09c-mobile.js) -->
   <div id="msInstall" class="ms-section" style="display:none;margin-top:10px">
     <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
-      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ</b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
+      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ <button type="button" class="ph-help" aria-expanded="false" aria-label="คำอธิบายการติดตั้ง" onclick="phHelpToggle(this)">?</button></b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
       <button id="msInstallBtn" onclick="msInstallApp()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">ติดตั้ง</button>
       <button onclick="msInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted,#64748b);font-size:20px;flex-shrink:0">×</button>
     </div>
@@ -2395,7 +2401,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <!-- the morning brief as a notification on this phone (msPushInit, 09c-mobile.js; routers/push_api.py) -->
   <div id="msPush" class="ms-section" style="display:none;margin-top:10px">
     <div class="ms-card" style="padding:10px 14px">
-      <p style="font-size:13px;font-weight:700">แจ้งเตือนตอนเช้า</p>
+      <p style="font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px">แจ้งเตือนตอนเช้า<button type="button" class="ph-help" aria-expanded="false" aria-label="คำอธิบายการแจ้งเตือน" onclick="phHelpToggle(this)">?</button></p>
       <p id="msPushState" style="font-size:12px;color:var(--text-muted,#64748b);margin-top:2px">กำลังตรวจสอบ…</p>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button id="msPushOn" onclick="msPushEnable()" style="min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent)">เปิดการแจ้งเตือน</button>
