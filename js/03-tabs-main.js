@@ -299,9 +299,10 @@ function ensureDesktopBooted() {
       const _yq = document.getElementById('selYearQuick'); if (_yq) _yq.value = _y;
     }
     _desktopBooted = true;
-    // Land on the Daily Brief (home) tab, not Overall (handles tab display +
-    // hides the period controls home doesn't use).
-    switchTab('home');
+    // PR-D1: the sidebar's department entries (js/18-launcher.js), then land: the department launcher on a desktop, the Daily Brief
+    // (home) on a phone that opened the full dashboard (switchTab also hides the period controls home does not use).
+    try { renderDeptNav(); } catch (e) { console.warn('renderDeptNav:', e); }
+    switchTab(_landingTab());
     // a supply reminder was tapped (batch 3): open the page it names
     if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; try { supplyDeepLink(l); } catch (e) { console.warn('deep link:', e); } }
   })();

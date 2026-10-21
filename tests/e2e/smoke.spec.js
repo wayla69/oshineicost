@@ -5,7 +5,7 @@
 const { test, expect } = require('@playwright/test');
 
 const TABS = [
-  'home', 'overall', 'dailysales', 'trend', 'compare', 'more',
+  'launcher', 'allpages', 'home', 'overall', 'dailysales', 'trend', 'compare', 'more',
   'buffetperf', 'childbuffet', 'guest', 'timeflow',
   'menu', 'engineering', 'cost', 'bomcost', 'costhead',
   'gpbranch', 'pnlbranch', 'pnlbill', 'benchmark',
