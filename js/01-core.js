@@ -195,7 +195,7 @@ async function unlockWrites() {
   else notifyError('รหัสปลดล็อกไม่ถูกต้อง');
 }
 // The same state as a lock icon beside the user name — the branch phone hides the
-// chip bar (#supplyNav takes its place), so the lock lives up in the top bar there.
+// chip bar (the bottom navigation takes its place), so the icon sits in the top bar; on the phone shell (PR-D3) the lock is a row of ฉัน.
 function _renderLockIcon(st, on) {
   const top = document.getElementById('supplyLockTop');
   if (!top) return;
@@ -372,6 +372,10 @@ function firstAllowedTab() {
 // PR-D1: a desktop (wider than the phone breakpoint of the whole app, 700 px) lands on the department launcher, หน้าแรก, for every
 // role; a phone keeps the phone-first boot it has today (the owner's summary, or the role's supply page) until D3 redraws it.
 function _launcherLanding() { try { return !window.matchMedia('(max-width:700px)').matches; } catch (e) { return true; } }
+// PR-D3: on a phone (<= 700 px) the person signs in to the phone shell instead: the department launcher, the bottom navigation and, behind
+// them, the owner's summary and the pages (js/09c-mobile.js, "PHONE SHELL"). body.ph-on is set only there, so every rule keyed on it is
+// inert on a desktop.
+function phOn() { return document.body.classList.contains('ph-on'); }
 function _landingTab() { return _launcherLanding() ? 'launcher' : 'home'; }
 
 // {login: name shown on screens} from /api/auth/me; whoTh() reads it (PR-M1)
@@ -536,9 +540,9 @@ function applyPermissions() {
   }
   // the branch login's entry to วัตถุดิบและใบสั่งซื้อ is its own page: call it so
   if (window.AUTH.role === 'branch') { const l = document.querySelector('#nav-supplyhome .nav-label'); if (l) l.textContent = 'สาขาของฉัน'; }
-  // ... and on a phone its pages sit on a bottom strip (#supplyNav) instead of the chip rows
+  // ... and on a phone its pages sit under the phone shell's bottom navigation (#phNav, PR-D3) instead of the chip rows
   if (window.AUTH.role === 'branch') {
-    document.body.classList.add('supply-phone'); _renderSupplyNav(activeTab);
+    document.body.classList.add('supply-phone'); phNavRender();
     try { brnBigFontApply(brnBigFontGet()); } catch (e) { /* ตัวอักษรใหญ่ (PR-M7) is read from this device's choice once the branch slice is loaded */ }
   }
   // 2) Collapse nav-section headers whose items are all hidden
@@ -1746,20 +1750,29 @@ function ensureSlicesLoaded() {
     // (first try loaded 6 of 15 and feedback/bomcenter were "not defined")
     if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
     const tags = [...document.querySelectorAll('script.lazy-slice[data-lazy]')];
-    for (const t of tags) {
-      const src = t.dataset.lazy;
-      if (!src || t.dataset.loaded) continue;
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = src; s.async = false;
-        s.onload = () => { t.dataset.loaded = '1'; res(); };
-        s.onerror = () => rej(new Error('slice failed to load: ' + src));
-        document.head.appendChild(s);
-      });
-    }
+    for (const t of tags) await _loadSliceTag(t);
     document.body.classList.add('slices-loaded');
   })().catch(e => { _slicesP = null; throw e; });   // a failed download is retried on the next call
   return _slicesP;
+}
+// One slice tag becomes one script, once: the whole load above and the phone shell (which wants js/18-launcher.js alone, 09c-mobile.js
+// phEnsureLauncher) share this promise, so a slice is never run twice (its top-level `let`s would throw).
+const _sliceLoads = new Map();
+function _loadSliceTag(t) {
+  const src = t.dataset.lazy;
+  if (!src || t.dataset.loaded) return Promise.resolve();
+  let p = _sliceLoads.get(src);
+  if (!p) {
+    p = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.async = false;
+      s.onload = () => { t.dataset.loaded = '1'; res(); };
+      s.onerror = () => { _sliceLoads.delete(src); rej(new Error('slice failed to load: ' + src)); };
+      document.head.appendChild(s);
+    });
+    _sliceLoads.set(src, p);
+  }
+  return p;
 }
 let activeSubtab    = 'mostOrdered';
 let activeOpsSubtab = 'cohort';
@@ -2453,7 +2466,8 @@ const TABS = {
 };
 
 function loadActiveTab() {
-  if (!_desktopBooted && _phoneFirst()) return;   // the shell boots on "เต็ม →" (03-tabs-main.js)
+  if (!_desktopBooted && (_phoneFirst() || phOn())) return;   // the shell boots on "เต็ม →" or on the first page opened from the phone shell (03-tabs-main.js)
+  if (document.body.classList.contains('ph-home')) return;   // a launcher view is on screen: the page behind it loads when it is opened (phOpenPage)
   _lastTabLoadAt = Date.now();
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
@@ -2893,7 +2907,7 @@ function _updateClusterBar(name) {
   if (!bar) return;
   const cl = clusterOf(name);
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
-  _renderSupplyNav(name);                          // the branch phone strip follows every switch
+  phNavRender();                                   // the phone's bottom navigation follows every switch (js/09c-mobile.js)
   if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the sidebar department entry that holds this page lights up (js/18-launcher.js)
   // The group you are in stays lit in the sidebar, whichever of its views is open
   // (its entry is tabs[0], or the first member the role can open - applyPermissions).
@@ -3002,6 +3016,18 @@ async function supplyBranchesWithData(month) {
   return _supplyBrData[month].rows;
 }
 function supplyBranchOptions(rows, first) { return (first ? `<option value="">${first}</option>` : '') + rows.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join(''); }
+// "mine" by role (moved here from js/16-supplyhome.js in PR-D3: the phone shell draws its tasks before that slice is loaded)
+// "mine" by role (owner_th names the department), not by module: management holds every
+// module and would otherwise own every branch's count; a role without a word falls back to modules
+const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['ประสานงานขาย'], analyst: ['ฝ่ายวิเคราะห์'],
+  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'],
+  warehouse: ['คลัง'] };
+function _shmMine(it) {
+  const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
+  const words = role && _SHM_ROLE_OWNERS[role];
+  if (words && it.owner_th) return words.some(w => it.owner_th.includes(w));
+  return (it.owner_modules || []).some(hasModule);
+}
 function _supplyItemOf(tab, pane) {
   // PR-M7: a page can sit in two chips (one per role: the analyst's งานประจำเดือน, Accounting's ข้อมูลตั้งต้น), so the item the
   // person's role lists is looked for first; only then any item of the page
@@ -3080,35 +3106,6 @@ function supplyOpen() {
   const ch = (want.chip && SUPPLY_CHIPS.find(c => c.key === want.chip && _supplyChipAllowed(c))) || SUPPLY_CHIPS.find(_supplyChipAllowed);
   if (ch) supplyChipOpen(ch.key);
 }
-// ── #supplyNav: the branch login's bottom strip on a phone ───────────────────
-// body.supply-phone (applyPermissions, role branch) + ≤700 px shows it; the lit
-// button is the open page. Every tap is a supplyGo deep link.
-const SUPPLY_PHONE_NAV = [
-  { tab: 'supplyhome', label: 'หน้างาน', icon: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>' },
-  { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', icon: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><path d="M9 14l2 2 4-4"/>' },
-  { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/>' },
-  { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: '<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.3 7L12 12l8.7-5"/><path d="M12 22V12"/>' },
-  { tab: 'branchstock', pane: 'var', label: 'ผลต่าง', icon: '<path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/>' },
-  // PR-M4: the month-end count is a 6th entry only on days 1–3 of the month (and while it is the open page); on other days it is
-  // reached from หน้างาน, and the strip stays five entries
-  { tab: 'branchstock', pane: 'count', label: 'ตรวจนับ', when: () => _supplyCountDays(), icon: '<path d="M4 6h16M4 12h16M4 18h9"/><path d="M16 17l2 2 3-4"/>' },
-];
-// the first three days of the month by the branch's clock (Bangkok)
-function _supplyCountDays() {
-  const day = Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(8, 10));
-  return day >= 1 && day <= 3;
-}
-function _renderSupplyNav(name) {
-  const nav = document.getElementById('supplyNav');
-  if (!nav) return;   // rendered for everyone; CSS shows it only for body.supply-phone on a phone
-  const acc = _SUPPLY_PANE[name];
-  const pane = acc ? acc.get() : null;
-  nav.innerHTML = SUPPLY_PHONE_NAV.filter(it => tabAllowed(it.tab) && (!it.when || it.when() || (it.tab === name && it.pane === pane))).map(it => {
-    const on = it.tab === name && (!it.pane || it.pane === pane);
-    return `<button class="${on ? 'active' : ''}" aria-current="${on ? 'page' : 'false'}" onclick="supplyGo({tab:'${it.tab}'${it.pane ? `,pane:'${it.pane}'` : ''}})"><svg viewBox="0 0 24 24" aria-hidden="true">${it.icon}</svg>${it.label}</button>`;
-  }).join('');
-}
-
 function _renderSupplyBar(bar, cl, name) {
   const acc = _SUPPLY_PANE[name];
   const hit = _supplyItemOf(name, acc ? acc.get() : null);

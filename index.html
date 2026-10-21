@@ -1673,18 +1673,9 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
   .wt .wt-arrow { display: none; }
   .wt-find { flex: 1 1 100%; min-width: 0; }
 }
-/* bottom strip for the branch login on a phone (body.supply-phone, set by applyPermissions):
-   หน้างาน · ตรวจนับ · สั่งสินค้า · รับสินค้า · ผลต่าง under the thumb; the chip rows above
-   give way to it, only the ปลดล็อกการบันทึก chip stays up there. Rendered by _renderSupplyNav. */
-#supplyNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; display: none;
-  background: var(--bg-card,#fff); border-top: 1px solid var(--border,#e2e8f0);
-  justify-content: space-around; padding: 2px 2px calc(2px + env(safe-area-inset-bottom, 0px)); }
-#supplyNav button { flex: 1; min-width: 0; background: none; border: 0; display: flex; flex-direction: column;
-  align-items: center; gap: 2px; font-size: 12px; line-height: 1.2; color: var(--text-muted,#94a3b8); padding: 4px 0; cursor: pointer; }
-#supplyNav button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-#supplyNav button.active { color: var(--group-ink, var(--accent)); font-weight: 700; }
+/* The branch login's pages sit under the phone shell's bottom navigation (#phNav, PR-D3 - it replaced the #supplyNav strip): the chip rows above
+   give way to it, and the lock state is a row of ฉัน. */
 @media (max-width: 700px) {
-  body.supply-phone #supplyNav { display: flex; }
   body.supply-phone .content-area { padding: 6px 12px 76px; }
   /* the strip replaces the chip rows entirely; the lock state moves to the icon beside the user name */
   body.supply-phone #clusterBar { display: none !important; }
@@ -1902,6 +1893,116 @@ body.mgt-reading .content-area { padding-top: 10px; }
 }
 
 /* ════════════════════════════════════════════════════════════
+   PHONE SHELL (PR-D3, 2026-10-21) — the department launcher and the bottom navigation of a phone.
+   Drawn by js/09c-mobile.js ("PHONE SHELL"). #phHome and #phNav exist for every screen but are display:none unless
+   body.ph-on, which only a phone (<= 700 px) gets: a desktop is untouched. Tokens only (the --dept-<key>-ink / -tint pairs
+   carry the dark variants); the navy header is the owner's summary header (#1f3a6b + white, the same in both themes).
+════════════════════════════════════════════════════════════ */
+#phHome, #phNav { display: none; }
+#phHome [hidden] { display: none !important; }
+#phHome { min-height: 100vh; background: var(--bg-page, #f0f4f8); color: var(--text-primary, #0f172a); padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+.ph-hero { background: #1f3a6b; color: #fff; padding: 16px 16px 28px; display: flex; flex-direction: column; gap: 12px; }
+.ph-hero-top { display: flex; align-items: center; gap: 10px; }
+.ph-logo { width: 32px; height: 32px; border-radius: var(--r-sm, 8px); background: #fff; color: #1f3a6b; display: flex; align-items: center; justify-content: center; font-weight: 700; flex: 0 0 auto; }
+.ph-brand { font-weight: 700; letter-spacing: .04em; }
+.ph-uid { margin-left: auto; min-width: 0; max-width: 55%; font-size: 13px; color: #c9d4e6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-hero-date { font-size: 13px; color: #c9d4e6; }
+.ph-yest { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 0; border: 0; background: none; color: #fff; text-align: left; font: inherit; cursor: pointer; }
+.ph-yest-l, .ph-yest-s { font-size: 13px; color: #c9d4e6; }
+.ph-yest-v { font-size: 26px; font-weight: 700; line-height: 1.25; }
+.ph-taskcard { position: relative; margin: -14px 16px 0; min-height: 52px; box-sizing: border-box; padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card, #fff); border: 1px solid var(--border, #d5dbe3); border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); color: var(--text-primary); text-decoration: none; }
+.ph-taskcard-t { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
+.ph-taskcard-go { font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.ph-dot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; background: var(--amber-ink); }
+.ph-dot.is-urgent { background: var(--bad-ink); }
+.ph-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.ph-sec { margin: 0; font-size: 15px; font-weight: 700; color: var(--accent); }
+.ph-sec-sm { margin-top: 6px; font-size: 14px; color: var(--text-secondary); }
+.ph-empty, .ph-note { margin: 0; font-size: 14px; color: var(--text-secondary); }
+.ph-depts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ph-dept { position: relative; min-height: 96px; box-sizing: border-box; padding: 12px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: var(--bg-card, #fff); border: 1px solid var(--border-soft, #e6eaf0); border-radius: var(--r-lg, 16px); box-shadow: var(--shadow-card, none); color: var(--text-primary); text-decoration: none; }
+.ph-badge { width: 48px; height: 48px; border-radius: var(--r-lg, 16px); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; background: var(--dt); color: var(--dk); }
+.ph-badge-sm { width: 40px; height: 40px; border-radius: var(--r-md, 12px); background: var(--bg-card, #fff); }
+.ph-badge-lg { width: 52px; height: 52px; }
+.ph-dept-n { font-size: 13px; font-weight: 600; text-align: center; line-height: 1.25; overflow-wrap: anywhere; }
+.ph-cnt { position: absolute; top: 6px; right: 8px; min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 999px; background: #b42318; color: #fff;
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }   /* D4 fills it; fixed red + white in both themes (6.5:1) */
+.ph-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.ph-head-navy { background: #1f3a6b; color: #fff; }
+.ph-head-navy .ph-head-t p { color: #c9d4e6; }
+.ph-head-tint { background: var(--dt); color: var(--dk); border-bottom: 1px solid var(--border-soft); }
+.ph-head-t { min-width: 0; }
+.ph-head-t h1 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.ph-head-t p { margin: 0; font-size: 13px; line-height: 1.35; }
+.ph-head-t h1:focus { outline: none; }                    /* the heading takes the focus on a view change (a screen reader), it is not a tab stop */
+.ph-back { width: 44px; height: 44px; margin: -6px 0 -6px -8px; border: 0; background: none; color: var(--dk); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; cursor: pointer; }
+.ph-av { width: 44px; height: 44px; border-radius: 999px; background: rgba(255,255,255,.2); color: #fff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ph-ptiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ph-ptile { min-height: 64px; box-sizing: border-box; padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; line-height: 1.3;
+  background: var(--bg-card, #fff); border: 1px solid var(--border-soft, #e6eaf0); border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); color: var(--text-primary); text-decoration: none; }
+.ph-ptile svg { color: var(--dk); flex: 0 0 auto; }
+.ph-ptile span { min-width: 0; overflow-wrap: anywhere; }
+.ph-card { background: var(--bg-card, #fff); border: 1px solid var(--border, #d5dbe3); border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); }
+.ph-todo-card { padding: 14px 14px 6px; }
+.ph-card-h { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ph-todo { min-height: 52px; box-sizing: border-box; padding: 6px 0; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border-soft, #e6eaf0); color: var(--text-primary); text-decoration: none; }
+.ph-todo-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ph-todo-main b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ph-todo-d { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ph-todo-card .ph-note { padding: 8px 0 10px; border-top: 1px solid var(--border-soft, #e6eaf0); }
+.ph-chev { font-size: 18px; color: var(--text-secondary); flex: 0 0 auto; }
+.ph-bigtiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ph-bigtile { min-height: 132px; box-sizing: border-box; padding: 16px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+  background: var(--bg-card, #fff); border: 1px solid var(--border-soft, #e6eaf0); border-radius: var(--r-lg, 16px); box-shadow: var(--shadow-card, none); color: var(--text-primary); text-decoration: none; }
+.ph-bigtile.ph-span2 { grid-column: span 2; min-height: 96px; }
+.ph-bigtile-n { font-size: 16px; font-weight: 700; }
+.ph-bigtile-h { font-size: 13px; color: var(--text-secondary); }
+.ph-search { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0 14px; font: inherit; font-size: 16px; color: var(--text-primary);
+  background: var(--bg-input, #fff); border: 1px solid var(--border-control, #7d8aa0); border-radius: var(--r-md, 12px); }
+.ph-card-list { overflow: hidden; }
+.ph-row { width: 100%; min-height: 52px; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 0; border-top: 1px solid var(--border-soft, #e6eaf0); background: none; font: inherit; font-size: 15px; text-align: left; color: var(--text-primary); text-decoration: none; cursor: pointer; }
+.ph-card-list > .ph-row:first-child { border-top: 0; }
+.ph-row span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ph-val { font-size: 14px; color: var(--text-secondary); white-space: nowrap; }
+#phMeLock.is-on .ph-val { color: var(--good-ink); }
+.ph-signout { width: 100%; min-height: 48px; margin-top: 4px; border: 1px solid var(--border-control, #7d8aa0); border-radius: var(--r-md, 12px); background: var(--bg-card, #fff);
+  font: inherit; font-size: 15px; font-weight: 600; color: var(--bad-ink); cursor: pointer; }
+#phv-me .ms-section { padding: 0; margin-top: 0; }
+#phv-me #msPushLater { display: none !important; }
+#phBusy { position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 41; padding: 10px 18px; border-radius: 999px;
+  background: #1f3a6b; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 4px 14px rgba(15,23,42,.3); }
+#phNav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; box-sizing: border-box; height: calc(56px + env(safe-area-inset-bottom, 0px)); padding: 0 4px env(safe-area-inset-bottom, 0px);
+  background: var(--bg-card, #fff); border-top: 1px solid var(--border, #d5dbe3); }
+.ph-nav-i { min-width: 0; min-height: 56px; padding: 4px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; background: none; font: inherit; font-size: 12px; line-height: 1.2; color: var(--text-secondary); cursor: pointer; }
+.ph-nav-i.active { color: var(--accent); font-weight: 700; }
+:is(.ph-dept, .ph-ptile, .ph-bigtile, .ph-row, .ph-nav-i, .ph-todo, .ph-taskcard, .ph-yest, .ph-back, .ph-signout, .ph-search):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 700px) {
+  body.ph-on #phNav { display: grid; }
+  body.ph-on.ph-home #phHome { display: block; }
+  /* a launcher view hides everything else; the summary and the pages are behind it until a tile opens them */
+  body.ph-on.ph-home .app-layout, body.ph-on.ph-home #mobileSummary, body.ph-on.ph-home #msNav, body.ph-on.ph-home #msSheet { display: none !important; }
+  /* the shell replaces the old phone chrome: the tab strip, the floating back button, the supply link of the summary, the user chip and the theme button */
+  body.ph-on .sidebar, body.ph-on #backToMobile, body.ph-on #msSupply { display: none !important; }
+  body.ph-on #userChip, body.ph-on #darkBtn { display: none !important; }
+  /* the owner's summary keeps its own six tabs; they sit just above the bottom navigation */
+  body.ph-on #msNav { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom: 5px; }
+  body.ph-on #mobileSummary { padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
+  body.ph-on #msSheet { z-index: 50; padding-bottom: 40px; }
+  /* a page: room under the content for the navigation (the sticky action rows of the branch and warehouse pages sit just above it) */
+  body.ph-on .content-area, body.ph-on.franchise-phone .content-area, body.ph-on.supply-phone .content-area { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  body.ph-on .ohb-actbar, body.ph-on .brn-sticky-bottom { bottom: calc(56px - 76px + env(safe-area-inset-bottom, 0px)) !important; }
+  body.ph-on .shm-toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* the branch and franchise logins had their top bar laid over the tab strip (it held the user chip, now a row of ฉัน); a pinned login has no
+     title or filters there (switchTab hides the scope of a page with its own controls), so with the strip gone the bar goes too */
+  body.ph-on.supply-phone .top-bar, body.ph-on.franchise-phone .top-bar { display: none !important; }
+}
+}
+
+/* ════════════════════════════════════════════════════════════
    PRINT — RE-ASSERTED LAST.
    The mobile @media (max-width:700px) blocks above sit LATER in this stylesheet
    than the main @media print block, so at equal specificity they win — and when
@@ -1915,7 +2016,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 @media print {
   /* the phone-only overlay must never reach paper, and the desktop shell has to
      be visible even when the phone was not in force-desktop mode */
-  #mobileSummary, #msNav, #backToMobile, #msSheet { display: none !important; }
+  #mobileSummary, #msNav, #backToMobile, #msSheet, #phHome, #phNav { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
   body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d; }
@@ -2109,15 +2210,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
   </div>
   <!-- pull-to-refresh indicator (09c-mobile.js) -->
   <div id="msPull" aria-hidden="true"></div>
-  <!-- install offer: beforeinstallprompt, or the iOS hint (msShowInstall, 09c-mobile.js) -->
-  <div id="msInstall" class="ms-section" style="display:none;margin-top:10px">
-    <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
-      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ</b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
-      <button id="msInstallBtn" onclick="msInstallApp()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">ติดตั้ง</button>
-      <button onclick="msInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted,#64748b);font-size:20px;flex-shrink:0">×</button>
-    </div>
-  </div>
-
   <!-- QA M4: a supply role's way back to its own work (shown by applyPermissions, 01-core.js) -->
   <div id="msSupply" class="ms-section" style="display:none;margin-top:10px">
     <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
@@ -2128,21 +2220,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
 
   <!-- offline: the worker served the last stored copy (sw.js → message offline-fallback) -->
   <div id="msOffline" class="ms-section" role="status" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--r-md);background:#fef3c7;color:#92400e;font-size:12px;font-weight:600"></div>
-  <!-- the morning brief as a notification on this phone (msPushInit, 09c-mobile.js; routers/push_api.py) -->
-  <div id="msPush" class="ms-section" style="display:none;margin-top:10px">
-    <div class="ms-card" style="padding:10px 14px">
-      <p style="font-size:13px;font-weight:700">แจ้งเตือนตอนเช้า</p>
-      <p id="msPushState" style="font-size:12px;color:var(--text-muted,#64748b);margin-top:2px">กำลังตรวจสอบ…</p>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <button id="msPushOn" onclick="msPushEnable()" style="min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent)">เปิดการแจ้งเตือน</button>
-        <button id="msPushOff" onclick="msPushDisable()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ปิด</button>
-        <button id="msPushTest" onclick="msPushTest()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ส่งทดสอบ</button>
-        <button id="msPushLater" onclick="msPushLater()" style="min-height:44px;padding:10px 14px;font-size:13px;border-radius:var(--r-md);border:0;background:none;color:var(--text-muted,#64748b)">ไว้ก่อน</button>
-      </div>
-      <!-- which kinds this device receives (msPushKinds, 09c-mobile.js; POST /api/push/prefs) -->
-      <div id="msPushKinds" style="display:none"></div>
-    </div>
-  </div>
   <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
     <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;min-height:44px;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>
@@ -2179,8 +2256,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <div class="ms-section-title">ดีสุด / ⚠ ต้องดู (เทียบเดือนก่อน)</div>
       <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
     </div>
-    <!-- once notifications are on the card above hides itself; this brings it back (msPushReopen) -->
-    <div class="ms-section" style="text-align:center"><button id="msPushReopen" onclick="msPushReopen()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;border:0;background:none;color:var(--text-muted,#64748b);text-decoration:underline">ตั้งค่าการแจ้งเตือน</button></div>
   </div>
 
   <!-- VIEW: ยอดขาย — trend by day / week / month, peak hours, tender mix -->
@@ -2287,7 +2362,57 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <button id="msnav-profit"    data-g="profit" onclick="msSwitchView('profit')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>กำไร</button>
   <button id="msnav-discounts" data-g="money"  onclick="msSwitchView('discounts')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>ส่วนลด</button>
 </nav>
-<nav id="supplyNav" aria-label="สาขาของฉัน"></nav>
+<!-- ══ PHONE SHELL (PR-D3): the department launcher, its department pages, ค้นหา and ฉัน (drawn by js/09c-mobile.js, "PHONE SHELL") and the
+     bottom navigation. Both are display:none unless body.ph-on (a phone, <= 700 px); the desktop never sees them. ══ -->
+<div id="phHome">
+  <section id="phv-home" class="ph-view" aria-label="หน้าแรก"></section>
+  <section id="phv-dept" class="ph-view" aria-label="แผนก" hidden></section>
+  <section id="phv-search" class="ph-view" aria-label="ค้นหา" hidden>
+    <header class="ph-head ph-head-navy"><div class="ph-head-t"><h1>ค้นหา</h1><p>พิมพ์ชื่อหน้าหรือรายงาน</p></div></header>
+    <div class="ph-body">
+      <input id="phSearchInput" class="ph-search" type="search" placeholder="ค้นหาหน้าหรือรายงาน" aria-label="ค้นหาหน้าหรือรายงาน" autocomplete="off" enterkeyhint="search" oninput="phSearchRender()">
+      <div id="phSearchRes"></div>
+    </div>
+  </section>
+  <section id="phv-me" class="ph-view" aria-label="ฉัน" hidden>
+    <header class="ph-head ph-head-navy"><span class="ph-av" id="phMeAv" aria-hidden="true">ม</span><div class="ph-head-t"><h1 id="phMeWho">ผู้ใช้งาน</h1><p id="phMeRole"></p></div></header>
+    <div class="ph-body">
+      <div class="ph-card ph-card-list">
+        <button type="button" class="ph-row" id="phMeDark" onclick="toggleDarkMode()" aria-pressed="false"><span>โหมดมืด</span><span class="ph-val" id="phMeDarkV">ปิด</span></button>
+        <button type="button" class="ph-row" id="phMeLock" onclick="phUnlockWrites()" hidden><span>การบันทึกข้อมูล</span><span class="ph-val" id="phMeLockV">อ่านอย่างเดียว</span></button>
+        <button type="button" class="ph-row" id="phMePw" onclick="openPasswordChange(false)"><span>เปลี่ยนรหัสผ่าน</span><span class="ph-chev" aria-hidden="true">›</span></button>
+        <button type="button" class="ph-row" onclick="phOpenPage(() => switchTab('manual'))"><span>คู่มือการใช้งาน</span><span class="ph-chev" aria-hidden="true">›</span></button>
+      </div>
+  <!-- install offer: beforeinstallprompt, or the iOS hint (msShowInstall, 09c-mobile.js) -->
+  <div id="msInstall" class="ms-section" style="display:none;margin-top:10px">
+    <div class="ms-card" style="padding:8px 8px 8px 14px;display:flex;align-items:center;gap:8px">
+      <span style="flex:1;min-width:0;font-size:13px;line-height:1.35"><b>ติดตั้ง Oshinei บนหน้าจอ</b><br><span id="msInstallHint" style="font-size:12px;color:var(--text-muted,#64748b)">เปิดได้เหมือนแอป ไม่ต้องพิมพ์ที่อยู่เว็บ</span></span>
+      <button id="msInstallBtn" onclick="msInstallApp()" style="min-height:44px;padding:10px 14px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);flex-shrink:0">ติดตั้ง</button>
+      <button onclick="msInstallDismiss()" aria-label="ปิด" style="min-height:44px;min-width:44px;border:0;background:none;color:var(--text-muted,#64748b);font-size:20px;flex-shrink:0">×</button>
+    </div>
+  </div>
+
+  <!-- the morning brief as a notification on this phone (msPushInit, 09c-mobile.js; routers/push_api.py) -->
+  <div id="msPush" class="ms-section" style="display:none;margin-top:10px">
+    <div class="ms-card" style="padding:10px 14px">
+      <p style="font-size:13px;font-weight:700">แจ้งเตือนตอนเช้า</p>
+      <p id="msPushState" style="font-size:12px;color:var(--text-muted,#64748b);margin-top:2px">กำลังตรวจสอบ…</p>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button id="msPushOn" onclick="msPushEnable()" style="min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent)">เปิดการแจ้งเตือน</button>
+        <button id="msPushOff" onclick="msPushDisable()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ปิด</button>
+        <button id="msPushTest" onclick="msPushTest()" style="display:none;min-height:44px;padding:10px 16px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">ส่งทดสอบ</button>
+        <button id="msPushLater" onclick="msPushLater()" style="min-height:44px;padding:10px 14px;font-size:13px;border-radius:var(--r-md);border:0;background:none;color:var(--text-muted,#64748b)">ไว้ก่อน</button>
+      </div>
+      <!-- which kinds this device receives (msPushKinds, 09c-mobile.js; POST /api/push/prefs) -->
+      <div id="msPushKinds" style="display:none"></div>
+    </div>
+  </div>
+      <button type="button" class="ph-signout" id="phMeOut" onclick="doLogout()">ออกจากระบบ</button>
+    </div>
+  </section>
+  <div id="phBusy" role="status" hidden>กำลังเปิดหน้า…</div>
+</div>
+<nav id="phNav" aria-label="เมนูหลัก"></nav>
 <button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></button>
 
 <div class="app-layout">

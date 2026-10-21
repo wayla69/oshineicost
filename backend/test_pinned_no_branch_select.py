@@ -125,6 +125,10 @@ def test_a_pinned_branch_login_sees_no_branch_selector_anywhere(live_server):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(base + "/", wait_until="networkidle", timeout=90000)
         page.wait_for_function("typeof supplyGo === 'function' && window.AUTH && window.AUTH.role === 'branch'", timeout=30000)
+        # PR-D3: a phone opens on the launcher; the shell (fragments + slices) boots on the first page opened from it
+        page.wait_for_function("document.body.classList.contains('ph-on')", timeout=30000)
+        page.evaluate("phOpenPage(() => {})")
+        page.wait_for_function("_desktopBooted === true", timeout=90000)
         page.wait_for_timeout(1000)
         other = "BranchB"
         panes = [("supplyhome", None), ("branchstock", "issue"), ("branchstock", "order"), ("branchstock", "recv"),
@@ -168,7 +172,9 @@ def test_a_pinned_franchise_login_sees_no_branch_selector_and_one_sidebar_entry(
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(base + "/", wait_until="networkidle", timeout=90000)
         page.wait_for_function("typeof switchTab === 'function' && window.AUTH && window.AUTH.role === 'franchise'", timeout=30000)
-        page.wait_for_function("document.getElementById('tab-franchise') && document.getElementById('tab-franchise').style.display !== 'none'", timeout=30000)
+        page.wait_for_function("document.body.classList.contains('ph-on')", timeout=30000)            # PR-D3: the phone shell; ร้านของฉัน is one tap away
+        page.evaluate("phOpenPage(() => switchTab('franchise'))")
+        page.wait_for_function("document.getElementById('tab-franchise') && document.getElementById('tab-franchise').style.display !== 'none'", timeout=90000)
         page.wait_for_timeout(2500)
         bad = page.evaluate("""() => ({
             naming: [...document.querySelectorAll('select')].filter(s => [...s.options].some(o => o.textContent.includes('BranchA'))).map(s => s.id || '(select)'),
