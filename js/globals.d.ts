@@ -19,6 +19,7 @@ declare var allMonths: string[];        // 01-core.js: Object.defineProperty(win
 declare function uiDialog(opt: any): Promise<any>;
 declare function uiConfirm(message: string, opt?: any): Promise<boolean>;
 declare function uiNotice(message: string, opt?: any): Promise<boolean>;
+declare function uiHelp(title: string, html: string): Promise<boolean>;
 declare function uiPrompt(message: string, value?: any, opt?: any): Promise<string | null>;
 // PR-D6 (01-core.js): the one toast, the "?" help popover and the finished-work filter
 declare function uiToast(text: string, kind?: string, opt?: any): { el: HTMLElement; close(): void; next(text: string, label?: string, fn?: any): any };

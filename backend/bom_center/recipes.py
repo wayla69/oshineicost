@@ -151,6 +151,72 @@ def match_blocks(con, blocks: list) -> list:
     return blocks
 
 
+# ── suggested POS codes for the menus still unmatched ───────────────────────
+SUGGEST_MIN = 0.8        # a Thai name this close (difflib ratio on the reduced name) is offered, never applied by itself
+
+
+def _suggest_pool(con, release_id: int) -> list:
+    """Active buffet / à la carte SKUs without a recipe in the release: (code, desc, tier, {name keys})."""
+    have = {c for (c,) in con.execute("SELECT sku_code FROM bc_recipe WHERE release_id=?", (release_id,))}
+    has_tier = con.execute("SELECT 1 FROM sqlite_master WHERE name='sku_tier'").fetchone()
+    tier_of = dict(con.execute("SELECT s.sku_code, t.tier FROM sku_tier t JOIN skus s USING(sku_id)")) if has_tier else {}
+    dish = {c: (th, en) for c, th, en in con.execute(
+        "SELECT ds.sku_code, d.name_th, d.name_en FROM bc_dish_sku ds JOIN bc_dish d USING(dish_id)")}
+    out = []
+    for code, desc in con.execute("SELECT sku_code, description FROM skus WHERE (sku_code LIKE 'OTHBF%' OR sku_code LIKE 'OTHAL%')"
+                                  " AND COALESCE(active, 1)=1 ORDER BY sku_code"):
+        if code in have:
+            continue
+        keys = {name_key(x) for x in (desc, *dish.get(code, ())) if x}
+        keys.discard("")
+        out.append((code, desc or "", str(tier_of.get(code) or ""), keys))
+    return out
+
+
+def _suggest_one(th, en, tier, pool) -> list:
+    """Every pool SKU of the same tier that is close enough to this menu, best first: [(rank, score, code, desc)].
+    rank 2 = the same English name, or the same Thai name; rank 1 = a Thai name with ratio >= SUGGEST_MIN."""
+    kth, ken = name_key(th), name_key(en)
+    hits = []
+    for code, desc, t, keys in pool:
+        if t != str(tier):
+            continue
+        if (ken and ken in keys) or (kth and kth in keys):
+            hits.append((2, 1.0, code, desc))
+            continue
+        if kth:
+            best = max((difflib.SequenceMatcher(None, kth, k).ratio() for k in keys), default=0.0)
+            if best >= SUGGEST_MIN:
+                hits.append((1, round(best, 3), code, desc))
+    return sorted(hits, key=lambda h: (-h[0], -h[1], h[2]))
+
+
+def suggest_pos(con, th, en, tier, release_id: int = -1):
+    """The POS code a menu in the kitchen's file most likely is: {sku_code, name, score, method} or None.
+    Only active OTHBF% / OTHAL% SKUs of the SAME tier without a recipe in `release_id` are candidates."""
+    hits = _suggest_one(th, en, tier, _suggest_pool(con, release_id))
+    if not hits:
+        return None
+    rank, score, code, desc = hits[0]
+    return {"sku_code": code, "name": desc, "score": score, "method": "exact" if rank == 2 else "close"}
+
+
+def suggest_unmatched(con, release_id: int, unmatched: list) -> None:
+    """Add `suggest` (see suggest_pos, or None) to each unmatched block, in place. One SKU is offered to one menu only:
+    the strongest claim keeps it, the others take their next best or none."""
+    pool = _suggest_pool(con, release_id)
+    cand = [(i, _suggest_one(u.get("th"), u.get("en"), u.get("tier"), pool)) for i, u in enumerate(unmatched)]
+    claims = sorted(((h[0], h[1], i, h[2], h[3]) for i, hs in cand for h in hs), key=lambda c: (-c[0], -c[1], c[2], c[3]))
+    taken, got = set(), {}
+    for rank, score, i, code, desc in claims:
+        if i in got or code in taken:
+            continue
+        got[i] = {"sku_code": code, "name": desc, "score": score, "method": "exact" if rank == 2 else "close"}
+        taken.add(code)
+    for i, u in enumerate(unmatched):
+        u["suggest"] = got.get(i)
+
+
 # ── release rows ─────────────────────────────────────────────────────────────
 def get_or_create_draft(con, label: str, effective_month: str, price_month: str, who: str, modules=None) -> int:
     ensure(con)
@@ -479,6 +545,7 @@ def tier_view(con, release_id: int, tier: int = None) -> dict:
         "SELECT ref, message FROM bc_release_check WHERE release_id=? AND check_code='unmatched' ORDER BY ref", (release_id,))]
     for u in unmatched:
         u["n_lines"] = len(u.pop("lines", []))
+    suggest_unmatched(con, release_id, unmatched)
     counts = {t: sum(1 for r in rows if r["min_tier"] == t) for t in TIERS}
     return {"release": release_row(con, release_id), "tier": tier, "rows": rows, "unmatched": unmatched,
             "counts": counts, "problems": sum(1 for r in rows if r["problems"]),

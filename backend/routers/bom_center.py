@@ -20,7 +20,8 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 import auth as _auth
-from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run
+import core as _core
+from core import get_db, invalidate_cache, require_write_token, require_write_token_unless_dry_run, ttl_cache
 from bom_center import aliases as _al
 from bom_center import backlog as _bl
 from bom_center import benchmark as _bm
@@ -2984,6 +2985,57 @@ def bc_issue_periods(request: Request, branch_id: Optional[int] = Query(None)):
         if _auth.scope_branch(request) or branch_id is not None:
             branch_id = _stock_branch(con, request, branch_id)
         return {"branches": _va.issue_periods(con, branch_id)}
+
+
+@ttl_cache
+def bc_issue_month_totals(branch_id: int, end_count_id: int, gen: int):
+    """The two numbers the month overview shows for a confirmed period (cached per period; `gen` is the data generation,
+    so a price or cost change that flushes the cache is never served from before it)."""
+    with get_db() as con:
+        _ensure(con)
+        t = _va.issue_summary(con, branch_id, end_count_id)["totals"]
+    return {"used_value": t["used_value"], "unpriced": t["unpriced"]}
+
+
+_ISS_STATUS_ORDER = {"ready": 0, "waiting": 1, "posted": 2}
+
+
+@router.get("/api/bom-center/issue-summary/month")
+def bc_issue_month(request: Request, month: Optional[str] = Query(None)):
+    """The month overview of ใบสรุปตัดเบิก: one row per counting branch with its period of the month, the state
+    (ready = receipts confirmed and not posted · waiting = receipts not confirmed · posted) and, for a confirmed period,
+    the value and the lines with no price. Without `month`: the latest month that has any period. A branch login: its own row."""
+    if month is not None:
+        _month_or_400(month)
+    with get_db() as con:
+        _ensure(con)
+        pinned = _stock_branch(con, request, None) if _auth.scope_branch(request) else None
+        branches = _va.issue_periods(con, pinned)
+    months = sorted({p["month"] for b in branches for p in b["periods"]}, reverse=True)
+    month = month or (months[0] if months else _this_month())
+    gen = _core._data_gen
+    rows = []
+    for b in branches:
+        inm = [p for p in b["periods"] if p["month"] == month]            # newest first
+        if not inm:
+            continue
+        p = next((x for x in inm if x["receipts_confirmed"] and not x["accounting_posted_at"]), inm[0])
+        status = "posted" if p["accounting_posted_at"] else ("ready" if p["receipts_confirmed"] else "waiting")
+        used = unpriced = None
+        if p["receipts_confirmed"]:
+            r = bc_issue_month_totals(b["branch_id"], p["end_count_id"], gen)
+            t = json.loads(r.body) if hasattr(r, "body") else r
+            used, unpriced = t["used_value"], t["unpriced"]
+        days = (date.fromisoformat(p["end_date"]) - date.fromisoformat(p["begin_date"])).days
+        rows.append({"branch_id": b["branch_id"], "name": b["name"], "begin_date": p["begin_date"], "end_date": p["end_date"],
+                     "days": days, "end_count_id": p["end_count_id"], "status": status,
+                     "receipts_confirmed": p["receipts_confirmed"],
+                     "accounting_posted_at": p["accounting_posted_at"], "accounting_posted_by": p["accounting_posted_by"],
+                     "used_value": used, "unpriced": unpriced})
+    rows.sort(key=lambda r: (_ISS_STATUS_ORDER[r["status"]], r["name"]))
+    n = {k: sum(1 for r in rows if r["status"] == k) for k in _ISS_STATUS_ORDER}
+    return {"month": month, "months": months, "rows": rows,
+            "counts": {"all": len(rows), "open": n["ready"] + n["waiting"], **n}}
 
 
 @router.get("/api/bom-center/issue-summary")
