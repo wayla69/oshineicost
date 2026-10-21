@@ -29,4 +29,8 @@ if [ -n "$real" ]; then
     echo "check-js: $(printf '%s\n' "$real" | grep -c .) error(s) — $n_noise type-shape note(s) ignored"
     exit 1
 fi
+# PR-D1: every page stays reachable - a department tile or a link of หน้ารายงานทั้งหมด (scripts/check-departments.js)
+if command -v node >/dev/null 2>&1; then
+    node scripts/check-departments.js || { echo "check-js: the page registry check failed"; exit 1; }
+fi
 echo "check-js: clean — $n_noise type-shape note(s) ignored"

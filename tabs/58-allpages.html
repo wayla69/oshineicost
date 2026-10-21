@@ -1,0 +1,28 @@
+<div id="tab-allpages" style="display:none">
+
+  <!-- หน้ารายงานทั้งหมด (PR-D1, 2026-10-21): the safety net of the department launcher. Every page the person may open, grouped as the
+       older menu grouped them (TAB_CLUSTERS and SUPPLY_CHIPS in js/01-core.js, through allPagesModel), each one a link. A page that sits
+       in no department is still here. Drawn by js/18-launcher.js loadAllPages. -->
+  <style>
+    #tab-allpages .alp { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+    #tab-allpages .alp-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--accent); }
+    #tab-allpages .alp-lead { font-size: 14px; color: var(--text-secondary); }
+    #tab-allpages .alp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; align-items: start; }
+    #tab-allpages .alp-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card); padding: 14px 16px; }
+    #tab-allpages .alp-card h2 { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--accent); }
+    #tab-allpages .alp-card ul { list-style: none; margin: 0; padding: 0; }
+    #tab-allpages .alp-card a { display: flex; align-items: center; min-height: 44px; padding: 4px 0; border-top: 1px solid var(--border-soft); font-size: 14px; color: var(--text-primary); text-decoration: none; overflow-wrap: anywhere; }
+    #tab-allpages .alp-card li:first-child a { border-top: 0; }
+    #tab-allpages .alp-card a:hover { color: var(--accent); text-decoration: underline; }
+    #tab-allpages :is(.alp-card a, .alp-back):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #tab-allpages .alp-back { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--accent); width: fit-content; }
+  </style>
+  <div class="alp">
+    <div>
+      <a href="#" class="alp-back" onclick="deptNavHome();return false">← หน้าแรก</a>
+      <h2 class="alp-title">หน้ารายงานทั้งหมด</h2>
+      <span class="alp-lead">ทุกหน้าที่บัญชีนี้เปิดได้ จัดกลุ่มตามเมนูเดิม หน้าที่ไม่อยู่ในแผนกใดจะอยู่ที่นี่</span>
+    </div>
+    <div id="alpBody" class="alp-grid"></div>
+  </div>
+</div>

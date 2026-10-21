@@ -289,7 +289,8 @@ function _startTitle(t, pane) {
 function showStartCard(role) {
   const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 5);   // every entry of a role shows (ประสานงานขาย has 5)
   // The branch role has no home page: the card sits on top of the page it landed on.
-  const host = document.getElementById(tabAllowed('home') ? 'tab-home' : 'tab-' + activeTab); if (!host || !items.length) return;
+  // PR-D1: on a desktop the landing page is the launcher, so the card sits on it
+  const host = document.getElementById(_launcherLanding() ? 'tab-launcher' : (tabAllowed('home') ? 'tab-home' : 'tab-' + activeTab)); if (!host || !items.length) return;
   let card = document.getElementById('homeStartCard');
   if (!card) { card = document.createElement('div'); card.id = 'homeStartCard'; host.insertBefore(card, host.firstChild); }
   card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
@@ -311,7 +312,7 @@ async function maybeShowStartCard() {
   try { if (localStorage.getItem(_startKey())) return; } catch(e) {}
   let me = null;
   try { me = await api(`${API}/api/usage/me`); } catch(e) { return; }
-  if (me && me.first_time) { if (tabAllowed('home')) switchTab('home'); showStartCard(window.AUTH.role || me.role); }
+  if (me && me.first_time) { if (_launcherLanding()) switchTab('launcher'); else if (tabAllowed('home')) switchTab('home'); showStartCard(window.AUTH.role || me.role); }
 }
 
 const ROLE_LABEL_TH = {
@@ -368,6 +369,10 @@ function firstAllowedTab() {
     'staff','custtype','supplyhome','ingpurchase','ordering','orderhub','branchstock','franchise','manual'];
   return order.find(tabAllowed) || 'manual';
 }
+// PR-D1: a desktop (wider than the phone breakpoint of the whole app, 700 px) lands on the department launcher, หน้าแรก, for every
+// role; a phone keeps the phone-first boot it has today (the owner's summary, or the role's supply page) until D3 redraws it.
+function _launcherLanding() { try { return !window.matchMedia('(max-width:700px)').matches; } catch (e) { return true; } }
+function _landingTab() { return _launcherLanding() ? 'launcher' : 'home'; }
 
 // {login: name shown on screens} from /api/auth/me; whoTh() reads it (PR-M1)
 async function _loadAuthNames() {
@@ -523,7 +528,8 @@ function applyPermissions() {
   // the franchise owner (PR-L) has ONE page, ร้านของฉัน: its nav entry is the only one left, and on a phone the sidebar
   // (a tab strip there) holds just that entry beside the user chip
   if (window.AUTH.role === 'franchise') {
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => { el.style.display = el.id === 'nav-franchise' ? '' : 'none'; });
+    // PR-D1: on a desktop the sidebar is หน้าแรก + the department entry (.dept-entry, js/18-launcher.js); on a phone those are hidden by CSS
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => { el.style.display = el.id === 'nav-franchise' || el.classList.contains('dept-entry') ? '' : 'none'; });
     document.body.classList.add('franchise-phone');
     // no branch selector anywhere (PR-K rule): the other pages are never opened, so their branch pickers go too
     document.querySelectorAll('#tabsRoot select').forEach(s => { if (/branch/i.test(s.id)) s.remove(); });
@@ -1725,7 +1731,7 @@ let _lastTabLoadAt  = 0;      // the open tab's last load (foreground refresh on
 
 // ── Lazy slices (2026-10-08). index.html loads five slices eagerly — 01-core,
 // 03-tabs-main, 06-features, 09b-cost-pnl, 09c-mobile: the login, the boot and the phone
-// summary. The other sixteen (the desktop tabs' code, ~1.6 MB) sit in index.html as inert
+// summary. The other seventeen (the desktop tabs' code, ~1.6 MB) sit in index.html as inert
 // <script type="text/plain" class="lazy-slice" data-lazy="/js/…?v=hash"> tags, in the same
 // order as before; this turns them into real scripts one after another (async=false keeps
 // the order; the server's ?v= makes them immutable-cached). init() awaits it on a desktop
@@ -2373,7 +2379,7 @@ async function onGroupChange() {
 
 // ── Tab switching ──────────────────────────────────────────────
 // owner 2026-10-20: plain Thai titles - the English duplicates in brackets are gone; GP / P&L / BoM / SKU stay (staff use them)
-const PAGE_TITLES = { franchise:'ร้านของฉัน', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน' };
+const PAGE_TITLES = { franchise:'ร้านของฉัน', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน', launcher:'หน้าแรก', allpages:'หน้ารายงานทั้งหมด' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2441,6 +2447,9 @@ const TABS = {
   heavyeater: { load: () => loadHeavyEaters(), follow: { dateRange: ['heFrom', 'heTo'] } },
   manual: {},
   costheadtop60: { load: () => loadCostHeadTop60() },
+  // PR-D1: the department launcher (the desktop landing page) and the list of every page; neither has period or branch filters
+  launcher: { load: () => loadLauncher(), ownFilters: true },
+  allpages: { load: () => loadAllPages(), ownFilters: true },
 };
 
 function loadActiveTab() {
@@ -2669,6 +2678,186 @@ const TAB_CLUSTERS = [
 ];
 const _inChip = (t, name) => t[0] === name || (t[2] || []).includes(name);
 const clusterOf = name => TAB_CLUSTERS.find(c => c.tabs.some(t => _inChip(t, name)));
+
+// ── Departments (PR-D1, 2026-10-21, owner: "แยกเป็น icon เมนู แต่ละแผนก") ───────────────────
+// ONE registry that the launcher home (js/18-launcher.js), the sidebar and - in the next PRs - the department workspace (D2),
+// the phone launcher (D3) and the red task badges (D4) all read. TAB_CLUSTERS and SUPPLY_CHIPS above STAY: the cluster bar and the
+// supply chips still draw inside the pages, and หน้ารายงานทั้งหมด is built from them, so no page is ever lost.
+//   key    short id; also the CSS suffix: --dept-<hue>-ink / -tint / -side (docs/ui-kit/tokens.css, light and dark)
+//   label  the department's name; duty one line under it; icon a DEPT_ICONS key
+//   roles  the roles whose HOME this is (listed first on their launcher); every role still sees any department it may open a page of
+//   pages  { tab, pane?, label, icon, mods?, roles? } - the real tab, and for the supply tabs the pane key of SUPPLY_CHIPS.
+//          A page appears only when the person may open it (js/18-launcher.js deptPageAllowed: tabAllowed, then the supply item's own
+//          mods / roles, then this entry's `mods` / `roles` when it names any). A page may sit in several departments.
+// 24x24 stroke paths (stroke 1.8, round caps) - the same set as the approved mockup; add more only in this style.
+const DEPT_ICONS = {
+  brief: 'M4 8h16v12H4z M9 8V5h6v3 M4 13h16',
+  mega: 'M4 10v4h3l7 4V6L7 10z M18 9a3 3 0 0 1 0 6',
+  clip: 'M9 4h6v3H9z M9 5H6v16h12V5h-3 M9 14l2 2 4-4',
+  pie: 'M12 3v9h9 M20.5 15A9 9 0 1 1 9 3.5',
+  calc: 'M6 3h12v18H6z M9 7h6 M9 11h.01 M12 11h.01 M15 11h.01 M9 15h.01 M12 15h.01 M15 15h.01 M9 18h6',
+  chef: 'M7 21h10 M7 17h10 M7 17v-5a4 4 0 0 1-1-7.9A4 4 0 0 1 12 3a4 4 0 0 1 6 1.1A4 4 0 0 1 17 12v5',
+  head: 'M4 14v-2a8 8 0 0 1 16 0v2 M4 14h3v5H4z M17 14h3v5h-3z M20 19a3 3 0 0 1-3 2h-3',
+  truck: 'M3 6h11v10H3z M14 10h4l3 3v3h-7 M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  store: 'M4 10l8-6 8 6v10H4z M10 20v-6h4v6',
+  key: 'M15 9a3 3 0 1 0 0-.01 M12.5 11.5L4 20 M7 17l2 2 M5 19l2 2',
+  bar: 'M3 3v18h18 M7 16v-4 M11 16v-8 M15 16v-6 M19 16V6',
+  trend: 'M3 17l6-6 4 4 8-8 M14 7h7v7',
+  coin: 'M12 3v18 M17 7H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6',
+  doc: 'M14 3H6v18h12V7z M14 3v4h4 M8 12h8 M8 16h5',
+  users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7 M22 21v-1a6 6 0 0 0-4-5.6',
+  book: 'M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z M4 17a3 3 0 0 1 3-3h11',
+  msg: 'M4 5h16v11H8l-4 4z M8 9h8 M8 12h5',
+  pct: 'M6.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M17.5 20a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M19 5L5 19',
+  cash: 'M3 7h18v12H3z M3 11h18 M16 15h2',
+  cancel: 'M6 3h12v18l-3-2-3 2-3-2-3 2z M10 9l4 4 M14 9l-4 4',
+  bowl: 'M3 11h18a9 7 0 0 1-18 0z M8 7c0-1 1-2 1-3 M12 7c0-1 1-2 1-3 M16 7c0-1 1-2 1-3',
+  tag: 'M3 12V4h8l10 10-8 8z M7.5 8.5h.01',
+  scale: 'M12 3v18 M5 21h14 M6 7h12 M6 7l-3 7a3 3 0 0 0 6 0z M18 7l-3 7a3 3 0 0 0 6 0z',
+  db: 'M4 6a8 3 0 1 0 16 0 8 3 0 1 0-16 0 M4 6v6a8 3 0 0 0 16 0V6 M4 12v6a8 3 0 0 0 16 0v-6',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M9 12l2 2 4-4',
+  inbox: 'M4 13h4l2 3h4l2-3h4 M4 13l2-8h12l2 8v6H4z',
+  ret: 'M9 14L4 9l5-5 M4 9h10a6 6 0 0 1 0 12h-3',
+  cal: 'M4 6h16v15H4z M4 10h16 M8 3v4 M16 3v4',
+  box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5',
+  cart: 'M3 4h2l2.5 11h11l2-8H6 M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  recv: 'M12 3v10 M8 9l4 4 4-4 M4 14v6h16v-6',
+  diff: 'M4 18l5-6 4 3 7-9 M15 6h5v5',
+  count: 'M9 6h11 M9 12h11 M9 18h11 M4 6l1 1 2-2 M4 12l1 1 2-2 M4 18l1 1 2-2',
+  lock: 'M6 11h12v10H6z M8 11V7a4 4 0 0 1 8 0v4',
+  upload: 'M12 15V3 M7 8l5-5 5 5 M4 15v6h16v-6',
+  // added for pages the mockup did not draw, in the same style
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2',
+  gauge: 'M4 18a8 8 0 1 1 16 0 M12 18l4-6 M7 18h.01 M17 18h.01',
+  target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 12h.01',
+  flask: 'M9 3h6 M10 3v6L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 9V3 M6.5 15h11',
+  bulb: 'M9 18h6 M10 21h4 M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
+  child: 'M12 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21v-2a6 6 0 0 1 12 0v2',
+  chat: 'M4 6h16v10H9l-5 4z M8 10h8',
+};
+const DEPARTMENTS = [
+  { key: 'mgmt', label: 'ผู้บริหาร', duty: 'ภาพรวม รายงาน และการรับทราบ', icon: 'brief', hue: 'mgmt', roles: ['management'], pages: [
+    { tab: 'mgtreport', label: 'รายงานผู้บริหาร', icon: 'doc' },
+    { tab: 'home', label: 'สรุปประจำวัน', icon: 'brief' },
+    { tab: 'overall', label: 'ภาพรวมและตัวชี้วัด', icon: 'gauge' },
+    { tab: 'dailysales', label: 'ยอดขายรายวัน', icon: 'cal' },
+    { tab: 'trend', label: 'แนวโน้ม', icon: 'trend' },
+    { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'coin' },
+    { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'bar' },
+    { tab: 'cost', label: 'ต้นทุน', icon: 'pie' },
+    { tab: 'bomcenter', pane: 'rel', label: 'รับทราบสูตร', icon: 'shield' }] },
+  { key: 'mkt', label: 'การตลาด', duty: 'ลูกค้า เมนู และเสียงลูกค้า', icon: 'mega', hue: 'mkt', roles: ['marketing'], pages: [
+    { tab: 'buffetperf', label: 'ลูกค้าและบุฟเฟ่ต์', icon: 'users' },
+    { tab: 'childbuffet', label: 'บุฟเฟ่ต์เด็ก', icon: 'child' },
+    { tab: 'menu', label: 'วิเคราะห์เมนู', icon: 'book' },
+    { tab: 'menuactionboard', label: 'ปรับเมนู', icon: 'count' },
+    { tab: 'menuopportunities', label: 'โอกาสเมนู', icon: 'bulb' },
+    { tab: 'menucompare', label: 'เทียบเมนู A/B', icon: 'diff' },
+    { tab: 'feedback', label: 'เสียงลูกค้า', icon: 'msg' },
+    { tab: 'custtype', label: 'ช่องทางและประเภทลูกค้า', icon: 'bar' },
+    { tab: 'timeflow', label: 'ช่วงเวลา', icon: 'clock' }] },
+  { key: 'ops', label: 'ปฏิบัติการ', duty: 'ควบคุมหน้าร้านและวินัยสาขา', icon: 'clip', hue: 'ops', roles: ['operation'], pages: [
+    { tab: 'opsreport', label: 'รายงานปฏิบัติการ', icon: 'clip' },
+    { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
+    { tab: 'cashctl', label: 'เงินสดขาด/เกิน', icon: 'cash' },
+    { tab: 'cancelbill', label: 'บิลยกเลิก', icon: 'cancel' },
+    { tab: 'staff', label: 'พนักงาน', icon: 'users' },
+    { tab: 'modifiers', label: 'ความต้องการพิเศษ', icon: 'chat' },
+    { tab: 'pricezone', label: 'ราคาและโซน', icon: 'tag' },
+    { tab: 'closetime', label: 'ปิดร้านและข้อมูล', icon: 'clock' },
+    { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', icon: 'count' },
+    { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', icon: 'doc' },
+    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', icon: 'diff' },
+    { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', icon: 'store' }] },
+  { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], pages: [
+    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' },
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', icon: 'book' },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
+    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้', icon: 'shield' },
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' },
+    { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', icon: 'scale' },
+    { tab: 'bomcenter', pane: 'rcheck', label: 'ตรวจสูตรด้วยยอดซื้อ', icon: 'count' },
+    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', icon: 'gauge' },
+    { tab: 'bomcost', label: 'ต้นทุนตามสูตร', icon: 'calc' },
+    { tab: 'costhead', label: 'ต้นทุนต่อหัว', icon: 'coin' },
+    { tab: 'coverage', label: 'ความครอบคลุมต้นทุน', icon: 'pie' },
+    { tab: 'menuimpact', label: 'วิเคราะห์วัตถุดิบ', icon: 'flask' },
+    { tab: 'menuefficiency', label: 'เป้าลดต้นทุน', icon: 'target' },
+    { tab: 'branchbom', label: 'BoM รายสาขา', icon: 'store' },
+    { tab: 'simhub', label: 'ตัวจำลอง', icon: 'calc' },
+    { tab: 'profit', label: 'กำไร SKU', icon: 'coin' },
+    { tab: 'benchmark', label: 'เทียบสาขา', icon: 'bar' },
+    { tab: 'pnl', label: 'P&L เชิงลึก', icon: 'trend' },
+    { tab: 'pnlbill', label: 'P&L ต่อบิล', icon: 'cancel' }] },
+  { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], pages: [
+    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', icon: 'book' },
+    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' }] },
+  { key: 'ss', label: 'ประสานงานขาย', duty: 'คิวใบสั่งซื้อ เคลม และรอบส่ง', icon: 'head', hue: 'ss', roles: ['salessupport'], pages: [
+    { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', icon: 'inbox' },
+    { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', icon: 'ret' },
+    { tab: 'bomcenter', pane: 'fc', label: 'ยอดแนะนำรายรอบ', icon: 'trend' },
+    { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', icon: 'doc' },
+    { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', icon: 'diff' },
+    { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', icon: 'bar' },
+    { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
+    { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', icon: 'recv' },
+    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', icon: 'lock' },
+    { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', icon: 'cal' },
+    { tab: 'bomcenter', pane: 'events', label: 'ปฏิทินเทศกาลและวันหยุด', icon: 'cal' },
+    { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', icon: 'box' },
+    { tab: 'bomcenter', pane: 'codereq', label: 'แจ้งเปลี่ยนรหัสสินค้า', icon: 'ret' }] },
+  { key: 'wh', label: 'คลัง', duty: 'ระบุยอดส่งจริงภายใน 14:00', icon: 'truck', hue: 'wh', roles: ['warehouse'], pages: [
+    { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', icon: 'inbox' }] },
+  { key: 'acc', label: 'บัญชี', duty: 'ใบสรุปตัดเบิกและงบกำไรขาดทุน', icon: 'calc', hue: 'acc', roles: ['accounting'], pages: [
+    { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', icon: 'doc' },
+    { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'coin' },
+    { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'bar' },
+    { tab: 'cashctl', label: 'เงินสดขาด/เกิน', icon: 'cash' },
+    { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
+    { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' }] },
+  { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และตรวจนับ', icon: 'store', hue: 'brn', roles: ['branch'], pages: [
+    { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', icon: 'box' },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: 'cart' },
+    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: 'recv' },
+    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', icon: 'diff' },
+    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', icon: 'count' }] },
+  { key: 'own', label: 'เจ้าของสาขา', duty: 'สรุปผลของร้านตนเอง', icon: 'key', hue: 'own', roles: ['franchise'], pages: [
+    // only the franchise login: the page reads ITS branch from the session, and for a central login the server answers 400 "name a branch"
+    // (that is why its old sidebar entry was never shown to anyone else)
+    { tab: 'franchise', label: 'ร้านของฉัน', icon: 'store', roles: ['franchise'] }] },
+];
+// Pages that sit in no cluster or chip (the older single entries): listed in หน้ารายงานทั้งหมด under "อื่น ๆ".
+const ALLPAGES_EXTRA = [
+  { tab: 'home', label: 'สรุปประจำวัน' }, { tab: 'action', label: 'ต้องดูวันนี้' }, { tab: 'feedback', label: 'เสียงลูกค้า' },
+  { tab: 'checklist', label: 'รายการตรวจเสียงลูกค้า' }, { tab: 'franchise', label: 'ร้านของฉัน', roles: ['franchise'] }, { tab: 'mgtreport', label: 'รายงานผู้บริหาร' },
+  { tab: 'report', label: 'รายงานรายเดือน (ฉบับเต็ม)' }, { tab: 'manual', label: 'คู่มือการใช้งาน' }, { tab: 'settings', label: 'ตั้งค่า' },
+];
+// The model of หน้ารายงานทั้งหมด: every cluster tab (its first level, as the cluster bar lists them), every item of every supply chip and
+// the pages above, as { group, tab, pane?, label }. `ok(entry)` filters (the live permission check; the check script passes () => true).
+// Pure data in, data out - scripts/check-departments.js runs it to prove nothing in TAB_CLUSTERS or SUPPLY_CHIPS is left out.
+function allPagesModel(ok) {
+  const keep = ok || (() => true), groups = [], seen = new Set(), tabs = new Set();
+  const add = (g, e) => {
+    const k = e.tab + '|' + (e.pane || '');
+    if (seen.has(k) || !keep(e)) return;
+    seen.add(k); tabs.add(e.tab);
+    let grp = groups.find(x => x.label === g);
+    if (!grp) groups.push(grp = { label: g, entries: [] });
+    grp.entries.push(e);
+  };
+  TAB_CLUSTERS.forEach(cl => {
+    // a supply item keeps its `item`, so the live check can apply that item's own mods / roles (js/18-launcher.js)
+    if (cl.chips) cl.chips.forEach(ch => ch.items.forEach(it => add(ch.key === 'home' ? cl.label : cl.label + ' · ' + ch.label, { tab: it.tab, pane: it.pane, label: it.label, item: it })));
+    else cl.tabs.forEach(t => add(cl.label, { tab: t[0], label: t[1] }));
+  });
+  // a tab of the supply cluster that no chip lists (only the older ones could be) is still a link
+  TAB_CLUSTERS.filter(cl => cl.chips).forEach(cl => cl.tabs.forEach(t => { if (!tabs.has(t[0])) add(cl.label, { tab: t[0], label: t[1] }); }));
+  ALLPAGES_EXTRA.forEach(e => add('อื่น ๆ', e));
+  return groups;
+}
+// ── end page registry (scripts/check-departments.js evaluates everything from `const _SUPPLY_CENTRE` to this line)
 // Group colours (docs/ui-kit/theme-groups.css): the group a tab belongs to -
 // its cluster's key, else one of the stand-alone entries below.
 const _GROUP_OF_LOOSE = { feedback: 'feedback', checklist: 'feedback' };
@@ -2705,6 +2894,7 @@ function _updateClusterBar(name) {
   const cl = clusterOf(name);
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
   _renderSupplyNav(name);                          // the branch phone strip follows every switch
+  if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the sidebar department entry that holds this page lights up (js/18-launcher.js)
   // The group you are in stays lit in the sidebar, whichever of its views is open
   // (its entry is tabs[0], or the first member the role can open - applyPermissions).
   if (cl) {

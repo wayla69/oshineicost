@@ -102,6 +102,34 @@ body.dark {
   --amber-ink:  #fbbf24;   /* 10.42:1 on the dark card */
   --orange-ink: #fb923c;   /* 7.68:1 on the dark card */
 }
+/* Department hues (PR-D1, 2026-10-21): the launcher home, the sidebar and the department workspace read one
+   hue per department (DEPARTMENTS in js/01-core.js). Per department: -ink = icon + heading text (>= 5.2:1 on its
+   own -tint and >= 6.3:1 on the white card), -tint = the card header band, -side = the icon on the navy sidebar rail
+   (>= 5:1 on both rails). Dark: the tint becomes a dark tinted surface and the ink a light ink (>= 6.1:1 on it). */
+:root {
+  --dept-mgmt-ink: #1f3a6b; --dept-mgmt-tint: #dde4f0; --dept-mgmt-side: #8fa9d6;
+  --dept-mkt-ink:  #9b1c55; --dept-mkt-tint:  #fbe3ee; --dept-mkt-side:  #e07fae;
+  --dept-ops-ink:  #8a3f00; --dept-ops-tint:  #fdebd8; --dept-ops-side:  #e0a060;
+  --dept-ana-ink:  #5b3fa8; --dept-ana-tint:  #ebe5fa; --dept-ana-side:  #a994e0;
+  --dept-kit-ink:  #2f6b1f; --dept-kit-tint:  #e3f2dc; --dept-kit-side:  #86c46f;
+  --dept-ss-ink:   #1d5fa8; --dept-ss-tint:   #dceafa; --dept-ss-side:   #6fa9e0;
+  --dept-wh-ink:   #7a5300; --dept-wh-tint:   #fbf0d0; --dept-wh-side:   #d9b650;
+  --dept-acc-ink:  #0f6b6b; --dept-acc-tint:  #dcf1f0; --dept-acc-side:  #62c2bd;
+  --dept-brn-ink:  #a12d2d; --dept-brn-tint:  #f9e1e1; --dept-brn-side:  #e07b7b;
+  --dept-own-ink:  #3c4a5e; --dept-own-tint:  #e6eaf0; --dept-own-side:  #a0adc0;
+}
+body.dark {
+  --dept-mgmt-ink: #9db8e8; --dept-mgmt-tint: #1c2d4b;
+  --dept-mkt-ink:  #f08cbb; --dept-mkt-tint:  #3a1f30;
+  --dept-ops-ink:  #f0a868; --dept-ops-tint:  #3a2a17;
+  --dept-ana-ink:  #b9a6f0; --dept-ana-tint:  #2a2347;
+  --dept-kit-ink:  #8fd078; --dept-kit-tint:  #1f3320;
+  --dept-ss-ink:   #7cb6f0; --dept-ss-tint:   #15304d;
+  --dept-wh-ink:   #e6c25a; --dept-wh-tint:   #3a2f12;
+  --dept-acc-ink:  #6fd0cb; --dept-acc-tint:  #123636;
+  --dept-brn-ink:  #f08a8a; --dept-brn-tint:  #3d2020;
+  --dept-own-ink:  #a9b6c9; --dept-own-tint:  #26303f;
+}
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */
 :root, body.dark {
