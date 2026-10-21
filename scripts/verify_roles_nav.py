@@ -168,7 +168,8 @@ def main(argv=None) -> int:
                 btn = page.query_selector("#supplyLegacyBtn")
                 check(btn is not None and "หน้าระบบเดิม" in btn.inner_text(), "management: ตั้งค่า has the one group หน้าระบบเดิม")
                 if btn:
-                    btn.click()
+                    # PR-D2: the bar is hidden on a desktop (the department header replaces it) but still drawn, so click it in the page
+                    page.evaluate("document.getElementById('supplyLegacyBtn').click()")
                     page.wait_for_timeout(300)
                     row = page.evaluate("[...document.querySelectorAll('#supplyLegacyRow button')].map(b => b.textContent.trim())")
                     check(row == LEGACY, f"management: the group holds {row}")

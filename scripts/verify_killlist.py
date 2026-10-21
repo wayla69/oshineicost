@@ -54,7 +54,7 @@ with sync_playwright() as pw:
         pg.wait_for_timeout(600)
         more = pg.evaluate("() => (document.getElementById('clusterMore') || {}).innerText || ''")
         check('cost cluster shows a ⋯ chip', more.strip().startswith('⋯'), more)
-        pg.click('#clusterMore')
+        pg.evaluate("() => document.getElementById('clusterMore').click()")   # PR-D2: the bar is drawn but hidden on a desktop
         pg.wait_for_timeout(300)
         check('⋯ unfolds', pg.evaluate("() => !!document.getElementById('clusterFold')"))
 
