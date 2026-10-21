@@ -4,10 +4,16 @@
 // pane, the pane's own item of SUPPLY_CHIPS) lets the signed-in role open it. The tasks are the ones of หน้างาน.
 // Shares the global scope of slices 01-17 (uses esc, api, API, tabAllowed, hasModule, supplyGo, _supplyItemOf,
 // _supplyItemAllowed, _shmMine, _shmOpen, _noEmoji, ROLE_LABEL_TH, whoTh, _TH_MONTHS). Every name starts with `lnch`, `dept` or `alp`.
+// PR-D2 (2026-10-21): the department workspace. On a desktop the page shows #deptHead above it (renderDeptHead: breadcrumb, the department's
+// band and a row of icon tabs = that department's pages) instead of the cluster bar and the supply chips; the sidebar is the icon rail.
 
-let _deptCur = null;        // the department the person last opened a page from (the sidebar lights its entry while that page is open)
 let _deptFocus = null;      // the department picked in the sidebar: the launcher scrolls to its card and the entry stays lit
 
+const _DEPT_KEY = 'oshinei_dept', _DEPT_LAST_KEY = 'oshinei_dept_last';
+function deptRememberedGet() { try { return localStorage.getItem(_DEPT_KEY) || null; } catch (e) { return null; } }
+function deptRemember(key) { _deptCur = key; try { localStorage.setItem(_DEPT_KEY, key); } catch (e) { /* private mode: memory only */ } }
+function _deptLastMap() { try { return JSON.parse(localStorage.getItem(_DEPT_LAST_KEY) || '{}') || {}; } catch (e) { return {}; } }
+let _deptCur = deptRememberedGet();   // the department the person last opened a page from (the rail lights its entry while that page is open)
 function _deptRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }   // auth off = the manager's view
 function _deptSvg(icon, size, cls) {
   return `<svg ${cls ? `class="${cls}" ` : ''}width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${DEPT_ICONS[icon] || DEPT_ICONS.doc}"/></svg>`;
@@ -36,38 +42,62 @@ function deptOpenPage(p) { if (p.pane) supplyGo({ tab: p.tab, pane: p.pane }); e
 function deptGo(key, idx) {
   const d = DEPARTMENTS.find(x => x.key === key), p = d && d.pages[idx];
   if (!p) return;
-  _deptCur = key; _deptFocus = null;
+  deptRemember(key); _deptFocus = null;
+  const last = _deptLastMap(); last[key] = idx;
+  try { localStorage.setItem(_DEPT_LAST_KEY, JSON.stringify(last)); } catch (e) { /* memory only */ }
   deptOpenPage(p);
 }
 
 // ── the sidebar: หน้าแรก, then one entry per department the person may open a page of ─────────────────────
+// the rail: a desktop starts with the sidebar folded to the icon rail (the app's own .collapsed); the toggle opens it to icon + full label
+// and the choice is remembered. A phone never gets the class (its strip shows the labels).
+let _deptRailDone = false;
+function deptRailInit() {
+  const sb = document.getElementById('sidebar');
+  if (_deptRailDone || !sb || !_launcherLanding()) return;
+  _deptRailDone = true;
+  let pref = '';
+  try { pref = localStorage.getItem('oshinei_rail') || ''; } catch (e) { /* default */ }
+  if (pref !== 'open' && !sb.classList.contains('collapsed')) toggleSidebar();
+}
+function railToggle() {
+  toggleSidebar();
+  try { localStorage.setItem('oshinei_rail', document.getElementById('sidebar').classList.contains('collapsed') ? 'rail' : 'open'); } catch (e) { /* not remembered */ }
+}
 function renderDeptNav() {
   const host = document.getElementById('deptNav');
   if (!host) return;
+  deptRailInit();
   const vis = deptVisible();
-  host.innerHTML = `<a href="#" class="nav-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และแผนกทั้งหมด">`
+  host.innerHTML = `<a href="#" class="nav-item rail-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และแผนกทั้งหมด">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></a>`
     + `<div class="nav-section dept-entry">แผนก</div>`
-    + vis.map(r => `<a href="#" class="nav-item dept-entry" id="nav-dept-${r.dept.key}" data-dept="${r.dept.key}" onclick="deptNavOpen('${r.dept.key}');return false" title="${esc(r.dept.label + ' · ' + r.dept.duty)}">`
+    + vis.map(r => `<a href="#" class="nav-item rail-item dept-entry" id="nav-dept-${r.dept.key}" data-dept="${r.dept.key}" onclick="deptNavOpen('${r.dept.key}');return false" title="${esc(r.dept.label + ' · ' + r.dept.duty)}">`
       + `${_deptSvg(r.dept.icon, 17, 'nav-icon')}<span class="nav-label">${esc(r.dept.label)}</span></a>`).join('');
   updateDeptNav(typeof activeTab === 'string' ? activeTab : '');
 }
 function deptNavHome() { _deptFocus = null; switchTab('launcher'); }
-// a department entry: the launcher, scrolled to that department's card
+// a department entry of the rail: that department's workspace - the page last opened there, else its first page the person may open
 function deptNavOpen(key) {
-  _deptCur = key; _deptFocus = key;
-  if (activeTab !== 'launcher') switchTab('launcher');
-  else updateDeptNav('launcher');
-  lnchFocusDept(key);
+  const row = deptVisible().find(r => r.dept.key === key);
+  if (!row) return;
+  const lastIdx = _deptLastMap()[key], hit = row.pages.find(x => x.i === lastIdx) || row.pages[0];
+  deptGo(key, hit.i);
 }
-// which department holds the open page: the one the person came from, else the first (home first) that lists it
-function _deptOf(tab) {
+// which department holds the open page: the one the person came from, else the first (home first) that lists it. A pane that no
+// department lists, of a tab that one does, still belongs to that department (no tab of its row is lit).
+// -> { row: {dept, pages}, cur: the lit entry {p, i} | null } | null
+function deptContext(tab) {
   const acc = typeof _SUPPLY_PANE === 'object' && _SUPPLY_PANE[tab];
-  const pane = acc ? acc.get() : null;
-  const rows = deptVisible().filter(r => r.dept.pages.some(p => p.tab === tab && (!p.pane || p.pane === pane)));
-  if (!rows.length) return null;
-  return (rows.find(r => r.dept.key === _deptCur) || rows[0]).dept.key;
+  const pane = acc ? acc.get() : null, rows = deptVisible();
+  const exact = r => r.pages.find(x => x.p.tab === tab && (!x.p.pane || x.p.pane === pane));
+  const pick = list => list.find(r => r.dept.key === _deptCur) || list[0];
+  let hit = rows.filter(exact);
+  if (hit.length) { const r = pick(hit); return { row: r, cur: exact(r) }; }
+  hit = rows.filter(r => r.pages.some(x => x.p.tab === tab));
+  return hit.length ? { row: pick(hit), cur: null } : null;
 }
+function _deptOf(tab) { const c = deptContext(tab); return c ? c.row.dept.key : null; }
 function updateDeptNav(name) {
   const nav = document.getElementById('deptNav');
   if (!nav) return;
@@ -77,6 +107,70 @@ function updateDeptNav(name) {
     el.classList.toggle('active', on);
     if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   });
+}
+
+// ── the department workspace (PR-D2): breadcrumb, the department's band and its icon tabs, above every page ─────────────────
+// Drawn into #deptHead (index.html) by _updateClusterBar on every page or pane change. A page of a department shows that
+// department's band and one tab per page the person may open; a page of none keeps a plain breadcrumb. Phone (<= 700 px): CSS hides it.
+function _deptCrumbHtml(parts, last) {
+  const home = `<a href="#" onclick="deptNavHome();return false">หน้าแรก</a>`;
+  return `<nav class="dh-crumb" aria-label="ตำแหน่งของหน้านี้">${home}`
+    + parts.map(x => `<span class="dh-sep" aria-hidden="true">›</span>${x}`).join('')
+    + `<span class="dh-sep" aria-hidden="true">›</span><b aria-current="page">${esc(last)}</b><span id="deptLock" class="dh-lock"></span></nav>`;
+}
+function _deptTabsFade(el) {
+  if (!el) return;
+  const max = el.scrollWidth - el.clientWidth;
+  el.classList.toggle('ovf-l', el.scrollLeft > 4);
+  el.classList.toggle('ovf-r', max > 4 && el.scrollLeft < max - 4);
+}
+function renderDeptHead(name) {
+  const host = document.getElementById('deptHead');
+  if (!host) return;
+  if (name === 'launcher') { host.hidden = true; host.innerHTML = ''; return; }
+  const refocus = host.contains(document.activeElement) && document.activeElement.getAttribute('role') === 'tab';
+  const ctx = deptContext(name), supply = !!(clusterOf(name) && clusterOf(name).chips);
+  let title = _noEmoji(PAGE_TITLES[name] || name);
+  if (supply) {   // a page of the supply module is named by its own item (the title above is "module · chip · item")
+    const acc = typeof _SUPPLY_PANE === 'object' && _SUPPLY_PANE[name], hit = _supplyItemOf(name, acc ? acc.get() : null);
+    if (hit) title = _noEmoji(hit.item.label);
+  }
+  host.hidden = false;
+  if (name === 'allpages' || !ctx) {
+    // a page of no department (or the list of all of them): home › หน้ารายงานทั้งหมด › the page
+    host.className = 'dept-head dh-plain';
+    host.removeAttribute('style');
+    host.innerHTML = _deptCrumbHtml(name === 'allpages' ? [] : [`<a href="#" onclick="switchTab('allpages');return false">หน้ารายงานทั้งหมด</a>`],
+      name === 'allpages' ? 'หน้ารายงานทั้งหมด' : title);
+    if (supply) _renderLockChip();
+    return;
+  }
+  const d = ctx.row.dept, cur = ctx.cur;
+  host.className = 'dept-head';
+  host.setAttribute('style', `--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)`);
+  const tabs = ctx.row.pages.map(x => {
+    const on = !!cur && cur.i === x.i;
+    return `<button type="button" role="tab" class="dh-tab" aria-selected="${on}" tabindex="${on || (!cur && x === ctx.row.pages[0]) ? 0 : -1}"`
+      + ` data-i="${x.i}" onclick="deptGo('${d.key}',${x.i})" onkeydown="deptTabKey(event)">${_deptSvg(x.p.icon, 20)}<span>${esc(x.p.label)}</span></button>`;
+  }).join('');
+  host.innerHTML = _deptCrumbHtml([`<span class="dh-dept">${esc(d.label)}</span>`], cur ? cur.p.label : title)
+    + `<div class="dh-band${ctx.row.pages.length > 7 ? ' many' : ''}"><div class="dh-id"><span class="dh-badge">${_deptSvg(d.icon, 26)}</span>`
+    + `<div class="dh-idtext"><h2 class="dh-name">${esc(d.label)}</h2><span class="dh-duty">${esc(d.duty)}</span></div></div>`
+    + `<div class="dh-tabs" role="tablist" aria-label="${esc('หน้าของแผนก' + d.label)}" onscroll="_deptTabsFade(this)">${tabs}</div></div>`;
+  const bar = host.querySelector('.dh-tabs'), act = bar.querySelector('[aria-selected="true"]');
+  if (act) bar.scrollLeft = Math.max(0, act.offsetLeft - (bar.clientWidth - act.offsetWidth) / 2);
+  _deptTabsFade(bar);
+  if (refocus) (act || bar.querySelector('[role="tab"]')).focus({ preventScroll: true });
+  if (supply) _renderLockChip();
+}
+// arrow keys move between the tabs of the row (Home / End jump); Enter and Space open the focused one, as on any button
+function deptTabKey(ev) {
+  const tabs = [...ev.currentTarget.parentElement.querySelectorAll('[role="tab"]')], i = tabs.indexOf(ev.currentTarget);
+  const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[ev.key];
+  if (to === undefined) return;
+  ev.preventDefault();
+  const t = tabs[(to + tabs.length) % tabs.length];
+  tabs.forEach(x => x.tabIndex = -1); t.tabIndex = 0; t.focus();
 }
 
 // ── หน้าแรก ──────────────────────────────────────────────────────────────────────────────────────────────
