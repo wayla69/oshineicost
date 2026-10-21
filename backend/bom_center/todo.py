@@ -16,6 +16,7 @@ and at most ONE variance summary (only when a single branch is in context) — n
 the monthly summary, never the fuzzy code matching. Not cached on purpose: several
 writes do not invalidate the cache, and this list must be right straight after a save.
 """
+import re
 from datetime import date, datetime, timedelta
 
 from .clock import BKK, now_bkk
@@ -23,6 +24,63 @@ from .fmt import at_th as _fmt_at, day_at_th as _day_at, day_th as _fmt_day, lbl
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
+
+# ── state: ยังไม่เสร็จ · รอตรวจ · เสร็จแล้ว (PR-TF, owner 2026-10-21) ──────────────────────────────────────────
+# `status` is unchanged (todo | blocked | done | na). `state` is DERIVED once, after every item is built, from the viewer's role:
+#   done   - status done or na;
+#   review - someone else's move holds the item: status blocked, or the viewer is a WAITER of an item in REVIEW_KEYS and
+#            the item is either the reviewer's open queue (status todo) or the viewer's own item marked `awaiting`;
+#   todo   - everything else that is open (my move).
+# REVIEW_KEYS: item key (base key; a branch suffix and a round suffix are dropped) -> (the roles that WAIT on it, kind).
+# Every other key in this module is a plain duty of its owner, or a step that only waits when it is blocked.
+#   kind "own"   - the waiter's OWN item: it is review only while the builder marked it `awaiting` (the waiter did its part;
+#                  before that it is the waiter's move, after the other side acts it is done);
+#   kind "queue" - the REVIEWER's open queue: todo for the reviewer (its move), review for the waiter whose work sits in it.
+#   draft                 innovation   own    the kitchen's monthly draft once sent with "ส่งตรวจ" (status done)
+#   review_pending        innovation   queue  the analyst's review of that draft
+#   price_submit          salessupport own    the price files Sales Support sent while some still wait (status done)
+#   price_review          salessupport queue  the analyst's review of those files
+#   code_request_review   salessupport queue  new codes Sales Support reported, waiting for the analyst
+#   claims_open           branch       own    the branch's claims waiting for Sales Support (status na)
+#   claims_pending        branch       queue  Sales Support's review of those claims
+#   pack_report_review    branch       queue  pack sizes a branch reported, waiting for the analyst
+#   queue_pending         branch       queue  the warehouse's processing of the orders the branches sent
+#   order_due             branch       own    the branch's order sent and not yet processed by the warehouse (status done)
+#   acknowledge           analyst      queue  the released version waiting for management to acknowledge it
+REVIEW_KEYS = {
+    "draft": (("innovation",), "own"), "review_pending": (("innovation",), "queue"),
+    "price_submit": (("salessupport",), "own"), "price_review": (("salessupport",), "queue"),
+    "code_request_review": (("salessupport",), "queue"),
+    "claims_open": (("branch",), "own"), "claims_pending": (("branch",), "queue"),
+    "pack_report_review": (("branch",), "queue"), "queue_pending": (("branch",), "queue"),
+    "order_due": (("branch",), "own"),
+    "acknowledge": (("analyst",), "queue"),
+}
+STATE_TH = {"todo": "ยังไม่เสร็จ", "review": "รอตรวจ", "done": "เสร็จแล้ว"}
+_ROUND_SUFFIX = re.compile(r"_(1|2|salmon)$")
+
+
+def _base_key(key: str) -> str:
+    return _ROUND_SUFFIX.sub("", str(key or "").split(":")[0])
+
+
+def item_state(it: dict, role: str = None) -> str:
+    """The state of ONE item for a viewer of `role` (None = no viewer: nobody waits, so a review queue is simply todo)."""
+    st = it.get("status")
+    rule = REVIEW_KEYS.get(_base_key(it.get("key")))
+    if rule and role in rule[0] and ((rule[1] == "queue" and st == "todo") or it.get("awaiting")):
+        return "review"
+    if st in ("done", "na"):
+        return "done"
+    if st == "blocked":
+        return "review"
+    return "todo"
+
+
+def annotate_states(entries: list, role: str = None) -> None:
+    for it in entries:
+        it["state"] = item_state(it, role)
+        it["state_th"] = STATE_TH[it["state"]]
 
 
 # ── small helpers ─────────────────────────────────────────────────────────────
@@ -269,10 +327,10 @@ def _month_items(con, month: str, today: date) -> list:
             sub_status, sub_detail = "na", "นำเข้าราคาของเดือนนี้แล้ว ไม่ต้องส่งไฟล์"
         else:
             sub_status, sub_detail = "todo", "ไฟล์รายงานจ่ายสินค้าภายใน หรือไฟล์ตามแม่แบบไฟล์ราคา"
-        out.append(_e("price_submit", 95, "month", f"ส่งไฟล์ราคาเดือน{_mth(month)} ให้ฝ่ายวิเคราะห์", sub_status, sub_detail,
-                      owner=("supply.ordering",), owner_th="ประสานงานขาย",
-                      go={"tab": "bomcenter", "pane": "pricefile", "month": month, "anchor": "bmcPriceSubmitCard"}))
         pend = _scalar(con, "SELECT COUNT(*) FROM bc_price_submission WHERE status='pending'") or 0
+        out.append(_e("price_submit", 95, "month", f"ส่งไฟล์ราคาเดือน{_mth(month)} ให้ฝ่ายวิเคราะห์", sub_status, sub_detail,
+                      owner=("supply.ordering",), owner_th="ประสานงานขาย", awaiting=bool(n_sub and pend),
+                      go={"tab": "bomcenter", "pane": "pricefile", "month": month, "anchor": "bmcPriceSubmitCard"}))
         if pend:
             out.append(_e("price_review", 98, "month", f"ตรวจและนำเข้าไฟล์ราคาที่ประสานงานขายส่งมา ({pend} ไฟล์)", "todo",
                           "ดูตัวอย่างก่อนบันทึก แล้วนำเข้าหรือส่งกลับพร้อมเหตุผล", count=pend,
@@ -290,7 +348,7 @@ def _month_items(con, month: str, today: date) -> list:
                        go={"tab": "bomcenter", "pane": "rec", "extra": {"release_id": rid}})
         if rstatus == "review":
             out.append(_e("draft", 110, "month", f"สร้างสูตรเดือน{_mth(deff)} และส่งตรวจ", "done",
-                          f"ส่งตรวจแล้ว {_fmt_at(sub_at)} โดย {_who(con, sub_by)}", **kitchen))
+                          f"ส่งตรวจแล้ว {_fmt_at(sub_at)} โดย {_who(con, sub_by)}", awaiting=True, **kitchen))
             out.append(_e("review_pending", 115, "month", f"สูตรรอตรวจ: {_lbl(label)}", "todo",
                           f"มีผลเดือน{_mth(deff)} · ตรวจรายการ แก้ไข หรือส่งกลับให้ครัว",
                           owner=("bom.release",), owner_th="ฝ่ายวิเคราะห์",
@@ -522,7 +580,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
             round_items.append(_e(f"order_due_{r}", 310, "week",
                           f"ส่งใบสั่งซื้อภายใน {it['cutoff_th']} · {_round_day(r, it['delivery'])}",
                           "done" if sent else "todo", detail,
-                          owner=("branch.stock",), owner_th="สาขา", branch=b,
+                          owner=("branch.stock",), owner_th="สาขา", branch=b, awaiting=st == "submitted",   # sent, the warehouse has not processed it
                           urgent=bool(not sent and (it["late"] or 0 <= it["hours_left"] < 4)),
                           round_th=it["round_th"], delivery=it["delivery"], delivery_th=it["delivery_th"],
                           cutoff_at=it["cutoff_at"], cutoff_th=it["cutoff_th"], cutoff_date=it["cycle_date"],
@@ -544,7 +602,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
             if _has(con, "bc_claim") else 0
         if nc_b:
             out.append(_e("claims_open", 325, "week", "เคลมสินค้าที่แจ้งไว้ รอประสานงานขายพิจารณา", "na",
-                          f"รอพิจารณา {nc_b} เรื่อง", count=nc_b, owner=("branch.stock",), owner_th="สาขา", branch=b,
+                          f"รอพิจารณา {nc_b} เรื่อง", count=nc_b, owner=("branch.stock",), owner_th="สาขา", branch=b, awaiting=True,
                           go={"tab": "branchstock", "pane": "recv", "anchor": "brnClaimCard"}))
         out += _count_items(con, b, today)
         if single:
@@ -717,8 +775,9 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
 
 # ── the answer ───────────────────────────────────────────────────────────────
 def build(con, month: str = None, branch_id: int = None, scoped_branch: str = None, today: date = None,
-          now=None) -> dict:
-    """`now` (tests): the Bangkok clock the cutoff countdown reads; with only `today` it is 08:00 that day."""
+          now=None, viewer_role: str = None) -> dict:
+    """`now` (tests): the Bangkok clock the cutoff countdown reads; with only `today` it is 08:00 that day.
+    `viewer_role` (PR-TF): the role of the caller; every item and close step gets `state` / `state_th` for that viewer."""
     if now is None and today is None:
         now = now_bkk()
     today = today or now.date()
@@ -755,6 +814,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
     close = _close_steps(con, month, close_br, scoped=bool(scoped_branch))
+    annotate_states(items + close["steps"], viewer_role)
     this_m = _ym(today)
     return {"month": month, "today": today.isoformat(), "scoped": bool(scoped_branch),
             "branch": chosen, "branches": [b for b in all_br if (not scoped_branch or b["branch_id"] == branch_id)],

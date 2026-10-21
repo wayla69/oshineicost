@@ -78,6 +78,19 @@ def _modules(request: Request) -> set:
     return _auth.modules_for_role(row["role"]) if row and row["active"] else set()
 
 
+def _viewer_role(request: Request) -> Optional[str]:
+    """The live role of the signed-in user (the same account lookup as _modules); None when auth is off or the account is gone."""
+    if not _auth.auth_enabled():
+        return None
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}
+    try:
+        with get_db() as con:
+            row = _auth.get_user(con, payload.get("u", ""))
+    except Exception:
+        row = None
+    return row["role"] if row and row["active"] else None
+
+
 def _month_or_400(m: Optional[str]) -> str:
     if not m or not _MONTH.match(m):
         raise HTTPException(400, "เดือนไม่ถูกต้อง (เช่น 2026-09)")
@@ -2277,7 +2290,7 @@ def bc_todo(request: Request, month: Optional[str] = Query(None), branch_id: Opt
     with get_db() as con:
         _ensure(con)
         try:
-            return _td.build(con, month, branch_id, _auth.scope_branch(request))
+            return _td.build(con, month, branch_id, _auth.scope_branch(request), viewer_role=_viewer_role(request))
         except PermissionError as e:
             raise HTTPException(403, str(e))
         except ValueError as e:
