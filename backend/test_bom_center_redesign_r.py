@@ -188,4 +188,4 @@ def test_the_recipes_pane_is_step_led():
         assert label in js, label
     # the shared "?" dialog lives in the core slice
     core = _src("js/01-core.js")
-    assert "window.uiHelp = function (title, html)" in core and "function uiHelp(" in _src("js/globals.d.ts")
+    assert "window.uiHelp = function (title, html, opener)" in core and "function uiHelp(" in _src("js/globals.d.ts")

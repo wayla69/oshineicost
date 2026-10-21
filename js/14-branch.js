@@ -1713,10 +1713,11 @@ function brnRenderVariance() {
       ${v.complete ? `${_bmcChip('รับสินค้าครบแล้ว', 'var(--good-ink)')} <span class="text-xs" style="color:var(--text-muted)">โดย ${esc(whoTh(v.receipts_confirmed_by))}</span> <button class="brn-link" onclick="brnConfirmRecv(true)">ยกเลิกการยืนยัน</button>`
         : `${_bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')} <button class="brn-act brn-act-line" onclick="brnConfirmRecv(false)">ยืนยันรับสินค้าครบ</button>`}</div>`;
   const ask = v.rows.filter(r => r.ask_reason).sort((a, b) => (Number(b.needs_reason) - Number(a.needs_reason)) || (Math.abs(b.gap_value || 0) - Math.abs(a.gap_value || 0)));
-  const flaggedOther = v.rows.filter(r => _BRN_FLAG.includes(r.status) && !r.ask_reason);
+  const flaggedAll = v.rows.filter(r => _BRN_FLAG.includes(r.status) && !r.ask_reason);
+  const incompleteRows = flaggedAll.filter(r => r.data_incomplete), flaggedOther = flaggedAll.filter(r => !r.data_incomplete);   // missing data is unfinished work, never done
   const inRange = v.rows.filter(r => !r.ask_reason && !_BRN_FLAG.includes(r.status));
   const askOpen = ask.filter(r => r.needs_reason), askDone = ask.filter(r => !r.needs_reason);
-  const vf = uiStateFilter.get();               // PR-D6: ยังไม่เสร็จ (the reasons still to give) · เสร็จแล้ว (answered, or no reason asked) · ทั้งหมด
+  const vf = uiStateFilter.get();               // PR-D6: ยังไม่เสร็จ (the reasons still to give + the lines whose data is incomplete) · เสร็จแล้ว (answered, or a line nobody is asked about) · ทั้งหมด
   _brnVarSel = new Set([..._brnVarSel].filter(c => askOpen.some(r => r.code === c)));
   const multi = askOpen.length >= 2 && _brnCanVariance() ? `<div class="text-xs" style="color:var(--text-muted)">ติ๊กหน้ารายการหลายรายการ เพื่อใช้เหตุผลเดียวกัน</div><div class="brn-multi" id="brnVarMulti" style="display:none">
       <div class="text-xs" style="color:var(--text-secondary)"><span id="brnVarSelN">เลือก 0 รายการ</span></div>
@@ -1727,11 +1728,11 @@ function brnRenderVariance() {
       <div id="brnVarMultiE" class="brn-err" role="alert"></div></div>` : '';
   const doneRows = askDone.map(r => _brnVarAskRow(r, v.reasons)).concat(flaggedOther.map(_brnVarOtherRow), vf === 'all' ? inRange.slice(0, 200).map(_brnVarOtherRow) : []);
   document.getElementById('brnVarList').innerHTML = '<div id="brnVarFilter"></div>'
-    + (vf !== 'done' ? (askOpen.length ? multi + askOpen.map(r => _brnVarAskRow(r, v.reasons)).join('')
+    + (vf !== 'done' ? (askOpen.length || incompleteRows.length ? (askOpen.length ? multi + askOpen.map(r => _brnVarAskRow(r, v.reasons)).join('') : '') + incompleteRows.map(_brnVarOtherRow).join('')
       : (vf === 'todo' ? '<div class="text-sm" style="color:var(--good-ink)">✓ ไม่มีรายการที่ต้องให้เหตุผล</div>' : '')) : '')
     + (vf !== 'todo' ? (doneRows.join('') || uiStateFilter.empty(vf, 'brnVarPick', 'รายการ')) : '')
     + (v.reason_min_baht ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">ถามเหตุผลเฉพาะรายการที่เกินเกณฑ์และต่างตั้งแต่ ฿${_bmcNum(v.reason_min_baht, 0)} ขึ้นไป</div>` : '');
-  uiStateFilter.bar('brnVarFilter', { counts: { todo: askOpen.length, done: askDone.length + flaggedOther.length, all: v.rows.length }, f: vf, pick: 'brnVarPick' });
+  uiStateFilter.bar('brnVarFilter', { counts: { todo: askOpen.length + incompleteRows.length, done: askDone.length + flaggedOther.length, all: v.rows.length }, f: vf, pick: 'brnVarPick' });
   brnVarMultiBar();
 }
 function brnVarPick(f) { uiStateFilter.set(f); brnRenderVariance(); }

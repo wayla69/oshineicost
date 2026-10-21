@@ -30,8 +30,6 @@
     <style>
       #bmc-pane-rec .rec-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
       #bmc-pane-rec .rec-top .rec-grow { flex: 1 1 auto; min-width: 8px; }
-      #bmc-pane-rec .rec-q, #bmc-pane-issue .rec-q { width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--border-control); background: var(--bg-card);
-        color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
       #bmc-pane-rec .bmc-menu > summary { min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; font-size: 14px; }
       #bmc-pane-rec .bmc-menu-pop { left: auto; right: 0; }
       #bmc-pane-rec .rec-ver { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 16px; margin-bottom: 12px; }
@@ -80,7 +78,6 @@
       #bmc-pane-rec :is(button, summary, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       @media (max-width: 1000px) { #bmc-pane-rec .rec-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } #bmc-pane-rec .rec-next { margin-left: 0; justify-content: flex-start; } }
       @media (max-width: 700px) {
-        #bmc-pane-rec .rec-q { width: 44px; height: 44px; }
         #bmc-pane-rec .bmc-menu > summary, #bmc-pane-rec .rec-tab, #bmc-pane-rec .iss-chip, #bmc-pane-rec .wt-btn { min-height: 44px; }
         #bmc-pane-rec .rec-month { flex: 1 1 100%; } #bmc-pane-rec .rec-month select { flex: 1; max-width: none; }
         #bmc-pane-rec .rec-arrow { display: none; }
@@ -113,7 +110,7 @@
           <a href="#" class="bmc-menu-item" onclick="bmcDownloadTemplate();return false" title="แม่แบบเปล่า มีรายการรหัส POS รหัสวัตถุดิบ และวิธีใช้">แม่แบบสูตรตามระดับราคา (Excel)</a>
           <a href="#" class="bmc-menu-item" onclick="bmcExportRecipes();return false">สูตรตามระดับราคา (Excel)</a>
         </div></details>
-      <button type="button" class="rec-q" aria-label="คำอธิบาย" title="คำอธิบาย" onclick="bmcRecHelp()">?</button>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-rec">?</button>
     </div>
     <div class="card rec-ver">
       <label class="rec-month">สูตรที่มีผลเดือน
@@ -121,6 +118,11 @@
       <div id="bmcRecSteps"></div>
       <div id="bmcRecNext" class="rec-next"></div>
     </div>
+    <template id="hlp-bomcenter-rec" data-title="สูตรตามระดับราคา"><p>สูตรหนึ่งเวอร์ชันมีผลตั้งแต่เดือนที่เลือก · ร่าง: ครัวสร้างสูตรและจับคู่รหัส POS ให้ครบ แล้วกด “ส่งตรวจ” · ฝ่ายวิเคราะห์ตรวจ: ฝ่ายวิเคราะห์แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว · ผู้บริหารรับทราบผลกระทบหลังประกาศใช้ · ระหว่างตรวจ ครัวแก้ไขสูตรไม่ได้จนกว่าฝ่ายวิเคราะห์จะส่งกลับ</p>
+    <p>“นำเข้าไฟล์ → ไฟล์ครัว Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ในเมนูนำเข้าไฟล์ก่อน</p>
+    <p>“ดาวน์โหลด → แม่แบบสูตรตามระดับราคา” มีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้าไฟล์ → ไฟล์สูตรตามระดับราคา” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
+    <p>ยังไม่จับคู่: ชื่อในไฟล์ Cost-RW ไม่ตรงกับเมนูใน POS · รหัสที่เสนอมาจากชื่อที่ใกล้เคียงในระดับราคาเดียวกัน ตรวจก่อนกด “จับคู่” · “ไม่วางขาย” จำไว้สำหรับการนำเข้าครั้งถัดไป</p>
+    <p>ต้องตรวจ: เมนูที่คิดต้นทุนไม่ได้ ไม่ตรงไฟล์ครัว หรือต้นทุนต่างจากระบบเดิม 20% ขึ้นไป · ข้อที่ฝ่ายวิเคราะห์ยอมรับแล้วไม่แสดง · ระดับราคาที่เลือกในรายการเมนูรวมเมนูของระดับราคาต่ำกว่า</p></template>
     <div id="bmcRecReport" class="mb-3"></div>
     <div id="bmcRecKpis" class="rec-kpis"></div>
     <div id="bmcRecWorkCard" class="card rec-work">
@@ -359,10 +361,9 @@
       #bmc-pane-issue .iss-dr-body { padding: 16px 20px 28px; display: flex; flex-direction: column; gap: 12px; }
       #bmc-pane-issue .iss-dr-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
       @media (max-width: 700px) {
-        #bmc-pane-issue .rec-q { width: 44px; height: 44px; }
         #bmc-pane-issue .iss-chip, #bmc-pane-issue .iss-dl, #bmc-pane-issue .wt-btn { min-height: 44px; }
         #bmc-pane-issue .iss-month { order: 1; flex: 1 1 0; min-width: 0; } #bmc-pane-issue .iss-month select { flex: 1; min-width: 0; min-height: 44px; }
-        #bmc-pane-issue .rec-q { order: 2; } #bmc-pane-issue .iss-filter { order: 3; flex: 1 1 100%; } #bmc-pane-issue #bmcIssAllWhy { order: 4; margin-left: 0 !important; flex: 1 1 100%; } #bmc-pane-issue .iss-dl { order: 5; }
+        #bmc-pane-issue .ui-q { order: 2; } #bmc-pane-issue .iss-filter { order: 3; flex: 1 1 100%; } #bmc-pane-issue #bmcIssAllWhy { order: 4; margin-left: 0 !important; flex: 1 1 100%; } #bmc-pane-issue .iss-dl { order: 5; }
         #bmc-pane-issue .iss-dl { margin-left: 0; flex: 1 1 100%; justify-content: center; }
         #bmc-pane-issue .iss-acts { justify-content: flex-start; }
         #bmc-pane-issue .wt-act { text-align: left; }
@@ -375,8 +376,14 @@
       <div id="bmcIssFilter" class="iss-filter" role="group" aria-label="กรองตามสถานะ"></div>
       <span id="bmcIssAllWhy" class="iss-why" style="margin-left:auto"></span>
       <button type="button" id="bmcIssAllBtn" class="iss-dl" style="margin-left:0" onclick="bmcIssXlsxAll()" disabled>ดาวน์โหลดทุกสาขาที่พร้อม</button>
-      <button type="button" class="rec-q" aria-label="คำอธิบาย" title="คำอธิบาย" onclick="bmcIssHelp()">?</button>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-issue">?</button>
     </div>
+    <template id="hlp-bomcenter-issue" data-title="ใบสรุปตัดเบิก"><p>แต่ละแถวคือสาขาและงวดของเดือนที่เลือก · พร้อมบันทึก = สาขาหรือประสานงานขายยืนยันรับสินค้าครบแล้ว และบัญชียังไม่บันทึก · รอสาขายืนยัน = ยังดาวน์โหลดไม่ได้ · บันทึกแล้ว = งวดล็อก</p>
+    <p>ตัวกรองเริ่มที่ “ยังไม่เสร็จ” เพื่อซ่อนสาขาที่บันทึกแล้ว · เลือก “บันทึกแล้ว” หรือ “ทั้งหมด” เมื่อต้องการดูหรือยกเลิกการบันทึก</p>
+    <p>ปุ่มดาวน์โหลดด้านบนสร้างไฟล์เดียวของทุกสาขาที่ยืนยันรับสินค้าครบแล้วในเดือนนั้น (รวมสาขาที่บันทึกแล้ว) · กดชื่อสาขาเพื่อดูกระทบยอดและรายการเคลื่อนไหวของงวด</p>
+    <p>คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย (ตามใบตัดเบิกที่ยืนยันแล้ว) · ผลต่าง = นับจริง − คงเหลือตามระบบ · ปริมาณในตารางกระทบยอดแสดงเป็นหน่วยที่สาขานับ</p>
+    <p>เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนั้นล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้ · ยกเลิกการบันทึกได้จากลิงก์ในแถวเดียวกัน</p>
+    <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p></template>
     <div id="bmcIssStatus" class="text-xs mb-2" role="status" style="color:var(--text-muted)"></div>
     <div id="bmcIssList" class="card iss-list"></div>
 

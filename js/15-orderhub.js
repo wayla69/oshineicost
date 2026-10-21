@@ -803,9 +803,11 @@ function ohbCompPick(f) { uiStateFilter.set(f); _ohbCFilter = 'all'; ohbRenderCo
 function ohbRenderComp() {
   const c = _ohbComp, box = document.getElementById('ohbComp');
   if (!c || !box) return;
-  // done = the round was ordered as suggested (ตามแนะนำ) or is not due yet; the rounds to look at (over / under / not ordered / not sent) are the work
-  const cf = uiStateFilter.get(), csp = uiStateFilter.split(c.rows, r => !_OHB_C_LOOK.includes(r.status));
-  const inView = r => cf === 'all' || (cf === 'done') === !_OHB_C_LOOK.includes(r.status);
+  // done = the round was ordered as suggested (ตามแนะนำ); the rounds to look at (over / under / not ordered / not sent) are the work; a round that is
+  // not due yet (upcoming) is neither - nothing has happened, so it is not "finished" and shows under ทั้งหมด only
+  const cf = uiStateFilter.get(), csp = uiStateFilter.split(c.rows.filter(r => r.status !== 'upcoming'), r => !_OHB_C_LOOK.includes(r.status));
+  csp.counts.all = c.rows.length;
+  const inView = r => cf === 'all' || (r.status !== 'upcoming' && (cf === 'done') === !_OHB_C_LOOK.includes(r.status));
   if (_ohbCFilter !== 'all' && !c.rows.some(r => inView(r) && r.status === _ohbCFilter)) _ohbCFilter = 'all';
   const stChips = Object.entries(_OHB_CS).filter(([k]) => c.rows.some(r => inView(r) && r.status === k)).map(([k, [t]]) => [k, t, c.rows.filter(r => inView(r) && r.status === k).length]);
   document.getElementById('ohbCChips').innerHTML = '<div id="ohbCBar"></div>' + (stChips.length > 1 ? `<div class="wt-seg" style="flex-wrap:wrap">${stChips

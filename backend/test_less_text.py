@@ -133,11 +133,11 @@ def test_every_help_button_points_at_a_template_that_exists():
 
 def test_every_pane_of_a_supply_page_has_its_help_behind_the_header_question_mark():
     """The "?" in the header of a page (data-help-tab) opens the help of the pane that shows: a template hlp-<tab>-<pane> in the fragment, or the text of
-    the role registered by orderhub (_OHB_HELP). The two panes PR-R is redesigning (ใบสรุปตัดเบิก, สูตรตามระดับราคา) still carry their folded block."""
+    the role registered by orderhub (_OHB_HELP)."""
     bmc, brn, oh = _src("tabs/52-bomcenter.html"), _src("tabs/53-branchstock.html"), _src("tabs/54-orderhub.html")
     for html, tab in ((bmc, "bomcenter"), (brn, "branchstock"), (oh, "orderhub")):
         assert f'data-help-tab="{tab}"' in html and 'aria-label="คำอธิบาย"' in html, tab
-    for pane in ("overview", "prep", "rel", "fc", "cal", "events", "zones", "ing", "price", "pricefile", "conv", "codereq", "rcheck"):
+    for pane in ("overview", "prep", "rel", "fc", "cal", "events", "zones", "ing", "price", "pricefile", "conv", "codereq", "rcheck", "rec", "issue"):
         assert f'<template id="hlp-bomcenter-{pane}"' in bmc, pane
     for pane in ("issue", "order", "count", "recv", "var"):
         assert f'<template id="hlp-branchstock-{pane}"' in brn, pane
@@ -145,9 +145,12 @@ def test_every_pane_of_a_supply_page_has_its_help_behind_the_header_question_mar
     for pane in ("queue", "claims", "issues", "issuevar", "persales", "comp", "adoption", "pilot", "central", "month"):
         assert re.search(r"\n  %s: \{" % pane, ohb), pane
         assert f'id="ohb-pane-{pane}"' in oh and f'id="ohbHelp-{pane}"' not in oh, pane          # no folded block at the bottom of the pane any more
-    for pane in ("rec", "issue"):
-        span = re.search(r'<div id="bmc-pane-%s".*?(?=\n  <div id="bmc-pane-|\n  <!-- ──|\Z)' % pane, bmc, re.S).group(0)
-        assert re.search(r'<details class="bmc-help[^"]*"', span), pane
+    for pane in ("rec", "issue"):                                  # PR-R's two panes: the "?" inside the pane is the same shared button
+        span = re.search(r'<div id="bmc-pane-%s".*?(?=\n  <div id="bmc-pane-|\n  <!-- \u2500\u2500|\Z)' % pane, bmc, re.S).group(0)
+        assert f'data-help="hlp-bomcenter-{pane}"' in span and "bmc-help" not in span and "rec-q" not in span, pane
+    js = _src("js/13-bom-center.js")
+    assert "function bmcRecHelp" not in js and "function bmcIssHelp" not in js           # their popovers are templates now
+    assert _src("js/01-core.js").count("window.uiHelp = function") == 1                  # ONE uiHelp
 
 
 def test_the_explanations_keep_their_facts():
@@ -302,3 +305,28 @@ def test_the_branch_strip_shows_only_the_open_lines_and_hides_when_nothing_is_op
     assert a_disp == "none"                                                                     # nothing open: the strip is not there
     assert b_disp == "" and "ตัดเบิกวันนี้" in b_rows and "✓" not in b_rows and "รับสินค้า" not in b_rows      # one open line, no finished line
     assert c_disp == "none"                                                                     # another role never sees it
+
+
+# ── what "finished" means (owner correction 2026-10-21): done = the work is complete, never "has no data yet" ─────────────────────────────────
+@needs_node
+def test_prep_classification_no_recipe_is_unfinished_work():
+    """สูตรกึ่งสำเร็จ: a sub-recipe with NO recipe (none), an incomplete one and one that needs checking are ยังไม่เสร็จ; only ok is เสร็จแล้ว."""
+    block = CORE[CORE.index("window.uiStateFilter = (function () {"):]
+    block = block[:block.index("})();") + len("})();")]
+    pre = ("global.localStorage = { getItem: k => null, setItem() {} }; global.document = { getElementById: id => null };\nconst window = global;\n" + block
+           + "\n" + _fn(BMC, "_bmcPrepDone"))
+    rows = [{"status": s} for s in ["none"] * 63 + ["incomplete"] * 4 + ["check"] * 2 + ["ok"] * 5]
+    r = _node(pre, f"(() => {{ const sp = window.uiStateFilter.split({json.dumps(rows)}, _bmcPrepDone); return [sp.counts, sp.todo.filter(x => x.status === 'none').length, sp.done.every(x => x.status === 'ok')]; }})()")
+    assert r[0] == {"todo": 69, "done": 5, "all": 74} and r[1] == 63 and r[2] is True
+    # the chips, the counts and the rows of the page all read the one classifier
+    fn = _fn(BMC, "bmcRenderPrep")
+    assert "uiStateFilter.split(d.rows, _bmcPrepDone)" in fn and "!_bmcPrepDone(r)" in fn and "'incomplete' || r.status === 'check'" not in fn
+
+
+def test_other_lists_do_not_call_missing_data_finished():
+    """The audit of the shared filter: a round not due yet is neither finished nor work; a usage line whose data is incomplete is work."""
+    oh, brn = _src("js/15-orderhub.js"), _src("js/14-branch.js")
+    comp = _fn(oh, "ohbRenderComp")
+    assert "r.status !== 'upcoming'" in comp and "csp.counts.all = c.rows.length" in comp          # upcoming shows under ทั้งหมด only
+    var = _fn(brn, "brnRenderVariance")
+    assert "incompleteRows = flaggedAll.filter(r => r.data_incomplete)" in var and "todo: askOpen.length + incompleteRows.length" in var

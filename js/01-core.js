@@ -100,36 +100,6 @@ window.uiNotice = (message, opt) => {
   const o = opt || {};
   return window.uiDialog({ message, title: o.title || 'แจ้งเตือน', okText: o.ok || 'ตกลง', noCancel: true });
 };
-// uiHelp(title, html): the "?" button of a page. What a page's controls mean is written here, never on the page (PR-R). `html` is trusted
-// markup of <p>s. One button (ปิด); Esc or a click outside also closes it, and the focus goes back to the control that opened it.
-window.uiHelp = function (title, html) {
-  return new Promise(resolve => {
-    const from = document.activeElement;
-    const wrap = document.createElement('div');
-    const tid = 'uiHelpT' + Date.now();
-    wrap.setAttribute('role', 'dialog');
-    wrap.setAttribute('aria-modal', 'true');
-    wrap.setAttribute('aria-labelledby', tid);
-    wrap.setAttribute('data-ui-dialog', '1');
-    wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px';
-    const helpH = (window.matchMedia && window.matchMedia('(max-width: 700px), (pointer: coarse)').matches) ? 44 : 36;       // a phone's button is 44 px tall
-    wrap.innerHTML = `<div style="width:100%;max-width:560px;max-height:90vh;overflow:auto;background:var(--bg-card, var(--bg-input, #fff));color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:16px 18px;box-shadow:0 10px 30px rgba(0,0,0,.25)">
-        <div id="${tid}" data-el="title" style="font-weight:600;font-size:16px;margin-bottom:8px"></div>
-        <div data-el="body" style="font-size:14px;line-height:1.7;color:var(--text-secondary)"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:14px"><button type="button" data-act="close" style="min-height:${helpH}px;border:0;border-radius:var(--r-sm, 8px);padding:6px 18px;font-size:14px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)">ปิด</button></div></div>`;
-    wrap.querySelector('[data-el="title"]').textContent = title || 'คำอธิบาย';
-    const body = wrap.querySelector('[data-el="body"]');
-    body.innerHTML = html || '';
-    body.querySelectorAll('p').forEach(p => { p.style.margin = '0 0 8px'; });
-    const done = () => { wrap.remove(); document.removeEventListener('keydown', onKey); try { if (from && from.focus) from.focus(); } catch (e) { /* the opener is gone */ } resolve(true); };
-    const onKey = e => { if (e.key === 'Escape') done(); };
-    wrap.addEventListener('mousedown', e => { if (e.target === wrap) done(); });
-    wrap.querySelector('[data-act="close"]').addEventListener('click', done);
-    document.addEventListener('keydown', onKey);
-    document.body.appendChild(wrap);
-    setTimeout(() => wrap.querySelector('[data-act="close"]').focus(), 0);
-  });
-};
 window.uiPrompt = (message, value, opt) => {
   const o = opt || {};
   return window.uiDialog({ title: o.title || 'กรอกข้อมูล', message, okText: o.okText || 'ตกลง',

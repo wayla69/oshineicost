@@ -314,7 +314,7 @@ def main(argv=None) -> int:
         check(all(order), f"page order: ปิดงวดเดือน · filter chips · month download · the table {order}")
         mopt = sel_text(page, "#bmcIssMonth") or ""
         check(bool(re.fullmatch(r"(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม) \d{4}", mopt)), f"month option: {mopt!r}")
-        chips = [re.sub(r"\s*\d+$", "", t) for t in page.eval_on_selector_all("#bmcIssFilter button", "els => els.map(e => e.textContent.trim())")]
+        chips = [re.sub(r"\s*\(?\d+\)?$", "", t) for t in page.eval_on_selector_all("#bmcIssFilter button", "els => els.map(e => e.textContent.trim())")]
         check(chips == ["ยังไม่เสร็จ", "พร้อมบันทึก", "รอสาขายืนยัน", "บันทึกแล้ว", "ทั้งหมด"], f"the filter chips: {chips}")
         check(page.evaluate("() => document.querySelector('#bmcIssFilter button[aria-pressed=true]').textContent.trim().startsWith('ยังไม่เสร็จ')"), "the default filter is ยังไม่เสร็จ")
         rows = page.eval_on_selector_all("#bmcIssList tbody tr", "els => els.map(e => e.textContent.replace(/\\s+/g, ' ').trim())")

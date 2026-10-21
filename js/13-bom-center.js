@@ -1196,16 +1196,18 @@ async function bmcLoadPrep() {
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function bmcPrepView(v) { uiStateFilter.set(v); bmcRenderPrep(); }
+// Finished = the sub-recipe is complete and costed from its recipe (ok). A sub-recipe with NO recipe yet (none), an incomplete one (incomplete) and one
+// that needs checking (check) are the kitchen's backlog - "done" never means "has no data yet".
+function _bmcPrepDone(r) { return r.status === 'ok'; }
 function bmcRenderPrep() {
   const d = _bmcPrep;
   if (!d) return;
-  const c = d.counts || {};
-  const n = k => c[k] || 0;
+  const psp = uiStateFilter.split(d.rows, _bmcPrepDone);
   _bmcPrepView = uiStateFilter.get();
-  uiStateFilter.bar('bmcPrepChips', { counts: { todo: n('incomplete') + n('check'), done: n('ok'), all: d.rows.length }, f: _bmcPrepView, pick: 'bmcPrepView' });
+  uiStateFilter.bar('bmcPrepChips', { counts: psp.counts, f: _bmcPrepView, pick: 'bmcPrepView' });
   document.getElementById('bmcPrepMonth').textContent = `ใช้ราคาเดือน${fmtMonthTh(d.month)}`;
   const q = (document.getElementById('bmcPrepQ').value || '').trim().toLowerCase();
-  const rows = d.rows.filter(r => (_bmcPrepView === 'all' || (_bmcPrepView === 'todo' ? (r.status === 'incomplete' || r.status === 'check') : r.status === 'ok'))
+  const rows = d.rows.filter(r => (_bmcPrepView === 'all' || (_bmcPrepView === 'todo' ? !_bmcPrepDone(r) : _bmcPrepDone(r)))
     && (!q || (r.code + ' ' + (r.name || '')).toLowerCase().includes(q)));
   // 2026-10-19: a table — each figure in its own column instead of one "· "-joined sentence
   const u = r => esc(r.base_unit || '');
@@ -1957,13 +1959,6 @@ function _bmcRecTabNow(nUn, nCk) {
   if (_bmcRecTab === 'unmatched' && nUn) return 'unmatched';
   if (_bmcRecTab === 'check' && nCk) return 'check';
   return nUn ? 'unmatched' : nCk ? 'check' : 'none';
-}
-function bmcRecHelp() {
-  uiHelp('สูตรตามระดับราคา', `<p>สูตรหนึ่งเวอร์ชันมีผลตั้งแต่เดือนที่เลือก · ร่าง: ครัวสร้างสูตรและจับคู่รหัส POS ให้ครบ แล้วกด “ส่งตรวจ” · ฝ่ายวิเคราะห์ตรวจ: ฝ่ายวิเคราะห์แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว · ผู้บริหารรับทราบผลกระทบหลังประกาศใช้ · ระหว่างตรวจ ครัวแก้ไขสูตรไม่ได้จนกว่าฝ่ายวิเคราะห์จะส่งกลับ</p>
-    <p>“นำเข้าไฟล์ → ไฟล์ครัว Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ในเมนูนำเข้าไฟล์ก่อน</p>
-    <p>“ดาวน์โหลด → แม่แบบสูตรตามระดับราคา” มีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้าไฟล์ → ไฟล์สูตรตามระดับราคา” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
-    <p>ยังไม่จับคู่: ชื่อในไฟล์ Cost-RW ไม่ตรงกับเมนูใน POS · รหัสที่เสนอมาจากชื่อที่ใกล้เคียงในระดับราคาเดียวกัน ตรวจก่อนกด “จับคู่” · “ไม่วางขาย” จำไว้สำหรับการนำเข้าครั้งถัดไป</p>
-    <p>ต้องตรวจ: เมนูที่คิดต้นทุนไม่ได้ ไม่ตรงไฟล์ครัว หรือต้นทุนต่างจากระบบเดิม 20% ขึ้นไป · ข้อที่ฝ่ายวิเคราะห์ยอมรับแล้วไม่แสดง · ระดับราคาที่เลือกในรายการเมนูรวมเมนูของระดับราคาต่ำกว่า</p>`);
 }
 
 // ── the work card ────────────────────────────────────────────────────────────
@@ -3096,8 +3091,7 @@ function bmcIssRender() {
   sel.innerHTML = ms.map(m => `<option value="${m}">${esc(fmtMonthTh(m))}</option>`).join('');
   sel.value = d.month;
   const c = d.counts || {};
-  document.getElementById('bmcIssFilter').innerHTML = _BMC_ISS_FILTERS.map(([k, t]) =>
-    `<button type="button" class="iss-chip" aria-pressed="${_bmcIssFilter === k}" onclick="bmcIssSetFilter('${k}')">${t} <b>${c[k] || 0}</b></button>`).join('');
+  uiStateFilter.bar('bmcIssFilter', { counts: c, f: _bmcIssFilter, pick: 'bmcIssSetFilter', opts: _BMC_ISS_FILTERS });      // the shared chips; the five states are PR-R's
   // the month workbook holds every branch whose receipts are confirmed (ready and posted)
   const n = (c.ready || 0) + (c.posted || 0);
   const btn = document.getElementById('bmcIssAllBtn');
@@ -3130,15 +3124,6 @@ function bmcIssRender() {
         <td data-l="ไม่มีราคา" class="wt-num">${r.unpriced == null ? '<span class="wt-muted">—</span>' : r.unpriced ? `<b style="color:var(--amber-ink)">${r.unpriced}</b>` : '<span class="wt-muted">0</span>'}</td>
         <td class="wt-act"><span class="iss-acts">${acts}</span></td></tr>`;
     }).join('')}</tbody></table></div>`;
-}
-// the "?" of the page: what the controls mean, kept off the page
-function bmcIssHelp() {
-  uiHelp('ใบสรุปตัดเบิก', `<p>แต่ละแถวคือสาขาและงวดของเดือนที่เลือก · พร้อมบันทึก = สาขาหรือประสานงานขายยืนยันรับสินค้าครบแล้ว และบัญชียังไม่บันทึก · รอสาขายืนยัน = ยังดาวน์โหลดไม่ได้ · บันทึกแล้ว = งวดล็อก</p>
-    <p>ตัวกรองเริ่มที่ “ยังไม่เสร็จ” เพื่อซ่อนสาขาที่บันทึกแล้ว · เลือก “บันทึกแล้ว” หรือ “ทั้งหมด” เมื่อต้องการดูหรือยกเลิกการบันทึก</p>
-    <p>ปุ่มดาวน์โหลดด้านบนสร้างไฟล์เดียวของทุกสาขาที่ยืนยันรับสินค้าครบแล้วในเดือนนั้น (รวมสาขาที่บันทึกแล้ว) · กดชื่อสาขาเพื่อดูกระทบยอดและรายการเคลื่อนไหวของงวด</p>
-    <p>คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย (ตามใบตัดเบิกที่ยืนยันแล้ว) · ผลต่าง = นับจริง − คงเหลือตามระบบ · ปริมาณในตารางกระทบยอดแสดงเป็นหน่วยที่สาขานับ</p>
-    <p>เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนั้นล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้ · ยกเลิกการบันทึกได้จากลิงก์ในแถวเดียวกัน</p>
-    <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p>`);
 }
 
 // ── the detail of one period (the drawer) ────────────────────────────────────
