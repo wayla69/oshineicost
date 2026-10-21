@@ -22,21 +22,78 @@
     </div></details>
   </div>
 
-  <!-- ── recipes by tier ────────────────────────────────────────────────── -->
+  <!-- ── recipes by tier (PR-R: step-led) ───────────────────────────────────────────
+       The version card (which version, its four steps, the one next action), four tiles, then ONE work card whose tabs hold only the work
+       that is left. The sentences live behind the "?" (bmcRecHelp). Drawn by js/13-bom-center.js: bmcLoadReleases / bmcRenderRecHead / bmcRenderRecipes. -->
   <div id="bmc-pane-rec" style="display:none">
-    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
-      <label class="text-xs" style="color:var(--text-muted)">เวอร์ชันสูตร
-        <select id="bmcRel" onchange="bmcLoadRecipes()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:280px"></select>
-      </label>
-      <div id="bmcTierChips" class="flex flex-wrap gap-1"></div>
-      <input type="search" id="bmcRecQ" placeholder="ค้นหาเมนู/รหัส…" oninput="bmcRenderRecipes()"
-             style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:180px">
-      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)"><input type="checkbox" id="bmcRecIssues" onchange="bmcRenderRecipes()"> เฉพาะรายการที่ต้องตรวจ</label>
-      <span id="bmcRecSummary" class="text-xs" style="color:var(--text-muted)"></span>
-    </div>
-    <!-- PR-M5: the toolbar is two menus (นำเข้า · ดาวน์โหลด) and the buttons of the draft -->
-    <div class="flex flex-wrap items-center gap-2 mb-3 p-2 bc-write" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
-      <details class="bmc-menu" id="bmcRecImportMenu"><summary>นำเข้า ▾</summary>
+    <style>
+      #bmc-pane-rec .rec-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+      #bmc-pane-rec .rec-top .rec-grow { flex: 1 1 auto; min-width: 8px; }
+      #bmc-pane-rec .rec-q, #bmc-pane-issue .rec-q { width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--border-control); background: var(--bg-card);
+        color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
+      #bmc-pane-rec .bmc-menu > summary { min-height: 40px; display: inline-flex; align-items: center; padding: 0 14px; font-size: 14px; }
+      #bmc-pane-rec .bmc-menu-pop { left: auto; right: 0; }
+      #bmc-pane-rec .rec-ver { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 16px; margin-bottom: 12px; }
+      #bmc-pane-rec .rec-month { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-rec .rec-month select { min-height: 40px; max-width: 260px; font-size: 15px; padding: 0 10px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); }
+      #bmc-pane-rec .rec-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+      #bmc-pane-rec .rec-step { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border-radius: 999px; font-size: 14px; background: var(--bg-subtle); color: var(--text-secondary); }
+      #bmc-pane-rec .rec-step.is-cur { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+      #bmc-pane-rec .rec-step.is-done { background: var(--dept-kit-tint); color: var(--dept-kit-ink); }
+      #bmc-pane-rec .rec-arrow { color: var(--text-muted); }
+      #bmc-pane-rec .rec-next { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
+      #bmc-pane-rec .rec-block { font-size: 14px; color: var(--amber-ink); }
+      #bmc-pane-rec .rec-wait { font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-rec .rec-next-btn { min-height: 44px; padding: 0 20px; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+      #bmc-pane-rec .rec-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+      #bmc-pane-rec .rec-kpi { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); color: var(--text-primary); font: inherit; cursor: pointer; min-height: 44px; }
+      #bmc-pane-rec .rec-kpi:hover { border-color: var(--accent); }
+      #bmc-pane-rec .rec-kpi.is-open { border-color: var(--amber-ink); }
+      #bmc-pane-rec .rec-kpi-l { font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-rec .rec-kpi-v { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+      #bmc-pane-rec .rec-kpi-v.is-bad { color: var(--amber-ink); }
+      #bmc-pane-rec .rec-kpi-v.is-ok { color: var(--good-ink); }
+      #bmc-pane-rec .rec-kpi-s { font-size: 13px; color: var(--text-muted); }
+      #bmc-pane-rec .rec-work { padding: 0; overflow: hidden; }
+      #bmc-pane-rec .rec-work-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+      #bmc-pane-rec .rec-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+      #bmc-pane-rec .rec-tab { min-height: 40px; padding: 0 14px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; }
+      #bmc-pane-rec .rec-tab b { font-variant-numeric: tabular-nums; margin-left: 4px; }
+      #bmc-pane-rec .rec-tab[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+      #bmc-pane-rec .rec-filters { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      #bmc-pane-rec .rec-filters .wt-find { min-width: 200px; }
+      #bmc-pane-rec .rec-sugbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-rec .rec-in { width: 100%; min-height: 40px; padding: 0 10px; font-size: 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); box-sizing: border-box; }
+      #bmc-pane-rec .rec-in.is-suggest { border-color: var(--dept-ana-ink); background: var(--dept-ana-tint); }
+      #bmc-pane-rec .rec-sug { font-size: 13px; color: var(--violet-ink); margin-top: 2px; }
+      #bmc-pane-rec .rec-done { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px 16px; font-size: 15px; color: var(--text-secondary); }
+      #bmc-pane-rec .wt-wrap, #bmc-pane-issue .wt-wrap { border: 0; border-radius: 0; }
+      #bmc-pane-rec .iss-acts, #bmc-pane-issue .iss-acts { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      #bmc-pane-rec .iss-branch, #bmc-pane-issue .iss-branch { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: transparent; }
+      #bmc-pane-rec .iss-branch:hover, #bmc-pane-issue .iss-branch:hover { text-decoration-color: currentColor; }
+      #bmc-pane-rec .iss-link, #bmc-pane-issue .iss-link { background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 14px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+      #bmc-pane-rec .iss-chip, #bmc-pane-issue .iss-chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border-control); background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 14px; cursor: pointer; }
+      #bmc-pane-rec .iss-chip.is-sm { min-height: 32px; padding: 0 10px; font-size: 13px; }
+      #bmc-pane-rec .iss-chip[aria-pressed="true"], #bmc-pane-issue .iss-chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+      #bmc-pane-rec .iss-chip b, #bmc-pane-issue .iss-chip b { font-variant-numeric: tabular-nums; }
+      #bmc-pane-rec :is(button, summary, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      @media (max-width: 1000px) { #bmc-pane-rec .rec-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } #bmc-pane-rec .rec-next { margin-left: 0; justify-content: flex-start; } }
+      @media (max-width: 700px) {
+        #bmc-pane-rec .rec-q { width: 44px; height: 44px; }
+        #bmc-pane-rec .bmc-menu > summary, #bmc-pane-rec .rec-tab, #bmc-pane-rec .iss-chip, #bmc-pane-rec .wt-btn { min-height: 44px; }
+        #bmc-pane-rec .rec-month { flex: 1 1 100%; } #bmc-pane-rec .rec-month select { flex: 1; max-width: none; }
+        #bmc-pane-rec .rec-arrow { display: none; }
+        #bmc-pane-rec .rec-next-btn { flex: 1 1 100%; }
+        #bmc-pane-rec .rec-filters { margin-left: 0; width: 100%; }
+        #bmc-pane-rec .rec-tabs { width: 100%; } #bmc-pane-rec .rec-tab { flex: 1 1 auto; }
+        #bmc-pane-rec .rec-in { min-height: 44px; }
+        #bmc-pane-rec .rec-menu-pop { min-width: 0; }
+      }
+    </style>
+    <div class="rec-top">
+      <span id="bmcRecStatus" class="text-xs" role="status" style="color:var(--text-muted)"></span>
+      <span class="rec-grow"></span>
+      <details class="bmc-menu bc-write" id="bmcRecImportMenu"><summary>นำเข้าไฟล์ ▾</summary>
         <div class="bmc-menu-pop">
           <div class="flex flex-wrap items-end gap-2 mb-2">
             <label class="text-[11px]" style="color:var(--text-muted)" title="เดือนที่เวอร์ชันนี้มีผล (ค่าเริ่มต้น: เดือนถัดไป)">มีผลเดือน<br>
@@ -50,34 +107,32 @@
             <input type="file" accept=".xlsx" style="display:none" onchange="bmcImportFlat(this)"></label>
           <a href="#" class="bmc-menu-item" onclick="supplyGo({tab:'bomcenter',pane:'prep'});return false">สูตรกึ่งสำเร็จ (ไปหน้าสูตรกึ่งสำเร็จ)</a>
         </div></details>
-      <details class="bmc-menu" id="bmcRecDownloadMenu"><summary>ดาวน์โหลด ▾</summary>
+      <details class="bmc-menu bc-write" id="bmcRecDownloadMenu"><summary>ดาวน์โหลด ▾</summary>
         <div class="bmc-menu-pop">
           <a href="#" class="bmc-menu-item" onclick="bmcDownloadTemplate();return false" title="แม่แบบเปล่า มีรายการรหัส POS รหัสวัตถุดิบ และวิธีใช้">แม่แบบสูตรตามระดับราคา (Excel)</a>
           <a href="#" class="bmc-menu-item" onclick="bmcExportRecipes();return false">สูตรตามระดับราคา (Excel)</a>
         </div></details>
-      <button id="bmcNewDraftBtn" onclick="bmcCreateDraft()" style="display:none;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">สร้างร่าง</button>
-      <button id="bmcSubmitBtn" onclick="bmcSubmitReview()" style="display:none;background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">ส่งตรวจ</button>
-      <span id="bmcRecStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+      <button type="button" class="rec-q" aria-label="คำอธิบาย" title="คำอธิบาย" onclick="bmcRecHelp()">?</button>
+    </div>
+    <div class="card rec-ver">
+      <label class="rec-month">สูตรที่มีผลเดือน
+        <select id="bmcRel" onchange="bmcLoadRecipes()" aria-label="เวอร์ชันสูตร"></select></label>
+      <div id="bmcRecSteps"></div>
+      <div id="bmcRecNext" class="rec-next"></div>
     </div>
     <div id="bmcRecReport" class="mb-3"></div>
-    <div id="bmcUnmatched" class="mb-3"></div>
-    <div class="card p-4 overflow-x-auto">
-      <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
-        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
-          <th class="py-1.5 pr-2">ระดับราคา</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">รหัส POS</th>
-          <th class="py-1.5 pr-2">เสิร์ฟ</th><th class="py-1.5 pr-2 text-right">ต้นทุน/เสิร์ฟ</th>
-          <th class="py-1.5 pr-2 text-right">ตามไฟล์ครัว</th><th class="py-1.5 pr-2 text-right">ระบบเดิม</th>
-          <th class="py-1.5 pr-2 text-right">ต่าง %</th><th class="py-1.5 pr-2 text-right">บรรทัด</th><th class="py-1.5">สถานะ</th>
-        </tr></thead>
-        <tbody id="bmcRecBody"></tbody>
-      </table>
+    <div id="bmcRecKpis" class="rec-kpis"></div>
+    <div id="bmcRecWorkCard" class="card rec-work">
+      <div class="rec-work-head">
+        <div id="bmcRecTabs" class="rec-tabs" role="tablist" aria-label="งานในเวอร์ชันนี้"></div>
+        <div class="rec-filters">
+          <div id="bmcTierChips" class="flex flex-wrap gap-1" role="group" aria-label="ระดับราคา"></div>
+          <input type="search" id="bmcRecQ" class="wt-find" placeholder="ค้นหาเมนูหรือรหัส" aria-label="ค้นหาเมนูหรือรหัส" oninput="bmcRenderRecipes()">
+        </div>
+      </div>
+      <div id="bmcRecWork"></div>
     </div>
     <div id="bmcEditor" class="card p-4 mt-3" style="display:none"></div>
-    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>“นำเข้า → ไฟล์ครัว Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ในเมนูนำเข้าก่อน</p>
-      <p>“ดาวน์โหลด → แม่แบบสูตรตามระดับราคา” มีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้า → ไฟล์สูตรตามระดับราคา” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
-      <p>เมื่อสูตรครบ กด “ส่งตรวจ” ฝ่ายวิเคราะห์จะตรวจและประกาศใช้ที่หน้า “ตรวจและประกาศใช้”</p>
-    </div></details>
   </div>
 
   <!-- ── review & release ──────────────────────────────────────────────── -->
@@ -266,42 +321,74 @@
     </div></details>
   </div>
 
-  <!-- ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads and ticks "posted" ─── -->
+  <!-- ── ใบสรุปตัดเบิก (PR-R: month overview) ────────────────────────────────────────────
+       ปิดงวดเดือน + the filter chips (ยังไม่เสร็จ is the default: finished work is out of sight until asked for) + the month download; one row per
+       counting branch; a branch name opens its detail in the drawer. Explanations are behind the "?". Drawn by js/13-bom-center.js: bmcLoadIssue. -->
   <div id="bmc-pane-issue" style="display:none">
-    <!-- PR-M5, the order of the page: (1) งวด + สาขา, (2) the status chips, (3) the three downloads, (4) the posting, (5) the reconciliation, then the movement table -->
-    <div class="card p-3 mb-3 flex flex-wrap items-end gap-3">
-      <label class="text-xs" style="color:var(--text-muted)">งวด<br>
-        <select id="bmcIssPeriod" onchange="bmcIssPeriodChanged()" style="max-width:420px;padding:5px 8px;font-size:13px;border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)"></select></label>
-      <label class="text-xs" style="color:var(--text-muted)">สาขา<br>
-        <select id="bmcIssBranch" data-branch-picker onchange="bmcIssBranchChanged()" style="padding:5px 8px;font-size:13px;border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)"></select></label>
-      <span id="bmcIssStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    <style>
+      #bmc-pane-issue .iss-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 12px; }
+      #bmc-pane-issue .iss-month { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-issue .iss-month select { min-height: 40px; font-size: 15px; padding: 0 10px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); }
+      #bmc-pane-issue .iss-filter { display: flex; flex-wrap: wrap; gap: 8px; }
+      #bmc-pane-issue .iss-dl { margin-left: auto; min-height: 40px; padding: 0 16px; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+      #bmc-pane-issue .iss-dl:disabled { opacity: .5; cursor: not-allowed; }
+      #bmc-pane-issue .iss-why { font-size: 13px; color: var(--amber-ink); }
+      #bmc-pane-issue .iss-list { padding: 0; overflow: hidden; }
+      #bmc-pane-issue .iss-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      #bmc-pane-issue .wt-act { text-align: right; }
+      #bmc-pane-issue :is(button, summary, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      #bmc-pane-issue .iss-back { position: fixed; inset: 0; z-index: 90; background: rgba(15,23,42,.45); }
+      #bmc-pane-issue .iss-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 91; width: min(1000px, 100%); overflow: auto; background: var(--bg-page, var(--bg-card)); color: var(--text-primary); border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(0,0,0,.25); display: flex; flex-direction: column; }
+      #bmc-pane-issue .iss-drawer[hidden], #bmc-pane-issue .iss-back[hidden] { display: none; }
+      #bmc-pane-issue .iss-dr-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 20px; background: var(--dept-acc-tint); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+      #bmc-pane-issue .iss-dr-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--text-primary); }
+      #bmc-pane-issue .iss-dr-sub { font-size: 14px; color: var(--text-secondary); }
+      #bmc-pane-issue .iss-dr-close { margin-left: auto; min-width: 44px; min-height: 44px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 20px; cursor: pointer; }
+      #bmc-pane-issue .iss-dr-body { padding: 16px 20px 28px; display: flex; flex-direction: column; gap: 12px; }
+      #bmc-pane-issue .iss-dr-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+      @media (max-width: 700px) {
+        #bmc-pane-issue .rec-q { width: 44px; height: 44px; }
+        #bmc-pane-issue .iss-chip, #bmc-pane-issue .iss-dl, #bmc-pane-issue .wt-btn { min-height: 44px; }
+        #bmc-pane-issue .iss-month { order: 1; flex: 1 1 0; min-width: 0; } #bmc-pane-issue .iss-month select { flex: 1; min-width: 0; min-height: 44px; }
+        #bmc-pane-issue .rec-q { order: 2; } #bmc-pane-issue .iss-filter { order: 3; flex: 1 1 100%; } #bmc-pane-issue #bmcIssAllWhy { order: 4; margin-left: 0 !important; flex: 1 1 100%; } #bmc-pane-issue .iss-dl { order: 5; }
+        #bmc-pane-issue .iss-dl { margin-left: 0; flex: 1 1 100%; justify-content: center; }
+        #bmc-pane-issue .iss-acts { justify-content: flex-start; }
+        #bmc-pane-issue .wt-act { text-align: left; }
+        #bmc-pane-issue .iss-dr-head, #bmc-pane-issue .iss-dr-body { padding-left: 12px; padding-right: 12px; }
+        #bmc-pane-issue .iss-dr-head { flex-wrap: nowrap; } #bmc-pane-issue .iss-dr-head > div:first-child { flex: 1 1 0; min-width: 0; }
+      }
+    </style>
+    <div class="card iss-bar">
+      <label class="iss-month">ปิดงวดเดือน <select id="bmcIssMonth" onchange="bmcIssMonthChanged()" aria-label="ปิดงวดเดือน"></select></label>
+      <div id="bmcIssFilter" class="iss-filter" role="group" aria-label="กรองตามสถานะ"></div>
+      <span id="bmcIssAllWhy" class="iss-why" style="margin-left:auto"></span>
+      <button type="button" id="bmcIssAllBtn" class="iss-dl" style="margin-left:0" onclick="bmcIssXlsxAll()" disabled>ดาวน์โหลดทุกสาขาที่พร้อม</button>
+      <button type="button" class="rec-q" aria-label="คำอธิบาย" title="คำอธิบาย" onclick="bmcIssHelp()">?</button>
     </div>
-    <div id="bmcIssChips" class="flex flex-wrap items-center gap-2 mb-2"></div>
-    <div class="card p-3 mb-3">
-      <div id="bmcIssDownloads" class="flex flex-wrap items-center gap-2">
-        <span class="text-xs font-semibold" style="color:var(--text-primary)">ดาวน์โหลด:</span>
-        <button onclick="bmcIssXlsx()" style="padding:6px 14px;font-size:13px;cursor:pointer;border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)">ใบสรุปตัดเบิก งวดนี้ (Excel)</button>
-        <button id="bmcIssAllBtn" onclick="bmcIssXlsxAll()" style="padding:6px 14px;font-size:13px;cursor:pointer;border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)">ใบสรุปตัดเบิก ทุกสาขาเดือนนี้ (Excel)</button>
-        <button onclick="bmcIssSlipsXlsx()" style="padding:6px 14px;font-size:13px;cursor:pointer;border:1px solid var(--border-control);border-radius:var(--r-sm);background:var(--bg-input);color:var(--text-primary)" title="ใบตัดเบิกที่สาขายืนยันแล้ว ทุกสาขา ตามเดือนของงวดที่เลือก (ไม่รวมร่าง)">ใบตัดเบิกสาขา ทั้งเดือน (Excel)</button>
+    <div id="bmcIssStatus" class="text-xs mb-2" role="status" style="color:var(--text-muted)"></div>
+    <div id="bmcIssList" class="card iss-list"></div>
+
+    <div id="bmcIssBack" class="iss-back" hidden onclick="bmcIssClose()"></div>
+    <aside id="bmcIssDrawer" class="iss-drawer" role="dialog" aria-modal="true" aria-labelledby="bmcIssDrTitle" hidden>
+      <div class="iss-dr-head">
+        <div><h2 id="bmcIssDrTitle" class="iss-dr-title"></h2><div id="bmcIssDrSub" class="iss-dr-sub"></div></div>
+        <button type="button" id="bmcIssDrClose" class="iss-dr-close" aria-label="ปิด" onclick="bmcIssClose()">&times;</button>
       </div>
-      <div class="bmc-iss-write mt-3">
-        <div class="flex flex-wrap items-center gap-3">
-          <button id="bmcIssPostBtn" onclick="bmcIssPost(true)" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 18px;font-size:14px;font-weight:600;cursor:pointer">บันทึกเข้าระบบบัญชีแล้ว</button>
-          <a href="#" id="bmcIssUnpost" onclick="bmcIssPost(false);return false" style="display:none;color:var(--accent);font-size:13px;text-decoration:underline">ยกเลิกการบันทึกบัญชี</a>
+      <div class="iss-dr-body">
+        <div id="bmcIssChips" class="flex flex-wrap items-center gap-2"></div>
+        <div id="bmcIssDownloads" class="iss-dr-acts">
+          <button type="button" id="bmcIssDrXlsx" class="wt-btn" onclick="bmcIssXlsx()">ใบสรุปตัดเบิก งวดนี้ (Excel)</button>
+          <button type="button" class="wt-btn" onclick="bmcIssSlipsXlsx()" title="ใบตัดเบิกที่สาขายืนยันแล้ว ทุกสาขา ตามเดือนของงวดที่เลือก (ไม่รวมร่าง)">ใบตัดเบิกสาขา ทั้งเดือน (Excel)</button>
+          <span id="bmcIssPosting" class="iss-dr-acts"></span>
+          <span id="bmcIssDrStatus" class="text-xs" role="status" style="color:var(--text-muted)"></span>
         </div>
-        <div id="bmcIssPostNote" class="text-xs mt-1" style="color:var(--text-secondary)"></div>
+        <div id="bmcIssRecon" class="card p-4 overflow-x-auto"></div>
+        <details id="bmcIssMoveBox" class="card p-4">
+          <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">ตารางเคลื่อนไหวของงวด</summary>
+          <div id="bmcIssTable" class="mt-3 overflow-x-auto"></div>
+        </details>
       </div>
-    </div>
-    <div id="bmcIssRecon" class="card p-4 mb-3 overflow-x-auto"></div>
-    <details id="bmcIssMoveBox" class="card p-4 mb-3">
-      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer">ตารางเคลื่อนไหวของงวด</summary>
-      <div id="bmcIssTable" class="mt-3 overflow-x-auto"></div>
-    </details>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย (ตามใบตัดเบิกที่ยืนยันแล้ว) · ผลต่าง = นับจริง − คงเหลือตามระบบ · ปริมาณในตารางกระทบยอดแสดงเป็นหน่วยที่สาขานับ</p>
-      <p>ดาวน์โหลดได้เมื่อสาขาหรือประสานงานขายยืนยันรับสินค้าครบของงวดนั้นแล้ว · เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้ · ยกเลิกการบันทึกบัญชีได้จากลิงก์ข้างปุ่ม</p>
-      <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p>
-    </div></details>
+    </aside>
   </div>
 
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
