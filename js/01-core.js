@@ -207,13 +207,14 @@ function _renderLockChip() {
   const st = window.writeToken || {};
   const on = st.unlocked === true;
   _renderLockIcon(st, on);
-  const el = document.getElementById('supplyLock');
-  if (!el) return;
-  if (st.gated === false) { el.innerHTML = ''; return; }
-  el.innerHTML = `<button onclick="unlockWrites()" title="${on
+  const els = ['supplyLock', 'deptLock'].map(id => document.getElementById(id)).filter(Boolean);   // the bar (a phone) and the department header (a desktop)
+  if (!els.length) return;
+  if (st.gated === false) { els.forEach(el => { el.innerHTML = ''; }); return; }
+  const html = `<button onclick="unlockWrites()" title="${on
       ? 'บันทึกข้อมูลได้ · กดเพื่อเปลี่ยนรหัสปลดล็อก'
       : 'ดูตัวอย่างได้ทุกหน้า · บันทึกจริงต้องกรอกรหัสปลดล็อก · กดเพื่อกรอก'}"
     class="text-[11px] rounded-full px-2.5 py-0.5" style="border:1px solid ${on ? 'var(--good-ink)' : 'var(--amber-ink)'};color:${on ? 'var(--good-ink)' : 'var(--amber-ink)'};background:transparent;white-space:nowrap">${on ? 'แก้ไขได้' : 'อ่านอย่างเดียว'}</button>`;
+  els.forEach(el => { el.innerHTML = html; });
 }
 
 // Session-expiry handler — re-open the login overlay (guarded so a burst of
@@ -2908,7 +2909,8 @@ function _updateClusterBar(name) {
   const cl = clusterOf(name);
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
   phNavRender();                                   // the phone's bottom navigation follows every switch (js/09c-mobile.js)
-  if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the sidebar department entry that holds this page lights up (js/18-launcher.js)
+  if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the rail's department entry that holds this page lights up (js/18-launcher.js)
+  if (typeof renderDeptHead === 'function') renderDeptHead(name);  // PR-D2: breadcrumb + the department's band and icon tabs (a desktop hides the bar below)
   // The group you are in stays lit in the sidebar, whichever of its views is open
   // (its entry is tabs[0], or the first member the role can open - applyPermissions).
   if (cl) {

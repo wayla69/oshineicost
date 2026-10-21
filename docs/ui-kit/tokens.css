@@ -130,6 +130,11 @@ body.dark {
   --dept-brn-ink:  #f08a8a; --dept-brn-tint:  #3d2020;
   --dept-own-ink:  #a9b6c9; --dept-own-tint:  #26303f;
 }
+/* The icon rail (PR-D2): the sidebar folded to the department rail. Navy in both themes, so the same values: the label
+   (9.7:1 on #16294d, more on the dark rail), the open entry as a white tile with a navy icon (14.4:1), a thin divider above the tools. */
+:root {
+  --rail-ink: #c9d4e6; --rail-ink-hover: #ffffff; --rail-active-bg: #ffffff; --rail-active-ink: #16294d; --rail-line: rgba(255, 255, 255, 0.14);
+}
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */
 :root, body.dark {

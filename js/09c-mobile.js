@@ -301,7 +301,7 @@ function phRenderDept(key) {
 function phOpenDeptPage(key, idx) {
   const d = DEPARTMENTS.find(x => x.key === key), p = d && d.pages[idx];
   if (!p) return;
-  _deptCur = key; _deptFocus = null;                 // the page opened from here keeps this department lit
+  deptRemember(key); _deptFocus = null;                 // the page opened from here keeps this department lit
   phOpenPage(() => deptOpenPage(p));
 }
 
