@@ -92,7 +92,7 @@ def test_the_close_steps_follow_the_data_per_branch(udon):
     p = CE.parse_report(c, _report())
     CE.apply_catalogue(c, p, "ss")
     st = _steps(TD.build(c, M, None, None, today=TODAY))
-    assert "บัญชีสินค้าส่วนกลาง" in st["central_report"]["detail"]
+    assert "บัญชีสินค้า" in st["central_report"]["detail"]
     assert st["code_links"]["status"] in ("todo", "done")
     CE.deliveries(c, p, "ss", [1], dry_run=False)
     d = TD.build(c, M, None, None, today=TODAY)

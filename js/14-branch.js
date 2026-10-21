@@ -1861,7 +1861,7 @@ function brnRenderVarRecon() {
 }
 function brnVarReconXlsx() {
   if (!_brnRecon) return;
-  bmcDownload(`${API}/api/bom-center/issue-reports/reconcile.xlsx?${_brnQS()}&end_count_id=${_brnRecon.period.end_count_id}`, 'คงเหลือตามระบบเทียบนับจริง.xlsx', 'brnRcStatus');
+  bmcDownload(`${API}/api/bom-center/issue-reports/reconcile.xlsx?${_brnQS()}&end_count_id=${_brnRecon.period.end_count_id}`, 'กระทบยอด.xlsx', 'brnRcStatus');
 }
 async function brnConfirmRecv(undo) {
   if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }

@@ -128,7 +128,7 @@ def parse_report(con, data: bytes, month: str = None) -> dict:
     grid = [list(r) for r in ws.iter_rows(values_only=True)]
     hi = next((i for i, r in enumerate(grid[:15]) if any(str(c or "").strip() == "รหัสสินค้า" for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” ใช้รายงานยอดสั่งสินค้าทุกสาขาของไดกิโตะ กรุ๊ป")
+        raise ValueError("ไม่พบหัวตาราง “รหัสสินค้า” ใช้ไฟล์รายงานไดกิโตะ กรุ๊ป (รายงานยอดสั่งสินค้าทุกสาขา) หรือไฟล์ที่ดาวน์โหลดจากปุ่ม “ดาวน์โหลดบัญชีสินค้า (Excel)”")
     head = [str(c or "").strip() for c in grid[hi]]
 
     def col(*names):
@@ -371,7 +371,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
         from .aliases import apply_choices
         unknown = [{"code": r["code"], "name": r["name"], "unit": r.get("inner")} for r in pl["rows"]
                    if r.get("is_new") and r["status"] != "skip"]
-        res = apply_choices(con, unknown, choices, who, can_alias, system=system, note="จากรายงานบัญชีสินค้าส่วนกลาง")
+        res = apply_choices(con, unknown, choices, who, can_alias, system=system, note="จากรายงานไดกิโตะ กรุ๊ป")
         aliased, requested, open_codes = len(res["aliased"]), len(res["requested"]), res["open"]
         left_out = set(open_codes) | set(res["requested"])
         parsed["_held"] = left_out               # the month's quantities of these codes are not booked either (deliveries)
@@ -405,7 +405,7 @@ def apply_catalogue(con, parsed: dict, who: str, set_local_others: bool = True, 
                                (r["code"],)).fetchone():
                 try:                      # PR-U: through the ladder writer (a step on the base unit, exact)
                     set_unit_rule(con, r["code"], "แพ็ค", f / r["inner_qty"],
-                                  f"1/{r['inner_qty']:g} ของ {r['recv_label']} (บัญชีสินค้าส่วนกลาง)", who)
+                                  f"1/{r['inner_qty']:g} ของ {r['recv_label']} (รายงานไดกิโตะ กรุ๊ป)", who)
                 except ValueError:        # a convenience rule: an item whose base unit is already the pack does not need it
                     pass
         con.execute("INSERT INTO bc_central_item(code, name, unit_label, sale_unit, inner_qty, inner_unit, base_per_sale,"
@@ -534,7 +534,7 @@ def deliveries(con, parsed: dict, who: str, branch_ids=None, dry_run: bool = Tru
             # the order unit must be in the master before the receipt converts it
             for ln in lines:
                 if conv.to_base(ln["code"], 1, ln["unit"])[0] is None:
-                    raise ValueError(f"{ln['code']}: นำเข้าบัญชีสินค้าส่วนกลางก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
+                    raise ValueError(f"{ln['code']}: นำเข้ารายงานไดกิโตะ กรุ๊ปก่อน (หน่วย {ln['unit']} ยังไม่อยู่ในทะเบียน)")
             r = add_receipt(con, b["branch_id"], rdate, [{"code": ln["code"], "qty": ln["qty"], "unit": ln["unit"]}
                                                          for ln in lines], who, ref=ref,
                             note=f"ยอดจัดส่งจากไดกิโตะ กรุ๊ป งวด {month} ({parsed.get('sheet') or ''})", source="central")

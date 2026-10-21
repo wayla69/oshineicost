@@ -12,6 +12,7 @@ import io
 import sqlite3
 
 from openpyxl import load_workbook
+from conftest import dl_name
 
 
 def _rows(db_path):
@@ -64,16 +65,16 @@ def test_status_split_and_filename(client):
         assert client.get(f"/api/bom-center/hub/consolidated?{q}&status=bogus").status_code == 400
         r = client.get(f"/api/bom-center/hub/consolidated.xlsx?{q}&status=submitted&split=true")
         assert r.status_code == 200
-        assert "bom_center_orders_submitted_2026-09-01_2026-10-31.xlsx" in r.headers["content-disposition"]
+        assert dl_name(r) == "สรุปรวมตามวันส่ง_รอยืนยันยอดส่ง_2026-09-01_2026-10-31.xlsx"
         wb = load_workbook(io.BytesIO(r.content), read_only=True)
-        assert wb.sheetnames == ["รวมตามวันส่ง", "ต่อสาขา"]                         # split=true is accepted and ignored
-        rows = list(wb["รวมตามวันส่ง"].iter_rows(values_only=True))
+        assert wb.sheetnames == ["สรุปรวมตามวันส่ง", "ต่อสาขา"]                       # split=true is accepted and ignored
+        rows = list(wb["สรุปรวมตามวันส่ง"].iter_rows(values_only=True))
         assert "บริษัท ไดกิโตะ กรุ๊ป จำกัด" in rows[0][0]                          # the note row names the company
         assert list(rows[1])[:5] == ["วันส่ง", "รหัส", "วัตถุดิบ", "หน่วย", "รวม"] and "ผู้จำหน่าย" not in rows[1]
         summary = {row[1]: row[4] for row in rows[2:] if row[1]}
         assert summary == {"X-1": 3, "X-2": 2}
         r = client.get(f"/api/bom-center/hub/consolidated.xlsx?{q}")
-        assert load_workbook(io.BytesIO(r.content), read_only=True).sheetnames == ["รวมตามวันส่ง", "ต่อสาขา"]
-        assert "bom_center_orders_open_" in r.headers["content-disposition"]
+        assert load_workbook(io.BytesIO(r.content), read_only=True).sheetnames == ["สรุปรวมตามวันส่ง", "ต่อสาขา"]
+        assert dl_name(r).startswith("สรุปรวมตามวันส่ง_รอดำเนินการ_")
     finally:
         _restore(main.DB_PATH, snap)

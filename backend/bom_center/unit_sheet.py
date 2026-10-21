@@ -112,7 +112,7 @@ def parse(data: bytes) -> dict:
                 ws_main = ws
                 break
     if ws_main is None and ws_port is None:
-        raise ValueError(f"ไม่พบแผ่นงาน “{SHEET}” หรือ “{PORTION_SHEET}” · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบหน่วย (Excel)”")
+        raise ValueError(f"ไม่พบแผ่นงาน “{SHEET}” หรือ “{PORTION_SHEET}” · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบหน่วยและการแปลง (Excel)”")
     if ws_main is not None:
         rows = list(ws_main.iter_rows(values_only=True))
         hi, m = _find_header(rows, _KEY, ("code", "unit", "qty"))
@@ -139,7 +139,7 @@ def parse(data: bytes) -> dict:
         rows = list(ws_port.iter_rows(values_only=True))
         hi, m = _find_header(rows, _PKEY, ("code", "raw", "qty", "pieces"))
         if hi is None:
-            raise ValueError(f"แผ่นงาน “{PORTION_SHEET}” ไม่มีหัวคอลัมน์ที่ต้องใช้ · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบหน่วย (Excel)”")
+            raise ValueError(f"แผ่นงาน “{PORTION_SHEET}” ไม่มีหัวคอลัมน์ที่ต้องใช้ · ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบหน่วยและการแปลง (Excel)”")
         out["sheets"].append(ws_port.title)
         for n, r in enumerate(rows[hi + 1:], start=hi + 2):
             def g(k, r=r):
