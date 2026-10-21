@@ -148,7 +148,7 @@ def test_a_phone_login_opens_the_launcher_then_a_department_then_a_page(live_ser
         b = _browser(p)
         ctx, page, errors = _phone(b, base, "management1", auth.DEFAULT_PASSWORD)
         home = page.evaluate("""() => ({ view: _phView, booted: _desktopBooted, depts: [...document.querySelectorAll('#phv-home .ph-dept')].map(e => e.dataset.dept || e.querySelector('.ph-dept-n').textContent),
-            nav: [...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.innerText.trim()), navH: Math.round(document.getElementById('phNav').getBoundingClientRect().height),
+            nav: [...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.querySelector('span').textContent.trim()), navH: Math.round(document.getElementById('phNav').getBoundingClientRect().height),
             hscroll: document.documentElement.scrollWidth > innerWidth, sidebar: getComputedStyle(document.getElementById('sidebar')).display,
             small: [...document.querySelectorAll('#phHome a, #phNav button')].filter(e => e.offsetParent).map(e => e.getBoundingClientRect().height).filter(h => h < 44).length })""")
         assert home["view"] == "home" and home["booted"] is False                                       # the heavy shell has not been fetched
@@ -174,7 +174,8 @@ def test_a_phone_login_opens_the_launcher_then_a_department_then_a_page(live_ser
         # the search: every page this login may open; the legacy ones are there too
         page.locator("#phNav .ph-nav-i:has(span:text-is('ค้นหา'))").click()
         page.fill("#phSearchInput", "ปฏิทินเทศกาล")
-        assert page.evaluate("[...document.querySelectorAll('#phSearchRes .ph-row')].map(e => e.innerText.trim())") == ["ปฏิทินเทศกาลและวันหยุด\n›"]
+        # PR-D4: a result is icon + page name + department chip (the same engine as the desktop panel)
+        assert page.evaluate("[...document.querySelectorAll('#phSearchRes .ph-row')].map(e => e.querySelector('.pgs-name').textContent + '|' + e.querySelector('.pgs-chip').textContent)") == ["ปฏิทินเทศกาลและวันหยุด|ประสานงานขาย"]
         page.locator("#phSearchRes .ph-row").click()
         page.wait_for_function("_phView === 'page' && activeTab === 'bomcenter'", timeout=30000)
         # ฉัน: theme, sign out, change password
@@ -197,7 +198,7 @@ def test_the_branch_and_franchise_homes_have_their_own_bottom_navigation(live_se
                                 data={"username": u, "password": "Temp@12345", "role": role, "branch": br})
             assert r.status in (200, 409), r.text()
         ctx, page, errors = _phone(b, base, "br_ph_a", "Temp@12345")
-        home = page.evaluate("""() => ({ title: document.querySelector('#phv-home .ph-head-t h1').textContent, nav: [...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.innerText.trim()),
+        home = page.evaluate("""() => ({ title: document.querySelector('#phv-home .ph-head-t h1').textContent, nav: [...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.querySelector('span').textContent.trim()),
             tiles: [...document.querySelectorAll('#phv-home .ph-bigtile-n')].map(e => e.textContent), todo: document.getElementById('phTodoH').textContent,
             picker: document.querySelectorAll('#phHome select').length })""")
         assert home["title"] == "BranchA" and home["picker"] == 0 and home["todo"] == "ต้องทำวันนี้"
@@ -205,11 +206,11 @@ def test_the_branch_and_franchise_homes_have_their_own_bottom_navigation(live_se
         assert home["tiles"] == ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]
         page.locator("#phNav .ph-nav-i:has(span:text-is('สั่งสินค้า'))").click()
         page.wait_for_function("_phView === 'page' && activeTab === 'branchstock' && _SUPPLY_PANE.branchstock.get() === 'order'", timeout=60000)
-        assert page.evaluate("document.querySelector('#phNav .ph-nav-i.active').innerText.trim()") == "สั่งสินค้า"
+        assert page.evaluate("document.querySelector('#phNav .ph-nav-i.active span').textContent.trim()") == "สั่งสินค้า"
         assert not errors, errors
         ctx.close()
         ctx, page, errors = _phone(b, base, "own_ph_b", "Temp@12345")
-        assert page.evaluate("[...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.innerText.trim())") == ["หน้าแรก", "ฉัน"]
+        assert page.evaluate("[...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.querySelector('span').textContent.trim())") == ["หน้าแรก", "ฉัน"]
         assert page.evaluate("[...document.querySelectorAll('#phv-home .ph-bigtile-n')].map(e => e.textContent)") == ["ร้านของฉัน"]
         assert not errors, errors
         ctx.close()

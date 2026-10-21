@@ -363,7 +363,7 @@ async def usage_counter(request: Request, call_next):
     response = await call_next(request)
     try:
         path = request.url.path
-        if (path.startswith("/api/") and not path.startswith("/api/usage")
+        if (path.startswith("/api/") and not path.startswith("/api/usage") and not path.startswith("/api/nav/")   # the badge poll is not use
                 and response.status_code < 400):
             route = request.scope.get("route")
             name = getattr(route, "path", None) or path
@@ -2382,6 +2382,11 @@ try:
 except ImportError:
     from routers.franchise import router as _franchise_router
 app.include_router(_franchise_router)
+try:
+    from .routers.nav import router as _nav_router
+except ImportError:
+    from routers.nav import router as _nav_router
+app.include_router(_nav_router)     # GET /api/nav/badges (PR-D4): the red task counts of the department menu
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Ingredient ordering — per-branch purchase planning (แผนสั่งวัตถุดิบรายสาขา)

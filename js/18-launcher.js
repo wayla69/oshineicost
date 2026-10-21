@@ -6,6 +6,8 @@
 // _supplyItemAllowed, _shmMine, _shmOpen, _noEmoji, ROLE_LABEL_TH, whoTh, _TH_MONTHS). Every name starts with `lnch`, `dept` or `alp`.
 // PR-D2 (2026-10-21): the department workspace. On a desktop the page shows #deptHead above it (renderDeptHead: breadcrumb, the department's
 // band and a row of icon tabs = that department's pages) instead of the cluster bar and the supply chips; the sidebar is the icon rail.
+// PR-D4 (2026-10-21): the red task counts (navBadges*, GET /api/nav/badges) and the page search (pgSearch*, "/" and Ctrl+K); both are also used by the
+// phone shell (js/09c-mobile.js), which loads this slice alone, so they depend on js/01-core.js only.
 
 let _deptFocus = null;      // the department picked in the sidebar: the launcher scrolls to its card and the entry stays lit
 
@@ -71,10 +73,13 @@ function renderDeptNav() {
   const vis = deptVisible();
   host.innerHTML = `<a href="#" class="nav-item rail-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และแผนกทั้งหมด">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></a>`
+    + `<a href="#" class="nav-item rail-item dept-entry" id="nav-search" onclick="pgSearchOpen();return false" title="ค้นหาหน้า · Ctrl K หรือ /">`
+      + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${_PG_SEARCH_ICON}"/></svg><span class="nav-label">ค้นหา</span></a>`
     + `<div class="nav-section dept-entry">แผนก</div>`
-    + vis.map(r => `<a href="#" class="nav-item rail-item dept-entry" id="nav-dept-${r.dept.key}" data-dept="${r.dept.key}" onclick="deptNavOpen('${r.dept.key}');return false" title="${esc(r.dept.label + ' · ' + r.dept.duty)}">`
+    + vis.map(r => `<a href="#" class="nav-item rail-item dept-entry" id="nav-dept-${r.dept.key}" data-dept="${r.dept.key}" data-nb="d:${r.dept.key}" onclick="deptNavOpen('${r.dept.key}');return false" title="${esc(r.dept.label + ' · ' + r.dept.duty)}">`
       + `${_deptSvg(r.dept.icon, 17, 'nav-icon')}<span class="nav-label">${esc(r.dept.label)}</span></a>`).join('');
   updateDeptNav(typeof activeTab === 'string' ? activeTab : '');
+  navBadgesApply(); navBadgesStart(); pgSearchInit();
 }
 function deptNavHome() { _deptFocus = null; switchTab('launcher'); }
 // a department entry of the rail: that department's workspace - the page last opened there, else its first page the person may open
@@ -103,7 +108,7 @@ function updateDeptNav(name) {
   if (!nav) return;
   const key = name === 'launcher' ? _deptFocus : (name === 'allpages' ? null : _deptOf(name));
   nav.querySelectorAll('.nav-item').forEach(el => {
-    const on = el.id === 'nav-launcher' ? (name === 'launcher' && !_deptFocus) : el.dataset.dept === key;
+    const on = el.id === 'nav-launcher' ? (name === 'launcher' && !_deptFocus) : (el.dataset.dept !== undefined && el.dataset.dept === key);
     el.classList.toggle('active', on);
     if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   });
@@ -151,7 +156,7 @@ function renderDeptHead(name) {
   const tabs = ctx.row.pages.map(x => {
     const on = !!cur && cur.i === x.i;
     return `<button type="button" role="tab" class="dh-tab" aria-selected="${on}" tabindex="${on || (!cur && x === ctx.row.pages[0]) ? 0 : -1}"`
-      + ` data-i="${x.i}" onclick="deptGo('${d.key}',${x.i})" onkeydown="deptTabKey(event)">${_deptSvg(x.p.icon, 20)}<span>${esc(x.p.label)}</span></button>`;
+      + ` data-i="${x.i}" data-nb="${_navPageSpec(x.p)}" onclick="deptGo('${d.key}',${x.i})" onkeydown="deptTabKey(event)">${_deptSvg(x.p.icon, 20)}<span>${esc(x.p.label)}</span></button>`;
   }).join('');
   host.innerHTML = _deptCrumbHtml([`<span class="dh-dept">${esc(d.label)}</span>`], cur ? cur.p.label : title)
     + `<div class="dh-band${ctx.row.pages.length > 7 ? ' many' : ''}"><div class="dh-id"><span class="dh-badge">${_deptSvg(d.icon, 26)}</span>`
@@ -162,6 +167,7 @@ function renderDeptHead(name) {
   _deptTabsFade(bar);
   if (refocus) (act || bar.querySelector('[role="tab"]')).focus({ preventScroll: true });
   if (supply) _renderLockChip();
+  navBadgesApply(); navBadgesRefresh(false);
 }
 // arrow keys move between the tabs of the row (Home / End jump); Enter and Space open the focused one, as on any button
 function deptTabKey(ev) {
@@ -201,7 +207,7 @@ function _lnchDeptsHtml(vis) {
     return `<section class="lnch-dept" id="lnch-dept-${d.key}" data-dept="${d.key}" aria-labelledby="lnch-h-${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
       + `<div class="lnch-dept-head"><span class="lnch-badge">${_deptSvg(d.icon, 26)}</span>`
       + `<div style="min-width:0"><h3 class="lnch-dept-name" id="lnch-h-${d.key}">${esc(d.label)}</h3><div class="lnch-dept-duty">${esc(d.duty)}</div></div></div>`
-      + `<div class="lnch-tiles">${r.pages.map(x => `<a href="#" class="lnch-tile" onclick="deptGo('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}`
+      + `<div class="lnch-tiles">${r.pages.map(x => `<a href="#" class="lnch-tile" data-nb="${_navPageSpec(x.p)}" onclick="deptGo('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}`
         + `<span class="lnch-tile-label">${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
   }).join('');
 }
@@ -217,6 +223,7 @@ async function loadLauncher() {
   document.getElementById('lnchFoot').innerHTML = _lnchFootHtml();
   updateDeptNav('launcher');
   if (_deptFocus) lnchFocusDept(_deptFocus);
+  navBadgesApply(); navBadgesStart(); navBadgesRefresh(false);
   await lnchLoadTasks();
 }
 
@@ -282,6 +289,255 @@ async function lnchLoadTasks() {
 }
 function lnchTaskGo(n) { const g = _lnchShown[n]; if (g && g.first.go) { _deptFocus = null; _shmOpen(g.first.go); } }
 function lnchTasksAll() { _deptFocus = null; shmFilterSet(_lnchFilter()); supplyGo({ tab: 'supplyhome' }); }
+
+// ── task count badges (PR-D4, 2026-10-21) ───────────────────────────────────────────────────────────────────────────────
+// GET /api/nav/badges answers { pages: { "<tab>" | "<tab>:<pane>": n }, at }: the tasks that wait for THIS person's own move (state "todo" only -
+// never รอตรวจ, never เสร็จแล้ว), counted on the server from the items of หน้างาน. A red count (1 to 99, then 99+) is drawn on every element that
+// carries `data-nb`:
+//   data-nb="p:<tab>[:<pane>]"  a page (launcher tile, department tab, phone tile, search row)
+//   data-nb="d:<dept>"          a department: the sum of its pages the person may open (rail icon; the phone's .ph-cnt carries data-dept)
+//   data-nb="t"                 the person's whole list (the phone's bottom-nav "งานของฉัน")
+// navBadgesApply() redraws the counts in place - no re-render, so focus and scroll stay. The data is fetched on load, whenever the tab is shown
+// again and every 5 minutes; a failed fetch keeps the last count for 15 minutes and then shows none - never an error on the screen.
+const _NB_EVERY_MS = 5 * 60 * 1000, _NB_MIN_GAP_MS = 45 * 1000, _NB_KEEP_MS = 15 * 60 * 1000;
+const _NB = { pages: /** @type {Record<string, number>} */ ({}), at: 0, tried: 0, busy: false, started: false };
+function _navPageSpec(p) { return 'p:' + p.tab + (p.pane ? ':' + p.pane : ''); }
+function navPageCount(p) { return _NB.pages[p.tab + (p.pane ? ':' + p.pane : '')] || 0; }
+function navDeptCounts() {   // { department key: n } over the pages the person may open
+  /** @type {Record<string, number>} */
+  const out = {};
+  deptVisible().forEach(r => { out[r.dept.key] = r.pages.reduce((n, x) => n + navPageCount(x.p), 0); });
+  return out;
+}
+function navBadgeText(n) { return n > 99 ? '99+' : String(n); }
+function navBadgesApply() {
+  const els = document.querySelectorAll('[data-nb], .ph-cnt[data-dept]');
+  if (!els.length) return;
+  let depts = null;
+  els.forEach(el => {
+    const own = el.classList.contains('ph-cnt');          // the phone's placeholder IS the badge; every other host gets a child
+    let n = 0;
+    if (own) { depts = depts || navDeptCounts(); n = depts[el.dataset.dept] || 0; }
+    else {
+      const spec = el.dataset.nb || '';
+      if (spec === 't') n = Object.values(_NB.pages).reduce((a, v) => a + (v > 0 ? v : 0), 0);
+      else if (spec.startsWith('d:')) { depts = depts || navDeptCounts(); n = depts[spec.slice(2)] || 0; }
+      else if (spec.startsWith('p:')) n = _NB.pages[spec.slice(2)] || 0;
+    }
+    let b = own ? el : el.querySelector(':scope > .nb');
+    if (n < 1) { if (b) { if (own) b.hidden = true; else b.remove(); } return; }
+    if (!b) { b = document.createElement('span'); b.className = 'nb'; el.appendChild(b); }
+    b.hidden = false;
+    b.setAttribute('role', 'img');
+    b.setAttribute('aria-label', `รอ ${n} งาน`);
+    b.textContent = navBadgeText(n);
+  });
+}
+async function navBadgesRefresh(force) {
+  if (_NB.busy || (!force && Date.now() - _NB.tried < _NB_MIN_GAP_MS)) return;
+  _NB.busy = true; _NB.tried = Date.now();
+  try {
+    const j = await getJSON('/api/nav/badges');                    // throws on a non-2xx answer
+    if (!j || !j.pages || typeof j.pages !== 'object') throw new Error('shape');
+    _NB.pages = j.pages; _NB.at = Date.now();
+  } catch (e) {
+    if (Date.now() - _NB.at > _NB_KEEP_MS) _NB.pages = {};     // no badges rather than an old number; nothing is shown about the failure
+  } finally { _NB.busy = false; }
+  navBadgesApply();
+}
+function navBadgesStart() {
+  if (_NB.started) return;
+  _NB.started = true;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) navBadgesRefresh(false); });
+  setInterval(() => { if (!document.hidden) navBadgesRefresh(true); }, _NB_EVERY_MS);
+  navBadgesRefresh(true);
+}
+
+// ── page search (PR-D4) ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ONE engine for the desktop panel (the launcher's search box, the rail's search icon, "/" and Ctrl+K) and the phone's ค้นหา page. The index is
+// every page the person may open: the pages of DEPARTMENTS first (with their department), then the rest of หน้ารายงานทั้งหมด. A page is found by its
+// label, its words (PAGE_KEYWORDS in js/01-core.js), its department or its old cluster. No server call.
+const _PG_SEARCH_ICON = 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5';
+const _PG_MAX = 12, _PG_IDLE = 8;
+function pgNorm(s) { return String(s || '').normalize('NFC').toLowerCase().replace(/[\s​ ]+/g, ''); }   // spaces do not matter, Latin is lower-case
+function _pgEntry(tab, pane, label, icon, dept, di, cluster) {
+  const kw = PAGE_KEYWORDS[tab + (pane ? '|' + pane : '')] || '';
+  return { tab, pane, label, icon, dept, di, cluster, n: pgNorm(label), nd: pgNorm(dept ? dept.label : ''), nc: pgNorm(cluster),
+    nk: kw.split(/\s+/).filter(Boolean).map(pgNorm) };
+}
+function pgIndex(extra) {
+  const seen = new Set(), out = [], role = _deptRole();
+  /** @type {Record<string, string>} */
+  const cluster = {};
+  allPagesModel(() => true).forEach(g => g.entries.forEach(e => { const k = e.tab + '|' + (e.pane || ''); if (!cluster[k]) cluster[k] = _noEmoji(g.label); }));
+  deptVisible().forEach(r => r.pages.forEach(x => {
+    const k = x.p.tab + '|' + (x.p.pane || '');
+    if (seen.has(k)) return;                                  // a page of several departments is listed once, under the first (the home one)
+    seen.add(k);
+    out.push(_pgEntry(x.p.tab, x.p.pane, _noEmoji(x.p.label), x.p.icon, r.dept, x.i, cluster[k] || ''));
+  }));
+  allPagesModel(e => (!e.roles || e.roles.includes(role)) && (e.item ? _supplyItemAllowed(e.item) : tabAllowed(e.tab))).forEach(g => g.entries.forEach(e => {
+    const k = e.tab + '|' + (e.pane || '');
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(_pgEntry(e.tab, e.pane, _noEmoji(e.label), 'doc', null, -1, _noEmoji(g.label)));
+  }));
+  (extra || []).slice().reverse().forEach(x => out.unshift(Object.assign(_pgEntry('', '', x.label, x.icon || 'doc', x.dept || null, -1, ''), x, { extra: true })));
+  return out;
+}
+// the best match of one normalised word against a page: label starts with it 100 > label has it 80 > a page word is it 75 / starts with it 70 / has it 55
+// > the department has it 40 > the old cluster has it 30; 0 = no match
+function _pgScore(e, q) {
+  if (!q) return 0;
+  if (e.n.startsWith(q)) return 100;
+  if (e.n.includes(q)) return 80;
+  if (e.nk.some(w => w === q)) return 75;
+  if (e.nk.some(w => w.startsWith(q))) return 70;
+  if (e.nk.some(w => w.includes(q))) return 55;
+  if (e.nd.includes(q)) return 40;
+  if (e.nc.includes(q)) return 30;
+  return 0;
+}
+// -> the pages for the typed text, best first (ties keep the registry order); no text = the pages with a count, then the home department's pages
+// (opt.all: every page, as the phone's ค้นหา page lists them before anything is typed)
+function pgSearchResults(text, extra, opt) {
+  const idx = pgIndex(extra), q = pgNorm(text);
+  if (!q && opt && opt.all) return idx;
+  if (!q) {
+    const role = _deptRole();
+    const counted = idx.filter(e => e.tab && navPageCount(e) > 0).sort((a, b) => navPageCount(b) - navPageCount(a));
+    return counted.concat(idx.filter(e => e.dept && e.dept.roles.includes(role) && !counted.includes(e))).concat(idx.filter(e => e.extra)).slice(0, _PG_IDLE);
+  }
+  const words = String(text).trim().split(/\s+/).map(pgNorm).filter(Boolean);
+  const scored = idx.map((e, order) => {
+    let s = _pgScore(e, q);
+    if (words.length > 1) { const each = words.map(w => _pgScore(e, w)); if (each.every(v => v > 0)) s = Math.max(s, Math.min(...each) * 0.9); }
+    return { e, s, order };
+  }).filter(x => x.s > 0);
+  // a department or cluster name only finds pages when nothing is named better (a whole cluster would otherwise flood the list)
+  const floor = scored.some(x => x.s >= 50) ? 50 : 0;
+  return scored.filter(x => x.s >= floor).sort((a, b) => (b.s - a.s) || (a.order - b.order)).slice(0, _PG_MAX).map(x => x.e);
+}
+// icon + name + department chip; the count of the page is added by navBadgesApply (data-nb on the row)
+function pgRowStyle(e) {
+  return e.dept ? `--dk:var(--dept-${e.dept.hue}-ink);--dt:var(--dept-${e.dept.hue}-tint)` : '--dk:var(--text-secondary);--dt:var(--bg-subtle)';
+}
+function pgRowInner(e) {
+  const chip = e.dept ? e.dept.label : (String(e.cluster || '').split(' · ')[0] || 'หน้ารายงานทั้งหมด');
+  return `<span class="pgs-ic">${_deptSvg(e.icon, 22)}</span><span class="pgs-name">${esc(e.label)}</span><span class="pgs-chip">${esc(chip)}</span>`;
+}
+function pgRowNb(e) { return e.tab ? ` data-nb="${_navPageSpec(e)}"` : ''; }
+// open a result: a page of a department opens in that department (its workspace tabs), the rest as a link of หน้ารายงานทั้งหมด
+function pgOpen(e) {
+  _deptFocus = null;
+  if (e.dept && e.di >= 0) deptGo(e.dept.key, e.di); else alpGo(e.tab, e.pane);
+}
+
+// the desktop panel
+/** @type {{list: any[], sel: number, opener: any}} */
+const _pg = { list: [], sel: 0, opener: null };
+let _pgKeysDone = false;
+function _pgPanel() {
+  let el = document.getElementById('pgSearch');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'pgSearch'; el.className = 'pgs-back'; el.hidden = true;
+  el.innerHTML = `<div class="pgs-box" role="dialog" aria-modal="true" aria-label="ค้นหาหน้า">`
+    + `<div class="pgs-head"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${_PG_SEARCH_ICON}"/></svg>`
+    + `<input id="pgsInput" class="pgs-input" type="text" role="combobox" aria-expanded="true" aria-controls="pgsList" aria-autocomplete="list" aria-label="ค้นหาหน้า" placeholder="ค้นหาหน้า เช่น ใบสั่งซื้อ ต้นทุน เคลม" autocomplete="off" spellcheck="false" enterkeyhint="go">`
+    + `<button type="button" class="pgs-x" id="pgsClose" aria-label="ปิด"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"/></svg></button></div>`
+    + `<div id="pgsList" class="pgs-list" role="listbox" aria-label="ผลการค้นหา"></div></div>`;
+  document.body.appendChild(el);
+  el.addEventListener('mousedown', ev => { if (ev.target === el) { ev.preventDefault(); pgSearchClose(); } });
+  const input = /** @type {HTMLInputElement} */ (el.querySelector('#pgsInput')), list = /** @type {HTMLElement} */ (el.querySelector('#pgsList'));
+  input.addEventListener('input', () => pgSearchRender());
+  el.addEventListener('keydown', pgSearchKey);
+  /** @type {HTMLElement} */ (el.querySelector('#pgsClose')).addEventListener('click', () => pgSearchClose());
+  list.addEventListener('click', ev => { const r = /** @type {HTMLElement} */ (ev.target).closest('[data-i]'); if (r) pgSearchGo(Number(r.getAttribute('data-i'))); });
+  list.addEventListener('mousemove', ev => { const r = /** @type {HTMLElement} */ (ev.target).closest('[data-i]'); const i = r ? Number(r.getAttribute('data-i')) : -1; if (i >= 0 && i !== _pg.sel) pgSearchSelect(i, false); });
+  return el;
+}
+function pgSearchRender() {
+  const input = /** @type {HTMLInputElement} */ (document.getElementById('pgsInput')), list = document.getElementById('pgsList');
+  if (!input || !list) return;
+  _pg.list = pgSearchResults(input.value);
+  _pg.sel = 0;
+  list.innerHTML = _pg.list.length
+    ? _pg.list.map((e, i) => `<div class="pgs-row" role="option" id="pgs-o${i}" data-i="${i}" aria-selected="${i === 0}"${pgRowNb(e)} style="${pgRowStyle(e)}">${pgRowInner(e)}</div>`).join('')
+    : '<div class="pgs-none">ไม่พบหน้า</div>';
+  input.setAttribute('aria-activedescendant', _pg.list.length ? 'pgs-o0' : '');
+  navBadgesApply();
+}
+function pgSearchSelect(i, scroll) {
+  if (!_pg.list.length) return;
+  _pg.sel = (i + _pg.list.length) % _pg.list.length;
+  document.querySelectorAll('#pgsList .pgs-row').forEach((r, n) => r.setAttribute('aria-selected', String(n === _pg.sel)));
+  const cur = document.getElementById('pgs-o' + _pg.sel), input = document.getElementById('pgsInput');
+  if (input) input.setAttribute('aria-activedescendant', 'pgs-o' + _pg.sel);
+  if (cur && scroll !== false) cur.scrollIntoView({ block: 'nearest' });
+}
+function pgSearchKey(ev) {
+  const k = ev.key;
+  if (k === 'Escape') { ev.preventDefault(); ev.stopPropagation(); pgSearchClose(); return; }
+  if (ev.isComposing) return;                                    // a Thai or other IME is still composing: Enter and arrows belong to it
+  if (k === 'ArrowDown') { ev.preventDefault(); pgSearchSelect(_pg.sel + 1); }
+  else if (k === 'ArrowUp') { ev.preventDefault(); pgSearchSelect(_pg.sel - 1); }
+  else if (k === 'Enter') { ev.preventDefault(); if (_pg.list.length) pgSearchGo(_pg.sel); }
+  else if (k === 'Tab') {                                        // the dialog keeps the focus: the field and the close button
+    const input = document.getElementById('pgsInput'), x = document.getElementById('pgsClose');
+    if (ev.shiftKey && document.activeElement === input) { ev.preventDefault(); if (x) x.focus(); }
+    else if (!ev.shiftKey && document.activeElement === x) { ev.preventDefault(); if (input) input.focus(); }
+  }
+}
+function pgSearchOpen(seed) {
+  if (!_launcherLanding() || phOn()) return;                    // a phone has its own ค้นหา page
+  const el = _pgPanel();
+  if (!el.hidden) return;
+  const act = document.activeElement;
+  _pg.opener = act && act !== document.body ? act : null;
+  el.hidden = false;
+  document.body.classList.add('pgs-open');
+  const input = /** @type {HTMLInputElement} */ (document.getElementById('pgsInput'));
+  input.value = seed || '';
+  pgSearchRender();
+  input.focus();
+}
+function pgSearchClose(noFocus) {
+  const el = document.getElementById('pgSearch');
+  if (!el || el.hidden) return;
+  el.hidden = true;
+  document.body.classList.remove('pgs-open');
+  const back = _pg.opener; _pg.opener = null;
+  if (!noFocus && back && document.contains(back)) { try { back.focus({ preventScroll: true }); } catch (e) { /* the opener is gone */ } }
+}
+function pgSearchGo(i) {
+  const e = _pg.list[i];
+  if (!e) return;
+  pgSearchClose(true);
+  pgOpen(e);
+}
+// "/" and Ctrl+K (Cmd+K) open the panel from anywhere but a field; the physical keys also work on a Thai layout (ฝ and า)
+function _pgBlocked() {
+  const shown = (/** @type {string} */ id) => { const x = document.getElementById(id); return !!x && getComputedStyle(x).display !== 'none'; };
+  if (shown('loginOverlay') || shown('pwOverlay')) return true;
+  return [...document.querySelectorAll('[aria-modal="true"]')].some(x => !x.closest('#pgSearch') && x.getClientRects().length > 0);
+}
+function pgSearchInit() {
+  if (_pgKeysDone) return;
+  _pgKeysDone = true;
+  document.addEventListener('keydown', ev => {
+    if (ev.defaultPrevented || ev.isComposing || !_launcherLanding() || phOn()) return;
+    const el = document.getElementById('pgSearch'), open = !!el && !el.hidden;
+    const key = ev.key, mod = (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey;
+    if (mod && (key === 'k' || key === 'K' || ev.code === 'KeyK')) { ev.preventDefault(); if (open) pgSearchClose(); else if (!_pgBlocked()) pgSearchOpen(); return; }
+    if (open || ev.ctrlKey || ev.metaKey || ev.altKey || !(key === '/' || ev.code === 'Slash')) return;
+    const t = /** @type {HTMLElement} */ (ev.target);
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (_pgBlocked()) return;
+    ev.preventDefault();
+    pgSearchOpen();
+  });
+}
 
 // ── หน้ารายงานทั้งหมด ────────────────────────────────────────────────────────────────────────────────────────
 function alpGo(tab, pane) { _deptFocus = null; if (pane) supplyGo({ tab, pane }); else switchTab(tab); }

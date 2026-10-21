@@ -3005,6 +3005,35 @@ const DEPARTMENTS = [
     // (that is why its old sidebar entry was never shown to anyone else)
     { tab: 'franchise', label: 'ร้านของฉัน', icon: 'store', roles: ['franchise'] }] },
 ];
+// Page search (PR-D4): the words people say for a page besides its label, space-separated, Thai and Latin ("tab" or "tab|pane" -> words).
+// The search (js/18-launcher.js pgSearchResults) also reads the page's label, its department and its old cluster; scripts/check-departments.js
+// fails when a key here is not a real page.
+const PAGE_KEYWORDS = {
+  'home': 'สรุป brief วันนี้ ต้องดู', 'overall': 'kpi ตัวชี้วัด ภาพรวม ยอดขาย', 'dailysales': 'ยอดขาย รายวัน sales daily', 'trend': 'แนวโน้ม trend เติบโต',
+  'mgtreport': 'รายงาน mgt report ผู้บริหาร ประชุม', 'report': 'รายงาน รายเดือน monthly',
+  'gpbranch': 'กำไร gp margin กำไรขั้นต้น', 'pnlbranch': 'กำไร p&l กำไรขาดทุน profit', 'pnl': 'กำไร p&l profit กำไรขาดทุน', 'pnlbill': 'กำไร p&l บิล bill',
+  'profit': 'กำไร sku margin', 'benchmark': 'เทียบ สาขา benchmark', 'cost': 'ต้นทุน cost bom อาหาร', 'bomcost': 'ต้นทุน cost bom สูตร recipe',
+  'costhead': 'ต้นทุน หัว cost per head', 'coverage': 'ต้นทุน ครอบคลุม coverage', 'menuimpact': 'วัตถุดิบ ต้นทุน ingredient', 'menuefficiency': 'ลดต้นทุน เป้า target',
+  'branchbom': 'bom สูตร สาขา ต้นทุน', 'simhub': 'จำลอง simulator what-if', 'heavyeater': 'นักกิน ต้นทุน heavy eater',
+  'buffetperf': 'บุฟเฟ่ต์ ลูกค้า buffet customer', 'childbuffet': 'เด็ก บุฟเฟ่ต์ child', 'guest': 'ลูกค้า ยอด หัว guest', 'custtype': 'ช่องทาง ประเภทลูกค้า grab line man delivery',
+  'timeflow': 'ช่วงเวลา ชั่วโมง peak time', 'menu': 'เมนู menu วิเคราะห์ ขายดี', 'menuactionboard': 'ปรับเมนู action ตัดเมนู', 'menuopportunities': 'โอกาส เมนูใหม่ opportunity',
+  'menucompare': 'เทียบเมนู ab compare', 'compare': 'เทียบ ab compare', 'feedback': 'เสียงลูกค้า รีวิว review ร้องเรียน', 'checklist': 'รีวิว checklist ตรวจ',
+  'opsreport': 'ปฏิบัติการ ops report', 'ops': 'ปฏิบัติการ ops เชิงลึก', 'discounts': 'ส่วนลด discount คูปอง โปรโมชัน', 'cashctl': 'เงินสด ขาด เกิน cash',
+  'cancelbill': 'ยกเลิก บิล void cancel', 'staff': 'พนักงาน แคชเชียร์ staff', 'modifiers': 'ความต้องการพิเศษ modifier', 'pricezone': 'ราคา โซน price zone',
+  'closetime': 'ปิดร้าน เวลา closing ข้อมูล', 'action': 'ต้องดู วันนี้ action',
+  'supplyhome': 'งาน หน้างาน todo task ปิดงวด', 'ordering': 'แผนสั่ง สั่งซื้อ plan order วัตถุดิบ', 'ingpurchase': 'ยอดซื้อ ซื้อ purchase เทียบยอดขาย', 'ordersetup|pack': 'ขนาดบรรจุ หน่วยสั่ง pack',
+  'franchise': 'ร้าน เจ้าของ สรุป franchise', 'manual': 'คู่มือ วิธีใช้ help manual', 'settings': 'ตั้งค่า settings ผู้ใช้ user สิทธิ์',
+  'orderhub|queue': 'ใบสั่งซื้อ po สั่งของ order คิว', 'orderhub|claims': 'เคลม คืนของ สินค้าเสียหาย claim return', 'orderhub|issues': 'ใบตัดเบิก ตัดเบิก ใบเบิก requisition',
+  'orderhub|issuevar': 'ผลต่าง ตัดเบิก variance', 'orderhub|comp': 'ตรวจ สั่ง ใบสั่งซื้อ สั่งช้า compliance', 'orderhub|persales': 'ใช้วัตถุดิบ ยอดขาย usage',
+  'orderhub|central': 'ปิดงวด นำเข้า ไดกิโตะ รายงานกลาง', 'orderhub|month': 'ผลต่าง รายเดือน ปิดเดือน monthly variance', 'orderhub|adoption': 'การใช้งาน adoption สาขา',
+  'bomcenter|rel': 'ประกาศใช้ สูตร release รับทราบ ตรวจ', 'bomcenter|rec': 'สูตร bom recipe ระดับราคา tier', 'bomcenter|prep': 'กึ่งสำเร็จ ซอส น้ำจิ้ม sub-recipe',
+  'bomcenter|ing': 'วัตถุดิบ ingredient ทะเบียน master', 'bomcenter|conv': 'หน่วย แปลง แปลงหน่วย unit', 'bomcenter|price': 'ราคา ราคาซื้อ price ต้นทุนวัตถุดิบ',
+  'bomcenter|pricefile': 'ไฟล์ราคา นำเข้าราคา price file', 'bomcenter|issue': 'ใบสรุปตัดเบิก ตัดเบิก บัญชี issue summary', 'bomcenter|fc': 'ยอดแนะนำ forecast พยากรณ์ รอบสั่ง',
+  'bomcenter|cal': 'รอบส่ง ปฏิทิน calendar', 'bomcenter|events': 'เทศกาล วันหยุด โปรโมชัน event', 'bomcenter|zones': 'โซน จัดเก็บ ตู้เย็น zone',
+  'bomcenter|codereq': 'รหัสสินค้า เปลี่ยนรหัส code', 'bomcenter|rcheck': 'ตรวจสูตร ยอดซื้อ recipe check', 'bomcenter|overview': 'ความพร้อม รหัสเดิม overview',
+  'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก', 'branchstock|order': 'สั่งสินค้า สั่งของ po ใบสั่งซื้อ', 'branchstock|recv': 'รับสินค้า รับของ receive',
+  'branchstock|var': 'ผลต่าง variance ใช้จริง', 'branchstock|count': 'ตรวจนับ นับสต็อก stock count สิ้นเดือน',
+};
 // Pages that sit in no cluster or chip (the older single entries): listed in หน้ารายงานทั้งหมด under "อื่น ๆ".
 const ALLPAGES_EXTRA = [
   { tab: 'home', label: 'สรุปประจำวัน' }, { tab: 'action', label: 'ต้องดูวันนี้' }, { tab: 'feedback', label: 'เสียงลูกค้า' },

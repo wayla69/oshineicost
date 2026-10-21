@@ -49,12 +49,23 @@
     #tab-launcher .lnch-tile:hover { border-color: var(--border-control); background: var(--bg-subtle); }
     #tab-launcher .lnch-tile svg { color: var(--dk); flex: 0 0 auto; }
     #tab-launcher .lnch-tile-label { font-size: 13px; line-height: 1.3; text-align: center; font-weight: 500; overflow-wrap: anywhere; }
-    #tab-launcher :is(.lnch-tile, .lnch-go, .lnch-all, .lnch-tab, .lnch-foot a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* PR-D4: the search box opens the page search (js/18-launcher.js pgSearchOpen; "/" and Ctrl+K do the same) */
+    #tab-launcher .lnch-search { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 520px; min-height: 44px; padding: 0 14px; box-sizing: border-box;
+      border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-card); color: var(--text-secondary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+    #tab-launcher .lnch-search:hover { border-color: var(--accent); }
+    #tab-launcher .lnch-search svg { flex: 0 0 auto; }
+    #tab-launcher .lnch-search span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #tab-launcher .lnch-search kbd { font: inherit; font-size: 12px; border: 1px solid var(--border-control); border-radius: 6px; padding: 1px 6px; color: var(--text-secondary); }
+    #tab-launcher :is(.lnch-tile, .lnch-go, .lnch-all, .lnch-tab, .lnch-search, .lnch-foot a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #tab-launcher .lnch-foot { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
     #tab-launcher .lnch-foot a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); }
     @media (max-width: 900px) { #tab-launcher .lnch-tiles { gap: 6px; padding: 10px; } }
   </style>
   <div class="lnch">
+    <button type="button" class="lnch-search" id="lnchSearch" onclick="pgSearchOpen()" aria-label="ค้นหาหน้า" aria-keyshortcuts="Control+K /">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5"/></svg>
+      <span>ค้นหาหน้า เช่น ใบสั่งซื้อ ต้นทุน เคลม</span><kbd aria-hidden="true">Ctrl K</kbd>
+    </button>
     <section class="lnch-top" aria-label="สรุปของวันนี้">
       <div class="lnch-hello">
         <span id="lnchDate" class="lnch-date"></span>

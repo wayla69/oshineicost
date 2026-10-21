@@ -118,12 +118,12 @@ def test_a_desktop_lands_on_the_launcher_and_each_role_sees_its_own_departments(
             assert not errors, (user, errors)
             ctx.close()
         m = seen["management1"]
-        assert m["depts"] == ["mgmt", "mkt", "ops", "ana", "kit", "ss", "wh", "acc", "brn"] and m["nav"][:2] == ["nav-launcher", "nav-dept-mgmt"]
+        assert m["depts"] == ["mgmt", "mkt", "ops", "ana", "kit", "ss", "wh", "acc", "brn"] and m["nav"][:3] == ["nav-launcher", "nav-search", "nav-dept-mgmt"]
         assert m["tiles"] >= 44
         ss = seen["salessupport1"]
         assert ss["depts"][0] == "ss" and "own" not in ss["depts"] and "brn" not in ss["depts"]          # the home department first
         assert seen["br_dep_a"]["depts"] == ["brn"] and seen["br_dep_a"]["shell"] == "INPUT"             # a branch login sees no other department
-        assert seen["own_dep_b"]["depts"] == ["own"] and seen["own_dep_b"]["nav"] == ["nav-launcher", "nav-dept-own"]
+        assert seen["own_dep_b"]["depts"] == ["own"] and seen["own_dep_b"]["nav"] == ["nav-launcher", "nav-search", "nav-dept-own"]
         b.close()
 
 
@@ -189,7 +189,7 @@ def _head(page):
     return page.evaluate("""() => { const h = document.getElementById('deptHead');
       return { shown: getComputedStyle(h).display !== 'none', crumb: (h.querySelector('.dh-crumb') || {}).innerText || '',
         name: (h.querySelector('.dh-name') || {}).textContent || '',
-        tabs: [...h.querySelectorAll('[role=tab]')].map(t => ({ label: t.textContent.trim(), sel: t.getAttribute('aria-selected'), h: Math.round(t.getBoundingClientRect().height) })),
+        tabs: [...h.querySelectorAll('[role=tab]')].map(t => ({ label: t.querySelector('span').textContent.trim(), sel: t.getAttribute('aria-selected'), h: Math.round(t.getBoundingClientRect().height) })),
         bar: getComputedStyle(document.getElementById('clusterBar')).display,
         rail: Math.round(document.getElementById('sidebar').getBoundingClientRect().width) } }""")
 
@@ -272,7 +272,7 @@ def test_the_header_and_the_rail_never_print_and_pinned_roles_see_only_their_own
         h = _head(page)
         assert h["name"] == "สาขา" and [t["label"] for t in h["tabs"]] == ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]
         assert page.evaluate("[...document.querySelectorAll('#sidebar .rail-item')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.id)") \
-            == ["nav-launcher", "nav-dept-brn", "nav-manual"]
+            == ["nav-launcher", "nav-search", "nav-dept-brn", "nav-manual"]
         assert not errors, errors
         ctx.close()
         # a phone keeps the bar and has no header

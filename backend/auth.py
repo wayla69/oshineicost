@@ -217,6 +217,7 @@ PUBLIC_PREFIXES = (
     "/api/data-coverage",
     "/api/market",
     "/api/search",
+    "/api/nav/",           # the caller's own task counts (PR-D4): every signed-in role, no sales.overview needed
     "/api/analysis/health",
 )
 # what a role WITHOUT sales.overview may still reach when no rule names the path

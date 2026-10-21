@@ -26,10 +26,10 @@ if (a < 0 || b < 0 || b < a) { console.error('check-departments: the registry bl
 const ctx = vm.createContext({ console });
 let R;
 try {
-  vm.runInContext(core.slice(a, b) + '\n;globalThis.__R = { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, allPagesModel };', ctx, { filename: 'js/01-core.js (registry)' });
+  vm.runInContext(core.slice(a, b) + '\n;globalThis.__R = { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, allPagesModel };', ctx, { filename: 'js/01-core.js (registry)' });
   R = ctx.__R;
 } catch (e) { console.error('check-departments: the registry block does not evaluate: ' + e.message); process.exit(1); }
-const { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, allPagesModel } = R;
+const { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, allPagesModel } = R;
 
 const tabsSrc = (/const TABS = \{([\s\S]*?)\n\};/.exec(core) || [])[1] || '';
 const tabKeys = new Set([...tabsSrc.matchAll(/^\s*([A-Za-z0-9_]+)\s*:\s*\{/gm)].map(m => m[1]));
@@ -77,6 +77,14 @@ SUPPLY_CHIPS.forEach(ch => ch.items.forEach(it => {
   const k = it.tab + '|' + (it.pane || '');
   if (!inDept.has(k) && !inAll.has(k)) bad(`supply chip "${ch.label}": ${k} (${it.label}) is on no department and not in หน้ารายงานทั้งหมด`);
 }));
+
+// ── PR-D4 · the search words: every key of PAGE_KEYWORDS is a real page ("tab" or "tab|pane"), and every word is text ──
+const pageKeys = new Set([...inDept, ...inAll].flatMap(k => [k, k.replace(/\|$/, '')]));
+Object.entries(PAGE_KEYWORDS || {}).forEach(([k, words]) => {
+  if (!pageKeys.has(k)) bad(`PAGE_KEYWORDS: "${k}" is not a page of a department or of หน้ารายงานทั้งหมด`);
+  if (typeof words !== 'string' || !words.trim()) bad(`PAGE_KEYWORDS: "${k}" has no words`);
+});
+if (!PAGE_KEYWORDS || Object.keys(PAGE_KEYWORDS).length < 40) bad('PAGE_KEYWORDS is missing or too short (js/01-core.js, after DEPARTMENTS)');
 
 if (fail.length) {
   fail.forEach(m => console.error('  ✗ ' + m));
