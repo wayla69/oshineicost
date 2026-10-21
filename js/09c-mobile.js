@@ -6,6 +6,8 @@
 // MOBILE OWNER SUMMARY
 // ════════════════════════════════════════════════════════════════
 async function showFullDashboard(tab) {
+  // PR-D3: on the phone shell the full dashboard is a page like any other (the Daily Brief unless a tab is named)
+  if (phOn()) { await phOpenPage(() => { switchTab(tab || (_desktopBooted && activeTab && activeTab !== 'launcher' ? activeTab : 'home')); }); return; }
   document.body.classList.add('force-desktop');
   try { localStorage.setItem('oshinei_phone_mode', 'full'); } catch (e) {}   // next open lands here (init, 03-tabs-main.js)
   window.scrollTo(0, 0);
@@ -20,15 +22,358 @@ async function showFullDashboard(tab) {
 }
 // QA M4 · the link on the phone summary of a supply role: the full shell, opened on หน้างาน
 async function msOpenSupply() {
+  if (phOn()) { await phOpenPage(() => supplyOpen()); return; }
   await showFullDashboard();
   try { supplyOpen(); } catch (e) { console.warn('supply open:', e); }
 }
 function showMobileSummary() {
+  if (phOn()) { phShowSummary(); return; }        // PR-D3: the summary is a page of the phone shell
   document.body.classList.remove('force-desktop');
   try { localStorage.setItem('oshinei_phone_mode', 'summary'); } catch (e) {}
   window.scrollTo(0, 0);
   loadMobileSummary(true);
 }
+
+// ════════════════════════════════════════════════════════════════
+// PHONE SHELL (PR-D3, 2026-10-21)
+// ════════════════════════════════════════════════════════════════
+// On a phone (<= 700 px) every login opens on the DEPARTMENT LAUNCHER (the same registry, DEPARTMENTS in js/01-core.js, that draws the
+// desktop's หน้าแรก) with a bottom navigation: หน้าแรก · งานของฉัน · ค้นหา · ฉัน (the branch login: หน้าแรก · ตัดเบิก · สั่งสินค้า ·
+// รับสินค้า · ฉัน; the franchise owner: หน้าแรก · ฉัน). Three things sit behind it and open on demand:
+//   - the owner's deep summary (#mobileSummary, the ms* views above): the first tile of ผู้บริหาร and the เมื่อวาน figure of the header;
+//   - the pages: the full shell (tab fragments + slices, ~2 MB) boots on the FIRST page a person opens, never before;
+//   - the launcher's own code: js/18-launcher.js alone (phEnsureLauncher), for the registry helpers deptVisible / deptOpenPage.
+// body.ph-on = the shell is in force (set only here, only <= 700 px); body.ph-home = a launcher view is on screen (#phHome) and the
+// summary / shell are hidden behind it. A page opens as before (switchTab / supplyGo / _shmOpen), so every deep link still lands.
+let _phView = 'home', _phDept = '', _phTodoGroups = [], _phTodoAt = 0, _phTodoSeq = 0, _phSearchList = [];
+const _PH_HOME_VIEWS = ['home', 'dept', 'search', 'me'];
+// the bottom navigation's own icons (24x24, stroke 1.8 - the DEPT_ICONS style); the rest come from DEPT_ICONS
+const _PH_ICON = {
+  home: 'M4 10l8-6 8 6v10H4z', search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5',
+  me: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0', back: 'M15 5l-7 7 7 7',
+};
+function _phoneApp() { try { return window.innerWidth > 0 && window.matchMedia('(max-width:700px)').matches; } catch (e) { return false; } }
+function _phPath(d, size) { return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`; }
+function _phKind() { const r = (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; return r === 'branch' ? 'branch' : r === 'franchise' ? 'franchise' : 'centre'; }
+// js/18-launcher.js alone: deptVisible, deptOpenPage, lnchDateLabel, lnchWho. The other slices wait for the first page.
+function phEnsureLauncher() {
+  if (typeof deptVisible === 'function') return Promise.resolve();
+  if (_slicesP) return _slicesP;                       // the whole load is under way and brings it
+  const t = document.querySelector('script.lazy-slice[data-lazy^="/js/18-launcher.js"]');
+  return t ? _loadSliceTag(t) : ensureSlicesLoaded();
+}
+async function phBoot() {
+  document.body.classList.add('ph-on', 'ph-home');          // the launcher's place is held while its slice loads: no flash of the summary behind it
+  try { await phEnsureLauncher(); } catch (e) { console.warn('launcher slice:', e); }
+  phNavRender();
+  // a tapped notification: a supply reminder opens its page, an owner's alert opens the summary (which applies the link itself)
+  if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; await phOpenPage(() => supplyDeepLink(l)); return; }
+  if (_msPendingLink && hasModule('sales.overview')) { await phShowSummary(); return; }
+  phShowHome();
+}
+// the width crossed 700 px (a turned phone, a dragged window): the shell comes or goes
+function phViewportChanged() {
+  if (_phoneApp()) { if (!phOn()) phBoot(); return; }
+  if (!phOn()) return;
+  document.body.classList.remove('ph-on', 'ph-home');
+  phNavRender();
+  if (!_desktopBooted) ensureDesktopBooted(); else if (activeTab === 'launcher' || !activeTab) switchTab('launcher');
+}
+function phForeground() {
+  const stale = (t) => !t || Date.now() - t > _STALE_MS;
+  if (_phView === 'summary') { if (_msFetchedAt && stale(_msFetchedAt)) msRefresh(); }
+  else if (_phView === 'home') { if (stale(_phTodoAt)) phRenderHome(); }
+  else if (_phView === 'page') { if (_desktopBooted && _lastTabLoadAt && stale(_lastTabLoadAt)) loadActiveTab(); }
+}
+function _phSetView(v) {
+  _phView = v;
+  const cl = document.body.classList;
+  cl.toggle('ph-home', _PH_HOME_VIEWS.includes(v));
+  if (v === 'summary') cl.remove('force-desktop'); else if (v === 'page') cl.add('force-desktop');
+  if (v !== 'summary') { try { msCloseSheet(); } catch (e) { /* the sheet is not open */ } }
+  if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
+  _PH_HOME_VIEWS.forEach(x => { const el = document.getElementById('phv-' + x); if (el) el.hidden = x !== v; });
+  phNavRender();
+  window.scrollTo(0, 0);
+  const ca = document.querySelector('.content-area'); if (ca) ca.scrollTop = 0;
+}
+// a screen reader follows the view change: the new view's heading takes the focus (it is not a tab stop)
+function _phFocusHead(v) {
+  const h = document.querySelector('#phv-' + v + ' h1');
+  if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: true }); } catch (e) { /* a hidden view takes no focus */ } }
+}
+function _phBusy(on) {
+  const el = document.getElementById('phBusy'); if (el) el.hidden = !on;
+  try { on ? showLoadingBar() : hideLoadingBar(); } catch (e) { /* no loading bar yet */ }
+}
+// Open a page: the launcher stays on screen (with "กำลังเปิดหน้า…") until the shell has booted, then the page replaces it.
+async function phOpenPage(fn) {
+  if (!_desktopBooted) {
+    _phBusy(true);
+    try { await ensureDesktopBooted({ noLanding: true }); }
+    catch (e) {
+      console.warn('desktop boot:', e); _desktopBootP = null; _phBusy(false);
+      try { notifyError('เปิดหน้าไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองใหม่'); } catch (e2) { /* no toast yet */ }
+      return;
+    }
+    _phBusy(false);
+  }
+  _phSetView('page');
+  try { fn(); } catch (e) { console.warn('phone page:', e); }
+}
+async function phShowSummary() {
+  _phSetView('summary');
+  document.body.dataset.group = _MS_GROUP[_msView] || 'home';
+  if (!window.__dataLastDate) { try { await initDataCoverageNote(); } catch (e) { /* the note is non-critical */ } }
+  loadMobileSummary(true);
+}
+
+// ── the bottom navigation ──────────────────────────────────────────────────────────────────────────────
+function _phNavItems() {
+  const kind = _phKind();
+  const home = { id: 'home', label: 'หน้าแรก', path: _PH_ICON.home, js: 'phShowHome()' };
+  const me = { id: 'me', label: 'ฉัน', path: _PH_ICON.me, js: 'phOpenMe()' };
+  if (kind === 'franchise') return [home, me];
+  if (kind === 'branch') {
+    const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane });
+    return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งสินค้า', 'cart', 'order'), b('recv', 'รับสินค้า', 'recv', 'recv'), me];
+  }
+  return [home, { id: 'tasks', label: 'งานของฉัน', path: DEPT_ICONS.count, js: 'phOpenTasks()' },
+    { id: 'search', label: 'ค้นหา', path: _PH_ICON.search, js: 'phOpenSearch()' }, me];
+}
+function _phNavOn(it) {
+  if (_phView === 'search' || _phView === 'me') return it.id === _phView;
+  if (_phView !== 'page') return it.id === 'home';
+  const acc = typeof _SUPPLY_PANE === 'object' ? _SUPPLY_PANE[activeTab] : null, pane = acc ? acc.get() : null;
+  if (_phKind() === 'branch') {                     // the strip lights the entry whose pane is open; any other page lights หน้าแรก
+    const listed = _phNavItems().some(x => x.tab && x.tab === activeTab && x.pane === pane);
+    return it.tab ? activeTab === it.tab && pane === it.pane : it.id === 'home' && !listed;
+  }
+  if (_phKind() === 'centre') { const t = tabAllowed('supplyhome') ? 'supplyhome' : 'home'; return it.id === 'tasks' ? activeTab === t : it.id === 'home' && activeTab !== t; }
+  return it.id === 'home';
+}
+function phNavRender() {
+  const nav = document.getElementById('phNav'); if (!nav) return;
+  if (!phOn()) { nav.innerHTML = ''; return; }
+  const items = _phNavItems();
+  nav.style.gridTemplateColumns = `repeat(${items.length}, minmax(0, 1fr))`;
+  nav.innerHTML = items.map(it => { const on = _phNavOn(it);
+    return `<button type="button" class="ph-nav-i${on ? ' active' : ''}" aria-current="${on ? 'page' : 'false'}" onclick="${it.js}">${_phPath(it.path, 24)}<span>${it.label}</span></button>`; }).join('');
+}
+
+// ── หน้าแรก ──────────────────────────────────────────────────────────────────────────────────────────────
+function phShowHome() { _phDept = ''; _phSetView('home'); phRenderHome(); }
+function phRenderHome() {
+  const host = document.getElementById('phv-home'); if (!host) return;
+  const kind = _phKind();
+  host.innerHTML = kind === 'branch' ? _phBranchHome() : kind === 'franchise' ? _phFranchiseHome() : _phCentreHome();
+  phLoadTasks();
+  if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
+}
+function _phUserId() { const a = window.AUTH || {}; return a.enabled ? String(a.username || '') : ''; }
+function _phHero(inner) {
+  return `<header class="ph-hero"><div class="ph-hero-top"><span class="ph-logo">お</span><span class="ph-brand">OSHINEI</span><span class="ph-uid">${esc(_phUserId())}</span></div>${inner}</header>`;
+}
+function _phCentreHome() {
+  const vis = deptVisible();
+  const yest = hasModule('sales.overview')
+    ? `<button type="button" class="ph-yest" id="phYest" onclick="phShowSummary()" aria-label="ยอดขายเมื่อวาน เปิดสรุปผู้บริหาร"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
+  return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
+    + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
+    + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
+    + `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">แผนก</h2>`
+    + (vis.length ? `<div class="ph-depts">${vis.map(r => { const d = r.dept;
+      return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)" onclick="phOpenDept('${d.key}');return false">`
+        + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('')}</div>`
+      : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
+    + '</section>';
+}
+function _phSubHead(name, sub, hue, icon) {
+  return `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${hue}-ink);--dt:var(--dept-${hue}-tint)"><span class="ph-badge ph-badge-sm">${_deptSvg(icon, 24)}</span>`
+    + `<div class="ph-head-t"><h1>${esc(name)}</h1><p>${esc(sub)}</p></div></header>`;
+}
+// the branch login: its own name and date, what to do today, five big tiles
+const _PH_BRN_HINT = { issue: 'ทุกวัน', order: 'ก่อน 13:15 สองวันก่อนส่ง', recv: 'เมื่อของมาถึง', var: 'เทียบสูตร', count: 'วันที่ 1 ของเดือน' };
+function _phBranchHome() {
+  const row = deptVisible().find(r => r.dept.key === 'brn');
+  const tiles = row ? row.pages : [];
+  return _phSubHead(pinnedBranchName() || 'สาขาของฉัน', lnchDateLabel(), 'brn', 'store')
+    + `<section class="ph-body"><div class="ph-card ph-todo-card" aria-labelledby="phTodoH"><h2 class="ph-card-h" id="phTodoH">ต้องทำวันนี้</h2><div id="phTodoRows"><div class="ph-note">กำลังโหลด…</div></div></div>`
+    + `<div class="ph-bigtiles">${tiles.map((x, n) => `<a href="#" class="ph-bigtile${n === tiles.length - 1 && tiles.length % 2 ? ' ph-span2' : ''}" onclick="phOpenDeptPage('brn',${x.i});return false">`
+      + `<span class="ph-badge ph-badge-lg" style="--dk:var(--dept-brn-ink);--dt:var(--dept-brn-tint)">${_deptSvg(x.p.icon, 30)}</span><span class="ph-bigtile-n">${esc(x.p.label)}</span>`
+      + `<span class="ph-bigtile-h">${esc(_PH_BRN_HINT[x.p.pane] || '')}</span></a>`).join('')}</div></section>`;
+}
+function _phFranchiseHome() {
+  const row = deptVisible().find(r => r.dept.key === 'own');
+  const x = row && row.pages[0];
+  return _phSubHead(pinnedBranchName() || 'ร้านของฉัน', lnchDateLabel(), 'own', 'key')
+    + `<section class="ph-body">${x ? `<a href="#" class="ph-bigtile ph-span2" onclick="phOpenDeptPage('own',${x.i});return false"><span class="ph-badge ph-badge-lg" style="--dk:var(--dept-own-ink);--dt:var(--dept-own-tint)">${_deptSvg(x.p.icon, 30)}</span>`
+      + `<span class="ph-bigtile-n">${esc(x.p.label)}</span><span class="ph-bigtile-h">สรุปผลของร้านตนเอง</span></a>` : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>'}</section>`;
+}
+
+// ── เมื่อวาน in the header: the Daily Brief's own figure (/api/home/brief, as msLoadYesterday reads it) ─────
+async function phLoadYesterday() {
+  const v = document.getElementById('phYestV'); if (!v) return;
+  try {
+    if (!_msBriefCache['']) _msBriefCache[''] = api(`${API}/api/home/brief`);
+    const brief = await _msBriefCache[''];
+    if (!document.getElementById('phYestV')) return;                    // another view replaced the home meanwhile
+    if (!brief || !brief.yesterday) { document.getElementById('phYest').hidden = true; return; }
+    const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow, wowPct = wow ? Math.round((rev - wow) / wow * 1000) / 10 : null;
+    document.getElementById('phYestL').textContent = brief.skipped_day ? 'ยอดขายวันล่าสุดที่ข้อมูลครบ' : 'ยอดขายเมื่อวาน';
+    v.textContent = '฿' + fmtN(rev);
+    document.getElementById('phYestS').textContent = wowPct == null ? '' : `เทียบวันเดียวกันสัปดาห์ก่อน ${wowPct > 0 ? '+' : ''}${wowPct}%`;
+  } catch (e) {
+    delete _msBriefCache[''];
+    const b = document.getElementById('phYest'); if (b) b.hidden = true;
+  }
+}
+
+// ── งานของฉันวันนี้: the open items of หน้างาน that belong to this role (the same filter as หน้างาน and the desktop launcher) ──
+// PR-TF: every task carries `state` (todo | review | done) for the signed-in role; the phone shows ยังไม่เสร็จ only (the default of หน้างาน), so done
+// and waiting-for-review items are not drawn. An answer without `state` (an old cache) is read from the status, as shmState does in js/16.
+function _phState(it) {
+  if (it && (it.state === 'todo' || it.state === 'review' || it.state === 'done')) return it.state;
+  const st = it && it.status;
+  return st === 'done' || st === 'na' ? 'done' : (st === 'blocked' ? 'review' : 'todo');
+}
+function _phGroups(items) {
+  const mine = items.filter(i => _phState(i) === 'todo' && _shmMine(i))
+    .sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
+  const groups = [];
+  mine.forEach(i => {                                                    // the same duty for several branches is ONE row naming how many
+    const k = String(i.key || '').split(':')[0] + '|' + (i.title || '');
+    const g = groups.find(x => x.k === k);
+    if (g) { if (i.branch && !g.branches.includes(i.branch)) g.branches.push(i.branch); g.urgent = g.urgent || !!i.urgent; }
+    else groups.push({ k, first: i, branches: i.branch ? [i.branch] : [], urgent: !!i.urgent });
+  });
+  return groups;
+}
+async function phLoadTasks() {
+  const seq = ++_phTodoSeq, kind = _phKind();
+  const text = document.getElementById('phTaskText'), dot = document.getElementById('phTaskDot'), rows = document.getElementById('phTodoRows');
+  if (kind === 'franchise') { _phTodoAt = Date.now(); return; }
+  if (kind === 'centre' && !tabAllowed('supplyhome')) {   // no supply module, no task list: the Daily Brief stands in
+    _phTodoAt = Date.now();
+    if (text) text.textContent = tabAllowed('home') ? 'สิ่งที่ต้องดูวันนี้' : 'งานของฉันวันนี้';
+    return;
+  }
+  let todo = null;
+  try { todo = await api(`${API}/api/bom-center/todo`); } catch (e) { todo = null; }
+  if (seq !== _phTodoSeq) return;
+  const ok = !!(todo && Array.isArray(todo.items));
+  _phTodoGroups = ok ? _phGroups(todo.items) : [];
+  if (ok) _phTodoAt = Date.now();
+  const n = _phTodoGroups.length, urgent = _phTodoGroups.some(g => g.urgent);
+  if (text) {
+    text.textContent = !ok ? 'งานของฉันวันนี้' : n ? `งานของฉันวันนี้ ${n} งาน` : 'ไม่มีงานค้างวันนี้';
+    if (dot) { dot.hidden = !ok || !n; dot.classList.toggle('is-urgent', urgent); }
+  }
+  if (rows) {
+    rows.innerHTML = !ok ? '<div class="ph-note">โหลดรายการงานไม่ได้ ลองเปิดหน้าใหม่อีกครั้ง</div>'
+      : !n ? '<div class="ph-note">ไม่มีงานค้างวันนี้</div>'
+      : _phTodoGroups.map((g, i) => {
+        const it = g.first, go = it.go && it.go.tab && tabAllowed(it.go.tab);
+        const who = g.branches.length > 1 ? ` · ${g.branches.length} สาขา` : '';
+        const inner = `<span class="ph-dot${g.urgent ? ' is-urgent' : ''}" aria-hidden="true"></span><span class="ph-todo-main"><b>${esc(it.title)}${esc(who)}</b>`
+          + (it.detail ? `<span class="ph-todo-d">${esc(it.detail)}</span>` : '') + `</span>${go ? '<span class="ph-chev" aria-hidden="true">›</span>' : ''}`;
+        return go ? `<a href="#" class="ph-todo" onclick="phTodoGo(${i});return false">${inner}</a>` : `<div class="ph-todo">${inner}</div>`;
+      }).join('');
+  }
+}
+function phTodoGo(i) { const g = _phTodoGroups[i]; if (g && g.first.go) phOpenPage(() => _shmOpen(g.first.go)); }
+// the งานของฉัน entry: หน้างาน for a login with the supply module, else the Daily Brief
+function phOpenTasks() {
+  if (tabAllowed('supplyhome')) phOpenPage(() => supplyGo({ tab: 'supplyhome' }));
+  else phOpenPage(() => switchTab(tabAllowed('home') ? 'home' : firstAllowedTab()));
+}
+
+// ── a department: its pages as a two-column grid ───────────────────────────────────────────────────────
+function phOpenDept(key) { _phDept = key; _phSetView('dept'); phRenderDept(key); }
+function phRenderDept(key) {
+  const host = document.getElementById('phv-dept'); if (!host) return;
+  const row = deptVisible().find(r => r.dept.key === key);
+  if (!row) { phShowHome(); return; }
+  const d = row.dept;
+  // the owner's deep summary is the first tile of ผู้บริหาร (any login that may read the owner's sales)
+  const summary = key === 'mgmt' && hasModule('sales.overview')
+    ? `<a href="#" class="ph-ptile" onclick="phShowSummary();return false">${_deptSvg('gauge', 28)}<span>สรุปผู้บริหาร</span></a>` : '';
+  host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
+    + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
+    + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(d.duty)}</p></div></header>`
+    + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><div class="ph-ptiles">${summary}${row.pages.map(x =>
+      `<a href="#" class="ph-ptile" onclick="phOpenDeptPage('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
+  _phFocusHead('dept');
+}
+function phOpenDeptPage(key, idx) {
+  const d = DEPARTMENTS.find(x => x.key === key), p = d && d.pages[idx];
+  if (!p) return;
+  deptRemember(key); _deptFocus = null;                 // the page opened from here keeps this department lit
+  phOpenPage(() => deptOpenPage(p));
+}
+
+// ── ค้นหา: every page this login may open (the list of หน้ารายงานทั้งหมด), filtered as the person types ──────────
+function phOpenSearch() {
+  _phSetView('search');
+  phSearchRender();
+  const i = document.getElementById('phSearchInput'); if (i) { try { i.focus({ preventScroll: true }); } catch (e) { /* no focus on a hidden field */ } }
+}
+function phSearchRender() {
+  const host = document.getElementById('phSearchRes'); if (!host) return;
+  const role = _deptRole(), q = (document.getElementById('phSearchInput').value || '').toLowerCase().replace(/\s+/g, '');
+  const groups = allPagesModel(e => (!e.roles || e.roles.includes(role)) && (e.item ? _supplyItemAllowed(e.item) : tabAllowed(e.tab)));
+  _phSearchList = [];
+  if (hasModule('sales.overview')) groups.unshift({ label: 'ผู้บริหาร', entries: [{ summary: true, label: 'สรุปผู้บริหาร' }] });
+  const html = groups.map(g => {
+    const gl = _noEmoji(g.label), hit = g.entries.filter(e => !q || (_noEmoji(e.label) + gl).toLowerCase().replace(/\s+/g, '').includes(q));
+    if (!hit.length) return '';
+    return `<h2 class="ph-sec ph-sec-sm">${esc(gl)}</h2><div class="ph-card ph-card-list">${hit.map(e => { _phSearchList.push(e);
+      return `<a href="#" class="ph-row" onclick="phSearchGo(${_phSearchList.length - 1});return false"><span>${esc(_noEmoji(e.label))}</span><span class="ph-chev" aria-hidden="true">›</span></a>`; }).join('')}</div>`;
+  }).join('');
+  host.innerHTML = html || '<p class="ph-empty">ไม่พบหน้าที่ตรงกับคำค้น</p>';
+}
+function phSearchGo(i) {
+  const e = _phSearchList[i]; if (!e) return;
+  if (e.summary) { phShowSummary(); return; }
+  _deptCur = null; _deptFocus = null;
+  phOpenPage(() => { if (e.pane) supplyGo({ tab: e.tab, pane: e.pane }); else switchTab(e.tab); });
+}
+
+// ── ฉัน: who is signed in, the theme, the write lock, notifications, the install card, password, sign out ─────
+function phOpenMe() {
+  _phSetView('me');
+  phMeRender();
+  _phFocusHead('me');
+  if (tabAllowed('supplyhome') && window.writeToken && window.writeToken.gated === null) verifyWriteToken().then(phMeRender).catch(() => {});
+  _msPushOpen = true; try { msPushInit(); } catch (e) { /* push is not supported here */ }
+}
+function phMeRender() {
+  const a = window.AUTH || {}, signed = !!(a.enabled && a.authenticated);
+  const who = lnchWho(), set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  set('phMeWho', who);
+  set('phMeAv', (who || '?').trim().charAt(0).toUpperCase());
+  const roleTh = String(ROLE_LABEL_TH[a.role] || a.role || '').split(' (')[0];
+  set('phMeRole', signed ? [roleTh === who ? '' : roleTh, isPinnedSession() ? a.branch : '', a.username].filter(Boolean).join(' · ') : 'ไม่ได้เปิดการเข้าสู่ระบบ');
+  phDarkSync();
+  const lock = document.getElementById('phMeLock'), st = window.writeToken || {};
+  if (lock) {
+    lock.hidden = !(tabAllowed('supplyhome') && st.gated !== false && st.gated !== null);
+    set('phMeLockV', st.unlocked ? 'แก้ไขได้' : 'อ่านอย่างเดียว');
+    lock.classList.toggle('is-on', !!st.unlocked);
+  }
+  ['phMePw', 'phMeOut'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = !signed; });
+}
+function phHelpToggle(btn) {   // the "?" of a card: its explanation is folded until asked for
+  const card = btn.closest('.ms-section'); if (!card) return;
+  const on = card.classList.toggle('ph-open');
+  btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+function phDarkSync() {
+  const on = document.body.classList.contains('dark'), b = document.getElementById('phMeDark');
+  if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  const v = document.getElementById('phMeDarkV'); if (v) v.textContent = on ? 'เปิด' : 'ปิด';
+}
+function phUnlockWrites() { unlockWrites().then(phMeRender).catch(() => {}); }
 
 // ── Pull to refresh on the summary: a downward drag from the top grows #msPull
 // ("ดึงลงเพื่อรีเฟรช" → "ปล่อยเพื่อรีเฟรช"), letting go past the threshold runs msRefresh().
@@ -82,7 +427,7 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if (d.type === 'offline-fallback') { _msOfflineAt = d.cachedAt || _msOfflineAt; _msOfflineShow(_msOfflineAt); }
     if (d.type === 'notification-open') {
       try {
-        if (String(d.url || '').includes('go=supply')) { if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
+        if (String(d.url || '').includes('go=supply')) { if (phOn()) phOpenPage(() => supplyDeepLink(d.url)); else if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
         else { _msPendingLink = d.url || ''; showMobileSummary(); }
       } catch (err) {}
     }
@@ -163,6 +508,7 @@ function msPushHide() {      // subscribed: tuck the card away, keep the bottom 
 function msPushReopen() {
   _msPushOpen = true;
   try { localStorage.removeItem('oshinei_push_snooze'); } catch (e) {}
+  if (phOn()) { phOpenMe(); return; }                 // PR-D3: the card lives in ฉัน on the phone shell
   msPushInit();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

@@ -146,15 +146,16 @@ def test_every_tile_and_every_all_pages_link_opens_its_page_and_a_phone_is_uncha
         assert not bad, bad[:5]
         assert not errors, errors
         ctx.close()
-        # a phone keeps the phone-first boot: no department entry is shown, the strip is the old one
+        # a phone (PR-D3) opens on the phone shell: the launcher with its bottom navigation, no sidebar department entry, no shell booted yet
         ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
         assert ctx.request.post(base + "/api/auth/login", data={"username": "management1", "password": auth.DEFAULT_PASSWORD}).ok
         page = ctx.new_page()
         page.goto(base + "/", wait_until="networkidle", timeout=90000)
         page.wait_for_function("typeof switchTab === 'function' && window.AUTH && window.AUTH.authenticated", timeout=60000)
-        page.wait_for_timeout(2500)
-        assert page.evaluate("[...document.querySelectorAll('.dept-entry')].filter(e => getComputedStyle(e).display !== 'none').length") == 0
-        assert page.evaluate("activeTab") != "launcher"
+        page.wait_for_function("document.body.classList.contains('ph-home')", timeout=30000)
+        page.wait_for_timeout(1500)
+        assert page.evaluate("[...document.querySelectorAll('.dept-entry')].filter(e => e.offsetParent !== null).length") == 0
+        assert page.evaluate("document.querySelectorAll('#phv-home .ph-dept').length") == 9
         b.close()
 
 

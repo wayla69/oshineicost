@@ -268,6 +268,7 @@ function _viewportChanged() {
   clearTimeout(_resizeT);
   _resizeT = setTimeout(() => {
     if (!_appStarted) return;
+    if (phOn() || _phoneApp()) { phViewportChanged(); return; }    // PR-D3: the phone shell comes and goes with the width (js/09c-mobile.js)
     if (_phoneFirst()) { if (!_msRpt) loadMobileSummary(); }
     else if (!_desktopBooted) ensureDesktopBooted();
   }, 250);
@@ -277,7 +278,8 @@ try { window.matchMedia('(max-width:700px)').addEventListener('change', _viewpor
 // The desktop shell: the fragments, the settings/preset furniture, the YTD period and
 // the landing tab. One promise, shared by every caller; a no-op once booted.
 let _desktopBooted = false, _desktopBootP = null;
-function ensureDesktopBooted() {
+// opts.noLanding: the caller opens its own page next (the phone shell, PR-D3), so no landing page is loaded first.
+function ensureDesktopBooted(opts) {
   if (!_desktopBootP) _desktopBootP = (async () => {
     await ensureSlicesLoaded();               // the tabs' code (01-core.js) — a phone fetches it only now
     const lazy = !document.getElementById('tabsRoot')?.childElementCount;
@@ -302,7 +304,7 @@ function ensureDesktopBooted() {
     // PR-D1: the sidebar's department entries (js/18-launcher.js), then land: the department launcher on a desktop, the Daily Brief
     // (home) on a phone that opened the full dashboard (switchTab also hides the period controls home does not use).
     try { renderDeptNav(); } catch (e) { console.warn('renderDeptNav:', e); }
-    switchTab(_landingTab());
+    if (!(opts && opts.noLanding)) switchTab(_landingTab());
     // a supply reminder was tapped (batch 3): open the page it names
     if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; try { supplyDeepLink(l); } catch (e) { console.warn('deep link:', e); } }
   })();
@@ -320,15 +322,15 @@ document.addEventListener('visibilitychange', () => {
   let phone = false;
   try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
   if (!phone) return;
+  if (phOn()) { phForeground(); return; }                      // PR-D3: the phone shell refreshes what is on screen (js/09c-mobile.js)
   if (_phoneFirst()) { if (_msFetchedAt && Date.now() - _msFetchedAt > _STALE_MS) msRefresh(); }
   else if (_desktopBooted && _lastTabLoadAt && Date.now() - _lastTabLoadAt > _STALE_MS) loadActiveTab();
 });
 
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
-  // the phone remembers which side was used last: เต็ม → once means เต็ม next time too,
-  // until the phone button brings the summary back (showMobileSummary, 09c-mobile.js)
-  try { if (window.matchMedia('(max-width:700px)').matches && localStorage.getItem('oshinei_phone_mode') === 'full') document.body.classList.add('force-desktop'); } catch (e) {}
+  // PR-D3: the phone no longer boots the full shell because เต็ม → was used last (oshinei_phone_mode): every phone opens on the department
+  // launcher (phBoot, js/09c-mobile.js) and the shell boots on the first page a person opens from it
   // the tabs' code and the 48 panels, before anything looks for them — a phone defers
   // both to ensureDesktopBooted
   if (!_phoneFirst()) { await ensureSlicesLoaded(); await loadTabFragments(); }
@@ -361,14 +363,18 @@ async function startApp() {
           _healthTimer = setInterval(checkApiHealth, 30000);
           await Promise.all([loadBranches(), loadMonths()]);
           _appStarted = true;
-          if (_phoneFirst()) loadMobileSummary(); else await ensureDesktopBooted();
+          if (_phoneApp()) await phBoot(); else if (_phoneFirst()) loadMobileSummary(); else await ensureDesktopBooted();
         }
       }, 5000);
       return;
     }
     await Promise.all([loadBranches(), loadMonths()]);
     _appStarted = true;
-    if (_phoneFirst()) {
+    if (_phoneApp()) {
+      // PR-D3: a phone opens on the department launcher; the owner's summary and the shell load when a person opens them (phBoot, js/09c-mobile.js)
+      await phBoot();
+      initDataCoverageNote();
+    } else if (_phoneFirst()) {
       // the owner's summary first — one management payload; the desktop shell
       // boots when "เต็ม →" is tapped (ensureDesktopBooted)
       await initDataCoverageNote();   // never rejects; the phone's MTD marker needs its date

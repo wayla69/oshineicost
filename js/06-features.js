@@ -1211,6 +1211,7 @@ function setDarkBtnIcon(isDark) {
     mb.setAttribute('aria-pressed', isDark ? 'true' : 'false');
     mb.title = isDark ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด';
   }
+  if (typeof phDarkSync === 'function') phDarkSync();   // the phone shell's ฉัน row (js/09c-mobile.js)
 }
 
 

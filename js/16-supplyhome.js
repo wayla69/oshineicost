@@ -55,21 +55,10 @@ const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcIngSummary: 'master_
 _SUPPLY_PANE.supplyhome = { get: () => null, set: () => {}, show: () => loadSupplyHome(),
   month: m => { supplyMonthPut(document.getElementById('shmMonth'), m); } };
 
-// "mine" by role (owner_th names the department), not by module: management holds every
-// module and would otherwise own every branch's count; a role without a word falls back to modules
-const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['ประสานงานขาย'], analyst: ['ฝ่ายวิเคราะห์'],
-  accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'],
-  warehouse: ['คลัง'] };
 // the roles that see the month-close list (they own a step of it), and the roles that may look at other departments' work
 const _SHM_CLOSE_ROLES = ['analyst', 'salessupport', 'accounting', 'management'];
 const _SHM_CENTRE_ROLES = ['analyst', 'salessupport', 'management', 'operation'];
 function _shmRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
-function _shmMine(it) {
-  const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
-  const words = role && _SHM_ROLE_OWNERS[role];
-  if (words && it.owner_th) return words.some(w => it.owner_th.includes(w));
-  return (it.owner_modules || []).some(hasModule);
-}
 // the month หน้างาน starts at when nobody has chosen: this month; a role that works the month being closed (it owns a step of the close
 // list) starts at the previous month, which is the month those steps and the price file belong to
 function _shmStartsPrev() { return _SHM_CLOSE_ROLES.includes(_shmRole()); }
