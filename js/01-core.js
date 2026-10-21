@@ -104,6 +104,196 @@ window.uiPrompt = (message, value, opt) => {
   return window.uiDialog({ title: o.title || 'กรอกข้อมูล', message, okText: o.okText || 'ตกลง',
     input: { value: value == null ? '' : String(value), list: o.list, placeholder: o.placeholder, required: o.required } });
 };
+// ── PR-D6 · toasts for results, "?" for explanations, one filter for finished work ────────────────────────────
+// uiToast(text, kind, {action:{label, onClick}, ms}): the ONE result message of the app (it replaces the grey status lines
+// that stayed beside the button, notifyError / notifySuccess and the ขั้นตอนถัดไป toast). kind = success | info | warn | error.
+// Bottom-right on a desktop, above the bottom navigation on a phone; success and info close after 4 s, a warning after 6 s, an
+// error stays until it is closed; at most 3 are stacked; a tap closes one. role="status" (polite); an error is role="alert".
+// Returns {el, close(), next(text, label, fn)}: next() adds the "ขั้นตอนถัดไป" line + button to the same toast (shmAfter).
+(function () {
+  const MAX = 3, MS = { success: 4000, info: 4000, warn: 6000, error: 0 }, IC = { success: '✓', info: 'i', warn: '!', error: '✕' };
+  const KIND = { ok: 'success', good: 'success', bad: 'error', err: 'error', warning: 'warn' };
+  function root() {
+    let r = document.getElementById('uiToasts');
+    if (!r) {
+      r = document.createElement('div');
+      r.id = 'uiToasts';
+      r.setAttribute('aria-live', 'polite');
+      document.body.appendChild(r);
+    }
+    return r;
+  }
+  // a phone: above the page's sticky action bar (ส่งใบสั่งซื้อ, ยืนยันใบตัดเบิก, ...), whatever its height, so a toast never covers a
+  // button or the first input; without such a bar the stylesheet keeps it above the bottom navigation
+  function place(r) {
+    r.style.removeProperty('bottom');
+    let phone = false;
+    try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) { /* no matchMedia */ }
+    if (!phone) return;
+    const bars = [...document.querySelectorAll('.brn-sticky-bottom, .brn-rcv-bar, .ohb-actbar')].filter(b => {
+      const q = b.getBoundingClientRect();
+      return q.height > 0 && q.top < window.innerHeight && q.bottom > 0;
+    });
+    if (!bars.length) return;
+    const top = Math.min(...bars.map(b => b.getBoundingClientRect().top));
+    r.style.setProperty('bottom', Math.round(window.innerHeight - top + 8) + 'px', 'important');
+  }
+  window.uiToast = function (text, kind, opt) {
+    const o = opt || {};
+    const k = KIND[kind] || (MS[kind] != null ? kind : 'info');
+    const t = String(text == null ? '' : text).replace(/^\s*(✓|⚠)\s*/, '').trim();
+    const r = root();
+    // the same message twice in a row (two status lines written together) is one toast
+    const dup = [...r.children].find(c => c.dataset.kind === k && c.dataset.text === t);
+    if (dup) { dup._arm(); return dup._handle; }
+    while (r.children.length >= MAX) r.firstElementChild._close();
+    const el = document.createElement('div');
+    el.className = 'ui-toast ui-toast-' + k;
+    el.dataset.kind = k; el.dataset.text = t;
+    el.setAttribute('role', k === 'error' ? 'alert' : 'status');
+    el.innerHTML = '<span class="ui-toast-ic" aria-hidden="true"></span><div class="ui-toast-body"><div class="ui-toast-text"></div><div class="ui-toast-next"></div></div>' +
+      '<button type="button" class="ui-toast-x" aria-label="ปิด">×</button>';
+    el.querySelector('.ui-toast-ic').textContent = IC[k];
+    el.querySelector('.ui-toast-text').textContent = t;
+    let timer = null;
+    // 4 s; a long message (a count line, a reason from the server) gets up to 4 s more so it can be read to the end
+    const ms = o.ms != null ? o.ms : (MS[k] ? MS[k] + Math.min(4000, Math.max(0, t.length - 60) * 50) : 0);
+    const arm = n => { clearTimeout(timer); if (n) timer = setTimeout(() => el._close(), n); };
+    el._close = () => { clearTimeout(timer); el.remove(); place(r); };
+    el._arm = () => arm(ms);
+    el.addEventListener('click', e => { if (!e.target.closest('.ui-toast-act')) el._close(); });      // a tap closes it
+    el.addEventListener('mouseenter', () => clearTimeout(timer));
+    el.addEventListener('mouseleave', () => arm(Math.min(ms, 2000)));
+    const handle = {
+      el, close: () => el._close(),
+      next(text2, label, fn) {
+        const n = el.querySelector('.ui-toast-next');
+        n.innerHTML = '<span class="ui-toast-nt"></span> <button type="button" class="ui-toast-act"></button>';
+        n.querySelector('.ui-toast-nt').textContent = text2 || '';
+        const b = n.querySelector('.ui-toast-act');
+        if (label && fn) { b.textContent = label; b.addEventListener('click', e => { e.stopPropagation(); el._close(); fn(); }); } else b.remove();
+        arm(Math.max(ms, 9000));       // long enough to read the next step and reach the button
+        return handle;
+      },
+    };
+    el._handle = handle;
+    if (o.action && o.action.label) handle.next('', o.action.label, o.action.onClick);
+    r.appendChild(el);
+    arm(ms);
+    place(r);
+    return handle;
+  };
+})();
+// A reason for the popover: uiHelp(title, html) opens a dialog with the full text of an explanation ("?" button; Esc or ปิด closes it and the
+// focus returns to the button that opened it; Tab stays inside). uiQ(key, title, html) registers an explanation made by a script and returns the
+// "?" button; a fragment keeps its text in <template id=...> and the button carries data-help="id" (title from the template's data-title).
+window.uiHelp = function (title, html, opener) {
+  const from = opener || document.activeElement;
+  const old = document.getElementById('uiHelpDlg');
+  if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'uiHelpDlg';
+  wrap.className = 'ui-help-back';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-modal', 'true');
+  wrap.setAttribute('aria-labelledby', 'uiHelpTitle');
+  wrap.innerHTML = '<div class="ui-help-box" tabindex="-1"><div class="ui-help-head"><div id="uiHelpTitle" class="ui-help-title"></div>' +
+    '<button type="button" class="ui-help-x" aria-label="ปิด">×</button></div><div class="ui-help-body"></div></div>';
+  wrap.querySelector('.ui-help-title').textContent = title || 'คำอธิบาย';
+  wrap.querySelector('.ui-help-body').innerHTML = html || '';
+  const done = () => { wrap.remove(); document.removeEventListener('keydown', onKey, true); try { if (from && from.focus && document.contains(from)) from.focus(); } catch (e) { /* the opener is gone */ } };
+  const onKey = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); return; }
+    if (e.key !== 'Tab') return;
+    const f = [...wrap.querySelectorAll('button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(x => x.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === wrap.querySelector('.ui-help-box'))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  wrap.addEventListener('click', e => { if (e.target === wrap || e.target.closest('.ui-help-x')) done(); });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(wrap);
+  setTimeout(() => { const x = wrap.querySelector('.ui-help-x'); if (x) x.focus(); }, 0);
+  return done;
+};
+window._uiHelpReg = window._uiHelpReg || {};
+window.uiQ = function (key, title, html, cls) {
+  if (html != null) window._uiHelpReg[key] = { title, html };
+  const esc2 = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return `<button type="button" class="ui-q${cls ? ' ' + cls : ''}" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help-key="${esc2(key)}" title="${esc2(title || 'คำอธิบาย')}">?</button>`;
+};
+// The "?" in the header of a supply page (data-help-tab="bomcenter | orderhub | branchstock") opens the explanation of the pane that is showing:
+// <template id="hlp-<tab>-<pane>"> in the fragment, or an explanation a script registered under "<tab>:<pane>" (the roles of a pane read different
+// text), or - for a pane not moved yet - its folded .bmc-help block.
+const _UI_PANE_PREFIX = { bomcenter: 'bmc-pane-', orderhub: 'ohb-pane-', branchstock: 'brn-pane-' };
+window.uiPaneHelp = function (tab, opener) {
+  const root = document.getElementById('tab-' + tab), pre = _UI_PANE_PREFIX[tab] || '';
+  const pane = root && [...root.children].find(el => el.id && el.id.indexOf(pre) === 0 && el.style.display !== 'none');
+  const name = pane ? pane.id.slice(pre.length) : '';
+  const tpl = document.getElementById('hlp-' + tab + '-' + name), reg = window._uiHelpReg[tab + ':' + name];
+  if (tpl) return window.uiHelp(tpl.getAttribute('data-title') || 'วิธีใช้หน้านี้', tpl.innerHTML, opener);
+  if (reg) return window.uiHelp(reg.title, reg.html, opener);
+  const det = pane && pane.querySelector(':scope > details.bmc-help');
+  if (det) { const d = det.querySelector(':scope > div'); return window.uiHelp('วิธีใช้หน้านี้', d ? d.innerHTML : '', opener); }
+  window.uiToast('หน้านี้ยังไม่มีคำอธิบาย', 'info');
+};
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.ui-q');
+  if (!b) return;
+  e.preventDefault();
+  const tplId = b.getAttribute('data-help'), key = b.getAttribute('data-help-key'), tabKey = b.getAttribute('data-help-tab');
+  if (tabKey) window.uiPaneHelp(tabKey, b);
+  else if (tplId) {
+    const tpl = document.getElementById(tplId);
+    if (tpl) window.uiHelp(tpl.getAttribute('data-title') || 'คำอธิบาย', tpl.innerHTML, b);
+  } else if (key && window._uiHelpReg[key]) {
+    window.uiHelp(window._uiHelpReg[key].title, window._uiHelpReg[key].html, b);
+  }
+});
+// One filter for finished work (PR-TF's control, shared): every work list hides done / processed / posted / not-needed rows by default and
+// shows them through the chips ยังไม่เสร็จ (default) · เสร็จแล้ว · ทั้งหมด, each with its count. The choice is remembered in the one key หน้างาน
+// uses (a value a list does not offer, such as รอตรวจ, reads as ยังไม่เสร็จ there).
+//   uiStateFilter.get(['todo','done','all'])      -> the chosen key
+//   uiStateFilter.set(k)
+//   uiStateFilter.bar(el, {counts, f, pick:'fnName', opts:[[key,label],...]})   renders the chips; pick is a global function name called with the key
+//   uiStateFilter.empty(f, pick)                  -> the empty-state HTML of a list (one line + ดูทั้งหมด)
+//   uiStateFilter.split(rows, isDone)             -> {todo, done, all, counts}
+window.uiStateFilter = (function () {
+  const KEY = 'oshinei_task_filter';
+  const LABEL = { all: 'ทั้งหมด', todo: 'ยังไม่เสร็จ', review: 'รอตรวจ', done: 'เสร็จแล้ว' };
+  const DEFAULT = [['todo', LABEL.todo], ['done', LABEL.done], ['all', LABEL.all]];
+  let mem = null;     // the choice when localStorage is blocked
+  function get(keys) {
+    let v = mem;
+    try { v = localStorage.getItem(KEY) || v; } catch (e) { /* blocked: the choice made on this page stands */ }
+    const ok = (keys || DEFAULT.map(x => x[0]));
+    return ok.includes(v) ? v : 'todo';
+  }
+  function set(f) { mem = f; try { localStorage.setItem(KEY, f); } catch (e) { /* lasts until the page is reloaded */ } }
+  function bar(el, o) {
+    const node = typeof el === 'string' ? document.getElementById(el) : el;
+    if (!node) return;
+    const opts = o.opts || DEFAULT;
+    if (o.counts && o.counts.all === 0) { node.innerHTML = ''; return; }          // nothing in the list at all: no chips either
+    node.classList.add('tskf-seg');
+    node.setAttribute('role', 'group');
+    if (!node.getAttribute('aria-label')) node.setAttribute('aria-label', 'กรองตามสถานะ');
+    node.innerHTML = opts.map(([k, t]) => `<button type="button" class="tskf-btn" data-f="${k}" aria-pressed="${o.f === k}" onclick="${o.pick}('${k}')">${t} <span class="tskf-n">(${(o.counts || {})[k] || 0})</span></button>`).join('');
+  }
+  // the empty state of a list: one line + one button (noun = what the list holds, "งาน" on หน้างาน)
+  function empty(f, pick, noun) {
+    const n = noun || 'รายการ';
+    return f === 'all' ? `<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มี${n}</div>`
+      : `<div class="text-xs py-2 shm-empty" style="color:var(--text-muted)">${f === 'done' ? `ยังไม่มี${n}ที่เสร็จแล้ว` : `ไม่มี${n}ค้าง`} <button type="button" class="shm-showall" onclick="${pick}('all')">ดูทั้งหมด</button></div>`;
+  }
+  function split(rows, isDone) {
+    const todo = [], done = [];
+    (rows || []).forEach(r => (isDone(r) ? done : todo).push(r));
+    return { todo, done, all: (rows || []).slice(), counts: { todo: todo.length, done: done.length, all: (rows || []).length } };
+  }
+  return { KEY, LABEL, DEFAULT, get, set, bar, empty, split };
+})();
 // the owner token: several saves can hit 403 together and all wait for the one dialog
 window.askWriteToken = function (message) {
   if (window._askTokenPending) return window._askTokenPending;
@@ -1942,39 +2132,10 @@ async function getJSON(path, { gen = null, signal } = {}) {
   return data;
 }
 
-// Surface otherwise-silent fetch/render failures instead of leaving a half-built tab.
-function notifyError(msg) {
-  let el = document.getElementById('globalErrToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'globalErrToast';
-    el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:12px;' +
-      'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
-    el.onclick = () => el.remove();
-    document.body.appendChild(el);
-  }
-  el.textContent = '⚠ ' + msg + '  (คลิกเพื่อปิด)';
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.remove(), 8000);
-}
-
-// The quiet counterpart: a green toast for "saved / done" (two tabs already probe for it).
-function notifySuccess(msg) {
-  let el = document.getElementById('globalOkToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'globalOkToast';
-    el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
-      'background:#065f46;color:#fff;padding:10px 14px;border-radius:var(--r-md);font-size:12px;' +
-      'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
-    el.onclick = () => el.remove();
-    document.body.appendChild(el);
-  }
-  el.textContent = '✓ ' + msg;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.remove(), 3500);
-}
+// Surface otherwise-silent fetch/render failures instead of leaving a half-built tab. PR-D6: both go through the one toast (uiToast).
+function notifyError(msg) { uiToast(msg, 'error'); }
+// The quiet counterpart: a toast for "saved / done".
+function notifySuccess(msg) { uiToast(msg, 'success'); }
 
 window.addEventListener('unhandledrejection', e => {
   if (e.reason === STALE) { e.preventDefault(); return; }            // expected — ignore

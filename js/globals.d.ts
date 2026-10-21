@@ -20,6 +20,18 @@ declare function uiDialog(opt: any): Promise<any>;
 declare function uiConfirm(message: string, opt?: any): Promise<boolean>;
 declare function uiNotice(message: string, opt?: any): Promise<boolean>;
 declare function uiPrompt(message: string, value?: any, opt?: any): Promise<string | null>;
+// PR-D6 (01-core.js): the one toast, the "?" help popover and the finished-work filter
+declare function uiToast(text: string, kind?: string, opt?: any): { el: HTMLElement; close(): void; next(text: string, label?: string, fn?: any): any };
+declare function uiHelp(title: string, html: string, opener?: any): () => void;
+declare function uiQ(key: string, title: string, html?: string | null, cls?: string): string;
+declare function uiPaneHelp(tab: string, opener?: any): any;
+declare const uiStateFilter: {
+  KEY: string; LABEL: Record<string, string>; DEFAULT: string[][];
+  get(keys?: string[]): string; set(f: string): void;
+  bar(el: any, o: { counts?: any; f: string; pick: string; opts?: string[][] }): void;
+  empty(f: string, pick: string, noun?: string): string;
+  split<T>(rows: T[], isDone: (r: T) => boolean): { todo: T[]; done: T[]; all: T[]; counts: { todo: number; done: number; all: number } };
+};
 declare function askWriteToken(message?: string): Promise<string | null>;
 
 // Slices keep per-feature state on window (window.gpbGranularity, …) and read it

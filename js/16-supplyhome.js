@@ -14,35 +14,24 @@ let _shmData = null;
 let _shmToastAt = 0;
 // ── PR-TF · task state and filter ────────────────────────────────────────────────────────────────────────
 const _SHM_STATE_TH = { todo: 'ยังไม่เสร็จ', review: 'รอตรวจ', done: 'เสร็จแล้ว' };
-const _SHM_FILTERS = [['all', 'ทั้งหมด'], ['todo', 'ยังไม่เสร็จ'], ['review', 'รอตรวจ'], ['done', 'เสร็จแล้ว']];
-const _SHM_FILTER_KEY = 'oshinei_task_filter';
+// PR-D6: the control is the shared one (uiStateFilter, 01-core.js) - this page offers one more state, รอตรวจ
+const _SHM_FILTERS = [['todo', 'ยังไม่เสร็จ'], ['review', 'รอตรวจ'], ['done', 'เสร็จแล้ว'], ['all', 'ทั้งหมด']];
+const _SHM_FILTER_KEYS = _SHM_FILTERS.map(f => f[0]);
 // the server derives `state` for the viewer's role; an answer without it (an old cache) is read from the status
 function shmState(it) {
   if (it && _SHM_STATE_TH[it.state]) return it.state;
   const st = it && it.status;
   return st === 'done' || st === 'na' ? 'done' : (st === 'blocked' ? 'review' : 'todo');
 }
-let _shmFilterMem = null;   // the choice when localStorage is blocked
-function shmFilterGet() {
-  let v = _shmFilterMem;
-  try { v = localStorage.getItem(_SHM_FILTER_KEY) || v; } catch (e) { /* blocked: the choice made on this page stands */ }
-  return _SHM_FILTERS.some(f => f[0] === v) ? v : 'todo';
-}
-function shmFilterSet(f) { _shmFilterMem = f; try { localStorage.setItem(_SHM_FILTER_KEY, f); } catch (e) { /* lasts until the page is reloaded */ } }
+function shmFilterGet() { return uiStateFilter.get(_SHM_FILTER_KEYS); }
+function shmFilterSet(f) { uiStateFilter.set(f); }
 function _shmFilter() { return shmFilterGet(); }
 function shmFilter(f) { shmFilterSet(f); if (_shmData) _shmRender(_shmData); }
 function _shmStateChip(st) {
   return st === 'todo' ? '' : _bmcChip(_SHM_STATE_TH[st], st === 'done' ? 'var(--good-ink)' : 'var(--amber-ink)');
 }
-function _shmEmptyHtml(f) {
-  return f === 'all' ? '<div class="text-xs py-2" style="color:var(--text-muted)">ไม่มีงาน</div>'
-    : '<div class="text-xs py-2 shm-empty" style="color:var(--text-muted)">ไม่มีงานในสถานะนี้ <button type="button" class="shm-showall" onclick="shmFilter(\'all\')">ดูทั้งหมด</button></div>';
-}
-function _shmFilterBar(counts, f) {
-  const el = document.getElementById('shmFilter');
-  if (!el) return;
-  el.innerHTML = _SHM_FILTERS.map(([k, t]) => `<button type="button" class="tskf-btn" data-f="${k}" aria-pressed="${f === k}" onclick="shmFilter('${k}')">${t} <span class="tskf-n">(${counts[k]})</span></button>`).join('');
-}
+function _shmEmptyHtml(f) { return uiStateFilter.empty(f, 'shmFilter', 'งาน'); }
+function _shmFilterBar(counts, f) { uiStateFilter.bar('shmFilter', { counts, f, pick: 'shmFilter', opts: _SHM_FILTERS }); }
 
 // the status line each save writes → the to-do item it completes (shmAfterStatus)
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcIngSummary: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
@@ -214,9 +203,11 @@ function _shmTodayRows(d) {
 function _shmTodayStrip(d, role) {
   const card = document.getElementById('shmToday');
   if (!card) return;
-  card.style.display = role === 'branch' ? '' : 'none';
-  if (role !== 'branch') return;
-  document.getElementById('shmTodayRows').innerHTML = _shmTodayRows(d).map(r => {
+  // PR-D6: only what is still open - a line that is finished ("รับสินค้า: ไม่มีใบรอรับ ✓") disappears, and so does the strip when nothing is open
+  const open = role === 'branch' ? _shmTodayRows(d).filter(r => !r.ok) : [];
+  card.style.display = open.length ? '' : 'none';
+  if (!open.length) return;
+  document.getElementById('shmTodayRows').innerHTML = open.map(r => {
     const ink = r.ok ? 'var(--good-ink)' : (r.bad ? 'var(--bad-ink)' : 'var(--amber-ink)');
     return `<div class="shm-today-row flex items-center gap-2" data-k="${r.k}" style="border-top:1px solid var(--border-soft);min-height:44px">
       <span aria-hidden="true" style="color:${ink};font-size:16px;width:18px;text-align:center">${r.ok ? '✓' : '●'}</span>
@@ -443,14 +434,14 @@ function _shmOpen(go) {
 // starts with ✓; the next open item after the one that save completes is shown as
 // a toast that opens it. One toast per 2 s — a save may write two status lines.
 // PR-M2: only a step of the person's own work, whose page the person's role holds — never another department's task.
-function shmAfterStatus(id) {
+function shmAfterStatus(id, toast) {
   const k = id === 'brnOrdStatus' && typeof _brnRound !== 'undefined' && _brnRound ? 'order_due_' + _brnRound : _SHM_STATUS_KEY[id];
-  if (k) shmAfter(k);
+  if (k) shmAfter(k, toast);
 }
 function _shmToastOk(it) {
   return _shmMine(it) && ((it.owner_modules || []).length === 0 || it.owner_modules.some(hasModule)) && !!(it.go && it.go.tab && tabAllowed(it.go.tab));
 }
-async function shmAfter(key) {
+async function shmAfter(key, toast) {
   if (!key || Date.now() - _shmToastAt < 2000) return;
   _shmToastAt = Date.now();
   try {
@@ -461,34 +452,13 @@ async function shmAfter(key) {
     const open = all.filter(i => (i.status === 'todo' || i.status === 'blocked') && i !== me && (!me || i.group !== me.group || i.seq > me.seq));
     const mineOpen = open.filter(_shmToastOk);
     const nx = mineOpen.find(it => !me || it.group === me.group) || mineOpen[0];
-    if (nx) _shmToast(nx);
+    if (nx) _shmToast(nx, toast);
   } catch (e) { /* a hint only */ }
 }
-function _shmToast(it) {
-  document.querySelectorAll('.shm-toast').forEach(e => e.remove());
-  const el = document.createElement('div');
-  el.className = 'shm-toast';
-  el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:60;max-width:360px;background:var(--bg-card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:var(--r-md, 10px);box-shadow:0 6px 20px rgba(0,0,0,.12);padding:10px 12px';
-  el.innerHTML = `<div class="text-[11px]" style="color:var(--text-muted)">ขั้นตอนถัดไป</div>
-    <div class="text-sm" style="color:var(--text-primary)">${esc(it.title)}</div>
-    <div class="flex gap-2 mt-2">${it.go && it.go.tab ? `<button onclick="this.closest('.shm-toast').remove();_shmOpen(${esc(JSON.stringify(it.go))})" class="text-xs rounded-lg px-3 py-1" style="background:var(--accent);color:var(--on-accent);border:0;cursor:pointer">ไปที่งาน →</button>` : ''}
-      <button onclick="this.closest('.shm-toast').remove()" class="text-xs rounded-lg px-3 py-1" style="border:1px solid var(--border);color:var(--text-secondary);background:transparent;cursor:pointer">ปิด</button></div>`;
-  document.body.appendChild(el);
-  _shmToastPlace(el);
-  setTimeout(() => { try { el.remove(); } catch (e) {} }, 12000);
-}
-// QA 2026-10-13 M7 · on a phone the toast sits ABOVE the page's sticky action bar (ส่งใบสั่งซื้อ, ยืนยันใบตัดเบิก, ยืนยันยอดส่ง, ...), whatever
-// its height, so it never covers a button or the first input; without such a bar it clears the bottom strip as before.
-function _shmToastPlace(el) {
-  let phone = false;
-  try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
-  if (!phone) return;
-  el.style.left = '12px'; el.style.right = '12px'; el.style.maxWidth = 'none';
-  const bars = [...document.querySelectorAll('.brn-sticky-bottom, .brn-rcv-bar, .ohb-actbar')].filter(b => {
-    const r = b.getBoundingClientRect();
-    return r.height > 0 && r.top < window.innerHeight && r.bottom > 0;
-  });
-  if (!bars.length) return;
-  const top = Math.min(...bars.map(b => b.getBoundingClientRect().top));
-  el.style.setProperty('bottom', Math.round(window.innerHeight - top + 8) + 'px', 'important');
+// PR-D6: the next step is a line + a button INSIDE the success toast of the save (uiToast, 01-core.js); a toast that has already closed gets a new one
+function _shmToast(it, toast) {
+  const go = it.go && it.go.tab ? it.go : null;
+  const text = 'ขั้นตอนถัดไป: ' + it.title;
+  if (toast && toast.el && document.body.contains(toast.el)) toast.next(text, go ? 'ไปที่งาน →' : '', go ? () => _shmOpen(go) : null);
+  else uiToast(text, 'info', go ? { action: { label: 'ไปที่งาน →', onClick: () => _shmOpen(go) } } : {});
 }

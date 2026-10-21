@@ -8,6 +8,7 @@
       <select id="bmcMonth" class="supply-month" onchange="bmcMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
     </label>
     <span id="bmcOverviewNote" class="text-xs" style="color:var(--text-muted)"></span>
+    <button type="button" class="ui-q ml-auto" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help-tab="bomcenter" title="คำอธิบายของหน้านี้">?</button>
   </div>
 
   <!-- ── overview ──────────────────────────────────────────────────────── -->
@@ -16,10 +17,10 @@
     <div id="bmcBacklogCard" class="card p-4 mb-3"></div>
     <div id="bmcSetupCard" class="card p-4 mb-3"></div>
     <div id="bmcIssuesCard" class="card p-4 mb-3"></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ความพร้อมของข้อมูลแสดงสิ่งที่ยังค้างก่อนใช้ข้อมูลตั้งต้น แต่ละข้อมีลิงก์ไปหน้าที่แก้ไข</p>
+    <template id="hlp-bomcenter-overview" data-title="ความพร้อมของข้อมูล">      <p>ความพร้อมของข้อมูลแสดงสิ่งที่ยังค้างก่อนใช้ข้อมูลตั้งต้น แต่ละข้อมีลิงก์ไปหน้าที่แก้ไข</p>
       <p>ชื่อไม่ตรง หมายถึงรหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด ให้เลือก “วัตถุดิบเดียวกัน” หรือ “ใช้รหัสแนะนำ” · การตัดสินมีผลกับแผนสั่งเท่านั้น ไม่มีผลกับต้นทุน</p>
-    </div></details>
+      <p>วัตถุดิบดิบที่ยังไม่มีขนาดบรรจุ แปลงหน่วยแพ็คหรือถุงไม่ได้ · ข้อที่เสร็จแล้วซ่อนไว้ตามค่าเริ่มต้น เลือก “เสร็จแล้ว” หรือ “ทั้งหมด” เพื่อดู</p>
+    </template>
   </div>
 
   <!-- ── recipes by tier ────────────────────────────────────────────────── -->
@@ -95,8 +96,9 @@
       </div>
     </div>
     <div class="card p-4 mb-3 bc-write" id="bmcPortion">
-      <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">สูตรแบ่งชิ้นจากวัตถุดิบทั้งตัว</div>
-      <div class="text-xs" style="color:var(--text-secondary)">ใช้กับวัตถุดิบที่รับเป็นน้ำหนักแต่ใช้เป็นชิ้น เช่น แซลมอนทั้งตัว 1 ตัวแล่เป็นกี่ชิ้น</div>
+      <div class="ui-cardhead"><div class="text-sm font-semibold" style="color:var(--text-primary)">สูตรแบ่งชิ้นจากวัตถุดิบทั้งตัว</div>
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-portion">?</button></div>
+      <div class="ui-sub">วัตถุดิบที่รับเป็นน้ำหนักแต่ใช้เป็นชิ้น</div>
       <div class="flex flex-wrap items-end gap-2 mt-2">
         <label class="text-xs" style="color:var(--text-muted)">สินค้ากึ่งสำเร็จ<br>
           <select id="bmcPortSel" onchange="bmcPortChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;max-width:260px;background:var(--bg-input);color:var(--text-primary)"></select></label>
@@ -123,11 +125,11 @@
         <button onclick="bmcPortSave()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">บันทึกสูตรแบ่งชิ้น</button>
         <span id="bmcPortStatus" class="text-xs"></span>
       </div>
-      <details class="bmc-help mt-2"><summary>วิธีใช้สูตรแบ่งชิ้น</summary><div>
+      <template id="hlp-bomcenter-portion" data-title="วิธีใช้สูตรแบ่งชิ้น"><p>ใช้กับวัตถุดิบที่รับเป็นน้ำหนักแต่ใช้เป็นชิ้น เช่น แซลมอนทั้งตัว 1 ตัวแล่เป็นกี่ชิ้น</p>
         <p>ใส่ของทั้งตัวที่นำมาแบ่ง (เช่น 1 ตัว) และจำนวนชิ้นที่ได้จริง ระบบคำนวณน้ำหนักต่อชิ้นและต้นทุนต่อชิ้นให้ตามสูตรที่ใส่ไว้ · หน่วยของของทั้งตัว (เช่น ตัว) ต้องตั้งไว้ในหน้าหน่วยและการแปลงก่อน · ถ้าตั้งเป็นแบบเฉลี่ย (เช่น 1 ตัว ≈ 4.5 กิโลกรัม) ต้นทุนต่อชิ้นเป็นค่าโดยประมาณ</p>
         <p>จำนวนชิ้นที่ได้ ครัวควรชั่งและยืนยันจากการแล่จริง · จำนวนนี้นับเฉพาะชิ้นที่ใช้ได้ ระบบจึงไม่บวกส่วนสูญเสียของวัตถุดิบซ้ำ ทั้งในต้นทุนและในแผนสั่งวัตถุดิบ</p>
         <p>หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้</p>
-      </div></details>
+      </template>
     </div>
     <div id="bmcPrepImport" class="card p-4 mb-3" style="display:none"></div>
     <div id="bmcPrepDetail" class="card p-4 mb-3" style="display:none"></div>
@@ -140,10 +142,10 @@
       </div>
       <div id="bmcPrepList" class="text-xs"></div>
     </div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>สูตรกึ่งสำเร็จ (CK / HK / DK) คือวัตถุดิบที่ครัวผลิตเองจากวัตถุดิบดิบ · 1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อ</p>
+    <template id="hlp-bomcenter-prep" data-title="สูตรกึ่งสำเร็จ">      <p>สูตรกึ่งสำเร็จ (CK / HK / DK) คือวัตถุดิบที่ครัวผลิตเองจากวัตถุดิบดิบ · 1 สูตร = ปริมาณที่ผลิตได้ต่อหม้อ</p>
       <p>สูตรที่ครบใช้ต้นทุนจากสูตร สูตรที่ไม่ครบใช้ราคาซื้อ · นำเข้าจากไฟล์ครัว (แผ่นงาน BoM_Semi) หรือดาวน์โหลดแม่แบบสูตรกึ่งสำเร็จ กรอก แล้วนำเข้าไฟล์สูตรกึ่งสำเร็จ · การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง</p>
-    </div></details>
+      
+    </template>
   </div>
   <div id="bmc-pane-rel" style="display:none">
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
@@ -157,10 +159,10 @@
     <div id="bmcRlEditor" class="card p-4 mb-3" style="display:none"></div>   <!-- a recipe opened from a finding, edited right here -->
     <div id="bmcRlCompare" class="card p-4 mb-3"></div>
     <div id="bmcRlHistory" class="card p-4 mb-3"></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ลำดับงาน: ครัวสร้างสูตรและส่งตรวจ → ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล → ผู้บริหารอ่านผลกระทบแล้วรับทราบหรือยกเลิกใช้</p>
+    <template id="hlp-bomcenter-rel" data-title="ตรวจและประกาศใช้">      <p>ลำดับงาน: ครัวสร้างสูตรและส่งตรวจ → ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ภายในวันที่ 25 ของเดือนก่อนเดือนที่มีผล → ผู้บริหารอ่านผลกระทบแล้วรับทราบหรือยกเลิกใช้</p>
       <p>เมื่อประกาศใช้แล้ว ต้นทุนในรายงานตั้งแต่เดือนที่มีผลเปลี่ยนตามเวอร์ชันนี้ทันที (เดือนก่อนกันยายน 2026 ใช้ต้นทุนระบบเดิมเสมอ) · ปุ่ม “ประกาศใช้” กดได้เมื่อไม่มีข้อที่ต้องแก้ไข</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── forecast: suggested order per round ───────────────────────────── -->
@@ -183,10 +185,10 @@
     <div id="bmcFcHead" class="mb-3"></div>
     <div id="bmcFcTable" class="card p-4 mb-3 overflow-x-auto" style="display:none"></div>
     <div id="bmcFcRuns" class="card p-4 mb-3"></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ในรอบ + กันขาด · หน้านี้ยังไม่หักคงเหลือของสาขา (หน้าสั่งสินค้าของสาขาหักให้)</p>
+    <template id="hlp-bomcenter-fc" data-title="ยอดแนะนำรายรอบ">      <p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ในรอบ + กันขาด · หน้านี้ยังไม่หักคงเหลือของสาขา (หน้าสั่งสินค้าของสาขาหักให้)</p>
       <p>“บันทึกยอดแนะนำ” เก็บผลที่คำนวณไว้เป็นฐานเทียบในหน้าสั่งสินค้าและหน้าตรวจสอบการสั่ง · “ความแม่นยำย้อนหลัง” ทดสอบยอดแนะนำกับยอดใช้จริง 3 สัปดาห์ล่าสุด</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
@@ -206,17 +208,17 @@
       <div id="bmcCalBulkPreview" class="mt-3"></div>
     </div>
     <span id="bmcCalStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
-    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ประสานงานขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) · มีผลตั้งแต่รอบถัดไป</p>
+    <template id="hlp-bomcenter-cal" data-title="รอบส่งของสาขา">      <p>ประสานงานขายกำหนดวันส่งของแต่ละรอบรายสาขา · เวลาตัดรอบ: สาขาต้องส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง (รอบส่งวันอังคาร ตัดรอบวันเสาร์ 13:15) · มีผลตั้งแต่รอบถัดไป</p>
       <p>ตั้งหลายสาขาพร้อมกัน: ดาวน์โหลดแม่แบบรอบส่งของสาขา แก้เฉพาะวันที่เปลี่ยน แล้วนำเข้าไฟล์รอบส่งของสาขา · ช่องว่าง = ไม่เปลี่ยน</p>
       <p>สาขาของบริษัทที่ใช้เป็นค่ากลาง: ค่ากลางคือมัธยฐานของสาขาที่เลือก ใช้เป็นเกณฑ์เทียบปริมาณวัตถุดิบต่อยอดขาย ฿100,000 และเป็นสาขาอ้างอิงเริ่มต้นของสาขาใหม่ · ช่วงยอมรับสำหรับสต็อกใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา เมื่อสาขาใดมีผลตรวจนับต้นงวดและปลายงวดครบ ระบบใช้ยอดซื้อปรับด้วยส่วนต่างของสต็อกและเกณฑ์ผลต่างปกติของสาขานั้น</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── PR-B4a (1.8) · ปฏิทินเทศกาลและวันหยุด (ตั้งค่า → ปฏิทินเทศกาลและวันหยุด): events the forecast reads + the public holidays, read only ─── -->
   <div id="bmc-pane-events" style="display:none">
     <div class="card p-4 mb-3 bmc-ev-write" id="bmcEvForm">
-      <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)" id="bmcEvFormTitle">เพิ่มช่วงเทศกาลหรือโปรโมชัน</div>
+      <div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)" id="bmcEvFormTitle">เพิ่มช่วงเทศกาลหรือโปรโมชัน</div><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-events">?</button></div>
       <div class="flex flex-wrap items-end gap-3">
         <label class="text-[11px]" style="color:var(--text-muted)">ชื่อ<br>
           <input id="bmcEvName" maxlength="60" placeholder="เช่น โปรโมชันวันแม่" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:200px"></label>
@@ -234,16 +236,26 @@
         <button id="bmcEvCancel" onclick="bmcEvReset()" style="display:none;border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ยกเลิกการแก้ไข</button>
         <span id="bmcEvStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-[11px] mt-2" style="color:var(--text-muted)">เว้นช่อง % ไว้ ยอดแนะนำใช้ยอดลูกค้าวันเดียวกันของปีก่อนเทียบวันปกติในวันเดียวกันของสัปดาห์ · กรอก % เมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน (+20 คือลูกค้ามากกว่าวันปกติ 20%)</p>
+      <div class="ui-sub mt-2">เว้นช่อง % ไว้ ยอดแนะนำใช้ยอดปีก่อน
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-evpct">?</button></div>
     </div>
     <div class="card p-4 mb-3"><div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ช่วงเทศกาลและโปรโมชัน</div><div id="bmcEvList"></div></div>
     <div class="card p-4 mb-3"><div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">วันหยุดราชการ <span class="text-[11px] font-normal" style="color:var(--text-muted)">· อ่านอย่างเดียว</span></div>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">ยอดแนะนำรู้วันหยุดเหล่านี้อยู่แล้ว (เทียบกับวันหยุดเดียวกันของปีก่อน) ไม่ต้องเพิ่มซ้ำ · เพิ่มเฉพาะโปรโมชันและงานที่ทำให้ลูกค้าต่างจากปกติ</p>
+      <div class="ui-sub mb-2">ยอดแนะนำรู้วันหยุดเหล่านี้อยู่แล้ว
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-evhol">?</button></div>
       <div id="bmcEvHol"></div></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ประสานงานขายเพิ่มช่วงโปรโมชันหรืองานที่มีผลกับจำนวนลูกค้า เลือกสาขาหรือทุกสาขา และใส่ % ที่ลูกค้าเพิ่มจากวันปกติ · ยอดแนะนำที่รอบส่งคลุมช่วงนั้นจะปรับตามเมื่อคำนวณใหม่</p>
+    <template id="hlp-bomcenter-evpct" data-title="ช่อง % ลูกค้าที่เพิ่ม">
+      <p>เว้นช่อง % ไว้ ยอดแนะนำใช้ยอดลูกค้าวันเดียวกันของปีก่อนเทียบวันปกติในวันเดียวกันของสัปดาห์</p>
+      <p>กรอก % เมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน (+20 คือลูกค้ามากกว่าวันปกติ 20%)</p>
+    </template>
+  <template id="hlp-bomcenter-evhol" data-title="วันหยุดราชการ">
+      <p>ยอดแนะนำรู้วันหยุดเหล่านี้อยู่แล้ว (เทียบกับวันหยุดเดียวกันของปีก่อน) ไม่ต้องเพิ่มซ้ำ</p>
+      <p>เพิ่มเฉพาะโปรโมชันและงานที่ทำให้ลูกค้าต่างจากปกติ</p>
+    </template>
+    <template id="hlp-bomcenter-events" data-title="ปฏิทินเทศกาลและวันหยุด">      <p>ประสานงานขายเพิ่มช่วงโปรโมชันหรืองานที่มีผลกับจำนวนลูกค้า เลือกสาขาหรือทุกสาขา และใส่ % ที่ลูกค้าเพิ่มจากวันปกติ · ยอดแนะนำที่รอบส่งคลุมช่วงนั้นจะปรับตามเมื่อคำนวณใหม่</p>
       <p>วันหยุดราชการมาจากตารางวันหยุดของระบบ (พ.ศ. 2567–2570) แก้ไม่ได้ที่หน้านี้</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── storage zones (ตั้งค่า → โซนจัดเก็บ): the centre adds, renames, deletes and reorders the zones a branch counts by ─── -->
@@ -260,10 +272,10 @@
         <span id="bmcZoneStatus" class="text-[11px]"></span>
       </div>
     </div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>โซนที่สาขาใช้แบ่งรายการตอนตรวจนับและตัดเบิก · ลำดับนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศร)</p>
+    <template id="hlp-bomcenter-zones" data-title="โซนจัดเก็บ">      <p>โซนที่สาขาใช้แบ่งรายการตอนตรวจนับและตัดเบิก · ลำดับนี้คือลำดับที่สาขาเห็น (ลากแถวหรือกดลูกศร)</p>
       <p>โซนที่ยังมีวัตถุดิบลบไม่ได้ · โซน “อื่น ๆ” ลบไม่ได้ เปลี่ยนชื่อได้</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads and ticks "posted" ─── -->
@@ -352,12 +364,12 @@
       </table>
     </div>
     <div id="bmcIngPager" class="bmc-pager mt-2"></div>
-    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>แก้ช่องในตารางได้โดยตรง แล้วกด “บันทึกการแก้ไข” · ชื่อต้องไม่ว่าง ตัวเลขต้องเป็นตัวเลขและไม่ติดลบ · แถวที่ไม่ผ่านจะมีข้อความสีแดง และระบบไม่บันทึกจนกว่าจะแก้</p>
+    <template id="hlp-bomcenter-ing" data-title="ทะเบียนวัตถุดิบ">      <p>แก้ช่องในตารางได้โดยตรง แล้วกด “บันทึกการแก้ไข” · ชื่อต้องไม่ว่าง ตัวเลขต้องเป็นตัวเลขและไม่ติดลบ · แถวที่ไม่ผ่านจะมีข้อความสีแดง และระบบไม่บันทึกจนกว่าจะแก้</p>
       <p>แก้หลายรายการด้วย Excel: ดาวน์โหลดทะเบียนวัตถุดิบ แก้ แล้วกด “นำเข้าไฟล์ทะเบียนวัตถุดิบ” · รับไฟล์ที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP เช่น Cost-RW</p>
       <p>“เติมจากข้อมูลในระบบ” เพิ่มรหัสใหม่จากสูตร ขนาดบรรจุ และรายการบังคับสั่ง · ไม่เขียนทับค่าที่ตั้งไว้แล้ว</p>
       <p>“รหัสในระบบอื่น” ใต้รหัสของแต่ละแถว ใช้ดูและจัดการรหัสที่ระบบบัญชี คลัง หรือผู้จำหน่ายใช้กับวัตถุดิบนี้ · รหัสในทะเบียนและสูตรไม่เปลี่ยน · รหัสใหม่ที่ประสานงานขายแจ้งมาแสดงในการ์ด “รหัสใหม่ที่รออนุมัติ” ด้านบน · ค้นหาด้วยรหัสในระบบอื่นได้</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── monthly prices ────────────────────────────────────────────────── -->
@@ -408,11 +420,11 @@
       </table>
     </div>
     <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
-    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>
+    <template id="hlp-bomcenter-price" data-title="ราคารายเดือน">      <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = หน่วยในสูตร · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>
       <p>การนำเข้าแสดงตัวอย่างก่อนบันทึกทุกครั้ง · “ยกราคาเดือนก่อนมาใช้” ใช้ราคาล่าสุดของแต่ละวัตถุดิบสำหรับเดือนที่ยังไม่มีไฟล์ · ตัวเลือก: นำเข้าจากรายงานที่มีอยู่ในระบบ และดาวน์โหลดแม่แบบราคารายเดือน · ไฟล์ที่ประสานงานขายส่งมารอตรวจแสดงเหนือตาราง</p>
       <p>รหัสในไฟล์ที่ทะเบียนไม่รู้จักจะไม่ถูกเพิ่มเอง: ระบบแสดงวัตถุดิบที่ชื่อใกล้เคียง แล้วเลือกรายการละรหัสว่า “เป็นรหัสใหม่ของวัตถุดิบเดิม” (สูตรไม่ต้องแก้) หรือ “เป็นวัตถุดิบใหม่” · รหัสที่ไม่เลือกจะไม่ถูกนำเข้า</p>
-    </div></details>
+      <p>บรรทัดที่ติดกฎหน่วยจะคิดราคาได้ในการบันทึกครั้งนั้น · แถวที่ราคาปกติซ่อนไว้ตามค่าเริ่มต้นของตัวอย่าง เลือก “เสร็จแล้ว” หรือ “ทั้งหมด” เพื่อดู</p>
+    </template>
   </div>
 
   <!-- ── ไฟล์ราคา (ประสานงานขาย): the price file Sales Support sends to the analyst, and the files she has sent ─── -->
@@ -432,11 +444,11 @@
       <div id="bmcSubUnknown" class="mt-3" style="display:none"></div>
     </div>
     <div id="bmcPriceFileList" class="card p-3 mb-3" style="display:none"></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ส่งรายงานจ่ายสินค้าภายในหรือไฟล์ตามแม่แบบไฟล์ราคา ให้ฝ่ายวิเคราะห์นำเข้า · เดือนของไฟล์คือเดือนที่เลือกด้านบน</p>
+    <template id="hlp-bomcenter-pricefile" data-title="ไฟล์ราคา">      <p>ส่งรายงานจ่ายสินค้าภายในหรือไฟล์ตามแม่แบบไฟล์ราคา ให้ฝ่ายวิเคราะห์นำเข้า · เดือนของไฟล์คือเดือนที่เลือกด้านบน</p>
       <p>ฝ่ายวิเคราะห์ตรวจไฟล์แล้วนำเข้า หรือส่งกลับพร้อมเหตุผล · ผลแสดงในรายการ “ไฟล์ที่ส่งแล้ว”</p>
       <p>ถ้าไฟล์มีรหัสที่ทะเบียนไม่รู้จัก ระบบแสดงรายการใต้ปุ่มส่ง พร้อมวัตถุดิบที่ชื่อใกล้เคียง · ถ้ารหัสนั้นเป็นรหัสใหม่ของวัตถุดิบเดิม เลือกวัตถุดิบแล้วกด “ส่งคำขอให้ฝ่ายวิเคราะห์” · ไฟล์ราคายังส่งได้ตามปกติ</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── unit converter ────────────────────────────────────────────────── -->
@@ -476,27 +488,27 @@
     <!-- PR-U2: the average weight per piece learned from receipts, and the pack sizes the branches reported -->
     <div id="bmcAvgCard" class="card p-4 mb-3">
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">ค่าเฉลี่ยจากการรับจริง (90 วัน)</div>
+      <div id="bmcAvgFilter"></div>
       <div id="bmcAvgBody" class="text-xs" style="color:var(--text-secondary)"></div>
-      <details class="mt-2"><summary class="text-xs" style="cursor:pointer;color:var(--accent)">ประวัติการตัดสินใจ</summary><div id="bmcAvgHist" class="text-xs mt-1"></div></details>
     </div>
     <div id="bmcPackCard" class="card p-4 mb-3">
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">ขนาดบรรจุที่สาขาแจ้ง</div>
+      <div id="bmcPackFilter"></div>
       <div id="bmcPackBody" class="text-xs" style="color:var(--text-secondary)"></div>
-      <details class="mt-2"><summary class="text-xs" style="cursor:pointer;color:var(--accent)">เรื่องที่ตัดสินใจแล้ว</summary><div id="bmcPackHist" class="text-xs mt-1"></div></details>
     </div>
-    <details class="bmc-help mt-3"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>บันไดหน่วยบอกว่าวัตถุดิบหนึ่งรายการรับหรือนับเป็นหน่วยอะไรได้บ้าง แต่ละหน่วยระบุเทียบกับหน่วยที่อยู่ถัดลงไป เช่น 1 กล่อง = 10 แพ็ค และ 1 แพ็ค = 1,000 กรัม · ตั้งได้ไม่เกิน 3 หน่วยต่อวัตถุดิบ · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองโดยไม่นับเป็นขั้น</p>
+    <template id="hlp-bomcenter-conv" data-title="หน่วยและการแปลง">      <p>บันไดหน่วยบอกว่าวัตถุดิบหนึ่งรายการรับหรือนับเป็นหน่วยอะไรได้บ้าง แต่ละหน่วยระบุเทียบกับหน่วยที่อยู่ถัดลงไป เช่น 1 กล่อง = 10 แพ็ค และ 1 แพ็ค = 1,000 กรัม · ตั้งได้ไม่เกิน 3 หน่วยต่อวัตถุดิบ · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองโดยไม่นับเป็นขั้น</p>
       <p>ชนิด “แน่นอน” ใช้กับของที่บรรจุคงที่ เช่น ปูอัด 1 แท่ง = 15 กรัม · ชนิด “เฉลี่ย” ใช้กับของที่แต่ละชิ้นหนักไม่เท่ากัน เช่น แซลมอนทั้งตัว 1 ตัว ≈ 4.5 กิโลกรัม (ช่วง 4–5) ผลการแปลงที่ผ่านขั้นเฉลี่ยเป็นค่าโดยประมาณ จึงแสดงเครื่องหมาย ≈ เสมอ</p>
       <p>ช่อง “ทดลองแปลง” ใช้ตรวจว่าปริมาณในหน่วยหนึ่งเท่ากับกี่หน่วยฐาน · การนำเข้าไฟล์หน่วยและการแปลงแสดงตัวอย่างก่อนบันทึกทุกครั้ง และนำเข้าแล้วบันไดหน่วยของรหัสที่อยู่ในไฟล์ถูกแทนที่ทั้งรายการ</p>
       <p>ค่าเฉลี่ยจากการรับจริง: ตอนรับสินค้าที่ขายเป็นน้ำหนักแต่ใช้เป็นตัว สาขานับจำนวนตัวที่ได้รับพร้อมน้ำหนัก ระบบหาน้ำหนักเฉลี่ยต่อตัวจากการรับของทุกสาขาใน 90 วัน เสนอเมื่อมีการรับอย่างน้อย 3 ครั้ง นับได้อย่างน้อย 10 ตัว และต่างจากค่าที่ใช้ตั้งแต่ 3% ขึ้นไป · “ใช้ค่านี้” เปลี่ยนค่าเฉลี่ยในบันไดหน่วย (ปัดเป็นทศนิยม 2 ตำแหน่ง และขยายช่วงให้ครอบคลุมเมื่อจำเป็น) · “คงค่าเดิม” ต้องระบุเหตุผล · ค่าเฉลี่ยเปลี่ยนต้นทุนของเดือนที่ยังไม่ประกาศใช้เท่านั้น เดือนที่ประกาศใช้แล้วไม่เปลี่ยน</p>
       <p>ขนาดบรรจุที่สาขาแจ้ง: สาขาพบว่าของที่รับมีขนาดบรรจุไม่ตรงกับทะเบียน แจ้งจากฟอร์มรับสินค้า และไม่กระทบการรับสินค้า · ตรวจกับฉลากหรือผู้จำหน่ายแล้วกด “ใช้ค่านี้” เพื่อปรับบันไดหน่วย หรือ “ไม่ใช้” พร้อมเหตุผลที่สาขาอ่านได้</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── PR-Y · แจ้งเปลี่ยนรหัสสินค้า (ตั้งค่า): Sales Support reports that a register item has a new code in another system ── -->
   <div id="bmc-pane-codereq" style="display:none">
     <div id="bmcCrqForm" class="card p-4 mb-3">
-      <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">แจ้งเปลี่ยนรหัสสินค้า</div>
+      <div class="ui-cardhead mb-2"><div class="text-xs font-semibold" style="color:var(--text-primary)">แจ้งเปลี่ยนรหัสสินค้า</div><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-codereq">?</button></div>
       <div class="flex flex-wrap items-end gap-3">
         <label class="text-xs" style="color:var(--text-muted)">รหัสใหม่<br>
           <input id="bmcCrqNew" maxlength="40" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:160px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -528,11 +540,11 @@
       <div class="text-xs font-semibold mb-2" style="color:var(--text-primary)">คำขอที่ส่งแล้ว</div>
       <div id="bmcCrqList" class="text-xs"></div>
     </div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>ใช้เมื่อระบบบัญชี คลัง หรือผู้จำหน่ายเปลี่ยนรหัสของวัตถุดิบที่มีอยู่แล้ว · รหัสที่สูตรใช้ในทะเบียนไม่เปลี่ยน รหัสใหม่ถูกบันทึกเป็น “รหัสในระบบอื่น” ของวัตถุดิบเดิม สูตรจึงไม่ต้องแก้</p>
+    <template id="hlp-bomcenter-codereq" data-title="แจ้งเปลี่ยนรหัสสินค้า">      <p>ใช้เมื่อระบบบัญชี คลัง หรือผู้จำหน่ายเปลี่ยนรหัสของวัตถุดิบที่มีอยู่แล้ว · รหัสที่สูตรใช้ในทะเบียนไม่เปลี่ยน รหัสใหม่ถูกบันทึกเป็น “รหัสในระบบอื่น” ของวัตถุดิบเดิม สูตรจึงไม่ต้องแก้</p>
       <p>กรอกรหัสใหม่ เลือกระบบ และเลือกวัตถุดิบเดิม (ใส่ชื่อตามระบบอื่นแล้วกด “ค้นหาวัตถุดิบที่ใกล้เคียง” เพื่อให้ระบบแนะนำ) · ใส่วันที่เริ่มใช้ถ้ารหัสใหม่ยังไม่เริ่มใช้ในวันนี้</p>
       <p>ฝ่ายวิเคราะห์ตรวจแล้วกด “ใช้” หรือ “ไม่ใช้” พร้อมเหตุผล · ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น · ผลแสดงในรายการ “คำขอที่ส่งแล้ว” · ไฟล์ที่ส่งให้ระบบบัญชีแสดงรหัสใหม่หลังอนุมัติ</p>
-    </div></details>
+      
+    </template>
   </div>
 
   <!-- ── PR-X · ตรวจสูตรด้วยยอดซื้อ (ข้อมูลตั้งต้น): the recipes and the units read against what the company branches bought ── -->
@@ -542,15 +554,16 @@
         <label>เดือนของไฟล์ราคา<br><select id="bmcRcMonth" onchange="bmcLoadRcheck(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:280px"></select></label>
         <a href="#" onclick="bmcRcXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดไฟล์ตรวจสูตรด้วยยอดซื้อ (Excel)</a>
         <span id="bmcRcStatus" style="padding-bottom:6px"></span>
+        <span class="ml-auto"><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-bomcenter-rcheck">?</button></span>
       </div>
       <div id="bmcRcChips" class="flex flex-wrap gap-1 mt-2"></div>
       <div id="bmcRcNotes" class="text-[11px] mt-2" style="color:var(--text-muted)"></div>
     </div>
     <div class="card p-3 mb-3"><div id="bmcRcBody"></div></div>
-    <details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>
-      <p>หน้านี้เทียบปริมาณที่สาขาของบริษัทซื้อจริง (จากไฟล์ราคารายสาขา) กับปริมาณที่สูตรบอกว่าใช้ โดยเทียบต่อยอดขาย ฿100,000 ของเดือนเดียวกัน แล้วใช้ค่ากลาง (มัธยฐานของสาขาที่เลือกไว้ในตั้งค่า → รอบส่งของสาขา) ของทั้งสองฝั่ง</p>
+    <template id="hlp-bomcenter-rcheck" data-title="ตรวจสูตรด้วยยอดซื้อ">      <p>หน้านี้เทียบปริมาณที่สาขาของบริษัทซื้อจริง (จากไฟล์ราคารายสาขา) กับปริมาณที่สูตรบอกว่าใช้ โดยเทียบต่อยอดขาย ฿100,000 ของเดือนเดียวกัน แล้วใช้ค่ากลาง (มัธยฐานของสาขาที่เลือกไว้ในตั้งค่า → รอบส่งของสาขา) ของทั้งสองฝั่ง</p>
       <p>“ต่างกันเกิน 10 เท่า” มักหมายถึงหน่วยหรืออัตราแปลงผิด ให้ไปตรวจที่หน่วยและการแปลง · “มีการซื้อ แต่ไม่มีในสูตร” อาจเป็นของที่ใช้ในสูตรกึ่งสำเร็จซึ่งยังไม่ได้เชื่อมกับสูตร · “มีในสูตร แต่ไม่มีการซื้อ” มักเป็นรหัสที่ซื้อภายใต้รหัสอื่น</p>
       <p>ไฟล์ราคาเป็นยอดซื้อทั้งเดือน ถ้ายอดขายรายวันมีไม่ครบทุกวัน ระบบปรับยอดซื้อตามสัดส่วนวันและแจ้งไว้ในหน้า · หน้านี้ไม่เปลี่ยนข้อมูลใด ๆ แต่ละแถวมีลิงก์ไปแก้ที่หน่วยและการแปลงหรือทะเบียนวัตถุดิบ</p>
-    </div></details>
+      
+    </template>
   </div>
 </div>

@@ -1,16 +1,5 @@
 <div id="tab-supplyhome" style="display:none">
-  <style>
-    /* PR-TF: the task filter - one segmented control above every list of this page (js/16-supplyhome.js shmFilter) */
-    #tab-supplyhome .tskf-seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-    #tab-supplyhome .tskf-btn { flex: 1 1 120px; min-height: 44px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm);
-      background: var(--bg-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    #tab-supplyhome .tskf-btn:hover { background: var(--bg-hover); }
-    #tab-supplyhome .tskf-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-    #tab-supplyhome .tskf-n { font-weight: 500; }
-    #tab-supplyhome .shm-showall { min-height: 44px; margin-left: 8px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm);
-      background: transparent; color: var(--accent); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-    #tab-supplyhome :is(.tskf-btn, .shm-showall):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  </style>
+  <!-- PR-D6: the task filter (.tskf-seg / .tskf-btn) is a global style now - uiStateFilter (js/01-core.js), index.html -->
 
   <!-- หน้างาน (BoM Center UX overhaul, 2026-10-07; PR-M2 2026-10-10): what each person has to do now and where the month
        stands, from GET /api/bom-center/todo (js/16-supplyhome.js). "งานของฉัน" is the one open block; the close list

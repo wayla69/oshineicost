@@ -478,7 +478,7 @@ def test_the_adoption_pane_and_the_หน้างาน_summary_exist():
     tab, home = _src("tabs/54-orderhub.html"), _src("tabs/55-supplyhome.html")
     assert "pane: 'adoption', label: 'การใช้งานทุกสาขา', mods: _SUPPLY_CENTRE" in core
     assert "สาขานำร่อง 4 สาขา'" not in core.split("const SUPPLY_LEGACY_LABEL")[0]          # the หน้างาน entry is gone
-    assert 'id="ohb-pane-adoption"' in tab and 'id="ohbHelp-adoption"' in tab and 'id="ohbCancelledReceipts"' in tab
+    assert 'id="ohb-pane-adoption"' in tab and "\n  adoption: {" in oh and 'id="ohbCancelledReceipts"' in tab      # PR-D6: its help is behind the "?" of the page header
     assert "'adoption'" in oh and "ohbLoadAdoption" in oh and "ohbAdOpen" in oh and "ohbLoadCancelledReceipts" in oh
     assert "ใบรับสินค้าที่สาขายกเลิก 7 วันล่าสุด" in oh
     assert 'id="shmAdoption"' in home and 'id="shmPush"' in home and "รับการแจ้งเตือนบนมือถือ" in home

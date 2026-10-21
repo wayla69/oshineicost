@@ -5,13 +5,8 @@
     <div class="flex items-start gap-3">
       <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold" style="color:var(--accent)">ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)</h2>
-        <p class="text-xs text-slate-600 mt-1">
-          <b>ยอดซื้อวัตถุดิบ</b> นำเข้าจากระบบจัดซื้อเป็นไฟล์ Excel (สาขา + สัปดาห์ + ยอดรวม) ·
-          <b>ยอดขาย</b> เป็นตัวเลขของระบบนี้เอง → ได้ <b>% ยอดซื้อต่อยอดขาย</b> ของแต่ละสาขา
-          <br><b style="color:var(--amber-ink)">คนละตัวกับ % ต้นทุนอาหาร</b> — ตามสูตร คือ “ควรใช้เท่าไร”, หน้านี้คือ “<b>ซื้อเข้าจริงเท่าไร</b>”
-          การซื้อมาก่อนขาย (ตุนของ/รอบส่งของ) ทำให้รายสัปดาห์แกว่งได้มาก จึงควรอ่านคู่กับค่าเฉลี่ยรวมช่วง
-        </p>
+        <div class="ui-cardhead"><h2 class="text-base font-bold" style="color:var(--accent)">ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-head">?</button></div>
+        <p class="ui-sub mt-1">ยอดซื้อจากไฟล์ที่นำเข้า เทียบกับยอดขายของระบบ</p>
       </div>
     </div>
   </div>
@@ -47,33 +42,33 @@
        is the CHAIN drifting week by week (one series) · where exactly (branch × week heatmap). -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
     <div class="card p-5">
-      <h2 class="section-title mb-1">สาขาไหนซื้อหนัก — % ยอดซื้อต่อยอดขาย (ทั้งช่วง)</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">เรียงจากมากไปน้อย · <span style="color:var(--good-ink)">เขียว</span> &lt; 33% · <span style="color:var(--amber-ink)">เหลือง</span> 33–40% · <span style="color:var(--bad-ink)">แดง</span> ≥ 40% · เส้นประ = เฉลี่ยทั้งเครือ</p>
+      <div class="ui-cardhead"><h2 class="section-title mb-1">สาขาไหนซื้อหนัก — % ยอดซื้อต่อยอดขาย (ทั้งช่วง)</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-branch">?</button></div>
+      <p class="ui-sub mb-2">เรียงจากมากไปน้อย · เส้นประ = เฉลี่ยทั้งเครือ</p>
       <div id="ipChartBranchWrap" style="height:320px"><canvas id="ipChartBranch"></canvas></div>
     </div>
     <div class="flex flex-col gap-5">
       <div class="card p-5">
-        <h2 class="section-title mb-1">ทั้งเครือ รายสัปดาห์ — % ยอดซื้อต่อยอดขาย</h2>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">นับเฉพาะสาขาที่นำเข้ายอดซื้อของสัปดาห์นั้นแล้ว · สีตามกรอบเดียวกับซ้าย</p>
+        <div class="ui-cardhead"><h2 class="section-title mb-1">ทั้งเครือ รายสัปดาห์ — % ยอดซื้อต่อยอดขาย</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-chain">?</button></div>
+        <p class="ui-sub mb-2">เฉพาะสาขาที่นำเข้ายอดซื้อของสัปดาห์นั้นแล้ว</p>
         <div style="height:190px"><canvas id="ipChartPct"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">ยอดซื้อ เทียบ ยอดขาย รายสัปดาห์ (฿ รวมทุกสาขา)</h2>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">แท่งฟ้า = ยอดขาย · แท่งม่วง = ยอดซื้อที่นำเข้า — สัปดาห์ที่ไม่มีแท่งม่วงคือยังไม่ได้นำเข้าไฟล์</p>
+        <div class="ui-cardhead"><h2 class="section-title mb-1">ยอดซื้อ เทียบ ยอดขาย รายสัปดาห์ (฿ รวมทุกสาขา)</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-amt">?</button></div>
+        <p class="ui-sub mb-2">ยอดซื้อและยอดขายรวมทุกสาขา</p>
         <div style="height:190px"><canvas id="ipChartAmt"></canvas></div>
       </div>
     </div>
   </div>
 
   <div class="card p-5 mb-4 overflow-x-auto">
-    <h2 class="section-title mb-1">แผนที่ความร้อน — สาขา × สัปดาห์ (% ยอดซื้อต่อยอดขาย)</h2>
-    <p class="text-[11px] mb-2" style="color:var(--text-muted)">อ่านตามแถว = สาขาหนึ่งผ่านไปทีละสัปดาห์ · อ่านตามคอลัมน์ = ทุกสาขาในสัปดาห์เดียวกัน · ช่องว่าง = ยังไม่นำเข้า · คอลัมน์ท้าย = ทั้งช่วง</p>
+    <div class="ui-cardhead"><h2 class="section-title mb-1">แผนที่ความร้อน — สาขา × สัปดาห์ (% ยอดซื้อต่อยอดขาย)</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-heat">?</button></div>
+    <p class="ui-sub mb-2">แถว = สาขา · คอลัมน์ = สัปดาห์</p>
     <div id="ipHeat"></div>
   </div>
 
   <div class="card p-5 mb-4 overflow-x-auto">
-    <h2 class="section-title mb-1">สรุปรายสาขา (ทั้งช่วง)</h2>
-    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · ⚠ = % หลุดกรอบเทียบสาขาอื่น · สัปดาห์ที่ยังไม่นำเข้าไม่ถูกนับเป็น 0 แต่จะนับเป็น “ขาดไฟล์”</p>
+    <div class="ui-cardhead"><h2 class="section-title mb-1">สรุปรายสาขา (ทั้งช่วง)</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-sum">?</button></div>
+    <p class="ui-sub mb-2">คลิกหัวคอลัมน์เพื่อเรียง</p>
     <table class="text-xs w-full" id="ipBranchTbl"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ยอดซื้อวัตถุดิบ</th>
       <th class="py-1.5 pr-2 text-right">ยอดขาย (ไม่รวม VAT)</th><th class="py-1.5 pr-2 text-right">% ต่อยอดขาย</th>
@@ -83,8 +78,8 @@
   </div>
 
   <div class="card p-5 overflow-x-auto">
-    <h2 class="section-title mb-1">รายสัปดาห์ × สาขา</h2>
-    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · แก้ตัวเลขในช่อง “ยอดซื้อ” ได้โดยตรงแล้วกด Enter (ใช้เมื่อต้องแก้ทีละรายการ — ทั้งชุดให้ใช้ไฟล์ Excel)</p>
+    <div class="ui-cardhead"><h2 class="section-title mb-1">รายสัปดาห์ × สาขา</h2><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ip-week">?</button></div>
+    <p class="ui-sub mb-2">คลิกหัวคอลัมน์เพื่อเรียง</p>
     <table class="text-xs w-full" id="ipWeekTbl"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2">สัปดาห์เริ่ม</th><th class="py-1.5 pr-2">สาขา</th>
       <th class="py-1.5 pr-2 text-right">ยอดซื้อวัตถุดิบ</th><th class="py-1.5 pr-2 text-right">ยอดขาย (ไม่รวม VAT)</th>
@@ -92,4 +87,16 @@
       <th class="py-1.5">ที่มา</th>
     </tr></thead><tbody id="ipWeekBody"></tbody></table>
   </div>
+
+  <!-- PR-D6: the explanations behind the "?" buttons (uiHelp, js/01-core.js) -->
+  <template id="hlp-ip-head" data-title="ยอดซื้อเทียบยอดขาย"><p><b>ยอดซื้อวัตถุดิบ</b> นำเข้าจากระบบจัดซื้อเป็นไฟล์ Excel (สาขา + สัปดาห์ + ยอดรวม) ·
+          <b>ยอดขาย</b> เป็นตัวเลขของระบบนี้เอง → ได้ <b>% ยอดซื้อต่อยอดขาย</b> ของแต่ละสาขา
+          </p><p><b style="color:var(--amber-ink)">คนละตัวกับ % ต้นทุนอาหาร</b> — ตามสูตร คือ “ควรใช้เท่าไร”, หน้านี้คือ “<b>ซื้อเข้าจริงเท่าไร</b>”
+          การซื้อมาก่อนขาย (ตุนของ/รอบส่งของ) ทำให้รายสัปดาห์แกว่งได้มาก จึงควรอ่านคู่กับค่าเฉลี่ยรวมช่วง</p></template>
+  <template id="hlp-ip-branch" data-title="ที่มาของสีและเส้นประ"><p>เรียงจากมากไปน้อย · <span style="color:var(--good-ink)">เขียว</span> &lt; 33% · <span style="color:var(--amber-ink)">เหลือง</span> 33–40% · <span style="color:var(--bad-ink)">แดง</span> ≥ 40% · เส้นประ = เฉลี่ยทั้งเครือ</p></template>
+  <template id="hlp-ip-chain" data-title="ทั้งเครือ รายสัปดาห์"><p>นับเฉพาะสาขาที่นำเข้ายอดซื้อของสัปดาห์นั้นแล้ว · สีตามกรอบเดียวกับซ้าย</p></template>
+  <template id="hlp-ip-amt" data-title="แท่งฟ้าและแท่งม่วง"><p>แท่งฟ้า = ยอดขาย · แท่งม่วง = ยอดซื้อที่นำเข้า — สัปดาห์ที่ไม่มีแท่งม่วงคือยังไม่ได้นำเข้าไฟล์</p></template>
+  <template id="hlp-ip-heat" data-title="วิธีอ่านแผนที่ความร้อน"><p>อ่านตามแถว = สาขาหนึ่งผ่านไปทีละสัปดาห์ · อ่านตามคอลัมน์ = ทุกสาขาในสัปดาห์เดียวกัน · ช่องว่าง = ยังไม่นำเข้า · คอลัมน์ท้าย = ทั้งช่วง</p></template>
+  <template id="hlp-ip-sum" data-title="ตารางสรุปรายสาขา"><p><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · ⚠ = % หลุดกรอบเทียบสาขาอื่น · สัปดาห์ที่ยังไม่นำเข้าไม่ถูกนับเป็น 0 แต่จะนับเป็น “ขาดไฟล์”</p></template>
+  <template id="hlp-ip-week" data-title="ตารางรายสัปดาห์ × สาขา"><p><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · แก้ตัวเลขในช่อง “ยอดซื้อ” ได้โดยตรงแล้วกด Enter (ใช้เมื่อต้องแก้ทีละรายการ — ทั้งชุดให้ใช้ไฟล์ Excel)</p></template>
 </div>
