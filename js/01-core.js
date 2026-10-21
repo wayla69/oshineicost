@@ -472,9 +472,11 @@ const ROLE_START = {
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 // An entry may name a pane of the วัตถุดิบและใบสั่งซื้อ module ([tab, why, pane]):
-// it opens through supplyGo and is titled by its chip, not by PAGE_TITLES.
+// it opens through supplyGo and is titled by the department that holds it (PR-D5: "<แผนก> → <หน้า>", the person's own department first), not by PAGE_TITLES.
 function _startGo(t, pane) { return pane ? `supplyGo({tab:'${t}',pane:'${pane}'})` : `switchTab('${t}')`; }
 function _startTitle(t, pane) {
+  const dept = pane && typeof deptVisible === 'function' ? deptVisible().find(r => r.pages.some(x => x.p.tab === t && x.p.pane === pane)) : null;
+  if (dept) return `${dept.dept.label} → ${dept.pages.find(x => x.p.tab === t && x.p.pane === pane).p.label}`;
   const hit = pane ? _supplyItemOf(t, pane) : null;
   return hit ? `${hit.chip.label} · ${hit.item.label}` : (PAGE_TITLES[t] || t);
 }
@@ -2621,7 +2623,7 @@ const TABS = {
   pnlbranch: { load: () => loadPnlBranch(), follow: { month: 'pnlMonthSel', prepare: () => _pnlFillMonths() } },
   more: { load: () => loadMoreAnalytics() },
   heavyeater: { load: () => loadHeavyEaters(), follow: { dateRange: ['heFrom', 'heTo'] } },
-  manual: {},
+  manual: { load: () => { if (typeof renderManualDeptMap === 'function') renderManualDeptMap(); } },   // PR-D5: the map of departments is drawn from DEPARTMENTS
   costheadtop60: { load: () => loadCostHeadTop60() },
   // PR-D1: the department launcher (the desktop landing page) and the list of every page; neither has period or branch filters
   launcher: { load: () => loadLauncher(), ownFilters: true },

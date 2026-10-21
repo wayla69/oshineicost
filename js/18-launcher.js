@@ -550,3 +550,21 @@ function loadAllPages() {
     + g.entries.map(e => `<li><a href="#" onclick="alpGo('${e.tab}'${e.pane ? `,'${e.pane}'` : ''});return false">${esc(_noEmoji(e.label))}</a></li>`).join('')
     + '</ul></section>').join('') : '<div class="alp-lead">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</div>';
 }
+
+// ── แผนที่เมนูตามแผนก (PR-D5, 2026-10-21): the manual's map of the ten departments ───────────────────────────────────────
+// Drawn from DEPARTMENTS on every visit to คู่มือการใช้งาน (TABS.manual.load), so the map never drifts from the menu: the icon, the name, the
+// duty line, the role(s) whose home it is, and every page as a link. A page this account may not open stays in the list, dimmed.
+function renderManualDeptMap() {
+  const host = document.getElementById('manualDeptMapBody');
+  if (!host) return;
+  const open = new Set(deptVisible().flatMap(r => r.pages.map(x => r.dept.key + '|' + x.i)));
+  const who = r => String(ROLE_LABEL_TH[r] || r).split(' (')[0];
+  host.innerHTML = DEPARTMENTS.map(d => {
+    const pages = d.pages.map((p, i) => open.has(d.key + '|' + i)
+      ? `<a href="#" class="mdm-pg" onclick="deptGo('${d.key}',${i});return false">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></a>`
+      : `<span class="mdm-pg is-off" title="บัญชีนี้ไม่มีสิทธิ์เปิดหน้านี้">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></span>`).join('');
+    return `<section class="mdm-card" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
+      + `<header class="mdm-head"><span class="mdm-badge">${_deptSvg(d.icon, 24)}</span><div><h4 class="mdm-name">${esc(d.label)}</h4><p class="mdm-duty">${esc(d.duty)}</p></div></header>`
+      + `<p class="mdm-who">แผนกหลักของ: ${esc(d.roles.map(who).join(' · '))}</p><div class="mdm-pages">${pages}</div></section>`;
+  }).join('');
+}
