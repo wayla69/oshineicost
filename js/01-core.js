@@ -1799,6 +1799,19 @@ function fmtDateTh(iso, withYear) {
   if (!p) return String(iso == null ? '' : iso);
   return `${p[2]} ${_TH_MON_SHORT[p[1] - 1]}${withYear || p[0] !== new Date().getFullYear() ? ' ' + p[0] : ''}`;
 }
+// "2026-W43" (ISO week) -> "19–25 ต.ค." / "28 ก.ย. – 4 ต.ค." (owner 2026-10-21: no week codes on screen)
+function fmtWeekTh(code) {
+  const m = /^(\d{4})-W(\d{1,2})$/.exec(String(code == null ? '' : code));
+  if (!m) return String(code == null ? '' : code);
+  const y = +m[1], w = +m[2];
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const mon = new Date(jan4.getTime() + ((w - 1) * 7 - ((jan4.getUTCDay() + 6) % 7)) * 864e5);
+  const sun = new Date(mon.getTime() + 6 * 864e5);
+  const iso = d => d.toISOString().slice(0, 10);
+  return mon.getUTCMonth() === sun.getUTCMonth()
+    ? `${mon.getUTCDate()}–${fmtDateTh(iso(sun))}`
+    : `${fmtDateTh(iso(mon))} – ${fmtDateTh(iso(sun))}`;
+}
 function fmtMonthTh(ym) { const m = /^(\d{4})-(\d{2})/.exec(String(ym == null ? '' : ym)); return m && _TH_MONTHS[+m[2] - 1] ? `${_TH_MONTHS[+m[2] - 1]} ${m[1]}` : String(ym == null ? '' : ym); }
 // QA 2026-10-13 M1 · a stored stamp as the Bangkok clock. The tables hold UTC: "2026-10-09T06:15:42" (naive, as master.now() writes it) or
 // "...+00:00" / "...Z" (aware, any offset is honoured); a stamp written with a SPACE ("2026-10-09 13:15", the reports' own format and the
@@ -3200,7 +3213,7 @@ async function loadUsageStats() {
     <div class="mb-6">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
       <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
-      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
+      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(fmtWeekTh(digest.latest.week))}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
         <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
       <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">เข้าสู่ระบบล่าสุด</th><th class="py-1 pr-3 text-right">เข้าสู่ระบบ</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
       <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
@@ -3226,7 +3239,7 @@ async function sendAdoptionDigest() {
   const st = document.getElementById('adoptionDigestStatus'); if (st) st.textContent = 'กำลังสร้าง…';
   try {
     const r = await api(`${API}/api/usage/adoption-digest/send`, { method: 'POST' });
-    if (st) st.textContent = `✓ สัปดาห์ ${r.week}: ${r.sent ? 'ส่ง Telegram แล้ว' : (r.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'เก็บในแอปแล้ว (ยังไม่มี Telegram)')}`;
+    if (st) st.textContent = `✓ สัปดาห์ ${fmtWeekTh(r.week)}: ${r.sent ? 'ส่ง Telegram แล้ว' : (r.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'เก็บในแอปแล้ว (ยังไม่มี Telegram)')}`;
     setTimeout(loadUsageStats, 1500);
   } catch (e) { if (st) st.textContent = '✗ ' + (e.message || e); }
 }
