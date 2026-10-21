@@ -130,6 +130,9 @@ body.dark {
   --dept-brn-ink:  #f08a8a; --dept-brn-tint:  #3d2020;
   --dept-own-ink:  #a9b6c9; --dept-own-tint:  #26303f;
 }
+/* The red task count (PR-D4, 2026-10-21): the circle on a page tile, a department tab, a rail icon, the phone tiles and the bottom navigation.
+   One red and white in BOTH themes (6.5:1 white on it), the owner's #b42318 of the approved mockup. */
+:root { --nb-bg: #b42318; --nb-ink: #ffffff; }
 /* The toast and the "?" popover (PR-D6, 2026-10-21): uiToast and uiHelp in js/01-core.js. A toast is the card surface with a 4 px bar in the
    kind's ink (success / info / warning / error) - the inks already switch with the theme, so the bar and the glyph read >= 4.5:1 in both. */
 body {   /* on body, not :root: a var() alias is resolved where it is declared, so body.dark's surface and inks must be in reach */

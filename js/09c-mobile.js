@@ -65,6 +65,7 @@ function phEnsureLauncher() {
 async function phBoot() {
   document.body.classList.add('ph-on', 'ph-home');          // the launcher's place is held while its slice loads: no flash of the summary behind it
   try { await phEnsureLauncher(); } catch (e) { console.warn('launcher slice:', e); }
+  try { navBadgesStart(); } catch (e) { /* PR-D4: the red counts need the launcher slice; without it there are none */ }
   phNavRender();
   // a tapped notification: a supply reminder opens its page, an owner's alert opens the summary (which applies the link itself)
   if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; await phOpenPage(() => supplyDeepLink(l)); return; }
@@ -135,10 +136,10 @@ function _phNavItems() {
   const me = { id: 'me', label: 'ฉัน', path: _PH_ICON.me, js: 'phOpenMe()' };
   if (kind === 'franchise') return [home, me];
   if (kind === 'branch') {
-    const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane });
+    const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane, nb: `p:branchstock:${pane}` });
     return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งสินค้า', 'cart', 'order'), b('recv', 'รับสินค้า', 'recv', 'recv'), me];
   }
-  return [home, { id: 'tasks', label: 'งานของฉัน', path: DEPT_ICONS.count, js: 'phOpenTasks()' },
+  return [home, { id: 'tasks', label: 'งานของฉัน', path: DEPT_ICONS.count, js: 'phOpenTasks()', nb: 't' },
     { id: 'search', label: 'ค้นหา', path: _PH_ICON.search, js: 'phOpenSearch()' }, me];
 }
 function _phNavOn(it) {
@@ -158,7 +159,8 @@ function phNavRender() {
   const items = _phNavItems();
   nav.style.gridTemplateColumns = `repeat(${items.length}, minmax(0, 1fr))`;
   nav.innerHTML = items.map(it => { const on = _phNavOn(it);
-    return `<button type="button" class="ph-nav-i${on ? ' active' : ''}" aria-current="${on ? 'page' : 'false'}" onclick="${it.js}">${_phPath(it.path, 24)}<span>${it.label}</span></button>`; }).join('');
+    return `<button type="button" class="ph-nav-i${on ? ' active' : ''}" aria-current="${on ? 'page' : 'false'}"${it.nb ? ` data-nb="${it.nb}"` : ''} onclick="${it.js}">${_phPath(it.path, 24)}<span>${it.label}</span></button>`; }).join('');
+  try { navBadgesApply(); } catch (e) { /* the launcher slice is not loaded yet */ }
 }
 
 // ── หน้าแรก ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ function phRenderHome() {
   const host = document.getElementById('phv-home'); if (!host) return;
   const kind = _phKind();
   host.innerHTML = kind === 'branch' ? _phBranchHome() : kind === 'franchise' ? _phFranchiseHome() : _phCentreHome();
+  try { navBadgesApply(); navBadgesRefresh(false); } catch (e) { /* PR-D4: no launcher slice, no counts */ }
   phLoadTasks();
   if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
 }
@@ -199,7 +202,7 @@ function _phBranchHome() {
   const tiles = row ? row.pages : [];
   return _phSubHead(pinnedBranchName() || 'สาขาของฉัน', lnchDateLabel(), 'brn', 'store')
     + `<section class="ph-body"><div class="ph-card ph-todo-card" aria-labelledby="phTodoH"><h2 class="ph-card-h" id="phTodoH">ต้องทำวันนี้</h2><div id="phTodoRows"><div class="ph-note">กำลังโหลด…</div></div></div>`
-    + `<div class="ph-bigtiles">${tiles.map((x, n) => `<a href="#" class="ph-bigtile${n === tiles.length - 1 && tiles.length % 2 ? ' ph-span2' : ''}" onclick="phOpenDeptPage('brn',${x.i});return false">`
+    + `<div class="ph-bigtiles">${tiles.map((x, n) => `<a href="#" class="ph-bigtile${n === tiles.length - 1 && tiles.length % 2 ? ' ph-span2' : ''}" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('brn',${x.i});return false">`
       + `<span class="ph-badge ph-badge-lg" style="--dk:var(--dept-brn-ink);--dt:var(--dept-brn-tint)">${_deptSvg(x.p.icon, 30)}</span><span class="ph-bigtile-n">${esc(x.p.label)}</span>`
       + `<span class="ph-bigtile-h">${esc(_PH_BRN_HINT[x.p.pane] || '')}</span></a>`).join('')}</div></section>`;
 }
@@ -302,7 +305,8 @@ function phRenderDept(key) {
     + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
     + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(d.duty)}</p></div></header>`
     + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><div class="ph-ptiles">${summary}${row.pages.map(x =>
-      `<a href="#" class="ph-ptile" onclick="phOpenDeptPage('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
+      `<a href="#" class="ph-ptile" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
+  navBadgesApply();
   _phFocusHead('dept');
 }
 function phOpenDeptPage(key, idx) {
@@ -312,7 +316,9 @@ function phOpenDeptPage(key, idx) {
   phOpenPage(() => deptOpenPage(p));
 }
 
-// ── ค้นหา: every page this login may open (the list of หน้ารายงานทั้งหมด), filtered as the person types ──────────
+// ── ค้นหา: the page search of the desktop (pgSearchResults, js/18-launcher.js, PR-D4), typed into a field ─────────────────────────────
+// Every page this login may open; a row = icon + page name + department chip (+ the red count of the page). Before anything is typed the whole
+// list is shown. The owner's summary is the first row of ผู้บริหาร.
 function phOpenSearch() {
   _phSetView('search');
   phSearchRender();
@@ -320,22 +326,20 @@ function phOpenSearch() {
 }
 function phSearchRender() {
   const host = document.getElementById('phSearchRes'); if (!host) return;
-  const role = _deptRole(), q = (document.getElementById('phSearchInput').value || '').toLowerCase().replace(/\s+/g, '');
-  const groups = allPagesModel(e => (!e.roles || e.roles.includes(role)) && (e.item ? _supplyItemAllowed(e.item) : tabAllowed(e.tab)));
-  _phSearchList = [];
-  if (hasModule('sales.overview')) groups.unshift({ label: 'ผู้บริหาร', entries: [{ summary: true, label: 'สรุปผู้บริหาร' }] });
-  const html = groups.map(g => {
-    const gl = _noEmoji(g.label), hit = g.entries.filter(e => !q || (_noEmoji(e.label) + gl).toLowerCase().replace(/\s+/g, '').includes(q));
-    if (!hit.length) return '';
-    return `<h2 class="ph-sec ph-sec-sm">${esc(gl)}</h2><div class="ph-card ph-card-list">${hit.map(e => { _phSearchList.push(e);
-      return `<a href="#" class="ph-row" onclick="phSearchGo(${_phSearchList.length - 1});return false"><span>${esc(_noEmoji(e.label))}</span><span class="ph-chev" aria-hidden="true">›</span></a>`; }).join('')}</div>`;
-  }).join('');
-  host.innerHTML = html || '<p class="ph-empty">ไม่พบหน้าที่ตรงกับคำค้น</p>';
+  const mgmt = DEPARTMENTS.find(d => d.key === 'mgmt');
+  const extra = hasModule('sales.overview') ? [{ summary: true, label: 'สรุปผู้บริหาร', icon: 'gauge', dept: mgmt }] : [];
+  _phSearchList = pgSearchResults(/** @type {HTMLInputElement} */ (document.getElementById('phSearchInput')).value || '', extra, { all: true });
+  host.innerHTML = _phSearchList.length
+    ? `<div class="ph-card ph-card-list" role="list">${_phSearchList.map((e, i) =>
+      `<a href="#" class="ph-row ph-srow" role="listitem"${pgRowNb(e)} style="${pgRowStyle(e)}" onclick="phSearchGo(${i});return false">${pgRowInner(e)}<span class="ph-chev" aria-hidden="true">›</span></a>`).join('')}</div>`
+    : '<p class="ph-empty">ไม่พบหน้า</p>';
+  navBadgesApply();
 }
 function phSearchGo(i) {
   const e = _phSearchList[i]; if (!e) return;
   if (e.summary) { phShowSummary(); return; }
-  _deptCur = null; _deptFocus = null;
+  if (e.dept) deptRemember(e.dept.key); else _deptCur = null;
+  _deptFocus = null;
   phOpenPage(() => { if (e.pane) supplyGo({ tab: e.tab, pane: e.pane }); else switchTab(e.tab); });
 }
 

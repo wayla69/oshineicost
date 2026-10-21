@@ -1564,7 +1564,8 @@ function setupShortcuts() {
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === '?')  { e.preventDefault(); showShortcutsHelp(); }
-    else if (e.key === '/') { e.preventDefault(); document.getElementById('globalSearch')?.focus(); }
+    // PR-D4: "/" opens the page search (js/18-launcher.js; Ctrl+K does too); the branch / SKU box of the top bar is reached by a click
+    else if (e.key === '/') { e.preventDefault(); if (typeof pgSearchOpen === 'function' && _launcherLanding() && !phOn()) pgSearchOpen(); else document.getElementById('globalSearch')?.focus(); }
     else if (e.key === 'd') { toggleDarkMode(); }
     else if (e.key === 'p') { printReport(); }
     else if (e.key === 'f') { togglePresetMenu(); }

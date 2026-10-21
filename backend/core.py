@@ -163,8 +163,11 @@ def _refresh_in_background(fn, args, kwargs, key: str):
     threading.Thread(target=run, daemon=True, name="cache-refresh").start()
 
 
-def ttl_cache(fn):
+def ttl_cache(fn=None, *, ttl=None, stale=None):
     """Decorator: caches the pre-serialized JSON bytes for 5 min (+ a serve-stale window).
+
+    ``@ttl_cache`` keeps the 5 min / stale-window defaults. ``@ttl_cache(ttl=60, stale=0)`` is a short cache for a small answer
+    that must not lag (the nav badges, PR-D4): ``ttl`` seconds fresh, ``stale`` seconds more of serve-stale (0 = never serve stale).
 
     Returning a ``Response(content=bytes)`` skips FastAPI's jsonable_encoder,
     which matters for large responses (e.g. lifecycle = 270 KB).
@@ -173,6 +176,10 @@ def ttl_cache(fn):
     function name (they would poison each other's cache — the table_turnover bug).
     Guard it at import time so the collision can never recur silently.
     """
+    if fn is None:
+        return lambda f: ttl_cache(f, ttl=ttl, stale=stale)
+    ttl_s = _CACHE_TTL if ttl is None else ttl
+    stale_s = _STALE_WINDOW if stale is None else stale
     if fn.__name__ in _cached_fn_names:
         raise RuntimeError(
             f"ttl_cache: duplicate cached function name '{fn.__name__}' — "
@@ -205,10 +212,10 @@ def ttl_cache(fn):
             entry = _resp_cache.get(key)
             if entry:
                 age = now - entry[0]
-                if age < _CACHE_TTL:
+                if age < ttl_s:
                     _cache_stats["hits"] += 1
                     return _Response(content=entry[1], media_type="application/json")
-                if age < _CACHE_TTL + _STALE_WINDOW:
+                if age < ttl_s + stale_s:
                     _cache_stats["stale"] += 1
                     if key not in _refreshing and key not in _inflight:
                         _refreshing.add(key)
@@ -230,7 +237,7 @@ def ttl_cache(fn):
             ev.wait(timeout=120)
             with _cache_lock:
                 entry = _resp_cache.get(key)
-                if entry and _time.monotonic() - entry[0] < _CACHE_TTL + _STALE_WINDOW:
+                if entry and _time.monotonic() - entry[0] < ttl_s + stale_s:
                     _cache_stats["hits"] += 1
                     return _Response(content=entry[1], media_type="application/json")
             data, result = _compute(fn, args, kwargs, key)
