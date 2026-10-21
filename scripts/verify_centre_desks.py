@@ -304,52 +304,41 @@ def main(argv=None) -> int:
         ctx, page, errors = session(b, "accounting1")
         clear_ctx(page)
         go(page, tab="bomcenter", pane="issue")
-        page.wait_for_selector("#bmcIssPeriod option", state="attached", timeout=30000)
+        page.wait_for_selector("#bmcIssFilter button", timeout=30000)
         page.wait_for_timeout(1500)
-        order = page.evaluate("""() => { const ids = ['bmcIssPeriod', 'bmcIssBranch', 'bmcIssChips', 'bmcIssDownloads', 'bmcIssPostBtn', 'bmcIssRecon', 'bmcIssMoveBox'];
+        # PR-R: the page is the month overview (one row per branch); the detail of a period is in a drawer
+        order = page.evaluate("""() => { const ids = ['bmcIssMonth', 'bmcIssFilter', 'bmcIssAllBtn', 'bmcIssList'];
           const el = ids.map(i => document.getElementById(i)); const ok = [];
           for (let i = 1; i < el.length; i++) ok.push(!!(el[i - 1].compareDocumentPosition(el[i]) & Node.DOCUMENT_POSITION_FOLLOWING));
           return ok } """)
-        check(all(order), f"page order: งวด · สาขา · chips · downloads · posting · reconciliation · movement {order}")
-        opt = sel_text(page, "#bmcIssPeriod") or ""
-        check(bool(re.fullmatch(r"(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม) \d{4} · \d{1,2}/\d{1,2}/\d{4} – \d{1,2}/\d{1,2}/\d{4} · .+", opt)), f"period option: {opt!r}")
-        dl = page.eval_on_selector_all("#bmcIssDownloads > *", "els => els.map(e => e.textContent.trim())")
-        check(dl == ["ดาวน์โหลด:", "ใบสรุปงวดนี้ (Excel)", "ทุกสาขาเดือนนี้ (Excel)", "ใบตัดเบิกรายวันทั้งเดือน (Excel)"], f"the three downloads as one group: {dl}")
-        post = page.locator("#bmcIssPostBtn")
-        unpost = page.locator("#bmcIssUnpost")
-        note = page.inner_text("#bmcIssPostNote")
-        check(bool(note.strip()), f"a line under the posting says what it does or why it is off: {note!r}")
-        if post.is_visible():
-            check(post.inner_text().strip() == "บันทึกเข้าระบบบัญชีแล้ว", "the posting is a button: บันทึกเข้าระบบบัญชีแล้ว")
-            bg = page.evaluate("() => getComputedStyle(document.getElementById('bmcIssPostBtn')).backgroundColor")
-            check(bg not in ("rgba(0, 0, 0, 0)", "transparent"), f"it is a primary (filled) button {bg}")
-            if post.is_enabled():
-                post.click()
-                page.wait_for_timeout(300)
-                d = dialog(page)
-                check("ล็อก" in d["msg"] and d["ok"] == "บันทึกเข้าระบบบัญชีแล้ว", f"the dialog states the lock: {d['msg'][:80]!r}")
-                close_dialog(page)
-            else:
-                check("ยืนยันรับสินค้าครบ" in note, "off: the reason is written under the button")
-        else:
-            check(unpost.is_visible() and unpost.inner_text().strip() == "ยกเลิกการบันทึกบัญชี", "posted: the un-post is a secondary link")
+        check(all(order), f"page order: ปิดงวดเดือน · filter chips · month download · the table {order}")
+        mopt = sel_text(page, "#bmcIssMonth") or ""
+        check(bool(re.fullmatch(r"(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม) \d{4}", mopt)), f"month option: {mopt!r}")
+        chips = [re.sub(r"\s*\d+$", "", t) for t in page.eval_on_selector_all("#bmcIssFilter button", "els => els.map(e => e.textContent.trim())")]
+        check(chips == ["ยังไม่เสร็จ", "พร้อมบันทึก", "รอสาขายืนยัน", "บันทึกแล้ว", "ทั้งหมด"], f"the filter chips: {chips}")
+        check(page.evaluate("() => document.querySelector('#bmcIssFilter button[aria-pressed=true]').textContent.trim().startsWith('ยังไม่เสร็จ')"), "the default filter is ยังไม่เสร็จ")
+        rows = page.eval_on_selector_all("#bmcIssList tbody tr", "els => els.map(e => e.textContent.replace(/\\s+/g, ' ').trim())")
+        check(not any("บันทึกแล้ว" in r for r in rows), "finished (posted) rows are out of the default view")
+        post = page.locator("#bmcIssList .wt-btn.is-primary")
+        if post.count():
+            check(post.first.inner_text().strip() == "บันทึกเข้าระบบบัญชีแล้ว", "a ready row has the primary button บันทึกเข้าระบบบัญชีแล้ว")
+            post.first.click()
+            page.wait_for_timeout(300)
+            d = dialog(page)
+            check("ล็อก" in d["msg"] and d["ok"] == "บันทึกเข้าระบบบัญชีแล้ว", f"the dialog states the lock: {d['msg'][:80]!r}")
+            close_dialog(page)
+        outside = page.evaluate("() => [...document.querySelectorAll('#bmc-pane-issue > *:not(.iss-drawer):not(.iss-back):not(style)')].map(e => e.innerText).join('\\n')")
+        check(not re.search(r"ยกมา[^\n]*\+[^\n]*[−-]|ผลต่าง =", outside), "no formula on the page (it is behind the ?)")
+        page.locator("#bmcIssList .iss-branch").first.click()
+        page.wait_for_selector("#bmcIssRecon", state="visible", timeout=30000)
+        page.wait_for_timeout(1500)
         recon = page.inner_text("#bmcIssRecon")
-        check("คงเหลือตามระบบ" in recon and "นับจริง" in recon and not re.search(r"ยกมา[^\n]*\+[^\n]*−", recon), "the reconciliation has no movement formula")
-        outside = page.evaluate("() => [...document.querySelectorAll('#bmc-pane-issue > *:not(details.bmc-help)')].map(e => e.innerText).join('\\n')")
-        check(not re.search(r"ยกมา[^\n]*\+[^\n]*[−-]|ผลต่าง =", outside), "formulas are only in วิธีใช้หน้านี้")
+        check("คงเหลือตามระบบ" in recon and "นับจริง" in recon and not re.search(r"ยกมา[^\n]*\+[^\n]*−", recon), "the drawer's reconciliation has no movement formula")
         check(page.evaluate("() => { const d = document.getElementById('bmcIssMoveBox'); return d.tagName === 'DETAILS' && !d.open }"), "the movement table is folded")
-        sel_ids = page.evaluate("() => ({ b: document.getElementById('bmcIssBranch').value, p: document.getElementById('bmcIssPeriod').value })")
-        rc = ctx.request.get(a.base + f"/api/bom-center/issue-reports/reconcile?end_count_id={sel_ids['p']}&branch_id={sel_ids['b']}").json()
-        shown = [x for x in rc["rows"] if x["status"] != "ok"][:80]
-        if shown:
-            diffs = page.locator("#bmcIssRecon .isr-diff").count()
-            check(diffs >= 1, f"the difference is coloured on {diffs} rows")
-            odd = [x for x in shown if x.get("per_count_unit") and x["per_count_unit"] != 1 and x.get("diff") is not None]
-            if odd:
-                unit = re.sub(r"\s*\([^)]*\)", "", odd[0]["count_unit"]).strip()
-                check(unit in recon, f"quantities are in the count unit ({unit!r}) the rows carry")
-            else:
-                print("note: no row with a count unit other than the base unit in this period")
+        check(page.locator("#bmcIssDownloads button").count() >= 2, "the drawer keeps the period and month-slips downloads")
+        shot(page, "acc_issue_drawer.png")
+        page.keyboard.press("Escape")
+        check(not page.is_visible("#bmcIssDrawer"), "Esc closes the drawer")
         shot(page, "acc_issue.png", full_page=True)
         check(not errors, f"no page errors {errors[:2]}")
         ctx.close()
@@ -371,22 +360,30 @@ def main(argv=None) -> int:
         shot(page, "an_release.png", full_page=True)
 
         go(page, tab="bomcenter", pane="rec")
-        page.wait_for_selector("#bmcRecBody tr", timeout=30000)
-        heads = page.eval_on_selector_all("#bmc-pane-rec thead th", "els => els.map(e => e.textContent.trim())")
+        page.wait_for_selector("#bmcRecKpis button", timeout=30000)
+        page.wait_for_timeout(1500)
+        # PR-R: a step-led page: version card (four steps + the next action), four tiles, one work card with tabs
+        steps = page.eval_on_selector_all("#bmcRecSteps li.rec-step", "els => els.map(e => e.textContent.replace(/\\s+/g, ' ').trim())")
+        check(len(steps) in (0, 4), f"the four steps (or none for the old system's version): {steps}")
+        check(page.locator("#bmcRecKpis button").count() == 4, "four tiles")
+        tabs = [re.sub(r"\s*\d+$", "", t) for t in page.eval_on_selector_all("#bmcRecTabs button", "els => els.map(e => e.textContent.trim())")]
+        check(tabs == ["ยังไม่จับคู่", "ต้องตรวจ", "ทุกเมนู"], f"the work tabs: {tabs}")
+        page.click("#bmcRecTabs button:has-text('ทุกเมนู')")
+        page.wait_for_selector("#bmcRecWork thead th", timeout=10000)
+        heads = page.eval_on_selector_all("#bmcRecWork thead th", "els => els.map(e => e.textContent.trim())")
         i = heads.index("ต้นทุน/เสิร์ฟ") if "ต้นทุน/เสิร์ฟ" in heads else -1
         check(i >= 0 and heads[i:i + 4] == ["ต้นทุน/เสิร์ฟ", "ตามไฟล์ครัว", "ระบบเดิม", "ต่าง %"], f"recipe columns: {heads}")
         menus = page.eval_on_selector_all("#bmc-pane-rec details.bmc-menu > summary", "els => els.map(e => e.textContent.trim())")
-        check(menus == ["นำเข้า ▾", "ดาวน์โหลด ▾"], f"the toolbar is two menus: {menus}")
-        check(page.locator("#bmcSubmitBtn").count() == 1, "ส่งตรวจ is next to the menus")
+        check(menus == ["นำเข้าไฟล์ ▾", "ดาวน์โหลด ▾"], f"the header actions are two menus: {menus}")
         page.click("#bmcRecImportMenu > summary")
         t = page.inner_text("#bmcRecImportMenu .bmc-menu-pop")
-        check("ไฟล์ครัว Cost-RW" in t and "แม่แบบ" in t and "สูตรกึ่งสำเร็จ" in t, "นำเข้า holds ไฟล์ครัว Cost-RW · แม่แบบ · สูตรกึ่งสำเร็จ")
+        check("ไฟล์ครัว Cost-RW" in t and "ไฟล์สูตรตามระดับราคา" in t and "สูตรกึ่งสำเร็จ" in t, "นำเข้าไฟล์ holds ไฟล์ครัว Cost-RW · ไฟล์สูตรตามระดับราคา · สูตรกึ่งสำเร็จ")
         check(TH_MONTH.match(sel_text(page, "#bmcCrwEff") or "") is not None, f"the effective month is a Thai month list: {sel_text(page, '#bmcCrwEff')!r}")
         shot(page, "an_recipes_menu.png")
         page.click("#bmcRecDownloadMenu > summary")
         check(not page.evaluate("() => document.getElementById('bmcRecImportMenu').open"), "opening the other menu closes the first")
         t = page.inner_text("#bmcRecDownloadMenu .bmc-menu-pop")
-        check("แม่แบบ" in t and "สูตรเป็น Excel" in t, "ดาวน์โหลด holds แม่แบบ · สูตรเป็น Excel")
+        check("แม่แบบสูตรตามระดับราคา" in t and "สูตรตามระดับราคา (Excel)" in t, "ดาวน์โหลด holds แม่แบบ · สูตรตามระดับราคา (Excel)")
 
         go(page, tab="bomcenter", pane="ing")
         page.wait_for_selector("#bmcIngBody tr", timeout=30000)

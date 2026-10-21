@@ -197,13 +197,14 @@ function bmcSetSub(k) {
     if (el) el.style.display = p === k ? '' : 'none';
   });
   if (k === 'overview') bmcLoadOverview();
-  if (k === 'rec') bmcLoadReleases();
+  if (k === 'rec') { _bmcRecTab = null; bmcLoadReleases(); }          // opening the page: the first tab that has work
   if (k === 'rel') bmcLoadReleasePane();
   if (k === 'fc') bmcLoadForecastPane();
   if (k === 'cal') bmcLoadCalendar();
   if (k === 'events') bmcLoadEvents();
   if (k === 'zones') bmcLoadZones();
-  if (k === 'issue') bmcLoadIssue();
+  if (k !== 'issue') bmcIssClose(true);
+  if (k === 'issue') { _bmcIssFilter = 'open'; bmcLoadIssue(); }       // opening the page: finished work stays out of sight
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') { bmcLoadIng(); bmcLoadCodeReqCard(); }
   if (k === 'price') bmcLoadPrices();
@@ -212,7 +213,7 @@ function bmcSetSub(k) {
   if (k === 'rcheck') bmcLoadRcheck();
   if (k === 'codereq') bmcLoadCodeReq();
   const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases); a code request has none
-  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq' || k === 'events') ? 'none' : '';
+  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq' || k === 'events' || k === 'issue' || k === 'rec') ? 'none' : '';
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 // The month strip sits above every pane: a change reloads the pane that is open.
@@ -1656,10 +1657,15 @@ async function bmcPortSave() {
 }
 
 // ── recipes by tier (Sprint S2) ─────────────────────────────────────────────
+// PR-R: a step-led page. The version card shows where the version is (four steps) and the ONE next action for the signed-in role;
+// four tiles count what is left; the work card lists only that work: ยังไม่จับคู่ → ต้องตรวจ, and ทุกเมนู on request.
 let _bmcRel = null;          // the release being viewed
 let _bmcRels = [];
 let _bmcTier = 0;            // 0 = every dish; else the basket of that tier (min_tier <= T)
 let _bmcRecView = null;      // /api/bom-center/recipes
+let _bmcRecTab = null;       // null = the first tab that has work (ยังไม่จับคู่, then ต้องตรวจ) · or 'unmatched' | 'check' | 'all'
+let _bmcRecOk = new Set();   // menus whose open checks were all accepted by the analyst: they leave ต้องตรวจ
+let _bmcSkuPool = [];        // the POS codes without a recipe in this version [{sku_code, name, tier}] (the picker of ยังไม่จับคู่)
 let _bmcEdit = null;         // {sku, d, lines}
 const _BMC_TIERS = [459, 629, 789, 999, 1299];
 
@@ -1674,113 +1680,284 @@ function _bmcEditableFor(rel) { return _bmcCanEditRel(rel); }
 function _bmcRelEditable() { return _bmcEditableFor(_bmcRel); }
 function _bmcEdRel() { return (_bmcEdit && _bmcEdit.rel) || _bmcRel; }   // the release the open editor belongs to
 
+// the name of a version in the list: the month it takes effect and its state; the label is in the title of the option
+function _bmcRelOpt(r, all) {
+  const base = r.kind === 'baseline' ? 'ระบบเดิม' : `${fmtMonthTh(r.effective_month)} (${_BMC_STATUS_TH[r.status] || r.status})`;
+  return all.filter(x => x.kind !== 'baseline' && r.kind !== 'baseline' && x.effective_month === r.effective_month && x.status === r.status).length > 1 ? `${base} · ${_bmcLbl(r.label)}` : base;
+}
 async function bmcLoadReleases(keepId) {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/releases`);
     _bmcRels = d.releases || [];
     window._bmcRelSuggest = d.suggest || {};
-    // the Cost-RW card's months: pre-filled with the suggestion, edited in place (no prompts before the file)
+    // the import menu's months: pre-filled with the suggestion, edited in place (no prompts before the file)
     const eff = document.getElementById('bmcCrwEff'), pm = document.getElementById('bmcCrwPm');
     const initSel = (el, v) => { if (el && !el.dataset.init) { supplyMonthPut(el, v); el.dataset.init = '1'; } };   // once: after that the person's choice stands
     initSel(eff, (d.suggest || {}).effective_month || supplyMonthAdd(supplyMonthNow(), 1));
     initSel(pm, (d.suggest || {}).price_month || supplyMonthDefault(true));
     const sel = document.getElementById('bmcRel');
     const cur = keepId || Number(sel.value) || (_bmcRels.find(r => r.kind === 'monthly') || _bmcRels[0] || {}).release_id;
-    const st = { draft: 'ร่าง', review: 'รอตรวจ', released: 'ประกาศใช้แล้ว', retired: 'ยกเลิกใช้' };
-    sel.innerHTML = _bmcRels.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''}>${esc(_bmcLbl(r.label))} · ${st[r.status] || r.status}`
-      + (r.kind === 'baseline' ? ' (ระบบเดิม)' : ` · มีผล ${fmtMonthTh(r.effective_month)} · ราคา ${fmtMonthTh(r.price_month || '-')}`) + `</option>`).join('')
-      || '<option value="">ยังไม่มีเวอร์ชัน · นำเข้าไฟล์ Cost-RW</option>';
-    document.getElementById('bmcTierChips').innerHTML = [0, ..._BMC_TIERS].map(t =>
-      `<button data-bmctier="${t}" onclick="bmcSetTier(${t})" style="font-size:12px;padding:3px 10px;border-radius:3px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer">${t ? '฿' + t.toLocaleString() : 'ทุกเมนู'}</button>`).join('');
+    sel.innerHTML = _bmcRels.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''} title="${esc(_bmcLbl(r.label) + (r.price_month ? ' · ราคาเดือน' + fmtMonthTh(r.price_month) : ''))}">${esc(_bmcRelOpt(r, _bmcRels))}</option>`).join('')
+      || '<option value="">ยังไม่มีเวอร์ชัน</option>';
     await bmcLoadRecipes();
   } catch (e) { _bmcStatus('bmcRecStatus', 'โหลดข้อมูลไม่สำเร็จ:' + String(e.message || e), 'var(--bad-ink)'); }
 }
 function bmcSetTier(t) { _bmcTier = t; bmcRenderRecipes(); }
-async function bmcLoadRecipes() {
-  const id = Number(document.getElementById('bmcRel').value);
-  _bmcRel = _bmcRels.find(r => r.release_id === id) || null;
-  document.getElementById('bmcEditor').style.display = 'none';
-  bmcRenderRecBanner();
-  if (!_bmcRel) { document.getElementById('bmcRecBody').innerHTML = '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ยังไม่มีสูตร · กด “นำเข้าสูตรจากไฟล์ Cost-RW”</td></tr>'; return; }
-  document.getElementById('bmcRecBody').innerHTML = '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">กำลังคำนวณต้นทุน…</td></tr>';
-  try {
-    _bmcRecView = await _bmcJson(`${API}/api/bom-center/recipes?release_id=${id}`);
-    bmcRenderRecipes();
-    bmcRenderUnmatched();
-  } catch (e) { document.getElementById('bmcRecBody').innerHTML = `<tr><td colspan="10" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`; }
-}
-function _bmcRecIssues(r) {
+// the open checks of a menu: a cost that cannot be worked out, a gap from the kitchen's file, a cost ≥ 20 % off the old system's.
+// A menu whose persisted checks were all accepted by the analyst is not listed (it left the work); `all` adds the manual mapping note.
+function _bmcRecIssues(r, all) {
   const out = [];
   if (r.problems) out.push(['คิดต้นทุนไม่ได้ ' + r.problems + ' บรรทัด', 'var(--bad-ink)']);
   if (r.sheet_diff != null && Math.abs(r.sheet_diff) > 0.01) out.push(['ไม่ตรงไฟล์ครัว', 'var(--amber-ink)']);
   if (r.v0_diff_pct != null && Math.abs(r.v0_diff_pct) >= 20) out.push(['ต่างจากระบบเดิม ≥20%', 'var(--amber-ink)']);
-  if ((r.source_ref || '').includes('จับคู่โดย')) out.push(['จับคู่ด้วยตนเอง', 'var(--navy-ink)']);
+  if (all && (r.source_ref || '').includes('จับคู่โดย')) out.push(['จับคู่ด้วยตนเอง', 'var(--navy-ink)']);
   return out;
 }
-function bmcRenderRecipes() {
-  document.querySelectorAll('#bmcTierChips [data-bmctier]').forEach(b => {
-    const on = Number(b.dataset.bmctier) === _bmcTier;
-    b.style.background = on ? 'var(--accent)' : 'var(--bg-card)'; b.style.color = on ? 'var(--on-accent)' : 'var(--text-secondary)';
-  });
-  if (!_bmcRecView) return;
-  const q = (document.getElementById('bmcRecQ').value || '').toLowerCase();
-  const only = document.getElementById('bmcRecIssues').checked;
-  const rows = _bmcRecView.rows.filter(r => (!_bmcTier || !r.min_tier || r.min_tier <= _bmcTier)
-    && (!q || `${r.sku_code} ${r.name || ''} ${r.name_en || ''}`.toLowerCase().includes(q))
-    && (!only || _bmcRecIssues(r).length));
-  document.getElementById('bmcRecBody').innerHTML = rows.map(r => {
-    const own = _bmcTier && r.min_tier === _bmcTier;
-    const iss = _bmcRecIssues(r);
-    const dv = r.v0_diff_pct;
-    return `<tr class="border-b" style="border-color:var(--border-soft);${_bmcTier && !own ? 'opacity:.72' : ''}">
-      <td class="py-1 pr-2">${r.min_tier ? _bmcChip('฿' + r.min_tier.toLocaleString(), own || !_bmcTier ? 'var(--accent)' : 'var(--text-muted)') : ''}</td>
-      <td class="py-1 pr-2"><a href="javascript:void(0)" onclick="bmcOpenRecipe('${esc(r.sku_code)}')" style="color:var(--accent)">${esc(r.name || '')}</a>
-        ${r.name_en ? `<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.name_en)}</div>` : ''}</td>
-      <td class="py-1 pr-2 whitespace-nowrap">${esc(r.sku_code)}</td>
-      <td class="py-1 pr-2 text-[11px]">${esc(r.serve || '')}</td>
-      <td class="py-1 pr-2 text-right font-semibold">${_bmcNum(r.cost)}</td>
-      <td class="py-1 pr-2 text-right">${_bmcNum(r.sheet_cost)}</td>
-      <td class="py-1 pr-2 text-right">${_bmcNum(r.v0_cost)}</td>
-      <td class="py-1 pr-2 text-right" style="color:${dv == null ? 'inherit' : Math.abs(dv) >= 20 ? 'var(--amber-ink)' : 'var(--text-muted)'}">${dv == null ? '' : (dv > 0 ? '+' : '') + dv + '%'}</td>
-      <td class="py-1 pr-2 text-right">${r.lines}</td>
-      <td class="py-1">${iss.length ? iss.map(([t, c]) => _bmcChip(t, c)).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}</td></tr>`;
-  }).join('') || '<tr><td colspan="10" class="py-3" style="color:var(--text-muted)">ไม่มีเมนู</td></tr>';
-  const v = _bmcRecView;
-  const avg = rows.length ? rows.reduce((s, r) => s + (r.cost || 0), 0) / rows.length : 0;
-  _bmcStatus('bmcRecSummary', `${rows.length} เมนู${_bmcTier ? ` ในตะกร้า ฿${_bmcTier.toLocaleString()} (รวมเมนูระดับราคาต่ำกว่า)` : ''} · เฉลี่ย ฿${_bmcNum(avg)}/เสิร์ฟ · `
-    + `ต้องตรวจ ${v.rows.filter(r => _bmcRecIssues(r).length).length} · ยังไม่จับคู่ ${v.unmatched.length}`
-    + (_bmcRel ? ` · คิดราคาเดือน${fmtMonthTh(_bmcRel.price_month || '-')}` : ''));
+const _bmcRecNeeds = r => _bmcRecIssues(r).length > 0 && !_bmcRecOk.has(r.sku_code);
+async function bmcLoadRecipes(quiet) {
+  const id = Number(document.getElementById('bmcRel').value);
+  const changed = !_bmcRel || _bmcRel.release_id !== id;
+  _bmcRel = _bmcRels.find(r => r.release_id === id) || null;
+  if (changed) { _bmcRecTab = null; _bmcRecView = null; }
+  if (!quiet) document.getElementById('bmcEditor').style.display = 'none';
+  const body = document.getElementById('bmcRecWork');
+  if (!_bmcRel) {
+    _bmcRecView = null;
+    bmcRenderRecHead();
+    body.innerHTML = `<div class="wt-empty">ยังไม่มีสูตร${_bmcCanRecipes() ? ' · นำเข้าไฟล์ครัว Cost-RW จากเมนูนำเข้าไฟล์' : ''}</div>`;
+    return;
+  }
+  if (!quiet) { bmcRenderRecHead(); body.innerHTML = '<div class="wt-empty">กำลังคำนวณต้นทุน…</div>'; }
+  try {
+    const q = `release_id=${id}`;
+    const [v, ck, pool] = await Promise.all([_bmcJson(`${API}/api/bom-center/recipes?${q}`),
+      _bmcJson(`${API}/api/bom-center/release-checks?${q}`).catch(() => null),
+      _bmcRelEditable() ? _bmcJson(`${API}/api/bom-center/buffet-skus?${q}`).catch(() => null) : Promise.resolve(null)]);
+    if (_bmcRel && _bmcRel.release_id !== id) return;              // another version was chosen meanwhile
+    _bmcRecView = v;
+    const by = {};
+    ((ck && ck.rows) || []).forEach(r => { if (/^OTH/.test(r.ref || '')) (by[r.ref.split('#')[0]] = by[r.ref.split('#')[0]] || []).push(!!r.resolved_by); });
+    _bmcRecOk = new Set(Object.keys(by).filter(s => by[s].every(Boolean)));
+    _bmcSkuPool = ((pool && pool.rows) || []).filter(r => !r.has_recipe);
+  } catch (e) { body.innerHTML = `<div class="wt-empty" style="color:var(--bad-ink)">${esc(String(e.message || e))}</div>`; return; }
+  bmcRenderRecHead();
+  bmcRenderRecipes();
 }
-function bmcRenderUnmatched() {
-  const box = document.getElementById('bmcUnmatched');
-  const u = (_bmcRecView && _bmcRecView.unmatched) || [];
-  if (!u.length) { box.innerHTML = ''; return; }
+
+// ── the version card: the four steps and the one next action ──────────────────
+const _BMC_REC_STEPS = ['ร่าง (ครัวสร้างสูตร)', 'ฝ่ายวิเคราะห์ตรวจ', 'ประกาศใช้', 'ผู้บริหารรับทราบ'];
+// the step a version is at: 0 draft · 1 in review · 3 released, waiting for management · 4 all done; -1 = no steps (the old system's, retired)
+function _bmcRecStep(r) {
+  if (!r || r.kind !== 'monthly') return -1;
+  if (r.status === 'draft') return 0;
+  if (r.status === 'review') return 1;
+  if (r.status === 'released') return r.acknowledged_by ? 4 : 3;
+  return -1;
+}
+// the ONE next action of the signed-in role, with what blocks it in one short line; `wait` = nothing for this role to do
+function _bmcRecNext() {
+  const r = _bmcRel, v = _bmcRecView, sg = window._bmcRelSuggest || {};
+  const nUn = v ? v.unmatched.length : 0, nBad = v ? v.problems : 0;
+  const hasDraft = _bmcRels.some(x => x.kind === 'monthly' && ['draft', 'review'].includes(x.status));
+  const create = _bmcCanRecipes() && !hasDraft ? { label: `สร้างร่างเดือน${fmtMonthTh(sg.effective_month || '')}`.trim(), fn: 'bmcCreateDraft()', block: '' } : null;
+  if (!r || r.kind !== 'monthly') return create;
+  if (r.status === 'draft') {
+    if (!_bmcCanRecipes()) return { wait: 'รอครัวส่งตรวจ' };
+    return { label: 'ส่งตรวจ', fn: 'bmcSubmitReview()', block: nUn ? `ยังจับคู่รหัสไม่ครบ ${nUn} เมนู` : nBad ? `คิดต้นทุนไม่ได้ ${nBad} เมนู` : '' };
+  }
+  if (r.status === 'review') {
+    if (!hasModule('bom.release')) return { wait: 'รอฝ่ายวิเคราะห์ตรวจ' };
+    return nUn ? { label: 'ส่งกลับแก้ไข', fn: "bmcSendBack(_bmcRel, 'bmcRecStatus')", block: `ยังจับคู่รหัสไม่ครบ ${nUn} เมนู` }
+      : { label: 'ไปตรวจและประกาศใช้', fn: 'bmcRecGoRelease()', block: '' };
+  }
+  if (r.status === 'released') {
+    if (!r.acknowledged_by) return hasModule('bom.audit') ? { label: 'รับทราบ', fn: "bmcAck(_bmcRel, 'bmcRecStatus')", block: '' } : { wait: 'รอผู้บริหารรับทราบ' };
+    return create;
+  }
+  return create;
+}
+function bmcRecGoRelease() {
+  if (_bmcRel) _bmcRlWant = _bmcRel.release_id;
+  supplyGo({ tab: 'bomcenter', pane: 'rel' });
+}
+function _bmcSendBackText(r) {
+  if (!r || r.status !== 'draft') return '';
+  const n = String(r.notes || ''), i = n.lastIndexOf('ส่งกลับแก้ไขโดย');
+  return i < 0 ? '' : n.slice(i).trim().replace(/^ส่งกลับแก้ไขโดย\s+([^:\s]+)\s*:/, (m, u) => `ส่งกลับแก้ไขโดย ${whoTh(u)}:`);
+}
+// the amber line of the release pane: why the analyst sent the draft back
+function _bmcSendBackLine(r) {
+  const seg = _bmcSendBackText(r);
+  return seg ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">ส่งกลับแก้ไข: ${esc(seg)}</div>` : '';
+}
+function bmcRecSentBack() { if (_bmcRel) uiHelp('เหตุผลที่ส่งกลับแก้ไข', `<p>${esc(_bmcSendBackText(_bmcRel))}</p>`); }
+function bmcRenderRecHead() {
+  const stepsEl = document.getElementById('bmcRecSteps'), nextEl = document.getElementById('bmcRecNext'), kp = document.getElementById('bmcRecKpis');
+  if (!stepsEl) return;
+  const r = _bmcRel, v = _bmcRecView, step = _bmcRecStep(r);
+  stepsEl.innerHTML = step < 0 ? '' : `<ol class="rec-steps" aria-label="ขั้นตอนของเวอร์ชัน">${_BMC_REC_STEPS.map((t, i) => {
+    const st = i === step ? 'is-cur' : i < step ? 'is-done' : '';
+    return `<li class="rec-step ${st}"${i === step ? ' aria-current="step"' : ''}><b>${i < step ? '✓' : i + 1}</b> ${esc(t)}</li>`;
+  }).join('<li class="rec-arrow" aria-hidden="true">›</li>')}</ol>`;
+  const nx = _bmcRecNext();
+  const back = r && r.status === 'draft' && _bmcSendBackText(r) ? '<button type="button" class="iss-link" onclick="bmcRecSentBack()">ถูกส่งกลับแก้ไข · ดูเหตุผล</button>' : '';
+  nextEl.innerHTML = back + (!nx ? '' : nx.wait ? `<span class="rec-wait">${esc(nx.wait)}</span>`
+    : `${nx.block ? `<span class="rec-block">${esc(nx.block)}</span>` : ''}<button type="button" id="bmcRecNextBtn" class="rec-next-btn" onclick="${nx.fn}">${esc(nx.label)}</button>`);
+  // the four tiles: what is left. A tile with nothing left shows a check mark, never a red zero.
+  if (!v || !r) { kp.innerHTML = ''; return; }
+  const nUn = v.unmatched.length, nCk = v.rows.filter(_bmcRecNeeds).length;
+  const costed = v.rows.filter(x => x.cost != null);
+  const avg = costed.length ? costed.reduce((s, x) => s + x.cost, 0) / costed.length : null;
+  const tile = (k, label, val, sub, bad) => `<button type="button" class="rec-kpi${bad ? ' is-open' : ''}" onclick="bmcRecTabGo('${k}')"><span class="rec-kpi-l">${label}</span>
+    <span class="rec-kpi-v${val === '✓' ? ' is-ok' : bad ? ' is-bad' : ''}">${val}</span><span class="rec-kpi-s">${sub || '&nbsp;'}</span></button>`;
+  kp.innerHTML = tile('all', 'เมนูในเวอร์ชันนี้', _bmcNum(v.rows.length, 0), 'ทุกระดับราคา')
+    + tile('all', 'ต้นทุนเฉลี่ย', avg == null ? '—' : '฿' + _bmcNum(avg, 1), `ต่อเสิร์ฟ${r.price_month ? ' · ราคา' + fmtMonthTh(r.price_month) : ''}`)
+    + tile('unmatched', 'ยังไม่จับคู่รหัส POS', nUn ? _bmcNum(nUn, 0) : '✓', '', nUn > 0)
+    + tile('check', 'ต้องตรวจ', nCk ? _bmcNum(nCk, 0) : '✓', '', false);
+}
+function bmcRecTabGo(k) {
+  const v = _bmcRecView;
+  if (k === 'unmatched' && v && !v.unmatched.length) return;
+  _bmcRecTab = k; bmcRenderRecipes();
+  const el = document.getElementById('bmcRecWorkCard'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// the tab on screen: the person's choice while it has work (ทุกเมนู always), else the first tab that has work
+function _bmcRecTabNow(nUn, nCk) {
+  if (_bmcRecTab === 'all') return 'all';
+  if (_bmcRecTab === 'unmatched' && nUn) return 'unmatched';
+  if (_bmcRecTab === 'check' && nCk) return 'check';
+  return nUn ? 'unmatched' : nCk ? 'check' : 'none';
+}
+function bmcRecHelp() {
+  uiHelp('สูตรตามระดับราคา', `<p>สูตรหนึ่งเวอร์ชันมีผลตั้งแต่เดือนที่เลือก · ร่าง: ครัวสร้างสูตรและจับคู่รหัส POS ให้ครบ แล้วกด “ส่งตรวจ” · ฝ่ายวิเคราะห์ตรวจ: ฝ่ายวิเคราะห์แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว · ผู้บริหารรับทราบผลกระทบหลังประกาศใช้ · ระหว่างตรวจ ครัวแก้ไขสูตรไม่ได้จนกว่าฝ่ายวิเคราะห์จะส่งกลับ</p>
+    <p>“นำเข้าไฟล์ → ไฟล์ครัว Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ในเมนูนำเข้าไฟล์ก่อน</p>
+    <p>“ดาวน์โหลด → แม่แบบสูตรตามระดับราคา” มีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้าไฟล์ → ไฟล์สูตรตามระดับราคา” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
+    <p>ยังไม่จับคู่: ชื่อในไฟล์ Cost-RW ไม่ตรงกับเมนูใน POS · รหัสที่เสนอมาจากชื่อที่ใกล้เคียงในระดับราคาเดียวกัน ตรวจก่อนกด “จับคู่” · “ไม่วางขาย” จำไว้สำหรับการนำเข้าครั้งถัดไป</p>
+    <p>ต้องตรวจ: เมนูที่คิดต้นทุนไม่ได้ ไม่ตรงไฟล์ครัว หรือต้นทุนต่างจากระบบเดิม 20% ขึ้นไป · ข้อที่ฝ่ายวิเคราะห์ยอมรับแล้วไม่แสดง · ระดับราคาที่เลือกในรายการเมนูรวมเมนูของระดับราคาต่ำกว่า</p>`);
+}
+
+// ── the work card ────────────────────────────────────────────────────────────
+function bmcRenderRecipes() {
+  const v = _bmcRecView, box = document.getElementById('bmcRecWork');
+  if (!v || !box) return;
+  const typed = {};                                              // codes typed into ยังไม่จับคู่ and not saved yet survive a redraw
+  box.querySelectorAll('input[data-ref]').forEach(el => { if (el.value !== el.dataset.sug) typed[el.dataset.ref] = el.value; });
+  const nUn = v.unmatched.length, nCk = v.rows.filter(_bmcRecNeeds).length, nAll = v.rows.length;
+  const tab = _bmcRecTabNow(nUn, nCk);
+  document.getElementById('bmcRecTabs').innerHTML = [['unmatched', 'ยังไม่จับคู่', nUn], ['check', 'ต้องตรวจ', nCk], ['all', 'ทุกเมนู', nAll]].map(([k, t, n]) =>
+    `<button type="button" role="tab" class="rec-tab" aria-selected="${tab === k}" onclick="bmcRecTabGo('${k}')">${t} <b>${n}</b></button>`).join('');
+  document.getElementById('bmcTierChips').innerHTML = [0, ..._BMC_TIERS].map(t =>
+    `<button type="button" class="iss-chip is-sm" aria-pressed="${t === _bmcTier}" onclick="bmcSetTier(${t})">${t ? '฿' + t.toLocaleString() : 'ทุกระดับ'}</button>`).join('');
+  if (tab === 'none') {
+    const nx = _bmcRecNext();
+    box.innerHTML = `<div class="rec-done"><span>ไม่มีงานค้างในฉบับนี้</span>${nx && nx.label ? `<button type="button" class="rec-next-btn" onclick="${nx.fn}">${esc(nx.label)}</button>` : ''}</div>`;
+    return;
+  }
+  const q = (document.getElementById('bmcRecQ').value || '').toLowerCase().trim();
+  if (tab === 'unmatched') {
+    box.innerHTML = _bmcUnmatchedHtml(q);
+    box.querySelectorAll('input[data-ref]').forEach(el => { if (el.dataset.ref in typed) el.value = typed[el.dataset.ref]; });
+    return;
+  }
+  const rows = v.rows.filter(r => (!_bmcTier || !r.min_tier || r.min_tier <= _bmcTier)
+    && (!q || `${r.sku_code} ${r.name || ''} ${r.name_en || ''}`.toLowerCase().includes(q))
+    && (tab === 'all' || _bmcRecNeeds(r)));
+  box.innerHTML = rows.length ? `<div class="wt-wrap" style="max-height:620px"><table class="wt"><thead><tr>
+      <th>ระดับราคา</th><th>เมนู</th><th>รหัส POS</th><th>เสิร์ฟ</th><th class="wt-num">ต้นทุน/เสิร์ฟ</th>
+      <th class="wt-num">ตามไฟล์ครัว</th><th class="wt-num">ระบบเดิม</th><th class="wt-num">ต่าง %</th><th class="wt-num">บรรทัด</th><th>สถานะ</th></tr></thead>
+    <tbody>${rows.map(r => {
+      const own = _bmcTier && r.min_tier === _bmcTier;
+      const accepted = _bmcRecIssues(r).length > 0 && _bmcRecOk.has(r.sku_code);
+      const chips = accepted ? [['ยอมรับแล้ว', 'var(--good-ink)'], ..._bmcRecIssues(r, true).filter(x => x[0] === 'จับคู่ด้วยตนเอง')] : _bmcRecIssues(r, tab === 'all');
+      const dv = r.v0_diff_pct;
+      return `<tr${_bmcTier && !own ? ' style="opacity:.72"' : ''}>
+      <td data-l="ระดับราคา">${r.min_tier ? _bmcChip('฿' + r.min_tier.toLocaleString(), own || !_bmcTier ? 'var(--accent)' : 'var(--text-muted)') : ''}</td>
+      <td data-l="เมนู"><button type="button" class="iss-branch" onclick="bmcOpenRecipe('${esc(r.sku_code)}')">${esc(r.name || '')}</button>
+        ${r.name_en ? `<div class="wt-muted" style="font-size:13px">${esc(r.name_en)}</div>` : ''}</td>
+      <td data-l="รหัส POS" class="wt-code">${esc(r.sku_code)}</td>
+      <td data-l="เสิร์ฟ" style="font-size:13px">${esc(r.serve || '')}</td>
+      <td data-l="ต้นทุน/เสิร์ฟ" class="wt-num" style="font-weight:600">${_bmcNum(r.cost)}</td>
+      <td data-l="ตามไฟล์ครัว" class="wt-num">${_bmcNum(r.sheet_cost)}</td>
+      <td data-l="ระบบเดิม" class="wt-num">${_bmcNum(r.v0_cost)}</td>
+      <td data-l="ต่าง %" class="wt-num" style="color:${dv == null ? 'inherit' : Math.abs(dv) >= 20 ? 'var(--amber-ink)' : 'var(--text-muted)'}">${dv == null ? '' : (dv > 0 ? '+' : '') + dv + '%'}</td>
+      <td data-l="บรรทัด" class="wt-num">${r.lines}</td>
+      <td data-l="สถานะ">${chips.length ? chips.map(([t, c]) => _bmcChip(t, c)).join(' ') : _bmcChip('พร้อม', 'var(--good-ink)')}</td></tr>`;
+    }).join('')}</tbody></table></div>` : '<div class="wt-empty">ไม่มีเมนู</div>';
+}
+
+// ── ยังไม่จับคู่: the menus of the kitchen's file with no POS code ───────────
+// Each row carries the code the server suggested from the name (same tier, close spelling), pre-filled in the picker; จับคู่ writes it, ไม่วางขาย
+// remembers the menu is not on sale. A matched or skipped row leaves the list at once.
+function _bmcSkuOptions(tier) {
+  return _bmcSkuPool.filter(r => !tier || !r.tier || String(r.tier) === String(tier))
+    .map(r => `<option value="${esc(r.sku_code)}">${r.tier ? '฿' + esc(r.tier) + ' · ' : ''}${esc(r.name || '')}</option>`).join('');
+}
+// what was typed → a POS code: the code itself, or the one code of that tier whose name holds the text
+function _bmcRecCode(v, tier) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  const same = _bmcSkuPool.find(r => r.sku_code.toLowerCase() === v.toLowerCase());
+  if (same) return same.sku_code;
+  const hit = _bmcSkuPool.filter(r => (!tier || !r.tier || String(r.tier) === String(tier)) && (r.name || '').toLowerCase().includes(v.toLowerCase()));
+  return hit.length === 1 ? hit[0].sku_code : v;
+}
+function _bmcUnmatchedHtml(q) {
+  const all = (_bmcRecView && _bmcRecView.unmatched) || [];
   const w = _bmcRelEditable();
-  box.innerHTML = `<div class="card p-4">
-    <div class="text-sm font-semibold" style="color:var(--text-primary)">สูตรที่ยังไม่ได้จับคู่รหัส POS (${u.length})</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">ชื่อในไฟล์ Cost-RW ไม่ตรงกับเมนูใน POS · เลือกรหัสแล้วกด “จับคู่” (จำไว้สำหรับการนำเข้าครั้งถัดไป) · เมนูที่ไม่ขาย กด “ข้าม (ไม่วางขาย)”</div>
-    <datalist id="bmcSkuList"></datalist>
-    <div class="overflow-x-auto"><table class="text-xs w-full"><tbody>${u.map((x, i) => `<tr class="border-b" style="border-color:var(--border-soft)">
-      <td class="pr-2 py-1">${_bmcChip('฿' + Number(x.tier).toLocaleString(), 'var(--accent)')}</td>
-      <td class="pr-2">${esc(x.th || '')}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(x.en || '')} · ${x.n_lines} บรรทัด · ไฟล์ ฿${_bmcNum(x.total)}${x.why ? ' · ' + esc(x.why) : ''}</div></td>
-      <td class="pr-2">${w ? `<input id="bmcMap${i}" list="bmcSkuList" placeholder="รหัส OTHBF…" style="width:150px;border:1px solid var(--border-control);border-radius:4px;padding:2px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">` : ''}</td>
-      <td class="whitespace-nowrap">${w ? `<button onclick="bmcMapBlock(${i})" style="font-size:11.5px;background:var(--accent);color:var(--on-accent);border:0;border-radius:4px;padding:2px 10px;cursor:pointer">จับคู่</button>
-        <button onclick="bmcMapBlock(${i}, true)" style="font-size:11.5px;background:none;color:var(--text-secondary);border:1px solid var(--border-control);border-radius:4px;padding:2px 8px;cursor:pointer">ข้าม (ไม่วางขาย)</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
-  if (w) _bmcJson(`${API}/api/bom-center/buffet-skus?release_id=${_bmcRel.release_id}`).then(d => {
-    document.getElementById('bmcSkuList').innerHTML = d.rows.filter(r => !r.has_recipe)
-      .map(r => `<option value="${esc(r.sku_code)}">${r.tier ? '฿' + r.tier + ' · ' : ''}${esc(r.name || '')}</option>`).join('');
-  }).catch(() => {});
+  const items = all.map((x, i) => ({ x, i })).filter(({ x }) => (!_bmcTier || Number(x.tier) === _bmcTier)
+    && (!q || `${x.th || ''} ${x.en || ''} ${x.suggest ? x.suggest.sku_code + ' ' + x.suggest.name : ''}`.toLowerCase().includes(q)));
+  const nSug = all.filter(x => x.suggest).length;
+  const bar = w && nSug ? `<div class="rec-sugbar"><span>ระบบเสนอรหัสจากชื่อที่ใกล้เคียงให้ ${nSug} จาก ${all.length} เมนู</span>
+      <button type="button" class="wt-btn is-primary" style="margin-left:auto" onclick="bmcRecMapAll()">จับคู่ตามที่เสนอ ${nSug} เมนู</button></div>` : '';
+  const tiers = [...new Set(items.map(({ x }) => x.tier))];
+  const lists = w ? tiers.map(t => `<datalist id="bmcSkuL${t}">${_bmcSkuOptions(t)}</datalist>`).join('') : '';
+  if (!items.length) return bar + '<div class="wt-empty">ไม่มีเมนูที่ตรงกับตัวกรอง</div>';
+  return `${bar}${lists}<div class="wt-wrap" style="max-height:none"><table class="wt"><thead><tr>
+      <th>ระดับ</th><th>เมนูในไฟล์ครัว</th><th class="wt-num">ต้นทุน</th><th>รหัส POS</th><th><span class="iss-sr">ทำรายการ</span></th></tr></thead>
+    <tbody>${items.map(({ x, i }) => `<tr>
+      <td data-l="ระดับ"><span class="wt-tag" style="color:var(--text-secondary)">฿${Number(x.tier).toLocaleString()}</span></td>
+      <td data-l="เมนูในไฟล์ครัว"><div style="font-weight:600">${esc(x.th || x.en || '')}</div>
+        <div class="wt-muted" style="font-size:13px">${esc(x.en || '')}${x.en ? ' · ' : ''}${x.n_lines} บรรทัด${x.why ? ' · ' + esc(x.why) : ''}</div></td>
+      <td data-l="ต้นทุน" class="wt-num">฿${_bmcNum(x.total)}</td>
+      <td data-l="รหัส POS" style="min-width:260px">${w ? `<input id="bmcMap${i}" data-ref="${esc(x.ref)}" data-sug="${x.suggest ? esc(x.suggest.sku_code) : ''}" list="bmcSkuL${x.tier}" value="${x.suggest ? esc(x.suggest.sku_code) : ''}" placeholder="พิมพ์ชื่อหรือรหัสเมนู" aria-label="รหัส POS ของ ${esc(x.th || '')}"
+          class="rec-in${x.suggest ? ' is-suggest' : ''}" autocomplete="off">
+        ${x.suggest ? `<div class="rec-sug">เสนอจากชื่อ: ${esc(x.suggest.sku_code)} ${esc(x.suggest.name)}</div>` : ''}` : ''}</td>
+      <td class="wt-act">${w ? `<span class="iss-acts"><button type="button" class="wt-btn is-primary" onclick="bmcMapBlock(${i})">จับคู่</button>
+        <button type="button" class="wt-btn" onclick="bmcMapBlock(${i}, true)">ไม่วางขาย</button></span>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+async function _bmcMapPost(x, sku) {
+  await _bmcJson(`${API}/api/bom-center/recipes/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ release_id: _bmcRel.release_id, ref: x.ref, sku_code: sku }) });
+  _bmcRecView.unmatched = _bmcRecView.unmatched.filter(u => u.ref !== x.ref);      // the row leaves the list at once
+  if (sku !== '-') _bmcSkuPool = _bmcSkuPool.filter(r => r.sku_code !== sku);
 }
 async function bmcMapBlock(i, skip) {
   const x = _bmcRecView.unmatched[i];
-  const sku = skip ? '-' : (document.getElementById('bmcMap' + i).value || '').trim();
+  if (!x) return;
+  const sku = skip ? '-' : _bmcRecCode(document.getElementById('bmcMap' + i).value, x.tier);
   if (!sku) { _bmcStatus('bmcRecStatus', 'เลือกรหัส POS', 'var(--bad-ink)'); return; }
   try {
-    await _bmcJson(`${API}/api/bom-center/recipes/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ release_id: _bmcRel.release_id, ref: x.ref, sku_code: sku }) });
+    await _bmcMapPost(x, sku);
     _bmcStatus('bmcRecStatus', skip ? `✓ ${x.th}: บันทึกว่าไม่วางขาย` : `✓ ${x.th} → ${sku}`, 'var(--good-ink)');
-    bmcLoadRecipes();
+    bmcRenderRecHead(); bmcRenderRecipes();
+    bmcLoadRecipes(true);                                         // the costs of the new recipe, quietly
   } catch (e) { _bmcStatus('bmcRecStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+// every menu with a suggestion, as suggested: one question that lists the pairs, then the same map call per pair and ONE message at the end
+async function bmcRecMapAll() {
+  const list = ((_bmcRecView && _bmcRecView.unmatched) || []).filter(x => x.suggest);
+  if (!list.length) return;
+  const lines = list.slice(0, 30).map(x => `฿${Number(x.tier).toLocaleString()} ${x.th || x.en} → ${x.suggest.sku_code} ${x.suggest.name}`).join('\n');
+  if (!await uiConfirm(`จับคู่ ${list.length} เมนูตามรหัสที่เสนอ?\n${lines}${list.length > 30 ? `\nและอีก ${list.length - 30} เมนู` : ''}`,
+    { title: 'ยืนยันการจับคู่ตามที่เสนอ', ok: `จับคู่ ${list.length} เมนู`, cancel: 'ยกเลิก' })) return;
+  let done = 0, fail = 0, last = '';
+  for (const x of list) {
+    try { await _bmcMapPost(x, x.suggest.sku_code); done++; } catch (e) { fail++; last = String(e.message || e); }
+  }
+  bmcRenderRecHead(); bmcRenderRecipes();
+  if (done) _bmcStatus('bmcRecStatus', `✓ จับคู่ตามที่เสนอแล้ว ${done} เมนู` + (fail ? ` · ไม่สำเร็จ ${fail} เมนู` : ''), fail ? 'var(--amber-ink)' : 'var(--good-ink)');
+  else _bmcStatus('bmcRecStatus', 'ไม่สำเร็จ: ' + last.slice(0, 160), 'var(--bad-ink)');
+  bmcLoadRecipes(true);
 }
 
 // recipe editor ---------------------------------------------------------------
@@ -1933,39 +2110,6 @@ async function bmcImportCostRw(input) {
   } catch (e) { _bmcStatus('bmcRecStatus', 'นำเข้าไม่สำเร็จ:' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
 }
-// what the version waits for, and the kitchen's two buttons (สร้างฉบับร่าง / ส่งตรวจ) — the banner sits first in #bmcRecReport
-// the analyst's last reason for sending a draft back ("ส่งกลับแก้ไขโดย … : reason" is appended to the notes), or ''
-function _bmcSendBackLine(r) {
-  if (!r || r.status !== 'draft') return '';
-  const n = String(r.notes || ''), i = n.lastIndexOf('ส่งกลับแก้ไขโดย');
-  if (i < 0) return '';
-  // the note stores the login of the analyst; show the name people know
-  const seg = n.slice(i).trim().replace(/^ส่งกลับแก้ไขโดย\s+([^:\s]+)\s*:/, (m, u) => `ส่งกลับแก้ไขโดย ${whoTh(u)}:`);
-  return `<div class="text-xs mt-1" style="color:var(--amber-ink)">ส่งกลับแก้ไข: ${esc(seg)}</div>`;
-}
-function bmcRenderRecBanner() {
-  const host = document.getElementById('bmcRecReport');
-  if (!host) return;
-  let box = document.getElementById('bmcRecBanner');
-  if (!box || box.parentNode !== host) { box = document.createElement('div'); box.id = 'bmcRecBanner'; host.insertBefore(box, host.firstChild); }
-  const r = _bmcRel, sg = window._bmcRelSuggest || {};
-  const monthly = !!(r && r.kind === 'monthly');
-  const hasDraft = _bmcRels.some(x => x.kind === 'monthly' && ['draft', 'review'].includes(x.status));
-  const sb = document.getElementById('bmcSubmitBtn'), nb = document.getElementById('bmcNewDraftBtn');
-  if (sb) sb.style.display = (monthly && r.status === 'draft' && _bmcCanRecipes()) ? '' : 'none';
-  if (nb) { nb.style.display = (!hasDraft && _bmcCanRecipes()) ? '' : 'none'; nb.textContent = `สร้างร่างเดือน${fmtMonthTh(sg.effective_month || '')}`.trim(); }
-  const card = (ink, html) => `<div class="text-xs p-2 mb-2" style="border-left:3px solid ${ink};background:var(--bg-subtle);color:var(--text-primary)">${html}</div>`;
-  let html = '';
-  if (monthly && r.status === 'review') {
-    html = card('var(--amber-ink)', `<b>รอตรวจ</b> (ฝ่ายวิเคราะห์) · ส่งตรวจโดย ${esc(whoTh(r.submitted_by))} เมื่อ ${esc(fmtAt(r.submitted_at) || '-')}`
-      + (hasModule('bom.center') ? '' : ' · ระหว่างการตรวจ ครัวแก้ไขสูตรไม่ได้ จนกว่าฝ่ายวิเคราะห์จะส่งกลับ'));
-  } else if (monthly && r.status === 'draft') {
-    html = card('var(--accent)', '<b>ร่าง</b> · ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ” ให้ฝ่ายวิเคราะห์' + _bmcSendBackLine(r));
-  } else if (!hasDraft && _bmcCanRecipes()) {
-    html = card('var(--accent)', `ยังไม่มีร่างของเดือน${fmtMonthTh(sg.effective_month || '')} · ดาวน์โหลดแม่แบบสูตรตามระดับราคา กรอกสูตรหลายเมนูแล้วนำเข้าไฟล์สูตรตามระดับราคา หรือสร้างร่างก่อน`);
-  }
-  box.innerHTML = html;
-}
 function bmcDownloadTemplate() {
   bmcDownload(`${API}/api/bom-center/recipes/template.xlsx` + (_bmcRel ? `?release_id=${_bmcRel.release_id}` : ''), 'แม่แบบ_สูตรตามระดับราคา.xlsx', 'bmcRecStatus');
 }
@@ -1994,17 +2138,17 @@ async function bmcSubmitReview(rel, statusId) {
     if (sid === 'bmcRlStatus') await bmcLoadReleasePane(r.release_id); else await bmcLoadReleases(r.release_id);
   } catch (e) { _bmcStatus(sid, 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
-async function bmcSendBack() {
-  const r = _bmcRlRel;
+async function bmcSendBack(rel, statusId) {
+  const r = rel || _bmcRlRel, sid = statusId || 'bmcRlStatus';
   if (!r) return;
   const reason = await uiPrompt('เหตุผลที่ส่งกลับให้ครัว (จำเป็น)', '', { title: 'ส่งกลับให้ครัวแก้ไข', okText: 'ส่งกลับ' });
   if (!reason) return;
   try {
     await _bmcJson(`${API}/api/bom-center/release-act/send-back`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ release_id: r.release_id, note: reason }) });
-    _bmcStatus('bmcRlStatus', '✓ ส่งกลับให้แก้ไขแล้ว', 'var(--good-ink)');
-    bmcLoadReleasePane(r.release_id);
-  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+    _bmcStatus(sid, '✓ ส่งกลับให้แก้ไขแล้ว', 'var(--good-ink)');
+    if (sid === 'bmcRlStatus') bmcLoadReleasePane(r.release_id); else bmcLoadReleases(r.release_id);
+  } catch (e) { _bmcStatus(sid, 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 function bmcExportRecipes() {
   if (!_bmcRel) return;
@@ -2030,6 +2174,7 @@ async function bmcImportFlat(input) {
 // comparison and acknowledges, or rolls back (bom.audit). Releasing does not yet
 // change report COGS — that is the S4 cut-over; the page says so.
 let _bmcRlRel = null;
+let _bmcRlWant = null;       // the version the release pane opens on (set by the next action of สูตรตามระดับราคา)
 const _BMC_STATUS_TH = { draft: 'ร่าง', review: 'รอตรวจ', released: 'ประกาศใช้แล้ว', retired: 'ยกเลิกใช้' };
 
 async function bmcLoadReleasePane(keepId) {
@@ -2039,7 +2184,8 @@ async function bmcLoadReleasePane(keepId) {
     window._bmcRelSuggest = d.suggest || {};
     const sel = document.getElementById('bmcRlSel');
     const monthly = _bmcRels.filter(r => r.kind === 'monthly');
-    const cur = keepId || Number(sel.value) || (monthly[0] || {}).release_id;
+    const cur = keepId || _bmcRlWant || Number(sel.value) || (monthly[0] || {}).release_id;
+    _bmcRlWant = null;
     sel.innerHTML = monthly.map(r => `<option value="${r.release_id}" ${r.release_id === cur ? 'selected' : ''}>${esc(_bmcLbl(r.label))} · ${_BMC_STATUS_TH[r.status] || r.status} · มีผล ${fmtMonthTh(r.effective_month)}</option>`).join('')
       || '<option value="">ยังไม่มีเวอร์ชันรายเดือน · นำเข้าสูตรที่ สูตรตามระดับราคา</option>';
     await bmcLoadRelease();
@@ -2178,15 +2324,17 @@ async function bmcDoRelease() {
     bmcLoadReleasePane(r.release_id);
   } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
-async function bmcAck() {
-  const note = await uiPrompt(`รับทราบ “${_bmcLbl(_bmcRlRel.label)}”\nหมายเหตุ (ไม่บังคับ)`, '', { title: 'รับทราบเวอร์ชัน', okText: 'รับทราบ' });
+async function bmcAck(rel, statusId) {
+  const r = rel || _bmcRlRel, sid = statusId || 'bmcRlStatus';
+  if (!r) return;
+  const note = await uiPrompt(`รับทราบ “${_bmcLbl(r.label)}”\nหมายเหตุ (ไม่บังคับ)`, '', { title: 'รับทราบเวอร์ชัน', okText: 'รับทราบ' });
   if (note === null) return;
   try {
     await _bmcJson(`${API}/api/bom-center/release-act/acknowledge`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ release_id: _bmcRlRel.release_id, note }) });
-    _bmcStatus('bmcRlStatus', '✓ รับทราบแล้ว', 'var(--good-ink)');
-    bmcLoadReleasePane(_bmcRlRel.release_id);
-  } catch (e) { _bmcStatus('bmcRlStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+      body: JSON.stringify({ release_id: r.release_id, note }) });
+    _bmcStatus(sid, '✓ รับทราบแล้ว', 'var(--good-ink)');
+    if (sid === 'bmcRlStatus') bmcLoadReleasePane(r.release_id); else bmcLoadReleases(r.release_id);
+  } catch (e) { _bmcStatus(sid, 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function bmcRetire() {
   const reason = await uiPrompt(`ยกเลิกใช้ “${_bmcLbl(_bmcRlRel.label)}”? เวอร์ชันก่อนหน้ากลับมามีผลแทน\nเหตุผล (จำเป็น)`, '', { title: 'ยกเลิกใช้เวอร์ชัน', okText: 'ยกเลิกใช้' });
@@ -2748,112 +2896,172 @@ async function bmcLoadRuns() {
 }
 
 // ── ใบสรุปตัดเบิก (ปิดงวดเดือน → ใบสรุปตัดเบิก): Accounting downloads it and ticks "posted" ─────
-let _bmcIssPeriods = null;    // /issue-summary/periods → { branches: [{branch_id, name, periods: […]}] }
-let _bmcIssSum = null;        // the summary on screen
+// PR-R: the page is the month overview of every counting branch (GET /issue-summary/month): one row per branch with its state and
+// the actions of that state. A branch name opens the detail of its period (reconciliation, movement table) in a drawer.
+// Finished work stays out of the default view: the filter starts on ยังไม่เสร็จ (ready + waiting); posted rows come with บันทึกแล้ว / ทั้งหมด.
+let _bmcIssMonth = null;      // /issue-summary/month → { month, months, rows, counts }
+let _bmcIssFilter = 'open';   // open | ready | waiting | posted | all
+let _bmcIssSum = null;        // the summary on screen (the drawer)
 let _bmcIssRecon = null;      // issue-reports/reconcile of the same period (system stock vs the count) — PR-J4
+let _bmcIssBr = null, _bmcIssEnd = null;   // the branch and the period the drawer shows
+let _bmcIssFrom = null;       // the control that opened the drawer: the focus goes back to it
 // the server's write rule (auth.py): cost.analysis or bom.center. The class is not `.bc-write`: loadBomCenter hides that
 // one unless the user holds bom.center, and Accounting does not.
 function _bmcIssCanPost() { return hasModule('cost.analysis') || hasModule('bom.center'); }
-function _bmcIssSel() {
-  const b = document.getElementById('bmcIssBranch'), p = document.getElementById('bmcIssPeriod');
-  return { branch_id: b && b.value ? Number(b.value) : null, end_count_id: p && p.value ? Number(p.value) : null };
-}
-async function bmcLoadIssue() {
-  document.querySelectorAll('#tab-bomcenter .bmc-iss-write').forEach(el => { el.style.display = _bmcIssCanPost() ? '' : 'none'; });
+function _bmcIssSel() { return { branch_id: _bmcIssBr, end_count_id: _bmcIssEnd }; }
+const _BMC_ISS_ST = { ready: ['พร้อมบันทึก', 'var(--teal-ink)'], waiting: ['รอสาขายืนยัน', 'var(--amber-ink)'], posted: ['บันทึกแล้ว', 'var(--good-ink)'] };
+const _BMC_ISS_FILTERS = [['open', 'ยังไม่เสร็จ'], ['ready', 'พร้อมบันทึก'], ['waiting', 'รอสาขายืนยัน'], ['posted', 'บันทึกแล้ว'], ['all', 'ทั้งหมด']];
+const _bmcIssIn = (f, st) => f === 'all' || (f === 'open' ? st !== 'posted' : st === f);
+function _bmcIssDrawerOpen() { const d = document.getElementById('bmcIssDrawer'); return !!(d && !d.hidden); }
+function _bmcIssStat(msg, ok) { bmcStatus(_bmcIssDrawerOpen() ? 'bmcIssDrStatus' : 'bmcIssStatus', ok, msg); }
+
+async function bmcLoadIssue(month, keepDrawer) {
+  const box = document.getElementById('bmcIssList');
+  if (!box) return;
+  if (!keepDrawer) bmcIssClose(true);
+  if (!_bmcIssMonth) box.innerHTML = '<div class="wt-empty">กำลังโหลด…</div>';
+  const get = m => _bmcJson(`${API}/api/bom-center/issue-summary/month${m ? '?month=' + encodeURIComponent(m) : ''}`);
   try {
-    _bmcIssPeriods = await _bmcJson(`${API}/api/bom-center/issue-summary/periods`);
+    const want = month || supplyCtx().month || '';
+    let d = await get(want);
+    // the remembered month has no period at all: the latest month that has one
+    if (!month && want && (d.months || []).length && !d.months.includes(d.month)) d = await get('');
+    _bmcIssMonth = d;
   } catch (e) {
-    _bmcStatus('bmcIssStatus', 'โหลดรายการงวดไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
+    box.innerHTML = `<div class="wt-empty" style="color:var(--bad-ink)">โหลดรายการงวดไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
     return;
   }
-  const bs = (_bmcIssPeriods.branches || []).filter(b => b.periods.length);
-  const sel = document.getElementById('bmcIssBranch');
-  if (!sel) return;                          // a pinned login has no picker (and never reaches this centre page)
-  if (!bs.length) {
-    sel.innerHTML = '';
-    document.getElementById('bmcIssPeriod').innerHTML = '';
-    document.getElementById('bmcIssChips').innerHTML = '';
-    document.getElementById('bmcIssTable').innerHTML = '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีสาขาที่ตรวจนับต้นงวดและปลายงวดครบ จึงยังไม่มีใบสรุปตัดเบิก</div>';
-    _bmcStatus('bmcIssStatus', '');
+  bmcIssRender();
+}
+// the person chose a month: it is the month of the whole tab (the other panes follow)
+function bmcIssMonthChanged() {
+  const m = document.getElementById('bmcIssMonth').value;
+  supplyCtxSet({ month: m });
+  const el = document.getElementById('bmcMonth');
+  if (el && el.value !== m) { supplyMonthPut(el, m); _bmcIng = []; _bmcPrices = []; }
+  bmcLoadIssue(m);
+}
+function bmcIssSetFilter(k) { _bmcIssFilter = k; bmcIssRender(); }
+function bmcIssRender() {
+  const d = _bmcIssMonth;
+  if (!d) return;
+  const sel = document.getElementById('bmcIssMonth');
+  const ms = [...new Set([...(d.months || []), d.month])].sort().reverse();
+  sel.innerHTML = ms.map(m => `<option value="${m}">${esc(fmtMonthTh(m))}</option>`).join('');
+  sel.value = d.month;
+  const c = d.counts || {};
+  document.getElementById('bmcIssFilter').innerHTML = _BMC_ISS_FILTERS.map(([k, t]) =>
+    `<button type="button" class="iss-chip" aria-pressed="${_bmcIssFilter === k}" onclick="bmcIssSetFilter('${k}')">${t} <b>${c[k] || 0}</b></button>`).join('');
+  // the month workbook holds every branch whose receipts are confirmed (ready and posted)
+  const n = (c.ready || 0) + (c.posted || 0);
+  const btn = document.getElementById('bmcIssAllBtn');
+  btn.disabled = !n;
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12 M7 10l5 5 5-5 M4 19h16"></path></svg>ดาวน์โหลดทุกสาขาที่พร้อม (${n} สาขา)`;
+  document.getElementById('bmcIssAllWhy').textContent = n ? '' : 'ยังไม่มีสาขายืนยันรับสินค้าครบ';
+  const box = document.getElementById('bmcIssList');
+  const rows = d.rows.filter(r => _bmcIssIn(_bmcIssFilter, r.status));
+  if (!rows.length) {
+    box.innerHTML = !c.all ? '<div class="wt-empty">ยังไม่มีสาขาที่ตรวจนับต้นงวดและปลายงวดครบในเดือนนี้</div>'
+      : _bmcIssFilter === 'open' ? `<div class="wt-empty">ทุกสาขาบันทึกครบแล้ว · <button type="button" class="iss-link" onclick="bmcIssSetFilter('posted')">ดูที่บันทึกแล้ว</button></div>`
+      : '<div class="wt-empty">ไม่มีสาขาในสถานะนี้</div>';
     return;
   }
-  const want = supplyCtx().branch_id;
-  sel.innerHTML = bs.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
-  sel.value = String(bs.some(b => b.branch_id === want) ? want : bs[0].branch_id);
-  bmcIssBranchChanged();
+  const canPost = _bmcIssCanPost();
+  const money = v => v == null ? '<span class="wt-muted">—</span>' : '฿' + _bmcNum(v, 2);
+  box.innerHTML = `<div class="wt-wrap" style="max-height:none"><table class="wt"><thead><tr>
+      <th>สาขา</th><th>งวด</th><th>สถานะ</th><th class="wt-num">มูลค่าตัดเบิก</th><th class="wt-num">ไม่มีราคา</th><th><span class="iss-sr">ทำรายการ</span></th></tr></thead>
+    <tbody>${rows.map(r => {
+      const [lbl, ink] = _BMC_ISS_ST[r.status];
+      const stTxt = r.status === 'posted' ? `${lbl} ${fmtDayAt(r.accounting_posted_at)} โดย ${whoTh(r.accounting_posted_by)}` : lbl;
+      const dl = `<button type="button" class="wt-btn" onclick="bmcIssXlsxRow(${r.branch_id})">ดาวน์โหลด</button>`;
+      const acts = r.status === 'ready' ? dl + (canPost ? `<button type="button" class="wt-btn is-primary" onclick="bmcIssPost(true, ${r.end_count_id}, ${r.branch_id})">บันทึกเข้าระบบบัญชีแล้ว</button>` : '')
+        : r.status === 'posted' ? dl + (canPost ? `<button type="button" class="iss-link" onclick="bmcIssPost(false, ${r.end_count_id}, ${r.branch_id})">ยกเลิกการบันทึก</button>` : '')
+        : '<span class="wt-muted">รอสาขายืนยันรับสินค้าครบ</span>';
+      return `<tr><td data-l="สาขา"><button type="button" class="iss-branch" onclick="bmcIssOpen(${r.branch_id}, this)">${esc(r.name)}</button></td>
+        <td data-l="งวด" class="wt-muted" style="white-space:nowrap">${esc(_bmcDm(r.begin_date))} → ${esc(_bmcDm(r.end_date))} (${r.days} วัน)</td>
+        <td data-l="สถานะ"><span class="wt-tag" style="color:${ink}">${esc(stTxt)}</span></td>
+        <td data-l="มูลค่าตัดเบิก" class="wt-num" style="font-weight:600">${money(r.used_value)}</td>
+        <td data-l="ไม่มีราคา" class="wt-num">${r.unpriced == null ? '<span class="wt-muted">—</span>' : r.unpriced ? `<b style="color:var(--amber-ink)">${r.unpriced}</b>` : '<span class="wt-muted">0</span>'}</td>
+        <td class="wt-act"><span class="iss-acts">${acts}</span></td></tr>`;
+    }).join('')}</tbody></table></div>`;
 }
-function _bmcIssPeriodOf(endId) {
-  const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === _bmcIssSel().branch_id);
-  return ((b && b.periods) || []).find(p => p.end_count_id === endId) || null;
+// the "?" of the page: what the controls mean, kept off the page
+function bmcIssHelp() {
+  uiHelp('ใบสรุปตัดเบิก', `<p>แต่ละแถวคือสาขาและงวดของเดือนที่เลือก · พร้อมบันทึก = สาขาหรือประสานงานขายยืนยันรับสินค้าครบแล้ว และบัญชียังไม่บันทึก · รอสาขายืนยัน = ยังดาวน์โหลดไม่ได้ · บันทึกแล้ว = งวดล็อก</p>
+    <p>ตัวกรองเริ่มที่ “ยังไม่เสร็จ” เพื่อซ่อนสาขาที่บันทึกแล้ว · เลือก “บันทึกแล้ว” หรือ “ทั้งหมด” เมื่อต้องการดูหรือยกเลิกการบันทึก</p>
+    <p>ปุ่มดาวน์โหลดด้านบนสร้างไฟล์เดียวของทุกสาขาที่ยืนยันรับสินค้าครบแล้วในเดือนนั้น (รวมสาขาที่บันทึกแล้ว) · กดชื่อสาขาเพื่อดูกระทบยอดและรายการเคลื่อนไหวของงวด</p>
+    <p>คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย (ตามใบตัดเบิกที่ยืนยันแล้ว) · ผลต่าง = นับจริง − คงเหลือตามระบบ · ปริมาณในตารางกระทบยอดแสดงเป็นหน่วยที่สาขานับ</p>
+    <p>เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนั้นล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้ · ยกเลิกการบันทึกได้จากลิงก์ในแถวเดียวกัน</p>
+    <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p>`);
 }
-function _bmcIssFillPeriods() {
-  const bid = _bmcIssSel().branch_id;
-  const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === bid);
-  const ps = b ? b.periods : [];                       // newest first
-  const tag = p => p.accounting_posted_at ? ' · บันทึกบัญชีแล้ว' : (p.receipts_confirmed ? ' · ยืนยันรับสินค้าครบแล้ว' : ' · ยังไม่ยืนยันรับสินค้าครบ');
-  // "กันยายน 2026 · 1/9/2026 – 30/9/2026 · บันทึกบัญชีแล้ว"
-  document.getElementById('bmcIssPeriod').innerHTML = ps.map(p =>
-    `<option value="${p.end_count_id}">${esc(fmtMonthTh(p.month))} · ${esc(fmtDay(p.begin_date))} – ${esc(fmtDay(p.end_date))}${tag(p)}</option>`).join('');
-  return ps;
-}
-let _bmcIssFallback = false;
-function bmcIssBranchChanged() {
-  const bid = _bmcIssSel().branch_id;
-  if (bid != null) supplyCtxSet({ branch_id: bid });
-  const ps = _bmcIssFillPeriods();
-  // the period of the month in the control (the previous month until somebody chooses): the one waiting for Accounting, else the newest of it;
-  // a month the branch has no period in falls back to the one waiting for Accounting, else the newest
-  const m = _bmcMonth(), inM = ps.filter(p => p.month === m), waiting = p => p.receipts_confirmed && !p.accounting_posted_at;
-  const pick = inM.find(waiting) || inM[0] || ps.find(waiting) || ps[0];
-  _bmcIssFallback = !!(pick && !inM.length && ps.length && supplyCtx().month);
-  if (pick) document.getElementById('bmcIssPeriod').value = String(pick.end_count_id);
+
+// ── the detail of one period (the drawer) ────────────────────────────────────
+function bmcIssOpen(bid, from) {
+  const r = ((_bmcIssMonth && _bmcIssMonth.rows) || []).find(x => x.branch_id === bid);
+  if (!r) return;
+  _bmcIssBr = bid; _bmcIssEnd = r.end_count_id; _bmcIssFrom = from || null;
+  const dr = document.getElementById('bmcIssDrawer'), bk = document.getElementById('bmcIssBack');
+  dr.hidden = false; bk.hidden = false;
+  document.getElementById('bmcIssDrTitle').textContent = `สาขา${r.name}`;
+  document.getElementById('bmcIssDrSub').textContent = `${fmtDay(r.begin_date)} → ${fmtDay(r.end_date)} · ${r.days} วัน`;
+  setTimeout(() => document.getElementById('bmcIssDrClose').focus(), 0);
   bmcIssLoadSummary();
 }
-// the person chose a period: its month is the month of the whole tab
-function bmcIssPeriodChanged() {
-  const p = _bmcIssPeriodOf(_bmcIssSel().end_count_id);
-  if (p) { supplyCtxSet({ month: p.month }); const el = document.getElementById('bmcMonth'); if (el && el.value !== p.month) { supplyMonthPut(el, p.month); _bmcIng = []; _bmcPrices = []; } }
-  _bmcIssFallback = false;
-  bmcIssLoadSummary();
+function bmcIssClose(silent) {
+  const dr = document.getElementById('bmcIssDrawer'), bk = document.getElementById('bmcIssBack');
+  if (!dr || dr.hidden) return;
+  dr.hidden = true; bk.hidden = true;
+  _bmcIssSum = null; _bmcIssRecon = null; _bmcIssBr = null; _bmcIssEnd = null;
+  const f = _bmcIssFrom; _bmcIssFrom = null;
+  if (!silent && f && document.body.contains(f)) { try { f.focus(); } catch (e) { /* the row was redrawn */ } }
 }
-// the posting: a primary button until it is done, then who did it and a secondary link to take it back; the reason it is off is written under it
+document.addEventListener('keydown', e => {
+  if (!_bmcIssDrawerOpen()) return;
+  if (e.key === 'Escape' && !document.querySelector('body > [data-ui-dialog]')) { bmcIssClose(); return; }
+  if (e.key !== 'Tab') return;
+  const f = [...document.querySelectorAll('#bmcIssDrawer button:not([disabled]), #bmcIssDrawer summary, #bmcIssDrawer a[href], #bmcIssDrawer input')].filter(x => x.offsetParent !== null);
+  if (!f.length || document.querySelector('body > [data-ui-dialog]')) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+// the posting of the period on screen: a primary button until it is done, then a secondary link to take it back
 function bmcIssRenderPost(st) {
-  const btn = document.getElementById('bmcIssPostBtn'), un = document.getElementById('bmcIssUnpost'), note = document.getElementById('bmcIssPostNote');
-  if (!btn) return;
+  const el = document.getElementById('bmcIssPosting');
+  if (!el) return;
   const posted = !!st.accounting_posted_at;
-  btn.style.display = posted ? 'none' : '';
-  un.style.display = posted ? '' : 'none';
-  btn.disabled = !posted && !st.receipts_confirmed;
-  btn.style.opacity = btn.disabled ? .5 : 1; btn.style.cursor = btn.disabled ? 'not-allowed' : 'pointer';
-  note.textContent = posted ? `บันทึกเข้าระบบบัญชีแล้ว เมื่อ ${fmtDayAt(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)} · งวดนี้ล็อกอยู่`
-    : st.receipts_confirmed ? 'กดเมื่อคีย์ใบสรุปเข้าระบบบัญชีแล้ว · เมื่อกดแล้วงวดนี้ล็อก'
-    : 'ต้องยืนยันรับสินค้าครบของงวดนี้ก่อน จึงบันทึกเข้าระบบบัญชีได้';
+  el.style.display = '';
+  el.innerHTML = !_bmcIssCanPost() ? '' : posted
+    ? `<button type="button" class="iss-link" onclick="bmcIssPost(false, ${_bmcIssEnd}, ${_bmcIssBr})">ยกเลิกการบันทึก</button>`
+    : st.receipts_confirmed ? `<button type="button" class="wt-btn is-primary" onclick="bmcIssPost(true, ${_bmcIssEnd}, ${_bmcIssBr})">บันทึกเข้าระบบบัญชีแล้ว</button>`
+    : '<span class="wt-muted">ยังไม่ยืนยันรับสินค้าครบ</span>';
 }
 async function bmcIssLoadSummary() {
   const s = _bmcIssSel();
   if (s.branch_id == null || s.end_count_id == null) return;
   const box = document.getElementById('bmcIssTable');
-  box.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</div>';
+  box.innerHTML = '<div class="wt-empty">กำลังคำนวณ…</div>';
   const rbox = document.getElementById('bmcIssRecon');
-  rbox.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</div>';
+  rbox.innerHTML = '<div class="wt-empty">กำลังคำนวณ…</div>';
   let d, rc = null;
   try {
     const q = `end_count_id=${s.end_count_id}&branch_id=${s.branch_id}`;
     [d, rc] = await Promise.all([_bmcJson(`${API}/api/bom-center/issue-summary?${q}`),
                                  _bmcJson(`${API}/api/bom-center/issue-reports/reconcile?${q}`).catch(() => null)]);
+    if (s.end_count_id !== _bmcIssEnd) return;                     // another branch was opened meanwhile
     _bmcIssSum = d;
     _bmcIssRecon = rc;
   } catch (e) {
     _bmcIssSum = null;
     _bmcIssRecon = null;
     rbox.innerHTML = '';
-    box.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">โหลดใบสรุปตัดเบิกไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
+    box.innerHTML = `<div class="wt-empty" style="color:var(--bad-ink)">โหลดใบสรุปตัดเบิกไม่สำเร็จ: ${esc(String(e.message || e).slice(0, 200))}</div>`;
     return;
   }
   const st = d.status, t = d.totals;
-  const allBtn = document.getElementById('bmcIssAllBtn'); if (allBtn) allBtn.title = 'ใบสรุปของทุกสาขา เดือน' + fmtMonthTh(d.period.month);
-  const mel = document.getElementById('bmcMonth');                       // the control shows the month of the period on screen
-  if (mel && mel.value !== d.period.month) { supplyMonthPut(mel, d.period.month); _bmcIng = []; _bmcPrices = []; }
+  document.getElementById('bmcIssDrSub').textContent = `${fmtDay(d.period.begin_date)} → ${fmtDay(d.period.end_date)} · ${d.period.days} วัน · ราคาเดือน${fmtMonthTh(d.period.month)}`;
+  const xl = document.getElementById('bmcIssDrXlsx');
+  if (xl) { xl.disabled = !st.receipts_confirmed; xl.title = st.receipts_confirmed ? '' : 'ยังไม่ยืนยันรับสินค้าครบ'; }
   const chips = [st.receipts_confirmed ? _bmcChip('ยืนยันรับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')];
   const sl = d.slips;                                  // the slip coverage of the period: a warning, never a lock
   if (sl) {
@@ -2864,12 +3072,12 @@ async function bmcIssLoadSummary() {
   if (rc) chips.push(rc.totals.flagged ? _bmcChip(`ผลต่างเกินเกณฑ์ ${rc.totals.flagged} รายการ`, 'var(--bad-ink)') : _bmcChip('ผลต่างอยู่ในเกณฑ์ทุกรายการ', 'var(--good-ink)'));
   if (st.accounting_posted_at) chips.push(_bmcChip(`บัญชีบันทึกแล้ว เมื่อ ${fmtDayAt(st.accounting_posted_at)} โดย ${whoTh(st.accounting_posted_by)}`, 'var(--navy-ink)'));
   if (t.unpriced) chips.push(_bmcChip(`ไม่มีราคา ${t.unpriced} รายการ`, 'var(--amber-ink)'));
-  if (d.period.partial) chips.push(_bmcChip(`ปิดงวดด้วยการตรวจนับหมุนเวียน (รายการเดิม) · คงเหลือตามระบบ (ไม่ได้นับ) ${t.system_basis} รายการ`, 'var(--navy-ink)'));
+  if (d.period.partial) chips.push(_bmcChip(`ปิดงวดด้วยการนับหมุนเวียน · ใช้คงเหลือตามระบบ ${t.system_basis} รายการ`, 'var(--navy-ink)'));
   document.getElementById('bmcIssChips').innerHTML = chips.join('');
+  if (d.period.partial_th) document.getElementById('bmcIssChips').title = d.period.partial_th;
   bmcIssRenderRecon();
   bmcIssRenderPost(st);
-  if (_bmcIssFallback) bmcStatus('bmcIssStatus', 'warn', 'สาขานี้ไม่มีงวดของเดือนที่เลือก · แสดงงวดล่าสุดแทน');
-  else _bmcStatus('bmcIssStatus', '');
+  _bmcIssStat('');
   const heads = ['รหัส', 'วัตถุดิบ', 'หน่วย', 'ยกมา (ต้นงวด)', 'รับเข้า', 'เคลม/ปรับ', 'นับจริง (ปลายงวด)', 'ตัดเบิก (ใช้จริง)', 'ราคาต่อหน่วย', 'มูลค่าตัดเบิก', 'ที่มาราคา'].concat(d.period.partial ? ['ที่มาของคงเหลือปลายงวด'] : []);
   const num = (v, dp) => (v === null || v === undefined) ? '—' : _bmcNum(v, dp);
   const rows = d.lines.map(l => {
@@ -2883,11 +3091,9 @@ async function bmcIssLoadSummary() {
       <td class="pr-2 text-right">${l.unit_price === null ? '—' : _bmcPrice(l.unit_price)}</td>
       <td class="pr-2 text-right" style="${ink}">${num(l.value, 2)}</td><td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(l.price_source || 'ไม่มีราคา')}</td>${d.period.partial ? `<td class="pr-2 text-[10.5px]" style="color:${l.end_basis === 'system' ? 'var(--navy-ink)' : 'var(--text-muted)'}">${esc(l.basis_th || '')}</td>` : ''}</tr>`;
   }).join('');
-  box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ใบสรุปตัดเบิก สาขา${esc(d.branch.name || '')} · ${esc(fmtDay(d.period.begin_date))} ถึง ${esc(fmtDay(d.period.end_date))} (${d.period.days} วัน · เดือน${fmtMonthTh(d.period.month)})</div>
-    ${d.period.partial_th ? `<div class="text-xs mb-2" style="color:var(--text-secondary)">${esc(d.period.partial_th)}</div>` : ''}
-    ${d.lines.length ? `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+  box.innerHTML = `${d.lines.length ? `<table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)">${heads.map((h, i) => `<th class="pr-2 ${i >= 3 && i <= 9 ? 'text-right' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
-      <tbody>${rows}</tbody></table>` : '<div class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเคลื่อนไหวในงวดนี้</div>'}
+      <tbody>${rows}</tbody></table>` : '<div class="wt-empty">ไม่มีรายการเคลื่อนไหวในงวดนี้</div>'}
     <div class="mt-2 text-sm" style="color:var(--text-primary)">รวมมูลค่าตัดเบิก <b>฿${_bmcNum(t.used_value, 2)}</b>
       <span class="text-[11px]" style="color:var(--text-muted)"> · มูลค่ารับเข้า ฿${_bmcNum(t.received_value, 2)} · เคลม/ปรับ ฿${_bmcNum(t.claims_value, 2)}</span></div>
     ${d.excluded.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">ไม่มีการเคลื่อนไหว ${d.excluded.length} รายการ (ไม่แสดงในใบสรุป)</div>` : ''}`;
@@ -2896,9 +3102,9 @@ async function bmcIssLoadSummary() {
 function bmcIssRenderRecon() {
   const rbox = document.getElementById('bmcIssRecon'), rc = _bmcIssRecon;
   if (!rbox) return;
-  if (!rc) { rbox.innerHTML = '<div class="text-xs" style="color:var(--amber-ink)">ยังไม่มีรายงานกระทบยอดของงวดนี้</div>'; return; }
+  if (!rc) { rbox.innerHTML = '<div class="wt-empty" style="color:var(--amber-ink)">ยังไม่มีรายงานกระทบยอดของงวดนี้</div>'; return; }
   const all = !!(document.getElementById('bmcIssAll') && document.getElementById('bmcIssAll').checked);
-  rbox.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">กระทบยอด สาขา${esc(rc.branch.name || '')} · คงเหลือตามระบบเทียบนับจริง</div>${isrReconHead(rc)}
+  rbox.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">กระทบยอด · คงเหลือตามระบบเทียบนับจริง</div>${isrReconHead(rc)}
     <label class="text-xs flex items-center gap-1 mt-2" style="color:var(--text-secondary)"><input type="checkbox" id="bmcIssAll" onchange="bmcIssRenderRecon()"${all ? ' checked' : ''}> แสดงทุกรายการ (${rc.rows.length})</label>
     <div class="mt-2">${isrReconTable(rc, { all, pfx: 'bmcIssRc', qty: brnQtyUnit, brief: true })}</div>`;
 }
@@ -2906,20 +3112,27 @@ function bmcIssSlipsXlsx() {         // every confirmed daily slip of the period
   const d = _bmcIssSum;
   if (!d) return;
   _ohbIsDownload(`${API}/api/bom-center/issues/export.xlsx?month=${encodeURIComponent(d.period.month)}`,
-    `ใบตัดเบิกสาขา_${d.period.month}.xlsx`, 'bmcIssStatus');
+    `ใบตัดเบิกสาขา_${d.period.month}.xlsx`, _bmcIssDrawerOpen() ? 'bmcIssDrStatus' : 'bmcIssStatus');
 }
 function bmcIssXlsx() {
   const d = _bmcIssSum;
   if (!d) return;
-  if (!d.status.receipts_confirmed) { _bmcStatus('bmcIssStatus', 'งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'var(--amber-ink)'); return; }
+  if (!d.status.receipts_confirmed) { _bmcIssStat('งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'warn'); return; }
   bmcDownload(`${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`,
-    `ใบสรุปตัดเบิก_${d.branch.name || ''}_${d.period.month}.xlsx`, 'bmcIssStatus');
+    `ใบสรุปตัดเบิก_${d.branch.name || ''}_${d.period.month}.xlsx`, 'bmcIssDrStatus');
+}
+// the download of a row of the overview (the workbook is refused by the server until the receipts are confirmed)
+function bmcIssXlsxRow(bid) {
+  const r = ((_bmcIssMonth && _bmcIssMonth.rows) || []).find(x => x.branch_id === bid);
+  if (!r) return;
+  bmcDownload(`${API}/api/bom-center/issue-summary.xlsx?end_count_id=${r.end_count_id}&branch_id=${r.branch_id}`,
+    `ใบสรุปตัดเบิก_${r.name || ''}_${_bmcIssMonth.month}.xlsx`, 'bmcIssStatus');
 }
 function bmcIssXlsxAll() {
-  const d = _bmcIssSum;
+  const d = _bmcIssMonth;
   if (!d) return;
-  bmcDownload(`${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.period.month)}`,
-    `ใบสรุปตัดเบิก_ทุกสาขา_${d.period.month}.xlsx`, 'bmcIssStatus');
+  bmcDownload(`${API}/api/bom-center/issue-summary-all.xlsx?month=${encodeURIComponent(d.month)}`,
+    `ใบสรุปตัดเบิก_ทุกสาขา_${d.month}.xlsx`, 'bmcIssStatus');
 }
 // one template, named for the page it is downloaded from: ราคารายเดือน (the analyst) or ไฟล์ราคา (Sales Support)
 function bmcDownloadPriceTemplate(statusId, page) {
@@ -2927,9 +3140,13 @@ function bmcDownloadPriceTemplate(statusId, page) {
   bmcDownload(`${API}/api/bom-center/prices/template.xlsx?page=${encodeURIComponent(p)}`, `แม่แบบ_${p}.xlsx`, statusId || 'bmcPriceStatus');
 }
 function bmcDownloadIngTemplate() { bmcDownload(`${API}/api/bom-center/ingredients/template.xlsx`, 'ทะเบียนวัตถุดิบ.xlsx', 'bmcIngStatus'); }
-async function bmcIssPost(want) {
-  const d = _bmcIssSum;
-  if (!d) return;
+// the posting (and its undo) of one period, from a row of the overview or from the drawer; the owner-token dialog is the shared 403 handler
+async function bmcIssPost(want, endCountId, branchId) {
+  let d = _bmcIssSum && _bmcIssSum.period.end_count_id === endCountId ? _bmcIssSum : null;
+  if (!d) {
+    try { d = await _bmcJson(`${API}/api/bom-center/issue-summary?end_count_id=${endCountId}&branch_id=${branchId}`); }
+    catch (e) { _bmcIssStat(String(e.message || e).slice(0, 200), false); return; }
+  }
   // the question says what is posted (branch, period, baht, lines) and what the lock does; the lock is lifted by the same box
   const what = `สาขา${d.branch.name || ''} · ${fmtDay(d.period.begin_date)} ถึง ${fmtDay(d.period.end_date)} · ${d.lines.length} รายการ · มูลค่าตัดเบิก ฿${_bmcNum(d.totals.used_value, 2)}`;
   // QA L4h: a period posted with confirmed slips missing says so in the question ("ขาดใบตัดเบิก N วัน") - a warning, never a block
@@ -2940,19 +3157,15 @@ async function bmcIssPost(want) {
       { title: 'ยืนยันการบันทึกเข้าระบบบัญชี', ok: 'บันทึกเข้าระบบบัญชีแล้ว', cancel: 'ยังไม่บันทึก' })
     : await uiConfirm(`ยกเลิกการบันทึกบัญชีของงวดนี้?\n${what}\nงวดนี้จะปลดล็อก และแก้ไขใบรับสินค้าและใบตัดเบิกได้อีก`,
       { title: 'ยืนยันการยกเลิกการบันทึกบัญชี', ok: 'ยกเลิกการบันทึกบัญชี', cancel: 'ไม่ยกเลิก' });
-  if (!ok) { bmcStatus('bmcIssStatus', null, 'ยังไม่เปลี่ยนสถานะ'); return; }
+  if (!ok) { _bmcIssStat('ยังไม่เปลี่ยนสถานะ', null); return; }
   try {
     await _bmcJson(`${API}/api/bom-center/issue-summary/posted`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ end_count_id: d.period.end_count_id, posted: want }) });
-    const b = ((_bmcIssPeriods && _bmcIssPeriods.branches) || []).find(x => x.branch_id === d.branch.branch_id);
-    const p = b && b.periods.find(x => x.end_count_id === d.period.end_count_id);
-    if (p) { p.accounting_posted_at = want ? new Date().toISOString() : null; }
-    _bmcIssFillPeriods();
-    document.getElementById('bmcIssPeriod').value = String(d.period.end_count_id);
-    await bmcIssLoadSummary();
-    bmcStatus('bmcIssStatus', true, want ? 'บันทึกเข้าระบบบัญชีแล้ว · งวดนี้ล็อก' : 'ยกเลิกการบันทึกบัญชีแล้ว · งวดนี้ปลดล็อก');
+    await bmcLoadIssue(_bmcIssMonth && _bmcIssMonth.month, true);                       // the overview: the row changes state
+    if (_bmcIssDrawerOpen() && _bmcIssEnd === d.period.end_count_id) await bmcIssLoadSummary();
+    _bmcIssStat(want ? 'บันทึกเข้าระบบบัญชีแล้ว · งวดนี้ล็อก' : 'ยกเลิกการบันทึกบัญชีแล้ว · งวดนี้ปลดล็อก', true);
   } catch (e) {
-    bmcStatus('bmcIssStatus', false, String(e.message || e).slice(0, 200));          // the server did not take it: the button stays as it was
+    _bmcIssStat(String(e.message || e).slice(0, 200), false);          // the server did not take it: the row stays as it was
   }
 }
 // ── PR-Y · รหัสใหม่ของวัตถุดิบเดิม ──────────────────────────────────────────────
