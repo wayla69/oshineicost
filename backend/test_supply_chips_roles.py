@@ -189,16 +189,21 @@ def test_pricefile_is_a_pane_of_its_own_with_the_submit_card():
     assert "bmcPricePreview" in price and "bmcImportPrices" in price                          # ... and the import card
 
 
-def test_every_pane_has_its_help_folded_at_the_bottom():
-    """The explanation of a page is a <details class="bmc-help"> (closed: no `open`), never a paragraph above the controls."""
+def test_every_pane_has_its_help_behind_a_question_mark():
+    """PR-D6: the explanation of a page is a <template> behind the "?" of the page header (uiHelp), never a paragraph above the controls and no longer a
+    folded block at the bottom. A <details class="bmc-help"> that is left (the two panes PR-R is redesigning) is closed: no `open`."""
     root = Path(__file__).resolve().parent.parent
     for f in ("tabs/52-bomcenter.html", "tabs/53-branchstock.html"):
         txt = (root / f).read_text(encoding="utf-8")
         helps = re.findall(r"<details[^>]*class=\"[^\"]*bmc-help[^\"]*\"[^>]*>", txt)
-        assert helps and not any(re.search(r"\bopen\b", h) for h in helps), f
+        assert not any(re.search(r"\bopen\b", h) for h in helps), f
+        assert 'class="ui-q' in txt and "<template id=\"hlp-" in txt, f
     oh = (root / "tabs" / "54-orderhub.html").read_text(encoding="utf-8")
+    js = (root / "js" / "15-orderhub.js").read_text(encoding="utf-8")
+    assert 'data-help-tab="orderhub"' in oh
     for pane in ("queue", "claims", "issues", "issuevar", "comp", "pilot", "central", "month"):
-        assert f'id="ohbHelp-{pane}"' in oh, pane
+        assert f'id="ohbHelp-{pane}"' not in oh, pane
+        assert re.search(r"\n  %s: \{" % pane, js), pane               # the text of the pane, by role, in _OHB_HELP
 
 
 def test_a_page_in_two_chips_is_listed_for_one_role_only():

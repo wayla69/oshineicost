@@ -94,25 +94,60 @@ async function _bmcJson(url, opt) {
   }
   return j;
 }
+// ── PR-D6: where a status goes ──────────────────────────────────────────────────────────────────────────────
+// A result (a save, an import, a download, a send, an approval) is a TOAST (uiToast, 01-core.js), not a line that stays beside the button:
+//   ✓ … / a good ink            → success toast (+ the ขั้นตอนถัดไป link of หน้างาน inside it)
+//   ไม่สำเร็จ … / a bad ink       → error toast (stays until closed); a field to fix (ใส่ / ระบุ / เลือก / ต้อง …) also stays inline at the field, short and red
+//   an amber ink                → warning toast + a short amber line beside the control (a thing to fix); only a state ("ยังไม่บันทึก") stays inline alone
+//   anything else               → info toast
+// and the INLINE line is kept for what is not a result: progress ("กำลังนำเข้า…"), an autosaved draft ("บันทึกร่าง 10:42"), a state that is still
+// true ("แก้ไขแล้ว ยังไม่บันทึก") and the *Summary counters of a table. One small muted line, never a sentence.
+const _BMC_STATUS_FIELD = /^(ใส่|ระบุ|เลือก|ต้อง|กรอก|แก้รายการ|ไม่ได้บันทึก|%|วันที่|เกณฑ์|ช่วง)/;
+function _bmcStatusKind(id, t, ink) {
+  if (!t) return { inline: 'clear' };
+  const bad = ink === 'var(--bad-ink)' || /^(ไม่สำเร็จ|บันทึกไม่สำเร็จ|นำเข้าไม่สำเร็จ|ส่งไม่สำเร็จ|ยกเลิกไม่สำเร็จ|โหลด.*ไม่สำเร็จ|กำหนดโซนไม่สำเร็จ|ไม่ได้ลบ)/.test(t);
+  const warn = ink === 'var(--amber-ink)';
+  const good = ink === 'var(--good-ink)' || t.charAt(0) === '✓';
+  if (!bad && !warn && !good && (/(…|\.\.\.)$/.test(t) || /^กำลัง/.test(t))) return { inline: 'note' };    // progress (a plain ink: a warning that happens to end in "…" is still a warning)
+  if (/^(✓ ?)?บันทึกร่าง|^ล้างร่าง/.test(t) || (good && /ร่างแล้ว/.test(t))) return { inline: 'note' };                  // a draft that was autosaved
+  if (/Summary$|Count$/.test(id || '')) return { inline: 'note' };                                                    // a counter of a table
+  if (bad) return { toast: 'error', inline: _BMC_STATUS_FIELD.test(t) ? 'field' : 'clear' };
+  if (warn) return /ยังไม่บันทึก|ยังไม่ได้บันทึก/.test(t) ? { inline: 'warn' } : { toast: 'warn', inline: 'warn' };      // a thing to fix stays beside its control, short
+  if (good) return { toast: 'success', inline: 'clear' };
+  return { toast: 'info', inline: 'clear' };
+}
+function _bmcStatusPut(el, t, how, ink) {
+  if (!el) return;
+  if (how === 'clear' || !t) { el.textContent = ''; return; }
+  el.textContent = t;
+  el.style.color = how === 'field' ? 'var(--bad-ink)' : how === 'warn' ? 'var(--amber-ink)' : (ink && how !== 'note' ? ink : 'var(--text-muted)');
+}
 function _bmcStatus(id, msg, ink) {
   const el = document.getElementById(id);
-  if (el) { el.textContent = msg; el.style.color = ink || 'var(--text-muted)'; }
-  // a save that succeeded (every one reports "✓ …"): หน้างาน says what comes next (16-supplyhome.js)
-  // (an autosaved draft is not a step done: no toast until the person submits)
-  if (msg && String(msg).startsWith('✓') && !/ร่าง/.test(String(msg)) && typeof shmAfterStatus === 'function') shmAfterStatus(id);
+  const t = msg == null ? '' : String(msg);
+  const k = _bmcStatusKind(id, t, ink);
+  _bmcStatusPut(el, t, k.inline, ink);
+  if (!k.toast) return;
+  const h = uiToast(t, k.toast);
+  // a save that succeeded (every one reports "✓ …"): หน้างาน says what comes next (16-supplyhome.js), inside the same toast
+  // (an autosaved draft is not a step done: no next step until the person submits)
+  if (k.toast === 'success' && t.charAt(0) === '✓' && !/ร่าง/.test(t) && typeof shmAfterStatus === 'function') shmAfterStatus(id, h);
 }
-// ── PR-M2: ONE status line for every save and download ──────────────────────────
-// bmcStatus(el, ok, text): el = an element or its id · ok true = "✓ …" in green, false = "ไม่สำเร็จ: …" in red,
-// 'warn' = amber (a field to fix), anything else = grey progress. A save or a download always ends in one of the first two.
+// ── PR-M2: ONE status call for every save and download ──────────────────────────────────────────────────────────
+// bmcStatus(el, ok, text): el = an element or its id · ok true = "✓ …" success toast, false = "ไม่สำเร็จ: …" error toast,
+// 'warn' = a field to fix (inline, amber, short, plus a warning toast), anything else = progress. A save or a download always ends in one of the first two.
 function bmcStatus(el, ok, text) {
   const node = typeof el === 'string' ? document.getElementById(el) : el;
-  if (!node) return;
   let t = String(text == null ? '' : text);
   if (t && ok === true && !t.startsWith('✓')) t = '✓ ' + t;
   if (t && ok === false && !/^(ไม่สำเร็จ|ไม่ได้|ใส่|ระบุ|เลือก)/.test(t)) t = 'ไม่สำเร็จ: ' + t;
   const ink = ok === true ? 'var(--good-ink)' : ok === false ? 'var(--bad-ink)' : ok === 'warn' ? 'var(--amber-ink)' : 'var(--text-muted)';
-  node.setAttribute('role', ok === false ? 'alert' : 'status');
-  if (node.id) _bmcStatus(node.id, t, ink); else { node.textContent = t; node.style.color = ink; }
+  if (node) node.setAttribute('role', ok === false ? 'alert' : 'status');
+  if (node && node.id) { _bmcStatus(node.id, t, ink); return; }
+  // an element without an id: the same routing, the inline part written on the element itself
+  const k = _bmcStatusKind('', t, ink);
+  _bmcStatusPut(node, t, ok === 'warn' && k.inline === 'clear' ? 'warn' : k.inline, ink);
+  if (k.toast) uiToast(t, k.toast);
 }
 // a file from the server saved in the browser, with the outcome on the status line (the server's reason when it refuses)
 async function bmcDownload(url, name, statusEl) {
@@ -139,6 +174,11 @@ async function bmcDownload(url, name, statusEl) {
 // the help of a page: folded, at the bottom (never a paragraph above the controls). `html` is trusted markup of <p>s.
 function bmcHelpHtml(html) {
   return `<details class="bmc-help"><summary>วิธีใช้หน้านี้</summary><div>${html}</div></details>`;
+}
+// PR-D6 · a note is ONE short line (<= 60 characters) with a "?" that opens the full text: bmcNote(key, short, fullHtml). `short` is plain text,
+// `fullHtml` is trusted markup (<p>s; escape anything that comes from the data). The key names the explanation in the registry (uiQ, 01-core.js).
+function bmcNote(key, short, full, cls, style) {
+  return `<div class="${cls || 'wt-note'}"${style ? ` style="${style}"` : ''}>${esc(short)} ${uiQ('bmc:' + key, 'คำอธิบาย', full == null ? '' : full)}</div>`;
 }
 // a version's name as people read it: the stored label may still end with the old "(draft)" tag (the status chip says it)
 function _bmcLbl(l) { return String(l == null ? '' : l).replace(/\s*\((?:draft|ร่าง)\)\s*$/i, ''); }
@@ -177,7 +217,10 @@ function bmcPairs(pairs, max) {
   return bmcLines((pairs || []).map(([l, v]) => `<span class="wt-pair"><span>${l}</span><span class="wt-pv">${v}</span></span>`), max);
 }
 function bmcBranchTable(branches, linkFn) {
-  const list = branches || [];
+  // PR-D6: a branch that is done (or has no work) is hidden by default - the shared filter (uiStateFilter) of the page decides: เสร็จแล้ว shows only
+  // those, ทั้งหมด shows every branch, anything else (ยังไม่เสร็จ · รอตรวจ) shows the branches that still have work
+  const fb = uiStateFilter.get(['todo', 'review', 'done', 'all']);
+  const list = (branches || []).filter(b => fb === 'all' || ((b.status === 'done' || b.status === 'na') === (fb === 'done')));
   if (!list.length) return '';
   const acts = list.map(b => (linkFn && b.status !== 'done' ? linkFn(b) || '' : ''));
   const anyAct = acts.some(Boolean);
@@ -237,7 +280,7 @@ async function loadBomCenter() {
 function bmcBacklogHtml(b, n) {
   const rows = (b.top || b.items || []).slice(0, n || 10);
   if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีงานแก้ข้อมูลค้าง</span>';
-  return (b.note ? `<div class="wt-note mb-1">${esc(b.note)}</div>` : '')
+  return (b.note ? bmcNote('backlog', 'เรียงตามผลกระทบต่อจาน', `<p>${esc(b.note)}</p>`, 'wt-note mb-1') : '')
     + `<div class="wt-wrap"><table class="wt"><thead><tr><th class="wt-num">#</th><th>งาน</th><th>ประเภท</th><th>ผลกระทบ</th><th></th></tr></thead><tbody>${rows.map((d, i) => `<tr>
       <td class="wt-num wt-muted" data-l="ลำดับ">${i + 1}</td>
       <td data-l="งาน" style="font-weight:600">${esc(d.title)}${d.detail ? `<div class="wt-muted" style="font-size:13px;font-weight:400">${esc(d.detail)}</div>` : ''}</td>
@@ -277,21 +320,25 @@ async function bmcLoadOverview() {
       : 'ยังไม่เคยนำเข้าราคาซื้อจริง';
     const setup = document.getElementById('bmcSetupCard');
     if (!s.ingredients) {
-      setup.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">เริ่มต้นใช้งาน</div>
-        <p class="text-xs mb-2" style="color:var(--text-secondary)">ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ” แล้วนำเข้าทะเบียนเดิม (DATAP ในไฟล์ Cost-RW) และราคาซื้อจริง</p>
+      _bmcSetupBase = []; _bmcSetupCr = null;
+      setup.innerHTML = `<div class="ui-cardhead mb-1"><div class="text-sm font-semibold" style="color:var(--text-primary)">เริ่มต้นใช้งาน</div>
+          ${uiQ('bmc:setup0', 'เริ่มต้นใช้งาน', '<p>ทะเบียนว่าง: กด “เติมจากข้อมูลในระบบ” แล้วนำเข้าทะเบียนเดิม (DATAP ในไฟล์ Cost-RW) และราคาซื้อจริง</p>')}</div>
+        <div class="ui-sub mb-2">ทะเบียนวัตถุดิบยังว่าง</div>
         ${_bmcCanWrite() ? '<button onclick="bmcSeed()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;cursor:pointer">เติมจากข้อมูลในระบบ</button>' : ''}`;
     } else {
       // each open item links to the list where it is fixed
       const steps = [
         [s.recipe_codes_missing === 0, `รหัสวัตถุดิบที่สูตรใช้อยู่ในทะเบียนครบ`, `สูตรใช้รหัสที่ยังไม่อยู่ในทะเบียน ${s.recipe_codes_missing} รหัส`, 'bmcGoIssues()', 'ตรวจรายการและรหัสที่แนะนำ'],
         [s.no_base_unit === 0, 'ทุกวัตถุดิบมีหน่วยฐาน', `${s.no_base_unit} รายการยังไม่มีหน่วยฐาน`, "bmcGoIng('ไม่มีหน่วยฐาน')", 'เปิดรายการ'],
-        [s.raw_without_pack === 0, 'วัตถุดิบดิบมีขนาดบรรจุครบ', `${s.raw_without_pack} รายการดิบยังไม่มีขนาดบรรจุ (จึงแปลงหน่วยแพ็คหรือถุงไม่ได้)`, "bmcGoIng('ไม่มีขนาดบรรจุ')", 'เปิดรายการ'],
+        [s.raw_without_pack === 0, 'วัตถุดิบดิบมีขนาดบรรจุครบ', `${s.raw_without_pack} รายการดิบยังไม่มีขนาดบรรจุ`, "bmcGoIng('ไม่มีขนาดบรรจุ')", 'เปิดรายการ'],
         [(s.price_sources || {}).purchase_avg > 0, `มีราคาซื้อจริงของเดือน${fmtMonthTh(s.month)}`, `ยังไม่มีราคาซื้อจริงของเดือน${fmtMonthTh(s.month)}`, "bmcSetSub('price')", 'นำเข้าที่ ราคารายเดือน'],
       ];
       const go = (on, label) => ` <a href="#" onclick="${on};return false" style="color:var(--accent);white-space:nowrap">${label} →</a>`;
-      setup.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ความพร้อมของข้อมูล</div>` +
-        steps.map(([ok, good, bad, on, label]) => `<div class="text-xs py-0.5" style="color:${ok ? 'var(--good-ink)' : 'var(--amber-ink)'}">${ok ? '✓' : '•'} ${esc(ok ? good : bad)}${ok ? '' : go(on, label)}</div>`).join('') +
-        '<div id="bmcSetupCr"></div>';
+      // PR-D6: a line that is done ("✓ …") is hidden by default - the shared filter (uiStateFilter) shows it again
+      _bmcSetupBase = steps.map(([ok, good, bad, on, label]) => ({ ok, html: `<div class="text-xs py-0.5" style="color:${ok ? 'var(--good-ink)' : 'var(--amber-ink)'}">${ok ? '✓' : '•'} ${esc(ok ? good : bad)}${ok ? '' : go(on, label)}</div>` }));
+      _bmcSetupCr = null;
+      setup.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">ความพร้อมของข้อมูล</div><div id="bmcSetupFilter"></div><div id="bmcSetupBody"></div>`;
+      _bmcSetupDraw();
     }
     bmcLoadCodeReview(s);
   } catch (e) {
@@ -299,9 +346,20 @@ async function bmcLoadOverview() {
   }
 }
 
+let _bmcSetupBase = [], _bmcSetupCr = null;       // the lines of ความพร้อมของข้อมูล: [{ok, html}] (the code-check line arrives later)
+function _bmcSetupDraw() {
+  const box = document.getElementById('bmcSetupBody');
+  if (!box) return;
+  const rows = _bmcSetupBase.concat(_bmcSetupCr ? [_bmcSetupCr] : []);
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(rows, r => r.ok);
+  uiStateFilter.bar('bmcSetupFilter', { counts: sp.counts, f, pick: '_bmcSetupPick' });
+  const list = f === 'all' ? sp.all : sp[f];
+  box.innerHTML = list.length ? list.map(r => r.html).join('') : uiStateFilter.empty(f, '_bmcSetupPick', 'ข้อ');
+}
+function _bmcSetupPick(f) { uiStateFilter.set(f); _bmcSetupDraw(); }
 // ── code check: old-recipe codes vs the master (codes.py) ───────────────────
 let _bmcCr = null;            // /api/bom-center/code-review
-let _bmcCrView = 'todo';      // todo | done | all
+let _bmcCrView = 'todo';      // todo | done | all - the shared filter (uiStateFilter): unfinished by default
 let _bmcCrGroups = [];       // [{code, names}] behind the buttons of the rendered rows
 const _BMC_CR = {
   missing: ['ไม่อยู่ในทะเบียน', 'var(--amber-ink)'], conflict: ['ชื่อไม่ตรง', 'var(--bad-ink)'],
@@ -315,7 +373,7 @@ async function bmcLoadCodeReview(s) {
     // an empty master makes every recipe code "missing" — say what fixes it instead of listing them
     iss.innerHTML = s.recipe_codes_missing
       ? `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รหัสที่สูตรเดิมใช้แต่ยังไม่อยู่ในทะเบียน: ${_bmcNum(s.recipe_codes_missing, 0)} รหัส</div>
-         <p class="text-xs" style="color:var(--text-secondary)">กด “เติมจากข้อมูลในระบบ” ด้านบนครั้งเดียว ทุกรหัสจะถูกเพิ่มพร้อมชื่อ หน่วย และขนาดบรรจุ</p>`
+         ${bmcNote('seed1', 'เติมจากข้อมูลในระบบด้านบนครั้งเดียว', '<p>กด “เติมจากข้อมูลในระบบ” ด้านบนครั้งเดียว ทุกรหัสจะถูกเพิ่มพร้อมชื่อ หน่วย และขนาดบรรจุ</p>', 'ui-sub')}`
       : '';
     iss.style.display = s.recipe_codes_missing ? '' : 'none';
     return;
@@ -328,10 +386,10 @@ async function bmcLoadCodeReview(s) {
     iss.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">ตรวจรหัสไม่สำเร็จ: ${esc(String(e.message || e))}</div>`;
   }
 }
-function bmcCrView(v) { _bmcCrView = v; bmcRenderCodeReview(); }
+function bmcCrView(v) { uiStateFilter.set(v); bmcRenderCodeReview(); }
 function bmcGoIssues() {
   bmcSetSub('overview');
-  _bmcCrView = 'todo';
+  uiStateFilter.set('todo');
   setTimeout(() => { const el = document.getElementById('bmcIssuesCard'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
 }
 let _bmcIngProb = '';         // the ingredient tab shows only rows with this problem ('' = any)
@@ -392,11 +450,14 @@ function bmcRenderCodeReview() {
   const d = _bmcCr;
   if (!iss || !d) return;
   const c = d.counts || {};
+  _bmcCrView = uiStateFilter.get();
   const todo = (c.conflict || 0) + (c.missing || 0);
-  const setupCr = document.getElementById('bmcSetupCr');
-  if (setupCr) setupCr.innerHTML = todo
-    ? `<div class="text-xs py-0.5" style="color:var(--amber-ink)">• รหัสในสูตรเดิมที่ชื่อไม่ตรงกับทะเบียน ${_bmcNum(c.conflict || 0, 0)} รหัส${c.missing ? ` · ไม่อยู่ในทะเบียน ${_bmcNum(c.missing, 0)} รหัส` : ''} <a href="#" onclick="bmcGoIssues();return false" style="color:var(--accent);white-space:nowrap">ตรวจและจับคู่รหัส →</a></div>`
-    : `<div class="text-xs py-0.5" style="color:var(--good-ink)">✓ รหัสในสูตรเดิมตรงกับทะเบียนหรือตรวจแล้วทั้งหมด</div>`;
+  if (document.getElementById('bmcSetupBody')) {
+    _bmcSetupCr = todo
+      ? { ok: false, html: `<div class="text-xs py-0.5" style="color:var(--amber-ink)">• รหัสในสูตรเดิมที่ชื่อไม่ตรงกับทะเบียน ${_bmcNum(c.conflict || 0, 0)} รหัส${c.missing ? ` · ไม่อยู่ในทะเบียน ${_bmcNum(c.missing, 0)} รหัส` : ''} <a href="#" onclick="bmcGoIssues();return false" style="color:var(--accent);white-space:nowrap">ตรวจและจับคู่รหัส →</a></div>` }
+      : { ok: true, html: `<div class="text-xs py-0.5" style="color:var(--good-ink)">✓ รหัสในสูตรเดิมตรงกับทะเบียนหรือตรวจแล้วทั้งหมด</div>` };
+    _bmcSetupDraw();
+  }
   const done = (d.rows || []).filter(r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap')).length;
   const hasDone = r => (r.names || []).some(n => n.status === 'same' || n.status === 'remap');
   const rows = (d.rows || []).filter(r => _bmcCrView === 'all' || (_bmcCrView === 'todo'
@@ -439,18 +500,18 @@ function bmcRenderCodeReview() {
       <td class="wt-act" data-l="">${w ? `<button type="button" class="wt-btn is-bad" onclick="bmcCrDecideG(${id}, 'clear')">ยกเลิกการตัดสินใจ</button>` : ''}</td></tr>`;
   };
   const body = rows.map(r => (_bmcCrView === 'done' ? '' : groupRows(r)) + (_bmcCrView === 'todo' ? '' : doneRow(r))).join('');
-  const seg = [['todo', 'ต้องตรวจ', todo], ['done', 'ตรวจแล้ว', done], ['all', 'ทุกรายการที่มีปัญหา', null]]
-    .map(([k, l, n]) => `<button type="button" class="${_bmcCrView === k ? 'is-on' : ''}" onclick="bmcCrView('${k}')">${l}${n != null ? `<span class="wt-n">${n}</span>` : ''}</button>`).join('');
+  const nOpen = (d.rows || []).filter(r => (r.groups || []).length > 0).length, nAll = (d.rows || []).filter(r => (r.groups || []).length > 0 || hasDone(r)).length;
   iss.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ตรวจรหัสสูตรเดิม: รหัสเดียวกันแต่ชื่อไม่ตรง</div>
       <a href="${API}/api/bom-center/code-review.xlsx?all=true" class="text-xs" style="color:var(--accent)">ดาวน์โหลดตรวจรหัสสูตรเดิม ทุกรหัส (Excel)</a></div>
     ${bmcStats([['รหัสที่สูตรเดิมใช้', d.used], ['ชื่อตรงกับทะเบียน', c.ok, 'var(--good-ink)'], ['ชื่อไม่ตรง', c.conflict, c.conflict ? 'var(--bad-ink)' : null],
       ['ไม่อยู่ในทะเบียน', c.missing, c.missing ? 'var(--amber-ink)' : null], ['ตรวจแล้ว', done]])}
-    <div class="wt-note mb-2">ชื่อไม่ตรง = รหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด · เลือก <b>วัตถุดิบเดียวกัน</b> หรือ <b>ใช้รหัสแนะนำ</b> · มีผลกับแผนสั่งเท่านั้น</div>
-    <div class="wt-bar"><div class="wt-seg">${seg}</div></div>
+    ${bmcNote('crnote', 'ชื่อไม่ตรง = รหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด', '<p>ชื่อไม่ตรง = รหัสเดียวกันแต่เป็นวัตถุดิบคนละชนิด · เลือก <b>วัตถุดิบเดียวกัน</b> หรือ <b>ใช้รหัสแนะนำ</b> · มีผลกับแผนสั่งเท่านั้น</p>', 'wt-note mb-2')}
+    <div id="bmcCrFilter"></div>
     <div id="bmcCrStatus" class="text-xs mb-1"></div>
     ${rows.length ? `<div class="wt-wrap" style="max-height:640px"><table class="wt"><thead><tr><th>รหัส</th><th>ชื่อในสูตรเดิม</th><th>${_bmcCrView === 'done' ? 'ที่เลือกไว้' : 'รหัสที่แนะนำ / ที่เลือกไว้'}</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`
       : `<div class="wt-empty" style="color:var(--good-ink)">${_bmcCrView === 'todo' ? '✓ ไม่มีรหัสที่ต้องตรวจ' : 'ยังไม่มีรายการ'}</div>`}`;
+  uiStateFilter.bar('bmcCrFilter', { counts: { todo: nOpen, done, all: nAll }, f: _bmcCrView, pick: 'bmcCrView' });
 }
 function bmcCrDecideG(i, status, useCode) {
   const g = _bmcCrGroups[i];
@@ -703,7 +764,7 @@ async function bmcSeed() {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=false`, { method: 'POST' });
     _bmcStatus('bmcIngStatus', `✓ ทะเบียน ${d.before} → ${d.after} รายการ`, 'var(--good-ink)');
     const rep = document.getElementById('bmcIngReport');
-    if (rep) rep.innerHTML = pre.multi_unit_codes.length ? `<div class="card p-3 text-xs" style="color:var(--amber-ink)">รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} รายการ ใช้หน่วยที่ใช้มากที่สุด · ตรวจที่หน่วยและการแปลง</div>` : '';
+    if (rep) rep.innerHTML = pre.multi_unit_codes.length ? `<div class="card p-3 text-xs" style="color:var(--amber-ink)">${esc(`รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} รายการ`)} ${uiQ('bmc:multiunit', 'รหัสที่สูตรใช้หลายหน่วย', '<p>ใช้หน่วยที่ใช้มากที่สุด · ตรวจที่หน่วยและการแปลง</p>')}</div>` : '';
     _bmcIng = [];
     bmcSetSub(_bmcSub === 'overview' ? 'overview' : 'ing');
   } catch (e) {
@@ -830,8 +891,36 @@ function _bmcRulesToSend() {
 }
 // PR-Y: the answers to "which unknown code is a new code of an existing item"; null = none given
 function _bmcPriceChoices() { const c = bmcUcChoices('bmcUcPrice'); return Object.keys(c).length ? c : null; }
+let _bmcPvLast = null;        // the preview on the screen: its filter chips and rows are redrawn without touching the code pickers beside them
+function _bmcPvPick(f) { uiStateFilter.set(f); _bmcPvDraw(); }
+function _bmcPvDraw() {
+  const p = _bmcPvLast, bar = document.getElementById('bmcPvFilter'), body = document.getElementById('bmcPvBody');
+  if (!p || !bar || !body) return;
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(p.rows, r => r.flag === 'ok');
+  uiStateFilter.bar(bar, { counts: sp.counts, f, pick: '_bmcPvPick' });
+  body.innerHTML = _bmcPvBodyHtml(p, f === 'all' ? sp.todo.concat(sp.done) : sp[f], f);
+}
+function _bmcPvBodyHtml(p, list, f) {
+  const flagInk = { flag: 'var(--bad-ink)', warn: 'var(--amber-ink)', new: 'var(--navy-ink)', ok: 'var(--text-muted)' };
+  const flagTh = { flag: 'เปลี่ยน ≥25%', warn: 'เปลี่ยน ≥10%', new: 'ใหม่', ok: 'ปกติ' };
+  const top = list.slice(0, 60);
+  if (!top.length) return uiStateFilter.empty(f, '_bmcPvPick', 'บรรทัด');
+  return `<div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
+      <thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">รหัส</th><th class="pr-2">วัตถุดิบ</th>
+        <th class="pr-2 text-right">ปริมาณ (หน่วยฐาน)</th><th class="pr-2 text-right">มูลค่า</th><th class="pr-2 text-right">ราคาใหม่</th>
+        <th class="pr-2 text-right">ราคาก่อน</th><th class="pr-2 text-right">เปลี่ยน</th><th class="pr-2">แปลงหน่วย</th><th></th></tr></thead>
+      <tbody>${top.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2">${esc(r.code)}</td><td class="pr-2">${esc(r.name || '')}</td>
+        <td class="pr-2 text-right">${_bmcNum(r.qty_base)} ${esc(r.base_unit || '')}</td><td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
+        <td class="pr-2 text-right font-semibold">${_bmcPrice(r.price_per_base)}</td><td class="pr-2 text-right">${_bmcPrice(r.prev_price)}</td>
+        <td class="pr-2 text-right" style="color:${flagInk[r.flag]}">${r.change_pct == null ? '' : (r.change_pct > 0 ? '+' : '') + r.change_pct + '%'}</td>
+        <td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(r.converted_by.join(' / '))}</td>
+        <td>${_bmcChip(flagTh[r.flag], flagInk[r.flag])}${r.manual_kept ? ' ' + _bmcChip('คงราคาที่กำหนดเอง', 'var(--navy-ink)') : ''}</td></tr>`).join('')}</tbody></table></div>
+    ${list.length > top.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)" title="เรียงจากรายการที่เปลี่ยนมากที่สุด">แสดง ${top.length} จาก ${list.length} รายการ</div>` : ''}`;
+}
 function _bmcShowPrice(p, applied) {
+  _bmcPvLast = p;
   document.getElementById('bmcPricePreview').innerHTML = _bmcPreviewHtml(p, applied);
+  _bmcPvDraw();
   if (applied) { bmcUcReset('bmcUcPrice'); return; }
   bmcUcRender('bmcUcPrice', p.unknown_items || [], { mode: 'price', onRecalc: 'bmcPriceRepreview()' });
 }
@@ -842,7 +931,7 @@ async function bmcPriceRepreview() {
     _bmcStatus('bmcPriceStatus', 'กำลังคำนวณใหม่…');
     _bmcPricePre = await _bmcPriceSend(true, _bmcChosenRules, _bmcPriceChoices());
     _bmcShowPrice(_bmcPricePre, false);
-    _bmcStatus('bmcPriceStatus', `คำนวณด้วยกฎหน่วย ${_bmcChosenRules.length} รายการและรหัสที่เลือกแล้ว · ตรวจผล แล้วกด “บันทึกราคา”`);
+    _bmcStatus('bmcPriceStatus', `คำนวณด้วยกฎหน่วย ${_bmcChosenRules.length} รายการแล้ว · ตรวจผลก่อนกด “บันทึกราคา”`);
   } catch (e) { _bmcStatus('bmcPriceStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 async function bmcPriceCommit() {
@@ -851,7 +940,7 @@ async function bmcPriceCommit() {
   const rules = _bmcRulesToSend(), choices = _bmcPriceChoices(), cs = bmcUcSummary('bmcUcPrice'), open = bmcUcOpen('bmcUcPrice').length;
   if (!pre.priced && !rules.length && !choices) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
   if (!await uiConfirm(`${_bmcPriceLabel}\nเดือน${fmtMonthTh(pre.month)}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
-      (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ (บรรทัดที่ติดกฎจะคิดราคาได้ในการบันทึกนี้)` : '') +
+      (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ` : '') +
       (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส (สูตรไม่ต้องแก้)` : '') +
       (cs.fresh ? `\nเพิ่มเป็นวัตถุดิบใหม่ ${cs.fresh} รหัส (ตรวจหน่วยฐานภายหลัง)` : '') +
       (open ? `\nรหัสที่ยังไม่เลือก ${open} รหัส ไม่ถูกนำเข้าในครั้งนี้` : '') +
@@ -872,28 +961,15 @@ async function bmcPriceCommit() {
   } catch (e) { _bmcStatus('bmcPriceStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 function _bmcPreviewHtml(p, applied) {
-  const flagInk = { flag: 'var(--bad-ink)', warn: 'var(--amber-ink)', new: 'var(--navy-ink)', ok: 'var(--text-muted)' };
-  const flagTh = { flag: 'เปลี่ยน ≥25%', warn: 'เปลี่ยน ≥10%', new: 'ใหม่', ok: 'ปกติ' };
-  const top = p.rows.filter(r => r.flag !== 'ok').concat(p.rows.filter(r => r.flag === 'ok')).slice(0, 60);
   return `<div class="card p-4">
     <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${applied ? '✓ บันทึกแล้ว' : 'ตัวอย่างก่อนบันทึก'}: ไฟล์ราคารายเดือน · ราคาซื้อจริงเดือน${fmtMonthTh(p.month)}</div>
     <div class="text-xs mb-2" style="color:var(--text-secondary)">${esc(p.source?.format || '')} · ${p.lines} บรรทัด · คิดราคาได้ ${p.priced} วัตถุดิบ (มูลค่า ฿${_bmcNum(p.value_total, 0)}) ·
       เปลี่ยน ≥25% <b style="color:var(--bad-ink)">${p.counts.flag}</b> · ≥10% <b style="color:var(--amber-ink)">${p.counts.warn}</b> · ใหม่ ${p.counts.new} ·
       ยกราคาเดิมมา ${p.carry_forward} · ยังไม่เคยมีราคา ${p.never_priced}
       ${p.added_codes?.length ? ` · <b style="color:var(--navy-ink)">${applied ? 'เพิ่ม' : 'จะเพิ่ม'}รหัสใหม่ในทะเบียน ${p.added_codes.length}</b>` : ''}
-      ${p.unknown_codes?.length ? ` · <b style="color:var(--amber-ink)">รหัสที่ไม่อยู่ในทะเบียน ${p.unknown_codes.length} (฿${_bmcNum(p.unknown_value, 0)}) · เลือกรายการละรหัสด้านล่าง</b>` : ''}
+      ${p.unknown_codes?.length ? ` · <b style="color:var(--amber-ink)">รหัสที่ไม่อยู่ในทะเบียน ${p.unknown_codes.length} (฿${_bmcNum(p.unknown_value, 0)}) · เลือกด้านล่าง</b>` : ''}
       ${p.issues.length ? ` · <b style="color:var(--amber-ink)">ใช้ไม่ได้ ${p.issues.length} บรรทัด (฿${_bmcNum(p.value_unused, 0)})</b>` : ''}</div>
-    <div class="overflow-x-auto"><table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
-      <thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">รหัส</th><th class="pr-2">วัตถุดิบ</th>
-        <th class="pr-2 text-right">ปริมาณ (หน่วยฐาน)</th><th class="pr-2 text-right">มูลค่า</th><th class="pr-2 text-right">ราคาใหม่</th>
-        <th class="pr-2 text-right">ราคาก่อน</th><th class="pr-2 text-right">เปลี่ยน</th><th class="pr-2">แปลงหน่วย</th><th></th></tr></thead>
-      <tbody>${top.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2">${esc(r.code)}</td><td class="pr-2">${esc(r.name || '')}</td>
-        <td class="pr-2 text-right">${_bmcNum(r.qty_base)} ${esc(r.base_unit || '')}</td><td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
-        <td class="pr-2 text-right font-semibold">${_bmcPrice(r.price_per_base)}</td><td class="pr-2 text-right">${_bmcPrice(r.prev_price)}</td>
-        <td class="pr-2 text-right" style="color:${flagInk[r.flag]}">${r.change_pct == null ? '' : (r.change_pct > 0 ? '+' : '') + r.change_pct + '%'}</td>
-        <td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(r.converted_by.join(' / '))}</td>
-        <td>${_bmcChip(flagTh[r.flag], flagInk[r.flag])}${r.manual_kept ? ' ' + _bmcChip('คงราคาที่กำหนดเอง', 'var(--navy-ink)') : ''}</td></tr>`).join('')}</tbody></table></div>
-    ${p.rows.length > top.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดง ${top.length} จาก ${p.rows.length} (เรียงจากรายการที่เปลี่ยนมากที่สุด)</div>` : ''}
+    <div id="bmcPvFilter"></div><div id="bmcPvBody"></div>
     ${p.issues.length ? `<div class="mt-3 text-xs font-semibold" style="color:var(--amber-ink)">บรรทัดที่ใช้ไม่ได้: แก้ไขทะเบียนหรือกฎหน่วย แล้วนำเข้าใหม่</div>
       <div class="overflow-x-auto"><table class="text-[11px] w-full"><tbody>${p.issues.slice(0, 80).map(i => `<tr class="border-b" style="border-color:var(--border-soft)">
         <td class="pr-2">${esc(i.code)}</td><td class="pr-2">${esc(i.name || '')}</td><td class="pr-2 text-right">${_bmcNum(i.qty)} ${esc(i.unit || '')}</td>
@@ -917,11 +993,11 @@ async function _bmcRunPriceImport(send, label) {
     _bmcShowPrice(pre, false);
     if (pre.month !== _bmcMonth()) { const el = document.getElementById('bmcMonth'); if (el) supplyMonthPut(el, pre.month); supplyCtxSet({ month: pre.month }); }
     if ((pre.suggested_rules || []).length) {
-      _bmcStatus('bmcPriceStatus', 'มีกฎหน่วยที่แนะนำ: กด “คำนวณใหม่ด้วยกฎที่เลือก” หรือ “บันทึกราคาพร้อมกฎที่เลือก”', 'var(--amber-ink)');
+      _bmcStatus('bmcPriceStatus', 'มีกฎหน่วยที่แนะนำ · เลือกแล้วกด “คำนวณใหม่”', 'var(--amber-ink)');
       return;
     }
     if ((pre.unknown_items || []).length) {      // PR-Y: nothing is added on its own - the person answers per code first
-      _bmcStatus('bmcPriceStatus', `มีรหัสที่ระบบไม่รู้จัก ${pre.unknown_items.length} รหัส: เลือกรายการละรหัสด้านล่าง แล้วกด “บันทึกราคา” (รหัสที่ไม่เลือกจะไม่ถูกนำเข้า)`, 'var(--amber-ink)');
+      _bmcStatus('bmcPriceStatus', `มีรหัสที่ไม่รู้จัก ${pre.unknown_items.length} รหัส · เลือกด้านล่างแล้วกด “บันทึกราคา”`, 'var(--amber-ink)');
       return;
     }
     if (!pre.priced) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
@@ -986,8 +1062,20 @@ function _bmcSubRow(s, withActions) {
         <button onclick="window.open(API + '/api/bom-center/prices/submissions/${s.sub_id}/file','_blank')" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">เปิดไฟล์</button>
         <button onclick="bmcSubReject(${s.sub_id})" style="background:var(--bg-input);color:var(--bad-ink);border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer">ส่งกลับ</button></span>` : ''}
     </div>
-    <div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">สรุป: ${_bmcNum(p.lines, 0)} บรรทัด คิดราคาได้ ${_bmcNum(p.priced, 0)} รายการ ใช้ไม่ได้ ${_bmcNum(p.issues, 0)}
+    <div class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${_bmcNum(p.lines, 0)} บรรทัด · คิดราคาได้ ${_bmcNum(p.priced, 0)} · ใช้ไม่ได้ ${_bmcNum(p.issues, 0)}
       · <span style="color:${_BMC_SUB_ST[s.status] || 'inherit'}">${verdict}</span>${s.note ? ' · หมายเหตุ: ' + esc(s.note) : ''}</div></div>`;
+}
+// PR-D6: "ไฟล์ที่ส่งแล้ว" lists the files still open (waiting, or sent back) first; the ones already imported are done and appear under เสร็จแล้ว / ทั้งหมด
+let _bmcSubsAll = [];
+function _bmcSubPick(f) { uiStateFilter.set(f); _bmcSubDraw(); }
+function _bmcSubDraw() {
+  const all = document.getElementById('bmcPriceFileList');
+  if (!all) return;
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(_bmcSubsAll, s => s.status === 'imported');
+  const list = f === 'all' ? sp.all : sp[f];
+  all.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ที่ส่งแล้ว</div><div id="bmcSubFilter"></div>`
+    + (list.map(s => _bmcSubRow(s, false)).join('') || uiStateFilter.empty(f, '_bmcSubPick', 'ไฟล์'));
+  uiStateFilter.bar('bmcSubFilter', { counts: sp.counts, f, pick: '_bmcSubPick' });
 }
 async function bmcLoadPriceSubs() {
   const pending = document.getElementById('bmcPriceSubList'), all = document.getElementById('bmcPriceFileList');
@@ -997,11 +1085,7 @@ async function bmcLoadPriceSubs() {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/prices/submissions?limit=20`);
     const subs = d.submissions || [];
-    if (all) {
-      all.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ที่ส่งแล้ว</div>`
-        + (subs.map(s => _bmcSubRow(s, false)).join('') || '<div class="text-[11px]" style="color:var(--text-muted)">ยังไม่มีไฟล์ที่ส่งมา</div>');
-      all.style.display = '';
-    }
+    if (all) { _bmcSubsAll = subs; _bmcSubDraw(); all.style.display = ''; }
     if (pending) {
       const wait = subs.filter(s => s.status === 'pending');
       pending.innerHTML = `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ไฟล์ราคาที่รอตรวจ (${wait.length})</div>`
@@ -1088,7 +1172,7 @@ async function bmcHistory(code) {
 
 // ── Phase 1.5: sub-recipes of prepared items (prep.py) ──────────────────────
 let _bmcPrep = null;          // /api/bom-center/prep
-let _bmcPrepView = 'todo';    // todo | all | ok | none
+let _bmcPrepView = 'todo';    // todo | done | all - the shared filter (uiStateFilter): the recipes that still need work by default
 let _bmcPrepEdit = null;      // the sub-recipe open in the editor
 const _BMC_PREP = {
   incomplete: ['สูตรไม่ครบ', 'var(--bad-ink)'], check: ['ต่างจากราคาซื้อ > 5%', 'var(--amber-ink)'],
@@ -1111,18 +1195,19 @@ async function bmcLoadPrep() {
     bmcPortInit();
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
-function bmcPrepView(v) { _bmcPrepView = v; bmcRenderPrep(); }
+function bmcPrepView(v) { uiStateFilter.set(v); bmcRenderPrep(); }
+// Finished = the sub-recipe is complete and costed from its recipe (ok). A sub-recipe with NO recipe yet (none), an incomplete one (incomplete) and one
+// that needs checking (check) are the kitchen's backlog - "done" never means "has no data yet".
+function _bmcPrepDone(r) { return r.status === 'ok'; }
 function bmcRenderPrep() {
   const d = _bmcPrep;
   if (!d) return;
-  const c = d.counts || {};
-  const n = k => c[k] || 0;
-  const chip = (label, v) => _bmcBtn(label, `bmcPrepView('${v}')`, false).replace('background:transparent', `background:${_bmcPrepView === v ? 'var(--accent-soft, var(--bg-hover))' : 'transparent'}`);
-  document.getElementById('bmcPrepChips').innerHTML = chip(`ต้องทำ (${n('incomplete') + n('check')})`, 'todo')
-    + chip(`ยังไม่มีสูตร (${n('none')})`, 'none') + chip(`ใช้ต้นทุนจากสูตร (${n('ok')})`, 'ok') + chip(`ทั้งหมด (${d.rows.length})`, 'all');
+  const psp = uiStateFilter.split(d.rows, _bmcPrepDone);
+  _bmcPrepView = uiStateFilter.get();
+  uiStateFilter.bar('bmcPrepChips', { counts: psp.counts, f: _bmcPrepView, pick: 'bmcPrepView' });
   document.getElementById('bmcPrepMonth').textContent = `ใช้ราคาเดือน${fmtMonthTh(d.month)}`;
   const q = (document.getElementById('bmcPrepQ').value || '').trim().toLowerCase();
-  const rows = d.rows.filter(r => (_bmcPrepView === 'all' || (_bmcPrepView === 'todo' ? (r.status === 'incomplete' || r.status === 'check') : r.status === _bmcPrepView))
+  const rows = d.rows.filter(r => (_bmcPrepView === 'all' || (_bmcPrepView === 'todo' ? !_bmcPrepDone(r) : _bmcPrepDone(r)))
     && (!q || (r.code + ' ' + (r.name || '')).toLowerCase().includes(q)));
   // 2026-10-19: a table — each figure in its own column instead of one "· "-joined sentence
   const u = r => esc(r.base_unit || '');
@@ -1140,7 +1225,7 @@ function bmcRenderPrep() {
       <td class="wt-num" data-l="ต่างกัน">${r.has_recipe ? diff(r) : ''}</td>
       <td data-l="ต้องแก้" style="color:var(--bad-ink)">${bmcLines((r.problems || []).slice(0, 3).map(esc))}${r.n_problems > 3 ? `<div class="wt-muted">และอีก ${r.n_problems - 3} เรื่อง</div>` : ''}</td>
       <td class="wt-act">${_bmcBtn(r.has_recipe ? 'เปิดสูตร' : (_bmcCanRecipes() ? 'เพิ่มสูตร' : 'ดู'), `bmcOpenPrep(${_bmcQ(r.code)})`)}</td></tr>`;
-  }).join('')}</tbody></table></div>` : `<div class="wt-empty" style="color:var(--good-ink)">${_bmcPrepView === 'todo' ? '✓ ไม่มีสูตรที่ต้องทำ' : 'ไม่มีรายการ'}</div>`;
+  }).join('')}</tbody></table></div>` : _bmcPrepView === 'todo' ? `<div class="wt-empty" style="color:var(--good-ink)">✓ ไม่มีสูตรที่ต้องทำ <button type="button" class="shm-showall" onclick="bmcPrepView('all')">ดูทั้งหมด</button></div>` : uiStateFilter.empty(_bmcPrepView, 'bmcPrepView', 'สูตร');
 }
 
 async function bmcOpenPrep(code) {
@@ -1181,7 +1266,7 @@ function bmcRenderPrepEdit() {
     ${bmcStats([['หน่วยฐาน', esc(d.base_unit || '—')], ['ขนาดบรรจุในทะเบียน', d.qty_per_recv ? _bmcNum(d.qty_per_recv) : null],
       ['ราคาซื้อ', d.own_price != null ? '฿' + _bmcPrice(d.own_price) : '—'], ['ต้นทุนจากสูตร', d.per_base != null ? '฿' + _bmcPrice(d.per_base) : '—'],
       ['ต้นทุนต่อ 1 สูตร', d.batch_cost != null && d.has_recipe ? '฿' + _bmcNum(d.batch_cost, 2) : null], ['ไฟล์ครัว', d.source_cost != null ? '฿' + _bmcNum(d.source_cost, 2) : null]])}
-    ${e.mode === 'portion' ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip('แบ่งชิ้น', 'var(--navy-ink)')} จำนวนชิ้นที่ได้นับเฉพาะชิ้นที่ใช้ได้ ต้นทุนจึงไม่บวกส่วนสูญเสียซ้ำ · หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้${e.note ? ' · หมายเหตุ: ' + esc(e.note) : ''}</div>` : ''}
+    ${e.mode === 'portion' ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">${_bmcChip('แบ่งชิ้น', 'var(--navy-ink)')} นับเฉพาะชิ้นที่ใช้ได้ ${uiQ('bmc:portion2', 'สูตรแบ่งชิ้น', '<p>จำนวนชิ้นที่ได้นับเฉพาะชิ้นที่ใช้ได้ ต้นทุนจึงไม่บวกส่วนสูญเสียซ้ำ</p><p>หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้</p>')}${e.note ? ' · หมายเหตุ: ' + esc(e.note) : ''}</div>` : ''}
     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs" style="color:var(--text-muted)">${e.mode === 'portion' ? 'แบ่งได้' : '1 สูตร ได้'}
       ${w ? _bmcInput(`type="number" step="any" value="${e.yield_qty}" onchange="_bmcPrepEdit.yield_qty=this.value"`, '100px') + _bmcInput(`value="${esc(e.yield_unit)}" onchange="_bmcPrepEdit.yield_unit=this.value"`, '90px')
         : `<b>${_bmcNum(e.yield_qty)} ${esc(e.yield_unit)}</b>`}</div>
@@ -1211,6 +1296,25 @@ async function bmcPrepImportSemi(input) {
   input.value = '';
   await bmcPrepPreview();
 }
+// PR-D6: the rows of the semi-recipe import that match well (the name and the yield agree, or a person mapped them) are done and hidden by default;
+// the ones to look at - a weak match, a skipped portion recipe, a line without a code - are shown (shared filter)
+let _bmcPpLast = null;
+const _BMC_PP_METHOD = { 'name+yield': 'ชื่อ + ปริมาณต่อสูตรตรง', name: 'ชื่อตรง', map: 'จับคู่ด้วยตนเอง' };
+function _bmcPpOk(w) { return !w.portion_skip && !w.unresolved && (w.score >= 1.1 || w.method === 'map'); }
+function _bmcPpPick(f) { uiStateFilter.set(f); _bmcPpDraw(); }
+function _bmcPpDraw() {
+  const p = _bmcPpLast, bar = document.getElementById('bmcPpFilter'), body = document.getElementById('bmcPpBody');
+  if (!p || !bar || !body) return;
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(p.writes, _bmcPpOk);
+  uiStateFilter.bar(bar, { counts: sp.counts, f, pick: '_bmcPpPick' });
+  const list = f === 'all' ? sp.todo.concat(sp.done) : sp[f];
+  body.innerHTML = list.length ? `<div class="wt-wrap mt-1" style="max-height:480px"><table class="wt"><thead><tr><th>รหัสในทะเบียน</th><th>จากไฟล์</th><th>วิธีจับคู่</th><th>หมายเหตุ</th></tr></thead><tbody>${list.map(w => `<tr>
+        <td data-l="รหัสในทะเบียน"><span class="wt-code">${esc(w.prepared_code)}</span> ${esc(w.prepared_name || '')}</td>
+        <td data-l="จากไฟล์">แถว ${w.row}: ${esc(w.src_code)} ${esc(w.src_name)}${w.yield_text ? `<div class="wt-muted" style="font-size:13px">${esc(w.yield_text)}</div>` : ''}</td>
+        <td data-l="วิธีจับคู่">${_bmcChip(_BMC_PP_METHOD[w.method] || w.method, w.score >= 1.1 || w.method === 'map' ? 'var(--good-ink)' : 'var(--amber-ink)')}${w.replaces ? ' ' + _bmcChip('แทนสูตรเดิม', 'var(--text-muted)') : ''}</td>
+        <td data-l="หมายเหตุ">${bmcLines([w.portion_skip ? _bmcChip('ข้าม', 'var(--amber-ink)') + ' <span style="color:var(--amber-ink)">' + esc(w.note_th || '') + '</span>' : '',
+          w.unresolved ? `<span style="color:var(--bad-ink)">ไม่พบรหัส ${w.unresolved} บรรทัด: ${w.lines.filter(l => !l.ingredient_code).map(l => esc(l.note)).join(', ')}</span>` : ''])}</td></tr>`).join('')}</tbody></table></div>` : uiStateFilter.empty(f, '_bmcPpPick', 'บรรทัด');
+}
 async function bmcPrepPreview() {
   const box = document.getElementById('bmcPrepImport');
   box.style.display = '';
@@ -1218,14 +1322,9 @@ async function bmcPrepPreview() {
   try {
     const fd = new FormData(); fd.append('file', _bmcPrepFile, _bmcPrepFile.name);
     const p = await _bmcJson(`${API}/api/bom-center/prep/import-semi?dry_run=true`, { method: 'POST', body: fd });
-    const methodTh = { 'name+yield': 'ชื่อ + ปริมาณต่อสูตรตรง', name: 'ชื่อตรง', map: 'จับคู่ด้วยตนเอง' };
+    _bmcPpLast = p;
     // 2026-10-19: both lists are tables, the counts are tiles
-    const writes = p.writes.length ? `<div class="wt-wrap mt-1" style="max-height:480px"><table class="wt"><thead><tr><th>รหัสในทะเบียน</th><th>จากไฟล์</th><th>วิธีจับคู่</th><th>หมายเหตุ</th></tr></thead><tbody>${p.writes.map(w => `<tr>
-        <td data-l="รหัสในทะเบียน"><span class="wt-code">${esc(w.prepared_code)}</span> ${esc(w.prepared_name || '')}</td>
-        <td data-l="จากไฟล์">แถว ${w.row}: ${esc(w.src_code)} ${esc(w.src_name)}${w.yield_text ? `<div class="wt-muted" style="font-size:13px">${esc(w.yield_text)}</div>` : ''}</td>
-        <td data-l="วิธีจับคู่">${_bmcChip(methodTh[w.method] || w.method, w.score >= 1.1 || w.method === 'map' ? 'var(--good-ink)' : 'var(--amber-ink)')}${w.replaces ? ' ' + _bmcChip('แทนสูตรเดิม', 'var(--text-muted)') : ''}</td>
-        <td data-l="หมายเหตุ">${bmcLines([w.portion_skip ? _bmcChip('ข้าม', 'var(--amber-ink)') + ' <span style="color:var(--amber-ink)">' + esc(w.note_th || '') + '</span>' : '',
-          w.unresolved ? `<span style="color:var(--bad-ink)">ไม่พบรหัส ${w.unresolved} บรรทัด: ${w.lines.filter(l => !l.ingredient_code).map(l => esc(l.note)).join(', ')}</span>` : ''])}</td></tr>`).join('')}</tbody></table></div>` : '';
+    const writes = `<div id="bmcPpFilter"></div><div id="bmcPpBody"></div>`;
     const um = p.unmatched.length ? `<div class="wt-wrap mt-1" style="max-height:360px"><table class="wt"><thead><tr><th>แถว</th><th>สูตรในไฟล์</th><th></th></tr></thead><tbody>${p.unmatched.map(u => `<tr>
         <td class="wt-num" data-l="แถว">${u.row}</td><td data-l="สูตรในไฟล์"><span class="wt-code">${esc(u.src_code)}</span> ${esc(u.name)}${u.yield_text ? `<div class="wt-muted" style="font-size:13px">${esc(u.yield_text)}</div>` : ''}</td>
         <td class="wt-act">${_bmcCanRecipes() ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center">${_bmcInput(`list="bmcCodeList" placeholder="รหัสในทะเบียน" id="bmcPrepMap_${u.row}"`, '130px')}
@@ -1233,10 +1332,11 @@ async function bmcPrepPreview() {
     box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ดูตัวอย่างก่อนบันทึก: ${esc(_bmcPrepFile.name)} · แผ่นงาน ${esc(p.sheet || '')}</div>
       ${bmcStats([['สูตรในไฟล์', p.rows], ['บันทึกได้ (รหัสในทะเบียน)', p.writes.length, 'var(--good-ink)'], ['ไม่พบรหัสวัตถุดิบ (บรรทัด)', p.unresolved_lines, p.unresolved_lines ? 'var(--amber-ink)' : null],
         ['สูตรที่ยังจับคู่รหัสไม่ได้', p.unmatched.length, p.unmatched.length ? 'var(--amber-ink)' : null], ['รหัสกึ่งสำเร็จที่ยังไม่มีสูตร', p.prepared_without.length]])}
-      <div class="wt-note">จับคู่ด้วยชื่อและปริมาณที่ได้ต่อสูตร ไม่ใช้รหัสในไฟล์เนื่องจากเป็นชุดรหัสเก่า · บรรทัดที่ไม่พบรหัสวัตถุดิบบันทึกได้ และระบุรหัสภายหลังในหน้าสูตร</div>
+      ${bmcNote('prepmatch', 'จับคู่ด้วยชื่อและปริมาณที่ได้ต่อสูตร', '<p>จับคู่ด้วยชื่อและปริมาณที่ได้ต่อสูตร ไม่ใช้รหัสในไฟล์เนื่องจากเป็นชุดรหัสเก่า</p><p>บรรทัดที่ไม่พบรหัสวัตถุดิบบันทึกได้ และระบุรหัสภายหลังในหน้าสูตร</p>')}
       ${_bmcCanRecipes() ? `<div class="flex gap-2 my-2">${_bmcBtn(`บันทึก ${p.writes.filter(w => !w.portion_skip).length} สูตร`, 'bmcPrepApply()', true)}${_bmcBtn('ยกเลิก', "document.getElementById('bmcPrepImport').style.display='none'")}<span id="bmcPrepApplyStatus" class="text-xs"></span></div>` : ''}
-      ${um ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">สูตรในไฟล์ที่ยังจับคู่รหัสไม่ได้: ระบุรหัส หรือกด “ไม่ใช่รายการของร้าน”</div>${um}` : ''}
-      <div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">รายการที่จะบันทึก (ป้ายสีเหลือง = ชื่อไม่ตรงกันทั้งหมด ควรตรวจ)</div>${writes}`;
+      ${um ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">สูตรในไฟล์ที่ยังจับคู่รหัสไม่ได้ ${uiQ('bmc:prepum', 'สูตรที่ยังจับคู่ไม่ได้', '<p>ระบุรหัส หรือกด “ไม่ใช่รายการของร้าน”</p>')}</div>${um}` : ''}
+      <div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">รายการที่จะบันทึก ${uiQ('bmc:prepwrites', 'รายการที่จะบันทึก', '<p>ป้ายสีเหลือง = ชื่อไม่ตรงกันทั้งหมด ควรตรวจ</p><p>รายการที่จับคู่ได้ดีซ่อนไว้ตามค่าเริ่มต้น เลือก “เสร็จแล้ว” หรือ “ทั้งหมด” เพื่อดู</p>')}</div>${writes}`;
+    _bmcPpDraw();
   } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 async function bmcPrepMap(name, code) {
@@ -1359,8 +1459,8 @@ function bmcRenderLadder() {
   const problems = [...(L.problems || []), ...(L.server ? [L.server] : [])];
   box.innerHTML = `<div style="color:var(--text-secondary)"><b>${esc(L.code)}</b> ${esc(L.name || '')} · หน่วยฐาน <b>${esc(L.base_unit || '—')}</b>` +
     (L.qty_per_recv ? ` · 1 ${esc(recvWord || 'หน่วยรับ')} = ${_bmcNum(L.qty_per_recv)} ${esc(L.base_unit || '')}${recvWord && recvLbl && recvWord !== recvLbl ? ` <span style="color:var(--text-muted)">(ทะเบียนเขียนว่า “${esc(recvLbl)}”)</span>` : ''}` : ' · ยังไม่มีขนาดบรรจุ') + `</div>` +
-    (L.rows.length ? rows : '<div style="color:var(--text-muted)" class="mt-1">ยังไม่มีบันไดหน่วย · กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองอยู่แล้ว</div>') +
-    (recvHit >= 0 ? `<div class="mt-1" style="color:var(--text-muted)">หน่วยรับ “${esc(recvWord)}” อยู่ในบันได ขนาดบรรจุในทะเบียนจะปรับตามเมื่อบันทึก</div>` : '') +
+    (L.rows.length ? rows : `<div style="color:var(--text-muted)" class="mt-1">ยังไม่มีบันไดหน่วย ${uiQ('bmc:ladnone', 'บันไดหน่วย', '<p>กิโลกรัมเป็นกรัม และลิตรเป็นมิลลิลิตร แปลงเองอยู่แล้ว</p>')}</div>`) +
+    (recvHit >= 0 ? `<div class="mt-1" style="color:var(--text-muted)">หน่วยรับ “${esc(recvWord)}” อยู่ในบันได · ขนาดบรรจุปรับตามเมื่อบันทึก</div>` : '') +
     (problems.length ? `<div class="mt-2" style="color:var(--bad-ink)" role="alert">${problems.map(esc).join('<br>')}</div>` : '') +
     (w ? `<div class="flex flex-wrap items-center gap-2 mt-2">
       ${L.rows.length < _BMC_MAX_STEPS ? _bmcBtn('เพิ่มขั้น', "bmcLadAdd()") : ''}
@@ -1427,42 +1527,59 @@ async function bmcConvert() {
 // proposes it when there are enough receipts and it differs. The analyst uses it or keeps the old value with a reason — nothing changes silently.
 let _bmcAvgRows = {};
 const _BMC_SHORT = { กิโลกรัม: 'กก.', มิลลิลิตร: 'มล.' };
+let _bmcAvgD = null;
+function _bmcAvgPick(f) { uiStateFilter.set(f); _bmcAvgDraw(); }
 async function bmcLoadAvg() {
-  const box = document.getElementById('bmcAvgBody'), hist = document.getElementById('bmcAvgHist');
+  const box = document.getElementById('bmcAvgBody');
   if (!box) return;
   try {
-    const d = await _bmcJson(`${API}/api/bom-center/units/avg-proposals?days=90`);
-    const w = _bmcCanPrices();
+    const d = _bmcAvgD = await _bmcJson(`${API}/api/bom-center/units/avg-proposals?days=90`);
     _bmcAvgRows = {};
     d.rows.forEach(r => { _bmcAvgRows[r.code + '|' + r.unit] = r; });
-    const su = u => _BMC_SHORT[u] || u || '';
-    const rows = d.rows.map(r => {
-      const rg = r.range ? ` (ช่วง ${_bmcNum(r.range[0], 2)}–${_bmcNum(r.range[1], 2)})` : '';
-      const obs = r.observed == null
-        ? '<span style="color:var(--text-muted)">ยังไม่มีการนับจำนวนตอนรับ</span>'
-        : `<b>≈ ${_bmcNum(r.observed, 2)} ${esc(su(r.parent))}</b><div style="color:var(--text-muted)">${r.n_receipts} ครั้ง · ${_bmcNum(r.n_pieces, 0)} ${esc(r.unit)} · ต่อครั้ง ${_bmcNum(r.min_receipt_avg, 2)}–${_bmcNum(r.max_receipt_avg, 2)}</div>`;
-      const state = r.proposal ? '' : !r.enough ? `<div style="color:var(--amber-ink)">${esc(r.need_text)}</div>`
-        : r.state === 'decided' ? '<div style="color:var(--text-muted)">ตัดสินใจแล้ว รอการรับครั้งใหม่</div>' : '<div style="color:var(--text-muted)">ใกล้เคียงค่าที่ใช้</div>';
-      const diff = r.diff_pct == null ? '—' : `<b style="color:${r.proposal ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${Math.abs(r.diff_pct) < 0.05 ? '0' : (r.diff_pct > 0 ? '+' : '') + _bmcNum(r.diff_pct, 1)}%</b>`;
-      const btn = r.proposal && w ? `<div class="flex flex-wrap gap-1">${_bmcBtn('ใช้ค่านี้', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'applied')`, true)}${_bmcBtn('คงค่าเดิม', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'kept')`)}</div>` : '';
-      return `<tr style="border-top:1px solid var(--border);vertical-align:top"${r.proposal ? ' class="bmc-avg-proposal"' : ''}>
+    _bmcAvgDraw();
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function _bmcAvgTable(list) {
+  const w = _bmcCanPrices(), su = u => _BMC_SHORT[u] || u || '';
+  const rows = list.map(r => {
+    const rg = r.range ? ` (ช่วง ${_bmcNum(r.range[0], 2)}–${_bmcNum(r.range[1], 2)})` : '';
+    const obs = r.observed == null
+      ? '<span style="color:var(--text-muted)">ยังไม่มีการนับจำนวนตอนรับ</span>'
+      : `<b>≈ ${_bmcNum(r.observed, 2)} ${esc(su(r.parent))}</b><div style="color:var(--text-muted)">${r.n_receipts} ครั้ง · ${_bmcNum(r.n_pieces, 0)} ${esc(r.unit)} · ต่อครั้ง ${_bmcNum(r.min_receipt_avg, 2)}–${_bmcNum(r.max_receipt_avg, 2)}</div>`;
+    const state = r.proposal ? '' : !r.enough ? `<div style="color:var(--amber-ink)">${esc(r.need_text)}</div>`
+      : r.state === 'decided' ? '<div style="color:var(--text-muted)">ตัดสินใจแล้ว รอการรับครั้งใหม่</div>' : '<div style="color:var(--text-muted)">ใกล้เคียงค่าที่ใช้</div>';
+    const diff = r.diff_pct == null ? '—' : `<b style="color:${r.proposal ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${Math.abs(r.diff_pct) < 0.05 ? '0' : (r.diff_pct > 0 ? '+' : '') + _bmcNum(r.diff_pct, 1)}%</b>`;
+    const btn = r.proposal && w ? `<div class="flex flex-wrap gap-1">${_bmcBtn('ใช้ค่านี้', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'applied')`, true)}${_bmcBtn('คงค่าเดิม', `bmcAvgDecide(${_bmcQ(r.code)},${_bmcQ(r.unit)},'kept')`)}</div>` : '';
+    return `<tr style="border-top:1px solid var(--border);vertical-align:top"${r.proposal ? ' class="bmc-avg-proposal"' : ''}>
         <td class="py-1 pr-2"><b style="color:var(--text-primary)">${esc(r.name || r.code)}</b><div style="color:var(--text-muted)">${esc(r.code)}</div></td>
         <td class="py-1 pr-2">${esc(r.unit)}</td>
         <td class="py-1 pr-2">${_bmcNum(r.current, 2)} ${esc(su(r.parent))}${rg}</td>
         <td class="py-1 pr-2">${obs}${state}</td><td class="py-1 pr-2">${diff}</td><td class="py-1">${btn}</td></tr>`;
-    }).join('');
-    box.innerHTML = d.rows.length
-      ? `<div class="mb-2">${d.proposals ? `มี ${d.proposals} รายการที่ค่าจากการรับจริงต่างจากค่าที่ใช้ รอฝ่ายวิเคราะห์ตัดสินใจ` : 'ยังไม่มีรายการที่ต้องตัดสินใจ'} <span id="bmcAvgStatus" class="ml-2"></span></div>
-        <div style="overflow-x:auto"><table class="w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
-          <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2">ค่าที่ใช้ (ช่วง)</th><th class="pr-2">จากการรับจริง</th><th class="pr-2">ต่าง %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : 'ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย (เช่น 1 ตัว ≈ 4.5 กิโลกรัม) · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับสินค้า';
-    if (hist) hist.innerHTML = d.history.length ? `<div class="wt-wrap" style="max-height:360px"><table class="wt"><thead><tr><th>วันที่</th><th>วัตถุดิบ</th><th>หน่วย</th><th>ผล</th><th class="wt-num">ค่าที่ใช้ → รับจริง</th><th>จำนวนที่รับ</th><th>ผู้ตัดสิน</th></tr></thead><tbody>
-      ${d.history.map(h => `<tr><td data-l="วันที่" style="white-space:nowrap">${esc(fmtDayAt(h.decided_at || ''))}</td><td data-l="วัตถุดิบ" style="font-weight:600">${esc(h.name || h.ingredient_code)}</td><td data-l="หน่วย">${esc(h.unit)}</td>
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
+      <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2">ค่าที่ใช้ (ช่วง)</th><th class="pr-2">จากการรับจริง</th><th class="pr-2">ต่าง %</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function _bmcAvgHistTable(history) {
+  return `<div class="wt-wrap" style="max-height:360px"><table class="wt"><thead><tr><th>วันที่</th><th>วัตถุดิบ</th><th>หน่วย</th><th>ผล</th><th class="wt-num">ค่าที่ใช้ → รับจริง</th><th>จำนวนที่รับ</th><th>ผู้ตัดสิน</th></tr></thead><tbody>
+      ${history.map(h => `<tr><td data-l="วันที่" style="white-space:nowrap">${esc(fmtDayAt(h.decided_at || ''))}</td><td data-l="วัตถุดิบ" style="font-weight:600">${esc(h.name || h.ingredient_code)}</td><td data-l="หน่วย">${esc(h.unit)}</td>
         <td data-l="ผล">${h.decision === 'applied' ? _bmcChip('ใช้ค่าที่รับจริง', 'var(--good-ink)') : _bmcChip('คงค่าเดิม', 'var(--text-muted)')}${h.note ? `<div class="wt-muted" style="font-size:13px">${esc(h.note)}</div>` : ''}</td>
         <td class="wt-num" data-l="ค่าที่ใช้ → รับจริง">${_bmcNum(h.current_avg, 2)} → ≈ ${_bmcNum(h.observed_avg, 2)}</td><td data-l="จำนวนที่รับ">${h.n_receipts} ครั้ง · ${_bmcNum(h.n_pieces, 0)} ${esc(h.unit)}</td>
-        <td class="wt-muted" data-l="ผู้ตัดสิน">${esc(whoTh(h.decided_by))}</td></tr>`).join('')}</tbody></table></div>`
-      : '<span style="color:var(--text-muted)">ยังไม่มีการตัดสินใจ</span>';
-  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+        <td class="wt-muted" data-l="ผู้ตัดสิน">${esc(whoTh(h.decided_by))}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function _bmcAvgDraw() {
+  const box = document.getElementById('bmcAvgBody'), d = _bmcAvgD;
+  if (!box || !d) return;
+  const f = uiStateFilter.get(), props = d.rows.filter(r => r.proposal), hist = d.history || [];
+  uiStateFilter.bar('bmcAvgFilter', { counts: { todo: props.length, done: hist.length, all: props.length + hist.length }, f, pick: '_bmcAvgPick' });
+  if (!d.rows.length && !hist.length) {
+    box.innerHTML = `<div style="color:var(--text-muted)">ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย ${uiQ('bmc:avgnone', 'หน่วยแบบเฉลี่ย', '<p>เช่น 1 ตัว ≈ 4.5 กิโลกรัม · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับสินค้า</p>')}</div>`;
+    return;
+  }
+  const head = d.proposals ? `<div class="mb-2">มี ${d.proposals} รายการรอตัดสินใจ ${uiQ('bmc:avgprop', 'ค่าเฉลี่ยจากการรับจริง', '<p>มี ' + d.proposals + ' รายการที่ค่าจากการรับจริงต่างจากค่าที่ใช้ รอฝ่ายวิเคราะห์ตัดสินใจ</p>')}</div>` : '';
+  const parts = [];
+  if (f !== 'done') parts.push(head + ((f === 'all' ? d.rows : props).length ? _bmcAvgTable(f === 'all' ? d.rows : props) : uiStateFilter.empty(f, '_bmcAvgPick', 'เรื่อง')));
+  if (f !== 'todo') parts.push((f === 'all' ? '<div class="text-xs font-semibold mt-3 mb-1" style="color:var(--text-primary)">ประวัติการตัดสินใจ</div>' : '') + (hist.length ? _bmcAvgHistTable(hist) : uiStateFilter.empty(f, '_bmcAvgPick', 'เรื่อง')));
+  box.innerHTML = parts.join('');
 }
 async function bmcAvgDecide(code, unit, decision) {
   const r = _bmcAvgRows[code + '|' + unit];
@@ -1483,31 +1600,46 @@ async function bmcAvgDecide(code, unit, decision) {
 }
 
 // ── PR-U2 · ขนาดบรรจุที่สาขาแจ้ง: "ขนาดบรรจุไม่ตรง" reported from the receive form, grouped by item × unit × reported size ──
+let _bmcPackD = null;
+function _bmcPackPick(f) { uiStateFilter.set(f); _bmcPackDraw(); }
 async function bmcLoadPack() {
-  const box = document.getElementById('bmcPackBody'), hist = document.getElementById('bmcPackHist');
+  const box = document.getElementById('bmcPackBody');
   if (!box) return;
   try {
     const [p, a] = await Promise.all([_bmcJson(`${API}/api/bom-center/units/pack-reports?status=pending`), _bmcJson(`${API}/api/bom-center/units/pack-reports?status=all`)]);
-    const w = _bmcCanPrices();
-    const rows = p.groups.map(g => `<tr style="border-top:1px solid var(--border);vertical-align:top">
+    _bmcPackD = { pending: p.groups || [], done: (a.groups || []).filter(g => g.status !== 'pending') };
+    _bmcPackDraw();
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+function _bmcPackTable(groups) {
+  const w = _bmcCanPrices();
+  const rows = groups.map(g => `<tr style="border-top:1px solid var(--border);vertical-align:top">
         <td class="py-1 pr-2"><b style="color:var(--text-primary)">${esc(g.name || g.ingredient_code)}</b><div style="color:var(--text-muted)">${esc(g.ingredient_code)}</div></td>
         <td class="py-1 pr-2">${esc(g.system_text)}</td><td class="py-1 pr-2"><b>${esc(g.reported_text)}</b></td>
         <td class="py-1 pr-2">${g.n_branches} สาขา / ${g.n_reports} ครั้ง</td>
         <td class="py-1 pr-2">${g.branches.map(b => `${esc(b.branch)} ${esc(fmtDay(b.date))}`).join('<br>')}</td>
         <td class="py-1 pr-2">${g.notes.length ? g.notes.map(n => `${esc(n.branch)}: ${esc(n.note)}`).join('<br>') : '—'}</td>
         <td class="py-1">${w ? `<div class="flex flex-wrap gap-1">${_bmcBtn('ใช้ค่านี้', `bmcPackDecide(${_bmcQ(g.report_ids)},'applied',${_bmcQ(g.name || g.ingredient_code)},${_bmcQ(g.reported_text)})`, true)}${_bmcBtn('ไม่ใช้', `bmcPackDecide(${_bmcQ(g.report_ids)},'rejected',${_bmcQ(g.name || g.ingredient_code)},${_bmcQ(g.reported_text)})`)}</div>` : ''}</td></tr>`).join('');
-    box.innerHTML = p.groups.length
-      ? `<div class="mb-2">รอตัดสินใจ ${p.groups.length} เรื่อง · ตรวจกับฉลากที่สาขาถ่ายส่งทางไลน์ แล้วเลือกใช้ค่าที่แจ้งหรือไม่ใช้ <span id="bmcPackStatus" class="ml-2"></span></div>
-        <div style="overflow-x:auto"><table class="w-full" style="min-width:680px"><thead><tr class="text-left" style="color:var(--text-muted)">
-          <th class="pr-2">วัตถุดิบ</th><th class="pr-2">ในระบบ</th><th class="pr-2">สาขาแจ้ง</th><th class="pr-2">จำนวน</th><th class="pr-2">สาขา วันที่</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : '<span id="bmcPackStatus"></span>ไม่มีเรื่องที่รอตัดสินใจ · สาขาแจ้งได้จากฟอร์มรับสินค้า ปุ่ม “ขนาดบรรจุไม่ตรง”';
-    const done = a.groups.filter(g => g.status !== 'pending');
-    if (hist) hist.innerHTML = done.length ? `<div class="wt-wrap" style="max-height:360px"><table class="wt"><thead><tr><th>วัตถุดิบ</th><th>ในระบบ</th><th>สาขาแจ้ง</th><th>ผล</th><th class="wt-num">สาขา</th></tr></thead><tbody>
+  return `<div style="overflow-x:auto"><table class="w-full" style="min-width:680px"><thead><tr class="text-left" style="color:var(--text-muted)">
+          <th class="pr-2">วัตถุดิบ</th><th class="pr-2">ในระบบ</th><th class="pr-2">สาขาแจ้ง</th><th class="pr-2">จำนวน</th><th class="pr-2">สาขา วันที่</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function _bmcPackDoneTable(done) {
+  return `<div class="wt-wrap" style="max-height:360px"><table class="wt"><thead><tr><th>วัตถุดิบ</th><th>ในระบบ</th><th>สาขาแจ้ง</th><th>ผล</th><th class="wt-num">สาขา</th></tr></thead><tbody>
       ${done.slice(0, 40).map(g => `<tr><td data-l="วัตถุดิบ" style="font-weight:600">${esc(g.name || g.ingredient_code)}</td><td data-l="ในระบบ">${esc(g.system_text)}</td><td data-l="สาขาแจ้ง">${esc(g.reported_text)}</td>
         <td data-l="ผล">${g.status === 'applied' ? _bmcChip('ใช้ค่าที่แจ้ง', 'var(--good-ink)') : _bmcChip('ไม่ใช้', 'var(--text-muted)')}${g.decision_note ? `<div class="wt-muted" style="font-size:13px">${esc(g.decision_note)}</div>` : ''}</td>
-        <td class="wt-num" data-l="สาขา">${g.n_branches}</td></tr>`).join('')}</tbody></table></div>`
-      : '<span style="color:var(--text-muted)">ยังไม่มีเรื่องที่ตัดสินใจแล้ว</span>';
-  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+        <td class="wt-num" data-l="สาขา">${g.n_branches}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function _bmcPackDraw() {
+  const box = document.getElementById('bmcPackBody'), d = _bmcPackD;
+  if (!box || !d) return;
+  const f = uiStateFilter.get();
+  uiStateFilter.bar('bmcPackFilter', { counts: { todo: d.pending.length, done: d.done.length, all: d.pending.length + d.done.length }, f, pick: '_bmcPackPick' });
+  const parts = [];
+  if (f !== 'done') parts.push(d.pending.length
+    ? `<div class="mb-2">รอตัดสินใจ ${d.pending.length} เรื่อง ${uiQ('bmc:packprop', 'ขนาดบรรจุที่สาขาแจ้ง', '<p>ตรวจกับฉลากที่สาขาถ่ายส่งทางไลน์ แล้วเลือกใช้ค่าที่แจ้งหรือไม่ใช้</p>')}</div>${_bmcPackTable(d.pending)}`
+    : `<div style="color:var(--text-secondary)">ไม่มีเรื่องที่รอตัดสินใจ ${uiQ('bmc:packnone', 'ขนาดบรรจุที่สาขาแจ้ง', '<p>สาขาแจ้งได้จากฟอร์มรับสินค้า ปุ่ม “ขนาดบรรจุไม่ตรง”</p>')}</div>`);
+  if (f !== 'todo') parts.push((f === 'all' ? '<div class="text-xs font-semibold mt-3 mb-1" style="color:var(--text-primary)">เรื่องที่ตัดสินใจแล้ว</div>' : '') + (d.done.length ? _bmcPackDoneTable(d.done) : uiStateFilter.empty(f, '_bmcPackPick', 'เรื่อง')));
+  box.innerHTML = parts.join('');
 }
 async function bmcPackDecide(ids, decision, name, text) {
   let note = null;
@@ -1827,13 +1959,6 @@ function _bmcRecTabNow(nUn, nCk) {
   if (_bmcRecTab === 'unmatched' && nUn) return 'unmatched';
   if (_bmcRecTab === 'check' && nCk) return 'check';
   return nUn ? 'unmatched' : nCk ? 'check' : 'none';
-}
-function bmcRecHelp() {
-  uiHelp('สูตรตามระดับราคา', `<p>สูตรหนึ่งเวอร์ชันมีผลตั้งแต่เดือนที่เลือก · ร่าง: ครัวสร้างสูตรและจับคู่รหัส POS ให้ครบ แล้วกด “ส่งตรวจ” · ฝ่ายวิเคราะห์ตรวจ: ฝ่ายวิเคราะห์แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว · ผู้บริหารรับทราบผลกระทบหลังประกาศใช้ · ระหว่างตรวจ ครัวแก้ไขสูตรไม่ได้จนกว่าฝ่ายวิเคราะห์จะส่งกลับ</p>
-    <p>“นำเข้าไฟล์ → ไฟล์ครัว Cost-RW” อ่านแผ่นงาน BF_459NET ถึง BF_1,299NET เพื่อสร้างหรือแก้สูตรร่างของบุฟเฟ่ต์ · เลือก “มีผลเดือน” และ “ราคาเดือน” ในเมนูนำเข้าไฟล์ก่อน</p>
-    <p>“ดาวน์โหลด → แม่แบบสูตรตามระดับราคา” มีรายการรหัส POS และรหัสวัตถุดิบ ใช้กรอกหลายเมนูในไฟล์เดียว แล้วนำเข้าด้วย “นำเข้าไฟล์ → ไฟล์สูตรตามระดับราคา” · สูตรของเมนูที่อยู่ในไฟล์ถูกแทนที่ทั้งสูตร</p>
-    <p>ยังไม่จับคู่: ชื่อในไฟล์ Cost-RW ไม่ตรงกับเมนูใน POS · รหัสที่เสนอมาจากชื่อที่ใกล้เคียงในระดับราคาเดียวกัน ตรวจก่อนกด “จับคู่” · “ไม่วางขาย” จำไว้สำหรับการนำเข้าครั้งถัดไป</p>
-    <p>ต้องตรวจ: เมนูที่คิดต้นทุนไม่ได้ ไม่ตรงไฟล์ครัว หรือต้นทุนต่างจากระบบเดิม 20% ขึ้นไป · ข้อที่ฝ่ายวิเคราะห์ยอมรับแล้วไม่แสดง · ระดับราคาที่เลือกในรายการเมนูรวมเมนูของระดับราคาต่ำกว่า</p>`);
 }
 
 // ── the work card ────────────────────────────────────────────────────────────
@@ -2231,7 +2356,7 @@ function bmcRenderRelHead(checks) {
             : ' · <span style="color:var(--amber-ink)">รอผู้บริหารรับทราบ</span>') : ''}</div></div>
       <div class="ml-auto flex flex-wrap gap-2">${acts.join('')}</div>
     </div>
-    ${r.status === 'review' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว</div>` : ''}
+    ${r.status === 'review' ? bmcNote('rl_review', 'ขั้นตอนถัดไป: ฝ่ายวิเคราะห์ตรวจรายการ', '<p>ฝ่ายวิเคราะห์ตรวจรายการ แก้หรือยอมรับข้อที่ติด แล้วประกาศใช้ หรือส่งกลับให้ครัว</p>', 'text-xs mt-3 p-2', 'border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)') : ''}
     ${r.status === 'draft' ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ครัวสร้างสูตรให้ครบ แล้วกด “ส่งตรวจ”${_bmcSendBackLine(r)}</div>` : ''}
     ${r.status === 'released' && !r.acknowledged_by ? `<div class="text-xs mt-3 p-2" style="border-left:3px solid var(--accent);background:var(--bg-subtle);color:var(--text-primary)">ขั้นตอนถัดไป: ผู้บริหารอ่านผลกระทบด้านล่าง แล้วกด “รับทราบ”</div>` : ''}`;
 }
@@ -2258,22 +2383,30 @@ function bmcRenderChecks(d) {
   d.rows.forEach((r, i) => { (groups[r.check_code] = groups[r.check_code] || { code: r.check_code, title: r.title, severity: r.severity, acceptable: r.acceptable, rows: [] }).rows.push({ r, i }); });
   const order = d.by_code.map(k => k.code).filter(c => groups[c]);
   const btnS = 'font-size:11px;background:none;color:var(--accent);border:1px solid var(--border-control);border-radius:4px;padding:1px 8px;cursor:pointer';
+  const f = uiStateFilter.get(), nDone = d.rows.filter(r => r.resolved_by).length;
   const html = order.map(c => {
     const g = groups[c], open = g.rows.filter(x => !x.r.resolved_by).length;
+    const all = g.rows;
+    g.rows = all.filter(x => f === 'all' || (f === 'todo' ? !x.r.resolved_by : !!x.r.resolved_by));
+    if (!g.rows.length) { g.rows = all; return ''; }
     const ink = g.severity === 'block' && open ? 'var(--bad-ink)' : g.severity === 'block' ? 'var(--good-ink)' : 'var(--amber-ink)';
-    return `<details ${open ? 'open' : ''} class="mb-1" data-check="${esc(g.code)}"><summary class="text-xs cursor-pointer py-1" style="color:var(--text-primary)"><b>${esc(g.title)}</b> <span class="bmc-code">· ${esc(g.code)}</span> ${_bmcChip(`ค้าง ${open} จาก ${g.rows.length}`, ink)}
+    const out = `<details ${open ? 'open' : ''} class="mb-1" data-check="${esc(g.code)}"><summary class="text-xs cursor-pointer py-1" style="color:var(--text-primary)"><b>${esc(g.title)}</b> <span class="bmc-code">· ${esc(g.code)}</span> ${_bmcChip(`ค้าง ${open} จาก ${g.rows.length}`, ink)}
         ${g.acceptable && open && canAccept ? `<button onclick="event.preventDefault();bmcAcceptGroup('${esc(g.code)}')" style="${btnS};margin-left:8px">ยอมรับทั้งกลุ่มพร้อมเหตุผล (${open})</button>` : ''}</summary>
       <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto"><table class="text-xs w-full"><tbody>${g.rows.slice(0, 200).map(({ r, i }) => `<tr class="border-b" style="border-color:var(--border-soft)">
         <td class="pr-2 py-1">${esc(r.message || '')}${r.resolved_by ? `<div class="text-[10.5px]" style="color:var(--good-ink)">ยอมรับโดย ${esc(whoTh(r.resolved_by))}</div>` : ''}</td>
         <td class="whitespace-nowrap">${r.acceptable && !r.resolved_by && canAccept ? `<button onclick="bmcAccept(${i})" style="${btnS}">ยอมรับพร้อมเหตุผล</button>` : ''}
           ${/^OTH/.test(r.ref) ? `<button onclick="bmcOpenRecipe('${esc(r.ref.split('#')[0])}', {rel: _bmcRlRel, host: 'bmcRlEditor'})" style="font-size:11px;background:none;color:var(--accent);border:0;cursor:pointer">เปิดสูตร</button>` : ''}</td></tr>`).join('')}</tbody></table>
       ${g.rows.length > 200 ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)">แสดง 200 จาก ${g.rows.length}</div>` : ''}</div></details>`;
+    g.rows = all;
+    return out;
   }).join('');
   box.innerHTML = `<div class="flex flex-wrap items-center gap-2 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รายการตรวจ</div>
       ${d.fresh ? _bmcChip('คำนวณใหม่เมื่อเปิดหน้า', 'var(--text-muted)') : ''}
       ${d.can_release ? _bmcChip('ไม่มีข้อที่ต้องแก้ไข พร้อมประกาศใช้', 'var(--good-ink)') : _bmcChip(`ต้องแก้ไข ${d.open_blocks} ข้อก่อนประกาศใช้`, 'var(--bad-ink)')}
-      ${_bmcChip(`ข้อสังเกต ${d.warnings}`, 'var(--amber-ink)')}</div>${html}`;
+      ${_bmcChip(`ข้อสังเกต ${d.warnings}`, 'var(--amber-ink)')}</div><div id="bmcRlFilter"></div>${html || uiStateFilter.empty(f, '_bmcRlPick', 'ข้อ')}`;
+  uiStateFilter.bar('bmcRlFilter', { counts: { todo: d.rows.length - nDone, done: nDone, all: d.rows.length }, f, pick: '_bmcRlPick' });
 }
+function _bmcRlPick(f) { uiStateFilter.set(f); if (window._bmcChecks) bmcRenderChecks(window._bmcChecks); }
 async function bmcAcceptGroup(code) {
   const d = window._bmcChecks;
   if (!d) return;
@@ -2451,7 +2584,7 @@ function _bmcFcFormula(f) {
     : se.mode === 'auto' && d.ly_from ? `${se.event ? se.event + ' · ' : ''}ปีก่อน ${fmtDay(d.ly_from)} – ${fmtDay(d.ly_to)} ลูกค้าเฉลี่ย ${_bmcNum(d.ly_pax_per_day, 0)} คน/วัน เทียบวันปกติในวันเดียวกันของสัปดาห์ ${_bmcNum(d.baseline_pax_per_day, 0)} คน/วัน`
     : (se.reason ? String(se.reason).replace(/[()]/g, '') : '');
   return `ยอดแนะนำ = ยอดขาย ${weeks} สัปดาห์ × ปฏิทิน ×${cal.toFixed(2)} × ปีก่อน ×${ly.toFixed(2)}`
-    + (src ? `<span style="color:var(--text-muted)"> · ${esc(src)}</span>` : '');
+    + (src ? ' ' + uiQ('bmc:fcsrc', 'ที่มาของตัวคูณ', `<p>${esc(src)}</p>`) : '');
 }
 function bmcRenderForecast() {
   const f = _bmcFc;
@@ -2465,7 +2598,7 @@ function bmcRenderForecast() {
     <div class="text-sm" style="color:var(--text-secondary)">ใช้ ${esc(fmtDay(f.cover_from))} ถึง ${esc(fmtDay(f.cover_to))}</div>
     ${f.calendar_filled ? '' : `<div class="text-sm mt-1" style="color:var(--amber-ink)"><b>ยังไม่ได้ตั้งรอบส่งของสาขานี้ (ใช้ค่าเริ่มต้น)</b> <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'cal'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a></div>`}
     <div id="bmcFcFormula" class="text-sm mt-2" style="color:var(--text-primary)">${_bmcFcFormula(f)}</div>
-    <div class="text-sm mt-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)">ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · <b>ยังไม่หักคงเหลือของสาขา</b> (หน้าสั่งสินค้าหักให้)</div>
+    <div class="text-sm mt-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)"><b>ยังไม่หักคงเหลือของสาขา</b> ${uiQ('bmc:fcnet', 'ยอดแนะนำ', '<p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · ยังไม่หักคงเหลือของสาขา (หน้าสั่งสินค้าหักให้)</p>')}</div>
     <details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--text-secondary)">ที่มาของตัวเลข</summary>
       <div class="text-sm mt-1" style="color:var(--text-secondary)">${bmcLines([`ยอดขาย ${esc(fmtDay(f.history_from))} ถึง ${esc(fmtDay(f.history_to))} (${f.trading_days} วันที่มีการขาย, เฉพาะช่วงเมนูใหม่)`,
         `สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ประกาศใช้แล้ว ${f.stats.release_skus} เมนู + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ`])}</div></details>
@@ -2552,18 +2685,17 @@ async function bmcLoadCalendar() {
   // 2026-10-19: one cell per round (วันส่ง, ตัดรอบ under it), the explanation folded, the save button on the title row
   const rnd = (r, k, x) => `<td data-l="${k === '1' ? 'รอบ 1' : k === '2' ? 'รอบ 2' : 'แซลมอนสด'}">${sel(r.branch_id, k, x.delivery_weekday)}${cut(r.branch_id, k, x.cutoff_th)}</td>`;
   document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-3 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
+      ${uiQ('bmc:calref', 'สาขาอ้างอิงคืออะไร', `<p>สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน คำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก</p><p>ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง)</p>`)}
       ${pilot.length ? `<label class="text-sm flex items-center gap-2" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()" style="width:18px;height:18px"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
       <span class="text-sm" style="color:var(--text-muted)">${calRows.length} จาก ${_bmcCal.rows.length} สาขา</span>
       ${w ? `<button type="button" class="wt-btn is-primary ml-auto" onclick="bmcSaveCalendar()">บันทึกรอบส่ง</button>` : ''}</div>
-    ${w ? '<div class="wt-note mb-2">เลือกวันส่ง แล้วกด “บันทึกรอบส่ง” (บันทึกเฉพาะแถวที่แก้ไข) · เวลาตัดรอบคำนวณให้เอง · สาขาอ้างอิงบันทึกทันทีที่เลือก</div>' : ''}
+    ${w ? bmcNote('calsave', 'เลือกวันส่ง แล้วกด “บันทึกรอบส่ง”', '<p>เลือกวันส่ง แล้วกด “บันทึกรอบส่ง” (บันทึกเฉพาะแถวที่แก้ไข) · เวลาตัดรอบคำนวณให้เอง · สาขาอ้างอิงบันทึกทันทีที่เลือก</p>', 'wt-note mb-2') : ''}
     <div class="wt-wrap" style="max-height:70vh"><table class="wt"><thead><tr>
       <th>สาขา</th><th>รอบ 1</th><th>รอบ 2</th><th>แซลมอนสด</th><th>สาขาอ้างอิง (สาขาใหม่)</th><th>ตั้งโดย</th></tr></thead>
     <tbody>${calRows.map(r => `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(r.branch)}</td>
       ${rnd(r, '1', r.r1)}${rnd(r, '2', r.r2)}${rnd(r, 'salmon', r.rsalmon)}
       <td data-l="สาขาอ้างอิง">${refSel(r)}</td>
-      <td data-l="ตั้งโดย" class="wt-muted" style="white-space:nowrap">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>
-    <details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--text-secondary)">สาขาอ้างอิงคืออะไร</summary>
-      <div class="text-sm mt-1" style="color:var(--text-secondary)">สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน คำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก · ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง)</div></details>`;
+      <td data-l="ตั้งโดย" class="wt-muted" style="white-space:nowrap">${[r.r1, r.r2, r.rsalmon].some(x => x.filled) ? esc(whoTh([r.r1, r.r2, r.rsalmon].map(x => x.filled_by).filter(Boolean)[0] || '')) : '<span style="color:var(--amber-ink)">ค่าเริ่มต้น</span>'}</td></tr>`).join('')}</tbody></table></div>`;
   const bulk = document.getElementById('bmcCalBulk');          // the file import is the sales team's, like the table above
   if (bulk) bulk.style.display = w ? '' : 'none';
   bmcLoadBenchmark();
@@ -2576,16 +2708,16 @@ async function bmcLoadCloseSettings() {
   if (!box) return;
   try { _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
   const c = _bmcCs, w = hasModule('bom.center');
-  box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">เกณฑ์ผลต่างและการตรวจนับ</div>
-    <p class="text-xs mt-1 mb-2" style="color:var(--text-secondary)">สาขาให้เหตุผลผลต่างเฉพาะรายการที่เกินเกณฑ์ร้อยละของกลุ่มมูลค่า และต่างตั้งแต่จำนวนบาทนี้ขึ้นไป · รายการที่ใช้จริงเป็น 0 หรืองวดที่ไม่มีใบรับสินค้าหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม</p>
+  box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">เกณฑ์ผลต่างและการตรวจนับ</div>
+      ${uiQ('bmc:cs1', 'เกณฑ์ผลต่างและการตรวจนับ', `<p>สาขาให้เหตุผลผลต่างเฉพาะรายการที่เกินเกณฑ์ร้อยละของกลุ่มมูลค่า และต่างตั้งแต่จำนวนบาทนี้ขึ้นไป</p><p>รายการที่ใช้จริงเป็น 0 หรืองวดที่ไม่มีใบรับสินค้าหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม</p><p>ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด): กลุ่มมูลค่าสูงนับเสริมทุกสัปดาห์ · ปิดงวดสิ้นเดือนต้องนับครบทุกรายการเสมอ</p><p>ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ ไม่ว่าจะเปิดหรือปิดการตรวจนับหมุนเวียน (มติเจ้าของ 13/10/2026)</p>`)}</div>
     <div class="flex flex-wrap items-end gap-3">
       <label class="text-xs" style="color:var(--text-muted)">ผลต่างขั้นต่ำที่ต้องให้เหตุผล (บาท)<br>
         <input id="bmcCsBaht" type="number" min="${c.reason_min_baht_min}" max="${c.reason_min_baht_max}" step="50" value="${c.reason_min_baht}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:120px;background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="text-xs flex items-center gap-2" style="color:var(--text-primary)"><input id="bmcCsCycle" type="checkbox" ${c.cycle_counts ? 'checked' : ''} ${w ? '' : 'disabled'}>
-        ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด): กลุ่มมูลค่าสูงนับเสริมทุกสัปดาห์ · ปิดงวดสิ้นเดือนต้องนับครบทุกรายการเสมอ</label>
+        ตรวจนับหมุนเวียนเสริม (ไม่ใช่การปิดงวด)</label>
       ${w ? `<button onclick="bmcSaveCloseSettings()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึก</button>` : ''}
       <span id="bmcCsStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ ไม่ว่าจะเปิดหรือปิดการตรวจนับหมุนเวียน (มติเจ้าของ 13/10/2026)</div>`;
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท · ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)}–${_bmcNum(c.reason_min_baht_max, 0)}</div>`;
 }
 async function bmcSaveCloseSettings() {
   const baht = Number(document.getElementById('bmcCsBaht').value), cyc = document.getElementById('bmcCsCycle').checked;
@@ -2609,18 +2741,22 @@ async function bmcLoadEvents() {
   const sel = document.getElementById('bmcEvBranch');
   if (sel && !sel.options.length) sel.innerHTML = '<option value="">ทุกสาขา</option>' + _bmcEv.branches.map(b => `<option value="${b.branch_id}">${esc(b.name)}</option>`).join('');
   const w = _bmcEvCanWrite();
-  document.getElementById('bmcEvList').innerHTML = _bmcEv.events.length
+  const evToday = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10), evF = uiStateFilter.get(), evSp = uiStateFilter.split(_bmcEv.events, e => e.date_to < evToday);
+  const evList = evF === 'all' ? evSp.all : evSp[evF];
+  window._bmcEvPick = f => { uiStateFilter.set(f); bmcLoadEvents(); };
+  document.getElementById('bmcEvList').innerHTML = `<div id="bmcEvFilter"></div>` + (evList.length
     ? `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)"><th class="pr-2">ชื่อ</th><th class="pr-2">ตั้งแต่</th><th class="pr-2">ถึง</th><th class="pr-2">สาขา</th><th class="pr-2">ลูกค้าเพิ่มจากวันปกติ</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${
-      _bmcEv.events.map(e => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1 font-semibold">${esc(e.name)}</td><td class="pr-2">${esc(fmtDay(e.date_from))}</td><td class="pr-2">${esc(fmtDay(e.date_to))}</td>
+      evList.map(e => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1 font-semibold">${esc(e.name)}</td><td class="pr-2">${esc(fmtDay(e.date_from))}</td><td class="pr-2">${esc(fmtDay(e.date_to))}</td>
         <td class="pr-2">${esc(e.branch || 'ทุกสาขา')}</td><td class="pr-2">${esc(_bmcEvPctTxt(e))}</td><td class="pr-2" style="color:var(--text-muted)">${esc(e.note || '')}</td>
         <td class="text-right whitespace-nowrap">${w ? `<a href="#" onclick="bmcEvEdit(${e.event_id});return false" style="color:var(--accent)">แก้ไข</a> · <a href="#" onclick="bmcEvDel(${e.event_id});return false" style="color:var(--bad-ink)">ลบ</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`
-    : '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีช่วงเทศกาลหรือโปรโมชันในช่วงนี้</span>';
+    : uiStateFilter.empty(evF, '_bmcEvPick', 'ช่วง'));
+  uiStateFilter.bar('bmcEvFilter', { counts: evSp.counts, f: evF, pick: '_bmcEvPick' });
   const byMonth = {};
   _bmcEv.holidays.forEach(h => { (byMonth[h.date.slice(0, 7)] = byMonth[h.date.slice(0, 7)] || []).push(h); });
   document.getElementById('bmcEvHol').innerHTML = Object.keys(byMonth).length
     ? Object.entries(byMonth).map(([m, hs]) => `<div class="mb-2"><div class="text-[11px] font-semibold" style="color:var(--text-secondary)">${esc(fmtMonthTh(m))}</div>
         <div class="flex flex-wrap gap-x-4 gap-y-1">${hs.map(h => `<span class="text-xs" style="color:var(--text-primary)">${esc(fmtDayShort(h.date))} ${esc(h.weekday_th)} · ${esc(h.name)} ${_bmcChip('วันหยุด', 'var(--navy-ink)')}</span>`).join('')}</div></div>`).join('')
-    : '<span class="text-xs" style="color:var(--text-muted)">ไม่มีวันหยุดราชการในช่วงนี้ (ตารางวันหยุดของระบบครอบคลุม พ.ศ. 2567–2570)</span>';
+    : `<span class="text-xs" style="color:var(--text-muted)">ไม่มีวันหยุดราชการในช่วงนี้ ${uiQ('bmc:holrange', 'ตารางวันหยุด', '<p>ตารางวันหยุดของระบบครอบคลุม พ.ศ. 2567–2570</p>')}</span>`;
 }
 function bmcEvReset() {
   _bmcEvEditId = null;
@@ -2676,8 +2812,8 @@ async function bmcLoadBenchmark() {
   try { _bmcBm = await _bmcJson(`${API}/api/bom-center/benchmark`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
   const b = _bmcBm, w = _bmcFcCanWrite();
   const typ = t => t === 'master' ? 'สาขาของบริษัท' : 'แฟรนไชส์';
-  box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">สาขาของบริษัทที่ใช้เป็นค่ากลาง</div>
-    <p class="text-xs mt-1 mb-2" style="color:var(--text-secondary)">ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย · ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 ในหน้าตรวจสูตรด้วยยอดซื้อ และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>
+  box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">สาขาของบริษัทที่ใช้เป็นค่ากลาง</div>
+      ${uiQ('bmc:bm1', 'สาขาที่ใช้เป็นค่ากลาง', `<p>ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย</p><p>ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 ในหน้าตรวจสูตรด้วยยอดซื้อ และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>`)}</div>
     <div id="bmcBmList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">${b.branches.filter(x => x.active).map(x => `<label class="text-xs flex items-center gap-2" style="color:var(--text-primary);min-height:32px">
       <input type="checkbox" value="${x.branch_id}" ${x.selected ? 'checked' : ''} ${w ? '' : 'disabled'} style="width:18px;height:18px"> ${esc(x.name)} <span class="text-[10.5px]" style="color:var(--text-muted)">${typ(x.branch_type)}</span></label>`).join('')}</div>
     <div class="flex flex-wrap items-end gap-3 mt-3">
@@ -2685,7 +2821,7 @@ async function bmcLoadBenchmark() {
         <input id="bmcBmBuf" type="number" min="${b.buffer_min}" max="${b.buffer_max}" step="1" value="${b.buffer_pct}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:90px;background:var(--bg-input);color:var(--text-primary)"></label>
       ${w ? `<button onclick="bmcSaveBenchmark()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึกค่ากลาง</button>` : ''}
       <span id="bmcBmStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>
-    <div class="text-[11px] mt-2" style="color:var(--text-muted)">${esc(b.buffer_note)} · สาขาที่มีผลตรวจนับต้นงวดและปลายงวดครบจะใช้ยอดซื้อปรับด้วยส่วนต่างของสต็อก และเกณฑ์ผลต่างปกติแทนช่วงยอมรับนี้${b.is_default ? ' · ขณะนี้ใช้ค่าเริ่มต้น: ' + esc(b.names_default.join(' · ')) : ''}</div>`;
+    <div class="text-[11px] mt-2" style="color:var(--text-muted)">ช่วงยอมรับใช้ชั่วคราว ${uiQ('bmc:bm2', 'ช่วงยอมรับ', `<p>${esc(b.buffer_note)}</p><p>สาขาที่มีผลตรวจนับต้นงวดและปลายงวดครบจะใช้ยอดซื้อปรับด้วยส่วนต่างของสต็อก และเกณฑ์ผลต่างปกติแทนช่วงยอมรับนี้</p>${b.is_default ? '<p>ขณะนี้ใช้ค่าเริ่มต้น: ' + esc(b.names_default.join(' · ')) + '</p>' : ''}`)}${b.is_default ? ' · ใช้ค่าเริ่มต้น' : ''}</div>`;
 }
 async function bmcSaveBenchmark() {
   const ids = [...document.querySelectorAll('#bmcBmList input:checked')].map(x => Number(x.value));
@@ -2701,7 +2837,7 @@ async function bmcSaveBenchmark() {
   } catch (e) { bmcStatus('bmcBmStatus', false, String(e.message || e)); }
 }
 // ── PR-X · ตรวจสูตรและหน่วยด้วยยอดซื้อจริง (analyst / management): what the company branches bought against what the recipes say ──
-let _bmcRc = null, _bmcRcFilter = 'all', _bmcRcAll = false;
+let _bmcRc = null, _bmcRcFilter = 'all', _bmcRcAll = false;    // _bmcRcFilter = one status chip ('all' = no narrowing); the shared filter (uiStateFilter) splits ในเกณฑ์ from the rest
 const _BMC_RC_ST = [['x10', 'ต่างกันเกิน 10 เท่า · ตรวจหน่วย', 'var(--bad-ink)'], ['no_recipe', 'มีการซื้อ แต่ไม่มีในสูตร', 'var(--amber-ink)'],
   ['no_buy', 'มีในสูตร แต่ไม่มีการซื้อ · ตรวจรหัส', 'var(--amber-ink)'], ['more', 'ซื้อมากกว่าสูตร', 'var(--amber-ink)'],
   ['less', 'ซื้อน้อยกว่าสูตร', 'var(--amber-ink)'], ['ok', 'ในเกณฑ์', 'var(--good-ink)']];
@@ -2723,6 +2859,7 @@ async function bmcLoadRcheck(month) {
   bmcRenderRcheck();
 }
 function bmcRcSetFilter(k) { _bmcRcFilter = k; _bmcRcAll = false; bmcRenderRcheck(); }
+function _bmcRcPick(f) { uiStateFilter.set(f); _bmcRcFilter = 'all'; _bmcRcAll = false; bmcRenderRcheck(); }
 function bmcRcOpenUnit(code) {
   supplyGo({ tab: 'bomcenter', pane: 'conv' });
   setTimeout(() => { const el = document.getElementById('bmcConvCode'); if (el) { el.value = code; bmcLoadLadder(); } }, 500);
@@ -2744,18 +2881,22 @@ function bmcRenderRcheck() {
     return;
   }
   const c = r.counts || {};
-  chips.innerHTML = [['all', 'ทั้งหมด', r.rows.length, 'var(--navy-ink)']].concat(_BMC_RC_ST.map(([k, t, ink]) => [k, t, c[k] || 0, ink])).map(([k, t, n, ink]) =>
-    `<button onclick="bmcRcSetFilter('${k}')" style="border:1px solid ${_bmcRcFilter === k ? ink : 'var(--border)'};background:${_bmcRcFilter === k ? 'var(--accent-soft)' : 'transparent'};color:${ink};border-radius:999px;padding:4px 14px;font-size:14px;min-height:34px;cursor:pointer">${esc(t)} <b>${n}</b></button>`).join(' ');
+  const rf = uiStateFilter.get(), rsp = uiStateFilter.split(r.rows, x => x.status === 'ok');
+  // the chips of the statuses are shown for the list on screen only (the ในเกณฑ์ chip is the เสร็จแล้ว view of the shared filter)
+  const stShown = _BMC_RC_ST.filter(([k]) => (rf === 'done' ? k === 'ok' : rf === 'todo' ? k !== 'ok' : true));
+  chips.innerHTML = '<div id="bmcRcBar"></div><div id="bmcRcSt" class="flex flex-wrap gap-1 mt-2">' + stShown.map(([k, t, ink]) =>
+    `<button onclick="bmcRcSetFilter('${_bmcRcFilter === k ? 'all' : k}')" aria-pressed="${_bmcRcFilter === k}" style="border:1px solid ${_bmcRcFilter === k ? ink : 'var(--border)'};background:${_bmcRcFilter === k ? 'var(--accent-soft)' : 'transparent'};color:${ink};border-radius:999px;padding:4px 14px;font-size:14px;min-height:44px;cursor:pointer">${esc(t)} <b>${c[k] || 0}</b></button>`).join(' ') + '</div>';
+  uiStateFilter.bar('bmcRcBar', { counts: rsp.counts, f: rf, pick: '_bmcRcPick' });
   const lines = [];
   lines.push(`ค่ากลางสาขาของบริษัท = มัธยฐานของ ${r.branches.map(b => esc(b.branch)).join(', ')}`);
   lines.push('ยอดขายไม่รวมภาษีมูลค่าเพิ่มและค่าบริการ · หน่วยเป็นหน่วยฐาน');
-  if (r.scaled) lines.push(`<b>ปรับยอดซื้อตามวันที่มียอดขายรายวัน</b>: ไฟล์ราคาเป็นยอดซื้อทั้งเดือน แต่ยอดขายรายวันมีไม่ครบทุกวัน จึงคูณยอดซื้อด้วย (วันที่มียอดขาย ÷ วันในเดือน) · ${r.branches.filter(b => b.scaled).map(b => `${esc(b.branch)} ${b.sales_days}/${b.month_days} วัน`).join(' · ')}`);
-  if (r.partial_month) lines.push('เดือนนี้ยังไม่สิ้นสุด ยอดซื้อและยอดขายยังไม่ครบเดือน ผลตรวจอาจคลาดเคลื่อน');
-  lines.push(`ช่วงยอมรับ ±${_bmcNum(r.buffer_pct, 0)}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา${r.stock_adjusted_branches ? ` · ${r.stock_adjusted_branches} สาขามีผลตรวจนับครบ ใช้ยอดซื้อปรับด้วยสต็อกและเกณฑ์ผลต่างปกติ` : ''}`);
+  if (r.scaled) lines.push(`<b>ปรับยอดซื้อตามวันที่มียอดขายรายวัน</b> ${uiQ('bmc:rcscaled', 'ปรับยอดซื้อตามวันที่มียอดขาย', `<p>ไฟล์ราคาเป็นยอดซื้อทั้งเดือน แต่ยอดขายรายวันมีไม่ครบทุกวัน จึงคูณยอดซื้อด้วย (วันที่มียอดขาย ÷ วันในเดือน)</p><p>${r.branches.filter(b => b.scaled).map(b => `${esc(b.branch)} ${b.sales_days}/${b.month_days} วัน`).join(' · ')}</p>`)}`);
+  if (r.partial_month) lines.push(`เดือนนี้ยังไม่สิ้นสุด ผลตรวจอาจคลาดเคลื่อน ${uiQ('bmc:rcpartial', 'เดือนที่ยังไม่สิ้นสุด', '<p>เดือนนี้ยังไม่สิ้นสุด ยอดซื้อและยอดขายยังไม่ครบเดือน ผลตรวจอาจคลาดเคลื่อน</p>')}`);
+  lines.push(`ช่วงยอมรับ ±${_bmcNum(r.buffer_pct, 0)}% ใช้ชั่วคราว ${uiQ('bmc:rcbuf', 'ช่วงยอมรับ', `<p>ช่วงยอมรับ ±${_bmcNum(r.buffer_pct, 0)}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา</p>${r.stock_adjusted_branches ? `<p>${r.stock_adjusted_branches} สาขามีผลตรวจนับครบ ใช้ยอดซื้อปรับด้วยสต็อกและเกณฑ์ผลต่างปกติ</p>` : ''}`)}`);
   if (r.skipped_branches.length) lines.push('ไม่นับ: ' + r.skipped_branches.map(x => esc((x.branch || '') + ' (' + x.why + ')')).join(' · '));
   if (r.skipped_items) lines.push(`ไม่แสดง ${r.skipped_items} รายการที่มีข้อมูลไม่ถึง 2 สาขา`);
   notes.innerHTML = `<ul style="margin:0;padding-left:20px;list-style:disc">${lines.map(l => `<li style="margin-top:2px">${l}</li>`).join('')}</ul>`;
-  let rows = _bmcRcFilter === 'all' ? r.rows : r.rows.filter(x => x.status === _bmcRcFilter);
+  let rows = (rf === 'all' ? r.rows : rf === 'done' ? rsp.done : rsp.todo).filter(x => _bmcRcFilter === 'all' || x.status === _bmcRcFilter);
   if (window._bmcRcItem) {                                  // 2.6 · a task "ตรวจสูตร: …" opens this page on that one item
     const it = window._bmcRcItem;
     rows = r.rows.filter(x => x.code === it);
@@ -2775,9 +2916,9 @@ function bmcRenderRcheck() {
       <td class="wt-num" data-l="ส่วนต่าง">${x.diff_pct == null ? '<span class="wt-muted">–</span>' : (x.diff_pct > 0 ? '+' : '') + _bmcNum(x.diff_pct, 1) + '%'}</td>
       <td data-l="ผลตรวจ">${_bmcChip(x.status_th, ink[x.status])}</td><td data-l="รายสาขา ซื้อ / สูตร" style="min-width:200px;color:var(--text-secondary)">${per(x)}</td>
       <td class="wt-act"><div style="display:flex;flex-direction:column;gap:6px"><button type="button" class="wt-btn" onclick="bmcRcOpenUnit('${esc(x.code)}')">หน่วยและการแปลง</button><button type="button" class="wt-btn" onclick="bmcRcOpenIng('${esc(x.code)}')">ทะเบียน</button></div></td></tr>`).join('')
-      || '<tr><td colspan="8" class="wt-empty">ไม่มีรายการในกลุ่มนี้</td></tr>'}</tbody></table></div>
+      || `<tr><td colspan="8" class="wt-empty">${rf === 'todo' ? '✓ ไม่มีรายการที่ต้องตรวจ' : 'ไม่มีรายการในกลุ่มนี้'}</td></tr>`}</tbody></table></div>
     ${total > 80 ? `<div class="mt-2 text-xs"><a href="#" onclick="_bmcRcAll=!_bmcRcAll;bmcRenderRcheck();return false" style="color:var(--accent)">${_bmcRcAll ? 'แสดงเฉพาะ 80 รายการแรก' : 'แสดงทั้งหมด ' + total + ' รายการ'}</a></div>` : ''}
-    <div class="wt-note">เรียงตามมูลค่าส่วนต่างต่อยอดขาย ฿100,000 · เครื่องหมาย * = สาขานั้นใช้ยอดซื้อปรับด้วยสต็อกต้นงวดและปลายงวด</div>`;
+    ${bmcNote('rcsort', 'เรียงตามมูลค่าส่วนต่างต่อยอดขาย ฿100,000', '<p>เรียงตามมูลค่าส่วนต่างต่อยอดขาย ฿100,000 · เครื่องหมาย * = สาขานั้นใช้ยอดซื้อปรับด้วยสต็อกต้นงวดและปลายงวด</p>')}`;
 }
 // ── bulk delivery days from a file: template → preview (dry run) → save ──
 let _bmcCalBulkFile = null;
@@ -2950,8 +3091,7 @@ function bmcIssRender() {
   sel.innerHTML = ms.map(m => `<option value="${m}">${esc(fmtMonthTh(m))}</option>`).join('');
   sel.value = d.month;
   const c = d.counts || {};
-  document.getElementById('bmcIssFilter').innerHTML = _BMC_ISS_FILTERS.map(([k, t]) =>
-    `<button type="button" class="iss-chip" aria-pressed="${_bmcIssFilter === k}" onclick="bmcIssSetFilter('${k}')">${t} <b>${c[k] || 0}</b></button>`).join('');
+  uiStateFilter.bar('bmcIssFilter', { counts: c, f: _bmcIssFilter, pick: 'bmcIssSetFilter', opts: _BMC_ISS_FILTERS });      // the shared chips; the five states are PR-R's
   // the month workbook holds every branch whose receipts are confirmed (ready and posted)
   const n = (c.ready || 0) + (c.posted || 0);
   const btn = document.getElementById('bmcIssAllBtn');
@@ -2984,15 +3124,6 @@ function bmcIssRender() {
         <td data-l="ไม่มีราคา" class="wt-num">${r.unpriced == null ? '<span class="wt-muted">—</span>' : r.unpriced ? `<b style="color:var(--amber-ink)">${r.unpriced}</b>` : '<span class="wt-muted">0</span>'}</td>
         <td class="wt-act"><span class="iss-acts">${acts}</span></td></tr>`;
     }).join('')}</tbody></table></div>`;
-}
-// the "?" of the page: what the controls mean, kept off the page
-function bmcIssHelp() {
-  uiHelp('ใบสรุปตัดเบิก', `<p>แต่ละแถวคือสาขาและงวดของเดือนที่เลือก · พร้อมบันทึก = สาขาหรือประสานงานขายยืนยันรับสินค้าครบแล้ว และบัญชียังไม่บันทึก · รอสาขายืนยัน = ยังดาวน์โหลดไม่ได้ · บันทึกแล้ว = งวดล็อก</p>
-    <p>ตัวกรองเริ่มที่ “ยังไม่เสร็จ” เพื่อซ่อนสาขาที่บันทึกแล้ว · เลือก “บันทึกแล้ว” หรือ “ทั้งหมด” เมื่อต้องการดูหรือยกเลิกการบันทึก</p>
-    <p>ปุ่มดาวน์โหลดด้านบนสร้างไฟล์เดียวของทุกสาขาที่ยืนยันรับสินค้าครบแล้วในเดือนนั้น (รวมสาขาที่บันทึกแล้ว) · กดชื่อสาขาเพื่อดูกระทบยอดและรายการเคลื่อนไหวของงวด</p>
-    <p>คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย (ตามใบตัดเบิกที่ยืนยันแล้ว) · ผลต่าง = นับจริง − คงเหลือตามระบบ · ปริมาณในตารางกระทบยอดแสดงเป็นหน่วยที่สาขานับ</p>
-    <p>เมื่อกด “บันทึกเข้าระบบบัญชีแล้ว” งวดนั้นล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้ · ยกเลิกการบันทึกได้จากลิงก์ในแถวเดียวกัน</p>
-    <p><a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></p>`);
 }
 
 // ── the detail of one period (the drawer) ────────────────────────────────────
@@ -3240,8 +3371,7 @@ async function bmcUcRender(boxId, items, opts) {
       + (decide ? '“เป็นรหัสใหม่ของวัตถุดิบเดิม” บันทึกรหัสนี้เป็นรหัสในระบบอื่นของวัตถุดิบเดิมทันที สูตรไม่ต้องแก้' : '“เป็นรหัสใหม่ของวัตถุดิบเดิม” ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ตรวจ และรหัสนั้นยังไม่ถูกนำเข้าในครั้งนี้');
   box.style.display = '';
   box.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
-    <div class="text-xs font-semibold" style="color:var(--amber-ink)">รหัสที่ระบบไม่รู้จัก (${st.items.length} รหัส)${left ? ` · ยังไม่ได้เลือก ${left}` : ' · เลือกครบแล้ว'}</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">${hint}</div>
+    <div class="text-xs font-semibold mb-2" style="color:var(--amber-ink)">รหัสที่ระบบไม่รู้จัก (${st.items.length} รหัส)${left ? ` · ยังไม่ได้เลือก ${left}` : ' · เลือกครบแล้ว'} ${uiQ('bmc:uchint', 'รหัสที่ระบบไม่รู้จัก', '<p>' + hint.split(' · ').map(x => esc(x)).join('</p><p>') + '</p>')}</div>
     <div class="flex flex-wrap items-center gap-2 mb-2">
       ${o.mode === 'request' ? '' : `<label class="text-[11px]" style="color:var(--text-muted)">ระบบของรหัสใหม่ ${_bmcSysSel(boxId + 'Sys', st.system || 'acc', `onchange="_bmcUc[${_bmcQ(boxId)}].system=this.value"`)}</label>`}
       ${o.mode === 'request' ? '' : _bmcBtn('เป็นวัตถุดิบใหม่ทั้งหมดที่ไม่มีรายการใกล้เคียง', `bmcUcAllNew(${_bmcQ(boxId)})`)}
@@ -3334,7 +3464,7 @@ function bmcAlRender(d) {
   const sysLine = d.current.map(c => `<span class="mr-3">${esc(c.system_th)}: ใช้รหัส <b>${esc(c.code)}</b>${c.is_alias ? '' : ' (รหัสในทะเบียน)'}${c.is_alias && w ? ` ${_bmcBtn('ใช้รหัสในทะเบียนแทน', `bmcAlAct(${_bmcQ(d.code)},{action:'register',system:${_bmcQ(c.system)}},'กลับไปใช้รหัสในทะเบียนแล้ว')`)}` : ''}</span>`).join('');
   cell.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
     <div class="text-xs font-semibold" style="color:var(--text-primary)">รหัสในระบบอื่นของ ${esc(d.code)} ${esc(d.name || '')}</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">รหัสในทะเบียนไม่เปลี่ยน และสูตรใช้รหัสนี้ต่อไป · รหัสในระบบอื่นใช้รับไฟล์เข้าและแสดงในไฟล์ที่ส่งให้ระบบนั้น</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">รหัสในทะเบียนไม่เปลี่ยน · สูตรใช้รหัสนี้ต่อไป ${uiQ('bmc:alinfo', 'รหัสในระบบอื่น', '<p>รหัสในทะเบียนไม่เปลี่ยน และสูตรใช้รหัสนี้ต่อไป</p><p>รหัสในระบบอื่นใช้รับไฟล์เข้าและแสดงในไฟล์ที่ส่งให้ระบบนั้น</p>')}</div>
     <div class="text-[11.5px] mb-2">${sysLine}</div>
     ${d.aliases.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:520px"><thead><tr class="text-left" style="color:var(--text-muted)">
       <th class="pr-2">ระบบ</th><th class="pr-2">รหัส</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">สถานะ</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${d.aliases.map(a => `
@@ -3384,16 +3514,28 @@ async function bmcLoadCodeReq() {
   const box = document.getElementById('bmcCrqList');
   try {
     const d = await _bmcJson(`${API}/api/bom-center/codes/requests?status=all`);
-    box.innerHTML = d.requests.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
+    _bmcCrqAll = d.requests;
+    _bmcCrqDraw();
+  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+}
+let _bmcCrqAll = [];
+function _bmcCrqPick(f) { uiStateFilter.set(f); _bmcCrqDraw(); }
+function _bmcCrqDraw() {
+  const box = document.getElementById('bmcCrqList');
+  if (!box) return;
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(_bmcCrqAll, r => r.status !== 'pending'), list = f === 'all' ? sp.all : sp[f];
+  {
+    box.innerHTML = `<div id="bmcCrqFilter"></div>` + (list.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:560px"><thead><tr class="text-left" style="color:var(--text-muted)">
         <th class="pr-2">วันที่แจ้ง</th><th class="pr-2">วัตถุดิบ</th><th class="pr-2">รหัสเดิม → รหัสใหม่</th><th class="pr-2">ระบบ</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">สถานะ</th></tr></thead><tbody>${
-      d.requests.slice(0, 60).map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">
+      list.slice(0, 60).map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">
         <td class="py-1 pr-2">${esc(fmtAt(r.requested_at))}<div style="color:var(--text-muted)">${esc(whoTh(r.requested_by))}</div></td>
         <td class="py-1 pr-2"><b>${esc(r.item_name || r.ingredient_code)}</b><div style="color:var(--text-muted)">${esc(r.ingredient_code)}</div></td>
         <td class="py-1 pr-2">${esc(r.old_code || '—')} → <b>${esc(r.new_code)}</b>${r.note ? `<div style="color:var(--text-muted)">${esc(r.note)}</div>` : ''}</td>
         <td class="py-1 pr-2">${esc(r.system_th)}</td><td class="py-1 pr-2">${r.valid_from ? esc(fmtDay(r.valid_from)) : '—'}</td>
         <td class="py-1 pr-2">${_bmcChip(r.status_th, r.status === 'applied' ? 'var(--good-ink)' : r.status === 'rejected' ? 'var(--bad-ink)' : 'var(--amber-ink)')}${r.decision_note ? `<div style="color:var(--text-muted)">${esc(r.decision_note)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`
-      : '<span style="color:var(--text-muted)">ยังไม่มีคำขอ</span>';
-  } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
+      : uiStateFilter.empty(f, '_bmcCrqPick', 'คำขอ'));
+    uiStateFilter.bar('bmcCrqFilter', { counts: sp.counts, f, pick: '_bmcCrqPick' });
+  }
 }
 async function bmcCrqSuggest() {
   const name = (document.getElementById('bmcCrqName').value || '').trim(), box = document.getElementById('bmcCrqSug');
@@ -3401,7 +3543,7 @@ async function bmcCrqSuggest() {
   try {
     const d = await _bmcJson(`${API}/api/bom-center/codes/suggest?name=${encodeURIComponent(name)}&code=${encodeURIComponent((document.getElementById('bmcCrqNew').value || '').trim())}`);
     box.innerHTML = d.suggestions.length ? 'วัตถุดิบที่ใกล้เคียง: ' + d.suggestions.map(s => `<button type="button" onclick="document.getElementById('bmcCrqItem').value=${_bmcQ(s.code)};bmcCrqPicked()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:2px 8px;margin:2px;font-size:11px;cursor:pointer;background:transparent;color:var(--text-primary)">${esc(s.code)} ${esc(s.name || '')}</button>`).join('')
-      : '<span style="color:var(--text-muted)">ไม่พบวัตถุดิบที่ชื่อใกล้เคียง · พิมพ์รหัสหรือชื่อในช่องวัตถุดิบเดิมเพื่อค้นหา</span>';
+      : '<span style="color:var(--text-muted)">ไม่พบวัตถุดิบที่ชื่อใกล้เคียง · พิมพ์ค้นหาในช่องวัตถุดิบเดิม</span>';
   } catch (e) { box.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
 function bmcCrqPicked() {                           // the chosen item: show its name, and the code in use as the old code
@@ -3439,8 +3581,8 @@ async function bmcLoadCodeReqCard() {
     const d = await _bmcJson(`${API}/api/bom-center/codes/requests?status=pending`);
     if (!d.requests.length) { card.style.display = 'none'; card.innerHTML = ''; return; }
     card.style.display = '';
-    card.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">รหัสใหม่ที่รออนุมัติ (${d.requests.length})</div>
-      <div class="text-[11px] mb-2" style="color:var(--text-muted)">ประสานงานขายแจ้งว่าวัตถุดิบเดิมมีรหัสใหม่ในระบบอื่น · “ใช้” บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น สูตรไม่ต้องแก้ · “ไม่ใช้” ต้องระบุเหตุผล <span id="bmcCodeReqStatus" class="ml-2"></span></div>
+    card.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รหัสใหม่ที่รออนุมัติ (${d.requests.length})</div>
+        ${uiQ('bmc:codereqcard', 'รหัสใหม่ที่รออนุมัติ', '<p>ประสานงานขายแจ้งว่าวัตถุดิบเดิมมีรหัสใหม่ในระบบอื่น</p><p>“ใช้” บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น สูตรไม่ต้องแก้ · “ไม่ใช้” ต้องระบุเหตุผล</p>')}</div>
       <div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:620px"><thead><tr class="text-left" style="color:var(--text-muted)">
         <th class="pr-2">วัตถุดิบ</th><th class="pr-2">รหัสเดิม → รหัสใหม่</th><th class="pr-2">ระบบ</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">แจ้งโดย</th><th></th></tr></thead><tbody>${
       d.requests.map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">

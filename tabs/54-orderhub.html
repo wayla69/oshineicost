@@ -1,7 +1,8 @@
 <div id="tab-orderhub" style="display:none">
 
   <div class="card p-4 mb-3" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
+    <div class="ui-cardhead"><h2 class="text-base font-bold" style="color:var(--accent)">ใบสั่งซื้อและการปิดงวดเดือน</h2>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help-tab="orderhub" title="คำอธิบายของหน้านี้">?</button></div>
   </div>
 
   <!-- PR-M5: ONE month for the whole tab (supplyCtx().month, shared with วัตถุดิบ & ราคา, หน้างาน and ผลต่างของสาขา); shown on the panes
@@ -38,7 +39,6 @@
     <div id="ohbConsolidated" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbQueue" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-queue"></div>
   </div>
 
   <!-- ── เคลมสินค้า (owner 2026-10-08) ── -->
@@ -50,7 +50,6 @@
     <div id="ohbClaimList" class="card p-3 mb-3"></div>
     <!-- batch 3 (3.6): the receipts a branch cancelled in the last 7 days, with the reason (ohbLoadCancelledReceipts) -->
     <div id="ohbCancelledReceipts" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-claims"></div>
   </div>
 
   <!-- ── ใบตัดเบิกสาขา (PR-J4): ประสานงานขาย follows the branches' daily slips, reopens one with a reason;
@@ -71,7 +70,6 @@
     <div id="ohbIsDetail" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbIsList" class="card p-3 mb-3"></div>
     <div id="ohbIsSummary" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-issues"></div>
   </div>
 
   <!-- ── ผลต่างตัดเบิกรายวัน (PR-J3) ── -->
@@ -86,7 +84,6 @@
     </div>
     <div id="ohbIvList" class="card p-3 mb-3"></div>
     <div id="ohbIvDetail" class="card p-3 mb-3" style="display:none"></div>
-    <div id="ohbHelp-issuevar"></div>
   </div>
 
   <!-- ── ใช้วัตถุดิบต่อยอดขาย ฿100,000 (PR-V): the same usage read against the sales, per branch and for the chain ── -->
@@ -103,7 +100,6 @@
     </div>
     <div id="ohbPsBranches" class="card p-3 mb-3" style="display:none"></div>
     <div id="ohbPsList" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-persales"></div>
   </div>
 
   <!-- ── compliance ── -->
@@ -120,7 +116,6 @@
     <div id="ohbComp" class="card p-3 mb-3"></div>
     <!-- batch 4b (2.5): what the orders achieved, per branch and month (GET /hub/outcome) -->
     <div id="ohbOutcome" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-comp"></div>
   </div>
 
   <!-- ── batch 3 (4.7): every branch account on one grid, the last 7 days, worst first (ohbLoadAdoption; GET /hub/adoption).
@@ -132,14 +127,12 @@
     </div>
     <div id="ohbAdList" class="card p-3 mb-3"></div>
     <div class="text-xs mb-3" style="color:var(--text-secondary)"><a href="#" onclick="ohbSetSub('pilot');return false" style="color:var(--accent)">ความพร้อมและผลนำร่อง 4 สาขา →</a></div>
-    <div id="ohbHelp-adoption"></div>
   </div>
 
   <!-- ── pilot ── -->
   <div id="ohb-pane-pilot" style="display:none">
     <div id="ohbPilotReady" class="card p-3 mb-3"></div>
     <div id="ohbPilotScore" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-pilot"></div>
   </div>
 
   <!-- ── S11: the central list, a month's deliveries, a month closed later ── -->
@@ -153,6 +146,8 @@
       <span id="ohbCloseSummary" class="text-xs" style="color:var(--text-secondary)"></span>
       <span id="ohbCloseStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
+    <!-- PR-D6: the steps that are done are hidden by default (uiStateFilter, js/01-core.js; js/15-orderhub.js _ohbStepDraw) -->
+    <div id="ohbStepFilter"></div><div id="ohbStepNone"></div>
 
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-center gap-2">
@@ -239,7 +234,6 @@
       </div>
       <div class="text-xs mt-1" style="color:var(--text-secondary)">ดูที่ <a href="#" onclick="supplyGo({tab:'orderhub',pane:'month'});return false" style="color:var(--accent);text-decoration:underline">สรุปผลต่างรายเดือน →</a></div>
     </div>
-    <div id="ohbHelp-central"></div>
   </div>
 
   <!-- ── monthly ── -->
@@ -248,6 +242,5 @@
       <a href="#" id="ohbMonthIssueLink" onclick="supplyGo({tab:'bomcenter',pane:'issue'});return false" style="color:var(--accent);text-decoration:underline">ใบสรุปตัดเบิกสำหรับบัญชี →</a>
     </div>
     <div id="ohbMonthBody" class="card p-3 mb-3"></div>
-    <div id="ohbHelp-month"></div>
   </div>
 </div>

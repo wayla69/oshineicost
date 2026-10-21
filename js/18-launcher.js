@@ -213,9 +213,6 @@ async function loadLauncher() {
   const vis = deptVisible();
   document.getElementById('lnchDate').textContent = lnchDateLabel();
   document.getElementById('lnchGreet').textContent = `สวัสดี ${lnchWho()}`;
-  document.getElementById('lnchDeptHint').textContent = vis.length > 1
-    ? 'แสดงเฉพาะแผนกที่บัญชีนี้มีสิทธิ์เปิดหน้าอย่างน้อยหนึ่งหน้า'
-    : 'บัญชีนี้เห็นเฉพาะแผนกของตนเอง';
   document.getElementById('lnchDepts').innerHTML = _lnchDeptsHtml(vis);
   document.getElementById('lnchFoot').innerHTML = _lnchFootHtml();
   updateDeptNav('launcher');

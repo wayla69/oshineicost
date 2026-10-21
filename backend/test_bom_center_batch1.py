@@ -209,7 +209,8 @@ def test_the_receipt_cancel_button_is_worded_and_the_order_label_replaces_the_re
 
 def test_the_slip_confirmation_says_what_blank_rows_mean():
     brn = _js("js/14-branch.js")
-    assert "ยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก คงเหลือตามระบบจึงไม่ลดลง" in brn
+    # PR-D6: the confirm is a short list, one fact a line - the blank rows count as not issued and the system stock does not drop
+    assert "ยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก (คงเหลือตามระบบไม่ลดลง)" in brn
     assert "(ถือว่าไม่ได้เบิก)" not in brn
     strip = _js("js/16-supplyhome.js")
     assert "รอยืนยัน · " not in strip and "ค้างย้อนหลัง" not in strip

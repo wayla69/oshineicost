@@ -1473,6 +1473,64 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .bmc-help > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 .bmc-help > div, .bmc-help > p { font-size: 12px; line-height: 1.6; margin-top: 6px; color: var(--text-secondary); }
 .bmc-help > div > p + p { margin-top: 4px; }
+/* ── PR-D6 · toast (uiToast), "?" help (uiHelp / uiQ), finished-work filter (uiStateFilter) — js/01-core.js ── */
+#uiToasts { position: fixed; right: 16px; bottom: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.ui-toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px 10px 12px; cursor: pointer; background: var(--toast-bg, var(--bg-card));
+  color: var(--toast-fg, var(--text-primary)); border: 1px solid var(--border); border-left: 4px solid var(--toast-info, var(--accent)); border-radius: var(--r-md, 12px);
+  box-shadow: var(--toast-shadow, 0 6px 20px rgba(15,23,42,.14)); font-size: 14px; line-height: 1.5; }
+.ui-toast-success { border-left-color: var(--toast-ok, var(--good-ink)); }
+.ui-toast-info { border-left-color: var(--toast-info, var(--accent)); }
+.ui-toast-warn { border-left-color: var(--toast-warn, var(--amber-ink)); }
+.ui-toast-error { border-left-color: var(--toast-bad, var(--bad-ink)); }
+.ui-toast-ic { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; text-align: center; font-size: 12px; font-weight: 700; line-height: 20px; border: 1.5px solid currentColor; }
+.ui-toast-success .ui-toast-ic { color: var(--toast-ok, var(--good-ink)); }
+.ui-toast-info .ui-toast-ic { color: var(--toast-info, var(--accent)); }
+.ui-toast-warn .ui-toast-ic { color: var(--toast-warn, var(--amber-ink)); }
+.ui-toast-error .ui-toast-ic { color: var(--toast-bad, var(--bad-ink)); }
+.ui-toast-body { flex: 1 1 auto; min-width: 0; }
+.ui-toast-text { overflow-wrap: anywhere; }
+.ui-toast-next { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; color: var(--text-secondary); }
+.ui-toast-next:empty { display: none; }
+.ui-toast-act { min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--r-sm, 8px); background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ui-toast-x { flex: 0 0 auto; width: 32px; height: 32px; border: 0; background: transparent; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--r-sm, 8px); }
+.ui-toast-x:hover { background: var(--bg-hover); }
+.ui-toast :is(.ui-toast-x, .ui-toast-act):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) { #uiToasts { left: 12px; right: 12px; width: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } .ui-toast-x { width: 44px; height: 44px; margin: -6px 0 -6px 0; } }
+@media (prefers-reduced-motion: no-preference) { .ui-toast { animation: ui-toast-in .16s ease-out; } @keyframes ui-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } } }
+.ui-q { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border-control); border-radius: 50%;
+  background: var(--bg-card); color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: middle; }
+.ui-q:hover { background: var(--bg-hover); }
+.ui-q:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) { .ui-q { width: 44px; height: 44px; font-size: 16px; } }
+.ui-help-back { position: fixed; inset: 0; z-index: 10000; background: var(--help-back, rgba(15,23,42,.45)); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ui-help-box { width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: var(--r-md, 12px); box-shadow: 0 10px 30px rgba(0,0,0,.25); outline: 0; }
+.ui-help-head { display: flex; align-items: center; gap: 8px; padding: 12px 8px 8px 16px; position: sticky; top: 0; background: var(--bg-card); border-bottom: 1px solid var(--border-soft); }
+.ui-help-title { flex: 1 1 auto; font-weight: 600; font-size: 15px; }
+.ui-help-x { width: 44px; height: 44px; border: 0; background: transparent; color: var(--text-secondary); font-size: 24px; line-height: 1; cursor: pointer; border-radius: var(--r-sm, 8px); }
+.ui-help-x:hover { background: var(--bg-hover); }
+.ui-help-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ui-help-body { padding: 12px 16px 16px; font-size: 14px; line-height: 1.7; color: var(--text-secondary); }
+.ui-help-body p + p, .ui-help-body ul + p, .ui-help-body p + ul { margin-top: 8px; }
+.ui-help-body ul { margin: 0; padding-left: 20px; list-style: disc; }
+.ui-help-body a { color: var(--accent); text-decoration: underline; }
+.ui-help-body b { color: var(--text-primary); }
+.tskf-seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tskf-btn { flex: 0 1 auto; min-width: 96px; min-height: 44px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-card); color: var(--text-primary);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#shmFilter .tskf-btn { flex: 1 1 120px; }      /* หน้างาน: one segmented control across the page */
+.tskf-btn:hover { background: var(--bg-hover); }
+.tskf-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tskf-n { font-weight: 500; }
+.shm-showall { min-height: 44px; margin-left: 8px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: transparent; color: var(--accent);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+:is(.tskf-btn, .shm-showall):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* a card heading with its "?": title + at most one short line; the explanation is behind the button */
+.ui-cardhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ui-cardhead > :first-child { min-width: 0; }
+.ui-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+/* a status that is only "in progress" or an autosaved draft: one small muted line, never a sentence */
+.ui-inline-note { font-size: 12px; color: var(--text-muted); }
 /* status line that follows a save or a download (bmcStatus) */
 .bmc-status { font-size: 13px; }
 /* ── PR-M3 · the branch's daily pages (ตัดเบิก · สั่งสินค้า) ──
@@ -1680,7 +1738,7 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
   /* the strip replaces the chip rows entirely; the lock state moves to the icon beside the user name */
   body.supply-phone #clusterBar { display: none !important; }
   body.supply-phone #supplyLockTop { display: inline-flex; }
-  body.supply-phone .shm-toast { bottom: 76px !important; }   /* the ขั้นตอนถัดไป toast clears the strip */
+  body.supply-phone #uiToasts { bottom: 76px; }   /* PR-D6: a toast clears the strip (the one toast: uiToast, 01-core.js) */
 
   /* ── PR-K phone polish (owner 2026-10-10). The branch pages used to spend ~240 px before the first card
      (tab strip 39 · top bar 91 · cluster card 86 · gaps), a 161 px sticky zone card, a 65 px sticky action
@@ -1698,6 +1756,9 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
   body.supply-phone #tab-branchstock > .brn-cluster { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; margin: 0 0 8px; overflow: hidden; white-space: nowrap; }
   body.supply-phone #tab-branchstock > .brn-cluster h2 { font-size: 13px; margin: 0; flex: 0 0 auto; }
   body.supply-phone #tab-branchstock > .brn-cluster .brn-cluster-name { margin: 0; flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; }
+  /* PR-D6: the "?" of the page sits in the one-line bar at its height; the touch area is still 44 px (the ::after reaches past the bar) */
+  body.supply-phone #tab-branchstock > .brn-cluster .ui-q { position: relative; width: 26px; height: 26px; min-width: 26px; min-height: 26px !important; font-size: 13px; margin: 0 0 0 auto; }   /* !important: the 44 px floor of the supply pages (one rule above) is an :is() list of high specificity */
+  body.supply-phone #tab-branchstock > .brn-cluster .ui-q::after { content: ''; position: absolute; inset: -9px; }
   body.supply-phone #brnBranchName { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* the sticky zone block */
   body.supply-phone .brn-zonebar { padding: 6px 10px !important; margin-bottom: 6px !important; }
@@ -2002,7 +2063,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* a page: room under the content for the navigation (the sticky action rows of the branch and warehouse pages sit just above it) */
   body.ph-on .content-area, body.ph-on.franchise-phone .content-area, body.ph-on.supply-phone .content-area { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   body.ph-on .ohb-actbar, body.ph-on .brn-sticky-bottom { bottom: calc(56px - 76px + env(safe-area-inset-bottom, 0px)) !important; }
-  body.ph-on .shm-toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important; }
+  body.ph-on #uiToasts { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }   /* PR-D6: above the bottom navigation */
   /* the branch and franchise logins had their top bar laid over the tab strip (it held the user chip, now a row of ฉัน); a pinned login has no
      title or filters there (switchTab hides the scope of a page with its own controls), so with the strip gone the bar goes too */
   body.ph-on.supply-phone .top-bar, body.ph-on.franchise-phone .top-bar { display: none !important; }

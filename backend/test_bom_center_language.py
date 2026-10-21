@@ -97,6 +97,7 @@ def _strip_js_comments(src: str) -> str:
 def _strip_html(src: str) -> str:
     src = re.sub(r"<!--.*?-->", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)
     src = re.sub(r"<style\b.*?</style>", lambda m: "\n" * m.group(0).count("\n"), src, flags=re.S)
+    src = re.sub(r"(</?)template\b", r"\1tpl", src)           # PR-D6: the <template> tag of a help text is markup, not the English word on a screen
     return _strip_js_comments(src) if "<script" in src else src
 
 

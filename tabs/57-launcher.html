@@ -10,7 +10,6 @@
     #tab-launcher .lnch-hello { flex: 1 1 340px; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; }
     #tab-launcher .lnch-date { font-size: 14px; color: var(--text-secondary); }
     #tab-launcher .lnch-greet { margin: 0; font-size: 28px; line-height: 1.3; font-weight: 700; color: var(--accent); overflow-wrap: anywhere; }
-    #tab-launcher .lnch-lead { font-size: 15px; color: var(--text-secondary); }
     #tab-launcher .lnch-tasks { flex: 2 1 520px; min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
       box-shadow: var(--shadow-card); padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
     #tab-launcher .lnch-tasks-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 6px; }
@@ -36,7 +35,6 @@
     #tab-launcher .lnch-empty { padding: 10px 0 4px; font-size: 14px; color: var(--text-secondary); border-top: 1px solid var(--border-soft); }
     #tab-launcher .lnch-sec-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 12px; }
     #tab-launcher .lnch-sec-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--accent); }
-    #tab-launcher .lnch-hint { font-size: 14px; color: var(--text-secondary); }
     #tab-launcher .lnch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 16px; align-items: start; }
     #tab-launcher .lnch-dept { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card);
       overflow: hidden; display: flex; flex-direction: column; scroll-margin-top: 12px; }
@@ -61,7 +59,6 @@
       <div class="lnch-hello">
         <span id="lnchDate" class="lnch-date"></span>
         <p id="lnchGreet" class="lnch-greet">สวัสดี</p>
-        <span class="lnch-lead">เลือกงานจากไอคอนของแผนก หรือเริ่มจากงานที่ค้างด้านขวา</span>
       </div>
       <div class="lnch-tasks" id="lnchTasks" aria-live="polite">
         <div class="lnch-tasks-head">
@@ -76,7 +73,6 @@
     <section aria-labelledby="lnchDeptTitle">
       <div class="lnch-sec-head">
         <h2 id="lnchDeptTitle">แผนก</h2>
-        <span id="lnchDeptHint" class="lnch-hint"></span>
       </div>
       <div id="lnchDepts" class="lnch-grid"></div>
     </section>
