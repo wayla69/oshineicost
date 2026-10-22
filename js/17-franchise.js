@@ -6,6 +6,8 @@
 // PR-F1 (2026-10-22): the daily table (finished days only), the 12-month trend (each month on its own, never a sum), the sales
 // target, the food-cost floor chip and one download (GET /api/franchise/summary.xlsx: สรุป / รายวัน / 12 เดือน / เมนูขายดี).
 // A franchise login lands here (_landingTab, 01-core.js; phBoot / phShowHome, 09c-mobile.js). Paper: the print stylesheet in index.html.
+// PR-F2 (2026-10-22): below the fold, from GET /api/franchise/insight (loaded when it nears the screen): สัดส่วนการขาย, ช่วงเวลาขายดี,
+// การควบคุม (discounts / voided bills / cash, counts and baht only), เสียงลูกค้า; and the รับแจ้งเตือนทุกเช้า card (kind "franchise").
 
 let _frcMonth = '';
 let _frcGen = 0;
@@ -51,6 +53,8 @@ async function loadFranchise() {
   const dl = document.getElementById('frcDownload');
   if (dl) dl.hidden = !d.available;
   if (body) body.innerHTML = _frcRender(d);
+  if (d.available) frcInsightWatch(gen);
+  frcPushInit();
 }
 
 // ดาวน์โหลดรายงานเดือนนี้: the month as an Excel file; the server's reason goes on a toast when it refuses
@@ -266,5 +270,191 @@ function _frcRender(d) {
     return _frcSection('ร้านของฉัน', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED}">ยังไม่มีข้อมูลของเดือนนี้ เลือกเดือนก่อนหน้าได้จากช่องเดือนด้านบน</div></div>`);
   }
   return _frcVerdict(d.verdict) + _frcSales(d.sales, d.discount_pct) + _frcTarget(d.target) + _frcDaily(d.sales) + _frcGp(d.gp)
-    + _frcTrend(d.trend_12m) + _frcIngredients(d.ingredients) + _frcDiscipline(d.discipline) + _frcMenus(d.top_menus);
+    + _frcTrend(d.trend_12m) + _frcIngredients(d.ingredients) + _frcDiscipline(d.discipline) + _frcMenus(d.top_menus)
+    + `<div id="frcInsight"><div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดสัดส่วนการขาย การควบคุม และเสียงลูกค้า…</div></div></div></div>`;
+}
+
+// ── PR-F2 (2026-10-22): สัดส่วนการขาย · ช่วงเวลาขายดี · การควบคุม · เสียงลูกค้า, from GET /api/franchise/insight. Loaded once the
+// cards above are drawn and the placeholder comes near the screen (IntersectionObserver; at once where it is missing). ──
+let _frcInsGen = 0;
+function frcInsightWatch(gen) {
+  const box = document.getElementById('frcInsight');
+  if (!box) return;
+  const go = () => { if (gen === _frcGen && _frcInsGen !== gen) { _frcInsGen = gen; frcLoadInsight(gen); } };
+  if (!('IntersectionObserver' in window)) { go(); return; }
+  const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: '600px 0px' });
+  io.observe(box);
+}
+async function frcLoadInsight(gen) {
+  const box = document.getElementById('frcInsight');
+  const qs = _frcMonth ? '?month=' + encodeURIComponent(_frcMonth) : '';
+  let d;
+  try {
+    const r = await fetch(`${API}/api/franchise/insight${qs}`);
+    const t = await r.text();
+    let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
+    if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'โหลดข้อมูลไม่สำเร็จ');
+    d = j;
+  } catch (e) {
+    if (gen !== _frcGen || !box) return;
+    box.innerHTML = `<div class="ms-section"><div class="ms-card"><div class="ms-row" style="color:var(--bad-ink)">${esc(e.message || 'โหลดข้อมูลไม่สำเร็จ')}</div></div></div>`;
+    return;
+  }
+  if (gen !== _frcGen || !box) return;
+  box.innerHTML = d.available ? _frcMix(d.mix) + _frcPeak(d.peak) + _frcControls(d.controls) + _frcVoice(d.voice) : _frcVoice(d.voice);
+}
+
+// a card: title + "?" + one-line subtitle
+function _frcCard(title, key, help, sub, inner) {
+  return `<div class="ms-section"><div class="ms-section-title frc-title">${esc(title)} ${uiQ('frc:' + key, title, help)}</div>`
+    + (sub ? `<p class="frc-sub">${esc(sub)}</p>` : '') + inner + `</div>`;
+}
+function _frcShareRow(label, share, prev, sub, col) {
+  const w = Math.max(0, Math.min(100, share || 0));
+  const d = share != null && prev != null ? Math.round((share - prev) * 10) / 10 : null;
+  return `<div class="ms-row" style="flex-wrap:wrap;gap:4px 10px"><span style="flex:1 1 55%;min-width:0;font-size:13px;color:var(--text-primary)">${esc(label)}`
+    + (sub ? `<br><span style="font-size:12px;${_FRC_MUTED}">${sub}</span>` : '') + `</span>`
+    + `<span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-primary)">${_frcPct(share)}</span>`
+    + `<span style="flex:1 1 100%;display:flex;align-items:center;gap:8px">${msBar(w, col || 'var(--navy-ink)')}`
+    + `<span style="font-size:12px;white-space:nowrap;${_FRC_MUTED}">เดือนก่อน ${_frcPct(prev)}${d != null && d !== 0 ? ` (${d > 0 ? '+' : ''}${d} จุด)` : ''}</span></span></div>`;
+}
+
+// ── สัดส่วนการขาย ───────────────────────────────────────────────────────────
+function _frcMix(m) {
+  if (!m) return '';
+  const help = '<p>ยอดขายแยกตามประเภท คิดจากยอดขายรายเมนูในช่วงวันเดียวกับยอดขายด้านบน และเทียบกับช่วงวันเดียวกันของเดือนก่อน</p>'
+    + '<p>บุฟเฟ่ต์ = แพ็กเกจบุฟเฟ่ต์ (จำนวนลูกค้า = จำนวนแพ็กเกจที่ขาย) · อาหารตามสั่ง = เมนูที่ขายแยกจาน · เครื่องดื่มและอื่น ๆ = เครื่องดื่ม เมนูเดลิเวอรี และรายการอื่น</p>'
+    + '<p>ระดับราคาบุฟเฟ่ต์มาจากรายงานผู้บริหาร นับเฉพาะบิลบุฟเฟ่ต์ · ช่องทางขายมาจากประเภทลูกค้าที่บันทึกใน POS (ทั้งเดือน)</p>';
+  const lines = (m.lines || []).map(x => _frcShareRow(x.label, x.sales_share, x.sales_share_prev,
+    `฿${fmtN(x.sales || 0)}${x.covers != null ? ` · ลูกค้า ${fmtN(x.covers)} คน (${_frcPctText(x.covers_share)} ของลูกค้าบุฟเฟ่ต์)` : ''}`)).join('');
+  const tiers = (m.tiers || []).length ? `<div class="frc-sub2">ระดับราคาบุฟเฟ่ต์</div><div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>ราคา</th>`
+    + `<th class="n">ลูกค้า</th><th class="n">สัดส่วน</th><th class="n">เดือนก่อน</th><th class="n">ต่อหัว (฿)</th></tr></thead><tbody>`
+    + m.tiers.map(t => `<tr><td>${esc(t.label || t.tier)}</td><td class="n">${t.covers == null ? _FRC_NA : fmtN(t.covers)}</td>`
+      + `<td class="n">${_frcPct(t.share)}</td><td class="n">${_frcPct(t.share_prev)}</td><td class="n">${t.per_head == null ? _FRC_NA : fmtN(t.per_head)}</td></tr>`).join('')
+    + `</tbody></table></div>` : '';
+  const ch = (m.channels || []).length ? `<div class="frc-sub2">ช่องทางขาย (ทั้งเดือน)</div><div class="ms-card">`
+    + m.channels.map(c => _frcShareRow(c.type, c.sales_share, c.sales_share_prev, c.delivery ? 'เดลิเวอรี' : '', c.delivery ? 'var(--amber-ink)' : 'var(--navy-ink)')).join('')
+    + `</div>` : '';
+  if (!lines && !tiers && !ch) return '';
+  return _frcCard('สัดส่วนการขาย', 'mix', help, 'สัดส่วนของยอดขายตามประเภท ระดับราคาบุฟเฟ่ต์ และช่องทางขาย เทียบเดือนก่อน',
+    (lines ? `<div class="frc-sub2" style="margin-top:0">ประเภทการขาย</div><div class="ms-card">${lines}</div>` : '') + tiers + ch);
+}
+
+// ── ช่วงเวลาขายดี ────────────────────────────────────────────────────────────
+const _FRC_DOW = [[1, 'จ.'], [2, 'อ.'], [3, 'พ.'], [4, 'พฤ.'], [5, 'ศ.'], [6, 'ส.'], [0, 'อา.']];    // strftime %w: Sunday = 0
+const _FRC_DOW_FULL = { 0: 'วันอาทิตย์', 1: 'วันจันทร์', 2: 'วันอังคาร', 3: 'วันพุธ', 4: 'วันพฤหัสบดี', 5: 'วันศุกร์', 6: 'วันเสาร์' };
+function _frcK(n) { return n >= 1000 ? (Math.round(n / 100) / 10).toString().replace(/\.0$/, '') + 'K' : String(n); }
+function _frcHour(h) { return String(h).padStart(2, '0') + ':00'; }
+function _frcPeak(p) {
+  if (!p || !(p.hours || []).length) return '';
+  const help = '<p>แท่งแสดงยอดขาย (ไม่รวม VAT) ของแต่ละชั่วโมงรวมทั้งช่วงเดือน ตัวเลขใต้แท่งคือจำนวนลูกค้า</p>'
+    + '<p>ตารางสีแสดงยอดขายเฉลี่ยต่อวันของแต่ละวันในสัปดาห์และชั่วโมง สีเข้มคือช่วงที่ขายได้มาก ใช้วางกำลังคนและการเตรียมของ</p>';
+  const hrs = p.hours, max = Math.max(1, ...hrs.map(h => h.sales || 0));
+  const bars = `<div class="frc-hours" role="img" aria-label="ยอดขายตามชั่วโมง ชั่วโมงที่ขายดีที่สุด ${esc(_frcHour(p.peak_hour))}">`
+    + hrs.map(h => `<div class="frc-hcol${h.hour === p.peak_hour ? ' pk' : ''}" title="${esc(_frcHour(h.hour))} · ฿${fmtN(h.sales || 0)} · ลูกค้า ${fmtN(h.covers || 0)} คน">`
+      + `<span class="bar" style="height:${Math.max(2, Math.round(100 * (h.sales || 0) / max))}%"></span><span class="hl">${h.hour}</span>`
+      + `<span class="hc">${_frcK(h.covers || 0)}</span></div>`).join('') + `</div>`;
+  const dp = (p.dayparts || []).map(x => `<span class="frc-pill">${esc(x.name)} ${_frcPct(x.share)}</span>`).join('');
+  const head = `<div class="ms-row" style="flex-wrap:wrap;gap:6px"><span style="flex:1 1 100%;font-size:13px;color:var(--text-primary)">ชั่วโมงที่ขายดีที่สุด <b>${esc(_frcHour(p.peak_hour))}</b>`
+    + ` (฿${fmtN(p.peak_hour_sales || 0)} ทั้งเดือน)</span>${dp}</div>`;
+  const cells = p.heat || [];
+  let heat = '';
+  if (cells.length) {
+    const hs = [...new Set(cells.map(c => c.hour))].sort((a, b) => a - b);
+    const h0 = hs[0], h1 = hs[hs.length - 1];
+    const hours = []; for (let h = h0; h <= h1; h++) hours.push(h);
+    const by = {}; cells.forEach(c => { by[c.dow + ':' + c.hour] = c.sales; });
+    const hmax = Math.max(1, ...cells.map(c => c.sales || 0));
+    const b = p.heat_best;
+    heat = `<div class="frc-sub2">ยอดขายเฉลี่ยต่อวัน ตามวันและชั่วโมง</div><div class="frc-heat" style="grid-template-columns:28px repeat(${hours.length},1fr)">`
+      + `<span></span>` + hours.map(h => `<span class="hh">${h % 2 === 0 ? h : ''}</span>`).join('')
+      + _FRC_DOW.map(([dw, lbl]) => `<span class="hd">${lbl}</span>` + hours.map(h => {
+        const v = by[dw + ':' + h];
+        const a = v ? Math.round(12 + 88 * v / hmax) : 0;
+        return `<span class="hx" style="background:${a ? `color-mix(in srgb, var(--navy-ink) ${a}%, transparent)` : 'var(--bg-subtle)'}" title="${esc(_FRC_DOW_FULL[dw])} ${esc(_frcHour(h))} · ${v ? '฿' + fmtN(v) + ' ต่อวัน' : 'ไม่มียอดขาย'}"></span>`;
+      }).join('')).join('') + `</div>`
+      + (b ? `<p class="frc-sub" style="margin-top:6px">ช่วงที่ขายดีที่สุด: ${esc(_FRC_DOW_FULL[b.dow])} ${esc(_frcHour(b.hour))} เฉลี่ย ฿${fmtN(b.sales || 0)} ต่อวัน</p>` : '');
+  }
+  return _frcCard('ช่วงเวลาขายดี', 'peak', help, 'ยอดขายและจำนวนลูกค้าตามชั่วโมง และตามวันในสัปดาห์ของเดือนนี้',
+    `<div class="ms-card">${head}<div style="padding:4px 2px 2px">${bars}</div></div>` + heat);
+}
+
+// ── การควบคุม: discounts against the ceiling, voided bills, cash over / short - counts and baht only ─────────────────
+function _frcFlagBox(f) {
+  if (!f) return '';
+  const items = f.items || [];
+  if (!items.length) return `<div class="ms-row" style="gap:10px"><span style="flex:0 0 44px;font-size:13px;font-weight:700;color:var(--good-ink)">ดี</span>`
+    + `<span style="font-size:13px;color:var(--text-primary)">ส่วนลด บิลยกเลิก และเงินสดอยู่ในเกณฑ์</span></div>`;
+  return [['fix', 'ต้องแก้', 'var(--bad-ink)'], ['watch', 'ควรดู', 'var(--amber-ink)']].map(([k, lbl, ink]) => {
+    const xs = items.filter(i => i.level === k);
+    if (!xs.length) return '';
+    return `<div class="ms-row" style="align-items:flex-start;gap:10px"><span style="flex:0 0 44px;font-size:13px;font-weight:700;color:${ink}">${lbl}</span>`
+      + `<span style="flex:1;min-width:0;font-size:13px;line-height:1.5;color:var(--text-primary)">${xs.map(i => `<span style="display:block;margin-bottom:3px">${esc(i.text)}</span>`).join('')}</span></div>`;
+  }).join('');
+}
+function _frcMoneyList(title, rows, name, count, unit) {
+  if (!rows || !rows.length) return '';
+  return `<div class="frc-sub2">${esc(title)}</div><div class="ms-card">` + rows.map(r => _frcRow(r[name] || '-', '฿' + fmtN(r.baht || 0),
+    `${fmtN(r[count] || 0)} ${unit}${r.share != null ? ' · ' + _frcPctText(r.share) + ' ของรายการนี้' : ''}`)).join('') + `</div>`;
+}
+function _frcControls(c) {
+  if (!c) return '';
+  const help = '<p>ส่วนลด: ส่วนลดทั้งหมดเทียบยอดขายก่อนหักส่วนลด เทียบกับเพดานที่บริษัทกำหนด ส่วนลดที่ใช้คูปองจะนับเป็น "ไม่ระบุ" ในรายการตามเหตุผล เพราะ POS บันทึกคูปองแยกจากเหตุผล</p>'
+    + '<p>บิลยกเลิก: บิลที่ถูกยกเลิกหรือลบทั้งบิล เกณฑ์ปกติต่ำกว่าร้อยละ 2 ของบิลทั้งหมด เกินร้อยละ 3 ควรตรวจสอบเหตุผล</p>'
+    + '<p>เงินสด: ผลการนับเงินสดปิดวัน วันที่ขาดตั้งแต่ 2,000 บาทขึ้นไปควรตรวจสอบ</p>'
+    + '<p>แสดงเป็นจำนวนและจำนวนเงินเท่านั้น ไม่แสดงเลขบิลหรือชื่อผู้ใช้งาน</p>';
+  const D = c.discount || {}, V = c.voids || {}, C = c.cash || {};
+  const over = D.pct != null && D.policy_pct != null && D.pct > D.policy_pct;
+  const disc = `<div class="ms-card">` + _frcRow('ส่วนลด', `<span style="color:${over ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_frcPct(D.pct)}</span>`,
+      `เพดาน ${_frcPctText(D.policy_pct)} · ฿${fmtN(D.baht || 0)}${D.over_policy_baht ? ' · เกินเพดาน ฿' + fmtN(D.over_policy_baht) : ''}`)
+    + _frcRow('บิลยกเลิก', V.bills ? `${fmtN(V.bills)} ใบ` : '0 ใบ', V.bills ? `฿${fmtN(V.baht || 0)} · ${_frcPctText(V.rate_pct)} ของบิลทั้งหมด` : 'ไม่มีบิลยกเลิกในเดือนนี้')
+    + _frcRow('เงินสดขาด/เกิน สุทธิ', C.net == null ? _FRC_NA : `<span style="color:${C.net < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${C.net < 0 ? '−' : ''}฿${fmtN(Math.abs(C.net))}</span>`,
+      C.days_counted ? `นับเงินสด ${fmtN(C.days_counted)} วัน · ขาด ${fmtN(C.short_days || 0)} วัน` : 'ยังไม่มีข้อมูลการนับเงินสด')
+    + `</div>`;
+  const cashDays = (C.days || []).filter(x => x.over_short);
+  const cash = cashDays.length ? `<div class="frc-sub2">วันที่เงินสดไม่ตรง</div><div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วันที่</th><th class="n">ขาด/เกิน (฿)</th></tr></thead><tbody>`
+    + cashDays.slice().reverse().map(x => `<tr><td>${esc(_frcDay(x.date))}</td><td class="n" style="color:${x.over_short < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${x.over_short > 0 ? '+' : ''}${fmtN(x.over_short)}</td></tr>`).join('')
+    + `</tbody></table></div>` : '';
+  return _frcCard('การควบคุม', 'controls', help, 'ส่วนลดเทียบเพดาน บิลยกเลิก และเงินสดขาดเกินของเดือนนี้',
+    `<div class="ms-card">${_frcFlagBox(c.flags)}</div>` + disc
+    + _frcMoneyList('ส่วนลดตามคูปองและโปรโมชัน', D.by_coupon, 'name', 'uses', 'ครั้ง')
+    + _frcMoneyList('ส่วนลดตามเหตุผล', D.by_reason, 'reason', 'bills', 'บิล')
+    + _frcMoneyList('บิลยกเลิกตามเหตุผล', V.by_reason, 'reason', 'bills', 'ใบ') + cash);
+}
+
+// ── เสียงลูกค้า: the branch's public reviews (stars, count, the latest ones) ─────────────────────────────────────────
+function _frcStars(n) {
+  if (n == null) return '';
+  const k = Math.max(0, Math.min(5, Math.round(n)));
+  return `<span class="frc-stars" aria-label="${k} ดาว">${'★'.repeat(k)}<span style="opacity:.3">${'★'.repeat(5 - k)}</span></span>`;
+}
+function _frcVoice(v) {
+  if (!v) return '';
+  const help = '<p>รีวิวสาธารณะของสาขาจาก Google, Facebook และช่องทางอื่นที่ระบบเก็บไว้ แสดงคะแนนเฉลี่ยและจำนวนรีวิวของเดือนนี้เทียบเดือนก่อน และรีวิวล่าสุด 5 รายการ</p>'
+    + '<p>ชื่อบุคคลที่ระบบพบในข้อความจะแสดงเป็น "พนักงาน"</p>';
+  if (!v.available) return _frcCard('เสียงลูกค้า', 'voice', help, 'คะแนนและรีวิวล่าสุดของสาขา',
+    `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรีวิวของสาขาในระบบ</div></div>`);
+  const ch = v.rating_change;
+  const head = `<div style="${_FRC_TILES};margin-top:0">`
+    + msKpiTile('คะแนนเฉลี่ยเดือนนี้', v.rating_avg == null ? '—' : Number(v.rating_avg).toFixed(1), '#f59e0b',
+      ch != null ? `${msPchip(Math.round(ch * 100) / 100, true, '')} <span style="font-size:12px;${_FRC_MUTED}">เดือนก่อน ${Number(v.rating_avg_prev).toFixed(1)}</span>` : 'เดือนก่อนยังไม่มีรีวิว')
+    + msKpiTile('จำนวนรีวิวเดือนนี้', fmtN(v.reviews_month || 0), '#0891b2', v.reviews_prev != null ? `เดือนก่อน ${fmtN(v.reviews_prev)}` : '')
+    + `</div>`;
+  const list = (v.latest || []).length ? `<div class="frc-sub2">รีวิวล่าสุด</div><div class="ms-card">` + v.latest.map(r => `<div class="ms-row" style="flex-direction:column;align-items:stretch;gap:4px">`
+      + `<span style="display:flex;gap:8px;align-items:center;font-size:12px;${_FRC_MUTED}">${_frcStars(r.stars)}<span>${esc(_frcDay(r.date))} · ${esc(r.source || '')}</span></span>`
+      + `<span style="font-size:13px;line-height:1.5;color:var(--text-primary);white-space:normal">${r.text ? esc(r.text) : `<span style="${_FRC_MUTED}">(ให้คะแนนโดยไม่เขียนข้อความ)</span>`}</span></div>`).join('') + `</div>` : '';
+  return _frcCard('เสียงลูกค้า', 'voice', help, 'คะแนนเฉลี่ย จำนวนรีวิว และรีวิวล่าสุดของสาขา', head + list);
+}
+
+// ── รับแจ้งเตือนทุกเช้า: the push card of this page (kind "franchise", the owner's own devices). The functions are the phone
+// summary's (09c-mobile.js msPush*, id prefix frcPush); hidden where push is not available or the server has no key. ──
+async function frcPushInit() {
+  const card = document.getElementById('frcPush');
+  if (!card) return;
+  const hide = () => { card.hidden = true; };
+  if (!(window.AUTH && window.AUTH.enabled) || window.AUTH.role !== 'franchise') return hide();
+  if (typeof _msPushSupported !== 'function' || !_msPushSupported()) return hide();
+  if (!await msPushVapid()) return hide();
+  card.hidden = false;
+  await msPushRender(undefined, 'frcPush');
 }

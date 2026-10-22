@@ -1890,6 +1890,21 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
 .frc-tbl th:first-child { background: var(--bg-input); }
 .frc-tbl tr.frc-we td, .frc-tbl tr.frc-part td { background: color-mix(in srgb, var(--bg-input) 70%, var(--bg-card)); }
 .frc-tbl .frc-dow { font-size: 12px; color: var(--text-muted); }
+/* PR-F2: สัดส่วนการขาย · ช่วงเวลาขายดี · การควบคุม · เสียงลูกค้า (js/17-franchise.js) */
+.frc-sub { font-size: 12.5px; color: var(--text-muted); margin: -2px 0 8px; }
+.frc-sub2 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 12px 0 6px; }
+.frc-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle); }
+.frc-hours { display: flex; align-items: flex-end; gap: 2px; height: 132px; }
+.frc-hcol { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.frc-hcol .bar { width: 72%; border-radius: 3px 3px 0 0; background: var(--navy-ink); opacity: .45; }
+.frc-hcol.pk .bar { opacity: 1; }
+.frc-hcol .hl { font-size: 12px; color: var(--text-secondary); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.frc-hcol .hc { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.frc-heat { display: grid; gap: 2px; align-items: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px; }
+.frc-heat .hh { font-size: 12px; color: var(--text-muted); text-align: center; font-variant-numeric: tabular-nums; }
+.frc-heat .hd { font-size: 12px; color: var(--text-secondary); }
+.frc-heat .hx { height: 22px; border-radius: 3px; }
+.frc-stars { color: var(--amber-ink); letter-spacing: 1px; font-size: 13px; }
 @media (max-width: 700px) {
   .content-area .frc-tbl { font-size: 13px; }
   .content-area .frc-tbl th:first-child, .content-area .frc-tbl td:first-child { max-width: none; }

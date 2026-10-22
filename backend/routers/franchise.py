@@ -21,6 +21,9 @@ module only picks the numbers and words the owner may see - no maths of its own 
                year earlier) against the sales so far, pro-rated by the report's weekday weights while the month is open
   gp.coverage  (F1) the share of plates / sales with no cost yet, on the ONE coverage definition (rules.coverage_sums_sql:
                needs_cost_sql + costed_sql). Food cost leaves those dishes out, so it is a floor
+  GET /api/franchise/insight  (F2) sales mix and busy hours, the controls (discounts / voided bills / cash, counts and baht
+               only) and the guests' public reviews - see the F2 block near the end of this module; and the owner's morning
+               push (franchise_morning_payload, sent by routers/push_api.maybe_send_franchise, kind "franchise")
   GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี. The Fly image has
                no Chrome, so no server PDF; the page has a print stylesheet (A4 portrait) for a paper copy
 
@@ -140,7 +143,7 @@ def _resolve_branch(con, request: Request, branch_id: Optional[int]):
 
 # ── sections ─────────────────────────────────────────────────────────────────
 def _report(branch: str, month: Optional[str]) -> dict:
-    from routers.reports import report_management
+    from .reports import report_management
     raw = report_management(period="monthly", date=None, week=None, month=month, branch=branch, group=None,
                             lang="th", mtd="1")
     return json.loads(raw.body)
@@ -224,7 +227,7 @@ def _trend_12m(branch: str) -> dict:
     """The last 12 closed months and the month in progress, each on its own (never a sum over months), from the phone's
     month-by-month series (reports.report_management_months): the report's sums, its weekday-fair MoM for the part month
     and its GP basis, so a month reads here as it does in the management report."""
-    from routers.reports import report_management_months
+    from .reports import report_management_months
     raw = report_management_months(branch=branch, group=None, lang="th", closed=12)
     d = json.loads(raw.body) if hasattr(raw, "body") else raw
     if not d.get("available"):
@@ -292,7 +295,7 @@ def _coverage(con, bid: int, month: str) -> Optional[dict]:
 
 
 def _top_menus(branch: str, month: str) -> list:
-    from routers.sales import top_ordered
+    from .sales import top_ordered
     raw = top_ordered(month=month, month_from=None, month_to=None, branch=branch, group=None, sort="qty", limit=10)
     d = json.loads(raw.body)
     rows = d.get("items") or d.get("rows") or d.get("top") or (d if isinstance(d, list) else [])
@@ -515,7 +518,7 @@ def franchise_workbook(d: dict):
     """-> openpyxl Workbook with the sheets สรุป / รายวัน / 12 เดือน / เมนูขายดี for one summary payload."""
     import openpyxl
     from openpyxl.styles import Font
-    from routers.bom_center import _sheet
+    from .bom_center import _sheet
     wb = openpyxl.Workbook()
     s, g, t = d.get("sales") or {}, d.get("gp") or {}, d.get("target") or {}
     cov = g.get("coverage") or {}
@@ -583,10 +586,330 @@ def franchise_workbook(d: dict):
 def franchise_summary_xlsx(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE),
                            branch_id: Optional[int] = Query(None)):
     """ดาวน์โหลดรายงานเดือนนี้: the summary of the month as an Excel file (same branch rules as the summary)."""
-    from routers.bom_center import _fname, _xlsx
+    from .bom_center import _fname, _xlsx
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     d = franchise_summary_data(bid, month)
     if not d.get("available"):
         raise HTTPException(404, "ยังไม่มีข้อมูลของเดือนนี้")
     return _xlsx(franchise_workbook(d), _fname("ร้านของฉัน", d.get("branch"), d.get("month")))
+
+
+# ── F2: what sells, the controls, the guests' voice ──────────────────────────
+# GET /api/franchise/insight: the second half of ร้านของฉัน, loaded after the summary (the page asks for it once the cards above
+# are drawn). The same branch rules as the summary; every figure comes from an engine a management page already shows:
+#   mix.tiers      the management report's buffet price tiers (report.tier, Mgmt §11): covers, share of buffet covers this
+#                  month and on last month's same window, spend per head
+#   mix.lines      buffet (adult / child), à-la-carte and everything else as shares of the line sales, over the report's own
+#                  window and its comparison window. The predicates are the Daily Brief's: rules.tier_code_sql = a buffet
+#                  package (child = buffet._BUFFET_CHILD_CODES or BUFFETCHILD*), core._FOOD_CATEGORY_FILTER = an à-la-carte dish;
+#                  the rest is drinks, delivery dishes and other lines. Covers = packages sold (buffet rows only)
+#   mix.channels   the ประเภทลูกค้าและเดลิเวอรี page (home_extra.extra_customer_type): share of sales and share of the POS's
+#                  customer-type tags, this month and last month. The tag count is a POS tally, so only its share is shown
+#   peak           the report's hours (report.peak: sales and covers by hour over the window, the busiest hour, dayparts) and the
+#                  ช่วงเวลาและรอบโต๊ะ page's weekday x hour grid (analysis_time.analysis_daypart_grid: sales per trading day)
+#   controls       discounts: the report's headline (discount over pre-discount sales, the policy ceiling, the baht beyond it),
+#                  by reason (analysis_discounts.discount_reasons) and by coupon / promotion (coupon_series_breakdown);
+#                  voided bills (home_extra.extra_cancel_bills: count, baht, rate, by reason); cash over / short per day
+#                  (home_extra.extra_cash + extra_cash_detail). Counts and baht only: no bill number, no cashier, no person
+#   controls.flags "ควรดู / ต้องแก้" lines in the verdict's style, from the thresholds below
+#   voice          the branch's public reviews (routers/feedback.py, kind 'review'): average stars and count this month and last
+#                  month (feedback_summary), and the latest reviews up to the end of the month (feedback_items): date, stars,
+#                  text, source. The feedback engine has no redaction helper; the names its analysis found in a review (the
+#                  `staff` field) are masked in the text, and no internal note, action, reply status or assignee is sent
+# Any text that names another branch (a customer-type label, a reason, a review) has that name replaced with "สาขาอื่น".
+T_CANCEL_WATCH, T_CANCEL_FIX = 2.0, 3.0        # voided bills, % of all bills (the บิลยกเลิก page's bands: normal < 2 %)
+T_CASH_DAY_FIX = 2000.0                         # one day's cash count short by at least this (push_api.CASH_SHORT_MIN)
+T_CASH_SHORT_DAYS_WATCH = 3                     # days short in the month
+MIX_TOP = 8                                     # rows per list (reasons, coupons, channels)
+REVIEWS_SHOWN = 5
+_SRC_LABEL = {"google": "Google", "facebook": "Facebook", "instagram": "Instagram", "tiktok": "TikTok", "line": "LINE",
+              "wongnai": "Wongnai", "tripadvisor": "Tripadvisor", "survey": "แบบสอบถาม"}
+_MASK = "พนักงาน"
+_OTHER = "สาขาอื่น"
+_DELIVERY_RE = re.compile(r"grab|line\s*man|food\s*panda|delivery|robinhood|shopee|เดลิเวอรี|แกร็บ", re.I)
+_DAYPART_TH = {"Lunch": "กลางวัน (11:00-14:59)", "Dinner": "เย็น (17:00-22:59)", "Other": "ช่วงอื่น"}
+
+
+def _plainj(v):
+    """An in-process call to a @ttl_cache'd endpoint hands back a Response around JSON bytes."""
+    if hasattr(v, "body"):
+        v = v.body
+    if isinstance(v, (bytes, bytearray, str)):
+        return json.loads(v)
+    return v
+
+
+def _prev_month(month: str) -> str:
+    y, m = int(month[:4]), int(month[5:7]) - 1
+    return f"{y - 1:04d}-12" if m == 0 else f"{y:04d}-{m:02d}"
+
+
+def _scrubber(con, own: str):
+    """-> fn(text) that replaces every OTHER branch's name with "สาขาอื่น" (the own name is kept, even inside a longer one)."""
+    others = sorted((r[0] for r in con.execute("SELECT name FROM branches WHERE name <> 'ALL' AND name <> ?", (own,)) if r[0]),
+                    key=len, reverse=True)
+
+    def scrub(text):
+        if not text:
+            return text
+        s = str(text).replace(own, "\x00") if own else str(text)
+        for n in others:
+            if n in s:
+                s = s.replace("สาขา" + n, _OTHER).replace(n, _OTHER)
+        return s.replace("\x00", own) if own else s
+    return scrub
+
+
+def _mix_lines(con, bid: int, s: str, e: str) -> dict:
+    """Line sales of [s, e] split into adult buffet / child buffet / à-la-carte / other, and buffet packages sold."""
+    from core import _FOOD_CATEGORY_FILTER
+    from rules import tier_code_sql
+    from .buffet import _BUFFET_CHILD_CODES
+    child = "(s.sku_code IN (" + ",".join(f"'{c}'" for c in _BUFFET_CHILD_CODES) + ") OR s.sku_code LIKE 'BUFFETCHILD%')"
+    buf = tier_code_sql("s.sku_code")
+    r = con.execute(
+        f"""SELECT COALESCE(SUM(d.subtotal_ex_vat),0),
+                   COALESCE(SUM(CASE WHEN {buf} AND NOT {child} THEN d.subtotal_ex_vat END),0),
+                   COALESCE(SUM(CASE WHEN {buf} AND NOT {child} THEN d.qty END),0),
+                   COALESCE(SUM(CASE WHEN {buf} AND {child} THEN d.subtotal_ex_vat END),0),
+                   COALESCE(SUM(CASE WHEN {buf} AND {child} THEN d.qty END),0),
+                   COALESCE(SUM(CASE WHEN d.sku_id IN (SELECT sk.sku_id FROM skus sk JOIN categories c ON c.category_id = sk.category_id
+                                                        WHERE {_FOOD_CATEGORY_FILTER}) THEN d.subtotal_ex_vat END),0)
+            FROM v_sales_sku_daily d JOIN skus s ON s.sku_id = d.sku_id
+            WHERE d.branch_id = :bid AND d.day BETWEEN :s AND :e""", {"bid": bid, "s": s, "e": e}).fetchone()
+    return {"total": float(r[0] or 0), "adult": (float(r[1] or 0), float(r[2] or 0)),
+            "child": (float(r[3] or 0), float(r[4] or 0)), "ala": float(r[5] or 0)}
+
+
+_LINES = (("adult", "บุฟเฟ่ต์ผู้ใหญ่"), ("child", "บุฟเฟ่ต์เด็ก"), ("ala", "อาหารตามสั่ง"), ("other", "เครื่องดื่มและอื่น ๆ"))
+
+
+def _line_rev(d: dict, key: str) -> float:
+    if key == "other":
+        return d["total"] - d["adult"][0] - d["child"][0] - d["ala"]
+    return d["ala"] if key == "ala" else d[key][0]
+
+
+def _lines_out(cur: dict, prev: Optional[dict]) -> list:
+    def share(x, tot):
+        return _num(100.0 * x / tot) if tot else None
+    covers_c = cur["adult"][1] + cur["child"][1]
+    covers_p = (prev["adult"][1] + prev["child"][1]) if prev else 0
+    out = []
+    for key, label in _LINES:
+        row = {"key": key, "label": label, "sales": _num(_line_rev(cur, key), 0), "sales_share": share(_line_rev(cur, key), cur["total"]),
+               "sales_share_prev": share(_line_rev(prev, key), prev["total"]) if prev else None,
+               "covers": None, "covers_share": None, "covers_share_prev": None}
+        if key in ("adult", "child"):
+            row["covers"] = _num(cur[key][1], 0)
+            row["covers_share"] = share(cur[key][1], covers_c)
+            row["covers_share_prev"] = share(prev[key][1], covers_p) if prev else None
+        out.append(row)
+    return out
+
+
+def _mix(con, rep: dict, bid: int, name: str, sel: str, scrub) -> dict:
+    from .home_extra import extra_customer_type
+    rng, cmp_rng = rep.get("range") or [None, None], rep.get("comp_range")
+    T = rep.get("tier") or {}
+    tiers = [{"tier": t.get("tier"), "label": t.get("label"), "covers": t.get("pax"), "covers_prev": t.get("pax_prev"),
+              "covers_change_pct": t.get("d_pax_pct"), "share": t.get("share"), "share_prev": t.get("share_prev"),
+              "per_head": _num(t.get("rev_head"), 0)} for t in (T.get("rows") or [])]
+    lines = []
+    if rng[0] and rng[1]:
+        cur = _mix_lines(con, bid, rng[0], rng[1])
+        prev = _mix_lines(con, bid, cmp_rng[0], cmp_rng[1]) if cmp_rng else None
+        if cur["total"]:
+            lines = _lines_out(cur, prev if prev and prev["total"] else None)
+
+    def chan(month):
+        d = extra_customer_type(month=month, branch=name, group=None)
+        return {scrub(t["type"]): t for t in (d.get("types") or [])} if d.get("month") == month else {}
+    now, before = chan(sel), chan(_prev_month(sel))
+    channels = [{"type": k, "sales_share": v.get("net_pct"), "sales_share_prev": (before.get(k) or {}).get("net_pct"),
+                 "tag_share": v.get("cust_pct"), "tag_share_prev": (before.get(k) or {}).get("cust_pct"),
+                 "delivery": bool(_DELIVERY_RE.search(k or ""))}
+                for k, v in sorted(now.items(), key=lambda kv: -(kv[1].get("net") or 0))][:MIX_TOP]
+    return {"window": rng, "compare_window": cmp_rng, "tiers": tiers, "lines": lines, "channels": channels,
+            "channels_month": sel if now else None, "channels_prev_month": _prev_month(sel) if before else None}
+
+
+def _peak(rep: dict, name: str, sel: str) -> dict:
+    from .analysis_time import analysis_daypart_grid
+    P = rep.get("peak") or {}
+    hours = [{"hour": h["hour"], "sales": _num(h.get("revenue"), 0), "covers": h.get("covers")} for h in (P.get("hourly") or [])]
+    ph = P.get("peak_hour") or {}
+    g = _plainj(analysis_daypart_grid(month=sel, month_from=None, month_to=None, branch=name, metric="revenue")) or {}
+    cells = [{"dow": c["dow"], "hour": c["hour"], "sales": _num(c["value"], 0)} for c in (g.get("cells") or [])]
+    best = max(cells, key=lambda c: c["sales"] or 0) if cells else None
+    return {"hours": hours, "peak_hour": ph.get("hour"), "peak_hour_sales": ph.get("revenue"),
+            "dayparts": [{"name": _DAYPART_TH.get(x["name"], x["name"]), "sales": x.get("revenue"), "covers": x.get("covers"),
+                          "share": x.get("pct")} for x in (P.get("dayparts") or [])],
+            "heat": cells, "heat_basis": "sales_per_trading_day", "heat_best": best}
+
+
+def _controls(con, rep: dict, name: str, sel: str, scrub) -> dict:
+    from .analysis_discounts import coupon_series_breakdown, discount_reasons
+    from .home_extra import extra_cancel_bills, extra_cash, extra_cash_detail
+    H = rep.get("headline") or {}
+    pol = float(H.get("discount_policy_pct") or DEFAULT_DISCOUNT_POLICY)
+    dr = discount_reasons(month_from=None, month_to=None, month=sel, branch=name, group=None)
+    cs = coupon_series_breakdown(month_from=None, month_to=None, month=sel, branch=name, group=None)
+    discount = {"pct": _num(H.get("discount_pct")), "policy_pct": _num(pol), "baht": _num(H.get("discount"), 0),
+                "over_policy_baht": _num(H.get("discount_excess"), 0) if H.get("discount_excess") is not None else None,
+                "by_reason": [{"reason": scrub(r.get("reason")), "bills": r.get("bills"), "baht": r.get("amount"), "share": r.get("pct")}
+                              for r in (dr.get("reasons") or []) if (r.get("amount") or 0) > 0][:MIX_TOP],
+                "by_coupon": [{"name": scrub(r.get("name")), "uses": r.get("uses"), "baht": r.get("amount"), "share": r.get("pct")}
+                              for r in (cs.get("series") or []) if (r.get("amount") or 0) > 0][:MIX_TOP]}
+    cb = extra_cancel_bills(month=sel, branch=name, group=None)
+    same = cb.get("month") == sel
+    cbs = (cb.get("summary") or {}) if same else {}
+    voids = {"bills": cbs.get("bills") or 0, "baht": cbs.get("amount") or 0, "rate_pct": cbs.get("cancel_rate"),
+             "by_reason": [{"reason": scrub(r.get("reason")), "bills": r.get("bills"), "baht": r.get("amount")}
+                           for r in ((cb.get("reasons") or []) if same else [])][:MIX_TOP]}
+    ca = extra_cash(month=sel, branch=name, group=None)
+    s = ca.get("summary") or {}
+    days = [{"date": x["day"], "over_short": _num(x.get("over_short"), 0)}
+            for x in (extra_cash_detail(branch=name, month=sel).get("days") or [])]
+    cash = {"net": _num(s.get("net"), 0) if days else None, "short_total": _num(s.get("short_total"), 0) if days else None,
+            "over_total": _num(s.get("over_total"), 0) if days else None, "short_days": s.get("short_days") if days else None,
+            "days_counted": len(days), "days": days}
+    return {"discount": discount, "voids": voids, "cash": cash, "flags": _control_flags(discount, voids, cash)}
+
+
+_TH_MON = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+
+
+def _th_date(iso) -> str:
+    try:
+        d = date.fromisoformat(str(iso)[:10])
+        return f"{d.day} {_TH_MON[d.month - 1]}"
+    except ValueError:
+        return str(iso or "")
+
+
+def _control_flags(discount: dict, voids: dict, cash: dict) -> dict:
+    """ควรดู / ต้องแก้ lines for the controls card, in the verdict's words (counts and baht, never a person)."""
+    out = []
+    p, pol = discount.get("pct"), discount.get("policy_pct") or DEFAULT_DISCOUNT_POLICY
+    if p is not None:
+        if p > 2 * pol:
+            out.append(("fix", "discount", f"ส่วนลดร้อยละ {_pct_text(p)} ของยอดขาย เกินเพดานร้อยละ {_pct_text(pol)} ควรตรวจสอบการให้ส่วนลด"))
+        elif p > pol:
+            out.append(("watch", "discount", f"ส่วนลดร้อยละ {_pct_text(p)} ของยอดขาย เกินเพดานร้อยละ {_pct_text(pol)}"))
+    r = voids.get("rate_pct")
+    if r is not None and voids.get("bills"):
+        what = f"บิลยกเลิก {voids['bills']:,} ใบ (฿{voids['baht'] or 0:,.0f}) คิดเป็นร้อยละ {_pct_text(r)} ของบิลทั้งหมด"
+        if r > T_CANCEL_FIX:
+            out.append(("fix", "voids", what + " สูงกว่าเกณฑ์ปกติ ควรตรวจสอบเหตุผลการยกเลิก"))
+        elif r > T_CANCEL_WATCH:
+            out.append(("watch", "voids", what))
+    days = cash.get("days") or []
+    bad = [x for x in days if (x["over_short"] or 0) <= -T_CASH_DAY_FIX]
+    if bad:
+        worst = min(bad, key=lambda x: x["over_short"])
+        more = f" และอีก {len(bad) - 1} วัน" if len(bad) > 1 else ""
+        out.append(("fix", "cash", f"เงินสดขาด ฿{-worst['over_short']:,.0f} ในวันที่ {_th_date(worst['date'])}{more} ควรตรวจสอบการนับเงินสด"))
+    elif (cash.get("short_days") or 0) >= T_CASH_SHORT_DAYS_WATCH:
+        out.append(("watch", "cash", f"เงินสดขาด {cash['short_days']} วันในเดือนนี้ รวม ฿{-(cash.get('short_total') or 0):,.0f}"))
+    level = "fix" if any(lv == "fix" for lv, _, _ in out) else "watch" if out else "good"
+    return {"level": level, "items": [{"level": lv, "key": k, "text": t} for lv, k, t in out]}
+
+
+def _mask_names(text: str, names) -> str:
+    """The names the feedback analysis found in a review (its `staff` field), masked in the text."""
+    s = text or ""
+    for n in sorted({str(x).strip() for x in (names or []) if str(x).strip()}, key=len, reverse=True):
+        if len(n) >= 2:
+            s = s.replace(n, _MASK)
+    return s
+
+
+def _voice(name: str, sel: str, scrub) -> dict:
+    from .feedback import feedback_items, feedback_summary
+    sm = feedback_summary(None, branch=name, month_from=sel, month_to=sel, source=None, kind="review")
+    prev = sm.get("prev") or {}
+    it = feedback_items(None, branch=name, month_from=None, month_to=sel, sentiment=None, theme=None, menu=None, source=None,
+                        kind="review", needs_reply=0, flagged=0, sla=0, sort="newest", limit=REVIEWS_SHOWN)
+    reviews = []
+    for x in it.get("items") or []:
+        src = str(x.get("source") or "").strip()
+        reviews.append({"date": str(x.get("rated_at") or "")[:10], "stars": x.get("rating"),
+                        "text": scrub(_mask_names(x.get("text") or "", x.get("staff")))[:400],
+                        "source": _SRC_LABEL.get(src.lower(), src or "-")})
+    avg, pavg = sm.get("avg_rating"), prev.get("avg_rating")
+    return {"available": bool(sm.get("total") or reviews), "month": sel, "rating_avg": avg, "reviews_month": sm.get("total") or 0,
+            "rating_avg_prev": pavg, "reviews_prev": prev.get("total"),
+            "rating_change": round(avg - pavg, 2) if avg is not None and pavg is not None else None, "latest": reviews}
+
+
+def franchise_insight_data(branch_id: int, month: Optional[str] = None) -> dict:
+    """The F2 sections of one branch for one month (see the comment above). Each part fails on its own."""
+    with get_db() as con:
+        name = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()[0]
+        scrub = _scrubber(con, name)
+        rep = _safe("report", lambda: _report(name, month), {}) or {}
+        sel = rep.get("selected_month") or month
+        ok = bool(rep.get("available")) and bool(sel)
+        mix = _safe("mix", lambda: _mix(con, rep, branch_id, name, sel, scrub)) if ok else None
+        peak = _safe("peak", lambda: _peak(rep, name, sel)) if ok else None
+        controls = _safe("controls", lambda: _controls(con, rep, name, sel, scrub)) if ok else None
+        voice = _safe("voice", lambda: _voice(name, sel, scrub)) if sel else None
+    return {"branch": name, "month": sel, "label": rep.get("label"), "available": ok,
+            "through": (rep.get("range") or [None, None])[1], "mix": mix, "peak": peak, "controls": controls, "voice": voice}
+
+
+@router.get("/api/franchise/insight")
+def franchise_insight(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE),
+                      branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน, second half: sales mix and busy hours, controls, the guests' reviews (same branch rules as the summary)."""
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    return franchise_insight_data(bid, month)
+
+
+# ── F2: the franchise owner's morning notification (routers/push_api.maybe_send_franchise) ──
+def _fmt_k(v) -> str:
+    v = float(v or 0)
+    if abs(v) >= 1e6:
+        return f"{v / 1e6:.2f}M"
+    if abs(v) >= 1e3:
+        return f"{v / 1e3:.1f}K"
+    return f"{v:,.0f}"
+
+
+def _thai_today() -> date:
+    from datetime import datetime
+    return (datetime.utcnow() + timedelta(hours=7)).date()
+
+
+def franchise_morning_payload(d: dict, ins: Optional[dict], today: Optional[date] = None) -> Optional[dict]:
+    """Title + body of the morning push, from the summary (franchise_summary_data) and the controls (franchise_insight_data):
+    the last finished day's net sales against the same weekday a week earlier (summary.sales.daily), the month so far against
+    the target to date (summary.target, F1) and the number of ต้องแก้ lines (the verdict's, plus the controls' voids and cash;
+    the discount line is already the verdict's own, so it is counted once). None when the summary has no finished day."""
+    s = (d or {}).get("sales") or {}
+    ld = (s.get("last_day") or {}).get("date")
+    if not d or not d.get("available") or not ld:
+        return None
+    row = next((x for x in (s.get("daily") or []) if x.get("date") == ld), None) or {}
+    rev = row.get("revenue") if row else (s.get("last_day") or {}).get("revenue")
+    wk = row.get("vs_last_week_pct")
+    today = today or _thai_today()
+    dd = date.fromisoformat(ld)
+    when = "เมื่อวาน" if dd == today - timedelta(days=1) else "วันล่าสุดที่ปิดการขาย"
+    chip = f" {'▲' if wk >= 0 else '▼'}{abs(wk):.1f}% เทียบวัน{TH_DOW[dd.weekday()]}ก่อน" if wk is not None else ""
+    title = f"ร้านของฉัน · {when} ({_th_date(ld)}) ฿{_fmt_k(rev)}{chip}"
+    bits = []
+    t = d.get("target") or {}
+    if t.get("source") not in (None, "none") and t.get("vs_to_date_pct") is not None:
+        v = t["vs_to_date_pct"]
+        bits.append(f"ยอดสะสมเดือนนี้{'สูงกว่า' if v >= 0 else 'ต่ำกว่า'}เป้าถึงวันนี้ {abs(v):.1f}%")
+    elif s.get("mtd") is not None:
+        bits.append(f"ยอดสะสมเดือนนี้ ฿{_fmt_k(s['mtd'])} (ยังไม่มีเป้า)")
+    fixes = len((d.get("verdict") or {}).get("fix") or [])
+    fixes += sum(1 for x in ((((ins or {}).get("controls") or {}).get("flags") or {}).get("items") or [])
+                 if x.get("level") == "fix" and x.get("key") != "discount")
+    bits.append(f"ต้องแก้ {fixes} รายการ" if fixes else "ไม่มีรายการต้องแก้")
+    return {"title": title, "body": " · ".join(bits), "url": "/?go=franchise", "tag": "oshinei-franchise", "fix_count": fixes}

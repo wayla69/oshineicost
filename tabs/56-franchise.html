@@ -17,5 +17,20 @@
       <button type="button" id="frcDownload" class="frc-dl" onclick="frcDownload()" hidden>ดาวน์โหลดรายงานเดือนนี้</button>
     </div>
     <div id="frcBody"></div>
+    <!-- PR-F2: รับแจ้งเตือนทุกเช้า - this owner's own morning summary on this phone (kind "franchise", routers/push_api.py
+         maybe_send_franchise). The card logic is the phone summary's (09c-mobile.js msPush*, id prefix frcPush); hidden where
+         push is not available (an iPhone tab that is not installed, a server without the key) and for every other login. -->
+    <div class="ms-section" id="frcPush" hidden>
+      <div class="ms-section-title">รับแจ้งเตือนทุกเช้า</div>
+      <div class="ms-card" style="padding:12px">
+        <p id="frcPushState" style="font-size:13px;color:var(--text-secondary);margin:0">กำลังตรวจสอบ…</p>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" id="frcPushOn" onclick="msPushEnable('frcPush')" style="min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);cursor:pointer">เปิดการแจ้งเตือน</button>
+          <button type="button" id="frcPushOff" onclick="msPushDisable('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ปิด</button>
+          <button type="button" id="frcPushTest" onclick="msPushTest('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ส่งทดสอบ</button>
+        </div>
+        <div id="frcPushKinds" style="display:none"></div>
+      </div>
+    </div>
   </div>
 </div>
