@@ -160,14 +160,18 @@ def raw_unit_cost_sql(s: str = "s") -> str:
 
 def dated_cost_sql(row: str, month: str) -> str:
     """The BoM Center cut-over (backend/bom_center/dated.py): from the Grand Menu
-    month on, a RELEASED version's cost for that SKU and month; NULL otherwise —
+    month on, the analyst's imported dish cost (bc_sku_cost_list), else a RELEASED
+    version's cost for that SKU and month; NULL otherwise —
     and NULL without even looking for any month before the cut-over, so August
     2026 and earlier keep the old engine's numbers byte for byte."""
-    # the latest month on or before the row's (a version stays in force until the
-    # next one) — so a new month needs no new row to keep its released cost
-    return (f"(CASE WHEN {month} >= '{GRAND_MENU_FROM[:7]}' THEN "
+    # the latest month on or before the row's (a version stays in force until the next one), so a new
+    # month needs no new row to keep its cost. PR-S2: the analyst's imported dish cost (bc_sku_cost_list)
+    # beats the released version, per SKU; both follow the same "latest month <=" rule.
+    return (f"(CASE WHEN {month} >= '{GRAND_MENU_FROM[:7]}' THEN COALESCE("
+            f"(SELECT bcl.unit_cost FROM bc_sku_cost_list bcl WHERE bcl.sku_id = {row}.sku_id"
+            f" AND bcl.month <= {month} ORDER BY bcl.month DESC LIMIT 1), "
             f"(SELECT bcm.unit_cost FROM bc_sku_cost_month bcm WHERE bcm.sku_id = {row}.sku_id"
-            f" AND bcm.month <= {month} ORDER BY bcm.month DESC LIMIT 1) "
+            f" AND bcm.month <= {month} ORDER BY bcm.month DESC LIMIT 1)) "
             f"END)")
 
 

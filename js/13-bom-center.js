@@ -283,7 +283,7 @@ function bmcSetSub(k) {
   k = _bmcVisiblePane(k);
   _bmcSub = k;
   _bmcMonthSync(k);
-  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'events', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
+  ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'events', 'zones', 'issue', 'ing', 'price', 'dishcost', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
     const el = document.getElementById('bmc-pane-' + p);
     if (el) el.style.display = p === k ? '' : 'none';
   });
@@ -299,6 +299,7 @@ function bmcSetSub(k) {
   if (k === 'prep') bmcLoadPrep();
   if (k === 'ing') { bmcLoadIng(); bmcLoadCodeReqCard(); }
   if (k === 'price') bmcLoadPrices();
+  if (k === 'dishcost') bmcLoadDishCost();
   if (k === 'pricefile') bmcLoadPriceFile();
   if (k === 'conv') bmcLoadConv();
   if (k === 'rcheck') bmcLoadRcheck();
@@ -313,7 +314,7 @@ function bmcMonthChanged() { _bmcIng = []; _bmcPrices = []; supplyCtxSet({ month
 async function loadBomCenter() {
   _bmcMonth();
   document.querySelectorAll('#tab-bomcenter .bc-write').forEach(el => {
-    const can = el.closest('#bmc-pane-price, #bmc-pane-conv') ? _bmcCanPrices() : el.closest('#bmc-pane-rec, #bmc-pane-prep, #bmc-pane-rel') ? _bmcCanRecipes() : _bmcCanWrite();
+    const can = el.closest('#bmc-pane-price, #bmc-pane-conv, #bmc-pane-dishcost') ? _bmcCanPrices() : el.closest('#bmc-pane-rec, #bmc-pane-prep, #bmc-pane-rel') ? _bmcCanRecipes() : _bmcCanWrite();
     el.style.display = can ? '' : 'none';
   });
   // Sales Support (and the analyst) send / follow the month's price file (PR-D)
@@ -1054,6 +1055,126 @@ async function _bmcRunPriceImport(send, label) {
     _bmcStatus('bmcPriceStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)');
   }
 }
+// ── PR-S2 · ต้นทุนต่อจานรายเดือน (bom_center/dish_cost.py) ─────────────────────────────────────────────
+// The analyst imports the dish cost per month; the reports use it in place of the recipe cost from that month on.
+// Import -> a preview (dry run: counts and the lists behind them) -> บันทึก; each row can be edited once the owner code is given.
+let _bmcDc = null, _bmcDcView = 'all', _bmcDcPre = null, _bmcDcSend = null, _bmcDcName = '';
+const _BMC_DC_CHIPS = [['all', 'ทั้งหมด'], ['imported', 'นำเข้า'], ['carried', 'ยกมา'], ['none', 'ไม่มีในตาราง'], ['changed30', 'เปลี่ยนเกิน 30%']];
+const _BMC_DC_INK = { imported: 'var(--good-ink)', carried: 'var(--navy-ink)', none: 'var(--amber-ink)' };
+function _bmcDcBaht(v) { return v == null ? '—' : '฿' + _bmcNum(v, 2); }
+function _bmcDcPct(p) {
+  if (p == null) return '<span class="wt-muted">—</span>';
+  const big = Math.abs(p) > 30;
+  return `<span style="color:${big ? 'var(--amber-ink)' : 'var(--text-secondary)'};${big ? 'font-weight:600' : ''}">${p > 0 ? '+' : ''}${_bmcNum(p, 1)}%</span>`;
+}
+async function bmcLoadDishCost(force) {
+  const m = _bmcMonth();
+  document.getElementById('bmcDcMonthLbl').textContent = fmtMonthTh(m);
+  if (_bmcDc && _bmcDc.month !== m) { _bmcDcPre = null; _bmcDcSend = null; document.getElementById('bmcDcPreview').innerHTML = ''; }
+  try {
+    const d = await _bmcJson(`${API}/api/bom-center/dish-cost?month=${m}`);
+    const first = !_bmcDc || _bmcDc.month !== m || force === 'reset';
+    _bmcDc = d;
+    if (first) _bmcDcView = d.counts.none ? 'none' : 'all';                 // the gaps first; with none, everything
+    bmcDcRender();
+  } catch (e) {
+    _bmcDc = null;
+    document.getElementById('bmcDcChips').innerHTML = '';
+    document.getElementById('bmcDcSummary').textContent = '';
+    document.getElementById('bmcDcList').innerHTML = `<div class="wt-empty" style="color:var(--bad-ink)">${esc(String(e.message || e))}</div>`;
+  }
+}
+function bmcDcView(f) { _bmcDcView = f; bmcDcRender(); }
+function bmcDcRender() {
+  const d = _bmcDc;
+  if (!d) return;
+  const c = d.counts;
+  uiStateFilter.bar('bmcDcChips', { counts: c, f: _bmcDcView, pick: 'bmcDcView', opts: _BMC_DC_CHIPS });
+  const q = (document.getElementById('bmcDcQ').value || '').trim().toLowerCase();
+  const rows = d.rows.filter(r => (_bmcDcView === 'all' || (_bmcDcView === 'changed30' ? r.changed30 : r.source_kind === _bmcDcView))
+    && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
+  document.getElementById('bmcDcSummary').textContent = `${c.all} เมนู` + (d.last_import_at ? ` · นำเข้าล่าสุด ${fmtDay(d.last_import_at.slice(0, 10))} โดย ${whoTh(d.last_import_by || '')}` : '');
+  const w = _bmcCanPrices();
+  document.getElementById('bmcDcList').innerHTML = rows.length ? `<div class="wt-wrap" style="max-height:640px"><table class="wt"><thead><tr>
+      <th>รหัส POS</th><th>เมนู</th><th class="wt-num">ต้นทุนต่อจาน</th><th class="wt-num">เดือนก่อน</th><th class="wt-num">เปลี่ยน</th><th class="wt-num">จานที่ขาย</th><th>ที่มา</th>${w ? '<th></th>' : ''}</tr></thead><tbody>${rows.slice(0, 800).map(r => `<tr>
+      <td class="wt-code" data-l="รหัส POS">${esc(r.code)}</td><td data-l="เมนู">${esc(r.name)}</td>
+      <td class="wt-num" data-l="ต้นทุนต่อจาน" style="font-weight:600">${r.unit_cost > 0 ? _bmcDcBaht(r.unit_cost) : '<span class="wt-muted">ไม่มีต้นทุน</span>'}</td>
+      <td class="wt-num" data-l="เดือนก่อน">${_bmcDcBaht(r.prev_cost)}</td><td class="wt-num" data-l="เปลี่ยน">${_bmcDcPct(r.change_pct)}</td>
+      <td class="wt-num" data-l="จานที่ขาย">${_bmcNum(r.plates, 0)}</td>
+      <td data-l="ที่มา">${_bmcChip(r.source, _BMC_DC_INK[r.source_kind])}${r.cost_source ? ` <span class="wt-muted">${esc(r.cost_source)}</span>` : ''}</td>
+      ${w ? `<td class="wt-act">${_bmcBtn('แก้ไข', `bmcDcEdit(${_bmcQ(r.code)})`)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
+    + (rows.length > 800 ? `<div class="wt-note">แสดง 800 จาก ${rows.length} เมนู ค้นหาเพื่อดูที่เหลือ</div>` : '')
+    : (_bmcDcView === 'all' ? '<div class="wt-empty">ไม่มีเมนู</div>' : `<div class="wt-empty">ไม่มีเมนูในกลุ่มนี้ <button type="button" class="shm-showall" onclick="bmcDcView('all')">ดูทั้งหมด</button></div>`);
+}
+async function bmcDcEdit(code) {
+  const r = (_bmcDc?.rows || []).find(x => x.code === code) || {};
+  const v = await uiPrompt(`ต้นทุนต่อจาน (บาท) ของ ${code} ${r.name || ''} เดือน${fmtMonthTh(_bmcMonth())}`, r.unit_cost > 0 ? r.unit_cost : '', { title: `แก้ต้นทุน ${code}`, okText: 'บันทึก' });
+  if (v === null) return;
+  if (String(v).trim() === '' || isNaN(Number(v)) || Number(v) < 0) { _bmcStatus('bmcDcStatus', 'ใส่ต้นทุนเป็นตัวเลขไม่ติดลบ', 'var(--amber-ink)'); return; }
+  try {
+    await _bmcJson(`${API}/api/bom-center/dish-cost/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: _bmcMonth(), sku_code: code, unit_cost: Number(v), note: '' }) });
+    _bmcStatus('bmcDcStatus', `✓ บันทึกต้นทุน ${code}`, 'var(--good-ink)');
+    bmcLoadDishCost();
+  } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
+}
+function bmcDcTemplate() { bmcDownload(`${API}/api/bom-center/dish-cost/template.xlsx?month=${_bmcMonth()}`, `แม่แบบ_ต้นทุนต่อจาน_${_bmcMonth()}.xlsx`, 'bmcDcStatus'); }
+function bmcDcExport() { bmcDownload(`${API}/api/bom-center/dish-cost/export.xlsx?month=${_bmcMonth()}`, `ต้นทุนต่อจาน_${_bmcMonth()}.xlsx`, 'bmcDcStatus'); }
+async function bmcDcImport(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const m = _bmcMonth();
+  _bmcDcName = file.name;
+  _bmcDcSend = dry => { const fd = new FormData(); fd.append('file', file, file.name);
+    return _bmcJson(`${API}/api/bom-center/dish-cost/import?month=${m}&dry_run=${dry}`, { method: 'POST', body: fd }); };
+  try {
+    _bmcStatus('bmcDcStatus', 'กำลังตรวจไฟล์…');
+    _bmcDcPre = await _bmcDcSend(true);
+    _bmcStatus('bmcDcStatus', '');
+    bmcDcShowPreview(_bmcDcPre, false);
+  } catch (e) { _bmcDcPre = null; _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+  input.value = '';
+}
+function _bmcDcMini(title, n, head, rows) {
+  if (!n) return '';
+  return `<details class="mt-2"><summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)">${title} ${n}</summary>
+    <div class="wt-wrap" style="max-height:320px"><table class="wt"><thead><tr>${head.map(h => `<th${h[1] ? ' class="wt-num"' : ''}>${h[0]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></details>`;
+}
+function bmcDcShowPreview(p, applied) {
+  const chip = (t, n, ink) => `<span style="margin-right:12px">${t} <b style="color:${n ? ink : 'var(--text-muted)'}">${n}</b></span>`;
+  const sw = p.sold_without_cost || [];
+  document.getElementById('bmcDcPreview').innerHTML = `<div class="card p-4">
+    <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${applied ? '✓ บันทึกแล้ว' : 'ตัวอย่างก่อนบันทึก'}: ${esc(_bmcDcName || p.file || '')} · ${esc(p.format || '')} · เดือน${fmtMonthTh(p.month)}</div>
+    <div class="text-xs" style="color:var(--text-secondary)">${chip('นำเข้า', p.imported, 'var(--good-ink)')}${chip('รหัสไม่พบ', p.unknown_codes.length, 'var(--amber-ink)')}${chip('รหัสแพ็กเกจ', p.tier_codes.length, 'var(--amber-ink)')}${chip('ค่าไม่ถูกต้อง', p.bad_values.length, 'var(--bad-ink)')}${chip('เปลี่ยนเกิน 30%', p.changed_30pct.length, 'var(--amber-ink)')}${chip('ขายแต่ไม่มีต้นทุน', sw.length, 'var(--bad-ink)')}</div>
+    ${_bmcDcMini('เมนูที่ขายในเดือนนี้แต่ไม่มีต้นทุน', sw.length, [['รหัส POS'], ['เมนู'], ['จานที่ขาย', 1], ['ต้นทุนที่ใช้อยู่', 1], ['ที่มา']],
+      sw.slice(0, 200).map(r => `<tr><td class="wt-code">${esc(r.code)}</td><td>${esc(r.name)}</td><td class="wt-num">${_bmcNum(r.plates, 0)}</td><td class="wt-num">${r.current_cost > 0 ? _bmcDcBaht(r.current_cost) : '—'}</td><td>${esc(r.current_source)}</td></tr>`).join(''))}
+    ${_bmcDcMini('ต้นทุนเปลี่ยนเกิน 30% จากเดือนก่อน', p.changed_30pct.length, [['รหัส POS'], ['เมนู'], ['เดือนก่อน', 1], ['ใหม่', 1], ['เปลี่ยน', 1]],
+      p.changed_30pct.slice(0, 200).map(r => `<tr><td class="wt-code">${esc(r.code)}</td><td>${esc(r.name)}</td><td class="wt-num">${_bmcDcBaht(r.old)}</td><td class="wt-num">${_bmcDcBaht(r.new)}</td><td class="wt-num">${_bmcDcPct(r.pct)}</td></tr>`).join(''))}
+    ${_bmcDcMini('ค่าไม่ถูกต้อง', p.bad_values.length, [['รหัส POS'], ['ค่าในไฟล์'], ['เหตุผล']],
+      p.bad_values.slice(0, 200).map(r => `<tr><td class="wt-code">${esc(r.code)}</td><td>${esc(r.value)}</td><td>${esc(r.why)}</td></tr>`).join(''))}
+    ${_bmcDcMini('รหัสที่ไม่พบ', p.unknown_codes.length, [['รหัส POS']], p.unknown_codes.slice(0, 200).map(c => `<tr><td class="wt-code">${esc(c)}</td></tr>`).join(''))}
+    ${_bmcDcMini('รหัสแพ็กเกจบุฟเฟ่ต์ไม่มีต้นทุนต่อจาน', p.tier_codes.length, [['รหัส POS']], p.tier_codes.slice(0, 200).map(c => `<tr><td class="wt-code">${esc(c)}</td></tr>`).join(''))}
+    ${applied || !_bmcCanPrices() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button type="button" onclick="bmcDcCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer"${p.imported ? '' : ' disabled'}>บันทึก</button>
+      <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่บันทึก</span></div>`}
+  </div>`;
+}
+async function bmcDcCommit() {
+  const pre = _bmcDcPre;
+  if (!pre || !_bmcDcSend || !pre.imported) return;
+  if (!await uiConfirm(`${_bmcDcName}\nเดือน${fmtMonthTh(pre.month)}: บันทึกต้นทุนต่อจาน ${pre.imported} เมนู` +
+      (pre.sold_without_cost.length ? `\nเมนูที่ขายแต่ยังไม่มีต้นทุน ${pre.sold_without_cost.length} เมนู` : '') +
+      (pre.changed_30pct.length ? `\nต้นทุนเปลี่ยนเกิน 30% ${pre.changed_30pct.length} เมนู` : '') +
+      ((pre.unknown_codes.length + pre.tier_codes.length + pre.bad_values.length) ? `\nข้ามรหัสหรือค่าที่ใช้ไม่ได้ ${pre.unknown_codes.length + pre.tier_codes.length + pre.bad_values.length} รายการ` : ''),
+      { title: 'ยืนยันการนำเข้าต้นทุนต่อจาน', ok: 'บันทึก', cancel: 'ยกเลิก' })) { _bmcStatus('bmcDcStatus', 'ยังไม่บันทึก'); return; }
+  try {
+    const d = await _bmcDcSend(false);
+    bmcDcShowPreview(d, true);
+    _bmcStatus('bmcDcStatus', `✓ นำเข้าต้นทุนต่อจาน ${d.imported} เมนู`, 'var(--good-ink)');
+    _bmcDcPre = null;
+    bmcLoadDishCost('reset');
+  } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+}
+
 async function bmcImportPrices(input) {
   const file = input?.files?.[0];
   if (!file) return;

@@ -348,6 +348,28 @@ def _merge_gaps_into_backlog(items: list, backlog: list) -> list:
     return items + [bk]
 
 
+def _dish_cost_item(con, month: str) -> list:
+    """PR-S2: the analyst's monthly dish cost list. A task until every menu sold in the month holds a cost from the list (stock mode keeps it:
+    it is not a recipe item)."""
+    from . import dish_cost as dc
+    if not month or month < dc.MIN_MONTH or not _has(con, "bc_sku_cost_list"):
+        return []
+    try:
+        n = len(dc.sold_without_cost(con, month))
+    except Exception:                                       # a database without the sales tables: nothing to ask for
+        return []
+    title = f"นำเข้าต้นทุนต่อจานเดือน{_mth(month)}"
+    go = {"tab": "bomcenter", "pane": "dishcost", "month": month}
+    if n:
+        return [_e("dish_cost_month", 102, "month", f"{title} (เมนูที่ขายแต่ไม่มีต้นทุน {n})", "todo",
+                   "ดาวน์โหลดแม่แบบ กรอกต้นทุน แล้วนำเข้า", count=n, owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go=go)]
+    last = con.execute("SELECT at, who FROM bc_audit WHERE action='dish_cost_import' AND row_key=? ORDER BY id DESC LIMIT 1",
+                       (month,)).fetchone()
+    return [_e("dish_cost_month", 102, "month", title, "done",
+               "ครบ" + (f" · นำเข้าล่าสุด {_fmt_at(last[0])} โดย {_who(con, last[1])}" if last else ""),
+               owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go=go)]
+
+
 def _month_items(con, month: str, today: date) -> list:
     from .release import checks_summary
     out = []
@@ -359,6 +381,7 @@ def _month_items(con, month: str, today: date) -> list:
                   (f"ราคาซื้อจริง {n:,} รหัส" + (f" · นำเข้าล่าสุด {_fmt_at(last[0])} โดย {_who(con, last[1])}" if last else ""))
                   if n else "นำเข้าจากไฟล์ที่ประสานงานขายส่งมา หรือนำเข้าเอง",
                   owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์", go={"tab": "bomcenter", "pane": "price", "month": month}))
+    out += _dish_cost_item(con, month)
     if _has(con, "bc_price_submission"):
         subs = con.execute("SELECT COUNT(*), MAX(submitted_at) FROM bc_price_submission WHERE month=?", (month,)).fetchone()
         n_sub = subs[0] or 0

@@ -2877,6 +2877,7 @@ const SUPPLY_CHIPS = [
   { key: 'monthly', label: 'งานประจำเดือน', items: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'rel', bom: true, label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
@@ -3038,6 +3039,7 @@ const DEPARTMENTS = [
   { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], pages: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' },
+    { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', icon: 'coin' },
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
     { tab: 'bomcenter', pane: 'rel', bom: true, label: 'ตรวจและประกาศใช้', icon: 'shield' },
@@ -3117,6 +3119,7 @@ const PAGE_KEYWORDS = {
   'orderhub|central': 'ปิดงวด นำเข้า ไดกิโตะ รายงานกลาง', 'orderhub|month': 'ผลต่าง รายเดือน ปิดเดือน monthly variance', 'orderhub|adoption': 'การใช้งาน adoption สาขา',
   'bomcenter|rel': 'ประกาศใช้ สูตร release รับทราบ ตรวจ', 'bomcenter|rec': 'สูตร bom recipe ระดับราคา tier', 'bomcenter|prep': 'กึ่งสำเร็จ ซอส น้ำจิ้ม sub-recipe',
   'bomcenter|ing': 'วัตถุดิบ ingredient ทะเบียน master', 'bomcenter|conv': 'หน่วย แปลง แปลงหน่วย unit', 'bomcenter|price': 'ราคา ราคาซื้อ price ต้นทุนวัตถุดิบ',
+  'bomcenter|dishcost': 'ต้นทุนต่อจาน ราคาต้นทุน price list cost',
   'bomcenter|pricefile': 'ไฟล์ราคา นำเข้าราคา price file', 'bomcenter|issue': 'ใบสรุปตัดเบิก ตัดเบิก บัญชี issue summary', 'bomcenter|fc': 'ยอดแนะนำ forecast พยากรณ์ รอบสั่ง',
   'bomcenter|cal': 'รอบส่ง ปฏิทิน calendar', 'bomcenter|events': 'เทศกาล วันหยุด โปรโมชัน event', 'bomcenter|zones': 'โซน จัดเก็บ ตู้เย็น zone',
   'bomcenter|codereq': 'รหัสสินค้า เปลี่ยนรหัส code', 'bomcenter|rcheck': 'ตรวจสูตร ยอดซื้อ recipe check', 'bomcenter|overview': 'ความพร้อม รหัสเดิม overview',
