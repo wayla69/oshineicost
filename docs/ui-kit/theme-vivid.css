@@ -45,7 +45,7 @@ body .kpi-card.card::after, body .ms-kpi::after, body #home-decision-tiles > .ca
 }
 body .kpi-card.card { container-type: inline-size; }
 body .kpi-card.card :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q),
-body .ms-kpi :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q),
+body .ms-kpi :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *),
 body #tab-menuimpact .mi-kpi :is(p, span, div, b, strong, small):not(.pill, .pill *),
 body #home-decision-tiles > .card :is(p, span, div, b, strong, small):not(.pill, .pill *) { color: inherit !important; }
 body #home-decision-tiles > .card p.text-2xl { font-size: var(--kfs); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
