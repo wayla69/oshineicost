@@ -2160,7 +2160,7 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
 
 @router.get("/api/bom-center/forecast")
 def bc_forecast(branch_id: int = Query(...), round: str = Query("1"), order_day: Optional[str] = Query(None),
-                weeks: int = Query(6, ge=2, le=12), season: str = Query("auto")):
+                weeks: int = Query(_fc.HISTORY_WEEKS, ge=2, le=12), season: str = Query("auto")):
     if round not in ("1", "2", "salmon"):
         raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือแซลมอนสด")
     with get_db() as con:
@@ -2173,7 +2173,7 @@ class RunBody(BaseModel):
     branch_id: int
     round: str = "1"
     order_day: Optional[str] = None
-    weeks: int = 6
+    weeks: int = _fc.HISTORY_WEEKS
     season: str = "auto"
 
 
@@ -3821,7 +3821,7 @@ def _per_sales_note(it: dict) -> str:
 
 
 @router.get("/api/bom-center/per-sales")
-def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(4, ge=1, le=8)):
+def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=8)):
     """The last `weeks` weeks against the `weeks` before: per branch the usage of each ingredient per ฿100,000 of sales (ex VAT),
     items by value, the change, the weekly swing and whether it is steady; plus the chain total (sum of usage / sum of sales).
     A branch login gets its own branch only."""
@@ -3838,7 +3838,7 @@ def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks
 
 
 @router.get("/api/bom-center/per-sales.xlsx")
-def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(4, ge=1, le=8)):
+def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=8)):
     from openpyxl import Workbook
     with get_db() as con:
         _ensure(con)

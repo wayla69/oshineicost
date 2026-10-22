@@ -7,8 +7,8 @@
   blank_class_a()  PR-B4a (1.4): the high-value items the sales say were used that day and that the slip leaves blank
   PR-S4        in mode `stock` (close_settings.mode()) there is no recipe: the BoM column of daily() / daily_day() / daily_items() /
                anomalies() / blank_class_a() is replaced by two comparators built from the CONFIRMED slips and the sales - the branch's own
-               normal (the same weekday in the 4 weeks before, scaled by the sales of the day) and the median of the other company branches
-               whose demand source is the slips (issued per 100,000 baht of sales over the 4 weeks before). bom_days is not called in that
+               normal (the same weekday in the 8 weeks before (forecast.HISTORY_WEEKS), scaled by the sales of the day) and the median of the other company branches
+               whose demand source is the slips (issued per 100,000 baht of sales over the 8 weeks before). bom_days is not called in that
                mode; mode `full` is untouched.
   log()        PR-J4 (R3): per branch and day, how the slip was handled — on time, late, reopened, reconfirmed —
                with the late purchase orders and the claims beside it; log_monthly() is one month of it
@@ -46,10 +46,10 @@ SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เ�
 _EPS = 1e-6
 
 # PR-S4 · mode `stock`: the comparators and their words
-NORMAL_WEEKS = 4                    # the same weekday in this many weeks before the day
+NORMAL_WEEKS = FC.HISTORY_WEEKS                    # the same weekday in this many weeks before the day
 NORMAL_MIN_DAYS = 2                 # fewer slip days than this among them: no "normal of the branch"
 MEDIAN_MIN_BRANCHES = 2             # fewer other branches on the slips than this: no all-branch median
-MEDIAN_WINDOW_DAYS = 28             # the window (days before the day) the issued per PER_SALES baht is measured over
+MEDIAN_WINDOW_DAYS = 7 * FC.HISTORY_WEEKS             # the window (days before the day) the issued per PER_SALES baht is measured over
 PER_SALES = 100000.0
 UNDER_PCT_STOCK = 20.0              # O4: under the comparator by more than this % is "under" (mode full keeps UNDER_PCT)
 BASIS_TH = {"normal": "ปกติของสาขา", "median": "ค่ากลาง", "both": "ปกติของสาขาและค่ากลาง"}

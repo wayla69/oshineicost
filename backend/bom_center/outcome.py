@@ -10,7 +10,7 @@ shelf was empty or full when the next delivery came. This measures it, per deliv
 
 The stock is stock.system_position (month-end count, the weekly counts of the class-A items, goods received, confirmed slips and the
 estimate for the days with sales and no slip - PR-B4a 1.3): no stock definition of its own. The average daily use is stock._usage, the same
-28-day figure the count sheet and the order plan use. A delivery whose next delivery has not arrived yet is not judged; a branch with no count
+56-day (8-week) figure the count sheet and the order plan use. A delivery whose next delivery has not arrived yet is not judged; a branch with no count
 to start from has no figure (the row says so). Per branch and month the rows add up to rounds measured, the median days of cover, the stock-outs
 and the rounds that had any.
 """
@@ -64,7 +64,7 @@ def branch_rows(con, branch_id: int, d0: date, d1: date, today: date = None) -> 
             row["why"] = "ยังไม่มีผลตรวจนับตั้งต้น"
             rows.append(row)
             continue
-        if use is None:                                        # one 28-day average per branch and window, not one per order
+        if use is None:                                        # one 56-day average per branch and window, not one per order
             use = ST._usage(con, branch_id, min(d1, today - timedelta(days=1)))
         codes = [c for (c,) in con.execute("SELECT ingredient_code FROM bc_order_line WHERE order_id=?", (oid,))]
         cover, out = [], []

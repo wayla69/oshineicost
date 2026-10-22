@@ -235,6 +235,21 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
     days_n = con.execute("SELECT COUNT(*) FROM bc_issue_slip WHERE branch_id=? AND status='confirmed' AND slip_date"
                          " BETWEEN ? AND ?", (branch_id, w0, w1)).fetchone()[0]
 
+    # PR-H8 · the guide beside the boxes: the mean issued (used + waste) quantity of the item on the SAME weekday over the last
+    # HISTORY_WEEKS weeks, from the confirmed slips only (a confirmed day without the item counts as 0)
+    from .forecast import HISTORY_WEEKS
+    same_days = [(d - timedelta(days=7 * k)).isoformat() for k in range(1, HISTORY_WEEKS + 1)]
+    ph = ",".join("?" * len(same_days))
+    nrm_days = {x for (x,) in con.execute(f"SELECT slip_date FROM bc_issue_slip WHERE branch_id=? AND status='confirmed'"
+                                          f" AND slip_date IN ({ph})", (branch_id, *same_days))}
+    nrm_sum = {}
+    if nrm_days:
+        for c, q in con.execute(
+                "SELECT l.ingredient_code, SUM(COALESCE(l.qty_used_base, 0) + COALESCE(l.qty_waste_base, 0)) FROM bc_issue_line l"
+                f" JOIN bc_issue_slip s USING(slip_id) WHERE s.branch_id=? AND s.status='confirmed' AND s.slip_date IN ({ph})"
+                " GROUP BY l.ingredient_code", (branch_id, *same_days)):
+            nrm_sum[c] = q or 0.0
+
     def in_count(code, qb, factor):
         return None if qb is None else round(qb / (factor or 1.0), 6)
     # PR-M3: what the branch really issues comes first inside a zone (it fills the same few lines every day), and
@@ -263,6 +278,8 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
             # the estimate matters on the slip when it takes the stock from something to nothing (without it the shelf would look stocked)
             it["estimate_matters"] = bool(eq and sq is not None and sq <= 0 < sq + eq)
             it["avg_used_7d"] = round(sums[it["code"]] / days_n / f, 6) if days_n and it["code"] in sums else None
+            it["normal_days"] = len(nrm_days)
+            it["normal_qty"] = round(nrm_sum.get(it["code"], 0.0) / len(nrm_days) / f, 6) if nrm_days else None
             ln = lines.get(it["code"])
             if ln:
                 same = (ln["unit"] or "") == (it["count_unit"] or "")

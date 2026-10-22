@@ -73,7 +73,7 @@ const _OHB_HELP = {
   issuevar: {
     get _() {                                                       // PR-S4: with no recipe the comparators are the branch's normal and the all-branch median
       return typeof BC_MODE !== 'undefined' && BC_MODE === 'stock'
-        ? ['เทียบมูลค่าที่เบิกจริงกับปกติของสาขา (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 4 สัปดาห์ก่อน ปรับตามยอดขาย) และค่ากลางทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
+        ? ['เทียบมูลค่าที่เบิกจริงกับปกติของสาขา (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย) และค่ากลางทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
           'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินปกติของสาขาหรือค่ากลางมากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ']
         : ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
           'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'];
@@ -1112,7 +1112,7 @@ function _isrDailyTableStock(d, openFn, th) {
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.normal_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.median_value)}</td>
       <td class="py-1 pr-2 text-right">${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
-    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ปกติของสาขา = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 4 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · ค่ากลางทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
+    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ปกติของสาขา = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · ค่ากลางทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
 function _isrDayItemsStock(d, head, note, flags) {
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
@@ -1250,7 +1250,7 @@ let _ohbPsView = 'bench';     // PR-X: the all-branch list reads against the ben
 const _OHB_PS_ROWS = 60;
 function _ohbPsQS() {
   const sel = document.getElementById('ohbPsBranch'), w = document.getElementById('ohbPsWeeks');
-  return `weeks=${w ? w.value : 4}${sel && sel.value ? '&branch_id=' + sel.value : ''}`;
+  return `weeks=${w ? w.value : 8}${sel && sel.value ? '&branch_id=' + sel.value : ''}`;
 }
 function _ohbPsNote(it) {
   if (it.steady === false) return _bmcChip(`ใช้ไม่สม่ำเสมอ (แกว่ง ±${_bmcNum(it.swing_pct, 0)}%)`, 'var(--amber-ink)');
