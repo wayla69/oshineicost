@@ -19,8 +19,16 @@ from fastapi.testclient import TestClient
 import auth
 from bom_center import price_submissions as PS
 from bom_center import todo as TD
-from test_bom_center_s11 import udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
+from bom_center import close_settings as CS
+from test_bom_center_s11 import udon as _udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
 from test_bom_center_s4b import con  # noqa: F401  (schema ensured on a scratch DB)
+
+
+@pytest.fixture
+def udon(_udon):
+    """PR-S1: the states of the recipe items (draft, review, acknowledge) are read in full mode; stock mode, the default, hides them."""
+    CS.set_mode(_udon, "test", "full")
+    return _udon
 
 TODAY = date(2026, 10, 7)
 M = "2026-09"

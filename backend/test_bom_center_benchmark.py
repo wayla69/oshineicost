@@ -541,6 +541,8 @@ def test_the_recipe_check_cache_is_dropped_with_the_usage_cache(rc, monkeypatch)
 
 # ── 7 · หน้างาน ─────────────────────────────────────────────────────────────────────────────────────
 def test_todo_lists_the_ten_times_rows_for_the_analyst_only(rc):
+    from bom_center import close_settings as CS
+    CS.set_mode(rc, "test", "full")           # PR-S1: the recipe-and-unit check is a recipe task; stock mode (the default) leaves it out
     out = TD.build(rc, today=TODAY)
     it = next(i for i in out["items"] if i["key"] == "recipe_check_units")
     assert it["title"] == "ตรวจหน่วยของวัตถุดิบที่ยอดซื้อต่างจากสูตรเกิน 10 เท่า (1 รายการ)" and it["count"] == 1 and it["status"] == "todo"

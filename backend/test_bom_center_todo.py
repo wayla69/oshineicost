@@ -21,8 +21,17 @@ from bom_center import central as CE
 from bom_center import stock as ST
 from bom_center import todo as TD
 from bom_center import variance as VA
-from test_bom_center_s11 import _report, udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
+from bom_center import close_settings as CS
+from test_bom_center_s11 import _report, udon as _udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
 from test_bom_center_s4b import con  # noqa: F401  (sales Sep–Oct 2026 at branch 1, default order calendar)
+
+
+@pytest.fixture
+def udon(_udon):
+    """PR-S1: this module is about the recipe items (the monthly draft, checks, release, acknowledgement), which stock mode - the default -
+    hides; its list is read in full mode, as it was written."""
+    CS.set_mode(_udon, "test", "full")
+    return _udon
 
 TODAY = date(2026, 10, 7)        # a Wednesday: Saturday's cutoff (Thursday 13:15) is the nearest in the default calendar
 M = "2026-09"

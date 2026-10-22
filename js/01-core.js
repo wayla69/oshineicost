@@ -480,6 +480,18 @@ function onSessionExpired() {
 // so nothing below hides anything (current behaviour preserved).
 window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };
 
+// PR-S1 · the system mode (app_settings bc_mode, GET /api/bom-center/mode): 'stock' hides every recipe page, task and reminder, 'full' is the
+// whole app. Loaded once after sign-in (loadBcMode), before any menu is drawn; 'stock' is also the answer when the server cannot be asked.
+let BC_MODE = 'stock';
+async function loadBcMode() {
+  try {
+    const r = await fetch(`${API}/api/bom-center/mode`);
+    const j = r.ok ? await r.json() : null;
+    BC_MODE = j && j.mode === 'full' ? 'full' : 'stock';
+  } catch (e) { BC_MODE = 'stock'; }
+  return BC_MODE;
+}
+
 // Sidebar tab → module it requires. Tabs absent from the map (e.g. 'manual') are
 // always allowed to any logged-in user. Mirrors MODULE_RULES in backend/auth.py.
 const TAB_MODULE = {
@@ -534,8 +546,15 @@ function _startTitle(t, pane) {
   const hit = pane ? _supplyItemOf(t, pane) : null;
   return hit ? `${hit.chip.label} · ${hit.item.label}` : (PAGE_TITLES[t] || t);
 }
+// PR-S1: the start entries a role sees in the current mode - a recipe page is dropped in stock mode; the kitchen's recipe entry becomes the register
+const _START_KITCHEN_STOCK = ['bomcenter', 'ดูทะเบียนวัตถุดิบ (อ่านอย่างเดียว ระหว่างขึ้นระบบสต๊อก)', 'ing'];
+function _roleStart(role) {
+  const list = ROLE_START[role] || ROLE_START.management;
+  if (role === 'innovation') return list.map(e => bomHidden(e[0], e[2]) ? _START_KITCHEN_STOCK : e);
+  return list.filter(e => !bomHidden(e[0], e[2]));
+}
 function showStartCard(role) {
-  const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 5);   // every entry of a role shows (ประสานงานขาย has 5)
+  const items = _roleStart(role).filter(([t]) => tabAllowed(t)).slice(0, 5);   // every entry of a role shows (ประสานงานขาย has 5)
   // The branch role has no home page: the card sits on top of the page it landed on.
   // PR-D1: on a desktop the landing page is the launcher, so the card sits on it
   const host = document.getElementById(_launcherLanding() ? 'tab-launcher' : (tabAllowed('home') ? 'tab-home' : 'tab-' + activeTab)); if (!host || !items.length) return;
@@ -608,6 +627,7 @@ function hasModule(m) {
   return (window.AUTH.modules || []).includes(m);
 }
 function tabAllowed(name) {
+  if (bomHidden(name)) return false;                        // PR-S1: a whole recipe page (bomcost, branchbom, menuimpact) in stock mode
   const m = TAB_MODULE[name];
   if (Array.isArray(m)) return m.some(hasModule);           // any one of them opens it
   return !m || hasModule(m);                                // unmapped → always allowed
@@ -679,6 +699,7 @@ async function doLogin(ev) {
                     role:data.role, branch:data.branch || null, modules:data.modules || [] };
     _sessionExpiredShown = false;
     await _loadAuthNames();
+    await loadBcMode();                       // PR-S1: before any menu is drawn
     hideLogin();
     applyPermissions();
     // Force a password change off the shared/temporary default before using the app.
@@ -2740,7 +2761,8 @@ function switchTab(name, direct) {
     return;
   }
   // Permission guard — refuse tabs the current role can't access (server enforces too).
-  if (!tabAllowed(name)) { name = firstAllowedTab(); }
+  // PR-S1: a recipe page in stock mode (a bookmark, an old link) opens the role's landing page instead - no error
+  if (!tabAllowed(name)) { name = (bomHidden(name) && tabAllowed(_landingTab())) ? _landingTab() : firstAllowedTab(); }
   activeTab = name;
   // Reading mode hides the app chrome via a <body> class for the Management
   // Report; without this it would follow the reader into every other tab.
@@ -2855,12 +2877,12 @@ const SUPPLY_CHIPS = [
   { key: 'monthly', label: 'งานประจำเดือน', items: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
+    { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'rel', bom: true, label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
   { key: 'recipes', label: 'สูตรและการประกาศใช้', items: [
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', roles: ['innovation'] },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', roles: ['innovation'] }] },
+    { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', roles: ['innovation'] },
+    { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', roles: ['innovation'] }] },
   { key: 'orders', label: 'ใบสั่งซื้อ', items: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', roles: ['warehouse', 'salessupport', 'analyst', 'management'] },
     { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
@@ -2879,8 +2901,8 @@ const SUPPLY_CHIPS = [
   { key: 'base', label: 'ข้อมูลตั้งต้น', items: [
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'rcheck', label: 'ตรวจสูตรด้วยยอดซื้อ', mods: ['bom.center'], roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
+    { tab: 'bomcenter', pane: 'rcheck', bom: true, label: 'ตรวจสูตรด้วยยอดซื้อ', mods: ['bom.center'], roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'overview', bom: true, label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', roles: ['branch', 'analyst', 'management'] },
     { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] },
@@ -2989,7 +3011,7 @@ const DEPARTMENTS = [
     { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'coin' },
     { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'bar' },
     { tab: 'cost', label: 'ต้นทุน', icon: 'pie' },
-    { tab: 'bomcenter', pane: 'rel', label: 'รับทราบสูตร', icon: 'shield' }] },
+    { tab: 'bomcenter', pane: 'rel', bom: true, label: 'รับทราบสูตร', icon: 'shield' }] },
   { key: 'mkt', label: 'การตลาด', duty: 'ลูกค้า เมนู และเสียงลูกค้า', icon: 'mega', hue: 'mkt', roles: ['marketing'], pages: [
     { tab: 'buffetperf', label: 'ลูกค้าและบุฟเฟ่ต์', icon: 'users' },
     { tab: 'childbuffet', label: 'บุฟเฟ่ต์เด็ก', icon: 'child' },
@@ -3016,27 +3038,27 @@ const DEPARTMENTS = [
   { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], pages: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' },
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', icon: 'book' },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
-    { tab: 'bomcenter', pane: 'rel', label: 'ตรวจและประกาศใช้', icon: 'shield' },
+    { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
+    { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
+    { tab: 'bomcenter', pane: 'rel', bom: true, label: 'ตรวจและประกาศใช้', icon: 'shield' },
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' },
     { tab: 'bomcenter', pane: 'conv', label: 'หน่วยและการแปลง', icon: 'scale' },
-    { tab: 'bomcenter', pane: 'rcheck', label: 'ตรวจสูตรด้วยยอดซื้อ', icon: 'count' },
-    { tab: 'bomcenter', pane: 'overview', label: 'ความพร้อมและรหัสสูตรเดิม', icon: 'gauge' },
-    { tab: 'bomcost', label: 'ต้นทุนตามสูตร', icon: 'calc' },
+    { tab: 'bomcenter', pane: 'rcheck', bom: true, label: 'ตรวจสูตรด้วยยอดซื้อ', icon: 'count' },
+    { tab: 'bomcenter', pane: 'overview', bom: true, label: 'ความพร้อมและรหัสสูตรเดิม', icon: 'gauge' },
+    { tab: 'bomcost', bom: true, label: 'ต้นทุนตามสูตร', icon: 'calc' },
     { tab: 'costhead', label: 'ต้นทุนต่อหัว', icon: 'coin' },
     { tab: 'coverage', label: 'ความครอบคลุมต้นทุน', icon: 'pie' },
-    { tab: 'menuimpact', label: 'วิเคราะห์วัตถุดิบ', icon: 'flask' },
+    { tab: 'menuimpact', bom: true, label: 'วิเคราะห์วัตถุดิบ', icon: 'flask' },
     { tab: 'menuefficiency', label: 'เป้าลดต้นทุน', icon: 'target' },
-    { tab: 'branchbom', label: 'BoM รายสาขา', icon: 'store' },
+    { tab: 'branchbom', bom: true, label: 'BoM รายสาขา', icon: 'store' },
     { tab: 'simhub', label: 'ตัวจำลอง', icon: 'calc' },
     { tab: 'profit', label: 'กำไร SKU', icon: 'coin' },
     { tab: 'benchmark', label: 'เทียบสาขา', icon: 'bar' },
     { tab: 'pnl', label: 'P&L เชิงลึก', icon: 'trend' },
     { tab: 'pnlbill', label: 'P&L ต่อบิล', icon: 'cancel' }] },
   { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], pages: [
-    { tab: 'bomcenter', pane: 'rec', label: 'สูตรตามระดับราคา', icon: 'book' },
-    { tab: 'bomcenter', pane: 'prep', label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
+    { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
+    { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' }] },
   { key: 'ss', label: 'ประสานงานขาย', duty: 'คิวใบสั่งซื้อ เคลม และรอบส่ง', icon: 'head', hue: 'ss', roles: ['salessupport'], pages: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', icon: 'inbox' },
@@ -3130,6 +3152,26 @@ function allPagesModel(ok) {
   ALLPAGES_EXTRA.forEach(e => add('อื่น ๆ', e));
   return groups;
 }
+// PR-S1 · stock mode (BC_MODE, loadBcMode): an entry flagged `bom: true` in DEPARTMENTS or SUPPLY_CHIPS is a recipe page and is hidden while the
+// mode is 'stock'. The flag names the PAGE: every occurrence of the same tab|pane (the department tile, the supply chip, the search words,
+// หน้ารายงานทั้งหมด, the start card, a deep link) follows, because they all ask bomHidden / tabAllowed. An entry without `pane` hides the whole tab.
+let _bomKeys = null;
+function bomKeySet() {
+  if (!_bomKeys) {
+    const s = new Set();
+    const add = e => { if (e && e.bom) s.add(e.tab + '|' + (e.pane || '')); };
+    DEPARTMENTS.forEach(d => d.pages.forEach(add));
+    SUPPLY_CHIPS.forEach(c => c.items.forEach(add));
+    _bomKeys = s;
+  }
+  return _bomKeys;
+}
+function bomHidden(tab, pane) {
+  if (BC_MODE === 'full') return false;
+  let s;
+  try { s = bomKeySet(); } catch (e) { return false; }      // the registry is not defined yet (a call while the file loads)
+  return s.has(tab + '|') || (!!pane && s.has(tab + '|' + pane));
+}
 // ── end page registry (scripts/check-departments.js evaluates everything from `const _SUPPLY_CENTRE` to this line)
 // Group colours (docs/ui-kit/theme-groups.css): the group a tab belongs to -
 // its cluster's key, else one of the stand-alone entries below.
@@ -3213,6 +3255,11 @@ const _SUPPLY_LANDING = {    // the entry click per role: the chip (and item) wh
   warehouse: { chip: 'orders', tab: 'orderhub', pane: 'queue' },
   operation: { chip: 'orders', tab: 'orderhub', pane: 'comp' }, accounting: { chip: 'close', tab: 'bomcenter', pane: 'issue' },
 };
+// PR-S1: the kitchen's daily page in stock mode is the register (read only), not the recipes; every other landing is unchanged
+function _supplyLanding(role) {
+  if (role === 'innovation' && bomHidden('bomcenter', 'rec')) return { chip: 'master', tab: 'bomcenter', pane: 'ing' };
+  return _SUPPLY_LANDING[role || ''] || {};
+}
 // a login whose _SUPPLY_LANDING names its daily supply page and who may open หน้างาน
 function _supplyPhoneRole() {
   const r = window.AUTH && window.AUTH.enabled && window.AUTH.role;
@@ -3315,7 +3362,7 @@ function _supplyItemOf(tab, pane) {
 // an item opens when its tab does and, if it names `mods`, the user holds one of them
 // ... and, since PR-M2, when the person's role is one the item names (auth off: everything shows, as the role is management)
 function _supplyRoleOk(it) { return !it.roles || it.roles.includes((window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'); }   // auth off = the manager's bar
-function _supplyItemAllowed(it) { return tabAllowed(it.tab) && (!it.mods || it.mods.some(hasModule)) && _supplyRoleOk(it); }
+function _supplyItemAllowed(it) { return tabAllowed(it.tab) && !bomHidden(it.tab, it.pane) && (!it.mods || it.mods.some(hasModule)) && _supplyRoleOk(it); }   // PR-S1: a recipe pane is hidden in stock mode
 function _supplyChipAllowed(ch) { return ch.items.some(_supplyItemAllowed); }
 
 // Open one item of the module. The pane is remembered BEFORE switchTab so the
@@ -3324,7 +3371,7 @@ function _supplyChipAllowed(ch) { return ch.items.some(_supplyItemAllowed); }
 function supplyGo(o) {
   o = o || {};
   let tab = o.tab, pane = o.pane || null;
-  if (!tab || !tabAllowed(tab)) {
+  if (!tab || !tabAllowed(tab) || bomHidden(tab, pane)) {       // PR-S1: a recipe pane in stock mode lands on the role's first visible page
     const first = SUPPLY_CHIPS.flatMap(c => c.items).find(_supplyItemAllowed);
     if (!first) return;
     tab = first.tab; pane = first.pane || null;
@@ -3354,7 +3401,7 @@ function supplyDeepLink(link) {
   if (q.get('go') !== 'supply') return false;
   let tab = q.get('tab') || 'supplyhome', pane = q.get('pane') || null;
   if (!SUPPLY_CHIPS.some(c => c.items.some(i => i.tab === tab))) tab = 'supplyhome';
-  if (pane && !_supplyItemOf(tab, pane)) pane = null;
+  if (pane && (!_supplyItemOf(tab, pane) || bomHidden(tab, pane))) pane = null;   // PR-S1: a recipe pane in stock mode opens the tab's own first page
   supplyGo({ tab, pane });
   return true;
 }
@@ -3370,8 +3417,8 @@ function supplyChipOpen(key) {
 // The sidebar entry (the module's nav items all call this; which one is visible is a permission matter).
 function supplyOpen() {
   if (tabAllowed('supplyhome')) { supplyGo({ tab: 'supplyhome' }); return; }   // everyone lands on หน้างาน
-  const want = _SUPPLY_LANDING[(window.AUTH && window.AUTH.role) || ''] || {};
-  if (want.tab && tabAllowed(want.tab) && !_supplyLastGet()[want.chip]) { supplyGo({ tab: want.tab, pane: want.pane }); return; }
+  const want = _supplyLanding((window.AUTH && window.AUTH.role) || '');
+  if (want.tab && tabAllowed(want.tab) && !bomHidden(want.tab, want.pane) && !_supplyLastGet()[want.chip]) { supplyGo({ tab: want.tab, pane: want.pane }); return; }
   const ch = (want.chip && SUPPLY_CHIPS.find(c => c.key === want.chip && _supplyChipAllowed(c))) || SUPPLY_CHIPS.find(_supplyChipAllowed);
   if (ch) supplyChipOpen(ch.key);
 }

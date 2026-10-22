@@ -343,6 +343,7 @@ async function init() {
     showLogin();
     return;                       // hold the app until the user logs in
   }
+  await loadBcMode();             // PR-S1: the system mode, before the launcher, the rail and the pages are drawn
   applyPermissions();
   await startApp();
 }

@@ -8,7 +8,9 @@
 //   * a department page names a tab that TABS does not know, a pane that no supply chip lists, or an icon DEPT_ICONS lacks;
 //   * a department hue has no --dept-<hue>-ink / -tint / -side token in docs/ui-kit/tokens.css (light), or no ink / tint in the
 //     dark block; or the departments are not the ten the owner approved, in that order;
-//   * a role named by a department or a page is not a role of the app.
+//   * a role named by a department or a page is not a role of the app;
+//   * PR-S1 · a `bom: true` entry (a recipe page, hidden in stock mode) is not a real page, or the same page is flagged in one place and
+//     not in another, or a role is left with no page at all in stock mode. It also prints how many pages each role sees in each mode.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -65,6 +67,62 @@ DEPARTMENTS.forEach(d => {
   });
 });
 
+// ── PR-S1 · the recipe pages (bom: true) ──
+const bomFlag = new Map();     // tab|pane -> { flagged, plain } over the DEPARTMENTS pages and the SUPPLY_CHIPS items
+const countFlag = e => {
+  const k = e.tab + '|' + (e.pane || '');
+  const c = bomFlag.get(k) || { flagged: 0, plain: 0 };
+  if (e.bom === true) c.flagged++; else c.plain++;
+  bomFlag.set(k, c);
+};
+DEPARTMENTS.forEach(d => d.pages.forEach(countFlag));
+SUPPLY_CHIPS.forEach(c => c.items.forEach(countFlag));
+const tabFileExists = tab => fs.readdirSync(path.join(root, 'tabs')).some(f => f.replace(/^\d+-|\.html$/g, '') === tab);
+bomFlag.forEach((c, k) => {
+  if (!c.flagged) return;
+  const [tab, pane] = k.split('|');
+  if (c.plain) bad(`bom: ${k} is flagged bom: true in ${c.flagged} place(s) and not in ${c.plain} other(s) - flag every occurrence of the page`);
+  if (!tabKeys.has(tab) || !tabFileExists(tab)) bad(`bom: ${k} is flagged bom: true but "${tab}" is not a real page (TABS / tabs/NN-${tab}.html)`);
+  if (pane && !chipPane.has(k)) bad(`bom: ${k} is flagged bom: true but no SUPPLY_CHIPS item lists pane "${pane}"`);
+});
+const bomKeys = [...bomFlag.entries()].filter(([, c]) => c.flagged).map(([k]) => k);
+if (!bomKeys.length) bad('bom: no entry is flagged bom: true (the recipe pages of stock mode)');
+
+// ── PR-S1 · pages per role and mode: the live visibility rules (tabAllowed, _supplyItemAllowed, deptPageAllowed, deptVisible) run on each role's modules ──
+const fnSrc = (src, name) => {
+  const m = new RegExp('^(async )?function ' + name + '\\(', 'm').exec(src);
+  if (!m) throw new Error('function ' + name + ' not found');
+  const open = src.indexOf('{', src.indexOf(')', m.index));
+  let depth = 0, j = open;
+  for (; j < src.length; j++) { if (src[j] === '{') depth++; else if (src[j] === '}' && --depth === 0) break; }
+  return src.slice(m.index, j + 1);
+};
+const launcher = read('js/18-launcher.js');
+const modeRows = {};
+try {
+  const pre = core.slice(core.indexOf('const TAB_MODULE'), core.indexOf('function firstAllowedTab'));
+  const win = { AUTH: { enabled: true, role: 'management', modules: [] } };
+  const vctx = vm.createContext({ console, window: win, document: {}, localStorage: {}, navigator: {} });
+  vm.runInContext('var BC_MODE = "stock";', vctx);
+  vm.runInContext(pre, vctx, { filename: 'js/01-core.js (permissions)' });
+  vm.runInContext(core.slice(a, b), vctx, { filename: 'js/01-core.js (registry)' });
+  vm.runInContext(['_supplyRoleOk', '_supplyItemAllowed'].map(n => fnSrc(core, n)).join('\n')
+    + '\n' + ['_deptRole', 'deptPageAllowed', 'deptVisible'].map(n => fnSrc(launcher, n)).join('\n'), vctx, { filename: 'visibility' });
+  const roleKeys = Object.keys(vm.runInContext('ROLE_MODULES_TH', vctx));
+  for (const role of roleKeys) {
+    modeRows[role] = {};
+    for (const mode of ['stock', 'full']) {
+      vm.runInContext(`BC_MODE = ${JSON.stringify(mode)}; window.AUTH = { enabled: true, role: ${JSON.stringify(role)}, modules: ROLE_MODULES_TH[${JSON.stringify(role)}] };`, vctx);
+      const rows = vm.runInContext('deptVisible().map(r => ({ d: r.dept.key, pages: r.pages.map(x => x.p.tab + "|" + (x.p.pane || "")) }))', vctx);
+      const keys = new Set(rows.flatMap(r => r.pages));
+      modeRows[role][mode] = { depts: rows.length, pages: keys.size, keys };
+    }
+    const st = modeRows[role].stock, fu = modeRows[role].full;
+    if (fu.pages && !st.pages) bad(`bom: the role ${role} sees ${fu.pages} page(s) in full mode and none in stock mode`);
+    bomKeys.forEach(k => { if (st.keys.has(k)) bad(`bom: the role ${role} still sees the recipe page ${k} in stock mode`); });
+  }
+} catch (e) { bad('bom: the visibility check could not run: ' + e.message); }
+
 // ── nothing in TAB_CLUSTERS or SUPPLY_CHIPS is left out ──
 const inDept = new Set(DEPARTMENTS.flatMap(d => d.pages.map(p => p.tab + '|' + (p.pane || ''))));
 const inDeptTab = new Set(DEPARTMENTS.flatMap(d => d.pages.map(p => p.tab)));
@@ -93,3 +151,6 @@ if (fail.length) {
 }
 const pages = DEPARTMENTS.reduce((n, d) => n + d.pages.length, 0);
 console.log(`check-departments: clean — ${DEPARTMENTS.length} departments, ${pages} tiles, ${[...inAll].length} pages in หน้ารายงานทั้งหมด`);
+console.log(`check-departments: ${bomKeys.length} recipe pages flagged bom: true (${bomKeys.join(', ')})`);
+console.log('check-departments: pages (departments) each role sees in stock mode / full mode:');
+Object.entries(modeRows).forEach(([role, m]) => console.log(`  ${role.padEnd(13)} stock ${String(m.stock.pages).padStart(3)} (${m.stock.depts})   full ${String(m.full.pages).padStart(3)} (${m.full.depts})`));

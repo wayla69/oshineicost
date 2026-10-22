@@ -273,7 +273,14 @@ function bmcBranchTable(branches, linkFn) {
   }).join('')}</tbody></table></div>`;
 }
 
+// PR-S1: in stock mode a recipe pane (rec, prep, rel, rcheck, overview) is not shown - the first pane the role's bar lists opens instead
+function _bmcVisiblePane(k) {
+  if (!bomHidden('bomcenter', k)) return k;
+  const it = SUPPLY_CHIPS.flatMap(c => c.items).find(i => i.tab === 'bomcenter' && i.pane && _supplyItemAllowed(i));
+  return it ? it.pane : 'ing';
+}
 function bmcSetSub(k) {
+  k = _bmcVisiblePane(k);
   _bmcSub = k;
   _bmcMonthSync(k);
   ['overview', 'rec', 'prep', 'rel', 'fc', 'cal', 'events', 'zones', 'issue', 'ing', 'price', 'pricefile', 'conv', 'rcheck', 'codereq'].forEach(p => {
@@ -2741,6 +2748,7 @@ async function bmcLoadCalendar() {
   if (bulk) bulk.style.display = w ? '' : 'none';
   bmcLoadBenchmark();
   bmcLoadCloseSettings();
+  bmcLoadMode();
 }
 // ── batch 4b (3.3 · 3.4) · เกณฑ์ผลต่างและการตรวจนับ: the baht floor of a variance reason, and the weekly-count switch ──
 let _bmcCs = null;
@@ -2769,6 +2777,34 @@ async function bmcSaveCloseSettings() {
     _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason_min_baht: baht, cycle_counts: cyc }) });
     bmcStatus('bmcCsStatus', true, `บันทึกแล้ว · ผลต่างขั้นต่ำ ฿${_bmcNum(baht, 0)} · ตรวจนับหมุนเวียน${cyc ? 'เปิด' : 'ปิด'}`);
   } catch (e) { bmcStatus('bmcCsStatus', false, String(e.message || e)); }
+}
+// ── PR-S1 · โหมดระบบ: สต๊อกก่อน (ปิดส่วนสูตร) หรือ เต็มระบบ (รวมสูตร); only management (bom.audit) changes it, the page reloads after a save ──
+const _BMC_MODE_LABEL = { stock: 'สต๊อกก่อน (ปิดส่วนสูตร)', full: 'เต็มระบบ (รวมสูตร)' };
+async function bmcLoadMode() {
+  const box = document.getElementById('bmcModeCard');
+  if (!box) return;
+  let m;
+  try { m = await _bmcJson(`${API}/api/bom-center/mode`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  const w = hasModule('bom.audit'), cur = m.mode === 'full' ? 'full' : 'stock';
+  box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">โหมดระบบ</div>
+      ${uiQ('bmc:mode1', 'โหมดระบบ', '<p>สต๊อกก่อน: ซ่อนหน้าสูตร งานประจำเดือนสูตร และการรับทราบสูตร ข้อมูลสูตรเดิมยังอยู่ครบ สลับกลับได้ทันที</p>')}</div>
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="text-xs" style="color:var(--text-muted)">โหมดปัจจุบัน<br><b id="bmcModeNow" class="text-sm" style="color:var(--text-primary)">${esc(m.label_th || _BMC_MODE_LABEL[cur])}</b></div>
+      <label class="text-xs" style="color:var(--text-muted)">เปลี่ยนเป็น<br>
+        <select id="bmcModeSel" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;min-width:200px;background:var(--bg-input);color:var(--text-primary)">
+          <option value="stock" ${cur === 'stock' ? 'selected' : ''}>${_BMC_MODE_LABEL.stock}</option>
+          <option value="full" ${cur === 'full' ? 'selected' : ''}>${_BMC_MODE_LABEL.full}</option></select></label>
+      ${w ? `<button onclick="bmcSaveMode()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;cursor:pointer">บันทึกโหมด</button>` : ''}
+      <span id="bmcModeStatus" class="text-[11px]" style="color:var(--text-muted)"></span></div>`;
+}
+async function bmcSaveMode() {
+  const sel = document.getElementById('bmcModeSel'), v = sel ? sel.value : '';
+  if (v !== 'stock' && v !== 'full') return;
+  if (!await uiConfirm(`ยืนยันเปลี่ยนโหมดระบบเป็น “${_BMC_MODE_LABEL[v]}”`, { title: 'ยืนยันเปลี่ยนโหมดระบบ', ok: 'บันทึกโหมด', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcModeStatus', null, 'ยังไม่บันทึก'); return; }
+  try {
+    await _bmcJson(`${API}/api/bom-center/mode`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: v }) });
+  } catch (e) { bmcStatus('bmcModeStatus', false, String(e.message || e)); return; }
+  location.reload();
 }
 // ── PR-B4a (1.8) · ปฏิทินเทศกาลและวันหยุด: the events (promotions, festivals) the forecast reads, and the public holidays, read only ──
 let _bmcEv = null, _bmcEvEditId = null;
