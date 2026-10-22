@@ -32,7 +32,7 @@ from .units import Converter, _is_pack_word, norm, unit_word
 DEFAULT_ZONES = (("frozen", "แช่แข็ง"), ("chilled", "แช่เย็น"), ("dry", "ของแห้ง"), ("bar", "บาร์น้ำ"), ("other", "อื่น ๆ"))
 ZONES_KEY = "bc_zones"
 FALLBACK_ZONE = "other"                   # where a guess lands when its zone no longer exists; cannot be deleted
-LOOKBACK_DAYS = 28
+LOOKBACK_DAYS = 7 * _HISTORY_WEEKS      # owner 2026-10-22: the daily-use average reads the same 8 weeks (forecast.HISTORY_WEEKS)
 RECENT_USE_DAYS = 14               # 3.2: an item the recipes used within this many days is on the default slip
 _ZONE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 

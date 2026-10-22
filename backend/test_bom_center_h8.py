@@ -34,7 +34,7 @@ def test_the_constant_is_8_weeks_and_every_default_window_follows_it():
                     (PS.reference_basis, "weeks"), (PS.benchmark_basis, "weeks"), (PS.report, "weeks")):
         assert _default(fn, arg) == FC.HISTORY_WEEKS, (fn.__name__, arg)
     assert _default(FC.backtest, "weeks") == 4                           # the number of evaluated weeks, not the history
-    assert ST.SLIP_MEAN_WEEKS == FC.HISTORY_WEEKS
+    assert ST.SLIP_MEAN_WEEKS == FC.HISTORY_WEEKS and ST.LOOKBACK_DAYS == 7 * FC.HISTORY_WEEKS == 56
     assert IR.NORMAL_WEEKS == FC.HISTORY_WEEKS and IR.MEDIAN_WINDOW_DAYS == 7 * FC.HISTORY_WEEKS == 56
 
 
