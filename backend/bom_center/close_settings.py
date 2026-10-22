@@ -8,6 +8,11 @@
                        full count of every item, whatever this switch says.
 
 Both are the centre's to edit (ตั้งค่า); every change is audited. Nothing is read from a request body without a range check.
+
+PR-S1 (owner 2026-10-22, docs/STOCK_FIRST_PLAN.md): a third switch, the system mode, sits beside them:
+
+  bc_mode              stock = stock management only - every recipe page, recipe task and recipe reminder is hidden (default when the key
+                       is absent); full = the whole app with the recipes. Nothing is deleted either way. Management alone changes it.
 """
 from .master import audit
 
@@ -16,6 +21,11 @@ KEY_CYCLE = "bc_cycle_counts"
 MIN_BAHT_DEFAULT = 500.0
 MIN_BAHT_MIN, MIN_BAHT_MAX = 0.0, 100000.0
 CYCLE_DEFAULT = False
+KEY_MODE = "bc_mode"
+MODE_STOCK, MODE_FULL = "stock", "full"
+MODES = (MODE_STOCK, MODE_FULL)
+MODE_DEFAULT = MODE_STOCK
+MODE_LABEL_TH = {MODE_STOCK: "สต๊อกก่อน (ปิดส่วนสูตร)", MODE_FULL: "เต็มระบบ (รวมสูตร)"}
 
 
 def _get(con, key):
@@ -72,3 +82,30 @@ def save(con, who: str, reason_min=None, cycle=None) -> dict:
         _put(con, KEY_CYCLE, "1" if cycle else "0")
         audit(con, who, "cycle_counts", "app_settings", KEY_CYCLE, "1" if old else "0", "1" if cycle else "0")
     return settings(con)
+
+
+def mode(con) -> str:
+    """The system mode: `stock` (the default, also for an unreadable value) or `full`."""
+    raw = _get(con, KEY_MODE)
+    v = str(raw).strip().lower() if raw is not None else MODE_DEFAULT
+    return v if v in MODES else MODE_DEFAULT
+
+
+def mode_info(con) -> dict:
+    m = mode(con)
+    return {"mode": m, "label_th": MODE_LABEL_TH[m]}
+
+
+def stock_mode(con) -> bool:
+    return mode(con) == MODE_STOCK
+
+
+def set_mode(con, who: str, value) -> dict:
+    """Save the mode (`stock` or `full`), audited with the old and the new value."""
+    v = value.strip().lower() if isinstance(value, str) else None
+    if v not in MODES:
+        raise ValueError("โหมดต้องเป็น stock หรือ full")
+    old = mode(con)
+    _put(con, KEY_MODE, v)
+    audit(con, who, "bc_mode", "app_settings", KEY_MODE, old, v)
+    return mode_info(con)

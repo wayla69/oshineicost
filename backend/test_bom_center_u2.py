@@ -189,6 +189,8 @@ def test_the_master_gaps_ride_on_the_backlog_card():
 
 def test_the_analyst_sees_the_work_once(con, monkeypatch):  # noqa: F811
     import bom_center.backlog as BL
+    from bom_center import close_settings as CS
+    CS.set_mode(con, "test", "full")                   # PR-S1: the recipe backlog card is part of the full list; stock mode (the default) leaves it out
     monkeypatch.setattr(BL, "build", lambda c, top=10: dict(_BACKLOG))
     monkeypatch.setattr(TD, "_master_gaps_item", lambda c: TD._e(
         "master_gaps", 35, "setup", "ข้อมูลตั้งต้นที่ยังว่าง", "todo", "", count=188, owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์",

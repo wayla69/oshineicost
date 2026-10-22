@@ -21,8 +21,16 @@ import auth
 import core
 from bom_center import nav_badges as NB
 from bom_center import todo as TD
-from test_bom_center_s11 import udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
+from bom_center import close_settings as CS
+from test_bom_center_s11 import udon as _udon  # noqa: F401  (branch 1 = อุดรธานี, the centre's September report)
 from test_bom_center_s4b import con  # noqa: F401  (schema ensured on a scratch DB)
+
+
+@pytest.fixture
+def udon(_udon):
+    """PR-S1: the badge tests count the recipe tasks too (a draft sent for review), which stock mode - the default - hides: read in full mode."""
+    CS.set_mode(_udon, "test", "full")
+    return _udon
 
 ROOT = Path(__file__).resolve().parent.parent
 TODAY = date(2026, 10, 7)
@@ -294,11 +302,12 @@ def test_the_search_is_a_dialog_with_the_keyboard_of_the_brief_and_no_backend():
     assert "/api/" not in _fn(LAUNCHER, "pgSearchResults") and "/api/" not in _fn(LAUNCHER, "pgIndex")
 
 
-def _harness(tmp_path, role, expr, allowed="() => true"):
-    """Run the real registry (js/01-core.js) and the real search / badge functions (js/18-launcher.js) in node with the permission checks stubbed."""
+def _harness(tmp_path, role, expr, allowed="() => true", mode="full"):
+    """Run the real registry (js/01-core.js) and the real search / badge functions (js/18-launcher.js) in node with the permission checks stubbed.
+    PR-S1: `mode` is the system mode (BC_MODE) the registry runs in - `full` = every page, the setting these tests were written for."""
     a, b = CORE.index("const _SUPPLY_CENTRE"), CORE.index("// ── end page registry")
     fns = "\n".join(_fn(LAUNCHER, n) for n in ("_deptRole", "deptPageAllowed", "deptVisible", "navPageCount", "navBadgeText", "pgNorm", "_pgEntry", "pgIndex", "_pgScore", "pgSearchResults"))
-    prelude = (f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }};\n"
+    prelude = (f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }}; let BC_MODE = '{mode}';\n"
                f"const tabAllowed = {allowed}; const hasModule = () => true; const _supplyItemAllowed = it => tabAllowed(it.tab); const _noEmoji = s => s;\n"
                "const _PG_MAX = 12, _PG_IDLE = 8;\n" + _const(LAUNCHER, "_NB") + "\n")
     f = tmp_path / "harness.js"

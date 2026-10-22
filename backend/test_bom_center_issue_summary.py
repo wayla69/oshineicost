@@ -151,6 +151,8 @@ def test_posting_needs_a_confirmed_period_and_locks_it(con):  # noqa: F811
 
 # ── หน้างาน ──────────────────────────────────────────────────────────────────
 def test_the_close_step_goes_blocked_todo_done(con):  # noqa: F811
+    from bom_center import close_settings as CS
+    CS.set_mode(con, "test", "full")          # PR-S1: the nine close steps are the full list (stock mode drops step 1, the recipe version in force)
     end = _period(con)
     today = date(2026, 10, 3)
 

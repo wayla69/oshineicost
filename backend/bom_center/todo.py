@@ -57,6 +57,31 @@ REVIEW_KEYS = {
     "acknowledge": (("analyst",), "queue"),
 }
 STATE_TH = {"todo": "ยังไม่เสร็จ", "review": "รอตรวจ", "done": "เสร็จแล้ว"}
+
+# PR-S1 (owner 2026-10-22, docs/STOCK_FIRST_PLAN.md): while close_settings.mode is `stock` build() leaves out every item below - the recipe
+# (BoM) work the app does not take up yet. Nothing is deleted: in `full` mode the list is exactly what it was. Base keys (a branch suffix is dropped).
+RECIPE_KEYS = (
+    "draft",                    # the kitchen's monthly recipe draft and its "ส่งตรวจ"
+    "review_pending",           # the analyst's review of that draft
+    "unmatched_pos",            # the draft's menus not yet matched to POS codes
+    "checks",                   # the release checks of the draft
+    "release",                  # the analyst's release (ประกาศใช้) of the version
+    "acknowledge",              # management's acknowledgement of the released version
+    "sub_recipes",              # the prepared items that still lack a sub-recipe
+    "code_review",              # the legacy recipe codes whose name differs from the register
+    "recipe_check_units",       # the units checked against real purchases versus the recipes (ตรวจสูตรด้วยยอดซื้อ)
+    "backlog",                  # the data-quality backlog ranked by the plates a recipe line touches
+    "feedback_formula_excess",  # the task "ตรวจสูตร" the variance reasons make (opens ตรวจสูตรด้วยยอดซื้อ)
+    "release_in_force",         # close step 1: the recipe version in force for the month
+)
+
+
+def is_recipe_item(it: dict) -> bool:
+    """True for an item / close step of RECIPE_KEYS (a feedback task is named by its rule: its key is `feedback:<task key>`)."""
+    key = _base_key(it.get("key"))
+    if key == "feedback":
+        key = f"feedback_{it.get('rule')}"
+    return key in RECIPE_KEYS
 _ROUND_SUFFIX = re.compile(r"_(1|2|salmon)$")
 
 
@@ -851,21 +876,33 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     week_br = [by_id[i] for i in week_br if i in by_id] if not chosen else week_br
     close_br = [chosen] if chosen else [by_id[i] for i in sorted(active_ids) if i in by_id]
     centre = not scoped_branch
+    from .close_settings import stock_mode
+    stock = stock_mode(con)                                  # PR-S1: stock mode leaves out every item of RECIPE_KEYS
     items = []
     if centre:
         items += _setup_items(con)
         items += _unit_review_items(con)
         items += _code_request_items(con)
-        items += _recipe_check_items(con, today)
+        if not stock:
+            items += _recipe_check_items(con, today)
         if chosen is None:                                   # the whole-centre list, not one branch seen by the centre (the reminders ask for those)
-            items = _merge_gaps_into_backlog(items, _backlog_item(con))
+            items = _merge_gaps_into_backlog(items, [] if stock else _backlog_item(con))
             items += _feedback_items(con)
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
     close = _close_steps(con, month, close_br, scoped=bool(scoped_branch))
+    in_force = close["steps"][0]["detail"]
+    if stock:
+        items = [it for it in items if not is_recipe_item(it)]
+        for it in items:
+            if it.get("key") == "master_seed":                # the seed button lives on the register page, which stays
+                it["go"] = {"tab": "bomcenter", "pane": "ing"}
+        close["steps"] = [s for s in close["steps"] if not is_recipe_item(s)]
+        close["done"] = sum(1 for s in close["steps"] if s["status"] == "done")
+        close["total"] = len(close["steps"])
     annotate_states(items + close["steps"], viewer_role)
     this_m = _ym(today)
     return {"month": month, "today": today.isoformat(), "scoped": bool(scoped_branch),
             "branch": chosen, "branches": [b for b in all_br if (not scoped_branch or b["branch_id"] == branch_id)],
-            "release": {"effective_month": _month_add(this_m, 1), "in_force": close["steps"][0]["detail"]},
+            "release": {"effective_month": _month_add(this_m, 1), "in_force": in_force},
             "items": items, "close": close}

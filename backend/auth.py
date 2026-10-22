@@ -376,6 +376,10 @@ MODULE_RULES = [
     # are read and acknowledged by the roles that own them (the router checks which); the ranked data-quality backlog is the analyst's
     ("GET", "/api/bom-center/close-settings",         {"supply.ordering", "bom.center", "ops.report", "cost.analysis"}),
     ("W",   "/api/bom-center/close-settings",         {"bom.center"}),
+    # PR-S1 the system mode: every signed-in role reads it (the menu is drawn from it - a branch or franchise login holds no sales.overview,
+    # so a rule naming every module is what lets it through); only management (bom.audit) changes it
+    ("GET", "/api/bom-center/mode",                   set(MODULES)),
+    ("W",   "/api/bom-center/mode",                   {"bom.audit"}),
     ("W",   "/api/bom-center/stock/partial-close",    {"branch.stock", "bom.center", "supply.ordering"}),
     ("*",   "/api/bom-center/feedback",               {"bom.center", "bom.recipes", "ops.report", "supply.ordering"}),
     ("GET", "/api/bom-center/backlog",                {"bom.center", "bom.prices", "bom.recipes"}),

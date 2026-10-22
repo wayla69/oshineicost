@@ -47,6 +47,10 @@ def test_only_the_summary_get_is_open_to_the_role():
     rules = [r for r in auth.MODULE_RULES if "franchise.view" in r[2]]
     # PR-F2: besides the one GET prefix, only the six Web Push device endpoints (own devices only, push_api) name the module
     push = [("*", "/api/push/" + p) for p in auth.PUSH_DEVICE_PATHS]
+    # PR-S1: the system mode is read by EVERY signed-in role (the menu is drawn from it), so its GET rule names every module, this one too
+    mode = [r for r in rules if r[1] == "/api/bom-center/mode"]
+    assert mode == [("GET", "/api/bom-center/mode", set(auth.MODULES))]
+    rules = [r for r in rules if r[1] != "/api/bom-center/mode"]
     assert rules[0] == ("GET", "/api/franchise", {"franchise.view"})
     assert [(m, pfx) for m, pfx, _ in rules[1:]] == push
     assert not auth.path_allowed("POST", "/api/push/anything-else", MODS) and not auth.path_allowed("GET", "/api/push", MODS)
@@ -56,6 +60,9 @@ def test_every_ruled_prefix_and_every_unruled_path_is_closed_to_the_role():
     bad = []
     for meths, pfx, mods in auth.MODULE_RULES:
         if pfx == "/api/franchise" or pfx.startswith(OPEN) or pfx in {"/api/push/" + p for p in auth.PUSH_DEVICE_PATHS}:
+            continue
+        if pfx == "/api/bom-center/mode":      # PR-S1: the one read of the system mode is open to every role (its write rule is not)
+            assert auth.path_allowed("GET", pfx, MODS) and not any(auth.path_allowed(m, pfx, MODS) for m in WRITES)
             continue
         for m in (("GET",) if meths == "GET" else ("GET",) + WRITES):
             if auth.path_allowed(m, pfx, MODS):

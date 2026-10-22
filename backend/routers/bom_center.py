@@ -340,6 +340,7 @@ class IngredientEdit(BaseModel):
 
 @router.post("/api/bom-center/ingredients", dependencies=[Depends(require_write_token)])
 def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
+    _register_write_guard(request)
     if not rows:
         raise HTTPException(400, "ไม่มีรายการ")
     for r in rows:
@@ -368,6 +369,7 @@ def bc_ingredients_save(rows: List[IngredientEdit], request: Request):
 def bc_ingredients_seed(request: Request, dry_run: bool = Query(True)):
     """Build the master from pack sizes, recipe codes and the warehouse list.
     Inserts and fills blanks only; never overwrites what a person set."""
+    _register_write_guard(request)
     with get_db() as con:
         _ensure(con)
         before = con.execute("SELECT COUNT(*) FROM bc_ingredient").fetchone()[0]
@@ -485,6 +487,7 @@ async def bc_ingredients_import(request: Request, file: UploadFile = File(...), 
                                 alias_system: str = Form("acc")):
     """Import the master template or a DATAP sheet. Values in the file overwrite. A code the register does not know is listed
     with the items it could be a new code of; `code_choices` is the answer per code (alias of an existing item / a new item)."""
+    _register_write_guard(request)
     rows, sheet, cols = await _read_master_file(file)
     choices = _choices_or_400(code_choices)
     with get_db() as con:
@@ -590,6 +593,7 @@ class AliasBody(BaseModel):
 @router.post("/api/bom-center/ingredients/{code}/aliases", dependencies=[Depends(require_write_token)])
 def bc_ingredient_aliases_save(code: str, body: AliasBody, request: Request):
     """The analyst records, retires or switches the outside codes of one register item. An alias is retired (active=0), never deleted."""
+    _register_write_guard(request)
     who = _who(request)
     with get_db() as con:
         _ensure(con)
@@ -2460,6 +2464,41 @@ def bc_close_settings_save(body: CloseSettingsBody, request: Request):
         out = _write(con, lambda: _cs.save(con, _who(request), body.reason_min_baht, body.cycle_counts))
     invalidate_cache("bc_")
     return out
+
+
+@router.get("/api/bom-center/mode")
+def bc_mode_get():
+    """PR-S1: the system mode - `stock` (recipes hidden, the default) or `full`. Every signed-in role reads it (the menu is drawn from it)."""
+    with get_db() as con:
+        _ensure(con)
+        return _cs.mode_info(con)
+
+
+class ModeBody(BaseModel):
+    mode: str
+
+
+@router.post("/api/bom-center/mode", dependencies=[Depends(require_write_token)])
+def bc_mode_save(body: ModeBody, request: Request):
+    """PR-S1: management switches the mode; audited. Nothing is deleted either way - the recipe pages, tasks and reminders come back with `full`."""
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _cs.set_mode(con, _who(request), body.mode))
+    invalidate_cache("bc_")
+    return out
+
+
+STOCK_MODE_REGISTER_DETAIL = "โหมดสต๊อกก่อน: ทะเบียนวัตถุดิบแก้ไขได้เฉพาะฝ่ายวิเคราะห์"
+
+
+def _register_write_guard(request: Request) -> None:
+    """PR-S1 (owner decision O3): while the system is in stock mode the ingredient register is the analyst's alone to change. A caller
+    without bom.center is refused with 403 whatever its other modules (the kitchen reads the register, it does not write it)."""
+    with get_db() as con:
+        _ensure(con)
+        stock = _cs.stock_mode(con)
+    if stock and "bom.center" not in _modules(request):
+        raise HTTPException(403, STOCK_MODE_REGISTER_DETAIL)
 
 
 # ── batch 4b (2.6) · งานที่เกิดจากเหตุผลผลต่าง ─────────────────────────────────────────────

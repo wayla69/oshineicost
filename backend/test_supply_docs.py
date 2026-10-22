@@ -50,7 +50,7 @@ def _departments():
             cur = {"key": h.group(1), "label": h.group(2), "roles": re.findall(r"'(\w+)'", h.group(6)), "pages": []}
             out.append(cur)
             continue
-        p = re.match(r"\s*\{ tab: '(\w+)'(?:, pane: '(\w+)')?, label: '([^']+)', icon: '(\w+)'(.*?)\}[,\]]?\s*(?://.*)?$", line)
+        p = re.match(r"\s*\{ tab: '(\w+)'(?:, pane: '(\w+)')?(?:, bom: true)?, label: '([^']+)', icon: '(\w+)'(.*?)\}[,\]]?\s*(?://.*)?$", line)
         if p:
             rest = p.group(5)
             roles = re.search(r"roles: \[([^\]]*)\]", rest)

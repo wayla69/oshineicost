@@ -149,6 +149,8 @@ def test_a_task_closes_by_an_acknowledgement_or_when_the_cause_stops(con):  # no
 
 
 def test_the_todo_lists_the_tasks_with_their_owners_and_links(con):  # noqa: F811
+    from bom_center import close_settings as CS
+    CS.set_mode(con, "test", "full")          # PR-S1: the "ตรวจสูตร" task is a recipe task; stock mode (the default) leaves it out
     two_branches(con)
     reason(con, end_count(con, 1, "2026-10-01"), 1, CRAB, "overportion")
     reason(con, end_count(con, 2, "2026-10-01"), 2, CRAB, "overportion")
@@ -211,6 +213,8 @@ def test_the_backlog_is_ranked_by_the_plates_each_item_touches(con):  # noqa: F8
 
 
 def test_an_item_nobody_sold_through_is_not_ranked_and_the_todo_carries_the_top_ten(con):  # noqa: F811
+    from bom_center import close_settings as CS
+    CS.set_mode(con, "test", "full")          # PR-S1: the recipe backlog card is part of the full list
     con.execute("INSERT INTO bc_ingredient(code, name_th, kind, base_unit) VALUES('CK-009', 'ซอสที่ไม่มีเมนูใช้', 'prepared', 'กรัม')")
     con.execute("INSERT INTO bom_ingredients(sku_id, seq, ingredient_code, ingredient_name, qty_per_serving, unit, price_per_unit, ingredient_cost,"
                 " ingredient_type) VALUES(11, 2, 'CK-001', 'ข้าวสวย', 100, 'กรัม', 0, 0, 'x')")

@@ -24,6 +24,7 @@ function _deptSvg(icon, size, cls) {
 // (its mods and its roles, _supplyItemAllowed); then the entry's own `mods` / `roles` when it names any
 function deptPageAllowed(p) {
   if (!tabAllowed(p.tab)) return false;
+  if (bomHidden(p.tab, p.pane)) return false;                    // PR-S1: a recipe page (bom: true) while the system is in stock mode
   if (p.mods && !p.mods.some(hasModule)) return false;
   if (p.roles && !p.roles.includes(_deptRole())) return false;
   if (p.pane) {
