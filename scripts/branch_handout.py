@@ -13,11 +13,11 @@ part of any handout.
 
 Which branches (the list is the same file branch_accounts.py reads):
 
-    py -3.12 scripts/branch_handout.py --template            # writes branch_list_template.xlsx (the 4 pilot rows filled)
+    py -3.12 scripts/branch_handout.py --template            # writes branch_list_template.xlsx (the 5 pilot rows filled)
     py -3.12 scripts/branch_handout.py --list D:/onboarding/branches.xlsx        # one handout per row
     py -3.12 scripts/branch_handout.py --list D:/onboarding/accounts_result.csv  # the result of branch_accounts.py --yes
     py -3.12 scripts/branch_handout.py --all --db D:/copy/oshinei.db             # every active branch of a DB copy
-    py -3.12 scripts/branch_handout.py                       # no option: the four pilot branches
+    py -3.12 scripts/branch_handout.py                       # no option: the five pilot branches
     py -3.12 scripts/branch_handout.py --list ... --only udon                    # a single branch
     py -3.12 scripts/branch_handout.py --role franchise --list D:/onboarding/owner_accounts_result.csv
                                                                                  # the franchise owners' messages and cards (own_<ตัวย่อ>, page ร้านของฉัน)
@@ -42,7 +42,7 @@ import branch_list as BL  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 URL = "https://oshinei-dashboard.fly.dev"
-BRANCHES = [(abbr, name, BL.PREFIX + abbr) for name, abbr in BL.PILOT_ABBRS.items()]     # (key, branch name, username): the four pilot branches
+BRANCHES = [(abbr, name, BL.PREFIX + abbr) for name, abbr in BL.PILOT_ABBRS.items()]     # (key, branch name, username): the five pilot branches
 PER_PAGE = 4                       # cards on one A4 page (2 x 2)
 
 
@@ -252,7 +252,7 @@ def main(argv=None) -> None:
     ap.add_argument("--include-existing", action="store_true", help="สร้างข้อความให้บัญชีที่มีอยู่แล้วด้วย")
     ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
                     help="branch = ข้อความและบัตรของทีมสาขา (ค่าเริ่มต้น) · franchise = ข้อความและบัตรของเจ้าของสาขา (own_<ตัวย่อ>, หน้า ร้านของฉัน)")
-    ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 4 แถว) แล้วจบ")
+    ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 5 แถว) แล้วจบ")
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)

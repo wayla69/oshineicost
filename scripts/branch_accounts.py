@@ -8,7 +8,7 @@
 
 The list is the same file branch_handout.py reads (columns สาขา · ตัวย่อ · ชื่อผู้ใช้ · LINE/ผู้รับ). The
 login of a branch is wh_<ตัวย่อ> (a blank ชื่อผู้ใช้ becomes that; a branch with no abbreviation gets
-wh_<branch id>). The four pilot branches (ubon udon khonkaen rayong) have their abbreviations built in.
+wh_<branch id>). The five pilot branches (chiangmai ubon udon korat surin) have their abbreviations built in.
 
 What it does, per row:
   1. checks the branch name against the system's active branch list (GET /api/branches);
@@ -24,9 +24,10 @@ The franchise owners (PR-L): the same list with `--role franchise` creates ONE r
 branches only. A list's ชื่อผู้ใช้ column counts only when it starts with own_; the result file is
 owner_accounts_result.csv, and branch_handout.py --role franchise --list <that file> writes the owner messages.
 
-The four pilot logins created on 2026-10-07 are named branch_ubon branch_udon branch_khonkaen branch_rayong.
+The four old pilot logins created on 2026-10-07 are named branch_ubon branch_udon branch_khonkaen branch_rayong (the
+pilot is now chiangmai ubon udon korat surin; --replace-pilot still handles exactly those four old logins).
 With --yes --replace-pilot (and only then):
-  * the pilot branches get a new wh_* login even though they already have the old one;
+  * the branches that have an old login get a new wh_* login even though they already have the old one;
   * the old branch_* login is switched off (PUT /api/auth/users/<name> {"active": false}) in a LATER run, once
     the wh_* login already exists - so create the wh_* logins, send the new handout (branch_handout.py), then run
     the same command again to retire the old logins. Nothing is ever deleted.
@@ -226,7 +227,7 @@ def main(argv=None) -> int:
     ap.add_argument("--yes", action="store_true", help="สร้างบัญชีจริง (ไม่ระบุ = แสดงแผนเท่านั้น)")
     ap.add_argument("--dry-run", action="store_true", help="แสดงแผนโดยไม่สร้างบัญชี (ค่าเริ่มต้น)")
     ap.add_argument("--replace-pilot", action="store_true",
-                    help="สาขานำร่อง 4 แห่งได้บัญชี wh_* ใหม่ และบัญชี branch_* เดิมถูกปิดในการรันครั้งถัดไป (ใช้ร่วมกับ --yes เท่านั้น)")
+                    help="สาขาที่มีบัญชี branch_* เดิม 4 บัญชีได้บัญชี wh_* ใหม่ และบัญชี branch_* เดิมถูกปิดในการรันครั้งถัดไป (ใช้ร่วมกับ --yes เท่านั้น)")
     ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
                     help="branch = บัญชีสาขา wh_<ตัวย่อ> (ค่าเริ่มต้น) · franchise = บัญชีเจ้าของสาขา own_<ตัวย่อ> (ดูผลอย่างเดียว)")
     ap.add_argument("--admin-user", default=os.environ.get("OSHINEI_ADMIN_USER", "management1"),

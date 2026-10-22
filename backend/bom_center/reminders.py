@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Order reminders (PR-18, reworked for the 13:15 cutoff in PR-A, batch 3 2026-10-12): the facts of หน้างาน
-(todo.build) for EVERY active branch account (not the four pilot branches) and the centre, as one Telegram message
+(todo.build) for EVERY active branch account (not the five pilot branches) and the centre, as one Telegram message
 a day — sent when the bot is configured (notify.telegram_config), stored either way — and as Web Push to the phones
 of the people who own each line (routers/push_api.maybe_send_supply: kind "supply").
 

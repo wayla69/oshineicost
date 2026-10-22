@@ -28,16 +28,19 @@ PREFIX = "wh_"                                   # every branch login is wh_<ต
 OWNER_PREFIX = "own_"                            # the franchise owner's login is own_<ตัวย่อ> (PR-L, owner 2026-10-10)
 ROLE_PREFIX = {"branch": PREFIX, "franchise": OWNER_PREFIX}
 
-# the four pilot branches and their abbreviations
+# the five pilot branches (owner 2026-10-22, opening count 1 Nov 2026) and their abbreviations
 PILOT_ABBRS = {
+    "เชียงใหม่": "chiangmai",
     "อุบลราชธานี": "ubon",
     "อุดรธานี": "udon",
-    "ขอนแก่น": "khonkaen",
-    "ระยอง": "rayong",
+    "โคราช1": "korat",
+    "สุรินทร์": "surin",
 }
 PILOT_USERNAMES = {name: PREFIX + abbr for name, abbr in PILOT_ABBRS.items()}
-# the logins created on 2026-10-07 under the old naming; branch_accounts.py --replace-pilot retires them
-LEGACY_PILOT_USERNAMES = {name: "branch_" + abbr for name, abbr in PILOT_ABBRS.items()}
+# the four logins created on 2026-10-07 under the old naming (the old pilot: ubon udon khonkaen rayong);
+# branch_accounts.py --replace-pilot retires exactly these. ขอนแก่น and ระยอง are no longer pilot branches.
+LEGACY_PILOT_USERNAMES = {"อุบลราชธานี": "branch_ubon", "อุดรธานี": "branch_udon",
+                          "ขอนแก่น": "branch_khonkaen", "ระยอง": "branch_rayong"}
 
 # result labels written by branch_accounts.py (column ผล)
 R_CREATED, R_EXISTS, R_FAILED, R_PLAN = "สร้างแล้ว", "มีอยู่แล้ว", "ไม่สำเร็จ", "จะสร้าง"
@@ -136,7 +139,7 @@ def login_of(row: dict, role: str = "branch") -> str:
 
 def username_for(branch: str, branch_id=None, abbr: str = "", role: str = "branch"):
     """The login name for a branch whose list row leaves it blank: wh_<ตัวย่อ> (own_<ตัวย่อ> for the franchise owner);
-    the four pilot branches have their abbreviation built in; a branch with no abbreviation gets wh_<branch id>. None
+    the five pilot branches have their abbreviation built in; a branch with no abbreviation gets wh_<branch id>. None
     when none of these is known (the caller must say so: branch names are Thai, so there is no ASCII name to fall back
     on, and two scripts guessing differently would hand a branch a login that does not exist)."""
     prefix = ROLE_PREFIX.get(role, PREFIX)
@@ -149,7 +152,7 @@ def username_for(branch: str, branch_id=None, abbr: str = "", role: str = "branc
 
 
 def write_template(path) -> Path:
-    """An example list: the four pilot branches with their abbreviations, a note row on top."""
+    """An example list: the five pilot branches with their abbreviations, a note row on top."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
     wb = Workbook()
