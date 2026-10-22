@@ -764,6 +764,8 @@ function applyPermissions() {
   if (csBtn) csBtn.style.display = hasModule('system.admin') ? '' : 'none';
   const cbBtn = document.getElementById('settabbtn-cloudbackup');     // the cloud backup of the database: Management only
   if (cbBtn) cbBtn.style.display = hasModule('system.admin') ? '' : 'none';
+  const cjBtn = document.getElementById('settabbtn-cloudjobs');       // every cloud job in one list: Management only
+  if (cjBtn) cjBtn.style.display = hasModule('system.admin') ? '' : 'none';
   // 5) If the current/landing tab isn't allowed, jump to the first allowed one
   if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
   // 6) The phone summary is the owner's sales view. A role without sales.overview
@@ -3391,10 +3393,10 @@ let costSearchTimer = null;
 function switchSettingsTab(name) {
   activeSettingsTab = name;
   document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
-    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','users'];
+    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','cloudjobs','users'];
     b.classList.toggle('active', subs[i] === name);
   });
-  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','users'].forEach(s => {
+  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','cloudjobs','users'].forEach(s => {
     document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
   });
   loadSettingsSubtab();
@@ -3478,6 +3480,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
   if (activeSettingsTab === 'cloudsync') loadCloudSync();
   if (activeSettingsTab === 'cloudbackup') loadCloudBackup();
+  if (activeSettingsTab === 'cloudjobs') loadCloudJobs();
   if (activeSettingsTab === 'usage')    loadUsageStats();
   if (activeSettingsTab === 'downtime') loadDowntime();
 }
@@ -3736,6 +3739,53 @@ async function cloudBackupRun() {
     else uiToast(j.detail || ('สำรองข้อมูลไม่ได้ (' + r.status + ')'), 'error');
   } catch (e) { uiToast('สำรองข้อมูลไม่ได้: ' + (e.message || e), 'error'); }
   setTimeout(loadCloudBackup, 1500);
+}
+
+
+// ── Settings → งานอัตโนมัติ: every job the cloud runs by itself (backend/cloud_jobs.py · docs/CLOUD_SYNC.md) ──
+// A table of labels and numbers (name, time, last result, next run, run-now); the explanation sits behind the "?". Management only.
+const CJ_RESULT_TH = { ok: 'สำเร็จ', failed: 'ไม่สำเร็จ', verify_failed: 'ทดสอบกู้คืนไม่ผ่าน', reconcile_failed: 'ไม่ผ่านการตรวจเทียบ',
+                       locked: 'ข้ามรอบ (มีงานอื่นทำอยู่)', no_space: 'พื้นที่ไม่พอ', creds_missing: 'ยังไม่ตั้งรหัส',
+                       no_source: 'ยังไม่มีช่องทางรีวิว', findings: 'พบปัญหา' };
+let _cjTimer = null;
+async function loadCloudJobs() {
+  const el = document.getElementById('cloudJobsBody');
+  if (!el) return;
+  clearTimeout(_cjTimer);
+  let d = null;
+  try { const r = await fetch(`${API}/api/admin/cloud-jobs/status`); d = r.ok ? await r.json() : null; } catch (e) { d = null; }
+  if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  const chip = j => {
+    if (j.running) return '<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:var(--amber-ink);border:1px solid currentColor">กำลังทำงาน</span>';
+    if (!j.result) return '—';
+    const bad = j.result !== 'ok' && j.result !== 'no_source';
+    return `<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:var(${bad ? '--bad-ink' : '--good-ink'});border:1px solid currentColor">${esc(CJ_RESULT_TH[j.result] || j.result)}</span>`;
+  };
+  const th = 'text-left font-medium py-1.5 pr-3';
+  const rows = (d.jobs || []).map(j => `<tr class="border-t" style="border-color:var(--border)">
+      <td class="py-1.5 pr-3 font-semibold" style="color:var(--text-primary)">${esc(j.label)}</td>
+      <td class="py-1.5 pr-3">${j.enabled ? 'เปิดใช้' : 'ปิดอยู่'}</td>
+      <td class="py-1.5 pr-3">${esc((j.times || []).join(', '))}</td>
+      <td class="py-1.5 pr-3">${chip(j)}</td>
+      <td class="py-1.5 pr-3">${esc(_csWhen(j.last_end))}</td>
+      <td class="py-1.5 pr-3">${j.enabled ? esc(_csWhen(j.next_run)) : '—'}</td>
+      <td class="py-1.5">${j.job === 'feedback' || j.job === 'invisible' || j.job === 'watchdog'
+        ? `<button type="button" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium" ${j.enabled && !j.running ? '' : 'disabled style="opacity:.5"'} onclick="cloudJobRun('${j.job}')">รันตอนนี้</button>`
+        : '<span class="text-[11px]" style="color:var(--text-muted)">ดูที่แท็บของงาน</span>'}</td>
+    </tr>`).join('');
+  el.innerHTML = `<div class="overflow-x-auto"><table class="wt text-sm w-full" style="color:var(--text-secondary)"><thead><tr style="color:var(--text-muted)">
+      <th class="${th}">งาน</th><th class="${th}">สถานะ</th><th class="${th}">เวลา</th><th class="${th}">ผลล่าสุด</th><th class="${th}">จบเมื่อ</th><th class="${th}">รอบถัดไป</th><th class="${th}"></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  if ((d.jobs || []).some(j => j.running)) _cjTimer = setTimeout(() => { if (activeSettingsTab === 'cloudjobs') loadCloudJobs(); }, 15000);
+}
+async function cloudJobRun(job) {
+  try {
+    const r = await fetch(`${API}/api/admin/cloud-jobs/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) uiToast('เริ่มรันงานแล้ว', 'success');
+    else uiToast(j.detail || ('รันงานไม่ได้ (' + r.status + ')'), 'error');
+  } catch (e) { uiToast('รันงานไม่ได้: ' + (e.message || e), 'error'); }
+  setTimeout(loadCloudJobs, 1500);
 }
 
 

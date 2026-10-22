@@ -514,6 +514,53 @@ def cloud_backup_payloads(backup: Optional[dict], now) -> list:
               "url": "/?go=summary", "tag": "oshinei-stale"})]
 
 
+# The feedback fetch, the Invisible Voice push and the cloud watchdog (backend/cloud_jobs.py) report through the same "stale"
+# kind. A failed run of feedback / invisible is pushed from its own status; the watchdog adds what a run cannot say about
+# itself (a missed slot, a stuck run, stale sales, a stale backup). The sync's and the backup's own failures already have
+# their alerts above, so the watchdog's push skips those result kinds.
+JOB_LABEL = {"failed": "ไม่สำเร็จ", "creds_missing": "ยังไม่ได้ตั้งรหัสเชื่อมต่อ"}
+JOB_NAME = {"feedback": "ดึงรีวิวลูกค้า", "invisible": "ส่งข้อมูลไป Invisible Voice"}
+JOB_ALERT_RESULTS = ("failed", "creds_missing")
+WATCH_PUSH_KINDS = ("missed", "stuck", "stale_data", "stale_backup")
+
+
+def cloud_job_payloads(statuses: Optional[dict], now) -> list:
+    """[(key, payload)] for feedback / invisible runs that failed or have no login. `statuses` = {job: stored status} of the
+    jobs that are switched on. Pure. One push per job and result per day, kind "stale"; a no_source / locked run is no alert."""
+    out = []
+    for job, st in (statuses or {}).items():
+        if not st or st.get("running"):
+            continue
+        res = st.get("result")
+        end = _cloud_end(st)
+        if res not in JOB_ALERT_RESULTS or end is None or now - end > timedelta(hours=CLOUD_ALERT_MAX_AGE_H):
+            continue
+        out.append((f"stale:job:{job}:{res}:{now.strftime('%Y-%m-%d')}",
+                    {"title": f"{JOB_NAME.get(job, job)}ไม่สำเร็จ",
+                     "body": f"งานอัตโนมัติบนคลาวด์: {JOB_LABEL.get(res, res)} (รอบ {end.day} {TH_MON[end.month - 1]} {end:%H:%M}) — ตรวจที่ ตั้งค่า > งานอัตโนมัติ",
+                     "url": "/?go=summary", "tag": "oshinei-stale"}))
+    return out
+
+
+def cloud_watchdog_payloads(status: Optional[dict], now) -> list:
+    """[(key, payload)] for the cloud watchdog's findings of the kinds above, from its stored status (app_settings
+    'cloud_job_watchdog_status'). One push per finding per day. Pure."""
+    if not status or status.get("running"):
+        return []
+    end = _cloud_end({"last_end": status.get("last_end")})
+    if end is None or now - end > timedelta(hours=CLOUD_ALERT_MAX_AGE_H):
+        return []
+    out = []
+    for f in status.get("findings") or []:
+        if f.get("kind") not in WATCH_PUSH_KINDS:
+            continue
+        out.append((f"stale:watch:{f.get('job')}:{f.get('kind')}:{now.strftime('%Y-%m-%d')}",
+                    {"title": f"{f.get('name')}: {f.get('meaning', '').split(' — ')[0]}",
+                     "body": f"{f.get('meaning', '')} — ตรวจที่ ตั้งค่า > งานอัตโนมัติ",
+                     "url": "/?go=summary", "tag": "oshinei-stale"}))
+    return out
+
+
 def alert_payloads(sc: dict, now, cloud: Optional[dict] = None) -> list:
     """[(key, payload)] for the conditions in the scorecard right now. Pure: no I/O, so the
     rules are testable. A drop is a branch ≥40% under its 7-day average AND its same weekday last week on the last settled
@@ -935,6 +982,14 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
             todo += cloud_backup_payloads(backup, now)
         except Exception as e:  # noqa: BLE001
             print(f"[push] alerts backup: {e}")
+        try:                                          # feedback / invisible / watchdog: only the ones switched on
+            import cloud_jobs as _cloud_jobs
+            stats = {j: _cloud_jobs.status_from_con(con, j) for j in ("feedback", "invisible") if _cloud_jobs.enabled_job(j)}
+            todo += cloud_job_payloads(stats, now)
+            if _cloud_jobs.enabled_job("watchdog"):
+                todo += cloud_watchdog_payloads(_cloud_jobs.status_from_con(con, "watchdog"), now)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] alerts cloud jobs: {e}")
         try:                                          # a failure in one source never hides the other
             todo += cash_discount_payloads(cashdata if cashdata is not None else cash_discount_rows(con))
         except Exception as e:  # noqa: BLE001
