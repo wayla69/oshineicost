@@ -35,12 +35,16 @@ OWNER_WORDS = {"branch": ["สาขา"], "salessupport": ["ประสาน�
 def _expected(todo: dict, role: str, modules) -> dict:
     """The badge counts worked out by hand from a todo answer (independent of nav_badges): own move, own duty, on the page of `go`."""
     rows = list(todo["items"]) + (todo["close"]["steps"] if role in ("analyst", "salessupport", "accounting") else [])
-    out = {}
+    out, gap = {}, False
     for it in rows:
         words = OWNER_WORDS.get(role)
         mine = any(w in it["owner_th"] for w in words) if words and it["owner_th"] else any(m in modules for m in it["owner_modules"])
-        if it["state"] != "todo" or not mine or not it["go"].get("tab"):
-            continue
+        if it["state"] != "todo" or not mine or not it["go"].get("tab") or it.get("upcoming"):
+            continue                                  # PR-U1: a round whose cutoff is a later day is not a task of today
+        if it["key"].startswith("issue_missing_"):    # PR-U1: the slip days left behind are ONE task
+            if gap:
+                continue
+            gap = True
         k = it["go"]["tab"] + (":" + it["go"]["pane"] if it["go"].get("pane") else "")
         out[k] = out.get(k, 0) + 1
     return out
@@ -150,7 +154,8 @@ def test_every_role_may_read_it_and_none_is_refused(client, auth_on, pinned):
         r = c.get("/api/nav/badges")
         assert r.status_code == 200, (role, r.status_code, r.text[:200])
         d = r.json()
-        assert set(d) == {"pages", "at"} and isinstance(d["pages"], dict), role
+        assert set(d) == {"pages", "total", "at"} and isinstance(d["pages"], dict), role
+        assert d["total"] == sum(d["pages"].values()), role
         assert all(isinstance(k, str) and isinstance(n, int) and n >= 1 for k, n in d["pages"].items()), role
         assert auth.path_allowed("GET", "/api/nav/badges", auth.modules_for_role(role)), role
         ok += 1
@@ -177,13 +182,14 @@ def test_over_http_a_pinned_branch_login_gets_its_own_branch(client, auth_on, pi
     c = _login("d4_branch", PW)
     todo = c.get("/api/bom-center/todo").json()
     assert todo["scoped"] is True and todo["branch"]["name"] == pinned
-    got = c.get("/api/nav/badges").json()["pages"]
-    assert got == _expected(todo, "branch", auth.modules_for_role("branch"))
+    got = c.get("/api/nav/badges").json()
+    assert got["pages"] == _expected(todo, "branch", auth.modules_for_role("branch"))
+    assert got["total"] == todo["mine_open"]["count"]                 # PR-U1: one "ยังไม่เสร็จ" - the badges and หน้างาน agree
 
 
 def test_auth_off_is_the_managers_view(client):
     d = client.get("/api/nav/badges").json()
-    assert set(d) == {"pages", "at"}
+    assert set(d) == {"pages", "total", "at"}
 
 
 # ── the cache: 60 s per user, single-flight, dropped by a bom-center write ───────────────────────────────

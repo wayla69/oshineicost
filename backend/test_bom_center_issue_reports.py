@@ -224,7 +224,8 @@ def test_a_late_slip_and_the_open_day(con):  # noqa: F811
     IS.save(con, 1, "2026-09-02", [g(CRAB, 450)], "udon", submit=True, now=at(4, 9))                  # two days late
     con.commit()
     d = IR.daily(con, 1, "2026-09", today=TODAY)
-    r = d["rows"][1]
+    r = next(x for x in d["rows"] if x["date"] == "2026-09-02")     # PR-U1: the days before the branch's first slip are not listed
+    assert d["rows"][0]["date"] == "2026-09-02"
     assert r["slip_status"] == "late" and r["slip_status_th"] == "ล่าช้า" and r["late"] == 1 and d["totals"]["late_days"] == 1
     # the current month: today is listed only once it has a slip, a day with sales but no slip stays "ไม่มีใบ"
     oct_ = IR.daily(con, 1, "2026-10", today=date(2026, 10, 4))

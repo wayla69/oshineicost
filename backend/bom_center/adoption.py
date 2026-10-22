@@ -22,12 +22,13 @@ from . import hub as _hub
 from . import issue_reports as _ir
 from .clock import today as bkk_today
 from .pilot import branch_accounts
+from .started import branch_start
 
 DAYS = 7
 GREEN_MIN = 90.0
 YELLOW_MIN = 60.0
-RANK = {"red": 0, "yellow": 1, "green": 2}
-LIGHT_TH = {"green": "เขียว", "yellow": "เหลือง", "red": "แดง"}
+RANK = {"red": 0, "yellow": 1, "green": 2, "not_started": 3}
+LIGHT_TH = {"green": "เขียว", "yellow": "เหลือง", "red": "แดง", "not_started": "ยังไม่เริ่มใช้ระบบ"}
 SUBMITTED = ("submitted", "processed", "received")
 
 
@@ -83,8 +84,8 @@ def grid(con, today: date = None, days: int = DAYS) -> dict:
     due, on_time = {}, {}
     for r in comp:
         sent = r.get("order_status") in SUBMITTED
-        if not sent and r["cycle_date"] >= today.isoformat():
-            continue                                    # today's (or a coming) cycle that is not in yet is not due yet
+        if not sent and (r["cycle_date"] >= today.isoformat() or r["status"] == "not_started"):
+            continue                                    # today's (or a coming) cycle that is not in yet is not due yet; nor one before the start
         due[r["branch_id"]] = due.get(r["branch_id"], 0) + 1
         if sent and not r.get("late"):
             on_time[r["branch_id"]] = on_time.get(r["branch_id"], 0) + 1
@@ -119,7 +120,10 @@ def grid(con, today: date = None, days: int = DAYS) -> dict:
         kind = None if not last else ("บันทึกข้อมูล" if last == write else "เข้าสู่ระบบ")
         active = bool(last and last >= since)
         lights = [c["light"] for c in (issues, orders, recv) if c["light"]]
-        if not active:
+        start = branch_start(con, bid)                  # PR-U1: before its first activity a branch is neutral, never red
+        if not start or start > today.isoformat():
+            status, why = "not_started", ""
+        elif not active:
             status, why = "red", "ไม่มีการใช้งานใน 7 วัน"
         elif lights:
             status = min(lights, key=lambda x: RANK[x])
@@ -140,4 +144,5 @@ def grid(con, today: date = None, days: int = DAYS) -> dict:
 def summary_line(g: dict) -> str:
     """The one line หน้างาน shows: 'ทั้งหมด N สาขา · เขียว N · เหลือง N · แดง N'."""
     c = g["counts"]
-    return f"ทั้งหมด {g['total']} สาขา · เขียว {c['green']} · เหลือง {c['yellow']} · แดง {c['red']}"
+    return (f"ทั้งหมด {g['total']} สาขา · เขียว {c['green']} · เหลือง {c['yellow']} · แดง {c['red']}"
+            + (f" · ยังไม่เริ่มใช้ระบบ {c['not_started']}" if c.get("not_started") else ""))

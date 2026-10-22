@@ -3221,6 +3221,15 @@ function supplyBranchOptions(rows, first) { return (first ? `<option value="">${
 const _SHM_ROLE_OWNERS = { branch: ['สาขา'], salessupport: ['ประสานงานขาย'], analyst: ['ฝ่ายวิเคราะห์'],
   accounting: ['บัญชี'], innovation: ['ครัว'], operation: ['ฝ่ายปฏิบัติการ'], management: ['ผู้บริหาร', 'ผู้ดูแลระบบ'],
   warehouse: ['คลัง'] };
+// PR-U1 (2.7) · the viewer's own open tasks are decided ONCE, on the server (bom_center/nav_badges.mine_open - the rule of the red badges): the
+// /todo answer carries their keys. Every "ยังไม่เสร็จ" of the launcher, หน้างาน and the phone keeps a todo task only when its key is there, so the
+// number is the same on every screen. An answer without it (an old cache) keeps the old reading. A round whose cutoff is still to come
+// (`upcoming`) is never a task of today: it is shown as "ถัดไป: …" and counts nowhere.
+function shmOpenKeys(d) { return d && d.mine_open && Array.isArray(d.mine_open.keys) ? new Set(d.mine_open.keys) : null; }
+function shmIsOpenTask(it, keys) {
+  if (it.upcoming) return false;
+  return keys ? keys.has(it.key) : true;
+}
 function _shmMine(it) {
   const role = window.AUTH && window.AUTH.enabled && window.AUTH.role;
   const words = role && _SHM_ROLE_OWNERS[role];

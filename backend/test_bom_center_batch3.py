@@ -427,8 +427,8 @@ def test_the_grid_reads_the_existing_definitions(grid_db):
     assert u["orders"]["on_time"] == 1 and u["orders"]["due"] == 3 and u["orders"]["light"] == "red"      # r1 in time; r2 late; salmon missing
     assert u["receive"] == {"received": 0, "delivered": 1, "pct": 0.0, "light": "red"}                        # the 3 Oct delivery is not recorded
     assert u["status"] == "red" and u["active"] is True                                                       # the worst column decides
-    lop = rows["ลพบุรี"]
-    assert lop["status"] == "red" and lop["active"] is False and "ไม่มีการใช้งาน" in lop["why"]
+    lop = rows["ลพบุรี"]                                        # PR-U1: never started - neutral, not red
+    assert lop["status"] == "not_started" and lop["status_th"] == "ยังไม่เริ่มใช้ระบบ" and lop["active"] is False
     assert lop["issues"]["pct"] is None and lop["last_active"] is None
 
 
@@ -443,10 +443,11 @@ def test_the_grid_is_sorted_worst_first_and_counts_the_lights(grid_db):
     c.execute("UPDATE bc_order SET status='received' WHERE round='2'")
     c.commit()
     g = AD.grid(c, today=date(2026, 10, 6))
-    assert [r["branch"] for r in g["rows"]] == ["ลพบุรี", "อุดรธานี"]                 # the inactive branch (red) first
-    u = g["rows"][1]
+    assert [r["branch"] for r in g["rows"]] == ["อุดรธานี", "ลพบุรี"]                 # PR-U1: a branch that has not started comes last
+    u = g["rows"][0]
     assert (u["issues"]["pct"], u["orders"]["pct"], u["receive"]["pct"]) == (100.0, 100.0, 100.0) and u["status"] == "green"
-    assert g["counts"] == {"green": 1, "yellow": 0, "red": 1} and AD.summary_line(g) == "ทั้งหมด 2 สาขา · เขียว 1 · เหลือง 0 · แดง 1"
+    assert g["counts"] == {"green": 1, "yellow": 0, "red": 0, "not_started": 1}
+    assert AD.summary_line(g) == "ทั้งหมด 2 สาขา · เขียว 1 · เหลือง 0 · แดง 0 · ยังไม่เริ่มใช้ระบบ 1"
 
 
 def test_the_lights():

@@ -2288,14 +2288,21 @@ def bc_todo(request: Request, month: Optional[str] = Query(None), branch_id: Opt
     A branch login gets its own branch only; the centre may name one or see them all."""
     if month:
         _month_or_400(month)
+    role = _viewer_role(request)
     with get_db() as con:
         _ensure(con)
         try:
-            return _td.build(con, month, branch_id, _auth.scope_branch(request), viewer_role=_viewer_role(request))
+            d = _td.build(con, month, branch_id, _auth.scope_branch(request), viewer_role=role)
         except PermissionError as e:
             raise HTTPException(403, str(e))
         except ValueError as e:
             raise HTTPException(404, str(e))
+    # PR-U1 (2.7): the viewer's own open tasks by the ONE rule the red badges use (nav_badges.mine_open) - the launcher, หน้างาน and the
+    # phone print this count, so "ยังไม่เสร็จ" is the same number everywhere
+    from bom_center import nav_badges as _nb
+    mine = _nb.mine_open(d, role, _modules(request))
+    d["mine_open"] = {"count": len(mine), "keys": [it["key"] for it in mine]}
+    return d
 
 
 def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
@@ -3971,6 +3978,15 @@ def bc_hub_consolidated(ids: Optional[str] = Query(None), date_from: Optional[st
     return out
 
 
+def _xlsx_qty(q, ln: dict) -> tuple:
+    """PR-U1: (quantity, unit text) of an order line in a workbook: a pack line in its pack word; a line in base units (no pack size
+    yet) in the readable unit with the note - 18558 กรัม -> 18.558, "กิโลกรัม (ยังไม่มีขนาดบรรจุ)". The stored quantity is unchanged."""
+    if ln.get("no_pack"):
+        f = float(ln.get("show_factor") or 1.0)
+        return round(float(q) / f, 3), f"{ln.get('show_unit') or ln.get('unit_word') or ''} ({ln['no_pack_th']})".strip()
+    return q, "แพ็ค"
+
+
 @router.get("/api/bom-center/hub/consolidated.xlsx")
 def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
                              date_to: Optional[str] = Query(None), status: Optional[str] = Query(None),
@@ -3992,8 +4008,9 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
             for ln in o["lines"]:
                 q = ln["processed_units"] if ln["processed_units"] is not None else ln["confirmed_units"]
                 if q:
-                    per_branch.append([bname, dlv, o["cycle_date"], _fc.ROUND_TH.get(str(o["round"]), o["round"]), ln["code"], ln["name"], q,
-                                       "แพ็ค" if ln["order_unit"] != "base" else "หน่วยฐาน", o["po_ref"], o["order_id"],
+                    qs, us = _xlsx_qty(q, ln)
+                    per_branch.append([bname, dlv, o["cycle_date"], _fc.ROUND_TH.get(str(o["round"]), o["round"]), ln["code"], ln["name"], qs,
+                                       us, o["po_ref"], o["order_id"],
                                        "ส่งล่าช้า (มีค่าปรับ)" if o.get("late") else "",
                                        (f"คีย์แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
                                         if o.get("accounting_keyed_at") else "ยังไม่คีย์")])
@@ -4006,8 +4023,10 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
            + " สรุปรวมตามวันส่ง (ใช้ยอดส่งจริงของคลัง ถ้ายังไม่มีใช้ยอดที่สาขายืนยัน)")
     for g in c["groups"]:
         for it in g["items"]:
-            ws.append([g["delivery"], it["code"], it["name"], it["unit"], it["total"]] +
-                      [it["by_branch"].get(b) for b in br])
+            f = float(it.get("show_factor") or 1.0) if it.get("no_pack") else 1.0
+            unit = (f"{it.get('show_unit') or it['unit']} ({it['no_pack_th']})" if it.get("no_pack") else it["unit"])
+            ws.append([g["delivery"], it["code"], it["name"], unit, round(it["total"] / f, 3)] +
+                      [None if it["by_branch"].get(b) is None else round(it["by_branch"][b] / f, 3) for b in br])
     ws2 = wb.create_sheet()
     _sheet(ws2, "ต่อสาขา", ["สาขา", "วันส่ง", "วันตัดรอบ", "รอบส่ง", "รหัส", "วัตถุดิบ", "จำนวน", "หน่วย", "PO", "ใบสั่งซื้อ", "ล่าช้า", "คีย์บัญชี"],
            "ทุกบรรทัดของใบสั่งซื้อที่เลือก")
@@ -4061,7 +4080,7 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
         c = _hub.compliance(con, d0, d1)
         oc = _oc.month(con, d1[:7])
     th = {"ok": "ตามแนะนำ", "over": "สั่งเกิน", "under": "สั่งขาด", "not_ordered": "ไม่ได้สั่ง",
-          "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงกำหนด"}
+          "not_submitted": "ยังไม่ส่ง", "upcoming": "ยังไม่ถึงกำหนด", "not_started": "ยังไม่เริ่มใช้ระบบ"}
     wb = Workbook()
     ws = wb.active
     _sheet(ws, "ตรวจสอบการสั่ง", ["วันตัดรอบ", "สาขา", "รอบส่ง", "สถานะ", "แนะนำ ฿", "สาขายืนยัน ฿", "ส่งจริง ฿",

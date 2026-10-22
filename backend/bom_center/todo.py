@@ -410,10 +410,14 @@ def _slip_info(con, bid: int, today: date) -> dict:
     from .issues import status_days
     d_prev = today - timedelta(days=1)
     t, y = status_days(con, bid, d_prev, today)[::-1]
+    from .started import branch_start
     last = con.execute("SELECT MAX(count_date) FROM bc_stock_count WHERE branch_id=? AND kind IN ('begin','end')"
                        " AND COALESCE(status,'submitted')='submitted'", (bid,)).fetchone()[0]
     started = bool(last) or bool(con.execute("SELECT 1 FROM bc_issue_slip WHERE branch_id=? LIMIT 1", (bid,)).fetchone())
     lo = max(date.fromisoformat(last), today - timedelta(days=7)) if last else today - timedelta(days=7)
+    first = branch_start(con, bid)                      # PR-U1: a day before the branch started is never a slip left behind
+    if first and date.fromisoformat(first) > lo:
+        lo = date.fromisoformat(first)
     gaps = [x["date"] for x in status_days(con, bid, lo, d_prev) if x["status"] in ("missing", "draft")] \
         if started and lo <= d_prev else []
     return {"today": t, "yesterday": y, "started": started, "gaps": gaps}
@@ -576,6 +580,9 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                 detail = f"{_left_th(it['hours_left'])} · ยังไม่ได้เปิดใบสั่งซื้อ"
             if not sent and not slip_ok:                     # the order is made from the stock after today's slip
                 detail += " · ยืนยันใบตัดเบิกวันนี้ก่อน"
+            # PR-U1 (2.8): a round is today's duty only when its cutoff is today or has passed; a later one is "ถัดไป", never a task
+            # of today - no badge, not in "ยังไม่เสร็จ" (nav_badges.mine_open leaves it out), named on the phone as the next round
+            upcoming = not sent and not it["late"] and it["cycle_date"] > today.isoformat()
             # M6: named as the สั่งสินค้า page names a round - "รอบ 2 (ส่ง 17/10)", "แซลมอนสด (ส่ง 19/10)" (fmt.round_day_th)
             round_items.append(_e(f"order_due_{r}", 310, "week",
                           f"ส่งใบสั่งซื้อภายใน {it['cutoff_th']} · {_round_day(r, it['delivery'])}",
@@ -584,7 +591,8 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                           urgent=bool(not sent and (it["late"] or 0 <= it["hours_left"] < 4)),
                           round_th=it["round_th"], delivery=it["delivery"], delivery_th=it["delivery_th"],
                           cutoff_at=it["cutoff_at"], cutoff_th=it["cutoff_th"], cutoff_date=it["cycle_date"],
-                          late=bool(it["late"]), due_today=it["cycle_date"] == today.isoformat(),
+                          late=bool(it["late"]), due_today=it["cycle_date"] == today.isoformat(), upcoming=upcoming,
+                          next_th=(f"ถัดไป: {_round_day(r, it['delivery'])} ตัดรอบ {it['cutoff_th']}" if upcoming else None),
                           go={"tab": "branchstock", "pane": "order", "extra": {"round": r, "delivery": it["delivery"]}}))
         out += round_items
         due = []
@@ -655,15 +663,30 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
                     owner=("supply.ordering", "bom.center"), owner_th="ประสานงานขาย / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "central", "anchor": "ohbLinks"}))
 
+    from .started import NOT_STARTED_TH, branch_start
+    starts = {b["branch_id"]: branch_start(con, b["branch_id"]) for b in branches}
+    # a month the centre closes after the fact (its report for the month carries the branch's deliveries) is held whatever the start
+    retro = {r[0] for r in con.execute("SELECT DISTINCT branch_id FROM bc_receipt WHERE ref=?", (f"CENTRAL-{month}",))}
+
+    def held(bid) -> bool:
+        return bid in retro or bool(starts.get(bid) and starts[bid] < m1)
+
     def per_branch(key, seq, title, owner, owner_th, fn):
-        rows = [fn(b) for b in branches]
+        # PR-U1: a branch that had not started before the month ended is not asked for that month - "ยังไม่เริ่มใช้ระบบ", neutral
+        rows = [fn(b) if held(b["branch_id"]) else
+                dict(fn(b), status="na", not_started=True, status_th=NOT_STARTED_TH,
+                     detail=f"เริ่มใช้ระบบวันที่ {_fmt_day(starts[b['branch_id']])}" if starts.get(b["branch_id"]) else NOT_STARTED_TH)
+                for b in branches]
         if not branches:
             steps.append(_e(key, seq, "close", title, "todo", "ยังไม่มีสาขาที่เริ่มปิดงวดเดือนนี้", owner=owner, owner_th=owner_th,
                             go={"tab": "orderhub", "pane": "central", "month": month}, branches=[]))
             return
         sts = [r["status"] for r in rows]
-        status = "done" if all(s == "done" for s in sts) else ("todo" if "todo" in sts else "blocked")
-        pend = [r for r in rows if r["status"] != "done"]
+        if all(s == "na" for s in sts):
+            status = "na"
+        else:
+            status = "done" if all(s in ("done", "na") for s in sts) else ("todo" if "todo" in sts else "blocked")
+        pend = [r for r in rows if r["status"] not in ("done", "na")]
         first = (pend or rows)[0]
         steps.append(_e(key, seq, "close", title, status,
                         " · ".join(f"{r['branch']}: {r['detail']}" for r in rows), count=len(pend) or None,
@@ -696,11 +719,15 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
         if first_day == m1:
             return None
         d0 = date.fromisoformat(first_day)
+        hi = (d0 + tol).isoformat()
+        st = starts.get(bid)
+        if st and m0 < st < m1:                       # PR-U1: a branch that started mid-month begins with its first count of the month
+            hi = max(hi, (date.fromisoformat(m1) - timedelta(days=1)).isoformat())
         return con.execute("SELECT count_id, count_date FROM bc_stock_count WHERE branch_id=?"
                            " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
                            " AND count_date BETWEEN ? AND ?"
                            " ORDER BY count_date, count_id LIMIT 1",
-                           (bid, (d0 - timedelta(days=1)).isoformat(), (d0 + tol).isoformat())).fetchone()
+                           (bid, (d0 - timedelta(days=1)).isoformat(), hi)).fetchone()
 
     def late_end(bid):
         """An end count that exists but is dated too late to close `month` (the 2nd or 3rd): it closes the next month."""
@@ -727,6 +754,10 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
             if late:
                 return {"branch_id": bid, "branch": b["name"], "status": "todo", "go": go,
                         "detail": f"ผลตรวจนับลงวันที่ {_fmt_day(late[0])} ใช้ปิดงวดถัดไป · งวดนี้ปิดด้วยผลนับวันที่ {_fmt_day(m1)} หรือวันสุดท้ายของเดือน"}
+            st = starts.get(bid)
+            if kind == "begin" and st and m0 < st < m1:   # PR-U1: started mid-month - its first count is the begin, not one dated the 1st
+                return {"branch_id": bid, "branch": b["name"], "status": "todo", "go": go,
+                        "detail": f"เริ่มใช้ระบบวันที่ {_fmt_day(st)} · ตรวจนับครบทุกรายการเป็นต้นงวด"}
             return {"branch_id": bid, "branch": b["name"], "status": "todo", "detail": f"ยังไม่มีผลตรวจนับวันที่ {_fmt_day(first_day)}", "go": go}
         return fn
 

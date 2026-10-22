@@ -111,7 +111,8 @@ function _bmcStatusKind(id, t, ink) {
   if (!bad && !warn && !good && (/(…|\.\.\.)$/.test(t) || /^กำลัง/.test(t))) return { inline: 'note' };    // progress (a plain ink: a warning that happens to end in "…" is still a warning)
   if (/^(✓ ?)?บันทึกร่าง|^ล้างร่าง/.test(t) || (good && /ร่างแล้ว/.test(t))) return { inline: 'note' };                  // a draft that was autosaved
   if (/Summary$|Count$/.test(id || '')) return { inline: 'note' };                                                    // a counter of a table
-  if (bad) return { toast: 'error', inline: _BMC_STATUS_FIELD.test(t) ? 'field' : 'clear' };
+  // PR-U1: a refusal of a save on the branch's pages (brn*) also stays in the status line - a toast vanishes, the branch must still read why
+  if (bad) return { toast: 'error', inline: _BMC_STATUS_FIELD.test(t) || /^brn/.test(id || '') ? 'field' : 'clear' };
   if (warn) return /ยังไม่บันทึก|ยังไม่ได้บันทึก/.test(t) ? { inline: 'warn' } : { toast: 'warn', inline: 'warn' };      // a thing to fix stays beside its control, short
   if (good) return { toast: 'success', inline: 'clear' };
   return { toast: 'info', inline: 'clear' };
@@ -195,6 +196,25 @@ function _bmcClaimWhen(c) {
   return [k ? `แจ้ง ${k.d}/${k.mo} ${k.hhmm}` : '', c.of_order > 1 ? `ครั้งที่ ${c.nth}` : ''].filter(Boolean).join(' · ');
 }
 function _bmcClaimTitle(c) { return [`เคลมของ ${c.branch || ''}`.trim(), _bmcRoundDay(c), _bmcClaimWhen(c)].filter(Boolean).join(' · '); }
+// PR-U1 · an order line in BASE units (the item has no pack size yet - `no_pack`, orders._show_fields): the figure in the bigger unit
+// the server names (`show_unit`, `show_factor` base units in one: กรัม -> กิโลกรัม), "18.6 กิโลกรัม" not "18558 กรัม"; under one of it, or
+// a line with a pack size, the figure stays in its own unit. -> {q, unit} (q = the number to print, unit = '' when the caller keeps its own)
+function bmcShowQty(q, row) {
+  const n = Number(q), f = Number(row && row.no_pack ? row.show_factor : 1) || 1;
+  if (!row || !row.no_pack || f <= 1 || !Number.isFinite(n) || Math.abs(n) < f) return { q: n, unit: '', f: 1 };
+  const v = n / f;
+  return { q: Math.round(v * (Math.abs(v) >= 10 ? 10 : 100)) / (Math.abs(v) >= 10 ? 10 : 100), unit: row.show_unit || '', f };
+}
+function bmcShowQtyTxt(q, row, ownUnit) {
+  const s = bmcShowQty(q, row);
+  return `${_bmcNum(s.q, 2)} ${s.unit || ownUnit || ''}`.trim();
+}
+// the chip of a line ordered in base units, with its "?"
+function bmcNoPackChip(row) {
+  if (!row || !row.no_pack) return '';
+  return _bmcChip(row.no_pack_th || 'ยังไม่มีขนาดบรรจุ', 'var(--amber-ink)') + ' ' + uiQ('bmc:nopack', 'ยังไม่มีขนาดบรรจุ',
+    '<p>ทะเบียนวัตถุดิบยังไม่ระบุขนาดบรรจุของรายการนี้ จำนวนจึงคิดเป็นหน่วยฐาน แสดงเป็นหน่วยที่ใหญ่ขึ้นเพื่ออ่านง่าย</p><p>ฝ่ายวิเคราะห์เป็นผู้เพิ่มขนาดบรรจุ</p>');
+}
 function _bmcChip(text, ink) {
   return `<span class="bmc-chip" style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:nowrap;vertical-align:middle">${esc(text)}</span>`;
 }
@@ -222,10 +242,10 @@ function bmcBranchTable(branches, linkFn) {
   const fb = uiStateFilter.get(['todo', 'review', 'done', 'all']);
   const list = (branches || []).filter(b => fb === 'all' || ((b.status === 'done' || b.status === 'na') === (fb === 'done')));
   if (!list.length) return '';
-  const acts = list.map(b => (linkFn && b.status !== 'done' ? linkFn(b) || '' : ''));
+  const acts = list.map(b => (linkFn && b.status !== 'done' && !b.not_started ? linkFn(b) || '' : ''));
   const anyAct = acts.some(Boolean);
   return `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt"><thead><tr><th>สาขา</th><th>สถานะ</th><th>รายละเอียด</th>${anyAct ? '<th></th>' : ''}</tr></thead><tbody>${list.map((b, i) => {
-    const [lbl, ink] = _BMC_BR_ST[b.status] || _BMC_BR_ST.todo;
+    const [lbl, ink] = b.not_started ? ['ยังไม่เริ่มใช้ระบบ', 'var(--text-muted)'] : (_BMC_BR_ST[b.status] || _BMC_BR_ST.todo);   // PR-U1: neutral
     return `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(b.branch || '')}</td>
       <td data-l="สถานะ"><span class="wt-tag" style="color:${ink}">${lbl}</span></td>
       <td data-l="รายละเอียด" style="color:var(--text-secondary)">${esc(b.detail || '')}</td>${anyAct ? `<td class="wt-act">${acts[i]}</td>` : ''}</tr>`;

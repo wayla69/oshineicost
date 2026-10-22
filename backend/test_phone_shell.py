@@ -111,7 +111,7 @@ def test_the_bottom_navigation_per_role():
 def test_the_tasks_are_the_roles_open_items_grouped_like_the_desk():
     owners = re.search(r"const _SHM_ROLE_OWNERS = \{.*?\};", CORE, re.S).group(0)
     pre = ("const hasModule = () => false;\n"
-           "const window = { AUTH: { enabled: true, role: 'branch' } };\n" + owners + "\n" + _fn(CORE, "_shmMine") + "\n" + _fn(SHELL, "_phState") + "\n" + _fn(SHELL, "_phGroups"))
+           "const window = { AUTH: { enabled: true, role: 'branch' } };\n" + owners + "\n" + _fn(CORE, "_shmMine") + "\n" + _fn(CORE, "shmIsOpenTask") + "\n" + _fn(SHELL, "_phState") + "\n" + _fn(SHELL, "_phGroups"))
     items = [
         {"key": "issue_today", "title": "ยืนยันใบตัดเบิก", "status": "todo", "owner_th": "สาขา", "seq": 2, "branch": "A"},
         {"key": "order_due_1", "title": "ส่งใบสั่งซื้อ", "status": "todo", "owner_th": "สาขา", "seq": 1, "urgent": True, "branch": "A"},
