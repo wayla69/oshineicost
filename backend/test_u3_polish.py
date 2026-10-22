@@ -207,7 +207,7 @@ def test_the_manual_receipt_form_is_folded_under_the_receipts():
 @needs_node
 def test_two_value_labels_of_the_columns_never_overlap():
     mob = _src("js/09c-mobile.js")
-    pre = ESC + _fn(mob, "msColumns")
+    pre = ESC + _fn(_src("js/01-core.js"), "glanceB1Kinds") + _fn(mob, "msColumns")   # msColumns wears B1 (VZ2): the classifier lives in 01-core
     # ร้านของฉัน's case: the last full month is high, the month in progress a little lower, side by side at the right edge
     got = _node(pre + """
 const vals = [4923483, 4802947, 5434311, 6031203, 5665725, 5813366, 5972276, 5360273, 4095005, 4076093, 4519999, 4138887, 2810692];
