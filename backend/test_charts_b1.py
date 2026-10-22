@@ -246,6 +246,37 @@ def test_b1_never_makes_the_partial_period_latest_or_best_at_any_granularity():
     assert got[:5] == [4, 3, 51.4, True, "hi"] and got[5:] == [5, 5, (50 + 52 + 49 + 55 + 51 + 120) / 6]
 
 
+# ── label collisions ────────────────────────────────────────────────────────────────────────────────────────────────
+@needs_node
+def test_labels_are_clamped_inside_the_chart_and_never_land_on_a_more_important_one():
+    got = _node(_fn(CORE, "glanceLabelSpot"), """(() => {
+  const B = { left: 40, right: 200 };
+  const edgeR = glanceLabelSpot([], { x: 198, y: 20, w: 60, align: 'center' }, B);      // would clip at the right edge
+  const edgeL = glanceLabelSpot([], { x: 41, y: 20, w: 60, align: 'center' }, B);
+  const leftAl = glanceLabelSpot([], { x: 190, y: 20, w: 60, align: 'left' }, B);      // a left-aligned end label near the right edge
+  const rightAl = glanceLabelSpot([], { x: 45, y: 20, w: 60, align: 'right' }, B);
+  const placed = [{ x: 100, y: 20, w: 50 }];                                              // the gold latest label, placed first
+  const onTop = glanceLabelSpot(placed, { x: 110, y: 28, w: 60, align: 'center' }, B);   // the average value on it -> no spot
+  const apart = glanceLabelSpot(placed, { x: 110, y: 50, w: 60, align: 'center' }, B);   // a line below -> fine
+  const side = glanceLabelSpot(placed, { x: 190, y: 20, w: 40, align: 'center' }, B);    // same line, far away -> fine
+  return { edgeR: edgeR.cx + 30, edgeL: edgeL.cx - 30, leftAl: leftAl.x + 60, rightAl: rightAl.x - 60, onTop, apart: !!apart, side: !!side };
+})()""")
+    assert got["edgeR"] <= 200 and got["edgeL"] >= 40 and got["leftAl"] <= 200 and got["rightAl"] >= 40
+    assert got["onTop"] is None and got["apart"] and got["side"]
+
+
+def test_the_average_value_is_placed_last_and_may_move_or_drop():
+    plugin = CORE[CORE.index("const GLANCE_PLUGIN = {"):]
+    assert plugin.index("2) the primary series") < plugin.index("3) the average's value") < plugin.index("4) name the weekend bands")
+    assert "[a.left + 4, ay - 8, 'left'], [a.left + 4, ay + 9, 'left'], [a.right - 4, ay - 8, 'right'], [a.right - 4, ay + 9, 'right']" in plugin
+
+
+def test_a_table_and_chart_pair_stacks_full_width_on_a_phone():
+    html = _src("index.html")
+    assert '.content-area [class*="lg:grid-cols-"]:has(> .card canvas) { grid-template-columns: minmax(0, 1fr) !important; }' in html
+    assert html.index(':has(> .card canvas)') < html.index(".content-area .card { overflow-x: auto; }")
+
+
 # ── the change pills on the gradient KPI tiles (coordinator fix 2) ──────────────────────────────────────────────────
 def _lum(h):
     h = h.lstrip("#")

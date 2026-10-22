@@ -1839,6 +1839,21 @@ function _glanceB1Frame(chart, gi) {
   return k && Object.assign(k, { meta: metas[0], pal: _glanceIsDark(chart) ? B1_PAL.dark : B1_PAL.light });
 }
 
+// Where a chart label may go (pure, so it can be tested): `c` = { x, y, w, align }, `placed` = boxes already on the chart ({ x: centre, y, w }),
+// `bounds` = { left, right }. The label is clamped INSIDE the bounds (never clipped at the edge); if it still overlaps a placed label
+// (closer than a line of text vertically and than their half-widths horizontally) there is no spot and null comes back, so the caller
+// tries its next candidate or drops it. Callers place the important labels first: latest (gold) > best > in-progress > average.
+function glanceLabelSpot(placed, c, bounds) {
+  let x = c.x;
+  const w = c.w;
+  if (c.align === 'center') x = Math.max(bounds.left + w / 2 + 2, Math.min(bounds.right - w / 2 - 2, x));
+  else if (c.align === 'left') x = Math.max(bounds.left + 2, Math.min(bounds.right - w - 2, x));
+  else x = Math.min(bounds.right - 2, Math.max(bounds.left + w + 2, x));
+  const cx = c.align === 'left' ? x + w / 2 : c.align === 'right' ? x - w / 2 : x;
+  if (placed.some(p => Math.abs(p.y - c.y) < 15 && Math.abs(p.x - cx) < (p.w + w) / 2 + 4)) return null;
+  return { x, cx };
+}
+
 const GLANCE_PLUGIN = {
   id: 'glance',
 
@@ -2056,9 +2071,6 @@ const GLANCE_PLUGIN = {
     const g = _glanceTheme(chart), ctx = chart.ctx, a = chart.chartArea;
     ctx.save();
     const placed = [];
-    if (chart.$glanceAvg) {
-      _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 12, 700);
-    }
     const b1 = chart.$glanceB1;
     if (b1) {   // B1: a dot under the axis for each weekend period
       ctx.fillStyle = g.theme.textDim;
@@ -2075,17 +2087,14 @@ const GLANCE_PLUGIN = {
     // labels and smaller type, so the end labels do not pile up.
     const narrow = chart.width < 520, fs = 12;
     {
-      const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 15 && Math.abs(p.x - x) < (p.w + w) / 2 + 4)
-                              && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 15 && x - w < a.left + 90);
       const put = (text, x, y, align, color, size, weight, halo = true) => {
         ctx.font = `${weight} ${size}px ${Chart.defaults.font.family}`;
         const w = ctx.measureText(text).width;
-        // A centred label never spills over the y-axis ticks or off the canvas edge.
-        if (align === 'center') x = Math.max(a.left + w / 2 + 2, Math.min(chart.width - w / 2 - 2, x));
-        const cx = align === 'left' ? x + w / 2 : align === 'right' ? x - w / 2 : x;
-        if (!free(cx, y, w)) return false;
-        placed.push({ x: cx, y, w });
-        _glanceText(ctx, text, x, y, align, color, halo ? g.surface : null, size, weight);
+        // A label never spills over the y-axis ticks or off the canvas edge, and never lands on a more important one.
+        const spot = glanceLabelSpot(placed, { x, y, w, align }, { left: a.left, right: chart.width });
+        if (!spot) return false;
+        placed.push({ x: spot.cx, y, w });
+        _glanceText(ctx, text, spot.x, y, align, color, halo ? g.surface : null, size, weight);
         return true;
       };
       const n = (chart.data.labels || []).length;
@@ -2115,15 +2124,16 @@ const GLANCE_PLUGIN = {
         const P = _glancePartial(chart);
         vals.forEach((v, i) => { if (v != null && i !== P && (hi < 0 || v > vals[hi])) hi = i; });
         const marks = [];
+        let last = vals.length - 1;
+        while (last >= 0 && vals[last] == null) last--;
         if (pm.type === 'bar' && plan.timeLike) {
-          let last = vals.length - 1;
-          while (last >= 0 && vals[last] == null) last--;
           if (b1 && b1.latest !== last) marks.push(b1.latest);   // the gold bar always carries its value
-          if (last >= 0) marks.push(last);
+          else if (last >= 0) marks.push(last);
         }
         let lastLine = vals.length - 1;
         while (lastLine >= 0 && vals[lastLine] == null) lastLine--;
         if (hi >= 0 && vals[hi] > 0 && !(pm.type === 'line' && hi === lastLine) && !marks.includes(hi)) marks.push(hi);
+        if (pm.type === 'bar' && plan.timeLike && b1 && b1.latest !== last && last >= 0 && !marks.includes(last)) marks.push(last);   // the period in progress comes after best
         marks.forEach(i => {
           const el = pm.data[i];
           if (!el || el.skip) return;
@@ -2141,7 +2151,15 @@ const GLANCE_PLUGIN = {
           }
         });
       }
-      // 3) name the weekend bands once, wherever the caption does not cover a label
+      // 3) the average's value goes where it collides with nothing (left edge, then right edge, above its line, then below); else the headline says it
+      if (chart.$glanceAvg) {
+        ctx.font = `700 12px ${Chart.defaults.font.family}`;
+        const txt = chart.$glanceAvg.text, ay = chart.$glanceAvg.y;
+        for (const [x, y, al] of [[a.left + 4, ay - 8, 'left'], [a.left + 4, ay + 9, 'left'], [a.right - 4, ay - 8, 'right'], [a.right - 4, ay + 9, 'right']]) {
+          if (put(txt, x, y, al, g.theme.text, 12, 700)) break;
+        }
+      }
+      // 4) name the weekend bands once, wherever the caption does not cover a label
       for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 12, 600, false)) break;
     }
     ctx.restore();

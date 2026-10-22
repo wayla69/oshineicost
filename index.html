@@ -1381,6 +1381,13 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .content-area [class*="grid-cols-4"],
   .content-area [class*="grid-cols-5"],
   .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* a table + a chart side by side (lg:grid-cols-3, the chart in a third) is a half-width squeeze on a phone: stack the cards */
+  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) { grid-template-columns: minmax(0, 1fr) !important; }
+  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) > * { grid-column: auto !important; }
+  /* a chart with a figures column beside it (the overall monthly trend): the figures go under the chart, full width */
+  .content-area div.flex:has(> div > canvas) { flex-direction: column; }
+  .content-area div.flex:has(> div > canvas) > div:has(> canvas) { flex: none !important; width: 100%; }
+  .content-area div.flex:has(> div > canvas) > :not(:has(> canvas)) { width: 100% !important; border-left: 0 !important; padding-left: 0 !important; }
   .content-area .card { overflow-x: auto; }
   .content-area canvas { max-width: 100%; }
   /* ── Tables on a phone: the card scrolls sideways (above), the first column stays
