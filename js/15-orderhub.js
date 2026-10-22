@@ -191,12 +191,14 @@ const _OHB_STEPS = [1, 2, 3, 4, 5, 6, 7];
 let _ohbStSt = {};                 // step number -> its status (done | todo | blocked | na)
 function _ohbStepDone(n) { return _ohbStSt[n] === 'done' || _ohbStSt[n] === 'na'; }
 function _ohbStepPick(f) { uiStateFilter.set(f); _ohbStepDraw(); }
+function _ohbStepList() { return BC_MODE === 'stock' ? _OHB_STEPS.filter(i => i !== 1 && i !== 7) : _OHB_STEPS; }   // PR-S4: stock mode - no recipe step 1, no month summary 7: the stepper ends at ใบสรุปตัดเบิก
 function _ohbStepDraw() {
-  const f = uiStateFilter.get(), sp = uiStateFilter.split(_OHB_STEPS, _ohbStepDone);
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(_ohbStepList(), _ohbStepDone);
   uiStateFilter.bar('ohbStepFilter', { counts: sp.counts, f, pick: '_ohbStepPick' });
   let n = 0;
   _OHB_STEPS.forEach(i => {
     const el = document.getElementById('ohbSt' + i), card = el && el.closest('.card');
+    if (BC_MODE === 'stock' && (i === 1 || i === 7)) { if (card) card.style.display = 'none'; return; }
     const on = f === 'all' || (f === 'todo' ? !_ohbStepDone(i) : _ohbStepDone(i));
     if (card) card.style.display = on ? '' : 'none';
     if (on) n++;
@@ -1037,7 +1039,7 @@ function _isrFlagChip(f, withDates) {
   const dates = withDates ? ` ${_isrDm(f.from)}–${_isrDm(f.to)}` : '';
   if (f.basis_th) {                                                 // PR-S4: mode stock - the chip names what it was set against
     return _bmcChip(under ? `${f.name} เบิกต่ำกว่า${f.basis_th} ${f.days} วันติดต่อกัน (ต่ำสุด ${_isrPctAbs(f.max_pct)})${dates}`
-      : `${f.name} เบิกเกิน${f.basis_th} ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)');
+      : `${f.name} เบิกเกิน${f.basis_th} ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)', true);
   }
   return _bmcChip(under ? `${f.name} เบิกน้อยกว่าสูตร ${f.days} วันติดต่อกัน (ต่ำสุด ${_isrPctAbs(f.max_pct)})${dates}`
     : `${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)');
@@ -1090,8 +1092,8 @@ function _isrDailyTableStock(d, openFn, th) {
       <td class="py-1 pr-2 text-right">${_isrBaht(r.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${r.normal_value == null ? dash : _isrBaht(r.normal_value)}</td>
       <td class="py-1 pr-2 text-right">${r.median_value == null ? dash : _isrBaht(r.median_value)}</td>
-      <td class="py-1 pr-2 text-right">${judged && r.var_pct != null ? bmcGapHtml(r.var_value, r.var_pct, 'issue_n') : `<span style="color:var(--text-muted)">${r.confirmed && !judged ? esc(_isrNoVerdict(r)) : '—'}</span>`}</td>
-      <td class="py-1 pr-2 text-right">${judged && r.median_var_pct != null ? bmcGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') : dash}</td>
+      <td class="py-1 pr-2 text-right">${judged && r.var_pct != null ? stkGapHtml(r.var_value, r.var_pct, 'issue_n') : `<span style="color:var(--text-muted)">${r.confirmed && !judged ? esc(_isrNoVerdict(r)) : '—'}</span>`}</td>
+      <td class="py-1 pr-2 text-right">${judged && r.median_var_pct != null ? stkGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') : dash}</td>
       <td class="py-1">${bmcPairs(r.over_items.map(o => [esc(o.name), bmcGapWords(null, o.var_pct, o.basis === 'median' ? 'issue_m' : 'issue_n', true)]))}${r.flagged || r.under_flagged ? `<div class="mt-1" style="display:flex;gap:4px;flex-wrap:wrap">${r.flagged ? _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? _bmcChip('เบิกต่ำกว่าปกติต่อเนื่อง', 'var(--amber-ink)') : ''}</div>` : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
@@ -1100,7 +1102,7 @@ function _isrDailyTableStock(d, openFn, th) {
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.normal_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.median_value)}</td>
-      <td class="py-1 pr-2 text-right">${bmcGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
+      <td class="py-1 pr-2 text-right">${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
     ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ปกติของสาขา = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 4 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · ค่ากลางทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
 function _isrDayItemsStock(d, head, note, flags) {
@@ -1110,8 +1112,8 @@ function _isrDayItemsStock(d, head, note, flags) {
     return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(r.name)}</b><div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.code)} · ${esc(_isrClassTh(r.class))}${r.waste_reason_th ? ' · ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : ''}</div></td>
       <td class="py-1 pr-2 text-right">${q(r.used, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.waste, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.issued, r.base_unit)}</td>
       <td class="py-1 pr-2 text-right">${q(r.normal, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.median, r.base_unit)}</td>
-      <td class="py-1 pr-2 text-right">${r.var_qty == null && r.var_value == null ? '—' : bmcGapHtml(r.var_value, r.var_pct, 'issue_n')}${r.var_qty == null || !r.var_qty ? '' : `<div class="text-[10.5px]" style="color:var(--text-muted)">${_bmcNum(Math.abs(r.var_qty), 1)} ${esc(r.base_unit || '')}</div>`}</td>
-      <td class="py-1 pr-2 text-right">${r.median_pct == null ? '—' : bmcGapHtml(null, r.median_pct, 'issue_m', true)}</td>
+      <td class="py-1 pr-2 text-right">${r.var_qty == null && r.var_value == null ? '—' : stkGapHtml(r.var_value, r.var_pct, 'issue_n')}${r.var_qty == null || !r.var_qty ? '' : `<div class="text-[10.5px]" style="color:var(--text-muted)">${_bmcNum(Math.abs(r.var_qty), 1)} ${esc(r.base_unit || '')}</div>`}</td>
+      <td class="py-1 pr-2 text-right">${r.median_pct == null ? '—' : stkGapHtml(null, r.median_pct, 'issue_m', true)}</td>
       <td class="py-1">${r.signal ? _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}</td></tr>`;
   }).join('');
   return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">

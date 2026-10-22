@@ -77,6 +77,14 @@ function bmcGapParts(value, pct, kind, short) {
   const text = d === 0 ? label : label + (baht ? ' ' + baht : '') + (pc ? (baht ? ` (${pc})` : ' ' + pc) : '');
   return { dir: d, label, baht, pct: pc, ink, text };
 }
+// PR-S4 · stock mode: a gap inside the threshold is "close to normal" in muted ink; only a gap beyond it is coloured and worded as over / under
+function stkGapHtml(value, pct, kind, short) {
+  if (pct === null || pct === undefined || pct === '' || isNaN(pct) || Math.abs(Number(pct)) > 20) return bmcGapHtml(value, pct, kind, short);
+  const near = kind === 'issue_m' ? 'ใกล้เคียงค่ากลาง' : 'ใกล้เคียงปกติ';
+  const v = value !== null && value !== undefined && value !== '' && !isNaN(value) && Math.abs(Number(value)) >= 0.5 ? ` ฿${_bmcNum(Math.abs(Number(value)), 0)}` : '';
+  const p = Math.abs(Number(pct)) >= 0.05 ? ` (${_bmcNum(Math.abs(Number(pct)), Math.abs(Number(pct)) >= 10 ? 0 : 1)}%)` : '';
+  return `<span style="color:var(--text-muted)">${near}${v}${p}</span>`;
+}
 function bmcGapWords(value, pct, kind, short) { return bmcGapParts(value, pct, kind, short).text; }
 function bmcGapHtml(value, pct, kind, short) { const g = bmcGapParts(value, pct, kind, short); return `<span style="color:${g.ink}">${esc(g.text)}</span>`; }
 function _bmcPrice(v) {
@@ -237,8 +245,8 @@ function bmcNoPackChip(row) {
   return _bmcChip(row.no_pack_th || 'ยังไม่มีขนาดบรรจุ', 'var(--amber-ink)') + ' ' + uiQ('bmc:nopack', 'ยังไม่มีขนาดบรรจุ',
     '<p>ทะเบียนวัตถุดิบยังไม่ระบุขนาดบรรจุของรายการนี้ จำนวนจึงคิดเป็นหน่วยฐาน แสดงเป็นหน่วยที่ใหญ่ขึ้นเพื่ออ่านง่าย</p><p>ฝ่ายวิเคราะห์เป็นผู้เพิ่มขนาดบรรจุ</p>');
 }
-function _bmcChip(text, ink) {
-  return `<span class="bmc-chip" style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:nowrap;vertical-align:middle">${esc(text)}</span>`;
+function _bmcChip(text, ink, wrap) {        // wrap: a long chip (a flag) may break into lines instead of running off a phone
+  return `<span class="bmc-chip" style="display:inline-block;padding:1px 8px;border-radius:${wrap ? 12 : 999}px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:${wrap ? 'normal;max-width:100%' : 'nowrap'};vertical-align:middle">${esc(text)}</span>`;
 }
 // One row per branch (2026-10-19, owner: no run-on "✓ อุดรธานี: … · ✓ อุบลราชธานี: …" lines): สาขา · สถานะ · รายละเอียด · the link.
 // `branches` = [{branch, status, detail, ...}] as /todo gives them; `linkFn(b)` returns the row's action html (or '').

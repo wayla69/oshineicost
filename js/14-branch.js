@@ -1900,7 +1900,7 @@ function brnDailyCards(d, openFn) {
 function _brnDailyCardsStock(d, openFn, anyJudged) {
   const t = d.totals;
   const head = `<div class="text-xs" style="color:var(--text-secondary);margin-bottom:6px">${anyJudged
-    ? `รวมวันที่ยืนยันแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ปกติของสาขา <b>${_brnBaht(t.normal_value)}</b> · <b>${bmcGapHtml(t.var_value, t.var_pct, 'issue_n')}</b> · ค่ากลางทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${bmcGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>`
+    ? `รวมวันที่ยืนยันแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ปกติของสาขา <b>${_brnBaht(t.normal_value)}</b> · <b>${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</b> · ค่ากลางทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>`
     : 'ยังไม่มีวันที่เทียบกับปกติได้'}</div>`;
   return head + d.rows.slice().reverse().map(r => {
     const ink = _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)';
@@ -1910,7 +1910,7 @@ function _brnDailyCardsStock(d, openFn, anyJudged) {
     return `<button type="button" class="brn-daycard" onclick="${openFn}('${r.date}')" style="border-left-color:${ink}">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:var(--text-primary)">${esc(fmtDayShort(r.date))}</b> ${_bmcChip(r.slip_status_th, ink)}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? ' ' + _bmcChip('เบิกต่ำกว่าปกติต่อเนื่อง', 'var(--amber-ink)') : ''}</div>
       <div class="text-xs" style="color:var(--text-secondary);margin-top:2px">${judged
-        ? `ยอดเบิก <b>${_brnBaht(r.issued_value)}</b> · ปกติของสาขา <b>${nrm}</b>${r.var_pct != null ? ' · <b>' + bmcGapHtml(r.var_value, r.var_pct, 'issue_n') + '</b>' : ''} · ค่ากลาง <b>${med}</b>${r.median_var_pct != null ? ' · <b>' + bmcGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') + '</b>' : ''}`
+        ? `ยอดเบิก <b>${_brnBaht(r.issued_value)}</b> · ปกติของสาขา <b>${nrm}</b>${r.var_pct != null ? ' · <b>' + stkGapHtml(r.var_value, r.var_pct, 'issue_n') + '</b>' : ''} · ค่ากลาง <b>${med}</b>${r.median_var_pct != null ? ' · <b>' + stkGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') + '</b>' : ''}`
         : r.confirmed ? `ยอดเบิก <b>${_brnBaht(r.issued_value)}</b> · ${esc(_isrNoVerdict(r))}`
         : `ยังไม่มียอดเบิกให้เทียบ · ปกติของสาขา <b>${nrm}</b> · ค่ากลาง <b>${med}</b>`}</div></button>`;
   }).join('');
@@ -1930,7 +1930,7 @@ function brnDayItemsHtml(d, closeJs) {
     return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(_brnNm(r))}</b>${r.signal ? ' ' + _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}
         <div class="text-[10.5px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(r), r.waste_reason_th ? 'ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : '')}</div></td>
       <td class="py-1 pr-2 text-right">${r.issued == null ? '—' : brnQtyUnit(r.issued, r)}<div class="text-[10.5px]" style="color:var(--text-muted)">/ ${stk ? (r.normal == null ? '—' : brnQtyUnit(r.normal, r)) + (r.median == null ? '' : ' · ' + brnQtyUnit(r.median, r)) : brnQtyUnit(r.bom, r)}</div></td>
-      <td class="py-1 text-right">${bmcGapHtml(r.var_value, r.var_pct, stk ? 'issue_n' : 'issue', true)}</td></tr>`;
+      <td class="py-1 text-right">${stkGapHtml(r.var_value, r.var_pct, stk ? 'issue_n' : 'issue', true)}</td></tr>`;
   }).join('');
   return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       <th class="py-1 pr-2">รายการ</th><th class="py-1 pr-2 text-right">${stk ? 'เบิก / ปกติของสาขา · ค่ากลาง' : 'เบิก / ตามสูตร'}</th><th class="py-1 text-right">${stk ? 'เทียบปกติ' : 'เทียบสูตร'}</th></tr></thead><tbody>${rows}</tbody></table></div>`

@@ -471,3 +471,42 @@ def test_stock_mode_uses_the_duty_lines_of_analyst_and_kitchen():
                 "const x = [deptDuty(d), deptDuty(e)];\nBC_MODE = 'full';\nconsole.log(JSON.stringify([x, deptDuty(d)]));")
         out = subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout.strip()
         assert json.loads(out) == [["b", "a"], "a"]
+
+
+
+def test_a_gap_inside_the_threshold_is_neutral_and_beyond_it_is_coloured():
+    src = (Path(__file__).resolve().parent.parent / "js" / "13-bom-center.js").read_text(encoding="utf-8")
+    fn = re.search(r"^function stkGapHtml\(.*?^\}", src, re.M | re.S).group(0)
+    if not shutil.which("node"):
+        pytest.skip("node is not installed")
+    code = ("const _bmcNum = (v) => String(Math.round(v)); const bmcGapHtml = (v, p, k) => 'COLOURED:' + k;\n" + fn
+            + "\nconsole.log(JSON.stringify([stkGapHtml(138, 3.5, 'issue_n'), stkGapHtml(-60, -19, 'issue_m'), stkGapHtml(500, 21, 'issue_n'),"
+              " stkGapHtml(1, -25, 'issue_m'), stkGapHtml(1, null, 'issue_n')]));")
+    out = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True, encoding="utf-8").stdout)
+    assert "ใกล้เคียงปกติ" in out[0] and "var(--text-muted)" in out[0] and "COLOURED" not in out[0]
+    assert "ใกล้เคียงค่ากลาง" in out[1]
+    assert out[2] == "COLOURED:issue_n" and out[3] == "COLOURED:issue_m" and out[4] == "COLOURED:issue_n"
+
+
+# ── 9 · the month summary page is a recipe page ───────────────────────────────────────────────
+def test_the_month_summary_is_hidden_in_stock_mode_and_the_close_ends_at_the_issue_summary(world):
+    c = world
+    js = (Path(__file__).resolve().parent.parent / "js" / "01-core.js").read_text(encoding="utf-8")
+    assert len(re.findall(r"pane: 'month', bom: true, label: 'สรุปผลต่างรายเดือน'", js)) == 2          # the department tile and the chip
+    now = datetime(2026, 9, 28, 8, 0, tzinfo=BKK)
+
+    def steps():
+        return [s["key"] for s in TD.build(c, "2026-09", None, None, today=date(2026, 9, 28), now=now)["close"]["steps"]]
+    stock = steps()
+    assert "monthly_summary" not in stock and "release_in_force" not in stock and stock[-1] == "issue_posted"
+    CS.set_mode(c, "t", "full")
+    full = steps()
+    assert full[-1] == "monthly_summary" and "release_in_force" in full
+
+
+def test_the_miscount_task_opens_the_issue_summary_in_stock_mode(world):
+    c = world
+    t = {"rule": "miscount", "month": "2026-09", "branches": [{"branch_id": 1}]}
+    assert TD._feedback_go(c, t) == {"tab": "bomcenter", "pane": "issue", "month": "2026-09", "branch": 1}
+    CS.set_mode(c, "t", "full")
+    assert TD._feedback_go(c, t)["pane"] == "month"

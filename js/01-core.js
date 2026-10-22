@@ -2905,7 +2905,7 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'month', bom: true, label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'], roles: ['accounting', 'analyst', 'management'] }] },
   // PR-M7 · ข้อมูลตั้งต้น (the analyst and the manager): the register, the units and the readiness of the older codes - set up rarely
   { key: 'base', label: 'ข้อมูลตั้งต้น', items: [
@@ -3081,7 +3081,7 @@ const DEPARTMENTS = [
     { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', icon: 'bar' },
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', icon: 'recv' },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', icon: 'lock' },
+    { tab: 'orderhub', pane: 'month', bom: true, label: 'สรุปผลต่างรายเดือน', icon: 'lock' },
     { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', icon: 'cal' },
     { tab: 'bomcenter', pane: 'events', label: 'ปฏิทินเทศกาลและวันหยุด', icon: 'cal' },
     { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', icon: 'box' },

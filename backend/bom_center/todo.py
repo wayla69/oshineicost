@@ -73,6 +73,7 @@ RECIPE_KEYS = (
     "backlog",                  # the data-quality backlog ranked by the plates a recipe line touches
     "feedback_formula_excess",  # the task "ตรวจสูตร" the variance reasons make (opens ตรวจสูตรด้วยยอดซื้อ)
     "release_in_force",         # close step 1: the recipe version in force for the month
+    "monthly_summary",          # close step 9: สรุปผลต่างรายเดือน (period use against the recipes); stock mode ends at ใบสรุปตัดเบิก
 )
 
 
@@ -300,6 +301,15 @@ FEEDBACK_GO = {
 }
 
 
+def _feedback_go(con, t: dict) -> dict:
+    """PR-S4: where a feedback task opens. The month summary is a recipe page: in stock mode the miscount task opens the month-close
+    summary (ใบสรุปตัดเบิก / กระทบยอด, system stock against the count) of that branch instead."""
+    from .close_settings import stock_mode
+    if t["rule"] == "miscount" and stock_mode(con):
+        return {"tab": "bomcenter", "pane": "issue", "month": t["month"], "branch": t["branches"][0]["branch_id"]}
+    return FEEDBACK_GO[t["rule"]](t)
+
+
 def _feedback_items(con) -> list:
     """Batch 4b (2.6): the tasks the variance and order reasons make (feedback.evaluate): one item per task, closed by an
     acknowledgement or when the rule stops holding. Each says who owns it; ตรวจสูตร links to ตรวจสูตรด้วยยอดซื้อ for the item."""
@@ -311,7 +321,7 @@ def _feedback_items(con) -> list:
     out = []
     for t in tasks:
         out.append(_e(f"feedback_{t['rule']}", 340, "week", t["title"], "todo", t["detail"], owner=tuple(t["owner_modules"]),
-                      owner_th=t["owner_th"], go=FEEDBACK_GO[t["rule"]](t), feedback_key=t["key"], rule=t["rule"], subject=t["subject"],
+                      owner_th=t["owner_th"], go=_feedback_go(con, t), feedback_key=t["key"], rule=t["rule"], subject=t["subject"],
                       month=t["month"], branch_names=[b["name"] for b in t["branches"]], ack_modules=t["ack_modules"]))
         out[-1]["key"] = f"feedback:{t['key']}"
     return out

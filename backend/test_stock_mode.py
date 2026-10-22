@@ -170,13 +170,13 @@ def test_todo_in_stock_mode_has_no_recipe_item_and_keeps_the_rest(udon):
     # what stays: prices, orders, the slip, claims, counts and the month close
     assert {"price_month", "price_submit", "master_seed", "master_issues"} <= items
     assert "order_due" in items and "issue_today" in items            # (the round suffix of order_due_1 / _2 / _salmon is dropped by _base_key)
-    assert {"deliveries", "begin_count", "end_count", "receipts_confirm", "issue_posted", "monthly_summary"} <= steps
+    assert {"deliveries", "begin_count", "end_count", "receipts_confirm", "issue_posted"} <= steps and "monthly_summary" not in steps      # PR-S4: the month summary is a recipe page
     # full mode is today's list: stock = full minus the recipe keys, nothing else moved
     assert {"draft", "acknowledge", "sub_recipes", "code_review"} <= full_i and "release_in_force" in full_s
     assert items == full_i - set(TD.RECIPE_KEYS)
     assert steps == full_s - set(TD.RECIPE_KEYS)
     assert [s["seq"] for s in d_full["close"]["steps"]] == list(range(1, 10))
-    assert d["close"]["total"] == len(d["close"]["steps"]) == 8
+    assert d["close"]["total"] == len(d["close"]["steps"]) == 7
     assert d["release"]["in_force"] == d_full["release"]["in_force"]
     # the seed button lives on the register page, which stays
     assert next(i for i in d["items"] if i["key"] == "master_seed")["go"] == {"tab": "bomcenter", "pane": "ing"}
