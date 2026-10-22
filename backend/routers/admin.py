@@ -136,8 +136,9 @@ def get_settings():
     with get_db() as con:
         rows = con.execute("SELECT key, value FROM app_settings").fetchall()
     # cloud_sync_status holds the pull's log tail (backend/cloud_sync.py): Management reads it from
-    # /api/admin/cloud-sync/status, it is not a preference every signed-in role should be handed
-    return {r["key"]: r["value"] for r in rows if not r["key"].startswith("cloud_sync_")}
+    # /api/admin/cloud-sync/status (cloud_backup_status: /api/admin/cloud-backup/status), it is not a preference
+    # every signed-in role should be handed
+    return {r["key"]: r["value"] for r in rows if not r["key"].startswith(("cloud_sync_", "cloud_backup_"))}
 
 
 @router.put("/api/settings", dependencies=[Depends(require_write_token)])
