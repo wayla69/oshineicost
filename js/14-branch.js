@@ -485,6 +485,7 @@ async function brnIssLoad(opts) {
     _brnIssLastSig = JSON.stringify(_brnIssLines().lines);
     if (!_brnIssZone || !sh.zones.some(z => z.zone === _brnIssZone)) _brnIssZone = (sh.zones[0] || {}).zone || null;
     brnIssRender();
+    brnFormMount('iss');                              // PR-SI: the Excel form under the day strip
     brnIssHistory();
   } catch (e) { document.getElementById('brnIssList').innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -1384,6 +1385,7 @@ async function brnOpenReceive(id, quiet) {
     box.style.display = '';
     box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">รับสินค้า · ${esc(_brnRoundLabel(o.round))} · ส่ง ${esc(fmtDay(o.delivery || o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}</div>
       <label class="text-xs mt-2 block" style="color:var(--text-muted)">วันที่รับ <input type="date" id="brnRecvOrdDate" value="${day}" style="${sel}"></label>
+      <div id="brnRecvForm" class="mt-2"></div>
       <div class="brn-q mt-3">รับครบตามที่คลังส่งทุกรายการ?</div>
       <div class="brn-qbtns mt-2">
         <button type="button" id="brnRcvAll" class="brn-qbtn" aria-pressed="false" onclick="brnRcvMode('all')">รับครบ</button>
@@ -1406,6 +1408,7 @@ async function brnOpenReceive(id, quiet) {
         <span id="brnRecvWhy" class="brn-why-line" role="status"></span>
         <span id="brnRecvOrdStatus" class="brn-status" role="status"></span></div>`;
     brnRcvRender();
+    brnFormMount('rcv');                                  // PR-SI: the Excel form of this receipt
     if (!quiet) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) { box.style.display = ''; box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
 }
@@ -2252,6 +2255,7 @@ function brnRenderOrder() {
   const editable = !o || ['suggested', 'confirmed'].includes(o.status);
   _brnOrdQuick(editable && p.rows.some(r => r.order_units > 0));
   _brnRenderBuffer(p, editable);
+  brnFormMount('ord', editable);                          // PR-SI: the Excel form, only while the order can still be changed
   const up = 1 + ((p.buffer || {}).pct || 0) / 100;
   const stk = p.stock || {};
   const slip = stk.slip_today || {};
@@ -2910,4 +2914,238 @@ function brnClaimHint(orderId) {   // right after a receipt: a line to claim wha
   el.style.color = 'var(--text-secondary)';
   el.innerHTML = `บันทึกรับสินค้าแล้ว · พบของชำรุด เสีย หรือส่งผิดภายหลัง <a href="#" onclick="brnClaimOpen(${orderId});return false" style="color:var(--accent);font-weight:600;text-decoration:underline">แจ้งเคลม</a>`;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ── PR-SI · แบบฟอร์ม Excel: ใบตัดเบิก · ใบสั่งซื้อ · รับสินค้า ─────────────────────────────────────────────────────
+// Keying in the app stays the default. The same page can hand out an Excel form and read it back: the file is checked first (a dry run: a table,
+// nothing written) and saved on the person's say-so. The server runs the very save the app uses (bom_center/branch_forms.py); this block only
+// shows the check and sends the file. Every word of the forms is in _BRN_FORM so the wording is changed in one place.
+const _BRN_FORM = {
+  download: 'ดาวน์โหลดแบบฟอร์ม', pick: 'นำเข้าไฟล์', days: 'จำนวนวัน', draft: 'บันทึกร่าง', confirmSlip: 'ยืนยันใบตัดเบิก', sendOrder: 'ส่งใบสั่งซื้อ',
+  saveRecv: 'บันทึกรับสินค้า', close: 'ปิด', ack: 'ตรวจสภาพและจำนวนครบแล้ว', claimNote: 'ข้อความถึงประสานงานขาย (ถ้ามี)',
+  help: {
+    iss: 'กรอกในแอปหรือใช้แบบฟอร์ม Excel ก็ได้ ผลเหมือนกัน · แบบฟอร์มกรอกได้ครั้งละไม่เกิน 7 วัน',
+    ord: 'กรอกในแอปหรือใช้แบบฟอร์ม Excel ก็ได้ ผลเหมือนกัน',
+    rcv: 'กรอกในแอปหรือใช้แบบฟอร์ม Excel ก็ได้ ผลเหมือนกัน',
+  },
+  state: {
+    new: ['ใหม่', 'var(--navy-ink)'], draft: ['มีร่างอยู่', 'var(--navy-ink)'], confirmed: ['ยืนยันแล้ว', 'var(--bad-ink)'],
+    future: ['วันล่วงหน้า', 'var(--bad-ink)'], too_old: ['เกิน 60 วัน', 'var(--bad-ink)'], posted: ['งวดล็อก', 'var(--bad-ink)'],
+  },
+};
+const _BRN_FORM_BOX = { iss: 'brnIssForm', ord: 'brnOrdForm', rcv: 'brnRecvForm' };
+let _brnFormKind = null;       // the pane that asked for the file picker
+let _brnFormSt = null;         // {kind, file, pre}: the file under check and what the server said
+
+function _brnFormAddDays(iso, n) { const d = new Date(String(iso) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function _brnFormInput() {
+  let el = /** @type {HTMLInputElement|null} */ (document.getElementById('brnFormFile'));
+  if (!el) {
+    el = document.createElement('input');
+    el.type = 'file'; el.id = 'brnFormFile'; el.accept = '.xlsx'; el.style.display = 'none';
+    el.addEventListener('change', () => brnFormPicked(el));
+    document.body.appendChild(el);
+  }
+  return el;
+}
+// the row under the page's own controls: the download, the days (slip only) and the import; `show` false hides it (an order already sent)
+function brnFormMount(kind, show) {
+  const box = document.getElementById(_BRN_FORM_BOX[kind]);
+  if (!box) return;
+  const on = _brnCanOrder() && show !== false;
+  box.style.display = on ? '' : 'none';
+  if (!on) { box.innerHTML = ''; return; }
+  if (box.querySelector('.brn-formrow')) return;
+  const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;min-height:44px;background:var(--bg-input);color:var(--text-primary)';
+  box.innerHTML = `<div class="brn-formrow" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+      <button type="button" class="brn-act brn-act-line" onclick="brnFormDownload('${kind}')">${_BRN_FORM.download}</button>
+      ${kind === 'iss' ? `<label class="text-xs" style="color:var(--text-secondary)">${_BRN_FORM.days} <select id="brnIssFormDays" style="${sel}">${[1, 2, 3, 4, 5, 6, 7].map(n => `<option value="${n}">${n}</option>`).join('')}</select></label>` : ''}
+      <button type="button" class="brn-act brn-act-line" onclick="brnFormPick('${kind}')">${_BRN_FORM.pick}</button>
+      ${uiQ('brn:form:' + kind, _BRN_FORM.download, `<p>${esc(_BRN_FORM.help[kind])}</p>`)}
+      <span id="brnFormStatus_${kind}" class="brn-status" role="status"></span></div>
+    <div class="brn-formpre mt-2"></div>`;
+}
+function brnFormDownload(kind) {
+  const qs = _brnQS();
+  const stat = 'brnFormStatus_' + kind;
+  if (kind === 'iss') {
+    if (!_brnIss) return;
+    const n = Number((document.getElementById('brnIssFormDays') || { value: 1 }).value || 1);
+    const start = _brnFormAddDays(_brnIss.date, -(n - 1));            // the days end on the day on screen
+    bmcDownload(`${API}/api/bom-center/issues/template.xlsx?${[qs, 'date=' + start, 'days=' + n].filter(Boolean).join('&')}`, 'แบบฟอร์ม_ใบตัดเบิก.xlsx', stat);
+  } else if (kind === 'ord') {
+    const p = _brnPlan;
+    if (!p) return;
+    bmcDownload(`${API}/api/bom-center/order/template.xlsx?${[qs, 'round=' + (p.round || _brnRound), 'delivery=' + p.delivery].filter(Boolean).join('&')}`, 'แบบฟอร์ม_ใบสั่งซื้อ.xlsx', stat);
+  } else if (_brnRecvOrd) {
+    bmcDownload(`${API}/api/bom-center/order/${_brnRecvOrd.order_id}/receive-template.xlsx${qs ? '?' + qs : ''}`, 'แบบฟอร์ม_รับสินค้า.xlsx', stat);
+  }
+}
+function brnFormPick(kind) {
+  _brnFormKind = kind;
+  const el = _brnFormInput();
+  el.value = '';
+  el.click();
+}
+// the URL of the import of a kind; `o` carries what the call needs beyond the branch
+function _brnFormUrl(kind, dry, o) {
+  const qs = _brnQS(), q = (a) => a.filter(Boolean).join('&');
+  if (kind === 'iss') return `${API}/api/bom-center/issues/import?${q([qs, 'dry_run=' + dry, 'submit=' + !!o.submit])}`;
+  if (kind === 'ord') {
+    const p = _brnPlan;
+    return `${API}/api/bom-center/order/import?${q([qs, 'round=' + (p.round || _brnRound), 'delivery=' + p.delivery, 'dry_run=' + dry, 'submit=' + !!o.submit, 'ack_late=' + !!o.ackLate])}`;
+  }
+  const day = (document.getElementById('brnRecvOrdDate') || { value: '' }).value;
+  return `${API}/api/bom-center/order/${_brnRecvOrd.order_id}/receive-import?${q([qs, 'dry_run=' + dry, 'ack=' + !!o.ack, day ? 'receipt_date=' + day : ''])}`;
+}
+function _brnFormBody(file, extra) {
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  Object.entries(extra || {}).forEach(([k, v]) => { if (v) fd.append(k, v); });
+  return fd;
+}
+async function brnFormPicked(el) {
+  const file = el.files && el.files[0];
+  const kind = _brnFormKind;
+  if (!file || !kind) return;
+  const stat = 'brnFormStatus_' + kind;
+  _bmcStatus(stat, 'กำลังตรวจไฟล์…', 'var(--text-muted)');
+  try {
+    const pre = await _bmcJson(_brnFormUrl(kind, true, {}), { method: 'POST', body: _brnFormBody(file) });
+    _brnFormSt = { kind, file, pre };
+    _bmcStatus(stat, '');
+    brnFormShow();
+  } catch (e) { _bmcStatus(stat, 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+}
+function brnFormClose() {
+  const st = _brnFormSt;
+  _brnFormSt = null;
+  if (!st) return;
+  const box = document.querySelector('#' + _BRN_FORM_BOX[st.kind] + ' .brn-formpre');
+  if (box) box.innerHTML = '';
+}
+function _brnFormProbs(errs) {
+  const list = (errs || []).slice(0, 3).map(e => (e.row ? `แถว ${e.row}: ` : '') + e.message);
+  const more = (errs || []).length > 3 ? ` และอีก ${errs.length - 3} รายการ` : '';
+  return list.map(esc).join('<br>') + more;
+}
+function _brnFormBtn(label, on, primary, off) {
+  return `<button type="button" class="brn-act${primary ? '' : ' brn-act-line'}" onclick="${on}"${off ? ' disabled' : ''}>${label}</button>`;
+}
+const _BRN_FORM_TABLE = 'width:100%;border-collapse:collapse';
+function _brnFormPreIss(d) {
+  const head = ['วันที่', 'รายการ', 'เบิกใช้', 'ของเสีย'];
+  const rows = d.dates.map(x => {                       // the problems of a date sit on a line of their own (a phone has no room for a fifth column)
+    const [t, ink] = _BRN_FORM.state[x.state] || [x.state, 'var(--text-muted)'];
+    return `<tr style="border-top:1px solid var(--border-soft);vertical-align:top"><td class="py-1 pr-2">${esc(fmtDayShort(x.date))} ${_bmcChip(t, ink)}</td>
+      <td class="py-1 pr-2 text-right">${x.lines}</td><td class="py-1 pr-2 text-right">${x.used_lines}</td><td class="py-1 pr-2 text-right">${x.waste_lines}</td></tr>`
+      + (x.errors.length ? `<tr><td colspan="4" class="pb-1" style="color:var(--bad-ink)">ปัญหา: ${_brnFormProbs(x.errors)}</td></tr>` : '');
+  }).join('');
+  const fe = (d.file_errors || []).length ? `<div class="text-xs mb-1" style="color:var(--bad-ink)">${_brnFormProbs(d.file_errors)}</div>` : '';
+  const none = !d.dates.some(x => !x.errors.length) || (d.file_errors || []).length > 0;
+  return `${fe}<div style="overflow-x:auto"><table class="text-xs" style="${_BRN_FORM_TABLE}"><thead><tr class="text-left" style="color:var(--text-muted)">${head.map((h, i) => `<th class="pr-2${i ? ' text-right' : ''}">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="flex flex-wrap items-center gap-2 mt-2">${_brnFormBtn(_BRN_FORM.draft, 'brnFormApplyIss(false)', false, none)}${_brnFormBtn(_BRN_FORM.confirmSlip, 'brnFormApplyIss(true)', true, none)}${_brnFormBtn(_BRN_FORM.close, 'brnFormClose()', false)}</div>`;
+}
+function _brnFormPreOrd(d) {
+  const p = _brnPlan || {};
+  const slipOk = _brnSlipOk(p);
+  const bad = d.errors.length > 0 || !d.lines;
+  const chips = [_bmcChip(`${d.lines} รายการ`, 'var(--navy-ink)')];
+  if (d.needs_reason_names && d.needs_reason_names.length) chips.push(_bmcChip(`ต้องระบุเหตุผล ${d.needs_reason_names.length} รายการก่อนส่ง`, 'var(--amber-ink)'));
+  if (!slipOk) chips.push(_bmcChip('ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่ง', 'var(--amber-ink)'));
+  if (p.late) chips.push(_bmcChip('ส่งล่าช้า (มีค่าปรับ)', 'var(--bad-ink)'));
+  const names = d.needs_reason_names && d.needs_reason_names.length ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">${esc(d.needs_reason_names.slice(0, 5).join(', '))}${d.needs_reason_names.length > 5 ? ' …' : ''}</div>` : '';
+  const errs = d.errors.length ? `<div class="text-xs mt-1" style="color:var(--bad-ink)">${_brnFormProbs(d.errors)}</div>` : '';
+  const cannotSend = bad || !slipOk || (d.needs_reason_names || []).length > 0;
+  return `<div class="flex flex-wrap items-center gap-2">${chips.join(' ')}</div>${names}${errs}
+    <div class="flex flex-wrap items-center gap-2 mt-2">${_brnFormBtn(_BRN_FORM.draft, 'brnFormApplyOrd(false)', false, bad)}${_brnFormBtn(_BRN_FORM.sendOrder, 'brnFormApplyOrd(true)', true, cannotSend)}${_brnFormBtn(_BRN_FORM.close, 'brnFormClose()', false)}</div>`;
+}
+function _brnFormPreRcv(d) {
+  const chips = [_bmcChip(`${d.lines} รายการ`, 'var(--navy-ink)')];
+  if (d.claim_lines) chips.push(_bmcChip(`เคลม ${d.claim_lines} รายการ`, 'var(--amber-ink)'));
+  if ((d.over || []).length) chips.push(_bmcChip(`รับเกินที่ส่ง ${d.over.length} รายการ`, 'var(--navy-ink)'));
+  const errs = d.errors.length ? `<div class="text-xs mt-1" style="color:var(--bad-ink)">${_brnFormProbs(d.errors)}</div>` : '';
+  const ok = d.errors.length === 0;
+  const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
+  return `<div class="flex flex-wrap items-center gap-2">${chips.join(' ')}</div>${errs}
+    ${d.claim_lines ? `<textarea id="brnFormClaimNote" rows="2" placeholder="${_BRN_FORM.claimNote}" style="${sel};width:100%;margin-top:6px"></textarea>` : ''}
+    <label class="mt-2" style="display:flex;gap:10px;align-items:center;min-height:44px;color:var(--text-primary);cursor:pointer;font-size:15px">
+      <input type="checkbox" id="brnFormAck" onchange="document.getElementById('brnFormRcvSave').disabled = !this.checked || ${!ok}" style="width:24px;height:24px;flex:none">
+      <span>${_BRN_FORM.ack}</span></label>
+    <button type="button" class="brn-link" onclick="brnRcvTerms()">เงื่อนไขการเคลม</button>
+    <div class="flex flex-wrap items-center gap-2 mt-2"><button type="button" id="brnFormRcvSave" class="brn-act" onclick="brnFormApplyRcv()" disabled>${_BRN_FORM.saveRecv}</button>${_brnFormBtn(_BRN_FORM.close, 'brnFormClose()', false)}</div>`;
+}
+function brnFormShow() {
+  const st = _brnFormSt;
+  if (!st) return;
+  const box = document.querySelector('#' + _BRN_FORM_BOX[st.kind] + ' .brn-formpre');
+  if (!box) return;
+  box.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px"><div class="text-xs mb-1" style="color:var(--text-muted)">${esc(st.file.name)}</div>`
+    + (st.kind === 'iss' ? _brnFormPreIss(st.pre) : st.kind === 'ord' ? _brnFormPreOrd(st.pre) : _brnFormPreRcv(st.pre)) + '</div>';
+}
+async function brnFormApplyIss(submit) {
+  const st = _brnFormSt;
+  if (!st || st.kind !== 'iss') return;
+  const ok = st.pre.dates.filter(x => !x.errors.length);
+  if (!ok.length) return;
+  if (submit && !await uiConfirm((ok.some(x => x.late) ? 'ใบย้อนหลังนับเป็นล่าช้า\n' : '')
+      + `ยืนยันใบตัดเบิก ${ok.length} วัน: ${ok.map(x => fmtDayShort(x.date)).join(', ')}\nยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย`,
+      { title: 'ยืนยันใบตัดเบิก', ok: 'ยืนยัน', cancel: 'กลับไปแก้' })) return;
+  _bmcStatus('brnFormStatus_iss', 'กำลังบันทึก…', 'var(--text-muted)');
+  try {
+    const r = await _bmcJson(_brnFormUrl('iss', false, { submit }), { method: 'POST', body: _brnFormBody(st.file) });
+    brnFormClose();
+    _bmcStatus('brnFormStatus_iss', '');
+    _brnPlan = null;                                  // the order suggestion follows the slips
+    _brnIssDirty = false;
+    await brnIssLoad({ quiet: true });
+    const n = submit ? r.confirmed : r.saved;
+    _bmcStatus('brnIssStatus', `✓ ${submit ? 'ยืนยันใบตัดเบิก' : 'บันทึกร่าง'} ${n} วัน` + (r.refused ? ` · ไม่บันทึก ${r.refused} วัน` : ''), r.refused ? 'var(--amber-ink)' : 'var(--good-ink)');
+  } catch (e) { _bmcStatus('brnFormStatus_iss', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
+}
+async function brnFormApplyOrd(submit, ackLate) {
+  const st = _brnFormSt;
+  const p = _brnPlan;
+  if (!st || st.kind !== 'ord' || !p) return;
+  if (submit && !ackLate) {
+    if (!await uiConfirm((p.late ? _BRN_LATE_MSG(p.cutoff_th) + '\n' : '')
+        + `ยืนยันส่งใบสั่งซื้อรอบส่ง${p.delivery_th}?\n${st.pre.lines} รายการ จากไฟล์\nแก้ไขได้จนกว่าคลังยืนยันยอดส่ง`, { title: 'ยืนยันการส่งใบสั่งซื้อ', ok: _BRN_FORM.sendOrder, cancel: 'ยกเลิก' })) return;
+    ackLate = !!p.late;
+  }
+  _bmcStatus('brnFormStatus_ord', 'กำลังบันทึก…', 'var(--text-muted)');
+  try {
+    const r = await _bmcJson(_brnFormUrl('ord', false, { submit, ackLate }), { method: 'POST', body: _brnFormBody(st.file) });
+    brnFormClose();
+    _bmcStatus('brnFormStatus_ord', '');
+    await brnLoadOrder();
+    _bmcStatus('brnOrdStatus', submit ? `✓ ส่งใบสั่งซื้อ ${_bmcRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} แล้ว · ฿${_bmcNum(r.value, 0)}${r.late ? ' · ส่งล่าช้า มีค่าปรับ' : ''}`
+      : `✓ บันทึกร่าง${r.needs_reason.length ? ` · ต้องระบุเหตุผล ${r.needs_reason.length} รายการก่อนส่ง` : ''}`, r.needs_reason.length && !submit ? 'var(--amber-ink)' : 'var(--good-ink)');
+  } catch (e) {
+    if (e.detail && e.detail.code === 'late' && !ackLate) {       // the server's clock says the cut-off has passed: ask once, then send with the late fee
+      if (await uiConfirm(_BRN_LATE_MSG(e.detail.cutoff_th) + '\nส่งใบสั่งซื้อนี้ต่อหรือไม่?', { title: 'ส่งใบสั่งซื้อล่าช้า', ok: _BRN_FORM.sendOrder, cancel: 'ไม่ส่ง' })) return brnFormApplyOrd(submit, true);
+      return;
+    }
+    _bmcStatus('brnFormStatus_ord', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)');
+  }
+}
+async function brnFormApplyRcv() {
+  const st = _brnFormSt;
+  const o = _brnRecvOrd;
+  const ack = /** @type {HTMLInputElement|null} */ (document.getElementById('brnFormAck'));
+  if (!st || st.kind !== 'rcv' || !o || !ack || !ack.checked) return;       // the acknowledgement is the person's own tick, never assumed
+  const d = st.pre;
+  const day = (document.getElementById('brnRecvOrdDate') || { value: '' }).value;
+  if (!await uiConfirm(`บันทึกรับสินค้า${_bmcRoundDay(o)} · ${d.lines} รายการ · วันที่ ${fmtDay(day)}`
+      + (d.claim_lines ? '\nเคลมส่วนต่างส่งถึงประสานงานขาย' : '') + ((d.over || []).length ? `\nรับเกินที่ส่ง ${d.over.length} รายการ` : ''),
+      { title: 'ยืนยันการบันทึกรับสินค้า', ok: _BRN_FORM.saveRecv, cancel: 'กลับไปแก้' })) return;
+  const note = String((document.getElementById('brnFormClaimNote') || { value: '' }).value || '').trim();
+  try {
+    const r = await _bmcJson(_brnFormUrl('rcv', false, { ack: true }), { method: 'POST', body: _brnFormBody(st.file, { claim_note: note }) });
+    brnFormClose();
+    _brnRecvOrd = null;
+    document.getElementById('brnRecvOrder').style.display = 'none';
+    _bmcStatus('brnRecvOrdDone', r.claim_id ? `✓ บันทึกรับสินค้าแล้ว · แจ้งเคลม ${r.claim_lines} รายการให้ประสานงานขายแล้ว` : `✓ บันทึกรับสินค้าแล้ว ${d.lines} รายการ`, 'var(--good-ink)');
+    if (!r.claim_id) brnClaimHint(o.order_id);
+    await brnLoadRecv();
+  } catch (e) { _bmcStatus('brnFormStatus_rcv', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 220), 'var(--bad-ink)'); }
 }

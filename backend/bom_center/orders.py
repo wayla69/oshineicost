@@ -262,6 +262,23 @@ def _cutoff_dt(con, o: dict) -> datetime:
                                                      o.get("delivery_date"))))
 
 
+def clean_line(con, ln: dict) -> tuple:
+    """(quantity | None, reason code | None) of one order line a branch sent, checked: the one rule of the app's save and of the file import."""
+    c = (ln.get("code") or "").strip()
+    q = ln.get("confirmed_units")
+    if q is not None:
+        try:
+            q = float(q)
+        except (TypeError, ValueError):
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องเป็นตัวเลข")
+        if q < 0:
+            raise ValueError(f"{_item(con, c)}: จำนวนต้องไม่ติดลบ")
+    rs = (ln.get("reason_code") or "").strip() or None
+    if rs and rs not in REASON_TH:
+        raise ValueError(f"{_item(con, c)}: เหตุผลไม่อยู่ในรายการ")
+    return q, rs
+
+
 def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines: list, who: str,
          submit: bool = False, note: str = None, buffer: dict = None, ack_late: bool = False,
          delivery: str = None, now: datetime = None) -> dict:
@@ -333,17 +350,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
         c = (ln.get("code") or "").strip()
         if not c:
             continue
-        q = ln.get("confirmed_units")
-        if q is not None:
-            try:
-                q = float(q)
-            except (TypeError, ValueError):
-                raise ValueError(f"{_item(con, c)}: จำนวนต้องเป็นตัวเลข")
-            if q < 0:
-                raise ValueError(f"{_item(con, c)}: จำนวนต้องไม่ติดลบ")
-        rs = (ln.get("reason_code") or "").strip() or None
-        if rs and rs not in REASON_TH:
-            raise ValueError(f"{_item(con, c)}: เหตุผลไม่อยู่ในรายการ")
+        q, rs = clean_line(con, ln)
         if c not in have:                                   # an item the suggestion did not include
             if not con.execute("SELECT 1 FROM bc_ingredient WHERE code=?", (c,)).fetchone():
                 raise ValueError(f"ไม่พบรหัส {c} ในทะเบียน")
