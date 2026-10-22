@@ -86,7 +86,7 @@ const _OHB_HELP = {
       'สีเขียว 90% ขึ้นไป · สีเหลือง 60–89% · สีแดงต่ำกว่า 60% หรือไม่มีการใช้งานใน 7 วัน · สีของสาขาคือสีของช่องที่ต่ำสุด',
       'ใช้งานล่าสุด = เวลาเข้าสู่ระบบหรือบันทึกข้อมูลล่าสุดของสาขา (เวลาประเทศไทย)'] },
   pilot: {
-    _: ['สาขานำร่อง 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง)',
+    _: ['ความพร้อม: ทุกสาขาที่เปิดใช้งาน · ผลนำร่อง: สาขานำร่อง 4 สาขา 4 สัปดาห์ (อุบลราชธานี · อุดรธานี · ขอนแก่น · ระยอง)',
       'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
       'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
   central: {
@@ -633,12 +633,12 @@ function ohbRenderDetail() {
       <div class="ohb-line-n">${esc(l.name || l.code)}</div>
       <div class="ohb-line-c">${esc(l.code)}</div>
       <div class="ohb-line-q">สั่ง <b>${_bmcNum(l.confirmed_units)}</b> ${esc(_ohbUnitFull(l))}${_ohbBig(l, l.confirmed_units)} <span style="color:var(--text-muted)">· ยอดแนะนำ ${_bmcNum(l.suggested_units)}</span>${l.no_pack ? ' ' + bmcNoPackChip(l) : ''}${l.reason_th ? `<div style="color:var(--amber-ink)">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</div>
-      ${work ? `<label class="ohb-line-f">ส่งจริง <input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" class="ohb-sent"> ${esc(_ohbUnitWord(l))}</label>
+      ${work ? `<label class="ohb-line-f">ส่งจริง <input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(bmcToTyped(sent, bmcTypeF(l)))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" class="ohb-sent"> ${esc(bmcTypeUnit(l, _ohbUnitWord(l)))}</label>
         <div id="ohbPE_${esc(l.code)}" class="ohb-line-e" role="alert"></div>
         <div id="ohbX_${esc(l.code)}"${sent != null && Math.abs(Number(sent) - Number(l.confirmed_units || 0)) > 1e-9 ? '' : ' hidden'}>
         <select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" class="ohb-line-r" aria-label="เหตุผลของ ${esc(l.name || l.code)}"><option value="">— เหตุผล (ส่งไม่ตรงกับที่สาขายืนยัน) —</option>${opts}</select>
         <input id="ohbN_${esc(l.code)}" value="${esc(l.ss_note || '')}" placeholder="หมายเหตุ" class="ohb-line-r" aria-label="หมายเหตุของ ${esc(l.name || l.code)}"></div>`
-        : `<div class="ohb-line-q">ส่งจริง <b>${_bmcNum(sent)}</b> ${esc(_ohbUnitWord(l))}${l.ss_reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : ''}</div>`}
+        : `<div class="ohb-line-q">ส่งจริง <b>${esc(bmcTypedTxt(sent, l, _ohbUnitWord(l)))}</b>${l.ss_reason_th ? ` <span style="color:var(--amber-ink)">· ${esc(l.ss_reason_th)}${l.ss_note ? ' · ' + esc(l.ss_note) : ''}</span>` : ''}</div>`}
       ${l.received_units != null ? `<div class="ohb-line-c">รับจริง ${_bmcNum(l.received_units)} ${esc(_ohbUnitWord(l))}</div>` : ''}</div>`;
   }).join('');
   // desktop (2026-10-19): สาขายืนยัน is the figure to send, ส่งจริง a large box beside it, the reason only when the two differ (as on a phone)
@@ -651,8 +651,8 @@ function ohbRenderDetail() {
       <td data-l="วัตถุดิบ" style="min-width:200px"><div style="font-weight:600">${esc(l.name || l.code)}${l.no_pack ? ' ' + bmcNoPackChip(l) : ''}</div>${l.reason_th ? `<div style="font-size:13px;color:var(--amber-ink)">สาขา: ${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</div>` : ''}</td>
       <td class="wt-num wt-muted" data-l="ยอดแนะนำ">${_bmcNum(l.suggested_units)}</td>
       <td class="wt-num" data-l="สาขายืนยัน" style="font-weight:700;font-size:15px">${_bmcNum(l.confirmed_units)}${_ohbBig(l, l.confirmed_units, true)}</td>
-      <td class="wt-num" data-l="ส่งจริง">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(String(sent ?? ''))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:96px;text-align:center;font-weight:700;${fld}">
-        <div id="ohbPE_${esc(l.code)}" role="alert" style="font-size:13px;color:var(--bad-ink)"></div>` : `<b>${_bmcNum(sent)}</b>`}</td>
+      <td class="wt-num" data-l="ส่งจริง">${work ? `<input inputmode="decimal" id="ohbP_${esc(l.code)}" value="${esc(bmcToTyped(sent, bmcTypeF(l)))}" oninput="ohbPLineCheck(${_bmcQ(l.code)}, true)" aria-label="ส่งจริง ${esc(l.name || l.code)}" style="width:96px;text-align:center;font-weight:700;${fld}">${bmcTypeF(l) > 1 ? `<div style="font-size:12px;color:var(--text-secondary)">${esc(bmcTypeUnit(l))}</div>` : ''}
+        <div id="ohbPE_${esc(l.code)}" role="alert" style="font-size:13px;color:var(--bad-ink)"></div>` : `<b>${esc(bmcTypeF(l) > 1 ? bmcTypedTxt(sent, l) : _bmcNum(sent))}</b>`}</td>
       <td data-l="หน่วย" style="white-space:nowrap">${esc(_ohbUnitFull(l))}</td>
       <td data-l="เหตุผล (คลัง)">${work ? `<div id="ohbX_${esc(l.code)}"${differs ? '' : ' hidden'}><div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
           <select id="ohbR_${esc(l.code)}" onchange="ohbPLineFull(${_bmcQ(l.code)})" style="${fld}"><option value="">— เลือกเหตุผล —</option>${reasons.map(r => `<option value="${r.code}"${l.ss_reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
@@ -686,10 +686,12 @@ function _ohbPRead(code) {
   if (!el) return { q: null, err: '' };
   const raw = String(el.value).trim().replace(',', '.');
   if (raw === '') return { q: null, err: '' };
-  const q = Number(raw);
-  if (!Number.isFinite(q) || !/^-?\d+(\.\d+)?$/.test(raw)) return { q: null, err: 'ใส่ตัวเลข' };
-  if (q < 0) return { q: null, err: 'ต้องไม่ติดลบ' };
-  return { q, err: '' };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !/^-?\d+(\.\d+)?$/.test(raw)) return { q: null, err: 'ใส่ตัวเลข' };
+  if (n < 0) return { q: null, err: 'ต้องไม่ติดลบ' };
+  // PR-U2: a line with no pack size is typed in กิโลกรัม / ลิตร, saved in base units
+  const l = _ohbOrder && _ohbOrder.lines.find(x => x.code === code);
+  return { q: bmcFromTyped(raw, bmcTypeF(l)), err: '' };
 }
 // the red note under a line: a wrong number, or a changed quantity without its reason (the server asks for the same)
 function _ohbPLine(l) {
@@ -728,7 +730,7 @@ function ohbFillAll() {
     const el = document.getElementById('ohbP_' + l.code);
     if (!el) return;
     if (el.dataset.touched === '1') { kept++; return; }
-    el.value = String(l.confirmed_units ?? '');
+    el.value = bmcToTyped(l.confirmed_units ?? '', bmcTypeF(l));
     const r = document.getElementById('ohbR_' + l.code), n = document.getElementById('ohbN_' + l.code);
     if (r) r.value = '';
     if (n) n.value = '';
@@ -1500,10 +1502,10 @@ function ohbClaimRender() {
     <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
       <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ส่งจริง</th><th class="py-1 pr-2 text-right">รับแล้ว</th><th class="py-1 pr-2 text-right">สาขาเคลม</th><th class="py-1 pr-2">สาเหตุ</th><th class="py-1 text-right">${act ? 'อนุมัติ' : 'อนุมัติแล้ว'}</th></tr></thead><tbody>
       ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(l.name || l.code)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(l.code)}</div></td>
-        <td class="py-1 pr-2 text-right">${_bmcNum(l.sent_units)}</td><td class="py-1 pr-2 text-right">${_bmcNum(l.received_units)}</td>
-        <td class="py-1 pr-2 text-right"><b>${_bmcNum(l.claim_units)}</b> ${esc(l.unit || '')}</td>
+        <td class="py-1 pr-2 text-right">${esc(bmcTypeF(l) > 1 ? bmcTypedTxt(l.sent_units, l) : _bmcNum(l.sent_units))}</td><td class="py-1 pr-2 text-right">${esc(bmcTypeF(l) > 1 ? bmcTypedTxt(l.received_units, l) : _bmcNum(l.received_units))}</td>
+        <td class="py-1 pr-2 text-right"><b>${esc(bmcTypedTxt(l.claim_units, l, l.unit || ''))}</b></td>
         <td class="py-1 pr-2">${esc(l.reason_th)}${l.note ? '<div class="text-[10.5px]" style="color:var(--text-muted)">' + esc(l.note) + '</div>' : ''}</td>
-        <td class="py-1 text-right">${act ? `<input inputmode="decimal" id="ohbCA_${esc(l.code)}" value="${esc(String(l.claim_units))}" style="width:70px;text-align:center;padding:3px;${field}">` : (l.approved_units == null ? '—' : _bmcNum(l.approved_units))}</td></tr>`).join('')}</tbody></table></div>
+        <td class="py-1 text-right">${act ? `<input inputmode="decimal" id="ohbCA_${esc(l.code)}" value="${esc(bmcToTyped(l.claim_units, bmcTypeF(l)))}" aria-label="อนุมัติ ${esc(l.name || l.code)}${bmcTypeF(l) > 1 ? ' (' + esc(bmcTypeUnit(l)) + ')' : ''}" style="width:70px;text-align:center;padding:3px;${field}">${bmcTypeF(l) > 1 ? ` <span style="font-size:12px;color:var(--text-secondary)">${esc(bmcTypeUnit(l))}</span>` : ''}` : (l.approved_units == null ? '—' : esc(bmcTypeF(l) > 1 ? bmcTypedTxt(l.approved_units, l) : _bmcNum(l.approved_units)))}</td></tr>`).join('')}</tbody></table></div>
     <div id="ohbClaimEffect" class="text-xs mt-2" style="color:var(--text-secondary)">${c.origin === 'receive' ? 'เคลมนี้แจ้งขณะรับสินค้า' : 'เคลมนี้แจ้งภายหลัง'} ${uiQ('ohb:claimeffect', 'ผลของการอนุมัติเคลม', '<p>' + (c.origin === 'receive'
       ? 'เคลมนี้แจ้งขณะรับสินค้า สาขารับเข้าตามจำนวนจริงแล้ว จึงอนุมัติแล้วสต็อกไม่เปลี่ยน ส่วนที่ไม่อนุมัติบันทึกเป็นรับเข้า'
       : 'เคลมนี้แจ้งภายหลัง อนุมัติแล้วหักจำนวนที่อนุมัติออกจากสินค้าที่สาขารับ ส่วนที่ไม่อนุมัติสต็อกไม่เปลี่ยน') + '</p>')}</div>
@@ -1517,7 +1519,7 @@ async function ohbClaimDecide(decision) {
   if (!c) return;
   const note = (document.getElementById('ohbClaimNote').value || '').trim();
   const lines = c.lines.map(l => { const el = document.getElementById('ohbCA_' + l.code);
-    return { code: l.code, approved_units: el && el.value !== '' ? Number(String(el.value).replace(',', '.')) : l.claim_units }; });
+    return { code: l.code, approved_units: el && el.value !== '' ? bmcFromTyped(el.value, bmcTypeF(l)) : l.claim_units }; });
   if (decision === 'reject' && !note) { _bmcStatus('ohbClaimStatus', 'ระบุเหตุผลที่ไม่อนุมัติ', 'var(--amber-ink)'); return; }
   const n = lines.filter(l => l.approved_units > 0).length;
   const recv = c.origin === 'receive';

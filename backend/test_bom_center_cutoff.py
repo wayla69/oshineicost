@@ -290,7 +290,8 @@ def test_sla_reads_the_stored_cutoff():
 
 # ── หน้างาน ──────────────────────────────────────────────────────────────────
 def _due(d):
-    return {i["key"].split(":")[0]: i for i in d["items"] if i["key"].startswith("order_due_")}
+    """the rounds of branch 1 (PR-U2: the centre's list covers every active branch, the fixture's second one too)"""
+    return {i["key"].split(":")[0]: i for i in d["items"] if i["key"].startswith("order_due_") and i.get("branch_id") in (None, 1)}
 
 
 def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811

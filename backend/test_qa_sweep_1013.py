@@ -73,7 +73,8 @@ def test_the_server_side_formatter_converts_too():
 # ── H2 · the warehouse on a phone ─────────────────────────────────────────────────────────────────────────
 @needs_node
 def test_fill_all_sets_the_untouched_lines_to_what_the_branch_confirmed():
-    fns = [_fn(OHB, n) for n in ("_ohbPRead", "_ohbPLine", "ohbPLineFull", "ohbPLineCheck", "_ohbDiffers", "_ohbPXToggle", "ohbFillAll")]
+    fns = [_fn(OHB, n) for n in ("_ohbPRead", "_ohbPLine", "ohbPLineFull", "ohbPLineCheck", "_ohbDiffers", "_ohbPXToggle", "ohbFillAll")] \
+        + [_fn(_src("js/13-bom-center.js"), n) for n in ("bmcTypeF", "bmcToTyped", "bmcFromTyped")]      # PR-U2: no-pack lines typed in กิโลกรัม
     pre = """
 const els = {};
 const mk = (id, value) => (els[id] = { id, value: String(value ?? ''), dataset: {}, style: {}, hidden: false, textContent: '' });
@@ -211,7 +212,7 @@ def test_the_supply_phone_role_follows_the_landing_table():
 def test_the_rounds_are_sorted_by_cutoff_and_named_like_the_order_page(udon):  # noqa: F811
     from test_bom_center_issues import NOW
     d = TD.build(udon, "2026-09", None, None, today=date(2026, 10, 5), now=NOW)
-    due = [i for i in d["items"] if i["key"].startswith("order_due_")]
+    due = [i for i in d["items"] if i["key"].startswith("order_due_") and i.get("branch_id") == 1]     # PR-U2: every active branch is listed
     assert len(due) == 3 and [i["cutoff_at"] for i in due] == sorted(i["cutoff_at"] for i in due)
     for i in due:
         rnd = i["key"].split(":")[0].replace("order_due_", "")

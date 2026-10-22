@@ -178,7 +178,8 @@ function phRenderHome() {
   phLoadTasks();
   if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
 }
-function _phUserId() { const a = window.AUTH || {}; return a.enabled ? String(a.username || '') : ''; }
+// U2: the header shows the name a person recognises (display name, else the Thai role label), never the login ID
+function _phUserId() { const a = window.AUTH || {}; return a.enabled ? (typeof lnchWho === 'function' ? lnchWho() : (a.display_name || '')) : ''; }
 function _phHero(inner) {
   return `<header class="ph-hero"><div class="ph-hero-top"><span class="ph-logo">お</span><span class="ph-brand">OSHINEI</span><span class="ph-uid">${esc(_phUserId())}</span></div>${inner}</header>`;
 }

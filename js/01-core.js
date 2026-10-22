@@ -56,6 +56,9 @@ window.uiDialog = function (opt) {
         ${o.input ? `<input data-el="in" type="${o.input.password ? 'password' : 'text'}" autocomplete="off" spellcheck="false" ${o.input.list ? `list="${listId}"` : ''} style="${field}">
           ${o.input.list ? `<datalist id="${listId}"></datalist>` : ''}
           <div data-el="err" style="font-size:12px;color:var(--bad-ink);margin-top:4px"></div>` : ''}
+        ${o.unlock ? `<label style="display:block;font-size:12px;color:var(--text-secondary);margin-top:${o.input ? 10 : 0}px;margin-bottom:4px">รหัสปลดล็อก (ครั้งเดียวต่อเบราว์เซอร์)</label>
+          <input data-el="tok" type="password" autocomplete="off" spellcheck="false" placeholder="รหัสปลดล็อก" style="${field}">
+          <div data-el="tokerr" style="font-size:12px;color:var(--bad-ink);margin-top:4px"></div>` : ''}
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
           <button type="button" data-act="cancel" style="border:1px solid var(--border);border-radius:var(--r-sm, 8px);padding:6px 14px;min-height:${btnH}px;font-size:${btnH ? 14 : 13}px;cursor:pointer;background:transparent;color:var(--text-primary)"></button>
           <button type="submit" style="border:0;border-radius:var(--r-sm, 8px);padding:6px 14px;min-height:${btnH}px;font-size:${btnH ? 14 : 13}px;cursor:pointer;background:var(--accent);color:var(--on-accent, #fff)"></button>
@@ -72,27 +75,44 @@ window.uiDialog = function (opt) {
       const dl = wrap.querySelector('datalist');
       if (dl) dl.innerHTML = o.input.list.map(x => `<option value="${String(x.value).replace(/"/g, '&quot;')}">${String(x.label || '').replace(/</g, '&lt;')}</option>`).join('');
     }
+    const tokIn = wrap.querySelector('[data-el="tok"]');
     const done = v => { wrap.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
     const onKey = e => { if (e.key === 'Escape') done(input ? null : false); };
-    wrap.querySelector('form').addEventListener('submit', e => {
+    let busy = false;
+    wrap.querySelector('form').addEventListener('submit', async e => {
       e.preventDefault();
-      if (!input) return done(true);
-      const v = input.value.trim();
-      if (o.input.required && !v) { wrap.querySelector('[data-el="err"]').textContent = 'ต้องกรอกข้อมูล'; input.focus(); return; }
+      if (busy) return;
+      const v = input ? input.value.trim() : true;
+      if (input && o.input.required && !v) { wrap.querySelector('[data-el="err"]').textContent = 'ต้องกรอกข้อมูล'; input.focus(); return; }
+      // U2: the unlock code sits in the same dialog as the question and is checked here, so a wrong code is
+      // corrected in place and the save that follows goes through on the first press
+      if (tokIn) {
+        const tokErr = wrap.querySelector('[data-el="tokerr"]');
+        const t = tokIn.value.trim();
+        if (!t) { tokErr.textContent = 'กรอกรหัสปลดล็อก'; tokIn.focus(); return; }
+        busy = true; tokErr.textContent = '';
+        const ok = await window.checkWriteToken(t);
+        busy = false;
+        if (!ok) { tokErr.textContent = 'รหัสปลดล็อกไม่ถูกต้อง'; tokIn.select(); return; }
+      }
       done(v);
     });
     wrap.querySelector('[data-act="cancel"]').addEventListener('click', () => done(input ? null : false));
     document.addEventListener('keydown', onKey);
     document.body.appendChild(wrap);
-    setTimeout(() => (input || wrap.querySelector('[type="submit"]')).focus(), 0);
+    setTimeout(() => (input || tokIn || wrap.querySelector('[type="submit"]')).focus(), 0);
   });
 };
 // uiConfirm(message, {title, ok, cancel}): a specific title and button labels per question (PR-M1);
 // without them the dialog keeps the generic title and ยืนยัน / ยกเลิก (okText / cancelText still work).
+// U2: a question before a save carries the unlock field itself while this browser holds no code and the
+// role's writes need one (writesLocked), so it is one dialog and one press; {write:false} marks a
+// question that saves nothing on the server (a preset kept in this browser).
 window.uiConfirm = (message, opt) => {
   const o = Object.assign({ message }, opt || {});
   if (o.ok != null && o.okText == null) o.okText = o.ok;
   if (o.cancel != null && o.cancelText == null) o.cancelText = o.cancel;
+  if (o.write !== false && window.writesLocked()) o.unlock = true;
   return window.uiDialog(o);
 };
 // uiNotice(message, {title, ok}): a refusal with a single button (PR-M4: "นับให้ครบก่อนส่ง" → กลับไปนับ)
@@ -103,6 +123,7 @@ window.uiNotice = (message, opt) => {
 window.uiPrompt = (message, value, opt) => {
   const o = opt || {};
   return window.uiDialog({ title: o.title || 'กรอกข้อมูล', message, okText: o.okText || 'ตกลง',
+    unlock: o.write !== false && window.writesLocked(),
     input: { value: value == null ? '' : String(value), list: o.list, placeholder: o.placeholder, required: o.required } });
 };
 // ── PR-D6 · toasts for results, "?" for explanations, one filter for finished work ────────────────────────────
@@ -363,8 +384,43 @@ function _writeTokenState(unlocked) {
   if (unlocked !== null) window.writeToken.gated = true;
   try { _renderLockChip(); } catch (e) { /* no bar on this page */ }
 }
+// U2: does this role's write need the code at all? /api/auth/me says (write_gated), so a browser with no
+// code stored never calls token-check just to be refused (no 403 on every page load).
+function _writeTokenFromAuth() {
+  const a = window.AUTH || {};
+  if (a.write_gated == null) return;
+  if (!a.write_gated) { window.writeToken.gated = false; window.writeToken.unlocked = null; }
+  else {
+    window.writeToken.gated = true;
+    let tok = ''; try { tok = localStorage.getItem('oshinei_upload_token') || ''; } catch (e) {}
+    window.writeToken.unlocked = tok ? window.writeToken.unlocked : false;
+  }
+  try { _renderLockChip(); } catch (e) { /* no bar yet */ }
+}
+// true while a save would be refused for want of the code: the role's writes are gated and nothing is stored
+window.writesLocked = function () {
+  const st = window.writeToken || {};
+  if (st.gated !== true) return false;
+  try { return !localStorage.getItem('oshinei_upload_token'); } catch (e) { return true; }
+};
+// checks a code with POST /api/auth/token-check (writes nothing); a good one is stored and the chip turns แก้ไขได้
+window.checkWriteToken = async function (tok) {
+  tok = String(tok || '').trim();
+  if (!tok) return false;
+  try {
+    const r = await window._rawFetch(`${API}/api/auth/token-check`, { method: 'POST', headers: { 'X-Upload-Token': tok } });
+    if (!r.ok) return false;
+    try { localStorage.setItem('oshinei_upload_token', tok); } catch (e) {}
+    _writeTokenState(true);
+    return true;
+  } catch (e) { return false; }
+};
 async function verifyWriteToken() {
   const tok = localStorage.getItem('oshinei_upload_token') || '';
+  if (!tok && window.writeToken.gated !== null) {        // nothing to check: the state is known from /api/auth/me
+    if (window.writeToken.gated) _writeTokenState(false);
+    return window.writeToken;
+  }
   try {
     const r = await window._rawFetch(`${API}/api/auth/token-check`, { method: 'POST', headers: tok ? { 'X-Upload-Token': tok } : {} });
     if (r.status === 403) {
@@ -380,10 +436,8 @@ async function verifyWriteToken() {
 async function unlockWrites() {
   const tok = await askWriteToken('ต้องกรอกรหัสปลดล็อกก่อนบันทึก (ครั้งเดียวต่อเบราว์เซอร์)');
   if (!tok) return;
-  try { localStorage.setItem('oshinei_upload_token', tok.trim()); } catch (e) {}
-  const st = await verifyWriteToken();
-  if (st.unlocked) notifySuccess('✓ ปลดล็อกแล้ว บันทึกข้อมูลได้');
-  else notifyError('รหัสปลดล็อกไม่ถูกต้อง');
+  if (await window.checkWriteToken(tok)) uiToast('ปลดล็อกแล้ว บันทึกข้อมูลได้', 'success');
+  else uiToast('รหัสปลดล็อกไม่ถูกต้อง', 'error');
 }
 // The same state as a lock icon beside the user name — the branch phone hides the
 // chip bar (the bottom navigation takes its place), so the icon sits in the top bar; on the phone shell (PR-D3) the lock is a row of ฉัน.
@@ -579,7 +633,8 @@ function _landingTab() { return franchiseLogin() ? 'franchise' : _launcherLandin
 async function _loadAuthNames() {
   try {
     const j = await (await fetch(`${API}/api/auth/me`)).json();
-    if (window.AUTH && j) { window.AUTH.display_name = j.display_name || null; window.AUTH.names = j.names || {}; }
+    if (window.AUTH && j) { window.AUTH.display_name = j.display_name || null; window.AUTH.names = j.names || {};
+      window.AUTH.role_th = j.role_th || null; window.AUTH.write_gated = j.write_gated; _writeTokenFromAuth(); }
   } catch (e) { /* the pages fall back to the login name */ }
 }
 async function bootstrapAuth() {
@@ -587,6 +642,7 @@ async function bootstrapAuth() {
     const r = await fetch(`${API}/api/auth/me`);
     window.AUTH = await r.json();
     window.AUTH.modules = window.AUTH.modules || [];
+    _writeTokenFromAuth();
   } catch (e) {
     // Network/health failure — don't hard-lock the UI; treat as auth-off.
     window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };

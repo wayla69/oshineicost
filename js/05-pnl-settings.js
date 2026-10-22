@@ -1496,7 +1496,7 @@ function setMenuFilterState(s) {
 }
 
 async function saveMenuPreset() {
-  const name = await uiPrompt('Name this menu filter:', 'My filter');
+  const name = await uiPrompt('Name this menu filter:', 'My filter', { write: false });
   if (!name) return;
   const presets = JSON.parse(localStorage.getItem('oshinei_menu_presets') || '[]');
   presets.push({ name, state: getMenuFilterState() });
@@ -1531,7 +1531,7 @@ function renderMenuPresetSelect() {
   sel.onchange = async (e) => {
     if (e.target.value === '__delete') {
       const names = presets.map((p, i) => `${i+1}. ${p.name}`).join('\n');
-      const idx = await uiPrompt('Delete which preset? Enter number:\n\n' + names);
+      const idx = await uiPrompt('Delete which preset? Enter number:\n\n' + names, '', { write: false });
       const n = parseInt(idx, 10);
       if (!isNaN(n) && n >= 1 && n <= presets.length) {
         presets.splice(n - 1, 1);

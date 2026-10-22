@@ -942,7 +942,7 @@ function applyCustomRange() {
 }
 
 async function saveCurrentAsPreset() {
-  const name = await uiPrompt('Name this preset:', 'My preset');
+  const name = await uiPrompt('Name this preset:', 'My preset', { write: false });
   if (!name) return;
   const preset = {
     name,

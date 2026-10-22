@@ -170,10 +170,12 @@ def auth_logout(request: Request, response: Response):
 @router.get("/api/auth/me", include_in_schema=False)
 def auth_me(request: Request):
     """Frontend bootstrap. When auth is disabled, report enabled=False with the
-    full module set so nothing is hidden (current behaviour preserved)."""
+    full module set so nothing is hidden (current behaviour preserved).
+    write_gated (U2): whether this session's saves need the write code, so a page that holds no
+    code knows it without calling /api/auth/token-check just to be refused."""
     if not _auth.auth_enabled():
         return {"enabled": False, "username": None, "role": "management",
-                "modules": sorted(_auth.MODULES)}
+                "write_gated": write_gate_on(), "modules": sorted(_auth.MODULES)}
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
         return {"enabled": True, "authenticated": False, "modules": []}
@@ -191,6 +193,7 @@ def auth_me(request: Request):
             "names": names,                                  # {login: name shown on screens}, for whoTh() in the pages
             "branch": row["branch"] if "branch" in row.keys() else None,
             "must_change": bool(row["must_change"]),
+            "write_gated": write_gate_on() and not is_branch_session(request),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
 
 

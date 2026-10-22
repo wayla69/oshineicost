@@ -107,11 +107,14 @@ def _default_month(con, today: date) -> str:
 
 
 def _branch_rows(con) -> list:
-    cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
-    sql = "SELECT branch_id, name FROM branches WHERE name <> 'ALL'"
-    if "active" in cols:
-        sql += " AND COALESCE(active, 1) = 1"
-    return [{"branch_id": r[0], "name": r[1]} for r in con.execute(sql + " ORDER BY name")]
+    from .pilot import active_branches                      # the one definition of an active branch
+    return active_branches(con)
+
+
+def _names_th(names: list, n: int = 5) -> str:
+    """'ก · ข · ค และอีก 12 สาขา' - a list of branch names that stays one line when it covers 30 branches."""
+    names = list(names)
+    return " · ".join(names[:n]) + (f" และอีก {len(names) - n} สาขา" if len(names) > n else "")
 
 
 def _scalar(con, sql, args=()):
@@ -300,8 +303,24 @@ def _backlog_item(con) -> list:
         return []
     return [_e("backlog", 36, "setup", f"งานแก้ข้อมูลค้างเรียงตามผลกระทบ ({b['total']} รายการ)", "todo",
                "แก้รายการบนสุดก่อน", count=b["total"], owner=("bom.center",), owner_th="ฝ่ายวิเคราะห์",
-               go={"tab": "bomcenter", "pane": "overview"}, backlog=b["top"], backlog_window=b["window"], backlog_counts=b["counts"],
+               go={"tab": "bomcenter", "pane": "overview", "anchor": "bmcBacklogCard"}, backlog=b["top"], backlog_window=b["window"], backlog_counts=b["counts"],
                backlog_total=b["total"])]
+
+
+def _merge_gaps_into_backlog(items: list, backlog: list) -> list:
+    """PR-U2 (3): ONE data-quality task for the analyst. While the impact-ranked backlog has rows, the card "ข้อมูลตั้งต้นที่ยังว่าง"
+    is not a second task: its blank-field lines ride on the backlog card (the same `gaps` table) and the item leaves the list, so
+    หน้างาน and the badges (nav_badges.mine_open counts rows) see the work once. With no backlog the gaps card stays as it is."""
+    if not backlog:
+        return items
+    bk = backlog[0]
+    gp = next((it for it in items if it.get("key") == "master_gaps"), None)
+    if gp is not None:
+        if gp.get("status") == "todo" and gp.get("gaps"):
+            bk["gaps"] = gp["gaps"]
+            bk["gaps_count"] = gp.get("count")
+        items = [it for it in items if it is not gp]
+    return items + [bk]
 
 
 def _month_items(con, month: str, today: date) -> list:
@@ -449,20 +468,19 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
     out = []
     slips = {b["branch_id"]: _slip_info(con, b["branch_id"], today) for b in branches}
     if centre:
-        from .pilot import pilot_branches
         users = {}
         if _has(con, "app_user"):
             for b, active in con.execute("SELECT branch, active FROM app_user WHERE role='branch'"):
                 users[b] = users.get(b) or bool(active)
-        no_acc = [b for b in pilot_branches(con) if not users.get(b["name"])]
-        out.append(_e("branch_account", 200, "week", "สร้างผู้ใช้ของสาขานำร่อง", "done" if not no_acc else "todo",
-                      ("ยังไม่มีผู้ใช้: " + " · ".join(b["name"] for b in no_acc)) if no_acc else "ทุกสาขานำร่องมีผู้ใช้แล้ว",
+        no_acc = [b for b in _branch_rows(con) if not users.get(b["name"])]      # PR-U2: every active branch, not the pilot four
+        out.append(_e("branch_account", 200, "week", "สร้างผู้ใช้ของสาขา", "done" if not no_acc else "todo",
+                      ("ยังไม่มีผู้ใช้: " + _names_th(b["name"] for b in no_acc)) if no_acc else "ทุกสาขามีผู้ใช้แล้ว",
                       count=len(no_acc) or None, owner=("system.admin",), owner_th="ผู้ดูแลระบบ",
                       go={"tab": "settings", "pane": "users"}))
         unfilled = [b for b in branches if not all(calendar(con, b["branch_id"])[r]["filled"] for r in ("1", "2", "salmon"))]
         out.append(_e("calendar", 210, "week", "กำหนดรอบส่งของสาขา (รอบ 1 · รอบ 2 · แซลมอนสด)",
                       "done" if not unfilled else "todo",
-                      ("ยังใช้ค่าเริ่มต้น: " + " · ".join(b["name"] for b in unfilled)) if unfilled else "ครบทุกสาขา",
+                      ("ยังใช้ค่าเริ่มต้น: " + _names_th(b["name"] for b in unfilled)) if unfilled else "ครบทุกสาขา",
                       count=len(unfilled) or None, owner=("supply.ordering",), owner_th="ประสานงานขาย",
                       go={"tab": "bomcenter", "pane": "cal"}))
         q = con.execute("SELECT COUNT(*), MIN(cycle_date), SUM(COALESCE(late,0)) FROM bc_order"
@@ -825,11 +843,11 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
     chosen = by_id.get(int(branch_id)) if branch_id is not None else None
     if branch_id is not None and not chosen:
         raise ValueError("ไม่พบสาขา")
-    # the centre's branch set: the pilot plus every branch with counts, orders or a central note
-    from .pilot import pilot_branches
+    # the centre's branch set: every active branch (PR-U2: the 30-branch rollout, not the pilot four); the month close keeps the
+    # branches with counts, orders or a central note
     active_ids = {r[0] for r in con.execute("SELECT branch_id FROM bc_stock_count UNION SELECT branch_id FROM bc_order")}
     active_ids |= {r[0] for r in con.execute("SELECT branch_id FROM bc_receipt WHERE ref=?", (f"CENTRAL-{month}",))}
-    week_br = [chosen] if chosen else sorted({b["branch_id"] for b in pilot_branches(con)} | active_ids)
+    week_br = [chosen] if chosen else sorted({b["branch_id"] for b in all_br})
     week_br = [by_id[i] for i in week_br if i in by_id] if not chosen else week_br
     close_br = [chosen] if chosen else [by_id[i] for i in sorted(active_ids) if i in by_id]
     centre = not scoped_branch
@@ -840,7 +858,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
         items += _code_request_items(con)
         items += _recipe_check_items(con, today)
         if chosen is None:                                   # the whole-centre list, not one branch seen by the centre (the reminders ask for those)
-            items += _backlog_item(con)
+            items = _merge_gaps_into_backlog(items, _backlog_item(con))
             items += _feedback_items(con)
         items += _month_items(con, month, today)
     items += _week_items(con, week_br, today, single=chosen is not None, centre=centre, now=now)
