@@ -281,9 +281,9 @@ def count_units(con, codes) -> dict:
 def _usage(con, branch_id: int, as_of: date, with_recent: bool = False):
     """{code: average base units a trading day} over the lookback window. `with_recent` -> (that, the set of codes the recipes
     used on a day of the last RECENT_USE_DAYS days up to `as_of`): the items a branch is still using (3.2)."""
-    from .forecast import era_start, usage_history
+    from .forecast import demand_source, era_start
     start = era_start(as_of - timedelta(days=LOOKBACK_DAYS - 1), as_of)
-    use, days, _ = usage_history(con, branch_id, start, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
+    use, days, _ = demand_source(con, branch_id, start, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
     n = max(len(days), 1)
     avg = {c: sum(s.values()) / n for c, s in use.items() if sum(s.values()) > 0}
     if not with_recent:
@@ -601,9 +601,16 @@ def system_position(con, branch_id: int, as_of: date, issues_through: date = Non
 def estimated_use(con, branch_id: int, days: list) -> tuple:
     """PR-B4a (1.3): ({days that had sales}, {code: base units}) - the BoM usage of the given days' sales, summed. The per-day
     figure is issue_reports.bom_days (cached in bcd_demand_day, rebuilt when the sales or the release changed); a day without
-    sales is not in it, so a closed day deducts nothing."""
+    sales is not in it, so a closed day deducts nothing.
+
+    PR-S3, stock mode (owner 2026-10-22): no recipes. A missing day is estimated at the branch's own mean of the CONFIRMED slips on the
+    same weekday over the 4 weeks before it (per item; used + waste, base units); with no such slip the day deducts nothing (it stays in
+    `missing_days` and is not in the days returned here)."""
     if not days:
         return [], {}
+    from .close_settings import stock_mode
+    if stock_mode(con):
+        return _estimated_from_slips(con, branch_id, days)
     from .issue_reports import bom_days
     by_month = {}
     for d in sorted(days):
@@ -616,6 +623,37 @@ def estimated_use(con, branch_id: int, days: list) -> tuple:
                 got.append(d)
                 for c, q in bom[d].items():
                     est[c] = est.get(c, 0.0) + (q or 0.0)
+    return got, est
+
+
+SLIP_MEAN_WEEKS = 4            # PR-S3: a missing day is the mean of the same weekday over this many weeks before it
+
+
+def _estimated_from_slips(con, branch_id: int, days: list) -> tuple:
+    ds = sorted(days)
+    lo = (date.fromisoformat(ds[0]) - timedelta(days=7 * SLIP_MEAN_WEEKS)).isoformat()
+    hi = (date.fromisoformat(ds[-1]) - timedelta(days=1)).isoformat()
+    confirmed = {d for (d,) in con.execute("SELECT slip_date FROM bc_issue_slip WHERE branch_id=? AND status='confirmed'"
+                                           " AND slip_date BETWEEN ? AND ?", (branch_id, lo, hi))}
+    qty = {}                                              # slip day -> {code: used + waste}
+    for d, c, q in con.execute(
+            "SELECT s.slip_date, l.ingredient_code, SUM(COALESCE(l.qty_used_base, 0) + COALESCE(l.qty_waste_base, 0))"
+            " FROM bc_issue_slip s JOIN bc_issue_line l USING(slip_id) WHERE s.branch_id=? AND s.status='confirmed'"
+            " AND s.slip_date BETWEEN ? AND ? GROUP BY s.slip_date, l.ingredient_code", (branch_id, lo, hi)):
+        qty.setdefault(d, {})[c] = q or 0.0
+    got, est = [], {}
+    for d in ds:
+        dd = date.fromisoformat(d)
+        same = [x for x in ((dd - timedelta(days=7 * k)).isoformat() for k in range(1, SLIP_MEAN_WEEKS + 1)) if x in confirmed]
+        if not same:
+            continue                                      # no slip on this weekday in the 4 weeks: the day deducts nothing
+        got.append(d)
+        tot = {}
+        for x in same:
+            for c, q in qty.get(x, {}).items():
+                tot[c] = tot.get(c, 0.0) + q
+        for c, q in tot.items():                          # a confirmed day without the item counts as 0 in the mean
+            est[c] = est.get(c, 0.0) + q / len(same)
     return got, est
 
 

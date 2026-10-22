@@ -154,3 +154,7 @@ def test_who_may_do_what():
     assert auth.path_allowed("GET", "/api/bom-center/hub/compliance", ops)
     assert not auth.path_allowed("POST", "/api/bom-center/hub/process/1", ops)
     assert not auth.path_allowed("GET", "/api/bom-center/hub/queue", br)
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

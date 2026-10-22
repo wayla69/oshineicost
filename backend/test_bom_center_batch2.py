@@ -560,3 +560,7 @@ def test_the_branch_and_ops_read_the_gap_in_words_and_excel_keeps_the_signs():
     assert "ผลต่าง <b" not in BRN and "th('ผลต่าง ฿'" not in OHB and "th('ผลต่าง %'" not in OHB          # no signed column left on the screens
     router = _src("backend/routers/bom_center.py")
     assert '"ผลต่าง (มูลค่า)"' in router and '"ผลต่าง %"' in router                                     # the Excel files keep the signed numbers
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

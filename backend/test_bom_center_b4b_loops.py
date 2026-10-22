@@ -294,3 +294,7 @@ def test_who_may_read_and_write_what_batch_4b_added():
     assert not can("branch", "GET", "/api/bom-center/feedback") and not can("accounting", "POST", "/api/bom-center/feedback/ack")
     assert can("branch", "GET", "/api/bom-center/stock/plan") and not can("branch", "GET", "/api/bom-center/hub/outcome")
     assert can("operation", "GET", "/api/bom-center/hub/outcome")
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

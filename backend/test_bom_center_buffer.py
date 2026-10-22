@@ -110,3 +110,7 @@ def test_covers_endpoint(client):
     assert r2.status_code == 400
     r3 = client.get("/api/bom-center/order/covers?branch_id=1&round=1&order_day=2026-10-06")     # deprecated form still works
     assert r3.status_code == 200 and r3.json()["round"] == "1"
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

@@ -215,3 +215,7 @@ def test_the_slip_confirmation_says_what_blank_rows_mean():
     strip = _js("js/16-supplyhome.js")
     assert "รอยืนยัน · " not in strip and "ค้างย้อนหลัง" not in strip
     assert "label: 'ตัดเบิกวันนี้'" in strip and "ค้าง ${gaps} วัน" in strip
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

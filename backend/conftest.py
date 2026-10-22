@@ -173,6 +173,15 @@ def _no_usage_cache(monkeypatch):
     yield
 
 
+@pytest.fixture
+def recipe_mode(monkeypatch):
+    """PR-S3: the system mode is `stock` when the key is absent (PR-S1), and in stock mode the order suggestion reads the confirmed
+    issue slips, not the recipes. A module that is about the recipe-based forecast (sales x recipe) asks for this fixture
+    (`pytestmark = pytest.mark.usefixtures("recipe_mode")`): an absent key then reads `full`, as it did before stock-first."""
+    from bom_center import close_settings
+    monkeypatch.setattr(close_settings, "MODE_DEFAULT", "full")
+
+
 @pytest.fixture(scope="session")
 def app_db(tmp_path_factory):
     """Build the temp DB once and point main at it."""

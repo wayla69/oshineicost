@@ -683,3 +683,7 @@ def test_auth_matrix():
         assert not auth.path_allowed("POST", cfg, R[role]), role
         assert not auth.path_allowed("GET", cfg, R[role]), role
     assert auth.path_allowed("GET", cfg, R["operation"])                                           # Operations reads the settings it is measured by
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

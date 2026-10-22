@@ -60,6 +60,15 @@ def sales_by_day(con, branch_id: int, d0, d1) -> dict:
         " GROUP BY day", (branch_id, _iso(d0), _iso(d1)))}
 
 
+def align_sales(sales_day: dict, days, stats) -> dict:
+    """PR-S3: usage read from the issue slips exists only on the days with a confirmed slip, so the sales it is divided by are those
+    days' sales (a day nobody confirmed would lower the ratio). Any other source: the sales as they are."""
+    if (stats or {}).get("source") != "slips":
+        return sales_day
+    keep = set(days or ())
+    return {d: v for d, v in sales_day.items() if d in keep}
+
+
 def week_blocks(d0, d1) -> list:
     """Whole 7-day blocks inside [d0, d1], counted back from d1; oldest first, each a list of ISO days."""
     a, b = _d(d0), _d(d1)
@@ -116,8 +125,9 @@ def ratio_from(use: dict, sales_day: dict, d0, d1) -> dict:
 def ratio(con, branch_id: int, d0, d1, month: str) -> dict:
     """{sales, days, items: {code: {per_100k, unit, weekly, swing_pct, steady, ...}}} for the branch over [d0, d1].
     `unit` is the ingredient's base unit; the usage is forecast.usage_history's (cached)."""
-    use, _days, _stats = FC.usage_history(con, branch_id, _d(d0), _d(d1), month)
-    out = ratio_from(use, sales_by_day(con, branch_id, d0, d1), d0, d1)
+    use, _days, _stats = FC.demand_source(con, branch_id, _d(d0), _d(d1), month)       # PR-S3: recipes or confirmed slips
+    out = ratio_from(use, align_sales(sales_by_day(con, branch_id, d0, d1), _days, _stats), d0, d1)
+    out["source"] = FC.source_info(_stats)
     units = dict(con.execute("SELECT code, base_unit FROM bc_ingredient"))
     for code, it in out["items"].items():
         it["unit"] = units.get(code)
@@ -284,9 +294,12 @@ def reference_basis(con, ref_id: int, month: str, weeks: int = 6, cover: list = 
         return out
     as_of = _d(last)
     start = FC.era_start(as_of - timedelta(days=7 * weeks - 1), as_of)
-    use, days, stats = FC.usage_history(con, ref_id, start, as_of, month)
+    use, days, stats = FC.demand_source(con, ref_id, start, as_of, month)             # PR-S3: recipes or confirmed slips
+    if stats.get("source") == "none":                       # a branch without enough slips is no reference
+        out.update(stats=stats, history_from=start.isoformat(), history_to=as_of.isoformat(), trading_days=len(days))
+        return out
     sales_day = sales_by_day(con, ref_id, start, as_of)
-    r = ratio_from(use, sales_day, start, as_of)
+    r = ratio_from(use, align_sales(sales_day, days, stats), start, as_of)
     out.update(items=r["items"], use=use, stats=stats, sales=r["sales"], ok=bool(r["items"]), history_from=start.isoformat(),
                history_to=as_of.isoformat(), trading_days=len(days))
     if cover and days:
@@ -304,11 +317,14 @@ def benchmark_basis(con, branch_id: int, month: str, weeks: int = 6, cover: list
     ok = [b for b in bases if b["ok"]]
     out = {"branch_id": None, "name": BM.LABEL, "label": f"คำนวณจาก{BM.LABEL}", "benchmark": True, "items": {}, "use": {},
            "stats": {}, "sales": 0.0, "ok": False, "sales_normal": None, "branches": [b["name"] for b in ok]}
-    if len(ok) < BM.MIN_BRANCHES:
+    from .close_settings import stock_mode
+    # PR-S3: in stock mode a single branch with enough confirmed slips is already a basis (owner O1: "as soon as any branch has 14 days")
+    if len(ok) < (1 if stock_mode(con) else BM.MIN_BRANCHES):
         return out
     items, via = {}, {}
     for code in set().union(*[set(b["items"]) for b in ok]):
-        med = BM.median_of(b["items"][code]["per_100k"] for b in ok if code in b["items"])
+        figs = [b["items"][code]["per_100k"] for b in ok if code in b["items"]]
+        med = BM.median_of(figs) if len(ok) >= BM.MIN_BRANCHES else BM.median_of_any(figs)
         if not med or med <= 0:
             continue
         swing = BM.median_of_any(b["items"][code]["swing_pct"] for b in ok if code in b["items"])
@@ -372,7 +388,8 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
     try:
         path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
         core = FC._loaded("core")
-        key = (path, tuple(branch_ids) if branch_ids is not None else None, end.isoformat(), weeks,
+        from .close_settings import mode as _mode
+        key = (path, tuple(branch_ids) if branch_ids is not None else None, end.isoformat(), weeks, _mode(con),
                tuple(BM.branch_ids(con)), BM.buffer_pct(con), _purchase_signature(con),
                getattr(core, "_data_gen", 0), getattr(core, "_db_gen", 0)) if path and FC.USAGE_CACHE_TTL else None
     except Exception:
@@ -415,10 +432,15 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
 
     for bid in list(ids) + [b for b in bench_ids if b not in ids and b in bnames]:
         with FC._plan_slots:
-            use, _days, _st = FC.usage_history(con, bid, min(prv0, cur0), cur1, month)
+            use, _days, _st = FC.demand_source(con, bid, min(prv0, cur0), cur1, month)     # PR-S3: recipes or confirmed slips
         sales_day = sales_by_day(con, bid, min(prv0, cur0), cur1)
-        cur = ratio_from(use, sales_day, cur0, cur1)
-        prv = ratio_from(use, sales_day, prv0, prv1) if prv0 <= prv1 else {"sales": 0.0, "items": {}, "weeks": 0, "days": 0}
+        nothing = {"sales": 0.0, "items": {}, "weeks": 0, "days": 0}
+        if _st.get("source") == "none":                          # stock mode, too few confirmed slips: no usage, so no ratio
+            cur, prv = dict(nothing), dict(nothing)
+        else:
+            al = align_sales(sales_day, _days, _st)
+            cur = ratio_from(use, al, cur0, cur1)
+            prv = ratio_from(use, al, prv0, prv1) if prv0 <= prv1 else dict(nothing)
         pur = BM.purchase_per_100k(con, bid, cur0, cur1, sales_day, price_in)
         if pur:
             purchases[bid] = pur
@@ -432,7 +454,8 @@ def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
             for c, it in r["items"].items():
                 tot[w]["use"][c] += it["usage"]
         branches.append({"branch_id": bid, "branch": bnames[bid], "sales": cur["sales"], "sales_prev": prv["sales"],
-                         "days": cur["days"], "weeks_prev": prv["weeks"], "_cur": cur["items"], "_prv": prv["items"]})
+                         "days": cur["days"], "weeks_prev": prv["weeks"], "_cur": cur["items"], "_prv": prv["items"],
+                         "source": FC.source_info(_st)})
     # PR-X: the benchmark = per item the median over the benchmark branches that use it (at least MIN_BRANCHES), now and before
     bench_now, bench_before = {}, {}
     if len(bench_cur) >= BM.MIN_BRANCHES:

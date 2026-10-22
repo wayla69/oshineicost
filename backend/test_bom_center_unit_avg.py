@@ -552,3 +552,7 @@ def test_the_new_tables_are_owned_and_the_migrations_are_idempotent(tmp_path):
     assert {"report_id", "reported_qty", "decision_note", "status"} <= cols("bc_pack_report")
     c.close()
     json.dumps(sorted(S.OWNED_TABLES))
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

@@ -217,3 +217,7 @@ def test_the_close_stepper_and_the_branch_list_follow_the_cycle(con):  # noqa: F
     CS.save(con, "analyst1", cycle=False)
     d = TD.build(con, branch_id=1, month="2026-10", today=NOV2)
     assert not {"cycle_count", "full_count", "partial_close"} & {i["key"].split(":")[0] for i in d["items"]}
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

@@ -162,3 +162,7 @@ def test_branch_role_may_order():
     assert auth.path_allowed("POST", "/api/bom-center/order/save", mods)
     assert auth.path_allowed("POST", "/api/bom-center/order/7/receive", mods)
     assert not auth.path_allowed("POST", "/api/bom-center/order-calendar", mods)   # the sales team's table
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

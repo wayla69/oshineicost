@@ -140,3 +140,7 @@ def test_calendar_rules_and_permissions(client):
     c.execute("DELETE FROM bc_audit WHERE action='order_calendar'")
     c.commit()
     c.close()
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

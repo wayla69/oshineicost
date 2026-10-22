@@ -820,3 +820,7 @@ def test_who_may_append():
     can = lambda role: auth.path_allowed("POST", "/api/bom-center/issues/append", R[role])  # noqa: E731
     assert can("branch") and can("salessupport") and can("analyst")                  # the roles that write a slip
     assert not can("operation") and not can("accounting") and not can("warehouse")
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

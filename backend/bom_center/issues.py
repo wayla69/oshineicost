@@ -31,6 +31,7 @@ import math
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import BKK, now_bkk
+from .close_settings import stock_mode
 from .fmt import day_th as _fmt_day
 from .fmt import item as _item
 from .fmt import no_unit as _no_unit
@@ -292,7 +293,7 @@ def sheet(con, branch_id: int, slip_date, now: datetime = None) -> dict:
                 "editable": st["status"] not in ("confirmed", "late"),
                 "can_append": st["status"] in ("confirmed", "late") and d == today,       # PR-M7: เบิกเพิ่ม is open on today's confirmed slip
                 "backdated": d < today, "prev_date": pv[1] if pv else None, "basis": pos["basis"], "missing_days": pos["missing_days"],
-                "estimated_days": pos["estimated_days"],
+                "estimated_days": pos["estimated_days"], "estimate_basis": "slips" if stock_mode(con) else "sales",
                 "earliest": (today - timedelta(days=MAX_BACKDATE_DAYS)).isoformat(),
                 "lines": list(lines.values()),
                 "reasons": [{"code": c, "label": t} for c, t in WASTE_REASONS]})

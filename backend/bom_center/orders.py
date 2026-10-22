@@ -29,6 +29,7 @@ import math
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
+from .close_settings import stock_mode
 from .fmt import item as _item
 from .master import audit
 from .units import Converter, unit_word
@@ -360,7 +361,7 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     missing = []
     for c, s, cf, rs, n in con.execute("SELECT ingredient_code, suggested_units, confirmed_units, reason_code, note"
                                        " FROM bc_order_line WHERE order_id=?", (oid,)):
-        if _needs_reason((s or 0) * up, cf) and not rs:        # the buffer explains its own share
+        if s is not None and _needs_reason(s * up, cf) and not rs:   # the buffer explains its own share; no suggestion (PR-S3 ก): nothing to explain
             missing.append(c)
         if rs == "other" and not (n or "").strip():
             missing.append(c)
@@ -667,6 +668,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
                   # today's slip is reported on its own (slip_today); the days BEFORE it are the warning
                   "missing_days": [d for d in stock["missing_days"] if d != stock_day.isoformat()],
                   "estimated_days": stock["estimated_days"],           # PR-B4a (1.3): of those, the days deducted at the BoM of the sales
+                  "estimate_basis": "slips" if stock_mode(con) else "sales",   # PR-S3: "slips" = the branch's own mean of that weekday (stock mode)
                   "slip_today": _is.status_of(con, branch_id, stock_day)}
     s["buffer"] = {"pct": pct, "min": BUFFER_MIN, "max": BUFFER_MAX,
                    "reasons": [{"code": k, "label": v} for k, v in BUFFER_REASONS]}
@@ -700,6 +702,8 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         r["round_down"] = down                              # 1.7 · "ปัดลง (เหลือพอ)": a remainder under 20 % of a big pack was left unordered
         r["order_units_base"] = order_units(r.get("need_base", r["need"]), r.get("qty_per_recv"), r.get("moq"),
                                             r.get("safety") or 0.0, r.get("big_pack"))[0] if pct else units
+        if "suggested" in r and r["suggested"] is None:    # PR-S3 (ก): no suggestion - the order line keeps NULL, not a 0 to be explained
+            r["order_units_base"] = None
         if r["code"] in cmap:
             r["price_per_base"], r["price_source"] = unit_price(con, r["code"], month, cmap)
             r["price_per_sale"] = cmap[r["code"]][1]
