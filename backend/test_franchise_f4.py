@@ -399,7 +399,7 @@ def test_the_render_helpers_escape_what_people_typed():
     row = _node(pre, f"_fmRowHtml({json.dumps({'id': '1);alert(9', 'topic_th': evil, 'branch': evil, 'status': 'closed', 'unread': 1, 'last_at': '2026-10-22 14:05:09', 'last': {'side': 'hq', 'body': evil}}, ensure_ascii=False)}, 'fmsgOpen', true)")
     assert "<script" not in row and "<img" not in row and "fmsgOpen(0)" in row and "alert(9" not in row
     ctx = _node(pre, "_fmCtxText({level: 'fix', month: '2026-10', line: 'ส่วนลด'})")
-    assert ctx == "ต้องแก้ · ต.ค. 2569 · ส่วนลด"
+    assert ctx == "ต้องแก้ · ต.ค. 2026 · ส่วนลด"
 
 
 def test_the_pages_draw_message_text_through_esc_only():
