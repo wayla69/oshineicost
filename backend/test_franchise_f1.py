@@ -5,7 +5,7 @@
     the comparison;
   * the 12-month trend is month by month, never a sum over months, and its months read as the management report's;
   * the target: a typed target, last year's actual, none (neutral), pro-rated by the report's weekday weights;
-  * GET /api/franchise/summary.xlsx: four sheets, a Thai file name, the same 403 rules as the summary, and none of the
+  * GET /api/franchise/summary.xlsx: four sheets (F3: a fifth, วัตถุดิบ), a Thai file name, the same 403 rules as the summary, and none of the
     forbidden words or another branch's name in any cell.
 """
 import io
@@ -184,7 +184,7 @@ def test_the_download_is_the_month_in_four_sheets(world):
     from urllib.parse import quote
     assert "filename*=UTF-8''" in cd and quote("ร้านของฉัน_BranchB_2026-06.xlsx") in cd
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    assert wb.sheetnames == ["สรุป", "รายวัน", "12 เดือน", "เมนูขายดี"]
+    assert wb.sheetnames == ["สรุป", "รายวัน", "12 เดือน", "เมนูขายดี", "วัตถุดิบ"]          # F3: + วัตถุดิบ (test_franchise_f3)
     days = [row[0] for row in wb["รายวัน"].iter_rows(min_row=3, values_only=True)]
     assert days == ["2026-06-01", "2026-06-02", "2026-06-03"]
     d = _summary(world["b"])

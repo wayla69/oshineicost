@@ -24,7 +24,9 @@ module only picks the numbers and words the owner may see - no maths of its own 
   GET /api/franchise/insight  (F2) sales mix and busy hours, the controls (discounts / voided bills / cash, counts and baht
                only) and the guests' public reviews - see the F2 block near the end of this module; and the owner's morning
                push (franchise_morning_payload, sent by routers/push_api.maybe_send_franchise, kind "franchise")
-  GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี. The Fly image has
+  supply_ratio (F3) ยอดซื้อเทียบยอดขาย of the month and of last month (_purchase_ratio, see the F3 block at the end of this module)
+  GET /api/franchise/supply   (F3) วัตถุดิบจากส่วนกลาง: delivery rounds, purchases against sales, claims, late orders, over-use
+  GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี (F3: + วัตถุดิบ). The Fly image has
                no Chrome, so no server PDF; the page has a print stylesheet (A4 portrait) for a paper copy
 
 Who sees which branch: the branch comes from the signed session (auth.scope_branch). A `branch_id` that names another
@@ -69,6 +71,8 @@ Verdict thresholds (module constants, one place to tune; a value that is null is
   slip coverage         >= 95 % good ; < 80 % watch ; < 50 % fix        slip on time  < 70 % watch
   orders on time        >= 90 % good ; < 80 % watch ; < 60 % fix        receipts on time < 80 % watch
   claims in the month   >= 3 watch
+  purchases / sales     (F3) up by more than T_PURCHASE_RISE_WATCH points on last month -> watch (an open month from
+                        T_PURCHASE_MIN_DAYS finished days)
   discount              <= policy good ; > policy watch ; > 2 x policy fix
 """
 import calendar as _cal
@@ -366,7 +370,7 @@ def _pct_text(x):
     return f"{abs(x):.1f}".rstrip("0").rstrip(".") if x is not None else "-"
 
 
-def _verdict(sales, gp, ing, disc, discount_pct, policy) -> dict:
+def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
     rules = []          # (level, text), in the order the owner reads them
 
     def add(level, text):
@@ -445,6 +449,9 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy) -> dict:
         n = disc.get("claims_month")
         if n is not None and n >= T_CLAIMS_WATCH:
             add("watch", f"มีการแจ้งเคลมสินค้า {n} ครั้งในเดือนนี้")
+    sv = _supply_verdict(supply)                       # F3: purchases from the centre against sales, vs last month
+    if sv:
+        add(*sv)
     if discount_pct is not None:
         pol = float(policy) if policy else DEFAULT_DISCOUNT_POLICY
         if discount_pct <= pol:
@@ -482,11 +489,14 @@ def franchise_summary_data(branch_id: int, month: Optional[str] = None) -> dict:
         top = _safe("top menus", lambda: _top_menus(name, sel), []) if sel and sales is not None else []
         ing = _safe("ingredients", lambda: _ingredients(con, branch_id, sel), None) if sel else None
         disc = _safe("discipline", lambda: _discipline(con, branch_id, sel), None) if sel else None
+        supply = None
+        if sel and sales is not None and _safe("supply start", lambda: _bc_started(con, branch_id, sel)[0], False):
+            supply = _safe("supply ratio", lambda: _purchase_ratio(con, branch_id, name, sel, rep))
     months = [{"month": m["month"], "label": m.get("label"), "mtd": bool(m.get("mtd"))} for m in (rep.get("months") or [])]
     return {"branch": name, "month": sel, "label": rep.get("label"), "months": months,
             "available": bool(sales), "sales": sales, "gp": gp, "ingredients": ing, "discipline": disc,
             "top_menus": top, "discount_pct": discount_pct, "target": target, "trend_12m": trend,
-            "verdict": _verdict(sales, gp, ing, disc, discount_pct, policy)}
+            "supply_ratio": supply, "verdict": _verdict(sales, gp, ing, disc, discount_pct, policy, supply=supply)}
 
 
 @router.get("/api/franchise/summary")
@@ -514,8 +524,9 @@ def _xl_rows(ws, rows, fmts):
                 ws.cell(row=ws.max_row, column=i + 1).number_format = f
 
 
-def franchise_workbook(d: dict):
-    """-> openpyxl Workbook with the sheets สรุป / รายวัน / 12 เดือน / เมนูขายดี for one summary payload."""
+def franchise_workbook(d: dict, supply: Optional[dict] = None):
+    """-> openpyxl Workbook with the sheets สรุป / รายวัน / 12 เดือน / เมนูขายดี for one summary payload, and (F3) วัตถุดิบ from
+    the supply payload of the same month (franchise_supply_data) when one is given."""
     import openpyxl
     from openpyxl.styles import Font
     from .bom_center import _sheet
@@ -576,10 +587,58 @@ def franchise_workbook(d: dict):
     _sheet(ws, "เมนูขายดี", ["อันดับ", "เมนู", "จำนวนจาน"], f"{head} · 10 อันดับตามจำนวนจาน")
     ws.column_dimensions["B"].width = 48
     _xl_rows(ws, [(i + 1, x["name"], x["plates"]) for i, x in enumerate(d.get("top_menus") or [])], [None, None, "#,##0"])
+    if supply is not None:
+        _supply_sheet(wb.create_sheet(), supply, head)
     for w in wb.worksheets:
         w.freeze_panes = "A3"
         w["A1"].font = Font(italic=True, color="5F6C80")
     return wb
+
+
+def _supply_sheet(ws, sp: dict, head: str) -> None:
+    """F3: the sheet วัตถุดิบ - the figures of the วัตถุดิบจากส่วนกลาง section (franchise_supply_data), nothing else."""
+    from openpyxl.styles import Font
+    from .bom_center import _sheet
+    _sheet(ws, "วัตถุดิบ", ["หัวข้อ", "ค่า", "หมายเหตุ", "", "", ""], f"{head} · วัตถุดิบจากส่วนกลาง")
+    for col, w in zip("ABCDEF", (30, 18, 40, 18, 22, 20)):
+        ws.column_dimensions[col].width = w
+    if not sp.get("started"):
+        ws.append([sp.get("not_started_th") or NOT_STARTED_SUPPLY_TH])
+        return
+    pu, cl, lt = sp.get("purchases") or {}, sp.get("claims") or {}, sp.get("late") or {}
+    upto = "" if pu.get("month_complete") else f"ถึงวันที่ {pu.get('through') or '-'} (วันล่าสุดที่ปิดการขาย)"
+    _xl_rows(ws, [("ยอดสั่งจากส่วนกลาง (บาท)", pu.get("ordered"), f"{pu.get('rounds') or 0} รอบส่งในเดือนนี้"),
+                  ("ยอดที่คลังจัดส่ง (บาท)", pu.get("delivered"), f"จัดส่งแล้ว {pu.get('rounds_delivered') or 0} รอบ")],
+             [None, _FX_BAHT, None])
+    _xl_rows(ws, [("ยอดซื้อเทียบยอดขาย (%)", pu.get("pct"), ("ยอดที่คลังจัดส่ง / ยอดขายไม่รวม VAT " + upto).strip()),
+                  ("ยอดซื้อเทียบยอดขาย เดือนก่อน (%)", pu.get("pct_prev"), pu.get("month_prev") or ""),
+                  ("เปลี่ยนแปลงจากเดือนก่อน (จุด)", pu.get("change_pp"), "")], [None, _FX_PCT, None])
+    ws.append(["ส่งใบสั่งซื้อหลังเวลาตัดรอบ (ใบ)", lt.get("count"), lt.get("text") or ""])
+    for x in cl.get("by_status") or []:
+        ws.append([f"เคลมสินค้า: {x['status_th']} (ครั้ง)", x["count"], ""])
+    _xl_rows(ws, [("มูลค่าเคลมที่อนุมัติ (บาท)", cl.get("approved_value"), "")], [None, _FX_BAHT, None])
+
+    def table(title, cols, rows, fmts):
+        ws.append([])
+        ws.append([title])
+        ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
+        ws.append(cols)
+        for c in ws[ws.max_row]:
+            c.font = Font(bold=True)
+        _xl_rows(ws, rows, fmts)
+    table("รอบส่งของเดือนนี้", ["วันส่ง", "รอบ", "มูลค่าที่สั่ง (บาท)", "มูลค่าที่จัดส่ง (บาท)", "สถานะ", "ส่งหลังเวลาตัดรอบ"],
+          [(r["delivery"], r["round_th"], r["ordered"], r["delivered"], r["status_th"], "ใช่ (มีค่าปรับ)" if r["late"] else "")
+           for r in sp.get("rounds") or []], [None, None, _FX_BAHT, _FX_BAHT, None, None])
+    table("เคลมสินค้าล่าสุด", ["วันที่แจ้ง", "รอบ", "รายการ", "จำนวน", "เหตุผล", "สถานะ"],
+          [(c["date"], c.get("round_th") or "", i["name"], f"{i['qty']:g} {i['unit'] or ''}".strip() if i["qty"] is not None else "",
+            i["reason_th"], c["status_th"] + (f" · {c['decision_note']}" if c.get("decision_note") else ""))
+           for c in cl.get("latest") or [] for i in c["items"]], [None] * 6)
+    ov = sp.get("overuse")
+    if ov:
+        table(f"วัตถุดิบที่ใช้เกินสูตร 5 อันดับ (รอบตรวจนับ {ov['begin']} ถึง {ov['end']})",
+              ["วัตถุดิบ", "ใช้เกิน", "หน่วย", "มูลค่า (บาท)", "เกินสูตร (%)", ""],
+              [(r["name"], r["qty"], r["unit"], r["value"], r["pct"], "") for r in ov.get("rows") or []],
+              [None, "#,##0.##", None, _FX_BAHT, _FX_PCT, None])
 
 
 @router.get("/api/franchise/summary.xlsx")
@@ -592,7 +651,8 @@ def franchise_summary_xlsx(request: Request, month: Optional[str] = Query(None, 
     d = franchise_summary_data(bid, month)
     if not d.get("available"):
         raise HTTPException(404, "ยังไม่มีข้อมูลของเดือนนี้")
-    return _xlsx(franchise_workbook(d), _fname("ร้านของฉัน", d.get("branch"), d.get("month")))
+    sp = _safe("supply sheet", lambda: franchise_supply_data(bid, d.get("month")))
+    return _xlsx(franchise_workbook(d, sp), _fname("ร้านของฉัน", d.get("branch"), d.get("month")))
 
 
 # ── F2: what sells, the controls, the guests' voice ──────────────────────────
@@ -913,3 +973,233 @@ def franchise_morning_payload(d: dict, ins: Optional[dict], today: Optional[date
                  if x.get("level") == "fix" and x.get("key") != "discount")
     bits.append(f"ต้องแก้ {fixes} รายการ" if fixes else "ไม่มีรายการต้องแก้")
     return {"title": title, "body": " · ".join(bits), "url": "/?go=franchise", "tag": "oshinei-franchise", "fix_count": fixes}
+
+
+# ── F3: วัตถุดิบจากส่วนกลาง - what the branch buys from the centre ─────────────────
+# GET /api/franchise/supply: the third lazy-loaded part of ร้านของฉัน (the same branch rules as the summary). Every figure is the
+# supply module's own, read only:
+#   rounds         the month's orders the branch SENT (submitted / processed / received; a draft or a cancelled order is not an
+#                  order) whose delivery day (hub.delivery_of) falls in the month, named "รอบ 1 · อ. 28/10" (forecast.ROUND_TH +
+#                  fmt.day_short_th: never an order number). ordered = hub.with_values value_ordered (confirmed_units), delivered =
+#                  value_sent (processed_units, once the warehouse has sent it): the ONE order value of the branch and warehouse
+#                  screens, so there is no second pricing formula and no per-item unit cost in the payload. status_th =
+#                  orders.STATUS_TH, the words the branch's own screens show; late = bc_order.late (submitted after the cutoff)
+#   purchases      month totals of ordered / delivered, and ยอดซื้อเทียบยอดขาย % = delivered value / net sales ex-VAT (the report's
+#                  headline revenue, the summary's sales.mtd: same revenue rule). While the month is open both sides stop at the
+#                  report's last finished day (deliveries on or before it); last month = all its deliveries over its full sales.
+#                  change_pp = this month's % less last month's %
+#   claims         claims RAISED in the month (Bangkok day of created_at, cancelled ones left out): count by status, the approved
+#                  value (approved_units valued by hub._pricer / hub._base for the order's month, as the order lines are), the
+#                  latest CLAIMS_SHOWN with item name, quantity, reason (claims.REASON_TH), status and the decision note the branch
+#                  already reads on its claim screen. No person's name, no branch note
+#   late           the number of the month's rounds submitted after the cutoff. The late fee has no engine: the count only
+#   overuse        the latest counted variance period (the summary's ingredients block: variance.period of the last period whose
+#                  end count falls in or before the month): the OVERUSE_TOP lines used most over the recipes in baht (status
+#                  'over'; a line the data cannot judge - variance 'data_incomplete' - left out), quantity in the item's readable
+#                  unit (units.readable). null when there is no counted period
+# Before the branch started the supply module (started.branch_start: none, or after the month) the payload says only
+# started=false and the page shows one neutral line, never red.
+T_PURCHASE_RISE_WATCH = 3.0     # ยอดซื้อเทียบยอดขาย up by more than this many points on last month -> ควรดู
+T_PURCHASE_MIN_DAYS = 7         # an open month is judged from this many finished days (deliveries come in rounds)
+CLAIMS_SHOWN = 5
+OVERUSE_TOP = 5
+SENT = ("submitted", "processed", "received")
+CLAIM_STATUS_TH = {"submitted": "รอพิจารณา", "approved": "อนุมัติ", "rejected": "ไม่อนุมัติ"}
+NOT_STARTED_SUPPLY_TH = "สาขายังไม่เริ่มใช้ระบบสั่งวัตถุดิบ"
+
+
+def _bc_started(con, bid: int, month: str):
+    """-> (started for this month, start date). A month that ends before the branch's first day in the supply module counts as
+    not started (started.branch_start: the earliest count, slip or sent order)."""
+    from bom_center.started import branch_start
+    start = branch_start(con, bid)
+    _, last = _month_bounds(month)
+    return bool(start) and start <= last.isoformat(), start
+
+
+def _supply_rounds(con, bid: int, month: str) -> list:
+    """The month's sent orders by delivery day, valued by hub.with_values (see the block comment)."""
+    from bom_center.fmt import day_short_th
+    from bom_center.forecast import ROUND_TH
+    from bom_center.hub import delivery_of, with_values
+    from bom_center.orders import STATUS_TH
+    first, last = _month_bounds(month)
+    rows = []
+    for oid, cyc, rnd, st, ddate, late in con.execute(
+            "SELECT order_id, cycle_date, round, status, delivery_date, COALESCE(late,0) FROM bc_order WHERE branch_id=?"
+            f" AND status IN ({','.join('?' * len(SENT))}) AND cycle_date BETWEEN ? AND ? ORDER BY cycle_date, order_id",
+            [bid, *SENT, (first - timedelta(days=14)).isoformat(), last.isoformat()]).fetchall():
+        dlv = str(delivery_of(con, bid, rnd, cyc, ddate))[:10]
+        if first.isoformat() <= dlv <= last.isoformat():
+            rows.append({"order_id": oid, "cycle_date": cyc, "status": st, "round": rnd, "delivery": dlv, "late": bool(late)})
+    with_values(con, rows)
+    out = []
+    for r in sorted(rows, key=lambda r: (r["delivery"], r["cycle_date"], r["order_id"])):
+        rnd = ROUND_TH.get(str(r["round"]), str(r["round"]))
+        out.append({"delivery": r["delivery"], "round_th": f"{rnd} · {day_short_th(r['delivery'])}",
+                    "ordered": r["value_ordered"], "delivered": r["value_sent"], "status": r["status"],
+                    "status_th": STATUS_TH.get(r["status"], r["status"]), "late": r["late"]})
+    return out
+
+
+def _month_sales(name: str, month: str, rep: Optional[dict] = None):
+    """-> (net sales ex-VAT, through, complete) of the branch's month from the management report (the summary's sales.mtd),
+    or (None, None, None) when the report has no data for that very month."""
+    rep = rep if rep is not None else (_safe("report", lambda: _report(name, month), {}) or {})
+    ok = rep.get("available") and rep.get("selected_month") == month and ((rep.get("range") or [""])[0] or "")[:7] == month
+    if not ok:
+        return None, None, None
+    H = rep.get("headline") or {}
+    return H.get("revenue"), (rep.get("range") or [None, None])[1], not rep.get("partial")
+
+
+def _purchase_ratio(con, bid: int, name: str, month: str, rep: Optional[dict] = None, rounds: Optional[list] = None) -> dict:
+    """ยอดซื้อเทียบยอดขาย of the month and of last month (see the block comment)."""
+    rounds = rounds if rounds is not None else _supply_rounds(con, bid, month)
+    sales, through, complete = _month_sales(name, month, rep)
+    upto = through if (through and not complete) else None
+    got = sum(r["delivered"] for r in rounds if r["delivered"] is not None and (upto is None or r["delivery"] <= upto))
+    pct = _num(100.0 * got / sales) if sales else None
+    prev = _prev_month(month)
+    p_pct = p_got = p_sales = None
+    if _bc_started(con, bid, prev)[0]:
+        p_rounds = _supply_rounds(con, bid, prev)
+        p_sales, _, _ = _month_sales(name, prev)
+        p_got = round(sum(r["delivered"] for r in p_rounds if r["delivered"] is not None), 2)
+        p_pct = _num(100.0 * p_got / p_sales) if p_sales else None
+    first, _ = _month_bounds(month)
+    days = (date.fromisoformat(through) - first).days + 1 if through else 0
+    return {"pct": pct, "delivered_to_date": round(got, 2), "sales_to_date": _num(sales, 2), "through": through,
+            "month_complete": bool(complete), "days": days,
+            "pct_prev": p_pct, "delivered_prev": p_got, "sales_prev": _num(p_sales, 2), "month_prev": prev,
+            "change_pp": _num(pct - p_pct) if pct is not None and p_pct is not None else None}
+
+
+def _supply_claims(con, bid: int, month: str, scrub) -> dict:
+    """Claims raised in the month: counts by status, the approved value and the latest ones (see the block comment)."""
+    from bom_center.claims import REASON_TH
+    from bom_center.fmt import bkk_stamp, item, round_day_th
+    from bom_center.hub import _base, _pricer, delivery_of
+    from bom_center.orders import unit_of_line
+    from bom_center.units import readable
+    first, last = _month_bounds(month)
+    per, value_of = _pricer(con)
+    ing = {c: (r, b) for c, r, b in con.execute("SELECT code, recv_unit, base_unit FROM bc_ingredient")}
+    picked = []
+    for cid, oid, st, at, note, cyc, rnd, ddate in con.execute(
+            "SELECT c.claim_id, c.order_id, c.status, c.created_at, c.decision_note, o.cycle_date, o.round, o.delivery_date"
+            " FROM bc_claim c LEFT JOIN bc_order o ON o.order_id = c.order_id WHERE c.branch_id=? AND c.status<>'cancelled'"
+            " ORDER BY c.created_at DESC, c.claim_id DESC", (bid,)).fetchall():
+        t = bkk_stamp(at)
+        day = t.date() if t else (date.fromisoformat(str(at)[:10]) if at else None)
+        if day and first <= day <= last:
+            picked.append((cid, oid, st, day, note, cyc, rnd, ddate))
+    counts = {k: 0 for k in CLAIM_STATUS_TH}
+    approved_value = 0.0
+    latest = []
+    for cid, oid, st, day, note, cyc, rnd, ddate in picked:
+        counts[st] = counts.get(st, 0) + 1
+        units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (oid,))}
+        lines = con.execute("SELECT ingredient_code, claim_units, approved_units, reason_code FROM bc_claim_line WHERE claim_id=?"
+                            " ORDER BY ingredient_code", (cid,)).fetchall()
+        if st == "approved":
+            m = str(cyc or "")[:7] or month
+            for c, _q, a, _r in lines:
+                p = value_of(c, m)
+                if p and a:
+                    approved_value += _base(a, units.get(c), per.get(c)) * p
+        if len(latest) < CLAIMS_SHOWN:
+            items = []
+            for c, q, a, rs in lines:
+                recv, base = ing.get(c, (None, None))
+                u = units.get(c) or "base"
+                if u == "base":
+                    qty, word = readable(q, base)
+                else:
+                    qty, word = q, unit_of_line(recv, base, u)[1]
+                items.append({"name": item(con, c), "qty": _num(qty, 2), "unit": word, "reason_th": REASON_TH.get(rs, rs)})
+            dlv = delivery_of(con, bid, rnd, cyc, ddate) if cyc else None
+            decided = st in ("approved", "rejected") and (note or "").strip()
+            latest.append({"date": day.isoformat(), "round_th": round_day_th(rnd, dlv) if cyc else None, "items": items,
+                           "status": st, "status_th": CLAIM_STATUS_TH.get(st, st),
+                           "decision_note": scrub(note.strip()) if decided else None})
+    return {"count": len(picked),
+            "by_status": [{"status": k, "status_th": v, "count": counts.get(k, 0)} for k, v in CLAIM_STATUS_TH.items()],
+            "approved_value": round(approved_value, 2), "latest": latest}
+
+
+def _supply_overuse(con, bid: int, month: str):
+    """The latest counted period's lines used most over the recipes, in baht (see the block comment). None without a period."""
+    from bom_center import variance as VA
+    from bom_center.fmt import item
+    from bom_center.stock import periods
+    from bom_center.units import readable
+    _, last = _month_bounds(month)
+    cut = (last + timedelta(days=1)).isoformat()
+    ps = [p for p in periods(con, bid) if p[1]["date"] < cut]
+    if not ps:
+        return None
+    v = VA.period(con, bid, ps[-1][1]["count_id"])
+    over = [r for r in v["rows"] if r.get("status") == "over" and (r.get("gap_value") or 0) > 0 and not r.get("data_incomplete")]
+    over.sort(key=lambda r: -r["gap_value"])
+    rows = []
+    for r in over[:OVERUSE_TOP]:
+        q, u = readable(r["gap"], r.get("base_unit"))
+        rows.append({"name": item(con, r["code"]), "qty": _num(q, 2), "unit": u, "value": _num(r["gap_value"], 0),
+                     "pct": _num(r.get("gap_pct"))})
+    return {"begin": v["begin_date"], "end": v["end_date"], "rows": rows, "lines_over": len(over)}
+
+
+def franchise_supply_data(branch_id: int, month: Optional[str] = None) -> dict:
+    """วัตถุดิบจากส่วนกลาง of one branch for one month (see the block comment). Each part fails on its own."""
+    from bom_center.clock import today as bkk_today
+    from bom_center.fmt import month_th
+    from bom_center.schema import ensure as _bc_ensure
+    with get_db() as con:
+        _bc_ensure(con)
+        name = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()[0]
+        rep = _safe("report", lambda: _report(name, month), {}) or {}
+        sel = rep.get("selected_month") or month or bkk_today().isoformat()[:7]
+        started, start = _bc_started(con, branch_id, sel)
+        out = {"branch": name, "month": sel, "label": rep.get("label") or month_th(sel), "started": started,
+               "start_date": start if started else None, "not_started_th": None if started else NOT_STARTED_SUPPLY_TH,
+               "rounds": [], "purchases": None, "claims": None, "late": None, "overuse": None}
+        if not started:
+            return out
+        scrub = _scrubber(con, name)
+        rounds = _safe("supply rounds", lambda: _supply_rounds(con, branch_id, sel), []) or []
+        ratio = _safe("purchase ratio", lambda: _purchase_ratio(con, branch_id, name, sel, rep, rounds)) or {}
+        n_late = sum(1 for r in rounds if r["late"])
+        out.update(
+            rounds=rounds,
+            purchases={"ordered": round(sum(r["ordered"] or 0 for r in rounds), 2),
+                       "delivered": round(sum(r["delivered"] for r in rounds if r["delivered"] is not None), 2),
+                       "rounds": len(rounds), "rounds_delivered": sum(1 for r in rounds if r["delivered"] is not None), **ratio},
+            claims=_safe("supply claims", lambda: _supply_claims(con, branch_id, sel, scrub)),
+            late={"count": n_late, "text": f"ส่งหลังเวลาตัดรอบ {n_late} ใบ (มีค่าปรับ)" if n_late else "ส่งทันเวลาตัดรอบทุกใบ"},
+            overuse=_safe("overuse", lambda: _supply_overuse(con, branch_id, sel)))
+    return out
+
+
+def _supply_verdict(ratio: Optional[dict]):
+    """(level, text) for the summary's verdict, or None: ยอดซื้อเทียบยอดขาย up by more than T_PURCHASE_RISE_WATCH points on last month,
+    judged once the month has T_PURCHASE_MIN_DAYS finished days (the claims line is the discipline block's, not repeated here)."""
+    if not ratio or ratio.get("change_pp") is None or ratio.get("pct") is None:
+        return None
+    if not ratio.get("month_complete") and (ratio.get("days") or 0) < T_PURCHASE_MIN_DAYS:
+        return None
+    d = ratio["change_pp"]
+    if d > T_PURCHASE_RISE_WATCH:
+        return ("watch", f"ยอดซื้อวัตถุดิบจากส่วนกลางคิดเป็นร้อยละ {_pct_text(ratio['pct'])} ของยอดขาย "
+                         f"สูงกว่าเดือนก่อน {_pct_text(d)} จุด ควรตรวจสอบการสั่งและการใช้วัตถุดิบ")
+    return None
+
+
+@router.get("/api/franchise/supply")
+def franchise_supply(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE),
+                     branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน, วัตถุดิบจากส่วนกลาง: the month's delivery rounds, purchases against sales, claims, late orders and the lines
+    used most over the recipes (same branch rules as the summary)."""
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    return franchise_supply_data(bid, month)
