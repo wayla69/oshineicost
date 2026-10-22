@@ -647,7 +647,7 @@ def set_link(con, old_code: str, new_code, who: str, note: str = None):
     if new_code not in known:
         raise ValueError(f"ไม่พบรหัส {new_code}")
     if new_code == old_code:
-        raise ValueError("รหัสในสูตรและรหัสของไดกิโตะ กรุ๊ปเป็นรหัสเดียวกัน")
+        raise ValueError("รหัสเดิมและรหัสของไดกิโตะ กรุ๊ปเป็นรหัสเดียวกัน")
     if con.execute("SELECT 1 FROM bc_code_link WHERE old_code=?", (new_code,)).fetchone():
         raise ValueError(f"{new_code} จับคู่กับรหัสอื่นอยู่แล้ว จึงจับคู่ต่อเนื่องไม่ได้")
     con.execute("INSERT INTO bc_code_link(old_code, new_code, note, who, at) VALUES(?,?,?,?,?)"

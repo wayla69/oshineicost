@@ -50,12 +50,12 @@ def _departments():
             cur = {"key": h.group(1), "label": h.group(2), "roles": re.findall(r"'(\w+)'", h.group(6)), "pages": []}
             out.append(cur)
             continue
-        p = re.match(r"\s*\{ tab: '(\w+)'(?:, pane: '(\w+)')?(?:, bom: true)?, label: '([^']+)', icon: '(\w+)'(.*?)\}[,\]]?\s*(?://.*)?$", line)
+        p = re.match(r"\s*\{ tab: '(\w+)'(?:, pane: '(\w+)')?(, bom: true)?, label: '([^']+)', icon: '(\w+)'(.*?)\}[,\]]?\s*(?://.*)?$", line)
         if p:
-            rest = p.group(5)
+            rest = p.group(6)
             roles = re.search(r"roles: \[([^\]]*)\]", rest)
             mods = re.search(r"mods: \[([^\]]*)\]", rest)
-            cur["pages"].append({"tab": p.group(1), "pane": p.group(2), "label": p.group(3),
+            cur["pages"].append({"tab": p.group(1), "pane": p.group(2), "label": p.group(4), "bom": bool(p.group(3)),
                                  "roles": re.findall(r"'(\w+)'", roles.group(1)) if roles else None,
                                  "mods": re.findall(r"'([\w.]+)'", mods.group(1)) if mods else None})
     return out
@@ -115,9 +115,13 @@ def test_a_role_names_every_supply_page_of_its_own_department_in_the_manual():
     for role in ("branch", "warehouse", "salessupport", "operation", "analyst", "innovation", "accounting", "franchise"):
         seen = _dept_visible(role)
         home, pages = next((d, p) for d, p in seen if role in d["roles"])
-        want = {p["label"] for p in pages if p["tab"] in SUPPLY_TABS or p["tab"] == "franchise"}
+        want = {p["label"] for p in pages if (p["tab"] in SUPPLY_TABS or p["tab"] == "franchise") and not p["bom"]}
         missing = want - set(rows[role]["pages"])
         assert not missing, f"{role}: the row does not name {sorted(missing)} of {home['label']}"
+        # PR-S4: a recipe page (bom: true) is hidden in stock mode, so the row leaves it out and the appendix of the manual names it
+        appendix = re.search(r'id="manualRecipeAppendix".*?</ol>', MANUAL, re.S).group(0)
+        gone = {p["label"] for p in pages if (p["tab"] in SUPPLY_TABS) and p["bom"]}
+        assert all(g in appendix for g in gone), f"{role}: {sorted(g for g in gone if g not in appendix)} missing from the recipe appendix"
 
 
 def test_every_department_and_page_label_of_the_manual_exists_in_departments():
@@ -313,8 +317,8 @@ def test_the_overhaul_document_has_the_department_section_and_the_d_rows():
         assert re.search(rf"\| {pr} \|", doc), pr
 
 
-def test_the_sop_is_version_1_16_with_a_revision_row_and_the_page_locations():
+def test_the_sop_is_version_1_17_with_a_revision_row_and_the_page_locations():
     sop = (REPO / "docs" / "sop" / "WP-SCM-001_ingredient_order_procedure.html").read_text(encoding="utf-8")
-    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.16 /", sop)
-    assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop)
+    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.17 /", sop)      # PR-S4: 1.17 (22 ต.ค. 2026) carries the stock-first rewrite
+    assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop)
     assert "ตำแหน่งของหน้าในแอป" in sop and "ปฏิบัติการ → การใช้งานทุกสาขา" in sop

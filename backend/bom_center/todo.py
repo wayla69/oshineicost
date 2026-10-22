@@ -73,6 +73,7 @@ RECIPE_KEYS = (
     "backlog",                  # the data-quality backlog ranked by the plates a recipe line touches
     "feedback_formula_excess",  # the task "ตรวจสูตร" the variance reasons make (opens ตรวจสูตรด้วยยอดซื้อ)
     "release_in_force",         # close step 1: the recipe version in force for the month
+    "monthly_summary",          # close step 9: สรุปผลต่างรายเดือน (period use against the recipes); stock mode ends at ใบสรุปตัดเบิก
 )
 
 
@@ -300,6 +301,15 @@ FEEDBACK_GO = {
 }
 
 
+def _feedback_go(con, t: dict) -> dict:
+    """PR-S4: where a feedback task opens. The month summary is a recipe page: in stock mode the miscount task opens the month-close
+    summary (ใบสรุปตัดเบิก / กระทบยอด, system stock against the count) of that branch instead."""
+    from .close_settings import stock_mode
+    if t["rule"] == "miscount" and stock_mode(con):
+        return {"tab": "bomcenter", "pane": "issue", "month": t["month"], "branch": t["branches"][0]["branch_id"]}
+    return FEEDBACK_GO[t["rule"]](t)
+
+
 def _feedback_items(con) -> list:
     """Batch 4b (2.6): the tasks the variance and order reasons make (feedback.evaluate): one item per task, closed by an
     acknowledgement or when the rule stops holding. Each says who owns it; ตรวจสูตร links to ตรวจสูตรด้วยยอดซื้อ for the item."""
@@ -311,7 +321,7 @@ def _feedback_items(con) -> list:
     out = []
     for t in tasks:
         out.append(_e(f"feedback_{t['rule']}", 340, "week", t["title"], "todo", t["detail"], owner=tuple(t["owner_modules"]),
-                      owner_th=t["owner_th"], go=FEEDBACK_GO[t["rule"]](t), feedback_key=t["key"], rule=t["rule"], subject=t["subject"],
+                      owner_th=t["owner_th"], go=_feedback_go(con, t), feedback_key=t["key"], rule=t["rule"], subject=t["subject"],
                       month=t["month"], branch_names=[b["name"] for b in t["branches"]], ack_modules=t["ack_modules"]))
         out[-1]["key"] = f"feedback:{t['key']}"
     return out
@@ -570,10 +580,13 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         except Exception:                                    # the list must open even if the report cannot be built
             odd = []
         shown = " · ".join(f"{a['branch']} ({', '.join(a['items'][:3])})" for a in odd)
-        out.append(_e("issue_anomaly", 229, "week", "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน",
+        from .close_settings import stock_mode as _stock_mode
+        _sm = _stock_mode(con)                               # PR-S4: with no recipe the word is ปกติ (the branch's own or the all-branch median)
+        out.append(_e("issue_anomaly", 229, "week", "ตรวจสอบสาขาที่เบิกเกินปกติติดต่อกัน" if _sm else "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน",
                       "todo" if odd else "done",
-                      (f"เบิกเกินสูตรมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}") if odd
-                      else "ไม่พบการเบิกเกินสูตรติดต่อกันใน 7 วันล่าสุด",
+                      ((f"เบิกเกินปกติของสาขาหรือค่ากลางมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}" if _sm
+                        else f"เบิกเกินสูตรมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}") if odd
+                       else ("ไม่พบการเบิกเกินปกติติดต่อกันใน 7 วันล่าสุด" if _sm else "ไม่พบการเบิกเกินสูตรติดต่อกันใน 7 วันล่าสุด")),
                       count=len(odd) or None, owner=("supply.ordering", "ops.report"),
                       owner_th="ประสานงานขาย / ฝ่ายปฏิบัติการ", urgent=bool(odd), branch_names=[a["branch"] for a in odd],
                       anomalies=[{"branch_id": a["branch_id"], "branch": a["branch"], "items": a["items"][:3],
@@ -588,10 +601,12 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         except Exception:
             low = []
         shown_low = " · ".join(f"{a['branch']} ({', '.join(a['items'][:3])})" for a in low)
-        out.append(_e("issue_under", 230, "week", "ตรวจสอบสาขาที่เบิกน้อยกว่าสูตรติดต่อกัน",
+        from .issue_reports import UNDER_PCT_STOCK
+        out.append(_e("issue_under", 230, "week", "ตรวจสอบสาขาที่เบิกต่ำกว่าปกติติดต่อกัน" if _sm else "ตรวจสอบสาขาที่เบิกน้อยกว่าสูตรติดต่อกัน",
                       "todo" if low else "done",
-                      (f"เบิกน้อยกว่าสูตรเกิน {UNDER_PCT:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}") if low
-                      else "ไม่พบการเบิกน้อยกว่าสูตรติดต่อกันใน 7 วันล่าสุด",
+                      ((f"เบิกต่ำกว่าปกติของสาขาหรือค่ากลางเกิน {UNDER_PCT_STOCK:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}" if _sm
+                        else f"เบิกน้อยกว่าสูตรเกิน {UNDER_PCT:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}") if low
+                       else ("ไม่พบการเบิกต่ำกว่าปกติติดต่อกันใน 7 วันล่าสุด" if _sm else "ไม่พบการเบิกน้อยกว่าสูตรติดต่อกันใน 7 วันล่าสุด")),
                       count=len(low) or None, owner=("supply.ordering", "ops.report"),
                       owner_th="ประสานงานขาย / ฝ่ายปฏิบัติการ", urgent=False, branch_names=[a["branch"] for a in low],
                       anomalies=[{"branch_id": a["branch_id"], "branch": a["branch"], "items": a["items"][:3],
@@ -722,9 +737,9 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
                     count=ci["needs_factor"] or None, owner=("supply.ordering", "bom.center"), owner_th="ประสานงานขาย / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "central", "month": month, "anchor": "ohbCenStat"}))
     lc = link_counts(con)
-    steps.append(_e("code_links", 3, "close", "จับคู่รหัสในสูตรกับรหัสสินค้าของไดกิโตะ กรุ๊ป",
+    steps.append(_e("code_links", 3, "close", "จับคู่รหัสเดิมกับรหัสสินค้าของไดกิโตะ กรุ๊ป",
                     "na" if not ci["count"] else ("todo" if (lc["candidates"] and not lc["links"]) else "done"),
-                    f"จับคู่แล้ว {lc['links']} · รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้า {lc['candidates']} (สาขาซื้อเอง หรือรอจับคู่)"
+                    f"จับคู่แล้ว {lc['links']} · รหัสเดิมที่ไม่อยู่ในบัญชีสินค้า {lc['candidates']} (สาขาซื้อเอง หรือรอจับคู่)"
                     if ci["count"] else "รอบัญชีสินค้าก่อน",
                     owner=("supply.ordering", "bom.center"), owner_th="ประสานงานขาย / ฝ่ายวิเคราะห์",
                     go={"tab": "orderhub", "pane": "central", "anchor": "ohbLinks"}))
@@ -921,6 +936,8 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
             if it.get("key") == "master_seed":                # the seed button lives on the register page, which stays
                 it["go"] = {"tab": "bomcenter", "pane": "ing"}
         close["steps"] = [s for s in close["steps"] if not is_recipe_item(s)]
+        for n, s in enumerate(close["steps"], 1):          # PR-S4: the steps that remain are numbered 1, 2, 3 ... (the page and หน้างาน print the number)
+            s["seq"] = n
         close["done"] = sum(1 for s in close["steps"] if s["status"] == "done")
         close["total"] = len(close["steps"])
     annotate_states(items + close["steps"], viewer_role)

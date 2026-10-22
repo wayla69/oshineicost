@@ -20,7 +20,7 @@ BOXW = 128                         # 9 px clear of each column boundary (where t
 HEAD_H, TOP = 30, 34               # the chart + legend must fit ONE A4 landscape page: keep H ≤ ~545
 FS, LH = 9.2, 13                   # box text size and line height
 COLS = ["① ตั้งต้น (รายเดือน)", "② ทุกวันที่เปิดขาย", "③ ก่อนตัดรอบ 13:15", "④ วันตัดรอบ → วันส่ง", "⑤ หลังรับสินค้า", "⑥ ปิดงวดเดือน"]
-LANES = [("kitchen", ["ครัว /", "ฝ่ายวิเคราะห์"], 118), ("ss", ["ประสานงานขาย"], 78), ("branch", ["สาขา"], 170),
+LANES = [("kitchen", ["ฝ่ายวิเคราะห์"], 118), ("ss", ["ประสานงานขาย"], 78), ("branch", ["สาขา"], 170),
          ("wh", ["คลัง"], 70), ("acc", ["บัญชี / ปฏิบัติการ", "/ ผู้บริหาร"], 70)]
 LANE_Y = {}
 _y = TOP
@@ -54,9 +54,8 @@ def box(bid, lane, col, lines, y=None, kind="step"):
     B[bid] = {"x": cx(col) - w / 2, "y": top, "w": w, "h": h, "lines": lines, "kind": kind, "col": col}
 
 
-box("k_new", "kitchen", 0, ["ครัว: สร้างสูตรจากแม่แบบ", "สูตรตามระดับราคา แล้วส่งตรวจ"], y=6)
-box("k_rel", "kitchen", 0, ["ฝ่ายวิเคราะห์: ตรวจ 14 ข้อ", "แก้ไข / ส่งกลับ → ประกาศใช้", "(ผู้บริหารรับทราบ)"], y=60)
-box("k_ver", "kitchen", 5, ["ฝ่ายวิเคราะห์: สูตรเวอร์ชัน", "ที่มีผลเดือนนั้น (ขั้น 1)"])
+box("k_new", "kitchen", 0, ["ฝ่ายวิเคราะห์: นำเข้าต้นทุน", "ต่อจานรายเดือน (Excel)"], y=6)
+box("k_rel", "kitchen", 0, ["ฝ่ายวิเคราะห์: ตรวจและ", "นำเข้าไฟล์ราคาซื้อจริง"], y=73)
 box("s_price", "ss", 0, ["ส่งไฟล์ราคาซื้อจริง", "รายเดือนของไดกิโตะ กรุ๊ป"], y=22)
 box("s_follow", "ss", 1, ["ติดตามสาขาที่ยังไม่ยืนยัน", "เปิดแก้ไขเมื่อสาขาแจ้ง", "พร้อมเหตุผล (บันทึก)"])
 box("s_key", "ss", 3, ["ดาวน์โหลดสรุปรวมตามวันส่ง", "(Excel) บันทึกเข้าระบบบัญชี", "แล้วทำเครื่องหมายคีย์แล้ว"])
@@ -65,11 +64,11 @@ box("s_close", "ss", 5, ["นำเข้ารายงานไดกิโต
 box("b_slip", "branch", 1, ["ใบตัดเบิกรายวัน", "เบิกใช้ + ของเสีย (สาเหตุ)", "→ ยืนยัน (ล็อก)", "เบิกเพิ่มได้ในวันเดียวกัน"], y=32)
 box("b_order", "branch", 2, ["สั่งสินค้าตามยอดแนะนำ", "เหตุผลเมื่อต่าง ±20%", "ส่งก่อน 13:15 (ล่าช้ามีค่าปรับ)"], y=111)
 box("b_recv", "branch", 3, ["รับสินค้า: รับครบ / ไม่ครบ", "+ สาเหตุ → เคลมอัตโนมัติ", "ยืนยันตรวจสภาพ"], y=40)
-box("b_var", "branch", 4, ["ผลต่างรายวันเทียบสูตร", "(ระบบคำนวณจากใบตัดเบิก)"], y=46.5)
+box("b_var", "branch", 4, ["ผลต่างรายวันเทียบปกติ", "ของสาขา / ค่ากลางทุกสาขา"], y=46.5)
 box("b_count", "branch", 5, ["ตรวจนับสิ้นเดือนครบทุกรายการ", "(ปิดงวดต้องนับ 100%) → ส่งผล", "เหตุผลผลต่างเกิน ฿500"], y=40)
 box("w_conf", "wh", 3, ["ยืนยันยอดส่ง + เหตุผล + PO", "ภายใน 14:00 ของวันตัดรอบ", "→ คลังจัดส่งแล้ว"])
-box("a_ops", "acc", 4, ["ฝ่ายปฏิบัติการ: ตรวจสัญญาณ", "เบิกผิดสูตรต่อเนื่อง 3 วัน"])
-box("a_end", "acc", 5, ["บัญชี: ใบสรุปตัดเบิก (Excel)", "บันทึกเข้าระบบบัญชี → ล็อกงวด", "ผู้บริหาร: สรุปผลต่างรายเดือน"], kind="end")
+box("a_ops", "acc", 4, ["ฝ่ายปฏิบัติการ: ตรวจสัญญาณ", "เบิกผิดปกติต่อเนื่อง 3 วัน"])
+box("a_end", "acc", 5, ["บัญชี: ใบสรุปตัดเบิก (Excel)", "บันทึกเข้าระบบบัญชี → ล็อกงวด"], kind="end")
 
 # the decision: centred in column 2 of the branch lane, level with the slip box
 _slip = B["b_slip"]
@@ -89,8 +88,7 @@ def line(pts, ends, dashed=False, label=None, lpos=None, arrow=True):
     C.append({"pts": pts, "dashed": dashed, "label": label, "lpos": lpos, "ends": set(ends), "arrow": arrow})
 
 
-k_new, k_rel = B["k_new"], B["k_rel"]
-line([mid(k_new, "bottom"), mid(k_rel, "top")], ["k_new", "k_rel"])
+k_rel = B["k_rel"]
 sp = B["s_price"]
 line([mid(sp, "top"), mid(k_rel, "bottom")], ["s_price", "k_rel"], label="ตรวจ · นำเข้า", lpos=(cx(0) + 6, (sp["y"] + k_rel["y"] + k_rel["h"]) / 2 + 3, "start"))
 sl, sf = B["b_slip"], B["s_follow"]
@@ -115,7 +113,7 @@ sc = B["s_claim"]
 line([mid(br, "right"), (xr, mid(br, "right")[1]), (xr, mid(sc, "left")[1]), mid(sc, "left")], ["b_recv", "s_claim"],
      label="ส่วนต่าง / เคลมภายหลัง", lpos=(xr + 5, LANE_Y["branch"][0] + 13, "start"))
 bv, ao, bc = B["b_var"], B["a_ops"], B["b_count"]
-line([mid(bv, "bottom"), mid(ao, "top")], ["b_var", "a_ops"], dashed=True, label="สัญญาณเบิกผิดสูตร", lpos=(cx(4) + 6, (LANE_Y["wh"][0] + LANE_Y["wh"][1]) / 2 + 3, "start"))
+line([mid(bv, "bottom"), mid(ao, "top")], ["b_var", "a_ops"], dashed=True, label="สัญญาณเบิกผิดปกติ", lpos=(cx(4) + 6, (LANE_Y["wh"][0] + LANE_Y["wh"][1]) / 2 + 3, "start"))
 line([mid(bv, "right"), mid(bc, "left")], ["b_var", "b_count"])
 scl, ae = B["s_close"], B["a_end"]
 line([mid(scl, "bottom"), mid(bc, "top")], ["s_close", "b_count"], label="ขั้น 2–4, 7", lpos=(cx(5) + 6, (scl["y"] + scl["h"] + bc["y"]) / 2 + 3, "start"))

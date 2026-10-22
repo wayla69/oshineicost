@@ -71,8 +71,13 @@ const _OHB_HELP = {
     _: ['ใบที่ยืนยันแล้วแก้ไขไม่ได้ · ประสานงานขายเปิดแก้ไขพร้อมเหตุผล แล้วสาขายืนยันใหม่',
       'ใบที่ยืนยันหลังวันที่ของใบเป็น “ล่าช้า” · ไฟล์ใบตัดเบิกสาขา (Excel) รวมเฉพาะใบที่ยืนยันแล้ว', _OHB_ACC_GUIDE] },
   issuevar: {
-    _: ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
-      'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'] },
+    get _() {                                                       // PR-S4: with no recipe the comparators are the branch's normal and the all-branch median
+      return typeof BC_MODE !== 'undefined' && BC_MODE === 'stock'
+        ? ['เทียบมูลค่าที่เบิกจริงกับปกติของสาขา (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 4 สัปดาห์ก่อน ปรับตามยอดขาย) และค่ากลางทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
+          'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินปกติของสาขาหรือค่ากลางมากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ']
+        : ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
+          'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'];
+    } },
   persales: {
     _: ['เทียบปริมาณวัตถุดิบที่ใช้กับยอดขาย (ไม่รวมภาษีมูลค่าเพิ่ม) ใช้ปริมาณเดียวกับที่ใช้คำนวณยอดแนะนำ เป็นอีกวิธีหนึ่งที่ใช้ดูควบคู่กัน ไม่ได้ใช้แทนการคำนวณตามเมนู',
       'แต่ละสาขาใช้ไม่เท่ากัน จึงดูเป็นรายสาขา · แกว่งต่อสัปดาห์ = ความผันผวนของอัตรารายสัปดาห์ ถ้าเกิน 15% แสดงว่าใช้ไม่สม่ำเสมอ ไม่ควรใช้ตัวเลขนี้เป็นเกณฑ์',
@@ -90,11 +95,14 @@ const _OHB_HELP = {
       'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
       'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
   central: {
-    _: ['ขั้นที่ 2 นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
-      'ขั้นที่ 3 จับคู่รหัสเดิมในสูตรกับรหัสของไดกิโตะ กรุ๊ป · มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน',
+    get _() {                                                   // PR-S4: stock mode numbers the steps from 1 (no recipe step 1)
+      const a = ['ขั้นที่ 2 นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
+      'ขั้นที่ 3 จับคู่รหัสเดิมกับรหัสของไดกิโตะ กรุ๊ป · มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน',
       'ขั้นที่ 4 นับก่อนเปิดร้านวันที่ 1 · นำเข้าต้นงวดก่อนปลายงวด',
       'ขั้นที่ 5 สาขายืนยันรับสินค้าครบและระบุเหตุผลผลต่าง (หรือประสานงานขายและฝ่ายวิเคราะห์ทำแทน)',
-      'ขั้นที่ 6 บัญชีดาวน์โหลดใบสรุปตัดเบิก แล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”'] },
+      'ขั้นที่ 6 บัญชีดาวน์โหลดใบสรุปตัดเบิก แล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”'];
+      return BC_MODE === 'stock' ? a.map(x => x.replace(/ขั้นที่ (\d)/, (m, n) => 'ขั้นที่ ' + (n - 1))) : a;
+    } },
   month: {
     _: ['รวมงวดที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร',
       'ข้อมูลส่วนนี้แสดงในรายงานผู้บริหาร (รายเดือน) ด้วย · กลุ่มมูลค่าสูง / กลาง / ต่ำ คือกลุ่มวัตถุดิบตามมูลค่า'] },
@@ -186,16 +194,24 @@ const _OHB_STEPS = [1, 2, 3, 4, 5, 6, 7];
 let _ohbStSt = {};                 // step number -> its status (done | todo | blocked | na)
 function _ohbStepDone(n) { return _ohbStSt[n] === 'done' || _ohbStSt[n] === 'na'; }
 function _ohbStepPick(f) { uiStateFilter.set(f); _ohbStepDraw(); }
+function _ohbStepList() { return BC_MODE === 'stock' ? _OHB_STEPS.filter(i => i !== 1 && i !== 7) : _OHB_STEPS; }   // PR-S4: stock mode - no recipe step 1, no month summary 7: the stepper ends at ใบสรุปตัดเบิก
 function _ohbStepDraw() {
-  const f = uiStateFilter.get(), sp = uiStateFilter.split(_OHB_STEPS, _ohbStepDone);
+  const f = uiStateFilter.get(), sp = uiStateFilter.split(_ohbStepList(), _ohbStepDone);
   uiStateFilter.bar('ohbStepFilter', { counts: sp.counts, f, pick: '_ohbStepPick' });
   let n = 0;
   _OHB_STEPS.forEach(i => {
     const el = document.getElementById('ohbSt' + i), card = el && el.closest('.card');
+    if (BC_MODE === 'stock' && (i === 1 || i === 7)) { if (card) card.style.display = 'none'; return; }
+    if (BC_MODE === 'stock' && card) { const nb = card.querySelector('span'); if (nb) nb.textContent = String(_ohbStepList().indexOf(i) + 1); }   // the visible steps are numbered 1, 2, 3 ...
     const on = f === 'all' || (f === 'todo' ? !_ohbStepDone(i) : _ohbStepDone(i));
     if (card) card.style.display = on ? '' : 'none';
     if (on) n++;
   });
+  if (BC_MODE === 'stock') {                                          // the header counts the visible steps only
+    const L = _ohbStepList(), d = document.getElementById('ohbCloseDone'), t = document.getElementById('ohbCloseTotal');
+    if (d) d.textContent = L.filter(i => _ohbStSt[i] === 'done').length;
+    if (t) t.textContent = L.length;
+  }
   const none = document.getElementById('ohbStepNone');
   if (none) none.innerHTML = n ? '' : uiStateFilter.empty(f, '_ohbStepPick', 'ขั้นตอน');
 }
@@ -214,10 +230,10 @@ async function ohbLoadCentral() {
                                       _bmcJson(`${API}/api/bom-center/todo?month=${month}`)]);
     _ohbClose = t;
     const st = {}; (t.close.steps || []).forEach(s => { st[s.key] = s; });
-    document.getElementById('ohbCloseSummary').innerHTML = `เสร็จ ${t.close.done} จาก ${t.close.total} ขั้นตอน ${uiQ('ohb:closebr', 'สาขาที่เริ่มปิดงวด', `<p>สาขาที่เริ่มปิดงวด: ${(t.close.branches || []).map(b => esc(b.name)).join(' · ') || 'ยังไม่มี'}</p>`)}`;
+    document.getElementById('ohbCloseSummary').innerHTML = `เสร็จ <span id="ohbCloseDone">${t.close.done}</span> จาก <span id="ohbCloseTotal">${t.close.total}</span> ขั้นตอน ${uiQ('ohb:closebr', 'สาขาที่เริ่มปิดงวด', `<p>สาขาที่เริ่มปิดงวด: ${(t.close.branches || []).map(b => esc(b.name)).join(' · ') || 'ยังไม่มี'}</p>`)}`;
     _ohbStSt = {};
     const set = (n, status) => { _ohbStSt[n] = status || 'todo'; const el = document.getElementById('ohbSt' + n); if (el) el.innerHTML = status ? _ohbStChip(status) : ''; };
-    set(1, st.release_in_force && st.release_in_force.status);
+    set(1, BC_MODE === 'stock' ? 'na' : st.release_in_force && st.release_in_force.status);
     document.getElementById('ohbSt1Detail').textContent = st.release_in_force ? st.release_in_force.detail : '';
     // step 2 = the list and the month's notes together
     set(2, st.central_report && st.deliveries ? (st.central_report.status === 'done' && st.deliveries.status === 'done' ? 'done' : 'todo') : 'todo');
@@ -293,7 +309,7 @@ function ohbRenderLinks(keepFocus) {
   const box = document.getElementById('ohbLinks'), d = _ohbLinkData;
   if (!box || !d) return;
   if (!d.links.length && !d.suggestions.length && !d.orphans.length) {
-    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้า · นำเข้ารายงานไดกิโตะ กรุ๊ปในขั้นที่ 2 ก่อน</div>';
+    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้า · นำเข้ารายงานไดกิโตะ กรุ๊ป' + stkWord('ในขั้นที่ 2 ก่อน', 'ในขั้นที่ 1 ก่อน') + '</div>';
     return;
   }
   const lf = uiStateFilter.get(), orphanView = _ohbLinkView === 'orphan' && d.orphans.length > 0;
@@ -302,15 +318,15 @@ function ohbRenderLinks(keepFocus) {
   const sugg = d.suggestions.filter(s => hit(s.old_code, s.old_name, ...s.options.flatMap(o => [o.new_code, o.new_name])));
   const kept = d.links.filter(l => hit(l.old_code, l.old_name, l.new_code, l.new_name));
   const orph = d.orphans.filter(o => hit(o.code, o.name));
-  const suggTable = rows => `<table class="wt"><thead><tr><th>รหัสในสูตร</th><th>ชื่อในสูตร</th><th>สินค้าในบัญชีไดกิโตะ กรุ๊ปที่ใกล้เคียง</th></tr></thead><tbody>${rows.map(s => `<tr>
-      <td class="wt-code" data-l="รหัสในสูตร">${esc(s.old_code)}</td>
-      <td data-l="ชื่อในสูตร">${esc(s.old_name || '')}</td>
+  const suggTable = rows => `<table class="wt"><thead><tr><th>รหัสเดิม</th><th>ชื่อเดิม</th><th>สินค้าในบัญชีไดกิโตะ กรุ๊ปที่ใกล้เคียง</th></tr></thead><tbody>${rows.map(s => `<tr>
+      <td class="wt-code" data-l="รหัสเดิม">${esc(s.old_code)}</td>
+      <td data-l="ชื่อเดิม">${esc(s.old_name || '')}</td>
       <td data-l="เลือกสินค้าที่ตรงกัน">${s.options.map(o => `<div class="wt-opt">
         <span class="wt-code">${esc(o.new_code)}</span><span class="wt-opt-name">${esc(o.new_name || '')}</span>${_ohbScoreTag(o.score)}
         <button type="button" class="wt-btn is-primary" onclick="ohbLinkSave([{old_code:${_bmcQ(s.old_code)},new_code:${_bmcQ(o.new_code)}}])">จับคู่</button></div>`).join('')}</td></tr>`).join('')}</tbody></table>`;
-  const keptTable = rows => `<table class="wt"><thead><tr><th>รหัสในสูตร</th><th>ชื่อในสูตร</th><th></th><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้าไดกิโตะ กรุ๊ป</th><th>ผู้จับคู่</th><th></th></tr></thead><tbody>${rows.map(l => `<tr>
-      <td class="wt-code" data-l="รหัสในสูตร">${esc(l.old_code)}</td>
-      <td data-l="ชื่อในสูตร">${esc(l.old_name || '')}</td>
+  const keptTable = rows => `<table class="wt"><thead><tr><th>รหัสเดิม</th><th>ชื่อเดิม</th><th></th><th>รหัสไดกิโตะ กรุ๊ป</th><th>ชื่อสินค้าไดกิโตะ กรุ๊ป</th><th>ผู้จับคู่</th><th></th></tr></thead><tbody>${rows.map(l => `<tr>
+      <td class="wt-code" data-l="รหัสเดิม">${esc(l.old_code)}</td>
+      <td data-l="ชื่อเดิม">${esc(l.old_name || '')}</td>
       <td class="wt-arrow">→</td>
       <td class="wt-code" data-l="รหัสไดกิโตะ กรุ๊ป">${esc(l.new_code)}</td>
       <td data-l="ชื่อสินค้าไดกิโตะ กรุ๊ป">${esc(l.new_name || '')}</td>
@@ -321,17 +337,17 @@ function ohbRenderLinks(keepFocus) {
   let body = '', note = '', shown = 0;
   if (orphanView) {
     shown = orph.length; body = orph.length ? orphTable(orph) : '';
-    note = bmcNote('lnkorph', 'ไม่ต้องทำอะไร ใช้ตรวจสูตรที่ยังขาดวัตถุดิบ', '<p>สินค้าในบัญชีสินค้าที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่</p>');
+    note = bmcNote('lnkorph', stkWord('ไม่ต้องทำอะไร ใช้ตรวจสูตรที่ยังขาดวัตถุดิบ', 'ไม่ต้องทำอะไร'), stkWord('<p>สินค้าในบัญชีสินค้าที่ยังไม่มีสูตรใดใช้และไม่พบรหัสคู่ · ไม่ต้องทำอะไร ใช้ตรวจว่ามีสูตรที่ยังขาดวัตถุดิบนี้หรือไม่</p>', '<p>สินค้าในบัญชีสินค้าที่ไม่พบรหัสคู่ · ไม่ต้องทำอะไร</p>'));
   } else {
     const parts = [];
     if (lf !== 'done' && sugg.length) { parts.push(suggTable(sugg)); shown += sugg.length;
-      note = bmcNote('lnksugg', 'เลือกสินค้าชนิดเดียวกันแล้วกด “จับคู่”', '<p>รหัสในสูตรที่ไม่อยู่ในบัญชีสินค้า เลือกสินค้าที่เป็นของชนิดเดียวกันแล้วกด “จับคู่” · ถ้าไม่ตรงกันเลย ไม่ต้องจับคู่</p>'); }
+      note = bmcNote('lnksugg', 'เลือกสินค้าชนิดเดียวกันแล้วกด “จับคู่”', '<p>รหัสเดิมที่ไม่อยู่ในบัญชีสินค้า เลือกสินค้าที่เป็นของชนิดเดียวกันแล้วกด “จับคู่” · ถ้าไม่ตรงกันเลย ไม่ต้องจับคู่</p>'); }
     if (lf !== 'todo' && kept.length) { parts.push(keptTable(kept)); shown += kept.length; }
     body = parts.join('');
   }
   if (!shown) body = q ? '<div class="wt-empty">ไม่พบรายการที่ตรงกับคำค้น</div>' : orphanView ? '<div class="wt-empty">ไม่มีรายการ</div>' : uiStateFilter.empty(lf, 'ohbLinkView', 'คู่');
   box.innerHTML = `<div class="wt-bar" style="align-items:center"><div id="ohbLinkSeg" style="margin:0;flex:1 1 auto"></div>
-      ${d.orphans.length ? `<button type="button" class="tskf-btn" style="flex:0 0 auto;margin-bottom:12px" aria-pressed="${orphanView}" onclick="ohbLinkView('orphan')">ไม่มีสูตรใช้ <span class="tskf-n">(${d.orphans.length})</span></button>` : ''}
+      ${d.orphans.length ? `<button type="button" class="tskf-btn" style="flex:0 0 auto;margin-bottom:12px" aria-pressed="${orphanView}" onclick="ohbLinkView('orphan')">${stkWord('ไม่มีสูตรใช้', 'ไม่มีรหัสเดิมใช้')} <span class="tskf-n">(${d.orphans.length})</span></button>` : ''}
       <input id="ohbLinkFindBox" class="wt-find" type="search" placeholder="ค้นหารหัสหรือชื่อ" value="${esc(_ohbLinkFind)}" oninput="ohbLinkFind(this.value)">
       ${q ? `<span class="text-sm" style="color:var(--text-muted)">พบ ${shown} รายการ</span>` : ''}</div>
     <div class="wt-wrap">${body}</div>${note}`;
@@ -339,7 +355,7 @@ function ohbRenderLinks(keepFocus) {
   if (keepFocus) { const f = document.getElementById('ohbLinkFindBox'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
 }
 async function ohbLinkUndo(oldCode, newCode) {
-  if (!await uiConfirm(`ยกเลิกการจับคู่ ${oldCode} → ${newCode}?\nรหัสในสูตรจะกลับไปอยู่ในรายการ “ต้องตัดสินใจ”`,
+  if (!await uiConfirm(`ยกเลิกการจับคู่ ${oldCode} → ${newCode}?\nรหัสเดิมจะกลับไปอยู่ในรายการ “ต้องตัดสินใจ”`,
       { title: 'ยกเลิกการจับคู่', ok: 'ยกเลิกการจับคู่', cancel: 'ไม่ยกเลิก' })) return;
   ohbLinkSave([{ old_code: oldCode, new_code: null }]);
 }
@@ -991,7 +1007,7 @@ async function ohbLoadPilot() {
     const R = d.readiness;
     _ohbPl = R;
     rb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ความพร้อม</div>
-      ${bmcStats([['ทะเบียนวัตถุดิบ', R.centre.ingredients], ['ราคาเดือน', esc((R.centre.price_months || []).map(fmtMonthTh).join(', ') || '—')], ['สูตรกึ่งสำเร็จ', R.centre.sub_recipes], ['เวอร์ชันที่ประกาศใช้', R.centre.releases]])}
+      ${bmcStats([['ทะเบียนวัตถุดิบ', R.centre.ingredients], ['ราคาเดือน', esc((R.centre.price_months || []).map(fmtMonthTh).join(', ') || '—')], ...(BC_MODE === 'stock' ? [] : [['สูตรกึ่งสำเร็จ', R.centre.sub_recipes], ['เวอร์ชันที่ประกาศใช้', R.centre.releases]])])}
       <div id="ohbPlFilter"></div><div id="ohbPlBody"></div>
       ${R.missing_branches.length ? `<div class="text-sm mt-1" style="color:var(--bad-ink)">ไม่พบสาขาในระบบ: ${R.missing_branches.map(esc).join(', ')}</div>` : ''}`;
     _ohbPlDraw();
@@ -1030,6 +1046,10 @@ function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)"
 function _isrFlagChip(f, withDates) {
   const under = f.direction === 'under';
   const dates = withDates ? ` ${_isrDm(f.from)}–${_isrDm(f.to)}` : '';
+  if (f.basis_th) {                                                 // PR-S4: mode stock - the chip names what it was set against
+    return _bmcChip(under ? `${f.name} เบิกต่ำกว่า${f.basis_th} ${f.days} วันติดต่อกัน (ต่ำสุด ${_isrPctAbs(f.max_pct)})${dates}`
+      : `${f.name} เบิกเกิน${f.basis_th} ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)', true);
+  }
   return _bmcChip(under ? `${f.name} เบิกน้อยกว่าสูตร ${f.days} วันติดต่อกัน (ต่ำสุด ${_isrPctAbs(f.max_pct)})${dates}`
     : `${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน (สูงสุด ${_isrPctAbs(f.max_pct)})${dates}`, under ? 'var(--amber-ink)' : 'var(--bad-ink)');
 }
@@ -1040,7 +1060,7 @@ function isrFlagChips(d) {
   if (t.late_days) chips.push(_bmcChip(`ยืนยันล่าช้า ${t.late_days} วัน`, 'var(--amber-ink)'));
   if (t.draft_days) chips.push(_bmcChip(`ยังไม่ยืนยัน ${t.draft_days} วัน`, 'var(--amber-ink)'));
   if (t.missing_days) chips.push(_bmcChip(`ไม่มีใบ ${t.missing_days} วัน`, 'var(--bad-ink)'));
-  if (!d.flags.length) chips.push(_bmcChip('✓ ไม่พบการเบิกเกินหรือน้อยกว่าสูตรต่อเนื่อง', 'var(--good-ink)'));
+  if (!d.flags.length) chips.push(_bmcChip(d.stock ? '✓ ไม่พบการเบิกเกินหรือต่ำกว่าปกติต่อเนื่อง' : '✓ ไม่พบการเบิกเกินหรือน้อยกว่าสูตรต่อเนื่อง', 'var(--good-ink)'));
   d.flags.forEach(f => chips.push(_isrFlagChip(f, true)));
   return chips.join(' ');
 }
@@ -1050,6 +1070,7 @@ function isrDailyTable(d, openFn) {
   if (!d.rows.length) return '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดขายหรือใบตัดเบิกในเดือนนี้</span>';
   const t = d.totals;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
+  if (d.stock) return _isrDailyTableStock(d, openFn, th);
   const body = d.rows.map(r => {
     return `<tr style="border-top:1px solid var(--border);cursor:pointer${r.flagged ? ';background:var(--bg-input)' : ''}" onclick="${openFn}('${r.date}')">
       <td class="py-1 pr-2" style="white-space:nowrap"><a href="#" onclick="return false" style="color:var(--accent);font-weight:600">${_isrDm(r.date)}</a> ${esc(r.weekday_th)}</td>
@@ -1067,6 +1088,47 @@ function isrDailyTable(d, openFn) {
       <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(t.var_value, t.var_pct, 'issue')}</td><td></td></tr></tfoot></table></div>
     ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% หรือน้อยกว่าสูตรเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
+// PR-S4 · mode stock: issued against the branch's normal and the all-branch median (no recipe)
+function _isrDailyTableStock(d, openFn, th) {
+  const t = d.totals;
+  const dash = '<span style="color:var(--text-muted)">—</span>';
+  const body = d.rows.map(r => {
+    const judged = r.judged ?? r.confirmed;
+    return `<tr style="border-top:1px solid var(--border);cursor:pointer${r.flagged || r.under_flagged ? ';background:var(--bg-input)' : ''}" onclick="${openFn}('${r.date}')">
+      <td class="py-1 pr-2" style="white-space:nowrap"><a href="#" onclick="return false" style="color:var(--accent);font-weight:600">${_isrDm(r.date)}</a> ${esc(r.weekday_th)}</td>
+      <td class="py-1 pr-2">${_bmcChip(r.slip_status_th, _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)')}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(r.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(r.waste_value)}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(r.issued_value)}</td>
+      <td class="py-1 pr-2 text-right">${r.normal_value == null ? dash : _isrBaht(r.normal_value)}</td>
+      <td class="py-1 pr-2 text-right">${r.median_value == null ? dash : _isrBaht(r.median_value)}</td>
+      <td class="py-1 pr-2 text-right">${judged && r.var_pct != null ? stkGapHtml(r.var_value, r.var_pct, 'issue_n') : `<span style="color:var(--text-muted)">${r.confirmed && !judged ? esc(_isrNoVerdict(r)) : '—'}</span>`}</td>
+      <td class="py-1 pr-2 text-right">${judged && r.median_var_pct != null ? stkGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') : dash}</td>
+      <td class="py-1">${bmcPairs(r.over_items.map(o => [esc(o.name), bmcGapWords(null, o.var_pct, o.basis === 'median' ? 'issue_m' : 'issue_n', true)]))}${r.flagged || r.under_flagged ? `<div class="mt-1" style="display:flex;gap:4px;flex-wrap:wrap">${r.flagged ? _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? _bmcChip('เบิกต่ำกว่าปกติต่อเนื่อง', 'var(--amber-ink)') : ''}</div>` : ''}</td></tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ปกติของสาขา ฿', 1)}${th('ค่ากลางทุกสาขา ฿', 1)}${th('เทียบปกติของสาขา', 1)}${th('เทียบค่ากลาง', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์')}</tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ยืนยันแล้ว)</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
+      <td class="py-1 pr-2 text-right">${_isrBaht(t.normal_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.median_value)}</td>
+      <td class="py-1 pr-2 text-right">${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
+    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ปกติของสาขา = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 4 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · ค่ากลางทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เกณฑ์เตือน: กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
+}
+function _isrDayItemsStock(d, head, note, flags) {
+  const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
+  const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
+  const rows = d.rows.map(r => {
+    return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(r.name)}</b><div class="text-[10.5px]" style="color:var(--text-muted)">${esc(r.code)} · ${esc(_isrClassTh(r.class))}${r.waste_reason_th ? ' · ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : ''}</div></td>
+      <td class="py-1 pr-2 text-right">${q(r.used, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.waste, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.issued, r.base_unit)}</td>
+      <td class="py-1 pr-2 text-right">${q(r.normal, r.base_unit)}</td><td class="py-1 pr-2 text-right">${q(r.median, r.base_unit)}</td>
+      <td class="py-1 pr-2 text-right">${r.var_qty == null && r.var_value == null ? '—' : stkGapHtml(r.var_value, r.var_pct, 'issue_n')}${r.var_qty == null || !r.var_qty ? '' : `<div class="text-[10.5px]" style="color:var(--text-muted)">${_bmcNum(Math.abs(r.var_qty), 1)} ${esc(r.base_unit || '')}</div>`}</td>
+      <td class="py-1 pr-2 text-right">${r.median_pct == null ? '—' : stkGapHtml(null, r.median_pct, 'issue_m', true)}</td>
+      <td class="py-1">${r.signal ? _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}</td></tr>`;
+  }).join('');
+  return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
+      ${th('วัตถุดิบ')}${th('เบิกใช้', 1)}${th('ของเสีย', 1)}${th('รวมเบิก', 1)}${th('ปกติของสาขา', 1)}${th('ค่ากลางทุกสาขา', 1)}${th('เทียบปกติของสาขา', 1)}${th('เทียบค่ากลาง', 1)}${th('สัญญาณ')}</tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
+}
 function isrDayItems(d, closeJs) {
   const s = d.slip, conf = s.key === 'on_time' || s.key === 'late';
   const head = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">
@@ -1074,8 +1136,9 @@ function isrDayItems(d, closeJs) {
       ${_bmcChip(s.status_th, _ISR_SLIP_INK[s.key] || 'var(--text-muted)')}
       ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}</span>` : ''}
       ${closeJs ? `<button onclick="${closeJs}" style="margin-left:auto;font-size:12px;color:var(--text-muted);background:none;border:0;cursor:pointer">ปิด</button>` : ''}</div>`;
-  const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณตามสูตร</div>';
+  const note = conf ? '' : `<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณ${d.stock ? 'ปกติของสาขาและค่ากลาง' : 'ตามสูตร'}</div>`;
   const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _isrFlagChip(f, false)).join(' ')}</div>` : '';
+  if (d.stock) return _isrDayItemsStock(d, head, note, flags);
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
   const th = (s, r) => `<th class="py-1 pr-2${r ? ' text-right' : ''}">${s}</th>`;
   const rows = d.rows.map(r => {
@@ -1204,7 +1267,7 @@ function _ohbPsTable(items, note, withVs) {
     : `<span style="color:${Math.abs(v) >= 30 ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%</span>`;
   return `<div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
       <th class="pr-2">วัตถุดิบ</th><th class="pr-2">หน่วย</th><th class="pr-2 text-right">ต่อยอดขาย ฿100,000</th><th class="pr-2 text-right">ช่วงก่อนหน้า</th>
-      <th class="pr-2 text-right">เปลี่ยนแปลง</th>${withVs ? '<th class="pr-2 text-right">การใช้ตามสูตรเทียบค่ากลาง</th>' : ''}<th class="pr-2 text-right">มูลค่า (฿)</th><th>${esc(note || 'ความสม่ำเสมอ')}</th></tr></thead>
+      <th class="pr-2 text-right">เปลี่ยนแปลง</th>${withVs ? '<th class="pr-2 text-right">การใช้เทียบค่ากลาง</th>' : ''}<th class="pr-2 text-right">มูลค่า (฿)</th><th>${esc(note || 'ความสม่ำเสมอ')}</th></tr></thead>
     <tbody>${shown.map(it => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1" title="${esc(it.code)}">${esc(it.name)}</td>
       <td class="pr-2" style="color:var(--text-secondary)">${esc(it.unit || '')}</td><td class="pr-2 text-right font-semibold">${num(it.per_100k)}</td>
       <td class="pr-2 text-right" style="color:var(--text-secondary)">${num(it.prev_per_100k)}</td><td class="pr-2 text-right">${chg(it.change_pct)}</td>
@@ -1231,7 +1294,7 @@ function ohbRenderPerSales() {
     box.style.display = '';
     box.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">เปรียบเทียบรายสาขา</div>
       <div class="overflow-x-auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
-        <th class="pr-2">สาขา</th><th class="pr-2 text-right">ยอดขาย (฿)</th><th class="pr-2 text-right">มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 (฿)</th>${cmp ? '<th class="pr-2 text-right">การใช้ตามสูตรเทียบค่ากลาง</th><th class="pr-2 text-right">ยอดซื้อเทียบค่ากลาง</th>' : ''}<th class="pr-2 text-right">รายการที่ใช้ไม่สม่ำเสมอ</th></tr></thead>
+        <th class="pr-2">สาขา</th><th class="pr-2 text-right">ยอดขาย (฿)</th><th class="pr-2 text-right">มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 (฿)</th>${cmp ? '<th class="pr-2 text-right">การใช้เทียบค่ากลาง</th><th class="pr-2 text-right">ยอดซื้อเทียบค่ากลาง</th>' : ''}<th class="pr-2 text-right">รายการที่ใช้ไม่สม่ำเสมอ</th></tr></thead>
       <tbody>${d.branches.map(b => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2 py-1"><a href="#" onclick="ohbPsPick(${b.branch_id});return false" style="color:var(--accent);text-decoration:underline">${esc(b.branch)}</a>${b.is_benchmark ? ' ' + _bmcChip('ค่ากลาง', 'var(--navy-ink)') : ''}${b.below_benchmark ? ' ' + _bmcChip(b.below_benchmark_th, 'var(--amber-ink)') : ''}${b.no_purchase_th ? ` <span class="text-[10.5px]" style="color:var(--text-muted)">${esc(b.no_purchase_th)}</span>` : ''}</td>
         <td class="pr-2 text-right">${_bmcNum(b.sales, 0)}</td><td class="pr-2 text-right font-semibold">${_bmcNum(b.value_per_100k, 0)}</td>${cmp ? `<td class="pr-2 text-right" style="color:var(--text-secondary)">${pvs(b.vs_benchmark_pct)}</td><td class="pr-2 text-right" style="color:${b.below_benchmark ? 'var(--amber-ink)' : 'var(--text-secondary)'}" title="${b.purchase_per_100k_value == null ? '' : 'ยอดซื้อ ฿' + _bmcNum(b.purchase_per_100k_value, 0) + ' ต่อยอดขาย ฿100,000 · ที่มา ' + (psrc[b.purchase_source] || '') + ' · ' + b.purchase_days + ' วันขาย'}">${pvs(b.purchase_vs_benchmark_pct)}</td>` : ''}
         <td class="pr-2 text-right" style="color:${b.items.some(i => i.steady === false) ? 'var(--amber-ink)' : 'var(--text-muted)'}">${b.items.some(i => i.steady === false) ? `<a href="#" onclick="ohbPsUnsteady(${b.branch_id});return false" style="color:var(--accent);text-decoration:underline" title="ดู 5 รายการที่มูลค่าสูงสุด">${b.items.filter(i => i.steady === false).length}</a>` : 0}</td></tr>`).join('')}
@@ -1249,7 +1312,7 @@ function ohbRenderPerSales() {
   const b = d.branches[0];
   list.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${esc(b.branch)} · ยอดขาย ฿${_bmcNum(b.sales, 0)} (${b.days} วันขาย) · มูลค่าวัตถุดิบต่อยอดขาย ฿100,000 ≈ ฿${_bmcNum(b.value_per_100k, 0)}
     ${b.is_benchmark ? _bmcChip('สาขาที่ใช้เป็นค่ากลาง', 'var(--navy-ink)') : ''}${b.below_benchmark ? _bmcChip(b.below_benchmark_th, 'var(--amber-ink)') : ''}
-    ${b.vs_benchmark_pct != null ? `<span class="text-xs font-normal" style="color:var(--text-secondary)"> · การใช้ตามสูตรเทียบค่ากลาง ${pvs(b.vs_benchmark_pct)}</span>` : ''}
+    ${b.vs_benchmark_pct != null ? `<span class="text-xs font-normal" style="color:var(--text-secondary)"> · การใช้เทียบค่ากลาง ${pvs(b.vs_benchmark_pct)}</span>` : ''}
     ${b.purchase_per_100k_value != null ? `<span class="text-xs font-normal" style="color:var(--text-secondary)"> · ซื้อจากไดกิโตะ กรุ๊ป ฿${_bmcNum(b.purchase_per_100k_value, 0)} ต่อยอดขาย ฿100,000${b.purchase_vs_benchmark_pct != null ? ' (ยอดซื้อเทียบค่ากลาง ' + pvs(b.purchase_vs_benchmark_pct) + ')' : ''} · ที่มา ${psrc[b.purchase_source] || ''} ${b.purchase_days} วันขาย</span>` : (b.no_purchase_th ? `<span class="text-xs font-normal" style="color:var(--text-muted)"> · ${esc(b.no_purchase_th)}</span>` : '')}</div>${_ohbPsTable(b.items, undefined, !!d.benchmark)}`;
 }
 // 4.5 · "รายการที่ใช้ไม่สม่ำเสมอ N" of a branch is a link: the 5 such items of the most baht (value of one ฿100,000 of sales), and the way to the whole list

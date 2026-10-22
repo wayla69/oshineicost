@@ -5,6 +5,11 @@
   daily()      every day:  what the branch issued (cost)  vs  the BoM of what it sold (R2)
   anomalies()  the branches whose class-A items run over the BoM for days in a row (PR-B4a, 1.4: or under it - direction='under')
   blank_class_a()  PR-B4a (1.4): the high-value items the sales say were used that day and that the slip leaves blank
+  PR-S4        in mode `stock` (close_settings.mode()) there is no recipe: the BoM column of daily() / daily_day() / daily_items() /
+               anomalies() / blank_class_a() is replaced by two comparators built from the CONFIRMED slips and the sales - the branch's own
+               normal (the same weekday in the 4 weeks before, scaled by the sales of the day) and the median of the other company branches
+               whose demand source is the slips (issued per 100,000 baht of sales over the 4 weeks before). bom_days is not called in that
+               mode; mode `full` is untouched.
   log()        PR-J4 (R3): per branch and day, how the slip was handled — on time, late, reopened, reconfirmed —
                with the late purchase orders and the claims beside it; log_monthly() is one month of it
   slip_rows()  PR-J4 (R4): the confirmed slips as priced lines, for the Excel Accounting posts from
@@ -39,6 +44,15 @@ SLIP_NOTE_TH = {"on_time": "", "late": "ยืนยันหลังวัน�
                 "missing": "ยังไม่มีใบตัดเบิก", "closed": "ไม่มียอดขายและไม่มีใบตัดเบิก"}
 SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เบิกเกินต่อเนื่อง", "under_streak": "เบิกน้อยกว่าสูตรต่อเนื่อง"}
 _EPS = 1e-6
+
+# PR-S4 · mode `stock`: the comparators and their words
+NORMAL_WEEKS = 4                    # the same weekday in this many weeks before the day
+NORMAL_MIN_DAYS = 2                 # fewer slip days than this among them: no "normal of the branch"
+MEDIAN_MIN_BRANCHES = 2             # fewer other branches on the slips than this: no all-branch median
+MEDIAN_WINDOW_DAYS = 28             # the window (days before the day) the issued per PER_SALES baht is measured over
+PER_SALES = 100000.0
+UNDER_PCT_STOCK = 20.0              # O4: under the comparator by more than this % is "under" (mode full keeps UNDER_PCT)
+BASIS_TH = {"normal": "ปกติของสาขา", "median": "ค่ากลาง", "both": "ปกติของสาขาและค่ากลาง"}
 
 
 def _d(x) -> date:
@@ -443,6 +457,296 @@ def _totals(rows: list) -> dict:
             "under_flagged_days": sum(1 for r in rows if r.get("under_flagged"))}
 
 
+# ── PR-S4 · mode `stock`: the daily issue against the branch's own normal and the all-branch median ──────────
+def stock_on(con) -> bool:
+    """True in mode `stock` (the default): no recipe, so the daily report compares with the comparators below."""
+    from .close_settings import stock_mode
+    return stock_mode(con)
+
+
+def _hist(con, ids: list, lo: date, hi: date) -> dict:
+    """{branch_id: {days: confirmed slip days, iss: {day: {code: used + waste, base units}}, sales: {day: ex-VAT baht}}} for the
+    CONFIRMED slips between lo and hi (inclusive). A confirmed slip without lines is still a slip day."""
+    from . import per_sales as PS
+    out = {int(b): {"days": set(), "iss": {}, "sales": {}} for b in ids}
+    if not out:
+        return out
+    ph = ",".join("?" * len(out))
+    for b, day, code, q in con.execute(
+            "SELECT s.branch_id, s.slip_date, l.ingredient_code, SUM(COALESCE(l.qty_used_base, 0) + COALESCE(l.qty_waste_base, 0))"
+            " FROM bc_issue_slip s LEFT JOIN bc_issue_line l USING(slip_id)"
+            f" WHERE s.status='confirmed' AND s.branch_id IN ({ph}) AND s.slip_date BETWEEN ? AND ?"
+            " GROUP BY s.branch_id, s.slip_date, l.ingredient_code", (*out, lo.isoformat(), hi.isoformat())):
+        h = out[b]
+        h["days"].add(day)
+        if code is not None and (q or 0) > 0:
+            h["iss"].setdefault(day, {})[code] = q
+    for b, day, v in con.execute(
+            f"SELECT branch_id, day, SUM(COALESCE(subtotal_ex_vat, 0)) FROM {PS.sales_table(con)}"
+            f" WHERE branch_id IN ({ph}) AND day BETWEEN ? AND ? GROUP BY branch_id, day", (*out, lo.isoformat(), hi.isoformat())):
+        out[b]["sales"][day] = float(v or 0.0)
+    return out
+
+
+def _company_hist(con, lo: date, hi: date, cache: dict) -> dict:
+    """_hist of every company branch (forecast.company_branch_ids), kept in `cache` for the duration of one report call."""
+    key = (lo.isoformat(), hi.isoformat())
+    if key not in cache:
+        cache[key] = _hist(con, FC.company_branch_ids(con), lo, hi)
+    return cache[key]
+
+
+def normal_of(h: dict, day: date):
+    """The branch's own normal for `day`: {code: base qty} = the mean issued quantity of the item on the same weekday in the NORMAL_WEEKS
+    weeks before (only days with a confirmed slip; a day without the item counts as 0) x the sales of `day` / the mean sales of those
+    days. Fewer than NORMAL_MIN_DAYS such days -> None; no sales of `day` (or none on the reference days) -> the mean as it is."""
+    ref = [r for r in ((day - timedelta(days=7 * k)).isoformat() for k in range(1, NORMAL_WEEKS + 1)) if r in h["days"]]
+    if len(ref) < NORMAL_MIN_DAYS:
+        return None
+    tot = {}
+    for r in ref:
+        for c, q in (h["iss"].get(r) or {}).items():
+            tot[c] = tot.get(c, 0.0) + q
+    scale = 1.0
+    sd = h["sales"].get(day.isoformat(), 0.0)
+    mean_sales = sum(h["sales"].get(r, 0.0) for r in ref) / len(ref)
+    if sd > 0 and mean_sales > 0:
+        scale = sd / mean_sales
+    return {c: v / len(ref) * scale for c, v in tot.items() if v > 0}
+
+
+def median_of(others: list, day: date, sales_day):
+    """The all-branch median for `day`: {code: base qty} = the median, over the OTHER company branches whose demand source is the slips
+    (at least forecast.SLIP_MIN_DAYS confirmed days in the MEDIAN_WINDOW_DAYS before), of (issued per PER_SALES baht of the sales of those
+    slip days) x the sales of `day` / PER_SALES. `others` = [hist of a branch]. Fewer than MEDIAN_MIN_BRANCHES such branches, or no sales
+    of `day` -> None."""
+    import statistics
+    if not sales_day or sales_day <= 0:
+        return None
+    window = [(day - timedelta(days=k)).isoformat() for k in range(1, MEDIAN_WINDOW_DAYS + 1)]
+    rates = []
+    for h in others:
+        sd = [x for x in window if x in h["days"]]
+        if len(sd) < FC.SLIP_MIN_DAYS:
+            continue
+        tot_sales = sum(h["sales"].get(x, 0.0) for x in sd)
+        if tot_sales <= 0:
+            continue
+        agg = {}
+        for x in sd:
+            for c, q in (h["iss"].get(x) or {}).items():
+                agg[c] = agg.get(c, 0.0) + q
+        rates.append({c: v / tot_sales * PER_SALES for c, v in agg.items()})
+    if len(rates) < MEDIAN_MIN_BRANCHES:
+        return None
+    codes = set().union(*rates)
+    out = {}
+    for c in codes:
+        m = statistics.median(r.get(c, 0.0) for r in rates)
+        if m > 0:
+            out[c] = m * sales_day / PER_SALES
+    return out
+
+
+def _month_class_issued(iss_q: dict, price) -> dict:
+    """ABC class of every item by its ISSUED ฿ over the days given ({day: {code: qty}}) - _month_class with the slips instead of the BoM."""
+    return _month_class(iss_q, price)
+
+
+def _scores(*pcts, below=False):
+    v = [p for p in pcts if p is not None]
+    return None if not v else (min(v) if below else max(v))
+
+
+def _basis(trig: set):
+    return None if not trig else ("both" if len(trig) > 1 else next(iter(trig)))
+
+
+def signal_th_stock(signal, basis) -> str:
+    if not signal or not basis:
+        return None
+    b = BASIS_TH[basis]
+    return {"over": f"เบิกเกิน{b}", "streak": f"เบิกเกิน{b}ต่อเนื่อง", "under_streak": f"เบิกต่ำกว่า{b}ต่อเนื่อง"}[signal]
+
+
+def _span_stock(con, branch_id: int, d0: date, d1: date, month: str, today: date = None, commit: bool = True,
+                cache: dict = None) -> dict:
+    """_span for mode `stock`: the same shape, with `normal` / `median` ({day: {code: qty} or None}) where the BoM was. The BoM day cache
+    is not touched. `cache` (optional) shares the other branches' slips between the calls of one report (anomalies)."""
+    today = today or now_bkk().date()
+    last = min(d1, today)
+    price = _prices(con, month)
+    names = _names(con)
+    empty = {"days": [], "rows": [], "flags": [], "normal": {}, "median": {}, "iss": {}, "st": {}, "klass": {}, "price": price,
+             "names": names, "flag_days": {}, "under_days": {}, "stock": True}
+    if last < d0:
+        return empty
+    cache = {} if cache is None else cache
+    lo = d0 - timedelta(days=max(7 * NORMAL_WEEKS, MEDIAN_WINDOW_DAYS))
+    company = _company_hist(con, lo, last, cache)
+    own = company.get(branch_id) or _hist(con, [branch_id], lo, last)[branch_id]
+    others = [h for b, h in company.items() if b != branch_id]
+    trading = set(_trading_days(con, branch_id, d0, last))
+    iss = issued(con, branch_id, d0, last + timedelta(days=1), by_day=True)
+    st = {s["date"]: s for s in IS.status_days(con, branch_id, d0, last)}
+    from .started import branch_start
+    start = branch_start(con, branch_id) or "9999"
+    days = [d for d in sorted(trading | set(st))
+            if ((d in trading and d < today.isoformat()) or st[d]["status"] != "missing")
+            and (d >= start or st[d]["status"] != "missing")]
+    t_iso = today.isoformat()
+    normal, median = {}, {}
+    for d in days:
+        dd = date.fromisoformat(d)
+        normal[d] = normal_of(own, dd)
+        median[d] = median_of(others, dd, own["sales"].get(d))
+    iss_q = {d: {c: v["used"] + v["waste"] for c, v in iss.get(d, {}).items()} for d in days}
+    klass = _month_class_issued(iss_q, _price_ref(con, month))
+    a_codes = sorted(c for c, k in klass.items() if k == "A")
+    rows, per_over, per_under, trig_o, trig_u = [], {}, {}, {}, {}      # per_*: code -> [(day, score)] · trig_*: (code or "*", day) -> {basis}
+    for d in days:
+        i, s = iss.get(d, {}), st[d]
+        conf = IS.is_confirmed(s)
+        nrm, med = normal.get(d), median.get(d)
+        have = nrm is not None or med is not None
+        judged = conf and d in trading and d < t_iso and have
+        used_v = sum(v["used"] * (price(c) or 0.0) for c, v in i.items())
+        waste_v = sum(v["waste"] * (price(c) or 0.0) for c, v in i.items())
+        iss_v = used_v + waste_v
+        nrm_v = round(sum(q * (price(c) or 0.0) for c, q in nrm.items()), 2) if nrm is not None else None
+        med_v = round(sum(q * (price(c) or 0.0) for c, q in med.items()), 2) if med is not None else None
+        pn = _pct(iss_v, nrm_v) if judged and nrm_v is not None else None
+        pm = _pct(iss_v, med_v) if judged and med_v is not None else None
+        over = []
+        for c in a_codes:
+            iq = (i.get(c) or {}).get("used", 0.0) + (i.get(c) or {}).get("waste", 0.0)
+            cn = _pct(iq, nrm.get(c, 0.0)) if judged and nrm is not None else None
+            cm = _pct(iq, med.get(c, 0.0)) if judged and med is not None else None
+            if d in trading:
+                per_over.setdefault(c, []).append((d, _scores(cn, cm)))
+                per_under.setdefault(c, []).append((d, _scores(cn, cm, below=True)))
+                trig_o[(c, d)] = {k for k, p in (("normal", cn), ("median", cm)) if p is not None and p > OVER_PCT}
+                trig_u[(c, d)] = {k for k, p in (("normal", cn), ("median", cm)) if p is not None and p < -UNDER_PCT_STOCK}
+            if trig_o.get((c, d)):
+                bs = _basis(trig_o[(c, d)])
+                over.append({"code": c, "name": (names.get(c) or (c,))[0], "var_pct": _scores(cn, cm), "basis": bs,
+                             "basis_th": BASIS_TH[bs]})
+        if d in trading:
+            trig_o[("*", d)] = {k for k, p in (("normal", pn), ("median", pm)) if p is not None and p > OVER_PCT}
+        wd = FC._wd(date.fromisoformat(d))
+        if d not in trading:
+            no_th = "ยังไม่มียอดขายของวันนั้น"
+        else:
+            no_th = None if have else "ยังไม่มีค่าปกติให้เทียบ"
+        rows.append({"date": d, "weekday": wd, "weekday_th": FC.WD_TH[wd], "slip_status": _slip_key(s),
+                     "slip_status_th": SLIP_STATUS_TH[_slip_key(s)], "slip_id": s["slip_id"], "late": int(s["late"] or 0),
+                     "confirmed": conf, "trading": d in trading, "normal_value": nrm_v if d in trading else None,
+                     "median_value": med_v if d in trading else None, "judged": judged, "today": d == t_iso,
+                     "no_formula": d not in trading or not have, "no_formula_th": no_th,
+                     "used_value": round(used_v, 2) if conf else None, "waste_value": round(waste_v, 2) if conf else None,
+                     "issued_value": round(iss_v, 2) if conf else None,
+                     "var_value": round(iss_v - nrm_v, 2) if judged and nrm_v is not None else None, "var_pct": pn,
+                     "median_var_value": round(iss_v - med_v, 2) if judged and med_v is not None else None, "median_var_pct": pm,
+                     "over_items": over})
+    flags, flag_days, under_days = [], {}, {}
+
+    def run_flag(run, kind, code, name, direction, trig):
+        days_in = [d for d in days if run["from"] <= d <= run["to"]]
+        u = set().union(*(trig.get((code or "*", d), set()) for d in days_in)) if days_in else set()
+        bs = _basis(u) or "normal"
+        flags.append(dict(run, kind=kind, code=code, name=name, direction=direction, basis=bs, basis_th=BASIS_TH[bs]))
+
+    total_over = [(r["date"], _scores(r["var_pct"], r["median_var_pct"])) for r in rows if r["trading"]]
+    for run in _streaks(total_over):
+        run_flag(run, "total", None, "รวมทุกรายการ", "over", trig_o)
+    for c in sorted(per_over):
+        for run in _streaks(per_over[c]):
+            run_flag(run, "item", c, (names.get(c) or (c,))[0], "over", trig_o)
+    for c in sorted(per_under):
+        for run in _streaks(per_under[c], threshold=-UNDER_PCT_STOCK, below=True):
+            run_flag(run, "item", c, (names.get(c) or (c,))[0], "under", trig_u)
+    for f in flags:
+        into = under_days if f["direction"] == "under" else flag_days
+        for r in rows:
+            if f["from"] <= r["date"] <= f["to"]:
+                into.setdefault(r["date"], []).append(f["code"] or "*")
+    for r in rows:
+        codes = flag_days.get(r["date"], [])
+        r["streak"] = [("รวมทุกรายการ" if c == "*" else (names.get(c) or (c,))[0]) for c in codes]
+        r["flagged"] = bool(codes)
+        ucodes = under_days.get(r["date"], [])
+        r["under_streak"] = [(names.get(c) or (c,))[0] for c in ucodes]
+        r["under_flagged"] = bool(ucodes)
+    flags.sort(key=lambda f: (-abs(f["max_pct"]), f["code"] or ""))
+    return {"days": days, "rows": rows, "flags": flags, "normal": normal, "median": median, "iss": iss, "st": st, "klass": klass,
+            "price": price, "names": names, "flag_days": flag_days, "under_days": under_days, "stock": True,
+            "trig_o": trig_o, "trig_u": trig_u}
+
+
+def _totals_stock(rows: list) -> dict:
+    """_totals for mode `stock`: the baht compare the JUDGED days; each comparator is summed over the days that have it."""
+    conf = [r for r in rows if r.get("judged")]
+    trading = [r for r in rows if not r.get("today") and (r["trading"] or r["slip_status"] != "missing")]
+    nr = [r for r in conf if r["normal_value"] is not None]
+    md = [r for r in conf if r["median_value"] is not None]
+    n_iss, n_val = sum(r["issued_value"] for r in nr), sum(r["normal_value"] for r in nr)
+    m_iss, m_val = sum(r["issued_value"] for r in md), sum(r["median_value"] for r in md)
+    return {"days": len(rows), "trading_days": len(trading), "confirmed_days": sum(1 for r in trading if r["confirmed"]),
+            "late_days": sum(1 for r in trading if r["slip_status"] == "late"),
+            "draft_days": sum(1 for r in trading if r["slip_status"] == "draft"),
+            "missing_days": sum(1 for r in trading if r["slip_status"] == "missing"),
+            "used_value": round(sum(r["used_value"] or 0.0 for r in conf), 2),
+            "waste_value": round(sum(r["waste_value"] or 0.0 for r in conf), 2),
+            "issued_value": round(sum(r["issued_value"] for r in conf), 2),
+            "normal_value": round(n_val, 2), "var_value": round(n_iss - n_val, 2), "var_pct": _pct(n_iss, n_val),
+            "median_value": round(m_val, 2), "median_var_value": round(m_iss - m_val, 2), "median_var_pct": _pct(m_iss, m_val),
+            "flagged_days": sum(1 for r in rows if r["flagged"]), "over_days": sum(1 for r in rows if r["over_items"]),
+            "under_flagged_days": sum(1 for r in rows if r.get("under_flagged"))}
+
+
+def _day_items_stock(s: dict, day: str) -> list:
+    """_day_items for mode `stock`: issued against the normal of the branch and the all-branch median."""
+    nrm, med = s["normal"].get(day), s["median"].get(day)
+    i, st = s["iss"].get(day, {}), s["st"].get(day)
+    conf = bool(st) and IS.is_confirmed(st)
+    row = next((r for r in s["rows"] if r["date"] == day), None)
+    judged = conf and bool(row and row.get("judged"))
+    p, names, klass = s["price"], s["names"], s["klass"]
+    flagged, under_flagged = set(s["flag_days"].get(day, [])), set(s["under_days"].get(day, []))
+    out = []
+    for c in sorted(set(nrm or ()) | set(med or ()) | set(i)):
+        cell = i.get(c) or {}
+        used, waste = cell.get("used", 0.0), cell.get("waste", 0.0)
+        iq = used + waste
+        nq = (nrm or {}).get(c, 0.0) if nrm is not None else None
+        mq = (med or {}).get(c, 0.0) if med is not None else None
+        pv = p(c)
+        n, u = names.get(c) or (c, None)
+        k = klass.get(c, "C")
+        pn = _pct(iq, nq) if judged and nq is not None else None
+        pm = _pct(iq, mq) if judged and mq is not None else None
+        over_t = {b for b, x in (("normal", pn), ("median", pm)) if x is not None and x > OVER_PCT}
+        under_t = {b for b, x in (("normal", pn), ("median", pm)) if x is not None and x < -UNDER_PCT_STOCK}
+        signal = basis = None
+        if judged and c in flagged:
+            signal, basis = "streak", _basis(s["trig_o"].get((c, day)) or over_t)
+        elif judged and c in under_flagged:
+            signal, basis = "under_streak", _basis(s["trig_u"].get((c, day)) or under_t)
+        elif judged and k == "A" and over_t:
+            signal, basis = "over", _basis(over_t)
+        out.append({"date": day, "code": c, "name": n, "base_unit": u, "class": k,
+                    "used": round(used, 3) if conf else None, "waste": round(waste, 3) if conf else None,
+                    "issued": round(iq, 3) if conf else None,
+                    "normal": round(nq, 3) if nq is not None else None, "median": round(mq, 3) if mq is not None else None,
+                    "var_qty": round(iq - nq, 3) if judged and nq is not None else None, "var_pct": pn, "median_pct": pm,
+                    "price_per_base": pv,
+                    "var_value": _round((iq - nq) * pv) if judged and nq is not None and pv is not None else None,
+                    "signal": signal, "basis": basis, "signal_th": signal_th_stock(signal, basis)})
+    rank = {"streak": 0, "under_streak": 0, "over": 1, None: 2}
+    out.sort(key=lambda r: (rank[r["signal"]], -abs(r["var_value"] or 0), r["code"]))
+    return out
+
+
 def daily(con, branch_id: int, month: str, today: date = None, commit: bool = True) -> dict:
     """R2: per trading day of `month`  issued (used + waste, ฿)  vs  the BoM of what was sold (฿); the slip
     status; the class-A items issued more than OVER_PCT over the BoM; and the flags (a class-A item — or the
@@ -450,6 +754,12 @@ def daily(con, branch_id: int, month: str, today: date = None, commit: bool = Tr
     confirmed has no comparison (nothing was issued yet), and breaks a streak. Today is listed only once it
     has a slip."""
     first, last = _month_bounds(month)
+    if stock_on(con):                                           # PR-S4: no recipe - the branch's normal and the all-branch median
+        s = _span_stock(con, branch_id, first, last, month, today, commit)
+        return {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "month": month, "stock": True,
+                "price_month": month, "rows": s["rows"], "flags": s["flags"], "totals": _totals_stock(s["rows"]),
+                "thresholds": {"over_pct": OVER_PCT, "streak_days": STREAK_DAYS, "under_pct": UNDER_PCT_STOCK},
+                "slip_status_th": SLIP_STATUS_TH}
     s = _span(con, branch_id, first, last, month, today, commit)
     return {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "month": month,
             "price_month": month, "rows": s["rows"], "flags": s["flags"], "totals": _totals(s["rows"]),
@@ -498,10 +808,11 @@ def daily_day(con, branch_id: int, day, today: date = None, commit: bool = True)
     d = _d(day)
     month = f"{d.year:04d}-{d.month:02d}"
     first, last = _month_bounds(month)
-    s = _span(con, branch_id, first, last, month, today, commit)
+    stock = stock_on(con)
+    s = (_span_stock if stock else _span)(con, branch_id, first, last, month, today, commit)
     iso = d.isoformat()
     st = s["st"].get(iso) or IS.status_of(con, branch_id, iso)
-    items = _day_items(s, iso)
+    items = (_day_items_stock if stock else _day_items)(s, iso)
     why = {}
     if st.get("slip_id"):
         why = {c: (r, n) for c, r, n in con.execute(
@@ -514,14 +825,20 @@ def daily_day(con, branch_id: int, day, today: date = None, commit: bool = True)
     VA.with_count_units(con, items)                             # PR-M4: count units for the branch page
     row = next((r for r in s["rows"] if r["date"] == iso), None)
     key = _slip_key(st)
-    return {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "date": iso, "month": month,
-            "weekday_th": FC.WD_TH[FC._wd(d)], "slip": dict(st, key=key, status_th=SLIP_STATUS_TH[key]),
-            "day": row, "rows": items, "flags": [f for f in s["flags"] if f["from"] <= iso <= f["to"]]}
+    out = {"branch": {"branch_id": branch_id, "name": _branch_name(con, branch_id)}, "date": iso, "month": month,
+           "weekday_th": FC.WD_TH[FC._wd(d)], "slip": dict(st, key=key, status_th=SLIP_STATUS_TH[key]),
+           "day": row, "rows": items, "flags": [f for f in s["flags"] if f["from"] <= iso <= f["to"]]}
+    if stock:
+        out["stock"] = True
+    return out
 
 
 def daily_items(con, branch_id: int, month: str, today: date = None, commit: bool = True) -> list:
     """Every day's per-item rows of a month (the second sheet of daily.xlsx)."""
     first, last = _month_bounds(month)
+    if stock_on(con):
+        s = _span_stock(con, branch_id, first, last, month, today, commit)
+        return [it for d in s["days"] for it in _day_items_stock(s, d)]
     s = _span(con, branch_id, first, last, month, today, commit)
     return [it for d in s["days"] for it in _day_items(s, d)]
 
@@ -537,9 +854,14 @@ def anomalies(con, as_of, lookback: int = 7, today: date = None, commit: bool = 
     ids = [r[0] for r in con.execute(
         "SELECT DISTINCT branch_id FROM bc_issue_slip WHERE status='confirmed' AND slip_date BETWEEN ? AND ?"
         " ORDER BY branch_id", (start.isoformat(), end.isoformat()))]
+    stock = stock_on(con)
+    shared = {}                                                  # PR-S4: the other branches' slips are read once for all branches
     for bid in ids:
-        s = _span(con, bid, start, end, month, today or end + timedelta(days=1), commit)
-        flags = [f for f in s["flags"] if f["direction"] == direction]
+        if stock:
+            s = _span_stock(con, bid, start, end, month, today or end + timedelta(days=1), commit, cache=shared)
+        else:
+            s = _span(con, bid, start, end, month, today or end + timedelta(days=1), commit)
+        flags =[f for f in s["flags"] if f["direction"] == direction]
         if flags:
             out.append({"branch_id": bid, "branch": _branch_name(con, bid), "flags": flags,
                         "max_pct": (min if direction == "under" else max)(f["max_pct"] for f in flags),
@@ -560,6 +882,24 @@ def blank_class_a(con, branch_id: int, day, filled, today: date = None, top: int
     first, _last = _month_bounds(month)
     out = {"date": d.isoformat(), "items": [], "total": 0, "shown": 0}
     if d < first:
+        return out
+    if stock_on(con):                                            # PR-S4: the item is "expected" when the branch's normal for the day has it
+        lo = d - timedelta(days=7 * NORMAL_WEEKS)
+        own = _hist(con, [branch_id], lo, d)[branch_id]
+        nrm = normal_of(own, d)
+        if not nrm:
+            return out
+        month_iss = issued(con, branch_id, first, d, by_day=True)           # confirmed slips of the month before `d`
+        klass = _month_class_issued({day: {c: v["used"] + v["waste"] for c, v in items.items()}
+                                     for day, items in month_iss.items()}, _price_ref(con, month))
+        price, names, have = _prices(con, month), _names(con), set(filled or ())
+        rows = []
+        for c, q in nrm.items():
+            if q > _EPS and klass.get(c) == "A" and c not in have:
+                n, u = names.get(c) or (c, None)
+                rows.append({"code": c, "name": n, "normal": round(q, 3), "base_unit": u, "value": _round(q * (price(c) or 0.0))})
+        rows.sort(key=lambda r: (-(r["value"] or 0), r["code"]))
+        out.update(items=rows[:max(int(top), 0)], total=len(rows), shown=min(len(rows), max(int(top), 0)), stock=True)
         return out
     bom = bom_days(con, branch_id, first, d, month, commit=commit)
     today_bom = bom.get(d.isoformat()) or {}

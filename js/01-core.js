@@ -249,12 +249,18 @@ window.uiQ = function (key, title, html, cls) {
 // <template id="hlp-<tab>-<pane>"> in the fragment, or an explanation a script registered under "<tab>:<pane>" (the roles of a pane read different
 // text), or - for a pane not moved yet - its folded .bmc-help block.
 const _UI_PANE_PREFIX = { bomcenter: 'bmc-pane-', orderhub: 'ohb-pane-', branchstock: 'brn-pane-' };
+// PR-S4 · a help text may hold <span data-recipe>…</span> (full mode only) and <span data-stock>…</span> (stock mode only)
+function _uiHelpMode(html) {
+  const box = document.createElement('div'); box.innerHTML = html;
+  box.querySelectorAll(BC_MODE === 'stock' ? '[data-recipe]' : '[data-stock]').forEach(e => e.remove());
+  return box.innerHTML;
+}
 window.uiPaneHelp = function (tab, opener) {
   const root = document.getElementById('tab-' + tab), pre = _UI_PANE_PREFIX[tab] || '';
   const pane = root && [...root.children].find(el => el.id && el.id.indexOf(pre) === 0 && el.style.display !== 'none');
   const name = pane ? pane.id.slice(pre.length) : '';
   const tpl = document.getElementById('hlp-' + tab + '-' + name), reg = window._uiHelpReg[tab + ':' + name];
-  if (tpl) return window.uiHelp(tpl.getAttribute('data-title') || 'วิธีใช้หน้านี้', tpl.innerHTML, opener);
+  if (tpl) return window.uiHelp(tpl.getAttribute('data-title') || 'วิธีใช้หน้านี้', _uiHelpMode(tpl.innerHTML), opener);
   if (reg) return window.uiHelp(reg.title, reg.html, opener);
   const det = pane && pane.querySelector(':scope > details.bmc-help');
   if (det) { const d = det.querySelector(':scope > div'); return window.uiHelp('วิธีใช้หน้านี้', d ? d.innerHTML : '', opener); }
@@ -2899,7 +2905,7 @@ const SUPPLY_CHIPS = [
     { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] }] },
   { key: 'close', label: 'ปิดงวดเดือน', items: [
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'analyst', 'management'] },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
+    { tab: 'orderhub', pane: 'month', bom: true, label: 'สรุปผลต่างรายเดือน', mods: _SUPPLY_CENTRE, roles: ['salessupport', 'operation', 'analyst', 'management'] },
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', mods: ['cost.analysis', 'bom.center', 'supply.ordering', 'ops.report'], roles: ['accounting', 'analyst', 'management'] }] },
   // PR-M7 · ข้อมูลตั้งต้น (the analyst and the manager): the register, the units and the readiness of the older codes - set up rarely
   { key: 'base', label: 'ข้อมูลตั้งต้น', items: [
@@ -3040,7 +3046,7 @@ const DEPARTMENTS = [
     { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', icon: 'doc' },
     { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', icon: 'diff' },
     { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', icon: 'store' }] },
-  { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], pages: [
+  { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], duty_stock: 'ราคา ต้นทุนต่อจาน และหน่วย', pages: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' },
     { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', icon: 'coin' },
@@ -3062,7 +3068,7 @@ const DEPARTMENTS = [
     { tab: 'benchmark', label: 'เทียบสาขา', icon: 'bar' },
     { tab: 'pnl', label: 'P&L เชิงลึก', icon: 'trend' },
     { tab: 'pnlbill', label: 'P&L ต่อบิล', icon: 'cancel' }] },
-  { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], pages: [
+  { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], duty_stock: 'ทะเบียนวัตถุดิบ (อ่านอย่างเดียว)', pages: [
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' }] },
@@ -3075,7 +3081,7 @@ const DEPARTMENTS = [
     { tab: 'orderhub', pane: 'persales', label: 'ใช้วัตถุดิบต่อยอดขาย', icon: 'bar' },
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'orderhub', pane: 'central', label: 'นำเข้าข้อมูลปิดงวด', icon: 'recv' },
-    { tab: 'orderhub', pane: 'month', label: 'สรุปผลต่างรายเดือน', icon: 'lock' },
+    { tab: 'orderhub', pane: 'month', bom: true, label: 'สรุปผลต่างรายเดือน', icon: 'lock' },
     { tab: 'bomcenter', pane: 'cal', label: 'รอบส่งของสาขา', icon: 'cal' },
     { tab: 'bomcenter', pane: 'events', label: 'ปฏิทินเทศกาลและวันหยุด', icon: 'cal' },
     { tab: 'bomcenter', pane: 'zones', label: 'โซนจัดเก็บ', icon: 'box' },
@@ -3173,6 +3179,10 @@ function bomKeySet() {
   }
   return _bomKeys;
 }
+// PR-S4 · the duty line of a department: `duty_stock` while the mode is 'stock' (a department whose recipe pages are hidden), else `duty`
+// PR-S4 · one string, two modes: stkWord(full-mode text, stock-mode text)
+function stkWord(full, stock) { return BC_MODE === 'stock' ? stock : full; }
+function deptDuty(d) { return (BC_MODE === 'stock' && d.duty_stock) || d.duty; }
 function bomHidden(tab, pane) {
   if (BC_MODE === 'full') return false;
   let s;

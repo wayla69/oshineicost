@@ -204,7 +204,7 @@ function _phSubHead(name, sub, hue, icon) {
     + `<div class="ph-head-t"><h1>${esc(name)}</h1><p>${esc(sub)}</p></div></header>`;
 }
 // the branch login: its own name and date, what to do today, five big tiles
-const _PH_BRN_HINT = { issue: 'ทุกวัน', order: 'ก่อน 13:15 สองวันก่อนส่ง', recv: 'เมื่อของมาถึง', var: 'เทียบสูตร', count: 'วันที่ 1 ของเดือน' };
+const _PH_BRN_HINT = { issue: 'ทุกวัน', order: 'ก่อน 13:15 สองวันก่อนส่ง', recv: 'เมื่อของมาถึง', get var() { return stkWord('เทียบสูตร', 'เทียบปกติของสาขา'); }, count: 'วันที่ 1 ของเดือน' };
 function _phBranchHome() {
   const row = deptVisible().find(r => r.dept.key === 'brn');
   const tiles = row ? row.pages : [];
@@ -316,7 +316,7 @@ function phRenderDept(key) {
     ? `<a href="#" class="ph-ptile" onclick="phShowSummary();return false">${_deptSvg('gauge', 28)}<span>สรุปผู้บริหาร</span></a>` : '';
   host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
     + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
-    + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(d.duty)}</p></div></header>`
+    + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(deptDuty(d))}</p></div></header>`
     + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><div class="ph-ptiles">${summary}${row.pages.map(x =>
       `<a href="#" class="ph-ptile" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
   navBadgesApply();

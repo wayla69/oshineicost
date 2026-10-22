@@ -97,7 +97,7 @@ async function loadSupplyHome() {
   if (bn) { bn.textContent = mine ? mine.name : ''; bn.style.display = mine ? '' : 'none'; }
   const role = _shmRole();
   document.getElementById('shmNote').textContent = `วันนี้ ${fmtDay(d.today)}` +
-    (role === 'analyst' || role === 'management' ? ` · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}` : '');
+    (BC_MODE !== 'stock' && (role === 'analyst' || role === 'management') ? ` · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}` : '');
   _shmRender(d);
   _bmcStatus('shmStatus', '');
 }
