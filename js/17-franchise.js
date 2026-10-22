@@ -583,10 +583,10 @@ function _frcOveruse(o) {
   const t = `<div class="frc-sub2">${stock ? 'วัตถุดิบที่นับได้น้อยกว่าระบบ 5 อันดับ' : 'วัตถุดิบที่ใช้เกินสูตร 5 อันดับ'}</div>`;
   if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ${stock ? 'ไม่มีวัตถุดิบที่นับได้น้อยกว่าระบบ' : 'ไม่มีวัตถุดิบที่ใช้เกินสูตร'}</div></div>`;
   return t + `<p class="frc-sub" style="margin-top:0">${esc(when)} · เรียงตามมูลค่า</p>`
-    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วัตถุดิบ</th><th class="n">${stock ? 'ขาด' : 'ใช้เกิน'}</th><th class="n">มูลค่า (฿)</th><th class="n">${stock ? 'ต่ำกว่าระบบ' : 'เกินสูตร'}</th></tr></thead><tbody>`
-    + rows.map(r => `<tr><td>${esc(r.name)}</td><td class="n">${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')}</td>`
-      + `<td class="n">${r.value == null ? _FRC_NA : fmtN(r.value)}</td><td class="n">${_frcPct(r.pct)}</td></tr>`).join('')
-    + `</tbody></table></div>`;
+    + `<div class="ms-card">` + rows.map(r => `<div class="ms-row" style="flex-direction:column;align-items:stretch;gap:3px">`
+      + `<span style="font-size:13px;color:var(--text-primary);overflow-wrap:anywhere">${esc(r.name)}</span>`
+      + `<span style="font-size:12px;${_FRC_MUTED}">${stock ? 'ขาด' : 'ใช้เกิน'} ${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')} · ${stock ? 'ต่ำกว่าระบบ' : 'เกินสูตร'} ${_frcPct(r.pct)} · ${r.value == null ? _FRC_NA : '฿' + fmtN(r.value)}</span></div>`).join('')
+    + `</div>`;
 }
 
 // ── PR-F4 (2026-10-22): ติดต่อสำนักงานใหญ่ (the owner) ────────────────────────────────────────────────────────────────────
