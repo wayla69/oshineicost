@@ -194,13 +194,13 @@ function _phCentreHome() {
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
     + `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">แผนก</h2>`
     + (vis.length ? `<div class="ph-depts">${vis.map(r => { const d = r.dept;
-      return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)" onclick="phOpenDept('${d.key}');return false">`
+      return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)" onclick="phOpenDept('${d.key}');return false">`
         + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('')}</div>`
       : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
     + '</section>';
 }
 function _phSubHead(name, sub, hue, icon) {
-  return `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${hue}-ink);--dt:var(--dept-${hue}-tint)"><span class="ph-badge ph-badge-sm">${_deptSvg(icon, 24)}</span>`
+  return `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${hue}-ink);--dt:var(--dept-${hue}-tint);--df:var(--dept-${hue}-f);--df2:var(--dept-${hue}-f2)"><span class="ph-badge ph-badge-sm">${_deptSvg(icon, 24)}</span>`
     + `<div class="ph-head-t"><h1>${esc(name)}</h1><p>${esc(sub)}</p></div></header>`;
 }
 // the branch login: its own name and date, what to do today, five big tiles
@@ -314,7 +314,7 @@ function phRenderDept(key) {
   // the owner's deep summary is the first tile of ผู้บริหาร (any login that may read the owner's sales)
   const summary = key === 'mgmt' && hasModule('sales.overview')
     ? `<a href="#" class="ph-ptile" onclick="phShowSummary();return false">${_deptSvg('gauge', 28)}<span>สรุปผู้บริหาร</span></a>` : '';
-  host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
+  host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)">`
     + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
     + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(deptDuty(d))}</p></div></header>`
     + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><div class="ph-ptiles">${summary}${row.pages.map(x =>
