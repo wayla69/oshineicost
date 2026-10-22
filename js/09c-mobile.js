@@ -70,15 +70,19 @@ async function phBoot() {
   // a tapped notification: a supply reminder opens its page, an owner's alert opens the summary (which applies the link itself)
   if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; await phOpenPage(() => supplyDeepLink(l)); return; }
   if (_msPendingLink && hasModule('sales.overview')) { await phShowSummary(); return; }
+  if (_phKind() === 'franchise') { await phOpenFranchise(); return; }
   phShowHome();
 }
+// PR-F1: the franchise owner's หน้าแรก IS ร้านของฉัน - the login opens on the page itself (no launcher of one tile); the bottom
+// navigation keeps หน้าแรก (this page) and ฉัน
+function phOpenFranchise() { _phDept = ''; return phOpenPage(() => switchTab('franchise')); }
 // the width crossed 700 px (a turned phone, a dragged window): the shell comes or goes
 function phViewportChanged() {
   if (_phoneApp()) { if (!phOn()) phBoot(); return; }
   if (!phOn()) return;
   document.body.classList.remove('ph-on', 'ph-home');
   phNavRender();
-  if (!_desktopBooted) ensureDesktopBooted(); else if (activeTab === 'launcher' || !activeTab) switchTab('launcher');
+  if (!_desktopBooted) ensureDesktopBooted(); else if (activeTab === 'launcher' || !activeTab) switchTab(_landingTab());
 }
 function phForeground() {
   const stale = (t) => !t || Date.now() - t > _STALE_MS;
@@ -164,11 +168,12 @@ function phNavRender() {
 }
 
 // ── หน้าแรก ──────────────────────────────────────────────────────────────────────────────────────────────
-function phShowHome() { _phDept = ''; _phSetView('home'); phRenderHome(); }
+function phShowHome() { if (_phKind() === 'franchise') { phOpenFranchise(); return; } _phDept = ''; _phSetView('home'); phRenderHome(); }
 function phRenderHome() {
   const host = document.getElementById('phv-home'); if (!host) return;
   const kind = _phKind();
-  host.innerHTML = kind === 'branch' ? _phBranchHome() : kind === 'franchise' ? _phFranchiseHome() : _phCentreHome();
+  if (kind === 'franchise') { phOpenFranchise(); return; }            // PR-F1: no launcher of one tile
+  host.innerHTML = kind === 'branch' ? _phBranchHome() : _phCentreHome();
   try { navBadgesApply(); navBadgesRefresh(false); } catch (e) { /* PR-D4: no launcher slice, no counts */ }
   phLoadTasks();
   if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
@@ -205,13 +210,6 @@ function _phBranchHome() {
     + `<div class="ph-bigtiles">${tiles.map((x, n) => `<a href="#" class="ph-bigtile${n === tiles.length - 1 && tiles.length % 2 ? ' ph-span2' : ''}" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('brn',${x.i});return false">`
       + `<span class="ph-badge ph-badge-lg" style="--dk:var(--dept-brn-ink);--dt:var(--dept-brn-tint)">${_deptSvg(x.p.icon, 30)}</span><span class="ph-bigtile-n">${esc(x.p.label)}</span>`
       + `<span class="ph-bigtile-h">${esc(_PH_BRN_HINT[x.p.pane] || '')}</span></a>`).join('')}</div></section>`;
-}
-function _phFranchiseHome() {
-  const row = deptVisible().find(r => r.dept.key === 'own');
-  const x = row && row.pages[0];
-  return _phSubHead(pinnedBranchName() || 'ร้านของฉัน', lnchDateLabel(), 'own', 'key')
-    + `<section class="ph-body">${x ? `<a href="#" class="ph-bigtile ph-span2" onclick="phOpenDeptPage('own',${x.i});return false"><span class="ph-badge ph-badge-lg" style="--dk:var(--dept-own-ink);--dt:var(--dept-own-tint)">${_deptSvg(x.p.icon, 30)}</span>`
-      + `<span class="ph-bigtile-n">${esc(x.p.label)}</span><span class="ph-bigtile-h">สรุปผลของร้านตนเอง</span></a>` : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>'}</section>`;
 }
 
 // ── เมื่อวาน in the header: the Daily Brief's own figure (/api/home/brief, as msLoadYesterday reads it) ─────

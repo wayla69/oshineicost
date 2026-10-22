@@ -1869,8 +1869,33 @@ body.role-franchise .topbar-actions > :not(#userChip):not(#darkBtn) { display: n
 body.role-branch #presetBar, body.role-franchise #presetBar { display: none !important; }
 /* ร้านของฉัน (PR-L): the franchise owner's one page. Phone first: a single column of cards on the owner's summary
    styles (.ms-*), the user chip beside the one tab-strip entry, nothing else in the chrome. */
-.frc-wrap { max-width: 600px; margin: 0 auto; }
+.frc-wrap { max-width: 720px; margin: 0 auto; }
 .frc-wrap .ms-section { padding: 0; }
+/* PR-F1: download button, the "?" beside a section title, the food-cost floor chip, the target meter, the two tables
+   (date / month column stays put while the figures scroll sideways on a 375 px phone) */
+.frc-dl { min-height: 40px; padding: 6px 14px; font-size: 14px; font-weight: 600; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); cursor: pointer; white-space: nowrap; }
+.frc-dl:disabled { opacity: .6; cursor: progress; }
+.frc-title { display: flex; align-items: center; gap: 8px; }
+.frc-chip-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.frc-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; line-height: 1.4; color: var(--amber-ink); border: 1px solid currentColor; background: color-mix(in srgb, currentColor 8%, transparent); }
+.frc-meter { position: relative; flex: 1 1 100%; height: 10px; border-radius: 5px; background: var(--bg-subtle); overflow: visible; }
+.frc-meter > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--navy-ink); }
+.frc-meter > i { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text-primary); }
+.frc-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--bg-card); border-radius: var(--r-md); border: 1px solid var(--border); }
+.frc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; color: var(--text-primary); }
+.frc-tbl th { background: var(--bg-input); color: var(--text-secondary); font-size: 12px; font-weight: 600; text-align: left; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.frc-tbl td { padding: 8px 10px; border-top: 1px solid var(--border); white-space: nowrap; background: var(--bg-card); }
+.frc-tbl .n { text-align: right; font-variant-numeric: tabular-nums; }
+.frc-tbl th:first-child, .frc-tbl td:first-child { position: sticky; left: 0; z-index: 1; }
+.frc-tbl th:first-child { background: var(--bg-input); }
+.frc-tbl tr.frc-we td, .frc-tbl tr.frc-part td { background: color-mix(in srgb, var(--bg-input) 70%, var(--bg-card)); }
+.frc-tbl .frc-dow { font-size: 12px; color: var(--text-muted); }
+@media (max-width: 700px) {
+  .content-area .frc-tbl { font-size: 13px; }
+  .content-area .frc-tbl th:first-child, .content-area .frc-tbl td:first-child { max-width: none; }
+  .frc-dl { flex: 1 1 100%; min-height: 44px; }
+  #frcStatus { flex-basis: 100%; }
+}
 @media (max-width: 700px) {
   body.franchise-phone .content-area { padding: 6px 12px 24px; }
   body.franchise-phone #clusterBar { display: none !important; }
@@ -2133,6 +2158,25 @@ body.mgt-reading .content-area { padding-top: 10px; }
      dropping the rest. Print swaps in the every-tier stack. */
   #mgtTierDrivers { display: none !important; }
   #mgtTierDriversPrint { display: block !important; }
+}
+/* ร้านของฉัน on paper (PR-F1): the in-app browser's print gives one clean A4 PORTRAIT document - the page's own
+   column at full width, no app chrome, both tables unfolded (no sideways scroll, no sticky column), a section never
+   split across two sheets unless it is longer than one, and colours kept. The rest of the app keeps its landscape sheet. */
+@page frc { size: A4 portrait; margin: 12mm 11mm 12mm; }
+@media print {
+  #tab-franchise { page: frc; color: #1e293b !important; }
+  #tab-franchise, #tab-franchise * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  #tab-franchise .frc-wrap { max-width: none; }
+  #tab-franchise #frcHead { box-shadow: none !important; border: 0 !important; border-bottom: 2px solid #1f3a6b !important; border-radius: 0; }
+  #tab-franchise .ms-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; }
+  #tab-franchise .ms-card, #tab-franchise .ms-kpi { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+  #tab-franchise .frc-tbl-wrap { overflow: visible !important; border-color: #e2e8f0; }
+  #tab-franchise .frc-tbl { font-size: 11px; }
+  #tab-franchise .frc-tbl th, #tab-franchise .frc-tbl td { padding: 4px 6px !important; }
+  #tab-franchise .frc-tbl th:first-child, #tab-franchise .frc-tbl td:first-child { position: static !important; max-width: none !important; }
+  #tab-franchise .frc-tbl thead { display: table-header-group; }
+  #tab-franchise .frc-tbl tr { break-inside: avoid; }
+  #tab-franchise .ui-q { display: none !important; }
 }
 /* app-wide type (2026-10-19): table heads and section titles — after their base rules so these win (screen only, not the A4 report) */
 @media screen {
