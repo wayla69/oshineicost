@@ -246,7 +246,9 @@ function bmcNoPackChip(row) {
     '<p>ทะเบียนวัตถุดิบยังไม่ระบุขนาดบรรจุของรายการนี้ จำนวนจึงคิดเป็นหน่วยฐาน แสดงเป็นหน่วยที่ใหญ่ขึ้นเพื่ออ่านง่าย</p><p>ฝ่ายวิเคราะห์เป็นผู้เพิ่มขนาดบรรจุ</p>');
 }
 function _bmcChip(text, ink, wrap) {        // wrap: a long chip (a flag) may break into lines instead of running off a phone
-  return `<span class="bmc-chip" style="display:inline-block;padding:1px 8px;border-radius:${wrap ? 12 : 999}px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:${wrap ? 'normal;max-width:100%' : 'nowrap'};vertical-align:middle">${esc(text)}</span>`;
+  // data-k = the meaning the ink carries (theme B fills the chip by it, with a glyph: docs/ui-kit/theme-vivid.css)
+  const k = /good-ink/.test(ink) ? 'good' : /amber-ink/.test(ink) ? 'watch' : /bad-ink/.test(ink) ? 'fix' : /accent/.test(ink) ? 'info' : 'neutral';
+  return `<span class="bmc-chip" data-k="${k}" style="display:inline-block;padding:1px 8px;border-radius:${wrap ? 12 : 999}px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:${wrap ? 'normal;max-width:100%' : 'nowrap'};vertical-align:middle">${esc(text)}</span>`;
 }
 // One row per branch (2026-10-19, owner: no run-on "✓ อุดรธานี: … · ✓ อุบลราชธานี: …" lines): สาขา · สถานะ · รายละเอียด · the link.
 // `branches` = [{branch, status, detail, ...}] as /todo gives them; `linkFn(b)` returns the row's action html (or '').

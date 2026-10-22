@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei UI Kit</title>
 <link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="theme-vivid.css">
 <script src="kit.js"></script>
 <style>
   /* layout only — every colour is a token */
@@ -32,7 +33,7 @@
 <div class="wrap">
   <div class="hero">
     <div class="logo-mark">お</div>
-    <div><h1>Oshinei UI Kit</h1><div class="muted" style="font-size:12.5px">หน้าจอตัวอย่างและคอมโพเนนต์ · ธีม formal เดียวกับแดชบอร์ดจริง</div></div>
+    <div><h1>Oshinei UI Kit</h1><div class="muted" style="font-size:12.5px">หน้าจอตัวอย่างและคอมโพเนนต์ · ธีม B "Vivid" เดียวกับแดชบอร์ดจริง</div></div>
     <button class="topbar-icon-btn" style="margin-left:auto" onclick="kitToggleTheme()" aria-label="สลับโหมดมืด"><svg class="ico-svg" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
   </div>
   <p class="lead">ทุกหน้าใช้ <code>colors_and_type.css</code> ไฟล์เดียว: tokens ของแอป (<code>tokens.css</code>) + คอมโพเนนต์ formal จาก design system (ชื่อคลาสเดียวกับ <code>index.html</code>) + สีประจำกลุ่มเมนู · HTML ล้วน ไม่มี build step · ตัวเลขในทุกหน้าเป็นข้อมูลสมมติ</p>
@@ -61,10 +62,21 @@
         <div class="sw"><div class="chip" style="background:var(--warn)"></div><b>warn</b>ต้องเฝ้าดู</div>
         <div class="sw"><div class="chip" style="background:var(--bg-card);color:var(--good-ink)">▲ 6.4%</div><b>good-ink</b>ตัวเลขขึ้น</div>
         <div class="sw"><div class="chip" style="background:var(--bg-card);color:var(--bad-ink)">▼ 7.2%</div><b>bad-ink</b>ตัวเลขลง</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--good-f),var(--good-f2));color:var(--good-on)">✓ ดี</div><b>good</b>ดี</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--watch-f),var(--watch-f2));color:var(--watch-on)">! ควรดู</div><b>watch</b>ควรดู</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--fix-f),var(--fix-f2));color:var(--fix-on)">✕ แก้</div><b>fix</b>ต้องแก้</div>
+        <div class="sw"><div class="chip" style="background:var(--neu-f);color:var(--neu-on)">ปกติ</div><b>neu</b>ปกติ</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(120deg,var(--hero1),var(--hero-mid),var(--hero2));color:var(--hero-ink)">Hero</div><b>hero</b>แถบหัวหน้า</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-blue-f),var(--hue-blue-f2));color:#fff">blue</div><b>hue-blue</b>KPI / แผนก</div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-teal-f),var(--hue-teal-f2));color:#fff">teal</div><b>hue-teal</b></div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-violet-f),var(--hue-violet-f2));color:#fff">violet</div><b>hue-violet</b></div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-orange-f),var(--hue-orange-f2));color:#fff">orange</div><b>hue-orange</b></div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-pink-f),var(--hue-pink-f2));color:#fff">pink</div><b>hue-pink</b></div>
+        <div class="sw"><div class="chip" style="background:linear-gradient(135deg,var(--hue-green-f),var(--hue-green-f2));color:#fff">green</div><b>hue-green</b></div>
       </div>
       <ul class="rules">
         <li>สีบอกทิศทางใช้คู่กับคำหรือ ▲ ▼ เสมอ ไม่ใช้สีอย่างเดียว · ตัวเลขที่เป็นข้อความใช้ <code>-ink</code> ไม่ใช้สี fill</li>
-        <li>ไม่มี gradient, ไม่มีเงาบนพื้นผิวปกติ, มุม 2–4px, เส้นขอบ 1px · ไม่มีอีโมจิในอินเทอร์เฟซ</li>
+        <li>ธีม B Vivid: gradient เฉพาะที่มีความหมาย (แถบหัวหน้า, KPI, ป้ายสถานะ, ปุ่มหลัก) · เงา 3 ระดับ · มุม 20/18/14px · ไม่มีอีโมจิในอินเทอร์เฟซ · ความหมายของสีมีสัญลักษณ์ ✓ ! ✕ หรือคำกำกับเสมอ · ค่าคอนทราสต์ทุกคู่ใน <code>CONTRAST_B.md</code></li>
       </ul>
     </div>
   </div>

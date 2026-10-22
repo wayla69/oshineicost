@@ -158,7 +158,7 @@ function renderDeptHead(name) {
   }
   const d = ctx.row.dept, cur = ctx.cur;
   host.className = 'dept-head';
-  host.setAttribute('style', `--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)`);
+  host.setAttribute('style', `--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)`);
   const tabs = ctx.row.pages.map(x => {
     const on = !!cur && cur.i === x.i;
     return `<button type="button" role="tab" class="dh-tab" aria-selected="${on}" tabindex="${on || (!cur && x === ctx.row.pages[0]) ? 0 : -1}"`
@@ -210,7 +210,7 @@ function lnchFocusDept(key) {
 function _lnchDeptsHtml(vis) {
   return vis.map(r => {
     const d = r.dept;
-    return `<section class="lnch-dept" id="lnch-dept-${d.key}" data-dept="${d.key}" aria-labelledby="lnch-h-${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
+    return `<section class="lnch-dept" id="lnch-dept-${d.key}" data-dept="${d.key}" aria-labelledby="lnch-h-${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)">`
       + `<div class="lnch-dept-head"><span class="lnch-badge">${_deptSvg(d.icon, 26)}</span>`
       + `<div style="min-width:0"><h3 class="lnch-dept-name" id="lnch-h-${d.key}">${esc(d.label)}</h3><div class="lnch-dept-duty">${esc(deptDuty(d))}</div></div></div>`
       + `<div class="lnch-tiles">${r.pages.map(x => `<a href="#" class="lnch-tile" data-nb="${_navPageSpec(x.p)}" onclick="deptGo('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}`
@@ -462,7 +462,7 @@ function pgApplyBranch(name) {
 }
 // icon + name + department chip; the count of the page is added by navBadgesApply (data-nb on the row)
 function pgRowStyle(e) {
-  return e.dept ? `--dk:var(--dept-${e.dept.hue}-ink);--dt:var(--dept-${e.dept.hue}-tint)` : '--dk:var(--text-secondary);--dt:var(--bg-subtle)';
+  return e.dept ? `--dk:var(--dept-${e.dept.hue}-ink);--dt:var(--dept-${e.dept.hue}-tint);--df:var(--dept-${e.dept.hue}-f);--df2:var(--dept-${e.dept.hue}-f2)` : '--dk:var(--text-secondary);--dt:var(--bg-subtle)';
 }
 function pgRowInner(e) {
   const chip = e.dept ? e.dept.label : (String(e.cluster || '').split(' · ')[0] || 'หน้ารายงานทั้งหมด');
@@ -606,7 +606,7 @@ function renderManualDeptMap() {
     const pages = d.pages.map((p, i) => open.has(d.key + '|' + i)
       ? `<a href="#" class="mdm-pg" onclick="deptGo('${d.key}',${i});return false">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></a>`
       : `<span class="mdm-pg is-off" title="บัญชีนี้ไม่มีสิทธิ์เปิดหน้านี้">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></span>`).join('');
-    return `<section class="mdm-card" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
+    return `<section class="mdm-card" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)">`
       + `<header class="mdm-head"><span class="mdm-badge">${_deptSvg(d.icon, 24)}</span><div><h4 class="mdm-name">${esc(d.label)}</h4><p class="mdm-duty">${esc(deptDuty(d))}</p></div></header>`
       + `<p class="mdm-who">แผนกหลักของ: ${esc(d.roles.map(who).join(' · '))}</p><div class="mdm-pages">${pages}</div></section>`;
   }).join('');

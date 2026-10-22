@@ -44,13 +44,13 @@ def test_the_ten_departments_in_the_owners_order_with_hues_in_both_themes():
     tokens = _src("docs/ui-kit/tokens.css")
     dark = tokens[tokens.index("Department hues"):]
     dark = dark[dark.index("body.dark"):]
-    light = {"mgmt": ("#1f3a6b", "#dde4f0"), "mkt": ("#9b1c55", "#fbe3ee"), "ops": ("#8a3f00", "#fdebd8"), "ana": ("#5b3fa8", "#ebe5fa"),
-             "kit": ("#2f6b1f", "#e3f2dc"), "ss": ("#1d5fa8", "#dceafa"), "wh": ("#7a5300", "#fbf0d0"), "acc": ("#0f6b6b", "#dcf1f0"),
+    light = {"mgmt": ("#3a2fb5", "#dcdaf8"), "mkt": ("#8c1442", "#fbe3ee"), "ops": ("#8a3f00", "#fdebd8"), "ana": ("#4a3290", "#ebe5fa"),
+             "kit": ("#06553a", "#e0f3ea"), "ss": ("#154a86", "#dceafa"), "wh": ("#7a5300", "#fbf0d0"), "acc": ("#0b5252", "#dcf1f0"),
              "brn": ("#a12d2d", "#f9e1e1"), "own": ("#3c4a5e", "#e6eaf0")}
     for k, (ink, tint) in light.items():
-        assert re.search(rf"--dept-{k}-ink:\s+{ink};", tokens) and re.search(rf"--dept-{k}-tint:\s+{tint};", tokens), k      # the owner's approved hues
+        assert re.search(rf"--dept-{k}-ink:\s+{ink};", tokens) and re.search(rf"--dept-{k}-tint:\s+{tint};", tokens), k      # the owner's approved hues (theme B, 2026-10-22)
         assert f"--dept-{k}-ink:" in dark and f"--dept-{k}-tint:" in dark, k                          # and a dark pair
-        assert f"--dept-{k}-side:" in tokens, k                                                       # the icon on the navy rail
+        assert f"--dept-{k}-side:" in tokens and f"--dept-{k}-f:" in tokens and f"--dept-{k}-f2:" in tokens, k                                                       # the icon on the navy rail
 
 
 def test_dept_text_colours_are_tokens_not_raw_hex():
