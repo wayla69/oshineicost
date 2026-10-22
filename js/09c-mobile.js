@@ -769,17 +769,20 @@ function msPartial(trend, gran) {
 }
 const msGlanceLine = html => html ? `<p style="font-size:12px;line-height:1.45;color:var(--text-secondary,#475569);margin:2px 0 8px">${html}</p>` : '';
 
-// A small column chart in SVG (no Chart.js on the phone): oldest→newest, the
-// latest complete period in the accent, the period in progress hollow + dashed,
-// weekends tinted, a dashed average line, value labels on the latest and the peak.
+// A small column chart in SVG (no Chart.js on the phone): oldest→newest, theme B1 (VZ2) like the dashboard's bars — gradient
+// columns with rounded tops, above the average teal→indigo, below it lilac, the latest complete period gold with a dark edge,
+// the period in progress hollow + dashed, a dot under each weekend, a dashed average line with its value, labels on the latest
+// and the peak. Under 4 finished periods it keeps the plain accent columns.
 function msColumns(vals, o) {
   const n = vals.length;
   if (n < 2) return '';
   // o.under (optional): one {t, c} per column printed under its label (the month-by-month view
   // prints the change on the previous month); o.allLabels labels every column, not just the ends
   const under = Array.isArray(o.under) ? o.under : null;
-  const W = 320, H = o.height || 100, top = 16, bottom = under ? 31 : 14, plotH = H - top - bottom;
   const P = o.partial == null ? -1 : o.partial;
+  const b1 = glanceB1Kinds(vals, { partial: P, weekend: o.weekend });
+  const wkDots = !!(b1 && (o.weekend || []).some(Boolean));
+  const W = 320, H = o.height || 100, top = 16, bottom = (under ? 31 : 14) + (wkDots ? 6 : 0), plotH = H - top - bottom;
   const max = Math.max(1, ...vals.filter(v => v != null));
   const step = W / n, bw = Math.max(3, Math.min(22, step * 0.64));
   const yOf = v => top + plotH * (1 - Math.max(0, v) / max);
@@ -793,6 +796,7 @@ function msColumns(vals, o) {
   // and below), so two labels closer than that overlap; a label that meets one moves up a line above it while it stays inside the chart,
   // else it is left out
   const LINE = 1.6;
+  const HALO = 'paint-order:stroke;stroke:var(--bg-card,#fff);stroke-width:3px;stroke-linejoin:round';
   const txt = (t, x, y, size, weight, color, check) => {
     const w = t.length * size * 0.56;
     x = Math.max(w / 2 + 1, Math.min(W - w / 2 - 1, x));
@@ -806,36 +810,52 @@ function msColumns(vals, o) {
       }
       placed.push({ x, y, w });
     }
-    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${weight}" style="fill:${color}">${esc(t)}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${weight}" style="fill:${color};${HALO}">${esc(t)}</text>`;
   };
+  const uid = 'mc' + Math.abs(vals.reduce((a, v, i) => (a * 31 + Math.round(v || 0) + i) | 0, 7)).toString(36);
+  // a column with rounded tips (the base is flat), as a path so the gradient follows it
+  const colPath = (x, y, w, h) => { const r = Math.min(4, w / 2, h); return `M${x.toFixed(1)},${(y + h).toFixed(1)}V${(y + r).toFixed(1)}a${r},${r} 0 0 1 ${r},-${r}h${(w - 2 * r).toFixed(1)}a${r},${r} 0 0 1 ${r},${r}V${(y + h).toFixed(1)}z`; };
+  const FB = { a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: '#9a84e6', bw2: '#8468d8', t1: '#f0a500', t2: '#b86e00' };
   let g = '';
-  (o.weekend || []).forEach((w, i) => { if (w) g += `<rect x="${(i * step).toFixed(1)}" y="${top - 4}" width="${step.toFixed(1)}" height="${plotH + 4}" style="fill:var(--bg-subtle,#f1f5f9)"/>`; });
+  if (b1) {
+    g += '<defs>' + ['a', 'aw', 'b', 'bw', 't'].map(k => `<linearGradient id="${uid}${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ch-${k}1,${FB[k + '1']})"/><stop offset="1" style="stop-color:var(--ch-${k}2,${FB[k + '2']})"/></linearGradient>`).join('') + '</defs>';
+  } else {
+    (o.weekend || []).forEach((w, i) => { if (w) g += `<rect x="${(i * step).toFixed(1)}" y="${top - 4}" width="${step.toFixed(1)}" height="${plotH + 4}" style="fill:var(--bg-subtle,#f1f5f9)"/>`; });
+  }
   if (avg != null) {
     const ya = yOf(avg).toFixed(1);
-    g += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke-width="1" stroke-dasharray="3 3" style="stroke:var(--text-muted,#94a3b8)"/>`;
+    g += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke-width="1.4" stroke-dasharray="5 3" style="stroke:var(--ch-avg,#475569)"/>`;
   }
   vals.forEach((v, i) => {
     if (v == null) return;
-    const x = (cx(i) - bw / 2).toFixed(1), y = yOf(v), h = Math.max(1, top + plotH - y);
-    if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--group, var(--accent,#1f3a6b))"/>`;
-    else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" style="fill:var(--group, var(--accent,#1f3a6b));opacity:${i === last ? 1 : 0.38}"/>`;
+    const x = cx(i) - bw / 2, y = yOf(v), h = Math.max(1, top + plotH - y);
+    if (b1) {
+      const kd = b1.kinds[i], key = kd.tone === 'now' ? 't' : (kd.tone === 'hi' ? 'a' : 'b') + (kd.wk ? 'w' : '');
+      if (i === P) g += `<path d="${colPath(x, y, bw, h)}" stroke-width="1.4" stroke-dasharray="3 2" style="fill:none;stroke:var(--ch-${key}2,${FB[key + '2']})"/>`;
+      else g += `<path d="${colPath(x, y, bw, h)}" fill="url(#${uid}${key})"${kd.tone === 'now' ? ' stroke-width="1.6" style="stroke:var(--ch-tstroke,#7a4a00)"' : ''}/>`;
+      if (kd.wk) g += `<circle cx="${cx(i).toFixed(1)}" cy="${(top + plotH + 5).toFixed(1)}" r="2" style="fill:var(--text-muted,#94a3b8)"/>`;
+      return;
+    }
+    if (i === P) g += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke-width="1.2" stroke-dasharray="3 2" style="fill:none;stroke:var(--group, var(--accent,#1f3a6b))"/>`;
+    else g += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" style="fill:var(--group, var(--accent,#1f3a6b));opacity:${i === last ? 1 : 0.38}"/>`;
   });
-  const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 11, 600, 'var(--text-primary,#1e293b)', true);
+  const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 12, 700, b1 && i === last ? 'var(--gold-i,#7a4500)' : 'var(--text-primary,#1e293b)', true);
   // priority: the latest complete value, then the period in progress (just its
   // tag - the figure is in the list/tile), then the peak
   if (last >= 0) g += lab(last);
   if (P >= 0 && vals[P] != null) g += lab(P, o.grain === 'day' ? 'วันนี้' : 'เดือนนี้');
   if (hi >= 0 && hi !== last) g += lab(hi);
-  if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="11" style="fill:var(--text-muted,#94a3b8)">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
+  if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="12" font-weight="700" style="fill:var(--text-secondary,#475569);${HALO}">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
   if (o.labels) {
     const ly = under ? H - 17 : H - 2;
-    if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 11, i === last ? 700 : 400, i === last ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#94a3b8)'); });
+    if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 12, i === last ? 700 : 600, i === last ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#94a3b8)'); });
     else {
-      g += txt(o.labels[0], cx(0), ly, 11, 400, 'var(--text-muted,#94a3b8)');
-      g += txt(o.labels[n - 1], cx(n - 1), ly, 11, 400, 'var(--text-muted,#94a3b8)');
+      g += txt(o.labels[0], cx(0), ly, 12, 600, 'var(--text-muted,#94a3b8)');
+      if (b1 && n > 4) g += txt(o.labels[Math.floor((n - 1) / 2)], cx(Math.floor((n - 1) / 2)), ly, 12, 600, 'var(--text-muted,#94a3b8)');   // first / middle / last
+      g += txt(o.labels[n - 1], cx(n - 1), ly, 12, 600, 'var(--text-muted,#94a3b8)');
     }
   }
-  if (under) under.forEach((u, i) => { if (u && u.t) g += txt(u.t, cx(i), H - 3, 11, 600, u.c || 'var(--text-muted,#94a3b8)'); });
+  if (under) under.forEach((u, i) => { if (u && u.t) g += txt(u.t, cx(i), H - 3, 12, 600, u.c || 'var(--text-muted,#94a3b8)'); });
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="${esc(o.aria || '')}">${g}</svg>`;
 }
 // Trend block = sentence + columns, for a trend array oldest→newest from /api/sales/daily.
@@ -1707,7 +1727,7 @@ function setupChartDefaults() {
 
   // Smoother lines, smaller resting points that grow on hover (less clutter)
   Chart.defaults.elements.line.tension = 0.25;
-  Chart.defaults.elements.line.borderWidth = 2;
+  Chart.defaults.elements.line.borderWidth = 2.5;   // theme B (VZ2)
   Chart.defaults.elements.point.radius = 2.2;     // visible (keeps scatter charts alive) but small
   Chart.defaults.elements.point.hoverRadius = 6;
   Chart.defaults.elements.point.hitRadius = 10;

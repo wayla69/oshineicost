@@ -129,14 +129,14 @@ body.dark .anomaly-banner { background:#422006; color: #fde68a; }
 /* Heat scales (js/01-core.js heatSeq / heatDiv): sequential navy = "how much",
    diverging = "vs normal". Each fill has its label ink (all >= 4.8:1). */
 :root {
-  --heat-s1:#eef2f8; --heat-s2:#d0dcee; --heat-s3:#9fb6da; --heat-s4:#6a8cc2; --heat-s5:#2f5391;
-  --heat-s1-ink:#0f172a; --heat-s2-ink:#0f172a; --heat-s3-ink:#0f172a; --heat-s4-ink:#0f172a; --heat-s5-ink:#fff;
+  --heat-s1:#7686da; --heat-s2:#6a66d4; --heat-s3:#5b52cc; --heat-s4:#3f33a8; --heat-s5:#2b1f80;   /* theme B 5-step scale (VZ2) */
+  --heat-s1-ink:#0f172a; --heat-s2-ink:#fff; --heat-s3-ink:#fff; --heat-s4-ink:#fff; --heat-s5-ink:#fff;
   --heat-d1:#d9625c; --heat-d2:#f3c4c0; --heat-d3:#e6eaf0; --heat-d4:#bfe3cc; --heat-d5:#3e9c69;
   --heat-d1-ink:#0f172a; --heat-d2-ink:#0f172a; --heat-d3-ink:#0f172a; --heat-d4-ink:#0f172a; --heat-d5-ink:#0f172a;
 }
 body.dark {
-  --heat-s1:#1c2638; --heat-s2:#22385c; --heat-s3:#2c4f85; --heat-s4:#4371b3; --heat-s5:#8fb3ec;
-  --heat-s1-ink:#fff; --heat-s2-ink:#fff; --heat-s3-ink:#fff; --heat-s4-ink:#fff; --heat-s5-ink:#0f172a;
+  --heat-s1:#5c6bc0; --heat-s2:#7d86d8; --heat-s3:#9d98e8; --heat-s4:#c0b8f6; --heat-s5:#e6e0ff;
+  --heat-s1-ink:#fff; --heat-s2-ink:#0f172a; --heat-s3-ink:#0f172a; --heat-s4-ink:#0f172a; --heat-s5-ink:#0f172a;
   --heat-d1:#b9524d; --heat-d2:#5a2f33; --heat-d3:#2b3446; --heat-d4:#27493a; --heat-d5:#3e9c69;
   --heat-d1-ink:#fff; --heat-d2-ink:#fff; --heat-d3-ink:#fff; --heat-d4-ink:#fff; --heat-d5-ink:#0f172a;
 }
@@ -1381,6 +1381,13 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .content-area [class*="grid-cols-4"],
   .content-area [class*="grid-cols-5"],
   .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* a table + a chart side by side (lg:grid-cols-3, the chart in a third) is a half-width squeeze on a phone: stack the cards */
+  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) { grid-template-columns: minmax(0, 1fr) !important; }
+  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) > * { grid-column: auto !important; }
+  /* a chart with a figures column beside it (the overall monthly trend): the figures go under the chart, full width */
+  .content-area div.flex:has(> div > canvas) { flex-direction: column; }
+  .content-area div.flex:has(> div > canvas) > div:has(> canvas) { flex: none !important; width: 100%; }
+  .content-area div.flex:has(> div > canvas) > :not(:has(> canvas)) { width: 100% !important; border-left: 0 !important; padding-left: 0 !important; }
   .content-area .card { overflow-x: auto; }
   .content-area canvas { max-width: 100%; }
   /* ── Tables on a phone: the card scrolls sideways (above), the first column stays
