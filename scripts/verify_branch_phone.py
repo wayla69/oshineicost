@@ -741,9 +741,9 @@ def main(argv=None) -> int:
             check(dlg["title"] == "ยืนยันการบันทึกรับสินค้า" and f"{len(lines_all)} รายการ" in dlg["msg"] and "รับครบทุกรายการ" in dlg["msg"] and dlg["ok"] == "บันทึกรับสินค้า",
                   f"the confirmation states the quantity: {dlg['msg'][:90]}")
             taps[0] += 1
-            page.evaluate("document.getElementById('brnRecvStatus').textContent = ''")
+            page.evaluate("document.getElementById('brnRecvOrdDone').textContent = ''")
             page.click("form:has([data-el=msg]) [type=submit]")
-            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvStatus').innerText)", timeout=15000)
+            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvOrdDone').innerText)", timeout=15000)
             rc = posts("/receive")[n0:]
             body = __import__("json").loads(rc[0][2]) if rc else {}
             bl = body.get("lines", [])
@@ -795,11 +795,11 @@ def main(argv=None) -> int:
             tap("#brnRecvOrdSave")
             page.wait_for_selector("form [data-el=msg]", timeout=5000)
             dlg = dialog()
-            check("แจ้งเคลมส่วนต่าง 1 รายการ" in dlg["msg"] and "รับครบทุกรายการ" not in dlg["msg"], f"the confirmation names the claim: {dlg['msg'][:130]}")
+            check("แจ้งเคลม 1 รายการ" in dlg["msg"] and "รับครบทุกรายการ" not in dlg["msg"], f"the confirmation names the claim: {dlg['msg'][:130]}")
             n0 = len(posts("/receive"))
-            page.evaluate("document.getElementById('brnRecvStatus').textContent = ''")
+            page.evaluate("document.getElementById('brnRecvOrdDone').textContent = ''")
             page.click("form:has([data-el=msg]) [type=submit]")
-            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvStatus').innerText)", timeout=15000)
+            page.wait_for_function("/บันทึกรับสินค้าแล้ว/.test(document.getElementById('brnRecvOrdDone').innerText)", timeout=15000)
             rc = posts("/receive")[n0:]
             body = __import__("json").loads(rc[0][2]) if rc else {}
             bl = body.get("lines", [])
@@ -807,7 +807,7 @@ def main(argv=None) -> int:
             check(len(rc) == 1 and len(bl) == len(lines_all) and len(shorts) == 1 and shorts[0]["code"] == pick["code"] and float(shorts[0]["received_units"]) == short_to
                   and all(float(x["received_units"]) == sent_by[x["code"]] for x in bl if x is not shorts[0]),
                   f"one call, every line sent: {len(bl)} lines, the picked one short with a reason, the others at the sent quantity")
-            st = page.evaluate("document.getElementById('brnRecvStatus').innerText")
+            st = page.evaluate("document.getElementById('brnRecvOrdDone').innerText")
             check("แจ้งเคลม 1 รายการ" in st and "#" not in st, f"the claim is raised in the same save: '{st}'")
             dd = api(f"/api/bom-center/order/{oid}")
             check(dd["status"] == "received" and len(dd["claims"]) == 1 and dd["claims"][0]["origin"] == "receive" and dd["claims"][0]["lines"][0]["claim_units"] == 1, "the order is received and ONE receive-time claim of 1 pack exists")

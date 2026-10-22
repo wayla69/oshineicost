@@ -239,7 +239,7 @@ function diveInChart(chartId) {
         if (canvas) chartInstances['zoomChart'] = new Chart(canvas, cfg);
       } catch (e) {
         console.error('diveInChart canvas render error:', e);
-        body.innerHTML = `<p class="text-sm text-red-500 py-4">⚠ Could not render chart: ${e.message}</p>`;
+        body.innerHTML = `<p class="text-sm text-red-500 py-4">แสดงกราฟไม่สำเร็จ: ${esc(String((e && e.message) || e))}</p>`;
       }
     }, 50);
 
@@ -255,13 +255,13 @@ function diveInChart(chartId) {
         }
       }).catch(err => {
         const pane = document.getElementById('diveEnhancerPane');
-        if (pane) pane.innerHTML = `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ: ${err.message}</p>`;
+        if (pane) pane.innerHTML = `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ: ${esc(String((err && err.message) || err))}</p>`;
       });
     }
   } catch (e) {
     console.error('diveInChart error:', e);
-    title.textContent = 'Error';
-    body.innerHTML = `<p class="text-sm text-red-500 py-4">⚠ Could not open dive-in: ${e.message}</p>`;
+    title.textContent = 'เกิดข้อผิดพลาด';
+    body.innerHTML = `<p class="text-sm text-red-500 py-4">เปิดรายละเอียดไม่สำเร็จ: ${esc(String((e && e.message) || e))}</p>`;
     modal.classList.remove('hidden');
   }
 }
@@ -1029,7 +1029,7 @@ function onGlobalSearchInput(e) {
 function renderSearchResults(data, q) {
   const el = document.getElementById('searchResults');
   if (!data.branches.length && !data.skus.length) {
-    el.innerHTML = `<div class="px-3 py-3 text-xs text-slate-400">No results for "${q}"</div>`;
+    el.innerHTML = `<div class="px-3 py-3 text-xs text-slate-400">ไม่พบสาขาหรือเมนู “${esc(q)}”</div>`;
     el.classList.remove('hidden');
     return;
   }
@@ -1038,15 +1038,15 @@ function renderSearchResults(data, q) {
     html += '<div class="search-group-title">สาขา</div>';
     html += data.branches.map(b => `
       <div class="search-item" onclick="selectSearchBranch('${jsAttr(b.name)}')">
-        <span class="badge">BRANCH</span>
+        <span class="badge">สาขา</span>
         <span class="font-medium">${esc(b.name)}</span>
       </div>`).join('');
   }
   if (data.skus.length) {
-    html += '<div class="search-group-title">SKUs</div>';
+    html += '<div class="search-group-title">เมนู (SKU)</div>';
     html += data.skus.map(s => `
       <div class="search-item" onclick="selectSearchSku('${jsAttr(s.sku_code)}')">
-        <span class="badge badge-sku">SKU</span>
+        <span class="badge badge-sku">เมนู</span>
         <span class="font-mono text-xs text-indigo-600">${esc(s.sku_code)}</span>
         <span class="text-slate-600 truncate">${esc(s.description || '')}</span>
         <span class="text-xs text-slate-400 ml-auto">${esc(s.category || '')}</span>
@@ -1557,11 +1557,20 @@ const TAB_NUMS = {
   '9':'timeflow', '0':'settings'
 };
 function showShortcutsHelp() {}
+// U3 (owner 2026-10-22) · the number keys switch report tabs only from a report: never while typing (a field, a contenteditable), never on
+// the phone shell, and never on a work page of the supply module or ร้านของฉัน, where a stray digit took the person to หน้าแรก mid-slip
+function _digitJumpOk(tab, target) {
+  const t = target || {};
+  if (t.isContentEditable || /^(input|textarea|select)$/i.test(String(t.tagName || ''))) return false;
+  if (typeof phOn === 'function' && phOn()) return false;
+  if (tab === 'franchise' || (typeof _SUPPLY_PANE !== 'undefined' && _SUPPLY_PANE && Object.prototype.hasOwnProperty.call(_SUPPLY_PANE, tab))) return false;
+  return true;
+}
 function setupShortcuts() {
   document.addEventListener('keydown', (e) => {
     if (!_desktopBooted && _phoneFirst()) return;   // the summary has no tabs to switch, and the slices are not here yet
     const tag = (e.target.tagName||'').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === '?')  { e.preventDefault(); showShortcutsHelp(); }
     // PR-D4: "/" opens the page search (js/18-launcher.js; Ctrl+K does too); the branch / SKU box of the top bar is reached by a click
@@ -1569,7 +1578,7 @@ function setupShortcuts() {
     else if (e.key === 'd') { toggleDarkMode(); }
     else if (e.key === 'p') { printReport(); }
     else if (e.key === 'f') { togglePresetMenu(); }
-    else if (TAB_NUMS[e.key]) { switchTab(TAB_NUMS[e.key]); }
+    else if (TAB_NUMS[e.key] && _digitJumpOk(activeTab, e.target)) { switchTab(TAB_NUMS[e.key]); }
   });
 }
 

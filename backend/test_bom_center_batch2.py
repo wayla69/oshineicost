@@ -186,15 +186,16 @@ def test_the_count_line_model_takes_parts(client):
 
 @needs_node
 def test_figures_on_the_slip_and_the_count_are_tidy():
-    pre = NUM + _fn(BRN, "_brnNice") + _fn(BRN, "_brnPh") + _fn(BRN, "_brnUnitW") + _fn(BRN, "_brnSysTxt")
+    pre = NUM + _fn(BRN, "_brnNice") + _fn(BRN, "_brnPh") + _fn(BRN, "_brnUnitW") + _fn(BRN, "_brnUnitFull") + _fn(BRN, "_brnSysTxt")
     got = _node(pre, "[_brnSysTxt(9.01,'แพ็ค'), _brnSysTxt(9.46,'แพ็ค 1 กก.'), _brnSysTxt(0.4,'แพ็ค 1 กก.'), _brnSysTxt(0,'แพ็ค'), "
                      "_brnSysTxt(-3,'กล่อง (10 แพ็ค)'), _brnSysTxt(null,'แพ็ค'), _brnNice(0.005), _brnNice(0.34), _brnNice(12.04), _brnPh(0.005), _brnPh(0.34), _brnPh(null)]")
-    assert got == ["9 แพ็ค", "9.5 แพ็ค", "น้อยกว่า 1 แพ็ค", "0 แพ็ค", "-3 กล่อง", "", "<0.1", "0.3", "12", "0", "0.3", "0"]
+    # U3: a unit that carries its contents keeps them, in brackets ("แพ็ค (1 กก.)"), the same words as the box under it
+    assert got == ["9 แพ็ค", "9.5 แพ็ค (1 กก.)", "น้อยกว่า 1 แพ็ค (1 กก.)", "0 แพ็ค", "-3 กล่อง (10 แพ็ค)", "", "<0.1", "0.3", "12", "0", "0.3", "0"]
 
 
 @needs_node
 def test_the_two_boxes_split_and_add_up_in_the_entry_unit():
-    pre = NUM + _fn(BRN, "_brnNice") + _fn(BRN, "_brnUnitW") + _fn(BRN, "_brnSysTxt") + "let _brnQty = {}, _brnQty2 = {};\n" \
+    pre = NUM + _fn(BRN, "_brnNice") + _fn(BRN, "_brnUnitW") + _fn(BRN, "_brnUnitFull") + _fn(BRN, "_brnSysTxt") + "let _brnQty = {}, _brnQty2 = {};\n" \
         + _fn(BRN, "_brnSplit") + _fn(BRN, "_brnPair") + _fn(BRN, "_brnTotal2")
     it = "{code:'A', unit_big:{per:20}}"
     got = _node(pre, f"[_brnSplit(43,20), _brnSplit(40,20), _brnSplit(7,20), _brnSplit(0,20), _brnTotal2({it},{{big:'2',small:'3'}}), "

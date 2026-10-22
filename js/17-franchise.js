@@ -207,7 +207,14 @@ function _frcDaily(s) {
 }
 
 // ── แนวโน้ม 12 เดือน: each month on its own with its MoM / YoY; the month in progress is weekday-fair and labelled ─────
-function _frcMonthLabel(m) { return msPeriodLabel(m.month + '-01', 'month'); }
+// U3 (owner 2026-10-22): the month is written as the header, the month list and the Excel file write it ("ต.ค. 2026", the management
+// report's label), never the phone's short "ต.ค. 69"
+const _FRC_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function _frcMonthLabel(m) {
+  if (m && m.label) return String(m.label);
+  const x = /^(\d{4})-(\d{2})/.exec(String((m && m.month) || ''));
+  return x && _FRC_MON[+x[2] - 1] ? `${_FRC_MON[+x[2] - 1]} ${x[1]}` : String((m && m.month) || '');
+}
 function _frcTrend(t) {
   const months = (t && t.months) || [];
   if (months.length < 2) return '';

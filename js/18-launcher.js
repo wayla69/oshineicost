@@ -429,7 +429,32 @@ function pgSearchResults(text, extra, opt) {
   }).filter(x => x.s > 0);
   // a department or cluster name only finds pages when nothing is named better (a whole cluster would otherwise flood the list)
   const floor = scored.some(x => x.s >= 50) ? 50 : 0;
-  return scored.filter(x => x.s >= floor).sort((a, b) => (b.s - a.s) || (a.order - b.order)).slice(0, _PG_MAX).map(x => x.e);
+  const pages = scored.filter(x => x.s >= floor).sort((a, b) => (b.s - a.s) || (a.order - b.order)).map(x => x.e);
+  return pgBranchHits(text, opt && opt.branches ? opt.branches : pgBranchNames()).concat(pages).slice(0, _PG_MAX);
+}
+// U3 (owner 2026-10-22) · a branch name ("อุดรธานี") finds the BRANCH as well as pages: picked, it becomes the branch filter of the dashboard
+// (pgApplyBranch). The names are the options of the branch filter (#selBranch), so a login that may not choose a branch (a pinned branch or
+// franchise login: a hidden field, no options) gets none. At most 5, a name that starts with the text first. Everything is drawn through
+// pgRowInner, which escapes the name.
+function pgBranchNames() {
+  if (typeof document === 'undefined') return [];
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch'));
+  return sel && sel.options && typeof tabAllowed === 'function' && tabAllowed('home') ? [...sel.options].map(o => o.value).filter(Boolean) : [];
+}
+function pgBranchHits(text, names) {
+  const q = pgNorm(text);
+  if (!q) return [];
+  return (names || []).map(n => ({ n, k: pgNorm(n) })).filter(x => x.k.includes(q))
+    .sort((a, b) => Number(b.k.startsWith(q)) - Number(a.k.startsWith(q))).slice(0, 5)
+    .map(x => Object.assign(_pgEntry('', '', x.n, 'store', null, -1, 'สาขา'), { branch: x.n, extra: true }));
+}
+// a branch picked from the search: the dashboard's branch filter takes it; from the launcher (no report on screen) หน้าแรก opens with it
+function pgApplyBranch(name) {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch'));
+  if (!sel || ![...(sel.options || [])].some(o => o.value === name)) return;
+  sel.value = name;
+  if (!activeTab || activeTab === 'launcher' || activeTab === 'allpages') switchTab('home');
+  else if (typeof onFilterChange === 'function') onFilterChange();
 }
 // icon + name + department chip; the count of the page is added by navBadgesApply (data-nb on the row)
 function pgRowStyle(e) {
@@ -443,6 +468,7 @@ function pgRowNb(e) { return e.tab ? ` data-nb="${_navPageSpec(e)}"` : ''; }
 // open a result: a page of a department opens in that department (its workspace tabs), the rest as a link of หน้ารายงานทั้งหมด
 function pgOpen(e) {
   _deptFocus = null;
+  if (e.branch) { pgApplyBranch(e.branch); return; }
   if (e.dept && e.di >= 0) deptGo(e.dept.key, e.di); else alpGo(e.tab, e.pane);
 }
 
@@ -455,9 +481,9 @@ function _pgPanel() {
   if (el) return el;
   el = document.createElement('div');
   el.id = 'pgSearch'; el.className = 'pgs-back'; el.hidden = true;
-  el.innerHTML = `<div class="pgs-box" role="dialog" aria-modal="true" aria-label="ค้นหาหน้า">`
+  el.innerHTML = `<div class="pgs-box" role="dialog" aria-modal="true" aria-label="ค้นหาหน้าหรือสาขา">`
     + `<div class="pgs-head"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${_PG_SEARCH_ICON}"/></svg>`
-    + `<input id="pgsInput" class="pgs-input" type="text" role="combobox" aria-expanded="true" aria-controls="pgsList" aria-autocomplete="list" aria-label="ค้นหาหน้า" placeholder="ค้นหาหน้า เช่น ใบสั่งซื้อ ต้นทุน เคลม" autocomplete="off" spellcheck="false" enterkeyhint="go">`
+    + `<input id="pgsInput" class="pgs-input" type="text" role="combobox" aria-expanded="true" aria-controls="pgsList" aria-autocomplete="list" aria-label="ค้นหาหน้าหรือสาขา" placeholder="ค้นหาหน้าหรือสาขา เช่น ใบสั่งซื้อ ต้นทุน อุดรธานี" autocomplete="off" spellcheck="false" enterkeyhint="go">`
     + `<button type="button" class="pgs-x" id="pgsClose" aria-label="ปิด"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12 M18 6L6 18"/></svg></button></div>`
     + `<div id="pgsList" class="pgs-list" role="listbox" aria-label="ผลการค้นหา"></div></div>`;
   document.body.appendChild(el);
@@ -477,7 +503,7 @@ function pgSearchRender() {
   _pg.sel = 0;
   list.innerHTML = _pg.list.length
     ? _pg.list.map((e, i) => `<div class="pgs-row" role="option" id="pgs-o${i}" data-i="${i}" aria-selected="${i === 0}"${pgRowNb(e)} style="${pgRowStyle(e)}">${pgRowInner(e)}</div>`).join('')
-    : '<div class="pgs-none">ไม่พบหน้า</div>';
+    : '<div class="pgs-none">ไม่พบหน้าหรือสาขา</div>';
   input.setAttribute('aria-activedescendant', _pg.list.length ? 'pgs-o0' : '');
   navBadgesApply();
 }
