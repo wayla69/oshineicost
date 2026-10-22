@@ -1,0 +1,209 @@
+# -*- coding: utf-8 -*-
+"""Charts in theme B (VZ2): bar style B1 app-wide, through the shared glance layer in js/01-core.js and the phone SVG columns.
+
+The promises:
+  * the B1 classifier (above / below the period average, weekend, latest finished period, best period) is applied to a one-series
+    period bar chart (days, weeks, months) and NOT to stacked, multi-series, horizontal or category-axis charts;
+  * the period still in progress is never "latest", never in the average (the closed-day rule stays);
+  * under 4 finished periods there is no classifier (an average of three says nothing);
+  * the canvas palette (B1_PAL) equals the --ch-* tokens, light and dark; the old twelve series colours map to the B set;
+  * the phone columns (msColumns) wear the same look: gradient defs, gold latest with a dark edge, weekend dots, text >= 12 px.
+"""
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parent.parent
+NODE = shutil.which("node")
+needs_node = pytest.mark.skipif(NODE is None, reason="node is not installed")
+
+
+def _src(rel):
+    return (REPO / rel).read_text(encoding="utf-8")
+
+
+def _fn(src, name):
+    m = re.search(r"(?:async )?function %s\(" % re.escape(name), src)
+    assert m, name
+    i = src.index("{", src.index(")", m.end()))
+    depth, j = 0, i
+    while j < len(src):
+        c = src[j]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return src[m.start():j + 1]
+        j += 1
+    raise AssertionError("unbalanced " + name)
+
+
+def _const(src, name):
+    m = re.search(r"^(?:const|let) %s = .*?;\s*$" % re.escape(name), src, re.M | re.S)
+    assert m, name
+    return m.group(0)
+
+
+def _node(prelude, expr):
+    out = subprocess.run([NODE, "-e", prelude + f"\nconsole.log(JSON.stringify({expr}));"], capture_output=True, text=True,
+                         encoding="utf-8", check=True).stdout
+    return json.loads(out)
+
+
+CORE = _src("js/01-core.js")
+MOB = _src("js/09c-mobile.js")
+TOKENS = _src("docs/ui-kit/tokens.css")
+FINITE = re.search(r"^const _glanceFinite = v => \{.*?^\};", CORE, re.M | re.S).group(0)
+PRE = "\n".join([_const(CORE, "_GLANCE_TIME_RE"), _const(CORE, "_GLANCE_SKIP_RE"), FINITE, _fn(CORE, "glanceB1Eligible"), _fn(CORE, "glanceB1Kinds")])
+
+
+def _daily(n=30, **kw):
+    labels = [f"2026-09-{d:02d}" for d in range(1, n + 1)]
+    cfg = {"type": "bar", "data": {"labels": labels, "datasets": [{"label": "ยอดขาย", "data": [100 + (i % 7) * 10 for i in range(n)]}]}}
+    cfg.update(kw)
+    return cfg
+
+
+# ── the classifier ───────────────────────────────────────────────────────────────────────────────────────────────────
+@needs_node
+def test_b1_classifier_marks_above_below_weekend_latest_and_best():
+    got = _node(PRE, """(() => {
+  const vals = [10, 30, 20, 40, 50, 15, 25, 60, 35];
+  const wk = vals.map((v, i) => i === 5 || i === 6);
+  const r = glanceB1Kinds(vals, { weekend: wk });
+  return { avg: r.avg, latest: r.latest, best: r.best, tone: r.kinds.map(k => k.tone), wk: r.kinds.map(k => k.wk) };
+})()""")
+    assert got["latest"] == 8 and got["best"] == 7
+    assert abs(got["avg"] - sum([10, 30, 20, 40, 50, 15, 25, 60, 35]) / 9) < 1e-9
+    # avg = 31.67: 10 lo, 30 lo, 20 lo, 40 hi, 50 hi, 15 lo, 25 lo, 60 hi, 35 is the latest -> "now"
+    assert got["tone"] == ["lo", "lo", "lo", "hi", "hi", "lo", "lo", "hi", "now"]
+    assert got["wk"] == [False] * 5 + [True, True, False, False]
+
+
+@needs_node
+def test_b1_classifier_keeps_the_period_in_progress_out_of_latest_and_the_average():
+    got = _node(PRE, """(() => {
+  const r = glanceB1Kinds([100, 100, 100, 100, 100, 1], { partial: 5 });
+  return { avg: r.avg, latest: r.latest, best: r.best, part: r.kinds.map(k => k.part), tone: r.kinds.map(k => k.tone) };
+})()""")
+    assert got["avg"] == 100 and got["latest"] == 4 and got["best"] == 0          # the 1 (today, still trading) is not in the average
+    assert got["part"] == [False] * 5 + [True] and got["tone"][4] == "now" and got["tone"][5] == "lo"
+
+
+@needs_node
+def test_b1_classifier_needs_four_finished_periods():
+    got = _node(PRE, "[glanceB1Kinds([1, 2, 3], {}), glanceB1Kinds([1, 2, 3, 4], { partial: 3 }), glanceB1Kinds([1, null, 3, 4, 5], {}) !== null]")
+    assert got == [None, None, True]
+
+
+# ── who gets B1 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+@needs_node
+def test_b1_applies_to_a_one_series_period_bar_chart_only():
+    def elig(cfg):
+        return _node(PRE, f"glanceB1Eligible({json.dumps(cfg)})")
+    assert elig(_daily()) is True                                                                     # sales by day
+    months = {"type": "bar", "data": {"labels": ["ม.ค. 69", "ก.พ. 69", "มี.ค. 69", "เม.ย. 69", "พ.ค. 69", "มิ.ย. 69"],
+                                      "datasets": [{"label": "ยอดขาย", "data": [5, 6, 7, 8, 9, 10]}]}}
+    assert elig(months) is True                                                                       # a monthly axis is periodic too
+    two = _daily(); two["data"]["datasets"].append({"label": "ปีก่อน", "data": [90] * 30})
+    assert elig(two) is False                                                                         # comparison / multi-series
+    line_overlay = _daily(); line_overlay["data"]["datasets"].append({"type": "line", "label": "แนวโน้ม", "data": [100] * 30})
+    assert elig(line_overlay) is False
+    stacked = _daily(options={"scales": {"x": {"stacked": True}, "y": {"stacked": True}}})
+    assert elig(stacked) is False
+    assert elig(_daily(options={"indexAxis": "y"})) is False                                          # horizontal
+    cats = {"type": "bar", "data": {"labels": ["ขอนแก่น", "โคราช", "อุดร", "สุรินทร์", "อุบล", "นครสวรรค์"],
+                                    "datasets": [{"label": "ยอดขาย", "data": [5, 6, 7, 8, 9, 10]}]}}
+    assert elig(cats) is False                                                                        # a category axis has no "latest"
+    assert elig(_daily(options={"plugins": {"glance": {"b1": False}}})) is False                      # opt-out
+    assert elig(_daily(options={"plugins": {"glance": False}})) is False
+    assert elig({"type": "line", "data": _daily()["data"]}) is False
+    assert elig(_daily(n=4)) is False                                                                 # too few periods
+
+
+@needs_node
+def test_b1_frame_is_built_for_one_series_and_not_for_several():
+    pre = "\n".join([_const(CORE, "_GLANCE_TIME_RE"), FINITE, _const(CORE, "B1_PAL"), _fn(CORE, "glanceB1Kinds"),
+                     _const(CORE, "_glancePartial"),
+                     _const(CORE, "_glanceIsDark"), _fn(CORE, "_glanceB1Frame")])
+    pre = "const document = { body: { classList: { contains: () => false } } };\n" + pre
+    got = _node(pre, """(() => {
+  const mk = (n, metas, b1) => ({ $b1: b1, $gi: { partial: -1 }, canvas: null,
+    data: { datasets: metas.map(() => ({ data: Array.from({ length: n }, (_, i) => 10 + (i % 5)) })) },
+    getSortedVisibleDatasetMetas: () => metas.map((t, index) => ({ type: t, index })) });
+  const gi = { grain: 'day', dates: Array.from({ length: 12 }, (_, i) => ({ y: 2026, m: 9, d: i + 1 })) };
+  const one = _glanceB1Frame(mk(12, ['bar'], true), gi), two = _glanceB1Frame(mk(12, ['bar', 'bar'], true), gi);
+  const off = _glanceB1Frame(mk(12, ['bar'], false), gi), line = _glanceB1Frame(mk(12, ['line'], true), gi);
+  return { one: one && [one.latest, one.kinds.length, one.pal.t1], two, off, line, wk: one.kinds.filter(k => k.wk).length };
+})()""")
+    assert got["one"] == [11, 12, "#f0a500"] and got["two"] is None and got["off"] is None and got["line"] is None
+    assert got["wk"] == 3          # 2026-09-05/06 (Sat, Sun) and 2026-09-12 (Sat)
+
+
+# ── palette ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+@needs_node
+def test_the_canvas_palette_equals_the_ch_tokens_light_and_dark():
+    pal = _node(_const(CORE, "B1_PAL"), "B1_PAL")
+    assert TOKENS.count("--ch-a1:") == 2
+    blocks = [TOKENS[m.start():m.start() + 900] for m in re.finditer(r"--ch-a1:", TOKENS)]
+    for name, block in zip(("light", "dark"), blocks):
+        tok = dict(re.findall(r"--ch-([a-z0-9]+): (#[0-9a-fA-F]{6})", block))
+        p = pal[name]
+        for k in ("a1", "a2", "aw1", "aw2", "b1", "b2", "bw1", "bw2", "t1", "t2", "tstroke", "avg"):
+            assert tok[k].lower() == p[k].lower(), (name, k)
+        for i in range(6):
+            assert tok[f"c{i + 1}"].lower() == p["c"][i].lower(), (name, "c", i)
+        for i in range(5):
+            assert tok[f"s{i + 1}"].lower() == p["s"][i].lower(), (name, "s", i)
+    # the heat scale is the sequential set
+    html = _src("index.html")
+    for name, sel in (("light", ":root {\n  --heat-s1"), ("dark", "body.dark {\n  --heat-s1")):
+        i = html.index(sel)
+        got = re.findall(r"--heat-s[1-5]:(#[0-9a-fA-F]{6})", html[i:i + 400])
+        assert [g.lower() for g in got] == [c.lower() for c in pal[name]["s"]], name
+
+
+@needs_node
+def test_old_series_colours_become_the_b_set_and_keep_their_alpha():
+    pre = _const(CORE, "PALETTE") + "\n" + _const(CORE, "B1_PAL") + "\n" + _const(CORE, "_B_OLD") + "\n" + _const(CORE, "_B_EXTRA") + "\n" + _fn(CORE, "glanceBColour")
+    got = _node(pre, "[glanceBColour('#2a78d6', false), glanceBColour('#2A78D6', true), glanceBColour('#1baf7a33', false), glanceBColour('#5a9f33', false), "
+                     "glanceBColour('#4a70b0', false), glanceBColour('#123456', false), glanceBColour('rgba(1,2,3,.5)', false), glanceBColour(null, false)]")
+    assert got == ["#3a2fb5", "#9d98ff", "#c25e0033", "#8a92b8", "#3a2fb5", "#123456", "rgba(1,2,3,.5)", None]
+
+
+def test_line_charts_are_2_5_px_and_chart_text_is_at_least_12px():
+    assert "Chart.defaults.elements.line.borderWidth = 2.5" in MOB
+    assert "ds.borderWidth = 2.5" in CORE
+    plugin = CORE[CORE.index("const GLANCE_PLUGIN = {"):]
+    for bad in re.findall(r"_glanceText\([^;]*?(?:,\s*)(\d+),\s*\d+\);", plugin):
+        assert int(bad) >= 12, bad
+    assert not re.search(r"narrow \? 10", CORE)
+    assert "font: { size: 11 }" not in CORE and "{ size: 11 }" not in CORE
+
+
+# ── the phone columns ────────────────────────────────────────────────────────────────────────────────────────────────
+ESC = "const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');\n"
+
+
+@needs_node
+def test_phone_columns_wear_b1():
+    pre = ESC + _fn(CORE, "glanceB1Kinds") + "\n" + _fn(MOB, "msColumns")
+    got = _node(pre, """(() => {
+  const vals = [50, 52, 49, 90, 95, 51, 53, 55, 88, 99, 54, 60, 61];
+  const wk = vals.map((v, i) => [3, 4, 8, 9].includes(i));
+  const svg = msColumns(vals, { partial: 12, weekend: wk, labels: vals.map((v, i) => 'd' + i), fmt: v => String(Math.round(v)), grain: 'day', height: 110 });
+  const few = msColumns([1, 2, 3], { labels: ['a', 'b', 'c'], fmt: String });
+  const sizes = [...svg.matchAll(/font-size="(\\d+)"/g)].map(m => +m[1]);
+  return { defs: (svg.match(/<linearGradient/g) || []).length, grad: (svg.match(/fill="url\\(#/g) || []).length, dots: (svg.match(/<circle/g) || []).length,
+           edge: svg.includes('--ch-tstroke'), dashed: svg.includes('stroke-dasharray="3 2"'), avgLine: svg.includes('stroke-dasharray="5 3"'),
+           minFont: Math.min(...sizes), gold: svg.includes('--gold-i'), few: few.includes('linearGradient') };
+})()""")
+    assert got["defs"] == 5 and got["grad"] == 12                  # 12 finished columns filled by a gradient; the 13th is the hollow in-progress one
+    assert got["dots"] == 4 and got["edge"] and got["dashed"] and got["avgLine"] and got["gold"]
+    assert got["minFont"] >= 12
+    assert got["few"] is False                                     # under 4 finished periods: the plain accent columns

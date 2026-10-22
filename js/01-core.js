@@ -1099,12 +1099,67 @@ async function deleteUser(username) {
 // first eight are the dataviz reference palette — adjacent pairs pass the CVD
 // (deutan/protan/tritan) and normal-vision separation gates on a light surface —
 // followed by four spares for the rare chart with more than eight series.
+// VZ2 (2026-10-22): the glance layer re-colours these twelve slots to the theme-B set (B1_PAL below) at chart init, so legends
+// and bars agree; the list stays as the key to that mapping.
 // 2026-10-02 owner: "สีแท่งสดไปหน่อย … อยากได้ความพาสเทล" — the pastel is applied to EVERY
-// bar by the glance layer's shade (see _glanceGrad: tip 25% / base 50% toward the
+// bar by the glance layer's shade (see _glanceBarGrad, VZ2: tip lighter than the base, per bar; was tip 25% / base 50% toward the
 // surface), so status-coloured bars (good/bad amber-green-red) soften with the
 // series ones. The palette itself stays the validated reference set; legends and
 // tooltips keep these true colours.
 const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948','#1d9bd8','#c47b2a','#9b5fb8','#5a9f33'];
+
+// ── Theme B charts (VZ2, 2026-10-22; owner chose variant B1 "gradient + meaning") ──────────────
+// B1_PAL mirrors the --ch-* tokens in docs/ui-kit/tokens.css (backend/test_charts_b1.py keeps them equal); canvas charts cannot
+// read a CSS variable, so the plugin below takes these. a/aw above the average (weekend brighter), b/bw below it, t the latest
+// bar (gold, dark edge), c the 6 categorical series colours, spare 6 more for a chart with more series, s the 5-step sequential
+// scale, avg the average line, gi gold as text. Colour-blind safe: teal/indigo vs lilac vs gold, never red against green.
+const B1_PAL = {
+  light: {
+    a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: '#9a84e6', bw2: '#8468d8',
+    t1: '#f0a500', t2: '#b86e00', tstroke: '#7a4a00', avg: '#475569', gi: '#7a4500',
+    c: ['#3a2fb5', '#0e8f87', '#c25e00', '#b01d62', '#1d78c9', '#6b7399'],
+    spare: ['#6a62d8', '#38a89f', '#d9822b', '#d4577f', '#4a97dc', '#8a92b8'],
+    s: ['#7686da', '#6a66d4', '#5b52cc', '#3f33a8', '#2b1f80'],
+  },
+  dark: {
+    a1: '#2dd4bf', a2: '#818cf8', aw1: '#5eead4', aw2: '#a5b4fc', b1: '#8b78d8', b2: '#7a66c8', bw1: '#9a88e4', bw2: '#8975d6',
+    t1: '#fcd34d', t2: '#f5b82e', tstroke: '#fff3c4', avg: '#c3cddb', gi: '#fcd34d',
+    c: ['#9d98ff', '#2dd4bf', '#fbbf24', '#f472b6', '#60a5fa', '#b4b9e0'],
+    spare: ['#b7b3ff', '#6fe3d3', '#fcd34d', '#f9a8d4', '#93c5fd', '#d3d7f0'],
+    s: ['#5c6bc0', '#7d86d8', '#9d98e8', '#c0b8f6', '#e6e0ff'],
+  },
+};
+const _B_OLD = PALETTE.map(c => c.toLowerCase());
+// SEMANTIC.revenue (the main series blue of the sales lines) takes the first B colour
+const _B_EXTRA = { '#4a70b0': 0 };
+// A series colour the old PALETTE gave (optionally with an alpha suffix, '#2a78d633') becomes the B colour of the same slot.
+function glanceBColour(c, dark) {
+  if (typeof c !== 'string') return c;
+  const m = c.toLowerCase().match(/^(#[0-9a-f]{6})([0-9a-f]{2})?$/);
+  const i = m ? (m[1] in _B_EXTRA ? _B_EXTRA[m[1]] : _B_OLD.indexOf(m[1])) : -1;
+  if (i < 0) return c;
+  const p = dark ? B1_PAL.dark : B1_PAL.light;
+  return (i < 6 ? p.c[i] : p.spare[i - 6]) + (m[2] || '');
+}
+// The B1 classifier for ONE series on a period axis (daily / weekly / monthly bars). vals: one number per period (null = none);
+// o.partial: the index still in progress (left out of the average and never "latest"); o.weekend: one boolean per period.
+// Returns null under 4 finished periods (an average of three says nothing), else
+//   { avg, latest, best, kinds[i] = { tone: 'now' | 'hi' | 'lo', wk, part } }  (tone 'hi' = at or above the average).
+function glanceB1Kinds(vals, o) {
+  o = o || {};
+  const P = o.partial == null ? -1 : o.partial;
+  const comp = [];
+  vals.forEach((v, i) => { if (v != null && i !== P) comp.push(i); });
+  if (comp.length < 4) return null;
+  const avg = comp.reduce((a, i) => a + vals[i], 0) / comp.length;
+  const latest = comp[comp.length - 1];
+  let best = comp[0];
+  comp.forEach(i => { if (vals[i] > vals[best]) best = i; });
+  const wk = o.weekend || [];
+  const kinds = vals.map((v, i) => v == null ? null
+    : { tone: i === latest ? 'now' : (v >= avg ? 'hi' : 'lo'), wk: !!wk[i], part: i === P });
+  return { avg, latest, best, kinds };
+}
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
@@ -1446,14 +1501,8 @@ function _glanceDot(ctx, x, y, color, surface) {
   ctx.stroke();
 }
 
-// Bar fill, cached per chart area + colour. Two rules make bars read as solid,
-// even colour instead of milky:
-//  - a see-through colour (many charts fade their non-highlighted bars) is
-//    flattened onto the card surface first, so it keeps its tone but gridlines
-//    no longer show through it;
-//  - the gradient is a SHADE, not a fade: full colour at the tip easing to the
-//    colour mixed 50% toward the surface at the zero line (both ways when
-//    negatives exist), so a short bar is still clearly its colour.
+// A see-through colour (many charts fade their non-highlighted bars) is flattened onto the card surface first, so it keeps
+// its tone but nothing shows through it.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
 // Lift a colour in HSL: +dl lightness (clamped to 0.86 so it never turns white) and
 // saturation × ks (clamped to 1) — the pastel that keeps its hue.
@@ -1473,32 +1522,15 @@ function _glanceLift(c, dl, ks) {
   const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, pp = 2 * l - q;
   return [Math.round(f(pp, q, h + 1 / 3) * 255), Math.round(f(pp, q, h) * 255), Math.round(f(pp, q, h - 1 / 3) * 255), 1];
 }
-function _glanceGrad(chart, rgba, surf, vs, horizontal) {
-  const a = chart.chartArea, g = chart.$glance || (chart.$glance = {});
-  const zero = vs && typeof vs.getPixelForValue === 'function' ? vs.getPixelForValue(0) : (horizontal ? a.left : a.bottom);
-  const key = `${rgba.join()}|${surf.join()}|${horizontal}|${a.left}|${a.top}|${a.right}|${a.bottom}|${Math.round(zero)}`;
-  g.grads = g.grads || new Map();
-  if (g.grads.has(key)) return g.grads.get(key);
-  const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-  // Pastel bars (owner 2026-10-02, "พาสเทลได้แล้ว แต่อยากให้สีเด่นขึ้น"): lighter, not
-  // washed — the hue keeps (even gains) its saturation while lightness rises, so
-  // a bar reads as a clear candy colour instead of a grey tint. Tip = L+0.10,
-  // S×1.25; base = L+0.24, S×1.15 (clamped). Applies to every bar chart whatever
-  // colour it was given; legends/tooltips keep the true colour.
-  const strong = _glanceCss(_glanceLift(solid, 0.11, 1.10), 1), weak = _glanceCss(_glanceLift(solid, 0.25, 1.05), 1);
-  const ctx = chart.ctx;
-  const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0)
-                          : ctx.createLinearGradient(0, a.top, 0, a.bottom);
-  const span = horizontal ? a.right - a.left : a.bottom - a.top;
-  const z = Math.max(0, Math.min(1, ((horizontal ? zero - a.left : zero - a.top) / (span || 1))));
-  // Strong at both far edges, lightest at the zero line (a baseline at an edge
-  // simply drops that edge's stop, so the bar never ends in a hard 1px band).
-  if (z > 0.001) grad.addColorStop(0, strong);
-  grad.addColorStop(z, weak);
-  if (z < 0.999) grad.addColorStop(1, strong);
-  if (g.grads.size > 64) g.grads.clear();
-  g.grads.set(key, grad);
-  return grad;
+// One bar's fill: the tip colour easing to the base colour along the bar (so a short bar is still clearly its colour),
+// drawn per element because each bar has its own length and its own kind (B1) or series colour.
+function _glanceBarGrad(ctx, el, horizontal, tip, base) {
+  const t = horizontal ? el.x : el.y, b = el.base;
+  if (!isFinite(t) || !isFinite(b) || t === b) return base;
+  const g = horizontal ? ctx.createLinearGradient(t, 0, b, 0) : ctx.createLinearGradient(0, t, 0, b);
+  g.addColorStop(0, tip);
+  g.addColorStop(1, base);
+  return g;
 }
 
 // ── Dates behind the x labels ──
@@ -1712,6 +1744,77 @@ function _glanceSetHeadline(chart, html) {
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 
+// ── B1 (VZ2) ────────────────────────────────────────────────────────────────
+// Config-time test for the one-series period bar chart that gets the B1 look: a vertical, unstacked bar chart with ONE visible
+// dataset on a period axis (days, weeks, months) and at least 5 periods. Multi-series, stacked, horizontal and category charts keep
+// the categorical palette; opt out with options.plugins.glance = { b1: false }.
+function glanceB1Eligible(cfg) {
+  const o = (cfg && cfg.options) || {}, go = o.plugins && o.plugins.glance;
+  if (go === false || (go && go.b1 === false)) return false;
+  if (!cfg || cfg.type !== 'bar' || o.indexAxis === 'y') return false;
+  if (o.scales && Object.values(o.scales).some(s => s && s.stacked)) return false;
+  const sets = ((cfg.data && cfg.data.datasets) || []).filter(ds => ds && !ds.hidden);
+  if (sets.length !== 1 || (sets[0].type && sets[0].type !== 'bar') || _GLANCE_SKIP_RE.test(sets[0].label || '')) return false;
+  if ((sets[0].data || []).filter(v => _glanceFinite(v) != null).length < 5) return false;
+  const labels = ((cfg.data && cfg.data.labels) || []).map(l => Array.isArray(l) ? l.join(' ') : String(l ?? ''));
+  return labels.length >= 5 && (labels.filter(l => _GLANCE_TIME_RE.test(l.trim())).length >= labels.length * 0.6
+                              || labels.every(l => /^\d{1,2}$/.test(l.trim())));
+}
+// No gridlines; the category axis names only its first, middle and last period; tick text 12 px.
+function _glanceB1Axes(o) {
+  o.scales = o.scales || {};
+  const keys = Object.keys(o.scales);
+  const xk = keys.find(k => k === 'x' || (o.scales[k] && o.scales[k].axis === 'x')) || 'x';
+  const yk = keys.find(k => k !== xk && (k === 'y' || (o.scales[k] && o.scales[k].axis === 'y'))) || 'y';
+  const x = o.scales[xk] = o.scales[xk] || {}, y = o.scales[yk] = o.scales[yk] || {};
+  [x, y].forEach(sc => {
+    sc.grid = Object.assign({}, sc.grid, { display: false });
+    sc.ticks = sc.ticks || {};
+    const f = sc.ticks.font || {};
+    sc.ticks.font = Object.assign({}, f, { size: Math.max(12, f.size || 12), weight: f.weight || 600 });
+  });
+  const base = x.ticks.callback;
+  x.ticks.autoSkip = false;
+  delete x.ticks.maxTicksLimit;
+  x.ticks.maxRotation = 0;
+  x.ticks.minRotation = 0;
+  x.ticks.padding = Math.max(x.ticks.padding || 0, 12);   // room for the weekend dots between the bars and the labels
+  x.ticks.callback = function (v, i, t) {
+    const n = (t && t.length) || 0;
+    const room = this && this.width ? this.width : 999;   // a narrow chart names only its first and last period
+    if (n > 3 && i !== 0 && i !== n - 1 && (room < 260 || i !== Math.floor((n - 1) / 2))) return '';
+    return base ? base.call(this, v, i, t) : this.getLabelForValue(v);
+  };
+}
+// Old-palette series colours become the B colours (bars, lines and slices), legend swatches included.
+function _glanceRecolour(cfg, dark) {
+  if (!cfg || !['bar', 'line', 'doughnut', 'pie'].includes(cfg.type)) return;
+  ((cfg.data && cfg.data.datasets) || []).forEach(ds => {
+    ['backgroundColor', 'borderColor', 'pointBackgroundColor', 'pointBorderColor'].forEach(p => {
+      const v = ds[p];
+      if (typeof v === 'string') ds[p] = glanceBColour(v, dark);
+      else if (Array.isArray(v)) ds[p] = v.map(c => glanceBColour(c, dark));
+    });
+    // theme B lines are 2.5 px (a line asked for 2 px, or left to the default, gets the B weight; a hairline or a thick one stays)
+    if ((ds.type || cfg.type) === 'line' && (ds.borderWidth === 2 || ds.borderWidth === undefined)) ds.borderWidth = 2.5;
+  });
+}
+const _glanceIsDark = chart => !(chart.canvas && chart.canvas.closest('[data-force-light]')) && document.body.classList.contains('dark');
+// The B1 plan for one frame: the classifier over the series, its palette and the bar meta. Null when the chart is not B1 or has < 4 finished periods.
+function _glanceB1Frame(chart, gi) {
+  if (!chart.$b1) return null;
+  const metas = chart.getSortedVisibleDatasetMetas();
+  if (metas.length !== 1 || metas[0].type !== 'bar') return null;
+  const vals = (chart.data.datasets[metas[0].index].data || []).map(_glanceFinite);
+  // weekends only on a run of consecutive days (weekly bars labelled with their first day are not days)
+  const ms = d => Date.UTC(d.y, d.m - 1, d.d);
+  const daily = gi.grain === 'day' && gi.dates.length === vals.length && gi.dates.every((d, i) => i === 0 || ms(d) - ms(gi.dates[i - 1]) === 86400000);
+  const wk = daily
+    ? gi.dates.map(d => { const w = new Date(d.y, d.m - 1, d.d).getDay(); return w === 0 || w === 6; }) : [];
+  const k = glanceB1Kinds(vals, { partial: _glancePartial(chart), weekend: wk });
+  return k && Object.assign(k, { meta: metas[0], pal: _glanceIsDark(chart) ? B1_PAL.dark : B1_PAL.light });
+}
+
 const GLANCE_PLUGIN = {
   id: 'glance',
 
@@ -1720,6 +1823,9 @@ const GLANCE_PLUGIN = {
   beforeInit(chart) {
     const cfg = chart.config, o = cfg.options || {};
     const go = o.plugins && o.plugins.glance;
+    if (go !== false) _glanceRecolour(cfg, _glanceIsDark(chart));
+    chart.$b1 = glanceB1Eligible(cfg);
+    if (chart.$b1) _glanceB1Axes(o);
     if (go === false || (cfg.type !== 'line' && cfg.type !== 'bar') || o.indexAxis === 'y') return;
     const sets = (cfg.data && cfg.data.datasets) || [];
     const yStacked = o.scales && o.scales.y && o.scales.y.stacked;
@@ -1743,7 +1849,7 @@ const GLANCE_PLUGIN = {
     let need = 0;
     const ctx = chart.ctx;
     ctx.save();
-    ctx.font = `600 ${narrow ? 10 : 11}px ${Chart.defaults.font.family}`;
+    ctx.font = `700 12px ${Chart.defaults.font.family}`;
     (narrow ? ends.slice(0, 1) : ends).forEach(ds => {
       const d = ds.data || [];
       let i = d.length - 1;
@@ -1793,8 +1899,11 @@ const GLANCE_PLUGIN = {
     chart.$glanceHollow = [];
     chart.$glanceWeekend = [];
     const gi = chart.$gi || {};
-    // Weekend bands behind a daily axis.
-    if (gi.grain === 'day' && gi.dates.length >= 7 && chart.options.indexAxis !== 'y' && _glanceOpt(chart, 'weekend')) {
+    // B1 (one-series period bars): above / below the average, weekend, latest, best (see glanceB1Kinds).
+    const b1 = _glanceB1Frame(chart, gi);
+    chart.$glanceB1 = b1;
+    // Weekend bands behind a daily axis (B1 marks weekends with a dot under the axis instead).
+    if (!b1 && gi.grain === 'day' && gi.dates.length >= 7 && chart.options.indexAxis !== 'y' && _glanceOpt(chart, 'weekend')) {
       const xs = Object.values(chart.scales).find(s => s.axis === 'x');
       if (xs && xs.type === 'category') {
         const a = chart.chartArea, g = _glanceTheme(chart), ctx = chart.ctx;
@@ -1831,19 +1940,33 @@ const GLANCE_PLUGIN = {
         if (m.type === 'bar') {
           m.data.forEach((el, i) => {
             if (!el || el.active || !el.options) return;
-            const orig = seen.get(el.options)?.get('backgroundColor') ?? el.options.backgroundColor;
-            const rgba = _glanceRgba(orig);
-            if (!rgba || !(rgba[3] > 0)) return;
+            const own = el.options;
+            const bk = b1 && m === b1.meta ? b1.kinds[i] : null;
+            let rgba, cTip, cBase, edge = null;
+            if (bk) {
+              const key = (bk.tone === 'now' ? 't' : bk.tone === 'hi' ? 'a' : 'b') + (bk.tone !== 'now' && bk.wk ? 'w' : '');
+              cTip = b1.pal[key + '1']; cBase = b1.pal[key + '2'];
+              rgba = _glanceRgba(cBase);
+              if (bk.tone === 'now') edge = b1.pal.tstroke;
+            } else {
+              rgba = _glanceRgba(own.backgroundColor);
+              if (!rgba || !(rgba[3] > 0)) return;
+              // theme B categorical bars: the series colour, a touch lighter at the tip (a see-through colour is flattened onto the card first)
+              const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
+              cTip = _glanceCss(_glanceLift(solid, 0.10, 1.05), 1); cBase = _glanceCss(solid, 1);
+            }
+            // A per-bar copy of the options: bars of one dataset share one options object, and every bar here has its own fill.
+            const copy = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
+            restore.push([el, 'options', own]);
+            el.options = copy;
             if (i === P) {
               // The period in progress: a pale fill + dashed outline (drawn after the bars).
-              // A per-bar copy of the options, so a shared object does not hollow every bar.
-              const own = el.options;
-              restore.push([el, 'options', own]);
-              el.options = Object.assign(Object.create(Object.getPrototypeOf(own)), own, { backgroundColor: _glanceCss(rgba, rgba[3] * 0.18) });
+              copy.backgroundColor = _glanceCss(rgba, rgba[3] * 0.18);
               chart.$glanceHollow.push({ el, color: _glanceCss(rgba, Math.max(rgba[3], 0.7)) });
-            } else if (depth && !stacked) {
-              swap(el.options, 'backgroundColor', _glanceGrad(chart, rgba, surf, m.vScale, horizontal));
+              return;
             }
+            if (depth || bk) copy.backgroundColor = _glanceBarGrad(chart.ctx, el, horizontal, cTip, cBase);
+            if (edge) { copy.borderColor = edge; copy.borderWidth = 1.6; }
           });
         } else if (depth && m.type === 'line' && m.dataset && m.dataset.options) {
           const lo = m.dataset.options;
@@ -1873,9 +1996,9 @@ const GLANCE_PLUGIN = {
           const g = _glanceTheme(chart), ctx = chart.ctx;
           ctx.save();
           ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.lineWidth = 1;
-          ctx.strokeStyle = g.theme.textDim;
+          ctx.setLineDash([5, 3]);
+          ctx.lineWidth = 1.4;
+          ctx.strokeStyle = (_glanceIsDark(chart) ? B1_PAL.dark : B1_PAL.light).avg;
           ctx.moveTo(a.left, Math.round(y) + 0.5);
           ctx.lineTo(a.right, Math.round(y) + 0.5);
           ctx.stroke();
@@ -1905,20 +2028,31 @@ const GLANCE_PLUGIN = {
     (chart.$glanceRestore || []).forEach(([o, p, v]) => { o[p] = v; });
     chart.$glanceRestore = null;
     const wkCaps = chart.$glanceWeekend || [];
-    if (!_glanceOpt(chart, 'labels') && !chart.$glanceAvg && !wkCaps.length) return;
+    if (!_glanceOpt(chart, 'labels') && !chart.$glanceAvg && !wkCaps.length && !chart.$glanceB1) return;
     const g = _glanceTheme(chart), ctx = chart.ctx, a = chart.chartArea;
     ctx.save();
     const placed = [];
     if (chart.$glanceAvg) {
-      _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 10, 500);
+      _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 12, 700);
+    }
+    const b1 = chart.$glanceB1;
+    if (b1) {   // B1: a dot under the axis for each weekend period
+      ctx.fillStyle = g.theme.textDim;
+      b1.kinds.forEach((k, i) => {
+        const el = b1.meta.data[i];
+        if (!k || !k.wk || !el || el.skip) return;
+        ctx.beginPath();
+        ctx.arc(el.x, a.bottom + 6, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
     const plan = _glanceOpt(chart, 'labels') ? _glancePlan(chart) : null;
     // A narrow chart (tablet, the full dashboard on a phone) keeps one series'
     // labels and smaller type, so the end labels do not pile up.
-    const narrow = chart.width < 520, fs = narrow ? 10 : 11;
+    const narrow = chart.width < 520, fs = 12;
     {
-      const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 13 && Math.abs(p.x - x) < (p.w + w) / 2 + 4)
-                              && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 12 && x - w < a.left + 90);
+      const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 15 && Math.abs(p.x - x) < (p.w + w) / 2 + 4)
+                              && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 15 && x - w < a.left + 90);
       const put = (text, x, y, align, color, size, weight, halo = true) => {
         ctx.font = `${weight} ${size}px ${Chart.defaults.font.family}`;
         const w = ctx.measureText(text).width;
@@ -1944,8 +2078,8 @@ const GLANCE_PLUGIN = {
         const color = typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text;
         const text = _glanceFmt(m.vScale, v) + (i === _glancePartial(chart) && _glanceActual(ds) ? _glanceTag(chart) : '');
         const atEnd = !n || i >= n - 1;
-        const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 600)
-                         : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600);
+        const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 700)
+                         : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 700);
         if (ok) _glanceDot(ctx, el.x, el.y, color, g.surface);
       });
       // 2) the primary series' peak (+ the latest bar on a time axis)
@@ -1960,6 +2094,7 @@ const GLANCE_PLUGIN = {
         if (pm.type === 'bar' && plan.timeLike) {
           let last = vals.length - 1;
           while (last >= 0 && vals[last] == null) last--;
+          if (b1 && b1.latest !== last) marks.push(b1.latest);   // the gold bar always carries its value
           if (last >= 0) marks.push(last);
         }
         let lastLine = vals.length - 1;
@@ -1976,14 +2111,14 @@ const GLANCE_PLUGIN = {
             const fill = _glanceRgba(Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor);
             const lum = fill ? (0.299 * fill[0] + 0.587 * fill[1] + 0.114 * fill[2]) / 255 : 0;
             put(text, el.x, inside ? el.y + 11 : up ? el.y - 8 : el.y + 9, 'center',
-                inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : g.theme.labelStrong, fs, 600, !inside);
-          } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600)) {
+                inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : (b1 && i === b1.latest ? b1.pal.gi : g.theme.labelStrong), fs, 700, !inside);
+          } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 700)) {
             _glanceDot(ctx, el.x, el.y, typeof ds.borderColor === 'string' ? ds.borderColor : g.theme.text, g.surface);
           }
         });
       }
       // 3) name the weekend bands once, wherever the caption does not cover a label
-      for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 9, 500, false)) break;
+      for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 12, 600, false)) break;
     }
     ctx.restore();
   },
@@ -2013,7 +2148,7 @@ const GLANCE_PLUGIN = {
     ctx.font = `700 ${size}px ${Chart.defaults.font.family}`;
     if (ctx.measureText(big).width > r * 1.7) { ctx.restore(); return; }
     _glanceText(ctx, big, arc.x, arc.y - (sub ? size * 0.32 : 0), 'center', g.theme.labelStrong, g.surface, size, 700);
-    if (sub) _glanceText(ctx, sub, arc.x, arc.y + size * 0.62, 'center', g.theme.text, g.surface, Math.max(10, Math.round(size * 0.5)), 500);
+    if (sub) _glanceText(ctx, sub, arc.x, arc.y + size * 0.62, 'center', g.theme.text, g.surface, Math.max(12, Math.round(size * 0.5)), 600);
     ctx.restore();
   },
 };
@@ -2278,7 +2413,7 @@ function _phoneChartTune(config, ctx) {
   if (lg.display === undefined) lg.display = ds.length <= 6;
   if (lg.display !== false) {
     if (!lg.position) lg.position = 'bottom';
-    lg.labels = Object.assign({ boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 11 } }, lg.labels || {});
+    lg.labels = Object.assign({ boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 12 } }, lg.labels || {});
   }
   if (!['bar', 'line', 'scatter', 'bubble'].includes(type)) return;
   const horizontal = o.indexAxis === 'y';
@@ -2297,7 +2432,7 @@ function _phoneChartTune(config, ctx) {
     } else if (!categoryAxis && sc.ticks.maxTicksLimit === undefined) {
       sc.ticks.maxTicksLimit = 5;
     }
-    sc.ticks.font = Object.assign({ size: 11 }, sc.ticks.font || {});
+    sc.ticks.font = Object.assign({ size: 12 }, sc.ticks.font || {});
   });
 }
 

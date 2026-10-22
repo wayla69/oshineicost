@@ -41,6 +41,12 @@
   --fix-f:   #c62828; --fix-f2:   #d33a3a; --fix-t:   #ffdcdc; --fix-i:   #9b1414; --fix-on:   #ffffff;
   --neu-f:   #4a5578; --neu-f2:   #4a5578; --neu-t:   #e3e7f6; --neu-i:   #333a63; --neu-on:   #ffffff;
   --gold: #f59e0b; --gold-i: #7a4500; --on-gold: #1f1300;
+  /* Chart set B1 (VZ2): a above the average (teal->indigo), b below (lilac), w weekend, t latest (gold), c1-c6 categorical, s1-s5 sequential.
+     js/01-core.js B1_PAL mirrors these values (backend/test_charts_b1.py keeps them equal). */
+  --ch-a1: #0c8f81; --ch-a2: #3a2fb5; --ch-aw1: #0f9d8e; --ch-aw2: #5148d4; --ch-b1: #8f78df; --ch-b2: #7e62d2; --ch-bw1: #9a84e6; --ch-bw2: #8468d8;
+  --ch-t1: #f0a500; --ch-t2: #b86e00; --ch-tstroke: #7a4a00; --ch-avg: #475569; --ch-mark: #b86e00;
+  --ch-c1: #3a2fb5; --ch-c2: #0e8f87; --ch-c3: #c25e00; --ch-c4: #b01d62; --ch-c5: #1d78c9; --ch-c6: #6b7399;
+  --ch-s1: #7686da; --ch-s2: #6a66d4; --ch-s3: #5b52cc; --ch-s4: #3f33a8; --ch-s5: #2b1f80;
   /* the hero band: indigo -> violet -> magenta; text on every stop >= 4.5:1 */
   --hero1: #3a2fb5; --hero-mid: #6a2aa8; --hero2: #b01d62; --hero-ink: #ffffff; --hero-ink2: #f3e8ff;
   --rail-grad1: #271f8a; --rail-grad2: #8a1650;
@@ -113,6 +119,10 @@ body.dark {
   --fix-f:   #f87171; --fix-f2:   #f87171; --fix-t:   #431a1f; --fix-i:   #ff9ea0; --fix-on:   #2a0705;
   --neu-f:   #9aa3d6; --neu-f2:   #9aa3d6; --neu-t:   #1f2350; --neu-i:   #c4caf0; --neu-on:   #0d1030;
   --gold: #fbbf24; --gold-i: #fcd34d; --on-gold: #1f1300;
+  --ch-a1: #2dd4bf; --ch-a2: #818cf8; --ch-aw1: #5eead4; --ch-aw2: #a5b4fc; --ch-b1: #8b78d8; --ch-b2: #7a66c8; --ch-bw1: #9a88e4; --ch-bw2: #8975d6;
+  --ch-t1: #fcd34d; --ch-t2: #f5b82e; --ch-tstroke: #fff3c4; --ch-avg: #c3cddb; --ch-mark: #fbbf24;
+  --ch-c1: #9d98ff; --ch-c2: #2dd4bf; --ch-c3: #fbbf24; --ch-c4: #f472b6; --ch-c5: #60a5fa; --ch-c6: #b4b9e0;
+  --ch-s1: #5c6bc0; --ch-s2: #7d86d8; --ch-s3: #9d98e8; --ch-s4: #c0b8f6; --ch-s5: #e6e0ff;
   --hero1: #271f8a; --hero-mid: #5a1f8a; --hero2: #8a1650; --hero-ink: #ffffff; --hero-ink2: #efe3ff;
   --rail-grad1: #150f50; --rail-grad2: #5b1140;
 
