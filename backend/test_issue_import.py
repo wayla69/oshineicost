@@ -98,7 +98,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
         row["สาเหตุของเสีย"] in dict(IS.WASTE_REASONS).values()
     assert row["สาเหตุของเสีย"] == IS.WASTE_REASON_TH["spill"] and row["หมายเหตุ"] == "หก"
     it = next(i for z in sh["zones"] for i in z["items"] if i["code"] == CRAB)
-    assert row["คงเหลือตามระบบ"] == pytest.approx(it["system_qty"], abs=0.01)
+    assert row["คงเหลือตามระบบ"] == BF.sys_text(it["system_qty"], PACK)
 
 
 def test_template_has_locked_grey_columns_a_reasons_sheet_and_a_dropdown(con):  # noqa: F811
@@ -678,3 +678,29 @@ def test_a_line_received_by_weight_is_received_in_the_app_not_from_a_file(con, m
     with pytest.raises(ValueError, match="รับรายการนี้ในแอป"):
         _rimp(con, wb, oid, dry_run=False, ack=True)
     assert _rstate(con) == before
+
+
+def test_system_stock_is_never_negative_in_a_file_for_the_slip_and_the_order(con, monkeypatch):  # noqa: F811
+    import copy
+    assert BF.sys_text(-0.5, "แพ็ค") == "น้อยกว่า 1 แพ็ค" and BF.sys_text(0, "แพ็ค") == "น้อยกว่า 1 แพ็ค"
+    assert BF.sys_text(0.4, "แพ็ค") == "น้อยกว่า 1 แพ็ค" and BF.sys_text(12.7, "แพ็ค") == "12.7 แพ็ค"
+    build_stock(con)
+    real = IS.sheet
+
+    def neg(c, bid, d, now=None):
+        sh = real(c, bid, d, now)
+        for z in sh["zones"]:
+            for it in z["items"]:
+                it["system_qty"] = -0.45
+        return sh
+    monkeypatch.setattr(IS, "sheet", neg)
+    wb, _ = _tmpl(con)
+    ws = wb[BF.SLIP_SHEET]
+    vals = [ws.cell(r, 6).value for r in range(3, ws.max_row + 1)]
+    assert vals and all(v.startswith("น้อยกว่า 1 ") for v in vals)
+    p = copy.deepcopy(_plan(con))
+    for r in p["rows"]:
+        r["system_qty"] = -62.9
+    owb, _ = BF.order_template(con, p, 1, "1", WED)
+    ows = owb[BF.ORDER_SHEET]
+    assert all(str(ows.cell(r, 4).value).startswith("น้อยกว่า 1 ") for r in range(3, ows.max_row + 1))

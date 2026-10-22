@@ -235,7 +235,7 @@ def slip_template(con, branch_id: int, start: date, days: int = 1, now: datetime
         for z in sh["zones"]:
             for it in z["items"]:
                 _add(ws, [d.isoformat(), it["code"], it.get("short_name") or it["name"], it["count_unit"],
-                          _q(it.get("normal_qty") or None, 2), _q(it.get("system_qty"), 2),
+                          _q(it.get("normal_qty") or None, 2), None if it.get("system_qty") is None else sys_text(it["system_qty"], it["count_unit"]),
                           it.get("used") or None, it.get("waste") or None,
                           _is.WASTE_REASON_TH.get(it.get("waste_reason")) if it.get("waste_reason") else None,
                           it.get("line_note")], edit)
@@ -373,6 +373,14 @@ def _unit_label(r: dict) -> str:
     return (r.get("recv_unit") or "แพ็ค") if r.get("order_unit") == "pack" else (r.get("base_unit") or "")
 
 
+def sys_text(v, unit) -> str:
+    """The system stock as the app pane writes it, for every template column that shows it: below one unit (zero or negative included) it
+    reads "น้อยกว่า 1 <unit>" - a file never shows a negative stock - else the figure with its unit."""
+    v = float(v)
+    u = str(unit or "").strip()
+    return f"น้อยกว่า 1 {u}".strip() if v < 1 else f"{round(v, 2):g} {u}".strip()
+
+
 def _q(v, nd=3):
     return None if v is None else round(float(v), nd)
 
@@ -397,7 +405,7 @@ def order_template(con, plan: dict, branch_id: int, rnd: str, delivery: date):
                 v, u = v / f, _unit_label(r)
             else:
                 u = r.get("system_unit") or r.get("count_unit") or r.get("base_unit") or ""
-            sys_txt = f"{round(v, 2):g} {u}".strip()
+            sys_txt = sys_text(v, u)
         no_sug = r.get("suggested", 0) is None
         sugg = None if no_sug else _q(r["order_units"] / f)
         last = r.get("last_order_qty") if no_sug else prev.get(r["code"])
