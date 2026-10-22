@@ -81,7 +81,7 @@ function renderDeptNav() {
   updateDeptNav(typeof activeTab === 'string' ? activeTab : '');
   navBadgesApply(); navBadgesStart(); pgSearchInit();
 }
-function deptNavHome() { _deptFocus = null; switchTab('launcher'); }
+function deptNavHome() { _deptFocus = null; switchTab(franchiseLogin() ? 'franchise' : 'launcher'); }   // PR-F1: the owner's หน้าแรก is ร้านของฉัน
 // a department entry of the rail: that department's workspace - the page last opened there, else its first page the person may open
 function deptNavOpen(key) {
   const row = deptVisible().find(r => r.dept.key === key);

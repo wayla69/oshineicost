@@ -503,6 +503,7 @@ function dismissStartCard() {
 }
 async function maybeShowStartCard() {
   if (!window.AUTH || !window.AUTH.enabled || !window.AUTH.authenticated) return;
+  if (franchiseLogin()) return;                 // PR-F1: one page, opened already - no card of steps on top of it
   try { if (localStorage.getItem(_startKey())) return; } catch(e) {}
   let me = null;
   try { me = await api(`${API}/api/usage/me`); } catch(e) { return; }
@@ -570,7 +571,9 @@ function _launcherLanding() { try { return !window.matchMedia('(max-width:700px)
 // them, the owner's summary and the pages (js/09c-mobile.js, "PHONE SHELL"). body.ph-on is set only there, so every rule keyed on it is
 // inert on a desktop.
 function phOn() { return document.body.classList.contains('ph-on'); }
-function _landingTab() { return _launcherLanding() ? 'launcher' : 'home'; }
+// PR-F1: the franchise owner has ONE page, ร้านของฉัน - the login lands on it directly (desktop and phone), never on a launcher of one tile
+function franchiseLogin() { return !!(window.AUTH && window.AUTH.enabled && window.AUTH.role === 'franchise'); }
+function _landingTab() { return franchiseLogin() ? 'franchise' : _launcherLanding() ? 'launcher' : 'home'; }
 
 // {login: name shown on screens} from /api/auth/me; whoTh() reads it (PR-M1)
 async function _loadAuthNames() {

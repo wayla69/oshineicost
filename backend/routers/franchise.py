@@ -11,6 +11,18 @@ module only picks the numbers and words the owner may see - no maths of its own 
   ingredients  bom_center.variance.period (latest counted period) + issue_reports.daily (waste, streak flag)
   discipline   bom_center.issue_reports.log_monthly (ใบตัดเบิก) + bom_center.hub.compliance (ใบสั่งซื้อ, รับสินค้า)
   verdict      "ดี / ควรดู / ต้องแก้": at most 3 one-line formal Thai sentences each, from the thresholds below
+  daily        (F1) one row per FINISHED day of the month (rules.closed_day_clause; the report's window ends on the last finished
+               day): net sales, bills, customers, per bill and the change on the same weekday one week earlier. The same grouped
+               query as the 30-day bars, on the same revenue rule (rules.net_revenue_sum: bill total / 1.07 less service charge)
+  trend_12m    (F1) the last 12 closed months and the month in progress, as /api/reports/management/months draws them
+               (reports.report_management_months: the report's own sums, weekday-fair MoM for the part month, the report's
+               GP basis). Each month on its own with MoM / YoY - never a sum over months
+  target       (F1) the month's sales target (targets.targets_for_month: a typed target wins, else the branch's own actual a
+               year earlier) against the sales so far, pro-rated by the report's weekday weights while the month is open
+  gp.coverage  (F1) the share of plates / sales with no cost yet, on the ONE coverage definition (rules.coverage_sums_sql:
+               needs_cost_sql + costed_sql). Food cost leaves those dishes out, so it is a floor
+  GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี. The Fly image has
+               no Chrome, so no server PDF; the page has a print stylesheet (A4 portrait) for a paper copy
 
 Who sees which branch: the branch comes from the signed session (auth.scope_branch). A `branch_id` that names another
 branch is refused with 403 `X-Denied: role`. A franchise login whose account carries no branch is refused too (it
@@ -41,6 +53,11 @@ Definitions that are not a plain copy of an engine's field
                                 over the orders processed with a delivery day in the month that has passed
   discipline.claims_month       claims raised in the month (not cancelled)
   discount_pct            report headline.discount_pct (discount over sales); policy ceiling headline.discount_policy_pct
+  daily[].vs_last_week_pct  net sales of the day against the same weekday seven days earlier (null when either has no sales)
+  target.to_date          month target x the elapsed share of the month. While the month is open the share is weighted by
+                          weekday exactly as the report's projection is (pace.proj_method 'dow': mtd / projected); without
+                          that, elapsed days / days in the month; a complete month: the full target
+  target.vs_to_date_pct   sales so far over target.to_date - 100 ; target.of_month_pct = sales so far over the month target
 
 Verdict thresholds (module constants, one place to tune; a value that is null is skipped, never judged)
   sales vs last month   >= +5 good ; <= -3 watch ; <= -10 fix          sales vs last year  >= +5 good ; <= -10 watch
@@ -161,28 +178,117 @@ def _gp_target(gp: dict, branch: str, month: str) -> None:
         gp["target_pct"], gp["target_basis"] = _num(pct), "last_year"
 
 
-def _daily(con, sales: dict, branch: str, last_day: Optional[str]):
-    """The last day of the report's window and the 30 days ending on it: one grouped query with the dashboard's own
-    revenue rule (rules.net_revenue_sum: bill total / 1.07 less service charge). A day without bills is null."""
-    from rules import net_revenue_sum, scope_filter
+TH_DOW = ("จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์")    # date.weekday() order
+
+
+def _daily(con, sales: dict, bid: int, last_day: Optional[str]):
+    """The last day of the report's window, the 30 days ending on it and (F1) every day of the month up to it, from ONE
+    grouped query on the dashboard's own revenue rule (rules.net_revenue_sum: bill total / 1.07 less service charge).
+    Only FINISHED days (rules.closed_day_clause): the report already ends its month-to-date window on the last finished
+    day, and the clause keeps the day still trading out even when a caller passes a later day. A day without bills is null."""
+    from rules import closed_day_clause, net_revenue_sum
     if not last_day:
         return
-    base, params = ["t.source='Easy'", "b.name!='ALL'"], {}
-    scope_filter(base, params, branch, None)
     end = date.fromisoformat(last_day)
-    start = end - timedelta(days=29)
-    rows = {r[0]: (r[1], r[2]) for r in con.execute(
-        f"SELECT date(t.sold_at), ROUND({net_revenue_sum('t')},2), COUNT(*) FROM sales_transaction t "
-        f"JOIN branches b ON b.branch_id=t.branch_id WHERE {' AND '.join(base)} "
-        f"AND t.sold_at >= :s AND t.sold_at < :e GROUP BY date(t.sold_at)",
-        {**params, "s": start.isoformat(), "e": (end + timedelta(days=1)).isoformat()})}
-    series = []
-    for i in range(30):
-        d = (start + timedelta(days=i)).isoformat()
-        series.append({"day": d, "revenue": _num(rows[d][0], 2) if d in rows else None})
-    sales["series_30d"] = series
-    sales["last_day"] = {"date": last_day, "revenue": _num(rows[last_day][0], 2) if last_day in rows else 0.0,
+    first = end.replace(day=1)
+    start = min(end - timedelta(days=29), first - timedelta(days=7))      # the table's first week compares with the month before
+    rows = {r[0]: (r[1], r[2], r[3]) for r in con.execute(
+        f"SELECT date(t.sold_at), ROUND({net_revenue_sum('t')},2), COUNT(*), COALESCE(SUM(t.customer_count),0) "
+        f"FROM sales_transaction t WHERE t.branch_id=:bid AND t.source='Easy' "
+        f"AND t.sold_at >= :s AND t.sold_at < :e AND {closed_day_clause('t.sold_at')} GROUP BY date(t.sold_at)",
+        {"bid": bid, "s": start.isoformat(), "e": (end + timedelta(days=1)).isoformat()})}
+
+    def rev(d):
+        return _num(rows[d][0], 2) if d in rows else None
+
+    s30 = end - timedelta(days=29)
+    sales["series_30d"] = [{"day": (s30 + timedelta(days=i)).isoformat(), "revenue": rev((s30 + timedelta(days=i)).isoformat())}
+                           for i in range(30)]
+    sales["last_day"] = {"date": last_day, "revenue": rev(last_day) if last_day in rows else 0.0,
                          "bills": rows[last_day][1] if last_day in rows else 0}
+    table = []
+    for i in range((end - first).days + 1):
+        dd = first + timedelta(days=i)
+        d, wk = dd.isoformat(), (dd - timedelta(days=7)).isoformat()
+        r = rows.get(d)
+        cur, prev = rev(d), rev(wk)
+        table.append({"date": d, "weekday": TH_DOW[dd.weekday()], "revenue": cur,
+                      "bills": r[1] if r else None, "customers": int(r[2]) if r else None,
+                      "per_bill": _num(r[0] / r[1], 0) if r and r[1] else None,
+                      "vs_last_week_pct": _num(100.0 * (cur - prev) / prev) if cur is not None and prev else None})
+    sales["daily"] = table
+    sales["daily_through"] = table[-1]["date"] if table else None
+
+
+def _trend_12m(branch: str) -> dict:
+    """The last 12 closed months and the month in progress, each on its own (never a sum over months), from the phone's
+    month-by-month series (reports.report_management_months): the report's sums, its weekday-fair MoM for the part month
+    and its GP basis, so a month reads here as it does in the management report."""
+    from routers.reports import report_management_months
+    raw = report_management_months(branch=branch, group=None, lang="th", closed=12)
+    d = json.loads(raw.body) if hasattr(raw, "body") else raw
+    if not d.get("available"):
+        return {"months": [], "latest": None}
+    out = []
+    for m in d.get("months") or []:
+        mom, yoy = m.get("mom") or {}, m.get("yoy") or {}
+        bills = m.get("bills") or 0
+        out.append({"month": m["month"], "label": m.get("label"), "partial": bool(m.get("mtd") or m.get("partial")),
+                    "through": m.get("through"), "days": m.get("days"),
+                    "revenue": _num(m.get("revenue"), 2), "customers": m.get("customers"), "bills": bills,
+                    "per_bill": _num(m["revenue"] / bills, 0) if bills and m.get("revenue") is not None else None,
+                    "gp_pct": _num(m.get("gp_pct")),
+                    "mom_pct": _num(mom.get("revenue")), "mom_basis": mom.get("basis"),
+                    "mom_customers_pct": _num(mom.get("customers")), "mom_gp_pp": _num(mom.get("gp_pp")),
+                    "yoy_pct": _num(yoy.get("revenue")) if yoy else None})
+    return {"months": out, "latest": out[-1] if out else None}
+
+
+def _target(con, rep: dict, sales: dict, branch: str, month: str) -> dict:
+    """The month's sales target (targets.py: a typed target wins, else the branch's own actual a year earlier) against the
+    sales so far. While the month is open the target to date follows the report's weekday weights (its projection), so a
+    month that has had fewer weekends so far is not judged behind; a complete month is judged against the full target."""
+    from targets import targets_for_month
+    rows = targets_for_month(con, month, branch=branch)
+    t = rows[0] if rows else {"source": "none", "revenue_target": 0, "basis_month": None}
+    out = {"source": t["source"], "basis_month": t.get("basis_month"), "month_target": None, "to_date": None,
+           "mtd": sales.get("mtd"), "vs_to_date_pct": None, "of_month_pct": None, "elapsed_share_pct": None,
+           "weighting": None, "month_complete": bool(sales.get("month_complete"))}
+    tgt = float(t.get("revenue_target") or 0)
+    if t["source"] == "none" or tgt <= 0:
+        out["source"] = "none"
+        return out
+    P = rep.get("pace") or {}
+    if sales.get("month_complete"):
+        share, how = 1.0, "month"
+    elif P.get("proj_method") == "dow" and P.get("projected") and P.get("mtd_revenue"):
+        share, how = min(1.0, float(P["mtd_revenue"]) / float(P["projected"])), "dow"
+    elif P.get("days_total"):
+        share, how = min(1.0, float(P.get("days_elapsed") or 0) / float(P["days_total"])), "days"
+    else:
+        share, how = 1.0, "month"
+    mtd = float(sales.get("mtd") or 0)
+    to_date = tgt * share
+    out.update({"month_target": round(tgt, 0), "to_date": round(to_date, 0), "elapsed_share_pct": _num(100.0 * share),
+                "weighting": how, "vs_to_date_pct": _num(100.0 * (mtd - to_date) / to_date) if to_date else None,
+                "of_month_pct": _num(100.0 * mtd / tgt)})
+    return out
+
+
+def _coverage(con, bid: int, month: str) -> Optional[dict]:
+    """The share of the month's plates and sales that should carry a cost and do not yet, on the ONE coverage definition
+    (rules.coverage_sums_sql = needs_cost_sql + costed_sql, the definition home, P&L and the coverage page use)."""
+    from rules import coverage_from_sums, coverage_sums_sql
+    r = con.execute(
+        f"SELECT {coverage_sums_sql('s')} FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id "
+        f"WHERE s.branch_id = :bid AND s.period_month = :m", {"bid": bid, "m": month}).fetchone()
+    if not r or not r["cov_plates"]:
+        return None
+    cov = coverage_from_sums(r)
+    pp, rp = cov.get("plates_pct"), cov.get("revenue_pct")
+    return {"uncosted_plates_pct": _num(100.0 - pp) if pp is not None else None,
+            "uncosted_sales_pct": _num(100.0 - rp) if rp is not None else None,
+            "floor": bool((pp is not None and pp < 100) or (rp is not None and rp < 100))}
 
 
 def _top_menus(branch: str, month: str) -> list:
@@ -362,16 +468,21 @@ def franchise_summary_data(branch_id: int, month: Optional[str] = None) -> dict:
         sales, gp, discount_pct, policy, last_day = _sales_and_gp(rep, name)
         sel = rep.get("selected_month") or month
         if sales is not None:
-            _safe("daily", lambda: _daily(con, sales, name, last_day))
+            _safe("daily", lambda: _daily(con, sales, branch_id, last_day))
         if gp and gp.get("gp_pct") is not None and sel:
             _gp_target(gp, name, sel)
+        if gp is not None and sel:
+            gp["coverage"] = _safe("coverage", lambda: _coverage(con, branch_id, sel))
+        target = _safe("target", lambda: _target(con, rep, sales, name, sel)) if sales is not None and sel else None
+        empty = {"months": [], "latest": None}
+        trend = _safe("trend", lambda: _trend_12m(name), empty) if sales is not None else empty
         top = _safe("top menus", lambda: _top_menus(name, sel), []) if sel and sales is not None else []
         ing = _safe("ingredients", lambda: _ingredients(con, branch_id, sel), None) if sel else None
         disc = _safe("discipline", lambda: _discipline(con, branch_id, sel), None) if sel else None
     months = [{"month": m["month"], "label": m.get("label"), "mtd": bool(m.get("mtd"))} for m in (rep.get("months") or [])]
     return {"branch": name, "month": sel, "label": rep.get("label"), "months": months,
             "available": bool(sales), "sales": sales, "gp": gp, "ingredients": ing, "discipline": disc,
-            "top_menus": top, "discount_pct": discount_pct,
+            "top_menus": top, "discount_pct": discount_pct, "target": target, "trend_12m": trend,
             "verdict": _verdict(sales, gp, ing, disc, discount_pct, policy)}
 
 
@@ -382,3 +493,100 @@ def franchise_summary(request: Request, month: Optional[str] = Query(None, patte
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     return franchise_summary_data(bid, month)
+
+
+# ── F1: the month as an Excel file ───────────────────────────────────────────
+# The Fly image (Dockerfile: python:3.12-slim, no Chrome / Playwright) cannot render a PDF on the server, so the download
+# is a workbook; a paper copy comes from the page itself (print stylesheet in index.html, A4 portrait). Every figure is
+# the summary's own (franchise_summary_data), so the file and the page never disagree; no other branch, no chain figure.
+_FX_BAHT, _FX_PCT = "#,##0", "0.0"
+_TARGET_SRC = {"manual": "เป้าที่กำหนดไว้", "last_year": "ยอดขายเดือนเดียวกันของปีก่อน", "none": "ไม่มีเป้า"}
+
+
+def _xl_rows(ws, rows, fmts):
+    for r in rows:
+        ws.append(list(r))
+        for i, f in enumerate(fmts):
+            if f:
+                ws.cell(row=ws.max_row, column=i + 1).number_format = f
+
+
+def franchise_workbook(d: dict):
+    """-> openpyxl Workbook with the sheets สรุป / รายวัน / 12 เดือน / เมนูขายดี for one summary payload."""
+    import openpyxl
+    from openpyxl.styles import Font
+    from routers.bom_center import _sheet
+    wb = openpyxl.Workbook()
+    s, g, t = d.get("sales") or {}, d.get("gp") or {}, d.get("target") or {}
+    cov = g.get("coverage") or {}
+    through = s.get("through") or s.get("daily_through")
+    head = f"ร้านของฉัน · สาขา{d.get('branch') or ''} · {d.get('label') or d.get('month') or ''}"
+
+    ws = wb.active
+    _sheet(ws, "สรุป", ["หัวข้อ", "ค่า", "หมายเหตุ"], head)
+    ws.column_dimensions["A"].width, ws.column_dimensions["B"].width, ws.column_dimensions["C"].width = 34, 18, 52
+    basis = "เทียบช่วงวันเดียวกัน ถ่วงตามวันในสัปดาห์" if not s.get("month_complete") else "เทียบทั้งเดือน"
+    pct = [None, _FX_PCT, None]
+    baht = [None, _FX_BAHT, None]
+    _xl_rows(ws, [("ข้อมูลถึงวันที่", through or "-", "วันล่าสุดที่ปิดการขายแล้ว")], [None, None, None])
+    _xl_rows(ws, [("ยอดขาย (ไม่รวม VAT)", s.get("mtd"), "ทั้งเดือน" if s.get("month_complete") else "สะสมถึงวันที่ข้างต้น")], baht)
+    _xl_rows(ws, [("เทียบเดือนก่อน (%)", s.get("mtd_vs_last_month_pct"), basis),
+                  ("เทียบช่วงเดียวกันของปีก่อน (%)", s.get("mtd_vs_last_year_pct"), "")], pct)
+    _xl_rows(ws, [("จำนวนบิล", s.get("bills"), ""), ("จำนวนลูกค้า", s.get("customers"), "")], [None, "#,##0", None])
+    _xl_rows(ws, [("เฉลี่ยต่อบิล (บาท)", s.get("per_bill"), "")], baht)
+    _xl_rows(ws, [("ส่วนลด (% ของยอดขาย)", d.get("discount_pct"), ""),
+                  ("กำไรขั้นต้น (%)", g.get("gp_pct"), ""),
+                  ("เป้ากำไรขั้นต้น (%)", g.get("target_pct"),
+                   "เดือนเดียวกันของปีก่อน" if g.get("target_basis") == "last_year" else "เดือนก่อน"),
+                  ("ต้นทุนอาหาร (% ของยอดขาย)", g.get("food_cost_pct"), "ค่าต่ำสุด: ไม่รวมเมนูที่ยังไม่มีต้นทุน"),
+                  ("เมนูที่ยังไม่มีต้นทุน (% ของจำนวนจาน)", cov.get("uncosted_plates_pct"), ""),
+                  ("เมนูที่ยังไม่มีต้นทุน (% ของยอดขาย)", cov.get("uncosted_sales_pct"), "")], pct)
+    if t.get("source") and t["source"] != "none":
+        _xl_rows(ws, [("เป้ายอดขายทั้งเดือน", t.get("month_target"), _TARGET_SRC.get(t["source"], "")),
+                      ("เป้ายอดขายถึงวันที่ข้อมูล", t.get("to_date"),
+                       "ถ่วงตามวันในสัปดาห์" if t.get("weighting") == "dow" else "ตามจำนวนวัน" if t.get("weighting") == "days" else "ทั้งเดือน")], baht)
+        _xl_rows(ws, [("ยอดขายเทียบเป้าถึงวันที่ข้อมูล (%)", t.get("vs_to_date_pct"), ""),
+                      ("ยอดขายคิดเป็นร้อยละของเป้าทั้งเดือน", t.get("of_month_pct"), "")], pct)
+    else:
+        _xl_rows(ws, [("เป้ายอดขาย", "-", "ยังไม่มีเป้าของเดือนนี้")], [None, None, None])
+    v = d.get("verdict") or {}
+    for key, word in (("good", "ดี"), ("watch", "ควรดู"), ("fix", "ต้องแก้")):
+        for line in v.get(key) or []:
+            ws.append([f"สรุป: {word}", "", line])
+
+    ws = wb.create_sheet()
+    _sheet(ws, "รายวัน", ["วันที่", "วัน", "ยอดขาย (ไม่รวม VAT)", "จำนวนบิล", "จำนวนลูกค้า", "เฉลี่ยต่อบิล", "เทียบวันเดียวกันสัปดาห์ก่อน (%)"],
+           f"{head} · เฉพาะวันที่ปิดการขายแล้ว")
+    _xl_rows(ws, [(x["date"], x["weekday"], x["revenue"], x["bills"], x["customers"], x["per_bill"], x["vs_last_week_pct"])
+                  for x in s.get("daily") or []], [None, None, _FX_BAHT, "#,##0", "#,##0", _FX_BAHT, _FX_PCT])
+
+    ws = wb.create_sheet()
+    _sheet(ws, "12 เดือน", ["เดือน", "สถานะ", "ยอดขาย (ไม่รวม VAT)", "เทียบเดือนก่อน (%)", "เทียบปีก่อน (%)", "จำนวนลูกค้า",
+                            "เฉลี่ยต่อบิล", "กำไรขั้นต้น (%)"],
+           f"ร้านของฉัน · สาขา{d.get('branch') or ''} · แต่ละเดือนแยกกัน เดือนที่ยังไม่จบเทียบช่วงวันเดียวกัน")
+    _xl_rows(ws, [(m.get("label") or m["month"], f"สะสมถึง {m['through']}" if m.get("partial") and m.get("through") else "ครบเดือน",
+                   m.get("revenue"), m.get("mom_pct"), m.get("yoy_pct"), m.get("customers"), m.get("per_bill"), m.get("gp_pct"))
+                  for m in (d.get("trend_12m") or {}).get("months") or []],
+             [None, None, _FX_BAHT, _FX_PCT, _FX_PCT, "#,##0", _FX_BAHT, _FX_PCT])
+
+    ws = wb.create_sheet()
+    _sheet(ws, "เมนูขายดี", ["อันดับ", "เมนู", "จำนวนจาน"], f"{head} · 10 อันดับตามจำนวนจาน")
+    ws.column_dimensions["B"].width = 48
+    _xl_rows(ws, [(i + 1, x["name"], x["plates"]) for i, x in enumerate(d.get("top_menus") or [])], [None, None, "#,##0"])
+    for w in wb.worksheets:
+        w.freeze_panes = "A3"
+        w["A1"].font = Font(italic=True, color="5F6C80")
+    return wb
+
+
+@router.get("/api/franchise/summary.xlsx")
+def franchise_summary_xlsx(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE),
+                           branch_id: Optional[int] = Query(None)):
+    """ดาวน์โหลดรายงานเดือนนี้: the summary of the month as an Excel file (same branch rules as the summary)."""
+    from routers.bom_center import _fname, _xlsx
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    d = franchise_summary_data(bid, month)
+    if not d.get("available"):
+        raise HTTPException(404, "ยังไม่มีข้อมูลของเดือนนี้")
+    return _xlsx(franchise_workbook(d), _fname("ร้านของฉัน", d.get("branch"), d.get("month")))
