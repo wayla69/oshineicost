@@ -367,21 +367,33 @@ def _clean_lines(con, lines: list, whole_up: bool = False):
     return clean, bad
 
 
+def day_problem(con, branch_id: int, d: date, today: date, check_posted: bool = False):
+    """Why a slip cannot be written for day `d`: (state, message) with state future | too_old | posted, else None. One rule for the app's
+    save and for the file import. `check_posted`: Accounting has posted the period of `d` (save asks it only when it confirms)."""
+    if d > today:
+        return "future", "ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า"
+    if (today - d).days > MAX_BACKDATE_DAYS:
+        return "too_old", f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน {MAX_BACKDATE_DAYS} วัน"
+    if check_posted:                                         # confirming changes a posted period's numbers
+        from .variance import assert_not_posted
+        try:
+            assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
+        except ValueError as e:
+            return "posted", str(e)
+    return None
+
+
 def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = False, note: str = None,
-         now: datetime = None) -> dict:
+         now: datetime = None, log_note: str = None) -> dict:
     """Write the day's draft (creating it) and optionally confirm it. Lines sent are upserted (both quantities
-    zero removes the line); lines not sent stay."""
+    zero removes the line); lines not sent stay. `log_note`: the note of the bc_issue_log rows this save writes (the file import)."""
     from .stock import _branch_name
     _branch_name(con, branch_id)
     d = _date_or_error(slip_date)
     today = _day(now)
-    if d > today:
-        raise ValueError("ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า")
-    if (today - d).days > MAX_BACKDATE_DAYS:
-        raise ValueError(f"บันทึกใบตัดเบิกย้อนหลังได้ไม่เกิน {MAX_BACKDATE_DAYS} วัน")
-    if submit:                                               # confirming changes a posted period's numbers
-        from .variance import assert_not_posted
-        assert_not_posted(con, branch_id, d.isoformat(), "ใบตัดเบิก")
+    prob = day_problem(con, branch_id, d, today, check_posted=submit)
+    if prob:
+        raise ValueError(prob[1])
     iso = d.isoformat()
     row = _row(con, branch_id, iso)
     if row and row["status"] == "confirmed":
@@ -407,11 +419,11 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     con.execute("UPDATE bc_issue_slip SET updated_at=?, note=COALESCE(?, note) WHERE slip_id=?", (_stamp(now), note, sid))
     n = con.execute("SELECT COUNT(*) FROM bc_issue_line WHERE slip_id=?", (sid,)).fetchone()[0]
     if created:
-        _log(con, row, who, "create", lines=n, now=now)
+        _log(con, row, who, "create", lines=n, note=log_note, now=now)
     else:
         last = con.execute("SELECT action FROM bc_issue_log WHERE slip_id=? ORDER BY log_id DESC LIMIT 1", (sid,)).fetchone()
         if last and last[0] == "reopen":                     # the first save after a reopen is on the record
-            _log(con, row, who, "save", late=row["late"], lines=n, now=now)
+            _log(con, row, who, "save", late=row["late"], lines=n, note=log_note, now=now)
     out = {"slip_id": sid, "date": iso, "status": "draft", "lines": n, "late": int(row["late"] or 0),
            "confirm_count": int(row["confirm_count"] or 0), "unconverted": bad}
     if submit:
@@ -429,9 +441,9 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
                     (who, _stamp(now), late, _stamp(now), sid))
         action = "confirm" if first else "reconfirm"
         row = _row_by_id(con, sid)
-        _log(con, row, who, action, late=late, lines=n, now=now)
+        _log(con, row, who, action, late=late, lines=n, note=log_note, now=now)
         audit(con, who, f"issue_{action}", "bc_issue_slip", str(sid), None,
-              {"branch_id": branch_id, "date": iso, "lines": n, "late": late})
+              {"branch_id": branch_id, "date": iso, "lines": n, "late": late, **({"note": log_note} if log_note else {})})
         out.update(status="confirmed", late=late, confirm_count=row["confirm_count"])
     out["slip"] = status_of(con, branch_id, iso)
     return out

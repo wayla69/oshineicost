@@ -25,6 +25,7 @@ from core import get_db, invalidate_cache, require_write_token, require_write_to
 from bom_center import aliases as _al
 from bom_center import backlog as _bl
 from bom_center import benchmark as _bm
+from bom_center import branch_forms as _bf
 from bom_center import central as _ce
 from bom_center import close_settings as _cs
 from bom_center import feedback as _fb
@@ -2821,6 +2822,45 @@ def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional
     return out
 
 
+# PR-SI · the same slip as an Excel form: download (up to 7 consecutive days), fill in, import. The import runs issues.save.
+@router.get("/api/bom-center/issues/template.xlsx")
+def bc_issue_template(request: Request, branch_id: Optional[int] = Query(None), date: Optional[str] = Query(None),
+                      days: int = Query(1)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        try:
+            wb, name, d0, d1 = _bf.slip_template(con, bid, _day_or_today(date), days)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return _xlsx(wb, _fname("แบบฟอร์ม", "ใบตัดเบิก", name, d0.isoformat() if d0 == d1 else f"{d0.isoformat()}_{d1.isoformat()}"))
+
+
+@router.post("/api/bom-center/issues/import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_issue_import(request: Request, file: UploadFile = File(...), branch_id: Optional[int] = Query(None),
+                          dry_run: bool = Query(True), submit: bool = Query(False)):
+    """A slip form back from Excel. dry_run (the default) answers per date and writes nothing; otherwise each date without an error is
+    saved as a draft, or confirmed with `submit`. Same W rule and same branch pinning as /issues/save."""
+    raw = await _read_xlsx(file)
+    try:
+        parsed = _bf.read_slip_file(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        if dry_run:
+            try:
+                return _bf.import_slips(con, bid, parsed, _who(request), file.filename, dry_run=True, submit=submit)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            finally:
+                con.rollback()
+        out = _write(con, lambda: _bf.import_slips(con, bid, parsed, _who(request), file.filename, dry_run=False, submit=submit))
+    _fc.clear_slip_cache()            # PR-S3: the order suggestion reads the confirmed slips
+    return out
+
+
 @router.get("/api/bom-center/issues/status")
 def bc_issue_status(request: Request, branch_id: Optional[int] = Query(None), date_from: Optional[str] = Query(None),
                     date_to: Optional[str] = Query(None)):
@@ -3715,6 +3755,58 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
     return out
 
 
+# PR-SI · the order as an Excel form (declared before /order/{order_id}); the import runs orders.save_flow
+@router.get("/api/bom-center/order/template.xlsx")
+def bc_order_template(request: Request, round: Optional[str] = Query(None), delivery: Optional[str] = Query(None),
+                      branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        rnd, dlv = _resolve_delivery(con, bid, round, delivery, None)
+        try:
+            plan = _or.plan(con, bid, rnd, dlv)
+            wb, name = _bf.order_template(con, plan, bid, rnd, dlv)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return _xlsx(wb, _fname("แบบฟอร์ม", "ใบสั่งซื้อ", name, f"รอบ{rnd}", dlv.isoformat()))
+
+
+@router.post("/api/bom-center/order/import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_order_import(request: Request, file: UploadFile = File(...), round: Optional[str] = Query(None),
+                          delivery: Optional[str] = Query(None), branch_id: Optional[int] = Query(None),
+                          dry_run: bool = Query(True), submit: bool = Query(False), ack_late: bool = Query(False)):
+    """An order form back from Excel: a draft, or submitted with `submit` (cut-off, today's slip and reason rules as in /order/save)."""
+    raw = await _read_xlsx(file)
+    try:
+        parsed = _bf.read_order_file(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        rnd, dlv = _resolve_delivery(con, bid, round, delivery, None)
+        try:
+            plan = _or.plan(con, bid, rnd, dlv)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if dry_run:
+            try:
+                return _bf.import_order(con, plan, bid, rnd, dlv, parsed, _who(request), file.filename, dry_run=True, submit=submit)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            finally:
+                con.rollback()
+
+        def go():
+            try:
+                return _bf.import_order(con, plan, bid, rnd, dlv, parsed, _who(request), file.filename, dry_run=False,
+                                        submit=submit, ack_late=ack_late)
+            except _or.LateSubmit as e:                      # the branch has to confirm the late fee first
+                con.rollback()
+                raise HTTPException(400, {"code": "late", "message": str(e), "cutoff_at": e.cutoff_at, "cutoff_th": e.cutoff_th})
+        return _write(con, go)
+
+
 @router.get("/api/bom-center/orders")
 def bc_orders(request: Request, branch_id: Optional[int] = Query(None), limit: int = Query(20),
               status: Optional[str] = Query(None)):
@@ -3781,6 +3873,48 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
         bid = _stock_branch(con, request, branch_id)
         out = _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
                                               receipt_date=body.receipt_date, ack=body.ack, claim_note=body.claim_note))
+    invalidate_cache("bc_")
+    return out
+
+
+# PR-SI · the receipt as an Excel form; the import runs orders.receive (the acknowledgement is the branch's, never assumed)
+@router.get("/api/bom-center/order/{order_id}/receive-template.xlsx")
+def bc_receive_template(order_id: int, request: Request, branch_id: Optional[int] = Query(None)):
+    with get_db() as con:
+        _ensure(con)
+        row = con.execute("SELECT branch_id FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "ไม่พบใบสั่งซื้อ")
+        _stock_branch(con, request, row[0])                  # a branch login reads only its own orders (403 for another branch's)
+        bid = _stock_branch(con, request, branch_id if branch_id is not None else row[0])
+        try:
+            wb, name = _bf.receive_template(con, bid, order_id)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return _xlsx(wb, _fname("แบบฟอร์ม", "รับสินค้า", name, f"ใบสั่งซื้อ{order_id}"))
+
+
+@router.post("/api/bom-center/order/{order_id}/receive-import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_receive_import(order_id: int, request: Request, file: UploadFile = File(...), branch_id: Optional[int] = Query(None),
+                            dry_run: bool = Query(True), ack: bool = Query(False), claim_note: Optional[str] = Form(None),
+                            receipt_date: Optional[str] = Query(None)):
+    raw = await _read_xlsx(file)
+    try:
+        parsed = _bf.read_receive_file(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        if dry_run:
+            try:
+                return _bf.import_receive(con, bid, order_id, parsed, _who(request), file.filename, dry_run=True)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            finally:
+                con.rollback()
+        out = _write(con, lambda: _bf.import_receive(con, bid, order_id, parsed, _who(request), file.filename, dry_run=False,
+                                                     ack=ack, receipt_date=receipt_date, claim_note=claim_note))
     invalidate_cache("bc_")
     return out
 
