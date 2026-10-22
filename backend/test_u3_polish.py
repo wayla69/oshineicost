@@ -76,11 +76,14 @@ console.log(JSON.stringify([
 
 @needs_node
 def test_why_an_item_is_on_the_slip_in_plain_words():
-    got = _node(_fn(BRN, "_brnIssWhy") + """
+    stk = "let BC_MODE = 'full'; function stkWord(f, s) { return BC_MODE === 'stock' ? s : f; }\n"      # PR-S4: the stock-first words (js/01-core.js)
+    got = _node(stk + _fn(BRN, "_brnIssWhy") + """
 console.log(JSON.stringify([_brnIssWhy({recent: true, used_recent: true, system_qty: 3, required: true, monitored: true}),
   _brnIssWhy({used_recent: true, required: true}), _brnIssWhy({system_qty: 0}), _brnIssWhy({system_qty: -2, required: true})]));""")
     assert got == [["เบิกใน 14 วันที่ผ่านมา", "มีคงเหลือตามระบบ", "รายการบังคับสั่ง ต้องนับทุกงวด"],
                    ["สูตรอาหารใช้ใน 14 วันที่ผ่านมา", "กลุ่มมูลค่าสูง ต้องนับทุกงวด"], [], ["กลุ่มมูลค่าสูง ต้องนับทุกงวด"]]
+    stock_js = stk + "BC_MODE = 'stock';\n" + _fn(BRN, "_brnIssWhy") + "\nconsole.log(JSON.stringify(_brnIssWhy({used_recent: true})));"
+    assert _node(stock_js) == ["ใช้ใน 14 วันที่ผ่านมา"]                                  # PR-S4: stock mode does not say "recipe"
 
 
 # ── 2 · ดูที่มา ──────────────────────────────────────────────────────────────────────────────────────────────────────

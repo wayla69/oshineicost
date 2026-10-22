@@ -591,7 +591,7 @@ function _brnIssZoneDone(z) { const req = z.items.filter(i => i.required); retur
 function _brnIssWhy(it) {
   const out = [];
   if (it.recent) out.push('เบิกใน 14 วันที่ผ่านมา');
-  else if (it.used_recent) out.push('สูตรอาหารใช้ใน 14 วันที่ผ่านมา');
+  else if (it.used_recent) out.push(stkWord('สูตรอาหารใช้ใน 14 วันที่ผ่านมา', 'ใช้ใน 14 วันที่ผ่านมา'));
   if (Number(it.system_qty) > 0) out.push('มีคงเหลือตามระบบ');
   if (it.required) out.push(it.monitored ? 'รายการบังคับสั่ง ต้องนับทุกงวด' : 'กลุ่มมูลค่าสูง ต้องนับทุกงวด');
   return out;
@@ -1684,11 +1684,14 @@ let _brnVarSel = new Set();   // the lines ticked for "ใช้เหตุผ�
 let _brnVarShowAll = false;   // the list of other lines also shows the lines inside the threshold
 let _brnVarOthersOpen = false;
 const _BRN_VT = [['period', 'รายงวด'], ['daily', 'รายวัน'], ['recon', 'สิ้นเดือน']];
+// PR-S4 · mode stock: the period tab (used against the recipes) is not offered; a link that names it opens the daily tab
+function _brnVtList() { return BC_MODE === 'stock' ? _BRN_VT.filter(([p]) => p !== 'period') : _BRN_VT; }
 function brnVarTab(k, quiet) {
+  if (BC_MODE === 'stock' && k === 'period') k = 'daily';
   _brnVarTab = k;
   _BRN_VT.forEach(([p]) => { const el = document.getElementById('brnVar-' + p); if (el) el.style.display = p === k ? '' : 'none'; });
   const bar = document.getElementById('brnVarTabs');
-  if (bar) bar.innerHTML = _BRN_VT.map(([p, t]) => {
+  if (bar) bar.innerHTML = _brnVtList().map(([p, t]) => {
     const on = p === k;
     return `<button onclick="brnVarTab('${p}')" aria-pressed="${on}" style="flex:1 1 0;min-height:44px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:999px;padding:5px 12px;font-size:14px;cursor:pointer;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">${t}</button>`;
   }).join('');
@@ -1878,6 +1881,7 @@ function brnDailyCards(d, openFn) {
   const t = d.totals;
   // PR-U1: no day judged yet (today, or no sales in yet): no verdict in the head either
   const anyJudged = d.rows.some(r => r.judged ?? r.confirmed);
+  if (d.stock) return _brnDailyCardsStock(d, openFn, anyJudged);
   const head = `<div class="text-xs" style="color:var(--text-secondary);margin-bottom:6px">${anyJudged
     ? `รวมวันที่ยืนยันแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ตามสูตร <b>${_brnBaht(t.bom_value)}</b> · <b>${bmcGapHtml(t.var_value, t.var_pct, 'issue')}</b>`
     : 'ยังไม่มีวันที่เทียบสูตรได้'}</div>`;
@@ -1892,6 +1896,25 @@ function brnDailyCards(d, openFn) {
         : `ยังไม่มียอดเบิกให้เทียบ · ตามสูตร <b>${bom}</b>`}</div></button>`;
   }).join('');
 }
+// PR-S4 · mode stock: the cards compare the day with the branch's normal and the all-branch median
+function _brnDailyCardsStock(d, openFn, anyJudged) {
+  const t = d.totals;
+  const head = `<div class="text-xs" style="color:var(--text-secondary);margin-bottom:6px">${anyJudged
+    ? `รวมวันที่ยืนยันแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ปกติของสาขา <b>${_brnBaht(t.normal_value)}</b> · <b>${bmcGapHtml(t.var_value, t.var_pct, 'issue_n')}</b> · ค่ากลางทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${bmcGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>`
+    : 'ยังไม่มีวันที่เทียบกับปกติได้'}</div>`;
+  return head + d.rows.slice().reverse().map(r => {
+    const ink = _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)';
+    const judged = r.confirmed && (r.judged ?? true);
+    const nrm = r.trading && r.normal_value != null ? _brnBaht(r.normal_value) : '—';
+    const med = r.trading && r.median_value != null ? _brnBaht(r.median_value) : '—';
+    return `<button type="button" class="brn-daycard" onclick="${openFn}('${r.date}')" style="border-left-color:${ink}">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:var(--text-primary)">${esc(fmtDayShort(r.date))}</b> ${_bmcChip(r.slip_status_th, ink)}${r.flagged ? ' ' + _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? ' ' + _bmcChip('เบิกต่ำกว่าปกติต่อเนื่อง', 'var(--amber-ink)') : ''}</div>
+      <div class="text-xs" style="color:var(--text-secondary);margin-top:2px">${judged
+        ? `ยอดเบิก <b>${_brnBaht(r.issued_value)}</b> · ปกติของสาขา <b>${nrm}</b>${r.var_pct != null ? ' · <b>' + bmcGapHtml(r.var_value, r.var_pct, 'issue_n') + '</b>' : ''} · ค่ากลาง <b>${med}</b>${r.median_var_pct != null ? ' · <b>' + bmcGapHtml(r.median_var_value, r.median_var_pct, 'issue_m') + '</b>' : ''}`
+        : r.confirmed ? `ยอดเบิก <b>${_brnBaht(r.issued_value)}</b> · ${esc(_isrNoVerdict(r))}`
+        : `ยังไม่มียอดเบิกให้เทียบ · ปกติของสาขา <b>${nrm}</b> · ค่ากลาง <b>${med}</b>`}</div></button>`;
+  }).join('');
+}
 // one day's items in three columns: item · issued / by the recipes (count units) · the gap %
 function brnDayItemsHtml(d, closeJs) {
   const s = d.slip, conf = s.key === 'on_time' || s.key === 'late';
@@ -1900,16 +1923,17 @@ function brnDayItemsHtml(d, closeJs) {
       ${_bmcChip(s.status_th, _ISR_SLIP_INK[s.key] || 'var(--text-muted)')}
       ${conf ? `<span class="text-xs" style="color:var(--text-secondary)">ยืนยันเวลา ${esc(_brnIssTime(s.confirmed_at))} โดย ${esc(whoTh(s.confirmed_by))}</span>` : ''}
       ${closeJs ? `<button onclick="${closeJs}" class="brn-link" style="margin-left:auto">ปิด</button>` : ''}</div>`;
-  const note = conf ? '' : '<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณตามสูตร</div>';
-  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน`, 'var(--bad-ink)')).join(' ')}</div>` : '';
+  const stk = !!d.stock;                                      // PR-S4: mode stock - the normal of the branch and the median instead of the recipe
+  const note = conf ? '' : `<div class="text-xs mt-2" style="color:var(--amber-ink)">ใบตัดเบิกวันนั้นยังไม่ยืนยัน · แสดงเฉพาะปริมาณ${stk ? 'ปกติของสาขา' : 'ตามสูตร'}</div>`;
+  const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => stk ? _isrFlagChip(f, false) : _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน`, 'var(--bad-ink)')).join(' ')}</div>` : '';
   const rows = d.rows.map(r => {
     return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(_brnNm(r))}</b>${r.signal ? ' ' + _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}
         <div class="text-[10.5px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(r), r.waste_reason_th ? 'ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : '')}</div></td>
-      <td class="py-1 pr-2 text-right">${r.issued == null ? '—' : brnQtyUnit(r.issued, r)}<div class="text-[10.5px]" style="color:var(--text-muted)">/ ${brnQtyUnit(r.bom, r)}</div></td>
-      <td class="py-1 text-right">${bmcGapHtml(r.var_value, r.var_pct, 'issue', true)}</td></tr>`;
+      <td class="py-1 pr-2 text-right">${r.issued == null ? '—' : brnQtyUnit(r.issued, r)}<div class="text-[10.5px]" style="color:var(--text-muted)">/ ${stk ? (r.normal == null ? '—' : brnQtyUnit(r.normal, r)) + (r.median == null ? '' : ' · ' + brnQtyUnit(r.median, r)) : brnQtyUnit(r.bom, r)}</div></td>
+      <td class="py-1 text-right">${bmcGapHtml(r.var_value, r.var_pct, stk ? 'issue_n' : 'issue', true)}</td></tr>`;
   }).join('');
   return head + note + flags + (d.rows.length ? `<div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      <th class="py-1 pr-2">รายการ</th><th class="py-1 pr-2 text-right">เบิก / ตามสูตร</th><th class="py-1 text-right">เทียบสูตร</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      <th class="py-1 pr-2">รายการ</th><th class="py-1 pr-2 text-right">${stk ? 'เบิก / ปกติของสาขา · ค่ากลาง' : 'เบิก / ตามสูตร'}</th><th class="py-1 text-right">${stk ? 'เทียบปกติ' : 'เทียบสูตร'}</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="text-xs mt-2" style="color:var(--text-muted)">ไม่มีรายการ</div>');
 }
 // PR-M5: the month of the daily variance is the module's month (supplyCtx), this month until somebody chooses
@@ -2164,7 +2188,7 @@ function _brnRenderLocal(p) {
   document.getElementById('brnOrdList').innerHTML = `<div class="text-xs mb-1" style="color:var(--text-muted)">วัตถุดิบที่ไดกิโตะ กรุ๊ปไม่ได้จัดส่ง สาขาซื้อเอง · ไม่ส่งเข้าใบสั่งซื้อ</div>` +
     (rows.map(r => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:baseline">
       <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(r))}
-        ${analyst && r.kind === 'prepared' ? _bmcChip('กึ่งสำเร็จ: ยังไม่มีสูตร', 'var(--amber-ink)') : ''}</div>
+        ${analyst && r.kind === 'prepared' && BC_MODE !== 'stock' ? _bmcChip('กึ่งสำเร็จ: ยังไม่มีสูตร', 'var(--amber-ink)') : ''}</div>
         <div class="text-[11px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(r), `ต้องใช้ ${_brnInCount(r, r.need)} ${esc(_brnUnitFull(_brnCountUnit(r)))}`)}</div></div>
       <div class="text-sm" style="margin-left:auto;color:var(--text-primary)">แนะนำ <b>${_bmcNum(r.order_units, 0)}</b> ${esc(_brnUnitLabel(r))}</div></div>`).join('')
       || '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีรายการที่ต้องซื้อเอง</span>');

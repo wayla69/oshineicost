@@ -100,7 +100,9 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     if an.get("count"):
         any_work = True
         from .issue_reports import OVER_PCT, STREAK_DAYS
-        lines.append(f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินสูตรมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
+        from .close_settings import stock_mode
+        word = "ปกติของสาขาหรือค่ากลาง" if stock_mode(con) else "สูตร"        # PR-S4: with no recipe the comparators are the branch's normal and the median
+        lines.append(f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกิน{word}มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
                      + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
     tail = f"หน้างาน: {html.escape(app_url.rstrip('/'))}/" if app_url else ""
@@ -205,7 +207,8 @@ def centre_morning(con, today: date = None, now: datetime = None) -> dict:
         add("salessupport", f"ใบสั่งซื้อที่คลังจัดส่งแล้วยังไม่คีย์บัญชี {ak['count']} ใบ", supply_url("orderhub", "queue"))
     an = items.get("issue_anomaly") or {}
     if an.get("count"):
-        add("operation", f"เบิกเกินสูตรติดต่อกัน {an['count']} สาขา: " + " · ".join(an.get("branch_names") or []),
+        from .close_settings import stock_mode
+        add("operation", f"เบิกเกิน{'ปกติ' if stock_mode(con) else 'สูตร'}ติดต่อกัน {an['count']} สาขา: " + " · ".join(an.get("branch_names") or []),
             supply_url("orderhub", "issuevar"))
     step = next((s for s in (d.get("close") or {}).get("steps") or [] if s["key"] == "issue_posted"), None)
     if step:

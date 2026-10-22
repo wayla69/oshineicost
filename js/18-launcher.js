@@ -166,7 +166,7 @@ function renderDeptHead(name) {
   }).join('');
   host.innerHTML = _deptCrumbHtml([`<span class="dh-dept">${esc(d.label)}</span>`], cur ? cur.p.label : title)
     + `<div class="dh-band${ctx.row.pages.length > 7 ? ' many' : ''}"><div class="dh-id"><span class="dh-badge">${_deptSvg(d.icon, 26)}</span>`
-    + `<div class="dh-idtext"><h2 class="dh-name">${esc(d.label)}</h2><span class="dh-duty">${esc(d.duty)}</span></div></div>`
+    + `<div class="dh-idtext"><h2 class="dh-name">${esc(d.label)}</h2><span class="dh-duty">${esc(deptDuty(d))}</span></div></div>`
     + `<div class="dh-tabs" role="tablist" aria-label="${esc('หน้าของแผนก' + d.label)}" onscroll="_deptTabsFade(this)">${tabs}</div></div>`;
   const bar = host.querySelector('.dh-tabs'), act = bar.querySelector('[aria-selected="true"]');
   if (act) bar.scrollLeft = Math.max(0, act.offsetLeft - (bar.clientWidth - act.offsetWidth) / 2);
@@ -212,7 +212,7 @@ function _lnchDeptsHtml(vis) {
     const d = r.dept;
     return `<section class="lnch-dept" id="lnch-dept-${d.key}" data-dept="${d.key}" aria-labelledby="lnch-h-${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
       + `<div class="lnch-dept-head"><span class="lnch-badge">${_deptSvg(d.icon, 26)}</span>`
-      + `<div style="min-width:0"><h3 class="lnch-dept-name" id="lnch-h-${d.key}">${esc(d.label)}</h3><div class="lnch-dept-duty">${esc(d.duty)}</div></div></div>`
+      + `<div style="min-width:0"><h3 class="lnch-dept-name" id="lnch-h-${d.key}">${esc(d.label)}</h3><div class="lnch-dept-duty">${esc(deptDuty(d))}</div></div></div>`
       + `<div class="lnch-tiles">${r.pages.map(x => `<a href="#" class="lnch-tile" data-nb="${_navPageSpec(x.p)}" onclick="deptGo('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}`
         + `<span class="lnch-tile-label">${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
   }).join('');
@@ -607,7 +607,7 @@ function renderManualDeptMap() {
       ? `<a href="#" class="mdm-pg" onclick="deptGo('${d.key}',${i});return false">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></a>`
       : `<span class="mdm-pg is-off" title="บัญชีนี้ไม่มีสิทธิ์เปิดหน้านี้">${_deptSvg(p.icon, 16)}<span>${esc(p.label)}</span></span>`).join('');
     return `<section class="mdm-card" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)">`
-      + `<header class="mdm-head"><span class="mdm-badge">${_deptSvg(d.icon, 24)}</span><div><h4 class="mdm-name">${esc(d.label)}</h4><p class="mdm-duty">${esc(d.duty)}</p></div></header>`
+      + `<header class="mdm-head"><span class="mdm-badge">${_deptSvg(d.icon, 24)}</span><div><h4 class="mdm-name">${esc(d.label)}</h4><p class="mdm-duty">${esc(deptDuty(d))}</p></div></header>`
       + `<p class="mdm-who">แผนกหลักของ: ${esc(d.roles.map(who).join(' · '))}</p><div class="mdm-pages">${pages}</div></section>`;
   }).join('');
 }

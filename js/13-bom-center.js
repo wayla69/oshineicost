@@ -49,6 +49,7 @@ function _bmcNum(v, d = 2) {
 // one, so the words carry the direction: "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)". kind: use = what the branch used against the recipes, issue =
 // what the slip issued against the recipes, count = the physical count against the system stock. Excel keeps the signed numbers.
 const _BMC_GAP_WORDS = { use: ['ใช้มากกว่าสูตร', 'ใช้น้อยกว่าสูตร', 'ใช้ตามสูตร'], issue: ['เบิกมากกว่าสูตร', 'เบิกน้อยกว่าสูตร', 'เบิกตามสูตร'],
+  issue_n: ['เบิกมากกว่าปกติ', 'เบิกน้อยกว่าปกติ', 'เบิกตามปกติ'], issue_m: ['เบิกมากกว่าค่ากลาง', 'เบิกน้อยกว่าค่ากลาง', 'เบิกเท่าค่ากลาง'],
   count: ['นับได้มากกว่าระบบ', 'นับได้น้อยกว่าระบบ', 'นับตรงกับระบบ'] };
 const _BMC_GAP_SHORT = ['มากกว่า', 'น้อยกว่า', 'ตรง'];
 function bmcGapDir(value, pct) {                      // +1 more · -1 less · 0 the same (under ฿0.5 and 0.05 %); the baht gap wins when both are given
@@ -813,7 +814,7 @@ async function bmcSeed() {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients/seed?dry_run=false`, { method: 'POST' });
     _bmcStatus('bmcIngStatus', `✓ ทะเบียน ${d.before} → ${d.after} รายการ`, 'var(--good-ink)');
     const rep = document.getElementById('bmcIngReport');
-    if (rep) rep.innerHTML = pre.multi_unit_codes.length ? `<div class="card p-3 text-xs" style="color:var(--amber-ink)">${esc(`รหัสที่สูตรใช้หลายหน่วย ${pre.multi_unit_codes.length} รายการ`)} ${uiQ('bmc:multiunit', 'รหัสที่สูตรใช้หลายหน่วย', '<p>ใช้หน่วยที่ใช้มากที่สุด · ตรวจที่หน่วยและการแปลง</p>')}</div>` : '';
+    if (rep) rep.innerHTML = pre.multi_unit_codes.length ? `<div class="card p-3 text-xs" style="color:var(--amber-ink)">${esc(`${stkWord('รหัสที่สูตรใช้หลายหน่วย', 'รหัสที่ใช้หลายหน่วย')} ${pre.multi_unit_codes.length} รายการ`)} ${uiQ('bmc:multiunit', 'รหัสที่สูตรใช้หลายหน่วย', '<p>ใช้หน่วยที่ใช้มากที่สุด · ตรวจที่หน่วยและการแปลง</p>')}</div>` : '';
     _bmcIng = [];
     bmcSetSub(_bmcSub === 'overview' ? 'overview' : 'ing');
   } catch (e) {
@@ -990,7 +991,7 @@ async function bmcPriceCommit() {
   if (!pre.priced && !rules.length && !choices) { _bmcStatus('bmcPriceStatus', 'ไม่มีบรรทัดที่ใช้คิดราคาได้', 'var(--bad-ink)'); return; }
   if (!await uiConfirm(`${_bmcPriceLabel}\nเดือน${fmtMonthTh(pre.month)}: บันทึกราคาซื้อจริง ${pre.priced} วัตถุดิบ` +
       (rules.length ? `\nพร้อมกฎหน่วย ${rules.length} รายการ` : '') +
-      (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส (สูตรไม่ต้องแก้)` : '') +
+      (cs.alias ? `\nบันทึกเป็นรหัสใหม่ของวัตถุดิบเดิม ${cs.alias} รหัส` : '') +
       (cs.fresh ? `\nเพิ่มเป็นวัตถุดิบใหม่ ${cs.fresh} รหัส (ตรวจหน่วยฐานภายหลัง)` : '') +
       (open ? `\nรหัสที่ยังไม่เลือก ${open} รหัส ไม่ถูกนำเข้าในครั้งนี้` : '') +
       (pre.added_codes?.length ? `\nเพิ่มรหัสใหม่ในทะเบียน ${pre.added_codes.length} (ตรวจหน่วยฐานภายหลัง)` : '') +
@@ -3022,7 +3023,7 @@ async function bmcLoadBenchmark() {
   const b = _bmcBm, w = _bmcFcCanWrite();
   const typ = t => t === 'master' ? 'สาขาของบริษัท' : 'แฟรนไชส์';
   box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">สาขาของบริษัทที่ใช้เป็นค่ากลาง</div>
-      ${uiQ('bmc:bm1', 'สาขาที่ใช้เป็นค่ากลาง', `<p>ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย</p><p>ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 ในหน้าตรวจสูตรด้วยยอดซื้อ และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>`)}</div>
+      ${uiQ('bmc:bm1', 'สาขาที่ใช้เป็นค่ากลาง', `<p>ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย</p><p>ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>`)}</div>
     <div id="bmcBmList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">${b.branches.filter(x => x.active).map(x => `<label class="text-xs flex items-center gap-2" style="color:var(--text-primary);min-height:32px">
       <input type="checkbox" value="${x.branch_id}" ${x.selected ? 'checked' : ''} ${w ? '' : 'disabled'} style="width:18px;height:18px"> ${esc(x.name)} <span class="text-[10.5px]" style="color:var(--text-muted)">${typ(x.branch_type)}</span></label>`).join('')}</div>
     <div class="flex flex-wrap items-end gap-3 mt-3">
@@ -3037,7 +3038,7 @@ async function bmcSaveBenchmark() {
   const buf = Number(document.getElementById('bmcBmBuf').value);
   if (ids.length < ((_bmcBm && _bmcBm.min_branches) || 2)) { bmcStatus('bmcBmStatus', 'warn', `เลือกสาขาอย่างน้อย ${(_bmcBm && _bmcBm.min_branches) || 2} สาขา`); return; }
   if (!(buf >= 0 && buf <= 50)) { bmcStatus('bmcBmStatus', 'warn', 'ช่วงยอมรับต้องอยู่ระหว่าง 0 ถึง 50'); return; }
-  if (!await uiConfirm(`บันทึกสาขาที่ใช้เป็นค่ากลาง ${ids.length} สาขา และช่วงยอมรับ ±${buf}%?\nรายงานต่อยอดขาย ฿100,000 และหน้าตรวจสูตรด้วยยอดซื้อจะคำนวณใหม่ตามนี้`,
+  if (!await uiConfirm(`บันทึกสาขาที่ใช้เป็นค่ากลาง ${ids.length} สาขา และช่วงยอมรับ ±${buf}%?\nรายงานต่อยอดขาย ฿100,000 จะคำนวณใหม่ตามนี้`,
     { title: 'ยืนยันการบันทึกค่ากลาง', ok: 'บันทึกค่ากลาง', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcBmStatus', null, 'ยังไม่บันทึก'); return; }
   try {
     _bmcBm = await _bmcJson(`${API}/api/bom-center/benchmark`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_ids: ids, buffer_pct: buf }) });
@@ -3575,9 +3576,9 @@ async function bmcUcRender(boxId, items, opts) {
   };
   const left = st.items.filter(u => { const c = ans(u); return !c || (c.as === 'alias' && !c.item); }).length;
   const hint = o.mode === 'request'
-    ? 'เลือกวัตถุดิบเดิมของแต่ละรหัสที่เป็นรหัสใหม่ แล้วส่งคำขอให้ฝ่ายวิเคราะห์ · ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น และสูตรไม่ต้องแก้'
+    ? 'เลือกวัตถุดิบเดิมของแต่ละรหัสที่เป็นรหัสใหม่ แล้วส่งคำขอให้ฝ่ายวิเคราะห์ · ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น '
     : (o.needAll ? 'เลือกให้ครบทุกรหัสก่อนบันทึก · ' : 'รหัสที่ยังไม่เลือกจะไม่ถูกนำเข้า · ')
-      + (decide ? '“เป็นรหัสใหม่ของวัตถุดิบเดิม” บันทึกรหัสนี้เป็นรหัสในระบบอื่นของวัตถุดิบเดิมทันที สูตรไม่ต้องแก้' : '“เป็นรหัสใหม่ของวัตถุดิบเดิม” ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ตรวจ และรหัสนั้นยังไม่ถูกนำเข้าในครั้งนี้');
+      + (decide ? '“เป็นรหัสใหม่ของวัตถุดิบเดิม” บันทึกรหัสนี้เป็นรหัสในระบบอื่นของวัตถุดิบเดิมทันที' : '“เป็นรหัสใหม่ของวัตถุดิบเดิม” ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ตรวจ และรหัสนั้นยังไม่ถูกนำเข้าในครั้งนี้');
   box.style.display = '';
   box.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
     <div class="text-xs font-semibold mb-2" style="color:var(--amber-ink)">รหัสที่ระบบไม่รู้จัก (${st.items.length} รหัส)${left ? ` · ยังไม่ได้เลือก ${left}` : ' · เลือกครบแล้ว'} ${uiQ('bmc:uchint', 'รหัสที่ระบบไม่รู้จัก', '<p>' + hint.split(' · ').map(x => esc(x)).join('</p><p>') + '</p>')}</div>
@@ -3673,7 +3674,7 @@ function bmcAlRender(d) {
   const sysLine = d.current.map(c => `<span class="mr-3">${esc(c.system_th)}: ใช้รหัส <b>${esc(c.code)}</b>${c.is_alias ? '' : ' (รหัสในทะเบียน)'}${c.is_alias && w ? ` ${_bmcBtn('ใช้รหัสในทะเบียนแทน', `bmcAlAct(${_bmcQ(d.code)},{action:'register',system:${_bmcQ(c.system)}},'กลับไปใช้รหัสในทะเบียนแล้ว')`)}` : ''}</span>`).join('');
   cell.innerHTML = `<div class="p-3" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
     <div class="text-xs font-semibold" style="color:var(--text-primary)">รหัสในระบบอื่นของ ${esc(d.code)} ${esc(d.name || '')}</div>
-    <div class="text-[11px] mb-2" style="color:var(--text-muted)">รหัสในทะเบียนไม่เปลี่ยน · สูตรใช้รหัสนี้ต่อไป ${uiQ('bmc:alinfo', 'รหัสในระบบอื่น', '<p>รหัสในทะเบียนไม่เปลี่ยน และสูตรใช้รหัสนี้ต่อไป</p><p>รหัสในระบบอื่นใช้รับไฟล์เข้าและแสดงในไฟล์ที่ส่งให้ระบบนั้น</p>')}</div>
+    <div class="text-[11px] mb-2" style="color:var(--text-muted)">รหัสในทะเบียนไม่เปลี่ยน ${uiQ('bmc:alinfo', 'รหัสในระบบอื่น', '<p>รหัสในทะเบียนไม่เปลี่ยน</p><p>รหัสในระบบอื่นใช้รับไฟล์เข้าและแสดงในไฟล์ที่ส่งให้ระบบนั้น</p>')}</div>
     <div class="text-[11.5px] mb-2">${sysLine}</div>
     ${d.aliases.length ? `<div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:520px"><thead><tr class="text-left" style="color:var(--text-muted)">
       <th class="pr-2">ระบบ</th><th class="pr-2">รหัส</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">สถานะ</th><th class="pr-2">หมายเหตุ</th><th></th></tr></thead><tbody>${d.aliases.map(a => `
@@ -3703,7 +3704,7 @@ async function bmcAlAdd(code) {
   const alias = (document.getElementById('bmcAlNew').value || '').trim();
   if (!alias) { bmcStatus('bmcAlStatus', 'warn', 'ระบุรหัสใหม่'); return; }
   const sys = document.getElementById('bmcAlSys').value, cur = document.getElementById('bmcAlCur').checked;
-  if (!await uiConfirm(`บันทึก ${alias} เป็นรหัสในระบบอื่นของ ${code} ${_bmcItemName(code)}\n${_BMC_SYS_TH[sys]}${cur ? ' · ตั้งเป็นรหัสปัจจุบัน' : ''}\nรหัสในทะเบียนและสูตรไม่เปลี่ยน`,
+  if (!await uiConfirm(`บันทึก ${alias} เป็นรหัสในระบบอื่นของ ${code} ${_bmcItemName(code)}\n${_BMC_SYS_TH[sys]}${cur ? ' · ตั้งเป็นรหัสปัจจุบัน' : ''}\nรหัสในทะเบียนไม่เปลี่ยน`,
       { title: 'ยืนยันการเพิ่มรหัสในระบบอื่น', ok: 'เพิ่มรหัส', cancel: 'ยกเลิก' })) return;
   await bmcAlAct(code, { action: 'add', alias, system: sys, valid_from: document.getElementById('bmcAlFrom').value || null,
     note: (document.getElementById('bmcAlNote').value || '').trim() || null, make_current: cur }, `เพิ่มรหัส ${alias} แล้ว`);
@@ -3768,7 +3769,7 @@ async function bmcCrqSend() {
   if (!v('bmcCrqNew')) { bmcStatus('bmcCrqStatus', 'warn', 'ระบุรหัสใหม่'); return; }
   if (!item) { bmcStatus('bmcCrqStatus', 'warn', 'เลือกวัตถุดิบเดิมในทะเบียน'); return; }
   const sys = document.getElementById('bmcCrqSys').value;
-  if (!await uiConfirm(`แจ้งว่า ${item} ${_bmcItemName(item)} ใช้รหัสใหม่ ${v('bmcCrqNew')} ใน${_BMC_SYS_TH[sys]}\nฝ่ายวิเคราะห์ตรวจก่อนบันทึก · รหัสในทะเบียนและสูตรไม่เปลี่ยน`,
+  if (!await uiConfirm(`แจ้งว่า ${item} ${_bmcItemName(item)} ใช้รหัสใหม่ ${v('bmcCrqNew')} ใน${_BMC_SYS_TH[sys]}\nฝ่ายวิเคราะห์ตรวจก่อนบันทึก · รหัสในทะเบียนไม่เปลี่ยน`,
       { title: 'ยืนยันการแจ้งเปลี่ยนรหัสสินค้า', ok: 'ส่งให้ฝ่ายวิเคราะห์', cancel: 'ยกเลิก' })) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/codes/request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
@@ -3791,7 +3792,7 @@ async function bmcLoadCodeReqCard() {
     if (!d.requests.length) { card.style.display = 'none'; card.innerHTML = ''; return; }
     card.style.display = '';
     card.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รหัสใหม่ที่รออนุมัติ (${d.requests.length})</div>
-        ${uiQ('bmc:codereqcard', 'รหัสใหม่ที่รออนุมัติ', '<p>ประสานงานขายแจ้งว่าวัตถุดิบเดิมมีรหัสใหม่ในระบบอื่น</p><p>“ใช้” บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น สูตรไม่ต้องแก้ · “ไม่ใช้” ต้องระบุเหตุผล</p>')}</div>
+        ${uiQ('bmc:codereqcard', 'รหัสใหม่ที่รออนุมัติ', '<p>ประสานงานขายแจ้งว่าวัตถุดิบเดิมมีรหัสใหม่ในระบบอื่น</p><p>“ใช้” บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น · “ไม่ใช้” ต้องระบุเหตุผล</p>')}</div>
       <div style="overflow-x:auto"><table class="text-[11.5px] w-full" style="min-width:620px"><thead><tr class="text-left" style="color:var(--text-muted)">
         <th class="pr-2">วัตถุดิบ</th><th class="pr-2">รหัสเดิม → รหัสใหม่</th><th class="pr-2">ระบบ</th><th class="pr-2">เริ่มใช้</th><th class="pr-2">แจ้งโดย</th><th></th></tr></thead><tbody>${
       d.requests.map(r => `<tr style="border-top:1px solid var(--border);vertical-align:top">
@@ -3807,7 +3808,7 @@ async function bmcCodeReqDecide(id, decision, code, name, system) {
   if (decision === 'rejected') {
     note = await uiPrompt(`เหตุผลที่ไม่ใช้รหัส ${code} ของ ${name} (จำเป็น · ประสานงานขายอ่านได้)`, '', { title: 'ไม่ใช้รหัสที่แจ้ง', okText: 'ไม่ใช้' });
     if (!note || !String(note).trim()) return;
-  } else if (!await uiConfirm(`บันทึก ${code} เป็นรหัสใหม่ของ ${name} ใน${system}\nรหัสในทะเบียนและสูตรไม่เปลี่ยน · ไฟล์ที่ส่งให้ระบบนั้นแสดงรหัสใหม่`,
+  } else if (!await uiConfirm(`บันทึก ${code} เป็นรหัสใหม่ของ ${name} ใน${system}\nรหัสในทะเบียนไม่เปลี่ยน · ไฟล์ที่ส่งให้ระบบนั้นแสดงรหัสใหม่`,
     { title: 'ยืนยันการใช้รหัสใหม่', ok: 'ใช้รหัสนี้', cancel: 'ยกเลิก' })) return;
   try {
     const out = await _bmcJson(`${API}/api/bom-center/codes/request/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' },

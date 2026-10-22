@@ -187,6 +187,7 @@ def test_the_issue_summary_json_carries_the_slip_coverage(con):  # noqa: F811
 
 
 # ── 4 · หน้างาน and the morning reminder ─────────────────────────────────────
+@pytest.mark.usefixtures("recipe_mode")   # PR-S4: this test compares the daily issue with the recipes (mode full); stock mode: test_slip_variance_nobom.py
 def test_the_centre_follows_up_missing_slips_and_over_issue(udon):  # noqa: F811
     c = udon
     three_salmon_days(c)                                                                 # salmon 30 % over the BoM on 1-3 Sep

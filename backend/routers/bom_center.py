@@ -3322,6 +3322,13 @@ DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก
 DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
                       "ผลต่าง (จำนวน)", "ผลต่าง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
 
+# PR-S4 · mode `stock`: no recipe - the BoM column becomes the branch's normal and the all-branch median
+DAILY_HEADERS_STOCK = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ปกติของสาขา (มูลค่า)",
+                       "ค่ากลางทุกสาขา (มูลค่า)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "ต่างจากค่ากลาง %",
+                       "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "สัญญาณต่อเนื่อง"]
+DAILY_ITEM_HEADERS_STOCK = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ปกติของสาขา",
+                            "ค่ากลางทุกสาขา", "ผลต่าง (จำนวน)", "ผลต่าง %", "ต่างจากค่ากลาง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
+
 
 def _recon_or_404(con, bid: int, end_count_id: int) -> dict:
     try:
@@ -3404,6 +3411,57 @@ def bc_ir_daily_day(request: Request, day: str = Query(...), branch_id: Optional
         return _short(con, _ir.daily_day(con, bid, day))
 
 
+def _daily_xlsx_stock(wb, ws, d: dict, items: list, month: str):
+    """PR-S4 · daily.xlsx in mode `stock`: issued against the normal of the branch and the all-branch median."""
+    from openpyxl.styles import Font
+    t = d["totals"]
+    th = _ir.signal_th_stock
+    _sheet(ws, "ผลต่างตัดเบิกรายวัน", DAILY_HEADERS_STOCK,
+           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับปกติของสาขา "
+           f"(ค่าเฉลี่ยวันเดียวกันของสัปดาห์ {_ir.NORMAL_WEEKS} สัปดาห์ก่อน ปรับตามยอดขายวันนั้น) และค่ากลางทุกสาขาต่อยอดขาย ฿100,000 "
+           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · ผลต่างและผลต่าง % เทียบกับปกติของสาขา · "
+           f"กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า {_ir.OVER_PCT:.0f}% หรือต่ำกว่าเกิน {_ir.UNDER_PCT_STOCK:.0f}% "
+           f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นสัญญาณต่อเนื่อง")
+    for r in d["rows"]:
+        sig = ", ".join(f"{f['name']}: {th('under_streak' if f['direction'] == 'under' else 'streak', f['basis'])}"
+                        for f in d["flags"] if f["from"] <= r["date"] <= f["to"])
+        ws.append([r["date"], r["weekday_th"], r["slip_status_th"], r["used_value"], r["waste_value"], r["issued_value"],
+                   r["normal_value"], r["median_value"], r["var_value"], r["var_pct"], r["median_var_pct"],
+                   ", ".join(f"{x['name']} ({x['var_pct']:+.1f}%)" for x in r["over_items"]),
+                   sig])
+    ws.append(["รวม", "", "", t["used_value"], t["waste_value"], t["issued_value"], t["normal_value"], t["median_value"],
+               t["var_value"], t["var_pct"], t["median_var_pct"]])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
+        for c in row[3:9]:
+            c.number_format = "#,##0.00"
+        row[9].number_format = "0.0"
+        row[10].number_format = "0.0"
+    ws.column_dimensions["L"].width = 48
+    ws.column_dimensions["M"].width = 36
+    ws.freeze_panes = "A3"
+    w2 = wb.create_sheet()
+    _sheet(w2, "รายการต่อวัน", DAILY_ITEM_HEADERS_STOCK,
+           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
+           "ผลต่าง = รวมเบิก − ปกติของสาขา · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
+    for it in items:
+        w2.append([it["date"], it["code"], it["name"], it["base_unit"], _CLASS_SHORT.get(it["class"], it["class"]), it["used"], it["waste"],
+                   it["issued"], it["normal"], it["median"], it["var_qty"], it["var_pct"], it["median_pct"], it["price_per_base"],
+                   it["var_value"], it["signal_th"]])
+    for row in w2.iter_rows(min_row=3, max_row=w2.max_row):
+        for c in row[5:11]:
+            c.number_format = "#,##0.###"
+        row[11].number_format = "0.0"
+        row[12].number_format = "0.0"
+        row[13].number_format = "#,##0.0000"
+        row[14].number_format = "#,##0.00"
+    w2.column_dimensions["C"].width = 44
+    w2.column_dimensions["P"].width = 40
+    w2.freeze_panes = "D3"
+    return _xlsx(wb, _fname("ผลต่างตัดเบิกรายวัน", d["branch"]["name"], month))
+
+
 @router.get("/api/bom-center/issue-reports/daily.xlsx")
 def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), month: Optional[str] = Query(None)):
     from openpyxl import Workbook
@@ -3417,6 +3475,8 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     t = d["totals"]
     wb = Workbook()
     ws = wb.active
+    if d.get("stock"):
+        return _daily_xlsx_stock(wb, ws, d, items, month)
     _sheet(ws, "ผลต่างตัดเบิกรายวัน", DAILY_HEADERS,
            f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
            f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
@@ -3732,7 +3792,7 @@ PER_SALES_COMPARE = "เทียบสาขา"
 
 def _per_sales_headers(weeks: int) -> list:
     return ["สาขา", "รหัส", "วัตถุดิบ", "หน่วย", f"ต่อยอดขาย ฿100,000 ({weeks} สัปดาห์ล่าสุด)", f"{weeks} สัปดาห์ก่อนหน้า",
-            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "การใช้ตามสูตรเทียบค่ากลาง %", "ยอดซื้อเทียบค่ากลาง %", "หมายเหตุ"]
+            "เปลี่ยนแปลง %", "แกว่งต่อสัปดาห์ %", "มูลค่าต่อยอดขาย ฿100,000", "การใช้เทียบค่ากลาง %", "ยอดซื้อเทียบค่ากลาง %", "หมายเหตุ"]
 
 
 def _strip_benchmark(out: dict) -> dict:
@@ -3793,10 +3853,10 @@ def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), 
     cur, prv = r["current"], r["previous"]
     _sheet(ws, PER_SALES_SHEET, _per_sales_headers(r["weeks"]),
            f"วัตถุดิบที่ใช้ต่อยอดขาย ฿100,000 (ไม่รวมภาษีมูลค่าเพิ่ม) · {r['weeks']} สัปดาห์ล่าสุด {cur['from']} ถึง {cur['to']}"
-           + (f" เทียบ {prv['from']} ถึง {prv['to']}" if prv else "") + " · ปริมาณใช้ตามสูตรเดียวกับยอดแนะนำ (รวมส่วนสูญเสีย) "
+           + (f" เทียบ {prv['from']} ถึง {prv['to']}" if prv else "") + " · ปริมาณใช้ชุดเดียวกับยอดแนะนำ (รวมส่วนสูญเสีย) "
            f"· มูลค่าตามราคาเดือน {r['month']} · แกว่งต่อสัปดาห์ = ส่วนเบี่ยงเบนมาตรฐานของอัตรารายสัปดาห์ ÷ ค่าเฉลี่ย "
            f"ถ้าเกิน {r['steady_pct']:g}% ถือว่าใช้ไม่สม่ำเสมอ"
-           + (f" · {_bm.LABEL} = ค่ากลาง (มัธยฐาน) ของ {', '.join(x['name'] for x in bench['branches'])} · “การใช้ตามสูตรเทียบค่ากลาง %” = ส่วนต่างของปริมาณใช้ตามสูตรจากค่ากลาง · “ยอดซื้อเทียบค่ากลาง %” = ส่วนต่างของมูลค่าที่ซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 จากค่ากลาง (ป้ายเตือนใช้ตัวเลขนี้)"
+           + (f" · {_bm.LABEL} = ค่ากลาง (มัธยฐาน) ของ {', '.join(x['name'] for x in bench['branches'])} · “การใช้เทียบค่ากลาง %” = ส่วนต่างของปริมาณใช้ตามสูตรจากค่ากลาง · “ยอดซื้อเทียบค่ากลาง %” = ส่วนต่างของมูลค่าที่ซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 จากค่ากลาง (ป้ายเตือนใช้ตัวเลขนี้)"
               f" · ช่วงยอมรับสต็อก ±{r['buffer_pct']:g}% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา · แถว “ทั้งเครือ” คือผลรวมทุกสาขา" if bench else ""))
     blocks = [(b["branch"], b["items"]) for b in r["branches"]] + ([(_bm.LABEL, bench["items"])] if bench else []) \
         + ([("ทั้งเครือ", chain["items"])] if chain else [])

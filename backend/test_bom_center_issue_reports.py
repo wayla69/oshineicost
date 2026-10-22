@@ -166,6 +166,7 @@ def three_salmon_days(con, third_submitted=True):
     con.commit()
 
 
+@pytest.mark.usefixtures("recipe_mode")   # PR-S4: this test compares the daily issue with the recipes (mode full); stock mode: test_slip_variance_nobom.py
 def test_daily_numbers_and_the_three_day_flag(con):  # noqa: F811
     three_salmon_days(con)
     d = IR.daily(con, 1, "2026-09", today=TODAY)
@@ -201,6 +202,7 @@ def test_daily_numbers_and_the_three_day_flag(con):  # noqa: F811
     assert len(IR.daily_items(con, 1, "2026-09", today=TODAY)) == 3 * 2 + 27 * 2
 
 
+@pytest.mark.usefixtures("recipe_mode")   # PR-S4: this test compares the daily issue with the recipes (mode full); stock mode: test_slip_variance_nobom.py
 def test_two_days_a_draft_or_a_gap_make_no_flag(con):  # noqa: F811
     slip(con, "2026-09-01", [g(CRAB, 450), g(SALMON, 260)])
     slip(con, "2026-09-02", [g(CRAB, 450), g(SALMON, 260)])
@@ -244,6 +246,7 @@ def test_streaks_need_consecutive_days():
     assert [r["days"] for r in S([("a", 25), ("b", 30), ("c", 21), ("d", 22), ("e", 5), ("f", 30), ("g", 30), ("h", 30)])] == [4, 3]
 
 
+@pytest.mark.usefixtures("recipe_mode")   # PR-S4: this test compares the daily issue with the recipes (mode full); stock mode: test_slip_variance_nobom.py
 def test_anomalies_name_the_branch_and_the_items(con):  # noqa: F811
     three_salmon_days(con)
     out = IR.anomalies(con, date(2026, 9, 3), lookback=7)
@@ -350,6 +353,7 @@ def _sql_slip(c, bid, day, code, used, status="confirmed", late=0):
               " VALUES(?,?,?,0,'กรัม',?,0)", (sid, code, used, used))
 
 
+@pytest.mark.usefixtures("recipe_mode")   # PR-S4: this test compares the daily issue with the recipes (mode full); stock mode: test_slip_variance_nobom.py
 def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_on):  # noqa: F811
     import main
     from routers.bom_center import DAILY_HEADERS, DAILY_ITEM_HEADERS, RECON_HEADERS
