@@ -127,8 +127,9 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "branch.stock",
     },
     "franchise": {
-        # The owner of a franchise branch (PR-L). One module, one GET prefix, NO write rule: every other path is closed
-        # to it (no sales.overview, so a path with no rule is denied). The account's `branch` pins the summary.
+        # The owner of a franchise branch (PR-L). One module, one GET prefix; the only write rules are the six Web Push device
+        # endpoints of its own devices (PR-F2). Every other path is closed to it (no sales.overview, so a path with no rule
+        # is denied). The account's `branch` pins the summary.
         "franchise.view",
     },
 }
@@ -228,6 +229,11 @@ OPEN_TO_ALL = PUBLIC_PREFIXES + ("/api/usage/",)
 # intersect the union of EVERY matching rule; paths matching no rule fall through
 # to default-allow (every role holds sales.overview, so generic /api/sales and
 # /api/analysis reads need no rule). Only the sensitive prefixes are tagged.
+# Web Push (routers/push_api.py): the modules that reach every /api/push endpoint, and the device endpoints a franchise owner may
+# also reach (its own devices only; PR-F2)
+_PUSH_MODULES = frozenset({"sales.overview", "branch.stock", "supply.warehouse"})
+PUSH_DEVICE_PATHS = ("vapid-public", "subscribe", "unsubscribe", "status", "prefs", "test")
+
 MODULE_RULES = [
     # ── reads that must be denied to some roles ────────────────────────────
     ("GET", "/api/cost",                     {"cost.analysis"}),
@@ -386,10 +392,13 @@ MODULE_RULES = [
     ("W",   "/api/bom",                      {"bom.edit"}),
     ("W",   "/api/settings",                 {"system.settings"}),
     ("W",   "/api/targets",                  {"system.settings"}),
-    ("GET", "/api/franchise",                {"franchise.view"}),   # PR-L: ร้านของฉัน (read-only; the role has no W rule anywhere)
+    ("GET", "/api/franchise",                {"franchise.view"}),   # PR-L: ร้านของฉัน (read-only; its only W rules are the push device endpoints below)
     # batch 3 (2.1): a phone turns on the reminders of its own login's work. Every endpoint answers for the caller's own devices; the
-    # branch login and the warehouse hold no sales.overview, so they are named here (the franchise owner stays closed out)
-    ("*",   "/api/push",                     {"sales.overview", "branch.stock", "supply.warehouse"}),
+    # branch login and the warehouse hold no sales.overview, so they are named here
+    ("*",   "/api/push",                     _PUSH_MODULES),
+    # PR-F2: the franchise owner turns its own morning summary (kind "franchise") on and off. Only the six device endpoints, each
+    # of which answers for the caller's own devices (push_api: _caller, username match); any other /api/push path stays closed
+    *[("*", "/api/push/" + _p, _PUSH_MODULES | {"franchise.view"}) for _p in PUSH_DEVICE_PATHS],
     ("W",   "/api/branches",                 {"system.settings"}),
     ("W",   "/api/closed_hours",             {"system.settings"}),
     ("W",   "/api/upload",                   {"data.upload"}),

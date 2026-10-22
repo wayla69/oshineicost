@@ -2342,7 +2342,8 @@ def _push_scheduler_loop():
         for step in (_push_api.maybe_send_morning, _push_api.maybe_send_alerts, _push_api.maybe_send_weekly,
                      _push_api.maybe_send_supply,        # 08:00 · the branch's morning line, the centre roles' lines (kind "supply")
                      _push_api.maybe_send_precutoff,     # 11:00 · branches that have not yet submitted today's order
-                     _push_api.maybe_send_cutoff):       # 13:15 · Sales Support: the branches that missed it
+                     _push_api.maybe_send_cutoff,        # 13:15 · Sales Support: the branches that missed it
+                     _push_api.maybe_send_franchise):    # 08:30 · PR-F2: each franchise owner's own branch (kind "franchise")
             try:                                         # one failing step never stops the next, and the loop never dies
                 step()
             except Exception as e:  # noqa: BLE001

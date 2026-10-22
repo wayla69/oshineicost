@@ -314,8 +314,12 @@ def test_a_branch_device_sees_only_itself_in_the_push_status(world):
         _sql("DELETE FROM usage_meta WHERE key='push_morning'")
 
 
-def test_the_franchise_owner_stays_closed_out_of_the_push_endpoints():
-    assert not auth.path_allowed("POST", "/api/push/subscribe", auth.ROLE_MODULES["franchise"])
+def test_the_franchise_owner_reaches_only_the_push_device_endpoints():
+    # PR-F2: the franchise owner turns its own morning summary on and off (kind "franchise", test_franchise_f2.py); any other
+    # /api/push path stays closed to the role
+    fr = auth.ROLE_MODULES["franchise"]
+    assert auth.path_allowed("POST", "/api/push/subscribe", fr) and auth.path_allowed("GET", "/api/push/vapid-public", fr)
+    assert not auth.path_allowed("POST", "/api/push/other", fr) and not auth.path_allowed("GET", "/api/push", fr)
     for role in ("branch", "warehouse", "salessupport", "operation", "accounting", "management"):
         mods = auth.ROLE_MODULES[role]
         assert auth.path_allowed("POST", "/api/push/subscribe", mods) and auth.path_allowed("GET", "/api/push/vapid-public", mods), role

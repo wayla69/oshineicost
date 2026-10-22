@@ -56,11 +56,17 @@ DISC_MIN_BAHT = 3000.0                          # … and at least this many bah
 # what a device can switch off, one by one (push_subscription.off holds the muted ids, comma-separated)
 KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("weekly", "สรุปรายสัปดาห์ เช้าวันจันทร์"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
          ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ"),
-         ("supply", "งานวัตถุดิบและใบสั่งซื้อ (ตอนเช้า และเตือนก่อนตัดรอบ)")]
+         ("supply", "งานวัตถุดิบและใบสั่งซื้อ (ตอนเช้า และเตือนก่อนตัดรอบ)"),
+         ("franchise", "สรุปร้านของฉันทุกเช้า 08:30")]
 KIND_IDS = [k for k, _ in KINDS]
 # batch 3 (2026-10-12): the supply reminders reach the phones of the branch accounts and of the centre roles that own a line.
 # A device that belongs to a branch-scoped login, or to a role that cannot read the chain's sales (the warehouse), is offered
 # this kind alone and never receives the others (send_to_all chain_only) — they carry the chain's sales figures.
+# PR-F2 (2026-10-22): kind "franchise" is the franchise owner's own morning summary of its branch (ร้านของฉัน). It is offered to a
+# login of role franchise ALONE and sent only to that login's own devices (maybe_send_franchise, only_users); a franchise device is
+# offered no other kind and never receives one: the chain kinds go out chain_only (its row carries its branch, and the role holds no
+# sales.overview) and the supply kinds by role.
+FRANCHISE_ROLE = "franchise"
 SUPPLY_MORNING = (8, 0)                         # Thai clock: the morning line of each branch and of the centre roles
 PRECUTOFF_AT = (11, 0)                          # two hours before the 13:15 cutoff
 CUTOFF_AT = (13, 15)                            # the missed-cutoff note, Sales Support only
@@ -140,8 +146,10 @@ def _kinds_for(con, user: str, request) -> list:
             role = (u["role"] if u else "") or ""
         except Exception:  # noqa: BLE001
             role = ""
+    if role == FRANCHISE_ROLE:
+        return [kv for kv in KINDS if kv[0] == "franchise"]
     supply = role in SUPPLY_ROLES
-    return [kv for kv in KINDS if (kv[0] != "supply" and chain) or (kv[0] == "supply" and supply)]
+    return [kv for kv in KINDS if kv[0] != "franchise" and ((kv[0] != "supply" and chain) or (kv[0] == "supply" and supply))]
 
 
 def _caller(request: Request) -> str:
@@ -196,10 +204,13 @@ def push_subscribe(body: _SubscribeBody, request: Request):
 
 @router.post("/api/push/unsubscribe", include_in_schema=False)
 def push_unsubscribe(body: _EndpointBody, request: Request):
-    _caller(request)
+    user = _caller(request)
     with get_db() as con:
         ensure(con)
-        cur = con.execute("DELETE FROM push_subscription WHERE endpoint = ?", (body.endpoint,))
+        if _auth.scope_branch(request):         # a branch / franchise login removes its own device only (PR-F2)
+            cur = con.execute("DELETE FROM push_subscription WHERE endpoint = ? AND username = ?", (body.endpoint, user))
+        else:
+            cur = con.execute("DELETE FROM push_subscription WHERE endpoint = ?", (body.endpoint,))
         con.commit()
         return {"ok": True, "removed": cur.rowcount}
 
@@ -259,7 +270,9 @@ def push_test(request: Request):
     with get_db() as con:
         ensure(con)
         chain = _chain_ok(con, user) and not _auth.scope_branch(request)
-        body = (f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if chain
+        franchise = [k for k, _ in _kinds_for(con, user, request)] == ["franchise"]
+        body = (f"เครื่องนี้จะได้รับสรุปร้านของฉันทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if franchise
+                else f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if chain
                 else "เครื่องนี้จะได้รับการแจ้งเตือนงานวัตถุดิบและใบสั่งซื้อ")
         payload = {"title": "Oshinei · ทดสอบการแจ้งเตือน", "body": body, "url": "/", "tag": "oshinei-test"}
         r = send_to_all(con, payload, only_user=user)
@@ -1011,4 +1024,62 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
         _meta_set(con, "push_alerts_sent", json.dumps(sent_keys[-60:], ensure_ascii=False))
         _meta_set(con, "push_alerts", json.dumps(rec, ensure_ascii=False))
         con.commit()
+    return rec
+
+
+# ── PR-F2: the franchise owner's morning summary (kind "franchise") ─────────
+#   push_franchise_day  08:30  each franchise login with a device: its own branch's last finished day against the same weekday a
+#                              week earlier, the month so far against the target, and the ต้องแก้ count (routers/franchise.py)
+# Sent with only_users (the owner's own logins), never chain_only: the payload is one branch's, and a franchise device is never
+# offered or sent a chain kind. A tap opens ร้านของฉัน (a franchise login lands there; url /?go=franchise).
+def franchise_payloads(con, devices: dict, now) -> list:
+    """[(branch, [users], payload)] for every branch that has a franchise login holding a device. Pure apart from the reads."""
+    from . import franchise as _fr          # the registered module object (see build_morning)
+    by_branch: dict = {}
+    for u, (role, b) in devices.items():
+        if role == FRANCHISE_ROLE and b:
+            by_branch.setdefault(b, []).append(u)
+    out = []
+    for b, users in sorted(by_branch.items()):
+        r = con.execute("SELECT branch_id FROM branches WHERE name = ?", (b,)).fetchone()
+        if not r:
+            continue
+        d = _fr.franchise_summary_data(int(r[0]))
+        ins = _fr.franchise_insight_data(int(r[0]), d.get("month"))
+        payload = _fr.franchise_morning_payload(d, ins, today=now.date())
+        if payload:
+            out.append((b, sorted(users), payload))
+    return out
+
+
+def maybe_send_franchise(now=None, send=None, force: bool = False) -> Optional[dict]:
+    """Once a day from MORNING_HOUR:MORNING_MINUTE Thai time: each franchise owner's own summary to that owner's devices.
+    The record (usage_meta push_franchise) keeps the built payloads, so a box without VAPID keys still shows what it would send."""
+    now = now or _thai_now()
+    if not force and (now.hour, now.minute) < (MORNING_HOUR, MORNING_MINUTE):
+        return None
+    day = now.strftime("%Y-%m-%d")
+    with get_db() as con:
+        ensure(con)
+        if not _supply_claim(con, "push_franchise_day", day, force):
+            return None
+        c = vapid_config()
+        rec = {"day": day, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "configured": c["configured"], "groups": []}
+        try:
+            devices = {u: v for u, v in _devices_by_user(con).items() if v[0] == FRANCHISE_ROLE}
+            groups = franchise_payloads(con, devices, now) if devices else []
+            rec["payloads"] = [{"branch": b, "users": len(us), **p} for b, us, p in groups]
+            if c["configured"] and groups:
+                rec.setdefault("groups", [])
+                for b, users, payload in groups:
+                    r = send_to_all(con, payload, send=send, only_users=users, kind="franchise")
+                    con.commit()
+                    rec["groups"].append({"label": b, "users": len(users), **{k: r[k] for k in ("targets", "sent", "gone", "failed", "muted")}})
+            for k in ("targets", "sent", "gone", "failed", "muted"):
+                rec[k] = sum(g[k] for g in rec["groups"])
+        except Exception as e:  # noqa: BLE001
+            rec["error"] = str(e)
+            print(f"[push] franchise: {e}")
+        _supply_rec(con, "push_franchise", rec)
+    print(f"[push] franchise {day}: {rec.get('sent', 0)}/{rec.get('targets', 0)} sent" + (f" ({rec['error']})" if rec.get("error") else ""))
     return rec
