@@ -274,7 +274,7 @@ def pushed(world, monkeypatch):
 def test_a_franchise_login_subscribes_and_is_offered_its_kind_only(pushed):
     b = pushed["b"]
     j = b.post("/api/push/prefs", json={"endpoint": EP}).json()
-    assert [k["id"] for k in j["kinds"]] == ["franchise"]
+    assert [k["id"] for k in j["kinds"]] == ["franchise", "franchise_reply"]          # PR-F4: + head office's replies
     st = b.get("/api/push/status").json()
     assert st["last"] is None and st["devices"] == st["my_devices"] == 1                     # no chain figure, no chain count
     # muting is per device and only the franchise kind is known to it
@@ -283,7 +283,7 @@ def test_a_franchise_login_subscribes_and_is_offered_its_kind_only(pushed):
     b.post("/api/push/prefs", json={"endpoint": EP, "off": []})
     # a centre login is never offered the franchise kind
     mk = [k["id"] for k in pushed["mg"].post("/api/push/prefs", json={"endpoint": "https://push.example/f2-mg"}).json()["kinds"]]
-    assert "franchise" not in mk and "morning" in mk
+    assert "franchise" not in mk and "franchise_reply" not in mk and "morning" in mk
 
 
 def test_the_franchise_login_reaches_no_other_push_path_and_removes_only_its_own_device(pushed):

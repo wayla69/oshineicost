@@ -5,12 +5,15 @@ Every signed-in role may read it (auth.PUBLIC_PREFIXES): it returns only the cou
 หน้างาน (bom_center/nav_badges.py), and an empty `pages` for a role that cannot read หน้างาน. A login pinned to a branch gets that
 branch's counts only. Cached per user for 60 s with core.ttl_cache; a bom-center write drops it (the cached function's name starts with `bc_`).
 """
+import json
+
 from fastapi import APIRouter, Request
 
 import auth as _auth
 from core import get_db, ttl_cache
 from bom_center import nav_badges as _nb
 from bom_center.schema import ensure as _ensure
+from . import franchise_msgs as _fm
 
 router = APIRouter()
 
@@ -46,4 +49,17 @@ def _identity(request: Request):
 def nav_badges(request: Request):
     user, role, modules = _identity(request)
     branch = _auth.scope_branch(request) or ""
-    return bc_nav_badges_for(user=user, role=role, branch=branch, mods=",".join(sorted(modules)))
+    out = bc_nav_badges_for(user=user, role=role, branch=branch, mods=",".join(sorted(modules)))
+    # PR-F4: the unread franchise message threads, beside the tasks (not cached: one COUNT, and a reply must show at once).
+    # {"franchise": n} for the owner's หน้าแรก, {"fmsg": n} for head office's inbox tile. `pages` / `total` stay the open TASKS
+    # (bom_center/nav_badges.mine_open, the figure of หน้างาน): a message is not a task, so it never adds to them.
+    try:
+        with get_db() as con:
+            extra = _fm.badge_counts(con, role if _auth.auth_enabled() else "management", modules, branch or None)
+    except Exception:       # pragma: no cover - a badge never breaks the menu
+        extra = {}
+    if not extra:
+        return out
+    if not isinstance(out, dict):           # core.ttl_cache hands back the cached JSON bytes as a Response
+        out = json.loads(bytes(out.body).decode("utf-8"))
+    return {**out, "messages": extra}

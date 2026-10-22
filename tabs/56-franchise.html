@@ -16,6 +16,9 @@
       <!-- PR-F1: the month as an Excel file (GET /api/franchise/summary.xlsx); a paper copy prints from this page (A4, index.html) -->
       <button type="button" id="frcDownload" class="frc-dl" onclick="frcDownload()" hidden>ดาวน์โหลดรายงานเดือนนี้</button>
     </div>
+    <!-- PR-F4: ติดต่อสำนักงานใหญ่ - the owner's questions to head office and the replies (GET/POST /api/franchise/messages*,
+         routers/franchise_msgs.py), drawn by js/17-franchise.js frcMsg*. Shown for the franchise login only. -->
+    <div class="ms-section" id="frcMsg" hidden></div>
     <div id="frcBody"></div>
     <!-- PR-F2: รับแจ้งเตือนทุกเช้า - this owner's own morning summary on this phone (kind "franchise", routers/push_api.py
          maybe_send_franchise). The card logic is the phone summary's (09c-mobile.js msPush*, id prefix frcPush); hidden where

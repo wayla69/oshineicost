@@ -313,9 +313,12 @@ function lnchTasksAll() { _deptFocus = null; shmFilterSet(_lnchFilter()); supply
 // navBadgesApply() redraws the counts in place - no re-render, so focus and scroll stay. The data is fetched on load, whenever the tab is shown
 // again and every 5 minutes; a failed fetch keeps the last count for 15 minutes and then shows none - never an error on the screen.
 const _NB_EVERY_MS = 5 * 60 * 1000, _NB_MIN_GAP_MS = 45 * 1000, _NB_KEEP_MS = 15 * 60 * 1000;
-const _NB = { pages: /** @type {Record<string, number>} */ ({}), at: 0, tried: 0, busy: false, started: false };
+// PR-F4: `messages` of the answer = the unread franchise message threads on a page ({franchise: n} the owner, {fmsg: n} head office). They
+// light the page's badge (and so its department) like a task, but never the "งานของฉัน" total: a message is not a task.
+const _NB = { pages: /** @type {Record<string, number>} */ ({}), msgs: /** @type {Record<string, number>} */ ({}), at: 0, tried: 0, busy: false, started: false };
 function _navPageSpec(p) { return 'p:' + p.tab + (p.pane ? ':' + p.pane : ''); }
-function navPageCount(p) { return _NB.pages[p.tab + (p.pane ? ':' + p.pane : '')] || 0; }
+function _navKeyCount(k) { return (_NB.pages[k] || 0) + (_NB.msgs[k] || 0); }
+function navPageCount(p) { return _navKeyCount(p.tab + (p.pane ? ':' + p.pane : '')); }
 function navDeptCounts() {   // { department key: n } over the pages the person may open
   /** @type {Record<string, number>} */
   const out = {};
@@ -335,14 +338,15 @@ function navBadgesApply() {
       const spec = el.dataset.nb || '';
       if (spec === 't') n = Object.values(_NB.pages).reduce((a, v) => a + (v > 0 ? v : 0), 0);
       else if (spec.startsWith('d:')) { depts = depts || navDeptCounts(); n = depts[spec.slice(2)] || 0; }
-      else if (spec.startsWith('p:')) n = _NB.pages[spec.slice(2)] || 0;
+      else if (spec.startsWith('p:')) n = _navKeyCount(spec.slice(2));
     }
     let b = own ? el : el.querySelector(':scope > .nb');
     if (n < 1) { if (b) { if (own) b.hidden = true; else b.remove(); } return; }
     if (!b) { b = document.createElement('span'); b.className = 'nb'; el.appendChild(b); }
     b.hidden = false;
     b.setAttribute('role', 'img');
-    b.setAttribute('aria-label', `รอ ${n} งาน`);
+    const msgOnly = !own && (el.dataset.nb || '').startsWith('p:') && !_NB.pages[(el.dataset.nb || '').slice(2)];
+    b.setAttribute('aria-label', msgOnly ? `ข้อความใหม่ ${n} หัวข้อ` : `รอ ${n} งาน`);
     b.textContent = navBadgeText(n);
   });
 }
@@ -352,9 +356,9 @@ async function navBadgesRefresh(force) {
   try {
     const j = await getJSON('/api/nav/badges');                    // throws on a non-2xx answer
     if (!j || !j.pages || typeof j.pages !== 'object') throw new Error('shape');
-    _NB.pages = j.pages; _NB.at = Date.now();
+    _NB.pages = j.pages; _NB.msgs = (j.messages && typeof j.messages === 'object') ? j.messages : {}; _NB.at = Date.now();
   } catch (e) {
-    if (Date.now() - _NB.at > _NB_KEEP_MS) _NB.pages = {};     // no badges rather than an old number; nothing is shown about the failure
+    if (Date.now() - _NB.at > _NB_KEEP_MS) { _NB.pages = {}; _NB.msgs = {}; }     // no badges rather than an old number; nothing is shown about the failure
   } finally { _NB.busy = false; }
   navBadgesApply();
 }

@@ -1905,6 +1905,44 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
 .frc-heat .hd { font-size: 12px; color: var(--text-secondary); }
 .frc-heat .hx { height: 22px; border-radius: 3px; }
 .frc-stars { color: var(--amber-ink); letter-spacing: 1px; font-size: 13px; }
+/* PR-F4: ติดต่อสำนักงานใหญ่ (#frcMsg, ร้านของฉัน, js/17-franchise.js fm*) and ข้อความจากเจ้าของสาขา (#tab-fmsg, js/19-fmsg.js).
+   Message text keeps its own line breaks (pre-wrap) and wraps long words; every target is at least 44 px high. */
+.fm-card { padding: 10px 12px; }
+.fm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.fm-grow { flex: 1 1 auto; min-width: 0; }
+.fm-btn { min-height: 44px; padding: 8px 16px; font-size: 14px; font-weight: 600; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); cursor: pointer; }
+.fm-btn.fm-primary { border: 0; background: var(--accent); color: var(--on-accent); }
+.fm-btn:disabled { opacity: .6; cursor: progress; }
+.fm-row { display: flex; width: 100%; min-height: 56px; padding: 8px 4px; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--border); cursor: pointer; color: var(--text-primary); }
+.fm-row:hover, .fm-row.fm-on { background: var(--bg-subtle); }
+.fm-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.fm-row-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fm-topic { font-size: 14px; font-weight: 600; color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-unread .fm-topic { color: var(--navy-ink); }
+.fm-when { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fm-snip { font-size: 13px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad-ink); }
+.fm-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; color: var(--text-secondary); background: var(--bg-subtle); white-space: nowrap; }
+.fm-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--on-accent); background: var(--accent); }
+.fm-sub { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 2px 0 8px; }
+.fm-label { display: block; font-size: 13px; color: var(--text-secondary); margin: 8px 0 4px; }
+.fm-select { width: 100%; min-height: 44px; padding: 8px 10px; font-size: 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); }
+.fm-text { display: block; width: 100%; min-height: 96px; padding: 10px; font-size: 15px; line-height: 1.5; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: var(--bg-input); color: var(--text-primary); resize: vertical; font-family: inherit; }
+.fm-count { font-size: 12px; color: var(--text-muted); text-align: right; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.fm-ctx { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; margin: 0 0 8px; border-radius: var(--r-sm); background: var(--bg-subtle); font-size: 13px; color: var(--text-secondary); }
+.fm-ctx-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fm-x { flex: 0 0 44px; min-height: 44px; margin: -8px -6px -8px 0; font-size: 20px; line-height: 1; background: transparent; border: 0; color: var(--text-muted); cursor: pointer; }
+.fm-thread { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
+.fm-msg { max-width: 88%; align-self: flex-start; padding: 8px 10px; border-radius: var(--r-md); background: var(--bg-subtle); border: 1px solid var(--border); }
+.fm-msg.fm-mine { align-self: flex-end; background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
+.fm-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 3px; }
+.fm-body { font-size: 14px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+.fm-closed { font-size: 13px; color: var(--text-muted); margin: 4px 0; }
+.frc-ask { display: inline-flex; align-items: center; min-height: 44px; margin: -10px 0 -10px 6px; padding: 0 6px; font-size: 12.5px; font-weight: 600; color: var(--accent); background: transparent; border: 0; text-decoration: underline; cursor: pointer; vertical-align: middle; }
+.fmsg-wrap { max-width: 1180px; margin: 0 auto; }
+.fmsg-grid { display: grid; grid-template-columns: minmax(280px, 400px) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .fmsg-grid { grid-template-columns: minmax(0, 1fr); } }
+@media print { #frcMsg, .frc-ask { display: none !important; } }
 @media (max-width: 700px) {
   .content-area .frc-tbl { font-size: 13px; }
   .content-area .frc-tbl th:first-child, .content-area .frc-tbl td:first-child { max-width: none; }
@@ -3162,5 +3200,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
 <script type="text/plain" class="lazy-slice" data-lazy="/js/16-supplyhome.js"></script>
 <script type="text/plain" class="lazy-slice" data-lazy="/js/17-franchise.js"></script>
 <script type="text/plain" class="lazy-slice" data-lazy="/js/18-launcher.js"></script>
+<script type="text/plain" class="lazy-slice" data-lazy="/js/19-fmsg.js"></script>
 </body>
 </html>

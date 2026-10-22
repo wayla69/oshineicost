@@ -306,7 +306,7 @@ def _harness(tmp_path, role, expr, allowed="() => true", mode="full"):
     """Run the real registry (js/01-core.js) and the real search / badge functions (js/18-launcher.js) in node with the permission checks stubbed.
     PR-S1: `mode` is the system mode (BC_MODE) the registry runs in - `full` = every page, the setting these tests were written for."""
     a, b = CORE.index("const _SUPPLY_CENTRE"), CORE.index("// ── end page registry")
-    fns = "\n".join(_fn(LAUNCHER, n) for n in ("_deptRole", "deptPageAllowed", "deptVisible", "navPageCount", "navBadgeText", "pgNorm", "_pgEntry", "pgIndex", "_pgScore", "pgSearchResults", "pgBranchNames", "pgBranchHits"))
+    fns = "\n".join(_fn(LAUNCHER, n) for n in ("_deptRole", "deptPageAllowed", "deptVisible", "_navKeyCount", "navPageCount", "navBadgeText", "pgNorm", "_pgEntry", "pgIndex", "_pgScore", "pgSearchResults", "pgBranchNames", "pgBranchHits"))
     prelude = (f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }}; let BC_MODE = '{mode}';\n"
                f"const tabAllowed = {allowed}; const hasModule = () => true; const _supplyItemAllowed = it => tabAllowed(it.tab); const _noEmoji = s => s;\n"
                "const _PG_MAX = 12, _PG_IDLE = 8;\n" + _const(LAUNCHER, "_NB") + "\n")
@@ -344,7 +344,7 @@ def test_search_finds_pages_by_label_synonym_department_and_cluster(tmp_path):
 @needs_node
 def test_search_lists_only_what_the_role_may_open_and_each_page_once(tmp_path):
     full = _harness(tmp_path, "management", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
-    assert len(full) == len(set(full)) == 80 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone)
+    assert len(full) == len(set(full)) == 81 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone; PR-F4: + fmsg)
     assert "franchise|" in _harness(tmp_path, "franchise", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
     only = _json.dumps(["branchstock", "manual"])
     rows = _harness(tmp_path, "branch", "pgSearchResults('').map(e => e.tab)", allowed=f"t => {only}.includes(t)")
