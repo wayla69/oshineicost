@@ -40,6 +40,7 @@ from .clock import BKK, now_bkk
 from .prices import PriceBook
 from .units import Converter, is_big_pack, to_order_units_ex
 
+HISTORY_WEEKS = 8                    # owner 2026-10-22: every suggestion / normal / estimate reads this many weeks of history (was 4-6)
 Z = {"A": 1.65, "B": 1.28, "C": 1.04}
 # The calendar is keyed by the DELIVERY weekday (SQLite %w: Sun = 0); the cutoff follows from it.
 DEFAULT_CAL = {"1": {"delivery_weekday": 3},                       # Wed → cutoff Mon 13:15
@@ -497,7 +498,7 @@ def source_label(con, branch_id: int) -> dict:
         return out
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
     as_of = date.fromisoformat(last) if last else now_bkk().date() - timedelta(days=1)
-    start = era_start(as_of - timedelta(days=41), as_of)
+    start = era_start(as_of - timedelta(days=7 * HISTORY_WEEKS - 1), as_of)
     n = len(_slip_days(con, branch_id, start, as_of))
     out.update(kind="slips" if n >= SLIP_MIN_DAYS else "none", confirmed_days=n, window_days=(as_of - start).days + 1)
     if out["kind"] == "none":
@@ -505,7 +506,7 @@ def source_label(con, branch_id: int) -> dict:
         for b in company_branch_ids(con, exclude=branch_id):
             bl = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (b,)).fetchone()[0]
             bo = date.fromisoformat(bl) if bl else as_of
-            if len(_slip_days(con, b, era_start(bo - timedelta(days=41), bo), bo)) >= SLIP_MIN_DAYS:
+            if len(_slip_days(con, b, era_start(bo - timedelta(days=7 * HISTORY_WEEKS - 1), bo), bo)) >= SLIP_MIN_DAYS:
                 k += 1
         if k:
             out.update(kind="benchmark", branches=k)
@@ -621,7 +622,7 @@ def season_factor(con, branch_id: int, c_from: date, c_to: date) -> dict:
         return {"factor": 1.0, "mode": "off", "reason": ""}
 
 
-def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, season: str = "auto",
+def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = HISTORY_WEEKS, season: str = "auto",
             as_of: date = None, stock: dict = None, uplift_pct: float = 0.0, delivery: date = None,
             ref_branch: int = None, expected_sales: float = None) -> dict:
     """The suggestion for one branch, one round, one delivery (nothing saved). `delivery` names
@@ -878,7 +879,7 @@ def _unsuggested_rows(con, branch_id, rnd, order_day, stock, master, salmon, cma
     return rows
 
 
-def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, delivery: date = None) -> dict:
+def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = HISTORY_WEEKS, delivery: date = None) -> dict:
     """PR-19: the customers the cover period normally brings, day by day — the weekday
     mean of the last `weeks` weeks (the forecast's own baseline rule) and the same
     dates a year earlier — so a branch can turn "we expect N customers" into a buffer %."""
@@ -941,7 +942,7 @@ def save_run(con, out: dict, who: str, params: dict) -> int:
     return run_id
 
 
-def backtest(con, branch_id: int, weeks: int = 4, history_weeks: int = 6, as_of: date = None) -> dict:
+def backtest(con, branch_id: int, weeks: int = 4, history_weeks: int = HISTORY_WEEKS, as_of: date = None) -> dict:
     """Replay each of the last `weeks` weeks: forecast every day from the data
     before that week only, compare with what was actually used. MAPE weighted by
     actual usage, overall and by ABC class."""

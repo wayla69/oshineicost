@@ -20,6 +20,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from .clock import today as bkk_today
+from .forecast import HISTORY_WEEKS as _HISTORY_WEEKS
 from .fmt import day_th as _fmt_day
 from .fmt import item as _item
 from .fmt import no_unit as _no_unit
@@ -31,7 +32,7 @@ from .units import Converter, _is_pack_word, norm, unit_word
 DEFAULT_ZONES = (("frozen", "แช่แข็ง"), ("chilled", "แช่เย็น"), ("dry", "ของแห้ง"), ("bar", "บาร์น้ำ"), ("other", "อื่น ๆ"))
 ZONES_KEY = "bc_zones"
 FALLBACK_ZONE = "other"                   # where a guess lands when its zone no longer exists; cannot be deleted
-LOOKBACK_DAYS = 28
+LOOKBACK_DAYS = 7 * _HISTORY_WEEKS      # owner 2026-10-22: the daily-use average reads the same 8 weeks (forecast.HISTORY_WEEKS)
 RECENT_USE_DAYS = 14               # 3.2: an item the recipes used within this many days is on the default slip
 _ZONE_CODE = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
@@ -604,7 +605,7 @@ def estimated_use(con, branch_id: int, days: list) -> tuple:
     sales is not in it, so a closed day deducts nothing.
 
     PR-S3, stock mode (owner 2026-10-22): no recipes. A missing day is estimated at the branch's own mean of the CONFIRMED slips on the
-    same weekday over the 4 weeks before it (per item; used + waste, base units); with no such slip the day deducts nothing (it stays in
+    same weekday over the HISTORY_WEEKS (8) weeks before it (per item; used + waste, base units); with no such slip the day deducts nothing (it stays in
     `missing_days` and is not in the days returned here)."""
     if not days:
         return [], {}
@@ -626,7 +627,7 @@ def estimated_use(con, branch_id: int, days: list) -> tuple:
     return got, est
 
 
-SLIP_MEAN_WEEKS = 4            # PR-S3: a missing day is the mean of the same weekday over this many weeks before it
+SLIP_MEAN_WEEKS = _HISTORY_WEEKS            # PR-S3: a missing day is the mean of the same weekday over this many weeks before it
 
 
 def _estimated_from_slips(con, branch_id: int, days: list) -> tuple:
@@ -646,7 +647,7 @@ def _estimated_from_slips(con, branch_id: int, days: list) -> tuple:
         dd = date.fromisoformat(d)
         same = [x for x in ((dd - timedelta(days=7 * k)).isoformat() for k in range(1, SLIP_MEAN_WEEKS + 1)) if x in confirmed]
         if not same:
-            continue                                      # no slip on this weekday in the 4 weeks: the day deducts nothing
+            continue                                      # no slip on this weekday in the history window: the day deducts nothing
         got.append(d)
         tot = {}
         for x in same:

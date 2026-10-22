@@ -103,7 +103,8 @@ def test_normal_needs_two_days_with_a_confirmed_slip():
     assert IR.normal_of(_h(["2026-09-23"], iss={"2026-09-23": {"X": 5.0}}), wed) is None
     assert IR.normal_of(_h(["2026-09-23", "2026-09-19"]), wed) is None           # 19 Sep is not the same weekday
     assert IR.normal_of(_h(["2026-09-02", "2026-09-23"], iss={"2026-09-02": {"X": 5.0}}), wed) == {"X": 2.5}
-    assert IR.normal_of(_h(["2026-08-26", "2026-09-23"]), wed) is None           # 5 weeks back is outside the window
+    assert IR.normal_of(_h(["2026-08-05", "2026-09-23"]), wed) == {}             # 8 weeks back (H8) is inside the window
+    assert IR.normal_of(_h(["2026-07-29", "2026-09-23"]), wed) is None          # 9 weeks back is outside the window
 
 
 def _branch_hist(per_day, sales=1000.0, days=14, start=date(2026, 9, 1)):

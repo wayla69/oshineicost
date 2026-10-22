@@ -317,8 +317,8 @@ def test_the_overhaul_document_has_the_department_section_and_the_d_rows():
         assert re.search(rf"\| {pr} \|", doc), pr
 
 
-def test_the_sop_is_version_1_17_with_a_revision_row_and_the_page_locations():
+def test_the_sop_is_version_1_18_with_a_revision_row_and_the_page_locations():
     sop = (REPO / "docs" / "sop" / "WP-SCM-001_ingredient_order_procedure.html").read_text(encoding="utf-8")
-    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.17 /", sop)      # PR-S4: 1.17 (22 ต.ค. 2026) carries the stock-first rewrite
-    assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop)
+    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.18 /", sop)      # PR-H8: 1.18 (22 ต.ค. 2026) widens the history to 8 weeks; 1.17 carried the stock-first rewrite
+    assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.18</td><td>22 ต\.ค\. 2026</td>", sop)
     assert "ตำแหน่งของหน้าในแอป" in sop and "ปฏิบัติการ → การใช้งานทุกสาขา" in sop
