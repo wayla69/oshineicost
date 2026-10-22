@@ -95,11 +95,14 @@ const _OHB_HELP = {
       'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
       'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
   central: {
-    _: ['ขั้นที่ 2 นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
+    get _() {                                                   // PR-S4: stock mode numbers the steps from 1 (no recipe step 1)
+      const a = ['ขั้นที่ 2 นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ปครั้งเดียว ได้ทั้งบัญชีสินค้าที่สั่งจากไดกิโตะ กรุ๊ป (หน่วย ราคา และรายการนอกบัญชีเป็น “สาขาซื้อเอง”) และใบรับสินค้าประจำเดือนของแต่ละสาขา · นำเข้าเดือนเดิมซ้ำจะแทนที่ใบเดิม · สาขาที่บันทึกรับเองครบแล้วไม่ต้องเลือก',
       'ขั้นที่ 3 จับคู่รหัสเดิมกับรหัสของไดกิโตะ กรุ๊ป · มีผลต่อยอดแนะนำและผลต่าง ไม่มีผลต่อต้นทุน',
       'ขั้นที่ 4 นับก่อนเปิดร้านวันที่ 1 · นำเข้าต้นงวดก่อนปลายงวด',
       'ขั้นที่ 5 สาขายืนยันรับสินค้าครบและระบุเหตุผลผลต่าง (หรือประสานงานขายและฝ่ายวิเคราะห์ทำแทน)',
-      'ขั้นที่ 6 บัญชีดาวน์โหลดใบสรุปตัดเบิก แล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”'] },
+      'ขั้นที่ 6 บัญชีดาวน์โหลดใบสรุปตัดเบิก แล้วทำเครื่องหมาย “บันทึกเข้าระบบบัญชีแล้ว”'];
+      return BC_MODE === 'stock' ? a.map(x => x.replace(/ขั้นที่ (\d)/, (m, n) => 'ขั้นที่ ' + (n - 1))) : a;
+    } },
   month: {
     _: ['รวมงวดที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร',
       'ข้อมูลส่วนนี้แสดงในรายงานผู้บริหาร (รายเดือน) ด้วย · กลุ่มมูลค่าสูง / กลาง / ต่ำ คือกลุ่มวัตถุดิบตามมูลค่า'] },
@@ -199,10 +202,16 @@ function _ohbStepDraw() {
   _OHB_STEPS.forEach(i => {
     const el = document.getElementById('ohbSt' + i), card = el && el.closest('.card');
     if (BC_MODE === 'stock' && (i === 1 || i === 7)) { if (card) card.style.display = 'none'; return; }
+    if (BC_MODE === 'stock' && card) { const nb = card.querySelector('span'); if (nb) nb.textContent = String(_ohbStepList().indexOf(i) + 1); }   // the visible steps are numbered 1, 2, 3 ...
     const on = f === 'all' || (f === 'todo' ? !_ohbStepDone(i) : _ohbStepDone(i));
     if (card) card.style.display = on ? '' : 'none';
     if (on) n++;
   });
+  if (BC_MODE === 'stock') {                                          // the header counts the visible steps only
+    const L = _ohbStepList(), d = document.getElementById('ohbCloseDone'), t = document.getElementById('ohbCloseTotal');
+    if (d) d.textContent = L.filter(i => _ohbStSt[i] === 'done').length;
+    if (t) t.textContent = L.length;
+  }
   const none = document.getElementById('ohbStepNone');
   if (none) none.innerHTML = n ? '' : uiStateFilter.empty(f, '_ohbStepPick', 'ขั้นตอน');
 }
@@ -221,7 +230,7 @@ async function ohbLoadCentral() {
                                       _bmcJson(`${API}/api/bom-center/todo?month=${month}`)]);
     _ohbClose = t;
     const st = {}; (t.close.steps || []).forEach(s => { st[s.key] = s; });
-    document.getElementById('ohbCloseSummary').innerHTML = `เสร็จ ${t.close.done} จาก ${t.close.total} ขั้นตอน ${uiQ('ohb:closebr', 'สาขาที่เริ่มปิดงวด', `<p>สาขาที่เริ่มปิดงวด: ${(t.close.branches || []).map(b => esc(b.name)).join(' · ') || 'ยังไม่มี'}</p>`)}`;
+    document.getElementById('ohbCloseSummary').innerHTML = `เสร็จ <span id="ohbCloseDone">${t.close.done}</span> จาก <span id="ohbCloseTotal">${t.close.total}</span> ขั้นตอน ${uiQ('ohb:closebr', 'สาขาที่เริ่มปิดงวด', `<p>สาขาที่เริ่มปิดงวด: ${(t.close.branches || []).map(b => esc(b.name)).join(' · ') || 'ยังไม่มี'}</p>`)}`;
     _ohbStSt = {};
     const set = (n, status) => { _ohbStSt[n] = status || 'todo'; const el = document.getElementById('ohbSt' + n); if (el) el.innerHTML = status ? _ohbStChip(status) : ''; };
     set(1, BC_MODE === 'stock' ? 'na' : st.release_in_force && st.release_in_force.status);
@@ -300,7 +309,7 @@ function ohbRenderLinks(keepFocus) {
   const box = document.getElementById('ohbLinks'), d = _ohbLinkData;
   if (!box || !d) return;
   if (!d.links.length && !d.suggestions.length && !d.orphans.length) {
-    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้า · นำเข้ารายงานไดกิโตะ กรุ๊ปในขั้นที่ 2 ก่อน</div>';
+    box.innerHTML = '<div class="wt-empty">ยังไม่มีบัญชีสินค้า · นำเข้ารายงานไดกิโตะ กรุ๊ป' + stkWord('ในขั้นที่ 2 ก่อน', 'ในขั้นที่ 1 ก่อน') + '</div>';
     return;
   }
   const lf = uiStateFilter.get(), orphanView = _ohbLinkView === 'orphan' && d.orphans.length > 0;

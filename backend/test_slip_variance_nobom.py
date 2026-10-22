@@ -497,6 +497,8 @@ def test_the_month_summary_is_hidden_in_stock_mode_and_the_close_ends_at_the_iss
 
     def steps():
         return [s["key"] for s in TD.build(c, "2026-09", None, None, today=date(2026, 9, 28), now=now)["close"]["steps"]]
+    seqs = [x["seq"] for x in TD.build(c, "2026-09", None, None, today=date(2026, 9, 28), now=now)["close"]["steps"]]
+    assert seqs == list(range(1, len(seqs) + 1))                                   # the steps that remain are numbered 1, 2, 3 ...
     stock = steps()
     assert "monthly_summary" not in stock and "release_in_force" not in stock and stock[-1] == "issue_posted"
     CS.set_mode(c, "t", "full")

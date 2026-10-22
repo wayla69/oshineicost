@@ -936,6 +936,8 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
             if it.get("key") == "master_seed":                # the seed button lives on the register page, which stays
                 it["go"] = {"tab": "bomcenter", "pane": "ing"}
         close["steps"] = [s for s in close["steps"] if not is_recipe_item(s)]
+        for n, s in enumerate(close["steps"], 1):          # PR-S4: the steps that remain are numbered 1, 2, 3 ... (the page and หน้างาน print the number)
+            s["seq"] = n
         close["done"] = sum(1 for s in close["steps"] if s["status"] == "done")
         close["total"] = len(close["steps"])
     annotate_states(items + close["steps"], viewer_role)
