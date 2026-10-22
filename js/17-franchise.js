@@ -250,15 +250,28 @@ function _frcTrend(t) {
 function _frcIngredients(i) {
   if (!i) return '';
   const lp = i.latest_period;
-  const period = lp
-    ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
-      + _frcRow(stkWord('ส่วนต่างการใช้วัตถุดิบเทียบสูตร', 'ส่วนต่างการใช้วัตถุดิบ'), lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
-          lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'ใช้เกินสูตร' : lp.diff_pct < 0 ? 'ใช้น้อยกว่าสูตร' : 'ตรงสูตร'))
-    : _frcRow('รอบตรวจนับล่าสุด', _FRC_NA, 'ยังไม่มีรอบตรวจนับที่เปรียบเทียบได้');
-  return _frcSection('วัตถุดิบ', `<div class="ms-card">${period}`
+  const stock = BC_MODE === 'stock';
+  let period;
+  if (stock) {
+    // F5: no recipes in stock mode - the gap is the system stock against the month-end count
+    period = lp
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+        + _frcRow('ส่วนต่างการใช้วัตถุดิบ', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
+            lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'นับได้มากกว่าระบบ' : lp.diff_pct < 0 ? 'นับได้น้อยกว่าระบบ' : 'ตรงกับระบบ'))
+      : _frcRow('ส่วนต่างการใช้วัตถุดิบ', _FRC_NA, 'ยังไม่มีผลตรวจนับสิ้นเดือน');
+  } else {
+    period = lp
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+        + _frcRow('ส่วนต่างการใช้วัตถุดิบเทียบสูตร', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
+            lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'ใช้เกินสูตร' : lp.diff_pct < 0 ? 'ใช้น้อยกว่าสูตร' : 'ตรงสูตร'))
+      : _frcRow('รอบตรวจนับล่าสุด', _FRC_NA, 'ยังไม่มีรอบตรวจนับที่เปรียบเทียบได้');
+  }
+  const help = '<p>ส่วนต่างการใช้วัตถุดิบ = มูลค่าที่นับได้จริงลบยอดคงเหลือตามระบบของรอบสิ้นเดือนล่าสุด เทียบเป็นร้อยละของมูลค่าวัตถุดิบที่เบิกใช้ในรอบนั้น · ค่าติดลบคือนับได้น้อยกว่าระบบ</p>';
+  const inner = `<div class="ms-card">${period}`
     + _frcRow('ของเสียในเดือนนี้', _frcPct(i.waste_pct_month), 'สัดส่วนต่อมูลค่าวัตถุดิบที่เบิกใช้')
     + _frcRow(stkWord('เบิกเกินสูตรติดต่อกันหลายวัน', 'เบิกเกินปกติติดต่อกันหลายวัน'), i.streak_flag ? `<span style="color:var(--bad-ink)">พบ ${fmtN(i.streak_days)} วัน</span>` : `<span style="color:var(--good-ink)">ไม่พบ</span>`)
-    + `</div>`);
+    + `</div>`;
+  return stock ? _frcCard('วัตถุดิบ', 'ingredients', help, '', inner) : _frcSection('วัตถุดิบ', inner);
 }
 
 function _frcDiscipline(d) {
@@ -516,6 +529,7 @@ function _frcSupply(d) {
   const help = '<p>ยอดสั่ง = มูลค่าที่สาขาสั่งในแต่ละรอบ · ยอดที่คลังจัดส่ง = มูลค่าที่คลังส่งจริง คิดแบบเดียวกับหน้าสั่งสินค้าของสาขา นับรอบที่วันส่งอยู่ในเดือนนี้ ไม่นับใบที่ยังเป็นร่างหรือยกเลิก</p>'
     + '<p>ยอดซื้อเทียบยอดขาย = ยอดที่คลังจัดส่ง ÷ ยอดขายไม่รวม VAT ของเดือนเดียวกัน ระหว่างเดือนนับถึงวันล่าสุดที่ปิดการขาย และเทียบกับทั้งเดือนของเดือนก่อน</p>'
     + '<p>ส่งใบสั่งซื้อหลังเวลาตัดรอบมีค่าปรับ หน้านี้แสดงเฉพาะจำนวนใบ · วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า</p>';
+  const helpStock = help.replace('วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า', 'วัตถุดิบที่นับได้น้อยกว่าระบบมาจากรอบตรวจนับสิ้นเดือนล่าสุด เรียงตามมูลค่า');
   if (!d.started) {
     return _frcCard(title, 'supply', help, '', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(d.not_started_th || 'สาขายังไม่เริ่มใช้ระบบสั่งวัตถุดิบ')}</div></div>`);
   }
@@ -539,7 +553,7 @@ function _frcSupply(d) {
       + `<td class="n">${r.ordered == null ? _FRC_NA : fmtN(r.ordered)}</td><td class="n">${r.delivered == null ? _FRC_NA : fmtN(r.delivered)}</td></tr>`).join('')
     + `</tbody></table></div>`
     : `<div class="ms-card" style="margin-top:10px"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรอบส่งในเดือนนี้</div></div>`;
-  return _frcCard(title, 'supply', help, '',
+  return _frcCard(title, 'supply', BC_MODE === 'stock' ? helpStock : help, '',
     tiles + tbl + _frcClaims(C) + _frcOveruse(d.overuse));
 }
 
@@ -563,12 +577,13 @@ function _frcClaims(c) {
 
 function _frcOveruse(o) {
   if (!o) return '';
+  const stock = BC_MODE === 'stock';
   const rows = o.rows || [];
   const when = `รอบตรวจนับ ${_frcDay(o.begin)} – ${_frcDay(o.end)}`;
-  const t = '<div class="frc-sub2">วัตถุดิบที่ใช้เกินสูตร 5 อันดับ</div>';
-  if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ไม่มีวัตถุดิบที่ใช้เกินสูตร</div></div>`;
+  const t = `<div class="frc-sub2">${stock ? 'วัตถุดิบที่นับได้น้อยกว่าระบบ 5 อันดับ' : 'วัตถุดิบที่ใช้เกินสูตร 5 อันดับ'}</div>`;
+  if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ${stock ? 'ไม่มีวัตถุดิบที่นับได้น้อยกว่าระบบ' : 'ไม่มีวัตถุดิบที่ใช้เกินสูตร'}</div></div>`;
   return t + `<p class="frc-sub" style="margin-top:0">${esc(when)} · เรียงตามมูลค่า</p>`
-    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วัตถุดิบ</th><th class="n">ใช้เกิน</th><th class="n">มูลค่า (฿)</th><th class="n">เกินสูตร</th></tr></thead><tbody>`
+    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วัตถุดิบ</th><th class="n">${stock ? 'ขาด' : 'ใช้เกิน'}</th><th class="n">มูลค่า (฿)</th><th class="n">${stock ? 'ต่ำกว่าระบบ' : 'เกินสูตร'}</th></tr></thead><tbody>`
     + rows.map(r => `<tr><td>${esc(r.name)}</td><td class="n">${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')}</td>`
       + `<td class="n">${r.value == null ? _FRC_NA : fmtN(r.value)}</td><td class="n">${_frcPct(r.pct)}</td></tr>`).join('')
     + `</tbody></table></div>`;
@@ -592,7 +607,7 @@ async function _fmFetch(url, opt) {
   const r = await fetch(`${API}${url}`, opt);
   const t = await r.text();
   let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
-  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่');
+  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'ดำเนินการไม่สำเร็จ ลองใหม่อีกครั้ง');
   return j;
 }
 function _fmPost(url, body) {
@@ -749,8 +764,8 @@ function _fmScrollIn(focusId) {
 async function frcMsgSendNew() {
   if (_fmBusy) return;
   const topic = (document.getElementById('frcMsgTopic') || {}).value || '', text = String((document.getElementById('frcMsgText') || {}).value || '').trim();
-  if (!topic) { uiToast('กรุณาเลือกหัวข้อ', 'warn'); return; }
-  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  if (!topic) { uiToast('เลือกหัวข้อ', 'warn'); return; }
+  if (!text) { uiToast('พิมพ์ข้อความ', 'warn'); return; }
   _fmBusy = true;
   const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
   try {
@@ -767,7 +782,7 @@ async function frcMsgSendNew() {
 async function frcMsgSendReply(tid) {
   if (_fmBusy) return;
   const text = String((document.getElementById('frcMsgReply') || {}).value || '').trim();
-  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  if (!text) { uiToast('พิมพ์ข้อความ', 'warn'); return; }
   _fmBusy = true;
   const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
   try {

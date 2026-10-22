@@ -129,16 +129,16 @@ def _resolve_branch(con, request: Request, branch_id: Optional[int]):
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) if _auth.auth_enabled() else None
     scoped = _auth.scope_branch(request)
     if payload and payload.get("r") == "franchise" and not scoped:
-        raise HTTPException(403, detail="บัญชีนี้ยังไม่ได้ผูกกับสาขา กรุณาแจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
+        raise HTTPException(403, detail="บัญชีนี้ยังไม่ได้ผูกกับสาขา แจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
     if scoped:
         r = con.execute("SELECT branch_id, name FROM branches WHERE name=?", (scoped,)).fetchone()
         if not r:
-            raise HTTPException(403, detail="บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ กรุณาแจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
+            raise HTTPException(403, detail="บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ แจ้งผู้ดูแลระบบ", headers={"X-Denied": "role"})
         if branch_id is not None and int(branch_id) != int(r[0]):
             raise HTTPException(403, detail="บัญชีเจ้าของสาขาดูได้เฉพาะสาขาของตนเอง", headers={"X-Denied": "role"})
         return int(r[0]), r[1]
     if branch_id is None:
-        raise HTTPException(400, "กรุณาเลือกสาขา")
+        raise HTTPException(400, "เลือกสาขา")
     r = con.execute("SELECT branch_id, name FROM branches WHERE branch_id=? AND name <> 'ALL'", (branch_id,)).fetchone()
     if not r:
         raise HTTPException(404, "ไม่พบสาขา")
@@ -310,6 +310,19 @@ def _top_menus(branch: str, month: str) -> list:
     return out
 
 
+def _stock_reconcile(con, bid: int, month: str):
+    """F5: the branch's latest month-end period that ends in or before the month, reconciled the way its สิ้นเดือน variance tab
+    is (issue_reports.reconcile: the system stock against the count). None when the branch has no such period."""
+    from bom_center import issue_reports as IR
+    from bom_center.stock import periods
+    _, last = _month_bounds(month)
+    cut = (last + timedelta(days=1)).isoformat()
+    ps = [p for p in periods(con, bid) if p[1]["date"] < cut]
+    if not ps:
+        return None
+    return IR.reconcile(con, bid, ps[-1][1]["count_id"])
+
+
 def _ingredients(con, bid: int, month: str) -> dict:
     from bom_center import issue_reports as IR
     from bom_center import variance as VA
@@ -320,7 +333,16 @@ def _ingredients(con, bid: int, month: str) -> dict:
            "stock_mode": bool(stock_mode(con))}      # P5: the streak is judged against the branch's normal (stock mode) or the recipes (full mode)
     cut = (last + timedelta(days=1)).isoformat()
     ps = [p for p in periods(con, bid) if p[1]["date"] < cut]
-    if ps:
+    if out["stock_mode"]:
+        # F5: no recipes in stock mode - the gap is the system stock against the count, as a share of what the period issued
+        rec = _safe("stock reconcile", lambda: _stock_reconcile(con, bid, month))
+        if rec:
+            issued = sum((x["used"] + x["waste"]) * x["price_per_base"] for x in rec["rows"] if x.get("price_per_base") is not None)
+            dv = rec["totals"]["diff_value"]
+            out["latest_period"] = {"begin": rec["period"]["begin_date"], "end": rec["period"]["end_date"],
+                                    "diff_pct": _num(100.0 * dv / issued) if issued > 0 else None,
+                                    "diff_value": _num(dv, 0), "reconciled": bool(rec["status"]["receipts_confirmed"])}
+    elif ps:
         v = VA.period(con, bid, ps[-1][1]["count_id"], summary_only=True)
         out["latest_period"] = {"begin": v["begin_date"], "end": v["end_date"], "diff_pct": _num(v.get("gap_pct")),
                                 "diff_value": _num(v.get("gap_value"), 0), "reconciled": bool(v.get("receipts_confirmed"))}
@@ -408,9 +430,11 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
         lp = ing.get("latest_period")
         if lp and lp.get("diff_pct") is not None:
             p = lp["diff_pct"]
-            word = "ใช้เกินสูตร" if p > 0 else "ใช้น้อยกว่าสูตร"
+            stk = bool(ing.get("stock_mode"))
+            word = ("นับได้มากกว่าระบบ" if p > 0 else "นับได้น้อยกว่าระบบ") if stk else ("ใช้เกินสูตร" if p > 0 else "ใช้น้อยกว่าสูตร")
             if abs(p) <= T_ING_GOOD:
-                add("good", f"การใช้วัตถุดิบรอบนับล่าสุดใกล้เคียงสูตร (ส่วนต่างร้อยละ {_pct_text(p)})")
+                add("good", f"วัตถุดิบรอบนับล่าสุดตรงกับระบบ (ส่วนต่างร้อยละ {_pct_text(p)})" if stk else
+                    f"การใช้วัตถุดิบรอบนับล่าสุดใกล้เคียงสูตร (ส่วนต่างร้อยละ {_pct_text(p)})")
             elif abs(p) > T_ING_FIX:
                 add("fix", f"วัตถุดิบรอบนับล่าสุด{word}ร้อยละ {_pct_text(p)} (฿{abs(lp.get('diff_value') or 0):,.0f}) ควรตรวจสอบหน้างาน")
             else:
@@ -638,8 +662,11 @@ def _supply_sheet(ws, sp: dict, head: str) -> None:
            for c in cl.get("latest") or [] for i in c["items"]], [None] * 6)
     ov = sp.get("overuse")
     if ov:
-        table(f"วัตถุดิบที่ใช้เกินสูตร 5 อันดับ (รอบตรวจนับ {ov['begin']} ถึง {ov['end']})",
-              ["วัตถุดิบ", "ใช้เกิน", "หน่วย", "มูลค่า (บาท)", "เกินสูตร (%)", ""],
+        from bom_center.close_settings import stock_mode
+        with get_db() as _con:
+            stk = stock_mode(_con)
+        table(f"{'วัตถุดิบที่นับได้น้อยกว่าระบบ' if stk else 'วัตถุดิบที่ใช้เกินสูตร'} 5 อันดับ (รอบตรวจนับ {ov['begin']} ถึง {ov['end']})",
+              ["วัตถุดิบ", "ขาด" if stk else "ใช้เกิน", "หน่วย", "มูลค่า (บาท)", "ต่ำกว่าระบบ (%)" if stk else "เกินสูตร (%)", ""],
               [(r["name"], r["qty"], r["unit"], r["value"], r["pct"], "") for r in ov.get("rows") or []],
               [None, "#,##0.##", None, _FX_BAHT, _FX_PCT, None])
 
@@ -1146,6 +1173,9 @@ def _supply_overuse(con, bid: int, month: str):
     from bom_center.fmt import item
     from bom_center.stock import periods
     from bom_center.units import readable
+    from bom_center.close_settings import stock_mode
+    if stock_mode(con):
+        return _supply_short(con, bid, month)
     _, last = _month_bounds(month)
     cut = (last + timedelta(days=1)).isoformat()
     ps = [p for p in periods(con, bid) if p[1]["date"] < cut]
@@ -1160,6 +1190,24 @@ def _supply_overuse(con, bid: int, month: str):
         rows.append({"name": item(con, r["code"]), "qty": _num(q, 2), "unit": u, "value": _num(r["gap_value"], 0),
                      "pct": _num(r.get("gap_pct"))})
     return {"begin": v["begin_date"], "end": v["end_date"], "rows": rows, "lines_over": len(over)}
+
+
+def _supply_short(con, bid: int, month: str):
+    """F5, stock mode: the OVERUSE_TOP items counted furthest below the system stock (largest negative diff in baht) in the latest
+    month-end reconcile; same row shape as the recipe version (qty / value / pct are the shortfall, positive). None without a period."""
+    from bom_center.fmt import item
+    from bom_center.units import readable
+    rec = _stock_reconcile(con, bid, month)
+    if not rec:
+        return None
+    short = [r for r in rec["rows"] if r.get("diff") is not None and r["diff"] < 0 and (r.get("diff_value") or 0) < 0]
+    short.sort(key=lambda r: r["diff_value"])
+    rows = []
+    for r in short[:OVERUSE_TOP]:
+        q, u = readable(-r["diff"], r.get("base_unit"))
+        rows.append({"name": item(con, r["code"]), "qty": _num(q, 2), "unit": u, "value": _num(-r["diff_value"], 0),
+                     "pct": _num(-r["diff_pct"]) if r.get("diff_pct") is not None else None})
+    return {"begin": rec["period"]["begin_date"], "end": rec["period"]["end_date"], "rows": rows, "lines_over": len(short)}
 
 
 def franchise_supply_data(branch_id: int, month: Optional[str] = None) -> dict:
