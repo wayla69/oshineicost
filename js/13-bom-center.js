@@ -209,6 +209,27 @@ function bmcShowQtyTxt(q, row, ownUnit) {
   const s = bmcShowQty(q, row);
   return `${_bmcNum(s.q, 2)} ${s.unit || ownUnit || ''}`.trim();
 }
+// PR-U2 · TYPING a line with no pack size in the bigger unit (กิโลกรัม, ลิตร; decimals allowed) on every box that keys it (ส่งจริง of the
+// warehouse, รับจริง and เคลม of the branch, the approved quantity of a claim): f = base units in one shown unit (1 for a pack line).
+// bmcToTyped = the box's value of a stored base quantity; bmcFromTyped = what was typed back in base units for the save, rounded to
+// 0.001 of a base unit so 48.6 กิโลกรัม is 48600 กรัม exactly. Every stored quantity stays in base units.
+function bmcTypeF(row) { return row && row.no_pack && Number(row.show_factor) > 1 ? Number(row.show_factor) : 1; }
+function bmcTypeUnit(row, ownUnit) { return bmcTypeF(row) > 1 ? (row.show_unit || ownUnit || '') : (ownUnit || ''); }
+function bmcToTyped(q, f) {
+  if (q === '' || q == null || !Number.isFinite(Number(q))) return q == null ? '' : String(q);
+  return (f || 1) > 1 ? String(Math.round(Number(q) / f * 1e6) / 1e6) : String(q);
+}
+function bmcFromTyped(v, f) {
+  const n = Number(String(v ?? '').trim().replace(',', '.'));
+  if (!Number.isFinite(n)) return NaN;
+  return (f || 1) > 1 ? Math.round(n * f * 1000) / 1000 : n;
+}
+// a base quantity written in the unit the line is typed in: "48.6 กิโลกรัม" (f > 1) or the figure as it is
+function bmcTypedTxt(q, row, ownUnit) {
+  const f = bmcTypeF(row);
+  if (f <= 1) return `${_bmcNum(q)} ${ownUnit || ''}`.trim();
+  return `${_bmcNum(Number(q || 0) / f, 3)} ${bmcTypeUnit(row, ownUnit)}`.trim();
+}
 // the chip of a line ordered in base units, with its "?"
 function bmcNoPackChip(row) {
   if (!row || !row.no_pack) return '';
@@ -2562,7 +2583,7 @@ async function bmcLoadRelHistory() {
 let _bmcFc = null;
 let _bmcFcKey = '';            // the choice (branch, round, day, season) the calculation on screen was made for
 let _bmcCal = null;
-let _bmcCalPilotOnly = true;   // the calendar page: the pilot branches alone until the sales team asks for all
+let _bmcCalPilotOnly = false;  // the calendar page: every active branch (PR-U2, 30-branch rollout); the pilot four stay an optional filter
 const _BMC_WD = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'];
 function _bmcFcCanWrite() { return hasModule('supply.ordering') || hasModule('bom.center'); }
 
@@ -2707,7 +2728,7 @@ async function bmcLoadCalendar() {
   document.getElementById('bmcFcCal').innerHTML = `<div class="flex items-center flex-wrap gap-3 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">รอบส่งของแต่ละสาขา</div>
       ${uiQ('bmc:calref', 'สาขาอ้างอิงคืออะไร', `<p>สาขาที่ขายไม่ถึง ${_bmcCal.new_branch_days || 14} วัน คำนวณยอดแนะนำจากปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของสาขาอ้างอิง คูณยอดขายที่สาขากรอก</p><p>ค่าเริ่มต้นคือค่ากลางสาขาของบริษัท (มัธยฐานของสาขาที่เลือกไว้ในกรอบด้านล่าง)</p>`)}
       ${pilot.length ? `<label class="text-sm flex items-center gap-2" style="color:var(--text-secondary)"><input type="checkbox" ${_bmcCalPilotOnly ? 'checked' : ''} onchange="_bmcCalPilotOnly=this.checked;bmcLoadCalendar()" style="width:18px;height:18px"> เฉพาะสาขานำร่อง (${pilot.length})</label>` : ''}
-      <span class="text-sm" style="color:var(--text-muted)">${calRows.length} จาก ${_bmcCal.rows.length} สาขา</span>
+      <span class="text-sm" style="color:var(--text-muted)">${calRows.length === _bmcCal.rows.length ? `${calRows.length} สาขา` : `${calRows.length} จาก ${_bmcCal.rows.length} สาขา`}</span>
       ${w ? `<button type="button" class="wt-btn is-primary ml-auto" onclick="bmcSaveCalendar()">บันทึกรอบส่ง</button>` : ''}</div>
     ${w ? bmcNote('calsave', 'เลือกวันส่ง แล้วกด “บันทึกรอบส่ง”', '<p>เลือกวันส่ง แล้วกด “บันทึกรอบส่ง” (บันทึกเฉพาะแถวที่แก้ไข) · เวลาตัดรอบคำนวณให้เอง · สาขาอ้างอิงบันทึกทันทีที่เลือก</p>', 'wt-note mb-2') : ''}
     <div class="wt-wrap" style="max-height:70vh"><table class="wt"><thead><tr>

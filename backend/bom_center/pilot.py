@@ -29,6 +29,15 @@ def pilot_branches(con) -> list:
     return out
 
 
+def active_branches(con) -> list:
+    """[{branch_id, name}] of every ACTIVE branch (branches.active, 'ALL' left out), by name - the one definition todo._branch_rows
+    uses. PR-U2 (30-branch rollout): the default scope of the readiness list and of หน้างาน; the four PILOT branches stay the scope of
+    the pilot scorecard only."""
+    cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
+    sql = "SELECT branch_id, name FROM branches WHERE name <> 'ALL'" + (" AND COALESCE(active, 1) = 1" if "active" in cols else "")
+    return [{"branch_id": r[0], "name": r[1]} for r in con.execute(sql + " ORDER BY name")]
+
+
 def branch_accounts(con) -> list:
     """Every ACTIVE branch account (role 'branch' with a branch) -> [{branch_id, name, usernames}], one row per branch,
     sorted by name. Batch 3 (30-branch rollout): the reminders and the adoption grid follow the accounts that exist,
@@ -54,7 +63,7 @@ def _has(con, table: str) -> bool:
 
 
 def readiness(con) -> dict:
-    """What still has to be done before (or to keep) the pilot running."""
+    """What still has to be done before a branch starts (PR-U2: every active branch, not the four pilot branches)."""
     from .forecast import calendar
     centre = {
         "ingredients": con.execute("SELECT COUNT(*) FROM bc_ingredient WHERE active=1").fetchone()[0],
@@ -73,7 +82,7 @@ def readiness(con) -> dict:
         for u, b, active in con.execute("SELECT username, branch, active FROM app_user WHERE role='branch'"):
             users.setdefault(b, []).append({"username": u, "active": bool(active)})
     rows = []
-    for b in pilot_branches(con):
+    for b in active_branches(con):
         bid = b["branch_id"]
         cal = calendar(con, bid)
         first = con.execute("SELECT MIN(count_date), MAX(count_date), COUNT(*) FROM bc_stock_count WHERE branch_id=?"
@@ -94,7 +103,7 @@ def readiness(con) -> dict:
                      "ready": all(ok for _, ok, _ in steps)})
     return {"centre": centre, "centre_steps": [{"key": k, "done": ok, "todo": t} for k, ok, t in centre_steps],
             "branches": rows, "pilot": list(PILOT), "missing_branches": [n for n in PILOT
-                                                                        if n not in {r["branch"] for r in rows}]}
+                                                                        if not any(b["name"] == n for b in pilot_branches(con))]}
 
 
 def _minutes(a: str, b: str):

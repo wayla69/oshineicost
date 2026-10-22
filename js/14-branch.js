@@ -1130,7 +1130,10 @@ async function brnLoadRecvOpen() {
 // what the warehouse sent for a line (the centre's processed quantity, else what the branch confirmed) and its unit label
 function _brnRcvSent(l) { return Number(l.processed_units ?? l.confirmed_units ?? 0); }
 // PR-W: the unit WORD of the item's receiving unit (the payload's `unit_word`: "กล่อง (10 แพ็ค)" -> กล่อง, "กิโลกรัม", "กระสอบ"), never a fixed "แพ็ค"
-function _brnRcvUnit(l) { return l.unit_word || (l.order_unit === 'base' ? '' : 'แพ็ค'); }
+function _brnRcvUnit(l) { return _brnRcvF(l) > 1 ? (l.show_unit || l.unit_word || '') : (l.unit_word || (l.order_unit === 'base' ? '' : 'แพ็ค')); }
+// PR-U2: a line with no pack size is typed and read in กิโลกรัม / ลิตร (bmcTypeF); a line received by weight keeps its own boxes
+function _brnRcvF(l) { return l && !_brnWtLine(l) ? bmcTypeF(l) : 1; }
+function _brnRcvQ(l, q) { const f = _brnRcvF(l); return _bmcNum(Number(q || 0) / f, f > 1 ? 3 : 2); }
 function _brnRcvLines() { return _brnRecvOrd ? _brnRecvOrd.lines.filter(l => _brnRcvSent(l) > 0 || l.received_units) : []; }
 function _brnRcvLine(code) { return _brnRcvLines().find(l => l.code === code); }
 function _brnRcvRaw(code) { return String(((_brnRcv.vals[code] || {}).q) ?? '').trim().replace(',', '.'); }
@@ -1143,7 +1146,7 @@ function _brnRcvTyped(l) {
   if (!_brnRcv.picked.includes(l.code)) return _brnRcvSent(l);
   const raw = _brnRcvRaw(l.code);
   if (raw === '') return null;
-  const q = Number(raw);
+  const q = bmcFromTyped(raw, _brnRcvF(l));
   return Number.isFinite(q) ? q : null;
 }
 // the gap of a line = sent − received; below zero it is an over-delivery (a note only, nothing to claim)
@@ -1241,7 +1244,7 @@ function brnRcvWtSettle(code) {
   if (sh.beyond && !picked) {
     if (st.mode !== 'some') { st.mode = 'some'; st.autoMode = true; }
     st.picked.push(code); st.auto.push(code);
-    st.vals[code] = { q: String(_brnRcvSent(l)), r: 'short', n: '' };
+    st.vals[code] = { q: bmcToTyped(_brnRcvSent(l), _brnRcvF(l)), r: 'short', n: '' };
   } else if (!sh.beyond && picked && st.auto.includes(code)) {
     st.picked = st.picked.filter(c => c !== code); st.auto = st.auto.filter(c => c !== code);
     if (!st.picked.length && st.autoMode) { st.mode = 'all'; st.autoMode = false; }
@@ -1394,7 +1397,7 @@ function brnRcvRender() {
     body.innerHTML = `<div class="text-sm" style="color:var(--text-primary);font-weight:600">รับครบ ${lines.length} รายการ</div>
       ${hasPack ? '<div class="text-xs" style="color:var(--text-muted);margin-top:2px">ขนาดบรรจุไม่ตรง? เปิด “ดูรายการที่คลังส่ง” แล้วแตะที่รายการนั้น</div>' : ''}
       <details class="mt-1"><summary class="text-xs" style="color:var(--accent);cursor:pointer;min-height:32px">ดูรายการที่คลังส่ง</summary>
-        <div style="max-height:260px;overflow:auto">${lines.map(l => `<div class="text-xs" style="border-top:1px solid var(--border);padding:4px 0"><div style="display:flex;gap:8px"><span style="flex:1 1 0;min-width:0;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span style="white-space:nowrap;color:var(--text-secondary)">${_bmcNum(_brnRcvSent(l))} ${esc(_brnRcvUnit(l))}</span></div>${brnPkBtn(l.code)}</div>`).join('')}</div></details>`;
+        <div style="max-height:260px;overflow:auto">${lines.map(l => `<div class="text-xs" style="border-top:1px solid var(--border);padding:4px 0"><div style="display:flex;gap:8px"><span style="flex:1 1 0;min-width:0;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span style="white-space:nowrap;color:var(--text-secondary)">${_brnRcvQ(l, _brnRcvSent(l))} ${esc(_brnRcvUnit(l))}</span></div>${brnPkBtn(l.code)}</div>`).join('')}</div></details>`;
     lines.forEach(l => brnPkRender(l.code));
   } else {
     body.innerHTML = `<input id="brnRcvQ" type="search" autocomplete="off" placeholder="ค้นหารายการที่ไม่ครบ" value="${esc(st.q)}" oninput="brnRcvSearch(this.value)"
@@ -1414,7 +1417,7 @@ function brnRcvResults() {
   const q = _brnRcv.q.trim().toLowerCase();
   const hits = _brnRcvLines().filter(l => !_brnRcv.picked.includes(l.code) && (!q || ((l.code || '') + ' ' + (l.name || '') + ' ' + (l.short_name || '')).toLowerCase().includes(q)));
   if (!q && hits.length > 8) { box.innerHTML = `<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">พิมพ์ชื่อวัตถุดิบเพื่อเลือกรายการที่ไม่ครบ (ทั้งหมด ${hits.length} รายการ)</div>`; return; }
-  box.innerHTML = hits.slice(0, 8).map(l => `<button type="button" class="brn-pick" onclick="brnRcvPick(${_bmcQ(l.code)})"><span style="flex:1 1 0;min-width:0;text-align:left;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span class="text-xs" style="color:var(--text-secondary);white-space:nowrap">ส่ง ${_bmcNum(_brnRcvSent(l))} ${esc(_brnRcvUnit(l))}</span><span style="color:var(--accent);font-weight:600">เลือก</span></button>`).join('')
+  box.innerHTML = hits.slice(0, 8).map(l => `<button type="button" class="brn-pick" onclick="brnRcvPick(${_bmcQ(l.code)})"><span style="flex:1 1 0;min-width:0;text-align:left;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span class="text-xs" style="color:var(--text-secondary);white-space:nowrap">ส่ง ${_brnRcvQ(l, _brnRcvSent(l))} ${esc(_brnRcvUnit(l))}</span><span style="color:var(--accent);font-weight:600">เลือก</span></button>`).join('')
     + (hits.length > 8 ? `<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">แสดง 8 จาก ${hits.length} รายการ · พิมพ์ชื่อเพิ่มเพื่อค้นหา</div>`
       : !hits.length && _brnRcv.picked.length < _brnRcvLines().length ? '<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">ไม่พบรายการที่ค้นหา</div>' : '');
 }
@@ -1422,7 +1425,7 @@ function brnRcvPick(code) {
   const l = _brnRcvLine(code);
   if (!l || _brnRcv.picked.includes(code)) return;
   _brnRcv.picked.push(code);
-  _brnRcv.vals[code] = { q: String(_brnRcvSent(l)), r: 'short', n: '' };
+  _brnRcv.vals[code] = { q: bmcToTyped(_brnRcvSent(l), _brnRcvF(l)), r: 'short', n: '' };
   _brnRcv.q = '';
   const qi = document.getElementById('brnRcvQ'); if (qi) qi.value = '';
   brnRcvResults(); brnRcvPickedRender(); brnRcvPcsRender(); brnRecvDiff(code); brnRecvAckChanged();
@@ -1447,7 +1450,7 @@ function brnRcvPickedRender() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(l))}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง <b style="color:var(--text-primary)">${_bmcNum(_brnRcvSent(l))}</b> ${unit}${wl && Math.abs(Number(l.sent_weight) - _brnRcvSent(l)) > 1e-9 ? ` (${_bmcNum(l.sent_weight, 3)} ${esc(_brnShortUnit(l.pieces_parent_unit))})` : ''}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง <b style="color:var(--text-primary)">${_brnRcvQ(l, _brnRcvSent(l))}</b> ${unit}${wl && Math.abs(Number(l.sent_weight) - _brnRcvSent(l)) > 1e-9 ? ` (${_bmcNum(l.sent_weight, 3)} ${esc(_brnShortUnit(l.pieces_parent_unit))})` : ''}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
         ${wl ? '' : `<div class="brn-box"><input id="brnRcvO_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q ?? '')}" aria-label="รับจริง ${esc(_brnNm(l))}" oninput="brnRcvTyped(${cq}, this.value)"
             style="border-color:var(--good-ink)"><span class="brn-cap">รับจริง · ${unit || 'หน่วยฐาน'}</span></div>`}
         ${l.pieces_unit && !wl ? `<div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(_brnRcv.pcs[code] ?? '')}"
@@ -1497,8 +1500,8 @@ function brnRecvDiff(code) {
     const gap = bad ? 0 : _brnRcvGap(l);
     const d = document.getElementById('brnRcvD_' + code), ov = document.getElementById('brnRcvOver_' + code), n = document.getElementById('brnRcvDn_' + code);
     if (d) d.style.display = gap > 1e-9 ? '' : 'none';
-    if (n) n.textContent = _bmcNum(Math.max(gap, 0));
-    if (ov) { ov.style.display = gap < -1e-9 ? '' : 'none'; ov.textContent = gap < -1e-9 ? `รับเกินที่ส่ง +${_bmcNum(-gap)}` : ''; }
+    if (n) n.textContent = _brnRcvQ(l, Math.max(gap, 0));
+    if (ov) { ov.style.display = gap < -1e-9 ? '' : 'none'; ov.textContent = gap < -1e-9 ? `รับเกินที่ส่ง +${_brnRcvQ(l, -gap)}` : ''; }
   }
   const k = _brnRcv.picked.filter(c => { const x = _brnRcvLine(c); return x && _brnRcvGap(x) > 1e-9; }).length;
   const cb = document.getElementById('brnRecvClaimBox'), t = document.getElementById('brnRecvClaimTitle');
@@ -2061,7 +2064,16 @@ function _brnUnitLabel(r) { return r.order_unit === 'pack' ? (r.recv_unit || '�
 // PR-U1 · a row ordered in base units (no pack size): the box takes the bigger unit (กิโลกรัม for กรัม); the working copy `_brnOrdQty` and
 // everything saved stay in base units. `_brnOrdTyped` keeps the text as typed so a half-typed "18." does not jump.
 let _brnOrdTyped = {};
-function _brnOrdF(r) { return r && r.no_pack && Number(r.show_factor) > 1 ? Number(r.show_factor) : 1; }
+function _brnOrdF(r) { return bmcTypeF(r); }
+// PR-U2: the system stock of a row with no pack size in the unit its order is typed in ("-63.0 กิโลกรัม", not "-62,995 กรัม")
+function _brnOrdSysTxt(r) {
+  const unit = r.system_unit || r.count_unit || r.base_unit || '', f = _brnOrdF(r);
+  if (f > 1 && (!r.system_unit || r.system_unit === r.base_unit)) {
+    const v = Number(r.system_qty) / f;
+    return `${_bmcNum(v, Math.abs(v) >= 10 ? 1 : 2)} ${_brnOrdUnitShow(r)}`;
+  }
+  return _brnSysTxt(r.system_qty, unit);
+}
 function _brnOrdUnitShow(r) { return _brnOrdF(r) > 1 ? (r.show_unit || _brnUnitLabel(r)) : _brnUnitLabel(r); }
 function _brnOrdBoxVal(r, v) {
   const f = _brnOrdF(r);
@@ -2238,7 +2250,7 @@ function brnRenderOrder() {
     // PR-U: an item bought by weight but used by the whole piece (ปลาแซลมอนทั้งตัว) shows the pieces too, as an estimate
     const approxPcs = (r.approx_unit && r.approx_per_unit > 0 && sugg > 0)
       ? ` · ≈ ${(pcs => _bmcNum(pcs, pcs >= 10 ? 0 : 1))(sugg * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) / r.approx_per_unit)} ${esc(r.approx_unit)}` : '';   // PR-W: a whole number from 10 up, one decimal below
-    const sysBox = r.system_qty == null ? '' : ` · คงเหลือตามระบบ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(r.system_qty, r.system_unit || r.count_unit || r.base_unit || ''))}</b>`;
+    const sysBox = r.system_qty == null ? '' : ` · คงเหลือตามระบบ <b style="color:${r.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnOrdSysTxt(r))}</b>`;
     const needWhy = dev && editable && !((_brnOrdReason[r.code] || {}).reason_code);
     return `<div class="brn-row${needWhy ? ' brn-need' : ''}" id="brnOrdRow_${esc(r.code)}" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
@@ -2633,7 +2645,8 @@ async function brnLoadClaims() {
 
 function _brnClLines() { return _brnClaimOrd ? _brnClaimOrd.lines.filter(l => l.remaining_units > 0) : []; }
 function _brnClLine(code) { return _brnClLines().find(l => l.code === code); }
-function _brnClUnit(l) { return l.unit_word || (l.order_unit === 'base' ? 'หน่วยฐาน' : 'แพ็ค'); }      // PR-W: the item's receiving unit word
+function _brnClUnit(l) { return bmcTypeF(l) > 1 ? (l.show_unit || l.unit_word || '') : (l.unit_word || (l.order_unit === 'base' ? 'หน่วยฐาน' : 'แพ็ค')); }      // PR-W: the item's receiving unit word; PR-U2: กิโลกรัม for a line with no pack size
+function _brnClQ(l, q) { const f = bmcTypeF(l); return _bmcNum(Number(q || 0) / f, f > 1 ? 3 : 2); }
 async function brnClaimOpen(orderId) {
   const box = document.getElementById('brnClaimForm');
   if (!box) return;
@@ -2667,7 +2680,7 @@ function brnClResults() {
   const q = _brnCl.q.trim().toLowerCase();
   const hits = _brnClLines().filter(l => !_brnCl.picked.includes(l.code) && (!q || ((l.code || '') + ' ' + (l.name || '') + ' ' + (l.short_name || '')).toLowerCase().includes(q)));
   if (!q && hits.length > 8) { box.innerHTML = `<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">พิมพ์ชื่อวัตถุดิบเพื่อเลือกรายการที่เคลม (ทั้งหมด ${hits.length} รายการ)</div>`; return; }
-  box.innerHTML = hits.slice(0, 8).map(l => `<button type="button" class="brn-pick" onclick="brnClPick(${_bmcQ(l.code)})"><span style="flex:1 1 0;min-width:0;text-align:left;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span class="text-xs" style="color:var(--text-secondary);white-space:nowrap">รับแล้ว ${_bmcNum(l.received_units)} ${esc(_brnClUnit(l))}</span><span style="color:var(--accent);font-weight:600">เลือก</span></button>`).join('')
+  box.innerHTML = hits.slice(0, 8).map(l => `<button type="button" class="brn-pick" onclick="brnClPick(${_bmcQ(l.code)})"><span style="flex:1 1 0;min-width:0;text-align:left;overflow-wrap:anywhere">${esc(_brnNm(l))}</span><span class="text-xs" style="color:var(--text-secondary);white-space:nowrap">รับแล้ว ${_brnClQ(l, l.received_units)} ${esc(_brnClUnit(l))}</span><span style="color:var(--accent);font-weight:600">เลือก</span></button>`).join('')
     + (hits.length > 8 ? `<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">แสดง 8 จาก ${hits.length} รายการ · พิมพ์ชื่อเพิ่มเพื่อค้นหา</div>`
       : !hits.length && _brnCl.picked.length < _brnClLines().length ? '<div class="text-xs" style="color:var(--text-muted);padding:4px 2px">ไม่พบรายการที่ค้นหา</div>' : '');
 }
@@ -2708,7 +2721,7 @@ function brnClPickedRender() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(l))}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง ${_bmcNum(l.sent_units)} · รับแล้ว ${_bmcNum(l.received_units)}${l.claimed_units ? ' · เคลมไปแล้ว ' + _bmcNum(l.claimed_units) : ''} · เคลมได้อีก <b style="color:var(--text-primary)">${_bmcNum(l.remaining_units)}</b> ${unit}</div></div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง ${_brnClQ(l, l.sent_units)} · รับแล้ว ${_brnClQ(l, l.received_units)}${l.claimed_units ? ' · เคลมไปแล้ว ' + _brnClQ(l, l.claimed_units) : ''} · เคลมได้อีก <b style="color:var(--text-primary)">${_brnClQ(l, l.remaining_units)}</b> ${unit}</div></div>
         <div class="brn-box"><input id="brnCq_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q || '')}" aria-label="จำนวนที่เคลม ${esc(_brnNm(l))}" oninput="brnClField(${cq}, 'q', this.value)"><span class="brn-cap">เคลม · ${unit}</span></div>
         <button type="button" class="brn-x" aria-label="เอาออก ${esc(_brnNm(l))}" onclick="brnClUnpick(${cq})">✕</button></div>
       <div class="brn-reason" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
@@ -2735,10 +2748,10 @@ async function brnClaimSend() {
   document.querySelectorAll('#brnClPicked .brn-err').forEach(e => { e.textContent = ''; });
   for (const code of _brnCl.picked) {
     const l = _brnClLine(code); if (!l) continue;
-    const v = _brnCl.vals[code] || {}, raw = String(v.q || '').trim().replace(',', '.'), q = Number(raw);
+    const v = _brnCl.vals[code] || {}, raw = String(v.q || '').trim().replace(',', '.'), q = raw === '' ? NaN : bmcFromTyped(raw, bmcTypeF(l));
     const reason = v.r || '', note = String(v.n || '').trim();
     if (raw === '' || !Number.isFinite(q) || !(q > 0)) { bad(code, 'จำนวนที่เคลมต้องมากกว่า 0'); return; }
-    if (q > l.remaining_units + 1e-9) { bad(code, `เคลมได้ไม่เกิน ${_bmcNum(l.remaining_units)}`); return; }
+    if (q > l.remaining_units + 1e-9) { bad(code, `เคลมได้ไม่เกิน ${_brnClQ(l, l.remaining_units)} ${_brnClUnit(l)}`); return; }
     if (!reason) { bad(code, 'เลือกสาเหตุ'); return; }
     if (reason === 'other' && !note) { bad(code, 'สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย'); return; }
     lines.push({ code, claim_units: q, reason, note: note || null });

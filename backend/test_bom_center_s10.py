@@ -43,17 +43,18 @@ def test_readiness(con):  # noqa: F811
     con.execute("UPDATE branches SET name='อุดรธานี' WHERE branch_id=1")
     auth.init_auth(con)
     r = PL.readiness(con)
-    assert [b["branch"] for b in r["branches"]] == ["อุดรธานี"]
+    # PR-U2: every active branch (the 30-branch rollout), not the pilot four; the pilot names not found are still listed
+    assert [b["branch"] for b in r["branches"]] == [b["name"] for b in PL.active_branches(con)] and "อุดรธานี" in [b["branch"] for b in r["branches"]]
     assert set(r["missing_branches"]) == {"อุบลราชธานี", "ขอนแก่น", "ระยอง"}
     assert {s["key"]: s["done"] for s in r["centre_steps"]}["master"] is True
-    b = r["branches"][0]
+    b = next(x for x in r["branches"] if x["branch"] == "อุดรธานี")
     assert {s["key"]: s["done"] for s in b["steps"]} == {"account": False, "calendar": False, "begin_count": False}
     auth.create_user(con, "udon_branch", "Abcdefgh1234!", "branch", branch="อุดรธานี")
     for rnd, wd in (("1", 2), ("2", 5), ("salmon", 1)):
         con.execute("INSERT INTO bc_order_calendar(branch_id, round, order_weekday, filled_by) VALUES(1,?,?, 'sales')",
                     (rnd, wd))
     ST.save(con, 1, [{"code": "13-01-009", "qty": 1}], "udon", submit=True, count_date="2026-09-22", require_all=False)
-    b = PL.readiness(con)["branches"][0]
+    b = next(x for x in PL.readiness(con)["branches"] if x["branch"] == "อุดรธานี")
     assert b["ready"] and b["first_count"] == "2026-09-22" and b["accounts"][0]["username"] == "udon_branch"
 
 

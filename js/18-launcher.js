@@ -38,7 +38,12 @@ function deptVisible() {
   const role = _deptRole();
   const rows = DEPARTMENTS.map((d, order) => ({ dept: d, home: d.roles.includes(role), order,
     pages: d.pages.map((p, i) => ({ p, i })).filter(x => deptPageAllowed(x.p)) })).filter(r => r.pages.length);
-  return rows.sort((a, b) => (Number(b.home) - Number(a.home)) || (a.order - b.order));
+  // U2: another department whose every open page is already a page of the person's own department adds no
+  // tile (คลัง opened ประสานงานขาย only for คิวใบสั่งซื้อ, which is the คลัง department's own page)
+  const pk = p => p.tab + '|' + (p.pane || '');
+  const own = new Set(rows.filter(r => r.home).flatMap(r => r.pages.map(x => pk(x.p))));
+  const kept = rows.filter(r => r.home || !own.size || r.pages.some(x => !own.has(pk(x.p))));
+  return kept.sort((a, b) => (Number(b.home) - Number(a.home)) || (a.order - b.order));
 }
 function deptOpenPage(p) { if (p.pane) supplyGo({ tab: p.tab, pane: p.pane }); else switchTab(p.tab); }
 function deptGo(key, idx) {

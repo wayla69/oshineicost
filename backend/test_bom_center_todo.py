@@ -31,8 +31,9 @@ PACK = [{"code": "13-01-009", "qty": 2, "unit": "แพ็ค 1 กก."}]
 
 
 def _by(d):
-    """items by key (a per-branch key is `key:branch_id`; one branch here)."""
-    return {i["key"].split(":")[0]: i for i in d["items"]}
+    """items by key (a per-branch key is `key:branch_id`); the branch under test is branch 1 - PR-U2: the centre's list covers every
+    active branch, so the fixture's second branch has its own rows, left out here."""
+    return {i["key"].split(":")[0]: i for i in d["items"] if i.get("branch_id") in (None, 1)}
 
 
 def _steps(d):
