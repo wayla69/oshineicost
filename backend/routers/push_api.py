@@ -57,7 +57,9 @@ DISC_MIN_BAHT = 3000.0                          # … and at least this many bah
 KINDS = [("morning", "สรุปเมื่อวานตอน 08:30"), ("weekly", "สรุปรายสัปดาห์ เช้าวันจันทร์"), ("drop", "สาขายอดตกหนัก"), ("stale", "ข้อมูลขายไม่เข้า"),
          ("cash", "เงินสดขาด"), ("disc", "ส่วนลดสูงผิดปกติ"),
          ("supply", "งานวัตถุดิบและใบสั่งซื้อ (ตอนเช้า และเตือนก่อนตัดรอบ)"),
-         ("franchise", "สรุปร้านของฉันทุกเช้า 08:30")]
+         ("franchise", "สรุปร้านของฉันทุกเช้า 08:30"),
+         ("franchise_reply", "คำตอบจากสำนักงานใหญ่"),
+         ("franchise_msg", "ข้อความจากเจ้าของสาขา")]
 KIND_IDS = [k for k, _ in KINDS]
 # batch 3 (2026-10-12): the supply reminders reach the phones of the branch accounts and of the centre roles that own a line.
 # A device that belongs to a branch-scoped login, or to a role that cannot read the chain's sales (the warehouse), is offered
@@ -67,6 +69,11 @@ KIND_IDS = [k for k, _ in KINDS]
 # offered no other kind and never receives one: the chain kinds go out chain_only (its row carries its branch, and the role holds no
 # sales.overview) and the supply kinds by role.
 FRANCHISE_ROLE = "franchise"
+# PR-F4 (2026-10-22): the franchise owner writes to head office (routers/franchise_msgs.py). A head-office reply goes to that branch's
+# franchise logins' devices as kind "franchise_reply" (offered to the role franchise alone, beside "franchise"); a new owner message goes
+# to the devices of FRANCHISE_MSG_ROLES as kind "franchise_msg" (offered to those roles alone). Neither carries a figure.
+FRANCHISE_KINDS = ("franchise", "franchise_reply")
+FRANCHISE_MSG_ROLES = ("management",)
 SUPPLY_MORNING = (8, 0)                         # Thai clock: the morning line of each branch and of the centre roles
 PRECUTOFF_AT = (11, 0)                          # two hours before the 13:15 cutoff
 CUTOFF_AT = (13, 15)                            # the missed-cutoff note, Sales Support only
@@ -147,9 +154,19 @@ def _kinds_for(con, user: str, request) -> list:
         except Exception:  # noqa: BLE001
             role = ""
     if role == FRANCHISE_ROLE:
-        return [kv for kv in KINDS if kv[0] == "franchise"]
+        return [kv for kv in KINDS if kv[0] in FRANCHISE_KINDS]
     supply = role in SUPPLY_ROLES
-    return [kv for kv in KINDS if kv[0] != "franchise" and ((kv[0] != "supply" and chain) or (kv[0] == "supply" and supply))]
+    msg = role in FRANCHISE_MSG_ROLES and not _auth.scope_branch(request)
+
+    def offered(k):
+        if k in FRANCHISE_KINDS:
+            return False
+        if k == "supply":
+            return supply
+        if k == "franchise_msg":
+            return msg
+        return chain
+    return [kv for kv in KINDS if offered(kv[0])]
 
 
 def _caller(request: Request) -> str:
@@ -270,7 +287,7 @@ def push_test(request: Request):
     with get_db() as con:
         ensure(con)
         chain = _chain_ok(con, user) and not _auth.scope_branch(request)
-        franchise = [k for k, _ in _kinds_for(con, user, request)] == ["franchise"]
+        franchise = "franchise" in [k for k, _ in _kinds_for(con, user, request)]
         body = (f"เครื่องนี้จะได้รับสรุปร้านของฉันทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if franchise
                 else f"เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า {MORNING_HOUR:02d}:{MORNING_MINUTE:02d}" if chain
                 else "เครื่องนี้จะได้รับการแจ้งเตือนงานวัตถุดิบและใบสั่งซื้อ")

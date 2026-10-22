@@ -74,6 +74,7 @@ MODULES: List[str] = [
     "branch.stock",        # สาขาของฉัน: นับสต๊อก (Phase 2) — a branch account works on its own branch only
     "supply.warehouse",    # คลัง: ระบุยอดส่งจริงและกด "ดำเนินการแล้ว" ที่คิวใบสั่งซื้อ (owner 2026-10-08)
     "franchise.view",      # ร้านของฉัน: สรุปผลของสาขาตนเองสำหรับเจ้าของสาขา แบบอ่านอย่างเดียว (PR-L)
+    "franchise.inbox",     # ข้อความจากเจ้าของสาขา: อ่านและตอบคำถามของเจ้าของสาขาทุกสาขา (PR-F4, owner 2026-10-22)
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -87,6 +88,7 @@ ROLE_MODULES: Dict[str, Set[str]] = {
     "operation": {
         "sales.overview", "ops.report", "ops.discounts", "ops.cash",
         "ops.staff", "ops.posextra", "report.export", "customer.feedback",
+        "franchise.inbox",   # PR-F4: Operations answers the franchise owners beside management (routers/franchise_msgs.py)
     },
     "analyst": {
         # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra are an
@@ -400,6 +402,11 @@ MODULE_RULES = [
     ("W",   "/api/settings",                 {"system.settings"}),
     ("W",   "/api/targets",                  {"system.settings"}),
     ("GET", "/api/franchise",                {"franchise.view"}),   # PR-L: ร้านของฉัน (read-only; its only W rules are the push device endpoints below)
+    # PR-F4: the owner's questions to head office and the replies (routers/franchise_msgs.py). The franchise login (franchise.view) reads
+    # and writes its OWN branch's threads only - the handler pins the branch to the signed session; head office (franchise.inbox:
+    # management + operation) reads every thread, replies, closes and reopens. GET and W in one rule: operation holds no franchise.view,
+    # so the GET /api/franchise rule above would refuse it the inbox. The handler re-checks the side of every call.
+    ("*",   "/api/franchise/messages",       {"franchise.view", "franchise.inbox"}),
     # batch 3 (2.1): a phone turns on the reminders of its own login's work. Every endpoint answers for the caller's own devices; the
     # branch login and the warehouse hold no sales.overview, so they are named here
     ("*",   "/api/push",                     _PUSH_MODULES),

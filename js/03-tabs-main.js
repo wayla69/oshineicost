@@ -307,6 +307,8 @@ function ensureDesktopBooted(opts) {
     if (!(opts && opts.noLanding)) switchTab(_landingTab());
     // a supply reminder was tapped (batch 3): open the page it names
     if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; try { supplyDeepLink(l); } catch (e) { console.warn('deep link:', e); } }
+    // PR-F4: a franchise-message notification was tapped: head office's inbox (ร้านของฉัน is the owner's landing page already)
+    if (_fmsgPending && _fmsgPending.go === 'fmsg' && !(opts && opts.noLanding) && tabAllowed('fmsg')) switchTab('fmsg');
   })();
   return _desktopBootP;
 }

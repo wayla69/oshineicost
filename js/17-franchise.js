@@ -11,6 +11,10 @@
 // PR-F3 (2026-10-22): วัตถุดิบจากส่วนกลาง after the branch-discipline card, from GET /api/franchise/supply (loaded when it nears the
 // screen): delivery rounds (ordered / delivered baht, status), purchases against sales vs last month, claims, late orders, the five
 // lines used most over the recipes. Before the branch started the supply module: one neutral line.
+// PR-F4 (2026-10-22): ติดต่อสำนักงานใหญ่ - the owner's questions to head office and the replies (frcMsg*, the card #frcMsg at the top of the
+// page, GET/POST /api/franchise/messages*), a "สอบถามเรื่องนี้" button beside each ควรดู / ต้องแก้ line of the verdict. Head office's inbox
+// is js/19-fmsg.js, which draws with the pure helpers here (_fmRowHtml, _fmMessagesHtml, ...). Every string a person typed is drawn through
+// esc() - never innerHTML of raw text.
 
 let _frcMonth = '';
 let _frcGen = 0;
@@ -58,6 +62,7 @@ async function loadFranchise() {
   if (body) body.innerHTML = _frcRender(d);
   if (d.available) { frcInsightWatch(gen); frcSupplyWatch(gen); }
   frcPushInit();
+  if (_fmView.mode === 'list' || !_fmData) frcMsgLoad();
 }
 
 // ดาวน์โหลดรายงานเดือนนี้: the month as an Excel file; the server's reason goes on a toast when it refuses
@@ -104,13 +109,17 @@ function _frcRow(label, value, sub) {
 }
 const _FRC_TILES = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px';
 
+let _frcVerdictLast = null;     // PR-F4: the lines a "สอบถามเรื่องนี้" button refers to
 function _frcVerdict(v) {
+  _frcVerdictLast = v || null;
+  const ask = franchiseLogin();     // only the owner writes to head office
   const groups = [['good', 'ดี', 'var(--good-ink)'], ['watch', 'ควรดู', 'var(--amber-ink)'], ['fix', 'ต้องแก้', 'var(--bad-ink)']];
   const rows = groups.map(([k, lbl, ink]) => {
     const items = (v && v[k]) || [];
+    const btn = i => ask && k !== 'good' ? `<button type="button" class="frc-ask" onclick="frcAskAbout('${k}',${i})">สอบถามเรื่องนี้</button>` : '';
     return `<div class="ms-row" style="align-items:flex-start;gap:10px"><span style="flex:0 0 44px;font-size:13px;font-weight:700;color:${ink}">${lbl}</span>`
       + `<span style="flex:1;min-width:0;font-size:13px;line-height:1.5;color:var(--text-primary)">`
-      + (items.length ? items.map(t => `<span style="display:block;margin-bottom:3px">${esc(t)}</span>`).join('') : `<span style="${_FRC_MUTED}">ไม่มีรายการ</span>`)
+      + (items.length ? items.map((t, i) => `<span style="display:block;margin-bottom:3px">${esc(t)}${btn(i)}</span>`).join('') : `<span style="${_FRC_MUTED}">ไม่มีรายการ</span>`)
       + `</span></div>`;
   }).join('');
   const note = v && v.note ? `<div class="ms-row" style="${_FRC_MUTED};font-size:12px">${esc(v.note)}</div>` : '';
@@ -564,3 +573,210 @@ function _frcOveruse(o) {
       + `<td class="n">${r.value == null ? _FRC_NA : fmtN(r.value)}</td><td class="n">${_frcPct(r.pct)}</td></tr>`).join('')
     + `</tbody></table></div>`;
 }
+
+// ── PR-F4 (2026-10-22): ติดต่อสำนักงานใหญ่ (the owner) ────────────────────────────────────────────────────────────────────
+// The card #frcMsg: the branch's own threads (open first; closed ones behind the finished-work filter), the unread mark, a thread with its
+// messages and a reply box, and "ส่งคำถามใหม่" (topic + text, optionally the verdict line it is about). The server pins the branch.
+/** @type {any} */
+let _fmData = null;
+/** @type {{mode: string, tid: number, ctx: any, topic: string}} */
+let _fmView = { mode: 'list', tid: 0, ctx: null, topic: '' };
+/** @type {any} */
+let _fmThread = null;
+let _fmBusy = false;
+const _FM_TOPICS = [['sales', 'ยอดขาย'], ['cost', 'ต้นทุนและวัตถุดิบ'], ['orders', 'ใบสั่งซื้อและเคลม'], ['controls', 'การควบคุม'], ['other', 'อื่น ๆ']];
+const _FM_FILTER = [['todo', 'ยังไม่ปิด'], ['done', 'ปิดแล้ว'], ['all', 'ทั้งหมด']];
+const _FM_TH_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+async function _fmFetch(url, opt) {
+  const r = await fetch(`${API}${url}`, opt);
+  const t = await r.text();
+  let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
+  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่');
+  return j;
+}
+function _fmPost(url, body) {
+  return _fmFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+// "2026-10-22 14:05:09" -> "22 ต.ค. 14:05" (the Buddhist year only when it is not this year's)
+function _fmWhen(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(iso || ''));
+  if (!m) return '';
+  const y = +m[1], yNow = new Date().getFullYear();
+  return `${+m[3]} ${_FM_TH_MON[+m[2] - 1] || ''}${y !== yNow ? ' ' + (y + 543) : ''} ${m[4]}:${m[5]}`;
+}
+function _fmMonthTh(ym) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+  return m ? `${_FM_TH_MON[+m[2] - 1] || ''} ${+m[1] + 543}` : '';
+}
+// the verdict line a question refers to: "ควรดู · ต.ค. 2569 · <line>" - text only (the caller escapes it)
+function _fmCtxText(c) {
+  if (!c) return '';
+  return [c.level_th || ({ watch: 'ควรดู', fix: 'ต้องแก้', good: 'ดี' })[c.level] || '', _fmMonthTh(c.month), c.line || ''].filter(Boolean).join(' · ');
+}
+// a first guess of the topic from the words of the verdict line (the owner can change it)
+function _fmGuessTopic(line) {
+  const t = String(line || '');
+  if (/ส่วนลด|ยกเลิก|เงินสด|ใบตัดเบิก|ควบคุม/.test(t)) return 'controls';
+  if (/ใบสั่งซื้อ|เคลม|รับสินค้า|จัดส่ง|ตัดรอบ/.test(t)) return 'orders';
+  if (/ต้นทุน|วัตถุดิบ|กำไร|ของเสีย|ยอดซื้อ/.test(t)) return 'cost';
+  if (/ยอดขาย|ลูกค้า|เป้า/.test(t)) return 'sales';
+  return 'other';
+}
+// the messages of a thread for the reader of `side` ('owner' | 'hq'): the reader's own side on the right. Pure (esc + _fmWhen).
+function _fmMessagesHtml(messages, side) {
+  return (messages || []).map(m => {
+    const mine = m.side === side;
+    return `<div class="fm-msg${mine ? ' fm-mine' : ''}"><div class="fm-meta">${esc(m.author || (m.side === 'hq' ? 'สำนักงานใหญ่' : 'เจ้าของสาขา'))} · ${esc(_fmWhen(m.created_at))}</div>`
+      + `<div class="fm-body">${esc(m.body)}</div></div>`;
+  }).join('');
+}
+// one row of a thread list. Pure. `onclick` names the opener; the branch is shown on head office's list only.
+function _fmRowHtml(t, onclick, showBranch) {
+  const last = t.last ? `<span class="fm-snip">${esc((t.last.side === 'hq' ? 'สำนักงานใหญ่: ' : '') + t.last.body)}</span>` : '';
+  const closed = t.status === 'closed' ? `<span class="fm-chip">ปิดแล้ว</span>` : '';
+  const dot = t.unread ? `<span class="fm-dot" role="img" aria-label="มีข้อความใหม่"></span>` : '';
+  return `<button type="button" class="fm-row${t.unread ? ' fm-unread' : ''}" data-tid="${Number(t.id) || 0}" onclick="${onclick}(${Number(t.id) || 0})">`
+    + `<span class="fm-row-main"><span class="fm-row-top">${dot}<span class="fm-topic">${showBranch ? esc(t.branch || '') + ' · ' : ''}${esc(t.topic_th || '')}</span>${closed}`
+    + `<span class="fm-when">${esc(_fmWhen(t.last_at))}</span></span>${last}</span></button>`;
+}
+function _fmComposer(id, max, placeholder) {
+  return `<textarea id="${id}" class="fm-text" rows="4" maxlength="${Number(max) || 1000}" placeholder="${esc(placeholder)}" oninput="fmCount('${id}',${Number(max) || 1000})"></textarea>`
+    + `<div class="fm-count" id="${id}Count">0 / ${fmtN(max)}</div>`;
+}
+function fmCount(id, max) {
+  const el = document.getElementById(id), c = document.getElementById(id + 'Count');
+  if (el && c) c.textContent = `${fmtN(String(el.value || '').length)} / ${fmtN(max)}`;
+}
+
+async function frcMsgLoad() {
+  const box = document.getElementById('frcMsg');
+  if (!box) return;
+  if (!franchiseLogin()) { box.hidden = true; return; }
+  box.hidden = false;
+  try { _fmData = await _fmFetch('/api/franchise/messages'); }
+  catch (e) {
+    box.innerHTML = `<div class="ms-section-title">ติดต่อสำนักงานใหญ่</div><div class="ms-card"><div class="ms-row" style="color:var(--bad-ink)">${esc(e.message)}</div></div>`;
+    return;
+  }
+  const p = _fmsgPending;
+  if (p && p.go === 'franchise') { _fmsgPending = null; if (p.t) { await frcMsgOpen(p.t, true); return; } }
+  if (_fmView.mode === 'thread' && _fmView.tid) { await frcMsgOpen(_fmView.tid); return; }
+  frcMsgRender();
+}
+function frcMsgRender() {
+  const box = document.getElementById('frcMsg');
+  if (!box || !_fmData) return;
+  const help = '<p>ส่งคำถามหรือข้อสังเกตถึงสำนักงานใหญ่ ฝ่ายบริหารและฝ่ายปฏิบัติการเป็นผู้ตอบ คำตอบแสดงในการ์ดนี้ และแจ้งเตือนที่เครื่องเมื่อเปิดรับการแจ้งเตือนไว้</p>'
+    + '<p>ข้อความที่ส่งแล้วแก้ไขหรือลบไม่ได้ ส่งได้ไม่เกินวันละ 20 ข้อความ ข้อความละไม่เกิน 1,000 ตัวอักษร หัวข้อที่สำนักงานใหญ่ปิดแล้วดูได้จากตัวกรอง "ปิดแล้ว"</p>';
+  const unread = _fmData.unread ? `<span class="fm-badge">ใหม่ ${fmtN(_fmData.unread)}</span>` : '';
+  const head = `<div class="ms-section-title frc-title">ติดต่อสำนักงานใหญ่ ${uiQ('frc:msg', 'ติดต่อสำนักงานใหญ่', help)}${unread}</div>`;
+  let inner;
+  if (_fmView.mode === 'new') inner = _fmNewHtml();
+  else if (_fmView.mode === 'thread' && _fmThread) inner = _fmThreadHtml(_fmThread);
+  else inner = _fmListHtml();
+  box.innerHTML = head + inner;
+  if (_fmView.mode !== 'new' && _fmView.mode !== 'thread') {
+    const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed');
+    uiStateFilter.bar('frcMsgFilter', { counts: sp.counts, f: uiStateFilter.get(['todo', 'done', 'all']), pick: 'frcMsgFilter', opts: _FM_FILTER });
+  }
+}
+function _fmListHtml() {
+  const f = uiStateFilter.get(['todo', 'done', 'all']);
+  const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed');
+  const rows = sp[f] || sp.todo;
+  const list = rows.length ? rows.map(t => _fmRowHtml(t, 'frcMsgOpen', false)).join('')
+    : (sp.counts.all ? uiStateFilter.empty(f, 'frcMsgFilter', 'หัวข้อ') : `<div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีคำถาม</div>`);
+  return `<div class="ms-card fm-card"><div class="fm-actions"><button type="button" class="fm-btn fm-primary" onclick="frcMsgNew()">ส่งคำถามใหม่</button>`
+    + `<div id="frcMsgFilter"></div></div>${list}</div>`;
+}
+function frcMsgFilter(f) { uiStateFilter.set(f); frcMsgRender(); }
+function _fmNewHtml() {
+  const v = _fmView, max = (_fmData && _fmData.max_body) || 1000;
+  const ctx = v.ctx ? `<div class="fm-ctx"><span class="fm-ctx-t">เรื่องที่อ้างถึง: ${esc(_fmCtxText(v.ctx))}</span>`
+    + `<button type="button" class="fm-x" aria-label="ไม่อ้างถึงเรื่องนี้" onclick="frcMsgDropCtx()">×</button></div>` : '';
+  const opts = ((_fmData && _fmData.topics) || _FM_TOPICS.map(([id, label]) => ({ id, label })))
+    .map(t => `<option value="${esc(t.id)}"${t.id === v.topic ? ' selected' : ''}>${esc(t.label)}</option>`).join('');
+  return `<div class="ms-card fm-card"><div class="fm-sub">ส่งคำถามใหม่</div>${ctx}`
+    + `<label class="fm-label" for="frcMsgTopic">หัวข้อ</label><select id="frcMsgTopic" class="fm-select"><option value="">เลือกหัวข้อ</option>${opts}</select>`
+    + `<label class="fm-label" for="frcMsgText">ข้อความ</label>${_fmComposer('frcMsgText', max, 'พิมพ์คำถามหรือข้อสังเกต')}`
+    + `<div class="fm-actions"><button type="button" class="fm-btn fm-primary" id="frcMsgSend" onclick="frcMsgSendNew()">ส่ง</button>`
+    + `<button type="button" class="fm-btn" onclick="frcMsgBack()">ยกเลิก</button></div></div>`;
+}
+function _fmThreadHtml(t) {
+  const max = t.max_body || 1000;
+  const ctx = t.context ? `<div class="fm-ctx"><span class="fm-ctx-t">เรื่องที่อ้างถึง: ${esc(_fmCtxText(t.context))}</span></div>` : '';
+  const foot = t.status === 'open'
+    ? `<label class="fm-label" for="frcMsgReply">ตอบกลับ</label>${_fmComposer('frcMsgReply', max, 'พิมพ์ข้อความ')}`
+      + `<div class="fm-actions"><button type="button" class="fm-btn fm-primary" id="frcMsgSend" onclick="frcMsgSendReply(${Number(t.id) || 0})">ส่ง</button></div>`
+    : `<div class="fm-closed">หัวข้อนี้ปิดแล้ว</div><div class="fm-actions"><button type="button" class="fm-btn fm-primary" onclick="frcMsgNew()">ส่งคำถามใหม่</button></div>`;
+  return `<div class="ms-card fm-card"><div class="fm-actions"><button type="button" class="fm-btn" onclick="frcMsgBack()">‹ กลับ</button>`
+    + `<span class="fm-topic fm-grow">${esc(t.topic_th || '')}</span>${t.status === 'closed' ? '<span class="fm-chip">ปิดแล้ว</span>' : ''}</div>`
+    + ctx + `<div class="fm-thread">${_fmMessagesHtml(t.messages, 'owner')}</div>${foot}</div>`;
+}
+async function frcMsgOpen(tid, scroll) {
+  try { _fmThread = await _fmFetch(`/api/franchise/messages/${Number(tid) || 0}`); }
+  catch (e) { uiToast(e.message, 'error'); _fmView = { mode: 'list', tid: 0, ctx: null, topic: '' }; frcMsgRender(); return; }
+  _fmView = { mode: 'thread', tid: _fmThread.id, ctx: null, topic: '' };
+  const row = ((_fmData && _fmData.threads) || []).find(x => x.id === _fmThread.id);
+  if (row && row.unread) { row.unread = 0; _fmData.unread = Math.max(0, (_fmData.unread || 0) - 1); }
+  frcMsgRender();
+  if (scroll !== false) _fmScrollIn();
+  try { navBadgesRefresh(true); } catch (e) { /* no launcher slice: no badge to redraw */ }
+}
+function frcMsgNew() { _fmView = { mode: 'new', tid: 0, ctx: null, topic: '' }; frcMsgRender(); _fmScrollIn('frcMsgTopic'); }
+function frcMsgBack() { _fmView = { mode: 'list', tid: 0, ctx: null, topic: '' }; _fmThread = null; frcMsgLoad(); }
+function frcMsgDropCtx() {
+  const topic = (document.getElementById('frcMsgTopic') || {}).value || _fmView.topic, text = (document.getElementById('frcMsgText') || {}).value || '';
+  _fmView = Object.assign({}, _fmView, { ctx: null, topic });
+  frcMsgRender();
+  const ta = document.getElementById('frcMsgText'); if (ta) { ta.value = text; fmCount('frcMsgText', (_fmData && _fmData.max_body) || 1000); }
+}
+// "สอบถามเรื่องนี้" beside a ควรดู / ต้องแก้ line: a new question that names the line and the month
+function frcAskAbout(level, i) {
+  const line = _frcVerdictLast && _frcVerdictLast[level] ? _frcVerdictLast[level][i] : '';
+  if (!line) return;
+  _fmView = { mode: 'new', tid: 0, ctx: { level, month: _frcMonth || '', line: String(line).slice(0, 300) }, topic: _fmGuessTopic(line) };
+  if (!_fmData) { frcMsgLoad().then(() => { frcMsgRender(); _fmScrollIn('frcMsgText'); }); return; }
+  frcMsgRender();
+  _fmScrollIn('frcMsgText');
+}
+function _fmScrollIn(focusId) {
+  const box = document.getElementById('frcMsg');
+  if (box) { try { box.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { box.scrollIntoView(); } }
+  if (focusId) setTimeout(() => { const el = document.getElementById(focusId); if (el) try { el.focus({ preventScroll: true }); } catch (e) { /* no focus */ } }, 300);
+}
+async function frcMsgSendNew() {
+  if (_fmBusy) return;
+  const topic = (document.getElementById('frcMsgTopic') || {}).value || '', text = String((document.getElementById('frcMsgText') || {}).value || '').trim();
+  if (!topic) { uiToast('กรุณาเลือกหัวข้อ', 'warn'); return; }
+  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  _fmBusy = true;
+  const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
+  try {
+    const ctx = _fmView.ctx ? { level: _fmView.ctx.level, month: _fmView.ctx.month, line: _fmView.ctx.line } : null;
+    const j = await _fmPost('/api/franchise/messages', { topic, body: text, context: ctx });
+    uiToast('ส่งคำถามถึงสำนักงานใหญ่แล้ว', 'success');
+    _fmView = { mode: 'thread', tid: j.thread.id, ctx: null, topic: '' };
+    await frcMsgLoad();
+  } catch (e) {
+    uiToast(e.message, 'error');
+    if (btn) btn.disabled = false;
+  } finally { _fmBusy = false; }
+}
+async function frcMsgSendReply(tid) {
+  if (_fmBusy) return;
+  const text = String((document.getElementById('frcMsgReply') || {}).value || '').trim();
+  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  _fmBusy = true;
+  const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
+  try {
+    _fmThread = await _fmPost(`/api/franchise/messages/${Number(tid) || 0}/reply`, { body: text });
+    uiToast('ส่งข้อความแล้ว', 'success');
+    frcMsgRender();
+  } catch (e) {
+    uiToast(e.message, 'error');
+    if (btn) btn.disabled = false;
+  } finally { _fmBusy = false; }
+}
+

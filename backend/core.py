@@ -361,10 +361,14 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      (found 2026-09-21). NOT ingredient_order_unit: pack sizes are seeded on
 #                      the PC (seed_order_units.py) and travel WITH the base DB - its rows a
 #                      PERSON wrote are carried forward one by one instead: see _MERGED_ROWS.
+#   franchise_msg_thread, franchise_msg_message
+#                      the franchise owners' questions and head office's replies (PR-F4,
+#                      routers/franchise_msgs.py), written only on the site
 _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings", "push_subscription",
                      "branch_downtime", "cost_override", "requisition_line", "stock_count",
                      "ingredient_sourcing", "ingredient_order_issue", "ingredient_order_issue_line",
-                     "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar")
+                     "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar",
+                     "franchise_msg_thread", "franchise_msg_message")
 #   bc_*               the BoM Calculation Center (backend/bom_center, docs/ADR-001): recipes,
 #                      releases, monthly prices, order calendars, stock counts, orders — all
 #                      typed or imported ON the site. The prefix IS the ownership rule, so a new

@@ -69,6 +69,8 @@ async function phBoot() {
   phNavRender();
   // a tapped notification: a supply reminder opens its page, an owner's alert opens the summary (which applies the link itself)
   if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; await phOpenPage(() => supplyDeepLink(l)); return; }
+  // PR-F4: a franchise-message notification: head office opens its inbox (the owner's link opens ร้านของฉัน below)
+  if (_fmsgPending && _fmsgPending.go === 'fmsg' && tabAllowed('fmsg')) { await phOpenPage(() => switchTab('fmsg')); return; }
   if (_msPendingLink && hasModule('sales.overview')) { await phShowSummary(); return; }
   if (_phKind() === 'franchise') { await phOpenFranchise(); return; }
   phShowHome();
@@ -138,7 +140,7 @@ function _phNavItems() {
   const kind = _phKind();
   const home = { id: 'home', label: 'หน้าแรก', path: _PH_ICON.home, js: 'phShowHome()' };
   const me = { id: 'me', label: 'ฉัน', path: _PH_ICON.me, js: 'phOpenMe()' };
-  if (kind === 'franchise') return [home, me];
+  if (kind === 'franchise') return [Object.assign({}, home, { nb: 'p:franchise' }), me];     // PR-F4: the unread replies of head office
   if (kind === 'branch') {
     const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane, nb: `p:branchstock:${pane}` });
     return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งสินค้า', 'cart', 'order'), b('recv', 'รับสินค้า', 'recv', 'recv'), me];
@@ -443,7 +445,9 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     if (d.type === 'offline-fallback') { _msOfflineAt = d.cachedAt || _msOfflineAt; _msOfflineShow(_msOfflineAt); }
     if (d.type === 'notification-open') {
       try {
-        if (String(d.url || '').includes('go=supply')) { if (phOn()) phOpenPage(() => supplyDeepLink(d.url)); else if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
+        const fm = fmsgParseLink(d.url || '');
+        if (fm) { _fmsgPending = fm; fmsgOpenPending(); }     // PR-F4: a franchise message: the inbox (head office) or ร้านของฉัน (the owner)
+        else if (String(d.url || '').includes('go=supply')) { if (phOn()) phOpenPage(() => supplyDeepLink(d.url)); else if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
         else { _msPendingLink = d.url || ''; showMobileSummary(); }
       } catch (err) {}
     }
@@ -461,7 +465,9 @@ let _msPendingLink = '';
   try {
     const q = new URLSearchParams(location.search);
     if (q.get('go')) {
-      if (q.get('go') === 'supply') _supplyPendingLink = location.search; else _msPendingLink = location.search;     // supply reminders (batch 3) open a supply page
+      if (q.get('go') === 'supply') _supplyPendingLink = location.search;     // supply reminders (batch 3) open a supply page
+      else if (q.get('go') === 'fmsg' || (q.get('go') === 'franchise' && q.get('t'))) _fmsgPending = fmsgParseLink(location.search);   // PR-F4
+      else _msPendingLink = location.search;
       history.replaceState(null, '', location.pathname + location.hash);
     }
   } catch (e) {}

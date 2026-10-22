@@ -2466,6 +2466,11 @@ except ImportError:
     from routers.franchise import router as _franchise_router
 app.include_router(_franchise_router)
 try:
+    from .routers.franchise_msgs import router as _franchise_msgs_router
+except ImportError:
+    from routers.franchise_msgs import router as _franchise_msgs_router
+app.include_router(_franchise_msgs_router)     # PR-F4: the franchise owner's questions to head office and the replies
+try:
     from .routers.nav import router as _nav_router
 except ImportError:
     from routers.nav import router as _nav_router

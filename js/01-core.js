@@ -515,6 +515,7 @@ const TAB_MODULE = {
   orderhub:['supply.ordering','ops.report','bom.center','supply.warehouse'],   // Phase 2 S9: ศูนย์สั่งของ — คิว Sales Support · compliance · สรุปเดือน   // BoM Center (S1): ทะเบียน ราคา หน่วย
   supplyhome:['branch.stock','supply.ordering','bom.center','bom.edit','bom.release','bom.audit','ops.report','cost.analysis','bom.prices','bom.recipes','supply.warehouse'],   // หน้างาน: any supply role (the server rule for /api/bom-center/todo lists the same)
   franchise:'franchise.view',   // ร้านของฉัน (PR-L): the franchise owner's page; the nav entry shows for that role only (applyPermissions)
+  fmsg:'franchise.inbox',       // PR-F4: ข้อความจากเจ้าของสาขา - head office's inbox of the owners' questions (management + operation)
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -608,11 +609,12 @@ const MODULE_LABEL_TH = {
   'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า',
   'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
   'franchise.view':'ร้านของฉัน: ดูผลการดำเนินงานของสาขาตนเอง',
+  'franchise.inbox':'ข้อความจากเจ้าของสาขา: อ่านและตอบ',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
-  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback'],
+  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback','franchise.inbox'],
   analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center','bom.release'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
@@ -968,7 +970,7 @@ function _renderPermMatrix(canEdit) {
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'รายละเอียด POS',
     'report.export':'ส่งออกรายงาน', 'system.settings':'ตั้งค่า', 'system.admin':'ผู้ดูแลระบบ',
     'data.upload':'อัปโหลดข้อมูล', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
-    'branch.stock':'สาขา: ตัดเบิก ตรวจนับ สั่งสินค้า', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)',
+    'branch.stock':'สาขา: ตัดเบิก ตรวจนับ สั่งสินค้า', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)', 'franchise.inbox':'ข้อความเจ้าของสาขา',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
@@ -2643,7 +2645,7 @@ async function onGroupChange() {
 
 // ── Tab switching ──────────────────────────────────────────────
 // owner 2026-10-20: plain Thai titles - the English duplicates in brackets are gone; GP / P&L / BoM / SKU stay (staff use them)
-const PAGE_TITLES = { franchise:'ร้านของฉัน', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน', launcher:'หน้าแรก', allpages:'หน้ารายงานทั้งหมด' };
+const PAGE_TITLES = { franchise:'ร้านของฉัน', fmsg:'ข้อความจากเจ้าของสาขา', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน', launcher:'หน้าแรก', allpages:'หน้ารายงานทั้งหมด' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -2681,6 +2683,7 @@ const TABS = {
   orderhub: { load: () => loadOrderHub(), ownFilters: true },
   supplyhome: { load: () => loadSupplyHome(), ownFilters: true },
   franchise: { load: () => loadFranchise(), ownFilters: true },
+  fmsg: { load: () => loadFmsgInbox(), ownFilters: true },     // PR-F4: head office's inbox of the franchise owners' questions (js/17-franchise.js)
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
@@ -3012,7 +3015,8 @@ const DEPARTMENTS = [
     { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'coin' },
     { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'bar' },
     { tab: 'cost', label: 'ต้นทุน', icon: 'pie' },
-    { tab: 'bomcenter', pane: 'rel', bom: true, label: 'รับทราบสูตร', icon: 'shield' }] },
+    { tab: 'bomcenter', pane: 'rel', bom: true, label: 'รับทราบสูตร', icon: 'shield' },
+    { tab: 'fmsg', label: 'ข้อความจากเจ้าของสาขา', icon: 'msg' }] },     // PR-F4: management and operation (franchise.inbox)
   { key: 'mkt', label: 'การตลาด', duty: 'ลูกค้า เมนู และเสียงลูกค้า', icon: 'mega', hue: 'mkt', roles: ['marketing'], pages: [
     { tab: 'buffetperf', label: 'ลูกค้าและบุฟเฟ่ต์', icon: 'users' },
     { tab: 'childbuffet', label: 'บุฟเฟ่ต์เด็ก', icon: 'child' },
@@ -3113,7 +3117,7 @@ const PAGE_KEYWORDS = {
   'cancelbill': 'ยกเลิก บิล void cancel', 'staff': 'พนักงาน แคชเชียร์ staff', 'modifiers': 'ความต้องการพิเศษ modifier', 'pricezone': 'ราคา โซน price zone',
   'closetime': 'ปิดร้าน เวลา closing ข้อมูล', 'action': 'ต้องดู วันนี้ action',
   'supplyhome': 'งาน หน้างาน todo task ปิดงวด', 'ordering': 'แผนสั่ง สั่งซื้อ plan order วัตถุดิบ', 'ingpurchase': 'ยอดซื้อ ซื้อ purchase เทียบยอดขาย', 'ordersetup|pack': 'ขนาดบรรจุ หน่วยสั่ง pack',
-  'franchise': 'ร้าน เจ้าของ สรุป franchise', 'manual': 'คู่มือ วิธีใช้ help manual', 'settings': 'ตั้งค่า settings ผู้ใช้ user สิทธิ์',
+  'franchise': 'ร้าน เจ้าของ สรุป franchise', 'fmsg': 'ข้อความ คำถาม ตอบ เจ้าของสาขา แฟรนไชส์ ติดต่อ message franchise inbox', 'manual': 'คู่มือ วิธีใช้ help manual', 'settings': 'ตั้งค่า settings ผู้ใช้ user สิทธิ์',
   'orderhub|queue': 'ใบสั่งซื้อ po สั่งของ order คิว', 'orderhub|claims': 'เคลม คืนของ สินค้าเสียหาย claim return', 'orderhub|issues': 'ใบตัดเบิก ตัดเบิก ใบเบิก requisition',
   'orderhub|issuevar': 'ผลต่าง ตัดเบิก variance', 'orderhub|comp': 'ตรวจ สั่ง ใบสั่งซื้อ สั่งช้า compliance', 'orderhub|persales': 'ใช้วัตถุดิบ ยอดขาย usage',
   'orderhub|central': 'ปิดงวด นำเข้า ไดกิโตะ รายงานกลาง', 'orderhub|month': 'ผลต่าง รายเดือน ปิดเดือน monthly variance', 'orderhub|adoption': 'การใช้งาน adoption สาขา',
@@ -3424,6 +3428,30 @@ function supplyGo(o) {
 // The address is read once at load (09c-mobile.js keeps it here and drops it from the bar) or handed over by sw.js when the app is already open;
 // it is applied when the shell has booted (ensureDesktopBooted). An unknown tab or pane falls back to หน้างาน; a role without the tab lands on its first page.
 let _supplyPendingLink = '';
+// PR-F4 · a tapped franchise-message notification: "/?go=fmsg&t=<thread>" (head office, the inbox) or "/?go=franchise&t=<thread>" (the owner,
+// ร้านของฉัน). Kept here as {go, t} by 09c-mobile.js and opened by the page itself (loadFmsgInbox / frcMsgLoad, js/17-franchise.js).
+/** @type {{go: string, t: number} | null} */
+let _fmsgPending = null;
+function fmsgParseLink(link) {
+  let q;
+  try { q = new URLSearchParams(String(link).includes('?') ? String(link).split('?')[1] : String(link)); } catch (e) { return null; }
+  const go = q.get('go'), t = parseInt(q.get('t') || '', 10);
+  if (go !== 'fmsg' && go !== 'franchise') return null;
+  return { go, t: Number.isFinite(t) && t > 0 ? t : 0 };
+}
+// open what _fmsgPending names now (a notification tapped while the app is open); before the shell has booted the boot applies it
+function fmsgOpenPending() {
+  const p = _fmsgPending;
+  if (!p) return;
+  const tab = p.go === 'fmsg' ? 'fmsg' : 'franchise';
+  if (!tabAllowed(tab)) { _fmsgPending = null; return; }
+  const open = () => {
+    if (activeTab !== tab) { switchTab(tab); return; }
+    if (tab === 'fmsg' && typeof loadFmsgInbox === 'function') loadFmsgInbox();
+    else if (tab === 'franchise' && typeof frcMsgLoad === 'function') frcMsgLoad();
+  };
+  if (phOn()) phOpenPage(open); else if (_desktopBooted) open();
+}
 function supplyDeepLink(link) {
   let q;
   try { q = new URLSearchParams(String(link).includes('?') ? String(link).split('?')[1] : String(link)); } catch (e) { return false; }

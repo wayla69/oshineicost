@@ -1,0 +1,26 @@
+<div id="tab-fmsg" style="display:none">
+
+  <!-- PR-F4 (2026-10-22): ข้อความจากเจ้าของสาขา - head office's inbox of the franchise owners' questions (management + operation,
+       module franchise.inbox). GET /api/franchise/messages/inbox, GET/POST /api/franchise/messages/{id}[/reply|/status]
+       (backend/routers/franchise_msgs.py), drawn by js/17-franchise.js fmsg*. Closed threads are behind the finished-work filter. -->
+  <template id="hlp-fmsg" data-title="ข้อความจากเจ้าของสาขา">
+    <p>คำถามและข้อสังเกตที่เจ้าของสาขาแฟรนไชส์ส่งจากหน้าร้านของฉัน ฝ่ายบริหารและฝ่ายปฏิบัติการอ่านและตอบได้ทุกหัวข้อ
+      เจ้าของสาขาเห็นชื่อผู้ตอบตามชื่อที่แสดงของบัญชี หรือชื่อฝ่าย</p>
+    <p>ปิดหัวข้อเมื่อตอบครบแล้ว หัวข้อที่ปิดย้ายไปอยู่ในตัวกรอง "ปิดแล้ว" และเปิดอีกครั้งได้ ข้อความที่ส่งแล้วแก้ไขหรือลบไม่ได้</p>
+  </template>
+  <div class="fmsg-wrap">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <span class="text-base font-semibold" style="color:var(--text-primary)">ข้อความจากเจ้าของสาขา</span>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-fmsg" title="ข้อความจากเจ้าของสาขา">?</button>
+      <label class="text-xs" style="color:var(--text-muted)">สาขา
+        <select id="fmsgBranch" data-branch-picker onchange="fmsgBranchChanged()" aria-label="เลือกสาขา" class="fm-select" style="width:auto;min-width:160px;margin:0"></select>
+      </label>
+      <div id="fmsgState"></div>
+      <span id="fmsgUnread" class="text-xs ml-auto" style="color:var(--text-secondary)"></span>
+    </div>
+    <div class="fmsg-grid">
+      <div id="fmsgList"></div>
+      <div id="fmsgThread"></div>
+    </div>
+  </div>
+</div>

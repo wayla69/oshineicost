@@ -1,7 +1,7 @@
 """PR-L - the franchise owner role (เจ้าของสาขา): role matrix, pinning, payload shape, nothing else reachable.
 
   * the role holds ONE module (franchise.view) and ONE read rule, GET /api/franchise; its only write rules are the six Web Push
-    device endpoints (PR-F2, own devices only), so every other path - every /api/bom-center/*, /api/auth/users*, /api/reports/* read or write - is closed;
+    device endpoints (PR-F2, own devices only) and its own messages to head office (PR-F4, /api/franchise/messages), so every other path - every /api/bom-center/*, /api/auth/users*, /api/reports/* read or write - is closed;
   * over HTTP: a franchise login reads /api/franchise/summary for its own branch (200, the payload keys), is refused
     (403, X-Denied: role) when it names another branch, and gets 403 on every other read and every write;
   * the payload carries no bills, recipes, prices, cashier or staff names and no other branch's name;
@@ -52,14 +52,16 @@ def test_only_the_summary_get_is_open_to_the_role():
     assert mode == [("GET", "/api/bom-center/mode", set(auth.MODULES))]
     rules = [r for r in rules if r[1] != "/api/bom-center/mode"]
     assert rules[0] == ("GET", "/api/franchise", {"franchise.view"})
-    assert [(m, pfx) for m, pfx, _ in rules[1:]] == push
+    # PR-F4: the owner's own questions to head office (the handler pins the branch; test_franchise_f4.py)
+    assert rules[1] == ("*", "/api/franchise/messages", {"franchise.view", "franchise.inbox"})
+    assert [(m, pfx) for m, pfx, _ in rules[2:]] == push
     assert not auth.path_allowed("POST", "/api/push/anything-else", MODS) and not auth.path_allowed("GET", "/api/push", MODS)
 
 
 def test_every_ruled_prefix_and_every_unruled_path_is_closed_to_the_role():
     bad = []
     for meths, pfx, mods in auth.MODULE_RULES:
-        if pfx == "/api/franchise" or pfx.startswith(OPEN) or pfx in {"/api/push/" + p for p in auth.PUSH_DEVICE_PATHS}:
+        if pfx in ("/api/franchise", "/api/franchise/messages") or pfx.startswith(OPEN) or pfx in {"/api/push/" + p for p in auth.PUSH_DEVICE_PATHS}:
             continue
         if pfx == "/api/bom-center/mode":      # PR-S1: the one read of the system mode is open to every role (its write rule is not)
             assert auth.path_allowed("GET", pfx, MODS) and not any(auth.path_allowed(m, pfx, MODS) for m in WRITES)

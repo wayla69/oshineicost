@@ -299,7 +299,7 @@ def test_the_kinds_a_login_is_offered(world):
     assert kinds("b3_wh") == ["supply"]
     assert kinds("b3_acc") == chain + ["supply"]                     # accounting reads the chain's sales, so it keeps those kinds too
     assert kinds("b3_ss") == chain + ["supply"]
-    assert kinds("b3_mg") == chain                                    # the manager receives no supply line
+    assert kinds("b3_mg") == chain + ["franchise_msg"]               # the manager receives no supply line; PR-F4: the owners' messages
     _sql("DELETE FROM push_subscription WHERE endpoint LIKE 'https://push.example/me-%'")
 
 
