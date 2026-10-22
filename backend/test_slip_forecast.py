@@ -417,3 +417,41 @@ def test_the_plan_endpoint_answers_source_and_fallback(client, monkeypatch):
     assert out["source"]["kind"] == "none" and out["source"]["min_days"] == 14
     assert out["fallback"]["mode"] in ("none", "benchmark") and out["fallback"]["min_days"] == 14
     assert out["stock"]["estimate_basis"] == "slips"
+
+
+# ── 7 · the all-branch median in stock mode: every company branch on slips, not the configured set ──
+def test_a_company_branch_outside_the_benchmark_set_counts_in_stock_mode(chain):
+    c = chain
+    BM.set_benchmark(c, "t", [1, 3])                                                     # branch 4 is a company branch, not in the set
+    _slips(c, 4, D0, D0 + timedelta(days=13), crab=(900.0, 100.0))                       # exactly 14 confirmed days
+    b = PS.benchmark_basis(c, 1, "2026-10", weeks=6, cover=[WED], factor=1.0)
+    assert b["ok"] and b["branches"] == ["Co4"]
+    assert b["items"][CRAB]["per_100k"] == pytest.approx(1000 / 3000 * 1e5)
+    assert FC.source_label(c, 1) == {"kind": "benchmark", "confirmed_days": 0, "window_days": 35, "min_days": 14, "branches": 1}
+    CS.set_mode(c, "t", "full")                                                          # full mode keeps the configured set
+    assert PS.benchmark_basis(c, 1, "2026-10", weeks=6, cover=[WED], factor=1.0)["branches"] == ["Co3"]   # the set [1, 3] (recipes), not Co4
+
+
+def test_a_franchise_branch_does_not_count(chain):
+    c = chain
+    c.execute("INSERT INTO branches(branch_id, name, branch_type, active) VALUES(6, 'Fr6', 'franchise', 1)")
+    _sell(c, 6)
+    c.commit()
+    _slips(c, 6, D0, AS_OF)
+    assert 6 not in FC.company_branch_ids(c)
+    assert PS.benchmark_basis(c, 1, "2026-10", weeks=6, cover=[WED], factor=1.0)["ok"] is False
+    p = OR.plan(c, 1, "1", WED, now=NOW)
+    assert p["fallback"]["mode"] == "none"                                               # a franchise branch's slips open no (ข)
+    _slips(c, 3, D0, AS_OF)
+    b = PS.benchmark_basis(c, 1, "2026-10", weeks=6, cover=[WED], factor=1.0)
+    assert b["branches"] == ["Co3"]
+
+
+def test_the_planned_branch_is_left_out_of_its_own_median(chain):
+    c = chain
+    _slips(c, 3, D0, AS_OF, crab=(450.0, 50.0))                                          # 16,667 g per ฿100,000
+    _slips(c, 4, D0, AS_OF, crab=(900.0, 100.0))                                         # 33,333
+    b3 = PS.benchmark_basis(c, 3, "2026-10", weeks=6, cover=[WED], factor=1.0)
+    assert b3["branches"] == ["Co4"] and b3["items"][CRAB]["per_100k"] == pytest.approx(1000 / 3000 * 1e5)
+    b4 = PS.benchmark_basis(c, 4, "2026-10", weeks=6, cover=[WED], factor=1.0)
+    assert b4["branches"] == ["Co3"] and b4["items"][CRAB]["per_100k"] == pytest.approx(500 / 3000 * 1e5)

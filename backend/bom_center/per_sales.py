@@ -312,7 +312,11 @@ def benchmark_basis(con, branch_id: int, month: str, weeks: int = 6, cover: list
     usage per ฿100,000 (the branch itself left out; an item needs MIN_BRANCHES branches that use it), and the median of their
     "ปกติ" sales for the cover days as the hint. Same shape as reference_basis."""
     from . import benchmark as BM
-    ids = [i for i in BM.branch_ids(con) if i != int(branch_id)]
+    from .close_settings import stock_mode as _stock
+    if _stock(con):                                         # PR-S3: every company branch whose demand is the slips, the planned one left out
+        ids = FC.company_branch_ids(con, exclude=branch_id)
+    else:
+        ids = [i for i in BM.branch_ids(con) if i != int(branch_id)]
     bases = [reference_basis(con, i, month, weeks=weeks, cover=cover, factor=factor) for i in ids]
     ok = [b for b in bases if b["ok"]]
     out = {"branch_id": None, "name": BM.LABEL, "label": f"คำนวณจาก{BM.LABEL}", "benchmark": True, "items": {}, "use": {},

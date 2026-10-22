@@ -478,6 +478,15 @@ def demand_source(con, branch_id: int, start: date, end: date, month: str) -> tu
                       "window_days": (end - start).days + 1, "missed": [], "missed_lines": 0, "via": {}}
 
 
+def company_branch_ids(con, exclude=None) -> list:
+    """PR-S3 (owner 2026-10-22): the company branches - `branches.branch_type = 'master'` (the master / franchise split the Monthly Report
+    scope uses), active, not the 'ALL' row - without `exclude`. In stock mode every one of them whose demand source is the slips (at
+    least SLIP_MIN_DAYS confirmed days) is part of the all-branch median; franchise branches never are."""
+    return [b for (b,) in con.execute(
+        "SELECT branch_id FROM branches WHERE branch_type='master' AND name<>'ALL' AND COALESCE(active,1)=1 ORDER BY branch_id")
+        if exclude is None or int(b) != int(exclude)]
+
+
 def source_label(con, branch_id: int) -> dict:
     """PR-S3 · where the order suggestion of a branch comes from right now, for a list of branches (no usage is walked, only the slip
     days are counted): {kind: recipes | slips | benchmark | none, confirmed_days, window_days, min_days, branches}. In stock mode
@@ -492,11 +501,8 @@ def source_label(con, branch_id: int) -> dict:
     n = len(_slip_days(con, branch_id, start, as_of))
     out.update(kind="slips" if n >= SLIP_MIN_DAYS else "none", confirmed_days=n, window_days=(as_of - start).days + 1)
     if out["kind"] == "none":
-        from . import benchmark as BM
         k = 0
-        for b in BM.branch_ids(con):
-            if int(b) == int(branch_id):
-                continue
+        for b in company_branch_ids(con, exclude=branch_id):
             bl = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (b,)).fetchone()[0]
             bo = date.fromisoformat(bl) if bl else as_of
             if len(_slip_days(con, b, era_start(bo - timedelta(days=41), bo), bo)) >= SLIP_MIN_DAYS:
