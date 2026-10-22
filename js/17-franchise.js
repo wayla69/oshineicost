@@ -598,18 +598,18 @@ async function _fmFetch(url, opt) {
 function _fmPost(url, body) {
   return _fmFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
-// "2026-10-22 14:05:09" -> "22 ต.ค. 14:05" (the Buddhist year only when it is not this year's)
+// "2026-10-22 14:05:09" -> "22 ต.ค. 14:05" (the year, as on the rest of ร้านของฉัน (U3): ค.ศ., only when it is not this year's)
 function _fmWhen(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(iso || ''));
   if (!m) return '';
   const y = +m[1], yNow = new Date().getFullYear();
-  return `${+m[3]} ${_FM_TH_MON[+m[2] - 1] || ''}${y !== yNow ? ' ' + (y + 543) : ''} ${m[4]}:${m[5]}`;
+  return `${+m[3]} ${_FM_TH_MON[+m[2] - 1] || ''}${y !== yNow ? ' ' + y : ''} ${m[4]}:${m[5]}`;
 }
 function _fmMonthTh(ym) {
   const m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
-  return m ? `${_FM_TH_MON[+m[2] - 1] || ''} ${+m[1] + 543}` : '';
+  return m ? `${_FM_TH_MON[+m[2] - 1] || ''} ${+m[1]}` : '';
 }
-// the verdict line a question refers to: "ควรดู · ต.ค. 2569 · <line>" - text only (the caller escapes it)
+// the verdict line a question refers to: "ควรดู · ต.ค. 2026 · <line>" - text only (the caller escapes it)
 function _fmCtxText(c) {
   if (!c) return '';
   return [c.level_th || ({ watch: 'ควรดู', fix: 'ต้องแก้', good: 'ดี' })[c.level] || '', _fmMonthTh(c.month), c.line || ''].filter(Boolean).join(' · ');
