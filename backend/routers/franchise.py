@@ -315,7 +315,9 @@ def _ingredients(con, bid: int, month: str) -> dict:
     from bom_center import variance as VA
     from bom_center.stock import periods
     first, last = _month_bounds(month)
-    out = {"latest_period": None, "waste_pct_month": None, "streak_flag": False, "streak_days": 0}
+    from bom_center.close_settings import stock_mode
+    out = {"latest_period": None, "waste_pct_month": None, "streak_flag": False, "streak_days": 0,
+           "stock_mode": bool(stock_mode(con))}      # P5: the streak is judged against the branch's normal (stock mode) or the recipes (full mode)
     cut = (last + timedelta(days=1)).isoformat()
     ps = [p for p in periods(con, bid) if p[1]["date"] < cut]
     if ps:
@@ -414,7 +416,8 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
             else:
                 add("watch", f"วัตถุดิบรอบนับล่าสุด{word}ร้อยละ {_pct_text(p)} (฿{abs(lp.get('diff_value') or 0):,.0f})")
         if ing.get("streak_flag"):
-            add("fix", f"มีวัตถุดิบหลักที่เบิกเกินสูตรติดต่อกันหลายวัน ({ing['streak_days']} วันในเดือนนี้) ควรตรวจสอบหน้างาน")
+            base = "ปกติของสาขาหรือค่ากลางทุกสาขา" if ing.get("stock_mode") else "สูตร"
+            add("fix", f"มีวัตถุดิบหลักที่เบิกเกิน{base}ติดต่อกันหลายวัน ({ing['streak_days']} วันในเดือนนี้) ควรตรวจสอบหน้างาน")
         w = ing.get("waste_pct_month")
         if w is not None:
             if w <= T_WASTE_GOOD:

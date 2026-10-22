@@ -157,7 +157,7 @@ def test_o1_a_no_branch_has_enough_slips_so_no_suggestion(chain):
     p = OR.plan(c, 1, "1", WED, now=NOW)
     assert p["source"] == {"kind": "none", "confirmed_days": 7, "window_days": 35, "min_days": 14}
     assert p["fallback"] == {"mode": "none", "confirmed_days": 7, "min_days": 14,
-                             "message": "ยังไม่มีใบตัดเบิกพอสำหรับยอดแนะนำ (7/14 วัน) กรอกยอดสั่งเอง"}
+                             "message": "ใบตัดเบิกยังไม่พอ (7/14 วัน) · กรอกยอดสั่งเอง"}
     assert p["ref_mode"] is None and p["sales_normal"] is None
     crab = {r["code"]: r for r in p["rows"]}[CRAB]
     assert crab["suggested"] is None and crab["last_order_qty"] == 4 and crab["system_qty"] is not None
@@ -186,7 +186,7 @@ def test_o1_b_another_branch_has_enough_so_the_benchmark_times_own_normal_sales(
     p = OR.plan(c, 1, "1", WED, now=NOW)
     assert p["source"]["kind"] == "none" and p["source"]["confirmed_days"] == 7
     assert p["fallback"] == {"mode": "benchmark", "confirmed_days": 7, "min_days": 14, "branches": 2,
-                             "message": "ยอดแนะนำจากค่ากลาง 2 สาขาต่อยอดขาย ฿100,000 (ใบตัดเบิกของสาขายังมี 7/14 วัน)"}
+                             "message": "ยอดแนะนำจากค่ากลาง 2 สาขา (ใบตัดเบิกของสาขา 7/14 วัน)"}
     rm = p["ref_mode"]
     assert rm["active"] and rm["benchmark"] and rm["needs_sales"] is False and rm["own_days"] == 7 and rm["min_days"] == 14
     cover = _days(date.fromisoformat(p["cover_from"]), date.fromisoformat(p["cover_to"]))

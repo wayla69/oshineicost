@@ -696,7 +696,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                         "message": _ps.NEED_SALES_TH if exp <= 0 else ""}
             k = len(rb.get("branches") or [])
             fallback = {"mode": "benchmark", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS, "branches": k,
-                        "message": f"ยอดแนะนำจากค่ากลาง {k} สาขาต่อยอดขาย ฿100,000 (ใบตัดเบิกของสาขายังมี {n_slip}/{SLIP_MIN_DAYS} วัน)"}
+                        "message": f"ยอดแนะนำจากค่ากลาง {k} สาขา (ใบตัดเบิกของสาขา {n_slip}/{SLIP_MIN_DAYS} วัน)"}
             sales_normal = None
             if exp > 0:
                 use, ps_items = rb["use"], rb["items"]
@@ -704,7 +704,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                 factor, up = 1.0, 1.0
         else:
             fallback = {"mode": "none", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS,
-                        "message": f"ยังไม่มีใบตัดเบิกพอสำหรับยอดแนะนำ ({n_slip}/{SLIP_MIN_DAYS} วัน) กรอกยอดสั่งเอง"}
+                        "message": f"ใบตัดเบิกยังไม่พอ ({n_slip}/{SLIP_MIN_DAYS} วัน) · กรอกยอดสั่งเอง"}
             sales_normal = None
     elif ref_branch and (is_bench or int(ref_branch) != int(branch_id)) and len(days) < _ps.NEW_BRANCH_DAYS:
         if is_bench:                                       # PR-X: the median of the company branches

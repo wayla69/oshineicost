@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """All-branches adoption grid (batch 3, 4.7 of the improvement proposal, owner approved 2026-10-12).
 
-One row per ACTIVE BRANCH ACCOUNT (users with role 'branch' and a branch - pilot.branch_accounts, not the four pilot
+One row per ACTIVE BRANCH ACCOUNT (users with role 'branch' and a branch - pilot.branch_accounts, not the five pilot
 branches), for the last 7 days (today included, today's open slip and order not judged yet), for Sales Support, Operations
 and management. Nothing here is a new definition; each column reads the one the pilot and the compliance reports already use:
 
