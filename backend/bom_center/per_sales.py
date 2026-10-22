@@ -142,7 +142,7 @@ def normal_from(series: dict, days: list, as_of, cover: list, factor: float = 1.
     return {"total": sum(per_day), "trend": m["trend"], "factor": factor, "per_day": per_day}
 
 
-def normal_sales(con, branch_id: int, cover_from, cover_to, weeks: int = 6, as_of=None, factor=None) -> dict:
+def normal_sales(con, branch_id: int, cover_from, cover_to, weeks: int = FC.HISTORY_WEEKS, as_of=None, factor=None) -> dict:
     """The sales ("ปกติ") expected over the cover days. `factor` None = the season factor the forecast would use.
     -> {total, trend, factor, days: [{date, normal}], history_from, history_to, trading_days}; total is None without history."""
     cf, ct = _d(cover_from), _d(cover_to)
@@ -283,7 +283,7 @@ def set_reference(con, who: str, branch_id: int, ref_id, mode: str = None) -> di
     return {"branch_id": int(branch_id), "ref_branch_id": ref_id}
 
 
-def reference_basis(con, ref_id: int, month: str, weeks: int = 6, cover: list = None, factor: float = 1.0) -> dict:
+def reference_basis(con, ref_id: int, month: str, weeks: int = FC.HISTORY_WEEKS, cover: list = None, factor: float = 1.0) -> dict:
     """What a new branch borrows from its reference branch: the ratio over the reference's last `weeks` weeks (its own
     history window, same rule as suggest) and, for the cover days, the reference's "ปกติ" sales as a hint."""
     last = con.execute(f"SELECT MAX(day) FROM {sales_table(con)} WHERE branch_id=?", (ref_id,)).fetchone()[0]
@@ -307,7 +307,7 @@ def reference_basis(con, ref_id: int, month: str, weeks: int = 6, cover: list = 
     return out
 
 
-def benchmark_basis(con, branch_id: int, month: str, weeks: int = 6, cover: list = None, factor: float = 1.0) -> dict:
+def benchmark_basis(con, branch_id: int, month: str, weeks: int = FC.HISTORY_WEEKS, cover: list = None, factor: float = 1.0) -> dict:
     """PR-X · what a new branch borrows when its reference is the benchmark: for every item the MEDIAN of the company branches'
     usage per ฿100,000 (the branch itself left out; an item needs MIN_BRANCHES branches that use it), and the median of their
     "ปกติ" sales for the cover days as the hint. Same shape as reference_basis."""
@@ -375,7 +375,7 @@ def _pct(new, old):
     return None if not old else round((new - old) / old * 100.0, 1)
 
 
-def report(con, weeks: int = 4, branch_ids=None, today=None) -> dict:
+def report(con, weeks: int = FC.HISTORY_WEEKS, branch_ids=None, today=None) -> dict:
     """Per branch the last `weeks` weeks against the `weeks` before (usage per ฿100,000 of sales), items by value, plus the
     chain total (Σ usage ÷ Σ sales). `branch_ids` None = every active branch with sales in the window."""
     weeks = max(1, min(int(weeks), 8))
