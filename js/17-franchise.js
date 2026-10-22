@@ -154,7 +154,7 @@ function _frcGp(g) {
   const ref = g.target_basis === 'last_year' ? 'เป้า = เดือนเดียวกันปีก่อน' : 'เป้า = เดือนก่อน';
   return _frcSection('กำไรขั้นต้นและต้นทุนอาหาร', `<div style="${_FRC_TILES};margin-top:0">`
     + msKpiTile('กำไรขั้นต้น (GP)', _frcPct(g.gp_pct), '#10b981', delta != null ? `${msPchip(delta, true, ' จุด')} <span style="font-size:12px;${_FRC_MUTED}">${ref} ${_frcPct(g.target_pct)}</span>` : '')
-    + msKpiTile('ต้นทุนอาหาร', _frcPct(g.food_cost_pct), '#f59e0b', 'ของยอดขาย ตามสูตร')
+    + msKpiTile('ต้นทุนอาหาร', _frcPct(g.food_cost_pct), '#f59e0b', stkWord('ของยอดขาย ตามสูตร', 'ของยอดขาย ตามต้นทุนต่อจาน'))
     + `</div>` + _frcCoverage(g.coverage));
 }
 
@@ -162,7 +162,7 @@ function _frcGp(g) {
 function _frcCoverage(c) {
   if (!c || !c.floor) return '';
   const plates = c.uncosted_plates_pct, sales = c.uncosted_sales_pct;
-  const help = '<p>ต้นทุนอาหารคำนวณจากสูตรของแต่ละเมนู เมนูที่ยังไม่มีต้นทุนนับเป็น 0 บาท ต้นทุนอาหารที่แสดงจึงเป็นค่าต่ำสุด และกำไรขั้นต้นอาจสูงกว่าความเป็นจริง</p>'
+  const help = '<p>' + stkWord('ต้นทุนอาหารคำนวณจากสูตรของแต่ละเมนู', 'ต้นทุนอาหารคิดจากต้นทุนต่อจานที่ฝ่ายวิเคราะห์นำเข้าของแต่ละเมนู') + ' เมนูที่ยังไม่มีต้นทุนนับเป็น 0 บาท ต้นทุนอาหารที่แสดงจึงเป็นค่าต่ำสุด และกำไรขั้นต้นอาจสูงกว่าความเป็นจริง</p>'
     + `<p>เดือนนี้ยังไม่มีต้นทุน ${esc(_frcPctText(plates))} ของจำนวนจาน และ ${esc(_frcPctText(sales))} ของยอดขายเมนูที่ต้องมีต้นทุน `
     + '(ไม่นับแพ็กเกจบุฟเฟ่ต์ ค่าบริการ และส่วนลด) บุฟเฟ่ต์ใช้จำนวนจานเป็นหลัก เนื่องจากเมนูในบุฟเฟ่ต์ไม่มียอดขายรายจาน</p>';
   return `<div class="frc-chip-row"><span class="frc-chip">ต้นทุนอาหารเป็นค่าต่ำสุด · ยังไม่มีต้นทุน ${esc(_frcPctText(plates))} ของจำนวนจาน</span>`
@@ -250,15 +250,28 @@ function _frcTrend(t) {
 function _frcIngredients(i) {
   if (!i) return '';
   const lp = i.latest_period;
-  const period = lp
-    ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
-      + _frcRow(stkWord('ส่วนต่างการใช้วัตถุดิบเทียบสูตร', 'ส่วนต่างการใช้วัตถุดิบ'), lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
-          lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'ใช้เกินสูตร' : lp.diff_pct < 0 ? 'ใช้น้อยกว่าสูตร' : 'ตรงสูตร'))
-    : _frcRow('รอบตรวจนับล่าสุด', _FRC_NA, 'ยังไม่มีรอบตรวจนับที่เปรียบเทียบได้');
-  return _frcSection('วัตถุดิบ', `<div class="ms-card">${period}`
+  const stock = BC_MODE === 'stock';
+  let period;
+  if (stock) {
+    // F5: no recipes in stock mode - the gap is the system stock against the month-end count
+    period = lp
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+        + _frcRow('ส่วนต่างการใช้วัตถุดิบ', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
+            lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'นับได้มากกว่าระบบ' : lp.diff_pct < 0 ? 'นับได้น้อยกว่าระบบ' : 'ตรงกับระบบ'))
+      : _frcRow('ส่วนต่างการใช้วัตถุดิบ', _FRC_NA, 'ยังไม่มีผลตรวจนับสิ้นเดือน');
+  } else {
+    period = lp
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+        + _frcRow('ส่วนต่างการใช้วัตถุดิบเทียบสูตร', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
+            lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'ใช้เกินสูตร' : lp.diff_pct < 0 ? 'ใช้น้อยกว่าสูตร' : 'ตรงสูตร'))
+      : _frcRow('รอบตรวจนับล่าสุด', _FRC_NA, 'ยังไม่มีรอบตรวจนับที่เปรียบเทียบได้');
+  }
+  const help = '<p>ส่วนต่างการใช้วัตถุดิบ = มูลค่าที่นับได้จริงลบยอดคงเหลือตามระบบของรอบสิ้นเดือนล่าสุด เทียบเป็นร้อยละของมูลค่าวัตถุดิบที่เบิกใช้ในรอบนั้น · ค่าติดลบคือนับได้น้อยกว่าระบบ</p>';
+  const inner = `<div class="ms-card">${period}`
     + _frcRow('ของเสียในเดือนนี้', _frcPct(i.waste_pct_month), 'สัดส่วนต่อมูลค่าวัตถุดิบที่เบิกใช้')
     + _frcRow(stkWord('เบิกเกินสูตรติดต่อกันหลายวัน', 'เบิกเกินปกติติดต่อกันหลายวัน'), i.streak_flag ? `<span style="color:var(--bad-ink)">พบ ${fmtN(i.streak_days)} วัน</span>` : `<span style="color:var(--good-ink)">ไม่พบ</span>`)
-    + `</div>`);
+    + `</div>`;
+  return stock ? _frcCard('วัตถุดิบ', 'ingredients', help, '', inner) : _frcSection('วัตถุดิบ', inner);
 }
 
 function _frcDiscipline(d) {
@@ -357,7 +370,7 @@ function _frcMix(m) {
     + m.channels.map(c => _frcShareRow(c.type, c.sales_share, c.sales_share_prev, c.delivery ? 'เดลิเวอรี' : '', c.delivery ? 'var(--amber-ink)' : 'var(--navy-ink)')).join('')
     + `</div>` : '';
   if (!lines && !tiers && !ch) return '';
-  return _frcCard('สัดส่วนการขาย', 'mix', help, 'สัดส่วนของยอดขายตามประเภท ระดับราคาบุฟเฟ่ต์ และช่องทางขาย เทียบเดือนก่อน',
+  return _frcCard('สัดส่วนการขาย', 'mix', help, '',
     (lines ? `<div class="frc-sub2" style="margin-top:0">ประเภทการขาย</div><div class="ms-card">${lines}</div>` : '') + tiers + ch);
 }
 
@@ -396,7 +409,7 @@ function _frcPeak(p) {
       }).join('')).join('') + `</div>`
       + (b ? `<p class="frc-sub" style="margin-top:6px">ช่วงที่ขายดีที่สุด: ${esc(_FRC_DOW_FULL[b.dow])} ${esc(_frcHour(b.hour))} เฉลี่ย ฿${fmtN(b.sales || 0)} ต่อวัน</p>` : '');
   }
-  return _frcCard('ช่วงเวลาขายดี', 'peak', help, 'ยอดขายและจำนวนลูกค้าตามชั่วโมง และตามวันในสัปดาห์ของเดือนนี้',
+  return _frcCard('ช่วงเวลาขายดี', 'peak', help, '',
     `<div class="ms-card">${head}<div style="padding:4px 2px 2px">${bars}</div></div>` + heat);
 }
 
@@ -436,7 +449,7 @@ function _frcControls(c) {
   const cash = cashDays.length ? `<div class="frc-sub2">วันที่เงินสดไม่ตรง</div><div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วันที่</th><th class="n">ขาด/เกิน (฿)</th></tr></thead><tbody>`
     + cashDays.slice().reverse().map(x => `<tr><td>${esc(_frcDay(x.date))}</td><td class="n" style="color:${x.over_short < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${x.over_short > 0 ? '+' : ''}${fmtN(x.over_short)}</td></tr>`).join('')
     + `</tbody></table></div>` : '';
-  return _frcCard('การควบคุม', 'controls', help, 'ส่วนลดเทียบเพดาน บิลยกเลิก และเงินสดขาดเกินของเดือนนี้',
+  return _frcCard('การควบคุม', 'controls', help, '',
     `<div class="ms-card">${_frcFlagBox(c.flags)}</div>` + disc
     + _frcMoneyList('ส่วนลดตามคูปองและโปรโมชัน', D.by_coupon, 'name', 'uses', 'ครั้ง')
     + _frcMoneyList('ส่วนลดตามเหตุผล', D.by_reason, 'reason', 'bills', 'บิล')
@@ -453,7 +466,7 @@ function _frcVoice(v) {
   if (!v) return '';
   const help = '<p>รีวิวสาธารณะของสาขาจาก Google, Facebook และช่องทางอื่นที่ระบบเก็บไว้ แสดงคะแนนเฉลี่ยและจำนวนรีวิวของเดือนนี้เทียบเดือนก่อน และรีวิวล่าสุด 5 รายการ</p>'
     + '<p>ชื่อบุคคลที่ระบบพบในข้อความจะแสดงเป็น "พนักงาน"</p>';
-  if (!v.available) return _frcCard('เสียงลูกค้า', 'voice', help, 'คะแนนและรีวิวล่าสุดของสาขา',
+  if (!v.available) return _frcCard('เสียงลูกค้า', 'voice', help, '',
     `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรีวิวของสาขาในระบบ</div></div>`);
   const ch = v.rating_change;
   const head = `<div style="${_FRC_TILES};margin-top:0">`
@@ -464,7 +477,7 @@ function _frcVoice(v) {
   const list = (v.latest || []).length ? `<div class="frc-sub2">รีวิวล่าสุด</div><div class="ms-card">` + v.latest.map(r => `<div class="ms-row" style="flex-direction:column;align-items:stretch;gap:4px">`
       + `<span style="display:flex;gap:8px;align-items:center;font-size:12px;${_FRC_MUTED}">${_frcStars(r.stars)}<span>${esc(_frcDay(r.date))} · ${esc(r.source || '')}</span></span>`
       + `<span style="font-size:13px;line-height:1.5;color:var(--text-primary);white-space:normal">${r.text ? esc(r.text) : `<span style="${_FRC_MUTED}">(ให้คะแนนโดยไม่เขียนข้อความ)</span>`}</span></div>`).join('') + `</div>` : '';
-  return _frcCard('เสียงลูกค้า', 'voice', help, 'คะแนนเฉลี่ย จำนวนรีวิว และรีวิวล่าสุดของสาขา', head + list);
+  return _frcCard('เสียงลูกค้า', 'voice', help, '', head + list);
 }
 
 // ── รับแจ้งเตือนทุกเช้า: the push card of this page (kind "franchise", the owner's own devices). The functions are the phone
@@ -516,6 +529,7 @@ function _frcSupply(d) {
   const help = '<p>ยอดสั่ง = มูลค่าที่สาขาสั่งในแต่ละรอบ · ยอดที่คลังจัดส่ง = มูลค่าที่คลังส่งจริง คิดแบบเดียวกับหน้าสั่งสินค้าของสาขา นับรอบที่วันส่งอยู่ในเดือนนี้ ไม่นับใบที่ยังเป็นร่างหรือยกเลิก</p>'
     + '<p>ยอดซื้อเทียบยอดขาย = ยอดที่คลังจัดส่ง ÷ ยอดขายไม่รวม VAT ของเดือนเดียวกัน ระหว่างเดือนนับถึงวันล่าสุดที่ปิดการขาย และเทียบกับทั้งเดือนของเดือนก่อน</p>'
     + '<p>ส่งใบสั่งซื้อหลังเวลาตัดรอบมีค่าปรับ หน้านี้แสดงเฉพาะจำนวนใบ · วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า</p>';
+  const helpStock = help.replace('วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า', 'วัตถุดิบที่นับได้น้อยกว่าระบบมาจากรอบตรวจนับสิ้นเดือนล่าสุด เรียงตามมูลค่า');
   if (!d.started) {
     return _frcCard(title, 'supply', help, '', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(d.not_started_th || 'สาขายังไม่เริ่มใช้ระบบสั่งวัตถุดิบ')}</div></div>`);
   }
@@ -539,7 +553,7 @@ function _frcSupply(d) {
       + `<td class="n">${r.ordered == null ? _FRC_NA : fmtN(r.ordered)}</td><td class="n">${r.delivered == null ? _FRC_NA : fmtN(r.delivered)}</td></tr>`).join('')
     + `</tbody></table></div>`
     : `<div class="ms-card" style="margin-top:10px"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรอบส่งในเดือนนี้</div></div>`;
-  return _frcCard(title, 'supply', help, 'ยอดสั่งและยอดที่คลังจัดส่งของแต่ละรอบ ยอดซื้อเทียบยอดขาย เคลมสินค้า และวัตถุดิบที่ใช้เกินสูตร',
+  return _frcCard(title, 'supply', BC_MODE === 'stock' ? helpStock : help, '',
     tiles + tbl + _frcClaims(C) + _frcOveruse(d.overuse));
 }
 
@@ -563,15 +577,16 @@ function _frcClaims(c) {
 
 function _frcOveruse(o) {
   if (!o) return '';
+  const stock = BC_MODE === 'stock';
   const rows = o.rows || [];
   const when = `รอบตรวจนับ ${_frcDay(o.begin)} – ${_frcDay(o.end)}`;
-  const t = '<div class="frc-sub2">วัตถุดิบที่ใช้เกินสูตร 5 อันดับ</div>';
-  if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ไม่มีวัตถุดิบที่ใช้เกินสูตร</div></div>`;
+  const t = `<div class="frc-sub2">${stock ? 'วัตถุดิบที่นับได้น้อยกว่าระบบ 5 อันดับ' : 'วัตถุดิบที่ใช้เกินสูตร 5 อันดับ'}</div>`;
+  if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ${stock ? 'ไม่มีวัตถุดิบที่นับได้น้อยกว่าระบบ' : 'ไม่มีวัตถุดิบที่ใช้เกินสูตร'}</div></div>`;
   return t + `<p class="frc-sub" style="margin-top:0">${esc(when)} · เรียงตามมูลค่า</p>`
-    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วัตถุดิบ</th><th class="n">ใช้เกิน</th><th class="n">มูลค่า (฿)</th><th class="n">เกินสูตร</th></tr></thead><tbody>`
-    + rows.map(r => `<tr><td>${esc(r.name)}</td><td class="n">${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')}</td>`
-      + `<td class="n">${r.value == null ? _FRC_NA : fmtN(r.value)}</td><td class="n">${_frcPct(r.pct)}</td></tr>`).join('')
-    + `</tbody></table></div>`;
+    + `<div class="ms-card">` + rows.map(r => `<div class="ms-row" style="flex-direction:column;align-items:stretch;gap:3px">`
+      + `<span style="font-size:13px;color:var(--text-primary);overflow-wrap:anywhere">${esc(r.name)}</span>`
+      + `<span style="font-size:12px;${_FRC_MUTED}">${stock ? 'ขาด' : 'ใช้เกิน'} ${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')} · ${stock ? 'ต่ำกว่าระบบ' : 'เกินสูตร'} ${_frcPct(r.pct)} · ${r.value == null ? _FRC_NA : '฿' + fmtN(r.value)}</span></div>`).join('')
+    + `</div>`;
 }
 
 // ── PR-F4 (2026-10-22): ติดต่อสำนักงานใหญ่ (the owner) ────────────────────────────────────────────────────────────────────
@@ -592,7 +607,7 @@ async function _fmFetch(url, opt) {
   const r = await fetch(`${API}${url}`, opt);
   const t = await r.text();
   let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
-  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'ดำเนินการไม่สำเร็จ กรุณาลองใหม่');
+  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'ดำเนินการไม่สำเร็จ ลองใหม่อีกครั้ง');
   return j;
 }
 function _fmPost(url, body) {
@@ -749,8 +764,8 @@ function _fmScrollIn(focusId) {
 async function frcMsgSendNew() {
   if (_fmBusy) return;
   const topic = (document.getElementById('frcMsgTopic') || {}).value || '', text = String((document.getElementById('frcMsgText') || {}).value || '').trim();
-  if (!topic) { uiToast('กรุณาเลือกหัวข้อ', 'warn'); return; }
-  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  if (!topic) { uiToast('เลือกหัวข้อ', 'warn'); return; }
+  if (!text) { uiToast('พิมพ์ข้อความ', 'warn'); return; }
   _fmBusy = true;
   const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
   try {
@@ -767,7 +782,7 @@ async function frcMsgSendNew() {
 async function frcMsgSendReply(tid) {
   if (_fmBusy) return;
   const text = String((document.getElementById('frcMsgReply') || {}).value || '').trim();
-  if (!text) { uiToast('กรุณาพิมพ์ข้อความ', 'warn'); return; }
+  if (!text) { uiToast('พิมพ์ข้อความ', 'warn'); return; }
   _fmBusy = true;
   const btn = document.getElementById('frcMsgSend'); if (btn) btn.disabled = true;
   try {

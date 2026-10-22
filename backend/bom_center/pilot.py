@@ -5,7 +5,7 @@ READINESS (before the pilot starts): is the centre set up (ingredient master, pr
 sub-recipes), and does each pilot branch have a branch login, an order calendar and
 its first (begin) count?
 
-SCORECARD (during the 4-week pilot), per branch, against the pass criteria:
+SCORECARD (during the pilot, five branches from 1 Nov 2026), per branch, against the pass criteria:
     issue slips confirmed  ≥ 95 %   (days of the window with a confirmed ใบตัดเบิก)
     slips confirmed on the day ≥ 90 %   (of the confirmed ones, those not marked late)
     gaps with a reason     ≥ 80 %   (flagged lines of periods ending in the window)
@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 
 from .clock import today as bkk_today
 
-PILOT = ("อุบลราชธานี", "อุดรธานี", "ขอนแก่น", "ระยอง")     # owner §10-11
+PILOT = ("เชียงใหม่", "อุบลราชธานี", "อุดรธานี", "โคราช1", "สุรินทร์")     # owner 2026-10-22: 5 branches, opening count 1 Nov 2026
 TARGETS = {"issue_coverage": 95.0, "issue_on_time": 90.0, "reason_coverage": 80.0, "mape_a": 15.0}
 
 
@@ -31,7 +31,7 @@ def pilot_branches(con) -> list:
 
 def active_branches(con) -> list:
     """[{branch_id, name}] of every ACTIVE branch (branches.active, 'ALL' left out), by name - the one definition todo._branch_rows
-    uses. PR-U2 (30-branch rollout): the default scope of the readiness list and of หน้างาน; the four PILOT branches stay the scope of
+    uses. PR-U2 (30-branch rollout): the default scope of the readiness list and of หน้างาน; the five PILOT branches stay the scope of
     the pilot scorecard only."""
     cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
     sql = "SELECT branch_id, name FROM branches WHERE name <> 'ALL'" + (" AND COALESCE(active, 1) = 1" if "active" in cols else "")
@@ -41,7 +41,7 @@ def active_branches(con) -> list:
 def branch_accounts(con) -> list:
     """Every ACTIVE branch account (role 'branch' with a branch) -> [{branch_id, name, usernames}], one row per branch,
     sorted by name. Batch 3 (30-branch rollout): the reminders and the adoption grid follow the accounts that exist,
-    not the four pilot branches. A branch that has no active account is not listed; an account whose branch is
+    not the five pilot branches. A branch that has no active account is not listed; an account whose branch is
     unknown or inactive is skipped."""
     cols = {r[1] for r in con.execute("PRAGMA table_info(branches)")}
     try:
@@ -73,9 +73,9 @@ def readiness(con) -> dict:
         "releases": con.execute("SELECT COUNT(*) FROM bc_release WHERE kind='monthly' AND status='released'").fetchone()[0],
     }
     centre_steps = [
-        ("master", centre["ingredients"] > 0, "เติมทะเบียนวัตถุดิบ (ฝ่ายวิเคราะห์ → ทะเบียนวัตถุดิบ → “เติมจากข้อมูลในระบบ”)"),
+        ("master", centre["ingredients"] > 0, "เติมทะเบียนวัตถุดิบ (ฝ่ายวิเคราะห์ → ทะเบียนวัตถุดิบ)"),
         ("prices", bool(centre["price_months"]), "นำเข้าราคาซื้อจริงเดือนล่าสุด (ฝ่ายวิเคราะห์ → ราคารายเดือน)"),
-        ("sub_recipes", centre["sub_recipes"] > 0, "นำเข้าสูตรกึ่งสำเร็จจากไฟล์ครัว (ฝ่ายวิเคราะห์ → สูตรกึ่งสำเร็จ) · ไม่บังคับ แต่ช่วยให้ยอดแนะนำรวมวัตถุดิบดิบที่เป็นส่วนผสม"),
+        ("sub_recipes", centre["sub_recipes"] > 0, "นำเข้าสูตรกึ่งสำเร็จ (ฝ่ายวิเคราะห์ → สูตรกึ่งสำเร็จ) · ไม่บังคับ"),
     ]
     users = {}
     if _has(con, "app_user"):

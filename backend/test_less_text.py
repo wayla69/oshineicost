@@ -8,6 +8,16 @@ The rules (tabs 51-56 and js 13-16):
     than 80 characters of text) outside <details> and <template>;
   * every work list hides what is finished (done / processed / posted / not needed) and shows it through ONE shared filter (uiStateFilter);
   * the launcher has no explanatory lines, and the branch "วันนี้เหลือทำอะไร" strip shows only the lines that are open.
+
+PR-P5 (owner 2026-10-22) adds the same rule for the text the supply SLICES draw at run time (js 13-17), which the fragment gate cannot see:
+  * every string / template literal of a slice is read (comments and regex literals skipped; the code inside `${...}` is read too), the HTML
+    tags are cut out of it, and any run of Thai text longer than LONG characters is an explanatory sentence;
+  * a sentence is allowed when the STATEMENT it belongs to (back to the previous `;` or `}` line end) is a "?" help (uiQ / uiHelp / uiPaneHelp /
+    bmcNote / `help =` / `hint =` / `_HELP` tables), a dialog (uiConfirm / uiPrompt / uiAlert), a toast or status call (uiToast / notify* /
+    bmcStatus / _shmToast), an error (throw new), a tooltip (title=) or a registered help text;
+  * what is left is drawn inline on a page: a slice keeps at most JS_LIMIT of them (the same budget as a fragment).
+The check is a heuristic on purpose: it errs towards allowing a sentence next to a help or toast call, and fails only on a long sentence that
+sits in plain markup or in a plain variable.
 """
 import json
 import re
@@ -25,6 +35,8 @@ FRAGMENTS = ["tabs/51-ingpurchase.html", "tabs/52-bomcenter.html", "tabs/53-bran
              "tabs/55-supplyhome.html", "tabs/56-franchise.html"]
 LIMIT = 3          # explanatory blocks per fragment
 LONG = 80          # characters of text that make a block explanatory
+JS_LIMIT = 3       # explanatory runs per supply slice drawn inline (PR-P5)
+SLICES = ["js/13-bom-center.js", "js/14-branch.js", "js/15-orderhub.js", "js/16-supplyhome.js", "js/17-franchise.js"]
 
 
 def _src(rel):
@@ -332,3 +344,144 @@ def test_other_lists_do_not_call_missing_data_finished():
     assert re.search(r"const _OHB_C_NEUTRAL = \['upcoming', 'not_started'\]", oh)
     var = _fn(brn, "brnRenderVariance")
     assert "incompleteRows = flaggedAll.filter(r => r.data_incomplete)" in var and "todo: askOpen.length + incompleteRows.length" in var
+
+
+# ── PR-P5: the text the slices draw at run time ───────────────────────────────────────────────────────────────────────────────────────────────
+THAI = re.compile(r"[฀-๿]")
+_TAG = re.compile(r"<[a-zA-Z/](?:\"[^\"]*\"|'[^']*'|[^>\"'])*>")
+_REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
+_TOP_DECL = re.compile(r"^(?:const|let|var|function|async function)[^\n]*", re.M)          # the top-level declaration a literal sits in
+_HELP_TABLE = re.compile(r"^(?:const|let|var)\s+\w*(?:HELP|TERMS|HINT)\w*\s*=")             # ... when that is a table of help texts
+_ALLOWED = re.compile(r"uiQ\(|uiHelp\(|uiPaneHelp\(|bmcNote\(|uiConfirm\(|uiPrompt\(|uiAlert\(|uiToast\(|notify(?:Error|Success)\(|_?bmcStatus\(|_shmToast\(|"
+                      r"throw new |\balert\(|\bconfirm\(|\b(?:help|hint|msg|reason)\s*=|_HELP\b|_TERMS\b|\btitle=|okText|_uiHelpReg|setAttribute\('title'")
+
+
+def _js_literals(src):
+    """[(start, body)] of every string and template literal outside comments and regex literals; the body of a template has its `${...}`
+    replaced by NUL, and the code inside `${...}` is scanned too (its literals are listed on their own)."""
+    out, n = [], len(src)
+
+    def code(i, in_tpl):
+        depth, prev = 0, ""
+        while i < n:
+            c = src[i]
+            if src.startswith("//", i):
+                j = src.find("\n", i)
+                i = n if j < 0 else j
+                continue
+            if src.startswith("/*", i):
+                j = src.find("*/", i + 2)
+                i = n if j < 0 else j + 2
+                continue
+            if c == "/" and (prev in _REGEX_AFTER or re.search(r"(?:return|typeof|case)\s*$", src[max(0, i - 8):i])):
+                j, cls = i + 1, False
+                while j < n and src[j] != "\n":
+                    if src[j] == "\\":
+                        j += 2
+                        continue
+                    if src[j] == "[":
+                        cls = True
+                    elif src[j] == "]":
+                        cls = False
+                    elif src[j] == "/" and not cls:
+                        break
+                    j += 1
+                i, prev = j + 1, ")"
+                continue
+            if c in "'\"":
+                j = i + 1
+                while j < n and src[j] != c and src[j] != "\n":
+                    j += 2 if src[j] == "\\" else 1
+                out.append((i, src[i + 1:j]))
+                i, prev = j + 1, ")"
+                continue
+            if c == "`":
+                i, prev = template(i), ")"
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                if in_tpl and depth == 0:
+                    return i + 1
+                depth -= 1
+            if not c.isspace():
+                prev = c
+            i += 1
+        return i
+
+    def template(i):
+        j, body = i + 1, []
+        while j < n:
+            c = src[j]
+            if c == "\\":
+                body.append(src[j:j + 2])
+                j += 2
+            elif c == "$" and src.startswith("${", j):
+                body.append("\x00")
+                j = code(j + 2, True)
+            elif c == "`":
+                break
+            else:
+                body.append(c)
+                j += 1
+        out.append((i, "".join(body)))
+        return j + 1
+
+    code(0, False)
+    return out
+
+
+def _long_runs(body):
+    return [t.strip() for t in _TAG.sub("\x00", body).split("\x00") if THAI.search(t) and len(t.strip()) > LONG]
+
+
+def inline_sentences(src):
+    """[(line, text)] of the runs of Thai text longer than LONG characters that a script draws on the page itself, that is, outside a help,
+    a dialog, a toast, an error or a tooltip statement."""
+    found = []
+    for a, body in _js_literals(src):
+        runs = _long_runs(body)
+        if not runs:
+            continue
+        cut = max(src.rfind(";\n", 0, a), src.rfind("}\n", 0, a), a - 2500)
+        decl = list(_TOP_DECL.finditer(src, 0, a))
+        if _ALLOWED.search(src[cut + 1:a]) or (decl and _HELP_TABLE.search(decl[-1].group(0))):
+            continue
+        found += [(src.count("\n", 0, a) + 1, t) for t in runs]
+    return found
+
+
+@pytest.mark.parametrize("rel", SLICES)
+def test_a_slice_draws_at_most_three_explanatory_sentences_inline(rel):
+    """No page of the supply module has a paragraph written into it by a script: it is behind a "?", in a dialog, a toast or an error."""
+    found = inline_sentences(_src(rel))
+    assert len(found) <= JS_LIMIT, f"{rel}: {len(found)} inline sentences > {LONG} characters\n" + "\n".join(f"  line {ln} {t[:90]}" for ln, t in found)
+
+
+def test_the_script_measure_sees_inline_text_and_ignores_help_toast_and_comments():
+    """The gate itself: a long sentence in markup counts, the same text in a "?", a toast, a confirm, an error or a comment does not;
+    a nested template, an arrow in an attribute and a regex literal do not confuse the reader."""
+    t = "ก" * 120
+    for js, n in [(f"el.innerHTML = `<p>{t}</p>`;\n", 1),
+                  (f"el.innerHTML = '<div>' + '<p>{t}</p>';\n", 1),
+                  (f"el.innerHTML = `<b>x</b> ${{uiQ('k', 'หัวข้อ', '<p>{t}</p>')}}`;\n", 0),
+                  (f"uiToast('{t}', 'success');\n", 0),
+                  (f"if (!await uiConfirm(`{t}`)) return;\n", 0),
+                  (f"throw new Error('{t}');\n", 0),
+                  (f"const help = '<p>{t}</p>'\n  + '<p>{t}</p>';\n", 0),
+                  (f"const _X_HELP = {{\n  a: {{\n    b: ['{t}'],\n  }},\n}};\n", 0),
+                  (f"// {t}\nconst a = 1;\n", 0),
+                  (f"const re = /[\"']{t[:3]}/; el.innerHTML = '{'ข' * 30}';\n", 0),
+                  (f"el.innerHTML = `<a onclick=\"go(x => x)\">{t}</a>`;\n", 1),
+                  (f"el.innerHTML = `${{rows.map(r => `<i>${{r}}</i>`).join('')}}<p>{t}</p>`;\n", 1)]:
+        assert len(inline_sentences(js)) == n, js
+
+
+def test_the_slices_keep_their_long_sentences_behind_help():
+    """The measure is not vacuous: the slices do hold many long Thai sentences, and all but a few sit in a help / dialog / toast statement."""
+    total = 0
+    for rel in SLICES:
+        src = _src(rel)
+        total += sum(1 for a, body in _js_literals(src) if _long_runs(body))
+        assert len(inline_sentences(src)) <= JS_LIMIT
+    assert total > 40

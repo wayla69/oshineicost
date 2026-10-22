@@ -37,13 +37,14 @@ def _csv(tmp_path, text, name="list.csv"):
 
 
 # ── the list ─────────────────────────────────────────────────────────────────
-def test_the_template_round_trips_with_the_four_pilot_rows(tmp_path):
+def test_the_template_round_trips_with_the_five_pilot_rows(tmp_path):
     p = BL.write_template(tmp_path / "branch_list_template.xlsx")
     rows = BL.read_list(p)
     assert [(r["branch"], r["abbr"]) for r in rows] == list(BL.PILOT_ABBRS.items())
-    assert [BL.login_of(r) for r in rows] == list(BL.PILOT_USERNAMES.values()) == ["wh_ubon", "wh_udon", "wh_khonkaen", "wh_rayong"]
+    assert [BL.login_of(r) for r in rows] == list(BL.PILOT_USERNAMES.values()) == ["wh_chiangmai", "wh_ubon", "wh_udon", "wh_korat", "wh_surin"]
     assert all(r["recipient"] == "" and r["username"] == "" for r in rows)
     assert list(BL.LEGACY_PILOT_USERNAMES.values()) == ["branch_ubon", "branch_udon", "branch_khonkaen", "branch_rayong"]
+    assert "ขอนแก่น" not in BL.PILOT_ABBRS and "ระยอง" not in BL.PILOT_ABBRS      # P5: only the retired logins remember them
 
 
 def test_csv_list_with_an_abbreviation_a_blank_username_and_a_recipient(tmp_path):
@@ -122,9 +123,9 @@ def _db(tmp_path, rows):
 
 
 def test_handout_all_uses_the_database_copy_and_branch_ids(tmp_path):
-    db = _db(tmp_path, [(1, "ชลบุรี", 1), (2, "ระยอง", 1), (3, "ปิดแล้ว", 0), (4, "ALL", 1)])
+    db = _db(tmp_path, [(1, "ชลบุรี", 1), (2, "สุรินทร์", 1), (3, "ปิดแล้ว", 0), (4, "ALL", 1)])
     HO.main(["--all", "--db", str(db), "--out", str(tmp_path / "o")])
-    assert sorted(f.name for f in (tmp_path / "o").glob("wh_*.txt")) == ["wh_1.txt", "wh_rayong.txt"]
+    assert sorted(f.name for f in (tmp_path / "o").glob("wh_*.txt")) == ["wh_1.txt", "wh_surin.txt"]
     with pytest.raises(SystemExit):
         HO.main(["--all", "--out", str(tmp_path / "o2")])             # --all needs the copy
 

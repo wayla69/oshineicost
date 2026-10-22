@@ -43,9 +43,9 @@ def test_readiness(con):  # noqa: F811
     con.execute("UPDATE branches SET name='อุดรธานี' WHERE branch_id=1")
     auth.init_auth(con)
     r = PL.readiness(con)
-    # PR-U2: every active branch (the 30-branch rollout), not the pilot four; the pilot names not found are still listed
+    # PR-U2: every active branch (the 30-branch rollout), not the pilot five; the pilot names not found are still listed
     assert [b["branch"] for b in r["branches"]] == [b["name"] for b in PL.active_branches(con)] and "อุดรธานี" in [b["branch"] for b in r["branches"]]
-    assert set(r["missing_branches"]) == {"อุบลราชธานี", "ขอนแก่น", "ระยอง"}
+    assert set(r["missing_branches"]) == {"เชียงใหม่", "อุบลราชธานี", "โคราช1", "สุรินทร์"}
     assert {s["key"]: s["done"] for s in r["centre_steps"]}["master"] is True
     b = next(x for x in r["branches"] if x["branch"] == "อุดรธานี")
     assert {s["key"]: s["done"] for s in b["steps"]} == {"account": False, "calendar": False, "begin_count": False}

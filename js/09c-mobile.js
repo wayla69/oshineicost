@@ -557,9 +557,9 @@ async function msPushRender(note, p) {
   const denied = Notification.permission === 'denied';
   const sup = _pushSupplyCard(p);
   const frc = p === 'frcPush';        // PR-F2: ร้านของฉัน, the franchise owner's own morning summary (kind "franchise")
-  if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · เครื่องนี้จะได้รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15' : 'เปิดอยู่ · เครื่องนี้จะได้รับสรุปเมื่อวานทุกเช้า 08:30');
+  if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · งานวันนี้ และเตือนก่อนตัดรอบ 13:15' : 'เปิดอยู่ · สรุปเมื่อวานทุกเช้า 08:30');
   else if (denied) { st.innerHTML = _msPushBlockedHelp(p); _msPushWatchPermission(); }
-  else st.textContent = note || (frc ? 'ยังไม่เปิด · รับสรุปยอดขายเมื่อวาน เป้า และรายการต้องแก้ทุกเช้า 08:30 บนเครื่องนี้' : sup ? 'ยังไม่เปิด · รับงานของวันนี้ตอนเช้า และเตือนก่อนตัดรอบ 13:15 บนเครื่องนี้' : 'ยังไม่เปิด · รับสรุปเมื่อวานทุกเช้า 08:30 บนเครื่องนี้');
+  else st.textContent = note || (frc ? 'ยังไม่เปิด · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'ยังไม่เปิด · งานวันนี้ และเตือนก่อนตัดรอบ 13:15' : 'ยังไม่เปิด · สรุปเมื่อวานทุกเช้า 08:30');
   if (on) on.style.display = sub || denied ? 'none' : '';
   if (off) off.style.display = sub ? '' : 'none';
   if (test) test.style.display = sub ? '' : 'none';

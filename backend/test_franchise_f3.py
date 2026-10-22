@@ -213,7 +213,14 @@ def test_the_claims_of_the_month(f3data, world):
     assert ok["decision_note"] == "รับเคลมแล้ว ส่งทดแทนรอบหน้า ตามที่สาขาอื่น แจ้ง"                     # another branch scrubbed
 
 
-def test_the_overuse_is_the_latest_counted_period(f3data, world):
+@pytest.fixture
+def full_mode(monkeypatch):
+    """F5: the over-the-recipe figures belong to full mode; stock mode (the default) reads the month-end reconcile instead."""
+    from bom_center import close_settings as CS
+    monkeypatch.setattr(CS, "stock_mode", lambda con: False)
+
+
+def test_the_overuse_is_the_latest_counted_period(f3data, world, full_mode):
     import main
     from bom_center import variance as VA
     o = _supply(world["b"])["overuse"]
@@ -250,7 +257,17 @@ def test_the_verdict_line_follows_its_constants():
     assert sum("เคลม" in t for t in v["watch"]) == 1
 
 
-def test_the_download_has_the_supply_sheet(f3data, world):
+def test_the_streak_line_names_what_the_usage_is_compared_with():
+    """P5: in stock mode the streak is against the branch's normal / the all-branch median (no recipe); in full mode it stays "สูตร"."""
+    from routers import franchise as F
+    ing = {"latest_period": None, "streak_flag": True, "streak_days": 3, "waste_pct_month": None}
+    stock = F._verdict(None, None, {**ing, "stock_mode": True}, None, None, None)["fix"]
+    full = F._verdict(None, None, {**ing, "stock_mode": False}, None, None, None)["fix"]
+    assert stock == ["มีวัตถุดิบหลักที่เบิกเกินปกติของสาขาหรือค่ากลางทุกสาขาติดต่อกันหลายวัน (3 วันในเดือนนี้) ควรตรวจสอบหน้างาน"]
+    assert full == ["มีวัตถุดิบหลักที่เบิกเกินสูตรติดต่อกันหลายวัน (3 วันในเดือนนี้) ควรตรวจสอบหน้างาน"]
+
+
+def test_the_download_has_the_supply_sheet(f3data, world, full_mode):
     r = world["b"].get("/api/franchise/summary.xlsx", params={"month": MONTH})
     assert r.status_code == 200, r.text
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
