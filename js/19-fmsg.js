@@ -82,7 +82,7 @@ function fmsgRenderThread() {
 async function fmsgSendReply(tid) {
   if (_fmsgBusy) return;
   const text = String((document.getElementById('fmsgReply') || {}).value || '').trim();
-  if (!text) { uiToast('กรุณาพิมพ์คำตอบ', 'warn'); return; }
+  if (!text) { uiToast('พิมพ์คำตอบ', 'warn'); return; }
   _fmsgBusy = true;
   const btn = document.getElementById('fmsgSend'); if (btn) btn.disabled = true;
   try {

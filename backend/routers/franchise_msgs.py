@@ -122,7 +122,7 @@ def clean_text(s, cap: int, field: str = "ข้อความ", required: bool
     t = _CTRL.sub("", t)
     t = re.sub(r"\n{3,}", "\n\n", t).strip()
     if required and not t:
-        raise HTTPException(400, f"กรุณากรอก{field}")
+        raise HTTPException(400, f"กรอก{field}")
     if len(t) > cap:
         raise HTTPException(400, f"{field}ยาวเกิน {cap:,} ตัวอักษร (ขณะนี้ {len(t):,} ตัวอักษร)")
     return t
@@ -173,12 +173,12 @@ def caller(request: Request, branch_id: Optional[int] = None) -> dict:
             scoped = _auth.scope_branch(request)
             live = (row["branch"] or "") if "branch" in row.keys() else ""
             if not scoped or not live:
-                _deny("บัญชีนี้ยังไม่ได้ผูกกับสาขา กรุณาแจ้งผู้ดูแลระบบ")
+                _deny("บัญชีนี้ยังไม่ได้ผูกกับสาขา แจ้งผู้ดูแลระบบ")
             if scoped != live:
-                _deny("สาขาของบัญชีนี้เปลี่ยนแล้ว กรุณาเข้าสู่ระบบใหม่")
+                _deny("สาขาของบัญชีนี้เปลี่ยนแล้ว เข้าสู่ระบบใหม่")
             r = con.execute("SELECT branch_id, name FROM branches WHERE name=?", (scoped,)).fetchone()
             if not r:
-                _deny("บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ กรุณาแจ้งผู้ดูแลระบบ")
+                _deny("บัญชีนี้ผูกกับสาขาที่ไม่พบในระบบ แจ้งผู้ดูแลระบบ")
             if branch_id is not None and int(branch_id) != int(r[0]):
                 _deny("บัญชีเจ้าของสาขาดูได้เฉพาะสาขาของตนเอง")
             return {"side": "owner", "user": user, "role": role, "name": name, "branch_id": int(r[0]), "branch": r[1]}
@@ -191,7 +191,7 @@ def _owner(request: Request, branch_id: Optional[int] = None) -> dict:
     who = caller(request, branch_id)
     if who["side"] != "owner":
         if not _auth.auth_enabled():
-            raise HTTPException(400, "กรุณาเลือกสาขา")
+            raise HTTPException(400, "เลือกสาขา")
         _deny("หน้านี้สำหรับเจ้าของสาขา")
     return who
 
@@ -216,7 +216,7 @@ def _rate_limit(con, who: dict) -> None:
     since = _now().strftime("%Y-%m-%d 00:00:00")
     n = con.execute("SELECT COUNT(*) FROM franchise_msg_message WHERE author_user=? AND created_at >= ?", (who["user"], since)).fetchone()[0]
     if n >= cap:
-        raise HTTPException(429, f"ส่งข้อความครบ {cap} ข้อความของวันนี้แล้ว กรุณาส่งใหม่ในวันถัดไป")
+        raise HTTPException(429, f"ส่งข้อความครบ {cap} ข้อความของวันนี้แล้ว ส่งใหม่ในวันถัดไป")
 
 
 # ── shaping the answers ──────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ def fmsg_owner_new(body: _NewBody, request: Request, branch_id: Optional[int] = 
     _write_gate(request)
     who = _owner(request, branch_id)
     if body.topic not in TOPIC_TH:
-        raise HTTPException(400, "กรุณาเลือกหัวข้อ")
+        raise HTTPException(400, "เลือกหัวข้อ")
     text = clean_text(body.body, MAX_BODY)
     ctx = clean_context(body.context)
     at = _stamp()
@@ -474,7 +474,7 @@ def fmsg_reply(tid: int, body: _ReplyBody, request: Request, branch_id: Optional
         ensure(con)
         r = _thread_row(con, tid, who)
         if r["status"] != "open":
-            raise HTTPException(409, "หัวข้อนี้ปิดแล้ว กรุณาส่งคำถามใหม่" if who["side"] == "owner" else "หัวข้อนี้ปิดแล้ว กรุณาเปิดหัวข้ออีกครั้งก่อนตอบ")
+            raise HTTPException(409, "หัวข้อนี้ปิดแล้ว ส่งคำถามใหม่" if who["side"] == "owner" else "หัวข้อนี้ปิดแล้ว เปิดหัวข้ออีกครั้งก่อนตอบ")
         _rate_limit(con, who)
         _insert_message(con, int(tid), who, text, at)
         if who["side"] == "owner":
