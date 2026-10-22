@@ -3012,7 +3012,7 @@ const DEPT_ICONS = {
   chat: 'M4 6h16v10H9l-5 4z M8 10h8',
 };
 const DEPARTMENTS = [
-  { key: 'mgmt', label: 'ผู้บริหาร', duty: 'ภาพรวม รายงาน และการรับทราบ', duty_stock: 'ภาพรวมและรายงาน', icon: 'brief', hue: 'mgmt', roles: ['management'], pages: [
+  { key: 'mgmt', label: 'ผู้บริหาร', duty: 'ภาพรวม รายงาน และการรับทราบ', icon: 'brief', hue: 'mgmt', roles: ['management'], duty_stock: 'ภาพรวมและรายงาน', pages: [
     { tab: 'mgtreport', label: 'รายงานผู้บริหาร', icon: 'doc' },
     { tab: 'home', label: 'สรุปประจำวัน', icon: 'brief' },
     { tab: 'overall', label: 'ภาพรวมและตัวชี้วัด', icon: 'gauge' },
