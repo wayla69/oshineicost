@@ -12,6 +12,7 @@
     <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">ปิดใช้งาน</button>
     <button class="subtab-btn" id="settabbtn-cloudsync" onclick="switchSettingsTab('cloudsync')">ข้อมูลจาก POS</button>
     <button class="subtab-btn" id="settabbtn-cloudbackup" onclick="switchSettingsTab('cloudbackup')">สำรองข้อมูล</button>
+    <button class="subtab-btn" id="settabbtn-cloudjobs" onclick="switchSettingsTab('cloudjobs')">งานอัตโนมัติ</button>
     <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">ผู้ใช้งาน</button>
   </div>
 
@@ -114,6 +115,27 @@
         </ul>
         <p><b>พื้นที่ไม่พอ</b> ต้องมีที่ว่างอย่างน้อย 1.5 เท่าของไฟล์ฐานข้อมูล ให้ขยายดิสก์ของเครื่อง</p>
         <p>เปิดใช้โดยสร้างที่เก็บไฟล์ด้วย flyctl storage create แล้วตั้งค่า OSHINEI_CLOUD_BACKUP=1 วิธีกู้คืนอยู่ใน docs/CLOUD_SYNC.md หัวข้อ "สำรองข้อมูล"</p>
+      </template>
+    </div>
+  </div>
+
+  <!-- ── Every job the cloud runs by itself (backend/cloud_jobs.py, docs/CLOUD_SYNC.md · Management only) ──
+       Labels and numbers only; the explanation is behind the "?". -->
+  <div id="settab-cloudjobs" class="hidden">
+    <div class="card p-5" style="max-width:980px">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h3 class="text-base font-bold" style="color:var(--text-primary)">งานอัตโนมัติบน cloud
+          <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="cjHelp">?</button></h3>
+      </div>
+      <div id="cloudJobsBody" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div>
+      <template id="cjHelp" data-title="งานอัตโนมัติบนคลาวด์">
+        <p>งานที่เคยรันบนคอมพิวเตอร์สำนักงาน ย้ายมารันบนเครื่องคลาวด์เองตามเวลาประเทศไทย แต่ละงานเปิดแยกกัน</p>
+        <ul>
+          <li><b>ดึงรีวิวลูกค้า</b> (09:00) ดึงรีวิวจากช่องทางที่ตั้งไว้เข้าแท็บเสียงลูกค้า ถ้ายังไม่ตั้งช่องทางใดจะขึ้น "ยังไม่มีช่องทางรีวิว" ซึ่งไม่ใช่ความผิดปกติ</li>
+          <li><b>ส่งข้อมูลไป Invisible Voice</b> (10:45) ส่งยอดขาย 3 วันล่าสุดและรายชื่อเมนู</li>
+          <li><b>ตรวจงานอัตโนมัติ</b> (11:15, 17:00 และหลังเริ่มเครื่อง 5 นาที) ตรวจทุกงานที่เปิดอยู่ว่าไม่สำเร็จ ไม่ได้รันตามรอบ หรือค้าง รวมถึงข้อมูลขายและสำเนาสำรองที่เก่าเกินไป แล้วแจ้งที่หน้าแรกและมือถือผู้บริหาร</li>
+        </ul>
+        <p>การดึงข้อมูลจาก POS และการสำรองข้อมูลมีแท็บของตัวเอง งานที่ปิดอยู่ไม่ถูกตรวจ วิธีเปิดอยู่ใน docs/CLOUD_SYNC.md หัวข้อ "งานอื่นบน cloud"</p>
       </template>
     </div>
   </div>

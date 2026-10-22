@@ -2818,9 +2818,13 @@ async function renderTaskHealthBanner() {
   const TH = { fail: 'ล้มเหลว', stale: 'ไม่ได้รันหลายวัน', stuck: 'ค้าง', missed: 'ไม่ได้รันรอบล่าสุด' };
   const when = s => s ? esc(String(s).replace('T', ' ').slice(5, 16)) : '—';
   const rows = bad.map(t => `<li><b>${esc(String(t.name).replace(/^Oshinei /, ''))}</b> — ${TH[t.level] || esc(t.level)}${t.days ? ` <b>${t.days} วันแล้ว</b>` : ''} · รันล่าสุด ${when(t.last_run)}${t.log_line ? `<br><span class="text-[11px]" style="opacity:.85;font-family:ui-monospace,monospace">${esc(t.log_line)}</span>` : ` · <span class="text-[11px]" style="opacity:.85">${esc(t.meaning || '')}</span>`}</li>`).join('');
+  const cloud = d.source === 'cloud' || d.source === 'both';   // cloud_jobs.py's watchdog reports too (source set only then)
+  const where = d.source === 'cloud' ? 'บนคลาวด์' : (d.source === 'both' ? 'บนคลาวด์และเครื่องสำนักงาน' : 'บนเครื่องสำนักงาน');
   const head = d.silent
-    ? `<b>เครื่องสำนักงานไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ถ้าเครื่องปิดอยู่ งาน sync / backup / ดึงรีวิว จะไม่รันเลย <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)} จาก ${esc(d.host || '?')})</span>`
-    : `<b>งานอัตโนมัติบนเครื่องสำนักงานมีปัญหา ${bad.length} งาน</b> <span class="text-[11px]" style="opacity:.8">(ตรวจล่าสุด ${when(d.checked_at)} · ${esc(d.host || '?')})</span>`;
+    ? (cloud
+      ? `<b>ตัวตรวจงานบนคลาวด์ไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ตรวจที่ ตั้งค่า > งานอัตโนมัติ <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)})</span>`
+      : `<b>เครื่องสำนักงานไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ถ้าเครื่องปิดอยู่ งาน sync / backup / ดึงรีวิว จะไม่รันเลย <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)} จาก ${esc(d.host || '?')})</span>`)
+    : `<b>งานอัตโนมัติ${where}มีปัญหา ${bad.length} งาน</b> <span class="text-[11px]" style="opacity:.8">(ตรวจล่าสุด ${when(d.checked_at)} · ${esc(d.host || '?')})</span>`;
   b.innerHTML = `<div>${head}${rows ? `<ul class="mt-1 ml-4 list-disc space-y-0.5">${rows}</ul>` : ''}</div>
     <button onclick="(function(){try{localStorage.setItem('${key}','1')}catch(e){};var el=document.getElementById('homeTaskHealthBanner');if(el)el.remove()})()" class="text-xs" style="color:inherit" title="ซ่อนวันนี้ (พรุ่งนี้กลับมาถ้ายังไม่หาย)">✕</button>`;
 }

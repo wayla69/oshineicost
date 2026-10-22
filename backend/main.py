@@ -787,18 +787,39 @@ async def _task_health_report(request: Request):
 
 
 def _task_health_view(now=None) -> dict:
-    raw = _usage_meta_get("task_health")
-    if not raw:
-        return {"known": False}
-    rec = _json.loads(raw)
-    rep = rec.get("report") or {}
+    """What the watchdogs last reported: the office PC's (POSTed by task_watchdog.py) and, once OSHINEI_CLOUD_WATCHDOG=1,
+    the Fly machine's own (cloud_jobs.py writes usage_meta 'task_health_cloud'). With no cloud report this is the PC's view
+    exactly as before. With one, the cloud report is the heartbeat: a PC that has gone quiet (switched off after the
+    cut-over) is no longer a finding, and the PC's problems are listed only while its report is fresh."""
     now = now or _thai_now()
-    age = (now - datetime.strptime(rec["received_at"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
-    problems = [t for t in rep.get("tasks") or [] if t.get("level") in _TASK_PROBLEM_LEVELS]
-    return {"known": True, "received_at": rec["received_at"], "age_hours": round(age, 1),
-            "silent": age > TASK_HEALTH_SILENT_HOURS, "silent_after_hours": TASK_HEALTH_SILENT_HOURS,
-            "host": rep.get("host"), "checked_at": rep.get("checked_at"), "signature": rep.get("signature") or "",
-            "problems": problems, "tasks": rep.get("tasks") or []}
+
+    def _read(key):
+        raw = _usage_meta_get(key)
+        if not raw:
+            return None
+        rec = _json.loads(raw)
+        rep = rec.get("report") or {}
+        age = (now - datetime.strptime(rec["received_at"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
+        return rec, rep, age, [t for t in rep.get("tasks") or [] if t.get("level") in _TASK_PROBLEM_LEVELS]
+
+    pc, cloud = _read("task_health"), _read("task_health_cloud")
+    if not pc and not cloud:
+        return {"known": False}
+    if not cloud:
+        rec, rep, age, problems = pc
+        return {"known": True, "received_at": rec["received_at"], "age_hours": round(age, 1),
+                "silent": age > TASK_HEALTH_SILENT_HOURS, "silent_after_hours": TASK_HEALTH_SILENT_HOURS,
+                "host": rep.get("host"), "checked_at": rep.get("checked_at"), "signature": rep.get("signature") or "",
+                "problems": problems, "tasks": rep.get("tasks") or []}
+    crec, crep, cage, cprob = cloud
+    pc_fresh = bool(pc) and pc[2] <= TASK_HEALTH_SILENT_HOURS
+    problems = (pc[3] if pc_fresh else []) + cprob
+    sig = "|".join(s for s in ((pc[1].get("signature") or "") if pc_fresh else "", crep.get("signature") or "") if s)
+    return {"known": True, "received_at": crec["received_at"], "age_hours": round(cage, 1),
+            "silent": cage > TASK_HEALTH_SILENT_HOURS, "silent_after_hours": TASK_HEALTH_SILENT_HOURS,
+            "host": crep.get("host") if not pc_fresh else f"{crep.get('host')} + {pc[1].get('host')}",
+            "source": "cloud" if not pc_fresh else "both", "checked_at": crep.get("checked_at"), "signature": sig,
+            "problems": problems, "tasks": (pc[1].get("tasks") or [] if pc_fresh else []) + (crep.get("tasks") or [])}
 
 
 @app.get("/api/usage/task-health")
@@ -2368,6 +2389,20 @@ def _cloud_backup_startup():
         _cloud_backup.start()
     except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
         print(f"[cloud-backup] could not start: {e}")
+@app.on_event("startup")
+def _cloud_jobs_startup():
+    """The feedback fetch, the Invisible Voice push and the task watchdog run on the Fly machine (backend/cloud_jobs.py,
+    docs/CLOUD_SYNC.md "งานอื่นบน cloud"). Each is OFF unless its own flag is 1: without them nothing here starts a thread."""
+    import sys as _sys
+    if "pytest" in _sys.modules:
+        return
+    try:
+        import cloud_jobs as _cloud_jobs
+        _cloud_jobs.start()
+    except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
+        print(f"[cloud-jobs] could not start: {e}")
+
+
 if __package__:
     from .routers.cost_bom import router as _cost_bom_router
     from .routers.cost_bom import get_cost_detail, branch_bom_analysis  # noqa: F401
@@ -2426,9 +2461,12 @@ app.include_router(_nav_router)     # GET /api/nav/badges (PR-D4): the red task 
 try:
     from .routers.cloud_sync_api import router as _cloud_sync_router
     from .routers.cloud_backup_api import router as _cloud_backup_router
+    from .routers.cloud_jobs_api import router as _cloud_jobs_router
 except ImportError:
     from routers.cloud_sync_api import router as _cloud_sync_router
     from routers.cloud_backup_api import router as _cloud_backup_router
+    from routers.cloud_jobs_api import router as _cloud_jobs_router
+app.include_router(_cloud_jobs_router)     # /api/admin/cloud-jobs/{status,run}: every cloud job in one list + feedback/invisible/watchdog (docs/CLOUD_SYNC.md)
 app.include_router(_cloud_backup_router)   # /api/admin/cloud-backup/{status,run}: the daily backup to object storage (docs/CLOUD_SYNC.md)
 app.include_router(_cloud_sync_router)     # /api/admin/cloud-sync/{status,run}: the cloud pull of Easy POS (docs/CLOUD_SYNC.md)
 

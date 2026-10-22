@@ -147,21 +147,25 @@ def main(argv=None) -> int:
     ap.add_argument("--no-sales", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--db", default=str(DB_FILE))
+    ap.add_argument("--readonly", action="store_true", help="open the database read-only (the cloud job reads the live file)")
+    ap.add_argument("--state-file", default=None,
+                    help="where the last pushed day is kept (default backend/.invisible_last_ok.txt; the cloud job uses /data)")
     ap.add_argument("--url", default=os.environ.get("INVISIBLE_API_URL", DEFAULT_URL))
     a = ap.parse_args(argv)
     kw = {"base": a.url, "key": "-" if a.dry_run else api_key(), "dry": a.dry_run}
-    con = sqlite3.connect(a.db)
+    con = sqlite3.connect(f"file:{Path(a.db).as_posix()}?mode=ro", uri=True, timeout=30) if a.readonly else sqlite3.connect(a.db)
+    state_file = Path(a.state_file) if a.state_file else STATE_FILE
     out: dict = {}
     if a.locations:
         out["locations"] = push_chunked("/api/v1/adapters/locations", location_rows(con), **kw)
     if not a.no_sales:
         today = datetime.now(tz=ZoneInfo("Asia/Bangkok")).date()
-        since = a.since or since_day(a.days, today)
+        since = a.since or since_day(a.days, today, state_file)
         rows = sales_rows(con, since)
         out["sales"] = {"since": since, "rows": len(rows), "results": push_chunked("/api/v1/adapters/sales", rows, **kw)}
         last_day = pushed_through(rows)
-        if last_day and not a.dry_run and a.db == str(DB_FILE):   # post() exits on any HTTP error, so this is a success
-            STATE_FILE.write_text(last_day, encoding="utf-8")
+        if last_day and not a.dry_run and (a.db == str(DB_FILE) or a.state_file):   # post() exits on any HTTP error, so this is a success
+            state_file.write_text(last_day, encoding="utf-8")
     if a.menu:
         rows = menu_rows(con)
         out["menu"] = {"rows": len(rows), "results": push_chunked("/api/v1/adapters/menu", rows, **kw)}

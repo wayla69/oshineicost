@@ -404,6 +404,8 @@ MODULE_RULES = [
     ("*",   "/api/admin/cloud-sync",         {"system.admin"}),
     # the cloud backup of oshinei.db (backend/cloud_backup.py): the same rule
     ("*",   "/api/admin/cloud-backup",       {"system.admin"}),
+    # every cloud job in one list, and the buttons of the feedback / Invisible / watchdog jobs (backend/cloud_jobs.py)
+    ("*",   "/api/admin/cloud-jobs",         {"system.admin"}),
 ]
 
 

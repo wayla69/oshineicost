@@ -259,7 +259,7 @@ class DbSink:
         self.fb, self.path = fb, str(db_path)
 
     def _con(self):
-        con = sqlite3.connect(self.path)
+        con = sqlite3.connect(self.path, timeout=30)      # the live app writes the same file (WAL): wait for it, do not fail
         con.row_factory = sqlite3.Row
         self.fb._ensure(con)
         return con
