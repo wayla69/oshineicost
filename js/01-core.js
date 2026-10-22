@@ -1579,8 +1579,32 @@ function glancePeriods(labels, go) {
   if (Array.isArray(go.dates) && go.dates.length === labels.length) dates = go.dates.map(x => _glanceParseLabel(String(x), ref));
   if (!dates || !dates.every(Boolean)) dates = labels.map(l => _glanceParseLabel(Array.isArray(l) ? l.join(' ') : String(l ?? ''), ref));
   if (!dates.every(Boolean)) return none;
-  const grain = dates.every(d => d.d != null) ? 'day' : dates.every(d => d.d == null) ? 'month' : null;
+  let grain = dates.every(d => d.d != null) ? 'day' : dates.every(d => d.d == null) ? 'month' : null;
   let partial = -1, note = '';
+  // Period START dates (a bar per week / month / quarter / year, labelled with its first day) are not days: tell them by the spacing,
+  // and the period in progress is the one that holds the last day with data and is not yet over (VZ2: never compared as a full one).
+  if (grain === 'day' && dates.length >= 2) {
+    const ut = d => Date.UTC(d.y, d.m - 1, d.d);
+    const gaps = dates.slice(1).map((d, i) => (ut(d) - ut(dates[i])) / 864e5).sort((x, y) => x - y);
+    const g = gaps[Math.floor(gaps.length / 2)];
+    const kind = g === 7 ? 'week' : (g >= 28 && g <= 31) ? 'month' : (g >= 89 && g <= 92) ? 'quarter' : (g >= 365 && g <= 366) ? 'year' : null;
+    if (kind) {
+      grain = kind;
+      const endOf = d => kind === 'week' ? ut(d) + 7 * 864e5 : Date.UTC(d.y, d.m - 1 + (kind === 'month' ? 1 : kind === 'quarter' ? 3 : 12), d.d);
+      const rt = Date.UTC(ref.y, ref.m - 1, ref.d);
+      for (let i = dates.length - 1; i >= 0; i--) {
+        if (ut(dates[i]) <= rt) {
+          if (rt < endOf(dates[i]) - 864e5) {
+            partial = i;
+            if (kind === 'month') note = `${ref.d}/${new Date(ref.y, ref.m, 0).getDate()} วัน`;
+          }
+          break;
+        }
+      }
+      if (go.mtd === false) partial = -1;
+      return { grain, dates, partial, note };
+    }
+  }
   if (grain === 'month') {
     const dim = new Date(ref.y, ref.m, 0).getDate();
     const i = dates.findIndex(d => d.y === ref.y && d.m === ref.m);

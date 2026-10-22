@@ -207,3 +207,59 @@ def test_phone_columns_wear_b1():
     assert got["dots"] == 4 and got["edge"] and got["dashed"] and got["avgLine"] and got["gold"]
     assert got["minFont"] >= 12
     assert got["few"] is False                                     # under 4 finished periods: the plain accent columns
+
+
+# ── the period still in progress, every granularity ─────────────────────────────────────────────────────────────────
+PERIODS = "\n".join(["const window = { __dataLastDate: '2026-10-19' };", _const(CORE, "_GLANCE_EN_MON"), _const(CORE, "_GLANCE_TH_MON"),
+                     _fn(CORE, "_glanceYear"), _fn(CORE, "_glanceParseLabel"), _fn(CORE, "_glanceLastDate"), _fn(CORE, "glancePeriods")])
+
+
+@needs_node
+def test_the_period_in_progress_is_found_for_month_week_quarter_and_year_bars():
+    got = _node(PERIODS, """(() => {
+  const r = l => { const x = glancePeriods(l, {}); return [x.grain, x.partial]; };
+  return {
+    month: r(['2026-03-01', '2026-04-01', '2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01', '2026-10-01']),
+    monthDone: r(['2026-02-01', '2026-03-01', '2026-04-01', '2026-05-01', '2026-06-01', '2026-07-01', '2026-08-01', '2026-09-01']),
+    week: r(['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19']),
+    weekDone: r(['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12']),
+    quarter: r(['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01', '2026-10-01']),
+    year: r(['2023-01-01', '2024-01-01', '2025-01-01', '2026-01-01']),
+    day: r(['2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19']),
+    note: glancePeriods(['2026-08-01', '2026-09-01', '2026-10-01'], {}).note,
+  };
+})()""")
+    assert got["month"] == ["month", 7] and got["monthDone"] == ["month", -1]
+    assert got["week"] == ["week", 5] and got["weekDone"] == ["week", -1]        # the week of 19 Oct holds the last day with data and is not over
+    assert got["quarter"] == ["quarter", 4] and got["year"] == ["year", 3]
+    assert got["day"][0] == "day" and got["note"] == "19/31 วัน"
+
+
+@needs_node
+def test_b1_never_makes_the_partial_period_latest_or_best_at_any_granularity():
+    # the in-progress bar is last and the LARGEST: it still must not be gold, best, or in the average
+    got = _node(PRE, """(() => {
+  const a = glanceB1Kinds([50, 52, 49, 55, 51, 120], { partial: 5 });
+  const b = glanceB1Kinds([50, 52, 49, 55, 51, 120, 130], { partial: 6 });
+  return [a.latest, a.best, a.avg, a.kinds[5].part, a.kinds[5].tone, b.latest, b.best, b.avg];
+})()""")
+    assert got[:5] == [4, 3, 51.4, True, "hi"] and got[5:] == [5, 5, (50 + 52 + 49 + 55 + 51 + 120) / 6]
+
+
+# ── the change pills on the gradient KPI tiles (coordinator fix 2) ──────────────────────────────────────────────────
+def _lum(h):
+    h = h.lstrip("#")
+    r, g, b = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4  # noqa: E731
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+
+def test_change_pills_on_the_tiles_keep_their_ink_and_clear_4_5_to_1():
+    # the tile rule forced every span in a tile to inherit the tile's white, which turned msPchip's deep ink white on its pale pill
+    css = _src("docs/ui-kit/theme-vivid.css")
+    rule = [ln for ln in css.splitlines() if ln.startswith("body .ms-kpi :is(p, span")][0]
+    assert ".ms-chip, .ms-chip *" in rule
+    for ink, bg in (("#047857", "#dcfce7"), ("#b91c1c", "#fee2e2"), ("#5f6c80", "#f1f5f9")):     # msPchip: up / down / flat, and the none chip
+        assert ink in MOB and bg in MOB
+        hi, lo = sorted((_lum(ink), _lum(bg)), reverse=True)
+        assert (hi + 0.05) / (lo + 0.05) >= 4.5, (ink, bg)
