@@ -8,6 +8,9 @@
 // A franchise login lands here (_landingTab, 01-core.js; phBoot / phShowHome, 09c-mobile.js). Paper: the print stylesheet in index.html.
 // PR-F2 (2026-10-22): below the fold, from GET /api/franchise/insight (loaded when it nears the screen): สัดส่วนการขาย, ช่วงเวลาขายดี,
 // การควบคุม (discounts / voided bills / cash, counts and baht only), เสียงลูกค้า; and the รับแจ้งเตือนทุกเช้า card (kind "franchise").
+// PR-F3 (2026-10-22): วัตถุดิบจากส่วนกลาง after the branch-discipline card, from GET /api/franchise/supply (loaded when it nears the
+// screen): delivery rounds (ordered / delivered baht, status), purchases against sales vs last month, claims, late orders, the five
+// lines used most over the recipes. Before the branch started the supply module: one neutral line.
 
 let _frcMonth = '';
 let _frcGen = 0;
@@ -53,7 +56,7 @@ async function loadFranchise() {
   const dl = document.getElementById('frcDownload');
   if (dl) dl.hidden = !d.available;
   if (body) body.innerHTML = _frcRender(d);
-  if (d.available) frcInsightWatch(gen);
+  if (d.available) { frcInsightWatch(gen); frcSupplyWatch(gen); }
   frcPushInit();
 }
 
@@ -270,7 +273,9 @@ function _frcRender(d) {
     return _frcSection('ร้านของฉัน', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED}">ยังไม่มีข้อมูลของเดือนนี้ เลือกเดือนก่อนหน้าได้จากช่องเดือนด้านบน</div></div>`);
   }
   return _frcVerdict(d.verdict) + _frcSales(d.sales, d.discount_pct) + _frcTarget(d.target) + _frcDaily(d.sales) + _frcGp(d.gp)
-    + _frcTrend(d.trend_12m) + _frcIngredients(d.ingredients) + _frcDiscipline(d.discipline) + _frcMenus(d.top_menus)
+    + _frcTrend(d.trend_12m) + _frcIngredients(d.ingredients) + _frcDiscipline(d.discipline)
+    + `<div id="frcSupply"><div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดวัตถุดิบจากส่วนกลาง…</div></div></div></div>`
+    + _frcMenus(d.top_menus)
     + `<div id="frcInsight"><div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดสัดส่วนการขาย การควบคุม และเสียงลูกค้า…</div></div></div></div>`;
 }
 
@@ -457,4 +462,98 @@ async function frcPushInit() {
   if (!await msPushVapid()) return hide();
   card.hidden = false;
   await msPushRender(undefined, 'frcPush');
+}
+
+// ── PR-F3 (2026-10-22): วัตถุดิบจากส่วนกลาง, from GET /api/franchise/supply. Loaded like the F2 cards: once the cards above are drawn
+// and the placeholder comes near the screen. Figures are the supply module's own (the order value of the branch's order screens). ──
+let _frcSupGen = 0;
+function frcSupplyWatch(gen) {
+  const box = document.getElementById('frcSupply');
+  if (!box) return;
+  const go = () => { if (gen === _frcGen && _frcSupGen !== gen) { _frcSupGen = gen; frcLoadSupply(gen); } };
+  if (!('IntersectionObserver' in window)) { go(); return; }
+  const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); go(); } }, { rootMargin: '600px 0px' });
+  io.observe(box);
+}
+async function frcLoadSupply(gen) {
+  const box = document.getElementById('frcSupply');
+  const qs = _frcMonth ? '?month=' + encodeURIComponent(_frcMonth) : '';
+  let d;
+  try {
+    const r = await fetch(`${API}/api/franchise/supply${qs}`);
+    const t = await r.text();
+    let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
+    if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'โหลดข้อมูลไม่สำเร็จ');
+    d = j;
+  } catch (e) {
+    if (gen !== _frcGen || !box) return;
+    box.innerHTML = `<div class="ms-section"><div class="ms-card"><div class="ms-row" style="color:var(--bad-ink)">${esc(e.message || 'โหลดข้อมูลไม่สำเร็จ')}</div></div></div>`;
+    return;
+  }
+  if (gen !== _frcGen || !box) return;
+  box.innerHTML = _frcSupply(d);
+}
+
+function _frcSupply(d) {
+  if (!d) return '';
+  const title = 'วัตถุดิบจากส่วนกลาง';
+  const help = '<p>ยอดสั่ง = มูลค่าที่สาขาสั่งในแต่ละรอบ · ยอดที่คลังจัดส่ง = มูลค่าที่คลังส่งจริง คิดแบบเดียวกับหน้าสั่งสินค้าของสาขา นับรอบที่วันส่งอยู่ในเดือนนี้ ไม่นับใบที่ยังเป็นร่างหรือยกเลิก</p>'
+    + '<p>ยอดซื้อเทียบยอดขาย = ยอดที่คลังจัดส่ง ÷ ยอดขายไม่รวม VAT ของเดือนเดียวกัน ระหว่างเดือนนับถึงวันล่าสุดที่ปิดการขาย และเทียบกับทั้งเดือนของเดือนก่อน</p>'
+    + '<p>ส่งใบสั่งซื้อหลังเวลาตัดรอบมีค่าปรับ หน้านี้แสดงเฉพาะจำนวนใบ · วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า</p>';
+  if (!d.started) {
+    return _frcCard(title, 'supply', help, '', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(d.not_started_th || 'สาขายังไม่เริ่มใช้ระบบสั่งวัตถุดิบ')}</div></div>`);
+  }
+  const P = d.purchases || {}, L = d.late || {}, C = d.claims || {};
+  const ch = P.change_pp;
+  const ratioSub = P.pct_prev != null
+    ? `${ch != null && ch !== 0 ? msPchip(Math.round(ch * 10) / 10, false, ' จุด') + ' ' : ''}<span style="font-size:12px;${_FRC_MUTED}">เดือนก่อน ${_frcPctText(P.pct_prev)}</span>`
+    : `<span style="font-size:12px;${_FRC_MUTED}">เดือนก่อนยังไม่มีข้อมูล</span>`;
+  const upto = P.month_complete ? 'ทั้งเดือน' : (P.through ? 'ถึง ' + _frcDay(P.through) : '');
+  const tiles = `<div style="${_FRC_TILES};margin-top:0">`
+    + msKpiTile('ยอดสั่งจากส่วนกลาง', _frcBaht(P.ordered), '#4a70b0', `${fmtN(P.rounds || 0)} รอบส่ง`)
+    + msKpiTile('ยอดที่คลังจัดส่ง', _frcBaht(P.delivered), '#0891b2', `จัดส่งแล้ว ${fmtN(P.rounds_delivered || 0)} รอบ`)
+    + msKpiTile('ยอดซื้อเทียบยอดขาย' + (upto ? ` (${esc(upto)})` : ''), _frcPct(P.pct), '#7a66b8', ratioSub)
+    + msKpiTile('ส่งหลังเวลาตัดรอบ', `${fmtN(L.count || 0)} ใบ`, L.count ? '#f59e0b' : '#10b981', L.count ? '(มีค่าปรับ)' : 'ทันเวลาทุกใบ')
+    + `</div>`;
+  const rounds = d.rounds || [];
+  const tbl = rounds.length ? `<div class="frc-sub2">รอบส่งของเดือนนี้</div><div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>รอบ · สถานะ</th>`
+    + `<th class="n">สั่ง (฿)</th><th class="n">จัดส่ง (฿)</th></tr></thead><tbody>`
+    + rounds.map(r => `<tr><td>${esc(r.round_th)}<br><span class="frc-dow">${esc(r.status_th || '')}</span>`
+      + `${r.late ? ' <span class="frc-dow" style="color:var(--amber-ink)">· ส่งหลังเวลาตัดรอบ</span>' : ''}</td>`
+      + `<td class="n">${r.ordered == null ? _FRC_NA : fmtN(r.ordered)}</td><td class="n">${r.delivered == null ? _FRC_NA : fmtN(r.delivered)}</td></tr>`).join('')
+    + `</tbody></table></div>`
+    : `<div class="ms-card" style="margin-top:10px"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรอบส่งในเดือนนี้</div></div>`;
+  return _frcCard(title, 'supply', help, 'ยอดสั่งและยอดที่คลังจัดส่งของแต่ละรอบ ยอดซื้อเทียบยอดขาย เคลมสินค้า และวัตถุดิบที่ใช้เกินสูตร',
+    tiles + tbl + _frcClaims(C) + _frcOveruse(d.overuse));
+}
+
+function _frcQty(v) { return v == null ? "—" : Number(v).toLocaleString("th-TH", { maximumFractionDigits: 2 }); }
+function _frcClaimInk(st) {
+  return st === 'approved' ? 'var(--good-ink)' : st === 'rejected' ? 'var(--text-secondary)' : 'var(--amber-ink)';
+}
+function _frcClaims(c) {
+  if (!c) return '';
+  const pills = (c.by_status || []).map(x => `<span class="frc-pill">${esc(x.status_th)} ${fmtN(x.count || 0)}</span>`).join(' ');
+  const head = `<div class="ms-row" style="flex-wrap:wrap;gap:6px"><span style="flex:1 1 100%;font-size:13px;color:var(--text-primary)">แจ้งเคลมในเดือนนี้ <b>${fmtN(c.count || 0)}</b> ครั้ง`
+    + `${c.approved_value ? ` · มูลค่าที่อนุมัติ ฿${fmtN(c.approved_value)}` : ''}</span>${pills}</div>`;
+  const list = (c.latest || []).map(x => `<div class="ms-row" style="flex-direction:column;align-items:stretch;gap:3px">`
+    + `<span style="display:flex;gap:8px;font-size:12px;${_FRC_MUTED}"><span>${esc(_frcDay(x.date))}${x.round_th ? ' · ' + esc(x.round_th) : ''}</span>`
+    + `<span style="margin-left:auto;font-weight:600;color:${_frcClaimInk(x.status)}">${esc(x.status_th)}</span></span>`
+    + (x.items || []).map(i => `<span style="font-size:13px;color:var(--text-primary)">${esc(i.name)} · ${i.qty == null ? '' : esc(_frcQty(i.qty))} ${esc(i.unit || '')} <span style="${_FRC_MUTED}">· ${esc(i.reason_th || '')}</span></span>`).join('')
+    + (x.decision_note ? `<span style="font-size:12px;color:var(--text-secondary)">ผลพิจารณา: ${esc(x.decision_note)}</span>` : '')
+    + `</div>`).join('');
+  return `<div class="frc-sub2">เคลมสินค้า</div><div class="ms-card">${head}${list}</div>`;
+}
+
+function _frcOveruse(o) {
+  if (!o) return '';
+  const rows = o.rows || [];
+  const when = `รอบตรวจนับ ${_frcDay(o.begin)} – ${_frcDay(o.end)}`;
+  const t = '<div class="frc-sub2">วัตถุดิบที่ใช้เกินสูตร 5 อันดับ</div>';
+  if (!rows.length) return t + `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(when)} · ไม่มีวัตถุดิบที่ใช้เกินสูตร</div></div>`;
+  return t + `<p class="frc-sub" style="margin-top:0">${esc(when)} · เรียงตามมูลค่า</p>`
+    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วัตถุดิบ</th><th class="n">ใช้เกิน</th><th class="n">มูลค่า (฿)</th><th class="n">เกินสูตร</th></tr></thead><tbody>`
+    + rows.map(r => `<tr><td>${esc(r.name)}</td><td class="n">${r.qty == null ? _FRC_NA : _frcQty(r.qty)} ${esc(r.unit || '')}</td>`
+      + `<td class="n">${r.value == null ? _FRC_NA : fmtN(r.value)}</td><td class="n">${_frcPct(r.pct)}</td></tr>`).join('')
+    + `</tbody></table></div>`;
 }

@@ -1,0 +1,4 @@
+# Lines the glossary gate (test_bom_center_language.py) lets through: <file relative to the repo>|<text the line contains>
+# PR-F3 (owner-approved 2026-10-22): the franchise owner's section is named วัตถุดิบจากส่วนกลาง - the central supply as a SOURCE of goods, not a team
+tabs/47-manual.html|วัตถุดิบจากส่วนกลาง
+docs/pilot/owner_guide.html|จากส่วนกลาง
