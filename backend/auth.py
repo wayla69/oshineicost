@@ -298,6 +298,9 @@ MODULE_RULES = [
     # owner 2026-10-07: accounting keeps the monthly price (and the unit rules a price file needs),
     # the kitchen keeps the recipes and sub-recipes; everything else in the centre is bom.center
     ("W",   "/api/bom-center/prices",                  {"bom.center", "bom.prices"}),
+    # PR-S2: the analyst's monthly dish cost list - read by the analyst, accounting and management; imported by the analyst (and accounting)
+    ("GET", "/api/bom-center/dish-cost",               {"bom.center", "bom.prices", "cost.analysis"}),
+    ("W",   "/api/bom-center/dish-cost",               {"bom.center", "bom.prices"}),
     # PR-D: Sales Support sends the month's price file; only the analyst (and accounting) imports or rejects it
     ("W",   "/api/bom-center/prices/submit",           {"supply.ordering", "bom.center", "bom.prices"}),
     ("W",   "/api/bom-center/prices/submissions",      {"bom.center", "bom.prices"}),

@@ -7,6 +7,18 @@
   ],
   "sha1": "da39a3ee5e6b"
  },
+ "bc_sku_cost_list": {
+  "rows": 0,
+  "cols": [
+   "sku_id",
+   "month",
+   "unit_cost",
+   "note",
+   "imported_by",
+   "imported_at"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
  "bc_sku_cost_month": {
   "rows": 0,
   "cols": [

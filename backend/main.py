@@ -258,6 +258,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/_admin/seed-db") \
             or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
             or path.startswith("/api/_admin/bc-sku-cost-month") \
+            or path.startswith("/api/_admin/bc-sku-cost-list") \
             or path.startswith("/api/_admin/backup/") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
@@ -1085,6 +1086,16 @@ def _bc_sku_cost_month(_tok: str = Depends(_seed_token_or_404)):
     with get_db() as con:
         rows = _bcd.export_rows(con)
     return {"columns": ["sku_code", "month", "unit_cost", "release_id", "built_at"], "rows": rows}
+
+
+@app.get("/api/_admin/bc-sku-cost-list", include_in_schema=False)
+def _bc_sku_cost_list(_tok: str = Depends(_seed_token_or_404)):
+    """The dish costs the analyst imported (PR-S2), for the SYNC to price per-bill COGS and the fact tables with them.
+    Keyed by sku_code: sku ids are local to each database."""
+    from bom_center import dated as _bcd
+    with get_db() as con:
+        rows = _bcd.export_list_rows(con)
+    return {"columns": ["sku_code", "month", "unit_cost", "note", "imported_by", "imported_at"], "rows": rows}
 
 
 # /api/_admin/backup/owner-data.{sqlite,json} — the nightly off-site copy of the owner-data

@@ -870,6 +870,109 @@ def bc_convert(code: str = Query(...), qty: float = Query(1.0), unit: str = Quer
             "cost": round(qb * p[0], 4) if (qb is not None and p) else None, "month": month}
 
 
+# ── PR-S2 · ต้นทุนต่อจานรายเดือน (the analyst's monthly dish cost list; bom_center/dish_cost.py) ──
+from bom_center import dish_cost as _dc                                         # noqa: E402
+
+
+def _dc_month(month: Optional[str]) -> str:
+    try:
+        return _dc.check_month(month or _this_month())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _dc_refresh() -> None:
+    """The cost a report multiplies by changed for the months from the imported one on: every cached response is stale.
+    (No recipe quantity moved, so the order plan's usage caches and the BoM days stay.) The fact tables the sync builds
+    (menu_fact_*, sale_bill_cogs) take the list at their next build, which pulls it with the released costs."""
+    invalidate_cache()
+
+
+@router.get("/api/bom-center/dish-cost")
+def bc_dish_cost(month: Optional[str] = Query(None)):
+    month = _dc_month(month)
+    with get_db() as con:
+        _ensure(con)
+        return _dc.month_table(con, month)
+
+
+@router.get("/api/bom-center/dish-cost/months")
+def bc_dish_cost_months():
+    with get_db() as con:
+        _ensure(con)
+        return {"default": _this_month(), "months": _dc.months(con, _this_month())}
+
+
+@router.get("/api/bom-center/dish-cost/template.xlsx")
+def bc_dish_cost_template(month: Optional[str] = Query(None)):
+    """Every menu sold in the month before, with the cost the reports use now - ready to correct and import."""
+    from openpyxl import Workbook
+    month = _dc_month(month)
+    with get_db() as con:
+        _ensure(con)
+        rows = _dc.template_rows(con, month)
+    wb = Workbook()
+    _sheet(wb.active, _dc.SHEET, _dc.HEADERS, f"ต้นทุนต่อจานเดือน {month} · ไม่รวม VAT · หน่วยเป็นบาท")
+    for r in rows:
+        wb.active.append(r)
+    return _xlsx(wb, _fname("แม่แบบ", _dc.SHEET, month))
+
+
+@router.get("/api/bom-center/dish-cost/export.xlsx")
+def bc_dish_cost_export(month: Optional[str] = Query(None)):
+    from openpyxl import Workbook
+    month = _dc_month(month)
+    with get_db() as con:
+        _ensure(con)
+        d = _dc.month_table(con, month)
+    wb = Workbook()
+    _sheet(wb.active, _dc.SHEET, ["รหัส POS", "ชื่อเมนู", "ต้นทุนต่อจาน (บาท)", "ต้นทุนเดือนก่อน (บาท)", "เปลี่ยน (%)", "จานที่ขาย", "ที่มา"],
+           f"ต้นทุนต่อจานเดือน {month} · ไม่รวม VAT · หน่วยเป็นบาท")
+    for r in d["rows"]:
+        wb.active.append([r["code"], r["name"], r["unit_cost"], r["prev_cost"], r["change_pct"], r["plates"], r["source"]])
+    return _xlsx(wb, _fname(_dc.SHEET, month))
+
+
+@router.post("/api/bom-center/dish-cost/import", dependencies=[Depends(require_write_token_unless_dry_run)])
+async def bc_dish_cost_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
+                              dry_run: bool = Query(True)):
+    """A file of dish costs -> the month's list. dry_run=true (the default) writes nothing and returns what would change."""
+    month = _dc_month(month)
+    raw = await file.read()
+    try:
+        parsed = _dc.parse(raw, file.filename or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with get_db() as con:
+        _ensure(con)
+        if dry_run:
+            try:
+                out = _dc.preview(con, month, parsed["rows"])
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        else:
+            out = _write(con, lambda: _dc.commit(con, month, parsed["rows"], _who(request)))
+    if not dry_run:
+        _dc_refresh()
+    return {**out, "format": parsed["format"], "dry_run": dry_run, "file": file.filename}
+
+
+class DishCostEdit(BaseModel):
+    month: str
+    sku_code: str
+    unit_cost: float
+    note: Optional[str] = ""
+
+
+@router.post("/api/bom-center/dish-cost/edit", dependencies=[Depends(require_write_token)])
+def bc_dish_cost_edit(body: DishCostEdit, request: Request):
+    with get_db() as con:
+        _ensure(con)
+        out = _write(con, lambda: _dc.set_one(con, body.month, body.sku_code, body.unit_cost, body.note or "", _who(request)))
+    _dc_refresh()
+    return out
+
+
 # ── M4 monthly prices ────────────────────────────────────────────────────────
 @router.get("/api/bom-center/prices")
 def bc_prices(month: Optional[str] = Query(None)):

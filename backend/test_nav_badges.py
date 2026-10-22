@@ -344,7 +344,7 @@ def test_search_finds_pages_by_label_synonym_department_and_cluster(tmp_path):
 @needs_node
 def test_search_lists_only_what_the_role_may_open_and_each_page_once(tmp_path):
     full = _harness(tmp_path, "management", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
-    assert len(full) == len(set(full)) == 79 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone)
+    assert len(full) == len(set(full)) == 80 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone)
     assert "franchise|" in _harness(tmp_path, "franchise", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
     only = _json.dumps(["branchstock", "manual"])
     rows = _harness(tmp_path, "branch", "pgSearchResults('').map(e => e.tab)", allowed=f"t => {only}.includes(t)")

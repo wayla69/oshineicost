@@ -62,6 +62,8 @@ def _db():
                            period_month TEXT DEFAULT '2026-08');
         CREATE TABLE bc_sku_cost_month(sku_id INTEGER, month TEXT, unit_cost REAL, release_id INTEGER,
                                        built_at TEXT, PRIMARY KEY (sku_id, month));
+        CREATE TABLE bc_sku_cost_list(sku_id INTEGER, month TEXT, unit_cost REAL, note TEXT, imported_by TEXT,
+                                      imported_at TEXT, PRIMARY KEY (sku_id, month));
         INSERT INTO skus VALUES (1,'BUFFET799'), (2,'B0001'), (3,'A0001'), (4,'NEW001'), (5,'X0009');
         INSERT INTO sku_cost VALUES (2, 13.4), (3, 0);          -- 0 means "no data", not free
         INSERT INTO bom_ingredients VALUES (3, 20.0), (3, 5.0); -- A0001 recipe = 25

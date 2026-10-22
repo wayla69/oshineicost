@@ -395,6 +395,7 @@ OWNED_TABLES = (
     "bc_stock_count", "bc_stock_count_line", "bc_order", "bc_order_line",
     "bc_audit", "bc_dish_name_map",
     "bc_sku_cost_month",          # the cut-over: released cost per SKU per month (dated.py)
+    "bc_sku_cost_list",           # PR-S2: the dish cost the analyst imports per month; beats the release (dish_cost.py)
     "bc_code_review",             # analyst's answer per legacy recipe code: same item / use another code (codes.py)
     "bc_prep_name_map", "bc_rel_prep_recipe", "bc_rel_prep_line",   # Phase 1.5 (prep.py)
     "bc_receipt", "bc_receipt_line", "bc_variance_reason", "bc_variance_period",   # Phase 2 S7 (variance.py)

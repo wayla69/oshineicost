@@ -114,6 +114,9 @@ CREATE TABLE IF NOT EXISTS sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe
 -- so it is part of the base schema; empty = the old engine everywhere.
 CREATE TABLE IF NOT EXISTS bc_sku_cost_month(sku_id INTEGER NOT NULL, month TEXT NOT NULL,
   unit_cost REAL NOT NULL, release_id INTEGER, built_at TEXT, PRIMARY KEY (sku_id, month));
+-- PR-S2: the dish costs the analyst imports per month (bom_center/dish_cost.py); they beat the released cost.
+CREATE TABLE IF NOT EXISTS bc_sku_cost_list(sku_id INTEGER NOT NULL, month TEXT NOT NULL, unit_cost REAL NOT NULL,
+  note TEXT, imported_by TEXT, imported_at TEXT, PRIMARY KEY (sku_id, month));
 
 -- ── sales_sku_monthly indexes ──────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sku_period       ON sales_sku_monthly(period_month);
