@@ -301,6 +301,10 @@ def consolidated(con, order_ids: list) -> dict:
         g = groups.setdefault(dlv, {"delivery": dlv, "items": {}})
         it = g["items"].setdefault(c, {"code": c, "name": n or c, "unit": recv if unit != "base" else base,
                                        "total": 0.0, "by_branch": {}})
+        if unit == "base":                               # PR-U1: no pack size yet - the screens show it in กิโลกรัม / ลิตร
+            from .units import NO_PACK_TH, readable_unit
+            it["no_pack"], it["no_pack_th"] = True, NO_PACK_TH
+            it["show_unit"], it["show_factor"] = readable_unit(base)
         it["total"] += q
         it["by_branch"][bname] = it["by_branch"].get(bname, 0.0) + q
         branches.add(bname)
@@ -326,15 +330,20 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None, branch_
     d0, d1 = date.fromisoformat(date_from), date.fromisoformat(date_to)
     today = bkk_today()
     names = dict(con.execute("SELECT branch_id, name FROM branches"))
+    from .started import NOT_STARTED_TH, branch_start
     rows = []
     for bid in ([branch_id] if branch_id else list(branch_ids) if branch_ids is not None else _phase2_branches(con)):
         cal = calendar(con, bid)
+        start = branch_start(con, bid)                    # PR-U1: a round before the branch started is not judged
         for rnd in ("1", "2", "salmon"):
             wd = cal[rnd]["order_weekday"]
             d = d0
             while d <= d1:
                 if _wd(d) == wd:
-                    rows.append(_cycle(con, bid, names.get(bid), rnd, d.isoformat(), today))
+                    row = _cycle(con, bid, names.get(bid), rnd, d.isoformat(), today)
+                    if row["status"] in ("not_ordered", "not_submitted") and (start is None or row["cycle_date"] < start):
+                        row["status"], row["status_th"] = "not_started", NOT_STARTED_TH
+                    rows.append(row)
                 d += timedelta(days=1)
     counts = {}
     for r in rows:

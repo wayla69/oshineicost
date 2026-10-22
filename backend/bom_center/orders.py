@@ -178,6 +178,7 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
     for ln in o["lines"]:                      # PR-W: the unit WORD every quantity of the line is written in (never the whole label)
         ln["unit_label"], ln["unit_word"] = unit_of_line(recv_lbl.get(ln["code"]), (names.get(ln["code"]) or (None, None))[1],
                                                          ln["order_unit"])
+        _show_fields(ln, ln["order_unit"], (names.get(ln["code"]) or (None, None))[1])
     if receive:
         _receive_fields(con, o)
     o["status_th"] = STATUS_TH.get(o["status"], o["status"])
@@ -188,6 +189,18 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
     from .hub import with_values
     with_values(con, [o])                  # value / value_ordered / value_sent / value_label — see hub.with_values
     return o
+
+
+def _show_fields(row: dict, order_unit, base_unit) -> None:
+    """PR-U1: a line ordered in BASE units (no pack size yet) carries `no_pack` and the unit the screens show it in - `show_unit` with
+    `show_factor` base units in one (กรัม -> กิโลกรัม, 1000). A pack line shows its own unit (factor 1). Quantities are not changed."""
+    from .units import NO_PACK_TH, readable_unit
+    if order_unit == "base":
+        row["no_pack"], row["no_pack_th"] = True, NO_PACK_TH
+        row["show_unit"], row["show_factor"] = readable_unit(base_unit)
+    else:
+        row["no_pack"], row["no_pack_th"] = False, None
+        row["show_unit"], row["show_factor"] = None, 1.0
 
 
 def unit_of_line(recv_label, base_unit, order_unit) -> tuple:
@@ -362,7 +375,8 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
            "slip_today": slip_today}
     if submit:
         if missing:
-            raise ValueError(f"จำนวนที่แก้ไขต่างจากที่แนะนำเกิน {DEVIATION_PCT:g}% · เลือกเหตุผล: " + ", ".join(sorted(set(missing))[:5]))
+            names = sorted({_item(con, c) for c in missing})      # PR-U1: the names the branch reads, never the codes
+            raise ValueError(f"ต้องระบุเหตุผล {len(names)} รายการก่อนส่ง (สั่งต่างจากยอดแนะนำเกิน {DEVIATION_PCT:g}%): " + ", ".join(names[:5]))
         if not con.execute("SELECT 1 FROM bc_order_line WHERE order_id=? AND confirmed_units>0", (oid,)).fetchone():
             raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
         if not _is.is_confirmed(slip_today):                # ใบตัดเบิก: the order is made from the stock AFTER today's issue
@@ -689,6 +703,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
         if r["code"] in cmap:
             r["price_per_base"], r["price_source"] = unit_price(con, r["code"], month, cmap)
             r["price_per_sale"] = cmap[r["code"]][1]
+        _show_fields(r, kind, r.get("base_unit"))
     # page 1 is what goes to the centre; page 2 the branch buys from local suppliers itself
     s["central_list"] = bool(cmap)
     s["local_rows"] = [r for r in s["rows"] if r.get("sourcing") == "local"]

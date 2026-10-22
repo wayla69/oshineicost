@@ -24,7 +24,7 @@ from .fmt import day_th as _fmt_day
 from .fmt import item as _item
 from .fmt import no_unit as _no_unit
 from .master import audit
-from .units import Converter, _is_pack_word, unit_word
+from .units import Converter, _is_pack_word, norm, unit_word
 
 # PR-K: the storage zones are the centre's to edit (app_settings key bc_zones = JSON [{code, label}]).
 # A code is stable (items point at it), a label may be renamed, the list order is the order a branch counts in.
@@ -205,6 +205,15 @@ def big_unit(conv, code: str, unit: str, factor) -> dict:
     return {"unit": u["unit"], "label": u["label"], "per": int(round(ratio)), "factor": u["factor"]}
 
 
+def countable(conv, code: str, base, unit) -> bool:
+    """PR-U1: can a count of this item be valued? Only when the register gives it a base unit and the unit the branch counts in
+    reaches that base unit. An item that cannot is left off the branch's count sheet (and so off the 100% rule): it is the analyst's
+    task "ไม่มีหน่วยฐาน" on หน้างาน, and a branch is never blocked by a gap in the register."""
+    if not norm(base):
+        return False
+    return conv.factor(code, unit or base)[0] is not None
+
+
 def _branch_name(con, branch_id: int) -> str:
     r = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()
     if not r:
@@ -317,12 +326,16 @@ def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
     valid = [z for z, _ in zcfg]
     by_zone = {z: [] for z in valid}
     conv = Converter(con)
+    not_countable = []                            # PR-U1: no usable base unit - the analyst's task (หน้างาน), never the branch's block
     for c in sorted(codes):
         m = master.get(c)
         if not m:
             continue
         name, fam, kind, base, recv, per, mon, zone, cu, _active = m
         unit, factor = entry_unit(conv, c, base, recv, per, cu)
+        if not countable(conv, c, base, unit):
+            not_countable.append(c)
+            continue
         z = zone if zone in by_zone else guess_zone(c, name, fam, kind, valid)
         k = klass.get(c, "C")
         if cyc and k != "A":                      # the weekly count is the class-A list only
@@ -352,7 +365,7 @@ def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
     return {"branch_id": branch_id, "branch": bname, "as_of": as_of.isoformat(), "mode": "cycle" if cyc else "full",
             "next_kind": "cycle" if cyc else ("end" if lc else "begin"),
             "last_count": (dict(lcy, kind="cycle") if lcy else lc) if cyc else lc, "draft": dr, "zones": out_z,
-            "items": sum(len(z["items"]) for z in out_z),
+            "items": sum(len(z["items"]) for z in out_z), "not_countable": len(not_countable),
             "required": sum(1 for z in out_z for r in z["items"] if r["required"]), "plan": count_plan(con, branch_id)}
 
 
@@ -439,6 +452,19 @@ def _write_lines(con, conv, line_table: str, id_col: str, cid: int, lines: list,
                     " note=excluded.note", (cid, code, q, unit, qb, (ln.get("note") or None)))
 
 
+def _drop_uncountable(con, conv, line_table: str, id_col: str, cid: int) -> None:
+    """Delete the draft lines of the items `countable` refuses (no base unit, or a count unit that cannot reach it)."""
+    m = {c: (b, r, p, cu) for c, b, r, p, cu in con.execute(
+        "SELECT code, base_unit, recv_unit, qty_per_recv, count_unit FROM bc_ingredient")}
+    for (code,) in con.execute(f"SELECT ingredient_code FROM {line_table} WHERE {id_col}=? AND qty_base IS NULL", (cid,)).fetchall():
+        if code in m:
+            b, r, p, cu = m[code]
+            unit, _f = entry_unit(conv, code, b, r, p, cu)
+            if countable(conv, code, b, unit):
+                continue
+        con.execute(f"DELETE FROM {line_table} WHERE {id_col}=? AND ingredient_code=?", (cid, code))
+
+
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
          note: str = None, require_all: bool = True) -> dict:
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
@@ -475,6 +501,11 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
             miss = uncounted_items(con, branch_id, cid)
             if miss:
                 raise ValueError(incomplete_th(miss))
+        # PR-U1: a line of an item that has no usable base unit cannot be valued; it is not on the sheet any more (an older draft may
+        # still carry it) and never blocks the count
+        _drop_uncountable(con, conv, "bc_stock_count_line", "count_id", cid)
+        n = con.execute("SELECT COUNT(*) FROM bc_stock_count_line WHERE count_id=?", (cid,)).fetchone()[0]
+        out["lines"] = n
         # every line of the draft, not only the ones sent now, must have reached the base unit
         bad = [_no_unit(con, c, u) for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NULL", (cid,))]
@@ -663,6 +694,13 @@ def cycle_draft_of(con, branch_id: int):
     return dict(zip(("count_id", "count_date", "updated_at", "counted_by"), r)) if r else None
 
 
+def next_full_date(count_date) -> date:
+    """The date of the month-end count that ends the period a count dated `count_date` begins: 1/10 -> 1/11, 22/10 -> 1/11 (a branch
+    that starts mid-month), 31/10 -> 1/12 (a count on the last day begins the next month)."""
+    d = (count_date if isinstance(count_date, date) else date.fromisoformat(str(count_date)[:10])) + timedelta(days=1)
+    return date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+
+
 def count_plan(con, branch_id: int, today: date = None) -> dict:
     """What the branch counts NOW. The month-end count (ต้นงวด / ปลายงวด) is ALWAYS the full count of every item (`mode` = "full").
     When the optional switch is on, the weekly count of the class-A items is offered besides it as a mid-month check
@@ -673,7 +711,16 @@ def count_plan(con, branch_id: int, today: date = None) -> dict:
     lc = last_submitted(con, branch_id)
     ws = today - timedelta(days=today.weekday())
     plan = {"cycle_counts": on, "mode": "full", "first": lc is None, "full_due": False, "full_overdue": False,
-            "partial_month": None, "partial_date": None, "cycle_due": False, "cycle_last": None, "week_start": ws.isoformat()}
+            "partial_month": None, "partial_date": None, "cycle_due": False, "cycle_last": None, "week_start": ws.isoformat(),
+            "last_full": None, "next_full_date": None, "next_full_due": lc is None}
+    if lc:
+        # PR-U1: the next month-end count after the last one - the 1st of the month after the period that count begins (a count dated
+        # the last day of a month begins the next month). It is due from the last day of the month before it (todo.CLOSE_TOLERANCE_DAYS
+        # lets the 1st count be dated a little later); until then the count pane shows the finished count, not an empty sheet.
+        nxt = next_full_date(lc["count_date"])
+        plan["last_full"] = {"kind": lc["kind"], "date": lc["count_date"], "kind_th": "ต้นงวด" if lc["kind"] == "begin" else "ปลายงวด"}
+        plan["next_full_date"] = nxt.isoformat()
+        plan["next_full_due"] = today >= nxt - timedelta(days=1)
     if not on or lc is None:
         return plan
     cl = cycle_last(con, branch_id)
@@ -721,6 +768,7 @@ def cycle_save(con, branch_id: int, lines: list, who: str, submit: bool = False,
             miss = [it["name"] for z in sheet(con, branch_id, mode="cycle")["zones"] for it in z["items"] if it["code"] not in have]
             if miss:
                 raise ValueError(f"ยังมีรายการที่ต้องนับ {len(miss)} รายการ ที่ยังไม่ได้นับ (เช่น {', '.join(miss[:3])}) นับให้ครบก่อนส่ง")
+        _drop_uncountable(con, conv, "bc_cycle_count_line", "cycle_id", cid)
         bad = [_no_unit(con, c, u) for c, u in con.execute(
             "SELECT ingredient_code, unit FROM bc_cycle_count_line WHERE cycle_id=? AND qty_base IS NULL", (cid,))]
         if bad:

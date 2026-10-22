@@ -460,6 +460,33 @@ class Converter:
             return None, "ปริมาณไม่ใช่ตัวเลข"
 
 
+# PR-U1: an order line in BASE units (the item has no pack size yet) is shown in the next metric unit up when the figure is large -
+# "ข้าวสวยญี่ปุ่นปรุงรส 18.6 กิโลกรัม", not "18558 กรัม". Display only: every stored quantity stays in base units.
+READABLE_UP = {"กรัม": ("กิโลกรัม", 1000.0), "มิลลิลิตร": ("ลิตร", 1000.0)}
+NO_PACK_TH = "ยังไม่มีขนาดบรรจุ"
+
+
+def readable_unit(base_unit) -> tuple:
+    """(unit to show, base units in one of it) for a base-unit order line: กรัม -> (กิโลกรัม, 1000), มิลลิลิตร -> (ลิตร, 1000); any other
+    unit is shown as it is (factor 1)."""
+    b = norm(base_unit)
+    return READABLE_UP.get(b, (b, 1.0))
+
+
+def readable(qty, base_unit) -> tuple:
+    """(quantity, unit) of a base-unit quantity as a person reads it: 18558 กรัม -> (18.6, กิโลกรัม), 1142 มิลลิลิตร -> (1.14, ลิตร); under
+    one of the bigger unit, or a unit with no bigger one, it stays as it is. One decimal from 10 up, two below."""
+    try:
+        q = float(qty)
+    except (TypeError, ValueError):
+        return qty, norm(base_unit)
+    u, f = readable_unit(base_unit)
+    if f == 1.0 or abs(q) < f:
+        return q, norm(base_unit)
+    v = q / f
+    return round(v, 1 if abs(v) >= 10 else 2), u
+
+
 def to_order_units(qty_base: float, qty_per_order: float, moq: float = 1.0, step: float = 1.0) -> float:
     """Whole purchasing units for a base-unit need, rounded UP (short is worse
     than carry-over), at least `moq` when anything is needed, in multiples of `step`."""

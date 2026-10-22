@@ -8,7 +8,7 @@ THIS person's own move on each page. It invents no business rule - every count i
     the role's owner words in `owner_th`, else the item's `owner_modules` against the viewer's modules);
   * for the three roles that own steps of the month close (analyst, salessupport, accounting) the open steps they own - the
     "งานของฉัน" list of หน้างาน shows them next to the items (management reads the whole close list, it is not "mine");
-  * ONLY `state == "todo"` - the person's own move. A task waiting for someone else's review (รอตรวจ) and a finished one (เสร็จแล้ว)
+  * ONLY `state == "todo"` - the person's own move (PR-U1: the one rule of mine_open below, shared with the todo answer). A task waiting for someone else's review (รอตรวจ) and a finished one (เสร็จแล้ว)
     never count. Each row counts once, on the page its `go` opens (a duty of eight branches = eight tasks on that page).
 
 Nothing heavy: todo.build is COUNT/EXISTS on bc_* tables (no report query). The router caches the answer per user for 60 s
@@ -35,6 +35,29 @@ def is_mine(it: dict, role, modules) -> bool:
     return any(m in modules for m in (it.get("owner_modules") or ()))
 
 
+def mine_open(d: dict, role, modules) -> list:
+    """PR-U1 (2.7): THE list of the viewer's own open tasks - the one number every screen shows as "ยังไม่เสร็จ": the red badges (their sum),
+    the launcher's tab, หน้างาน's "งานของฉัน" and the phone's ต้องทำวันนี้. From a todo.build answer `d` built for `role`:
+
+      * the items, plus the open close steps for the roles that own steps of the month close (CLOSE_ROLES);
+      * only the viewer's own move (`state == "todo"`) and the viewer's own duty (is_mine);
+      * not a round whose cutoff is still to come (`upcoming`, todo._week_items): it is "ถัดไป", not a task of today;
+      * the slip days a branch left behind are ONE task (หน้างาน shows them as one row "ใบตัดเบิกค้าง N วัน"), kept on the oldest day.
+    """
+    rows = list(d["items"]) + (list(d["close"]["steps"]) if role in CLOSE_ROLES else [])
+    out, gaps = [], []
+    for it in rows:
+        if it.get("state") != "todo" or it.get("upcoming") or not is_mine(it, role, modules) or not page_key(it.get("go")):
+            continue
+        if str(it.get("key") or "").split(":")[0].startswith("issue_missing_"):
+            gaps.append(it)
+            continue
+        out.append(it)
+    if gaps:
+        out.append(min(gaps, key=lambda g: str(g.get("slip_date") or "")))
+    return out
+
+
 def page_key(go: dict):
     """The page a task opens: "<tab>" or "<tab>:<pane>" (the key the department registry looks up)."""
     tab = (go or {}).get("tab")
@@ -51,14 +74,10 @@ def build(con, role, modules, scoped_branch=None, today=None, now=None) -> dict:
         d = _td.build(con, None, None, scoped_branch, today=today, now=now, viewer_role=role)
     except (PermissionError, ValueError):
         d = None                                              # a pinned account whose branch is gone: no badges, no error
+    total = 0
     if d:
-        rows = list(d["items"])
-        if role in CLOSE_ROLES:
-            rows += d["close"]["steps"]
-        for it in rows:
-            if it.get("state") != "todo" or not is_mine(it, role, modules):
-                continue
+        for it in mine_open(d, role, modules):
             k = page_key(it.get("go"))
-            if k:
-                pages[k] = pages.get(k, 0) + 1
-    return {"pages": pages, "at": (now or now_bkk()).isoformat(timespec="seconds")}
+            pages[k] = pages.get(k, 0) + 1
+            total += 1
+    return {"pages": pages, "total": total, "at": (now or now_bkk()).isoformat(timespec="seconds")}

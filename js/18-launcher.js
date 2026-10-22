@@ -244,8 +244,10 @@ function _lnchGroup(list) {
   });
   return groups;
 }
+let _lnchOpenN = null;          // PR-U1: the number of open tasks (the server's mine_open) - the same figure as the badges and หน้างาน
+function _lnchTabN(k) { return k === 'todo' && _lnchOpenN != null ? _lnchOpenN : _lnchGroups[k].length; }
 function _lnchTabsHtml(f) {
-  return _LNCH_TABS.map(([k, t]) => `<button type="button" class="lnch-tab" data-f="${k}" aria-pressed="${f === k}" onclick="lnchTaskFilter('${k}')">${t} <span class="lnch-tab-n">(${_lnchGroups[k].length})</span></button>`).join('');
+  return _LNCH_TABS.map(([k, t]) => `<button type="button" class="lnch-tab" data-f="${k}" aria-pressed="${f === k}" onclick="lnchTaskFilter('${k}')">${t} <span class="lnch-tab-n">(${_lnchTabN(k)})</span></button>`).join('');
 }
 function lnchRenderTasks() {
   const rows = document.getElementById('lnchTaskRows'), tabs = document.getElementById('lnchTaskTabs');
@@ -281,9 +283,14 @@ async function lnchLoadTasks() {
   try { todo = await api(`${API}/api/bom-center/todo`); } catch (e) { todo = null; }
   if (activeTab !== 'launcher') return;                       // the person already moved on
   if (!todo || !Array.isArray(todo.items)) { rows.innerHTML = '<div class="lnch-empty">โหลดรายการงานไม่ได้ ลองเปิดหน้าใหม่อีกครั้ง</div>'; return; }
-  const mine = todo.items.filter(_shmMine);
+  // PR-U1: the items and, for a role that owns steps of the month close, those steps - the open ones are exactly the server's mine_open
+  const role = (window.AUTH && window.AUTH.enabled && window.AUTH.role) || '';
+  const steps = ['analyst', 'salessupport', 'accounting'].includes(role) ? ((todo.close && todo.close.steps) || []) : [];
+  const keys = shmOpenKeys(todo);
+  const mine = todo.items.concat(steps).filter(i => _shmMine(i) && !i.upcoming);
   _lnchGroups = { todo: [], review: [], done: [] };
-  _LNCH_TABS.forEach(([k]) => { _lnchGroups[k] = _lnchGroup(mine.filter(i => shmState(i) === k)); });
+  _LNCH_TABS.forEach(([k]) => { _lnchGroups[k] = _lnchGroup(mine.filter(i => shmState(i) === k && (k !== 'todo' || shmIsOpenTask(i, keys)))); });
+  _lnchOpenN = keys ? keys.size : null;
   all.style.display = ''; all.textContent = 'ดูทั้งหมด';
   lnchRenderTasks();
 }

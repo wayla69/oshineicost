@@ -181,7 +181,7 @@ function _shmTodayRows(d) {
   // สั่งสินค้า: the NEXT order due - the open round whose cutoff comes first (a round past its cutoff first of all). "ส่งแล้ว" only when
   // no round is waiting: while another order is still open the strip names it, never a ✓ for the one that went (2.3)
   const ord = items.filter(it => base(it).startsWith('order_due_'));
-  const pend = ord.filter(it => it.status === 'todo').sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
+  const pend = ord.filter(it => it.status === 'todo' && !it.upcoming).sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
   if (pend.length) {
     const it = pend[0];
     const ms = new Date(it.cutoff_at).getTime() - Date.now();
@@ -189,6 +189,9 @@ function _shmTodayRows(d) {
     const more = pend.length > 1 ? ` · รออีก ${pend.length - 1} รอบ` : '';
     rows.push({ k: 'order', label: 'สั่งสินค้า', ok: false, bad: !!it.late,
       text: (it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `${it.round_th === 'แซลมอนสด' ? 'แซลมอนสด · ' : ''}รอบส่ง ${fmtDayShort(it.delivery)} · ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`) + more, go: it.go });
+  } else if (ord.some(it => it.upcoming)) {           // PR-U1: the next cutoff is on a later day - nothing to do today
+    const nx = ord.filter(it => it.upcoming).sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at)))[0];
+    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: nx.next_th || 'ยังไม่ถึงรอบตัด', go: nx.go });
   } else if (ord.length) {
     rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: ord[0].go });
   } else {
@@ -255,7 +258,8 @@ async function shmPushInit() {
   await msPushRender(undefined, 'shmPush');
 }
 // ── batch 3 · 4.7 the all-branches grid as one line (the centre roles; the pane is การใช้งานทุกสาขา under ใบสั่งซื้อ) ──
-const _SHM_LIGHT = { green: ['เขียว', 'var(--good-ink)'], yellow: ['เหลือง', 'var(--amber-ink)'], red: ['แดง', 'var(--bad-ink)'] };
+const _SHM_LIGHT = { green: ['เขียว', 'var(--good-ink)'], yellow: ['เหลือง', 'var(--amber-ink)'], red: ['แดง', 'var(--bad-ink)'],
+  not_started: ['ยังไม่เริ่มใช้ระบบ', 'var(--text-muted)'] };
 async function shmAdoptionLoad(role) {
   const card = document.getElementById('shmAdoption'), line = document.getElementById('shmAdoptionLine');
   if (!card || !line) return;
@@ -265,7 +269,7 @@ async function shmAdoptionLoad(role) {
   if (!show) return;
   try {
     const g = await _bmcJson(`${API}/api/bom-center/hub/adoption`);
-    line.innerHTML = `ทั้งหมด ${g.total} สาขา ` + ['green', 'yellow', 'red'].map(k => _bmcChip(`${_SHM_LIGHT[k][0]} ${g.counts[k]}`, _SHM_LIGHT[k][1])).join(' ');
+    line.innerHTML = `ทั้งหมด ${g.total} สาขา ` + ['green', 'yellow', 'red', 'not_started'].filter(k => k !== 'not_started' || g.counts[k]).map(k => _bmcChip(`${_SHM_LIGHT[k][0]} ${g.counts[k]}`, _SHM_LIGHT[k][1])).join(' ');
   } catch (e) { line.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e).slice(0, 120))}</span>`; }
 }
 
@@ -275,30 +279,37 @@ function _shmRender(d) {
   shmInstallRefresh();
   shmPushInit();
   shmAdoptionLoad(role);
-  const items = d.items || [];
+  // PR-U1: a round whose cutoff is still to come is not a task of today (it is the "ถัดไป" line); a todo task of mine is kept only when the
+  // server counts it (mine_open, the badges' rule), so "ยังไม่เสร็จ" here is the launcher's and the badges' number
+  const upcoming = (d.items || []).filter(it => it.upcoming);
+  const items = (d.items || []).filter(it => !it.upcoming);
+  const keys = shmOpenKeys(d), mineOk = it => shmState(it) !== 'todo' || shmIsOpenTask(it, keys);
   const c = d.close || { steps: [], branches: [] };
   const steps = c.steps || [];
   const f = _shmFilter(), keep = it => f === 'all' || shmState(it) === f;
-  const mineItems = _shmCollapseBacklog(items.filter(_shmMine)), others = items.filter(it => !_shmMine(it));
+  const mineItems = _shmCollapseBacklog(items.filter(_shmMine)).filter(mineOk), others = items.filter(it => !_shmMine(it));
   const showClose = _SHM_CLOSE_ROLES.includes(role) && steps.length > 0;
   // a role that owns steps of the close sees those; the manager reads the whole list (the whole month is the manager's overview)
   const mineSteps = showClose ? (role === 'management' ? steps.slice() : steps.filter(_shmMine)) : [];
-  const stepsAhead = mineSteps.filter(s => s.status === 'todo' || s.status === 'blocked');
+  const stepsAhead = mineSteps.filter(s => (s.status === 'todo' || s.status === 'blocked') && mineOk(s));
   // "งานของฉัน": my items, then my open steps of the close (accounting's step 8 is its whole work); a finished step is in the close list only
   const mine = mineItems.concat(role === 'management' ? [] : stepsAhead);
   const showOthers = _SHM_CENTRE_ROLES.includes(role);
-  // the counts of the segmented control: every row the sections can show, once (a step in "งานของฉัน" and in the close list is one)
-  const rows = new Set(mine.concat(mineSteps));
+  // the counts of the segmented control: the person's OWN rows, once (a step in "งานของฉัน" and in the close list is one); other departments'
+  // work has its own count line - PR-U1: so "ยังไม่เสร็จ (N)" is the same N as the launcher and the badges
+  const rows = new Set(mine.concat(role === 'management' ? [] : mineSteps.filter(mineOk)));
   const counts = { all: 0, todo: 0, review: 0, done: 0 };
   rows.forEach(it => { counts[shmState(it)]++; });
-  if (showOthers) ['todo', 'review', 'done'].forEach(k => { counts[k] += _shmOthersLines(others.filter(it => shmState(it) === k)).length; });
   counts.all = counts.todo + counts.review + counts.done;
   _shmFilterBar(counts, f);
   // the open (my move) first, then what waits for a review, then the finished; one list for every filter
   const card = it => _shmCard(it, it.group === 'close' ? it.seq : undefined, true);
   const shownMine = mine.filter(keep).sort(_shmSortMine(role));
-  document.getElementById('shmMineCount').textContent = mine.length ? `แสดง ${shownMine.length} จาก ${mine.length}` : '';
-  document.getElementById('shmMine').innerHTML = shownMine.length ? shownMine.map(card).join('') : _shmEmptyHtml(f);
+  document.getElementById('shmMineCount').textContent = mine.length ? `ยังไม่เสร็จ ${counts.todo}` : '';
+  // the next round of a branch whose cutoff is still to come: one muted line, never a card or a count
+  const nextLine = role === 'branch' && f !== 'done' ? upcoming.filter(_shmMine).sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at))).slice(0, 1)
+    .map(it => `<div class="text-xs py-2" style="color:var(--text-muted);border-top:1px solid var(--border-soft)">${esc(it.next_th || it.title)}</div>`).join('') : '';
+  document.getElementById('shmMine').innerHTML = (shownMine.length ? shownMine.map(card).join('') : _shmEmptyHtml(f)) + nextLine;
   // the close list: collapsed, only the steps of this role; the rest is one grey line
   const closeCard = document.getElementById('shmCloseCard');
   closeCard.style.display = showClose ? '' : 'none';
@@ -449,7 +460,7 @@ async function shmAfter(key, toast) {
     if (activeTab === 'supplyhome') { _shmData = d; _shmRender(d); }
     const all = [...(d.items || []), ...((d.close && d.close.steps) || [])];
     const me = all.find(i => i.key === key || i.key.startsWith(key));
-    const open = all.filter(i => (i.status === 'todo' || i.status === 'blocked') && i !== me && (!me || i.group !== me.group || i.seq > me.seq));
+    const open = all.filter(i => (i.status === 'todo' || i.status === 'blocked') && !i.upcoming && i !== me && (!me || i.group !== me.group || i.seq > me.seq));
     const mineOpen = open.filter(_shmToastOk);
     const nx = mineOpen.find(it => !me || it.group === me.group) || mineOpen[0];
     if (nx) _shmToast(nx, toast);

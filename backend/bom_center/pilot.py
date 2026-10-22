@@ -113,10 +113,8 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
     as_of = as_of or bkk_today()
     start = as_of - timedelta(days=7 * weeks - 1)
     # the pilot starts at the branch's first month-end count or first issue slip — days before it are not held against it
-    first = con.execute("SELECT MIN(d) FROM (SELECT MIN(count_date) AS d FROM bc_stock_count WHERE branch_id=?"
-                        " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
-                        " UNION ALL SELECT MIN(slip_date) FROM bc_issue_slip WHERE branch_id=?)",
-                        (branch_id, branch_id)).fetchone()[0]
+    from .started import branch_start                 # PR-U1: the one branch start date
+    first = branch_start(con, branch_id)
     started = first is not None or con.execute(
         "SELECT 1 FROM bc_order WHERE branch_id=? AND status IN ('submitted','processed','received')",
         (branch_id,)).fetchone() is not None

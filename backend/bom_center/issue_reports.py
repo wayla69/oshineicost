@@ -358,21 +358,28 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
     bom = bom_days(con, branch_id, d0, last, month, commit=commit)
     iss = issued(con, branch_id, d0, last + timedelta(days=1), by_day=True)
     st = {s["date"]: s for s in IS.status_days(con, branch_id, d0, last)}
+    from .started import branch_start
+    start = branch_start(con, branch_id) or "9999"    # PR-U1: a day before the branch started is not listed (nor judged); none yet = none
     days = [d for d in sorted(set(bom) | set(st))
-            if (d in bom and d < today.isoformat()) or st[d]["status"] != "missing"]
+            if ((d in bom and d < today.isoformat()) or st[d]["status"] != "missing")
+            and (d >= start or st[d]["status"] != "missing")]
+    t_iso = today.isoformat()
     klass = _month_class({d: bom[d] for d in days if d in bom}, _price_ref(con, month))
     a_codes = sorted(c for c, k in klass.items() if k == "A")
     rows, per_code, per_code_u = [], {}, {}                     # per_code: code -> [(day, pct)] · per_code_u: the same for the under-issue streak
     for d in days:
         b, i, s = bom.get(d, {}), iss.get(d, {}), st[d]
         conf = IS.is_confirmed(s)
+        # PR-U1: a day is JUDGED (issued against the recipes) only when its slip is confirmed, it has a formula value (its sales are in)
+        # and it is over - the day still trading (Bangkok) and a day with no sales yet carry no verdict
+        judged = conf and d in bom and d < t_iso
         used_v = sum(v["used"] * (price(c) or 0.0) for c, v in i.items())
         waste_v = sum(v["waste"] * (price(c) or 0.0) for c, v in i.items())
         bom_v = sum(q * (price(c) or 0.0) for c, q in b.items())
         over = []
         for c in a_codes:
             iq = (i.get(c) or {}).get("used", 0.0) + (i.get(c) or {}).get("waste", 0.0)
-            pct = _pct(iq, b.get(c, 0.0)) if conf else None
+            pct = _pct(iq, b.get(c, 0.0)) if judged else None
             if d in bom:                                        # a streak runs over TRADING days only
                 per_code.setdefault(c, []).append((d, pct))
                 per_code_u.setdefault(c, []).append((d, pct))
@@ -381,11 +388,13 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
         wd = FC._wd(date.fromisoformat(d))
         row = {"date": d, "weekday": wd, "weekday_th": FC.WD_TH[wd], "slip_status": _slip_key(s),
                "slip_status_th": SLIP_STATUS_TH[_slip_key(s)], "slip_id": s["slip_id"], "late": int(s["late"] or 0),
-               "confirmed": conf, "trading": d in bom, "bom_value": round(bom_v, 2),
+               "confirmed": conf, "trading": d in bom, "bom_value": round(bom_v, 2) if d in bom else None,
+               "judged": judged, "today": d == t_iso, "no_formula": d not in bom,
+               "no_formula_th": "ยังไม่มีค่าตามสูตร" if d not in bom else None,
                "used_value": round(used_v, 2) if conf else None, "waste_value": round(waste_v, 2) if conf else None,
                "issued_value": round(used_v + waste_v, 2) if conf else None,
-               "var_value": round(used_v + waste_v - bom_v, 2) if conf else None,
-               "var_pct": _pct(used_v + waste_v, bom_v) if conf else None, "over_items": over}
+               "var_value": round(used_v + waste_v - bom_v, 2) if judged else None,
+               "var_pct": _pct(used_v + waste_v, bom_v) if judged else None, "over_items": over}
         rows.append(row)
     flags, flag_days, under_days = [], {}, {}
     total_series = [(r["date"], r["var_pct"]) for r in rows if r["trading"]]
@@ -417,16 +426,18 @@ def _span(con, branch_id: int, d0: date, d1: date, month: str, today: date = Non
 
 
 def _totals(rows: list) -> dict:
-    conf = [r for r in rows if r["confirmed"]]
-    bom_v = sum(r["bom_value"] for r in conf)
+    """PR-U1: the baht compare the JUDGED days only (confirmed, with a formula value, over); the head counts the days that are over and
+    needed a slip - a day with sales or a day with a slip - so "ยืนยันแล้ว N/M วัน" agrees with the rows (the day still trading is not in it)."""
+    conf = [r for r in rows if r.get("judged", r["confirmed"])]
+    bom_v = sum(r["bom_value"] or 0.0 for r in conf)
     iss_v = sum(r["issued_value"] for r in conf)
-    trading = [r for r in rows if r["trading"]]
+    trading = [r for r in rows if not r.get("today") and (r["trading"] or r["slip_status"] != "missing")]
     return {"days": len(rows), "trading_days": len(trading), "confirmed_days": sum(1 for r in trading if r["confirmed"]),
             "late_days": sum(1 for r in trading if r["slip_status"] == "late"),
             "draft_days": sum(1 for r in trading if r["slip_status"] == "draft"),
             "missing_days": sum(1 for r in trading if r["slip_status"] == "missing"),
-            "used_value": round(sum(r["used_value"] for r in conf), 2),
-            "waste_value": round(sum(r["waste_value"] for r in conf), 2), "issued_value": round(iss_v, 2),
+            "used_value": round(sum(r["used_value"] or 0.0 for r in conf), 2),
+            "waste_value": round(sum(r["waste_value"] or 0.0 for r in conf), 2), "issued_value": round(iss_v, 2),
             "bom_value": round(bom_v, 2), "var_value": round(iss_v - bom_v, 2), "var_pct": _pct(iss_v, bom_v),
             "flagged_days": sum(1 for r in rows if r["flagged"]), "over_days": sum(1 for r in rows if r["over_items"]),
             "under_flagged_days": sum(1 for r in rows if r.get("under_flagged"))}
@@ -450,6 +461,8 @@ def _day_items(s: dict, day: str) -> list:
     """The per-item comparison of one day inside a span (see _span)."""
     b, i, st = s["bom"].get(day, {}), s["iss"].get(day, {}), s["st"].get(day)
     conf = bool(st) and IS.is_confirmed(st)
+    row = next((r for r in s["rows"] if r["date"] == day), None)
+    judged = conf and bool(row and row.get("judged"))         # PR-U1: no verdict for today or for a day with no formula value
     p, names, klass = s["price"], s["names"], s["klass"]
     flagged = set(s["flag_days"].get(day, []))
     under_flagged = set(s["under_days"].get(day, []))
@@ -461,19 +474,19 @@ def _day_items(s: dict, day: str) -> list:
         pv = p(c)
         n, u = names.get(c) or (c, None)
         k = klass.get(c, "C")
-        pct = _pct(used + waste, bq) if conf else None
+        pct = _pct(used + waste, bq) if judged else None
         signal = None
-        if conf and c in flagged:
+        if judged and c in flagged:
             signal = "streak"
-        elif conf and c in under_flagged:
+        elif judged and c in under_flagged:
             signal = "under_streak"
-        elif conf and k == "A" and pct is not None and pct > OVER_PCT:
+        elif judged and k == "A" and pct is not None and pct > OVER_PCT:
             signal = "over"
         out.append({"date": day, "code": c, "name": n, "base_unit": u, "class": k,
                     "used": round(used, 3) if conf else None, "waste": round(waste, 3) if conf else None,
                     "issued": round(used + waste, 3) if conf else None, "bom": round(bq, 3),
-                    "var_qty": round(used + waste - bq, 3) if conf else None, "var_pct": pct, "price_per_base": pv,
-                    "var_value": _round((used + waste - bq) * pv) if conf and pv is not None else None,
+                    "var_qty": round(used + waste - bq, 3) if judged else None, "var_pct": pct, "price_per_base": pv,
+                    "var_value": _round((used + waste - bq) * pv) if judged and pv is not None else None,
                     "signal": signal, "signal_th": SIGNAL_TH.get(signal)})
     rank = {"streak": 0, "under_streak": 0, "over": 1, None: 2}
     out.sort(key=lambda r: (rank[r["signal"]], -abs(r["var_value"] or 0), r["code"]))
@@ -580,11 +593,9 @@ def _bkk(ts):
 
 
 def _started(con, branch_id: int):
-    """The first day the branch is held to the slip: its first submitted month-end count or its first slip."""
-    r = con.execute("SELECT MIN(d) FROM (SELECT MIN(count_date) AS d FROM bc_stock_count WHERE branch_id=?"
-                    " AND COALESCE(status,'submitted')='submitted' AND kind IN ('begin','end')"
-                    " UNION ALL SELECT MIN(slip_date) FROM bc_issue_slip WHERE branch_id=?)", (branch_id, branch_id)).fetchone()
-    return r[0] if r else None
+    """The first day the branch is held to the slip: the one branch start date (started.branch_start, PR-U1)."""
+    from .started import branch_start
+    return branch_start(con, branch_id)
 
 
 def log(con, d0, d1, branch_id: int = None, today: date = None) -> dict:
@@ -660,7 +671,9 @@ def log(con, d0, d1, branch_id: int = None, today: date = None) -> dict:
             cnt["reconfirms"] += row["reconfirms"]
             cnt["late_orders"] += lo_n
             cnt["claims"] += cl_n
-            if is_trading and key in ("on_time", "late", "draft", "missing"):
+            # PR-U1: a day with a slip is a day the branch worked even when its sales are not in yet (the POS arrives a day late), so the
+            # summary's วันขาย / ยืนยันตรงวัน agree with the day rows above it
+            if (is_trading or have_slip) and key in ("on_time", "late", "draft", "missing"):
                 cnt["trading_days"] += 1
                 cnt[key] += 1
         if had or branch_id is not None:

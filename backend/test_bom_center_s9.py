@@ -108,12 +108,15 @@ def test_compliance_places_the_gap(con):  # noqa: F811
     assert r["processed"] < r["confirmed"] and r["centre_change_pct"] < 0
     assert r["received"] < r["processed"] and r["delivery_gap_pct"] < 0
     assert r["delivery"] == "2026-10-07" and r["late"] is False
-    assert by[("2026-09-28", "1")]["status"] == "not_ordered"      # a Monday with no order
-    assert by[("2026-09-24", "2")]["status"] == "not_ordered"      # Thursday: round 2's cutoff
+    # PR-U1: the branch started on 5 Oct (its first slip): the rounds before it are not judged
+    assert by[("2026-09-28", "1")]["status"] == "not_started"      # a Monday with no order, before the start
+    assert by[("2026-09-24", "2")]["status"] == "not_started"      # Thursday: round 2's cutoff, before the start
+    assert by[("2026-10-01", "2")]["status"] == "not_started"
     assert c["counts"]["over"] == 1
 
 
 def test_a_draft_is_not_submitted(con):  # noqa: F811
+    IS.save(con, 1, "2026-10-04", [{"code": "V-007", "qty_used": 10, "unit": "กรัม"}], "udon", submit=True, now=NOW)  # PR-U1: started
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     OR.save(con, 1, "1", p["order_day"], p, [], "udon")
     con.commit()

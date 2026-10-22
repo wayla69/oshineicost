@@ -327,6 +327,8 @@ def test_other_lists_do_not_call_missing_data_finished():
     """The audit of the shared filter: a round not due yet is neither finished nor work; a usage line whose data is incomplete is work."""
     oh, brn = _src("js/15-orderhub.js"), _src("js/14-branch.js")
     comp = _fn(oh, "ohbRenderComp")
-    assert "r.status !== 'upcoming'" in comp and "csp.counts.all = c.rows.length" in comp          # upcoming shows under ทั้งหมด only
+    # upcoming (and, PR-U1, a round before the branch started) shows under ทั้งหมด only
+    assert "!_OHB_C_NEUTRAL.includes(r.status)" in comp and "csp.counts.all = c.rows.length" in comp
+    assert re.search(r"const _OHB_C_NEUTRAL = \['upcoming', 'not_started'\]", oh)
     var = _fn(brn, "brnRenderVariance")
     assert "incompleteRows = flaggedAll.filter(r => r.data_incomplete)" in var and "todo: askOpen.length + incompleteRows.length" in var

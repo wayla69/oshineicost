@@ -279,7 +279,7 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   // วัตถุดิบและใบสั่งซื้อ: at most three of my open items from หน้างาน, overdue ones first
   if (todo && Array.isArray(todo.items)) {
     const isMine = i => typeof _shmMine === 'function' ? _shmMine(i) : (i.owner_modules || []).some(hasModule);
-    const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && isMine(i));
+    const mine = todo.items.filter(i => (i.status === 'todo' || i.status === 'blocked') && !i.upcoming && isMine(i));
     mine.sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
     // UX batch A (2026-10-20): the same duty for several branches is ONE row naming the branches, not a row each
     const groups = [];

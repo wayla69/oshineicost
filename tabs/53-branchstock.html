@@ -89,7 +89,9 @@
       <div id="brnInfo" class="text-xs mt-1" style="color:var(--text-muted)"></div>
     </div>
 
-    <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
+    <div id="brnDone" class="card p-3 mb-3" style="display:none"></div>
+
+    <div id="brnSheetBar" class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
       <div id="brnZones" class="flex flex-wrap gap-1 brn-zones"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs brn-filterrow" style="color:var(--text-muted)">
         <label class="flex items-center gap-1"><input type="checkbox" id="brnRequiredOnly" onchange="brnRender()"> <span class="brn-t-long">เฉพาะรายการที่ยังไม่ได้นับ</span><span class="brn-t-short">ยังไม่นับ</span></label>
@@ -101,7 +103,7 @@
 
     <div id="brnList" class="card p-3 mb-3"></div>
 
-    <div class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
+    <div id="brnSheetActs" class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div class="flex flex-wrap items-center gap-2">
         <button onclick="brnSave(false)" class="brn-write" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
         <button onclick="brnSave(true)" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลตรวจนับ</button>

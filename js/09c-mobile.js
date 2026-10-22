@@ -240,8 +240,9 @@ function _phState(it) {
   const st = it && it.status;
   return st === 'done' || st === 'na' ? 'done' : (st === 'blocked' ? 'review' : 'todo');
 }
-function _phGroups(items) {
-  const mine = items.filter(i => _phState(i) === 'todo' && _shmMine(i))
+function _phGroups(items, keys) {
+  // PR-U1: the open tasks are the server's (mine_open, the badges' rule); a round whose cutoff is still to come is not a task of today
+  const mine = items.filter(i => _phState(i) === 'todo' && _shmMine(i) && shmIsOpenTask(i, keys || null))
     .sort((a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (a.seq - b.seq));
   const groups = [];
   mine.forEach(i => {                                                    // the same duty for several branches is ONE row naming how many
@@ -265,24 +266,35 @@ async function phLoadTasks() {
   try { todo = await api(`${API}/api/bom-center/todo`); } catch (e) { todo = null; }
   if (seq !== _phTodoSeq) return;
   const ok = !!(todo && Array.isArray(todo.items));
-  _phTodoGroups = ok ? _phGroups(todo.items) : [];
+  const keys = ok ? shmOpenKeys(todo) : null;
+  const role = (window.AUTH && window.AUTH.enabled && window.AUTH.role) || '';
+  const steps = ok && ['analyst', 'salessupport', 'accounting'].includes(role) ? ((todo.close && todo.close.steps) || []) : [];
+  _phTodoGroups = ok ? _phGroups(todo.items.concat(steps), keys) : [];
   if (ok) _phTodoAt = Date.now();
-  const n = _phTodoGroups.length, urgent = _phTodoGroups.some(g => g.urgent);
+  // the count is the number of tasks (the badges' figure); a duty of several branches is one row naming how many
+  const n = keys ? keys.size : _phTodoGroups.length, urgent = _phTodoGroups.some(g => g.urgent);
+  // the next round of a branch (cutoff still to come): one muted line, no dot, no badge
+  const next = ok && kind === 'branch' ? todo.items.filter(i => i.upcoming && i.next_th && _shmMine(i))
+    .sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at))).slice(0, 1) : [];
+  const nextHtml = next.map(i => `<div class="ph-todo ph-todo-next"><span class="ph-todo-main"><span class="ph-todo-d">${esc(i.next_th)}</span></span></div>`).join('');
   if (text) {
     text.textContent = !ok ? 'งานของฉันวันนี้' : n ? `งานของฉันวันนี้ ${n} งาน` : 'ไม่มีงานค้างวันนี้';
     if (dot) { dot.hidden = !ok || !n; dot.classList.toggle('is-urgent', urgent); }
   }
   if (rows) {
     rows.innerHTML = !ok ? '<div class="ph-note">โหลดรายการงานไม่ได้ ลองเปิดหน้าใหม่อีกครั้ง</div>'
-      : !n ? '<div class="ph-note">ไม่มีงานค้างวันนี้</div>'
-      : _phTodoGroups.map((g, i) => {
+      : !n ? '<div class="ph-note">ไม่มีงานค้างวันนี้</div>' + nextHtml
+      : _phGroupsHtml() + nextHtml;
+  }
+}
+function _phGroupsHtml() {
+  return _phTodoGroups.map((g, i) => {
         const it = g.first, go = it.go && it.go.tab && tabAllowed(it.go.tab);
         const who = g.branches.length > 1 ? ` · ${g.branches.length} สาขา` : '';
         const inner = `<span class="ph-dot${g.urgent ? ' is-urgent' : ''}" aria-hidden="true"></span><span class="ph-todo-main"><b>${esc(it.title)}${esc(who)}</b>`
           + (it.detail ? `<span class="ph-todo-d">${esc(it.detail)}</span>` : '') + `</span>${go ? '<span class="ph-chev" aria-hidden="true">›</span>' : ''}`;
         return go ? `<a href="#" class="ph-todo" onclick="phTodoGo(${i});return false">${inner}</a>` : `<div class="ph-todo">${inner}</div>`;
       }).join('');
-  }
 }
 function phTodoGo(i) { const g = _phTodoGroups[i]; if (g && g.first.go) phOpenPage(() => _shmOpen(g.first.go)); }
 // the งานของฉัน entry: หน้างาน for a login with the supply module, else the Daily Brief

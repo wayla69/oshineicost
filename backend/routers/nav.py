@@ -22,7 +22,7 @@ def bc_nav_badges_for(user: str, role: str, branch: str, mods: str):
     with get_db() as con:
         _ensure(con)
         if not _auth.path_allowed("GET", "/api/bom-center/todo", modules):
-            return {"pages": {}, "at": _nb.now_bkk().isoformat(timespec="seconds")}
+            return {"pages": {}, "total": 0, "at": _nb.now_bkk().isoformat(timespec="seconds")}
         return _nb.build(con, role or None, modules, branch or None)
 
 

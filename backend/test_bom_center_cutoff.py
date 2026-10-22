@@ -253,7 +253,8 @@ def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: 
     assert ST.system_position(c, 1, AS_OF)["basis"] is None
     assert [h["kind"] for h in ST.history(c, 1)] == ["spot"]                                # the row is still there to read
     st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
-    assert st["begin_count"]["status"] == "todo"
+    # PR-U1: a spot row is not a start either - the branch has not started, so the close does not ask it yet (neutral, never done)
+    assert st["begin_count"]["status"] != "done" and st["begin_count"]["branches"][0]["not_started"]
     # a month-end import for the same date is accepted, and is the begin
     every = [{"code": it["code"], "qty": 2 if it["code"] == CRAB else 0, "unit": "แพ็ค 1 กก." if it["code"] == CRAB else it["count_unit"], "note": None}
              for z in ST.sheet(c, 1)["zones"] for it in z["items"]]
