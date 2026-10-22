@@ -286,10 +286,10 @@ def test_the_strip_names_the_next_order_due_not_a_tick_for_the_one_that_went():
              _due("1", "todo", far, delivery="2026-10-17"), _due("salmon", "todo", "2999-02-02T13:15:00+07:00", delivery="2026-10-19")]
     order = next(r for r in _strip_rows(items) if r["k"] == "order")
     assert order["ok"] is False and "ส่งแล้ว" not in order["text"]
-    assert "รอบส่ง D 10-17" in order["text"] and "CUT 2999-01-01" in order["text"] and order["text"].endswith("รออีก 1 รอบ")
+    assert "รอบส่งของ D 10-17" in order["text"] and "CUT 2999-01-01" in order["text"] and order["text"].endswith("รออีก 1 รอบ")
     assert order["go"]["extra"]["round"] == "1"                                     # the one whose cutoff comes first
     late = next(r for r in _strip_rows(items + [_due("2b", "todo", "2026-10-12T13:15:00+07:00", late=True)]) if r["k"] == "order")
-    assert late["bad"] is True and "เลยเวลาตัดรอบ" in late["text"]                  # a round past its cutoff comes first
+    assert late["bad"] is True and "เลยเวลาส่ง" in late["text"]                  # a round past its cutoff comes first
     done = next(r for r in _strip_rows([i for i in items if i["status"] == "done"]) if r["k"] == "order")
     assert done["ok"] is True and done["text"] == "ส่งแล้ว"
     none = next(r for r in _strip_rows([items[0]]) if r["k"] == "order")
@@ -424,7 +424,7 @@ def _read_file(rows):
 
 
 def test_the_register_file_may_carry_the_short_name_or_not(reg):
-    head = ["รหัส", "ชื่อวัตถุดิบ", "หน่วยฐาน", "หน่วยรับ", "ขนาดบรรจุ"]
+    head = ["รหัส", "ชื่อวัตถุดิบ", "หน่วยเล็กสุด", "หน่วยรับ", "ขนาดแพ็ค"]
     rows, _sheet, cols = _read_file([head + ["ชื่อสั้น"], ["02-01-001", "ปลาแซลมอน (ชื่อเต็ม)", "กรัม", "กิโลกรัม", 1000, "แซลมอน"],
                                      ["S-777", "เกลือ", "กรัม", "ถุง", 500, None]])
     assert "short_name" in cols and rows[0]["short_name"] == "แซลมอน"
@@ -557,9 +557,9 @@ def test_the_branch_and_ops_read_the_gap_in_words_and_excel_keeps_the_signs():
     for needle in ("bmcGapHtml(t.var_value, t.var_pct, 'issue')", "bmcGapHtml(r.var_value, r.var_pct, 'issue')", "bmcGapHtml(t.diff_value, null, 'count')",
                    "bmcGapParts(x.diff, x.diff_pct, 'count')", "bmcGapHtml(t.gap_value, t.gap_pct, 'use')", "bmcGapHtml(b.gap_value, b.gap_pct, 'use')"):
         assert needle in OHB, needle
-    assert "ผลต่าง <b" not in BRN and "th('ผลต่าง ฿'" not in OHB and "th('ผลต่าง %'" not in OHB          # no signed column left on the screens
+    assert "ส่วนต่าง <b" not in BRN and "th('ส่วนต่าง ฿'" not in OHB and "th('ส่วนต่าง %'" not in OHB          # no signed column left on the screens
     router = _src("backend/routers/bom_center.py")
-    assert '"ผลต่าง (มูลค่า)"' in router and '"ผลต่าง %"' in router                                     # the Excel files keep the signed numbers
+    assert '"ส่วนต่าง (มูลค่า)"' in router and '"ส่วนต่าง %"' in router                                     # the Excel files keep the signed numbers
 
 
 import pytest as _pytest_s3  # noqa: E402

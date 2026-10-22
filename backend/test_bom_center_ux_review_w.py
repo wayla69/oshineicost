@@ -9,7 +9,7 @@ The promises (the server side of them; the screens are checked in the browser):
   * a line received by weight (a whole salmon) takes the WEIGHT weighed as its quantity: up to 3 % below the weight sent is no
     shortage (no reason, no claim); more needs a reason and becomes a claim; more than sent is accepted; the pieces are counted
     against the weight weighed, so the learned average is the branch's own;
-  * the "ขนาดบรรจุไม่ตรง" form starts at the next unit down of the item's ladder (กล่อง -> แพ็ค), never the bare base unit.
+  * the "ขนาดแพ็คไม่ตรง" form starts at the next unit down of the item's ladder (กล่อง -> แพ็ค), never the bare base unit.
 """
 import pytest
 
@@ -165,7 +165,7 @@ def test_exactly_three_percent_is_still_within(av):  # noqa: F811
 def test_a_weight_more_than_three_percent_below_is_a_short_line_that_needs_a_reason_and_becomes_a_claim(av):  # noqa: F811
     oid, q = _sent(av)
     w = round(q * 0.96, 4)
-    with pytest.raises(ValueError, match="เลือกสาเหตุของส่วนต่าง"):
+    with pytest.raises(ValueError, match="เลือกสาเหตุที่ขาด"):
         OR.receive(av, 1, oid, [{"code": CODE, "weight": w, "pieces": 2}], "udon", ack=True)
     av.rollback()
     assert OR.detail(av, oid)["status"] == "processed"                                                       # nothing was saved
@@ -223,7 +223,7 @@ def test_the_weight_is_refused_when_it_is_not_a_number_or_the_item_is_not_receiv
 
 def test_a_line_without_a_weight_keeps_the_old_strict_rule(av):  # noqa: F811
     oid, q = _sent(av)
-    with pytest.raises(ValueError, match="เลือกสาเหตุของส่วนต่าง"):                                        # 2 % short by quantity alone is still a shortage
+    with pytest.raises(ValueError, match="เลือกสาเหตุที่ขาด"):                                        # 2 % short by quantity alone is still a shortage
         OR.receive(av, 1, oid, [{"code": CODE, "received_units": round(q * 0.98, 4), "pieces": 2}], "udon", ack=True)
 
 

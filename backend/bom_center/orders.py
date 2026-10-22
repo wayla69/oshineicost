@@ -36,7 +36,7 @@ from .units import Converter, unit_word
 
 WEIGHT_TOLERANCE_PCT = 3.0    # PR-W: a line received by WEIGHT (a whole fish) that weighs up to this much less than what was sent is no shortage
 DEVIATION_PCT = 20.0          # a confirmed quantity further than this from the suggestion needs a reason
-REASONS = (("stock_more", "คงเหลือจริงมากกว่าตามระบบ"), ("stock_less", "คงเหลือจริงน้อยกว่าตามระบบ"),
+REASONS = (("stock_more", "ของที่มีจริงมากกว่าในระบบ"), ("stock_less", "ของที่มีจริงน้อยกว่าในระบบ"),
            ("event", "มีงาน / โปรโมชัน / ลูกค้าจองกลุ่ม"), ("space", "พื้นที่จัดเก็บไม่เพียงพอ"),
            ("quality", "สินค้าล็อตก่อนเสีย / คุณภาพไม่ดี"), ("pack", "ขนาดแพ็ค / ขั้นต่ำผู้จำหน่าย"),
            ("other", "อื่น ๆ"))
@@ -82,7 +82,7 @@ class LateSubmit(ValueError):
 
     def __init__(self, cutoff_at: str, cutoff_th: str):
         self.cutoff_at, self.cutoff_th = cutoff_at, cutoff_th
-        super().__init__(f"เลยเวลาตัดรอบ ({cutoff_th}) ส่งตอนนี้มีค่าปรับล่าช้า · ยืนยันส่ง?")
+        super().__init__(f"เลยเวลาส่ง ({cutoff_th}) ส่งตอนนี้มีค่าปรับ · ส่งต่อหรือไม่?")
 
 
 def backfill(con) -> None:
@@ -240,7 +240,7 @@ def _receive_fields(con, o: dict) -> None:
 
 
 STATUS_TH = {"suggested": "ร่าง (ยังไม่ส่ง)", "confirmed": "ร่าง (ยังไม่ส่ง)", "submitted": "ส่งแล้ว (รอคลังจัดส่ง)",
-             "processed": "คลังจัดส่งแล้ว", "received": "รับสินค้าแล้ว", "cancelled": "ยกเลิก"}
+             "processed": "คลังจัดส่งแล้ว", "received": "รับของแล้ว", "cancelled": "ยกเลิก"}
 
 
 def _needs_reason(sugg, conf) -> bool:
@@ -384,11 +384,11 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
     if submit:
         if missing:
             names = sorted({_item(con, c) for c in missing})      # PR-U1: the names the branch reads, never the codes
-            raise ValueError(f"ต้องระบุเหตุผล {len(names)} รายการก่อนส่ง (สั่งต่างจากยอดแนะนำเกิน {DEVIATION_PCT:g}%): " + ", ".join(names[:5]))
+            raise ValueError(f"ต้องระบุเหตุผล {len(names)} รายการก่อนส่ง (สั่งต่างจากจำนวนที่ควรสั่งเกิน {DEVIATION_PCT:g}%): " + ", ".join(names[:5]))
         if not con.execute("SELECT 1 FROM bc_order_line WHERE order_id=? AND confirmed_units>0", (oid,)).fetchone():
             raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
         if not _is.is_confirmed(slip_today):                # ใบตัดเบิก: the order is made from the stock AFTER today's issue
-            raise ValueError("ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ")
+            raise ValueError("ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ")
         late = _now_for(None, now) > cut
         if late and not ack_late:
             raise LateSubmit(cut.isoformat(), cutoff_th(cut))
@@ -421,7 +421,7 @@ def reopen(con, branch_id: int, order_id: int, who: str):
     if not o or o["branch_id"] != branch_id:
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] != "submitted":
-        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและคลังยังไม่ยืนยันยอดส่ง (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+        raise ValueError(f"เปิดแก้ไขได้เฉพาะใบสั่งซื้อที่ส่งแล้วและคลังยังไม่บันทึกจำนวนที่ส่ง (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     con.execute("UPDATE bc_order SET status='suggested', submitted_at=NULL, late=0 WHERE order_id=?", (order_id,))
     audit(con, who, "order_reopen", "bc_order", str(order_id))
 
@@ -463,9 +463,9 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
     if not o or o["branch_id"] != branch_id:
         raise ValueError("ไม่พบใบสั่งซื้อของสาขานี้")
     if o["status"] not in ("submitted", "processed"):
-        raise ValueError(f"รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
+        raise ValueError(f"รับของได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {STATUS_TH.get(o['status'])})")
     if not ack:
-        raise ValueError("ทำเครื่องหมายยืนยันการตรวจสินค้าก่อนบันทึก")
+        raise ValueError("ติ๊ก “ตรวจสภาพและจำนวนครบแล้ว” ก่อนบันทึก")
     got = {}
     for ln in lines or []:
         c = (ln.get("code") or "").strip()
@@ -522,7 +522,7 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
             continue                          # PR-W: booked at the weight received, no reason and no claim
         if gap > 1e-9:
             if reason not in _cl.REASON_TH:
-                raise ValueError(f"{_item(con, c)}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุของส่วนต่าง")
+                raise ValueError(f"{_item(con, c)}: รับจริงน้อยกว่าที่คลังส่ง ({sent[c]:g}) · เลือกสาเหตุที่ขาด")
             if reason == "other" and not note:
                 raise ValueError(f"{_item(con, c)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
             short.append({"code": c, "claim_units": round(gap, 6), "reason": reason, "note": note,

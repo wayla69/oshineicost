@@ -101,7 +101,7 @@ def test_the_bottom_navigation_per_role():
     def labels(role):
         return [i["label"] for i in _node(_nav_prelude(role), "_phNavItems()")]
     assert labels("management") == labels("analyst") == labels("salessupport") == ["หน้าแรก", "งานของฉัน", "ค้นหา", "ฉัน"]
-    assert labels("branch") == ["หน้าแรก", "ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ฉัน"]
+    assert labels("branch") == ["หน้าแรก", "ตัดเบิก", "สั่งของ", "รับของ", "ฉัน"]
     assert labels("franchise") == ["หน้าแรก", "ฉัน"]
     panes = [(i.get("tab"), i.get("pane")) for i in _node(_nav_prelude("branch"), "_phNavItems()")]
     assert panes[1:4] == [("branchstock", "issue"), ("branchstock", "order"), ("branchstock", "recv")]
@@ -202,11 +202,11 @@ def test_the_branch_and_franchise_homes_have_their_own_bottom_navigation(live_se
             tiles: [...document.querySelectorAll('#phv-home .ph-bigtile-n')].map(e => e.textContent), todo: document.getElementById('phTodoH').textContent,
             picker: document.querySelectorAll('#phHome select').length })""")
         assert home["title"] == "BranchA" and home["picker"] == 0 and home["todo"] == "ต้องทำวันนี้"
-        assert home["nav"] == ["หน้าแรก", "ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ฉัน"]
-        assert home["tiles"] == ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]
-        page.locator("#phNav .ph-nav-i:has(span:text-is('สั่งสินค้า'))").click()
+        assert home["nav"] == ["หน้าแรก", "ตัดเบิก", "สั่งของ", "รับของ", "ฉัน"]
+        assert home["tiles"] == ["ตัดเบิก", "สั่งของ", "รับของ", "ส่วนต่างการใช้", "นับของสิ้นเดือน"]
+        page.locator("#phNav .ph-nav-i:has(span:text-is('สั่งของ'))").click()
         page.wait_for_function("_phView === 'page' && activeTab === 'branchstock' && _SUPPLY_PANE.branchstock.get() === 'order'", timeout=60000)
-        assert page.evaluate("document.querySelector('#phNav .ph-nav-i.active span').textContent.trim()") == "สั่งสินค้า"
+        assert page.evaluate("document.querySelector('#phNav .ph-nav-i.active span').textContent.trim()") == "สั่งของ"
         assert not errors, errors
         ctx.close()
         ctx, page, errors = _phone(b, base, "own_ph_b", "Temp@12345")

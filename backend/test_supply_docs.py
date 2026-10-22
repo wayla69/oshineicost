@@ -161,7 +161,7 @@ def test_the_close_has_nine_steps_in_the_manual():
 
 def test_the_branch_flow_of_the_manual_names_the_phone_screens():
     block = re.search(r'id="manualBranchFlow".*?</ol>', MANUAL, re.S).group(0)
-    for w in ("ยืนยันใบตัดเบิก", "ส่งใบสั่งซื้อ", "รับครบ", "มีรายการไม่ครบ", "บันทึกรับสินค้า", "แจ้งเคลม", "ส่งผลตรวจนับ", "ยืนยันรับสินค้าครบ"):
+    for w in ("ส่งใบตัดเบิก", "ส่งใบสั่งซื้อ", "รับครบ", "มีรายการไม่ครบ", "บันทึกรับของ", "แจ้งของขาด/เสีย", "ส่งผลนับ", "แจ้งว่าบันทึกรับของครบ"):
         assert w in block, w
 
 
@@ -245,12 +245,12 @@ def _load(name):
 def test_the_branch_handout_carries_the_daily_rule_and_the_receive_question():
     HO = _load("branch_handout")
     txt = HO.message("อุดรธานี", "wh_udon", "PW-X")
-    for w in ("ใบตัดเบิก", "ยืนยันใบตัดเบิกของวันนี้ก่อน", "13:15", "รับครบ", "มีรายการไม่ครบ", "ส่งใบสั่งซื้อ", "ยืนยัน", "หน้าแรก · ตัดเบิก · สั่งสินค้า · รับสินค้า · ฉัน", "ตรวจนับ"):
+    for w in ("ใบตัดเบิก", "ส่งใบตัดเบิกของวันนี้ก่อน", "13:15", "รับครบ", "มีรายการไม่ครบ", "ส่งใบสั่งซื้อ", "เวลาส่งสุดท้าย", "หน้าแรก · ตัดเบิก · สั่งของ · รับของ · ฉัน", "นับของ"):
         assert w in txt, w
     for w in ("ปล่อย", "token", "Sales Support", "ส่วนกลาง"):
         assert w not in txt, w
     card = HO.card("อุดรธานี", "wh_udon", "PW-X")
-    assert "ตัดเบิก" in card and "ยืนยัน" in card and "รับครบ" in card
+    assert "ตัดเบิก" in card and "ส่งใบตัดเบิก" in card and "รับครบ" in card
 
 
 def test_the_owner_handout_names_the_cards_and_the_guide():
@@ -317,9 +317,9 @@ def test_the_overhaul_document_has_the_department_section_and_the_d_rows():
         assert re.search(rf"\| {pr} \|", doc), pr
 
 
-def test_the_sop_is_version_1_19_with_a_revision_row_and_the_page_locations():
+def test_the_sop_is_version_1_20_with_a_revision_row_and_the_page_locations():
     sop = (REPO / "docs" / "sop" / "WP-SCM-001_ingredient_order_procedure.html").read_text(encoding="utf-8")
-    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.19 /", sop)      # PR-SI: 1.19 (23 ต.ค. 2026) adds the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
+    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.20 /", sop)      # PR-PW: 1.20 (23 ต.ค. 2026) is the everyday-words pass; 1.19 added the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
     assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.18</td><td>22 ต\.ค\. 2026</td>", sop)
-    assert re.search(r"<tr><td>1\.19</td><td>23 ต\.ค\. 2026</td>", sop)
+    assert re.search(r"<tr><td>1\.19</td><td>23 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.20</td><td>23 ต\.ค\. 2026</td>", sop)
     assert "ตำแหน่งของหน้าในแอป" in sop and "ปฏิบัติการ → การใช้งานทุกสาขา" in sop

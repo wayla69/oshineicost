@@ -101,14 +101,14 @@ def test_the_log_names_how_each_day_was_handled(con):  # noqa: F811
     rows = {r["date"]: r for r in lg["rows"]}
     assert [r["date"] for r in lg["rows"]] == sorted(rows, reverse=True) and len(rows) == 10          # every trading day
     d4 = rows["2026-09-04"]
-    assert (d4["status"], d4["status_th"], d4["slip_id"], d4["lines"]) == ("on_time", "ยืนยันตรงวัน", sid, 1)
+    assert (d4["status"], d4["status_th"], d4["slip_id"], d4["lines"]) == ("on_time", "ส่งตรงวัน", sid, 1)
     assert (d4["reopens"], d4["reconfirms"], d4["confirmed_at"], d4["confirmed_by"]) == (1, 1, "2026-09-05 10:00", "udon")
     assert d4["reopen_notes"][0]["note"] == "ใส่จำนวนผิด" and d4["reopen_notes"][0]["who"] == "ss"
     assert d4["note"] == "2026-09-05 09:00 ss: ใส่จำนวนผิด" and d4["weekday_th"] == "ศุกร์"
     assert rows["2026-09-06"]["status"] == "on_time" and rows["2026-09-06"]["reopens"] == 0 and rows["2026-09-06"]["claims"] == 1
     assert rows["2026-09-07"]["status"] == "draft" and rows["2026-09-07"]["confirmed_at"] is None
     d8 = rows["2026-09-08"]
-    assert (d8["status"], d8["status_th"], d8["late"], d8["status_note"]) == ("late", "ล่าช้า", 1, "ยืนยันหลังวันที่ของใบ")
+    assert (d8["status"], d8["status_th"], d8["late"], d8["status_note"]) == ("late", "ส่งช้า", 1, "ส่งหลังวันที่ของใบ")
     assert d8["confirmed_at"] == "2026-09-09 21:00"
     assert rows["2026-09-05"]["status"] == "missing" and rows["2026-09-05"]["late_orders"] == 1
     assert rows["2026-09-10"]["status"] == "missing"
@@ -163,7 +163,7 @@ def test_a_posted_period_locks_the_slips_inside_it(con):  # noqa: F811
     ok = IS.save(con, 1, "2026-10-01", [g(CRAB, 1)], "udon", submit=True, now=at(2, 21, 10))
     assert ok["status"] == "confirmed"
     # the PR-F receipt lock still reads the same, with the same cause
-    with pytest.raises(ValueError, match=r"ใบรับสินค้าวันที่ 20/9/2026 อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
+    with pytest.raises(ValueError, match=r"ใบรับของวันที่ 20/9/2026 อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
         VA.add_receipt(con, 1, "2026-09-20", [{"code": CRAB, "qty": 1, "unit": "กรัม"}], "udon")
     VA.add_receipt(con, 1, "2026-10-02", [{"code": CRAB, "qty": 1, "unit": "กรัม"}], "udon")
     with pytest.raises(ValueError, match="อยู่ในงวดที่บัญชีบันทึกใบสรุปตัดเบิกแล้ว"):
@@ -203,7 +203,7 @@ def test_the_centre_follows_up_missing_slips_and_over_issue(udon):  # noqa: F811
     assert an["go"] == {"tab": "orderhub", "pane": "issuevar", "branch": 1} and an["count"] == 1
     # the morning message names both
     text = RM.morning(c, today=date(2026, 9, 6))["text"]
-    assert "<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน 1 สาขา · อุดรธานี" in text
+    assert "<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ส่ง 1 สาขา · อุดรธานี" in text
     assert "<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินสูตรมากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี (แซลมอน)" in text
     # a week later the streak is out of the window: done, and no Ops line
     later = items(date(2026, 9, 20), at(20, 8))["issue_anomaly"]
@@ -277,7 +277,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         assert list(summ[1]) == SLIP_SUMMARY_HEADERS and summ[2][:7] == ("BranchA", 1, 0, 1, 13.75, 5.0, 18.75)
         assert summ[3][0] == "รวม"
         r = acc.get("/api/bom-center/issues/export.xlsx?month=2026-08")
-        assert r.status_code == 400 and "ยังไม่มีใบตัดเบิกที่ยืนยันแล้วในเดือน 2026-08" in r.json()["detail"]
+        assert r.status_code == 400 and "ยังไม่มีใบตัดเบิกที่ส่งแล้วในเดือน 2026-08" in r.json()["detail"]
         assert acc.get("/api/bom-center/issues/export.xlsx?month=bad").status_code == 400
         assert acc.get("/api/bom-center/issues/export.xlsx").status_code == 400
         # branch pinning
@@ -293,7 +293,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         one = load_workbook(io.BytesIO(r.content))
         assert one.sheetnames == ["ใบตัดเบิก"] and len(list(one.worksheets[0].iter_rows())) == 3
         r = ss.get(f"/api/bom-center/issues/export/{draft}.xlsx")
-        assert r.status_code == 400 and "ใบตัดเบิกนี้ยังไม่ยืนยัน จึงยังส่งออกไม่ได้" in r.json()["detail"]
+        assert r.status_code == 400 and "ใบตัดเบิกนี้ยังไม่ส่ง จึงยังส่งออกไม่ได้" in r.json()["detail"]
         assert ss.get("/api/bom-center/issues/export/99999.xlsx").status_code == 404
         # the log
         j = acc.get("/api/bom-center/issue-reports/log?date_from=2026-09-01&date_to=2026-09-10&branch_id=1").json()
@@ -310,7 +310,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         assert wb.sheetnames == ["บันทึกความล่าช้า", "สรุปต่อสาขา"]
         lr = list(wb["บันทึกความล่าช้า"].iter_rows(values_only=True))
         assert list(lr[1]) == LOG_HEADERS and [x[0] for x in lr[2:]] == ["2026-09-07", "2026-09-08"]       # oldest first
-        assert lr[2][2] == "ยืนยันตรงวัน" and lr[3][2] == "ยังไม่ยืนยัน" and lr[3][10] == "มีร่างแล้ว ยังไม่ยืนยัน"
+        assert lr[2][2] == "ส่งตรงวัน" and lr[3][2] == "ยังไม่ส่ง" and lr[3][10] == "มีร่างแล้ว ยังไม่ส่ง"
         sr = list(wb["สรุปต่อสาขา"].iter_rows(values_only=True))
         assert list(sr[1]) == LOG_SUMMARY_HEADERS and sr[2][:8] == ("BranchA", 2, 1, 0, 1, 0, 100.0, 50.0) and sr[3][0] == "รวม"
         r = ss.get("/api/bom-center/issue-reports/log.xlsx?date_from=2026-09-01&date_to=2026-09-10")
@@ -330,7 +330,7 @@ def test_http_exports_log_and_the_reopen_lock(client, app_db, auth_on):  # noqa:
         wb = load_workbook(io.BytesIO(r.content))
         assert wb.sheetnames == ["ใบตัดเบิกรายวัน", "กระทบยอด", "สรุปเคลื่อนไหว"]
         first = list(wb["ใบตัดเบิกรายวัน"].iter_rows(values_only=True))
-        assert list(first[1]) == SLIP_EXPORT_HEADERS and [x[2] for x in first[2:]] == ["T-ISS1"] and "ยืนยันแล้ว 1/2 วันขาย" in first[0][0]
+        assert list(first[1]) == SLIP_EXPORT_HEADERS and [x[2] for x in first[2:]] == ["T-ISS1"] and "ส่งแล้ว 1/2 วันขาย" in first[0][0]
         assert list(next(wb["กระทบยอด"].iter_rows(min_row=2, max_row=2, values_only=True))) == RECON_HEADERS
         j = acc.get(f"/api/bom-center/issue-summary?end_count_id={e1}&branch_id=1").json()
         assert j["slips"]["trading_days"] == 2 and j["slips"]["confirmed_days"] == 1 and j["slips"]["draft_days"] == ["2026-09-08"]

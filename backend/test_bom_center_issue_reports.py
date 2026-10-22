@@ -172,7 +172,7 @@ def test_daily_numbers_and_the_three_day_flag(con):  # noqa: F811
     d = IR.daily(con, 1, "2026-09", today=TODAY)
     assert d["branch"]["branch_id"] == 1 and d["month"] == "2026-09" and len(d["rows"]) == 30        # every trading day of September
     r1 = d["rows"][0]
-    assert (r1["date"], r1["weekday_th"], r1["slip_status"], r1["slip_status_th"]) == ("2026-09-01", "อังคาร", "on_time", "ยืนยันตรงวัน")
+    assert (r1["date"], r1["weekday_th"], r1["slip_status"], r1["slip_status_th"]) == ("2026-09-01", "อังคาร", "on_time", "ส่งตรงวัน")
     assert r1["used_value"] == pytest.approx(450 * 0.15 + 260 * 0.3714, abs=0.01) and r1["waste_value"] == 0
     assert r1["bom_value"] == pytest.approx(450 * 0.15 + 200 * 0.3714, abs=0.01)                          # 141.78
     assert r1["issued_value"] == pytest.approx(164.06, abs=0.01) and r1["var_value"] == pytest.approx(22.28, abs=0.01)
@@ -228,7 +228,7 @@ def test_a_late_slip_and_the_open_day(con):  # noqa: F811
     d = IR.daily(con, 1, "2026-09", today=TODAY)
     r = next(x for x in d["rows"] if x["date"] == "2026-09-02")     # PR-U1: the days before the branch's first slip are not listed
     assert d["rows"][0]["date"] == "2026-09-02"
-    assert r["slip_status"] == "late" and r["slip_status_th"] == "ล่าช้า" and r["late"] == 1 and d["totals"]["late_days"] == 1
+    assert r["slip_status"] == "late" and r["slip_status_th"] == "ส่งช้า" and r["late"] == 1 and d["totals"]["late_days"] == 1
     # the current month: today is listed only once it has a slip, a day with sales but no slip stays "ไม่มีใบ"
     oct_ = IR.daily(con, 1, "2026-10", today=date(2026, 10, 4))
     assert [r["date"] for r in oct_["rows"]] == ["2026-10-01", "2026-10-02", "2026-10-03"]
@@ -288,7 +288,7 @@ def test_reconcile_numbers_status_reason_and_totals(con):  # noqa: F811
     assert crab["movement"] == 8 and crab["movement_gap"] == 2                                          # the counts say 8 left; slips say 6
     # batch 4b (3.3): 27 selling days of the period have no confirmed slip - the system stock cannot be judged, so the line is labelled, not asked
     assert crab["data_incomplete"] is True and crab["incomplete_why"] == "slips" and crab["needs_reason"] is False and "reason" not in crab
-    assert (veg["status"], veg["status_th"], veg["count"], veg["system"], veg["diff"]) == ("not_counted", "ตรวจนับไม่ครบ", None, 100, None)
+    assert (veg["status"], veg["status_th"], veg["count"], veg["system"], veg["diff"]) == ("not_counted", "นับของไม่ครบ", None, 100, None)
     assert veg["needs_reason"] is False
     t = r["totals"]
     assert (t["lines"], t["flagged"], t["needs_reason"], t["not_counted"], t["unpriced"]) == (2, 1, 0, 1, 0)
@@ -302,7 +302,7 @@ def test_reconcile_numbers_status_reason_and_totals(con):  # noqa: F811
     con.commit()
     r2 = IR.reconcile(con, 1, end)
     crab2 = r2["rows"][0]
-    assert crab2["reason"] == "miscount" and crab2["reason_th"] == "ตรวจนับผิด" and crab2["needs_reason"] is False
+    assert crab2["reason"] == "miscount" and crab2["reason_th"] == "นับของผิด" and crab2["needs_reason"] is False
     assert crab2["status"] == "under" and r2["totals"]["needs_reason"] == 0 and r2["totals"]["flagged"] == 1
     # the confirmation state comes from bc_variance_period
     VA.confirm_receipts(con, 1, end, "udon")
@@ -387,16 +387,16 @@ def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_
         r = br.post("/api/bom-center/variance/reason", headers=TOKEN, json={"end_count_id": e1, "code": "T-ISS1", "reason": "miscount"})
         assert r.status_code == 200, r.text
         j = br.get(f"/api/bom-center/issue-reports/reconcile?end_count_id={e1}").json()
-        assert j["totals"]["needs_reason"] == 0 and next(x for x in j["rows"] if x["code"] == "T-ISS1")["reason_th"] == "ตรวจนับผิด"
+        assert j["totals"]["needs_reason"] == 0 and next(x for x in j["rows"] if x["code"] == "T-ISS1")["reason_th"] == "นับของผิด"
         r = acc.get(f"/api/bom-center/issue-reports/reconcile.xlsx?end_count_id={e1}&branch_id=1")
-        assert r.status_code == 200 and dl_name(r).startswith("กระทบยอด_") and dl_name(r).endswith("_2026-09.xlsx")
+        assert r.status_code == 200 and dl_name(r).startswith("เทียบของ_") and dl_name(r).endswith("_2026-09.xlsx")
         ws = load_workbook(io.BytesIO(r.content)).worksheets[0]
         rows = list(ws.iter_rows(values_only=True))
-        assert ws.title == "กระทบยอด" and list(rows[1]) == RECON_HEADERS and len(RECON_HEADERS) == 19
+        assert ws.title == "เทียบของ" and list(rows[1]) == RECON_HEADERS and len(RECON_HEADERS) == 19
         assert rows[0][0].startswith("รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขาBranchA งวด 2026-09-01 ถึง 2026-10-01 (เดือน 2026-09)")
-        assert "ใบตัดเบิกยืนยันแล้ว 1/2 วัน" in rows[0][0]
+        assert "ใบตัดเบิกส่งแล้ว 1/2 วัน" in rows[0][0]
         row = next(x for x in rows[2:] if x[0] == "T-ISS1")
-        assert row[4:15] == (10, 5, 0, 5.5, 0, 9.5, 6, -3.5, -8.75, -36.8, "นับได้น้อยกว่าระบบ") and row[15] == "ตรวจนับผิด"
+        assert row[4:15] == (10, 5, 0, 5.5, 0, 9.5, 6, -3.5, -8.75, -36.8, "นับได้น้อยกว่าระบบ") and row[15] == "นับของผิด"
         # daily
         j = acc.get("/api/bom-center/issue-reports/daily?branch_id=1&month=2026-09").json()
         assert [r["date"] for r in j["rows"]] == ["2026-09-07", "2026-09-08"]
@@ -412,13 +412,13 @@ def test_http_reports_headers_workbooks_and_branch_pinning(client, app_db, auth_
         assert dd["slip"]["key"] == "on_time" and dd["rows"][0]["code"] == "T-ISS1" and dd["rows"][0]["var_pct"] == 10.0
         assert ss.get("/api/bom-center/issue-reports/daily/day?branch_id=1&day=7-9").status_code == 400
         r = ss.get("/api/bom-center/issue-reports/daily.xlsx?branch_id=1&month=2026-09")
-        assert r.status_code == 200 and dl_name(r).startswith("ผลต่างตัดเบิกรายวัน_") and dl_name(r).endswith("_2026-09.xlsx")
+        assert r.status_code == 200 and dl_name(r).startswith("ส่วนต่างตัดเบิกรายวัน_") and dl_name(r).endswith("_2026-09.xlsx")
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["ผลต่างตัดเบิกรายวัน", "รายการต่อวัน"]
-        assert list(next(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS and len(DAILY_HEADERS) == 11
+        assert wb.sheetnames == ["ส่วนต่างตัดเบิกรายวัน", "รายการต่อวัน"]
+        assert list(next(wb["ส่วนต่างตัดเบิกรายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS and len(DAILY_HEADERS) == 11
         assert list(next(wb["รายการต่อวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_ITEM_HEADERS and len(DAILY_ITEM_HEADERS) == 14
-        first = list(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
-        assert first[:9] == ("2026-09-07", "จันทร์", "ยืนยันตรงวัน", 13.75, 0, 13.75, 12.5, 1.25, 10.0)
+        first = list(wb["ส่วนต่างตัดเบิกรายวัน"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        assert first[:9] == ("2026-09-07", "จันทร์", "ส่งตรงวัน", 13.75, 0, 13.75, 12.5, 1.25, 10.0)
         # the cache was written by the reads, and a release-side write clears it
         cc = sqlite3.connect(str(main.DB_PATH))
         assert cc.execute("SELECT COUNT(*) FROM bcd_demand_day_meta WHERE branch_id=1").fetchone()[0] == 2

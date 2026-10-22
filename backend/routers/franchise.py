@@ -440,7 +440,7 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
             else:
                 add("watch", f"วัตถุดิบรอบนับล่าสุด{word}ร้อยละ {_pct_text(p)} (฿{abs(lp.get('diff_value') or 0):,.0f})")
         if ing.get("streak_flag"):
-            base = "ปกติของสาขาหรือค่ากลางทุกสาขา" if ing.get("stock_mode") else "สูตร"
+            base = "ที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขา" if ing.get("stock_mode") else "สูตร"
             add("fix", f"มีวัตถุดิบหลักที่เบิกเกิน{base}ติดต่อกันหลายวัน ({ing['streak_days']} วันในเดือนนี้) ควรตรวจสอบหน้างาน")
         w = ing.get("waste_pct_month")
         if w is not None:
@@ -467,7 +467,7 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
             if o >= T_ORD_GOOD:
                 add("good", f"ใบสั่งซื้อส่งทันเวลาตัดรอบร้อยละ {_pct_text(o)}")
             elif o < T_ORD_FIX:
-                add("fix", f"ใบสั่งซื้อส่งทันเวลาตัดรอบเพียงร้อยละ {_pct_text(o)} การส่งล่าช้ามีค่าปรับ ควรแจ้งทีมสาขา")
+                add("fix", f"ใบสั่งซื้อส่งทันเวลาตัดรอบเพียงร้อยละ {_pct_text(o)} การส่งช้ามีค่าปรับ ควรแจ้งทีมสาขา")
             elif o < T_ORD_WATCH:
                 add("watch", f"ใบสั่งซื้อส่งทันเวลาตัดรอบร้อยละ {_pct_text(o)}")
         r = disc.get("receipts_on_time")

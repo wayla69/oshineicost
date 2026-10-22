@@ -20,7 +20,7 @@ def test_the_endpoints_answer_and_refuse(client):
     assert client.post("/api/bom-center/stock/partial-close?branch_id=1", json={"month": "2026-13"}).status_code == 400
     for m in ("2026-09", "2026-10"):                                                       # withdrawn 2026-10-13: no month is closed on a partial count
         x = client.post("/api/bom-center/stock/partial-close?branch_id=1", json={"month": m})
-        assert x.status_code == 400 and "ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ" in x.json()["detail"]
+        assert x.status_code == 400 and "ปิดเดือนต้องนับของครบทุกรายการ" in x.json()["detail"]
     b = client.get("/api/bom-center/backlog?top=3").json()
     assert set(b) >= {"window", "items", "top", "counts", "total", "kind_th", "note"} and len(b["top"]) <= 3
     assert client.get("/api/bom-center/feedback").json() == {"tasks": []}

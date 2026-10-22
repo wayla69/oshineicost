@@ -697,7 +697,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = HISTORY
                         "message": _ps.NEED_SALES_TH if exp <= 0 else ""}
             k = len(rb.get("branches") or [])
             fallback = {"mode": "benchmark", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS, "branches": k,
-                        "message": f"ยอดแนะนำจากค่ากลาง {k} สาขา (ใบตัดเบิกของสาขา {n_slip}/{SLIP_MIN_DAYS} วัน)"}
+                        "message": f"จำนวนที่ควรสั่งจากค่ากลาง {k} สาขา (ใบตัดเบิกของสาขา {n_slip}/{SLIP_MIN_DAYS} วัน)"}
             sales_normal = None
             if exp > 0:
                 use, ps_items = rb["use"], rb["items"]

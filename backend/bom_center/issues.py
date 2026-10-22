@@ -7,8 +7,8 @@ the slip. The system stock after a day's issue is
 
     last month-end count + goods received − confirmed slips
 
-and it is the basis of the order suggestion (orders.plan). The month-end count (ต้นงวด /
-ปลายงวด) stays, to compare the slips with what really moved.
+and it is the basis of the order suggestion (orders.plan). The month-end count (นับครั้งแรก /
+นับสิ้นเดือน) stays, to compare the slips with what really moved.
 
 Rules (shared by every PR of the series):
   * one slip per branch per day (UNIQUE branch_id, slip_date); a draft is saved as often as
@@ -41,7 +41,7 @@ from .units import Converter
 
 WASTE_REASONS = _reasons("waste", "expired", "spill", "prep_loss", "other")      # fmt.REASON_LABEL: the words variance uses too
 WASTE_REASON_TH = dict(WASTE_REASONS)
-STATUS_TH = {"confirmed": "ยืนยันแล้ว", "late": "ยืนยันล่าช้า", "draft": "ร่าง", "missing": "ยังไม่บันทึก"}
+STATUS_TH = {"confirmed": "ส่งแล้ว", "late": "ส่งช้า", "draft": "ร่าง", "missing": "ยังไม่บันทึก"}
 MAX_BACKDATE_DAYS = 60
 RECENT_DAYS = 14               # an item issued on a CONFIRMED slip in this many days before the day is "recent" (listed first)
 
@@ -397,7 +397,7 @@ def save(con, branch_id: int, slip_date, lines: list, who: str, submit: bool = F
     iso = d.isoformat()
     row = _row(con, branch_id, iso)
     if row and row["status"] == "confirmed":
-        raise ValueError(f"ใบตัดเบิกวันที่ {_fmt_day(iso)} ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข")
+        raise ValueError(f"ใบตัดเบิกวันที่ {_fmt_day(iso)} ส่งแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข")
     clean, bad = _clean_lines(con, lines)
     created = False
     if not row:
@@ -460,7 +460,7 @@ def append(con, branch_id: int, slip_date, lines: list, who: str, now: datetime 
     iso = d.isoformat()
     row = _row(con, branch_id, iso)
     if not row or row["status"] != "confirmed" or d != _day(now):
-        raise ValueError("เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว")
+        raise ValueError("เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว")
     assert_not_posted(con, branch_id, iso, "ใบตัดเบิก")
     clean, bad = _clean_lines(con, lines, whole_up=True)
     if bad:
@@ -517,7 +517,7 @@ def reopen(con, slip_id: int, who: str, note: str, now: datetime = None) -> dict
     if not row:
         raise ValueError("ไม่พบใบตัดเบิก")
     if row["status"] != "confirmed":
-        raise ValueError("เปิดแก้ไขได้เฉพาะใบตัดเบิกที่ยืนยันแล้ว")
+        raise ValueError("เปิดแก้ไขได้เฉพาะใบตัดเบิกที่ส่งแล้ว")
     from .variance import assert_not_posted
     assert_not_posted(con, row["branch_id"], row["slip_date"], "ใบตัดเบิก")     # Accounting has keyed this period
     note = (note or "").strip()

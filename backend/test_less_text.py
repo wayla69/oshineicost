@@ -170,7 +170,7 @@ def test_the_explanations_keep_their_facts():
     bmc, brn = _src("tabs/52-bomcenter.html"), _src("tabs/53-branchstock.html")
     for fact in ("BF_459NET ถึง BF_1,299NET", "13:15 สองวันก่อนวันส่ง", "ประกาศใช้ภายในวันที่ 25", "ตั้งหลายสาขาพร้อมกัน", "ปรับยอดซื้อตามสัดส่วนวัน"):
         assert fact in bmc, fact
-    for fact in ("ตรวจนับสิ้นเดือน", "ใช้น้อยกว่าสูตร", "ยืนยันรับสินค้าครบ"):
+    for fact in ("นับของสิ้นเดือน", "ใช้น้อยกว่าสูตร", "แจ้งว่าบันทึกรับของครบ"):
         assert fact in brn, fact
     assert "มติเจ้าของ 13/10/2026" in _src("js/13-bom-center.js")
     assert "คลังระบุยอดส่งจริงภายใน 14:00" in _src("js/15-orderhub.js")
@@ -315,7 +315,7 @@ def test_the_branch_strip_shows_only_the_open_lines_and_hides_when_nothing_is_op
                    f" _shmTodayStrip({json.dumps(open_)}, 'management'); return [a, b, els.shmToday.style.display]; }})()")
     (a_disp, _), (b_disp, b_rows), c_disp = r
     assert a_disp == "none"                                                                     # nothing open: the strip is not there
-    assert b_disp == "" and "ตัดเบิกวันนี้" in b_rows and "✓" not in b_rows and "รับสินค้า" not in b_rows      # one open line, no finished line
+    assert b_disp == "" and "ตัดเบิกวันนี้" in b_rows and "✓" not in b_rows and "รับของ" not in b_rows      # one open line, no finished line
     assert c_disp == "none"                                                                     # another role never sees it
 
 

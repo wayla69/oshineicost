@@ -186,7 +186,7 @@ def test_o1_b_another_branch_has_enough_so_the_benchmark_times_own_normal_sales(
     p = OR.plan(c, 1, "1", WED, now=NOW)
     assert p["source"]["kind"] == "none" and p["source"]["confirmed_days"] == 7
     assert p["fallback"] == {"mode": "benchmark", "confirmed_days": 7, "min_days": 14, "branches": 2,
-                             "message": "ยอดแนะนำจากค่ากลาง 2 สาขา (ใบตัดเบิกของสาขา 7/14 วัน)"}
+                             "message": "จำนวนที่ควรสั่งจากค่ากลาง 2 สาขา (ใบตัดเบิกของสาขา 7/14 วัน)"}
     rm = p["ref_mode"]
     assert rm["active"] and rm["benchmark"] and rm["needs_sales"] is False and rm["own_days"] == 7 and rm["min_days"] == 14
     cover = _days(date.fromisoformat(p["cover_from"]), date.fromisoformat(p["cover_to"]))

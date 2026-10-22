@@ -271,7 +271,7 @@ def test_a_report_is_saved_without_touching_the_receipt_or_the_register(pk):
     before = _snapshot(con)
     r = PK.submit(con, 1, oid, CODE, "กล่อง", 12, "แพ็ค", "กล่องใหม่บรรจุ 12", "udon")
     con.commit()
-    assert r["message"] == "✓ แจ้งขนาดบรรจุแล้ว ฝ่ายวิเคราะห์จะตรวจและปรับทะเบียน ถ่ายรูปฉลากส่งทางไลน์ด้วย"
+    assert r["message"] == "✓ แจ้งขนาดแพ็คแล้ว ฝ่ายวิเคราะห์จะตรวจและปรับทะเบียน ถ่ายรูปฉลากส่งทางไลน์ด้วย"
     assert _snapshot(con) == before
     row = con.execute("SELECT branch_id, order_id, ingredient_code, unit, reported_qty, reported_parent, current_qty, current_parent,"
                       " note, status, created_by FROM bc_pack_report").fetchone()
@@ -377,7 +377,7 @@ def test_the_todo_counts_the_decisions_not_the_rows(pk):
     PK.submit(con, 2, oid2, CODE, "แพ็ค", 1.2, "กิโลกรัม", None, "ubon")
     con.commit()
     it = {i["key"]: i for i in TD.build(con)["items"]}["pack_report_review"]
-    assert it["count"] == 2 and it["title"] == "ตรวจขนาดบรรจุที่สาขาแจ้ง (2 เรื่อง)" and it["owner_th"] == "ฝ่ายวิเคราะห์"
+    assert it["count"] == 2 and it["title"] == "ตรวจขนาดแพ็คที่สาขาแจ้ง (2 เรื่อง)" and it["owner_th"] == "ฝ่ายวิเคราะห์"
     assert it["owner_modules"] == ["bom.center", "bom.prices"] and it["go"]["anchor"] == "bmcPackCard"
     assert "ในระบบ 1 กล่อง = 10 แพ็ค · สาขาแจ้ง 1 กล่อง = 12 แพ็ค" in it["detail"]
     assert all(i["key"] != "pack_report_review" for i in TD.build(con, scoped_branch="BranchA")["items"])  # the branch's หน้างาน shows nothing new

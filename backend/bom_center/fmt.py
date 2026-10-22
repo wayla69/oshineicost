@@ -94,7 +94,7 @@ def lbl(label) -> str:
 # reads the same on both pages (the stored codes never change)
 REASON_LABEL = {"waste": "วัตถุดิบเสีย / ทิ้ง", "expired": "หมดอายุ", "spill": "หก / ตก / แตก", "prep_loss": "ตัดแต่งเกินสูตร",
                 "staff": "ชิม / อาหารพนักงาน", "overportion": "เสิร์ฟเกินปริมาณตามสูตร", "transfer": "โอนให้สาขาอื่น",
-                "miscount": "ตรวจนับผิด", "receipt": "บันทึกรับสินค้าไม่ครบ", "other": "อื่น ๆ (ระบุ)"}
+                "miscount": "นับของผิด", "receipt": "บันทึกรับของไม่ครบ", "other": "อื่น ๆ (ระบุ)"}
 
 
 CLASS_TH = {"A": "กลุ่มมูลค่าสูง", "B": "กลุ่มมูลค่ากลาง", "C": "กลุ่มมูลค่าต่ำ"}         # the ABC class of an ingredient
@@ -160,7 +160,7 @@ def round_day_th(round_key, delivery) -> str:
     return f"{ROUND_TH.get(str(round_key), str(round_key))}" + (f" (ส่ง {d.day}/{d.month})" if d else "")
 
 
-# 4.6: a gap in words. The sign of "ผลต่าง −฿16,197 −8.1%" is read the wrong way round as often as the right one; the words carry the
+# 4.6: a gap in words. The sign of "ส่วนต่าง −฿16,197 −8.1%" is read the wrong way round as often as the right one; the words carry the
 # direction instead: "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)". kind: use = what the branch used against the recipes, issue = what the slip issued
 # against the recipes, count = the physical count against the system stock. The Excel files keep the signed numbers.
 GAP_WORDS = {"use": ("ใช้มากกว่าสูตร", "ใช้น้อยกว่าสูตร", "ใช้ตามสูตร"),

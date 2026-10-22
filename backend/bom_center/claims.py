@@ -39,9 +39,9 @@ REASONS = [
     ("other", "อื่น ๆ (ระบุในหมายเหตุ)"),
 ]
 REASON_TH = dict(REASONS)
-STATUS_TH = {"submitted": "รอประสานงานขายพิจารณา", "approved": "อนุมัติรับเคลมแล้ว",
+STATUS_TH = {"submitted": "รอประสานงานขายพิจารณา", "approved": "อนุมัติแล้ว",
              "rejected": "ไม่อนุมัติ", "cancelled": "สาขายกเลิก"}
-ORIGIN_TH = {"receive": "แจ้งขณะรับสินค้า", "after": "แจ้งภายหลัง"}
+ORIGIN_TH = {"receive": "แจ้งขณะรับของ", "after": "แจ้งภายหลัง"}
 OPEN = ("submitted", "approved")          # the statuses that use up a line's claimable quantity
 
 
@@ -98,7 +98,7 @@ def claimable(con, branch_id: int, order_id: int) -> dict:
     counted against the received quantity."""
     o = _order(con, branch_id, order_id)
     if o["status"] != "received":
-        raise ValueError("แจ้งเคลมได้เมื่อบันทึกรับสินค้าของใบสั่งซื้อนี้แล้วเท่านั้น")
+        raise ValueError("แจ้งของขาด/เสียได้เมื่อบันทึกรับของใบสั่งซื้อนี้แล้วเท่านั้น")
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     taken = {}
     for c, cu, au, st in con.execute(
@@ -133,7 +133,7 @@ def _clean_lines(lines: list, limit: dict, over_msg, con=None) -> list:
         try:
             q = float(ln.get("claim_units"))
         except (TypeError, ValueError):
-            raise ValueError(f"{_item(con, code)}: จำนวนที่เคลมต้องเป็นตัวเลข")
+            raise ValueError(f"{_item(con, code)}: จำนวนที่แจ้งต้องเป็นตัวเลข")
         if q <= 0:
             continue
         if code not in limit:
@@ -142,13 +142,13 @@ def _clean_lines(lines: list, limit: dict, over_msg, con=None) -> list:
             raise ValueError(over_msg(code, limit[code], q))
         rs = (ln.get("reason") or "").strip()
         if rs not in REASON_TH:
-            raise ValueError(f"{_item(con, code)}: เลือกสาเหตุของการเคลม")
+            raise ValueError(f"{_item(con, code)}: เลือกสาเหตุที่แจ้ง")
         nt = (ln.get("note") or "").strip() or None
         if rs == "other" and not nt:
             raise ValueError(f"{_item(con, code)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         clean.append((code, q, rs, nt))
     if not clean:
-        raise ValueError("ระบุรายการที่จะเคลมอย่างน้อย 1 รายการ")
+        raise ValueError("เลือกของที่จะแจ้งอย่างน้อย 1 รายการ")
     if len({c for c, *_ in clean}) != len(clean):
         raise ValueError("มีรายการซ้ำ · รวมเป็นบรรทัดเดียว")
     return clean
@@ -176,8 +176,8 @@ def create(con, branch_id: int, order_id: int, lines: list, photos: list, note: 
     can = {ln["code"]: ln for ln in claimable(con, branch_id, order_id)["lines"]}
 
     def over(code, cap, q):
-        return (f"{code}: เคลมได้ไม่เกิน {cap:g} (รับแล้ว {can[code]['received_units']:g}"
-                + (f" · เคลมไปแล้ว {can[code]['claimed_units']:g}" if can[code]["claimed_units"] else "") + ")")
+        return (f"{code}: แจ้งได้ไม่เกิน {cap:g} (รับแล้ว {can[code]['received_units']:g}"
+                + (f" · แจ้งไปแล้ว {can[code]['claimed_units']:g}" if can[code]["claimed_units"] else "") + ")")
 
     clean = _clean_lines(lines, {c: ln["remaining_units"] for c, ln in can.items()}, over, con)
     photos = photos or []
@@ -206,7 +206,7 @@ def create_from_receive(con, branch_id: int, order_id: int, lines: list, note: s
             cap[c] = round(float(ln.get("sent_units") or 0) - float(ln.get("received_units") or 0), 6)
 
     def over(code, limit, q):
-        return f"{code}: เคลมขณะรับสินค้าได้ไม่เกินส่วนต่างระหว่างที่คลังส่งกับที่รับจริง ({limit:g})"
+        return f"{code}: แจ้งขณะรับของได้ไม่เกินจำนวนที่ขาดระหว่างที่คลังส่งกับที่รับจริง ({limit:g})"
 
     clean = _clean_lines(lines, cap, over, con)
     cid = _insert(con, branch_id, order_id, "receive", clean, [], note, who)
@@ -245,7 +245,7 @@ def _delivery(con, h: dict):
 def detail(con, claim_id: int) -> dict:
     d = _head(con, claim_id)
     if not d:
-        raise ValueError("ไม่พบรายการเคลม")
+        raise ValueError("ไม่พบเรื่องที่แจ้ง")
     d["delivery"] = _delivery(con, d)
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (d["order_id"],))}
@@ -315,9 +315,9 @@ def photo(con, claim_id: int, photo_id: int):
 def cancel(con, claim_id: int, who: str) -> dict:
     h = _head(con, claim_id)
     if not h:
-        raise ValueError("ไม่พบรายการเคลม")
+        raise ValueError("ไม่พบเรื่องที่แจ้ง")
     if h["status"] != "submitted":
-        raise ValueError("ยกเลิกได้เฉพาะเคลมที่ยังรอพิจารณา")
+        raise ValueError("ยกเลิกได้เฉพาะเรื่องที่ยังรอพิจารณา")
     con.execute("UPDATE bc_claim SET status='cancelled', decided_by=?, decided_at=? WHERE claim_id=?", (who, now(), claim_id))
     audit(con, who, "claim_cancel", "bc_claim", str(claim_id), "submitted", "cancelled")
     return {"claim_id": claim_id, "status": "cancelled"}

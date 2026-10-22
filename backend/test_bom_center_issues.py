@@ -175,7 +175,7 @@ def test_a_draft_is_confirmed_once_and_a_slip_for_a_past_day_is_late(con):  # no
     # yesterday's slip done today: confirmed, but marked late
     back = IS.save(con, 1, "2026-10-03", [used()], "udon", submit=True, now=NOW)
     assert back["late"] == 1 and back["slip"]["status"] == "late" and IS.is_confirmed(back["slip"])
-    assert IS.STATUS_TH["late"] == "ยืนยันล่าช้า"
+    assert IS.STATUS_TH["late"] == "ส่งช้า"
     # every day of a range gets a verdict, a day without a slip is "missing"
     days = IS.status_days(con, 1, "2026-10-03", "2026-10-06")
     assert [(x["date"], x["status"]) for x in days] == [("2026-10-03", "late"), ("2026-10-04", "missing"),
@@ -184,7 +184,7 @@ def test_a_draft_is_confirmed_once_and_a_slip_for_a_past_day_is_late(con):  # no
     assert IS.missing_days(con, 1, "2026-10-06", "2026-10-03") == []
     # the saved line round-trips in its own unit and the base unit
     d3 = IS.detail(con, back["slip_id"])
-    assert d3["lines"][0]["qty_used_base"] == 1000 and d3["status_th"] == "ยืนยันล่าช้า" and d3["date"] == "2026-10-03"
+    assert d3["lines"][0]["qty_used_base"] == 1000 and d3["status_th"] == "ส่งช้า" and d3["date"] == "2026-10-03"
 
 
 # ── 3 · validations ──────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ def test_a_confirmed_slip_is_locked_and_lines_with_zero_quantity_go(con):  # noq
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)
     con.commit()
     assert IS.save(con, 1, "2026-10-02", [used()], "udon", submit=True, now=NOW)["status"] == "confirmed"
-    with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2/10/2026 ยืนยันแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข"):
+    with pytest.raises(ValueError, match="ใบตัดเบิกวันที่ 2/10/2026 ส่งแล้ว · ต้องการแก้ แจ้งประสานงานขายให้เปิดแก้ไข"):
         IS.save(con, 1, "2026-10-02", [used(qty=1)], "udon", now=NOW)
     # both quantities zero removes a line; a waste line without a reason is refused only when it has waste
     d = IS.save(con, 1, "2026-10-04", [used(), used("V-007", 5)], "udon", now=NOW)
@@ -260,7 +260,7 @@ def test_reopen_reconfirm_and_the_log(con):  # noqa: F811
             IS.reopen(con, *args, now=NOW)
     r = IS.reopen(con, sid, "ss", "สาขาคีย์ปริมาณผิด", now=at(6, 9))
     assert r == {"slip_id": sid, "branch_id": 1, "date": "2026-10-03", "status": "draft"}
-    with pytest.raises(ValueError, match="เปิดแก้ไขได้เฉพาะใบตัดเบิกที่ยืนยันแล้ว"):
+    with pytest.raises(ValueError, match="เปิดแก้ไขได้เฉพาะใบตัดเบิกที่ส่งแล้ว"):
         IS.reopen(con, sid, "ss", "อีกครั้ง", now=NOW)
     row = IS.detail(con, sid)
     assert row["status"] == "draft" and row["late"] == 1 and row["confirm_count"] == 1       # `late` and the count stay
@@ -343,7 +343,7 @@ def test_submit_needs_todays_confirmed_slip_no_count_is_written_and_a_gap_only_w
     assert p["stock"]["missing_days"] == ["2026-10-02", "2026-10-03", "2026-10-04"]      # earlier days: a warning
     crab = next(r for r in p["rows"] if r["code"] == CRAB)["order_units"]
     line = line + [{"code": CRAB, "confirmed_units": crab}]
-    with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):
+    with pytest.raises(ValueError, match="ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):
         OR.save_flow(con, 1, "1", WED, line, "udon", submit=True, now=NOW, as_of=AS_OF)
     con.rollback()
     slip(con, "2026-10-05", [used("V-007", 10)], now=NOW)
@@ -479,8 +479,8 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     d = build(branch_id=1)
     it = _issue_items(d)
     t = it["issue_today"]
-    assert t["title"] == "ยืนยันใบตัดเบิกประจำวันที่ 5/10" and t["seq"] == 305 and t["status"] == "todo"
-    assert t["detail"] == "ยังไม่บันทึก · ยืนยันก่อนส่งใบสั่งซื้อ"
+    assert t["title"] == "ส่งใบตัดเบิกประจำวันที่ 5/10" and t["seq"] == 305 and t["status"] == "todo"
+    assert t["detail"] == "ยังไม่บันทึก · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
     assert (t["slip_status"], t["yesterday"], t["started"]) == ("missing", "missing", True)
     assert t["owner_modules"] == ["branch.stock"] and t["go"] == {"tab": "branchstock", "pane": "issue",
                                                                   "extra": {"date": "2026-10-05"}, "branch": 1}
@@ -488,35 +488,35 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     assert gaps == ["2026-10-02", "2026-10-03", "2026-10-04"]
     g = next(i for i in d["items"] if i["key"].startswith("issue_missing_2026-10-04"))
     assert g["seq"] == 306 and g["urgent"] is True and g["status"] == "todo" and g["go"]["extra"] == {"date": "2026-10-04"}
-    assert it["order_due_1"]["detail"].endswith(" · ยืนยันใบตัดเบิกวันนี้ก่อน")
+    assert it["order_due_1"]["detail"].endswith(" · ส่งใบตัดเบิกวันนี้ก่อน")
     line = RM.branch_line(d["items"])
-    assert "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in line["text"] and line["pending"] is True
+    assert "ใบตัดเบิกเมื่อวาน: ยังไม่ส่ง" in line["text"] and line["pending"] is True
     # a draft, then a confirmed slip today; yesterday's confirmed too
     IS.save(c, 1, "2026-10-05", [used()], "udon", now=NOW)
-    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "มีร่างแล้ว · ยืนยันก่อนส่งใบสั่งซื้อ"
+    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "มีร่างแล้ว · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
     IS.save(c, 1, "2026-10-05", [], "udon", submit=True, now=NOW)
     IS.save(c, 1, "2026-10-04", [used()], "udon", submit=True, now=NOW)
     d = build(branch_id=1)
     it = _issue_items(d)
-    assert it["issue_today"]["status"] == "done" and it["issue_today"]["detail"] == "ยืนยันแล้ว เวลา 08:00 โดย udon"
+    assert it["issue_today"]["status"] == "done" and it["issue_today"]["detail"] == "ส่งแล้ว เวลา 08:00 โดย udon"
     assert it["issue_today"]["confirmed_hhmm"] == "08:00" and it["issue_today"]["appends"] == 0       # PR-M7: the branch's strip reads these
     IS.append(c, 1, "2026-10-05", [used(qty=1)], "udon", now=NOW)
     assert _issue_items(build(branch_id=1))["issue_today"]["appends"] == 1
     assert it["issue_today"]["yesterday"] == "late" and "issue_missing_2026-10-04" not in it
-    assert not it["order_due_1"]["detail"].endswith("ต้องยืนยันใบตัดเบิกวันนี้ก่อน")
-    assert "ใบตัดเบิกเมื่อวาน: ยืนยันแล้ว" in RM.branch_line(d["items"])["text"]
+    assert not it["order_due_1"]["detail"].endswith("ต้องส่งใบตัดเบิกวันนี้ก่อน")
+    assert "ใบตัดเบิกเมื่อวาน: ส่งแล้ว" in RM.branch_line(d["items"])["text"]
     # the centre follows up the branches that did not confirm yesterday's slip
     IS.reopen(c, IS.status_of(c, 1, "2026-10-04")["slip_id"], "ss", "แก้ไข", now=NOW)
     cen = _issue_items(build())["issue_missing"]
-    assert cen["seq"] == 228 and cen["title"] == "ติดตามสาขาที่ยังไม่ยืนยันใบตัดเบิกของเมื่อวาน" and cen["status"] == "todo"
+    assert cen["seq"] == 228 and cen["title"] == "ติดตามสาขาที่ยังไม่ส่งใบตัดเบิกของเมื่อวาน" and cen["status"] == "todo"
     assert cen["owner_modules"] == ["supply.ordering", "ops.report"] and cen["owner_th"] == "ประสานงานขาย"
     assert cen["count"] == 1 and "อุดรธานี" in cen["detail"] and cen["urgent"] is True
     import auth                                                    # batch 3: the reminders follow the branch accounts
     auth.init_auth(c)
     c.execute("INSERT INTO app_user(username, pw_hash, pw_salt, role, branch) VALUES('br_udon', 'x', 'y', 'branch', 'อุดรธานี')")
     morning = RM.morning(c, today=date(2026, 10, 5))
-    assert any("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in b["text"] for b in morning["branches"]) \
-        and "ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน" in morning["text"]
+    assert any("ใบตัดเบิกเมื่อวาน: ยังไม่ส่ง" in b["text"] for b in morning["branches"]) \
+        and "ใบตัดเบิกเมื่อวาน: ยังไม่ส่ง" in morning["text"]
 
 
 # ── 11 · the scorecard ───────────────────────────────────────────────────────
@@ -593,12 +593,12 @@ def test_the_http_flow_sheet_save_status_list_detail_reopen(client, monkeypatch)
         o = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=ob)
         assert o.status_code == 200 and o.json()["slip_today"]["status"] == "draft", o.text
         o = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=dict(ob, submit=True))
-        assert o.status_code == 400 and "ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in o.json()["detail"]
+        assert o.status_code == 400 and "ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in o.json()["detail"]
         assert seen == [False, False]
         r = client.post(f"/api/bom-center/issues/save?branch_id={bid}", headers=hdr, json=dict(body, submit=True))
         assert r.status_code == 200 and r.json()["status"] == "confirmed" and r.json()["late"] == 0
         again = client.post(f"/api/bom-center/issues/save?branch_id={bid}", headers=hdr, json=body)
-        assert again.status_code == 400 and "ยืนยันแล้ว" in again.json()["detail"]
+        assert again.status_code == 400 and "ส่งแล้ว" in again.json()["detail"]
         lst = client.get(f"/api/bom-center/issues?branch_id={bid}&date_from=2026-10-01&date_to=2026-10-05").json()
         assert [(x["date"], x["status"], x["lines"]) for x in lst["slips"]] == [("2026-10-05", "confirmed", 1)]
         assert {s["code"] for s in lst["statuses"]} == {"confirmed", "late", "draft", "missing"}
@@ -683,15 +683,15 @@ def test_append_rounds_every_quantity_up_to_a_whole_number(con):  # noqa: F811
 
 
 @pytest.mark.parametrize("day, lines, now, msg", [
-    ("2026-10-03", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # a confirmed slip of yesterday's
-    ("2026-10-06", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),            # no slip
+    ("2026-10-03", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว"),            # a confirmed slip of yesterday's
+    ("2026-10-06", [used(qty=1)], at(5, 15), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว"),            # no slip
     ("2026-10-05", [], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
     ("2026-10-05", [used(qty=0)], at(5, 15), "ใส่จำนวนที่เบิกเพิ่มอย่างน้อย 1 รายการ"),
     ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม"}], at(5, 15), f"{CRAB_NM}: เลือกสาเหตุของของเสีย"),
     ("2026-10-05", [{"code": CRAB, "qty_waste": 5, "unit": "กรัม", "waste_reason": "other"}], at(5, 15), f"{CRAB_NM}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
     ("2026-10-05", [used(qty=-1)], at(5, 15), f"{CRAB_NM}: จำนวนต้องไม่ติดลบ"),
     ("2026-10-05", [used(qty=1, unit="ช้อนโต๊ะ")], at(5, 15), "ยังไม่ได้ตั้งหน่วย"),
-    ("2026-10-05", [used(qty=1)], at(6, 0, 30), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"),        # after midnight it is yesterday's slip
+    ("2026-10-05", [used(qty=1)], at(6, 0, 30), "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว"),        # after midnight it is yesterday's slip
 ])
 def test_append_refusals_change_nothing(con, day, lines, now, msg):  # noqa: F811
     _todays_slip(con)
@@ -706,12 +706,12 @@ def test_append_refusals_change_nothing(con, day, lines, now, msg):  # noqa: F81
 def test_append_is_refused_on_a_draft_and_on_a_reopened_slip(con):  # noqa: F811
     build_stock(con)
     slip(con, "2026-10-05", [used()], submit=False, now=at(5, 9))                           # today's draft
-    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"):
+    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว"):
         IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 10))
     s = IS.save(con, 1, "2026-10-05", [], "udon", submit=True, now=at(5, 11))
     IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 12))                    # confirmed: accepted
     IS.reopen(con, s["slip_id"], "ss", "แก้ไข", now=at(5, 13))
-    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว"):
+    with pytest.raises(ValueError, match="เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว"):
         IS.append(con, 1, "2026-10-05", [used(qty=1)], "udon", now=at(5, 14))                # a draft again: the branch edits it itself
 
 
@@ -797,7 +797,7 @@ def test_the_http_append_flow_and_the_branch_pin(client, monkeypatch):
         url = f"/api/bom-center/issues/append?branch_id={bid}"
         assert client.post(url, json=ap).status_code in (401, 403)                         # the token gate
         no = client.post(url, headers=hdr, json=ap)                                         # nothing confirmed yet
-        assert no.status_code == 400 and "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ยืนยันแล้ว" in no.json()["detail"]
+        assert no.status_code == 400 and "เบิกเพิ่มได้เฉพาะใบตัดเบิกของวันนี้ที่ส่งแล้ว" in no.json()["detail"]
         assert client.post(f"/api/bom-center/issues/save?branch_id={bid}", headers=hdr, json=body).status_code == 200
         ok = client.post(url, headers=hdr, json=ap)
         assert ok.status_code == 200 and ok.json()["added"] == 1 and ok.json()["appends"] == 1 and ok.json()["status"] == "confirmed", ok.text

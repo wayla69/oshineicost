@@ -3,10 +3,10 @@
 with ITSELF and with the OTHER branches, not with a recipe.
 
 The promises:
-  * ปกติของสาขา: the mean issued quantity of the item on the same weekday in the 4 weeks before the day (only days with a confirmed
+  * ที่สาขาใช้ปกติ: the mean issued quantity of the item on the same weekday in the 4 weeks before the day (only days with a confirmed
     slip; a confirmed day without the item counts as 0), scaled by the sales of the day / the mean sales of those days; fewer than 2
     such days -> None; no sales of the day -> the mean as it is;
-  * ค่ากลางทุกสาขา: the median, over the OTHER active company branches (never a franchise branch, never the branch itself) with at
+  * เฉลี่ยทุกสาขา: the median, over the OTHER active company branches (never a franchise branch, never the branch itself) with at
     least 14 confirmed slip days in the 28 days before, of the issued per 100,000 baht of sales, x the sales of the day; fewer than 2
     such branches -> None;
   * a day/item is over when issued > comparator x 1.2 for EITHER comparator, under when < x 0.8; 3 trading days in a row is a flag; a
@@ -154,7 +154,7 @@ def test_over_on_both_comparators_for_three_days_is_one_flag_with_basis_both(wor
     fl = _flags(c)
     assert [(f["code"], f["kind"], f["days"], f["from"], f["to"], f["basis"], f["max_pct"]) for f in fl] == \
         [(SALMON, "item", 3, "2026-09-24", "2026-09-26", "both", 25.0)]
-    assert fl[0]["name"] == SAL and fl[0]["basis_th"] == "ปกติของสาขาและค่ากลาง"
+    assert fl[0]["name"] == SAL and fl[0]["basis_th"] == "ที่สาขาใช้ปกติและเฉลี่ยทุกสาขา"
     rows = _rows(c)
     r = rows["2026-09-25"]
     assert r["flagged"] and r["streak"] == [SAL] and [o["code"] for o in r["over_items"]] == [SALMON]
@@ -162,7 +162,7 @@ def test_over_on_both_comparators_for_three_days_is_one_flag_with_basis_both(wor
     assert not rows["2026-09-27"]["flagged"] and not rows["2026-09-23"]["flagged"]
     day = IR.daily_day(c, 1, "2026-09-25", today=TODAY)
     sal = next(x for x in day["rows"] if x["code"] == SALMON)
-    assert (sal["signal"], sal["basis"], sal["signal_th"]) == ("streak", "both", "เบิกเกินปกติของสาขาและค่ากลางต่อเนื่อง")
+    assert (sal["signal"], sal["basis"], sal["signal_th"]) == ("streak", "both", "เบิกเกินที่สาขาใช้ปกติและเฉลี่ยทุกสาขาต่อเนื่อง")
     assert (sal["normal"], sal["median"], sal["issued"], sal["var_qty"], sal["var_pct"], sal["median_pct"]) == (260, 260, 325, 65, 25.0, 25.0)
     assert day["rows"][0]["code"] == SALMON                                       # the flagged item first
     assert day["stock"] is True and day["flags"][0]["basis"] == "both"
@@ -179,7 +179,7 @@ def test_only_the_median_can_trigger_basis_median(world):
     assert r["var_pct"] == 0.0 and r["median_var_pct"] == pytest.approx(14.7, abs=0.1)   # against its own normal the branch is "normal"
     sal_it = next(x for x in IR.daily_day(c, 1, "2026-09-20", today=TODAY)["rows"] if x["code"] == SALMON)
     assert sal_it["var_pct"] == 0.0 and sal_it["median_pct"] == 25.0
-    assert (sal_it["signal"], sal_it["basis"], sal_it["signal_th"]) == ("streak", "median", "เบิกเกินค่ากลางต่อเนื่อง")
+    assert (sal_it["signal"], sal_it["basis"], sal_it["signal_th"]) == ("streak", "median", "เบิกเกินเฉลี่ยทุกสาขาต่อเนื่อง")
 
 
 def test_only_the_normal_can_trigger_basis_normal(world):
@@ -191,7 +191,7 @@ def test_only_the_normal_can_trigger_basis_normal(world):
     sal = [f for f in _flags(c) if f["code"] == SALMON]
     assert len(sal) == 1 and (sal[0]["basis"], sal[0]["days"]) == ("normal", 3)
     it = next(x for x in IR.daily_day(c, 1, "2026-09-24", today=TODAY)["rows"] if x["code"] == SALMON)
-    assert (it["signal_th"], it["median_pct"], it["var_pct"]) == ("เบิกเกินปกติของสาขาต่อเนื่อง", 0.0, 25.0)
+    assert (it["signal_th"], it["median_pct"], it["var_pct"]) == ("เบิกเกินที่สาขาใช้ปกติต่อเนื่อง", 0.0, 25.0)
 
 
 def test_two_days_in_a_row_are_no_flag_and_the_gap_ends_a_streak(world):
@@ -221,7 +221,7 @@ def test_under_for_three_days_is_an_under_streak_with_its_basis(world):
     r = _rows(c)["2026-09-25"]
     assert r["under_flagged"] and r["under_streak"] == [SAL] and not r["flagged"]
     it = next(x for x in IR.daily_day(c, 1, "2026-09-25", today=TODAY)["rows"] if x["code"] == SALMON)
-    assert (it["signal"], it["signal_th"]) == ("under_streak", "เบิกต่ำกว่าปกติของสาขาและค่ากลางต่อเนื่อง")
+    assert (it["signal"], it["signal_th"]) == ("under_streak", "เบิกต่ำกว่าที่สาขาใช้ปกติและเฉลี่ยทุกสาขาต่อเนื่อง")
     out = IR.anomalies(c, date(2026, 9, 27), 7, today=TODAY, direction="under")
     assert [(a["branch_id"], a["items"], a["max_pct"]) for a in out] == [(1, [SAL], -25.0)]
     assert IR.anomalies(c, date(2026, 9, 27), 7, today=TODAY) == []
@@ -325,11 +325,11 @@ def test_blank_class_a_lists_the_expected_class_a_items_left_off_the_slip(world)
 def test_the_stock_headers_and_the_full_headers():
     from routers.bom_center import DAILY_HEADERS, DAILY_HEADERS_STOCK, DAILY_ITEM_HEADERS, DAILY_ITEM_HEADERS_STOCK
     assert DAILY_HEADERS == ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
-                             "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
+                             "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินกำหนด", "เบิกเกินต่อเนื่อง"]
     assert DAILY_ITEM_HEADERS[8] == "ตามสูตร" and len(DAILY_ITEM_HEADERS) == 14
     assert "ตามสูตร (มูลค่า)" not in DAILY_HEADERS_STOCK and "ตามสูตร" not in DAILY_ITEM_HEADERS_STOCK
-    assert DAILY_HEADERS_STOCK[6:11] == ["ปกติของสาขา (มูลค่า)", "ค่ากลางทุกสาขา (มูลค่า)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "ต่างจากค่ากลาง %"]
-    assert DAILY_ITEM_HEADERS_STOCK[8:10] == ["ปกติของสาขา", "ค่ากลางทุกสาขา"] and "ต่างจากค่ากลาง %" in DAILY_ITEM_HEADERS_STOCK
+    assert DAILY_HEADERS_STOCK[6:11] == ["ที่สาขาใช้ปกติ (มูลค่า)", "เฉลี่ยทุกสาขา (มูลค่า)", "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "ต่างจากเฉลี่ยทุกสาขา %"]
+    assert DAILY_ITEM_HEADERS_STOCK[8:10] == ["ที่สาขาใช้ปกติ", "เฉลี่ยทุกสาขา"] and "ต่างจากเฉลี่ยทุกสาขา %" in DAILY_ITEM_HEADERS_STOCK
     assert len(DAILY_HEADERS_STOCK) == 13 and len(DAILY_ITEM_HEADERS_STOCK) == 16
 
 
@@ -360,9 +360,9 @@ def test_the_workbook_and_the_json_follow_the_mode(client, app_db):
         r = client.get(f"/api/bom-center/issue-reports/daily.xlsx?branch_id={bid}&month=2026-09")
         assert r.status_code == 200
         wb = load_workbook(io.BytesIO(r.content))
-        assert wb.sheetnames == ["ผลต่างตัดเบิกรายวัน", "รายการต่อวัน"]
-        rows = list(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(values_only=True))
-        assert list(rows[1]) == DAILY_HEADERS_STOCK and "ปกติของสาขา" in rows[0][0] and "ค่ากลางทุกสาขา" in rows[0][0]
+        assert wb.sheetnames == ["ส่วนต่างตัดเบิกรายวัน", "รายการต่อวัน"]
+        rows = list(wb["ส่วนต่างตัดเบิกรายวัน"].iter_rows(values_only=True))
+        assert list(rows[1]) == DAILY_HEADERS_STOCK and "ที่สาขาใช้ปกติ" in rows[0][0] and "เฉลี่ยทุกสาขา" in rows[0][0]
         assert list(next(wb["รายการต่อวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_ITEM_HEADERS_STOCK
         j = client.get(f"/api/bom-center/issue-reports/daily?branch_id={bid}&month=2026-09").json()
         assert j["stock"] is True and "normal_value" in j["rows"][0]
@@ -371,7 +371,7 @@ def test_the_workbook_and_the_json_follow_the_mode(client, app_db):
         c.commit()
         r = client.get(f"/api/bom-center/issue-reports/daily.xlsx?branch_id={bid}&month=2026-09")
         wb = load_workbook(io.BytesIO(r.content))
-        assert list(next(wb["ผลต่างตัดเบิกรายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS
+        assert list(next(wb["ส่วนต่างตัดเบิกรายวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_HEADERS
         assert list(next(wb["รายการต่อวัน"].iter_rows(min_row=2, max_row=2, values_only=True))) == DAILY_ITEM_HEADERS
         assert "stock" not in client.get(f"/api/bom-center/issue-reports/daily?branch_id={bid}&month=2026-09").json()
     finally:
@@ -395,11 +395,11 @@ def test_the_excel_marks_the_basis_of_a_streak(world):
     wb = Workbook()
     resp = _daily_xlsx_stock(wb, wb.active, d, items, "2026-09")
     assert resp.status_code == 200
-    ws = wb["ผลต่างตัดเบิกรายวัน"]
+    ws = wb["ส่วนต่างตัดเบิกรายวัน"]
     row = next(r for r in ws.iter_rows(min_row=3, values_only=True) if r[0] == "2026-09-25")
-    assert row[12] == f"{SAL}: เบิกเกินปกติของสาขาและค่ากลางต่อเนื่อง" and row[11] == f"{SAL} (+25.0%)"
+    assert row[12] == f"{SAL}: เบิกเกินที่สาขาใช้ปกติและเฉลี่ยทุกสาขาต่อเนื่อง" and row[11] == f"{SAL} (+25.0%)"
     sig = [r[15] for r in wb["รายการต่อวัน"].iter_rows(min_row=3, values_only=True) if r[0] == "2026-09-25" and r[1] == SALMON]
-    assert sig == ["เบิกเกินปกติของสาขาและค่ากลางต่อเนื่อง"]
+    assert sig == ["เบิกเกินที่สาขาใช้ปกติและเฉลี่ยทุกสาขาต่อเนื่อง"]
 
 
 # ── 6 · the to-do list and the reminders say ปกติ ─────────────────────────────────────────────
@@ -414,10 +414,10 @@ def test_the_to_do_items_and_the_reminders_say_normal_not_recipe(world):
     now = datetime(2026, 9, 28, 8, 0, tzinfo=BKK)
     an = _items(c, date(2026, 9, 28), now)["issue_anomaly"]
     assert (an["seq"], an["title"], an["status"], an["urgent"]) == (229, "ตรวจสอบสาขาที่เบิกเกินปกติติดต่อกัน", "todo", True)
-    assert an["detail"] == f"เบิกเกินปกติของสาขาหรือค่ากลางมากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})"
+    assert an["detail"] == f"เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})"
     assert an["go"] == {"tab": "orderhub", "pane": "issuevar", "branch": 1} and an["count"] == 1
     text = RM.morning(c, today=date(2026, 9, 28))["text"]
-    assert f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินปกติของสาขาหรือค่ากลางมากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})" in text
+    assert f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})" in text
     assert "สูตร" not in an["title"] + an["detail"] + text.split("ฝ่ายปฏิบัติการ", 1)[1]
     push = RM.centre_morning(c, today=date(2026, 9, 28), now=now)
     assert push["operation"]["lines"] == [f"เบิกเกินปกติติดต่อกัน 1 สาขา: อุดรธานี"]
@@ -431,7 +431,7 @@ def test_the_under_issue_item_says_normal_too(world):
     c.commit()
     low = _items(c, date(2026, 9, 28), datetime(2026, 9, 28, 8, 0, tzinfo=BKK))["issue_under"]
     assert low["title"] == "ตรวจสอบสาขาที่เบิกต่ำกว่าปกติติดต่อกัน" and low["status"] == "todo"
-    assert low["detail"] == f"เบิกต่ำกว่าปกติของสาขาหรือค่ากลางเกิน 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})"
+    assert low["detail"] == f"เบิกต่ำกว่าที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขาเกิน 20% ติดต่อกันอย่างน้อย 3 วัน: อุดรธานี ({SAL})"
 
 
 def test_full_mode_keeps_the_recipe_words_in_the_to_do_list(world):
@@ -485,7 +485,7 @@ def test_a_gap_inside_the_threshold_is_neutral_and_beyond_it_is_coloured():
               " stkGapHtml(1, -25, 'issue_m'), stkGapHtml(1, null, 'issue_n')]));")
     out = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True, encoding="utf-8").stdout)
     assert "ใกล้เคียงปกติ" in out[0] and "var(--text-muted)" in out[0] and "COLOURED" not in out[0]
-    assert "ใกล้เคียงค่ากลาง" in out[1]
+    assert "ใกล้เคียงเฉลี่ยทุกสาขา" in out[1]
     assert out[2] == "COLOURED:issue_n" and out[3] == "COLOURED:issue_m" and out[4] == "COLOURED:issue_n"
 
 

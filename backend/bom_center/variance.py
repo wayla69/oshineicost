@@ -36,7 +36,7 @@ ASK_TOP = 20                                            # PR-M4 (owner Q3): a re
 
 
 INCOMPLETE_TH = "ข้อมูลไม่ครบ"                           # batch 4b (3.3): a line the branch is not asked about, because the data cannot say
-SYSTEM_TH = "คงเหลือตามระบบ (ไม่ได้นับ)"                  # batch 4b (3.4): an end figure taken from the system stock, not from a count
+SYSTEM_TH = "ของในระบบ (ไม่ได้นับ)"                  # batch 4b (3.4): an end figure taken from the system stock, not from a count
 USED_ZERO_PCT = -99.95            # a gap that rounds to -100.0 % on the screen: the item was used 0 (the counts are the same) against a recipe
 _EPS = 1e-9
 
@@ -105,7 +105,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
     try:
         date.fromisoformat(receipt_date)
     except (TypeError, ValueError):
-        raise ValueError("วันที่รับสินค้าต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise ValueError("วันที่รับของต้องอยู่ในรูปแบบ YYYY-MM-DD")
     conv = Converter(con)
     clean, bad = {}, []
     for ln in lines or []:
@@ -133,7 +133,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
             pcs = (prev[3] or 0.0) + (pcs or 0.0)
         clean[code] = (q, unit, qb, pcs)
     if not clean:
-        raise ValueError("ยังไม่มีรายการรับสินค้า")
+        raise ValueError("ยังไม่มีรายการรับของ")
     _refuse_if_posted(con, branch_id, receipt_date)
     if bad:
         raise ValueError("บันทึกไม่ได้: " + "; ".join(bad[:3]) + " · แจ้งฝ่ายวิเคราะห์")
@@ -149,7 +149,7 @@ def add_receipt(con, branch_id: int, receipt_date: str, lines: list, who: str, r
     return {"receipt_id": rid, "lines": len(clean)}
 
 
-def assert_not_posted(con, branch_id: int, day: str, what: str = "ใบรับสินค้า") -> None:
+def assert_not_posted(con, branch_id: int, day: str, what: str = "ใบรับของ") -> None:
     """A document dated inside a period whose ใบสรุปตัดเบิก Accounting has posted would change numbers it
     already keyed: refuse until Accounting un-posts it. A period is [begin count date, end count date) — the
     month-end count is taken before trading, so the end date itself belongs to the NEXT period. Used for
@@ -167,7 +167,7 @@ def assert_not_posted(con, branch_id: int, day: str, what: str = "ใบรั�
 
 
 def _refuse_if_posted(con, branch_id: int, receipt_date: str) -> None:
-    assert_not_posted(con, branch_id, receipt_date, "ใบรับสินค้า")
+    assert_not_posted(con, branch_id, receipt_date, "ใบรับของ")
 
 
 def _closed_through(con, branch_id: int):
@@ -182,23 +182,23 @@ CANCEL_REASON_MAX = 300
 
 
 def delete_receipt(con, branch_id: int, receipt_id: int, who: str, reason: str) -> bool:
-    """Cancel a receipt (batch 3, 3.6: the button is "ยกเลิกใบรับสินค้า"). The receipt row is really deleted, as before — the
+    """Cancel a receipt (batch 3, 3.6: the button is "ยกเลิกใบรับของ"). The receipt row is really deleted, as before — the
     stock figures read bc_receipt — but a reason is REQUIRED and the whole receipt (header and every line) is first written to
     bc_receipt_cancel and to the audit log, so what was cancelled, by whom, when and why is never lost. Sales Support reads the
     last 7 days (cancelled_receipts)."""
     why = " ".join(str(reason or "").split())
     if len(why) < CANCEL_REASON_MIN:
-        raise ValueError("ต้องระบุเหตุผลในการยกเลิกใบรับสินค้า")
+        raise ValueError("ต้องระบุเหตุผลในการยกเลิกใบรับของ")
     why = why[:CANCEL_REASON_MAX]
     r = con.execute("SELECT receipt_date, source, ref, note, entered_by, created_at FROM bc_receipt WHERE receipt_id=? AND branch_id=?",
                     (receipt_id, branch_id)).fetchone()
     if not r:
-        raise ValueError("ไม่พบใบรับสินค้านี้")
+        raise ValueError("ไม่พบใบรับของนี้")
     if r[1] == "claim":
-        raise ValueError("รายการนี้เกิดจากการอนุมัติเคลม ลบไม่ได้ หากต้องแก้ไขให้แจ้งประสานงานขาย")
+        raise ValueError("รายการนี้เกิดจากการอนุมัติเรื่องที่แจ้ง ลบไม่ได้ หากต้องแก้ไขให้แจ้งประสานงานขาย")
     closed = _closed_through(con, branch_id)
     if closed and r[0] < closed:
-        raise ValueError(f"ใบรับสินค้าวันที่ {_fmt_day(r[0])} อยู่ในงวดที่ปิดแล้ว ({_fmt_day(closed)}) จึงลบไม่ได้ · แจ้งฝ่ายวิเคราะห์")
+        raise ValueError(f"ใบรับของวันที่ {_fmt_day(r[0])} อยู่ในเดือนที่ปิดแล้ว ({_fmt_day(closed)}) จึงลบไม่ได้ · แจ้งฝ่ายวิเคราะห์")
     cur = con.execute("SELECT * FROM bc_receipt_line WHERE receipt_id=? ORDER BY ingredient_code", (receipt_id,))
     cols = [d[0] for d in cur.description]
     lines = [dict(zip(cols, row)) for row in cur.fetchall()]
@@ -265,7 +265,7 @@ def _ref_th(con, branch_id: int, ref, source=None):
     if m:
         row = con.execute("SELECT order_id FROM bc_claim WHERE claim_id=?", (int(m.group(1)),)).fetchone()
         t = of_order(row[0]) if row else None
-        return f"ปรับตามเคลม {t}" if t else "ปรับตามเคลม"
+        return f"ปรับตามที่แจ้งของขาด/เสีย {t}" if t else "ปรับตามที่แจ้งของขาด/เสีย"
     m = re.fullmatch(r"CENTRAL-(\d{4}-\d{2})", r)
     if m:
         return f"รายงานไดกิโตะ กรุ๊ป เดือน{month_th(m.group(1))}"
@@ -284,7 +284,7 @@ def receipts(con, branch_id: int, limit: int = 30) -> list:
                      " ORDER BY ingredient_code", (rid,))]
         out.append({"receipt_id": rid, "receipt_date": d, "source": src, "ref": ref, "entered_by": by, "lines": lines})
     closed = _closed_through(con, branch_id)
-    from .pack_reports import for_orders          # PR-U2: what the analyst answered to "ขนาดบรรจุไม่ตรง", read on the receive history
+    from .pack_reports import for_orders          # PR-U2: what the analyst answered to "ขนาดแพ็คไม่ตรง", read on the receive history
     reports = for_orders(con, branch_id)
     for r in out:
         r["locked"] = bool(closed and r["receipt_date"] < closed)
@@ -351,7 +351,7 @@ def period(con, branch_id: int, end_count_id: int = None, summary_only: bool = F
     from .stock import periods as _p
     ps = _p(con, branch_id)
     if not ps:
-        raise ValueError("ยังเทียบไม่ได้ · ต้องมีผลตรวจนับต้นงวดและปลายงวด")
+        raise ValueError("ยังเทียบไม่ได้ · ต้องมีผลนับครั้งแรกและนับสิ้นเดือน")
     pair = ps[-1] if end_count_id is None else next((p for p in ps if p[1]["count_id"] == int(end_count_id)), None)
     if pair is None:
         raise ValueError("ไม่พบงวดนี้")
@@ -563,10 +563,10 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
               "unit_price": unit_price, "price_source": src, "has_reason": c in reasons,
               "used": None, "value": None, "status": "ok", "note": None,
               "end_basis": end_basis.get(c) or "count",
-              "basis_th": SYSTEM_TH if end_basis.get(c) == "system" else ("นับหมุนเวียนล่าสุด" if end_basis.get(c) == "cycle" else "นับจริง")}
+              "basis_th": SYSTEM_TH if end_basis.get(c) == "system" else ("นับเสริมรายสัปดาห์ล่าสุด" if end_basis.get(c) == "cycle" else "นับจริง")}
         if c not in begin or c not in end:
-            miss = [t for t, d in (("ต้นงวด", begin), ("ปลายงวด", end)) if c not in d]
-            ln.update(status="not_counted", note="ไม่พบในผลตรวจนับ" + "และ".join(miss))
+            miss = [t for t, d in (("ครั้งแรก", begin), ("สิ้นเดือน", end)) if c not in d]
+            ln.update(status="not_counted", note="ไม่พบในผลนับ" + "และ".join(miss))
         else:
             used = begin[c] + r + cl - end[c]
             ln["used"] = round(used, 3)
@@ -592,9 +592,9 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         "slips": slip_coverage(con, branch_id, d0, d1),
         "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
                    "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days, "partial": bool(end_basis),
-                   "partial_th": (f"ปิดงวดด้วยการตรวจนับหมุนเวียน (รายการเดิม ก่อนมีมติให้นับครบทุกรายการ) · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับหมุนเวียนล่าสุด · "
+                   "partial_th": (f"ปิดเดือนด้วยการนับเสริมรายสัปดาห์ (รายการเดิม ก่อนมีมติให้นับครบทุกรายการ) · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับเสริมรายสัปดาห์ล่าสุด · "
                                   f"อีก {sum(1 for v in end_basis.values() if v == 'system')} รายการเป็น{SYSTEM_TH} ใช้จริงจึงเท่ากับใบตัดเบิกที่ยืนยันแล้ว "
-                                  "ผลต่างจากการนับจริงจะปรากฏเมื่อปิดงวดถัดไปด้วยการตรวจนับครบทุกรายการ") if end_basis else None},
+                                  "ส่วนต่างจากการนับจริงจะปรากฏเมื่อปิดเดือนถัดไปด้วยการนับของครบทุกรายการ") if end_basis else None},
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,
                    "receipts_confirmed_at": conf[1] if conf else None, "reasons_done": reasons_done,
                    "accounting_posted_at": conf[2] if conf else None,
@@ -653,7 +653,7 @@ def set_posted(con, end_count_id: int, posted: bool, who: str, branch_id: int = 
         raise ValueError("ไม่พบงวดนี้ของสาขา")
     conf = con.execute("SELECT 1 FROM bc_variance_period WHERE end_count_id=?", (end_count_id,)).fetchone()
     if posted and not conf:
-        raise ValueError("ต้องยืนยันรับสินค้าครบของงวดนี้ก่อนจึงบันทึกเข้าระบบบัญชีได้")
+        raise ValueError("สาขาต้องแจ้งว่าบันทึกรับของครบของเดือนนี้ก่อนจึงบันทึกเข้าระบบบัญชีได้")
     at = now() if posted else None
     if conf:
         con.execute("UPDATE bc_variance_period SET accounting_posted_at=?, accounting_posted_by=? WHERE end_count_id=?",

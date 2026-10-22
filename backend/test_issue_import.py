@@ -86,7 +86,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
     ws = wb[BF.SLIP_SHEET]
     assert name and "รหัสสาขา 1" in ws["A1"].value and "2026-10-05" in ws["A1"].value
     assert "กรอกเฉพาะช่องเบิกใช้ ของเสีย และสาเหตุ · ห้ามแก้รหัส" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ปกติ (8 สัปดาห์)", "คงเหลือตามระบบ", "เบิกใช้", "ของเสีย",
+    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ปกติ (8 สัปดาห์)", "ของในระบบ", "เบิกใช้", "ของเสีย",
                                          "สาเหตุของเสีย", "หมายเหตุ"]
     sh = IS.sheet(con, 1, "2026-10-05", now=NOW)
     want = [it["code"] for z in sh["zones"] for it in z["items"]]
@@ -98,7 +98,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
         row["สาเหตุของเสีย"] in dict(IS.WASTE_REASONS).values()
     assert row["สาเหตุของเสีย"] == IS.WASTE_REASON_TH["spill"] and row["หมายเหตุ"] == "หก"
     it = next(i for z in sh["zones"] for i in z["items"] if i["code"] == CRAB)
-    assert row["คงเหลือตามระบบ"] == BF.sys_text(it["system_qty"], PACK)
+    assert row["ของในระบบ"] == BF.sys_text(it["system_qty"], PACK)
 
 
 def test_template_has_locked_grey_columns_a_reasons_sheet_and_a_dropdown(con):  # noqa: F811
@@ -213,7 +213,7 @@ def test_future_old_and_confirmed_dates_are_refused_with_their_state(con):  # no
     assert by["2026-10-06"]["state"] == "future" and by["2026-10-06"]["errors"][0]["message"] == "ใบตัดเบิกต้องไม่เป็นวันล่วงหน้า"
     assert by["2026-07-01"]["state"] == "too_old" and "ย้อนหลังได้ไม่เกิน 60 วัน" in by["2026-07-01"]["errors"][0]["message"]
     assert by["2026-10-03"]["state"] == "confirmed" and by["2026-10-03"]["result"] == "refused"
-    assert by["2026-10-03"]["errors"][0]["message"] == "ใบตัดเบิกวันที่ 3/10/2026 ยืนยันแล้ว หากต้องแก้ไข แจ้งประสานงานขาย"
+    assert by["2026-10-03"]["errors"][0]["message"] == "ใบตัดเบิกวันที่ 3/10/2026 ส่งแล้ว หากต้องแก้ไข แจ้งประสานงานขาย"
     assert by["2026-10-04"]["state"] == "draft" and by["2026-10-05"]["state"] == "new"
     assert out["ok"] is False and [d["date"] for d in out["dates"]] == sorted(by)
 
@@ -362,7 +362,7 @@ def test_the_order_template_carries_the_plans_numbers_read_only_and_the_reasons(
     wb, name = BF.order_template(con, p, 1, "1", WED)
     ws = wb[BF.ORDER_SHEET]
     assert name and "รหัสสาขา 1" in ws["A1"].value and "รอบ 1" in ws["A1"].value and "วันส่ง 2026-10-07" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "คงเหลือตามระบบ", "ยอดแนะนำ", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
+    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "ของในระบบ", "จำนวนที่ควรสั่ง", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
     assert [ws.cell(r, 1).value for r in range(3, ws.max_row + 1)] == [r["code"] for r in p["rows"]]
     r = next(x for x in range(3, ws.max_row + 1) if ws.cell(x, 1).value == CRAB)
     crab = next(x for x in p["rows"] if x["code"] == CRAB)
@@ -437,7 +437,7 @@ def test_the_reason_rule_the_slip_rule_and_the_cutoff_are_the_apps(con):  # noqa
     wb, p = _ofile(con, {CRAB: {"สั่ง": sug * 3 + 5, "เหตุผล": OR.REASON_TH["other"]}}, p)
     assert "ต้องระบุเหตุผล" in _oimp(con, wb, p, submit=True)["errors"][0]["message"]         # "other" needs a note
     wb, p = _ofile(con, {CRAB: {"สั่ง": sug * 3 + 5, "เหตุผล": OR.REASON_TH["event"]}}, p)
-    assert "ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in _oimp(con, wb, p, submit=True)["errors"][0]["message"]
+    assert "ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in _oimp(con, wb, p, submit=True)["errors"][0]["message"]
     IS.save(con, 1, "2026-10-05", SLIP_LINE, "udon", submit=True, now=NOW)
     con.commit()
     ok = _oimp(con, wb, p, submit=True)
@@ -502,7 +502,7 @@ def test_the_receive_template_prefills_what_was_sent_and_locks_it(con):  # noqa:
     wb = _rfile(con, oid)
     ws = wb[BF.RECEIVE_SHEET]
     assert f"ใบสั่งซื้อเลขที่ {oid}" in ws["A1"].value and "รหัสสาขา 1" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "ส่งจริง", "รับจริง", "สาเหตุส่วนต่าง", "หมายเหตุ"]
+    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "ส่งจริง", "รับจริง", "สาเหตุที่ขาด", "หมายเหตุ"]
     r = next(x for x in range(3, ws.max_row + 1) if ws.cell(x, 1).value == CODE)
     assert ws.cell(r, 4).value == q and ws.cell(r, 5).value == q and ws.cell(r, 6).value is None
     assert [ws.cell(r, c).protection.locked for c in range(1, 8)] == [True, True, True, True, False, False, False]
@@ -514,8 +514,8 @@ def test_a_receive_dry_run_shows_the_claim_and_writes_nothing(con):  # noqa: F81
     before = _rstate(con)
     wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2}})
     bad = _rimp(con, wb, oid)                                                        # short, no reason: the app's message
-    assert bad["ok"] is False and f"{CRAB_NM}: รับจริงน้อยกว่าที่คลังส่ง ({q:g}) · เลือกสาเหตุของส่วนต่าง" == bad["errors"][0]["message"]
-    wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2, "สาเหตุส่วนต่าง": CL.REASON_TH["short"]}})
+    assert bad["ok"] is False and f"{CRAB_NM}: รับจริงน้อยกว่าที่คลังส่ง ({q:g}) · เลือกสาเหตุที่ขาด" == bad["errors"][0]["message"]
+    wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2, "สาเหตุที่ขาด": CL.REASON_TH["short"]}})
     out = _rimp(con, wb, oid)
     assert out["ok"] is True and out["claim_lines"] == 1 and out["received"] is False and out["claim_id"] is None
     con.rollback()
@@ -528,9 +528,9 @@ def test_a_receive_dry_run_shows_the_claim_and_writes_nothing(con):  # noqa: F81
 
 def test_a_real_receive_import_needs_the_acknowledgement_and_makes_the_claim(con):  # noqa: F811
     oid, q = _sent(con)
-    wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2, "สาเหตุส่วนต่าง": "short"}})
+    wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2, "สาเหตุที่ขาด": "short"}})
     before = _rstate(con)
-    with pytest.raises(ValueError, match="ทำเครื่องหมายยืนยันการตรวจสินค้าก่อนบันทึก"):
+    with pytest.raises(ValueError, match="ติ๊ก “ตรวจสภาพและจำนวนครบแล้ว” ก่อนบันทึก"):
         _rimp(con, wb, oid, dry_run=False)
     con.rollback()
     assert _rstate(con) == before
@@ -539,7 +539,7 @@ def test_a_real_receive_import_needs_the_acknowledgement_and_makes_the_claim(con
     assert out["received"] is True and out["claim_id"] and out["claim_lines"] == 1
     assert OR.detail(con, oid)["status"] == "received" and OR._order_row(con, oid)["ack_by"] == "udon"
     assert con.execute("SELECT COUNT(*) FROM bc_audit WHERE action='receive_import'").fetchone()[0] == 1
-    with pytest.raises(ValueError, match="รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น"):
+    with pytest.raises(ValueError, match="รับของได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น"):
         BF.receive_template(con, 1, oid)
 
 
@@ -554,7 +554,7 @@ def test_a_receive_file_of_another_order_branch_or_kind_is_refused(con):  # noqa
     with pytest.raises(ValueError, match="ไม่พบใบสั่งซื้อของสาขานี้"):
         BF.receive_template(con, 2, oid)
     slip_wb, _ = _tmpl(con)
-    with pytest.raises(ValueError, match="ไม่ใช่แบบฟอร์มรับสินค้า"):
+    with pytest.raises(ValueError, match="ไม่ใช่แบบฟอร์มรับของ"):
         BF.read_receive_file(_book(slip_wb))
     parsed["rows"].append((60, {"code": "NO-SUCH", "received_units": 1, "reason": "", "note": None}))
     out = BF.import_receive(con, 1, oid, parsed, "udon", "f.xlsx")
@@ -632,7 +632,7 @@ def test_http_templates_dry_run_pinning_token_log_and_cache(client, app_db, monk
         assert cleared == [1, 1]
         r = br_a.post("/api/bom-center/issues/import?dry_run=false", files=files)
         assert r.status_code == 200 and r.json()["refused"] == 1
-        assert r.json()["dates"][0]["message"] == "ใบตัดเบิกวันที่ 5/10/2026 ยืนยันแล้ว หากต้องแก้ไข แจ้งประสานงานขาย"
+        assert r.json()["dates"][0]["message"] == "ใบตัดเบิกวันที่ 5/10/2026 ส่งแล้ว หากต้องแก้ไข แจ้งประสานงานขาย"
         assert [x["action"] for x in br_a.get(f"/api/bom-center/issues/{sid}").json()["log"]] == ["create", "confirm"]
         # the order and receipt routes are not swallowed by /order/{id}
         q = f"round=1&delivery=2026-10-07"

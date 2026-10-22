@@ -43,15 +43,15 @@
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติใบตัดเบิก</div>
       <div id="brnIssHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
-    <template id="hlp-branchstock-issue" data-title="วิธีใช้ใบตัดเบิก">      <p>กรอกเฉพาะรายการที่ใช้หรือทิ้งในวันนั้น · ช่องที่เว้นว่างถือว่าไม่ได้เบิก · รายการที่เบิกบ่อยใน 14 วันล่าสุดอยู่บนสุดของแต่ละโซน</p>
-      <p>ตัวเลขเทาในช่อง เช่น “เมื่อวาน 3” คือจำนวนในใบตัดเบิกที่ยืนยันครั้งก่อน · ของเสียต้องเลือกสาเหตุ</p>
-      <p>ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ ย้อนหลัง 8 สัปดาห์</p>
-      <p>เครื่องหมาย ✓ ที่โซน = กรอกรายการที่ต้องนับของโซนนั้นครบทุกรายการ · ร่างบันทึกเองหลังพิมพ์ครบ 2–3 วินาที · ยืนยันแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย</p>
+    <template id="hlp-branchstock-issue" data-title="วิธีใช้ใบตัดเบิก">      <p>กรอกเฉพาะของที่ใช้หรือทิ้งในวันนั้น · ช่องที่เว้นว่างถือว่าไม่ได้เบิก · ของที่เบิกบ่อยใน 14 วันล่าสุดอยู่บนสุดของแต่ละโซน</p>
+      <p>ตัวเลขเทาในช่อง เช่น “เมื่อวาน 3” คือจำนวนในใบตัดเบิกที่ส่งครั้งก่อน · ของเสียต้องเลือกสาเหตุ</p>
+      <p>ปกติ = ค่าเฉลี่ยของวันเดียวกันในสัปดาห์ ย้อนหลัง 8 สัปดาห์</p>
+      <p>เครื่องหมาย ✓ ที่โซน = กรอกของที่ต้องนับในโซนนั้นครบทุกรายการ · ร่างบันทึกเองหลังพิมพ์ครบ 2–3 วินาที · ส่งใบแล้วแก้ไขไม่ได้ ต้องการแก้ แจ้งประสานงานขาย</p>
       
     </template>
   </div>
 
-  <!-- ── สั่งสินค้า (the suggestion is net of the system stock after the issue slip; today's slip must be confirmed before sending) ── -->
+  <!-- ── สั่งของ (the suggestion is net of the system stock after the issue slip; today's slip must be confirmed before sending) ── -->
   <div id="brn-pane-order" style="display:none">
     <div class="card p-3 mb-3">
       <div id="brnOrdDeliv" class="brn-delivlist"></div>
@@ -61,12 +61,12 @@
       <div id="brnOrdForm" class="mt-2"></div>
       <div id="brnOrdBuffer" class="mt-2" style="border-top:1px solid var(--border-soft);padding-top:8px"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
-        <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะรายการที่ต้องสั่ง</label>
+        <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะของที่ต้องสั่ง</label>
         <input type="search" id="brnOrdQ" placeholder="ค้นหา…" oninput="brnRenderOrder()"
                style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:140px">
       </div>
     </div>
-    <!-- PR-M7: สั่งตามยอดแนะนำทั้งหมด -->
+    <!-- PR-M7: สั่งตามจำนวนที่ควรสั่งทั้งหมด -->
     <div id="brnOrdQuick" class="brn-quick mb-3" style="display:none"></div>
     <div id="brnOrdGate" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnOrdList" class="card p-3 mb-3"></div>
@@ -79,14 +79,14 @@
       <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ใบสั่งซื้อล่าสุด</div>
       <div id="brnOrdHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
-    <template id="hlp-branchstock-order" data-title="วิธีใช้สั่งสินค้า">
-      <p>ยอดแนะนำหักคงเหลือตามระบบหลังใบตัดเบิกแล้ว · ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ</p>
-      <p>ส่งใบสั่งซื้อภายในเวลาตัดรอบของแต่ละรอบส่ง · ส่งหลังเวลาตัดรอบมีค่าปรับล่าช้า · แก้ไขได้จนกว่าคลังยืนยันยอดส่ง</p>
-      <p>รายการที่สั่งต่างจากยอดแนะนำมากต้องเลือกเหตุผล · ถ้ายอดขายรอบนี้ต่างจากปกติ ใช้ “ยอดขายรอบนี้ต่างจากปกติ?” ปรับยอดแนะนำ</p>
+    <template id="hlp-branchstock-order" data-title="วิธีใช้สั่งของ">
+      <p>จำนวนที่ควรสั่งคิดจากของในระบบ หลังหักใบตัดเบิกแล้ว · ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ</p>
+      <p>ส่งใบสั่งซื้อภายในเวลาส่งสุดท้ายของแต่ละรอบส่งของ · ส่งช้ากว่าเวลามีค่าปรับ · แก้ไขได้จนกว่าคลังบันทึกจำนวนที่ส่ง</p>
+      <p>ถ้าสั่งต่างจากจำนวนที่ควรสั่งมาก ต้องเลือกเหตุผล · ถ้ายอดขายรอบนี้จะต่างจากปกติ ใช้ “ยอดขายรอบนี้ต่างจากปกติ?” ปรับจำนวนที่ควรสั่ง</p>
     </template>
   </div>
 
-  <!-- ── ตรวจนับสิ้นเดือน (ต้นงวด / ปลายงวด) ── -->
+  <!-- ── นับของสิ้นเดือน (นับครั้งแรก / นับสิ้นเดือน) ── -->
   <div id="brn-pane-count" style="display:none">
     <div class="card p-3 mb-3">
       <div class="text-xs"><span id="brnKind"></span></div>
@@ -110,7 +110,7 @@
     <div id="brnSheetActs" class="card p-3 mb-3 brn-sticky-bottom" style="position:sticky;bottom:0;z-index:5">
       <div class="flex flex-wrap items-center gap-2">
         <button onclick="brnSave(false)" class="brn-write" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">บันทึกร่าง</button>
-        <button onclick="brnSave(true)" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลตรวจนับ</button>
+        <button onclick="brnSave(true)" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">ส่งผลนับ</button>
         <button onclick="brnDiscard()" class="brn-write" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ล้างร่าง</button>
         <span id="brnStatus" class="text-xs"></span>
       </div>
@@ -118,11 +118,11 @@
 
     <div id="brnNext"></div>
     <div class="card p-3 mb-3">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการตรวจนับ</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ประวัติการนับของ</div>
       <div id="brnHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
-    <template id="hlp-branchstock-count" data-title="วิธีใช้ตรวจนับสิ้นเดือน">      <p><b>ตรวจนับสิ้นเดือน</b> — นับครบทุกรายการวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง)</p>
-      <p>ครั้งแรก = <b>ต้นงวด</b> ครั้งต่อไป = <b>ปลายงวด</b> · ต้องนับให้ครบทุกรายการก่อนกด “ส่งผลตรวจนับ” (ใส่ 0 ถ้าไม่มีของ ช่องว่างถือว่ายังไม่ได้นับ ปิดงวดสิ้นเดือนต้องนับ 100%) · เครื่องหมาย ✓ ที่โซน = นับครบทุกรายการของโซนนั้น · ตรวจนับหมุนเวียนกลุ่มมูลค่าสูง (ถ้าเปิดใช้) เป็นการตรวจเสริม ไม่ใช่การปิดงวด · เบิกใช้รายวันบันทึกในหน้า “ตัดเบิก”</p>
+    <template id="hlp-branchstock-count" data-title="วิธีใช้นับของสิ้นเดือน">      <p><b>นับของสิ้นเดือน</b> — นับของทุกรายการในวันที่ 1 ของเดือน (หรือภายใน 2 วัน) ทีละโซน ตามหน่วยที่นับจริง (แพ็ค / ขวด / ถุง)</p>
+      <p>ครั้งแรกเรียก <b>นับครั้งแรก</b> ครั้งต่อไปเรียก <b>นับสิ้นเดือน</b> · ต้องนับให้ครบทุกรายการก่อนกด “ส่งผลนับ” (ใส่ 0 ถ้าไม่มีของ ช่องว่างถือว่ายังไม่ได้นับ ปิดเดือนต้องนับครบ 100%) · เครื่องหมาย ✓ ที่โซน = นับครบทุกรายการของโซนนั้น · นับเสริมรายสัปดาห์เฉพาะกลุ่มมูลค่าสูง (ถ้าเปิดใช้) เป็นการนับเพิ่ม ไม่ใช่การปิดเดือน · ของที่ใช้แต่ละวันบันทึกในหน้า “ตัดเบิก”</p>
       
     </template>
   </div>
@@ -133,27 +133,27 @@
     <div id="brnRecvOpen" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnRecvOrder" class="card p-3 mb-3" style="display:none;border-left:4px solid var(--accent)"></div>
     <span id="brnRecvOrdDone" class="text-xs block mb-2" role="status"></span>
-    <!-- ── แจ้งเคลมสินค้า (owner 2026-10-08, 2026-10-09): goods that arrived damaged or wrong, claimed with a reason
+    <!-- ── แจ้งของขาด/เสีย (owner 2026-10-08, 2026-10-09): goods that arrived damaged or wrong, claimed with a reason
          (photos go to ประสานงานขาย by LINE); the receive form above raises the claim for a shortfall itself.
          The ids brnClaimCard / brnClaimMsg / brnClaimList / brnClaimForm are kept: the หน้างาน link anchors here. ── -->
     <div id="brnClaimCard" class="card p-3 mb-3" style="border-left:4px solid var(--amber-ink)">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งเคลมสินค้า</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งของขาด/เสีย</div>
       <div class="text-sm" style="color:var(--text-primary)">ส่งรูปทางไลน์ถึงประสานงานขาย</div>
       <div id="brnClaimMsg" class="text-xs mb-1"></div>
       <div id="brnClaimList" class="text-xs" style="color:var(--text-secondary)"></div>
       <div id="brnClaimForm" class="mt-2" style="display:none"></div>
     </div>
     <div class="card p-3 mb-3">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับสินค้าล่าสุด</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับของล่าสุด</div>
       <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
     </div>
     <!-- U3 (owner 2026-10-22): the form for goods the branch bought or received itself sits under the receipts, folded - the page opens on
          what the warehouse sent -->
     <details id="brnRecvManual" class="card p-3 mb-3">
-      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer;min-height:32px">บันทึกสินค้าที่รับเอง</summary>
+      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer;min-height:32px">บันทึกของที่รับเอง</summary>
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label>วันที่รับ<br><input type="date" id="brnRecvDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <label>เลขที่ใบส่งสินค้า (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
+        <label>เลขที่ใบส่งของ (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
       </div>
       <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label style="flex:1 1 200px">วัตถุดิบ<br><input id="brnRecvItem" list="brnItemList" placeholder="พิมพ์ชื่อหรือรหัส" onchange="brnRecvPicked()"
@@ -166,27 +166,27 @@
       <datalist id="brnItemList"></datalist>
       <div id="brnRecvLines" class="text-sm mt-2"></div>
       <div class="flex flex-wrap items-center gap-2 mt-2">
-        <button onclick="brnRecvSave()" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับสินค้า</button>
+        <button onclick="brnRecvSave()" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับของ</button>
         <span id="brnRecvStatus" class="text-xs"></span>
       </div>
     </details>
-    <template id="hlp-branchstock-recv" data-title="วิธีใช้รับสินค้า">      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: ตอบ “รับครบ” หากได้รับตามที่คลังส่งทุกรายการ · หากรายการใดไม่ครบ ตอบ “มีรายการไม่ครบ” แล้วเลือกรายการนั้น ใส่ “รับจริง” และเลือกสาเหตุ ส่วนต่างเป็นเคลมอัตโนมัติ ส่งรูปทางไลน์ให้ประสานงานขาย</p>
-      <p>บันทึกสินค้าที่รับเอง (ท้ายหน้า แตะเพื่อเปิด): บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น <span data-recipe>“ใช้น้อยกว่าสูตร”</span><span data-stock>“นับได้มากกว่าระบบ”</span></p>
-      <p>แจ้งเคลมภายหลัง: เลือกใบที่รับแล้ว ค้นหาและเลือกเฉพาะรายการที่มีปัญหา ใส่จำนวน (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
+    <template id="hlp-branchstock-recv" data-title="วิธีใช้รับของ">      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: ตอบ “รับครบ” ถ้าได้ของตามที่คลังส่งทุกรายการ · ถ้ารายการใดไม่ครบ ตอบ “มีรายการไม่ครบ” แล้วเลือกรายการนั้น ใส่ “รับจริง” และเลือกสาเหตุ จำนวนที่ขาดจะถูกแจ้งเป็นของขาดให้เอง ส่งรูปทางไลน์ให้ประสานงานขาย</p>
+      <p>บันทึกของที่รับเอง (ท้ายหน้า แตะเพื่อเปิด): บันทึกทุกครั้งที่รับของ รวมของที่สาขาซื้อเอง · ถ้าไม่บันทึกจะแสดงเป็น <span data-recipe>“ใช้น้อยกว่าสูตร”</span><span data-stock>“นับได้มากกว่าระบบ”</span></p>
+      <p>แจ้งของขาด/เสียภายหลัง: เลือกใบที่รับแล้ว ค้นหาและเลือกเฉพาะรายการที่มีปัญหา ใส่จำนวน (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
       
     </template>
   </div>
 
-  <!-- ── ผลต่างของฉัน ── -->
+  <!-- ── ส่วนต่างของฉัน ── -->
   <div id="brn-pane-var" style="display:none">
-    <!-- สามมุมมอง: รายงวด (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบสูตร) · สิ้นเดือน (คงเหลือตามระบบเทียบนับจริง) -->
+    <!-- สามมุมมอง: รายเดือน (ใช้จริงเทียบสูตร) · รายวัน (ตัดเบิกเทียบสูตร) · สิ้นเดือน (ของในระบบเทียบนับจริง) -->
     <div id="brnVarTabs" class="flex gap-1 mb-3"></div>
 
     <div id="brnVar-period">
       <div id="brnVarOverview" class="card p-3 mb-3" style="display:none"></div>
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-          งวด <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          เดือน <select id="brnVarPeriod" onchange="brnLoadVariance(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
         </div>
         <div id="brnVarHead" class="text-xs mt-2"></div>
         <span id="brnVarStatus" class="brn-status" role="status"></span>
@@ -198,7 +198,7 @@
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
           <label>เดือน<br><select id="brnVarDayMonth" class="supply-month" onchange="brnVarDayMonthChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></select></label>
-          <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดผลต่างตัดเบิกรายวัน (Excel)</a>
+          <a href="#" onclick="brnVarDailyXlsx();return false" style="color:var(--accent);padding-bottom:6px">ดาวน์โหลดส่วนต่างตัดเบิกรายวัน (Excel)</a>
           <span id="brnVarDayStatus" style="padding-bottom:6px"></span>
         </div>
         <div id="brnVarDayChips" class="flex flex-wrap gap-1 mt-2"></div>
@@ -210,22 +210,22 @@
     <div id="brnVar-recon" style="display:none">
       <div class="card p-3 mb-3">
         <div class="flex flex-wrap items-center gap-2 text-xs" style="color:var(--text-muted)">
-          งวด <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
+          เดือน <select id="brnRcPeriod" onchange="brnLoadVarRecon(this.value)" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:260px"></select>
           <label class="flex items-center gap-1"><input type="checkbox" id="brnRcAll" onchange="brnRenderVarRecon()"> แสดงทุกรายการ</label>
-          <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลดกระทบยอด (Excel)</a>
+          <a href="#" onclick="brnVarReconXlsx();return false" style="color:var(--accent)">ดาวน์โหลดตารางเทียบของ (Excel)</a>
         </div>
         <div id="brnRcHead" class="text-xs mt-2"></div>
         <span id="brnRcStatus" class="text-xs"></span>
       </div>
       <div id="brnRcList" class="card p-3 mb-3"></div>
     </div>
-    <template id="hlp-branchstock-var" data-title="วิธีใช้ผลต่างของฉัน">      <p data-recipe>รายงวด: ใช้จริงเทียบกับยอดตามสูตร · ให้เหตุผลเฉพาะรายการมูลค่าสูง (กลุ่มมูลค่าสูง และ 20 รายการที่ผลต่างเป็นเงินมากที่สุด) ที่เกินเกณฑ์และต่างตั้งแต่ ฿500 · รายการที่ขึ้น “ข้อมูลไม่ครบ” และรายการอื่นใน “รายการอื่น” ไม่ต้องให้เหตุผล</p>
+    <template id="hlp-branchstock-var" data-title="วิธีใช้ส่วนต่างของฉัน">      <p data-recipe>รายเดือน: ใช้จริงเทียบกับยอดตามสูตร · ให้เหตุผลเฉพาะรายการมูลค่าสูง (กลุ่มมูลค่าสูง และ 20 รายการที่ส่วนต่างเป็นเงินมากที่สุด) ที่ต่างมากและเป็นเงินตั้งแต่ ฿500 · รายการที่ขึ้น “ข้อมูลไม่ครบ” และรายการอื่นใน “รายการอื่น” ไม่ต้องให้เหตุผล</p>
       <p data-recipe>ติ๊กหลายรายการแล้วกด “ใช้เหตุผลเดียวกันกับที่เลือก” เพื่อบันทึกเหตุผลเดียวกันพร้อมกัน</p>
-      <p data-recipe>ถ้าบันทึกรับสินค้าไม่ครบ ผลจะแสดงเป็น “ใช้น้อยกว่าสูตร” · ตรวจสอบการรับสินค้าก่อนกด “ยืนยันรับสินค้าครบ”</p>
+      <p data-recipe>ถ้าบันทึกรับของไม่ครบ ผลจะแสดงเป็น “ใช้น้อยกว่าสูตร” · ตรวจการรับของก่อนกด “แจ้งว่าบันทึกรับของครบ”</p>
       <p data-recipe>รายวัน: ยอดเบิกเทียบกับยอดตามสูตรของแต่ละวัน · กลุ่มมูลค่าสูงที่เบิกเกินสูตรเกิน 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · แตะที่วันเพื่อดูรายการ</p>
-      <p data-stock>รายวัน: ยอดเบิกเทียบกับปกติของสาขา (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย) และค่ากลางทุกสาขา · กลุ่มมูลค่าสูงที่เบิกเกินหรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · แตะที่วันเพื่อดูรายการ</p>
-      <p data-stock>สิ้นเดือน: คงเหลือตามระบบเทียบกับนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล · ถ้าบันทึกรับสินค้าไม่ครบ ผลจะแสดงเป็น “นับได้มากกว่าระบบ” ตรวจสอบการรับสินค้าก่อนกด “ยืนยันรับสินค้าครบ”</p>
-      <p data-recipe>สิ้นเดือน: คงเหลือตามระบบเทียบกับนับจริง · รายการเกินเกณฑ์ต้องระบุเหตุผล</p>
+      <p data-stock>รายวัน: ยอดเบิกเทียบกับที่สาขาใช้ปกติ (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย) และเฉลี่ยทุกสาขา · กลุ่มมูลค่าสูงที่เบิกเกินหรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขึ้นไปเป็นเตือน · แตะที่วันเพื่อดูรายการ</p>
+      <p data-stock>สิ้นเดือน: ของในระบบเทียบกับนับจริง · รายการที่ต่างมากต้องระบุเหตุผล · ถ้าบันทึกรับของไม่ครบ ผลจะแสดงเป็น “นับได้มากกว่าระบบ” ตรวจการรับของก่อนกด “แจ้งว่าบันทึกรับของครบ”</p>
+      <p data-recipe>สิ้นเดือน: ของในระบบเทียบกับนับจริง · รายการที่ต่างมากต้องระบุเหตุผล</p>
       
     </template>
   </div>

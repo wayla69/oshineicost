@@ -167,7 +167,7 @@ def test_a_branch_login_is_pinned_to_its_branch(db, monkeypatch):
     assert RB._stock_branch(db, None, 1) == 1
 
 
-# ── owner 2026-10-13 · "ปิดงวดสิ้นเดือนต้องนับ 100%": a count is submitted only with EVERY item of the sheet counted ──
+# ── owner 2026-10-13 · "ปิดเดือนต้องนับ 100%": a count is submitted only with EVERY item of the sheet counted ──
 def _required(sh):
     return [i for z in sh["zones"] for i in z["items"] if i["required"]]
 
@@ -189,7 +189,7 @@ def test_a_count_with_an_uncounted_item_is_refused(db):
         ST.save(db, 1, [], "udon", submit=True, count_date="2026-10-01")
     msg = str(e.value)
     n = len(items) - 1
-    assert msg.startswith(f"ยังไม่ได้นับ {n} รายการ ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ (เช่น ") and msg.endswith(")")
+    assert msg.startswith(f"ยังไม่ได้นับ {n} รายการ ปิดเดือนต้องนับของครบทุกรายการ (เช่น ") and msg.endswith(")")
     assert items[1]["name"] in msg and first["name"] not in msg
     db.rollback()
     assert ST.draft_of(db, 1) is None                     # the refused call stored nothing (the router rolls back too)
@@ -200,14 +200,14 @@ def test_a_count_with_an_uncounted_item_is_refused(db):
 
 def test_a_file_import_must_carry_every_item_and_says_what_it_becomes(db):
     """Owner 2026-10-13 (replaces QA M5's "refuse unless confirmed"): a file that leaves ANY item of the sheet blank is refused, dry run and
-    saving alike, with no override; the answer says whether the file is the ต้นงวด or the ปลายงวด and how many items it counts."""
+    saving alike, with no override; the answer says whether the file is the นับครั้งแรก or the นับสิ้นเดือน and how many items it counts."""
     part = [{"code": "S-011", "qty": 2.0, "unit": "ถุง 1 กก.", "note": None}]
     pre = ST.import_count(db, 1, "2026-09-01", part, "analyst")
     sheet_n = len(_everything(ST.sheet(db, 1)))
-    assert pre["incomplete"] and not pre["ok"] and pre["blank"] == sheet_n - 1 and pre["kind"] == "begin" and pre["kind_th"] == "ต้นงวด"
+    assert pre["incomplete"] and not pre["ok"] and pre["blank"] == sheet_n - 1 and pre["kind"] == "begin" and pre["kind_th"] == "นับครั้งแรก"
     assert pre["counted_th"] == f"นับมา 1 จาก {sheet_n} รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ"
-    assert pre["incomplete_th"].startswith(f"ยังไม่ได้นับ {sheet_n - 1} รายการ ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ (เช่น ") and pre["missing"]
-    with pytest.raises(ValueError, match="ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"):
+    assert pre["incomplete_th"].startswith(f"ยังไม่ได้นับ {sheet_n - 1} รายการ ปิดเดือนต้องนับของครบทุกรายการ (เช่น ") and pre["missing"]
+    with pytest.raises(ValueError, match="ปิดเดือนต้องนับของครบทุกรายการ"):
         ST.import_count(db, 1, "2026-09-01", part, "analyst", dry_run=False)
     with pytest.raises(TypeError):                                                           # there is no accept_partial any more
         ST.import_count(db, 1, "2026-09-01", part, "analyst", accept_partial=True)
@@ -218,8 +218,8 @@ def test_a_file_import_must_carry_every_item_and_says_what_it_becomes(db):
     out = ST.import_count(db, 1, "2026-09-01", full, "analyst", dry_run=False)
     assert out["ok"] and out["status"] == "submitted"
     nxt = ST.import_count(db, 1, "2026-10-01", full, "analyst")                              # the second file is the END of the period
-    assert nxt["kind"] == "end" and nxt["kind_th"] == "ปลายงวด" and nxt["closes"] == {"begin_date": "2026-09-01", "end_date": "2026-10-01"}
-    assert "ปิดงวด" in nxt["role_th"] and "1/9/2026" in nxt["role_th"] and nxt["ok"]
+    assert nxt["kind"] == "end" and nxt["kind_th"] == "นับสิ้นเดือน" and nxt["closes"] == {"begin_date": "2026-09-01", "end_date": "2026-10-01"}
+    assert "ปิดเดือน" in nxt["role_th"] and "1/9/2026" in nxt["role_th"] and nxt["ok"]
 
 
 def test_last_count_is_read_in_the_unit_counted_now(db):

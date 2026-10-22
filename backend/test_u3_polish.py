@@ -80,8 +80,8 @@ def test_why_an_item_is_on_the_slip_in_plain_words():
     got = _node(stk + _fn(BRN, "_brnIssWhy") + """
 console.log(JSON.stringify([_brnIssWhy({recent: true, used_recent: true, system_qty: 3, required: true, monitored: true}),
   _brnIssWhy({used_recent: true, required: true}), _brnIssWhy({system_qty: 0}), _brnIssWhy({system_qty: -2, required: true})]));""")
-    assert got == [["เบิกใน 14 วันที่ผ่านมา", "มีคงเหลือตามระบบ", "รายการบังคับสั่ง ต้องนับทุกงวด"],
-                   ["สูตรอาหารใช้ใน 14 วันที่ผ่านมา", "กลุ่มมูลค่าสูง ต้องนับทุกงวด"], [], ["กลุ่มมูลค่าสูง ต้องนับทุกงวด"]]
+    assert got == [["เบิกใน 14 วันที่ผ่านมา", "มีของในระบบ", "รายการบังคับสั่ง ต้องนับทุกเดือน"],
+                   ["สูตรอาหารใช้ใน 14 วันที่ผ่านมา", "กลุ่มมูลค่าสูง ต้องนับทุกเดือน"], [], ["กลุ่มมูลค่าสูง ต้องนับทุกเดือน"]]
     stock_js = stk + "BC_MODE = 'stock';\n" + _fn(BRN, "_brnIssWhy") + "\nconsole.log(JSON.stringify(_brnIssWhy({used_recent: true})));"
     assert _node(stock_js) == ["ใช้ใน 14 วันที่ผ่านมา"]                                  # PR-S4: stock mode does not say "recipe"
 
@@ -181,8 +181,8 @@ console.log(JSON.stringify(r));""")
 def test_the_receive_confirm_says_what_it_records():
     got = _node(_fn(BRN, "_brnRcvHead") + """
 console.log(JSON.stringify([_brnRcvHead(4, 0, 4), _brnRcvHead(4, 2, 4), _brnRcvHead(4, 4, 0), _brnRcvHead(4, 3, 1), _brnRcvHead(3, 0, 0)]));""")
-    assert got == ["รับไม่ครบทุกรายการ · แจ้งเคลม 4 รายการ", "รับไม่ครบทุกรายการ · แจ้งเคลม 4 รายการ", "รับ 4 รายการ",
-                   "รับ 3 รายการ · แจ้งเคลม 1 รายการ", "ไม่ได้รับสินค้า"]
+    assert got == ["รับไม่ครบทุกรายการ · แจ้งของขาด 4 รายการ", "รับไม่ครบทุกรายการ · แจ้งของขาด 4 รายการ", "รับ 4 รายการ",
+                   "รับ 3 รายการ · แจ้งของขาด 1 รายการ", "ไม่ได้รับของ"]
     fn = _fn(BRN, "brnReceiveOrder")
     assert "${_brnRcvHead(lines.length, n, short)}" in fn and "· ${n} รายการ · วันที่" not in fn
     # the line under the picked rows and the line under the save button never say "รับครบ 0 รายการ" either
@@ -197,7 +197,7 @@ def test_the_manual_receipt_form_is_folded_under_the_receipts():
     assert pane.index('id="brnRecvOrder"') < pane.index('id="brnRecvOrdDone"') < pane.index('id="brnClaimCard"') \
         < pane.index('id="brnRecvHistory"') < pane.index('<details id="brnRecvManual"') < pane.index('id="brnRecvDate"')
     det = pane[pane.index('<details id="brnRecvManual"'):]
-    assert " open" not in det[:det.index(">")] and "<summary" in det and "บันทึกสินค้าที่รับเอง</summary>" in det
+    assert " open" not in det[:det.index(">")] and "<summary" in det and "บันทึกของที่รับเอง</summary>" in det
     assert det.index("</details>") > det.index('id="brnRecvStatus"')                          # the manual form's own status stays inside it
     assert "_bmcStatus('brnRecvOrdDone'" in _fn(BRN, "brnReceiveOrder") and "_bmcStatus('brnRecvStatus'" not in _fn(BRN, "brnReceiveOrder")
     assert "brnRecvOrdDone: 'receive_pending'" in _src("js/16-supplyhome.js")

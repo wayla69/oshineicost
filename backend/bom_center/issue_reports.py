@@ -36,11 +36,11 @@ OVER_PCT = 20.0            # a class-A item issued more than this % over its BoM
 STREAK_DAYS = 3            # … and that many trading days in a row is a flag
 UNDER_PCT = 30.0           # PR-B4a (1.4): a class-A item issued more than this % UNDER its BoM that day is "under" (3 days in a row = a flag)
 BLANK_TOP = 8              # PR-B4a (1.4): the confirm dialog names this many blank class-A items, the most valuable first
-SLIP_STATUS_TH = {"on_time": "ยืนยันตรงวัน", "late": "ล่าช้า", "draft": "ยังไม่ยืนยัน", "missing": "ไม่มีใบ",
+SLIP_STATUS_TH = {"on_time": "ส่งตรงวัน", "late": "ส่งช้า", "draft": "ยังไม่ส่ง", "missing": "ไม่มีใบ",
                   "closed": "ไม่มียอดขาย"}
 RECON_STATUS_TH = {"ok": "ตรงกัน (ในเกณฑ์)", "over": "นับได้มากกว่าระบบ", "under": "นับได้น้อยกว่าระบบ",
-                   "not_counted": "ตรวจนับไม่ครบ"}
-SLIP_NOTE_TH = {"on_time": "", "late": "ยืนยันหลังวันที่ของใบ", "draft": "มีร่างแล้ว ยังไม่ยืนยัน",
+                   "not_counted": "นับของไม่ครบ"}
+SLIP_NOTE_TH = {"on_time": "", "late": "ส่งหลังวันที่ของใบ", "draft": "มีร่างแล้ว ยังไม่ส่ง",
                 "missing": "ยังไม่มีใบตัดเบิก", "closed": "ไม่มียอดขายและไม่มีใบตัดเบิก"}
 SIGNAL_TH = {"over": "เบิกเกินเกณฑ์", "streak": "เบิกเกินต่อเนื่อง", "under_streak": "เบิกน้อยกว่าสูตรต่อเนื่อง"}
 _EPS = 1e-6
@@ -52,7 +52,7 @@ MEDIAN_MIN_BRANCHES = 2             # fewer other branches on the slips than thi
 MEDIAN_WINDOW_DAYS = 7 * FC.HISTORY_WEEKS             # the window (days before the day) the issued per PER_SALES baht is measured over
 PER_SALES = 100000.0
 UNDER_PCT_STOCK = 20.0              # O4: under the comparator by more than this % is "under" (mode full keeps UNDER_PCT)
-BASIS_TH = {"normal": "ปกติของสาขา", "median": "ค่ากลาง", "both": "ปกติของสาขาและค่ากลาง"}
+BASIS_TH = {"normal": "ที่สาขาใช้ปกติ", "median": "เฉลี่ยทุกสาขา", "both": "ที่สาขาใช้ปกติและเฉลี่ยทุกสาขา"}
 
 
 def _d(x) -> date:

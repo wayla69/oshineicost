@@ -123,8 +123,8 @@ function _shmSortMine(role) {
     : (a, b) => ((b.urgent ? 1 : 0) - (a.urgent ? 1 : 0)) || (st[shmState(a)] - st[shmState(b)]) || (a.seq - b.seq);
 }
 // other departments' per-branch duties are one line each, not one card per branch and day
-const _SHM_GROUP_TITLE = { slip: 'สาขาที่ยังไม่ยืนยันใบตัดเบิก', order_due: 'สาขาที่ยังไม่ส่งใบสั่งซื้อ',
-  receive_pending: 'สาขาที่ยังไม่บันทึกรับสินค้า', variance_open: 'สาขาที่ยังไม่ระบุเหตุผลผลต่าง' };
+const _SHM_GROUP_TITLE = { slip: 'สาขาที่ยังไม่ส่งใบตัดเบิก', order_due: 'สาขาที่ยังไม่ส่งใบสั่งซื้อ',
+  receive_pending: 'สาขาที่ยังไม่บันทึกรับของ', variance_open: 'สาขาที่ยังไม่ระบุเหตุผลของส่วนต่าง' };
 function _shmGroupKey(it) {
   if (!it.branch_id) return null;
   const k = String(it.key).split(':')[0];
@@ -161,7 +161,7 @@ function _shmOthersHtml(lines, f) {
 }
 
 // ── PR-M7 · "วันนี้เหลือทำอะไร" (a branch login, หน้างาน only) ──────────────────────────────────────────────
-// Three lines — ตัดเบิก · สั่งสินค้า · รับสินค้า — each with a ✓ (nothing left) or ● (something to do) and a link to the task. The
+// Three lines — ตัดเบิก · สั่งของ · รับของ — each with a ✓ (nothing left) or ● (something to do) and a link to the task. The
 // statuses are read from the same to-do items as the cards below (issue_today, the nearest order_due_*, receive_pending).
 const _SHM_WD = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 function _shmTodayRows(d) {
@@ -173,12 +173,12 @@ function _shmTodayRows(d) {
   const gaps = items.filter(it => base(it).startsWith('issue_missing_') && it.status === 'todo').length;
   if (iss) {
     const ok = iss.status === 'done';
-    // 5.4: ONE status for today's slip (ยืนยันแล้ว · ร่าง · ยังไม่ทำ), then the backlog as a count
-    const txt = ok ? `ยืนยันแล้ว ${iss.confirmed_hhmm || ''}`.trim() + (iss.appends ? ` · เบิกเพิ่ม ${iss.appends} ครั้ง` : '')
+    // 5.4: ONE status for today's slip (ส่งแล้ว · ร่าง · ยังไม่ทำ), then the backlog as a count
+    const txt = ok ? `ส่งแล้ว ${iss.confirmed_hhmm || ''}`.trim() + (iss.appends ? ` · เบิกเพิ่ม ${iss.appends} ครั้ง` : '')
       : (iss.slip_status === 'draft' ? 'ร่าง' : 'ยังไม่ทำ');
     rows.push({ k: 'issue', label: 'ตัดเบิกวันนี้', ok: ok && !gaps, text: txt + (gaps ? ` · ค้าง ${gaps} วัน` : ''), go: iss.go });
   }
-  // สั่งสินค้า: the NEXT order due - the open round whose cutoff comes first (a round past its cutoff first of all). "ส่งแล้ว" only when
+  // สั่งของ: the NEXT order due - the open round whose cutoff comes first (a round past its cutoff first of all). "ส่งแล้ว" only when
   // no round is waiting: while another order is still open the strip names it, never a ✓ for the one that went (2.3)
   const ord = items.filter(it => base(it).startsWith('order_due_'));
   const pend = ord.filter(it => it.status === 'todo' && !it.upcoming).sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.cutoff_at).localeCompare(String(b.cutoff_at)));
@@ -187,26 +187,26 @@ function _shmTodayRows(d) {
     const ms = new Date(it.cutoff_at).getTime() - Date.now();
     const left = isNaN(ms) || ms <= 0 ? '' : ` (${fmtLeft(ms / 3600000)})`;
     const more = pend.length > 1 ? ` · รออีก ${pend.length - 1} รอบ` : '';
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: false, bad: !!it.late,
-      text: (it.late ? 'เลยเวลาตัดรอบ · ส่งตอนนี้มีค่าปรับ' : `${it.round_th === 'แซลมอนสด' ? 'แซลมอนสด · ' : ''}รอบส่ง ${fmtDayShort(it.delivery)} · ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`) + more, go: it.go });
+    rows.push({ k: 'order', label: 'สั่งของ', ok: false, bad: !!it.late,
+      text: (it.late ? 'เลยเวลาส่ง · ส่งตอนนี้มีค่าปรับ' : `${it.round_th === 'แซลมอนสด' ? 'แซลมอนสด · ' : ''}รอบส่งของ ${fmtDayShort(it.delivery)} · ส่งใบสั่งซื้อภายใน ${fmtCutoff(it.cutoff_at)}${left}`) + more, go: it.go });
   } else if (ord.some(it => it.upcoming)) {           // PR-U1: the next cutoff is on a later day - nothing to do today
     const nx = ord.filter(it => it.upcoming).sort((a, b) => String(a.cutoff_at).localeCompare(String(b.cutoff_at)))[0];
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: nx.next_th || 'ยังไม่ถึงรอบตัด', go: nx.go });
+    rows.push({ k: 'order', label: 'สั่งของ', ok: true, text: nx.next_th || 'ยังไม่ถึงเวลาส่ง', go: nx.go });
   } else if (ord.length) {
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ส่งแล้ว', go: ord[0].go });
+    rows.push({ k: 'order', label: 'สั่งของ', ok: true, text: 'ส่งแล้ว', go: ord[0].go });
   } else {
-    rows.push({ k: 'order', label: 'สั่งสินค้า', ok: true, text: 'ไม่มีรอบที่ต้องส่ง', go: { tab: 'branchstock', pane: 'order' } });
+    rows.push({ k: 'order', label: 'สั่งของ', ok: true, text: 'ไม่มีรอบที่ต้องส่ง', go: { tab: 'branchstock', pane: 'order' } });
   }
   // รับสินค้า
   const rec = items.find(it => base(it) === 'receive_pending');
-  rows.push(rec ? { k: 'recv', label: 'รับสินค้า', ok: false, text: `มีใบรอรับ ${rec.count || 1} ใบ`, go: rec.go }
-    : { k: 'recv', label: 'รับสินค้า', ok: true, text: 'ไม่มีใบรอรับ', go: { tab: 'branchstock', pane: 'recv' } });
+  rows.push(rec ? { k: 'recv', label: 'รับของ', ok: false, text: `มีใบรอรับ ${rec.count || 1} ใบ`, go: rec.go }
+    : { k: 'recv', label: 'รับของ', ok: true, text: 'ไม่มีใบรอรับ', go: { tab: 'branchstock', pane: 'recv' } });
   return rows;
 }
 function _shmTodayStrip(d, role) {
   const card = document.getElementById('shmToday');
   if (!card) return;
-  // PR-D6: only what is still open - a line that is finished ("รับสินค้า: ไม่มีใบรอรับ ✓") disappears, and so does the strip when nothing is open
+  // PR-D6: only what is still open - a line that is finished ("รับของ: ไม่มีใบรอรับ ✓") disappears, and so does the strip when nothing is open
   const open = role === 'branch' ? _shmTodayRows(d).filter(r => !r.ok) : [];
   card.style.display = open.length ? '' : 'none';
   if (!open.length) return;
