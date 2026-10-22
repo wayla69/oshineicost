@@ -20,6 +20,8 @@
       <div id="brnIssBanner" class="mt-2" style="display:none"></div>
       <!-- PR-M7: เบิกเหมือนเมื่อวาน — fills the empty boxes from the previous confirmed slip -->
       <div id="brnIssQuick" class="brn-quick mt-2" style="display:none"></div>
+      <!-- PR-SI: the same slip as an Excel form (js/14-branch.js brnFormMount) -->
+      <div id="brnIssForm" class="mt-2"></div>
     </div>
     <div class="card p-3 mb-3 brn-zonebar" style="position:sticky;top:0;z-index:5">
       <div id="brnIssZones" class="flex flex-wrap gap-1 brn-zones"></div>
@@ -56,6 +58,7 @@
       <div id="brnOrdPages" class="flex flex-wrap gap-1 mt-2"></div>
       <div id="brnOrdHead" class="text-xs mt-2"></div>
       <div id="brnOrdBanner" class="mt-2" style="display:none"></div>
+      <div id="brnOrdForm" class="mt-2"></div>
       <div id="brnOrdBuffer" class="mt-2" style="border-top:1px solid var(--border-soft);padding-top:8px"></div>
       <div class="flex flex-wrap items-center gap-3 mt-2 text-xs" style="color:var(--text-muted)">
         <label class="flex items-center gap-1"><input type="checkbox" id="brnOrdOnly" checked onchange="brnRenderOrder()"> เฉพาะรายการที่ต้องสั่ง</label>
