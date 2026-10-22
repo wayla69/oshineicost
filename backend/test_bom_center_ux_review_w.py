@@ -232,3 +232,7 @@ def test_the_receive_route_accepts_a_weight_without_a_quantity():
     ln = ReceiveLine(code="02-01-001", weight=8.8, pieces=2)
     assert ln.received_units is None and ln.dict()["weight"] == 8.8
     assert ReceiveLine(code="X", received_units=3).dict()["weight"] is None
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

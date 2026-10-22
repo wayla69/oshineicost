@@ -643,3 +643,7 @@ def test_http_the_consolidated_file_shows_the_accounting_code_and_keeps_the_regi
             c.execute("DELETE FROM bc_audit WHERE row_key='T-KEY1' OR row_key LIKE 'TKEY-%'")
             c.commit()
         _cleanup(main.DB_PATH, ids)
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

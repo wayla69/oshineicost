@@ -382,3 +382,7 @@ def test_the_festival_editor_moved_out_of_the_legacy_group():
     legacy = re.findall(r"\{[^{}]*group: 'legacy'[^{}]*\}", setup)
     assert not [x for x in legacy if "ปฏิทินเทศกาล" in x] and len(legacy) == 3
     assert "ปฏิทินเทศกาล" not in "".join(legacy)
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

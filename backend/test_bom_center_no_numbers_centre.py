@@ -172,3 +172,7 @@ def test_a_single_claim_says_nothing_about_its_turn(con):  # noqa: F811
 def test_a_replaced_version_is_named_by_its_label_in_the_release_note():
     src = _src("backend/bom_center/release.py")
     assert "เวอร์ชันเลขที่" not in src and "แทนที่โดยเวอร์ชัน {lbl(rel['label'])}" in src
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

@@ -424,3 +424,7 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         assert client.get(f"/api/bom-center/stock/counts?branch_id={bid}&kind=month").json()["counts"] == []
     finally:
         _restore(main.DB_PATH, snap)
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

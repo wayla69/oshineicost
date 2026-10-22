@@ -408,3 +408,7 @@ def test_a_week_the_branch_barely_traded_is_not_a_week(newb):
     newb.commit()
     four = PS.ratio(newb, 2, date(2026, 9, 29), AS_OF, "2026-10")            # four days: the ratio is there, the week is not
     assert four["weeks"] == 0 and four["items"][CRAB]["swing_pct"] is None and four["items"][CRAB]["steady"] is None
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

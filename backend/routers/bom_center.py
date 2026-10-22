@@ -2204,9 +2204,15 @@ def bc_forecast_runs(branch_id: Optional[int] = Query(None), limit: int = Query(
             q += " WHERE r.branch_id = ?"
             args.append(branch_id)
         rows = con.execute(q + " ORDER BY r.run_id DESC LIMIT ?", args + [limit]).fetchall()
-    cols = ("run_id", "branch_id", "branch", "order_day", "round", "cover_from", "cover_to", "created_at",
-            "created_by", "lines", "value")
-    return {"rows": [dict(zip(cols, r)) for r in rows]}
+        cols = ("run_id", "branch_id", "branch", "order_day", "round", "cover_from", "cover_to", "created_at",
+                "created_by", "lines", "value")
+        out = [dict(zip(cols, r)) for r in rows]
+        src = {}                                   # PR-S3: where each branch's suggestion comes from now (the list shows it per branch)
+        for r in out:
+            if r["branch_id"] not in src:
+                src[r["branch_id"]] = _fc.source_label(con, r["branch_id"])
+            r["source"] = src[r["branch_id"]]
+    return {"rows": out}
 
 
 @router.get("/api/bom-center/forecast/backtest")
@@ -2775,9 +2781,11 @@ def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = 
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _write(con, lambda: _is.save(con, bid, body.date or bkk_today().isoformat(),
-                                            [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
-                                            note=body.note))
+        out = _write(con, lambda: _is.save(con, bid, body.date or bkk_today().isoformat(),
+                                           [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
+                                           note=body.note))
+    _fc.clear_slip_cache()            # PR-S3: the order suggestion reads the confirmed slips
+    return out
 
 
 class IssueBlankBody(BaseModel):
@@ -2796,7 +2804,9 @@ def bc_issue_blank(body: IssueBlankBody, request: Request, branch_id: Optional[i
             day = date.fromisoformat(body.date) if body.date else bkk_today()
         except ValueError:
             raise HTTPException(400, "วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD")
-        return _short(con, _ir.blank_class_a(con, bid, day, set(body.codes or [])))
+        out = _short(con, _ir.blank_class_a(con, bid, day, set(body.codes or [])))
+    _fc.clear_slip_cache()            # PR-S3: asked at every confirm; the slip figures are read afresh after it
+    return out
 
 
 @router.post("/api/bom-center/issues/append", dependencies=[Depends(require_write_token)])
@@ -2805,8 +2815,10 @@ def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional
     with get_db() as con:
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
-        return _write(con, lambda: _is.append(con, bid, body.date or bkk_today().isoformat(),
-                                              [ln.dict() for ln in body.lines], _who(request)))
+        out = _write(con, lambda: _is.append(con, bid, body.date or bkk_today().isoformat(),
+                                             [ln.dict() for ln in body.lines], _who(request)))
+    _fc.clear_slip_cache()            # PR-S3
+    return out
 
 
 @router.get("/api/bom-center/issues/status")
@@ -2829,7 +2841,9 @@ def bc_issue_reopen(body: IssueReopenBody, request: Request):
     """Sales Support (or the analyst) opens a confirmed slip for the branch to edit; the reason is logged."""
     with get_db() as con:
         _ensure(con)
-        return _write(con, lambda: _is.reopen(con, body.slip_id, _who(request), body.note))
+        out = _write(con, lambda: _is.reopen(con, body.slip_id, _who(request), body.note))
+    _fc.clear_slip_cache()            # PR-S3
+    return out
 
 
 @router.get("/api/bom-center/issues")

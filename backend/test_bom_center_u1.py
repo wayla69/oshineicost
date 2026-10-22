@@ -340,3 +340,7 @@ def test_bmc_show_qty():
 def test_the_next_count_across_the_year_end():
     """A count dated the last day of December begins January: the next one is the 1st of February."""
     assert ST.next_full_date(date(2026, 12, 31)) == date(2027, 2, 1) and ST.next_full_date(date(2026, 12, 30)) == date(2027, 1, 1)
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

@@ -314,6 +314,8 @@ _usage_lock = threading.Lock()
 def clear_usage_cache() -> None:
     with _usage_lock:
         _usage_cache.clear()
+    with _slip_lock:
+        _slip_cache.clear()
     try:                                                   # PR-V: the per-฿100,000 report is built on this usage (PR-X: so is the recipe check)
         from . import backlog, per_sales, recipe_check
         per_sales.clear_cache()
@@ -390,6 +392,131 @@ def _usage_history_uncached(con, branch_id: int, start: date, end: date, month: 
                        sorted(missed.items(), key=lambda kv: -kv[1])[:40]]
     stats["missed_lines"] = len(missed)
     return use, sorted(days), stats
+
+
+# ── PR-S3 · demand from the confirmed issue slips (stock-first mode) ──────────────────────────────────────────────
+SLIP_MIN_DAYS = 14                     # fewer confirmed slip days than this in the window: no recipe fallback in stock mode (O1)
+_slip_cache: dict = {}                 # key -> (stored at, (use, days, stats)); its own dict, cleared with clear_usage_cache()
+_slip_lock = threading.Lock()
+
+
+def clear_slip_cache() -> None:
+    """A slip was saved, confirmed, appended to or reopened: what the slips say changed (PR-S3). The per-฿100,000 report is built on
+    the same usage, so its cache goes too."""
+    with _slip_lock:
+        _slip_cache.clear()
+    try:
+        from . import per_sales
+        per_sales.clear_cache()
+    except Exception:
+        pass
+
+
+def _slip_days(con, branch_id: int, start: date, end: date) -> list:
+    return [d for (d,) in con.execute(
+        "SELECT slip_date FROM bc_issue_slip WHERE branch_id=? AND status='confirmed' AND slip_date BETWEEN ? AND ? ORDER BY slip_date",
+        (branch_id, start.isoformat(), end.isoformat()))]
+
+
+def _usage_history_slips_uncached(con, branch_id: int, start: date, end: date) -> tuple:
+    days = _slip_days(con, branch_id, start, end)
+    use = {}
+    unconverted = 0
+    for day, code, ub, wb, qu, qw in con.execute(
+            "SELECT s.slip_date, l.ingredient_code, l.qty_used_base, l.qty_waste_base, l.qty_used, l.qty_waste"
+            " FROM bc_issue_slip s JOIN bc_issue_line l USING(slip_id)"
+            " WHERE s.branch_id=? AND s.status='confirmed' AND s.slip_date BETWEEN ? AND ?",
+            (branch_id, start.isoformat(), end.isoformat())):
+        if ((qu or 0) > 0 and ub is None) or ((qw or 0) > 0 and wb is None):
+            unconverted += 1                              # a line the units cannot turn into base units: its NULL part is skipped
+        q = (ub or 0.0) + (wb or 0.0)                     # waste is part of what leaves the shelf: no yield gross-up
+        if q > 0:
+            use.setdefault(code, {})
+            use[code][day] = use[code].get(day, 0.0) + q
+    stats = {"source": "slips", "confirmed_days": len(days), "window_days": (end - start).days + 1,
+             "missed": [], "missed_lines": 0, "via": {}, "unconverted_lines": unconverted}
+    return use, days, stats
+
+
+def usage_history_slips(con, branch_id: int, start: date, end: date) -> tuple:
+    """({ingredient: {day: used + waste, base units}}, days with a confirmed slip, stats) - the same shape as usage_history, read from
+    the CONFIRMED issue slips (a draft is nobody's figure yet). Cached like usage_history (own dict, same TTL and lock pattern, key =
+    database file + core's generations); the slip write endpoints call clear_slip_cache()."""
+    ttl = USAGE_CACHE_TTL
+    key = _usage_key(con, branch_id, start, end, "slips") if ttl and ttl > 0 else None
+    if key is not None:
+        with _slip_lock:
+            hit = _slip_cache.get(key)
+        if hit and _time.monotonic() - hit[0] < ttl:
+            use, days, stats = hit[1]
+            return use, list(days), dict(stats)
+    use, days, stats = _usage_history_slips_uncached(con, branch_id, start, end)
+    if key is not None:
+        with _slip_lock:
+            if len(_slip_cache) >= _USAGE_CACHE_MAX:
+                for k in sorted(_slip_cache, key=lambda k: _slip_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
+                    _slip_cache.pop(k, None)
+            _slip_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
+    return use, days, stats
+
+
+def demand_source(con, branch_id: int, start: date, end: date, month: str) -> tuple:
+    """PR-S3 · the ONE place that decides what a branch's demand is read from: (use, days, stats) with stats["source"] =
+      recipes  mode `full`: forecast.usage_history, as before;
+      slips    mode `stock` and at least SLIP_MIN_DAYS confirmed slip days in [start, end]: usage_history_slips;
+      none     mode `stock` and fewer: ({}, the days that have a slip, stats) - never a fall back to the recipes (owner O1)."""
+    from .close_settings import stock_mode
+    if not stock_mode(con):
+        use, days, stats = usage_history(con, branch_id, start, end, month)
+        stats["source"] = "recipes"
+        stats["window_days"] = (end - start).days + 1
+        return use, days, stats
+    days = _slip_days(con, branch_id, start, end)
+    if len(days) >= SLIP_MIN_DAYS:
+        return usage_history_slips(con, branch_id, start, end)
+    return {}, days, {"source": "none", "confirmed_days": len(days), "min_days": SLIP_MIN_DAYS,
+                      "window_days": (end - start).days + 1, "missed": [], "missed_lines": 0, "via": {}}
+
+
+def company_branch_ids(con, exclude=None) -> list:
+    """PR-S3 (owner 2026-10-22): the company branches - `branches.branch_type = 'master'` (the master / franchise split the Monthly Report
+    scope uses), active, not the 'ALL' row - without `exclude`. In stock mode every one of them whose demand source is the slips (at
+    least SLIP_MIN_DAYS confirmed days) is part of the all-branch median; franchise branches never are."""
+    return [b for (b,) in con.execute(
+        "SELECT branch_id FROM branches WHERE branch_type='master' AND name<>'ALL' AND COALESCE(active,1)=1 ORDER BY branch_id")
+        if exclude is None or int(b) != int(exclude)]
+
+
+def source_label(con, branch_id: int) -> dict:
+    """PR-S3 · where the order suggestion of a branch comes from right now, for a list of branches (no usage is walked, only the slip
+    days are counted): {kind: recipes | slips | benchmark | none, confirmed_days, window_days, min_days, branches}. In stock mode
+    `benchmark` = fewer than SLIP_MIN_DAYS confirmed days of its own and `branches` other company branches that have enough."""
+    from .close_settings import stock_mode
+    out = {"kind": "recipes", "confirmed_days": None, "window_days": None, "min_days": SLIP_MIN_DAYS, "branches": 0}
+    if not stock_mode(con):
+        return out
+    last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
+    as_of = date.fromisoformat(last) if last else now_bkk().date() - timedelta(days=1)
+    start = era_start(as_of - timedelta(days=41), as_of)
+    n = len(_slip_days(con, branch_id, start, as_of))
+    out.update(kind="slips" if n >= SLIP_MIN_DAYS else "none", confirmed_days=n, window_days=(as_of - start).days + 1)
+    if out["kind"] == "none":
+        k = 0
+        for b in company_branch_ids(con, exclude=branch_id):
+            bl = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (b,)).fetchone()[0]
+            bo = date.fromisoformat(bl) if bl else as_of
+            if len(_slip_days(con, b, era_start(bo - timedelta(days=41), bo), bo)) >= SLIP_MIN_DAYS:
+                k += 1
+        if k:
+            out.update(kind="benchmark", branches=k)
+    return out
+
+
+def source_info(stats: dict) -> dict:
+    """The `source` block of an answer: where a branch's demand was read from and how much of the window the slips cover."""
+    kind = (stats or {}).get("source", "recipes")
+    return {"kind": kind, "confirmed_days": (stats or {}).get("confirmed_days"),
+            "window_days": (stats or {}).get("window_days"), "min_days": SLIP_MIN_DAYS}
 
 
 def era_start(start: date, as_of: date) -> date:
@@ -523,7 +650,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     as_of = as_of or (date.fromisoformat(last_data) if last_data else order_day - timedelta(days=1))
     start = era_start(as_of - timedelta(days=7 * weeks - 1), as_of)
     month = f"{order_day.year:04d}-{order_day.month:02d}"
-    use, days, stats = usage_history(con, branch_id, start, as_of, month)
+    use, days, stats = demand_source(con, branch_id, start, as_of, month)
+    src = stats.get("source", "recipes")                   # PR-S3: recipes | slips | none (stock mode, too few confirmed slip days)
     bname = (con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone() or [None])[0]
     sf = {"factor": 1.0, "mode": "off", "reason": ""}
     if season == "auto":
@@ -542,14 +670,43 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
     cover = [c_from + timedelta(days=i) for i in range((c_to - c_from).days + 1)]
     # PR-V · usage per ฿100,000 of sales (own history), and the "ปกติ" sales the forecast assumes for the cover days
     sales_day = _ps.sales_by_day(con, branch_id, start, as_of)
-    ps_items = _ps.ratio_from(use, sales_day, start, as_of)["items"]
+    ps_items = _ps.ratio_from(use, _ps.align_sales(sales_day, days, stats), start, as_of)["items"]
     sales_normal = None
     if days and sales_day:
         n_ = _ps.normal_from(sales_day, days, as_of, cover, factor)["total"]
         sales_normal = round(n_, 2) if n_ > 0 else None
     ref_mode = None
+    fallback = None
     is_bench = ref_branch == _ps.BENCH
-    if ref_branch and (is_bench or int(ref_branch) != int(branch_id)) and len(days) < _ps.NEW_BRANCH_DAYS:
+    if src == "none":
+        # PR-S3 · O1: stock mode, fewer than SLIP_MIN_DAYS confirmed slip days. (ข) another branch has enough: the benchmark per
+        # ฿100,000 of the slip branches x the sales expected (by default this branch's own "ปกติ" sales of the cover days - it has sales
+        # without slips); (ก) none has: no suggestion at all, the branch types its own order.
+        n_slip = int(stats.get("confirmed_days") or 0)
+        rb = _ps.benchmark_basis(con, branch_id, month, weeks=weeks, cover=cover, factor=factor)
+        if rb["ok"]:
+            exp = float(expected_sales or 0.0)
+            if exp <= 0 and sales_day:
+                own = _ps.normal_from(sales_day, sorted(sales_day), as_of, cover, factor)["total"]
+                exp = round(own, 2) if own > 0 else 0.0
+                expected_sales = exp or expected_sales
+            ref_mode = {"active": True, "branch_id": None, "name": rb["name"], "own_days": n_slip, "min_days": SLIP_MIN_DAYS,
+                        "expected_sales": exp or None, "ref_sales_normal": rb["sales_normal"], "needs_sales": exp <= 0,
+                        "ref_ok": True, "benchmark": True, "label": rb.get("label"),
+                        "message": _ps.NEED_SALES_TH if exp <= 0 else ""}
+            k = len(rb.get("branches") or [])
+            fallback = {"mode": "benchmark", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS, "branches": k,
+                        "message": f"ยอดแนะนำจากค่ากลาง {k} สาขาต่อยอดขาย ฿100,000 (ใบตัดเบิกของสาขายังมี {n_slip}/{SLIP_MIN_DAYS} วัน)"}
+            sales_normal = None
+            if exp > 0:
+                use, ps_items = rb["use"], rb["items"]
+                stats["via"] = (rb["stats"] or {}).get("via", {})
+                factor, up = 1.0, 1.0
+        else:
+            fallback = {"mode": "none", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS,
+                        "message": f"ยังไม่มีใบตัดเบิกพอสำหรับยอดแนะนำ ({n_slip}/{SLIP_MIN_DAYS} วัน) กรอกยอดสั่งเอง"}
+            sales_normal = None
+    elif ref_branch and (is_bench or int(ref_branch) != int(branch_id)) and len(days) < _ps.NEW_BRANCH_DAYS:
         if is_bench:                                       # PR-X: the median of the company branches
             rb = _ps.benchmark_basis(con, branch_id, month, weeks=weeks, cover=cover, factor=factor)
         else:
@@ -668,6 +825,8 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
                      "short_ship_skipped": m.get("skipped", 0),                                   # 1.8 · days left out of the means
                      "value": round((units * per if units else need) * ppb, 2) if ppb else None})
     rows.sort(key=lambda r: -(r["value"] or 0))
+    if fallback and fallback["mode"] == "none":            # PR-S3 (ก): the list of the branch, no figure to suggest
+        rows = _unsuggested_rows(con, branch_id, rnd, order_day, stock, master, salmon, cmap)
     stats.pop("via", None)                                 # carried on each row instead
     cal = calendar(con, branch_id)[rnd]
     cut = cutoff_for(dlv)
@@ -679,7 +838,44 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, seas
             "trading_days": len(days), "season": sf, "stats": stats, "uplift_pct": round(float(uplift_pct or 0.0), 2),
             "on_hand_included": bool((stock or {}).get("basis")),
             "rows": rows, "value_total": round(sum(r["value"] or 0 for r in rows), 2),
-            "salmon_codes": sorted(salmon), "sales_normal": sales_normal, "ref_mode": ref_mode}
+            "salmon_codes": sorted(salmon), "sales_normal": sales_normal, "ref_mode": ref_mode,
+            "source": source_info(stats), "fallback": fallback}
+
+
+def _unsuggested_rows(con, branch_id, rnd, order_day, stock, master, salmon, cmap) -> list:
+    """PR-S3 (ก): the rows of a branch that has no suggestion (stock mode, too few confirmed slips, no other branch to borrow from):
+    the items the page lists today - the branch's count sheet (monitored items), the centre's list, what it holds by the last count,
+    what its latest sent order of this round carried - each with `suggested` None and `last_order_qty` (that order's quantity)."""
+    from .central import NON_FOOD
+    from .prep import book as _prep_book
+    last = {}
+    r = con.execute("SELECT order_id FROM bc_order WHERE branch_id=? AND round=? AND cycle_date<? AND status IN"
+                    " ('submitted','processed','received') ORDER BY cycle_date DESC, order_id DESC LIMIT 1",
+                    (branch_id, rnd, order_day.isoformat())).fetchone()
+    if r:
+        last = {c: q for c, q in con.execute("SELECT ingredient_code, confirmed_units FROM bc_order_line WHERE order_id=?"
+                                             " AND COALESCE(confirmed_units, 0) > 0", (r[0],))}
+    has_sub = set(_prep_book(con))
+    codes = {c for c, m in master.items() if m[7] and c not in has_sub}              # monitored (the count sheet)
+    codes |= {c for c in cmap if c in master and not c.startswith(NON_FOOD)}
+    codes |= {c for c in ((stock or {}).get("qty") or {}) if c in master}
+    codes |= {c for c in last if c in master}
+    rows = []
+    for code in sorted(codes):
+        if (code in salmon) != (rnd == "salmon"):
+            continue
+        name, base, recv, per, moq, shelf, kind, mon, src, lead = master[code]
+        rows.append({"code": code, "name": name or code, "base_unit": base, "class": "C", "kind": kind, "monitored": bool(mon),
+                     "sourcing": ("central" if code in cmap else "local") if cmap else (src or "central"),
+                     "per_day": 0, "forecast": 0.0, "forecast_base": 0.0, "need_base": 0.0, "need_no_est": None, "safety": 0.0,
+                     "need": 0.0, "trend": 1.0, "on_hand": None, "on_order": 0.0, "pre_cover_use": None, "projected": None,
+                     "moq": moq, "sigma": 0.0, "recv_unit": recv, "qty_per_recv": per, "suggested_units": None,
+                     "suggested": None, "last_order_qty": last.get(code), "pack_known": bool(per), "price_per_base": None,
+                     "via": [], "per_sales": None, "ref_label": None, "shelf_days": int(shelf) if shelf else None,
+                     "shelf_cap_days": None, "price_missing": False, "price_note": None, "price_fallback": None,
+                     "big_pack": False, "round_down": False, "lead_days": int(lead) if lead else None, "lead_extra_days": 0,
+                     "short_ship_skipped": 0, "value": None})
+    return rows
 
 
 def covers(con, branch_id: int, rnd: str, order_day: date, weeks: int = 6, delivery: date = None) -> dict:
@@ -755,7 +951,9 @@ def backtest(con, branch_id: int, weeks: int = 4, history_weeks: int = 6, as_of:
     as_of = as_of or date.fromisoformat(last_data)
     first = as_of - timedelta(days=7 * (weeks + history_weeks) - 1)
     month = f"{as_of.year:04d}-{as_of.month:02d}"
-    use, days, _st = usage_history(con, branch_id, first, as_of, month)
+    use, days, _st = demand_source(con, branch_id, first, as_of, month)
+    if _st.get("source") == "none":                        # PR-S3: stock mode, too few confirmed slips to replay
+        return {"available": False, "source": source_info(_st)}
     from .prices import price_for
     spend = {c: sum(s.values()) * ((price_for(con, c, month) or (0,))[0]) for c, s in use.items()}
     klass = _abc(spend)
@@ -782,4 +980,4 @@ def backtest(con, branch_id: int, weeks: int = 4, history_weeks: int = 6, as_of:
     tot_e, tot_a = sum(err.values()), sum(act.values())
     return {"available": True, "branch_id": branch_id, "weeks": weeks, "as_of": as_of.isoformat(),
             "mape_by_class": by_class, "mape": round(100.0 * tot_e / tot_a, 1) if tot_a else None,
-            "target_a": 15.0}
+            "target_a": 15.0, "source": source_info(_st)}

@@ -230,3 +230,7 @@ def test_last_count_is_read_in_the_unit_counted_now(db):
     crab = _items(ST.sheet(db, 1, AS_OF))["13-01-009"]
     assert crab["count_unit"] == "แพ็ค 1 กก." and crab["last_unit"] == crab["count_unit"]      # typed in grams, read in packs
     assert crab["last_qty"] == 2.5 and crab["last_base"] == 2500.0
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)

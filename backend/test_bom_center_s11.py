@@ -179,3 +179,7 @@ def test_a_recipes_older_code_is_counted_as_the_one_delivered(udon):
         CE.set_link(udon, "02-01-001", "02-01-001", "ss")
     CE.set_link(udon, "13-01-009", None, "ss")
     assert CE.links(udon) == {}
+
+
+import pytest as _pytest_s3  # noqa: E402
+pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)
