@@ -2327,6 +2327,22 @@ def _stock_branch(con, request: Request, branch_id: Optional[int]) -> int:
     return int(branch_id)
 
 
+@router.get("/api/bom-center/stock/first-month")
+@router.get("/api/bom-center/first-month")
+def bc_first_month(request: Request):
+    """U3: {first_month: 'YYYY-MM' | null} - where the month controls of the supply pages start (stock.first_month): a branch login's own
+    start, else the first month of the whole module. Two paths, one answer: /stock/… for the branch and ordering roles, the plain one for the
+    roles that read the centre (cost.analysis, bom.*)."""
+    with get_db() as con:
+        _ensure(con)
+        scoped = _auth.scope_branch(request)
+        bid = None
+        if scoped:
+            r = con.execute("SELECT branch_id FROM branches WHERE name=?", (scoped,)).fetchone()
+            bid = int(r[0]) if r else None
+        return {"first_month": (bid and _st.first_month(con, bid)) or _st.first_month(con)}
+
+
 @router.get("/api/bom-center/stock/me")
 def bc_stock_me(request: Request, month: Optional[str] = Query(None)):
     """Who is counting: a branch login gets its branch; the centre gets the branch list. With `month` (YYYY-MM, PR-M5) the

@@ -3279,7 +3279,7 @@ function supplyCtxSet(patch) {
   return c;
 }
 // ── PR-M5: ONE month control for the whole module ────────────────────────────────
-// A <select class="supply-month"> of the last 18 months (data-fwd="n" adds n months ahead), labelled "กันยายน 2026", value "2026-09".
+// A <select class="supply-month"> from the module's first month, at most 18 months back (U3; data-fwd="n" adds n months ahead), labelled "กันยายน 2026", value "2026-09".
 // Every month control of the module (วัตถุดิบ & ราคา, ใบสั่งซื้อ, หน้างาน, ผลต่างของสาขา) starts from supplyCtx().month; when nobody has
 // chosen yet it starts at this month on a working page and at the previous month on a page that closes a month
 // (ปิดงวดเดือน, ใบสรุปตัดเบิก, สรุปผลต่างรายเดือน). A choice made on one of them is the choice on all of them.
@@ -3292,12 +3292,38 @@ function supplyMonthAdd(ym, n) {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
 }
 function supplyMonthDefault(prev) { return prev ? supplyMonthAdd(supplyMonthNow(), -1) : supplyMonthNow(); }
+// U3 (owner 2026-10-22): the list starts at the first month the module has data in (`first`, GET …/first-month: a branch login's own start)
+// instead of 18 months back - never later than this month, never more than 18 months; `fwd` months ahead and a kept older choice stay.
+// The sales pages keep their own month lists.
+function supplyMonthList(now, fwd, first, keep) {
+  const list = [];
+  for (let i = fwd; i > -SUPPLY_MONTHS_BACK; i--) {
+    const m = supplyMonthAdd(now, i);
+    if (i < 0 && first && m < first) break;
+    list.push(m);
+  }
+  if (keep && /^\d{4}-\d{2}$/.test(keep) && !list.includes(keep)) { list.push(keep); list.sort().reverse(); }
+  return list;
+}
+let _supplyFirstMonth = null, _supplyFirstAsked = false;
+function _supplyFirstLoad() {
+  if (_supplyFirstAsked) return;
+  _supplyFirstAsked = true;
+  const path = ['branch.stock', 'supply.ordering', 'bom.center', 'ops.report'].some(hasModule) ? '/api/bom-center/stock/first-month'
+    : ['cost.analysis', 'bom.edit', 'bom.prices', 'bom.recipes'].some(hasModule) ? '/api/bom-center/first-month' : '';
+  if (!path) return;
+  _bmcJson(`${API}${path}`).then(d => {
+    const m = d && d.first_month;
+    if (!m || !/^\d{4}-\d{2}$/.test(m)) return;
+    _supplyFirstMonth = m;
+    document.querySelectorAll('select.supply-month').forEach(el => { if (el.options.length) supplyMonthFill(/** @type {HTMLSelectElement} */ (el)); });
+  }).catch(() => { /* the 18 months stay */ });
+}
 function supplyMonthFill(el) {
   if (!el) return;
-  const keep = el.value, fwd = Number(el.dataset.fwd || 0), now = supplyMonthNow();
-  const list = [];
-  for (let i = fwd; i > -SUPPLY_MONTHS_BACK; i--) list.push(supplyMonthAdd(now, i));
-  if (keep && /^\d{4}-\d{2}$/.test(keep) && !list.includes(keep)) { list.push(keep); list.sort().reverse(); }
+  _supplyFirstLoad();
+  const keep = el.value, fwd = Number(el.dataset.fwd || 0);
+  const list = supplyMonthList(supplyMonthNow(), fwd, _supplyFirstMonth, keep);
   el.innerHTML = list.map(m => `<option value="${m}">${fmtMonthTh(m)}</option>`).join('');
   if (keep && list.includes(keep)) el.value = keep;
 }

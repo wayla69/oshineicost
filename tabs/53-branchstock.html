@@ -128,9 +128,26 @@
     <!-- orders the centre has processed (or the branch sent) are received here, whatever today's cycle is -->
     <div id="brnRecvOpen" class="card p-3 mb-3" style="display:none"></div>
     <div id="brnRecvOrder" class="card p-3 mb-3" style="display:none;border-left:4px solid var(--accent)"></div>
+    <span id="brnRecvOrdDone" class="text-xs block mb-2" role="status"></span>
+    <!-- ── แจ้งเคลมสินค้า (owner 2026-10-08, 2026-10-09): goods that arrived damaged or wrong, claimed with a reason
+         (photos go to ประสานงานขาย by LINE); the receive form above raises the claim for a shortfall itself.
+         The ids brnClaimCard / brnClaimMsg / brnClaimList / brnClaimForm are kept: the หน้างาน link anchors here. ── -->
+    <div id="brnClaimCard" class="card p-3 mb-3" style="border-left:4px solid var(--amber-ink)">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งเคลมสินค้า</div>
+      <div class="text-sm" style="color:var(--text-primary)">ส่งรูปทางไลน์ถึงประสานงานขาย</div>
+      <div id="brnClaimMsg" class="text-xs mb-1"></div>
+      <div id="brnClaimList" class="text-xs" style="color:var(--text-secondary)"></div>
+      <div id="brnClaimForm" class="mt-2" style="display:none"></div>
+    </div>
     <div class="card p-3 mb-3">
-      <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">บันทึกสินค้าที่รับเอง</div>
-      <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับสินค้าล่าสุด</div>
+      <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+    <!-- U3 (owner 2026-10-22): the form for goods the branch bought or received itself sits under the receipts, folded - the page opens on
+         what the warehouse sent -->
+    <details id="brnRecvManual" class="card p-3 mb-3">
+      <summary class="text-sm font-semibold" style="color:var(--text-primary);cursor:pointer;min-height:32px">บันทึกสินค้าที่รับเอง</summary>
+      <div class="flex flex-wrap items-end gap-2 mt-2 text-xs" style="color:var(--text-muted)">
         <label>วันที่รับ<br><input type="date" id="brnRecvDate" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>เลขที่ใบส่งสินค้า (ถ้ามี)<br><input id="brnRecvRef" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:14px;width:130px;background:var(--bg-input);color:var(--text-primary)"></label>
       </div>
@@ -148,23 +165,9 @@
         <button onclick="brnRecvSave()" class="brn-write" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 16px;font-size:14px;cursor:pointer">บันทึกรับสินค้า</button>
         <span id="brnRecvStatus" class="text-xs"></span>
       </div>
-    </div>
-    <!-- ── แจ้งเคลมสินค้า (owner 2026-10-08, 2026-10-09): goods that arrived damaged or wrong, claimed with a reason
-         (photos go to ประสานงานขาย by LINE); the receive form above raises the claim for a shortfall itself.
-         The ids brnClaimCard / brnClaimMsg / brnClaimList / brnClaimForm are kept: the หน้างาน link anchors here. ── -->
-    <div id="brnClaimCard" class="card p-3 mb-3" style="border-left:4px solid var(--amber-ink)">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">แจ้งเคลมสินค้า</div>
-      <div class="text-sm" style="color:var(--text-primary)">ส่งรูปทางไลน์ถึงประสานงานขาย</div>
-      <div id="brnClaimMsg" class="text-xs mb-1"></div>
-      <div id="brnClaimList" class="text-xs" style="color:var(--text-secondary)"></div>
-      <div id="brnClaimForm" class="mt-2" style="display:none"></div>
-    </div>
-    <div class="card p-3 mb-3">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">รับสินค้าล่าสุด</div>
-      <div id="brnRecvHistory" class="text-xs" style="color:var(--text-secondary)"></div>
-    </div>
+    </details>
     <template id="hlp-branchstock-recv" data-title="วิธีใช้รับสินค้า">      <p>ใบสั่งซื้อที่คลังจัดส่งแล้ว: ตอบ “รับครบ” หากได้รับตามที่คลังส่งทุกรายการ · หากรายการใดไม่ครบ ตอบ “มีรายการไม่ครบ” แล้วเลือกรายการนั้น ใส่ “รับจริง” และเลือกสาเหตุ ส่วนต่างเป็นเคลมอัตโนมัติ ส่งรูปทางไลน์ให้ประสานงานขาย</p>
-      <p>บันทึกสินค้าที่รับเอง: บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
+      <p>บันทึกสินค้าที่รับเอง (ท้ายหน้า แตะเพื่อเปิด): บันทึกทุกครั้งที่รับสินค้า รวมที่สาขาซื้อเอง · ไม่บันทึกจะแสดงเป็น “ใช้น้อยกว่าสูตร”</p>
       <p>แจ้งเคลมภายหลัง: เลือกใบที่รับแล้ว ค้นหาและเลือกเฉพาะรายการที่มีปัญหา ใส่จำนวน (ไม่เกินจำนวนที่รับ) และเลือกสาเหตุ</p>
       
     </template>

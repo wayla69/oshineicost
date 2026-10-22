@@ -578,7 +578,7 @@ def franchise_workbook(d: dict, supply: Optional[dict] = None):
     _sheet(ws, "12 เดือน", ["เดือน", "สถานะ", "ยอดขาย (ไม่รวม VAT)", "เทียบเดือนก่อน (%)", "เทียบปีก่อน (%)", "จำนวนลูกค้า",
                             "เฉลี่ยต่อบิล", "กำไรขั้นต้น (%)"],
            f"ร้านของฉัน · สาขา{d.get('branch') or ''} · แต่ละเดือนแยกกัน เดือนที่ยังไม่จบเทียบช่วงวันเดียวกัน")
-    _xl_rows(ws, [(m.get("label") or m["month"], f"สะสมถึง {m['through']}" if m.get("partial") and m.get("through") else "ครบเดือน",
+    _xl_rows(ws, [(m.get("label") or _month_label(m["month"]), f"สะสมถึง {m['through']}" if m.get("partial") and m.get("through") else "ครบเดือน",
                    m.get("revenue"), m.get("mom_pct"), m.get("yoy_pct"), m.get("customers"), m.get("per_bill"), m.get("gp_pct"))
                   for m in (d.get("trend_12m") or {}).get("months") or []],
              [None, None, _FX_BAHT, _FX_PCT, _FX_PCT, "#,##0", _FX_BAHT, _FX_PCT])
@@ -839,6 +839,15 @@ def _controls(con, rep: dict, name: str, sel: str, scrub) -> dict:
 
 
 _TH_MON = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+
+
+def _month_label(m) -> str:
+    """U3 (owner 2026-10-22): ONE way to write a month on ร้านของฉัน, its Excel file included - the management report's "ต.ค. 2026"."""
+    s = str(m or "")
+    try:
+        return f"{_TH_MON[int(s[5:7]) - 1]} {int(s[:4])}"
+    except (ValueError, IndexError):
+        return s
 
 
 def _th_date(iso) -> str:
@@ -1153,7 +1162,6 @@ def _supply_overuse(con, bid: int, month: str):
 def franchise_supply_data(branch_id: int, month: Optional[str] = None) -> dict:
     """วัตถุดิบจากส่วนกลาง of one branch for one month (see the block comment). Each part fails on its own."""
     from bom_center.clock import today as bkk_today
-    from bom_center.fmt import month_th
     from bom_center.schema import ensure as _bc_ensure
     with get_db() as con:
         _bc_ensure(con)
@@ -1161,7 +1169,7 @@ def franchise_supply_data(branch_id: int, month: Optional[str] = None) -> dict:
         rep = _safe("report", lambda: _report(name, month), {}) or {}
         sel = rep.get("selected_month") or month or bkk_today().isoformat()[:7]
         started, start = _bc_started(con, branch_id, sel)
-        out = {"branch": name, "month": sel, "label": rep.get("label") or month_th(sel), "started": started,
+        out = {"branch": name, "month": sel, "label": rep.get("label") or _month_label(sel), "started": started,
                "start_date": start if started else None, "not_started_th": None if started else NOT_STARTED_SUPPLY_TH,
                "rounds": [], "purchases": None, "claims": None, "late": None, "overuse": None}
         if not started:

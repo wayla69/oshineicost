@@ -306,7 +306,7 @@ def _harness(tmp_path, role, expr, allowed="() => true", mode="full"):
     """Run the real registry (js/01-core.js) and the real search / badge functions (js/18-launcher.js) in node with the permission checks stubbed.
     PR-S1: `mode` is the system mode (BC_MODE) the registry runs in - `full` = every page, the setting these tests were written for."""
     a, b = CORE.index("const _SUPPLY_CENTRE"), CORE.index("// ── end page registry")
-    fns = "\n".join(_fn(LAUNCHER, n) for n in ("_deptRole", "deptPageAllowed", "deptVisible", "navPageCount", "navBadgeText", "pgNorm", "_pgEntry", "pgIndex", "_pgScore", "pgSearchResults"))
+    fns = "\n".join(_fn(LAUNCHER, n) for n in ("_deptRole", "deptPageAllowed", "deptVisible", "navPageCount", "navBadgeText", "pgNorm", "_pgEntry", "pgIndex", "_pgScore", "pgSearchResults", "pgBranchNames", "pgBranchHits"))
     prelude = (f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }}; let BC_MODE = '{mode}';\n"
                f"const tabAllowed = {allowed}; const hasModule = () => true; const _supplyItemAllowed = it => tabAllowed(it.tab); const _noEmoji = s => s;\n"
                "const _PG_MAX = 12, _PG_IDLE = 8;\n" + _const(LAUNCHER, "_NB") + "\n")

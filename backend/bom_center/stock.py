@@ -49,6 +49,21 @@ def branches_with_data(con, month: str) -> set:
     return ids
 
 
+def first_month(con, branch_id: int = None):
+    """U3 (owner 2026-10-22): the first month (YYYY-MM) the module has anything dated in - a daily slip, an order that was not cancelled,
+    a stock count or a goods receipt (for `branch_id`: that branch's own, its start). The month controls of the supply pages start there
+    instead of 18 months back. None = nothing yet."""
+    best = None
+    for table, col, extra in (("bc_issue_slip", "slip_date", ""), ("bc_order", "cycle_date", " AND COALESCE(status, '') <> 'cancelled'"),
+                              ("bc_stock_count", "count_date", ""), ("bc_receipt", "receipt_date", "")):
+        sql = f"SELECT MIN({col}) FROM {table} WHERE {col} IS NOT NULL AND {col} <> ''{extra}" + (" AND branch_id=?" if branch_id else "")
+        r = con.execute(sql, (branch_id,) if branch_id else ()).fetchone()
+        m = str(r[0])[:7] if r and r[0] else None
+        if m and re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", m) and (best is None or m < best):
+            best = m
+    return best
+
+
 def zones(con) -> tuple:
     """The configured zones as ((code, label), …) in count order; the 5 defaults when nothing valid is stored."""
     try:

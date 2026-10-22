@@ -37,7 +37,7 @@ function _shmFilterBar(counts, f) { uiStateFilter.bar('shmFilter', { counts, f, 
 const _SHM_STATUS_KEY = { bmcIngStatus: 'master_issues', bmcIngSummary: 'master_issues', bmcPriceStatus: 'price_month', bmcRecStatus: 'draft',
   bmcSubStatus: 'price_submit', bmcPrepStatus: 'sub_recipes', bmcPrepEditStatus: 'sub_recipes', bmcRlStatus: 'checks', bmcCalStatus: 'calendar',
   ohbCenStatus: 'central_report', ohbLinkStatus: 'code_links', ohbDelStatus: 'deliveries', ohbCntStatus: 'begin_count',
-  brnStatus: 'end_count', brnIssStatus: 'issue_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending',
+  brnStatus: 'end_count', brnIssStatus: 'issue_today', brnOrdStatus: 'order_due_1', brnVarStatus: 'receipts_confirm', brnRecvStatus: 'receive_pending', brnRecvOrdDone: 'receive_pending',
   ohbDStatus: 'queue_pending' };
 
 // The วัตถุดิบและใบสั่งซื้อ bar (01-core.js): this tab has one view; a month from a link lands in the strip.

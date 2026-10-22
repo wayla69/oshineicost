@@ -29,13 +29,21 @@ function _brnCanOrder() { return hasModule('branch.stock') || hasModule('bom.cen
 function _brnCanVariance() { return hasModule('branch.stock') || hasModule('bom.center') || hasModule('supply.ordering'); }   // close step 5 (owner 2026-10-07)
 const _BRN_READONLY = 'บทบาทของคุณดูหน้านี้ได้ แต่บันทึกแทนสาขาไม่ได้';
 
-// 4.1 · a branch screen writes the SHORT name when the register has one and the full name otherwise; the code (and the full name, when
-// there is a short one) sit behind a small "ดูที่มา" on the row. The payloads carry `short_name` beside `name` (fmt.add_short).
+// 4.1 · a branch screen writes the SHORT name when the register has one and the full name otherwise. The payloads carry `short_name` beside
+// `name` (fmt.add_short). U3 (owner 2026-10-22): a small "ดูที่มา" on the row opens what the row does not already say, in plain words - the
+// full name (when a short one is shown) and the row's own `facts` (the unit ladder, the last count, why the item is on the list); the code
+// only comes last, beside them. A row with nothing more to say has no link at all (a bare code tells the floor nothing).
 function _brnNm(x) { return String((x && (x.short_name || x.name || x.code)) || ''); }
-function _brnSrc(x) {
-  const full = x && x.short_name && x.name && x.short_name !== x.name ? ` · ${esc(x.name)}` : '';
-  return `<button type="button" class="brn-why brn-srcbtn" onclick="brnSrc(this)" aria-expanded="false">ดูที่มา</button><span class="brn-srcv" hidden> ${esc((x && x.code) || '')}${full}</span>`;
+function _brnSrc(x, facts) {
+  const lines = [];
+  if (x && x.short_name && x.name && x.short_name !== x.name) lines.push(String(x.name));
+  (facts || []).forEach(f => { if (f) lines.push(String(f)); });
+  if (!lines.length) return '';
+  if (x && x.code) lines.push('รหัส ' + x.code);
+  return `<button type="button" class="brn-why brn-srcbtn" onclick="brnSrc(this)" aria-expanded="false">ดูที่มา</button><span class="brn-srcv" hidden> ${lines.map(t => esc(t)).join(' · ')}</span>`;
 }
+// the parts of a row's small line, joined by " · " (an empty part - e.g. no "ดูที่มา" - leaves no stray separator)
+function _brnLine(...parts) { return parts.filter(Boolean).join(' · '); }
 function brnSrc(btn) {
   const v = btn.nextElementSibling;
   if (!v) return;
@@ -53,9 +61,18 @@ function _brnNice(v) {
 }
 function _brnPh(v) { const n = _brnNice(v); return n === '' || n === '<0.1' ? '0' : n; }      // a placeholder: the same figure, "0" for a dust of a unit
 function _brnUnitW(unit) { return String(unit || '').replace(/\s*\([^)]*\)/g, '').trim().split(/\s+/)[0] || ''; }      // "กล่อง (10 แพ็ค)" -> กล่อง · "แพ็ค 1 กก." -> แพ็ค
+// U3 (owner 2026-10-22): a unit named with its contents reads the same on the box, the stock figure and the ladder - "แพ็ค 10 กก." is written
+// "แพ็ค (10 กก.)", so "4 แพ็ค (10 กก.)" can never be read as 4 packs of 1 kg. A unit already in brackets ("กล่อง (10 แพ็ค)") or a bare word stays.
+// Display only: the register keeps its unit text.
+function _brnUnitFull(unit) {
+  const u = String(unit || '').trim();
+  if (u.includes('(')) return u;
+  const m = u.match(/^(\S+)\s+(\d[\s\S]*)$/);
+  return m ? `${m[1]} (${m[2].trim()})` : u;
+}
 function _brnSysTxt(q, unit) {
   if (q === null || q === undefined || q === '' || isNaN(q)) return '';
-  const w = _brnUnitW(unit), n = Number(q);
+  const w = _brnUnitFull(unit), n = Number(q);
   if (n > 0 && n < 1) return `น้อยกว่า 1 ${w}`.trim();
   return `${_brnNice(n)} ${w}`.trim();
 }
@@ -246,7 +263,7 @@ function brnRender() {
   const zoneSel = it => !_brnCanLayout() ? '' : `<select onchange="brnSetLayout(${_bmcQ(it.code)}, this.value)" title="โซนจัดเก็บ" style="font-size:11px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text-muted);padding:1px 2px">${(_brnMe.zones || []).map(z => `<option value="${z.zone}"${z.zone === (s.zones.find(zz => zz.items.includes(it)) || {}).zone ? ' selected' : ''}>${esc(z.label)}</option>`).join('')}</select>`;
   document.getElementById('brnList').innerHTML = items.length ? items.map(it => {
     const v = _brnQty[it.code] ?? '';
-    const last = it.last_qty != null ? `ครั้งก่อน ${_brnNice(it.last_qty)} ${esc(it.last_unit || it.count_unit || '')}` : '';
+    const last = it.last_qty != null ? `ครั้งก่อน ${_brnNice(it.last_qty)} ${esc(_brnUnitFull(it.last_unit || it.count_unit || ''))}` : '';
     const two = !!it.unit_big;                                    // 3.1: a box of packs has a box for the boxes and one for the packs
     const pair = two ? _brnPair(it) : null, word = _brnUnitW(it.count_unit);
     const bigW = two ? _brnUnitW(it.unit_big.label) : '';
@@ -256,26 +273,27 @@ function brnRender() {
     return `<div class="brn-row" style="display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;border-top:1px solid var(--border);padding:8px 0">
       <div class="brn-namecol" style="flex:1 1 220px;min-width:0">
         <div class="text-sm" style="color:var(--text-primary);font-weight:600;overflow-wrap:anywhere">${esc(_brnNm(it))}</div>
-        <div class="text-[11px]" style="color:var(--text-muted)">${_brnSrc(it)}${_brnLadderTxt(it)}${two ? ` · 1 ${esc(bigW)} = ${_bmcNum(it.unit_big.per)} ${esc(word)}` : ''}${last ? ' · ' + last : ''} ${zoneSel(it)}${two ? ` <span id="brnTot_${esc(it.code)}" class="text-[11px]" style="color:var(--text-secondary)">${_brnTotalTxt(it, pair)}</span>` : ''}</div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(it), _brnLadderTxt(it), two ? `1 ${esc(bigW)} = ${_bmcNum(it.unit_big.per)} ${esc(word)}` : '', last)} ${zoneSel(it)}${two ? ` <span id="brnTot_${esc(it.code)}" class="text-[11px]" style="color:var(--text-secondary)">${_brnTotalTxt(it, pair)}</span>` : ''}</div>
       </div>
       ${two ? `<div class="brn-boxes" style="margin-left:auto">${box2('big', pair.big, bigW, lastBig ? _brnPh(lastBig.big) : '0')}${box2('small', pair.small, word, lastBig ? _brnPh(lastBig.small) : '0')}</div>` : `<div style="display:flex;gap:6px;align-items:center;margin-left:auto">
       <button onclick="brnStep(${_bmcQ(it.code)}, -1)" aria-label="ลด" style="width:36px;height:36px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text-primary);font-size:18px;cursor:pointer">−</button>
       <input inputmode="decimal" value="${esc(v)}" placeholder="${it.last_qty != null ? _brnPh(it.last_qty) : '0'}" oninput="brnSet(${_bmcQ(it.code)}, this.value)"
              style="width:68px;height:36px;text-align:center;font-size:16px;border:1px solid ${v !== '' ? 'var(--accent)' : 'var(--border-control)'};border-radius:10px;background:var(--bg-input);color:var(--text-primary)">
       <button onclick="brnStep(${_bmcQ(it.code)}, 1)" aria-label="เพิ่ม" style="width:36px;height:36px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text-primary);font-size:18px;cursor:pointer">+</button>
-      <span class="text-xs brn-unit" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(it.count_unit || it.base_unit || '')}</span>
+      <span class="text-xs brn-unit" style="width:64px;color:var(--text-secondary);overflow-wrap:anywhere">${esc(_brnUnitFull(it.count_unit || it.base_unit || ''))}</span>
       </div>`}
     </div>`;
   }).join('') : '<span class="text-xs" style="color:var(--text-muted)">ไม่มีรายการในโซนนี้</span>';
 }
 
-// PR-U1: the ladder line of a count row ("1 แพ็ค 1 กก. = 1,000 กรัม") only when it says something - both units named and different
-function _brnLadderTxt(it) {
+// PR-U1: the ladder of a count row ("1 แพ็ค (1 กก.) = 1,000 กรัม") only when it says something - both units named and different (plain text; _brnLadderTxt escapes it)
+function _brnLadderPlain(it) {
   const cu = String(it.count_unit || '').trim(), bu = String(it.base_unit || '').trim();
   if (!cu || !bu || cu === bu || !(it.per_count_unit > 0)) return '';
   if (_brnUnitW(cu) === bu && Number(it.per_count_unit) === 1) return '';
-  return ` · 1 ${esc(cu)} = ${_bmcNum(it.per_count_unit)} ${esc(bu)}`;
+  return `1 ${_brnUnitFull(cu)} = ${_bmcNum(it.per_count_unit)} ${bu}`;
 }
+function _brnLadderTxt(it) { return esc(_brnLadderPlain(it)); }
 function _brnItem(code) { return _brnSheet.zones.flatMap(z => z.items).find(i => i.code === code); }
 function _brnTotalTxt(it, p) {
   const t = _brnTotal2(it, p);
@@ -569,6 +587,20 @@ function _brnIssReasonBox(code) {
 // "โซนนี้ครบ": the zone has required items (monitored, or class A) and every one of them is filled — a quantity above 0
 // in เบิกใช้ or ของเสีย (a 0 is not stored, so it cannot count after a reload)
 function _brnIssZoneDone(z) { const req = z.items.filter(i => i.required); return req.length > 0 && req.every(i => _brnIssAny(i.code)); }
+// U3 (owner 2026-10-22) · why an item is on the slip a branch opens with (issues.default_list), in plain words, for its "ดูที่มา"
+function _brnIssWhy(it) {
+  const out = [];
+  if (it.recent) out.push('เบิกใน 14 วันที่ผ่านมา');
+  else if (it.used_recent) out.push('สูตรอาหารใช้ใน 14 วันที่ผ่านมา');
+  if (Number(it.system_qty) > 0) out.push('มีคงเหลือตามระบบ');
+  if (it.required) out.push(it.monitored ? 'รายการบังคับสั่ง ต้องนับทุกงวด' : 'กลุ่มมูลค่าสูง ต้องนับทุกงวด');
+  return out;
+}
+// "ต้องนับ" on a slip row only when it is the reason the row is there: an item the branch has not issued or used lately and holds no stock
+// of. On every other row (most of a branch's stocked items are class A or บังคับสั่ง) the chip said nothing; the reason sits in "ดูที่มา".
+function _brnIssCountChip(it) {
+  return !!it.required && !it.recent && !it.used_recent && !(Number(it.system_qty) > 0) && !_brnIssAny(it.code);
+}
 function _brnIssZoneChips() {
   const s = _brnIss;
   if (!s) return;
@@ -640,23 +672,27 @@ function brnIssRender() {
     const bad = _brnIssBadVal(v);
     return `<div class="brn-box"><input id="${id}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v)}" ${ed ? '' : 'disabled'} aria-label="${label} ${esc(_brnNm(it))}"
         placeholder="${_brnIssAppend ? 'เพิ่ม' : prev ? prevWord + ' ' + _brnPh(prev) : ''}" oninput="brnIssSetField(${_bmcQ(it.code)}, '${f}', this.value)" ${_brnIssAppend ? `onchange="brnIssWholeUp(${_bmcQ(it.code)}, '${f}', this)"` : ''} ${bad ? 'aria-invalid="true"' : ''}
-        style="border-color:${bad ? 'var(--bad-ink)' : (v !== '' ? ink : 'var(--border-control)')}"><span class="brn-cap">${label} · ${esc(unit)}</span></div>`;
+        style="border-color:${bad ? 'var(--bad-ink)' : (v !== '' ? ink : 'var(--border-control)')}"><span class="brn-cap">${label} · ${esc(_brnUnitFull(unit))}</span></div>`;
   };
   document.getElementById('brnIssList').innerHTML = items.length ? items.map(it => {
     const v = _brnIssQty[it.code] || { used: '', waste: '' };
-    const unit = it.count_unit || it.base_unit || '';
+    const unit = it.count_unit || it.base_unit || '', unitF = _brnUnitFull(unit);
+    const chip = _brnIssCountChip(it) ? _bmcChip('ต้องนับ', 'var(--amber-ink)') : '';
+    const src = _brnSrc(it, [_brnIssWhy(it).join(' · '), _brnLadderPlain(it),
+      it.last_qty != null ? `นับล่าสุด ${_brnNice(it.last_qty)} ${_brnUnitFull(it.last_unit || unit)}` : '']);
+    const lead = [chip, src].filter(Boolean).join(' ');
     const sys = it.system_qty == null ? ''
-      : `<span class="brn-sys-sep"> · </span><span class="brn-sys">คงเหลือตามระบบ <b style="color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`
+      : `${lead ? '<span class="brn-sys-sep"> · </span>' : ''}<span class="brn-sys">คงเหลือตามระบบ <b style="white-space:nowrap;color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`
         + (it.estimate_matters && nEst ? ' ' + _bmcChip(`ประมาณจากยอดขาย ${nEst} วัน`, 'var(--amber-ink)') : '');
-    const avg = it.avg_used_7d != null ? `<span class="brn-avg"> · เฉลี่ย 7 วัน ${_brnNice(it.avg_used_7d)} ${esc(_brnUnitW(unit))}/วัน</span>` : '';
+    const avg = it.avg_used_7d != null ? `<span class="brn-avg">${lead || sys ? ' · ' : ''}เฉลี่ย 7 วัน วันละ ${_brnNice(it.avg_used_7d)} ${esc(unitF)}</span>` : '';
     // เบิกเพิ่ม: what the confirmed slip already holds for the item, so the box holds only the quantity to add
     const have = _brnIssAppend && (it.used > 0 || it.waste > 0)
-      ? `<div class="text-[11px]" style="color:var(--navy-ink)">ในใบแล้ว${it.used > 0 ? ` เบิกใช้ ${_brnNice(it.used)}` : ''}${it.waste > 0 ? ` ของเสีย ${_brnNice(it.waste)}` : ''} ${esc(_brnUnitW(unit))}</div>` : '';
+      ? `<div class="text-[11px]" style="color:var(--navy-ink)">ในใบแล้ว${it.used > 0 ? ` เบิกใช้ ${_brnNice(it.used)}` : ''}${it.waste > 0 ? ` ของเสีย ${_brnNice(it.waste)}` : ''} ${esc(unitF)}</div>` : '';
     return `<div class="brn-row" style="border-top:1px solid var(--border);padding:8px 0">
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" title="${esc(it.name)}" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(it))}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${it.required ? _bmcChip('ต้องนับ', 'var(--amber-ink)') + ' ' : ''}${_brnSrc(it)}${sys}${avg}</div>${have}</div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${lead}${sys}${avg}</div>${have}</div>
         <div class="brn-boxes">${box(it, 'used', 'เบิกใช้', 'var(--accent)', v.used, it.prev_used, unit)}${box(it, 'waste', 'ของเสีย', 'var(--amber-ink)', v.waste, it.prev_waste, unit)}</div></div>
       <div id="brnIssE_${esc(it.code)}" class="brn-err" role="alert">${_brnIssBad(it.code) ? _BRN_QTY_ERR : ''}</div>
       <div id="brnIssX_${esc(it.code)}">${_brnIssReasonBox(it.code)}</div></div>`;
@@ -975,7 +1011,7 @@ function _brnRecvCard(x) {
   const bad = x.lines.filter(l => l.qty_base == null).length;
   const preview = x.lines.slice(0, 3).map(l => esc(_brnNm(l))).join(', ') + (x.lines.length > 3 ? ` และอีก ${x.lines.length - 3} รายการ` : '');
   const rows = x.lines.map(l => `<tr style="border-top:1px solid var(--border)">
-      <td class="py-1 pr-2" style="color:var(--text-primary)">${esc(_brnNm(l))}<div class="text-[10.5px]" style="color:var(--text-muted)">${_brnSrc(l)}</div></td>
+      <td class="py-1 pr-2" style="color:var(--text-primary)">${esc(_brnNm(l))}${_brnSrc(l) ? `<div class="text-[10.5px]" style="color:var(--text-muted)">${_brnSrc(l)}</div>` : ''}</td>
       <td class="py-1 pr-2 text-right" style="white-space:nowrap;color:var(--text-primary)">${_bmcNum(l.qty)}</td>
       <td class="py-1" style="color:var(--text-secondary)">${esc(l.unit_word || l.unit || '')}${l.pieces ? ` · ${_bmcNum(l.pieces, 0)} ${esc(l.pieces_unit || '')}` : ''}${l.qty_base == null ? ' ' + _bmcChip('แปลงหน่วยไม่ได้', 'var(--bad-ink)') : ''}</td></tr>`).join('');
   // PR-U2: what the analyst answered to "ขนาดบรรจุไม่ตรง" on this order (the reason is read here when the answer is no)
@@ -1450,7 +1486,7 @@ function brnRcvPickedRender() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(l))}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง <b style="color:var(--text-primary)">${_brnRcvQ(l, _brnRcvSent(l))}</b> ${unit}${wl && Math.abs(Number(l.sent_weight) - _brnRcvSent(l)) > 1e-9 ? ` (${_bmcNum(l.sent_weight, 3)} ${esc(_brnShortUnit(l.pieces_parent_unit))})` : ''}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(l), 'ส่งจริง')} <b style="color:var(--text-primary)">${_brnRcvQ(l, _brnRcvSent(l))}</b> ${unit}${wl && Math.abs(Number(l.sent_weight) - _brnRcvSent(l)) > 1e-9 ? ` (${_bmcNum(l.sent_weight, 3)} ${esc(_brnShortUnit(l.pieces_parent_unit))})` : ''}${l.ss_reason_th ? ' · คลัง: ' + esc(l.ss_reason_th) : ''}</div></div>
         ${wl ? '' : `<div class="brn-box"><input id="brnRcvO_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q ?? '')}" aria-label="รับจริง ${esc(_brnNm(l))}" oninput="brnRcvTyped(${cq}, this.value)"
             style="border-color:var(--good-ink)"><span class="brn-cap">รับจริง · ${unit || 'หน่วยฐาน'}</span></div>`}
         ${l.pieces_unit && !wl ? `<div class="brn-box" id="brnRcvPW_${c}"><input id="brnRcvP_${c}" class="brn-qty" style="height:44px" inputmode="numeric" autocomplete="off" value="${esc(_brnRcv.pcs[code] ?? '')}"
@@ -1470,7 +1506,8 @@ function brnRcvPickedRender() {
   _brnRcv.picked.forEach(code => { brnRcvPcsUpdate(code); brnPkRender(code); });
   if (rest) {
     const n = _brnRcvLines().length - _brnRcv.picked.length;
-    rest.innerHTML = `รับครบ ${n} รายการ${_brnRcv.picked.length ? ` <span style="color:var(--text-muted)">· ปรับ ${_brnRcv.picked.length} รายการด้านบน</span>` : ''}`;
+    const k = _brnRcv.picked.length;      // U3: never "รับครบ 0 รายการ" - every line picked reads "ปรับ N รายการด้านบน" alone
+    rest.innerHTML = `${n ? `รับครบ ${n} รายการ` : ''}${k ? ` <span style="color:var(--text-muted)">${n ? '· ' : ''}ปรับ ${k} รายการด้านบน</span>` : ''}`;
   }
 }
 function brnRcvTyped(code, v) { (_brnRcv.vals[code] || (_brnRcv.vals[code] = {})).q = String(v || ''); brnRecvDiff(code); }
@@ -1523,8 +1560,16 @@ function brnRecvAckChanged() {
   b.disabled = !!why;
   if (w) {
     w.style.color = why ? 'var(--amber-ink)' : 'var(--text-secondary)';
-    w.textContent = why || (st.mode === 'all' ? `รับครบ ${n} รายการ` : `รับครบ ${n - st.picked.length} รายการ · ปรับ ${st.picked.length} รายการ`);
+    w.textContent = why || (st.mode === 'all' ? `รับครบ ${n} รายการ` : `${n - st.picked.length ? `รับครบ ${n - st.picked.length} รายการ · ` : ''}ปรับ ${st.picked.length} รายการ`);
   }
+}
+// U3 (owner 2026-10-22) · what the receive confirm says it records, never "· 0 รายการ": every line short -> "รับไม่ครบทุกรายการ";
+// nothing received -> "ไม่ได้รับสินค้า"; else the lines received; the lines claimed follow (they go to ประสานงานขาย with the receipt)
+function _brnRcvHead(nAll, nRecv, nShort) {
+  const claim = nShort ? ` · แจ้งเคลม ${nShort} รายการ` : '';
+  if (nShort && nShort >= nAll) return `รับไม่ครบทุกรายการ${claim}`;
+  if (!nRecv) return `ไม่ได้รับสินค้า${claim}`;
+  return `รับ ${nRecv} รายการ${claim}`;
 }
 async function brnReceiveOrder() {
   const o = _brnRecvOrd;
@@ -1567,20 +1612,20 @@ async function brnReceiveOrder() {
   const n = lines.filter(l => l.received_units > 0).length;
   const day = document.getElementById('brnRecvOrdDate').value;
   const claimNote = String((document.getElementById('brnRecvClaimNote') || {}).value || '').trim();
-  if (!await uiConfirm(`บันทึกรับสินค้า${_bmcRoundDay(o)} · ${n} รายการ · วันที่ ${fmtDay(day)}`
+  if (!await uiConfirm(`บันทึกรับสินค้า${_bmcRoundDay(o)} · ${_brnRcvHead(lines.length, n, short)} · วันที่ ${fmtDay(day)}`
       + (_brnRcv.mode === 'all' ? '\nรับครบทุกรายการ' : '')
       + (pcsN ? `\nชั่งน้ำหนักและนับจำนวน${[...pcsUnits].join(' / ')} ${pcsN} รายการ` : '')
       + (within ? `\nน้ำหนักน้อยกว่าที่ส่งไม่เกิน ${_bmcNum(_brnWtTol(), 1)}% ${within} รายการ รับตามน้ำหนักที่ชั่ง ไม่แจ้งเคลม` : '')
-      + (short ? `\nแจ้งเคลมส่วนต่าง ${short} รายการให้ประสานงานขาย` : '') + (over ? `\nรับเกินที่ส่ง ${over} รายการ` : ''), { title: 'ยืนยันการบันทึกรับสินค้า', ok: 'บันทึกรับสินค้า', cancel: 'กลับไปแก้' })) return;
+      + (short ? '\nเคลมส่วนต่างส่งถึงประสานงานขาย' : '') + (over ? `\nรับเกินที่ส่ง ${over} รายการ` : ''), { title: 'ยืนยันการบันทึกรับสินค้า', ok: 'บันทึกรับสินค้า', cancel: 'กลับไปแก้' })) return;
   try {
     const r = await _bmcJson(`${API}/api/bom-center/order/${o.order_id}/receive${_brnQS() ? '?' + _brnQS() : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lines, receipt_date: day || null, ack: true, claim_note: claimNote || null }) });
     _brnRecvOrd = null;
     document.getElementById('brnRecvOrder').style.display = 'none';
     if (r.claim_id) {
-      _bmcStatus('brnRecvStatus', `✓ บันทึกรับสินค้าแล้ว · แจ้งเคลม ${r.claim_lines} รายการให้ประสานงานขายแล้ว`, 'var(--good-ink)');
+      _bmcStatus('brnRecvOrdDone', `✓ บันทึกรับสินค้าแล้ว · แจ้งเคลม ${r.claim_lines} รายการให้ประสานงานขายแล้ว`, 'var(--good-ink)');
     } else {
-      _bmcStatus('brnRecvStatus', `✓ บันทึกรับสินค้าแล้ว ${n} รายการ`, 'var(--good-ink)');
+      _bmcStatus('brnRecvOrdDone', `✓ บันทึกรับสินค้าแล้ว ${n} รายการ`, 'var(--good-ink)');
       brnClaimHint(o.order_id);
     }
     await brnLoadRecv();
@@ -1859,7 +1904,7 @@ function brnDayItemsHtml(d, closeJs) {
   const flags = d.flags.length ? `<div class="flex flex-wrap gap-1 mt-2">${d.flags.map(f => _bmcChip(`${f.name} เบิกเกินสูตร ${f.days} วันติดต่อกัน`, 'var(--bad-ink)')).join(' ')}</div>` : '';
   const rows = d.rows.map(r => {
     return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2"><b>${esc(_brnNm(r))}</b>${r.signal ? ' ' + _bmcChip(r.signal_th, r.signal === 'streak' ? 'var(--bad-ink)' : 'var(--amber-ink)') : ''}
-        <div class="text-[10.5px]" style="color:var(--text-muted)">${_brnSrc(r)}${r.waste_reason_th ? ' · ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : ''}</div></td>
+        <div class="text-[10.5px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(r), r.waste_reason_th ? 'ของเสีย: ' + esc(r.waste_reason_th) + (r.note ? ' (' + esc(r.note) + ')' : '') : '')}</div></td>
       <td class="py-1 pr-2 text-right">${r.issued == null ? '—' : brnQtyUnit(r.issued, r)}<div class="text-[10.5px]" style="color:var(--text-muted)">/ ${brnQtyUnit(r.bom, r)}</div></td>
       <td class="py-1 text-right">${bmcGapHtml(r.var_value, r.var_pct, 'issue', true)}</td></tr>`;
   }).join('');
@@ -2074,7 +2119,7 @@ function _brnOrdSysTxt(r) {
   }
   return _brnSysTxt(r.system_qty, unit);
 }
-function _brnOrdUnitShow(r) { return _brnOrdF(r) > 1 ? (r.show_unit || _brnUnitLabel(r)) : _brnUnitLabel(r); }
+function _brnOrdUnitShow(r) { return _brnUnitFull(_brnOrdF(r) > 1 ? (r.show_unit || _brnUnitLabel(r)) : _brnUnitLabel(r)); }
 function _brnOrdBoxVal(r, v) {
   const f = _brnOrdF(r);
   if (f === 1 || v === '' || v == null || isNaN(Number(v))) return v ?? '';
@@ -2117,7 +2162,7 @@ function _brnRenderLocal(p) {
     (rows.map(r => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:baseline">
       <div style="flex:1 1 220px;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(r))}
         ${analyst && r.kind === 'prepared' ? _bmcChip('กึ่งสำเร็จ: ยังไม่มีสูตร', 'var(--amber-ink)') : ''}</div>
-        <div class="text-[11px]" style="color:var(--text-muted)">${_brnSrc(r)} · ต้องใช้ ${_brnInCount(r, r.need)} ${esc(_brnCountUnit(r))}</div></div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(r), `ต้องใช้ ${_brnInCount(r, r.need)} ${esc(_brnUnitFull(_brnCountUnit(r)))}`)}</div></div>
       <div class="text-sm" style="margin-left:auto;color:var(--text-primary)">แนะนำ <b>${_bmcNum(r.order_units, 0)}</b> ${esc(_brnUnitLabel(r))}</div></div>`).join('')
       || '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีรายการที่ต้องซื้อเอง</span>');
   document.getElementById('brnOrdActions').innerHTML = '';
@@ -2721,7 +2766,7 @@ function brnClPickedRender() {
       <div style="display:flex;gap:8px;align-items:flex-start">
         <div class="brn-namecol" style="flex:1 1 0;min-width:0">
           <div class="brn-name" style="color:var(--text-primary);font-weight:600">${esc(_brnNm(l))}</div>
-          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnSrc(l)} · ส่งจริง ${_brnClQ(l, l.sent_units)} · รับแล้ว ${_brnClQ(l, l.received_units)}${l.claimed_units ? ' · เคลมไปแล้ว ' + _brnClQ(l, l.claimed_units) : ''} · เคลมได้อีก <b style="color:var(--text-primary)">${_brnClQ(l, l.remaining_units)}</b> ${unit}</div></div>
+          <div class="brn-sub text-[11px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(l), `ส่งจริง ${_brnClQ(l, l.sent_units)}`)} · รับแล้ว ${_brnClQ(l, l.received_units)}${l.claimed_units ? ' · เคลมไปแล้ว ' + _brnClQ(l, l.claimed_units) : ''} · เคลมได้อีก <b style="color:var(--text-primary)">${_brnClQ(l, l.remaining_units)}</b> ${unit}</div></div>
         <div class="brn-box"><input id="brnCq_${c}" class="brn-qty" inputmode="decimal" autocomplete="off" value="${esc(v.q || '')}" aria-label="จำนวนที่เคลม ${esc(_brnNm(l))}" oninput="brnClField(${cq}, 'q', this.value)"><span class="brn-cap">เคลม · ${unit}</span></div>
         <button type="button" class="brn-x" aria-label="เอาออก ${esc(_brnNm(l))}" onclick="brnClUnpick(${cq})">✕</button></div>
       <div class="brn-reason" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
@@ -2781,7 +2826,7 @@ async function brnClaimView(id) {
       ${c.decision_note ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">ผลพิจารณา${c.decided_by ? ' โดย ' + esc(whoTh(c.decided_by)) : ''}: ${esc(c.decision_note)}</div>` : ''}
       ${_brnClaimEffect(c)}
       <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="pr-2">วัตถุดิบ</th><th class="pr-2 text-right">ส่งจริง</th><th class="pr-2 text-right">รับแล้ว</th><th class="pr-2 text-right">เคลม</th><th class="pr-2 text-right">อนุมัติ</th><th>สาเหตุ</th></tr></thead><tbody>
-        ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(_brnNm(l))}<div class="text-[10.5px]" style="color:var(--text-muted)">${_brnSrc(l)}${l.unit ? ' · หน่วย ' + esc(l.unit) : ''}</div></td>
+        ${c.lines.map(l => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2">${esc(_brnNm(l))}<div class="text-[10.5px]" style="color:var(--text-muted)">${_brnLine(_brnSrc(l), l.unit ? 'หน่วย ' + esc(_brnUnitFull(l.unit)) : '')}</div></td>
           <td class="py-1 pr-2 text-right">${_bmcNum(l.sent_units)}</td><td class="py-1 pr-2 text-right">${_bmcNum(l.received_units)}</td>
           <td class="py-1 pr-2 text-right">${_bmcNum(l.claim_units)}</td><td class="py-1 pr-2 text-right">${l.approved_units == null ? '—' : _bmcNum(l.approved_units)}</td>
           <td class="py-1">${esc(l.reason_th)}${l.note ? ' · ' + esc(l.note) : ''}</td></tr>`).join('')}</tbody></table></div>

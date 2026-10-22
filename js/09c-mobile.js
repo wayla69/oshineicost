@@ -343,12 +343,13 @@ function phSearchRender() {
   host.innerHTML = _phSearchList.length
     ? `<div class="ph-card ph-card-list" role="list">${_phSearchList.map((e, i) =>
       `<a href="#" class="ph-row ph-srow" role="listitem"${pgRowNb(e)} style="${pgRowStyle(e)}" onclick="phSearchGo(${i});return false">${pgRowInner(e)}<span class="ph-chev" aria-hidden="true">›</span></a>`).join('')}</div>`
-    : '<p class="ph-empty">ไม่พบหน้า</p>';
+    : '<p class="ph-empty">ไม่พบหน้าหรือสาขา</p>';
   navBadgesApply();
 }
 function phSearchGo(i) {
   const e = _phSearchList[i]; if (!e) return;
   if (e.summary) { phShowSummary(); return; }
+  if (e.branch) { const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch')); if (sel) sel.value = e.branch; _deptCur = null; _deptFocus = null; phOpenPage(() => switchTab('home')); return; }
   if (e.dept) deptRemember(e.dept.key); else _deptCur = null;
   _deptFocus = null;
   phOpenPage(() => { if (e.pane) supplyGo({ tab: e.tab, pane: e.pane }); else switchTab(e.tab); });
@@ -782,11 +783,21 @@ function msColumns(vals, o) {
   const avg = comp.length >= 3 ? comp.reduce((a, i) => a + vals[i], 0) / comp.length : null;
   const cx = i => i * step + step / 2;
   const placed = [];
+  // U3 (owner 2026-10-22, ร้านของฉัน 12 เดือน: "เดือนนี้" sat on the value label): a Thai line is about 1.6 x the font size tall (marks above
+  // and below), so two labels closer than that overlap; a label that meets one moves up a line above it while it stays inside the chart,
+  // else it is left out
+  const LINE = 1.6;
   const txt = (t, x, y, size, weight, color, check) => {
     const w = t.length * size * 0.56;
     x = Math.max(w / 2 + 1, Math.min(W - w / 2 - 1, x));
     if (check) {
-      if (placed.some(p => Math.abs(p.x - x) < (p.w + w) / 2 + 3 && Math.abs(p.y - y) < size + 2)) return '';
+      const hit = yy => placed.find(p => Math.abs(p.x - x) < (p.w + w) / 2 + 3 && Math.abs(p.y - yy) < size * LINE);
+      const h = hit(y);
+      if (h) {
+        const up = h.y - size * LINE;
+        if (up < size || hit(up)) return '';
+        y = up;
+      }
       placed.push({ x, y, w });
     }
     return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${weight}" style="fill:${color}">${esc(t)}</text>`;

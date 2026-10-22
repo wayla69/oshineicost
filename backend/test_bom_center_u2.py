@@ -264,7 +264,7 @@ console.log(JSON.stringify(r));""")
 def test_the_order_row_writes_its_system_stock_in_the_order_unit():
     bmc, brn = _src("js/13-bom-center.js"), _src("js/14-branch.js")
     pre = ("function _bmcNum(v, d = 2) { return Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d }); }\n"
-           + "\n".join([_fn(bmc, "bmcTypeF"), _fn(brn, "_brnNice"), _fn(brn, "_brnUnitW"), _fn(brn, "_brnSysTxt"), _fn(brn, "_brnUnitLabel"),
+           + "\n".join([_fn(bmc, "bmcTypeF"), _fn(brn, "_brnNice"), _fn(brn, "_brnUnitW"), _fn(brn, "_brnUnitFull"), _fn(brn, "_brnSysTxt"), _fn(brn, "_brnUnitLabel"),
                         _fn(brn, "_brnOrdF"), _fn(brn, "_brnOrdUnitShow"), _fn(brn, "_brnOrdSysTxt")]))
     out = _node(pre + """
 const r = { no_pack: true, show_unit: 'กิโลกรัม', show_factor: 1000, order_unit: 'base', base_unit: 'กรัม', system_unit: 'กรัม', count_unit: 'กรัม' };
