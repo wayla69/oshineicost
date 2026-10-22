@@ -618,7 +618,7 @@ def franchise_summary_xlsx(request: Request, month: Optional[str] = Query(None, 
 #                  text, source. The feedback engine has no redaction helper; the names its analysis found in a review (the
 #                  `staff` field) are masked in the text, and no internal note, action, reply status or assignee is sent
 # Any text that names another branch (a customer-type label, a reason, a review) has that name replaced with "สาขาอื่น".
-T_CANCEL_WATCH, T_CANCEL_FIX = 2.0, 3.0        # voided bills, % of all bills (the บิลยกเลิก page's bands: normal < 2 %)
+T_CANCEL_WATCH, T_CANCEL_FIX = 0.5, 1.0        # voided bills, % of all bills (owner 2026-10-22: ควรดู > 0.5 %, ต้องแก้ > 1 %; same bands as the บิลยกเลิก page)
 T_CASH_DAY_FIX = 2000.0                         # one day's cash count short by at least this (push_api.CASH_SHORT_MIN)
 T_CASH_SHORT_DAYS_WATCH = 3                     # days short in the month
 MIX_TOP = 8                                     # rows per list (reasons, coupons, channels)

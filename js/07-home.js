@@ -2266,11 +2266,11 @@ async function loadCancelBill(force) {
   if (d.month) { const el = document.getElementById('cbMonth'); if (el && !el.value) el.value = d.month; }
   document.getElementById('cbRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const s = d.summary || {};
-  // Whole-bill void rate benchmark: healthy < 2%, watch 2-3%, high > 3%.
+  // Whole-bill void rate bands (owner 2026-10-22): normal <= 0.5%, watch 0.5-1%, high > 1% (same as ร้านของฉัน, routers/franchise.py T_CANCEL_*).
   const cr = s.cancel_rate;
-  const crColor = cr == null ? '#7a66b8' : cr > 3 ? '#ef4444' : cr > 2 ? '#f59e0b' : '#10b981';
+  const crColor = cr == null ? '#7a66b8' : cr > 1 ? '#ef4444' : cr > 0.5 ? '#f59e0b' : '#10b981';
   const crSub = cr == null ? 'ของบิลทั้งหมด'
-    : cr > 3 ? `สูง · เกณฑ์ปกติ < 2% ●` : cr > 2 ? `ควรเฝ้าระวัง · ปกติ < 2% ●` : `ปกติดี (< 2%) ●`;
+    : cr > 1 ? `สูง · เกณฑ์ปกติไม่เกิน 0.5% ●` : cr > 0.5 ? `ควรเฝ้าระวัง · ปกติไม่เกิน 0.5% ●` : `ปกติดี (ไม่เกิน 0.5%) ●`;
   document.getElementById('cbKpis').innerHTML = [
     _extKpi('บิลยกเลิก/ลบ', fmtN(s.bills || 0), 'ทั้งบิล (เดือนนี้)', '#ef4444'),
     _extKpi('มูลค่ารวม', fmt(s.amount || 0), 'ยอดบิลที่ถูกยกเลิก', '#f59e0b'),
@@ -2278,8 +2278,8 @@ async function loadCancelBill(force) {
     _extKpi('บิลปกติ', fmtN(s.valid_bills || 0), 'เทียบเป็นฐาน', '#0891b2'),
   ].join('');
   const cbAlert = document.getElementById('cbAlert');
-  if (cbAlert) cbAlert.innerHTML = (cr != null && cr > 2)
-    ? `<div class="card p-3 text-xs" style="background:${cr>3?'#fef2f2':'#fffbeb'};border:1px solid ${cr>3?'#ef4444':'#f59e0b'}">⚠ อัตรายกเลิกบิล <b>${cr}%</b> ${cr>3?'สูงกว่าเกณฑ์ปกติ (&lt; 2%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
+  if (cbAlert) cbAlert.innerHTML = (cr != null && cr > 0.5)
+    ? `<div class="card p-3 text-xs" style="background:${cr>1?'#fef2f2':'#fffbeb'};border:1px solid ${cr>1?'#ef4444':'#f59e0b'}">⚠ อัตรายกเลิกบิล <b>${cr}%</b> ${cr>1?'สูงกว่าเกณฑ์ปกติ (ไม่เกิน 0.5%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
     : '';
   const tb = (s.bills || 1);
   document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">

@@ -183,12 +183,12 @@ def test_the_flags_follow_the_thresholds(world, f2data):
     items = {i["key"]: i for i in _insight(world["b"])["controls"]["flags"]["items"]}
     assert items["cash"]["level"] == "fix" and "2,500" in items["cash"]["text"]                  # one day short by ≥ ฿2,000
     # pure rule checks
-    f = F._control_flags({"pct": 2.0, "policy_pct": 2.5}, {"bills": 1, "baht": 10, "rate_pct": 1.0}, {"days": [], "short_days": 0})
+    f = F._control_flags({"pct": 2.0, "policy_pct": 2.5}, {"bills": 1, "baht": 10, "rate_pct": 0.4}, {"days": [], "short_days": 0})
     assert f == {"level": "good", "items": []}
-    f = F._control_flags({"pct": 3.0, "policy_pct": 2.5}, {"bills": 9, "baht": 10, "rate_pct": 2.5},
+    f = F._control_flags({"pct": 3.0, "policy_pct": 2.5}, {"bills": 9, "baht": 10, "rate_pct": 0.8},
                          {"days": [{"date": "2026-06-01", "over_short": -100}], "short_days": 3, "short_total": -300})
     assert f["level"] == "watch" and [i["key"] for i in f["items"]] == ["discount", "voids", "cash"]
-    f = F._control_flags({"pct": 6.0, "policy_pct": 2.5}, {"bills": 9, "baht": 10, "rate_pct": 3.5}, {"days": []})
+    f = F._control_flags({"pct": 6.0, "policy_pct": 2.5}, {"bills": 9, "baht": 10, "rate_pct": 1.5}, {"days": []})
     assert f["level"] == "fix" and all(i["level"] == "fix" for i in f["items"])
     assert all("ควร" in i["text"] for i in f["items"])
 
@@ -393,3 +393,14 @@ def test_the_franchise_module_imports_its_neighbours_relatively():
     import re
     src = (Path(__file__).resolve().parent / "routers" / "franchise.py").read_text(encoding="utf-8")
     assert not re.search(r"^\s*from routers[. ]", src, re.M) and not re.search(r"^\s*import routers", src, re.M)
+
+
+def test_void_bands_owner_2026_10_22():
+    """Owner 2026-10-22: voided bills ควรดู above 0.5 %, ต้องแก้ above 1 % of all bills."""
+    from routers import franchise as F
+    assert (F.T_CANCEL_WATCH, F.T_CANCEL_FIX) == (0.5, 1.0)
+
+    def level(rate):
+        f = F._control_flags({}, {"bills": 5, "baht": 1000, "rate_pct": rate}, {"days": []})
+        return [i["level"] for i in f["items"] if i["key"] == "voids"]
+    assert level(0.5) == [] and level(0.6) == ["watch"] and level(1.0) == ["watch"] and level(1.2) == ["fix"]
