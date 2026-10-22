@@ -11,6 +11,7 @@
     <button class="subtab-btn" onclick="switchSettingsTab('usage')">การใช้งานจริง</button>
     <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">ปิดใช้งาน</button>
     <button class="subtab-btn" id="settabbtn-cloudsync" onclick="switchSettingsTab('cloudsync')">ข้อมูลจาก POS</button>
+    <button class="subtab-btn" id="settabbtn-cloudbackup" onclick="switchSettingsTab('cloudbackup')">สำรองข้อมูล</button>
     <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">ผู้ใช้งาน</button>
   </div>
 
@@ -89,6 +90,30 @@
         <p><b>ผ่านการตรวจเทียบ</b> หมายถึงยอดเดือนที่ปิดแล้วตรงกับข้อมูลเดิม ถ้าไม่ผ่านระบบจะไม่เปลี่ยนข้อมูลที่ใช้อยู่</p>
         <p><b>พื้นที่ไม่พอ</b> ต้องมีที่ว่างอย่างน้อย 2.5 เท่าของไฟล์ฐานข้อมูล ให้ขยายดิสก์ของเครื่อง</p>
         <p>เปิดใช้โดยตั้งค่า OSHINEI_CLOUD_SYNC=1 และรหัสเชื่อมต่อ POS (OSH_SVR, OSH_PORT, OSH_USER, OSH_PWD, OSH_DB) ที่ Fly ขั้นตอนอยู่ใน docs/CLOUD_SYNC.md</p>
+      </template>
+    </div>
+  </div>
+
+  <!-- ── The cloud backup of oshinei.db (backend/cloud_backup.py, docs/CLOUD_SYNC.md · Management only) ──
+       Labels and numbers only; the explanation is behind the "?". -->
+  <div id="settab-cloudbackup" class="hidden">
+    <div class="card p-5" style="max-width:760px">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h3 class="text-base font-bold" style="color:var(--text-primary)">สำรองข้อมูล (cloud)
+          <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="cbHelp">?</button></h3>
+        <button type="button" id="cbRunBtn" onclick="cloudBackupRun()"
+                class="text-sm px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">สำรองข้อมูลตอนนี้</button>
+      </div>
+      <div id="cloudBackupBody" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div>
+      <template id="cbHelp" data-title="สำรองข้อมูลบนคลาวด์">
+        <p>ระบบบนคลาวด์สำรองฐานข้อมูลเองทุกวัน ไปเก็บในที่เก็บไฟล์ภายนอกเครื่อง (Tigris) ไม่ต้องเปิดคอมพิวเตอร์สำนักงานค้างไว้</p>
+        <ul>
+          <li>ทำหลังการดึงข้อมูลจาก POS รอบเช้า ตามเวลาที่แสดงใน "รอบถัดไป"</li>
+          <li>ทุกครั้งมีการทดสอบกู้คืน: แตกไฟล์ที่สำรองแล้วตรวจความสมบูรณ์และจำนวนแถวเทียบกับรายการตรวจ ผลต้องเป็น <b>PASS</b></li>
+          <li>เก็บสำเนา 7 วันล่าสุด และสำเนาแรกของแต่ละเดือนย้อนหลัง 6 เดือน สำเนาเก่ากว่านั้นถูกลบหลังอัปโหลดรอบใหม่สำเร็จเท่านั้น</li>
+        </ul>
+        <p><b>พื้นที่ไม่พอ</b> ต้องมีที่ว่างอย่างน้อย 1.5 เท่าของไฟล์ฐานข้อมูล ให้ขยายดิสก์ของเครื่อง</p>
+        <p>เปิดใช้โดยสร้างที่เก็บไฟล์ด้วย flyctl storage create แล้วตั้งค่า OSHINEI_CLOUD_BACKUP=1 วิธีกู้คืนอยู่ใน docs/CLOUD_SYNC.md หัวข้อ "สำรองข้อมูล"</p>
       </template>
     </div>
   </div>

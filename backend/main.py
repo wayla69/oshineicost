@@ -2354,6 +2354,20 @@ def _cloud_sync_startup():
         _cloud_sync.start(apply_fn=_swap_incoming_and_warm)
     except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
         print(f"[cloud-sync] could not start: {e}")
+
+
+@app.on_event("startup")
+def _cloud_backup_startup():
+    """The Fly machine backs up its own database to object storage (backend/cloud_backup.py, docs/CLOUD_SYNC.md). OFF
+    unless OSHINEI_CLOUD_BACKUP=1: without it nothing here starts a thread or touches the database."""
+    import os as _os, sys as _sys
+    if "pytest" in _sys.modules or _os.environ.get("OSHINEI_CLOUD_BACKUP", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return
+    try:
+        import cloud_backup as _cloud_backup
+        _cloud_backup.start()
+    except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
+        print(f"[cloud-backup] could not start: {e}")
 if __package__:
     from .routers.cost_bom import router as _cost_bom_router
     from .routers.cost_bom import get_cost_detail, branch_bom_analysis  # noqa: F401
@@ -2411,8 +2425,11 @@ except ImportError:
 app.include_router(_nav_router)     # GET /api/nav/badges (PR-D4): the red task counts of the department menu
 try:
     from .routers.cloud_sync_api import router as _cloud_sync_router
+    from .routers.cloud_backup_api import router as _cloud_backup_router
 except ImportError:
     from routers.cloud_sync_api import router as _cloud_sync_router
+    from routers.cloud_backup_api import router as _cloud_backup_router
+app.include_router(_cloud_backup_router)   # /api/admin/cloud-backup/{status,run}: the daily backup to object storage (docs/CLOUD_SYNC.md)
 app.include_router(_cloud_sync_router)     # /api/admin/cloud-sync/{status,run}: the cloud pull of Easy POS (docs/CLOUD_SYNC.md)
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -402,6 +402,8 @@ MODULE_RULES = [
     ("*",   "/api/auth/users",               {"system.admin"}),
     # the cloud pull of Easy POS (backend/cloud_sync.py): its status and the "pull now" button are Management's alone
     ("*",   "/api/admin/cloud-sync",         {"system.admin"}),
+    # the cloud backup of oshinei.db (backend/cloud_backup.py): the same rule
+    ("*",   "/api/admin/cloud-backup",       {"system.admin"}),
 ]
 
 

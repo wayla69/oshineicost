@@ -762,6 +762,8 @@ function applyPermissions() {
   if (uBtn) uBtn.style.display = hasModule('system.admin') ? '' : 'none';
   const csBtn = document.getElementById('settabbtn-cloudsync');       // the cloud pull of Easy POS: Management only
   if (csBtn) csBtn.style.display = hasModule('system.admin') ? '' : 'none';
+  const cbBtn = document.getElementById('settabbtn-cloudbackup');     // the cloud backup of the database: Management only
+  if (cbBtn) cbBtn.style.display = hasModule('system.admin') ? '' : 'none';
   // 5) If the current/landing tab isn't allowed, jump to the first allowed one
   if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
   // 6) The phone summary is the owner's sales view. A role without sales.overview
@@ -3389,10 +3391,10 @@ let costSearchTimer = null;
 function switchSettingsTab(name) {
   activeSettingsTab = name;
   document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
-    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','users'];
+    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','users'];
     b.classList.toggle('active', subs[i] === name);
   });
-  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','users'].forEach(s => {
+  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','cloudsync','cloudbackup','users'].forEach(s => {
     document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
   });
   loadSettingsSubtab();
@@ -3475,6 +3477,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'prefs')    loadPreferences();
   if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
   if (activeSettingsTab === 'cloudsync') loadCloudSync();
+  if (activeSettingsTab === 'cloudbackup') loadCloudBackup();
   if (activeSettingsTab === 'usage')    loadUsageStats();
   if (activeSettingsTab === 'downtime') loadDowntime();
 }
@@ -3678,6 +3681,61 @@ async function cloudSyncRun() {
     else uiToast(j.detail || ('ดึงข้อมูลไม่ได้ (' + r.status + ')'), 'error');
   } catch (e) { uiToast('ดึงข้อมูลไม่ได้: ' + (e.message || e), 'error'); }
   setTimeout(loadCloudSync, 1500);
+}
+
+// ── Settings → สำรองข้อมูล: the cloud backup of oshinei.db (backend/cloud_backup.py · docs/CLOUD_SYNC.md) ──
+// Labels and numbers only; the explanation sits behind the "?" in the card's header. Management only.
+const CB_RESULT_TH = { ok: 'สำเร็จ', failed: 'ไม่สำเร็จ', verify_failed: 'ทดสอบกู้คืนไม่ผ่าน', locked: 'ข้ามรอบ (มีงานอื่นทำอยู่)',
+                       no_space: 'พื้นที่ไม่พอ', creds_missing: 'ยังไม่ตั้งรหัสที่เก็บข้อมูลสำรอง' };
+let _cbTimer = null;
+async function loadCloudBackup() {
+  const el = document.getElementById('cloudBackupBody');
+  if (!el) return;
+  clearTimeout(_cbTimer);
+  let d = null;
+  try { const r = await fetch(`${API}/api/admin/cloud-backup/status`); d = r.ok ? await r.json() : null; } catch (e) { d = null; }
+  if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  const s = d.status || {};
+  const bad = s.result && s.result !== 'ok';
+  const chip = s.result
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:var(${bad ? '--bad-ink' : '--good-ink'});border:1px solid currentColor">${esc(CB_RESULT_TH[s.result] || s.result)}</span>`
+    : '—';
+  const vchip = s.verify
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:var(${s.verify === 'PASS' ? '--good-ink' : '--bad-ink'});border:1px solid currentColor">${esc(s.verify)}</span>`
+    : '—';
+  const row = (k, v) => `<div class="flex justify-between gap-3 py-1.5 border-b" style="border-color:var(--border)"><span style="color:var(--text-muted)">${k}</span><span class="text-right font-semibold" style="color:var(--text-primary)">${v}</span></div>`;
+  const num = n => (n == null ? '—' : (+n).toLocaleString());
+  const objs = d.objects || [];
+  const kb = n => (n / 1e6).toFixed(0) + ' MB';
+  el.innerHTML =
+    row('สถานะ', d.running ? 'กำลังสำรองข้อมูล' : (d.enabled ? 'เปิดใช้' : 'ปิดอยู่')) +
+    row('ผลรอบล่าสุด', chip) +
+    row('ทดสอบกู้คืน', vchip) +
+    row('เริ่ม', esc(_csWhen(s.last_start))) +
+    row('จบ', esc(_csWhen(s.last_end)) + (s.duration_s != null ? ` · ${Math.max(1, Math.round(s.duration_s / 60))} นาที` : '')) +
+    row('สำเร็จล่าสุด', esc(_csWhen(s.last_ok))) +
+    row('ขนาดไฟล์', s.size_mb ? `${num(s.size_mb)} MB` : '—') +
+    row('จำนวนสำเนาที่เก็บ', d.objects_error ? '—' : `${objs.length} (7 วัน + 6 เดือน)`) +
+    row('รอบถัดไป', d.enabled ? esc(_csWhen(d.next_run)) : '—') +
+    row('พื้นที่ว่าง / ที่ต้องการ', d.free_gb == null ? '—' : `${d.free_gb} / ${d.need_gb} GB`) +
+    row('รหัสที่เก็บข้อมูลสำรอง', d.creds_present ? 'ตั้งแล้ว' : 'ยังไม่ตั้ง') +
+    (d.objects_error ? `<div class="text-xs mt-2" style="color:var(--bad-ink)">อ่านรายการสำเนาไม่สำเร็จ: ${esc(d.objects_error)}</div>` : '') +
+    (objs.length ? `<details class="mt-3"><summary class="text-xs cursor-pointer" style="color:var(--text-muted)">สำเนาในที่เก็บข้อมูล (${objs.length})</summary><div class="text-[12px] mt-2" style="color:var(--text-secondary)">${objs.map(o => `<div class="flex justify-between gap-3 py-0.5"><span>${esc(o.key.replace(/^db\//, ''))}</span><span>${kb(o.size)}</span></div>`).join('')}</div></details>` : '') +
+    ((s.log_tail || []).length ? `<details class="mt-3"><summary class="text-xs cursor-pointer" style="color:var(--text-muted)">บันทึกล่าสุด (${s.log_tail.length} บรรทัด)</summary><pre class="text-[11px] mt-2 p-2 rounded-lg overflow-x-auto" style="background:var(--bg-input);color:var(--text-secondary);white-space:pre-wrap">${esc(s.log_tail.join('\n'))}</pre></details>` : '');
+  const btn = document.getElementById('cbRunBtn');
+  if (btn) { btn.disabled = !d.enabled || !!d.running; btn.style.opacity = btn.disabled ? '.5' : ''; }
+  if (d.running) _cbTimer = setTimeout(() => { if (activeSettingsTab === 'cloudbackup') loadCloudBackup(); }, 15000);
+}
+async function cloudBackupRun() {
+  const btn = document.getElementById('cbRunBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/admin/cloud-backup/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) uiToast('เริ่มสำรองข้อมูลแล้ว', 'success');
+    else uiToast(j.detail || ('สำรองข้อมูลไม่ได้ (' + r.status + ')'), 'error');
+  } catch (e) { uiToast('สำรองข้อมูลไม่ได้: ' + (e.message || e), 'error'); }
+  setTimeout(loadCloudBackup, 1500);
 }
 
 

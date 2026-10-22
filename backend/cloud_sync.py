@@ -244,21 +244,22 @@ _log_lock = threading.Lock()
 _loggers: dict = {}
 
 
-def get_logger(log_dir) -> logging.Logger:
-    """A midnight-rotating file logger in `log_dir` (kept 14 days). One per directory; a directory that
-    cannot be created gives a logger that discards - the run never fails for want of a log."""
-    key = str(log_dir)
+def get_logger(log_dir, name: str = "cloud_sync") -> logging.Logger:
+    """A midnight-rotating file logger `<name>.log` in `log_dir` (kept 14 days). One per directory and name; a
+    directory that cannot be created gives a logger that discards - the run never fails for want of a log.
+    (cloud_backup.py reuses it with name="cloud_backup".)"""
+    key = f"{log_dir}|{name}"
     with _log_lock:
         lg = _loggers.get(key)
         if lg is not None:
             return lg
-        lg = logging.getLogger(f"oshinei.cloud_sync.{key}")
+        lg = logging.getLogger(f"oshinei.{name}.{key}")
         lg.setLevel(logging.INFO)
         lg.propagate = False
         try:
             Path(log_dir).mkdir(parents=True, exist_ok=True)
             h = logging.handlers.TimedRotatingFileHandler(
-                str(Path(log_dir) / "cloud_sync.log"), when="midnight", backupCount=LOG_KEEP_DAYS,
+                str(Path(log_dir) / f"{name}.log"), when="midnight", backupCount=LOG_KEEP_DAYS,
                 encoding="utf-8", delay=True)
             h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
             lg.addHandler(h)

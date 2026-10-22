@@ -488,6 +488,32 @@ def cloud_sync_payloads(cloud: Optional[dict], now) -> list:
               "url": "/?go=summary", "tag": "oshinei-stale"})]
 
 
+# The cloud backup of oshinei.db (backend/cloud_backup.py) reports through the same "stale" kind (one switch for
+# "something the machine does by itself has stopped"). Its status sits in app_settings['cloud_backup_status'].
+BACKUP_LABEL = {"ok": "ปกติ", "failed": "สำรองข้อมูลไม่สำเร็จ", "verify_failed": "ทดสอบกู้คืนไม่ผ่าน",
+                "locked": "ข้ามรอบ เพราะมีงานซิงก์อื่นทำอยู่", "no_space": "พื้นที่เก็บข้อมูลไม่พอ",
+                "creds_missing": "ยังไม่ได้ตั้งรหัสที่เก็บข้อมูลสำรอง"}
+BACKUP_ALERT_RESULTS = ("failed", "verify_failed", "no_space", "creds_missing")
+
+
+def cloud_backup_payloads(backup: Optional[dict], now) -> list:
+    """[(key, payload)] when the daily cloud backup failed, failed its restore test, ran out of space or has no
+    storage login. Pure like cloud_sync_payloads. One push per result per day (the key), kind "stale"."""
+    if not backup or backup.get("running"):
+        return []
+    res = backup.get("result")
+    if res not in BACKUP_ALERT_RESULTS:
+        return []
+    end = _cloud_end(backup)
+    if end is None or now - end > timedelta(hours=CLOUD_ALERT_MAX_AGE_H):
+        return []
+    when = f" (รอบ {end.day} {TH_MON[end.month - 1]} {end:%H:%M})"
+    return [(f"stale:backup:{res}:{now.strftime('%Y-%m-%d')}",
+             {"title": "สำรองข้อมูลไม่สำเร็จ",
+              "body": f"การสำรองข้อมูลบนคลาวด์: {BACKUP_LABEL.get(res, res)}{when} — ตรวจที่ ตั้งค่า > สำรองข้อมูล",
+              "url": "/?go=summary", "tag": "oshinei-stale"})]
+
+
 def alert_payloads(sc: dict, now, cloud: Optional[dict] = None) -> list:
     """[(key, payload)] for the conditions in the scorecard right now. Pure: no I/O, so the
     rules are testable. A drop is a branch ≥40% under its 7-day average AND its same weekday last week on the last settled
@@ -887,6 +913,13 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
                 cloud = _cloud_sync.status_from_con(con)
         except Exception as e:  # noqa: BLE001
             print(f"[push] alerts cloud status: {e}")
+        backup = None
+        try:                                          # the cloud backup's status, only while that is switched on
+            import cloud_backup as _cloud_backup
+            if _cloud_backup.enabled():
+                backup = _cloud_backup.status_from_con(con)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] alerts backup status: {e}")
         try:
             sc = scorecard if scorecard is not None else read_scorecard()
             todo = alert_payloads(sc, now, cloud=cloud)
@@ -898,6 +931,10 @@ def maybe_send_alerts(now=None, send=None, force: bool = False, scorecard=None, 
             todo += cloud_sync_payloads(cloud, now)
         except Exception as e:  # noqa: BLE001
             print(f"[push] alerts cloud: {e}")
+        try:
+            todo += cloud_backup_payloads(backup, now)
+        except Exception as e:  # noqa: BLE001
+            print(f"[push] alerts backup: {e}")
         try:                                          # a failure in one source never hides the other
             todo += cash_discount_payloads(cashdata if cashdata is not None else cash_discount_rows(con))
         except Exception as e:  # noqa: BLE001
