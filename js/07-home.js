@@ -195,6 +195,7 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
       footColor: H.footColor, valColor: H.color, go: "switchTab('costhead')",
     },
   ];
+  if (!canSeeCost()) tiles.pop();    // PL3: the margin tile (ต้นทุนอาหาร %) is only for the roles that hold a cost or profit module
   el.innerHTML = tiles.map(t => `
     <div class="card p-4 ${t.go ? 'cursor-pointer' : ''}" ${t.go ? `onclick="${t.go}"` : ''} style="${t.go ? 'transition:box-shadow .15s' : ''}">
       <div class="flex items-center gap-2 mb-2">
@@ -233,8 +234,8 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   // real move against last month, or a figure that cannot be trusted yet. The old rule
   // (> 45%) was true every day of the year for a buffet, so it was the permanent #1
   // "urgent" item and pushed the real ones down.
-  const fcp = brief.food_cost_pct_mtd;
-  const H = _homeCostHealth(brief), CH = H.c;
+  const fcp = canSeeCost() ? brief.food_cost_pct_mtd : null;   // PL3: no cost sentences for a role without a cost or profit module
+  const H = _homeCostHealth(brief), CH = canSeeCost() ? H.c : {};
   if (fcp != null && H.above)
     A.push({ p: 0, sev: 'red', icon: '', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — สูงกว่าแถบเป้า ${H.lo}–${H.hi}%${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   else if (fcp != null && CH.delta_pp != null && CH.delta_pp >= 3)
@@ -2411,7 +2412,10 @@ async function loadDataQuality() {
   const el = document.getElementById('dqFindings'); if (!el) return;
   let d; try { d = await api(`${API}/api/data-quality`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่สำเร็จ</p>'; return; }
-  const sev = { high: ['#dc2626', '#fef2f2'], warn: ['#d97706', '#fffbeb'], info: ['#0891b2', '#f0f9ff'] };
+  // PL3 (RV3 F6): the cards take the page's own tokens - a tint of the severity colour over the card fill - not a fixed cream/pink
+  // fill, which was a white block inside a dark page
+  const sev = { high: ['#dc2626', 'color-mix(in srgb, #dc2626 9%, var(--bg-card))'], warn: ['#d97706', 'color-mix(in srgb, #d97706 9%, var(--bg-card))'],
+                info: ['#0891b2', 'color-mix(in srgb, #0891b2 9%, var(--bg-card))'] };
   const rowLine = (k, r) => {
     if (k === 'missing_days') return `${esc(r.branch)} — ${r.missing_days} วัน (${(r.dates || []).slice(0, 3).join(', ')}${(r.dates || []).length > 3 ? ' …' : ''})`;
     // Recorded closures are shown WITH their reason: the point of splitting them
@@ -2424,7 +2428,7 @@ async function loadDataQuality() {
   el.innerHTML = (d.findings || []).map(f => {
     const [c, bg] = sev[f.severity] || sev.info;
     const rows = (f.rows || []).map(r => `<li class="text-[11px]" style="color:var(--text-muted)">• ${rowLine(f.key, r)}</li>`).join('');
-    return `<div class="mb-2 rounded-lg p-3${f.benign ? '' : ' on-light'}" style="background:${f.benign ? 'var(--bg-subtle)' : bg};border:1px solid ${f.benign ? 'var(--border)' : c}">
+    return `<div class="mb-2 rounded-lg p-3" style="background:${f.benign ? 'var(--bg-subtle)' : bg};border:1px solid ${f.benign ? 'var(--border)' : c}">
         <div class="flex items-baseline justify-between gap-3 flex-wrap">
           <span class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.title)}
             ${f.benign ? '<span class="text-[10px] font-normal" style="color:var(--text-muted)">· ไม่กระทบตัวเลขการเงิน</span>' : ''}</span>
@@ -2434,7 +2438,7 @@ async function loadDataQuality() {
         ${rows ? `<ul class="mt-1 space-y-0.5">${rows}</ul>` : ''}
         ${f.key === 'uncosted_skus' ? `<a href="${API}/api/cost/suggestions.csv" download
              class="inline-block mt-2 text-[11px] font-semibold rounded px-2 py-1"
-             style="background:#fff;border:1px solid ${c};color:${textInk(c)}">ดาวน์โหลดต้นทุนที่ระบบประมาณให้ (CSV)</a>
+             style="background:var(--bg-card);border:1px solid ${c};color:${textInk(c)}">ดาวน์โหลดต้นทุนที่ระบบประมาณให้ (CSV)</a>
            <span class="text-[10px] ml-2" style="color:var(--text-muted)">ประมาณจากเมนูที่มีต้นทุนจริงแล้ว · ตรวจก่อนนำไปกรอก</span>` : ''}
       </div>`;
   }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';

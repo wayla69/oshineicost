@@ -1153,7 +1153,7 @@ function bcImportTemplate(input) {
       const hdr = rows[0].map(h => h.trim().toLowerCase());
       const ix = n => hdr.findIndex(h => h.startsWith(n));
       const iSku = ix('sku_code'), iCost = ix('new_unit_cost'), iQty = ix('new_qty'), iClose = ix('close');
-      if (iSku < 0 || iCost < 0) { uiNotice('ไม่พบคอลัมน์ sku_code / new_unit_cost — กรุณาใช้ template ที่ export'); return; }
+      if (iSku < 0 || iCost < 0) { uiNotice('ไม่พบคอลัมน์รหัสเมนูหรือต้นทุนใหม่ ให้ใช้ไฟล์แม่แบบที่ส่งออกจากหน้านี้'); return; }
       const cur = {}; (bcSimBase.skus||[]).forEach(r => { cur[r.sku_code] = r; });
       let nCost = 0, nQty = 0, nClose = 0, unknown = 0;
       bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};   // template replaces current scenario
@@ -1221,7 +1221,7 @@ async function bcDeleteScenario() {
 async function bcAdoptScenario() {
   const id = document.getElementById('bcScenSel')?.value;
   if (!id) { uiNotice('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด Save current)'); return; }
-  if (!await uiConfirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
+  if (!await uiConfirm('บันทึกว่า "ใช้จริง" (adopt)?\nจะบันทึกต้นทุนปัจจุบันเป็นฐาน แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
   const r = await fetch(`${API}/api/bom-cost/scenarios/${id}/adopt`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
   });

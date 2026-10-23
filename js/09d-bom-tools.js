@@ -282,7 +282,7 @@ async function loadRecalibration() {
   if (mf) params.set('month_from', mf);
   if (mt) params.set('month_to',   mt);
   const body = document.getElementById('recalibBody');
-  body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400">Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400">กำลังโหลด…</td></tr>';
   try {
     const data = await api(`${API}/api/cost/recalibration?${params}`);
     _recalibData = data;
@@ -451,7 +451,7 @@ function openMonthlyPackDialog() {
 function downloadMonthlyPack() {
   const month = document.getElementById('mpackMonth').value;
   if (!month || month.length !== 7) {
-    uiNotice('กรุณาเลือกเดือน (YYYY-MM)');
+    uiNotice('เลือกเดือนก่อน');
     return;
   }
   const fmt = document.querySelector('input[name="mpackFmt"]:checked')?.value || 'xlsx';

@@ -24,6 +24,15 @@ def branch_start(con, branch_id: int):
     return r[0] if r and r[0] else None
 
 
+def effective_start(con, branch_id: int, today) -> str:
+    """PL3 (RV3 F19): the day a branch is first held to the supply module's work, as a screen uses it.
+
+    The branch start above when the branch has one; a branch with no activity yet has not started, so its FIRST day is today: the days
+    before it are not "ยังไม่ทำ", and a round whose cutoff is before it is not "เลยเวลาส่ง · มีค่าปรับ". (Chosen over the date the branch
+    login was created: an account made two weeks before the first slip would otherwise open on two weeks of missed days.)"""
+    return branch_start(con, branch_id) or (today.isoformat() if isinstance(today, date) else str(today)[:10])
+
+
 def started_by(con, branch_id: int, day) -> bool:
     """Had the branch started on `day` (a date or ISO string)?"""
     s = branch_start(con, branch_id)

@@ -1903,7 +1903,10 @@ function brnDailyCards(d, openFn) {
 function _brnDailyCardsStock(d, openFn, anyJudged) {
   const t = d.totals;
   const head = `<div class="text-xs" style="color:var(--text-secondary);margin-bottom:6px">${anyJudged
-    ? `รวมวันที่ส่งใบแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ที่สาขาใช้ปกติ <b>${_brnBaht(t.normal_value)}</b> · <b>${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</b> · เฉลี่ยทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>`
+    ? `รวมวันที่ส่งใบแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ` +
+      // PL3 (RV3 F15): a comparator with no basis behind it says so - not "฿0" and a percentage of nothing
+      (t.normal_value > 0 ? `ที่สาขาใช้ปกติ <b>${_brnBaht(t.normal_value)}</b> · <b>${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</b>` : 'ที่สาขาใช้ปกติ <b>ยังไม่มีข้อมูลพอ</b>') + ' · ' +
+      (t.median_value > 0 ? `เฉลี่ยทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>` : 'เฉลี่ยทุกสาขา <b>ยังไม่มีข้อมูลพอ</b>')
     : 'ยังไม่มีวันที่เทียบกับปกติได้'}</div>`;
   return head + d.rows.slice().reverse().map(r => {
     const ink = _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)';
@@ -2243,8 +2246,13 @@ function _brnRowFlags(r, nEst) {
 // 14 confirmed days - the sentence the server gives (no suggestion / the benchmark)
 function _brnSrcLine(p) {
   const s = p.source || {}, f = p.fallback;
-  const t = f ? f.message : (s.kind === 'slips' ? `คิดจากใบตัดเบิก ${s.window_days} วัน` : '');
-  const q = !f && s.kind === 'slips' ? ' ' + uiQ('brn:srcline', 'คิดจากใบตัดเบิก', `<p>ใบตัดเบิกที่ส่งแล้ว ${s.confirmed_days}/${s.window_days} วัน</p>`) : '';
+  // PL3 (RV3 F17): the fallback is said ONCE - the card below ("ใบตัดเบิกยังไม่ครบ · คำนวณจาก…") already says it while a reference is in use;
+  // the x/y days are behind the "?", never on the page
+  if (f && p.ref_mode && p.ref_mode.active) return '';
+  const m = f ? /^(.*?)\s*\(([^)]*)\)\s*$/.exec(f.message || '') : null;
+  const t = f ? (m ? m[1] : f.message) : (s.kind === 'slips' ? `คิดจากใบตัดเบิก ${s.window_days} วัน` : '');
+  const q = f ? (m ? ' ' + uiQ('brn:srcline', 'จำนวนวันที่มีใบตัดเบิก', `<p>${esc(m[2])}</p>`) : '')
+    : s.kind === 'slips' ? ' ' + uiQ('brn:srcline', 'คิดจากใบตัดเบิก', `<p>ใบตัดเบิกที่ส่งแล้ว ${s.confirmed_days}/${s.window_days} วัน</p>`) : '';
   return t ? `<div class="mt-1" style="color:${f ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${esc(t)}${q}</div>` : '';
 }
 function brnRenderOrder() {
@@ -2363,9 +2371,9 @@ function brnRenderOrder() {
   else if (editable) {
     // the reason a button is off is TEXT under it (a hover title does not exist on a phone)
     const send = slipOk ? btn('ส่งใบสั่งซื้อ', 'brnOrderSave(true)', true)
-      : `<button disabled aria-describedby="brnOrdWhy" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งใบสั่งซื้อ</button>`;
-    acts = btn('บันทึกไว้ก่อน', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', "brnOrderAct('cancel')") : '')
-      + (slipOk ? '' : `<div id="brnOrdWhy" class="w-full text-xs" style="color:var(--amber-ink)">ส่งใบสั่งซื้อไม่ได้ · ต้องส่งใบตัดเบิกวันนี้ก่อน</div>`);
+      : `<button disabled aria-describedby="brnOrdGate" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งใบสั่งซื้อ</button>`;
+    // PL3 (RV3 F17): the reason the button is off is the card above it ("ส่งใบตัดเบิกวันนี้แล้วจึงส่งใบสั่งซื้อได้"), said once - not a second line here
+    acts = btn('บันทึกไว้ก่อน', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', "brnOrderAct('cancel')") : '');
   }
   // receiving belongs to an order the warehouse has sent (คลังจัดส่งแล้ว); one that is only sent waits for the warehouse
   else if (o.status === 'submitted') acts = btn('เปิดแก้ไข', "brnOrderAct('reopen')") + `<div class="w-full text-xs" style="color:var(--text-secondary)">รอคลังจัดส่ง · รับของได้เมื่อคลังจัดส่งแล้ว</div>`;
@@ -2426,8 +2434,7 @@ function _brnRenderRefCard(box, p, editable) {
     return;
   }
   const own = p.fallback ? `ใบตัดเบิกที่ส่งแล้วเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)` : `สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)`;
-  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">${p.fallback ? 'ใบตัดเบิกยังไม่ครบ' : 'สาขาใหม่'} · คำนวณจาก${refTxt}</div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${own} ${uiQ('brn:ref', p.fallback ? stkWord('คำนวณจากค่ากลางอย่างไร', 'คำนวณจากเฉลี่ยทุกสาขาอย่างไร') : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
+  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">${p.fallback ? 'ใบตัดเบิกยังไม่ครบ' : 'สาขาใหม่'} · คำนวณจาก${refTxt} ${uiQ('brn:ref', p.fallback ? stkWord('คำนวณจากค่ากลางอย่างไร', 'คำนวณจากเฉลี่ยทุกสาขาอย่างไร') : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
       <label style="color:var(--text-secondary)">ยอดขายที่คาดของรอบนี้ (บาท)
         <input id="brnRefSales" type="text" inputmode="numeric" autocomplete="off" value="${rm.expected_sales ? esc(String(rm.expected_sales)) : ''}" style="width:130px;height:36px;margin-left:6px;text-align:right;${inp}"></label>

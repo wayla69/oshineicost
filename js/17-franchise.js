@@ -116,14 +116,16 @@ function _frcVerdict(v) {
   const groups = [['good', 'ดี', 'var(--good-ink)'], ['watch', 'ควรดู', 'var(--amber-ink)'], ['fix', 'ต้องแก้', 'var(--bad-ink)']];
   const rows = groups.map(([k, lbl, ink]) => {
     const items = (v && v[k]) || [];
-    const btn = i => ask && k !== 'good' ? `<button type="button" class="frc-ask" onclick="frcAskAbout('${k}',${i})">สอบถามเรื่องนี้</button>` : '';
+    // PL3 (RV3 F21): short lines, not paragraphs - each item is one sentence, the repeated "สอบถามเรื่องนี้" is a one-word "ถาม" chip,
+    // and the note under the list is behind the "?" of the heading
+    const btn = i => ask && k !== 'good' ? `<button type="button" class="frc-ask" aria-label="สอบถามเรื่องนี้" title="สอบถามเรื่องนี้" onclick="frcAskAbout('${k}',${i})">ถาม</button>` : '';
     return `<div class="ms-row" style="align-items:flex-start;gap:10px"><span style="flex:0 0 44px;font-size:13px;font-weight:700;color:${ink}">${lbl}</span>`
       + `<span style="flex:1;min-width:0;font-size:13px;line-height:1.5;color:var(--text-primary)">`
-      + (items.length ? items.map((t, i) => `<span style="display:block;margin-bottom:3px">${esc(t)}${btn(i)}</span>`).join('') : `<span style="${_FRC_MUTED}">ไม่มีรายการ</span>`)
+      + (items.length ? items.map((t, i) => `<span style="display:flex;align-items:flex-start;gap:8px;margin-bottom:3px"><span style="flex:1;min-width:0">${esc(t)}</span>${btn(i)}</span>`).join('') : `<span style="${_FRC_MUTED}">ไม่มีรายการ</span>`)
       + `</span></div>`;
   }).join('');
-  const note = v && v.note ? `<div class="ms-row" style="${_FRC_MUTED};font-size:12px">${esc(v.note)}</div>` : '';
-  return _frcSection('สรุปของเดือนนี้', `<div class="ms-card">${rows}${note}</div>`);
+  const q = v && v.note ? ' ' + uiQ('frc:verdict', 'สรุปของเดือนนี้', `<p>${esc(v.note)}</p>`) : '';
+  return `<div class="ms-section"><div class="ms-section-title">สรุปของเดือนนี้${q}</div><div class="ms-card">${rows}</div></div>`;
 }
 
 function _frcSales(s, disc) {

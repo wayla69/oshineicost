@@ -4,7 +4,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 """
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
-from fastapi import Query
+from fastapi import Query, Request
 from typing import Optional
 from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter, tier_code_sql
 from core import (
@@ -1408,7 +1408,7 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
 
 
 @router.get("/api/overall/latest-month-mtd")
-def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+def latest_month_mtd(request: Request, branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """Fair month-to-date comparison for the latest (possibly incomplete) month:
     current month 1→latest-day vs previous month 1→same-day. Returns revenue (ex-VAT),
     customers, discount, and BoM COGS for both periods. COGS via our BoM only (iron rule)."""
@@ -1459,6 +1459,12 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
         # COGS window is rolling — flag if prev period predates available daily-sku data
         mindd = con.execute("SELECT MIN(day) FROM v_sales_sku_daily").fetchone()[0]
         cogs_ok = bool(mindd) and mindd <= prev_s.isoformat()
+    import auth as _auth
+    if not (_auth.request_modules(request) & {"cost.analysis", "profit.pnl"}):
+        # PL3: a role with no cost or profit module gets the sales side only - never the cost of goods or the gross profit
+        for _side in (cur, prev):
+            _side["cogs"] = None; _side["gross_profit"] = None
+        cogs_ok = False
     return {"available": True, "partial": partial, "cutoff_day": d, "days_in_month": last_dom,
             "cur_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
             "cur_range": [cur_s.isoformat(), cur_e.isoformat()],

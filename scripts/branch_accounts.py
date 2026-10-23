@@ -104,7 +104,7 @@ def sign_in(api, user: str, password: str) -> None:
     if not (isinstance(js, dict) and js.get("authenticated")):
         raise SystemExit("เข้าสู่ระบบแล้วแต่ระบบไม่ยืนยันตัวตน")
     if js.get("must_change"):
-        raise SystemExit(f"บัญชี {user} ยังใช้รหัสผ่านเริ่มต้น กรุณาเข้าสู่ระบบทางเบราว์เซอร์และตั้งรหัสผ่านใหม่ก่อน")
+        raise SystemExit(f"บัญชี {user} ยังใช้รหัสผ่านเริ่มต้น ให้เข้าสู่ระบบทางเบราว์เซอร์และตั้งรหัสผ่านใหม่ก่อน")
 
 
 def plan_rows(rows: list, branches: dict, users: list, replace_pilot: bool = False, role: str = "branch") -> list:

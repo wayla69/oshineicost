@@ -125,7 +125,7 @@ function renderFeedback(d) {
     tile('เชิงลบ', `${d.neg_pct}%`, _fbDelta(d.neg_pct, prev && prev.neg_pct, { pct: true, goodUp: false, unit: ' pt' }), `${s.neg || 0} เสียง`, '#b91c1c') +
     tile('อัตราตอบกลับ', resp.rate != null ? resp.rate + '%' : '—', _fbDelta(resp.rate, prev && prev.response_rate, { pct: true, goodUp: true, digits: 0, unit: ' pt' }), resp.answerable ? `ตอบแล้ว ${resp.answered}/${resp.answerable}${resp.median_days != null ? ` · กลาง ${resp.median_days} วัน` : ''}` : 'ยังไม่มีเสียงลบที่ตอบผ่านระบบได้', '#047857') +
     tile('รอสาขาตอบ', `${d.unreplied || 0}`, _fbDelta(d.sla_breached, prev && prev.sla_breached, { digits: 0, goodUp: false }), (d.sla_breached ? `<span style="color:var(--bad-ink);font-weight:600">เกิน ${d.sla_days} วัน ${d.sla_breached}</span>` : `ทุกรายการยังอยู่ใน SLA ${d.sla_days} วัน`) + (d.severe ? ` · <span style="color:var(--bad-ink);font-weight:600">ร้ายแรง ${d.severe}</span>` : ''), (d.sla_breached || d.severe) ? '#b91c1c' : '#0f766e');
-  document.getElementById('fbSlaDays').textContent = d.sla_days || 1;
+  const _sd = tplById('fbSlaDays'); if (_sd) _sd.textContent = d.sla_days || 1;
   _fbTrend(d);
   // mix
   const srcs = Object.entries(d.sources || {}).sort((a, x) => x[1] - a[1]);
@@ -136,7 +136,7 @@ function renderFeedback(d) {
        <div class="flex rounded overflow-hidden mt-1" style="height:12px;background:#e5e7eb"><div style="width:${100 * (s.pos || 0) / tot}%;background:#047857"></div><div style="width:${100 * (s.neu || 0) / tot}%;background:#9ca3af"></div><div style="width:${100 * (s.neg || 0) / tot}%;background:#b91c1c"></div></div>
        <div class="flex justify-between text-[11px] mt-0.5"><span style="color:var(--good-ink)">บวก ${(100 * (s.pos || 0) / tot).toFixed(0)}%</span><span style="color:var(--text-muted)">กลาง ${(100 * (s.neu || 0) / tot).toFixed(0)}%</span><span style="color:var(--bad-ink)">ลบ ${(100 * (s.neg || 0) / tot).toFixed(0)}%</span></div></div>` +
     (srcs.length ? `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ช่องทาง</div>` + srcs.map(([k, v]) => `<div class="flex items-center gap-2 text-xs mb-1"><span style="width:88px">${_fbEsc(k)}</span><div class="fb-bar" style="flex:1"><i style="width:${100 * v / mx}%;background:#0369a1"></i></div><span style="width:34px;text-align:right">${v}</span></div>`).join('') : '') +
-    `<div class="text-[11px] mt-2" style="color:var(--text-muted)">วิเคราะห์โดย ${eng || '—'}${(d.analysed_by || {}).claude ? '' : ' · <span title="ตั้ง ANTHROPIC_API_KEY บน Fly เพื่อให้ Claude อ่านประชด/บริบทซับซ้อนได้">พจนานุกรม: ตั้ง Claude ได้ใน Checklist เฟส 7</span>'}</div>`;
+    `<div class="text-[11px] mt-2" style="color:var(--text-muted)">วิเคราะห์โดย ${eng || '—'}${(d.analysed_by || {}).claude ? '' : ' · <span title="ยังไม่ได้เปิดใช้ AI อ่านประชดและบริบทที่ซับซ้อน">วิเคราะห์ด้วยพจนานุกรมคำ</span>'}</div>`;
   _fbThemes(d);
   _fbBranches(d);
   // menus
@@ -512,7 +512,7 @@ async function loadFeedbackNarrative() {
   const p = new URLSearchParams({ days: (document.getElementById('fbAiDays') || {}).value || '7' });
   const b = _fbBranchLocal || getBranch(); if (b) p.set('branch', b);
   let d; try { d = await api(`${API}/api/feedback/narrative?${p}`); } catch (e) { el.textContent = 'สรุปไม่สำเร็จ'; return; }
-  eng.textContent = `· ${d.range[0]} → ${d.range[1]} · เขียนโดย ${d.engine === 'claude' ? 'Claude' : 'กฎ (ตั้ง ANTHROPIC_API_KEY เพื่อใช้ Claude)'}`;
+  eng.textContent = `· ${d.range[0]} → ${d.range[1]} · เขียนโดย ${d.engine === 'claude' ? 'Claude' : 'กฎ (ยังไม่ได้เปิดใช้ AI)'}`;
   el.innerHTML = `<p>${_fbEsc(d.overview)}</p>${d.fix ? `<p class="mt-1"><b>ต้องแก้:</b> ${_fbEsc(d.fix)}</p>` : ''}${d.praise ? `<p class="mt-1"><b>ทำได้ดี:</b> ${_fbEsc(d.praise)}</p>` : ''}` +
     ((d.actions || []).length ? `<ol class="mt-1 pl-5 list-decimal">${d.actions.map(a => `<li>${_fbEsc(a)}</li>`).join('')}</ol>` : '') +
     `<div class="mt-1"><button class="fb-ghost" onclick="fbCopy(this, ${JSON.stringify([d.overview, d.fix, d.praise, ...(d.actions || []).map((a, i) => `${i + 1}. ${a}`)].filter(Boolean).join('\n')).replace(/"/g, '&quot;')})">คัดลอกส่งกลุ่ม</button></div>`;
@@ -524,7 +524,7 @@ async function askFeedback() {
   const body = { question: q.trim(), days: +((document.getElementById('fbAiDays') || {}).value || 7) * 4 };
   const b = _fbBranchLocal || getBranch(); if (b) body.branch = b;
   let d; try { d = await _fbPost('/api/feedback/ask', body); } catch (e) { out.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">ถามไม่สำเร็จ: ${_fbEsc(e.message)}</span>`; return; }
-  out.innerHTML = `<div class="rounded p-3" style="background:var(--bg-input)"><p class="text-sm">${_fbEsc(d.answer)}</p><p class="text-[11px] mt-1" style="color:var(--text-muted)">${d.range[0]} → ${d.range[1]} · ${d.engine === 'claude' ? 'ตอบโดย Claude' : 'ค้นหาคำ (ตั้ง ANTHROPIC_API_KEY เพื่อให้ AI ตอบเป็นประโยค)'}${d.matches != null ? ` · ตรงกัน ${d.matches} เสียง` : ''}</p>` +
+  out.innerHTML = `<div class="rounded p-3" style="background:var(--bg-input)"><p class="text-sm">${_fbEsc(d.answer)}</p><p class="text-[11px] mt-1" style="color:var(--text-muted)">${d.range[0]} → ${d.range[1]} · ${d.engine === 'claude' ? 'ตอบโดย Claude' : 'ค้นหาคำ (ยังไม่ได้เปิดใช้ AI)'}${d.matches != null ? ` · ตรงกัน ${d.matches} เสียง` : ''}</p>` +
     ((d.cites || []).length ? d.cites.map(c => `<div class="text-xs mt-1 pl-2" style="border:1px solid ${c.sentiment === 'neg' ? '#fca5a5' : '#a7f3d0'}">"${_fbEsc(c.text)}" <span style="color:var(--text-muted)">— ${_fbEsc(c.branch || '')} ${_fbEsc(c.date || '')}${c.rating != null ? ' · ' + c.rating + '★' : ''}</span></div>`).join('') : '') + '</div>';
 }
 

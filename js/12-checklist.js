@@ -250,7 +250,7 @@ function setChecklistTask(id, fields) {
 function setChecklistStart(v) { if (!v) return; _clAct(() => _clPost(`/api/checklist/${CL_NAME}/meta`, _clBody({ start: v }))); }
 
 async function completeChecklist() {
-  if (!await uiConfirm('ยืนยันปิดสมบูรณ์? ระบบจะตรวจว่าทุกขั้นตอนถูกติ๊กครบ แล้วล็อกรายการนี้ (ผู้บริหารเปิดแก้ไขอีกครั้งได้)')) return;
+  if (!await uiConfirm('ยืนยันปิดสมบูรณ์? จะตรวจว่าทุกขั้นตอนติ๊กครบ แล้วล็อกรายการนี้ (ผู้บริหารเปิดแก้ไขอีกครั้งได้)')) return;
   try {
     const r = await _clPost(`/api/checklist/${CL_NAME}/complete`, _clBody({}));
     _clState = await getJSON(`/api/checklist/${CL_NAME}`); _clRender();

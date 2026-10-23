@@ -2910,8 +2910,12 @@ def bc_issue_status(request: Request, branch_id: Optional[int] = Query(None), da
         d0 = _day_or_today(date_from) if date_from else d1 - timedelta(days=6)
         if d0 > d1 or (d1 - d0).days > 92:
             raise HTTPException(400, "ช่วงวันที่ต้องไม่เกิน 92 วัน")
-        return {"branch_id": bid, "date_from": d0.isoformat(), "date_to": d1.isoformat(),
-                "days": _is.status_days(con, bid, d0, d1)}
+        # PL3 (RV3 F19): a day before the branch started is not a day left undone (started.effective_start: a branch with no activity yet starts today)
+        # (the default week of the branch page only: a range somebody asks for by name is answered day by day, as before)
+        from bom_center.started import effective_start
+        start = effective_start(con, bid, _day_or_today(None))
+        days = [x for x in _is.status_days(con, bid, d0, d1) if date_from or x["date"] >= start or x["status"] != "missing"]
+        return {"branch_id": bid, "date_from": d0.isoformat(), "date_to": d1.isoformat(), "days": days}
 
 
 @router.post("/api/bom-center/issues/reopen", dependencies=[Depends(require_write_token)])

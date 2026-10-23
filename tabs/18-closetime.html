@@ -15,8 +15,7 @@
        design — these are real records (deleting destroys history) and missing
        days can only return via a POS re-sync, never be invented. -->
   <div class="card p-5 mb-4">
-    <h2 class="section-title mb-1">ตรวจสุขภาพข้อมูล</h2>
-    <p class="text-xs text-slate-400 mb-3">สิ่งที่ทำให้ตัวเลขเพี้ยนแบบเงียบ ๆ · ระบบ<b>รายงานอย่างเดียว ไม่แก้ไขข้อมูลให้</b> (เป็นบันทึกการเงินจริง และวันที่ขาดต้องกู้จาก POS เท่านั้น)</p>
+    <h2 class="section-title mb-1">ตรวจสุขภาพข้อมูล <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-closetime-1" title="คำอธิบาย">?</button></h2><template id="hlp-closetime-1" data-title="ตรวจสุขภาพข้อมูล"><p>สิ่งที่ทำให้ตัวเลขเพี้ยนแบบเงียบ ๆ · ระบบ<b>รายงานอย่างเดียว ไม่แก้ไขข้อมูลให้</b> (เป็นบันทึกการเงินจริง และวันที่ขาดต้องกู้จาก POS เท่านั้น)</p></template>
     <div id="dqFindings"></div>
   </div>
 
@@ -29,15 +28,13 @@
       <div style="height:260px"><canvas id="ctmChartDays"></canvas></div>
     </div>
     <div class="card p-5">
-      <h2 class="section-title mb-3">เวลาปิดเฉลี่ยรายสาขา (30 วันล่าสุด)</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก · แท่งแดง = เวลาปิดหลุดกรอบเทียบสาขาอื่น · เวลาก่อน 06:00 นับเป็นปิดหลังเที่ยงคืน</p>
+      <h2 class="section-title mb-3">เวลาปิดเฉลี่ยรายสาขา (30 วันล่าสุด) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-closetime-2" title="คำอธิบาย">?</button></h2><template id="hlp-closetime-2" data-title="เวลาปิดเฉลี่ยรายสาขา"><p>คลิกปุ่มมุมกราฟเพื่อเจาะลึก · แท่งแดง = เวลาปิดหลุดกรอบเทียบสาขาอื่น · เวลาก่อน 06:00 นับเป็นปิดหลังเที่ยงคืน</p></template>
       <div style="height:260px"><canvas id="ctmChartClose"></canvas></div>
     </div>
   </div>
 
   <div class="card p-5 overflow-x-auto">
-    <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
-    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น</p>
+    <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-closetime-3" title="คำอธิบาย">?</button></h2><template id="hlp-closetime-3" data-title="รายสาขา"><p><b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น</p></template>
     <table class="text-xs w-full" id="ctmTable"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
   </div>
 </div>

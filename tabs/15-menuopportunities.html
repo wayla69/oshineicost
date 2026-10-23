@@ -1,20 +1,17 @@
 <!-- ══ โอกาสเมนู (Menu Opportunities) ══ -->
 <div id="tab-menuopportunities" style="display:none">
   <div class="card p-4 mb-4" style="background:#fef9c3;border:1px solid #ca8a04">
-    <h2 class="text-base font-bold" style="color:var(--amber-ink)">โอกาสเมนู — ขยายเมนูจากข้อมูลจริง</h2>
-    <p class="text-xs text-slate-500 mt-1">อิงยอดขาย/สัดส่วน/แนวโน้มเท่านั้น (ไม่ใช้ข้อมูลต้นทุน). <b>ไม่มีการเดา “เมนูที่ควรจับคู่ขาย”</b> เพราะข้อมูลระดับใบเสร็จยังไม่ครบ — จึงเน้น 3 สัญญาณที่เชื่อถือได้</p>
+    <h2 class="text-base font-bold" style="color:var(--amber-ink)">โอกาสเมนู — ขยายเมนูจากข้อมูลจริง <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuopportunities-1" data-title="โอกาสเมนู"><p>อิงยอดขาย/สัดส่วน/แนวโน้มเท่านั้น (ไม่ใช้ข้อมูลต้นทุน). <b>ไม่มีการเดา “เมนูที่ควรจับคู่ขาย”</b> เพราะข้อมูลระดับใบเสร็จยังไม่ครบ — จึงเน้น 3 สัญญาณที่เชื่อถือได้</p></template>
   </div>
   <div id="oppStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
 
   <div class="card p-5 mb-4" style="border:1px solid #0ea5e9">
-    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี</h3>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่นิยมทั้งเครือ (ขายใน ≥5 สาขา) แต่บางสาขาขายต่ำกว่าค่ากลางมาก — โอกาสเพิ่มยอด</p>
+    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-2" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-2" data-title="เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี"><p>เมนูที่นิยมทั้งเครือ (ขายใน ≥5 สาขา) แต่บางสาขาขายต่ำกว่าค่ากลางมาก — โอกาสเพิ่มยอด</p></template>
     <div id="oppGaps" class="overflow-x-auto"></div>
   </div>
 
   <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
-    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">หมวดที่ยังขยายได้ / ควรลด</h3>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">รายได้ต่อเมนูสูง + แนวโน้มทรงตัว/โต = มีที่ว่างให้เพิ่มเมนู · หมวดที่หดตัว = ควรทบทวน</p>
+    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">หมวดที่ยังขยายได้ / ควรลด <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-3" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-3" data-title="หมวดที่ยังขยายได้ / ควรลด"><p>รายได้ต่อเมนูสูง + แนวโน้มทรงตัว/โต = มีที่ว่างให้เพิ่มเมนู · หมวดที่หดตัว = ควรทบทวน</p></template>
     <div id="oppWhitespace" class="overflow-x-auto"></div>
   </div>
 

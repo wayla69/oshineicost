@@ -172,7 +172,7 @@ def test_the_issue_pane_is_the_month_overview():
         assert gone not in pane, gone
     assert "/api/bom-center/issue-summary/month" in js and "uiHelp(" in js
     assert "let _bmcIssFilter = 'open'" in js                                          # finished work is out of the default view
-    assert "[['open', 'ยังไม่เสร็จ'], ['ready', 'พร้อมบันทึก'], ['waiting', 'รอสาขายืนยัน'], ['posted', 'บันทึกแล้ว'], ['all', 'ทั้งหมด']]" in js
+    assert "[['open', 'ยังไม่เสร็จ'], ['ready', 'พร้อมบันทึก'], ['waiting', 'รอสาขาส่ง'], ['posted', 'บันทึกแล้ว'], ['all', 'ทั้งหมด']]" in js
 
 
 def test_the_recipes_pane_is_step_led():

@@ -864,8 +864,7 @@ function renderKpiHero(trendData, gpb, disc) {
     : 'ต้องการ ≥3 เดือน';
   el.innerHTML =
     tile('รายได้ (ไม่รวม VAT)', fmt(mtd ? mtd.cur.revenue_ex_vat : revOf(last)), revBadge, '#4a70b0', revSub, spark(sparkOf('revenue'), '#4a70b0')) +
-    cogsTile +
-    gpTile +
+    (canSeeCost() ? cogsTile + gpTile : '') +     // PL3: the cost and gross-profit tiles are for the roles that hold a cost or profit module
     tile('ลูกค้า (Pax)', fmtN(mtd ? mtd.cur.customers : (last.customer_count||0)), custBadge, '#7a66b8', custSub, spark(sparkOf('customer_count'), '#7a66b8')) +
     tile('จำนวนบิล', fmtN(mtd ? mtd.cur.bills : (last.tx_count||0)), billBadge, '#10b981', billSub, spark(sparkOf('tx_count'), '#10b981')) +
     tile('ยอด/หัว', fmtN(Math.round(phCur)), phBadge, '#06b6d4', phSub, spark(t.map(phOf), '#06b6d4')) +

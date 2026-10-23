@@ -84,8 +84,7 @@
       </table>
       </div>
 
-      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">โปรไฟล์รายสาขา — จุดเด่น/ผิดปกติเทียบเครือ</h3>
-      <p class="text-xs text-slate-400 mb-3">เทียบแต่ละสาขากับค่ากลาง (median) ของทั้งเครือ · แสดงเฉพาะจุดที่ต่างชัด (เกิน ±20%)</p>
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">โปรไฟล์รายสาขา — จุดเด่น/ผิดปกติเทียบเครือ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-report-1" title="คำอธิบาย">?</button></h3><template id="hlp-report-1" data-title="โปรไฟล์รายสาขา"><p>เทียบแต่ละสาขากับค่ากลาง (median) ของทั้งเครือ · แสดงเฉพาะจุดที่ต่างชัด (เกิน ±20%)</p></template>
       <div id="rptBranchProfile"></div>
     </div>
 
@@ -180,8 +179,7 @@
         <tbody id="rptDiscountBody"></tbody>
       </table>
 
-      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ลักษณะส่วนลดรายสาขา · เทียบเดือนก่อน</h3>
-      <p class="text-xs text-slate-400 mb-2">แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p>
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ลักษณะส่วนลดรายสาขา · เทียบเดือนก่อน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-report-2" title="คำอธิบาย">?</button></h3><template id="hlp-report-2" data-title="ลักษณะส่วนลดรายสาขา · เทียบเดือนก่อน"><p>แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p></template>
       <div id="rptDiscountComposition" class="overflow-x-auto text-sm"></div>
 
       <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ระดับราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
@@ -225,17 +223,17 @@
 
       <h3 class="text-sm font-bold text-slate-600 mb-2">ความผิดปกติ (90 วันล่าสุด)</h3>
       <ul id="rptAnomalies" class="list-disc pl-5 text-sm text-slate-600 space-y-1 mb-4"></ul>
-      <h3 class="text-sm font-bold text-slate-600 mb-2">คำแนะนำเชิงปฏิบัติ (เรียงตามความสำคัญ)</h3>
+      <h3 class="text-sm font-bold text-slate-600 mb-2">คำแนะนำเชิงปฏิบัติ (เรียงตามความสำคัญ) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-report-b1" title="คำอธิบาย">?</button></h3><template id="hlp-report-b1" data-title="คำแนะนำเชิงปฏิบัติ"><p><b>พยากรณ์รายได้ (run-rate):</b> คาดสิ้นเดือน = MTD ÷ จำนวนวันที่ผ่านไป × จำนวนวันในเดือน. ทุกสาขาใช้ตัวหาร "วันที่ผ่านไป" เท่ากัน (วันในปฏิทินของวันที่ขายล่าสุด) วันที่ปิดร้านนับเป็นรายได้ 0 → ผลรวมรายสาขาเท่ากับยอดรวมพอดี. รายได้เป็นแบบ <b>ไม่รวม VAT</b> (หารด้วย 1.07).</p><p><b>ช่วงความเชื่อมั่น (ทุกสาขา):</b> คาดสิ้นเดือน ± 1 SD ของรายได้รายวัน × √(จำนวนวันที่เหลือ).</p><p><b>vs เดือนก่อน (MoM):</b> (คาดสิ้นเดือน − ยอดจริงเดือนก่อนเต็มเดือน) ÷ ยอดจริงเดือนก่อน × 100.</p><p><b>Anomalies:</b> z-score ของรายได้รายวันเทียบค่าเฉลี่ย/ส่วนเบี่ยงเบนมาตรฐานของ 90 วันล่าสุด.</p><p><b>Action Items:</b> กฎอัตโนมัติจาก Menu Engineering quadrant (เส้นแบ่ง = median ปริมาณ × median margin), SKU ที่ยังไม่มีต้นทุน, อัตราส่วนลด, YoY, และพยากรณ์รายสาขา. ระดับ: เร่งด่วน · ควรทำ · ข้อมูล.</p></template>
       <ul id="rptActions" class="text-sm text-slate-700 space-y-1.5"></ul>
 
       <details class="mt-5 text-xs text-slate-500">
         <summary class="cursor-pointer font-semibold text-slate-600 select-none">วิธีคำนวณ</summary>
         <div class="mt-2 space-y-1.5 pl-1 leading-relaxed">
-          <p><b>พยากรณ์รายได้ (run-rate):</b> คาดสิ้นเดือน = MTD ÷ จำนวนวันที่ผ่านไป × จำนวนวันในเดือน. ทุกสาขาใช้ตัวหาร "วันที่ผ่านไป" เท่ากัน (วันในปฏิทินของวันที่ขายล่าสุด) วันที่ปิดร้านนับเป็นรายได้ 0 → ผลรวมรายสาขาเท่ากับยอดรวมพอดี. รายได้เป็นแบบ <b>ไม่รวม VAT</b> (หารด้วย 1.07).</p>
-          <p><b>ช่วงความเชื่อมั่น (ทุกสาขา):</b> คาดสิ้นเดือน ± 1 SD ของรายได้รายวัน × √(จำนวนวันที่เหลือ).</p>
-          <p><b>vs เดือนก่อน (MoM):</b> (คาดสิ้นเดือน − ยอดจริงเดือนก่อนเต็มเดือน) ÷ ยอดจริงเดือนก่อน × 100.</p>
-          <p><b>Anomalies:</b> z-score ของรายได้รายวันเทียบค่าเฉลี่ย/ส่วนเบี่ยงเบนมาตรฐานของ 90 วันล่าสุด.</p>
-          <p><b>Action Items:</b> กฎอัตโนมัติจาก Menu Engineering quadrant (เส้นแบ่ง = median ปริมาณ × median margin), SKU ที่ยังไม่มีต้นทุน, อัตราส่วนลด, YoY, และพยากรณ์รายสาขา. ระดับ: เร่งด่วน · ควรทำ · ข้อมูล.</p>
+          
+          
+          
+          
+          
         </div>
       </details>
     </div>

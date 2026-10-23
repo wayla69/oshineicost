@@ -70,7 +70,8 @@ function bmcGapParts(value, pct, kind, short) {
   const label = d > 0 ? w[0] : d < 0 ? w[1] : w[2];
   const hasV = value !== null && value !== undefined && value !== '' && !isNaN(value), hasP = pct !== null && pct !== undefined && pct !== '' && !isNaN(pct);
   const baht = d !== 0 && hasV && Math.abs(Number(value)) >= 0.5 ? `฿${_bmcNum(Math.abs(Number(value)), 0)}` : '';
-  const pc = d !== 0 && hasP && Math.abs(Number(pct)) >= 0.05 ? `${_bmcNum(Math.abs(Number(pct)), Math.abs(Number(pct)) >= 10 ? 0 : 1)}%` : '';
+  // PL3 (RV3 F15): a percentage over 999 is a comparison against almost nothing, not a size - it reads "มากกว่า 999%"
+  const pc = d !== 0 && hasP && Math.abs(Number(pct)) >= 0.05 ? (Math.abs(Number(pct)) > 999 ? '>999%' : `${_bmcNum(Math.abs(Number(pct)), Math.abs(Number(pct)) >= 10 ? 0 : 1)}%`) : '';
   // the ink: more than the recipes (or less than the system stock) is the loss; the other direction is amber; the same is good
   const bad = k === 'count' ? d < 0 : d > 0;
   const ink = d === 0 ? 'var(--good-ink)' : bad ? 'var(--bad-ink)' : 'var(--amber-ink)';
@@ -79,6 +80,8 @@ function bmcGapParts(value, pct, kind, short) {
 }
 // PR-S4 · stock mode: a gap inside the threshold is "close to normal" in muted ink; only a gap beyond it is coloured and worded as over / under
 function stkGapHtml(value, pct, kind, short) {
+  // PL3 (RV3 F14/F15): no comparison figure at all is "—", never the green "เบิกตามปกติ" (that reads as "all good" when nothing was compared)
+  if ((pct === null || pct === undefined || pct === '' || isNaN(pct)) && (value === null || value === undefined || value === '' || isNaN(value))) return '<span style="color:var(--text-muted)">—</span>';
   if (pct === null || pct === undefined || pct === '' || isNaN(pct) || Math.abs(Number(pct)) > 20) return bmcGapHtml(value, pct, kind, short);
   const near = kind === 'issue_m' ? 'ใกล้เคียงเฉลี่ยทุกสาขา' : 'ใกล้เคียงปกติ';
   const v = value !== null && value !== undefined && value !== '' && !isNaN(value) && Math.abs(Number(value)) >= 0.5 ? ` ฿${_bmcNum(Math.abs(Number(value)), 0)}` : '';
@@ -253,7 +256,7 @@ function _bmcChip(text, ink, wrap) {        // wrap: a long chip (a flag) may br
 // One row per branch (2026-10-19, owner: no run-on "✓ อุดรธานี: … · ✓ อุบลราชธานี: …" lines): สาขา · สถานะ · รายละเอียด · the link.
 // `branches` = [{branch, status, detail, ...}] as /todo gives them; `linkFn(b)` returns the row's action html (or '').
 const _BMC_BR_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
-                     blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-muted)'], na: ['ไม่มีงาน', 'var(--text-muted)'] };
+                     blocked: ['รอขั้นตอนก่อนหน้า', 'var(--text-secondary)'], na: ['ไม่มีงาน', 'var(--text-secondary)'] };
 // numbers as tiles instead of "a 12 · b 3 · c 0" sentences: [[label, value, ink?], ...]; a null value is left out
 function bmcStats(list) {
   return `<div class="wt-stats">${list.filter(x => x && x[1] != null).map(([l, v, ink]) => `<div class="wt-stat"><div class="wt-stat-l">${l}</div>
@@ -276,8 +279,8 @@ function bmcBranchTable(branches, linkFn) {
   if (!list.length) return '';
   const acts = list.map(b => (linkFn && b.status !== 'done' && !b.not_started ? linkFn(b) || '' : ''));
   const anyAct = acts.some(Boolean);
-  return `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt"><thead><tr><th>สาขา</th><th>สถานะ</th><th>รายละเอียด</th>${anyAct ? '<th></th>' : ''}</tr></thead><tbody>${list.map((b, i) => {
-    const [lbl, ink] = b.not_started ? ['ยังไม่เริ่มใช้ระบบ', 'var(--text-muted)'] : (_BMC_BR_ST[b.status] || _BMC_BR_ST.todo);   // PR-U1: neutral
+  return `<div class="wt-wrap mt-2" style="max-height:360px"><table class="wt wt-lines"><thead><tr><th>สาขา</th><th>สถานะ</th><th>รายละเอียด</th>${anyAct ? '<th></th>' : ''}</tr></thead><tbody>${list.map((b, i) => {
+    const [lbl, ink] = b.not_started ? ['ยังไม่เริ่มใช้ระบบ', 'var(--text-secondary)'] : (_BMC_BR_ST[b.status] || _BMC_BR_ST.todo);   // PR-U1: neutral
     return `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(b.branch || '')}</td>
       <td data-l="สถานะ"><span class="wt-tag" style="color:${ink}">${lbl}</span></td>
       <td data-l="รายละเอียด" style="color:var(--text-secondary)">${esc(b.detail || '')}</td>${anyAct ? `<td class="wt-act">${acts[i]}</td>` : ''}</tr>`;
@@ -3276,8 +3279,8 @@ let _bmcIssFrom = null;       // the control that opened the drawer: the focus g
 // one unless the user holds bom.center, and Accounting does not.
 function _bmcIssCanPost() { return hasModule('cost.analysis') || hasModule('bom.center'); }
 function _bmcIssSel() { return { branch_id: _bmcIssBr, end_count_id: _bmcIssEnd }; }
-const _BMC_ISS_ST = { ready: ['พร้อมบันทึก', 'var(--teal-ink)'], waiting: ['รอสาขายืนยัน', 'var(--amber-ink)'], posted: ['บันทึกแล้ว', 'var(--good-ink)'] };
-const _BMC_ISS_FILTERS = [['open', 'ยังไม่เสร็จ'], ['ready', 'พร้อมบันทึก'], ['waiting', 'รอสาขายืนยัน'], ['posted', 'บันทึกแล้ว'], ['all', 'ทั้งหมด']];
+const _BMC_ISS_ST = { ready: ['พร้อมบันทึก', 'var(--teal-ink)'], waiting: ['รอสาขาส่ง', 'var(--amber-ink)'], posted: ['บันทึกแล้ว', 'var(--good-ink)'] };
+const _BMC_ISS_FILTERS = [['open', 'ยังไม่เสร็จ'], ['ready', 'พร้อมบันทึก'], ['waiting', 'รอสาขาส่ง'], ['posted', 'บันทึกแล้ว'], ['all', 'ทั้งหมด']];
 const _bmcIssIn = (f, st) => f === 'all' || (f === 'open' ? st !== 'posted' : st === f);
 function _bmcIssDrawerOpen() { const d = document.getElementById('bmcIssDrawer'); return !!(d && !d.hidden); }
 function _bmcIssStat(msg, ok) { bmcStatus(_bmcIssDrawerOpen() ? 'bmcIssDrStatus' : 'bmcIssStatus', ok, msg); }
@@ -3333,7 +3336,7 @@ function bmcIssRender() {
     return;
   }
   const canPost = _bmcIssCanPost();
-  const money = v => v == null ? '<span class="wt-muted">—</span>' : '฿' + _bmcNum(v, 2);
+  const money = v => v == null ? '<span class="wt-muted">—</span>' : '฿' + _bmcNum(v, 0);
   box.innerHTML = `<div class="wt-wrap" style="max-height:none"><table class="wt"><thead><tr>
       <th>สาขา</th><th>งวด</th><th>สถานะ</th><th class="wt-num">มูลค่าตัดเบิก</th><th class="wt-num">ไม่มีราคา</th><th><span class="iss-sr">ทำรายการ</span></th></tr></thead>
     <tbody>${rows.map(r => {

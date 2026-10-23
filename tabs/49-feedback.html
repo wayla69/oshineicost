@@ -57,7 +57,7 @@
 
   <div class="card p-4 mt-4" id="fbDrCard">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">รายงานประจำวัน/สัปดาห์/เดือน <span class="text-[11px] font-normal" style="color:var(--text-muted)">— สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตาม · เสียงชมที่หยิบไปใช้ได้ · หัวข้อ/เมนูที่ถูกพูดถึง</span></h3>
+      <h3 class="text-sm font-semibold">รายงานประจำวัน/สัปดาห์/เดือน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-fb-report" title="คำอธิบาย">?</button><template id="hlp-fb-report" data-title="รายงานประจำวัน/สัปดาห์/เดือน"><p>สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตาม เสียงชมที่หยิบไปใช้ได้ และหัวข้อหรือเมนูที่ถูกพูดถึง</p></template></h3>
       <div class="flex items-center gap-2 flex-wrap">
         <div class="flex gap-1"><button class="fb-ghost" onclick="setDailyReportPeriod('day')">วันนี้</button><button class="fb-ghost" onclick="setDailyReportPeriod('week')">สัปดาห์นี้</button><button class="fb-ghost" onclick="setDailyReportPeriod('month')">เดือนนี้</button></div>
         <input type="date" id="fbDrDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
@@ -89,10 +89,10 @@
 
   <div class="card p-4 mt-4" id="fbQueueCard">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">กล่องงาน — ต้องตอบ</h3>
+      <h3 class="text-sm font-semibold">กล่องงาน — ต้องตอบ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-feedback-b1" title="คำอธิบาย">?</button></h3><template id="hlp-feedback-b1" data-title="กล่องงาน"><p>เรียงตามความเร่งด่วน: ยังไม่ตอบ → ร้ายแรง / ปักหมุด → เกิน <span id="fbSlaDays">1</span> วัน → ดาวต่ำสุด → เก่าสุด · ตอบผ่านระบบได้กับ Google · Facebook · Instagram · TikTok ส่วน Inbox/การพูดถึงให้ตอบในแอปแล้วกด "ตอบแล้ว"</p></template>
       <div class="flex flex-wrap gap-1" id="fbQueueFilters"></div>
     </div>
-    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เรียงตามความเร่งด่วน: ยังไม่ตอบ → ร้ายแรง / ปักหมุด → เกิน <span id="fbSlaDays">1</span> วัน → ดาวต่ำสุด → เก่าสุด · ตอบผ่านระบบได้กับ Google · Facebook · Instagram · TikTok ส่วน Inbox/การพูดถึงให้ตอบในแอปแล้วกด "ตอบแล้ว"</p>
+    
     <div id="fbReplyPanel" class="mt-3 rounded p-3" style="display:none;border:1px solid #93c5fd;background:#eff6ff"></div>
     <div id="fbNeg" class="mt-2"></div>
   </div>
@@ -102,7 +102,7 @@
       <h3 class="text-sm font-semibold">สรุปและถามข้อมูล <span id="fbAiEngine" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
       <div class="flex items-center gap-2"><select id="fbAiDays" class="rounded border px-1 text-[11px]" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"><option value="7">7 วัน</option><option value="14">14 วัน</option><option value="30">30 วัน</option></select><button class="fb-btn" onclick="loadFeedbackNarrative()">สรุปช่วงนี้</button></div>
     </div>
-    <div id="fbNarrative" class="mt-2 text-sm" style="color:var(--text-secondary)"><span class="text-xs" style="color:var(--text-muted)">กด "สรุปช่วงนี้" เพื่อให้ระบบเขียนสรุปเป็นย่อหน้า (Claude เมื่อตั้ง ANTHROPIC_API_KEY · ไม่งั้นสรุปจากกฎ)</span></div>
+    <div id="fbNarrative" class="mt-2 text-sm" style="color:var(--text-secondary)"><span class="text-xs" style="color:var(--text-muted)">กด “สรุปช่วงนี้” เพื่อดูสรุปเป็นย่อหน้า</span></div>
     <div class="flex gap-2 mt-3"><input id="fbAskQ" class="flex-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="ถามข้อมูล เช่น ลูกค้าบ่นเรื่องแซลมอนสาขาไหนบ้าง / พนักงานคนไหนถูกชมมากสุด" onkeydown="if(event.key==='Enter') askFeedback()"><button class="fb-ghost" onclick="askFeedback()">ถาม</button></div>
     <div id="fbAskA" class="mt-2"></div>
   </div>
@@ -121,10 +121,10 @@
 
   <div class="card p-4 mt-4" id="fbActionsCard">
     <div class="flex items-baseline justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">งานแก้ไข — ปิดวงจร <span id="fbActionsHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
+      <h3 class="text-sm font-semibold">งานแก้ไข — ปิดวงจร <span id="fbActionsHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-feedback-b2" title="คำอธิบาย">?</button></h3><template id="hlp-feedback-b2" data-title="งานแก้ไข"><p>หัวข้อบนสาขาหนึ่งกลายเป็นงานที่มีเจ้าของและกำหนดเสร็จ ระบบวัดหัวข้อนั้น 28 วันก่อนสร้างงาน (ฐาน) และ 28 วันหลังเสร็จ แล้วตัดสิน ดีขึ้น / เท่าเดิม / แย่ลง จาก "เสียงลบต่อ 100 เสียง" — งานแก้เป็นแค่คำอ้างจนกว่าลูกค้าจะยืนยัน</p></template>
       <div class="flex items-center gap-2"><span id="fbActionFilters" class="flex gap-1"></span><button class="fb-btn" onclick="openActionForm({})">งานใหม่</button></div>
     </div>
-    <p class="text-[11px] mt-1" style="color:var(--text-muted)">หัวข้อบนสาขาหนึ่งกลายเป็นงานที่มีเจ้าของและกำหนดเสร็จ ระบบวัดหัวข้อนั้น 28 วันก่อนสร้างงาน (ฐาน) และ 28 วันหลังเสร็จ แล้วตัดสิน ดีขึ้น / เท่าเดิม / แย่ลง จาก "เสียงลบต่อ 100 เสียง" — งานแก้เป็นแค่คำอ้างจนกว่าลูกค้าจะยืนยัน</p>
+    
     <div id="fbActionForm" class="mt-2 rounded p-3" style="display:none;border:1px solid #99f6e4;background:#f0fdfa"></div>
     <div id="fbActions" class="mt-2"></div>
   </div>
@@ -149,7 +149,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
     <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">พนักงานที่ถูกพูดถึง</h3><span class="text-[11px]" style="color:var(--text-muted)">ชมและบ่นเป็นรายชื่อ</span></div><div id="fbStaff" class="mt-1" style="max-height:340px;overflow:auto"></div></div>
-    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">เสียงชม</h3><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>
+    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">เสียงชม <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-feedback-b3" title="คำอธิบาย">?</button></h3><template id="hlp-feedback-b3" data-title="เสียงชม"><p>ไฟล์ตาราง: คอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) · Takeout: takeout.google.com → เลือกเฉพาะ Google Business Profile</p><p>ลูกค้าสแกน QR ที่โต๊ะหรือใบเสร็จแล้วตอบใน 20 วินาที (หน้า 1–5 · เรื่องที่พูดถึง · ข้อความ · ช่องทางติดต่อกลับถ้าต้องการ) คำตอบเข้าหน้านี้เป็นประเภท "แบบสอบถาม" — คำตอบเชิงลบที่ฝากเบอร์ไว้ขึ้นในกล่องงานให้สาขาโทรกลับ · คะแนน 4–5 จะเห็นปุ่มชวนรีวิวบน Google เมื่อใส่ลิงก์รีวิวของสาขา</p></template><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>
   </div>
 
   <details class="card p-4 mt-4" id="fbAllCard">
@@ -164,7 +164,7 @@
       <div class="lg:col-span-2">
         <label class="text-xs font-semibold" style="color:var(--text-secondary)">วางรีวิว (บรรทัดละ 1 รีวิว)</label>
         <textarea id="fbText" rows="4" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="เช่น  แซลมอนสดมาก บริการดี จะกลับมาอีก&#10;      รอนานมาก พนักงานไม่สนใจ ทุเรียนหมดตั้งแต่ทุ่มนึง"></textarea>
-        <p class="text-[11px] mt-1" style="color:var(--text-muted)">ไฟล์ตาราง: คอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) · Takeout: takeout.google.com → เลือกเฉพาะ Google Business Profile</p>
+        
       </div>
       <div class="flex flex-col gap-2">
         <label class="text-xs font-semibold" style="color:var(--text-secondary)">ค่าเริ่มต้นสำหรับบรรทัดที่ไม่ระบุ</label>
@@ -182,7 +182,7 @@
 
   <details class="card p-4 mt-4" id="fbSurvey" ontoggle="if(this.open) loadSurveyLinks()">
     <summary class="text-sm font-semibold cursor-pointer">QR แบบสอบถามหน้าร้าน — ช่องทางของเราเอง <span id="fbSurveyHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></summary>
-    <p class="text-xs mt-2" style="color:var(--text-secondary)">ลูกค้าสแกน QR ที่โต๊ะหรือใบเสร็จแล้วตอบใน 20 วินาที (หน้า 1–5 · เรื่องที่พูดถึง · ข้อความ · ช่องทางติดต่อกลับถ้าต้องการ) คำตอบเข้าหน้านี้เป็นประเภท "แบบสอบถาม" — คำตอบเชิงลบที่ฝากเบอร์ไว้ขึ้นในกล่องงานให้สาขาโทรกลับ · คะแนน 4–5 จะเห็นปุ่มชวนรีวิวบน Google เมื่อใส่ลิงก์รีวิวของสาขา</p>
+    
     <div id="fbSurveyLinks" class="mt-2 text-xs">กำลังโหลด…</div>
     <p class="text-[11px] mt-2" style="color:var(--text-muted)">ลิงก์รีวิว Google ของสาขา: Google Business Profile → "ขอรีวิว" → คัดลอกลิงก์ (รูปแบบ https://g.page/r/…/review) · ข้อมูลติดต่อของลูกค้าถูกลบอัตโนมัติหลัง <span id="fbSurveyDays">90</span> วัน · โปสเตอร์เปิดในแท็บใหม่ กดพิมพ์ A5</p>
   </details>

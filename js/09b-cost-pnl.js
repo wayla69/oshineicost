@@ -17,6 +17,8 @@
     b.innerHTML = '<strong>JS errors (close to ignore):</strong><br>' + _errors.map(e => '• ' + e).join('<br>') +
       '<button onclick="this.parentNode.remove()" style="float:right;background:none;border:none;cursor:pointer;font-size:14px">✕</button>';
   }
+  // PL3: a banner belongs to the page that raised it - opening another page clears it, and the list it shows
+  window._clearErrBanner = function () { _errors.length = 0; const b = document.getElementById('_errBanner'); if (b) b.remove(); };
   // Errors we silently log (cosmetic only — Chart.js datalabel formatters that hit null/undefined values)
   const _IGNORE_RE = /toFixed is not a function|Cannot read propert(y|ies) of (null|undefined).*toFixed/;
   window.addEventListener('error', function(e) {
@@ -138,7 +140,7 @@ async function saveUncostedRow(skuCode) {
   const out = await _postCosts([{ sku_code: skuCode, unit_cost: val }], msg);
   if (!out) return;
   if (out.skipped_price_as_cost) {
-    msg.innerHTML = `<span class="text-amber-600">⚠ ${esc(skuCode)}: ค่าที่ใส่ใกล้เคียง "ราคาขาย×1.07" — น่าจะใส่ราคาขายแทนต้นทุน กรุณาใส่ต้นทุนจริง</span>`;
+    msg.innerHTML = `<span class="text-amber-600">⚠ ${esc(skuCode)}: ค่าที่ใส่ใกล้เคียง "ราคาขาย×1.07" — น่าจะใส่ราคาขายแทนต้นทุน ให้ใส่ต้นทุนจริง</span>`;
     inp.classList.add('border-amber-400'); return;
   }
   if (out.updated > 0) {

@@ -230,7 +230,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 _DOCS_401_HTML = (
     "<!doctype html><meta charset='utf-8'>"
     "<body style='font-family:sans-serif;padding:3rem;text-align:center'>"
-    "<h3>กรุณาเข้าสู่ระบบก่อนเปิดเอกสาร (login required)</h3>"
+    "<h3>เข้าสู่ระบบก่อนเปิดเอกสาร</h3>"
     "<p><a href='/'>ไปหน้าเข้าสู่ระบบ / open the dashboard</a> "
     "แล้วกลับมาเปิดลิงก์นี้อีกครั้ง</p></body>")
 
@@ -1418,8 +1418,8 @@ def data_quality():
         add("missing_days", "วันที่ไม่มีข้อมูล ระหว่างช่วงที่สาขาเปิดขายอยู่", "warn",
             sum(g["missing_days"] for g in unexplained),
             "ช่องว่างกลางคาบการขายของสาขานั้นเอง ที่ยังไม่มีการบันทึกสาเหตุไว้ — "
-            "ตรวจก่อนว่าสาขาปิดจริงหรือไม่ (บันทึกได้ด้วย backend/mark_downtime.py) "
-            "ถ้าไม่ใช่ กู้คืนได้ด้วยการ re-sync ช่วงวันนั้นจาก POS เท่านั้น ระบบจะไม่สร้างข้อมูลขึ้นเอง",
+            "ตรวจก่อนว่าสาขาปิดจริงหรือไม่ ถ้าปิดจริง ให้แจ้งผู้ดูแลระบบบันทึกวันปิดร้าน "
+            "ถ้าไม่ใช่ ต้องดึงข้อมูลช่วงวันนั้นจาก POS ใหม่ ข้อมูลจะไม่เกิดขึ้นเอง",
             rows=unexplained[:10])
         if explained:
             add("known_downtime", "วันที่ไม่มีข้อมูล — บันทึกสาเหตุไว้แล้ว", "info",

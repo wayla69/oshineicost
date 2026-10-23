@@ -1037,8 +1037,8 @@ function _isrDm(iso) { const p = String(iso || '').split('-'); return p.length =
 // 5.2: the value class as the floor and Ops read it
 const _ISR_CLASS_TH = { A: 'ของแพง', B: 'ของราคาปานกลาง', C: 'ของราคาถูก' };
 function _isrClassTh(c) { return _ISR_CLASS_TH[c] || String(c == null ? '' : c); }
-function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
-function _isrPctAbs(v) { return v == null ? '—' : `${_bmcNum(Math.abs(v), 1)}%`; }      // 4.6: where the words already say more / less
+function _isrPct(v) { return v == null ? '—' : Math.abs(v) > 999 ? `${v > 0 ? '+' : '−'}>999%` : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
+function _isrPctAbs(v) { return v == null ? '—' : Math.abs(v) > 999 ? '>999%' : `${_bmcNum(Math.abs(v), 1)}%`; }      // 4.6: where the words already say more / less (PL3: over 999 % = ">999%")
 function _isrMoney(v) { return v == null ? '—' : `${v < 0 ? '−' : ''}฿${_bmcNum(Math.abs(v), 0)}`; }
 function _isrBaht(v) { return v == null ? '<span style="color:var(--text-muted)">—</span>' : _bmcNum(v, 0); }
 // 1.4 · a streak flag in words: over the recipe (red) or UNDER it (amber - the slip left blank or short)
@@ -1059,7 +1059,10 @@ function isrFlagChips(d) {
   if (t.late_days) chips.push(_bmcChip(`ส่งช้า ${t.late_days} วัน`, 'var(--amber-ink)'));
   if (t.draft_days) chips.push(_bmcChip(`ยังไม่ส่ง ${t.draft_days} วัน`, 'var(--amber-ink)'));
   if (t.missing_days) chips.push(_bmcChip(`ไม่มีใบ ${t.missing_days} วัน`, 'var(--bad-ink)'));
-  if (!d.flags.length) chips.push(_bmcChip(d.stock ? '✓ ไม่พบการเบิกเกินหรือต่ำกว่าปกติต่อเนื่อง' : '✓ ไม่พบการเบิกเกินหรือน้อยกว่าสูตรต่อเนื่อง', 'var(--good-ink)'));
+  // PL3 (RV3 F14): "nothing found" is only said when something was compared; the chip puts its own ✓ in front (it was shown twice)
+  const compared = !d.stock || (t.normal_value > 0 || t.median_value > 0);
+  if (!d.flags.length) chips.push(compared ? _bmcChip(d.stock ? 'ไม่พบการเบิกเกินหรือต่ำกว่าปกติต่อเนื่อง' : 'ไม่พบการเบิกเกินหรือน้อยกว่าสูตรต่อเนื่อง', 'var(--good-ink)')
+    : _bmcChip('ยังไม่มีข้อมูลพอให้เทียบกับปกติ', 'var(--text-muted)'));
   d.flags.forEach(f => chips.push(_isrFlagChip(f, true)));
   return chips.join(' ');
 }

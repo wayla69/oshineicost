@@ -1090,6 +1090,10 @@ function renderMce2Actions() {
 // BRANCH BENCHMARK
 // ── Menu Cost Efficiency (Phase 6): servings × cost share → reduction targets ──
 async function loadMenuCostEfficiency() {
+  // PL3 (RV3 F1): the card is cost data - a role without the cost module neither asks for it nor sees an empty card
+  const card = document.getElementById('mceCard');
+  if (card) card.style.display = hasModule('cost.analysis') ? '' : 'none';
+  if (!hasModule('cost.analysis')) return;
   const p = new URLSearchParams({ limit:'80' });
   if (getBranch())    p.set('branch', getBranch());
   if (getMonthFrom()) p.set('month_from', getMonthFrom());
@@ -1097,6 +1101,7 @@ async function loadMenuCostEfficiency() {
   let d;
   try { d = await api(`${API}/api/buffet/menu-cost-efficiency?${p}`); }
   catch(e){ return; }
+  if (!d || !Array.isArray(d.items)) { if (card) card.style.display = 'none'; return; }   // a refused or empty answer: no card, no error
   document.getElementById('mceScope').textContent = (getBranch()||'ทุกสาขา') + ' · ' + d.n_dishes + ' เมนู';
   // KPI chips
   const top5cost = d.items.slice(0,5).reduce((a,r)=>a+r.cost_pct,0);
@@ -1602,7 +1607,7 @@ async function loadTierGp() {
 
   const data = await api(`${API}/api/buffet/tier-mix?${params}`).catch(() => null);
   if (!data || !data.rows || !data.rows.length) {
-    document.getElementById('tierGpBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล — กรุณาใส่ unit_cost ใน Settings → Cost Management</td></tr>';
+    document.getElementById('tierGpBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล ให้ใส่ต้นทุนต่อหน่วยในตั้งค่า (จัดการต้นทุน)</td></tr>';
     return;
   }
 
@@ -2293,7 +2298,7 @@ async function loadBuffetGP() {
 
   const d = await api(`${API}/api/buffet/gp?${params}`).catch(() => null);
   if (!d || !d.period_total) {
-    document.getElementById('gpBomKpis').innerHTML = '<p class="col-span-6 text-slate-400 text-center py-6">ไม่มีข้อมูล — กรุณาใส่ unit_cost ใน Settings → Cost Management</p>';
+    document.getElementById('gpBomKpis').innerHTML = '<p class="col-span-6 text-slate-400 text-center py-6">ไม่มีข้อมูล ให้ใส่ต้นทุนต่อหน่วยในตั้งค่า (จัดการต้นทุน)</p>';
     return;
   }
 

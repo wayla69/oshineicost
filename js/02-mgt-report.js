@@ -11,7 +11,8 @@ let mgtPeriod = 'daily';
 let mgtWeek = null;          // selected week (Monday ISO date); null = latest completed week
 let mgtDay = null;           // selected day (ISO date); null = latest day in data
 let mgtMonth = null;         // selected month ('YYYY-MM'); null = latest complete month
-let mgtLang = (() => { try { return localStorage.getItem('mgtLang') === 'th' ? 'th' : 'en'; } catch (e) { return 'en'; } })();
+// PL3 (RV3 F10): the report opens in Thai - English only when someone chose it (the toggle remembers the choice)
+let mgtLang = (() => { try { return localStorage.getItem('mgtLang') === 'en' ? 'en' : 'th'; } catch (e) { return 'th'; } })();
 
 function _mgtToggleUI() {
   const on  = 'background:#fff;color:#0f172a';
@@ -245,7 +246,7 @@ async function loadMgtReport() {
   }
   if (_gen !== _mgtGen) return;        // superseded by a newer period/branch/lang
   if (!j || !j.available) {
-    if (body) body.innerHTML = `<div class="card p-6 text-sm text-slate-500">${mgtLang === 'th' ? 'ยังไม่มีข้อมูลการขาย — กรุณาอัปโหลดหรือซิงค์ข้อมูลก่อน' : 'No sales data yet — upload or sync data first.'}</div>`;
+    if (body) body.innerHTML = `<div class="card p-6 text-sm text-slate-500">${mgtLang === 'th' ? 'ยังไม่มีข้อมูลการขาย ให้อัปโหลดหรือซิงค์ข้อมูลก่อน' : 'No sales data yet — upload or sync data first.'}</div>`;
     return;
   }
   renderMgtReport(j,

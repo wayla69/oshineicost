@@ -13,6 +13,7 @@ declare const marked: any;
 
 // ── globals the shell / the slices define on `window` rather than as names ──
 declare var __vendorErr: string[];      // index.html: vendor scripts that failed to load
+declare function _clearErrBanner(): void;   // 09b-cost-pnl.js: window._clearErrBanner (PL3)
 declare var allMonths: string[];        // 01-core.js: Object.defineProperty(window, 'allMonths', …)
 // 01-core.js: window.uiDialog / uiConfirm / uiPrompt / askWriteToken — the in-page
 // dialogs every slice awaits (the app's browser pane has no prompt()/confirm()).

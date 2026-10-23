@@ -1019,8 +1019,8 @@ function msKpisHtml(j) {
   return `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">รายได้${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk('#4a70b0')}">${fmt(H.revenue || 0)}</p><p class="sub">${chips(H.rev_wow_pct, H.rev_yoy_pct, true)}</p>${cols}</div>`
     + msKpiTile('ลูกค้า', fmtN(H.customers || 0), '#0891b2', chips(H.cust_wow_pct, H.cust_yoy_pct))
     + msKpiTile('รายได้/หัว', H.rev_per_head != null ? fmt(H.rev_per_head) : '—', '#7a66b8', chips(H.rph_wow_pct, H.rph_yoy_pct))
-    + msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', '#10b981', G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`)
-    + msKpiTile('ส่วนลด', fmt(H.discount || 0), '#ef4444', H.discount_pct != null ? `<b>${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:12px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%` : ''}</span>` : '')
+    + (canSeeCost() ? msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', '#10b981', G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`) : '')   // PL3: no gross profit for a role without a cost or profit module (the server drops it too)
+    + msKpiTile('ส่วนลด', fmt(H.discount || 0), '#ef4444', H.discount_pct != null ? `<b>${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:12px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%` : ''}</span>` : '', !canSeeCost())
     + (H.mom_basis === 'dow' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:12px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
 }
 // target card: % of target as the headline, the bar, then the figures behind it
@@ -1719,6 +1719,19 @@ function setupChartDefaults() {
   Chart.defaults.font.weight = 500;
   Chart.defaults.color = '#475569';
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
+  // PL3 (RV3 F32): a long axis number is short on the axis ("100,000,000" -> "100M") so the tick labels are not cut off at the chart's left
+  // edge; a chart that sets its own tick callback keeps it
+  try {
+    const lin = Chart.defaults.scales && Chart.defaults.scales.linear;
+    if (lin) {
+      lin.ticks = lin.ticks || {};
+      const base = Chart.Ticks && Chart.Ticks.formatters && Chart.Ticks.formatters.numeric;
+      lin.ticks.callback = function (v, i, ticks) {
+        if (typeof v === 'number' && Math.abs(v) >= 1e6) return `${+(v / 1e6).toFixed(1)}M`;
+        return base ? base.call(this, v, i, ticks) : v;
+      };
+    }
+  } catch (e) { /* the default tick format stays */ }
 
   // Rounded, cleaner bars
   Chart.defaults.elements.bar.borderRadius = 7;      // rounded tip (owner 2026-10-01: softer, livelier bars)...

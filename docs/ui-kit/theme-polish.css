@@ -1,0 +1,93 @@
+/* PL3 (2026-10-23) · screen polish from the role-by-role review (RV3). Linked after theme-vivid.css, last on purpose.
+   Only what a page cannot do for itself: the phone tap floor, the supply bar on a phone, grids that must stack, the text floor, and the
+   few header / dark-mode gaps. Tokens only - no new colour that has no token (white on the header gradient is the header's own rule). */
+
+/* ── headers on the gradient: the white the theme gives them, where an id-scoped rule had set a dark ink (RV3 F2) ─────────────────── */
+/* theme-vivid gives every header cell a gradient; a page's own dark or coloured ink (an id-scoped rule, an inline colour) was left on it and
+   read at 1.2-2:1. Header cells on the gradient are white; the tables that keep a flat fill (the Top 60 tables, heatmaps, the franchise tables,
+   a sticky first cell) keep their own ink. The A4 report prints its own teal header (its rule is !important too). */
+body :where(thead th, .wt th):not(.tbl-stick, .tbl-top60 th, .heatmap-table th, .frc-tbl th) { color: #ffffff !important; }
+body thead th.tbl-stick, body table.tbl-wide thead .tbl-stick { color: var(--text-primary); }   /* a sticky first cell keeps the card fill (F30) */
+
+/* ── text floor 12px on screen (RV3 F22): the sizes the earlier floors did not reach ───────────────────────────────────────────── */
+@media screen {
+  body .nav-section, body .search-item .badge { font-size: 12px; }
+  body :is(.brn-cap, .brn-srcbtn, .brn-srcv, .brn-v3l, .bmc-code, .heatmap-branch-label, .hours-label, .tbl-top60 th .sub,
+           .heatmap-table th, .heatmap-cell, #tab-franchise .frc-tbl) { font-size: 12px; }
+  body :is(#tab-closetime, #tab-ingpurchase, #tab-menuimpact) thead th { font-size: 12px; }
+  body #tab-menuimpact :is(.mi-flag, .mi-kpi .mi-kpi-sub) { font-size: 12px; }
+  body :is([class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"], [class*="text-[11px]"], [class*="text-[11.5px]"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12px; }
+}
+
+/* a control a page blanks (visibility) leaves no empty row in the top bar on a desktop either - the phone already did this (F29) */
+body .top-bar .invisible { display: none !important; }
+
+/* the "お" mark sits on a white badge in both themes: its ink is the badge's own navy, not the theme accent (F31) */
+body .logo-mark { color: #1f3a6b; }
+
+/* ── section titles with a note beside them wrap instead of squeezing the title to a letter a line (F11) ─────────────────────────── */
+body .section-title { flex-wrap: wrap; row-gap: 2px; }
+
+@media (max-width: 700px) {
+  /* ── a long page title wraps under itself instead of running below the เครื่องมือ button (F28) ──────────────────────────────── */
+  body .topbar-scope .page-title { flex: 1 1 0; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+
+  /* ── tap targets 44px on every page of the full dashboard (F8, F18, F37) ───────────────────────────────────────────────────── */
+  body :is(button, select, summary, [role="button"], textarea,
+           input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])) { min-height: 44px; }
+  body :is(.dive-btn, .ui-q, .fb-chip, .tbl-fold-btn, .topbar-icon-btn) { min-width: 44px; }
+  body a.see-full { display: inline-flex; align-items: center; min-height: 44px; }
+  body label:has(> input[type="checkbox"], > input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+  body input[type="checkbox"], body input[type="radio"] { width: 22px; height: 22px; }
+
+  /* ── the branch strip (สาขาของฉัน · ชื่อสาขา · ตัวอักษรใหญ่ · ?) grows to its 44px controls instead of letting them spill out of a 32px bar,
+        and its one-line counters wrap instead of ending in "…"; the day chips wrap (F18, F27) ─────────────────────────────────────── */
+  body #tab-branchstock > .brn-cluster { height: auto !important; min-height: 52px; overflow: visible !important; padding-top: 4px !important; padding-bottom: 4px !important; flex-wrap: wrap; }
+  body #tab-branchstock > .brn-cluster .ui-q { width: 44px !important; height: 44px !important; min-width: 44px !important; min-height: 44px !important; }
+  body #tab-branchstock > .brn-cluster .brn-big-btn { min-height: 44px !important; }
+  body .brn-filterrow { flex-wrap: wrap; }
+  body .brn-filterrow > span { flex: 1 1 100%; white-space: normal; overflow: visible; text-overflow: clip; font-size: 12px; }
+  body #brnIssDays { flex-wrap: wrap; }
+  body .brn-sticky-bottom span[id$="Status"] { white-space: normal; max-width: 100%; }
+
+  /* ── the per-branch rows of a task (สาขา · สถานะ · รายละเอียด) are one line each, not a card of three labelled cards (F33) ──────── */
+  .wt.wt-lines tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; border: 0; border-top: 1px solid var(--border); border-radius: 0; margin: 0; padding: 8px 4px; }
+  .wt.wt-lines td { display: block; width: auto; padding: 0; }
+  .wt.wt-lines td[data-l]::before { display: none; }
+  .wt.wt-lines td[data-l="รายละเอียด"] { flex: 1 1 100%; font-size: 13px; }
+  .wt.wt-lines td.wt-act { margin-left: auto; }
+
+  /* ── a chip with a long list inside it (the branches behind the all-branch average, ...) wraps instead of running off the screen (F35),
+        and a menu name in the owner's tables shows whole (F37) ──────────────────────────────────────────────────────────────────── */
+  body .bmc-chip { white-space: normal !important; max-width: 100%; }
+  #tab-franchise .frc-tbl td { white-space: normal; overflow: visible; text-overflow: clip; max-width: none; overflow-wrap: anywhere; }
+
+  /* ── the supply bar is ONE scrolling row, and its repeated title card is only the "?" (F9) ─────────────────────────────────────── */
+  #clusterBar.supply-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 6px; padding-bottom: 2px; }
+  #clusterBar.supply-bar::-webkit-scrollbar { display: none; }
+  #clusterBar.supply-bar > * { flex: 0 0 auto; white-space: nowrap; }
+  #clusterBar.supply-bar > div { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; width: auto; margin-top: 0; }
+  #clusterBar.supply-bar > div > * { flex: 0 0 auto; white-space: nowrap; }
+  :is(#tab-orderhub, #tab-ingpurchase, #tab-bomcenter, #tab-branchstock, #tab-supplyhome) > .card:has(> .ui-cardhead > h2.text-base) {
+    padding: 0; margin: 0 0 4px; background: none !important; border: 0 !important; box-shadow: none !important; min-height: 0; }
+  :is(#tab-orderhub, #tab-ingpurchase, #tab-bomcenter, #tab-branchstock, #tab-supplyhome) > .card > .ui-cardhead:has(> h2.text-base) { justify-content: flex-end; }
+  :is(#tab-orderhub, #tab-ingpurchase, #tab-bomcenter, #tab-branchstock, #tab-supplyhome) > .card > .ui-cardhead > h2.text-base { display: none; }
+
+  /* ── a grid that starts as one column stays one column on a phone (the 2-column collapse above was meant for KPI grids) (F13) ─── */
+  .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] { grid-template-columns: minmax(0, 1fr) !important; }
+  .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] > * { grid-column: auto !important; }
+
+  /* ── เทียบเมนู A/B: the period pickers stack and never run out of the card (F12) ───────────────────────────────────────────── */
+  #tab-menucompare .card > .flex-wrap > .flex { flex-wrap: wrap; width: 100%; }
+  #tab-menucompare :is(#mcAmonth, #mcAdate, #mcBmonth, #mcBdate) { flex-wrap: wrap; width: 100%; }
+  #tab-menucompare :is(input[type="month"], input[type="date"]) { flex: 1 1 130px; min-width: 0; }
+
+  /* ── รายงานผู้บริหาร on a phone: the printable A4 report is read on screen, so its small print is lifted to 12px (the printed sheet keeps its
+        sizes: this is @media screen) and its chart labels follow (F10, F32) ───────────────────────────────────────────────────────── */
+  @media screen {
+    #tab-mgtreport #mgtRptBody :is(svg text, table, th, td, [class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"],
+        [class*="text-[11px]"], [class*="text-[11.5px]"], [style*="font-size:9px"], [style*="font-size:10px"], [style*="font-size:11px"]) { font-size: 12px !important; }
+  }
+  /* a short button is still 44px wide (F8) */
+  body :is(button, [role="button"], summary) { min-width: 44px; }
+}

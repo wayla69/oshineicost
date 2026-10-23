@@ -1921,7 +1921,7 @@ async function runComparison() {
     }
   });
   if (getBranch()) params.set('branch', getBranch());
-  document.getElementById('cmpStatus').textContent = 'Loading…';
+  document.getElementById('cmpStatus').textContent = 'กำลังโหลด…';
   try {
     const data = await api(`${API}/api/analysis/period_compare?${params}`);
     document.getElementById('cmpStatus').textContent = '';

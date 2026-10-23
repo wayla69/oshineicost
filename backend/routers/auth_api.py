@@ -121,7 +121,9 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
     _set_session_cookie(response, request, token, max_age=ttl)
     return {"username": row["username"], "role": row["role"], "branch": branch,
             "must_change": bool(row["must_change"]),
-            "modules": sorted(_auth.modules_for_role(row["role"]))}
+            "modules": sorted(_auth.modules_for_role(row["role"])),
+            # PL3: the server's own path rules, so a page asks only for what it will be answered (js/01-core.js pathAllowedForMe)
+            "rules": _auth.client_rules(), "open_to_all": list(_auth.OPEN_TO_ALL)}
 
 
 @router.post("/api/auth/token-check", include_in_schema=False, dependencies=[Depends(require_write_token)])
@@ -194,7 +196,8 @@ def auth_me(request: Request):
             "branch": row["branch"] if "branch" in row.keys() else None,
             "must_change": bool(row["must_change"]),
             "write_gated": write_gate_on() and not is_branch_session(request),
-            "modules": sorted(_auth.modules_for_role(row["role"]))}
+            "modules": sorted(_auth.modules_for_role(row["role"])),
+            "rules": _auth.client_rules(), "open_to_all": list(_auth.OPEN_TO_ALL)}   # PL3: see the login answer above
 
 
 # ── user administration (Management only — gated by middleware + _require_admin)

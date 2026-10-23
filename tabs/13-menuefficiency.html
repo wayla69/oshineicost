@@ -50,8 +50,7 @@
   </div>
   <!-- Ingredient attack section -->
   <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว)</h2>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-1" data-title="กลุ่ม: เสิร์ฟ × ต้นทุน เสิร์ฟเยอะ + ต้นทุนสูง"><p>วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p></template>
     <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>
@@ -79,17 +78,16 @@
   <!-- Pareto 80/20 analysis -->
   <div class="card p-5 mb-4" style="border:1px solid #f59e0b">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">Pareto 80/20 — กี่เมนูที่กิน 80% ของต้นทุน?</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">Pareto 80/20 — กี่เมนูที่กิน 80% ของต้นทุน? <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-b1" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-b1" data-title="Pareto 80/20"><p>แท่ง = % ต้นทุนรายเมนู · เส้น = % ต้นทุนสะสม · <b>จุดที่เส้นทะลุ 80% คือจำนวนเมนูที่ต้องโฟกัส</b></p></template>
       <span id="mce2ParetoLabel" class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.12);color:var(--amber-ink)"></span>
     </div>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">แท่ง = % ต้นทุนรายเมนู · เส้น = % ต้นทุนสะสม · <b>จุดที่เส้นทะลุ 80% คือจำนวนเมนูที่ต้องโฟกัส</b></p>
+    
     <div style="height:320px"><canvas id="mce2Pareto"></canvas></div>
   </div>
 
   <!-- What-If savings calculator -->
   <div class="card p-5 mb-4" style="border:1px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สถานการณ์จำลอง: ลดต้นทุนแล้วประหยัดได้เท่าไร?</h2>
-    <p class="text-[11px] mb-4" style="color:var(--text-muted)">เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สถานการณ์จำลอง: ลดต้นทุนแล้วประหยัดได้เท่าไร? <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-2" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-2" data-title="Pareto 80/20"><p>เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p></template>
     <div class="flex flex-wrap items-center gap-4 mb-4">
       <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
         เป้าหมายอันดับต้น
@@ -115,20 +113,20 @@
   <!-- Monthly cost trend (top 8 dishes) -->
   <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">ต้นทุนเปลี่ยน — เมนูไหนแพงขึ้น/ถูกลงตามเวลา?</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">ต้นทุนเปลี่ยน — เมนูไหนแพงขึ้น/ถูกลงตามเวลา? <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-b2" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-b2" data-title="ต้นทุนเปลี่ยน"><p>% ต้นทุนรายเมนูต่อเดือน (Top 8 เมนูที่กินต้นทุนสูงสุด) · เส้นที่พุ่งขึ้น = เมนูที่ต้องจัดการด่วน</p></template>
       <span id="mce2TrendStatus" class="text-[11px]" style="color:var(--text-muted)">กำลังโหลด…</span>
     </div>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">% ต้นทุนรายเมนูต่อเดือน (Top 8 เมนูที่กินต้นทุนสูงสุด) · เส้นที่พุ่งขึ้น = เมนูที่ต้องจัดการด่วน</p>
+    
     <div style="height:320px"><canvas id="mce2Trend"></canvas></div>
   </div>
 
   <!-- Per-branch dish efficiency (mini drill-down) -->
   <div class="card p-5 mb-4 hidden" id="mce2BranchPanel" style="border:1px solid #0ea5e9">
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-base font-bold" id="mce2BranchTitle" style="color:var(--text-primary)">เปรียบเทียบสาขา</h2>
+      <h2 class="text-base font-bold" id="mce2BranchTitle" style="color:var(--text-primary)">เปรียบเทียบสาขา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-b3" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-b3" data-title="เปรียบเทียบสาขา"><p>ต้นทุน/จาน ของเมนูนี้ต่างกันอย่างไรในแต่ละสาขา — สาขาที่ต้นทุนต่ำคือ best practice</p></template>
       <button onclick="document.getElementById('mce2BranchPanel').classList.add('hidden')" class="text-xs" style="color:var(--text-muted)">✕ ปิด</button>
     </div>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุน/จาน ของเมนูนี้ต่างกันอย่างไรในแต่ละสาขา — สาขาที่ต้นทุนต่ำคือ best practice</p>
+    
     <div id="mce2BranchContent" class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div style="height:260px"><canvas id="mce2BranchBar"></canvas></div>
       <div id="mce2BranchTable" class="overflow-x-auto" style="max-height:260px;overflow-y:auto"></div>
@@ -137,8 +135,7 @@
 
   <!-- Card A — Category cost rollup -->
   <div class="card p-5 mb-4" style="border:1px solid #0ea5e9">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">ต้นทุนรวมตามหมวดสินค้า</h2>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">รวมต้นทุนทุกเมนูจัดกลุ่มตามหมวด — หมวดที่มียอดสูงสุดคือเป้าหมายต่อรองต้นทุนหรือปรับสูตรก่อน</p>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">ต้นทุนรวมตามหมวดสินค้า <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-3" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-3" data-title="ต้นทุนเปลี่ยน"><p>รวมต้นทุนทุกเมนูจัดกลุ่มตามหมวด — หมวดที่มียอดสูงสุดคือเป้าหมายต่อรองต้นทุนหรือปรับสูตรก่อน</p></template>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div style="height:300px"><canvas id="mce2CatBar"></canvas></div>
       <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto">
@@ -162,8 +159,7 @@
 
   <!-- Card B — Recipe coverage / engineering potential -->
   <div class="card p-5 mb-4" style="border:1px solid #ef4444">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">โอกาสปรับสูตร — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่ไม่มีสูตร BoM = ปรับต้นทุนได้จำกัด · เมนูที่ไม่มีข้อมูลต้นทุนเลย = blind spot</p>
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">โอกาสปรับสูตร — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-4" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-4" data-title="โอกาสปรับสูตร"><p>เมนูที่ไม่มีสูตร BoM = ปรับต้นทุนได้จำกัด · เมนูที่ไม่มีข้อมูลต้นทุนเลย = blind spot</p></template>
     <div id="mce2CovKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div style="height:200px"><canvas id="mce2CovDonut"></canvas></div>

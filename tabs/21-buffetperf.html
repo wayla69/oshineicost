@@ -4,15 +4,11 @@
 <div id="tab-buffetperf" style="display:none">
 
   <!-- Header strip — always visible -->
-  <div class="card p-4 mb-4" style="background:#fdf2f8;border:1px solid #ec4899">
-    <div class="flex items-start gap-3">
-      <span style="font-size:28px"></span>
-      <div class="flex-1">
-        <h2 class="text-base font-bold text-pink-900">ภาพรวมผลงานบุฟเฟ่ต์</h2>
-        <p class="text-xs text-slate-600 mt-1">วัดผลด้าน <b>core business ของบุฟเฟ่ต์</b> — ปริมาณ pax จริง, การใช้ที่นั่ง, food cost, อัตรา over-consumption, attach rate เครื่องดื่ม
-          <br>มาตรฐานอุตสาหกรรมร้านบุฟเฟ่ต์ไทย (2026): <b>ต้นทุนอาหาร 55-70%</b> · <b>Seat utilization 60-80%</b> · <b>Beverage attach ≥15%</b></p>
-      </div>
-    </div>
+  <div class="card p-4 mb-4 ui-cardhead" style="background:var(--accent-soft);border:1px solid var(--accent)">
+    <h2 class="text-base font-bold" style="color:var(--accent)">ภาพรวมผลงานบุฟเฟ่ต์</h2>
+    <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf" title="คำอธิบายของหน้านี้">?</button>
+    <template id="hlp-buffetperf" data-title="ภาพรวมผลงานบุฟเฟ่ต์"><p>วัดผลหลักของบุฟเฟ่ต์: จำนวนลูกค้าจริง การใช้ที่นั่ง ต้นทุนอาหาร อัตราการกินเกินปกติ และสัดส่วนลูกค้าที่สั่งเครื่องดื่ม</p>
+      <p>เกณฑ์อ้างอิงของร้านบุฟเฟ่ต์ไทย (ปี 2026): ต้นทุนอาหาร 55–70% · การใช้ที่นั่ง 60–80% · ลูกค้าที่สั่งเครื่องดื่ม ตั้งแต่ 15% ขึ้นไป</p></template>
   </div>
 
   <!-- KPI hero row — always visible -->
@@ -76,8 +72,7 @@
         <div style="height:240px"><canvas id="bperfTierTrend"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">สัดส่วนระดับราคา (ทุกระดับ)</h2>
-        <p class="text-xs text-slate-400 mb-3">% ของลูกค้าในแต่ละช่วงราคา · แยกทุก tier + Child (ราคาตามเมนูของช่วงนั้น — ตั้งแต่ 1 ก.ย. 2026 ใช้ราคาใหม่ 459/629/789/999/1,299 ราคาเก่าไม่มีขายแล้ว)</p>
+        <h2 class="section-title mb-1">สัดส่วนระดับราคา (ทุกระดับ) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-1" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-1" data-title="สัดส่วนระดับราคา"><p>% ของลูกค้าในแต่ละช่วงราคา · แยกทุก tier + Child (ราคาตามเมนูของช่วงนั้น — ตั้งแต่ 1 ก.ย. 2026 ใช้ราคาใหม่ 459/629/789/999/1,299 ราคาเก่าไม่มีขายแล้ว)</p></template>
         <div style="height:240px"><canvas id="bperfPremiumGauge"></canvas></div>
       </div>
     </div>
@@ -100,10 +95,10 @@
     <!-- GP per Cover by Tier -->
     <div class="card p-5 mb-5">
       <div class="flex items-center gap-2 mb-1">
-        <h2 class="section-title mb-0">กำไรขั้นต้นต่อหัว — รายละเอียดตามระดับราคา</h2>
+        <h2 class="section-title mb-0">กำไรขั้นต้นต่อหัว — รายละเอียดตามระดับราคา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b1" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b1" data-title="กำไรขั้นต้นต่อหัว"><p>Revenue (ex-VAT) ÷ covers − COGS ÷ covers = GP/cover · ยิ่งสูงยิ่งดี เปรียบเทียบ tier ว่าอันไหนทำกำไรต่อหัวจริงๆ</p></template>
         <span class="text-xs text-slate-400 ml-2">ต้องใส่ unit_cost ใน Settings → Cost Management</span>
       </div>
-      <p class="text-xs text-slate-400 mb-4">Revenue (ex-VAT) ÷ covers − COGS ÷ covers = GP/cover · ยิ่งสูงยิ่งดี เปรียบเทียบ tier ว่าอันไหนทำกำไรต่อหัวจริงๆ</p>
+      
       <div class="overflow-x-auto mb-4">
         <table class="text-xs w-full" id="tierGpTable">
           <thead><tr class="text-left text-slate-500 border-b border-slate-200">
@@ -123,8 +118,7 @@
 
     <!-- Pricing Recommendation -->
     <div class="card p-5" style="background:#f0f9ff;border:1px solid #0ea5e9">
-      <h2 class="section-title mb-1">ข้อเสนอการปรับราคา</h2>
-      <p class="text-xs text-slate-400 mb-3">เปรียบเทียบ tier mix ปัจจุบันกับ "optimal mix" ที่เพิ่ม margin โดยไม่กระทบ volume มากเกินไป</p>
+      <h2 class="section-title mb-1">ข้อเสนอการปรับราคา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-2" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-2" data-title="กำไรขั้นต้นต่อหัว"><p>เปรียบเทียบ tier mix ปัจจุบันกับ "optimal mix" ที่เพิ่ม margin โดยไม่กระทบ volume มากเกินไป</p></template>
       <div id="bperfPricingRec"></div>
     </div>
 
@@ -151,7 +145,7 @@
     <!-- RevPASH -->
     <div class="card p-5 mb-5">
       <div class="flex items-center gap-3 mb-1 flex-wrap">
-        <h2 class="section-title mb-0">RevPASH — รายได้ต่อที่นั่งต่อชั่วโมง</h2>
+        <h2 class="section-title mb-0">RevPASH — รายได้ต่อที่นั่งต่อชั่วโมง <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b2" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b2" data-title="RevPASH"><p>RevPASH = Revenue ÷ (ที่นั่ง × ชั่วโมง) · มาตรฐาน hospitality ระดับโลก · ช่วง peak ควร > 50/seat/hr</p></template>
         <div class="flex items-center gap-2 ml-auto text-xs">
           <label class="text-slate-500">จำนวนที่นั่ง:</label>
           <input type="number" id="revpashSeats" value="120" min="10" max="1000"
@@ -159,7 +153,7 @@
             class="w-20 border border-slate-200 rounded px-2 py-1 text-slate-700 text-center" />
         </div>
       </div>
-      <p class="text-xs text-slate-400 mb-4">RevPASH = Revenue ÷ (ที่นั่ง × ชั่วโมง) · มาตรฐาน hospitality ระดับโลก · ช่วง peak ควร > 50/seat/hr</p>
+      
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="revpashKpis"></div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
@@ -240,9 +234,8 @@
     <div class="card p-5 mb-5" style="background:#f0fdf4;border:1px solid #10b981">
       <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
         <div>
-          <h2 class="text-base font-bold text-emerald-900">กำไรขั้นต้นจากต้นทุนจริง (BoM)</h2>
-          <p class="text-xs text-slate-500 mt-0.5">Revenue (ex-VAT) เทียบกับต้นทุนตามรายการที่กดสั่งจริง · วัน/สัปดาห์ = pro-rate จาก monthly BoM
-            <span class="text-amber-600"> · ถ้า Margin % ติดลบอย่างมาก ให้ตรวจสอบ unit_cost ใน Settings — อาจใส่เป็นราคาขายแทนราคาต้นทุน</span></p>
+          <h2 class="text-base font-bold text-emerald-900">กำไรขั้นต้นจากต้นทุนจริง (BoM) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-3" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-3" data-title="กำไรขั้นต้นจากต้นทุนจริง"><p>Revenue (ex-VAT) เทียบกับต้นทุนตามรายการที่กดสั่งจริง · วัน/สัปดาห์ = pro-rate จาก monthly BoM
+            <span class="text-amber-600"> · ถ้า Margin % ติดลบอย่างมาก ให้ตรวจสอบ unit_cost ใน Settings — อาจใส่เป็นราคาขายแทนราคาต้นทุน</span></p></template>
         </div>
         <div class="flex items-center gap-2">
           <div class="flex rounded-lg overflow-hidden border border-slate-200 text-xs font-medium">
@@ -335,10 +328,10 @@
     <!-- Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate) -->
     <div class="card p-5 mt-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h2 class="section-title mb-0">กลุ่มกินหนัก · กำไรต่อหัวจริง (จ่าย − กินจริง)</h2>
+        <h2 class="section-title mb-0">กลุ่มกินหนัก · กำไรต่อหัวจริง (จ่าย − กินจริง) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b3" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b3" data-title="กลุ่มกินหนัก · กำไรต่อหัวจริง"><p>ต้นทุน BoM ต่อบิลจริง (ไม่เฉลี่ยตามยอด) เทียบกับเงินที่จ่าย → หา <b>ลูกค้าที่กินจนขาดทุน</b> · แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (คำนวณจากบิลที่มีต้นทุน ~31 วัน)</p></template>
         <span id="hetWindow" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-xs text-slate-400 mb-3">ต้นทุน BoM ต่อบิลจริง (ไม่เฉลี่ยตามยอด) เทียบกับเงินที่จ่าย → หา <b>ลูกค้าที่กินจนขาดทุน</b> · แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (คำนวณจากบิลที่มีต้นทุน ~31 วัน)</p>
+      
       <div id="hetKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
       <div id="hetInsight" class="mb-3"></div>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -364,10 +357,10 @@
     <!-- Turn-Time & Table Throughput Efficiency -->
     <div class="card p-5 mt-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h2 class="section-title mb-0">เวลานั่งและรอบโต๊ะ · ประสิทธิภาพการหมุนโต๊ะ</h2>
+        <h2 class="section-title mb-0">เวลานั่งและรอบโต๊ะ · ประสิทธิภาพการหมุนโต๊ะ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b4" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b4" data-title="เวลานั่งและรอบโต๊ะ · ประสิทธิภาพการหมุนโต๊ะ"><p>โต๊ะที่นั่งนาน = เสียโอกาสรอบถัดไป · <b>GP/นาที-โต๊ะ</b> = กำไรที่โต๊ะสร้างต่อ 1 นาทีที่ถูกใช้ · = นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (เสียสองต่อ) · ที่นั่งไม่มีในข้อมูล จึงวัดต่อ "โต๊ะ"</p></template>
         <span id="turnChain" class="text-[11px]" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-xs text-slate-400 mb-3">โต๊ะที่นั่งนาน = เสียโอกาสรอบถัดไป · <b>GP/นาที-โต๊ะ</b> = กำไรที่โต๊ะสร้างต่อ 1 นาทีที่ถูกใช้ · = นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (เสียสองต่อ) · ที่นั่งไม่มีในข้อมูล จึงวัดต่อ "โต๊ะ"</p>
+      
       <div id="turnInsight" class="mb-3"></div>
       <div class="overflow-x-auto">
         <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -432,8 +425,7 @@
     <div class="card p-5 mb-5" style="border:1px solid #06b6d4">
       <div class="mb-3 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 class="text-base font-bold text-cyan-900">ปริมาณใช้ในช่วงเวลา — วัตถุดิบที่ใช้มากสุดในช่วงเวลา</h2>
-          <p class="text-xs text-slate-500 mt-0.5">รวมยอดขาย × BoM เพื่อหาว่าวัตถุดิบใดเป็นตัวขับต้นทุนหลัก · ใช้ filter เดือน/สาขาที่ตั้งไว้</p>
+          <h2 class="text-base font-bold text-cyan-900">ปริมาณใช้ในช่วงเวลา — วัตถุดิบที่ใช้มากสุดในช่วงเวลา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-4" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-4" data-title="ปริมาณใช้ในช่วงเวลา"><p>รวมยอดขาย × BoM เพื่อหาว่าวัตถุดิบใดเป็นตัวขับต้นทุนหลัก · ใช้ filter เดือน/สาขาที่ตั้งไว้</p></template>
         </div>
         <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none whitespace-nowrap mt-1">
           <input type="checkbox" id="bomConsGroupFamily" onchange="loadBomConsumption()" class="accent-cyan-600 w-4 h-4">
@@ -456,12 +448,12 @@
     <!-- ════ /Phase 4 ════ -->
 
     <!-- ════ Menu Cost Efficiency — เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน ════ -->
-    <div class="card p-5 mb-5" style="border:1px solid #ef4444">
+    <div id="mceCard" class="card p-5 mb-5" style="border:1px solid #ef4444">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h2 class="text-base font-bold text-rose-900">เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน — หาเป้าลดต้นทุน</h2>
+        <h2 class="text-base font-bold text-rose-900">เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน — หาเป้าลดต้นทุน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b5" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b5" data-title="เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน"><p>เมนูที่ <b>เสิร์ฟเยอะ + ต้นทุนสูง</b> = เป้าหมายอันดับแรกที่ควรปรับสูตร/ลด portion เพื่อลดต้นทุนรวมมากที่สุด · กราฟ: แกนนอน = % จำนวนเสิร์ฟ, แกนตั้ง = % ต้นทุน, ขนาด = ต้นทุน/จาน</p></template>
         <span id="mceScope" class="text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-700"></span>
       </div>
-      <p class="text-xs text-slate-500 mb-3">เมนูที่ <b>เสิร์ฟเยอะ + ต้นทุนสูง</b> = เป้าหมายอันดับแรกที่ควรปรับสูตร/ลด portion เพื่อลดต้นทุนรวมมากที่สุด · กราฟ: แกนนอน = % จำนวนเสิร์ฟ, แกนตั้ง = % ต้นทุน, ขนาด = ต้นทุน/จาน</p>
+      
       <div id="mceKpis" class="flex flex-wrap gap-2 mb-3"></div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div><div style="height:340px"><canvas id="mceScatter"></canvas></div></div>
