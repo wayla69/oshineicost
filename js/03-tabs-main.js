@@ -284,6 +284,8 @@ function ensureDesktopBooted(opts) {
     await ensureSlicesLoaded();               // the tabs' code (01-core.js) — a phone fetches it only now
     const lazy = !document.getElementById('tabsRoot')?.childElementCount;
     await loadTabFragments();
+    // loadMonths() ran before the fragments existed on a phone: the pickers inside them (แนวโน้ม: cmpMonth / cmpVs) were never filled
+    if (allMonths.length) { try { populateCmpDropdowns(); } catch (e) { console.warn('cmp pickers:', e); } }
     // on a phone the permissions ran before the fragments existed — the Settings →
     // ผู้ใช้งาน sub-tab lives in one, so apply them again now
     if (lazy && window.AUTH && window.AUTH.enabled) applyPermissions();
@@ -2400,6 +2402,8 @@ async function loadGrossProfit(){
 }
 
 async function loadTrend() {
+  // the page opens on its defaults (latest month vs the one before) even when the pickers were not filled yet - a phone's first visit
+  if (!document.getElementById('cmpMonth')?.value) { if (allMonths.length) populateCmpDropdowns(); else await loadMonths(); }
   const month = document.getElementById('cmpMonth')?.value;
   const vs    = document.getElementById('cmpVs')?.value;
   if (!month || !vs || month === vs) return;
@@ -2452,8 +2456,10 @@ async function loadTrend() {
         legend: { display: false },
         datalabels: {
           display: true,
+          // a gain is written past the tip of its bar; a fall just right of the zero line - past ITS tip it ran into the category
+          // names on a phone (LK)
           anchor: ctx => ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start',
-          align:  ctx => ctx.dataset.data[ctx.dataIndex] >= 0 ? 'right' : 'left',
+          align:  'right',
           formatter: v => (v > 0 ? '+' : '') + v.toFixed(1) + '%',
           color: '#1e293b', font: { size: 12, weight: '600' },
         },

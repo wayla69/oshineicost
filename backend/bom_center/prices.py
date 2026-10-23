@@ -22,6 +22,8 @@ its age in months), never over a price a person typed (source='manual').
 price_for(code, month) is THE lookup every other part of the center uses.
 """
 import json
+import threading
+import time
 from collections import defaultdict
 
 from .master import audit, now
@@ -36,6 +38,55 @@ def month_diff(a: str, b: str) -> int:
     return (int(b[:4]) - int(a[:4])) * 12 + int(b[5:7]) - int(a[5:7])
 
 
+# LK (2026-10): price_for() ran two SQL statements per item per call - a plan of 240 items asked 1,200 times (and the order the plan
+# prices again 500 more). While caching is on (forecast.plan_cache_ttl(): off in the tests) the whole price table is read once into a
+# per-code list and answered from memory. The book is only used by a connection that has no transaction open (an uncommitted import
+# preview must see its own rows and must not publish them), it is dropped with every generation of forecast._gen_base (a prefixed flush,
+# a full flush, a file swap, clear_usage_cache) and with its TTL, and it is checked against a fingerprint of the table at most once a
+# second, so a writer that forgot to flush is seen within a second.
+_BOOK: dict = {}                                           # gen base -> [loaded_at, checked_at, fingerprint, {code: [rows by month]}]
+_BOOK_LOCK = threading.Lock()
+_BOOK_LOAD = threading.Lock()
+
+
+def _price_fp(con):
+    return tuple(con.execute("SELECT COUNT(*), COALESCE(SUM(price_per_base), 0), COALESCE(MAX(month), ''),"
+                             " COALESCE(MAX(imported_at), ''), COALESCE(SUM(price_age_months), 0) FROM bc_ingredient_price").fetchone())
+
+
+def _price_book(con):
+    if con.in_transaction:
+        return None
+    from . import forecast as FC
+    ttl = FC.plan_cache_ttl()
+    base = FC._gen_base(con) if ttl else None
+    if base is None:
+        return None
+    now_ = time.monotonic()
+    with _BOOK_LOCK:
+        ent = _BOOK.get(base)
+    if ent and now_ - ent[0] < ttl:
+        if now_ - ent[1] < 1.0:
+            return ent[3]
+        if _price_fp(con) == ent[2]:
+            ent[1] = now_
+            return ent[3]
+    with _BOOK_LOAD:                   # concurrent misses (a request storm after a flush) read the table once
+        with _BOOK_LOCK:
+            ent = _BOOK.get(base)
+        if ent and time.monotonic() - ent[0] < ttl and ent[2] == _price_fp(con):
+            return ent[3]
+        fp = _price_fp(con)
+        rows = defaultdict(list)
+        for code, month, price, src, age in con.execute("SELECT ingredient_code, month, price_per_base, source, price_age_months"
+                                                        " FROM bc_ingredient_price ORDER BY ingredient_code, month"):
+            rows[code].append((month, price, src, age))
+        with _BOOK_LOCK:
+            _BOOK.clear()
+            _BOOK[base] = [now_, now_, fp, rows]
+        return rows
+
+
 def price_for(con, code: str, month: str):
     """(price_per_base, source, priced_month, age_months) in force for `month`:
     that month's row, else the latest earlier one. An item with NO price up to
@@ -43,6 +94,17 @@ def price_for(con, code: str, month: str):
     sheet is dated 23-07-2569, so without this an item never bought in June had no
     June price at all; a later actual purchase never reaches back (age < 0 marks it).
     None when never priced."""
+    book = _price_book(con)
+    if book is not None:
+        lst = book.get(code) or ()
+        earlier = [x for x in lst if x[0] <= month]
+        if earlier:
+            m, price, src, age_m = earlier[-1]
+            return float(price), src, m, (age_m or 0) + month_diff(m, month)
+        later = next((x for x in lst if x[0] > month and x[2] == "list_ref"), None)
+        if later is None:
+            return None
+        return float(later[1]), later[2], later[0], month_diff(later[0], month)
     r = con.execute("SELECT price_per_base, source, month, price_age_months FROM bc_ingredient_price"
                     " WHERE ingredient_code=? AND month<=? ORDER BY month DESC LIMIT 1", (code, month)).fetchone()
     if not r:
@@ -400,10 +462,38 @@ class PriceBook:
                                  " AND price_per_base > 0 AND month>? ORDER BY month LIMIT 1", (code, self.month)).fetchone()
         return (float(r[0]), r[1]) if r else None
 
+    def _bench_book(self, ids):
+        """LK: {code: median} for every item the benchmark branches priced, read once per month while caching is on (it was four
+        statements per unpriced item per plan). None = caching is off or a transaction is open: ask item by item, as before."""
+        from . import forecast as FC
+        if self.con.in_transaction:
+            return None
+        key, hit = FC.memo_get(self.con, 0, "bench_price", (self.month, tuple(ids)))
+        if key is None:
+            return None
+        if hit is None:
+            import statistics
+            best = {}                                     # (code, branch) -> (month<=?, month, price): the row the per-item query picks
+            ph = ",".join("?" * len(ids))
+            for code, b, mo, pr in self.con.execute("SELECT ingredient_code, branch_id, month, price_per_base FROM bc_ingredient_price_branch"
+                                                    f" WHERE branch_id IN ({ph}) AND price_per_base > 0", tuple(ids)):
+                cand = (mo <= self.month, mo, float(pr))
+                if (code, b) not in best or cand[:2] > best[(code, b)][:2]:
+                    best[(code, b)] = cand
+            figs = {}
+            for (code, b), cand in best.items():
+                figs.setdefault(code, []).append(cand[2])
+            hit = {c: statistics.median(v) for c, v in figs.items()}
+            FC.memo_put(key, hit)
+        return hit
+
     def _bench_median(self, code):
         ids = self._bench_ids()
         if not ids:
             return None
+        book = self._bench_book(ids)
+        if book is not None:
+            return book.get(code)
         import statistics
         got = []
         for b in ids:

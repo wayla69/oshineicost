@@ -631,6 +631,17 @@ SLIP_MEAN_WEEKS = _HISTORY_WEEKS            # PR-S3: a missing day is the mean o
 
 
 def _estimated_from_slips(con, branch_id: int, days: list) -> tuple:
+    """LK: kept per branch + days while its confirmed slips and the generations have not moved (forecast.memo_get); a copy is returned."""
+    from . import forecast as _fc
+    key, hit = _fc.memo_get(con, branch_id, "est_slips", tuple(sorted(days)))
+    if hit is not None:
+        return list(hit[0]), dict(hit[1])
+    got, est = _estimated_from_slips_uncached(con, branch_id, days)
+    _fc.memo_put(key, (list(got), dict(est)))
+    return got, est
+
+
+def _estimated_from_slips_uncached(con, branch_id: int, days: list) -> tuple:
     ds = sorted(days)
     lo = (date.fromisoformat(ds[0]) - timedelta(days=7 * SLIP_MEAN_WEEKS)).isoformat()
     hi = (date.fromisoformat(ds[-1]) - timedelta(days=1)).isoformat()
