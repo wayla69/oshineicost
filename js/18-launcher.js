@@ -377,8 +377,11 @@ function navBadgesStart() {
 const _PG_SEARCH_ICON = 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5';
 const _PG_MAX = 12, _PG_IDLE = 8;
 function pgNorm(s) { return String(s || '').normalize('NFC').toLowerCase().replace(/[\s​ ]+/g, ''); }   // spaces do not matter, Latin is lower-case
+// PL3 (RV3 F16): a branch login reads the branch words (docs/BRANCH_WORDS.md): "ปิดเดือน", not the office's "ปิดงวด"
+function _brWord(s) { return _deptRole() === 'branch' ? String(s == null ? '' : s).replace(/ปิดงวด/g, 'ปิดเดือน') : s; }
 function _pgEntry(tab, pane, label, icon, dept, di, cluster) {
-  const kw = PAGE_KEYWORDS[tab + (pane ? '|' + pane : '')] || '';
+  if (typeof _brWord === 'function') { label = _brWord(label); cluster = _brWord(cluster); }
+  const kw =PAGE_KEYWORDS[tab + (pane ? '|' + pane : '')] || '';
   return { tab, pane, label, icon, dept, di, cluster, n: pgNorm(label), nd: pgNorm(dept ? dept.label : ''), nc: pgNorm(cluster),
     nk: kw.split(/\s+/).filter(Boolean).map(pgNorm) };
 }

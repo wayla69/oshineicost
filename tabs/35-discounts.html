@@ -24,20 +24,21 @@
       <div class="flex items-center gap-2">
         <span id="disc-alert-meta" class="text-xs text-slate-400"></span>
         <button onclick="document.getElementById('disc-alert-config').classList.toggle('hidden')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">เกณฑ์</button>
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-disc-alert" title="คำอธิบาย">?</button>
+        <template id="hlp-disc-alert" data-title="ส่วนลดที่ต้องระวัง"><p>สัญญาณที่อาจเป็นเงินรั่วหรือการลดราคาที่ไม่เหมาะสม เรียงตามความสำคัญ: ด่วน แล้วเฝ้าระวัง</p><p>กดที่แถวเพื่อดูบิล</p></template>
       </div>
     </div>
-    <p class="text-xs text-slate-400 mb-3">สัญญาณเสี่ยงรั่ว/ลดมั่ว เรียงตามความสำคัญ · ด่วน · เฝ้าระวัง · คลิกแถวเพื่อดูบิล</p>
-    <div id="disc-alert-config" class="hidden mb-3 p-3 rounded-lg" style="background:#f8fafc;border:1px solid #e2e8f0"></div>
+    <div id="disc-alert-config" class="hidden mb-3 p-3 rounded-lg" style="background:var(--bg-subtle);border:1px solid var(--border)"></div>
     <div id="disc-alert-list"></div>
   </div>
 
   <!-- Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">ส่วนลดและจุดรั่วรายสาขา</h2>
+      <h2 class="section-title mb-0">ส่วนลดและจุดรั่วรายสาขา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-b1" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-b1" data-title="ส่วนลดและจุดรั่วรายสาขา"><p>% = ส่วนลดรวม ÷ ยอดขาย<b>ก่อนหักส่วนลด</b> (ฐานคำนวณจริง รวมค่าบุฟเฟต์ต่อหัว) · เทียบกับค่าเฉลี่ยทุกสาขา · = ใช้ส่วนลดสูงผิดปกติ · คลิกกล่องเพื่อดูบิล</p></template>
       <span id="disc-leak-meta" class="text-xs text-slate-400"></span>
     </div>
-    <p class="text-xs text-slate-400 mb-3">% = ส่วนลดรวม ÷ ยอดขาย<b>ก่อนหักส่วนลด</b> (ฐานคำนวณจริง รวมค่าบุฟเฟต์ต่อหัว) · เทียบกับค่าเฉลี่ยทุกสาขา · = ใช้ส่วนลดสูงผิดปกติ · คลิกกล่องเพื่อดูบิล</p>
+    
     <div id="disc-leak-summary" class="mb-4"></div>
     <div id="disc-leak-boxes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
   </div>
@@ -63,8 +64,7 @@
 
   <!-- Payment method × discount — leakage: cash + heavy markdown -->
   <div class="card p-5 mb-5">
-    <h2 class="section-title mb-1">วิธีจ่าย × ส่วนลด — จุดรั่ว "เงินสด + ลดหนัก"</h2>
-    <p class="text-xs text-slate-400 mb-3">เงินสด + ลด ≥20% ของบิล = เสี่ยงรั่ว/ลดมั่วมากสุด · ดูว่าจ่ายแบบไหนได้ลดหนัก · คลิกแถวสาขาเพื่อดูบิล</p>
+    <h2 class="section-title mb-1">วิธีจ่าย × ส่วนลด — จุดรั่ว "เงินสด + ลดหนัก" <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-1" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-1" data-title="วิธีจ่าย × ส่วนลด"><p>เงินสด + ลด ≥20% ของบิล = เสี่ยงรั่ว/ลดมั่วมากสุด · ดูว่าจ่ายแบบไหนได้ลดหนัก · คลิกแถวสาขาเพื่อดูบิล</p></template>
     <div id="paydisc-summary" class="mb-4"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>
@@ -95,13 +95,13 @@
   <!-- Discount reason / type (Sale.DiscountReasonId → DiscountSaleReason) -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">ประเภทส่วนลด (เหตุผลที่เลือกใน POS)</h2>
+      <h2 class="section-title mb-0">ประเภทส่วนลด (เหตุผลที่เลือกใน POS) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-b2" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-b2" data-title="ประเภทส่วนลด"><p>เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p></template>
       <div class="flex items-center gap-2">
         <span id="disc-reason-note" class="text-xs text-slate-400"></span>
         <button onclick="exportDiscountReasons()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
     </div>
-    <p class="text-xs text-slate-400 mb-3">เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p>
+    
     <div id="disc-reason-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e"></div>
     <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3"></div>
     <div id="disc-reason-split" class="mb-4"></div>
@@ -116,13 +116,13 @@
   <!-- Coupon / promotion by SERIES (CouponSeries name) -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">คูปอง/โปรโมชัน (แยกตามชุด)</h2>
+      <h2 class="section-title mb-0">คูปอง/โปรโมชัน (แยกตามชุด) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-b3" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-b3" data-title="คูปอง/โปรโมชัน"><p>ส่วนลดจากคูปอง/โปรแยกตาม "ชื่อชุด" (เด็กสูง · ผู้สูงอายุ · วันเกิด · VIP · ผู้ถือหุ้น …) — ดูว่าชุดไหนใช้เงินลดมากสุด · เฉลี่ย/ครั้ง สูงผิดปกติ = ตรวจสอบ</p><p>คลิกแถวเพื่อดูแยก รายสาขา / รายวัน · MoM = เดือนล่าสุดเทียบเดือนก่อน (สีแดง = ลดมากขึ้น)</p></template>
       <div class="flex items-center gap-2">
         <span id="coupon-series-note" class="text-xs text-slate-400"></span>
         <button onclick="exportCouponSeries()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
     </div>
-    <p class="text-xs text-slate-400 mb-3">ส่วนลดจากคูปอง/โปรแยกตาม "ชื่อชุด" (เด็กสูง · ผู้สูงอายุ · วันเกิด · VIP · ผู้ถือหุ้น …) — ดูว่าชุดไหนใช้เงินลดมากสุด · เฉลี่ย/ครั้ง สูงผิดปกติ = ตรวจสอบ</p>
+    
     <div id="coupon-series-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fef2f2;border:1px solid #ef4444;color:#991b1b"></div>
     <div id="coupon-series-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
     <div style="max-height:380px;overflow:auto"><table class="tbl-top60 w-full text-xs">
@@ -133,7 +133,7 @@
       </tr></thead>
       <tbody id="coupon-series-body"></tbody>
     </table></div>
-    <p class="text-[11px] text-slate-400 mt-2">คลิกแถวเพื่อดูแยก รายสาขา / รายวัน · MoM = เดือนล่าสุดเทียบเดือนก่อน (สีแดง = ลดมากขึ้น)</p>
+    
   </div>
 
   <div class="card p-5 mb-5 overflow-x-auto">

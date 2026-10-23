@@ -52,6 +52,8 @@ def test_morning_names_the_duties_and_follows_them(acct_udon):
 
 
 def test_a_missed_cutoff_is_named_with_the_late_fee(acct_udon):
+    # PL3: a branch with no activity yet starts today, so only a branch that has started is told its cutoff was missed
+    acct_udon.execute("INSERT INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by, confirmed_at) VALUES(1, '2026-09-01', 'confirmed', 't', '2026-09-01', '2026-09-01', 't', '2026-09-01')")
     rec = RM.morning(acct_udon, today=TUE)                     # Tuesday morning: Wednesday's cutoff passed yesterday
     line = _line(rec)
     assert line["pending"] and "ยังไม่ส่งใบสั่งซื้อรอบส่งของ วันพุธ 7/10 (ส่งช้า มีค่าปรับ)" in line["text"]

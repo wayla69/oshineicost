@@ -167,7 +167,7 @@ def test_a_dry_run_reports_per_date_and_touches_nothing(con):  # noqa: F811
 @pytest.mark.parametrize("edit, msg", [
     ({"เบิกใช้": "abc"}, f"{CRAB_NM}: จำนวนต้องเป็นตัวเลข"),
     ({"เบิกใช้": -1}, f"{CRAB_NM}: จำนวนต้องไม่ติดลบ"),
-    ({"เบิกใช้": 1, "ของเสีย": 1}, f"{CRAB_NM}: เลือกสาเหตุของของเสีย"),
+    ({"เบิกใช้": 1, "ของเสีย": 1}, f"{CRAB_NM}: เลือกสาเหตุที่เสีย"),
     ({"ของเสีย": 1, "สาเหตุของเสีย": OTHER}, f"{CRAB_NM}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย"),
 ])
 def test_the_errors_are_the_apps_errors_with_the_row(con, edit, msg):  # noqa: F811

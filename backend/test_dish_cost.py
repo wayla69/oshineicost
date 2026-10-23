@@ -170,7 +170,8 @@ def test_preview_counts(con):
     assert TIER not in sw
     pre2 = DC.preview(con, "2026-10", [])
     assert {r["code"] for r in pre2["sold_without_cost"]} == {"DCT-A", "DCT-B", "DCT-C", "DCT-D"}
-    assert {r["code"]: r["current_source"] for r in pre2["sold_without_cost"]}["DCT-C"] == "สูตรที่ประกาศใช้"
+    assert {r["code"]: r["current_source"] for r in pre2["sold_without_cost"]}["DCT-C"] == (
+        "ต้นทุนที่ประกาศใช้" if __import__("bom_center.close_settings", fromlist=["x"]).stock_mode(con) else "สูตรที่ประกาศใช้")   # PL3: stock mode names no recipe
 
 
 def test_month_and_value_rules(con):

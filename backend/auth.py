@@ -573,6 +573,27 @@ def parse_token(token: str) -> Optional[Dict]:
     return payload
 
 
+def request_modules(request) -> Set[str]:
+    """The modules the signed session of this request holds (every module with auth off).
+    Read from the signed cookie and the live role map - no DB hit per request. A payload
+    that is missing or forged holds none."""
+    if not auth_enabled():
+        return set(MODULES)
+    payload = parse_token(request.cookies.get(SESSION_COOKIE, "")) or {}
+    return modules_for_role(payload.get("r") or "")
+
+
+def client_rules() -> List[list]:
+    """The GET-relevant part of MODULE_RULES, for the browser: [[prefix, [modules...]]...] (rules for
+    GET and for every method). The pages read it from /api/auth/me so that a page asks only for what the
+    server will answer - ONE rule list, kept here (path_allowed below is its twin in JS)."""
+    out = []
+    for meths, pfx, mods in MODULE_RULES:
+        if meths in ("GET", "*"):
+            out.append([pfx, sorted(mods)])
+    return out
+
+
 def scope_branch(request) -> Optional[str]:
     """The branch a logged-in user is confined to, or None (the whole chain,
     or auth off). Read from the signed cookie — no DB hit per request."""
@@ -608,7 +629,7 @@ def check_password_policy(password: str) -> None:
     if len(pw) < MIN_PASSWORD_LEN:
         raise ValueError(f"รหัสผ่านต้องยาวอย่างน้อย {MIN_PASSWORD_LEN} ตัวอักษร")
     if pw.strip().lower() == DEFAULT_PASSWORD.lower():
-        raise ValueError("ห้ามใช้รหัสผ่านเริ่มต้นที่แชร์กัน — กรุณาตั้งรหัสผ่านใหม่")
+        raise ValueError("ห้ามใช้รหัสผ่านเริ่มต้นที่แชร์กัน ให้ตั้งรหัสผ่านใหม่")
 
 
 def init_auth(con: sqlite3.Connection) -> None:

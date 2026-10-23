@@ -88,7 +88,7 @@
           <li><b>12:00 และ 16:00</b> ดึงข้อมูล 45 วันล่าสุด (ดึงใหม่ทั้งหมดทุก 7 วัน)</li>
           <li>ถ้าเครื่องเริ่มใหม่ข้ามรอบ ระบบดึงให้หนึ่งครั้งหลังเริ่มเครื่อง</li>
         </ul>
-        <p><b>ผ่านการตรวจเทียบ</b> หมายถึงยอดเดือนที่ปิดแล้วตรงกับข้อมูลเดิม ถ้าไม่ผ่านระบบจะไม่เปลี่ยนข้อมูลที่ใช้อยู่</p>
+        <p><b>ผ่านการตรวจเทียบ</b> หมายถึงยอดเดือนที่ปิดแล้วตรงกับข้อมูลเดิม ถ้าไม่ผ่านจะไม่เปลี่ยนข้อมูลที่ใช้อยู่</p>
         <p><b>พื้นที่ไม่พอ</b> ต้องมีที่ว่างอย่างน้อย 2.5 เท่าของไฟล์ฐานข้อมูล ให้ขยายดิสก์ของเครื่อง</p>
         <p>เปิดใช้โดยตั้งค่า OSHINEI_CLOUD_SYNC=1 และรหัสเชื่อมต่อ POS (OSH_SVR, OSH_PORT, OSH_USER, OSH_PWD, OSH_DB) ที่ Fly ขั้นตอนอยู่ใน docs/CLOUD_SYNC.md</p>
       </template>
@@ -226,7 +226,7 @@
       <div class="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div>
           <h3 class="text-base font-bold text-amber-900">ปรับต้นทุน — แก้ unit_cost ให้ตรงต้นทุนจริง</h3>
-          <p class="text-xs text-amber-800 mt-1">แสดง Top 30 SKU ที่ขับ COGS มากที่สุด · ตั้ง target food cost % แล้วระบบจะ suggest unit_cost ใหม่ · แก้ทีละตัวหรือ apply ทั้งหมดเลย</p>
+          <p class="text-xs text-amber-800 mt-1">แสดง Top 30 SKU ที่ขับ COGS มากที่สุด · ตั้ง target food cost % แล้วจะได้ต้นทุนต่อหน่วยที่แนะนำ · แก้ทีละตัวหรือ apply ทั้งหมดเลย</p>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <label class="text-xs text-amber-900 font-semibold">เป้าต้นทุนอาหาร:</label>
@@ -303,7 +303,7 @@
       </div>
       <!-- Row 1: search + saved presets -->
       <div class="flex items-center gap-3 mb-3 flex-wrap">
-        <input id="costSearch" type="text" placeholder="Search SKU or description…"
+        <input id="costSearch" type="text" placeholder="ค้นหารหัสหรือชื่อเมนู…"
           oninput="debounceLoadCosts()"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-400">
         <select id="costPresetSel" onchange="loadMenuPreset(this.value)"
@@ -406,7 +406,7 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 class="text-sm font-bold text-indigo-900">ต้นทุนรายเดือน</h3>
-          <p class="text-xs text-slate-500 mt-0.5">กำหนด unit_cost ต่อ SKU ในแต่ละเดือน สำหรับวัตถุดิบที่ราคาผันผวน — ระบบจะใช้ค่าเดือนที่ระบุ ถ้าไม่มีจะย้อนไปใช้เดือนก่อนหน้า ถ้าไม่มีอีกใช้ค่า default</p>
+          <p class="text-xs text-slate-500 mt-0.5">กำหนด unit_cost ต่อ SKU ในแต่ละเดือน สำหรับวัตถุดิบที่ราคาผันผวน — จะใช้ค่าเดือนที่ระบุ ถ้าไม่มีจะย้อนไปใช้เดือนก่อนหน้า ถ้าไม่มีอีกใช้ค่า default</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs text-slate-500 font-medium">เดือน</label>

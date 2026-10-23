@@ -3,8 +3,7 @@
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-menucompare" style="display:none">
   <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">เทียบเมนู A vs B</h2>
-    <p class="text-xs text-slate-500 mt-1">เลือกช่วง A กับ B (เดือน หรือ ช่วงวันที่) แล้วเทียบ Top เมนู · คลิกแถวเพื่อ dive-in (รายสาขา · เทรนด์ · BoM)</p>
+    <h2 class="text-base font-bold" style="color:var(--accent)">เทียบเมนู A vs B <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menucompare-1" title="คำอธิบาย">?</button></h2><template id="hlp-menucompare-1" data-title="เทียบเมนู A vs B"><p>เลือกช่วง A กับ B (เดือน หรือ ช่วงวันที่) แล้วเทียบ Top เมนู · คลิกแถวเพื่อ dive-in (รายสาขา · เทรนด์ · BoM)</p></template>
   </div>
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
     <div class="flex items-center gap-2">
@@ -29,7 +28,8 @@
 
   <div class="card p-5">
     <h3 class="text-sm font-bold mb-1" style="color:var(--text-primary)">ตารางที่ 1 · เทียบเมนู A vs B — ยอดรวม
-      <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวนชิ้นรวม · สัดส่วน · ต้นทุน ของแต่ละช่วง · คลิกหัวคอลัมน์เพื่อเรียง)</span></h3>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-mc-t1" title="คำอธิบาย">?</button>
+      <template id="hlp-mc-t1" data-title="ตารางที่ 1 · ยอดรวม"><p>เฉพาะเมนูบุฟเฟ่ต์ แสดงจำนวนชิ้นรวม สัดส่วน และต้นทุนของแต่ละช่วง กดหัวคอลัมน์เพื่อเรียง</p></template></h3>
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
       <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
@@ -53,7 +53,8 @@
   <div class="card p-5 mt-4">
     <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
       <h3 class="text-sm font-bold" style="color:var(--text-primary)">ตารางที่ 2 · เทียบเมนู A vs B — ต่อหัว
-        <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวน/คน &amp; ต้นทุน/หัว = หารด้วยจำนวนลูกค้าของแต่ละช่วง)</span></h3>
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-mc-t2" title="คำอธิบาย">?</button>
+        <template id="hlp-mc-t2" data-title="ตารางที่ 2 · ต่อหัว"><p>เฉพาะเมนูบุฟเฟ่ต์ จำนวนต่อคนและต้นทุนต่อหัว คิดโดยหารด้วยจำนวนลูกค้าของแต่ละช่วง</p></template></h3>
       <button onclick="exportTable('mcTable2','menu_compare_per_head.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
     </div>
     <div class="mb-3"><span id="mcCoversNote2" class="text-[11px] text-slate-400"></span></div>

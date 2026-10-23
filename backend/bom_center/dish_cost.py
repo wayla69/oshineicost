@@ -216,10 +216,12 @@ def _list_rows(con, month: str) -> dict:
 def _source_of(con, month: str):
     """(sku_id -> source label) maker for the cost the app uses now, when the list does not hold the SKU."""
     rel = dated._latest(dated.month_map(con), month) if month >= dated.CUTOVER_MONTH else {}
+    from .close_settings import stock_mode      # PL3: the stock mode has no recipe pages, so the label does not name a recipe
+    word = "ต้นทุนที่ประกาศใช้" if stock_mode(con) else "สูตรที่ประกาศใช้"
 
     def label(sid, cost):
         if sid in rel:
-            return "สูตรที่ประกาศใช้"
+            return word
         return "ต้นทุนเดิม" if cost > 0 else "ไม่มีต้นทุน"
     return label
 

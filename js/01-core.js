@@ -240,6 +240,13 @@ window.uiHelp = function (title, html, opener) {
   return done;
 };
 window._uiHelpReg = window._uiHelpReg || {};
+// PL3: a value a script fills in may sit inside a help <template> (the explanation moved behind its "?"): find it on the page or in a template's content
+function tplById(id) {
+  const e = document.getElementById(id);
+  if (e) return e;
+  for (const t of document.querySelectorAll('template')) { const x = /** @type {HTMLTemplateElement} */ (t).content.getElementById(id); if (x) return x; }
+  return null;
+}
 window.uiQ = function (key, title, html, cls) {
   if (html != null) window._uiHelpReg[key] = { title, html };
   const esc2 = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -349,6 +356,13 @@ window.askWriteToken = function (message) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     const method = init.method || (typeof input !== 'string' && input && input.method) || 'GET';
     if (!isWrite(method) || !url.includes('/api/') || url.includes('/api/upload')) {
+      // PL3: a read the server would refuse for this role is answered here as the same 403, without a request
+      if (!isWrite(method) && url.includes('/api/') && typeof pathAllowedForMe === 'function') {
+        let pth = ''; try { pth = new URL(url, location.href).pathname; } catch (e) { /* not a URL */ }
+        if (pth && !pathAllowedForMe(pth)) {
+          return Promise.resolve(new Response(JSON.stringify({ detail: 'ไม่มีสิทธิ์ใช้ส่วนนี้' }), { status: 403, headers: { 'Content-Type': 'application/json', 'X-Denied': 'role' } }));
+        }
+      }
       return _origFetch(input, init).then(r => observe(url, r));
     }
     const send = (tok) => {
@@ -497,8 +511,105 @@ async function loadBcMode() {
     BC_MODE = j && j.mode === 'full' ? 'full' : 'stock';
     if (j && j.history_weeks > 0) BC_HIST_WEEKS = j.history_weeks;
   } catch (e) { BC_MODE = 'stock'; }
+  if (BC_MODE === 'stock') { try { stkWordsStart(); } catch (e) { /* wording only */ } }
   return BC_MODE;
 }
+
+// ── PL3 stock words ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// RV3 F7 (owner 2026-10-23): in stock mode the analytics pages (cost, GP, P&L, cost per head, coverage, the home and overall insights,
+// the management report) say "ต้นทุนต่อจาน" / dish cost, never BoM or recipe. The cost figures themselves are the same in both modes; only
+// the words change, and only while BC_MODE is 'stock' (full mode keeps its own words). The words come from many slices and from the server
+// (the insight sentences), so one rewrite runs on the text of every analytics page as it is drawn (a MutationObserver) and on every chart
+// label (mkChart). The supply, franchise, manual and settings pages are not touched. Rules run in order; the first ones are the specific
+// phrases. test_pl3_stock_words.py runs this list over the text of the pages and fails on a BoM or recipe word left.
+/** @type {Array<[RegExp, any]>} */
+const _STK_WORDS = [
+  [/BoM\s*\(ต้นทุน\)/g, 'ต้นทุน'],
+  [/\s*\((?:COGS\s*·\s*)?BoM[^)]*\)/g, ''],                          // "(BoM)", "(BoM จริง)", "(COGS·BoM)"
+  [/\s*\(BoM basis\)/gi, ''],
+  [/BoM recipe food cost/gi, 'dish food cost'],
+  [/BoM basis/gi, 'dish-cost basis'],
+  [/BoM[ -]cost/gi, 'dish cost'],
+  [/\s*·\s*BoM(?=\s*·|\s*$|\s*\))/g, ''],                              // "56% ของรายได้ · BoM · MTD"
+  [/ต้นทุน\s*BoM\s*(พุ่ง|ลด)/g, 'ต้นทุนอาหาร$1'],
+  [/(?:ใช้|ตาม|ด้วย|จาก)สูตร\s*BoM(?:\s*(?:ใหม่|เดียว|จริง))?/g, m => m.replace(/สูตร\s*BoM(?:\s*(?:ใหม่|เดียว|จริง))?/, 'ต้นทุนต่อจาน')],
+  [/(?:มี|ครอบคลุม|เพิ่ม|ไม่มี|ไม่พบ)\s*(?:สูตร\s*)?BoM(?:\s*recipe)?/g, m => m.replace(/(?:สูตร\s*)?BoM(?:\s*recipe)?/, 'ต้นทุนต่อจาน')],
+  [/ต้นทุน\s*\(BoM\)/g, 'ต้นทุน'],
+  [/ต้นทุน\s*BoM\s*(?=[฀-๿])/g, 'ต้นทุน'],                    // "ต้นทุน BoM รวม" -> "ต้นทุนรวม"
+  [/ต้นทุน\s*BoM/g, 'ต้นทุน'],
+  [/ข้อมูล\s*BoM(?:\s*cost)?/g, 'ข้อมูลต้นทุนต่อจาน'],
+  [/สูตร\s*\(BoM\)/g, 'ต้นทุนต่อจาน'],
+  [/สูตร\s*BoM/g, 'ต้นทุนต่อจาน'],
+  [/BoM\s*COGS/g, 'ต้นทุนขาย'],
+  [/BoM\s*Center/g, 'ต้นทุนต่อจาน'],
+  [/ที่ประกาศใช้/g, 'ที่ใช้'],
+  [/สูตรเสนอ/g, 'ต้นทุนเสนอ'],
+  [/(?:เปลี่ยน|ปรับ)สูตร\s*\/\s*(?:ลด\s*)?portion/g, 'ลดปริมาณเสิร์ฟ'],
+  [/(?:เปลี่ยน|ปรับ)สูตร/g, 'ปรับเมนู'],
+  [/ตรวจสูตร/g, 'ตรวจเมนู'],
+  [/(?:ตาม|ใช้เกิน|เบิกเกิน|ตักเกิน|เกิน|น้อยกว่า)สูตร/g, m => m.replace('สูตร', 'ค่าที่คาด')],
+  [/ไม่มีสูตร|ไม่อยู่ในสูตรใด/g, 'ไม่มีต้นทุนต่อจาน'],
+  [/ทุกสูตร/g, 'ทุกเมนู'],
+  [/สูตรมาตรฐานระบบ/g, 'ต้นทุนมาตรฐาน'],
+  [/สูตรของเมนูใกล้เคียง/g, 'เมนูใกล้เคียง'],
+  [/คีย์สูตร/g, 'คีย์ต้นทุน'],
+  [/\s*\(สูตร\)/g, ''],
+  [/\bvs\s*สูตร/g, 'vs ปกติ'],
+  [/\bBoM\b/g, 'ต้นทุนต่อจาน'],
+  [/สูตร/g, 'ต้นทุนต่อจาน'],                                           // whatever is left: the recipe is not a word of the stock mode
+];
+function stkText(s) {
+  if (BC_MODE !== 'stock' || typeof s !== 'string' || (s.indexOf('BoM') < 0 && s.indexOf('สูตร') < 0)) return s;
+  let o = s;
+  for (const [re, to] of _STK_WORDS) o = o.replace(re, to);
+  return o;
+}
+const _STK_SKIP = '#tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-supplyhome, #tab-ordering, #tab-ordersetup, #tab-ingpurchase, #tab-franchise, #tab-fmsg, #tab-manual, #tab-settings, #tab-checklist';
+function _stkSkipped(el) { return !!(el && el.closest && el.closest(_STK_SKIP) && !el.closest('#bmc-pane-dishcost')); }   // the dish-cost page (ต้นทุนต่อจาน) sits in the supply centre but is an analytics page
+let _stkObs = null;
+function _stkNode(root) {
+  if (!root || BC_MODE !== 'stock') return;
+  const base = root.nodeType === 3 ? root.parentElement : root;
+  if (!base || _stkSkipped(base)) return;
+  if (root.nodeType === 3) {
+    const t = stkText(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t;
+    return;
+  }
+  if (root.nodeType !== 1 || /^(SCRIPT|STYLE|TEXTAREA|CANVAS)$/.test(root.tagName)) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const p = n.parentElement; if (!p || /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.tagName) || _stkSkipped(p)) continue;
+    const t = stkText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t;
+  }
+  const els = root.querySelectorAll ? root.querySelectorAll('[title],[placeholder],[aria-label]') : [];
+  els.forEach(e => {
+    if (_stkSkipped(e)) return;
+    ['title', 'placeholder', 'aria-label'].forEach(a => { const v = e.getAttribute(a); if (v) { const t = stkText(v); if (t !== v) e.setAttribute(a, t); } });
+  });
+}
+function stkWordsStart() {
+  if (_stkObs || typeof MutationObserver === 'undefined' || !document.body) return;
+  _stkObs = new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.type === 'characterData') _stkNode(m.target);
+      else m.addedNodes.forEach(n => _stkNode(n));
+    }
+  });
+  _stkObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+  _stkNode(document.body);
+}
+// a chart's own words (dataset names, titles, axis titles) are canvas text, not DOM: the same rewrite, once, as the chart is made
+function stkChartWords(config) {
+  if (BC_MODE !== 'stock' || !config) return;
+  try {
+    ((config.data && config.data.datasets) || []).forEach(d => { if (typeof d.label === 'string') d.label = stkText(d.label); });
+    const o = config.options || {}, pl = o.plugins || {};
+    if (pl.title && typeof pl.title.text === 'string') pl.title.text = stkText(pl.title.text);
+    Object.values(o.scales || {}).forEach(sc => { if (sc && sc.title && typeof sc.title.text === 'string') sc.title.text = stkText(sc.title.text); });
+    if (config.data && Array.isArray(config.data.labels)) config.data.labels = config.data.labels.map(l => typeof l === 'string' ? stkText(l) : l);
+  } catch (e) { /* wording only */ }
+}
+// ── end PL3 stock words
 
 // Sidebar tab → module it requires. Tabs absent from the map (e.g. 'manual') are
 // always allowed to any logged-in user. Mirrors MODULE_RULES in backend/auth.py.
@@ -632,9 +743,41 @@ const ROLE_MODULES_TH = {
   franchise: ['franchise.view'],
 };
 
+// PL3: the server's path rules (/api/auth/me "rules", the same MODULE_RULES list auth.path_allowed reads), copied here so that a page
+// never asks for an answer the server will refuse - the browser would log it as a console error and the section would stay empty.
+// Longest prefix wins; a path no rule names is open to a role that holds sales.overview (or to the open prefixes).
+let _AUTH_RULES = null, _AUTH_OPEN = [];
+function _authRulesFrom(j) {
+  if (j && Array.isArray(j.rules)) { _AUTH_RULES = j.rules; _AUTH_OPEN = j.open_to_all || []; }
+}
+function pathAllowedForMe(path) {
+  if (!window.AUTH || !window.AUTH.enabled || !_AUTH_RULES) return true;
+  const mods = new Set(window.AUTH.modules || []);
+  let best = -1, allowed = new Set();
+  for (const [pfx, ms] of _AUTH_RULES) {
+    if (!path.startsWith(pfx)) continue;
+    if (pfx.length > best) { best = pfx.length; allowed = new Set(ms); } else if (pfx.length === best) ms.forEach(x => allowed.add(x));
+  }
+  if (best < 0) return mods.has('sales.overview') || _AUTH_OPEN.some(p => path.startsWith(p));
+  for (const m of allowed) if (mods.has(m)) return true;
+  return false;
+}
 function hasModule(m) {
   if (!window.AUTH || !window.AUTH.enabled) return true;   // auth off → everything
   return (window.AUTH.modules || []).includes(m);
+}
+// PL3: may this role see cost of goods, gross profit and food-cost figures? (the server removes them from the payload of a role that may not)
+function canSeeCost() { return hasModule('cost.analysis') || hasModule('profit.pnl'); }
+// PL3: a card marked data-needs="/api/path[,/api/other]" is shown only when the role may read that data (the same rule the server applies),
+// so a page never shows an empty card for data its role cannot load. Called when a page opens and after sign-in.
+function applyNeeds(root) {
+  if (!document.getElementById('needsHiddenCss')) {
+    const st = document.createElement('style'); st.id = 'needsHiddenCss'; st.textContent = '.needs-hidden{display:none!important}';
+    document.head.appendChild(st);
+  }
+  (root || document).querySelectorAll('[data-needs]').forEach(el => {
+    el.classList.toggle('needs-hidden', !el.dataset.needs.split(',').some(p => pathAllowedForMe(p.trim())));
+  });
 }
 function tabAllowed(name) {
   if (bomHidden(name)) return false;                        // PR-S1: a whole recipe page (bomcost, branchbom, menuimpact) in stock mode
@@ -663,7 +806,7 @@ function _landingTab() { return franchiseLogin() ? 'franchise' : _launcherLandin
 async function _loadAuthNames() {
   try {
     const j = await (await fetch(`${API}/api/auth/me`)).json();
-    if (window.AUTH && j) { window.AUTH.display_name = j.display_name || null; window.AUTH.names = j.names || {};
+    if (window.AUTH && j) { _authRulesFrom(j); window.AUTH.display_name = j.display_name || null; window.AUTH.names = j.names || {};
       window.AUTH.role_th = j.role_th || null; window.AUTH.write_gated = j.write_gated; _writeTokenFromAuth(); }
   } catch (e) { /* the pages fall back to the login name */ }
 }
@@ -672,6 +815,7 @@ async function bootstrapAuth() {
     const r = await fetch(`${API}/api/auth/me`);
     window.AUTH = await r.json();
     window.AUTH.modules = window.AUTH.modules || [];
+    _authRulesFrom(window.AUTH);
     _writeTokenFromAuth();
   } catch (e) {
     // Network/health failure — don't hard-lock the UI; treat as auth-off.
@@ -2359,7 +2503,8 @@ const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); r
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
-const fmt  = n => { const v=_num(n); return v==null ? '—' : v >= 1e6 ? (v/1e6).toFixed(2)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : v.toFixed(0); };
+// PL3 (RV3 F25): one number format - a negative figure is shortened the same way as a positive one (it was printed whole: "-155931" beside "170.8K")
+const fmt  = n => { const v=_num(n); if (v==null) return '—'; const a=Math.abs(v), s = v < 0 && a >= 0.5 ? '-' : ''; return s + (a >= 1e6 ? (a/1e6).toFixed(2)+'M' : a >= 1e3 ? (a/1e3).toFixed(1)+'K' : a.toFixed(0)); };
 const fmtN = n => { const v=_num(n); return v==null ? '—' : v.toLocaleString('th-TH',{maximumFractionDigits:0}); };
 const fmtP = n => { const v=_num(n); return v==null ? '—' : v.toFixed(1)+'%'; };
 const fmtM = n => { const v=_num(n); return v==null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1)+'%'; };
@@ -2503,6 +2648,7 @@ function mkChart(id, config) {
       };
     }
   }
+  stkChartWords(config);   // PL3: stock mode names no BoM on a chart either
   // A phone showing the full dashboard (เต็ม →) gets a chart cut for 375 px: see _phoneChartTune.
   if (_onPhoneScreen()) { try { _phoneChartTune(config, ctx); } catch (e) { console.warn('phone chart tune:', e); } }
   // Apply theme-aware axis / grid / label colors (respects dark mode).
@@ -2953,7 +3099,9 @@ function switchTab(name, direct) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   // PR-S1: a recipe page in stock mode (a bookmark, an old link) opens the role's landing page instead - no error
   if (!tabAllowed(name)) { name = (bomHidden(name) && tabAllowed(_landingTab())) ? _landingTab() : firstAllowedTab(); }
+  if (activeTab !== name && typeof _clearErrBanner === 'function') { try { _clearErrBanner(); } catch (e) { /* cosmetic */ } }   // PL3: an error banner stays with the page that raised it
   activeTab = name;
+  try { applyNeeds(document.getElementById('tab-' + name) || undefined); } catch (e) { /* cosmetic */ }
   // Reading mode hides the app chrome via a <body> class for the Management
   // Report; without this it would follow the reader into every other tab.
   if (name !== 'mgtreport') { try { _mgtReadingOff(); } catch (e) {} }
@@ -3127,7 +3275,7 @@ const TAB_CLUSTERS = [
   { key: 'sales',  label: 'ยอดขาย',          tabs: [['overall','ภาพรวมและตัวชี้วัด'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['timeflow','ช่วงเวลา'],['custtype','ช่องทาง & ประเภทลูกค้า'],['compare','เทียบ A/B'],['more','ข้อสังเกตเพิ่มเติม']] },
   { key: 'buffet', label: 'ลูกค้า & บุฟเฟ่ต์', tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['guest','ลูกค้า & ยอด/หัว'],['childbuffet','บุฟเฟ่ต์เด็ก']] },
   { key: 'menu',   label: 'เมนู',            tabs: [['menu','วิเคราะห์เมนู',['engineering']],['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menucompare','เทียบเมนู A/B']] },
-  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','Simulators']] },
+  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','ตัวจำลอง']] },
   { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','เทียบสาขา'],['pnl','P&L เชิงลึก']] },
   { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
   { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },

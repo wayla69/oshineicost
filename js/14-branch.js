@@ -581,7 +581,7 @@ function _brnIssReasonBox(code) {
   const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
   const bad = !q.reason || (q.reason === 'other' && !String(q.note || '').trim());
   return `<div class="flex flex-wrap gap-2 mt-1 brn-reason"><select id="brnIssR_${esc(code)}" onchange="brnIssSetField(${_bmcQ(code)}, 'reason', this.value)" ${ed ? '' : 'disabled'}
-      style="${inp};border-color:${bad ? 'var(--amber-ink)' : 'var(--border-control)'}"><option value="">— สาเหตุของของเสีย —</option>${((_brnIss && _brnIss.reasons) || []).map(r => `<option value="${esc(r.code)}"${q.reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
+      style="${inp};border-color:${bad ? 'var(--amber-ink)' : 'var(--border-control)'}"><option value="">— สาเหตุที่เสีย —</option>${((_brnIss && _brnIss.reasons) || []).map(r => `<option value="${esc(r.code)}"${q.reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
     <input id="brnIssN_${esc(code)}" value="${esc(q.note || '')}" placeholder="${q.reason === 'other' ? 'ระบุคำอธิบาย (จำเป็น)' : 'หมายเหตุ'}" oninput="brnIssSetField(${_bmcQ(code)}, 'note', this.value)" ${ed ? '' : 'disabled'}
       style="flex:1 1 140px;min-width:0;${inp}"></div>`;
 }
@@ -792,7 +792,7 @@ async function brnIssSave(submit, quiet) {
     const code = invalid[0] || incomplete[0];
     const it = _brnIssItem(code), q = _brnIssQty[code] || {};
     _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${_brnNm(it)}`
-      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุของของเสีย: ${_brnNm(it)}`,
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุที่เสีย: ${_brnNm(it)}`,
       invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
@@ -803,7 +803,7 @@ async function brnIssSave(submit, quiet) {
   const sig = JSON.stringify(lines);
   if (quiet && (!lines.length || sig === _brnIssLastSig) && (invalid.length || incomplete.length)) {
     _bmcStatus('brnIssStatus', invalid.length ? `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`
-      : `ยังไม่ได้บันทึก ${incomplete.length} รายการ · เลือกสาเหตุของของเสีย`, invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
+      : `ยังไม่ได้บันทึก ${incomplete.length} รายการ · เลือกสาเหตุที่เสีย`, invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     return;
   }
   const nAny = lines.filter(l => l.qty_used > 0 || l.qty_waste > 0);
@@ -836,7 +836,7 @@ async function brnIssSave(submit, quiet) {
       if (d && d.status === 'missing') { d.status = 'draft'; _brnIssDayChips(); }
       // never "saved" in plain words after a line was left out: the left-out rows are named
       if (invalid.length) _bmcStatus('brnIssStatus', `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`, 'var(--bad-ink)');
-      else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุของของเสีย)`, 'var(--amber-ink)');
+      else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุที่เสีย)`, 'var(--amber-ink)');
       else _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()}${_brnIssFillNote()}`, 'var(--good-ink)');
       return;
     }
@@ -892,7 +892,7 @@ async function brnIssAppendSave() {
     const code = invalid[0] || incomplete[0];
     const it = _brnIssItem(code), q = _brnIssQty[code] || {};
     _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${_brnNm(it)}`
-      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุของของเสีย: ${_brnNm(it)}`,
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุที่เสีย: ${_brnNm(it)}`,
       invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
@@ -1903,7 +1903,10 @@ function brnDailyCards(d, openFn) {
 function _brnDailyCardsStock(d, openFn, anyJudged) {
   const t = d.totals;
   const head = `<div class="text-xs" style="color:var(--text-secondary);margin-bottom:6px">${anyJudged
-    ? `รวมวันที่ส่งใบแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ที่สาขาใช้ปกติ <b>${_brnBaht(t.normal_value)}</b> · <b>${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</b> · เฉลี่ยทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>`
+    ? `รวมวันที่ส่งใบแล้ว · ยอดเบิก <b>${_brnBaht(t.issued_value)}</b> · ` +
+      // PL3 (RV3 F15): a comparator with no basis behind it says so - not "฿0" and a percentage of nothing
+      (t.normal_value > 0 ? `ที่สาขาใช้ปกติ <b>${_brnBaht(t.normal_value)}</b> · <b>${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</b>` : 'ที่สาขาใช้ปกติ <b>ยังไม่มีข้อมูลพอ</b>') + ' · ' +
+      (t.median_value > 0 ? `เฉลี่ยทุกสาขา <b>${_brnBaht(t.median_value)}</b> · <b>${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</b>` : 'เฉลี่ยทุกสาขา <b>ยังไม่มีข้อมูลพอ</b>')
     : 'ยังไม่มีวันที่เทียบกับปกติได้'}</div>`;
   return head + d.rows.slice().reverse().map(r => {
     const ink = _ISR_SLIP_INK[r.slip_status] || 'var(--text-muted)';
@@ -2243,8 +2246,13 @@ function _brnRowFlags(r, nEst) {
 // 14 confirmed days - the sentence the server gives (no suggestion / the benchmark)
 function _brnSrcLine(p) {
   const s = p.source || {}, f = p.fallback;
-  const t = f ? f.message : (s.kind === 'slips' ? `คิดจากใบตัดเบิก ${s.window_days} วัน` : '');
-  const q = !f && s.kind === 'slips' ? ' ' + uiQ('brn:srcline', 'คิดจากใบตัดเบิก', `<p>ใบตัดเบิกที่ส่งแล้ว ${s.confirmed_days}/${s.window_days} วัน</p>`) : '';
+  // PL3 (RV3 F17): the fallback is said ONCE - the card below ("ใบตัดเบิกยังไม่ครบ · คำนวณจาก…") already says it while a reference is in use;
+  // the x/y days are behind the "?", never on the page
+  if (f && p.ref_mode && p.ref_mode.active) return '';
+  const m = f ? /^(.*?)\s*\(([^)]*)\)\s*$/.exec(f.message || '') : null;
+  const t = f ? (m ? m[1] : f.message) : (s.kind === 'slips' ? `คิดจากใบตัดเบิก ${s.window_days} วัน` : '');
+  const q = f ? (m ? ' ' + uiQ('brn:srcline', 'จำนวนวันที่มีใบตัดเบิก', `<p>${esc(m[2])}</p>`) : '')
+    : s.kind === 'slips' ? ' ' + uiQ('brn:srcline', 'คิดจากใบตัดเบิก', `<p>ใบตัดเบิกที่ส่งแล้ว ${s.confirmed_days}/${s.window_days} วัน</p>`) : '';
   return t ? `<div class="mt-1" style="color:${f ? 'var(--amber-ink)' : 'var(--text-secondary)'}">${esc(t)}${q}</div>` : '';
 }
 function brnRenderOrder() {
@@ -2363,9 +2371,9 @@ function brnRenderOrder() {
   else if (editable) {
     // the reason a button is off is TEXT under it (a hover title does not exist on a phone)
     const send = slipOk ? btn('ส่งใบสั่งซื้อ', 'brnOrderSave(true)', true)
-      : `<button disabled aria-describedby="brnOrdWhy" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งใบสั่งซื้อ</button>`;
-    acts = btn('บันทึกไว้ก่อน', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', "brnOrderAct('cancel')") : '')
-      + (slipOk ? '' : `<div id="brnOrdWhy" class="w-full text-xs" style="color:var(--amber-ink)">ส่งใบสั่งซื้อไม่ได้ · ต้องส่งใบตัดเบิกวันนี้ก่อน</div>`);
+      : `<button disabled aria-describedby="brnOrdGate" style="border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:not-allowed;opacity:.5;background:var(--accent);color:var(--on-accent)">ส่งใบสั่งซื้อ</button>`;
+    // PL3 (RV3 F17): the reason the button is off is the card above it ("ส่งใบตัดเบิกวันนี้แล้วจึงส่งใบสั่งซื้อได้"), said once - not a second line here
+    acts = btn('บันทึกไว้ก่อน', 'brnOrderSave(false)') + send + (o ? btn('ยกเลิกใบสั่งซื้อ', "brnOrderAct('cancel')") : '');
   }
   // receiving belongs to an order the warehouse has sent (คลังจัดส่งแล้ว); one that is only sent waits for the warehouse
   else if (o.status === 'submitted') acts = btn('เปิดแก้ไข', "brnOrderAct('reopen')") + `<div class="w-full text-xs" style="color:var(--text-secondary)">รอคลังจัดส่ง · รับของได้เมื่อคลังจัดส่งแล้ว</div>`;
@@ -2426,8 +2434,7 @@ function _brnRenderRefCard(box, p, editable) {
     return;
   }
   const own = p.fallback ? `ใบตัดเบิกที่ส่งแล้วเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)` : `สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)`;
-  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">${p.fallback ? 'ใบตัดเบิกยังไม่ครบ' : 'สาขาใหม่'} · คำนวณจาก${refTxt}</div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${own} ${uiQ('brn:ref', p.fallback ? stkWord('คำนวณจากค่ากลางอย่างไร', 'คำนวณจากเฉลี่ยทุกสาขาอย่างไร') : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
+  box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">${p.fallback ? 'ใบตัดเบิกยังไม่ครบ' : 'สาขาใหม่'} · คำนวณจาก${refTxt} ${uiQ('brn:ref', p.fallback ? stkWord('คำนวณจากค่ากลางอย่างไร', 'คำนวณจากเฉลี่ยทุกสาขาอย่างไร') : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
       <label style="color:var(--text-secondary)">ยอดขายที่คาดของรอบนี้ (บาท)
         <input id="brnRefSales" type="text" inputmode="numeric" autocomplete="off" value="${rm.expected_sales ? esc(String(rm.expected_sales)) : ''}" style="width:130px;height:36px;margin-left:6px;text-align:right;${inp}"></label>

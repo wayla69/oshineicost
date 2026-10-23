@@ -5,7 +5,7 @@ host-module pattern as routers/reports.py.
 """
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
-from fastapi import Query
+from fastapi import Query, Request
 from typing import Optional
 from rules import closed_day_clause, latest_settled_day
 from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_band,
@@ -512,7 +512,6 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
 # ---------------------------------------------------------------------------
 # /api/home/brief  — Daily Brief summary
 # ---------------------------------------------------------------------------
-@router.get("/api/home/brief")
 @ttl_cache
 def home_brief(branch: Optional[str] = Query(None)):
     """Yesterday vs target + MTD + recent anomalies + top/bottom branch."""
@@ -679,6 +678,28 @@ def home_brief(branch: Optional[str] = Query(None)):
         "mtd_bom_cost": mtd_bom_cost,
         "cost_health": cost_health,
     }
+
+
+@router.get("/api/home/brief")
+def home_brief_route(request: Request, branch: Optional[str] = Query(None)):
+    """The Daily Brief for the signed-in role: the cached brief, minus the food-cost figures for a role that holds
+    neither cost.analysis nor profit.pnl (PL3 - the page shows no cost sentence for it, and the payload carries none)."""
+    import json as _j
+    import auth as _auth
+    from fastapi import Response as _R
+    resp = home_brief(branch=branch)
+    if _auth.request_modules(request) & {"cost.analysis", "profit.pnl"}:
+        return resp
+    try:
+        data = _j.loads(resp.body)
+    except Exception:
+        return resp
+    if isinstance(data, dict):
+        data["food_cost_pct_mtd"] = None
+        data["mtd_bom_cost"] = None
+        ch = data.get("cost_health")
+        data["cost_health"] = {"giveaways": ch["giveaways"]} if isinstance(ch, dict) and "giveaways" in ch else {}
+    return _R(content=_j.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), media_type="application/json")
 
 
 def _prev_month(m: str) -> str:

@@ -11,7 +11,7 @@ double-import the app.
 """
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
-from fastapi import HTTPException, Query, Response
+from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
@@ -924,7 +924,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     fb = lambda x: f"฿{x:,.2f}" if x is not None else "-"
     if not comparison_available:
         insights = [f"ยังไม่มีช่วงก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM}) "
-                    f"— ตัวเลขด้านล่างเป็นข้อมูลช่วง {a_from} ถึง {a_to} เดี่ยวๆ ระบบจะกลับมาเปรียบเทียบอัตโนมัติ "
+                    f"— ตัวเลขด้านล่างเป็นข้อมูลช่วง {a_from} ถึง {a_to} เดี่ยวๆ การเปรียบเทียบจะกลับมาอัตโนมัติ "
                     f"เมื่อทั้งสองช่วงอยู่หลังวันที่เมนูเปลี่ยนแล้ว (เช่น ต.ค. เทียบ ก.ย.)"]
         # No "vs previous period" is possible yet, but A's own numbers don't need
         # one — surface the highest food-cost tier as a real, actionable finding
@@ -940,7 +940,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         if not actions:
             actions.append({"title": "เก็บตัวเลขเดือนนี้ไว้เป็นฐาน (baseline)",
                             "detail": f"เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM} — ต้นทุน/หัวและ BoM เฉลี่ย/จานต่อ tier "
-                                      f"ด้านล่างคือฐานของเมนูใหม่ พอถึงเดือนถัดไปที่มีข้อมูลเทียบได้ ระบบจะวิเคราะห์แนวโน้มให้อัตโนมัติ"})
+                                      f"ด้านล่างคือฐานของเมนูใหม่ พอถึงเดือนถัดไปที่มีข้อมูลเทียบได้ จะวิเคราะห์แนวโน้มให้อัตโนมัติ"})
         return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
                 "coverage": [lo, hi], "mode": mode, "comparison_available": False,
                 "era_clamped": era_clamped, "menu_era_from": _PT_NEW_MENU_FROM,
@@ -3023,7 +3023,6 @@ def _mgt_payment(con, *, branch, ce, cs, group, has_prev, pe, ps):
     return {"payment": payment}
 
 
-@router.get("/api/reports/management")
 @ttl_cache
 def report_management(
     period: str = Query("daily"),            # 'daily' | 'weekly' | 'monthly'
@@ -3284,6 +3283,69 @@ def report_management(
     }
 
 
+# PL3: a role with neither cost.analysis nor profit.pnl (marketing, sales support, operation, warehouse...) gets the
+# management summary WITHOUT cost, gross profit or food-cost figures: the server removes them from the payload, so a
+# phone page that forgets to hide a tile still cannot show them. The cached report is shared; this works on a copy.
+_MGT_COST_MODULES = {"cost.analysis", "profit.pnl"}
+# the action sentences that are cost / margin figures (Thai and English wording of report_management)
+_MGT_COST_ACTION = __import__("re").compile(r"ต้นทุนอาหาร|ต้นทุนต่อหัว|อัตรากำไรขั้นต้น|[Ff]ood cost|[Gg]ross margin")
+
+
+def strip_management_cost(d: dict) -> dict:
+    """Return a copy of a /api/reports/management payload with every cost / margin figure removed."""
+    out = dict(d)
+    gp = out.get("gp")
+    if isinstance(gp, dict):
+        out["gp"] = {"revenue": gp.get("revenue"), "hidden": True}
+    menu = out.get("menu")
+    if isinstance(menu, dict):
+        m = {k: v for k, v in menu.items() if k in ("basis", "covers", "covers_prev", "top_n")}
+        m.update({"top": [], "risers": [], "savers": [], "hidden": True})
+        out["menu"] = m
+    pace = out.get("pace")
+    if isinstance(pace, dict):
+        p2 = {k: v for k, v in pace.items() if k not in ("food_cost_pct", "bom_cost_mtd", "cost_coverage", "food_cost_pct_prev")}
+        if isinstance(p2.get("prev_month"), dict):
+            p2["prev_month"] = {k: v for k, v in p2["prev_month"].items() if k != "food_cost_pct"}
+        out["pace"] = p2
+    tier = out.get("tier")
+    if isinstance(tier, dict):
+        t2 = {k: v for k, v in tier.items() if k != "drivers"}
+        t2["rows"] = [{k: v for k, v in r.items() if k not in ("cogs_head", "cogs_head_prev", "gp_head", "food_pct")}
+                      for r in (tier.get("rows") or []) if isinstance(r, dict)]
+        out["tier"] = t2
+    out["actions"] = [a for a in (out.get("actions") or []) if not (isinstance(a, dict) and _MGT_COST_ACTION.search(a.get("text") or ""))] or \
+        [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if out.get("lang") == "th" else "No critical issues flagged for this period.")}]
+    out.pop("stock_variance", None)
+    return out
+
+
+@router.get("/api/reports/management")
+def report_management_route(
+    request: Request,
+    period: str = Query("daily"),
+    date:   Optional[str] = Query(None),
+    week:   Optional[str] = Query(None),
+    month:  Optional[str] = Query(None),
+    branch: Optional[str] = Query(None),
+    group:  Optional[str] = Query(None),
+    lang:   str = Query("en"),
+    mtd:    Optional[str] = Query(None),
+):
+    """The management summary for the signed-in role: the cached report, minus the cost figures for a
+    role that holds neither cost.analysis nor profit.pnl (see strip_management_cost)."""
+    import auth as _auth
+    resp = report_management(period=period, date=date, week=week, month=month, branch=branch, group=group, lang=lang, mtd=mtd)
+    if _auth.request_modules(request) & _MGT_COST_MODULES:
+        return resp
+    try:
+        data = _json.loads(resp.body)
+    except Exception:
+        return resp
+    return Response(content=_json.dumps(strip_management_cost(data), ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                    media_type="application/json")
+
+
 # ---------------------------------------------------------------------------
 # /api/reports/management/months — the phone's month-by-month view (รายเดือน)
 # ---------------------------------------------------------------------------
@@ -3298,7 +3360,6 @@ def report_management(
 _MGT_YOY_FROM = "2026-05-15"   # the report's year-on-year guard: a year-ago window is complete only from mid-May 2026
 
 
-@router.get("/api/reports/management/months")
 @ttl_cache
 def report_management_months(
     branch: Optional[str] = Query(None),
@@ -3458,6 +3519,40 @@ def report_management_months(
         "yoy_from": _MGT_YOY_FROM,
         "months": rows_out,
     }
+
+
+def strip_months_cost(d: dict) -> dict:
+    """PL3: the month-by-month series without gross profit / food cost, for a role that holds neither cost module."""
+    out = dict(d)
+    rows = []
+    for r in out.get("months") or []:
+        r = {k: v for k, v in r.items() if k not in ("gp_pct", "gp", "food_cost", "cost_basis")}
+        if isinstance(r.get("mom"), dict):
+            r["mom"] = {k: v for k, v in r["mom"].items() if k != "gp_pp"}
+        rows.append(r)
+    out["months"] = rows
+    return out
+
+
+@router.get("/api/reports/management/months")
+def report_management_months_route(
+    request: Request,
+    branch: Optional[str] = Query(None),
+    group:  Optional[str] = Query(None),
+    lang:   str = Query("th"),
+    closed: int = Query(12, ge=2, le=23),
+):
+    """The month-by-month series for the signed-in role (cost figures removed when the role holds no cost module)."""
+    import auth as _auth
+    resp = report_management_months(branch=branch, group=group, lang=lang, closed=closed)
+    if _auth.request_modules(request) & _MGT_COST_MODULES:
+        return resp
+    try:
+        data = _json.loads(resp.body)
+    except Exception:
+        return resp
+    return Response(content=_json.dumps(strip_months_cost(data), ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                    media_type="application/json")
 
 
 # ---------------------------------------------------------------------------

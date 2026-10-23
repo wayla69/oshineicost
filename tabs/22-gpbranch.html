@@ -8,11 +8,10 @@
     <div class="flex items-start gap-3">
       <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold text-emerald-900">GP รายสาขา</h2>
-        <p class="text-xs text-slate-600 mt-1">
+        <h2 class="text-base font-bold text-emerald-900">GP รายสาขา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-gpbranch-1" title="คำอธิบาย">?</button></h2><template id="hlp-gpbranch-1" data-title="GP รายสาขา"><p>
           <b>ภาพรวม — รวมทุก SKU ทั้งบุฟเฟ่ต์และอลาคาท</b> · ใช้สูตร BoM: ตัด tier SKU (BUFFET350/500/590/799/CHILD) ออก เพราะนับซ้ำกับ B0xxx
           <br>เป้าหมาย ต้นทุนอาหาร: <b id="gpbTargetText">55-70%</b> · สถานะ ในเป้า · ⚠ ใกล้ขอบ · เกินเป้า
-        </p>
+        </p></template>
       </div>
     </div>
   </div>
@@ -37,8 +36,8 @@
   <div id="gpbSummary" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
 
   <!-- Narrative page summary — plain-Thai read of the GP picture across branches -->
-  <div class="card p-4 mb-4">
-    <h2 class="section-title mb-2">สรุปอ่านง่าย — ภาพรวม GP รายสาขา</h2>
+  <div class="card p-3 mb-4 ui-cardhead">
+    <h2 class="section-title mb-0">สรุปอ่านง่าย — ภาพรวม GP รายสาขา</h2>
     <div id="gpbNarrative"></div>
   </div>
 
@@ -53,8 +52,7 @@
 
   <!-- GP% bar chart -->
   <div class="card p-5 mb-4">
-    <h2 class="section-title mb-1">GP% รายสาขา <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
-    <p class="text-xs text-slate-400 mb-3">เปอร์เซ็นต์กำไรขั้นต้นของแต่ละสาขา · พื้นที่เขียวคือเป้าหมาย (ต้นทุนอาหาร 55-70% = GP 45-55%)</p>
+    <h2 class="section-title mb-1">GP% รายสาขา <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-gpbranch-2" title="คำอธิบาย">?</button></h2><template id="hlp-gpbranch-2" data-title="สรุปอ่านง่าย"><p>เปอร์เซ็นต์กำไรขั้นต้นของแต่ละสาขา · พื้นที่เขียวคือเป้าหมาย (ต้นทุนอาหาร 55-70% = GP 45-55%)</p></template>
     <div id="gpbBarWrap" style="position:relative;height:560px"><canvas id="gpbBarChart"></canvas></div>
   </div>
 

@@ -935,7 +935,7 @@ async function bcLoadSimulator() {
   const scenList = scens.scenarios || [];
   pane.innerHTML = `
     <div class="flex flex-wrap items-center gap-3 mb-4">
-      <label class="text-xs">Scenario:
+      <label class="text-xs">สถานการณ์:
         <select id="bcScenSel" onchange="bcLoadScenario(this.value)" class="border border-slate-300 rounded-lg px-2 py-1 text-xs min-w-[180px]">
           <option value="">— Baseline —</option>
           ${scenList.map(s => `<option value="${s.id}">${esc(s.name)} (${s.n_items})</option>`).join('')}
@@ -957,7 +957,7 @@ async function bcLoadSimulator() {
       <div class="card p-4">
         <h3 class="font-semibold mb-3">แก้ไข — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
         <div class="flex flex-wrap gap-2 mb-3 text-xs">
-          <input id="bcSimSearch" placeholder="Search SKU/description" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
+          <input id="bcSimSearch" placeholder="ค้นหารหัสหรือชื่อเมนู" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
           <select id="bcSimBizFilter" onchange="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1">
             <option value="">ทั้งหมด</option>
             ${BIZ_TYPES.map(t => `<option value="${t}">${BIZ_TYPE_META[t].icon} ${t}</option>`).join('')}
@@ -1153,7 +1153,7 @@ function bcImportTemplate(input) {
       const hdr = rows[0].map(h => h.trim().toLowerCase());
       const ix = n => hdr.findIndex(h => h.startsWith(n));
       const iSku = ix('sku_code'), iCost = ix('new_unit_cost'), iQty = ix('new_qty'), iClose = ix('close');
-      if (iSku < 0 || iCost < 0) { uiNotice('ไม่พบคอลัมน์ sku_code / new_unit_cost — กรุณาใช้ template ที่ export'); return; }
+      if (iSku < 0 || iCost < 0) { uiNotice('ไม่พบคอลัมน์รหัสเมนูหรือต้นทุนใหม่ ให้ใช้ไฟล์แม่แบบที่ส่งออกจากหน้านี้'); return; }
       const cur = {}; (bcSimBase.skus||[]).forEach(r => { cur[r.sku_code] = r; });
       let nCost = 0, nQty = 0, nClose = 0, unknown = 0;
       bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};   // template replaces current scenario
@@ -1221,7 +1221,7 @@ async function bcDeleteScenario() {
 async function bcAdoptScenario() {
   const id = document.getElementById('bcScenSel')?.value;
   if (!id) { uiNotice('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด Save current)'); return; }
-  if (!await uiConfirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
+  if (!await uiConfirm('บันทึกว่า "ใช้จริง" (adopt)?\nจะบันทึกต้นทุนปัจจุบันเป็นฐาน แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
   const r = await fetch(`${API}/api/bom-cost/scenarios/${id}/adopt`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
   });

@@ -667,7 +667,15 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                           go={"tab": "branchstock", "pane": "issue", "extra": {"date": gd}}))
         # one duty per round: the nearest delivery, and the cutoff the branch has to beat for it
         nearest = {}
-        for it in next_deliveries(con, bid, today, horizon_days=7, now=now):
+        # PL3 (RV3 F19): a round whose cutoff is before the branch's first day is not "เลยเวลาส่ง · มีค่าปรับ" - the branch's first round is the next
+        # one it can still make (started.effective_start; a branch with no activity yet starts today). Fallback: the nearest, as before.
+        from .started import effective_start
+        first_day = effective_start(con, bid, today)
+        all_it = next_deliveries(con, bid, today, horizon_days=14, now=now)        # 14: a round that is late today has its next delivery a week on
+        for it in all_it:
+            if not (it["late"] and it["cycle_date"] < first_day):
+                nearest.setdefault(it["round"], it)
+        for it in all_it:
             nearest.setdefault(it["round"], it)
         round_items = []                                      # QA M6: the rounds in the order of their cutoff, the nearest deadline first
         for r in sorted(("1", "2", "salmon"), key=lambda k: (nearest[k]["cutoff_at"], k)):

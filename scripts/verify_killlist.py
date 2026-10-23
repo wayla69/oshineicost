@@ -36,7 +36,7 @@ with sync_playwright() as pw:
 
     if on_hold:
         # every cluster bar shows all of its members, no ⋯ chip
-        for tab, must in (('cost', ['BoM Cost', 'Simulators', 'Top60', 'ความครอบคลุม', 'นักกินหนัก']),
+        for tab, must in (('cost', ['BoM Cost', 'ตัวจำลอง', 'Top60', 'ความครอบคลุม', 'นักกินหนัก']),
                           ('opsreport', ['ส่วนลด', 'พนักงาน', 'เงินสด', 'บิลยกเลิก', 'Modifiers', 'ราคา/โซน', 'ปิดร้าน']),
                           ('gpbranch', ['P&L รายสาขา', 'P&L ต่อบิล', 'Benchmark', 'กำไร SKU'])):
             pg.evaluate(f"() => switchTab('{tab}')")

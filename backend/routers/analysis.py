@@ -8,7 +8,7 @@ registered by main.py right after this one). URLs unchanged.
 """
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
-from fastapi import HTTPException, Query
+from fastapi import HTTPException, Query, Request, Response
 from typing import Dict, List, Optional
 from rules import avg_ticket_sql, net_revenue_row, net_revenue_sum
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
@@ -875,7 +875,6 @@ def _th_ym(ym) -> str:
         return f" {ym}"
 
 
-@router.get("/api/analysis/anomalies")
 @ttl_cache
 def analysis_anomalies(
     month_from: Optional[str] = Query(None),
@@ -1091,6 +1090,34 @@ def analysis_anomalies(
         print(f"[anomalies] BoM cost-trend insight skipped: {e}")
 
     return {"insights": insights, "branch_growth": growths[:10]}
+
+
+# insight types that are cost / margin figures: a role with neither cost.analysis nor profit.pnl does not receive them (PL3)
+_ANOMALY_COST_TYPES = {"cost_spike", "cost_drop"}
+
+
+@router.get("/api/analysis/anomalies")
+def analysis_anomalies_route(
+    request: Request,
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    threshold:  float         = Query(1.5, description="z-score threshold"),
+):
+    """The month-on-month insights for the signed-in role: the cached answer, minus the food-cost insights for a role
+    that holds neither cost.analysis nor profit.pnl (the home and overall pages list them as plain sentences)."""
+    import json as _j
+    import auth as _auth
+    resp = analysis_anomalies(month_from=month_from, month_to=month_to, branch=branch, group=group, threshold=threshold)
+    if _auth.request_modules(request) & {"cost.analysis", "profit.pnl"}:
+        return resp
+    try:
+        data = _j.loads(resp.body)
+    except Exception:
+        return resp
+    data["insights"] = [i for i in data.get("insights", []) if i.get("type") not in _ANOMALY_COST_TYPES]
+    return Response(content=_j.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), media_type="application/json")
 
 
 # ---------------------------------------------------------------------------

@@ -979,7 +979,7 @@ function deleteUserPreset(idx, ev) {
 function renderUserPresets() {
   const wrap = document.getElementById('userPresets');
   const presets = JSON.parse(localStorage.getItem('oshinei_presets') || '[]');
-  if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">none yet</span>'; return; }
+  if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">ยังไม่มี</span>'; return; }
   wrap.innerHTML = presets.map((p, i) => `
     <span class="preset-chip" onclick="applyUserPreset(${i})">
       ★ ${p.name}
@@ -1655,7 +1655,7 @@ async function loadGpBranch() {
   try {
     const data = await api(`${API}/api/gp/by-branch-month${qs?'?'+qs:''}`);
     _gpbData = data;
-    document.getElementById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
+    tplById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
     _gpbRenderSummary(data);
     _gpbRenderNarrative(data);
     _gpbRenderBoxes();
@@ -1698,7 +1698,7 @@ function _gpbRenderNarrative(data) {
     const rev = r.total_revenue || 0, cogs = r.total_cogs || 0;
     return { branch: r.branch, rev, gpp: rev ? (rev - cogs) / rev * 100 : null, fc: rev ? cogs / rev * 100 : null };
   }).filter(r => r.rev > 0 && r.gpp != null);
-  if (!rows.length) { el.innerHTML = '<p class="text-xs text-slate-400 italic">ไม่มีข้อมูลพอจะสรุป</p>'; return; }
+  if (!rows.length) { el.innerHTML = ''; return; }
   const byGp = [...rows].sort((a, b) => b.gpp - a.gpp);
   const best = byGp[0], worst = byGp[byGp.length - 1];
   const overFc = rows.filter(r => r.fc > hi);             // food cost over target = margin risk
@@ -1714,7 +1714,8 @@ function _gpbRenderNarrative(data) {
       : `ทุกสาขา ต้นทุนอาหาร อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
     `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
   ];
-  el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
+  // PL3 (RV3 F20): no explanatory block on the page - the summary is behind the "?" of its heading
+  el.innerHTML = uiQ('gpb:narr', 'สรุปอ่านง่าย — ภาพรวม GP รายสาขา', `<div class="text-xs space-y-1.5" style="line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`);
 }
 
 function _gpbRenderBoxes() {

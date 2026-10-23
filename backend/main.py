@@ -230,7 +230,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 _DOCS_401_HTML = (
     "<!doctype html><meta charset='utf-8'>"
     "<body style='font-family:sans-serif;padding:3rem;text-align:center'>"
-    "<h3>กรุณาเข้าสู่ระบบก่อนเปิดเอกสาร (login required)</h3>"
+    "<h3>เข้าสู่ระบบก่อนเปิดเอกสาร</h3>"
     "<p><a href='/'>ไปหน้าเข้าสู่ระบบ / open the dashboard</a> "
     "แล้วกลับมาเปิดลิงก์นี้อีกครั้ง</p></body>")
 
@@ -1418,8 +1418,8 @@ def data_quality():
         add("missing_days", "วันที่ไม่มีข้อมูล ระหว่างช่วงที่สาขาเปิดขายอยู่", "warn",
             sum(g["missing_days"] for g in unexplained),
             "ช่องว่างกลางคาบการขายของสาขานั้นเอง ที่ยังไม่มีการบันทึกสาเหตุไว้ — "
-            "ตรวจก่อนว่าสาขาปิดจริงหรือไม่ (บันทึกได้ด้วย backend/mark_downtime.py) "
-            "ถ้าไม่ใช่ กู้คืนได้ด้วยการ re-sync ช่วงวันนั้นจาก POS เท่านั้น ระบบจะไม่สร้างข้อมูลขึ้นเอง",
+            "ตรวจก่อนว่าสาขาปิดจริงหรือไม่ ถ้าปิดจริง ให้แจ้งผู้ดูแลระบบบันทึกวันปิดร้าน "
+            "ถ้าไม่ใช่ ต้องดึงข้อมูลช่วงวันนั้นจาก POS ใหม่ ข้อมูลจะไม่เกิดขึ้นเอง",
             rows=unexplained[:10])
         if explained:
             add("known_downtime", "วันที่ไม่มีข้อมูล — บันทึกสาเหตุไว้แล้ว", "info",
@@ -1690,35 +1690,35 @@ def upload_file(
 # stdlib only (urllib + xml.etree) — no new pip dependency. NOT wrapped in the
 # 5-min response cache so a transient feed failure isn't cached as "unavailable".
 # ---------------------------------------------------------------------------
-MARKET_AS_OF = "2025 actuals + 2026F · refreshed 2026-06"   # vintage of curated data
+MARKET_AS_OF = "ข้อมูลจริงปี 2025 และคาดการณ์ปี 2026 · ปรับปรุง มิ.ย. 2026"   # vintage of curated data (PL3: Thai, like the page)
 
 MARKET_MACRO = [
-    {"label": "GDP Growth (TH)",     "value": "+2.4%",  "year": "2025",     "trend": "down",
-     "sub": "2026F ~+1.7–2.0% — slowing",             "source": "BoT / Min. of Finance"},
-    {"label": "Headline Inflation",  "value": "~0%",    "year": "2025",     "trend": "flat",
-     "sub": "2026F ~+1% — subdued",                   "source": "IMF / BoT"},
-    {"label": "Consumer Confidence", "value": "50.6",   "year": "Apr 2026", "trend": "down",
-     "sub": "lowest since Aug — demand soft",         "source": "UTCC"},
-    {"label": "Foreign Tourists",    "value": "32.9M",  "year": "2025",     "trend": "down",
-     "sub": "−7.2% YoY — first drop since COVID",      "source": "TAT"},
+    {"label": "เศรษฐกิจไทย (GDP)",     "value": "+2.4%",  "year": "2025",     "trend": "down",
+     "sub": "คาดปี 2026 ประมาณ +1.7–2.0% · ชะลอลง",             "source": "ธปท. / กระทรวงการคลัง"},
+    {"label": "เงินเฟ้อทั่วไป",         "value": "~0%",    "year": "2025",     "trend": "flat",
+     "sub": "คาดปี 2026 ประมาณ +1% · ต่ำ",                   "source": "IMF / ธปท."},
+    {"label": "ความเชื่อมั่นผู้บริโภค", "value": "50.6",   "year": "เม.ย. 2026", "trend": "down",
+     "sub": "ต่ำสุดตั้งแต่เดือน ส.ค. · กำลังซื้อยังอ่อน",         "source": "ม.หอการค้าไทย"},
+    {"label": "นักท่องเที่ยวต่างชาติ",   "value": "32.9M",  "year": "2025",     "trend": "down",
+     "sub": "−7.2% จากปีก่อน · ลดลงครั้งแรกนับจากช่วงโควิด",      "source": "ททท."},
 ]
 
 MARKET_INDUSTRY = [
-    {"label": "TH Foodservice market",     "value": "$38.1B",
-     "sub": "2026F · +7.6% YoY (CAGR ~7.6% to 2031)",          "source": "Mordor Intelligence"},
-    {"label": "Restaurant sales growth",   "value": "+4–5%/yr",
-     "sub": "2024–26 · restaurants = 93% of F&B income",       "source": "Krungsri Research"},
-    {"label": "Japanese restaurants (TH)", "value": "5,916",
-     "sub": "2024 census · +2.9% YoY (+165 outlets)",          "source": "JETRO Bangkok"},
-    {"label": "Japanese segment growth",   "value": "+6.0%/yr",
-     "sub": "$1.45B (2025) → $2.31B (2033) · buffet = price wars, thin margins", "source": "Phoenix Research"},
+    {"label": "ตลาดธุรกิจอาหารในไทย",     "value": "$38.1B",
+     "sub": "คาดปี 2026 · +7.6% จากปีก่อน (โตเฉลี่ยราว 7.6% ต่อปีถึงปี 2031)",          "source": "Mordor Intelligence"},
+    {"label": "ยอดขายร้านอาหารเติบโต",   "value": "+4–5%/ปี",
+     "sub": "ปี 2024–26 · ร้านอาหารคิดเป็น 93% ของรายได้อาหารและเครื่องดื่ม",       "source": "ศูนย์วิจัยกรุงศรี"},
+    {"label": "ร้านอาหารญี่ปุ่นในไทย", "value": "5,916",
+     "sub": "สำรวจปี 2024 · +2.9% จากปีก่อน (เพิ่ม 165 ร้าน)",          "source": "JETRO กรุงเทพฯ"},
+    {"label": "กลุ่มร้านอาหารญี่ปุ่นเติบโต",   "value": "+6.0%/ปี",
+     "sub": "$1.45B (2025) → $2.31B (2033) · บุฟเฟ่ต์แข่งขันด้านราคา กำไรบาง", "source": "Phoenix Research"},
 ]
 
 # Annual industry growth used as the benchmark line against the chain's own YoY.
 MARKET_BENCHMARK = {
     "industry_growth_pct": 6.0,     # blended TH restaurant/foodservice growth (2026)
     "jp_segment_growth_pct": 6.0,   # Japanese-restaurant segment CAGR (2026–33)
-    "label": "TH foodservice ~+7.6%/yr · restaurant ~+4–5% · Japanese ~+6%/yr",
+    "label": "ตลาดอาหารไทย ~+7.6%/ปี · ร้านอาหาร ~+4–5% · ร้านญี่ปุ่น ~+6%/ปี",
 }
 
 MARKET_SOURCES = [

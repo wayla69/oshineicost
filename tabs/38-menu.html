@@ -100,8 +100,7 @@
   <!-- Sub: Most Revenue (à la carte only) -->
   <div id="sub-mostCost" class="hidden">
     <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
-      <h2 class="text-base font-bold text-slate-800 mb-1">à la carte · รายได้และกำไรขั้นต้น</h2>
-      <p class="text-xs text-slate-600">เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p>
+      <h2 class="text-base font-bold text-slate-800 mb-1">à la carte · รายได้และกำไรขั้นต้น <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menu-1" title="คำอธิบาย">?</button></h2><template id="hlp-menu-1" data-title="วิเคราะห์กับยอดขาย"><p>เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p></template>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div class="card p-5">
@@ -143,8 +142,7 @@
 
     <!-- What is this page? -->
     <div class="card p-4 mb-5" style="background:var(--accent-soft);border:1px solid var(--accent)">
-      <h2 class="text-base font-bold text-slate-800 mb-1">วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
-      <p class="text-xs text-slate-600">จัดเมนูเป็น <b>4 กลุ่ม</b> ตาม <b>ความนิยม (จำนวนขาย)</b> และ <b>กำไรต่อจาน</b> พร้อมบอกว่าควรทำอะไรกับแต่ละกลุ่ม · ดูตารางเต็มและกราฟ BCG ด้านล่างได้</p>
+      <h2 class="text-base font-bold text-slate-800 mb-1">วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menu-2" title="คำอธิบาย">?</button></h2><template id="hlp-menu-2" data-title="15 อันดับรายได้สูงสุด รายได้ &amp; กำไรขั้นต้น เรียง: รายได้ กำไร% จำนวนขาย # SKU เมนู หมวด จำนวนขาย รายได้ ต้นทุน/จาน กำไร % วิเคราะห์เมนู"><p>จัดเมนูเป็น <b>4 กลุ่ม</b> ตาม <b>ความนิยม (จำนวนขาย)</b> และ <b>กำไรต่อจาน</b> พร้อมบอกว่าควรทำอะไรกับแต่ละกลุ่ม · ดูตารางเต็มและกราฟ BCG ด้านล่างได้</p></template>
     </div>
 
     <p class="text-xs mb-3" style="color:var(--text-muted)">ต้องการกรองตามหมวดเมนู? <button onclick="switchTab('engineering', true)" class="underline" style="color:var(--accent);background:none;border:0;padding:0">เปิดแบบกรองหมวด →</button></p>

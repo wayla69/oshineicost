@@ -405,7 +405,7 @@ async function _opPostSourcing(rows, label) {
 function _opBulkGuard() {
   if (document.getElementById('opFamily')?.checked) {
     uiNotice('โหมด “รวมชื่อคล้ายกัน” รวมหลายรหัสเข้าเป็นบรรทัดเดียว จึงไม่มีรหัสให้บันทึก\n'
-        + 'กรุณาปิดโหมดนี้ก่อนเลือกเป็นชุด');
+        + 'ปิดโหมดนี้ก่อนจึงเลือกเป็นชุดได้');
     return null;
   }
   const by = new Map();
@@ -448,7 +448,7 @@ async function opKeepTopN() {
   const typ = document.getElementById('opType')?.value || '';
   if (inc !== 'all' || q || typ) {
     uiNotice('อันดับต้องคิดจากวัตถุดิบทั้งหมด\n'
-        + 'กรุณาตั้ง “ทุกรายการ” และล้างตัวกรองประเภท/คำค้นก่อน');
+        + 'ตั้งเป็น “ทุกรายการ” และล้างตัวกรองประเภทกับคำค้นก่อน');
     return;
   }
   const n = parseInt(document.getElementById('opTopN')?.value, 10);
@@ -640,7 +640,7 @@ async function opIssueCycle() {
   const branch = document.getElementById('opBranch')?.value || '';
   const st = document.getElementById('opCycleStatus');
   const scope = branch || 'ทุกสาขา';
-  if (!await uiConfirm(`ออกรอบสั่งสำหรับ ${scope}?\n\nระบบจะบันทึกตัวเลขที่แนะนำ ณ ตอนนี้ไว้เป็นหลักฐาน `
+  if (!await uiConfirm(`ออกรอบสั่งสำหรับ ${scope}?\n\nจะบันทึกตัวเลขที่แนะนำ ณ ตอนนี้ไว้เป็นหลักฐาน `
              + `เพื่อใช้เทียบกับที่สาขาสั่งจริง (ออกซ้ำรอบเดิม = เขียนทับของเดิม)`)) return;
   st.textContent = 'กำลังออกรอบสั่ง…';
   try {
@@ -663,7 +663,7 @@ async function opIssueCycle() {
 async function opLoadCycles() {
   const branch = document.getElementById('opBranch')?.value || '';
   const tol = document.getElementById('opTolerance')?.value || '20';
-  const lbl = document.getElementById('opTolLabel'); if (lbl) lbl.textContent = tol;
+  const lbl = tplById('opTolLabel'); if (lbl) lbl.textContent = tol;
   let d;
   try {
     d = await api(`${API}/api/ingredients/order-cycles?limit=40`
