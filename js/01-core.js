@@ -2462,8 +2462,10 @@ function _phoneChartTune(config, ctx) {
   if (!['bar', 'line', 'scatter', 'bubble'].includes(type)) return;
   const horizontal = o.indexAxis === 'y';
   o.scales = o.scales || {};
-  if (!o.scales.x) o.scales.x = {};
-  if (!o.scales.y) o.scales.y = {};
+  // a default x / y axis only for a chart that names none of its own: a chart with yRev + yCust has no 'y', and the empty one added here
+  // would draw its own 0 / 0.5 / 1.0 ticks beside the plot (LK)
+  if (!Object.keys(o.scales).some(k => k.startsWith('x'))) o.scales.x = {};
+  if (!Object.keys(o.scales).some(k => k.startsWith('y'))) o.scales.y = {};
   Object.entries(o.scales).forEach(([k, sc]) => {
     if (!sc || sc.display === false) return;
     const isX = k.startsWith('x'), isY = k.startsWith('y');

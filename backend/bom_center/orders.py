@@ -643,7 +643,7 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     PR-V: `expected_sales` (฿ ex VAT for the cover period, None = the cycle's order's own `buffer_sales`) is used only by a
     new branch (fewer than 14 trading days of sales) that has a reference branch set (per_sales.REF_KEY): its rows are then
     the reference branch's usage per ฿100,000 × this figure, and `ref_mode` says so (`needs_sales` while it is missing)."""
-    from .forecast import _now_for, cover_for_delivery, cutoff_for, day_th, next_deliveries, suggest
+    from .forecast import _now_for, cover_for_delivery, cutoff_for, day_th, next_deliveries
     from .stock import count_units
     from . import issues as _is
     cyc_d, dlv, _cf, _ct = cover_for_delivery(con, branch_id, rnd, delivery)
@@ -665,9 +665,9 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     from . import per_sales as _ps
     if expected_sales is None:
         expected_sales = (o0 or {}).get("buffer_sales")
-    with _fc._plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
-        s = suggest(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv,
-                    ref_branch=_ps.resolved_reference(con, branch_id), expected_sales=expected_sales)
+    # the CPU-bound part, behind the plan cache (forecast.suggest_cached) and inside the plan slots on a miss
+    s = _fc.suggest_cached(con, branch_id, rnd, cyc_d, as_of=as_of, stock=stock, uplift_pct=pct, delivery=dlv,
+                           ref_branch=_ps.resolved_reference(con, branch_id), expected_sales=expected_sales)
     if s.get("ref_mode"):                  # a new branch: the expected sales ARE the expectation, no % on top
         pct = 0.0
     s["expected_sales"] = expected_sales
@@ -745,6 +745,16 @@ def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: s
     behind the usage history); the load test of 2026-10-09 (docs/LOAD_TEST_30_BRANCHES.md) showed that
     computing it AFTER a first write held the SQLite write lock for seconds and answered "database is
     locked" to about 15 branches saving at once. The write transaction now begins inside `save()`."""
+    p = prepare_flow(con, branch_id, rnd, delivery, buffer=buffer, now=now, as_of=as_of)
+    return save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,
+                ack_late=ack_late, delivery=delivery.isoformat(), now=now)
+
+
+def prepare_flow(con, branch_id: int, rnd: str, delivery: date, buffer: dict = None, now: datetime = None,
+                 as_of: date = None) -> dict:
+    """The read-only half of save_flow: the status guard and the plan. A caller that serialises its writers (the router's write gate)
+    runs this OUTSIDE the gate - the plan is the CPU-heavy part and must not wait for, or make others wait for, the write lock -
+    and then calls save() with the result."""
     from .forecast import cover_for_delivery
     cyc = cover_for_delivery(con, branch_id, rnd, delivery)[0].isoformat()
     oid = find(con, branch_id, rnd, cyc)
@@ -753,7 +763,5 @@ def save_flow(con, branch_id: int, rnd: str, delivery: date, lines: list, who: s
         raise ValueError(f"ใบสั่งซื้อนี้มีสถานะ “{STATUS_TH.get(o['status'])}” จึงแก้ไขไม่ได้"
                          + (" · กด “เปิดแก้ไข” ก่อน" if o["status"] == "submitted" else ""))
     pct = None if buffer is None else (buffer or {}).get("pct")
-    p = plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now,
-             expected_sales=_sales_of(buffer))
-    return save(con, branch_id, rnd, p["order_day"], p, lines, who, submit=submit, note=note, buffer=buffer,
-                ack_late=ack_late, delivery=delivery.isoformat(), now=now)
+    return plan(con, branch_id, rnd, delivery, as_of=as_of, buffer_pct=pct, now=now,
+                expected_sales=_sales_of(buffer))

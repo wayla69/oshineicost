@@ -415,12 +415,27 @@ DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES
 
 
-def ensure(con, commit: bool = False) -> None:
-    """Create every bom-center table and index that is missing. Idempotent.
+# LK (2026-10): ensure() ran ~50 CREATE TABLE IF NOT EXISTS and a PRAGMA table_info per migration on EVERY request of the module
+# (about a quarter of the Python time of a request at the cutoff hour). The DDL and the column migrations only need to run once per
+# connection: they are skipped while the file's schema_version is the one this connection saw right after the last full run (a
+# rolled-back CREATE, an ALTER by anyone, a swapped file all change it). The data checks below always run. An in-memory database is
+# never skipped.
+_ENSURED: dict = {}
 
-    Does not commit unless asked: callers that build a release inside one
-    transaction (snapshot_v0's dry-run rolls everything back) must not have
-    their half-written work committed under them by a CREATE TABLE."""
+
+def _ensured_key(con):
+    try:
+        path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
+        if not path:
+            return None, None
+        import sys
+        gen = getattr(sys.modules.get("core"), "_db_gen", 0)
+        return (path, id(con), gen), con.execute("PRAGMA schema_version").fetchone()[0]
+    except Exception:
+        return None, None
+
+
+def _ensure_schema(con) -> None:
     from .dated import DDL as DATED_DDL
     from .codes import DDL as CODES_DDL
     from .central import DDL as CENTRAL_DDL, LINK_DDL
@@ -433,6 +448,19 @@ def ensure(con, commit: bool = False) -> None:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in have:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+
+
+def ensure(con, commit: bool = False) -> None:
+    """Create every bom-center table and index that is missing. Idempotent.
+
+    Does not commit unless asked: callers that build a release inside one
+    transaction (snapshot_v0's dry-run rolls everything back) must not have
+    their half-written work committed under them by a CREATE TABLE."""
+    key, sv = _ensured_key(con)
+    if key is None or _ENSURED.get(key) != sv:
+        _ensure_schema(con)
+        if key is not None:
+            _ENSURED[key] = con.execute("PRAGMA schema_version").fetchone()[0]
     # PR-U: every rule written before the ladder is a level-1 exact step on the base unit (idempotent; reads first so a
     # plain GET never opens a write transaction when there is nothing to fill)
     if con.execute("SELECT 1 FROM bc_unit_rule WHERE qty_in_parent IS NULL LIMIT 1").fetchone():

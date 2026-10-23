@@ -54,10 +54,18 @@ def sales_table(con) -> str:
 
 
 def sales_by_day(con, branch_id: int, d0, d1) -> dict:
-    """{iso day: Σ subtotal_ex_vat} of the branch's sales between d0 and d1 (inclusive) — VAT is never in it."""
-    return {day: float(v or 0.0) for day, v in con.execute(
+    """{iso day: Σ subtotal_ex_vat} of the branch's sales between d0 and d1 (inclusive) — VAT is never in it.
+
+    LK: kept for the plan cache's TTL (forecast.memo_get: same generations; off in the tests) - a plan reads the same window for the
+    branch and again for every company branch behind the benchmark. The caller gets its own dict."""
+    key, hit = FC.memo_get(con, branch_id, "sales_day", (_iso(d0), _iso(d1)))
+    if hit is not None:
+        return dict(hit)
+    out = {day: float(v or 0.0) for day, v in con.execute(
         f"SELECT day, SUM(COALESCE(subtotal_ex_vat, 0)) FROM {sales_table(con)} WHERE branch_id=? AND day BETWEEN ? AND ?"
         " GROUP BY day", (branch_id, _iso(d0), _iso(d1)))}
+    FC.memo_put(key, dict(out))
+    return out
 
 
 def align_sales(sales_day: dict, days, stats) -> dict:
@@ -286,26 +294,42 @@ def set_reference(con, who: str, branch_id: int, ref_id, mode: str = None) -> di
 
 def reference_basis(con, ref_id: int, month: str, weeks: int = FC.HISTORY_WEEKS, cover: list = None, factor: float = 1.0) -> dict:
     """What a new branch borrows from its reference branch: the ratio over the reference's last `weeks` weeks (its own
-    history window, same rule as suggest) and, for the cover days, the reference's "ปกติ" sales as a hint."""
+    history window, same rule as suggest) and, for the cover days, the reference's "ปกติ" sales as a hint.
+
+    LK: the ratio (the costly part: the usage walk and the weekly swing of every item) does not depend on the cover days or the
+    factor, and thirty branches planned from the same benchmark ask for the same twelve company branches again and again - so it is
+    kept per reference branch (forecast.memo_get: dropped with that branch's slips and with every generation). Only the hint is
+    computed per call. The dicts handed out are shared and read-only."""
+    key, hit = FC.memo_get(con, ref_id, "ref_core", (month, weeks))
+    if hit is None:
+        hit = _reference_core(con, ref_id, month, weeks)
+        FC.memo_put(key, hit)
+    out, sales_day, days, as_of = hit
+    out = dict(out)
+    if cover and days:
+        out["sales_normal"] = round(normal_from(sales_day, days, as_of, cover, factor)["total"], 2)
+    return out
+
+
+def _reference_core(con, ref_id: int, month: str, weeks: int):
+    """(basis without the hint, the reference's sales by day, its usage days, the last day of its history)."""
     last = con.execute(f"SELECT MAX(day) FROM {sales_table(con)} WHERE branch_id=?", (ref_id,)).fetchone()[0]
     name = (con.execute("SELECT name FROM branches WHERE branch_id=?", (ref_id,)).fetchone() or [None])[0]
     out = {"branch_id": ref_id, "name": name, "items": {}, "use": {}, "stats": {}, "sales": 0.0, "ok": False,
            "sales_normal": None}
     if not last:
-        return out
+        return out, {}, [], None
     as_of = _d(last)
     start = FC.era_start(as_of - timedelta(days=7 * weeks - 1), as_of)
     use, days, stats = FC.demand_source(con, ref_id, start, as_of, month)             # PR-S3: recipes or confirmed slips
     if stats.get("source") == "none":                       # a branch without enough slips is no reference
         out.update(stats=stats, history_from=start.isoformat(), history_to=as_of.isoformat(), trading_days=len(days))
-        return out
+        return out, {}, [], as_of
     sales_day = sales_by_day(con, ref_id, start, as_of)
     r = ratio_from(use, align_sales(sales_day, days, stats), start, as_of)
     out.update(items=r["items"], use=use, stats=stats, sales=r["sales"], ok=bool(r["items"]), history_from=start.isoformat(),
                history_to=as_of.isoformat(), trading_days=len(days))
-    if cover and days:
-        out["sales_normal"] = round(normal_from(sales_day, days, as_of, cover, factor)["total"], 2)
-    return out
+    return out, sales_day, days, as_of
 
 
 def benchmark_basis(con, branch_id: int, month: str, weeks: int = FC.HISTORY_WEEKS, cover: list = None, factor: float = 1.0) -> dict:

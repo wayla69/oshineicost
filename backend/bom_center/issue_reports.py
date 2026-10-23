@@ -490,7 +490,18 @@ def _company_hist(con, lo: date, hi: date, cache: dict) -> dict:
     """_hist of every company branch (forecast.company_branch_ids), kept in `cache` for the duration of one report call."""
     key = (lo.isoformat(), hi.isoformat())
     if key not in cache:
+<<<<<<< HEAD
         cache[key] = _hist(con, FC.median_branch_ids(con), lo, hi)
+=======
+        ids = FC.company_branch_ids(con)
+        # LK: also kept between calls (the daily report asked every company branch's slips again on each call): per branch set and
+        # window, valid while none of those branches' slips changed (forecast.clear_slip_cache bumps the written branch's generation)
+        mkey, hit = FC.memo_get(con, 0, "company_hist", (key, tuple(ids), tuple(FC._slip_gens[i] for i in ids)))
+        if hit is None:
+            hit = _hist(con, ids, lo, hi)
+            FC.memo_put(mkey, hit)
+        cache[key] = hit
+>>>>>>> origin/main
     return cache[key]
 
 
