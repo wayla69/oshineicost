@@ -30,7 +30,7 @@ TXT = {
     "other_branch": "ไฟล์นี้เป็นของสาขาอื่น (รหัสสาขา {file}) จึงนำเข้าที่สาขานี้ไม่ได้",
     "days_range": "จำนวนวันต้องอยู่ระหว่าง 1 ถึง {max}",
     "note_tail": "กรอกเฉพาะช่องเบิกใช้ ของเสีย และสาเหตุ · ห้ามแก้รหัส",
-    "slip_locked": "ใบตัดเบิกวันที่ {day} ยืนยันแล้ว หากต้องแก้ไข แจ้งประสานงานขาย",
+    "slip_locked": "ใบตัดเบิกวันที่ {day} ส่งแล้ว หากต้องแก้ไข แจ้งประสานงานขาย",
     "slip_note": "นำเข้าจากไฟล์ {name}",
     "bad_date": "วันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)",
     "dup_code": "{name}: รหัสซ้ำในไฟล์",
@@ -41,12 +41,12 @@ TXT = {
     "ord_unknown": "ไม่พบรหัส {code} ในรายการสั่งของรอบนี้",
     "ord_errors": "ไฟล์มี {n} แถวที่ต้องแก้ไข: {first}",          # also the slip and the receipt
     "ord_none": "ไม่พบจำนวนที่สั่งในไฟล์",
-    "rcv_note_tail": "กรอกเฉพาะช่องรับจริง สาเหตุส่วนต่าง และหมายเหตุ · ห้ามแก้รหัส",
+    "rcv_note_tail": "กรอกเฉพาะช่องรับจริง สาเหตุที่ขาด และหมายเหตุ · ห้ามแก้รหัส",
     "rcv_other_order": "ไฟล์นี้เป็นของใบสั่งซื้อเลขที่ {file} ไม่ตรงกับใบที่เลือก ({want})",
     "rcv_unknown": "ไม่พบรหัส {code} ในใบสั่งซื้อนี้",
-    "rcv_state": "รับสินค้าได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {st})",
+    "rcv_state": "รับของได้เมื่อส่งใบสั่งซื้อแล้วเท่านั้น (สถานะปัจจุบัน: {st})",
     "rcv_weight_note": "รายการที่ชั่งน้ำหนักและนับจำนวนตัว (เช่น ปลาทั้งตัว) รับในแอป",
-    "rcv_weight": "{name}: รับรายการนี้ในแอป (ต้องชั่งน้ำหนักและนับจำนวน{unit}) จึงนำเข้าใบรับสินค้านี้จากไฟล์ไม่ได้",
+    "rcv_weight": "{name}: รับรายการนี้ในแอป (ต้องชั่งน้ำหนักและนับจำนวน{unit}) จึงนำเข้าใบรับของนี้จากไฟล์ไม่ได้",
     "no_order": "ไม่พบใบสั่งซื้อของสาขานี้",
 }
 
@@ -57,10 +57,10 @@ SLIP_HEAD_EDIT = ["เบิกใช้", "ของเสีย", "สาเ�
 MAX_DAYS = 7
 ORDER_SHEET = "ใบสั่งซื้อ"
 ORDER_REASONS_SHEET = "เหตุผลการสั่ง"
-ORDER_HEAD = ["รหัส", "วัตถุดิบ", "หน่วย", "คงเหลือตามระบบ", "ยอดแนะนำ", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
-RECEIVE_SHEET = "รับสินค้า"
-RECEIVE_REASONS_SHEET = "สาเหตุส่วนต่าง"
-RECEIVE_HEAD = ["รหัส", "วัตถุดิบ", "หน่วย", "ส่งจริง", "รับจริง", "สาเหตุส่วนต่าง", "หมายเหตุ"]
+ORDER_HEAD = ["รหัส", "วัตถุดิบ", "หน่วย", "ของที่ควรเหลือ (ตามระบบ)", "จำนวนที่ควรสั่ง", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
+RECEIVE_SHEET = "รับของ"
+RECEIVE_REASONS_SHEET = "สาเหตุที่ขาด"
+RECEIVE_HEAD = ["รหัส", "วัตถุดิบ", "หน่วย", "ส่งจริง", "รับจริง", "สาเหตุที่ขาด", "หมายเหตุ"]
 
 
 # ── workbook pieces ──────────────────────────────────────────────────────────
@@ -151,7 +151,12 @@ def _table(raw: bytes, sheet: str) -> tuple:
     return note, head, [(i + 1, r) for i, r in enumerate(grid) if i > hi]
 
 
+_OLD_HEAD = {"สาเหตุที่ขาด": "สาเหตุส่วนต่าง"}          # the header a file downloaded before the wording changed still carries
+
+
 def _cell(head: list, row: list, name: str):
+    if name not in head and _OLD_HEAD.get(name) in head:
+        name = _OLD_HEAD[name]
     return row[head.index(name)] if name in head and head.index(name) < len(row) else None
 
 
@@ -227,7 +232,7 @@ def slip_template(con, branch_id: int, start: date, days: int = 1, now: datetime
     name = _bname(con, branch_id)
     span = dates[0].isoformat() + (f" ถึง {dates[-1].isoformat()}" if days > 1 else "")
     note = f"ใบตัดเบิก สาขา{name} · รหัสสาขา {branch_id} · วันที่ {span} · {TXT['note_tail']}"
-    head = SLIP_HEAD_FIX + [f"ปกติ ({HISTORY_WEEKS} สัปดาห์)", "คงเหลือตามระบบ"] + SLIP_HEAD_EDIT
+    head = SLIP_HEAD_FIX + [f"ปกติ ({HISTORY_WEEKS} สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)"] + SLIP_HEAD_EDIT
     wb, ws = _make(SLIP_SHEET, note, head, [12, 14, 44, 16, 16, 16, 12, 12, 30, 24])
     edit = {6, 7, 8, 9}
     for d in dates:
@@ -533,7 +538,7 @@ def receive_template(con, branch_id: int, order_id: int):
     _rcv_state(o)
     name = _bname(con, branch_id)
     by_weight = _by_weight(o)
-    note = (f"รับสินค้า ใบสั่งซื้อเลขที่ {order_id} · สาขา{name} · รหัสสาขา {branch_id} · {TXT['rcv_note_tail']}"
+    note = (f"รับของ ใบสั่งซื้อเลขที่ {order_id} · สาขา{name} · รหัสสาขา {branch_id} · {TXT['rcv_note_tail']}"
             + (f" · {TXT['rcv_weight_note']}" if by_weight else ""))
     wb, ws = _make(RECEIVE_SHEET, note, RECEIVE_HEAD, [14, 44, 16, 14, 14, 40, 24])
     for ln in o["lines"]:
@@ -543,14 +548,14 @@ def receive_template(con, branch_id: int, order_id: int):
         f = _rcv_factor(ln)
         _add(ws, [ln["code"], ln.get("short_name") or ln["name"], _rcv_unit(ln), _q(sent / f), _q(sent / f), None, None],
              set() if ln in by_weight else {4, 5, 6})                  # a line received by weight is received in the app
-    _finish(wb, ws, RECEIVE_REASONS_SHEET, [(c, t) for c, t in _cl.REASONS], "F", "สาเหตุส่วนต่าง")
+    _finish(wb, ws, RECEIVE_REASONS_SHEET, [(c, t) for c, t in _cl.REASONS], "F", "สาเหตุที่ขาด")
     return wb, name
 
 
 def read_receive_file(raw: bytes) -> dict:
     note, head, body = _table(raw, RECEIVE_SHEET)
-    if not note.startswith("รับสินค้า "):
-        raise ValueError(TXT["wrong_kind"].format(what="รับสินค้า"))
+    if not note.startswith(("รับของ ", "รับสินค้า ")):         # a file downloaded before the wording changed is read too
+        raise ValueError(TXT["wrong_kind"].format(what="รับของ"))
     m = re.search(r"ใบสั่งซื้อเลขที่\s*(\d+)", note)
     pairs = [(c, t) for c, t in _cl.REASONS]
     rows, errs = [], []
@@ -559,7 +564,7 @@ def read_receive_file(raw: bytes) -> dict:
         if not code:
             continue
         try:
-            rs = _reason_code(_cell(head, r, "สาเหตุส่วนต่าง"), pairs)
+            rs = _reason_code(_cell(head, r, "สาเหตุที่ขาด"), pairs)
         except KeyError as e:
             errs.append({"row": rno, "code": "reason", "message": TXT["bad_reason"].format(name=code, value=e.args[0])})
             continue

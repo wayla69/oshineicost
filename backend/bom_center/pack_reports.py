@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""bom_center.pack_reports — "ขนาดบรรจุไม่ตรง" (PR-U2).
+"""bom_center.pack_reports — "ขนาดแพ็คไม่ตรง" (PR-U2).
 
 While receiving, a branch sees a pack that is not the size the register says ("1 กล่อง = 10 แพ็ค" but the box holds 12).
 It reports the real size from the receive form. The report
@@ -129,7 +129,7 @@ def submit(con, branch_id: int, order_id: int, code: str, unit: str, qty, parent
         (branch_id, order_id, code, u, q, par, cur_q, cur_p, note, who, now()))
     audit(con, who, "unit_pack_report", "bc_pack_report", str(cur.lastrowid), None,
           {"order_id": order_id, "code": code, "unit": u, "qty": q, "parent": par, "current": [cur_q, cur_p]})
-    return {"report_id": cur.lastrowid, "message": "✓ แจ้งขนาดบรรจุแล้ว ฝ่ายวิเคราะห์จะตรวจและปรับทะเบียน ถ่ายรูปฉลากส่งทางไลน์ด้วย"}
+    return {"report_id": cur.lastrowid, "message": "✓ แจ้งขนาดแพ็คแล้ว ฝ่ายวิเคราะห์จะตรวจและปรับทะเบียน ถ่ายรูปฉลากส่งทางไลน์ด้วย"}
 
 
 def _group_key(r) -> tuple:
@@ -227,7 +227,7 @@ def decide(con, report_ids: list, decision: str, note: str, who: str) -> dict:
 
 def for_orders(con, branch_id: int = None, order_ids=None) -> dict:
     """{order_id: [{ingredient_code, name, unit, text, status, status_th, decision_note}]} — what the branch reads on the
-    receive history ('แจ้งขนาดบรรจุ: ไม่ใช้ — {note}')."""
+    receive history ('แจ้งขนาดแพ็ค: ไม่ใช้ — {note}')."""
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     sql = ("SELECT order_id, ingredient_code, unit, reported_qty, reported_parent, status, decision_note, note, report_id"
            " FROM bc_pack_report WHERE order_id IS NOT NULL")

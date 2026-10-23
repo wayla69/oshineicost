@@ -255,13 +255,13 @@ function _frcIngredients(i) {
   if (stock) {
     // F5: no recipes in stock mode - the gap is the system stock against the month-end count
     period = lp
-      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'บันทึกรับของครบแล้ว' : 'ยังไม่ได้แจ้งว่าบันทึกรับของครบ')
         + _frcRow('ส่วนต่างการใช้วัตถุดิบ', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
             lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'นับได้มากกว่าระบบ' : lp.diff_pct < 0 ? 'นับได้น้อยกว่าระบบ' : 'ตรงกับระบบ'))
-      : _frcRow('ส่วนต่างการใช้วัตถุดิบ', _FRC_NA, 'ยังไม่มีผลตรวจนับสิ้นเดือน');
+      : _frcRow('ส่วนต่างการใช้วัตถุดิบ', _FRC_NA, 'ยังไม่มีผลนับสิ้นเดือน');
   } else {
     period = lp
-      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'ยืนยันรับสินค้าครบแล้ว' : 'ยังไม่ยืนยันรับสินค้าครบ')
+      ? _frcRow('รอบตรวจนับล่าสุด', `${_frcDay(lp.begin)} – ${_frcDay(lp.end)}`, lp.reconciled ? 'บันทึกรับของครบแล้ว' : 'ยังไม่ได้แจ้งว่าบันทึกรับของครบ')
         + _frcRow('ส่วนต่างการใช้วัตถุดิบเทียบสูตร', lp.diff_pct == null ? _FRC_NA : `${lp.diff_pct > 0 ? '+' : ''}${_frcPct(lp.diff_pct)} (${lp.diff_value > 0 ? '+' : ''}${_frcBaht(lp.diff_value)})`,
             lp.diff_pct == null ? '' : (lp.diff_pct > 0 ? 'ใช้เกินสูตร' : lp.diff_pct < 0 ? 'ใช้น้อยกว่าสูตร' : 'ตรงสูตร'))
       : _frcRow('รอบตรวจนับล่าสุด', _FRC_NA, 'ยังไม่มีรอบตรวจนับที่เปรียบเทียบได้');
@@ -276,12 +276,12 @@ function _frcIngredients(i) {
 
 function _frcDiscipline(d) {
   if (!d) return '';
-  if (!d.module_active) return _frcSection('วินัยการทำงานของสาขา', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED}">สาขายังไม่ได้เริ่มใช้ระบบตัดเบิกและสั่งสินค้า</div></div>`);
+  if (!d.module_active) return _frcSection('วินัยการทำงานของสาขา', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED}">สาขายังไม่ได้เริ่มใช้ระบบตัดเบิกและสั่งของ</div></div>`);
   return _frcSection('วินัยการทำงานของสาขา', `<div class="ms-card">`
-    + _frcRow('ใบตัดเบิกที่ยืนยันแล้ว', _frcPct(d.slip_coverage_pct, 0), 'ต่อจำนวนวันที่เปิดขาย')
-    + _frcRow('ใบตัดเบิกที่ยืนยันตรงวัน', _frcPct(d.slip_on_time_pct, 0), 'ต่อจำนวนใบที่ยืนยันแล้ว')
+    + _frcRow('ใบตัดเบิกที่ส่งแล้ว', _frcPct(d.slip_coverage_pct, 0), 'ต่อจำนวนวันที่เปิดขาย')
+    + _frcRow('ใบตัดเบิกที่ส่งตรงวัน', _frcPct(d.slip_on_time_pct, 0), 'ต่อจำนวนใบที่ส่งแล้ว')
     + _frcRow('ใบสั่งซื้อที่ส่งทันเวลาตัดรอบ', _frcPct(d.orders_on_time_pct, 0))
-    + _frcRow('การบันทึกรับสินค้าทันกำหนด', _frcPct(d.receipts_on_time, 0), 'ภายในวันถัดจากวันส่ง')
+    + _frcRow('การบันทึกรับของทันกำหนด', _frcPct(d.receipts_on_time, 0), 'ภายในวันถัดจากวันส่ง')
     + _frcRow('การแจ้งเคลมสินค้าในเดือนนี้', d.claims_month == null ? _FRC_NA : `${fmtN(d.claims_month)} ครั้ง`)
     + `</div>`);
 }
@@ -526,10 +526,10 @@ async function frcLoadSupply(gen) {
 function _frcSupply(d) {
   if (!d) return '';
   const title = 'วัตถุดิบจากส่วนกลาง';
-  const help = '<p>ยอดสั่ง = มูลค่าที่สาขาสั่งในแต่ละรอบ · ยอดที่คลังจัดส่ง = มูลค่าที่คลังส่งจริง คิดแบบเดียวกับหน้าสั่งสินค้าของสาขา นับรอบที่วันส่งอยู่ในเดือนนี้ ไม่นับใบที่ยังเป็นร่างหรือยกเลิก</p>'
+  const help = '<p>ยอดสั่ง = มูลค่าที่สาขาสั่งในแต่ละรอบ · ยอดที่คลังจัดส่ง = มูลค่าที่คลังส่งจริง คิดแบบเดียวกับหน้าสั่งของที่สาขา นับรอบที่วันส่งอยู่ในเดือนนี้ ไม่นับใบที่ยังเป็นร่างหรือยกเลิก</p>'
     + '<p>ยอดซื้อเทียบยอดขาย = ยอดที่คลังจัดส่ง ÷ ยอดขายไม่รวม VAT ของเดือนเดียวกัน ระหว่างเดือนนับถึงวันล่าสุดที่ปิดการขาย และเทียบกับทั้งเดือนของเดือนก่อน</p>'
-    + '<p>ส่งใบสั่งซื้อหลังเวลาตัดรอบมีค่าปรับ หน้านี้แสดงเฉพาะจำนวนใบ · วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า</p>';
-  const helpStock = help.replace('วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า', 'วัตถุดิบที่นับได้น้อยกว่าระบบมาจากรอบตรวจนับสิ้นเดือนล่าสุด เรียงตามมูลค่า');
+    + '<p>ส่งใบสั่งซื้อหลังเวลาส่งสุดท้ายมีค่าปรับ หน้านี้แสดงเฉพาะจำนวนใบ · วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า</p>';
+  const helpStock = help.replace('วัตถุดิบที่ใช้เกินสูตรมาจากรอบตรวจนับล่าสุด เรียงตามมูลค่า', 'วัตถุดิบที่นับได้น้อยกว่าระบบมาจากรอบนับของสิ้นเดือนล่าสุด เรียงตามมูลค่า');
   if (!d.started) {
     return _frcCard(title, 'supply', help, '', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(d.not_started_th || 'สาขายังไม่เริ่มใช้ระบบสั่งวัตถุดิบ')}</div></div>`);
   }
@@ -543,13 +543,13 @@ function _frcSupply(d) {
     + msKpiTile('ยอดสั่งจากส่วนกลาง', _frcBaht(P.ordered), '#4a70b0', `${fmtN(P.rounds || 0)} รอบส่ง`)
     + msKpiTile('ยอดที่คลังจัดส่ง', _frcBaht(P.delivered), '#0891b2', `จัดส่งแล้ว ${fmtN(P.rounds_delivered || 0)} รอบ`)
     + msKpiTile('ยอดซื้อเทียบยอดขาย' + (upto ? ` (${esc(upto)})` : ''), _frcPct(P.pct), '#7a66b8', ratioSub)
-    + msKpiTile('ส่งหลังเวลาตัดรอบ', `${fmtN(L.count || 0)} ใบ`, L.count ? '#f59e0b' : '#10b981', L.count ? '(มีค่าปรับ)' : 'ทันเวลาทุกใบ')
+    + msKpiTile('ส่งหลังเวลาส่งสุดท้าย', `${fmtN(L.count || 0)} ใบ`, L.count ? '#f59e0b' : '#10b981', L.count ? '(มีค่าปรับ)' : 'ทันเวลาทุกใบ')
     + `</div>`;
   const rounds = d.rounds || [];
   const tbl = rounds.length ? `<div class="frc-sub2">รอบส่งของเดือนนี้</div><div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>รอบ · สถานะ</th>`
     + `<th class="n">สั่ง (฿)</th><th class="n">จัดส่ง (฿)</th></tr></thead><tbody>`
     + rounds.map(r => `<tr><td>${esc(r.round_th)}<br><span class="frc-dow">${esc(r.status_th || '')}</span>`
-      + `${r.late ? ' <span class="frc-dow" style="color:var(--amber-ink)">· ส่งหลังเวลาตัดรอบ</span>' : ''}</td>`
+      + `${r.late ? ' <span class="frc-dow" style="color:var(--amber-ink)">· ส่งหลังเวลาส่งสุดท้าย</span>' : ''}</td>`
       + `<td class="n">${r.ordered == null ? _FRC_NA : fmtN(r.ordered)}</td><td class="n">${r.delivered == null ? _FRC_NA : fmtN(r.delivered)}</td></tr>`).join('')
     + `</tbody></table></div>`
     : `<div class="ms-card" style="margin-top:10px"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีรอบส่งในเดือนนี้</div></div>`;
@@ -633,7 +633,7 @@ function _fmCtxText(c) {
 function _fmGuessTopic(line) {
   const t = String(line || '');
   if (/ส่วนลด|ยกเลิก|เงินสด|ใบตัดเบิก|ควบคุม/.test(t)) return 'controls';
-  if (/ใบสั่งซื้อ|เคลม|รับสินค้า|จัดส่ง|ตัดรอบ/.test(t)) return 'orders';
+  if (/ใบสั่งซื้อ|เคลม|รับสินค้า|รับของ|จัดส่ง|ตัดรอบ/.test(t)) return 'orders';
   if (/ต้นทุน|วัตถุดิบ|กำไร|ของเสีย|ยอดซื้อ/.test(t)) return 'cost';
   if (/ยอดขาย|ลูกค้า|เป้า/.test(t)) return 'sales';
   return 'other';

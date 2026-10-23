@@ -84,7 +84,7 @@ def test_the_branch_morning_push_says_what_is_open_and_opens_หน้างา�
     b = PL.branch_accounts(c)[0]
     p = RM.branch_morning(c, b, today=MON, now=datetime(2026, 10, 5, 8, 0))
     assert p["title"] == "อุดรธานี · งานวัตถุดิบและใบสั่งซื้อวันนี้"
-    assert "ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 ภายในวันนี้ 13:15" in p["body"]
+    assert "ส่งใบสั่งซื้อรอบส่งของ วันพุธ 7/10 ภายในวันนี้ 13:15" in p["body"]
     assert p["url"] == "/?go=supply&tab=supplyhome" and p["tag"] == RM.SUPPLY_TAG
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'submitted')")
     assert RM.branch_morning(c, b, today=MON, now=datetime(2026, 10, 5, 8, 0)) is None      # sent already: nothing is open
@@ -96,7 +96,7 @@ def test_the_pre_cutoff_push_counts_the_time_left(udon):  # noqa: F811
     _acct(c, "br_udon", "อุดรธานี")
     b = PL.branch_accounts(c)[0]
     p = RM.branch_precutoff(c, b, today=MON, now=datetime(2026, 10, 5, 11, 1))
-    assert p["body"] == "ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 ภายในวันนี้ 13:15 (อีก 2 ชม.)"
+    assert p["body"] == "ส่งใบสั่งซื้อรอบส่งของ วันพุธ 7/10 ภายในวันนี้ 13:15 (อีก 2 ชม.)"
     assert p["url"] == "/?go=supply&tab=branchstock&pane=order"
     assert "อีก 1 ชม." in RM.branch_precutoff(c, b, today=MON, now=datetime(2026, 10, 5, 12, 0))["body"]
     assert "อีก 20 นาที" in RM.branch_precutoff(c, b, today=MON, now=datetime(2026, 10, 5, 12, 55))["body"]
@@ -111,7 +111,7 @@ def test_the_cutoff_push_names_the_branches_that_missed_it(udon):  # noqa: F811
     _acct(c, "br_udon", "อุดรธานี")
     rec = RM.cutoff(c, today=MON, now=datetime(2026, 10, 5, 13, 20, tzinfo=BKK))
     p = RM.cutoff_payload(rec)
-    assert p["title"] == "ตัดรอบ 13:15 · ยังไม่ส่งใบสั่งซื้อ 1 สาขา" and "อุดรธานี" in p["body"] and "มีค่าปรับ" in p["body"]
+    assert p["title"] == "เวลาส่งสุดท้าย 13:15 · ยังไม่ส่งใบสั่งซื้อ 1 สาขา" and "อุดรธานี" in p["body"] and "มีค่าปรับ" in p["body"]
     assert RM.cutoff_payload({"missed": []}) is None
 
 
@@ -243,7 +243,7 @@ def test_the_pre_cutoff_push_at_eleven(world):
     rec = P.maybe_send_precutoff(now=datetime(2026, 10, 5, 11, 1), send=send)                                      # 11:01: yes
     assert [u for u, _ in log] == ["b3_br_a"], rec                                                                  # only the branch that has not sent
     p = log[0][1]
-    assert p["body"] == "ส่งใบสั่งซื้อรอบส่งวันพุธ 7/10 ภายในวันนี้ 13:15 (อีก 2 ชม.)" and p["url"] == "/?go=supply&tab=branchstock&pane=order"
+    assert p["body"] == "ส่งใบสั่งซื้อรอบส่งของ วันพุธ 7/10 ภายในวันนี้ 13:15 (อีก 2 ชม.)" and p["url"] == "/?go=supply&tab=branchstock&pane=order"
     assert P.maybe_send_precutoff(now=datetime(2026, 10, 5, 11, 2), send=send) is None and len(log) == 1           # a second run: no
     assert P.maybe_send_precutoff(now=datetime(2026, 10, 5, 13, 20), send=send) is None                            # after the cutoff: no
 
@@ -475,7 +475,7 @@ def test_the_branch_screen_asks_for_a_reason_and_sends_it():
     js = _src("js/14-branch.js")
     fn = js[js.index("async function brnRecvDelete"):js.index("// ── receiving an order (S8")]
     assert "uiPrompt(" in fn and "required: true" in fn and "JSON.stringify({ reason })" in fn and "method: 'DELETE'" in fn
-    assert "ยกเลิกใบรับสินค้า" in fn
+    assert "ยกเลิกใบรับของ" in fn
 
 
 def test_the_adoption_pane_and_the_หน้างาน_summary_exist():
@@ -485,7 +485,7 @@ def test_the_adoption_pane_and_the_หน้างาน_summary_exist():
     assert "สาขานำร่อง 4 สาขา'" not in core.split("const SUPPLY_LEGACY_LABEL")[0]          # the หน้างาน entry is gone
     assert 'id="ohb-pane-adoption"' in tab and "\n  adoption: {" in oh and 'id="ohbCancelledReceipts"' in tab      # PR-D6: its help is behind the "?" of the page header
     assert "'adoption'" in oh and "ohbLoadAdoption" in oh and "ohbAdOpen" in oh and "ohbLoadCancelledReceipts" in oh
-    assert "ใบรับสินค้าที่สาขายกเลิก 7 วันล่าสุด" in oh
+    assert "ใบรับของที่สาขายกเลิก 7 วันล่าสุด" in oh
     assert 'id="shmAdoption"' in home and 'id="shmPush"' in home and "รับการแจ้งเตือนบนมือถือ" in home
     assert "shmAdoptionLoad" in shm and "shmPushInit" in shm
     assert "mods: _SUPPLY_CENTRE" in core and re.search(r"pane: 'adoption'.*roles: \['salessupport', 'operation', 'analyst', 'management'\]", core)

@@ -327,7 +327,8 @@ def test_search_finds_pages_by_label_synonym_department_and_cluster(tmp_path):
     assert r[0] == ["คิวใบสั่งซื้อ", "ss", "orderhub|queue"]
     assert _labels(tmp_path, "salessupport", "ใบ สั่ง")[0][2] == "orderhub|queue"
     assert _labels(tmp_path, "salessupport", "PO")[0][2] == "orderhub|queue"                         # a synonym of the registry (PAGE_KEYWORDS)
-    assert _labels(tmp_path, "salessupport", "สั่งของ")[0][2] == "orderhub|queue"
+    r2 = _labels(tmp_path, "salessupport", "สั่งของ")                                                  # PR-PW: สั่งของ is now the branch page's own label, so it comes first; the queue is still found
+    assert r2[0][2] == "branchstock|order" and "orderhub|queue" in [x[2] for x in r2]
     assert _labels(tmp_path, "salessupport", "เคลม")[0][2] == "orderhub|claims"                      # label starts with it
     assert _labels(tmp_path, "salessupport", "คืนของ")[0][2] == "orderhub|claims"                    # synonym
     top = [x[2] for x in _labels(tmp_path, "management", "กำไร")]

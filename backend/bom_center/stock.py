@@ -224,7 +224,7 @@ def big_unit(conv, code: str, unit: str, factor) -> dict:
 def countable(conv, code: str, base, unit) -> bool:
     """PR-U1: can a count of this item be valued? Only when the register gives it a base unit and the unit the branch counts in
     reaches that base unit. An item that cannot is left off the branch's count sheet (and so off the 100% rule): it is the analyst's
-    task "ไม่มีหน่วยฐาน" on หน้างาน, and a branch is never blocked by a gap in the register."""
+    task "ไม่มีหน่วยเล็กสุด" on หน้างาน, and a branch is never blocked by a gap in the register."""
     if not norm(base):
         return False
     return conv.factor(code, unit or base)[0] is not None
@@ -301,7 +301,7 @@ def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
     from .forecast import _abc
     cyc = mode == "cycle"
     if cyc and not cycle_on(con):
-        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ตรวจนับครบทุกรายการ")
+        raise ValueError("การนับเสริมรายสัปดาห์ปิดอยู่ · นับของครบทุกรายการ")
     from .prices import price_for
     bname = _branch_name(con, branch_id)
     last = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (branch_id,)).fetchone()[0]
@@ -386,7 +386,7 @@ def sheet(con, branch_id: int, as_of: date = None, mode: str = "full") -> dict:
 
 
 def uncounted_items(con, branch_id: int, count_id: int) -> list:
-    """Owner decision 2026-10-13: EVERY item of the branch's count sheet must have a value for a count to become ต้นงวด / ปลายงวด
+    """Owner decision 2026-10-13: EVERY item of the branch's count sheet must have a value for a count to become นับครั้งแรก / นับสิ้นเดือน
     (a 0 is a value, a blank is not): [(code, name)] of the items the count `count_id` has no quantity for."""
     have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_stock_count_line WHERE count_id=? AND qty_base IS NOT NULL", (count_id,))}
     return [(it["code"], it["name"]) for z in sheet(con, branch_id)["zones"] for it in z["items"] if it["code"] not in have]
@@ -486,7 +486,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
     BEGIN stock, every later one the END of a period and the BEGIN of the next.
 
-    Owner decision 2026-10-13 ("ปิดงวดสิ้นเดือนต้องนับ 100%"): a count is submitted only when EVERY item of the branch's sheet has a
+    Owner decision 2026-10-13 ("ปิดเดือนต้องนับ 100%"): a count is submitted only when EVERY item of the branch's sheet has a
     quantity (0 counts, blank does not) - no override. `require_all=False` exists for the tests' fixtures only; no endpoint passes it."""
     _branch_name(con, branch_id)
     conv = Converter(con)
@@ -494,7 +494,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     try:
         date.fromisoformat(cdate)
     except ValueError:
-        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise ValueError("วันที่นับของต้องอยู่ในรูปแบบ YYYY-MM-DD")
     dr = draft_of(con, branch_id)
     kind = "end" if last_submitted(con, branch_id) else "begin"
     if dr:
@@ -512,7 +512,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     out = {"count_id": cid, "kind": kind, "lines": n, "status": "draft", "unconverted": bad}
     if submit:
         if not n:
-            raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
+            raise ValueError("ยังไม่มีรายการที่นับของ")
         if require_all:
             miss = uncounted_items(con, branch_id, cid)
             if miss:
@@ -672,7 +672,7 @@ def detail(con, count_id: int) -> dict:
     r = con.execute("SELECT count_id, branch_id, count_date, kind, status, counted_by, submitted_at, note"
                     " FROM bc_stock_count WHERE count_id=?", (count_id,)).fetchone()
     if not r:
-        raise ValueError("ไม่พบผลตรวจนับนี้")
+        raise ValueError("ไม่พบผลนับนี้")
     out = dict(zip(("count_id", "branch_id", "count_date", "kind", "status", "counted_by", "submitted_at", "note"), r))
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     out["lines"] = [{"code": c, "name": names.get(c), "qty": q, "unit": u, "qty_base": qb, "note": nt}
@@ -715,7 +715,7 @@ def set_layout(con, rows: list, who: str) -> int:
             raise ValueError(f"{code}: โซนต้องเป็น {', '.join(sorted(zlabels))}")
         cu = (r.get("count_unit") or "").strip() or None
         if cu and conv.factor(code, cu)[0] is None:
-            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยฐานไม่ได้ · เพิ่มกฎหน่วยก่อน")
+            raise ValueError(f"{code}: ยังแปลง {cu} เป็นหน่วยเล็กสุดไม่ได้ · เพิ่มกฎหน่วยก่อน")
         con.execute("UPDATE bc_ingredient SET storage_zone=?, count_unit=? WHERE code=?", (z, cu, code))
         audit(con, who, "stock_layout", "bc_ingredient", code, None, {"zone": z, "count_unit": cu})
         n += 1
@@ -727,8 +727,8 @@ def set_layout(con, rows: list, who: str) -> int:
 # system stock (system_position) and NEVER closes a period: the owner's decision of 2026-10-13 is that a month-end close is a full count of
 # every item. The partial close of batch 4b (stock.partial_close) is withdrawn; its rows (bc_stock_count.partial = 1, lines with `basis`)
 # remain readable as they were written.
-CLOSE_FULL_TH = "ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"
-CYCLE_TH = "ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด)"
+CLOSE_FULL_TH = "ปิดเดือนต้องนับของครบทุกรายการ"
+CYCLE_TH = "นับเสริมรายสัปดาห์ (ไม่ใช่การปิดเดือน)"
 
 
 def cycle_on(con) -> bool:
@@ -756,7 +756,7 @@ def next_full_date(count_date) -> date:
 
 
 def count_plan(con, branch_id: int, today: date = None) -> dict:
-    """What the branch counts NOW. The month-end count (ต้นงวด / ปลายงวด) is ALWAYS the full count of every item (`mode` = "full").
+    """What the branch counts NOW. The month-end count (นับครั้งแรก / นับสิ้นเดือน) is ALWAYS the full count of every item (`mode` = "full").
     When the optional switch is on, the weekly count of the class-A items is offered besides it as a mid-month check
     (`cycle_due` = none yet in the current week, Monday to Sunday); it never closes a period. `partial_month` stays in the answer
     (always None) for the screens of an older build."""
@@ -772,7 +772,7 @@ def count_plan(con, branch_id: int, today: date = None) -> dict:
         # the last day of a month begins the next month). It is due from the last day of the month before it (todo.CLOSE_TOLERANCE_DAYS
         # lets the 1st count be dated a little later); until then the count pane shows the finished count, not an empty sheet.
         nxt = next_full_date(lc["count_date"])
-        plan["last_full"] = {"kind": lc["kind"], "date": lc["count_date"], "kind_th": "ต้นงวด" if lc["kind"] == "begin" else "ปลายงวด"}
+        plan["last_full"] = {"kind": lc["kind"], "date": lc["count_date"], "kind_th": "นับครั้งแรก" if lc["kind"] == "begin" else "นับสิ้นเดือน"}
         plan["next_full_date"] = nxt.isoformat()
         plan["next_full_due"] = today >= nxt - timedelta(days=1)
     if not on or lc is None:
@@ -791,17 +791,17 @@ def cycle_save(con, branch_id: int, lines: list, who: str, submit: bool = False,
     (system_position)."""
     _branch_name(con, branch_id)
     if not cycle_on(con):
-        raise ValueError("การตรวจนับหมุนเวียนปิดอยู่ · ตรวจนับครบทุกรายการ")
+        raise ValueError("การนับเสริมรายสัปดาห์ปิดอยู่ · นับของครบทุกรายการ")
     if last_submitted(con, branch_id) is None:
-        raise ValueError("ต้องตรวจนับครบทุกรายการเป็นต้นงวดครั้งแรกก่อน จึงตรวจนับหมุนเวียนได้")
+        raise ValueError("ต้องนับของครบทุกรายการเป็นการนับครั้งแรกก่อน จึงนับเสริมรายสัปดาห์ได้")
     conv = Converter(con)
     cdate = count_date or bkk_today().isoformat()
     try:
         d = date.fromisoformat(cdate)
     except ValueError:
-        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise ValueError("วันที่นับของต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if d > bkk_today():
-        raise ValueError("วันที่ตรวจนับต้องไม่เป็นวันในอนาคต")
+        raise ValueError("วันที่นับของต้องไม่เป็นวันในอนาคต")
     dr = cycle_draft_of(con, branch_id)
     if dr:
         cid = dr["count_id"]
@@ -816,7 +816,7 @@ def cycle_save(con, branch_id: int, lines: list, who: str, submit: bool = False,
     out = {"count_id": cid, "kind": "cycle", "lines": n, "status": "draft", "unconverted": bad}
     if submit:
         if not n:
-            raise ValueError("ยังไม่มีรายการที่ตรวจนับ")
+            raise ValueError("ยังไม่มีรายการที่นับของ")
         if require_all:
             have = {c for (c,) in con.execute("SELECT ingredient_code FROM bc_cycle_count_line WHERE cycle_id=? AND qty_base IS NOT NULL", (cid,))}
             miss = [it["name"] for z in sheet(con, branch_id, mode="cycle")["zones"] for it in z["items"] if it["code"] not in have]
@@ -896,7 +896,7 @@ def _cycle_rebase(con, branch_id: int, basis_id: int, cdate: str, as_of: date, t
 
 
 def partial_close(con, branch_id: int, month: str, who: str, today: date = None, accept_missing_slips: bool = False) -> dict:
-    """Owner decision 2026-10-13 ("ปิดงวดสิ้นเดือนต้องนับ 100%"): a month is closed ONLY by a full count of every item. A partial close is
+    """Owner decision 2026-10-13 ("ปิดเดือนต้องนับ 100%"): a month is closed ONLY by a full count of every item. A partial close is
     refused for every month. The rows an earlier partial close wrote (stock_count.partial = 1) stay as they are, labelled on the screens."""
     raise ValueError(CLOSE_FULL_TH)
 
@@ -924,7 +924,7 @@ def read_count_file(data: bytes) -> list:
     hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]
                and any(str(c or "").strip().startswith("จำนวน") for c in r)), None)
     if hi is None:
-        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบใบตรวจนับ (Excel)”")
+        raise ValueError("ไม่พบหัวตาราง (ต้องมีคอลัมน์ “รหัส” และ “จำนวน”) ใช้ไฟล์จากปุ่ม “ดาวน์โหลดแม่แบบใบนับของ (Excel)”")
     head = [str(c or "").strip() for c in grid[hi]]
     ci = head.index("รหัส")
     cq = next(i for i, h in enumerate(head) if h.startswith("จำนวน"))
@@ -946,27 +946,27 @@ def read_count_file(data: bytes) -> list:
         out.append({"code": code, "qty": qf, "unit": str(cell(r, cu) or "").strip(),
                     "note": str(cell(r, cn) or "").strip() or None})
     if not out:
-        raise ValueError("ไม่พบจำนวนที่ตรวจนับในไฟล์")
+        raise ValueError("ไม่พบจำนวนที่นับของในไฟล์")
     return out
 
 
 def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dry_run: bool = True) -> dict:
     """Save a whole count from a file and submit it, dated the day it was counted.
 
-    QA 2026-10-13 M5 · the answer says what the file BECOMES (the first count = ต้นงวด; any later one = ปลายงวด of the period since the last
-    count, and the ต้นงวด of the next) and how many of the sheet's items it carries ("นับมา 3 จาก 248 รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ").
+    QA 2026-10-13 M5 · the answer says what the file BECOMES (the first count = นับครั้งแรก; any later one = นับสิ้นเดือน of the period since the last
+    count, and the นับครั้งแรก of the next) and how many of the sheet's items it carries ("นับมา 3 จาก 248 รายการ · รายการที่ไม่ได้กรอกถือว่าไม่ได้นับ").
     Owner decision 2026-10-13: a file that leaves ANY item of the sheet blank is REFUSED (dry run: ok=False, incomplete=True; saving:
     ValueError) - a close is a count of every item, with no override."""
     try:
         date.fromisoformat(count_date)
     except (TypeError, ValueError):
-        raise ValueError("วันที่ตรวจนับต้องอยู่ในรูปแบบ YYYY-MM-DD")
+        raise ValueError("วันที่นับของต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if draft_of(con, branch_id):
-        raise ValueError("สาขานี้มีร่างผลตรวจนับค้างอยู่ · ส่งหรือลบร่างก่อนนำเข้า")
+        raise ValueError("สาขานี้มีผลนับที่บันทึกไว้แต่ยังไม่ส่ง · ส่งหรือลบก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
                    f" COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}",
                    (branch_id, count_date)).fetchone():
-        raise ValueError(f"วันที่ {_fmt_day(count_date)} มีผลตรวจนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
+        raise ValueError(f"วันที่ {_fmt_day(count_date)} มีผลนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
     conv = Converter(con)
     known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}
     unknown = sorted({ln["code"] for ln in lines if ln["code"] not in known})
@@ -976,10 +976,10 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
            "unknown": unknown, "unconverted": bad, "dry_run": dry_run, "ok": not unknown and not bad}
     prev = last_submitted(con, branch_id)
     out["kind"] = "end" if prev else "begin"
-    out["kind_th"] = "ปลายงวด" if prev else "ต้นงวด"
+    out["kind_th"] = "นับสิ้นเดือน" if prev else "นับครั้งแรก"
     out["closes"] = {"begin_date": prev["count_date"], "end_date": count_date} if prev else None
-    out["role_th"] = (f"ผลนับนี้เป็นปลายงวด ปิดงวดที่เริ่มนับวันที่ {_fmt_day(prev['count_date'])} ถึงวันที่ {_fmt_day(count_date)} และเป็นต้นงวดของงวดถัดไป"
-                      if prev else "ผลนับนี้เป็นต้นงวด (ผลตรวจนับครั้งแรกของสาขา) ยังไม่ปิดงวดใด")
+    out["role_th"] = (f"ผลนับนี้เป็นการนับสิ้นเดือน ปิดเดือนที่เริ่มนับวันที่ {_fmt_day(prev['count_date'])} ถึงวันที่ {_fmt_day(count_date)} และเป็นการนับครั้งแรกของเดือนถัดไป"
+                      if prev else "ผลนับนี้เป็นการนับครั้งแรก (ผลนับครั้งแรกของสาขา) ยังไม่ปิดเดือนใด")
     sheet_rows = template_rows(con, branch_id)
     on_sheet = {r["code"] for r in sheet_rows}
     counted = {ln["code"] for ln in lines} & on_sheet
@@ -993,6 +993,6 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
         if not dry_run:
             raise ValueError(out["incomplete_th"])
     if out["ok"] and not dry_run:
-        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากไฟล์ใบตรวจนับ")
+        r = save(con, branch_id, lines, who, submit=True, count_date=count_date, note="นำเข้าจากไฟล์ใบนับของ")
         out.update(count_id=r["count_id"], kind=r["kind"], status=r["status"])
     return out

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PR-B4b (3.4) - the OPTIONAL weekly cycle count, and (since the owner's decision of 2026-10-13, "ปิดงวดสิ้นเดือนต้องนับ 100%") the
+"""PR-B4b (3.4) - the OPTIONAL weekly cycle count, and (since the owner's decision of 2026-10-13, "ปิดเดือนต้องนับ 100%") the
 withdrawal of the partial month close.
 
 The class-A items of a branch MAY be counted every week (switch bc_cycle_counts, off by default): a mid-month check kept in its own tables
@@ -132,7 +132,7 @@ def legacy_partial_close(con, month_end="2026-10-31", date_="2026-11-01"):
     sp = ST.system_position(con, 1, date.fromisoformat(month_end), issues_through=date.fromisoformat(month_end), estimate=False)
     cid = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at, status, updated_at, submitted_at, partial)"
                       " VALUES(1, ?, 'end', 'udon', ?, '2026-11-01T01:00:00+00:00', 'submitted', '2026-11-01T01:00:00+00:00', '2026-11-01T01:00:00+00:00', 1)",
-                      (date_, "คงเหลือตามระบบ (ไม่ได้นับ)")).lastrowid
+                      (date_, "ของที่ควรเหลือ (ไม่ได้นับ)")).lastrowid
     for c, q in sorted(sp["qty"].items()):
         con.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, basis) VALUES(?,?,?,?,?,?)",
                     (cid, c, max(q, 0.0), "กรัม", max(q, 0.0), "cycle" if c in a else "system"))
@@ -141,16 +141,16 @@ def legacy_partial_close(con, month_end="2026-10-31", date_="2026-11-01"):
 
 
 def test_a_partial_close_is_refused_for_every_month(con):  # noqa: F811
-    """Owner 2026-10-13: ปิดงวดสิ้นเดือนต้องนับ 100%. No month, date, switch or flag lets a partial end count be written."""
+    """Owner 2026-10-13: ปิดเดือนต้องนับ 100%. No month, date, switch or flag lets a partial end count be written."""
     start_counts(con)
     cycle_count(con, "2026-10-04", {c: 70000 for c in class_a(con)})
     for month, today in (("2026-10", NOV2), ("2026-09", NOV2), ("2026-10", date(2026, 10, 30)), ("2026-13", NOV2)):
-        with pytest.raises(ValueError, match="ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"):
+        with pytest.raises(ValueError, match="ปิดเดือนต้องนับของครบทุกรายการ"):
             ST.partial_close(con, 1, month, "udon", today=today)
-    with pytest.raises(ValueError, match="ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"):
+    with pytest.raises(ValueError, match="ปิดเดือนต้องนับของครบทุกรายการ"):
         ST.partial_close(con, 1, "2026-10", "udon", today=NOV2, accept_missing_slips=True)
     CS.save(con, "analyst1", cycle=False)
-    with pytest.raises(ValueError, match="ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ"):
+    with pytest.raises(ValueError, match="ปิดเดือนต้องนับของครบทุกรายการ"):
         ST.partial_close(con, 1, "2026-10", "udon", today=NOV2)
     assert con.execute("SELECT COUNT(*) FROM bc_stock_count WHERE partial=1").fetchone()[0] == 0
 
@@ -165,7 +165,7 @@ def test_an_old_partial_close_is_still_read_and_labelled(con):  # noqa: F811
     p = VA.period(con, 1, cid)
     assert p["partial"] is True and p["system_basis"] >= 1 and p["end_date"] == "2026-11-01"
     sys_rows = [x for x in p["rows"] if x.get("system_basis")]
-    assert sys_rows and all(x["basis_th"] == "คงเหลือตามระบบ (ไม่ได้นับ)" and x["ask_reason"] is False for x in sys_rows)
+    assert sys_rows and all(x["basis_th"] == "ของที่ควรเหลือ (ไม่ได้นับ)" and x["ask_reason"] is False for x in sys_rows)
     s = VA.issue_summary(con, 1, cid)
     assert s["period"]["partial"] is True and "รายการเดิม" in s["period"]["partial_th"] and s["totals"]["system_basis"] >= 1
     rc = IR.reconcile(con, 1, cid)
@@ -182,14 +182,14 @@ def test_an_old_partial_close_is_still_read_and_labelled(con):  # noqa: F811
 
 
 def test_the_count_that_closes_a_period_is_a_full_count_of_every_item(con):  # noqa: F811
-    """Owner 2026-10-13: a count becomes ต้นงวด / ปลายงวด only when EVERY item of the sheet has a value (0 is a value, blank is not)."""
+    """Owner 2026-10-13: a count becomes นับครั้งแรก / นับสิ้นเดือน only when EVERY item of the sheet has a value (0 is a value, blank is not)."""
     start_counts(con)
     everything = [it for z in ST.sheet(con, 1)["zones"] for it in z["items"]]
     assert len(everything) >= 2
     lines = [{"code": it["code"], "qty": 0, "unit": it["count_unit"]} for it in everything]
     with pytest.raises(ValueError) as e:
         ST.save(con, 1, lines[:-1], "udon", submit=True, count_date="2026-11-01")
-    assert str(e.value).startswith("ยังไม่ได้นับ 1 รายการ ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ (เช่น ") and everything[-1]["name"] in str(e.value)
+    assert str(e.value).startswith("ยังไม่ได้นับ 1 รายการ ปิดเดือนต้องนับของครบทุกรายการ (เช่น ") and everything[-1]["name"] in str(e.value)
     con.rollback()
     assert ST.draft_of(con, 1) is None
     ST.save(con, 1, lines[:-1], "udon", submit=False, count_date="2026-11-01")           # a draft may be saved at any time
@@ -201,7 +201,7 @@ def test_the_close_stepper_and_the_branch_list_follow_the_cycle(con):  # noqa: F
     start_counts(con)
     d = TD.build(con, branch_id=1, today=date(2026, 10, 14))
     keys = {i["key"].split(":")[0]: i for i in d["items"]}
-    assert keys["cycle_count"]["title"] == "ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด)" and keys["cycle_count"]["status"] == "todo"
+    assert keys["cycle_count"]["title"] == "นับเสริมรายสัปดาห์ (ไม่ใช่การปิดเดือน)" and keys["cycle_count"]["status"] == "todo"
     assert keys["cycle_count"]["owner_modules"] == ["branch.stock"] and "full_count" not in keys and "partial_close" not in keys
     cycle_count(con, "2026-10-12", {c: 70000 for c in class_a(con)})
     assert {i["key"].split(":")[0]: i for i in TD.build(con, branch_id=1, today=date(2026, 10, 14))["items"]}["cycle_count"]["status"] == "done"
@@ -213,7 +213,7 @@ def test_the_close_stepper_and_the_branch_list_follow_the_cycle(con):  # noqa: F
     for month in ("2026-10", "2026-09"):
         d = TD.build(con, branch_id=1, month=month, today=NOV2)
         steps = {s["key"]: s for s in d["close"]["steps"]}
-        assert steps["end_count"]["title"].startswith("ผลตรวจนับปลายงวด (นับครบทุกรายการ)")
+        assert steps["end_count"]["title"].startswith("ผลนับสิ้นเดือน (นับครบทุกรายการ)")
     CS.save(con, "analyst1", cycle=False)
     d = TD.build(con, branch_id=1, month="2026-10", today=NOV2)
     assert not {"cycle_count", "full_count", "partial_close"} & {i["key"].split(":")[0] for i in d["items"]}

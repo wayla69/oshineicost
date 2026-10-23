@@ -334,7 +334,7 @@ def test_the_claim_list_names_the_round_and_the_delivery_day(con):  # noqa: F811
     row = CL.listing(con, 1)[0]
     assert row["order_id"] == oid and row["round"] and row["lines"] == 1
     assert row["delivery"] and row["delivery"] >= row["cycle_date"]
-    assert row["origin_th"] == "แจ้งภายหลัง" and CL.ORIGIN_TH["receive"] == "แจ้งขณะรับสินค้า"
+    assert row["origin_th"] == "แจ้งภายหลัง" and CL.ORIGIN_TH["receive"] == "แจ้งขณะรับของ"
 
 
 import pytest as _pytest_s3  # noqa: E402

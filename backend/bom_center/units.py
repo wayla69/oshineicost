@@ -463,7 +463,7 @@ class Converter:
 # PR-U1: an order line in BASE units (the item has no pack size yet) is shown in the next metric unit up when the figure is large -
 # "ข้าวสวยญี่ปุ่นปรุงรส 18.6 กิโลกรัม", not "18558 กรัม". Display only: every stored quantity stays in base units.
 READABLE_UP = {"กรัม": ("กิโลกรัม", 1000.0), "มิลลิลิตร": ("ลิตร", 1000.0)}
-NO_PACK_TH = "ยังไม่มีขนาดบรรจุ"
+NO_PACK_TH = "ยังไม่มีขนาดแพ็ค"
 
 
 def readable_unit(base_unit) -> tuple:

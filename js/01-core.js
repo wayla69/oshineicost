@@ -540,7 +540,7 @@ const ROLE_START = {
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['bomcenter', 'สร้างสูตรเดือนถัดไปจากแม่แบบ แล้วส่งตรวจ', 'rec'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
   salessupport: [['orderhub', 'ติดตามใบตัดเบิกที่สาขายังไม่ยืนยันหรือยืนยันล่าช้า', 'issues'], ['orderhub', 'พิจารณาเคลมที่สาขาแจ้ง', 'claims'], ['orderhub', 'คีย์ใบสั่งซื้อเข้าระบบบัญชี', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
   warehouse: [['orderhub', 'ระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง”', 'queue']],
-  branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง', 'order'], ['branchstock', 'บันทึกสินค้าที่รับเข้าร้านทุกครั้ง รวมที่สาขาซื้อเอง', 'recv']],
+  branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และส่งทุกวัน', 'issue'], ['branchstock', 'ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่งของ', 'order'], ['branchstock', 'บันทึกของที่รับเข้าร้านทุกครั้ง รวมของที่สาขาซื้อเอง', 'recv']],
   franchise: [['franchise', 'สรุปผลการดำเนินงานของสาขาตนเองในเดือนนี้: ยอดขาย กำไรขั้นต้น วัตถุดิบ และวินัยการทำงานของสาขา']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
@@ -612,7 +612,7 @@ const MODULE_LABEL_TH = {
   'supply.ordering':'ประสานงานขาย: ใบสั่งซื้อ เคลม ใบตัดเบิก', 'customer.feedback':'เสียงลูกค้า',
   'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'สูตร: ประกาศใช้', 'bom.audit':'สูตร: รับทราบ/ยกเลิกใช้',
   'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร: แก้ไข',
-  'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า',
+  'branch.stock':'สาขา: ตัดเบิก นับของ และสั่งของ',
   'supply.warehouse':'คลัง: ระบุยอดส่งจริง',
   'franchise.view':'ร้านของฉัน: ดูผลการดำเนินงานของสาขาตนเอง',
   'franchise.inbox':'ข้อความจากเจ้าของสาขา: อ่านและตอบ',
@@ -976,7 +976,7 @@ function _renderPermMatrix(canEdit) {
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'รายละเอียด POS',
     'report.export':'ส่งออกรายงาน', 'system.settings':'ตั้งค่า', 'system.admin':'ผู้ดูแลระบบ',
     'data.upload':'อัปโหลดข้อมูล', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
-    'branch.stock':'สาขา: ตัดเบิก ตรวจนับ สั่งสินค้า', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)', 'franchise.inbox':'ข้อความเจ้าของสาขา',
+    'branch.stock':'สาขา: ตัดเบิก นับของ สั่งของ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)', 'franchise.inbox':'ข้อความเจ้าของสาขา',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
@@ -3092,10 +3092,10 @@ const SUPPLY_CHIPS = [
     { tab: 'bomcenter', pane: 'overview', bom: true, label: 'ความพร้อมและรหัสสูตรเดิม', roles: ['analyst', 'management'] }] },
   { key: 'branch', label: 'สาขาของฉัน', items: [
     { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', roles: ['branch', 'analyst', 'management'] },
-    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] },
-    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', roles: ['branch', 'analyst', 'management'] },
-    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', roles: ['branch', 'analyst', 'management'] },
-    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }] },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งของ', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'recv', label: 'รับของ', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', roles: ['branch', 'analyst', 'management'] },
+    { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }] },
   // ตั้งค่า: the delivery calendar and the zones, then ONE level-2 group "หน้าระบบเดิม" holding the four pages of the
   // older ordering screens (owner 2026-10-10: regrouped, kept, never deleted)
   { key: 'setup', label: 'ตั้งค่า', items: [
@@ -3272,12 +3272,12 @@ const DEPARTMENTS = [
     { tab: 'cashctl', label: 'เงินสดขาด/เกิน', icon: 'cash' },
     { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' }] },
-  { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และตรวจนับ', icon: 'store', hue: 'brn', roles: ['branch'], pages: [
+  { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และนับของ', icon: 'store', hue: 'brn', roles: ['branch'], pages: [
     { tab: 'branchstock', pane: 'issue', label: 'ตัดเบิก', icon: 'box' },
-    { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: 'cart' },
-    { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: 'recv' },
-    { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', icon: 'diff' },
-    { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', icon: 'count' }] },
+    { tab: 'branchstock', pane: 'order', label: 'สั่งของ', icon: 'cart' },
+    { tab: 'branchstock', pane: 'recv', label: 'รับของ', icon: 'recv' },
+    { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', icon: 'diff' },
+    { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', icon: 'count' }] },
   { key: 'own', label: 'เจ้าของสาขา', duty: 'สรุปผลของร้านตนเอง', icon: 'key', hue: 'own', roles: ['franchise'], pages: [
     // only the franchise login: the page reads ITS branch from the session, and for a central login the server answers 400 "name a branch"
     // (that is why its old sidebar entry was never shown to anyone else)
@@ -3310,8 +3310,8 @@ const PAGE_KEYWORDS = {
   'bomcenter|pricefile': 'ไฟล์ราคา นำเข้าราคา price file', 'bomcenter|issue': 'ใบสรุปตัดเบิก ตัดเบิก บัญชี issue summary', 'bomcenter|fc': 'ยอดแนะนำ forecast พยากรณ์ รอบสั่ง',
   'bomcenter|cal': 'รอบส่ง ปฏิทิน calendar', 'bomcenter|events': 'เทศกาล วันหยุด โปรโมชัน event', 'bomcenter|zones': 'โซน จัดเก็บ ตู้เย็น zone',
   'bomcenter|codereq': 'รหัสสินค้า เปลี่ยนรหัส code', 'bomcenter|rcheck': 'ตรวจสูตร ยอดซื้อ recipe check', 'bomcenter|overview': 'ความพร้อม รหัสเดิม overview',
-  'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก', 'branchstock|order': 'สั่งสินค้า สั่งของ po ใบสั่งซื้อ', 'branchstock|recv': 'รับสินค้า รับของ receive',
-  'branchstock|var': 'ผลต่าง variance ใช้จริง', 'branchstock|count': 'ตรวจนับ นับสต็อก stock count สิ้นเดือน',
+  'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก เบิกใช้ ของเสีย', 'branchstock|order': 'สั่งของ สั่งสินค้า po ใบสั่งซื้อ จำนวนที่ควรสั่ง ยอดแนะนำ', 'branchstock|recv': 'รับของ รับสินค้า receive แจ้งของขาด แจ้งของเสีย เคลม',
+  'branchstock|var': 'ส่วนต่าง ผลต่าง variance ใช้จริง', 'branchstock|count': 'นับของ ตรวจนับ นับสต็อก stock count สิ้นเดือน ต้นงวด ปลายงวด',
 };
 // Pages that sit in no cluster or chip (the older single entries): listed in หน้ารายงานทั้งหมด under "อื่น ๆ".
 const ALLPAGES_EXTRA = [

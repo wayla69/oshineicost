@@ -135,9 +135,9 @@ def test_the_close_steps_use_the_period_rule_of_the_issue_summary(udon):
     assert per["month"] == M and per["end_date"] == "2026-09-30"          # the summary accepts this period
     st = _steps(TD.build(c, M, None, None, today=TODAY))
     assert st["begin_count"]["status"] == "done" and st["end_count"]["status"] == "done"
-    assert st["receipts_confirm"]["status"] == "todo" and "รอผลตรวจนับ" not in st["receipts_confirm"]["detail"]
+    assert st["receipts_confirm"]["status"] == "todo" and "รอผลนับ" not in st["receipts_confirm"]["detail"]
     assert st["receipts_confirm"]["go"]["extra"] == {"end_count_id": out["count_id"]}
-    assert st["issue_posted"]["status"] == "blocked" and "รอยืนยันรับสินค้าครบ" in st["issue_posted"]["detail"]
+    assert st["issue_posted"]["status"] == "blocked" and "รอให้สาขาแจ้งว่าบันทึกรับของครบ" in st["issue_posted"]["detail"]
     VA.confirm_receipts(c, 1, out["count_id"], "u")
     st = _steps(TD.build(c, M, None, None, today=TODAY))
     assert st["receipts_confirm"]["status"] == "done"
@@ -152,7 +152,7 @@ def test_the_close_steps_use_the_period_rule_of_the_issue_summary(udon):
     # a count dated the 3rd closes October, not September: say so instead of "waiting"
     c.execute("UPDATE bc_stock_count SET count_date='2026-10-03' WHERE count_id=?", (out["count_id"],))
     st = _steps(TD.build(c, M, None, None, today=TODAY))
-    assert st["end_count"]["status"] == "todo" and "ใช้ปิดงวดถัดไป" in st["end_count"]["detail"]
+    assert st["end_count"]["status"] == "todo" and "ใช้ปิดเดือนถัดไป" in st["end_count"]["detail"]
 
 
 def test_a_cutoff_day_asks_for_the_order_and_the_queue(udon):

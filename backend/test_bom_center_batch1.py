@@ -5,7 +5,7 @@ The promises:
     (กล่องละ 10 แพ็ค)" - instead of a fixed "แพ็ค";
   * 2.4 only TODAY's slip stops an order: the page says so and lists the days behind it as "ใบที่ค้าง N วัน (8–11/10) ทำภายหลังได้";
   * 5.1 the cutoff is written one way ("ส่งใบสั่งซื้อภายใน พฤ. 15/10 เวลา 13:15") with the time left as "อีก 2 วัน 19 ชม.";
-  * 5.2 one set of waste-reason words for the slip and the variance page, "กลุ่มมูลค่าสูง/กลาง/ต่ำ" for the value class;
+  * 5.2 one set of waste-reason words for the slip and the variance page, "ของแพง/กลาง/ต่ำ" for the value class;
   * 5.3 a message to the floor names the ingredient, never its code, and never says "กฎหน่วย";
   * string 10 a receipt is named by its round and delivery day (never ORDER-8 / CLAIM-1).
 """
@@ -51,7 +51,7 @@ def test_the_hub_order_lines_carry_the_unit_the_screen_writes(av):  # noqa: F811
 
 def test_no_order_line_unit_is_hard_coded_in_the_hub_screen():
     src = _js("js/15-orderhub.js")
-    assert "'แพ็ค'" not in src and '"แพ็ค"' not in src and "'หน่วยฐาน'" not in src
+    assert "'แพ็ค'" not in src and '"แพ็ค"' not in src and "'หน่วยเล็กสุด'" not in src
     assert "_ohbUnitFull(l)" in src and "_ohbUnitWord(l)" in src
     # the same two helpers write the phone block and the desktop table
     assert src.count("_ohbUnitFull(l)") >= 2
@@ -75,10 +75,10 @@ def test_the_unit_helper_writes_the_contents_of_a_label_once():
 def test_the_order_page_says_only_todays_slip_blocks_the_order():
     src = _js("js/14-branch.js")
     assert "ทำใบของวันที่ขาดก่อน" not in src and "ยังไม่ได้ทำใบตัดเบิก" not in src
-    assert "ยืนยันใบตัดเบิกวันนี้แล้วส่งใบสั่งซื้อได้" in src
+    assert "ส่งใบตัดเบิกวันนี้แล้วจึงส่งใบสั่งซื้อได้" in src
     assert "ทำภายหลังได้" in src and "brnMissLater()" in src and "brnIssGoToday()" in src      # the dismiss link and the link to the slip
     # …and the server agrees: it asks for today's slip only
-    assert "ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in _js("backend/bom_center/orders.py")
+    assert "ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ" in _js("backend/bom_center/orders.py")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
@@ -136,13 +136,13 @@ def test_the_slip_and_the_variance_page_share_their_reason_words():
 
 
 def test_the_floor_reads_the_value_class_as_a_group_and_the_label_as_must_count():
-    assert fmt.CLASS_TH == {"A": "กลุ่มมูลค่าสูง", "B": "กลุ่มมูลค่ากลาง", "C": "กลุ่มมูลค่าต่ำ"}
+    assert fmt.CLASS_TH == {"A": "ของแพง", "B": "ของราคาปานกลาง", "C": "ของราคาถูก"}
     hub = _js("js/15-orderhub.js")
     assert "ชั้น ${" not in hub and "ชั้น A" not in hub
     brn = _js("js/14-branch.js")
     assert "'บังคับ'" not in brn and "_bmcChip('ต้องนับ'" in brn
     assert "ไดกิโตะ กรุ๊ป" in brn and re.search(r"ไดกิโตะ(?! กรุ๊ป)", brn) is None
-    assert "คงเหลือ <b" not in brn                                                             # always "คงเหลือตามระบบ"
+    assert "คงเหลือ <b" not in brn                                                             # always "ของที่ควรเหลือ (ตามระบบ)"
 
 
 # ── 5.3 · the ingredient's name, not its code ───────────────────────────────────────────────────────────────────
@@ -198,19 +198,19 @@ def test_a_receipt_is_named_by_its_round_and_delivery_day(av):  # noqa: F811
     # a reference the person typed is left as written; the central report and a claim are named too
     assert VA._ref_th(av, 1, "INV-77") is None
     assert VA._ref_th(av, 1, "CENTRAL-2026-09") == "รายงานไดกิโตะ กรุ๊ป เดือนกันยายน 2026"
-    assert VA._ref_th(av, 1, "CLAIM-999") == "ปรับตามเคลม"
+    assert VA._ref_th(av, 1, "CLAIM-999") == "ปรับตามที่แจ้งของขาด/เสีย"
 
 
 def test_the_receipt_cancel_button_is_worded_and_the_order_label_replaces_the_ref():
     brn = _js("js/14-branch.js")
-    assert ">ยกเลิกใบรับสินค้า</button>" in brn and "ลบใบรับ" not in brn
+    assert ">ยกเลิกใบรับของ</button>" in brn and "ลบใบรับ" not in brn
     assert "x.ref_th" in brn
 
 
 def test_the_slip_confirmation_says_what_blank_rows_mean():
     brn = _js("js/14-branch.js")
     # PR-D6: the confirm is a short list, one fact a line - the blank rows count as not issued and the system stock does not drop
-    assert "ยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก (คงเหลือตามระบบไม่ลดลง)" in brn
+    assert "ยังไม่ได้กรอก ${Math.max(nAll - nAny.length, 0)} รายการ ถือว่าไม่ได้เบิก (ของที่ควรเหลือไม่ลดลง)" in brn
     assert "(ถือว่าไม่ได้เบิก)" not in brn
     strip = _js("js/16-supplyhome.js")
     assert "รอยืนยัน · " not in strip and "ค้างย้อนหลัง" not in strip

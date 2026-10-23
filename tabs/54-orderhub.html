@@ -61,7 +61,7 @@
         <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
         <span class="text-xs" style="padding-bottom:8px;color:var(--text-secondary)">ดาวน์โหลด เดือน<b id="ohbIsDlMonth"></b>:</span>
-        <button onclick="ohbIsXlsx()" title="เฉพาะใบที่สาขายืนยันแล้ว ไม่รวมร่าง" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกสาขา (Excel)</button>
+        <button onclick="ohbIsXlsx()" title="เฉพาะใบที่สาขาส่งแล้ว ไม่รวมร่าง" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกสาขา (Excel)</button>
         <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
         <span id="ohbIsStatus" style="padding-bottom:6px"></span>
       </div>
@@ -210,7 +210,7 @@
     <div class="card p-3 mb-3">
       <div class="flex flex-wrap items-center gap-2">
         <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:var(--group-soft, var(--bg-input));color:var(--group-ink, var(--text-primary));font-size:12px;font-weight:700;align-items:center;justify-content:center">5</span>
-        <span class="text-sm font-semibold" style="color:var(--text-primary)">ยืนยันรับสินค้าครบและระบุเหตุผลผลต่าง</span>
+        <span class="text-sm font-semibold" style="color:var(--text-primary)">แจ้งว่าบันทึกรับของครบและระบุเหตุผลผลต่าง</span>
         <span id="ohbSt5" class="ml-auto"></span>
       </div>
       <div id="ohbSt5Detail" class="text-xs mt-1" style="color:var(--text-secondary)"></div>

@@ -39,29 +39,29 @@ def branch_line(items: list, today: date = None) -> dict:
         if o.get("due_today"):
             due_today = True
             if done:
-                parts.append(f"ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} แล้ว")
+                parts.append(f"ส่งใบสั่งซื้อรอบส่งของ {o['delivery_th']} แล้ว")
             elif o.get("late"):
-                parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ส่งล่าช้า มีค่าปรับ)")
+                parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่งของ {o['delivery_th']} (ส่งช้า มีค่าปรับ)")
                 pending = True
             else:
-                parts.append(f"ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} ภายในวันนี้ 13:15")
+                parts.append(f"ส่งใบสั่งซื้อรอบส่งของ {o['delivery_th']} ภายในวันนี้ 13:15")
                 pending = True
         elif o.get("late") and not done:                   # the cutoff passed on an earlier day
-            parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่ง{o['delivery_th']} (ส่งล่าช้า มีค่าปรับ)")
+            parts.append(f"ยังไม่ส่งใบสั่งซื้อรอบส่งของ {o['delivery_th']} (ส่งช้า มีค่าปรับ)")
             pending = True
     if not parts and orders:
         nxt = min((o for o in orders if o["status"] != "done"), key=lambda o: o["cutoff_at"], default=None) \
             or min(orders, key=lambda o: o["cutoff_at"])
-        parts.append(f"ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป ส่งใบสั่งซื้อภายใน {nxt['cutoff_th']} · รอบส่ง{nxt['delivery_th']})")
+        parts.append(f"ไม่มีกำหนดส่งใบสั่งซื้อวันนี้ (ถัดไป ส่งใบสั่งซื้อภายใน {nxt['cutoff_th']} · รอบส่งของ {nxt['delivery_th']})")
     slip = by.get("issue_today")
     if slip and slip.get("started"):                     # ใบตัดเบิก: yesterday's slip, only for a branch that has begun
         if slip.get("yesterday") in ("confirmed", "late"):
-            parts.append("ใบตัดเบิกเมื่อวาน: ยืนยันแล้ว")
+            parts.append("ใบตัดเบิกเมื่อวาน: ส่งแล้ว")
         else:
-            parts.append("ใบตัดเบิกเมื่อวาน: ยังไม่ยืนยัน")
+            parts.append("ใบตัดเบิกเมื่อวาน: ยังไม่ส่ง")
             pending = True
     if recv and recv.get("count"):
-        parts.append(f"รับสินค้าตามใบสั่งซื้อ {recv['count']} ใบ")
+        parts.append(f"รับของตามใบสั่งซื้อ {recv['count']} ใบ")
         pending = True
     return {"text": " · ".join(parts), "due_today": due_today, "pending": pending}
 
@@ -85,7 +85,7 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     if queue["count"]:
         any_work = True
         lines.append(f"<b>คลัง</b>: ใบสั่งซื้อค้างคิว {queue['count']} ใบ"
-                     + (f" · ส่งล่าช้า {queue['late_orders']} ใบ (มีค่าปรับ)" if queue["late_orders"] else "")
+                     + (f" · ส่งช้า {queue['late_orders']} ใบ (มีค่าปรับ)" if queue["late_orders"] else "")
                      + (" · มีใบที่เลยวันตัดรอบแล้ว" if queue["late"] else ""))
     cl = centre.get("claims_pending") or {}
     if cl.get("count"):
@@ -94,14 +94,14 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
     im = centre.get("issue_missing") or {}
     if im.get("count"):                                      # ใบตัดเบิกของเมื่อวาน
         any_work = True
-        lines.append(f"<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน {im['count']} สาขา · "
+        lines.append(f"<b>ประสานงานขาย</b>: ใบตัดเบิกของเมื่อวานยังไม่ส่ง {im['count']} สาขา · "
                      + html.escape(" · ".join(im.get("branch_names") or [])))
     an = centre.get("issue_anomaly") or {}
     if an.get("count"):
         any_work = True
         from .issue_reports import OVER_PCT, STREAK_DAYS
         from .close_settings import stock_mode
-        word = "ปกติของสาขาหรือค่ากลาง" if stock_mode(con) else "สูตร"        # PR-S4: with no recipe the comparators are the branch's normal and the median
+        word = "ที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขา" if stock_mode(con) else "สูตร"        # PR-S4: with no recipe the comparators are the branch's normal and the median
         lines.append(f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกิน{word}มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
                      + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"
@@ -133,11 +133,11 @@ def cutoff(con, today: date = None, app_url: str = "", now: datetime = None) -> 
     n = q.get("count") or 0
     if not missed and not n:
         return None
-    lines = [f"<b>ตัดรอบ 13:15 · {thai_date(today)}</b>"]
-    lines += [f"{html.escape(m['name'])}: ยังไม่ส่งใบสั่งซื้อรอบส่ง{m['delivery_th']} (ส่งล่าช้า มีค่าปรับ)" for m in missed]
+    lines = [f"<b>เวลาส่งสุดท้าย 13:15 · {thai_date(today)}</b>"]
+    lines += [f"{html.escape(m['name'])}: ยังไม่ส่งใบสั่งซื้อรอบส่งของ {m['delivery_th']} (ส่งช้า มีค่าปรับ)" for m in missed]
     if n:
         lines.append(f"คลัง: ใบสั่งซื้อค้างคิว {n} ใบ ยืนยันยอดส่งภายใน 14:00 ของวันตัดรอบ"
-                     + (f" · ส่งล่าช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""))
+                     + (f" · ส่งช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""))
     if app_url:
         lines.append(f"คิวใบสั่งซื้อ: {html.escape(app_url.rstrip('/'))}/")
     return {"today": today.isoformat(), "text": "\n".join(lines), "count": n, "late": bool(q.get("urgent")),
@@ -194,13 +194,13 @@ def centre_morning(con, today: date = None, now: datetime = None) -> dict:
     q = items.get("queue_pending") or {}
     if q.get("count"):
         add("warehouse", f"ใบสั่งซื้อค้างคิว {q['count']} ใบ ยืนยันยอดส่งภายใน 14:00 ของวันตัดรอบ"
-            + (f" · ส่งล่าช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""), supply_url("orderhub", "queue"))
+            + (f" · ส่งช้า {q['late_orders']} ใบ (มีค่าปรับ)" if q.get("late_orders") else ""), supply_url("orderhub", "queue"))
     cl = items.get("claims_pending") or {}
     if cl.get("count"):
         add("salessupport", f"เคลมสินค้ารอพิจารณา {cl['count']} เรื่อง", supply_url("orderhub", "claims"))
     im = items.get("issue_missing") or {}
     if im.get("count"):
-        add("salessupport", f"ใบตัดเบิกของเมื่อวานยังไม่ยืนยัน {im['count']} สาขา: " + " · ".join(im.get("branch_names") or []),
+        add("salessupport", f"ใบตัดเบิกของเมื่อวานยังไม่ส่ง {im['count']} สาขา: " + " · ".join(im.get("branch_names") or []),
             supply_url("orderhub", "issues"))
     ak = items.get("accounting_keyed") or {}
     if ak.get("count"):
@@ -249,10 +249,10 @@ def branch_precutoff(con, branch: dict, today: date = None, now: datetime = None
         minutes = int((cut - now).total_seconds() // 60)
         if minutes <= 0:
             continue
-        lines.append(f"ส่งใบสั่งซื้อรอบส่ง{it['delivery_th']} ภายในวันนี้ 13:15 ({_left(minutes)})")
+        lines.append(f"ส่งใบสั่งซื้อรอบส่งของ {it['delivery_th']} ภายในวันนี้ 13:15 ({_left(minutes)})")
     if not lines:
         return None
-    return {"title": f"{branch['name']} · ใกล้ถึงเวลาตัดรอบ 13:15", "body": " · ".join(lines),
+    return {"title": f"{branch['name']} · ใกล้ถึงเวลาส่งสุดท้าย 13:15", "body": " · ".join(lines),
             "url": supply_url("branchstock", "order"), "tag": SUPPLY_TAG + "-cutoff"}
 
 
@@ -262,6 +262,6 @@ def cutoff_payload(rec: dict) -> Optional[dict]:
     missed = (rec or {}).get("missed") or []
     if not missed:
         return None
-    names = " · ".join(f"{m['name']} (รอบส่ง{m['delivery_th']})" for m in missed)
-    return {"title": f"ตัดรอบ 13:15 · ยังไม่ส่งใบสั่งซื้อ {len(missed)} สาขา", "body": names + " · ส่งล่าช้า มีค่าปรับ",
+    names = " · ".join(f"{m['name']} (รอบส่งของ {m['delivery_th']})" for m in missed)
+    return {"title": f"เวลาส่งสุดท้าย 13:15 · ยังไม่ส่งใบสั่งซื้อ {len(missed)} สาขา", "body": names + " · ส่งช้า มีค่าปรับ",
             "url": supply_url("supplyhome"), "tag": SUPPLY_TAG + "-missed"}

@@ -49,7 +49,7 @@ function _bmcNum(v, d = 2) {
 // one, so the words carry the direction: "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)". kind: use = what the branch used against the recipes, issue =
 // what the slip issued against the recipes, count = the physical count against the system stock. Excel keeps the signed numbers.
 const _BMC_GAP_WORDS = { use: ['ใช้มากกว่าสูตร', 'ใช้น้อยกว่าสูตร', 'ใช้ตามสูตร'], issue: ['เบิกมากกว่าสูตร', 'เบิกน้อยกว่าสูตร', 'เบิกตามสูตร'],
-  issue_n: ['เบิกมากกว่าปกติ', 'เบิกน้อยกว่าปกติ', 'เบิกตามปกติ'], issue_m: ['เบิกมากกว่าค่ากลาง', 'เบิกน้อยกว่าค่ากลาง', 'เบิกเท่าค่ากลาง'],
+  issue_n: ['เบิกมากกว่าปกติ', 'เบิกน้อยกว่าปกติ', 'เบิกตามปกติ'], issue_m: ['เบิกมากกว่าเฉลี่ยทุกสาขา', 'เบิกน้อยกว่าเฉลี่ยทุกสาขา', 'เบิกเท่าเฉลี่ยทุกสาขา'],
   count: ['นับได้มากกว่าระบบ', 'นับได้น้อยกว่าระบบ', 'นับตรงกับระบบ'] };
 const _BMC_GAP_SHORT = ['มากกว่า', 'น้อยกว่า', 'ตรง'];
 function bmcGapDir(value, pct) {                      // +1 more · -1 less · 0 the same (under ฿0.5 and 0.05 %); the baht gap wins when both are given
@@ -80,7 +80,7 @@ function bmcGapParts(value, pct, kind, short) {
 // PR-S4 · stock mode: a gap inside the threshold is "close to normal" in muted ink; only a gap beyond it is coloured and worded as over / under
 function stkGapHtml(value, pct, kind, short) {
   if (pct === null || pct === undefined || pct === '' || isNaN(pct) || Math.abs(Number(pct)) > 20) return bmcGapHtml(value, pct, kind, short);
-  const near = kind === 'issue_m' ? 'ใกล้เคียงค่ากลาง' : 'ใกล้เคียงปกติ';
+  const near = kind === 'issue_m' ? 'ใกล้เคียงเฉลี่ยทุกสาขา' : 'ใกล้เคียงปกติ';
   const v = value !== null && value !== undefined && value !== '' && !isNaN(value) && Math.abs(Number(value)) >= 0.5 ? ` ฿${_bmcNum(Math.abs(Number(value)), 0)}` : '';
   const p = Math.abs(Number(pct)) >= 0.05 ? ` (${_bmcNum(Math.abs(Number(pct)), Math.abs(Number(pct)) >= 10 ? 0 : 1)}%)` : '';
   return `<span style="color:var(--text-muted)">${near}${v}${p}</span>`;
@@ -1752,7 +1752,7 @@ function _bmcAvgDraw() {
   const f = uiStateFilter.get(), props = d.rows.filter(r => r.proposal), hist = d.history || [];
   uiStateFilter.bar('bmcAvgFilter', { counts: { todo: props.length, done: hist.length, all: props.length + hist.length }, f, pick: '_bmcAvgPick' });
   if (!d.rows.length && !hist.length) {
-    box.innerHTML = `<div style="color:var(--text-muted)">ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย ${uiQ('bmc:avgnone', 'หน่วยแบบเฉลี่ย', '<p>เช่น 1 ตัว ≈ 4.5 กิโลกรัม · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับสินค้า</p>')}</div>`;
+    box.innerHTML = `<div style="color:var(--text-muted)">ยังไม่มีวัตถุดิบที่ตั้งหน่วยแบบเฉลี่ย ${uiQ('bmc:avgnone', 'หน่วยแบบเฉลี่ย', '<p>เช่น 1 ตัว ≈ 4.5 กิโลกรัม · ตั้งที่บันไดหน่วยด้านบน แล้วให้สาขานับจำนวนตัวตอนรับของ</p>')}</div>`;
     return;
   }
   const head = d.proposals ? `<div class="mb-2">มี ${d.proposals} รายการรอตัดสินใจ ${uiQ('bmc:avgprop', 'ค่าเฉลี่ยจากการรับจริง', '<p>มี ' + d.proposals + ' รายการที่ค่าจากการรับจริงต่างจากค่าที่ใช้ รอฝ่ายวิเคราะห์ตัดสินใจ</p>')}</div>` : '';
@@ -1817,14 +1817,14 @@ function _bmcPackDraw() {
   const parts = [];
   if (f !== 'done') parts.push(d.pending.length
     ? `<div class="mb-2">รอตัดสินใจ ${d.pending.length} เรื่อง ${uiQ('bmc:packprop', 'ขนาดบรรจุที่สาขาแจ้ง', '<p>ตรวจกับฉลากที่สาขาถ่ายส่งทางไลน์ แล้วเลือกใช้ค่าที่แจ้งหรือไม่ใช้</p>')}</div>${_bmcPackTable(d.pending)}`
-    : `<div style="color:var(--text-secondary)">ไม่มีเรื่องที่รอตัดสินใจ ${uiQ('bmc:packnone', 'ขนาดบรรจุที่สาขาแจ้ง', '<p>สาขาแจ้งได้จากฟอร์มรับสินค้า ปุ่ม “ขนาดบรรจุไม่ตรง”</p>')}</div>`);
+    : `<div style="color:var(--text-secondary)">ไม่มีเรื่องที่รอตัดสินใจ ${uiQ('bmc:packnone', 'ขนาดบรรจุที่สาขาแจ้ง', '<p>สาขาแจ้งได้จากฟอร์มรับของ ปุ่ม “ขนาดบรรจุไม่ตรง”</p>')}</div>`);
   if (f !== 'todo') parts.push((f === 'all' ? '<div class="text-xs font-semibold mt-3 mb-1" style="color:var(--text-primary)">เรื่องที่ตัดสินใจแล้ว</div>' : '') + (d.done.length ? _bmcPackDoneTable(d.done) : uiStateFilter.empty(f, '_bmcPackPick', 'เรื่อง')));
   box.innerHTML = parts.join('');
 }
 async function bmcPackDecide(ids, decision, name, text) {
   let note = null;
   if (decision === 'rejected') {
-    note = await uiPrompt(`เหตุผลที่ไม่ใช้ค่าที่แจ้งของ ${name} (จำเป็น · สาขาอ่านได้ที่ประวัติรับสินค้า)`, '', { title: 'ไม่ใช้ค่าที่สาขาแจ้ง', okText: 'ไม่ใช้' });
+    note = await uiPrompt(`เหตุผลที่ไม่ใช้ค่าที่แจ้งของ ${name} (จำเป็น · สาขาอ่านได้ที่ประวัติรับของ)`, '', { title: 'ไม่ใช้ค่าที่สาขาแจ้ง', okText: 'ไม่ใช้' });
     if (!note || !String(note).trim()) return;
   } else if (!await uiConfirm(`ปรับทะเบียนของ ${name} เป็น ${text}\nบันไดหน่วยของรายการนี้เปลี่ยน ต้นทุนของเดือนที่ยังไม่ประกาศใช้เปลี่ยนตาม`,
     { title: 'ยืนยันการปรับขนาดบรรจุ', ok: 'ใช้ค่านี้', cancel: 'ยกเลิก' })) return;
@@ -2788,10 +2788,10 @@ function bmcRenderForecast() {
     <div class="text-sm" style="color:var(--text-secondary)">ใช้ ${esc(fmtDay(f.cover_from))} ถึง ${esc(fmtDay(f.cover_to))}</div>
     ${f.calendar_filled ? '' : `<div class="text-sm mt-1" style="color:var(--amber-ink)"><b>ยังไม่ได้ตั้งรอบส่งของสาขานี้ (ใช้ค่าเริ่มต้น)</b> <a href="#" onclick="supplyGo({tab:'bomcenter',pane:'cal'});return false" style="color:var(--amber-ink);text-decoration:underline">ตั้งค่ารอบส่ง →</a></div>`}
     <div id="bmcFcFormula" class="text-sm mt-2" style="color:var(--text-primary)">${_bmcFcFormula(f)}</div>
-    <div class="text-sm mt-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)"><b>ยังไม่หักคงเหลือของสาขา</b> ${uiQ('bmc:fcnet', 'ยอดแนะนำ', '<p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · ยังไม่หักคงเหลือของสาขา (หน้าสั่งสินค้าหักให้)</p>')}</div>
+    <div class="text-sm mt-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm);color:var(--amber-ink)"><b>ยังไม่หักคงเหลือของสาขา</b> ${uiQ('bmc:fcnet', 'ยอดแนะนำ', '<p>ยอดแนะนำ = ปริมาณที่คาดว่าจะใช้ + กันขาด · ยังไม่หักคงเหลือของสาขา (หน้าสั่งของหักให้)</p>')}</div>
     <details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--text-secondary)">ที่มาของตัวเลข</summary>
       <div class="text-sm mt-1" style="color:var(--text-secondary)">${bmcLines([`ยอดขาย ${esc(fmtDay(f.history_from))} ถึง ${esc(fmtDay(f.history_to))} (${f.trading_days} วันที่มีการขาย, เฉพาะช่วงเมนูใหม่)`,
-        f.source && f.source.kind !== 'recipes' ? (f.fallback ? f.fallback.message : `ใบตัดเบิกที่ยืนยันแล้ว ${f.source.confirmed_days}/${f.source.window_days} วัน (ขั้นต่ำ ${f.source.min_days} วัน)`)
+        f.source && f.source.kind !== 'recipes' ? (f.fallback ? f.fallback.message : `ใบตัดเบิกที่ส่งแล้ว ${f.source.confirmed_days}/${f.source.window_days} วัน (ขั้นต่ำ ${f.source.min_days} วัน)`)
           : `สูตร: ${f.stats.release_skus ? `เวอร์ชันที่ประกาศใช้แล้ว ${f.stats.release_skus} เมนู + ` : ''}สูตรระบบเดิมสำหรับเมนูที่เหลือ`])}</div></details>
     ${f.stats.missed_lines ? `<details class="mt-2"><summary class="text-sm cursor-pointer" style="color:var(--amber-ink)">แปลงหน่วยไม่ได้ ${f.stats.missed_lines} บรรทัด <a href="#" onclick="event.stopPropagation();supplyGo({tab:'bomcenter',pane:'conv'});return false" style="color:var(--amber-ink);text-decoration:underline">แก้ไขที่ หน่วยและการแปลง →</a></summary>
       <div class="wt-wrap mt-1" style="max-height:280px"><table class="wt"><thead><tr><th>รหัส</th><th>หน่วย</th><th class="wt-num">จาน</th><th>สาเหตุ</th></tr></thead><tbody>
@@ -2839,7 +2839,7 @@ async function bmcSaveForecast() {
   if (!_bmcFc || _bmcFcKey !== key) await bmcRunForecast();
   if (!_bmcFc || _bmcFcKey !== key) return;
   const f = _bmcFc;
-  if (!await uiConfirm(`บันทึกยอดแนะนำเป็นรอบสั่ง?\n${f.branch} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round} · ตัดรอบ ${f.order_weekday} ${fmtDay(f.order_day)} · ${f.rows.length} รายการ · ฿${_bmcNum(f.value_total, 0)}\nใช้เป็นฐานเทียบในหน้าสั่งสินค้าของสาขาและหน้าตรวจสอบการสั่ง`,
+  if (!await uiConfirm(`บันทึกยอดแนะนำเป็นรอบสั่ง?\n${f.branch} · ${f.round === 'salmon' ? 'แซลมอนสด' : 'รอบ ' + f.round} · ตัดรอบ ${f.order_weekday} ${fmtDay(f.order_day)} · ${f.rows.length} รายการ · ฿${_bmcNum(f.value_total, 0)}\nใช้เป็นฐานเทียบในหน้าสั่งของที่สาขาและหน้าตรวจสอบการสั่ง`,
       { title: 'ยืนยันการบันทึกยอดแนะนำ', ok: 'บันทึกเป็นรอบสั่ง', cancel: 'ยังไม่บันทึก' })) { bmcStatus('bmcFcStatus', null, 'ยังไม่บันทึก'); return; }
   try {
     const d = await _bmcJson(`${API}/api/bom-center/forecast/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -2901,7 +2901,7 @@ async function bmcLoadCloseSettings() {
   try { _bmcCs = await _bmcJson(`${API}/api/bom-center/close-settings`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
   const c = _bmcCs, w = hasModule('bom.center');
   box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">เกณฑ์ผลต่างและการตรวจนับ</div>
-      ${uiQ('bmc:cs1', 'เกณฑ์ผลต่างและการตรวจนับ', `<p>สาขาให้เหตุผลผลต่างเฉพาะรายการที่เกินเกณฑ์ร้อยละของกลุ่มมูลค่า และต่างตั้งแต่จำนวนบาทนี้ขึ้นไป</p><p>รายการที่ใช้จริงเป็น 0 หรืองวดที่ไม่มีใบรับสินค้าหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม</p><p>ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด): กลุ่มมูลค่าสูงนับเสริมทุกสัปดาห์ · ปิดงวดสิ้นเดือนต้องนับครบทุกรายการเสมอ</p><p>ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ ไม่ว่าจะเปิดหรือปิดการตรวจนับหมุนเวียน (มติเจ้าของ 13/10/2026)</p>`)}</div>
+      ${uiQ('bmc:cs1', 'เกณฑ์ผลต่างและการตรวจนับ', `<p>สาขาให้เหตุผลผลต่างเฉพาะรายการที่เกินเกณฑ์ร้อยละของกลุ่มมูลค่า และต่างตั้งแต่จำนวนบาทนี้ขึ้นไป</p><p>รายการที่ใช้จริงเป็น 0 หรืองวดที่ไม่มีใบรับของหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม</p><p>ตรวจนับหมุนเวียน (ไม่ใช่การปิดงวด): ของแพงนับเสริมทุกสัปดาห์ · ปิดงวดสิ้นเดือนต้องนับครบทุกรายการเสมอ</p><p>ค่าเริ่มต้น ${_bmcNum(c.reason_min_baht_default, 0)} บาท (ตั้งได้ ${_bmcNum(c.reason_min_baht_min, 0)} ถึง ${_bmcNum(c.reason_min_baht_max, 0)}; 0 = ไม่มีเกณฑ์บาท) · ปิดงวดสิ้นเดือนต้องตรวจนับครบทุกรายการ ไม่ว่าจะเปิดหรือปิดการตรวจนับหมุนเวียน (มติเจ้าของ 13/10/2026)</p>`)}</div>
     <div class="flex flex-wrap items-end gap-3">
       <label class="text-xs" style="color:var(--text-muted)">ผลต่างขั้นต่ำที่ต้องให้เหตุผล (บาท)<br>
         <input id="bmcCsBaht" type="number" min="${c.reason_min_baht_min}" max="${c.reason_min_baht_max}" step="50" value="${c.reason_min_baht}" ${w ? '' : 'disabled'} style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;width:120px;background:var(--bg-input);color:var(--text-primary)"></label>
@@ -3317,7 +3317,7 @@ function bmcIssRender() {
   const btn = document.getElementById('bmcIssAllBtn');
   btn.disabled = !n;
   btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12 M7 10l5 5 5-5 M4 19h16"></path></svg>ดาวน์โหลดทุกสาขาที่พร้อม (${n} สาขา)`;
-  document.getElementById('bmcIssAllWhy').textContent = n ? '' : 'ยังไม่มีสาขายืนยันรับสินค้าครบ';
+  document.getElementById('bmcIssAllWhy').textContent = n ? '' : 'ยังไม่มีสาขาแจ้งว่าบันทึกรับของครบ';
   const box = document.getElementById('bmcIssList');
   const rows = d.rows.filter(r => _bmcIssIn(_bmcIssFilter, r.status));
   if (!rows.length) {
@@ -3336,7 +3336,7 @@ function bmcIssRender() {
       const dl = `<button type="button" class="wt-btn" onclick="bmcIssXlsxRow(${r.branch_id})">ดาวน์โหลด</button>`;
       const acts = r.status === 'ready' ? dl + (canPost ? `<button type="button" class="wt-btn is-primary" onclick="bmcIssPost(true, ${r.end_count_id}, ${r.branch_id})">บันทึกเข้าระบบบัญชีแล้ว</button>` : '')
         : r.status === 'posted' ? dl + (canPost ? `<button type="button" class="iss-link" onclick="bmcIssPost(false, ${r.end_count_id}, ${r.branch_id})">ยกเลิกการบันทึก</button>` : '')
-        : '<span class="wt-muted">รอสาขายืนยันรับสินค้าครบ</span>';
+        : '<span class="wt-muted">รอสาขาแจ้งว่าบันทึกรับของครบ</span>';
       return `<tr><td data-l="สาขา"><button type="button" class="iss-branch" onclick="bmcIssOpen(${r.branch_id}, this)">${esc(r.name)}</button></td>
         <td data-l="งวด" class="wt-muted" style="white-space:nowrap">${esc(_bmcDm(r.begin_date))} → ${esc(_bmcDm(r.end_date))} (${r.days} วัน)</td>
         <td data-l="สถานะ"><span class="wt-tag" style="color:${ink}">${esc(stTxt)}</span></td>
@@ -3385,7 +3385,7 @@ function bmcIssRenderPost(st) {
   el.innerHTML = !_bmcIssCanPost() ? '' : posted
     ? `<button type="button" class="iss-link" onclick="bmcIssPost(false, ${_bmcIssEnd}, ${_bmcIssBr})">ยกเลิกการบันทึก</button>`
     : st.receipts_confirmed ? `<button type="button" class="wt-btn is-primary" onclick="bmcIssPost(true, ${_bmcIssEnd}, ${_bmcIssBr})">บันทึกเข้าระบบบัญชีแล้ว</button>`
-    : '<span class="wt-muted">ยังไม่ยืนยันรับสินค้าครบ</span>';
+    : '<span class="wt-muted">ยังไม่ได้แจ้งว่าบันทึกรับของครบ</span>';
 }
 async function bmcIssLoadSummary() {
   const s = _bmcIssSel();
@@ -3412,11 +3412,11 @@ async function bmcIssLoadSummary() {
   const st = d.status, t = d.totals;
   document.getElementById('bmcIssDrSub').textContent = `${fmtDay(d.period.begin_date)} → ${fmtDay(d.period.end_date)} · ${d.period.days} วัน · ราคาเดือน${fmtMonthTh(d.period.month)}`;
   const xl = document.getElementById('bmcIssDrXlsx');
-  if (xl) { xl.disabled = !st.receipts_confirmed; xl.title = st.receipts_confirmed ? '' : 'ยังไม่ยืนยันรับสินค้าครบ'; }
-  const chips = [st.receipts_confirmed ? _bmcChip('ยืนยันรับสินค้าครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ยืนยันรับสินค้าครบ', 'var(--amber-ink)')];
+  if (xl) { xl.disabled = !st.receipts_confirmed; xl.title = st.receipts_confirmed ? '' : 'ยังไม่ได้แจ้งว่าบันทึกรับของครบ'; }
+  const chips = [st.receipts_confirmed ? _bmcChip('บันทึกรับของครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ได้แจ้งว่าบันทึกรับของครบ', 'var(--amber-ink)')];
   const sl = d.slips;                                  // the slip coverage of the period: a warning, never a lock
   if (sl) {
-    chips.push(_bmcChip(`ใบตัดเบิกยืนยันแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)'));
+    chips.push(_bmcChip(`ใบตัดเบิกส่งแล้ว ${sl.confirmed_days}/${sl.trading_days} วัน`, sl.trading_days && sl.confirmed_days >= sl.trading_days ? 'var(--good-ink)' : 'var(--amber-ink)'));
     if (sl.missing_days.length) chips.push(_bmcChip(`ขาดใบตัดเบิก ${sl.missing_days.length} วัน`, 'var(--bad-ink)'));
     if (sl.draft_days.length) chips.push(_bmcChip(`ยังไม่ยืนยัน ${sl.draft_days.length} วัน`, 'var(--amber-ink)'));
   }
@@ -3468,7 +3468,7 @@ function bmcIssSlipsXlsx() {         // every confirmed daily slip of the period
 function bmcIssXlsx() {
   const d = _bmcIssSum;
   if (!d) return;
-  if (!d.status.receipts_confirmed) { _bmcIssStat('งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังดาวน์โหลดไม่ได้', 'warn'); return; }
+  if (!d.status.receipts_confirmed) { _bmcIssStat('งวดนี้ยังไม่ได้แจ้งว่าบันทึกรับของครบ จึงยังดาวน์โหลดไม่ได้', 'warn'); return; }
   bmcDownload(`${API}/api/bom-center/issue-summary.xlsx?end_count_id=${d.period.end_count_id}&branch_id=${d.branch.branch_id}`,
     `ใบสรุปตัดเบิก_${d.branch.name || ''}_${d.period.month}.xlsx`, 'bmcIssDrStatus');
 }
@@ -3504,9 +3504,9 @@ async function bmcIssPost(want, endCountId, branchId) {
   const sl = d.slips || {}, nMiss = (sl.missing_days || []).length + (sl.draft_days || []).length;
   const warn = want && nMiss ? `\nขาดใบตัดเบิก ${nMiss} วัน (${[...(sl.missing_days || []), ...(sl.draft_days || [])].sort().slice(0, 3).map(fmtDay).join(', ')}${nMiss > 3 ? ' …' : ''}) ผลต่างของวันเหล่านี้จึงยังไม่ครบ` : '';
   const ok = want
-    ? await uiConfirm(`บันทึกใบสรุปตัดเบิกเข้าระบบบัญชีแล้ว?\n${what}${warn}\nเมื่อบันทึกแล้วงวดนี้ล็อก: เพิ่มใบรับสินค้า แก้ใบตัดเบิก และยกเลิกการยืนยันรับสินค้าครบไม่ได้`,
+    ? await uiConfirm(`บันทึกใบสรุปตัดเบิกเข้าระบบบัญชีแล้ว?\n${what}${warn}\nเมื่อบันทึกแล้วงวดนี้ล็อก: เพิ่มใบรับของ แก้ใบตัดเบิก และยกเลิกที่แจ้งว่าบันทึกรับของครบไม่ได้`,
       { title: 'ยืนยันการบันทึกเข้าระบบบัญชี', ok: 'บันทึกเข้าระบบบัญชีแล้ว', cancel: 'ยังไม่บันทึก' })
-    : await uiConfirm(`ยกเลิกการบันทึกบัญชีของงวดนี้?\n${what}\nงวดนี้จะปลดล็อก และแก้ไขใบรับสินค้าและใบตัดเบิกได้อีก`,
+    : await uiConfirm(`ยกเลิกการบันทึกบัญชีของงวดนี้?\n${what}\nงวดนี้จะปลดล็อก และแก้ไขใบรับของและใบตัดเบิกได้อีก`,
       { title: 'ยืนยันการยกเลิกการบันทึกบัญชี', ok: 'ยกเลิกการบันทึกบัญชี', cancel: 'ไม่ยกเลิก' });
   if (!ok) { _bmcIssStat('ยังไม่เปลี่ยนสถานะ', null); return; }
   try {

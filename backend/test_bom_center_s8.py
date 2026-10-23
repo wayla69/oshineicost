@@ -91,7 +91,7 @@ def test_confirm_submit_reopen_receive(con):  # noqa: F811
     con.rollback()
     ok_lines = [{"code": CRAB, "confirmed_units": sug * 3, "reason_code": "event", "note": "จองกลุ่ม 40 คน"},
                 {"code": "V-007", "confirmed_units": 2, "reason_code": "event"}]
-    with pytest.raises(ValueError, match="ต้องยืนยันใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):   # no confirmed slip yet
+    with pytest.raises(ValueError, match="ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ"):   # no confirmed slip yet
         flow(ok_lines, submit=True)
     con.rollback()
     _slip(con)

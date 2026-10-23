@@ -58,7 +58,7 @@ def test_the_acknowledgement_is_required_and_stored(con):  # noqa: F811
     oid, q = _sent(con)
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q, reason=None, ack=False)
-    assert "ทำเครื่องหมายยืนยันการตรวจสินค้า" in str(e.value)
+    assert "ติ๊ก “ตรวจสภาพและจำนวนครบแล้ว”" in str(e.value)
     con.rollback()
     assert OR.detail(con, oid)["status"] == "processed"               # nothing was saved
     out = _receive(con, oid, q, reason=None)
@@ -77,7 +77,7 @@ def test_a_short_receipt_needs_a_reason(con):  # noqa: F811
         con.rollback()
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q - 2, reason=None)
-    assert "เลือกสาเหตุของส่วนต่าง" in str(e.value)
+    assert "เลือกสาเหตุที่ขาด" in str(e.value)
     con.rollback()
     with pytest.raises(ValueError) as e:
         _receive(con, oid, q - 2, reason="other")
@@ -96,7 +96,7 @@ def test_a_short_receipt_is_booked_at_the_received_quantity_and_claims_the_gap(c
     rec = con.execute("SELECT qty, qty_base FROM bc_receipt_line WHERE receipt_id=?", (out["receipt_id"],)).fetchone()
     assert rec[0] == q - 2 and rec[1] == pytest.approx((q - 2) * unit)
     d = CL.detail(con, out["claim_id"])
-    assert d["origin"] == "receive" and d["origin_th"] == "แจ้งขณะรับสินค้า" and d["status"] == "submitted"
+    assert d["origin"] == "receive" and d["origin_th"] == "แจ้งขณะรับของ" and d["status"] == "submitted"
     assert d["note"] == "ส่งรูปทางไลน์แล้ว" and d["photos"] == [] and d["stock_adjusted"] is False
     ln = d["lines"][0]
     assert (ln["code"], ln["claim_units"], ln["reason"], ln["sent_units"], ln["received_units"]) == (CODE, 2, "short", q, q - 2)
@@ -205,7 +205,7 @@ def test_a_receive_claim_cannot_exceed_the_gap(con):  # noqa: F811
     line = {"code": CODE, "claim_units": 3, "reason": "short", "sent_units": q, "received_units": q - 2}
     with pytest.raises(ValueError) as e:
         CL.create_from_receive(con, 1, oid, [line], None, "udon")
-    assert "เคลมขณะรับสินค้าได้ไม่เกินส่วนต่างระหว่างที่คลังส่งกับที่รับจริง (2)" in str(e.value)
+    assert "แจ้งขณะรับของได้ไม่เกินจำนวนที่ขาดระหว่างที่คลังส่งกับที่รับจริง (2)" in str(e.value)
     con.rollback()
     with pytest.raises(ValueError):                                    # a line with no gap at all
         CL.create_from_receive(con, 1, oid, [dict(line, claim_units=1, sent_units=4, received_units=4)], None, "udon")
@@ -254,10 +254,10 @@ def _http_flow(oid):
     body = {"lines": [{"code": "T-CL1", "received_units": 3, "reason": "short", "note": None}],
             "receipt_date": "2026-10-07", "claim_note": "ส่งรูปทางไลน์แล้ว"}
     no_ack = a.post(f"/api/bom-center/order/{oid}/receive", json=body)
-    assert no_ack.status_code == 400 and "ทำเครื่องหมายยืนยันการตรวจสินค้า" in no_ack.json()["detail"], no_ack.text
+    assert no_ack.status_code == 400 and "ติ๊ก “ตรวจสภาพและจำนวนครบแล้ว”" in no_ack.json()["detail"], no_ack.text
     no_reason = a.post(f"/api/bom-center/order/{oid}/receive",
                        json={**body, "ack": True, "lines": [{"code": "T-CL1", "received_units": 3}]})
-    assert no_reason.status_code == 400 and "เลือกสาเหตุของส่วนต่าง" in no_reason.json()["detail"]
+    assert no_reason.status_code == 400 and "เลือกสาเหตุที่ขาด" in no_reason.json()["detail"]
     assert a.get(f"/api/bom-center/order/{oid}").json()["status"] == "processed"      # both refusals saved nothing
     r = a.post(f"/api/bom-center/order/{oid}/receive", json={**body, "ack": True})
     assert r.status_code == 200, r.text
@@ -269,7 +269,7 @@ def _http_flow(oid):
     assert d["claim_reasons"][0]["code"] == "short"
     assert [c["claim_id"] for c in d["claims"]] == [cid] and d["claims"][0]["origin"] == "receive"
     assert d["claims"][0]["lines"][0]["claim_units"] == 2
-    assert a.get("/api/bom-center/claims").json()["origins"][0] == {"code": "receive", "label": "แจ้งขณะรับสินค้า"}
+    assert a.get("/api/bom-center/claims").json()["origins"][0] == {"code": "receive", "label": "แจ้งขณะรับของ"}
     mg = _login("management1")
     row = next(x for x in mg.get("/api/bom-center/hub/queue?status=received").json()["orders"] if x["order_id"] == oid)
     assert row["claims"] == 1 and row["claims_pending"] == 1

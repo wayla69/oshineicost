@@ -190,7 +190,7 @@ def test_fact_close_has_nine_steps_and_the_texts_say_so():
 def test_fact_issue_summary_header_names_the_counted_stock():
     from routers import bom_center as r
     assert r.ISSUE_HEADERS[6] == "นับจริง (ปลายงวด)"
-    assert "คงเหลือ (ปลายงวด)" not in r.ISSUE_HEADERS and "นับจริง (ปลายงวด)" in r.RECON_HEADERS
+    assert "คงเหลือ (ปลายงวด)" not in r.ISSUE_HEADERS and "นับจริง (สิ้นเดือน)" in r.RECON_HEADERS      # the branch's own file says สิ้นเดือน; the accountant's keeps ปลายงวด
 
 
 def test_fact_release_statuses_are_thai():

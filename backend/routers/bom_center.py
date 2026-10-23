@@ -2482,7 +2482,7 @@ def _count_mode(mode: Optional[str]) -> str:
         return "full"
     if mode == "cycle":
         return "cycle"
-    raise HTTPException(400, "ชนิดการตรวจนับไม่ถูกต้อง")
+    raise HTTPException(400, "ชนิดการนับของไม่ถูกต้อง")
 
 
 @router.get("/api/bom-center/stock/sheet")
@@ -2902,8 +2902,8 @@ def bc_issues_list(request: Request, branch_id: Optional[int] = Query(None), dat
 
 # The confirmed slips as an Excel file, for Accounting's program (declared before /issues/{slip_id}).
 SLIP_EXPORT_HEADERS = ["วันที่", "สาขา", "รหัส", "วัตถุดิบ", "หน่วย", "เบิกใช้", "ของเสีย", "สาเหตุของเสีย", "ราคาต่อหน่วย",
-                       "มูลค่าเบิกใช้", "มูลค่าของเสีย", "เลขที่ใบ", "ยืนยันเมื่อ", "ล่าช้า"]
-SLIP_SUMMARY_HEADERS = ["สาขา", "จำนวนใบ", "ใบที่ยืนยันล่าช้า", "จำนวนรายการ", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "มูลค่ารวม"]
+                       "มูลค่าเบิกใช้", "มูลค่าของเสีย", "เลขที่ใบ", "ส่งเมื่อ", "ส่งช้า"]
+SLIP_SUMMARY_HEADERS = ["สาขา", "จำนวนใบ", "ใบที่ส่งช้า", "จำนวนรายการ", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "มูลค่ารวม"]
 
 
 def _slip_lines_sheet(ws, title: str, rows: list, note: str) -> None:
@@ -2915,7 +2915,7 @@ def _slip_lines_sheet(ws, title: str, rows: list, note: str) -> None:
             reason = r["waste_reason_th"] + (f" — {r['note']}" if r["note"] else "")
         ws.append([r["date"], r["branch"], r["code"], r["name"], r["base_unit"], r["qty_used"], r["qty_waste"], reason,
                    r["unit_price"], r["used_value"], r["waste_value"], r["slip_id"], r["confirmed_at"],
-                   "ล่าช้า" if r["late"] else ""])
+                   "ส่งช้า" if r["late"] else ""])
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for c in row[5:7]:
             c.number_format = "#,##0.###"
@@ -2965,10 +2965,10 @@ def bc_issues_export(request: Request, month: Optional[str] = Query(None), branc
         bid = _claim_scope(con, request, branch_id)
         rows = _ir.slip_rows(con, month=month, branch_id=bid)
     if not rows:
-        raise HTTPException(400, f"ยังไม่มีใบตัดเบิกที่ยืนยันแล้วในเดือน {month}")
+        raise HTTPException(400, f"ยังไม่มีใบตัดเบิกที่ส่งแล้วในเดือน {month}")
     who = f"สาขา{rows[0]['branch']}" if bid is not None else "ทุกสาขา"
-    note = (f"ใบตัดเบิกที่ยืนยันแล้ว {who} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
-            "ไม่รวมใบที่ยังเป็นร่างหรือที่เปิดแก้ไขอยู่ · “ล่าช้า” = ใบที่ยืนยันหลังวันที่ของใบ")
+    note = (f"ใบตัดเบิกที่ส่งแล้ว {who} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
+            "ไม่รวมใบที่ยังเป็นร่างหรือที่เปิดแก้ไขอยู่ · “ส่งช้า” = ใบที่ส่งหลังวันที่ของใบ")
     wb = Workbook()
     _slip_lines_sheet(wb.active, "ใบตัดเบิกสาขา", rows, note)
     _slip_summary_sheet(wb.create_sheet(), "สรุปต่อสาขา", rows, note)
@@ -2987,7 +2987,7 @@ def bc_issue_export_one(slip_id: int, request: Request):
             raise HTTPException(404, "ไม่พบใบตัดเบิก")
         _stock_branch(con, request, head["branch_id"])
         if head["status"] != "confirmed":
-            raise HTTPException(400, "ใบตัดเบิกนี้ยังไม่ยืนยัน จึงยังส่งออกไม่ได้")
+            raise HTTPException(400, "ใบตัดเบิกนี้ยังไม่ส่ง จึงยังส่งออกไม่ได้")
         rows = _ir.slip_rows(con, slip_id=slip_id)
     wb = Workbook()
     _slip_lines_sheet(wb.active, "ใบตัดเบิก", rows,
@@ -3142,7 +3142,7 @@ def _issue_note(s: dict) -> str:
             " · ตัดเบิก = ยกมา + รับเข้า + เคลม/ปรับ − คงเหลือ"
             f" · ราคาต่อหน่วย = ราคาซื้อจริงเดือน {p['month']}")
     if st.get("receipts_confirmed_by"):
-        note += f" · ยืนยันรับสินค้าครบโดย {st['receipts_confirmed_by']}"
+        note += f" · แจ้งว่าบันทึกรับของครบโดย {st['receipts_confirmed_by']}"
     if p.get("partial_th"):
         note += " · " + p["partial_th"]
     return note
@@ -3180,8 +3180,8 @@ def _period_slip_rows(con, bid: int, s: dict) -> list:
 
 def _period_slip_note(s: dict, recon: dict) -> str:
     p, sl = s["period"], recon["slips"]
-    return (f"ใบตัดเบิกรายวันที่ยืนยันแล้ว สาขา{s['branch']['name']} งวด {p['begin_date']} ถึง {p['end_date']} (เดือน {p['month']}) · "
-            f"ใบตัดเบิกยืนยันแล้ว {sl['confirmed_days']}/{sl['trading_days']} วันขาย · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
+    return (f"ใบตัดเบิกรายวันที่ส่งแล้ว สาขา{s['branch']['name']} งวด {p['begin_date']} ถึง {p['end_date']} (เดือน {p['month']}) · "
+            f"ใบตัดเบิกส่งแล้ว {sl['confirmed_days']}/{sl['trading_days']} วันขาย · ราคาต่อหน่วย = ราคาซื้อจริงของเดือนที่ใบตัดเบิกระบุ · "
             "ไม่รวมใบที่ยังเป็นร่าง")
 
 
@@ -3191,8 +3191,8 @@ def _issue_or_400(con, bid: int, end_count_id: int) -> dict:
     except ValueError as e:
         raise HTTPException(404, str(e))
     if not s["status"]["receipts_confirmed"]:
-        raise HTTPException(400, "งวดนี้ยังไม่ยืนยันรับสินค้าครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้ "
-                                 "· ให้สาขาหรือประสานงานขายยืนยันก่อน")
+        raise HTTPException(400, "งวดนี้ยังไม่ได้แจ้งว่าบันทึกรับของครบ จึงยังจัดทำใบสรุปตัดเบิกไม่ได้ "
+                                 "· ให้สาขาหรือประสานงานขายแจ้งก่อน")
     return s
 
 
@@ -3306,7 +3306,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
         slips = {k: _period_slip_rows(con, s["branch"]["branch_id"], s) for k, s in done.items()}
         recons = {k: _ir.reconcile(con, s["branch"]["branch_id"], k) for k, s in done.items()}
     if not done:
-        raise HTTPException(400, f"ยังไม่มีงวดที่ยืนยันรับสินค้าครบในเดือน {month}")
+        raise HTTPException(400, f"ยังไม่มีงวดที่แจ้งว่าบันทึกรับของครบในเดือน {month}")
     wb = Workbook()
     used = set()
     ws = wb.active
@@ -3324,7 +3324,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
             sheets.append(s)
         else:
             ws.append([b["name"], p["begin_date"], p["end_date"], None, None, None, None, None,
-                       "ยังไม่ยืนยันรับสินค้าครบ (ไม่มีแผ่นงาน)"])
+                       "ยังไม่ได้แจ้งว่าบันทึกรับของครบ (ไม่มีแผ่นงาน)"])
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for c in row[4:7]:
             c.number_format = "#,##0.00"
@@ -3333,7 +3333,7 @@ def bc_issue_summary_all_xlsx(request: Request, month: str = Query(...)):
     # PR-J4: the daily slips of every confirmed period, then per branch its movement sheet and its reconciliation
     all_slips = [r for s in sheets for r in slips[s["period"]["end_count_id"]]]
     _slip_lines_sheet(wb.create_sheet(), _sheet_title("ใบตัดเบิกรายวัน", used), all_slips,
-                      f"ใบตัดเบิกรายวันที่ยืนยันแล้วของทุกสาขาในงวดที่ยืนยันรับสินค้าครบ เดือน {month} · ไม่รวมใบที่ยังเป็นร่าง")
+                      f"ใบตัดเบิกรายวันที่ส่งแล้วของทุกสาขาในงวดที่แจ้งว่าบันทึกรับของครบ เดือน {month} · ไม่รวมใบที่ยังเป็นร่าง")
     for s in sheets:
         name = s["branch"]["name"]
         _issue_sheet(wb.create_sheet(), _sheet_title(name, used), s)
@@ -3354,20 +3354,20 @@ def bc_issue_posted(body: PostedBody, request: Request):
 
 
 # ── PR-J3 · issue-slip reports: system stock vs count, daily issue vs BoM (issue_reports.py) ──
-RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "ยกมา (ต้นงวด)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
-                 "คงเหลือตามระบบ", "นับจริง (ปลายงวด)", "ผลต่าง (จำนวน)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "สถานะ", "เหตุผล",
+RECON_HEADERS = ["รหัส", "วัตถุดิบ", "หน่วย", "ราคาของ", "ยกมา (ต้นเดือน)", "รับเข้า", "เคลม/ปรับ", "ตัดเบิก (ใช้)", "ของเสีย",
+                 "ของที่ควรเหลือ (ตามระบบ)", "นับจริง (สิ้นเดือน)", "ส่วนต่าง (จำนวน)", "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "สถานะ", "เหตุผล",
                  "หมายเหตุ", "ราคาต่อหน่วย", "ที่มาของนับจริง / ข้อมูลไม่ครบ"]
 DAILY_HEADERS = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
-                 "ผลต่าง (มูลค่า)", "ผลต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "เบิกเกินต่อเนื่อง"]
-DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
-                      "ผลต่าง (จำนวน)", "ผลต่าง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
+                 "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "รายการของแพงที่เบิกเกินกำหนด", "เบิกเกินต่อเนื่อง"]
+DAILY_ITEM_HEADERS = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ราคาของ", "เบิกใช้", "ของเสีย", "รวมเบิก", "ตามสูตร",
+                      "ส่วนต่าง (จำนวน)", "ส่วนต่าง %", "ราคาต่อหน่วย", "ส่วนต่าง (มูลค่า)", "สัญญาณ"]
 
 # PR-S4 · mode `stock`: no recipe - the BoM column becomes the branch's normal and the all-branch median
-DAILY_HEADERS_STOCK = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ปกติของสาขา (มูลค่า)",
-                       "ค่ากลางทุกสาขา (มูลค่า)", "ผลต่าง (มูลค่า)", "ผลต่าง %", "ต่างจากค่ากลาง %",
-                       "รายการกลุ่มมูลค่าสูงที่เบิกเกินเกณฑ์", "สัญญาณต่อเนื่อง"]
-DAILY_ITEM_HEADERS_STOCK = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "กลุ่มมูลค่า", "เบิกใช้", "ของเสีย", "รวมเบิก", "ปกติของสาขา",
-                            "ค่ากลางทุกสาขา", "ผลต่าง (จำนวน)", "ผลต่าง %", "ต่างจากค่ากลาง %", "ราคาต่อหน่วย", "ผลต่าง (มูลค่า)", "สัญญาณ"]
+DAILY_HEADERS_STOCK = ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ที่สาขาใช้ปกติ (มูลค่า)",
+                       "เฉลี่ยทุกสาขา (มูลค่า)", "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "ต่างจากเฉลี่ยทุกสาขา %",
+                       "รายการของแพงที่เบิกเกินกำหนด", "สัญญาณต่อเนื่อง"]
+DAILY_ITEM_HEADERS_STOCK = ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ราคาของ", "เบิกใช้", "ของเสีย", "รวมเบิก", "ที่สาขาใช้ปกติ",
+                            "เฉลี่ยทุกสาขา", "ส่วนต่าง (จำนวน)", "ส่วนต่าง %", "ต่างจากเฉลี่ยทุกสาขา %", "ราคาต่อหน่วย", "ส่วนต่าง (มูลค่า)", "สัญญาณ"]
 
 
 def _recon_or_404(con, bid: int, end_count_id: int) -> dict:
@@ -3394,8 +3394,8 @@ def bc_ir_reconcile_xlsx(request: Request, end_count_id: int = Query(...), branc
         bid = _stock_branch(con, request, branch_id)
         r = _recon_or_404(con, bid, end_count_id)
     wb = Workbook()
-    _recon_sheet(wb.active, "กระทบยอด", r)
-    return _xlsx(wb, _fname("กระทบยอด", _bname(bid), r["period"]["month"]))
+    _recon_sheet(wb.active, "เทียบของ", r)
+    return _xlsx(wb, _fname("เทียบของ", _bname(bid), r["period"]["month"]))
 
 
 def _recon_sheet(ws, title: str, r: dict) -> None:
@@ -3404,9 +3404,9 @@ def _recon_sheet(ws, title: str, r: dict) -> None:
     p, sl = r["period"], r["slips"]
     _sheet(ws, title, RECON_HEADERS,
            f"รายงานสินค้าคงเหลือตามตัดเบิกเทียบกับสินค้านับจริง สาขา{r['branch']['name']} งวด {p['begin_date']} ถึง "
-           f"{p['end_date']} (เดือน {p['month']}) · คงเหลือตามระบบ = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย · "
-           "ผลต่าง = นับจริง − คงเหลือตามระบบ · เกณฑ์ กลุ่มมูลค่าสูง ±5% · กลาง ±10% · ต่ำ ±20% · "
-           f"ใบตัดเบิกยืนยันแล้ว {sl['confirmed_days']}/{sl['trading_days']} วัน")
+           f"{p['end_date']} (เดือน {p['month']}) · ของที่ควรเหลือ (ตามระบบ) = ยกมา + รับเข้า + เคลม/ปรับ − ตัดเบิก − ของเสีย · "
+           "ส่วนต่าง = นับจริง − ของที่ควรเหลือ (ตามระบบ) · ช่วงที่ยอมรับ ของแพง ±5% · ปานกลาง ±10% · ถูก ±20% · "
+           f"ใบตัดเบิกส่งแล้ว {sl['confirmed_days']}/{sl['trading_days']} วัน")
     for x in r["rows"]:
         ws.append([x["code"], x["name"], x["base_unit"], _CLASS_SHORT.get(x["class"], x["class"]), x["begin"], x["received"], x["claims"], x["used"],
                    x["waste"], x["system"], x["count"], x["diff"], x["diff_value"], x["diff_pct"], x["status_th"],
@@ -3456,11 +3456,11 @@ def _daily_xlsx_stock(wb, ws, d: dict, items: list, month: str):
     from openpyxl.styles import Font
     t = d["totals"]
     th = _ir.signal_th_stock
-    _sheet(ws, "ผลต่างตัดเบิกรายวัน", DAILY_HEADERS_STOCK,
-           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับปกติของสาขา "
-           f"(ค่าเฉลี่ยวันเดียวกันของสัปดาห์ {_ir.NORMAL_WEEKS} สัปดาห์ก่อน ปรับตามยอดขายวันนั้น) และค่ากลางทุกสาขาต่อยอดขาย ฿100,000 "
-           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · ผลต่างและผลต่าง % เทียบกับปกติของสาขา · "
-           f"กลุ่มมูลค่าสูงเบิกเกินปกติของสาขาหรือค่ากลางมากกว่า {_ir.OVER_PCT:.0f}% หรือต่ำกว่าเกิน {_ir.UNDER_PCT_STOCK:.0f}% "
+    _sheet(ws, "ส่วนต่างตัดเบิกรายวัน", DAILY_HEADERS_STOCK,
+           f"ส่วนต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับที่สาขาใช้ปกติ "
+           f"(ค่าเฉลี่ยวันเดียวกันของสัปดาห์ {_ir.NORMAL_WEEKS} สัปดาห์ก่อน ปรับตามยอดขายวันนั้น) และเฉลี่ยทุกสาขาต่อยอดขาย ฿100,000 "
+           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ส่งแล้ว · ส่วนต่างและส่วนต่าง % เทียบกับที่สาขาใช้ปกติ · "
+           f"ของแพงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า {_ir.OVER_PCT:.0f}% หรือต่ำกว่าเกิน {_ir.UNDER_PCT_STOCK:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นสัญญาณต่อเนื่อง")
     for r in d["rows"]:
         sig = ", ".join(f"{f['name']}: {th('under_streak' if f['direction'] == 'under' else 'streak', f['basis'])}"
@@ -3483,8 +3483,8 @@ def _daily_xlsx_stock(wb, ws, d: dict, items: list, month: str):
     ws.freeze_panes = "A3"
     w2 = wb.create_sheet()
     _sheet(w2, "รายการต่อวัน", DAILY_ITEM_HEADERS_STOCK,
-           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
-           "ผลต่าง = รวมเบิก − ปกติของสาขา · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
+           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยเล็กสุดของวัตถุดิบ · "
+           "ส่วนต่าง = รวมเบิก − ที่สาขาใช้ปกติ · แถวที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิก")
     for it in items:
         w2.append([it["date"], it["code"], it["name"], it["base_unit"], _CLASS_SHORT.get(it["class"], it["class"]), it["used"], it["waste"],
                    it["issued"], it["normal"], it["median"], it["var_qty"], it["var_pct"], it["median_pct"], it["price_per_base"],
@@ -3499,7 +3499,7 @@ def _daily_xlsx_stock(wb, ws, d: dict, items: list, month: str):
     w2.column_dimensions["C"].width = 44
     w2.column_dimensions["P"].width = 40
     w2.freeze_panes = "D3"
-    return _xlsx(wb, _fname("ผลต่างตัดเบิกรายวัน", d["branch"]["name"], month))
+    return _xlsx(wb, _fname("ส่วนต่างตัดเบิกรายวัน", d["branch"]["name"], month))
 
 
 @router.get("/api/bom-center/issue-reports/daily.xlsx")
@@ -3517,9 +3517,9 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     ws = wb.active
     if d.get("stock"):
         return _daily_xlsx_stock(wb, ws, d, items, month)
-    _sheet(ws, "ผลต่างตัดเบิกรายวัน", DAILY_HEADERS,
-           f"ผลต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
-           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ยืนยันแล้ว · กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
+    _sheet(ws, "ส่วนต่างตัดเบิกรายวัน", DAILY_HEADERS,
+           f"ส่วนต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบตามสูตรจากยอดขายของวันนั้น "
+           f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ส่งแล้ว · ของแพงเบิกเกินสูตรมากกว่า {_ir.OVER_PCT:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นเบิกเกินต่อเนื่อง")
     for r in d["rows"]:
         ws.append([r["date"], r["weekday_th"], r["slip_status_th"], r["used_value"], r["waste_value"], r["issued_value"],
@@ -3539,8 +3539,8 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
     ws.freeze_panes = "A3"
     w2 = wb.create_sheet()
     _sheet(w2, "รายการต่อวัน", DAILY_ITEM_HEADERS,
-           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยฐานของวัตถุดิบ · "
-           "ผลต่าง = รวมเบิก − ตามสูตร · แถวที่ใบตัดเบิกยังไม่ยืนยันไม่มีตัวเลขเบิก")
+           f"รายการวัตถุดิบต่อวัน สาขา{d['branch']['name']} เดือน {month} · หน่วยเป็นหน่วยเล็กสุดของวัตถุดิบ · "
+           "ส่วนต่าง = รวมเบิก − ตามสูตร · แถวที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิก")
     for it in items:
         w2.append([it["date"], it["code"], it["name"], it["base_unit"], _CLASS_SHORT.get(it["class"], it["class"]), it["used"], it["waste"], it["issued"],
                    it["bom"], it["var_qty"], it["var_pct"], it["price_per_base"], it["var_value"], it["signal_th"]])
@@ -3552,14 +3552,14 @@ def bc_ir_daily_xlsx(request: Request, branch_id: Optional[int] = Query(None), m
         row[12].number_format = "#,##0.00"
     w2.column_dimensions["C"].width = 44
     w2.freeze_panes = "D3"
-    return _xlsx(wb, _fname("ผลต่างตัดเบิกรายวัน", d["branch"]["name"], month))
+    return _xlsx(wb, _fname("ส่วนต่างตัดเบิกรายวัน", d["branch"]["name"], month))
 
 
 # ── PR-J4 · R3 the lateness log: how each branch handled its slips (issue_reports.log) ──
-LOG_HEADERS = ["วันที่", "สาขา", "สถานะใบตัดเบิก", "ยืนยันเมื่อ", "ผู้ยืนยัน", "ยืนยันซ้ำ (ครั้ง)", "เปิดแก้ไข (ครั้ง)",
-               "เหตุผลเปิดแก้ไข", "ใบสั่งซื้อส่งล่าช้า (ใบ)", "เคลม (เรื่อง)", "หมายเหตุ"]
-LOG_SUMMARY_HEADERS = ["สาขา", "วันขาย", "ยืนยันตรงวัน", "ล่าช้า", "ยังไม่ยืนยัน", "ไม่มีใบ", "ตรงวัน %", "มีใบ %",
-                       "เปิดแก้ไข (ครั้ง)", "ยืนยันซ้ำ (ครั้ง)", "ใบสั่งซื้อส่งล่าช้า (ใบ)", "เคลม (เรื่อง)"]
+LOG_HEADERS = ["วันที่", "สาขา", "สถานะใบตัดเบิก", "ส่งเมื่อ", "ผู้ส่ง", "ส่งซ้ำ (ครั้ง)", "เปิดแก้ไข (ครั้ง)",
+               "เหตุผลเปิดแก้ไข", "ใบสั่งซื้อส่งช้า (ใบ)", "เคลม (เรื่อง)", "หมายเหตุ"]
+LOG_SUMMARY_HEADERS = ["สาขา", "วันขาย", "ส่งตรงวัน", "ส่งช้า", "ยังไม่ส่ง", "ไม่มีใบ", "ตรงวัน %", "มีใบ %",
+                       "เปิดแก้ไข (ครั้ง)", "ส่งซ้ำ (ครั้ง)", "ใบสั่งซื้อส่งช้า (ใบ)", "เคลม (เรื่อง)"]
 
 
 def _log_range(date_from: Optional[str], date_to: Optional[str]) -> tuple:
@@ -3603,7 +3603,7 @@ def bc_ir_log_xlsx(request: Request, date_from: Optional[str] = Query(None), dat
         lg = _ir.log_monthly(con, month, bid) if month else _ir.log(con, d0, d1, bid)
     label = f"เดือน {month}" if month else f"{d0} ถึง {d1}"
     note = (f"บันทึกความล่าช้าของใบตัดเบิก {label} · นับเฉพาะวันที่สาขามียอดขายหรือมีใบตัดเบิก ไม่นับวันก่อนสาขาเริ่มใช้งานและไม่นับวันนี้ที่ยังไม่ครบวัน · "
-            "ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย")
+            "ตรงวัน % = ส่งตรงวัน ÷ ใบที่ส่งแล้ว · มีใบ % = ใบที่ส่งแล้ว ÷ วันขาย")
     wb = Workbook()
     ws = wb.active
     _sheet(ws, "บันทึกความล่าช้า", LOG_HEADERS, note)
@@ -3891,7 +3891,7 @@ def bc_receive_template(order_id: int, request: Request, branch_id: Optional[int
             wb, name = _bf.receive_template(con, bid, order_id)
         except ValueError as e:
             raise HTTPException(400, str(e))
-    return _xlsx(wb, _fname("แบบฟอร์ม", "รับสินค้า", name, f"ใบสั่งซื้อ{order_id}"))
+    return _xlsx(wb, _fname("แบบฟอร์ม", "รับของ", name, f"ใบสั่งซื้อ{order_id}"))
 
 
 @router.post("/api/bom-center/order/{order_id}/receive-import", dependencies=[Depends(require_write_token_unless_dry_run)])
@@ -4121,9 +4121,9 @@ def _claim_scope(con, request: Request, branch_id: Optional[int]):
 def _claim_head_or_403(con, request: Request, claim_id: int) -> dict:
     h = _cl._head(con, claim_id)
     if not h:
-        raise HTTPException(404, "ไม่พบรายการเคลม")
+        raise HTTPException(404, "ไม่พบเรื่องที่แจ้ง")
     if _auth.scope_branch(request) and h["branch_id"] != _stock_branch(con, request, None):
-        raise HTTPException(403, detail="บัญชีสาขาเข้าถึงได้เฉพาะเคลมของสาขาตัวเอง", headers={"X-Denied": "role"})
+        raise HTTPException(403, detail="บัญชีสาขาเข้าถึงได้เฉพาะเรื่องที่แจ้งของสาขาตัวเอง", headers={"X-Denied": "role"})
     return h
 
 
@@ -4185,7 +4185,7 @@ async def bc_claim_create(request: Request, payload: str = Form(...), photos: Li
         p = json.loads(payload)
         order_id = int(p["order_id"])
     except (ValueError, KeyError, TypeError):
-        raise HTTPException(400, "ข้อมูลการเคลมไม่ถูกต้อง")
+        raise HTTPException(400, "ข้อมูลที่แจ้งไม่ถูกต้อง")
     raws = []
     for f in photos:
         b = await f.read(_cl.MAX_PHOTO_BYTES + 1)
@@ -4377,7 +4377,7 @@ def bc_hub_consolidated_xlsx(ids: Optional[str] = Query(None), date_from: Option
                     qs, us = _xlsx_qty(q, ln)
                     per_branch.append([bname, dlv, o["cycle_date"], _fc.ROUND_TH.get(str(o["round"]), o["round"]), ln["code"], ln["name"], qs,
                                        us, o["po_ref"], o["order_id"],
-                                       "ส่งล่าช้า (มีค่าปรับ)" if o.get("late") else "",
+                                       "ส่งช้า (มีค่าปรับ)" if o.get("late") else "",
                                        (f"คีย์แล้ว {_hub.keyed_date(o['accounting_keyed_at'])}"
                                         if o.get("accounting_keyed_at") else "ยังไม่คีย์")])
     wb = Workbook()
@@ -4457,11 +4457,11 @@ def bc_hub_compliance_xlsx(date_from: Optional[str] = Query(None), date_to: Opti
         ws.append([r["cycle_date"], r["branch"], _fc.ROUND_TH.get(str(r["round"]), r["round"]), th.get(r["status"], r["status"]), r["suggested"], r["confirmed"],
                    r["processed"], r["received"], r.get("confirmed_vs_suggested_pct"), r.get("centre_change_pct"),
                    r.get("delivery_gap_pct"), r.get("submitted_on_time"), r.get("processed_on_time"),
-                   "ส่งล่าช้า (มีค่าปรับ)" if r.get("late") else ""])
+                   "ส่งช้า (มีค่าปรับ)" if r.get("late") else ""])
     w2 = wb.create_sheet()                                   # PR-J4: how each branch kept its daily issue slips in the same dates
     _sheet(w2, "ใบตัดเบิก", LOG_SUMMARY_HEADERS,
-           f"การทำใบตัดเบิกของแต่ละสาขา {d0} ถึง {d1} · นับเฉพาะวันที่สาขามียอดขาย · ตรงวัน % = ยืนยันตรงวัน ÷ ใบที่ยืนยันแล้ว · "
-           "มีใบ % = ใบที่ยืนยันแล้ว ÷ วันขาย")
+           f"การทำใบตัดเบิกของแต่ละสาขา {d0} ถึง {d1} · นับเฉพาะวันที่สาขามียอดขาย · ตรงวัน % = ส่งตรงวัน ÷ ใบที่ส่งแล้ว · "
+           "มีใบ % = ใบที่ส่งแล้ว ÷ วันขาย")
     for s in c["issues"]:
         w2.append([s["branch"], s["trading_days"], s["on_time"], s["late"], s["draft"], s["missing"], s["on_time_pct"],
                    s["coverage_pct"], s["reopens"], s["reconfirms"], s["late_orders"], s["claims"]])
@@ -4703,7 +4703,7 @@ def bc_stock_count_template(request: Request, branch_id: Optional[int] = Query(N
         name = con.execute("SELECT name FROM branches WHERE branch_id=?", (bid,)).fetchone()[0]
         rows = _st.template_rows(con, bid)
     wb = Workbook()
-    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "กลุ่มมูลค่า", "ต้องนับ",
+    heads = ["โซน", "รหัส", "ชื่อ", "หน่วยนับ", "จำนวนที่นับ", "1 หน่วยนับ = หน่วยฐาน", "หน่วยฐาน", "ราคาของ", "ต้องนับ",
              "หมายเหตุ"]
     _sheet(wb.active, "ใบตรวจนับ", heads,
            f"ใบตรวจนับสินค้าคงเหลือ สาขา{name} · วันที่ตรวจนับ {count_date or '……'} (นับก่อนเปิดร้านและก่อนรับสินค้าของวันนั้น)"

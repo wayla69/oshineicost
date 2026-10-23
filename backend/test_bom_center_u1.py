@@ -73,7 +73,7 @@ def test_an_item_with_no_base_unit_is_not_on_the_count_sheet_and_never_blocks_it
     out = ST.save(con, 1, _all_lines(sh), "udon", submit=True, count_date="2026-10-01")
     assert out["status"] == "submitted" and out["lines"] == len(_items(sh))
     assert not con.execute("SELECT 1 FROM bc_stock_count_line WHERE ingredient_code='X-001'").fetchone()
-    # the analyst's task names it (หน้างาน "ไม่มีหน่วยฐาน N")
+    # the analyst's task names it (หน้างาน "ไม่มีหน่วยเล็กสุด N")
     it = {i["key"]: i for i in TD.build(con, "2026-09", None, None, today=date(2026, 10, 7))["items"]}["master_issues"]
     assert it["status"] == "todo" and "ไม่มีหน่วยฐาน 1" in it["detail"]
 
@@ -120,7 +120,7 @@ def test_an_order_line_without_a_pack_size_is_marked_and_kept_in_base_units(con)
     con.commit()
     p = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW)
     crab = next(r for r in p["rows"] if r["code"] == "13-01-009")
-    assert crab["order_unit"] == "base" and crab["no_pack"] is True and crab["no_pack_th"] == "ยังไม่มีขนาดบรรจุ"
+    assert crab["order_unit"] == "base" and crab["no_pack"] is True and crab["no_pack_th"] == "ยังไม่มีขนาดแพ็ค"
     assert (crab["show_unit"], crab["show_factor"]) == ("กิโลกรัม", 1000.0)
     _slip(con, "2026-10-05", hour=8)
     out = OR.save_flow(con, 1, "1", WED, [{"code": "13-01-009", "confirmed_units": crab["order_units"]}], "udon",
@@ -133,7 +133,7 @@ def test_an_order_line_without_a_pack_size_is_marked_and_kept_in_base_units(con)
     it = c["groups"][0]["items"][0]
     assert it["no_pack"] and it["show_factor"] == 1000.0 and it["total"] == crab["order_units"]
     from routers.bom_center import _xlsx_qty
-    assert _xlsx_qty(18558, ln) == (18.558, "กิโลกรัม (ยังไม่มีขนาดบรรจุ)")
+    assert _xlsx_qty(18558, ln) == (18.558, "กิโลกรัม (ยังไม่มีขนาดแพ็ค)")
     assert _xlsx_qty(3, {"no_pack": False}) == (3, "แพ็ค")
 
 
@@ -226,7 +226,7 @@ def test_the_plan_names_the_next_count_and_when_it_is_due(con):  # noqa: F811
     assert p["first"] and p["next_full_due"] is True and p["last_full"] is None
     ST.save(con, 1, [{"code": "13-01-009", "qty": 1, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-01", require_all=False)
     p = ST.count_plan(con, 1, date(2026, 10, 2))
-    assert p["last_full"] == {"kind": "begin", "date": "2026-10-01", "kind_th": "ต้นงวด"}
+    assert p["last_full"] == {"kind": "begin", "date": "2026-10-01", "kind_th": "นับครั้งแรก"}
     assert p["next_full_date"] == "2026-11-01" and p["next_full_due"] is False
     assert ST.count_plan(con, 1, date(2026, 10, 31))["next_full_due"] is True        # due from the last day of the month
 
@@ -285,7 +285,7 @@ def test_a_round_whose_cutoff_is_a_later_day_is_upcoming_and_never_a_badge(con):
     due = {i["key"].split(":")[0]: i for i in d["items"] if i["key"].startswith("order_due_")}
     assert due["order_due_1"]["due_today"] and not due["order_due_1"]["upcoming"]
     later = [i for i in due.values() if i["cutoff_date"] > mon.isoformat()]
-    assert later and all(i["upcoming"] and i["next_th"].startswith("ถัดไป: ") and "ตัดรอบ" in i["next_th"] for i in later)
+    assert later and all(i["upcoming"] and i["next_th"].startswith("ถัดไป: ") and "ส่งก่อน" in i["next_th"] for i in later)
     pages = NB.build(con, "branch", mods, name, today=mon)["pages"]
     assert pages.get("branchstock:order") == 1                         # today's round only
     keys = {i["key"] for i in NB.mine_open(d, "branch", mods)}
@@ -312,7 +312,7 @@ def test_the_branch_screens():
     # 3: base-unit lines in the bigger unit, with the chip
     assert "bmcNoPackChip(r)" in brn and "brnOrdInput(" in brn and "function bmcShowQty(" in bmc
     # 6: the finished count is a done state with a start button when due
-    assert "function _brnCountDone(" in brn and "เริ่มตรวจนับปลายงวด" in brn and 'id="brnDone"' in _src("tabs/53-branchstock.html")
+    assert "function _brnCountDone(" in brn and "เริ่มนับของสิ้นเดือน" in brn and 'id="brnDone"' in _src("tabs/53-branchstock.html")
 
 
 @needs_node

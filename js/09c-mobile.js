@@ -143,7 +143,7 @@ function _phNavItems() {
   if (kind === 'franchise') return [Object.assign({}, home, { nb: 'p:franchise' }), me];     // PR-F4: the unread replies of head office
   if (kind === 'branch') {
     const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane, nb: `p:branchstock:${pane}` });
-    return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งสินค้า', 'cart', 'order'), b('recv', 'รับสินค้า', 'recv', 'recv'), me];
+    return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งของ', 'cart', 'order'), b('recv', 'รับของ', 'recv', 'recv'), me];
   }
   return [home, { id: 'tasks', label: 'งานของฉัน', path: DEPT_ICONS.count, js: 'phOpenTasks()', nb: 't' },
     { id: 'search', label: 'ค้นหา', path: _PH_ICON.search, js: 'phOpenSearch()' }, me];
@@ -557,9 +557,9 @@ async function msPushRender(note, p) {
   const denied = Notification.permission === 'denied';
   const sup = _pushSupplyCard(p);
   const frc = p === 'frcPush';        // PR-F2: ร้านของฉัน, the franchise owner's own morning summary (kind "franchise")
-  if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · งานวันนี้ และเตือนก่อนตัดรอบ 13:15' : 'เปิดอยู่ · สรุปเมื่อวานทุกเช้า 08:30');
+  if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · งานวันนี้ และเตือนก่อนเวลาส่งสุดท้าย 13:15' : 'เปิดอยู่ · สรุปเมื่อวานทุกเช้า 08:30');
   else if (denied) { st.innerHTML = _msPushBlockedHelp(p); _msPushWatchPermission(); }
-  else st.textContent = note || (frc ? 'ยังไม่เปิด · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'ยังไม่เปิด · งานวันนี้ และเตือนก่อนตัดรอบ 13:15' : 'ยังไม่เปิด · สรุปเมื่อวานทุกเช้า 08:30');
+  else st.textContent = note || (frc ? 'ยังไม่เปิด · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'ยังไม่เปิด · งานวันนี้ และเตือนก่อนเวลาส่งสุดท้าย 13:15' : 'ยังไม่เปิด · สรุปเมื่อวานทุกเช้า 08:30');
   if (on) on.style.display = sub || denied ? 'none' : '';
   if (off) off.style.display = sub ? '' : 'none';
   if (test) test.style.display = sub ? '' : 'none';
