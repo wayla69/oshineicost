@@ -268,22 +268,343 @@
 - `js/01-core.js:543` branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และยืนยันทุกวัน', 'issue'], ['branchstock', 'ส่ง → branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และส่งทุกวัน', 'issue'], ['branchstock', 'ส่งใบส
 - `js/01-core.js:615` 'branch.stock':'สาขา: ตัดเบิก ตรวจนับ และสั่งสินค้า', → 'branch.stock':'สาขา: ตัดเบิก นับของ และสั่งของ',
 - `js/01-core.js:979` 'branch.stock':'สาขา: ตัดเบิก ตรวจนับ สั่งสินค้า', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply. → 'branch.stock':'สาขา: ตัดเบิก นับของ สั่งของ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.ware
-- `js/01-core.js:2918` { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'order', label: 'สั่งของ', roles: ['branch', 'analyst', 'management'] },
-- `js/01-core.js:2919` { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'recv', label: 'รับของ', roles: ['branch', 'analyst', 'management'] },
-- `js/01-core.js:2920` { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', roles: ['branch', 'analyst', 'management'] },
-- `js/01-core.js:2921` { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }]  → { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }] }
-- `js/01-core.js:3098` { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และตรวจนับ', icon: 'store', hue: 'brn', roles: ['branch'] → { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และนับของ', icon: 'store', hue: 'brn', roles: ['branch'],
-- `js/01-core.js:3100` { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: 'cart' }, → { tab: 'branchstock', pane: 'order', label: 'สั่งของ', icon: 'cart' },
-- `js/01-core.js:3101` { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: 'recv' }, → { tab: 'branchstock', pane: 'recv', label: 'รับของ', icon: 'recv' },
-- `js/01-core.js:3102` { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', icon: 'diff' }, → { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', icon: 'diff' },
-- `js/01-core.js:3103` { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', icon: 'count' }] }, → { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', icon: 'count' }] },
-- `js/01-core.js:3136` 'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก', 'branchstock|order': 'สั่งสินค้า สั่งของ po ใบสั่งซื้อ', → 'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก เบิกใช้ ของเสีย', 'branchstock|order': 'สั่งของ สั่งสินค้า
-- `js/01-core.js:3137` 'branchstock|var': 'ผลต่าง variance ใช้จริง', 'branchstock|count': 'ตรวจนับ นับสต็อก stock count สิ้นเดือน', → 'branchstock|var': 'ส่วนต่าง ผลต่าง variance ใช้จริง', 'branchstock|count': 'นับของ ตรวจนับ นับสต็อก stock cou
+- `js/01-core.js:1102`  → // VZ2 (2026-10-22): the glance layer re-colours these twelve slots to the theme-B set (B1_PAL below) at chart
+- `js/01-core.js:1103`  → // and bars agree; the list stays as the key to that mapping.
+- `js/01-core.js:1105` // bar by the glance layer's shade (see _glanceGrad: tip 25% / base 50% toward the → // bar by the glance layer's shade (see _glanceBarGrad, VZ2: tip lighter than the base, per bar; was tip 25% /
+- `js/01-core.js:1111`  → // ── Theme B charts (VZ2, 2026-10-22; owner chose variant B1 "gradient + meaning") ──────────────
+- `js/01-core.js:1112`  → // B1_PAL mirrors the --ch-* tokens in docs/ui-kit/tokens.css (backend/test_charts_b1.py keeps them equal); ca
+- `js/01-core.js:1113`  → // read a CSS variable, so the plugin below takes these. a/aw above the average (weekend brighter), b/bw below
+- `js/01-core.js:1114`  → // bar (gold, dark edge), c the 6 categorical series colours, spare 6 more for a chart with more series, s the
+- `js/01-core.js:1115`  → // scale, avg the average line, gi gold as text. Colour-blind safe: teal/indigo vs lilac vs gold, never red ag
+- `js/01-core.js:1116`  → const B1_PAL = {
+- `js/01-core.js:1117`  → light: {
+- `js/01-core.js:1118`  → a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: '#9a84e6', bw
+- `js/01-core.js:1119`  → t1: '#f0a500', t2: '#b86e00', tstroke: '#7a4a00', avg: '#475569', gi: '#7a4500',
+- `js/01-core.js:1120`  → c: ['#3a2fb5', '#0e8f87', '#c25e00', '#b01d62', '#1d78c9', '#6b7399'],
+- `js/01-core.js:1121`  → spare: ['#6a62d8', '#38a89f', '#d9822b', '#d4577f', '#4a97dc', '#8a92b8'],
+- `js/01-core.js:1122`  → s: ['#7686da', '#6a66d4', '#5b52cc', '#3f33a8', '#2b1f80'],
+- `js/01-core.js:1123`  → },
+- `js/01-core.js:1124`  → dark: {
+- `js/01-core.js:1125`  → a1: '#2dd4bf', a2: '#818cf8', aw1: '#5eead4', aw2: '#a5b4fc', b1: '#8b78d8', b2: '#7a66c8', bw1: '#9a88e4', bw
+- `js/01-core.js:1126`  → t1: '#fcd34d', t2: '#f5b82e', tstroke: '#fff3c4', avg: '#c3cddb', gi: '#fcd34d',
+- `js/01-core.js:1127`  → c: ['#9d98ff', '#2dd4bf', '#fbbf24', '#f472b6', '#60a5fa', '#b4b9e0'],
+- `js/01-core.js:1128`  → spare: ['#b7b3ff', '#6fe3d3', '#fcd34d', '#f9a8d4', '#93c5fd', '#d3d7f0'],
+- `js/01-core.js:1129`  → s: ['#5c6bc0', '#7d86d8', '#9d98e8', '#c0b8f6', '#e6e0ff'],
+- `js/01-core.js:1130`  → },
+- `js/01-core.js:1131`  → };
+- `js/01-core.js:1132`  → const _B_OLD = PALETTE.map(c => c.toLowerCase());
+- `js/01-core.js:1133`  → // SEMANTIC.revenue (the main series blue of the sales lines) takes the first B colour
+- `js/01-core.js:1134`  → const _B_EXTRA = { '#4a70b0': 0 };
+- `js/01-core.js:1135`  → // A series colour the old PALETTE gave (optionally with an alpha suffix, '#2a78d633') becomes the B colour of
+- `js/01-core.js:1136`  → function glanceBColour(c, dark) {
+- `js/01-core.js:1137`  → if (typeof c !== 'string') return c;
+- `js/01-core.js:1138`  → const m = c.toLowerCase().match(/^(#[0-9a-f]{6})([0-9a-f]{2})?$/);
+- `js/01-core.js:1139`  → const i = m ? (m[1] in _B_EXTRA ? _B_EXTRA[m[1]] : _B_OLD.indexOf(m[1])) : -1;
+- `js/01-core.js:1140`  → if (i < 0) return c;
+- `js/01-core.js:1141`  → const p = dark ? B1_PAL.dark : B1_PAL.light;
+- `js/01-core.js:1142`  → return (i < 6 ? p.c[i] : p.spare[i - 6]) + (m[2] || '');
+- `js/01-core.js:1143`  → }
+- `js/01-core.js:1144`  → // The B1 classifier for ONE series on a period axis (daily / weekly / monthly bars). vals: one number per per
+- `js/01-core.js:1145`  → // o.partial: the index still in progress (left out of the average and never "latest"); o.weekend: one boolean
+- `js/01-core.js:1146`  → // Returns null under 4 finished periods (an average of three says nothing), else
+- `js/01-core.js:1147`  → //   { avg, latest, best, kinds[i] = { tone: 'now' | 'hi' | 'lo', wk, part } }  (tone 'hi' = at or above the a
+- `js/01-core.js:1148`  → function glanceB1Kinds(vals, o) {
+- `js/01-core.js:1149`  → o = o || {};
+- `js/01-core.js:1150`  → const P = o.partial == null ? -1 : o.partial;
+- `js/01-core.js:1151`  → const comp = [];
+- `js/01-core.js:1152`  → vals.forEach((v, i) => { if (v != null && i !== P) comp.push(i); });
+- `js/01-core.js:1153`  → if (comp.length < 4) return null;
+- `js/01-core.js:1154`  → const avg = comp.reduce((a, i) => a + vals[i], 0) / comp.length;
+- `js/01-core.js:1155`  → const latest = comp[comp.length - 1];
+- `js/01-core.js:1156`  → let best = comp[0];
+- `js/01-core.js:1157`  → comp.forEach(i => { if (vals[i] > vals[best]) best = i; });
+- `js/01-core.js:1158`  → const wk = o.weekend || [];
+- `js/01-core.js:1159`  → const kinds = vals.map((v, i) => v == null ? null
+- `js/01-core.js:1160`  → : { tone: i === latest ? 'now' : (v >= avg ? 'hi' : 'lo'), wk: !!wk[i], part: i === P });
+- `js/01-core.js:1161`  → return { avg, latest, best, kinds };
+- `js/01-core.js:1162`  → }
+- `js/01-core.js:1163`  → 
+- `js/01-core.js:1504` // Bar fill, cached per chart area + colour. Two rules make bars read as solid, → // A see-through colour (many charts fade their non-highlighted bars) is flattened onto the card surface first
+- `js/01-core.js:1505` // even colour instead of milky: → // its tone but nothing shows through it.
+- `js/01-core.js:1506` //  - a see-through colour (many charts fade their non-highlighted bars) is → 
+- `js/01-core.js:1507` //    flattened onto the card surface first, so it keeps its tone but gridlines → 
+- `js/01-core.js:1508` //    no longer show through it; → 
+- `js/01-core.js:1509` //  - the gradient is a SHADE, not a fade: full colour at the tip easing to the → 
+- `js/01-core.js:1510` //    colour mixed 50% toward the surface at the zero line (both ways when → 
+- `js/01-core.js:1511` //    negatives exist), so a short bar is still clearly its colour. → 
+- `js/01-core.js:1525` function _glanceGrad(chart, rgba, surf, vs, horizontal) { → // One bar's fill: the tip colour easing to the base colour along the bar (so a short bar is still clearly its
+- `js/01-core.js:1526` const a = chart.chartArea, g = chart.$glance || (chart.$glance = {}); → // drawn per element because each bar has its own length and its own kind (B1) or series colour.
+- `js/01-core.js:1527` const zero = vs && typeof vs.getPixelForValue === 'function' ? vs.getPixelForValue(0) : (horizontal ? a.left : → function _glanceBarGrad(ctx, el, horizontal, tip, base) {
+- `js/01-core.js:1528` const key = `${rgba.join()}|${surf.join()}|${horizontal}|${a.left}|${a.top}|${a.right}|${a.bottom}|${Math.roun → const t = horizontal ? el.x : el.y, b = el.base;
+- `js/01-core.js:1529` g.grads = g.grads || new Map(); → if (!isFinite(t) || !isFinite(b) || t === b) return base;
+- `js/01-core.js:1530` if (g.grads.has(key)) return g.grads.get(key); → const g = horizontal ? ctx.createLinearGradient(t, 0, b, 0) : ctx.createLinearGradient(0, t, 0, b);
+- `js/01-core.js:1531` const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]); → g.addColorStop(0, tip);
+- `js/01-core.js:1532` // Pastel bars (owner 2026-10-02, "พาสเทลได้แล้ว แต่อยากให้สีเด่นขึ้น"): lighter, not → g.addColorStop(1, base);
+- `js/01-core.js:1533` // washed — the hue keeps (even gains) its saturation while lightness rises, so → return g;
+- `js/01-core.js:1534` // a bar reads as a clear candy colour instead of a grey tint. Tip = L+0.10, → 
+- `js/01-core.js:1535` // S×1.25; base = L+0.24, S×1.15 (clamped). Applies to every bar chart whatever → 
+- `js/01-core.js:1536` // colour it was given; legends/tooltips keep the true colour. → 
+- `js/01-core.js:1537` const strong = _glanceCss(_glanceLift(solid, 0.11, 1.10), 1), weak = _glanceCss(_glanceLift(solid, 0.25, 1.05) → 
+- `js/01-core.js:1538` const ctx = chart.ctx; → 
+- `js/01-core.js:1539` const grad = horizontal ? ctx.createLinearGradient(a.left, 0, a.right, 0) → 
+- `js/01-core.js:1540` : ctx.createLinearGradient(0, a.top, 0, a.bottom); → 
+- `js/01-core.js:1541` const span = horizontal ? a.right - a.left : a.bottom - a.top; → 
+- `js/01-core.js:1542` const z = Math.max(0, Math.min(1, ((horizontal ? zero - a.left : zero - a.top) / (span || 1)))); → 
+- `js/01-core.js:1543` // Strong at both far edges, lightest at the zero line (a baseline at an edge → 
+- `js/01-core.js:1544` // simply drops that edge's stop, so the bar never ends in a hard 1px band). → 
+- `js/01-core.js:1545` if (z > 0.001) grad.addColorStop(0, strong); → 
+- `js/01-core.js:1546` grad.addColorStop(z, weak); → 
+- `js/01-core.js:1547` if (z < 0.999) grad.addColorStop(1, strong); → 
+- `js/01-core.js:1548` if (g.grads.size > 64) g.grads.clear(); → 
+- `js/01-core.js:1549` g.grads.set(key, grad); → 
+- `js/01-core.js:1550` return grad; → 
+- `js/01-core.js:1582` const grain = dates.every(d => d.d != null) ? 'day' : dates.every(d => d.d == null) ? 'month' : null; → let grain = dates.every(d => d.d != null) ? 'day' : dates.every(d => d.d == null) ? 'month' : null;
+- `js/01-core.js:1584`  → // Period START dates (a bar per week / month / quarter / year, labelled with its first day) are not days: tel
+- `js/01-core.js:1585`  → // and the period in progress is the one that holds the last day with data and is not yet over (VZ2: never com
+- `js/01-core.js:1586`  → if (grain === 'day' && dates.length >= 2) {
+- `js/01-core.js:1587`  → const ut = d => Date.UTC(d.y, d.m - 1, d.d);
+- `js/01-core.js:1588`  → const gaps = dates.slice(1).map((d, i) => (ut(d) - ut(dates[i])) / 864e5).sort((x, y) => x - y);
+- `js/01-core.js:1589`  → const g = gaps[Math.floor(gaps.length / 2)];
+- `js/01-core.js:1590`  → const kind = g === 7 ? 'week' : (g >= 28 && g <= 31) ? 'month' : (g >= 89 && g <= 92) ? 'quarter' : (g >= 365 
+- `js/01-core.js:1591`  → if (kind) {
+- `js/01-core.js:1592`  → grain = kind;
+- `js/01-core.js:1593`  → const endOf = d => kind === 'week' ? ut(d) + 7 * 864e5 : Date.UTC(d.y, d.m - 1 + (kind === 'month' ? 1 : kind 
+- `js/01-core.js:1594`  → const rt = Date.UTC(ref.y, ref.m - 1, ref.d);
+- `js/01-core.js:1595`  → for (let i = dates.length - 1; i >= 0; i--) {
+- `js/01-core.js:1596`  → if (ut(dates[i]) <= rt) {
+- `js/01-core.js:1597`  → if (rt < endOf(dates[i]) - 864e5) {
+- `js/01-core.js:1598`  → partial = i;
+- `js/01-core.js:1599`  → if (kind === 'month') note = `${ref.d}/${new Date(ref.y, ref.m, 0).getDate()} วัน`;
+- `js/01-core.js:1600`  → }
+- `js/01-core.js:1601`  → break;
+- `js/01-core.js:1602`  → }
+- `js/01-core.js:1603`  → }
+- `js/01-core.js:1604`  → if (go.mtd === false) partial = -1;
+- `js/01-core.js:1605`  → return { grain, dates, partial, note };
+- `js/01-core.js:1606`  → }
+- `js/01-core.js:1607`  → }
+- `js/01-core.js:1771`  → // ── B1 (VZ2) ────────────────────────────────────────────────────────────────
+- `js/01-core.js:1772`  → // Config-time test for the one-series period bar chart that gets the B1 look: a vertical, unstacked bar chart
+- `js/01-core.js:1773`  → // dataset on a period axis (days, weeks, months) and at least 5 periods. Multi-series, stacked, horizontal an
+- `js/01-core.js:1774`  → // the categorical palette; opt out with options.plugins.glance = { b1: false }.
+- `js/01-core.js:1775`  → function glanceB1Eligible(cfg) {
+- `js/01-core.js:1776`  → const o = (cfg && cfg.options) || {}, go = o.plugins && o.plugins.glance;
+- `js/01-core.js:1777`  → if (go === false || (go && go.b1 === false)) return false;
+- `js/01-core.js:1778`  → if (!cfg || cfg.type !== 'bar' || o.indexAxis === 'y') return false;
+- `js/01-core.js:1779`  → if (o.scales && Object.values(o.scales).some(s => s && s.stacked)) return false;
+- `js/01-core.js:1780`  → const sets = ((cfg.data && cfg.data.datasets) || []).filter(ds => ds && !ds.hidden);
+- `js/01-core.js:1781`  → if (sets.length !== 1 || (sets[0].type && sets[0].type !== 'bar') || _GLANCE_SKIP_RE.test(sets[0].label || '')
+- `js/01-core.js:1782`  → if ((sets[0].data || []).filter(v => _glanceFinite(v) != null).length < 5) return false;
+- `js/01-core.js:1783`  → const labels = ((cfg.data && cfg.data.labels) || []).map(l => Array.isArray(l) ? l.join(' ') : String(l ?? '')
+- `js/01-core.js:1784`  → return labels.length >= 5 && (labels.filter(l => _GLANCE_TIME_RE.test(l.trim())).length >= labels.length * 0.6
+- `js/01-core.js:1785`  → || labels.every(l => /^\d{1,2}$/.test(l.trim())));
+- `js/01-core.js:1786`  → }
+- `js/01-core.js:1787`  → // No gridlines; the category axis names only its first, middle and last period; tick text 12 px.
+- `js/01-core.js:1788`  → function _glanceB1Axes(o) {
+- `js/01-core.js:1789`  → o.scales = o.scales || {};
+- `js/01-core.js:1790`  → const keys = Object.keys(o.scales);
+- `js/01-core.js:1791`  → const xk = keys.find(k => k === 'x' || (o.scales[k] && o.scales[k].axis === 'x')) || 'x';
+- `js/01-core.js:1792`  → const yk = keys.find(k => k !== xk && (k === 'y' || (o.scales[k] && o.scales[k].axis === 'y'))) || 'y';
+- `js/01-core.js:1793`  → const x = o.scales[xk] = o.scales[xk] || {}, y = o.scales[yk] = o.scales[yk] || {};
+- `js/01-core.js:1794`  → [x, y].forEach(sc => {
+- `js/01-core.js:1795`  → sc.grid = Object.assign({}, sc.grid, { display: false });
+- `js/01-core.js:1796`  → sc.ticks = sc.ticks || {};
+- `js/01-core.js:1797`  → const f = sc.ticks.font || {};
+- `js/01-core.js:1798`  → sc.ticks.font = Object.assign({}, f, { size: Math.max(12, f.size || 12), weight: f.weight || 600 });
+- `js/01-core.js:1799`  → });
+- `js/01-core.js:1800`  → const base = x.ticks.callback;
+- `js/01-core.js:1801`  → x.ticks.autoSkip = false;
+- `js/01-core.js:1802`  → delete x.ticks.maxTicksLimit;
+- `js/01-core.js:1803`  → x.ticks.maxRotation = 0;
+- `js/01-core.js:1804`  → x.ticks.minRotation = 0;
+- `js/01-core.js:1805`  → x.ticks.padding = Math.max(x.ticks.padding || 0, 12);   // room for the weekend dots between the bars and the 
+- `js/01-core.js:1806`  → x.ticks.callback = function (v, i, t) {
+- `js/01-core.js:1807`  → const n = (t && t.length) || 0;
+- `js/01-core.js:1808`  → const room = this && this.width ? this.width : 999;   // a narrow chart names only its first and last period
+- `js/01-core.js:1809`  → if (n > 3 && i !== 0 && i !== n - 1 && (room < 260 || i !== Math.floor((n - 1) / 2))) return '';
+- `js/01-core.js:1810`  → return base ? base.call(this, v, i, t) : this.getLabelForValue(v);
+- `js/01-core.js:1811`  → };
+- `js/01-core.js:1812`  → }
+- `js/01-core.js:1813`  → // Old-palette series colours become the B colours (bars, lines and slices), legend swatches included.
+- `js/01-core.js:1814`  → function _glanceRecolour(cfg, dark) {
+- `js/01-core.js:1815`  → if (!cfg || !['bar', 'line', 'doughnut', 'pie'].includes(cfg.type)) return;
+- `js/01-core.js:1816`  → ((cfg.data && cfg.data.datasets) || []).forEach(ds => {
+- `js/01-core.js:1817`  → ['backgroundColor', 'borderColor', 'pointBackgroundColor', 'pointBorderColor'].forEach(p => {
+- `js/01-core.js:1818`  → const v = ds[p];
+- `js/01-core.js:1819`  → if (typeof v === 'string') ds[p] = glanceBColour(v, dark);
+- `js/01-core.js:1820`  → else if (Array.isArray(v)) ds[p] = v.map(c => glanceBColour(c, dark));
+- `js/01-core.js:1821`  → });
+- `js/01-core.js:1822`  → // theme B lines are 2.5 px (a line asked for 2 px, or left to the default, gets the B weight; a hairline or a
+- `js/01-core.js:1823`  → if ((ds.type || cfg.type) === 'line' && (ds.borderWidth === 2 || ds.borderWidth === undefined)) ds.borderWidth
+- `js/01-core.js:1824`  → });
+- `js/01-core.js:1825`  → }
+- `js/01-core.js:1826`  → const _glanceIsDark = chart => !(chart.canvas && chart.canvas.closest('[data-force-light]')) && document.body.
+- `js/01-core.js:1827`  → // The B1 plan for one frame: the classifier over the series, its palette and the bar meta. Null when the char
+- `js/01-core.js:1828`  → function _glanceB1Frame(chart, gi) {
+- `js/01-core.js:1829`  → if (!chart.$b1) return null;
+- `js/01-core.js:1830`  → const metas = chart.getSortedVisibleDatasetMetas();
+- `js/01-core.js:1831`  → if (metas.length !== 1 || metas[0].type !== 'bar') return null;
+- `js/01-core.js:1832`  → const vals = (chart.data.datasets[metas[0].index].data || []).map(_glanceFinite);
+- `js/01-core.js:1833`  → // weekends only on a run of consecutive days (weekly bars labelled with their first day are not days)
+- `js/01-core.js:1834`  → const ms = d => Date.UTC(d.y, d.m - 1, d.d);
+- `js/01-core.js:1835`  → const daily = gi.grain === 'day' && gi.dates.length === vals.length && gi.dates.every((d, i) => i === 0 || ms(
+- `js/01-core.js:1836`  → const wk = daily
+- `js/01-core.js:1837`  → ? gi.dates.map(d => { const w = new Date(d.y, d.m - 1, d.d).getDay(); return w === 0 || w === 6; }) : [];
+- `js/01-core.js:1838`  → const k = glanceB1Kinds(vals, { partial: _glancePartial(chart), weekend: wk });
+- `js/01-core.js:1839`  → return k && Object.assign(k, { meta: metas[0], pal: _glanceIsDark(chart) ? B1_PAL.dark : B1_PAL.light });
+- `js/01-core.js:1840`  → }
+- `js/01-core.js:1841`  → 
+- `js/01-core.js:1842`  → // Where a chart label may go (pure, so it can be tested): `c` = { x, y, w, align }, `placed` = boxes already 
+- `js/01-core.js:1843`  → // `bounds` = { left, right }. The label is clamped INSIDE the bounds (never clipped at the edge); if it still
+- `js/01-core.js:1844`  → // (closer than a line of text vertically and than their half-widths horizontally) there is no spot and null c
+- `js/01-core.js:1845`  → // tries its next candidate or drops it. Callers place the important labels first: latest (gold) > best > in-p
+- `js/01-core.js:1846`  → function glanceLabelSpot(placed, c, bounds) {
+- `js/01-core.js:1847`  → let x = c.x;
+- `js/01-core.js:1848`  → const w = c.w;
+- `js/01-core.js:1849`  → if (c.align === 'center') x = Math.max(bounds.left + w / 2 + 2, Math.min(bounds.right - w / 2 - 2, x));
+- `js/01-core.js:1850`  → else if (c.align === 'left') x = Math.max(bounds.left + 2, Math.min(bounds.right - w - 2, x));
+- `js/01-core.js:1851`  → else x = Math.min(bounds.right - 2, Math.max(bounds.left + w + 2, x));
+- `js/01-core.js:1852`  → const cx = c.align === 'left' ? x + w / 2 : c.align === 'right' ? x - w / 2 : x;
+- `js/01-core.js:1853`  → if (placed.some(p => Math.abs(p.y - c.y) < 15 && Math.abs(p.x - cx) < (p.w + w) / 2 + 4)) return null;
+- `js/01-core.js:1854`  → return { x, cx };
+- `js/01-core.js:1855`  → }
+- `js/01-core.js:1856`  → 
+- `js/01-core.js:1865`  → if (go !== false) _glanceRecolour(cfg, _glanceIsDark(chart));
+- `js/01-core.js:1866`  → chart.$b1 = glanceB1Eligible(cfg);
+- `js/01-core.js:1867`  → if (chart.$b1) _glanceB1Axes(o);
+- `js/01-core.js:1891` ctx.font = `600 ${narrow ? 10 : 11}px ${Chart.defaults.font.family}`; → ctx.font = `700 12px ${Chart.defaults.font.family}`;
+- `js/01-core.js:1941` // Weekend bands behind a daily axis. → // B1 (one-series period bars): above / below the average, weekend, latest, best (see glanceB1Kinds).
+- `js/01-core.js:1942` if (gi.grain === 'day' && gi.dates.length >= 7 && chart.options.indexAxis !== 'y' && _glanceOpt(chart, 'weeken → const b1 = _glanceB1Frame(chart, gi);
+- `js/01-core.js:1943`  → chart.$glanceB1 = b1;
+- `js/01-core.js:1944`  → // Weekend bands behind a daily axis (B1 marks weekends with a dot under the axis instead).
+- `js/01-core.js:1945`  → if (!b1 && gi.grain === 'day' && gi.dates.length >= 7 && chart.options.indexAxis !== 'y' && _glanceOpt(chart, 
+- `js/01-core.js:1982` const orig = seen.get(el.options)?.get('backgroundColor') ?? el.options.backgroundColor; → const own = el.options;
+- `js/01-core.js:1983` const rgba = _glanceRgba(orig); → const bk = b1 && m === b1.meta ? b1.kinds[i] : null;
+- `js/01-core.js:1984` if (!rgba || !(rgba[3] > 0)) return; → let rgba, cTip, cBase, edge = null;
+- `js/01-core.js:1985`  → if (bk) {
+- `js/01-core.js:1986`  → const key = (bk.tone === 'now' ? 't' : bk.tone === 'hi' ? 'a' : 'b') + (bk.tone !== 'now' && bk.wk ? 'w' : '')
+- `js/01-core.js:1987`  → cTip = b1.pal[key + '1']; cBase = b1.pal[key + '2'];
+- `js/01-core.js:1988`  → rgba = _glanceRgba(cBase);
+- `js/01-core.js:1989`  → if (bk.tone === 'now') edge = b1.pal.tstroke;
+- `js/01-core.js:1990`  → } else {
+- `js/01-core.js:1991`  → rgba = _glanceRgba(own.backgroundColor);
+- `js/01-core.js:1992`  → if (!rgba || !(rgba[3] > 0)) return;
+- `js/01-core.js:1993`  → // theme B categorical bars: the series colour, a touch lighter at the tip (a see-through colour is flattened 
+- `js/01-core.js:1994`  → const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
+- `js/01-core.js:1995`  → cTip = _glanceCss(_glanceLift(solid, 0.10, 1.05), 1); cBase = _glanceCss(solid, 1);
+- `js/01-core.js:1996`  → }
+- `js/01-core.js:1997`  → // A per-bar copy of the options: bars of one dataset share one options object, and every bar here has its own
+- `js/01-core.js:1998`  → const copy = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
+- `js/01-core.js:1999`  → restore.push([el, 'options', own]);
+- `js/01-core.js:2000`  → el.options = copy;
+- `js/01-core.js:2003` // A per-bar copy of the options, so a shared object does not hollow every bar. → copy.backgroundColor = _glanceCss(rgba, rgba[3] * 0.18);
+- `js/01-core.js:2004` const own = el.options; → 
+- `js/01-core.js:2005` restore.push([el, 'options', own]); → 
+- `js/01-core.js:2006` el.options = Object.assign(Object.create(Object.getPrototypeOf(own)), own, { backgroundColor: _glanceCss(rgba, → 
+- `js/01-core.js:2005` } else if (depth && !stacked) { → return;
+- `js/01-core.js:2006` swap(el.options, 'backgroundColor', _glanceGrad(chart, rgba, surf, m.vScale, horizontal)); → 
+- `js/01-core.js:2007`  → if (depth || bk) copy.backgroundColor = _glanceBarGrad(chart.ctx, el, horizontal, cTip, cBase);
+- `js/01-core.js:2008`  → if (edge) { copy.borderColor = edge; copy.borderWidth = 1.6; }
+- `js/01-core.js:2038` ctx.setLineDash([4, 4]); → ctx.setLineDash([5, 3]);
+- `js/01-core.js:2039` ctx.lineWidth = 1; → ctx.lineWidth = 1.4;
+- `js/01-core.js:2040` ctx.strokeStyle = g.theme.textDim; → ctx.strokeStyle = (_glanceIsDark(chart) ? B1_PAL.dark : B1_PAL.light).avg;
+- `js/01-core.js:2070` if (!_glanceOpt(chart, 'labels') && !chart.$glanceAvg && !wkCaps.length) return; → if (!_glanceOpt(chart, 'labels') && !chart.$glanceAvg && !wkCaps.length && !chart.$glanceB1) return;
+- `js/01-core.js:2074` if (chart.$glanceAvg) { → const b1 = chart.$glanceB1;
+- `js/01-core.js:2075` _glanceText(ctx, chart.$glanceAvg.text, a.left + 4, chart.$glanceAvg.y - 8, 'left', g.theme.text, g.surface, 1 → if (b1) {   // B1: a dot under the axis for each weekend period
+- `js/01-core.js:2076`  → ctx.fillStyle = g.theme.textDim;
+- `js/01-core.js:2077`  → b1.kinds.forEach((k, i) => {
+- `js/01-core.js:2078`  → const el = b1.meta.data[i];
+- `js/01-core.js:2079`  → if (!k || !k.wk || !el || el.skip) return;
+- `js/01-core.js:2080`  → ctx.beginPath();
+- `js/01-core.js:2081`  → ctx.arc(el.x, a.bottom + 6, 2, 0, Math.PI * 2);
+- `js/01-core.js:2082`  → ctx.fill();
+- `js/01-core.js:2083`  → });
+- `js/01-core.js:2088` const narrow = chart.width < 520, fs = narrow ? 10 : 11; → const narrow = chart.width < 520, fs = 12;
+- `js/01-core.js:2089` const free = (x, y, w) => !placed.some(p => Math.abs(p.y - y) < 13 && Math.abs(p.x - x) < (p.w + w) / 2 + 4) → 
+- `js/01-core.js:2090` && !(chart.$glanceAvg && Math.abs(chart.$glanceAvg.y - 8 - y) < 12 && x - w < a.left + 90); → 
+- `js/01-core.js:2093` // A centred label never spills over the y-axis ticks or off the canvas edge. → // A label never spills over the y-axis ticks or off the canvas edge, and never lands on a more important one.
+- `js/01-core.js:2094` if (align === 'center') x = Math.max(a.left + w / 2 + 2, Math.min(chart.width - w / 2 - 2, x)); → const spot = glanceLabelSpot(placed, { x, y, w, align }, { left: a.left, right: chart.width });
+- `js/01-core.js:2095` const cx = align === 'left' ? x + w / 2 : align === 'right' ? x - w / 2 : x; → if (!spot) return false;
+- `js/01-core.js:2096` if (!free(cx, y, w)) return false; → placed.push({ x: spot.cx, y, w });
+- `js/01-core.js:2097` placed.push({ x: cx, y, w }); → _glanceText(ctx, text, spot.x, y, align, color, halo ? g.surface : null, size, weight);
+- `js/01-core.js:2098` _glanceText(ctx, text, x, y, align, color, halo ? g.surface : null, size, weight); → 
+- `js/01-core.js:2114` const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 600) → const ok = atEnd ? put(text, el.x + 8, el.y, 'left', g.theme.labelStrong, fs, 700)
+- `js/01-core.js:2115` : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600); → : put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 700);
+- `js/01-core.js:2127`  → let last = vals.length - 1;
+- `js/01-core.js:2128`  → while (last >= 0 && vals[last] == null) last--;
+- `js/01-core.js:2130` let last = vals.length - 1; → if (b1 && b1.latest !== last) marks.push(b1.latest);   // the gold bar always carries its value
+- `js/01-core.js:2131` while (last >= 0 && vals[last] == null) last--; → else if (last >= 0) marks.push(last);
+- `js/01-core.js:2132` if (last >= 0) marks.push(last); → 
+- `js/01-core.js:2136`  → if (pm.type === 'bar' && plan.timeLike && b1 && b1.latest !== last && last >= 0 && !marks.includes(last)) mark
+- `js/01-core.js:2148` inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : g.theme.labelStrong, fs, 600, !inside); → inside ? (fill && lum > 0.6 ? '#0f172a' : '#ffffff') : (b1 && i === b1.latest ? b1.pal.gi : g.theme.labelStron
+- `js/01-core.js:2149` } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 600)) { → } else if (put(text, el.x, el.y - 12 < 9 ? el.y + 13 : el.y - 12, 'center', g.theme.labelStrong, fs, 700)) {
+- `js/01-core.js:2154` // 3) name the weekend bands once, wherever the caption does not cover a label → // 3) the average's value goes where it collides with nothing (left edge, then right edge, above its line, the
+- `js/01-core.js:2155` for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 9, 500, false)) break; → if (chart.$glanceAvg) {
+- `js/01-core.js:2156`  → ctx.font = `700 12px ${Chart.defaults.font.family}`;
+- `js/01-core.js:2157`  → const txt = chart.$glanceAvg.text, ay = chart.$glanceAvg.y;
+- `js/01-core.js:2158`  → for (const [x, y, al] of [[a.left + 4, ay - 8, 'left'], [a.left + 4, ay + 9, 'left'], [a.right - 4, ay - 8, 'r
+- `js/01-core.js:2159`  → if (put(txt, x, y, al, g.theme.text, 12, 700)) break;
+- `js/01-core.js:2160`  → }
+- `js/01-core.js:2161`  → }
+- `js/01-core.js:2162`  → // 4) name the weekend bands once, wherever the caption does not cover a label
+- `js/01-core.js:2163`  → for (const cx of wkCaps) if (put('ส-อา', cx, a.top + 7, 'center', g.theme.textDim, 12, 600, false)) break;
+- `js/01-core.js:2193` if (sub) _glanceText(ctx, sub, arc.x, arc.y + size * 0.62, 'center', g.theme.text, g.surface, Math.max(10, Mat → if (sub) _glanceText(ctx, sub, arc.x, arc.y + size * 0.62, 'center', g.theme.text, g.surface, Math.max(12, Mat
+- `js/01-core.js:2458` lg.labels = Object.assign({ boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 11 } }, lg.labels || {}); → lg.labels = Object.assign({ boxWidth: 8, boxHeight: 8, padding: 10, font: { size: 12 } }, lg.labels || {});
+- `js/01-core.js:2477` sc.ticks.font = Object.assign({ size: 11 }, sc.ticks.font || {}); → sc.ticks.font = Object.assign({ size: 12 }, sc.ticks.font || {});
+- `js/01-core.js:3095` { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'order', label: 'สั่งของ', roles: ['branch', 'analyst', 'management'] },
+- `js/01-core.js:3096` { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'recv', label: 'รับของ', roles: ['branch', 'analyst', 'management'] },
+- `js/01-core.js:3097` { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', roles: ['branch', 'analyst', 'management'] }, → { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', roles: ['branch', 'analyst', 'management'] },
+- `js/01-core.js:3098` { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }]  → { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', roles: ['branch', 'analyst', 'management'] }] }
+- `js/01-core.js:3275` { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และตรวจนับ', icon: 'store', hue: 'brn', roles: ['branch'] → { key: 'brn', label: 'สาขา', duty: 'ตัดเบิก สั่ง รับ และนับของ', icon: 'store', hue: 'brn', roles: ['branch'],
+- `js/01-core.js:3277` { tab: 'branchstock', pane: 'order', label: 'สั่งสินค้า', icon: 'cart' }, → { tab: 'branchstock', pane: 'order', label: 'สั่งของ', icon: 'cart' },
+- `js/01-core.js:3278` { tab: 'branchstock', pane: 'recv', label: 'รับสินค้า', icon: 'recv' }, → { tab: 'branchstock', pane: 'recv', label: 'รับของ', icon: 'recv' },
+- `js/01-core.js:3279` { tab: 'branchstock', pane: 'var', label: 'ผลต่างการใช้', icon: 'diff' }, → { tab: 'branchstock', pane: 'var', label: 'ส่วนต่างการใช้', icon: 'diff' },
+- `js/01-core.js:3280` { tab: 'branchstock', pane: 'count', label: 'ตรวจนับสิ้นเดือน', icon: 'count' }] }, → { tab: 'branchstock', pane: 'count', label: 'นับของสิ้นเดือน', icon: 'count' }] },
+- `js/01-core.js:3313` 'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก', 'branchstock|order': 'สั่งสินค้า สั่งของ po ใบสั่งซื้อ', → 'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก เบิกใช้ ของเสีย', 'branchstock|order': 'สั่งของ สั่งสินค้า
+- `js/01-core.js:3314` 'branchstock|var': 'ผลต่าง variance ใช้จริง', 'branchstock|count': 'ตรวจนับ นับสต็อก stock count สิ้นเดือน', → 'branchstock|var': 'ส่วนต่าง ผลต่าง variance ใช้จริง', 'branchstock|count': 'นับของ ตรวจนับ นับสต็อก stock cou
 - `js/09c-mobile.js:146` return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งสินค้า', 'cart', 'order'), b('recv', 'รับ → return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งของ', 'cart', 'order'), b('recv', 'รับของ
 - `js/09c-mobile.js:560` if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · งานวันนี → if (sub) st.textContent = note || (frc ? 'เปิดอยู่ · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'เปิดอยู่ · งานวันนี
 - `js/09c-mobile.js:562` else st.textContent = note || (frc ? 'ยังไม่เปิด · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'ยังไม่เปิด · งานวันนี → else st.textContent = note || (frc ? 'ยังไม่เปิด · สรุปร้านของฉันทุกเช้า 08:30' : sup ? 'ยังไม่เปิด · งานวันนี
+- `js/09c-mobile.js:772` // A small column chart in SVG (no Chart.js on the phone): oldest→newest, the → // A small column chart in SVG (no Chart.js on the phone): oldest→newest, theme B1 (VZ2) like the dashboard's 
+- `js/09c-mobile.js:773` // latest complete period in the accent, the period in progress hollow + dashed, → // columns with rounded tops, above the average teal→indigo, below it lilac, the latest complete period gold w
+- `js/09c-mobile.js:774` // weekends tinted, a dashed average line, value labels on the latest and the peak. → // the period in progress hollow + dashed, a dot under each weekend, a dashed average line with its value, lab
+- `js/09c-mobile.js:775`  → // and the peak. Under 4 finished periods it keeps the plain accent columns.
+- `js/09c-mobile.js:781` const W = 320, H = o.height || 100, top = 16, bottom = under ? 31 : 14, plotH = H - top - bottom; → 
+- `js/09c-mobile.js:783`  → const b1 = glanceB1Kinds(vals, { partial: P, weekend: o.weekend });
+- `js/09c-mobile.js:784`  → const wkDots = !!(b1 && (o.weekend || []).some(Boolean));
+- `js/09c-mobile.js:785`  → const W = 320, H = o.height || 100, top = 16, bottom = (under ? 31 : 14) + (wkDots ? 6 : 0), plotH = H - top -
+- `js/09c-mobile.js:799`  → const HALO = 'paint-order:stroke;stroke:var(--bg-card,#fff);stroke-width:3px;stroke-linejoin:round';
+- `js/09c-mobile.js:813` return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${ → return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${size}" font-weight="${
+- `js/09c-mobile.js:815`  → const uid = 'mc' + Math.abs(vals.reduce((a, v, i) => (a * 31 + Math.round(v || 0) + i) | 0, 7)).toString(36);
+- `js/09c-mobile.js:816`  → // a column with rounded tips (the base is flat), as a path so the gradient follows it
+- `js/09c-mobile.js:817`  → const colPath = (x, y, w, h) => { const r = Math.min(4, w / 2, h); return `M${x.toFixed(1)},${(y + h).toFixed(
+- `js/09c-mobile.js:818`  → const FB = { a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: 
+- `js/09c-mobile.js:820` (o.weekend || []).forEach((w, i) => { if (w) g += `<rect x="${(i * step).toFixed(1)}" y="${top - 4}" width="${ → if (b1) {
+- `js/09c-mobile.js:821`  → g += '<defs>' + ['a', 'aw', 'b', 'bw', 't'].map(k => `<linearGradient id="${uid}${k}" x1="0" y1="0" x2="0" y2=
+- `js/09c-mobile.js:822`  → } else {
+- `js/09c-mobile.js:823`  → (o.weekend || []).forEach((w, i) => { if (w) g += `<rect x="${(i * step).toFixed(1)}" y="${top - 4}" width="${
+- `js/09c-mobile.js:824`  → }
+- `js/09c-mobile.js:827` g += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke-width="1" stroke-dasharray="3 3" style="stroke:var(- → g += `<line x1="0" x2="${W}" y1="${ya}" y2="${ya}" stroke-width="1.4" stroke-dasharray="5 3" style="stroke:var
+- `js/09c-mobile.js:831` const x = (cx(i) - bw / 2).toFixed(1), y = yOf(v), h = Math.max(1, top + plotH - y); → const x = cx(i) - bw / 2, y = yOf(v), h = Math.max(1, top + plotH - y);
+- `js/09c-mobile.js:832` if (i === P) g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" stroke → if (b1) {
+- `js/09c-mobile.js:833` else g += `<rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="3" style=" → const kd = b1.kinds[i], key = kd.tone === 'now' ? 't' : (kd.tone === 'hi' ? 'a' : 'b') + (kd.wk ? 'w' : '');
+- `js/09c-mobile.js:834`  → if (i === P) g += `<path d="${colPath(x, y, bw, h)}" stroke-width="1.4" stroke-dasharray="3 2" style="fill:non
+- `js/09c-mobile.js:835`  → else g += `<path d="${colPath(x, y, bw, h)}" fill="url(#${uid}${key})"${kd.tone === 'now' ? ' stroke-width="1.
+- `js/09c-mobile.js:836`  → if (kd.wk) g += `<circle cx="${cx(i).toFixed(1)}" cy="${(top + plotH + 5).toFixed(1)}" r="2" style="fill:var(-
+- `js/09c-mobile.js:837`  → return;
+- `js/09c-mobile.js:838`  → }
+- `js/09c-mobile.js:839`  → if (i === P) g += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(
+- `js/09c-mobile.js:840`  → else g += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx=
+- `js/09c-mobile.js:842` const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 11, 600, 'var(--text-primary,#1e293b)' → const lab = (i, t) => txt(t ?? o.fmt(vals[i]), cx(i), yOf(vals[i]) - 4, 12, 700, b1 && i === last ? 'var(--gol
+- `js/09c-mobile.js:848` if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="11" style="fill:var(--text-mute → if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="12" font-weight="700" style="fi
+- `js/09c-mobile.js:851` if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 11, i === last ? 700 : 400, i === last ?  → if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 12, i === last ? 700 : 600, i === last ? 
+- `js/09c-mobile.js:853` g += txt(o.labels[0], cx(0), ly, 11, 400, 'var(--text-muted,#94a3b8)'); → g += txt(o.labels[0], cx(0), ly, 12, 600, 'var(--text-muted,#94a3b8)');
+- `js/09c-mobile.js:854` g += txt(o.labels[n - 1], cx(n - 1), ly, 11, 400, 'var(--text-muted,#94a3b8)'); → if (b1 && n > 4) g += txt(o.labels[Math.floor((n - 1) / 2)], cx(Math.floor((n - 1) / 2)), ly, 12, 600, 'var(--
+- `js/09c-mobile.js:855`  → g += txt(o.labels[n - 1], cx(n - 1), ly, 12, 600, 'var(--text-muted,#94a3b8)');
+- `js/09c-mobile.js:858` if (under) under.forEach((u, i) => { if (u && u.t) g += txt(u.t, cx(i), H - 3, 11, 600, u.c || 'var(--text-mut → if (under) under.forEach((u, i) => { if (u && u.t) g += txt(u.t, cx(i), H - 3, 12, 600, u.c || 'var(--text-mut
+- `js/09c-mobile.js:1730` Chart.defaults.elements.line.borderWidth = 2; → Chart.defaults.elements.line.borderWidth = 2.5;   // theme B (VZ2)
 
-รวม 31 บรรทัด
+รวม 352 บรรทัด
 
 ## ข้อความจากเซิร์ฟเวอร์ที่สาขาเห็น · ไฟล์ Excel
 
