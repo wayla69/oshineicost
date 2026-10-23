@@ -159,6 +159,7 @@ def test_saving_an_order_writes_no_stock_count(con):  # noqa: F811
     assert con.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 1
 
 
+@pytest.mark.no_slip_seed
 def test_an_order_needs_todays_confirmed_slip_and_an_earlier_gap_only_warns(con):  # noqa: F811
     line = [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}]
     OR.save_flow(con, 1, "1", WED, line, "udon", now=NOW, as_of=AS_OF)                    # saving a draft is fine …
@@ -239,6 +240,16 @@ def test_reopen_and_cancel_leave_the_stock_counts_and_the_slip_alone(con):  # no
     assert IS.status_of(con, 1, "2026-10-05")["status"] == "confirmed"                  # the slip is the branch's, not the order's
 
 
+def _by_key(steps):
+    """The close steps by key; in stock mode the grouped steps (central_report, counts) also give their parts under the full-mode keys."""
+    out = {x["key"]: x for x in steps}
+    for x in steps:
+        for p in x.get("parts", []):
+            out.setdefault(p["key"], p)
+    return out
+
+
+@pytest.mark.full_only    # the stock-mode sheet of a branch with no slip history and no monitored item is empty
 def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: F811
     c = udon
     cur = c.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, status, submitted_at, created_at)"
@@ -252,7 +263,7 @@ def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: 
     assert ST.periods(c, 1) == [] and ST.history(c, 1, kinds=ST.MONTH_KINDS) == []
     assert ST.system_position(c, 1, AS_OF)["basis"] is None
     assert [h["kind"] for h in ST.history(c, 1)] == ["spot"]                                # the row is still there to read
-    st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
+    st = _by_key(TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"])
     # PR-U1: a spot row is not a start either - the branch has not started, so the close does not ask it yet (neutral, never done)
     assert st["begin_count"]["status"] != "done" and st["begin_count"]["branches"][0]["not_started"]
     # a month-end import for the same date is accepted, and is the begin
@@ -260,12 +271,14 @@ def test_legacy_spot_rows_are_ignored_by_every_month_end_reader(udon):  # noqa: 
              for z in ST.sheet(c, 1)["zones"] for it in z["items"]]
     r = ST.import_count(c, 1, "2026-09-01", every, "u", dry_run=False)
     assert r["ok"] and r["kind"] == "begin"
-    st = {s["key"]: s for s in TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"]}
+    st = _by_key(TD.build(c, "2026-09", None, None, today=date(2026, 10, 7))["close"]["steps"])
     assert st["begin_count"]["status"] == "done"
     with pytest.raises(TypeError):                                                         # the writer takes no kind any more
         ST.save(c, 1, [], "u", kind="spot")
 
 
+@pytest.mark.no_slip_seed
+@pytest.mark.full_only
 def test_stock_position_is_the_system_stock_plus_what_is_on_order(con):  # noqa: F811
     x = ST.save(con, 1, [{"code": CRAB, "qty": 5, "unit": "แพ็ค 1 กก."}], "u", submit=True, count_date="2026-10-02", require_all=False)["count_id"]
     ST.save(con, 1, [{"code": CRAB, "qty": 1, "unit": "แพ็ค 1 กก."}], "u", count_date="2026-10-04")        # a draft is no basis
@@ -427,4 +440,4 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
 
 
 import pytest as _pytest_s3  # noqa: E402
-pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)
+pytestmark = _pytest_s3.mark.usefixtures("both_modes")   # PL1 #8: runs in mode full AND mode stock (the default)

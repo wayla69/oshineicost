@@ -93,7 +93,8 @@ def mode(con) -> str:
 
 def mode_info(con) -> dict:
     m = mode(con)
-    return {"mode": m, "label_th": MODE_LABEL_TH[m]}
+    from .forecast import HISTORY_WEEKS
+    return {"mode": m, "label_th": MODE_LABEL_TH[m], "history_weeks": HISTORY_WEEKS}      # PL1 #15: the pages print the weeks from here, not a literal 8
 
 
 def stock_mode(con) -> bool:

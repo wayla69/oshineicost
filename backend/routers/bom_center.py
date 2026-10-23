@@ -36,6 +36,7 @@ from bom_center import hub as _hub
 from bom_center import issues as _is
 from bom_center import issue_reports as _ir
 from bom_center.clock import today as bkk_today
+from bom_center.fmt import NORMAL_OR_MEDIAN_TH as _NORMAL_OR_MEDIAN_TH
 from bom_center.fmt import CLASS_SHORT_TH as _CLASS_SHORT
 from bom_center.fmt import add_short as _short
 from bom_center import master as _m
@@ -140,6 +141,7 @@ def _xlsx(wb, filename: str):
     beside it for old clients: the ASCII part of the name, or `download.xlsx` when nothing of it is ASCII."""
     from urllib.parse import quote
     buf = io.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     buf.seek(0)
     stem = filename.rsplit(".", 1)[0]
@@ -885,8 +887,9 @@ def _dc_month(month: Optional[str]) -> str:
 def _dc_refresh() -> None:
     """The cost a report multiplies by changed for the months from the imported one on: every cached response is stale.
     (No recipe quantity moved, so the order plan's usage caches and the BoM days stay.) The fact tables the sync builds
-    (menu_fact_*, sale_bill_cogs) take the list at their next build, which pulls it with the released costs."""
-    invalidate_cache()
+    (menu_fact_*, sale_bill_cogs) take the list at their next build, which pulls it with the released costs.
+    PL1 #5: the list is not a source of sku_effective_cost, so that table is not rebuilt (it was, on every single edit)."""
+    invalidate_cache(rebuild_cost=False)
 
 
 @router.get("/api/bom-center/dish-cost")
@@ -936,10 +939,11 @@ def bc_dish_cost_export(month: Optional[str] = Query(None)):
 
 @router.post("/api/bom-center/dish-cost/import", dependencies=[Depends(require_write_token_unless_dry_run)])
 async def bc_dish_cost_import(request: Request, file: UploadFile = File(...), month: Optional[str] = Query(None),
-                              dry_run: bool = Query(True)):
-    """A file of dish costs -> the month's list. dry_run=true (the default) writes nothing and returns what would change."""
+                              dry_run: bool = Query(True), confirm_zero: bool = Query(False)):
+    """A file of dish costs -> the month's list. dry_run=true (the default) writes nothing and returns what would change.
+    A 0 baht cost is written only with confirm_zero=true."""
     month = _dc_month(month)
-    raw = await file.read()
+    raw = await _read_xlsx(file)
     try:
         parsed = _dc.parse(raw, file.filename or "")
     except ValueError as e:
@@ -952,10 +956,14 @@ async def bc_dish_cost_import(request: Request, file: UploadFile = File(...), mo
             except ValueError as e:
                 raise HTTPException(400, str(e))
         else:
-            out = _write(con, lambda: _dc.commit(con, month, parsed["rows"], _who(request)))
+            try:
+                out = _write(con, lambda: _dc.commit(con, month, parsed["rows"], _who(request), confirm_zero))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
     if not dry_run:
         _dc_refresh()
-    return {**out, "format": parsed["format"], "dry_run": dry_run, "file": file.filename}
+    return {**out, "format": parsed["format"], "dry_run": dry_run, "file": file.filename,
+            **({} if dry_run else {"facts_note": _dc.facts_note()})}
 
 
 class DishCostEdit(BaseModel):
@@ -963,15 +971,20 @@ class DishCostEdit(BaseModel):
     sku_code: str
     unit_cost: float
     note: Optional[str] = ""
+    confirm_zero: bool = False
 
 
 @router.post("/api/bom-center/dish-cost/edit", dependencies=[Depends(require_write_token)])
 def bc_dish_cost_edit(body: DishCostEdit, request: Request):
     with get_db() as con:
         _ensure(con)
-        out = _write(con, lambda: _dc.set_one(con, body.month, body.sku_code, body.unit_cost, body.note or "", _who(request)))
+        try:
+            out = _write(con, lambda: _dc.set_one(con, body.month, body.sku_code, body.unit_cost, body.note or "", _who(request),
+                                                  body.confirm_zero))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     _dc_refresh()
-    return out
+    return {**out, "facts_note": _dc.facts_note()}
 
 
 # ── M4 monthly prices ────────────────────────────────────────────────────────
@@ -2217,7 +2230,7 @@ def bc_forecast_runs(branch_id: Optional[int] = Query(None), limit: int = Query(
 
 
 @router.get("/api/bom-center/forecast/backtest")
-def bc_forecast_backtest(branch_id: int = Query(...), weeks: int = Query(4, ge=1, le=8)):
+def bc_forecast_backtest(branch_id: int = Query(...), weeks: int = Query(4, ge=1, le=_fc.HISTORY_WEEKS)):
     with get_db() as con:
         _ensure(con)
         return _fc.backtest(con, branch_id, weeks=weeks)
@@ -2786,6 +2799,7 @@ def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = 
                                            [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
                                            note=body.note))
     _fc.clear_slip_cache()            # PR-S3: the order suggestion reads the confirmed slips
+    invalidate_cache("bc_nav_badges_for")   # PL1 #18: the badge counts follow the slip at once (they were cached 60 s)
     return out
 
 
@@ -2819,6 +2833,7 @@ def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional
         out = _write(con, lambda: _is.append(con, bid, body.date or bkk_today().isoformat(),
                                              [ln.dict() for ln in body.lines], _who(request)))
     _fc.clear_slip_cache()            # PR-S3
+    invalidate_cache("bc_nav_badges_for")   # PL1 #18
     return out
 
 
@@ -2858,6 +2873,7 @@ async def bc_issue_import(request: Request, file: UploadFile = File(...), branch
                 con.rollback()
         out = _write(con, lambda: _bf.import_slips(con, bid, parsed, _who(request), file.filename, dry_run=False, submit=submit))
     _fc.clear_slip_cache()            # PR-S3: the order suggestion reads the confirmed slips
+    invalidate_cache("bc_nav_badges_for")   # PL1 #18: the badge counts follow the slip at once (they were cached 60 s)
     return out
 
 
@@ -2883,6 +2899,7 @@ def bc_issue_reopen(body: IssueReopenBody, request: Request):
         _ensure(con)
         out = _write(con, lambda: _is.reopen(con, body.slip_id, _who(request), body.note))
     _fc.clear_slip_cache()            # PR-S3
+    invalidate_cache("bc_nav_badges_for")   # PL1 #18
     return out
 
 
@@ -3460,7 +3477,7 @@ def _daily_xlsx_stock(wb, ws, d: dict, items: list, month: str):
            f"ส่วนต่างตัดเบิกรายวัน สาขา{d['branch']['name']} เดือน {month} · ตัดเบิกเทียบกับที่สาขาใช้ปกติ "
            f"(ค่าเฉลี่ยวันเดียวกันของสัปดาห์ {_ir.NORMAL_WEEKS} สัปดาห์ก่อน ปรับตามยอดขายวันนั้น) และเฉลี่ยทุกสาขาต่อยอดขาย ฿100,000 "
            f"(ราคาซื้อเดือน {month}) · นับเฉพาะใบตัดเบิกที่ส่งแล้ว · ส่วนต่างและส่วนต่าง % เทียบกับที่สาขาใช้ปกติ · "
-           f"ของแพงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า {_ir.OVER_PCT:.0f}% หรือต่ำกว่าเกิน {_ir.UNDER_PCT_STOCK:.0f}% "
+           f"ของแพงเบิกเกิน{_NORMAL_OR_MEDIAN_TH}มากกว่า {_ir.OVER_PCT:.0f}% หรือต่ำกว่าเกิน {_ir.UNDER_PCT_STOCK:.0f}% "
            f"ติดต่อกัน {_ir.STREAK_DAYS} วันขายขึ้นไป ถือเป็นสัญญาณต่อเนื่อง")
     for r in d["rows"]:
         sig = ", ".join(f"{f['name']}: {th('under_streak' if f['direction'] == 'under' else 'streak', f['basis'])}"
@@ -3955,7 +3972,7 @@ def _per_sales_note(it: dict) -> str:
 
 
 @router.get("/api/bom-center/per-sales")
-def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=8)):
+def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=_fc.HISTORY_WEEKS)):
     """The last `weeks` weeks against the `weeks` before: per branch the usage of each ingredient per ฿100,000 of sales (ex VAT),
     items by value, the change, the weekly swing and whether it is steady; plus the chain total (sum of usage / sum of sales).
     A branch login gets its own branch only."""
@@ -3972,7 +3989,7 @@ def bc_per_sales(request: Request, branch_id: Optional[int] = Query(None), weeks
 
 
 @router.get("/api/bom-center/per-sales.xlsx")
-def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=8)):
+def bc_per_sales_xlsx(request: Request, branch_id: Optional[int] = Query(None), weeks: int = Query(_fc.HISTORY_WEEKS, ge=1, le=_fc.HISTORY_WEEKS)):
     from openpyxl import Workbook
     with get_db() as con:
         _ensure(con)
@@ -4490,7 +4507,7 @@ def bc_hub_monthly(month: Optional[str] = Query(None)):
 
 # ── Phase 2 · S10: pilot readiness and scorecard (pilot.py) ─────────────────
 @router.get("/api/bom-center/hub/pilot")
-def bc_hub_pilot(weeks: int = Query(4)):
+def bc_hub_pilot(weeks: int = Query(4)):  # PILOT_WEEKS
     """Before the pilot: what is still to set up. During it: each branch against §7.3's pass criteria."""
     with get_db() as con:
         _ensure(con)

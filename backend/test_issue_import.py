@@ -30,7 +30,7 @@ from test_bom_center_issues import AS_OF, CRAB, CRAB_NM, NOW, PACK, at, build_st
 from test_bom_center_s4b import con  # noqa: F401  (sales to 5 Oct 2026 at branch 1; crab stick 1 kg packs)
 
 
-pytestmark = pytest.mark.usefixtures("recipe_mode")        # the fixtures build their sheets from recipes (mode full)
+pytestmark = [pytest.mark.usefixtures("both_modes"), pytest.mark.no_slip_seed]        # PL1 #8: the SI forms run in mode full AND mode stock (the default)
 SPILL, OTHER = IS.WASTE_REASON_TH["spill"], IS.WASTE_REASON_TH["other"]
 
 
@@ -86,7 +86,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
     ws = wb[BF.SLIP_SHEET]
     assert name and "รหัสสาขา 1" in ws["A1"].value and "2026-10-05" in ws["A1"].value
     assert "กรอกเฉพาะช่องเบิกใช้ ของเสีย และสาเหตุ · ห้ามแก้รหัส" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ปกติ (8 สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)", "เบิกใช้", "ของเสีย",
+    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "เฉลี่ยวันเดียวกัน (8 สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)", "เบิกใช้", "ของเสีย",
                                          "สาเหตุของเสีย", "หมายเหตุ"]
     sh = IS.sheet(con, 1, "2026-10-05", now=NOW)
     want = [it["code"] for z in sh["zones"] for it in z["items"]]
@@ -101,6 +101,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
     assert row["ของที่ควรเหลือ (ตามระบบ)"] == BF.sys_text(it["system_qty"], PACK)
 
 
+@pytest.mark.full_only
 def test_template_has_locked_grey_columns_a_reasons_sheet_and_a_dropdown(con):  # noqa: F811
     build_stock(con)
     wb, _ = _tmpl(con)
@@ -146,6 +147,7 @@ def test_days_repeats_the_block_for_consecutive_dates_and_is_limited(con):  # no
 
 
 # ── 2 · the dry run ──────────────────────────────────────────────────────────
+@pytest.mark.full_only
 def test_a_dry_run_reports_per_date_and_touches_nothing(con):  # noqa: F811
     build_stock(con)
     wb, _ = _tmpl(con, "2026-10-04", days=2)
@@ -218,6 +220,7 @@ def test_future_old_and_confirmed_dates_are_refused_with_their_state(con):  # no
     assert out["ok"] is False and [d["date"] for d in out["dates"]] == sorted(by)
 
 
+@pytest.mark.slip_seed
 def test_a_period_accounting_has_posted_refuses_the_date(con):  # noqa: F811
     ST.save(con, 1, [{"code": CRAB, "qty": 10, "unit": PACK}], "udon", submit=True, count_date="2026-09-01", require_all=False)
     end = ST.save(con, 1, [{"code": CRAB, "qty": 8, "unit": PACK}], "udon", submit=True, count_date="2026-10-02", require_all=False)["count_id"]
@@ -357,6 +360,7 @@ def _ostate(c):  # noqa: F811
     return {t: sorted(repr(tuple(r)) for r in c.execute(f"SELECT * FROM {t}")) for t in ("bc_order", "bc_order_line", "bc_audit")}
 
 
+@pytest.mark.slip_seed
 def test_the_order_template_carries_the_plans_numbers_read_only_and_the_reasons(con):  # noqa: F811
     p = _plan(con)
     wb, name = BF.order_template(con, p, 1, "1", WED)
@@ -389,6 +393,7 @@ def test_without_a_suggestion_the_template_has_no_suggested_column_and_says_why(
     assert all(ws.cell(r, 6).value is not None for r in range(3, ws.max_row + 1))
 
 
+@pytest.mark.slip_seed
 def test_an_order_dry_run_writes_nothing_and_a_real_import_is_the_apps_draft(con):  # noqa: F811
     p = _plan(con)
     sug = next(x for x in p["rows"] if x["code"] == CRAB)["order_units"]
@@ -409,6 +414,7 @@ def test_an_order_dry_run_writes_nothing_and_a_real_import_is_the_apps_draft(con
     assert "สั่ง.xlsx" in a and "'submit': False" in a
 
 
+@pytest.mark.slip_seed
 def test_the_order_errors_are_the_apps_errors(con):  # noqa: F811
     wb, p = _ofile(con, {CRAB: {"สั่ง": "abc"}})
     out = _oimp(con, wb, p)
@@ -427,6 +433,7 @@ def test_the_order_errors_are_the_apps_errors(con):  # noqa: F811
     assert out["errors"][0]["row"] == 50 and "NO-SUCH" in out["errors"][0]["message"]
 
 
+@pytest.mark.slip_seed
 def test_the_reason_rule_the_slip_rule_and_the_cutoff_are_the_apps(con):  # noqa: F811
     p = _plan(con)
     sug = next(x for x in p["rows"] if x["code"] == CRAB)["order_units"]
@@ -497,6 +504,7 @@ def _rstate(c):  # noqa: F811
             for t in ("bc_order", "bc_order_line", "bc_receipt", "bc_receipt_line", "bc_claim", "bc_audit")}
 
 
+@pytest.mark.slip_seed
 def test_the_receive_template_prefills_what_was_sent_and_locks_it(con):  # noqa: F811
     oid, q = _sent(con)
     wb = _rfile(con, oid)
@@ -509,6 +517,7 @@ def test_the_receive_template_prefills_what_was_sent_and_locks_it(con):  # noqa:
     assert [x[0] for x in wb[BF.RECEIVE_REASONS_SHEET].iter_rows(min_row=2, values_only=True)] == [t for _c, t in CL.REASONS]
 
 
+@pytest.mark.slip_seed
 def test_a_receive_dry_run_shows_the_claim_and_writes_nothing(con):  # noqa: F811
     oid, q = _sent(con)
     before = _rstate(con)
@@ -526,6 +535,7 @@ def test_a_receive_dry_run_shows_the_claim_and_writes_nothing(con):  # noqa: F81
     assert _rstate(con) == before
 
 
+@pytest.mark.slip_seed
 def test_a_real_receive_import_needs_the_acknowledgement_and_makes_the_claim(con):  # noqa: F811
     oid, q = _sent(con)
     wb = _rfile(con, oid, {CODE: {"รับจริง": q - 2, "สาเหตุที่ขาด": "short"}})
@@ -543,6 +553,7 @@ def test_a_real_receive_import_needs_the_acknowledgement_and_makes_the_claim(con
         BF.receive_template(con, 1, oid)
 
 
+@pytest.mark.slip_seed
 def test_a_receive_file_of_another_order_branch_or_kind_is_refused(con):  # noqa: F811
     oid, q = _sent(con)
     wb = _rfile(con, oid)
@@ -656,6 +667,7 @@ def test_http_templates_dry_run_pinning_token_log_and_cache(client, app_db, monk
         c.close()
 
 
+@pytest.mark.slip_seed
 def test_a_line_received_by_weight_is_received_in_the_app_not_from_a_file(con, monkeypatch):  # noqa: F811
     oid, q = _sent(con)
     real = OR.detail

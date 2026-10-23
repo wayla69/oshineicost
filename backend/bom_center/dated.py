@@ -196,6 +196,10 @@ def pull_from_live(sq, api: str = None, timeout: int = 25) -> int:
         print(f"      dated costs pulled from the live site: {len(rows)} rows")
         try:                                    # the analyst's dish cost list: non-fatal on its own (an older deploy has no such route)
             lrows = _get("/api/_admin/bc-sku-cost-list").get("rows") or []
+            if not lrows and sq.execute("SELECT COUNT(*) FROM bc_sku_cost_list").fetchone()[0]:
+                # PL1 #21: an empty answer (an older deploy, an auth quirk) is not "the list was emptied" - keep what this DB has
+                print("      dish cost list: the live site answered with no rows - keeping the DB's own")
+                return len(rows)
             sq.execute("DELETE FROM bc_sku_cost_list")
             sq.executemany("INSERT OR REPLACE INTO bc_sku_cost_list(sku_id, month, unit_cost, note, imported_by, imported_at)"
                            " VALUES(?,?,?,?,?,?)", [(codes[r[0]], *r[1:6]) for r in lrows if r[0] in codes])

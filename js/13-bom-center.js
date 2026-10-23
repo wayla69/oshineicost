@@ -1037,6 +1037,7 @@ function _bmcPreviewHtml(p, applied) {
         </td></tr>`).join('')}</tbody></table></div>` : ''}
     ${applied ? '' : '<div id="bmcUcPrice" class="mt-3" style="display:none"></div>'}
     ${_bmcSuggestedHtml(p.suggested_rules)}
+    ${applied && p.facts_note ? `<div class="text-xs mt-2" style="color:var(--text-secondary)">${esc(p.facts_note)}</div>` : ''}
     ${applied || !_bmcCanPrices() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button onclick="bmcPriceCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกราคา${(p.suggested_rules || []).length || _bmcChosenRules.length ? 'พร้อมกฎที่เลือก' : ''}</button>
       <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่บันทึก</span></div>`}
   </div>`;
@@ -1104,7 +1105,7 @@ function bmcDcRender() {
   const q = (document.getElementById('bmcDcQ').value || '').trim().toLowerCase();
   const rows = d.rows.filter(r => (_bmcDcView === 'all' || (_bmcDcView === 'changed30' ? r.changed30 : r.source_kind === _bmcDcView))
     && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
-  document.getElementById('bmcDcSummary').textContent = `${c.all} เมนู` + (d.last_import_at ? ` · นำเข้าล่าสุด ${fmtDay(d.last_import_at.slice(0, 10))} โดย ${whoTh(d.last_import_by || '')}` : '');
+  document.getElementById('bmcDcSummary').textContent = `${c.all} เมนู` + (d.last_import_at ? ` · นำเข้าล่าสุด ${fmtDay(d.last_import_day || d.last_import_at.slice(0, 10))} โดย ${whoTh(d.last_import_by || '')}` : '');
   const w = _bmcCanPrices();
   document.getElementById('bmcDcList').innerHTML = rows.length ? `<div class="wt-wrap" style="max-height:640px"><table class="wt"><thead><tr>
       <th>รหัส POS</th><th>เมนู</th><th class="wt-num">ต้นทุนต่อจาน</th><th class="wt-num">เดือนก่อน</th><th class="wt-num">เปลี่ยน</th><th class="wt-num">จานที่ขาย</th><th>ที่มา</th>${w ? '<th></th>' : ''}</tr></thead><tbody>${rows.slice(0, 800).map(r => `<tr>
@@ -1122,10 +1123,13 @@ async function bmcDcEdit(code) {
   const v = await uiPrompt(`ต้นทุนต่อจาน (บาท) ของ ${code} ${r.name || ''} เดือน${fmtMonthTh(_bmcMonth())}`, r.unit_cost > 0 ? r.unit_cost : '', { title: `แก้ต้นทุน ${code}`, okText: 'บันทึก' });
   if (v === null) return;
   if (String(v).trim() === '' || isNaN(Number(v)) || Number(v) < 0) { _bmcStatus('bmcDcStatus', 'ใส่ต้นทุนเป็นตัวเลขไม่ติดลบ', 'var(--amber-ink)'); return; }
+  // PL1: 0 baht wins over the cost table and the recipe, so it is written only after a second, explicit confirm
+  const zero = Number(v) === 0;
+  if (zero && !await uiConfirm(`บันทึกต้นทุนของ ${code} ${r.name || ''} เป็น 0 บาท?\nเมนูนี้จะไม่มีต้นทุนในรายงาน`, { title: 'ต้นทุน 0 บาท', ok: 'บันทึก 0 บาท', cancel: 'ยกเลิก' })) { _bmcStatus('bmcDcStatus', 'ยังไม่บันทึก'); return; }
   try {
-    await _bmcJson(`${API}/api/bom-center/dish-cost/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: _bmcMonth(), sku_code: code, unit_cost: Number(v), note: '' }) });
-    _bmcStatus('bmcDcStatus', `✓ บันทึกต้นทุน ${code}`, 'var(--good-ink)');
+    const d = await _bmcJson(`${API}/api/bom-center/dish-cost/edit`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: _bmcMonth(), sku_code: code, unit_cost: Number(v), note: '', confirm_zero: zero }) });
+    _bmcStatus('bmcDcStatus', `✓ บันทึกต้นทุน ${code}${d.facts_note ? ' · ' + d.facts_note : ''}`, 'var(--good-ink)');
     bmcLoadDishCost();
   } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
@@ -1136,8 +1140,8 @@ async function bmcDcImport(input) {
   if (!file) return;
   const m = _bmcMonth();
   _bmcDcName = file.name;
-  _bmcDcSend = dry => { const fd = new FormData(); fd.append('file', file, file.name);
-    return _bmcJson(`${API}/api/bom-center/dish-cost/import?month=${m}&dry_run=${dry}`, { method: 'POST', body: fd }); };
+  _bmcDcSend = (dry, zero) => { const fd = new FormData(); fd.append('file', file, file.name);
+    return _bmcJson(`${API}/api/bom-center/dish-cost/import?month=${m}&dry_run=${dry}${zero ? '&confirm_zero=true' : ''}`, { method: 'POST', body: fd }); };
   try {
     _bmcStatus('bmcDcStatus', 'กำลังตรวจไฟล์…');
     _bmcDcPre = await _bmcDcSend(true);
@@ -1156,7 +1160,7 @@ function bmcDcShowPreview(p, applied) {
   const sw = p.sold_without_cost || [];
   document.getElementById('bmcDcPreview').innerHTML = `<div class="card p-4">
     <div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">${applied ? '✓ บันทึกแล้ว' : 'ตัวอย่างก่อนบันทึก'}: ${esc(_bmcDcName || p.file || '')} · ${esc(p.format || '')} · เดือน${fmtMonthTh(p.month)}</div>
-    <div class="text-xs" style="color:var(--text-secondary)">${chip('นำเข้า', p.imported, 'var(--good-ink)')}${chip('รหัสไม่พบ', p.unknown_codes.length, 'var(--amber-ink)')}${chip('รหัสแพ็กเกจ', p.tier_codes.length, 'var(--amber-ink)')}${chip('ค่าไม่ถูกต้อง', p.bad_values.length, 'var(--bad-ink)')}${chip('เปลี่ยนเกิน 30%', p.changed_30pct.length, 'var(--amber-ink)')}${chip('ขายแต่ไม่มีต้นทุน', sw.length, 'var(--bad-ink)')}</div>
+    <div class="text-xs" style="color:var(--text-secondary)">${chip('นำเข้า', p.imported, 'var(--good-ink)')}${chip('รหัสไม่พบ', p.unknown_codes.length, 'var(--amber-ink)')}${chip('รหัสแพ็กเกจ', p.tier_codes.length, 'var(--amber-ink)')}${chip('ค่าไม่ถูกต้อง', p.bad_values.length, 'var(--bad-ink)')}${chip('ต้นทุน 0 บาท', (p.zero_costs || []).length, 'var(--amber-ink)')}${chip('เปลี่ยนเกิน 30%', p.changed_30pct.length, 'var(--amber-ink)')}${chip('ขายแต่ไม่มีต้นทุน', sw.length, 'var(--bad-ink)')}</div>
     ${_bmcDcMini('เมนูที่ขายในเดือนนี้แต่ไม่มีต้นทุน', sw.length, [['รหัส POS'], ['เมนู'], ['จานที่ขาย', 1], ['ต้นทุนที่ใช้อยู่', 1], ['ที่มา']],
       sw.slice(0, 200).map(r => `<tr><td class="wt-code">${esc(r.code)}</td><td>${esc(r.name)}</td><td class="wt-num">${_bmcNum(r.plates, 0)}</td><td class="wt-num">${r.current_cost > 0 ? _bmcDcBaht(r.current_cost) : '—'}</td><td>${esc(r.current_source)}</td></tr>`).join(''))}
     ${_bmcDcMini('ต้นทุนเปลี่ยนเกิน 30% จากเดือนก่อน', p.changed_30pct.length, [['รหัส POS'], ['เมนู'], ['เดือนก่อน', 1], ['ใหม่', 1], ['เปลี่ยน', 1]],
@@ -1175,12 +1179,13 @@ async function bmcDcCommit() {
   if (!await uiConfirm(`${_bmcDcName}\nเดือน${fmtMonthTh(pre.month)}: บันทึกต้นทุนต่อจาน ${pre.imported} เมนู` +
       (pre.sold_without_cost.length ? `\nเมนูที่ขายแต่ยังไม่มีต้นทุน ${pre.sold_without_cost.length} เมนู` : '') +
       (pre.changed_30pct.length ? `\nต้นทุนเปลี่ยนเกิน 30% ${pre.changed_30pct.length} เมนู` : '') +
+      ((pre.zero_costs || []).length ? `\nต้นทุน 0 บาท ${pre.zero_costs.length} เมนู (เมนูเหล่านี้จะไม่มีต้นทุนในรายงาน)` : '') +
       ((pre.unknown_codes.length + pre.tier_codes.length + pre.bad_values.length) ? `\nข้ามรหัสหรือค่าที่ใช้ไม่ได้ ${pre.unknown_codes.length + pre.tier_codes.length + pre.bad_values.length} รายการ` : ''),
       { title: 'ยืนยันการนำเข้าต้นทุนต่อจาน', ok: 'บันทึก', cancel: 'ยกเลิก' })) { _bmcStatus('bmcDcStatus', 'ยังไม่บันทึก'); return; }
   try {
-    const d = await _bmcDcSend(false);
+    const d = await _bmcDcSend(false, (pre.zero_costs || []).length > 0);
     bmcDcShowPreview(d, true);
-    _bmcStatus('bmcDcStatus', `✓ นำเข้าต้นทุนต่อจาน ${d.imported} เมนู`, 'var(--good-ink)');
+    _bmcStatus('bmcDcStatus', `✓ นำเข้าต้นทุนต่อจาน ${d.imported} เมนู${d.facts_note ? ' · ' + d.facts_note : ''}`, 'var(--good-ink)');
     _bmcDcPre = null;
     bmcLoadDishCost('reset');
   } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
@@ -3033,6 +3038,7 @@ async function bmcLoadBenchmark() {
   const b = _bmcBm, w = _bmcFcCanWrite();
   const typ = t => t === 'master' ? 'สาขาของบริษัท' : 'แฟรนไชส์';
   box.innerHTML = `<div class="ui-cardhead mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">สาขาของบริษัทที่ใช้เป็นค่ากลาง</div>
+      ${BC_MODE === 'stock' ? uiQ('bmc:bm3', 'ค่ากลางในโหมดสต๊อก', '<p>ในโหมดสต๊อก ค่ากลางใช้ทุกสาขาของบริษัทที่ส่งใบตัดเบิกครบ 14 วัน ทั้งในยอดแนะนำ ผลต่างรายวัน และรายงานต่อยอดขาย 100,000 บาท รายการที่เลือกไว้ที่นี่ใช้เมื่อเปิดโหมดสูตร</p>') : ''}
       ${uiQ('bmc:bm1', 'สาขาที่ใช้เป็นค่ากลาง', `<p>ปริมาณที่ควรสั่งอ้างอิงสาขาที่บริษัทดำเนินการเอง เพราะสาขาแฟรนไชส์อาจซื้อวัตถุดิบจากภายนอกด้วย</p><p>ค่ากลางคือมัธยฐานของสาขาที่เลือก (ต้องมีข้อมูลอย่างน้อย ${b.min_branches} สาขา) ใช้เป็นเกณฑ์เทียบในรายงานต่อยอดขาย ฿100,000 และเป็นค่าอ้างอิงเริ่มต้นของสาขาใหม่</p>`)}</div>
     <div id="bmcBmList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">${b.branches.filter(x => x.active).map(x => `<label class="text-xs flex items-center gap-2" style="color:var(--text-primary);min-height:32px">
       <input type="checkbox" value="${x.branch_id}" ${x.selected ? 'checked' : ''} ${w ? '' : 'disabled'} style="width:18px;height:18px"> ${esc(x.name)} <span class="text-[10.5px]" style="color:var(--text-muted)">${typ(x.branch_type)}</span></label>`).join('')}</div>

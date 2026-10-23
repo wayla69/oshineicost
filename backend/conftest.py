@@ -182,6 +182,36 @@ def recipe_mode(monkeypatch):
     monkeypatch.setattr(close_settings, "MODE_DEFAULT", "full")
 
 
+def _seed_stock_history(con):
+    """Stock mode reads the CONFIRMED issue slips (at least forecast.SLIP_MIN_DAYS days), so a module written against the recipe forecast
+    needs a slip history to have a suggestion at all: branch 1 confirms 450 g crab and 200 g salmon every day, 1 Sep - 3 Oct 2026 (the module confirms the later days itself)."""
+    from datetime import date, timedelta
+    d, end = date(2026, 9, 1), date(2026, 10, 3)
+    while d <= end:
+        cur = con.execute("INSERT INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by,"
+                          " confirmed_at) VALUES(1,?, 'confirmed','t','2026-10-01','2026-10-01','t','2026-10-01')", (d.isoformat(),))
+        for code, q in (("13-01-009", 450.0), ("02-01-001", 200.0)):
+            con.execute("INSERT INTO bc_issue_line(slip_id, ingredient_code, qty_used, qty_waste, unit, qty_used_base, qty_waste_base)"
+                        " VALUES(?,?,?,0,'กรัม',?,0)", (cur.lastrowid, code, q, q))
+        d += timedelta(days=1)
+    con.commit()
+
+
+@pytest.fixture(params=["full", "stock"])
+def both_modes(request, monkeypatch):
+    """PL1 #8: a module that is not ABOUT recipes runs in BOTH modes - `full` as the old pin did, and `stock`, the real default (with a
+    slip history behind branch 1, see _seed_stock_history). A test that asserts a recipe-derived number is marked
+    `@pytest.mark.full_only` and is skipped in stock mode (stock mode has its own tests: test_stock_mode, test_slip_*, test_pl1_polish)."""
+    from bom_center import close_settings
+    mode = request.param
+    if mode == "stock" and request.node.get_closest_marker("full_only"):
+        pytest.skip("asserts a recipe-derived number: mode full only")
+    monkeypatch.setattr(close_settings, "MODE_DEFAULT", mode)
+    if mode == "stock" and (request.node.get_closest_marker("slip_seed") or not request.node.get_closest_marker("no_slip_seed")):      # a module that writes slips itself keeps its own history
+        _seed_stock_history(request.getfixturevalue("con"))
+    return mode
+
+
 @pytest.fixture(scope="session")
 def app_db(tmp_path_factory):
     """Build the temp DB once and point main at it."""
@@ -205,3 +235,9 @@ def client(app_db):
     from fastapi.testclient import TestClient
     with TestClient(main.app) as c:
         yield c
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "no_slip_seed: the both_modes stock run does not seed a slip history (the module writes slips itself)")
+    config.addinivalue_line("markers", "slip_seed: a test of a no_slip_seed module that does need the seeded slip history in stock mode")
+    config.addinivalue_line("markers", "full_only: asserts a recipe-derived number; skipped under the both_modes stock run (PL1 8)")

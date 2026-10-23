@@ -338,4 +338,4 @@ def test_the_claim_list_names_the_round_and_the_delivery_day(con):  # noqa: F811
 
 
 import pytest as _pytest_s3  # noqa: E402
-pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)
+pytestmark = _pytest_s3.mark.usefixtures("both_modes")   # PL1 #8: runs in mode full AND mode stock (the default)

@@ -302,4 +302,4 @@ def test_http_receive_everything_in_one_call(client, app_db, auth_on):
 
 
 import pytest as _pytest_s3  # noqa: E402
-pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)
+pytestmark = _pytest_s3.mark.usefixtures("both_modes")   # PL1 #8: runs in mode full AND mode stock (the default)

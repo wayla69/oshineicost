@@ -14,6 +14,17 @@ MONTH_TH = ["มกราคม", "กุมภาพันธ์", "มีน�
             "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
 WD_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]            # Monday = 0
 
+# PL1 #14 · the comparator words of the stock mode, ONE place (docs/BRANCH_WORDS.md): the branch's own normal and the all-branch median.
+NORMAL_TH = "ที่สาขาใช้ปกติ"
+MEDIAN_TH = "เฉลี่ยทุกสาขา"
+NORMAL_OR_MEDIAN_TH = f"{NORMAL_TH}หรือ{MEDIAN_TH}"
+NORMAL_AND_MEDIAN_TH = f"{NORMAL_TH}และ{MEDIAN_TH}"
+
+
+def comparator_th(stock: bool) -> str:
+    """What a sentence compares the issue with: in stock mode the branch's normal or the all-branch median, otherwise the recipe."""
+    return NORMAL_OR_MEDIAN_TH if stock else "สูตร"
+
 
 def _d(v):
     if isinstance(v, datetime):

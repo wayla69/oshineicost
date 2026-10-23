@@ -745,6 +745,7 @@ def ingredients_order_plan_xlsx(
         ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = w
     ws.freeze_panes = "A4"
     buf = _io_ing.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     buf.seek(0)
     # HTTP headers are latin-1: a Thai branch name in filename= raises
@@ -2187,6 +2188,7 @@ def _xlsx_attachment(wb, filename: str):
     from urllib.parse import quote as _q
     from fastapi.responses import StreamingResponse as _SR
     buf = _io.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     buf.seek(0)
     ascii_name = filename.encode("ascii", "ignore").decode() or "template.xlsx"

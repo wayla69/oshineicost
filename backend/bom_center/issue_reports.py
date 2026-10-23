@@ -52,7 +52,8 @@ MEDIAN_MIN_BRANCHES = 2             # fewer other branches on the slips than thi
 MEDIAN_WINDOW_DAYS = 7 * FC.HISTORY_WEEKS             # the window (days before the day) the issued per PER_SALES baht is measured over
 PER_SALES = 100000.0
 UNDER_PCT_STOCK = 20.0              # O4: under the comparator by more than this % is "under" (mode full keeps UNDER_PCT)
-BASIS_TH = {"normal": "ที่สาขาใช้ปกติ", "median": "เฉลี่ยทุกสาขา", "both": "ที่สาขาใช้ปกติและเฉลี่ยทุกสาขา"}
+from .fmt import MEDIAN_TH, NORMAL_AND_MEDIAN_TH, NORMAL_TH   # noqa: E402  (PL1 #14: the words live in fmt)
+BASIS_TH = {"normal": NORMAL_TH, "median": MEDIAN_TH, "both": NORMAL_AND_MEDIAN_TH}
 
 
 def _d(x) -> date:
@@ -458,10 +459,7 @@ def _totals(rows: list) -> dict:
 
 
 # ── PR-S4 · mode `stock`: the daily issue against the branch's own normal and the all-branch median ──────────
-def stock_on(con) -> bool:
-    """True in mode `stock` (the default): no recipe, so the daily report compares with the comparators below."""
-    from .close_settings import stock_mode
-    return stock_mode(con)
+from .close_settings import stock_mode as stock_on   # noqa: E402  (PL1 #14: one function; True in mode `stock`, the default - no recipe, the daily report compares with the comparators below)
 
 
 def _hist(con, ids: list, lo: date, hi: date) -> dict:
@@ -492,7 +490,7 @@ def _company_hist(con, lo: date, hi: date, cache: dict) -> dict:
     """_hist of every company branch (forecast.company_branch_ids), kept in `cache` for the duration of one report call."""
     key = (lo.isoformat(), hi.isoformat())
     if key not in cache:
-        cache[key] = _hist(con, FC.company_branch_ids(con), lo, hi)
+        cache[key] = _hist(con, FC.median_branch_ids(con), lo, hi)
     return cache[key]
 
 

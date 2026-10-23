@@ -12,7 +12,7 @@ so they are refused at import and `_cogs_case` never counts a package twice.
 """
 import io
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import rules
 
@@ -38,6 +38,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def bkk_day(at):
+    """The Bangkok calendar day of an imported_at stamp (UTC, no zone suffix): an import at 03:00 Bangkok is stamped the day before."""
+    if not at:
+        return None
+    try:
+        return (datetime.strptime(str(at)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc) + timedelta(hours=7)).date().isoformat()
+    except ValueError:
+        return str(at)[:10]
+
+
 def _next(month: str) -> str:
     return dated._next(month)
 
@@ -47,12 +57,35 @@ def _prev(month: str) -> str:
     return f"{y - (m == 1):04d}-{12 if m == 1 else m - 1:02d}"
 
 
-def check_month(month) -> str:
+def max_month(today=None) -> str:
+    """The latest month a cost may be entered for: next month (a list is prepared before the month starts), never further (PL1 #16)."""
+    from .clock import today as _today
+    t = today or _today()
+    return _next(f"{t.year:04d}-{t.month:02d}")
+
+
+def check_month(month, today=None) -> str:
     if not month or not _MONTH.match(str(month)):
         raise ValueError("เดือนไม่ถูกต้อง (เช่น 2026-09)")
     if month < MIN_MONTH:
         raise ValueError(f"ต้นทุนต่อจานเริ่มได้ตั้งแต่เดือน {MIN_MONTH}")
+    if month > max_month(today):
+        raise ValueError(f"ต้นทุนต่อจานบันทึกล่วงหน้าได้ไม่เกินเดือน {max_month(today)}")
     return month
+
+
+def facts_note(now=None) -> str:
+    """The line shown after a write: the dated reports follow at once, the fact tables (menu engineering, per-bill P&L, Top 60 per head)
+    are built by the sync, so they take the cost at its next run (PL1 #6)."""
+    try:
+        import cloud_sync as _cs
+        from .clock import now_bkk
+        n = now or now_bkk()
+        nxt = _cs.next_slot(n, _cs.configured_times())
+    except Exception:
+        return "รายงานเมนูและรายงานรายบิลใช้ต้นทุนนี้หลังการซิงก์รอบถัดไป"
+    day = "วันนี้" if nxt.date() == n.astimezone(nxt.tzinfo).date() else "พรุ่งนี้"
+    return f"รายงานเมนูและรายงานรายบิลใช้ต้นทุนนี้หลังการซิงก์รอบถัดไป เวลา {nxt:%H:%M} น. ({day})"
 
 
 def _num(v):
@@ -247,15 +280,22 @@ def preview(con, month: str, rows: list) -> dict:
                       for sid in miss), key=lambda x: -x["plates"])
     return {"month": month, "rows": [{k: o[k] for k in ("code", "name", "cost", "note")} for o in ok],
             "imported": len(ok), "unknown_codes": unknown, "tier_codes": tiers, "bad_values": bad,
+            "zero_costs": [o["code"] for o in ok if o["cost"] == 0],
             "changed_30pct": changed, "sold_without_cost": without}
 
 
-def commit(con, month: str, rows: list, who: str) -> dict:
+ZERO_CONFIRM_TH = "ต้นทุน 0 บาทจะทำให้เมนูนั้นไม่มีต้นทุนในรายงาน · ยืนยันอีกครั้งหากต้องการบันทึกเป็น 0 บาท"
+
+
+def commit(con, month: str, rows: list, who: str, confirm_zero: bool = False) -> dict:
     """UPSERT the rows of `rows` into `month` (the caller commits) and audit it. Lines the preview calls
-    unknown / package / bad are skipped, exactly as it said."""
+    unknown / package / bad are skipped, exactly as it said. A 0 baht cost wins over the cost table and the recipe,
+    so it is written only when the caller confirms it (PL1 #16)."""
     pre = preview(con, month, rows)
     if not pre["imported"]:
         raise ValueError("ไม่มีรายการที่นำเข้าได้")
+    if pre["zero_costs"] and not confirm_zero:
+        raise ValueError(f"มี {len(pre['zero_costs'])} เมนูที่ต้นทุน 0 บาท ({', '.join(pre['zero_costs'][:5])}) · {ZERO_CONFIRM_TH}")
     ok, _, _, _ = _classify(con, rows)
     at = _now()
     con.executemany(
@@ -267,7 +307,7 @@ def commit(con, month: str, rows: list, who: str) -> dict:
     return pre
 
 
-def set_one(con, month: str, sku_code: str, unit_cost, note: str, who: str) -> dict:
+def set_one(con, month: str, sku_code: str, unit_cost, note: str, who: str, confirm_zero: bool = False) -> dict:
     """Edit one row of the month (the caller commits)."""
     check_month(month)
     dated.ensure(con)
@@ -278,6 +318,8 @@ def set_one(con, month: str, sku_code: str, unit_cost, note: str, who: str) -> d
     if not r:
         raise ValueError("ไม่พบรหัส POS นี้")
     cost = _num(unit_cost)
+    if cost == 0 and not confirm_zero:
+        raise ValueError(ZERO_CONFIRM_TH)
     old = con.execute("SELECT unit_cost FROM bc_sku_cost_list WHERE sku_id=? AND month=?", (r[0], month)).fetchone()
     con.execute(
         "INSERT INTO bc_sku_cost_list(sku_id, month, unit_cost, note, imported_by, imported_at) VALUES(?,?,?,?,?,?)"
@@ -322,7 +364,8 @@ def month_table(con, month: str) -> dict:
               "none": sum(r["source_kind"] == "none" for r in rows), "changed30": sum(r["changed30"] for r in rows)}
     last = con.execute("SELECT MAX(imported_at) FROM bc_sku_cost_list WHERE month=?", (month,)).fetchone()[0]
     who = con.execute("SELECT imported_by FROM bc_sku_cost_list WHERE month=? AND imported_at=? LIMIT 1", (month, last)).fetchone() if last else None
-    return {"month": month, "rows": rows, "counts": counts, "last_import_at": last, "last_import_by": who[0] if who else None}
+    return {"month": month, "rows": rows, "counts": counts, "last_import_at": last, "last_import_day": bkk_day(last),
+            "last_import_by": who[0] if who else None}
 
 
 def months(con, upto: str = None) -> list:

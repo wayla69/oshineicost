@@ -279,13 +279,18 @@ def warm_cache_async(top: int = 40, max_age_hours: float = 24.0):
     return t
 
 
-def invalidate_cache(*prefixes: str):
+def invalidate_cache(*prefixes: str, rebuild_cost: bool = True):
     """Remove cached entries whose key starts with any of the given function names.
 
     Called with no arguments → flush the entire cache (used after bulk data writes
     where it's hard to know which derived endpoints depend on the change).
     Either way the generation moves on, so a computation already running on the
     old data cannot store its result afterwards.
+
+    `rebuild_cost=False` (PL1 #5): the write does not touch sku_cost / BoM / aliases - the sources of
+    sku_effective_cost - so only the response cache is dropped and the effective-cost table is not
+    rebuilt. The dish-cost list (bc_sku_cost_list) is read through rules.dated_cost_sql, not through
+    that table, so a dish-cost edit is exactly such a write.
     """
     global _cache_gen, _cache_bytes, _data_gen
     with _cache_lock:
@@ -303,7 +308,7 @@ def invalidate_cache(*prefixes: str):
     # the per-SKU effective-cost lookup so _unified_cogs_expr reflects the new costs
     # immediately (preserving the pre-materialisation live-subquery behaviour).
     # Best-effort and resilient — never break the mutation response if it fails.
-    if not prefixes:
+    if not prefixes and rebuild_cost:
         try:
             with get_db() as con:
                 _build_sku_effective_cost(con, force=True)
@@ -467,8 +472,9 @@ def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
             "SELECT type, name, sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND ("
             f"  (type='table' AND {_preserved_pred('name')}) OR "
-            f"  (type='index' AND {_preserved_pred('tbl_name')}))"
-            "ORDER BY (type='index')"            # tables first, then their indexes
+            f"  (type='index' AND {_preserved_pred('tbl_name')}) OR "
+            f"  (type='trigger' AND {_preserved_pred('tbl_name')}))"      # PL1 #19: a table's triggers (franchise messages are immutable by trigger)
+            "ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END"      # tables first, then their indexes, then their triggers
         ).fetchall()
         if not any(o[0] == "table" for o in objs):
             return
@@ -483,6 +489,9 @@ def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
                     if rows:
                         ph = ",".join("?" * len(rows[0]))
                         dest.executemany(f'INSERT INTO "{name}" VALUES ({ph})', rows)
+                elif typ == "trigger":
+                    dest.execute(f'DROP TRIGGER IF EXISTS "{name}"')
+                    dest.execute(sql)
                 else:
                     dest.execute(f'DROP INDEX IF EXISTS "{name}"')
                     dest.execute(sql)

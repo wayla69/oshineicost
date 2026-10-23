@@ -247,9 +247,14 @@ def needs_cost_sql(code: str = "sk.sku_code") -> str:
             f" AND {code} NOT IN {excluded})")
 
 
-def costed_sql(row: str = "ssm") -> str:
-    """True when the engine has a unit cost above ฿0 for the sales row `row`."""
-    return f"({effective_unit_cost_sql(row)} > 0)"
+def costed_sql(row: str = "ssm", month: str = None) -> str:
+    """True when the engine has a unit cost above ฿0 for the sales row `row`.
+
+    The month matters: the analyst's imported dish cost (bc_sku_cost_list) and a released
+    version are read only through dated_cost_sql, which needs the row's month. Without it a
+    dish costed only by that list counted in COGS but stayed "uncosted" here (PL1 #1). `month`
+    defaults to the row's own period_month: every roll-up this is used on carries one."""
+    return f"({effective_unit_cost_sql(row, month or f'{row}.period_month')} > 0)"
 
 
 def coverage_sums_sql(row: str = "ssm", code: str = "sk.sku_code") -> str:

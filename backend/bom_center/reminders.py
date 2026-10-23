@@ -101,7 +101,8 @@ def morning(con, today: date = None, app_url: str = "") -> dict:
         any_work = True
         from .issue_reports import OVER_PCT, STREAK_DAYS
         from .close_settings import stock_mode
-        word = "ที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขา" if stock_mode(con) else "สูตร"        # PR-S4: with no recipe the comparators are the branch's normal and the median
+        from .fmt import comparator_th
+        word = comparator_th(stock_mode(con))        # PR-S4: with no recipe the comparators are the branch's normal and the median
         lines.append(f"<b>ฝ่ายปฏิบัติการ</b>: เบิกเกิน{word}มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: "
                      + html.escape(" · ".join(f"{a['branch']} ({', '.join(a['items'])})" for a in an.get("anomalies") or [])))
     head = f"<b>วัตถุดิบและใบสั่งซื้อ · {thai_date(today)}</b>"

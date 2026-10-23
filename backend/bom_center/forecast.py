@@ -488,6 +488,18 @@ def company_branch_ids(con, exclude=None) -> list:
         if exclude is None or int(b) != int(exclude)]
 
 
+def median_branch_ids(con, exclude=None) -> list:
+    """PL1 #7 · THE set behind "เฉลี่ยทุกสาขา" / the benchmark, for the order suggestion, the daily variance and the per-฿100,000 report alike.
+    Stock mode: every active company branch (company_branch_ids); each of them counts only while its demand source is the slips (at least
+    SLIP_MIN_DAYS confirmed days - demand_source gives `none` below that, so it adds nothing to a median). Full mode: the branches chosen
+    on the ค่ากลาง settings page (benchmark.branch_ids), as before."""
+    from .close_settings import stock_mode
+    if stock_mode(con):
+        return company_branch_ids(con, exclude=exclude)
+    from . import benchmark as BM
+    return [i for i in BM.branch_ids(con) if exclude is None or int(i) != int(exclude)]
+
+
 def source_label(con, branch_id: int) -> dict:
     """PR-S3 · where the order suggestion of a branch comes from right now, for a list of branches (no usage is walked, only the slip
     days are counted): {kind: recipes | slips | benchmark | none, confirmed_days, window_days, min_days, branches}. In stock mode
@@ -503,7 +515,7 @@ def source_label(con, branch_id: int) -> dict:
     out.update(kind="slips" if n >= SLIP_MIN_DAYS else "none", confirmed_days=n, window_days=(as_of - start).days + 1)
     if out["kind"] == "none":
         k = 0
-        for b in company_branch_ids(con, exclude=branch_id):
+        for b in median_branch_ids(con, exclude=branch_id):
             bl = con.execute("SELECT MAX(day) FROM sales_sku_daily WHERE branch_id=?", (b,)).fetchone()[0]
             bo = date.fromisoformat(bl) if bl else as_of
             if len(_slip_days(con, b, era_start(bo - timedelta(days=7 * HISTORY_WEEKS - 1), bo), bo)) >= SLIP_MIN_DAYS:
@@ -697,7 +709,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = HISTORY
                         "message": _ps.NEED_SALES_TH if exp <= 0 else ""}
             k = len(rb.get("branches") or [])
             fallback = {"mode": "benchmark", "confirmed_days": n_slip, "min_days": SLIP_MIN_DAYS, "branches": k,
-                        "message": f"จำนวนที่ควรสั่งจากค่ากลาง {k} สาขา (ใบตัดเบิกของสาขา {n_slip}/{SLIP_MIN_DAYS} วัน)"}
+                        "message": f"จำนวนที่ควรสั่งจากเฉลี่ยทุกสาขา {k} สาขา (ใบตัดเบิกของสาขา {n_slip}/{SLIP_MIN_DAYS} วัน)"}
             sales_normal = None
             if exp > 0:
                 use, ps_items = rb["use"], rb["items"]
