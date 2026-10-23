@@ -560,7 +560,7 @@ function ohbRenderQueueList() {
     // desktop (2026-10-19): one table per delivery day — the order, its round, lines, value and every status as a stacked chip column
     const tags = o => [o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : '',
       o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : '',
-      o.stock_deducted ? '' : _bmcChip('ไม่มีผลนับสิ้นเดือน', 'var(--text-muted)'),
+      o.stock_deducted ? '' : _bmcChip('ยังไม่ได้หักของที่เหลืออยู่', 'var(--text-muted)'),
       o.late ? _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : '',
       o.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งหลัง 14:00', 'var(--bad-ink)') : '',
       o.status === 'processed' ? _bmcChip(`คลังจัดส่งแล้ว${o.po_ref ? ' · ' + o.po_ref : ''}`, 'var(--good-ink)') : '',

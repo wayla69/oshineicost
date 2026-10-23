@@ -2264,8 +2264,8 @@ function brnRenderOrder() {
   const md = stk.missing_days || [];
   const nEst = (stk.estimated_days || []).length;                         // 1.3 · missing slips taken out at the BoM of the sales
   const stockLine = (stk.deducted
-    ? `${_bmcChip('หักของที่ควรเหลือแล้ว', 'var(--good-ink)')}${nEst ? ' ' + _bmcChip(`${_brnEstWord(stk.estimate_basis)} ${nEst} วัน (${_brnIssRuns(stk.estimated_days)})`, 'var(--amber-ink)') : ''}${slipOk ? ` · ใบตัดเบิกวันนี้: ส่งแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
-    : `${_bmcChip('ไม่มีผลนับสิ้นเดือน', 'var(--text-muted)')} ${uiQ('brn:nostock', 'ไม่มีผลนับสิ้นเดือน', '<p>ยังไม่มีผลนับสิ้นเดือน จำนวนที่ควรสั่งจึงไม่หักของที่ควรเหลือ (ตามระบบ)</p>')}${slipOk ? ` · ใบตัดเบิกวันนี้: ส่งแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`);
+    ? `${_bmcChip('หักของที่เหลืออยู่แล้ว', 'var(--good-ink)')}${nEst ? ' ' + _bmcChip(`${_brnEstWord(stk.estimate_basis)} ${nEst} วัน (${_brnIssRuns(stk.estimated_days)})`, 'var(--amber-ink)') : ''}${slipOk ? ` · ใบตัดเบิกวันนี้: ส่งแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`
+    : `${_bmcChip('ยังไม่ได้หักของที่เหลืออยู่', 'var(--text-muted)')} ${uiQ('brn:nostock', 'ยังไม่ได้หักของที่เหลืออยู่', '<p>ยังไม่มีผลนับสิ้นเดือน จำนวนที่ควรสั่งจึงไม่หักของที่เหลืออยู่</p>')}${slipOk ? ` · ใบตัดเบิกวันนี้: ส่งแล้ว เวลา ${esc(_brnIssTime(slip.confirmed_at))}` : ''}`);
   // the one thing that blocks sending is an action card of its own above the list (not a line inside the header)
   // 2.4: only TODAY's slip blocks the order; the days behind it can be made later ("ทำภายหลัง" hides that line for this session)
   const missLine = md.length && !_brnMissLater
