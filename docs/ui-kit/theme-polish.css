@@ -6,7 +6,11 @@
 /* theme-vivid gives every header cell a gradient; a page's own dark or coloured ink (an id-scoped rule, an inline colour) was left on it and
    read at 1.2-2:1. Header cells on the gradient are white; the tables that keep a flat fill (the Top 60 tables, heatmaps, the franchise tables,
    a sticky first cell) keep their own ink. The A4 report prints its own teal header (its rule is !important too). */
-body :where(thead th, .wt th):not(.tbl-stick, .tbl-top60 th, .heatmap-table th, .frc-tbl th) { color: #ffffff !important; }
+body :where(thead th, .wt th):not(.tbl-stick, .tbl-top60 th, .heatmap-table th, .frc-tbl th) { color: var(--th-ink, #ffffff) !important; }
+/* The ink follows the fill: white only where the header really has the gradient. A header that a page paints flat (the seven supply tabs'
+   tables, a cell with its own inline background) names its own ink in --th-ink, so it reads as the normal header ink - never white on light. */
+body :is(:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) th,
+         th[style*="background"]) { --th-ink: var(--text-secondary); }
 body thead th.tbl-stick, body table.tbl-wide thead .tbl-stick { color: var(--text-primary); }   /* a sticky first cell keeps the card fill (F30) */
 
 /* ── text floor 12px on screen (RV3 F22): the sizes the earlier floors did not reach ───────────────────────────────────────────── */
