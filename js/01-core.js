@@ -524,6 +524,7 @@ async function loadBcMode() {
 // phrases. test_pl3_stock_words.py runs this list over the text of the pages and fails on a BoM or recipe word left.
 /** @type {Array<[RegExp, any]>} */
 const _STK_WORDS = [
+  [/BoM\s*\(ต้นทุน\)/g, 'ต้นทุน'],
   [/\s*\((?:COGS\s*·\s*)?BoM[^)]*\)/g, ''],                          // "(BoM)", "(BoM จริง)", "(COGS·BoM)"
   [/\s*\(BoM basis\)/gi, ''],
   [/BoM recipe food cost/gi, 'dish food cost'],
@@ -3274,7 +3275,7 @@ const TAB_CLUSTERS = [
   { key: 'sales',  label: 'ยอดขาย',          tabs: [['overall','ภาพรวมและตัวชี้วัด'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['timeflow','ช่วงเวลา'],['custtype','ช่องทาง & ประเภทลูกค้า'],['compare','เทียบ A/B'],['more','ข้อสังเกตเพิ่มเติม']] },
   { key: 'buffet', label: 'ลูกค้า & บุฟเฟ่ต์', tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['guest','ลูกค้า & ยอด/หัว'],['childbuffet','บุฟเฟ่ต์เด็ก']] },
   { key: 'menu',   label: 'เมนู',            tabs: [['menu','วิเคราะห์เมนู',['engineering']],['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menucompare','เทียบเมนู A/B']] },
-  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','Simulators']] },
+  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','ตัวจำลอง']] },
   { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','เทียบสาขา'],['pnl','P&L เชิงลึก']] },
   { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
   { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },

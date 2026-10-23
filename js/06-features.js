@@ -979,7 +979,7 @@ function deleteUserPreset(idx, ev) {
 function renderUserPresets() {
   const wrap = document.getElementById('userPresets');
   const presets = JSON.parse(localStorage.getItem('oshinei_presets') || '[]');
-  if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">none yet</span>'; return; }
+  if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">ยังไม่มี</span>'; return; }
   wrap.innerHTML = presets.map((p, i) => `
     <span class="preset-chip" onclick="applyUserPreset(${i})">
       ★ ${p.name}

@@ -454,9 +454,9 @@ async function loadStaff() {
   const totalRev = d.reduce((s, r) => s + (r.revenue || 0), 0);
   const avgDisc = d.length ? d.reduce((s, r) => s + (r.discount_rate || 0), 0) / d.length : 0;
   document.getElementById('staff-kpi-row').innerHTML = [
-    { label: 'Total Staff Revenue', value: `${fmt(totalRev)}`, sub: _staffByBranch ? `${d.length} บัญชี×สาขา` : `${d.length} บัญชีแคชเชียร์`, color: '#4a70b0' },
+    { label: 'ยอดขายรวมของพนักงาน', value: `${fmt(totalRev)}`, sub: _staffByBranch ? `${d.length} บัญชี×สาขา` : `${d.length} บัญชีแคชเชียร์`, color: '#4a70b0' },
     { label: 'Top Cashier', value: top.cashier || '—', sub: `${fmt(top.revenue || 0)}`, color: 'var(--good-ink)' },
-    { label: 'Network Avg Ticket', value: `${fmt(d.length ? d.reduce((s,r)=>s+(r.avg_ticket||0),0)/d.length : 0)}`, sub: 'ต่อใบเสร็จ', color: '#0891b2' },
+    { label: 'ยอดเฉลี่ยต่อบิลทั้งเครือ', value: `${fmt(d.length ? d.reduce((s,r)=>s+(r.avg_ticket||0),0)/d.length : 0)}`, sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: 'Network Discount Rate', value: `${avgDisc.toFixed(1)}%`, sub: 'of transactions with discount', color: avgDisc > 15 ? '#ef4444' : '#f59e0b' },
   ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${textInk(k.color)}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
@@ -1028,8 +1028,8 @@ async function loadDiscountsTab() {
   // KPI scope (not the global month). Empty when on the month fallback.
   const drillDate = hasDay ? `date_from:'${dFrom}',date_to:'${dTo}',` : '';
   document.getElementById('disc-kpi-row').innerHTML = [
-    { label: 'Total Discounted', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% of all transactions`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
-    { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
+    { label: 'ส่วนลดรวม', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% ของบิลทั้งหมด`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
+    { label: 'จำนวนบิลที่ลด', value: fmtN(o.discount_tx||0), sub: `จากทั้งหมด ${fmtN(o.total_tx||0)} บิล`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
     { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7a66b8' },
     { label: `เกินเพดานส่วนลด ${o.policy_pct != null ? o.policy_pct : (d.policy_pct != null ? d.policy_pct : 2.5)}%`, value: `${fmt(o.excess_baht||0)}`,
       sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' },
@@ -1404,7 +1404,7 @@ const _DOW_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
 function renderTfBranchCards() {
   const el = document.getElementById('tfBranchCards');
   if (!el) return;
-  const metricLabel = { revenue:'Revenue', tx_count:'Transactions', customer_count:'Customers', avg_ticket:'Avg Ticket' }[_timeflowMetric] || 'Revenue';
+  const metricLabel = { revenue:'ยอดขาย', tx_count:'จำนวนบิล', customer_count:'จำนวนลูกค้า', avg_ticket:'ยอดเฉลี่ยต่อบิล' }[_timeflowMetric] || 'ยอดขาย';
   el.innerHTML = _tfBranchPeakData.map(b => {
     const isActive = _tfDrillBranch === b.branch;
     const peakH = b.peak_hour != null ? `${b.peak_hour}:00` : '—';
@@ -1623,7 +1623,7 @@ function renderTimeflowGrid() {
 function tfCellClick(dow, hour, value, rank) {
   const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const isMoney = _timeflowMetric === 'revenue' || _timeflowMetric === 'avg_ticket';
-  const metricName = { revenue:'Revenue', tx_count:'บิล', customer_count:'Customers', avg_ticket:'Avg Ticket' }[_timeflowMetric];
+  const metricName = { revenue:'ยอดขาย', tx_count:'บิล', customer_count:'ลูกค้า', avg_ticket:'ยอดเฉลี่ยต่อบิล' }[_timeflowMetric];
   const valFmt = isMoney ? '' + value.toLocaleString() : value.toLocaleString();
   const pctOfPeak = _timeflowData.max_value ? (value / _timeflowData.max_value * 100).toFixed(1) : '—';
   const totalCells = 7 * (_tfOpenTo - _tfOpenFrom + 1);

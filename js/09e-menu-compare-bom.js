@@ -935,7 +935,7 @@ async function bcLoadSimulator() {
   const scenList = scens.scenarios || [];
   pane.innerHTML = `
     <div class="flex flex-wrap items-center gap-3 mb-4">
-      <label class="text-xs">Scenario:
+      <label class="text-xs">สถานการณ์:
         <select id="bcScenSel" onchange="bcLoadScenario(this.value)" class="border border-slate-300 rounded-lg px-2 py-1 text-xs min-w-[180px]">
           <option value="">— Baseline —</option>
           ${scenList.map(s => `<option value="${s.id}">${esc(s.name)} (${s.n_items})</option>`).join('')}
@@ -957,7 +957,7 @@ async function bcLoadSimulator() {
       <div class="card p-4">
         <h3 class="font-semibold mb-3">แก้ไข — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
         <div class="flex flex-wrap gap-2 mb-3 text-xs">
-          <input id="bcSimSearch" placeholder="Search SKU/description" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
+          <input id="bcSimSearch" placeholder="ค้นหารหัสหรือชื่อเมนู" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
           <select id="bcSimBizFilter" onchange="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1">
             <option value="">ทั้งหมด</option>
             ${BIZ_TYPES.map(t => `<option value="${t}">${BIZ_TYPE_META[t].icon} ${t}</option>`).join('')}

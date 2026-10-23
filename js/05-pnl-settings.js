@@ -58,7 +58,7 @@ function renderPnlKpis(s) {
     banner.classList.remove('hidden');
     msg.innerHTML = cov === 0
       ? '<b>No SKU costs uploaded yet.</b> GP / Margin show 0. Upload costs via <b>Settings → Costs</b>.'
-      : `<b>Cost coverage: ${cov.toFixed(0)}%</b> of revenue. Profit figures reflect only costed SKUs.`;
+      : `<b>ต้นทุนครอบคลุม ${cov.toFixed(0)}%</b> ของรายได้ ตัวเลขกำไรนับเฉพาะเมนูที่มีต้นทุน`;
   } else if (banner) banner.classList.add('hidden');
 
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -563,7 +563,7 @@ function renderCostOverview() {
                                sub: hasCosts ? s.costed_skus+' SKUs costed' : 'no costs entered', color:'#ef4444' },
     { label:'กำไรขั้นต้น',   value: hasCosts ? fmt(s.total_gross_profit) : '—',
                                sub: hasCosts ? 'Revenue (ex-VAT) minus COGS' : 'requires cost data', color:'#10b981' },
-    { label:'Overall Margin', value: s.overall_margin_pct != null ? s.overall_margin_pct.toFixed(1)+'%' : '—',
+    { label:'มาร์จินรวม', value: s.overall_margin_pct != null ? s.overall_margin_pct.toFixed(1)+'%' : '—',
                                sub: hasCosts ? 'weighted gross margin' : 'requires cost data', color: marginColor },
   ].map(k => `
     <div class="card kpi-card p-4">
@@ -1956,7 +1956,7 @@ function renderComparison(data) {
     { key:'revenue',        label:'Revenue ',    fmt: v => fmt(v) },
     { key:'tx_count',       label:'บิล',   fmt: v => fmtN(v) },
     { key:'customer_count', label:'ลูกค้า',      fmt: v => fmtN(v) },
-    { key:'avg_ticket',     label:'Avg Ticket ', fmt: v => fmtN(v) },
+    { key:'avg_ticket',     label:'ยอดเฉลี่ยต่อบิล', fmt: v => fmtN(v) },
     { key:'discount',       label:'Discounts ',  fmt: v => fmt(v) },
   ];
 
@@ -2120,7 +2120,7 @@ async function loadAnomalyBanner() {
     banner.innerHTML = `
       <span class="text-base"></span>
       <div class="flex-1 flex flex-wrap items-center gap-2">
-        <span class="font-semibold text-amber-800" style="color:inherit">Insights:</span>
+        <span class="font-semibold text-amber-800" style="color:inherit">ข้อสังเกต:</span>
         ${data.insights.map(ins => `
           <span class="anomaly-item ${ins.severity === 'good' ? 'anomaly-good' : 'anomaly-bad'}"
             title="${ins.mom_pct != null ? 'MoM ' + ins.mom_pct + '%' : (ins.period || '')}">${ins.message}</span>

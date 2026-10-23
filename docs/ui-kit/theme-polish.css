@@ -15,12 +15,16 @@ body thead th.tbl-stick, body table.tbl-wide thead .tbl-stick { color: var(--tex
   body :is(.brn-cap, .brn-srcbtn, .brn-srcv, .brn-v3l, .bmc-code, .heatmap-branch-label, .hours-label, .tbl-top60 th .sub,
            .heatmap-table th, .heatmap-cell, #tab-franchise .frc-tbl) { font-size: 12px; }
   body :is(#tab-closetime, #tab-ingpurchase, #tab-menuimpact) thead th { font-size: 12px; }
-  body #tab-menuimpact :is(.mi-flag, .mi-kpi .mi-kpi-sub) { font-size: 12px; }
+  body :is(.mi-flag, #tab-menuimpact .mi-kpi .mi-kpi-sub) { font-size: 12px; }
+  body #tab-feedback :is(.l, .d, .fb-delta, .fb-tag, .fb-meta, .fb-quote small) { font-size: 12px !important; }
   body :is([class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"], [class*="text-[11px]"], [class*="text-[11.5px]"]):where(:not(#mgtRptBody, #mgtRptBody *)) { font-size: 12px; }
 }
 
 /* a control a page blanks (visibility) leaves no empty row in the top bar on a desktop either - the phone already did this (F29) */
 body .top-bar .invisible { display: none !important; }
+
+/* an active sub-tab takes its group's tint under its group's ink (the ink was the group's, the tint the accent's: 3.8:1) (F30) */
+body .subtab-btn.active, body.dark .subtab-btn.active { background: var(--group-soft, var(--accent-soft)); }
 
 /* the "お" mark sits on a white badge in both themes: its ink is the badge's own navy, not the theme accent (F31) */
 body .logo-mark { color: #1f3a6b; }
@@ -32,13 +36,27 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   /* ── a long page title wraps under itself instead of running below the เครื่องมือ button (F28) ──────────────────────────────── */
   body .topbar-scope .page-title { flex: 1 1 0; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 
-  /* ── tap targets 44px on every page of the full dashboard (F8, F18, F37) ───────────────────────────────────────────────────── */
+  /* ── tap targets 44px on every page of the full dashboard (F8, F18, F37). !important: a bar's own id-scoped height (the supply chip bar kept
+        34px) must not win over the floor ───────────────────────────────────────────────────────────────────────────────────── */
   body :is(button, select, summary, [role="button"], textarea,
-           input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])) { min-height: 44px; }
-  body :is(.dive-btn, .ui-q, .fb-chip, .tbl-fold-btn, .topbar-icon-btn) { min-width: 44px; }
+           input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])) { min-height: 44px !important; }
+  /* a check box or radio on its own is a 44px target too: the box is drawn 24px inside it (no label of its own to tap) */
+  body input[type="checkbox"], body input[type="radio"] { -webkit-appearance: none; appearance: none; width: 44px !important; height: 44px !important; padding: 10px; box-sizing: border-box;
+    background: transparent !important; position: relative; flex: 0 0 auto; min-width: 44px !important; margin: 0; cursor: pointer; }
+  body input[type="checkbox"]::before, body input[type="radio"]::before { content: ''; display: block; width: 24px; height: 24px; border: 2px solid var(--border-control);
+    border-radius: 6px; background: var(--bg-input); box-sizing: border-box; }
+  body input[type="radio"]::before { border-radius: 50%; }
+  body input[type="checkbox"]:checked::before, body input[type="radio"]:checked::before { background: var(--accent); border-color: var(--accent); }
+  body input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 18px; top: 11px; width: 8px; height: 15px; border: solid var(--on-accent); border-width: 0 3px 3px 0; transform: rotate(45deg); }
+  body input[type="radio"]:checked::after { content: ''; position: absolute; left: 17px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); }
+  body input[type="checkbox"]:disabled, body input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
+  /* the sticky first column of a table keeps the header band's colour under the white header ink (it was the card fill) */
+  .content-area table thead th:first-child { background: var(--accent); }
+  body.dark .content-area table thead th:first-child { background: #3a3590; }
+  body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn) { min-width: 44px; }
+  #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }
   body a.see-full { display: inline-flex; align-items: center; min-height: 44px; }
   body label:has(> input[type="checkbox"], > input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
-  body input[type="checkbox"], body input[type="radio"] { width: 22px; height: 22px; }
 
   /* ── the branch strip (สาขาของฉัน · ชื่อสาขา · ตัวอักษรใหญ่ · ?) grows to its 44px controls instead of letting them spill out of a 32px bar,
         and its one-line counters wrap instead of ending in "…"; the day chips wrap (F18, F27) ─────────────────────────────────────── */
@@ -85,8 +103,9 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   /* ── รายงานผู้บริหาร on a phone: the printable A4 report is read on screen, so its small print is lifted to 12px (the printed sheet keeps its
         sizes: this is @media screen) and its chart labels follow (F10, F32) ───────────────────────────────────────────────────────── */
   @media screen {
-    #tab-mgtreport #mgtRptBody :is(svg text, table, th, td, [class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"], [class*="text-[10.5px]"],
-        [class*="text-[11px]"], [class*="text-[11.5px]"], [style*="font-size:9px"], [style*="font-size:10px"], [style*="font-size:11px"]) { font-size: 12px !important; }
+    #tab-mgtreport #mgtRptBody :is(svg text, table, th, td, [class*="text-[8px]"], [class*="text-[8.5px]"], [class*="text-[9px]"], [class*="text-[9.5px]"], [class*="text-[10px]"],
+        [class*="text-[10.5px]"], [class*="text-[11px]"], [class*="text-[11.5px]"], [style*="font-size:8"], [style*="font-size:9"], [style*="font-size:10"],
+        [style*="font-size:11"], [style*="font-size: 9"], [style*="font-size: 10"], [style*="font-size: 11"]) { font-size: 12px !important; }
   }
   /* a short button is still 44px wide (F8) */
   body :is(button, [role="button"], summary) { min-width: 44px; }

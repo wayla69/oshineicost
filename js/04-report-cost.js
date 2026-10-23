@@ -1839,7 +1839,7 @@ async function loadProfitAnalysis() {
     if (cov === 0) {
       msg.innerHTML = '<b>No SKU costs uploaded yet.</b> Profit metrics show 0 until you upload cost data via <b>Settings → Costs</b>. Upload a CSV with sku_code, unit_cost columns to activate this dashboard.';
     } else {
-      msg.innerHTML = `<b>Cost coverage: ${cov.toFixed(0)}%</b> of revenue. Some SKUs lack cost data. Profit figures reflect only costed SKUs. Improve accuracy by uploading more costs in <b>Settings → Costs</b>.`;
+      msg.innerHTML = `<b>ต้นทุนครอบคลุม ${cov.toFixed(0)}%</b> ของรายได้ บางเมนูยังไม่มีต้นทุน ตัวเลขกำไรนับเฉพาะเมนูที่มีต้นทุน เพิ่มต้นทุนได้ที่ <b>ตั้งค่า → ต้นทุน</b>`;
     }
   } else {
     banner.classList.add('hidden');

@@ -380,7 +380,7 @@ function pgNorm(s) { return String(s || '').normalize('NFC').toLowerCase().repla
 // PL3 (RV3 F16): a branch login reads the branch words (docs/BRANCH_WORDS.md): "ปิดเดือน", not the office's "ปิดงวด"
 function _brWord(s) { return _deptRole() === 'branch' ? String(s == null ? '' : s).replace(/ปิดงวด/g, 'ปิดเดือน') : s; }
 function _pgEntry(tab, pane, label, icon, dept, di, cluster) {
-  label = _brWord(label); cluster = _brWord(cluster);
+  if (typeof _brWord === 'function') { label = _brWord(label); cluster = _brWord(cluster); }
   const kw =PAGE_KEYWORDS[tab + (pane ? '|' + pane : '')] || '';
   return { tab, pane, label, icon, dept, di, cluster, n: pgNorm(label), nd: pgNorm(dept ? dept.label : ''), nc: pgNorm(cluster),
     nk: kw.split(/\s+/).filter(Boolean).map(pgNorm) };

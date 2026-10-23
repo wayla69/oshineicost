@@ -3172,7 +3172,7 @@ def report_management(
                      if th else
                      f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse.")})
     if food_cost_pct is not None and food_cost_pct >= 53:
-        actions.append({"sev": "med", "cost": True,
+        actions.append({"sev": "med",
             "text": (f"ต้นทุนอาหาร {food_cost_pct:.0f}% — สูงกว่าเป้า ~50%"
                      if th else
                      f"Food cost {food_cost_pct:.0f}% — above the ~50% target.")})
@@ -3197,14 +3197,14 @@ def report_management(
                      f"{len(_behind)} branches under 90% of this month's target: {_names}{_more}.")})
     if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
         m0 = cost_up[0]
-        actions.append({"sev": "low", "cost": True,
+        actions.append({"sev": "low",
             "text": (f"{m0['menu']} ต้นทุนต่อหัวเพิ่มขึ้น ฿{m0['delta']:.2f} เทียบ{pword}ก่อน "
                      f"(฿{m0['cost_per_head']:.2f}/หัว) — ตรวจสอบการตักเสิร์ฟ / ต้นทุนวัตถุดิบ"
                      if th else
                      f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
                      f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost.")})
     if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
-        actions.append({"sev": "med", "cost": True,
+        actions.append({"sev": "med",
             "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"
                      if th else
                      f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%.")})
@@ -3287,6 +3287,8 @@ def report_management(
 # management summary WITHOUT cost, gross profit or food-cost figures: the server removes them from the payload, so a
 # phone page that forgets to hide a tile still cannot show them. The cached report is shared; this works on a copy.
 _MGT_COST_MODULES = {"cost.analysis", "profit.pnl"}
+# the action sentences that are cost / margin figures (Thai and English wording of report_management)
+_MGT_COST_ACTION = __import__("re").compile(r"ต้นทุนอาหาร|ต้นทุนต่อหัว|อัตรากำไรขั้นต้น|[Ff]ood cost|[Gg]ross margin")
 
 
 def strip_management_cost(d: dict) -> dict:
@@ -3312,7 +3314,7 @@ def strip_management_cost(d: dict) -> dict:
         t2["rows"] = [{k: v for k, v in r.items() if k not in ("cogs_head", "cogs_head_prev", "gp_head", "food_pct")}
                       for r in (tier.get("rows") or []) if isinstance(r, dict)]
         out["tier"] = t2
-    out["actions"] = [a for a in (out.get("actions") or []) if not (isinstance(a, dict) and a.get("cost"))] or \
+    out["actions"] = [a for a in (out.get("actions") or []) if not (isinstance(a, dict) and _MGT_COST_ACTION.search(a.get("text") or ""))] or \
         [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if out.get("lang") == "th" else "No critical issues flagged for this period.")}]
     out.pop("stock_variance", None)
     return out

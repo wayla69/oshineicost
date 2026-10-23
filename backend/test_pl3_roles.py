@@ -105,7 +105,7 @@ def test_management_summary_without_cost_for_marketing(client, app_db, auth_on):
     assert a["menu"]["top"] == [] and a["menu"]["risers"] == [] and a["menu"]["savers"] == []
     for k in ("food_cost_pct", "bom_cost_mtd", "cost_coverage", "food_cost_pct_prev"):
         assert k not in a["pace"], k
-    assert all("cost" not in x for x in a["actions"]) and a["actions"]
+    assert a["actions"] and not any(("ต้นทุนอาหาร" in x["text"] or "food cost" in x["text"].lower()) for x in a["actions"])
     assert "stock_variance" not in a
     for r in (a.get("tier") or {}).get("rows", []):
         assert not ({"cogs_head", "cogs_head_prev", "gp_head", "food_pct"} & set(r))

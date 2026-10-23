@@ -2440,7 +2440,7 @@ async function loadTrend() {
   mkChart('chartCmpBar', {
     type: 'bar',
     data: {
-      labels: ['Revenue','บิล','Customers','Avg Ticket'],
+      labels: ['ยอดขาย','บิล','ลูกค้า','ยอดเฉลี่ยต่อบิล'],
       datasets: [{
         label: '% เปลี่ยนแปลงเทียบ ' + fmtMonth(vs),
         data: pctValues,
