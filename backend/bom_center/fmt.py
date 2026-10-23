@@ -103,7 +103,7 @@ def lbl(label) -> str:
 
 # 5.2: ONE set of words for why stock was lost - the slip's waste reasons and the variance reasons draw from it, so the same code
 # reads the same on both pages (the stored codes never change)
-REASON_LABEL = {"waste": "วัตถุดิบเสีย / ทิ้ง", "expired": "หมดอายุ", "spill": "หก / ตก / แตก", "prep_loss": "ตัดแต่งเกินสูตร",
+REASON_LABEL = {"waste": "วัตถุดิบเสีย / ทิ้ง", "expired": "หมดอายุ", "spill": "หก / ตก / แตก", "prep_loss": "ตัดแต่งทิ้งเกินปกติ",
                 "staff": "ชิม / อาหารพนักงาน", "overportion": "เสิร์ฟเกินปริมาณตามสูตร", "transfer": "โอนให้สาขาอื่น",
                 "miscount": "นับของผิด", "receipt": "บันทึกรับของไม่ครบ", "other": "อื่น ๆ (ระบุ)"}
 

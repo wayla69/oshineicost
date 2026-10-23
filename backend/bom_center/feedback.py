@@ -5,7 +5,7 @@ Three rules, evaluated on every request for the current month and the one before
 "monthly" is the same function a month later), each making ONE task for the people who can act on it:
 
   formula_excess   the same item is explained as served above the recipe quantity (variance reason `overportion`, "เสิร์ฟเกินปริมาณตามสูตร")
-                   or trimmed above the recipe (slip waste reason `prep_loss`, "ตัดแต่งเกินสูตร") in 2 branches or more in one month, or in the
+                   or trimmed above the recipe (slip waste reason `prep_loss`, "ตัดแต่งทิ้งเกินปกติ") in 2 branches or more in one month, or in the
                    same branch in 2 months in a row  ->  "ตรวจสูตร: {item} ({branches})" for the kitchen and the analyst, linked to
                    ตรวจสูตรด้วยยอดซื้อ filtered to the item.
                    `overportion` is stored only as a variance reason and `prep_loss` only as a slip waste reason (the variance list has no
