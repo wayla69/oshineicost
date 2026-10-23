@@ -53,6 +53,7 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   /* the sticky first column of a table keeps the header band's colour under the white header ink (it was the card fill) */
   .content-area table thead th:first-child { background: var(--accent); }
   body.dark .content-area table thead th:first-child { background: #3a3590; }
+  body .ms-toggle { min-width: 44px !important; }
   body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn) { min-width: 44px; }
   #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }
   body a.see-full { display: inline-flex; align-items: center; min-height: 44px; }
