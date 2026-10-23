@@ -314,14 +314,14 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     # past the cutoff and not sent: late, urgent, with the late-fee wording
     late = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert late["late"] is True and late["urgent"] is True and late["status"] == "todo"
-    assert late["detail"] == "เลยเวลาส่ง · ส่งตอนนี้มีค่าปรับ · ส่งใบตัดเบิกวันนี้ก่อน"
+    assert late["detail"] == "เลยเวลาส่ง · มีค่าปรับ · ส่งใบตัดเบิกวันนี้ก่อน"
     # a draft order says so; a sent one is done and no longer urgent
     c.execute("INSERT INTO bc_order(branch_id, cycle_date, round, status) VALUES(1, '2026-10-05', '1', 'suggested')")
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
-        == "อีก 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง) · ส่งใบตัดเบิกวันนี้ก่อน"
+        == "อีก 5 ชม. · สถานะ: ยังไม่ส่ง · ส่งใบตัดเบิกวันนี้ก่อน"
     slip(c)                                                                              # the slip is confirmed: the suffix goes
     assert _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=NOW))["order_due_1"]["detail"] \
-        == "อีก 5 ชม. · สถานะ: ร่าง (ยังไม่ส่ง)"
+        == "อีก 5 ชม. · สถานะ: ยังไม่ส่ง"
     c.execute("UPDATE bc_order SET status='submitted', late=1")
     done = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert done["status"] == "done" and done["urgent"] is False and done["detail"].startswith("สถานะ: ")

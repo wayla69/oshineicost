@@ -97,8 +97,8 @@ REASON_LABEL = {"waste": "วัตถุดิบเสีย / ทิ้ง", 
                 "miscount": "นับของผิด", "receipt": "บันทึกรับของไม่ครบ", "other": "อื่น ๆ (ระบุ)"}
 
 
-CLASS_TH = {"A": "กลุ่มมูลค่าสูง", "B": "กลุ่มมูลค่ากลาง", "C": "กลุ่มมูลค่าต่ำ"}         # the ABC class of an ingredient
-CLASS_SHORT_TH = {"A": "สูง", "B": "กลาง", "C": "ต่ำ"}                                    # …in a table cell under "กลุ่มมูลค่า"
+CLASS_TH = {"A": "ของแพง", "B": "ของราคาปานกลาง", "C": "ของราคาถูก"}         # the ABC class of an ingredient
+CLASS_SHORT_TH = {"A": "แพง", "B": "ปานกลาง", "C": "ถูก"}                                    # …in a table cell under "กลุ่มมูลค่า"
 
 
 def reasons(*codes) -> tuple:

@@ -514,8 +514,8 @@ def _count_items(con, b: dict, today: date) -> list:
     done = not plan["cycle_due"]
     return [_e("cycle_count", 334, "week", CYCLE_TH, "done" if done else "todo",
                (f"นับแล้ว {_fmt_day(plan['cycle_last'])} · สัปดาห์นี้ครบแล้ว" if done else
-                ("นับเพิ่มเฉพาะกลุ่มมูลค่าสูง ไม่บังคับ · สัปดาห์นี้ยังไม่ได้นับ"
-                 + (f" · ล่าสุด {_fmt_day(plan['cycle_last'])}" if plan["cycle_last"] else " · ยังไม่เคยนับเสริมรายสัปดาห์"))),
+                ("นับเพิ่มเฉพาะของแพง · สัปดาห์นี้ยังไม่นับ"
+                 + (f" · ล่าสุด {_fmt_day(plan['cycle_last'])}" if plan["cycle_last"] else ""))),
                owner=("branch.stock",), owner_th="สาขา", branch=b, go={"tab": "branchstock", "pane": "count"})]
 
 
@@ -623,7 +623,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
             hhmm = datetime.fromisoformat(at).astimezone(BKK).strftime("%H:%M") if at else "-"
             slip_detail = f"ส่งแล้ว เวลา {hhmm} โดย {_who(con, st_today['confirmed_by'])}"
         elif st_today["status"] == "draft":
-            slip_detail = "มีร่างแล้ว · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
+            slip_detail = "บันทึกไว้ก่อนแล้ว · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
         else:
             slip_detail = "ยังไม่บันทึก · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
         out.append(_e("issue_today", 305, "week", f"ส่งใบตัดเบิกประจำวันที่ {today.day}/{today.month}",
@@ -654,7 +654,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
             if sent:
                 detail = f"สถานะ: {STATUS_TH.get(st, st)}"
             elif late_now:
-                detail = "เลยเวลาส่ง · ส่งตอนนี้มีค่าปรับ"
+                detail = "เลยเวลาส่ง · มีค่าปรับ"
             elif st:
                 detail = f"{_left_th(it['hours_left'])} · สถานะ: {STATUS_TH.get(st, st)}"
             else:
@@ -690,7 +690,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         nc_b = _scalar(con, "SELECT COUNT(*) FROM bc_claim WHERE branch_id=? AND status='submitted'", (bid,)) \
             if _has(con, "bc_claim") else 0
         if nc_b:
-            out.append(_e("claims_open", 325, "week", "เคลมสินค้าที่แจ้งไว้ รอประสานงานขายพิจารณา", "na",
+            out.append(_e("claims_open", 325, "week", "ของขาด/เสียที่แจ้งไว้ รอพิจารณา", "na",
                           f"รอพิจารณา {nc_b} เรื่อง", count=nc_b, owner=("branch.stock",), owner_th="สาขา", branch=b, awaiting=True,
                           go={"tab": "branchstock", "pane": "recv", "anchor": "brnClaimCard"}))
         out += _count_items(con, b, today)
@@ -702,11 +702,12 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                 v = None
             if v:
                 open_ = (not v["complete"]) or v["needs_reason"] > 0
-                out.append(_e("variance_open", 330, "week", "ระบุเหตุผลของส่วนต่างและแจ้งว่าบันทึกรับของครบของเดือนล่าสุด",
+                left = v["needs_reason"] + (0 if v["complete"] else 1)
+                from .fmt import MONTH_TH
+                out.append(_e("variance_open", 330, "week", f"ปิดเดือน{MONTH_TH[int(str(v['begin_date'])[5:7]) - 1]}: บอกเหตุผลส่วนต่าง แล้วแจ้งรับของครบ",
                               "todo" if open_ else "done",
-                              f"ช่วง {_fmt_day(v['begin_date'])} → {_fmt_day(v['end_date'])} · ยังไม่ระบุเหตุผล {v['needs_reason']}"
-                              + ("" if v["complete"] else " · ยังไม่ได้แจ้งว่าบันทึกรับของครบ"),
-                              count=(v["needs_reason"] + (0 if v["complete"] else 1)) or None,
+                              f"เหลือ {left} รายการ" if left else "ครบแล้ว",
+                              count=left or None,
                               owner=("branch.stock",), owner_th="สาขา", branch=b,
                               go={"tab": "branchstock", "pane": "var", "extra": {"end_count_id": v["end_count_id"]}}))
     if centre and not single:
@@ -828,7 +829,7 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
                 # a period an earlier build closed on a PARTIAL count (before the owner's decision of 2026-10-13) is labelled as such, never rewritten
                 p = _scalar(con, "SELECT COALESCE(partial,0) FROM bc_stock_count WHERE count_id=?", (c[0],))
                 return {"branch_id": bid, "branch": b["name"], "status": "done",
-                        "detail": f"นับของ {_fmt_day(c[1])}" + (" · ปิดด้วยการนับเสริมรายสัปดาห์ (รายการเดิม ของในระบบไม่ได้นับ)" if p else ""), "go": go}
+                        "detail": f"นับของ {_fmt_day(c[1])}" + (" · ปิดด้วยการนับเสริมรายสัปดาห์ (รายการเดิม ของที่ควรเหลือไม่ได้นับ)" if p else ""), "go": go}
             if kind == "end" and not count_in(bid, m0):
                 return {"branch_id": bid, "branch": b["name"], "status": "blocked", "detail": "รอผลนับครั้งแรกก่อน", "go": go}
             late = late_end(bid) if kind == "end" else None

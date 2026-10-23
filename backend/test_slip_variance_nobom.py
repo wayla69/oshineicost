@@ -325,7 +325,7 @@ def test_blank_class_a_lists_the_expected_class_a_items_left_off_the_slip(world)
 def test_the_stock_headers_and_the_full_headers():
     from routers.bom_center import DAILY_HEADERS, DAILY_HEADERS_STOCK, DAILY_ITEM_HEADERS, DAILY_ITEM_HEADERS_STOCK
     assert DAILY_HEADERS == ["วันที่", "วัน", "ใบตัดเบิก", "มูลค่าเบิกใช้", "มูลค่าของเสีย", "รวมเบิก (มูลค่า)", "ตามสูตร (มูลค่า)",
-                             "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "รายการกลุ่มมูลค่าสูงที่เบิกเกินกำหนด", "เบิกเกินต่อเนื่อง"]
+                             "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "รายการของแพงที่เบิกเกินกำหนด", "เบิกเกินต่อเนื่อง"]
     assert DAILY_ITEM_HEADERS[8] == "ตามสูตร" and len(DAILY_ITEM_HEADERS) == 14
     assert "ตามสูตร (มูลค่า)" not in DAILY_HEADERS_STOCK and "ตามสูตร" not in DAILY_ITEM_HEADERS_STOCK
     assert DAILY_HEADERS_STOCK[6:11] == ["ที่สาขาใช้ปกติ (มูลค่า)", "เฉลี่ยทุกสาขา (มูลค่า)", "ส่วนต่าง (มูลค่า)", "ส่วนต่าง %", "ต่างจากเฉลี่ยทุกสาขา %"]

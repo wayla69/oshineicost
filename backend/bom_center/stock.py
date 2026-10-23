@@ -962,7 +962,7 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
     except (TypeError, ValueError):
         raise ValueError("วันที่นับของต้องอยู่ในรูปแบบ YYYY-MM-DD")
     if draft_of(con, branch_id):
-        raise ValueError("สาขานี้มีร่างผลนับค้างอยู่ · ส่งหรือลบร่างก่อนนำเข้า")
+        raise ValueError("สาขานี้มีผลนับที่บันทึกไว้แต่ยังไม่ส่ง · ส่งหรือลบก่อนนำเข้า")
     if con.execute("SELECT 1 FROM bc_stock_count WHERE branch_id=? AND count_date=? AND"
                    f" COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}",
                    (branch_id, count_date)).fetchone():

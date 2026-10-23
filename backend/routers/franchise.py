@@ -640,7 +640,7 @@ def _supply_sheet(ws, sp: dict, head: str) -> None:
     _xl_rows(ws, [("ยอดซื้อเทียบยอดขาย (%)", pu.get("pct"), ("ยอดที่คลังจัดส่ง / ยอดขายไม่รวม VAT " + upto).strip()),
                   ("ยอดซื้อเทียบยอดขาย เดือนก่อน (%)", pu.get("pct_prev"), pu.get("month_prev") or ""),
                   ("เปลี่ยนแปลงจากเดือนก่อน (จุด)", pu.get("change_pp"), "")], [None, _FX_PCT, None])
-    ws.append(["ส่งใบสั่งซื้อหลังเวลาตัดรอบ (ใบ)", lt.get("count"), lt.get("text") or ""])
+    ws.append(["ส่งใบสั่งซื้อหลังเวลาส่งสุดท้าย (ใบ)", lt.get("count"), lt.get("text") or ""])
     for x in cl.get("by_status") or []:
         ws.append([f"เคลมสินค้า: {x['status_th']} (ครั้ง)", x["count"], ""])
     _xl_rows(ws, [("มูลค่าเคลมที่อนุมัติ (บาท)", cl.get("approved_value"), "")], [None, _FX_BAHT, None])
@@ -653,7 +653,7 @@ def _supply_sheet(ws, sp: dict, head: str) -> None:
         for c in ws[ws.max_row]:
             c.font = Font(bold=True)
         _xl_rows(ws, rows, fmts)
-    table("รอบส่งของเดือนนี้", ["วันส่ง", "รอบ", "มูลค่าที่สั่ง (บาท)", "มูลค่าที่จัดส่ง (บาท)", "สถานะ", "ส่งหลังเวลาตัดรอบ"],
+    table("รอบส่งของเดือนนี้", ["วันส่ง", "รอบ", "มูลค่าที่สั่ง (บาท)", "มูลค่าที่จัดส่ง (บาท)", "สถานะ", "ส่งหลังเวลาส่งสุดท้าย"],
           [(r["delivery"], r["round_th"], r["ordered"], r["delivered"], r["status_th"], "ใช่ (มีค่าปรับ)" if r["late"] else "")
            for r in sp.get("rounds") or []], [None, None, _FX_BAHT, _FX_BAHT, None, None])
     table("เคลมสินค้าล่าสุด", ["วันที่แจ้ง", "รอบ", "รายการ", "จำนวน", "เหตุผล", "สถานะ"],
@@ -1235,7 +1235,7 @@ def franchise_supply_data(branch_id: int, month: Optional[str] = None) -> dict:
                        "delivered": round(sum(r["delivered"] for r in rounds if r["delivered"] is not None), 2),
                        "rounds": len(rounds), "rounds_delivered": sum(1 for r in rounds if r["delivered"] is not None), **ratio},
             claims=_safe("supply claims", lambda: _supply_claims(con, branch_id, sel, scrub)),
-            late={"count": n_late, "text": f"ส่งหลังเวลาตัดรอบ {n_late} ใบ (มีค่าปรับ)" if n_late else "ส่งทันเวลาตัดรอบทุกใบ"},
+            late={"count": n_late, "text": f"ส่งหลังเวลาส่งสุดท้าย {n_late} ใบ (มีค่าปรับ)" if n_late else "ส่งทันเวลาตัดรอบทุกใบ"},
             overuse=_safe("overuse", lambda: _supply_overuse(con, branch_id, sel)))
     return out
 

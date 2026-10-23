@@ -74,9 +74,9 @@ const _OHB_HELP = {
     get _() {                                                       // PR-S4: with no recipe the comparators are the branch's normal and the all-branch median
       return typeof BC_MODE !== 'undefined' && BC_MODE === 'stock'
         ? ['เทียบมูลค่าที่เบิกจริงกับที่สาขาใช้ปกติ (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย) และเฉลี่ยทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
-          'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ']
+          'วัตถุดิบของแพงที่เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ']
         : ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
-          'วัตถุดิบกลุ่มมูลค่าสูงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'];
+          'วัตถุดิบของแพงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'];
     } },
   persales: {
     _: ['เทียบปริมาณวัตถุดิบที่ใช้กับยอดขาย (ไม่รวมภาษีมูลค่าเพิ่ม) ใช้ปริมาณเดียวกับที่ใช้คำนวณยอดแนะนำ เป็นอีกวิธีหนึ่งที่ใช้ดูควบคู่กัน ไม่ได้ใช้แทนการคำนวณตามเมนู',
@@ -92,7 +92,7 @@ const _OHB_HELP = {
       'ใช้งานล่าสุด = เวลาเข้าสู่ระบบหรือบันทึกข้อมูลล่าสุดของสาขา (เวลาประเทศไทย)'] },
   pilot: {
     _: ['ความพร้อม: ทุกสาขาที่เปิดใช้งาน · ผลนำร่อง: สาขานำร่อง 5 สาขา 4 สัปดาห์ (เชียงใหม่ · อุบลราชธานี · อุดรธานี · โคราช1 · สุรินทร์)',
-      'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์กลุ่มมูลค่าสูง ≤ 15%',
+      'เกณฑ์ผ่าน: ใบตัดเบิกครบทุกวัน ≥ 95% · ยืนยันภายในวัน ≥ 90% · ผลต่างมีเหตุผล ≥ 80% · ความคลาดเคลื่อนพยากรณ์ของแพง ≤ 15%',
       'คู่มือ: <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">สาขา (1 หน้า)</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/pilot/pilot_plan.html" target="_blank" style="color:var(--accent)">แผนนำร่องและสคริปต์วิดีโอ</a>'] },
   central: {
     get _() {                                                   // PR-S4: stock mode numbers the steps from 1 (no recipe step 1)
@@ -105,7 +105,7 @@ const _OHB_HELP = {
     } },
   month: {
     _: ['รวมงวดที่ปิดในเดือนนี้ · ใช้จริง = ต้นงวด + รับเข้า − ปลายงวด เทียบกับยอดตามสูตร',
-      'ข้อมูลส่วนนี้แสดงในรายงานผู้บริหาร (รายเดือน) ด้วย · กลุ่มมูลค่าสูง / กลาง / ต่ำ คือกลุ่มวัตถุดิบตามมูลค่า'] },
+      'ข้อมูลส่วนนี้แสดงในรายงานผู้บริหาร (รายเดือน) ด้วย · ของแพง / ปานกลาง / ถูก คือกลุ่มวัตถุดิบตามมูลค่า'] },
 };
 function _ohbRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
 // PR-D6: the explanation is behind the "?" in the header of the page (uiPaneHelp, 01-core.js), not folded at the bottom of the pane; this keeps
@@ -898,7 +898,7 @@ async function ohbLoadMonth() {
       ${bmcStats([['มูลค่าตามสูตร', '฿' + _bmcNum(t.bom_value, 0)], ['เทียบสูตร', bmcGapHtml(t.gap_value, t.gap_pct, 'use')], ['ใช้เกินสูตร', '฿' + _bmcNum(t.over_value, 0), t.over_value ? 'var(--bad-ink)' : null],
         ['เดือนก่อน', m.previous && m.previous.total.bom_value ? bmcGapWords(null, m.previous.total.gap_pct, 'use') : null]])}
       <div style="overflow-x:auto" class="mt-2"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left"><th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">งวด</th>
-        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">เทียบสูตร</th><th class="py-1 pr-2 text-right">กลุ่มมูลค่าสูง / กลาง / ต่ำ ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้าง</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2 text-right">ตามสูตร ฿</th><th class="py-1 pr-2 text-right">เทียบสูตร</th><th class="py-1 pr-2 text-right">ของแพง / ปานกลาง / ถูก ฿</th><th class="py-1 pr-2 text-right">เดือนก่อน</th><th class="py-1">ค้าง</th></tr></thead><tbody>` +
       m.branches.map(b => `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(b.branch)}</td><td class="py-1 pr-2 text-right">${b.periods}</td>
         <td class="py-1 pr-2 text-right">${_bmcNum(b.bom_value, 0)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(b.gap_value, b.gap_pct, 'use')}</td>
         <td class="py-1 pr-2 text-right">${['A', 'B', 'C'].map(k => _bmcNum(b.by_class[k], 0)).join(' / ')}</td>
@@ -1018,7 +1018,7 @@ async function ohbLoadPilot() {
     sb.innerHTML = `<div class="text-sm font-semibold mb-1" style="color:var(--text-primary)">ผลนำร่อง ${d.scorecard.weeks} สัปดาห์ล่าสุด</div>
       <div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
         <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">ใบตัดเบิกครบทุกวัน (≥${T.issue_coverage}%)</th><th class="py-1 pr-2 text-right">ยืนยันภายในวัน (≥${T.issue_on_time}%)</th>
-        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์กลุ่มมูลค่าสูง (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">วันที่ของพอใช้ตอนรอบถัดไปถึง</th><th class="py-1 pr-2 text-right">รายการที่หมดก่อนรอบถัดไป</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
+        <th class="py-1 pr-2 text-right">ผลต่างมีเหตุผล (≥${T.reason_coverage}%)</th><th class="py-1 pr-2 text-right">พยากรณ์ของแพง (≤${T.mape_a}%)</th><th class="py-1 pr-2 text-right">วันที่ของพอใช้ตอนรอบถัดไปถึง</th><th class="py-1 pr-2 text-right">รายการที่หมดก่อนรอบถัดไป</th><th class="py-1 pr-2 text-right">ส่งใบสั่งซื้อ</th><th class="py-1">สรุป</th></tr></thead><tbody>` +
       d.scorecard.branches.map(s => { const m = s.metrics, p = s.passes, [vt, vi] = vd[s.verdict];
         return `<tr style="border-top:1px solid var(--border)"><td class="py-1 pr-2 font-semibold">${esc(s.branch)}<div class="text-[10.5px]" style="color:var(--text-muted)">${esc(fmtDay(s.from))} → ${esc(fmtDay(s.to))} · ${s.cycles} วันสั่ง · ใบตัดเบิก ${(s.slips ? s.slips.confirmed + s.slips.late : 0)} ใบ</div></td>
           <td class="py-1 pr-2 text-right">${cell(m.issue_coverage, p.issue_coverage, '%')}</td><td class="py-1 pr-2 text-right">${cell(m.issue_on_time, p.issue_on_time, '%')}</td>
@@ -1036,7 +1036,7 @@ const _ISR_ST = { ok: ['ตรงกัน (ในช่วงที่ยอม
   under: ['นับได้น้อยกว่าระบบ', 'var(--bad-ink)'], not_counted: ['นับของไม่ครบ', 'var(--text-muted)'] };
 function _isrDm(iso) { const p = String(iso || '').split('-'); return p.length === 3 ? `${Number(p[2])}/${Number(p[1])}` : String(iso || ''); }
 // 5.2: the value class as the floor and Ops read it
-const _ISR_CLASS_TH = { A: 'กลุ่มมูลค่าสูง', B: 'กลุ่มมูลค่ากลาง', C: 'กลุ่มมูลค่าต่ำ' };
+const _ISR_CLASS_TH = { A: 'ของแพง', B: 'ของราคาปานกลาง', C: 'ของราคาถูก' };
 function _isrClassTh(c) { return _ISR_CLASS_TH[c] || String(c == null ? '' : c); }
 function _isrPct(v) { return v == null ? '—' : `${v > 0 ? '+' : ''}${_bmcNum(v, 1)}%`; }
 function _isrPctAbs(v) { return v == null ? '—' : `${_bmcNum(Math.abs(v), 1)}%`; }      // 4.6: where the words already say more / less
@@ -1081,12 +1081,12 @@ function isrDailyTable(d, openFn) {
       <td class="py-1">${bmcPairs(r.over_items.map(o => [esc(o.name), bmcGapWords(null, o.var_pct, 'issue', true)]))}${r.flagged || r.under_flagged ? `<div class="mt-1" style="display:flex;gap:4px;flex-wrap:wrap">${r.flagged ? _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? _bmcChip('เบิกน้อยกว่าสูตรต่อเนื่อง', 'var(--amber-ink)') : ''}</div>` : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('เทียบสูตร', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินกำหนด')}</tr></thead>
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ตามสูตร ฿', 1)}${th('เทียบสูตร', 1)}${th('ของแพงที่เบิกเกินกำหนด')}</tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ส่งแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.bom_value)}</td><td class="py-1 pr-2 text-right">${bmcGapHtml(t.var_value, t.var_pct, 'issue')}</td><td></td></tr></tfoot></table></div>
-    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ กลุ่มมูลค่าสูงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% หรือน้อยกว่าสูตรเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
+    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ ของแพงเบิกเกินสูตรมากกว่า ${d.thresholds.over_pct}% หรือน้อยกว่าสูตรเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
 // PR-S4 · mode stock: issued against the branch's normal and the all-branch median (no recipe)
 function _isrDailyTableStock(d, openFn, th) {
@@ -1106,13 +1106,13 @@ function _isrDailyTableStock(d, openFn, th) {
       <td class="py-1">${bmcPairs(r.over_items.map(o => [esc(o.name), bmcGapWords(null, o.var_pct, o.basis === 'median' ? 'issue_m' : 'issue_n', true)]))}${r.flagged || r.under_flagged ? `<div class="mt-1" style="display:flex;gap:4px;flex-wrap:wrap">${r.flagged ? _bmcChip('เบิกเกินต่อเนื่อง', 'var(--bad-ink)') : ''}${r.under_flagged ? _bmcChip('เบิกต่ำกว่าปกติต่อเนื่อง', 'var(--amber-ink)') : ''}</div>` : ''}</td></tr>`;
   }).join('');
   return `<div style="overflow-x:auto"><table class="w-full text-xs"><thead><tr style="color:var(--text-muted);text-align:left">
-      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ที่สาขาใช้ปกติ ฿', 1)}${th('เฉลี่ยทุกสาขา ฿', 1)}${th('เทียบที่สาขาใช้ปกติ', 1)}${th('เทียบเฉลี่ยทุกสาขา', 1)}${th('กลุ่มมูลค่าสูงที่เบิกเกินกำหนด')}</tr></thead>
+      ${th('วันที่')}${th('ใบตัดเบิก')}${th('เบิกใช้ ฿', 1)}${th('ของเสีย ฿', 1)}${th('รวมเบิก ฿', 1)}${th('ที่สาขาใช้ปกติ ฿', 1)}${th('เฉลี่ยทุกสาขา ฿', 1)}${th('เทียบที่สาขาใช้ปกติ', 1)}${th('เทียบเฉลี่ยทุกสาขา', 1)}${th('ของแพงที่เบิกเกินกำหนด')}</tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr style="border-top:2px solid var(--border);font-weight:600"><td class="py-1 pr-2" colspan="2">รวม (เฉพาะวันที่ส่งแล้ว)</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.normal_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.median_value)}</td>
       <td class="py-1 pr-2 text-right">${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
-    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ที่สาขาใช้ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · เฉลี่ยทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ กลุ่มมูลค่าสูงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
+    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ที่สาขาใช้ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · เฉลี่ยทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ ของแพงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
 function _isrDayItemsStock(d, head, note, flags) {
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;
@@ -1161,11 +1161,11 @@ function isrReconHead(r) {
       ${sl.draft_days.length ? _bmcChip(`ยังไม่ส่ง ${sl.draft_days.length} วัน`, 'var(--amber-ink)') : ''}
       ${r.status.receipts_confirmed ? _bmcChip('บันทึกรับของครบแล้ว', 'var(--good-ink)') : _bmcChip('ยังไม่ได้แจ้งว่าบันทึกรับของครบ', 'var(--amber-ink)')}
       ${t.incomplete ? _bmcChip(`ข้อมูลไม่ครบ ${t.incomplete} รายการ (ไม่ถามเหตุผล)`, 'var(--text-muted)') : ''}
-      ${r.partial ? _bmcChip(`นับเสริมรายสัปดาห์ · ไม่ได้นับ ${t.system_basis} รายการ`, 'var(--navy-ink)') + ' ' + uiQ('isr:partial', 'นับเสริมรายสัปดาห์', `<p>ปิดเดือนด้วยการนับเสริมรายสัปดาห์ (รายการเดิม) · ของในระบบ (ไม่ได้นับ) ${t.system_basis} รายการ</p>`) : ''}</div>
+      ${r.partial ? _bmcChip(`นับเสริมรายสัปดาห์ · ไม่ได้นับ ${t.system_basis} รายการ`, 'var(--navy-ink)') + ' ' + uiQ('isr:partial', 'นับเสริมรายสัปดาห์', `<p>ปิดเดือนด้วยการนับเสริมรายสัปดาห์ (รายการเดิม) · ของที่ควรเหลือ (ไม่ได้นับ) ${t.system_basis} รายการ</p>`) : ''}</div>
     <div class="mt-1 text-sm">สุทธิ <b>${bmcGapHtml(t.diff_value, null, 'count')}</b> ·
       รายการที่นับได้น้อยกว่าระบบรวม ${_isrMoney(Math.abs(t.under_value || 0))} · รายการที่นับได้มากกว่าระบบรวม ${_isrMoney(Math.abs(t.over_value || 0))} · ต่างมาก ${t.flagged} รายการ ·
       ยังไม่ระบุเหตุผล <b style="color:${t.needs_reason ? 'var(--amber-ink)' : 'var(--good-ink)'}">${t.needs_reason}</b>${t.not_counted ? ` · นับของไม่ครบ ${t.not_counted}` : ''}</div>
-    ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) ของในระบบจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
+    ${miss.length ? `<div class="text-[11px] mt-1" style="color:var(--amber-ink)">ขาดใบตัดเบิก ${miss.length} วัน (${miss.slice(0, 6).map(_isrDm).join(', ')}${miss.length > 6 ? ' …' : ''}) ของที่ควรเหลือจึงอาจสูงกว่าที่เป็นจริง</div>` : ''}`;
 }
 // o: {all: show every row, edit: reason inputs, pfx: id prefix, save: name of the save function (code, true),
 //     qty: optional (qtyBase, row) -> HTML text, a quantity in the unit the page's readers count in (the branch page and the
@@ -1186,7 +1186,7 @@ function isrReconTable(r, o) {
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ${esc(_isrClassTh(x.class))} (ช่วงที่ยอมรับ ±${r.thresholds[x.class]}%)</span>
         <span style="margin-left:auto" class="text-sm">${x.diff_value != null && bmcGapDir(x.diff_value) !== 0 ? `<b style="color:${bmcGapParts(x.diff_value, null, 'count').ink}">${bmcGapParts(x.diff_value, null, 'count').baht}</b>` : ''}</span></div>
       <div class="text-xs mt-0.5" style="color:var(--text-secondary)">${o.brief ? '' : `ยกมา ${q(x.begin, x)} + รับ ${q(x.received, x)} + เคลม/ปรับ ${q(x.claims, x)} − ตัดเบิก ${q(x.used, x)} − ของเสีย ${q(x.waste, x)}
-        = `}ของในระบบ <b>${q(x.system, x)}</b> · ${x.system_basis ? `<span style="color:var(--text-muted)">${esc(x.basis_th)}</span>` : `นับจริง <b>${q(x.count, x)}</b>`}${x.diff != null ? ` · ${(g => g.dir ? `${esc(g.label)} <b class="isr-diff" style="color:${g.ink}">${q(Math.abs(x.diff), x)}${g.pct ? ` (${g.pct})` : ''}</b>` : `<b class="isr-diff" style="color:${g.ink}">${esc(g.label)}</b>`)(bmcGapParts(x.diff, x.diff_pct, 'count'))}` : ''}</div>
+        = `}ควรเหลือ <b>${q(x.system, x)}</b> · ${x.system_basis ? `<span style="color:var(--text-muted)">${esc(x.basis_th)}</span>` : `นับจริง <b>${q(x.count, x)}</b>`}${x.diff != null ? ` · ${(g => g.dir ? `${esc(g.label)} <b class="isr-diff" style="color:${g.ink}">${q(Math.abs(x.diff), x)}${g.pct ? ` (${g.pct})` : ''}</b>` : `<b class="isr-diff" style="color:${g.ink}">${esc(g.label)}</b>`)(bmcGapParts(x.diff, x.diff_pct, 'count'))}` : ''}</div>
       ${x.status === 'not_counted' ? '<div class="text-xs mt-0.5" style="color:var(--text-muted)">ไม่พบรายการนี้ในผลนับครั้งแรกหรือนับสิ้นเดือน จึงยังเปรียบเทียบไม่ได้</div>' : ''}
       ${flag && !x.ask_reason && !x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-muted)">${x.data_incomplete ? _bmcChip(x.incomplete_th || 'ข้อมูลไม่ครบ', 'var(--text-muted)') + ' ไม่ถามเหตุผล เพราะ' + (x.incomplete_why === 'slips' ? 'เดือนนี้ยังขาดใบตัดเบิกบางวัน' : 'เดือนนี้ไม่มีใบรับของ') : (r.reason_min_baht ? `ส่วนต่างต่ำกว่า ฿${_bmcNum(r.reason_min_baht, 0)} ไม่ต้องให้เหตุผล` : '')}</div>` : ''}
       ${flag && o.edit && (x.ask_reason || x.reason_th) ? `<div class="flex flex-wrap items-center gap-2 mt-1 text-xs${o.qty ? ' brn-reason' : ''}">

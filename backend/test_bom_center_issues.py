@@ -80,7 +80,7 @@ def test_the_sheet_shows_the_system_stock_before_the_day_the_average_and_the_rea
     assert crab["system_qty"] == pytest.approx(12.7)                       # 13400 - 1000 - 600 - 700 … before 4 Oct's own issue
     assert crab["avg_used_7d"] == pytest.approx((1000 + 600 + 0) / 3 / 1000)   # three confirmed days, in packs
     assert crab["used"] == 5 and crab["waste"] == 0                         # the draft's own line, back in the count unit
-    assert sh["date"] == "2026-10-04" and sh["status"]["status"] == "draft" and sh["status_th"] == "ร่าง"
+    assert sh["date"] == "2026-10-04" and sh["status"]["status"] == "draft" and sh["status_th"] == "ยังไม่ส่ง"
     assert sh["editable"] is True and sh["backdated"] is True               # today (NOW) is 5 Oct
     assert sh["basis"] == {"count_id": cid, "date": "2026-10-01"} and sh["missing_days"] == []
     assert [r["code"] for r in sh["reasons"]] == ["waste", "expired", "spill", "prep_loss", "other"]
@@ -493,7 +493,7 @@ def test_todo_and_reminders_follow_the_slip(udon):  # noqa: F811
     assert "ใบตัดเบิกเมื่อวาน: ยังไม่ส่ง" in line["text"] and line["pending"] is True
     # a draft, then a confirmed slip today; yesterday's confirmed too
     IS.save(c, 1, "2026-10-05", [used()], "udon", now=NOW)
-    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "มีร่างแล้ว · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
+    assert _issue_items(build(branch_id=1))["issue_today"]["detail"] == "บันทึกไว้ก่อนแล้ว · ส่งใบตัดเบิกก่อนส่งใบสั่งซื้อ"
     IS.save(c, 1, "2026-10-05", [], "udon", submit=True, now=NOW)
     IS.save(c, 1, "2026-10-04", [used()], "udon", submit=True, now=NOW)
     d = build(branch_id=1)

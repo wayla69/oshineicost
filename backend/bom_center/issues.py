@@ -41,7 +41,7 @@ from .units import Converter
 
 WASTE_REASONS = _reasons("waste", "expired", "spill", "prep_loss", "other")      # fmt.REASON_LABEL: the words variance uses too
 WASTE_REASON_TH = dict(WASTE_REASONS)
-STATUS_TH = {"confirmed": "ส่งแล้ว", "late": "ส่งช้า", "draft": "ร่าง", "missing": "ยังไม่บันทึก"}
+STATUS_TH = {"confirmed": "ส่งแล้ว", "late": "ส่งช้า", "draft": "ยังไม่ส่ง", "missing": "ยังไม่บันทึก"}
 MAX_BACKDATE_DAYS = 60
 RECENT_DAYS = 14               # an item issued on a CONFIRMED slip in this many days before the day is "recent" (listed first)
 

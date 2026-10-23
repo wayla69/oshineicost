@@ -55,7 +55,7 @@ def test_a_line_that_cannot_be_judged_is_labelled_and_never_asked():
     rows = [_row("I", "under", "A", -900.0, data_incomplete=True), _row("S", "over", "A", 900.0, system_basis=True),
             _row("OK", "over", "A", 900.0)]
     assert VA.ask_reason_codes(rows, min_baht=500) == {"OK"}
-    assert VA.INCOMPLETE_TH == "ข้อมูลไม่ครบ" and VA.SYSTEM_TH == "ของในระบบ (ไม่ได้นับ)"
+    assert VA.INCOMPLETE_TH == "ข้อมูลไม่ครบ" and VA.SYSTEM_TH == "ของที่ควรเหลือ (ไม่ได้นับ)"
 
 
 def test_the_setting_is_read_by_the_period_and_defaults_to_500(db):  # noqa: F811

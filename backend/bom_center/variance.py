@@ -36,7 +36,7 @@ ASK_TOP = 20                                            # PR-M4 (owner Q3): a re
 
 
 INCOMPLETE_TH = "ข้อมูลไม่ครบ"                           # batch 4b (3.3): a line the branch is not asked about, because the data cannot say
-SYSTEM_TH = "ของในระบบ (ไม่ได้นับ)"                  # batch 4b (3.4): an end figure taken from the system stock, not from a count
+SYSTEM_TH = "ของที่ควรเหลือ (ไม่ได้นับ)"                  # batch 4b (3.4): an end figure taken from the system stock, not from a count
 USED_ZERO_PCT = -99.95            # a gap that rounds to -100.0 % on the screen: the item was used 0 (the counts are the same) against a recipe
 _EPS = 1e-9
 
@@ -592,7 +592,7 @@ def issue_summary(con, branch_id: int, end_count_id: int) -> dict:
         "slips": slip_coverage(con, branch_id, d0, d1),
         "period": {"begin_date": b["date"], "end_date": e["date"], "begin_count_id": b["count_id"],
                    "end_count_id": e["count_id"], "month": month, "days": (d1 - d0).days, "partial": bool(end_basis),
-                   "partial_th": (f"ปิดเดือนด้วยการนับเสริมรายสัปดาห์ (รายการเดิม ก่อนมีมติให้นับครบทุกรายการ) · กลุ่มมูลค่าสูง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับเสริมรายสัปดาห์ล่าสุด · "
+                   "partial_th": (f"ปิดเดือนด้วยการนับเสริมรายสัปดาห์ (รายการเดิม ก่อนมีมติให้นับครบทุกรายการ) · ของแพง {sum(1 for v in end_basis.values() if v == 'cycle')} รายการใช้ผลนับเสริมรายสัปดาห์ล่าสุด · "
                                   f"อีก {sum(1 for v in end_basis.values() if v == 'system')} รายการเป็น{SYSTEM_TH} ใช้จริงจึงเท่ากับใบตัดเบิกที่ยืนยันแล้ว "
                                   "ส่วนต่างจากการนับจริงจะปรากฏเมื่อปิดเดือนถัดไปด้วยการนับของครบทุกรายการ") if end_basis else None},
         "status": {"receipts_confirmed": bool(conf), "receipts_confirmed_by": conf[0] if conf else None,

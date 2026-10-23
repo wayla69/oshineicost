@@ -175,7 +175,7 @@ function _shmTodayRows(d) {
     const ok = iss.status === 'done';
     // 5.4: ONE status for today's slip (ส่งแล้ว · ร่าง · ยังไม่ทำ), then the backlog as a count
     const txt = ok ? `ส่งแล้ว ${iss.confirmed_hhmm || ''}`.trim() + (iss.appends ? ` · เบิกเพิ่ม ${iss.appends} ครั้ง` : '')
-      : (iss.slip_status === 'draft' ? 'ร่าง' : 'ยังไม่ทำ');
+      : (iss.slip_status === 'draft' ? 'ยังไม่ส่ง' : 'ยังไม่ทำ');
     rows.push({ k: 'issue', label: 'ตัดเบิกวันนี้', ok: ok && !gaps, text: txt + (gaps ? ` · ค้าง ${gaps} วัน` : ''), go: iss.go });
   }
   // สั่งของ: the NEXT order due - the open round whose cutoff comes first (a round past its cutoff first of all). "ส่งแล้ว" only when

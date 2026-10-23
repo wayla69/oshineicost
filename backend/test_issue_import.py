@@ -86,7 +86,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
     ws = wb[BF.SLIP_SHEET]
     assert name and "รหัสสาขา 1" in ws["A1"].value and "2026-10-05" in ws["A1"].value
     assert "กรอกเฉพาะช่องเบิกใช้ ของเสีย และสาเหตุ · ห้ามแก้รหัส" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ปกติ (8 สัปดาห์)", "ของในระบบ", "เบิกใช้", "ของเสีย",
+    assert [c.value for c in ws[2]] == ["วันที่", "รหัส", "วัตถุดิบ", "หน่วย", "ปกติ (8 สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)", "เบิกใช้", "ของเสีย",
                                          "สาเหตุของเสีย", "หมายเหตุ"]
     sh = IS.sheet(con, 1, "2026-10-05", now=NOW)
     want = [it["code"] for z in sh["zones"] for it in z["items"]]
@@ -98,7 +98,7 @@ def test_template_rows_are_the_sheet_items_prefilled_with_the_draft(con):  # noq
         row["สาเหตุของเสีย"] in dict(IS.WASTE_REASONS).values()
     assert row["สาเหตุของเสีย"] == IS.WASTE_REASON_TH["spill"] and row["หมายเหตุ"] == "หก"
     it = next(i for z in sh["zones"] for i in z["items"] if i["code"] == CRAB)
-    assert row["ของในระบบ"] == BF.sys_text(it["system_qty"], PACK)
+    assert row["ของที่ควรเหลือ (ตามระบบ)"] == BF.sys_text(it["system_qty"], PACK)
 
 
 def test_template_has_locked_grey_columns_a_reasons_sheet_and_a_dropdown(con):  # noqa: F811
@@ -362,7 +362,7 @@ def test_the_order_template_carries_the_plans_numbers_read_only_and_the_reasons(
     wb, name = BF.order_template(con, p, 1, "1", WED)
     ws = wb[BF.ORDER_SHEET]
     assert name and "รหัสสาขา 1" in ws["A1"].value and "รอบ 1" in ws["A1"].value and "วันส่ง 2026-10-07" in ws["A1"].value
-    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "ของในระบบ", "จำนวนที่ควรสั่ง", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
+    assert [c.value for c in ws[2]] == ["รหัส", "วัตถุดิบ", "หน่วย", "ของที่ควรเหลือ (ตามระบบ)", "จำนวนที่ควรสั่ง", "สั่งครั้งก่อน", "สั่ง", "เหตุผล", "หมายเหตุ"]
     assert [ws.cell(r, 1).value for r in range(3, ws.max_row + 1)] == [r["code"] for r in p["rows"]]
     r = next(x for x in range(3, ws.max_row + 1) if ws.cell(x, 1).value == CRAB)
     crab = next(x for x in p["rows"] if x["code"] == CRAB)

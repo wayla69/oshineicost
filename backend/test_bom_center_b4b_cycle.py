@@ -132,7 +132,7 @@ def legacy_partial_close(con, month_end="2026-10-31", date_="2026-11-01"):
     sp = ST.system_position(con, 1, date.fromisoformat(month_end), issues_through=date.fromisoformat(month_end), estimate=False)
     cid = con.execute("INSERT INTO bc_stock_count(branch_id, count_date, kind, counted_by, note, created_at, status, updated_at, submitted_at, partial)"
                       " VALUES(1, ?, 'end', 'udon', ?, '2026-11-01T01:00:00+00:00', 'submitted', '2026-11-01T01:00:00+00:00', '2026-11-01T01:00:00+00:00', 1)",
-                      (date_, "ของในระบบ (ไม่ได้นับ)")).lastrowid
+                      (date_, "ของที่ควรเหลือ (ไม่ได้นับ)")).lastrowid
     for c, q in sorted(sp["qty"].items()):
         con.execute("INSERT INTO bc_stock_count_line(count_id, ingredient_code, qty_kitchen, unit, qty_base, basis) VALUES(?,?,?,?,?,?)",
                     (cid, c, max(q, 0.0), "กรัม", max(q, 0.0), "cycle" if c in a else "system"))
@@ -165,7 +165,7 @@ def test_an_old_partial_close_is_still_read_and_labelled(con):  # noqa: F811
     p = VA.period(con, 1, cid)
     assert p["partial"] is True and p["system_basis"] >= 1 and p["end_date"] == "2026-11-01"
     sys_rows = [x for x in p["rows"] if x.get("system_basis")]
-    assert sys_rows and all(x["basis_th"] == "ของในระบบ (ไม่ได้นับ)" and x["ask_reason"] is False for x in sys_rows)
+    assert sys_rows and all(x["basis_th"] == "ของที่ควรเหลือ (ไม่ได้นับ)" and x["ask_reason"] is False for x in sys_rows)
     s = VA.issue_summary(con, 1, cid)
     assert s["period"]["partial"] is True and "รายการเดิม" in s["period"]["partial_th"] and s["totals"]["system_basis"] >= 1
     rc = IR.reconcile(con, 1, cid)

@@ -239,7 +239,7 @@ def _receive_fields(con, o: dict) -> None:
     o["pack_reports"] = _pk.for_orders(con, order_ids=[o["order_id"]]).get(o["order_id"], [])
 
 
-STATUS_TH = {"suggested": "ร่าง (ยังไม่ส่ง)", "confirmed": "ร่าง (ยังไม่ส่ง)", "submitted": "ส่งแล้ว (รอคลังจัดส่ง)",
+STATUS_TH = {"suggested": "ยังไม่ส่ง", "confirmed": "ยังไม่ส่ง", "submitted": "ส่งแล้ว (รอคลังจัดส่ง)",
              "processed": "คลังจัดส่งแล้ว", "received": "รับของแล้ว", "cancelled": "ยกเลิก"}
 
 

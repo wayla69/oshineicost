@@ -178,7 +178,7 @@ def test_the_rounds_are_the_order_screens_values(f3data, world):
     assert [r["status_th"] for r in d["rounds"]] == ["รับของแล้ว", "คลังจัดส่งแล้ว", "ส่งแล้ว (รอคลังจัดส่ง)"]
     p = d["purchases"]
     assert p["ordered"] == 2650.0 and p["delivered"] == 1450.0 and p["rounds"] == 3 and p["rounds_delivered"] == 2
-    assert d["late"] == {"count": 2, "text": "ส่งหลังเวลาตัดรอบ 2 ใบ (มีค่าปรับ)"} and [r["late"] for r in d["rounds"]] == [False, True, True]
+    assert d["late"] == {"count": 2, "text": "ส่งหลังเวลาส่งสุดท้าย 2 ใบ (มีค่าปรับ)"} and [r["late"] for r in d["rounds"]] == [False, True, True]
 
 
 def test_purchases_against_sales_is_the_same_window_and_last_month(f3data, world):
@@ -276,7 +276,7 @@ def test_the_download_has_the_supply_sheet(f3data, world, full_mode):
     vals = {row[0]: row[1] for row in ws.iter_rows(min_row=3, values_only=True) if row and row[0]}
     d = _supply(world["b"])
     assert vals["ยอดสั่งจากส่วนกลาง (บาท)"] == d["purchases"]["ordered"] and vals["ยอดที่คลังจัดส่ง (บาท)"] == d["purchases"]["delivered"]
-    assert vals["ยอดซื้อเทียบยอดขาย (%)"] == d["purchases"]["pct"] and vals["ส่งใบสั่งซื้อหลังเวลาตัดรอบ (ใบ)"] == 2
+    assert vals["ยอดซื้อเทียบยอดขาย (%)"] == d["purchases"]["pct"] and vals["ส่งใบสั่งซื้อหลังเวลาส่งสุดท้าย (ใบ)"] == 2
     assert vals["มูลค่าเคลมที่อนุมัติ (บาท)"] == 400.0
     text = " ".join(str(v) for row in ws.iter_rows(values_only=True) for v in row if v is not None)
     for w in ("รอบ 1 · อ. 2/6", "แซลมอนทดสอบ", "กิโลกรัม", "วัตถุดิบที่ใช้เกินสูตร 5 อันดับ"):
