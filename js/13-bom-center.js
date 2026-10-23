@@ -1037,7 +1037,6 @@ function _bmcPreviewHtml(p, applied) {
         </td></tr>`).join('')}</tbody></table></div>` : ''}
     ${applied ? '' : '<div id="bmcUcPrice" class="mt-3" style="display:none"></div>'}
     ${_bmcSuggestedHtml(p.suggested_rules)}
-    ${applied && p.facts_note ? `<div class="text-xs mt-2" style="color:var(--text-secondary)">${esc(p.facts_note)}</div>` : ''}
     ${applied || !_bmcCanPrices() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button onclick="bmcPriceCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกราคา${(p.suggested_rules || []).length || _bmcChosenRules.length ? 'พร้อมกฎที่เลือก' : ''}</button>
       <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่บันทึก</span></div>`}
   </div>`;
@@ -1169,6 +1168,7 @@ function bmcDcShowPreview(p, applied) {
       p.bad_values.slice(0, 200).map(r => `<tr><td class="wt-code">${esc(r.code)}</td><td>${esc(r.value)}</td><td>${esc(r.why)}</td></tr>`).join(''))}
     ${_bmcDcMini('รหัสที่ไม่พบ', p.unknown_codes.length, [['รหัส POS']], p.unknown_codes.slice(0, 200).map(c => `<tr><td class="wt-code">${esc(c)}</td></tr>`).join(''))}
     ${_bmcDcMini('รหัสแพ็กเกจบุฟเฟ่ต์ไม่มีต้นทุนต่อจาน', p.tier_codes.length, [['รหัส POS']], p.tier_codes.slice(0, 200).map(c => `<tr><td class="wt-code">${esc(c)}</td></tr>`).join(''))}
+    ${applied && p.facts_note ? `<div class="text-xs mt-2" style="color:var(--text-secondary)">${esc(p.facts_note)}</div>` : ''}
     ${applied || !_bmcCanPrices() ? '' : `<div class="flex flex-wrap items-center gap-2 mt-3"><button type="button" onclick="bmcDcCommit()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer"${p.imported ? '' : ' disabled'}>บันทึก</button>
       <span class="text-[11px]" style="color:var(--text-muted)">ยังไม่บันทึก</span></div>`}
   </div>`;

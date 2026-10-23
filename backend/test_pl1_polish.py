@@ -18,7 +18,7 @@ The promises:
 """
 import io
 import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import pytest
 from openpyxl import Workbook, load_workbook
@@ -36,7 +36,7 @@ from bom_center import variance as VA
 from bom_center.clock import BKK
 from test_bom_center_s4b import con  # noqa: F401
 from test_bom_center_s7 import db  # noqa: F401  (branch 1: counts 8 and 15 Sep 2026, the crab stick 30 % over the recipes)
-from test_dish_cost import DISHES, TIER, con as dc_con  # noqa: F401
+from test_dish_cost import _file, con as dc_con, web  # noqa: F401
 from test_bom_center_s11 import udon  # noqa: F401
 from test_slip_variance_nobom import world  # noqa: F401  (stock mode, branches 1, 3, 4 with 28 confirmed slip days)
 
@@ -164,35 +164,24 @@ def test_the_note_names_the_next_sync():
     assert "06:00 น. (พรุ่งนี้)" in DC.facts_note(t)
 
 
-def test_http_dish_cost_writes_flush_without_rebuild_and_carry_the_sync_line(client, app_db, monkeypatch):
+def test_http_dish_cost_writes_flush_without_rebuild_and_carry_the_sync_line(client, web, monkeypatch):
     import routers.bom_center as rb
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
     calls = []
     monkeypatch.setattr(rb, "invalidate_cache", lambda *a, **k: calls.append((a, k)))
-    wb = Workbook()
-    wb.active.title = DC.SHEET
-    for r in ([*DC.HEADERS], ["DCP-1", "x", 15, ""]):
-        wb.active.append(r)
-    b = io.BytesIO()
-    wb.save(b)
-    con_ = sqlite3.connect(str(core.DB_PATH))
-    con_.execute("INSERT OR IGNORE INTO skus(sku_id, sku_code, description, category_id, unit, business_type, active)"
-                 " VALUES(9951, 'DCP-1', 'x', 3, 'plate', 'alacarte', 1)")
-    con_.commit()
-    con_.close()
     h = {"X-Upload-Token": "tok"}
-    r = client.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=false", files={"file": ("a.xlsx", b.getvalue())}, headers=h)
+    r = client.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=false", files=_file([["DCW-1", "x", 15, ""]]), headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["facts_note"].startswith("รายงานเมนูและรายงานรายบิลใช้ต้นทุนนี้หลังการซิงก์รอบถัดไป")
     assert calls == [((), {"rebuild_cost": False})]
-    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCP-1", "unit_cost": 16}, headers=h)
+    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 16}, headers=h)
     assert r.status_code == 200 and "facts_note" in r.json() and calls[-1] == ((), {"rebuild_cost": False})
     # 0 baht: refused without the confirm, written with it
-    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCP-1", "unit_cost": 0}, headers=h)
+    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 0}, headers=h)
     assert r.status_code == 400 and "ยืนยันอีกครั้ง" in r.json()["detail"]
-    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCP-1", "unit_cost": 0, "confirm_zero": True}, headers=h)
+    r = client.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 0, "confirm_zero": True}, headers=h)
     assert r.status_code == 200
 
 

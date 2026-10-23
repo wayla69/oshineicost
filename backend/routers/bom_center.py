@@ -889,7 +889,7 @@ def _dc_refresh() -> None:
     """The cost a report multiplies by changed for the months from the imported one on: every cached response is stale.
     (No recipe quantity moved, so the order plan's usage caches and the BoM days stay.) The fact tables the sync builds
     (menu_fact_*, sale_bill_cogs) take the list at their next build, which pulls it with the released costs.
-    PL1 #5: the list is not a source of sku_effective_cost, so that table is not rebuilt (it was, on every single edit)."""
+    PL1 #5: the list is not a source of the effective-cost table, so that table is not rebuilt (it was, on every single edit)."""
     invalidate_cache(rebuild_cost=False)
 
 

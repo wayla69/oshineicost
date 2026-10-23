@@ -184,7 +184,7 @@ def test_month_and_value_rules(con):
         DC.set_one(con, "2026-10", "DCT-A", "สิบ", "", "analyst1")
     with pytest.raises(ValueError, match="ไม่มีรายการที่นำเข้าได้"):
         DC.commit(con, "2026-10", _rows(("NOPE", 1)), "analyst1")
-    DC.set_one(con, "2026-10", "DCT-D", 0, "", "analyst1")                  # zero is a number >= 0
+    DC.set_one(con, "2026-10", "DCT-D", 0, "", "analyst1", confirm_zero=True)   # zero is a number >= 0, written only when confirmed (PL1)
 
 
 def test_commit_and_edit_are_audited_and_upsert(con):

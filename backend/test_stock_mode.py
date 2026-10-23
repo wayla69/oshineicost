@@ -40,14 +40,14 @@ def test_default_is_stock_when_the_key_is_absent():
     assert CS.mode(c) == "stock"                                      # no app_settings table at all
     c.execute("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
     assert CS.mode(c) == "stock" and CS.stock_mode(c) is True        # the table, no key
-    assert CS.mode_info(c) == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)"}
+    assert CS.mode_info(c) == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)", "history_weeks": 8}
     c.execute("INSERT INTO app_settings VALUES('bc_mode', 'nonsense')")
     assert CS.mode(c) == "stock"                                      # an unreadable value never opens the recipes
 
 
 def test_set_get_round_trip_audit_and_bad_value(udon):
     assert CS.mode(udon) == "stock"
-    assert CS.set_mode(udon, "mgr", "full") == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)"}
+    assert CS.set_mode(udon, "mgr", "full") == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)", "history_weeks": 8}
     assert CS.mode(udon) == "full" and CS.stock_mode(udon) is False
     CS.set_mode(udon, "mgr", " STOCK ")
     assert CS.mode(udon) == "stock"
@@ -125,7 +125,7 @@ def test_every_signed_in_role_reads_the_mode(world):
     for role, c in world.items():
         r = c.get("/api/bom-center/mode")
         assert r.status_code == 200, (role, r.text)
-        assert r.json() == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)"}, role
+        assert r.json() == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)", "history_weeks": 8}, role
 
 
 def test_the_matrix_lets_every_role_read_and_only_bom_audit_write():
@@ -149,7 +149,7 @@ def test_only_management_with_the_token_changes_the_mode(world):
     assert mg.get("/api/bom-center/mode").json()["mode"] == "stock"
     assert mg.post("/api/bom-center/mode", json={"mode": "both"}, headers={"X-Upload-Token": TOKEN}).status_code == 400
     r = mg.post("/api/bom-center/mode", json=body, headers={"X-Upload-Token": TOKEN})
-    assert r.status_code == 200 and r.json() == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)"}
+    assert r.status_code == 200 and r.json() == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)", "history_weeks": 8}
     for role, c in world.items():                                                     # every role sees the new mode
         assert c.get("/api/bom-center/mode").json()["mode"] == "full", role
     assert mg.post("/api/bom-center/mode", json={"mode": "stock"}, headers={"X-Upload-Token": TOKEN}).json()["mode"] == "stock"

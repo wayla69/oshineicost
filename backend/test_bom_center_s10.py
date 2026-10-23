@@ -58,7 +58,7 @@ def test_readiness(con):  # noqa: F811
     assert b["ready"] and b["first_count"] == "2026-09-22" and b["accounts"][0]["username"] == "udon_branch"
 
 
-def test_scorecard_against_the_pass_criteria(con):  # noqa: F811
+def test_scorecard_against_the_pass_criteria(con, recipe_mode):  # noqa: F811   # the recipe-gap reasons (mode full); stock mode: test_pl1_polish.py
     def count(day, crab):
         return ST.save(con, 1, [{"code": "13-01-009", "qty": crab, "unit": "กรัม"},
                                 {"code": "02-01-001", "qty": 9000, "unit": "กรัม"}], "udon",
