@@ -12,11 +12,12 @@ writes need bom.center or bom.edit (auth.MODULE_RULES).
 import io
 import json
 import re
+import threading
 from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 import auth as _auth
@@ -1447,18 +1448,38 @@ class RecipeLine(BaseModel):
     prep_note: Optional[str] = None
 
 
+def _fast_json(obj):
+    """LK: the hot pages (plan, issue sheet, count sheet, order) return plain dicts of 10-15 thousand numbers and strings. FastAPI's
+    jsonable_encoder walks every one of them in Python ON the event loop (about 15 ms for a plan, more under load) before the response
+    is rendered; the payload is already JSON, so it is rendered directly. Anything json cannot write (a date, a set ...) goes the
+    FastAPI way, unchanged."""
+    try:
+        return JSONResponse(obj)
+    except (TypeError, ValueError):
+        return obj
+
+
+# LK (2026-10) · one writer at a time INSIDE the process. SQLite has one write lock anyway; what a second writer used to do was spin on it
+# in the C busy handler for `busy_timeout` (5 s) and then fail with "database is locked" - and at the cutoff hour a writer whose short
+# transaction ran in a process of dozens of busy threads (the GIL is shared by all of them) took seconds of wall time to finish, so the
+# waiters timed out (load test, 30-60 branches: 14 lock errors / 7 failed submits at 60). Waiting here is a plain Python lock wait: no GIL,
+# no timeout, no error. Re-entrant (a write that calls another write helper), and always released.
+_WRITE_GATE = threading.RLock()
+
+
 def _write(con, fn):
     """Run a write on the shared per-thread connection: commit, or roll back on any error."""
-    try:
-        out = fn()
-        con.commit()
-        return out
-    except ValueError as e:
-        con.rollback()
-        raise HTTPException(400, str(e))
-    except Exception:
-        con.rollback()
-        raise
+    with _WRITE_GATE:
+        try:
+            out = fn()
+            con.commit()
+            return out
+        except ValueError as e:
+            con.rollback()
+            raise HTTPException(400, str(e))
+        except Exception:
+            con.rollback()
+            raise
 
 
 def _drop_bom_days() -> None:
@@ -2494,7 +2515,7 @@ def bc_stock_sheet(request: Request, branch_id: Optional[int] = Query(None), mod
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _short(con, _st.sheet(con, bid, mode=mode))
+            return _fast_json(_short(con, _st.sheet(con, bid, mode=mode)))
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -2772,7 +2793,7 @@ def bc_issue_sheet(request: Request, branch_id: Optional[int] = Query(None), dat
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         try:
-            return _short(con, _is.sheet(con, bid, date or bkk_today().isoformat()))
+            return _fast_json(_short(con, _is.sheet(con, bid, date or bkk_today().isoformat())))
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -2785,7 +2806,8 @@ def bc_issue_save(body: IssueBody, request: Request, branch_id: Optional[int] = 
         out = _write(con, lambda: _is.save(con, bid, body.date or bkk_today().isoformat(),
                                            [ln.dict() for ln in body.lines], _who(request), submit=body.submit,
                                            note=body.note))
-    _fc.clear_slip_cache()            # PR-S3: the order suggestion reads the confirmed slips
+    if out.get("status") == "confirmed":          # LK: a draft changes no confirmed slip - the order suggestion reads those only
+        _fc.clear_slip_cache(bid)     # PR-S3: the order suggestion reads the confirmed slips (this branch's entries; the benchmark's too)
     return out
 
 
@@ -2806,7 +2828,7 @@ def bc_issue_blank(body: IssueBlankBody, request: Request, branch_id: Optional[i
         except ValueError:
             raise HTTPException(400, "วันที่ใบตัดเบิกต้องอยู่ในรูปแบบ YYYY-MM-DD")
         out = _short(con, _ir.blank_class_a(con, bid, day, set(body.codes or [])))
-    _fc.clear_slip_cache()            # PR-S3: asked at every confirm; the slip figures are read afresh after it
+    _fc.clear_slip_cache(bid, benchmark=False)    # PR-S3: asked at every confirm; the slip figures are read afresh after it (LK: this branch only)
     return out
 
 
@@ -2818,7 +2840,7 @@ def bc_issue_append(body: IssueAppendBody, request: Request, branch_id: Optional
         bid = _stock_branch(con, request, branch_id)
         out = _write(con, lambda: _is.append(con, bid, body.date or bkk_today().isoformat(),
                                              [ln.dict() for ln in body.lines], _who(request)))
-    _fc.clear_slip_cache()            # PR-S3
+    _fc.clear_slip_cache(bid)         # PR-S3
     return out
 
 
@@ -3699,7 +3721,7 @@ def bc_order_plan(request: Request, round: Optional[str] = Query(None), delivery
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         out["round"] = rnd
-        return _short(con, out)
+        return _fast_json(_short(con, out))
 
 
 @router.get("/api/bom-center/order/covers")
@@ -3742,11 +3764,16 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         rnd, dlv = _resolve_delivery(con, bid, body.round, body.delivery, body.order_day)
+        try:                                          # the read-only half (status guard + plan) runs before the write gate is taken
+            prep = _or.prepare_flow(con, bid, rnd, dlv, buffer=body.buffer)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         def go():
             try:
-                return _or.save_flow(con, bid, rnd, dlv, [ln.dict() for ln in body.lines], _who(request),
-                                     submit=body.submit, note=body.note, buffer=body.buffer, ack_late=body.ack_late)
+                return _or.save(con, bid, rnd, prep["order_day"], prep, [ln.dict() for ln in body.lines], _who(request),
+                                submit=body.submit, note=body.note, buffer=body.buffer, ack_late=body.ack_late,
+                                delivery=dlv.isoformat())
             except _or.LateSubmit as e:                      # the branch has to confirm the late fee first
                 con.rollback()
                 raise HTTPException(400, {"code": "late", "message": str(e), "cutoff_at": e.cutoff_at,
@@ -3829,7 +3856,7 @@ def bc_order_detail(order_id: int, request: Request):
         _stock_branch(con, request, o["branch_id"])
         o["claim_reasons"] = [{"code": c, "label": t} for c, t in _cl.REASONS]
         o["claims"] = _cl.for_order(con, order_id)
-        return _short(con, o)
+        return _fast_json(_short(con, o))
 
 
 @router.post("/api/bom-center/order/{order_id}/reopen", dependencies=[Depends(require_write_token)])

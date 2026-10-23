@@ -65,11 +65,14 @@ class Stats:
         self.codes = defaultdict(lambda: defaultdict(int))
         self.flags = defaultdict(list)                # "locked" / "timeout" / "5xx" / "4xx" / "exc" -> [samples]
         self.expected = defaultdict(int)              # endpoint -> expected 400s (late confirm)
+        self.round = 0                                # the round being run (set by main): latencies are also kept per round
+        self.by_round = defaultdict(lambda: defaultdict(list))   # endpoint -> round -> [seconds]
 
     def add(self, name, status, secs, body="", expected=False):
         low = (body or "")[:2000].lower()
         with self.lock:
             self.lat[name].append(secs)
+            self.by_round[name][self.round].append(secs)
             self.codes[name][status] += 1
             if expected:
                 self.expected[name] += 1
@@ -103,7 +106,9 @@ class Stats:
                 "c4xx": sum(v for k, v in c.items() if isinstance(k, int) and 400 <= k < 500) - self.expected[name],
                 "expected_400": self.expected[name],
                 "c5xx": sum(v for k, v in c.items() if isinstance(k, int) and k >= 500),
-                "exc": c.get("exc", 0)}
+                "exc": c.get("exc", 0),
+                "by_round": {r: {"n": len(v), "p50": pct(sorted(v), 50), "p95": pct(sorted(v), 95)}
+                             for r, v in sorted(self.by_round[name].items())}}
         return out
 
 
@@ -171,6 +176,20 @@ def scan_server_log(path, offset):
             frame = None
     return {"locked": text.count("database is locked"), "tracebacks": text.count("Traceback (most recent call last)"),
             "exceptions": dict(exc), "last_app_frame": dict(where)}
+
+
+def server_errors(stats_flags, srv):
+    """The server-side failures of a run, in one place: HTTP 5xx the clients saw, "database is locked" in a response body
+    or in the server's own log (a lock error reaches the client as a bare 500 "Internal Server Error", so the body check
+    alone reads 0), and tracebacks in the log. `stats_flags` is Stats.flags, `srv` the scan_server_log result or None."""
+    srv = srv or {}
+    out = {"http_5xx": len(stats_flags.get("5xx", [])),
+           "locked_in_bodies": len(stats_flags.get("locked", [])),
+           "locked_in_server_log": int(srv.get("locked") or 0),
+           "tracebacks_in_server_log": int(srv.get("tracebacks") or 0)}
+    out["lock_errors"] = max(out["locked_in_bodies"], out["locked_in_server_log"])
+    out["total"] = out["http_5xx"] + out["lock_errors"]
+    return out
 
 
 def jget(r):
@@ -306,6 +325,7 @@ def main():
     ap.add_argument("--stagger", type=float, default=0.0,
                     help="spread the branches' start over this many seconds (0 = all at the same instant, the worst case)")
     ap.add_argument("--server-log", default="", help="the scratch server's stderr file: scanned for 'database is locked' and tracebacks")
+    ap.add_argument("--strict", action="store_true", help="exit with status 1 when the run saw any server 5xx or lock error")
     a = ap.parse_args()
     if not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$", a.base.rstrip("/")):
         raise SystemExit("refusing: --base must be a local scratch server (127.0.0.1 / localhost)")
@@ -376,6 +396,7 @@ def main():
     for ri in range(a.rounds):
         pref = ROUND_CYCLE[ri % len(ROUND_CYCLE)]
         rec = {"round": ri + 1, "preferred": pref}
+        stats.round = ri + 1
         # 1. the cutoff-hour rush
         barrier = threading.Barrier(n)
 
@@ -446,6 +467,8 @@ def main():
     srv = scan_server_log(a.server_log, log_offset) if a.server_log else None
     if srv:
         print("server log:", json.dumps(srv, ensure_ascii=False))
+    errs = server_errors(stats.flags, srv)
+    print("SERVER ERRORS:", json.dumps(errs))
     if problems:
         print("branches that did not complete an order:", len(problems))
         for p in problems[:8]:
@@ -453,9 +476,11 @@ def main():
     out = {"config": {"base": a.base, "branches": n, "rounds": a.rounds, "heavy": a.heavy, "month_end": a.month_end,
                       "stagger": a.stagger},
            "endpoints": summ, "rounds": rounds_out, "flags": {k: v[:50] for k, v in stats.flags.items()},
-           "flag_counts": fl, "problems": problems, "server_log": srv}
+           "flag_counts": fl, "problems": problems, "server_log": srv, "server_errors": errs}
     Path(a.out).write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     print("written", a.out)
+    if a.strict and errs["total"]:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

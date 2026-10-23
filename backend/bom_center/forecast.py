@@ -28,6 +28,7 @@ A run can be saved (bc_forecast_run/_line): Phase 2's branch order screen and
 the compliance report judge against that frozen number, never a recomputation.
 backtest() replays the last weeks to measure the forecast error (MAPE) by class.
 """
+import functools
 import json
 import math
 import os
@@ -69,6 +70,12 @@ def _loaded(name: str):
 def _wd(d: date) -> int:
     """SQLite %w: Sunday = 0."""
     return (d.weekday() + 1) % 7
+
+
+@functools.lru_cache(maxsize=16384)
+def _wd_iso(iso: str) -> int:
+    """_wd of an ISO date string (cached: the same ~60 history days are asked once per ingredient)."""
+    return _wd(date.fromisoformat(iso))
 
 
 def _next_on_or_after(d: date, wd: int) -> date:
@@ -306,10 +313,20 @@ def _per_dish(con, month: str) -> tuple:
 
 USAGE_CACHE_TTL = float(os.environ.get("OSHINEI_USAGE_CACHE_TTL", "600"))     # seconds; 0 = off (tests)
 _USAGE_CACHE_MAX = 64
-PLAN_CONCURRENCY = max(1, int(os.environ.get("OSHINEI_PLAN_CONCURRENCY", "3")))
+PLAN_CONCURRENCY = max(1, int(os.environ.get("OSHINEI_PLAN_CONCURRENCY", "1")))
 _plan_slots = threading.BoundedSemaphore(PLAN_CONCURRENCY)
 _usage_cache: dict = {}                                    # key -> (stored at, (use, days, stats))
 _usage_lock = threading.Lock()
+
+
+_flight_locks = [threading.Lock() for _ in range(16)]
+
+
+def _flight(key):
+    """A lock to hold while a cache entry is computed, so concurrent misses of the SAME key compute it once (no key = no lock).
+    Striped: two different keys that share a lock only wait for each other, never deadlock (nothing else is taken inside)."""
+    import contextlib
+    return contextlib.nullcontext() if key is None else _flight_locks[hash(key) % len(_flight_locks)]
 
 
 def clear_usage_cache() -> None:
@@ -317,6 +334,7 @@ def clear_usage_cache() -> None:
         _usage_cache.clear()
     with _slip_lock:
         _slip_cache.clear()
+    _bump_gens(None)                                       # LK: the stored plans and stock estimates were built on the same inputs
     try:                                                   # PR-V: the per-฿100,000 report is built on this usage (PR-X: so is the recipe check)
         from . import backlog, per_sales, recipe_check
         per_sales.clear_cache()
@@ -352,7 +370,7 @@ def usage_history(con, branch_id: int, start: date, end: date, month: str) -> tu
     calls clear_usage_cache() after every write to those recipe-side inputs.
     `days` and `stats` are copied on return because callers pop from them; `use` is read-only for callers.
 
-    PLAN_CONCURRENCY (env OSHINEI_PLAN_CONCURRENCY, default 3) caps how many `suggest()` computations run
+    PLAN_CONCURRENCY (env OSHINEI_PLAN_CONCURRENCY, default 1 since LK: with the plan cache a miss is short, and one at a time leaves the writers the GIL) caps how many `suggest()` computations run
     at once (`_plan_slots`, taken in orders.plan): the plan is CPU-bound Python, and thirty of them at the
     cutoff hour starve the thread that holds the SQLite write lock of the GIL until busy_timeout expires."""
     ttl = USAGE_CACHE_TTL
@@ -363,14 +381,21 @@ def usage_history(con, branch_id: int, start: date, end: date, month: str) -> tu
         if hit and _time.monotonic() - hit[0] < ttl:
             use, days, stats = hit[1]
             return use, list(days), dict(stats)
-    use, days, stats = _usage_history_uncached(con, branch_id, start, end, month)
-    if key is not None:
-        with _usage_lock:
-            if len(_usage_cache) >= _USAGE_CACHE_MAX:
-                for k in sorted(_usage_cache, key=lambda k: _usage_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
-                    _usage_cache.pop(k, None)
-            _usage_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
-    return use, days, stats
+    with _flight(key):                 # LK: thirty requests that miss together compute it once; the rest wait here and read the cache
+        if key is not None:
+            with _usage_lock:
+                hit = _usage_cache.get(key)
+            if hit and _time.monotonic() - hit[0] < ttl:
+                use, days, stats = hit[1]
+                return use, list(days), dict(stats)
+        use, days, stats = _usage_history_uncached(con, branch_id, start, end, month)
+        if key is not None:
+            with _usage_lock:
+                if len(_usage_cache) >= _USAGE_CACHE_MAX:
+                    for k in sorted(_usage_cache, key=lambda k: _usage_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
+                        _usage_cache.pop(k, None)
+                _usage_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
+        return use, days, stats
 
 
 def _usage_history_uncached(con, branch_id: int, start: date, end: date, month: str) -> tuple:
@@ -401,16 +426,164 @@ _slip_cache: dict = {}                 # key -> (stored at, (use, days, stats));
 _slip_lock = threading.Lock()
 
 
-def clear_slip_cache() -> None:
+def clear_slip_cache(branch_id: int = None, benchmark: bool = True) -> None:
     """A slip was saved, confirmed, appended to or reopened: what the slips say changed (PR-S3). The per-฿100,000 report is built on
-    the same usage, so its cache goes too."""
+    the same usage, so its cache goes too.
+
+    LK (2026-10): `branch_id` limits the drop to that branch's own entries (its slip usage, its stored plans, its stock estimates) -
+    thirty branches confirming their slips at the cutoff hour used to empty the caches of all thirty, every time. The other branches'
+    entries stay right: a branch's usage is read from ITS slips only. `benchmark=False` leaves the per-฿100,000 report cache alone
+    (a call that changed no confirmed slip - the "blank class A" check). No branch = everything, as before."""
     with _slip_lock:
-        _slip_cache.clear()
+        if branch_id is None:
+            _slip_cache.clear()
+        else:
+            for k in [k for k in _slip_cache if k[1] == int(branch_id)]:
+                _slip_cache.pop(k, None)
+    _bump_gens(branch_id)
+    if benchmark:
+        try:
+            from . import per_sales
+            per_sales.clear_cache()
+        except Exception:
+            pass
+
+
+# ── LK · the plan cache ───────────────────────────────────────────────────────────────────────────────────────────
+# One branch opens its order page, picks a delivery chip, confirms its slip, saves the draft and submits: five plans from the same
+# inputs but two. The suggestion (the CPU-bound part of a plan) is kept per exact request, and a hit is valid only while nothing it was
+# built from has moved. The key carries every input the request itself names (branch, round, dates, buffer, expected sales), a hash of
+# the stock position it was given (which holds the counts, receipts, slips and open orders of the branch), the branch's own order
+# signature (the short shipments it learns from), the branch's own slip generation and those of the company branches (the benchmark
+# reads their slips), and core's generations (any prefixed flush, a full flush, a file swap) and this module's (clear_usage_cache).
+# TTL: OSHINEI_PLAN_CACHE_TTL (default 120 s), and never longer than the usage cache's - which the tests switch off.
+PLAN_CACHE_TTL = float(os.environ.get("OSHINEI_PLAN_CACHE_TTL", "120"))
+_PLAN_CACHE_MAX = 192
+_plan_cache: dict = {}                                     # key -> (stored at, pickled suggestion)
+_plan_lock = threading.Lock()
+_plan_gen = 0                                              # bumped by clear_usage_cache() / clear_slip_cache()
+_slip_gens: dict = defaultdict(int)                        # branch_id -> bumped when that branch's confirmed slips changed
+_memo: dict = {}                                           # small derived-value memo (stock estimates); same generations
+_memo_lock = threading.Lock()
+
+
+def _bump_gens(branch_id=None) -> None:
+    global _plan_gen
+    with _plan_lock:
+        if branch_id is None:
+            _plan_gen += 1
+            _plan_cache.clear()
+        else:
+            _slip_gens[int(branch_id)] += 1
+            for k in [k for k in _plan_cache if k[1] == int(branch_id)]:
+                _plan_cache.pop(k, None)
+    with _memo_lock:
+        if branch_id is None:
+            _memo.clear()
+        else:
+            for k in [k for k in _memo if k[1] == int(branch_id)]:
+                _memo.pop(k, None)
+
+
+def plan_cache_ttl() -> float:
+    ttl = USAGE_CACHE_TTL
+    return 0.0 if not ttl or ttl <= 0 else min(PLAN_CACHE_TTL, ttl)
+
+
+_PATH_OF: dict = {}                                        # id(connection) -> (connection, file path): a connection never changes file
+
+
+def _db_path(con) -> str:
+    ent = _PATH_OF.get(id(con))
+    if ent is not None and ent[0] is con:
+        return ent[1]
+    path = next((r[2] for r in con.execute("PRAGMA database_list") if r[1] == "main"), "")
+    if len(_PATH_OF) >= 256:
+        _PATH_OF.clear()
+    _PATH_OF[id(con)] = (con, path)
+    return path
+
+
+def _gen_base(con):
+    """(file path, core generations, this module's generation) - None for a connection with no file behind it, and for one with a
+    transaction open: it may read rows nobody else can see (an import preview) and must not publish them."""
+    if con.in_transaction:
+        return None
     try:
-        from . import per_sales
-        per_sales.clear_cache()
+        path = _db_path(con)
     except Exception:
-        pass
+        return None
+    if not path:
+        return None
+    core = _loaded("core")
+    return (path, getattr(core, "_db_gen", 0), getattr(core, "_data_gen", 0), getattr(core, "_cache_gen", 0), _plan_gen)
+
+
+def memo_get(con, branch_id: int, name: str, args: tuple):
+    """(key, value) - a value derived from one branch's confirmed slips (stock.py's estimates), kept while no generation moved;
+    value None = miss (hand the key to memo_put). key None = caching is off for this connection."""
+    ttl = plan_cache_ttl()
+    base = _gen_base(con) if ttl else None
+    if base is None:
+        return None, None
+    key = (name, int(branch_id), args, base, _slip_gens[int(branch_id)])
+    with _memo_lock:
+        hit = _memo.get(key)
+    if hit and _time.monotonic() - hit[0] < ttl:
+        return key, hit[1]
+    return key, None
+
+
+def memo_put(key, value) -> None:
+    if key is None:
+        return
+    with _memo_lock:
+        if len(_memo) >= 512:
+            for k in sorted(_memo, key=lambda k: _memo[k][0])[:128]:
+                _memo.pop(k, None)
+        _memo[key] = (_time.monotonic(), value)
+
+
+def _orders_sig(con, branch_id: int) -> tuple:
+    """What the suggestion reads of the branch's orders (short shipments, the last sent order): their count, newest id and newest
+    stamps. A draft being saved changes none of it, so the autosave does not empty the cache."""
+    r = con.execute("SELECT COUNT(*), COALESCE(MAX(order_id), 0), COALESCE(MAX(submitted_at), ''), COALESCE(MAX(processed_at), ''),"
+                    " COALESCE(MAX(received_at), '') FROM bc_order WHERE branch_id=? AND status IN ('submitted','processed','received')",
+                    (branch_id,)).fetchone()
+    return tuple(r)
+
+
+def suggest_cached(con, branch_id: int, rnd: str, order_day: date, **kw) -> dict:
+    """forecast.suggest behind the plan cache (see above), inside the plan slots on a miss. The caller gets its own copy."""
+    import pickle
+    ttl = plan_cache_ttl()
+    base = _gen_base(con) if ttl else None
+    key = None
+    if base is not None:
+        try:
+            sig = json.dumps(kw.get("stock"), sort_keys=True, default=str)
+        except (TypeError, ValueError):
+            sig = None
+        if sig is not None:
+            company = tuple(_slip_gens[int(i)] for i in company_branch_ids(con))
+            key = ("plan", int(branch_id), rnd, order_day.isoformat(), kw.get("weeks"), kw.get("season"),
+                   (kw.get("as_of") or date.min).isoformat(), round(float(kw.get("uplift_pct") or 0.0), 6),
+                   (kw.get("delivery") or date.min).isoformat(), kw.get("ref_branch"), kw.get("expected_sales"),
+                   hash(sig), base, _slip_gens[int(branch_id)], company, _orders_sig(con, branch_id))
+            with _plan_lock:
+                hit = _plan_cache.get(key)
+            if hit and _time.monotonic() - hit[0] < ttl:
+                return pickle.loads(hit[1])                  # plain dicts / lists / numbers: a pickle is a faster deep copy
+    with _plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
+        out = suggest(con, branch_id, rnd, order_day, **kw)
+    if key is not None:
+        stored = pickle.dumps(out, protocol=pickle.HIGHEST_PROTOCOL)
+        with _plan_lock:
+            if len(_plan_cache) >= _PLAN_CACHE_MAX:
+                for k in sorted(_plan_cache, key=lambda k: _plan_cache[k][0])[:_PLAN_CACHE_MAX // 4]:
+                    _plan_cache.pop(k, None)
+            _plan_cache[key] = (_time.monotonic(), stored)
+    return out
 
 
 def _slip_days(con, branch_id: int, start: date, end: date) -> list:
@@ -451,14 +624,21 @@ def usage_history_slips(con, branch_id: int, start: date, end: date) -> tuple:
         if hit and _time.monotonic() - hit[0] < ttl:
             use, days, stats = hit[1]
             return use, list(days), dict(stats)
-    use, days, stats = _usage_history_slips_uncached(con, branch_id, start, end)
-    if key is not None:
-        with _slip_lock:
-            if len(_slip_cache) >= _USAGE_CACHE_MAX:
-                for k in sorted(_slip_cache, key=lambda k: _slip_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
-                    _slip_cache.pop(k, None)
-            _slip_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
-    return use, days, stats
+    with _flight(key):                 # LK: one computation for requests that miss together (see usage_history)
+        if key is not None:
+            with _slip_lock:
+                hit = _slip_cache.get(key)
+            if hit and _time.monotonic() - hit[0] < ttl:
+                use, days, stats = hit[1]
+                return use, list(days), dict(stats)
+        use, days, stats = _usage_history_slips_uncached(con, branch_id, start, end)
+        if key is not None:
+            with _slip_lock:
+                if len(_slip_cache) >= _USAGE_CACHE_MAX:
+                    for k in sorted(_slip_cache, key=lambda k: _slip_cache[k][0])[:max(1, _USAGE_CACHE_MAX // 4)]:
+                        _slip_cache.pop(k, None)
+                _slip_cache[key] = (_time.monotonic(), (use, list(days), dict(stats)))
+        return use, days, stats
 
 
 def demand_source(con, branch_id: int, start: date, end: date, month: str) -> tuple:
@@ -543,18 +723,23 @@ def _daily_model(series: dict, days: list, as_of: date, skip=None) -> dict:
         kept = [d for d in days if d not in skip]
         if len(kept) >= MIN_DAYS_AFTER_SKIP and len(kept) < len(days):
             skipped, days = len(days) - len(kept), kept
+    # LK: the weekday of a day is looked up once per day string (cached), the two 14-day thresholds are computed once - this ran
+    # per ingredient x per day (30,000 isoformat() calls in one plan)
     by_wd = defaultdict(list)
-    for d in days:
-        by_wd[_wd(date.fromisoformat(d))].append(series.get(d, 0.0))
+    vals = [series.get(d, 0.0) for d in days]
+    wds = [_wd_iso(d) for d in days]
+    for w, v in zip(wds, vals):
+        by_wd[w].append(v)
     mean_wd = {wd: sum(v) / len(v) for wd, v in by_wd.items() if v}
-    overall = (sum(series.get(d, 0.0) for d in days) / len(days)) if days else 0.0
-    last = [series.get(d, 0.0) for d in days if d > (as_of - timedelta(days=14)).isoformat()]
-    prev = [series.get(d, 0.0) for d in days
-            if (as_of - timedelta(days=28)).isoformat() < d <= (as_of - timedelta(days=14)).isoformat()]
+    overall = (sum(vals) / len(days)) if days else 0.0
+    c14 = (as_of - timedelta(days=14)).isoformat()
+    c28 = (as_of - timedelta(days=28)).isoformat()
+    last = [v for d, v in zip(days, vals) if d > c14]
+    prev = [v for d, v in zip(days, vals) if c28 < d <= c14]
     trend = 1.0
     if last and prev and sum(prev) > 0:
         trend = max(0.7, min(1.3, (sum(last) / len(last)) / (sum(prev) / len(prev))))
-    resid = [series.get(d, 0.0) - mean_wd.get(_wd(date.fromisoformat(d)), overall) for d in days]
+    resid = [v - mean_wd.get(w, overall) for w, v in zip(wds, vals)]
     sigma = math.sqrt(sum(r * r for r in resid) / (len(resid) - 1)) if len(resid) > 1 else 0.0
     return {"mean_wd": mean_wd, "overall": overall, "trend": trend, "sigma": sigma, "skipped": skipped}
 
