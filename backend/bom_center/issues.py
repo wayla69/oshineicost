@@ -353,7 +353,7 @@ def _clean_lines(con, lines: list, whole_up: bool = False):
             continue
         if waste > 0:
             if reason not in WASTE_REASON_TH:
-                raise ValueError(f"{_item(con, code)}: เลือกสาเหตุของของเสีย")
+                raise ValueError(f"{_item(con, code)}: เลือกสาเหตุที่เสีย")
             if reason == "other" and not lnote:
                 raise ValueError(f"{_item(con, code)}: สาเหตุ “อื่น ๆ” ต้องระบุคำอธิบาย")
         else:

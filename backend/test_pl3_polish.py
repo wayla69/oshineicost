@@ -135,6 +135,13 @@ def test_no_banned_word_in_what_a_person_reads(rel):
     assert not left, (rel, left[:3])
 
 
+def test_rv2_36_no_doubled_word_reads_as_a_typo():
+    for rel in ("js/14-branch.js", "tabs/52-bomcenter.html", "backend/bom_center/issues.py"):
+        s = (REPO / rel).read_text(encoding="utf-8", errors="replace")
+        assert "สาเหตุของของเสีย" not in s and "หน่วยของของทั้งตัว" not in s, rel
+    assert "หน่วยของวัตถุดิบทั้งตัว" in _src("tabs/52-bomcenter.html")
+
+
 DEV_WORDS = ("backend/mark_downtime.py", "ANTHROPIC_API_KEY", "unit_cost ใน Settings", "ตั้ง Claude ได้ใน Checklist")
 
 

@@ -581,7 +581,7 @@ function _brnIssReasonBox(code) {
   const inp = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
   const bad = !q.reason || (q.reason === 'other' && !String(q.note || '').trim());
   return `<div class="flex flex-wrap gap-2 mt-1 brn-reason"><select id="brnIssR_${esc(code)}" onchange="brnIssSetField(${_bmcQ(code)}, 'reason', this.value)" ${ed ? '' : 'disabled'}
-      style="${inp};border-color:${bad ? 'var(--amber-ink)' : 'var(--border-control)'}"><option value="">— สาเหตุของของเสีย —</option>${((_brnIss && _brnIss.reasons) || []).map(r => `<option value="${esc(r.code)}"${q.reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
+      style="${inp};border-color:${bad ? 'var(--amber-ink)' : 'var(--border-control)'}"><option value="">— สาเหตุที่เสีย —</option>${((_brnIss && _brnIss.reasons) || []).map(r => `<option value="${esc(r.code)}"${q.reason === r.code ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select>
     <input id="brnIssN_${esc(code)}" value="${esc(q.note || '')}" placeholder="${q.reason === 'other' ? 'ระบุคำอธิบาย (จำเป็น)' : 'หมายเหตุ'}" oninput="brnIssSetField(${_bmcQ(code)}, 'note', this.value)" ${ed ? '' : 'disabled'}
       style="flex:1 1 140px;min-width:0;${inp}"></div>`;
 }
@@ -792,7 +792,7 @@ async function brnIssSave(submit, quiet) {
     const code = invalid[0] || incomplete[0];
     const it = _brnIssItem(code), q = _brnIssQty[code] || {};
     _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${_brnNm(it)}`
-      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุของของเสีย: ${_brnNm(it)}`,
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุที่เสีย: ${_brnNm(it)}`,
       invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
@@ -803,7 +803,7 @@ async function brnIssSave(submit, quiet) {
   const sig = JSON.stringify(lines);
   if (quiet && (!lines.length || sig === _brnIssLastSig) && (invalid.length || incomplete.length)) {
     _bmcStatus('brnIssStatus', invalid.length ? `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`
-      : `ยังไม่ได้บันทึก ${incomplete.length} รายการ · เลือกสาเหตุของของเสีย`, invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
+      : `ยังไม่ได้บันทึก ${incomplete.length} รายการ · เลือกสาเหตุที่เสีย`, invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     return;
   }
   const nAny = lines.filter(l => l.qty_used > 0 || l.qty_waste > 0);
@@ -836,7 +836,7 @@ async function brnIssSave(submit, quiet) {
       if (d && d.status === 'missing') { d.status = 'draft'; _brnIssDayChips(); }
       // never "saved" in plain words after a line was left out: the left-out rows are named
       if (invalid.length) _bmcStatus('brnIssStatus', `ไม่ได้บันทึก ${invalid.length} รายการ · ${_BRN_QTY_ERR}`, 'var(--bad-ink)');
-      else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุของของเสีย)`, 'var(--amber-ink)');
+      else if (incomplete.length) _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()} · ยังไม่ได้บันทึก ${incomplete.length} รายการ (เลือกสาเหตุที่เสีย)`, 'var(--amber-ink)');
       else _bmcStatus('brnIssStatus', `บันทึกไว้แล้ว ${clock()}${_brnIssFillNote()}`, 'var(--good-ink)');
       return;
     }
@@ -892,7 +892,7 @@ async function brnIssAppendSave() {
     const code = invalid[0] || incomplete[0];
     const it = _brnIssItem(code), q = _brnIssQty[code] || {};
     _bmcStatus('brnIssStatus', invalid.length ? `${_BRN_QTY_ERR}: ${_brnNm(it)}`
-      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุของของเสีย: ${_brnNm(it)}`,
+      : q.reason === 'other' ? `ระบุคำอธิบายของสาเหตุ “อื่น ๆ”: ${_brnNm(it)}` : `เลือกสาเหตุที่เสีย: ${_brnNm(it)}`,
       invalid.length ? 'var(--bad-ink)' : 'var(--amber-ink)');
     const el = document.getElementById(invalid.length ? 'brnIssU_' + code : 'brnIssR_' + code) || document.getElementById('brnIssW_' + code) || document.getElementById('brnIssU_' + code);
     if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
