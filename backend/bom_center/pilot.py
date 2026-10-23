@@ -96,7 +96,7 @@ def readiness(con) -> dict:
              "สร้างบัญชีผู้ใช้ของสาขา (ตั้งค่า → ผู้ใช้งาน → บทบาท “สาขา” และเลือกสาขา)"),
             ("calendar", all(cal[r]["filled"] for r in ("1", "2", "salmon")),
              "ประสานงานขายกำหนดวันส่งของ 3 รอบ (ประสานงานขาย → รอบส่งของสาขา)"),
-            ("begin_count", bool(first[0]), "สาขาตรวจนับต้นงวดครั้งแรก (สาขา → ตรวจนับสิ้นเดือน)"),
+            ("begin_count", bool(first[0]), "สาขานับของครั้งแรก (สาขา → นับของสิ้นเดือน)"),
         ]
         rows.append({"branch_id": bid, "branch": b["name"], "accounts": users.get(b["name"], []),
                      "first_count": first[0], "last_count": first[1], "counts": first[2], "last_order": last_order,
