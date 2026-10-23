@@ -182,7 +182,7 @@ def test_fact_close_has_nine_steps_and_the_texts_say_so():
     seqs = sorted({int(m) for m in re.findall(r'per_branch\("[a-z_]+", (\d+),', src)} | {1, 2, 3, 9})
     assert seqs == list(range(1, 10))
     manual = (REPO / "tabs" / "47-manual.html").read_text(encoding="utf-8")
-    assert "9 ขั้นตอน" in manual
+    assert "โหมดเต็มระบบมี 9 ขั้น" in manual and "ปิดงวดเดือนในโหมดสต๊อกมี 5 ขั้น" in manual     # PL1/PL2: nine steps in the full mode, one list of five in the stock mode
     assert not re.search(r"ขั้นตอนที่? ?1[–-][67]", manual)
     assert todo.CLOSE_TOLERANCE_DAYS == 2
 

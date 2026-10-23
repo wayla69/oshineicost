@@ -154,9 +154,9 @@ def test_the_owner_guide_is_linked_from_the_manual_and_the_owner_row_names_the_p
     assert (PILOT / "owner_guide.html").exists()
 
 
-def test_the_close_has_nine_steps_in_the_manual():
+def test_the_close_has_five_steps_in_the_manual_and_nine_in_full_mode():
     block = re.search(r'id="manualCloseSteps".*?</ol>', MANUAL, re.S).group(0)
-    assert len(re.findall(r"<li>", block)) == 9 and "9 ขั้นตอน" in MANUAL
+    assert len(re.findall(r"<li>", block)) == 5 and "ปิดงวดเดือนในโหมดสต๊อกมี 5 ขั้น" in MANUAL and "โหมดเต็มระบบมี 9 ขั้น" in MANUAL     # PL1/PL2: one list of five steps
 
 
 def test_the_branch_flow_of_the_manual_names_the_phone_screens():
@@ -317,9 +317,27 @@ def test_the_overhaul_document_has_the_department_section_and_the_d_rows():
         assert re.search(rf"\| {pr} \|", doc), pr
 
 
-def test_the_sop_is_version_1_20_with_a_revision_row_and_the_page_locations():
+def test_the_sop_is_version_1_21_with_a_revision_row_and_the_page_locations():
     sop = (REPO / "docs" / "sop" / "WP-SCM-001_ingredient_order_procedure.html").read_text(encoding="utf-8")
-    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.20 /", sop)      # PR-PW: 1.20 (23 ต.ค. 2026) is the everyday-words pass; 1.19 added the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
+    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.21 /", sop)      # PL2: 1.21 (23 ต.ค. 2026) is the review polish (one five-step close list, the 14-slip-day rule, no "ฉบับร่าง"); 1.20 (23 ต.ค. 2026) is the everyday-words pass; 1.19 added the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
     assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.18</td><td>22 ต\.ค\. 2026</td>", sop)
     assert re.search(r"<tr><td>1\.19</td><td>23 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.20</td><td>23 ต\.ค\. 2026</td>", sop)
+    assert re.search(r"<tr><td>1\.21</td><td>23 ต\.ค\. 2026</td>", sop)
+    assert "ฉบับร่าง" not in re.sub(r"<tr><td>1\.\d+</td>.*?</tr>", "", sop, flags=re.S)       # PL2: the status line says รอการอนุมัติ
+    assert "<h3>7.7 ปิดเดือน (5 ขั้นในโหมดสต๊อก)</h3>" in sop
     assert "ตำแหน่งของหน้าในแอป" in sop and "ปฏิบัติการ → การใช้งานทุกสาขา" in sop
+
+
+# ── PL2 · the documents say what the app says about the first 14 slip days and the month close ─────────────────
+def test_documents_state_the_14_slip_day_rule_and_the_five_step_close():
+    for rel in ("docs/pilot/branch_guide.html", "docs/pilot/pilot_plan.html", "docs/pilot/salessupport_guide.html",
+                "docs/ONBOARDING_30_BRANCHES.md", "tabs/47-manual.html", "scripts/branch_handout.py"):
+        txt = (REPO / rel).read_text(encoding="utf-8")
+        assert "14 วัน" in txt and ("กรอกยอดสั่งเอง" in txt or "กรอกช่อง" in txt), rel
+    for rel in ("docs/pilot/salessupport_guide.html", "docs/sop/WP-SCM-001_ingredient_order_procedure.html", "tabs/47-manual.html"):
+        txt = (REPO / rel).read_text(encoding="utf-8")
+        assert "5 ขั้น" in txt and "ใบสรุปตัดเบิก" in txt, rel
+    gl = (REPO / "docs" / "STOCK_FIRST_GOLIVE.md").read_text(encoding="utf-8")
+    for pr in ("#441", "#442", "#443"):
+        assert pr in gl, pr
+    assert "ฉบับร่าง" not in gl
