@@ -40,14 +40,14 @@ def test_default_is_stock_when_the_key_is_absent():
     assert CS.mode(c) == "stock"                                      # no app_settings table at all
     c.execute("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
     assert CS.mode(c) == "stock" and CS.stock_mode(c) is True        # the table, no key
-    assert CS.mode_info(c) == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)"}
+    assert CS.mode_info(c) == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)", "history_weeks": 8}
     c.execute("INSERT INTO app_settings VALUES('bc_mode', 'nonsense')")
     assert CS.mode(c) == "stock"                                      # an unreadable value never opens the recipes
 
 
 def test_set_get_round_trip_audit_and_bad_value(udon):
     assert CS.mode(udon) == "stock"
-    assert CS.set_mode(udon, "mgr", "full") == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)"}
+    assert CS.set_mode(udon, "mgr", "full") == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)", "history_weeks": 8}
     assert CS.mode(udon) == "full" and CS.stock_mode(udon) is False
     CS.set_mode(udon, "mgr", " STOCK ")
     assert CS.mode(udon) == "stock"
@@ -125,7 +125,7 @@ def test_every_signed_in_role_reads_the_mode(world):
     for role, c in world.items():
         r = c.get("/api/bom-center/mode")
         assert r.status_code == 200, (role, r.text)
-        assert r.json() == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)"}, role
+        assert r.json() == {"mode": "stock", "label_th": "สต๊อกก่อน (ปิดส่วนสูตร)", "history_weeks": 8}, role
 
 
 def test_the_matrix_lets_every_role_read_and_only_bom_audit_write():
@@ -149,7 +149,7 @@ def test_only_management_with_the_token_changes_the_mode(world):
     assert mg.get("/api/bom-center/mode").json()["mode"] == "stock"
     assert mg.post("/api/bom-center/mode", json={"mode": "both"}, headers={"X-Upload-Token": TOKEN}).status_code == 400
     r = mg.post("/api/bom-center/mode", json=body, headers={"X-Upload-Token": TOKEN})
-    assert r.status_code == 200 and r.json() == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)"}
+    assert r.status_code == 200 and r.json() == {"mode": "full", "label_th": "เต็มระบบ (รวมสูตร)", "history_weeks": 8}
     for role, c in world.items():                                                     # every role sees the new mode
         assert c.get("/api/bom-center/mode").json()["mode"] == "full", role
     assert mg.post("/api/bom-center/mode", json={"mode": "stock"}, headers={"X-Upload-Token": TOKEN}).json()["mode"] == "stock"
@@ -170,13 +170,15 @@ def test_todo_in_stock_mode_has_no_recipe_item_and_keeps_the_rest(udon):
     # what stays: prices, orders, the slip, claims, counts and the month close
     assert {"price_month", "price_submit", "master_seed", "master_issues"} <= items
     assert "order_due" in items and "issue_today" in items            # (the round suffix of order_due_1 / _2 / _salmon is dropped by _base_key)
-    assert {"deliveries", "begin_count", "end_count", "receipts_confirm", "issue_posted"} <= steps and "monthly_summary" not in steps      # PR-S4: the month summary is a recipe page
+    # PL1: the month close of stock mode is ONE list of five steps (the stepper and หน้างาน print it); the grouped ones keep the full-mode steps as `parts`
+    assert steps == {"central_report", "code_links", "counts", "receipts_confirm", "issue_posted"} and "monthly_summary" not in steps
+    assert {"deliveries", "begin_count", "end_count"} <= {p["key"] for s in d["close"]["steps"] for p in s.get("parts", [])}
     # full mode is today's list: stock = full minus the recipe keys, nothing else moved
     assert {"draft", "acknowledge", "sub_recipes", "code_review"} <= full_i and "release_in_force" in full_s
     assert items == full_i - set(TD.RECIPE_KEYS)
-    assert steps == full_s - set(TD.RECIPE_KEYS)
+    assert full_s - set(TD.RECIPE_KEYS) == {"central_report", "code_links", "deliveries", "begin_count", "end_count", "receipts_confirm", "issue_posted"}
     assert [s["seq"] for s in d_full["close"]["steps"]] == list(range(1, 10))
-    assert d["close"]["total"] == len(d["close"]["steps"]) == 7
+    assert d["close"]["total"] == len(d["close"]["steps"]) == 5
     assert d["release"]["in_force"] == d_full["release"]["in_force"]
     # the seed button lives on the register page, which stays
     assert next(i for i in d["items"] if i["key"] == "master_seed")["go"] == {"tab": "bomcenter", "pane": "ing"}

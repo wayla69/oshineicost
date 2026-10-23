@@ -284,7 +284,12 @@ def _usage(con, branch_id: int, as_of: date, with_recent: bool = False):
     used on a day of the last RECENT_USE_DAYS days up to `as_of`): the items a branch is still using (3.2)."""
     from .forecast import demand_source, era_start
     start = era_start(as_of - timedelta(days=LOOKBACK_DAYS - 1), as_of)
-    use, days, _ = demand_source(con, branch_id, start, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
+    use, days, st = demand_source(con, branch_id, start, as_of, f"{as_of.year:04d}-{as_of.month:02d}")
+    if st.get("source") == "none":
+        # PL1 #11: the 14-day gate is for the order SUGGESTION. The count sheet only needs to know which items a branch uses and how
+        # much, so it reads whatever confirmed slips exist (a new branch is not all class C with an empty "used recently" for weeks).
+        from .forecast import usage_history_slips
+        use, days, _ = usage_history_slips(con, branch_id, start, as_of)
     n = max(len(days), 1)
     avg = {c: sum(s.values()) / n for c, s in use.items() if sum(s.values()) > 0}
     if not with_recent:

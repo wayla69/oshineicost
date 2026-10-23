@@ -440,7 +440,8 @@ def _verdict(sales, gp, ing, disc, discount_pct, policy, supply=None) -> dict:
             else:
                 add("watch", f"วัตถุดิบรอบนับล่าสุด{word}ร้อยละ {_pct_text(p)} (฿{abs(lp.get('diff_value') or 0):,.0f})")
         if ing.get("streak_flag"):
-            base = "ที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขา" if ing.get("stock_mode") else "สูตร"
+            from bom_center.fmt import comparator_th
+            base = comparator_th(bool(ing.get("stock_mode")))
             add("fix", f"มีวัตถุดิบหลักที่เบิกเกิน{base}ติดต่อกันหลายวัน ({ing['streak_days']} วันในเดือนนี้) ควรตรวจสอบหน้างาน")
         w = ing.get("waste_pct_month")
         if w is not None:

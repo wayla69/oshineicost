@@ -257,7 +257,8 @@ def resolved_reference(con, branch_id: int):
     spec = reference_spec(con, branch_id)
     if spec["mode"] == "branch":
         return spec["ref_branch_id"]
-    if spec["mode"] == "benchmark" and len([i for i in BM.branch_ids(con) if i != int(branch_id)]) >= BM.MIN_BRANCHES:
+    from .close_settings import stock_mode
+    if spec["mode"] == "benchmark" and len(FC.median_branch_ids(con, exclude=branch_id)) >= (1 if stock_mode(con) else BM.MIN_BRANCHES):
         return BENCH
     return None
 
@@ -336,14 +337,13 @@ def benchmark_basis(con, branch_id: int, month: str, weeks: int = FC.HISTORY_WEE
     usage per ฿100,000 (the branch itself left out; an item needs MIN_BRANCHES branches that use it), and the median of their
     "ปกติ" sales for the cover days as the hint. Same shape as reference_basis."""
     from . import benchmark as BM
-    from .close_settings import stock_mode as _stock
-    if _stock(con):                                         # PR-S3: every company branch whose demand is the slips, the planned one left out
-        ids = FC.company_branch_ids(con, exclude=branch_id)
-    else:
-        ids = [i for i in BM.branch_ids(con) if i != int(branch_id)]
+    ids = FC.median_branch_ids(con, exclude=branch_id)      # PL1 #7: the one set (stock: every company branch whose demand is the slips)
     bases = [reference_basis(con, i, month, weeks=weeks, cover=cover, factor=factor) for i in ids]
     ok = [b for b in bases if b["ok"]]
-    out = {"branch_id": None, "name": BM.LABEL, "label": f"คำนวณจาก{BM.LABEL}", "benchmark": True, "items": {}, "use": {},
+    from .close_settings import stock_mode
+    from .fmt import MEDIAN_TH
+    lbl = MEDIAN_TH if stock_mode(con) else BM.LABEL         # the branch reads this: in stock mode it is the all-branch figure (glossary)
+    out = {"branch_id": None, "name": lbl, "label": f"คำนวณจาก{lbl}", "benchmark": True, "items": {}, "use": {},
            "stats": {}, "sales": 0.0, "ok": False, "sales_normal": None, "branches": [b["name"] for b in ok]}
     from .close_settings import stock_mode
     # PR-S3: in stock mode a single branch with enough confirmed slips is already a basis (owner O1: "as soon as any branch has 14 days")
@@ -402,7 +402,7 @@ def _pct(new, old):
 def report(con, weeks: int = FC.HISTORY_WEEKS, branch_ids=None, today=None) -> dict:
     """Per branch the last `weeks` weeks against the `weeks` before (usage per ฿100,000 of sales), items by value, plus the
     chain total (Σ usage ÷ Σ sales). `branch_ids` None = every active branch with sales in the window."""
-    weeks = max(1, min(int(weeks), 8))
+    weeks = max(1, min(int(weeks), FC.HISTORY_WEEKS))
     end = _closed_end(con, today)
     n = 7 * weeks
     from .dated import CUTOVER
@@ -418,7 +418,7 @@ def report(con, weeks: int = FC.HISTORY_WEEKS, branch_ids=None, today=None) -> d
         core = FC._loaded("core")
         from .close_settings import mode as _mode
         key = (path, tuple(branch_ids) if branch_ids is not None else None, end.isoformat(), weeks, _mode(con),
-               tuple(BM.branch_ids(con)), BM.buffer_pct(con), _purchase_signature(con),
+               tuple(FC.median_branch_ids(con)), BM.buffer_pct(con), _purchase_signature(con),
                getattr(core, "_data_gen", 0), getattr(core, "_db_gen", 0)) if path and FC.USAGE_CACHE_TTL else None
     except Exception:
         key = None
@@ -429,7 +429,7 @@ def report(con, weeks: int = FC.HISTORY_WEEKS, branch_ids=None, today=None) -> d
     from .prices import price_for
     from .stock import count_units
     buf = BM.buffer_pct(con)
-    bench_ids = BM.branch_ids(con)
+    bench_ids = FC.median_branch_ids(con)                      # PL1 #7: the same set as the suggestion and the daily variance
     names = dict(con.execute("SELECT code, name_th FROM bc_ingredient"))
     bnames = {b: nm for b, nm in con.execute("SELECT branch_id, name FROM branches WHERE name<>'ALL'")}
     if branch_ids is None:

@@ -72,8 +72,8 @@ const _OHB_HELP = {
       'ใบที่ส่งหลังวันที่ของใบเป็น “ส่งช้า” · ไฟล์ใบตัดเบิกสาขา (Excel) รวมเฉพาะใบที่ส่งแล้ว', _OHB_ACC_GUIDE] },
   issuevar: {
     get _() {                                                       // PR-S4: with no recipe the comparators are the branch's normal and the all-branch median
-      return typeof BC_MODE !== 'undefined' && BC_MODE === 'stock'
-        ? ['เทียบมูลค่าที่เบิกจริงกับที่สาขาใช้ปกติ (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย) และเฉลี่ยทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
+      return BC_MODE === 'stock'
+        ? ['เทียบมูลค่าที่เบิกจริงกับที่สาขาใช้ปกติ (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ ' + BC_HIST_WEEKS + ' สัปดาห์ก่อน ปรับตามยอดขาย) และเฉลี่ยทุกสาขาต่อยอดขาย ฿100,000 · เลือกสาขาและเดือนก่อน',
           'วัตถุดิบของแพงที่เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ']
         : ['เทียบมูลค่าที่เบิกจริงกับมูลค่าตามสูตรของแต่ละวัน · เลือกสาขาและเดือนก่อน',
           'วัตถุดิบของแพงที่เบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขายขึ้นไป แสดงเป็นเตือน · กดที่วันเพื่อดูรายการ'];
@@ -207,11 +207,7 @@ function _ohbStepDraw() {
     if (card) card.style.display = on ? '' : 'none';
     if (on) n++;
   });
-  if (BC_MODE === 'stock') {                                          // the header counts the visible steps only
-    const L = _ohbStepList(), d = document.getElementById('ohbCloseDone'), t = document.getElementById('ohbCloseTotal');
-    if (d) d.textContent = L.filter(i => _ohbStSt[i] === 'done').length;
-    if (t) t.textContent = L.length;
-  }
+  // PL1: the header reads the server's close list (close.done of close.total), the list หน้างาน prints - five steps in stock mode, the same numbers
   const none = document.getElementById('ohbStepNone');
   if (none) none.innerHTML = n ? '' : uiStateFilter.empty(f, '_ohbStepPick', 'ขั้นตอน');
 }
@@ -236,17 +232,20 @@ async function ohbLoadCentral() {
     set(1, BC_MODE === 'stock' ? 'na' : st.release_in_force && st.release_in_force.status);
     document.getElementById('ohbSt1Detail').textContent = st.release_in_force ? st.release_in_force.detail : '';
     // step 2 = the list and the month's notes together
-    set(2, st.central_report && st.deliveries ? (st.central_report.status === 'done' && st.deliveries.status === 'done' ? 'done' : 'todo') : 'todo');
+    // PL1: in stock mode the report and the deliveries are ONE close step (central_report, parts = [report, deliveries]); the full mode lists them apart
+    const crParts = (st.central_report && st.central_report.parts) || [st.central_report, st.deliveries].filter(Boolean);
+    const delStep = crParts.find(p => p.key === 'deliveries') || st.deliveries;
+    set(2, st.central_report ? (st.central_report.parts ? st.central_report.status : (st.central_report.status === 'done' && st.deliveries && st.deliveries.status === 'done' ? 'done' : 'todo')) : 'todo');
     document.getElementById('ohbCenStat').innerHTML = (d.count
       ? bmcStats([['บัญชีสินค้า (รายการ)', d.count], ['สาขาซื้อเอง (รายการ)', d.local],
           ['ยังไม่ระบุอัตราแปลงหน่วย', d.needs_factor || 0, d.needs_factor ? 'var(--amber-ink)' : null]])
       : '<div class="text-sm" style="color:var(--amber-ink)">ยังไม่มีบัญชีสินค้า (ยอดแนะนำถือว่าสั่งจากไดกิโตะ กรุ๊ปทุกรายการ)</div>')
-      + (st.deliveries ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับของประจำเดือน${fmtMonthTh(month)}</div>${_ohbBranchLines(st.deliveries)}` : '');
+      + (delStep ? `<div class="text-sm font-semibold mt-3" style="color:var(--text-primary)">ใบรับของประจำเดือน${fmtMonthTh(month)}</div>${_ohbBranchLines(delStep)}` : '');
     set(3, st.code_links && st.code_links.status);
     ohbLoadLinks();
     // step 4 = the two counts
-    const c4 = [st.begin_count, st.end_count].filter(Boolean);
-    set(4, c4.length ? (c4.every(s => s.status === 'done') ? 'done' : c4.some(s => s.status === 'todo') ? 'todo' : 'blocked') : null);
+    const c4 = (st.counts && st.counts.parts) || [st.begin_count, st.end_count].filter(Boolean);
+    set(4, st.counts ? st.counts.status : c4.length ? (c4.every(s => s.status === 'done') ? 'done' : c4.some(s => s.status === 'todo') ? 'todo' : 'blocked') : null);
     document.getElementById('ohbSt4Detail').innerHTML = c4.map(s => `<div class="mt-3"><span class="text-sm font-semibold" style="color:var(--text-primary)">${esc(s.title)}</span> ${_ohbStChip(s.status)}${_ohbBranchLines(s)}</div>`).join('');
     set(5, st.receipts_confirm && st.receipts_confirm.status);
     document.getElementById('ohbSt5Detail').innerHTML = st.receipts_confirm ? _ohbBranchLines(st.receipts_confirm,
@@ -280,7 +279,7 @@ function ohbCntBranchChanged(quiet) {
   if (!quiet) supplyCtxSet({ branch_id: bid || null });
   if (!_ohbClose || !bid) return;
   const st = {}; (_ohbClose.close.steps || []).forEach(s => { st[s.key] = s; });
-  const pend = [st.begin_count, st.end_count].filter(Boolean)
+  const pend = ((st.counts && st.counts.parts) || [st.begin_count, st.end_count]).filter(Boolean)
     .map(s => (s.branches || []).find(b => b.branch_id === bid)).find(b => b && b.status !== 'done');
   const want = pend && pend.go && pend.go.extra ? pend.go.extra.count_date : '';
   if (want) day.value = want;
@@ -1112,7 +1111,7 @@ function _isrDailyTableStock(d, openFn, th) {
       <td class="py-1 pr-2 text-right">${_isrBaht(t.used_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.waste_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.issued_value)}</td>
       <td class="py-1 pr-2 text-right">${_isrBaht(t.normal_value)}</td><td class="py-1 pr-2 text-right">${_isrBaht(t.median_value)}</td>
       <td class="py-1 pr-2 text-right">${stkGapHtml(t.var_value, t.var_pct, 'issue_n')}</td><td class="py-1 pr-2 text-right">${stkGapHtml(t.median_var_value, t.median_var_pct, 'issue_m')}</td><td></td></tr></tfoot></table></div>
-    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ที่สาขาใช้ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · เฉลี่ยทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ ของแพงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
+    ${bmcNote('isrdaily', `ราคาซื้อเดือน${fmtMonthTh(d.price_month)}`, `<p>วันที่ใบตัดเบิกยังไม่ส่งไม่มีตัวเลขเบิกให้เปรียบเทียบ</p><p>ที่สาขาใช้ปกติ = ค่าเฉลี่ยวันเดียวกันของสัปดาห์ ${BC_HIST_WEEKS} สัปดาห์ก่อน (ต้องมีใบตัดเบิกอย่างน้อย 2 วัน) ปรับตามยอดขายวันนั้น · เฉลี่ยทุกสาขา = ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000 (ต้องมีอย่างน้อย 2 สาขา)</p><p>ราคาซื้อเดือน${esc(fmtMonthTh(d.price_month))} · เตือนเมื่อ ของแพงเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า ${d.thresholds.over_pct}% หรือต่ำกว่าเกิน ${d.thresholds.under_pct}% ติดต่อกัน ${d.thresholds.streak_days} วันขายขึ้นไป</p>`, 'text-[11px] mt-2')}`;
 }
 function _isrDayItemsStock(d, head, note, flags) {
   const q = (v, u) => v == null ? '<span style="color:var(--text-muted)">—</span>' : `${_bmcNum(v, 1)} ${esc(u || '')}`;

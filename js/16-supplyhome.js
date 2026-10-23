@@ -416,7 +416,7 @@ function _shmOpen(go) {
   if (x.date && go.pane === 'issue' && typeof _brnIssDate !== 'undefined') { _brnIssDate = x.date; _brnIssDateKeep = true; }   // the day of the slip the task names
   if (go.pane === 'var' && typeof _brnVarTab !== 'undefined') {           // the variance page's view (period / daily / recon) the task names
     if (x.var_tab) _brnVarTab = x.var_tab;
-    else if (x.end_count_id) _brnVarTab = 'period';                       // the receipts step opens the period view
+    else if (x.end_count_id) _brnVarTab = BC_MODE === 'stock' ? 'recon' : 'period';   // the receipts step opens the period view (stock mode has the สิ้นเดือน tab instead)
     if (x.day) { _brnVarTab = 'daily'; _shmWhen(() => typeof _brnVarDay !== 'undefined' && _brnVarDay, () => brnVarDayOpen(x.day)); }
   }
   if (x.day && go.pane === 'issues') _shmWhen(() => document.getElementById('ohbIsFrom') && typeof ohbLoadIssues === 'function', () => {   // the day the task names, all branches
@@ -434,10 +434,13 @@ function _shmOpen(go) {
   });
   if (x.count_date) _shmWhen(() => document.getElementById('ohbCntDate'), () => { document.getElementById('ohbCntDate').value = x.count_date; });
   if (x.order_id) _shmWhen(() => typeof brnOpenReceive === 'function' && _brnMe && document.getElementById('brnRecvOpen'), () => brnOpenReceive(x.order_id));
-  if (x.end_count_id) _shmWhen(() => { const s = document.getElementById('brnVarPeriod'); return s && s.options.length; }, () => {
-    const s = document.getElementById('brnVarPeriod');
-    if (String(s.value) !== String(x.end_count_id) && [...s.options].some(o => o.value === String(x.end_count_id))) { s.value = String(x.end_count_id); brnLoadVariance(x.end_count_id); }
-  });
+  if (x.end_count_id) {
+    const recon = typeof _brnVarTab !== 'undefined' && _brnVarTab === 'recon', sid = recon ? 'brnRcPeriod' : 'brnVarPeriod';   // PL1: the สิ้นเดือน tab has its own period list
+    _shmWhen(() => { const s = document.getElementById(sid); return s && s.options.length; }, () => {
+      const s = document.getElementById(sid);
+      if (String(s.value) !== String(x.end_count_id) && [...s.options].some(o => o.value === String(x.end_count_id))) { s.value = String(x.end_count_id); if (recon) brnLoadVarRecon(x.end_count_id); else brnLoadVariance(x.end_count_id); }
+    });
+  }
 }
 
 // ── "ขั้นตอนถัดไป" after a save ───────────────────────────────────────────────

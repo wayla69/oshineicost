@@ -548,6 +548,7 @@ def _build_xlsx(data: dict):
         autofit(ws)
 
     buf = io.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     buf.seek(0)
     return buf

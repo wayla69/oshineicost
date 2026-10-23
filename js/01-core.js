@@ -251,7 +251,7 @@ window.uiQ = function (key, title, html, cls) {
 const _UI_PANE_PREFIX = { bomcenter: 'bmc-pane-', orderhub: 'ohb-pane-', branchstock: 'brn-pane-' };
 // PR-S4 · a help text may hold <span data-recipe>…</span> (full mode only) and <span data-stock>…</span> (stock mode only)
 function _uiHelpMode(html) {
-  const box = document.createElement('div'); box.innerHTML = html;
+  const box = document.createElement('div'); box.innerHTML = String(html).replace(/\[\[HW\]\]/g, String(BC_HIST_WEEKS));   // [[HW]] = the weeks of history (BC_HIST_WEEKS)
   box.querySelectorAll(BC_MODE === 'stock' ? '[data-recipe]' : '[data-stock]').forEach(e => e.remove());
   return box.innerHTML;
 }
@@ -489,11 +489,13 @@ window.AUTH = { enabled: false, authenticated: true, role: 'management', modules
 // PR-S1 · the system mode (app_settings bc_mode, GET /api/bom-center/mode): 'stock' hides every recipe page, task and reminder, 'full' is the
 // whole app. Loaded once after sign-in (loadBcMode), before any menu is drawn; 'stock' is also the answer when the server cannot be asked.
 let BC_MODE = 'stock';
+let BC_HIST_WEEKS = 8;          // PL1 #15: the weeks of history behind every "ปกติ" / suggestion; the server's forecast.HISTORY_WEEKS arrives with the mode
 async function loadBcMode() {
   try {
     const r = await fetch(`${API}/api/bom-center/mode`);
     const j = r.ok ? await r.json() : null;
     BC_MODE = j && j.mode === 'full' ? 'full' : 'stock';
+    if (j && j.history_weeks > 0) BC_HIST_WEEKS = j.history_weeks;
   } catch (e) { BC_MODE = 'stock'; }
   return BC_MODE;
 }

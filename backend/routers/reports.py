@@ -3892,7 +3892,7 @@ def _xlsx_save(*, j, wb):
     # names this section hands on; None where a path never assigns one
     buf = None
     fname = None
-    buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+    __import__('xl_safe').guard_workbook(wb); buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
     tag = j.get("selected_month") or j.get("selected_week") or j.get("focus") or "report"
     fname = f"management_{j['period']}_{tag}.xlsx"
     return {"buf": buf, "fname": fname}

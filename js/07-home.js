@@ -240,8 +240,9 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   else if (fcp != null && CH.delta_pp != null && CH.delta_pp >= 3)
     A.push({ p: 2, sev: 'amber', icon: '', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังอยู่ในแถบเป้า แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   if (CH.coverage_pct != null && CH.coverage_pct < 95)
-    A.push({ p: 3, sev: 'amber', icon: '', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: "switchTab('coverage')" });
-  const RQ = CH.requisition;
+    A.push({ p: 3, sev: 'amber', icon: '', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: (BC_MODE === 'stock' && tabAllowed('bomcenter')) ? "supplyGo({tab:'bomcenter',pane:'dishcost'})" : "switchTab('coverage')" });   // PL1: stock mode fills the cost on the ต้นทุนต่อจาน page
+  // the requisition-against-recipe items belong to the recipe pages, which stock mode does not offer (PL1 #4)
+  const RQ = BC_MODE === 'stock' ? null : CH.requisition;
   if (RQ && RQ.worst && RQ.worst.ratio >= 1.25)
     A.push({ p: 3, sev: 'amber', icon: '', text: `${esc(RQ.worst.branch)} เบิกวัตถุดิบสูงกว่าต้นทุนตามสูตร ${RQ.worst.ratio.toFixed(2)} เท่า (${esc(RQ.worst.month)}) — ตักเกินสูตร ของเสีย หรือตุนสต๊อก`, act: 'ดูเบิก vs สูตร', go: "switchTab('branchbom')" });
   if (RQ && RQ.missing_month)

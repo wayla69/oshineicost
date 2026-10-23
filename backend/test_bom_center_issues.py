@@ -109,6 +109,7 @@ def _zone_items(sh, *codes):
 
 
 # PR-M3 · usage first inside a zone, and yesterday's quantities as the hint
+@pytest.mark.full_only
 def test_the_sheet_marks_recent_items_and_lists_them_first_in_their_zone(con):  # noqa: F811
     build_stock(con)
     zone = ST.zones(con)[0][0]
@@ -145,6 +146,7 @@ def test_recent_covers_the_14_days_before_the_day_and_confirmed_slips_only(con):
     assert crab("2026-10-18")["recent"] is True
 
 
+@pytest.mark.full_only
 def test_the_previous_confirmed_slip_gives_prev_used_and_prev_waste_in_the_count_unit(con):  # noqa: F811
     build_stock(con)                                       # 1 Oct used 1000 g · 2 Oct used 600 g · 3 Oct wasted 700 g · 4 Oct a draft
     crab = lambda d: next(i for z in IS.sheet(con, 1, d, now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)  # noqa: E731
@@ -290,6 +292,7 @@ def test_reopen_reconfirm_and_the_log(con):  # noqa: F811
 
 
 # ── 5 · the system stock ─────────────────────────────────────────────────────
+@pytest.mark.full_only
 def test_system_position_is_count_plus_receipts_minus_confirmed_slips(con):  # noqa: F811
     cid = build_stock(con)
     sp = ST.system_position(con, 1, AS_OF, estimate=False)               # PR-B4a (1.3): the confirmed-slips-only figure; the default estimates the missing days
@@ -312,6 +315,7 @@ def test_system_position_is_count_plus_receipts_minus_confirmed_slips(con):  # n
 
 
 # ── 6 · the plan ─────────────────────────────────────────────────────────────
+@pytest.mark.full_only
 def test_the_plan_deducts_the_system_stock_after_todays_slip(con):  # noqa: F811
     ST.save(con, 1, [{"code": CRAB, "qty": 3, "unit": PACK}], "udon", submit=True, count_date="2026-10-05", require_all=False)
     con.commit()
@@ -357,6 +361,7 @@ def test_submit_needs_todays_confirmed_slip_no_count_is_written_and_a_gap_only_w
 
 
 # ── 8 · the usage-history cache ──────────────────────────────────────────────
+@pytest.mark.full_only
 def test_the_usage_history_is_computed_once_per_process_until_the_cache_generation_moves(con, monkeypatch):  # noqa: F811
     import core
     calls = []
@@ -730,6 +735,7 @@ def test_append_is_refused_inside_a_period_accounting_has_posted(con):  # noqa: 
     assert IS.detail(con, s["slip_id"])["lines"][0]["qty_used"] == 1000
 
 
+@pytest.mark.full_only
 def test_the_sheet_carries_the_waste_reason_of_the_previous_slip(con):  # noqa: F811
     build_stock(con)                                         # 3 Oct: CRAB wasted 700 g, reason spill
     crab = next(i for z in IS.sheet(con, 1, "2026-10-05", now=NOW)["zones"] for i in z["items"] if i["code"] == CRAB)
@@ -823,4 +829,4 @@ def test_who_may_append():
 
 
 import pytest as _pytest_s3  # noqa: E402
-pytestmark = _pytest_s3.mark.usefixtures("recipe_mode")   # PR-S3: this module builds its forecast, plans and count sheets from recipes (mode full)
+pytestmark = [_pytest_s3.mark.usefixtures("both_modes"), _pytest_s3.mark.no_slip_seed]   # PL1 #8: runs in mode full AND mode stock (the default)

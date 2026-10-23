@@ -169,7 +169,8 @@ def test_reconcile_with_every_slip_asks_by_the_floor(con):  # noqa: F811
     assert next(x for x in IR.reconcile(con, 1, end)["rows"] if x["code"] == CRAB)["needs_reason"] is True
 
 
-def test_the_todo_counts_the_same_reasons_as_the_period(db):  # noqa: F811
+def test_the_todo_counts_the_same_reasons_as_the_period(db, recipe_mode):  # noqa: F811
+    # mode full: the recipe period. (Stock mode reads the month-end reconcile instead: test_pl1_polish.py.)
     db, end = db
     setting(db, "bc_reason_min_baht", 0)
     items = {i["key"].split(":")[0]: i for i in TD.build(db, branch_id=1, today=date(2026, 9, 16))["items"]}

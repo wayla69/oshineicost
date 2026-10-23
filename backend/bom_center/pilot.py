@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta
 from .clock import today as bkk_today
 
 PILOT = ("เชียงใหม่", "อุบลราชธานี", "อุดรธานี", "โคราช1", "สุรินทร์")     # owner 2026-10-22: 5 branches, opening count 1 Nov 2026
+PILOT_WEEKS = 4                      # the pilot window: weeks judged, and the most weeks the backtest tests (its history is forecast.HISTORY_WEEKS)
 TARGETS = {"issue_coverage": 95.0, "issue_on_time": 90.0, "reason_coverage": 80.0, "mape_a": 15.0}
 
 
@@ -114,7 +115,7 @@ def _minutes(a: str, b: str):
     return (db - da).total_seconds() / 60.0
 
 
-def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
+def scorecard(con, branch_id: int, weeks: int = PILOT_WEEKS, as_of: date = None) -> dict:
     from .forecast import _wd, backtest, calendar
     from .issues import status_days
     from .stock import periods as _periods
@@ -154,8 +155,23 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
         "SELECT round, cycle_date FROM bc_order WHERE branch_id=? AND status IN ('submitted','processed','received')"
         " AND cycle_date BETWEEN ? AND ?", (branch_id, start.isoformat(), as_of.isoformat()))}
     flagged = with_reason = 0
+    from .close_settings import stock_mode
+    stock = stock_mode(con)
     for b, e in _periods(con, branch_id):
         if start.isoformat() <= e["date"] <= as_of.isoformat():
+            if stock:
+                # PL1 #3: in stock mode the lines a branch answers are the สิ้นเดือน tab's (system stock against the count),
+                # not the recipe gap: the lines it is ASKED a reason for, and how many of them have one
+                from .issue_reports import reconcile
+                try:
+                    rows_ = reconcile(con, branch_id, e["count_id"])["rows"]
+                except ValueError:
+                    continue
+                for r in rows_:
+                    if r.get("ask_reason"):
+                        flagged += 1
+                        with_reason += 1 if r.get("reason") else 0
+                continue
             p = period(con, branch_id, e["count_id"])
             for r in p["rows"]:
                 if r["status"] in ("over", "under", "negative", "no_bom"):
@@ -163,7 +179,7 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
                     with_reason += 1 if r.get("reason") else 0
     bt = {}
     try:
-        bt = backtest(con, branch_id, weeks=min(weeks, 4), as_of=as_of)
+        bt = backtest(con, branch_id, weeks=min(weeks, PILOT_WEEKS), as_of=as_of)   # the test windows; the history behind each is forecast.HISTORY_WEEKS
     except Exception:
         bt = {"available": False}
     mape_a = (bt.get("mape_by_class") or {}).get("A") if bt.get("available") else None
@@ -201,7 +217,7 @@ def scorecard(con, branch_id: int, weeks: int = 4, as_of: date = None) -> dict:
                         "fail" if any(v is False for v in known) else "pending")}
 
 
-def overview(con, weeks: int = 4) -> dict:
+def overview(con, weeks: int = PILOT_WEEKS) -> dict:
     rows = []
     for b in pilot_branches(con):
         s = scorecard(con, b["branch_id"], weeks)

@@ -685,7 +685,7 @@ function brnIssRender() {
     const sys = it.system_qty == null ? ''
       : `${lead ? '<span class="brn-sys-sep"> · </span>' : ''}<span class="brn-sys">ควรเหลือ <b style="white-space:nowrap;color:${it.system_qty < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${esc(_brnSysTxt(it.system_qty, unit))}</b></span>`
         + (it.estimate_matters && nEst ? ' ' + _bmcChip(`${_brnEstWord(s.estimate_basis)} ${nEst} วัน`, 'var(--amber-ink)') : '');
-    const avg = it.normal_qty != null ? `<span class="brn-avg">${lead || sys ? ' · ' : ''}ปกติ ${_brnNice(it.normal_qty)} ${esc(unitF)}</span>` : '';
+    const avg = it.normal_qty != null ? `<span class="brn-avg">${lead || sys ? ' · ' : ''}เฉลี่ยวันเดียวกัน ${_brnNice(it.normal_qty)} ${esc(unitF)}</span>` : '';
     // เบิกเพิ่ม: what the confirmed slip already holds for the item, so the box holds only the quantity to add
     const have = _brnIssAppend && (it.used > 0 || it.waste > 0)
       ? `<div class="text-[11px]" style="color:var(--navy-ink)">ในใบแล้ว${it.used > 0 ? ` เบิกใช้ ${_brnNice(it.used)}` : ''}${it.waste > 0 ? ` ของเสีย ${_brnNice(it.waste)}` : ''} ${esc(unitF)}</div>` : '';
@@ -2228,7 +2228,7 @@ function brnMissLater() { _brnMissLater = true; brnRenderOrder(); }
 // PR-B4a · why a suggested figure is not the plain forecast, one chip each (1.3 estimate · 1.5 shelf life · 1.6 no price · 1.7 round down · 1.8 lead time and short shipments)
 // PR-S3: what a missing slip day is estimated from - the branch's own mean of that weekday in stock mode, the recipes of the sales otherwise
 function _brnEstWord(basis) { return basis === 'slips' ? 'ประมาณจากใบตัดเบิกเฉลี่ย' : 'ประมาณจากยอดขาย'; }
-function _brnEstHow(basis) { return basis === 'slips' ? 'ตามค่าเฉลี่ยใบตัดเบิกของสาขาในวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน' : 'ตามสูตรจากยอดขาย'; }
+function _brnEstHow(basis) { return basis === 'slips' ? `ตามค่าเฉลี่ยใบตัดเบิกของสาขาในวันเดียวกันของสัปดาห์ ${BC_HIST_WEEKS} สัปดาห์ก่อน` : 'ตามสูตรจากยอดขาย'; }
 function _brnRowFlags(r, nEst) {
   const c = [];
   if (r.estimate_changes && nEst) c.push(_bmcChip(`${_brnEstWord(((_brnPlan || {}).stock || {}).estimate_basis)} ${nEst} วัน`, 'var(--amber-ink)'));   // only when it changes the packs ordered; the head says it once
@@ -2427,13 +2427,13 @@ function _brnRenderRefCard(box, p, editable) {
   }
   const own = p.fallback ? `ใบตัดเบิกที่ส่งแล้วเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)` : `สาขานี้มียอดขายเพียง ${rm.own_days} วัน (ต่ำกว่า ${rm.min_days} วัน)`;
   box.innerHTML = `<div class="text-sm" style="font-weight:600;color:var(--text-primary)">${p.fallback ? 'ใบตัดเบิกยังไม่ครบ' : 'สาขาใหม่'} · คำนวณจาก${refTxt}</div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${own} ${uiQ('brn:ref', p.fallback ? 'คำนวณจากค่ากลางอย่างไร' : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">${own} ${uiQ('brn:ref', p.fallback ? stkWord('คำนวณจากค่ากลางอย่างไร', 'คำนวณจากเฉลี่ยทุกสาขาอย่างไร') : 'สาขาใหม่คำนวณอย่างไร', `<p>${own} จึงใช้ปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของ${refOf} คูณยอดขายที่คาดของรอบนี้</p>`)}</div>
     <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
       <label style="color:var(--text-secondary)">ยอดขายที่คาดของรอบนี้ (บาท)
         <input id="brnRefSales" type="text" inputmode="numeric" autocomplete="off" value="${rm.expected_sales ? esc(String(rm.expected_sales)) : ''}" style="width:130px;height:36px;margin-left:6px;text-align:right;${inp}"></label>
       <button onclick="brnApplyRefSales()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:8px 14px;font-size:13px;cursor:pointer;min-height:36px">คำนวณจำนวนที่ควรสั่ง</button>
     </div>
-    <div class="text-[11px] mt-1" style="color:var(--text-muted)">ยอดขายไม่รวมภาษีมูลค่าเพิ่ม${rm.ref_sales_normal ? ` · ${rm.benchmark ? 'ค่ากลางสาขาของบริษัท' : 'สาขา' + esc(rm.name)}ขายปกติในช่วงนี้ ≈ ฿${_bmcNum(rm.ref_sales_normal, 0)}` : ''}</div>
+    <div class="text-[11px] mt-1" style="color:var(--text-muted)">ยอดขายไม่รวมภาษีมูลค่าเพิ่ม${rm.ref_sales_normal ? ` · ${rm.benchmark ? stkWord('ค่ากลางสาขาของบริษัท', 'เฉลี่ยทุกสาขา') : 'สาขา' + esc(rm.name)}ขายปกติในช่วงนี้ ≈ ฿${_bmcNum(rm.ref_sales_normal, 0)}` : ''}</div>
     ${rm.needs_sales || rm.message ? `<div class="text-xs mt-1" style="color:var(--amber-ink)">${esc(rm.message || '')}</div>` : ''}`;
 }
 async function brnApplyRefSales() {

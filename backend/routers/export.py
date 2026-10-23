@@ -438,6 +438,7 @@ def _mpack_render_xlsx(pack: dict) -> bytes:
     autofit(ws6)
 
     buf = _io.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     return buf.getvalue()
 

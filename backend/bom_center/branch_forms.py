@@ -136,11 +136,12 @@ def _table(raw: bytes, sheet: str) -> tuple:
     """(note text, header names, [(excel row, cells)]) of the form's sheet."""
     from openpyxl import load_workbook
     try:
-        wb = load_workbook(io.BytesIO(raw), data_only=True)
+        wb = load_workbook(io.BytesIO(raw), data_only=True, read_only=True)       # PL1 #17: streamed, not loaded whole
     except Exception:
         raise ValueError(TXT["bad_file"])
     ws = wb[sheet] if sheet in wb.sheetnames else wb.worksheets[0]
     grid = [list(r) for r in ws.iter_rows(values_only=True)]
+    wb.close()
     hi = next((i for i, r in enumerate(grid[:10]) if "รหัส" in [str(c or "").strip() for c in r]), None)
     if hi is None:
         raise ValueError(TXT["no_head"])
@@ -232,7 +233,7 @@ def slip_template(con, branch_id: int, start: date, days: int = 1, now: datetime
     name = _bname(con, branch_id)
     span = dates[0].isoformat() + (f" ถึง {dates[-1].isoformat()}" if days > 1 else "")
     note = f"ใบตัดเบิก สาขา{name} · รหัสสาขา {branch_id} · วันที่ {span} · {TXT['note_tail']}"
-    head = SLIP_HEAD_FIX + [f"ปกติ ({HISTORY_WEEKS} สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)"] + SLIP_HEAD_EDIT
+    head = SLIP_HEAD_FIX + [f"เฉลี่ยวันเดียวกัน ({HISTORY_WEEKS} สัปดาห์)", "ของที่ควรเหลือ (ตามระบบ)"] + SLIP_HEAD_EDIT
     wb, ws = _make(SLIP_SHEET, note, head, [12, 14, 44, 16, 16, 16, 12, 12, 30, 24])
     edit = {6, 7, 8, 9}
     for d in dates:

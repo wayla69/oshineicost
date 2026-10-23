@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime, timedelta
 
 from .clock import BKK, now_bkk
-from .fmt import at_th as _fmt_at, day_at_th as _day_at, day_th as _fmt_day, lbl as _lbl, left_th as _left_th, month_th as _mth, round_day_th as _round_day, who as _who
+from .fmt import NORMAL_OR_MEDIAN_TH, at_th as _fmt_at, day_at_th as _day_at, day_th as _fmt_day, lbl as _lbl, left_th as _left_th, month_th as _mth, round_day_th as _round_day, who as _who
 
 CLOSE_TOLERANCE_DAYS = 2          # a "1st of the month" count may be dated up to two days later
 RELEASE_DAY = 25                  # owner §10-2: the analyst releases by the 25th
@@ -519,6 +519,33 @@ def _count_items(con, b: dict, today: date) -> list:
                owner=("branch.stock",), owner_th="สาขา", branch=b, go={"tab": "branchstock", "pane": "count"})]
 
 
+def _month_end_view(con, bid: int):
+    """The latest period of a branch as the month-close task reads it: {begin_date, end_count_id, complete, needs_reason, stock}.
+    Stock mode (PL1 #2): the reasons the branch can give are the สิ้นเดือน tab's lines (issue_reports.reconcile: system stock against
+    the count, the same reasons table), never the recipe period (variance.period) - that tab is not offered in stock mode and with
+    no released recipe usage every item used would read as a gap nobody can answer. Full mode keeps variance.period."""
+    from .close_settings import stock_mode
+    if stock_mode(con):
+        from .issue_reports import reconcile
+        from .stock import periods as _periods
+        ps = _periods(con, bid)
+        if not ps:
+            return None
+        e = ps[-1][1]
+        try:
+            r = reconcile(con, bid, e["count_id"])
+        except ValueError:
+            return None
+        return {"begin_date": r["period"]["begin_date"], "end_count_id": r["period"]["end_count_id"],
+                "complete": bool(r["status"]["receipts_confirmed"]), "needs_reason": int(r["totals"]["needs_reason"]), "stock": True}
+    from .variance import period
+    try:
+        v = period(con, bid, summary_only=True)
+    except ValueError:
+        return None
+    return v
+
+
 def _week_items(con, branches: list, today: date, single: bool, centre: bool, now=None) -> list:
     from .forecast import calendar, next_deliveries
     from .hub import delivery_of
@@ -584,7 +611,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         _sm = _stock_mode(con)                               # PR-S4: with no recipe the word is ปกติ (the branch's own or the all-branch median)
         out.append(_e("issue_anomaly", 229, "week", "ตรวจสอบสาขาที่เบิกเกินปกติติดต่อกัน" if _sm else "ตรวจสอบสาขาที่เบิกเกินสูตรติดต่อกัน",
                       "todo" if odd else "done",
-                      ((f"เบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขามากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}" if _sm
+                      ((f"เบิกเกิน{NORMAL_OR_MEDIAN_TH}มากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}" if _sm
                         else f"เบิกเกินสูตรมากกว่า {OVER_PCT:.0f}% ติดต่อกันอย่างน้อย {STREAK_DAYS} วัน: {shown}") if odd
                        else ("ไม่พบการเบิกเกินปกติติดต่อกันใน 7 วันล่าสุด" if _sm else "ไม่พบการเบิกเกินสูตรติดต่อกันใน 7 วันล่าสุด")),
                       count=len(odd) or None, owner=("supply.ordering", "ops.report"),
@@ -604,7 +631,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         from .issue_reports import UNDER_PCT_STOCK
         out.append(_e("issue_under", 230, "week", "ตรวจสอบสาขาที่เบิกต่ำกว่าปกติติดต่อกัน" if _sm else "ตรวจสอบสาขาที่เบิกน้อยกว่าสูตรติดต่อกัน",
                       "todo" if low else "done",
-                      ((f"เบิกต่ำกว่าที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขาเกิน {UNDER_PCT_STOCK:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}" if _sm
+                      ((f"เบิกต่ำกว่า{NORMAL_OR_MEDIAN_TH}เกิน {UNDER_PCT_STOCK:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}" if _sm
                         else f"เบิกน้อยกว่าสูตรเกิน {UNDER_PCT:.0f}% ติดต่อกันอย่างน้อย {_SD} วัน: {shown_low}") if low
                        else ("ไม่พบการเบิกต่ำกว่าปกติติดต่อกันใน 7 วันล่าสุด" if _sm else "ไม่พบการเบิกน้อยกว่าสูตรติดต่อกันใน 7 วันล่าสุด")),
                       count=len(low) or None, owner=("supply.ordering", "ops.report"),
@@ -695,11 +722,7 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                           go={"tab": "branchstock", "pane": "recv", "anchor": "brnClaimCard"}))
         out += _count_items(con, b, today)
         if single:
-            from .variance import period
-            try:
-                v = period(con, bid, summary_only=True)
-            except ValueError:
-                v = None
+            v = _month_end_view(con, bid)
             if v:
                 open_ = (not v["complete"]) or v["needs_reason"] > 0
                 left = v["needs_reason"] + (0 if v["complete"] else 1)
@@ -709,7 +732,8 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
                               f"เหลือ {left} รายการ" if left else "ครบแล้ว",
                               count=left or None,
                               owner=("branch.stock",), owner_th="สาขา", branch=b,
-                              go={"tab": "branchstock", "pane": "var", "extra": {"end_count_id": v["end_count_id"]}}))
+                              go={"tab": "branchstock", "pane": "var",
+                                  "extra": {"end_count_id": v["end_count_id"], **({"var_tab": "recon"} if v.get("stock") else {})}}))
     if centre and not single:
         n = _scalar(con, "SELECT COUNT(*) FROM bc_stock_count WHERE kind='end' AND COALESCE(status,'submitted')='submitted'"
                          " AND count_id NOT IN (SELECT end_count_id FROM bc_variance_period)") or 0
@@ -886,6 +910,69 @@ def _close_steps(con, month: str, branches: list, scoped: bool) -> dict:
             "branches": [{"branch_id": b["branch_id"], "name": b["name"]} for b in branches]}
 
 
+# PL1: the stock-mode month close is ONE list of five steps, used by the stepper (ปิดงวดเดือน) and by หน้างาน alike. The nine steps of
+# the full mode are grouped the way the stepper always showed them: the centre's report and the month's deliveries are one step, the
+# first and the end count are one step. A merged step keeps its originals in `parts` (the stepper draws a block for each).
+STOCK_CLOSE_GROUPS = (
+    ("central_report", "นำเข้ารายงานไดกิโตะ กรุ๊ปประจำเดือน", ("central_report", "deliveries")),
+    ("code_links", None, ("code_links",)),
+    ("counts", "ใบตรวจนับต้นงวดและปลายงวด", ("begin_count", "end_count")),
+    ("receipts_confirm", None, ("receipts_confirm",)),
+    ("issue_posted", None, ("issue_posted",)),
+)
+
+
+def _worst(statuses: list) -> str:
+    if all(x == "na" for x in statuses):
+        return "na"
+    if all(x in ("done", "na") for x in statuses):
+        return "done"
+    return "todo" if "todo" in statuses else "blocked"
+
+
+def stock_close_steps(steps: list) -> list:
+    """Group the nine full-mode close steps into the five of the stock-mode close (see STOCK_CLOSE_GROUPS), numbered 1..5."""
+    by = {s["key"]: s for s in steps}
+    out = []
+    for key, title, parts_keys in STOCK_CLOSE_GROUPS:
+        parts = [by[k] for k in parts_keys if k in by]
+        if not parts:
+            continue
+        if len(parts) == 1:
+            m = dict(parts[0])
+        else:
+            pend = [p for p in parts if p["status"] not in ("done", "na")]
+            first = (pend or parts)[0]
+            owners = []
+            for p in parts:
+                owners += [o for o in p["owner_modules"] if o not in owners]
+            counts = [p["count"] for p in parts if p.get("count")]
+            m = dict(parts[0], key=key, title=title, status=_worst([p["status"] for p in parts]),
+                     detail=" · ".join(p["detail"] for p in parts if p.get("detail")),
+                     count=sum(counts) or None, owner_modules=owners, go=dict(first["go"]), parts=[dict(p) for p in parts])
+            rows = {}
+            for p in parts:
+                for r in p.get("branches") or []:
+                    rows.setdefault(r["branch_id"], []).append(r)
+            if rows:
+                merged = []
+                for bid, rs in rows.items():
+                    lead = next((r for r in rs if r["status"] not in ("done", "na")), rs[0])
+                    merged.append(dict(lead, status=_worst([r["status"] for r in rs]),
+                                       detail=" · ".join(r["detail"] for r in rs if r.get("detail"))))
+                m["branches"] = merged
+        m["key"] = key
+        out.append(m)
+    for n, s in enumerate(out, 1):
+        s["seq"] = n
+    for s in out:                                            # the reasons are given on the สิ้นเดือน tab, the only variance tab with them in stock mode
+        if s["key"] == "receipts_confirm":
+            for g in [s] + list(s.get("branches") or []):
+                if g.get("go", {}).get("extra", {}).get("end_count_id"):
+                    g["go"]["extra"]["var_tab"] = "recon"
+    return out
+
+
 # ── the answer ───────────────────────────────────────────────────────────────
 def build(con, month: str = None, branch_id: int = None, scoped_branch: str = None, today: date = None,
           now=None, viewer_role: str = None) -> dict:
@@ -936,9 +1023,7 @@ def build(con, month: str = None, branch_id: int = None, scoped_branch: str = No
         for it in items:
             if it.get("key") == "master_seed":                # the seed button lives on the register page, which stays
                 it["go"] = {"tab": "bomcenter", "pane": "ing"}
-        close["steps"] = [s for s in close["steps"] if not is_recipe_item(s)]
-        for n, s in enumerate(close["steps"], 1):          # PR-S4: the steps that remain are numbered 1, 2, 3 ... (the page and หน้างาน print the number)
-            s["seq"] = n
+        close["steps"] = stock_close_steps([s for s in close["steps"] if not is_recipe_item(s)])   # PL1: five steps, numbered 1..5 (the stepper and หน้างาน print the same list)
         close["done"] = sum(1 for s in close["steps"] if s["status"] == "done")
         close["total"] = len(close["steps"])
     annotate_states(items + close["steps"], viewer_role)

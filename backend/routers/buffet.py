@@ -3093,6 +3093,7 @@ def buffet_gp_export(
     autofit(ws4)
 
     buf = _io.BytesIO()
+    __import__('xl_safe').guard_workbook(wb)  # PL1 #9: no cell becomes a formula
     wb.save(buf)
     buf.seek(0)
     filename = f"buffet_gp_{month_from or 'all'}_{month_to or 'all'}.xlsx"
