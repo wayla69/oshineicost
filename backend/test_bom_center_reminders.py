@@ -63,8 +63,22 @@ def test_a_missed_cutoff_is_named_with_the_late_fee(acct_udon):
     assert "ส่งช้า 1 ใบ (มีค่าปรับ)" in rec["text"] and rec["queue"]["late_orders"] == 1
 
 
+_SLIP = ("INSERT INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by, confirmed_at)"
+         " VALUES(1, ?, 'confirmed', 't', ?, ?, 't', ?)")
+
+
+def test_first_day_cutoff_is_not_named_in_the_1315_note(acct_udon):
+    """P3-1 (owner 2026-10-24): on the branch's first day a cutoff that passed earlier that day is exempt - the 13:15 note does not name it."""
+    c = acct_udon
+    after = datetime(2026, 10, 5, 13, 20, tzinfo=BKK)
+    assert RM.cutoff(c, today=MON, now=after) is None                       # no activity yet: today is its first day
+    c.execute(_SLIP, ("2026-10-05",) * 4)                                     # its first slip is today's
+    assert RM.cutoff(c, today=MON, now=after) is None
+
+
 def test_cutoff_note_only_when_someone_missed_it_or_orders_wait(acct_udon):
     c = acct_udon
+    c.execute(_SLIP, ("2026-10-04",) * 4)          # P3-1: the branch started the day before - its second day is held to the cutoff
     after = datetime(2026, 10, 5, 13, 20, tzinfo=BKK)
     s = RM.cutoff(c, today=MON, app_url="https://x.test", now=after)
     assert s["missed"] == [{"branch_id": 1, "name": "อุดรธานี", "delivery": "2026-10-07", "delivery_th": "วันพุธ 7/10"}]

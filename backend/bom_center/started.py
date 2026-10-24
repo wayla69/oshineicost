@@ -38,3 +38,13 @@ def started_by(con, branch_id: int, day) -> bool:
     s = branch_start(con, branch_id)
     d = day.isoformat() if isinstance(day, date) else str(day)[:10]
     return bool(s) and s <= d
+
+
+def late_exempt(con, branch_id: int, cycle_date, today, first_day: str = None) -> bool:
+    """P3-1 (owner 2026-10-24, "Should be exempt"): the ONE rule for a round the branch is not held to. A round whose cutoff day
+    (`cycle_date`) falls on or before the branch's first day (effective_start; the same calendar day at any time counts) is never
+    "เลยเวลาส่ง · มีค่าปรับ": not a late duty in หน้างาน (so not in the nav badges), not named in the 13:15 note, not late on the order
+    plan, not flagged late when the branch submits it (no late-fee question) and not counted in the ordering compliance. The branch
+    orders for the next open round as usual; from its second day on the rule is as before. `first_day` saves the lookup."""
+    d = cycle_date.isoformat() if isinstance(cycle_date, date) else str(cycle_date)[:10]
+    return d <= (first_day or effective_start(con, branch_id, today))

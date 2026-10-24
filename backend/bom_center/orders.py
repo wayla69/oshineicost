@@ -389,7 +389,9 @@ def save(con, branch_id: int, rnd: str, cycle_date: str, suggestion: dict, lines
             raise ValueError("ใบสั่งซื้อยังไม่มีรายการสินค้า")
         if not _is.is_confirmed(slip_today):                # ใบตัดเบิก: the order is made from the stock AFTER today's issue
             raise ValueError("ต้องส่งใบตัดเบิกของวันนี้ก่อนส่งใบสั่งซื้อ")
-        late = _now_for(None, now) > cut
+        from .started import late_exempt                  # P3-1: a cutoff on or before the branch's first day is not late
+        now_s = _now_for(None, now)
+        late = now_s > cut and not late_exempt(con, branch_id, cycle_date, now_s.date())
         if late and not ack_late:
             raise LateSubmit(cut.isoformat(), cutoff_th(cut))
         con.execute("UPDATE bc_order SET status='submitted', submitted_at=?, late=? WHERE order_id=?",
@@ -680,9 +682,14 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
     s["buffer"] = {"pct": pct, "min": BUFFER_MIN, "max": BUFFER_MAX,
                    "reasons": [{"code": k, "label": v} for k, v in BUFFER_REASONS]}
     cut = cutoff_for(dlv)
-    s.update(delivery_th=day_th(dlv), late=now_ > cut, open=now_ <= cut,
-             hours_left=round((cut - now_).total_seconds() / 3600.0, 1),
-             deliveries=next_deliveries(con, branch_id, now_.date(), now=now_))
+    from .started import effective_start, late_exempt    # P3-1: a cutoff on or before the branch's first day is not late
+    first_day = effective_start(con, branch_id, now_.date())
+    dels = next_deliveries(con, branch_id, now_.date(), now=now_)
+    for x in dels:
+        if x["late"] and late_exempt(con, branch_id, x["cycle_date"], now_.date(), first_day):
+            x["late"] = False
+    s.update(delivery_th=day_th(dlv), late=now_ > cut and not late_exempt(con, branch_id, cyc, now_.date(), first_day),
+             open=now_ <= cut, hours_left=round((cut - now_).total_seconds() / 3600.0, 1), deliveries=dels)
     cu = count_units(con, [r["code"] for r in s["rows"]])
     cmap = central_map(con)
     month = s["order_day"][:7]
