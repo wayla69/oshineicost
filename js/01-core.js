@@ -3553,7 +3553,8 @@ const PAGE_CARDS = {
   gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['รายได้', 'GP (', 'GP %'], labels: ['รายได้', 'GP', 'GP %'], pill: 'สถานะ',
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
-  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบเดือนก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] }],
+  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบเดือนก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
+    { sel: '#spikeTable', title: 'เมนู', sub: ['สาขา'], keyCols: [['วันนี้', 'ช่วงนี้'], ['เฉลี่ย', 'ปกติ'], 'สูงกว่า'] }],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],

@@ -1232,15 +1232,180 @@ def sales_daily(
 
 
 
+_SPIKE_PERIODS = ("day", "week", "mtd", "range")
+_SPIKE_MAX_RANGE_DAYS = 92
+_SPIKE_BASE_DAYS = 21          # baseline = the 3 weeks before the period (or the day)
+
+
+def _spike_iso(v: Optional[str], label: str):
+    """Parse a YYYY-MM-DD query value; 400 with a formal Thai message otherwise."""
+    import datetime as _dt
+    from fastapi import HTTPException
+    try:
+        return _dt.date.fromisoformat((v or "").strip()[:10])
+    except ValueError:
+        raise HTTPException(400, f"{label}ไม่ถูกต้อง ใช้รูปแบบ ปปปป-ดด-วว (เช่น 2026-10-01)")
+
+
+def _spike_window(period: str, anchor, date_from: Optional[str], date_to: Optional[str], latest):
+    """(start, end) of a non-day spike period. `anchor` and `latest` are dates; the end
+    never passes `latest` (the last finished day), so the day still trading stays out."""
+    import datetime as _dt
+    from fastapi import HTTPException
+    if period == "week":
+        return anchor - _dt.timedelta(days=anchor.weekday()), anchor
+    if period == "mtd":
+        return anchor.replace(day=1), anchor
+    if not date_from or not date_to:
+        raise HTTPException(400, "ช่วงที่กำหนดเองต้องระบุทั้งวันเริ่มต้น (date_from) และวันสิ้นสุด (date_to)")
+    s, e = _spike_iso(date_from, "วันเริ่มต้น"), _spike_iso(date_to, "วันสิ้นสุด")
+    if s > e:
+        raise HTTPException(400, "วันเริ่มต้นต้องไม่อยู่หลังวันสิ้นสุด")
+    if (e - s).days + 1 > _SPIKE_MAX_RANGE_DAYS:
+        raise HTTPException(400, f"ช่วงวันที่ยาวได้ไม่เกิน {_SPIKE_MAX_RANGE_DAYS} วัน")
+    if e > latest:
+        raise HTTPException(400, f"วันสิ้นสุดต้องไม่เกินวันล่าสุดที่มีข้อมูลครบ ({latest.isoformat()})")
+    return s, e
+
+
+def _jd7(d) -> int:
+    """Weekday key of a date, equal to SQLite CAST(julianday(day) AS INTEGER) % 7."""
+    return (d.toordinal() + 1721424) % 7
+
+
+def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold):
+    """Week / MTD / custom-range spike, weekday-fair (memory rule 'MTD weekday-fair
+    baseline'). Per branch x SKU: period_qty = sum of qty over the period; expected = sum,
+    over each period day the branch traded, of the SKU's average qty on that WEEKDAY across
+    the 3 weeks before the period (days the branch traded, zeros included; a weekday with no
+    baseline trading day uses the plain baseline daily average). x = period_qty / expected.
+    Same rules as the day mode: spike when x >= threshold and period_qty >= 5; new menu when
+    the SKU sold on < 5 baseline days and period_qty >= 20. Qty only - NO cost (iron rule)."""
+    import datetime as _dt
+    from rules import TH_TODAY_SQL
+    # the last finished day; MAX through the (branch, day) index, not a table scan
+    try:
+        latest_s = con.execute(
+            f"SELECT MAX(day) FROM sales_sku_daily WHERE branch_id IN (SELECT branch_id FROM branches) "
+            f"AND day < {TH_TODAY_SQL}").fetchone()[0]
+    except Exception:
+        return {"date": None, "period": period, "spikes": [], "note": "no daily sku data"}
+    if not latest_s:
+        return {"date": None, "period": period, "spikes": []}
+    latest = _dt.date.fromisoformat(latest_s[:10])
+    anchor = _spike_iso(focus_arg, "วันที่") if focus_arg else latest
+    if anchor > latest:
+        anchor = latest
+    ps, pe = _spike_window(period, anchor, date_from, date_to, latest)
+    bs, be = ps - _dt.timedelta(days=_SPIKE_BASE_DAYS), ps - _dt.timedelta(days=1)
+    q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat(), "bs": bs.isoformat(), "be": be.isoformat()}
+    # Speed (live-size DB, MTD all branches): a whole-chain window reads most of the
+    # table, so a plain scan beats ~200k (branch, day) index lookups; one branch keeps
+    # the index. Rows come back as tuples. Weekday key = CAST(julianday(day) AS INT) % 7
+    # (cheaper than strftime); Python uses the same key (_jd7). Service-charge lines are
+    # dropped as v_sales_sku_daily does (core._REV_VIEWS); the baseline only feeds SKUs
+    # found in the period, so it needs no second filter.
+    one_branch = "b.name=" in bfilt
+    scan = "" if one_branch else "NOT INDEXED"
+    bjoin = "JOIN branches b ON b.branch_id=d.branch_id" if bfilt else ""
+    cur = con.cursor()
+    cur.row_factory = None
+    # 1 - the period, one pass: qty per branch x SKU
+    prow = cur.execute(f"""
+        SELECT a.bid, b.name, s.description, s.sku_code, a.sid, a.q FROM (
+          SELECT d.branch_id bid, d.sku_id sid, SUM(d.qty) q
+          FROM sales_sku_daily d {scan} {bjoin}
+          WHERE d.day BETWEEN :ps AND :pe {bfilt} GROUP BY d.branch_id, d.sku_id) a
+        JOIN branches b ON b.branch_id=a.bid JOIN skus s ON s.sku_id=a.sid
+        WHERE a.q > 0 AND UPPER(COALESCE(s.sku_code,'')) NOT IN ('SERVICECHARGE','SERVICE')""", q).fetchall()
+    # 2 - the baseline, one pass: qty and days sold per branch x SKU x weekday
+    #     (one row per branch x day x SKU, so SUM(qty > 0) = days sold)
+    base: dict = {}
+    for bid, sid, w, qq, nn in cur.execute(f"""
+        SELECT d.branch_id, d.sku_id, CAST(julianday(d.day) AS INTEGER) % 7 w, SUM(d.qty), SUM(d.qty > 0)
+        FROM sales_sku_daily d {scan} {bjoin}
+        WHERE d.day BETWEEN :bs AND :be {bfilt}
+        GROUP BY d.branch_id, d.sku_id, w""", q):
+        e = base.get((bid, sid))
+        if e is None:
+            e = base[(bid, sid)] = [0.0] * 8          # qty per weekday key 0..6, [7] = days sold
+        e[w] += qq or 0
+        e[7] += nn or 0
+    # 3 - the days each branch traded, both windows (covering index)
+    tb: dict = {}
+    tp: dict = {}
+    for bid, day in cur.execute(f"""
+        SELECT d.branch_id, d.day FROM sales_sku_daily d {bjoin}
+        WHERE d.day BETWEEN :bs AND :pe {bfilt} GROUP BY d.branch_id, d.day""", q):
+        dd = _dt.date.fromisoformat(day[:10])
+        (tb if dd < ps else tp).setdefault(bid, [0] * 7)[_jd7(dd)] += 1
+    days = (pe - ps).days + 1
+    # per branch: weight of each weekday key = period trading days of that weekday /
+    # baseline trading days of it; weekdays absent from the baseline fall back to the
+    # plain baseline daily average (their period days / all baseline trading days).
+    wts: dict = {}
+    for bid in set(tb) | set(tp):
+        tbw = tb.get(bid, [0] * 7)
+        tpw = tp.get(bid, [0] * 7)
+        tot = sum(tbw)
+        orphan = sum(tpw[w] for w in range(7) if not tbw[w])
+        fb = orphan / tot if tot else 0.0
+        wts[bid] = [(tpw[w] / tbw[w] if tbw[w] else 0.0) + fb for w in range(7)]
+    zero7 = [0.0] * 7
+    spikes = []
+    for bid, branch_name, desc, code, sid, pq in prow:
+        pq = pq or 0
+        e = base.get((bid, sid))
+        n = e[7] if e else 0
+        wt = wts.get(bid, zero7)
+        expected = sum(e[w] * wt[w] for w in range(7)) if e else 0.0
+        name = (desc or code or "").replace("(B) ", "").replace("(A) ", "")
+        row = {"branch": branch_name, "menu": name, "today": round(pq), "per_day": round(pq / days, 1)}
+        if expected > 0 and n >= 5:
+            x = pq / expected
+            if x >= threshold and pq >= 5:
+                spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
+                               "x": round(x, 1), "pct": round((x - 1) * 100),
+                               "excess": round(pq - expected), "is_new": False})
+        elif n < 5 and pq >= 20:
+            spikes.append({**row, "avg": 0, "expected": 0, "x": None, "pct": None,
+                           "excess": round(pq), "is_new": True})
+    spikes.sort(key=lambda s: -s["excess"])
+    return {"date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
+            "days": days, "baseline_from": bs.isoformat(), "baseline_to": be.isoformat(),
+            "latest_day": latest.isoformat(),
+            "window_days": _SPIKE_BASE_DAYS, "threshold": threshold,
+            "count": len(spikes), "spikes": spikes[:limit]}
+
+
 @router.get("/api/sales/menu-spike")
 def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
                group: Optional[str] = Query(None), limit: int = Query(300, ge=1, le=1000),
-               threshold: float = Query(1.5, ge=1.0)):
-    """Menus whose QTY on a given day spiked vs their trailing 21-day average, per
-    branch (answers '#5: which menu was abnormally high that day'). Shows ALL items
-    above `threshold`× (default 1.5×). Qty-only from sales_sku_daily — NO cost (iron rule)."""
+               threshold: float = Query(1.5, ge=1.0), period: str = Query("day"),
+               date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+    """Menus whose QTY spiked, per branch (answers '#5: which menu was abnormally high').
+    Shows ALL items above `threshold`x (default 1.5x). Qty-only from sales_sku_daily -
+    NO cost (iron rule).
+
+    period=day (default, unchanged): the `date` (or latest day) vs the trailing 21-day
+    average of the days the SKU sold.
+    period=week | mtd | range: Monday of the anchor's week -> anchor / 1st of the anchor's
+    month -> anchor / date_from -> date_to (<= 92 days, <= the last finished day), compared
+    weekday-fair with the 3 weeks before the period - see _menu_spike_period. Anchor =
+    `date` or the last finished day; the day still trading is never included."""
     import datetime as _dt
+    from fastapi import HTTPException
+    if period not in _SPIKE_PERIODS:
+        raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
     with get_db() as con:
+        if period != "day":
+            pfilt = ""
+            pparams: dict = {}
+            if branch:
+                pfilt += " AND b.name=:branch"; pparams["branch"] = branch
+            if group:
+                pfilt += " AND COALESCE(b.branch_type,'master')=:grp"; pparams["grp"] = group
+            return _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold)
         try:
             maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
         except Exception:
