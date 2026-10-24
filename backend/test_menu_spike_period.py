@@ -6,7 +6,7 @@
 - the weekday-fair "ปกติ": a weekend-heavy menu is not flagged in a period that is mostly weekend;
 - custom range validation answers 400 in formal Thai;
 - the 5-plate floor; the new-menu list (28-day boundary, per_day, trend, day mode) - section 7;
-- the pure JS helper periodRange(kind, anchor) of the card (to be lifted into js/01-core.js).
+- the pure JS helper periodRange(kind, anchor) of the card (lifted into js/01-core.js by PR-PP1).
 """
 import datetime as dt
 import json
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from routers import sales
-from test_bom_center_batch2 import _fn, needs_node, NODE
+from test_bom_center_batch2 import needs_node, NODE
 
 
 # ── a frozen copy of the day mode before PR-SP (the reference the day mode must still match) ──
@@ -145,8 +145,9 @@ def _first_by_name(con):
 
 
 def _assert_day_matches_without_new(got, want, db):
-    """PR-SN: the day mode = the frozen reference minus its new menus (the old n < 5 rule and the 28-day rule);
-    every other key unchanged; the new menus sit in new_menus."""
+    """PR-SN: the day mode = the frozen reference, except that (1) its rows of menus first sold < 28 days ago left for
+    new_menus and (2) its old is_new rows (n < 5 baseline days, >= 20 plates) of menus older than that stay in spikes
+    as thin_base rows ("ปกติ" over the branch's trading days, not the days sold); every other row and key unchanged."""
     con = sqlite3.connect(db) if isinstance(db, str) else db
     first = _first_by_name(con)
     focus = dt.date.fromisoformat(want["date"]) if want.get("date") else None
@@ -155,8 +156,13 @@ def _assert_day_matches_without_new(got, want, db):
         f = first.get((s["branch"], s["menu"]))
         return f is not None and (focus - f).days < 28
     keep = [s for s in want["spikes"] if not s["is_new"] and not is_new(s)]
-    exp = {**want, "spikes": keep, "count": len(keep)} if want.get("date") else want
-    assert {k: v for k, v in got.items() if k not in ("new_menus", "new_count", "new_days")} == exp
+    thin_want = {(s["branch"], s["menu"]) for s in want["spikes"] if s["is_new"] and not is_new(s)}
+    thin_got = [s for s in got["spikes"] if s.get("thin_base")]
+    assert {(s["branch"], s["menu"]) for s in thin_got} == thin_want
+    assert all(s["is_new"] is False and s["today"] >= 20 for s in thin_got)
+    rest = [s for s in got["spikes"] if not s.get("thin_base")]
+    exp = {**want, "spikes": keep, "count": len(keep) + len(thin_got)} if want.get("date") else want
+    assert {**{k: v for k, v in got.items() if k not in ("new_menus", "new_count", "new_days")}, "spikes": rest} == exp
     assert got["new_count"] == len(got["new_menus"]) and all(m["age_days"] <= 28 for m in got["new_menus"])
     assert all(not s["is_new"] for s in got["spikes"])
 
@@ -305,12 +311,13 @@ def test_a_92_day_range_is_accepted(client):
     assert r.status_code == 200 and r.json()["days"] == 92
 
 
-# ── 6. the card's pure period helper (js/07-home.js periodRange) ─────────────────────────────────
+# ── 6. the card's pure period helper: periodRange, lifted into js/01-core.js by PR-PP1 (its <period-core> block) ──
 @needs_node
 def test_period_range_helper():
-    src = (Path(__file__).resolve().parent.parent / "js" / "07-home.js").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent / "js" / "01-core.js").read_text(encoding="utf-8")
+    block = src[src.index("// <period-core>"):src.index("// </period-core>")]
     js = ("const _M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];\n"
-          "const fmtDateTh = s => `${+s.slice(8)} ${_M[+s.slice(5, 7) - 1]}`;\n" + _fn(src, "periodRange"))
+          "const fmtDateTh = s => `${+s.slice(8)} ${_M[+s.slice(5, 7) - 1]}`;\n" + block)
     cases = [["day", "2026-10-23"], ["week", "2026-10-23"], ["week", "2026-10-19"], ["mtd", "2026-10-23"],
              ["range", {"from": "2026-09-28", "to": "2026-10-03"}], ["range", {"from": "2026-10-05", "to": "2026-10-01"}],
              ["week", "bad"], ["year", "2026-10-23"]]
@@ -320,12 +327,15 @@ def test_period_range_helper():
         out = json.loads(subprocess.run([NODE, f.name], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
     finally:
         Path(f.name).unlink()
-    assert out[0] == {"from": "2026-10-23", "to": "2026-10-23", "days": 1, "label": "23 ต.ค."}
-    assert out[1] == {"from": "2026-10-19", "to": "2026-10-23", "days": 5, "label": "19–23 ต.ค."}   # Monday 19 Oct
-    assert out[2]["from"] == "2026-10-19" and out[2]["days"] == 1
-    assert out[3] == {"from": "2026-10-01", "to": "2026-10-23", "days": 23, "label": "1–23 ต.ค."}
-    assert out[4] == {"from": "2026-09-28", "to": "2026-10-03", "days": 6, "label": "28 ก.ย.–3 ต.ค."}
-    assert out[5] is None and out[6] is None and out[7] is None
+    # the PR-SP fields are kept; PR-PP1 adds cur / prev / ly / complete / Thai labels beside them (backend/test_periods.py)
+    sp = [None if o is None else {k: o[k] for k in ("from", "to", "days", "label")} for o in out]
+    assert sp[0] == {"from": "2026-10-23", "to": "2026-10-23", "days": 1, "label": "23 ต.ค."}
+    assert sp[1] == {"from": "2026-10-19", "to": "2026-10-23", "days": 5, "label": "19–23 ต.ค."}   # Monday 19 Oct
+    assert sp[2]["from"] == "2026-10-19" and sp[2]["days"] == 1
+    assert sp[3] == {"from": "2026-10-01", "to": "2026-10-23", "days": 23, "label": "1–23 ต.ค."}
+    assert sp[4] == {"from": "2026-09-28", "to": "2026-10-03", "days": 6, "label": "28 ก.ย.–3 ต.ค."}
+    assert sp[5] is None and sp[6] is None
+    assert sp[7] == {"from": "2026-01-01", "to": "2026-10-23", "days": 296, "label": "1 ม.ค.–23 ต.ค."}   # PR-PP1: year is a kind now
 
 
 # ── 7. PR-SN · new menus (owner 2026-10-24): new while period end - first day sold < 28 days ──────────────
@@ -355,25 +365,38 @@ def test_the_28_day_boundary(monkeypatch):
     assert r["new_count"] == 0 and _row(r, "เมนูใหม่")["is_new"] is False
 
 
-def test_an_old_menu_with_a_thin_baseline_follows_the_spike_rule(monkeypatch):
-    # เมนูเล็ก first sold 1 Jul (old), then only on 3 baseline days before a 30-plate day: the old code called it
-    # "เมนูใหม่"; now it is existing and the spike rule (>= 5 baseline days) leaves it out of both lists
+def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch):
+    # เมนูเล็ก first sold 1 Jul (old), then only on 3 baseline days (2 plates each) before a 30-plate day: the old code
+    # called it "เมนูใหม่"; now it is an existing menu with a thin baseline: listed from 20 plates, marked thin_base,
+    # "ปกติ" counting the branch's trading days without a sale as zero
     def plan(d):
         p = {1: 10}
         if d == dt.date(2026, 7, 1) or d in (dt.date(2026, 8, 5), dt.date(2026, 8, 10), dt.date(2026, 8, 15)):
             p[5] = 2
         if d == dt.date(2026, 8, 20):
             p[5] = 30
+        if d in (dt.date(2026, 7, 1), dt.date(2026, 8, 20)):
+            p[6] = 25                                            # เมนูใหม่น้อย: old, no baseline sale at all
+            p[2] = 1 if d.month == 7 else 19                     # ซาชิมิ: old, thin, 19 plates < 20 -> not listed
         return p
     con = _db(plan)
     old = _day_reference(con, date="2026-08-20")
     assert next(s for s in old["spikes"] if s["menu"] == "เมนูเล็ก")["is_new"] is True    # the old rule
     r = _call(con, monkeypatch, date="2026-08-20")
-    assert _row(r, "เมนูเล็ก") is None and _nm(r, "เมนูเล็ก") is None
+    # day mode: 6 plates over the 21 trading days = 0.29 a day
+    assert _row(r, "เมนูเล็ก") == {"branch": "สาขาทดสอบ", "menu": "เมนูเล็ก", "today": 30, "avg": 0.3, "x": 105.0,
+                                   "pct": 10400, "excess": 30, "is_new": False, "thin_base": True}
+    assert _row(r, "เมนูใหม่น้อย") == {"branch": "สาขาทดสอบ", "menu": "เมนูใหม่น้อย", "today": 25, "avg": 0.0, "x": None,
+                                        "pct": None, "excess": 25, "is_new": False, "thin_base": True}
+    assert _row(r, "ซาชิมิ") is None and r["new_menus"] == []
+    # week of 17 Aug (to Thu 20): weekday-fair "ปกติ" = Mon 2/3 + Wed 2/3 = 1.33 plates
     r = _call(con, monkeypatch, period="week", date="2026-08-20")
-    assert _row(r, "เมนูเล็ก") is None and _nm(r, "เมนูเล็ก") is None
+    s = _row(r, "เมนูเล็ก")
+    assert (s["today"], s["avg"], s["expected"], s["x"], s["excess"], s["thin_base"]) == (30, 1.3, 1, 22.5, 29, True)
+    assert _row(r, "เมนูใหม่น้อย")["x"] is None and _row(r, "เมนูใหม่น้อย")["excess"] == 25
+    assert _row(r, "ซาชิมิ") is None and _nm(r, "เมนูเล็ก") is None
 
-    # with >= 5 baseline days the same old menu is a spike as before
+    # with >= 5 baseline days the same old menu is a plain spike, no thin_base key
     def plan2(d):
         p = plan(d)
         if dt.date(2026, 8, 1) <= d < dt.date(2026, 8, 20):
@@ -381,7 +404,7 @@ def test_an_old_menu_with_a_thin_baseline_follows_the_spike_rule(monkeypatch):
         return p
     r = _call(_db(plan2), monkeypatch, date="2026-08-20")
     s = _row(r, "เมนูเล็ก")
-    assert s is not None and s["is_new"] is False and s["x"] == 15.0 and _nm(r, "เมนูเล็ก") is None
+    assert s is not None and s["is_new"] is False and s["x"] == 15.0 and "thin_base" not in s and _nm(r, "เมนูเล็ก") is None
 
 
 def _launch_plan(d):

@@ -435,20 +435,19 @@ def top_skus(
 def _mtd_window(con):
     """Equal-period (MTD) comparison window when the latest month is incomplete.
     Returns None when the latest month is complete (use normal monthly MoM).
-    STANDING RULE: never compare a partial month against a full month."""
-    import calendar as _cal
+    STANDING RULE: never compare a partial month against a full month.
+    The windows come from periods.resolve('month', ...) - the one period pattern."""
+    from periods import resolve
     row = con.execute("SELECT MAX(day) m FROM sales_sku_daily").fetchone()
     dmax = row["m"] if row else None
     if not dmax:
         return None
-    y, m, d = (int(x) for x in dmax.split("-"))
-    if d >= _cal.monthrange(y, m)[1]:
+    r = resolve("month", dmax)
+    if r["complete"]:
         return None
-    pidx = y * 12 + (m - 1) - 1; py, pm = pidx // 12, pidx % 12 + 1
-    ped = min(d, _cal.monthrange(py, pm)[1])
-    return {"cutoff_day": d, "latest_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
-            "cur_s": f"{y:04d}-{m:02d}-01", "cur_e": dmax,
-            "prev_s": f"{py:04d}-{pm:02d}-01", "prev_e": f"{py:04d}-{pm:02d}-{ped:02d}"}
+    (cs, ce), (ps, pe) = r["cur"], r["prev"]
+    return {"cutoff_day": r["days"], "latest_month": cs[:7], "prev_month": ps[:7],
+            "cur_s": cs, "cur_e": ce, "prev_s": ps, "prev_e": pe}
 
 
 @router.get("/api/sales/top_ordered")
@@ -1277,7 +1276,9 @@ def _jd7(d) -> int:
 
 # ── new menus (owner 2026-10-24): a menu is NEW at a branch while anchor - first_sold < 28 days ──
 _SPIKE_NEW_DAYS = 28
-_SPIKE_TREND_MIN_AGE = 14       # the trend compares the first 7 days with the latest 7: needs two full weeks
+_SPIKE_TREND_MIN_AGE = 14
+_SPIKE_THIN_DAYS = 5            # an existing menu sold on fewer baseline days than this has a "thin" baseline
+_SPIKE_THIN_MIN_QTY = 20        # ... and is listed from this many plates (the old new-menu floor), marked thin_base       # the trend compares the first 7 days with the latest 7: needs two full weeks
 _TH_MON_SPIKE = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
 _FIRST_SOLD: dict = {"key": None, "map": {}, "full": False, "bids": set()}
 _FIRST_SOLD_LOCK = _threading.Lock()
@@ -1398,7 +1399,8 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     the 3 weeks before the period (days the branch traded, zeros included; a weekday with no
     baseline trading day uses the plain baseline daily average). x = period_qty / expected.
     Same rules as the day mode: spike when x >= threshold, period_qty >= 5 and the SKU sold on
-    >= 5 baseline days. A NEW menu (anchor = period end, anchor - first_sold < 28 days) is never a
+    >= 5 baseline days; an existing menu sold on < 5 baseline days is listed from 20 plates with
+    thin_base: true (x vs the same zero-counting baseline, None when it is 0). A NEW menu (anchor = period end, anchor - first_sold < 28 days) is never a
     spike: it goes to new_menus (_spike_new_menus). Qty only - NO cost (iron rule)."""
     import datetime as _dt
     from rules import TH_TODAY_SQL
@@ -1500,6 +1502,13 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
                 spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
                                "x": round(x, 1), "pct": round((x - 1) * 100),
                                "excess": round(pq - expected), "is_new": False})
+        elif n < _SPIKE_THIN_DAYS and pq >= _SPIKE_THIN_MIN_QTY:
+            # an existing menu that sold on < 5 baseline days: listed from 20 plates (the old floor), "ปกติ" = the
+            # weekday-fair baseline that counts the branch's trading days without a sale as zero (0 -> no x)
+            x = pq / expected if expected > 0 else None
+            spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
+                           "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
+                           "excess": round(pq - expected), "is_new": False, "thin_base": True})
     spikes.sort(key=lambda s: -s["excess"])
     new_menus = _spike_new_menus(con, newc, pe, ps, tdays)
     return {"date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
@@ -1527,7 +1536,9 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
     `date` or the last finished day; the day still trading is never included.
 
     Two parts (owner 2026-10-24): `spikes` = EXISTING menus only (the spike rule above; `is_new`
-    stays, always false, for old clients); `new_menus` = every NEW menu sold in the period (no
+    stays, always false, for old clients; an existing menu sold on < 5 baseline days is listed from
+    20 plates with `thin_base: true`, its "ปกติ" counting the branch's trading days without a sale
+    as zero - day mode: baseline total / the branch's trading days in the 21 days); `new_menus` = every NEW menu sold in the period (no
     threshold), new = period end - first day the SKU sold at the branch < 28 days - see
     _spike_new_menus for its fields (first_sold, age_days, qty, per_day, trend)."""
     import datetime as _dt
@@ -1575,6 +1586,7 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
         fday = _dt.date(fy, fm, fd)
         fsm = _first_sold_map(con, {r["bid"] for r in rows}) if rows else {}
         newc = []
+        thin = []
         for r in rows:
             today = r["today"] or 0; avg = r["avgq"] or 0; n = r["n"] or 0
             name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
@@ -1592,6 +1604,22 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
                     spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
                                    "avg": round(avg, 1), "x": round(x, 1), "pct": round((x - 1) * 100),
                                    "excess": round(today - avg), "is_new": False})
+            elif n < _SPIKE_THIN_DAYS and today >= _SPIKE_THIN_MIN_QTY:
+                thin.append((r, name, today, avg * n))         # avg * n = the baseline total
+        if thin:
+            # existing menus that sold on < 5 baseline days: "ปกติ" = baseline total / the branch's trading days in the
+            # 21 days (days without a sale count as zero), x vs that; listed from 20 plates (the old floor)
+            tbids = sorted({t[0]["bid"] for t in thin})
+            ntd = {b: c for b, c in con.execute(
+                f"SELECT branch_id, COUNT(DISTINCT day) FROM sales_sku_daily WHERE branch_id IN ({','.join('?' * len(tbids))}) "
+                "AND day>=? AND day<? GROUP BY branch_id", (*tbids, wstart, focus)).fetchall()}
+            for r, name, today, tot in thin:
+                nd = ntd.get(r["bid"]) or 0
+                base = tot / nd if nd else 0.0
+                x = today / base if base > 0 else None
+                spikes.append({"branch": r["branch"], "menu": name, "today": round(today), "avg": round(base, 1),
+                               "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
+                               "excess": round(today - base), "is_new": False, "thin_base": True})
         spikes.sort(key=lambda s: -s["excess"])
         new_menus = _spike_new_menus(con, newc, fday, fday)
     return {"date": focus, "window_days": 21, "threshold": threshold,

@@ -710,32 +710,7 @@ async function loadDailySales(force) {
   renderMenuSpike(d.focus);
 }
 
-// periodRange(kind, anchor) -> { from, to, days, label } · pure (no DOM, no globals but fmtDateTh), kept here to be lifted
-// into js/01-core.js for the one period pattern of every sales figure (owner 2026-10-24).
-//   kind 'day'   anchor 'YYYY-MM-DD'            -> that day
-//   kind 'week'  anchor 'YYYY-MM-DD'            -> Monday of its week -> anchor (week to date)
-//   kind 'mtd'   anchor 'YYYY-MM-DD'            -> the 1st of its month -> anchor (month to date)
-//   kind 'range' anchor { from, to } (ISO days) -> as given
-// label: "23 ต.ค." · "20–23 ต.ค." · "28 ก.ย.–3 ต.ค."; null when the anchor is not a date.
-function periodRange(kind, anchor) {
-  const iso = d => d.toISOString().slice(0, 10);
-  const day = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? new Date(s + 'T00:00:00Z') : null);
-  let a, b;
-  if (kind === 'range') { a = day(anchor && anchor.from); b = day(anchor && anchor.to); }
-  else {
-    b = day(anchor);
-    if (!b) return null;
-    a = new Date(b.getTime());
-    if (kind === 'week') a.setUTCDate(a.getUTCDate() - ((a.getUTCDay() + 6) % 7));
-    else if (kind === 'mtd') a.setUTCDate(1);
-    else if (kind !== 'day') return null;
-  }
-  if (!a || !b || a > b) return null;
-  const from = iso(a), to = iso(b), days = Math.round((b.getTime() - a.getTime()) / 864e5) + 1;
-  const label = from === to ? fmtDateTh(to)
-    : from.slice(0, 7) === to.slice(0, 7) ? `${+from.slice(8)}–${fmtDateTh(to)}` : `${fmtDateTh(from)}–${fmtDateTh(to)}`;
-  return { from, to, days, label };
-}
+// periodRange (the one period helper, PR-PP1) lives in js/01-core.js.
 
 // #5 menu-spike: which menus were abnormally high (qty), per branch. Period chips (PR-SP, owner 2026-10-24), styled as the
 // page's gran-btn track so a shared period component can replace them: วัน = the focus day vs its 21-day average ·
@@ -787,11 +762,11 @@ function spikeExport() {
   const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
   // PR-SN: one file, two parts - the section column tells เมนูเดิม (spike) from เมนูใหม่ (first sold < 4 weeks ago)
   const head = ['ส่วน', 'เมนู', 'สาขา', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', 'ต่อวัน',
-    per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน', '+จาน', 'สูงกว่า (เท่า)', 'เริ่มขาย', 'ขายมาแล้ว (วัน)', 'แนวโน้ม (%)'];
+    per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน', '+จาน', 'สูงกว่า (เท่า)', 'เริ่มขาย', 'ขายมาแล้ว (วัน)', 'แนวโน้ม (%)', 'หมายเหตุ'];
   const rows = sp.map(s => ['เมนูเดิม · พุ่งผิดปกติ', s.menu, s.branch, s.today, per ? s.per_day : s.today,
-    per ? s.expected : s.avg, s.excess, s.x != null ? s.x : '', '', '', ''])
+    per ? s.expected : s.avg, s.excess, s.x != null ? s.x : '', '', '', '', s.thin_base ? 'ขายน้อยช่วงก่อน' : ''])
     .concat(nm.map(m => ['เมนูใหม่', m.menu, m.branch, m.qty, m.per_day, '', '', '', m.first_sold, m.age_days,
-      m.trend && m.trend.pct != null ? m.trend.pct : '']));
+      m.trend && m.trend.pct != null ? m.trend.pct : '', '']));
   const span = per ? `${d.date_from}_${d.date_to}` : (d.date || '');
   downloadCSV([head].concat(rows).map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
 }
@@ -862,7 +837,9 @@ async function renderMenuSpike(focusDate) {
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}${per && s.per_day != null ? `<div class="sp-perday">${num1(s.per_day)} ต่อวัน</div>` : ''}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${fmtN(per ? s.expected : s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--amber-ink)">+${fmtN(s.excess)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:var(--bad-ink);font-weight:700">${s.x != null ? '×' + s.x : ''}</span>${s.x != null && s.pct != null ? `<div class="sp-perday">+${fmtN(s.pct)}%</div>` : ''}</td>
+      <td class="py-1.5 text-right tabular-nums">${s.x != null
+        ? `<span style="color:${s.x >= 1.5 ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${s.x}</span>${s.pct != null ? `<div class="sp-perday">${s.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(s.pct))}%</div>` : ''}`
+        : '<span style="color:var(--text-muted)">—</span>'}${s.thin_base ? '<div class="sp-thin">ขายน้อยช่วงก่อน</div>' : ''}</td>
     </tr>`).join('') + `</tbody></table></div>`;
   const trendCell = t => {
     if (!t || t.pct == null) return '<span style="color:var(--text-muted)">—</span>';
@@ -2255,6 +2232,14 @@ function _syncExtraMonthRange(fromId, toId, tabKey) {
     if (gt && [...st.options].some(o => o.value === gt)) st.value = gt;
   }
   _extraLastGlobal[tabKey] = key;
+}
+// PR-PP1 · a page's periodBar (registered under `barKey`) follows the top bar's วัน / สัปดาห์ / เดือน / ปี (getPeriodKind).
+// Only a real global change moves it, and only to a kind the page offers (a month-only cost page keeps เดือน on สัปดาห์).
+function _syncExtraPeriod(barKey, tabKey) {
+  const bar = _pbars[barKey]; if (!bar) return;
+  const gk = getPeriodKind(), k = 'period|' + tabKey;
+  if (gk !== _extraLastGlobal[k] && bar.kinds.includes(gk) && bar.get().kind !== gk) bar.set({ kind: gk }, true);
+  _extraLastGlobal[k] = gk;
 }
 
 // เงินสดขาด/เกิน

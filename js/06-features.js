@@ -869,76 +869,23 @@ async function loadHealthScores() {
 // ════════════════════════════════════════════════════════════════
 // FEATURE 7: PRESETS / SAVED FILTERS
 // ════════════════════════════════════════════════════════════════
+// PR-PP1: the เลือกเร็ว row and its own กำหนดเอง are gone - the ONE period bar (js/01-core.js) holds the period; these two
+// stay for a caller that still names a quick range.
 function loadPresetRange(range) {
-  if (!allMonths.length) return;
-  const today = new Date();
-  const ym = d => d.toISOString().slice(0,7);
-  const setMR = (from, to) => {
-    setGranularity('monthly');
-    document.getElementById('selMonthFrom').value = from || '';
-    document.getElementById('selMonthTo').value   = to   || allMonths[allMonths.length-1];
-    onFilterChange();
-  };
-  const last = allMonths[allMonths.length-1];
-  const monthsAgo = n => allMonths[Math.max(0, allMonths.length-1-n)];
-  switch (range) {
-    case 'this_month': setMR(last, last); break;
-    case 'last_month': { const m = monthsAgo(1); setMR(m, m); break; }
-    case 'last_3m': setMR(monthsAgo(2), last); break;
-    case 'last_6m': setMR(monthsAgo(5), last); break;
-    case 'ytd':     { const y = last.slice(0,4); setMR(`${y}-01`, last); break; }
-    case 'all':     setMR('', ''); break;
+  const ms = Array.isArray(window.allMonths) ? window.allMonths : [];
+  const last = ms[ms.length - 1];
+  if (!last) return;
+  if (range === 'this_month') gPeriodSet({ kind: 'month' });
+  else if (range === 'last_month') { const y = +last.slice(0, 4), m = +last.slice(5, 7); gPeriodSet({ kind: 'month', pick: new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10) }); }
+  else if (range === 'ytd') gPeriodSet({ kind: 'year' });
+  else if (range === 'all') gPeriodSet({ kind: 'range', from: ms[0] + '-01', to: gPeriodAnchor() });
+  else if (range === 'last_3m' || range === 'last_6m') {
+    const n = range === 'last_3m' ? 3 : 6, y = +last.slice(0, 4), m = +last.slice(5, 7);
+    gPeriodSet({ kind: 'range', from: new Date(Date.UTC(y, m - n, 1)).toISOString().slice(0, 10), to: gPeriodAnchor() });
   }
 }
-
-// Custom DAY-range picker (full calendar) in the Quick-load bar.
-// Picks exact start/end dates. Day-precise pages (transaction-grain) honour the
-// exact dates; month-aggregate pages fall back to the enclosing month range.
-function _lastDayOfMonth(ym) {            // "YYYY-MM" → "YYYY-MM-DD" (last day)
-  const [y, m] = ym.split('-').map(Number);
-  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-}
-function toggleCustomRange() {
-  const box = document.getElementById('customRangeBox');
-  const open = box.classList.contains('hidden');
-  if (open) {
-    const f = document.getElementById('customFrom'), t = document.getElementById('customTo');
-    // Data window bounds for the calendar
-    const dataMin = (allMonths[0] || '2025-01') + '-01';
-    const today = new Date().toISOString().slice(0, 10);
-    f.min = dataMin; f.max = today; t.min = dataMin; t.max = today;
-    // Prefill from the active range: day pickers if in day mode, else the month range
-    const dF = document.getElementById('selDateFrom')?.value;
-    const dT = document.getElementById('selDateTo')?.value;
-    if (dF || dT) { f.value = dF || ''; t.value = dT || ''; }
-    else {
-      const mf = getMonthFrom(), mt = getMonthTo();
-      f.value = mf ? mf + '-01' : dataMin;
-      t.value = mt ? _lastDayOfMonth(mt) : today;
-    }
-    box.classList.remove('hidden'); box.classList.add('inline-flex');
-    document.getElementById('customRangeChip').classList.add('active');
-  } else {
-    box.classList.add('hidden'); box.classList.remove('inline-flex');
-    document.getElementById('customRangeChip').classList.remove('active');
-  }
-}
-
-function applyCustomRange() {
-  const from = document.getElementById('customFrom').value;   // YYYY-MM-DD
-  const to   = document.getElementById('customTo').value;
-  const msg  = document.getElementById('customRangeMsg');
-  if (!from || !to) { msg.textContent = 'เลือกวันเริ่มและวันสิ้นสุด'; return; }
-  if (from > to)    { msg.textContent = 'วันเริ่มต้องไม่เกินวันสิ้นสุด'; return; }
-  msg.textContent = '';
-  // Day-precise custom range → daily granularity + global date pickers.
-  setGranularity('daily');
-  document.getElementById('selDateFrom').value = from;
-  document.getElementById('selDateTo').value   = to;
-  // Derive enclosing month range so month-aggregate pages still filter correctly.
-  document.getElementById('selMonthFrom').value = from.slice(0, 7);
-  document.getElementById('selMonthTo').value   = to.slice(0, 7);
-  onFilterChange();
+function applyCustomRange(from, to) {
+  if (from && to) gPeriodSet({ kind: 'range', from, to });
 }
 
 async function saveCurrentAsPreset() {
@@ -947,6 +894,7 @@ async function saveCurrentAsPreset() {
   const preset = {
     name,
     branch: getBranch(),
+    period: gPeriodGet(),          // PR-PP1: the bar's period; month_from / month_to stay so an older build still reads it
     month_from: getMonthFrom(),
     month_to:   getMonthTo(),
     granularity: currentGranularity,
@@ -962,10 +910,10 @@ function applyUserPreset(idx) {
   const p = presets[idx];
   if (!p) return;
   if (p.branch !== undefined) document.getElementById('selBranch').value = p.branch;
-  setGranularity(p.granularity || 'monthly');
-  if (p.month_from !== undefined) document.getElementById('selMonthFrom').value = p.month_from;
-  if (p.month_to   !== undefined) document.getElementById('selMonthTo').value   = p.month_to;
-  onFilterChange();
+  // PR-PP1: a new preset carries {period}; an older one (month_from / month_to) becomes that month or that month range
+  const per = gPeriodFromPreset(p);
+  _closePresetMenu();
+  if (per) gPeriodSet(per); else onFilterChange();
 }
 
 function deleteUserPreset(idx, ev) {
@@ -979,19 +927,32 @@ function deleteUserPreset(idx, ev) {
 function renderUserPresets() {
   const wrap = document.getElementById('userPresets');
   const presets = JSON.parse(localStorage.getItem('oshinei_presets') || '[]');
-  if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">ยังไม่มี</span>'; return; }
+  if (!wrap) return;
+  if (!presets.length) { wrap.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มีช่วงที่บันทึก</span>'; return; }
   wrap.innerHTML = presets.map((p, i) => `
-    <span class="preset-chip" onclick="applyUserPreset(${i})">
-      ★ ${p.name}
-      <span class="x" onclick="deleteUserPreset(${i}, event)" title="Delete">✕</span>
+    <span class="preset-chip" role="menuitem" tabindex="0" onclick="applyUserPreset(${i})" onkeydown="if(event.key==='Enter')applyUserPreset(${i})">
+      ★ ${esc(p.name)}
+      <button type="button" class="x" onclick="deleteUserPreset(${i}, event)" aria-label="ลบช่วงที่บันทึก" title="ลบ">✕</button>
     </span>`).join('');
 }
 
+// PR-PP1: the ★ ช่วงที่บันทึก button opens the one list of saved ranges (#presetMenu) - the เลือกเร็ว row is gone
 function togglePresetMenu() {
-  const bar = document.getElementById('presetBar');
-  bar.classList.toggle('hidden');
-  document.getElementById('presetBtn')?.setAttribute('aria-expanded', bar.classList.contains('hidden') ? 'false' : 'true');
+  const m = document.getElementById('presetMenu');
+  if (!m) return;
+  m.classList.toggle('hidden');
+  if (!m.classList.contains('hidden')) renderUserPresets();
+  document.getElementById('presetBtn')?.setAttribute('aria-expanded', m.classList.contains('hidden') ? 'false' : 'true');
 }
+function _closePresetMenu() {
+  document.getElementById('presetMenu')?.classList.add('hidden');
+  document.getElementById('presetBtn')?.setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('presetMenu'), b = document.getElementById('presetBtn');
+  const t = /** @type {Node} */ (e.target);
+  if (m && !m.classList.contains('hidden') && !m.contains(t) && b && !b.contains(t)) _closePresetMenu();
+});
 
 function toggleMoreFilters() {
   const menu = document.getElementById('moreFiltersMenu');

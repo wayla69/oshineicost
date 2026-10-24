@@ -1,10 +1,33 @@
 {
- "count": 0,
+ "count": 2,
  "date": "2026-06-03",
  "new_count": 0,
  "new_days": 28,
  "new_menus": [],
- "spikes": [],
+ "spikes": [
+  {
+   "avg": 50.0,
+   "branch": "BranchA",
+   "excess": 0,
+   "is_new": false,
+   "menu": "แซลมอน",
+   "pct": 0,
+   "thin_base": true,
+   "today": 50,
+   "x": 1.0
+  },
+  {
+   "avg": 50.0,
+   "branch": "BranchB",
+   "excess": 0,
+   "is_new": false,
+   "menu": "แซลมอน",
+   "pct": 0,
+   "thin_base": true,
+   "today": 50,
+   "x": 1.0
+  }
+ ],
  "threshold": 1.5,
  "window_days": 21
 }
