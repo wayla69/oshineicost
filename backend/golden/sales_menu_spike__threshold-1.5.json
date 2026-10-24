@@ -1,28 +1,10 @@
 {
- "count": 2,
+ "count": 0,
  "date": "2026-06-03",
- "spikes": [
-  {
-   "avg": 0,
-   "branch": "BranchA",
-   "excess": 50,
-   "is_new": true,
-   "menu": "แซลมอน",
-   "pct": null,
-   "today": 50,
-   "x": null
-  },
-  {
-   "avg": 0,
-   "branch": "BranchB",
-   "excess": 50,
-   "is_new": true,
-   "menu": "แซลมอน",
-   "pct": null,
-   "today": 50,
-   "x": null
-  }
- ],
+ "new_count": 0,
+ "new_days": 28,
+ "new_menus": [],
+ "spikes": [],
  "threshold": 1.5,
  "window_days": 21
 }
