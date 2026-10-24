@@ -70,7 +70,7 @@
   <!-- Pareto สะสม — cost concentration A vs B -->
   <div class="card p-5 mt-4" id="mcParetoCard" style="display:none">
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-      <h3 class="text-sm font-bold" style="color:var(--text-primary)">Pareto สะสม — การกระจุกตัวของต้นทุน (A เทียบ B)</h3>
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">Pareto สะสม — การกระจุกตัวของต้นทุน (A เทียบ B) <span id="mcParetoQ"><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menucompare-mb1" title="คำอธิบาย">?</button></span></h3><template id="hlp-menucompare-mb1" data-title="Pareto สะสม"><p>เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%</p></template>
       <div class="flex items-center gap-2 flex-wrap">
         <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
           <button class="gran-btn gran-active" id="mcParetoModeConc" onclick="mcSetParetoMode('concentration')" title="แต่ละช่วงเรียงต้นทุนของตัวเอง — ดูการกระจุกตัว">การกระจุกตัว</button>
@@ -79,7 +79,7 @@
         <span id="mcParetoSummary" class="text-[11px] text-slate-500"></span>
       </div>
     </div>
-    <p id="mcParetoHint" class="text-xs text-slate-400 mb-3">เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%</p>
+    <p id="mcParetoHint" class="text-xs text-slate-400 mb-3">เส้นประ = 80%</p>
     <div style="height:300px"><canvas id="mcParetoChart"></canvas></div>
   </div>
 

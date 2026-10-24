@@ -63,7 +63,8 @@ async function loadCostCoverage() {
       <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div>
       ${sub ? `<div class="text-xs text-slate-400 mt-1">${esc(sub)}</div>` : ''}</div>`).join('');
   const defEl = document.getElementById('cov-definition');
-  if (defEl) defEl.textContent = d.definition || '';
+  // PR-MB: the definition of "มีต้นทุน" is behind a "?" (the line keeps only the button)
+  if (defEl) defEl.innerHTML = d.definition ? `ความหมายของต้นทุนครบ ${uiQ('cov:definition', 'ต้นทุนครบหมายถึงอะไร', `<p>${esc(d.definition)}</p>`)}` : '';
   const tr = d.monthly_trend || [];
   mkChart('cov-trend', {
     type:'line',
@@ -413,7 +414,7 @@ async function loadPnlBranch() {
   const note = document.getElementById('pnl-note');
   if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
     note.classList.remove('hidden');
-    note.textContent = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น. ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา';
+    note.innerHTML = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ · ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา ' + uiQ('pnl:fixed-unset', 'ค่าใช้จ่ายคงที่', '<p>ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น.</p>');
   } else { note.classList.add('hidden'); }
   _pnlBranchRows = {}; (d.branches||[]).forEach(b => { _pnlBranchRows[b.branch] = b; });
   document.getElementById('pnl-branches').innerHTML = (d.branches||[]).map(b => {

@@ -1255,8 +1255,7 @@ async function loadMenuImpact(force) {
     : '';
   const tierCard = (d.tiers || []).length < 2 ? '' : `
     <div class="card p-5 overflow-x-auto mb-5">
-      <h2 class="section-title mb-1">เจาะตามระดับราคาบุฟเฟ่ต์ — ใครสั่ง/กินเยอะ และผลต่อต้นทุน-กำไร</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนูของช่วงนั้น อ่านจากบรรทัดแพ็กเกจในบิลจริง (ราคา NET รวม service charge 5% + VAT 7% แล้ว) · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)${eraNote}</p>
+      <h2 class="section-title mb-2">เจาะตามระดับราคาบุฟเฟ่ต์ — ใครสั่ง/กินเยอะ และผลต่อต้นทุน-กำไร ${uiQ('mi:tier', 'Tier ราคาบุฟเฟ่ต์', `<p>Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนูของช่วงนั้น อ่านจากบรรทัดแพ็กเกจในบิลจริง (ราคา NET รวม service charge 5% + VAT 7% แล้ว) · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)${eraNote}</p>`)}</h2>
       <table class="text-xs w-full" id="miTierTbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">ระดับราคา</th><th class="py-1.5 pr-2 text-right">บิลในระดับราคา</th><th class="py-1.5 pr-2 text-right">% สั่ง</th>
         <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนตัวเอง/หัว</th>
@@ -1303,12 +1302,11 @@ async function loadMenuImpact(force) {
     </div>
     ${tierCard}
     <div class="card p-5 overflow-x-auto">
-      <h2 class="section-title mb-3">รายสาขา — ใครขาย/ใครกินเยอะ และผลต่อต้นทุนเมนูอื่น</h2>
+      <h2 class="section-title mb-3">รายสาขา — ใครขาย/ใครกินเยอะ และผลต่อต้นทุนเมนูอื่น ${uiQ('mi:branch', 'อ่านตารางรายสาขา', `<p>Δ ต้นทุนเมนูอื่น/หัว = บิลที่มีรายการนี้ กินเมนูอื่นแพงขึ้น/ถูกลงเท่าไร (คุมรายวันภายในสาขา) · เขียว = ช่วยลด · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น (Tukey fence) · คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</p>`)}</h2>
       <table class="text-xs w-full" id="miBranchTbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">บิลที่สั่ง</th><th class="py-1.5 pr-2 text-right">จำนวน</th>
         <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
         <th class="py-1.5 text-right">Δ ต้นทุนเมนูอื่น/หัว</th></tr></thead><tbody>${brRows}</tbody></table>
-      <p class="text-[11px] mt-2" style="color:var(--text-muted)">Δ ต้นทุนเมนูอื่น/หัว = บิลที่มีรายการนี้ กินเมนูอื่นแพงขึ้น/ถูกลงเท่าไร (คุมรายวันภายในสาขา) · เขียว = ช่วยลด · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น (Tukey fence) · คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</p>
     </div>`;
   ['miTierTbl', 'miBranchTbl'].forEach(makeSortable);
   _miLast = d;
@@ -1501,7 +1499,7 @@ function _ptRender(d) {
   body.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
     <div class="card p-5 mb-5 overflow-x-auto">
-      <h2 class="section-title mb-3">ระดับราคา — คนทานและต้นทุน/หัว (A เทียบ B)</h2>
+      <h2 class="section-title mb-3">ระดับราคา — คนทานและต้นทุน/หัว (A เทียบ B) ${uiQ('pt:tier-table', 'อ่านตารางระดับราคา', `<p>"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p><p class="mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>`)}</h2>
       <table class="text-xs w-full" id="ptTierTbl"><thead>
         <tr class="text-center" style="color:var(--text-muted)">
           <th></th>
@@ -1515,8 +1513,6 @@ function _ptRender(d) {
         <th class="py-1.5 pr-2 text-right" title="นับเฉพาะบิลบุฟเฟ่ต์ (หาร pax บุฟเฟ่ต์) — ไม่ใช่ต้นทุน/หัวทั้งเครือในหน้า ต้นทุน/หัว ซึ่งหารลูกค้าทุกบิลรวมเดลิเวอรี/กลับบ้าน">ต้นทุน/หัวบุฟเฟ่ต์ (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">ต้นทุนขาย %</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
-      <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5"><h2 class="section-title mb-3">สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
@@ -1525,20 +1521,18 @@ function _ptRender(d) {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-          <h2 class="section-title mb-0">แนวโน้มสัดส่วนคนทานตามระดับราคา</h2>${ptGranBtns('mix')}</div>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>
+          <h2 class="section-title mb-0">แนวโน้มสัดส่วนคนทานตามระดับราคา ${uiQ('pt:chart-mix', 'แนวโน้มสัดส่วนคนทาน', '<p>คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>')}</h2>${ptGranBtns('mix')}</div>
         <div style="height:280px"><canvas id="ptChartMix"></canvas></div>
         <p class="text-[10.5px] mt-2" id="ptNoteMix" style="color:var(--text-muted)"></p></div>
       <div class="card p-5">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-          <h2 class="section-title mb-0">แนวโน้มต้นทุนอาหาร/หัว ตามระดับราคา</h2>${ptGranBtns('cogs')}</div>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = ช่วงที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
+          <h2 class="section-title mb-0">แนวโน้มต้นทุนอาหาร/หัว ตามระดับราคา ${uiQ('pt:chart-cogs', 'แนวโน้มต้นทุนอาหาร/หัว', '<p>คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = ช่วงที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>')}</h2>${ptGranBtns('cogs')}</div>
         <div style="height:280px"><canvas id="ptChartCogs"></canvas></div>
         <p class="text-[10.5px] mt-2" id="ptNoteCogs" style="color:var(--text-muted)"></p></div>
     </div>
     <div class="card p-5 overflow-x-auto">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <h2 class="section-title mb-0">Top-${(d.top30 || []).length} เมนูหลักในต้นทุน — การทานต่อหัวแยกตาม Tier (A, วงเล็บ = Δ% เทียบ B)</h2>
+        <h2 class="section-title mb-0">Top-${(d.top30 || []).length} เมนูหลักในต้นทุน — การทานต่อหัวแยกตาม Tier (A, วงเล็บ = Δ% เทียบ B) ${uiQ('pt:top30', 'อ่านตาราง Top เมนู', `<p>เรียงตามต้นทุนรวมในช่วง A · ${qUnit} = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น${_ptQtyPer100 ? ' × 100' : ''} · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>`)}</h2>
         <div class="flex gap-1 items-center">${ptQtyUnitBtns()}
         <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button></div>
       </div>
@@ -1546,12 +1540,10 @@ function _ptRender(d) {
         <th class="py-1.5 pr-1" data-nosort style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
         <th class="py-1.5 pr-2 text-right" title="นับเฉพาะบิลบุฟเฟ่ต์ (หาร pax บุฟเฟ่ต์) — ไม่ใช่ต้นทุน/หัวทั้งเครือในหน้า ต้นทุน/หัว ซึ่งหารลูกค้าทุกบิลรวมเดลิเวอรี/กลับบ้าน">ต้นทุน/หัวบุฟเฟ่ต์</th><th class="py-1.5 pr-2 text-right">${qUnit} รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ${qUnit} = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น${_ptQtyPer100 ? ' × 100' : ''} · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>
     </div>
     <div class="card p-5 overflow-x-auto">
-      <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละระดับราคา</h2>
+      <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละระดับราคา ${uiQ('pt:bom-detail', 'ต้นทุนต่อจานแต่ละระดับราคา', `<p>แต่ละ tier = <b>ทุกจานที่ลูกค้า tier นั้นกินได้</b> (สะสมจาก tier ที่ถูกกว่าขึ้นมา) เรียงต้นทุนสูตรจากแพงไปถูก ใช้ดูว่าจานไหนดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>`)}</h2>
       ${bomDetailSections || '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล BoM รายจาน — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569</p>'}
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">แต่ละ tier = <b>ทุกจานที่ลูกค้า tier นั้นกินได้</b> (สะสมจาก tier ที่ถูกกว่าขึ้นมา) เรียงต้นทุนสูตรจากแพงไปถูก ใช้ดูว่าจานไหนดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>
     </div>`;
 
   _ptLast = d;
@@ -1909,7 +1901,7 @@ async function loadCostHeadTop60(force) {
     const drv = (A.hottest_drivers || []).map(x => `${esc(x.desc)} (+${q2(x.d)}/หัว)`).join(', ');
     headline = `<div class="card p-4 mb-4" style="border:1px solid ${RED};background:#fdf3f0">
       <p class="text-sm font-bold" style="color:${textInk(RED)}">สาขาต้นทุน/หัวสูงสุด: ${esc(A.hottest)} (${b2(d.branches.find(b=>b.name===A.hottest)?.cph_total||0)}/หัว · ${sgn(A.hottest_gap)} จากภาพรวม)</p>
-      <p class="text-xs mt-1" style="color:var(--text-secondary)">ตัวขับหลัก: ${drv}. ส่วนต่าง ${sgn(A.hottest_gap)} บาท/หัว × ${n0(A.hottest_covers)} หัว ≈ <b>${fmt(A.hottest_excess_month)}</b> ที่ใช้ต้นทุนต่างจากค่าเฉลี่ยกลุ่มเดือนนี้ — เป้าตรวจสอบพอร์ชั่น/ของเสีย/การ map รหัสลำดับแรก.</p></div>`;
+      <p class="text-xs mt-1" style="color:var(--text-secondary)">ตัวขับหลัก: ${drv}. ส่วนต่าง ${sgn(A.hottest_gap)} บาท/หัว × ${n0(A.hottest_covers)} หัว ≈ <b>${fmt(A.hottest_excess_month)}</b> ที่ใช้ต้นทุนต่างจากค่าเฉลี่ยกลุ่มเดือนนี้ ${uiQ('cht:hottest', 'สาขาต้นทุน/หัวสูงสุด', '<p>ส่วนต่างที่ใช้ต้นทุนต่างจากค่าเฉลี่ยกลุ่มเดือนนี้ — เป้าตรวจสอบพอร์ชั่น/ของเสีย/การ map รหัสลำดับแรก.</p>')}</p></div>`;
   }
 
   // ── menu table builders ──
@@ -1963,19 +1955,18 @@ async function loadCostHeadTop60(force) {
 
   // ── action plan (static guidance) ──
   const action = `<div class="card p-5 mb-4">
-    <h2 class="section-title mb-3">แนวทาง ตรวจสอบ · พัฒนา · ติดตามแก้ไข</h2>
+    <h2 class="section-title mb-3">แนวทาง ตรวจสอบ · พัฒนา · ติดตามแก้ไข ${uiQ('cht:action', 'แนวทางตรวจสอบ', '<p>① ตรวจสอบ: โฟกัสเมนูจุดแดงราคาแพงที่ Δ/หัวบวกมากก่อน — ดึงบิลขาดทุน/ส่วนลด/Void มาดูว่าเป็นการกินจริง/ของเสีย/แจกฟรี/map รหัสผิด</p><p class="mt-2">เกณฑ์ “มีสาระสำคัญ”: Δ/หัวต่างจากภาพรวมชัดและเป็นบาท/หัวที่มีนัย (เน้นวัตถุดิบแพง). ตัวเลขจากฐานข้อมูลจริง — “สาเหตุ” เป็นสมมุติฐานเพื่อตรวจสอบ ไม่ใช่ข้อสรุปความผิด.</p>')}</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs" style="color:var(--text-secondary)">
       <div style="border:1px solid ${RED};padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">① ตรวจสอบ</p>
-        <ul style="padding-left:1em;margin:0"><li>โฟกัสเมนูจุดแดงราคาแพงที่ Δ/หัวบวกมากก่อน — ดึงบิลขาดทุน/ส่วนลด/Void มาดูว่าเป็นการกินจริง/ของเสีย/แจกฟรี/map รหัสผิด</li><li>Yield test: ชั่ง/นับพอร์ชั่นจริงเทียบ BoM (แซลมอน/หอยเชลล์/กุ้ง/ทุเรียน)</li><li>ตรวจ sku_cost เทียบราคาซื้อจริง โดยเฉพาะเมนูที่ขึ้น “ใหม่”</li></ul></div>
+        <ul style="padding-left:1em;margin:0"><li>โฟกัสเมนูจุดแดงราคาแพงที่ Δ/หัวบวกมากก่อน — ดึงบิลขาดทุน/ส่วนลด/Void มาดู</li><li>Yield test: ชั่ง/นับพอร์ชั่นจริงเทียบ BoM (แซลมอน/หอยเชลล์/กุ้ง/ทุเรียน)</li><li>ตรวจ sku_cost เทียบราคาซื้อจริง โดยเฉพาะเมนูที่ขึ้น “ใหม่”</li></ul></div>
       <div style="border:1px solid #0d9488;padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">② พัฒนา</p>
         <ul style="padding-left:1em;margin:0"><li>มาตรฐานพอร์ชั่นเป็นภาพ + เครื่องชั่งประจำสเตชั่นทะเล</li><li>คุมการเติม (refill) วัตถุดิบแพงในสาขาที่สูงผิดปกติ</li><li>Menu engineering + จัดซื้อ/สเปกรวมศูนย์ให้ทุกสาขาเท่ากัน</li></ul></div>
       <div style="border:1px solid var(--accent);padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">③ ติดตามแก้ไข</p>
         <ul style="padding-left:1em;margin:0"><li>ตั้งเป้าต้นทุน/หัวรายสาขา = ภาพรวม ${b2(ov.cph_total)} หรือดีกว่า</li><li>ทบทวนรายเดือนด้วยรายงานนี้ (เปลี่ยนเดือนด้านบน) ดูว่า Δ/หัวเมนูเป้าหมายลดลงไหม</li><li>มอบเจ้าของงานต่อสาขา + วัดซ้ำ 30 วัน (เกณฑ์ผ่าน Δ/หัวลด ≥ 50%)</li></ul></div>
-    </div>
-    <p class="text-[11px] mt-3" style="color:var(--text-muted)">เกณฑ์ “มีสาระสำคัญ”: Δ/หัวต่างจากภาพรวมชัดและเป็นบาท/หัวที่มีนัย (เน้นวัตถุดิบแพง). ตัวเลขจากฐานข้อมูลจริง — “สาเหตุ” เป็นสมมุติฐานเพื่อตรวจสอบ ไม่ใช่ข้อสรุปความผิด.</p></div>`;
+    </div></div>`;
 
   // ── charts row (canvases filled after innerHTML lands in the DOM) ──
   const chartsRow = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">

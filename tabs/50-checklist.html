@@ -110,7 +110,7 @@
       <section class="card p-4 mt-4">
         <div class="flex items-center justify-between flex-wrap gap-2 cursor-pointer" onclick="toggleChecklistGantt()"><h3 class="text-sm font-semibold">ไทม์ไลน์ <span class="text-[11px] font-normal" style="color:var(--text-muted)" id="clGanttHint">(ซ่อน/แสดง)</span></h3><span class="text-[11px]" style="color:var(--text-muted)" id="clToday"></span></div>
         <div id="clGanttWrap"><div id="clGantt" style="overflow-x:auto" class="mt-2"></div>
-        <p class="text-[11px] mt-2" style="color:var(--text-muted)">แถบเติมตาม % ขั้นตอนที่ติ๊ก · เขียว = เฟสเสร็จ · แดง = มีงานติดปัญหา · กรอบส้ม = เลยกำหนดแต่ยังไม่เสร็จ · แถบลาย = รอฝ่ายภายนอกอนุมัติ · เส้นประแดง = วันนี้</p></div>
+        <p class="text-[11px] mt-2" style="color:var(--text-muted)">เขียว = เสร็จ · แดง = ติดปัญหา · กรอบส้ม = เลยกำหนด · ลาย = รออนุมัติ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-checklist-mb1" title="คำอธิบาย">?</button></p><template id="hlp-checklist-mb1" data-title="สีของไทม์ไลน์"><p>แถบเติมตาม % ขั้นตอนที่ติ๊ก · เขียว = เฟสเสร็จ · แดง = มีงานติดปัญหา · กรอบส้ม = เลยกำหนดแต่ยังไม่เสร็จ · แถบลาย = รอฝ่ายภายนอกอนุมัติ · เส้นประแดง = วันนี้</p></template></div>
       </section>
       <div id="clPhases"></div>
       <section class="card p-4 mt-4"><h3 class="text-sm font-semibold mb-2">ประวัติล่าสุด</h3><div id="clLog" class="cl-log" style="max-height:240px;overflow:auto"></div></section>

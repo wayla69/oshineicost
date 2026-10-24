@@ -108,9 +108,10 @@ async function renderReportTier(month) {
     block.innerHTML = `<p class="text-xs text-slate-400">${esc(d.error || d.hint || 'ไม่มีข้อมูล Tier สำหรับเดือนนี้')}</p>`;
     return;
   }
-  if (note) note.textContent = d.comparison_available === false
-    ? `เดือน ${fmtMonth(month)} · ${d.scope_label || ''} · ยังไม่มีเดือนก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูเปลี่ยน 1 ก.ย. 2569) · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT)`
-    : `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
+  // PR-MB: the line keeps the period and the scope; what a Tier is sits behind the "?" of the heading (hlp-report-mb3)
+  if (note) note.innerHTML = d.comparison_available === false
+    ? `เดือน ${esc(fmtMonth(month))} · ${esc(d.scope_label || '')} · ไม่มีเดือนก่อนหน้าสำหรับเปรียบเทียบ ${uiQ('report:tier-nocmp', 'ไม่มีเดือนเปรียบเทียบ', '<p>ยังไม่มีเดือนก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูเปลี่ยน 1 ก.ย. 2569) · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT)</p>')}`
+    : `เดือน ${esc(fmtMonth(month))} (A) เทียบ ${esc(d.b_range[0])} → ${esc(d.b_range[1])} (B) · ${esc(d.scope_label || '')}`;
   const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? 'var(--bad-ink)' : v < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
   const paxD = v => v == null ? '—' : `<span style="color:${v >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
   const rows = d.tiers.map(x => `<tr class="border-t border-slate-100">
@@ -131,11 +132,10 @@ async function renderReportTier(month) {
         <th class="py-2 pr-4">ระดับราคา</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
         <th class="py-2 pr-4 text-right">Δ คนทาน</th><th class="py-2 pr-4 text-right">สัดส่วน (Δpp)</th>
         <th class="py-2 pr-4 text-right">รายได้/หัว</th><th class="py-2 pr-4 text-right">ต้นทุน/หัว (Δ)</th>
-        <th class="py-2 pr-4 text-right">BoM เฉลี่ย/จาน</th>
+        <th class="py-2 pr-4 text-right">BoM เฉลี่ย/จาน ${uiQ('report:tier-bom-avg', 'BoM เฉลี่ย/จาน', '<p>"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ วิเคราะห์วัตถุดิบ → วิเคราะห์ Tier ราคาขาย</p>')}</th>
         <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">ต้นทุนอาหาร %</th>
       </tr></thead><tbody>${rows}</tbody></table>
-    ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
-    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ วิเคราะห์วัตถุดิบ → วิเคราะห์ Tier ราคาขาย</p>`;
+    ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}`;
 }
 
 // Run async thunks with bounded concurrency, preserving input order. Used by the
@@ -626,7 +626,7 @@ async function loadReport() {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <p class="text-[11px] text-slate-400 mt-2">แถบ = ระยะห่างจากค่ากลาง (median) ของเครือ ณ ค่ากลาง (เส้นแบ่งกลาง) · ●เขียว = ทิศทางดี · ●แดง = ทิศทางแย่ · เทา = ต่างกันแต่ไม่มีทิศทางดี/แย่ชัดเจน</p>`;
+      <p class="text-[11px] text-slate-400 mt-2">แถบ = ระยะห่างจากค่ากลางของเครือ ${uiQ('report:branch-median-bars', 'อ่านแถบเทียบค่ากลาง', '<p>แถบ = ระยะห่างจากค่ากลาง (median) ของเครือ ณ ค่ากลาง (เส้นแบ่งกลาง) · ●เขียว = ทิศทางดี · ●แดง = ทิศทางแย่ · เทา = ต่างกันแต่ไม่มีทิศทางดี/แย่ชัดเจน</p>')}</p>`;
   })();
 
   // ── §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (reuses the Menu tab's renderer so the
@@ -1839,7 +1839,7 @@ async function loadProfitAnalysis() {
     if (cov === 0) {
       msg.innerHTML = '<b>No SKU costs uploaded yet.</b> Profit metrics show 0 until you upload cost data via <b>Settings → Costs</b>. Upload a CSV with sku_code, unit_cost columns to activate this dashboard.';
     } else {
-      msg.innerHTML = `<b>ต้นทุนครอบคลุม ${cov.toFixed(0)}%</b> ของรายได้ บางเมนูยังไม่มีต้นทุน ตัวเลขกำไรนับเฉพาะเมนูที่มีต้นทุน เพิ่มต้นทุนได้ที่ <b>ตั้งค่า → ต้นทุน</b>`;
+      msg.innerHTML = `<b>ต้นทุนครอบคลุม ${cov.toFixed(0)}%</b> ของรายได้ · เพิ่มต้นทุนได้ที่ <b>ตั้งค่า → ต้นทุน</b> ${uiQ('profit:coverage', 'ต้นทุนครอบคลุม', '<p>บางเมนูยังไม่มีต้นทุน ตัวเลขกำไรนับเฉพาะเมนูที่มีต้นทุน</p>')}`;
     }
   } else {
     banner.classList.add('hidden');

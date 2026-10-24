@@ -2091,7 +2091,7 @@ async function loadRequisitionGap() {
       <th class="py-1.5 pr-2 text-right">ต้นทุนอาหาร % (สูตร)</th><th class="py-1.5 pr-2 text-right">ส่วนต่าง ฿</th><th></th>
     </tr></thead><tbody>${d.branches.map(r => row(r, false)).join('')}${row(d.total, true)}</tbody></table></div>
     <p class="text-[11px] mt-2 p-2 rounded" style="color:#9a3412;background:#fff7ed">⚠ ${esc(d.caveat)}</p>
-    <div class="text-xs font-semibold text-slate-600 mt-4 mb-1">วัตถุดิบที่ส่วนต่างสูงสุด (เบิก − ที่สูตรคิดไว้) · วัตถุดิบที่ไม่อยู่ในสูตรใดเลยรวม ${b(d.not_in_any_recipe)}</div>
+    <div class="text-xs font-semibold text-slate-600 mt-4 mb-1">วัตถุดิบที่ส่วนต่างสูงสุด (เบิก − ที่สูตรคิดไว้) <span class="font-normal">· วัตถุดิบที่ไม่อยู่ในสูตรใดเลยรวม ${b(d.not_in_any_recipe)}</span></div>
     <div style="max-height:340px;overflow:auto"><table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b">
       <th class="py-1 pr-2">#</th><th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">เบิก</th>
       <th class="py-1 pr-2 text-right">สูตรคิดไว้</th><th class="py-1 text-right">ส่วนต่าง</th></tr></thead><tbody>${ing}</tbody></table></div>`;

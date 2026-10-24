@@ -654,7 +654,7 @@ const ROLE_START = {
   salessupport: [['orderhub', 'ติดตามใบตัดเบิกที่สาขายังไม่ยืนยันหรือยืนยันล่าช้า', 'issues'], ['orderhub', 'พิจารณาเคลมที่สาขาแจ้ง', 'claims'], ['orderhub', 'คีย์ใบสั่งซื้อเข้าระบบบัญชี', 'queue'], ['bomcenter', 'คำนวณและบันทึกยอดแนะนำให้สาขา', 'fc'], ['bomcenter', 'กำหนดวันส่งของรอบ 1 รอบ 2 และแซลมอนสดของแต่ละสาขา', 'cal']],
   warehouse: [['orderhub', 'ระบุยอดส่งจริงภายใน 14:00 ของวันตัดรอบ แล้วกด “ยืนยันยอดส่ง”', 'queue']],
   branch: [['branchstock', 'บันทึกใบตัดเบิก (เบิกใช้และของเสีย) และส่งทุกวัน', 'issue'], ['branchstock', 'ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่งของ', 'order'], ['branchstock', 'บันทึกของที่รับเข้าร้านทุกครั้ง รวมของที่สาขาซื้อเอง', 'recv']],
-  franchise: [['franchise', 'สรุปผลการดำเนินงานของสาขาตนเองในเดือนนี้: ยอดขาย กำไรขั้นต้น วัตถุดิบ และวินัยการทำงานของสาขา']],
+  franchise: [['franchise', 'ผลงานเดือนนี้ของสาขา: ยอดขาย กำไรขั้นต้น วัตถุดิบ วินัยการทำงาน']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 // An entry may name a pane of the วัตถุดิบและใบสั่งซื้อ module ([tab, why, pane]):
@@ -884,7 +884,7 @@ function openPasswordChange(force) {
   document.getElementById('pwConfirm').value = '';
   document.getElementById('pwError').style.display = 'none';
   document.getElementById('pwHint').textContent = force
-    ? 'ตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 10 ตัวอักษร) — ช่อง "รหัสผ่านปัจจุบัน" ใส่รหัสที่ได้รับมา'
+    ? 'ตั้งรหัสผ่านใหม่ก่อนใช้งาน อย่างน้อย 10 ตัวอักษร · รหัสผ่านปัจจุบัน = รหัสที่ได้รับ'
     : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)';
   // When forced, no cancel — the user must set a password before continuing.
   document.getElementById('pwCancel').style.display = force ? 'none' : '';
@@ -2629,7 +2629,21 @@ function _phoneChartTune(config, ctx) {
     const categoryAxis = horizontal ? isY : isX;
     sc.ticks = sc.ticks || {};
     if (categoryAxis && !horizontal) {
-      if (sc.ticks.maxTicksLimit === undefined) sc.ticks.maxTicksLimit = 6;
+      // PR-MB: a category axis with more than 6 labels names its first, middle and last one (the B1 rule, _glanceB1Axes); fewer: every label
+      let fml = false;
+      if (sc.ticks.maxTicksLimit === undefined && sc.ticks.autoSkip === undefined) {
+        const base = sc.ticks.callback;
+        sc.ticks.autoSkip = false;
+        sc.ticks.maxRotation = 0;
+        sc.ticks.minRotation = 0;
+        sc.ticks.callback = function (v, i, t) {
+          const n = (t && t.length) || 0;
+          if (n > 6 && i !== 0 && i !== n - 1 && i !== Math.floor((n - 1) / 2)) return '';
+          return base ? base.call(this, v, i, t) : this.getLabelForValue(v);
+        };
+        fml = true;
+      }
+      if (sc.ticks.maxTicksLimit === undefined && !fml) sc.ticks.maxTicksLimit = 6;
       if (sc.ticks.autoSkip === undefined) sc.ticks.autoSkip = true;
       if (sc.title && sc.title.display) sc.title.display = false;
     } else if (!categoryAxis && sc.ticks.maxTicksLimit === undefined) {
@@ -3513,6 +3527,70 @@ function phonePageDefault(tab, pane, view) {
   if (e && typeof e === 'object') return e[view] || e[Object.keys(e)[0]];
   return e === 'fit' ? 'fit' : 'touch';
 }
+// PR-MB · the card lists of a phone in แตะง่าย: the tables people read daily, one card per row (phCardList, js/09c-mobile.js "CARD LISTS").
+// Keyed like PAGE_PHONE; one entry per table:
+//   sel      the table inside the page's panel (all: true = every match, e.g. one table per delivery day)
+//   title    the column of the row's name; sub = the grey line (code / branch / date; subL: true prints each with its header)
+//   keyCols  the 3 key figures, as the table's header prints them (start of the header is enough; [a, b] = a, else b); labels = short names
+//   pill     the status / class column (its chip keeps its colour; tones = { regex: good | bad | warn | info } where the cell is plain text)
+//   done     the pill words of a finished row: hidden by default behind the shared state filter (uiStateFilter). A page whose own filter
+//            already hides finished work (the supply queues) has no `done` here: its filter stays above the cards.
+//   rows     only these rows (a toggle row's sub-rows are left to the sheet); spark = the columns of a sparkline ('months' = the month columns);
+//   sparkCell = a cell that already holds one; fields: 'table' = a writer's editable table stays the table; empty = { t, act } of an empty list
+// backend/test_phone_content.py checks that every page of the MB list has its tables here, each with a title and 1-3 key columns.
+const PAGE_CARDS = {
+  menu: [
+    { sel: '#orderedTable', title: 'เมนู', sub: ['SKU'], keyCols: ['จำนวนขาย', '% เทียบยอดรวม', 'เปลี่ยนแปลง %'], labels: ['จำนวนขาย', '% ของยอดรวม', 'เปลี่ยน %'], pill: 'ABC' },
+    { sel: '#costHeadTable', title: 'เมนู', sub: ['SKU'], keyCols: ['ต้นทุน/หัว', '% ของต้นทุนรวม', 'เปลี่ยนแปลง %'], labels: ['ต้นทุน/หัว', '% ของต้นทุน', 'เปลี่ยน %'], pill: 'ABC' },
+    { sel: 'table:has(#meTableBody)', title: 'เมนู', sub: ['หมวด'], keyCols: ['ยอดขาย', 'กำไร', '% กำไร'], pill: 'กลุ่ม' }],
+  menuopportunities: [
+    { sel: '#oppGaps table', title: 'เมนู', sub: ['สาขา', 'หมวด'], keyCols: ['สาขานี้', 'ทั้งเครือ', 'โอกาสเพิ่ม'], labels: ['สาขานี้', 'ทั้งเครือ', 'โอกาสเพิ่ม (ชิ้น)'] },
+    { sel: '#oppWhitespace table', title: 'หมวด', keyCols: ['#เมนู', 'รายได้', 'รายได้/เมนู'], labels: ['เมนู', 'รายได้', 'รายได้/เมนู'], pill: 'คำแนะนำ',
+      tones: { 'ขยาย': 'good', 'ควรลด': 'bad', 'เฝ้าดู': 'warn' } },
+    { sel: '#oppRevive table', keyCols: [1, 2, 3] }],
+  profit: [{ sel: '#profitBandTable', title: 'ช่วง', sub: ['บิล', 'ลูกค้า'], subL: true, keyCols: ['รายได้ไม่รวม VAT', 'กำไร', 'อัตรากำไร %'], labels: ['รายได้', 'กำไร', 'อัตรากำไร'] }],
+  benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', 'คะแนน'] }],
+  gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['รายได้', 'GP (', 'GP %'], labels: ['รายได้', 'GP', 'GP %'], pill: 'สถานะ',
+    tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
+  pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
+  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบเดือนก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] }],
+  discounts: [
+    { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
+    { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
+  staff: [{ sel: '#staffTable', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', '% ส่วนลด'] }],
+  cancelbill: [
+    { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['บิลยกเลิก', 'มูลค่า'] },
+    { sel: 'table:has(#cbReasons)', title: 'เหตุผล', keyCols: ['บิล', '%', 'มูลค่า'] }],
+  cashctl: [
+    { sel: 'table:has(#ccBody)', title: 'สาขา', keyCols: ['ขาด/เกิน', 'วันที่ขาด', '% ของยอด'] },
+    { sel: 'table:has(#ccWorst)', title: 'สาขา', sub: ['วันที่'], keyCols: ['ขาด/เกิน', 'ยอดขาย', 'ลูกค้า'] }],
+  costhead: [{ sel: 'table:has(#chBody)', title: 'สาขา', sub: ['vs เฉลี่ย'], subL: true, keyCols: ['ต้นทุน/หัว', 'ต้นทุน%', 'GP/หัว'] }],
+  coverage: [
+    { sel: 'table:has(#cov-branches)', title: 'สาขา', sub: ['SKU ค้าง'], subL: true, keyCols: ['รายได้', 'ไม่มีต้นทุน', '% ไม่มี'] },
+    { sel: 'table:has(#cov-review)', rows: 'tr[onclick]', title: 'เมนู', keyCols: ['ต้นทุน/ที่', 'จานเดือนนี้', 'ต้นทุนรวม/เดือน'], pill: 'สถานะ',
+      tones: { 'ยืนยันแล้ว': 'good', 'ประมาณการ': 'warn', 'สูตรเสนอ': 'info' }, done: 'ยืนยันแล้ว' },
+    { sel: 'table:has(#cov-fixer)', title: 'เมนู', sub: ['SKU', 'หมวด'], keyCols: ['รายได้', 'จำนวน', 'ราคาขาย/หน่วย'], fields: 'table' }],
+  menuefficiency: [{ sel: 'table:has(#mce2Body)', title: 'เมนู', sub: ['หมวด', 'แหล่ง'], keyCols: ['ต้นทุนรวม', '%ต้นทุน', '฿/จาน'], pill: 'ABC' }],
+  'orderhub|queue': [{ sel: '#ohbQueue table', all: true, title: 'ใบสั่งซื้อ', sub: ['ตัดรอบ'], subL: true, keyCols: ['มูลค่า', 'รายการ'], pill: 'สถานะ' }],
+  'orderhub|claims': [{ sel: '#ohbCancelledReceipts table', title: 'สาขา', sub: ['ใบรับของ', 'เหตุผล'], keyCols: ['รายการ'] }],
+  'orderhub|issues': [{ sel: '#ohbIsSummary table', title: 'สาขา', sub: ['ส่งช้า', 'ยังไม่ส่ง'], subL: true, keyCols: ['ตรงวัน %', 'มีใบ %', 'ไม่มีใบ'] }],
+  'orderhub|issuevar': [{ sel: '#ohbIvList table', title: 'วันที่', keyCols: ['รวมเบิก', ['ตามสูตร', 'ที่สาขาใช้ปกติ'], ['เทียบสูตร', 'เทียบที่สาขาใช้ปกติ']], labels: ['รวมเบิก ฿', 'ปกติ ฿', 'เทียบ'], pill: 'ใบตัดเบิก' }],
+  'orderhub|comp': [{ sel: '#ohbComp table.wt', title: 'สาขา', sub: ['ตัดรอบ'], subL: true, keyCols: ['สาขายืนยัน', 'ส่งจริง', 'รับจริง'], labels: ['สาขายืนยัน ฿', 'ส่งจริง ฿', 'รับจริง ฿'], pill: 'สถานะ' }],
+  'orderhub|adoption': [{ sel: '#ohbAdList table', title: 'สาขา', sub: ['ใช้งานล่าสุด'], subL: true, keyCols: ['ใบตัดเบิกตรงวัน', 'ส่งใบสั่งซื้อตรงเวลา', 'รับของบันทึกแล้ว'],
+    labels: ['ตัดเบิกตรงวัน', 'สั่งตรงเวลา', 'บันทึกรับของ'], pill: 'สถานะ', tones: { 'เขียว': 'good', 'เหลือง': 'warn', 'แดง': 'bad' } }],
+  'orderhub|persales': [
+    { sel: '#ohbPsBranches > .overflow-x-auto > table', title: 'สาขา', keyCols: ['ยอดขาย', 'มูลค่าวัตถุดิบต่อยอดขาย', 'การใช้เทียบค่ากลาง'], labels: ['ยอดขาย ฿', 'วัตถุดิบต่อ ฿100,000', 'เทียบค่ากลาง'] },
+    { sel: '#ohbPsList table', title: 'วัตถุดิบ', sub: ['หน่วย'], keyCols: ['ต่อยอดขาย', 'เปลี่ยนแปลง', 'มูลค่า'], labels: ['ต่อ ฿100,000', 'เปลี่ยน', 'มูลค่า ฿'] }],
+  'bomcenter|fc': [{ sel: '#bmcFcTable table', title: 'วัตถุดิบ', sub: ['รหัส'], keyCols: ['แนะนำสั่ง', 'มูลค่า', 'ใช้/วัน'], labels: ['แนะนำสั่ง', 'มูลค่า ฿', 'ใช้/วัน'], pill: 'กลุ่ม', sparkCell: 'แนวโน้ม' }],
+  'bomcenter|price': [{ sel: 'table:has(#bmcPriceBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'อายุ', 'สาขาที่ซื้อ'], labels: ['ราคา/หน่วยฐาน', 'อายุ (เดือน)', 'สาขาที่ซื้อ'], pill: 'แหล่ง' }],
+  'bomcenter|dishcost': [{ sel: '#bmcDcList table', title: 'เมนู', sub: ['รหัส POS'], keyCols: ['ต้นทุนต่อจาน', 'เปลี่ยน', 'จานที่ขาย'], pill: 'ที่มา' }],
+  'bomcenter|ing': [{ sel: 'table:has(#bmcIngBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'ราคา/หน่วยรับ', 'ใช้ในเมนู'], pill: 'สถานะ', fields: 'table' }],
+  'bomcenter|issue': [{ sel: '#bmcIssList table', title: 'สาขา', sub: ['งวด'], keyCols: ['มูลค่าตัดเบิก', 'ไม่มีราคา'], pill: 'สถานะ' }],
+  feedback: [
+    { sel: '#fbItems table', title: 'สาขา', sub: ['วันที่', 'ช่องทาง', 'ข้อความ'], keyCols: ['★', 'ตอบกลับ'], labels: ['ดาว', 'ตอบกลับ'], pill: 'ความรู้สึก',
+      tones: { 'บวก|ชม|positive': 'good', 'ลบ|ติ|negative': 'bad', 'กลาง|neutral': 'neutral' } },
+    { sel: '#fbBranches table', title: 'สาขา', sub: ['ปัญหาหลัก'], keyCols: ['เสียง', '★', 'ลบ %'], labels: ['เสียง', 'ดาว', 'ลบ %'] }],
+};
 // Pages that sit in no cluster or chip (the older single entries): listed in หน้ารายงานทั้งหมด under "อื่น ๆ".
 const ALLPAGES_EXTRA = [
   { tab: 'home', label: 'สรุปประจำวัน' }, { tab: 'action', label: 'ต้องดูวันนี้' }, { tab: 'feedback', label: 'เสียงลูกค้า' },
@@ -4144,7 +4222,7 @@ async function loadUsageStats() {
   const byName = Object.fromEntries(tabs.map(t => [t.name, t]));
   const killRows = [...watched].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:var(--amber-ink)' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
   const killHead = onHold
-    ? `Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
+    ? `Kill list — <b>พักไว้</b> · แท็บที่เฝ้าดู (${watched.size}) ${uiQ('usage:kill', 'Kill list พักไว้', '<p>เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน · ยังไม่ซ่อน/ไม่ลบแท็บใด</p>')}`
     : `Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
   // ── who uses it: the adoption view (the owner's question — who has and hasn't started) ──
   const STATUS = { active: ['ใช้งานอยู่', '#15803d', '#dcfce7'], idle: ['ไม่ได้ใช้ในช่วงนี้', '#b45309', '#fef3c7'],
@@ -4162,8 +4240,7 @@ async function loadUsageStats() {
   const ps = people && people.summary ? people.summary : null;
   const peopleHtml = people ? `
     <div class="mb-6">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
-      <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''} ${uiQ('usage:people', 'การเข้าใช้รายคน', '<p>"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</p>')}</div>
       ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(fmtWeekTh(digest.latest.week))}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
         <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
       <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">เข้าสู่ระบบล่าสุด</th><th class="py-1 pr-3 text-right">เข้าสู่ระบบ</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>

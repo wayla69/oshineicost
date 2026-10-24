@@ -558,8 +558,7 @@ function simhubBuildTier() {
     <div class="card p-5">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 class="text-base font-bold" style="color:var(--accent)">ตัวจำลองอัปเกรดระดับราคา</h2>
-          <p class="text-xs text-slate-400 mt-0.5">จำลองการดันลูกค้าขึ้น tier สูงกว่าแล้วดู GP ที่เพิ่ม — คู่ tier ใช้ตามเมนูที่ขายจริงในช่วงที่เลือก (ถึง ส.ค. 2026 = ฿590 → ฿799 · ตั้งแต่ 1 ก.ย. 2026 = ฿629 → ฿789)</p>
+          <h2 class="text-base font-bold" style="color:var(--accent)">ตัวจำลองอัปเกรดระดับราคา ${uiQ('sim:tier', 'ตัวจำลองอัปเกรดระดับราคา', '<p>จำลองการดันลูกค้าขึ้น tier สูงกว่าแล้วดู GP ที่เพิ่ม — คู่ tier ใช้ตามเมนูที่ขายจริงในช่วงที่เลือก (ถึง ส.ค. 2026 = ฿590 → ฿799 · ตั้งแต่ 1 ก.ย. 2026 = ฿629 → ฿789)</p>')}</h2>
           <p id="simScenarioNote" class="text-[11px] text-indigo-500 mt-0.5"></p>
         </div>
         <label class="text-xs flex items-center gap-2 whitespace-nowrap">ดัน % ลูกค้าขึ้น tier:

@@ -7,10 +7,10 @@
   <!-- Food-cost benchmark: each branch vs chain peer median + target band -->
   <div class="card p-5 mb-5" id="benchFoodCostCard">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">เทียบสาขา ต้นทุนอาหาร</h2>
+      <h2 class="section-title mb-0">เทียบสาขา ต้นทุนอาหาร <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-benchmark-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-benchmark-mb1" data-title="เทียบสาขา ต้นทุนอาหาร"><p>% ต้นทุนอาหารแต่ละสาขา เทียบ <b>ค่ากลางเครือ (peer)</b> และ <b>ช่วงเป้า</b> · เขียว = ดีกว่าเพื่อน (quartile บน), แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p></template>
       <span id="benchFcSummary" class="text-[11px] text-slate-500"></span>
     </div>
-    <p class="text-xs text-slate-400 mb-3">% ต้นทุนอาหารแต่ละสาขา เทียบ <b>ค่ากลางเครือ (peer)</b> และ <b>ช่วงเป้า</b> · เขียว = ดีกว่าเพื่อน (quartile บน), แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p>
+    <p class="text-xs text-slate-400 mb-3">เขียว = ดีกว่าเพื่อน · แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p>
     <div id="benchFoodCostBody"></div>
   </div>
 
@@ -19,7 +19,7 @@
     <div class="flex items-start gap-3">
       <div style="font-size:24px;line-height:1"></div>
       <div class="flex-1">
-        <p class="font-semibold text-sm text-slate-800 mb-1">วิธีคำนวณคะแนนสาขา (0–100)</p>
+        <p class="font-semibold text-sm text-slate-800 mb-1">วิธีคำนวณคะแนนสาขา (0–100) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-benchmark-mb2" title="คำอธิบาย">?</button></p><template id="hlp-benchmark-mb2" data-title="น้ำหนักคะแนนสาขา"><p>รายได้ถ่วงน้ำหนักสูงสุดเพราะเป็นผลประกอบการที่จับต้องได้จริง การเติบโตและโมเมนตัมสะท้อนทิศทางอนาคต ความสม่ำเสมอลดความเสี่ยงของรายได้ที่แกว่งแรง</p></template>
         <p class="text-xs text-slate-600 mb-2">คะแนนรวมจาก 4 องค์ประกอบ ถ่วงน้ำหนักตามความสำคัญต่อผลประกอบการ</p>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
@@ -39,7 +39,6 @@
             <p class="text-[10px] text-slate-500 mt-0.5">แนวโน้ม 3 เดือนล่าสุด</p>
           </div>
         </div>
-        <p class="text-[11px] text-slate-500 mt-2">รายได้ถ่วงน้ำหนักสูงสุดเพราะเป็นผลประกอบการที่จับต้องได้จริง การเติบโตและโมเมนตัมสะท้อนทิศทางอนาคต ความสม่ำเสมอลดความเสี่ยงของรายได้ที่แกว่งแรง</p>
       </div>
     </div>
   </div>

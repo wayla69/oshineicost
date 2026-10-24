@@ -12,7 +12,7 @@ PDF = SRC[:-5] + ".pdf"
 _m = re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>\s*([0-9.]+)", io.open(SRC, encoding="utf-8").read())
 VER = _m.group(1) if _m else "?"
 FOOT = ('<div style="width:100%;font-family:\'Leelawadee UI\',Tahoma;font-size:8pt;color:#5b6b82;padding:0 16mm;display:flex;justify-content:space-between">'
-        f'<span>WP-SCM-001 ฉบับที่ {VER} · คู่มือการทำงาน กระบวนการบริหารวัตถุดิบและใบสั่งซื้อสาขา · ฉบับร่าง รอการอนุมัติ</span>'
+        f'<span>WP-SCM-001 ฉบับที่ {VER} · คู่มือการทำงาน กระบวนการบริหารวัตถุดิบและใบสั่งซื้อสาขา · รอการอนุมัติ</span>'
         '<span>หน้า <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>')
 with sync_playwright() as p:
     b = p.chromium.launch(channel="chrome", headless=True)

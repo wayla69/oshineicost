@@ -874,12 +874,12 @@ function renderAbcAnalysis() {
 
   const pA = (valA/tot*100).toFixed(1), pB = (valB/tot*100).toFixed(1), pC = (valC/tot*100).toFixed(1);
 
-  // Mode toggle + insight
-  const insight = byCost
+  // Mode toggle + insight (PR-MB: the reading of the classes is behind the "?" of the ABC line)
+  const insight = uiQ('abc:insight-' + (byCost ? 'cost' : 'revenue'), 'ABC Analysis', byCost
     ? `Class A คือกลุ่ม SKU ที่ใช้ <b>ต้นทุนวัตถุดิบ 70% แรก</b> — ต้องโฟกัสด้าน supply chain (เจรจาราคา · safety stock · cycle count บ่อย)
        <br>Class C เป็น long-tail ของต้นทุน — อาจจะคุ้มน้อย ทบทวนว่าเป็น strategic items หรือไม่`
     : `Class A คือกลุ่ม SKU ที่ทำ <b>รายได้ 70% แรก</b> — ต้องโฟกัสด้าน sales (positioning · staff training · stockout prevention)
-       <br>Class C เป็น long-tail — พิจารณาลดจำนวนเพื่อเพิ่ม kitchen execution speed`;
+       <br>Class C เป็น long-tail — พิจารณาลดจำนวนเพื่อเพิ่ม kitchen execution speed`);
 
   el.innerHTML = `
     <div class="flex items-center gap-3 mb-4 flex-wrap">
@@ -911,8 +911,7 @@ function renderAbcAnalysis() {
         <span class="text-xs text-slate-500">C: ${groupC.length} SKUs = ${pC}%</span>
       </div>
     </div>
-    <p class="text-xs text-slate-500 leading-relaxed"><b>ABC Analysis ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100%
-      <br>${insight}</p>`;
+    <p class="text-xs text-slate-500 leading-relaxed"><b>ABC Analysis ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100% ${insight}</p>`;
 }
 
 
@@ -1073,7 +1072,7 @@ function renderSuggestions() {
   const buffetMargin  = buffetRev > 0 && buffetCost > 0 ? ((buffetRev - buffetCost) / buffetRev * 100).toFixed(1) : null;
   cards.push(`
     <div class="card p-5">
-      <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-800">กระจุกตัวรายได้ + บุฟเฟ่ต์</h3></div>
+      <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-800">กระจุกตัวรายได้ + บุฟเฟ่ต์ ${uiQ('insights:buffet-share', 'สัดส่วนบุฟเฟ่ต์', '<p>หาก buffet > 70% ของยอดขาย → ธุรกิจพึ่งพา volume สูง · เน้นควบคุม BoM และ portion control · พิจารณาเพิ่มเมนู à la carte กำไรสูงเพื่อกระจายความเสี่ยง</p>')}</h3></div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div class="rounded-lg p-3 border border-indigo-100" style="background:var(--accent-soft)">
           <p class="text-xs text-indigo-600 font-semibold mb-1">Pareto 80/20</p>
@@ -1086,7 +1085,6 @@ function renderSuggestions() {
           ${buffetMargin ? `<p class="text-xs text-slate-500 mt-1">อัตรากำไรขั้นต้นของบุฟเฟ่ต์ <b>${buffetMargin}%</b></p>` : ''}
         </div>
       </div>
-      <p class="text-xs text-slate-500">หาก buffet > 70% ของยอดขาย → ธุรกิจพึ่งพา volume สูง · เน้นควบคุม BoM และ portion control · พิจารณาเพิ่มเมนู à la carte กำไรสูงเพื่อกระจายความเสี่ยง</p>
     </div>`);
 
   // ── 3 & 4 — quadrant recommendations (only if costs exist) ──
@@ -1187,13 +1185,12 @@ function renderSuggestions() {
       const dogsPct = s.total_revenue ? (dogsRev/s.total_revenue*100).toFixed(1) : 0;
       cards.push(`
         <div class="card p-5" style="border:1px solid #ef4444">
-          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-red-700">ตัวถ่วง Dogs (${dogs.length} รายการ · ${dogsPct}% ของรายได้)</h3></div>
+          <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-red-700">ตัวถ่วง Dogs (${dogs.length} รายการ · ${dogsPct}% ของรายได้) ${uiQ('insights:dogs-rule', 'ขนาดเมนู', '<p><b>Industry rule of thumb:</b> เมนู 50–80 รายการทำงานดีกว่าเมนูใหญ่ ทั้งใน kitchen execution + customer decision speed</p>')}</h3></div>
           <p class="text-sm text-slate-600 mb-3">ขายน้อย <em>และ</em> กำไรต่ำ — เปลืองพื้นที่เมนู เปลือง training พนักงาน เปลืองสต็อก</p>
           <ul class="space-y-1 text-sm text-slate-600 mb-3">
             <li>• <b>ตัดออกจากเมนูเลย</b> — สั้นกระชับดีกว่า ลูกค้าตัดสินใจเร็วขึ้น</li>
             <li>• ถ้าเป็น <b>strategic items</b> (vegan/allergen-free) → ปรับสูตรลดต้นทุน</li>
             <li>• ถ้ามีกลุ่มลูกค้าเฉพาะที่สั่ง → ประเมินผลกระทบรายได้ก่อนตัด</li>
-            <li>• <b>Industry rule of thumb:</b> เมนู 50–80 รายการทำงานดีกว่าเมนูใหญ่ ทั้งใน kitchen execution + customer decision speed</li>
             <li>• สาขาที่มีปัญหาเรื่อง kitchen capacity ควรเริ่มจากตัด Dogs ก่อน</li>
           </ul>
           <div class="flex flex-wrap gap-1">${dogs.slice(0,10).map(r=>`<span class="pill pill-down">${esc(r.description.slice(0,20))} · ${r.margin_pct?.toFixed(0)}%</span>`).join('')}</div>
@@ -1255,14 +1252,7 @@ function renderSuggestions() {
             → พิจารณาขึ้นราคา Tier บน หรือ ลดต้นทุนวัตถุดิบ premium</p>
           </div>` : ''}
           <div class="bg-rose-50 rounded-lg p-3 border border-rose-200">
-            <p class="font-semibold text-rose-800 mb-1">Action items บุฟเฟ่ต์</p>
-            <ul class="text-xs text-slate-700 space-y-1">
-              <li>• <b>BoM Tracking</b> — บันทึกต้นทุนวัตถุดิบบุฟเฟ่ต์รายเดือน (เนื้อแซลมอน เนื้อวากิว ของหวาน) → ตอบโจทย์ว่า margin ตกหรือไม่</li>
-              <li>• <b>Portion Control</b> — บุฟเฟ่ต์ที่ "all-you-can-eat" ต้องมีระบบ <b>ค่าปรับเหลือ</b> (มี SKU OT0012/0013/0016 อยู่แล้ว) เก็บอย่างเข้มงวด</li>
-              <li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (฿459) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (฿789/฿999) เพื่อเพิ่ม margin</li>
-              <li>• <b>Premium Add-on</b> — ขาย add-on margin สูง เช่น แซลมอนพรีเมียม เครื่องดื่ม alcohol → ลูกค้าบุฟเฟ่ต์ตัดสินใจง่ายเพราะอารมณ์ "เปย์มาแล้ว"</li>
-              <li>• <b>Buffet Mix Optimization</b> — Tier ฿629 เป็น sweet spot ของเมนูใหม่ — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li>
-            </ul>
+            <p class="font-semibold text-rose-800 mb-1">Action items บุฟเฟ่ต์ ${uiQ('insights:buffet-actions', 'Action items บุฟเฟ่ต์', `<ul><li>• <b>BoM Tracking</b> — บันทึกต้นทุนวัตถุดิบบุฟเฟ่ต์รายเดือน (เนื้อแซลมอน เนื้อวากิว ของหวาน) → ตอบโจทย์ว่า margin ตกหรือไม่</li><li>• <b>Portion Control</b> — บุฟเฟ่ต์ที่ "all-you-can-eat" ต้องมีระบบ <b>ค่าปรับเหลือ</b> (มี SKU OT0012/0013/0016 อยู่แล้ว) เก็บอย่างเข้มงวด</li><li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (฿459) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (฿789/฿999) เพื่อเพิ่ม margin</li><li>• <b>Premium Add-on</b> — ขาย add-on margin สูง เช่น แซลมอนพรีเมียม เครื่องดื่ม alcohol → ลูกค้าบุฟเฟ่ต์ตัดสินใจง่ายเพราะอารมณ์ "เปย์มาแล้ว"</li><li>• <b>Buffet Mix Optimization</b> — Tier ฿629 เป็น sweet spot ของเมนูใหม่ — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li></ul>`)}</p>
           </div>
         </div>
       </div>`);
@@ -1578,7 +1568,7 @@ async function saveCostRow(skuId, skuCode) {
     if (data.skipped_price_as_cost) {   // guard rejected it as price-as-cost
       inp.style.borderColor = '#f59e0b';
       if (stat) { stat.textContent = '⚠'; stat.style.color = 'var(--amber-ink)';
-        stat.title = 'ค่านี้ใกล้เคียงราคาขาย (×1.07) — ดูเหมือนราคา ไม่ใช่ต้นทุน · looks like price, not cost'; }
+        stat.setAttribute('title', 'ค่านี้ใกล้เคียงราคาขาย (×1.07) — ดูเหมือนราคา ไม่ใช่ต้นทุน · looks like price, not cost'); }
       return;
     }
     if (stat) { stat.textContent = '✓'; stat.style.color = 'var(--good-ink)'; stat.title = 'บันทึกแล้ว · saved'; }

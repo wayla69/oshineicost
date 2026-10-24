@@ -2187,6 +2187,52 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-rs-act { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
 .ph-rs-act button { min-height: 44px; padding: 8px 16px; font: inherit; font-size: 14px; font-weight: 600; border-radius: var(--r-md, 12px); border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card, #fff); color: var(--text-primary); cursor: pointer; }
 .ph-rs-act button:disabled { opacity: .55; cursor: not-allowed; }
+/* PR-MB · card lists (js/09c-mobile.js "CARD LISTS"): in แตะง่าย a page's daily table is one card per row - pill, name, grey line, three key
+   figures, an optional sparkline, a chevron to the row sheet - under sort and filter chips. The table's own box is hidden meanwhile. */
+.ph-cl { display: none; }
+@media screen and (max-width: 700px) {   /* screen: on paper the table prints, never its cards */
+  body.ph-on:not(.ph-fit) .ph-cl { display: block; margin: 4px 0 12px; }
+  body.ph-on:not(.ph-fit) .ph-cl-src { display: none !important; }
+  body.ph-on .ph-rn { display: none !important; }                      /* a row-number column (#, ลำดับ) says nothing on a phone */
+  body.ph-on.ph-fit .ph-frame table :is(tbody, tfoot) :is(td, th).ph-rn + :is(td, th) { position: sticky; left: 0; z-index: 2; background: var(--bg-card); }
+  body.ph-on.ph-fit .ph-frame table thead th.ph-rn + th { position: sticky; left: 0; z-index: 4; }
+  body.ph-on .ph-cl-chips { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  body.ph-on .ph-cl-chips::-webkit-scrollbar { display: none; }
+  body.ph-on .ph-cl-chip { flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card, #fff);
+    color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+  body.ph-on .ph-cl-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  body.ph-on .ph-cl-n { font-variant-numeric: tabular-nums; font-weight: 700; }
+  body.ph-on .ph-cl-st .tskf-seg { margin-bottom: 8px; }
+  body.ph-on .ph-cl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  body.ph-on .ph-cl-card { display: flex; align-items: stretch; background: var(--bg-card, #fff); border: 1px solid var(--border, #d5dbe3); border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); overflow: hidden; }
+  body.ph-on .ph-cl-card.ph-cl-tot { background: var(--bg-subtle, #f1f5f9); }
+  body.ph-on .ph-cl-hit { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 10px 6px 10px 14px; margin: 0; background: transparent; border: 0;
+    text-align: left; font: inherit; color: inherit; cursor: pointer; }
+  body.ph-on .ph-cl-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  body.ph-on .ph-cl-pill { align-self: flex-start; max-width: 100%; display: inline-block; margin-bottom: 2px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.ph-on .ph-cl-pill[data-tone="good"] { background: var(--good-t); color: var(--good-i); }
+  body.ph-on .ph-cl-pill[data-tone="fix"] { background: var(--fix-t); color: var(--fix-i); }
+  body.ph-on .ph-cl-pill[data-tone="watch"] { background: var(--watch-t); color: var(--watch-i); }
+  body.ph-on .ph-cl-pill[data-tone="neu"] { background: var(--neu-t); color: var(--neu-i); }
+  body.ph-on .ph-cl-pill.ph-cl-own { padding: 0; border-radius: 0; background: transparent; white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; }
+  body.ph-on .ph-cl-t { font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); overflow-wrap: anywhere; }
+  body.ph-on .ph-cl-s { font-size: 13px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  body.ph-on .ph-cl-figs { display: flex; gap: 8px; margin-top: 6px; }
+  body.ph-on .ph-cl-f { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+  body.ph-on .ph-cl-fl { font-size: 12px; line-height: 1.35; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.ph-on .ph-cl-fv { font-size: 15px; line-height: 1.35; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.ph-on .ph-cl-spark { display: block; margin-top: 6px; }
+  body.ph-on .ph-cl-spark svg { display: block; width: 100%; height: auto; max-height: 64px; }
+  body.ph-on .ph-cl-chev { flex: 0 0 auto; padding: 0 6px; font-size: 24px; line-height: 1; color: var(--text-secondary); }
+  body.ph-on .ph-cl-tick { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--border-soft, #e6eaf0); cursor: pointer; }
+  body.ph-on .ph-cl-tick input { width: 22px; height: 22px; margin: 0; }
+  body.ph-on .ph-cl-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; border: 1px dashed var(--border-control, #7d8aa0); border-radius: var(--r-md, 12px);
+    font-size: 14px; color: var(--text-secondary); }
+  body.ph-on .ph-cl-act, body.ph-on .ph-cl-more { min-height: 44px; padding: 0 16px; border-radius: var(--r-md, 12px); border: 1px solid var(--accent); background: var(--bg-card, #fff); color: var(--accent);
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  body.ph-on .ph-cl-more { width: 100%; margin-top: 8px; }
+}
 @media (max-width: 700px) {
   /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
   body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
@@ -2234,7 +2280,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on #msSheet.ph-rowsheet .ms-header button[onclick^="msSheetStep"] { display: none; }
   body.ph-on #phSheetBack:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 59; background: rgba(15,23,42,.45); }
 }
-}
 
 /* ════════════════════════════════════════════════════════════
    PRINT — RE-ASSERTED LAST.
@@ -2251,6 +2296,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the phone-only overlay must never reach paper, and the desktop shell has to
      be visible even when the phone was not in force-desktop mode */
   #mobileSummary, #msNav, #backToMobile, #msSheet, #phHome, #phNav { display: none !important; }
+  /* PR-MB: a "?" opens a dialog on screen; on paper it is nothing (the card lists are screen-only: their block is @media screen) */
+  .ui-q, .ph-cl { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
   body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d; }

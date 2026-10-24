@@ -8,10 +8,9 @@
   <div id="mabBoard" class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))"></div>
   <div id="mabNeedsWrap" class="card p-4 mt-4" style="display:none;border:1px solid #94a3b8">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-bold" style="color:var(--text-primary)">ℹ️ ยังไม่มีข้อมูลต้นทุน (<span id="mabNeedsCount">0</span>)</h3>
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">ℹ️ ยังไม่มีข้อมูลต้นทุน (<span id="mabNeedsCount">0</span>) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuactionboard-mb1" title="คำอธิบาย">?</button></h3><template id="hlp-menuactionboard-mb1" data-title="เมนูที่ยังไม่มีข้อมูลต้นทุน"><p>เมนูเหล่านี้ยังจัดอันดับด้วยมาร์จิ้นไม่ได้ — เพิ่ม BoM/ต้นทุนเพื่อให้ปรากฏในกลุ่มจัดการ</p></template>
       <button onclick="document.getElementById('mabNeedsBody').classList.toggle('hidden')" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">แสดง/ซ่อน</button>
     </div>
-    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เมนูเหล่านี้ยังจัดอันดับด้วยมาร์จิ้นไม่ได้ — เพิ่ม BoM/ต้นทุนเพื่อให้ปรากฏในกลุ่มจัดการ</p>
     <div id="mabNeedsBody" class="hidden mt-2"></div>
   </div>
 </div>

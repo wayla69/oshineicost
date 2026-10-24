@@ -235,10 +235,12 @@ function mcRenderPareto() {
   if (sum) sum.textContent = aligned
     ? `Top 10 เมนู(ชุดเดียวกัน) = A ${topN(ca, 10)}% · B ${topN(cb, 10)}% ของต้นทุน`
     : `80% ของต้นทุน: A = ${rank80(ca)} เมนู · B = ${rank80(cb)} เมนู   |   Top 10 = A ${topN(ca, 10)}% · B ${topN(cb, 10)}%`;
-  const hint = document.getElementById('mcParetoHint');
-  if (hint) hint.textContent = aligned
-    ? 'เรียงเมนูชุดเดียวกันทั้ง A/B (ตามต้นทุนรวม) — อันดับ N = เมนูชุดเดียวกัน ดูว่าเมนูเดิมกินสัดส่วนต้นทุนต่างกันแค่ไหนในแต่ละช่วง · เส้นประ = 80%'
-    : 'เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%';
+  // PR-MB: the reading of the chart is behind the "?" of the card title; the line under it keeps the legend of the dashed line
+  const hint = document.getElementById('mcParetoHint'), q = document.getElementById('mcParetoQ');
+  if (hint) hint.textContent = 'เส้นประ = 80%';
+  if (q) q.innerHTML = uiQ('mc:pareto', 'Pareto สะสม', aligned
+    ? '<p>เรียงเมนูชุดเดียวกันทั้ง A/B (ตามต้นทุนรวม) — อันดับ N = เมนูชุดเดียวกัน ดูว่าเมนูเดิมกินสัดส่วนต้นทุนต่างกันแค่ไหนในแต่ละช่วง · เส้นประ = 80%</p>'
+    : '<p>เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%</p>');
   const aLbl = 'A (' + ((L.a_range || []).filter(Boolean).join('–') || 'A') + ')';
   const bLbl = 'B (' + ((L.b_range || []).filter(Boolean).join('–') || 'B') + ')';
   mkChart('mcParetoChart', {
@@ -1086,8 +1088,7 @@ function bcRecomputeKpis() {
         <tr class="border-t"><td class="py-1">ต้นทุนอาหาร %</td><td class="text-right ${bcFoodPctColor(b.food_cost_pct)}">${bcFmtPct(b.food_cost_pct)}</td><td class="text-right font-semibold ${bcFoodPctColor(scenFood)}">${bcFmtPct(scenFood)}</td><td class="text-right">${scenFood!=null&&b.food_cost_pct!=null?((scenFood-b.food_cost_pct>=0?'+':'')+(scenFood-b.food_cost_pct).toFixed(2)+'pp'):''}</td></tr>
       </tbody>
     </table>
-    <p class="text-[10px] text-slate-400 mt-3">ปรับใช้: ต้นทุน ${nOv} · จำนวนเสิร์ฟ ${nQ} · ปิดเมนู ${nD} · preview client-side · COGS=BoM เท่านั้น</p>
-    <p class="text-[10px] text-slate-400 mt-1">หมายเหตุ: เมนูบุฟเฟ่ต์รายได้/จาน = 0 (ปิดเมนู = ประหยัดต้นทุน รายได้ค่าบุฟเฟ่ต์คงเดิม) · à la carte รายได้ปรับตามจำนวนเสิร์ฟ</p>`;
+    <p class="text-[10px] text-slate-400 mt-3">ปรับใช้: ต้นทุน ${nOv} · จำนวนเสิร์ฟ ${nQ} · ปิดเมนู ${nD} · preview client-side · COGS=BoM เท่านั้น ${uiQ('bcsim:note', 'รายได้ในสถานการณ์จำลอง', '<p>หมายเหตุ: เมนูบุฟเฟ่ต์รายได้/จาน = 0 (ปิดเมนู = ประหยัดต้นทุน รายได้ค่าบุฟเฟ่ต์คงเดิม) · à la carte รายได้ปรับตามจำนวนเสิร์ฟ</p>')}</p>`;
 }
 function bcApplyPct(p) {
   (bcSimBase?.skus||[]).forEach(r => {
@@ -1266,7 +1267,7 @@ function bcRenderRoi(d, id) {
   }).join('');
   panel.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI) — ${esc(sc.name||'')}</h3>
+      <h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI) — ${esc(sc.name||'')} ${uiQ('bcroi:real', 'ผลประหยัดจริง', '<p>ประหยัด "จริง" = (ต้นทุน/หน่วยตอน adopt − ต้นทุน/หน่วยปัจจุบัน) × จำนวนที่ขายตั้งแต่ adopt — จะขึ้นเมื่อต้นทุนจริงลดลงตามที่วางแผน</p>')}</h3>
       <div class="flex items-center gap-2">
         <span class="text-[11px] text-slate-400">adopt ${esc((sc.adopted_at||'').slice(0,10))} · baseline ${esc(sc.baseline_month||'')} · ${t.months_tracked||0} เดือน</span>
         <button onclick="bcUnadopt('${id}')" class="text-[11px] border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">ยกเลิกการนำไปใช้</button>
@@ -1284,7 +1285,6 @@ function bcRenderRoi(d, id) {
           <div style="height:100%;width:${prog}%;background:#7a66b8"></div></div>
       </div>
     </div>
-    <p class="text-[11px] text-slate-400 mb-3">ประหยัด "จริง" = (ต้นทุน/หน่วยตอน adopt − ต้นทุน/หน่วยปัจจุบัน) × จำนวนที่ขายตั้งแต่ adopt — จะขึ้นเมื่อต้นทุนจริงลดลงตามที่วางแผน</p>
     <div class="overflow-auto" style="max-height:300px">
       <table class="text-xs w-full"><thead><tr style="color:var(--text-muted)" class="border-b">
         <th class="py-1 pr-2 text-left">SKU</th><th class="py-1 pr-2 text-left">เมนู</th>

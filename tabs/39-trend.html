@@ -67,8 +67,7 @@
   <div class="card p-5 mt-5" data-needs="/api/analysis/gross_profit">
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <div>
-        <h2 class="section-title mb-0">กำไรขั้นต้น <span class="font-normal text-slate-400 normal-case">(Revenue − COGS)</span> <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
-        <p class="text-xs text-slate-400 mt-0.5">รายวัน/สัปดาห์เกลี่ย COGS รายเดือนตามสัดส่วนยอดขาย · รายเดือนใช้ qty × unit_cost ตรง</p>
+        <h2 class="section-title mb-0">กำไรขั้นต้น <span class="font-normal text-slate-400 normal-case">(Revenue − COGS)</span> <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-trend-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-trend-mb1" data-title="กำไรขั้นต้น"><p>รายวัน/สัปดาห์เกลี่ย COGS รายเดือนตามสัดส่วนยอดขาย · รายเดือนใช้ qty × unit_cost ตรง</p></template>
       </div>
       <div class="inline-flex rounded-md border border-slate-200 text-xs overflow-hidden" id="gpGranBar">
         <button data-gran="daily"   onclick="setGpGran('daily')"   class="px-3 py-1 bg-indigo-600 text-white">รายวัน</button>

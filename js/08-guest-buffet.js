@@ -1534,10 +1534,10 @@ async function loadBuffetPerformance() {
   if (k.food_cost_pct > k.food_cost_target_hi) {
     actions.push({ icon:'⚠', tone:'red', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% เกินเป้าสูงสุด ${k.food_cost_target_hi}%</b> — ตรวจสอบ BoM, เจรจาซัพพลายเออร์, ปรับ portion control` });
   } else if (k.food_cost_pct < k.food_cost_target_lo) {
-    actions.push({ icon:'✓', tone:'green', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> — อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ` });
+    actions.push({ icon:'✓', tone:'green', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> ${uiQ('guest:food-low', 'ต้นทุนอาหารต่ำกว่าเป้า', '<p>อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ</p>')}` });
   }
   if (k.beverage_attach_pct < 10) {
-    actions.push({ icon:'', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> — แม้ ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร` });
+    actions.push({ icon:'', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> · ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม — ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) ${uiQ('guest:bev', 'เครื่องดื่ม', '<p>แม้บิลส่วนใหญ่สั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</p>')}` });
   }
   // Top vs bottom utilization
   if (d.seat_util.length >= 2) {
@@ -2234,7 +2234,7 @@ async function loadHeavyEaterTail() {
     const w = parties[0], best = parties[parties.length - 1];
     ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">
       <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:var(--bad-ink)">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
-      ยิ่งคนน้อย ความเสี่ยง "คนกินเยอะคนเดียว" ยิ่งสูง → จุดที่ควรคุม portion/ราคา tier</div>`;
+      ${uiQ('het:party', 'ขนาดโต๊ะกับการขาดทุน', '<p>ยิ่งคนน้อย ความเสี่ยง "คนกินเยอะคนเดียว" ยิ่งสูง → จุดที่ควรคุม portion/ราคา tier</p>')}</div>`;
   } else if (ins) { ins.innerHTML = ''; }
   // distribution bars
   const dist = d.distribution || [];
