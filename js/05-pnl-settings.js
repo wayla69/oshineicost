@@ -2106,20 +2106,149 @@ async function loadAnomalyBanner() {
       banner.classList.add('hidden');
       return;
     }
-    banner.className = 'anomaly-banner';
-    banner.innerHTML = `
-      <span class="text-base"></span>
-      <div class="flex-1 flex flex-wrap items-center gap-2">
-        <span class="font-semibold text-amber-800" style="color:inherit">ข้อสังเกต:</span>
-        ${data.insights.map(ins => `
-          <span class="anomaly-item ${ins.severity === 'good' ? 'anomaly-good' : 'anomaly-bad'}"
-            title="${ins.mom_pct != null ? 'MoM ' + ins.mom_pct + '%' : (ins.period || '')}">${ins.message}</span>
-        `).join('')}
-      </div>
-      <button onclick="this.closest('.anomaly-banner').classList.add('hidden')"
-        class="text-slate-400 hover:text-slate-700 text-lg flex-shrink-0">✕</button>
-    `;
+    renderInsightBox(banner, data);
   } catch(e) { banner.classList.add('hidden'); }
+}
+
+// PR-OB (owner 2026-10-24 "ข้อสังเกตุทำให้ดูง่าย อ่านชัดได้ไหมครับ"): the box was one solid pill per sentence (16 of them, one for every
+// month the food cost moved). Now: a header (period chip, "?" for the basis, ✕), three KPI tiles (revenue, fastest-growing branch, biggest
+// drop) and one food-cost block (the latest full month big, a small bar chart of the monthly %, every month behind ดูทุกเดือน). Colour is
+// meaning on the figure and the arrow only (good / bad ink); the text keeps the theme inks. It reads the structured fields of
+// /api/analysis/anomalies (kind, delta, prev, amount, ...) and its cost_series; a tile or a block with no data is not drawn.
+const _insSign = (v, dp) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(dp == null ? 1 : dp);
+const _insTone = (d, upGood) => (d == null || d === 0) ? 'flat' : ((d > 0) === upGood ? 'good' : 'bad');
+const _insArrow = d => d > 0 ? '▲' : d < 0 ? '▼' : '';
+// "มิ.ย. 2568" -> "มิ.ย. 68" (an axis tick)
+const _insTick = s => String(s || '').replace(/\s(\d{2})(\d{2})$/, ' $2');
+function _insDrill(kind, branch) {
+  if (!tabAllowed('dailysales')) return;
+  if (branch) { const sel = document.getElementById('selBranch'); if (sel) sel.value = branch; }
+  switchTab('dailysales');
+}
+// one to-date range ["2026-10-01", "2026-10-19"] -> "1–19 ต.ค. 2569" (Buddhist year, as the data chip of the top bar)
+function _insRange(r) {
+  if (!Array.isArray(r) || r.length < 2) return '';
+  const p = x => String(x).split('-').map(Number);
+  const [y1, m1, d1] = p(r[0]), [y2, m2, d2] = p(r[1]);
+  const mon = (m, y) => `${_TH_MON_SHORT[m - 1]} ${y + 543}`;
+  return (y1 === y2 && m1 === m2) ? `${d1}–${d2} ${mon(m2, y2)}` : `${d1} ${mon(m1, y1)} – ${d2} ${mon(m2, y2)}`;
+}
+// owner 2026-10-24: every sales tile compares to-date with the period before AND the same period last year
+function _insCmp(lbl, d) {
+  const v = d != null ? `<span class="ins-delta ins-${_insTone(d, true)}">${_insArrow(d)} ${_insSign(d)}%</span>` : '<span class="ins-delta ins-flat">—</span>';
+  return `<span class="ins-cmp"><span class="ins-cmp-l">${lbl}</span>${v}</span>`;
+}
+function _insTile(i) {
+  const isRev = i.kind === 'revenue_mom';
+  const big = isRev ? `฿${fmtN(i.amount)}` : esc(i.branch || '');
+  const base = `ก่อนหน้า ฿${fmtN(i.prev)}${i.prev_year ? ` · ปีก่อน ฿${fmtN(i.prev_year)}` : ''}`;
+  const go = tabAllowed('dailysales');
+  const rg = i.ranges || {};
+  const tip = rg.current ? `${_insRange(rg.current)} เทียบ ${_insRange(rg.previous)} และ ${_insRange(rg.last_year)}` : '';
+  const inner = `<span class="ins-lbl">${esc(i.label || '')}</span>
+    <span class="ins-big${isRev ? '' : ' ins-name'}">${big}</span>${isRev ? '' : `<span class="ins-amt">฿${fmtN(i.amount)}</span>`}
+    ${_insCmp('เทียบเดือนก่อน', i.delta)}${_insCmp('เทียบปีก่อน', i.delta_yoy)}
+    <span class="ins-sub">${base}</span>${go ? '<span class="ins-go" aria-hidden="true">›</span>' : ''}`;
+  return go
+    ? `<button type="button" class="ins-tile" data-ins-kind="${esc(i.kind)}" data-ins-branch="${esc(i.branch || '')}" title="${esc(tip ? tip + ' · ' : '')}ดูยอดขายรายวัน${i.branch ? ' · ' + esc(i.branch) : ''}">${inner}</button>`
+    : `<div class="ins-tile"${tip ? ` title="${esc(tip)}"` : ''}>${inner}</div>`;
+}
+// the monthly food-cost % as bars from zero: red = up from the month before, green = down (the cost reads "up = worse"); value labels on
+// the latest month and the highest / lowest only, placed by the glance layer's rule (glanceLabelSpot: latest first; a label with no room is dropped)
+function _insCostChart(series, width) {
+  const n = series.length, H = 96;
+  const max = Math.max(...series.map(r => r.pct)) || 1;
+  const top = max * 1.18;
+  const bw = width / n;
+  const iLast = n - 1;
+  let iHi = 0, iLo = 0;
+  series.forEach((r, k) => { if (r.pct > series[iHi].pct) iHi = k; if (r.pct < series[iLo].pct) iLo = k; });
+  const placed = [], labels = [];
+  [iLast, iHi, iLo].forEach(k => {
+    if (labels.some(l => l.k === k)) return;
+    const txt = series[k].pct.toFixed(1) + '%';
+    const w = txt.length * 7 + 4, y = H - series[k].pct / top * H - 4;
+    const s = typeof glanceLabelSpot === 'function' ? glanceLabelSpot(placed, { x: (k + 0.5) * bw, y, w, align: 'center' }, { left: 0, right: width }) : { x: (k + 0.5) * bw, cx: (k + 0.5) * bw };
+    if (!s) return;
+    placed.push({ x: s.cx, y, w });
+    labels.push({ k, txt, x: s.x, y });
+  });
+  const ticks = n > 6 ? [0, Math.floor(iLast / 2), iLast] : series.map((_, k) => k);
+  const bars = series.map((r, k) => {
+    const tone = _insTone(r.delta, false);
+    const t = `${r.month_th} · ${r.pct.toFixed(1)}%${r.delta != null ? ` · ${_insArrow(r.delta)} ${_insSign(r.delta)} จุด` : ''}`;
+    return `<div class="ins-col" title="${esc(t)}"><div class="ins-bar ins-bar-${tone}${k === iLast ? ' ins-bar-now' : ''}" style="height:${(r.pct / top * 100).toFixed(1)}%"></div></div>`;
+  }).join('');
+  const lab = labels.map(l => `<span class="ins-val${l.k === iLast ? ' ins-val-now' : ''}" style="left:${l.x.toFixed(1)}px;top:${Math.max(0, l.y - 14).toFixed(1)}px">${l.txt}</span>`).join('');
+  const tk = ticks.map(k => `<span class="ins-tick${k === iLast ? ' ins-tick-now' : ''}" style="left:${((k + 0.5) * bw).toFixed(1)}px">${esc(_insTick(series[k].month_th))}</span>`).join('');
+  const hi = series[iHi], lo = series[iLo];
+  const aria = `ต้นทุนอาหารรายเดือน ${series[0].month_th} ถึง ${series[iLast].month_th}: ล่าสุด ${series[iLast].pct.toFixed(1)}% · สูงสุด ${hi.month_th} ${hi.pct.toFixed(1)}% · ต่ำสุด ${lo.month_th} ${lo.pct.toFixed(1)}%`;
+  return `<div class="ins-chart" role="img" aria-label="${esc(aria)}"><div class="ins-plot" style="height:${H}px">${bars}${lab}</div><div class="ins-ticks">${tk}</div></div>`;
+}
+function _insAllTable(series) {
+  const rows = series.slice().reverse();
+  const half = Math.ceil(rows.length / 2);
+  const tbl = part => `<table class="ins-tbl"><thead><tr><th>เดือน</th><th>% ของรายได้</th><th>เปลี่ยน</th></tr></thead><tbody>${part.map(r => {
+    const tone = _insTone(r.delta, false);
+    return `<tr><td>${esc(r.month_th)}</td><td class="ins-num">${r.pct.toFixed(1)}%</td><td class="ins-num">${r.delta != null ? `<span class="ins-${tone}">${_insArrow(r.delta)} ${_insSign(r.delta)} จุด</span>` : '—'}</td></tr>`;
+  }).join('')}</tbody></table>`;
+  return tbl(rows.slice(0, half)) + (rows.length > half ? tbl(rows.slice(half)) : '');
+}
+function renderInsightBox(box, data) {
+  const meta = data.meta || {};
+  const ins = data.insights || [];
+  const tiles = ['revenue_mom', 'branch_top', 'branch_drop'].map(k => ins.find(i => i.kind === k)).filter(Boolean);
+  const series = (data.cost_series || []).filter(r => r && r.pct != null);
+  if (!tiles.length && !series.length) { box.classList.add('hidden'); return; }
+  const costWord = stkText('ต้นทุน BoM ลด').replace(/\s*ลด$/, '');   // the stock-mode wording: ต้นทุนอาหาร (full mode keeps ต้นทุน BoM)
+  const basis = (meta.mtd_day ? `วันที่ 1–${meta.mtd_day} · ` : '') + 'เทียบเดือนก่อนและปีก่อน';
+  const chip = meta.period_th ? `<span class="ins-chip">${esc(meta.period_th)} · ${esc(basis)}</span>` : '';
+  const help = uiQ('overall:insights', 'ข้อสังเกต',
+    `<p><b>รายได้และสาขา</b>: ${meta.ranges ? `${esc(_insRange(meta.ranges.current))} เทียบ ${esc(_insRange(meta.ranges.previous))} (เดือนก่อน) และ ${esc(_insRange(meta.ranges.last_year))} (ปีก่อน)` : `${esc(meta.period_th || 'เดือนล่าสุด')} เทียบเดือนก่อนและปีก่อน`}${meta.mtd_day ? ' · เดือนที่ยังไม่จบเทียบจำนวนวันเท่ากัน' : ''} · รายได้ไม่รวม VAT · ไม่มีข้อมูลปีก่อน แสดง —</p>
+     <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · เติบโตเร็วสุด / ลดมากสุด = สาขาที่ยอดเปลี่ยนมากที่สุดเทียบเดือนก่อนของสาขานั้น · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
+     ${series.length ? `<p><b>${esc(costWord)} % ของรายได้</b>: ${esc(costWord)}ของจานที่ขาย ÷ รายได้ของเดือนนั้น นับเฉพาะเดือนที่จบแล้ว · แท่งสีแดง = สูงขึ้นจากเดือนก่อน · สีเขียว = ลดลง · ตัวเลขบนแท่ง = เดือนล่าสุด สูงสุด และต่ำสุด · ดูทุกเดือนได้ที่ "ดูทุกเดือน"</p>` : ''}`);
+  const head = `<div class="ins-head"><span class="ins-title">ข้อสังเกต</span>${chip}<span class="ins-sp"></span>${help}
+    <button type="button" class="ins-x" aria-label="ปิดข้อสังเกต" onclick="this.closest('#anomalyBanner').classList.add('hidden')">✕</button></div>`;
+  const kpis = tiles.length ? `<div class="ins-kpis">${tiles.map(_insTile).join('')}</div>` : '';
+  let cost = '';
+  if (series.length) {
+    const last = series[series.length - 1], prev = series.length > 1 ? series[series.length - 2] : null;
+    const tone = _insTone(last.delta, false);
+    cost = `<div class="ins-cost">
+      <div class="ins-cost-l">
+        <span class="ins-lbl">${esc(costWord)} % ของรายได้</span>
+        <span class="ins-big">${last.pct.toFixed(1)}%</span>
+        ${last.delta != null ? `<span class="ins-delta ins-${tone}">${_insArrow(last.delta)} ${_insSign(last.delta)} จุด</span>` : ''}
+        <span class="ins-sub">${esc(last.month_th)}${prev ? ` · เทียบ ${esc(prev.month_th)} (${prev.pct.toFixed(1)}%)` : ''}</span>
+      </div>
+      <div class="ins-cost-r" data-ins-chart="1"></div>
+      <div class="ins-all-wrap">
+        <button type="button" class="ins-more" aria-expanded="false">ดูทุกเดือน (${series.length})</button>
+        <div class="ins-all hidden">${_insAllTable(series)}</div>
+      </div>
+    </div>`;
+  }
+  box.className = 'ins-box';
+  box.innerHTML = head + kpis + cost;
+  // the chart is laid out at the width it gets (labels are placed in pixels); last 16 months
+  const cw = box.querySelector('[data-ins-chart]');
+  if (cw) {
+    const draw = () => { cw.innerHTML = _insCostChart(series.slice(-16), Math.max(160, cw.clientWidth || 480)); };
+    draw();
+    if (window.ResizeObserver && !box._insRO) {
+      let wLast = cw.clientWidth;
+      box._insRO = new ResizeObserver(() => { const c = box.querySelector('[data-ins-chart]'); if (c && c.clientWidth && Math.abs(c.clientWidth - wLast) > 8) { wLast = c.clientWidth; c.dispatchEvent(new Event('ins-redraw')); } });
+      box._insRO.observe(box);
+    }
+    cw.addEventListener('ins-redraw', draw);
+  }
+  box.querySelectorAll('.ins-tile[data-ins-kind]').forEach(b => b.addEventListener('click', () => _insDrill(b.dataset.insKind, b.dataset.insBranch)));
+  const more = box.querySelector('.ins-more');
+  if (more) more.addEventListener('click', () => {
+    const all = box.querySelector('.ins-all'), open = all.classList.toggle('hidden') === false;
+    more.setAttribute('aria-expanded', String(open));
+    more.textContent = open ? 'ซ่อน' : `ดูทุกเดือน (${series.length})`;
+  });
 }
 
 // Action Center — consolidate anomalies + branch-pace (MTD-fair) into one

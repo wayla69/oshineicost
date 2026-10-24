@@ -875,6 +875,18 @@ def _th_ym(ym) -> str:
         return f" {ym}"
 
 
+_TH_MON_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+
+
+def _th_ym_short(ym) -> str:
+    """'2026-10' -> 'ต.ค. 2569' (short Thai month, Buddhist year, as the data chip of the top bar); the raw value when it is not a month."""
+    try:
+        y, m = str(ym)[:7].split("-")
+        return f"{_TH_MON_SHORT[int(m) - 1]} {int(y) + 543}"
+    except Exception:
+        return str(ym or "")
+
+
 @ttl_cache
 def analysis_anomalies(
     month_from: Optional[str] = Query(None),
@@ -890,6 +902,12 @@ def analysis_anomalies(
     - BoM cost % spike / dip month-over-month
     All comparisons are like-for-like consecutive months (house rule), never
     against an all-period average. Uses Easy transaction-level data.
+
+    PR-OB (2026-10-24): besides its `message` sentence (the home action queue reads it), every insight carries structured fields for
+    the overall page's insight box: kind (revenue_mom | branch_top | branch_drop | cost_up | cost_down), label, value + unit (฿ / %),
+    delta + delta_unit (% for revenue and branches, pp for the food-cost share), prev, amount (฿), branch, period, period_th
+    ("ต.ค. 2569"), basis_note ("เทียบวันที่ 1–23 เท่ากัน"). `cost_series` = every full month's food-cost % of revenue with its change
+    in points; `meta` = the latest compared month and the basis of the comparison.
     """
     insights: List[dict] = []
 
@@ -908,6 +926,8 @@ def analysis_anomalies(
         filters_tx.append("b.name = :branch")
         params["branch"] = branch
     _group_filter(filters_tx, params, group)
+    # the same month last year is read even when the month range starts after it (the YoY tile compares against it)
+    filters_ly, params_ly = list(filters_tx), dict(params)
     _month_range_filter(filters_tx, params, month_from, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
@@ -917,7 +937,9 @@ def analysis_anomalies(
     # prior month instead of a partial-vs-full month. We do this by clamping ALL
     # months to day ≤ cutoff; only the last two are ever surfaced below.
     import calendar as _cal
+    from to_date import to_date_ranges
     mtd_note = ""
+    mtd_day = None
     with get_db() as con:
         partial_months = _partial_months(con)
         # Base the MTD clamp on the latest FULLY-synced month, not a trailing sliver:
@@ -934,10 +956,12 @@ def analysis_anomalies(
                 "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
         day_clause = ""
         if maxday:
-            _y, _m, _d = (int(x) for x in maxday.split("-"))
-            if _d < _cal.monthrange(_y, _m)[1]:   # latest month is partial
+            _rg = to_date_ranges(maxday, "month")   # the shared to-date rule (backend/to_date.py)
+            if not _rg["complete"]:                 # latest month is partial: every month is clamped to the same days
+                _d = _rg["day"]
                 day_clause = f" AND CAST(strftime('%d', st.sold_at) AS INT) <= {_d}"
                 mtd_note = f" (เทียบวันที่ 1–{_d} เท่ากัน)"
+                mtd_day = _d
 
         easy_monthly = con.execute(
             f"""
@@ -988,6 +1012,22 @@ def analysis_anomalies(
 
     # Revenue MoM — use threshold param as sensitivity (fix D10)
     _thr = threshold
+    basis_note = mtd_note.strip(" ()") if mtd_note else "เทียบเดือนก่อนทั้งเดือน"
+
+    def _ym_back(ym, k):
+        y, m = (int(x) for x in ym[:7].split("-"))
+        n = y * 12 + m - 1 - k
+        return f"{n // 12}-{n % 12 + 1:02d}"
+
+    def _ranges(ym):
+        """The to-date ranges of month `ym` as the figures were summed: day 1..cutoff (the whole month when no cutoff)."""
+        y, m = (int(x) for x in ym[:7].split("-"))
+        last = _cal.monthrange(y, m)[1]
+        r = to_date_ranges(f"{ym[:7]}-{min(mtd_day or last, last):02d}", "month")
+        return {"current": r["current"], "previous": r["previous"], "last_year": r["last_year"]}
+
+    def _yoy(amount, ly):
+        return round((amount - ly) / ly * 100, 1) if ly else None
     if len(monthly) >= 2:
         last = monthly[-1]
         prev = monthly[-2]
@@ -995,11 +1035,29 @@ def analysis_anomalies(
         prev_rev = prev["revenue"] or 0
         if prev_rev > 0:
             mom_pct = (last_rev - prev_rev) / prev_rev * 100
+
+            ly_month = _ym_back(last["month"], 12)
+            ly_rev = rev_by_month.get(ly_month)
+            if ly_rev is None:
+                with get_db() as con_ly:
+                    ly_rev = con_ly.execute(
+                        f"""SELECT ROUND({net_revenue_sum('st')}, 2) FROM sales_transaction st
+                            JOIN branches b ON b.branch_id = st.branch_id
+                            WHERE {" AND ".join(filters_ly)} AND strftime('%Y-%m', st.sold_at) = :_lym{day_clause}""",
+                        {**params_ly, "_lym": ly_month}).fetchone()[0]
+
+            def _rev_fields():
+                return {"kind": "revenue_mom", "label": "รายได้เดือนนี้", "unit": "฿", "delta": round(mom_pct, 1), "delta_unit": "%",
+                        "prev": prev_rev, "amount": last_rev, "branch": None, "period_th": _th_ym_short(last["month"]),
+                        "prev_period": prev["month"], "prev_period_th": _th_ym_short(prev["month"]), "basis_note": basis_note,
+                        "prev_year": ly_rev or None, "delta_yoy": _yoy(last_rev, ly_rev), "prev_year_period": ly_month,
+                        "prev_year_period_th": _th_ym_short(ly_month), "ranges": _ranges(last["month"])}
             if mom_pct >= _thr:
                 insights.append({
                     "type": "spike", "severity": "good",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
+                    **_rev_fields(),
                     "message": f"รายได้เดือน{_th_ym(last['month'])} โต {mom_pct:+.1f}% จากเดือน{_th_ym(prev['month'])} — ฿{last_rev:,.0f} (ก่อนหน้า ฿{prev_rev:,.0f}){mtd_note}",
                 })
             elif mom_pct <= -_thr:
@@ -1007,6 +1065,7 @@ def analysis_anomalies(
                     "type": "dip", "severity": "bad",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
+                    **_rev_fields(),
                     "message": f"รายได้เดือน{_th_ym(last['month'])} ลด {abs(mom_pct):.1f}% จากเดือน{_th_ym(prev['month'])} — ฿{last_rev:,.0f} (ก่อนหน้า ฿{prev_rev:,.0f}){mtd_note}",
                 })
 
@@ -1026,12 +1085,23 @@ def analysis_anomalies(
                     "last_month": recs[-1]["month"], "prev_month": recs[-2]["month"],
                 })
     growths.sort(key=lambda x: -x["growth_pct"])
+
+    def _branch_fields(kind, label, g):
+        ly_month = _ym_back(g["last_month"], 12)
+        ly = (bgrowth_map.get(g["branch"]) or {}).get(ly_month)
+        return {"kind": kind, "label": label, "unit": "%", "delta": g["growth_pct"], "delta_unit": "%",
+                "prev": g["prev_revenue"], "amount": g["last_revenue"], "period": g["last_month"],
+                "period_th": _th_ym_short(g["last_month"]), "prev_period": g["prev_month"],
+                "prev_period_th": _th_ym_short(g["prev_month"]), "basis_note": basis_note,
+                "prev_year": ly or None, "delta_yoy": _yoy(g["last_revenue"], ly), "prev_year_period": ly_month,
+                "prev_year_period_th": _th_ym_short(ly_month), "ranges": _ranges(g["last_month"])}
     if growths:
         top = growths[0]
         if top["growth_pct"] > _thr:
             insights.append({
                 "type": "growth", "severity": "good", "metric": "branch_mom",
                 "branch": top["branch"], "value": top["growth_pct"],
+                **_branch_fields("branch_top", "เติบโตเร็วสุด", top),
                 "message": f"เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% เทียบเดือนก่อน (฿{top['last_revenue']:,.0f}){mtd_note}",
             })
         worst = growths[-1]
@@ -1039,10 +1109,12 @@ def analysis_anomalies(
             insights.append({
                 "type": "drop", "severity": "bad", "metric": "branch_mom",
                 "branch": worst["branch"], "value": worst["growth_pct"],
+                **_branch_fields("branch_drop", "ลดมากสุด", worst),
                 "message": f"⚠ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% เทียบเดือนก่อน (฿{worst['last_revenue']:,.0f}){mtd_note}",
             })
 
     # BoM cost % spike / dip detection (MoM delta >= 5 pp)
+    cost_months: List[dict] = []
     # Phase 18d: migrated to _cogs_case helper so monthly cost overrides + tier
     # exclusion (incl. plain BUFFET) are unified with the rest of the app.
     try:
@@ -1065,31 +1137,52 @@ def analysis_anomalies(
             if r["bom_cost"] and r["revenue"] and r["revenue"] > 0
             and r["month"] not in partial_months
         ]
+        # the chart series: full months only - the month still trading (latest synced day before its month end) is left out
+        _trading = maxday[:7] if (maxday and mtd_day) else None
+        for i, (m, bc, rev) in enumerate(cost_series):
+            if m == _trading:
+                continue
+            pct = bc / rev * 100
+            d = None
+            if i:
+                _, pbc, prev = cost_series[i - 1]
+                d = round(pct - pbc / prev * 100, 1)
+            cost_months.append({"month": m, "month_th": _th_ym_short(m), "pct": round(pct, 1), "delta": d})
         for i in range(1, len(cost_series)):
             m, bc, rev   = cost_series[i]
             _, pbc, prev = cost_series[i - 1]
             curr_pct = bc  / rev  * 100
             prev_pct = pbc / prev * 100
             delta = curr_pct - prev_pct
+            _cf = {"label": "ต้นทุน BoM", "unit": "%", "delta": round(delta, 1), "delta_unit": "pp", "prev": round(prev_pct, 1),
+                   "amount": bc, "branch": None, "period_th": _th_ym_short(m), "prev_period": cost_series[i - 1][0],
+                   "prev_period_th": _th_ym_short(cost_series[i - 1][0]), "basis_note": "เทียบเดือนก่อนทั้งเดือน"}
             if delta >= _thr:
                 insights.append({
                     "type": "cost_spike", "severity": "bad",
                     "metric": "bom_cost_pct", "period": m,
-                    "value": round(curr_pct, 1),
+                    "value": round(curr_pct, 1), "kind": "cost_up", **_cf,
                     "message": f"⚠ ต้นทุน BoM พุ่งในเดือน{_th_ym(m)} — {curr_pct:.1f}% ของรายได้ (+{delta:.1f} จุดจากเดือนก่อน)",
                 })
             elif delta <= -_thr:
                 insights.append({
                     "type": "cost_drop", "severity": "good",
                     "metric": "bom_cost_pct", "period": m,
-                    "value": round(curr_pct, 1),
+                    "value": round(curr_pct, 1), "kind": "cost_down", **_cf,
                     "message": f"ต้นทุน BoM ลดในเดือน{_th_ym(m)} — {curr_pct:.1f}% ของรายได้ ({delta:.1f} จุดจากเดือนก่อน)",
                 })
     except Exception as e:
         # one bad month must not blank every insight — say which one broke
         print(f"[anomalies] BoM cost-trend insight skipped: {e}")
 
-    return {"insights": insights, "branch_growth": growths[:10]}
+    meta = {"period": None, "period_th": "", "prev_period": None, "prev_period_th": "", "prev_year_period": None, "prev_year_period_th": "",
+            "mtd_day": mtd_day, "basis_note": basis_note, "ranges": None}
+    if len(monthly) >= 2:
+        _lm = monthly[-1]["month"]
+        meta.update(period=_lm, period_th=_th_ym_short(_lm),
+                    prev_period=monthly[-2]["month"], prev_period_th=_th_ym_short(monthly[-2]["month"]),
+                    prev_year_period=_ym_back(_lm, 12), prev_year_period_th=_th_ym_short(_ym_back(_lm, 12)), ranges=_ranges(_lm))
+    return {"insights": insights, "branch_growth": growths[:10], "cost_series": cost_months, "meta": meta}
 
 
 # insight types that are cost / margin figures: a role with neither cost.analysis nor profit.pnl does not receive them (PL3)
@@ -1117,6 +1210,7 @@ def analysis_anomalies_route(
     except Exception:
         return resp
     data["insights"] = [i for i in data.get("insights", []) if i.get("type") not in _ANOMALY_COST_TYPES]
+    data["cost_series"] = []   # PR-OB: the month-by-month food-cost % is a cost figure too
     return Response(content=_j.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), media_type="application/json")
 
 
