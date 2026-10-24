@@ -1536,18 +1536,13 @@ def _mgt_month_bounds(_dt, _cal, sel, mtd_month, lc, latest_day):
     windows are clamped to the same elapsed days. Shared by the report and the phone
     month-by-month series, so the two never draw a month differently.
     → (cs, ce, ps, pe, ys, ye, partial)"""
+    from periods import resolve                # the one period pattern (docs/PERIOD_PATTERN.md)
     sy, sm = int(sel[:4]), int(sel[5:7])
-    cs = _dt.date(sy, sm, 1)
-    ce = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
-    if sel == mtd_month:
-        ce = min(ce, lc)
+    full_end = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
+    # a closed month is drawn whole (anchor = its last day); the in-progress one to date (anchor = lc)
+    w = resolve("month", min(full_end, lc) if sel == mtd_month else full_end, date_from=f"{sel}-01")
+    cs, ce, ps, pe, ys, ye = (_dt.date.fromisoformat(x) for x in (*w["cur"], *w["prev"], *w["ly"]))
     partial = ce > latest_day or sel == mtd_month
-    pm_l = cs - _dt.timedelta(days=1)          # previous calendar month
-    ps = pm_l.replace(day=1)
-    pe = pm_l if sel != mtd_month else ps.replace(day=min(ce.day, pm_l.day))
-    # same CALENDAR month last year (full month vs full month; weekday drift washes out)
-    ys = cs.replace(year=cs.year - 1)
-    ye = ys.replace(day=min(ce.day, _cal.monthrange(ys.year, ys.month)[1]))
     return cs, ce, ps, pe, ys, ye, partial
 
 
@@ -1575,6 +1570,8 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     weeks = None
     ye = None
     ys = None
+    from periods import resolve                # the one period pattern (docs/PERIOD_PATTERN.md)
+    _w = None
     rng = con.execute(
         f"SELECT MIN(date(st.sold_at)) lo, MAX(date(st.sold_at)) hi "
         f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
@@ -1608,8 +1605,9 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     months: list = []
     selected_month = None
     if period == "daily":
+        _w = resolve("day", fdate)                # periods: prev = same weekday last week, ly = 364 days back
         cs = ce = fdate
-        ps = pe = fdate - _dt.timedelta(days=7)
+        ps, pe = (_dt.date.fromisoformat(x) for x in _w["prev"])
         days_in_period = 1
         partial = (focus == today_th)   # in-progress current day (explicit date=today)
         ref_anchor = fdate
@@ -1696,13 +1694,11 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
                     sel_mon = cand
             except Exception:
                 pass
-        cs = sel_mon
-        ce = sel_mon + _dt.timedelta(days=6)
+        _w = resolve("week", sel_mon + _dt.timedelta(days=6))   # a closed week, whole (periods)
+        cs, ce, ps, pe = (_dt.date.fromisoformat(x) for x in (*_w["cur"], *_w["prev"]))
         days_in_period = 7
         partial = False
         ref_anchor = ce
-        ps = cs - _dt.timedelta(days=7)
-        pe = cs - _dt.timedelta(days=1)
         selected_week = cs.isoformat()
         if th:
             label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)} (จ.–อา.)"
@@ -1717,12 +1713,10 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     # Dropped if it predates the data. Monthly compares the SAME CALENDAR month
     # last year (full month vs full month — the standard for monthly reporting;
     # weekday drift washes out over a whole month).
-    if period == "daily":
-        ys = ye = fdate - _dt.timedelta(days=364)
-    elif period == "monthly":
+    if period == "monthly":
         ys, ye = _ys_m, _ye_m
     else:
-        ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
+        ys, ye = (_dt.date.fromisoformat(x) for x in _w["ly"])
     has_yoy = ys.isoformat() >= mind
     return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "is_mtd": is_mtd, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "weeks": weeks, "ye": ye, "ys": ys}
 

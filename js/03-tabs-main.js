@@ -235,7 +235,7 @@ async function retryConnection() {
     populateTargetMonths();
     initCostCategories();
     renderUserPresets();
-    document.getElementById('presetBar').classList.remove('hidden');
+    gPeriodWrite(); gPeriodRender();
     loadActiveTab();
   }
 }
@@ -292,16 +292,8 @@ function ensureDesktopBooted(opts) {
     populateTargetMonths();
     try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
     try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
-    document.getElementById('presetBar').classList.remove('hidden');
-    // Default the period to YTD (Jan of the latest year → latest month) so the
-    // cumulative "ยอดรวมช่วงที่เลือก" totals read year-to-date on first load.
-    if (allMonths.length) {
-      const _last = allMonths[allMonths.length - 1], _y = _last.slice(0, 4);
-      const _sf = document.getElementById('selMonthFrom'), _st = document.getElementById('selMonthTo');
-      if (_sf) _sf.value = allMonths.find(m => m >= `${_y}-01`) || _last;
-      if (_st) _st.value = _last;
-      const _yq = document.getElementById('selYearQuick'); if (_yq) _yq.value = _y;
-    }
+    // PR-PP1: the period is the ONE period bar's (PERIOD_DEFAULT_KIND to date - year until PP3 - unless this device chose another)
+    gPeriodWrite(); gPeriodRender();
     _desktopBooted = true;
     // PR-D1: the sidebar's department entries (js/18-launcher.js), then land: the department launcher on a desktop, the Daily Brief
     // (home) on a phone that opened the full dashboard (switchTab also hides the period controls home does not use).
@@ -419,6 +411,7 @@ async function initDataCoverageNote() {
     // progress (drawn hollow, tagged MTD); charts drawn before it arrived re-check.
     if (window.__dataLastDate !== c.last_date) {
       window.__dataLastDate = c.last_date;
+      try { gPeriodWrite(); gPeriodRender(); } catch (e) { /* the bar is not drawn yet */ }   // PR-PP1: the anchor is the last data day
       Object.values(chartInstances).forEach(ch => { try { if (ch && ch.$gi && ch.$gi.grain) ch.update('none'); } catch (e) { /* stale chart */ } });
     }
     const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -477,9 +470,8 @@ async function loadMonths() {
   if (currentGranularity === 'quarterly') populateQuarterSelects();
   else populateMonthSelects();
   populateCmpDropdowns();
-  // Phase 7: populate calendar-year quick selector
   window.allMonths = allMonths;
-  _populateYearQuick();
+  if (typeof gPeriodWrite === 'function') { gPeriodWrite(); gPeriodRender(); }   // PR-PP1: the hidden month fields follow the bar
 }
 
 function fmtMonth(ym) {
@@ -509,48 +501,10 @@ function populateCmpDropdowns() {
 // ── Granularity ────────────────────────────────────────────────
 let currentGranularity = 'monthly';
 
+// PR-PP1: the top bar's toggle is gone - the ONE period bar (gPeriod*, js/01-core.js) sets currentGranularity
+// (week -> weekly, กำหนดเอง -> daily, month / year -> monthly). Kept for callers that still name a granularity.
 function setGranularity(g) {
   currentGranularity = g;
-  const useDates = g === 'daily' || g === 'weekly';
-  const isYearly = g === 'yearly';
-
-  // Toggle button styles
-  ['daily','weekly','monthly','quarterly','yearly'].forEach(name => {
-    const btn = document.getElementById('gran-' + name);
-    if (!btn) return;
-    const on = name === g;
-    btn.classList.toggle('gran-active', on);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.style.color = on ? '' : 'var(--text-secondary)';
-  });
-
-  // Show/hide range pickers
-  const dp = document.getElementById('dateRangePickers');
-  const mp = document.getElementById('monthRangePickers');
-  if (useDates) {
-    dp.classList.remove('hidden'); dp.classList.add('flex');
-    mp.classList.add('hidden');
-    if (!document.getElementById('selDateFrom').value) {
-      const days = g === 'daily' ? 30 : 91;
-      const today = new Date();
-      const from  = new Date(today.getTime() - days * 86400000);
-      document.getElementById('selDateTo').value   = today.toISOString().slice(0,10);
-      document.getElementById('selDateFrom').value = from.toISOString().slice(0,10);
-    }
-  } else if (isYearly) {
-    // Yearly view = compare all years; period selectors are not used
-    dp.classList.add('hidden'); dp.classList.remove('flex');
-    mp.classList.add('hidden');
-  } else {
-    dp.classList.add('hidden'); dp.classList.remove('flex');
-    mp.classList.remove('hidden');
-    if (g === 'quarterly') populateQuarterSelects();
-    else                   populateMonthSelects();
-  }
-
-  // Bust the per-tab guard cache so EVERY tab re-fetches for the new granularity.
-  // Without this, a guarded tab whose _filterKey() is unchanged silently keeps its
-  // stale data when you toggle Day/Week/Month.
   Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]);
   loadActiveTab();
 }
@@ -603,22 +557,13 @@ function populateQuarterSelects() {
   });
 }
 
-// Returns URL params string for trend-specific API calls (respects granularity)
+// Params of the trend charts: the ช่วงกราฟ window ending at the period bar's period (PR-PP1, gPeriodTrendWindow)
 function getTrendParams() {
   const p = new URLSearchParams();
   if (getBranch()) p.set('branch', getBranch());
-  p.set('granularity', currentGranularity);
-  if (currentGranularity === 'daily' || currentGranularity === 'weekly') {
-    const df = document.getElementById('selDateFrom')?.value;
-    const dt = document.getElementById('selDateTo')?.value;
-    if (df) p.set('date_from', df);
-    if (dt) p.set('date_to',   dt);
-  } else if (currentGranularity === 'yearly') {
-    // Yearly mode: deliberately omit month_from/month_to to include all years
-  } else {
-    if (getMonthFrom()) p.set('month_from', getMonthFrom());
-    if (getMonthTo())   p.set('month_to',   getMonthTo());
-  }
+  const w = gPeriodTrendWindow();
+  p.set('granularity', w.g);
+  ['date_from', 'date_to', 'month_from', 'month_to'].forEach(k => { if (w[k]) p.set(k, w[k]); });
   return p.toString() ? '?' + p.toString() : '';
 }
 
@@ -1123,7 +1068,7 @@ function renderTrendAnalysisBar(trendData) {
       ${sub ? `<p class="text-xs text-slate-400">${sub}</p>` : ''}
     </div>`;
 
-  const periodLbl = {daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', quarterly:'รายไตรมาส'}[currentGranularity] || 'ช่วง';
+  const periodLbl = {daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', quarterly:'รายไตรมาส'}[trendGranularity()] || 'ช่วง';
   el.innerHTML = [
     stat('รายได้รวม',    fmt(total), data.length+' '+periodLbl.toLowerCase()+'s', '#4a70b0'),
     stat(periodLbl+' Avg',   fmt(avg), '', 'var(--text-primary)'),
@@ -1228,14 +1173,14 @@ async function loadTrendChart() {
   const data = await api(`${API}/api/sales/monthly${getTrendParams()}`);
 
   // ── Yearly mode: pivot into per-year line series on Jan-Dec axis ────────────
-  if (currentGranularity === 'yearly') return renderYearlyOverlay(data);
+  if (trendGranularity() === 'yearly') return renderYearlyOverlay(data);
 
   let labels = data.map(d => fmtPeriod(d.period_month));
   const revenues = data.map(d => scaleRevenue(d.revenue, d.tx_count, d.customer_count));
 
   // Fetch YoY + Targets + Forecast in parallel (monthly granularity only)
   let yoyMap = {}, targetMap = {}, fc = null;
-  if (currentGranularity === 'monthly') {
+  if (trendGranularity() === 'monthly') {
     const params = new URLSearchParams();
     if (getBranch())    params.set('branch', getBranch());
     if (getGroup())     params.set('group',  getGroup());
@@ -1282,7 +1227,7 @@ async function loadTrendChart() {
   }
   // Forecast tail — OLS on actual monthly revenue, projected to END OF YEAR
   // (Dec of the latest data year). Confidence band widens with the horizon.
-  if (unitIsTotal && currentGranularity === 'monthly' && data.length >= 3) {
+  if (unitIsTotal && trendGranularity() === 'monthly' && data.length >= 3) {
     const lastMonth = data[data.length - 1]?.period_month || '';
     const [ly, lm] = lastMonth.split('-').map(Number);
     const horizon = (ly && lm && lm < 12) ? (12 - lm) : 0;
@@ -1324,7 +1269,7 @@ async function loadTrendChart() {
   }
 
   // YoY overlay — prior-year revenue at same period (only if data exists)
-  if (unitIsTotal && currentGranularity === 'monthly' && Object.keys(yoyMap).length) {
+  if (unitIsTotal && trendGranularity() === 'monthly' && Object.keys(yoyMap).length) {
     const yoyArr = data.map(d => {
       const ly = yoyMap[d.period_month];
       return (ly && ly.ly_revenue) ? scaleRevenue(ly.ly_revenue, d.tx_count, d.customer_count) : null;
@@ -1351,7 +1296,7 @@ async function loadTrendChart() {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: currentGranularity==='monthly' || Object.keys(targetMap).length>0, position:'bottom', labels:{color:chartTheme().text,font:{size:10},boxWidth:14,filter:(li)=>!/Forecast (band|lo)/.test(li.text)} },
+        legend: { display: trendGranularity()==='monthly' || Object.keys(targetMap).length>0, position:'bottom', labels:{color:chartTheme().text,font:{size:10},boxWidth:14,filter:(li)=>!/Forecast (band|lo)/.test(li.text)} },
         datalabels: { display: false },
         tooltip: {
           callbacks: {

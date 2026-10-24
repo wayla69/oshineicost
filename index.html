@@ -2506,6 +2506,61 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .nav-item.dept-entry.active::before { background: var(--gs); width: 4px; }
 .nav-item.dept-entry.active { background: color-mix(in srgb, var(--gs) 22%, transparent); }
 .nav-item.dept-entry:focus-visible { outline: 2px solid var(--gs); outline-offset: -2px; }
+/* ── PR-PP1 (2026-10-24): the one period chip track (periodBar) and the two comparison chips (periodCmpHtml), js/01-core.js ── */
+.pbar-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+.pbar { display: inline-flex; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--r-md); padding: 3px; gap: 2px; max-width: 100%; }
+.pbar .gran-btn { min-height: 32px; }
+.pbar-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.pbar-range[hidden] { display: none; }
+.pbar-range input { border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); }
+.pbar-apply { border: 1px solid var(--accent); border-radius: var(--r-md); padding: 4px 12px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--on-accent, #fff); cursor: pointer; }
+.pbar-err { color: var(--bad-ink); font-size: 12px; }
+.pcmp-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pcmp { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.pcmp b { font-weight: 700; }
+.pcmp-none { color: var(--text-muted); }
+.pcmp-row .pcmp-q { width: 24px; height: 24px; }
+/* the ONE period bar of the top bar (#gPeriod, gPeriod* in js/01-core.js) and the ★ saved-range menu */
+.gp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.gp .pbar .gran-btn { padding: 4px 11px; }
+.gp-step { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); padding: 2px; }
+.gp-step[hidden], .gp-range[hidden], .gp-chart[hidden] { display: none; }
+.gp-arrow { min-width: 30px; min-height: 30px; border: none; background: transparent; color: var(--text-primary); font-size: 18px; line-height: 1; border-radius: var(--r-sm); cursor: pointer; }
+.gp-arrow:hover:not(:disabled) { background: var(--bg-hover); }
+.gp-arrow:disabled { color: var(--text-muted); opacity: .45; cursor: default; }
+.gp-arrow:focus-visible, .gp .gran-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gp-label { min-width: 84px; text-align: center; font-size: 12.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; padding: 0 4px; }
+.gp-range { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); }
+.gp-range input { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 8px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); }
+.gp-apply { border: 1px solid var(--accent); border-radius: var(--r-md); padding: 5px 12px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--on-accent, #fff); cursor: pointer; }
+.gp-err { color: var(--bad-ink); font-size: 12px; }
+.gp-chart { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.gp-chart select { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 5px 8px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); }
+.preset-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; max-width: min(320px, calc(100vw - 32px)); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+.preset-menu.hidden { display: none; }
+.preset-menu .preset-chip { justify-content: space-between; }
+.preset-menu .preset-chip .x { border: none; background: transparent; color: inherit; cursor: pointer; padding: 0 2px; }
+.preset-menu .preset-save { background: var(--good-t); color: var(--good-i); border-color: transparent; }
+@media (max-width: 700px) {
+  /* a phone: the period bar is ONE row that scrolls sideways, inside the folded tools */
+  .gp { flex: 0 0 auto; width: calc(100vw - 16px); max-width: none; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; }   /* wider than the scope column: the row runs under the phone tools */
+  .gp::-webkit-scrollbar { display: none; }
+  .gp > * { flex: 0 0 auto; }
+  .gp-step, .gp-range { order: -1; }   /* the period on screen first, the kinds after it */
+  .gp .pbar { display: inline-flex; width: auto; max-width: none; overflow: visible; flex-wrap: nowrap; }
+  .gp .pbar .gran-btn, .gp-arrow, .gp-apply, .gp-range input, .gp-chart select { min-height: 44px; min-width: 44px; font-size: 14px; }
+  .gp-range { flex-wrap: nowrap; }
+  .preset-menu { position: fixed; left: 16px; right: 16px; top: auto; max-width: none; }
+}
+@media (max-width: 700px) {
+  .pbar-wrap { width: 100%; }
+  .pbar { display: flex; flex-wrap: nowrap; overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .pbar::-webkit-scrollbar { display: none; }
+  .pbar .gran-btn { flex: 0 0 auto; min-height: 44px; min-width: 44px; font-size: 14px; }
+  .pbar-range input, .pbar-apply { min-height: 44px; font-size: 14px; }
+  .pcmp-row .pcmp-q { width: 44px; height: 44px; }
+}
 </style>
 <style>
 /* ── PR-D2 (2026-10-21): the department workspace. (1) The icon rail: the sidebar folded with the app's own .collapsed (a desktop starts
@@ -3170,41 +3225,47 @@ body.mgt-reading .content-area { padding-top: 10px; }
         style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:160px;font-weight:600">
         <option value="">ทุกสาขา</option>
       </select>
-      <!-- Granularity toggle -->
-      <div class="flex flex-shrink-0" role="group" aria-label="ความถี่ข้อมูล (Day / Week / Month / Qtr / Year)" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
-        <button id="gran-daily"     onclick="setGranularity('daily')"     aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)">วัน</button>
-        <button id="gran-weekly"    onclick="setGranularity('weekly')"    aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)">สัปดาห์</button>
-        <button id="gran-monthly"   onclick="setGranularity('monthly')"   aria-pressed="true"  class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all gran-active">เดือน</button>
-        <button id="gran-quarterly" onclick="setGranularity('quarterly')" aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)">ไตรมาส</button>
-        <button id="gran-yearly"    onclick="setGranularity('yearly')"    aria-pressed="false" class="gran-btn px-2.5 py-1 text-xs font-medium rounded-md transition-all" style="color:var(--text-secondary)" title="Year-over-Year comparison">ปี</button>
-      </div>
-      <!-- Date pickers for Daily / Weekly -->
-      <div id="dateRangePickers" class="hidden items-center gap-1.5">
-        <input type="date" id="selDateFrom" onchange="onFilterChange()"
-          style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:130px">
-        <span style="color:var(--text-muted);font-size:14px">–</span>
-        <input type="date" id="selDateTo" onchange="onFilterChange()"
-          style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:130px">
-      </div>
-      <!-- Month/Quarter pickers for Monthly / Quarterly -->
-      <div id="monthRangePickers" class="flex items-center gap-1.5">
-        <select id="selMonthFrom" onchange="onFilterChange()"
-          style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:115px">
-          <option value="">ทั้งหมด</option>
-        </select>
-        <span style="color:var(--text-muted);font-size:14px">–</span>
-        <select id="selMonthTo" onchange="onFilterChange()"
-          style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:115px">
-          <option value="">ล่าสุด</option>
-        </select>
-        <!-- Phase 4: quick period presets — one-click ranges -->
-        <div id="periodPresets" class="flex items-center gap-1 flex-shrink-0" style="margin-left:2px">
-          <button onclick="setPeriodPreset('all')"  id="preset-all"  class="period-preset">ทั้งหมด</button>
-          <button onclick="setPeriodPreset('3m')"   id="preset-3m"   class="period-preset">3ด.</button>
-          <button onclick="setPeriodPreset('6m')"   id="preset-6m"   class="period-preset">6ด.</button>
-          <button onclick="setPeriodPreset('ytd')"  id="preset-ytd"  class="period-preset">ปีนี้</button>
-          <button onclick="setPeriodPreset('12m')"  id="preset-12m"  class="period-preset">12ด.</button>
+      <!-- PR-PP1 (owner 2026-10-24): ONE period bar - สัปดาห์ · เดือน · ปี · กำหนดเอง, a stepper ‹ ต.ค. 2569 › for the chosen kind
+           (the current period to date by default) and จาก–ถึง for กำหนดเอง (gPeriod*, js/01-core.js). It writes the four hidden
+           fields below, so every page that reads getMonthFrom / getMonthTo / the day range keeps working until PP2/PP3 move it.
+           Every figure carries its own เทียบช่วงก่อน + เทียบปีก่อน, so there is no compare filter; 3 / 6 / 12 เดือน is a chart
+           option (ช่วงกราฟ, the trend chart of ภาพรวมยอดขาย only). -->
+      <div id="gPeriod" class="gp" role="group" aria-label="ช่วงเวลา">
+        <div class="pbar gp-kinds" role="group" aria-label="ประเภทช่วงเวลา">
+          <button type="button" class="gran-btn" data-k="week" aria-pressed="false" onclick="gPeriodKind('week')">สัปดาห์</button>
+          <button type="button" class="gran-btn" data-k="month" aria-pressed="false" onclick="gPeriodKind('month')">เดือน</button>
+          <button type="button" class="gran-btn gran-active" data-k="year" aria-pressed="true" onclick="gPeriodKind('year')">ปี</button>
+          <button type="button" class="gran-btn" data-k="range" aria-pressed="false" onclick="gPeriodKind('range')">กำหนดเอง</button>
         </div>
+        <div class="gp-step" id="gpStep">
+          <button type="button" class="gp-arrow" id="gpPrev" onclick="gPeriodStep(-1)" aria-label="ช่วงก่อนหน้า">‹</button>
+          <span id="gpLabel" class="gp-label" aria-live="polite"></span>
+          <button type="button" class="gp-arrow" id="gpNext" onclick="gPeriodStep(1)" aria-label="ช่วงถัดไป">›</button>
+        </div>
+        <div class="gp-range" id="gpRange" hidden>
+          <label for="gpFrom" class="sr-only">จาก</label><input type="date" id="gpFrom">
+          <span aria-hidden="true">–</span>
+          <label for="gpTo" class="sr-only">ถึง</label><input type="date" id="gpTo">
+          <button type="button" class="gp-apply" onclick="gPeriodApplyRange()">ใช้ช่วงนี้</button>
+          <span id="gpErr" class="gp-err" role="alert"></span>
+        </div>
+        <label class="gp-chart" id="gpChart" hidden>ช่วงกราฟ
+          <select id="selChartWin" onchange="gPeriodChartWin(this.value)" aria-label="ช่วงกราฟ">
+            <option value="3">3 เดือน</option>
+            <option value="6">6 เดือน</option>
+            <option value="12" selected>12 เดือน</option>
+            <option value="all">ทั้งหมด</option>
+            <option value="q">ทั้งหมด รายไตรมาส</option>
+            <option value="y">เทียบรายปี</option>
+          </select>
+        </label>
+      </div>
+      <!-- the state the pages read (getMonthFrom / getMonthTo, the day range of qp / summaryParams); written by the bar only -->
+      <div id="gPeriodState" hidden>
+        <input type="date" id="selDateFrom" tabindex="-1" aria-hidden="true">
+        <input type="date" id="selDateTo" tabindex="-1" aria-hidden="true">
+        <select id="selMonthFrom" tabindex="-1" aria-hidden="true"><option value="">ทั้งหมด</option></select>
+        <select id="selMonthTo" tabindex="-1" aria-hidden="true"><option value="">ล่าสุด</option></select>
       </div>
     </div>
     <!-- Phone only: folds the controls away so the page opens on its data (toggleTopbarFold) -->
@@ -3264,10 +3325,17 @@ body.mgt-reading .content-area { padding-top: 10px; }
           </select>
         </div>
       </div>
-      <button id="presetBtn" onclick="togglePresetMenu()" aria-haspopup="true" aria-expanded="false" aria-label="ช่วงเวลาที่บันทึกไว้"
-        class="topbar-icon-btn relative whitespace-nowrap" style="width:auto;padding:0 10px;font-size:12px;gap:4px" title="บันทึก preset">
+      <div class="relative flex-shrink-0">
+      <button id="presetBtn" onclick="togglePresetMenu()" aria-haspopup="true" aria-expanded="false" aria-controls="presetMenu" aria-label="ช่วงเวลาที่บันทึกไว้"
+        class="topbar-icon-btn relative whitespace-nowrap" style="width:auto;padding:0 10px;font-size:12px;gap:4px" title="ช่วงเวลาที่บันทึกไว้">
         <span aria-hidden="true">★</span> <span style="color:var(--text-secondary);font-weight:500">ช่วงที่บันทึก</span>
       </button>
+      <!-- PR-PP1: the saved ranges live here only (the เลือกเร็ว row is gone) -->
+      <div id="presetMenu" class="preset-menu hidden" role="menu" aria-label="ช่วงที่บันทึกไว้">
+        <div id="userPresets" class="flex flex-col gap-1.5"></div>
+        <button type="button" onclick="saveCurrentAsPreset()" class="preset-chip preset-save">+ บันทึกช่วงปัจจุบัน</button>
+      </div>
+      </div>
       <!-- DB connection status -->
       <div id="dbStatus" class="db-status checking" title="Database connection status">
         <span class="db-dot"></span>
@@ -3293,37 +3361,6 @@ body.mgt-reading .content-area { padding-top: 10px; }
       </button>
       <input id="salesDataFile" type="file" accept=".xlsx,.txt" class="hidden" onchange="onSalesDataSelected(event)">
     </div>
-  </div>
-
-  <!-- Preset chips bar -->
-  <div id="presetBar" class="hidden px-6 py-2.5 flex items-center gap-2 flex-wrap" style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
-    <span class="text-xs text-slate-500 font-medium mr-1">เลือกเร็ว:</span>
-    <button onclick="loadPresetRange('this_month')" class="preset-chip">เดือนนี้</button>
-    <button onclick="loadPresetRange('last_month')" class="preset-chip">เดือนที่แล้ว</button>
-    <button onclick="loadPresetRange('last_3m')" class="preset-chip">3 เดือนล่าสุด</button>
-    <button onclick="loadPresetRange('last_6m')" class="preset-chip">6 เดือนล่าสุด</button>
-    <button onclick="loadPresetRange('ytd')" class="preset-chip">ตั้งแต่ต้นปี</button>
-    <button onclick="loadPresetRange('all')" class="preset-chip">ทั้งหมด</button>
-    <span class="text-slate-300 mx-1">·</span>
-    <span class="text-xs text-slate-500 font-medium">ปี:</span>
-    <select id="selYearQuick" onchange="onYearQuickChange(this.value)" aria-label="เลือกปีปฏิทิน" class="preset-chip" style="padding:4px 8px" title="เลือกปีปฏิทิน">
-      <option value="">ปี…</option>
-    </select>
-    <button onclick="setYearRange(new Date().getFullYear()-1, true)" class="preset-chip" title="ปีที่แล้วเต็มปี">ปีก่อน</button>
-    <button onclick="setYoYRange()" class="preset-chip" title="ปีนี้ vs ปีที่แล้ว">เทียบปีก่อน</button>
-    <span class="text-slate-300 mx-1">|</span>
-    <button onclick="toggleCustomRange()" id="customRangeChip" class="preset-chip">กำหนดเอง</button>
-    <span id="customRangeBox" class="hidden items-center gap-1">
-      <input type="date" id="customFrom" class="border border-slate-300 rounded px-2 py-1 text-xs" title="วันเริ่มต้น">
-      <span class="text-xs text-slate-400">→</span>
-      <input type="date" id="customTo" class="border border-slate-300 rounded px-2 py-1 text-xs" title="วันสิ้นสุด">
-      <button onclick="applyCustomRange()" class="preset-chip" style="background:var(--accent-soft);color:var(--accent)">ใช้ช่วงนี้</button>
-      <span id="customRangeMsg" class="text-xs text-red-500"></span>
-    </span>
-    <span class="text-slate-300 mx-1">|</span>
-    <span class="text-xs text-slate-500 font-medium">ช่วงที่บันทึกไว้:</span>
-    <div id="userPresets" class="flex items-center gap-1.5 flex-wrap"></div>
-    <button onclick="saveCurrentAsPreset()" class="preset-chip" style="background:#d1fae5;color:#065f46">+ บันทึกค่าปัจจุบัน</button>
   </div>
 
   <main class="content-area">
