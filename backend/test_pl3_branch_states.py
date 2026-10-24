@@ -122,6 +122,15 @@ def test_effective_start_is_the_first_activity_or_today(newbranch):
     assert effective_start(newbranch, 98, "2026-10-23") == "2026-10-23"
 
 
+def test_late_exempt_covers_the_first_day_itself(newbranch):
+    """P3-1 (owner 2026-10-24): a cutoff on or before the branch's first day is exempt; from the next day on it is held."""
+    from bom_center.started import late_exempt
+    today = date(2026, 10, 23)
+    assert late_exempt(newbranch, 98, "2026-10-23", today) and late_exempt(newbranch, 98, date(2026, 10, 22), today)
+    assert not late_exempt(newbranch, 98, "2026-10-24", today)
+    assert late_exempt(newbranch, 97, "2026-09-01", today) and not late_exempt(newbranch, 97, "2026-09-02", today)
+
+
 def test_a_new_branch_has_no_round_that_is_already_late_and_an_old_one_keeps_it(newbranch):
     from bom_center.forecast import next_deliveries
     from bom_center import todo as TD

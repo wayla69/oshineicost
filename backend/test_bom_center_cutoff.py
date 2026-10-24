@@ -51,6 +51,26 @@ def slip(c, now=NOW):
     c.commit()
 
 
+START_SQL = ("INSERT INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by, confirmed_at)"
+             " VALUES(?, '2026-10-04', 'confirmed', 't', '2026-10-04', '2026-10-04', 't', '2026-10-04')")
+
+
+def first_day_today(c, bid=1):
+    """P3-1: no activity before Monday 5/10 (the stock-mode run seeds a slip history from 1/9: it is taken away), so Monday is the
+    branch's first day (started.effective_start)."""
+    c.execute("DELETE FROM bc_issue_line WHERE slip_id IN (SELECT slip_id FROM bc_issue_slip WHERE branch_id=? AND slip_date<'2026-10-05')",
+              (bid,))
+    c.execute("DELETE FROM bc_issue_slip WHERE branch_id=? AND slip_date<'2026-10-05'", (bid,))
+    c.commit()
+
+
+def started_the_day_before(c, bid=1):
+    """P3-1: the branch started on Sunday 4/10, so Monday 5/10 is its second day and its cutoff is held (a cutoff on or before the first
+    day is exempt - started.late_exempt)."""
+    c.execute(START_SQL, (bid,))
+    c.commit()
+
+
 # ── the rule ─────────────────────────────────────────────────────────────────
 def test_cutoff_is_1315_two_days_before_and_a_sunday_moves_to_saturday():
     assert F.cutoff_for(date(2026, 10, 6)) == at(3, 13, 15)            # Tuesday delivery -> Saturday
@@ -142,8 +162,14 @@ def test_plan_by_delivery_carries_the_cutoff_and_the_count_unit(con):  # noqa: F
     assert [d["round"] for d in p["deliveries"]] == ["1", "2", "salmon", "1"] and "count" not in p
     crab = next(r for r in p["rows"] if r["code"] == CRAB)
     assert crab["count_unit"] == "แพ็ค 1 กก." and crab["per_count_unit"] == 1000 and crab["system_qty"] is None
+    first_day_today(con)
+    first = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=LATE)          # P3-1: the branch's first day - its passed cutoff is not late
+    assert first["late"] is False and first["open"] is False and first["hours_left"] < 0
+    assert not any(d["late"] for d in first["deliveries"])
+    started_the_day_before(con)                                          # its second day: as before
     late = OR.plan(con, 1, "1", WED, as_of=AS_OF, now=LATE)
     assert late["late"] is True and late["open"] is False and late["hours_left"] < 0
+    assert late["deliveries"][0]["late"] is True
 
 
 # ── ordering without a count ─────────────────────────────────────────────────
@@ -203,7 +229,21 @@ def test_a_draft_suggestion_follows_the_system_stock_and_is_frozen_when_sent(con
     assert crab()["suggested_units"] == 0
 
 
+def test_a_submit_after_the_cutoff_on_the_first_day_is_not_late(con):  # noqa: F811
+    """P3-1: the branch's first day (its first slip is Monday's): an order sent after Monday 13:15 is not late and asks no late fee."""
+    first_day_today(con)
+    slip(con, LATE)
+    out = OR.save_flow(con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon",
+                       submit=True, now=LATE, as_of=AS_OF)
+    assert out["status"] == "submitted" and out["late"] == 0
+    con.commit()
+    assert HB.queue(con)[0]["late"] is False
+    row = HB.compliance(con, "2026-10-05", "2026-10-05", 1)["rows"][0]
+    assert row["late"] is False and row["order_id"] == out["order_id"]
+
+
 def test_a_late_submit_needs_the_late_fee_acknowledged_and_is_flagged(con):  # noqa: F811
+    started_the_day_before(con)                                                      # P3-1: Monday is its second day
     slip(con, LATE)                                                                  # Monday's slip, confirmed at 15:00
     args = (con, 1, "1", WED, [{"code": "V-007", "confirmed_units": 2, "reason_code": "event"}], "udon")
     with pytest.raises(OR.LateSubmit) as e:
@@ -324,6 +364,12 @@ def test_todo_names_the_delivery_and_the_cutoff_per_round(udon):  # noqa: F811
     # under four hours left: urgent
     near = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=at(5, 10)))["order_due_1"]
     assert near["urgent"] is True and near["late"] is False
+    # P3-1: on the branch's first day a cutoff that passed earlier that day is no late duty - the next round of round 1 is named instead
+    first_day_today(c)
+    first = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))
+    assert not any(i["late"] for i in first.values()) and first["order_due_1"]["cutoff_date"] == "2026-10-12"
+    assert first["order_due_1"]["upcoming"] is True and "เลยเวลาส่ง" not in first["order_due_1"]["detail"]
+    started_the_day_before(c)                                                            # its second day: as before
     # past the cutoff and not sent: late, urgent, with the late-fee wording
     late = _due(TD.build(c, "2026-09", None, None, today=date(2026, 10, 5), now=LATE))["order_due_1"]
     assert late["late"] is True and late["urgent"] is True and late["status"] == "todo"
@@ -383,7 +429,12 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
                            json=[{"branch_id": bid, "round": "2", "delivery_weekday": 9}]).status_code == 400
         c = sqlite3.connect(str(main.DB_PATH))
         c.execute("DELETE FROM bc_order_calendar")                     # back to the defaults for the rest
+        c.execute("DELETE FROM bc_issue_slip WHERE branch_id=?", (bid,))
         c.commit()
+        # P3-1: on the branch's first day the passed cutoff is not late on the plan
+        p = client.get(f"/api/bom-center/order/plan?branch_id={bid}&round=1&delivery=2026-10-07")
+        assert p.status_code == 200 and p.json()["late"] is False, p.text
+        started_the_day_before(c, bid)                                 # from its second day on, as before
         c.close()
         # the plan by delivery
         p = client.get(f"/api/bom-center/order/plan?branch_id={bid}&round=1&delivery=2026-10-07")
@@ -412,7 +463,7 @@ def test_the_endpoints_calendar_plan_save_late_and_exports(client, monkeypatch):
         n = sqlite3.connect(str(main.DB_PATH))
         assert n.execute("SELECT COUNT(*) FROM bc_order").fetchone()[0] == 0                 # nothing was kept
         assert n.execute("SELECT COUNT(*) FROM bc_stock_count").fetchone()[0] == 0          # no count is written by ordering
-        assert n.execute("SELECT COUNT(*) FROM bc_issue_slip WHERE status='confirmed'").fetchone()[0] == 1   # the slip stays
+        assert n.execute("SELECT COUNT(*) FROM bc_issue_slip WHERE status='confirmed' AND slip_date='2026-10-05'").fetchone()[0] == 1   # the slip stays
         n.close()
         r = client.post(f"/api/bom-center/order/save?branch_id={bid}", headers=hdr, json=dict(body, ack_late=True))
         assert r.status_code == 200, r.text

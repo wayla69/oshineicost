@@ -330,7 +330,7 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None, branch_
     d0, d1 = date.fromisoformat(date_from), date.fromisoformat(date_to)
     today = bkk_today()
     names = dict(con.execute("SELECT branch_id, name FROM branches"))
-    from .started import NOT_STARTED_TH, branch_start
+    from .started import NOT_STARTED_TH, branch_start, late_exempt
     rows = []
     for bid in ([branch_id] if branch_id else list(branch_ids) if branch_ids is not None else _phase2_branches(con)):
         cal = calendar(con, bid)
@@ -341,8 +341,11 @@ def compliance(con, date_from: str, date_to: str, branch_id: int = None, branch_
             while d <= d1:
                 if _wd(d) == wd:
                     row = _cycle(con, bid, names.get(bid), rnd, d.isoformat(), today)
-                    if row["status"] in ("not_ordered", "not_submitted") and (start is None or row["cycle_date"] < start):
+                    exempt = start is not None and late_exempt(con, bid, row["cycle_date"], today, start)   # P3-1: the first day too
+                    if row["status"] in ("not_ordered", "not_submitted") and (start is None or exempt):
                         row["status"], row["status_th"] = "not_started", NOT_STARTED_TH
+                    elif exempt:
+                        row["late"] = False
                     rows.append(row)
                 d += timedelta(days=1)
     counts = {}

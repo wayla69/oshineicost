@@ -470,6 +470,9 @@ def test_the_reason_rule_the_slip_rule_and_the_cutoff_are_the_apps(con):  # noqa
     # after the cut-off: a dry run reports the late fee, a real import needs the branch's own acknowledgement
     con.execute("DELETE FROM bc_order_line")
     con.execute("DELETE FROM bc_order")
+    # P3-1: Monday 5/10 must be the branch's second day - a cutoff on its first day is never late (started.late_exempt)
+    con.execute("INSERT OR IGNORE INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by,"
+                " confirmed_at) VALUES(1, '2026-10-04', 'confirmed', 't', '2026-10-04', '2026-10-04', 't', '2026-10-04')")
     con.commit()
     assert _oimp(con, wb, p, submit=True, now=LATE)["late"] == 1
     with pytest.raises(OR.LateSubmit):

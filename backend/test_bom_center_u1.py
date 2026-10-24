@@ -151,10 +151,11 @@ def test_one_branch_start_date(con):  # noqa: F811
 
 def test_rounds_before_the_start_are_not_judged(con):  # noqa: F811
     _slip(con, "2026-10-05")
-    c = HB.compliance(con, "2026-09-22", "2026-10-06", branch_id=1)
+    c = HB.compliance(con, "2026-09-22", "2026-10-13", branch_id=1)
     by = {(r["cycle_date"], r["round"]): r for r in c["rows"]}
     assert by[("2026-09-28", "1")]["status"] == "not_started" and by[("2026-09-28", "1")]["status_th"] == "ยังไม่เริ่มใช้ระบบ"
-    assert by[("2026-10-05", "1")]["status"] in ("not_ordered", "upcoming")      # from the start on, a round is judged
+    assert by[("2026-10-05", "1")]["status"] == "not_started"                    # P3-1: a cutoff ON the first day is exempt too
+    assert by[("2026-10-12", "1")]["status"] in ("not_ordered", "upcoming")      # from the day after the start on, a round is judged
 
 
 def test_the_adoption_grid_is_neutral_before_the_start(con):  # noqa: F811
@@ -290,7 +291,15 @@ def test_a_round_whose_cutoff_is_a_later_day_is_upcoming_and_never_a_badge(con):
     assert pages.get("branchstock:order") == 1                         # today's round only
     keys = {i["key"] for i in NB.mine_open(d, "branch", mods)}
     assert all(i["key"] not in keys for i in later)
-    # a cutoff that has passed and was not sent is still today's (late) duty
+    # P3-1: on the branch's first day (no activity yet: today) a cutoff that passed earlier that day is not a late duty nor a badge
+    pm = datetime(2026, 10, 5, 15, 0, tzinfo=BKK)
+    d = TD.build(con, None, None, name, today=mon, now=pm, viewer_role="branch")
+    o1 = next(i for i in d["items"] if i["key"].startswith("order_due_1"))
+    assert not o1["late"] and o1["cutoff_date"] > mon.isoformat() and o1["upcoming"]
+    assert not any(i["late"] for i in d["items"] if i["key"].startswith("order_due_"))
+    assert not NB.build(con, "branch", mods, name, today=mon, now=pm)["pages"].get("branchstock:order")
+    # from its second day on (it started the day before), a cutoff that has passed and was not sent is still today's (late) duty
+    _slip(con, "2026-10-04")
     d = TD.build(con, None, None, name, today=mon, now=datetime(2026, 10, 5, 15, 0, tzinfo=BKK), viewer_role="branch")
     o1 = next(i for i in d["items"] if i["key"].startswith("order_due_1"))
     assert o1["late"] and not o1["upcoming"]
