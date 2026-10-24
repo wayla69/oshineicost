@@ -317,12 +317,15 @@ def test_the_overhaul_document_has_the_department_section_and_the_d_rows():
         assert re.search(rf"\| {pr} \|", doc), pr
 
 
-def test_the_sop_is_version_1_21_with_a_revision_row_and_the_page_locations():
+def test_the_sop_is_version_1_22_with_a_revision_row_and_the_page_locations():
     sop = (REPO / "docs" / "sop" / "WP-SCM-001_ingredient_order_procedure.html").read_text(encoding="utf-8")
-    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.21 /", sop)      # PL2: 1.21 (23 ต.ค. 2026) is the review polish (one five-step close list, the 14-slip-day rule, no "ฉบับร่าง"); 1.20 (23 ต.ค. 2026) is the everyday-words pass; 1.19 added the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
+    assert re.search(r"ฉบับที่ / วันที่มีผล</th>\s*<td>1\.22 /", sop)      # MB: 1.22 (24 ต.ค. 2026) is the role bottom bars of the phone; PL2: 1.21 (23 ต.ค. 2026) is the review polish (one five-step close list, the 14-slip-day rule, no "ฉบับร่าง"); 1.20 (23 ต.ค. 2026) is the everyday-words pass; 1.19 added the Excel forms; 1.18 widened the history to 8 weeks; 1.17 carried the stock-first rewrite
     assert re.search(r"<tr><td>1\.16</td><td>21 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.17</td><td>22 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.18</td><td>22 ต\.ค\. 2026</td>", sop)
     assert re.search(r"<tr><td>1\.19</td><td>23 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.20</td><td>23 ต\.ค\. 2026</td>", sop)
-    assert re.search(r"<tr><td>1\.21</td><td>23 ต\.ค\. 2026</td>", sop)
+    assert re.search(r"<tr><td>1\.21</td><td>23 ต\.ค\. 2026</td>", sop) and re.search(r"<tr><td>1\.22</td><td>24 ต\.ค\. 2026</td>", sop)
+    # MB: the phone's bottom bar is the bar of each role (PR-MA): the old หน้าแรก · งานของฉัน · ค้นหา · ฉัน bar is gone outside the history table
+    body = re.sub(r"<tr><td>1\.\d+</td>.*?</tr>", "", sop, flags=re.S)
+    assert "แถบล่างบนโทรศัพท์ (ตามบทบาท)" in body and "แว่นขยาย" in body and "ปุ่ม “งานของฉัน”" not in body and "(โทรศัพท์: งานของฉัน)" not in body
     assert "ฉบับร่าง" not in re.sub(r"<tr><td>1\.\d+</td>.*?</tr>", "", sop, flags=re.S)       # PL2: the status line says รอการอนุมัติ
     assert "<h3>7.7 ปิดเดือน (5 ขั้นในโหมดสต๊อก)</h3>" in sop
     assert "ตำแหน่งของหน้าในแอป" in sop and "ปฏิบัติการ → การใช้งานทุกสาขา" in sop
