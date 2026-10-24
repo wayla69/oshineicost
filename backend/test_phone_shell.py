@@ -245,7 +245,9 @@ def test_the_branch_and_franchise_homes_have_their_own_bottom_navigation(live_se
         ctx.close()
         ctx, page, errors = _phone(b, base, "own_ph_b", "Temp@12345")
         assert page.evaluate("[...document.querySelectorAll('#phNav .ph-nav-i')].map(e => e.querySelector('span').textContent.trim())") == ["หน้าแรก", "ฉัน"]
-        assert page.evaluate("[...document.querySelectorAll('#phv-home .ph-bigtile-n')].map(e => e.textContent)") == ["ร้านของฉัน"]
+        # PR-F1: the owner's หน้าแรก IS ร้านของฉัน - the login opens on the page itself, there is no launcher of one tile
+        page.wait_for_function("_phView === 'page' && activeTab === 'franchise'", timeout=60000)
+        assert page.evaluate("document.querySelector('#phNav .ph-nav-i.active span').textContent.trim()") == "หน้าแรก"
         assert not errors, errors
         ctx.close()
         b.close()

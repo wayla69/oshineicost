@@ -108,7 +108,8 @@ def test_a_desktop_lands_on_the_launcher_and_each_role_sees_its_own_departments(
         for user, pwd in (("management1", auth.DEFAULT_PASSWORD), ("salessupport1", auth.DEFAULT_PASSWORD), ("br_dep_a", "Temp@12345"),
                           ("own_dep_b", "Temp@12345")):
             ctx, page, errors = _login(b, base, user, pwd, {"width": 1440, "height": 900})
-            page.wait_for_function("activeTab === 'launcher'", timeout=30000)
+            # PR-F1: the franchise owner's login opens ร้านของฉัน itself (no launcher of one tile); every other login lands on the launcher
+            page.wait_for_function("activeTab === %r" % ("franchise" if user == "own_dep_b" else "launcher"), timeout=30000)
             page.wait_for_timeout(1200)
             seen[user] = page.evaluate("""() => ({
                 depts: [...document.querySelectorAll('#lnchDepts .lnch-dept')].map(s => s.dataset.dept),
@@ -123,7 +124,7 @@ def test_a_desktop_lands_on_the_launcher_and_each_role_sees_its_own_departments(
         ss = seen["salessupport1"]
         assert ss["depts"][0] == "ss" and "own" not in ss["depts"] and "brn" not in ss["depts"]          # the home department first
         assert seen["br_dep_a"]["depts"] == ["brn"] and seen["br_dep_a"]["shell"] == "INPUT"             # a branch login sees no other department
-        assert seen["own_dep_b"]["depts"] == ["own"] and seen["own_dep_b"]["nav"] == ["nav-launcher", "nav-search", "nav-dept-own"]
+        assert seen["own_dep_b"]["depts"] == [] and seen["own_dep_b"]["nav"] == ["nav-launcher", "nav-search", "nav-dept-own"]
         b.close()
 
 
@@ -270,7 +271,7 @@ def test_the_header_and_the_rail_never_print_and_pinned_roles_see_only_their_own
         page.wait_for_function("activeTab === 'branchstock'", timeout=30000)
         page.wait_for_timeout(1200)
         h = _head(page)
-        assert h["name"] == "สาขา" and [t["label"] for t in h["tabs"]] == ["ตัดเบิก", "สั่งสินค้า", "รับสินค้า", "ผลต่างการใช้", "ตรวจนับสิ้นเดือน"]
+        assert h["name"] == "สาขา" and [t["label"] for t in h["tabs"]] == ["ตัดเบิก", "สั่งของ", "รับของ", "ส่วนต่างการใช้", "นับของสิ้นเดือน"]   # docs/BRANCH_WORDS.md
         assert page.evaluate("[...document.querySelectorAll('#sidebar .rail-item')].filter(e => getComputedStyle(e).display !== 'none').map(e => e.id)") \
             == ["nav-launcher", "nav-search", "nav-dept-brn", "nav-manual"]
         assert not errors, errors

@@ -29,13 +29,14 @@ body.dark {
   --g-home-ink: #7995c5;     --g-home-soft: #1c2d4b;
   --g-sales-ink: #589fc7;    --g-sales-soft: #15324c;
   --g-buffet-ink: #54a7a7;   --g-buffet-soft: #183646;
-  --g-feedback-ink: #c5779e; --g-feedback-soft: #32233f;
+  --g-feedback-ink: #cb80a5; --g-feedback-soft: #32233f;
   --g-menu-ink: #c4922e;     --g-menu-soft: #36332a;
   --g-cost-ink: #d28250;     --g-cost-soft: #382b2d;
   --g-profit-ink: #5da493;   --g-profit-soft: #16333d;
-  --g-money-ink: #d27470;    --g-money-soft: #362331;
+  --g-money-ink: #d87f7b;    --g-money-soft: #362331;
   --g-ops-ink: #9b8cca;      --g-ops-soft: #272b4c;
   --g-supply-ink: #80a647;   --g-supply-soft: #24362e;
+  /* RV-M: feedback and money were 4.49:1 on their own tint (the active sub-tab, the cluster chips); now 4.95 / 5.0 */
 }
 
 /* the active group → three working variables */
