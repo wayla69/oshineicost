@@ -179,8 +179,16 @@ Every check that failed was re-run after its fix and now passes. What is left ar
 
 ## Checks
 
-- `py -3.12 -m pytest -o addopts=""` (4 processes): see the PR body for the four summary lines; 0 failed.
-- Browser tests (py -3.14): `test_departments.py`, `test_phone_shell.py` and `test_prelaunch_review.py` all pass.
+- `py -3.12 -m pytest -o addopts=""`, 4 processes, 0 failed:
+  - `669 passed, 2 skipped`
+  - `594 passed, 4 skipped`
+  - `830 passed, 8 skipped`
+  - `853 passed, 9 skipped`
+- **A second order dependency, fixed:**
+  - Adding a test module shifted the 4-process split, and `test_slip_forecast::test_the_plan_endpoint_answers_source_and_fallback` then failed after `test_bom_center_calendar.py`.
+  - Cause: the calendar test changed branch 1's round 1 for the rest of the session. Bisected to that one module.
+  - Fix: the test now restores the branch's calendar rows.
+- **Browser tests (py -3.14):** 80 passed, across `test_prelaunch_review.py`, `test_departments.py`, `test_phone_shell.py`, `test_phone_modes.py`, `test_nav_badges.py` and the two pinned-login files.
 - `bash scripts/check-js.sh`: clean.
 - `node scripts/check-departments.js`: clean.
 - pyflakes (as CI): 0.
