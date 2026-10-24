@@ -101,6 +101,7 @@ function _phSetView(v) {
   if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
   _PH_HOME_VIEWS.forEach(x => { const el = document.getElementById('phv-' + x); if (el) el.hidden = x !== v; });
   phNavRender();
+  phFitApply();                                   // PR-MA: พอดีจอ is for a page; a launcher view or the summary is always the touch layout
   window.scrollTo(0, 0);
   const ca = document.querySelector('.content-area'); if (ca) ca.scrollTop = 0;
 }
@@ -136,6 +137,31 @@ async function phShowSummary() {
 }
 
 // ── the bottom navigation ──────────────────────────────────────────────────────────────────────────────
+// PR-MA (owner 2026-10-24): one bar per role, built for its daily work - หน้าแรก, up to three pages, ฉัน. The red count of an entry is the
+// number of tasks waiting on that page (nav_badges, data-nb="p:<tab>:<pane>"); หน้าแรก carries the person's whole open list (data-nb="t", the
+// count the old งานของฉัน entry had). ค้นหา moved to the magnifier of the header. A page the role may not open is left out of its bar.
+// `home` = the page หน้าแรก opens for the role (else the launcher); a second tap on หน้าแรก while that page is open goes to the launcher.
+const _PH_BARS = {
+  management: [{ label: 'ยอดขาย', tab: 'dailysales', icon: 'cal' }, { label: 'กำไร', tab: 'gpbranch', icon: 'coin' }, { label: 'สาขา', tab: 'overall', icon: 'store' }],
+  salessupport: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }, { label: 'ใบตัดเบิกสาขา', tab: 'orderhub', pane: 'issues', icon: 'doc', nb: true },
+    { label: 'เคลม', tab: 'orderhub', pane: 'claims', icon: 'ret', nb: true }],
+  warehouse: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }],
+  analyst: [{ label: 'ต้นทุนต่อจาน', tab: 'bomcenter', pane: 'dishcost', icon: 'coin', nb: true }, { label: 'ราคารายเดือน', tab: 'bomcenter', pane: 'price', icon: 'tag', nb: true },
+    { label: 'ไฟล์ราคา', tab: 'bomcenter', pane: 'pricefile', icon: 'upload', nb: true }],
+  accounting: [{ label: 'ใบสรุปตัดเบิก', tab: 'bomcenter', pane: 'issue', icon: 'doc', nb: true }, { label: 'P&L รายสาขา', tab: 'pnlbranch', icon: 'bar' },
+    { label: 'GP รายสาขา', tab: 'gpbranch', icon: 'coin' }],
+  operation: [{ label: 'ใบตัดเบิกสาขา', tab: 'orderhub', pane: 'issues', icon: 'doc', nb: true }, { label: 'ผลต่างตัดเบิกรายวัน', tab: 'orderhub', pane: 'issuevar', icon: 'diff', nb: true },
+    { label: 'ส่วนลด', tab: 'discounts', icon: 'pct' }],
+  marketing: [{ label: 'ลูกค้าและบุฟเฟ่ต์', tab: 'buffetperf', icon: 'users' }, { label: 'วิเคราะห์เมนู', tab: 'menu', icon: 'book' }, { label: 'เสียงลูกค้า', tab: 'feedback', icon: 'msg' }],
+  innovation: [{ label: 'ทะเบียนวัตถุดิบ', tab: 'bomcenter', pane: 'ing', icon: 'db' }],
+};
+const _PH_HOME_TAB = { salessupport: 'supplyhome', analyst: 'supplyhome', marketing: 'home' };
+function _phRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
+// may this login open the page? the launcher's own rule when its slice is loaded (deptPageAllowed: the tab, stock mode, the supply item's roles)
+function _phPageOk(p) {
+  try { return typeof deptPageAllowed === 'function' ? deptPageAllowed(p) : tabAllowed(p.tab); } catch (e) { return false; }
+}
+function _phHomeTab() { const t = _PH_HOME_TAB[_phRole()]; return t && _phPageOk({ tab: t }) ? t : ''; }
 function _phNavItems() {
   const kind = _phKind();
   const home = { id: 'home', label: 'หน้าแรก', path: _PH_ICON.home, js: 'phShowHome()' };
@@ -145,19 +171,30 @@ function _phNavItems() {
     const b = (id, label, icon, pane) => ({ id, label, path: DEPT_ICONS[icon], js: `phOpenPage(()=>supplyGo({tab:'branchstock',pane:'${pane}'}))`, tab: 'branchstock', pane, nb: `p:branchstock:${pane}` });
     return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งของ', 'cart', 'order'), b('recv', 'รับของ', 'recv', 'recv'), me];
   }
-  return [home, { id: 'tasks', label: 'งานของฉัน', path: DEPT_ICONS.count, js: 'phOpenTasks()', nb: 't' },
-    { id: 'search', label: 'ค้นหา', path: _PH_ICON.search, js: 'phOpenSearch()' }, me];
+  const ht = _phHomeTab();
+  const pages = (_PH_BARS[_phRole()] || _PH_BARS.management).filter(_phPageOk).map(p => {
+    const key = p.tab + (p.pane ? ':' + p.pane : '');
+    const go = p.pane ? `supplyGo({tab:'${p.tab}',pane:'${p.pane}'})` : `switchTab('${p.tab}')`;
+    return { id: 'pg-' + key, label: p.label, path: DEPT_ICONS[p.icon], js: `phBarGo(()=>${go})`, tab: p.tab, pane: p.pane || null, nb: p.nb ? 'p:' + key : '' };
+  });
+  return [Object.assign({}, home, { nb: 't', tab: ht || null, js: 'phHomeTap()' }), ...pages, me];
 }
+// หน้าแรก: the role's home page (หน้างาน, สรุปประจำวัน) or the launcher; tapped again on that page, the launcher
+function phHomeTap() {
+  const ht = _phHomeTab();
+  if (ht && !(_phView === 'page' && activeTab === ht)) { _deptCur = null; _deptFocus = null; phOpenPage(() => ht === 'supplyhome' ? supplyGo({ tab: 'supplyhome' }) : switchTab(ht)); return; }
+  phShowHome();
+}
+function phBarGo(fn) { _deptCur = null; _deptFocus = null; phOpenPage(fn); }
 function _phNavOn(it) {
   if (_phView === 'search' || _phView === 'me') return it.id === _phView;
   if (_phView !== 'page') return it.id === 'home';
   const acc = typeof _SUPPLY_PANE === 'object' ? _SUPPLY_PANE[activeTab] : null, pane = acc ? acc.get() : null;
-  if (_phKind() === 'branch') {                     // the strip lights the entry whose pane is open; any other page lights หน้าแรก
-    const listed = _phNavItems().some(x => x.tab && x.tab === activeTab && x.pane === pane);
-    return it.tab ? activeTab === it.tab && pane === it.pane : it.id === 'home' && !listed;
-  }
-  if (_phKind() === 'centre') { const t = tabAllowed('supplyhome') ? 'supplyhome' : 'home'; return it.id === 'tasks' ? activeTab === t : it.id === 'home' && activeTab !== t; }
-  return it.id === 'home';
+  const hit = x => x.tab && x.tab === activeTab && (!x.pane || x.pane === pane);
+  const items = _phNavItems();
+  // the entry of the open page lights up (หน้าแรก for its own home page); any other page lights หน้าแรก
+  if (it.id === 'home') return hit(it) || !items.some(x => x.id !== 'home' && hit(x));
+  return hit(it);
 }
 function phNavRender() {
   const nav = document.getElementById('phNav'); if (!nav) return;
@@ -182,8 +219,12 @@ function phRenderHome() {
 }
 // U2: the header shows the name a person recognises (display name, else the Thai role label), never the login ID
 function _phUserId() { const a = window.AUTH || {}; return a.enabled ? (typeof lnchWho === 'function' ? lnchWho() : (a.display_name || '')) : ''; }
+// PR-MA: ค้นหา is the magnifier of the header (top right, beside the avatar); the avatar opens ฉัน
+function _phInitial() { return (_phUserId() || 'ฉ').trim().charAt(0).toUpperCase() || 'ฉ'; }
 function _phHero(inner) {
-  return `<header class="ph-hero"><div class="ph-hero-top"><span class="ph-logo">お</span><span class="ph-brand">OSHINEI</span><span class="ph-uid">${esc(_phUserId())}</span></div>${inner}</header>`;
+  return `<header class="ph-hero"><div class="ph-hero-top"><span class="ph-logo">お</span><span class="ph-brand">OSHINEI</span><span class="ph-uid">${esc(_phUserId())}</span>`
+    + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button>`
+    + `<button type="button" class="ph-hav" onclick="phOpenMe()" aria-label="ฉัน">${esc(_phInitial())}</button></div>${inner}</header>`;
 }
 function _phCentreHome() {
   const vis = deptVisible();
@@ -380,6 +421,9 @@ function phMeRender() {
     lock.classList.toggle('is-on', !!st.unlocked);
   }
   ['phMePw', 'phMeOut'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = !signed; });
+  // PR-MA: หน้าที่เปิดล่าสุด, the last three pages of this device, first
+  const rw = document.getElementById('phMeRecentWrap'), rl = document.getElementById('phMeRecent');
+  if (rw && rl) { const r = _phRecentHtml(); rl.innerHTML = r.html; rw.hidden = !r.n; try { navBadgesApply(); } catch (e) { /* no launcher slice */ } }
 }
 function phHelpToggle(btn) {   // the "?" of a card: its explanation is folded until asked for
   const card = btn.closest('.ms-section'); if (!card) return;
@@ -424,6 +468,317 @@ function phUnlockWrites() { unlockWrites().then(phMeRender).catch(() => {}); }
     y0 = null; dist = 0; pulling = false; ind.classList.remove('ready');
   }, { passive: true });
 })();
+
+// ════════════════════════════════════════════════════════════════
+// PHONE DISPLAY MODES (PR-MA, 2026-10-24)
+// ════════════════════════════════════════════════════════════════
+// Every page of the phone shell opens in one of two modes (the default of each page: PAGE_PHONE in js/01-core.js):
+//   แตะง่าย (touch) - the phone layout: 12 px text floor, 44 px targets, stacked cards (the stylesheet's <= 700 px rules);
+//   พอดีจอ (fit)    - the page's desktop layout in a frame _PH_FIT_MIN-_PH_FIT_MAX px wide (the page's own content width, 820 px when it cannot be
+//                    read), scaled to the screen width with CSS zoom (transform: scale where zoom is not supported). The frame is never wider than
+//                    the width at which 12 px text still reads >= 5.5 px (_PH_FIT_TEXT / _PH_FIT_FLOOR), and the text inside it is at least 12 px,
+//                    so the smallest text is >= 5.5 px at rest and >= 12 px when a table or a chart is shown at 100 % (a double tap).
+// The frame is the open page's panel (#tab-<name>.ph-frame); the top bar, the chip rows and the bottom bar sit outside it. Inside it the filters,
+// the period pickers, the sub-tab chips and the "?" are counter-zoomed back to touch size (.ph-tz). The browser's own pinch zoom stays.
+// A tap on a table row opens the row sheet; a double tap on a table or a chart shows it at 100 % (again: back). The choice is remembered per page
+// on this device (localStorage, oshinei_phmode).
+const _PH_FIT_MIN = 760, _PH_FIT_MAX = 900, _PH_FIT_DEF = 820, _PH_FIT_TEXT = 12, _PH_FIT_FLOOR = 5.5, _PH_MODE_KEY = 'oshinei_phmode';
+const _PH_TZ_SEL = '.ui-q, select, input[type="month"], input[type="date"], input[type="search"], input[type="text"], input:not([type]), .subtab-btn, .gran-btn, .wt-seg button, [role="tab"], .wt-find, .bmc-pager button';
+let _phFitT = null, _phFitPanel = null, _phFitObs = null, _phFitKey = '';
+const _phZoomOK = (() => { try { return CSS.supports('zoom', '0.5'); } catch (e) { return false; } })();
+// the page on screen: its tab, its pane (a supply tab) and, for a page with two views, which one is showing
+function phCurPage() {
+  if (typeof activeTab !== 'string' || !activeTab) return null;
+  const acc = typeof _SUPPLY_PANE === 'object' ? _SUPPLY_PANE[activeTab] : null;
+  const pane = acc ? acc.get() : '';
+  return { tab: activeTab, pane: pane || '', view: _phPageView(activeTab, pane || '') };
+}
+function _phPageKey(pg) { return pg.tab + (pg.pane ? '|' + pg.pane : '') + (pg.view ? '#' + pg.view : ''); }
+// ต้นทุนต่อจาน: the table, or the import (a file read and waiting to be saved); ทะเบียนวัตถุดิบ: the list, or editing it (a field changed or in use)
+function _phPageView(tab, pane) {
+  if (tab !== 'bomcenter') return '';
+  try {
+    if (pane === 'dishcost') return typeof _bmcDcPre !== 'undefined' && _bmcDcPre ? 'import' : 'table';
+    if (pane === 'ing') {
+      const ed = typeof _bmcIngEdits === 'object' && _bmcIngEdits && Object.keys(_bmcIngEdits).length;
+      const ae = document.activeElement;
+      return ed || (ae && ae.closest && ae.closest('#bmcIngBody') && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) ? 'edit' : 'list';
+    }
+  } catch (e) { /* the page's slice is not loaded */ }
+  return '';
+}
+function _phModes() { try { return JSON.parse(localStorage.getItem(_PH_MODE_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function phModeOf(pg) {
+  const own = _phModes()[_phPageKey(pg)];
+  return own === 'fit' || own === 'touch' ? own : phonePageDefault(pg.tab, pg.pane, pg.view);
+}
+// the page may take พอดีจอ: a page of the phone shell, not the branch login (its pages are the touch layout, ตัวอักษรใหญ่ is its option)
+function _phFitAllowed() { return phOn() && _phView === 'page' && !document.body.classList.contains('supply-phone'); }
+function phModeToggle() {
+  const pg = phCurPage(); if (!pg) return;
+  const next = phModeOf(pg) === 'fit' ? 'touch' : 'fit';
+  const m = _phModes(); m[_phPageKey(pg)] = next;
+  try { localStorage.setItem(_PH_MODE_KEY, JSON.stringify(m)); } catch (e) { /* private mode: this visit only */ }
+  phFitApply();
+  try { loadActiveTab(); } catch (e) { /* the page draws again with the mode's charts and lists */ }
+  try { uiToast(next === 'fit' ? 'พอดีจอ' : 'แตะง่าย'); } catch (e) { /* no toast yet */ }
+}
+function phFitSchedule() { clearTimeout(_phFitT); _phFitT = setTimeout(phFitApply, 0); }
+function phFitApply() {
+  const pg = phCurPage();
+  const panel = pg ? document.getElementById('tab-' + pg.tab) : null;
+  const fit = !!(panel && pg && _phFitAllowed() && phModeOf(pg) === 'fit');
+  if (_phFitPanel && (_phFitPanel !== panel || !fit)) _phFitOff(_phFitPanel);
+  document.body.classList.toggle('ph-fit', fit);
+  _phModeBtnSync(pg, fit);
+  if (pg && _phView === 'page') phRecentAdd(pg);
+  if (!fit) return;
+  const key = _phPageKey(pg);
+  if (_phFitPanel !== panel || _phFitKey !== key) { _phFitPanel = panel; _phFitKey = key; panel.classList.add('ph-frame'); panel.dataset.phw = ''; _phFitWatch(panel); }
+  phFitLayout(panel);
+}
+function _phModeBtnSync(pg, fit) {
+  const b = document.getElementById('phModeBtn'), l = document.getElementById('phModeL');
+  if (!b) return;
+  b.hidden = !pg || !_phFitAllowed();
+  b.setAttribute('aria-pressed', fit ? 'true' : 'false');
+  b.setAttribute('aria-label', fit ? 'โหมดแสดงผล พอดีจอ (แตะเพื่อเปลี่ยนเป็นแตะง่าย)' : 'โหมดแสดงผล แตะง่าย (แตะเพื่อเปลี่ยนเป็นพอดีจอ)');
+  if (l) l.textContent = fit ? 'พอดีจอ' : 'แตะง่าย';
+  const av = document.getElementById('phTbAv'); if (av) av.textContent = _phInitial();
+}
+function _phFitOff(panel) {
+  if (_phFitObs) { _phFitObs.disconnect(); _phFitObs = null; }
+  panel.classList.remove('ph-frame', 'ph-measure');
+  ['width', 'zoom', 'transform', 'transform-origin', 'margin-bottom', 'margin-right'].forEach(k => panel.style.removeProperty(k));
+  panel.querySelectorAll('[data-phf]').forEach(el => { el.style.removeProperty('font-size'); delete el.dataset.phf; });
+  panel.querySelectorAll('.ph-tz').forEach(el => { el.classList.remove('ph-tz'); el.style.removeProperty('zoom'); });
+  panel.querySelectorAll('.ph-xs, .ph-xv').forEach(el => { el.classList.remove('ph-xs', 'ph-xv'); el.style.removeProperty('max-height'); });
+  panel.querySelectorAll('.ph-z100').forEach(_phZoomOff);
+  delete panel._phS;
+  _phFitPanel = null; _phFitKey = '';
+}
+// the page draws its content after it opens (and again on every filter): the frame follows, debounced
+function _phFitWatch(panel) {
+  if (_phFitObs) _phFitObs.disconnect();
+  let t = null;
+  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) phFitLayout(panel); }, 250); });
+  _phFitObs.observe(panel, { childList: true, subtree: true, characterData: true });
+}
+function _phAvail() {
+  const ca = document.querySelector('.content-area'); if (!ca) return window.innerWidth;
+  const cs = getComputedStyle(ca);
+  return Math.max(200, ca.clientWidth - parseFloat(cs.paddingLeft || '0') - parseFloat(cs.paddingRight || '0'));
+}
+// the page's own content width: the narrowest width at which nothing in it overflows (charts left out: they take any width)
+function _phNatural(panel) {
+  const keep = { w: panel.style.width, z: panel.style.zoom, t: panel.style.transform };
+  panel.style.zoom = ''; panel.style.transform = ''; panel.style.width = 'min-content';
+  panel.classList.add('ph-measure');
+  let w = 0;
+  try { w = Math.ceil(panel.scrollWidth); } catch (e) { w = 0; }
+  panel.classList.remove('ph-measure');
+  panel.style.width = keep.w; panel.style.zoom = keep.z; panel.style.transform = keep.t;
+  return w;
+}
+function phFitLayout(panel) {
+  if (!panel || !panel.isConnected) return;
+  const avail = _phAvail();
+  const cap = Math.floor(avail * _PH_FIT_TEXT / _PH_FIT_FLOOR);                 // wider than this, 12 px text would read under 5.5 px
+  const nat = _phNatural(panel) || _PH_FIT_DEF;
+  let W = Math.min(Math.max(nat, _PH_FIT_MIN), _PH_FIT_MAX, cap);
+  const prev = +panel.dataset.phw || 0;
+  if (prev && Math.abs(prev - W) < 12) W = prev;                                    // a few px of difference is not worth a reflow
+  panel.dataset.phw = String(W);
+  const s = avail / W;
+  panel._phS = s;
+  panel.style.width = W + 'px';
+  if (_phZoomOK) { panel.style.zoom = String(s); panel.style.transform = ''; }
+  else {
+    panel.style.transform = `scale(${s})`; panel.style.transformOrigin = '0 0';
+    panel.style.marginRight = `${-(W * (1 - s))}px`;
+    panel.style.marginBottom = `${-(panel.offsetHeight * (1 - s))}px`;
+  }
+  _phFitTouch(panel, s);
+  _phFitTables(panel, s);
+  _phFitFloor(panel);
+}
+// the filters, the pickers, the chips and the "?" keep their touch size: zoom 1/s puts them back at 1:1 (zoom only; a transform cannot undo)
+function _phFitTouch(panel, s) {
+  if (!_phZoomOK) return;
+  panel.querySelectorAll(_PH_TZ_SEL).forEach(el => {
+    if (el.closest('table') || el.closest('.ph-z100') || el.parentElement.closest('.ph-tz')) return;
+    el.classList.add('ph-tz'); el.style.zoom = String(1 / s);
+  });
+}
+// a table that fits its box keeps the page's scroll (its header pins under the top bar); a wider one scrolls inside its box, header and first column pinned
+function _phFitTables(panel, s) {
+  const ca = document.querySelector('.content-area');
+  const h = Math.max(240, Math.floor(((ca ? ca.clientHeight : window.innerHeight) - 16) / s));
+  panel.querySelectorAll('table').forEach(tb => {
+    if (tb.closest('.ph-z100')) return;
+    let box = tb.parentElement;
+    while (box && box !== panel) { const ox = getComputedStyle(box).overflowX; if (ox !== 'visible' && ox !== 'clip') break; box = box.parentElement; }
+    if (!box || box === panel) {
+      if (tb.offsetWidth <= panel.clientWidth + 1) return;
+      box = tb.parentElement;
+    }
+    const wide = tb.scrollWidth > box.clientWidth + 1 || box.classList.contains('ph-xs') && tb.scrollWidth > box.clientWidth - 1;
+    box.classList.toggle('ph-xs', wide); box.classList.toggle('ph-xv', !wide);
+    if (wide) box.style.maxHeight = h + 'px'; else box.style.removeProperty('max-height');
+  });
+}
+// the text floor: every text inside the frame is at least 12 px (so >= 5.5 px at rest, >= 12 px at 100 %); SVG text by its drawn size
+function _phFitFloor(panel) {
+  const s = panel._phS || 1;
+  panel.querySelectorAll('*').forEach(el => {
+    if (el.dataset && el.dataset.phf) return;
+    const svg = el instanceof SVGElement;
+    if (svg && !/^(text|tspan)$/i.test(el.tagName)) return;
+    let own = false;
+    for (const n of el.childNodes) { if (n.nodeType === 3 && n.textContent.trim()) { own = true; break; } }
+    if (!own) return;
+    const fs = parseFloat(getComputedStyle(el).fontSize) || 0;
+    if (!svg) { if (fs && fs < _PH_FIT_TEXT) { el.style.setProperty('font-size', _PH_FIT_TEXT + 'px', 'important'); el.dataset.phf = '1'; } return; }
+    try {
+      const m = el.getScreenCTM(); if (!m) return;
+      const drawn = fs * Math.hypot(m.b, m.d) * (_phZoomOK ? 1 : s);          // getScreenCTM is in screen px; a transform frame scales on top
+      if (drawn && drawn < _PH_FIT_FLOOR) { el.style.setProperty('font-size', (fs * _PH_FIT_FLOOR / drawn + 0.05).toFixed(2) + 'px', 'important'); el.dataset.phf = '1'; }
+    } catch (e) { /* not drawn */ }
+  });
+}
+
+// ── a double tap on a table or a chart: that element at 100 % (net zoom 1), the width of the screen, scrolling inside itself ──
+function _phZoomTarget(t) {
+  const el = t.closest && (t.closest('table') || t.closest('canvas') || t.closest('.heatmap-wrap'));
+  if (!el || !el.closest('.ph-frame')) return null;
+  const z = el.closest('.ph-z100'); if (z) return z;
+  return el.closest('.card') || el.closest('.ph-xs, .ph-xv') || el.parentElement;
+}
+function phZoomToggle(el) {
+  const panel = el.closest('.ph-frame'); if (!panel) return;
+  if (el.classList.contains('ph-z100')) { _phZoomOff(el); phFitLayout(panel); return; }
+  panel.querySelectorAll('.ph-z100').forEach(_phZoomOff);
+  const s = panel._phS || 1, avail = _phAvail(), pr = panel.getBoundingClientRect(), er = el.getBoundingClientRect();
+  const ca = document.querySelector('.content-area');
+  el.classList.add('ph-z100');
+  if (_phZoomOK) {
+    el.style.zoom = String(1 / s);
+    el.style.width = avail + 'px';
+    el.style.marginLeft = `${-(er.left - pr.left)}px`;
+    el.style.maxHeight = Math.max(240, (ca ? ca.clientHeight : window.innerHeight) - 24) + 'px';
+  } else {
+    el.style.transform = `scale(${1 / s})`; el.style.transformOrigin = '0 0';
+  }
+  el.querySelectorAll('.ph-xs, .ph-xv').forEach(x => { x.classList.remove('ph-xs', 'ph-xv'); x.style.removeProperty('max-height'); });
+  el.querySelectorAll('.ph-tz').forEach(x => { x.classList.remove('ph-tz'); x.style.removeProperty('zoom'); });   // at 100 % a control is at its own size already
+  setTimeout(() => { try { el.scrollIntoView({ block: 'start' }); } catch (e) { /* off screen */ } }, 0);
+}
+function _phZoomOff(el) {
+  el.classList.remove('ph-z100');
+  ['zoom', 'width', 'margin-left', 'max-height', 'transform', 'transform-origin'].forEach(k => el.style.removeProperty(k));
+}
+
+// ── a tap on a table row (พอดีจอ): the row sheet - every column as label / value, the row's status first, its own actions last ──
+let _phTap = null, _phRowBypass = false, _phRowActs = [], _phRowOwn = null;
+const _PH_INTERACTIVE = 'a[href], a[onclick], button, input, select, textarea, label, summary, [role="button"], [contenteditable="true"], .ph-tz';
+function _phRowOf(t) {
+  const tr = t.closest && t.closest('tr');
+  if (!tr || !tr.closest('.ph-frame') || tr.closest('thead') || !tr.cells || !tr.cells.length) return null;
+  if ([...tr.cells].every(c => c.tagName === 'TH')) return null;
+  return tr;
+}
+document.addEventListener('click', e => {
+  if (_phRowBypass || !document.body.classList.contains('ph-fit')) return;
+  const t = /** @type {Element} */ (e.target);
+  if (!t || !t.closest || !t.closest('.ph-frame')) return;
+  if (t.closest(_PH_INTERACTIVE)) return;                       // a button, a link, a field of the row does its own job
+  const zt = _phZoomTarget(t), row = _phRowOf(t);
+  if (!zt && !row) return;
+  const now = Date.now();
+  if (_phTap && now - _phTap.t < 350 && Math.abs(e.clientX - _phTap.x) < 40 && Math.abs(e.clientY - _phTap.y) < 40) {
+    clearTimeout(_phTap.timer); _phTap = null;
+    e.preventDefault(); e.stopPropagation();
+    if (zt) phZoomToggle(zt);
+    return;
+  }
+  if (row) { e.preventDefault(); e.stopPropagation(); }          // the row's own click waits: it is an action of the sheet
+  const tap = { t: now, x: e.clientX, y: e.clientY, timer: null };
+  if (row) tap.timer = setTimeout(() => { if (_phTap === tap) _phTap = null; phRowSheet(row); }, 350);
+  _phTap = tap;
+}, true);
+function _phCellText(td) {
+  const fields = [...td.querySelectorAll('input:not([type="hidden"]), select, textarea')];
+  const own = (td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim();
+  const vals = fields.map(f => f.type === 'checkbox' || f.type === 'radio' ? (f.checked ? 'ใช่' : 'ไม่ใช่')
+    : f.tagName === 'SELECT' ? ((f.selectedOptions && f.selectedOptions[0] && f.selectedOptions[0].text) || '') : (f.value || '')).filter(Boolean);
+  return [own, ...vals].filter(Boolean).join(' · ');
+}
+function _phHeads(table, n) {
+  const rows = table.tHead ? [...table.tHead.rows] : [];
+  const out = new Array(n).fill('');
+  rows.forEach(r => { let i = 0; [...r.cells].forEach(c => { const span = c.colSpan || 1, t = (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim(); for (let k = 0; k < span && i < n; k++, i++) if (t) out[i] = span > 1 && out[i] ? out[i] : t; }); });
+  return out;
+}
+function phRowSheet(tr) {
+  const sh = document.getElementById('msSheet'), body = document.getElementById('msSheetBody'), table = tr.closest('table');
+  if (!sh || !body || !table) return;
+  const cells = [...tr.cells];
+  const n = cells.reduce((a, c) => a + (c.colSpan || 1), 0);
+  const heads = _phHeads(table, n);
+  const pairs = []; let i = 0;
+  // a cell that only holds a selection box (the row's tick) is not a value of the row
+  const tickOnly = c => !(c.innerText || c.textContent || '').trim() && c.querySelector('input[type="checkbox"], input[type="radio"]') && !c.querySelector('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
+  cells.forEach(c => { const v = tickOnly(c) ? '' : _phCellText(c); if (v) pairs.push([heads[i] || '', v]); i += c.colSpan || 1; });
+  const pill = tr.querySelector('.bmc-chip, .wt-tag, .pill, .ms-chip, .frc-pill, .fm-chip, .badge-up, .badge-down, [class*="chip"], [class*="tag-"]');
+  _phRowActs = [...tr.querySelectorAll('button, a[href], a[onclick], [role="button"]')].filter(b => (b.innerText || b.getAttribute('aria-label') || b.title || '').trim());
+  const own = tr.hasAttribute('onclick') || [...tr.cells].some(c => c.hasAttribute('onclick'));
+  const acts = _phRowActs.map((b, k) => `<button type="button" onclick="phRowAct(${k})"${b.disabled ? ' disabled' : ''}>${esc((b.innerText || b.getAttribute('aria-label') || b.title).replace(/\s+/g, ' ').trim())}</button>`);
+  if (own) acts.unshift(`<button type="button" onclick="phRowAct(-1)">เปิดรายละเอียด</button>`);
+  _phRowOwn = own ? tr : null;
+  document.getElementById('msSheetTitle').textContent = pairs.length ? pairs[0][1].slice(0, 80) : 'รายการ';
+  document.getElementById('msSheetSub').textContent = (document.getElementById('pageTitle') || {}).textContent || '';
+  body.innerHTML = `<div class="ph-rs">${pill ? `<div class="ph-rs-pill">${pill.outerHTML}</div>` : ''}<dl class="ph-rs-list">`
+    + pairs.map(([h, v]) => `<div class="ph-rs-row"><dt>${esc(h || '—')}</dt><dd>${esc(v)}</dd></div>`).join('') + '</dl>'
+    + (acts.length ? `<div class="ph-rs-act">${acts.join('')}</div>` : '') + '</div>';
+  sh.classList.add('open', 'ph-rowsheet'); sh.scrollTop = 0;
+  const back = document.getElementById('phSheetBack'); if (back) back.hidden = false;
+  const bk = sh.querySelector('.ms-header .ms-toggle'); if (bk) { bk.setAttribute('aria-label', 'ปิด'); try { bk.focus({ preventScroll: true }); } catch (e) { /* no focus */ } }
+}
+function phRowAct(k) {
+  const el = k < 0 ? _phRowOwn : _phRowActs[k];
+  msCloseSheet();
+  if (!el || !el.isConnected) return;
+  _phRowBypass = true;
+  try { el.click(); } finally { _phRowBypass = false; }
+}
+
+// ── หน้าที่เปิดล่าสุด (ฉัน): the last three pages opened on this device ──
+const _PH_RECENT_KEY = 'oshinei_ph_recent';
+function _phRecentGet() { try { const a = JSON.parse(localStorage.getItem(_PH_RECENT_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function _phPageLabel(tab, pane) {
+  const p = DEPARTMENTS.flatMap(d => d.pages).find(x => x.tab === tab && (x.pane || '') === (pane || ''));
+  if (p) return { label: p.label, icon: p.icon };
+  const t = document.getElementById('pageTitle');
+  return { label: (t && t.textContent.trim()) || tab, icon: 'doc' };
+}
+function phRecentAdd(pg) {
+  if (!pg || pg.tab === 'launcher') return;
+  const k = pg.tab + '|' + (pg.pane || '');
+  const list = _phRecentGet().filter(x => x && x.k !== k);
+  const meta = _phPageLabel(pg.tab, pg.pane);
+  list.unshift({ k, tab: pg.tab, pane: pg.pane || '', label: meta.label, icon: meta.icon });
+  try { localStorage.setItem(_PH_RECENT_KEY, JSON.stringify(list.slice(0, 3))); } catch (e) { /* memory only */ }
+}
+function _phRecentHtml() {
+  const rows = _phRecentGet().filter(x => x && x.tab && _phPageOk({ tab: x.tab, pane: x.pane || undefined })).slice(0, 3);
+  return { n: rows.length, html: rows.map((x, i) => `<a href="#" class="ph-bigtile" data-nb="${_navPageSpec({ tab: x.tab, pane: x.pane })}" onclick="phRecentGo(${i});return false">`
+    + `<span class="ph-badge" style="--dk:var(--accent);--dt:var(--accent-soft)">${_deptSvg(x.icon || 'doc', 26)}</span><span class="ph-bigtile-n">${esc(x.label)}</span></a>`).join('') };
+}
+function phRecentGo(i) {
+  const x = _phRecentGet().filter(r => r && r.tab && _phPageOk({ tab: r.tab, pane: r.pane || undefined }))[i]; if (!x) return;
+  _deptCur = null; _deptFocus = null;
+  phOpenPage(() => { if (x.pane) supplyGo({ tab: x.tab, pane: x.pane }); else switchTab(x.tab); });
+}
 
 // ── Service worker (sw.js): the shell and the summary's last numbers survive a lost
 // connection, and the morning brief can arrive as a notification. Registered for
@@ -1500,7 +1855,13 @@ async function msOpenBranch(name) {
   body.innerHTML = msBranchSheetHtml(j, days, menu);
 }
 function msCloseSheet() {
-  const sh = document.getElementById('msSheet'); if (sh) sh.classList.remove('open');
+  const sh = document.getElementById('msSheet');
+  if (sh) {
+    const row = sh.classList.contains('ph-rowsheet');
+    sh.classList.remove('open', 'ph-rowsheet');
+    if (row) { const bk = sh.querySelector('.ms-header .ms-toggle'); if (bk) bk.setAttribute('aria-label', 'กลับ'); }
+  }
+  const back = document.getElementById('phSheetBack'); if (back) back.hidden = true;     // PR-MA: the row sheet's dim backdrop
   document.body.classList.remove('ms-sheet-open');
 }
 function msBranchSheetHtml(j, days, menu) {
@@ -1559,6 +1920,7 @@ async function msSheetGo(tab, branch) {
   sh.addEventListener('touchend', e => {
     if (x0 == null) return;
     const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0; x0 = y0 = null;
+    if (sh.classList.contains('ph-rowsheet')) { if (dy > 80 && Math.abs(dx) < 60 && sh.scrollTop <= 0) msCloseSheet(); return; }   // PR-MA: a row sheet closes on a swipe down
     if (Math.abs(dx) > 70 && Math.abs(dy) < 50) msSheetStep(dx < 0 ? 1 : -1);
   }, { passive: true });
 })();

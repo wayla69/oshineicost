@@ -437,12 +437,13 @@ def test_badges_and_search_on_a_phone(live_server):
         ctx, page, errors = _page(b, live_server, {"width": 390, "height": 844}, {"orderhub:queue": 3, "bomcenter:price": 2}, phone=True)
         page.wait_for_function("document.body.classList.contains('ph-home') && document.querySelectorAll('#phNav .ph-nav-i').length > 0", timeout=60000)
         page.wait_for_function("document.querySelector('#phNav .nb')", timeout=15000)
-        assert page.evaluate("document.querySelector('#phNav [data-nb=t] .nb').textContent") == "5"      # the whole list on งานของฉัน
+        assert page.evaluate("document.querySelector('#phNav [data-nb=t] .nb').textContent") == "5"      # the whole list on หน้าแรก (PR-MA: was งานของฉัน)
         dept = page.evaluate("Object.fromEntries([...document.querySelectorAll('.ph-cnt:not([hidden])')].map(e => [e.dataset.dept, e.textContent]))")
         assert dept.get("ss") == "3" and dept.get("ana") == "2" and "mgmt" not in dept                  # a department with nothing waiting has no circle
         assert page.evaluate("document.querySelector('.ph-cnt:not([hidden])').getAttribute('aria-label')").startswith("รอ ")
-        # ค้นหา: the same engine - icon + page + department chip
-        page.locator("#phNav .ph-nav-i", has_text="ค้นหา").click()
+        # ค้นหา: the same engine - icon + page + department chip (PR-MA: the magnifier of the header, no longer an entry of the bottom bar)
+        assert page.locator("#phNav .ph-nav-i", has_text="ค้นหา").count() == 0
+        page.locator("#phHeroSearch").click()
         page.fill("#phSearchInput", "ใบสั่ง")
         row = page.evaluate("[...document.querySelectorAll('#phSearchRes .ph-row')].map(e => e.querySelector('.pgs-name').textContent + '|' + e.querySelector('.pgs-chip').textContent)")
         assert row[0] == "คิวใบสั่งซื้อ|ประสานงานขาย"
