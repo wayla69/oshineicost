@@ -353,7 +353,9 @@ _REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
 _TOP_DECL = re.compile(r"^(?:const|let|var|function|async function)[^\n]*", re.M)          # the top-level declaration a literal sits in
 _HELP_TABLE = re.compile(r"^(?:const|let|var)\s+\w*(?:HELP|TERMS|HINT)\w*\s*=")             # ... when that is a table of help texts
 _ALLOWED = re.compile(r"uiQ\(|uiHelp\(|uiPaneHelp\(|bmcNote\(|uiConfirm\(|uiPrompt\(|uiAlert\(|uiToast\(|notify(?:Error|Success)\(|_?bmcStatus\(|_shmToast\(|"
-                      r"throw new |\balert\(|\bconfirm\(|\b(?:help|hint|msg|reason)\s*=|_HELP\b|_TERMS\b|\btitle=|okText|_uiHelpReg|setAttribute\('title'")
+                      r"throw new |\balert\(|\bconfirm\(|\b(?:help|hint|msg|reason)\s*=|_HELP\b|_TERMS\b|\btitle=|okText|_uiHelpReg|setAttribute\('title'|"
+                      # PR-MB: the analysis panel of a chart's zoom dialog (_diveSection / _diveBullet, js/06-features.js) and uiDialog are dialogs
+                      r"_diveSection\(|_diveBullet\(|uiDialog\(")
 
 
 def _js_literals(src):
@@ -485,3 +487,51 @@ def test_the_slices_keep_their_long_sentences_behind_help():
         total += sum(1 for a, body in _js_literals(src) if _long_runs(body))
         assert len(inline_sentences(src)) <= JS_LIMIT
     assert total > 40
+
+
+# ── PR-MB (owner 2026-10-24): the same rule on EVERY page, the analytics pages included ─────────────────────────────────────────────
+# Every fragment (tabs/*.html) keeps at most LIMIT explanatory blocks outside a "?" / <details> / <template>, and every slice (js/*.js) draws
+# at most JS_LIMIT explanatory sentences inline. Two files are the explanation itself and are named here with the reason:
+EXEMPT = {
+    "tabs/47-manual.html": "the user manual is the help itself: it is the page a \"?\" leads to, read on purpose",
+    "js/02-mgt-report.js": "the printed management report (one A4-landscape pack, PDF): its notes are the footnotes of that document and must print; "
+                           "a \"?\" dialog does not print",
+}
+ALL_FRAGMENTS = sorted(p.relative_to(REPO).as_posix() for p in (REPO / "tabs").glob("*.html"))
+ALL_SLICES = sorted(p.relative_to(REPO).as_posix() for p in (REPO / "js").glob("*.js"))
+
+
+def test_every_page_and_slice_is_covered_and_the_exemptions_are_named():
+    assert len(ALL_FRAGMENTS) >= 59 and len(ALL_SLICES) >= 23
+    assert set(FRAGMENTS) < set(ALL_FRAGMENTS) and set(SLICES) < set(ALL_SLICES)
+    for rel, why in EXEMPT.items():
+        assert (REPO / rel).exists() and len(why) > 40, rel
+
+
+@pytest.mark.parametrize("rel", [r for r in ALL_FRAGMENTS if r not in EXEMPT])
+def test_every_page_has_at_most_three_explanatory_blocks_outside_help(rel):
+    """MB: the explanation of an analytics page is behind its "?" too (a <template> + data-help, or a closed <details>)."""
+    blocks = explanatory_blocks(rel)
+    assert len(blocks) <= LIMIT, f"{rel}: {len(blocks)} explanatory blocks > {LONG} characters\n" + "\n".join(f"  line {ln} <{t}> {txt[:90]}" for ln, t, txt in blocks)
+
+
+@pytest.mark.parametrize("rel", [r for r in ALL_SLICES if r not in EXEMPT])
+def test_every_slice_draws_at_most_three_explanatory_sentences_inline(rel):
+    found = inline_sentences(_src(rel))
+    assert len(found) <= JS_LIMIT, f"{rel}: {len(found)} inline sentences > {LONG} characters\n" + "\n".join(f"  line {ln} {t[:90]}" for ln, t in found)
+
+
+def test_every_help_button_of_every_page_points_at_a_template_that_exists():
+    for rel in ALL_FRAGMENTS:
+        html = _src(rel)
+        for ref in re.findall(r'data-help="([^"]+)"', html):
+            assert re.search(r'<template id="%s"[^>]*data-title="[^"]+"' % re.escape(ref), html), f"{rel}: no template for {ref}"
+
+
+def test_the_abc_pareto_explanation_of_menu_analysis_is_behind_its_question_mark():
+    """The brief's example: วิเคราะห์เมนู's "ABC = Pareto …" paragraph is a "?" (uiQ) now, and its facts are kept."""
+    src = _src("js/03-tabs-main.js")
+    assert "ABC = Pareto" in src
+    assert not [t for _, t in inline_sentences(src) if "Pareto" in t]
+    i = src.index("ABC = Pareto")
+    assert "uiQ(" in src[max(src.rfind(";\n", 0, i), src.rfind("}\n", 0, i)):i]

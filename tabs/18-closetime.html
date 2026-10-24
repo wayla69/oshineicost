@@ -7,7 +7,7 @@
     <button onclick="document.getElementById('ctmDate').value='';loadCloseTime(true)"
       style="border:1px solid var(--border);border-radius:var(--r-md);padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
     <span id="ctmFresh" class="text-xs font-semibold" style="color:var(--text-secondary)"></span>
-    <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
+    <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)"><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-closetime-mb1" title="คำอธิบาย">?</button></span><template id="hlp-closetime-mb1" data-title="เวลาปิดร้านและความสดของข้อมูล"><p>เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</p></template>
   </div>
   <div id="ctmKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
 

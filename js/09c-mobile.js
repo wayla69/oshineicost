@@ -532,6 +532,7 @@ function phFitApply() {
   document.body.classList.toggle('ph-fit', fit);
   _phModeBtnSync(pg, fit);
   if (pg && _phView === 'page') phRecentAdd(pg);
+  phCardsSchedule();                              // PR-MB: แตะง่าย draws the page's daily tables as cards; พอดีจอ takes them away
   if (!fit) return;
   const key = _phPageKey(pg);
   if (_phFitPanel !== panel || _phFitKey !== key) { _phFitPanel = panel; _phFitKey = key; panel.classList.add('ph-frame'); panel.dataset.phw = ''; _phFitWatch(panel); }
@@ -555,6 +556,7 @@ function _phFitOff(panel) {
   panel.querySelectorAll('.ph-xs, .ph-xv').forEach(el => { el.classList.remove('ph-xs', 'ph-xv'); el.style.removeProperty('max-height'); });
   panel.querySelectorAll('.ph-z100').forEach(_phZoomOff);
   delete panel._phS;
+  _phChartsCrisp(panel, 0);                       // PR-MB: the charts go back to the browser's own pixel ratio
   _phFitPanel = null; _phFitKey = '';
 }
 // the page draws its content after it opens (and again on every filter): the frame follows, debounced
@@ -582,6 +584,7 @@ function _phNatural(panel) {
 }
 function phFitLayout(panel) {
   if (!panel || !panel.isConnected) return;
+  _phRowNums(panel);                                                                // PR-MB: no row-number column on a phone (before the width is read)
   const avail = _phAvail();
   const cap = Math.floor(avail * _PH_FIT_TEXT / _PH_FIT_FLOOR);                 // wider than this, 12 px text would read under 5.5 px
   const nat = _phNatural(panel) || _PH_FIT_DEF;
@@ -601,6 +604,21 @@ function phFitLayout(panel) {
   _phFitTouch(panel, s);
   _phFitTables(panel, s);
   _phFitFloor(panel);
+  _phChartsCrisp(panel, s);
+}
+// PR-MB · a chart in the frame is drawn for the size it is SHOWN at: its canvas holds (drawn width x device pixel ratio) pixels, so it is
+// sharp at rest (scale s) and again at 100 % after a double tap (scale 1) - not a scaled bitmap. scale 0 = back to the browser's own ratio.
+function _phChartsCrisp(root, scale) {
+  if (typeof Chart === 'undefined' || !root) return;
+  const dpr = window.devicePixelRatio || 1;
+  root.querySelectorAll('canvas').forEach(cv => {
+    const ch = Chart.getChart ? Chart.getChart(cv) : null; if (!ch) return;
+    const z = cv.closest('.ph-z100') ? 1 : scale;
+    const want = z ? +(dpr * z).toFixed(3) : undefined;
+    if (ch.options.devicePixelRatio === want) return;
+    ch.options.devicePixelRatio = want;
+    try { ch.resize(); } catch (e) { /* not drawn yet */ }
+  });
 }
 // the filters, the pickers, the chips and the "?" keep their touch size: zoom 1/s puts them back at 1:1 (zoom only; a transform cannot undo)
 function _phFitTouch(panel, s) {
@@ -671,6 +689,7 @@ function phZoomToggle(el) {
   }
   el.querySelectorAll('.ph-xs, .ph-xv').forEach(x => { x.classList.remove('ph-xs', 'ph-xv'); x.style.removeProperty('max-height'); });
   el.querySelectorAll('.ph-tz').forEach(x => { x.classList.remove('ph-tz'); x.style.removeProperty('zoom'); });   // at 100 % a control is at its own size already
+  _phChartsCrisp(el, 1);                                                             // PR-MB: the chart is redrawn for 100 %, not stretched
   setTimeout(() => { try { el.scrollIntoView({ block: 'start' }); } catch (e) { /* off screen */ } }, 0);
 }
 function _phZoomOff(el) {
@@ -719,23 +738,24 @@ function _phHeads(table, n) {
   rows.forEach(r => { let i = 0; [...r.cells].forEach(c => { const span = c.colSpan || 1, t = (c.innerText || c.textContent || '').replace(/\s+/g, ' ').trim(); for (let k = 0; k < span && i < n; k++, i++) if (t) out[i] = span > 1 && out[i] ? out[i] : t; }); });
   return out;
 }
-function phRowSheet(tr) {
+// title (PR-MB): the name a card shows; else the row's first value
+function phRowSheet(tr, title) {
   const sh = document.getElementById('msSheet'), body = document.getElementById('msSheetBody'), table = tr.closest('table');
   if (!sh || !body || !table) return;
   const cells = [...tr.cells];
   const n = cells.reduce((a, c) => a + (c.colSpan || 1), 0);
   const heads = _phHeads(table, n);
   const pairs = []; let i = 0;
-  // a cell that only holds a selection box (the row's tick) is not a value of the row
+  // a cell that only holds a selection box (the row's tick) is not a value of the row; nor is a row number (#, ลำดับ - PR-MB)
   const tickOnly = c => !(c.innerText || c.textContent || '').trim() && c.querySelector('input[type="checkbox"], input[type="radio"]') && !c.querySelector('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
-  cells.forEach(c => { const v = tickOnly(c) ? '' : _phCellText(c); if (v) pairs.push([heads[i] || '', v]); i += c.colSpan || 1; });
+  cells.forEach(c => { const rn = c.classList.contains('ph-rn') || _PH_RN_RE.test(_phNorm(heads[i])); const v = tickOnly(c) || rn ? '' : _phCellText(c); if (v) pairs.push([heads[i] || '', v]); i += c.colSpan || 1; });
   const pill = tr.querySelector('.bmc-chip, .wt-tag, .pill, .ms-chip, .frc-pill, .fm-chip, .badge-up, .badge-down, [class*="chip"], [class*="tag-"]');
   _phRowActs = [...tr.querySelectorAll('button, a[href], a[onclick], [role="button"]')].filter(b => (b.innerText || b.getAttribute('aria-label') || b.title || '').trim());
   const own = tr.hasAttribute('onclick') || [...tr.cells].some(c => c.hasAttribute('onclick'));
   const acts = _phRowActs.map((b, k) => `<button type="button" onclick="phRowAct(${k})"${b.disabled ? ' disabled' : ''}>${esc((b.innerText || b.getAttribute('aria-label') || b.title).replace(/\s+/g, ' ').trim())}</button>`);
   if (own) acts.unshift(`<button type="button" onclick="phRowAct(-1)">เปิดรายละเอียด</button>`);
   _phRowOwn = own ? tr : null;
-  document.getElementById('msSheetTitle').textContent = pairs.length ? pairs[0][1].slice(0, 80) : 'รายการ';
+  document.getElementById('msSheetTitle').textContent = (title || (pairs.length ? pairs[0][1] : '') || 'รายการ').slice(0, 80);
   document.getElementById('msSheetSub').textContent = (document.getElementById('pageTitle') || {}).textContent || '';
   body.innerHTML = `<div class="ph-rs">${pill ? `<div class="ph-rs-pill">${pill.outerHTML}</div>` : ''}<dl class="ph-rs-list">`
     + pairs.map(([h, v]) => `<div class="ph-rs-row"><dt>${esc(h || '—')}</dt><dd>${esc(v)}</dd></div>`).join('') + '</dl>'
@@ -750,6 +770,331 @@ function phRowAct(k) {
   if (!el || !el.isConnected) return;
   _phRowBypass = true;
   try { el.click(); } finally { _phRowBypass = false; }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CARD LISTS (PR-MB, 2026-10-24)
+// ════════════════════════════════════════════════════════════════
+// In แตะง่าย (touch) the tables people read daily are one card per row (phCardList): the status / class pill (colour = meaning), the name, a
+// grey line (code / branch / date), the three key figures on one line, an optional sparkline (msColumns, B1) and a chevron that opens the row
+// sheet with every column. Sort chips (the key figures + the name) and filter chips (the pill's values) sit on top; finished rows are behind the
+// shared state filter (uiStateFilter), hidden by default. The tables and their key columns are registered in PAGE_CARDS (js/01-core.js).
+// The table stays in the page, hidden while its cards show: the sheet reads its row, the card's actions click the row's own buttons.
+// In พอดีจอ and on a desktop the table is the table. Row-number columns (#, ลำดับ) are hidden on a phone in both modes.
+const _PH_CL_PAGE = 50;                                // cards drawn at once; "แสดงอีก" draws the next 50
+const _PH_RN_RE = /^(#|ลำดับ|ลำดับที่|ที่|อันดับ|no\.?)$/i;   // the header of a row-number column
+const _PH_CL_TONE = { good: 'good', bad: 'fix', warn: 'watch', info: 'neu', neutral: 'neu' };
+let _phCl = {}, _phClObs = null, _phClPanel = null, _phClT = null;
+const _phNorm = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+// the group a pill belongs to for the filter chips: its words before a count, a date or a reference (สาขาแก้ไข 2 รายการ -> สาขาแก้ไข)
+const _phPillKey = t => (String(t || '').split(/\s+·\s+/)[0].replace(/\s*[+±−-]?\d[\d,./]*.*$/, '').trim()) || String(t || '');
+const _phHeadName = s => _phNorm(s).replace(/[\s↕▾▴▲▼⇅↑↓]+$/, '');
+const _phTidy = s => s.replace(/^[▸▾►▼›]\s*/, '').replace(/\s*(?:›|→|เจาะลึก\s*→?)$/, '').trim();
+// a number as the table prints it: ฿1,234 · 12.5% · −3 · (1,200) · 1.2K · 3.40M · 2 ล้าน -> a number to sort by (null = no number)
+function _phNum(t) {
+  const s = String(t == null ? '' : t).replace(/[−–]/g, '-').replace(/,/g, '');
+  const m = s.match(/(\(?)(-?)\s*[฿$]?\s*(-?)\s*(\d+(?:\.\d+)?)\s*(K(?![a-z])|M(?![a-z])|ล้าน|พัน)?/i);
+  if (!m) return null;
+  let v = parseFloat(m[4]);
+  const u = (m[5] || '').toUpperCase();
+  if (u === 'K' || u === 'พัน') v *= 1e3; else if (u === 'M' || u === 'ล้าน') v *= 1e6;
+  const neg = m[2] === '-' || m[3] === '-' || /▼/.test(s.slice(0, m.index + 1)) || (m[1] === '(' && /\)/.test(s.slice(m.index)));
+  return neg ? -v : v;
+}
+// the app's own date text on a phone: 2026-10-19 -> 19/10 (the year only when it is not this year)
+function _phDateTh(t) {
+  const y = String(new Date().getFullYear());
+  return String(t == null ? '' : t).replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (a, yy, mm, dd) => `${+dd}/${+mm}${yy === y ? '' : '/' + yy.slice(2)}`);
+}
+// the column of a header: a number is the column's index (negative from the end); a text is the header as the table prints it
+// (exact, then the start of it, then anywhere in it; case and spacing ignored). -1 = the table has no such column.
+function _phColIdx(heads, ref) {
+  if (typeof ref === 'number') return ref < 0 ? heads.length + ref : ref;
+  const r = _phNorm(ref).toLowerCase(), h = heads.map(x => _phNorm(x).toLowerCase());
+  let i = h.indexOf(r);
+  if (i < 0) i = h.findIndex(x => x.startsWith(r));
+  if (i < 0) i = h.findIndex(x => x.includes(r));
+  return i;
+}
+// The card list of one table, as HTML. spec = { id, rows: [{ title, sub, figs: [{ l, v, ink }], pill: { t, tone, html }, done, spark, total }],
+// keys: [label x3], sort: { k: 'name' | 0..2, dir: 1 | -1 } | null, filter: '' | pill text, state: 'todo' | 'done' | 'all', hasDone,
+// limit, empty: { t, act } }. Pure: the rows are already read (see _phCardSpec); the DOM is not touched.
+function phCardList(spec) {
+  const id = esc(spec.id), all = spec.rows || [];
+  const s = spec.sort, ordered = !!(s && (s.k === 'name' || typeof s.k === 'number'));
+  const totals = all.filter(r => r.total && !r.grp), body = all.filter(r => !r.total && !r.grp);
+  const st = spec.hasDone ? (spec.state || 'todo') : 'all';
+  const byState = body.filter(r => st === 'all' || (st === 'done' ? r.done : !r.done));
+  const pills = [];
+  byState.forEach(r => { const t = r.pill && r.pill.k; if (t && !pills.includes(t)) pills.push(t); });
+  const filter = spec.filter && pills.includes(spec.filter) ? spec.filter : '';
+  let rows = byState.filter(r => !filter || (r.pill && r.pill.k === filter));
+  if (!ordered && !filter && st === 'all') {                                      // the table's own order keeps its group rows
+    const keep = new Set(rows);
+    rows = all.filter(r => !r.total && (r.grp || keep.has(r)));
+  }
+  if (ordered) {
+    rows = rows.slice().sort((a, b) => {
+      if (s.k === 'name') return s.dir * String(a.title).localeCompare(String(b.title), 'th');
+      const x = a.figs[s.k] ? a.figs[s.k].n : null, y = b.figs[s.k] ? b.figs[s.k].n : null;
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return s.dir * (x - y);
+    });
+  }
+  const chip = (on, js, label, n) => `<button type="button" class="ph-cl-chip" aria-pressed="${on}" onclick="${js}">${esc(label)}${n != null ? ` <span class="ph-cl-n">${n}</span>` : ''}</button>`;
+  const arrow = k => s && s.k === k ? (s.dir > 0 ? ' ↑' : ' ↓') : '';
+  const sorts = [chip(!!(s && s.k === 'name'), `phCardSort('${id}','name')`, 'ชื่อ' + arrow('name'))]
+    .concat((spec.keys || []).map((l, k) => chip(!!(s && s.k === k), `phCardSort('${id}',${k})`, l + arrow(k))));
+  const filters = pills.length >= 2 && pills.length <= 10
+    ? [chip(!filter, `phCardFilter('${id}','')`, 'ทั้งหมด', byState.length)].concat(pills.map(p => chip(filter === p, `phCardFilter('${id}',${esc(JSON.stringify(p))})`, p, byState.filter(r => r.pill && r.pill.k === p).length)))
+    : [];
+  const pillHtml = p => !p || !p.t ? '' : p.html ? `<span class="ph-cl-pill ph-cl-own">${p.html}</span>`
+    : `<span class="ph-cl-pill" data-tone="${_PH_CL_TONE[p.tone] || 'neu'}">${esc(p.t)}</span>`;
+  const tick = r => r.tick ? `<label class="ph-cl-tick"><input type="checkbox" aria-label="${esc(r.tick.l)}"${r.tick.on ? ' checked' : ''}${r.tick.dis ? ' disabled' : ''} onchange="phCardTick('${id}',${r.i},this.checked)"></label>` : '';
+  const card = (r, i, tot) => `<li class="ph-cl-card${tot || r.grp ? ' ph-cl-tot' : ''}${r.tick ? ' ph-cl-hastick' : ''}">${tick(r)}<button type="button" class="ph-cl-hit" onclick="phCardOpen('${id}',${r.i})" aria-label="${esc(r.title)} · ดูทุกคอลัมน์">`
+    + `<span class="ph-cl-main">${pillHtml(r.pill)}<span class="ph-cl-t">${esc(r.title || '—')}</span>`
+    + (() => { const sb = [(ordered || filter) && r.group ? r.group : '', r.sub].filter(Boolean).join(' · '); return sb ? `<span class="ph-cl-s">${esc(sb)}</span>` : ''; })()
+    + `<span class="ph-cl-figs">${(r.figs || []).filter(f => f.v || !r.grp).map(f => `<span class="ph-cl-f"><span class="ph-cl-fl">${esc(f.l)}</span><span class="ph-cl-fv"${f.ink ? ` style="color:${esc(f.ink)}"` : ''}>${esc(f.v || '—')}</span></span>`).join('')}</span>`
+    + (r.spark ? `<span class="ph-cl-spark">${r.spark}</span>` : '') + `</span><span class="ph-cl-chev" aria-hidden="true">›</span></button></li>`;
+  const lim = Math.max(_PH_CL_PAGE, spec.limit || 0);
+  const shown = rows.slice(0, lim);
+  let list;
+  if (!all.length || (!rows.length && !totals.length)) {
+    const e = spec.empty || {};
+    const stEmpty = spec.hasDone && body.length && st !== 'all';
+    list = `<div class="ph-cl-empty" role="status"><span>${esc(stEmpty ? (st === 'done' ? 'ยังไม่มีรายการที่เสร็จแล้ว' : 'ไม่มีรายการค้าง') : filter ? 'ไม่มีรายการในกลุ่มนี้' : (e.t || 'ไม่มีรายการในช่วงที่เลือก'))}</span>`
+      + (stEmpty ? `<button type="button" class="ph-cl-act" onclick="phCardState('all')">ดูทั้งหมด</button>`
+        : filter ? `<button type="button" class="ph-cl-act" onclick="phCardFilter('${id}','')">ดูทั้งหมด</button>`
+          : `<button type="button" class="ph-cl-act" onclick="phCardEmptyAct('${id}')">${esc(e.act || 'เลือกช่วงอื่น')}</button>`) + '</div>';
+  } else {
+    list = `<ul class="ph-cl-list" role="list">${totals.map(r => card(r, 0, true)).join('')}${shown.map((r, i) => card(r, i, false)).join('')}</ul>`
+      + (rows.length > lim ? `<button type="button" class="ph-cl-more" onclick="phCardMore('${id}')">แสดงอีก ${Math.min(_PH_CL_PAGE, rows.length - lim)} จาก ${rows.length - lim} รายการ</button>` : '');
+  }
+  return `<div class="ph-cl" data-cl="${id}">`
+    + (spec.hasDone && body.length ? `<div class="ph-cl-st" data-cl-st="${id}"></div>` : '')
+    + (all.length > 1 ? `<div class="ph-cl-chips" role="group" aria-label="เรียงตาม">${sorts.join('')}</div>` : '')
+    + (filters.length ? `<div class="ph-cl-chips" role="group" aria-label="กรองตามกลุ่ม">${filters.join('')}</div>` : '')
+    + list + '</div>';
+}
+// the colour a cell's text carries in the table (an inline colour or a text-* class), so a figure keeps its meaning on the card
+function _phInk(td) {
+  for (const el of [td, ...td.querySelectorAll('*')]) {
+    if (el.style && el.style.color) return el.style.color;
+    const c = [...(el.classList || [])].find(x => /^text-(red|rose|green|emerald|amber|orange|yellow)-\d00$/.test(x));
+    if (c) return /red|rose/.test(c) ? 'var(--bad-ink)' : /green|emerald/.test(c) ? 'var(--good-ink)' : 'var(--amber-ink)';
+  }
+  return '';
+}
+const _PH_CHIP_SEL = '.bmc-chip, .wt-tag, .pill, .ms-chip, .frc-pill, .fm-chip, .badge-up, .badge-down, .ohb-st, [class*="chip"], [class*="tag-"], [class*="badge"]';
+// The card spec of one table as it is drawn: its header texts, its body rows (a message row such as "ไม่มีข้อมูล" is the empty state),
+// the columns PAGE_CARDS names. cfg = { title, sub, keyCols, pill, tones, done, spark, empty, total }.
+// the lines of a cell as it is drawn (a <br>, a <div>, a <p> start a line) - read from a copy, so a hidden table reads the same as a shown one
+function _phLines(el) {
+  const c = /** @type {Element} */ (el.cloneNode(true));
+  c.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+  c.querySelectorAll('div, p, li').forEach(d => d.prepend('\n'));
+  c.querySelectorAll('script, style, template').forEach(x => x.remove());
+  return String(c.textContent || '').split('\n').map(_phNorm).filter(Boolean);
+}
+const _PH_MONTH_HEAD = /^(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)|^\d{4}-\d{2}$/;
+function _phCardSpec(table, cfg, id) {
+  const rowSel = cfg.rows || '';
+  const bodyRows = [...table.tBodies].flatMap(b => [...b.rows]).filter(tr => tr.cells.length && tr.style.display !== 'none' && !tr.hidden && !tr.classList.contains('hidden')
+    && (!rowSel || tr.matches(rowSel) || tr.cells.length === 1) && ![...tr.cells].every(c => c.tagName === 'TH' && (c.colSpan || 1) > 1));
+  const n = Math.max(1, ...bodyRows.map(tr => [...tr.cells].reduce((a, c) => a + (c.colSpan || 1), 0)));
+  const heads = _phHeads(table, n);
+  const col = ref => Array.isArray(ref) ? ref.map(r => _phColIdx(heads, r)).find(i => i >= 0) ?? -1 : _phColIdx(heads, ref);
+  const ti = col(cfg.title != null ? cfg.title : 0), pi = cfg.pill != null ? col(cfg.pill) : -1;
+  const ki = (cfg.keyCols || []).map(col).filter(i => i >= 0).slice(0, 3), si = (cfg.sub || []).map(col);
+  const spi = cfg.spark === 'months' ? heads.map((h, i) => _PH_MONTH_HEAD.test(_phNorm(h)) ? i : -1).filter(i => i >= 0)
+    : Array.isArray(cfg.spark) ? cfg.spark.map(col).filter(i => i >= 0) : [];
+  const sci = cfg.sparkCell != null ? col(cfg.sparkCell) : -1;
+  const cellsOf = tr => { const out = []; [...tr.cells].forEach(c => { for (let k = 0; k < (c.colSpan || 1); k++) out.push(c); }); return out; };
+  const tones = Object.entries(cfg.tones || {}).map(([re, t]) => [new RegExp(re, 'i'), t]);
+  const doneRe = cfg.done ? new RegExp(cfg.done, 'i') : null;
+  const lines = td => td ? _phLines(td) : [];
+  const txt = td => td ? _phNorm(td.textContent) : '';
+  let empty = null, group = '';
+  const rows = [];
+  bodyRows.forEach(tr => {
+    const cs = cellsOf(tr);
+    if (tr.cells.length === 1 && (tr.cells[0].colSpan || 1) >= Math.max(2, n - 1)) { empty = empty || txt(tr.cells[0]); return; }   // "ไม่มีข้อมูล"
+    const isGrp = (tr.cells[0].colSpan || 1) >= 3;                                                     // a group's row (a branch above its cashiers)
+    if (isGrp) group = txt(tr.cells[0]);
+    // the name: the cell's own text without its buttons, chips and fields (a cell that IS a button keeps it), the toggle arrows cut off
+    const tcell = cs[ti] || cs[0];
+    let tl = [];
+    let tchips = [];
+    if (tcell) {
+      const cl = /** @type {HTMLElement} */ (tcell.cloneNode(true));
+      tchips = [...cl.querySelectorAll(_PH_CHIP_SEL)].map(x => x.outerHTML);
+      cl.querySelectorAll('button, input, select, textarea, ' + _PH_CHIP_SEL).forEach(x => x.remove());
+      tl = _phLines(cl);
+      if (!tl.length) tl = lines(tcell);
+      if (!tl.length) { const v = _phCellText(tcell); if (v) tl = [v]; }
+    }
+    tl = tl.map(_phTidy).filter(Boolean);
+    const title = tl[0] || '';
+    const sub = [...tl.slice(1), ...si.map((i, k) => {
+      if (i < 0 || !cs[i] || cs[i] === tcell) return '';
+      const v = _phTidy(lines(cs[i]).join(' · '));
+      return v && cfg.subL ? `${(cfg.subLabels && cfg.subLabels[k]) || _phNorm(heads[i])} ${v}` : v;
+    })].filter(Boolean);
+    const figs = ki.map((i, k) => {
+      const td = cs[i] && cs[i] !== tcell ? cs[i] : null, v = td ? (lines(td)[0] || '') || _phCellText(td) : '';
+      return { l: (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]), v: _phDateTh(v), n: v ? _phNum(v) : null, ink: td ? _phInk(td) : '' };
+    });
+    let pill = null;
+    const pcell = pi >= 0 ? cs[pi] : null;
+    const chips = pcell ? [...pcell.querySelectorAll(_PH_CHIP_SEL)].filter(x => !x.parentElement.closest(_PH_CHIP_SEL)) : [];
+    const pfirst = pcell && !chips.length ? [...pcell.querySelectorAll('span, b, strong')].find(x => _phNorm(x.textContent)) : null;
+    const ptxt = (chips.length ? _phNorm(chips[0].textContent) : pfirst && _phNorm(pfirst.textContent).length <= 30 ? _phNorm(pfirst.textContent)
+      : pcell ? (lines(pcell)[0] || '') : '').slice(0, 40);
+    if (ptxt) {
+      const tone = (tones.find(([re]) => re.test(ptxt)) || [])[1];
+      pill = { t: ptxt, k: _phPillKey(ptxt), tone: tone || 'neutral', html: !tone && chips.length ? chips.slice(0, 2).map(x => x.outerHTML).join(' ') : '' };
+    } else if (pi < 0 && tchips.length) {
+      const d = document.createElement('div'); d.innerHTML = tchips[0];
+      pill = { t: _phNorm(d.textContent), k: _phPillKey(_phNorm(d.textContent)), tone: 'neutral', html: tchips.slice(0, 2).join(' ') };
+    }
+    const tickCell = [...tr.cells].find(c => !_phNorm(c.textContent) && c.querySelector('input[type="checkbox"]') && !c.querySelector('input:not([type="checkbox"]), select, textarea'));
+    const tick = tickCell ? /** @type {HTMLInputElement} */ (tickCell.querySelector('input[type="checkbox"]')) : null;
+    const sp = spi.length >= 3 ? spi.map(i => _phNum(txt(cs[i]))) : null;
+    const svg = sci >= 0 && cs[sci] ? cs[sci].querySelector('svg') : null;
+    const total = cfg.total !== false && /^(รวม|ทั้งหมด|เฉลี่ยเครือ|ทั้งเครือ|ค่ากลาง)/.test(title);
+    rows.push({ i: rows.length, tr, title, sub: _phDateTh(sub.join(' · ')), group: isGrp ? '' : group, grp: isGrp, figs, pill, total,
+      tick: tick ? { on: !!tick.checked, l: tick.getAttribute('aria-label') || 'เลือก', dis: !!tick.disabled } : null,
+      done: !!(doneRe && (doneRe.test(ptxt) || doneRe.test(tr.getAttribute('data-state') || ''))),
+      spark: sp && sp.filter(v => v != null).length >= 3 && typeof msColumns === 'function' ? msColumns(sp, { height: 46, fmt: v => fmt(v), aria: 'แนวโน้ม' })
+        : svg ? svg.outerHTML : '' });
+  });
+  const keys = ki.map((i, k) => (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]));
+  return { id, rows, keys, hasDone: !!doneRe, empty: { t: (cfg.empty && cfg.empty.t) || empty || '', act: cfg.empty && cfg.empty.act } };
+}
+// the box of a table that the cards replace: the table and the wrappers that hold nothing else (a scroll box, a .wt-wrap)
+function _phClBox(table, panel) {
+  let box = table;
+  while (box.parentElement && box.parentElement !== panel && box.parentElement.children.length === 1 && !box.parentElement.classList.contains('card')
+    && !/^tab-/.test(box.parentElement.id || '')) box = box.parentElement;
+  return box;
+}
+function _phClOn() {
+  return phOn() && _phView === 'page' && !document.body.classList.contains('ph-fit');
+}
+function phCardsSchedule() { clearTimeout(_phClT); _phClT = setTimeout(phCardsApply, 0); }
+function phCardsOf(tab, pane) { const r = typeof PAGE_CARDS === 'object' ? PAGE_CARDS : {}; return r[tab + '|' + (pane || '')] || r[tab] || []; }
+function _phClOff(scope) {
+  (scope || document).querySelectorAll('.ph-cl').forEach(l => l.remove());
+  (scope || document).querySelectorAll('.ph-cl-src').forEach(b => b.classList.remove('ph-cl-src'));
+}
+function phCardsApply() {
+  const pg = phCurPage(), on = !!pg && _phClOn();
+  const panel = pg ? document.getElementById('tab-' + pg.tab) : null;
+  if (_phClPanel && (_phClPanel !== panel || !on)) { _phClOff(_phClPanel); if (_phClObs) { _phClObs.disconnect(); _phClObs = null; } _phClPanel = null; }
+  if (!phOn() || !panel) return;
+  _phRowNums(panel);
+  if (!on) return;
+  if (_phClPanel !== panel) { _phClPanel = panel; _phClWatch(panel); }
+  const cfgs = phCardsOf(pg.tab, pg.pane), live = new Set();
+  // a table on screen: itself, or (once its cards show) the place of its hidden box; a table of a hidden sub-tab is not
+  const shown = t => { const src = t.closest('.ph-cl-src'), el = src ? src.parentElement : t; return !!el && el.getClientRects().length > 0; };
+  // a table a writer edits in place (fields in its rows) stays the table: its cards would hide the fields
+  const edits = t => [...t.tBodies].some(b => b.querySelector('input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea'));
+  cfgs.forEach((cfg, k) => {
+    const tables = [...panel.querySelectorAll(cfg.sel)].filter(t => t.tagName === 'TABLE' && !t.closest('.ph-cl') && shown(t) && !(cfg.fields === 'table' && edits(t)));
+    (cfg.all ? tables : tables.slice(0, 1)).forEach((table, j) => {
+      const id = `${pg.tab}${pg.pane ? '-' + pg.pane : ''}-${k}-${j}`;
+      live.add(id);
+      const box = _phClBox(table, panel);
+      const sig = table.tBodies.length + ':' + table.rows.length + ':' + (table.textContent || '').length;
+      const st = _phCl[id] = _phCl[id] || { sort: null, filter: '', limit: 0 };
+      const cur = box.previousElementSibling && box.previousElementSibling.matches('.ph-cl') && box.previousElementSibling.getAttribute('data-cl') === id ? box.previousElementSibling : null;
+      if (cur && st.sig === sig && st.table === table) return;
+      const spec = _phCardSpec(table, cfg, id);
+      Object.assign(st, { sig, table, spec, cfg });
+      _phClDraw(id, box, cur);
+    });
+  });
+  panel.querySelectorAll('.ph-cl').forEach(l => { if (!live.has(l.getAttribute('data-cl'))) { const b = l.nextElementSibling; l.remove(); if (b) b.classList.remove('ph-cl-src'); } });
+}
+function _phClDraw(id, box, cur) {
+  const st = _phCl[id]; if (!st || !st.spec) return;
+  if (!box) { const old = document.querySelector(`.ph-cl[data-cl="${id}"]`); box = old && old.nextElementSibling; cur = old; }
+  if (!box) return;
+  const html = phCardList(Object.assign({}, st.spec, { sort: st.sort, filter: st.filter, limit: st.limit, state: uiStateFilter.get() }));
+  const wrap = document.createElement('div'); wrap.innerHTML = html;
+  const el = wrap.firstElementChild;
+  if (cur) cur.replaceWith(el); else box.parentElement.insertBefore(el, box);
+  box.classList.add('ph-cl-src');
+  const sb = el.querySelector('[data-cl-st]');
+  if (sb) {
+    const body = st.spec.rows.filter(r => !r.total), done = body.filter(r => r.done).length;
+    uiStateFilter.bar(sb, { f: uiStateFilter.get(), counts: { todo: body.length - done, done, all: body.length }, pick: 'phCardState' });
+  }
+}
+// the page draws its rows after it opens (and again on every filter): the cards follow, debounced; their own changes are not a redraw
+function _phClWatch(panel) {
+  if (_phClObs) _phClObs.disconnect();
+  let t = null;
+  const own = n => n.nodeType === 1 && /** @type {Element} */ (n).classList.contains('ph-cl');
+  _phClObs = new MutationObserver(ms => {
+    const real = ms.some(m => {
+      const el = m.target.nodeType === 1 ? /** @type {Element} */ (m.target) : m.target.parentElement;
+      if (el && el.closest('.ph-cl')) return false;
+      if (m.type === 'attributes') return m.attributeName !== 'class' || !/ph-(cl|rn)/.test(String(m.oldValue || '') + ' ' + (el ? el.getAttribute('class') : ''));
+      return !([...m.addedNodes, ...m.removedNodes].length && [...m.addedNodes, ...m.removedNodes].every(own));
+    });
+    if (!real) return;
+    clearTimeout(t); t = setTimeout(() => { if (_phClPanel === panel) phCardsApply(); }, 200);
+  });
+  // a sub-tab shown or hidden (style / class / hidden) is a change too; the cards' own class on the table's box is not
+  _phClObs.observe(panel, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'], attributeOldValue: true });
+}
+function phCardSort(id, k) {
+  const st = _phCl[id]; if (!st) return;
+  const same = st.sort && st.sort.k === k;
+  st.sort = { k, dir: same ? -st.sort.dir : (k === 'name' ? 1 : -1) };       // a figure sorts largest first, the name ก-ฮ; again: the other way
+  st.limit = 0; _phClDraw(id);
+}
+function phCardFilter(id, p) { const st = _phCl[id]; if (!st) return; st.filter = p; st.limit = 0; _phClDraw(id); }
+function phCardMore(id) { const st = _phCl[id]; if (!st) return; st.limit = Math.max(_PH_CL_PAGE, st.limit || 0) + _PH_CL_PAGE; _phClDraw(id); }
+function phCardState(f) { uiStateFilter.set(f); Object.keys(_phCl).forEach(id => { if (document.querySelector(`.ph-cl[data-cl="${id}"]`)) _phClDraw(id); }); }
+function phCardOpen(id, i) {
+  const st = _phCl[id], r = st && st.spec && st.spec.rows.find(x => x.i === i);
+  if (!r || !r.tr || !r.tr.isConnected) { phCardsApply(); return; }
+  phRowSheet(r.tr, r.title);
+}
+// the tick of a card is the row's own tick (a bulk selection): the row's box changes and its own handler runs
+function phCardTick(id, i, on) {
+  const st = _phCl[id], r = st && st.spec && st.spec.rows.find(x => x.i === i);
+  const cb = r && r.tr && r.tr.isConnected ? /** @type {HTMLInputElement} */ (r.tr.querySelector('input[type="checkbox"]')) : null;
+  if (!cb) { phCardsApply(); return; }
+  cb.checked = !!on;
+  cb.dispatchEvent(new Event('change', { bubbles: true }));
+  r.tick.on = !!on;
+}
+// the action of an empty list: the period / filter the page reads (its first picker, else the top bar's filters)
+function phCardEmptyAct(id) {
+  const l = document.querySelector(`.ph-cl[data-cl="${id}"]`), panel = l && l.closest('.tab-content');
+  const f = panel && [...panel.querySelectorAll('select, input[type="month"], input[type="date"], input[type="week"]')].find(x => x.offsetParent !== null && !x.closest('.ph-cl'));
+  if (f) { try { f.scrollIntoView({ block: 'center' }); f.focus({ preventScroll: true }); } catch (e) { /* off screen */ } return; }
+  if (document.body.classList.contains('tb-folded') && typeof toggleTopbarFold === 'function') { toggleTopbarFold(); return; }
+  const tb = document.querySelector('.top-bar select, .top-bar input'); if (tb) { try { /** @type {HTMLElement} */ (tb).focus(); } catch (e) { /* hidden */ } }
+}
+// a row-number column (#, ลำดับ) says nothing on a phone: its cells are hidden in both modes (the first column only, a single cell wide)
+function _phRowNums(panel) {
+  panel.querySelectorAll('table').forEach(tb => {
+    const h = tb.tHead && tb.tHead.rows[0] && tb.tHead.rows[0].cells[0];
+    if (!h || (h.colSpan || 1) !== 1 || !_PH_RN_RE.test(_phNorm(h.textContent))) return;
+    [...tb.rows].forEach(tr => {
+      const c = tr.cells[0];
+      if (!c || c.classList.contains('ph-rn') || (c.colSpan || 1) !== 1 || c.querySelector('input, button, select')) return;
+      if (c.tagName === 'TD' && !/^[\d.\s]*$/.test(c.textContent || '')) return;          // a label such as "รวม" in that column stays
+      c.classList.add('ph-rn');
+    });
+  });
 }
 
 // ── หน้าที่เปิดล่าสุด (ฉัน): the last three pages opened on this device ──

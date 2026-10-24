@@ -114,7 +114,7 @@ function renderFeedback(d) {
   const empty = document.getElementById('fbEmpty');
   if (!d.total) {
     empty.style.display = '';
-    empty.innerHTML = `<div class="fb-empty"><div class="text-3xl"></div><p class="font-semibold mt-1">ยังไม่มีเสียงลูกค้าในช่วงนี้</p><p class="text-xs mt-1">เปิดการดึงอัตโนมัติจาก Google / Facebook / Instagram ตาม Checklist หรือวาง/อัปโหลดรีวิวเองด้านล่าง${_fbBranchLocal || _fbKind ? ' · หรือลองล้างตัวกรองสาขา/ประเภท' : ''}</p><div class="flex justify-center gap-2 mt-3"><button class="fb-btn" onclick="switchTab('checklist')">ไปที่รายการตรวจสอบการเปิดใช้</button><button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button></div></div>`;
+    empty.innerHTML = `<div class="fb-empty"><div class="text-3xl"></div><p class="font-semibold mt-1">ยังไม่มีเสียงลูกค้าในช่วงนี้ ${uiQ('fb:empty', 'ยังไม่มีเสียงลูกค้า', `<p>เปิดการดึงอัตโนมัติจาก Google / Facebook / Instagram ตาม Checklist หรือวาง/อัปโหลดรีวิวเองด้านล่าง${_fbBranchLocal || _fbKind ? ' · หรือลองล้างตัวกรองสาขา/ประเภท' : ''}</p>`)}</p><div class="flex justify-center gap-2 mt-3"><button class="fb-btn" onclick="switchTab('checklist')">ไปที่รายการตรวจสอบการเปิดใช้</button><button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button></div></div>`;
   } else { empty.style.display = 'none'; empty.innerHTML = ''; }
   // KPI tiles
   const s = d.sentiment || {};
@@ -575,13 +575,13 @@ async function loadFeedbackCompetitors(branch) {
   let d; try { d = await api(`${API}/api/feedback/competitors?${p}`); } catch (e) { el.textContent = 'โหลดไม่สำเร็จ'; return; }
   if (!d.available) {
     hint.textContent = '— ยังไม่มีภาพถ่ายคู่แข่ง';
-    el.innerHTML = `<p style="color:var(--text-secondary)">ยังไม่มีข้อมูล — ใส่ Google Places API key ใน backend\\.feedback_config.json ("places": {"api_key": …}) แล้วรัน <code>py backend\\fetch_feedback.py places</code> ครั้งแรก หลังจากนั้นระบบถ่ายภาพเองเดือนละครั้ง (คู่มือ §20)</p>`;
+    el.innerHTML = `<p style="color:var(--text-secondary)">ยังไม่มีข้อมูล ${uiQ('fb:competitors-setup', 'ตั้งค่าภาพถ่ายคู่แข่ง', `<p>ใส่ Google Places API key ใน backend\\.feedback_config.json ("places": {"api_key": …}) แล้วรัน <code>py backend\\fetch_feedback.py places</code> ครั้งแรก หลังจากนั้นระบบถ่ายภาพเองเดือนละครั้ง (คู่มือ §20)</p>`)}</p>`;
     return;
   }
   hint.textContent = `— ภาพถ่าย ${d.month}${d.prev_month ? ` · เทียบ ${d.prev_month}` : ''}`;
   const dl = (cur, prev, digits) => (cur == null || prev == null) ? '' : (Math.abs(cur - prev) < (digits ? 0.005 : 0.5) ? '' : `<span class="fb-delta ${cur > prev ? 'good' : 'bad'}">${cur > prev ? '▲' : '▼'}${Math.abs(cur - prev).toFixed(digits)}</span>`);
   const rows = d.branches || [];
-  el.innerHTML = rows.length ? `<table class="fb-t"><thead><tr><th>สาขา</th><th>ลิสติ้งของเรา</th><th style="text-align:right">★ เรา</th><th style="text-align:right">รีวิว</th><th style="text-align:right">★ กลางคู่แข่ง</th><th style="text-align:right">ห่าง</th><th style="text-align:right">อันดับ</th><th>คู่แข่งที่ดีที่สุด</th><th></th></tr></thead><tbody>` +
+  el.innerHTML = rows.length ? `<table class="fb-t"><thead><tr><th>สาขา</th><th>ลิสติ้งของเรา</th><th style="text-align:right">★ เรา</th><th style="text-align:right">รีวิว</th><th style="text-align:right">★ กลางคู่แข่ง ${uiQ('fb:competitors-cols', 'อ่านตารางคู่แข่ง', '<p>★ กลางคู่แข่ง = ค่ากลางของร้านที่มีรีวิว ≥ 20 ในรัศมี · ห่าง = ★ เรา − ★ กลางคู่แข่ง · อันดับนับเฉพาะร้านที่มีรีวิว ≥ 20 · คลิกสาขาเพื่อดูรายชื่อ</p>')}</th><th style="text-align:right">ห่าง</th><th style="text-align:right">อันดับ</th><th>คู่แข่งที่ดีที่สุด</th><th></th></tr></thead><tbody>` +
     rows.map(r => { const me = r.self || {}, pv = r.prev || {};
       return `<tr class="row" onclick="loadFeedbackCompetitors('${_fbEsc(r.branch).replace(/'/g, "\\'")}')"><td><b>${_fbEsc(r.branch)}</b></td><td class="text-[11px]" style="color:var(--text-muted)">${_fbEsc(me.name || '—')}</td>
         <td style="text-align:right;font-weight:600">${me.rating != null ? me.rating.toFixed(1) : '—'} ${dl(me.rating, pv.rating, 1)}</td><td style="text-align:right">${(me.ratings_total || 0).toLocaleString()} ${dl(me.ratings_total, pv.ratings_total, 0)}</td>
@@ -589,7 +589,7 @@ async function loadFeedbackCompetitors(branch) {
         <td style="text-align:right;color:${r.gap == null ? 'inherit' : r.gap >= 0.2 ? 'var(--good-ink)' : r.gap <= -0.2 ? 'var(--bad-ink)' : 'inherit'}">${r.gap != null ? (r.gap > 0 ? '+' : '') + r.gap.toFixed(2) : '—'}</td>
         <td style="text-align:right">${r.rank ? `#${r.rank}/${r.of}` : '—'}</td><td class="text-[11px]">${r.best ? `${_fbEsc(r.best.name)} ★${r.best.rating.toFixed(1)} (${r.best.ratings_total.toLocaleString()}) · ${(r.best.distance_m / 1000).toFixed(1)} กม.` : '—'}</td><td class="text-[11px]" style="color:var(--sky-ink)">${(r.list || []).length ? '' : 'ดูรายชื่อ →'}</td></tr>` +
         ((r.list || []).length ? `<tr><td colspan="9"><div class="pl-3" style="color:var(--text-secondary)">${r.list.map(c => `${_fbEsc(c.name)} ★${c.rating != null ? c.rating.toFixed(1) : '—'} (${(c.ratings_total || 0).toLocaleString()}) · ${(c.distance_m / 1000).toFixed(1)} กม.${c.price_level != null ? ' · ' + '฿'.repeat(Math.max(1, c.price_level)) : ''}`).join('<br>')}</div></td></tr>` : ''); }).join('') + '</tbody></table>' +
-    `<div class="mt-1" style="color:var(--text-muted)">★ กลางคู่แข่ง = ค่ากลางของร้านที่มีรีวิว ≥ 20 ในรัศมี · ห่าง = ★ เรา − ★ กลางคู่แข่ง · อันดับนับเฉพาะร้านที่มีรีวิว ≥ 20 · คลิกสาขาเพื่อดูรายชื่อ</div>` :
+    `<div class="mt-1" style="color:var(--text-muted)">คลิกสาขาเพื่อดูรายชื่อ</div>` :
     '<p style="color:var(--text-muted)">ไม่มีข้อมูลสำหรับสาขาที่เลือก</p>';
 }
 

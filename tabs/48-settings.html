@@ -24,12 +24,11 @@
        entry stays visible instead of silently erasing a real gap. -->
   <div id="settab-downtime" class="hidden">
     <div class="card p-5 mb-5" style="max-width:1000px">
-      <h2 class="section-title mb-1">วันที่สาขาปิด / ยังไม่เปิดขาย</h2>
-      <p class="text-xs mb-4" style="color:var(--text-muted)">
+      <h2 class="section-title mb-4">วันที่สาขาปิด / ยังไม่เปิดขาย <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-settings-mb1" data-title="วันที่สาขาปิด / ยังไม่เปิดขาย"><p>
         ระบบตรวจสุขภาพข้อมูลนับทุกวันที่ไม่มียอดขายกลางช่วงเปิดร้านว่าเป็น “ข้อมูลหาย” เพราะ POS ไม่มีช่องบันทึกว่าปิดร้าน
         · บันทึกช่วงปิดไว้ที่นี่ แล้ววันเหล่านั้นจะ<b>ย้ายไปอยู่หมวด “บันทึกสาเหตุไว้แล้ว”</b> ไม่ได้ถูกลบทิ้ง
         จึงยังตรวจย้อนหลังได้ว่าใครบันทึกด้วยเหตุผลใด
-        · <b>อย่าบันทึกวันที่ POS มีข้อมูลแต่ระบบเราไม่มี</b> — นั่นคือ sync มีปัญหา ต้องแก้ที่ sync ไม่ใช่กลบด้วยหน้านี้</p>
+        · <b>อย่าบันทึกวันที่ POS มีข้อมูลแต่ระบบเราไม่มี</b> — นั่นคือ sync มีปัญหา ต้องแก้ที่ sync ไม่ใช่กลบด้วยหน้านี้</p></template>
       <div class="flex flex-wrap gap-3 items-end mb-3">
         <div><label class="block text-xs mb-1" style="color:var(--text-muted)">สาขา</label>
           <select id="dtBranch" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></select></div>
@@ -59,13 +58,12 @@
   <!-- ── Usage telemetry (lean-overhaul Phase 0) ── -->
   <div id="settab-usage" class="hidden">
     <div class="card p-5" style="max-width:980px">
-      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h3 class="text-base font-bold" style="color:var(--text-primary)">การใช้งานจริง</h3>
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+        <h3 class="text-base font-bold" style="color:var(--text-primary)">การใช้งานจริง <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb2" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb2" data-title="การใช้งานจริง"><p>เก็บอัตโนมัติจากการเปิดแท็บและการเรียก API (เริ่มนับหลัง deploy เวอร์ชันนี้) — ใช้ตัดสินว่าแท็บไหนควร เก็บ/รวม/ตัด ตามแผน Lean Overhaul Phase 2 (docs/LEAN_OVERHAUL_PLAN.md)</p></template>
         <select id="usageDays" onchange="loadUsageStats()" class="border rounded-lg px-2 py-1 text-xs" style="border-color:var(--border)">
           <option value="30">30 วันล่าสุด</option><option value="60">60 วันล่าสุด</option><option value="90">90 วันล่าสุด</option>
         </select>
       </div>
-      <p class="text-xs mb-4" style="color:var(--text-muted)">เก็บอัตโนมัติจากการเปิดแท็บและการเรียก API (เริ่มนับหลัง deploy เวอร์ชันนี้) — ใช้ตัดสินว่าแท็บไหนควร เก็บ/รวม/ตัด ตามแผน Lean Overhaul Phase 2 (docs/LEAN_OVERHAUL_PLAN.md)</p>
       <div id="usageStatsBody" class="text-sm" style="color:var(--text-secondary)">กำลังโหลด…</div>
     </div>
   </div>
@@ -143,8 +141,7 @@
   <!-- ── User management (Management only) ── -->
   <div id="settab-users" class="hidden">
     <div class="card p-5" style="max-width:900px">
-      <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">จัดการผู้ใช้งาน</h3>
-      <p class="text-xs mb-4" style="color:var(--text-muted)">กำหนดบทบาท (role) ของผู้ใช้ — แต่ละบทบาทเห็น modules ต่างกันตามสิทธิ์ · รหัสเริ่มต้นของผู้ใช้ที่สร้างใหม่ตั้งเองได้</p>
+      <h3 class="text-base font-bold mb-4" style="color:var(--text-primary)">จัดการผู้ใช้งาน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb3" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb3" data-title="จัดการผู้ใช้งาน"><p>กำหนดบทบาท (role) ของผู้ใช้ — แต่ละบทบาทเห็น modules ต่างกันตามสิทธิ์ · รหัสเริ่มต้นของผู้ใช้ที่สร้างใหม่ตั้งเองได้</p></template>
       <!-- Add user -->
       <div class="flex items-end gap-2 flex-wrap mb-5 p-3 rounded-lg" style="background:var(--bg-input)">
         <div><label class="block text-xs font-medium mb-1" style="color:var(--text-muted)">ชื่อผู้ใช้</label>
@@ -225,8 +222,9 @@
     <div class="card p-5 mb-4" style="border:2px solid #f59e0b;background:#fef3c7">
       <div class="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div>
-          <h3 class="text-base font-bold text-amber-900">ปรับต้นทุน — แก้ unit_cost ให้ตรงต้นทุนจริง</h3>
-          <p class="text-xs text-amber-800 mt-1">แสดง Top 30 SKU ที่ขับ COGS มากที่สุด · ตั้ง target food cost % แล้วจะได้ต้นทุนต่อหน่วยที่แนะนำ · แก้ทีละตัวหรือ apply ทั้งหมดเลย</p>
+          <h3 class="text-base font-bold text-amber-900">ปรับต้นทุน — แก้ unit_cost ให้ตรงต้นทุนจริง <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb4" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb4" data-title="ปรับต้นทุน"><p>แสดง Top 30 SKU ที่ขับ COGS มากที่สุด · ตั้ง target food cost % แล้วจะได้ต้นทุนต่อหน่วยที่แนะนำ · แก้ทีละตัวหรือ apply ทั้งหมดเลย</p><p>
+          <b>แนะนำ:</b> เริ่มจาก SKU ที่ flag (cost ≥ 90% of sell price หรือ buffet-only) — มักเป็นที่ user เผลอกรอกผิด
+        </p></template>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <label class="text-xs text-amber-900 font-semibold">เป้าต้นทุนอาหาร:</label>
@@ -268,9 +266,7 @@
       </div>
       <!-- Actions -->
       <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
-        <p class="text-xs text-amber-800">
-          <b>แนะนำ:</b> เริ่มจาก SKU ที่ flag (cost ≥ 90% of sell price หรือ buffet-only) — มักเป็นที่ user เผลอกรอกผิด
-        </p>
+        <span></span>
         <div class="flex items-center gap-2">
           <button onclick="recalibApplyAllSuggested()"
             class="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="คัดลอก suggested ทุกตัวลงช่อง new cost">ใช้ค่าที่แนะนำทั้งหมด</button>
@@ -287,8 +283,7 @@
       <!-- ── Template download banner ── -->
       <div class="flex items-center justify-between gap-4 mb-5 p-4 rounded-xl border border-indigo-200 flex-wrap" style="background:var(--indigo-soft)">
         <div>
-          <p class="text-sm font-semibold text-indigo-800">ดาวน์โหลดแบบฟอร์ม</p>
-          <p class="text-xs text-indigo-600 mt-0.5">Get a pre-filled CSV with all your SKUs, descriptions, categories &amp; reference sales data. Fill in the <code class="bg-indigo-100 px-1 rounded font-mono">unit_cost</code> column then upload.</p>
+          <p class="text-sm font-semibold text-indigo-800">ดาวน์โหลดแบบฟอร์ม <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb5" title="คำอธิบาย">?</button></p><template id="hlp-settings-mb5" data-title="ดาวน์โหลดแบบฟอร์ม"><p>Get a pre-filled CSV with all your SKUs, descriptions, categories &amp; reference sales data. Fill in the <code class="bg-indigo-100 px-1 rounded font-mono">unit_cost</code> column then upload.</p></template>
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <button onclick="downloadCostTemplate()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-colors">
@@ -379,8 +374,7 @@
     <div class="card p-5 mt-5" style="border:1px solid #f97316">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-orange-900">ตรวจสอบต้นทุน BoM — ตรวจสอบ unit_cost</h3>
-          <p class="text-xs text-slate-500 mt-0.5">ตรวจหา SKU ที่ unit_cost เป็นราคาขาย (error) หรือสูงผิดปกติ (warning) เพื่อแก้ไขให้ถูกต้อง</p>
+          <h3 class="text-sm font-bold text-orange-900">ตรวจสอบต้นทุน BoM — ตรวจสอบ unit_cost <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb6" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb6" data-title="ตรวจสอบต้นทุน BoM"><p>ตรวจหา SKU ที่ unit_cost เป็นราคาขาย (error) หรือสูงผิดปกติ (warning) เพื่อแก้ไขให้ถูกต้อง</p></template>
         </div>
         <button onclick="loadBomAudit(true)" class="px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg font-medium">↺ รีเฟรช</button>
       </div>
@@ -405,8 +399,7 @@
     <div class="card p-5 mt-5" style="border:1px solid var(--accent)">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-indigo-900">ต้นทุนรายเดือน</h3>
-          <p class="text-xs text-slate-500 mt-0.5">กำหนด unit_cost ต่อ SKU ในแต่ละเดือน สำหรับวัตถุดิบที่ราคาผันผวน — จะใช้ค่าเดือนที่ระบุ ถ้าไม่มีจะย้อนไปใช้เดือนก่อนหน้า ถ้าไม่มีอีกใช้ค่า default</p>
+          <h3 class="text-sm font-bold text-indigo-900">ต้นทุนรายเดือน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb7" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb7" data-title="ต้นทุนรายเดือน"><p>กำหนด unit_cost ต่อ SKU ในแต่ละเดือน สำหรับวัตถุดิบที่ราคาผันผวน — จะใช้ค่าเดือนที่ระบุ ถ้าไม่มีจะย้อนไปใช้เดือนก่อนหน้า ถ้าไม่มีอีกใช้ค่า default</p></template>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-xs text-slate-500 font-medium">เดือน</label>
@@ -483,8 +476,7 @@
     <div class="card p-5">
       <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-slate-800">ค่าแรง + ค่าใช้จ่ายคงที่ ต่อสาขา (ต่อเดือน)</h3>
-          <p class="text-xs text-slate-500 mt-0.5">ใส่ <b>ค่าแรงแยกต่างหาก</b> (controllable cost ที่ใหญ่สุด) จากค่าเช่า/น้ำไฟ → ปลดล็อก <b>Prime Cost = Food% + Labor%</b> ในแท็บ P&amp;L รายสาขา · ใช้คำนวณ Net Profit ด้วย</p>
+          <h3 class="text-sm font-bold text-slate-800">ค่าแรง + ค่าใช้จ่ายคงที่ ต่อสาขา (ต่อเดือน) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb8" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb8" data-title="ค่าแรงและค่าใช้จ่ายคงที่"><p>ใส่ <b>ค่าแรงแยกต่างหาก</b> (controllable cost ที่ใหญ่สุด) จากค่าเช่า/น้ำไฟ → ปลดล็อก <b>Prime Cost = Food% + Labor%</b> ในแท็บ P&amp;L รายสาขา · ใช้คำนวณ Net Profit ด้วย</p></template>
         </div>
         <div class="flex gap-2">
           <button onclick="saveFixedCosts()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg">บันทึก</button>
@@ -500,7 +492,7 @@
   <!-- ── Branch Config ── -->
   <div id="settab-branches" class="hidden">
     <div class="card p-5">
-      <p class="text-xs text-slate-400 mb-4">Rename branches and assign a store group. Changes reflect across all data immediately. The top-bar Group filter scopes every chart to the selected group.</p>
+      <div class="flex justify-end mb-2"><button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb9" title="คำอธิบาย">?</button></div><template id="hlp-settings-mb9" data-title="ตั้งค่าสาขา"><p>Rename branches and assign a store group. Changes reflect across all data immediately. The top-bar Group filter scopes every chart to the selected group.</p></template>
       <table class="text-sm w-full">
         <thead>
           <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
@@ -527,8 +519,8 @@
           บันทึกชั่วโมง
         </button>
         <span id="hoursSaveStatus" class="text-sm"></span>
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb10" title="คำอธิบาย">?</button><template id="hlp-settings-mb10" data-title="ชั่วโมงเปิดทำการ"><p>Click cells to toggle open/closed for each hour. Closed hours are excluded from average calculations.</p></template>
       </div>
-      <p class="text-xs text-slate-400 mb-3">Click cells to toggle open/closed for each hour. Closed hours are excluded from average calculations.</p>
       <div id="hoursGrid"></div>
     </div>
   </div>
@@ -574,16 +566,14 @@
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">เพดานส่วนลด (นโยบาย)</p>
-            <p class="text-xs text-slate-400 mt-0.5">% ของยอดขายก่อนลดที่ยอมรับได้ — แท็บส่วนลด, Management Report และรายงานทบทวนส่วนลดแสดง ฿ ที่ให้เกินเพดานนี้</p>
+            <p class="text-sm font-medium text-slate-700">เพดานส่วนลด (นโยบาย) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb11" title="คำอธิบาย">?</button></p><template id="hlp-settings-mb11" data-title="เพดานส่วนลด"><p>% ของยอดขายก่อนลดที่ยอมรับได้ — แท็บส่วนลด, Management Report และรายงานทบทวนส่วนลดแสดง ฿ ที่ให้เกินเพดานนี้</p></template>
           </div>
           <input id="prefDiscountPolicy" type="number" min="0" max="100" step="0.1" placeholder="2.5"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-indigo-400">
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">แถบเป้าต้นทุนอาหาร (%)</p>
-            <p class="text-xs text-slate-400 mt-0.5">ช่วงที่ถือว่าปกติของธุรกิจนี้ — หน้าแรกจะขึ้นสีแดงเมื่อสูงกว่าค่าบน และเตือนเมื่อขยับผิดปกติเทียบเดือนก่อน (บุฟเฟ่ต์: 55–70)</p>
+            <p class="text-sm font-medium text-slate-700">แถบเป้าต้นทุนอาหาร (%) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb12" title="คำอธิบาย">?</button></p><template id="hlp-settings-mb12" data-title="แถบเป้าต้นทุนอาหาร"><p>ช่วงที่ถือว่าปกติของธุรกิจนี้ — หน้าแรกจะขึ้นสีแดงเมื่อสูงกว่าค่าบน และเตือนเมื่อขยับผิดปกติเทียบเดือนก่อน (บุฟเฟ่ต์: 55–70)</p></template>
           </div>
           <div class="flex items-center gap-2">
             <input id="prefFoodBandLo" type="number" min="1" max="99" step="1" placeholder="55"
@@ -610,20 +600,18 @@
 
       <!-- Branches section -->
       <div class="card p-5">
-        <h3 class="font-semibold text-slate-700 mb-1">สาขา</h3>
-        <p class="text-xs text-slate-400 mb-4">Deactivated branches are hidden from all filters and excluded from every chart and analysis.</p>
+        <h3 class="font-semibold text-slate-700 mb-4">สาขา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb13" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb13" data-title="ปิดใช้งานสาขา"><p>Deactivated branches are hidden from all filters and excluded from every chart and analysis.</p></template>
         <div id="deactivateBranchList" class="space-y-2"></div>
       </div>
 
       <!-- Menu items section -->
       <div class="card p-5">
-        <div class="flex items-center gap-3 mb-3 flex-wrap">
-          <h3 class="font-semibold text-slate-700">รายการเมนู</h3>
+        <div class="flex items-center gap-3 mb-4 flex-wrap">
+          <h3 class="font-semibold text-slate-700">รายการเมนู <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb14" title="คำอธิบาย">?</button></h3><template id="hlp-settings-mb14" data-title="ปิดใช้งานรายการเมนู"><p>Deactivated items are excluded from SKU analysis and cost reports. Sales data is preserved.</p></template>
           <input id="deactivateSkuSearch" type="text" placeholder="Filter by SKU or description…"
             oninput="renderSkuDeactivateList()"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-400 ml-auto">
         </div>
-        <p class="text-xs text-slate-400 mb-4">Deactivated items are excluded from SKU analysis and cost reports. Sales data is preserved.</p>
         <div id="deactivateSkuList" class="space-y-1 max-h-96 overflow-y-auto pr-1"></div>
         <p id="deactivateSkuEmpty" class="hidden text-xs text-slate-400 mt-3 text-center">No SKUs found.</p>
       </div>

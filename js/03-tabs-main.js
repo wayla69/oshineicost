@@ -430,9 +430,9 @@ async function initDataCoverageNote() {
       el.innerHTML = `⚠ ${chip}`;
       el.style.background = '#fef3c7';
       el.style.color = '#92400e';   // fixed light badge (#fef3c7) in both themes: 6.4:1
-      el.title = `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
+      el.setAttribute('title', `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
                + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น ต้นทุนอาหาร % กระทบน้อย. `
-               + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`;
+               + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`);   // a tooltip
     } else {
       el.innerHTML = chip;
       el.style.background = 'var(--bg-subtle)';
@@ -1963,9 +1963,10 @@ function _abcBadge(cum) {
 function _renderTop60Sales(d) {
   const items = (d && d.items) || [];
   const noteEl = document.getElementById('orderedMomNote');
-  if (noteEl) noteEl.textContent = _top60MomLabel(d, 'MoM เทียบ ');
+  // PR-MB: the reading of the columns is behind the "?" beside the heading (the line under it stays empty)
+  if (noteEl) noteEl.innerHTML = esc(_top60MomLabel(d, 'MoM เทียบ ')) + ' ' + uiQ('menu:top60-abc', 'ABC และ Pareto', '<p>ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · ต้นทุนรวม = ต้นทุน BoM รวมของเมนู (ต้นทุน/จาน × จำนวนขาย) · % สะสม COGS = Pareto สัดส่วนต้นทุนสะสม (เมนูแรกๆ ที่ทำให้ถึง 80% = ตัวขับต้นทุนหลัก)</p>');
   const cn = document.getElementById('orderedCoverNote');
-  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · ต้นทุนรวม = ต้นทุน BoM รวมของเมนู (ต้นทุน/จาน × จำนวนขาย) · % สะสม COGS = Pareto สัดส่วนต้นทุนสะสม (เมนูแรกๆ ที่ทำให้ถึง 80% = ตัวขับต้นทุนหลัก)';
+  if (cn) cn.textContent = '';
   const body = document.getElementById('orderedBody'), foot = document.getElementById('orderedFoot');
   if (!items.length) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
   // prev qty (from qty MoM%) drives the total-MoM% in the footer
@@ -2018,11 +2019,10 @@ function _renderTop60CostHead(d, ids) {
   const cCur = (d && d.cmp_covers_cur) || 0, cPrev = (d && d.cmp_covers_prev) || 0;
   const coversRatio = (cCur > 0 && cPrev > 0) ? cPrev / cCur : null;   // prev ÷ cur
   const noteEl = document.getElementById(ids.momNote);
-  if (noteEl) noteEl.textContent = _top60MomLabel(d, 'เทียบ ');
+  // PR-MB: the reading of the columns is behind the "?" beside the heading; the line under it keeps only the no-covers state
+  if (noteEl) noteEl.innerHTML = esc(_top60MomLabel(d, 'เทียบ ')) + (covers ? ' ' + uiQ('menu:top60-costhead', 'อ่านตารางต้นทุนต่อหัว', `<p>จำนวนเสิร์ฟ = จำนวนจาน/ที่ขายในช่วงนี้ (จำนวน % = เทียบเดือนก่อน · ขึ้น = ขายดีขึ้น) · ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)</p>`) : '');
   const cn = document.getElementById(ids.note);
-  if (cn) cn.textContent = covers
-    ? `จำนวนเสิร์ฟ = จำนวนจาน/ที่ขายในช่วงนี้ (จำนวน % = เทียบเดือนก่อน · ขึ้น = ขายดีขึ้น) · ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)`
-    : 'ต้นทุน/หัว: ไม่มีข้อมูลจำนวนลูกค้าในช่วงนี้';
+  if (cn) cn.textContent = covers ? '' : 'ต้นทุน/หัว: ไม่มีข้อมูลจำนวนลูกค้าในช่วงนี้';
   const body = document.getElementById(ids.body), foot = document.getElementById(ids.foot);
   if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
   const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));

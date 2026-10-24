@@ -413,7 +413,7 @@ async function loadPnlBranch() {
   const note = document.getElementById('pnl-note');
   if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
     note.classList.remove('hidden');
-    note.textContent = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น. ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา';
+    note.innerHTML = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ · ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา ' + uiQ('pnl:fixed-unset', 'ค่าใช้จ่ายคงที่', '<p>ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น.</p>');
   } else { note.classList.add('hidden'); }
   _pnlBranchRows = {}; (d.branches||[]).forEach(b => { _pnlBranchRows[b.branch] = b; });
   document.getElementById('pnl-branches').innerHTML = (d.branches||[]).map(b => {

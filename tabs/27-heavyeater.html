@@ -41,10 +41,9 @@
   </div>
   <div class="card p-5">
     <div class="flex items-center justify-between mb-2">
-      <h3 class="text-sm font-bold text-slate-700">บิลมาร์จิน/หัว แย่สุด (ตรวจสอบ/เฝ้าระวัง)</h3>
+      <h3 class="text-sm font-bold text-slate-700">บิลมาร์จิน/หัว แย่สุด (ตรวจสอบ/เฝ้าระวัง) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-heavyeater-mb1" title="คำอธิบาย">?</button></h3><template id="hlp-heavyeater-mb1" data-title="บิลมาร์จิน/หัว แย่สุด"><p>ต้นทุน/หัว สูงกว่ารายได้/หัว = ขาดทุนต่อหัว · บิลต้นทุน/หัวสูงผิดปกติอาจเป็นข้อมูลผิด (จำนวนลูกค้าผิด) ที่ควรเช็ก</p></template>
       <button onclick="exportTable('heExTable','heavy_eaters_worst.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
     </div>
-    <p class="text-[11px] text-slate-400 mb-3">ต้นทุน/หัว สูงกว่ารายได้/หัว = ขาดทุนต่อหัว · บิลต้นทุน/หัวสูงผิดปกติอาจเป็นข้อมูลผิด (จำนวนลูกค้าผิด) ที่ควรเช็ก</p>
     <div class="overflow-auto" style="max-height:520px">
       <table class="tbl-top60 w-full text-xs" id="heExTable">
         <thead><tr>

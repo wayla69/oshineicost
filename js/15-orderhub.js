@@ -29,6 +29,9 @@ function ohbQueuePick(f) { uiStateFilter.set(f); _ohbKeyedSel.clear(); ohbRender
 // a phone (the branch login's strip or any narrow screen): the queue is cards and a line is a stacked block
 // PR-MA: a page in พอดีจอ (body.ph-fit) is the desktop layout scaled down: the queue is the desktop table there
 function _ohbPhone() { return document.body.classList.contains('supply-phone') || (window.matchMedia('(max-width: 700px)').matches && !document.body.classList.contains('ph-fit')); }
+// PR-MB: in the phone shell of a centre login the queue and the adoption list draw their table, and the shared card list (phCardList, PAGE_CARDS)
+// turns it into one card per row in แตะง่าย; the branch login keeps its own cards
+function _ohbSharedCards() { return document.body.classList.contains('ph-on') && !document.body.classList.contains('supply-phone'); }
 let _ohbWasPhone = null;
 window.addEventListener('resize', () => {
   const p = _ohbPhone();
@@ -556,7 +559,7 @@ function ohbRenderQueueList() {
     const days = Object.keys(byDay).sort();
     const sumBy = (rows, lbl) => rows.filter(o => o.value_label === lbl).reduce((a, o) => a + (o.value || 0), 0);
     const dayTotal = rows => [['มูลค่าที่สั่ง'], ['มูลค่าที่จัดส่ง']].map(([l]) => rows.some(o => o.value_label === l) ? `${l} ฿${_bmcNum(sumBy(rows, l), 0)}` : '').filter(Boolean).join(' · ');
-    const phone = _ohbPhone();
+    const phone = _ohbPhone() && !_ohbSharedCards();
     // desktop (2026-10-19): one table per delivery day — the order, its round, lines, value and every status as a stacked chip column
     const tags = o => [o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : '',
       o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : '',
@@ -946,7 +949,7 @@ function _ohbAdDraw() {
   if (!g || !list) return;
   const f = uiStateFilter.get(), sp = uiStateFilter.split(g.rows, r => r.status === 'green' || r.status === 'not_started'), rows = f === 'all' ? g.rows : sp[f];
   {
-    const phone = _ohbPhone();
+    const phone = _ohbPhone() && !_ohbSharedCards();
     const lt = r => { const [t, ink] = _OHB_LIGHT[r.status]; return `<span style="color:${ink};font-weight:600"><span aria-hidden="true">●</span> ${t}</span>`; };
     const bar = '<div id="ohbAdFilter"></div>';
     if (!rows.length) { list.innerHTML = bar + uiStateFilter.empty(f, '_ohbAdPick', 'สาขา'); uiStateFilter.bar('ohbAdFilter', { counts: sp.counts, f, pick: '_ohbAdPick' }); return; }

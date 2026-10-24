@@ -4,11 +4,10 @@
     <div class="flex items-start gap-3">
       <span style="font-size:28px"></span>
       <div class="flex-1">
-        <h2 class="text-base font-bold" style="color:var(--accent)">ตั้งค่าการสั่งซื้อ</h2>
-        <p class="text-xs text-slate-600 mt-1">
+        <h2 class="text-base font-bold" style="color:var(--accent)">ตั้งค่าการสั่งซื้อ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ordersetup-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-ordersetup-mb1" data-title="ตั้งค่าการสั่งซื้อ"><p>
           <b>ขนาดบรรจุ</b> = 1 หน่วยสั่ง เท่ากับกี่หน่วยฐาน (ปัดยอดสั่งขึ้นเป็นจำนวนเต็มหน่วยสั่ง) ·
           <b>ปฏิทินเทศกาล</b> = ช่วงที่ต้องสั่งเพิ่ม เช่น สงกรานต์ ปีใหม่ โปรโมชัน
-        </p>
+        </p></template>
       </div>
     </div>
   </div>
@@ -22,6 +21,11 @@
         <input type="checkbox" id="osPackOnlyMissing" checked onchange="osRenderPacks()"> แสดงเฉพาะที่ยังไม่ตั้ง
       </label>
       <span id="osPackSummary" class="text-xs" style="color:var(--text-muted)"></span>
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ordersetup-mb2" title="คำอธิบาย">?</button><template id="hlp-ordersetup-mb2" data-title="การกรอกขนาดบรรจุ"><p>
+      กรอก <b>ขนาดบรรจุ</b> = จำนวนหน่วยฐานต่อ 1 หน่วยสั่ง (เช่น แซลมอน 1 แพ็ค = 1,000 กรัม ให้กรอก 1000) ·
+      <b>ยกลัง</b> = สั่งเป็นจำนวนเท่าของกี่หน่วย (สั่งยกลัง 6 ให้กรอก 6) · <b>ขั้นต่ำ</b> = จำนวนหน่วยสั่งขั้นต่ำของผู้จำหน่าย ·
+      รายการที่ยังไม่ตั้งจะสั่งเป็น กก./ลิตร แทนแพ็ค
+      </p></template>
       <button onclick="osSavePacks()" class="ml-auto" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">บันทึกการแก้ไข</button>
     </div>
 
@@ -40,11 +44,6 @@
       <span id="osImportStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="osImportReport" class="mb-3"></div>
-    <div class="card p-3 mb-4 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
-      กรอก <b>ขนาดบรรจุ</b> = จำนวนหน่วยฐานต่อ 1 หน่วยสั่ง (เช่น แซลมอน 1 แพ็ค = 1,000 กรัม ให้กรอก 1000) ·
-      <b>ยกลัง</b> = สั่งเป็นจำนวนเท่าของกี่หน่วย (สั่งยกลัง 6 ให้กรอก 6) · <b>ขั้นต่ำ</b> = จำนวนหน่วยสั่งขั้นต่ำของผู้จำหน่าย ·
-      รายการที่ยังไม่ตั้งจะสั่งเป็น กก./ลิตร แทนแพ็ค
-    </div>
     <div class="card p-5 overflow-x-auto">
       <table class="text-xs w-full">
         <thead><tr class="text-left border-b" style="color:var(--text-muted)">
@@ -61,7 +60,10 @@
   <!-- ── demand calendar ────────────────────────────────────────────── -->
   <div id="os-pane-cal" style="display:none">
     <div class="card p-4 mb-4">
-      <h3 class="text-sm font-bold mb-2" style="color:var(--text-primary)">เพิ่มช่วงเทศกาล / โปรโมชัน</h3>
+      <h3 class="text-sm font-bold mb-2" style="color:var(--text-primary)">เพิ่มช่วงเทศกาล / โปรโมชัน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ordersetup-mb3" title="คำอธิบาย">?</button></h3><template id="hlp-ordersetup-mb3" data-title="ตัวคูณช่วงเทศกาล"><p>
+        ตัวคูณว่าง = คิดจาก<b>ยอดลูกค้าวันเดียวกันของปีก่อน</b>เทียบวันปกติในวันเดียวกันของสัปดาห์ (รายสาขา · วันหยุดราชการเทียบกับวันหยุดเดียวกันของปีก่อน) ·
+        กรอกเองเมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน
+      </p></template>
       <div class="flex flex-wrap items-end gap-3">
         <div><label class="text-[11px] block" style="color:var(--text-muted)">ชื่อ</label>
           <input id="osCalName" placeholder="เช่น สงกรานต์" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:170px"></div>
@@ -77,10 +79,6 @@
         <button onclick="osAddEvent()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">+ เพิ่ม</button>
         <span id="osCalStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>
-      <p class="text-[11px] mt-2" style="color:var(--text-muted)">
-        ตัวคูณว่าง = คิดจาก<b>ยอดลูกค้าวันเดียวกันของปีก่อน</b>เทียบวันปกติในวันเดียวกันของสัปดาห์ (รายสาขา · วันหยุดราชการเทียบกับวันหยุดเดียวกันของปีก่อน) ·
-        กรอกเองเมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน
-      </p>
     </div>
     <div class="card p-5 overflow-x-auto">
       <table class="text-xs w-full">

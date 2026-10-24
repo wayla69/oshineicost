@@ -7,8 +7,8 @@
     <button class="subtab-btn active" onclick="switchOpsSubtab('cohort')">กลุ่มสาขา</button>
     <button class="subtab-btn" onclick="switchOpsSubtab('affinity')">สั่งคู่กัน</button>
     <button class="subtab-btn" onclick="switchTab('simhub'); simhubSetMode('whatif')" title="ย้ายไปที่หน้า Simulators แล้ว">สถานการณ์จำลอง ↗</button>
+    <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ops-mb1" title="คำอธิบาย">?</button><template id="hlp-ops-mb1" data-title="หน้าเปรียบเทียบที่เกี่ยวข้อง"><p>เปรียบเทียบสาขา/แคชเชียร์/ส่วนลด ดูได้ที่แท็บ <b>Benchmark สาขา</b> · <b>Staff</b> · <b>ส่วนลด</b> และ <b>รายงาน §3</b></p></template>
   </div>
-  <p class="text-xs text-slate-400 mb-4 -mt-3">เปรียบเทียบสาขา/แคชเชียร์/ส่วนลด ดูได้ที่แท็บ <b>Benchmark สาขา</b> · <b>Staff</b> · <b>ส่วนลด</b> และ <b>รายงาน §3</b></p>
 
 
   <!-- Time Analysis removed — use Time & Flow tab -->
@@ -58,8 +58,7 @@
   <!-- ─── What-If simulator ─── -->
   <div id="opsub-whatif" class="hidden">
     <div class="card p-5">
-      <h2 class="section-title">ตัวจำลองสถานการณ์</h2>
-      <p class="text-xs text-slate-400 mb-4">Adjust the sliders to see projected revenue & margin from your current period baseline.</p>
+      <h2 class="section-title">ตัวจำลองสถานการณ์ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-ops-mb2" title="คำอธิบาย">?</button></h2><template id="hlp-ops-mb2" data-title="ตัวจำลองสถานการณ์"><p>Adjust the sliders to see projected revenue &amp; margin from your current period baseline.</p></template>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <div id="whatifBase" class="text-xs text-slate-500 mb-4 p-3 border border-slate-200 rounded-lg" style="background:var(--bg-subtle)"></div>

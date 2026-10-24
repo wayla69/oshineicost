@@ -34,14 +34,14 @@
         <div id="home-leak-watch"></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">เมนูเด่น / ตก เมื่อวาน <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· อัตราสั่งต่อหัว (จาน/100 ลูกค้า) เทียบค่าเฉลี่ย 21 วัน — ตัดผลจำนวนลูกค้าออก</span></h2>
+        <h2 class="section-title mb-1">เมนูเด่น / ตก เมื่อวาน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-home-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-home-mb1" data-title="เมนูเด่น / ตก เมื่อวาน"><p>อัตราสั่งต่อหัว (จาน/100 ลูกค้า) เทียบค่าเฉลี่ย 21 วัน — ตัดผลจำนวนลูกค้าออก</p></template>
         <div id="home-menu-movers" class="mt-2"></div>
       </div>
     </div>
 
     <!-- Movers ↔ revenue: how yesterday's menu-mix shift moved food sales -->
     <div class="card p-5 mb-5">
-      <h2 class="section-title mb-1">เมนูขยับ ↔ ยอดขาย <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· การสลับเมนูเมื่อวานกระทบรายได้อาหารยังไง (เทียบรายได้/วันเฉลี่ย 21 วันต่อเมนู)</span></h2>
+      <h2 class="section-title mb-1">เมนูขยับ ↔ ยอดขาย <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-home-mb2" title="คำอธิบาย">?</button></h2><template id="hlp-home-mb2" data-title="เมนูขยับ ↔ ยอดขาย"><p>การสลับเมนูเมื่อวานกระทบรายได้อาหารยังไง (เทียบรายได้/วันเฉลี่ย 21 วันต่อเมนู)</p></template>
       <div id="home-movers-revenue" class="mt-2"></div>
     </div>
 
@@ -76,10 +76,10 @@
     <!-- ── Industry & Economy Context (external data) ── -->
     <div class="card p-5 mb-5" id="home-market">
       <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h2 class="section-title mb-0">บริบทเศรษฐกิจ &amp; อุตสาหกรรมร้านอาหาร</h2>
+        <h2 class="section-title mb-0">บริบทเศรษฐกิจ &amp; อุตสาหกรรมร้านอาหาร <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-home-mb3" title="คำอธิบาย">?</button></h2><template id="hlp-home-mb3" data-title="บริบทเศรษฐกิจและอุตสาหกรรม"><p>เศรษฐกิจไทยและตลาดร้านอาหาร/บุฟเฟ่ต์ญี่ปุ่น เพื่อวางผลประกอบการของเราเทียบกับตลาด</p></template>
         <span class="text-[11px]" style="color:var(--text-muted)" id="market-asof">กำลังโหลดบริบทตลาด…</span>
       </div>
-      <p class="text-xs mb-4" style="color:var(--text-secondary)">เศรษฐกิจไทยและตลาดร้านอาหาร/บุฟเฟ่ต์ญี่ปุ่น เพื่อวางผลประกอบการของเราเทียบกับตลาด</p>
+      <div class="mb-4"></div>
 
       <!-- live FX / gold / oil quotes (server-fetched) -->
       <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">

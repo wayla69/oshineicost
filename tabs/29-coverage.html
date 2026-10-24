@@ -38,10 +38,9 @@
   <!-- No-cost fixer: editable worklist — fill unit_cost right here -->
   <div class="card p-4 mt-5" style="border:1px solid var(--accent-soft)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <div class="text-sm font-semibold text-slate-700">เติมต้นทุนที่ขาด — แก้ได้เลย (รายได้สูงสุด แล้วตามด้วยจานบุฟเฟ่ต์ที่เสิร์ฟมากสุด)</div>
+      <div class="text-sm font-semibold text-slate-700">เติมต้นทุนที่ขาด <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-coverage-mb1" title="คำอธิบาย">?</button></div><template id="hlp-coverage-mb1" data-title="เติมต้นทุนที่ขาด"><p>แก้ได้เลย (รายได้สูงสุด แล้วตามด้วยจานบุฟเฟ่ต์ที่เสิร์ฟมากสุด)</p><p>กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าที่บันทึกที่นี่ถือเป็นต้นทุนยืนยันแล้ว ไม่หายเมื่อซิงก์ข้อมูลรอบถัดไป · ใส่ <b>0</b> เพื่อถอนค่าที่เคยใส่ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · ค่าบริการ ค่าปรับ และแพ็กเกจบุฟเฟ่ต์ไม่ต้องใส่ (ไม่นับเป็นช่องว่าง)</p></template>
       <button id="cov-fixer-saveall" onclick="saveAllUncosted()" class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:var(--accent);color:var(--on-accent)">บันทึกทั้งหมดที่กรอก</button>
     </div>
-    <p class="text-xs text-slate-400 mb-3">กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าที่บันทึกที่นี่ถือเป็นต้นทุนยืนยันแล้ว ไม่หายเมื่อซิงก์ข้อมูลรอบถัดไป · ใส่ <b>0</b> เพื่อถอนค่าที่เคยใส่ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · ค่าบริการ ค่าปรับ และแพ็กเกจบุฟเฟ่ต์ไม่ต้องใส่ (ไม่นับเป็นช่องว่าง)</p>
     <div style="max-height:440px;overflow:auto">
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
@@ -57,10 +56,9 @@
   <!-- Cost review: the kitchen confirms what the files only proposed -->
   <div class="card p-4 mt-5" style="border:1px solid #bbf7d0">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <div class="text-sm font-semibold text-slate-700">ตรวจและยืนยันต้นทุนที่ระบบเสนอไว้</div>
+      <div class="text-sm font-semibold text-slate-700">ตรวจและยืนยันต้นทุนที่ระบบเสนอไว้ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-coverage-mb2" title="คำอธิบาย">?</button></div><template id="hlp-coverage-mb2" data-title="ตรวจและยืนยันต้นทุน"><p>เมนูเหล่านี้ระบบ<b>ประมาณต้นทุนให้เอง</b> (จากใบเบิก หรือจากสูตรของเมนูใกล้เคียง) — ราคาวัตถุดิบเป็นของจริง แต่<b>ปริมาณเป็นข้อเสนอ</b> · กดที่แถวเพื่อแก้ปริมาณ/ราคาให้ตรงกับที่ครัวทำจริง แล้วกด <b>ยืนยัน</b> · เรียงจากเมนูที่ขายมากสุด (แก้ตรงนี้กระทบต้นทุนมากสุด) · สิ่งที่ยืนยันแล้ว<b>ไม่หายเมื่อระบบ sync ข้อมูลรายวัน</b></p></template>
       <div id="cov-review-sum" class="text-xs text-slate-500"></div>
     </div>
-    <p class="text-xs text-slate-400 mb-3">เมนูเหล่านี้ระบบ<b>ประมาณต้นทุนให้เอง</b> (จากใบเบิก หรือจากสูตรของเมนูใกล้เคียง) — ราคาวัตถุดิบเป็นของจริง แต่<b>ปริมาณเป็นข้อเสนอ</b> · กดที่แถวเพื่อแก้ปริมาณ/ราคาให้ตรงกับที่ครัวทำจริง แล้วกด <b>ยืนยัน</b> · เรียงจากเมนูที่ขายมากสุด (แก้ตรงนี้กระทบต้นทุนมากสุด) · สิ่งที่ยืนยันแล้ว<b>ไม่หายเมื่อระบบ sync ข้อมูลรายวัน</b></p>
     <div style="max-height:560px;overflow:auto">
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">

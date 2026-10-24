@@ -233,15 +233,14 @@ async function openBillItems(row = {}) {
   body.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
       <th class="py-2 pr-3">เมนู</th><th class="py-2 pr-3">SKU</th>
       <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">@BoM (ต้นทุน/หน่วย)</th>
-      <th class="py-2 pr-3 text-right">รายได้</th>
+      <th class="py-2 pr-3 text-right">รายได้ ${uiQ('pnlbill:item-rev', 'รายได้ต่อเมนู', `<p>รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. ทุน/หน่วย = ตาราง Cost Management ก่อน แล้วจึง BoM (buffet tier = 0).</p>`)}</th>
       <th class="py-2 pr-3 text-right">ต้นทุนขาย (BoM)</th><th class="py-2 text-right">กำไรขั้นต้น</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="border-t-2 border-slate-200 font-bold">
       <td class="py-2 pr-3" colspan="4">รวม ${fmtN(items.length)} เมนู</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.rev)}</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.cogs)}</td>
-      <td class="py-2 text-right tabular-nums" style="color:${tot.margin < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(tot.margin)}</td></tr></tfoot></table>
-    <p class="text-[11px] text-slate-400 mt-3">รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. ทุน/หน่วย = ตาราง Cost Management ก่อน แล้วจึง BoM (buffet tier = 0).</p>`;
+      <td class="py-2 text-right tabular-nums" style="color:${tot.margin < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(tot.margin)}</td></tr></tfoot></table>`;
 }
 
 let _discBillsCtx = {};   // remembered drill context so the วิธีจ่าย dropdown can re-query

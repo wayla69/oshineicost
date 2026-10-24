@@ -60,7 +60,7 @@ In fit, a tap on a table row opens the existing sheet (`#msSheet`, class `ph-row
 
 A tap on the dim, the ← button or a swipe down closes the sheet. A button, link or field inside a row still does its own job. A double tap zooms the table instead of opening the sheet: the single tap waits 350 ms.
 
-The sheet is generic: any `<table>` works. A page may later register a nicer formatter; that is MB's job.
+The sheet is generic: any `<table>` works. In touch, the card lists of 7 open the same sheet from a card's chevron.
 
 ## 4. Role bottom bars
 
@@ -87,8 +87,8 @@ Where หน้าแรก opens a page (หน้างาน, สรุปป
 1. Add the page to the registry as before (DEPARTMENTS / SUPPLY_CHIPS / TAB_CLUSTERS).
 2. Add its phone default to `PAGE_PHONE`: `'fit'` for analytics or a wide read-only table, `'touch'` for a form, an editor, a branch page or a page worked with a thumb. A page with a list view and an edit view names both (`{ list: 'fit', edit: 'touch' }`) and adds its view detector to `_phPageView` (js/09c-mobile.js).
 3. Inside the page, keep to the app's tools: tables are `<table>` with a `thead` (the row sheet reads its header text), and filters are `select` / `input` / `.subtab-btn` (kept at touch size in fit). Use Tailwind `md:` columns for the desktop layout; the frame applies them.
-4. For MB later: name the key columns (the 2–3 values a card list shows first) next to the page's renderer, so the touch layout can draw cards instead of a scrolled table.
-5. Run `node scripts/check-departments.js` (it fails without a phone default), `bash scripts/check-js.sh`, `backend/test_phone_modes.py`, and the e2e `tests/e2e/phone-modes.spec.js`.
+4. A table people read every day on a phone gets a card list: add it to `PAGE_CARDS` (js/01-core.js) with its name column and its three key columns (see 7).
+5. Run `node scripts/check-departments.js` (it fails without a phone default), `bash scripts/check-js.sh`, `backend/test_phone_modes.py`, `backend/test_phone_content.py`, and the e2e `tests/e2e/phone-modes.spec.js` and `tests/e2e/phone-cards.spec.js`.
 
 ## 6. Launch checklist for phones (5 pilot branches, 1 พ.ย. 2569)
 
@@ -96,7 +96,98 @@ Where หน้าแรก opens a page (หน้างาน, สรุปป
 - [ ] Each role's daily page opens in its default mode. ⤢ switches the mode and the choice survives a reload.
 - [ ] Fit pages: no sideways page scroll; pinch zoom works; double tap on a table shows it at 100 %; a row opens its sheet and the sheet closes on the dim, ← and a swipe down.
 - [ ] Touch pages: text ≥ 12 px and targets ≥ 44 px (the branch pages with ตัวอักษรใหญ่ on and off).
+- [ ] Touch card lists (7.2): each card shows its pill, name and three figures; the sort and filter chips work; a card opens its sheet; an empty list says what to do.
 - [ ] Light and dark mode on both phones; contrast ≥ 4.5:1 for text.
 - [ ] The search magnifier finds a page by its Thai name; ฉัน lists the last three pages.
 - [ ] The installed app (home-screen icon) opens on the launcher and keeps the morning notification.
 - [ ] No console errors and no 403 on any page of any role (the MA walk: `scratchpad\ma\<role>\`).
+
+## 7. Card lists, help behind "?", headers and charts (MB, 2026-10-24)
+
+### 7.1 The card-list rule
+
+In แตะง่าย (touch), the tables people read every day are drawn as **one card per row**. In พอดีจอ (fit) and on a desktop, the table stays a table.
+
+- **The renderer** is `phCardList(spec)` in `js/09c-mobile.js` ("CARD LISTS"), and it is the only one. `_phCardSpec` reads the table as the page drew it: its header texts, its body rows and the columns that `PAGE_CARDS` names.
+- **A card** shows, in order:
+  - the status or class pill (colour = meaning: the row's own chip keeps its colour, and plain text takes a tone from `tones`);
+  - the name, with a grey line under it (code, branch, date; dates as d/m);
+  - **three key figures** on one line;
+  - an optional sparkline (`msColumns`, B1);
+  - a chevron. A tap opens the MA row sheet with every column, plus the row's own buttons.
+- **The chips on top:**
+  - **sort chips:** the name and the three key figures. A second tap flips the order. With no chip pressed, the list keeps the table's own order.
+  - **filter chips:** the pill's values, with counts. They show when there are 2–10 values.
+  - **finished rows** are hidden by default behind the shared state filter (`uiStateFilter`, ยังไม่เสร็จ / เสร็จแล้ว / ทั้งหมด). A page that already filters its own list (the supply queues) keeps its filter above the cards.
+- **A long list** shows 50 cards, then "แสดงอีก".
+- **An empty list** shows one line and the action to take ("เลือกช่วงอื่น" goes to the page's own period picker). It never shows a blank area, or zeros that look like data.
+- **The table stays in the page,** hidden while its cards show. The sheet reads its rows, and the card's tick and actions click the row's own controls. The cards follow every redraw of the table, sub-tab and filter changes included.
+- **Exceptions:**
+  - A writer's editable table (`fields: 'table'`: ทะเบียนวัตถุดิบ for the analyst, the cost fixer of ความครอบคลุมต้นทุน) stays a table, because cards would hide its fields.
+  - On the centre phone shell, the queue and the adoption list draw their table for the shared cards (`_ohbSharedCards`). The branch login keeps its own cards.
+- **Row-number columns** (`#`, ลำดับ, อันดับ) are hidden on a phone in both modes. The sheet leaves them out. In fit, the sticky first column moves to the next column.
+
+To register a table, add it to `PAGE_CARDS` (js/01-core.js, keyed like `PAGE_PHONE`):
+
+```
+{ sel, title, sub, subL, keyCols: [3 headers], labels, pill, tones, done, rows, spark | sparkCell, fields, all, empty }
+```
+
+`backend/test_phone_content.py` fails when a page of the list below has no entry, or when a key column is not a header the page prints.
+
+### 7.2 Key columns per page
+
+| Page | Key | Table | Name · grey line | Key figures | Pill | Finished = hidden |
+|---|---|---|---|---|---|---|
+| วิเคราะห์เมนู | menu | `#orderedTable` · `#costHeadTable` · the menu-engineering table | เมนู · SKU / หมวด | จำนวนขาย, % ของยอดรวม, เปลี่ยน % · ต้นทุน/หัว, % ของต้นทุน, เปลี่ยน % · ยอดขาย, กำไร, % กำไร | ABC · กลุ่ม | — |
+| ปรับเมนู | menuactionboard | — (own cards) | | | | |
+| โอกาสเมนู | menuopportunities | `#oppGaps` · `#oppWhitespace` · `#oppRevive` | เมนู · สาขา, หมวด | สาขานี้, ทั้งเครือ, โอกาสเพิ่ม (ชิ้น) · เมนู, รายได้, รายได้/เมนู | คำแนะนำ | — |
+| กำไร SKU | profit | `#profitBandTable` | ช่วง · บิล, ลูกค้า | รายได้, กำไร, อัตรากำไร | — | — |
+| เทียบสาขา | benchmark | `#benchmarkTable` | สาขา | รายได้, ยอดบิลเฉลี่ย, คะแนน | — | — |
+| GP รายสาขา | gpbranch | `#gpbTable` (branch rows) | สาขา · ต้นทุนอาหาร % | รายได้, GP, GP % | สถานะ (ในเป้า / ใกล้ขอบ / นอกเป้า) | — |
+| P&L รายสาขา | pnlbranch | `#pnlbTable` | สาขา · GP%, OP% | รายได้, กำไรขั้นต้น, กำไรดำเนินงาน | — | — |
+| ยอดขายรายวัน | dailysales | the branch table (`#dsBody`) | สาขา · เทียบเดือนก่อน, เทียบปีก่อน | ยอดขาย, ลูกค้า, ยอด/หัว | — | — |
+| ส่วนลด | discounts | cashiers (`#discCashierBody`) · reasons | แคชเชียร์ · สาขา (the branch row is a group card) | ส่วนลดรวม, % ยอดขาย, อัตรา | — | — |
+| พนักงาน | staff | `#staffTable` | แคชเชียร์ · สาขา | รายได้, ยอดบิลเฉลี่ย, % ส่วนลด | — | — |
+| บิลยกเลิก | cancelbill | branches · reasons | สาขา · เหตุผล | บิลยกเลิก, มูลค่า · บิล, %, มูลค่า | — | — |
+| เงินสดขาด/เกิน | cashctl | branches (`#ccBody`) · worst days (`#ccWorst`) | สาขา · วันที่ | ขาด/เกิน, วันที่ขาด, % ของยอด · ขาด/เกิน, ยอดขาย, ลูกค้า | — | — |
+| ต้นทุนต่อหัว | costhead | `#chBody` | สาขา · vs เฉลี่ย | ต้นทุน/หัว, ต้นทุน%, GP/หัว | — | — |
+| ความครอบคลุมต้นทุน | coverage | branches · the review list · the fixer (a table for a writer) | สาขา · SKU ค้าง / เมนู | รายได้, ไม่มีต้นทุน, % ไม่มี · ต้นทุน/ที่, จานเดือนนี้, ต้นทุนรวม/เดือน | สถานะ (review) | ยืนยันแล้ว |
+| เป้าลดต้นทุน | menuefficiency | `#mce2Body` | เมนู · หมวด, แหล่ง | ต้นทุนรวม, %ต้นทุน, ฿/จาน | ABC | — |
+| คิวใบสั่งซื้อ | orderhub\|queue | one table per delivery day | ใบสั่งซื้อ · ตัดรอบ | มูลค่า, รายการ (+ the key-in tick) | สถานะ chips | the page's own filter |
+| เคลมสินค้า | orderhub\|claims | cancelled receipts (the claim list is already cards) | สาขา · ใบรับของ, เหตุผล | รายการ | — | the page's own filter |
+| ใบตัดเบิกสาขา | orderhub\|issues | the per-branch summary (the slip log is already rows) | สาขา · ส่งช้า, ยังไม่ส่ง | ตรงวัน %, มีใบ %, ไม่มีใบ | — | the page's own filter |
+| ผลต่างตัดเบิกรายวัน | orderhub\|issuevar | the daily table of a branch | วันที่ | รวมเบิก ฿, ปกติ ฿, เทียบ | ใบตัดเบิก | — |
+| ตรวจสอบการสั่ง | orderhub\|comp | `#ohbComp` | สาขา · ตัดรอบ | สาขายืนยัน ฿, ส่งจริง ฿, รับจริง ฿ | สถานะ | the page's own filter |
+| การใช้งานทุกสาขา | orderhub\|adoption | `#ohbAdList` | สาขา · ใช้งานล่าสุด | ตัดเบิกตรงวัน, สั่งตรงเวลา, บันทึกรับของ | สถานะ (เขียว / เหลือง / แดง) | the page's own filter |
+| ใช้วัตถุดิบต่อยอดขาย | orderhub\|persales | branches · the items of a branch | สาขา / วัตถุดิบ · หน่วย | ยอดขาย ฿, วัตถุดิบต่อ ฿100,000, เทียบค่ากลาง · ต่อ ฿100,000, เปลี่ยน, มูลค่า ฿ | the row's chips | — |
+| ยอดแนะนำรายรอบ | bomcenter\|fc | `#bmcFcTable` | วัตถุดิบ · รหัส | แนะนำสั่ง, มูลค่า ฿, ใช้/วัน (+ its trend line) | กลุ่ม (A/B/C) | — |
+| ราคารายเดือน | bomcenter\|price | `#bmcPriceBody` | วัตถุดิบ · รหัส, หน่วยฐาน | ราคา/หน่วยฐาน, อายุ (เดือน), สาขาที่ซื้อ | แหล่ง | — |
+| ต้นทุนต่อจาน | bomcenter\|dishcost | `#bmcDcList` | เมนู · รหัส POS | ต้นทุนต่อจาน, เปลี่ยน, จานที่ขาย | ที่มา | the page's own filter |
+| ทะเบียนวัตถุดิบ | bomcenter\|ing | `#bmcIngBody` (read-only logins; a writer keeps the table) | วัตถุดิบ · รหัส, หน่วยฐาน | ราคา/หน่วยฐาน, ราคา/หน่วยรับ, ใช้ในเมนู | สถานะ | — |
+| ใบสรุปตัดเบิก | bomcenter\|issue | `#bmcIssList` | สาขา · งวด | มูลค่าตัดเบิก, ไม่มีราคา | สถานะ | the page's own filter |
+| เสียงลูกค้า | feedback | all items (`#fbItems`) · branches (`#fbBranches`); the reply queue is already cards | สาขา · วันที่, ช่องทาง, ข้อความ | ดาว, ตอบกลับ · เสียง, ดาว, ลบ % | ความรู้สึก | — |
+| ข้อความจากเจ้าของสาขา | fmsg | — (own cards) | | | | |
+
+**Left as they are, with the reason:**
+
+- **ปรับเมนู:** four bucket boards of menu cards. There is no table.
+- **ข้อความจากเจ้าของสาขา:** one row per conversation, with the shared state filter. There is no table.
+- **The claim list of เคลมสินค้า, the slip log of ใบตัดเบิกสาขา and the reply queue of เสียงลูกค้า:** each is already one card or row per item, with its own filter.
+- **ทะเบียนวัตถุดิบ for a writer, and the cost fixer of ความครอบคลุมต้นทุน:** editable tables. A card would hide the fields.
+- **Wide reference tables** (heatmaps, the P&L statement, the management report): these are read in fit.
+
+### 7.3 Help, headers, charts
+
+- **Prose → "?":** every page keeps at most three explanatory blocks outside a "?" (`backend/test_less_text.py` now covers every fragment and slice). Two files are the explanation itself and are exempt:
+  - the user manual;
+  - the printed management report, whose notes are the footnotes of the A4 pack.
+- **Headers:**
+  - the page title stays on one line, and "ข้อมูลถึง …" is the short chip of the top bar (MA);
+  - row numbers are hidden;
+  - the dates the app prints on a card are d/m. Native date inputs stay native.
+- **Charts in touch:**
+  - one-series period bars are B1;
+  - a category axis with more than six labels names its first, middle and last label;
+  - labels follow the VZ2 collision rule.
+- **Charts in fit:** drawn for the size they are shown at, i.e. canvas pixels = drawn width × device pixel ratio. That holds at rest and again after a double tap to 100 %, so they are never a stretched bitmap.

@@ -126,7 +126,7 @@ async function loadOrderPlan(force) {
   const eraEl = document.getElementById('opEraNote');
   if (eraEl) eraEl.innerHTML = m.era && m.era.straddles
     ? `<div class="card p-3 text-xs flex flex-wrap items-center gap-2" style="background:#fff7ed;border:1px solid #ea580c;color:#9a3412">
-         <span>⚠ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> — ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</span>
+         <span>⚠ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> ${uiQ('op:era', 'ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู', '<p>ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</p>')}</span>
          <button onclick="opUseEraFrom()" style="background:#c2410c;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer">ใช้เฉพาะเมนูใหม่ (เริ่ม ${esc(m.era.suggest_from)})</button>
        </div>`
     : '';
@@ -346,8 +346,7 @@ async function opLoadForcedNote(meta) {
   try { d = await api(`${API}/api/ingredients/forced-order`); } catch(e) { el.innerHTML = ''; return; }
   const sm = d.summary || {}, miss = (d.items || []).filter(i => !i.in_recipes);
   el.innerHTML = `<div class="card p-3 text-xs mb-3" style="background:#f0fdfa;border:1px solid #0f766e;color:#134e4a">
-    <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลัง —
-    ติ๊ก “สั่งจากไดกิโตะ” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
+    <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลัง ${uiQ('op:forced', 'รายการบังคับสั่ง', '<p>รายการตามใบคลังติ๊ก “สั่งจากไดกิโตะ” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)</p>')}
     · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
     ${miss.length ? `<div class="mt-1" style="color:var(--amber-ink)">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ ระบบจึงคำนวณและติดตามให้ไม่ได้<ul style="margin:4px 0 0;padding-left:20px;list-style:disc">${miss.map(i => `<li><b>${esc(i.code)}</b> ${esc(i.name)}</li>`).join('')}</ul></div>` : ''}
     <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
@@ -1005,8 +1004,7 @@ async function loadIngPurchase(force) {
   const gaps = (d.rows || []).filter(r => r.amount == null);
   document.getElementById('ipGaps').innerHTML = gaps.length
     ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
-        <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> — สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ
-        จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด
+        <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> ${uiQ('ip:gaps', 'สัปดาห์ที่ยังไม่นำเข้า', '<p>สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0)</p>')} · ล่าสุด
         <ul style="margin:4px 0 0;padding-left:20px;list-style:disc">${gaps.slice(0, 6).map(g => `<li>${esc(g.branch)} สัปดาห์ ${esc(fmtDay(g.week_start))}</li>`).join('')}${gaps.length > 6 ? `<li>และอีก ${gaps.length - 6} ช่อง</li>` : ''}</ul>
        </div>` : '';
 
