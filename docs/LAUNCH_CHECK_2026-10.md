@@ -88,7 +88,7 @@ Every check that failed was re-run after its fix and now passes. What is left ar
 | นับของ by Excel | — (an office function, see ประสานงานขาย) | — |
 | ส่วนต่างการใช้: tabs, reason on one line, one reason for ticked lines, แจ้งว่าบันทึกรับของครบ (month close), Excel with the formula guard | ✓ (fixed: P1-2, P2-1, P2-2) | ✓ (fixed: P1-2, P2-1, P2-2) |
 | Shell: bottom bar and badges, home tiles, ต้องทำวันนี้, ค้นหา, ฉัน, ตัวอักษรใหญ่, toasts, sign-out | ✓ (fixed: P2-3, P2-4) | ✓ |
-| New branch with no data (หาดใหญ่): every page, home, หน้างาน | ✓ (P3-1 open) | ✓ |
+| New branch with no data (หาดใหญ่): every page, home, หน้างาน | ✓ (P3-1 แก้แล้ว #455) | ✓ |
 
 ### Centre supply desks
 
@@ -165,7 +165,7 @@ Every check that failed was re-run after its fix and now passes. What is left ar
 
 | # | Where | Note |
 |---|---|---|
-| P3-1 | New branch, day one | A round whose cutoff passed earlier on the branch's first day is shown as today's late duty ("เลยเวลาส่ง · มีค่าปรับ"). This is the pinned design: `test_bom_center_u1`, and the 13:15 push to ประสานงานขาย names the branches that missed it. Rounds before the first day are already exempt (PL3). Exempting the first day too needs an owner decision. |
+| P3-1 | New branch, day one | **แก้แล้ว (#455).** Owner 2026-10-24: "Should be exempt". A round whose cutoff falls on or before the branch's first day (the same day at any time) is not late: not in หน้างาน, the badges, the 13:15 note, the order plan or the compliance; a submit after it is not late and asks no late fee. One rule: `started.late_exempt`. From the second day on, as before. |
 | P3-2 | Warehouse phone · ฉัน | "หน้าที่เปิดล่าสุด" can list the start-up page (หน้างาน) under a leftover title after the first tap. The recent page is recorded before the requested page shows (`js/09c-mobile.js` phOpenPage / phFitApply). |
 | P3-3 | นับของ (branch) | The zone chip ✓ and the progress line update when the zone changes, not while typing. |
 | P3-4 | ฉัน | ตัวอักษรใหญ่ is only on the branch page header, not in ฉัน; on a desktop the button shows but the size stays. |
