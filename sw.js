@@ -12,6 +12,10 @@
      Nothing else under /api is cached; no POST ever is; logout clears it (message
      clear-api-cache).
 
+   A new build: the page compares its meta app-build with GET /api/meta/build, calls registration.update() and waits
+   until this worker (skipWaiting on install) has activated - the old shell caches are deleted in activate - before
+   it reloads (js/01-core.js appUpdateCheck).
+
    Push: the morning brief arrives as a notification (backend/routers/push_api.py);
    a tap opens or focuses the app. */
 'use strict';
@@ -96,17 +100,30 @@ async function shellStaleWhileRevalidate(req) {
   return hit || (await net) || Response.error();
 }
 
+// The page. A deploy restarts the server for a few seconds: a failed fetch (or a 5xx from the proxy) is tried once more
+// after 2 s before the cached page is served, so a reload for a new version does not land on the old cached '/'.
+async function pageFetchOnce(req) {
+  const resp = await fetch(req);
+  if (resp && resp.status >= 500) throw Object.assign(new Error('page ' + resp.status), { resp });
+  return resp;
+}
 async function pageNetworkFirst(req) {
   const cache = await caches.open(SHELL);
-  try {
-    const resp = await fetch(req);
-    if (resp && resp.ok) cache.put('/', resp.clone());
-    return resp;
-  } catch (err) {
-    const hit = await cache.match('/');
-    if (hit) { tellClients({ type: 'offline-fallback', url: '/', cachedAt: '' }); return hit; }
-    throw err;
+  let last = null;
+  for (let i = 0; i < 2; i++) {
+    try {
+      const resp = await pageFetchOnce(req);
+      if (resp && resp.ok) cache.put('/', resp.clone());
+      return resp;
+    } catch (err) {
+      last = err;
+      if (i === 0) await new Promise((r) => setTimeout(r, 2000));
+    }
   }
+  const hit = await cache.match('/');
+  if (hit) { tellClients({ type: 'offline-fallback', url: '/', cachedAt: '' }); return hit; }
+  if (last && last.resp) return last.resp;
+  throw last;
 }
 
 self.addEventListener('fetch', (e) => {
@@ -128,6 +145,7 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.type === 'clear-api-cache') e.waitUntil(caches.delete(API));
+  if (d.type === 'skip-waiting') self.skipWaiting();             // the page found a new build (js/01-core.js appUpdateCheck)
 });
 
 // ── push ──

@@ -315,6 +315,7 @@ document.addEventListener('visibilitychange', () => {
   document.body.classList.toggle('app-hidden', document.hidden);
   if (document.hidden) return;
   try { checkApiHealth(); } catch (e) {}
+  try { appUpdateCheck(); } catch (e) {}                       // a deploy since this page loaded: the new version (js/01-core.js)
   let phone = false;
   try { phone = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
   if (!phone) return;
