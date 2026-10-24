@@ -370,7 +370,8 @@ def test_the_order_template_carries_the_plans_numbers_read_only_and_the_reasons(
     assert [ws.cell(r, 1).value for r in range(3, ws.max_row + 1)] == [r["code"] for r in p["rows"]]
     r = next(x for x in range(3, ws.max_row + 1) if ws.cell(x, 1).value == CRAB)
     crab = next(x for x in p["rows"] if x["code"] == CRAB)
-    assert ws.cell(r, 5).value == crab["order_units"] and ws.cell(r, 7).value is None and ws.cell(r, 9).value is None
+    # RV-M: the สั่ง box starts at the suggestion (what the file shows is what the order holds)
+    assert ws.cell(r, 5).value == crab["order_units"] and ws.cell(r, 7).value == crab["order_units"] and ws.cell(r, 9).value is None
     for c in (1, 2, 3, 4, 5, 6):
         assert ws.cell(r, c).protection.locked is True
     for c in (7, 8, 9):
@@ -415,6 +416,20 @@ def test_an_order_dry_run_writes_nothing_and_a_real_import_is_the_apps_draft(con
 
 
 @pytest.mark.slip_seed
+def test_a_blank_order_box_is_not_ordered_and_the_preview_counts_the_orders_lines(con):  # noqa: F811
+    """RV-M: a blank สั่ง box kept the suggestion out of sight - a file with 4 lines typed sent 175 lines (฿285,647) while the preview and
+    the confirm dialog said "4 รายการ จากไฟล์". The box now starts at the suggestion, a blank box is 0, and `lines` is what the order holds."""
+    p = _plan(con)
+    pos = [r["code"] for r in p["rows"] if (r.get("order_units") or 0) > 0]
+    assert CRAB in pos
+    wb, p = _ofile(con, None, p)
+    untouched = _oimp(con, wb, p)
+    assert untouched["ok"] is True and untouched["lines"] == len(pos) and untouched["value"] is not None
+    wb, p = _ofile(con, {CRAB: {"สั่ง": None}}, p)                           # the suggested line left blank is read as 0, not skipped
+    assert [ln["confirmed_units"] for _rno, ln in BF.read_order_file(_book(wb))["rows"] if ln["code"] == CRAB] == [0]
+
+
+@pytest.mark.slip_seed
 def test_the_order_errors_are_the_apps_errors(con):  # noqa: F811
     wb, p = _ofile(con, {CRAB: {"สั่ง": "abc"}})
     out = _oimp(con, wb, p)
@@ -425,7 +440,7 @@ def test_the_order_errors_are_the_apps_errors(con):  # noqa: F811
     assert _oimp(con, wb, p)["errors"][0]["message"] == f"{CRAB_NM}: จำนวนต้องไม่ติดลบ"
     wb, p = _ofile(con, {CRAB: {"สั่ง": 1, "เหตุผล": "ไม่มีเหตุผลนี้"}})
     assert "ไม่อยู่ในรายการ" in _oimp(con, wb, p)["errors"][0]["message"]
-    wb, p = _ofile(con, {})
+    wb, p = _ofile(con, {r["code"]: {"สั่ง": None} for r in _plan(con)["rows"]})          # every box emptied: nothing is ordered
     assert _oimp(con, wb, p)["errors"][0]["message"] == "ไม่พบจำนวนที่สั่งในไฟล์"
     parsed = BF.read_order_file(_book(wb))
     parsed["rows"].append((50, {"code": "NO-SUCH", "confirmed_units": 1, "reason_code": None, "note": None}))
@@ -654,7 +669,10 @@ def test_http_templates_dry_run_pinning_token_log_and_cache(client, app_db, monk
         assert br_a.get(f"/api/bom-center/order/template.xlsx?{q}&branch_id={b_id}").status_code == 403
         r = br_a.post(f"/api/bom-center/order/import?{q}", files={"file": ("ใบสั่ง.xlsx", body)})        # a slip file is not an order form
         assert r.status_code == 400 and "ไม่ใช่แบบฟอร์มใบสั่งซื้อ" in r.json()["detail"]
-        r = br_a.post(f"/api/bom-center/order/import?{q}", files={"file": ("ใบสั่ง.xlsx", _book(owb))})   # nothing typed
+        ows = owb[BF.ORDER_SHEET]
+        for row in range(3, ows.max_row + 1):                                                            # every box emptied
+            ows.cell(row, 7).value = None
+        r = br_a.post(f"/api/bom-center/order/import?{q}", files={"file": ("ใบสั่ง.xlsx", _book(owb))})
         assert r.status_code == 200 and r.json()["ok"] is False and r.json()["errors"][0]["message"] == "ไม่พบจำนวนที่สั่งในไฟล์"
         assert br_a.get("/api/bom-center/order/999999/receive-template.xlsx").status_code == 404
         r = br_a.post("/api/bom-center/order/999999/receive-import", files={"file": ("รับ.xlsx", body)})

@@ -500,7 +500,15 @@ async function ohbCntImport(input) {
         { title: 'ยืนยันการนำเข้าใบตรวจนับ', ok: 'นำเข้าใบตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
     _bmcStatus('ohbCntStatus', `✓ นำเข้าใบตรวจนับวันที่ ${fmtDay(day)} แล้ว (${d.kind === 'begin' ? 'นับครั้งแรก' : 'นับสิ้นเดือน'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
-    ohbLoadCentral();                       // the next missing date, the step statuses
+    const was = document.getElementById('ohbCntBranch').value;
+    await ohbLoadCentral();                 // the next missing date, the step statuses
+    // RV-M: the form moves on to the next branch still waiting for a count - say so beside the fields, so a second file is not sent to a
+    // branch the person did not pick
+    const sel2 = document.getElementById('ohbCntBranch'), st2 = document.getElementById('ohbCntStatus');
+    if (sel2 && st2 && sel2.value !== was) {
+      st2.textContent = `ต่อไป: สาขา${sel2.selectedOptions[0]?.textContent || ''} วันที่ ${fmtDay(document.getElementById('ohbCntDate').value)}`;
+      st2.style.color = 'var(--navy-ink)';
+    }
   } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
 }
@@ -925,7 +933,9 @@ function _ohbAdLast(r) {
   if (!r.last_active) return '<span style="color:var(--bad-ink)">ยังไม่เคยใช้งาน</span>';
   return `${esc(fmtAt(r.last_active))}<span class="text-[11px]" style="color:var(--text-muted)"> · ${esc(r.last_active_kind || '')}</span>`;
 }
+let _ohbIsWant = null;               // RV-M: the branch a link asked ใบตัดเบิกสาขา to open with (used once, by ohbLoadIssues)
 function ohbAdOpen(branchId) {      // a row opens that branch's slips (ใบตัดเบิกสาขา), the branch already chosen
+  _ohbIsWant = branchId;
   supplyGo({ tab: 'orderhub', pane: 'issues', branch: branchId });
 }
 async function ohbLoadAdoption() {
@@ -1179,7 +1189,13 @@ function isrReconHead(r) {
 //     brief: no movement formula on a row — the system stock, the count and the coloured difference only (the accounting page)}
 function isrReconTable(r, o) {
   o = o || {};
-  const rows = r.rows.filter(x => o.all || x.status !== 'ok').slice(0, o.all ? 500 : 80);
+  // RV-M: the list was cut at 80 rows with no word, while the head counted every line still waiting for a reason (86 of 176 flagged):
+  // every line that needs a reason is listed, the rest fill up to the cap in their own order, and a cut list says so
+  const all = r.rows.filter(x => o.all || x.status !== 'ok'), cap = o.all ? 500 : 80;
+  const must = new Set(all.filter(x => x.needs_reason).map(x => x.code));
+  let room = Math.max(0, cap - must.size);
+  const rows = all.filter(x => must.has(x.code) || (room-- > 0));
+  const cut = all.length > rows.length ? `<div class="text-xs mt-2" style="color:var(--text-muted)">แสดง ${rows.length} จาก ${all.length} รายการ${o.all ? '' : ' · ติ๊ก “แสดงทุกรายการ” เพื่อดูที่เหลือ'}</div>` : '';
   if (!rows.length) return '<span class="text-xs" style="color:var(--good-ink)">✓ ทุกรายการอยู่ในช่วงที่ยอมรับ</span>';
   const pfx = o.pfx || 'isrRc';
   const q = (v, x) => v == null ? '—' : o.qty ? o.qty(v, x) : `${_bmcNum(v, 1)} ${esc(x.base_unit || '')}`;
@@ -1187,8 +1203,9 @@ function isrReconTable(r, o) {
     const [label, ink] = _ISR_ST[x.status] || [x.status_th, 'var(--text-muted)'];
     const flag = x.status === 'over' || x.status === 'under';
     const opts = r.reasons.map(c => `<option value="${esc(c.code)}"${x.reason === c.code ? ' selected' : ''}>${esc(c.label)}</option>`).join('');
+    const tick = o.tick && o.edit && x.needs_reason ? `<input type="checkbox" aria-label="เลือก ${esc(x.name)}" ${o.picked && o.picked.has(x.code) ? 'checked' : ''} onchange="${o.tick}(${_bmcQ(x.code)}, this.checked)">` : '';
     return `<div style="border-top:1px solid var(--border);padding:8px 0">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline"><b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline">${tick}<b class="text-sm" style="color:var(--text-primary)">${esc(x.name)}</b>
         ${_bmcChip(label, ink)} <span class="text-[11px]" style="color:var(--text-muted)">${esc(x.code)} · ${esc(_isrClassTh(x.class))} (ช่วงที่ยอมรับ ±${r.thresholds[x.class]}%)</span>
         <span style="margin-left:auto" class="text-sm">${x.diff_value != null && bmcGapDir(x.diff_value) !== 0 ? `<b style="color:${bmcGapParts(x.diff_value, null, 'count').ink}">${bmcGapParts(x.diff_value, null, 'count').baht}</b>` : ''}</span></div>
       <div class="text-xs mt-0.5" style="color:var(--text-secondary)">${o.brief ? '' : `ยกมา ${q(x.begin, x)} + รับ ${q(x.received, x)} + เคลม/ปรับ ${q(x.claims, x)} − ตัดเบิก ${q(x.used, x)} − ของเสีย ${q(x.waste, x)}
@@ -1204,7 +1221,7 @@ function isrReconTable(r, o) {
       : (flag && x.reason_th ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">เหตุผล: ${esc(x.reason_th)}${x.reason_note ? ' · ' + esc(x.reason_note) : ''}${x.reason_by ? ' · ' + esc(whoTh(x.reason_by)) : ''}</div>`
         : (flag && x.needs_reason ? '<div class="text-xs mt-1" style="color:var(--amber-ink)">ยังไม่ระบุเหตุผล</div>' : ''))}
     </div>`;
-  }).join('');
+  }).join('') + cut;
 }
 
 // the centre's pane: ผลต่างตัดเบิกรายวัน
@@ -1383,7 +1400,9 @@ async function ohbLoadIssues() {
     const byId = new Map();
     lists.flat().forEach(b => byId.set(b.branch_id, b));
     const rows = [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
-    const cur = sel.value;
+    // RV-M: a row of การใช้งานทุกสาขา opened this pane on ทุกสาขา: the branch it asked for wins once, then the person's own choice
+    const cur = _ohbIsWant != null ? String(_ohbIsWant) : sel.value;
+    _ohbIsWant = null;
     sel.innerHTML = supplyBranchOptions(rows, 'ทุกสาขา');
     if (rows.some(b => String(b.branch_id) === cur)) sel.value = cur;
     const q = `date_from=${document.getElementById('ohbIsFrom').value}&date_to=${document.getElementById('ohbIsTo').value}${sel.value ? '&branch_id=' + sel.value : ''}`;

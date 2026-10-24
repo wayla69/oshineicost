@@ -244,6 +244,11 @@ def _kind(msg, ink=None, sid="x"):
     ("กำลังนำเข้า…", None, {"inline": "note"}),                                                   # progress stays a small line
     ("✓ บันทึกร่างแล้ว 10:42", "var(--good-ink)", {"inline": "note"}),                           # an autosaved draft too
     ("บันทึกร่างแล้ว 10:42 · ต้องระบุเหตุผล 2 รายการก่อนส่ง", "var(--amber-ink)", {"inline": "note"}),
+    # RV-M: the branch words' autosave (บันทึกไว้แล้ว / บันทึกไว้ก่อน, no ✓) is the same inline note; a save the person pressed is a toast
+    ("บันทึกไว้แล้ว 10:42", "var(--good-ink)", {"inline": "note"}),
+    ("บันทึกไว้แล้ว 10:42 · ต้องระบุเหตุผล 2 รายการก่อนส่ง", "var(--amber-ink)", {"inline": "note"}),
+    ("บันทึกไว้ก่อน 12 รายการ 10:42", "var(--text-muted)", {"inline": "note"}),
+    ("✓ บันทึกไว้แล้ว 10:42 · 3 รายการ", "var(--good-ink)", {"toast": "success", "inline": "clear"}),
     ("✓ บันทึกแล้ว", "var(--good-ink)", {"toast": "success", "inline": "clear"}),
     ("ไม่สำเร็จ: เครือข่ายขัดข้อง", "var(--bad-ink)", {"toast": "error", "inline": "clear"}),
     ("ใส่ชื่อของสินค้า", "var(--bad-ink)", {"toast": "error", "inline": "field"}),               # a field to fix: inline + the toast

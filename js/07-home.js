@@ -2725,7 +2725,7 @@ async function loadMarket() {
       ).join(' · ');
   } catch(e) {
     const a = document.getElementById('market-asof');
-    if (a) a.textContent = 'market context unavailable';
+    if (a) a.textContent = 'ข้อมูลตลาดยังไม่พร้อมใช้งาน';
   }
 }
 
