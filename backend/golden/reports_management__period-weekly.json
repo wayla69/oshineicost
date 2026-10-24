@@ -314,11 +314,13 @@
  ],
  "selected_month": null,
  "selected_week": "2026-04-27",
+ "selected_year": null,
  "stock_variance": null,
  "table": {
   "available": false
  },
  "tier": null,
+ "to_date": false,
  "trend": [
   {
    "label": "12 Apr",
@@ -366,7 +368,14 @@
    "end": "2026-05-03",
    "label": "27 Apr 2026 – 3 May 2026",
    "start": "2026-04-27"
+  },
+  {
+   "end": "2026-06-03",
+   "label": "1 Jun 2026 – 3 Jun 2026 (to date)",
+   "start": "2026-06-01",
+   "to_date": true
   }
  ],
+ "years": [],
  "yoy_range": null
 }

@@ -49,23 +49,23 @@ def test_top_ordered_mom_basis_is_mtd(client):
     assert all(abs(m) < 5 for m in moms), f"MTD MoM should be ~0, got {moms[:5]}"
 
 
-def test_sales_daily_month_mom_is_weekday_fair(client):
-    """Home/mobile MTD tiles read /api/sales/daily gran=month — while the month is
-    partial its MoM must use the SAME weekday-fair (dow) baseline as the Management
-    report §3, not a raw same-elapsed-days compare."""
+def test_sales_daily_month_mom_is_to_date(client):
+    """Home/mobile MTD tiles read /api/sales/daily gran=month — while the month is partial its MoM compares
+    days 1..n with days 1..n of last month (PR-PP2, the one period pattern: the calendar to-date rule replaced
+    the weekday-fair baseline for the headline %; the Management report §3 pace keeps the weekday-fair one)."""
     d = client.get("/api/sales/daily", params={"gran": "month"}).json()
     assert d["mtd"] is True and d["mtd_cutoff_day"] == 3
-    assert d["mom_basis"] == "dow"
+    assert d["mom_basis"] == "to_date"
+    assert d["cur_range"] == ["2026-06-01", "2026-06-03"] and d["prev_range"] == ["2026-05-01", "2026-05-03"]
     # fixture: June 1–3 daily revenue == May daily revenue → MoM ≈ 0 (never a
     # partial-vs-full collapse), for the chain total and every branch row
     assert d["total"]["mom_pct"] is not None and abs(d["total"]["mom_pct"]) < 5
     for b in d["branches"]:
         if b["mom_pct"] is not None:
             assert abs(b["mom_pct"]) < 5, f"{b['branch']} MoM {b['mom_pct']}"
-    # ties out with the Management report §3 pacing MoM (same scope, same basis)
+    # the §3 pace keeps its weekday-fair basis (a separate figure now)
     p = client.get("/api/reports/management", params={"period": "daily"}).json()["pace"]
     assert p["mom_basis"] == "dow"
-    assert abs((d["total"]["mom_pct"] or 0) - (p["mom_pct"] or 0)) <= 0.2
 
 
 def test_anomalies_partial_month_tagged_mtd(client):

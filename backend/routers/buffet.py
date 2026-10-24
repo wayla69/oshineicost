@@ -21,68 +21,91 @@ router = APIRouter()
 
 @router.get("/api/buffet/child")
 @ttl_cache
-def buffet_child(branch: Optional[str] = Query(None)):
-    """Child-buffet (BUFFETCHILD) summary per branch: latest-month covers,
-    revenue, % of buffet covers, MoM vs previous month, plus a chain-wide
-    monthly trend for the YTD line. (There is no senior/age discount data, and
-    'child' is a buffet TIER, not a tagged discount — this is the closest
-    available signal.)"""
+def buffet_child(branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                 kind: str = Query("month"), pick: Optional[str] = Query(None),
+                 date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+    """Child-buffet (BUFFETCHILD) summary per branch for one period: covers, revenue, % of buffet covers, and the two
+    comparisons of the one period pattern (PR-PP2, docs/PERIOD_PATTERN.md): เทียบช่วงก่อน + เทียบปีก่อน. The period
+    follows the top bar (kind / pick / date_from / date_to); a period not finished is to date through the last closed
+    day and both bases are their first n days. Plus a chain-wide monthly trend for the YTD line (the month in progress
+    to date). (There is no senior/age discount data, and 'child' is a buffet TIER, not a tagged discount — this is the
+    closest available signal.)"""
+    import calendar as _cal
+    import periods as _P
+    from rules import scope_filter as _scope
     bfilt = ["b.name != 'ALL'"]
     bparams: dict = {}
-    if branch:
-        bfilt.append("b.name = :branch")
-        bparams["branch"] = branch
-    where = "WHERE " + " AND ".join(bfilt + ["sk.sku_code IN ('BUFFETCHILD','BUFFET')"])
+    _scope(bfilt, bparams, branch, group)
+    tw = " AND ".join(["t.source='Easy'"] + bfilt)
+    codes = "sk.sku_code IN ('BUFFETCHILD','BUFFET')"
     with get_db() as con:
+        w = _P.windows(con, kind, tw, bparams, pick=pick, date_from=date_from, date_to=date_to)
+        if not w:
+            return {"latest_month": None, "prev_month": None, "period": None, "by_branch": [], "trend": [], "total": None}
+        daily_first = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0]
+
+        def window(s, e):
+            """{branch: {cq, cr, aq}} of [s, e]: the daily table where it reaches, whole months from the monthly one,
+            else None (a window neither can draw)."""
+            if daily_first and s >= daily_first:
+                sql = f"""SELECT b.name branch, sk.sku_code code, SUM(d.qty) qty, SUM(d.subtotal_ex_vat) rev
+                          FROM v_sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id JOIN skus sk ON sk.sku_id = d.sku_id
+                          WHERE {" AND ".join(bfilt)} AND {codes} AND d.day BETWEEN :_s AND :_e GROUP BY b.name, sk.sku_code"""
+                rows = con.execute(sql, {**bparams, "_s": s, "_e": e}).fetchall()
+            else:
+                ey, em = int(e[:4]), int(e[5:7])
+                if s[8:10] != "01" or int(e[8:10]) != _cal.monthrange(ey, em)[1]:
+                    return None
+                sql = f"""SELECT b.name branch, sk.sku_code code, SUM(sm.qty) qty, SUM(sm.subtotal_ex_vat) rev
+                          FROM v_sales_sku_monthly sm JOIN branches b ON b.branch_id = sm.branch_id JOIN skus sk ON sk.sku_id = sm.sku_id
+                          WHERE {" AND ".join(bfilt)} AND {codes} AND sm.period_month BETWEEN :_ms AND :_me
+                          GROUP BY b.name, sk.sku_code"""
+                rows = con.execute(sql, {**bparams, "_ms": s[:7], "_me": e[:7]}).fetchall()
+            out: dict = {}
+            for r in rows:
+                c = out.setdefault(r["branch"], {"cq": 0.0, "cr": 0.0, "aq": 0.0})
+                if r["code"] == "BUFFETCHILD":
+                    c["cq"] += r["qty"] or 0; c["cr"] += r["rev"] or 0
+                else:
+                    c["aq"] += r["qty"] or 0
+            return out
+
+        cur = window(*w["cur"]) or {}
+        prev = window(*w["prev"]) if w["has_prev"] else None
+        ly = window(*w["ly"]) if w["has_ly"] else None
         rows = con.execute(f"""
-            SELECT b.name AS branch, sm.period_month AS m, sk.sku_code AS code,
-                   ROUND(SUM(sm.qty), 0)             AS qty,
-                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS rev
-            FROM v_sales_sku_monthly sm
-            JOIN branches b ON b.branch_id = sm.branch_id
-            JOIN skus sk    ON sk.sku_id   = sm.sku_id
-            {where}
-            GROUP BY b.name, sm.period_month, sk.sku_code
-        """, bparams).fetchall()
+            SELECT sm.period_month AS m, ROUND(SUM(sm.qty), 0) AS qty, ROUND(SUM(sm.subtotal_ex_vat), 2) AS rev
+            FROM v_sales_sku_monthly sm JOIN branches b ON b.branch_id = sm.branch_id JOIN skus sk ON sk.sku_id = sm.sku_id
+            WHERE {" AND ".join(bfilt)} AND sk.sku_code = 'BUFFETCHILD' AND sm.period_month <= :_am
+            GROUP BY sm.period_month ORDER BY sm.period_month""", {**bparams, "_am": w["anchor"][:7]}).fetchall()
+        trend = [{"month": r["m"], "covers": round(r["qty"] or 0), "revenue": round(r["rev"] or 0, 2), "partial": False} for r in rows]
+        am = _P.resolve("month", w["anchor"])
+        if trend and trend[-1]["month"] == w["anchor"][:7] and not am["complete"]:      # the month in progress, to date
+            tm = window(*am["cur"])
+            if tm is not None:
+                trend[-1].update(covers=round(sum(v["cq"] for v in tm.values())),
+                                 revenue=round(sum(v["cr"] for v in tm.values()), 2), partial=True)
 
-    from collections import defaultdict
-    # per branch -> month -> {child_qty, child_rev, adult_qty}
-    bm: dict = defaultdict(lambda: defaultdict(lambda: {"cq": 0.0, "cr": 0.0, "aq": 0.0}))
-    trend_m: dict = defaultdict(lambda: {"covers": 0.0, "revenue": 0.0})
-    months: set = set()
-    for r in rows:
-        months.add(r["m"])
-        cell = bm[r["branch"]][r["m"]]
-        if r["code"] == "BUFFETCHILD":
-            cell["cq"] += r["qty"] or 0; cell["cr"] += r["rev"] or 0
-            tm = trend_m[r["m"]]; tm["covers"] += r["qty"] or 0; tm["revenue"] += r["rev"] or 0
-        else:
-            cell["aq"] += r["qty"] or 0
-
-    months_sorted = sorted(months)
-    latest = months_sorted[-1] if months_sorted else None
-    prev   = months_sorted[-2] if len(months_sorted) > 1 else None
+    def tot(d, k):
+        return sum(v[k] for v in d.values()) if d is not None else None
 
     by_branch = []
-    for br, mm in bm.items():
-        last = mm.get(latest, {"cq": 0, "cr": 0, "aq": 0}) if latest else {"cq": 0, "cr": 0, "aq": 0}
-        pv   = mm.get(prev,   {"cq": 0, "cr": 0, "aq": 0}) if prev   else {"cq": 0, "cr": 0, "aq": 0}
-        covers = last["cq"]; prev_covers = pv["cq"]
-        tot_buffet = last["cq"] + last["aq"]
+    for br, c in cur.items():
+        p = (prev or {}).get(br) if prev is not None else None
+        y = (ly or {}).get(br) if ly is not None else None
+        tb = c["cq"] + c["aq"]
         by_branch.append({
-            "branch":        br,
-            "covers":        round(covers),
-            "revenue":       round(last["cr"], 2),
-            "prev_covers":   round(prev_covers),
-            "pct_of_buffet": round(last["cq"] / tot_buffet * 100, 1) if tot_buffet else None,
-            "mom_pct":       round((covers - prev_covers) / prev_covers * 100, 1) if prev_covers > 0 else None,
+            "branch": br, "covers": round(c["cq"]), "revenue": round(c["cr"], 2),
+            "prev_covers": round(p["cq"]) if p else None, "ly_covers": round(y["cq"]) if y else None,
+            "pct_of_buffet": round(c["cq"] / tb * 100, 1) if tb else None,
+            "mom_pct": _P.pct(c["cq"], p["cq"]) if p else None, "yoy_pct": _P.pct(c["cq"], y["cq"]) if y else None,
         })
     by_branch.sort(key=lambda x: -x["covers"])
-
-    trend = [{"month": m, "covers": round(trend_m[m]["covers"]),
-              "revenue": round(trend_m[m]["revenue"], 2)} for m in months_sorted]
-    return {"latest_month": latest, "prev_month": prev,
-            "by_branch": by_branch, "trend": trend}
+    total = {"covers": round(tot(cur, "cq") or 0), "revenue": round(tot(cur, "cr") or 0, 2),
+             "prev": ({"covers": round(tot(prev, "cq")), "revenue": round(tot(prev, "cr"), 2)} if prev else None),
+             "ly": ({"covers": round(tot(ly, "cq")), "revenue": round(tot(ly, "cr"), 2)} if ly else None)}
+    return {"latest_month": w["cur"][1][:7], "prev_month": w["prev"][1][:7], "period": _P.public(w),
+            "by_branch": by_branch, "trend": trend, "total": total}
 
 
 
