@@ -17,5 +17,43 @@
    "prev_revenue": 2850.0
   }
  ],
- "insights": []
+ "cost_series": [
+  {
+   "delta": 0.0,
+   "month": "2026-05",
+   "month_th": "พ.ค. 2569",
+   "pct": 30.0
+  },
+  {
+   "delta": null,
+   "month": "2026-04",
+   "month_th": "เม.ย. 2569",
+   "pct": 30.0
+  }
+ ],
+ "insights": [],
+ "meta": {
+  "basis_note": "เทียบวันที่ 1–3 เท่ากัน",
+  "mtd_day": 3,
+  "period": "2026-06",
+  "period_th": "มิ.ย. 2569",
+  "prev_period": "2026-05",
+  "prev_period_th": "พ.ค. 2569",
+  "prev_year_period": "2025-06",
+  "prev_year_period_th": "มิ.ย. 2568",
+  "ranges": {
+   "current": [
+    "2026-06-01",
+    "2026-06-03"
+   ],
+   "last_year": [
+    "2025-06-01",
+    "2025-06-03"
+   ],
+   "previous": [
+    "2026-05-01",
+    "2026-05-03"
+   ]
+  }
+ }
 }
