@@ -19,24 +19,25 @@ function spikeAnswer(url) {
   return { period: 'week', date_from: '2026-10-19', date_to: '2026-10-23', latest_day: '2026-10-23', spikes, count: 60, new_menus, new_count: 8 };
 }
 
-async function login(page) {
+// one navigation only: a second goto aborts the first page's boot requests, and the app logs each as "Failed to fetch".
+// The test account (a local run with auth on) signs in through the context's request API, which shares the cookie jar.
+async function login(ctx) {
   if (process.env.E2E_USER && process.env.E2E_PASS) {
-    await page.goto('/');
-    await page.evaluate(async ([u, p]) => (await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })).status,
-      [process.env.E2E_USER, process.env.E2E_PASS]);
+    const r = await ctx.request.post('/api/auth/login', { data: { username: process.env.E2E_USER, password: process.env.E2E_PASS } });
+    expect(r.ok()).toBe(true);
   }
 }
 
 async function open(browser, opts, mode) {
   const ctx = await browser.newContext(opts);
+  await login(ctx);
+  await ctx.addInitScript(m => { try { localStorage.setItem('oshinei_phmode', JSON.stringify({ dailysales: m }));
+    localStorage.setItem('oshinei_spike_period', JSON.stringify({ m: 'week', f: '', t: '' })); } catch (e) { /* none */ } }, mode);
+  await ctx.route('**/api/sales/menu-spike?*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(spikeAnswer(r.request().url())) }));
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', m => { if (m.type() === 'error' && !IGNORE.some(re => re.test(m.text()))) errors.push(m.text()); });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
-  await page.route('**/api/sales/menu-spike?*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(spikeAnswer(r.request().url())) }));
-  await login(page);
-  await page.goto('/');
-  await page.evaluate(m => { try { localStorage.setItem('oshinei_phmode', JSON.stringify({ dailysales: m })); localStorage.setItem('oshinei_spike_period', JSON.stringify({ m: 'week', f: '', t: '' })); } catch (e) { /* none */ } }, mode);
   await page.goto('/', { waitUntil: 'networkidle' });
   if (opts.isMobile) {
     await page.waitForFunction(() => document.body.classList.contains('ph-on') && typeof phOpenPage === 'function', null, { timeout: 60_000 });
