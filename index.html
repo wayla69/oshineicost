@@ -2428,6 +2428,28 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .nav-item.dept-entry.active::before { background: var(--gs); width: 4px; }
 .nav-item.dept-entry.active { background: color-mix(in srgb, var(--gs) 22%, transparent); }
 .nav-item.dept-entry:focus-visible { outline: 2px solid var(--gs); outline-offset: -2px; }
+/* ── PR-PP1 (2026-10-24): the one period chip track (periodBar) and the two comparison chips (periodCmpHtml), js/01-core.js ── */
+.pbar-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+.pbar { display: inline-flex; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--r-md); padding: 3px; gap: 2px; max-width: 100%; }
+.pbar .gran-btn { min-height: 32px; }
+.pbar-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.pbar-range[hidden] { display: none; }
+.pbar-range input { border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; font-size: 12px; background: var(--bg-input); color: var(--text-primary); }
+.pbar-apply { border: 1px solid var(--accent); border-radius: var(--r-md); padding: 4px 12px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--on-accent, #fff); cursor: pointer; }
+.pbar-err { color: var(--bad-ink); font-size: 12px; }
+.pcmp-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pcmp { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.pcmp b { font-weight: 700; }
+.pcmp-none { color: var(--text-muted); }
+.pcmp-row .pcmp-q { width: 24px; height: 24px; }
+@media (max-width: 700px) {
+  .pbar-wrap { width: 100%; }
+  .pbar { display: flex; flex-wrap: nowrap; overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .pbar::-webkit-scrollbar { display: none; }
+  .pbar .gran-btn { flex: 0 0 auto; min-height: 44px; min-width: 44px; font-size: 14px; }
+  .pbar-range input, .pbar-apply { min-height: 44px; font-size: 14px; }
+  .pcmp-row .pcmp-q { width: 44px; height: 44px; }
+}
 </style>
 <style>
 /* ── PR-D2 (2026-10-21): the department workspace. (1) The icon rail: the sidebar folded with the app's own .collapsed (a desktop starts

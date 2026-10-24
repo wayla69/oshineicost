@@ -433,20 +433,19 @@ def top_skus(
 def _mtd_window(con):
     """Equal-period (MTD) comparison window when the latest month is incomplete.
     Returns None when the latest month is complete (use normal monthly MoM).
-    STANDING RULE: never compare a partial month against a full month."""
-    import calendar as _cal
+    STANDING RULE: never compare a partial month against a full month.
+    The windows come from periods.resolve('month', ...) - the one period pattern."""
+    from periods import resolve
     row = con.execute("SELECT MAX(day) m FROM sales_sku_daily").fetchone()
     dmax = row["m"] if row else None
     if not dmax:
         return None
-    y, m, d = (int(x) for x in dmax.split("-"))
-    if d >= _cal.monthrange(y, m)[1]:
+    r = resolve("month", dmax)
+    if r["complete"]:
         return None
-    pidx = y * 12 + (m - 1) - 1; py, pm = pidx // 12, pidx % 12 + 1
-    ped = min(d, _cal.monthrange(py, pm)[1])
-    return {"cutoff_day": d, "latest_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
-            "cur_s": f"{y:04d}-{m:02d}-01", "cur_e": dmax,
-            "prev_s": f"{py:04d}-{pm:02d}-01", "prev_e": f"{py:04d}-{pm:02d}-{ped:02d}"}
+    (cs, ce), (ps, pe) = r["cur"], r["prev"]
+    return {"cutoff_day": r["days"], "latest_month": cs[:7], "prev_month": ps[:7],
+            "cur_s": cs, "cur_e": ce, "prev_s": ps, "prev_e": pe}
 
 
 @router.get("/api/sales/top_ordered")

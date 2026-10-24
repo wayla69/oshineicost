@@ -2445,6 +2445,190 @@ function fmtWeekTh(code) {
     : `${fmtDateTh(iso(mon))} – ${fmtDateTh(iso(sun))}`;
 }
 function fmtMonthTh(ym) { const m = /^(\d{4})-(\d{2})/.exec(String(ym == null ? '' : ym)); return m && _TH_MONTHS[+m[2] - 1] ? `${_TH_MONTHS[+m[2] - 1]} ${m[1]}` : String(ym == null ? '' : ym); }
+// ── PR-PP1 · one period pattern (owner 2026-10-24, docs/PERIOD_PATTERN.md) ─────────────────────────────────────────
+// <period-core> pure, no DOM: backend/test_periods.py runs this block in node beside backend/periods.py (parity)
+//   periodRange(kind, anchorIso, {date_from, date_to, today}) = periods.resolve: kind day | week | month | year | range
+//   ('mtd' = month). The anchor is the last closed day; a period running past it is to-date (its first day..the anchor,
+//   n days) and both bases are their first n days: day -> 7 / 364 days back · week -> the week before / 364 days back ·
+//   month -> 1..n of last month (clamped) / of the month a year back · year -> 1 Jan..the same date last year (both) ·
+//   range -> the same number of days just before / the same dates a year back. A finished period compares whole.
+//   -> {kind, cur:[f,t], prev:[f,t], ly:[f,t], days, complete, label_th, prev_label_th, ly_label_th, from, to, label}
+//   (from/to/label = cur and its short label, the PR-SP shape). null for a bad date, an unknown kind or a period
+//   that starts after the anchor. The PR-SP call periodRange('range', {from, to}) still works.
+const _PR_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+const _PR_KINDS = ['day', 'week', 'month', 'year', 'range'];
+function _prDay(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s == null ? '' : s).slice(0, 10)) ? new Date(String(s).slice(0, 10) + 'T00:00:00Z') : null; }
+function _prIso(d) { return d.toISOString().slice(0, 10); }
+function _prAdd(d, n) { return new Date(d.getTime() + n * 864e5); }
+function _prMlen(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }            // m = 1..12
+function _prYmd(y, m, d) { return new Date(Date.UTC(y, m - 1, d)); }
+function _prYearBack(d) { const y = d.getUTCFullYear() - 1, m = d.getUTCMonth() + 1; return _prYmd(y, m, Math.min(d.getUTCDate(), _prMlen(y, m))); }
+function _prTh(d, yr) { return `${d.getUTCDate()} ${_PR_MON[d.getUTCMonth()]}` + (yr === false ? '' : ` ${d.getUTCFullYear() + 543}`); }
+// '23 ต.ค. 2569' · '1–23 ต.ค. 2569' · '28 ก.ย.–3 ต.ค. 2569' · '29 ธ.ค. 2568–4 ม.ค. 2569' (Buddhist year, as periods.label_th)
+function periodLabelTh(a, b) {
+  const x = typeof a === 'string' ? _prDay(a) : a, y = typeof b === 'string' ? _prDay(b) : b;
+  if (!x || !y) return '';
+  if (x.getTime() === y.getTime()) return _prTh(y);
+  if (x.getUTCFullYear() === y.getUTCFullYear() && x.getUTCMonth() === y.getUTCMonth()) return `${x.getUTCDate()}–${_prTh(y)}`;
+  if (x.getUTCFullYear() === y.getUTCFullYear()) return `${_prTh(x, false)}–${_prTh(y)}`;
+  return `${_prTh(x)}–${_prTh(y)}`;
+}
+function periodRange(kind, anchor, opts) {
+  opts = opts || {};
+  if (anchor && typeof anchor === 'object' && !(anchor instanceof Date)) {      // PR-SP: periodRange('range', {from, to})
+    opts = Object.assign({}, opts, { date_from: anchor.from, date_to: anchor.to }); anchor = anchor.to;
+  }
+  if (kind === 'mtd') kind = 'month';
+  if (!_PR_KINDS.includes(kind)) return null;
+  let a = _prDay(anchor);
+  if (!a) return null;
+  if (opts.today) { const t = _prDay(opts.today); if (!t) return null; const y = _prAdd(t, -1); if (y < a) a = y; }
+  let ps, pe;
+  if (kind === 'range') {
+    ps = _prDay(opts.date_from); pe = _prDay(opts.date_to);
+    if (!ps || !pe || ps > pe) return null;
+  } else {
+    const p = opts.date_from != null && opts.date_from !== '' ? _prDay(opts.date_from) : a;
+    if (!p) return null;
+    const y = p.getUTCFullYear(), m = p.getUTCMonth() + 1;
+    if (kind === 'day') { ps = pe = p; }
+    else if (kind === 'week') { ps = _prAdd(p, -((p.getUTCDay() + 6) % 7)); pe = _prAdd(ps, 6); }
+    else if (kind === 'month') { ps = _prYmd(y, m, 1); pe = _prYmd(y, m, _prMlen(y, m)); }
+    else { ps = _prYmd(y, 1, 1); pe = _prYmd(y, 12, 31); }
+  }
+  if (ps > a) return null;
+  const complete = pe <= a, cs = ps, ce = pe < a ? pe : a;
+  const n = Math.round((ce.getTime() - cs.getTime()) / 864e5) + 1, len = Math.round((pe.getTime() - ps.getTime()) / 864e5) + 1;
+  let prev, ly;
+  if (kind === 'day' || kind === 'week') { prev = [_prAdd(cs, -7), _prAdd(ce, -7)]; ly = [_prAdd(cs, -364), _prAdd(ce, -364)]; }
+  else if (kind === 'month') {
+    const y = cs.getUTCFullYear(), m = cs.getUTCMonth() + 1, py = m > 1 ? y : y - 1, pm = m > 1 ? m - 1 : 12;
+    prev = [_prYmd(py, pm, 1), _prYmd(py, pm, complete ? _prMlen(py, pm) : Math.min(n, _prMlen(py, pm)))];
+    ly = [_prYmd(y - 1, m, 1), _prYmd(y - 1, m, complete ? _prMlen(y - 1, m) : Math.min(n, _prMlen(y - 1, m)))];
+  } else if (kind === 'year') { prev = [_prYmd(cs.getUTCFullYear() - 1, 1, 1), _prYearBack(ce)]; ly = prev.slice(); }
+  else { const p0 = _prAdd(ps, -len); prev = [p0, _prAdd(p0, n - 1)]; ly = [_prYearBack(cs), _prYearBack(ce)]; }
+  const from = _prIso(cs), to = _prIso(ce);
+  const short = (typeof fmtDateTh === 'function')
+    ? (from === to ? fmtDateTh(to) : from.slice(0, 7) === to.slice(0, 7) ? `${+from.slice(8)}–${fmtDateTh(to)}` : `${fmtDateTh(from)}–${fmtDateTh(to)}`)
+    : periodLabelTh(cs, ce);
+  return { kind, cur: [from, to], prev: prev.map(_prIso), ly: ly.map(_prIso), days: n, complete,
+    label_th: periodLabelTh(cs, ce), prev_label_th: periodLabelTh(prev[0], prev[1]), ly_label_th: periodLabelTh(ly[0], ly[1]),
+    from, to, label: short };
+}
+// pct / pp = periods.pct / periods.pp: % change (null without a base above zero) · change of a ratio in points (จุด)
+function periodPct(cur, base) {
+  if (cur == null || base == null || cur === '' || base === '') return null;
+  const c = Number(cur), b = Number(base);
+  if (!isFinite(c) || !isFinite(b) || b <= 0) return null;
+  return Math.round(((c - b) / b) * 100 * 10) / 10;
+}
+function periodPp(cur, base) {
+  if (cur == null || base == null || cur === '' || base === '') return null;
+  const c = Number(cur), b = Number(base);
+  return isFinite(c) && isFinite(b) ? Math.round((c - b) * 10) / 10 : null;
+}
+// </period-core>
+
+// periodBar(el, {kinds, value, onChange, range, key}) · the one period chip track: วัน · สัปดาห์ · เดือน · ปี · กำหนดเอง.
+//   el     an element or its id · kinds  the kinds the figure supports (a month-only cost source passes ['month','year']:
+//   the week chip is not drawn) · value  {kind, from, to} or a kind · range  true adds กำหนดเอง (จาก–ถึง + แสดง)
+//   key    remembers the choice on this device (localStorage oshinei_period_<key>; a blocked storage is ignored)
+//   onChange({kind, from, to}) runs on a chip tap and on แสดง. Returns {get(), set(value, silent), kinds}.
+// 44 px targets and a scrolling track on a phone (.pbar, index.html). A TABS[].follow.period page follows the top bar's
+// วัน / สัปดาห์ / เดือน / ปี (getPeriodKind, _syncExtraPeriod in js/07-home.js).
+const _PBAR_LABEL = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน', year: 'ปี', range: 'กำหนดเอง' };
+const _pbars = {};
+function periodBar(el, opt) {
+  const box = typeof el === 'string' ? document.getElementById(el) : el;
+  if (!box) return null;
+  opt = opt || {};
+  const kinds = (opt.kinds || ['day', 'week', 'month', 'year']).filter(k => k !== 'range' && _PR_KINDS.includes(k));
+  if (opt.range) kinds.push('range');
+  const lsKey = opt.key ? 'oshinei_period_' + opt.key : '';
+  const norm = v => (typeof v === 'string' ? { kind: v, from: '', to: '' } : Object.assign({ kind: '', from: '', to: '' }, v || {}));
+  let val = norm(opt.value);
+  if (lsKey) { try { const s = JSON.parse(localStorage.getItem(lsKey) || 'null'); if (s && kinds.includes(s.kind)) val = norm(s); } catch (e) { /* storage blocked */ } }
+  if (!kinds.includes(val.kind)) val.kind = kinds.includes('month') ? 'month' : kinds[0];
+  const save = () => { if (lsKey) { try { localStorage.setItem(lsKey, JSON.stringify(val)); } catch (e) { /* storage blocked */ } } };
+  const uid = 'pb' + Math.random().toString(36).slice(2, 8);
+  box.classList.add('pbar-wrap');
+  box.innerHTML = `<div class="pbar" role="group" aria-label="ช่วงเวลา">` +
+    kinds.map(k => `<button type="button" class="gran-btn" data-k="${k}" aria-pressed="false">${_PBAR_LABEL[k]}</button>`).join('') + `</div>` +
+    (opt.range ? `<div class="pbar-range" hidden><label for="${uid}f">จาก</label><input type="date" id="${uid}f" data-p="f"><label for="${uid}t">ถึง</label><input type="date" id="${uid}t" data-p="t"><button type="button" class="pbar-apply">แสดง</button><span class="pbar-err" role="alert"></span></div>` : '');
+  const inp = w => /** @type {HTMLInputElement|null} */ (box.querySelector(`.pbar-range input[data-p="${w}"]`));
+  const paint = () => {
+    box.querySelectorAll('.pbar [data-k]').forEach(b => {
+      const on = b.getAttribute('data-k') === val.kind;
+      b.classList.toggle('gran-active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const tr = /** @type {HTMLElement} */ (b.parentElement), bb = /** @type {HTMLElement} */ (b);   // a phone scrolls the track: keep the chosen chip in view
+      if (on && tr && tr.scrollWidth > tr.clientWidth) tr.scrollLeft = Math.max(0, bb.offsetLeft - tr.offsetLeft - 8);
+    });
+    const rg = /** @type {HTMLElement|null} */ (box.querySelector('.pbar-range'));
+    if (rg) {
+      rg.hidden = val.kind !== 'range';
+      const f = inp('f'), t = inp('t');
+      if (f && val.from) f.value = val.from;
+      if (t && val.to) t.value = val.to;
+    }
+  };
+  const fire = () => { save(); paint(); if (typeof opt.onChange === 'function') opt.onChange(Object.assign({}, val)); };
+  box.querySelectorAll('.pbar [data-k]').forEach(b => b.addEventListener('click', () => {
+    val.kind = b.getAttribute('data-k') || val.kind;
+    if (val.kind === 'range' && !(val.from && val.to)) { save(); paint(); return; }   // wait for จาก–ถึง
+    fire();
+  }));
+  const ap = box.querySelector('.pbar-apply');
+  if (ap) ap.addEventListener('click', () => {
+    const f = inp('f')?.value || '', t = inp('t')?.value || '';
+    const err = box.querySelector('.pbar-err');
+    if (!f || !t) { if (err) err.textContent = 'ระบุวันที่ทั้งช่อง จาก และ ถึง'; return; }
+    if (f > t) { if (err) err.textContent = 'วันที่ จาก ต้องไม่อยู่หลังวันที่ ถึง'; return; }
+    if (err) err.textContent = '';
+    val = { kind: 'range', from: f, to: t }; fire();
+  });
+  paint();
+  const ctl = {
+    get: () => Object.assign({}, val),
+    set: (v, silent) => { const n = norm(v); if (!kinds.includes(n.kind)) return; val = n; if (silent) { save(); paint(); } else fire(); },
+    kinds: kinds.slice(),
+  };
+  if (opt.key) _pbars[opt.key] = ctl;
+  return ctl;
+}
+// periodCmpHtml(cur, prev, ly, {unit, upGood, range}) · the two comparison chips of one figure: เทียบช่วงก่อน · เทียบปีก่อน.
+//   unit '%' (baht / qty: % change) | 'pp' (a ratio: the change in จุด) · upGood false for a cost (down = good ink)
+//   range a periodRange() result: its compared windows go in the chip's tooltip and in the "?"; a year (prev = ly) shows one chip.
+//   A base with no data shows "—" (never a made-up %).
+function periodCmpHtml(cur, prev, ly, opt) {
+  opt = opt || {};
+  const unit = opt.unit === 'pp' ? 'pp' : '%', upGood = opt.upGood !== false, r = opt.range || null;
+  const e2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const chip = (label, base, span) => {
+    const d = unit === 'pp' ? periodPp(cur, base) : periodPct(cur, base);
+    const tip = r ? `${r.label_th} เทียบ ${span}` : '';
+    if (d == null) return `<span class="pcmp pcmp-none"${tip ? ` title="${e2(tip + ' · ไม่มีข้อมูลฐาน')}"` : ''}>${label} —</span>`;
+    const good = d === 0 ? null : (d > 0) === upGood;
+    const ink = good == null ? 'var(--text-secondary)' : good ? 'var(--good-ink)' : 'var(--bad-ink)';
+    const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '';
+    const num = `${arrow}${arrow ? ' ' : ''}${Math.abs(d).toLocaleString('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${unit === 'pp' ? ' จุด' : '%'}`;
+    return `<span class="pcmp"${tip ? ` title="${e2(tip)}"` : ''}>${label} <b style="color:${ink}">${num}</b></span>`;
+  };
+  const sameBase = !!r && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
+  const html = (sameBase ? '' : chip('เทียบช่วงก่อน', prev, r ? r.prev_label_th : '')) + chip('เทียบปีก่อน', ly, r ? r.ly_label_th : '');
+  let q = '';
+  if (r && typeof uiQ === 'function') {
+    const txt = `<p>${e2(r.label_th)}${r.complete ? '' : ' (ถึงวันที่ปิดยอดล่าสุด)'}</p>` +
+      (sameBase ? '' : `<p><b>เทียบช่วงก่อน</b> · ${e2(r.prev_label_th)}</p>`) + `<p><b>เทียบปีก่อน</b> · ${e2(r.ly_label_th)}</p>` +
+      `<p>${unit === 'pp' ? 'สัดส่วนเทียบเป็นจุด' : 'เทียบเป็นร้อยละ'} · ช่วงที่ยังไม่จบเทียบจำนวนวันเท่ากัน · ไม่มีข้อมูลฐานแสดง —</p>`;
+    q = uiQ('pcmp:' + r.kind + ':' + r.cur.join('_') + ':' + unit, 'ช่วงที่เทียบ', txt, 'pcmp-q');
+  }
+  return `<span class="pcmp-row">${html}${q}</span>`;
+}
+// The top bar's วัน / สัปดาห์ / เดือน / ไตรมาส / ปี (setGranularity) as a period kind: a quarter reads as month
+function getPeriodKind() {
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  return { daily: 'day', weekly: 'week', monthly: 'month', quarterly: 'month', yearly: 'year' }[g] || 'month';
+}
 // QA 2026-10-13 M1 · a stored stamp as the Bangkok clock. The tables hold UTC: "2026-10-09T06:15:42" (naive, as master.now() writes it) or
 // "...+00:00" / "...Z" (aware, any offset is honoured); a stamp written with a SPACE ("2026-10-09 13:15", the reports' own format and the
 // checklist's) already is the branch's clock and is kept as it is. -> {y, mo, d, h, mi, hhmm, iso} or null when there is no time part.
@@ -3111,11 +3295,14 @@ function loadActiveTab() {
 //   date:       input id  — one day, snapped to the global period's end day
 //   dateRange:  [from, to] input ids — the global day range
 //   monthRange: [from, to] select ids — the global month range
+//   period:     a periodBar key (PR-PP1) — its kind follows the top bar's
+//               วัน / สัปดาห์ / เดือน / ปี (getPeriodKind)
 //   prepare:    async fn that fills the picker's options first; a month select
 //               without one is filled by _extraMonths (the /api/months list)
 async function _followGlobal(tabKey, f) {
   if (f.prepare) await f.prepare();
   else if (f.month) await _extraMonths(f.month);
+  if (f.period) _syncExtraPeriod(f.period, tabKey);
   if (f.month) _syncExtraMonth(f.month, tabKey);
   if (f.date) _syncExtraDate(f.date, tabKey);
   if (f.dateRange) _syncExtraDateRange(f.dateRange[0], f.dateRange[1], tabKey);
