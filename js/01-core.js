@@ -2624,10 +2624,196 @@ function periodCmpHtml(cur, prev, ly, opt) {
   }
   return `<span class="pcmp-row">${html}${q}</span>`;
 }
-// The top bar's วัน / สัปดาห์ / เดือน / ไตรมาส / ปี (setGranularity) as a period kind: a quarter reads as month
-function getPeriodKind() {
-  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
-  return { daily: 'day', weekly: 'week', monthly: 'month', quarterly: 'month', yearly: 'year' }[g] || 'month';
+// The top bar's period kind (the ONE period bar below): week | month | year | range
+function getPeriodKind() { return _gp.kind; }
+
+// ── PR-PP1 · the ONE period bar of the top bar (owner 2026-10-24): สัปดาห์ · เดือน · ปี · กำหนดเอง + ‹ ต.ค. 2569 › ──────────
+// Replaces the วัน/สัปดาห์/เดือน/ไตรมาส/ปี toggle, the two date pickers, the two month pickers with 3ด./6ด./12ด. and the
+// เลือกเร็ว row. The bar keeps {kind, pick, from, to}: pick = any day of the period wanted ('' = the period of the anchor,
+// to date); from/to = the กำหนดเอง days. It WRITES the hidden fields the pages read (#gPeriodState: selMonthFrom / selMonthTo,
+// selDateFrom / selDateTo) and currentGranularity (week -> weekly, กำหนดเอง -> daily, month / year -> monthly), so getMonthFrom,
+// getMonthTo, qp(), summaryParams(), _filterKey and TABS[].follow keep working until PP2/PP3 move each page onto periodRange.
+// The anchor is the last closed day with data (the coverage note's last day, never after yesterday on the Thai clock).
+// 3 / 6 / 12 เดือน · ทั้งหมด is a chart option (ช่วงกราฟ, getTrendParams), shown only where a trend chart reads it.
+const _GP_LS = 'oshinei_gperiod', _GP_WIN_LS = 'oshinei_chartwin';
+let _gp = (() => {
+  try { const v = JSON.parse(localStorage.getItem(_GP_LS) || 'null'); if (v && ['week', 'month', 'year', 'range'].includes(v.kind)) return { kind: v.kind, pick: v.pick || '', from: v.from || '', to: v.to || '' }; } catch (e) { /* storage blocked */ }
+  return { kind: 'month', pick: '', from: '', to: '' };
+})();
+let _gpChartWin = (() => { try { const v = localStorage.getItem(_GP_WIN_LS); if (['3', '6', '12', 'all', 'q', 'y'].includes(v || '')) return v; } catch (e) { /* storage blocked */ } return '12'; })();
+function _gpSave() { try { localStorage.setItem(_GP_LS, JSON.stringify(_gp)); localStorage.setItem(_GP_WIN_LS, _gpChartWin); } catch (e) { /* storage blocked */ } }
+function _gpMonths() { return Array.isArray(window.allMonths) ? window.allMonths : []; }
+function gPeriodAnchor() {
+  const thToday = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  const yday = _prIso(_prAdd(/** @type {Date} */ (_prDay(thToday)), -1));
+  let a = String(window.__dataLastDate || '').slice(0, 10);
+  if (!_prDay(a)) {
+    const ms = _gpMonths(), last = ms[ms.length - 1];
+    if (last) { const y = +last.slice(0, 4), m = +last.slice(5, 7); a = `${last}-${String(_prMlen(y, m)).padStart(2, '0')}`; }
+  }
+  return (!_prDay(a) || a > yday) ? yday : a;
+}
+function _gpFirstDay() { const ms = _gpMonths(); return ms.length ? ms[0] + '-01' : ''; }
+// the windows of the bar's period (a periodRange result), null when it cannot be drawn (a range after the anchor)
+function gPeriodResolve() {
+  const a = gPeriodAnchor();
+  if (_gp.kind === 'range') return (_gp.from && _gp.to) ? periodRange('range', a, { date_from: _gp.from, date_to: _gp.to }) : null;
+  return periodRange(_gp.kind, a, _gp.pick ? { date_from: _gp.pick } : {}) || periodRange(_gp.kind, a);
+}
+function _gpSetSel(id, v) {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById(id)); if (!sel) return;
+  if (v && ![...sel.options].some(o => o.value === v)) { const o = document.createElement('option'); o.value = v; o.textContent = fmtMonthTh(v); sel.appendChild(o); }
+  sel.value = v;
+}
+function _gpSetVal(id, v) { const el = /** @type {HTMLInputElement|null} */ (document.getElementById(id)); if (el) el.value = v; }
+// write the fields the pages read; no reload (gPeriodApply reloads)
+function gPeriodWrite() {
+  const r = gPeriodResolve();
+  if (!r) return null;
+  _gpSetVal('selDateFrom', r.cur[0]); _gpSetVal('selDateTo', r.cur[1]);
+  const mf = r.cur[0].slice(0, 7), mt = r.cur[1].slice(0, 7), ms = _gpMonths().filter(m => m >= mf && m <= mt);
+  _gpSetSel('selMonthFrom', ms[0] || mf); _gpSetSel('selMonthTo', ms[ms.length - 1] || mt);
+  // eslint-disable-next-line no-global-assign
+  currentGranularity = _gp.kind === 'week' ? 'weekly' : _gp.kind === 'range' ? 'daily' : 'monthly';
+  return r;
+}
+const _GP_MON_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function gPeriodLabel(r) {
+  if (!r) return '';
+  if (_gp.kind === 'month') return `${_GP_MON_SHORT[+r.cur[0].slice(5, 7) - 1]} ${+r.cur[0].slice(0, 4) + 543}`;
+  if (_gp.kind === 'year') return String(+r.cur[0].slice(0, 4) + 543);
+  return r.label_th;
+}
+// กำหนดเอง tapped with no range yet: its จาก–ถึง is open while the pages stay on the period they show (until ใช้ช่วงนี้)
+let _gpRangeOpen = false;
+function gPeriodRender() {
+  const r = gPeriodResolve(), shown = _gpRangeOpen ? 'range' : _gp.kind;
+  document.querySelectorAll('#gPeriod .gp-kinds [data-k]').forEach(b => {
+    const on = b.getAttribute('data-k') === shown;
+    b.classList.toggle('gran-active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const step = document.getElementById('gpStep'), rg = document.getElementById('gpRange');
+  if (step) step.hidden = shown === 'range';
+  if (rg) rg.hidden = shown !== 'range';
+  const lab = document.getElementById('gpLabel');
+  if (lab) {
+    lab.textContent = gPeriodLabel(r);
+    lab.title = r ? r.label_th + (r.complete ? '' : ' · ถึงวันที่ปิดยอดล่าสุด') : '';
+  }
+  const prev = /** @type {HTMLButtonElement|null} */ (document.getElementById('gpPrev')), next = /** @type {HTMLButtonElement|null} */ (document.getElementById('gpNext'));
+  const first = _gpFirstDay();
+  if (prev) prev.disabled = !r || (!!first && r.cur[0] <= first);
+  if (next) next.disabled = !r || _gpShift(r, 1) === null;
+  const f = /** @type {HTMLInputElement|null} */ (document.getElementById('gpFrom')), t = /** @type {HTMLInputElement|null} */ (document.getElementById('gpTo'));
+  const a = gPeriodAnchor();
+  [f, t].forEach(x => { if (x) { x.max = a; if (first) x.min = first; } });
+  if (shown === 'range' && f && t && !f.value && !t.value) {
+    const cur = r || periodRange('month', a);
+    if (cur) { f.value = _gp.from || cur.cur[0]; t.value = _gp.to || cur.cur[1]; }
+  }
+  const sw = /** @type {HTMLSelectElement|null} */ (document.getElementById('selChartWin'));
+  if (sw) sw.value = _gpChartWin;
+}
+// the pick of the period `d` steps away, '' when that is the anchor's own period, null when it starts after the anchor
+function _gpShift(r, d) {
+  const s = /** @type {Date} */ (_prDay(r.cur[0]));
+  let n;
+  if (_gp.kind === 'week') n = _prAdd(s, 7 * d);
+  else if (_gp.kind === 'month') n = _prYmd(s.getUTCFullYear(), s.getUTCMonth() + 1 + d, 1);
+  else n = _prYmd(s.getUTCFullYear() + d, 1, 1);
+  const iso = _prIso(n), a = gPeriodAnchor();
+  if (iso > a) return null;
+  const nr = periodRange(_gp.kind, a, { date_from: iso });
+  return nr && !nr.complete ? '' : iso;
+}
+function gPeriodApply() {
+  _gpSave(); gPeriodWrite(); gPeriodRender();
+  Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]);
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+function gPeriodKind(k) {
+  if (!['week', 'month', 'year', 'range'].includes(k)) return;
+  const r = gPeriodResolve();
+  if (k === 'range') {                                   // open จาก–ถึง; the page moves on ใช้ช่วงนี้ (or at once to a range used before)
+    if (_gp.kind === 'range') return;
+    if (_gp.from && _gp.to) { _gpRangeOpen = false; _gp.kind = 'range'; gPeriodApply(); return; }
+    _gpRangeOpen = true; gPeriodRender();
+    const f = /** @type {HTMLInputElement|null} */ (document.getElementById('gpFrom')), t = /** @type {HTMLInputElement|null} */ (document.getElementById('gpTo'));
+    if (f && t && r) { f.value = r.cur[0]; t.value = r.cur[1]; }
+    if (f) f.focus();
+    return;
+  }
+  _gpRangeOpen = false;
+  // the same stretch of time in the new kind: the period that holds the end of the one on screen
+  const end = r ? r.cur[1] : '';
+  _gp.kind = k;
+  const nr = end ? periodRange(k, gPeriodAnchor(), { date_from: end }) : null;
+  _gp.pick = nr && nr.complete ? end : '';
+  gPeriodApply();
+}
+function gPeriodStep(d) {
+  const r = gPeriodResolve(); if (!r || _gp.kind === 'range') return;
+  const n = _gpShift(r, d);
+  if (n === null) return;
+  const first = _gpFirstDay();
+  if (d < 0 && first && r.cur[0] <= first) return;
+  _gp.pick = n;
+  gPeriodApply();
+}
+function gPeriodApplyRange() {
+  const f = /** @type {HTMLInputElement|null} */ (document.getElementById('gpFrom'))?.value || '', t = /** @type {HTMLInputElement|null} */ (document.getElementById('gpTo'))?.value || '';
+  const err = document.getElementById('gpErr');
+  if (!f || !t) { if (err) err.textContent = 'ระบุวันที่ทั้งช่อง จาก และ ถึง'; return; }
+  if (f > t) { if (err) err.textContent = 'วันที่ จาก ต้องไม่อยู่หลังวันที่ ถึง'; return; }
+  if (f > gPeriodAnchor()) { if (err) err.textContent = 'ยังไม่มีข้อมูลในช่วงนี้'; return; }
+  if (err) err.textContent = '';
+  _gp = { kind: 'range', pick: '', from: f, to: t };
+  _gpRangeOpen = false;
+  gPeriodApply();
+}
+// set the bar from outside (a saved range, a deep link): {kind, pick, from, to}; reloads unless silent
+function gPeriodSet(v, silent) {
+  if (!v || !['week', 'month', 'year', 'range'].includes(v.kind)) return;
+  _gp = { kind: v.kind, pick: v.pick || '', from: v.from || '', to: v.to || '' };
+  _gpRangeOpen = false;
+  if (silent) { _gpSave(); gPeriodWrite(); gPeriodRender(); } else gPeriodApply();
+}
+function gPeriodGet() { return Object.assign({}, _gp); }
+function gPeriodChartWin(v) {
+  if (!['3', '6', '12', 'all', 'q', 'y'].includes(v)) return;
+  _gpChartWin = v; _gpSave();
+  Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]);
+  loadActiveTab();
+}
+// the bucket of the trend chart: ช่วงกราฟ q / y win; otherwise week -> weekly, a short กำหนดเอง -> daily, else monthly
+function trendGranularity() {
+  if (_gpChartWin === 'y') return 'yearly';
+  if (_gpChartWin === 'q') return 'quarterly';
+  if (_gp.kind === 'week') return 'weekly';
+  if (_gp.kind === 'range') { const r = gPeriodResolve(); return r && r.days <= 62 ? 'daily' : 'monthly'; }
+  return 'monthly';
+}
+// the trend window: it ENDS at the bar's period and reaches back the ช่วงกราฟ months (a short กำหนดเอง: the range itself)
+function gPeriodTrendWindow() {
+  const r = gPeriodResolve(), g = trendGranularity();
+  if (!r || g === 'yearly') return { g };
+  const end = r.cur[1];
+  if (g === 'daily') return { g, date_from: r.cur[0], date_to: end };
+  const n = ({ '3': 3, '6': 6, '12': 12 })[_gpChartWin] || 0;          // 0 = all
+  const e = /** @type {Date} */ (_prDay(end)), m0 = _prYmd(e.getUTCFullYear(), e.getUTCMonth() + 1 - (n - 1), 1);
+  if (g === 'weekly') return { g, date_from: n ? _prIso(m0) : '', date_to: end };
+  return { g, month_from: n ? _prIso(m0).slice(0, 7) : '', month_to: end.slice(0, 7) };
+}
+// a saved range of the ★ menu: new ones carry {period}; the older ones (month_from / month_to / granularity) still load
+function gPeriodFromPreset(p) {
+  if (p && p.period && p.period.kind) return p.period;
+  const mf = (p && p.month_from) || '', mt = (p && p.month_to) || '', ms = _gpMonths();
+  const last = ms[ms.length - 1] || '';
+  const to = mt || last, from = mf || ms[0] || to;
+  if (!to) return null;
+  if (from === to) return { kind: 'month', pick: to + '-01' };
+  const y = +to.slice(0, 4), m = +to.slice(5, 7);
+  return { kind: 'range', from: from + '-01', to: `${to}-${String(_prMlen(y, m)).padStart(2, '0')}` };
 }
 // QA 2026-10-13 M1 · a stored stamp as the Bangkok clock. The tables hold UTC: "2026-10-09T06:15:42" (naive, as master.now() writes it) or
 // "...+00:00" / "...Z" (aware, any offset is honoured); a stamp written with a SPACE ("2026-10-09 13:15", the reports' own format and the
@@ -3062,65 +3248,10 @@ function summaryParams() {
   return qp();
 }
 
-// ── Calendar year quick selector (Phase 7) ─────────────────────────
-// Populate selYearQuick from window.allMonths (set by loadMonths in dashboard init).
-function _populateYearQuick() {
-  const sel = document.getElementById('selYearQuick');
-  if (!sel) return;
-  const months = Array.isArray(window.allMonths) ? window.allMonths.slice() : [];
-  const years = [...new Set(months.map(m => m.slice(0, 4)))].sort();
-  // Preserve placeholder option, rebuild rest
-  while (sel.options.length > 1) sel.remove(1);
-  years.forEach(y => {
-    const o = document.createElement('option');
-    o.value = y; o.textContent = y;
-    sel.appendChild(o);
-  });
-}
-// Set month range to Jan–Dec of a given calendar year (clamped to data availability).
-// fullYear=true → always Jan-Dec; false → Jan-current month for YTD behaviour.
-function setYearRange(year, fullYear = true) {
-  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
-  if (!months.length) return;
-  const yStr = String(year);
-  const inYear = months.filter(m => m.startsWith(yStr));
-  if (!inYear.length) {
-    uiNotice(`ไม่มีข้อมูลในปี ${yStr}`);
-    return;
-  }
-  const from = fullYear ? `${yStr}-01` : inYear[0];
-  const to = fullYear ? `${yStr}-12` : inYear[inYear.length - 1];
-  // Snap to available months (some months may be missing in data)
-  const fromSnap = months.find(m => m >= from) || inYear[0];
-  const toSnap   = [...months].reverse().find(m => m <= to) || inYear[inYear.length - 1];
-  const selFrom = document.getElementById('selMonthFrom');
-  const selTo   = document.getElementById('selMonthTo');
-  if (selFrom) selFrom.value = fromSnap;
-  if (selTo)   selTo.value   = toSnap;
-  // Sync the year dropdown display
-  const ySel = document.getElementById('selYearQuick');
-  if (ySel) ySel.value = yStr;
-  if (typeof onFilterChange === 'function') onFilterChange();
-}
-function onYearQuickChange(val) {
-  if (!val) return;  // placeholder selected — no-op
-  setYearRange(parseInt(val, 10), true);
-}
-// YoY: set range to current-year YTD; user can switch to previous via dropdown for compare.
-function setYoYRange() {
-  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
-  if (!months.length) return;
-  const latest = months[months.length - 1];
-  const curYear = parseInt(latest.slice(0, 4), 10);
-  const prevYear = curYear - 1;
-  // Set to span Jan(prevYear) → latest(curYear) so charts show YoY context
-  const selFrom = document.getElementById('selMonthFrom');
-  const selTo   = document.getElementById('selMonthTo');
-  if (selFrom) selFrom.value = months.find(m => m >= `${prevYear}-01`) || months[0];
-  if (selTo)   selTo.value   = latest;
-  const ySel = document.getElementById('selYearQuick');
-  if (ySel) ySel.value = '';
-  if (typeof onFilterChange === 'function') onFilterChange();
+// PR-PP1: the year select, ปีก่อน and เทียบปีก่อน of the old เลือกเร็ว row are gone (every figure shows เทียบปีก่อน itself);
+// a caller that still asks for a calendar year moves the ONE period bar to it.
+function setYearRange(year) {
+  if (typeof gPeriodSet === 'function') gPeriodSet({ kind: 'year', pick: `${year}-01-01` });
 }
 
 // Phase 5 — click any branch name/box to drill into it globally.
@@ -3135,52 +3266,12 @@ function drillIntoBranch(branchName) {
   if (typeof onFilterChange === 'function') onFilterChange();
 }
 
-// Phase 4 — global period presets. Sets selMonthFrom/selMonthTo then reloads.
-// Highlights the active preset button; clears it when the user changes selectors manually.
+// PR-PP1: the 3ด. / 6ด. / ปีนี้ / 12ด. buttons are gone: a trend window is the chart option ช่วงกราฟ, the period is the bar's.
 function setPeriodPreset(preset) {
-  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
-  if (!months.length) return;
-  const latest = months[months.length - 1];
-  const latestDate = new Date(latest + '-01');
-  let from = '';
-  if (preset === 'all') {
-    from = '';
-  } else if (preset === '3m') {
-    const d = new Date(latestDate); d.setMonth(d.getMonth() - 2);
-    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  } else if (preset === '6m') {
-    const d = new Date(latestDate); d.setMonth(d.getMonth() - 5);
-    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  } else if (preset === '12m') {
-    const d = new Date(latestDate); d.setMonth(d.getMonth() - 11);
-    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  } else if (preset === 'ytd') {
-    from = latest.slice(0, 4) + '-01';
-  }
-  // Snap to nearest available month
-  const snapFrom = from ? (months.find(m => m >= from) || months[0]) : '';
-  const selFrom = document.getElementById('selMonthFrom');
-  const selTo   = document.getElementById('selMonthTo');
-  if (selFrom) selFrom.value = snapFrom;
-  if (selTo)   selTo.value   = '';
-  // Highlight active preset button
-  document.querySelectorAll('.period-preset').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('preset-' + preset);
-  if (btn) btn.classList.add('active');
-  if (typeof onFilterChange === 'function') onFilterChange();
+  if (preset === 'ytd') { gPeriodSet({ kind: 'year' }); return; }
+  const w = { '3m': '3', '6m': '6', '12m': '12', all: 'all' }[preset];
+  if (w) gPeriodChartWin(w);
 }
-// Clear preset highlight when user manually changes period selectors
-(function() {
-  function clearPresetHighlight() {
-    document.querySelectorAll('.period-preset').forEach(b => b.classList.remove('active'));
-  }
-  document.addEventListener('DOMContentLoaded', () => {
-    ['selMonthFrom','selMonthTo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('change', clearPresetHighlight);
-    });
-  });
-})();
 
 async function onGroupChange() {
   // Filter the branch dropdown to show only branches in the selected group
@@ -3351,19 +3442,14 @@ function switchTab(name, direct) {
   // range entirely (only the branch filter applies). Hide the period controls and
   // the Quick-load bar here so they don't look broken when they have no effect.
   const hidePeriod = (name === 'home' || name === 'mgtreport');
-  document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('invisible', hidePeriod);
-  document.getElementById('dateRangePickers')?.classList.toggle('invisible', hidePeriod);
-  document.getElementById('monthRangePickers')?.classList.toggle('invisible', hidePeriod);
-  const _pb = document.getElementById('presetBar');
-  if (_pb) _pb.style.display = hidePeriod ? 'none' : '';
+  document.getElementById('gPeriod')?.classList.toggle('invisible', hidePeriod);
+  const _gc = document.getElementById('gpChart');                 // ช่วงกราฟ: only the page whose trend chart reads it (PR-PP1)
+  if (_gc) _gc.hidden = name !== 'overall';
   // Pages with their own branch / month controls (TABS[].ownFilters) get no chain filters at all,
   // removed from the layout (not just invisible) so a phone shows the page first
   const ownPage = !!(TABS[name] && TABS[name].ownFilters);
   document.getElementById('selBranch').closest('div').classList.toggle('hidden', ownPage);
-  document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('hidden', ownPage);
-  document.getElementById('dateRangePickers')?.classList.toggle('hidden', ownPage);
-  document.getElementById('monthRangePickers')?.classList.toggle('hidden', ownPage);
-  if (_pb && ownPage) _pb.style.display = 'none';
+  document.getElementById('gPeriod')?.classList.toggle('hidden', ownPage);
   document.getElementById('pageTitle').textContent = _noEmoji(PAGE_TITLES[name] || name);
   _updateClusterBar(name);
   // Reset buffet subtab to overview whenever user navigates to/from buffetperf

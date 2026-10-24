@@ -32,10 +32,28 @@ Decisions taken in PP1 (the brief left them open):
   (restaurant sales are weekday-seasonal). The brief's "same calendar dates one year back" is kept for month, year and range.
 - **year**: เทียบช่วงก่อน and เทียบปีก่อน are the same window, so `periodCmpHtml` draws one chip (เทียบปีก่อน).
 - **range**: a range that runs past the anchor is clamped to it; its base is the first n days of the window just before.
-- The top bar already has วัน · สัปดาห์ · เดือน · ไตรมาส · ปี beside the month filter (`setGranularity`); that toggle is the
-  global period kind (`getPeriodKind()`, a quarter reads as month) instead of a second chip row.
 - The weekday-fair MoM (`mom_basis='dow'`) stays for the management report §3 pace and the tests that pin it; the headline %
   moves to the calendar to-date rule page by page in PP2/PP3.
+
+## The top bar: ONE period bar (owner 2026-10-24)
+
+`สัปดาห์ · เดือน · ปี · กำหนดเอง` + a stepper `‹ ต.ค. 2569 ›` for the chosen kind (the current period to date by default; ›
+stops at it, ‹ at the first data month) + จาก–ถึง for กำหนดเอง. It replaces the วัน/สัปดาห์/เดือน/ไตรมาส/ปี toggle, the two date
+pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the เลือกเร็ว row (เดือนนี้ … ทั้งหมด · ปี · ปีก่อน · เทียบปีก่อน ·
+กำหนดเอง · ช่วงที่บันทึกไว้). There is no compare filter: every figure shows เทียบช่วงก่อน and เทียบปีก่อน itself.
+
+- **Chart option, not period**: `ช่วงกราฟ` (3 · 6 · 12 เดือน · ทั้งหมด · ทั้งหมด รายไตรมาส · เทียบรายปี) is shown only on
+  ภาพรวมยอดขาย, whose trend chart is the one reader (`getTrendParams` → `gPeriodTrendWindow`): the chart ends at the bar's
+  period and reaches back that far; its bucket is weekly for สัปดาห์, daily for a กำหนดเอง of up to 62 days, else monthly.
+- **Saved ranges** live in one place: the ★ ช่วงที่บันทึก menu. A new one stores `{period}`; an older one
+  (`month_from` / `month_to`) still loads — one month becomes that month, a span becomes กำหนดเอง from its first to its last day.
+- **Compatibility until PP2/PP3**: the bar writes the hidden `selMonthFrom` / `selMonthTo` / `selDateFrom` / `selDateTo`
+  (`#gPeriodState`) and `currentGranularity` (week → weekly, กำหนดเอง → daily, month / year → monthly), so `getMonthFrom`,
+  `getMonthTo`, `qp()`, `summaryParams()`, `_filterKey`, `onFilterChange` and `TABS[].follow` keep working unchanged.
+  The default moved from year-to-date (Jan … latest month) to the current month to date.
+- Phone: one sideways-scrolling row inside the folded tools, the period (stepper) first, 44 px targets.
+- API: `gPeriodGet()`, `gPeriodSet({kind, pick, from, to}, silent)`, `gPeriodResolve()` (a `periodRange` result),
+  `gPeriodAnchor()`, `getPeriodKind()`; remembered on the device (`oshinei_gperiod`, `oshinei_chartwin`).
 
 ## Grain per figure (what a page may offer)
 
@@ -79,7 +97,8 @@ periodPct(cur, base), periodPp(cur, base)                   // = periods.pct / p
 periodLabelTh(fromIso, toIso)
 periodBar(el, {kinds, value, onChange, range, key})         // the chip track วัน · สัปดาห์ · เดือน · ปี · กำหนดเอง
 periodCmpHtml(cur, prev, ly, {unit: '%'|'pp', upGood, range})  // the two comparison chips + "?"
-getPeriodKind()                                             // the top bar's kind
+getPeriodKind()                                             // the top bar's kind (week | month | year | range)
+gPeriodGet(), gPeriodSet(v, silent), gPeriodResolve()       // the top bar's period bar (see above)
 ```
 
 - `periodBar`: 44 px targets and a scrolling track on a phone; remembers the choice per page (`localStorage
