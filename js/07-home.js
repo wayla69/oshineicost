@@ -710,12 +710,91 @@ async function loadDailySales(force) {
   renderMenuSpike(d.focus);
 }
 
-// #5 menu-spike: which menus were abnormally high (qty) on the focus day, per branch.
-// Shows ALL items ≥1.5× their 21-day average; has its own branch picker.
-let _spikeBranchesLoaded = false, _spikeFocus = null;
+// periodRange(kind, anchor) -> { from, to, days, label } · pure (no DOM, no globals but fmtDateTh), kept here to be lifted
+// into js/01-core.js for the one period pattern of every sales figure (owner 2026-10-24).
+//   kind 'day'   anchor 'YYYY-MM-DD'            -> that day
+//   kind 'week'  anchor 'YYYY-MM-DD'            -> Monday of its week -> anchor (week to date)
+//   kind 'mtd'   anchor 'YYYY-MM-DD'            -> the 1st of its month -> anchor (month to date)
+//   kind 'range' anchor { from, to } (ISO days) -> as given
+// label: "23 ต.ค." · "20–23 ต.ค." · "28 ก.ย.–3 ต.ค."; null when the anchor is not a date.
+function periodRange(kind, anchor) {
+  const iso = d => d.toISOString().slice(0, 10);
+  const day = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? new Date(s + 'T00:00:00Z') : null);
+  let a, b;
+  if (kind === 'range') { a = day(anchor && anchor.from); b = day(anchor && anchor.to); }
+  else {
+    b = day(anchor);
+    if (!b) return null;
+    a = new Date(b.getTime());
+    if (kind === 'week') a.setUTCDate(a.getUTCDate() - ((a.getUTCDay() + 6) % 7));
+    else if (kind === 'mtd') a.setUTCDate(1);
+    else if (kind !== 'day') return null;
+  }
+  if (!a || !b || a > b) return null;
+  const from = iso(a), to = iso(b), days = Math.round((b.getTime() - a.getTime()) / 864e5) + 1;
+  const label = from === to ? fmtDateTh(to)
+    : from.slice(0, 7) === to.slice(0, 7) ? `${+from.slice(8)}–${fmtDateTh(to)}` : `${fmtDateTh(from)}–${fmtDateTh(to)}`;
+  return { from, to, days, label };
+}
+
+// #5 menu-spike: which menus were abnormally high (qty), per branch. Period chips (PR-SP, owner 2026-10-24), styled as the
+// page's gran-btn track so a shared period component can replace them: วัน = the focus day vs its 21-day average ·
+// สัปดาห์นี้ / เดือนนี้ = Monday / the 1st -> the focus day (to date) · กำหนดเอง = จาก–ถึง. A period is compared with
+// "ปกติ" (weekday-fair, the 3 weeks before it; backend _menu_spike_period), not with the previous period: a spike is vs normal.
+// Shows ALL items ≥1.5×; has its own branch picker; the chosen period is remembered on this device.
+let _spikeBranchesLoaded = false, _spikeFocus = null, _spikeSeq = 0, _spikeLast = null;
+const _SPIKE_LS = 'oshinei_spike_period';
+const _SPIKE_MODES = ['day', 'week', 'mtd', 'range'];
+let _spikeMode = (() => {
+  try { const v = JSON.parse(localStorage.getItem(_SPIKE_LS) || 'null'); if (v && _SPIKE_MODES.includes(v.m)) return v; } catch (e) {}
+  return { m: 'day', f: '', t: '' };
+})();
+function _spikeSave() { try { localStorage.setItem(_SPIKE_LS, JSON.stringify(_spikeMode)); } catch (e) {} }
+function _spikeChips() {
+  document.querySelectorAll('#spikeModes [data-m]').forEach(b => {
+    const on = b.dataset.m === _spikeMode.m;
+    b.classList.toggle('gran-active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const tr = b.parentElement;                  // a phone scrolls the chip row: keep the chosen chip in view
+    if (on && tr && tr.scrollWidth > tr.clientWidth) tr.scrollLeft = Math.max(0, b.offsetLeft - tr.offsetLeft - 8);
+  });
+  const box = document.getElementById('spikeCustom');
+  if (box) box.hidden = _spikeMode.m !== 'range';
+}
+function spikeSetMode(m) {
+  if (!_SPIKE_MODES.includes(m)) return;
+  _spikeMode.m = m;
+  if (m === 'range') {
+    const f = document.getElementById('spikeFrom'), t = document.getElementById('spikeTo');
+    const end = _spikeMode.t || _spikeFocus || '';
+    if (t && !t.value) t.value = end;
+    if (f && !f.value && end) { const d = new Date(end + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 6); f.value = _spikeMode.f || d.toISOString().slice(0, 10); }
+  }
+  _spikeSave(); _spikeChips();
+  if (m !== 'range' || (_spikeMode.f && _spikeMode.t)) renderMenuSpike();
+}
+function spikeApplyRange() {
+  const f = document.getElementById('spikeFrom')?.value || '', t = document.getElementById('spikeTo')?.value || '';
+  const el = document.getElementById('dsSpike');
+  if (!f || !t) { if (el) el.innerHTML = '<p class="text-xs py-2" style="color:var(--bad-ink)">ระบุวันที่ทั้งช่อง จาก และ ถึง</p>'; return; }
+  if (f > t) { if (el) el.innerHTML = '<p class="text-xs py-2" style="color:var(--bad-ink)">วันที่ จาก ต้องไม่อยู่หลังวันที่ ถึง</p>'; return; }
+  _spikeMode = { m: 'range', f, t }; _spikeSave(); _spikeChips(); renderMenuSpike();
+}
+function spikeExport() {
+  const d = _spikeLast;
+  if (!d || !(d.spikes || []).length) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
+  const per = !!d.period && d.period !== 'day';
+  const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const head = ['เมนู', 'สาขา', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)'].concat(per ? ['ต่อวัน'] : [])
+    .concat([per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน', '+จาน', 'สูงกว่า (เท่า)', 'เมนูใหม่']);
+  const rows = d.spikes.map(s => [s.menu, s.branch, s.today].concat(per ? [s.per_day] : [])
+    .concat([s.is_new ? '' : (per ? s.expected : s.avg), s.excess, s.x != null ? s.x : '', s.is_new ? 'ใช่' : '']));
+  const span = per ? `${d.date_from}_${d.date_to}` : (d.date || '');
+  downloadCSV([head].concat(rows).map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
+}
 async function renderMenuSpike(focusDate) {
   const el = document.getElementById('dsSpike'); if (!el) return;
   if (focusDate) _spikeFocus = focusDate;     // remember focus across branch-picker changes
+  _spikeChips();
   // populate the local branch picker once
   const bsel = document.getElementById('spikeBranch');
   if (bsel && !_spikeBranchesLoaded) {
@@ -727,31 +806,52 @@ async function renderMenuSpike(focusDate) {
       _spikeBranchesLoaded = true;
     } catch (e) {}
   }
-  el.innerHTML = '<p class="text-xs text-slate-400 py-2">กำลังโหลด…</p>';
+  const mode = _spikeMode.m;
+  if (mode === 'range' && !(_spikeMode.f && _spikeMode.t)) { spikeSetMode('range'); el.innerHTML = '<p class="text-xs py-2" style="color:var(--text-muted)">เลือกช่วงวันที่ จาก–ถึง แล้วกด แสดง</p>'; return; }
+  el.innerHTML = '<p class="text-xs py-2" style="color:var(--text-muted)">กำลังโหลด…</p>';
   const p = new URLSearchParams(); p.set('threshold', '1.5'); p.set('limit', '500');
-  if (_spikeFocus) p.set('date', _spikeFocus);
+  if (mode !== 'day') p.set('period', mode);
+  if (mode === 'range') { p.set('date_from', _spikeMode.f); p.set('date_to', _spikeMode.t); }
+  else if (_spikeFocus) p.set('date', _spikeFocus);
   const localBr = bsel?.value || '';
   if (localBr) p.set('branch', localBr);
   else if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
+  const seq = ++_spikeSeq;
   let d;
-  try { d = await api(`${API}/api/sales/menu-spike?${p}`); } catch (e) { el.innerHTML = ''; return; }
+  try { d = await api(`${API}/api/sales/menu-spike?${p}`); } catch (e) { if (seq === _spikeSeq) el.innerHTML = ''; return; }
+  if (seq !== _spikeSeq) return;                 // a newer choice is already on its way
+  const rangeEl = document.getElementById('spikeRange'), cntEl = document.getElementById('spikeCount');
+  if (d && typeof d.detail === 'string') {       // 400: the custom range is not valid
+    _spikeLast = null;
+    if (rangeEl) rangeEl.textContent = '';
+    if (cntEl) cntEl.textContent = '';
+    el.innerHTML = `<p class="text-xs py-2" style="color:var(--bad-ink)">${esc(d.detail)}</p>`;
+    return;
+  }
+  _spikeLast = d;
+  const per = !!d.period && d.period !== 'day';
+  if (per && d.latest_day) { const f = document.getElementById('spikeFrom'), t = document.getElementById('spikeTo'); if (f) f.max = d.latest_day; if (t) t.max = d.latest_day; }
+  if (rangeEl) {
+    const pr = per ? periodRange('range', { from: d.date_from, to: d.date_to }) : periodRange('day', d.date);
+    const txt = pr ? pr.label : ''; rangeEl.textContent = txt; rangeEl.hidden = !txt;
+  }
   const sp = d.spikes || [];
-  const cntEl = document.getElementById('spikeCount');
   if (cntEl) cntEl.textContent = (d.count || 0) + ' รายการ' + ((d.count || 0) > sp.length ? ` (แสดง ${sp.length})` : '');
-  if (!sp.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-2">ไม่พบเมนูที่พุ่ง ≥1.5× ในวันนี้</p>'; return; }
+  if (!sp.length) { el.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่พบเมนูที่พุ่ง ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`; return; }
+  const hQty = per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', hBase = per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน';
   el.innerHTML = `<table class="text-xs w-full" id="spikeTable"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
     <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
-    <th class="py-1.5 pr-2 text-right">วันนี้ (จาน)</th><th class="py-1.5 pr-2 text-right">เฉลี่ย 21 วัน</th>
+    <th class="py-1.5 pr-2 text-right">${hQty}</th><th class="py-1.5 pr-2 text-right">${hBase}</th>
     <th class="py-1.5 pr-2 text-right">+จาน</th><th class="py-1.5 text-right">สูงกว่า</th></tr></thead><tbody>` +
     sp.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
-      <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
+      <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(s.menu)}</td>
-      <td class="py-1.5 pr-2 text-slate-500">${esc(s.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${s.is_new ? '<span class="text-amber-600">เมนูใหม่</span>' : fmtN(s.avg)}</td>
+      <td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(s.branch)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}${per && s.per_day != null ? `<div class="sp-perday">${Number(s.per_day).toLocaleString('th-TH', { maximumFractionDigits: 1 })} ต่อวัน</div>` : ''}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${s.is_new ? '<span style="color:var(--amber-ink)">เมนูใหม่</span>' : fmtN(per ? s.expected : s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--amber-ink)">+${fmtN(s.excess)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:var(--bad-ink);font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : ''}</span></td>
+      <td class="py-1.5 text-right tabular-nums"><span style="color:var(--bad-ink);font-weight:700">${s.x != null ? '×' + s.x : ''}</span>${s.x != null && s.pct != null ? `<div class="sp-perday">+${fmtN(s.pct)}%</div>` : ''}</td>
     </tr>`).join('') + `</tbody></table>`;
 }
 
