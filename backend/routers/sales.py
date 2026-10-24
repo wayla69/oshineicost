@@ -1400,7 +1400,8 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     baseline trading day uses the plain baseline daily average). x = period_qty / expected.
     Same rules as the day mode: spike when x >= threshold, period_qty >= 5 and the SKU sold on
     >= 5 baseline days; an existing menu sold on < 5 baseline days is listed from 20 plates with
-    thin_base: true (x vs the same zero-counting baseline, None when it is 0). A NEW menu (anchor = period end, anchor - first_sold < 28 days) is never a
+    thin_base: true when x (vs the same zero-counting baseline) >= threshold, or when that baseline
+    is 0 (x None). A NEW menu (anchor = period end, anchor - first_sold < 28 days) is never a
     spike: it goes to new_menus (_spike_new_menus). Qty only - NO cost (iron rule)."""
     import datetime as _dt
     from rules import TH_TODAY_SQL
@@ -1506,6 +1507,8 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             # an existing menu that sold on < 5 baseline days: listed from 20 plates (the old floor), "ปกติ" = the
             # weekday-fair baseline that counts the branch's trading days without a sale as zero (0 -> no x)
             x = pq / expected if expected > 0 else None
+            if x is not None and x < threshold:            # a baseline > 0: the same 1.5x rule as every spike
+                continue
             spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
                            "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
                            "excess": round(pq - expected), "is_new": False, "thin_base": True})
@@ -1537,7 +1540,7 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
 
     Two parts (owner 2026-10-24): `spikes` = EXISTING menus only (the spike rule above; `is_new`
     stays, always false, for old clients; an existing menu sold on < 5 baseline days is listed from
-    20 plates with `thin_base: true`, its "ปกติ" counting the branch's trading days without a sale
+    20 plates with `thin_base: true` when x >= threshold or its "ปกติ" is 0, "ปกติ" counting the branch's trading days without a sale
     as zero - day mode: baseline total / the branch's trading days in the 21 days); `new_menus` = every NEW menu sold in the period (no
     threshold), new = period end - first day the SKU sold at the branch < 28 days - see
     _spike_new_menus for its fields (first_sold, age_days, qty, per_day, trend)."""
@@ -1617,6 +1620,8 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
                 nd = ntd.get(r["bid"]) or 0
                 base = tot / nd if nd else 0.0
                 x = today / base if base > 0 else None
+                if x is not None and x < threshold:        # a baseline > 0: the same 1.5x rule as every spike
+                    continue
                 spikes.append({"branch": r["branch"], "menu": name, "today": round(today), "avg": round(base, 1),
                                "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
                                "excess": round(today - base), "is_new": False, "thin_base": True})

@@ -156,9 +156,11 @@ def _assert_day_matches_without_new(got, want, db):
         f = first.get((s["branch"], s["menu"]))
         return f is not None and (focus - f).days < 28
     keep = [s for s in want["spikes"] if not s["is_new"] and not is_new(s)]
-    thin_want = {(s["branch"], s["menu"]) for s in want["spikes"] if s["is_new"] and not is_new(s)}
+    thin_old = {(s["branch"], s["menu"]) for s in want["spikes"] if s["is_new"] and not is_new(s)}
     thin_got = [s for s in got["spikes"] if s.get("thin_base")]
-    assert {(s["branch"], s["menu"]) for s in thin_got} == thin_want
+    # a thin row is one of those old is_new rows that also clears the threshold (or has no baseline)
+    assert {(s["branch"], s["menu"]) for s in thin_got} <= thin_old
+    assert all(s["x"] is None or s["x"] >= want["threshold"] for s in thin_got)
     assert all(s["is_new"] is False and s["today"] >= 20 for s in thin_got)
     rest = [s for s in got["spikes"] if not s.get("thin_base")]
     exp = {**want, "spikes": keep, "count": len(keep) + len(thin_got)} if want.get("date") else want
@@ -378,6 +380,10 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
         if d in (dt.date(2026, 7, 1), dt.date(2026, 8, 20)):
             p[6] = 25                                            # เมนูใหม่น้อย: old, no baseline sale at all
             p[2] = 1 if d.month == 7 else 19                     # ซาชิมิ: old, thin, 19 plates < 20 -> not listed
+        if d == dt.date(2026, 7, 1) or dt.date(2026, 8, 6) <= d <= dt.date(2026, 8, 8):
+            p[3] = 4                                             # เมนูใหม่ (sku 3): old, thin, 3 days x 4 = 12 -> 0.57 a day
+        if d == dt.date(2026, 8, 20):
+            p[3] = 22
         return p
     con = _db(plan)
     old = _day_reference(con, date="2026-08-20")
@@ -389,6 +395,13 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
     assert _row(r, "เมนูใหม่น้อย") == {"branch": "สาขาทดสอบ", "menu": "เมนูใหม่น้อย", "today": 25, "avg": 0.0, "x": None,
                                         "pct": None, "excess": 25, "is_new": False, "thin_base": True}
     assert _row(r, "ซาชิมิ") is None and r["new_menus"] == []
+    assert _row(r, "เมนูใหม่")["x"] == 38.5                      # thin, 22 plates vs 0.57: listed (>= 1.5x)
+    # thin with a baseline but under 1.5x: not listed (the same threshold as every spike)
+    r3 = _call(con, monkeypatch, date="2026-08-20", threshold=50.0)
+    assert _row(r3, "เมนูใหม่") is None and _row(r3, "เมนูเล็ก") is not None   # x 38.5 < 50, x 105 >= 50
+    assert _row(r3, "เมนูใหม่น้อย")["x"] is None                 # no baseline: listed from 20 plates, x "—"
+    r3 = _call(con, monkeypatch, date="2026-08-20", threshold=200.0)
+    assert _row(r3, "เมนูเล็ก") is None and _row(r3, "เมนูใหม่น้อย") is not None
     # week of 17 Aug (to Thu 20): weekday-fair "ปกติ" = Mon 2/3 + Wed 2/3 = 1.33 plates
     r = _call(con, monkeypatch, period="week", date="2026-08-20")
     s = _row(r, "เมนูเล็ก")
