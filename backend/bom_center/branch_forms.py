@@ -36,7 +36,7 @@ TXT = {
     "dup_code": "{name}: รหัสซ้ำในไฟล์",
     "unknown_code": "ไม่พบรหัส {code} ในรายการของสาขานี้",
     "bad_reason": "{name}: สาเหตุ “{value}” ไม่อยู่ในรายการ",
-    "ord_note_tail": "กรอกเฉพาะช่องสั่ง เหตุผล และหมายเหตุ · ห้ามแก้รหัส",
+    "ord_note_tail": "ช่องสั่งใส่จำนวนที่ควรสั่งไว้แล้ว แก้ได้ · ช่องสั่งที่ว่าง = ไม่สั่ง · กรอกเฉพาะช่องสั่ง เหตุผล และหมายเหตุ · ห้ามแก้รหัส",
     "ord_other_round": "ไฟล์นี้เป็นของรอบหรือวันส่งอื่น ({file}) ไม่ตรงกับที่เลือก ({want})",
     "ord_unknown": "ไม่พบรหัส {code} ในรายการสั่งของรอบนี้",
     "ord_errors": "ไฟล์มี {n} แถวที่ต้องแก้ไข: {first}",          # also the slip and the receipt
@@ -415,7 +415,9 @@ def order_template(con, plan: dict, branch_id: int, rnd: str, delivery: date):
         no_sug = r.get("suggested", 0) is None
         sugg = None if no_sug else _q(r["order_units"] / f)
         last = r.get("last_order_qty") if no_sug else prev.get(r["code"])
-        _add(ws, [r["code"], r.get("short_name") or r["name"], _unit_label(r), sys_txt, sugg, None if last is None else _q(last / f), None, None, None],
+        # RV-M: the สั่ง box starts at the suggestion, as the app's box does; what the file shows is what the order holds (a blank box
+        # used to keep the suggestion out of sight: 4 lines typed sent 175)
+        _add(ws, [r["code"], r.get("short_name") or r["name"], _unit_label(r), sys_txt, sugg, None if last is None else _q(last / f), sugg, None, None],
              {6, 7, 8})
     _finish(wb, ws, ORDER_REASONS_SHEET, [(c["code"], c["label"]) for c in plan["reasons"]], "H", "เหตุผล")
     return wb, name
@@ -431,8 +433,10 @@ def read_order_file(raw: bytes) -> dict:
     for rno, r in body:
         code = str(_cell(head, r, "รหัส") or "").strip()
         q = _cell(head, r, "สั่ง")
-        if not code or _blank(q):
+        if not code:
             continue
+        if _blank(q):                                        # RV-M: a blank สั่ง box is "not ordered" (0), never "keep the suggestion"
+            q = 0
         try:
             rs = _reason_code(_cell(head, r, "เหตุผล"), pairs)
         except KeyError as e:
@@ -474,11 +478,12 @@ def import_order(con, plan: dict, branch_id: int, rnd: str, delivery: date, pars
         f = _factor(r)
         q = None if ln["confirmed_units"] is None else float(ln["confirmed_units"])
         lines.append({**ln, "confirmed_units": q if q is None or f == 1 else round(q * f * 1000) / 1000})
+    ordered = sum(1 for ln in lines if (ln["confirmed_units"] or 0) > 0)       # RV-M: the lines the order will hold, not the rows read
     res = {"dry_run": dry_run, "submit": bool(submit), "filename": filename, "branch_id": branch_id, "round": rnd,
-           "delivery": delivery.isoformat(), "lines": len(lines), "errors": errors, "ok": not errors and bool(lines),
+           "delivery": delivery.isoformat(), "lines": ordered, "errors": errors, "ok": not errors and bool(ordered),
            "fallback": plan.get("fallback"), "order_id": None, "status": None, "needs_reason": [], "needs_reason_names": [],
            "value": None, "late": 0, "cutoff_th": plan.get("cutoff_th"), "slip_today": None}
-    if errors or not lines:
+    if errors or not ordered:
         if not dry_run:
             raise ValueError(TXT["ord_errors"].format(n=len(errors), first=errors[0]["message"]) if errors else TXT["ord_none"])
         if not errors:

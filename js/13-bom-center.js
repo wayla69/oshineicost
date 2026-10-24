@@ -122,6 +122,9 @@ function _bmcStatusKind(id, t, ink) {
   const good = ink === 'var(--good-ink)' || t.charAt(0) === '✓';
   if (!bad && !warn && !good && (/(…|\.\.\.)$/.test(t) || /^กำลัง/.test(t))) return { inline: 'note' };    // progress (a plain ink: a warning that happens to end in "…" is still a warning)
   if (/^(✓ ?)?บันทึกร่าง|^ล้างร่าง/.test(t) || (good && /ร่างแล้ว/.test(t))) return { inline: 'note' };                  // a draft that was autosaved
+  // RV-M: the branch words renamed the draft (docs/BRANCH_WORDS.md: บันทึกไว้ก่อน); an autosave ("บันทึกไว้แล้ว 10:42", no ✓) popped a toast on
+  // every pause in typing and wiped the line beside the button. It is the inline note again, as the draft was.
+  if (!bad && /^บันทึกไว้(แล้ว|ก่อน) /.test(t)) return { inline: 'note' };
   if (/Summary$|Count$/.test(id || '')) return { inline: 'note' };                                                    // a counter of a table
   // PR-U1: a refusal of a save on the branch's pages (brn*) also stays in the status line - a toast vanishes, the branch must still read why
   if (bad) return { toast: 'error', inline: _BMC_STATUS_FIELD.test(t) || /^brn/.test(id || '') ? 'field' : 'clear' };
@@ -144,7 +147,7 @@ function _bmcStatus(id, msg, ink) {
   const h = uiToast(t, k.toast);
   // a save that succeeded (every one reports "✓ …"): หน้างาน says what comes next (16-supplyhome.js), inside the same toast
   // (an autosaved draft is not a step done: no next step until the person submits)
-  if (k.toast === 'success' && t.charAt(0) === '✓' && !/ร่าง/.test(t) && typeof shmAfterStatus === 'function') shmAfterStatus(id, h);
+  if (k.toast === 'success' && t.charAt(0) === '✓' && !/ร่าง|บันทึกไว้/.test(t) && typeof shmAfterStatus === 'function') shmAfterStatus(id, h);
 }
 // ── PR-M2: ONE status call for every save and download ──────────────────────────────────────────────────────────
 // bmcStatus(el, ok, text): el = an element or its id · ok true = "✓ …" success toast, false = "ไม่สำเร็จ: …" error toast,

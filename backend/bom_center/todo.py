@@ -669,11 +669,14 @@ def _week_items(con, branches: list, today: date, single: bool, centre: bool, no
         nearest = {}
         # PL3 (RV3 F19): a round whose cutoff is before the branch's first day is not "เลยเวลาส่ง · มีค่าปรับ" - the branch's first round is the next
         # one it can still make (started.effective_start; a branch with no activity yet starts today). Fallback: the nearest, as before.
-        from .started import effective_start
+        from .started import branch_start, effective_start
         first_day = effective_start(con, bid, today)
+        # RV-M: a branch with no activity yet starts TODAY, and a round whose cutoff passed earlier today is not its "เลยเวลาส่ง · มีค่าปรับ"
+        # either (หาดใหญ่ on its first morning was told so for แซลมอนสด): for it the first round is one whose cutoff it can still make
+        fresh = not branch_start(con, bid)
         all_it = next_deliveries(con, bid, today, horizon_days=14, now=now)        # 14: a round that is late today has its next delivery a week on
         for it in all_it:
-            if not (it["late"] and it["cycle_date"] < first_day):
+            if not (it["late"] and (it["cycle_date"] <= first_day if fresh else it["cycle_date"] < first_day)):
                 nearest.setdefault(it["round"], it)
         for it in all_it:
             nearest.setdefault(it["round"], it)

@@ -143,3 +143,18 @@ def test_the_slip_day_strip_of_a_new_branch_has_no_past_missing_days():
     src = _src("backend/routers/bom_center.py")
     body = src.split("def bc_issue_status(")[1].split("@router")[0]
     assert "effective_start" in body and "date_from or x[\"date\"] >= start" in body
+
+
+def test_a_new_branch_is_not_late_on_a_round_whose_cutoff_passed_earlier_on_its_first_day(newbranch):
+    """RV-M: หาดใหญ่ (no activity yet) was told "แซลมอนสด · เลยเวลาส่ง · มีค่าปรับ" on its first morning: the round's cutoff was earlier that
+    same day (cycle_date == first day, and the test was `<`). A branch that has started keeps that round late."""
+    from bom_center.forecast import next_deliveries
+    from bom_center import todo as TD
+    today = date(2026, 10, 24)                                   # แซลมอนสด: cutoff 24/10 13:15, the first morning is over at 15:00
+    now = datetime(2026, 10, 24, 15, 0, tzinfo=timezone(timedelta(hours=7)))
+    same_day = [i for i in next_deliveries(newbranch, 98, today, horizon_days=14, now=now) if i["late"] and i["cycle_date"] == today.isoformat()]
+    assert same_day, "the calendar has a round whose cutoff was earlier today"
+    for bid, name, expect_late in ((98, "สาขาใหม่PL3", False), (97, "สาขาเก่าPL3", True)):
+        d = TD.build(newbranch, "2026-10", None, name, today=today, viewer_role="branch", now=now)
+        rounds = [i for i in d["items"] if i["key"].startswith("order_due_")]
+        assert rounds and any(i["late"] for i in rounds) is expect_late, (name, [(i["key"], i["late"], i["cutoff_date"]) for i in rounds])

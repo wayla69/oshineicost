@@ -356,7 +356,7 @@ async function brnSave(submit, quiet) {
             <button onclick="brnSetSub('var')" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;font-size:14px;cursor:pointer;background:transparent;color:var(--text-primary)">ดูส่วนต่างก่อน →</button></div></div>` : '';
       await brnLoadSheet();
     } else {
-      _bmcStatus('brnStatus', `✓ บันทึกไว้ก่อน ${r.lines} รายการ ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`
+      _bmcStatus('brnStatus', `${quiet ? '' : '✓ '}บันทึกไว้ก่อน ${r.lines} รายการ ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`
         + (r.unconverted && r.unconverted.length ? ` · แปลงหน่วยไม่สำเร็จ ${r.unconverted.length} รายการ` : ''), r.unconverted && r.unconverted.length ? 'var(--amber-ink)' : 'var(--text-muted)');
     }
   } catch (e) { _bmcStatus('brnStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
@@ -1994,23 +1994,68 @@ async function brnLoadVarRecon(endId) {
 function brnRenderVarRecon() {
   const r = _brnRecon;
   if (!r) return;
-  document.getElementById('brnRcHead').innerHTML = isrReconHead(r);
+  // RV-M: in stock mode the รายเดือน tab (which held "แจ้งว่าบันทึกรับของครบ") is not offered, so the month close could not be finished:
+  // the สิ้นเดือน tab carries the same step for this period
+  const done = !!(r.status || {}).receipts_confirmed, eid = (r.period || {}).end_count_id;
+  const step = !_brnCanVariance() || !eid ? '' : `<div class="flex flex-wrap items-center gap-2 mt-2">${done
+    ? `<span class="text-xs" style="color:var(--text-muted)">แจ้งโดย ${esc(whoTh(r.status.receipts_confirmed_by))}</span> <button class="brn-link" onclick="brnConfirmRecv(true, ${Number(eid)})">ยกเลิกที่แจ้งไว้</button>`
+    : `<button class="brn-act brn-act-line" onclick="brnConfirmRecv(false, ${Number(eid)})">แจ้งว่าบันทึกรับของครบ</button>`}</div>`;
+  // RV-M: the month-end tab gives one reason to several ticked lines too (the รายเดือน tab had it; stock mode does not offer that tab)
+  const open = (r.rows || []).filter(x => x.needs_reason).map(x => x.code);
+  _brnRcSel = new Set([..._brnRcSel].filter(c => open.includes(c)));
+  const multi = open.length >= 2 && _brnCanVariance() ? `<div class="text-xs mt-2" style="color:var(--text-muted)">ติ๊กหน้ารายการหลายรายการ เพื่อใช้เหตุผลเดียวกัน</div>
+    <div class="brn-multi" id="brnRcMulti" style="display:${_brnRcSel.size ? '' : 'none'}"><div class="text-xs" style="color:var(--text-secondary)"><span id="brnRcSelN">เลือก ${_brnRcSel.size} รายการ</span></div>
+      <div class="brn-reason" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <select id="brnRcMultiR" aria-label="เหตุผลที่ใช้กับรายการที่เลือก" style="flex:1 1 150px;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;background:var(--bg-input);color:var(--text-primary)"><option value="">— เหตุผล —</option>${(r.reasons || []).map(c => `<option value="${esc(c.code)}">${esc(c.label)}</option>`).join('')}</select>
+        <input id="brnRcMultiN" placeholder="หมายเหตุ (จำเป็นเมื่อเลือก “อื่น ๆ”)" style="flex:1 1 120px;min-width:0;border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 6px;background:var(--bg-input);color:var(--text-primary)">
+        <button class="brn-act" onclick="brnRcMultiSave()">ใช้เหตุผลเดียวกันกับที่เลือก</button></div>
+      <div id="brnRcMultiE" class="brn-err" role="alert"></div></div>` : '';
+  document.getElementById('brnRcHead').innerHTML = isrReconHead(r) + step + multi;
   document.getElementById('brnRcList').innerHTML = isrReconTable(r, { all: document.getElementById('brnRcAll').checked, edit: _brnCanVariance(),
-    pfx: 'brnRc', save: 'brnSaveReason', qty: (v, x) => brnQtyUnit(v, x) });
+    pfx: 'brnRc', save: 'brnSaveReason', qty: (v, x) => brnQtyUnit(v, x), tick: 'brnRcSelect', picked: _brnRcSel });
+}
+let _brnRcSel = new Set();    // the month-end lines ticked for one reason
+function brnRcSelect(code, on) {
+  if (on) _brnRcSel.add(code); else _brnRcSel.delete(code);
+  const m = document.getElementById('brnRcMulti'), n = document.getElementById('brnRcSelN');
+  if (m) m.style.display = _brnRcSel.size ? '' : 'none';
+  if (n) n.textContent = `เลือก ${_brnRcSel.size} รายการ`;
+}
+async function brnRcMultiSave() {
+  const e = document.getElementById('brnRcMultiE');
+  const say = m => { if (e) e.textContent = m || ''; };
+  if (!_brnCanVariance()) { say(_BRN_READONLY); return; }
+  const reason = document.getElementById('brnRcMultiR').value, note = document.getElementById('brnRcMultiN').value.trim();
+  const codes = [..._brnRcSel];
+  if (!codes.length) { say('ติ๊กรายการที่ต้องการก่อน'); return; }
+  if (!reason) { say('เลือกเหตุผลก่อนกดบันทึก'); return; }
+  if (reason === 'other' && !note) { say('เหตุผล “อื่น ๆ” ต้องระบุคำอธิบาย'); return; }
+  const endId = _brnRecon.period.end_count_id;
+  let bad = 0, first = '';
+  for (const code of codes) {
+    try { await _brnPostReason(endId, code, reason, note); _brnRcSel.delete(code); }
+    catch (err) { bad++; first = first || String(err.message || err).slice(0, 160); }
+  }
+  await brnLoadVarRecon(endId);
+  if (bad) say(`ไม่สำเร็จ ${bad} รายการ: ${first}`);
+  else bmcStatus('brnRcStatus', true, `บันทึกเหตุผลแล้ว ${codes.length} รายการ`);
 }
 function brnVarReconXlsx() {
   if (!_brnRecon) return;
   bmcDownload(`${API}/api/bom-center/issue-reports/reconcile.xlsx?${_brnQS()}&end_count_id=${_brnRecon.period.end_count_id}`, 'เทียบของ.xlsx', 'brnRcStatus');
 }
-async function brnConfirmRecv(undo) {
-  if (!_brnCanVariance()) { _bmcStatus('brnVarStatus', _BRN_READONLY, 'var(--amber-ink)'); return; }
+async function brnConfirmRecv(undo, endId) {
+  const rc = endId != null;                             // RV-M: from the สิ้นเดือน tab (stock mode), for that tab's period
+  const st = rc ? 'brnRcStatus' : 'brnVarStatus';
+  if (!_brnCanVariance()) { _bmcStatus(st, _BRN_READONLY, 'var(--amber-ink)'); return; }
   if (!undo && !await uiConfirm('แจ้งว่าบันทึกรับของครบทุกใบของเดือนนี้แล้วใช่ไหม?', { title: 'แจ้งว่าบันทึกรับของครบ', ok: 'ใช่ ครบแล้ว', cancel: 'ยังไม่แจ้ง' })) return;
   try {
+    const eid = rc ? endId : _brnVar.end_count_id;
     await _bmcJson(`${API}/api/bom-center/variance/confirm-receipts?${_brnQS()}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ end_count_id: _brnVar.end_count_id, undo: !!undo }) });
-    await brnLoadVariance(_brnVar.end_count_id);
-    _bmcStatus('brnVarStatus', undo ? 'ยกเลิกแล้ว' : '✓ แจ้งว่าบันทึกรับของครบแล้ว', 'var(--good-ink)');
-  } catch (e) { _bmcStatus('brnVarStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
+      body: JSON.stringify({ end_count_id: eid, undo: !!undo }) });
+    if (rc) await brnLoadVarRecon(eid); else await brnLoadVariance(eid);
+    _bmcStatus(st, undo ? 'ยกเลิกแล้ว' : '✓ แจ้งว่าบันทึกรับของครบแล้ว', 'var(--good-ink)');
+  } catch (e) { _bmcStatus(st, 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 
 // ── สั่งของ (PR-A, changed by PR-J2) ───────────────────────────────────────────
@@ -3058,7 +3103,7 @@ function _brnFormPreOrd(d) {
   const p = _brnPlan || {};
   const slipOk = _brnSlipOk(p);
   const bad = d.errors.length > 0 || !d.lines;
-  const chips = [_bmcChip(`${d.lines} รายการ`, 'var(--navy-ink)')];
+  const chips = [_bmcChip(`${d.lines} รายการ${d.value != null ? ` · ฿${_bmcNum(d.value, 0)}` : ''}`, 'var(--navy-ink)')];   // RV-M: what the order will hold
   if (d.needs_reason_names && d.needs_reason_names.length) chips.push(_bmcChip(`ต้องระบุเหตุผล ${d.needs_reason_names.length} รายการก่อนส่ง`, 'var(--amber-ink)'));
   if (!slipOk) chips.push(_bmcChip('ต้องส่งใบตัดเบิกของวันนี้ก่อน', 'var(--amber-ink)'));
   if (p.late) chips.push(_bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)'));
@@ -3117,7 +3162,7 @@ async function brnFormApplyOrd(submit, ackLate) {
   if (!st || st.kind !== 'ord' || !p) return;
   if (submit && !ackLate) {
     if (!await uiConfirm((p.late ? _BRN_LATE_MSG(p.cutoff_th) + '\n' : '')
-        + `ส่งใบสั่งซื้อรอบส่งของ ${p.delivery_th}?\n${st.pre.lines} รายการ จากไฟล์\nแก้ไขได้จนกว่าคลังบันทึกจำนวนที่ส่ง`, { title: 'ส่งใบสั่งซื้อ', ok: _BRN_FORM.sendOrder, cancel: 'ยกเลิก' })) return;
+        + `ส่งใบสั่งซื้อรอบส่งของ ${p.delivery_th}?\n${st.pre.lines} รายการ${st.pre.value != null ? ` · ฿${_bmcNum(st.pre.value, 0)}` : ''}\nแก้ไขได้จนกว่าคลังบันทึกจำนวนที่ส่ง`, { title: 'ส่งใบสั่งซื้อ', ok: _BRN_FORM.sendOrder, cancel: 'ยกเลิก' })) return;
     ackLate = !!p.late;
   }
   _bmcStatus('brnFormStatus_ord', 'กำลังบันทึก…', 'var(--text-muted)');

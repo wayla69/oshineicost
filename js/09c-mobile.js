@@ -249,7 +249,9 @@ const _PH_BRN_HINT = { issue: 'ทุกวัน', order: 'ก่อน 13:15 �
 function _phBranchHome() {
   const row = deptVisible().find(r => r.dept.key === 'brn');
   const tiles = row ? row.pages : [];
+  // RV-M: the branch home had no way to open ค้นหา (the centre's hero has the magnifier; the phone top bar is hidden here)
   return _phSubHead(pinnedBranchName() || 'สาขาของฉัน', lnchDateLabel(), 'brn', 'store')
+      .replace('</header>', `<button type="button" class="ph-hsearch" id="phBrnSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button></header>`)
     + `<section class="ph-body"><div class="ph-card ph-todo-card" aria-labelledby="phTodoH"><h2 class="ph-card-h" id="phTodoH">ต้องทำวันนี้</h2><div id="phTodoRows"><div class="ph-note">กำลังโหลด…</div></div></div>`
     + `<div class="ph-bigtiles">${tiles.map((x, n) => `<a href="#" class="ph-bigtile${n === tiles.length - 1 && tiles.length % 2 ? ' ph-span2' : ''}" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('brn',${x.i});return false">`
       + `<span class="ph-badge ph-badge-lg" style="--dk:var(--dept-brn-ink);--dt:var(--dept-brn-tint)">${_deptSvg(x.p.icon, 30)}</span><span class="ph-bigtile-n">${esc(x.p.label)}</span>`
