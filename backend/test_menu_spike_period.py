@@ -4,15 +4,21 @@
 - week / mtd bounds (Monday / the 1st -> the anchor, never past the last finished day);
 - the weekday-fair "ปกติ": a weekend-heavy menu is not flagged in a period that is mostly weekend;
 - custom range validation answers 400 in formal Thai;
-- the new-menu rule and the 5-plate floor.
+- the new-menu rule and the 5-plate floor;
+- the pure JS helper periodRange(kind, anchor) of the card (to be lifted into js/01-core.js).
 """
 import datetime as dt
+import json
 import sqlite3
+import subprocess
+import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
 from routers import sales
+from test_bom_center_batch2 import _fn, needs_node, NODE
 
 
 # ── a frozen copy of the day mode before PR-SP (the reference the day mode must still match) ──
@@ -262,3 +268,26 @@ def test_range_validation_answers_400_in_thai(client, params, word):
 def test_a_92_day_range_is_accepted(client):
     r = client.get("/api/sales/menu-spike", params={"period": "range", "date_from": "2026-03-04", "date_to": "2026-06-03"})
     assert r.status_code == 200 and r.json()["days"] == 92
+
+
+# ── 6. the card's pure period helper (js/07-home.js periodRange) ─────────────────────────────────
+@needs_node
+def test_period_range_helper():
+    src = (Path(__file__).resolve().parent.parent / "js" / "07-home.js").read_text(encoding="utf-8")
+    js = ("const _M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];\n"
+          "const fmtDateTh = s => `${+s.slice(8)} ${_M[+s.slice(5, 7) - 1]}`;\n" + _fn(src, "periodRange"))
+    cases = [["day", "2026-10-23"], ["week", "2026-10-23"], ["week", "2026-10-19"], ["mtd", "2026-10-23"],
+             ["range", {"from": "2026-09-28", "to": "2026-10-03"}], ["range", {"from": "2026-10-05", "to": "2026-10-01"}],
+             ["week", "bad"], ["year", "2026-10-23"]]
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+        f.write(js + f"\nconsole.log(JSON.stringify({json.dumps(cases, ensure_ascii=False)}.map(c => periodRange(c[0], c[1]))));")
+    try:
+        out = json.loads(subprocess.run([NODE, f.name], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    finally:
+        Path(f.name).unlink()
+    assert out[0] == {"from": "2026-10-23", "to": "2026-10-23", "days": 1, "label": "23 ต.ค."}
+    assert out[1] == {"from": "2026-10-19", "to": "2026-10-23", "days": 5, "label": "19–23 ต.ค."}   # Monday 19 Oct
+    assert out[2]["from"] == "2026-10-19" and out[2]["days"] == 1
+    assert out[3] == {"from": "2026-10-01", "to": "2026-10-23", "days": 23, "label": "1–23 ต.ค."}
+    assert out[4] == {"from": "2026-09-28", "to": "2026-10-03", "days": 6, "label": "28 ก.ย.–3 ต.ค."}
+    assert out[5] is None and out[6] is None and out[7] is None

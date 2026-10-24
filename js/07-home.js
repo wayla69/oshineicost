@@ -710,9 +710,37 @@ async function loadDailySales(force) {
   renderMenuSpike(d.focus);
 }
 
-// #5 menu-spike: which menus were abnormally high (qty), per branch. Period chips (PR-SP, owner 2026-10-24):
-// วันที่เลือก = the focus day vs its 21-day average · สัปดาห์นี้ / เดือนนี้ (MTD) = Monday / the 1st -> the focus day ·
-// กำหนดเอง = จาก–ถึง; every period is compared weekday-fair with the 3 weeks before it (backend _menu_spike_period).
+// periodRange(kind, anchor) -> { from, to, days, label } · pure (no DOM, no globals but fmtDateTh), kept here to be lifted
+// into js/01-core.js for the one period pattern of every sales figure (owner 2026-10-24).
+//   kind 'day'   anchor 'YYYY-MM-DD'            -> that day
+//   kind 'week'  anchor 'YYYY-MM-DD'            -> Monday of its week -> anchor (week to date)
+//   kind 'mtd'   anchor 'YYYY-MM-DD'            -> the 1st of its month -> anchor (month to date)
+//   kind 'range' anchor { from, to } (ISO days) -> as given
+// label: "23 ต.ค." · "20–23 ต.ค." · "28 ก.ย.–3 ต.ค."; null when the anchor is not a date.
+function periodRange(kind, anchor) {
+  const iso = d => d.toISOString().slice(0, 10);
+  const day = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? new Date(s + 'T00:00:00Z') : null);
+  let a, b;
+  if (kind === 'range') { a = day(anchor && anchor.from); b = day(anchor && anchor.to); }
+  else {
+    b = day(anchor);
+    if (!b) return null;
+    a = new Date(b.getTime());
+    if (kind === 'week') a.setUTCDate(a.getUTCDate() - ((a.getUTCDay() + 6) % 7));
+    else if (kind === 'mtd') a.setUTCDate(1);
+    else if (kind !== 'day') return null;
+  }
+  if (!a || !b || a > b) return null;
+  const from = iso(a), to = iso(b), days = Math.round((b.getTime() - a.getTime()) / 864e5) + 1;
+  const label = from === to ? fmtDateTh(to)
+    : from.slice(0, 7) === to.slice(0, 7) ? `${+from.slice(8)}–${fmtDateTh(to)}` : `${fmtDateTh(from)}–${fmtDateTh(to)}`;
+  return { from, to, days, label };
+}
+
+// #5 menu-spike: which menus were abnormally high (qty), per branch. Period chips (PR-SP, owner 2026-10-24), styled as the
+// page's gran-btn track so a shared period component can replace them: วัน = the focus day vs its 21-day average ·
+// สัปดาห์นี้ / เดือนนี้ = Monday / the 1st -> the focus day (to date) · กำหนดเอง = จาก–ถึง. A period is compared with
+// "ปกติ" (weekday-fair, the 3 weeks before it; backend _menu_spike_period), not with the previous period: a spike is vs normal.
 // Shows ALL items ≥1.5×; has its own branch picker; the chosen period is remembered on this device.
 let _spikeBranchesLoaded = false, _spikeFocus = null, _spikeSeq = 0, _spikeLast = null;
 const _SPIKE_LS = 'oshinei_spike_period';
@@ -731,13 +759,6 @@ function _spikeChips() {
   });
   const box = document.getElementById('spikeCustom');
   if (box) box.hidden = _spikeMode.m !== 'range';
-}
-// "23 ต.ค." · "20–23 ต.ค." · "28 ก.ย.–3 ต.ค."
-function _spikeRangeTh(a, b) {
-  if (!a) return '';
-  if (!b || a === b) return fmtDateTh(a);
-  const pa = a.split('-'), pb = b.split('-');
-  return pa[0] === pb[0] && pa[1] === pb[1] ? `${+pa[2]}–${fmtDateTh(b)}` : `${fmtDateTh(a)}–${fmtDateTh(b)}`;
 }
 function spikeSetMode(m) {
   if (!_SPIKE_MODES.includes(m)) return;
@@ -811,7 +832,10 @@ async function renderMenuSpike(focusDate) {
   _spikeLast = d;
   const per = !!d.period && d.period !== 'day';
   if (per && d.latest_day) { const f = document.getElementById('spikeFrom'), t = document.getElementById('spikeTo'); if (f) f.max = d.latest_day; if (t) t.max = d.latest_day; }
-  if (rangeEl) { const txt = per ? _spikeRangeTh(d.date_from, d.date_to) : (d.date ? fmtDateTh(d.date) : ''); rangeEl.textContent = txt; rangeEl.hidden = !txt; }
+  if (rangeEl) {
+    const pr = per ? periodRange('range', { from: d.date_from, to: d.date_to }) : periodRange('day', d.date);
+    const txt = pr ? pr.label : ''; rangeEl.textContent = txt; rangeEl.hidden = !txt;
+  }
   const sp = d.spikes || [];
   if (cntEl) cntEl.textContent = (d.count || 0) + ' รายการ' + ((d.count || 0) > sp.length ? ` (แสดง ${sp.length})` : '');
   if (!sp.length) { el.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่พบเมนูที่พุ่ง ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`; return; }
