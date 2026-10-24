@@ -63,7 +63,8 @@ async function loadCostCoverage() {
       <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div>
       ${sub ? `<div class="text-xs text-slate-400 mt-1">${esc(sub)}</div>` : ''}</div>`).join('');
   const defEl = document.getElementById('cov-definition');
-  if (defEl) defEl.textContent = d.definition || '';
+  // PR-MB: the definition of "มีต้นทุน" is behind a "?" (the line keeps only the button)
+  if (defEl) defEl.innerHTML = d.definition ? `ความหมายของต้นทุนครบ ${uiQ('cov:definition', 'ต้นทุนครบหมายถึงอะไร', `<p>${esc(d.definition)}</p>`)}` : '';
   const tr = d.monthly_trend || [];
   mkChart('cov-trend', {
     type:'line',
