@@ -2635,10 +2635,13 @@ function getPeriodKind() { return _gp.kind; }
 // getMonthTo, qp(), summaryParams(), _filterKey and TABS[].follow keep working until PP2/PP3 move each page onto periodRange.
 // The anchor is the last closed day with data (the coverage note's last day, never after yesterday on the Thai clock).
 // 3 / 6 / 12 เดือน · ทั้งหมด is a chart option (ช่วงกราฟ, getTrendParams), shown only where a trend chart reads it.
+// The bar's kind on a device that has not chosen one. 'year' (1 Jan -> the anchor) while pages still read selMonthFrom / selMonthTo, so
+// none shrinks from Jan -> latest to one month on deploy; PP3 switches it to 'month' once every page reads periodRange.
+const PERIOD_DEFAULT_KIND = 'year';
 const _GP_LS = 'oshinei_gperiod', _GP_WIN_LS = 'oshinei_chartwin';
 let _gp = (() => {
   try { const v = JSON.parse(localStorage.getItem(_GP_LS) || 'null'); if (v && ['week', 'month', 'year', 'range'].includes(v.kind)) return { kind: v.kind, pick: v.pick || '', from: v.from || '', to: v.to || '' }; } catch (e) { /* storage blocked */ }
-  return { kind: 'month', pick: '', from: '', to: '' };
+  return { kind: PERIOD_DEFAULT_KIND, pick: '', from: '', to: '' };
 })();
 let _gpChartWin = (() => { try { const v = localStorage.getItem(_GP_WIN_LS); if (['3', '6', '12', 'all', 'q', 'y'].includes(v || '')) return v; } catch (e) { /* storage blocked */ } return '12'; })();
 function _gpSave() { try { localStorage.setItem(_GP_LS, JSON.stringify(_gp)); localStorage.setItem(_GP_WIN_LS, _gpChartWin); } catch (e) { /* storage blocked */ } }

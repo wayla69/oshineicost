@@ -292,7 +292,7 @@ function ensureDesktopBooted(opts) {
     populateTargetMonths();
     try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
     try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
-    // PR-PP1: the period is the ONE period bar's (the current month to date unless this device chose another)
+    // PR-PP1: the period is the ONE period bar's (PERIOD_DEFAULT_KIND to date - year until PP3 - unless this device chose another)
     gPeriodWrite(); gPeriodRender();
     _desktopBooted = true;
     // PR-D1: the sidebar's department entries (js/18-launcher.js), then land: the department launcher on a desktop, the Daily Brief

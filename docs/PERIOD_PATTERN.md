@@ -50,7 +50,8 @@ pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the �
 - **Compatibility until PP2/PP3**: the bar writes the hidden `selMonthFrom` / `selMonthTo` / `selDateFrom` / `selDateTo`
   (`#gPeriodState`) and `currentGranularity` (week → weekly, กำหนดเอง → daily, month / year → monthly), so `getMonthFrom`,
   `getMonthTo`, `qp()`, `summaryParams()`, `_filterKey`, `onFilterChange` and `TABS[].follow` keep working unchanged.
-  The default moved from year-to-date (Jan … latest month) to the current month to date.
+  The default kind is the constant `PERIOD_DEFAULT_KIND = 'year'` (js/01-core.js): year to date, 1 Jan … the anchor, so every page
+  that still reads the month fields keeps showing Jan … latest as before. PP3 switches it to `'month'`. A device that chose a kind keeps it.
 - Phone: one sideways-scrolling row inside the folded tools, the period (stepper) first, 44 px targets.
 - API: `gPeriodGet()`, `gPeriodSet({kind, pick, from, to}, silent)`, `gPeriodResolve()` (a `periodRange` result),
   `gPeriodAnchor()`, `getPeriodKind()`; remembered on the device (`oshinei_gperiod`, `oshinei_chartwin`).
