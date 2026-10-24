@@ -103,14 +103,14 @@ function renderPnlTrend(monthly) {
 function renderPnlBillDistChain(dist) {
   const note = document.getElementById('pnlBillDistNote');
   if (!dist.buckets || dist.buckets.length === 0) {
-    if (note) note.textContent = 'Upload SKU costs to see estimated GP/bill distribution';
+    if (note) note.textContent = 'ยังไม่มีต้นทุนเมนู จึงยังประมาณ GP ต่อบิลไม่ได้';
     return;
   }
-  if (note) note.textContent = `Est. GP/bill · Margin rate used: ${dist.margin_pct_used}% · ${fmtN(dist.total_tx)} bills`;
+  if (note) note.textContent = `GP ต่อบิลโดยประมาณ · อัตรากำไรที่ใช้ ${dist.margin_pct_used}% · ${fmtN(dist.total_tx)} บิล`;
   mkChart('chartPnlBillDist', {
     type:'bar',
     data:{ labels: dist.buckets.map(b=>b.label), datasets:[{ label:'บิล', data:dist.buckets.map(b=>b.count), backgroundColor:'#7a66b8', borderRadius:3, borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' bills'}}},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},datalabels:{display:false},tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' บิล'}}},
       scales:{x:{ticks:{color:chartTheme().text}},y:{beginAtZero:true,ticks:{color:chartTheme().text}}} },
   });
 }
@@ -118,12 +118,12 @@ function renderPnlBillDistChain(dist) {
 function renderPnlBillDist(stats, isRevenue) {
   const note = document.getElementById('pnlBillDistNote');
   if (!stats || stats.tx_count === 0) {
-    if (note) note.textContent = 'No Easy POS transaction data for this period (available from May 2025)';
+    if (note) note.textContent = 'ช่วงนี้ยังไม่มีบิลจาก Easy POS (มีข้อมูลตั้งแต่ พ.ค. 2025)';
     return;
   }
   const buckets = isRevenue ? stats.buckets : stats.profit_buckets;
-  const label   = isRevenue ? 'Revenue/bill ' : 'Est. GP/bill ';
-  if (note) note.textContent = `${fmtN(stats.tx_count)} bills · Avg ${fmtN(stats.avg)} · Median ${fmtN(stats.p50)}${stats.margin_pct_used > 0 ? ' · Margin: '+stats.margin_pct_used+'%' : ''}`;
+  const label   = isRevenue ? 'รายได้ต่อบิล ' : 'GP ต่อบิล (ประมาณ) ';
+  if (note) note.textContent = `${fmtN(stats.tx_count)} บิล · เฉลี่ย ${fmtN(stats.avg)} · ค่ากลาง ${fmtN(stats.p50)}${stats.margin_pct_used > 0 ? ' · อัตรากำไร '+stats.margin_pct_used+'%' : ''}`;
   mkChart('chartPnlBillDist', {
     type:'bar',
     data:{ labels: buckets.map(b=>b.label+' '), datasets:[{ label, data:buckets.map(b=>b.count), backgroundColor:'#4a70b0', borderRadius:3, borderWidth:0 }] },

@@ -12,6 +12,15 @@ body :where(thead th, .wt th):not(.tbl-stick, .tbl-top60 th, .heatmap-table th, 
 body :is(:is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt):not(.heatmap-table) th,
          th[style*="background"]) { --th-ink: var(--text-secondary); }
 body thead th.tbl-stick, body table.tbl-wide thead .tbl-stick { color: var(--text-primary); }   /* a sticky first cell keeps the card fill (F30) */
+/* RV-M: a header's second line (.sub: the unit, "ต่อหัว") follows the header's own ink: on the band it stayed the muted grey of the card
+   (3.2:1 on the dark band of the Top 60 and เทียบเมนู tables) */
+body :is(thead th, .wt th) .sub { color: color-mix(in srgb, currentColor 82%, transparent); }
+/* RV-M: a row a page tints (an outlier cashier, a flagged bill: .bg-red-50 ...) stays light in dark mode (index.html, the light scopes) with
+   the light inks, but its sticky name cell painted the dark card under them (navy on dark, 1.6:1). The sticky cell takes its row's fill. */
+table.tbl-wide tbody tr:is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50,
+    .bg-fuchsia-50, .bg-yellow-50) > .tbl-stick,
+body.ph-on.ph-fit .ph-frame table tbody tr:is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50,
+    .bg-pink-50, .bg-fuchsia-50, .bg-yellow-50) > td:first-child { background: inherit; }
 
 /* ── text floor 12px on screen (RV3 F22): the sizes the earlier floors did not reach ───────────────────────────────────────────── */
 @media screen {
@@ -56,9 +65,15 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   body input[type="checkbox"]:checked:where(:not(.ph-frame *))::after { content: ''; position: absolute; left: 18px; top: 11px; width: 8px; height: 15px; border: solid var(--on-accent); border-width: 0 3px 3px 0; transform: rotate(45deg); }
   body input[type="radio"]:checked:where(:not(.ph-frame *))::after { content: ''; position: absolute; left: 17px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); }
   body :is(input[type="checkbox"], input[type="radio"]):disabled:where(:not(.ph-frame *)) { opacity: .5; cursor: not-allowed; }
-  /* the sticky first column of a table keeps the header band's colour under the white header ink (it was the card fill) */
-  .content-area table thead th:first-child { background: var(--accent); }
-  body.dark .content-area table thead th:first-child { background: #3a3590; }
+  /* the sticky first column of a table keeps the header band's colour under the white header ink (it was the card fill).
+     RV-M: only where the header IS the band (the tables of the white-ink rule at the top), and with the band's white ink: the sticky first
+     cell kept the --text-primary of the card fill, navy on the band (2:1 in light mode, on 12 pages in พอดีจอ); a table that keeps a flat
+     header (the Top 60 tables, heatmaps, the franchise tables, the supply tabs' flat tables, an inline fill) keeps its own fill and ink
+     (the franchise table's first head cell read 1.2:1). */
+  .content-area table thead th:first-child:not(.tbl-top60 th, .heatmap-table th, .frc-tbl th, [style*="background"],
+      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: var(--accent); color: #ffffff !important; }
+  body.dark .content-area table thead th:first-child:not(.tbl-top60 th, .heatmap-table th, .frc-tbl th, [style*="background"],
+      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: #3a3590; }
   body .ms-toggle { min-width: 44px !important; }
   body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn):where(:not(.ph-frame *)) { min-width: 44px; }
   #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }
@@ -119,4 +134,12 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   }
   /* a short button is still 44px wide (F8) */
   body :is(button, [role="button"], summary):where(:not(.ph-frame *)) { min-width: 44px; }
+  /* RV-M: 44px targets in แตะง่าย that the floor above does not reach: a clickable table row or cell (the branch rows of สรุปประจำวัน, the
+     heat-map branch names, the sortable heads of P&L), a clickable row built of divs (the branch rows of ส่วนลด, the bands of P&L ต่อบิล),
+     a file picker, and a link standing on its own (เสียงลูกค้า, เวลาปิดร้าน). Inside the พอดีจอ frame the desktop sizes stay. */
+  :where(body:not(.ph-fit)) .content-area :is(tr[onclick] > td, td[onclick], th[onclick]) { height: 44px; }
+  :where(body:not(.ph-fit)) .content-area :is(div, li)[onclick] { min-height: 44px; }
+  :where(body:not(.ph-fit)) .content-area input[type="file"] { min-height: 44px; }
+  :where(body:not(.ph-fit)) .content-area :is(a[href], a[onclick]):not(td a, p a, li a, .nav-item) { min-height: 44px; box-sizing: border-box; }
+  :where(body:not(.ph-fit)) .content-area :is(a.inline-block, a.fb-ghost) { display: inline-flex; align-items: center; }
 }

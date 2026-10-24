@@ -495,8 +495,10 @@ function renderMce2Table(col, dir) {
     const srcColor = src === 'bom' ? '#10b981' : src === 'sku_cost' ? '#f59e0b' : '#ef4444';
     const srcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${srcColor}20;color:${textInk(srcColor)}">${srcLabel}</span>`;
 
-    // FC% = cost / revenue * 100
-    const fcPct = r.revenue > 0 ? (r.cost / r.revenue * 100) : null;
+    // FC% = cost / revenue * 100. RV-M: a buffet item has almost no revenue of its own (a few ฿ of à-la-carte sales), so the ratio ran to
+    // 859,642 % - a number that reads as data and is not. Above 999 % the cell shows "—" (the cost columns still rank it).
+    const fcRaw = r.revenue > 0 ? (r.cost / r.revenue * 100) : null;
+    const fcPct = fcRaw != null && fcRaw <= 999 ? fcRaw : null;
     const fcColor = fcPct == null ? 'var(--text-muted)' : fcPct > 60 ? 'var(--bad-ink)' : fcPct > 40 ? '#f59e0b' : '#10b981';
     const fcCell = fcPct != null ? `<span style="color:${textInk(fcColor)}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
 

@@ -96,7 +96,8 @@ body .tskf-btn[aria-pressed="true"], body .lnch-tab[aria-pressed="true"], body .
   background: linear-gradient(135deg, var(--accent), #8a2aa8) !important; color: #ffffff !important; border-color: transparent !important; box-shadow: 0 5px 14px rgba(58,47,181,.38);
 }
 body.dark .ui-toast-act, body.dark .frc-dl, body.dark .period-preset.active, body.dark .gran-active, body.dark .tskf-btn[aria-pressed="true"],
-body.dark .lnch-tab[aria-pressed="true"], body.dark .ms-seg-on { background: linear-gradient(135deg, #7a6cf0, #c04fb0) !important; color: #10122e !important; box-shadow: none; }
+body.dark .lnch-tab[aria-pressed="true"], body.dark .ms-seg-on { background: linear-gradient(135deg, #8577f2, #cc62bd) !important; color: #10122e !important; box-shadow: none; }
+/* RV-M: the stops #7a6cf0 → #c04fb0 held the dark ink at 4.34:1 (every active chip of dark mode); #8577f2 → #cc62bd are 5.2:1 and up */
 body .tskf-btn, body .lnch-tab, body .period-preset, body .gran-btn, body .subtab-btn, body .ph-nav-i, body .preset-chip { font-weight: 700; border-radius: var(--r-btn); }
 body .tskf-btn, body .lnch-tab { border: 0; box-shadow: var(--shadow-card); }
 body .subtab-btn.active, body.dark .subtab-btn.active { background: var(--accent-soft); border-radius: var(--r-btn) var(--r-btn) 0 0; }
