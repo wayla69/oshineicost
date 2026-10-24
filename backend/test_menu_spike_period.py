@@ -5,7 +5,7 @@
 - the weekday-fair "ปกติ": a weekend-heavy menu is not flagged in a period that is mostly weekend;
 - custom range validation answers 400 in formal Thai;
 - the new-menu rule and the 5-plate floor;
-- the pure JS helper periodRange(kind, anchor) of the card (to be lifted into js/01-core.js).
+- the pure JS helper periodRange(kind, anchor) of the card (lifted into js/01-core.js by PR-PP1).
 """
 import datetime as dt
 import json
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from routers import sales
-from test_bom_center_batch2 import _fn, needs_node, NODE
+from test_bom_center_batch2 import needs_node, NODE
 
 
 # ── a frozen copy of the day mode before PR-SP (the reference the day mode must still match) ──
@@ -270,12 +270,13 @@ def test_a_92_day_range_is_accepted(client):
     assert r.status_code == 200 and r.json()["days"] == 92
 
 
-# ── 6. the card's pure period helper (js/07-home.js periodRange) ─────────────────────────────────
+# ── 6. the card's pure period helper: periodRange, lifted into js/01-core.js by PR-PP1 (its <period-core> block) ──
 @needs_node
 def test_period_range_helper():
-    src = (Path(__file__).resolve().parent.parent / "js" / "07-home.js").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parent.parent / "js" / "01-core.js").read_text(encoding="utf-8")
+    block = src[src.index("// <period-core>"):src.index("// </period-core>")]
     js = ("const _M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];\n"
-          "const fmtDateTh = s => `${+s.slice(8)} ${_M[+s.slice(5, 7) - 1]}`;\n" + _fn(src, "periodRange"))
+          "const fmtDateTh = s => `${+s.slice(8)} ${_M[+s.slice(5, 7) - 1]}`;\n" + block)
     cases = [["day", "2026-10-23"], ["week", "2026-10-23"], ["week", "2026-10-19"], ["mtd", "2026-10-23"],
              ["range", {"from": "2026-09-28", "to": "2026-10-03"}], ["range", {"from": "2026-10-05", "to": "2026-10-01"}],
              ["week", "bad"], ["year", "2026-10-23"]]
@@ -285,9 +286,12 @@ def test_period_range_helper():
         out = json.loads(subprocess.run([NODE, f.name], capture_output=True, text=True, encoding="utf-8", check=True).stdout)
     finally:
         Path(f.name).unlink()
-    assert out[0] == {"from": "2026-10-23", "to": "2026-10-23", "days": 1, "label": "23 ต.ค."}
-    assert out[1] == {"from": "2026-10-19", "to": "2026-10-23", "days": 5, "label": "19–23 ต.ค."}   # Monday 19 Oct
-    assert out[2]["from"] == "2026-10-19" and out[2]["days"] == 1
-    assert out[3] == {"from": "2026-10-01", "to": "2026-10-23", "days": 23, "label": "1–23 ต.ค."}
-    assert out[4] == {"from": "2026-09-28", "to": "2026-10-03", "days": 6, "label": "28 ก.ย.–3 ต.ค."}
-    assert out[5] is None and out[6] is None and out[7] is None
+    # the PR-SP fields are kept; PR-PP1 adds cur / prev / ly / complete / Thai labels beside them (backend/test_periods.py)
+    sp = [None if o is None else {k: o[k] for k in ("from", "to", "days", "label")} for o in out]
+    assert sp[0] == {"from": "2026-10-23", "to": "2026-10-23", "days": 1, "label": "23 ต.ค."}
+    assert sp[1] == {"from": "2026-10-19", "to": "2026-10-23", "days": 5, "label": "19–23 ต.ค."}   # Monday 19 Oct
+    assert sp[2]["from"] == "2026-10-19" and sp[2]["days"] == 1
+    assert sp[3] == {"from": "2026-10-01", "to": "2026-10-23", "days": 23, "label": "1–23 ต.ค."}
+    assert sp[4] == {"from": "2026-09-28", "to": "2026-10-03", "days": 6, "label": "28 ก.ย.–3 ต.ค."}
+    assert sp[5] is None and sp[6] is None
+    assert sp[7] == {"from": "2026-01-01", "to": "2026-10-23", "days": 296, "label": "1 ม.ค.–23 ต.ค."}   # PR-PP1: year is a kind now
