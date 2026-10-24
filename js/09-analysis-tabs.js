@@ -9,6 +9,7 @@ let _engData = [];
 let _engFilter = 'all';
 
 async function loadEngineering() {
+  periodHeadline('phd-engineering', 'engineering');   // PR-PP2
   const _fk = _filterKey(); if (_tabLastKey.engineering === _fk) return; _tabLastKey.engineering = _fk;
   const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
@@ -412,6 +413,7 @@ function setStaffByBranch(on) {
 }
 
 async function loadStaff() {
+  periodHeadline('phd-staff', 'staff');   // PR-PP2
   const _fk = _filterKey() + '|bb=' + _staffByBranch;
   if (_tabLastKey.staff === _fk) return; _tabLastKey.staff = _fk;
   const params = new URLSearchParams();
@@ -519,38 +521,31 @@ async function loadStaff() {
 // DISCOUNTS & LEAKAGE
 // ════════════════════════════════════════════════════════════════
 async function loadChildBuffet() {
-  const d = await api(`${API}/api/buffet/child${getBranch()?'?branch='+encodeURIComponent(getBranch()):''}`).catch(() => null);
+  // PR-PP2: follows the top bar's period (it ignored the global filter), to date when it is not finished, with
+  // เทียบช่วงก่อน + เทียบปีก่อน on the same days (never a part month against a whole one)
+  const d = await api(`${API}/api/buffet/child?${gPeriodQuery()}`).catch(() => null);
   if (!d || !d.by_branch) return;
-  const bb = d.by_branch;
-  const momChip = p => p == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
-
-  // Chain summary KPIs (latest vs prev from the trend)
+  const bb = d.by_branch, R = d.period, T = d.total || {};
   const tr = d.trend || [];
-  const last = tr[tr.length - 1], prev = tr.length >= 2 ? tr[tr.length - 2] : null;
-  const totCovers = bb.reduce((s, b) => s + (b.covers || 0), 0);
-  const totRev    = bb.reduce((s, b) => s + (b.revenue || 0), 0);
-  const totPrev   = bb.reduce((s, b) => s + (b.prev_covers || 0), 0);
-  const momCovers = totPrev > 0 ? (totCovers - totPrev) / totPrev * 100 : null;
-  const momRev    = (prev && prev.revenue > 0) ? ((last.revenue - prev.revenue) / prev.revenue * 100) : null;
+  const totCovers = T.covers || 0, totRev = T.revenue || 0;
   // % of buffet (chain): weighted by covers
   const wPct = bb.reduce((s, b) => s + (b.pct_of_buffet || 0) * (b.covers || 0), 0) / (totCovers || 1);
-  const kpi = (label, value, chip, accent, sub) =>
+  const kpi = (label, value, accent, sub) =>
     `<div class="card p-4" style="border-top:3px solid ${accent}">
-      <div class="flex items-center justify-between gap-2"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${label}</p>${chip||''}</div>
+      <p class="text-[11px] text-slate-500 uppercase tracking-wide">${label}</p>
       <p class="text-2xl font-bold" style="color:${textInk(accent)}">${value}</p>
       <p class="text-[11px] text-slate-400">${sub||''}</p></div>`;
   document.getElementById('childKpiRow').innerHTML =
-    kpi('covers เด็ก (เดือนล่าสุด)', fmtN(totCovers), momChip(momCovers), '#ec4899', `${d.latest_month||''} · เทียบ ${d.prev_month||'—'}`) +
-    kpi('รายได้บุฟเฟ่ต์เด็ก', fmt(totRev), momChip(momRev), '#7a66b8', 'เดือนล่าสุด (ex-VAT)') +
-    kpi('% ของบุฟเฟ่ต์', wPct.toFixed(1) + '%', '', '#0891b2', 'covers เด็ก ÷ covers บุฟเฟ่ต์รวม') +
-    kpi('สาขาที่มีเด็กมากสุด', bb[0] ? esc(bb[0].branch) : '—', '', '#f59e0b', bb[0] ? fmtN(bb[0].covers) + ' covers' : '');
+    periodKpi({ l: 'covers เด็ก', v: fmtN(totCovers), c: '#ec4899', cur: totCovers, prev: T.prev && T.prev.covers, ly: T.ly && T.ly.covers, range: R, sub: esc(periodSpan(R)) }) +
+    periodKpi({ l: 'รายได้บุฟเฟ่ต์เด็ก', v: fmt(totRev), c: '#7a66b8', cur: totRev, prev: T.prev && T.prev.revenue, ly: T.ly && T.ly.revenue, range: R, q: false, sub: 'ex-VAT' }) +
+    kpi('% ของบุฟเฟ่ต์', wPct.toFixed(1) + '%', '#0891b2', 'covers เด็ก ÷ covers บุฟเฟ่ต์รวม') +
+    kpi('สาขาที่มีเด็กมากสุด', bb[0] ? esc(bb[0].branch) : '—', '#f59e0b', bb[0] ? fmtN(bb[0].covers) + ' covers' : '');
 
   // YTD trend (current year only)
   const curYear = (d.latest_month || '').slice(0, 4);
   const ytd = tr.filter(t => (t.month || '').slice(0, 4) === curYear);
   const noteEl = document.getElementById('childTrendNote');
-  if (noteEl) noteEl.textContent = `รายเดือนปี ${curYear} · ${ytd.length} เดือน`;
+  if (noteEl) noteEl.textContent = `รายเดือนปี ${curYear} · ${ytd.length} เดือน${ytd.length && ytd[ytd.length - 1].partial ? ' · เดือนล่าสุดถึงวันที่ปิดยอดล่าสุด' : ''}`;
   mkChart('chartChildYtd', {
     type: 'line',
     data: {
@@ -575,18 +570,14 @@ async function loadChildBuffet() {
   });
 
   // Per-branch boxes (latest month)
-  document.getElementById('childBranchSub').textContent =
-    `${bb.length} สาขา · ${d.latest_month || ''}${d.prev_month ? ` · MoM เทียบ ${d.prev_month}` : ''}`;
-  document.getElementById('childBranchBoxes').innerHTML = bb.map(b => {
-    const c = (b.mom_pct == null) ? '#94a3b8' : b.mom_pct >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
-    return `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
+  document.getElementById('childBranchSub').innerHTML = `${bb.length} สาขา · ${esc(periodSpan(R))} ${periodQ(R)}`;
+  document.getElementById('childBranchBoxes').innerHTML = bb.map(b => `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:var(--pink-ink)">${fmtN(b.covers)}</p>
       <p class="text-[11px] text-slate-400 mt-0.5">covers เด็ก · ${b.pct_of_buffet != null ? b.pct_of_buffet.toFixed(1) + '% ของบุฟเฟ่ต์' : '—'}</p>
-      <p class="text-xs font-semibold mt-1" style="color:${textInk(c)}">${b.mom_pct == null ? '<span class="text-slate-400">ไม่มีเดือนก่อน</span>' : (b.mom_pct >= 0 ? '▲' : '▼') + ' ' + Math.abs(b.mom_pct).toFixed(1) + '% MoM'}</p>
+      <div class="mt-1">${periodCmpHtml(b.covers, b.prev_covers, b.ly_covers, { range: R, q: false })}</div>
       <p class="text-[11px] text-slate-400 mt-0.5">รายได้ ${fmt(b.revenue)}</p>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 }
 
 let DISC_REASON_DATA = [];
@@ -693,7 +684,9 @@ async function loadCouponSeries(params, gen) {
         + spikes.map(r => `${esc(r.name)} <b>▲${r.mom_pct.toFixed(0)}%</b> (${fmt(r.amount)})`).join(' · ');
     } else alertEl.classList.add('hidden');
   }
-  const momNote = d.mom ? ` · MoM ${d.mom.cur} vs ${d.mom.prev}` : '';
+  // PR-PP2: the month in progress is set against the same days (1..n) of last month and of the month a year back
+  const M = d.mom;
+  const momNote = M ? (M.to_date ? ` · ${M.label_th} เทียบ ${M.prev_label_th} · ${M.ly_label_th}` : ` · เทียบ ${fmtMonth(M.prev)} · ${fmtMonth(M.ly)}`) : '';
   if (note) note.textContent = `${fmtN(d.series_count || 0)} ชุด · ใช้ ${fmtN(d.total_uses || 0)} ครั้ง · รวม ${fmt(d.total_amount || 0)}${momNote}`;
   const top = s[0];
   cards.innerHTML = [
@@ -703,8 +696,9 @@ async function loadCouponSeries(params, gen) {
     { l: 'เฉลี่ย/ครั้ง', v: fmt(d.total_uses ? Math.round(d.total_amount / d.total_uses) : 0), s2: 'ต่อการใช้ 1 ครั้ง', c: '#10b981' },
   ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
-  const momCell = v => v == null ? '<span class="text-slate-300">—</span>'
-    : `<span style="color:${v === 0 ? 'var(--text-muted)' : (v > 0 ? 'var(--bad-ink)' : 'var(--good-ink)')};font-weight:600">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
+  // a discount: up = bad ink (periodPctDelta upGood false); เทียบช่วงก่อน on top, เทียบปีก่อน under it
+  const momCell = (v, y) => `<div>${periodPctDelta(v, { upGood: false, title: 'เทียบช่วงก่อน' })}</div>` +
+    `<div>${periodPctDelta(y, { upGood: false, title: 'เทียบปีก่อน' })}</div>`;
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
@@ -715,7 +709,7 @@ async function loadCouponSeries(params, gen) {
       <td class="num tabular font-semibold" style="color:var(--amber-ink)">${fmt(r.amount)}</td>
       <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
       <td class="num tabular">${r.pct}%</td>
-      <td class="num tabular">${momCell(r.mom_pct)}</td>
+      <td class="num tabular">${momCell(r.mom_pct, r.yoy_pct)}</td>
       <td style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
       <td class="text-slate-300">›</td>
     </tr>`;
@@ -1308,6 +1302,7 @@ async function openHourDetail(hour) {
 }
 
 async function loadTimeflow() {
+  periodHeadline('phd-timeflow', 'timeflow');   // PR-PP2
   const _fk = _filterKey() + '|' + _timeflowMetric; if (_tabLastKey.timeflow === _fk) return; _tabLastKey.timeflow = _fk;
   const params = new URLSearchParams({ metric: _timeflowMetric });
   if (getBranch())    params.set('branch', getBranch());

@@ -44,10 +44,13 @@ body .kpi-card.card::after, body .ms-kpi::after, body #home-decision-tiles > .ca
   background: rgba(255,255,255,.10); pointer-events: none;
 }
 body .kpi-card.card { container-type: inline-size; }
-body .kpi-card.card :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q),
-body .ms-kpi :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *),
+body .kpi-card.card :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .pcmp, .pcmp *),
+body .ms-kpi :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *, .pcmp, .pcmp *),
 body #tab-menuimpact .mi-kpi :is(p, span, div, b, strong, small):not(.pill, .pill *),
-body #home-decision-tiles > .card :is(p, span, div, b, strong, small):not(.pill, .pill *) { color: inherit !important; }
+body #home-decision-tiles > .card :is(p, span, div, b, strong, small):not(.pill, .pill *, .pcmp, .pcmp *) { color: inherit !important; }
+/* PR-PP2: the comparison chips (periodCmpHtml) on a gradient tile sit on the card colour, so their good / bad inks keep their contrast */
+body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp { background: var(--bg-card); border-color: transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.6); }
+body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp-q { background: rgba(255,255,255,.95); }
 body #home-decision-tiles > .card p.text-2xl { font-size: var(--kfs); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
 body .kpi-card.card .kpi-label, body .ms-kpi .lbl { font-weight: 700; opacity: .96; }
 body .kpi-card.card .kpi-value { font-size: clamp(26px, 15cqw, var(--kfs)); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }

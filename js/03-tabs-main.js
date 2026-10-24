@@ -660,7 +660,8 @@ async function renderExecSummary() {
   </div>`;
 }
 
-let _heroMtd = null;   // fair MTD-vs-MTD payload for the latest (partial) month
+let _heroMtd = null;   // fair MTD-vs-MTD payload for the latest (partial) month (the GP / COGS tiles until PR-PP3)
+let _heroPeriod = null;   // PR-PP2: /api/period/sales for the top bar's period (the sales tiles, the KPI cards, best / worst branch)
 function renderKpiHero(trendData, gpb, disc) {
   const wrap = document.getElementById('kpiHeroWrap');
   const el   = document.getElementById('kpiHero');
@@ -682,13 +683,19 @@ function renderKpiHero(trendData, gpb, disc) {
   const spark = (arr, color) => (typeof mkSparkline === 'function' && arr.length >= 2) ? mkSparkline(arr.slice(-6), color) : '';
   const sparkOf = field => t.map(r => r[field] || 0);
 
-  // Next-month revenue forecast — OLS on the monthly series (≥3 pts)
+  // Next-month revenue forecast — OLS on the monthly series (≥3 pts). PR-PP2: on COMPLETE months only — the month
+  // in progress (the month of the last closed day, not yet at its last day) would pull the line down.
+  const _anc = (typeof gPeriodAnchor === 'function') ? gPeriodAnchor() : '';
+  const _partialLast = !!(_anc && last.period_month === _anc.slice(0, 7) && _anc < _lastDayOfMonth(_anc.slice(0, 7)));
+  const tFull = _partialLast ? t.slice(0, -1) : t;
   let fc = null, nextMo = null;
-  if (t.length >= 3) {
-    const ys = t.map(revOf), n = ys.length, xs = ys.map((_, i) => i);
+  if (tFull.length >= 3) {
+    const ys = tFull.map(revOf), n = ys.length, xs = ys.map((_, i) => i);
     const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
     let num=0, den=0; for (let i=0;i<n;i++){ num+=(xs[i]-mx)*(ys[i]-my); den+=(xs[i]-mx)**2; }
-    const slope = den?num/den:0; fc = Math.max(0, my + slope*(n - mx));
+    const slope = den?num/den:0;
+    const ahead = _partialLast ? 1 : 0;           // the month after the one in progress
+    fc = Math.max(0, my + slope*(n + ahead - mx));
     const [yy, mm] = (last.period_month||'').split('-').map(Number);
     if (yy && mm) nextMo = mm===12 ? `${yy+1}-01` : `${yy}-${String(mm+1).padStart(2,'0')}`;
   }
@@ -774,19 +781,29 @@ function renderKpiHero(trendData, gpb, disc) {
       `ของยอดขาย · ต่ำ = ดี · ${mtdSub}`, spark((disc&&disc.trend)?disc.trend.map(x=>x.rate||0):[], '#f43f5e'));
   }
 
+  // PR-PP2: the sales tiles follow the top bar's period (to date when it is not finished) with เทียบช่วงก่อน + เทียบปีก่อน
+  // (/api/period/sales). The GP / COGS tiles keep their month basis until PR-PP3 moves the cost figures.
+  const HP = (_heroPeriod && _heroPeriod.cur) ? _heroPeriod : null, HR = HP ? HP.period : null;
   const mEl = document.getElementById('kpiHeroMonth');
   if (mEl) {
-    if (mtd) {
+    if (HR) mEl.innerHTML = esc(periodSpan(HR)) + ' ' + periodQ(HR);
+    else if (mtd) {
       mEl.textContent = `${fmtMonth(mtd.cur_month)} (1–${mtd.cutoff_day}) · เทียบ ${fmtMonth(mtd.prev_month)} (1–${mtd.cutoff_day}) · เทียบช่วงวันเท่ากัน (MTD)`;
     } else {
       mEl.textContent = last.period_month ? fmtMonth(last.period_month) + (prev?` · เทียบ ${fmtMonth(prev.period_month)}`:'') : '';
     }
   }
+  const hpCmp = (f, unit, upGood) => HP ? periodCmpHtml(HP.cur[f], HP.prev && HP.prev[f], HP.ly && HP.ly[f], { unit, upGood, range: HR, q: false }) : '';
+  if (HP) {
+    discTile = tile('% ส่วนลด', HP.cur.discount_pct != null ? HP.cur.discount_pct.toFixed(1) + '%' : '—', '', '#f43f5e',
+      'ของยอดขาย · ต่ำ = ดี', spark(dtr ? dtr.map(x => x.rate || 0) : [], '#f43f5e'), hpCmp('discount_pct', 'pp', false));
+  }
 
-  function tile(label, value, deltaHtml, accent, sub, sparkHtml) {
+  function tile(label, value, deltaHtml, accent, sub, sparkHtml, cmpHtml) {
     return `<div class="card p-4" style="border-top:3px solid ${accent}">
       <div class="flex items-center justify-between gap-2"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${label}</p>${deltaHtml||''}</div>
       <p class="text-2xl font-bold" style="color:${textInk(accent)}">${value}</p>
+      ${cmpHtml ? `<div class="pkpi-cmp">${cmpHtml}</div>` : ''}
       <div class="flex items-end justify-between gap-2"><p class="text-[11px] text-slate-400">${sub||''}</p>${sparkHtml||''}</div>
     </div>`;
   }
@@ -803,18 +820,23 @@ function renderKpiHero(trendData, gpb, disc) {
   const phBadge   = badge(mom(phCur, phPrev));
   const phSub     = mtd ? `ต่อลูกค้า (ไม่รวม VAT) · ${mtdSub}` : 'ต่อลูกค้า (ไม่รวม VAT)';
   // Next-month forecast vs the most recent COMPLETE month (the partial latest month would be an unfair base)
-  const fcBaseObj = (mtd && prev) ? prev : last;
+  const fcBaseObj = _partialLast ? prev : last;
   const fcBase    = revOf(fcBaseObj);
   const fcBadge   = (fc != null && fcBase > 0) ? badge(mom(fc, fcBase)) : '';
   const fcSub     = (fc != null && nextMo)
-    ? `${fmtMonth(nextMo)} · เทียบ ${fcBaseObj ? fmtMonth(fcBaseObj.period_month) : 'เดือนก่อน'} (${fmt(fcBase)}) · linear trend`
-    : 'ต้องการ ≥3 เดือน';
-  el.innerHTML =
-    tile('รายได้ (ไม่รวม VAT)', fmt(mtd ? mtd.cur.revenue_ex_vat : revOf(last)), revBadge, '#4a70b0', revSub, spark(sparkOf('revenue'), '#4a70b0')) +
+    ? `${fmtMonth(nextMo)} · เทียบ ${fcBaseObj ? fmtMonth(fcBaseObj.period_month) : 'เดือนก่อน'} (${fmt(fcBase)}) · แนวโน้มเส้นตรง จากเดือนที่ปิดแล้ว`
+    : 'ต้องการ ≥3 เดือนที่ปิดแล้ว';
+  el.innerHTML = (HP
+    ? tile('รายได้ (ไม่รวม VAT)', fmt(HP.cur.revenue), '', '#4a70b0', 'ยอดขายสุทธิ', spark(sparkOf('revenue'), '#4a70b0'), hpCmp('revenue', '%', true))
+    : tile('รายได้ (ไม่รวม VAT)', fmt(mtd ? mtd.cur.revenue_ex_vat : revOf(last)), revBadge, '#4a70b0', revSub, spark(sparkOf('revenue'), '#4a70b0'))) +
     (canSeeCost() ? cogsTile + gpTile : '') +     // PL3: the cost and gross-profit tiles are for the roles that hold a cost or profit module
-    tile('ลูกค้า (Pax)', fmtN(mtd ? mtd.cur.customers : (last.customer_count||0)), custBadge, '#7a66b8', custSub, spark(sparkOf('customer_count'), '#7a66b8')) +
-    tile('จำนวนบิล', fmtN(mtd ? mtd.cur.bills : (last.tx_count||0)), billBadge, '#10b981', billSub, spark(sparkOf('tx_count'), '#10b981')) +
-    tile('ยอด/หัว', fmtN(Math.round(phCur)), phBadge, '#06b6d4', phSub, spark(t.map(phOf), '#06b6d4')) +
+    (HP
+      ? tile('ลูกค้า (Pax)', fmtN(HP.cur.customers), '', '#7a66b8', 'จำนวนลูกค้า', spark(sparkOf('customer_count'), '#7a66b8'), hpCmp('customers', '%', true)) +
+        tile('จำนวนบิล', fmtN(HP.cur.bills), '', '#10b981', 'ใบเสร็จ', spark(sparkOf('tx_count'), '#10b981'), hpCmp('bills', '%', true)) +
+        tile('ยอด/หัว', HP.cur.rev_per_head != null ? fmtN(Math.round(HP.cur.rev_per_head)) : '—', '', '#06b6d4', 'ต่อลูกค้า (ไม่รวม VAT)', spark(t.map(phOf), '#06b6d4'), hpCmp('rev_per_head', '%', true))
+      : tile('ลูกค้า (Pax)', fmtN(mtd ? mtd.cur.customers : (last.customer_count||0)), custBadge, '#7a66b8', custSub, spark(sparkOf('customer_count'), '#7a66b8')) +
+        tile('จำนวนบิล', fmtN(mtd ? mtd.cur.bills : (last.tx_count||0)), billBadge, '#10b981', billSub, spark(sparkOf('tx_count'), '#10b981')) +
+        tile('ยอด/หัว', fmtN(Math.round(phCur)), phBadge, '#06b6d4', phSub, spark(t.map(phOf), '#06b6d4'))) +
     discTile +
     tile('คาดเดือนถัดไป', fc!=null?fmt(fc):'—', fcBadge, '#f59e0b', fcSub);
   wrap.classList.remove('hidden');
@@ -829,17 +851,16 @@ function renderKpiHero(trendData, gpb, disc) {
 async function renderBranchHilite() {
   const hl = document.getElementById('kpiBranchHilite');
   if (!hl) return;
-  const p = new URLSearchParams({ gran: 'month' });
-  if (getBranch()) p.set('branch', getBranch());
-  if (getGroup())  p.set('group', getGroup());
-  let d;
-  try { d = await api(`${API}/api/sales/daily?${p}`); }
-  catch (e) { return; }
-  const isMtd  = !!d.mtd;
-  const curLbl = isMtd ? `MTD 1–${d.mtd_cutoff_day}` : 'เดือนล่าสุด';
-  const cmpLbl = !isMtd ? 'เทียบเดือนก่อน'
-    : d.mom_basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน'
-    : `เทียบ MTD เดือนก่อน (1–${d.mtd_cutoff_day} วันเท่ากัน)`;
+  // PR-PP2: the top bar's period (to date) against the same days of the period before (/api/period/sales by branch)
+  let hp = _heroPeriod;
+  if (!hp || !Array.isArray(hp.branches) || !hp.branches.length) {
+    try { hp = await api(`${API}/api/period/sales?${gPeriodQuery({ by_branch: 1 })}`); } catch (e) { return; }
+  }
+  const r = hp && hp.period;
+  const curLbl = r ? r.label_th : '';
+  const cmpLbl = r ? `เทียบ ${r.prev_label_th}` : '';
+  const d = { branches: (hp && hp.branches || []).map(b => ({ branch: b.branch, revenue: b.cur.revenue, mom_pct: b.rev_prev_pct,
+                                                                 mom_rev: b.prev ? b.prev.revenue : null })) };
   const bl = (d.branches || []).filter(b => (b.revenue || 0) > 0 && b.mom_pct != null);
   if (bl.length < 2) { hl.innerHTML = ''; return; }
   const best  = bl.reduce((a, b) => b.mom_pct > (a?.mom_pct ?? -1e9) ? b : a, null);
@@ -850,8 +871,8 @@ async function renderBranchHilite() {
     <p class="text-lg font-bold text-slate-800">${esc(b.branch)}</p>
     <p class="text-[11px] text-slate-400">${curLbl} ${fmt(b.revenue)} · ${cmpLbl} ${fmt(b.mom_rev || 0)}</p>
   </div>`;
-  hl.innerHTML = hcard('','สาขาเด่นเดือนนี้ (โตสุด MoM)', best, '#059669')
-               + hcard('⚠','ต้องดู (ตกสุด MoM)', worst, '#dc2626');
+  hl.innerHTML = hcard('','สาขาเด่น (โตสุด เทียบช่วงก่อน)', best, '#059669')
+               + hcard('⚠','ต้องดู (ตกสุด เทียบช่วงก่อน)', worst, '#dc2626');
 }
 
 async function loadSummaryKpis() {
@@ -868,15 +889,16 @@ async function loadSummaryKpis() {
       <div class="skeleton" style="height:10px;width:50%"></div>
     </div>`).join('');
 
-  let d, trendData, mtd = null;
+  let d, trendData, mtd = null, hp = null;
   try {
     const mtdP = new URLSearchParams();
     if (getBranch()) mtdP.set('branch', getBranch());
     if (getGroup()) mtdP.set('group', getGroup());
-    [d, trendData, mtd] = await Promise.all([
+    [d, trendData, mtd, hp] = await Promise.all([
       getJSON(`/api/summary${summaryParams()}`, { gen }),
       getJSON(`/api/sales/monthly${getTrendParams()}`, { gen }),
       api(`${API}/api/overall/latest-month-mtd?${mtdP}`).catch(() => null),
+      api(`${API}/api/period/sales?${gPeriodQuery({ by_branch: 1 })}`).catch(() => null),   // PR-PP2: the top bar's period
     ]);
   } catch(err) {
     if (err === STALE) return;   // a newer tab/filter load superseded this one
@@ -884,6 +906,7 @@ async function loadSummaryKpis() {
     throw err;
   }
   _heroMtd = mtd;   // fair MTD-vs-MTD comparison when the latest month is incomplete
+  _heroPeriod = (loadGen === gen) ? hp : _heroPeriod;
 
   renderTrendAnalysisBar(trendData);
   renderKpiHero(trendData);
@@ -919,17 +942,24 @@ async function loadSummaryKpis() {
   }
 
   // Use ex-VAT revenue throughout — แสดงรายได้ไม่รวม VAT
+  // PR-PP2: the cards read the top bar's period from /api/period/sales (to date through the last closed day, so the day
+  // still trading is never in them) and compare it with the same days of the period before - never a part month
+  // against a whole one. /api/summary stays the fallback.
+  const HP = (hp && hp.cur) ? hp : null, HR = HP ? HP.period : null;
+  if (HP) d = Object.assign({}, d, { revenue_ex_vat: HP.cur.revenue, revenue: HP.cur.revenue_inc_vat, tx_count: HP.cur.bills, customer_count: HP.cur.customers });
   const revShown = d.revenue_ex_vat ?? d.revenue;
-  const prevRevShown = prevMonth ? (prevMonth.revenue_ex_vat ?? prevMonth.revenue) : null;
+  const prevRevShown = HP ? (HP.prev && HP.prev.revenue) : prevMonth ? (prevMonth.revenue_ex_vat ?? prevMonth.revenue) : null;
   const perHead  = d.customer_count ? revShown / d.customer_count : null;
-  const revDelta = prevRevShown ? pctDelta(revShown, prevRevShown) : null;
-  const txDelta  = prevMonth ? pctDelta(d.tx_count,  prevMonth.tx_count)  : null;
+  const revDelta = HP ? periodPct(revShown, prevRevShown) : prevRevShown ? pctDelta(revShown, prevRevShown) : null;
+  const txDelta  = HP ? periodPct(d.tx_count, HP.prev && HP.prev.bills) : prevMonth ? pctDelta(d.tx_count,  prevMonth.tx_count)  : null;
+  const gCmp = (f, unit) => HP ? `<div class="pkpi-cmp">${periodCmpHtml(HP.cur[f], HP.prev && HP.prev[f], HP.ly && HP.ly[f], { unit, range: HR, q: false })}</div>` : '';
 
   const revClass = revDelta == null ? 'kpi-neu' : revDelta >= 0 ? 'kpi-up' : 'kpi-down';
   const txClass  = txDelta  == null ? 'kpi-neu' : txDelta  >= 0 ? 'kpi-up' : 'kpi-down';
   const _useDates = currentGranularity === 'daily' || currentGranularity === 'weekly';
   let _periodScope;
-  if (_useDates) {
+  if (HR) _periodScope = periodSpan(HR);
+  else if (_useDates) {
     const _df = document.getElementById('selDateFrom')?.value;
     const _dt = document.getElementById('selDateTo')?.value;
     _periodScope = (_df && _dt)
@@ -945,7 +975,7 @@ async function loadSummaryKpis() {
   document.getElementById('kpiGrid').innerHTML = `
     <div class="card kpi-card ${revClass} p-4">
       <div class="kpi-card-top"><p class="kpi-label">รายได้รวม <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p>${trendBadge(revDelta)}</div>
-      <p class="kpi-value" style="color:var(--accent)">${fmt(revShown)}</p>
+      <p class="kpi-value" style="color:var(--accent)">${fmt(revShown)}</p>${gCmp('revenue', '%')}
       <div class="kpi-card-bottom">
         <p class="kpi-sub">${_periodScope} · รวม VAT ${fmt(d.revenue)}</p>
         ${mkSparkline(revSpark, '#4a70b0')}
@@ -953,7 +983,7 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card ${txClass} p-4">
       <div class="kpi-card-top"><p class="kpi-label">จำนวนบิล</p>${trendBadge(txDelta)}</div>
-      <p class="kpi-value" style="color:var(--good-ink)">${fmtN(d.tx_count)}</p>
+      <p class="kpi-value" style="color:var(--good-ink)">${fmtN(d.tx_count)}</p>${gCmp('bills', '%')}
       <div class="kpi-card-bottom">
         <p class="kpi-sub">${fmtN(d.customer_count)} ลูกค้า</p>
         ${mkSparkline(txSpark, '#10b981')}
@@ -961,12 +991,12 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card kpi-neu p-4">
       <div class="kpi-card-top"><p class="kpi-label">ยอดบิลเฉลี่ย <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p></div>
-      <p class="kpi-value" style="color:var(--cyan-ink)">${fmtN(d.tx_count ? revShown / d.tx_count : 0)}</p>
+      <p class="kpi-value" style="color:var(--cyan-ink)">${fmtN(d.tx_count ? revShown / d.tx_count : 0)}</p>${gCmp('avg_ticket', '%')}
       <div class="kpi-card-bottom"><p class="kpi-sub">ต่อใบเสร็จ</p></div>
     </div>
     <div class="card kpi-card kpi-neu p-4">
       <div class="kpi-card-top"><p class="kpi-label">เฉลี่ย/ลูกค้า <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p></div>
-      <p class="kpi-value" style="color:var(--accent)">${perHead ? fmtN(Math.round(perHead)) : '—'}</p>
+      <p class="kpi-value" style="color:var(--accent)">${perHead ? fmtN(Math.round(perHead)) : '—'}</p>${gCmp('rev_per_head', '%')}
       <div class="kpi-card-bottom"><p class="kpi-sub">ต่อหัว</p></div>
     </div>
     <div class="card kpi-card kpi-neu p-4" id="marginCard">
@@ -1488,12 +1518,16 @@ function _moverRow(m, positive) {
   const name = (m.name || m.code || '').replace(/^\((?:A|B|EX|T)\)\s*/i, '').trim();
   const cat  = (m.category || '').replace(/^Oshinei\s+/i, '');
   const deltaTxt = (m.delta > 0 ? '+' : '') + fmtN(m.delta);
+  // PR-PP2: เทียบปีก่อน beside the change on the period before (— without a year-ago base)
+  const ly = m.delta_ly_pct;
+  const lyTxt = `<span class="text-xs" style="color:${ly == null ? 'var(--text-muted)' : ly >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}" title="เทียบปีก่อน">ปีก่อน ${ly == null ? '—' : (ly > 0 ? '+' : '') + ly.toFixed(0) + '%'}</span>`;
   return `<div class="flex items-center justify-between gap-3 py-0.5">
     <span class="min-w-0">
       <span class="text-sm text-slate-700 block truncate" title="${esc(m.name)}">${esc(name)}</span>
       <span class="text-[10px] text-slate-400">${esc(cat)}</span>
     </span>
     <span class="flex items-center gap-2 flex-shrink-0">
+      ${lyTxt}
       <span class="text-xs text-slate-400">${deltaTxt}</span>
       <span class="text-sm font-semibold" style="color:${textInk(color)};min-width:52px;text-align:right">${arrow} ${pct}</span>
     </span>
@@ -1558,9 +1592,11 @@ async function loadMovers() {
   }
   card.classList.remove('hidden');
   const fmtPer = p => (typeof fmtPeriod === 'function' ? fmtPeriod(p) : p);
-  const cp = data.current, pp = data.previous;
-  document.getElementById('moversPeriod').textContent =
-    `จำนวนที่ขาย (orders) · ${fmtPer(cp.from)}${cp.from !== cp.to ? '–' + fmtPer(cp.to) : ''} vs ${fmtPer(pp.from)}${pp.from !== pp.to ? '–' + fmtPer(pp.to) : ''}`;
+  const cp = data.current, pp = data.previous, td = data.to_date;
+  // PR-PP2: the month in progress is to date - say which days are set against which ("?" holds the windows)
+  document.getElementById('moversPeriod').innerHTML = td
+    ? `จำนวนที่ขาย (orders) · ${esc(td.label_th)} เทียบ ${esc(td.prev_label_th)} ${periodQ(Object.assign({ kind: 'range', complete: false }, td))}`
+    : esc(`จำนวนที่ขาย (orders) · ${fmtPer(cp.from)}${cp.from !== cp.to ? '–' + fmtPer(cp.to) : ''} vs ${fmtPer(pp.from)}${pp.from !== pp.to ? '–' + fmtPer(pp.to) : ''}`);
 
   const g = document.getElementById('moversGainers');
   const d = document.getElementById('moversDecliners');
@@ -1896,6 +1932,9 @@ function _momSpan(pct, goodUp = true) {
   return `<span style="color:${textInk(c)};font-weight:600">${pct>0?'▲':pct<0?'▼':''} ${Math.abs(pct).toFixed(1)}%</span>`;
 }
 function _top60MomLabel(d, prefix) {
+  // PR-PP2: the compared windows (this scope's last closed day) when the month is not finished
+  if (d && d.mom_basis === 'mtd' && Array.isArray(d.cmp_range) && Array.isArray(d.cmp_prev_range))
+    return `${prefix}${periodLabelTh(d.cmp_prev_range[0], d.cmp_prev_range[1])} (วันเท่ากัน)`;
   return (d && d.mom_basis === 'mtd') ? `${prefix}1–${d.mtd_cutoff_day} วันเท่ากัน (MTD)` : `${prefix}เดือนก่อน`;
 }
 
@@ -1924,7 +1963,9 @@ function _renderTop60Sales(d) {
     const pq = prevQtyOf(r);
     cum += r.qty_share_pct || 0;
     sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
-    const momCell = mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true);
+    // PR-PP2: เทียบช่วงก่อน on top, เทียบปีก่อน under it (— without a year-ago base)
+    const momCell = (mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true))
+      + `<div class="text-xs" title="เทียบปีก่อน">ปีก่อน ${_momSpan(r.qty_yoy_pct, true)}</div>`;
     const cogs = r.cogs || 0; sumCogs += cogs;
     cumCogs += r.cogs_share_pct || 0;                                // running Pareto of COGS share
     const costCell = cogs > 0 ? fmtN(cogs) : '<span class="text-slate-300">—</span>';  // TOTAL cost (BoM)

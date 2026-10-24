@@ -90,6 +90,42 @@ label_th(a, b)
 Delegating today: `routers/sales.py:_mtd_window`, `routers/reports.py:_mgt_month_bounds` and the day / week windows of
 `_mgt_window` (same outputs). `backend/to_date.py:to_date_ranges` (PR-OB, the anomaly box) is a thin alias over `resolve`.
 
+PR-PP2 adds the request side (still in `periods.py`; `windows` reads the database, the rest is pure):
+
+```python
+windows(con, kind, where, params, pick=None, date_from=None, date_to=None, anchor_day=None)
+    # resolve() on one scope's data: anchor = the scope's last closed day; + {anchor, first_day, has_prev, has_ly}
+    # (a base that starts before the scope's first day with bills is not compared). A pick after the anchor falls back
+    # to the anchor's own period. None without data.
+public(w)                 # the `period` object an endpoint returns (the JS periodCmpHtml reads it as its range)
+kind_of(g, default)       # 'daily' | 'weekly' | 'monthly' | 'yearly' | 'mtd' | a kind -> the kind
+covered(win, first_day)   # the data reaches back to the window's first day
+shift(kind, d, n)         # the first day of the period n steps away (the trailing trends)
+span_of(month_from, month_to, date_from, date_to)   # a free A/B period as days
+guard(spans, anchor, first_day, lead=('a', 'b'))    # the free compare pages: every period ends by the anchor; when the
+    # first lead period runs past it, it is to date (n days) and every other period is cut to its own first n days;
+    # a base before the data is listed in no_base (no %)
+```
+
+### The sales endpoints (PR-PP2)
+
+| Endpoint | Period | Comparisons |
+|---|---|---|
+| `/api/sales/daily?gran=day\|week\|month\|year&date=` | `windows` (date = any day of the period) | `period`, `total.prev` / `total.ly`, per branch `mom_pct` / `yoy_pct`; `mom_basis` = `to_date` \| `full` (the weekday-fair `dow` is gone here); the trend ends with the period to date (`partial`) |
+| `/api/period/sales?kind=&pick=&date_from=&date_to=&by_branch=1` (new) | `windows` | revenue · covers · bills · per head · per bill · discount % for cur / prev / ly (+ per branch); `change` in % (discount in จุด) |
+| `/api/period/headline?page=&kind=&pick=` (new) | `windows`; a month-grain source (`pos_customer_type_month`) shows the month in progress without comparison and runs a year over closed months (`grain_note`) | the headline figures of the pages that had no comparison (guest · buffetperf · timeflow · staff · engineering · cashctl · custtype · pricezone · cancelbill · opsreport); a POS table that does not reach a window's first day gives no value |
+| `/api/reports/management?period=yearly&year=` | the year to date (1 Jan .. the latest complete day) or a whole year | prev = ly = the year before, same days |
+| `/api/reports/management?period=weekly\|monthly` | the week / month in progress is offered to date (`weeks[0].to_date`, `months[0].mtd`); the default stays the latest finished one (`mtd=1` opens the month in progress) | the headline and the branch league compare to date on the calendar (`headline.mom_basis = 'to_date'`); **§3 pace keeps the weekday-fair baseline** (`pace.mom_basis = 'dow'`) |
+| `/api/reports/management/months` | as before | the month in progress `mom.basis = 'to_date'` (was `dow`) |
+| `/api/analysis/compare` · `/api/analysis/period_compare` · `/api/sales/menu-compare` | `guard`: either side in progress cuts both to the same days; the anchor is the last closed day | `to_date`, `n_days`, `windows` |
+| `/api/analysis/yoy` | the month of the anchor, not finished, is month to date on both sides | no raw % when the year-ago month starts before the data |
+| `/api/analysis/health` · `/api/menu/lifecycle` | closed months only | — |
+| `/api/sales/top_ordered` · `/api/sales/dish-movers` · `/api/analysis/coupon-series` | the month in progress to date from the day tables, on the scope's last closed day | + `qty_yoy_pct` / `delta_ly_pct` / `yoy_pct` |
+| `/api/buffet/child` | follows the top bar (`kind`, `pick`); it was the latest month whatever the filter | cur / prev / ly per branch and chain |
+| `/api/home/brief` (`mtd_revenue`), `/api/meta/data-window`, `/api/overall/latest-month-mtd` | end on the last closed day (the day still trading was in them) | — |
+
+Cost figures (the overall GP / COGS tiles, the home food-cost card, the report's cost card) keep their basis until PR-PP3.
+
 ### Frontend — `js/01-core.js`
 
 ```js
@@ -107,6 +143,26 @@ gPeriodGet(), gPeriodSet(v, silent), gPeriodResolve()       // the top bar's per
   `kinds: ['month', 'year']` — the week chip is not drawn.
 - `periodCmpHtml`: good / bad ink by direction and by whether up is good (`upGood: false` for a cost).
 - A page that follows the top bar declares `follow: { period: '<bar key>' }` in `TABS` (`_syncExtraPeriod`).
+  PR-PP2: a page mounts its bar on its first load and records the top bar's kind then, so only a later change of the
+  top bar moves it (a page keeps its own default, e.g. ยอดขายรายวัน on เดือน while the top bar opens on ปี).
+
+PR-PP2 helpers (`js/01-core.js`, after `periodCmpHtml`):
+
+```js
+periodOf(d)                     // the server's `period` object (or the older cur_range / prev_range / yoy_range trio)
+periodSpan(r)                   // '1–19 ต.ค. 2569 · ถึงวันที่ปิดยอดล่าสุด'
+periodQ(r, unit)                // the "?" alone (beside a table heading)
+periodKpi({l, v, c, cur, prev, ly, unit, upGood, range, q, sub})   // a KPI tile with its two chips
+periodDelta(cur, base, opt) / periodPctDelta(pct, opt)             // one compact change for a table cell
+periodHeadline(hostId, page, {kinds, kind, pick})                  // /api/period/headline as a chip track + tiles
+gPeriodQuery(extra)             // the top bar's period as kind + pick (or date_from / date_to) + the branch scope
+```
+
+Pages: ยอดขายรายวัน (`periodBar` วัน · สัปดาห์ · เดือน · ปี, `follow.period`); the overall hero, KPI cards and best /
+needs-attention branch, เทียบสาขา, บุฟเฟ่ต์เด็ก and the headline pages follow the top bar; รายงานผู้บริหาร keeps its
+own cover toggle (รายวัน · รายสัปดาห์ · รายเดือน · **รายปี**) and pickers. The menu-spike card keeps its own period
+chips (PR-SP; its "vs normal" baseline is not a period comparison). ความต้องการพิเศษ (`pos_modifier`) has no date
+column: all-time counts, no period.
 
 The block between `// <period-core>` and `// </period-core>` is pure; `backend/test_periods.py` runs it in node on the
 same date table as `periods.resolve` (parity).

@@ -3,32 +3,33 @@
   "from": "2026-06",
   "to": "2026-06"
  },
- "decliners": [
-  {
-   "category": "A La Carte",
-   "code": "A0001",
-   "delta": -20.0,
-   "delta_pct": -20.0,
-   "is_new": false,
-   "name": "(A) สเต๊ก",
-   "now": 80.0,
-   "was": 100.0
-  },
-  {
-   "category": "Sashimi",
-   "code": "B0001",
-   "delta": -200.0,
-   "delta_pct": -20.0,
-   "is_new": false,
-   "name": "(B) แซลมอน",
-   "now": 800.0,
-   "was": 1000.0
-  }
- ],
+ "decliners": [],
  "gainers": [],
  "metric": "qty",
  "previous": {
   "from": "2026-05",
   "to": "2026-05"
+ },
+ "to_date": {
+  "cur": [
+   "2026-06-01",
+   "2026-06-03"
+  ],
+  "days": 3,
+  "label_th": "1–3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-01",
+   "2025-06-03"
+  ],
+  "ly_label_th": "1–3 มิ.ย. 2568",
+  "prev": [
+   "2026-05-01",
+   "2026-05-03"
+  ],
+  "prev_label_th": "1–3 พ.ค. 2569"
+ },
+ "year_ago": {
+  "from": "2025-06-01",
+  "to": "2025-06-03"
  }
 }

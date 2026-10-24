@@ -1546,7 +1546,7 @@ def _mgt_month_bounds(_dt, _cal, sel, mtd_month, lc, latest_day):
     return cs, ce, ps, pe, ys, ye, partial
 
 
-def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, period, th, week, where):
+def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, period, th, week, where, year=None):
     # names this section hands on; None where a period path never assigns one
     ce = None
     comp_label = None
@@ -1567,7 +1567,10 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     ref_anchor = None
     selected_month = None
     selected_week = None
+    selected_year = None
     weeks = None
+    years = None
+    to_date = False
     ye = None
     ys = None
     from periods import resolve                # the one period pattern (docs/PERIOD_PATTERN.md)
@@ -1600,10 +1603,14 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
 
     # ---- period bounds + WoW-fair comparison window -------------------
     latest_day = _dt.date.fromisoformat(maxd)
+    # PR-PP2: a week / month / year is FINISHED only through the latest COMPLETE day (never the day still trading -
+    # MAX(sold_at) is today after the noon sync); one not finished is to date through that day (periods.resolve)
+    _lc = min(latest_day, _dt.date.fromisoformat(today_th) - _dt.timedelta(days=1))
     weeks: list = []
     selected_week = None
     months: list = []
     selected_month = None
+    years: list = []
     if period == "daily":
         _w = resolve("day", fdate)                # periods: prev = same weekday last week, ly = 364 days back
         cs = ce = fdate
@@ -1627,7 +1634,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
             f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
         for m in sorted((r["m"] for r in mrows if r["m"]), reverse=True):
             my, mm = int(m[:4]), int(m[5:7])
-            if _dt.date(my, mm, _cal.monthrange(my, mm)[1]) <= latest_day:
+            if _dt.date(my, mm, _cal.monthrange(my, mm)[1]) <= _lc:
                 months.append({"month": m, "label": f"{MON[mm-1]} {my}"})
             if len(months) >= 24:
                 break
@@ -1639,13 +1646,16 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
         # is clamped to the same elapsed days (previous month 1..d, same month
         # last year 1..d) so a part month is never judged against a full one.
         # The printed report never asks for it: a pack is for a closed month.
+        # PR-PP2: the month in progress is always offered (it was the phone's mtd=1 only), month to date through the
+        # latest complete day, every comparison clamped to the same elapsed days; the default stays the latest
+        # COMPLETE month (a printed pack is for a closed month) unless mtd=1 asks for it.
         mtd_month = None
-        if mtd:
-            _lc = min(latest_day, _dt.date.fromisoformat(today_th) - _dt.timedelta(days=1))
-            if _lc.strftime("%Y-%m") == maxd[:7] and not any(x["month"] == maxd[:7] for x in months) and _lc.day >= 1:
-                mtd_month = maxd[:7]
-                months.insert(0, {"month": mtd_month, "mtd": True, "through": _lc.isoformat(),
-                                  "label": f"{MON[_lc.month-1]} {_lc.year}" + (" (สะสม)" if th else " (MTD)")})
+        _lcm = _lc.strftime("%Y-%m")
+        if not any(x["month"] == _lcm for x in months) and _lc.isoformat() >= mind:
+            mtd_month = _lcm
+            months.insert(0, {"month": mtd_month, "mtd": True, "through": _lc.isoformat(),
+                              "label": f"{MON[_lc.month-1]} {_lc.year}" + (" (ถึงวันที่ " + str(_lc.day) + ")" if th else f" (to day {_lc.day})")})
+            if mtd or not any(not x.get("mtd") for x in months):
                 sel = mtd_month
         if month:
             m10 = month[:7]
@@ -1653,7 +1663,8 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
                 sel = m10
         sy, sm = int(sel[:4]), int(sel[5:7])
         cs, ce, ps, pe, _ys_m, _ye_m, partial = _mgt_month_bounds(
-            _dt, _cal, sel, mtd_month, (_lc if mtd else None), latest_day)
+            _dt, _cal, sel, mtd_month, _lc, latest_day)
+        to_date = bool(sel == mtd_month)
         days_in_period = (ce - cs).days + 1
         ref_anchor = ce
         selected_month = sel
@@ -1664,10 +1675,39 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
         else:
             label = f"{MON[sm-1]} {sy}" + (f" (1–{ce.day})" if sel == mtd_month else "")
             comp_label = "previous month" + (f" (days 1–{ce.day})" if sel == mtd_month else "")
+    elif period == "yearly":
+        # PR-PP2: the calendar year - the year in progress to date through the latest complete day (1 Jan .. that
+        # day) against 1 Jan .. the same date a year back; a finished year whole against the whole year before.
+        yrows = con.execute(
+            f"SELECT DISTINCT strftime('%Y', st.sold_at) y FROM sales_transaction st "
+            f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
+        for y in sorted((r["y"] for r in yrows if r["y"]), reverse=True):
+            done = _dt.date(int(y), 12, 31) <= _lc
+            if not done and int(y) != _lc.year:
+                continue
+            years.append({"year": y, "to_date": not done, "through": None if done else _lc.isoformat(),
+                          "label": (f"ปี {y}" if th else f"Year {y}") + ("" if done else (f" (1 {MON[0]}–{_lc.day} {MON[_lc.month-1]})"))})
+        sel_y = years[0]["year"] if years else str(_lc.year)
+        if year and any(x["year"] == str(year)[:4] for x in years):
+            sel_y = str(year)[:4]
+        _w = resolve("year", _lc if int(sel_y) == _lc.year else _dt.date(int(sel_y), 12, 31), date_from=f"{sel_y}-01-01")
+        cs, ce, ps, pe = (_dt.date.fromisoformat(x) for x in (*_w["cur"], *_w["prev"]))
+        days_in_period = _w["days"]
+        partial = not _w["complete"]
+        to_date = partial
+        ref_anchor = ce
+        selected_year = sel_y
+        if th:
+            label = f"ปี {sel_y}" + (f" (1 {MON[0]}–{dlabel(ce)})" if partial else "")
+            comp_label = "ปีก่อน" + (" (ช่วงวันเดียวกัน)" if partial else "")
+        else:
+            label = f"Year {sel_y}" + (f" (1 {MON[0]} – {dlabel(ce)})" if partial else "")
+            comp_label = "previous year" + (" (same days)" if partial else "")
     else:
         # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
         # have data — most recent first, cap 26 — so the picker and the default
         # both come from real, finished weeks (never the current partial week).
+        # PR-PP2: plus the week in progress, to date (Mon .. the latest complete day), listed first.
         mon_expr = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
         monrows = con.execute(
             f"SELECT DISTINCT {mon_expr} mon FROM sales_transaction st "
@@ -1675,37 +1715,45 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
         for m in sorted((r["mon"] for r in monrows if r["mon"]), reverse=True):
             md = _dt.date.fromisoformat(m)
             sun = md + _dt.timedelta(days=6)
-            if sun <= latest_day:
+            if sun <= _lc:
                 weeks.append({"start": m, "end": sun.isoformat(),
                               "label": f"{dlabel(md)} – {dlabel(sun)}"})
             if len(weeks) >= 26:
                 break
         # Default = most recent completed week WITH data; fall back to the calendar
         # week before the latest day if there is no fully-completed week yet.
-        cur_mon = latest_day - _dt.timedelta(days=latest_day.weekday())
+        cur_mon = _lc - _dt.timedelta(days=_lc.weekday())
         default_mon = (_dt.date.fromisoformat(weeks[0]["start"]) if weeks
                        else cur_mon - _dt.timedelta(days=7))
+        wtd = (cur_mon + _dt.timedelta(days=6)) > _lc and cur_mon.isoformat() >= mind
+        if wtd:
+            weeks.insert(0, {"start": cur_mon.isoformat(), "end": _lc.isoformat(), "to_date": True,
+                             "label": f"{dlabel(cur_mon)} – {dlabel(_lc)}" + (" (ถึงวันที่)" if th else " (to date)")})
         sel_mon = default_mon
         if week:
             try:
                 wd = _dt.date.fromisoformat(week[:10])
                 cand = wd - _dt.timedelta(days=wd.weekday())          # snap to that week's Monday
-                if (cand + _dt.timedelta(days=6)) <= latest_day:      # never an incomplete week
-                    sel_mon = cand
+                if (cand + _dt.timedelta(days=6)) <= _lc or (wtd and cand == cur_mon):
+                    sel_mon = cand                                    # a finished week, or the week to date
             except Exception:
                 pass
-        _w = resolve("week", sel_mon + _dt.timedelta(days=6))   # a closed week, whole (periods)
+        if wtd and sel_mon == cur_mon:
+            _w = resolve("week", _lc, date_from=cur_mon)            # Mon .. the latest complete day, same weekdays back
+        else:
+            _w = resolve("week", sel_mon + _dt.timedelta(days=6))   # a closed week, whole (periods)
         cs, ce, ps, pe = (_dt.date.fromisoformat(x) for x in (*_w["cur"], *_w["prev"]))
-        days_in_period = 7
-        partial = False
+        days_in_period = _w["days"]
+        partial = not _w["complete"]
+        to_date = partial
         ref_anchor = ce
         selected_week = cs.isoformat()
         if th:
-            label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)} (จ.–อา.)"
-            comp_label = "สัปดาห์ก่อนหน้า (จ.–อา.)"
+            label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)}" + (" (ถึงวันที่)" if partial else " (จ.–อา.)")
+            comp_label = "ช่วงเดียวกันสัปดาห์ก่อน" if partial else "สัปดาห์ก่อนหน้า (จ.–อา.)"
         else:
-            label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
-            comp_label = "previous week (Mon–Sun)"
+            label = f"Week of {dlabel(cs)} – {dlabel(ce)}" + (" (to date)" if partial else " (Mon–Sun)")
+            comp_label = "the same days last week" if partial else "previous week (Mon–Sun)"
     has_prev = ps.isoformat() >= mind
     # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
     # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
@@ -1718,7 +1766,7 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     else:
         ys, ye = (_dt.date.fromisoformat(x) for x in _w["ly"])
     has_yoy = ys.isoformat() >= mind
-    return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "is_mtd": is_mtd, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "weeks": weeks, "ye": ye, "ys": ys}
+    return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "is_mtd": is_mtd, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "selected_year": selected_year, "to_date": to_date, "weeks": weeks, "years": years, "ye": ye, "ys": ys}
 
 
 def _mgt_agg(con, where, params, s, e):
@@ -1805,23 +1853,10 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, is_mtd=False, params, pct, 
         headline["rph_wow_pct"]   = pct(cur["rev_per_head"] or 0, prev["rev_per_head"]) if prev["rev_per_head"] else None
         headline["ticket_wow_pct"]= pct(cur["avg_ticket"] or 0, prev["avg_ticket"]) if prev["avg_ticket"] else None
         if is_mtd:
-            # a month in progress is compared on the weekday-fair baseline (the owner's rule,
-            # report §3), never against the same raw elapsed days of last month - the phone
-            # chips, the §3 line, the daily tile and the month-by-month series then all agree
-            headline["mom_basis"] = "same_days"
-            base = _mgt_dow_baseline(con, where, params, ps.strftime("%Y-%m"), cs, ce.day)
-            if base:
-                headline["mom_basis"] = "dow"
-                headline["baseline"] = base
-                c_rph = (cur["revenue"] / cur["customers"]) if cur["customers"] else 0
-                b_rph = (base["revenue"] / base["customers"]) if base["customers"] else None
-                c_tk = (cur["revenue"] / cur["bills"]) if cur["bills"] else 0
-                b_tk = (base["revenue"] / base["bills"]) if base["bills"] else None
-                headline["rev_wow_pct"]   = pct(cur["revenue"], base["revenue"])
-                headline["cust_wow_pct"]  = pct(cur["customers"], base["customers"])
-                headline["bills_wow_pct"] = pct(cur["bills"], base["bills"])
-                headline["rph_wow_pct"]   = pct(c_rph, b_rph) if b_rph else None
-                headline["ticket_wow_pct"] = pct(c_tk, b_tk) if b_tk else None
+            # PR-PP2 (owner 2026-10-24, docs/PERIOD_PATTERN.md): a month in progress is compared to date on the
+            # calendar - days 1..n against days 1..n of last month (the windows above, periods.resolve). The
+            # weekday-fair baseline stays on the report's §3 pace only (pace.mom_basis = 'dow').
+            headline["mom_basis"] = "to_date"
     yoy = agg(ys, ye) if has_yoy else None
     if yoy:
         headline["yoy"] = yoy
@@ -1857,9 +1892,8 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
     tgt_b = ({t["branch"]: t for t in targets_for_month(con, cs.strftime("%Y-%m"), branch, group)}
              if period == "monthly" else {})
     tot_rev = sum((r["rev"] or 0) for r in cur_b.values()) or 0
-    # month in progress: each branch against its own weekday-fair baseline (same rule as the headline)
-    dow_b = (_mgt_dow_baseline(con, where, params, ps.strftime("%Y-%m"), cs, ce.day, by_branch=True)
-             if (is_mtd and has_prev) else None)
+    # PR-PP2: a month in progress compares each branch to date on the calendar, as the headline does
+    dow_b = None
     branches = []
     for nm, r in cur_b.items():
         rev = r["rev"] or 0; cust = r["cust"] or 0
@@ -2803,11 +2837,12 @@ def _mgt_trend(con, *, MON, _dt, ce, cs, dlabel, params, period, where):
             d = cs - _dt.timedelta(days=i)
             trend.append({"label": dlabel(d), "start": d.isoformat(),
                           "revenue": rev_by.get(d.isoformat(), 0)})
-    elif period == "monthly":
-        mlist = []                       # 8 calendar months ending at the selected one
+    elif period in ("monthly", "yearly"):
+        mlist = []                       # 8 calendar months ending at the selected one (yearly: at its last month)
+        _m0 = ce if period == "yearly" else cs
         for i in range(7, -1, -1):
-            mi = (cs.month - 1 - i) % 12 + 1
-            yi = cs.year + (cs.month - 1 - i - (mi - 1)) // 12
+            mi = (_m0.month - 1 - i) % 12 + 1
+            yi = _m0.year + (_m0.month - 1 - i - (mi - 1)) // 12
             mlist.append((yi, mi))
         start = _dt.date(mlist[0][0], mlist[0][1], 1)
         rows = con.execute(f"""
@@ -3019,16 +3054,19 @@ def _mgt_payment(con, *, branch, ce, cs, group, has_prev, pe, ps):
 
 @ttl_cache
 def report_management(
-    period: str = Query("daily"),            # 'daily' | 'weekly' | 'monthly'
+    period: str = Query("daily"),            # 'daily' | 'weekly' | 'monthly' | 'yearly' (PR-PP2)
     date:   Optional[str] = Query(None),     # focus day (default = latest day in data)
     week:   Optional[str] = Query(None),     # weekly: any date in the wanted FULL week (default = last completed week)
     month:  Optional[str] = Query(None),     # monthly: 'YYYY-MM' (default = last COMPLETE month)
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),               # 'en' | 'th' — language for labels, comp_label & action items
-    mtd:    Optional[str] = Query(None),     # monthly: '1' also offers the in-progress month, month-to-date (the phone)
+    mtd:    Optional[str] = Query(None),     # monthly: '1' opens on the in-progress month, month-to-date (the phone)
+    year:   Optional[str] = Query(None),     # yearly: 'YYYY' (default = the year of the latest complete day, to date)
 ):
-    """One-glance management summary for a day, a COMPLETE week or a COMPLETE month.
+    """One-glance management summary for a day, a week, a month or a year (PR-PP2: the week / month / year in
+    progress is offered to date through the latest complete day, compared with the same days of the period before
+    and of the year before; the default week and month stay the latest COMPLETE ones).
 
     Mirrors the proven idioms used across the dashboard so the numbers tie out:
       · revenue = SUM(total_inc_vat)/1.07 − SUM(service_charge)  (ex-VAT AND ex-service-charge)
@@ -3041,7 +3079,7 @@ def report_management(
     and the chosen one (`selected_week`/`selected_month`), so the same simple
     presentation serves the Daily, Weekly AND Monthly report."""
     import datetime as _dt, calendar as _cal
-    if period not in ("daily", "weekly", "monthly"):
+    if period not in ("daily", "weekly", "monthly", "yearly"):
         period = "daily"
     th = (lang == "th")          # localise labels / comp_label / action items
     if th:
@@ -3066,9 +3104,9 @@ def report_management(
     # which is passed straight back to the caller. The sections are the same
     # statements this function used to hold inline, so their output is
     # unchanged — backend/test_golden.py pins that for all three periods.
-    ctx = {"DOW": DOW, "MON": MON, "_cal": _cal, "_dt": _dt, "base": base, "branch": branch, "date": date, "dlabel": dlabel, "group": group, "lang": lang, "month": month, "mtd": (mtd in ("1", "true", "yes")), "params": params, "pct": pct, "period": period, "th": th, "week": week, "where": where}
+    ctx = {"DOW": DOW, "MON": MON, "_cal": _cal, "_dt": _dt, "base": base, "branch": branch, "date": date, "dlabel": dlabel, "group": group, "lang": lang, "month": month, "mtd": (mtd in ("1", "true", "yes")), "params": params, "pct": pct, "period": period, "th": th, "week": week, "where": where, "year": year}
     with get_db() as con:
-        out = _mgt_window(con, DOW=ctx.get("DOW"), MON=ctx.get("MON"), _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), date=ctx.get("date"), dlabel=ctx.get("dlabel"), month=ctx.get("month"), mtd=ctx.get("mtd"), params=ctx.get("params"), period=ctx.get("period"), th=ctx.get("th"), week=ctx.get("week"), where=ctx.get("where"))
+        out = _mgt_window(con, DOW=ctx.get("DOW"), MON=ctx.get("MON"), _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), date=ctx.get("date"), dlabel=ctx.get("dlabel"), month=ctx.get("month"), mtd=ctx.get("mtd"), params=ctx.get("params"), period=ctx.get("period"), th=ctx.get("th"), week=ctx.get("week"), where=ctx.get("where"), year=ctx.get("year"))
         if out.get("available") is False:
             return out
         ctx.update(out)
@@ -3136,8 +3174,8 @@ def report_management(
 
 
     # ---- auto-generated action items (localised, severity-ordered) -------
-    pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "สัปดาห์") if th
-             else ("day" if period == "daily" else "month" if period == "monthly" else "week"))
+    pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "ปี" if period == "yearly" else "สัปดาห์") if th
+             else ("day" if period == "daily" else "month" if period == "monthly" else "year" if period == "yearly" else "week"))
     actions = []
     if prev and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
         actions.append({"sev": "high",
@@ -3254,6 +3292,9 @@ def report_management(
         "weeks": weeks,
         "selected_month": selected_month,
         "months": months,
+        "selected_year": ctx.get("selected_year"),
+        "years": ctx.get("years") or [],
+        "to_date": bool(ctx.get("to_date")),        # PR-PP2: the period is not finished - to date, same days compared
         "days_in_period": days_in_period,
         "latest_day": maxd,
         "min_day": mind,
@@ -3325,11 +3366,12 @@ def report_management_route(
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),
     mtd:    Optional[str] = Query(None),
+    year:   Optional[str] = Query(None),
 ):
     """The management summary for the signed-in role: the cached report, minus the cost figures for a
     role that holds neither cost.analysis nor profit.pnl (see strip_management_cost)."""
     import auth as _auth
-    resp = report_management(period=period, date=date, week=week, month=month, branch=branch, group=group, lang=lang, mtd=mtd)
+    resp = report_management(period=period, date=date, week=week, month=month, branch=branch, group=group, lang=lang, mtd=mtd, year=year)
     if _auth.request_modules(request) & _MGT_COST_MODULES:
         return resp
     try:
@@ -3437,11 +3479,6 @@ def report_management_months(
             gp = round(rev - cost, 2)
             return round(gp / rev * 100, 1), gp, round(cost), src
 
-        def dow_baseline(prev_month, month_first, n_days):
-            """(revenue, covers) of the report's weekday-fair baseline (§3), or None."""
-            b = _mgt_dow_baseline(con, where, params, prev_month, month_first, n_days)
-            return (b["revenue"], b["customers"]) if b else None
-
         rows_out = []
         for sel in sel_months:
             cs, ce, ps, pe, ys, ye, partial = _mgt_month_bounds(_dt, _cal, sel, mtd_month, lc, latest_day)
@@ -3461,16 +3498,12 @@ def report_management_months(
                     mom["rev_per_head"] = (pct(cur["rev_per_head"] or 0, prev["rev_per_head"])
                                            if prev["rev_per_head"] else None)
                 else:
-                    mom["basis"] = "same_days"
+                    # PR-PP2: the month in progress to date on the calendar (days 1..n of last month), as the report
+                    # headline and the daily-sales tile; the weekday-fair baseline stays on the report's §3 pace
+                    mom["basis"] = "to_date"
                     b_rev, b_cust = prev["revenue"], prev["customers"]
                     b_rph = prev["rev_per_head"]
                     c_rph = cur["rev_per_head"] or 0
-                    dow = dow_baseline(ps.strftime("%Y-%m"), cs, ce.day)
-                    if dow:
-                        mom["basis"] = "dow"
-                        b_rev, b_cust = dow
-                        b_rph = (b_rev / b_cust) if b_cust else None
-                        c_rph = (cur["revenue"] / cur["customers"]) if cur["customers"] else 0
                     mom["revenue"] = pct(cur["revenue"], b_rev)
                     mom["customers"] = pct(cur["customers"], b_cust)
                     mom["rev_per_head"] = pct(c_rph, b_rph) if b_rph else None
@@ -3996,8 +4029,10 @@ def report_management_xlsx(
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),               # match the on-screen language
+    year:   Optional[str] = Query(None),     # PR-PP2: yearly
+    mtd:    Optional[str] = Query(None),
 ):
-    """Download the Daily/Weekly/Monthly Management Summary as a multi-sheet Excel
+    """Download the Daily/Weekly/Monthly/Yearly Management Summary as a multi-sheet Excel
     file. Reuses report_management() so the numbers match the on-screen report."""
     try:
         import openpyxl
@@ -4007,7 +4042,7 @@ def report_management_xlsx(
         raise HTTPException(status_code=500, detail="openpyxl not installed")
     # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
     resp = report_management(period=period, date=date, week=week, month=month,
-                             branch=branch, group=group, lang=lang)
+                             branch=branch, group=group, lang=lang, mtd=mtd, year=year)
     j = _json.loads(resp.body) if hasattr(resp, "body") else resp
     if not j.get("available"):
         raise HTTPException(status_code=404, detail="No sales data for this period")

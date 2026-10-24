@@ -2615,14 +2615,108 @@ function periodCmpHtml(cur, prev, ly, opt) {
   };
   const sameBase = !!r && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
   const html = (sameBase ? '' : chip('เทียบช่วงก่อน', prev, r ? r.prev_label_th : '')) + chip('เทียบปีก่อน', ly, r ? r.ly_label_th : '');
-  let q = '';
-  if (r && typeof uiQ === 'function') {
-    const txt = `<p>${e2(r.label_th)}${r.complete ? '' : ' (ถึงวันที่ปิดยอดล่าสุด)'}</p>` +
-      (sameBase ? '' : `<p><b>เทียบช่วงก่อน</b> · ${e2(r.prev_label_th)}</p>`) + `<p><b>เทียบปีก่อน</b> · ${e2(r.ly_label_th)}</p>` +
-      `<p>${unit === 'pp' ? 'สัดส่วนเทียบเป็นจุด' : 'เทียบเป็นร้อยละ'} · ช่วงที่ยังไม่จบเทียบจำนวนวันเท่ากัน · ไม่มีข้อมูลฐานแสดง —</p>`;
-    q = uiQ('pcmp:' + r.kind + ':' + r.cur.join('_') + ':' + unit, 'ช่วงที่เทียบ', txt, 'pcmp-q');
-  }
+  const q = (r && opt.q !== false) ? periodQ(r, unit) : '';
   return `<span class="pcmp-row">${html}${q}</span>`;
+}
+// periodQ(r, unit) · the "?" of a figure: the period on screen and the two compared windows (PR-PP2: also alone, beside a table)
+function periodQ(r, unit) {
+  if (!r || typeof uiQ !== 'function') return '';
+  const e2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const sameBase = r.prev && r.ly && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
+  const txt = `<p>${e2(r.label_th)}${r.complete ? '' : ' (ถึงวันที่ปิดยอดล่าสุด)'}</p>` +
+    (sameBase ? '' : `<p><b>เทียบช่วงก่อน</b> · ${e2(r.prev_label_th)}</p>`) + `<p><b>เทียบปีก่อน</b> · ${e2(r.ly_label_th)}</p>` +
+    `<p>${unit === 'pp' ? 'สัดส่วนเทียบเป็นจุด' : 'เทียบเป็นร้อยละ'} · ช่วงที่ยังไม่จบเทียบจำนวนวันเท่ากัน · ไม่มีข้อมูลฐานแสดง —</p>`;
+  return uiQ('pcmp:' + r.kind + ':' + (r.cur || []).join('_') + ':' + (unit || '%'), 'ช่วงที่เทียบ', txt, 'pcmp-q');
+}
+// ── PR-PP2 · the sales pages read the server's `period` object ({kind, cur, prev, ly, days, complete, label_th,
+// prev_label_th, ly_label_th, has_prev, has_ly}, backend periods.public) as the range of their chips.
+// periodOf(d) · that object from a payload: d.period, or the older cur_range / prev_range / yoy_range trio.
+function periodOf(d) {
+  if (!d) return null;
+  const p = d.period && typeof d.period === 'object' ? d.period : null;
+  if (p && Array.isArray(p.cur)) return p;
+  const cur = d.cur_range || d.range, prev = d.prev_range || d.comp_range, ly = d.yoy_range || d.ly_range;
+  if (!Array.isArray(cur) || !Array.isArray(prev) || !Array.isArray(ly)) return null;
+  return Object.assign({ kind: (p && p.kind) || 'range', complete: !!(p && p.complete) }, p || {}, {
+    cur, prev, ly, label_th: periodLabelTh(cur[0], cur[1]), prev_label_th: periodLabelTh(prev[0], prev[1]), ly_label_th: periodLabelTh(ly[0], ly[1]) });
+}
+// periodSpan(r) · the period on screen: '1–19 ต.ค. 2569' + ' · ถึงวันที่ปิดยอดล่าสุด' while it is not finished
+function periodSpan(r) { return r ? r.label_th + (r.complete ? '' : ' · ถึงวันที่ปิดยอดล่าสุด') : ''; }
+// periodKpi({l, v, c, cur, prev, ly, unit, upGood, range, q, sub}) · a KPI tile: label, value, the two comparison chips
+//   (prev / ly null = no base -> "—"). q: false leaves out the "?" (one "?" per row of tiles is enough).
+function periodKpi(k) {
+  const chips = periodCmpHtml(k.cur, k.prev, k.ly, { unit: k.unit, upGood: k.upGood, range: k.range, q: k.q });
+  const ink = typeof textInk === 'function' ? textInk(k.c) : k.c;
+  return `<div class="card p-4 pkpi" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p>` +
+    `<p class="text-2xl font-bold" style="color:${ink}">${k.v}</p><div class="pkpi-cmp">${chips}</div>` +
+    (k.sub ? `<p class="text-[11px] mt-1" style="color:var(--text-muted)">${k.sub}</p>` : '') + `</div>`;
+}
+// periodDelta(cur, base, {unit, upGood, title}) · one compact change for a table cell: ▲ 4.2% / ▼ 1.0 จุด / —
+function periodDelta(cur, base, opt) {
+  opt = opt || {};
+  const d = opt.unit === 'pp' ? periodPp(cur, base) : periodPct(cur, base);
+  const t = opt.title ? ` title="${String(opt.title).replace(/"/g, '&quot;')}"` : '';
+  if (d == null) return `<span class="text-xs" style="color:var(--text-muted)"${t}>—</span>`;
+  const good = d === 0 ? null : (d > 0) === (opt.upGood !== false);
+  const ink = good == null ? 'var(--text-secondary)' : good ? 'var(--good-ink)' : 'var(--bad-ink)';
+  return `<span class="text-xs font-semibold" style="color:${ink}"${t}>${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${Math.abs(d).toFixed(1)}${opt.unit === 'pp' ? ' จุด' : '%'}</span>`;
+}
+// periodFmt(v, format) · a headline value: baht | int | pct | min | num
+function periodFmt(v, f) {
+  if (v == null || !isFinite(Number(v))) return '—';
+  v = Number(v);
+  if (f === 'baht') return fmt(v);
+  if (f === 'int') return fmtN(Math.round(v));
+  if (f === 'pct') return v.toFixed(1) + '%';
+  if (f === 'min') return v.toFixed(0) + ' นาที';
+  return v.toLocaleString('th-TH', { maximumFractionDigits: 2 });
+}
+// periodHeadline(hostId, page, {kinds, kind, pick}) · the headline figures of a page that had no comparison (PR-PP2): a period
+//   chip track (periodBar, remembered per page as ph_<page>; TABS follow.period moves it with the top bar), the period on
+//   screen, and one tile per figure with เทียบช่วงก่อน · เทียบปีก่อน (/api/period/headline). pick() = a day of the period
+//   wanted (default: the last day of the top bar's period); a month-only source passes kinds ['month', 'year'].
+const _phSeq = {};
+async function periodHeadline(hostId, page, opt) {
+  opt = opt || {};
+  const host = document.getElementById(hostId); if (!host) return null;
+  const key = 'ph_' + page;
+  if (!host.querySelector('.ph-bar') || !_pbars[key]) {
+    host.innerHTML = `<div class="prow mb-3"><div class="ph-bar"></div><span class="prow-span ph-span"></span></div>` +
+      `<div class="ph-tiles grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>`;
+    periodBar(host.querySelector('.ph-bar'), { kinds: opt.kinds || ['week', 'month', 'year'], value: opt.kind || 'month', key,
+      onChange: () => periodHeadline(hostId, page, opt) });
+    try { if (!(('period|' + page) in _extraLastGlobal)) _extraLastGlobal['period|' + page] = getPeriodKind(); } catch (e) { /* 07-home not loaded */ }
+  }
+  const bar = _pbars[key];
+  const p = new URLSearchParams({ page, kind: bar ? bar.get().kind : 'month' });
+  let pick = typeof opt.pick === 'function' ? opt.pick() : opt.pick;
+  if (!pick && typeof gPeriodResolve === 'function') { const g = gPeriodResolve(); if (g) pick = g.cur[1]; }
+  if (pick) p.set('pick', pick);
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  const seq = (_phSeq[page] = (_phSeq[page] || 0) + 1);
+  let d;
+  try { d = await api(`${API}/api/period/headline?${p}`); } catch (e) { return null; }
+  if (seq !== _phSeq[page] || !d) return null;
+  const r = d.period;
+  const span = host.querySelector('.ph-span');
+  if (span) span.innerHTML = esc(periodSpan(r)) + (d.grain_note && typeof uiQ === 'function'
+    ? ' ' + uiQ('phn:' + page, 'ข้อมูลรายเดือน', `<p>${esc(d.grain_note)}</p>`, 'pcmp-q') : '');
+  const tiles = host.querySelector('.ph-tiles');
+  const COL = ['#4a70b0', '#0891b2', '#7a66b8', '#0d9488'];
+  if (tiles) tiles.innerHTML = (d.figures || []).map((f, i) => periodKpi({ l: esc(f.label), v: periodFmt(f.cur, f.format), c: COL[i % COL.length],
+    cur: f.cur, prev: f.prev, ly: f.ly, unit: f.unit, upGood: f.up_good, range: r, q: i === 0 })).join('');
+  return d;
+}
+// periodPctDelta(pct, {upGood, title}) · the same for a change the server already worked out (null -> —)
+function periodPctDelta(v, opt) {
+  opt = opt || {};
+  const t = opt.title ? ` title="${String(opt.title).replace(/"/g, '&quot;')}"` : '';
+  if (v == null || !isFinite(Number(v))) return `<span class="text-xs" style="color:var(--text-muted)"${t}>—</span>`;
+  v = Number(v);
+  const good = v === 0 ? null : (v > 0) === (opt.upGood !== false);
+  const ink = good == null ? 'var(--text-secondary)' : good ? 'var(--good-ink)' : 'var(--bad-ink)';
+  return `<span class="text-xs font-semibold" style="color:${ink}"${t}>${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}${opt.unit === 'pp' ? ' จุด' : '%'}</span>`;
 }
 // The top bar's period kind (the ONE period bar below): week | month | year | range
 function getPeriodKind() { return _gp.kind; }
@@ -2782,6 +2876,18 @@ function gPeriodSet(v, silent) {
   if (silent) { _gpSave(); gPeriodWrite(); gPeriodRender(); } else gPeriodApply();
 }
 function gPeriodGet() { return Object.assign({}, _gp); }
+// PR-PP2 · the top bar's period as query params for the period endpoints (/api/period/*): kind + pick (its first day) or
+// date_from / date_to for กำหนดเอง; with the branch scope. The server resolves the windows on its own last closed day.
+function gPeriodQuery(extra) {
+  const r = gPeriodResolve(), p = new URLSearchParams();
+  p.set('kind', _gp.kind);
+  if (_gp.kind === 'range') { if (_gp.from) p.set('date_from', _gp.from); if (_gp.to) p.set('date_to', _gp.to); }
+  else if (r) p.set('pick', r.cur[0]);
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
+  return p.toString();
+}
 function gPeriodChartWin(v) {
   if (!['3', '6', '12', 'all', 'q', 'y'].includes(v)) return;
   _gpChartWin = v; _gpSave();
@@ -3315,11 +3421,11 @@ const TABS = {
   ops: { load: () => loadOpsSubtab() },
   settings: { load: () => loadSettingsSubtab() },
   home: { load: () => loadHome() },
-  dailysales: { load: () => loadDailySales(), follow: { date: 'dsDate' } },
+  dailysales: { load: () => loadDailySales(), follow: { date: 'dsDate', period: 'dailysales' } },
   costhead: { load: () => loadCostHead(), follow: { date: 'chDate' } },
   menuimpact: { load: () => loadMenuImpact() },
   pnlbill: { load: () => loadPnlBill(), follow: { date: 'pbDate' } },
-  opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', prepare: () => _opFillMonths() } },
+  opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', period: 'ph_opsreport', prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
   ingpurchase: { load: () => loadIngPurchase() },
   // ownFilters: the page has its own branch / month controls, so switchTab removes the
@@ -3331,20 +3437,20 @@ const TABS = {
   supplyhome: { load: () => loadSupplyHome(), ownFilters: true },
   franchise: { load: () => loadFranchise(), ownFilters: true },
   fmsg: { load: () => loadFmsgInbox(), ownFilters: true },     // PR-F4: head office's inbox of the franchise owners' questions (js/17-franchise.js)
-  cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
-  custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
+  cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth', period: 'ph_cashctl' } },
+  custtype: { load: () => loadCustType(), follow: { month: 'ctMonth', period: 'ph_custtype' } },
   modifiers: { load: () => loadModifiers() },
-  pricezone: { load: () => loadPriceZone(), follow: { month: 'pzMonth' } },
-  cancelbill: { load: () => loadCancelBill(), follow: { month: 'cbMonth' } },
+  pricezone: { load: () => loadPriceZone(), follow: { month: 'pzMonth', period: 'ph_pricezone' } },
+  cancelbill: { load: () => loadCancelBill(), follow: { month: 'cbMonth', period: 'ph_cancelbill' } },
   closetime: { load: () => loadCloseTime(), follow: { date: 'ctmDate' } },
-  guest: { load: () => loadGuest() },
+  guest: { load: () => loadGuest(), follow: { period: 'ph_guest' } },
   benchmark: { load: () => loadBenchmark() },
-  engineering: { load: () => loadEngineering() },
-  buffetperf: { load: () => loadBuffetPerformance() },
-  staff: { load: () => loadStaff() },
+  engineering: { load: () => loadEngineering(), follow: { period: 'ph_engineering' } },
+  buffetperf: { load: () => loadBuffetPerformance(), follow: { period: 'ph_buffetperf' } },
+  staff: { load: () => loadStaff(), follow: { period: 'ph_staff' } },
   discounts: { load: () => loadDiscountsTab() },
   childbuffet: { load: () => loadChildBuffet() },
-  timeflow: { load: () => loadTimeflow() },
+  timeflow: { load: () => loadTimeflow(), follow: { period: 'ph_timeflow' } },
   gpbranch: { load: () => loadGpBranch() },
   branchbom: { load: () => loadBranchBom(), follow: { monthRange: ['bbomMonthFrom', 'bbomMonthTo'], prepare: () => _bbomInitFilters() } },
   bomcost: { load: () => loadBomCostTab() },

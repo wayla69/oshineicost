@@ -1458,6 +1458,12 @@ function msPartial(trend, gran) {
   const last = trend.length - 1;
   if (last < 0) return { i: -1, note: '' };
   const [y, m, d] = _msYmd(trend[last].start);
+  // PR-PP2: /api/sales/daily marks the period that is to date through the last closed day (`partial`, `end`)
+  if (trend[last].partial !== undefined) {
+    if (!trend[last].partial) return { i: -1, note: '' };
+    const e = _msYmd(trend[last].end), n = Math.round((Date.UTC(e[0], e[1] - 1, e[2]) - Date.UTC(y, m - 1, d)) / 864e5) + 1;
+    return { i: last, note: gran === 'month' ? `${e[2]}/${new Date(y, m, 0).getDate()} วัน` : gran === 'week' ? `${n}/7 วัน` : '' };
+  }
   if (gran === 'month') {
     const ref = _glanceLastDate(), dim = new Date(y, m, 0).getDate();
     return (y === ref.y && m === ref.m && ref.d < dim) ? { i: last, note: `${ref.d}/${dim} วัน` } : { i: -1, note: '' };
@@ -1705,9 +1711,9 @@ const _msSevCol = s => s === 'high' ? '#ef4444' : s === 'med' ? '#f59e0b' : '#94
 const _msCpCol = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
 const _msMuted = 'color:var(--text-muted,#64748b)';
 const _msNone = t => `<div class="ms-row" style="font-size:12px;${_msMuted}">${t}</div>`;
-// the month in progress is compared on last month's weekday-fair baseline (owner rule; the report's
-// headline.mom_basis === 'dow') - every % vs เดือนก่อน on the summary then reads on that basis
-const _msDowNote = 'เดือนนี้ยังไม่ครบ จึงเทียบ % กับฐานปกติตามวันในสัปดาห์ของเดือนก่อน ไม่เทียบกับวันเดียวกันของเดือนก่อนโดยตรง';
+// PR-PP2: the month in progress is compared to date - days 1..n against days 1..n of last month and of the same
+// month a year back (the report's headline.mom_basis === 'to_date'); the weekday-fair figure stays on the pace card
+const _msDowNote = 'เดือนนี้ยังไม่ครบ จึงเทียบกับวันที่ 1 ถึงวันเดียวกันของเดือนก่อนและของปีก่อน';
 const _msSM = v => (v >= 0 ? '+' : '−') + fmt(Math.abs(v || 0));
 function msKpiTile(l, v, c, sub, span) {
   return `<div class="ms-kpi"${span ? ' style="grid-column:1/-1"' : ''}><p class="lbl">${l}</p><p class="val" style="${span ? '' : 'font-size:21px;'}color:${textInk(c)}">${v}</p><p class="sub">${sub || ''}</p></div>`;
@@ -1723,7 +1729,7 @@ function msKpisHtml(j) {
     + msKpiTile('รายได้/หัว', H.rev_per_head != null ? fmt(H.rev_per_head) : '—', '#7a66b8', chips(H.rph_wow_pct, H.rph_yoy_pct))
     + (canSeeCost() ? msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', '#10b981', G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`) : '')   // PL3: no gross profit for a role without a cost or profit module (the server drops it too)
     + msKpiTile('ส่วนลด', fmt(H.discount || 0), '#ef4444', H.discount_pct != null ? `<b>${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:12px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%` : ''}</span>` : '', !canSeeCost())
-    + (H.mom_basis === 'dow' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:12px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
+    + (H.mom_basis === 'to_date' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:12px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
 }
 // target card: % of target as the headline, the bar, then the figures behind it
 function msTargetHtml(j) {
@@ -1908,7 +1914,7 @@ function msRenderBranches() {
   const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o) : '';
   const withT = branches.filter(b => b.vs_target_pct != null), onT = withT.filter(b => b.vs_target_pct >= 100).length;
   const head = (sentence ? `<div style="padding-top:8px">${msGlanceLine(sentence)}</div>` : '')
-    + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'dow' ? ' · % เทียบเดือนก่อนอิงฐานปกติตามวันในสัปดาห์' : ''}</p>`;
+    + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
   document.getElementById('msBranches').innerHTML = head + branches.map(b => {
     const right = S === 'rph'
       ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
@@ -1955,8 +1961,7 @@ function msMomTxt(v, goodUp = true, unit = '%') {
   return `<span style="color:var(${good ? '--good-ink' : '--bad-ink'});font-weight:600">${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}${unit === '%' ? '%' : ' ' + unit}</span>`;
 }
 const _msMomBasisNote = m => !m.mtd ? ''
-  : m.mom.basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน'
-  : m.mom.basis === 'same_days' ? 'เทียบวันเดียวกันของเดือนก่อน' : '';
+  : (m.mom.basis === 'to_date' || m.mom.basis === 'same_days') ? 'เทียบวันที่ 1 ถึงวันเดียวกันของเดือนก่อน' : '';
 function msMonthCell(label, value, mom, yoy) {
   return `<div style="min-width:0"><div style="font-size:12px;${_msMuted}">${label}</div>
     <div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b);white-space:nowrap">${value}</div>
@@ -1998,7 +2003,7 @@ function msMonthsHtml(d, selected) {
       </div></div>`;
   }).join('');
   return `<div style="padding:10px 0 8px">${msGlanceLine(sentence)}${chart}</div>
-    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบกับฐานปกติตามวันในสัปดาห์ ไม่เทียบกับทั้งเดือน</p>
+    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบวันเท่ากันของเดือนก่อน ไม่เทียบกับทั้งเดือน</p>
     ${cards}
     <p style="font-size:12px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · เทียบปีก่อน แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
 }
@@ -2051,8 +2056,13 @@ async function msLoadSales() {
       <span style="width:${inProg ? 104 : 64}px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}${tag}</span>
     </div>`;
   }).join('');
+  // PR-PP2: the latest period (to date when it is not finished) with เทียบช่วงก่อน + เทียบปีก่อน
+  const T0 = d.total || {}, R0 = periodOf(d);
+  const cmp0 = R0 ? `<div class="ms-row" style="flex-wrap:wrap;gap:6px"><span style="font-size:13px;font-weight:600">${esc(R0.label_th)}</span>`
+    + `<b style="font-variant-numeric:tabular-nums">${fmt(T0.revenue || 0)}</b>`
+    + periodCmpHtml(T0.revenue, T0.prev && T0.prev.revenue, T0.ly && T0.ly.revenue, { range: R0 }) + `</div>` : '';
   wrap.innerHTML = rows
-    ? `<div style="padding:10px 0 8px">${msTrendBlock(asc, gran, 110)}</div>
+    ? `${cmp0}<div style="padding:10px 0 8px">${msTrendBlock(asc, gran, 110)}</div>
        <p style="font-size:12px;${_msMuted};margin:0 0 2px">ขีดในแถบ = ค่าเฉลี่ย${gran === 'day' ? ' · แถบเทา = เสาร์-อาทิตย์' : gran === 'week' ? ' · สัปดาห์ จ.–อา.' : ''}</p>${rows}`
     : '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
