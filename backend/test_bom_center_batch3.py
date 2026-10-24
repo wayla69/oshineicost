@@ -39,6 +39,16 @@ MON = date(2026, 10, 5)
 
 
 # ── the branch accounts ──────────────────────────────────────────────────────
+START_SQL = ("INSERT OR IGNORE INTO bc_issue_slip(branch_id, slip_date, status, created_by, created_at, updated_at, confirmed_by, confirmed_at)"
+             " VALUES(?, ?, 'confirmed', 't', ?, ?, 't', ?)")
+
+
+def _started(c, bid, day="2026-10-04"):
+    """P3-1: the branch started before the test day, so a cutoff missed on the test day is held (a cutoff on or before the branch's first
+    day is exempt - started.late_exempt)."""
+    c.execute(START_SQL, (bid, day, day, day, day))
+
+
 def _acct(c, username, branch, role="branch", active=1):
     auth.init_auth(c)
     c.execute("INSERT INTO app_user(username, pw_hash, pw_salt, role, branch, active) VALUES(?, 'x', 'y', ?, ?, ?)",
@@ -61,6 +71,7 @@ def test_the_reminders_follow_the_accounts_not_the_pilot_names(udon):  # noqa: F
     c = udon
     c.execute("UPDATE branches SET name='ลพบุรี' WHERE branch_id=2")      # a branch that is not one of the four pilot names
     _acct(c, "br_lop", "ลพบุรี")
+    _started(c, 2)
     rec = RM.morning(c, today=MON)
     assert [b["name"] for b in rec["branches"]] == ["ลพบุรี"]            # the pilot branch อุดรธานี has no account: not listed
     assert rec["any_work"] is True and "<b>ลพบุรี</b>" in rec["text"]
@@ -109,6 +120,7 @@ def test_the_pre_cutoff_push_counts_the_time_left(udon):  # noqa: F811
 def test_the_cutoff_push_names_the_branches_that_missed_it(udon):  # noqa: F811
     c = udon
     _acct(c, "br_udon", "อุดรธานี")
+    _started(c, 1)
     rec = RM.cutoff(c, today=MON, now=datetime(2026, 10, 5, 13, 20, tzinfo=BKK))
     p = RM.cutoff_payload(rec)
     assert p["title"] == "เวลาส่งสุดท้าย 13:15 · ยังไม่ส่งใบสั่งซื้อ 1 สาขา" and "อุดรธานี" in p["body"] and "มีค่าปรับ" in p["body"]
@@ -257,16 +269,26 @@ def test_the_pre_cutoff_push_skips_a_branch_whose_order_is_in(world):
 
 
 def test_the_thirteen_fifteen_push_is_for_sales_support_only(world):
-    log = []
-    send = _sender(log)
-    assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 14), send=send) is None
-    rec = P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 16), send=send)
-    assert [u for u, _ in log] == ["b3_ss"], rec                     # not the branches, not the warehouse
-    body = log[0][1]["body"]
-    assert "BranchA" in body and "BranchB" in body and "มีค่าปรับ" in body and log[0][1]["url"] == "/?go=supply&tab=supplyhome"
-    assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 30), send=send) is None and len(log) == 1
-    _clear_meta()
-    assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 20, 5), send=send) is None              # a restart at night does not announce it
+    with main.get_db() as db:                                        # P3-1: both branches started the day before
+        ids = [r[0] for r in db.execute("SELECT branch_id FROM branches WHERE name IN ('BranchA', 'BranchB')")]
+        for bid in ids:
+            _started(db, bid)
+        db.commit()
+    try:
+        log = []
+        send = _sender(log)
+        assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 14), send=send) is None
+        rec = P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 16), send=send)
+        assert [u for u, _ in log] == ["b3_ss"], rec                     # not the branches, not the warehouse
+        body = log[0][1]["body"]
+        assert "BranchA" in body and "BranchB" in body and "มีค่าปรับ" in body and log[0][1]["url"] == "/?go=supply&tab=supplyhome"
+        assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 13, 30), send=send) is None and len(log) == 1
+        _clear_meta()
+        assert P.maybe_send_cutoff(now=datetime(2026, 10, 5, 20, 5), send=send) is None              # a restart at night does not announce it
+    finally:
+        with main.get_db() as db:
+            db.executemany("DELETE FROM bc_issue_slip WHERE branch_id=? AND slip_date='2026-10-04' AND created_by='t'", [(b,) for b in ids])
+            db.commit()
 
 
 def test_the_scheduler_runs_every_supply_step_even_when_one_fails(monkeypatch):
@@ -411,8 +433,9 @@ def grid_db(udon):  # noqa: F811
     c.execute("UPDATE branches SET name='ลพบุรี' WHERE branch_id=2")
     _acct(c, "br_udon", "อุดรธานี")
     _acct(c, "br_lop", "ลพบุรี")                                  # a branch with an account and no activity at all
-    # branch 1 (sales every day 1-5 Oct): slips 1-3 on time, 4 late, 5 not made
-    for d in ("2026-10-01", "2026-10-02", "2026-10-03"):
+    # branch 1 (sales every day 30 Sep - 5 Oct): slips 30 Sep - 3 Oct on time, 4 late, 5 not made. P3-1: it starts on 30 Sep, so the
+    # round of Thu 1 Oct is its second day and is held (sent late); with a start on 1 Oct that round would be exempt (started.late_exempt)
+    for d in ("2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03"):
         _slip(c, d)
     _slip(c, "2026-10-04", late=1, at="2026-10-05T05:00:00+00:00")
     # orders: round 1 of Mon 5 Oct sent in time; round 2 of Thu 1 Oct sent late; the salmon of Sat 3 Oct never made
@@ -427,7 +450,7 @@ def test_the_grid_reads_the_existing_definitions(grid_db):
     assert (g["from"], g["to"], g["days"], g["total"]) == ("2026-09-30", "2026-10-06", 7, 2)
     rows = {r["branch"]: r for r in g["rows"]}
     u = rows["อุดรธานี"]
-    assert u["issues"]["on_time"] == 3 and u["issues"]["days"] == 5 and u["issues"]["pct"] == 60.0 and u["issues"]["light"] == "yellow"
+    assert u["issues"]["on_time"] == 4 and u["issues"]["days"] == 6 and u["issues"]["pct"] == 66.7 and u["issues"]["light"] == "yellow"
     assert u["orders"]["on_time"] == 1 and u["orders"]["due"] == 3 and u["orders"]["light"] == "red"      # r1 in time; r2 late; salmon missing
     assert u["receive"] == {"received": 0, "delivered": 1, "pct": 0.0, "light": "red"}                        # the 3 Oct delivery is not recorded
     assert u["status"] == "red" and u["active"] is True                                                       # the worst column decides
