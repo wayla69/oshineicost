@@ -761,13 +761,17 @@ function spikeApplyRange() {
 }
 function spikeExport() {
   const d = _spikeLast;
-  if (!d || !(d.spikes || []).length) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
+  const sp = (d && d.spikes) || [], nm = (d && d.new_menus) || [];
+  if (!d || (!sp.length && !nm.length)) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
   const per = !!d.period && d.period !== 'day';
   const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-  const head = ['เมนู', 'สาขา', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)'].concat(per ? ['ต่อวัน'] : [])
-    .concat([per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน', '+จาน', 'สูงกว่า (เท่า)', 'เมนูใหม่']);
-  const rows = d.spikes.map(s => [s.menu, s.branch, s.today].concat(per ? [s.per_day] : [])
-    .concat([s.is_new ? '' : (per ? s.expected : s.avg), s.excess, s.x != null ? s.x : '', s.is_new ? 'ใช่' : '']));
+  // PR-SN: one file, two parts - the section column tells เมนูเดิม (spike) from เมนูใหม่ (first sold < 4 weeks ago)
+  const head = ['ส่วน', 'เมนู', 'สาขา', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', 'ต่อวัน',
+    per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน', '+จาน', 'สูงกว่า (เท่า)', 'เริ่มขาย', 'ขายมาแล้ว (วัน)', 'แนวโน้ม (%)', 'หมายเหตุ'];
+  const rows = sp.map(s => ['เมนูเดิม · พุ่งผิดปกติ', s.menu, s.branch, s.today, per ? s.per_day : s.today,
+    per ? s.expected : s.avg, s.excess, s.x != null ? s.x : '', '', '', '', s.thin_base ? 'ขายน้อยช่วงก่อน' : ''])
+    .concat(nm.map(m => ['เมนูใหม่', m.menu, m.branch, m.qty, m.per_day, '', '', '', m.first_sold, m.age_days,
+      m.trend && m.trend.pct != null ? m.trend.pct : '', '']));
   const span = per ? `${d.date_from}_${d.date_to}` : (d.date || '');
   downloadCSV([head].concat(rows).map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
 }
@@ -816,23 +820,62 @@ async function renderMenuSpike(focusDate) {
     const pr = per ? periodRange('range', { from: d.date_from, to: d.date_to }) : periodRange('day', d.date);
     const txt = pr ? pr.label : ''; rangeEl.textContent = txt; rangeEl.hidden = !txt;
   }
-  const sp = d.spikes || [];
-  if (cntEl) cntEl.textContent = (d.count || 0) + ' รายการ' + ((d.count || 0) > sp.length ? ` (แสดง ${sp.length})` : '');
-  if (!sp.length) { el.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่พบเมนูที่พุ่ง ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`; return; }
+  const sp = d.spikes || [], nm = d.new_menus || [];
+  const nSp = d.count || 0, nNew = d.new_count != null ? d.new_count : nm.length;
+  if (cntEl) cntEl.textContent = '';
+  const shown = (n, k) => n > k ? ` · แสดง ${fmtN(k)}` : '';
   const hQty = per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', hBase = per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน';
-  el.innerHTML = `<table class="text-xs w-full" id="spikeTable"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+  const num1 = v => v == null ? '—' : Number(v).toLocaleString('th-TH', { maximumFractionDigits: 1 });
+  const thead = cols => `<thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">${cols}</tr></thead>`;
+  // PR-SN (owner 2026-10-24) · two parts: existing menus that spiked, then new menus (first sold at the branch < 4 weeks before the
+  // period end; after 4 weeks a menu moves to the existing part and the spike rule)
+  const oldHtml = !sp.length
+    ? `<p class="sp-empty">ไม่พบเมนูเดิมที่สูงกว่าปกติ ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
+    : `<div class="sp-box"><table class="text-xs w-full" id="spikeTable">${thead(`
     <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
     <th class="py-1.5 pr-2 text-right">${hQty}</th><th class="py-1.5 pr-2 text-right">${hBase}</th>
-    <th class="py-1.5 pr-2 text-right">+จาน</th><th class="py-1.5 text-right">สูงกว่า</th></tr></thead><tbody>` +
+    <th class="py-1.5 pr-2 text-right">+จาน</th><th class="py-1.5 text-right">สูงกว่า</th>`)}<tbody>` +
     sp.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(s.menu)}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(s.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}${per && s.per_day != null ? `<div class="sp-perday">${Number(s.per_day).toLocaleString('th-TH', { maximumFractionDigits: 1 })} ต่อวัน</div>` : ''}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${s.is_new ? '<span style="color:var(--amber-ink)">เมนูใหม่</span>' : fmtN(per ? s.expected : s.avg)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}${per && s.per_day != null ? `<div class="sp-perday">${num1(s.per_day)} ต่อวัน</div>` : ''}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${fmtN(per ? s.expected : s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--amber-ink)">+${fmtN(s.excess)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:var(--bad-ink);font-weight:700">${s.x != null ? '×' + s.x : ''}</span>${s.x != null && s.pct != null ? `<div class="sp-perday">+${fmtN(s.pct)}%</div>` : ''}</td>
-    </tr>`).join('') + `</tbody></table>`;
+      <td class="py-1.5 text-right tabular-nums">${s.x != null
+        ? `<span style="color:${s.x >= 1.5 ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${s.x}</span>${s.pct != null ? `<div class="sp-perday">${s.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(s.pct))}%</div>` : ''}`
+        : '<span style="color:var(--text-muted)">—</span>'}${s.thin_base ? '<div class="sp-thin">ขายน้อยช่วงก่อน</div>' : ''}</td>
+    </tr>`).join('') + `</tbody></table></div>`;
+  const trendCell = t => {
+    if (!t || t.pct == null) return '<span style="color:var(--text-muted)">—</span>';
+    const up = t.pct > 0, dn = t.pct < 0;
+    const ink = up ? 'var(--good-ink)' : dn ? 'var(--bad-ink)' : 'var(--text-secondary)';
+    return `<span style="color:${ink};font-weight:700">${up ? '▲ +' : dn ? '▼ −' : ''}${fmtN(Math.abs(t.pct))}%</span>`
+      + `<div class="sp-perday">${num1(t.first_per_day)} → ${num1(t.latest_per_day)} ต่อวัน</div>`;
+  };
+  const newHtml = !nm.length
+    ? `<p class="sp-empty">ไม่มีเมนูใหม่ที่ขายใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
+    : `<div class="sp-box"><table class="text-xs w-full" id="spikeNewTable">${thead(`
+    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
+    <th class="py-1.5 pr-2 text-right">เริ่มขาย</th><th class="py-1.5 pr-2 text-right">ขายมาแล้ว (วัน)</th>
+    <th class="py-1.5 pr-2 text-right">${hQty}</th><th class="py-1.5 pr-2 text-right">ต่อวัน</th><th class="py-1.5 text-right">แนวโน้ม</th>`)}<tbody>` +
+    nm.map((m, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+      <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-2 font-medium">${esc(m.menu)}</td>
+      <td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(m.branch)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${esc(m.first_sold_th || '')}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(m.age_days)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(m.qty)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${num1(m.per_day)}</td>
+      <td class="py-1.5 text-right tabular-nums">${trendCell(m.trend)}</td>
+    </tr>`).join('') + `</tbody></table></div>`;
+  el.innerHTML = `<section class="sp-sec sp-sec-old" aria-label="เมนูเดิม พุ่งผิดปกติ">
+      <h3 class="sp-h">เมนูเดิม · พุ่งผิดปกติ <span class="sp-n">(${fmtN(nSp)}${shown(nSp, sp.length)})</span></h3>${oldHtml}</section>
+    <section class="sp-sec sp-sec-new" aria-label="เมนูใหม่">
+      <h3 class="sp-h"><span class="sp-long">เมนูใหม่ · ขายครบ 4 สัปดาห์แล้วย้ายเป็นเมนูเดิม</span><span class="sp-short">เมนูใหม่ (ไม่เกิน 4 สัปดาห์)</span>
+        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-new" title="คำอธิบาย">?</button>
+        <span class="sp-n">(${fmtN(nNew)}${shown(nNew, nm.length)})</span></h3>${newHtml}</section>`;
+  if (typeof phCardsSchedule === 'function') phCardsSchedule();
 }
 
 // ── #10 ต้นทุน/หัว รายสาขา (BoM) ──

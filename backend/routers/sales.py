@@ -13,6 +13,8 @@ from core import (
     ex_vat, get_db, ttl_cache,
 )
 
+import threading as _threading
+
 from fastapi import APIRouter
 router = APIRouter()
 
@@ -1238,14 +1240,135 @@ def _jd7(d) -> int:
     return (d.toordinal() + 1721424) % 7
 
 
+# ── new menus (owner 2026-10-24): a menu is NEW at a branch while anchor - first_sold < 28 days ──
+_SPIKE_NEW_DAYS = 28
+_SPIKE_TREND_MIN_AGE = 14
+_SPIKE_THIN_DAYS = 5            # an existing menu sold on fewer baseline days than this has a "thin" baseline
+_SPIKE_THIN_MIN_QTY = 20        # ... and is listed from this many plates (the old new-menu floor), marked thin_base       # the trend compares the first 7 days with the latest 7: needs two full weeks
+_TH_MON_SPIKE = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+_FIRST_SOLD: dict = {"key": None, "map": {}, "full": False, "bids": set()}
+_FIRST_SOLD_LOCK = _threading.Lock()
+
+
+def _first_sold_map(con, bids) -> dict:
+    """{(branch_id, sku_id): 'YYYY-MM-DD'} = the first day the SKU sold (qty > 0) at the branch, over all of
+    sales_sku_daily (history starts 22 Mar 2026: an older menu reads as that date). The table changes only at a
+    sync, so the map is kept per process and keyed on the DB file, the table's rowid span and core._data_gen
+    (bumped by the full flush after a sync): the whole-table MIN(day) costs ~0.4 s once, then nothing. One or
+    two branches read through the (branch, day) index instead of the whole table. An in-memory DB (tests) is
+    never kept."""
+    import core as _core
+    path = next((r[2] for r in con.execute("PRAGMA database_list").fetchall() if r[1] == "main"), "") or ""
+    lo = con.execute("SELECT MIN(rowid) FROM sales_sku_daily").fetchone()[0]
+    hi = con.execute("SELECT MAX(rowid) FROM sales_sku_daily").fetchone()[0]
+    key = (path, lo, hi, _core._data_gen) if path else None
+    bids = set(bids)
+    with _FIRST_SOLD_LOCK:
+        if key is not None and _FIRST_SOLD["key"] == key and (_FIRST_SOLD["full"] or bids <= _FIRST_SOLD["bids"]):
+            return _FIRST_SOLD["map"]
+        if key is None or _FIRST_SOLD["key"] != key:
+            fresh = {"key": key, "map": {}, "full": False, "bids": set()}
+        else:
+            fresh = _FIRST_SOLD
+        cur = con.cursor()
+        cur.row_factory = None
+        todo = bids - fresh["bids"]
+        if len(todo) <= 2:
+            for bid in sorted(todo):
+                for sid, d in cur.execute("SELECT sku_id, MIN(day) FROM sales_sku_daily WHERE branch_id=? AND qty > 0 "
+                                          "GROUP BY sku_id", (bid,)):
+                    fresh["map"][(bid, sid)] = d[:10]
+            fresh["bids"] |= todo
+        else:
+            fresh["map"] = {(bid, sid): d[:10] for bid, sid, d in cur.execute(
+                "SELECT branch_id, sku_id, MIN(day) FROM sales_sku_daily NOT INDEXED WHERE qty > 0 GROUP BY branch_id, sku_id")}
+            fresh["full"] = True
+        if key is not None:
+            _FIRST_SOLD.update(fresh)
+        return fresh["map"]
+
+
+def _spike_new_menus(con, cands, anchor, ps, tdays=None) -> list:
+    """The rows of the new-menu list. cands = [(bid, branch, menu, code, sid, qty, first_sold date)], every one new
+    (anchor - first_sold < 28 days) and sold in the period ps..anchor. tdays = {bid: set(dates the branch traded)}
+    covering anchor-27..anchor (read here when None). per_day = period plates / days the branch traded within
+    max(ps, first_sold)..anchor; trend = per_day of the latest 7 days vs per_day of the first 7 days, from age 14."""
+    import datetime as _dt
+    if not cands:
+        return []
+    ns = anchor - _dt.timedelta(days=_SPIKE_NEW_DAYS - 1)
+    cur = con.cursor()
+    cur.row_factory = None
+    bids = sorted({c[0] for c in cands})
+    ph = ",".join("?" * len(bids))
+    if tdays is None:
+        tdays = {}
+        for bid, day in cur.execute(f"SELECT branch_id, day FROM sales_sku_daily WHERE branch_id IN ({ph}) "
+                                    f"AND day BETWEEN ? AND ? GROUP BY branch_id, day", (*bids, ns.isoformat(), anchor.isoformat())):
+            tdays.setdefault(bid, set()).add(_dt.date.fromisoformat(day[:10]))
+    need = [c for c in cands if (anchor - c[6]).days + 1 >= _SPIKE_TREND_MIN_AGE]
+    l0 = (anchor - _dt.timedelta(days=6)).isoformat()
+    sums: dict = {}                    # (bid, sid) -> [plates of the first 7 days, plates of the latest 7 days]
+    if need:
+        nb = sorted({c[0] for c in need}); sids = sorted({c[4] for c in need})
+        f6 = {(c[0], c[4]): (c[6] + _dt.timedelta(days=6)).isoformat() for c in need}
+        # rows only (no GROUP BY), summed here; a chain-wide window reads faster as a plain scan (as the period query)
+        bsql = f"AND branch_id IN ({','.join('?' * len(nb))})" if len(nb) <= 2 else ""
+        scan = "" if bsql else "NOT INDEXED"
+        for bid, sid, day, q in cur.execute(
+                f"SELECT branch_id, sku_id, day, qty FROM sales_sku_daily {scan} WHERE day BETWEEN ? AND ? {bsql} "
+                f"AND sku_id IN ({','.join('?' * len(sids))})",
+                (min(c[6] for c in need).isoformat(), anchor.isoformat(), *(nb if bsql else ()), *sids)):
+            e = f6.get((bid, sid))
+            if e is None or not q:
+                continue
+            day = day[:10]
+            acc = sums.get((bid, sid))
+            if acc is None:
+                acc = sums[(bid, sid)] = [0.0, 0.0]
+            if day <= e:
+                acc[0] += q
+            if day >= l0:
+                acc[1] += q
+    import bisect as _bisect
+    tsorted = {bid: sorted(ds) for bid, ds in tdays.items()}
+
+    def ndays(bid, a, b):
+        xs = tsorted.get(bid) or []
+        return _bisect.bisect_right(xs, b) - _bisect.bisect_left(xs, a)
+
+    out = []
+    for bid, branch_name, menu, code, sid, pq, first in cands:
+        age = (anchor - first).days + 1
+        n = ndays(bid, max(ps, first), anchor)
+        trend = None
+        if age >= _SPIKE_TREND_MIN_AGE:
+            acc = sums.get((bid, sid), (0.0, 0.0))
+            n1 = ndays(bid, first, first + _dt.timedelta(days=6))
+            n2 = ndays(bid, anchor - _dt.timedelta(days=6), anchor)
+            f7 = acc[0] / n1 if n1 else None
+            l7 = acc[1] / n2 if n2 else None
+            if f7 is not None and l7 is not None:
+                trend = {"first_per_day": round(f7, 1), "latest_per_day": round(l7, 1),
+                         "pct": round((l7 / f7 - 1) * 100) if f7 > 0 else None}
+        out.append({"branch": branch_name, "menu": menu, "sku_code": code, "first_sold": first.isoformat(),
+                    "first_sold_th": f"{first.day} {_TH_MON_SPIKE[first.month - 1]}", "age_days": age,
+                    "qty": round(pq), "per_day": round(pq / n, 1) if n else None, "trend": trend})
+    out.sort(key=lambda r: (-r["qty"], r["menu"], r["branch"]))
+    return out
+
+
 def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold):
     """Week / MTD / custom-range spike, weekday-fair (memory rule 'MTD weekday-fair
     baseline'). Per branch x SKU: period_qty = sum of qty over the period; expected = sum,
     over each period day the branch traded, of the SKU's average qty on that WEEKDAY across
     the 3 weeks before the period (days the branch traded, zeros included; a weekday with no
     baseline trading day uses the plain baseline daily average). x = period_qty / expected.
-    Same rules as the day mode: spike when x >= threshold and period_qty >= 5; new menu when
-    the SKU sold on < 5 baseline days and period_qty >= 20. Qty only - NO cost (iron rule)."""
+    Same rules as the day mode: spike when x >= threshold, period_qty >= 5 and the SKU sold on
+    >= 5 baseline days; an existing menu sold on < 5 baseline days is listed from 20 plates with
+    thin_base: true when x (vs the same zero-counting baseline) >= threshold, or when that baseline
+    is 0 (x None). A NEW menu (anchor = period end, anchor - first_sold < 28 days) is never a
+    spike: it goes to new_menus (_spike_new_menus). Qty only - NO cost (iron rule)."""
     import datetime as _dt
     from rules import TH_TODAY_SQL
     # the last finished day; MAX through the (branch, day) index, not a table scan
@@ -1254,16 +1377,19 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             f"SELECT MAX(day) FROM sales_sku_daily WHERE branch_id IN (SELECT branch_id FROM branches) "
             f"AND day < {TH_TODAY_SQL}").fetchone()[0]
     except Exception:
-        return {"date": None, "period": period, "spikes": [], "note": "no daily sku data"}
+        return {"date": None, "period": period, "spikes": [], "new_menus": [], "new_count": 0, "note": "no daily sku data"}
     if not latest_s:
-        return {"date": None, "period": period, "spikes": []}
+        return {"date": None, "period": period, "spikes": [], "new_menus": [], "new_count": 0}
     latest = _dt.date.fromisoformat(latest_s[:10])
     anchor = _spike_iso(focus_arg, "วันที่") if focus_arg else latest
     if anchor > latest:
         anchor = latest
     ps, pe = _spike_window(period, anchor, date_from, date_to, latest)
     bs, be = ps - _dt.timedelta(days=_SPIKE_BASE_DAYS), ps - _dt.timedelta(days=1)
-    q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat(), "bs": bs.isoformat(), "be": be.isoformat()}
+    ns = pe - _dt.timedelta(days=_SPIKE_NEW_DAYS - 1)       # first_sold on/after ns = a new menu
+    ts0 = min(bs, ns)
+    q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat(), "bs": bs.isoformat(), "be": be.isoformat(),
+         "ts0": ts0.isoformat()}
     # Speed (live-size DB, MTD all branches): a whole-chain window reads most of the
     # table, so a plain scan beats ~200k (branch, day) index lookups; one branch keeps
     # the index. Rows come back as tuples. Weekday key = CAST(julianday(day) AS INT) % 7
@@ -1296,14 +1422,17 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             e = base[(bid, sid)] = [0.0] * 8          # qty per weekday key 0..6, [7] = days sold
         e[w] += qq or 0
         e[7] += nn or 0
-    # 3 - the days each branch traded, both windows (covering index)
+    # 3 - the days each branch traded, both windows and the 28 days of the new-menu rule (covering index)
     tb: dict = {}
     tp: dict = {}
+    tdays: dict = {}
     for bid, day in cur.execute(f"""
         SELECT d.branch_id, d.day FROM sales_sku_daily d {bjoin}
-        WHERE d.day BETWEEN :bs AND :pe {bfilt} GROUP BY d.branch_id, d.day""", q):
+        WHERE d.day BETWEEN :ts0 AND :pe {bfilt} GROUP BY d.branch_id, d.day""", q):
         dd = _dt.date.fromisoformat(day[:10])
-        (tb if dd < ps else tp).setdefault(bid, [0] * 7)[_jd7(dd)] += 1
+        tdays.setdefault(bid, set()).add(dd)
+        if dd >= bs:
+            (tb if dd < ps else tp).setdefault(bid, [0] * 7)[_jd7(dd)] += 1
     days = (pe - ps).days + 1
     # per branch: weight of each weekday key = period trading days of that weekday /
     # baseline trading days of it; weekdays absent from the baseline fall back to the
@@ -1318,8 +1447,16 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         wts[bid] = [(tpw[w] / tbw[w] if tbw[w] else 0.0) + fb for w in range(7)]
     zero7 = [0.0] * 7
     spikes = []
+    fsm = _first_sold_map(con, {r[0] for r in prow}) if prow else {}
+    newc = []
     for bid, branch_name, desc, code, sid, pq in prow:
         pq = pq or 0
+        fs = fsm.get((bid, sid))
+        first = _dt.date.fromisoformat(fs) if fs else None
+        if first is not None and (pe - first).days < _SPIKE_NEW_DAYS:      # a new menu: its own list, never a spike
+            if pq >= 1:
+                newc.append((bid, branch_name, (desc or code or "").replace("(B) ", "").replace("(A) ", ""), code, sid, pq, first))
+            continue
         e = base.get((bid, sid))
         n = e[7] if e else 0
         wt = wts.get(bid, zero7)
@@ -1332,15 +1469,23 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
                 spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
                                "x": round(x, 1), "pct": round((x - 1) * 100),
                                "excess": round(pq - expected), "is_new": False})
-        elif n < 5 and pq >= 20:
-            spikes.append({**row, "avg": 0, "expected": 0, "x": None, "pct": None,
-                           "excess": round(pq), "is_new": True})
+        elif n < _SPIKE_THIN_DAYS and pq >= _SPIKE_THIN_MIN_QTY:
+            # an existing menu that sold on < 5 baseline days: listed from 20 plates (the old floor), "ปกติ" = the
+            # weekday-fair baseline that counts the branch's trading days without a sale as zero (0 -> no x)
+            x = pq / expected if expected > 0 else None
+            if x is not None and x < threshold:            # a baseline > 0: the same 1.5x rule as every spike
+                continue
+            spikes.append({**row, "avg": round(expected, 1), "expected": round(expected),
+                           "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
+                           "excess": round(pq - expected), "is_new": False, "thin_base": True})
     spikes.sort(key=lambda s: -s["excess"])
+    new_menus = _spike_new_menus(con, newc, pe, ps, tdays)
     return {"date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
             "days": days, "baseline_from": bs.isoformat(), "baseline_to": be.isoformat(),
             "latest_day": latest.isoformat(),
             "window_days": _SPIKE_BASE_DAYS, "threshold": threshold,
-            "count": len(spikes), "spikes": spikes[:limit]}
+            "count": len(spikes), "spikes": spikes[:limit],
+            "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
 
 
 @router.get("/api/sales/menu-spike")
@@ -1357,7 +1502,14 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
     period=week | mtd | range: Monday of the anchor's week -> anchor / 1st of the anchor's
     month -> anchor / date_from -> date_to (<= 92 days, <= the last finished day), compared
     weekday-fair with the 3 weeks before the period - see _menu_spike_period. Anchor =
-    `date` or the last finished day; the day still trading is never included."""
+    `date` or the last finished day; the day still trading is never included.
+
+    Two parts (owner 2026-10-24): `spikes` = EXISTING menus only (the spike rule above; `is_new`
+    stays, always false, for old clients; an existing menu sold on < 5 baseline days is listed from
+    20 plates with `thin_base: true` when x >= threshold or its "ปกติ" is 0, "ปกติ" counting the branch's trading days without a sale
+    as zero - day mode: baseline total / the branch's trading days in the 21 days); `new_menus` = every NEW menu sold in the period (no
+    threshold), new = period end - first day the SKU sold at the branch < 28 days - see
+    _spike_new_menus for its fields (first_sold, age_days, qty, per_day, trend)."""
     import datetime as _dt
     from fastapi import HTTPException
     if period not in _SPIKE_PERIODS:
@@ -1374,9 +1526,9 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
         try:
             maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
         except Exception:
-            return {"date": None, "spikes": [], "note": "no daily sku data"}
+            return {"date": None, "spikes": [], "new_menus": [], "new_count": 0, "note": "no daily sku data"}
         if not maxd:
-            return {"date": None, "spikes": []}
+            return {"date": None, "spikes": [], "new_menus": [], "new_count": 0}
         focus = (date or maxd)[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         wstart = (_dt.date(fy, fm, fd) - _dt.timedelta(days=21)).isoformat()
@@ -1394,15 +1546,25 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
               SELECT branch_id, sku_id, AVG(qty) avgq, COUNT(*) n
               FROM v_sales_sku_daily WHERE day>=:ws AND day<:focus GROUP BY branch_id, sku_id)
             SELECT b.name branch, s.description, s.sku_code, t.q today,
-                   COALESCE(h.avgq,0) avgq, COALESCE(h.n,0) n
+                   COALESCE(h.avgq,0) avgq, COALESCE(h.n,0) n, t.branch_id bid, t.sku_id sid
             FROM today t JOIN branches b ON b.branch_id=t.branch_id
             JOIN skus s ON s.sku_id=t.sku_id
             LEFT JOIN hist h ON h.branch_id=t.branch_id AND h.sku_id=t.sku_id
             WHERE t.q>0""", params).fetchall()
         spikes = []
+        fday = _dt.date(fy, fm, fd)
+        fsm = _first_sold_map(con, {r["bid"] for r in rows}) if rows else {}
+        newc = []
+        thin = []
         for r in rows:
             today = r["today"] or 0; avg = r["avgq"] or 0; n = r["n"] or 0
             name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
+            fs = fsm.get((r["bid"], r["sid"]))
+            first = _dt.date.fromisoformat(fs) if fs else None
+            if first is not None and (fday - first).days < _SPIKE_NEW_DAYS:    # a new menu: its own list
+                if today >= 1:
+                    newc.append((r["bid"], r["branch"], name, r["sku_code"], r["sid"], today, first))
+                continue
             if avg > 0 and n >= 5:
                 x = today / avg
                 # show ALL items above the threshold (default 1.5×); tiny floor (≥5
@@ -1411,12 +1573,29 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
                     spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
                                    "avg": round(avg, 1), "x": round(x, 1), "pct": round((x - 1) * 100),
                                    "excess": round(today - avg), "is_new": False})
-            elif n < 5 and today >= 20:
-                spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
-                               "avg": 0, "x": None, "pct": None, "excess": round(today), "is_new": True})
+            elif n < _SPIKE_THIN_DAYS and today >= _SPIKE_THIN_MIN_QTY:
+                thin.append((r, name, today, avg * n))         # avg * n = the baseline total
+        if thin:
+            # existing menus that sold on < 5 baseline days: "ปกติ" = baseline total / the branch's trading days in the
+            # 21 days (days without a sale count as zero), x vs that; listed from 20 plates (the old floor)
+            tbids = sorted({t[0]["bid"] for t in thin})
+            ntd = {b: c for b, c in con.execute(
+                f"SELECT branch_id, COUNT(DISTINCT day) FROM sales_sku_daily WHERE branch_id IN ({','.join('?' * len(tbids))}) "
+                "AND day>=? AND day<? GROUP BY branch_id", (*tbids, wstart, focus)).fetchall()}
+            for r, name, today, tot in thin:
+                nd = ntd.get(r["bid"]) or 0
+                base = tot / nd if nd else 0.0
+                x = today / base if base > 0 else None
+                if x is not None and x < threshold:        # a baseline > 0: the same 1.5x rule as every spike
+                    continue
+                spikes.append({"branch": r["branch"], "menu": name, "today": round(today), "avg": round(base, 1),
+                               "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
+                               "excess": round(today - base), "is_new": False, "thin_base": True})
         spikes.sort(key=lambda s: -s["excess"])
+        new_menus = _spike_new_menus(con, newc, fday, fday)
     return {"date": focus, "window_days": 21, "threshold": threshold,
-            "count": len(spikes), "spikes": spikes[:limit]}
+            "count": len(spikes), "spikes": spikes[:limit],
+            "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
 
 
 @router.get("/api/sales/cost-per-head")
