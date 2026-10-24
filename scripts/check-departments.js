@@ -28,10 +28,10 @@ if (a < 0 || b < 0 || b < a) { console.error('check-departments: the registry bl
 const ctx = vm.createContext({ console });
 let R;
 try {
-  vm.runInContext(core.slice(a, b) + '\n;globalThis.__R = { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, allPagesModel };', ctx, { filename: 'js/01-core.js (registry)' });
+  vm.runInContext(core.slice(a, b) + '\n;globalThis.__R = { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, PAGE_PHONE, allPagesModel, phonePageDefault };', ctx, { filename: 'js/01-core.js (registry)' });
   R = ctx.__R;
 } catch (e) { console.error('check-departments: the registry block does not evaluate: ' + e.message); process.exit(1); }
-const { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, allPagesModel } = R;
+const { SUPPLY_CHIPS, TAB_CLUSTERS, DEPARTMENTS, DEPT_ICONS, PAGE_KEYWORDS, PAGE_PHONE, allPagesModel, phonePageDefault } = R;
 
 const tabsSrc = (/const TABS = \{([\s\S]*?)\n\};/.exec(core) || [])[1] || '';
 const tabKeys = new Set([...tabsSrc.matchAll(/^\s*([A-Za-z0-9_]+)\s*:\s*\{/gm)].map(m => m[1]));
@@ -144,6 +144,22 @@ Object.entries(PAGE_KEYWORDS || {}).forEach(([k, words]) => {
 });
 if (!PAGE_KEYWORDS || Object.keys(PAGE_KEYWORDS).length < 40) bad('PAGE_KEYWORDS is missing or too short (js/01-core.js, after DEPARTMENTS)');
 
+// ── PR-MA · the phone display mode: every page of a department or of หน้ารายงานทั้งหมด names its default ('fit' | 'touch', or one per view),
+//    and every key of PAGE_PHONE is a real page ("tab|pane" of the registry, or a key of TABS) ──
+const MODES = new Set(['fit', 'touch']);
+const phoneCount = { fit: 0, touch: 0 };
+if (!PAGE_PHONE || typeof PAGE_PHONE !== 'object') bad('PAGE_PHONE is missing from js/01-core.js (the page registry block)');
+else {
+  [...pageKeys].filter(k => !k.endsWith('|')).forEach(k => {
+    const e = PAGE_PHONE[k];
+    if (e === undefined) { bad(`PAGE_PHONE: the page "${k}" has no phone default ('fit' or 'touch')`); return; }
+    const vals = typeof e === 'object' ? Object.values(e) : [e];
+    if (!vals.length || vals.some(v => !MODES.has(v))) bad(`PAGE_PHONE: "${k}" must be 'fit', 'touch' or { view: 'fit' | 'touch' } (found ${JSON.stringify(e)})`);
+    phoneCount[phonePageDefault(...k.split('|'))]++;
+  });
+  Object.keys(PAGE_PHONE).forEach(k => { if (!pageKeys.has(k) && !tabKeys.has(k)) bad(`PAGE_PHONE: "${k}" is not a page of the registry nor a key of TABS`); });
+}
+
 if (fail.length) {
   fail.forEach(m => console.error('  ✗ ' + m));
   console.error(`check-departments: ${fail.length} problem(s)`);
@@ -151,6 +167,7 @@ if (fail.length) {
 }
 const pages = DEPARTMENTS.reduce((n, d) => n + d.pages.length, 0);
 console.log(`check-departments: clean — ${DEPARTMENTS.length} departments, ${pages} tiles, ${[...inAll].length} pages in หน้ารายงานทั้งหมด`);
+console.log(`check-departments: phone defaults - ${phoneCount.fit} pages open in พอดีจอ (fit), ${phoneCount.touch} in แตะง่าย (touch)`);
 console.log(`check-departments: ${bomKeys.length} recipe pages flagged bom: true (${bomKeys.join(', ')})`);
 console.log('check-departments: pages (departments) each role sees in stock mode / full mode:');
 Object.entries(modeRows).forEach(([role, m]) => console.log(`  ${role.padEnd(13)} stock ${String(m.stock.pages).padStart(3)} (${m.stock.depts})   full ${String(m.full.pages).padStart(3)} (${m.full.depts})`));

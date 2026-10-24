@@ -90,21 +90,55 @@ def test_the_registry_helpers_the_phone_needs_are_still_defined_once():
 
 
 # ── node: the pure parts ─────────────────────────────────────────────────────
-def _nav_prelude(role):
+def _nav_prelude(role, allowed="() => true"):
+    # PR-MA: the bar of each role; `allowed` stands in for the launcher's page rule (deptPageAllowed) of that login
+    bars = re.search(r"const _PH_BARS = \{.*?\n\};", SHELL, re.S).group(0)
+    home = re.search(r"const _PH_HOME_TAB = \{.*?\};", SHELL).group(0)
     return ("const DEPT_ICONS = new Proxy({}, { get: (t, k) => 'p-' + String(k) });\n"
-            f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }};\n"
-            + _fn(SHELL, "_phKind") + "\n" + _fn(SHELL, "_phNavItems") + "\nconst _PH_ICON = { home: 'h', search: 's', me: 'm' };")
+            f"const window = {{ AUTH: {{ enabled: true, role: '{role}' }} }};\nconst deptPageAllowed = {allowed};\nconst tabAllowed = () => true;\n"
+            + bars + "\n" + home + "\n" + "\n".join(_fn(SHELL, n) for n in ("_phKind", "_phRole", "_phPageOk", "_phHomeTab", "_phNavItems"))
+            + "\nconst _PH_ICON = { home: 'h', search: 's', me: 'm' };")
+
+
+# PR-MA (owner 2026-10-24): one bar per role, built for its daily work; ค้นหา is the magnifier of the header now
+BARS = {
+    "management": ["หน้าแรก", "ยอดขาย", "กำไร", "สาขา", "ฉัน"],
+    "salessupport": ["หน้าแรก", "คิวใบสั่งซื้อ", "ใบตัดเบิกสาขา", "เคลม", "ฉัน"],
+    "warehouse": ["หน้าแรก", "คิวใบสั่งซื้อ", "ฉัน"],
+    "analyst": ["หน้าแรก", "ต้นทุนต่อจาน", "ราคารายเดือน", "ไฟล์ราคา", "ฉัน"],
+    "accounting": ["หน้าแรก", "ใบสรุปตัดเบิก", "P&L รายสาขา", "GP รายสาขา", "ฉัน"],
+    "operation": ["หน้าแรก", "ใบตัดเบิกสาขา", "ผลต่างตัดเบิกรายวัน", "ส่วนลด", "ฉัน"],
+    "marketing": ["หน้าแรก", "ลูกค้าและบุฟเฟ่ต์", "วิเคราะห์เมนู", "เสียงลูกค้า", "ฉัน"],
+    "innovation": ["หน้าแรก", "ทะเบียนวัตถุดิบ", "ฉัน"],
+}
 
 
 @needs_node
 def test_the_bottom_navigation_per_role():
-    def labels(role):
-        return [i["label"] for i in _node(_nav_prelude(role), "_phNavItems()")]
-    assert labels("management") == labels("analyst") == labels("salessupport") == ["หน้าแรก", "งานของฉัน", "ค้นหา", "ฉัน"]
-    assert labels("branch") == ["หน้าแรก", "ตัดเบิก", "สั่งของ", "รับของ", "ฉัน"]
-    assert labels("franchise") == ["หน้าแรก", "ฉัน"]
-    panes = [(i.get("tab"), i.get("pane")) for i in _node(_nav_prelude("branch"), "_phNavItems()")]
+    def items(role, allowed="() => true"):
+        return _node(_nav_prelude(role, allowed), "_phNavItems()")
+    for role, want in BARS.items():
+        got = items(role)
+        assert [i["label"] for i in got] == want, role
+        assert "ค้นหา" not in [i["label"] for i in got], role                                     # the old search slot is gone
+        assert got[0]["nb"] == "t", role                                                          # the old งานของฉัน count sits on หน้าแรก
+    assert [i["label"] for i in items("branch")] == ["หน้าแรก", "ตัดเบิก", "สั่งของ", "รับของ", "ฉัน"]
+    assert [i["label"] for i in items("franchise")] == ["หน้าแรก", "ฉัน"]
+    panes = [(i.get("tab"), i.get("pane")) for i in items("branch")]
     assert panes[1:4] == [("branchstock", "issue"), ("branchstock", "order"), ("branchstock", "recv")]
+    # the red counts: the pages with tasks carry their nav_badges key
+    nb = {i["label"]: i.get("nb") for i in items("salessupport")}
+    assert nb["คิวใบสั่งซื้อ"] == "p:orderhub:queue" and nb["ใบตัดเบิกสาขา"] == "p:orderhub:issues" and nb["เคลม"] == "p:orderhub:claims"
+    nb = {i["label"]: i.get("nb") for i in items("analyst")}
+    assert nb["ต้นทุนต่อจาน"] == "p:bomcenter:dishcost" and nb["ราคารายเดือน"] == "p:bomcenter:price" and nb["ไฟล์ราคา"] == "p:bomcenter:pricefile"
+    assert {i["label"]: i.get("nb") for i in items("accounting")}["ใบสรุปตัดเบิก"] == "p:bomcenter:issue"
+    nb = {i["label"]: i.get("nb") for i in items("operation")}
+    assert nb["ผลต่างตัดเบิกรายวัน"] == "p:orderhub:issuevar" and nb["ส่วนลด"] == ""
+    # a page the login may not open is left out of its bar (a role with three entries shows three)
+    assert [i["label"] for i in items("salessupport", "p => p.pane !== 'claims'")] == ["หน้าแรก", "คิวใบสั่งซื้อ", "ใบตัดเบิกสาขา", "ฉัน"]
+    # หน้าแรก of Sales Support and the analyst is หน้างาน, of marketing สรุปประจำวัน; the others open the launcher
+    assert items("salessupport")[0]["tab"] == "supplyhome" and items("analyst")[0]["tab"] == "supplyhome" and items("marketing")[0]["tab"] == "home"
+    assert items("management")[0]["tab"] is None and items("warehouse")[0]["tab"] is None
 
 
 @needs_node
@@ -152,7 +186,7 @@ def test_a_phone_login_opens_the_launcher_then_a_department_then_a_page(live_ser
             hscroll: document.documentElement.scrollWidth > innerWidth, sidebar: getComputedStyle(document.getElementById('sidebar')).display,
             small: [...document.querySelectorAll('#phHome a, #phNav button')].filter(e => e.offsetParent).map(e => e.getBoundingClientRect().height).filter(h => h < 44).length })""")
         assert home["view"] == "home" and home["booted"] is False                                       # the heavy shell has not been fetched
-        assert len(home["depts"]) == 9 and home["nav"] == ["หน้าแรก", "งานของฉัน", "ค้นหา", "ฉัน"] and home["navH"] == 56
+        assert len(home["depts"]) == 9 and home["nav"] == BARS["management"] and home["navH"] == 56
         assert not home["hscroll"] and home["sidebar"] == "none" and home["small"] == 0
         # a department: header tint + two-column grid of tiles; the owner's summary is its first tile
         page.locator(".ph-dept", has_text="ผู้บริหาร").first.click()
@@ -172,7 +206,7 @@ def test_a_phone_login_opens_the_launcher_then_a_department_then_a_page(live_ser
         page.wait_for_function("_phView === 'page' && activeTab === 'dailysales'", timeout=60000)
         assert page.evaluate("_desktopBooted") is True
         # the search: every page this login may open; the legacy ones are there too
-        page.locator("#phNav .ph-nav-i:has(span:text-is('ค้นหา'))").click()
+        page.locator("#phTbSearch").click()                                                     # PR-MA: the magnifier of the top bar
         page.fill("#phSearchInput", "ปฏิทินเทศกาล")
         # PR-D4: a result is icon + page name + department chip (the same engine as the desktop panel)
         assert page.evaluate("[...document.querySelectorAll('#phSearchRes .ph-row')].map(e => e.querySelector('.pgs-name').textContent + '|' + e.querySelector('.pgs-chip').textContent)") == ["ปฏิทินเทศกาลและวันหยุด|ประสานงานขาย"]

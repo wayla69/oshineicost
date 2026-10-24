@@ -2585,7 +2585,19 @@ function resetZoom(chartId) {
 //     branch names), value axes ≤ 5 ticks, 11 px tick font, no x-axis title
 // The glance layer (GLANCE_PLUGIN) keeps drawing latest / peak / avg as before.
 function _onPhoneScreen() {
+  // PR-MA: a page in พอดีจอ (body.ph-fit) is the desktop layout scaled to the screen, so its charts are the desktop charts
+  if (document.body.classList.contains('ph-fit')) return false;
   try { return window.innerWidth > 0 && window.matchMedia('(max-width:700px)').matches; } catch (e) { return false; }
+}
+// PR-MA: in พอดีจอ a chart is drawn at the frame's size and scaled down with it; a font under 12 px would read under 5.5 px on a 390 px screen,
+// so every font the chart names (ticks, legend, titles, data labels) is at least 12 px. A chart's own larger sizes stay.
+function _fitChartFonts(o, depth) {
+  if (!o || typeof o !== 'object' || (depth || 0) > 6) return;
+  Object.keys(o).forEach(k => {
+    const v = o[k];
+    if (k === 'font' && v && typeof v === 'object' && !Array.isArray(v)) { if (typeof v.size !== 'number' || v.size < 12) v.size = Math.max(12, typeof v.size === 'number' ? v.size : 12); }
+    else if (k !== 'data' && v && typeof v === 'object' && !Array.isArray(v)) _fitChartFonts(v, (depth || 0) + 1);
+  });
 }
 function _phoneChartTune(config, ctx) {
   const type = config.type;
@@ -2651,6 +2663,14 @@ function mkChart(id, config) {
   stkChartWords(config);   // PL3: stock mode names no BoM on a chart either
   // A phone showing the full dashboard (เต็ม →) gets a chart cut for 375 px: see _phoneChartTune.
   if (_onPhoneScreen()) { try { _phoneChartTune(config, ctx); } catch (e) { console.warn('phone chart tune:', e); } }
+  if (document.body.classList.contains('ph-fit')) {
+    try {
+      const o = config.options = config.options || {}; o.plugins = o.plugins || {};
+      ['legend', 'title', 'subtitle', 'datalabels'].forEach(k => { if (o.plugins[k] !== false) { o.plugins[k] = o.plugins[k] || {}; if (k === 'legend') { o.plugins[k].labels = o.plugins[k].labels || {}; o.plugins[k].labels.font = o.plugins[k].labels.font || {}; } else o.plugins[k].font = o.plugins[k].font || {}; } });
+      Object.values(o.scales || {}).forEach(sc => { if (sc) { sc.ticks = sc.ticks || {}; sc.ticks.font = sc.ticks.font || {}; } });
+      _fitChartFonts(o);
+    } catch (e) { console.warn('fit chart fonts:', e); }
+  }
   // Apply theme-aware axis / grid / label colors (respects dark mode).
   // A canvas inside a [data-force-light] container (the printable Management
   // Report keeps a white-paper look in dark mode) always themes as light.
@@ -3465,6 +3485,34 @@ const PAGE_KEYWORDS = {
   'branchstock|issue': 'ตัดเบิก ใช้วัตถุดิบ ใบตัดเบิก เบิกใช้ ของเสีย', 'branchstock|order': 'สั่งของ สั่งสินค้า po ใบสั่งซื้อ จำนวนที่ควรสั่ง ยอดแนะนำ', 'branchstock|recv': 'รับของ รับสินค้า receive แจ้งของขาด แจ้งของเสีย เคลม',
   'branchstock|var': 'ส่วนต่าง ผลต่าง variance ใช้จริง', 'branchstock|count': 'นับของ ตรวจนับ นับสต็อก stock count สิ้นเดือน ต้นงวด ปลายงวด',
 };
+// PR-MA · the phone display mode of every page ("tab" or "tab|pane" -> 'fit' | 'touch', or { view: mode } for a page with two views).
+// 'touch' (แตะง่าย) = the phone layout: 12 px text floor, 44 px targets, stacked cards. 'fit' (พอดีจอ) = the page's desktop layout in a frame
+// 760-900 px wide scaled to the screen width (js/09c-mobile.js, "PHONE DISPLAY MODES"). The person may switch per page (the ⤢ button of the
+// phone top bar, remembered on the device). scripts/check-departments.js fails when a page of a department or of หน้ารายงานทั้งหมด has no entry.
+// Analytics, reports and read-only tables: fit. Branch pages, หน้างาน, the launcher, ฉัน, ค้นหา, editors and import forms: touch.
+const PAGE_PHONE = {
+  launcher: 'touch', allpages: 'touch', home: 'touch', supplyhome: 'touch', franchise: 'touch', manual: 'touch', settings: 'touch',
+  mgtreport: 'fit', report: 'fit', overall: 'fit', dailysales: 'fit', trend: 'fit', compare: 'fit', more: 'fit', action: 'fit', checklist: 'fit',
+  gpbranch: 'fit', pnlbranch: 'fit', pnlbill: 'fit', profit: 'fit', benchmark: 'fit', pnl: 'fit',
+  cost: 'fit', bomcost: 'fit', costhead: 'fit', coverage: 'fit', menuimpact: 'fit', menuefficiency: 'fit', branchbom: 'fit', simhub: 'fit', heavyeater: 'fit',
+  buffetperf: 'fit', childbuffet: 'fit', guest: 'fit', custtype: 'fit', timeflow: 'fit', feedback: 'fit',
+  menu: 'fit', menuactionboard: 'fit', menuopportunities: 'fit', menucompare: 'fit',
+  opsreport: 'fit', ops: 'fit', discounts: 'fit', cashctl: 'fit', cancelbill: 'fit', staff: 'fit', modifiers: 'fit', pricezone: 'fit', closetime: 'fit',
+  fmsg: 'fit', ordering: 'fit', ingpurchase: 'fit', 'ordersetup|pack': 'fit',
+  'orderhub|queue': 'fit', 'orderhub|claims': 'fit', 'orderhub|comp': 'fit', 'orderhub|issues': 'fit', 'orderhub|issuevar': 'fit', 'orderhub|persales': 'fit',
+  'orderhub|adoption': 'fit', 'orderhub|month': 'fit', 'orderhub|central': 'touch',
+  'bomcenter|fc': 'fit', 'bomcenter|price': 'fit', 'bomcenter|issue': 'fit', 'bomcenter|rcheck': 'fit', 'bomcenter|overview': 'fit',
+  'bomcenter|dishcost': { table: 'fit', import: 'touch' }, 'bomcenter|ing': { list: 'fit', edit: 'touch' },
+  'bomcenter|pricefile': 'touch', 'bomcenter|rec': 'touch', 'bomcenter|prep': 'touch', 'bomcenter|rel': 'touch', 'bomcenter|conv': 'touch',
+  'bomcenter|cal': 'touch', 'bomcenter|events': 'touch', 'bomcenter|zones': 'touch', 'bomcenter|codereq': 'touch',
+  'branchstock|issue': 'touch', 'branchstock|order': 'touch', 'branchstock|recv': 'touch', 'branchstock|var': 'touch', 'branchstock|count': 'touch',
+};
+// the default mode of a page (and of one of its views); a page the registry does not name opens in touch, the phone's own layout
+function phonePageDefault(tab, pane, view) {
+  const e = PAGE_PHONE[tab + '|' + (pane || '')] || PAGE_PHONE[tab];
+  if (e && typeof e === 'object') return e[view] || e[Object.keys(e)[0]];
+  return e === 'fit' ? 'fit' : 'touch';
+}
 // Pages that sit in no cluster or chip (the older single entries): listed in หน้ารายงานทั้งหมด under "อื่น ๆ".
 const ALLPAGES_EXTRA = [
   { tab: 'home', label: 'สรุปประจำวัน' }, { tab: 'action', label: 'ต้องดูวันนี้' }, { tab: 'feedback', label: 'เสียงลูกค้า' },
@@ -3555,6 +3603,7 @@ function _updateClusterBar(name) {
   const cl = clusterOf(name);
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
   phNavRender();                                   // the phone's bottom navigation follows every switch (js/09c-mobile.js)
+  if (typeof phFitSchedule === 'function') phFitSchedule();   // PR-MA: the page's phone display mode (พอดีจอ / แตะง่าย, js/09c-mobile.js)
   if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the rail's department entry that holds this page lights up (js/18-launcher.js)
   if (typeof renderDeptHead === 'function') renderDeptHead(name);  // PR-D2: breadcrumb + the department's band and icon tabs (a desktop hides the bar below)
   // The group you are in stays lit in the sidebar, whichever of its views is open

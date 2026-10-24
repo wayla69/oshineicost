@@ -27,7 +27,8 @@ function _ohbQShown() {
 }
 function ohbQueuePick(f) { uiStateFilter.set(f); _ohbKeyedSel.clear(); ohbRenderQueueList(); }
 // a phone (the branch login's strip or any narrow screen): the queue is cards and a line is a stacked block
-function _ohbPhone() { return document.body.classList.contains('supply-phone') || window.matchMedia('(max-width: 700px)').matches; }
+// PR-MA: a page in พอดีจอ (body.ph-fit) is the desktop layout scaled down: the queue is the desktop table there
+function _ohbPhone() { return document.body.classList.contains('supply-phone') || (window.matchMedia('(max-width: 700px)').matches && !document.body.classList.contains('ph-fit')); }
 let _ohbWasPhone = null;
 window.addEventListener('resize', () => {
   const p = _ohbPhone();

@@ -1377,25 +1377,26 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
      Scoped to .content-area so the dedicated mobile app (#mobileSummary) is
      untouched. Collapses dense KPI/stat grids to 2 columns and lets wide
      tables scroll horizontally inside their card instead of overflowing. */
-  .content-area [class*="grid-cols-3"],
-  .content-area [class*="grid-cols-4"],
-  .content-area [class*="grid-cols-5"],
-  .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* PR-MA: :where(body:not(.ph-fit)) = the phone layout (แตะง่าย) only; a page in พอดีจอ keeps its desktop layout inside the scaled frame */
+  :where(body:not(.ph-fit)) .content-area [class*="grid-cols-3"],
+  :where(body:not(.ph-fit)) .content-area [class*="grid-cols-4"],
+  :where(body:not(.ph-fit)) .content-area [class*="grid-cols-5"],
+  :where(body:not(.ph-fit)) .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   /* a table + a chart side by side (lg:grid-cols-3, the chart in a third) is a half-width squeeze on a phone: stack the cards */
-  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) { grid-template-columns: minmax(0, 1fr) !important; }
-  .content-area [class*="lg:grid-cols-"]:has(> .card canvas) > * { grid-column: auto !important; }
+  :where(body:not(.ph-fit)) .content-area [class*="lg:grid-cols-"]:has(> .card canvas) { grid-template-columns: minmax(0, 1fr) !important; }
+  :where(body:not(.ph-fit)) .content-area [class*="lg:grid-cols-"]:has(> .card canvas) > * { grid-column: auto !important; }
   /* a chart with a figures column beside it (the overall monthly trend): the figures go under the chart, full width */
-  .content-area div.flex:has(> div > canvas) { flex-direction: column; }
-  .content-area div.flex:has(> div > canvas) > div:has(> canvas) { flex: none !important; width: 100%; }
-  .content-area div.flex:has(> div > canvas) > :not(:has(> canvas)) { width: 100% !important; border-left: 0 !important; padding-left: 0 !important; }
+  :where(body:not(.ph-fit)) .content-area div.flex:has(> div > canvas) { flex-direction: column; }
+  :where(body:not(.ph-fit)) .content-area div.flex:has(> div > canvas) > div:has(> canvas) { flex: none !important; width: 100%; }
+  :where(body:not(.ph-fit)) .content-area div.flex:has(> div > canvas) > :not(:has(> canvas)) { width: 100% !important; border-left: 0 !important; padding-left: 0 !important; }
   .content-area .card { overflow-x: auto; }
   .content-area canvas { max-width: 100%; }
   /* ── Tables on a phone: the card scrolls sideways (above), the first column stays
      put so a wide table still reads (P&L is 650 px on a 375 px screen), cells pack
      tighter, and nothing is smaller than 12 px. ── */
   .content-area table { font-size: 12px; }
-  .content-area table th, .content-area table td { padding-left: 6px !important; padding-right: 6px !important; }
-  .content-area table th:first-child, .content-area table td:first-child {
+  :where(body:not(.ph-fit)) .content-area table th, :where(body:not(.ph-fit)) .content-area table td { padding-left: 6px !important; padding-right: 6px !important; }
+  :where(body:not(.ph-fit)) .content-area table th:first-child, :where(body:not(.ph-fit)) .content-area table td:first-child {
     position: sticky; left: 0; z-index: 1; background: var(--bg-card);
     max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* ── Nothing smaller than 12 px in the full dashboard on a phone: the utility sizes
@@ -1729,15 +1730,15 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
 .wt-stat { border: 1px solid var(--border); border-radius: var(--r-md, 12px); padding: 8px 12px; }
 .wt-stat-l { font-size: 12.5px; color: var(--text-muted); }
 .wt-stat-v { font-size: 20px; font-weight: 700; line-height: 1.25; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-@media (max-width: 700px) {
-  .wt-wrap { max-height: none; border: 0; }
-  .wt thead { display: none; }
-  .wt, .wt tbody, .wt tr, .wt td { display: block; width: 100%; }
-  .wt tr { border: 1px solid var(--border); border-radius: var(--r-md, 12px); margin-bottom: 8px; padding: 6px 4px; }
-  .wt td { border: 0; padding: 4px 10px; background: transparent !important; text-align: left !important; }
-  .wt td[data-l]::before { content: attr(data-l); display: block; font-size: 12px; color: var(--text-muted); }
-  .wt .wt-arrow { display: none; }
-  .wt-find { flex: 1 1 100%; min-width: 0; }
+@media (max-width: 700px) {   /* PR-MA: the cards are the แตะง่าย layout; in พอดีจอ (body.ph-fit) a work table stays a table */
+  :where(body:not(.ph-fit)) .wt-wrap { max-height: none; border: 0; }
+  :where(body:not(.ph-fit)) .wt thead { display: none; }
+  :where(body:not(.ph-fit)) :is(.wt, .wt tbody, .wt tr, .wt td) { display: block; width: 100%; }
+  :where(body:not(.ph-fit)) .wt tr { border: 1px solid var(--border); border-radius: var(--r-md, 12px); margin-bottom: 8px; padding: 6px 4px; }
+  :where(body:not(.ph-fit)) .wt td { border: 0; padding: 4px 10px; background: transparent !important; text-align: left !important; }
+  :where(body:not(.ph-fit)) .wt td[data-l]::before { content: attr(data-l); display: block; font-size: 12px; color: var(--text-muted); }
+  :where(body:not(.ph-fit)) .wt .wt-arrow { display: none; }
+  :where(body:not(.ph-fit)) .wt-find { flex: 1 1 100%; min-width: 0; }
 }
 /* The branch login's pages sit under the phone shell's bottom navigation (#phNav, PR-D3 - it replaced the #supplyNav strip): the chip rows above
    give way to it, and the lock state is a row of ฉัน. */
@@ -1830,11 +1831,11 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
       [style*="font-size:10px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size:11.5px"], [style*="font-size: 11px"],
       #brnIssProgress, #brnProgress, #brnIssProgress b, #brnProgress b) { font-size: 12px !important; }
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, textarea, summary, [role="button"],
-      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])) { min-height: 44px; }
-  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, [role="button"]) { min-width: 44px; }
+      input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])):where(:not(.ph-frame *)) { min-height: 44px; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, [role="button"]):where(:not(.ph-frame *)) { min-width: 44px; }
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) label:has(> input[type="file"]) { display: inline-flex; align-items: center; min-height: 44px; }
   /* every link: a 44 px box (a long link may wrap, so no negative margin) ... */
-  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) a[href]:not(.ohb-claimrow):not(.nav-item) { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) a[href]:not(.ohb-claimrow):not(.nav-item):where(:not(.ph-frame *)) { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; box-sizing: border-box; }
   /* ... except the short links inside a line of text, which keep the line's height and borrow the 44 px from the lines around them */
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(.brn-why, .brn-srcbtn, a.whitespace-nowrap, a.text-xs, a[class*="text-["], [class*="text-["] > a,
       [class*="text-["] > span > a, td > a:not(.ohb-claimrow), li > a:not(.ohb-claimrow)) { margin-block: -13px; }
@@ -2154,6 +2155,84 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the branch and franchise logins had their top bar laid over the tab strip (it held the user chip, now a row of ฉัน); a pinned login has no
      title or filters there (switchTab hides the scope of a page with its own controls), so with the strip gone the bar goes too */
   body.ph-on.supply-phone .top-bar, body.ph-on.franchise-phone .top-bar { display: none !important; }
+}
+/* ════════════════════════════════════════════════════════════
+   PHONE DISPLAY MODES (PR-MA, 2026-10-24) — แตะง่าย (touch) and พอดีจอ (fit) on the phone shell. Drawn by js/09c-mobile.js ("PHONE DISPLAY MODES").
+   Touch is the phone layout above. Fit (body.ph-fit) renders the open page (#tab-<name>.ph-frame) at its desktop layout in a frame 760-900 px wide
+   and scales it to the screen with CSS zoom; the phone rules of the touch layout are scoped out of it (:where(body:not(.ph-fit)) and
+   :where(:not(.ph-frame *))). The top bar, the chip rows, the filters and the "?" stay at touch size. The browser's own pinch zoom stays.
+   A double tap on a table or a chart shows it at 100 %; a tap on a table row opens the row sheet (#msSheet.ph-rowsheet).
+════════════════════════════════════════════════════════════ */
+#phModeBtn, #phTbSearch, #phTbAv { display: none; }
+#phSheetBack[hidden] { display: none; }
+.ph-tb-btn { min-height: 44px; min-width: 44px; box-sizing: border-box; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; border: 1px solid var(--border-control, #7d8aa0); border-radius: var(--r-md, 12px); background: var(--bg-card, #fff); color: var(--text-primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#phModeBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft, var(--bg-card)); }
+.ph-tb-av { width: 44px; height: 44px; flex: 0 0 auto; border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent); font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.ph-hsearch, .ph-hav { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font: inherit; }
+.ph-hsearch { border: 1px solid rgba(255,255,255,.45); background: transparent; color: #fff; }
+.ph-hav { border: 0; background: #fff; color: #1f3a6b; font-size: 16px; font-weight: 700; }
+.ph-hero-top .ph-uid { max-width: 40%; }
+.ph-nav-i span { max-width: 100%; padding: 0 2px; box-sizing: border-box; line-height: 1.15; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ph-recent { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ph-recent .ph-bigtile { min-height: 104px; padding: 12px 6px; }
+.ph-recent .ph-bigtile-n { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+/* the row sheet: the row's every column as label / value, its status first, its own actions last */
+.ph-rs { padding: 10px 16px 4px; }
+.ph-rs-pill { margin: 0 0 6px; }
+.ph-rs-list { margin: 0; }
+.ph-rs-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 44px; box-sizing: border-box; padding: 10px 0; border-top: 1px solid var(--border-soft, #e6eaf0); }
+.ph-rs-row:first-child { border-top: 0; }
+.ph-rs-row dt { flex: 0 0 42%; min-width: 0; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ph-rs-row dd { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 15px; color: var(--text-primary); text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ph-rs-act { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.ph-rs-act button { min-height: 44px; padding: 8px 16px; font: inherit; font-size: 14px; font-weight: 600; border-radius: var(--r-md, 12px); border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card, #fff); color: var(--text-primary); cursor: pointer; }
+.ph-rs-act button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 700px) {
+  /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
+  body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
+  body.ph-on .top-bar { gap: 6px; padding: 6px 8px; align-items: center; }
+  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; }
+  body.ph-on .topbar-scope .page-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
+  body.ph-on #dataCoverageNote { font-size: 12px !important; padding: 2px 8px !important; }
+  body.ph-on #dataCoverageNote .dcn-x { display: none; }
+  body.ph-on .top-bar .tb-fold { align-self: center; margin-left: 0; min-width: 44px; min-height: 44px; padding: 0 8px !important; }
+  body.ph-on #tbFoldBtn > span:not(#tbFoldChev) { display: none; }
+  body.ph-on.tb-folded .top-bar { flex-wrap: nowrap; }
+  /* a page with its own filters (switchTab hides the whole scope zone, the title with it): on the phone the title and the chip stay */
+  body.ph-on .top-bar .topbar-scope:is(.hidden, .invisible) { display: flex !important; visibility: visible; }
+  body.ph-on .top-bar .topbar-scope:is(.hidden, .invisible) > :not(.page-title):not(#dataCoverageNote) { display: none !important; }
+  /* fit: the frame. Its width and zoom are set by phFitLayout; the area around it gives up its side padding and never scrolls sideways */
+  body.ph-on.ph-fit .content-area { padding-left: 4px; padding-right: 4px; overflow-x: hidden; }
+  body.ph-on.ph-fit .ph-frame { box-sizing: border-box; max-width: none; overflow-x: clip; }
+  body.ph-on.ph-fit .ph-frame .card { overflow: visible; }
+  body.ph-on.ph-fit .ph-frame .ph-xs { overflow: auto !important; overscroll-behavior: contain; }
+  body.ph-on.ph-fit .ph-frame .ph-xv { overflow: visible !important; }
+  /* the header row and the first column stay pinned while the frame or its table scrolls */
+  body.ph-on.ph-fit .ph-frame thead th { position: sticky; top: 0; z-index: 3; }
+  body.ph-on.ph-fit .ph-frame table :is(tbody td, tfoot td, tfoot th):first-child { position: sticky; left: 0; z-index: 2; background: var(--bg-card); }
+  body.ph-on.ph-fit .ph-frame table thead th:first-child { left: 0; z-index: 4; }
+  body.ph-on.ph-fit .ph-frame :is(table, canvas) { touch-action: manipulation; }
+  body.ph-on.ph-fit .ph-frame tbody tr { cursor: pointer; }
+  /* the filters, the period pickers, the chips and the "?" inside the frame keep their touch size (counter-zoomed by phFitLayout) */
+  body.ph-on.ph-fit .ph-frame .ph-tz { min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  /* the desktop layout at the frame's width: Tailwind's sm: and md: columns (keyed to the viewport, so off on a phone) apply in the frame */
+  body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-2, .md\:grid-cols-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-3, .md\:grid-cols-3) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.ph-on.ph-fit .ph-frame .md\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.ph-on.ph-fit .ph-frame .md\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  body.ph-on.ph-fit .ph-frame .md\:grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  body.ph-on.ph-fit .ph-frame .md\:col-span-4 { grid-column: span 4 / span 4; }
+  body.ph-on.ph-fit .ph-frame .md\:border-r { border-right-width: 1px; }
+  body.ph-on.ph-fit .ph-frame .sm\:block { display: block; }
+  /* a table or a chart at 100 % (double tap): above its neighbours, scrolling inside itself */
+  body.ph-on.ph-fit .ph-frame .ph-z100 { position: relative; z-index: 6; overflow: auto !important; overscroll-behavior: contain; background: var(--bg-card); box-shadow: 0 0 0 2px var(--accent), 0 8px 24px rgba(15,23,42,.25); }
+  body.ph-on .ph-frame.ph-measure canvas { display: none !important; }
+  /* the row sheet rises from the bottom over a dimmed page; a tap on the dim or a swipe down closes it */
+  body.ph-on #msSheet.open.ph-rowsheet { display: block; top: auto; max-height: 82vh; z-index: 60; border-radius: 16px 16px 0 0; background: var(--bg-card, #fff);
+    box-shadow: 0 -8px 30px rgba(15,23,42,.3); padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  body.ph-on #msSheet.ph-rowsheet .ms-header { border-radius: 16px 16px 0 0; }
+  body.ph-on #msSheet.ph-rowsheet .ms-header button[onclick^="msSheetStep"] { display: none; }
+  body.ph-on #phSheetBack:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 59; background: rgba(15,23,42,.45); }
 }
 }
 
@@ -2619,6 +2698,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   </div>
   <div id="msSheetBody"></div>
 </div>
+<div id="phSheetBack" hidden onclick="msCloseSheet()"></div>
 <nav id="msNav">
   <button id="msnav-summary"   data-g="home"   class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
   <button id="msnav-sales"     data-g="sales"  onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
@@ -2642,6 +2722,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <section id="phv-me" class="ph-view" aria-label="ฉัน" hidden>
     <header class="ph-head ph-head-navy"><span class="ph-av" id="phMeAv" aria-hidden="true">ม</span><div class="ph-head-t"><h1 id="phMeWho">ผู้ใช้งาน</h1><p id="phMeRole"></p></div></header>
     <div class="ph-body">
+      <div id="phMeRecentWrap" role="group" aria-labelledby="phMeRecentH" hidden><h2 class="ph-sec" id="phMeRecentH">หน้าที่เปิดล่าสุด</h2><div class="ph-recent" id="phMeRecent"></div></div>
       <div class="ph-card ph-card-list">
         <button type="button" class="ph-row" id="phMeDark" onclick="toggleDarkMode()" aria-pressed="false"><span>โหมดมืด</span><span class="ph-val" id="phMeDarkV">ปิด</span></button>
         <button type="button" class="ph-row" id="phMeLock" onclick="phUnlockWrites()" hidden><span>การบันทึกข้อมูล</span><span class="ph-val" id="phMeLockV">อ่านอย่างเดียว</span></button>
@@ -2999,6 +3080,15 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/></svg>
       <span style="color:var(--text-secondary);font-weight:500">เครื่องมือ</span> <span id="tbFoldChev" aria-hidden="true">▴</span>
     </button>
+    <!-- PR-MA · the phone shell only (display:none elsewhere): the display mode of this page, the page search and ฉัน (js/09c-mobile.js) -->
+    <button id="phModeBtn" type="button" class="ph-tb-btn" onclick="phModeToggle()" aria-pressed="false" aria-label="โหมดแสดงผล">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6 M20 4l-7 7 M10 20H4v-6 M4 20l7-7"/></svg>
+      <span id="phModeL">แตะง่าย</span>
+    </button>
+    <button id="phTbSearch" type="button" class="ph-tb-btn" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5"/></svg>
+    </button>
+    <button id="phTbAv" type="button" class="ph-tb-av" onclick="phOpenMe()" aria-label="ฉัน">ฉ</button>
     <!-- ░░ ACTIONS zone — find · extra filters · tools · uploads ░░ -->
     <div class="topbar-actions flex items-center gap-2 flex-wrap" style="margin-left:auto">
       <!-- Global search -->

@@ -42,26 +42,28 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
 
   /* ── tap targets 44px on every page of the full dashboard (F8, F18, F37). !important: a bar's own id-scoped height (the supply chip bar kept
         34px) must not win over the floor ───────────────────────────────────────────────────────────────────────────────────── */
+  /* PR-MA: :where(:not(.ph-frame *)) - a page in พอดีจอ keeps its desktop controls inside the scaled frame (js/09c-mobile.js); its filters and
+        its "?" keep their 44px from the frame's own rule (index.html, PHONE DISPLAY MODES) */
   body :is(button, select, summary, [role="button"], textarea,
-           input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])) { min-height: 44px !important; }
+           input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])):where(:not(.ph-frame *)) { min-height: 44px !important; }
   /* a check box or radio on its own is a 44px target too: the box is drawn 24px inside it (no label of its own to tap) */
-  body input[type="checkbox"], body input[type="radio"] { -webkit-appearance: none; appearance: none; width: 44px !important; height: 44px !important; padding: 10px; box-sizing: border-box;
+  body :is(input[type="checkbox"], input[type="radio"]):where(:not(.ph-frame *)) { -webkit-appearance: none; appearance: none; width: 44px !important; height: 44px !important; padding: 10px; box-sizing: border-box;
     background: transparent !important; position: relative; flex: 0 0 auto; min-width: 44px !important; margin: 0; cursor: pointer; }
-  body input[type="checkbox"]::before, body input[type="radio"]::before { content: ''; display: block; width: 24px; height: 24px; border: 2px solid var(--border-control);
+  body :is(input[type="checkbox"], input[type="radio"]):where(:not(.ph-frame *))::before { content: ''; display: block; width: 24px; height: 24px; border: 2px solid var(--border-control);
     border-radius: 6px; background: var(--bg-input); box-sizing: border-box; }
-  body input[type="radio"]::before { border-radius: 50%; }
-  body input[type="checkbox"]:checked::before, body input[type="radio"]:checked::before { background: var(--accent); border-color: var(--accent); }
-  body input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 18px; top: 11px; width: 8px; height: 15px; border: solid var(--on-accent); border-width: 0 3px 3px 0; transform: rotate(45deg); }
-  body input[type="radio"]:checked::after { content: ''; position: absolute; left: 17px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); }
-  body input[type="checkbox"]:disabled, body input[type="radio"]:disabled { opacity: .5; cursor: not-allowed; }
+  body input[type="radio"]:where(:not(.ph-frame *))::before { border-radius: 50%; }
+  body :is(input[type="checkbox"], input[type="radio"]):checked:where(:not(.ph-frame *))::before { background: var(--accent); border-color: var(--accent); }
+  body input[type="checkbox"]:checked:where(:not(.ph-frame *))::after { content: ''; position: absolute; left: 18px; top: 11px; width: 8px; height: 15px; border: solid var(--on-accent); border-width: 0 3px 3px 0; transform: rotate(45deg); }
+  body input[type="radio"]:checked:where(:not(.ph-frame *))::after { content: ''; position: absolute; left: 17px; top: 17px; width: 10px; height: 10px; border-radius: 50%; background: var(--on-accent); }
+  body :is(input[type="checkbox"], input[type="radio"]):disabled:where(:not(.ph-frame *)) { opacity: .5; cursor: not-allowed; }
   /* the sticky first column of a table keeps the header band's colour under the white header ink (it was the card fill) */
   .content-area table thead th:first-child { background: var(--accent); }
   body.dark .content-area table thead th:first-child { background: #3a3590; }
   body .ms-toggle { min-width: 44px !important; }
-  body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn) { min-width: 44px; }
+  body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn):where(:not(.ph-frame *)) { min-width: 44px; }
   #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }
   body a.see-full { display: inline-flex; align-items: center; min-height: 44px; }
-  body label:has(> input[type="checkbox"], > input[type="radio"]) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+  body label:has(> input[type="checkbox"], > input[type="radio"]):where(:not(.ph-frame *)) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
 
   /* ── the branch strip (สาขาของฉัน · ชื่อสาขา · ตัวอักษรใหญ่ · ?) grows to its 44px controls instead of letting them spill out of a 32px bar,
         and its one-line counters wrap instead of ending in "…"; the day chips wrap (F18, F27) ─────────────────────────────────────── */
@@ -74,11 +76,11 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   body .brn-sticky-bottom span[id$="Status"] { white-space: normal; max-width: 100%; }
 
   /* ── the per-branch rows of a task (สาขา · สถานะ · รายละเอียด) are one line each, not a card of three labelled cards (F33) ──────── */
-  .wt.wt-lines tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; border: 0; border-top: 1px solid var(--border); border-radius: 0; margin: 0; padding: 8px 4px; }
-  .wt.wt-lines td { display: block; width: auto; padding: 0; }
-  .wt.wt-lines td[data-l]::before { display: none; }
-  .wt.wt-lines td[data-l="รายละเอียด"] { flex: 1 1 100%; font-size: 13px; }
-  .wt.wt-lines td.wt-act { margin-left: auto; }
+  :where(body:not(.ph-fit)) .wt.wt-lines tr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; border: 0; border-top: 1px solid var(--border); border-radius: 0; margin: 0; padding: 8px 4px; }
+  :where(body:not(.ph-fit)) .wt.wt-lines td { display: block; width: auto; padding: 0; }
+  :where(body:not(.ph-fit)) .wt.wt-lines td[data-l]::before { display: none; }
+  :where(body:not(.ph-fit)) .wt.wt-lines td[data-l="รายละเอียด"] { flex: 1 1 100%; font-size: 13px; }
+  :where(body:not(.ph-fit)) .wt.wt-lines td.wt-act { margin-left: auto; }
 
   /* ── a chip with a long list inside it (the branches behind the all-branch average, ...) wraps instead of running off the screen (F35),
         and a menu name in the owner's tables shows whole (F37) ──────────────────────────────────────────────────────────────────── */
@@ -97,8 +99,8 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   :is(#tab-orderhub, #tab-ingpurchase, #tab-bomcenter, #tab-branchstock, #tab-supplyhome) > .card > .ui-cardhead > h2.text-base { display: none; }
 
   /* ── a grid that starts as one column stays one column on a phone (the 2-column collapse above was meant for KPI grids) (F13) ─── */
-  .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] { grid-template-columns: minmax(0, 1fr) !important; }
-  .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] > * { grid-column: auto !important; }
+  :where(body:not(.ph-fit)) .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] { grid-template-columns: minmax(0, 1fr) !important; }
+  :where(body:not(.ph-fit)) .content-area [class~="grid-cols-1"][class*="lg:grid-cols-"] > * { grid-column: auto !important; }
 
   /* ── เทียบเมนู A/B: the period pickers stack and never run out of the card (F12) ───────────────────────────────────────────── */
   #tab-menucompare .card > .flex-wrap > .flex { flex-wrap: wrap; width: 100%; }
@@ -113,5 +115,5 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
         [style*="font-size:11"], [style*="font-size: 9"], [style*="font-size: 10"], [style*="font-size: 11"]) { font-size: 12px !important; }
   }
   /* a short button is still 44px wide (F8) */
-  body :is(button, [role="button"], summary) { min-width: 44px; }
+  body :is(button, [role="button"], summary):where(:not(.ph-frame *)) { min-width: 44px; }
 }

@@ -424,15 +424,17 @@ async function initDataCoverageNote() {
     const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
     const [y, m, d] = c.last_date.split('-').map(Number);
     const human = `${d} ${TH_MON[m-1]} ${y+543}`;   // พ.ศ.
+    // PR-MA: on the phone top bar the chip is short ("ถึง 22 ต.ค."): the words in .dcn-x are hidden there (index.html, PHONE DISPLAY MODES)
+    const chip = `<span class="dcn-x">ข้อมูล</span>ถึง ${d} ${TH_MON[m-1]}<span class="dcn-x"> ${y+543}</span>`;
     if (c.last_day_missing) {
-      el.textContent = `⚠ ข้อมูลถึง ${human}`;
+      el.innerHTML = `⚠ ${chip}`;
       el.style.background = '#fef3c7';
       el.style.color = '#92400e';   // fixed light badge (#fef3c7) in both themes: 6.4:1
       el.title = `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
                + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น ต้นทุนอาหาร % กระทบน้อย. `
                + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`;
     } else {
-      el.textContent = `ข้อมูลถึง ${human}`;
+      el.innerHTML = chip;
       el.style.background = 'var(--bg-subtle)';
       el.style.color = 'var(--text-secondary)';
       el.title = `ข้อมูลล่าสุดถึง ${human}`;
