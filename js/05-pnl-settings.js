@@ -2275,8 +2275,36 @@ function exportTable(tableId, filename = 'export.csv') {
 }
 
 
+// RV-M: the formula guard of backend/xl_safe.py for every CSV the page writes (8 callers build their own text): a field that starts with
+// = + - @ tab or CR - a POS reason "=HYPERLINK(...)", a typed note - opens in Excel as a formula. It gets a leading apostrophe; a number
+// ("-12.5", "+3") and a lone "-" stay as they are. The text is split on its own CSV quoting (a quoted field may hold commas and newlines).
+function csvGuard(text) {
+  const out = [];
+  let i = 0, row = [], f = '', q = false, quoted = false;
+  const put = () => {
+    const danger = f.length && '=+-@\t\r'.includes(f[0]) && f !== '-' && !/^[-+]?\d[\d,]*(\.\d+)?%?$/.test(f);
+    const v = danger ? "'" + f : f;
+    row.push(quoted || danger || /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v);
+    f = ''; quoted = false;
+  };
+  const s = String(text);
+  for (; i < s.length; i++) {
+    const c = s[i];
+    if (q) {
+      if (c === '"' && s[i + 1] === '"') { f += '"'; i++; }
+      else if (c === '"') q = false;
+      else f += c;
+    } else if (c === '"') { q = true; quoted = true; }
+    else if (c === ',') put();
+    else if (c === '\n') { put(); out.push(row.join(',')); row = []; }
+    else if (c === '\r' && s[i + 1] === '\n') { /* the \n ends the row */ }
+    else f += c;
+  }
+  if (f.length || row.length || quoted) { put(); out.push(row.join(',')); }
+  return out.join('\n');
+}
 function downloadCSV(text, filename) {
-  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['﻿' + csvGuard(text)], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;

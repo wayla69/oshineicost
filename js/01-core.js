@@ -414,6 +414,8 @@ function _writeTokenFromAuth() {
     window.writeToken.gated = true;
     let tok = ''; try { tok = localStorage.getItem('oshinei_upload_token') || ''; } catch (e) {}
     window.writeToken.unlocked = tok ? window.writeToken.unlocked : false;
+    // RV-M: a code is stored but not checked yet - ask once (ฉัน and the lock chip said อ่านอย่างเดียว while saves went through)
+    if (tok && window.writeToken.unlocked == null && typeof verifyWriteToken === 'function') verifyWriteToken();
   }
   try { _renderLockChip(); } catch (e) { /* no bar yet */ }
 }

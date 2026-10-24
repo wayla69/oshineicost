@@ -1546,7 +1546,7 @@ async function loadTableTurnover() {
 }
 
 function renderTimeflowGrid() {
-  const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DOW_LABELS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];   // RV-M: Thai day names on a Thai page
   const gridEl = document.getElementById('timeflowGrid');
   if (!gridEl || !_timeflowData.cells) return;
 
@@ -1598,7 +1598,7 @@ function renderTimeflowGrid() {
       const rank = rankMap[`${dow}_${h}`];
       html += `<td
         onclick="tfCellClick(${dow},${h},${v},${rank})"
-        title="${DOW_LABELS[dow]} ${h}:00 · ${v > 0 ? (isMoney ? '' + v.toLocaleString() : v.toLocaleString()) : '—'} · Rank #${rank}"
+        title="${DOW_LABELS[dow]} ${h}:00 · ${v > 0 ? (isMoney ? '' + v.toLocaleString() : v.toLocaleString()) : '—'} · อันดับ ${rank}"
         style="background:${bg};color:${fg};height:36px;min-width:${cellW}px;text-align:center;cursor:pointer;border-radius:var(--r-md);font-size:10px;font-weight:${v>0?600:400};transition:transform .12s;vertical-align:middle"
         onmouseover="this.style.transform='scale(1.1)';this.style.zIndex=10;this.style.position='relative'"
         onmouseout="this.style.transform='';this.style.zIndex='';this.style.position=''">
@@ -1620,7 +1620,7 @@ function renderTimeflowGrid() {
 }
 
 function tfCellClick(dow, hour, value, rank) {
-  const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DOW_LABELS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];   // RV-M: Thai day names on a Thai page
   const isMoney = _timeflowMetric === 'revenue' || _timeflowMetric === 'avg_ticket';
   const metricName = { revenue:'ยอดขาย', tx_count:'บิล', customer_count:'ลูกค้า', avg_ticket:'ยอดเฉลี่ยต่อบิล' }[_timeflowMetric];
   const valFmt = isMoney ? '' + value.toLocaleString() : value.toLocaleString();
@@ -1648,7 +1648,7 @@ function tfCellClick(dow, hour, value, rank) {
 }
 
 function tfDiveIn() {
-  const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DOW_LABELS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];   // RV-M: Thai day names on a Thai page
   const cells = _timeflowData.cells || [];
   if (!cells.length) return;
   const isMoney = _timeflowMetric === 'revenue' || _timeflowMetric === 'avg_ticket';
@@ -1675,12 +1675,12 @@ function tfDiveIn() {
       <button onclick="document.getElementById('tfCellDetail').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">Peak Day</p><p class="text-base font-bold text-indigo-600">${DOW_LABELS[peakDow.dow]}</p><p class="text-xs text-slate-400">${fmtV(peakDow.v)}</p></div>
-      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">Peak Hour</p><p class="text-base font-bold text-indigo-600">${peakHour.h}:00</p><p class="text-xs text-slate-400">${fmtV(peakHour.v)}</p></div>
-      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">Top Cell</p><p class="text-base font-bold text-amber-600">${DOW_LABELS[top5[0]?.dow]} ${top5[0]?.hour}:00</p><p class="text-xs text-slate-400">${fmtV(top5[0]?.value||0)}</p></div>
-      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">Concentration</p><p class="text-base font-bold text-emerald-600">${totalVal>0?((top5[0]?.value||0)/totalVal*100).toFixed(1):0}%</p><p class="text-xs text-slate-400">in single slot</p></div>
+      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">วันขายดีสุด</p><p class="text-base font-bold text-indigo-600">${DOW_LABELS[peakDow.dow]}</p><p class="text-xs text-slate-400">${fmtV(peakDow.v)}</p></div>
+      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">ชั่วโมงขายดีสุด</p><p class="text-base font-bold text-indigo-600">${peakHour.h}:00</p><p class="text-xs text-slate-400">${fmtV(peakHour.v)}</p></div>
+      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">ช่วงขายดีสุด</p><p class="text-base font-bold text-amber-600">${DOW_LABELS[top5[0]?.dow]} ${top5[0]?.hour}:00</p><p class="text-xs text-slate-400">${fmtV(top5[0]?.value||0)}</p></div>
+      <div class="bg-white p-3 rounded-lg text-center shadow-sm"><p class="text-xs text-slate-500">สัดส่วนช่วงสูงสุด</p><p class="text-base font-bold text-emerald-600">${totalVal>0?((top5[0]?.value||0)/totalVal*100).toFixed(1):0}%</p><p class="text-xs text-slate-400">in single slot</p></div>
     </div>
-    <p class="text-xs font-semibold text-slate-500 mb-2">Top 5 Slots</p>
+    <p class="text-xs font-semibold text-slate-500 mb-2">5 ช่วงขายดีสุด</p>
     <div class="space-y-1">
       ${top5.map((c,i)=>{
         const pct = totalVal > 0 ? (c.value/totalVal*100).toFixed(1) : 0;

@@ -694,13 +694,14 @@ function frcMsgRender() {
   else inner = _fmListHtml();
   box.innerHTML = head + inner;
   if (_fmView.mode !== 'new' && _fmView.mode !== 'thread') {
-    const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed');
+    const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed' && !t.unread);
     uiStateFilter.bar('frcMsgFilter', { counts: sp.counts, f: uiStateFilter.get(['todo', 'done', 'all']), pick: 'frcMsgFilter', opts: _FM_FILTER });
   }
 }
 function _fmListHtml() {
   const f = uiStateFilter.get(['todo', 'done', 'all']);
-  const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed');
+  // RV-M: a closed thread with a reply the owner has not read stays in the default list (the card said "ใหม่ 1" over an empty list)
+  const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed' && !t.unread);
   const rows = sp[f] || sp.todo;
   const list = rows.length ? rows.map(t => _fmRowHtml(t, 'frcMsgOpen', false)).join('')
     : (sp.counts.all ? uiStateFilter.empty(f, 'frcMsgFilter', 'หัวข้อ') : `<div class="ms-row" style="${_FRC_MUTED};font-size:13px">ยังไม่มีคำถาม</div>`);

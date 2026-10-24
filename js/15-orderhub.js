@@ -500,7 +500,15 @@ async function ohbCntImport(input) {
         { title: 'ยืนยันการนำเข้าใบตรวจนับ', ok: 'นำเข้าใบตรวจนับ', cancel: 'ยกเลิก' })) { _bmcStatus('ohbCntStatus', 'ยกเลิกแล้ว'); return; }
     const d = await _bmcJson(`${API}/api/bom-center/stock/count-import?dry_run=false&${_ohbCntQS()}`, { method: 'POST', body: _ohbFd(file) });
     _bmcStatus('ohbCntStatus', `✓ นำเข้าใบตรวจนับวันที่ ${fmtDay(day)} แล้ว (${d.kind === 'begin' ? 'นับครั้งแรก' : 'นับสิ้นเดือน'}) · ${d.counted_th || d.lines + ' รายการ'}`, 'var(--good-ink)');
-    ohbLoadCentral();                       // the next missing date, the step statuses
+    const was = document.getElementById('ohbCntBranch').value;
+    await ohbLoadCentral();                 // the next missing date, the step statuses
+    // RV-M: the form moves on to the next branch still waiting for a count - say so beside the fields, so a second file is not sent to a
+    // branch the person did not pick
+    const sel2 = document.getElementById('ohbCntBranch'), st2 = document.getElementById('ohbCntStatus');
+    if (sel2 && st2 && sel2.value !== was) {
+      st2.textContent = `ต่อไป: สาขา${sel2.selectedOptions[0]?.textContent || ''} วันที่ ${fmtDay(document.getElementById('ohbCntDate').value)}`;
+      st2.style.color = 'var(--navy-ink)';
+    }
   } catch (e) { _bmcStatus('ohbCntStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
   finally { input.value = ''; }
 }

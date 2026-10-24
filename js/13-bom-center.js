@@ -125,7 +125,9 @@ function _bmcStatusKind(id, t, ink) {
   // RV-M: the branch words renamed the draft (docs/BRANCH_WORDS.md: บันทึกไว้ก่อน); an autosave ("บันทึกไว้แล้ว 10:42", no ✓) popped a toast on
   // every pause in typing and wiped the line beside the button. It is the inline note again, as the draft was.
   if (!bad && /^บันทึกไว้(แล้ว|ก่อน) /.test(t)) return { inline: 'note' };
-  if (/Summary$|Count$/.test(id || '')) return { inline: 'note' };                                                    // a counter of a table
+  // a counter of a table. RV-M: only a plain counter - a save reported on the counter's line (ทะเบียนวัตถุดิบ: "บันทึก 1 รายการแล้ว",
+  // a refusal) is a result and goes to its toast like any other
+  if (/Summary$|Count$/.test(id || '') && !bad && !good && !warn) return { inline: 'note' };
   // PR-U1: a refusal of a save on the branch's pages (brn*) also stays in the status line - a toast vanishes, the branch must still read why
   if (bad) return { toast: 'error', inline: _BMC_STATUS_FIELD.test(t) || /^brn/.test(id || '') ? 'field' : 'clear' };
   if (warn) return /ยังไม่บันทึก|ยังไม่ได้บันทึก/.test(t) ? { inline: 'warn' } : { toast: 'warn', inline: 'warn' };      // a thing to fix stays beside its control, short
@@ -1193,7 +1195,8 @@ async function bmcDcCommit() {
     bmcDcShowPreview(d, true);
     _bmcStatus('bmcDcStatus', `✓ นำเข้าต้นทุนต่อจาน ${d.imported} เมนู${d.facts_note ? ' · ' + d.facts_note : ''}`, 'var(--good-ink)');
     _bmcDcPre = null;
-    bmcLoadDishCost('reset');
+    await bmcLoadDishCost('reset');
+    bmcDcView('imported');                  // RV-M: the rows just saved (the reset opened on ไม่มีในตาราง and hid them)
   } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
 }
 

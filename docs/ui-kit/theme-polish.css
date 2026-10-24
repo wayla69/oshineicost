@@ -137,7 +137,7 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   /* RV-M: 44px targets in แตะง่าย that the floor above does not reach: a clickable table row or cell (the branch rows of สรุปประจำวัน, the
      heat-map branch names, the sortable heads of P&L), a clickable row built of divs (the branch rows of ส่วนลด, the bands of P&L ต่อบิล),
      a file picker, and a link standing on its own (เสียงลูกค้า, เวลาปิดร้าน). Inside the พอดีจอ frame the desktop sizes stay. */
-  :where(body:not(.ph-fit)) .content-area :is(tr[onclick] > td, td[onclick], th[onclick]) { height: 44px; }
+  :where(body:not(.ph-fit)) .content-area :is(tr[onclick] > td, td[onclick], th[onclick]) { height: 44px !important; }   /* !important: the heat grid of ช่วงเวลา sets 36px inline */
   :where(body:not(.ph-fit)) .content-area :is(div, li)[onclick] { min-height: 44px; }
   :where(body:not(.ph-fit)) .content-area input[type="file"] { min-height: 44px; }
   :where(body:not(.ph-fit)) .content-area :is(a[href], a[onclick]):not(td a, p a, li a, .nav-item) { min-height: 44px; box-sizing: border-box; }

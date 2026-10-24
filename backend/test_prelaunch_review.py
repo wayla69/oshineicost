@@ -87,7 +87,7 @@ def test_header_inks_and_carets_follow_the_band():
 # ── 44 px targets in แตะง่าย ─────────────────────────────────────────────────────────────────────────────────────────────────
 def test_clickable_rows_cells_file_pickers_and_lone_links_are_44px_in_touch():
     css = _src("docs/ui-kit/theme-polish.css")
-    for rule in (":is(tr[onclick] > td, td[onclick], th[onclick]) { height: 44px; }", ":is(div, li)[onclick] { min-height: 44px; }",
+    for rule in (":is(tr[onclick] > td, td[onclick], th[onclick]) { height: 44px !important; }", ":is(div, li)[onclick] { min-height: 44px; }",
                  'input[type="file"] { min-height: 44px; }'):
         assert rule in css, rule
 
@@ -98,6 +98,41 @@ def test_no_english_sentences_left_on_the_cost_and_pnl_pages_and_fc_percent_is_c
                    ("js/05-pnl-settings.js", "Margin rate used"), ("js/05-pnl-settings.js", "Est. GP/bill"), ("js/07-home.js", "market context unavailable")):
         assert s not in _src(rel), (rel, s)
     assert "fcRaw != null && fcRaw <= 999 ? fcRaw : null" in _src("js/08-guest-buffet.js")
+
+
+# ── found by the flow runs ───────────────────────────────────────────────────────────────────────────────────────────────────
+def test_every_csv_the_page_writes_passes_the_formula_guard():
+    """ส่วนลด's reason export wrote a POS reason "=1+1" raw: downloadCSV (8 callers) now escapes it, numbers stay numbers."""
+    from test_less_text import NODE, _fn, _node
+    if NODE is None:
+        pytest.skip("node is not installed")
+    src = _src("js/05-pnl-settings.js")
+    assert "new Blob(['﻿' + csvGuard(text)]" in src
+    got = _node(_fn(src, "csvGuard"), 'csvGuard(\'a,=1+1,"@SUM(A1), x",-12.5,+3,-,"he said ""hi""",-x\\n2,\\t9,ok\')')
+    assert got == 'a,"\'=1+1","\'@SUM(A1), x",-12.5,+3,-,"he said ""hi""","\'-x"\n2,"\'\t9",ok'
+
+
+def test_a_counter_line_carries_a_save_result_to_its_toast():
+    """ทะเบียนวัตถุดิบ reports its save on bmcIngSummary; the counter rule swallowed the success and the refusal (no toast)."""
+    from test_less_text import NODE, _kind
+    if NODE is None:
+        pytest.skip("node is not installed")
+    assert _kind("บันทึก 1 รายการแล้ว", "var(--good-ink)", "bmcIngSummary")["toast"] == "success"
+    assert _kind("ไม่สำเร็จ: x", "var(--bad-ink)", "bmcIngSummary")["toast"] == "error"
+    assert _kind("12 จาก 274 รายการ · มีปัญหา 3", None, "bmcIngSummary") == {"inline": "note"}
+
+
+def test_the_flow_fixes_are_wired():
+    core, bmc, frc, ohb = _src("js/01-core.js"), _src("js/13-bom-center.js"), _src("js/17-franchise.js"), _src("js/15-orderhub.js")
+    assert "if (tok && window.writeToken.unlocked == null && typeof verifyWriteToken === 'function') verifyWriteToken();" in core
+    assert "await bmcLoadDishCost('reset');\n    bmcDcView('imported');" in bmc.replace("\r\n", "\n")
+    assert frc.count("t => t.status === 'closed' && !t.unread") == 2           # an unread reply keeps a closed thread in the default list
+    assert "const cur = _ohbIsWant != null ? String(_ohbIsWant) : sel.value;" in ohb   # การใช้งานทุกสาขา -> ใบตัดเบิกสาขา of that branch
+    assert "ต่อไป: สาขา" in ohb                                                    # the count form says where it moved on to
+    br = _src("js/14-branch.js")
+    assert "brnConfirmRecv(false, ${Number(eid)})" in br and "tick: 'brnRcSelect'" in br   # stock mode: month close + ticks on สิ้นเดือน
+    assert 'id="phBrnSearch" onclick="phOpenSearch()"' in _src("js/09c-mobile.js")
+    assert "const must = new Set(all.filter(x => x.needs_reason)" in ohb           # every line that needs a reason is listed
 
 
 # ── browser ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
