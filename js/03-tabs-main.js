@@ -1520,7 +1520,7 @@ function _moverRow(m, positive) {
   const deltaTxt = (m.delta > 0 ? '+' : '') + fmtN(m.delta);
   // PR-PP2: เทียบปีก่อน beside the change on the period before (— without a year-ago base)
   const ly = m.delta_ly_pct;
-  const lyTxt = `<span class="text-[11px]" style="color:${ly == null ? 'var(--text-muted)' : ly >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}" title="เทียบปีก่อน">ปีก่อน ${ly == null ? '—' : (ly > 0 ? '+' : '') + ly.toFixed(0) + '%'}</span>`;
+  const lyTxt = `<span class="text-xs" style="color:${ly == null ? 'var(--text-muted)' : ly >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}" title="เทียบปีก่อน">ปีก่อน ${ly == null ? '—' : (ly > 0 ? '+' : '') + ly.toFixed(0) + '%'}</span>`;
   return `<div class="flex items-center justify-between gap-3 py-0.5">
     <span class="min-w-0">
       <span class="text-sm text-slate-700 block truncate" title="${esc(m.name)}">${esc(name)}</span>
@@ -1965,7 +1965,7 @@ function _renderTop60Sales(d) {
     sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
     // PR-PP2: เทียบช่วงก่อน on top, เทียบปีก่อน under it (— without a year-ago base)
     const momCell = (mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true))
-      + `<div class="text-[10px]" title="เทียบปีก่อน">ปีก่อน ${_momSpan(r.qty_yoy_pct, true)}</div>`;
+      + `<div class="text-xs" title="เทียบปีก่อน">ปีก่อน ${_momSpan(r.qty_yoy_pct, true)}</div>`;
     const cogs = r.cogs || 0; sumCogs += cogs;
     cumCogs += r.cogs_share_pct || 0;                                // running Pareto of COGS share
     const costCell = cogs > 0 ? fmtN(cogs) : '<span class="text-slate-300">—</span>';  // TOTAL cost (BoM)
