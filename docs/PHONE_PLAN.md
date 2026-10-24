@@ -147,6 +147,7 @@ To register a table, add it to `PAGE_CARDS` (js/01-core.js, keyed like `PAGE_PHO
 | GP รายสาขา | gpbranch | `#gpbTable` (branch rows) | สาขา · ต้นทุนอาหาร % | รายได้, GP, GP % | สถานะ (ในเป้า / ใกล้ขอบ / นอกเป้า) | — |
 | P&L รายสาขา | pnlbranch | `#pnlbTable` | สาขา · GP%, OP% | รายได้, กำไรขั้นต้น, กำไรดำเนินงาน | — | — |
 | ยอดขายรายวัน | dailysales | the branch table (`#dsBody`) | สาขา · เทียบเดือนก่อน, เทียบปีก่อน | ยอดขาย, ลูกค้า, ยอด/หัว | — | — |
+| ยอดขายรายวัน · เมนูพุ่งผิดปกติ | dailysales | `#spikeTable` | เมนู · สาขา | วันนี้ (จาน) / ช่วงนี้ (จาน), เฉลี่ย 21 วัน / ปกติ (จาน), สูงกว่า | — | — |
 | ส่วนลด | discounts | cashiers (`#discCashierBody`) · reasons | แคชเชียร์ · สาขา (the branch row is a group card) | ส่วนลดรวม, % ยอดขาย, อัตรา | — | — |
 | พนักงาน | staff | `#staffTable` | แคชเชียร์ · สาขา | รายได้, ยอดบิลเฉลี่ย, % ส่วนลด | — | — |
 | บิลยกเลิก | cancelbill | branches · reasons | สาขา · เหตุผล | บิลยกเลิก, มูลค่า · บิล, %, มูลค่า | — | — |

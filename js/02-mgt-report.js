@@ -1554,7 +1554,9 @@ function renderMgtReport(j, jM, jF) {
   if (!body) return;
   const footMonth = (j.pace && j.pace.month) || (isTH ? 'เดือนนั้น' : 'the period month');
   const footnote = isTH
-    ? `<p class="text-[11px] text-slate-400 px-1 mgt-foot">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว (อิงสูตร BoM), ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % เป็นตัวเลขอิง BoM ของ ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
+    // RV-M: the report is a light sheet in both themes - its foot takes the sheet's own muted ink (the theme's dark-mode grey read 3.1:1 on it),
+    // and stock mode names no BoM
+    ? `<p class="text-[11px] px-1 mgt-foot" style="color:#5f6c80">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว ${stkWord('(อิงสูตร BoM)', '(อิงต้นทุนต่อจาน)')}, ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % ${stkWord('เป็นตัวเลขอิง BoM ของ', 'อิงต้นทุนต่อจานของ')} ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
     : `<p class="text-[11px] text-slate-400 px-1 mgt-foot">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
   // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
   // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.

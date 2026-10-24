@@ -61,6 +61,10 @@ def _build_db(path: str):
                                               PRIMARY KEY (branch_id, dow));
       CREATE TABLE IF NOT EXISTS sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
       CREATE TABLE IF NOT EXISTS sale_bill_cogs(receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);
+      -- RV-M: sync_mssql always creates it (empty or not). Without it the fixture depended on test ORDER: the golden of
+      -- /api/feedback/business was captured after test_feedback_business.py had created it in the session DB, so the golden
+      -- failed whenever it ran without that module before it (alone, or in a split run: "branches": [] instead of 2 rows).
+      CREATE TABLE IF NOT EXISTS sale_bill_item(receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL);
       CREATE TABLE IF NOT EXISTS pos_payment_month(branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT);
       CREATE TABLE IF NOT EXISTS pos_channel_month(branch_id INT, period_month TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL);
       CREATE TABLE IF NOT EXISTS pos_void(branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);

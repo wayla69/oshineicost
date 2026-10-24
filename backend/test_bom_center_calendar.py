@@ -20,12 +20,27 @@ def test_a_partial_save_leaves_the_other_rounds_as_defaults(client, app_db, monk
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "t")
     rows = client.get("/api/bom-center/order-calendar").json()["rows"]
     bid = rows[0]["branch_id"]
-    r = client.post("/api/bom-center/order-calendar", headers={"X-Upload-Token": "t"},
-                    json=[{"branch_id": bid, "round": "1", "delivery_weekday": 5}])        # Friday → cutoff Wednesday
-    assert r.status_code == 200, r.text
-    assert r.json()["rows"] == 1
-    row = next(x for x in client.get("/api/bom-center/order-calendar").json()["rows"] if x["branch_id"] == bid)
-    assert row["r1"]["filled"] and row["r1"]["delivery_weekday"] == 5
-    assert row["r1"]["order_weekday"] == 3 and row["r1"]["lead_days"] == 2 and row["r1"]["cutoff_th"] == "วันพุธ 13:15"
-    assert not row["r2"]["filled"] and not row["rsalmon"]["filled"]        # untouched rounds stay defaults
-    assert row["r2"]["delivery_weekday"] == FC.DEFAULT_CAL["2"]["delivery_weekday"]
+    # RV-M: the save below changed branch 1's round 1 for the rest of the session (its delivery day became Friday), so a later module
+    # that orders for 7 Oct got "วันส่งไม่ตรงกับวันส่งที่กำหนดไว้ของรอบนี้" whenever it ran after this one in the same process
+    # (test_slip_forecast in a split run). The branch's calendar rows are put back afterwards.
+    import sqlite3
+    k = sqlite3.connect(str(app_db))
+    cols = [r[1] for r in k.execute("PRAGMA table_info(bc_order_calendar)")]
+    saved = k.execute("SELECT * FROM bc_order_calendar WHERE branch_id=?", (bid,)).fetchall()
+    k.close()
+    try:
+        r = client.post("/api/bom-center/order-calendar", headers={"X-Upload-Token": "t"},
+                        json=[{"branch_id": bid, "round": "1", "delivery_weekday": 5}])        # Friday → cutoff Wednesday
+        assert r.status_code == 200, r.text
+        assert r.json()["rows"] == 1
+        row = next(x for x in client.get("/api/bom-center/order-calendar").json()["rows"] if x["branch_id"] == bid)
+        assert row["r1"]["filled"] and row["r1"]["delivery_weekday"] == 5
+        assert row["r1"]["order_weekday"] == 3 and row["r1"]["lead_days"] == 2 and row["r1"]["cutoff_th"] == "วันพุธ 13:15"
+        assert not row["r2"]["filled"] and not row["rsalmon"]["filled"]        # untouched rounds stay defaults
+        assert row["r2"]["delivery_weekday"] == FC.DEFAULT_CAL["2"]["delivery_weekday"]
+    finally:
+        k = sqlite3.connect(str(app_db))
+        k.execute("DELETE FROM bc_order_calendar WHERE branch_id=?", (bid,))
+        k.executemany(f"INSERT INTO bc_order_calendar({', '.join(cols)}) VALUES({', '.join('?' * len(cols))})", saved)
+        k.commit()
+        k.close()
