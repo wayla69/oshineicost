@@ -124,6 +124,84 @@ body.dark .anomaly-banner { background:#422006; color: #fde68a; }
 .anomaly-item:hover { filter: brightness(0.95); }
 .anomaly-good { background: #d1fae5; color: #065f46; }
 .anomaly-bad  { background: #fee2e2; color: #991b1b; }
+/* ── ข้อสังเกต box of ภาพรวมยอดขาย (PR-OB, owner 2026-10-24): a light card - header + 3 KPI tiles + the food-cost block, instead of one
+   solid pill per sentence. Colour = meaning on the figure and the arrow only (--good-ink / --bad-ink); text in the theme inks. Sized by its
+   own width (container queries), so the phone's พอดีจอ frame and แตะง่าย both lay it out right. Every text >= 12 px. ── */
+.ins-box { container-type: inline-size; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-card, 16px);
+  box-shadow: var(--shadow-card); padding: 14px 16px 16px; margin-bottom: 16px; color: var(--text-primary); animation: slideDown 0.25s ease; }
+.ins-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-bottom: 12px; }
+.ins-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.ins-chip { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); background: var(--bg-subtle); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.ins-sp { flex: 1 1 auto; }
+.ins-x { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.ins-x:hover { background: var(--bg-hover); color: var(--text-primary); }
+.ins-x:focus-visible, .ins-tile:focus-visible, .ins-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ins-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ins-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-width: 0;
+  background: var(--bg-subtle); border: 1px solid var(--border-soft); border-radius: var(--r-tile, 12px); padding: 12px 28px 12px 14px;
+  color: var(--text-primary); font: inherit; }
+button.ins-tile { cursor: pointer; transition: background .15s, border-color .15s; }
+button.ins-tile:hover { background: var(--bg-hover); border-color: var(--border); }
+.ins-go { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 20px; color: var(--text-muted); }
+.ins-lbl { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.ins-big { font-size: 26px; font-weight: 800; line-height: 1.2; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.ins-big.ins-name { font-size: 20px; overflow-wrap: anywhere; }
+.ins-delta { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ins-cmp { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ins-cmp-l { font-size: 12.5px; color: var(--text-muted); min-width: 92px; }
+.ins-amt { font-size: 15px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.ins-sub { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ins-good { color: var(--good-ink); }
+.ins-bad  { color: var(--bad-ink); }
+.ins-flat { color: var(--text-secondary); }
+.ins-cost { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); gap: 8px 18px; align-items: end; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.ins-cost-l { display: flex; flex-direction: column; gap: 2px; align-self: center; }
+.ins-cost-r { min-width: 0; }
+.ins-all-wrap { grid-column: 1 / -1; }
+.ins-chart { position: relative; }
+.ins-plot { position: relative; display: flex; align-items: flex-end; gap: 3px; border-bottom: 1px solid var(--border); }
+.ins-col { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
+.ins-bar { width: 72%; max-width: 34px; border-radius: 5px 5px 0 0; min-height: 2px; }
+/* B1 bars: the tip lighter than the base, per bar; up = the fix fill, down = the good fill, the first month (no change) neutral */
+.ins-bar-bad  { background: linear-gradient(to top, var(--fix-f), color-mix(in srgb, var(--fix-f) 48%, var(--bg-card))); }
+.ins-bar-good { background: linear-gradient(to top, var(--good-f), color-mix(in srgb, var(--good-f) 48%, var(--bg-card))); }
+.ins-bar-flat { background: linear-gradient(to top, var(--neu-f), color-mix(in srgb, var(--neu-f) 48%, var(--bg-card))); }
+body.dark .ins-bar-bad  { background: linear-gradient(to top, color-mix(in srgb, var(--fix-f) 70%, var(--bg-card)), color-mix(in srgb, var(--fix-f) 72%, #ffffff)); }
+body.dark .ins-bar-good { background: linear-gradient(to top, color-mix(in srgb, var(--good-f) 70%, var(--bg-card)), color-mix(in srgb, var(--good-f) 72%, #ffffff)); }
+body.dark .ins-bar-flat { background: linear-gradient(to top, color-mix(in srgb, var(--neu-f) 70%, var(--bg-card)), color-mix(in srgb, var(--neu-f) 72%, #ffffff)); }
+.ins-bar-now  { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3.5px var(--text-primary); }
+.ins-val { position: absolute; transform: translateX(-50%); font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;
+  pointer-events: none; font-variant-numeric: tabular-nums; }
+.ins-val-now { font-weight: 800; color: var(--text-primary); }
+.ins-ticks { position: relative; height: 18px; }
+.ins-tick { position: absolute; top: 3px; transform: translateX(-50%); font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.ins-tick:first-child { transform: none; left: 0 !important; }
+.ins-tick:last-child { transform: none; left: auto !important; right: 0; }
+.ins-tick-now { font-weight: 700; color: var(--text-secondary); }
+.ins-more { font-size: 13px; font-weight: 600; color: var(--accent); background: transparent; border: 1px solid var(--border-control);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer; margin-top: 4px; }
+.ins-more:hover { background: var(--bg-hover); }
+.ins-all { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; margin-top: 8px; }
+.ins-all.hidden { display: none; }
+.ins-tbl { align-self: start; width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ins-tbl th { text-align: left; font-size: 12px; font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.ins-tbl td { padding: 4px 6px; border-bottom: 1px solid var(--border-soft); color: var(--text-primary); }
+.ins-tbl .ins-num, .ins-tbl th:not(:first-child) { text-align: right; }
+@container (max-width: 640px) {
+  .ins-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ins-kpis > :first-child { grid-column: 1 / -1; }
+  .ins-cost { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 420px) {
+  .ins-chip { order: 5; white-space: normal; }       /* title, ? and ✕ stay on one row; the period chip goes under them */
+  .ins-big { font-size: 24px; }
+  .ins-big.ins-name { font-size: 18px; }
+  .ins-all { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 300px) { .ins-kpis { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .ins-x { width: 44px; height: 44px; } .ins-more { min-height: 44px; } }
 
 /* ── Branch heatmap ── */
 /* Heat scales (js/01-core.js heatSeq / heatDiv): sequential navy = "how much",
