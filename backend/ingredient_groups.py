@@ -15,6 +15,7 @@ Figures, per branch x group, on the windows of periods.windows (cur / prev to da
     cost_per_head = cost / customers · plates_per_head = plates / customers · cost_per_plate = cost / costed plates
     share_of_food_cost = cost / the branch's whole food cost (the same engine over every dish)
 """
+import math
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import periods as P
@@ -128,6 +129,7 @@ def _r(x, n=2):
 
 def _fig(plates: float, cost: float, costed: float, cust: float, food: float) -> Dict:
     return {"plates": round(plates, 1), "cost": round(cost, 2), "uncosted_plates": round(max(plates - costed, 0.0), 1),
+            "_cust": cust, "_costed": costed,
             "cost_per_head": _r(cost / cust) if cust else None,
             "plates_per_head": _r(plates / cust, 3) if cust else None,
             "cost_per_plate": _r(cost / costed) if costed else None,
@@ -139,6 +141,47 @@ CHG = ("cost_per_head", "plates_per_head", "cost_per_plate")
 
 def _chg(cur: Optional[Dict], base: Optional[Dict]) -> Dict:
     return {k: (P.pct((cur or {}).get(k), (base or {}).get(k)) if cur and base else None) for k in CHG}
+
+
+CAUSES = ("customers", "plates_per_head", "cost_per_plate")
+CAUSE_TH = {"customers": "ลูกค้า", "plates_per_head": "กินต่อหัว", "cost_per_plate": "ต้นทุนต่อจาน"}
+
+
+def _logmean(a: float, b: float) -> float:
+    """The logarithmic mean L(a, b) = (a - b) / (ln a - ln b); L(a, a) = a."""
+    if abs(a - b) <= 1e-9 * max(abs(a), abs(b), 1.0):
+        return a
+    return (a - b) / (math.log(a) - math.log(b))
+
+
+def split(cur: Optional[Dict], base: Optional[Dict]) -> Dict:
+    """Why the group cost moved (owner 2026-10-25): cost = customers x plates / head x cost / plate, so its change splits into
+    three baht parts that add up to the whole change (LMDI: part_i = L(cost_now, cost_base) x ln(x_i now / x_i base)).
+    Plates here are the costed plates (the same plates cost / plate is worked on), so the identity is exact.
+    -> {total, total_pct, customers, plates_per_head, cost_per_plate, main} or {.., reason} without a base."""
+    none = {"total": None, "total_pct": None, "customers": None, "plates_per_head": None, "cost_per_plate": None, "main": None}
+    if not cur or not base:
+        return dict(none, reason="ไม่มีข้อมูลช่วงที่เทียบ")
+    c1, c0 = float(cur.get("cost") or 0), float(base.get("cost") or 0)
+    n1, n0 = float(cur.get("_cust") or 0), float(base.get("_cust") or 0)
+    q1, q0 = float(cur.get("_costed") or 0), float(base.get("_costed") or 0)
+    if min(c1, c0, n1, n0, q1, q0) <= 0:
+        out = dict(none, reason="ช่วงใดช่วงหนึ่งไม่มีจานที่มีต้นทุน หรือไม่มีลูกค้า")
+        if c0 > 0 or c1 > 0:
+            out["total"] = round(c1 - c0, 2)
+            out["total_pct"] = P.pct(c1, c0)
+        return out
+    x1 = {"customers": n1, "plates_per_head": q1 / n1, "cost_per_plate": c1 / q1}
+    x0 = {"customers": n0, "plates_per_head": q0 / n0, "cost_per_plate": c0 / q0}
+    lm = _logmean(c1, c0)
+    parts = {k: lm * math.log(x1[k] / x0[k]) for k in CAUSES}
+    total = c1 - c0
+    main = max(CAUSES, key=lambda k: abs(parts[k])) if any(abs(v) > 0.005 for v in parts.values()) else None
+    return {"total": round(total, 2), "total_pct": P.pct(c1, c0), **{k: round(v, 2) for k, v in parts.items()}, "main": main}
+
+
+def _public_cell(c: Optional[Dict]) -> Optional[Dict]:
+    return {k: v for k, v in c.items() if not k.startswith("_")} if c else c
 
 
 def _sum_cells(data: Dict, groups: Dict[int, List[str]], names: Iterable[str]) -> Dict:
@@ -180,11 +223,14 @@ def _merge(cur: Optional[Dict], prev: Optional[Dict], ly: Optional[Dict]) -> Dic
         c = (cur or {}).get("cells", {}).get(s)
         p = (prev or {}).get("cells", {}).get(s)
         y = (ly or {}).get("cells", {}).get(s)
-        cell = dict(c) if c else {k: None for k in ("plates", "cost", "uncosted_plates", "cost_per_head",
-                                                    "plates_per_head", "cost_per_plate", "share_of_food_cost")}
-        cell["prev"] = {k: p.get(k) for k in CHG + ("share_of_food_cost", "plates", "uncosted_plates")} if p else None
-        cell["ly"] = {k: y.get(k) for k in CHG + ("share_of_food_cost", "plates", "uncosted_plates")} if y else None
+        cell = _public_cell(c) if c else {k: None for k in ("plates", "cost", "uncosted_plates", "cost_per_head",
+                                                            "plates_per_head", "cost_per_plate", "share_of_food_cost")}
+        keep = CHG + ("share_of_food_cost", "plates", "uncosted_plates", "cost")
+        cell["prev"] = {k: p.get(k) for k in keep} if p else None
+        cell["ly"] = {k: y.get(k) for k in keep} if y else None
         cell["change"] = {"prev": _chg(c, p), "ly": _chg(c, y)}
+        # why the group cost moved: ลูกค้า · กินต่อหัว · ต้นทุนต่อจาน in baht, adding up to the change (split)
+        cell["cause"] = {"prev": split(c, p), "ly": split(c, y)}
         out["cells"][s] = cell
     return out
 
