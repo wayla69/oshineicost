@@ -2534,11 +2534,18 @@ async function loadBranchHeatmap() {
 }
 function _renderBranchHeatmap() {
   const wrap = document.getElementById('heatmapWrap');
-  const data = _heatData || [];
+  const data = (_heatData || []).filter(r => !getBranch() || r.branch === getBranch());   // DV2: follows the top bar's branch
   if (!wrap) return;
-  if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">No data.</p>'; return; }
+  if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">ไม่มีข้อมูล</p>'; return; }
 
   const periods = [...new Set(data.map(r => r.period))].sort();
+  // DV2: a heat map of one or two columns repeats the branch sales table - with fewer than 3 periods it is not drawn; a finer grain is offered
+  if (periods.length < 3) {
+    const g = document.getElementById('heatmapGran');
+    const finer = g && g.value === 'monthly' ? 'weekly' : g && g.value === 'weekly' ? 'daily' : '';
+    wrap.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">ช่วงที่เลือกมี ${periods.length} ช่วง แผนภาพความร้อนแสดงเมื่อมีตั้งแต่ 3 ช่วงขึ้นไป${finer ? ` <button type="button" class="shm-showall" onclick="document.getElementById('heatmapGran').value='${finer}';loadBranchHeatmap()">ดู${finer === 'weekly' ? 'รายสัปดาห์' : 'รายวัน'}</button>` : ''}</p>`;
+    return;
+  }
   const map = {};
   data.forEach(r => { (map[r.branch] = map[r.branch] || {})[r.period] = r; });
   const rev = (br, p) => (map[br] && map[br][p] && map[br][p].revenue) || 0;

@@ -2709,7 +2709,7 @@ function _updateSimResult() {
   </div>`).join('');
 }
 
-// DV2: SKU Lifecycle (วงจรชีวิตเมนู) removed from the page - 833 rows of "new +0.0 %"; /api/menu/lifecycle stays (ปรับเมนู reads it)
+// DV2: SKU Lifecycle (วงจรชีวิตเมนู) removed from the page - 833 rows of "new +0.0 %"; /api/menu/lifecycle stays for the API
 
 // ── BoM Cost Audit ────────────────────────────────────────────────────────
 let _bomAuditLoaded = false;
