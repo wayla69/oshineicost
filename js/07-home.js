@@ -2844,7 +2844,11 @@ async function loadCustType(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${t.cust_pct}%</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmt(t.net)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold">${t.net_pct}%</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('ctByBranch').innerHTML = (d.by_branch || []).map(r => {
+  // DV2: the by-branch table answers "which branch sells through delivery"; with delivery at 0 % in every branch it answers nothing and hides
+  const ctRows = d.by_branch || [];
+  const ctCard = document.getElementById('ctBranchCard');
+  if (ctCard) ctCard.style.display = ctRows.length && ctRows.every(r => (r.delivery_pct || 0) < 0.5) ? 'none' : '';
+  document.getElementById('ctByBranch').innerHTML = ctRows.map(r => {
     const dCol = r.delivery_pct >= 25 ? '#f59e0b' : r.delivery_pct >= 10 ? '#0891b2' : '#94a3b8';
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
