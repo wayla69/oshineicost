@@ -84,7 +84,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 import auth as _auth
-from core import get_db
+from core import get_db, ttl_cache
 
 router = APIRouter()
 
@@ -1279,3 +1279,158 @@ def franchise_supply(request: Request, month: Optional[str] = Query(None, patter
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     return franchise_supply_data(bid, month)
+
+
+# ── DV6 (phone table review 2026-10-25, owner: "อะไรที่มีประโยชน์ขึ้นหน้าจอของเจ้าของสาขาด้วย") ─────────────────────────────
+# GET /api/franchise/decide - เรื่องที่ควรดู: the decision items of ONE branch for the period of the top bar (kind week | month,
+# pick = any day of it; the windows are periods.windows on the branch's own last closed day, the period before to date as the
+# base). Every figure comes from the engine the office pages read; this block only picks the owner's own row and the chain's
+# aggregate ("เฉลี่ยทุกสาขา" - never another branch's row or name):
+#   costly     ของแพง: the 8 high-value ingredient groups (ingredient_groups.compute_plates, the plates view of the High Value
+#              Product Monitor) - plates per customer now / the period before / เฉลี่ยทุกสาขา, and why the plates moved
+#              (ลูกค้า / กินต่อหัว, in plates). Plates only: no cost. Sorted by the plates over the chain's per-head rate
+#              (what serving more than the chain adds), then by plates
+#   menus      the per-head menu rule of the menu-spike card (sales._menu_spike_period, the plates view - with_cost False): the
+#              menus ordered more per customer than their normal (the 3 weeks before, weekday-fair), top 5 by extra plates; and
+#              the new / returning menus of the period (top 5 by plates)
+#   food_cost  food cost % of sales (period_cost.cost_sum, the one cost engine of the period pattern) now / the period before,
+#              against เฉลี่ยทุกสาขา (the chain's pooled figure); gap_baht = (pct - chain pct) x the branch's sales: what a
+#              chain-average food cost would have saved (> 0) or cost (< 0)
+#   weeks      the last DECIDE_WEEKS whole Monday-Sunday weeks ending on or before the period's end: net sales
+#              (rules.net_revenue_sum, finished days only) against the branch's own average of those weeks (the heat strip)
+DECIDE_KINDS = ("week", "month")
+DECIDE_WEEKS = 6
+DECIDE_TOP = 5
+DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
+_DECIDE_SPIKE = {"week": "week", "month": "mtd"}
+
+
+def _decide_window(con, bid: int, kind: str, pick: Optional[str]):
+    import periods as P
+    return P.windows(con, kind, "t.source='Easy' AND b.branch_id=:bid", {"bid": bid}, pick=pick)
+
+
+def _decide_costly(con, w: dict, name: str) -> dict:
+    import ingredient_groups as IG
+    import periods as P
+    d = IG.compute_plates(con, w, None, None)
+    me = next((b for b in d.get("branches") or [] if b.get("branch") == name), None) or {}
+    chain = d.get("chain") or {}
+    n = float(me.get("customers") or 0)
+    rows = []
+    for g in d.get("groups") or []:
+        s = g["slug"]
+        c = (me.get("cells") or {}).get(s) or {}
+        a = (chain.get("cells") or {}).get(s) or {}
+        if not (c.get("plates") or (c.get("prev") or {}).get("plates")):
+            continue
+        h, h0, ha = c.get("plates_per_head"), (c.get("prev") or {}).get("plates_per_head"), a.get("plates_per_head")
+        cause = c.get("cause") or {}
+        rows.append({"slug": s, "label": g["label"], "plates": c.get("plates"), "per_head": h, "prev_per_head": h0,
+                     "per_head_change_pct": P.pct(h, h0) if h is not None and h0 else None,
+                     "avg_per_head": ha, "vs_avg_pct": P.pct(h, ha) if h is not None and ha else None,
+                     "over_avg_plates": round((h - ha) * n, 1) if h is not None and ha is not None and n else None,
+                     "plates_change": cause.get("total"), "plates_change_pct": cause.get("total_pct"),
+                     "by_customers": cause.get("customers"), "by_per_head": cause.get("plates_per_head"),
+                     "main": cause.get("main")})
+    rows.sort(key=lambda r: (-(r["over_avg_plates"] if r["over_avg_plates"] is not None else -1e9), -(r["plates"] or 0)))
+    return {"customers": me.get("customers"), "prev_customers": me.get("prev_customers"),
+            "customers_change_pct": (me.get("change") or {}).get("customers"),
+            "base_label": (d.get("base") or {}).get("label_th"), "groups": rows}
+
+
+def _decide_menus(con, w: dict, name: str) -> dict:
+    from .sales import _menu_spike_period
+    d = _menu_spike_period(con, _DECIDE_SPIKE[w["kind"]], w["cur"][1], None, None, " AND b.name=:branch", {"branch": name},
+                           300, 1.5, with_cost=False)
+    up = [r for r in (d.get("spikes") or []) if (r.get("excess") or 0) > 0]
+    rising = [{"menu": r["menu"], "plates": r.get("today"), "rate": r.get("rate"), "normal_rate": r.get("normal_rate"),
+               "extra_plates": r.get("excess"), "x": r.get("x"), "per_buffet": r.get("basis") == "buffet"}
+              for r in up[:DECIDE_TOP]]
+    new = [{"menu": m["menu"], "plates": m.get("qty"), "rate": m.get("rate"), "first_sold_th": m.get("first_sold_th"),
+            "age_days": m.get("age_days"), "returning": bool(m.get("returning"))}
+           for m in (d.get("new_menus") or [])[:DECIDE_TOP]]
+    return {"from": d.get("date_from"), "to": d.get("date_to"), "normal_from": d.get("baseline_from"),
+            "normal_to": d.get("baseline_to"), "rising": rising, "rising_count": len(up),
+            "new": new, "new_count": d.get("new_count") or 0}
+
+
+def _decide_food_cost(con, w: dict, name: str) -> dict:
+    import period_cost as PC
+    import periods as P
+    floor = PC.cost_floor(con)
+    cur, why = PC.cost_sum(con, *w["cur"], name, None, floor)
+    prev = PC.cost_sum(con, *w["prev"], name, None, floor)[0] if w.get("has_prev") else None
+    avg = PC.cost_sum(con, *w["cur"], None, None, floor)[0]
+    avg_prev = PC.cost_sum(con, *w["prev"], None, None, floor)[0] if w.get("has_prev") else None
+
+    def fc(x):
+        return _num((x or {}).get("food_cost_pct"))
+    pct, ppct, apct, appct = fc(cur), fc(prev), fc(avg), fc(avg_prev)
+    rev = (cur or {}).get("revenue")
+    both = pct is not None and apct is not None
+    return {"pct": pct, "prev_pct": ppct, "change_pp": P.pp(pct, ppct) if pct is not None and ppct is not None else None,
+            "avg_pct": apct, "avg_prev_pct": appct,
+            "avg_change_pp": P.pp(apct, appct) if apct is not None and appct is not None else None,
+            "vs_avg_pp": P.pp(pct, apct) if both else None,
+            "gap_baht": round((pct - apct) / 100.0 * rev) if both and rev else None,
+            "coverage_pct": (cur or {}).get("cost_coverage_pct"), "reason": why}
+
+
+def _decide_weeks(con, bid: int, end_iso: str) -> dict:
+    import periods as P
+    from rules import closed_day_clause, net_revenue_sum
+    end = date.fromisoformat(end_iso[:10])
+    last_sun = end - timedelta(days=(end.weekday() + 1) % 7)       # the last whole Monday-Sunday week ends on this Sunday
+    first_mon = last_sun - timedelta(days=7 * DECIDE_WEEKS - 1)
+    rows = {r[0]: (r[1] or 0.0, r[2] or 0) for r in con.execute(
+        f"SELECT date(t.sold_at), {net_revenue_sum('t')}, COALESCE(SUM(t.customer_count),0) FROM sales_transaction t "
+        f"WHERE t.branch_id=:bid AND t.source='Easy' AND t.sold_at >= :s AND t.sold_at < :e "
+        f"AND {closed_day_clause('t.sold_at')} GROUP BY date(t.sold_at)",
+        {"bid": bid, "s": first_mon.isoformat(), "e": (last_sun + timedelta(days=1)).isoformat()})}
+    weeks = []
+    for i in range(DECIDE_WEEKS):
+        a = first_mon + timedelta(days=7 * i)
+        days = [(a + timedelta(days=j)).isoformat() for j in range(7)]
+        got = [rows[x] for x in days if x in rows]
+        weeks.append({"from": a.isoformat(), "to": days[-1], "label": P.week_span_th(a, a + timedelta(days=6)),
+                      "revenue": round(sum(g[0] for g in got), 2) if got else None,
+                      "customers": int(sum(g[1] for g in got)) if got else None})
+    live = [x["revenue"] for x in weeks if x["revenue"]]
+    avg = sum(live) / len(live) if len(live) >= 3 else None
+    for x in weeks:
+        x["vs_avg_pct"] = _num(100.0 * (x["revenue"] / avg - 1)) if avg and x["revenue"] else None
+    return {"weeks": weeks, "avg": round(avg, 2) if avg else None}
+
+
+def franchise_decide_data(branch_id: int, kind: str = "week", pick: Optional[str] = None) -> dict:
+    """เรื่องที่ควรดู of one branch for one period (see the block comment above)."""
+    import periods as P
+    with get_db() as con:
+        name = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()[0]
+        w = _decide_window(con, branch_id, kind, pick)
+        if not w:
+            return {"available": False, "period": None, "costly": None, "menus": None, "food_cost": None, "weeks": None}
+        return {"available": True, "period": P.public(w) or {},
+                "costly": _safe("costly", lambda: _decide_costly(con, w, name)),
+                "menus": _safe("menus", lambda: _decide_menus(con, w, name)),
+                "food_cost": _safe("food cost", lambda: _decide_food_cost(con, w, name)),
+                "weeks": _safe("weeks", lambda: _decide_weeks(con, branch_id, w["cur"][1]))}
+
+
+@ttl_cache
+def franchise_decide_payload(branch_id: int, kind: str, pick: Optional[str]):
+    """The cached answer of /api/franchise/decide (the branch is resolved from the session before this is called)."""
+    return franchise_decide_data(branch_id, kind, pick)
+
+
+@router.get("/api/franchise/decide")
+def franchise_decide(request: Request, kind: str = Query("week"), pick: Optional[str] = Query(None, pattern=DATE_RE),
+                     branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน · เรื่องที่ควรดู: ของแพง per customer, the menus ordered more per customer, new menus, food cost % against
+    เฉลี่ยทุกสาขา and the last 6 weeks' sales against the branch's own average - for the top bar's period (week | month)."""
+    if kind not in DECIDE_KINDS:
+        raise HTTPException(400, "ช่วงเวลาต้องเป็นสัปดาห์ (week) หรือเดือน (month)")
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    return franchise_decide_payload(bid, kind, pick)
