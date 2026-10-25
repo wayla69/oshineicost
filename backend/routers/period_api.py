@@ -367,7 +367,7 @@ def _day_floor(con):
 def _plates_base(base_from, base_to, cur, latest):
     """The section's comparison period: the menu-spike card's checks (both dates, start <= end, <= 92 days, closed days only) but it
     may sit before OR after the current period (W vs W in any order); only an overlap is refused. HTTP 400 in formal Thai."""
-    from routers.sales import _SPIKE_MAX_RANGE_DAYS, _spike_iso
+    from .sales import _SPIKE_MAX_RANGE_DAYS, _spike_iso   # relative: one module however the app starts
     if not base_from or not base_to:
         raise HTTPException(400, "ช่วงที่ใช้เทียบต้องระบุทั้งวันเริ่มต้น (base_from) และวันสิ้นสุด (base_to)")
     s, e = _spike_iso(base_from, "วันเริ่มต้นของช่วงที่ใช้เทียบ"), _spike_iso(base_to, "วันสิ้นสุดของช่วงที่ใช้เทียบ")

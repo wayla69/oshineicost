@@ -893,7 +893,9 @@ const _SPHV_LS = 'oshinei_sphv_slug', _SPHV_WLS = 'oshinei_sphv_weeks';
 const _SPHV_CAUSE = { customers: 'ลูกค้า', plates_per_head: 'กินต่อหัว' };
 const _SPHV_SHORT = { customers: 'ลูกค้า', plates_per_head: 'กิน' };
 const _SPHV_WD = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
-let _spHv = { slug: 'salmon', d: null, key: '', seq: 0, err: '', p: null, weeks: [], latest: '' };
+// the 8 groups of backend/ingredient_groups.py GROUPS, until the first answer names them
+const _SPHV_GROUPS = [['salmon', 'แซลมอน'], ['tuna', 'ทูน่า'], ['hamachi', 'ฮามาจิ'], ['amaebi', 'กุ้งหวาน'], ['scallop', 'หอยเชลล์'], ['eel', 'ปลาไหล'], ['oyster', 'หอยนางรม'], ['beef', 'เนื้อ']].map(([slug, label]) => ({ slug, label }));
+let _spHv = { slug: 'salmon', d: null, key: '', seq: 0, err: '', p: null, weeks: [], latest: '', groups: null };
 // the week pair: a = the Monday of the chosen week, b = the Monday of the week it is compared with; a = '' -> ตามช่วงของการ์ด
 let _spHvW = { a: '', b: '' };
 try { const s = localStorage.getItem(_SPHV_LS); if (s) _spHv.slug = s; } catch (e) { /* no storage */ }
@@ -1026,7 +1028,8 @@ function spikeHvHtml() {
   const head = `<h3 class="sp-h">วัตถุดิบมูลค่าสูง · จำนวนจาน
       <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-hv" title="คำอธิบาย">?</button>
       ${vs ? `<span class="sp-n" id="spikeHvVs"${pr && full ? ` title="${esc(full)}"` : ''}>(${esc(vs + why)})</span>` : ''}</h3>`;
-  const opts = [['all', 'ทั้งหมด']].concat((groups.length ? groups : [{ slug: 'salmon', label: 'แซลมอน' }]).map(g => [g.slug, g.label]));
+  if (groups.length) _spHv.groups = groups;      // an error or a load keeps the chips of the last answer
+  const opts = [['all', 'ทั้งหมด']].concat((groups.length ? groups : (_spHv.groups || _SPHV_GROUPS)).map(g => [g.slug, g.label]));
   const chips = `<div class="sp-hv-ctl ph-tz-unit">${_spHvWeekCtl()}<div class="sp-hv-sc"><div id="spikeHvChips" class="sp-hv-chips" role="group" aria-label="วัตถุดิบ">`
     + opts.map(([k, l]) => `<button type="button" class="gran-btn${slug === k ? ' gran-active' : ''}" data-g="${esc(k)}" aria-pressed="${slug === k}" onclick="spikeHvSet('${esc(k)}')">${esc(l)}</button>`).join('')
     + '</div></div></div>';
