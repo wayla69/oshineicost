@@ -99,16 +99,22 @@ for (const mode of ['touch', 'fit']) {
       await expect(chip.locator('.gb-l')).toHaveText('ทุกสาขา');
       const c = await chip.evaluate(el => {
         const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        let span = 0;                     // the rows of pixels a tap at the chip's centre column lands on the chip
-        for (let y = Math.floor(r.top) - 14; y <= Math.ceil(r.bottom) + 14; y++) { const e = document.elementFromPoint(cx, y); if (e && e.closest('#gpBranchChip') === el) span++; }
+        // the rows of pixels a tap at a chip's centre column lands on that chip
+        const spanOf = (sel, b) => { let n = 0, x = b.left + b.width / 2;
+          for (let y = Math.floor(b.top) - 14; y <= Math.ceil(b.bottom) + 14; y++) { const e = document.elementFromPoint(x, y); if (e && e.closest(sel)) n++; } return n; };
         const rc = /** @type {HTMLElement} */ (document.getElementById('gpRangeChip')).getBoundingClientRect();
         const rhit = document.elementFromPoint(rc.left + rc.width / 2, rc.top + rc.height / 2);
-        return { h: r.height, right: r.right, span, cy, rangeOk: !!rhit && !!rhit.closest('#gpRangeChip'), fs: parseFloat(getComputedStyle(el).fontSize) };
+        return { h: r.height, right: r.right, span: spanOf('#gpBranchChip', r), rspan: spanOf('#gpRangeChip', rc), cy,
+          sameRow: Math.abs(rc.top - r.top) < 2, apart: rc.right <= r.left, rangeOk: !!rhit && !!rhit.closest('#gpRangeChip'),
+          fs: parseFloat(getComputedStyle(el).fontSize) };
       });
       expect(c.h, 'one line, 28 px drawn').toBeLessThanOrEqual(30);
       expect(c.right).toBeLessThanOrEqual(390);
       expect(c.span, '44 px to tap').toBeGreaterThanOrEqual(43);
       expect(c.rangeOk, 'the period chip keeps its own taps').toBe(true);
+      expect(c.rspan, 'the period chip: 44 px to tap').toBeGreaterThanOrEqual(43);
+      expect(c.sameRow, 'period and branch chips on ONE row (no third header row)').toBe(true);
+      expect(c.apart, 'side by side, no overlap').toBe(true);
       expect(c.fs).toBeGreaterThanOrEqual(12);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
       await shot(page, `chip_${mode}_${scheme}`);
@@ -137,6 +143,10 @@ for (const mode of ['touch', 'fit']) {
       expect(await page.evaluate(() => getBranch())).toBe(pick);
       await expect(chip.locator('.gb-l')).toHaveText(pick);
       await page.waitForTimeout(800);
+      const after = await page.evaluate(() => { const a = document.getElementById('gpRangeChip').getBoundingClientRect(), b = document.getElementById('gpBranchChip').getBoundingClientRect();
+        return { same: Math.abs(a.top - b.top) < 2, apart: a.right <= b.left, right: b.right }; });
+      expect(after).toMatchObject({ same: true, apart: true });          // a long branch name ellipsises, it never pushes the pair apart
+      expect(after.right).toBeLessThanOrEqual(390);
       await shot(page, `picked_${mode}_${scheme}`);
       // and back to ทุกสาขา the same way
       await chip.click();
