@@ -1913,13 +1913,14 @@ function msKpisHtml(j) {
 }
 // target card: % of target as the headline, the bar, then the figures behind it
 function msTargetHtml(j) {
-  const P = j.pace || {}, pvt = P.proj_vs_target_pct, mc = P.month_complete;
+  const P = j.pace || {}, pvt = P.proj_vs_target_pct, mc = P.month_complete, TS = P.target_scope;   // DV1: % of target like for like
   if (!P.target) return _msNone('ยังไม่มีเป้าเดือนนี้ — สาขาใหม่ยังไม่มีเดือนเดียวกันปีก่อน');
   const c = _msTgtCol(pvt);
   return `<div style="display:flex;align-items:baseline;gap:10px;padding:10px 0 4px"><span style="font-size:30px;font-weight:800;line-height:1;color:${textInk(c)}">${pvt != null ? pvt.toFixed(0) + '%' : '—'}</span><span style="font-size:12px;${_msMuted}">${mc ? 'ของเป้าทั้งเดือน' : 'ของเป้า (ประมาณการสิ้นเดือน)'}</span></div>
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${msBar(Math.min(100, Math.round(pvt || 0)), c)}<span style="font-size:12px;${_msMuted}">100%</span></div>
     <div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอดทั้งเดือน' : `ยอดสะสม (${P.days_elapsed || 0}/${P.days_total || 0} วัน)`}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.mtd_revenue || 0)}</b></div>
     ${mc ? '' : `<div class="ms-row"><span style="flex:1;font-size:13px">ประมาณการสิ้นเดือน${P.proj_method === 'dow' ? ' <span style="font-size:12px;' + _msMuted + '">(ถ่วงวันในสัปดาห์)</span>' : ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.projected || 0)}</b></div>`}
+    ${TS && TS.no_target_branches ? `<div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอด' : 'ประมาณการ'} ${TS.branches} สาขาที่มีเป้า <span style="font-size:12px;${_msMuted}">(ไม่รวม ${TS.no_target_branches} สาขาที่ยังไม่มีเป้า)</span></span><b style="font-variant-numeric:tabular-nums">${fmt(TS.projected || 0)}</b></div>` : ''}
     <div class="ms-row"><span style="flex:1;font-size:13px">เป้า ${P.month || ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.target)}</b></div>
     ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:12px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
     <p style="font-size:12px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;

@@ -3294,16 +3294,21 @@ def report_management(
             "text": (f"ต้นทุนอาหาร {food_cost_pct:.0f}% — สูงกว่าเป้า ~50%"
                      if th else
                      f"Food cost {food_cost_pct:.0f}% — above the ~50% target.")})
+    _ts = (pace or {}).get("target_scope") or {}
     if ctx.get("target_projected") is not None:          # DV1: like for like - the branches that have a target
         projected = ctx["target_projected"]
     if projected and target and projected < target * 0.95:
         gap = (1 - projected/target) * 100
         if th:
             word = "ยอดรวมทั้งเดือน" if month_complete else "ประมาณการสิ้นเดือน"
+            if _ts.get("no_target_branches"):
+                word += f" {_ts['branches']} สาขาที่มีเป้า"
             actions.append({"sev": "med",
                 "text": f"{word} ฿{projected:,.0f} ต่ำกว่าเป้า ฿{target:,.0f} อยู่ {gap:.0f}%"})
         else:
             word = "Month total" if month_complete else "Month-end projection"
+            if _ts.get("no_target_branches"):
+                word += f" of the {_ts['branches']} branches with a target"
             actions.append({"sev": "med",
                 "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
     _behind = [r for r in branches if r.get("vs_target_pct") is not None and r["vs_target_pct"] < 90]

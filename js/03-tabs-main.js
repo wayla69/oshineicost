@@ -633,7 +633,7 @@ async function renderExecSummary() {
     api(`${API}/api/profit/summary?${pq}`).catch(() => null),
     api(`${API}/api/targets?month=${fc.period}`).catch(() => []),
   ]);
-  const tgtTotal = (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
+  const tgtTotal = fc.target_scope ? (fc.target || 0) : (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
   // DV1: the one % of target (/api/forecast, like for like = the management summary's); the old sum is a fallback only
   const projVsTgt = fc.target_scope ? fc.proj_vs_target_pct : (tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null);
   const gp = prof && prof.margin_pct != null ? prof.margin_pct : null;
@@ -647,7 +647,7 @@ async function renderExecSummary() {
   const onPace = projVsTgt == null ? '' : projVsTgt >= 100 ? 'เกินเป้า ✓' : projVsTgt >= 90 ? 'ใกล้เป้า ⚠' : 'ต่ำกว่าเป้า ●';
   const gpWord = gp == null ? '' : gp >= 40 ? 'แข็งแรง' : gp >= 30 ? 'พอใช้' : 'ต่ำ';
   const narrative = `เดือน ${fmtMonth(fc.period)}: ทำไปแล้ว ${fc.days_elapsed}/${fc.days_total} วัน · คาดการณ์รายได้ทั้งเดือน <b>${fmt(fc.projected)}</b>` +
-    (projVsTgt != null ? ` (<b style="color:${textInk(tgtColor)}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
+    (projVsTgt != null ? ` (<b style="color:${textInk(tgtColor)}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace}${fc.target_scope && fc.target_scope.no_target_branches ? ` · เฉพาะ ${fc.target_scope.branches} สาขาที่มีเป้า` : ''})` :' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
     (gp != null ? ` · GP <b style="color:${textInk(gpColor)}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
   host.classList.remove('hidden');
   host.innerHTML = `<div class="card p-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
