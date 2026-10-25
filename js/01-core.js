@@ -2603,10 +2603,11 @@ function periodCmpHtml(cur, prev, ly, opt) {
   opt = opt || {};
   const unit = opt.unit === 'pp' ? 'pp' : '%', upGood = opt.upGood !== false, r = opt.range || null;
   const e2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const chip = (label, base, span) => {
+  const why = (r && r.reasons) || {};
+  const chip = (label, base, span, k) => {
     const d = unit === 'pp' ? periodPp(cur, base) : periodPct(cur, base);
     const tip = r ? `${r.label_th} เทียบ ${span}` : '';
-    if (d == null) return `<span class="pcmp pcmp-none"${tip ? ` title="${e2(tip + ' · ไม่มีข้อมูลฐาน')}"` : ''}>${label} —</span>`;
+    if (d == null) return `<span class="pcmp pcmp-none"${tip ? ` title="${e2(tip + ' · ' + (why[k] || 'ไม่มีข้อมูลฐาน'))}"` : ''}>${label} —</span>`;
     const good = d === 0 ? null : (d > 0) === upGood;
     const ink = good == null ? 'var(--text-secondary)' : good ? 'var(--good-ink)' : 'var(--bad-ink)';
     const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '';
@@ -2614,7 +2615,7 @@ function periodCmpHtml(cur, prev, ly, opt) {
     return `<span class="pcmp"${tip ? ` title="${e2(tip)}"` : ''}>${label} <b style="color:${ink}">${num}</b></span>`;
   };
   const sameBase = !!r && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
-  const html = (sameBase ? '' : chip('เทียบช่วงก่อน', prev, r ? r.prev_label_th : '')) + chip('เทียบปีก่อน', ly, r ? r.ly_label_th : '');
+  const html = (sameBase ? '' : chip('เทียบช่วงก่อน', prev, r ? r.prev_label_th : '', 'prev')) + chip('เทียบปีก่อน', ly, r ? r.ly_label_th : '', 'ly');
   const q = (r && opt.q !== false) ? periodQ(r, unit) : '';
   return `<span class="pcmp-row">${html}${q}</span>`;
 }
@@ -2623,10 +2624,14 @@ function periodQ(r, unit) {
   if (!r || typeof uiQ !== 'function') return '';
   const e2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const sameBase = r.prev && r.ly && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
+  // PR-PP3: a base that is not compared says why (r.reasons from the server: the data starts later - a year names the month,
+  // 'ข้อมูลปีก่อนเริ่ม พ.ค. 2568' - or the day-level cost starts later), so "—" is never bare
+  const why = r.reasons || {};
+  const wl = k => why[k] ? ` · <span style="color:var(--text-secondary)">${e2(why[k])}</span>` : '';
   const txt = `<p>${e2(r.label_th)}${r.complete ? '' : ' (ถึงวันที่ปิดยอดล่าสุด)'}</p>` +
-    (sameBase ? '' : `<p><b>เทียบช่วงก่อน</b> · ${e2(r.prev_label_th)}</p>`) + `<p><b>เทียบปีก่อน</b> · ${e2(r.ly_label_th)}</p>` +
+    (sameBase ? '' : `<p><b>เทียบช่วงก่อน</b> · ${e2(r.prev_label_th)}${wl('prev')}</p>`) + `<p><b>เทียบปีก่อน</b> · ${e2(r.ly_label_th)}${sameBase && !why.ly ? wl('prev') : wl('ly')}</p>` +
     `<p>${unit === 'pp' ? 'สัดส่วนเทียบเป็นจุด' : 'เทียบเป็นร้อยละ'} · ช่วงที่ยังไม่จบเทียบจำนวนวันเท่ากัน · ไม่มีข้อมูลฐานแสดง —</p>`;
-  return uiQ('pcmp:' + r.kind + ':' + (r.cur || []).join('_') + ':' + (unit || '%'), 'ช่วงที่เทียบ', txt, 'pcmp-q');
+  return uiQ('pcmp:' + r.kind + ':' + (r.cur || []).join('_') + ':' + (unit || '%') + ':' + Object.keys(why).join(''), 'ช่วงที่เทียบ', txt, 'pcmp-q');
 }
 // ── PR-PP2 · the sales pages read the server's `period` object ({kind, cur, prev, ly, days, complete, label_th,
 // prev_label_th, ly_label_th, has_prev, has_ly}, backend periods.public) as the range of their chips.
@@ -2721,9 +2726,9 @@ function getPeriodKind() { return _gp.kind; }
 // getMonthTo, qp(), summaryParams(), _filterKey and TABS[].follow keep working until PP2/PP3 move each page onto periodRange.
 // The anchor is the last closed day with data (the coverage note's last day, never after yesterday on the Thai clock).
 // 3 / 6 / 12 เดือน · ทั้งหมด is a chart option (ช่วงกราฟ, getTrendParams), shown only where a trend chart reads it.
-// The bar's kind on a device that has not chosen one. 'year' (1 Jan -> the anchor) while pages still read selMonthFrom / selMonthTo, so
-// none shrinks from Jan -> latest to one month on deploy; PP3 switches it to 'month' once every page reads periodRange.
-const PERIOD_DEFAULT_KIND = 'year';
+// The bar's kind on a device that has not chosen one: the month to date (PR-PP3 - every sales and cost page now reads the bar's
+// period; it was 'year' through PP1/PP2 so that no page that still read selMonthFrom / selMonthTo shrank on deploy).
+const PERIOD_DEFAULT_KIND = 'month';
 const _GP_LS = 'oshinei_gperiod', _GP_WIN_LS = 'oshinei_chartwin';
 let _gp = (() => {
   try { const v = JSON.parse(localStorage.getItem(_GP_LS) || 'null'); if (v && ['day', 'week', 'month', 'year', 'range'].includes(v.kind)) return { kind: v.kind, pick: v.pick || '', from: v.from || '', to: v.to || '' }; } catch (e) { /* storage blocked */ }
@@ -3450,9 +3455,9 @@ const TABS = {
   action: { load: () => loadActionCenter() },
   menu: { load: () => { loadMenuSubtab(); renderMenuSalesNarrative(); } },
   trend: { load: () => loadTrend(), follow: { month: 'cmpMonth', period: { kinds: ['month'] }, prepare: () => { if (Array.isArray(window.allMonths) && allMonths.length && !document.getElementById('cmpMonth')?.options.length) populateCmpDropdowns(); } } },   // PR-PP2: A = the top bar's month
-  cost: { load: () => loadCostAnalysis() },
+  cost: { load: () => loadCostAnalysis(), follow: { period: { kinds: ['month', 'year'] } } },   // PR-PP3
   profit: { load: () => loadProfitAnalysis() },
-  pnl: { load: () => loadPnlTab() },
+  pnl: { load: () => loadPnlTab(), follow: { period: { kinds: ['month', 'year', 'range'] } } },   // PR-PP3
   compare: { load: () => initCompare() },
   report: { load: () => loadReport() },
   mgtreport: { load: () => loadMgtReport() },
@@ -3460,12 +3465,12 @@ const TABS = {
   settings: { load: () => loadSettingsSubtab() },
   home: { load: () => loadHome() },
   dailysales: { load: () => loadDailySales(), follow: { period: { kinds: ['day', 'week', 'month', 'year'] } } },
-  costhead: { load: () => loadCostHead(), follow: { date: 'chDate' } },
+  costhead: { load: () => loadCostHead(), follow: { period: { kinds: ['day', 'week', 'month', 'year'] } } },   // PR-PP3
   menuimpact: { load: () => loadMenuImpact() },
-  pnlbill: { load: () => loadPnlBill(), follow: { date: 'pbDate' } },
+  pnlbill: { load: () => loadPnlBill(), follow: { period: { kinds: ['day', 'week', 'month'] } } },   // PR-PP3: per-bill COGS is a rolling window
   opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', period: { kinds: ['week', 'month', 'range'] }, prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
-  ingpurchase: { load: () => loadIngPurchase() },
+  ingpurchase: { load: () => loadIngPurchase(), follow: { period: { kinds: ['week', 'month', 'year', 'range'] } } },   // PR-PP3: purchases are weekly
   // ownFilters: the page has its own branch / month controls, so switchTab removes the
   // global filter bar from the layout (not just invisible: a phone then shows the page first).
   ordersetup: { load: () => loadOrderSetup(), ownFilters: true },
@@ -3489,22 +3494,22 @@ const TABS = {
   discounts: { load: () => loadDiscountsTab() },
   childbuffet: { load: () => loadChildBuffet(), follow: { period: { kinds: ['week', 'month', 'year', 'range'] } } },
   timeflow: { load: () => loadTimeflow(), follow: { period: { kinds: ['month', 'year'] } } },
-  gpbranch: { load: () => loadGpBranch() },
-  branchbom: { load: () => loadBranchBom(), follow: { monthRange: ['bbomMonthFrom', 'bbomMonthTo'], prepare: () => _bbomInitFilters() } },
-  bomcost: { load: () => loadBomCostTab() },
+  gpbranch: { load: () => loadGpBranch(), follow: { period: { kinds: ['week', 'month', 'year', 'range'] } } },   // PR-PP3
+  branchbom: { load: () => loadBranchBom(), follow: { period: { kinds: ['week', 'month', 'year', 'range'] }, prepare: () => _bbomInitFilters() } },   // PR-PP3
+  bomcost: { load: () => loadBomCostTab(), follow: { period: { kinds: ['week', 'month', 'year', 'range'] } } },   // PR-PP3
   simhub: { load: () => loadSimhub() },
   menucompare: { load: () => loadMenuCompare() },
-  menuefficiency: { load: () => loadMCE() },
+  menuefficiency: { load: () => loadMCE(), follow: { period: { kinds: ['month', 'year'] } } },   // PR-PP3
   menuactionboard: { load: () => loadMenuActionBoard() },
   menuopportunities: { load: () => loadMenuOpportunities() },
   feedback: { load: () => loadFeedback() },
   checklist: { load: () => loadChecklist() },
-  coverage: { load: () => loadCostCoverage() },
-  pnlbranch: { load: () => loadPnlBranch(), follow: { month: 'pnlMonthSel', prepare: () => _pnlFillMonths() } },
+  coverage: { load: () => loadCostCoverage(), follow: { period: { kinds: ['month', 'year'] } } },   // PR-PP3
+  pnlbranch: { load: () => loadPnlBranch(), follow: { period: { kinds: ['month', 'year', 'range'] } } },   // PR-PP3: the month select is hidden
   more: { load: () => loadMoreAnalytics() },
   heavyeater: { load: () => loadHeavyEaters(), follow: { dateRange: ['heFrom', 'heTo'] } },
   manual: { load: () => { if (typeof renderManualDeptMap === 'function') renderManualDeptMap(); } },   // PR-D5: the map of departments is drawn from DEPARTMENTS
-  costheadtop60: { load: () => loadCostHeadTop60() },
+  costheadtop60: { load: () => loadCostHeadTop60(), follow: { period: { kinds: ['month'] } } },   // PR-PP3: month-grain report
   // PR-D1: the department launcher (the desktop landing page) and the list of every page; neither has period or branch filters
   launcher: { load: () => loadLauncher(), ownFilters: true },
   allpages: { load: () => loadAllPages(), ownFilters: true },

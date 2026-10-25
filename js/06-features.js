@@ -1552,16 +1552,6 @@ let _gpbSortDir = 'desc';
 let _gpbExpanded = new Set();
 window.gpbGranularity = window.gpbGranularity || 'month';
 
-function setGpbGranularity(g) {
-  if (!['day','week','month'].includes(g)) g = 'month';
-  window.gpbGranularity = g;
-  ['day','week','month'].forEach(k => {
-    const b = document.getElementById('gpbGran-' + k);
-    if (b) b.classList.toggle('active', k === g);
-  });
-  loadGpBranch();
-}
-
 function _gpbStatusBucket(foodPct, lo, hi) {
   if (foodPct == null) return { label:'—', cls:'text-slate-400', emoji:'·', color:'#94a3b8' };
   const band = (hi - lo); // typically 10
@@ -1570,52 +1560,29 @@ function _gpbStatusBucket(foodPct, lo, hi) {
   return { label:'นอกเป้า', cls:'text-rose-600', emoji:'●', color:'#ef4444' };
 }
 
-function _gpbInitFilters() {
-  // Populate month dropdowns from window.allMonths (preferred) or use global current values
-  const fromSel = document.getElementById('gpbMonthFrom');
-  const toSel   = document.getElementById('gpbMonthTo');
-  if (!fromSel || !toSel) return;
-  if (fromSel.options.length === 0) {
-    const months = Array.isArray(window.allMonths) ? window.allMonths.slice() : [];
-    const opts = ['<option value="">— ทั้งหมด —</option>'].concat(
-      months.map(m => `<option value="${m}">${m}</option>`)
-    ).join('');
-    fromSel.innerHTML = opts;
-    toSel.innerHTML   = opts;
-    // default to global filter values if any
-    const gf = (typeof getMonthFrom === 'function') ? getMonthFrom() : '';
-    const gt = (typeof getMonthTo   === 'function') ? getMonthTo()   : '';
-    if (gf) fromSel.value = gf;
-    if (gt) toSel.value   = gt;
-  }
-}
-
+// PR-PP3: the top bar is the period (สัปดาห์ · เดือน · ปี · กำหนดเอง). The months of the table are the bar's months; a week
+// shows the per-branch trend in weeks (pro-rated from the month: ประมาณการ). The summary cards and the branch boxes are the
+// bar's period to date (/api/period/cost) with เทียบช่วงก่อน + เทียบปีก่อน.
+let _gpbCost = null;
 async function loadGpBranch() {
-  _gpbInitFilters();
-  // Follow the GLOBAL month range when it changes (a manual local pick wins until
-  // the global range changes again).
-  (function () {
-    const gf = getMonthFrom(), gt = getMonthTo(), key = gf + '|' + gt;
-    if (key !== _extraLastGlobal['gpbranch_r']) {
-      const fS = document.getElementById('gpbMonthFrom'), tS = document.getElementById('gpbMonthTo');
-      if (fS && [...fS.options].some(o => o.value === gf)) fS.value = gf;
-      if (tS && [...tS.options].some(o => o.value === gt)) tS.value = gt;
-      _extraLastGlobal['gpbranch_r'] = key;
-    }
-  })();
   const status = document.getElementById('gpbStatus');
   if (status) status.textContent = 'กำลังโหลด…';
-  const mf = document.getElementById('gpbMonthFrom')?.value || '';
-  const mt = document.getElementById('gpbMonthTo')?.value   || '';
+  const r = gPeriodResolve();
   const params = new URLSearchParams();
-  if (mf) params.set('month_from', mf);
-  if (mt) params.set('month_to',   mt);
-  const gran = window.gpbGranularity || 'month';
+  if (r) { params.set('month_from', r.cur[0].slice(0, 7)); params.set('month_to', r.cur[1].slice(0, 7)); }
+  if (getGroup()) params.set('group', getGroup());
+  const gran = getPeriodKind() === 'week' ? 'week' : 'month';
+  window.gpbGranularity = gran;
   if (gran !== 'month') params.set('granularity', gran);
   const qs = params.toString();
   try {
-    const data = await api(`${API}/api/gp/by-branch-month${qs?'?'+qs:''}`);
-    _gpbData = data;
+    const [data, pc] = await Promise.all([
+      api(`${API}/api/gp/by-branch-month${qs?'?'+qs:''}`),
+      api(`${API}/api/period/cost?${gPeriodQuery({ by_branch: 1 })}`).catch(() => null),
+    ]);
+    if (data && data.rows && getBranch()) data.rows = data.rows.filter(x => x.branch === getBranch());
+    _gpbData = data; _gpbCost = pc;
+    if (pc && pc.period) { periodChip(pc.period, true); const q = document.getElementById('gpbPeriodQ'); if (q) q.innerHTML = periodQ(pc.period, 'pp'); }
     tplById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
     _gpbRenderSummary(data);
     _gpbRenderNarrative(data);
@@ -1641,6 +1608,19 @@ function _gpbRenderSummary(data) {
     </div>`;
   const fmtB = n => (n == null) ? '—' : Number(n).toLocaleString('th-TH', {maximumFractionDigits:0}) + ' ';
   const fmtPct = n => (n == null) ? '—' : n.toFixed(1) + '%';
+  const P = (_gpbCost && _gpbCost.cur) ? _gpbCost : null;
+  if (P) {   // PR-PP3: the bar's period with its two comparisons
+    const c = P.cur, R = P.period, v = (o, k) => o ? o[k] : null, bk = _gpbStatusBucket(c.food_cost_pct, data.target_lo, data.target_hi);
+    const K = (l, val, k, col, unit, upGood, i) => periodKpi({ l, v: val, c: col, cur: c[k], prev: v(P.prev, k), ly: v(P.ly, k), unit, upGood, range: R, q: i === 0 });
+    document.getElementById('gpbSummary').innerHTML = [
+      K('รายได้รวม (ex VAT)', fmtB(c.revenue), 'revenue', '#0ea5e9', '%', true, 0),
+      K('BoM Cost รวม', fmtB(c.cogs), 'cogs', '#f59e0b', '%', false),
+      K('GP รวม', fmtB(c.gp), 'gp', c.gp >= 0 ? '#10b981' : '#ef4444', '%', true),
+      K('GP %', fmtPct(c.gp_pct), 'gp_pct', '#7a66b8', 'pp', true),
+      K('ต้นทุนอาหาร %', `${bk.emoji} ${fmtPct(c.food_cost_pct)}`, 'food_cost_pct', bk.color, 'pp', false),
+    ].join('');
+    return;
+  }
   document.getElementById('gpbSummary').innerHTML = [
     card('รายได้รวม (ex VAT)', fmtB(g.revenue), `${data.rows.length} สาขา`, '#0ea5e9'),
     card('BoM Cost รวม',       fmtB(g.cogs),    'ตามสูตร BoM ใหม่',           '#f59e0b'),
@@ -1684,6 +1664,27 @@ function _gpbRenderBoxes() {
   const el = document.getElementById('gpbBoxes');
   if (!el) return;
   const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
+  // PR-PP3: the bar's period per branch (to date) against the same days of the period before and of the year before, in จุด
+  // (the boxes set the month in progress against the whole month before)
+  const PB = (_gpbCost && Array.isArray(_gpbCost.branches) && _gpbCost.branches.length) ? _gpbCost : null;
+  if (PB) {
+    const R = PB.period;
+    const bx = PB.branches.filter(b => b.cur && b.cur.gp_pct != null && (!getBranch() || b.branch === getBranch()))
+      .sort((a, b) => b.cur.gp_pct - a.cur.gp_pct);
+    if (!bx.length) { el.innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
+    el.innerHTML = bx.map((b, i) => {
+      const cur = b.cur.gp_pct;
+      const gpColor = cur >= 50 ? '#059669' : cur >= 40 ? '#0ea5e9' : cur >= 30 ? '#d97706' : '#dc2626';
+      return `<div class="rounded-xl border p-3 gpb-box-drill" onclick="drillIntoBranch('${jsAttr(b.branch)}')" title="คลิกเพื่อดูเฉพาะ ${esc(b.branch)}" style="border-color:${gpColor}33;background:${gpColor}0a">
+        <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
+        <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${textInk(gpColor)}">${cur.toFixed(1)}%</p>
+        <p class="text-[11px] text-slate-400 mt-0.5">GP%</p>
+        <div class="pkpi-cmp" onclick="event.stopPropagation()">${periodCmpHtml(cur, b.prev && b.prev.gp_pct, b.ly && b.ly.gp_pct, { unit: 'pp', range: R, q: i === 0 })}</div>
+        <p class="text-[11px] text-slate-400 mt-0.5">ต้นทุนอาหาร ${b.cur.food_cost_pct != null ? b.cur.food_cost_pct.toFixed(1) + '%' : '—'}</p>
+      </div>`;
+    }).join('');
+    return;
+  }
   const boxes = (_gpbData.rows || []).map(r => {
     // Roll up monthly (Easy+CM) → GP% per month, then take latest vs previous.
     const byMonth = {};
@@ -1776,7 +1777,7 @@ function _gpbRenderTable() {
       : (r.monthly || []).slice().sort((a, b) => a.month.localeCompare(b.month));
     const sub = buckets.map(m => {
       const bk = _gpbStatusBucket(m.food_cost_pct, lo, hi);
-      const label = useTrend ? m.bucket : `${m.month} · ${m.source || ''}`;
+      const label = useTrend ? `${m.bucket} · ประมาณการ` : `${m.month} · ${m.source || ''}`;   // PR-PP3: a week is pro-rated from its month
       return `
         <tr style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
           <td class="px-3 py-1 pl-8 text-xs text-slate-500">${label}</td>
@@ -2007,8 +2008,13 @@ async function loadRequisitionGap() {
   if (!body) return;
   const mf = document.getElementById('reqMonthFrom'), mt = document.getElementById('reqMonthTo');
   const qs = new URLSearchParams();
-  if (_reqInit && mf.value) qs.set('month', mf.value);
-  if (_reqInit && mt.value) qs.set('month_to', mt.value);
+  // PR-PP3: the top bar's months (requisitions are monthly: closed months only - the month still in progress is left out)
+  const _r = gPeriodResolve();
+  let _m0 = _r ? _r.cur[0].slice(0, 7) : '', _m1 = _r ? _r.cur[1].slice(0, 7) : '';
+  if (_r && !_r.complete) { const y = +_m1.slice(0, 4), m = +_m1.slice(5, 7) - 1; _m1 = m ? `${y}-${String(m).padStart(2, '0')}` : `${y - 1}-12`; }
+  const _rp = document.getElementById('reqPeriod');
+  if (_m0 && _m1 && _m1 >= _m0) { qs.set('month', _m0); qs.set('month_to', _m1); if (_rp) _rp.textContent = _m0 === _m1 ? fmtMonth(_m0) : `${fmtMonth(_m0)} – ${fmtMonth(_m1)}`; }
+  else if (_r) { if (_rp) _rp.textContent = ''; body.innerHTML = `<p class="text-xs" style="color:var(--text-muted)">ใบเบิกเก็บเป็นรายเดือน เดือนที่ยังไม่จบจึงยังไม่แสดง</p>`; return; }
   let d;
   try { d = await api(`${API}/api/requisition/vs-recipe?${qs}`); }
   catch (e) { body.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่ได้</p>'; return; }
@@ -2016,12 +2022,12 @@ async function loadRequisitionGap() {
     body.innerHTML = `<p class="text-xs" style="color:var(--orange-ink)">${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
     return;
   }
-  if (!_reqInit) {                       // first load: fill the pickers from what exists
+  if (!_reqInit) {                       // first load: fill the (hidden) pickers from what exists
     const opts = d.months.map(m => `<option value="${m}">${m}</option>`).join('');
     mf.innerHTML = opts; mt.innerHTML = opts;
-    mf.value = d.month_from; mt.value = d.month_to;
     _reqInit = true;
   }
+  mf.value = d.month_from; mt.value = d.month_to;
   const b = v => v == null ? '-' : '฿' + fmtN(v);
   const b2 = v => v == null ? '-' : '฿' + Number(v).toFixed(2);
   const pc = v => v == null ? '-' : v.toFixed(1) + '%';
@@ -2095,8 +2101,12 @@ async function loadBranchBom(force) {
   await _bbomInitFilters();
   // Phase 16: when chain mode, send branch=ALL (backend aggregates across all active branches)
   const branch = (_bbomViewMode === 'chain') ? 'ALL' : document.getElementById('bbomBranch').value;
-  const mf     = document.getElementById('bbomMonthFrom').value;
-  const mt     = document.getElementById('bbomMonthTo').value;
+  // PR-PP3: the top bar's months and kind (สัปดาห์ -> the trend in weeks, a short กำหนดเอง -> in days, else months)
+  const _r = gPeriodResolve();
+  const mf     = _r ? _r.cur[0].slice(0, 7) : document.getElementById('bbomMonthFrom').value;
+  const mt     = _r ? _r.cur[1].slice(0, 7) : document.getElementById('bbomMonthTo').value;
+  window.bbomGranularity = getPeriodKind() === 'week' ? 'week' : (getPeriodKind() === 'range' && _r && _r.days <= 62) ? 'day' : 'month';
+  if (_r) periodChip(_r);
   if (!branch) {
     document.getElementById('bbomSummary').innerHTML =
       '<p class="text-slate-400 col-span-5 text-center py-8">เลือกสาขาก่อน</p>';
