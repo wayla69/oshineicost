@@ -125,7 +125,7 @@ def test_day_mode_with_spikes(monkeypatch):
         rng = _call(con, monkeypatch, period="range", date_from="2026-08-20", date_to="2026-08-20",
                     **{k: v for k, v in kw.items() if k != "date"})
         _same_as_range(_call(con, monkeypatch, **kw), rng)
-    assert _call(con, monkeypatch, date="2026-08-20", threshold=5.0)["count"] == 0
+    assert _call(con, monkeypatch, date="2026-08-20", threshold=5.0)["spike_count"] == 0
 
 
 def test_day_mode_is_weekday_fair(monkeypatch):
@@ -188,7 +188,7 @@ def test_a_real_weekend_spike_is_flagged_with_its_fields(monkeypatch):
     s = _row(r, "ซาชิมิ")
     # no customer counts in this DB: basis "days" = one per trading day, the plate standard of PR-SP (rate None)
     assert s == {"branch": "สาขาทดสอบ", "menu": "ซาชิมิ", "today": 150, "per_day": 75.0, "avg": 60.0, "expected": 60,
-                 "x": 2.5, "pct": 150, "excess": 90, "is_new": False, "kind": "buffet", "basis": "days", "customers": None,
+                 "x": 2.5, "pct": 150, "excess": 90, "is_new": False, "spike": True, "kind": "buffet", "basis": "days", "customers": None,
                  "rate": None, "normal_rate": None, "tiers": None, "tier_note": "ยังไม่มีข้อมูลแยก tier"}
     assert _row(r, "ข้าวปั้น") is None                          # flat menu
 
@@ -346,7 +346,7 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
     r = _call(con, monkeypatch, date="2026-08-20")
     # day mode (PR-ST: weekday-fair): Thu 20 Aug vs the Thursdays 30 Jul, 6 and 13 Aug, none of which sold เมนูเล็ก -> "ปกติ" 0
     assert _row(r, "เมนูเล็ก") == {"branch": "สาขาทดสอบ", "menu": "เมนูเล็ก", "today": 30, "per_day": 30.0, "avg": 0.0,
-                                   "expected": 0, "x": None, "pct": None, "excess": 30, "is_new": False, "thin_base": True,
+                                   "expected": 0, "x": None, "pct": None, "excess": 30, "is_new": False, "spike": True, "thin_base": True,
                                    "kind": "alc", "basis": "days", "customers": None, "rate": None, "normal_rate": None,
                                    "tiers": None, "tier_note": "ยังไม่มีข้อมูลแยก tier"}
     # เมนูใหม่น้อย / ซาชิมิ: no sale from 2 Jul to 19 Aug -> back on 20 Aug: the new-menu part (PR-TD), whatever the plates
@@ -1007,3 +1007,116 @@ def test_raw_plates_rows_say_whether_per_head_lists_them_too(monkeypatch):
     by = {s["menu"]: s["in_per_head"] for s in r["spikes_plates"]}
     assert by == {"(AL) ราเมง": True, "ข้าวปั้น": False}
     assert (r["plates_count"], r["plates_only_count"]) == (2, 1)
+
+
+# ── 12. PR-RK · the existing-menu list ranks by extra cost, no 1.5x gate (owner 2026-10-25, "เมนูที่นิยมไม่ติดเลย เรียงผิด") ──────
+# One branch, 100 customers a day, the period 28 Sep .. 4 Oct (7 days), its normal the 21 days before. Per day, baseline -> period:
+#   ยอดนิยม   200 -> 220 (x1.1, +140 plates, ฿30 a plate = ฿4,200)   the popular menu 10 % up per head: the largest extra cost
+#   หมึก      100 -> 130 (x1.3, +210 plates, ฿5 = ฿1,050)              the most extra plates
+#   นาน ๆ ที  2 -> 6     (x3.0, +28 plates,  ฿20 = ฿560)               the old rule: spike, the chip
+#   เกือบเท่า 100 -> 103 (x1.03, +21 plates) under x1.05 -> not listed
+#   นิดเดียว  10 -> 10, 12 on the last day (+2 plates) under +3 plates -> not listed
+#   (OT) ค่าปรับบุฟเฟ่ต์ 789 Net (10 กรัม) 1 -> 20, ค่ามัดจำจาน 1 -> 10, คูปองมูลค่า789 1 -> 10: fee lines, in no section
+def _db_rank():
+    con = sqlite3.connect(":memory:", check_same_thread=False)
+    con.row_factory = sqlite3.Row
+    con.executescript("""
+      CREATE TABLE branches(branch_id INTEGER PRIMARY KEY, name TEXT, branch_type TEXT);
+      CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT);
+      CREATE TABLE sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
+      CREATE INDEX ix_ssd ON sales_sku_daily(branch_id, day, sku_id);
+      CREATE VIEW v_sales_sku_daily AS SELECT * FROM sales_sku_daily
+        WHERE sku_id NOT IN (SELECT sku_id FROM skus WHERE UPPER(sku_code) IN ('SERVICECHARGE','SERVICE'));
+      CREATE TABLE sales_transaction(branch_id INT, receipt_no TEXT, sold_at TEXT, customer_count INT, source TEXT,
+        total_inc_vat REAL, service_charge REAL);
+      CREATE TABLE bc_sku_cost_list(sku_id INT, month TEXT, unit_cost REAL);
+      CREATE TABLE bc_sku_cost_month(sku_id INT, month TEXT, unit_cost REAL);
+      CREATE TABLE sku_effective_cost(sku_id INT, recipe_cost REAL);
+      CREATE TABLE sku_cost(sku_id INT, unit_cost REAL);
+      CREATE TABLE bom_ingredients(sku_id INT, ingredient_cost REAL);
+      CREATE TABLE bom_sku_alias(bom_sku_code TEXT, resolved_sku_id INT);
+      INSERT INTO branches VALUES (1, 'สาขาทดสอบ', 'master');
+      INSERT INTO skus VALUES (1, 'POP', '(A) ยอดนิยม'), (2, 'SQUID', '(A) หมึก'), (3, 'RARE', '(A) นาน ๆ ที'),
+        (4, 'FLAT', '(A) เกือบเท่า'), (5, 'TINY', '(A) นิดเดียว'),
+        (6, 'OTHOTOTH00011', '(OT) ค่าปรับบุฟเฟ่ต์ 789 Net (10 กรัม)'), (7, 'DEP1', 'ค่ามัดจำจาน'), (8, 'OT0000110', 'คูปองมูลค่า789');
+      INSERT INTO sku_cost VALUES (1, 30), (2, 5), (3, 20), (4, 30), (5, 30), (6, 50), (7, 50), (8, 50);
+    """)
+    d = dt.date(2026, 8, 17)
+    while d <= _PC1:
+        day, p = d.isoformat(), _PC0 <= d <= _PC1
+        con.execute("INSERT INTO sales_transaction VALUES (1, ?, ?, 100, 'Easy', 10700, 0)", (f"R{day}", day + " 12:00:00"))
+        plan = {1: 220 if p else 200, 2: 130 if p else 100, 3: 6 if p else 2, 4: 103 if p else 100,
+                5: 12 if d == _PC1 else 10, 6: 20 if p else 1, 7: 10 if p else 1, 8: 10 if p else 1}
+        for sid, q in plan.items():
+            con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, ?, ?, 0)", (day, sid, q))
+        d += dt.timedelta(days=1)
+    return con
+
+
+_FEES = {"(OT) ค่าปรับบุฟเฟ่ต์ 789 Net (10 กรัม)", "ค่ามัดจำจาน", "คูปองมูลค่า789"}
+
+
+def _rank(cost=True, threshold=1.5):
+    return sales._menu_spike_period(_db_rank(), "range", None, _PC0.isoformat(), _PC1.isoformat(), "", {}, 300, threshold,
+                                    with_cost=cost)
+
+
+def test_the_ranked_list_puts_the_popular_menu_with_the_largest_extra_cost_first(monkeypatch):
+    r = _cost_range(_db_rank(), monkeypatch)
+    assert [(s["menu"], s["x"], s["excess"], s["extra_cost"], s["spike"]) for s in r["spikes"]] == [
+        ("ยอดนิยม", 1.1, 140, 4200.0, False), ("หมึก", 1.3, 210, 1050.0, False), ("นาน ๆ ที", 3.0, 28, 560.0, True)]
+    assert (r["count"], r["spike_count"]) == (3, 1)
+    assert r["top_extra_cost"] == 4200 + 1050 + 560                  # ต้นทุนเพิ่มรวม = the first `top` rows of the ranked list
+    assert _cost_range(_db_rank(), monkeypatch, top=1)["top_extra_cost"] == 4200.0
+
+
+def test_the_chip_threshold_and_the_noise_floor():
+    r = _rank(threshold=1.25)
+    assert {s["menu"]: s["spike"] for s in r["spikes"]} == {"ยอดนิยม": False, "หมึก": True, "นาน ๆ ที": True}
+    assert r["spike_count"] == 2 and r["threshold"] == 1.25
+    names = {s["menu"] for s in _rank()["spikes"]}
+    assert "เกือบเท่า" not in names and "นิดเดียว" not in names            # x1.03 and +2 plates: under the noise floor
+    # a chip threshold of 1.0 makes every row of >= 5 plates above normal a spike, and a spike is always listed
+    assert {"เกือบเท่า", "นิดเดียว"} <= {s["menu"] for s in _rank(threshold=1.0)["spikes"]}
+
+
+def test_a_role_without_cost_ranks_by_extra_plates():
+    r = _rank(cost=False)
+    assert [s["menu"] for s in r["spikes"]] == ["หมึก", "ยอดนิยม", "นาน ๆ ที"]
+    assert [s["spike"] for s in r["spikes"]] == [False, False, True] and r["spike_count"] == 1
+    assert not (_COST_ROW & {k for s in r["spikes"] for k in s})
+
+
+@pytest.mark.parametrize("cost", [True, False])
+def test_fee_lines_are_in_no_section(cost):
+    r = _rank(cost=cost)
+    names = {x["menu"] for x in r["spikes"] + r["spikes_plates"] + r["new_menus"]}
+    assert not (_FEES & names), names
+    assert r["count"] == 3 and r["new_count"] == 0
+    if cost:
+        assert all(s["unit_cost"] != 50 for s in r["spikes"])
+
+
+def test_a_raw_plates_row_is_per_head_only_when_the_ranked_row_is_a_spike():
+    # same customers every day, so raw x = per-head x: หมึก x1.3 is a raw-plates row under a 1.25 threshold and a ranked spike too;
+    # under 1.5 only นาน ๆ ที is in แบบเดิม, and it is a ranked spike
+    r = _rank(cost=False, threshold=1.25)
+    assert {s["menu"]: s["in_per_head"] for s in r["spikes_plates"]} == {"หมึก": True, "นาน ๆ ที": True}
+    r = _rank(cost=False, threshold=1.5)
+    assert {s["menu"]: s["in_per_head"] for s in r["spikes_plates"]} == {"นาน ๆ ที": True}
+    assert r["plates_only_count"] == 0
+
+
+@pytest.mark.parametrize("code,desc,want", [
+    ("OTHOTOTH00011", "(OT) ค่าปรับบุฟเฟ่ต์ 789 Net (10 กรัม)", True), ("OT0007", "ค่าปรับบุฟเฟ่ต์ 350++ (100 กรัม)", True),
+    ("OT0021", "ค่าปรับบุฟเฟต์ 1150++ + (100 กรัม)", True), ("X1", "ค่าบริการจัดส่ง", True), ("X2", "ค่ามัดจำจาน", True),
+    ("X3", "ค่าเสียหายอุปกรณ์", True), ("OTHOTOTH00002", "(OT) ค่าเปิดห้อง (เล็ก)", True), ("OT0018", "ค่าเปิดเหล้า,ไวน์,เบียร์(100)", True),
+    ("OT0000110", "คูปองมูลค่า789", True), ("X4", "  (ot) อื่น ๆ", True), ("SERVICECHARGE", "Service", True),
+    ("BUFFET799", "(B) บุฟเฟ่ต์ 799", True), ("B01", "บุฟเฟ่ต์ (ผู้ใหญ่)", True),
+    ("A001", "(A) ซาชิมิแซลมอน", False), ("B0123", "(B) ซอฟต์ครีมมัตฉะ", False), ("CR0001", "ค่าอาหารจัดเลี้ยง", False),
+    (None, None, False)])
+def test_the_non_food_predicate_and_its_sql_twin_agree(code, desc, want):
+    from rules import is_non_food_line, non_food_sql
+    assert is_non_food_line(code, desc) is want
+    con = sqlite3.connect(":memory:")
+    assert bool(con.execute(f"SELECT {non_food_sql('?1', '?2')}", (code, desc)).fetchone()[0]) is want
