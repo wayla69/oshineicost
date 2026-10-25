@@ -1547,7 +1547,7 @@ function setupShortcuts() {
 // GP by Branch tab — BoM formula (Easy)
 // ══════════════════════════════════════════════════════════════════════════
 let _gpbData = null;
-let _gpbSortKey = 'total_revenue';
+let _gpbSortKey = 'over_target_baht';   // DV2: the baht of food cost over the target's ceiling, largest first
 let _gpbSortDir = 'desc';
 let _gpbExpanded = new Set();
 window.gpbGranularity = window.gpbGranularity || 'month';
@@ -1741,7 +1741,10 @@ function _gpbSort(key) {
 
 function _gpbRenderTable() {
   if (!_gpbData) return;
-  const rows = _gpbData.rows.slice();
+  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
+  // DV2: the baht the branch is over the food-cost ceiling (= the GP below the GP floor x revenue); 0 inside the band
+  const rows = _gpbData.rows.map(r => Object.assign({}, r, {
+    over_target_baht: r.total_food_cost_pct != null && r.total_revenue ? Math.max(0, (r.total_food_cost_pct - hi) / 100 * r.total_revenue) : null }));
   const dir = (_gpbSortDir === 'desc') ? -1 : 1;
   rows.sort((a, b) => {
     const av = a[_gpbSortKey];
@@ -1753,7 +1756,6 @@ function _gpbRenderTable() {
   });
   const fmtB = n => (n == null) ? '—' : Number(n).toLocaleString('th-TH', {maximumFractionDigits:0});
   const fmtPct = n => (n == null) ? '—' : n.toFixed(1) + '%';
-  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
 
   const html = rows.map(r => {
     const bucket = _gpbStatusBucket(r.total_food_cost_pct, lo, hi);
@@ -1762,6 +1764,7 @@ function _gpbRenderTable() {
     const main = `
       <tr class="gpb-row" style="border-bottom:1px solid var(--border);cursor:pointer" onclick="_gpbToggleRow(${r.branch_id})">
         <td class="px-3 py-2 font-medium">${arrow} ${esc(r.branch)}<button class="drill-branch-btn" onclick="event.stopPropagation();drillIntoBranch('${jsAttr(r.branch)}')" title="ดูเฉพาะสาขานี้">เจาะลึก →</button></td>
+        <td class="px-3 py-2 text-right" style="font-weight:600;color:${r.over_target_baht > 0 ? 'var(--bad-ink)' : 'var(--text-muted)'}">${r.over_target_baht == null ? '—' : r.over_target_baht > 0 ? fmtB(r.over_target_baht) : '0'}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_revenue)}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_cogs)}</td>
         <td class="px-3 py-2 text-right" style="color:${(r.total_gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'};font-weight:600">${fmtB(r.total_gp)}</td>
@@ -1781,6 +1784,7 @@ function _gpbRenderTable() {
       return `
         <tr style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
           <td class="px-3 py-1 pl-8 text-xs text-slate-500">${label}</td>
+          <td class="px-3 py-1 text-right text-xs">${m.food_cost_pct != null && m.revenue ? fmtB(Math.max(0, (m.food_cost_pct - hi) / 100 * m.revenue)) : '—'}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.revenue)}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.cogs)}</td>
           <td class="px-3 py-1 text-right text-xs" style="color:${(m.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${fmtB(m.gp)}</td>
@@ -1872,7 +1876,10 @@ function _gpbRenderHeatmap() {
   const monthSet = new Set();
   _gpbData.rows.forEach(r => (r.monthly || []).forEach(m => monthSet.add(m.month)));
   const months = Array.from(monthSet).sort();
-  if (months.length === 0) { wrap.innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
+  // DV2: a heat map of one month is the table again - the card hides until the period has two months or more
+  const card = document.getElementById('gpbHeatCard');
+  if (card) card.style.display = months.length < 2 ? 'none' : '';
+  if (months.length < 2) { wrap.innerHTML = ''; return; }
 
   const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
   // Color scale by food cost % vs target

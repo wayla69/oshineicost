@@ -4046,10 +4046,10 @@ const PAGE_CARDS = {
     { sel: '#oppRevive table', keyCols: [1, 2, 3] }],
   profit: [{ sel: '#profitBandTable', title: 'ช่วง', sub: ['บิล', 'ลูกค้า'], subL: true, keyCols: ['รายได้ไม่รวม VAT', 'กำไร', 'อัตรากำไร %'], labels: ['รายได้', 'กำไร', 'อัตรากำไร'] }],
   benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', 'คะแนน'] }],
-  gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['รายได้', 'GP (', 'GP %'], labels: ['รายได้', 'GP', 'GP %'], pill: 'สถานะ',
+  gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['เกินเป้า', 'GP (', 'GP %'], labels: ['เกินเป้า ฿', 'GP', 'GP %'], pill: 'สถานะ',
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
-  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
+  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['บาทที่เปลี่ยน', 'ยอดขาย', 'ยอด/หัว'] },
     // PR-SC: a role that sees cost gets the ต้นทุนเพิ่ม column (table.sp-costed); PR-TD (owner 2026-10-25): it is the LAST column and the last figure
     { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], 'สูงกว่า', 'ต้นทุนเพิ่ม'], labels: ['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม'] },
     { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], ['ปกติ', 'ช่วงเทียบ'], 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
@@ -4063,7 +4063,7 @@ const PAGE_CARDS = {
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
   staff: [{ sel: '#staffTable', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', '% ส่วนลด'] }],
   cancelbill: [
-    { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['บิลยกเลิก', 'มูลค่า'] },
+    { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['มูลค่า', 'สัดส่วน', 'บิลยกเลิก'] },
     { sel: 'table:has(#cbReasons)', title: 'เหตุผล', keyCols: ['บิล', '%', 'มูลค่า'] }],
   cashctl: [
     { sel: 'table:has(#ccBody)', title: 'สาขา', keyCols: ['ขาด/เกิน', 'วันที่ขาด', '% ของยอด'] },

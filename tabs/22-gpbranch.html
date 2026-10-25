@@ -59,6 +59,7 @@
         <thead>
           <tr style="background:var(--bg-subtle);border-bottom:2px solid var(--border)">
             <th class="px-3 py-2 text-left cursor-pointer" onclick="_gpbSort('branch')">สาขา</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('over_target_baht')" title="ต้นทุนอาหารที่เกินเพดานเป้า (บาท) = (ต้นทุนอาหาร % − เพดานเป้า) × รายได้">เกินเป้า (฿)</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_revenue')">รายได้ ()</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_cogs')">ต้นทุน BoM ()</th>
             <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_gp')">GP ()</th>
@@ -73,7 +74,7 @@
   </div>
 
   <!-- Heatmap -->
-  <div class="card p-5 mb-4">
+  <div class="card p-5 mb-4" id="gpbHeatCard">
     <h2 class="section-title mb-1">แผนภาพความร้อน GP% รายเดือน × รายสาขา</h2>
     <p class="text-xs text-slate-400 mb-3">สีเขียว = GP สูง · สีแดง = GP ต่ำ/ขาดทุน · เลื่อนเมาส์เพื่อดูรายละเอียด</p>
     <div id="gpbHeatmap" style="overflow:auto"></div>
