@@ -198,8 +198,15 @@ def test_cost_roles_only():
         assert auth.path_allowed("GET", path, {"sales.overview", "profit.pnl"})
         assert auth.path_allowed("GET", path, {"sales.overview", "cost.analysis"})
     core = (HERE.parent / "js" / "01-core.js").read_text(encoding="utf-8")
-    assert "hvmonitor:['cost.analysis','profit.pnl']" in core
-    assert 'data-needs="/api/cost/ingredient-groups"' in (HERE.parent / "tabs" / "60-hvmonitor.html").read_text(encoding="utf-8")
+    # DV4: the page opens to the plates roles too (the จำนวนจาน view, /api/sales/ingredient-groups-plates: no cost); บาท stays cost-only
+    assert "hvmonitor:['cost.analysis','profit.pnl','menu.analysis','customer.buffet']" in core
+    tab = (HERE.parent / "tabs" / "60-hvmonitor.html").read_text(encoding="utf-8")
+    assert 'data-needs="/api/cost/ingredient-groups,/api/sales/ingredient-groups-plates"' in tab
+    js = (HERE.parent / "js" / "20-hvmonitor.js").read_text(encoding="utf-8")
+    assert "function hvmCostView() { return canSeeCost(); }" in js and "if (_hvmView() === 'plates') { hvpLoad(force); return; }" in js
+    mk = auth.modules_for_role("marketing")
+    assert auth.path_allowed("GET", "/api/sales/ingredient-groups-plates", mk)
+    assert not ({"cost.analysis", "profit.pnl"} & mk)
 
 
 # ── why the cost moved: ลูกค้า · กินต่อหัว · ต้นทุนต่อจาน (LMDI, baht) ──────────────────────────────────────────────────

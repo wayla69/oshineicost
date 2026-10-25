@@ -193,3 +193,25 @@ def test_the_base_may_be_after_the_chosen_week_but_never_overlap_it(ig):  # noqa
     r = ig.get(URL, params={"period": "range", "date_from": early["from"], "date_to": early["to"],
                             "base_from": YESTERDAY, "base_to": (dt.date.fromisoformat(YESTERDAY) + dt.timedelta(days=1)).isoformat()})
     assert r.status_code == 400 and "วันล่าสุดที่มีข้อมูลครบ" in r.json()["detail"]
+
+
+def test_the_top_bars_period_gives_the_cost_views_windows(ig):  # noqa: F811
+    """DV4: the จำนวนจาน view of High Value Product Monitor follows the top bar - kind (+ pick / date_from / date_to) resolves the same
+    windows as /api/cost/ingredient-groups (cur and prev), the branch scope included; a bad kind is refused in formal Thai."""
+    for kind in ("week", "month", "year"):
+        c = ig.get("/api/cost/ingredient-groups", params={"kind": kind, "pick": YESTERDAY}).json()
+        p = ig.get(URL, params={"kind": kind, "pick": YESTERDAY}).json()
+        assert p["period"]["cur"] == c["period"]["cur"] and p["period"]["prev"] == c["period"]["prev"], kind
+        assert p["base"]["kind"] == "prev"
+        assert p["chain"]["customers"] == c["chain"]["customers"]
+        for s in IG.SLUGS:
+            assert p["chain"]["cells"][s]["plates"] == pytest.approx(c["chain"]["cells"][s]["plates"]), (kind, s)
+    w = P.resolve("week", YESTERDAY)
+    r = ig.get(URL, params={"kind": "range", "date_from": w["cur"][0], "date_to": w["cur"][1], "branch": "BranchA"}).json()
+    assert r["period"]["cur"] == list(w["cur"]) and [b["branch"] for b in r["branches"]] == ["BranchA"]
+    assert r["chain"]["customers"] == r["branches"][0]["customers"]
+    # the top bar's kind wins over the old period parameter
+    k = ig.get(URL, params={"kind": "week", "pick": YESTERDAY, "period": "day"}).json()
+    assert k["period"]["cur"] == list(w["cur"])
+    bad = ig.get(URL, params={"kind": "decade"})
+    assert bad.status_code == 400 and bad.json()["detail"] == "ช่วงเวลาไม่ถูกต้อง"

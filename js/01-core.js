@@ -622,7 +622,7 @@ const TAB_MODULE = {
   menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
   menuactionboard:'cost.analysis', menuopportunities:'menu.analysis', feedback:'customer.feedback', checklist:'customer.feedback',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis', costheadtop60:'cost.analysis',
-  hvmonitor:['cost.analysis','profit.pnl'],   // High Value Product Monitor (owner 2026-10-25): /api/cost/ingredient-groups is cost.analysis / profit.pnl
+  hvmonitor:['cost.analysis','profit.pnl','menu.analysis','customer.buffet'],   // High Value Product Monitor (owner 2026-10-25): บาท = cost.analysis / profit.pnl; DV4: จำนวนจาน (no cost) for the plates roles too
   menuimpact:'cost.analysis',
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
   simhub:'cost.simulator',
@@ -4132,9 +4132,8 @@ const PAGE_CARDS = {
     { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', keyCols: ['+จาน', 'สูงกว่า', 'สะสม'], labels: ['+จาน', 'สูงกว่า', 'สะสม'], figSub: true },
     { sel: '#spikeNewTable.sp-costed', title: 'เมนู', keyCols: ['ต้นทุน', 'จาน/วัน', 'แนวโน้ม'], labels: ['ต้นทุนช่วงนี้', 'จาน/วัน', 'แนวโน้ม'] },
     { sel: '#spikeNewTable:not(.sp-costed)', title: 'เมนู', keyCols: ['จาน/วัน', 'ต่อ 100 ลูกค้า', 'แนวโน้ม'], labels: ['จาน/วัน', 'ต่อ 100 ลูกค้า', 'แนวโน้ม'] },
-    // owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน: one group (plates only) and the branches x groups matrix
-    { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'], figSub: true },
-    { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true }],
+    // DV4: วัตถุดิบมูลค่าสูง · จำนวนจาน moved to High Value Product Monitor (hvmonitor below)
+  ],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'สาขา', keyCols: ['เกินเพดาน', '% ยอดขาย', 'ส่วนลดรวม'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
@@ -4146,8 +4145,13 @@ const PAGE_CARDS = {
     { sel: 'table:has(#ccBody)', title: 'สาขา', keyCols: ['ขาด/เกิน', 'วันที่ขาด', '% ของยอด'] },
     { sel: 'table:has(#ccWorst)', title: 'สาขา', sub: ['วันที่'], keyCols: ['ขาด/เกิน', 'ยอดขาย', 'ลูกค้า'] }],
   costhead: [{ sel: 'table:has(#chBody)', title: 'สาขา', sub: ['vs เฉลี่ย'], subL: true, keyCols: ['ต้นทุน/หัว', 'ต้นทุน%', 'GP/หัว'] }],
-  hvmonitor: [{ sel: '#hvmTable', title: 'สาขา', keyCols: ['ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน'], figSub: true },
-    { sel: '#hvmMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ต้นทุนอาหาร/หัว'], figSub: true }],
+  // DV4 (phone table review 2026-10-25): บาท = ทั้งหมด (one card per ingredient: the change, its main cause, the cost now; สาขาที่ดัน under
+  // the name) or one ingredient (one card per branch: the change with its cause, สะสม, cost / head); จำนวนจาน = one group or the matrix
+  // (DV5 cap: the 8 ingredients and the branch lists fold under their own floor - ฿1,000 / 20 plates - so no second cap; the matrix 10)
+  hvmonitor: [{ sel: '#hvmAll', title: 'วัตถุดิบ', keyCols: ['เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน'], figSub: true, cap: false },
+    { sel: '#hvmTable', title: 'สาขา', keyCols: ['เปลี่ยน', 'สะสม', 'ต้นทุน/หัว'], figSub: true, cap: false },
+    { sel: '#hvpTable', title: 'สาขา', keyCols: ['จากกินต่อหัว', 'จาน/หัว', 'จานที่ออก'], figSub: true, cap: false },
+    { sel: '#hvpMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true, cap: 10 }],
   coverage: [
     { sel: 'table:has(#cov-branches)', title: 'สาขา', sub: ['SKU ค้าง'], subL: true, keyCols: ['รายได้', 'ไม่มีต้นทุน', '% ไม่มี'] },
     { sel: 'table:has(#cov-review)', rows: 'tr[onclick]', title: 'เมนู', keyCols: ['ต้นทุน/ที่', 'จานเดือนนี้', 'ต้นทุนรวม/เดือน'], pill: 'สถานะ',

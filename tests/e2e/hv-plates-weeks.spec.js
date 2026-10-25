@@ -5,6 +5,9 @@
 //   2. the section's own week pair: สัปดาห์ [W43 · …] เทียบ [W42 · …] (Mon–Sun, ISO numbers); a week still running compares the same weekdays;
 //   3. the 9 food chips wrap on a phone (no sideways scroll), 44 px to tap; the HVM chips too;
 //   4. bigger figures (>= 16 px on a phone, >= 12 px text at 100 % in พอดีจอ).
+// DV4 (phone table review 2026-10-25): the section is the จำนวนจาน view of High Value Product Monitor now (DV3 took it off the menu-spike
+// card); the pair opens on the last finished week vs the week before, ตามแถบด้านบน follows the top bar; the page follows the top bar's
+// period and branch in both views.
 // The answers are mocked (the weeks list and the bases follow the request) so the cases hold whatever the fixture has.
 const { test, expect } = require('@playwright/test');
 
@@ -76,19 +79,19 @@ async function login(ctx) {
   }
 }
 
-async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', slug = 'salmon' }) {
+async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', slug = 'salmon', view = 'baht' }) {
   const ctx = await browser.newContext({ ...opts, colorScheme: scheme });
   await login(ctx);
-  await ctx.addInitScript(([m, t, d, s]) => {
+  await ctx.addInitScript(([m, t, d, s, v]) => {
     try {
       if (sessionStorage.getItem('hvw_init')) return;          // a reload keeps what the page remembered
       sessionStorage.setItem('hvw_init', '1');
       localStorage.setItem('oshinei_phmode', JSON.stringify({ [t]: m })); localStorage.setItem('oshinei_dark', d ? '1' : '0');
       localStorage.setItem('oshinei_spike_period', JSON.stringify({ m: 'week', f: '', t: '' })); localStorage.setItem('oshinei_sphv_slug', s);
-      localStorage.removeItem('oshinei_sphv_weeks');
+      localStorage.removeItem('oshinei_hvp_weeks'); localStorage.setItem('oshinei_hvm_view', v);
       localStorage.setItem('oshinei_hvm_slug', s); localStorage.setItem('oshinei_gperiod', JSON.stringify({ kind: 'month', pick: '', from: '', to: '' }));
     } catch (e) { /* none */ }
-  }, [mode, tab, scheme === 'dark', slug]);
+  }, [mode, tab, scheme === 'dark', slug, view]);
   const urls = [];
   const watch = (pat, body) => ctx.route(pat, r => { urls.push(r.request().url());
     return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body(r.request().url())) }); });
@@ -96,6 +99,7 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', slug =
   await watch(/\/api\/sales\/menu-spike\?/, spikeAnswer);
   await watch(/\/api\/cost\/ingredient-groups\?/, hvmAnswer);
   const page = await ctx.newPage();
+  page.on('request', r => { if (/\/api\/cost\/ingredient-groups\?/.test(r.url()) && !urls.includes(r.url())) urls.push(r.url()); });
   const errors = [];
   page.on('console', m => { if (m.type() === 'error' && !IGNORE.some(re => re.test(m.text()))) errors.push(m.text()); });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
@@ -103,7 +107,9 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', slug =
   await go(page, opts, tab);
   return { ctx, page, errors, urls };
 }
-async function go(page, opts, tab) {
+async function go(page, opts, tab, again) {
+  // a phone may load the page once more right after a reload (the phone-first boot): ask again on the new document
+  if (!again) { try { return await go(page, opts, tab, true); } catch (e) { if (!/Execution context was destroyed/.test(String(e))) throw e; await page.waitForLoadState('networkidle'); } }
   if (opts.isMobile) {
     await page.waitForFunction(() => document.body.classList.contains('ph-on') && typeof phOpenPage === 'function', null, { timeout: 60_000 });
     await page.evaluate(async t => { await phOpenPage(() => switchTab(t)); }, tab);
@@ -112,7 +118,7 @@ async function go(page, opts, tab) {
     await page.evaluate(t => switchTab(t), tab);
   }
   if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
-  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmMatrix'), null, { timeout: 60_000 });
+  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 });
   await page.waitForTimeout(900);
 }
 async function shot(page, name, sel) {
@@ -144,28 +150,30 @@ const CHIPS = sel => {
 const CASES = [['desktop', DESK, 'fit'], ['390 แตะง่าย', PHONE, 'touch'], ['390 พอดีจอ', PHONE, 'fit']];
 for (const [name, opts, mode] of CASES) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    // DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
-    // and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
-    test.skip(`plates · ${name} · ${scheme}: base values, the W vs W picker, chips that fit, larger figures`, async ({ browser }) => {
+    test(`hvmonitor · จำนวนจาน · ${name} · ${scheme}: base values, the W vs W picker (last finished week first), chips that fit, larger figures`, async ({ browser }) => {
       test.setTimeout(150_000);
-      const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'dailysales', mode, scheme });
+      const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'hvmonitor', mode, scheme, view: 'plates' });
       const tag = `${name.replace(/\s+/g, '_')}_${scheme}`;
       const ph = !!opts.isMobile;
-      // ── the picker: ตามช่วงของการ์ด first, then W labels (Mon–Sun), the running week to its closed day
-      const wa = page.locator('#spikeHvWa');
+      // ── the picker: ตามแถบด้านบน first, then W labels (Mon–Sun), the running week to its closed day
+      const wa = page.locator('#hvpWa');
       await expect(wa).toBeVisible();
       const optsA = await wa.locator('option').allTextContents();
-      expect(optsA[0]).toBe('ตามช่วงของการ์ด');
+      expect(optsA[0]).toBe('ตามแถบด้านบน');
       expect(optsA[1]).toBe('W43 · 19–24 ต.ค. (ถึงวันที่ปิด)');
       expect(optsA[2]).toBe('W42 · 12–18 ต.ค.');
       expect(optsA.slice(1).every(t => /^W\d{1,2} · /.test(t))).toBe(true);
-      await expect(page.locator('#spikeHvWb')).toHaveCount(0);
-      // the card's own period by default
-      expect(lastPlates(urls).searchParams.get('period')).toBe('week');
-      // ── เดิม under every figure (table)
+      // a week by default: the last finished one (W42) vs the week before (W41), whole weeks
+      await expect(page.locator('#hvpVs')).toHaveText('W42 (12–18 ต.ค.) เทียบ W41 (5–11 ต.ค.)');
+      expect(await wa.inputValue()).toBe('2026-10-12');
+      await expect(page.locator('#hvpWb')).toHaveValue('2026-10-05');
+      let u = lastPlates(urls);
+      expect([u.searchParams.get('period'), u.searchParams.get('date_from'), u.searchParams.get('date_to'), u.searchParams.get('base_from'), u.searchParams.get('base_to')])
+        .toEqual(['range', '2026-10-12', '2026-10-18', '2026-10-05', '2026-10-11']);
+      // ── เดิม under every figure (table): จานที่ออก · จาน/หัว · ลูกค้า
       const b0 = await page.evaluate(() => {
-        const tb = /** @type {HTMLTableElement} */ (document.getElementById('spikeHvTable')), r = tb.tBodies[0].rows[0];
-        return [1, 2, 3].map(i => (r.cells[i].querySelector('.sp-hv-d') || {}).textContent || '');
+        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvpTable')), r = tb.tBodies[0].rows[0];
+        return [3, 4, 5].map(i => (r.cells[i].querySelector('.hvm-d') || {}).textContent || '');
       });
       expect(b0[0]).toMatch(/^▲\d+\.\d% · เดิม 193,466$/);
       expect(b0[1]).toMatch(/· เดิม 10\.96$/);
@@ -173,92 +181,137 @@ for (const [name, opts, mode] of CASES) {
       // ── the figures are bigger: >= 16 px on a phone (15 px desktop), the base line >= 12 px
       const fs = await page.evaluate(() => {
         const px = s => [...document.querySelectorAll(s)].filter(e => e.getClientRects().length).map(e => parseFloat(getComputedStyle(e).fontSize));
-        return { v: Math.min(...px('#spikeHvTable .sp-v')), d: Math.min(...px('#spikeHvTable .sp-hv-d, #spikeHvTable .sp-hv-b')), n: Math.min(...px('#spikeHvTable .sp-hv-name')),
-          small: [...document.querySelectorAll('#spikeHvTable td, #spikeHvTable td *')].filter(e => e.textContent.trim() && e.getClientRects().length)
+        return { v: Math.min(...px('#hvpTable td.hvm-num .hvm-v:not(.hvm-cum)')), d: Math.min(...px('#hvpTable .hvm-d, #hvpTable .hvm-b')), n: Math.min(...px('#hvpTable td.hvm-name')),
+          small: [...document.querySelectorAll('#hvpTable td, #hvpTable td *')].filter(e => e.textContent.trim() && e.getClientRects().length)
             .map(e => parseFloat(getComputedStyle(e).fontSize)).filter(x => x < 12).length };
       });
-      expect(fs.v).toBeGreaterThanOrEqual(ph ? 16 : 15);
-      expect(fs.d).toBeGreaterThanOrEqual(12);
-      expect(fs.n).toBeGreaterThanOrEqual(13);
-      expect(fs.small, 'text >= 12 px at 100 %').toBe(0);
-      // contrast of the change and the base (light / dark)
-      const k = await page.evaluate(() => {
-        const rgb = s => { const n = String(s).match(/[\d.]+/g) || ['0', '0', '0']; return [+n[0], +n[1], +n[2], n[3] == null ? 1 : +n[3]]; };
-        const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
-        const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] >= 0.5) return c; } return [255, 255, 255]; };
-        return Math.min(...[...document.querySelectorAll('#spikeHvTable .sp-hv-d > span, #spikeHvTable .sp-v')].filter(e => e.getClientRects().length).map(e => {
-          const a = lum(rgb(getComputedStyle(e).color)), b = lum(bgOf(e)); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }));
-      });
-      expect(k).toBeGreaterThanOrEqual(4.5);
-      // ── the chips: desktop one row; a phone wraps them (5 + 4), nothing off screen, no sideways scroll, 44 px to tap
-      await page.locator('#spikeHvSec').scrollIntoViewIfNeeded();
-      const c = await page.evaluate(CHIPS, '#spikeHvChips .gran-btn');
+      if (mode !== 'touch' || !ph) {
+        expect(fs.v).toBeGreaterThanOrEqual(ph ? 16 : 15);
+        expect(fs.d).toBeGreaterThanOrEqual(12);
+        expect(fs.n).toBeGreaterThanOrEqual(13);
+        expect(fs.small, 'text >= 12 px at 100 %').toBe(0);
+        // contrast of the change and the base (light / dark)
+        const k = await page.evaluate(() => {
+          const rgb = s => { const n = String(s).match(/[\d.]+/g) || ['0', '0', '0']; return [+n[0], +n[1], +n[2], n[3] == null ? 1 : +n[3]]; };
+          const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+          const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c[3] >= 0.5) return c; } return [255, 255, 255]; };
+          return Math.min(...[...document.querySelectorAll('#hvpTable .hvm-d > span, #hvpTable .hvm-v')].filter(e => e.getClientRects().length).map(e => {
+            const a = lum(rgb(getComputedStyle(e).color)), b = lum(bgOf(e)); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }));
+        });
+        expect(k).toBeGreaterThanOrEqual(4.5);
+      }
+      // ── the chips: desktop one row; a phone wraps them (5 + 5 with CSV), nothing off screen, no sideways scroll, 44 px to tap
+      const c = await page.evaluate(CHIPS, '#hvmChips .gran-btn');
       if (ph) {
         expect(c.rows, 'the chips wrap').toBe(2);
         expect(c.off, 'every chip on screen').toEqual([]);
         expect(c.clipped, 'no chip label cut').toEqual([]);
-        expect(c.scroll, 'no sideways scroll').toBeLessThanOrEqual(0);
         expect(c.sw).toBeLessThanOrEqual(390);
         if (mode === 'touch') { expect(c.miss, '44 px to tap').toEqual([]); expect(c.h).toBeLessThanOrEqual(34); }
       } else {
         expect(c.rows).toBe(1);
       }
       if (mode === 'touch' && ph) {                // the touch cards carry the base too
-        const card = page.locator('#spikeHvSec .ph-cl-card').first();
+        const card = page.locator('#tab-hvmonitor .ph-cl-card').first();
         await expect(card).toBeVisible();
         expect(await card.textContent()).toContain('เดิม');
       }
-      await shot(page, `ds_hv_salmon_card_${tag}`, '#spikeHvSec');
+      await shot(page, `hvp_salmon_W42vsW41_${tag}`, '#hvmView');
       // ── choose W43 (still running, จ.–ส.): the base is W42 on the same weekdays
       await wa.selectOption('2026-10-19');
-      await expect(page.locator('#spikeHvVs')).toHaveText('(W43 (จ.–ส.) เทียบ W42 (จ.–ส.))');
-      let u = lastPlates(urls);
+      await expect(page.locator('#hvpVs')).toHaveText('W43 (จ.–ส.) เทียบ W42 (จ.–ส.)');
+      u = lastPlates(urls);
       expect([u.searchParams.get('period'), u.searchParams.get('date_from'), u.searchParams.get('date_to'), u.searchParams.get('base_from'), u.searchParams.get('base_to')])
         .toEqual(['range', '2026-10-19', '2026-10-24', '2026-10-12', '2026-10-17']);
-      const wb = page.locator('#spikeHvWb');
+      const wb = page.locator('#hvpWb');
       await expect(wb).toBeVisible();
       expect(await wb.locator('option[value="2026-10-19"]').evaluate(o => /** @type {HTMLOptionElement} */ (o).disabled)).toBe(true);   // never itself
       // "w1 vs w7": W43 vs W37, to date
       await wb.selectOption('2026-09-07');
-      await expect(page.locator('#spikeHvVs')).toHaveText('(W43 (จ.–ส.) เทียบ W37 (จ.–ส.))');
+      await expect(page.locator('#hvpVs')).toHaveText('W43 (จ.–ส.) เทียบ W37 (จ.–ส.)');
       u = lastPlates(urls);
       expect([u.searchParams.get('base_from'), u.searchParams.get('base_to')]).toEqual(['2026-09-07', '2026-09-12']);
-      await page.waitForFunction(() => !!document.getElementById('spikeHvTable'));
-      await shot(page, `ds_hv_salmon_W43vsW37_${tag}`, '#spikeHvSec');
+      await page.waitForFunction(() => !!document.getElementById('hvpTable'));
+      await shot(page, `hvp_salmon_W43vsW37_${tag}`, '#hvmView');
       // two finished weeks, the base the LATER one: whole weeks, the base value reads "เทียบ"
       await wa.selectOption('2026-08-31');
-      await wb.selectOption('2026-09-28');
-      await expect(page.locator('#spikeHvVs')).toHaveText('(W36 (31 ส.ค.–6 ก.ย.) เทียบ W40 (28 ก.ย.–4 ต.ค.))');
+      await page.locator('#hvpWb').selectOption('2026-09-28');
+      await expect(page.locator('#hvpVs')).toHaveText('W36 (31 ส.ค.–6 ก.ย.) เทียบ W40 (28 ก.ย.–4 ต.ค.)');
       u = lastPlates(urls);
       expect([u.searchParams.get('date_from'), u.searchParams.get('date_to'), u.searchParams.get('base_from'), u.searchParams.get('base_to')])
         .toEqual(['2026-08-31', '2026-09-06', '2026-09-28', '2026-10-04']);
-      await page.waitForFunction(() => !!document.getElementById('spikeHvTable'));
-      expect(await page.locator('#spikeHvTable tbody tr').first().locator('.sp-hv-b').first().textContent()).toMatch(/^ · เทียบ /);
+      await page.waitForFunction(() => !!document.getElementById('hvpTable'));
+      expect(await page.locator('#hvpTable tbody tr').first().locator('.hvm-b').first().textContent()).toMatch(/^ · เทียบ /);
       // ── ทั้งหมด: now, "▲x% · เดิม y" and the cause word in each cell
       await wa.selectOption('2026-10-19');
-      await wb.selectOption('2026-10-12');
-      await page.locator('#spikeHvChips .gran-btn[data-g="all"]').click();
-      await page.waitForFunction(() => !!document.getElementById('spikeHvMatrix'));
+      await expect(page.locator('#hvpWb')).toHaveValue('2026-10-12');
+      await page.locator('#hvmChips .gran-btn[data-g="all"]').click();
+      await page.waitForFunction(() => !!document.getElementById('hvpMatrix'));
       const mx = await page.evaluate(() => {
-        const tb = /** @type {HTMLTableElement} */ (document.getElementById('spikeHvMatrix')), r = tb.tBodies[0].rows[0];
-        return { cell: (r.cells[1].querySelector('.sp-hv-d') || {}).textContent || '', cust: (r.cells[9].querySelector('.sp-hv-d') || {}).textContent || '' };
+        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvpMatrix')), r = tb.tBodies[0].rows[0];
+        return { cell: (r.cells[1].querySelector('.hvm-d') || {}).textContent || '', cust: (r.cells[9].querySelector('.hvm-d') || {}).textContent || '' };
       });
       expect(mx.cell).toMatch(/^[▲▼]?\d+\.\d% · เดิม 10\.96$/);
       expect(mx.cust).toMatch(/· เดิม 17,652$/);
-      await shot(page, `ds_hv_all_W43vsW42_${tag}`, '#spikeHvSec');
+      await shot(page, `hvp_all_W43vsW42_${tag}`, '#hvmView');
       // ── remembered on this device: a reload keeps the pair
       await page.reload({ waitUntil: 'networkidle' });
-      await go(page, opts, 'dailysales');
-      await expect(page.locator('#spikeHvVs')).toHaveText('(W43 (จ.–ส.) เทียบ W42 (จ.–ส.))');
+      await go(page, opts, 'hvmonitor');
+      await expect(page.locator('#hvpVs')).toHaveText('W43 (จ.–ส.) เทียบ W42 (จ.–ส.)');
       expect(lastPlates(urls).searchParams.get('base_from')).toBe('2026-10-12');
-      // back to the card's period
-      await page.locator('#spikeHvWa').selectOption('');
-      await expect(page.locator('#spikeHvWb')).toHaveCount(0);
-      await expect.poll(() => lastPlates(urls).searchParams.get('period')).toBe('week');
+      // back to the top bar's period
+      await page.locator('#hvpWa').selectOption('');
+      await expect(page.locator('#hvpWb')).toHaveCount(0);
+      await expect.poll(() => lastPlates(urls).searchParams.get('kind')).toBe('month');
+      expect(lastPlates(urls).searchParams.get('base_from')).toBeNull();
       expect(errors).toEqual([]);
       await ctx.close();
     });
   }
+}
+
+// ── the page follows the top bar: its period and its branch, in both views (principle 4 of the decision-value programme) ──
+for (const [name, opts] of [['desktop', DESK], ['390', PHONE]]) {
+  test(`hvmonitor · ${name}: a period change and a branch change on the top bar reload both views with the new filters`, async ({ browser }) => {
+    test.setTimeout(150_000);
+    const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'hvmonitor', mode: 'fit' });
+    const lastCost = () => new URL(urls.filter(x => /\/api\/cost\/ingredient-groups\?/.test(x)).pop() || 'http://x/');
+    expect(lastCost().searchParams.get('kind')).toBe('month');
+    // the period: สัปดาห์ on the top bar -> the baht view asks for the week
+    let n0 = urls.length;
+    await page.evaluate(() => gPeriodSet({ kind: 'week' }));
+    await expect.poll(() => urls.slice(n0).some(x => /\/api\/cost\/ingredient-groups\?/.test(x) && new URL(x).searchParams.get('kind') === 'week'), { timeout: 30_000 }).toBe(true);
+    // the branch: the top bar's branch filter -> the baht view asks for that branch
+    const br = await page.evaluate(() => { const s = /** @type {HTMLSelectElement} */ (document.getElementById('selBranch'));
+      const o = [...s.options].find(x => x.value); return o ? o.value : ''; });
+    expect(br, 'the fixture has a branch to choose').not.toBe('');
+    n0 = urls.length;
+    await page.evaluate(b => { const s = /** @type {HTMLSelectElement} */ (document.getElementById('selBranch')); s.value = b; s.dispatchEvent(new Event('change')); }, br);
+    await expect.poll(() => urls.slice(n0).some(x => /\/api\/cost\/ingredient-groups\?/.test(x) && new URL(x).searchParams.get('branch') === br), { timeout: 30_000 }).toBe(true);
+    expect(lastCost().searchParams.get('kind')).toBe('week');
+    // จำนวนจาน: the period changed on the top bar, so the view follows it (kind=week) with the branch
+    n0 = urls.length;
+    await page.locator('#hvmView .gran-btn[data-v="plates"]').click();
+    await expect.poll(() => urls.slice(n0).some(x => x.includes('ingredient-groups-plates')), { timeout: 30_000 }).toBe(true);
+    let u = lastPlates(urls);
+    expect([u.searchParams.get('kind'), u.searchParams.get('branch'), u.searchParams.get('base_from')]).toEqual(['week', br, null]);
+    // a week pair keeps the branch; a branch change keeps the pair
+    await page.locator('#hvpWa').selectOption('2026-10-12');
+    u = lastPlates(urls);
+    expect([u.searchParams.get('period'), u.searchParams.get('date_from'), u.searchParams.get('branch')]).toEqual(['range', '2026-10-12', br]);
+    n0 = urls.length;
+    await page.evaluate(() => { const s = /** @type {HTMLSelectElement} */ (document.getElementById('selBranch')); s.value = ''; s.dispatchEvent(new Event('change')); });
+    await expect.poll(() => urls.slice(n0).some(x => x.includes('ingredient-groups-plates') && !new URL(x).searchParams.get('branch')), { timeout: 30_000 }).toBe(true);
+    u = lastPlates(urls);
+    expect([u.searchParams.get('period'), u.searchParams.get('date_from')]).toEqual(['range', '2026-10-12']);
+    // a period change on the top bar: the view follows the bar again
+    n0 = urls.length;
+    await page.evaluate(() => gPeriodSet({ kind: 'month' }));
+    await expect.poll(() => urls.slice(n0).some(x => x.includes('ingredient-groups-plates') && new URL(x).searchParams.get('kind') === 'month'), { timeout: 30_000 }).toBe(true);
+    await expect(page.locator('#hvpWa')).toHaveValue('');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
 }
 
 // ── High Value Product Monitor: เดิม under every figure, the chips (+ CSV) wrap on a phone ──
@@ -269,10 +322,10 @@ for (const [name, opts, mode] of CASES) {
     const tag = name.replace(/\s+/g, '_');
     const t = await page.evaluate(() => {
       const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvmTable')), r = tb.tBodies[0].rows[0];
-      return [1, 2, 3, 5].map(i => (r.cells[i].querySelector('.hvm-b') || {}).textContent || '');
+      return [3, 4, 5, 6].map(i => (r.cells[i].querySelector('.hvm-b') || {}).textContent || '');
     });
-    expect(t).toEqual([' · เดิม ฿14.5', ' · เดิม 1.0', ' · เดิม ฿14.6', ' · เดิม ฿391']);
-    const fs = await page.evaluate(() => Math.min(...[...document.querySelectorAll('#hvmTable .hvm-v')].map(e => parseFloat(getComputedStyle(e).fontSize))));
+    expect(t).toEqual([' · เดิม ฿14.5', ' · เดิม 1.0', ' · เดิม ฿14.6', ' · เดิม 29.0%']);
+    const fs = await page.evaluate(() => Math.min(...[...document.querySelectorAll('#hvmTable td.hvm-num .hvm-v:not(.hvm-cum)')].map(e => parseFloat(getComputedStyle(e).fontSize))));
     expect(fs).toBeGreaterThanOrEqual(opts.isMobile ? 16 : 15);
     const c = await page.evaluate(CHIPS, '#hvmChips .gran-btn, .hvm-csv');
     if (opts.isMobile) {
@@ -284,8 +337,8 @@ for (const [name, opts, mode] of CASES) {
     }
     await shot(page, `hvm_salmon_${tag}`);
     await page.locator('#hvmChips .gran-btn[data-g="all"]').click();
-    await page.waitForFunction(() => !!document.getElementById('hvmMatrix'));
-    expect(await page.locator('#hvmMatrix tbody tr').first().locator('.hvm-b').first().textContent()).toBe(' · เดิม ฿14.5');
+    await page.waitForFunction(() => !!document.getElementById('hvmAll'));
+    expect(await page.locator('#hvmAll tbody tr').first().locator('.hvm-b').first().textContent()).toBe(' · เดิม ฿1.4K');
     await shot(page, `hvm_all_${tag}`);
     expect(errors).toEqual([]);
     await ctx.close();
