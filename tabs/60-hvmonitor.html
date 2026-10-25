@@ -61,7 +61,7 @@
     @media (max-width: 700px) {
       /* owner 2026-10-25 (the 390 px screenshot: two rows of giant pills): ONE row that scrolls sideways, chips the size of the other chip
          tracks (28 px drawn, 13 px text), CSV 32 px beside it; 44 px to tap through an ::after inside the scroller's 8 px padding */
-      .hvm-ctl { width: 100%; flex-wrap: nowrap; gap: 8px; }
+      .hvm-ctl { width: 100%; flex-wrap: nowrap; gap: 8px; margin-bottom: 12px; }   /* the tap areas of the table's sort buttons stay clear of the chips */
       .hvm-chips-sc { display: block; flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 8px 0; margin: -8px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
       .hvm-chips-sc::-webkit-scrollbar { display: none; }
       .hvm-chips { flex-wrap: nowrap; max-width: none; }
