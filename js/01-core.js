@@ -4160,7 +4160,7 @@ function _updateClusterBar(name) {
     const on = t === name || (alias || []).includes(name);
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
     // the active chip wears the group colour (theme-groups.css); without that sheet the fallbacks are the old navy
-    return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+    return `<button onclick="switchTab('${t}')"${title}${on ? ' aria-current="page"' : ''} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
       ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
       : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${_noEmoji(lbl)}</button>`;
   };
@@ -4170,6 +4170,9 @@ function _updateClusterBar(name) {
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
+  // the phone shell draws the bar as one sideways row (index.html): keep the open page's chip in view
+  const cur = phOn() ? /** @type {HTMLElement|null} */ (bar.querySelector('[aria-current="page"]')) : null;
+  if (cur && bar.scrollWidth > bar.clientWidth + 1) bar.scrollLeft = Math.max(0, bar.scrollLeft + cur.getBoundingClientRect().left - bar.getBoundingClientRect().left - 24);
 }
 
 // ── วัตถุดิบและใบสั่งซื้อ: the two-level bar, deep links and the shared context ──

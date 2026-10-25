@@ -205,6 +205,20 @@ for (const mode of ['touch', 'fit']) {
     expect(Math.abs(f.csvMid - f.mid), 'CSV on the same row').toBeLessThanOrEqual(4);
     expect(f.tap, 'a chip is 44 px to tap').toBe(true);
     expect(f.sw).toBeLessThanOrEqual(390);
+    // the "?" by the title: the compact ui-q (#466): <= 30 px drawn on screen, a tap 21 px off its centre still lands on it
+    const qs = await page.evaluate(() => [...document.querySelectorAll('#tab-hvmonitor .hvm-head h2 .ui-q')].map(q => {
+      const r = q.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const hit = (dx, dy) => { const e = document.elementFromPoint(cx + dx, cy + dy); return !!e && e.closest('.ui-q') === q; };
+      return { w: r.width, h: r.height, tap: hit(0, -21) && hit(0, 21) && hit(-21, 0) && hit(21, 0) }; }));
+    expect(qs.length).toBe(2);
+    for (const q of qs) { expect(q.w).toBeLessThanOrEqual(30); expect(q.h).toBeLessThanOrEqual(30); expect(q.tap, 'the "?" is 44 px to tap').toBe(true); }
+    // the group pages' chip bar: one compact row that scrolls sideways
+    const cb = await page.evaluate(() => { const bar = document.getElementById('clusterBar'), bs = [...bar.querySelectorAll('button')];
+      return { rows: new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size, h: Math.max(...bs.map(b => b.getBoundingClientRect().height)),
+        cur: (bar.querySelector('[aria-current="page"]') || { textContent: '' }).textContent.trim() }; });
+    expect(cb.rows, 'the cluster bar is one row').toBe(1);
+    expect(cb.h).toBeLessThanOrEqual(34);
+    expect(cb.cur).toBe('High Value Product Monitor');
     await shot(page, `hvm_head_${mode}`);
     expect(errors).toEqual([]);
     await ctx.close();

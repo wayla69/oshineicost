@@ -1492,6 +1492,14 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .cluster-tab, .gran-btn { font-size: 12px; }
   /* วัตถุดิบและใบสั่งซื้อ: a branch login works this bar with a thumb */
   body[data-group="supply"] #clusterBar button { padding: 8px 12px; font-size: 13px; }
+  /* owner 2026-10-25 · the page chips of a group ("ต้นทุน: ภาพรวม · ต้นทุน/หัว · …") on the phone shell: ONE compact row that scrolls
+     sideways (it was three rows of 44 px pills over the page), 32 px drawn, 44 px to tap through an ::after inside the 6 px padding; the
+     chosen chip is scrolled into view (_updateClusterBar). The supply bar keeps its own two-level row (the polish sheet). */
+  body.ph-on #clusterBar:not(.supply-bar) { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding: 6px 4px; margin-bottom: 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  body.ph-on #clusterBar:not(.supply-bar)::-webkit-scrollbar { display: none; }
+  body.ph-on #clusterBar:not(.supply-bar) > * { flex: 0 0 auto; white-space: nowrap; }
+  body.ph-on #clusterBar:not(.supply-bar) > button { position: relative; box-sizing: border-box; height: 32px; min-height: 0 !important; padding: 0 12px; font-size: 13px; line-height: 1; }
+  body.ph-on #clusterBar:not(.supply-bar) > button::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
 
   /* Subtab button bars were the main cause of page-level horizontal scroll on
      phones (a row of nowrap buttons wider than the viewport). Let them wrap to
