@@ -632,9 +632,6 @@ function deskShow(btn) {
   note.classList.add('desk-force');
   const ed = note.nextElementSibling; if (ed && ed.classList.contains('desk-only')) ed.classList.add('desk-force');
 }
-function deskNoteHtml() {
-  return '<div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>';
-}
 // a signed baht figure: +฿193.0K / −฿537.0K
 function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
 
@@ -1734,7 +1731,8 @@ async function loadOpsReport(force) {
     || (d.void_pending
       ? '<tr><td colspan="4" class="py-4 text-center text-amber-600 text-xs">Void รายวันจะแสดงหลัง sync รอบถัดไป</td></tr>'
       : '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>');
-  document.getElementById('opPromo').innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
+  const opPromo = document.getElementById('opPromo');   // DV2: the list moved to ส่วนลด (null on this page)
+  if (opPromo) opPromo.innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
     <td class="py-1.5 pr-2">${esc(x.name || ('Series ' + x.series))}${x.code && x.code !== x.name ? ` <span class="text-[10px] text-slate-400">${esc(x.code)}</span>` : ''}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:var(--amber-ink)">${fmt(x.discount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';

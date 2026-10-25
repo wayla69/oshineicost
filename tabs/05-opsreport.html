@@ -16,9 +16,8 @@
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2 text-right">จำนวน</th><th class="py-1.5 pr-2 text-right">มูลค่าขาย</th><th class="py-1.5 text-right">ต้นทุน BoM</th>
       </tr></thead><tbody id="opVoid"></tbody></table></div>
-    <div class="card p-5 overflow-x-auto"><h2 class="section-title mb-3">โปรโมชัน/คูปอง ที่ใช้มากสุด</h2>
-      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-        <th class="py-1.5 pr-2">คูปอง (ชุด)</th><th class="py-1.5 pr-2 text-right">ครั้งที่ใช้</th><th class="py-1.5 text-right">ส่วนลดรวม</th>
-      </tr></thead><tbody id="opPromo"></tbody></table></div>
+    <!-- DV2 (phone table review 2026-10-25): the coupon list repeated ส่วนลด · คูปอง/โปรโมชัน - one link instead -->
+    <div class="card p-5" data-needs="/api/analysis/coupon-series"><h2 class="section-title mb-2">โปรโมชัน/คูปอง</h2>
+      <button type="button" class="shm-showall" style="margin-left:0" onclick="switchTab('discounts')">คูปองและโปรโมชันแยกตามชุด · ส่วนลด ›</button></div>
   </div>
 </div>
