@@ -381,21 +381,44 @@ def set_manual(con, code: str, month: str, price_per_base: float, note: str, who
     audit(con, who, "manual_price", "bc_ingredient_price", f"{code}|{month}", old and list(old), price_per_base)
 
 
-def month_table(con, month: str) -> list:
-    """Every master ingredient with the price in force for `month`."""
+def prev_month(month: str) -> str:
+    y, m = int(month[:4]), int(month[5:7])
+    return f"{y - 1:04d}-12" if m == 1 else f"{y:04d}-{m - 1:02d}"
+
+
+def month_table(con, month: str, with_change: bool = False) -> list:
+    """Every master ingredient with the price in force for `month`.
+    with_change (DV2, the price page): also the price in force the month before, the change in %, the quantity bought (base units:
+    the month's purchases, else the month before's) and the baht effect of the change on that quantity
+    (impact_baht = (price - prev_price) x qty), so the page can rank by baht instead of by code."""
     out = []
     branch_n = defaultdict(int)
     for code, n in con.execute("SELECT ingredient_code, COUNT(*) FROM bc_ingredient_price_branch WHERE month=?"
                                " GROUP BY ingredient_code", (month,)):
         branch_n[code] = n
+    pm = prev_month(month)
+    qty = {}
+    if with_change:
+        for code, m, q in con.execute("SELECT ingredient_code, month, qty_bought FROM bc_ingredient_price"
+                                      " WHERE month IN (?, ?) AND qty_bought > 0", (month, pm)):
+            if m == month or code not in qty:
+                qty[code] = (float(q), m)
     for code, name, base, kind, monitored, active in con.execute(
             "SELECT code, name_th, base_unit, kind, monitored, active FROM bc_ingredient ORDER BY code"):
         p = price_for(con, code, month)
-        out.append({"code": code, "name": name, "base_unit": base, "kind": kind, "monitored": bool(monitored),
-                    "active": bool(active),
-                    "price_per_base": round(p[0], 6) if p else None, "source": p[1] if p else None,
-                    "priced_month": p[2] if p else None, "age_months": p[3] if p else None,
-                    "branches": branch_n.get(code, 0)})
+        row = {"code": code, "name": name, "base_unit": base, "kind": kind, "monitored": bool(monitored),
+               "active": bool(active),
+               "price_per_base": round(p[0], 6) if p else None, "source": p[1] if p else None,
+               "priced_month": p[2] if p else None, "age_months": p[3] if p else None,
+               "branches": branch_n.get(code, 0)}
+        if with_change:
+            pp = price_for(con, code, pm)
+            q, qm = qty.get(code, (None, None))
+            prev = round(pp[0], 6) if pp else None
+            chg = round((p[0] - pp[0]) / pp[0] * 100.0, 1) if (p and pp and pp[0] > 0) else None
+            row.update({"prev_price": prev, "change_pct": chg, "qty": round(q, 3) if q else None, "qty_month": qm,
+                        "impact_baht": round((p[0] - pp[0]) * q, 2) if (p and pp and q) else None})
+        out.append(row)
     return out
 
 

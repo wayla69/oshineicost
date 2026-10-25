@@ -101,7 +101,7 @@ OWN_CARDS = {
     "fmsg": "one row per conversation (button.fm-row, js/19-fmsg.js) with the shared state filter: no table",
 }
 # a table with fewer than three numeric columns shows what it has
-FEWER = {("cancelbill", 0): 2, ("orderhub|queue", 0): 2, ("orderhub|claims", 0): 1, ("bomcenter|issue", 0): 2, ("feedback", 0): 2}
+FEWER = {("orderhub|queue", 0): 2, ("orderhub|claims", 0): 1, ("bomcenter|issue", 0): 2, ("feedback", 0): 2}
 
 
 @needs_node

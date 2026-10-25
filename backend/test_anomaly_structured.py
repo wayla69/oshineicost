@@ -62,7 +62,9 @@ def test_every_insight_has_structured_fields_matching_its_message(client):
             assert i["branch"] and i["branch"] in i["message"]
             assert i["unit"] == "%" and i["value"] == i["delta"]
             assert f"{abs(i['delta']):.1f}%" in i["message"] and f"฿{i['amount']:,.0f}" in i["message"]
-            assert i["label"] == ("เติบโตเร็วสุด" if i["kind"] == "branch_top" else "ลดมากสุด")
+            assert i["label"] == ("ยอดเพิ่มมากสุด" if i["kind"] == "branch_top" else "ยอดลดมากสุด")
+            assert abs(i["change_baht"] - (i["amount"] - i["prev"])) < 0.02
+            assert f"฿{abs(i['change_baht']):,.0f}" in i["message"]
             assert i["basis_note"] in i["message"]
         else:
             assert i["type"] == ("cost_spike" if i["kind"] == "cost_up" else "cost_drop")
@@ -131,3 +133,16 @@ def test_tiles_carry_last_year_fields_and_ranges(client):
         assert i["ranges"] == {"current": ["2026-06-01", "2026-06-03"], "previous": ["2026-05-01", "2026-05-03"],
                                "last_year": ["2025-06-01", "2025-06-03"]}
     assert d["meta"]["ranges"]["current"] == ["2026-06-01", "2026-06-03"] and d["meta"]["prev_year_period_th"] == "มิ.ย. 2568"
+
+
+def test_branch_tiles_rank_by_baht_not_percent(client):
+    # DV2: the tile is the branch with the largest baht change; the next two ride along in `others`, also by baht
+    d = client.get("/api/analysis/anomalies", params={"threshold": -1}).json()
+    top = next(i for i in d["insights"] if i["kind"] == "branch_top")
+    drop = next(i for i in d["insights"] if i["kind"] == "branch_drop")
+    ups = [top["change_baht"]] + [o["change_baht"] for o in top["others"]]
+    downs = [drop["change_baht"]] + [o["change_baht"] for o in drop["others"]]
+    assert ups == sorted(ups, reverse=True)
+    assert downs == sorted(downs)
+    for o in top["others"] + drop["others"]:
+        assert set(o) == {"branch", "change_baht", "delta"}

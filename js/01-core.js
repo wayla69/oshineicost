@@ -3096,6 +3096,30 @@ const fmt  = n => { const v=_num(n); if (v==null) return '—'; const a=Math.abs
 const fmtN = n => { const v=_num(n); return v==null ? '—' : v.toLocaleString('th-TH',{maximumFractionDigits:0}); };
 const fmtP = n => { const v=_num(n); return v==null ? '—' : v.toFixed(1)+'%'; };
 const fmtM = n => { const v=_num(n); return v==null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1)+'%'; };
+// ── DV2 (phone table review 2026-10-25) · a ranked list shows its first rows (and, for a two-sided list, its last rows); the rest are
+// behind "ดูทั้งหมด (N)". The rows beyond the cap carry `hidden` + data-dv-more="<key>", so the phone cards (which skip hidden rows) follow;
+// the button toggles every row of its key. dvMoreHidden(i, n, top, bottom): true when row i of n is folded.
+function dvMoreHidden(i, n, top, bottom) { return n > top + (bottom || 0) && i >= top && i < n - (bottom || 0); }
+function dvMoreAttr(key, i, n, top, bottom) { return dvMoreHidden(i, n, top, bottom) ? ` hidden data-dv-more="${esc(key)}"` : ''; }
+function dvMoreBtn(key, n, top, bottom) {
+  return n > top + (bottom || 0)
+    ? `<div class="dv-more-wrap"><button type="button" class="shm-showall dv-more" data-dv-for="${esc(key)}" data-n="${n}" aria-expanded="false" onclick="dvMoreToggle(this)">ดูทั้งหมด (${fmtN(n)})</button></div>` : '';
+}
+function dvMoreToggle(btn) {
+  const key = btn.getAttribute('data-dv-for'), open = btn.getAttribute('aria-expanded') !== 'true';
+  document.querySelectorAll(`[data-dv-more="${CSS.escape(key)}"]`).forEach(r => { /** @type {HTMLElement} */ (r).hidden = !open; });
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? 'ย่อ' : `ดูทั้งหมด (${fmtN(+btn.getAttribute('data-n'))})`;
+}
+// an editor on a phone (.desk-only, index.html): "แสดงบนโทรศัพท์" shows it for this visit
+function deskShow(btn) {
+  const note = btn.closest('.desk-note'); if (!note) return;
+  note.classList.add('desk-force');
+  const ed = note.nextElementSibling; if (ed && ed.classList.contains('desk-only')) ed.classList.add('desk-force');
+}
+// a signed baht figure: +฿193.0K / −฿537.0K
+function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
+
 
 // ── Fetch robustness (D3) + stale-response guard (D4) ───────────────────────
 // loadGen increments on every tab switch / filter change. A loader captures the
@@ -4045,11 +4069,11 @@ const PAGE_CARDS = {
       tones: { 'ขยาย': 'good', 'ควรลด': 'bad', 'เฝ้าดู': 'warn' } },
     { sel: '#oppRevive table', keyCols: [1, 2, 3] }],
   profit: [{ sel: '#profitBandTable', title: 'ช่วง', sub: ['บิล', 'ลูกค้า'], subL: true, keyCols: ['รายได้ไม่รวม VAT', 'กำไร', 'อัตรากำไร %'], labels: ['รายได้', 'กำไร', 'อัตรากำไร'] }],
-  benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', 'คะแนน'] }],
-  gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['รายได้', 'GP (', 'GP %'], labels: ['รายได้', 'GP', 'GP %'], pill: 'สถานะ',
+  benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['คะแนน', 'รายได้', 'ยอดบิลเฉลี่ย'] }],
+  gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['เกินเป้า', 'GP (', 'GP %'], labels: ['เกินเป้า ฿', 'GP', 'GP %'], pill: 'สถานะ',
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
-  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
+  dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['บาทที่เปลี่ยน', 'ยอดขาย', 'ยอด/หัว'] },
     // PR-SC: a role that sees cost gets the ต้นทุนเพิ่ม column (table.sp-costed); PR-TD (owner 2026-10-25): it is the LAST column and the last figure
     { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], 'สูงกว่า', 'ต้นทุนเพิ่ม'], labels: ['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม'] },
     { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], ['ปกติ', 'ช่วงเทียบ'], 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
@@ -4059,11 +4083,11 @@ const PAGE_CARDS = {
     { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'], figSub: true },
     { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true }],
   discounts: [
-    { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
+    { sel: 'table:has(#discCashierBody)', title: 'สาขา', keyCols: ['เกินเพดาน', '% ยอดขาย', 'ส่วนลดรวม'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
-  staff: [{ sel: '#staffTable', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', '% ส่วนลด'] }],
+  staff: [{ sel: '#staffAnomTable', title: 'บิล', keyCols: ['ส่วนลด', '% ของบิล', 'สาขา'] }],
   cancelbill: [
-    { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['บิลยกเลิก', 'มูลค่า'] },
+    { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['มูลค่า', 'สัดส่วน', 'บิลยกเลิก'] },
     { sel: 'table:has(#cbReasons)', title: 'เหตุผล', keyCols: ['บิล', '%', 'มูลค่า'] }],
   cashctl: [
     { sel: 'table:has(#ccBody)', title: 'สาขา', keyCols: ['ขาด/เกิน', 'วันที่ขาด', '% ของยอด'] },
@@ -4085,11 +4109,11 @@ const PAGE_CARDS = {
   'orderhub|adoption': [{ sel: '#ohbAdList table', title: 'สาขา', sub: ['ใช้งานล่าสุด'], subL: true, keyCols: ['ใบตัดเบิกตรงวัน', 'ส่งใบสั่งซื้อตรงเวลา', 'รับของบันทึกแล้ว'],
     labels: ['ตัดเบิกตรงวัน', 'สั่งตรงเวลา', 'บันทึกรับของ'], pill: 'สถานะ', tones: { 'เขียว': 'good', 'เหลือง': 'warn', 'แดง': 'bad' } }],
   'orderhub|persales': [
-    { sel: '#ohbPsBranches > .overflow-x-auto > table', title: 'สาขา', keyCols: ['ยอดขาย', 'มูลค่าวัตถุดิบต่อยอดขาย', 'การใช้เทียบค่ากลาง'], labels: ['ยอดขาย ฿', 'วัตถุดิบต่อ ฿100,000', 'เทียบค่ากลาง'] },
-    { sel: '#ohbPsList table', title: 'วัตถุดิบ', sub: ['หน่วย'], keyCols: ['ต่อยอดขาย', 'เปลี่ยนแปลง', 'มูลค่า'], labels: ['ต่อ ฿100,000', 'เปลี่ยน', 'มูลค่า ฿'] }],
+    { sel: '#ohbPsBranches > .overflow-x-auto > table', title: 'สาขา', keyCols: [['เบี่ยงจากค่ากลาง', 'ยอดขาย'], 'มูลค่าวัตถุดิบต่อยอดขาย', 'การใช้เทียบค่ากลาง'], labels: ['เบี่ยงจากค่ากลาง ฿', 'วัตถุดิบต่อ ฿100,000', 'เทียบค่ากลาง'] },
+    { sel: '#ohbPsList table', title: 'วัตถุดิบ', sub: ['หน่วย'], keyCols: [['เบี่ยงจากค่ากลาง', 'ต่อยอดขาย'], 'มูลค่า', ['การใช้เทียบค่ากลาง', 'เปลี่ยนแปลง']], labels: ['เบี่ยง ฿ / ต่อ ฿100,000', 'มูลค่า ฿', 'เทียบ'] }],
   'bomcenter|fc': [{ sel: '#bmcFcTable table', title: 'วัตถุดิบ', sub: ['รหัส'], keyCols: ['แนะนำสั่ง', 'มูลค่า', 'ใช้/วัน'], labels: ['แนะนำสั่ง', 'มูลค่า ฿', 'ใช้/วัน'], pill: 'กลุ่ม', sparkCell: 'แนวโน้ม' }],
-  'bomcenter|price': [{ sel: 'table:has(#bmcPriceBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'อายุ', 'สาขาที่ซื้อ'], labels: ['ราคา/หน่วยฐาน', 'อายุ (เดือน)', 'สาขาที่ซื้อ'], pill: 'แหล่ง' }],
-  'bomcenter|dishcost': [{ sel: '#bmcDcList table', title: 'เมนู', sub: ['รหัส POS'], keyCols: ['ต้นทุนต่อจาน', 'เปลี่ยน', 'จานที่ขาย'], pill: 'ที่มา' }],
+  'bomcenter|price': [{ sel: 'table:has(#bmcPriceBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ผลเป็นบาท', 'เปลี่ยน', 'ราคา/หน่วยฐาน'], labels: ['ผลเป็นบาท', 'เปลี่ยน', 'ราคา/หน่วยฐาน'], pill: 'แหล่ง' }],
+  'bomcenter|dishcost': [{ sel: '#bmcDcList table', title: 'เมนู', sub: ['รหัส POS'], keyCols: ['ผลเป็นบาท', 'ต้นทุนต่อจาน', 'เปลี่ยน'], pill: 'ที่มา' }],
   'bomcenter|ing': [{ sel: 'table:has(#bmcIngBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'ราคา/หน่วยรับ', 'ใช้ในเมนู'], pill: 'สถานะ', fields: 'table' }],
   'bomcenter|issue': [{ sel: '#bmcIssList table', title: 'สาขา', sub: ['งวด'], keyCols: ['มูลค่าตัดเบิก', 'ไม่มีราคา'], pill: 'สถานะ' }],
   feedback: [
@@ -4750,7 +4774,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'targets')    loadTargets();
   if (activeSettingsTab === 'costs')      { renderMenuPresetSelect(); loadCosts(); loadBomAudit(); }
   if (activeSettingsTab === 'fixedcosts') loadFixedCosts();
-  if (activeSettingsTab === 'branches')   loadBranchConfig();
+  if (activeSettingsTab === 'branches')   { loadBranchConfig(); if (typeof loadPzZonesRef === 'function') loadPzZonesRef(); }
   if (activeSettingsTab === 'deactivate') loadDeactivate();
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();

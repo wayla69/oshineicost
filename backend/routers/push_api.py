@@ -420,7 +420,7 @@ def build_morning() -> Optional[dict]:
     # so read the plain functions functools.wraps kept under __wrapped__
     brief_fn = getattr(_he.home_brief, "__wrapped__", _he.home_brief)
     sc_fn = getattr(_he.home_branch_scorecard, "__wrapped__", _he.home_branch_scorecard)
-    return morning_payload(brief_fn(branch=None), sc_fn(date=None, group=None))
+    return morning_payload(brief_fn(branch=None), sc_fn(date=None, group=None, branch=None))
 
 
 def maybe_send_morning(now=None, send=None, force: bool = False) -> Optional[dict]:
@@ -468,7 +468,7 @@ def _plain(v):
 
 def read_scorecard() -> dict:
     from . import home_extra as _he          # the registered module object (see build_morning)
-    return _plain(_he.home_branch_scorecard(date=None, group=None))
+    return _plain(_he.home_branch_scorecard(date=None, group=None, branch=None))
 
 
 # The cloud pull of Easy POS (backend/cloud_sync.py) reports through the same "stale" kind: a person who muted the

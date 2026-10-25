@@ -325,6 +325,23 @@ async function openDiscountBills(opts = {}) {
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
 
+// DV2 · พนักงาน "บิลส่วนลดสูงผิดปกติ": four columns, the answer in column 3-4 (บิล · สาขา · ส่วนลด ฿ · % ของบิล), largest discount first;
+// a row opens the bill's menus; every column of the bills stays in "ดูบิลทั้งหมด"
+function _staffAnomTable(bills, p95) {
+  const rows = bills.slice().sort((a, b) => (b.discount || 0) - (a.discount || 0));
+  return `<table class="w-full text-xs" id="staffAnomTable"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
+    <th class="py-2 pr-3">บิล</th><th class="py-2 pr-3">สาขา</th><th class="py-2 pr-3 text-right">ส่วนลด (฿)</th><th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`
+    + rows.map(b => {
+      const hot = (b.discount || 0) >= p95 && p95 > 0;
+      const pnlRow = JSON.stringify({ receipt: b.receipt_no, branch: b.branch, rev: Math.round((b.total_inc_vat || 0) / 1.07), disc: b.discount || 0,
+        cogs: b.cogs_bom != null ? Math.round(b.cogs_bom) : 0, cust: b.customer_count || 0 }).replace(/'/g, '&#39;');
+      return `<tr class="border-b border-slate-100 cursor-pointer hover:bg-indigo-50/50" title="คลิกดูเมนูในบิล" onclick='openBillItems(${pnlRow})'>
+        <td class="py-1.5 pr-3"><span class="font-mono">${esc(b.receipt_no || '—')}</span><div class="text-[11px]" style="color:var(--text-muted)">${esc((b.sold_at || '').replace('T', ' ').slice(0, 16))}</div></td>
+        <td class="py-1.5 pr-3">${esc(b.branch || '—')}</td>
+        <td class="py-1.5 pr-3 text-right font-semibold" style="color:${hot ? 'var(--bad-ink)' : 'var(--amber-ink)'}">${fmtN(b.discount || 0)}</td>
+        <td class="py-1.5 text-right">${b.disc_pct != null ? b.disc_pct.toFixed(1) + '%' : '—'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
 function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
   const head = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
     <th class="py-2 pr-3">ใบเสร็จ</th><th class="py-2 pr-3">วันเวลา</th>
@@ -425,27 +442,28 @@ async function loadStaff() {
   if (_staffByBranch) cashierParams.set('by_branch', 'true');
 
   // Loading states
-  document.getElementById('staffBody').innerHTML =
+  const staffBody = document.getElementById('staffBody');   // DV2: the cashier summary table is gone (null on the page)
+  if (staffBody) staffBody.innerHTML =
     '<tr><td colspan="10" class="py-6 text-center text-slate-400 text-xs">กำลังโหลด…</td></tr>';
   document.getElementById('staff-abnormal-bills').innerHTML =
     '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
 
   // Abnormal-discount bills panel (top by discount, current filters)
   (async () => {
-    const bp = new URLSearchParams(params); bp.set('limit', '8'); bp.set('sort', 'discount');
+    const bp = new URLSearchParams(params); bp.set('limit', '10'); bp.set('sort', 'discount');
     const db = await api(`${API}/api/analysis/discount_bills?${bp}`).catch(() => null);
     const el = document.getElementById('staff-abnormal-bills');
     if (!db || !db.bills || !db.bills.length) {
       el.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีบิลส่วนลดในช่วงนี้</p>'; return;
     }
-    el.innerHTML = renderDiscBillsTable(db.bills, db.summary?.p95_discount || 0, true, !getBranch());
+    el.innerHTML = _staffAnomTable(db.bills, db.summary?.p95_discount || 0);
   })();
 
   const d = await api(`${API}/api/analysis/cashiers?${cashierParams}`).catch(() => []);
 
   if (!Array.isArray(d) || !d.length) {
     document.getElementById('staff-kpi-row').innerHTML = '';
-    document.getElementById('staffBody').innerHTML =
+    if (staffBody) staffBody.innerHTML =
       '<tr><td colspan="10" class="py-8 text-center text-slate-400 text-sm">ไม่มีข้อมูลแคชเชียร์ในช่วงเวลา/สาขาที่เลือก — ลองขยายช่วงเวลา หรือเลือก "ทุกสาขา"</td></tr>';
     return;
   }
@@ -491,7 +509,8 @@ async function loadStaff() {
     }
   });
 
-  document.getElementById('staffBody').innerHTML = d.map((r, i) => {
+  if (!staffBody) return;
+  staffBody.innerHTML = d.map((r, i) => {
     const branchLabel = r.primary_branch
       ? (r.branch_count > 1
           ? `${r.primary_branch} <span class="text-[10px] text-slate-400">+${r.branch_count - 1}</span>`
@@ -676,7 +695,7 @@ async function loadCouponSeries(params, gen) {
   COUPON_DRILL_PARAMS = params.toString();   // remember filter for the drill modal
   // ── leakage alert: coupon series whose discount spiked MoM (≥+50%, material) ──
   const alertEl = document.getElementById('coupon-series-alert');
-  const spikes = s.filter(r => r.mom_pct != null && r.mom_pct >= 50 && (r.pct || 0) >= 1)
+  const spikes = s.filter(r => r.mom_pct != null && r.mom_pct >= 50 && (r.pct || 0) >= 1 && r.mom_pct > -100 && (r.amount || 0) / (1 + r.mom_pct / 100) >= 1000)
                   .sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 4);
   if (alertEl) {
     if (spikes.length) {
@@ -698,8 +717,13 @@ async function loadCouponSeries(params, gen) {
   ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
   // a discount: up = bad ink (periodPctDelta upGood false); เทียบช่วงก่อน on top, เทียบปีก่อน under it
-  const momCell = (v, y) => `<div>${periodPctDelta(v, { upGood: false, title: 'เทียบช่วงก่อน' })}</div>` +
-    `<div>${periodPctDelta(y, { upGood: false, title: 'เทียบปีก่อน' })}</div>`;
+  // DV2: the baht change first; a % shows only on a base of ฿1,000 or more (a near-zero base printed +37,199 %)
+  const baseOf = (amt, p) => p != null && p > -100 ? amt / (1 + p / 100) : null;
+  const pctOk = (amt, p) => { const b = baseOf(amt || 0, p); return b != null && b >= 1000; };
+  const bahtLine = (amt, p, lbl) => { const b = baseOf(amt || 0, p); if (b == null) return `<div class="text-[10px]" style="color:var(--text-muted)">${lbl} —</div>`;
+    const dlt = (amt || 0) - b;
+    return `<div class="text-[10px] tabular-nums" title="${lbl} ฿${fmtN(Math.round(b))}"><span style="color:${dlt > 0 ? 'var(--bad-ink)' : dlt < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${dvBaht(dlt)}</span>${pctOk(amt, p) ? ` <span style="color:var(--text-muted)">(${p > 0 ? '+' : ''}${p.toFixed(0)}%)</span>` : ` <span style="color:var(--text-muted)">${lbl}</span>`}</div>`; };
+  const momCell = (v, y, amt) => bahtLine(amt, v, 'ช่วงก่อน') + bahtLine(amt, y, 'ปีก่อน');
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
@@ -710,7 +734,7 @@ async function loadCouponSeries(params, gen) {
       <td class="num tabular font-semibold" style="color:var(--amber-ink)">${fmt(r.amount)}</td>
       <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
       <td class="num tabular">${r.pct}%</td>
-      <td class="num tabular">${momCell(r.mom_pct, r.yoy_pct)}</td>
+      <td class="num tabular">${momCell(r.mom_pct, r.yoy_pct, r.amount)}</td>
       <td style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
       <td class="text-slate-300">›</td>
     </tr>`;
@@ -1149,8 +1173,6 @@ let _discGroupByBranch = true;   // default: split by branch (don't merge cashie
 
 function setDiscGroup(on) {
   _discGroupByBranch = on;
-  document.getElementById('discGrpFlat').classList.toggle('active', !on);
-  document.getElementById('discGrpBranch').classList.toggle('active', on);
   renderDiscCashiers();
 }
 
@@ -1170,7 +1192,28 @@ function _discCashierRow(r) {
     </tr>`;
 }
 
+// DV2 (phone table review 2026-10-25): the cashier logins of Easy POS are shared, so a row per cashier names nobody. The table is one row
+// per branch: the baht over the policy ceiling first (column 2), then the branch's discount; branches inside the ceiling are folded behind
+// "ดูทั้งหมด". A row opens the branch's discounted bills. (The per-cashier rows stay in the CSV of the bills drill.)
 function renderDiscCashiers() {
+  const body = document.getElementById('discCashierBody');
+  if (!body || !_discData) return;
+  const rows = (_discData.by_branch || []).filter(b => !getBranch() || b.branch === getBranch()).slice()
+    .sort((a, b) => (b.over_policy ? 1 : 0) - (a.over_policy ? 1 : 0) || (b.excess_baht || 0) - (a.excess_baht || 0) || (b.total_discount || 0) - (a.total_discount || 0));
+  const keep = getBranch() ? rows.length : rows.filter(b => b.over_policy).length;   // one branch: no fold
+  body.innerHTML = rows.map((b, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50 cursor-pointer"${dvMoreAttr('discCashierBody', i, rows.length, keep)} onclick="openDiscountBills({branch:'${jsAttr(b.branch || '')}', title:'บิลส่วนลด · ${jsAttr(b.branch || '')}'})" title="คลิกดูบิลส่วนลด">
+      <td class="py-2 pr-3 font-medium">${b.over_policy ? '⚑ ' : ''}${esc(b.branch || '—')}</td>
+      <td class="py-2 pr-3 text-right font-semibold" style="color:${b.over_policy ? 'var(--bad-ink)' : 'var(--text-muted)'}">${b.over_policy ? fmt(b.excess_baht || 0) : '0'}</td>
+      <td class="py-2 pr-3 text-right">${b.disc_pct_of_sales != null ? b.disc_pct_of_sales.toFixed(1) + '%' : '—'}</td>
+      <td class="py-2 pr-3 text-right">${fmt(b.total_discount || 0)}</td>
+      <td class="py-2 text-right">${b.discount_tx != null ? fmtN(b.discount_tx) : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">—</td></tr>';
+  const more = document.getElementById('discCashierMore');
+  if (more) more.innerHTML = rows.length > keep
+    ? (keep ? '' : `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีสาขาที่ให้ส่วนลดเกินเพดาน${_discData.policy_pct != null ? ' ' + _discData.policy_pct + '%' : ''}</p>`) + dvMoreBtn('discCashierBody', rows.length, keep) : '';
+}
+// the older per-cashier rendering (the "รวม" / "จัดกลุ่มรายสาขา" toggle), kept for a deep link that still calls it
+function _discCashiersByPerson() {
   const body = document.getElementById('discCashierBody');
   if (!body || !_discData) return;
   const cashiers = _discData.top_cashiers || [];
