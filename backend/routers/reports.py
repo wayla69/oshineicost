@@ -1923,6 +1923,10 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
             "share_pct": round(rev/tot_rev*100, 1) if tot_rev else None,
             "wow_pct": ((pct(rev, dow_b[nm]["revenue"]) if nm in dow_b else None) if dow_b is not None
                         else (pct(rev, p["rev"] or 0) if p else None)),
+            # DV6 (phone table review 2026-10-25, §3.4): the baht behind wow_pct - the same windows (the comparison period,
+            # to date in a month in progress), so the phone ranks the branches by the money, not the %
+            "prev_revenue": (p["rev"] or 0) if p else None,
+            "rev_delta": round(rev - (p["rev"] or 0)) if p else None,
             "yoy_pct": pct(rev, y["rev"] or 0) if (y and (y["rev"] or 0) > 0) else None,
             "target": round(t["revenue_target"]) if has_t else None,
             "target_source": (t["source"] if t else None) if period == "monthly" else None,
@@ -1994,6 +1998,11 @@ def _mgt_target_scope(con, ctx) -> None:
                 b["projected"] = round((b["revenue"] or 0) * f)
                 b["vs_target_pct"] = round(b["projected"] / b["target"] * 100, 1)
                 b["target_basis"] = "projected"
+    # DV6 (review §3.4): the baht a branch is away from its target on the same basis as vs_target_pct (the month-end
+    # projection while the month is open, the month's sales once it is complete) - the phone's branch list ranks by it
+    for b in branches:
+        if b.get("target"):
+            b["target_gap"] = round((b["projected"] if live else (b["revenue"] or 0)) - b["target"])
     att = attainment(con, pace["month"], {b["branch"]: b["revenue"] for b in branches}, f, ctx.get("branch"), ctx.get("group"))
     pace["target"] = att["target"]
     pace["proj_vs_target_pct"] = att["pct"]
@@ -3264,29 +3273,35 @@ def report_management(
     pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "ปี" if period == "yearly" else "สัปดาห์") if th
              else ("day" if period == "daily" else "month" if period == "monthly" else "year" if period == "yearly" else "week"))
     actions = []
+    # DV6 (phone table review 2026-10-25, top-10 #9): every line carries the baht it is about - `baht` signed (< 0 = sales
+    # lost against the comparison, money given away or cost added; > 0 = the opposite) and `baht_label`, what the figure is.
+    # Within one severity the lines run by the size of that baht.
+    _vs = (f"เทียบ{pword}ก่อน" if th else f"vs last {pword}")
+    _disc_l = ("ส่วนลดของบิลเหล่านี้" if th else "discount on these bills")
+    _tgt_l = ("ห่างเป้า" if th else "short of target")
     if prev and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
-        actions.append({"sev": "high",
+        actions.append({"sev": "high", "baht": round((headline.get("revenue") or 0) - (prev.get("revenue") or 0)), "baht_label": _vs,
             "text": (f"ยอดขายรวมทั้งเครือลดลง {abs(headline['rev_wow_pct']):.0f}% เทียบ{pword}ก่อน — ตรวจสอบสาเหตุ"
                      if th else
                      f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% vs last {pword} — investigate drivers.")})
     for r in branches:
         if r["wow_pct"] is not None and r["wow_pct"] <= -25 and r["revenue"] > 0:
-            actions.append({"sev": "high",
+            actions.append({"sev": "high", "baht": r.get("rev_delta"), "baht_label": _vs,
                 "text": (f"{r['branch']} ยอดขายลดลง {abs(r['wow_pct']):.0f}% เทียบ{pword}ก่อน (฿{r['revenue']:,.0f})"
                          if th else
                          f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% vs last {pword} (฿{r['revenue']:,.0f}).")})
     if cash_heavy.get("bills"):
-        actions.append({"sev": "high",
+        actions.append({"sev": "high", "baht": -round(cash_heavy.get("baht") or 0), "baht_label": _disc_l,
             "text": (f"{cash_heavy['bills']} บิลส่วนลดที่จ่ายด้วยเงินสดเป็นหลัก (฿{cash_heavy['baht']:,.0f}) — ตรวจสอบความเสี่ยงเงินขาด"
                      if th else
                      f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}) — review for skim risk.")})
     if heavy["bills"]:
-        actions.append({"sev": "med",
+        actions.append({"sev": "med", "baht": -round(heavy.get("baht") or 0), "baht_label": _disc_l,
             "text": (f"{heavy['bills']} บิลให้ส่วนลด ≥30% (฿{heavy['baht']:,.0f}) ใน{pword}นี้"
                      if th else
                      f"{heavy['bills']} bills discounted ≥30% (฿{heavy['baht']:,.0f}) this {pword}.")})
     if reprint["bills"]:
-        actions.append({"sev": "med",
+        actions.append({"sev": "med", "baht": -round(reprint.get("baht") or 0), "baht_label": _disc_l,
             "text": (f"{reprint['bills']} บิลส่วนลดถูกพิมพ์ซ้ำมากกว่า 1 ครั้ง — อาจมีการพิมพ์ซ้ำผิดปกติ"
                      if th else
                      f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse.")})
@@ -3305,13 +3320,13 @@ def report_management(
             word = "ยอดรวมทั้งเดือน" if month_complete else "ประมาณการสิ้นเดือน"
             if _ts.get("no_target_branches"):
                 word += f" {_ts['branches']} สาขาที่มีเป้า"
-            actions.append({"sev": "med",
+            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l,
                 "text": f"{word} ฿{projected:,.0f} ต่ำกว่าเป้า ฿{target:,.0f} อยู่ {gap:.0f}%"})
         else:
             word = "Month total" if month_complete else "Month-end projection"
             if _ts.get("no_target_branches"):
                 word += f" of the {_ts['branches']} branches with a target"
-            actions.append({"sev": "med",
+            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l,
                 "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
     _behind = [r for r in branches if r.get("vs_target_pct") is not None and r["vs_target_pct"] < 90]
     if _behind:
@@ -3319,21 +3334,35 @@ def report_management(
         _names = ", ".join(f"{r['branch']} {r['vs_target_pct']:.0f}%" for r in _behind[:4])
         _more = (f" +{len(_behind) - 4}" if len(_behind) > 4 else "")
         _proj = any(r.get("target_basis") == "projected" for r in _behind)
-        actions.append({"sev": "med",
+        _gap = sum(r["target_gap"] if r.get("target_gap") is not None else
+                   round((r.get("projected") or r["revenue"] or 0) - r["target"]) for r in _behind if r.get("target"))
+        actions.append({"sev": "med", "baht": _gap,
+                        "baht_label": (f"ห่างเป้ารวม {len(_behind)} สาขา" if th else f"short of target, {len(_behind)} branches"),
             "text": (f"{len(_behind)} สาขาต่ำกว่า 90% ของเป้าเดือนนี้{' (ประมาณการสิ้นเดือน)' if _proj else ''}: {_names}{_more}"
                      if th else
                      f"{len(_behind)} branches under 90% of this month's target{' (month-end projection)' if _proj else ''}: {_names}{_more}.")})
     if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
         m0 = cost_up[0]
         # DV1 (review §5 no. 2): the line names the cause - the cost per plate or the plates per head
-        actions.append({"sev": "low", "text": _cost_riser_action(m0, pword, th)})
+        _cov = (menu_out or {}).get("covers") or 0
+        actions.append({"sev": "low", "baht": -round((m0.get("delta") or 0) * _cov) if _cov else None,
+                        "baht_label": ("ต้นทุนที่เพิ่มของเมนูนี้" if th else "cost added by this dish"),
+                        "text": _cost_riser_action(m0, pword, th)})
     if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
-        actions.append({"sev": "med",
+        actions.append({"sev": "med", "baht": round(gp["gp_pct_delta_pp"] / 100.0 * (gp.get("revenue") or 0)),
+                        "baht_label": ("ผลต่อกำไรจากอัตรากำไรที่ลด" if th else "gross profit lost to the lower margin"),
             "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"
                      if th else
                      f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%.")})
+    # the food-cost line (its wording and threshold live in their own block): the baht of the cost per head against the
+    # comparison - the GP bridge's cost_head effect, the same figure the profit view draws
+    _bridge = (gp.get("bridge") or {}) if isinstance(gp, dict) else {}
+    for a in actions:
+        if "baht" not in a and a["text"].startswith(("ต้นทุนอาหาร", "Food cost")):
+            a["baht"] = _bridge.get("cost_head")
+            a["baht_label"] = (f"ผลต่อกำไรจากต้นทุนต่อหัว {_vs}" if th else f"GP effect of the cost per head {_vs}")
     sev_rank = {"high": 0, "med": 1, "low": 2}
-    actions.sort(key=lambda a: sev_rank.get(a["sev"], 9))
+    actions.sort(key=lambda a: (sev_rank.get(a["sev"], 9), -abs(a.get("baht") or 0)))
     actions = actions[:7]
     if not actions:
         actions = [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]

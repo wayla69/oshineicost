@@ -1607,7 +1607,7 @@ function initTopbarFold() {
 
 // ── shared state + helpers ──
 let _msView = 'summary', _msRpt = null, _msBranchesFilled = false, _msMonthsFilled = false,
-    _msSalesGran = 'month', _msBranchSort = 'rev';
+    _msSalesGran = 'month', _msBranchSort = 'chg';    // DV6: the branch list opens on the baht against last month
 function msBranch() { return document.getElementById('msBranch')?.value || ''; }
 function msPchip(v, goodUp = true, unit = '%') {
   if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#5f6c80">—</span>';
@@ -1818,8 +1818,45 @@ function msPickedOlderMonth() {
   return !!(j && j.selected_month && first && j.selected_month !== first.month);
 }
 
+// ── DV6 (owner 2026-10-25: "อย่าลืมให้ filter ได้ด้วย"): the summary follows the app's ONE period and branch. On opening it takes the
+// branch of the top bar (#selBranch) and the month that holds the end of the top bar's period (gPeriodResolve); its own two pickers write
+// back - a month picked here sets the top bar to that month, a branch sets #selBranch - so the pages opened next show the same scope.
+// A pinned login has neither picker (stripBranchPickers). ──
+let _msFromPick = false, _msShownMonth = null;
+function _msEnsureOpt(sel, v, label) {
+  if (v && ![...sel.options].some(o => o.value === v)) { const o = document.createElement('option'); o.value = v; o.textContent = label || v; sel.appendChild(o); }
+}
+function msPullGlobal() {
+  const g = /** @type {HTMLSelectElement|HTMLInputElement|null} */ (document.getElementById('selBranch'));
+  const mb = /** @type {HTMLSelectElement|null} */ (document.getElementById('msBranch'));
+  if (g && mb && mb.tagName === 'SELECT') { _msEnsureOpt(mb, g.value || ''); mb.value = g.value || ''; }
+  const ms = /** @type {HTMLSelectElement|null} */ (document.getElementById('msMonthSel'));
+  const r = typeof gPeriodResolve === 'function' ? gPeriodResolve() : null;
+  if (!ms || !r) return;
+  const m = r.cur[1].slice(0, 7), open = !r.complete && r.cur[1] >= gPeriodAnchor();
+  if ([...ms.options].some(o => o.value === m)) ms.value = m;
+  else if (open) ms.value = '';                                 // the month in progress = the default "เดือนล่าสุด"
+  else { _msEnsureOpt(ms, m, typeof fmtMonthTh === 'function' ? fmtMonthTh(m) : m); ms.value = m; }
+}
+function msPickChanged() {
+  const g = /** @type {HTMLSelectElement|HTMLInputElement|null} */ (document.getElementById('selBranch'));
+  const b = msBranch(), m = msMonth();
+  if (g && g.tagName === 'SELECT' && document.getElementById('msBranch')) {
+    _msEnsureOpt(/** @type {HTMLSelectElement} */ (g), b);
+    if (g.value !== b) { g.value = b; if (typeof branchChipRender === 'function') branchChipRender(); }
+  }
+  // the month picked here becomes the top bar's period (to date when it is the month in progress; '' = เดือนล่าสุด)
+  if (m !== _msShownMonth && typeof gPeriodSet === 'function') gPeriodSet({ kind: 'month', pick: m ? m + '-01' : '' }, true);
+  if (typeof _tabLastKey === 'object') Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]);
+  _msFromPick = true;
+  loadMobileSummary(true);
+}
+
 // ── entry point: fetch the month payload, then render the active view ──
 async function loadMobileSummary(force) {
+  if (!_msFromPick) { try { msPullGlobal(); } catch (e) { /* the top bar is not drawn yet */ } }
+  _msFromPick = false;
+  _msShownMonth = msMonth();
   const status = document.getElementById('msStatus');
   if (status) status.textContent = 'กำลังโหลด…';
   const navP = document.getElementById('msnav-profit'), navD = document.getElementById('msnav-discounts');
@@ -1925,9 +1962,15 @@ function msTargetHtml(j) {
     ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:12px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
     <p style="font-size:12px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;
 }
+// DV6 (phone table review 2026-10-25, top-10 #9): every to-do line shows the baht it is about on the right (actions[].baht, signed:
+// red = sales lost / money given away / cost added, green = the opposite; dvBaht, js/01-core.js) with what the figure is (baht_label) under it
 function msActionsHtml(j) {
-  return (j.actions || []).map(a => `<div class="ms-row"><span style="width:8px;height:8px;border-radius:50%;background:${_msSevCol(a.sev)};flex-shrink:0;margin-top:2px;align-self:flex-start"></span><span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.text)}</span></div>`).join('')
-    || _msNone('ไม่พบประเด็นเร่งด่วน');
+  return (j.actions || []).map(a => {
+    const b = a.baht, has = b != null && b !== 0;
+    const right = has ? `<span style="flex-shrink:0;max-width:42%;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap;color:${b < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(b)}</b>`
+      + (a.baht_label ? `<br><span style="font-size:12px;${_msMuted}">${esc(a.baht_label)}</span>` : '') + `</span>` : '';
+    return `<div class="ms-row ms-act" style="align-items:flex-start;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${_msSevCol(a.sev)};flex-shrink:0;margin-top:6px"></span><span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.text)}</span>${right}</div>`;
+  }).join('') || _msNone('ไม่พบประเด็นเร่งด่วน');
 }
 const _MS_DP = { Lunch: 'กลางวัน (11–14)', Dinner: 'เย็น (17–22)', Other: 'อื่นๆ' };
 const _MS_DOW_EN = { Mon: 'จ.', Tue: 'อ.', Wed: 'พ.', Thu: 'พฤ.', Fri: 'ศ.', Sat: 'ส.', Sun: 'อา.' };
@@ -1988,13 +2031,15 @@ function msRenderSummary() {
   document.getElementById('msKpis').innerHTML = msKpisHtml(j);
   const tEl = document.getElementById('msTarget'); if (tEl) tEl.innerHTML = msTargetHtml(j);
   const aEl = document.getElementById('msActions'); if (aEl) aEl.innerHTML = msActionsHtml(j);
-  const brs = j.branches || [], withMom = brs.filter(b => b.wow_pct != null);
-  const best = withMom.slice().sort((a, b) => b.wow_pct - a.wow_pct)[0];
-  const worst = withMom.slice().sort((a, b) => a.wow_pct - b.wow_pct)[0];
+  // DV6 (review §3.3): โตสุด / ตกสุด by the baht against last month (rev_delta), not the % - a small branch's −25 % is not the
+  // branch that lost the most money; the % stays beside the baht
+  const brs = j.branches || [], withMom = brs.filter(b => b.rev_delta != null);
+  const best = withMom.slice().sort((a, b) => b.rev_delta - a.rev_delta)[0];
+  const worst = withMom.slice().sort((a, b) => a.rev_delta - b.rev_delta)[0];
   const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border:1px solid ${good ? '#10b981' : '#ef4444'}" data-br="${esc(b.branch)}" onclick="msOpenBranch(this.dataset.br)">
-      <p class="lbl">${good ? 'โตสุด' : '⚠ ตกสุด'}</p>
+      <p class="lbl">${good ? 'เพิ่มมากสุด (บาท)' : '⚠ ลดมากสุด (บาท)'}</p>
       <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)} <span style="font-size:12px;${_msMuted}">›</span></p>
-      <p class="sub">${msPchip(b.wow_pct)} · ${fmt(b.revenue)}</p></div>`;
+      <p class="sub"><b style="color:${b.rev_delta < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'};font-variant-numeric:tabular-nums">${dvBaht(b.rev_delta)}</b> ${msPchip(b.wow_pct)}</p></div>`;
   const bw = document.getElementById('msBestWorst');
   if (bw) { bw.innerHTML = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.parentElement.style.display = brs.length > 1 ? '' : 'none'; }
   msLoadYesterday();
@@ -2069,30 +2114,44 @@ function msYesterdayHtml(brief, sc, br) {
 }
 
 // ── VIEW: สาขา ──
+// DV6 (phone table review 2026-10-25, §3.4 สาขา): the list opens on the baht against last month (rev_delta, the biggest loss
+// first - the branch to call); เป้า ranks by the baht away from the target on the month-end projection (target_gap)
 function msSetBranchSort(s) {
   _msBranchSort = s;
-  ['rev', 'mom', 'rph', 'tgt'].forEach(x => document.getElementById('msSort' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', x === s));
+  ['chg', 'rev', 'rph', 'tgt'].forEach(x => document.getElementById('msSort' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', x === s));
   msRenderBranches();
 }
 function msRenderBranches() {
   const j = _msRpt; if (!j) return;
   let branches = (j.branches || []).slice();
   const hasTgt = branches.some(b => b.vs_target_pct != null), yoy = _msYoyOk(j);
+  const hasChg = branches.some(b => b.rev_delta != null);
   const tgtBtn = document.getElementById('msSortTgt'); if (tgtBtn) tgtBtn.style.display = hasTgt ? '' : 'none';
-  if (_msBranchSort === 'tgt' && !hasTgt) _msBranchSort = 'rev';
+  const chgBtn = document.getElementById('msSortChg'); if (chgBtn) chgBtn.style.display = hasChg ? '' : 'none';
+  if ((_msBranchSort === 'tgt' && !hasTgt) || (_msBranchSort === 'chg' && !hasChg)) _msBranchSort = 'rev';
+  ['chg', 'rev', 'rph', 'tgt'].forEach(x => document.getElementById('msSort' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', x === _msBranchSort));
   const S = _msBranchSort;
+  const gapOf = b => b.target_gap != null ? b.target_gap : (b.target != null ? (b.projected ?? b.revenue ?? 0) - b.target : null);
   if (S === 'rev')      branches.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
-  else if (S === 'mom') branches.sort((a, b) => (b.wow_pct ?? -1e9) - (a.wow_pct ?? -1e9));
+  else if (S === 'chg') branches.sort((a, b) => (a.rev_delta ?? 1e15) - (b.rev_delta ?? 1e15));
   else if (S === 'rph') branches.sort((a, b) => (b.rev_per_head ?? -1e9) - (a.rev_per_head ?? -1e9));
-  else                  branches.sort((a, b) => (b.vs_target_pct ?? -1e9) - (a.vs_target_pct ?? -1e9));
+  else                  branches.sort((a, b) => (gapOf(a) ?? 1e15) - (gapOf(b) ?? 1e15));
   const maxRev = Math.max(1, ...branches.map(b => b.revenue || 0));
   const revs = branches.map(b => b.revenue).filter(v => v != null);
   const avgW = revs.length >= 3 ? Math.round(100 * revs.reduce((a, v) => a + v, 0) / revs.length / maxRev) : null;
-  const metric = S === 'mom' ? { v: b => b.wow_pct, o: { pct: true, fmt: v => `${v > 0 ? '+' : ''}${v}%` } }
+  const metric = S === 'chg' ? { v: b => b.rev_delta, o: { fmt: v => dvBaht(v) } }
                : S === 'rph' ? { v: b => b.rev_per_head || null, o: { fmt: v => fmt(v) + '/หัว', below: true } }
-               : S === 'tgt' ? { v: b => b.vs_target_pct, o: { pct: true, fmt: v => `${v}% ของเป้า` } }
+               : S === 'tgt' ? { v: b => gapOf(b), o: { fmt: v => dvBaht(v) + ' จากเป้า' } }
                : { v: b => b.revenue || null, o: { fmt, below: true } };   // 0 = not trading (e.g. a closed branch), not "the lowest"
-  const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o) : '';
+  // the baht views open on the sum each way: "ลดลง 18 สาขา −฿4.20M · เพิ่มขึ้น 10 สาขา +฿1.10M"
+  const split = vals => {
+    const dn = vals.filter(v => v < 0), up = vals.filter(v => v > 0), sum = a => a.reduce((s, v) => s + v, 0);
+    return [dn.length ? `${S === 'tgt' ? 'ต่ำกว่าเป้า' : 'ลดลง'} ${_glanceB(`${dn.length} สาขา ${dvBaht(sum(dn))}`)}` : '',
+            up.length ? `${S === 'tgt' ? 'ถึงเป้า' : 'เพิ่มขึ้น'} ${_glanceB(`${up.length} สาขา ${dvBaht(sum(up))}`)}` : ''].filter(Boolean).join(' · ');
+  };
+  const sentence = branches.length < 2 ? ''
+    : (S === 'chg' || S === 'tgt') ? split(branches.map(metric.v).filter(v => v != null))
+    : glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o);
   const withT = branches.filter(b => b.vs_target_pct != null), onT = withT.filter(b => b.vs_target_pct >= 100).length;
   const head = (sentence ? `<div style="padding-top:8px">${msGlanceLine(sentence)}</div>` : '')
     + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า${withT.some(b => b.target_basis === 'projected') ? ' (ประมาณการสิ้นเดือน)' : ''} · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
@@ -2100,7 +2159,9 @@ function msRenderBranches() {
     const right = S === 'rph'
       ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
       : S === 'tgt'
-      ? `<span style="font-size:12px;${_msMuted}">${b.target != null ? 'เป้า ' + fmt(b.target) : ''}</span><span class="ms-chip" style="background:${_msTgtCol(b.vs_target_pct)}22;color:${textInk(_msTgtCol(b.vs_target_pct))}">${b.vs_target_pct != null ? b.vs_target_pct.toFixed(0) + '%' : '—'}</span>`
+      ? `<span style="text-align:right;line-height:1.25">${gapOf(b) != null ? `<b style="font-size:13px;font-variant-numeric:tabular-nums;color:${gapOf(b) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(gapOf(b))}</b><br>` : ''}<span style="font-size:12px;${_msMuted}">${b.target != null ? 'เป้า ' + fmt(b.target) : ''}</span></span><span class="ms-chip" style="background:${_msTgtCol(b.vs_target_pct)}22;color:${textInk(_msTgtCol(b.vs_target_pct))}">${b.vs_target_pct != null ? b.vs_target_pct.toFixed(0) + '%' : '—'}</span>`
+      : S === 'chg'
+      ? `<span style="text-align:right;line-height:1.25"><b style="font-size:13px;font-variant-numeric:tabular-nums;color:${(b.rev_delta || 0) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${b.rev_delta != null ? dvBaht(b.rev_delta) : '—'}</b><br><span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span></span>${msPchip(b.wow_pct)}`
       : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.wow_pct)}`;
     const sub = [yoy && b.yoy_pct != null ? `เทียบปีก่อน ${b.yoy_pct > 0 ? '+' : ''}${b.yoy_pct}%` : '',
                  b.vs_target_pct != null && S !== 'tgt' ? `<span style="color:${textInk(_msTgtCol(b.vs_target_pct))}">เป้า ${b.vs_target_pct.toFixed(0)}%</span>` : ''].filter(Boolean).join(' · ');
@@ -2255,41 +2316,55 @@ function msRenderPeakPay() {
 }
 
 // ── VIEW: เมนู ──
+// DV6 (phone table review 2026-10-25, §3.4 เมนู + top-10 #9): the tab answers "which dishes push the food cost per head up, in baht"
+// - the management payload's own list (menu.risers: each dish's cost per head now vs last month, the to-do line's figure; DV1 split it
+// into the cost per plate and the plates per head) x the period's customers. Top 5, the rest behind ดูทั้งหมด. The old มาแรง (% of
+// pieces) and ขายดี (pieces) lists are gone; a role without a cost module (the server strips menu.risers, PL3) keeps ขายดี in plates.
 async function msLoadMenu() {
-  const wrap = document.getElementById('msMenu');
-  const rWrap = document.getElementById('msMenuRisers');
+  const j = _msRpt, wrap = document.getElementById('msMenuRisers'), title = document.getElementById('msMenuTitle');
+  if (!j || !wrap) return;
+  const M = j.menu || {};
+  if (canSeeCost() && !M.hidden) {
+    if (title) title.textContent = 'เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)';
+    wrap.innerHTML = msCostRisersHtml(j, 'msmenu', 5);
+    return;
+  }
+  if (title) title.textContent = 'เมนูขายดี (จำนวนจาน)';
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
-  if (rWrap) rWrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
-  // limit=100: one payload feeds BOTH lists — top-20 by qty (below) and the
-  // MoM risers. The top-100-by-qty pool doubles as a volume floor so a tiny-
-  // base SKU can't fake a huge % (debug-mantra rule 5); qty_mom_pct itself is
-  // MTD-fair (same day-range both months) and the food filter is the canonical
-  // _FOOD_CATEGORY_FILTER incl. the durian whitelist (rule 23).
-  const q = new URLSearchParams({ sort: 'qty', limit: '100' });
+  const q = new URLSearchParams({ sort: 'qty', limit: '20' });
   const br = msBranch(); if (br) q.set('branch', br);
-  const mon = (_msRpt && _msRpt.selected_month) || ''; if (mon) q.set('month', mon);
-  let d; try { d = await api(`${API}/api/sales/top_ordered?${q}`); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; if (rWrap) rWrap.innerHTML = ''; return; }
-  const pool = (d.items || []);
-  if (rWrap) rWrap.innerHTML = msRisersHtml(pool, d, 1000, 8);
-  wrap.innerHTML = msTopMenuHtml(pool.slice(0, 20));
+  const mon = j.selected_month || ''; if (mon) q.set('month', mon);
+  let d; try { d = await api(`${API}/api/sales/top_ordered?${q}`); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  if (_msRpt !== j) return;
+  wrap.innerHTML = msTopMenuHtml((d.items || []).slice(0, 20));
 }
-// มาแรง: biggest positive qty-MoM among meaningful-volume menus
-function msRisersHtml(pool, d, minQty, n) {
-  const risers = pool.filter(x => (x.qty || 0) >= minQty && x.qty_mom_pct != null && x.qty_mom_pct > 0 && x.qty_mom_pct <= 400)
-    .sort((a, b) => b.qty_mom_pct - a.qty_mom_pct).slice(0, n);
-  const maxM = Math.max(1, ...risers.map(x => x.qty_mom_pct || 0));
-  const capNote = (d || {}).mom_basis === 'mtd'
-    ? `เทียบช่วงวันที่ 1–${d.mtd_cutoff_day || ''} ของเดือนก่อน (แฟร์กับเดือนที่ยังไม่จบ)` : 'เทียบเดือนก่อนหน้า';
-  return (risers.map((x, i) => {
-    const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
-    return `<div class="ms-row">
-      <span style="width:18px;font-size:12px;${_msMuted}">${i + 1}</span>
-      <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</span>
-      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (x.qty_mom_pct || 0) / maxM), '#10b981')}</span></span>
-      <span style="width:84px;text-align:right;flex-shrink:0">${msPchip(Math.round(x.qty_mom_pct * 10) / 10)}<br><span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${fmtN(x.qty || 0)} ชิ้น</span></span>
+// the dishes whose food cost per head rose, by the baht it added (cost per head change x the customers of the period): the context
+// line first (the whole cost per head, gp.cost_per_head - the bridge's), then the rows with their share of the rise and why it rose
+function msCostRisersHtml(j, key, top) {
+  const M = j.menu || {}, G = j.gp || {}, cov = M.covers || 0;
+  const rows = (M.risers || []).filter(m => (m.delta || 0) > 0);
+  if (M.cost_basis === 'unavailable') return _msNone('ยังไม่มีต้นทุนรายเมนูของช่วงนี้');
+  if (!rows.length || !cov) return _msNone('ไม่มีเมนูที่ต้นทุนต่อหัวเพิ่มขึ้นเทียบเดือนก่อน');
+  const bahtOf = m => m.delta * cov, total = rows.reduce((s, m) => s + bahtOf(m), 0);
+  const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + '฿' + Math.abs(v).toFixed(2);
+  const cph = G.cost_per_head, cph0 = G.cost_per_head_prev, B = G.bridge || {};
+  const ctx = cph != null && cph0 != null
+    ? ` · ต้นทุนต่อหัวทั้งหมด ฿${cph0.toFixed(0)} → ฿${cph.toFixed(0)}${B.cost_head != null ? ` (ผลต่อกำไร ${dvBaht(B.cost_head)})` : ''}` : '';
+  const head = `<div style="padding-top:8px">${msGlanceLine(`${fmtN(rows.length)} เมนูเพิ่มต้นทุนรวม ${_glanceB('+฿' + fmt(total))} เทียบเดือนก่อน${ctx}`)}</div>`;
+  let cum = 0;
+  const body = rows.map((m, i) => {
+    const b = bahtOf(m), share = total ? 100 * b / total : 0;
+    cum += share;
+    const why = m.price_delta != null && m.usage_delta != null ? ` · ราคาต่อจาน ${sg(m.price_delta)} · กินต่อหัว ${sg(m.usage_delta)}` : '';
+    return `<div class="ms-row"${dvMoreAttr(key, i, rows.length, top)} style="align-items:flex-start">
+      <span style="width:18px;font-size:12px;${_msMuted};margin-top:1px">${i + 1}</span>
+      <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.menu)}</span>
+      <span style="font-size:12px;${_msMuted};display:block;line-height:1.35">${sg(m.delta)}/หัว${why}</span></span>
+      <span style="flex-shrink:0;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;color:var(--bad-ink)">+฿${fmt(b)}</b><br><span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${share.toFixed(0)}% · สะสม ${Math.min(100, cum).toFixed(0)}%</span></span>
     </div>`;
-  }).join('') || '<div class="ms-row">ยังไม่มีเมนูยอดนิยมที่เพิ่มขึ้นชัดเจน</div>')
-    + `<div class="ms-row" style="border:0;padding-top:6px"><span style="font-size:12px;${_msMuted}">${capNote} · เฉพาะเมนูยอด ≥ ${fmtN(minQty)} ชิ้น · ไม่นับเมนูที่เพิ่งเริ่มขาย (>5 เท่า)</span></div>`;
+  }).join('');
+  return head + body + dvMoreBtn(key, rows.length, top)
+    + `<p style="font-size:12px;${_msMuted};margin:6px 0 4px">บาท = ต้นทุนต่อหัวที่เพิ่ม × ลูกค้า ${fmtN(cov)} คน · % = สัดส่วนของต้นทุนที่เพิ่มทั้งหมด</p>`;
 }
 function msTopMenuHtml(items) {
   const maxQ = Math.max(1, ...items.map(x => x.qty || 0));
@@ -2383,7 +2458,7 @@ async function msOpenBranch(name) {
   const mq = new URLSearchParams({ sort: 'qty', limit: '40', branch: name });
   if (msPickedOlderMonth()) dq.set('date', _msRpt.range[1]);
   if (_msRpt && _msRpt.selected_month) mq.set('month', _msRpt.selected_month);
-  const canMenu = _msMod('menu.analysis') || _msMod('cost.analysis');
+  const canMenu = (_msMod('menu.analysis') || _msMod('cost.analysis')) && !canSeeCost();   // DV6: a cost role reads the menu list from the payload
   let j, days = null, menu = null;
   try {
     [j, days, menu] = await Promise.all([
@@ -2413,7 +2488,9 @@ function msBranchSheetHtml(j, days, menu) {
   const dtr = (days || {}).trend || [];
   const trend14 = dtr.length >= 3 ? `<div style="padding:8px 0 4px">${msTrendBlock(dtr, 'day', 100)}</div>` : _msNone('ไม่มีข้อมูลรายวัน');
   const pool = (menu || {}).items || [];
-  const menuHtml = pool.length ? `<p style="font-size:12px;${_msMuted};margin:8px 0 0">ขายดี (ตามจำนวน)</p>${msTopMenuHtml(pool.slice(0, 8))}<p style="font-size:12px;${_msMuted};margin:10px 0 0">มาแรง (คนกินเพิ่มขึ้น)</p>${msRisersHtml(pool, menu, 200, 5)}` : '';
+  // DV6: the branch's dishes that push its cost per head up, in baht (the เมนู tab's list); a role without cost: ขายดี in plates
+  const menuHtml = cost && !M.hidden ? msCostRisersHtml(j, 'mssheet', 5)
+    : pool.length ? `<p style="font-size:12px;${_msMuted};margin:8px 0 0">ขายดี (จำนวนจาน)</p>${msTopMenuHtml(pool.slice(0, 8))}` : '';
   const cph = (M.top || []).slice(0, 6);
   const cphHtml = cph.length ? cph.map((m, i) => `<div class="ms-row" style="padding:5px 0"><span style="width:18px;font-size:12px;${_msMuted}">${i + 1}</span><span style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.menu)}</span><span style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums">฿${(m.cost_per_head || 0).toFixed(2)}</span>${m.delta != null ? `<span style="font-size:12px;width:52px;text-align:right;color:${textInk(m.delta > 0 ? '#ef4444' : m.delta < 0 ? '#10b981' : '#64748b')}">${m.delta > 0 ? '+' : ''}${m.delta.toFixed(2)}</span>` : ''}</div>`).join('') + `<p style="font-size:12px;${_msMuted};margin:6px 0 4px">ต้นทุนอาหารของเมนู ÷ จำนวนหัวของสาขา · ตัวเลขท้าย = เปลี่ยนจากเดือนก่อน${M.total_cph != null ? ` · รวม ฿${M.total_cph.toFixed(0)}/หัว` : ''}</p>` : _msNone('ไม่มีข้อมูลต้นทุนเมนู');
   const pol = H.discount_policy_pct;
@@ -2428,7 +2505,7 @@ function msBranchSheetHtml(j, days, menu) {
     + sec('เป้าเดือนนี้', msTargetHtml(j))
     + sec('14 วันล่าสุด', trend14)
     + sec('สิ่งที่ต้องทำ', msActionsHtml(j))
-    + (menuHtml ? sec('เมนู', menuHtml) : '')
+    + (menuHtml ? sec(cost && !M.hidden ? 'เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)' : 'เมนู', menuHtml) : '')
     + (cost ? sec('ต้นทุน/หัว สูงสุด (รายเมนู)', cphHtml) : '')
     + (_msMod('ops.discounts') ? sec('ส่วนลด', discHtml) : '')
     + sec('ชั่วโมงพีค & ช่วงเวลา', msPeakHtml(j.peak))
