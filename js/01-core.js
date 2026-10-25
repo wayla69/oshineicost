@@ -4050,11 +4050,12 @@ const PAGE_CARDS = {
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
   dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
-    // PR-SC: a role that sees cost gets the ต้นทุนเพิ่ม column (table.sp-costed); PR-TD (owner 2026-10-25): it is the LAST column and the last figure
-    { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], 'สูงกว่า', 'ต้นทุนเพิ่ม'], labels: ['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม'] },
-    { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], ['ปกติ', 'ช่วงเทียบ'], 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
-    { sel: '#spikePlatesTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], '+จาน', 'สูงกว่า'], labels: ['จาน', '+จาน', 'สูงกว่า'] },
-    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] },
+    // DV3 (phone table review 2026-10-25): one row per dish - ต้นทุนเพิ่มสุทธิ first (its % of the food cost under it), สะสม, +จาน; the
+    // สาขาที่ดัน / tier lines are the grey lines under the name. A role without cost: +จาน, สูงกว่า, สะสม.
+    { sel: '#spikeTable.sp-costed', title: 'เมนู', keyCols: ['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน'], labels: ['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน'], figSub: true },
+    { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', keyCols: ['+จาน', 'สูงกว่า', 'สะสม'], labels: ['+จาน', 'สูงกว่า', 'สะสม'], figSub: true },
+    { sel: '#spikeNewTable.sp-costed', title: 'เมนู', keyCols: ['ต้นทุน', 'จาน/วัน', 'แนวโน้ม'], labels: ['ต้นทุนช่วงนี้', 'จาน/วัน', 'แนวโน้ม'] },
+    { sel: '#spikeNewTable:not(.sp-costed)', title: 'เมนู', keyCols: ['จาน/วัน', 'ต่อ 100 ลูกค้า', 'แนวโน้ม'], labels: ['จาน/วัน', 'ต่อ 100 ลูกค้า', 'แนวโน้ม'] },
     // owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน: one group (plates only) and the branches x groups matrix
     { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'], figSub: true },
     { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true }],

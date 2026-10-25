@@ -1339,7 +1339,6 @@ class _SpikeCost:
 
     def __init__(self, con, ps, pe, bfilt, params):
         import datetime as _dt
-        from rules import is_tier_code
         cur = con.cursor()
         cur.row_factory = None
         bjoin = "JOIN branches b ON b.branch_id=d.branch_id" if bfilt else ""
@@ -1356,18 +1355,8 @@ class _SpikeCost:
             sm.add((sid, m))
         self.unit: dict = {}                     # (sid, month) -> ฿ per plate (0 = uncosted, or a package)
         self.pkg: set = set()                    # sku ids that are buffet tier packages: never costed
-        pairs = sorted(sm)
-        expr = effective_unit_cost_sql("x", "x.m")
-        for i in range(0, len(pairs), 400):
-            chunk = pairs[i:i + 400]
-            vals = ",".join("(?,?)" for _ in chunk)
-            for sid, m, code, uc in cur.execute(
-                    f"WITH x(sku_id, m) AS (VALUES {vals}) SELECT x.sku_id, x.m, sk.sku_code, {expr} "
-                    f"FROM x LEFT JOIN skus sk ON sk.sku_id = x.sku_id", [v for p in chunk for v in p]):
-                if is_tier_code(code or ""):
-                    self.pkg.add(sid)
-                    uc = 0.0
-                self.unit[(sid, m)] = float(uc or 0.0)
+        self._cur, self.month = cur, pe.isoformat()[:7]
+        self._fill(sorted(sm))
         self.food_cost = sum(qq * self.unit.get((sid, m), 0.0)
                              for (_b, sid), mm in self.plates.items() for m, qq in mm.items())
         try:
@@ -1379,12 +1368,31 @@ class _SpikeCost:
         except Exception:
             self.revenue, self.revenue_basis = sub, "ex_vat_lines"
 
+    def _fill(self, pairs) -> None:
+        """self.unit[(sid, month)] for every pair not read yet: the dish cost of THE engine, a tier package at ฿0."""
+        from rules import is_tier_code
+        pairs = [p for p in pairs if p not in self.unit]
+        expr = effective_unit_cost_sql("x", "x.m")
+        for i in range(0, len(pairs), 400):
+            chunk = pairs[i:i + 400]
+            vals = ",".join("(?,?)" for _ in chunk)
+            for sid, m, code, uc in self._cur.execute(
+                    f"WITH x(sku_id, m) AS (VALUES {vals}) SELECT x.sku_id, x.m, sk.sku_code, {expr} "
+                    f"FROM x LEFT JOIN skus sk ON sk.sku_id = x.sku_id", [v for p in chunk for v in p]):
+                if is_tier_code(code or ""):
+                    self.pkg.add(sid)
+                    uc = 0.0
+                self.unit[(sid, m)] = float(uc or 0.0)
+
     def unit_of(self, bid, sid) -> float:
-        """The row's unit cost weighted by its plates in each month of the period (a dish cost that changes on the 1st)."""
+        """The row's unit cost weighted by its plates in each month of the period (a dish cost that changes on the 1st).
+        DV3: a row without a plate in the period (sold in the baseline only) = the dish cost of the period's last month."""
         mm = self.plates.get((bid, sid)) or {}
         tq = sum(mm.values())
         if tq <= 0:
-            return 0.0
+            if (sid, self.month) not in self.unit:
+                self._fill([(sid, self.month)])
+            return self.unit.get((sid, self.month), 0.0)
         return sum(qq * self.unit.get((sid, m), 0.0) for m, qq in mm.items()) / tq
 
     def share(self, baht):
@@ -1709,6 +1717,161 @@ def _spike_returns(cur, scan, bjoin, bfilt, q, tdays) -> dict:
     return out
 
 
+# ── DV3 (phone table review 2026-10-25, top-10 #3) · the card by DISH ─────────────────────────────────────────────────────────────
+# The chain view is one row per dish (the menu name - every SKU code and branch summed), its NET extra cost (the branches above their
+# normal minus the branches below it; a branch that sold none in the period counts its whole normal as a decrease), the branches that
+# push it (สาขาที่ดัน, top 3 with ฿), a floor and the share / cumulative % that say where to stop. One branch in scope = the same rows
+# for that branch. New menus are grouped per dish the same way, with their own floor.
+_DISH_FLOOR_BAHT = 1000          # a dish row is material from ฿1,000 of net extra cost ...
+_DISH_FLOOR_SHARE = 0.1          # ... or from 0.1 % of the scope's food cost of the period
+_DISH_FLOOR_PLATES = 20          # a role without cost: from 20 net extra plates
+_NEW_FLOOR_PER_DAY = 20          # a new dish is material from 20 plates a day (all its branches) ...
+_NEW_FLOOR_BAHT = 1000           # ... or from ฿1,000 of food cost in the period (cost roles)
+_DISH_PUSHERS = 3
+
+
+def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
+    """ents = [(kind, menu, bid, branch, sid, plates, expected)] = every existing branch x SKU of the scope with a sale in the period or
+    in its baseline (new / returning menus and non-food lines excluded). spk = {(bid, sid): the ranked row} (tiers, spike). sc =
+    _SpikeCost or None (then not one cost key, PL3). Returns (rows, totals): rows = the dishes above their normal - net extra cost > 0
+    (cost view; an uncosted dish above its normal comes last) or net extra plates > 0 - sorted by it, each with its share of the food
+    cost (cost_share), the cumulative % of the rows above it (cum_pct, of the summed positive dishes) and material (the floor);
+    totals = the up / down / net sums over EVERY dish (the net = increases minus decreases)."""
+    acc: dict = {}
+    for kind, menu, bid, branch, sid, pq, exp in ents:
+        a = acc.get((kind, menu))
+        if a is None:
+            a = acc[(kind, menu)] = {"kind": kind, "menu": menu, "pq": 0.0, "exp": 0.0, "net": 0.0, "costed": False,
+                                    "br": {}, "keys": [], "spike": set()}
+        uc = sc.unit_of(bid, sid) if sc is not None else 0.0
+        ex = pq - exp
+        a["pq"] += pq
+        a["exp"] += exp
+        a["net"] += ex * uc
+        a["costed"] = a["costed"] or uc > 0
+        b = a["br"].setdefault(branch, [0.0, 0.0, 0.0])      # [excess plates, net ฿, plates]
+        b[0] += ex
+        b[1] += ex * uc
+        b[2] += pq
+        a["keys"].append((bid, sid))
+        r = spk.get((bid, sid))
+        if r is not None and r.get("spike"):
+            a["spike"].add(branch)
+    cost = sc is not None
+    tot = {"up_excess": 0.0, "down_excess": 0.0}
+    if cost:
+        tot.update({"up_cost": 0.0, "down_cost": 0.0})
+    rows = []
+    for a in acc.values():
+        ex = a["pq"] - a["exp"]
+        tot["up_excess" if ex > 0 else "down_excess"] += ex
+        if cost:
+            tot["up_cost" if a["net"] > 0 else "down_cost"] += a["net"]
+        byc = cost and a["costed"]
+        if not (a["net"] > 0 if byc else ex > 0):
+            continue
+        x = a["pq"] / a["exp"] if a["exp"] > 0 else None
+        row = {"menu": a["menu"], "kind": a["kind"], "branches": sum(1 for b in a["br"].values() if b[2] > 0),
+               "today": round(a["pq"]), "expected": round(a["exp"]), "excess": round(ex),
+               "x": round(x, 2) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
+               # the พุ่ง chip: the dish's OWN plates >= threshold x its normal (>= 5 plates), not one branch's; spike_branches = those
+               "spike": (x >= threshold and a["pq"] >= 5) if x is not None else bool(a["spike"]),
+               "spike_branches": len(a["spike"]), "_net": a["net"] if cost else ex, "_ex": ex}
+        if not one_branch:
+            i = 1 if byc else 0
+            push = sorted(((n, b) for n, b in a["br"].items() if b[i] > 0), key=lambda kv: (-kv[1][i], kv[0]))
+            row["pushers"] = [{"branch": n, "excess": round(b[0]), **({"extra_cost": round(b[1], 2)} if cost else {})}
+                              for n, b in push[:_DISH_PUSHERS]]
+            row["pushers_more"] = max(0, len(push) - _DISH_PUSHERS)
+        else:
+            # one branch: the branch's own ranked row (its tiers, per-head figures) when the dish is one SKU there
+            r = spk.get(a["keys"][0]) if len(a["keys"]) == 1 else None
+            if r is not None:
+                for k in ("tiers", "tier_note", "tier_to", "tier_rest", "rate", "normal_rate", "basis", "customers", "thin_base"):
+                    if k in r:
+                        row[k] = r[k]
+        if cost:
+            row.update({"net_cost": round(a["net"], 2), "cost_share": sc.share(a["net"]), "net_pp": sc.pp(a["net"]),
+                        "uncosted": not a["costed"]})
+        rows.append(row)
+    if cost:
+        rows.sort(key=lambda r: (r["uncosted"], -r["_net"], -r["_ex"], r["menu"]))
+        base = tot["up_cost"]
+    else:
+        rows.sort(key=lambda r: (-r["_ex"], r["menu"]))
+        base = tot["up_excess"]
+    run = 0.0
+    for r in rows:
+        if cost and r["uncosted"]:
+            r["cum_pct"], r["material"] = None, False
+        else:
+            run += r["_net"]
+            r["cum_pct"] = round(run / base * 100, 1) if base > 0 else None
+            r["material"] = (r["_net"] >= _DISH_FLOOR_BAHT or (r["cost_share"] or 0) >= _DISH_FLOOR_SHARE) if cost \
+                else r["_ex"] >= _DISH_FLOOR_PLATES
+        r.pop("_net")
+        r.pop("_ex")
+    out = {k: round(v, 2) for k, v in tot.items()}
+    out["net_excess"] = round(tot["up_excess"] + tot["down_excess"], 2)
+    if cost:
+        net = tot["up_cost"] + tot["down_cost"]
+        out.update({"net_cost": round(net, 2), "net_share": sc.share(net), "net_pp": sc.pp(net)})
+    return rows, out
+
+
+def _spike_new_dishes(nms, cost, one_branch) -> list:
+    """DV3 · the new-menu rows (_spike_new_menus, with the private _q) grouped per dish: branches selling it, plates, plates a day (summed
+    over its branches), plates per 100 customers (over the rows with customers), the food cost of the period (cost roles), how many of
+    its branches it came back at (returning), the trend (latest 7 days vs the first 7, plates a day summed over the branches that have
+    one), the top 3 branches by plates. Sorted by the period's cost (cost roles; an uncosted dish after the costed ones) or by plates;
+    material = >= 20 plates a day or >= ฿1,000 of food cost."""
+    acc: dict = {}
+    for m in nms:
+        a = acc.get((m["kind"], m["menu"]))
+        if a is None:
+            a = acc[(m["kind"], m["menu"])] = {"menu": m["menu"], "kind": m["kind"], "qty": 0.0, "per_day": 0.0, "rq": 0.0, "cust": 0.0,
+                                               "cost": 0.0, "costed": False, "ret": 0, "first": m["first_sold"], "age": 0,
+                                               "t1": 0.0, "t2": 0.0, "tn": 0, "br": []}
+        a["qty"] += m["_q"]
+        a["per_day"] += m["per_day"] or 0.0
+        if m.get("customers"):
+            a["rq"] += m["_q"]
+            a["cust"] += m["customers"]
+        if cost:
+            a["cost"] += m.get("period_cost") or 0.0
+            a["costed"] = a["costed"] or (m.get("unit_cost") or 0) > 0
+        a["ret"] += 1 if m.get("returning") else 0
+        a["first"] = min(a["first"], m["first_sold"])
+        a["age"] = max(a["age"], m["age_days"])
+        t = m.get("trend")
+        if t and t.get("first_per_day") is not None and t.get("latest_per_day") is not None:
+            a["t1"] += t["first_per_day"]
+            a["t2"] += t["latest_per_day"]
+            a["tn"] += 1
+        a["br"].append(m)
+    rows = []
+    for a in acc.values():
+        brs = sorted(a["br"], key=lambda m: (-m["_q"], m["branch"]))
+        row = {"menu": a["menu"], "kind": a["kind"], "branches": len(brs), "qty": round(a["qty"]), "per_day": round(a["per_day"], 1),
+               "rate": round(a["rq"] / a["cust"] * _SPIKE_PER, 1) if a["cust"] > 0 else None, "returning": a["ret"],
+               "first_sold": a["first"], "age_days": a["age"],
+               "trend_pct": round((a["t2"] / a["t1"] - 1) * 100) if a["tn"] and a["t1"] > 0 else None,
+               "top": [{"branch": m["branch"], "qty": round(m["_q"]), "returning": bool(m.get("returning"))} for m in brs[:_DISH_PUSHERS]],
+               "more": max(0, len(brs) - _DISH_PUSHERS)}
+        if one_branch and brs:
+            m = brs[0]
+            row.update({"first_sold_th": m.get("first_sold_th"), **{k: m[k] for k in ("returned_on", "first_sold_ever") if k in m}})
+        if cost:
+            row.update({"period_cost": round(a["cost"], 2), "uncosted": not a["costed"]})
+        row["material"] = a["per_day"] >= _NEW_FLOOR_PER_DAY or (cost and a["cost"] >= _NEW_FLOOR_BAHT)
+        rows.append(row)
+    if cost:
+        rows.sort(key=lambda r: (r["uncosted"], -r["period_cost"], -r["qty"], r["menu"]))
+    else:
+        rows.sort(key=lambda r: (-r["qty"], r["menu"]))
+    return rows
+
+
 def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold, with_cost=False,
                        top=_SPIKE_TOP, base_from=None, base_to=None):
     """Day / week / MTD / custom-range spike, per head and weekday-fair (memory rule 'MTD weekday-fair baseline';
@@ -1854,6 +2017,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     fsm = _first_sold_map(con, {r[0] for r in prow}) if prow else {}
     rets = _spike_returns(cur, scan, bjoin, bfilt, q, tdays) if prow else {}
     newc = []
+    dents: list = []                        # DV3 · (kind, menu, bid, branch, sid, plates, expected) of every existing branch x SKU
     for bid, branch_name, desc, code, sid, pq in prow:
         pq = pq or 0
         fs = fsm.get((bid, sid))
@@ -1893,6 +2057,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         basis = basis_of(bid, kind)
         wt, cp = weights(bid, basis)
         expected = sum(e[w] * wt[w] for w in range(7)) if e else 0.0
+        dents.append((kind, name, bid, branch_name, sid, pq, expected))       # DV3: every existing row, up or down
         thin = n < _SPIKE_THIN_DAYS
         spike = True
         if expected > 0 and not thin:
@@ -1922,6 +2087,32 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         if thin:
             row["thin_base"] = True
         spikes.append(row)
+    # DV3 · an existing menu sold in the baseline but not once in the period is a decrease of its whole normal (the net per dish)
+    seen = {(r[0], r[4]) for r in prow}
+    extra = [k for k in base if k not in seen]
+    if extra:
+        from rules import is_non_food_line
+        sids = sorted({k[1] for k in extra})
+        sk: dict = {}
+        for i in range(0, len(sids), 500):
+            ch = sids[i:i + 500]
+            for sid, code, desc in cur.execute(f"SELECT sku_id, sku_code, description FROM skus WHERE sku_id IN ({','.join('?' * len(ch))})", ch):
+                sk[sid] = (code, desc)
+        bn = {bid: nm for bid, nm in cur.execute("SELECT branch_id, name FROM branches")}
+        fs2 = _first_sold_map(con, {k[0] for k in extra} | {r[0] for r in prow})
+        for bid, sid in extra:
+            code, desc = sk.get(sid, (None, None))
+            if desc is None or is_non_food_line(code, desc):
+                continue
+            fs = fs2.get((bid, sid))
+            if fs and (pe - _dt.date.fromisoformat(fs)).days < _SPIKE_NEW_DAYS:
+                continue
+            kind = _spike_kind(desc)
+            wt, _cp = weights(bid, basis_of(bid, kind))
+            e = base[(bid, sid)]
+            expected = sum(e[w] * wt[w] for w in range(7))
+            if expected > 0:
+                dents.append((kind, _spike_name(desc, code), bid, bn.get(bid, ""), sid, 0.0, expected))
     sc = None
     if with_cost:
         try:
@@ -1929,6 +2120,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         except Exception as e:                  # a DB without the cost tables: the plates still answer
             print(f"[menu-spike] cost skipped: {e}")
     if sc is not None:
+        sc._fill(sorted({(e[4], sc.month) for e in dents if e[5] <= 0}))      # DV3: the dish cost of the baseline-only rows, one pass
         for s in spikes:
             uc = sc.unit_of(s["_bid"], s["_sid"])
             ex = max(0.0, s["_pq"] - s["_exp"]) * uc
@@ -1949,6 +2141,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
                     "top_pp": sc.pp(tx), "uncosted_count": sum(1 for s in spikes if s["uncosted"])}
     # PR-SX (owner 2026-10-25) · a raw-plates row whose menu is also a per-head spike (same branch x SKU) carries in_per_head: true; the
     # card hides those by default, so แบบเดิม lists what spiked only because more customers came (plates_only_count = the rest)
+    dishes, dtot = _spike_dishes(dents, sc, {(s["_bid"], s["_sid"]): s for s in spikes}, one_branch, threshold)
     phk = {(s["_bid"], s["_sid"]) for s in spikes if s["spike"]}       # PR-RK: "also per head" = in the ranked list AND spike
     for r in plates:
         r["in_per_head"] = r.pop("_k") in phk
@@ -1961,6 +2154,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             uc = sc.unit_of(m["_bid"], m["_sid"])
             m.update({"unit_cost": round(uc, 2), "period_cost": round(m["_q"] * uc, 2),
                       "uncosted": uc <= 0 and m["_sid"] not in sc.pkg, "package": m["_sid"] in sc.pkg})
+    new_dishes = _spike_new_dishes(new_menus, sc is not None, one_branch)
     for m in new_menus:
         for k in ("_bid", "_sid", "_q"):
             m.pop(k, None)
@@ -1990,7 +2184,14 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             "count": len(spikes), "spike_count": sum(1 for s in spikes if s["spike"]), "spikes": shown,
             "plates_count": len(plates), "plates_only_count": sum(1 for r in plates if not r["in_per_head"]), "spikes_plates": [{k: v for k, v in r.items() if k != "_ex"} for r in
                                                            sorted(plates, key=lambda r: (-r["_ex"], r["menu"], r["branch"]))[:limit]],
-            "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
+            "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit],
+            # DV3 · the card by dish (see _spike_dishes / _spike_new_dishes); view = chain | branch (one branch in scope)
+            "view": "branch" if one_branch else "chain", "dish_totals": dtot,
+            "dish_floor": ({"baht": _DISH_FLOOR_BAHT, "share_pct": _DISH_FLOOR_SHARE} if sc is not None else {"plates": _DISH_FLOOR_PLATES}),
+            "dish_count": len(dishes), "dish_material_count": sum(1 for r in dishes if r["material"]), "dishes": dishes[:limit],
+            "new_dish_floor": {"per_day": _NEW_FLOOR_PER_DAY, **({"baht": _NEW_FLOOR_BAHT} if sc is not None else {})},
+            "new_dish_count": len(new_dishes), "new_dish_material_count": sum(1 for r in new_dishes if r["material"]),
+            "new_dishes": new_dishes[:limit]}
 
 
 @router.get("/api/sales/menu-spike")
@@ -2031,7 +2232,14 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
 
     PR-TD (owner 2026-10-25): base_from + base_to = compare with that period instead of ปกติ (see _menu_spike_period); every
     answer carries base {kind, from, to} and summary (the card's strip); new menus that are an existing menu back on sale after
-    >= 21 days without one carry returning: true, returned_on, first_sold_ever (_spike_returns)."""
+    >= 21 days without one carry returning: true, returned_on, first_sold_ever (_spike_returns).
+
+    DV3 (phone table review 2026-10-25): the card draws `dishes` = one row per dish of the scope (view chain: every branch summed,
+    with `pushers` = สาขาที่ดัน; view branch: one branch in scope, the branch's per-head row details) on the NET extra cost (increases
+    minus decreases; a branch that sold none in the period counts its normal as a decrease), with cost_share, cum_pct and `material`
+    (dish_floor: >= ฿1,000 or >= 0.1 % of the food cost; 20 net plates without cost); dish_totals = up / down / net over every dish;
+    `new_dishes` = the new menus per dish (new_dish_floor: >= 20 plates a day or >= ฿1,000). `spikes`, `new_menus` and
+    `spikes_plates` stay as they were (the CSV)."""
     from fastapi import HTTPException
     if period not in _SPIKE_PERIODS:
         raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")

@@ -12,10 +12,34 @@
  "date_from": "2026-06-03",
  "date_to": "2026-06-03",
  "days": 1,
+ "dish_count": 0,
+ "dish_floor": {
+  "baht": 1000,
+  "share_pct": 0.1
+ },
+ "dish_material_count": 0,
+ "dish_totals": {
+  "down_cost": 0.0,
+  "down_excess": 0.0,
+  "net_cost": 0.0,
+  "net_excess": 0.0,
+  "net_pp": 0.0,
+  "net_share": 0.0,
+  "up_cost": 0.0,
+  "up_excess": 0.0
+ },
+ "dishes": [],
  "food_cost_total": 900.0,
  "latest_day": "2026-06-03",
  "new_count": 0,
  "new_days": 28,
+ "new_dish_count": 0,
+ "new_dish_floor": {
+  "baht": 1000,
+  "per_day": 20
+ },
+ "new_dish_material_count": 0,
+ "new_dishes": [],
  "new_menus": [],
  "period": "day",
  "plates_count": 0,
@@ -42,5 +66,6 @@
  "top_extra_cost": 0,
  "top_pp": 0.0,
  "uncosted_count": 0,
+ "view": "chain",
  "window_days": 21
 }

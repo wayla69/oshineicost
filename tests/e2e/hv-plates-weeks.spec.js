@@ -111,7 +111,7 @@ async function go(page, opts, tab) {
     await page.waitForFunction(() => typeof switchTab === 'function', null, { timeout: 60_000 });
     await page.evaluate(t => switchTab(t), tab);
   }
-  if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#spikeHvSec #spikeHvTable, #spikeHvSec #spikeHvMatrix'), null, { timeout: 60_000 });
+  if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
   if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmMatrix'), null, { timeout: 60_000 });
   await page.waitForTimeout(900);
 }
@@ -144,7 +144,9 @@ const CHIPS = sel => {
 const CASES = [['desktop', DESK, 'fit'], ['390 แตะง่าย', PHONE, 'touch'], ['390 พอดีจอ', PHONE, 'fit']];
 for (const [name, opts, mode] of CASES) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    test(`plates · ${name} · ${scheme}: base values, the W vs W picker, chips that fit, larger figures`, async ({ browser }) => {
+    // DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
+    // and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
+    test.skip(`plates · ${name} · ${scheme}: base values, the W vs W picker, chips that fit, larger figures`, async ({ browser }) => {
       test.setTimeout(150_000);
       const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'dailysales', mode, scheme });
       const tag = `${name.replace(/\s+/g, '_')}_${scheme}`;

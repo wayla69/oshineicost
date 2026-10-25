@@ -718,11 +718,13 @@ async function loadDailySales(force) {
 // "ปกติ" (weekday-fair, the 3 weeks before it; backend _menu_spike_period), not with the previous period: a spike is vs normal.
 // Shows ALL items ≥1.5×; has its own branch picker; the chosen period is remembered on this device.
 let _spikeBranchesLoaded = false, _spikeFocus = null, _spikeSeq = 0, _spikeLast = null;
-const _SPIKE_LS = 'oshinei_spike_period';
+// DV3 (phone table review 2026-10-25): สัปดาห์ by default - one day swings too much; a new storage key, so a choice stored before is dropped
+const _SPIKE_LS = 'oshinei_spike_period_v2';
 const _SPIKE_MODES = ['day', 'week', 'mtd', 'range'];
+try { localStorage.removeItem('oshinei_spike_period'); } catch (e) { /* no storage */ }
 let _spikeMode = (() => {
   try { const v = JSON.parse(localStorage.getItem(_SPIKE_LS) || 'null'); if (v && _SPIKE_MODES.includes(v.m)) return v; } catch (e) {}
-  return { m: 'day', f: '', t: '' };
+  return { m: 'week', f: '', t: '' };
 })();
 function _spikeSave() { try { localStorage.setItem(_SPIKE_LS, JSON.stringify(_spikeMode)); } catch (e) {} }
 // PR-TD (owner 2026-10-25) · กำหนดเอง: ช่วงนี้ = a Mon–Sun week (pk 'week') or จาก–ถึง (pk 'range'); เทียบกับ = ปกติ (bk 'normal', the 3 weeks
@@ -833,24 +835,21 @@ function spikeToggleAll() {
   try { localStorage.setItem(_SPIKE_ALL_LS, _spikeAll ? '1' : '0'); } catch (e) {}
   if (_spikeLast) _spikeDraw(_spikeLast, _spikeOneBr);
 }
-// PR-TD (owner 2026-10-25) · แบบเดิม: the raw-plates list at the bottom (d.spikes_plates), "ดูทั้งหมด" kept.
-// PR-SX (owner 2026-10-25, "แก้เลย"): folded by default; once opened the device remembers it under a NEW key, so a state stored before this
-// change (the old key, open by default) is dropped and everyone starts folded. เฉพาะที่ไม่อยู่ในส่วนต่อหัว (on by default) hides the rows whose
-// menu is also a per-head spike (in_per_head), so the list shows what spiked only because more customers came.
-const _SPIKE_PL_LS = 'oshinei_spike_plates_open_v2';
-try { localStorage.removeItem('oshinei_spike_plates_open'); } catch (e) { /* no storage */ }
-let _spikePlOpen = (() => { try { return localStorage.getItem(_SPIKE_PL_LS) === '1'; } catch (e) { return false; } })();
-let _spikePlAll = false, _spikePlOnly = true;
-function spikePlatesOnly() { _spikePlOnly = !_spikePlOnly; _spikePlAll = false; if (_spikeLast) _spikeDraw(_spikeLast, _spikeOneBr); }
-function spikePlatesFold() {
-  _spikePlOpen = !_spikePlOpen;
-  try { localStorage.setItem(_SPIKE_PL_LS, _spikePlOpen ? '1' : '0'); } catch (e) {}
-  const b = document.getElementById('spikePlatesBody'), f = document.getElementById('spikePlatesFold');
-  if (b) b.hidden = !_spikePlOpen;
-  if (f) { f.setAttribute('aria-expanded', _spikePlOpen ? 'true' : 'false'); f.textContent = _spikePlOpen ? 'ซ่อน' : 'แสดง'; }
+// DV3 (phone table review 2026-10-25) · เมนูใหม่ (per dish) is FOLDED by default; once opened this device remembers it. Its own "ดูทั้งหมด".
+// The raw-plates list (แบบเดิม) left the card: it is in the CSV only.
+const _SPIKE_NEW_LS = 'oshinei_spike_new_open';
+try { localStorage.removeItem('oshinei_spike_plates_open_v2'); } catch (e) { /* no storage */ }
+let _spikeNewOpen = (() => { try { return localStorage.getItem(_SPIKE_NEW_LS) === '1'; } catch (e) { return false; } })();
+let _spikeNewAll = false;
+function spikeNewFold() {
+  _spikeNewOpen = !_spikeNewOpen;
+  try { localStorage.setItem(_SPIKE_NEW_LS, _spikeNewOpen ? '1' : '0'); } catch (e) {}
+  const b = document.getElementById('spikeNewBody'), f = document.getElementById('spikeNewFold');
+  if (b) b.hidden = !_spikeNewOpen;
+  if (f) { f.setAttribute('aria-expanded', _spikeNewOpen ? 'true' : 'false'); f.textContent = _spikeNewOpen ? 'ซ่อน' : 'แสดง'; }
   if (typeof phCardsSchedule === 'function') phCardsSchedule();
 }
-function spikePlatesAll() { _spikePlAll = !_spikePlAll; if (_spikeLast) _spikeDraw(_spikeLast, _spikeOneBr); }
+function spikeNewToggleAll() { _spikeNewAll = !_spikeNewAll; if (_spikeLast) _spikeDraw(_spikeLast, _spikeOneBr); }
 const _spikeBaht = v => v == null ? '—' : '฿' + fmtN(v);
 const _spikePct = (v, dp) => v == null ? '—' : Number(v).toLocaleString('th-TH', { minimumFractionDigits: dp, maximumFractionDigits: dp });
 function _spikeCostNote(s) {
@@ -882,6 +881,8 @@ function _spikeBackChip(m) {
     + (m.first_sold_ever ? ` · ขายครั้งแรก ${fmtDateTh(m.first_sold_ever)}` : '') + ' · นับเป็นเมนูใหม่ 28 วันนับจากวันที่กลับมาขาย';
   return ` <span class="sp-back-chip" title="${esc(tip)}">กลับมาขาย</span>`;
 }
+// DV3 (2026-10-25): this section is no longer drawn on the menu-spike card (spikeHvLoad / spikeHvHtml are not called from it); DV4 moves the
+// view into High Value Product Monitor. /api/sales/ingredient-groups-plates stays as it is.
 // ── owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน ("เอาไปโชว์ในเมนูยอดขาย ต่อท้าย เมนูใหม่ แต่โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน และให้
 // เลือกช่วงเวลาได้"): the 8 groups of the High Value Product Monitor (backend/ingredient_groups.py, one definition) in PLATES only, after the
 // เมนูใหม่ section, on the card's own period (its chips, กำหนดเอง and เทียบกับ: base_from / base_to) and branch select
@@ -1077,29 +1078,59 @@ function _spHvCsv() {
 }
 // PR-RK · the chip threshold of the answer (1.5 -> "1.5")
 function _spikeThr(d) { const t = d && d.threshold != null ? Number(d.threshold) : 1.5; return String(Math.round(t * 100) / 100); }
+// DV3 · the floor of the dish list, in words ("≥ ฿1,000 หรือ ≥ 0.1% ของต้นทุนอาหาร" · "≥ 20 จาน")
+function _spikeFloorTxt(d) {
+  const f = (d && d.dish_floor) || {};
+  return f.baht != null ? `≥ ฿${fmtN(f.baht)} หรือ ≥ ${f.share_pct}% ของต้นทุนอาหาร` : `≥ ${fmtN(f.plates != null ? f.plates : 20)} จาน`;
+}
+function _spikeNewFloorTxt(d) {
+  const f = (d && d.new_dish_floor) || {};
+  return `≥ ${fmtN(f.per_day != null ? f.per_day : 20)} จาน/วัน` + (f.baht != null ? ` หรือ ≥ ฿${fmtN(f.baht)}` : '');
+}
+// DV3 · สาขาที่ดัน (chain view): the top 3 branches with their ฿ (plates without cost), "+N" more
+function _spikePushTxt(x, cv) {
+  if (!x.pushers || !x.pushers.length) return '';
+  const byC = cv && !x.uncosted;
+  const parts = x.pushers.map(p => `${p.branch} ${byC && p.extra_cost != null ? '฿' + fmt(p.extra_cost) : '+' + fmtN(p.excess) + ' จาน'}`);
+  if (x.pushers_more) parts.push(`อีก ${fmtN(x.pushers_more)} สาขา`);
+  return parts.join(' · ');
+}
+// DV3 · ขาย N สาขา (chain view of a new dish): the top 3 branches by plates, "+N" more
+function _spikeSoldTxt(x) {
+  const parts = (x.top || []).map(b => `${b.branch} ${fmtN(b.qty)}`);
+  if (x.more) parts.push(`อีก ${fmtN(x.more)} สาขา`);
+  return parts.join(' · ');
+}
 function spikeExport() {
   const d = _spikeLast;
-  const sp = (d && d.spikes) || [], nm = (d && d.new_menus) || [];
-  const hv = _spHvCsv();
-  if (!d || (!sp.length && !nm.length && !(d.spikes_plates || []).length && !hv.length)) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
+  const sp = (d && d.spikes) || [], nm = (d && d.new_menus) || [], ds = (d && d.dishes) || [], nd = (d && d.new_dishes) || [];
+  if (!d || (!sp.length && !nm.length && !ds.length && !nd.length && !(d.spikes_plates || []).length)) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
   const per = !!d.period && d.period !== 'day';
   const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-  // PR-SN: one file, two parts - the section column tells เมนูเดิม (spike) from เมนูใหม่ (first sold < 4 weeks ago)
-  // PR-SC: a role that sees cost also gets ต้นทุนต่อจาน · ต้นทุนเพิ่ม · % ของต้นทุนอาหาร · จุด, and a new menu its cost of the period
   const cv = !!d.cost_view;
-  // PR-TD: the table's order (เพิ่มจาก tier before the figures, ต้นทุน last); a chosen comparison period names its columns ช่วงเทียบ
   const vb = !!(d.base && d.base.kind === 'range'), nb = vb ? `ช่วงเทียบ ${d.base.from} ถึง ${d.base.to}` : 'ปกติ';
+  // DV3 · block 1 = the card's answer, one row per dish (every branch summed in the chain view): เมนูเดิม by net extra cost, then เมนูใหม่
+  const dHead = ['ส่วน', 'เมนู', 'สาขาที่ขาย', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', `${nb} (จาน)`, '+จาน สุทธิ', 'จาน/วัน', 'สูงกว่า (เท่า)', 'แนวโน้ม (%)',
+    'กลับมาขาย (สาขา)', d.view === 'chain' ? 'สาขาที่ดัน / สาขาที่ขาย' : 'สาขา', 'ถึงเกณฑ์', 'สะสม (%)']
+    .concat(cv ? ['ต้นทุนเพิ่มสุทธิ (บาท)', '% ของต้นทุนอาหาร', 'ต้นทุน ช่วงนี้ (บาท)'] : []);
+  const brName = d.view === 'chain' ? '' : (_spikeOneBr || '');
+  const dRows = ds.map(x => [cv ? 'เมนูเดิม · ดันต้นทุนเพิ่มสุทธิ' : 'เมนูเดิม · จานเพิ่มสุทธิ', x.menu, x.branches, x.today, x.expected, x.excess, '', x.x != null ? x.x : '', '', '',
+    d.view === 'chain' ? _spikePushTxt(x, cv) : brName, x.material ? 'ใช่' : '', x.cum_pct != null ? x.cum_pct : '']
+    .concat(cv ? [x.uncosted ? '' : x.net_cost, x.uncosted ? '' : x.cost_share, ''] : []))
+    .concat(nd.map(x => ['เมนูใหม่', x.menu, x.branches, x.qty, '', '', x.per_day, '', x.trend_pct != null ? x.trend_pct : '', x.returning || '',
+      d.view === 'chain' ? _spikeSoldTxt(x) : brName, x.material ? 'ใช่' : '', '']
+      .concat(cv ? ['', '', x.uncosted ? '' : x.period_cost] : [])));
+  // block 2 = the rows per branch x menu (as before DV3), the raw-plates list (แบบเดิม) included: the file keeps every detail
   const head = ['ส่วน', 'เมนู', 'สาขา', 'เพิ่มจาก tier', per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', 'ต่อวัน', 'ลูกค้า', 'ฐานลูกค้า', 'จาน/100 ลูกค้า',
     `${nb} (จาน/100 ลูกค้า)`, `${nb} (จาน)`, '+จาน', 'สูงกว่า (เท่า)', 'เริ่มขาย', 'ขายมาแล้ว (วัน)', 'แนวโน้ม (%)', 'กลับมาขาย',
     'ขายครั้งแรก', 'หมายเหตุ']
     .concat(cv ? ['ต้นทุนต่อจาน (บาท)', 'ต้นทุนเพิ่ม (บาท)', '% ของต้นทุนอาหาร', 'จุด (ต้นทุนอาหาร %)', 'ต้นทุน ช่วงนี้ (บาท)'] : []);
-  // PR-RK: the existing-menu list is a ranking now; the old rule (x >= the threshold) is a note on its row
-  const oldSec = cv ? 'เมนูเดิม · ดันต้นทุนเพิ่มสูงสุด' : 'เมนูเดิม · จานเพิ่มสูงสุด', thrTxt = _spikeThr(d);
+  const oldSec = cv ? 'รายสาขา · เมนูเดิม · ต้นทุนเพิ่ม' : 'รายสาขา · เมนูเดิม · จานเพิ่ม', thrTxt = _spikeThr(d);
   const rows = sp.map(s => [oldSec, s.menu, s.branch, s.tiers ? _spikeTierText(s) : (s.tier_note || ''), s.today, s.per_day, s.customers,
     _SPIKE_BASIS[s.basis] || '', s.rate, s.normal_rate, s.expected, s.excess, s.x != null ? s.x : '', '', '', '', '', '',
     [s.spike ? `พุ่ง ≥${thrTxt}×` : '', s.thin_base ? (vb ? 'ขายน้อยในช่วงเทียบ' : 'ขายน้อยช่วงก่อน') : '', s.tier_to ? `แยก tier ถึง ${fmtDateTh(s.tier_to)}` : '', cv ? _spikeCostNote(s) : ''].filter(Boolean).join(' · ')]
     .concat(cv ? [s.unit_cost, s.extra_cost, s.cost_share, s.extra_cost_per_head_pp, ''] : []))
-    .concat(nm.map(m => ['เมนูใหม่', m.menu, m.branch, '', m.qty, m.per_day, m.customers, _SPIKE_BASIS[m.basis] || '', m.rate, '', '', '', '',
+    .concat(nm.map(m => ['รายสาขา · เมนูใหม่', m.menu, m.branch, '', m.qty, m.per_day, m.customers, _SPIKE_BASIS[m.basis] || '', m.rate, '', '', '', '',
       m.first_sold, m.age_days, m.trend && m.trend.pct != null ? m.trend.pct : '', m.returning ? 'ใช่' : '', m.returning ? (m.first_sold_ever || '') : '',
       cv ? _spikeCostNote(m) : '']
       .concat(cv ? [m.unit_cost, '', '', '', m.period_cost] : [])))
@@ -1107,43 +1138,52 @@ function spikeExport() {
       s.excess, s.x != null ? s.x : '', '', '', '', '', '', [s.thin_base ? (vb ? 'ขายน้อยในช่วงเทียบ' : 'ขายน้อยช่วงก่อน') : '', s.in_per_head ? `อยู่ในส่วนต่อหัวด้วย (พุ่ง ≥${thrTxt}×)` : ''].filter(Boolean).join(' · ')]
       .concat(cv ? ['', '', '', '', ''] : [])));
   const span = (per ? `${d.date_from}_${d.date_to}` : (d.date || '')) + (vb ? `_vs_${d.base.from}_${d.base.to}` : '');
-  const all = [head].concat(rows).concat(hv.length ? [[]].concat(hv) : []);
+  const all = [dHead].concat(dRows).concat([[]], [head], rows);
   downloadCSV(all.map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
 }
-// PR-TD (owner 2026-10-25) · the strip under the controls: four small tiles (2-up on a phone). ลูกค้า ช่วงนี้ (customers per day vs the base),
-// เมนูพุ่ง (เมนูเดิม · เมนูใหม่), ต้นทุนเพิ่มรวม of the first `top` rows (cost roles; จานเกินรวม for the others), the tier that adds the most plates.
-function _spikeStrip(d, spAll, top, vsBase) {
+// PR-TD (owner 2026-10-25) · the strip under the controls: four small tiles (2-up on a phone). DV3: ลูกค้า ช่วงนี้ · เมนูที่ถึงเกณฑ์ (เมนูเดิม,
+// เมนูใหม่) · ต้นทุนเพิ่มสุทธิ = every dish above its normal minus every dish below it (cost roles; จานเพิ่มสุทธิ for the others) · the tier
+// that adds the most plates.
+function _spikeStrip(d, vsBase) {
   const st = document.getElementById('spikeStrip'); if (!st) return;
-  const sm = d.summary || {}, cv = !!d.cost_view, n = Math.min(top, spAll.length);
+  const sm = d.summary || {}, cv = !!d.cost_view, dt = d.dish_totals || {};
   const pct = sm.customers_vs_base_pct;
-  const nHi = d.spike_count != null ? d.spike_count : spAll.filter(s => s.spike !== false).length;
   const pctTxt = pct == null ? '' : `${vsBase ? 'เทียบช่วงเทียบ' : 'เทียบปกติ'} ${pct > 0 ? '+' : pct < 0 ? '−' : '±'}${_spikePct(Math.abs(pct), 1)}% ต่อวัน`;
   const tile = (id, label, value, sub, opts = {}) => `<div class="sp-tile${opts.cls ? ' ' + opts.cls : ''}"${id ? ` id="${id}"` : ''}${opts.title ? ` title="${esc(opts.title)}"` : ''}>`
     + `<div class="sp-tile-l">${label}${opts.q || ''}</div><div class="sp-tile-v"${opts.ink ? ` style="color:${opts.ink}"` : ''}>${value}</div>${sub ? `<div class="sp-tile-s">${sub}</div>` : ''}</div>`;
+  const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '±');
+  const ink = v => v > 0 ? 'var(--bad-ink)' : v < 0 ? 'var(--good-ink)' : '';
+  const nMat = d.dish_material_count != null ? d.dish_material_count : 0, nNew = d.new_dish_material_count != null ? d.new_dish_material_count : 0;
+  const nHi = (d.dishes || []).filter(x => x.spike && x.material).length;
   const tiles = [
     tile('', 'ลูกค้า ช่วงนี้', sm.customers ? fmtN(sm.customers) : '—', esc(pctTxt), { title: sm.customers_per_day != null
       ? `ต่อวัน ${fmtN(sm.customers_per_day)} คน${sm.base_customers_per_day != null ? ` · ${vsBase ? 'ช่วงเทียบ' : 'ปกติ'} ${fmtN(sm.base_customers_per_day)} คนต่อวัน` : ''}` : '' }),
-    // PR-RK: the tile counts the rows of the old rule (spike_count, >= the threshold); the list above ranks every menu above normal
-    tile('', 'เมนูพุ่ง', `${fmtN(nHi)} <span class="sp-tile-u">รายการ</span>`, `เมนูเดิม ≥${_spikeThr(d)}× · เมนูใหม่ ${fmtN(d.new_count || 0)}`,
-      { ink: nHi > 0 ? 'var(--bad-ink)' : '' }),
-    cv && d.top_extra_cost != null
-      ? tile('spikeCost', 'ต้นทุนเพิ่มรวม', _spikeBaht(d.top_extra_cost),
-        `${d.top_cost_share != null ? `${_spikePct(d.top_cost_share, 1)}% ของต้นทุนอาหาร · ` : ''}${fmtN(n)} อันดับแรกที่แสดง`,
-        { ink: (d.top_extra_cost || 0) > 0 ? 'var(--bad-ink)' : '', cls: 'sp-tile-cost',
-          q: ' <button type="button" id="spikeCostQ" class="ui-q" aria-label="คำอธิบาย ต้นทุนเพิ่ม" aria-haspopup="dialog" data-help="hlp-dailysales-spike-cost" title="คำอธิบาย">?</button>',
-          title: `ต้นทุนอาหารช่วงนี้ ${_spikeBaht(d.food_cost_total)} · ยอดขายสุทธิ ${_spikeBaht(d.revenue_total)}${d.top_pp != null ? ` · +${_spikePct(d.top_pp, 2)} จุดของต้นทุนอาหาร %` : ''}` })
-      : tile('spikeExcess', 'จานเกินรวม', sm.top_excess != null ? `+${fmtN(sm.top_excess)} <span class="sp-tile-u">จาน</span>` : '—', `${fmtN(n)} อันดับแรกที่แสดง`),
+    tile('spikeMat', 'เมนูที่ถึงเกณฑ์', `${fmtN(nMat)} <span class="sp-tile-u">เมนู</span>`, `เมนูใหม่ ${fmtN(nNew)} · พุ่ง ≥${_spikeThr(d)}× ${fmtN(nHi)}`,
+      { title: `เกณฑ์ เมนูเดิม ${_spikeFloorTxt(d)} · เมนูใหม่ ${_spikeNewFloorTxt(d)}` }),
+    cv && dt.net_cost != null
+      ? tile('spikeCost', 'ต้นทุนเพิ่มสุทธิ', `${sg(dt.net_cost)}฿${fmt(Math.abs(dt.net_cost))}`,
+        `เพิ่ม ฿${fmt(dt.up_cost || 0)} · ลด ฿${fmt(Math.abs(dt.down_cost || 0))}`,
+        { ink: ink(dt.net_cost), cls: 'sp-tile-cost',
+          q: ' <button type="button" id="spikeCostQ" class="ui-q" aria-label="คำอธิบาย ต้นทุนเพิ่มสุทธิ" aria-haspopup="dialog" data-help="hlp-dailysales-spike-cost" title="คำอธิบาย">?</button>',
+          title: `${dt.net_share != null ? `${sg(dt.net_share)}${_spikePct(Math.abs(dt.net_share), 2)}% ของต้นทุนอาหาร ${_spikeBaht(d.food_cost_total)} · ` : ''}`
+            + `${dt.net_pp != null ? `${sg(dt.net_pp)}${_spikePct(Math.abs(dt.net_pp), 2)} จุดของต้นทุนอาหาร % · ` : ''}ยอดขายสุทธิ ${_spikeBaht(d.revenue_total)}` })
+      : tile('spikeExcess', 'จานเพิ่มสุทธิ', dt.net_excess != null ? `${sg(dt.net_excess)}${fmtN(Math.abs(Math.round(dt.net_excess)))} <span class="sp-tile-u">จาน</span>` : '—',
+        dt.up_excess != null ? `เพิ่ม ${fmtN(Math.round(dt.up_excess))} · ลด ${fmtN(Math.abs(Math.round(dt.down_excess || 0)))}` : '', { ink: ink(dt.net_excess || 0) }),
     tile('', 'tier ที่ดันมากสุด', sm.tier_top ? esc(sm.tier_top.label) : '—', sm.tier_top ? `+${fmtN(sm.tier_top.excess)} จาน` : 'ไม่มีข้อมูลแยก tier'),
   ];
   st.innerHTML = tiles.join('');
   st.hidden = false;
 }
+// DV3 (owner 2026-10-25, "อย่าลืมให้ filter ได้ด้วย") · the card keeps its own period chips and FOLLOWS the top bar's branch: a change of the
+// top bar's branch (or the phone's branch chip, the same #selBranch) moves this card's select to it; the card's own select then narrows the
+// card alone until the top bar changes again. A pinned login (PR-K) has no select (data-branch-picker): the top bar's hidden branch rules.
+let _spikeTopBr = null;
 async function renderMenuSpike(focusDate) {
   const el = document.getElementById('dsSpike'); if (!el) return;
   if (focusDate) _spikeFocus = focusDate;     // remember focus across branch-picker changes
   _spikeChips();
   // populate the local branch picker once
-  const bsel = document.getElementById('spikeBranch');
+  const bsel = /** @type {HTMLSelectElement|null} */ (document.getElementById('spikeBranch'));
   if (bsel && !_spikeBranchesLoaded) {
     try {
       const bl = await api(`${API}/api/branches`);
@@ -1152,6 +1192,12 @@ async function renderMenuSpike(focusDate) {
       bsel.innerHTML = '<option value="">ทุกสาขา</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
       _spikeBranchesLoaded = true;
     } catch (e) {}
+  }
+  const topBr = getBranch() || '';
+  if (bsel && topBr !== _spikeTopBr) {
+    if (topBr && ![...bsel.options].some(o => o.value === topBr)) bsel.insertAdjacentHTML('beforeend', `<option value="${esc(topBr)}">${esc(topBr)}</option>`);
+    bsel.value = topBr;
+    _spikeTopBr = topBr;
   }
   const mode = _spikeMode.m;
   if (mode === 'range' && !(_spikeMode.f && _spikeMode.t)) { spikeSetMode('range'); el.innerHTML = '<p class="text-xs py-2" style="color:var(--text-muted)">เลือกช่วงวันที่ จาก–ถึง แล้วกด แสดง</p>'; return; }
@@ -1163,12 +1209,10 @@ async function renderMenuSpike(focusDate) {
     if (_spikeMode.bk && _spikeMode.bk !== 'normal' && _spikeMode.bf && _spikeMode.bt) { p.set('base_from', _spikeMode.bf); p.set('base_to', _spikeMode.bt); }
   }
   else if (_spikeFocus) p.set('date', _spikeFocus);
-  const localBr = bsel?.value || '';
-  // one branch chosen (this card's picker or the page's branch filter): no สาขา column, the name once in the header chip
-  const oneBr = localBr || getBranch() || '';
+  // one branch chosen (this card's select, which follows the top bar): the branch view - rows per dish of that branch, its name in the chip
+  const oneBr = bsel ? (bsel.value || '') : topBr;
   if (oneBr) p.set('branch', oneBr);
   if (getGroup()) p.set('group', getGroup());
-  spikeHvLoad(p);                                // วัตถุดิบมูลค่าสูง · จำนวนจาน: the same period, base and branch, in parallel
   const seq = ++_spikeSeq;
   let d;
   try { d = await api(`${API}/api/sales/menu-spike?${p}`); } catch (e) { if (seq === _spikeSeq) el.innerHTML = ''; return; }
@@ -1185,6 +1229,12 @@ async function renderMenuSpike(focusDate) {
   _spikeLast = d; _spikeOneBr = oneBr;
   _spikeDraw(d, oneBr);
 }
+// DV3 (phone table review 2026-10-25, top-10 #3) · two parts, one row per DISH:
+//   เมนูเดิม · ดันต้นทุนเพิ่มสุทธิ (d.dishes): chain view = every branch summed, NET extra cost (ups minus downs), สาขาที่ดัน under the name;
+//   one branch = rows per dish of that branch with its tiers. The rows at or above the floor (material, first `top`) show first; ดูทั้งหมด (N)
+//   opens every dish above its normal (remembered on this device). ต้นทุนเพิ่มสุทธิ carries its share of the food cost, สะสม the cumulative %.
+//   เมนูใหม่และเมนูที่กลับมาขาย (d.new_dishes): grouped per dish the same way, its own floor, FOLDED by default (remembered).
+// The rows per branch x menu and the raw-plates list (แบบเดิม) are in the CSV only.
 function _spikeDraw(d, oneBr) {
   const el = document.getElementById('dsSpike'); if (!el) return;
   const rangeEl = document.getElementById('spikeRange'), cntEl = document.getElementById('spikeCount');
@@ -1203,143 +1253,102 @@ function _spikeDraw(d, oneBr) {
     const txt = [oneBr, span].filter(Boolean).join(' · '); rangeEl.textContent = txt; rangeEl.hidden = !txt;
   }
   const subEl = document.getElementById('spikeSubTxt');
-  const thr = _spikeThr(d), thrN = d.threshold != null ? Number(d.threshold) : 1.5;
+  const thr = _spikeThr(d);
   if (subEl) subEl.textContent = vsBase ? `เทียบต่อหัวกับช่วง ${_spikeSpan(d.base.from, d.base.to)} · ป้าย พุ่ง = ≥${thr}×` : `เทียบต่อหัวกับปกติ · ป้าย พุ่ง = ≥${thr}×`;
-  const spAll = d.spikes || [], nm = d.new_menus || [];
-  const nSp = d.count || 0, nNew = d.new_count != null ? d.new_count : nm.length;
-  const cv = !!d.cost_view, top = d.top || 15;
-  const sp = _spikeAll ? spAll : spAll.slice(0, top);
+  const cv = !!d.cost_view, top = d.top || 15, chain = (d.view || (oneBr ? 'branch' : 'chain')) === 'chain';
   if (cntEl) cntEl.textContent = '';
-  _spikeStrip(d, spAll, top, vsBase);
-  const shown = (n, k) => n > k ? ` · แสดง ${fmtN(k)}` : '';
-  const hNow = per ? 'ช่วงนี้' : 'วันนี้';
+  _spikeStrip(d, vsBase);
+  const nowW = per ? 'ช่วงนี้' : 'วันนี้', normW = vsBase ? 'ช่วงเทียบ' : 'ปกติ';
   const num1 = v => v == null ? '—' : Number(v).toLocaleString('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  // PR-ST: the branch is a grey line under the menu name (ทุกสาขา only); one branch chosen = its name once in the header chip
-  const nameTd = (menu, b, chip) => `<td class="sp-name"><span class="sp-menu" title="${esc(menu)}">${esc(menu)}</span>${chip || ''}${oneBr ? '' : `<div class="sp-br">${esc(b)}</div>`}</td>`;
   const thead = cols => `<thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">${cols}</tr></thead>`;
-  const basisTip = s => s.basis === 'days' ? 'สาขานี้ไม่มีจำนวนลูกค้า เทียบเป็นจานต่อวัน'
-    : `${fmtN(s.today != null ? s.today : s.qty)} จาน ÷ ${_SPIKE_BASIS[s.basis]} ${fmtN(s.customers)} คน × 100`;
-  const tierCell = s => {
-    if (!s.tiers) return `<td class="sp-tier" title="${esc(s.tier_note || '')}"><span style="color:var(--text-muted)">—</span></td>`;
-    const pos = _spikeTierChips(s);
-    const tip = s.tiers.map(t => `${t.label}: ${fmtN(t.plates)} จาน · ลูกค้า ${fmtN(t.customers)} · ${num1(t.rate)} ต่อ 100 ลูกค้า (ปกติ ${num1(t.normal_rate)}) · ${t.excess >= 0 ? '+' : '−'}${num1(Math.abs(t.excess))} จาน`);
-    if (s.tier_to) tip.push(`แยก tier ถึง ${fmtDateTh(s.tier_to)}`);
-    if (s.tier_rest != null && Math.abs(s.tier_rest) >= 1) tip.push(`${s.tier_rest > 0 ? '+' : '−'}${num1(Math.abs(s.tier_rest))} จาน มาจากสัดส่วนลูกค้าแต่ละ tier ที่เปลี่ยนไป`);
-    // data-ph-line: the phone's card and row sheet draw each of these as its own line (label left, value right; "hi" = bad ink)
-    const lines = pos.slice(0, _SPIKE_TIER_SHOW).map(t => `<div class="sp-tl${t.high ? ' sp-tl-hi' : ''}" data-ph-line="${t.high ? 'hi' : ''}"><span class="sp-tl-k">${esc(t.label)}</span> <span class="sp-tl-v">+${fmtN(Math.round(t.excess))}</span></div>`);
-    if (pos.length > _SPIKE_TIER_SHOW) lines.push(`<div class="sp-tl-more" data-ph-line="">+${fmtN(pos.length - _SPIKE_TIER_SHOW)} tier</div>`);
-    const body = lines.length ? `<div class="sp-tls">${lines.join('')}</div>` : '<span style="color:var(--text-muted)">—</span>';
-    return `<td class="sp-tier" title="${esc(tip.join('\n'))}">${body}${s.tier_to ? `<div class="sp-perday">ถึง ${esc(fmtDateTh(s.tier_to))}</div>` : ''}</td>`;
+  const pctOf = v => v == null ? '—' : v > 0 && v < 0.05 ? '&lt;0.1' : _spikePct(v, v >= 10 ? 0 : 1);
+  // ── เมนูเดิม · by dish ──
+  const dsAll = d.dishes || [], dMat = dsAll.filter(x => x.material);
+  const nDish = d.dish_count != null ? d.dish_count : dsAll.length, nMat = d.dish_material_count != null ? d.dish_material_count : dMat.length;
+  const ds = _spikeAll ? dsAll : dMat.slice(0, top);
+  const floorTxt = _spikeFloorTxt(d);
+  const hiChip = x => x.spike ? ` <span class="sp-hi-chip" title="${esc(`สูงกว่า${normW}ตั้งแต่ ${thr} เท่า และอย่างน้อย 5 จาน${chain ? ` · พุ่งที่ ${fmtN(x.spike_branches)} สาขา` : ''}`)}">พุ่ง ≥${thr}×</span>` : '';
+  const subLine = x => {
+    if (chain) {
+      const t = _spikePushTxt(x, cv);
+      return t ? `<div class="sp-push" data-ph-line="">สาขาที่ดัน: ${esc(t)}</div>` : '';
+    }
+    const tt = x.tiers ? _spikeTierText(x) : '';
+    return (tt ? `<div class="sp-push" data-ph-line="">เพิ่มจาก tier: ${esc(tt)}</div>` : '')
+      + (x.rate != null ? `<div class="sp-push" data-ph-line="">${num1(x.rate)} ต่อ 100 ลูกค้า · ${normW} ${num1(x.normal_rate)}</div>` : '');
   };
-  const rateCell = s => s.rate != null
-    ? `<td class="sp-num" title="${esc(basisTip(s))}"><div class="sp-v" data-ph-line="">${num1(s.rate)}</div><div class="sp-perday" data-ph-line="">${fmtN(s.today)} จาน · +${fmtN(s.excess)}</div></td>`
-    : `<td class="sp-num" title="${esc(basisTip(s))}"><div class="sp-v" data-ph-line="">${fmtN(s.today)}</div><div class="sp-perday" data-ph-line="">จาน · +${fmtN(s.excess)}</div></td>`;
-  const costTd = s => {
-    const note = _spikeCostNote(s);
-    if (note) return `<td class="sp-num"><span class="sp-nocost">${note}</span></td>`;
-    const bad = s.extra_cost > 0;
-    const tip = `+${num1(s.excess)} จาน × ${_spikeBaht(s.unit_cost)} ต่อจาน`;
-    // PR-TD: ฿ (bold, bad ink) · % of the food cost · points, one line each, never broken inside a line
-    return `<td class="sp-num sp-cost-td" title="${esc(tip)}"><div class="sp-v" data-ph-line="${bad ? 'hi' : ''}" style="color:${bad ? 'var(--bad-ink)' : 'var(--text-secondary)'}">${_spikeBaht(s.extra_cost)}</div>`
-      + `<div class="sp-perday" data-ph-line="">${s.cost_share > 0 && s.cost_share < 0.05 ? '&lt;0.1' : _spikePct(s.cost_share, 1)}% ของต้นทุนอาหาร</div>`
-      + `<div class="sp-perday" data-ph-line="">${bad ? '+' : ''}${s.extra_cost_per_head_pp > 0 && s.extra_cost_per_head_pp < 0.005 ? '&lt;0.01' : _spikePct(s.extra_cost_per_head_pp, 2)} จุด</div></td>`;
+  const nameTd = x => `<td class="sp-name"><span class="sp-menu" title="${esc(x.menu)}">${esc(x.menu)}</span>${hiChip(x)}${subLine(x)}</td>`;
+  const netTd = x => {
+    if (x.uncosted) return '<td class="sp-num"><span class="sp-nocost">ยังไม่มีต้นทุน</span></td>';
+    return `<td class="sp-num sp-cost-td" title="${esc(`ต้นทุนเพิ่มสุทธิ ${_spikeBaht(x.net_cost)} · ${x.net_pp != null ? _spikePct(x.net_pp, 2) + ' จุดของต้นทุนอาหาร %' : ''}`)}">`
+      + `<div class="sp-v" data-ph-line="hi" style="color:var(--bad-ink)">${_spikeBaht(Math.round(x.net_cost))}</div>`
+      + `<div class="sp-perday" data-ph-line="">${pctOf(x.cost_share)}% ของต้นทุนอาหาร</div></td>`;
   };
-  // PR-RK · a ranked row that also passes the old rule (x >= the threshold, >= 5 plates)
-  const _spHi = s => s.spike != null ? !!s.spike : s.x >= thrN;    // the red × follows the chip (x is rounded: 1.48 shows ×1.5)
-  const hiChip = s => s.spike ? ` <span class="sp-hi-chip" title="${esc(`สูงกว่า${vsBase ? 'ช่วงเทียบ' : 'ปกติ'}ตั้งแต่ ${thr} เท่า และอย่างน้อย 5 จาน`)}">พุ่ง ≥${thr}×</span>` : '';
-  const normTd = s => `<td class="sp-num"><span class="sp-v sp-v2">${s.normal_rate != null ? num1(s.normal_rate) : fmtN(s.expected)}</span></td>`;
-  // PR-SN (owner 2026-10-24) · two parts: existing menus that spiked, then new menus (first sold at the branch < 4 weeks before the
-  // period end; after 4 weeks a menu moves to the existing part and the spike rule)
-  const oldHtml = !sp.length
-    ? `<p class="sp-empty">ไม่พบเมนูเดิมที่สูงกว่า${vsBase ? 'ช่วงเทียบ' : 'ปกติ'}ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
-    : `<div class="sp-box${sp.length < spAll.length || spAll.length <= top ? ' sp-box-top' : ''}"><table class="sp-tbl sp-fixed w-full${cv ? ' sp-costed' : ''}" id="spikeTable">${_spikeCols(cv ? [3, 28, 16, 13, 13, 13, 14] : [3, 30, 18, 17, 16, 16])}${thead(`
-    <th class="sp-rn">#</th><th class="sp-name-h">เมนู</th><th class="sp-tier-h">เพิ่มจาก tier</th>
-    <th class="text-right">${hNow} <span class="sp-unit">(จาน/100 ลูกค้า)</span></th><th class="text-right">${vsBase ? 'ช่วงเทียบ' : 'ปกติ'} <span class="sp-unit">(จาน/100 ลูกค้า)</span></th>
-    <th class="text-right">สูงกว่า</th>${cv ? '<th class="text-right">ต้นทุนเพิ่ม</th>' : ''}`)}<tbody>` +
-    sp.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+  const cumTd = x => `<td class="sp-num"><span class="sp-v sp-v2">${x.cum_pct != null ? _spikePct(x.cum_pct, 0) + '%' : '—'}</span></td>`;
+  const platesTd = x => `<td class="sp-num" title="${esc(`${nowW} ${fmtN(x.today)} จาน · ${normW} ${fmtN(x.expected)} จาน`)}"><div class="sp-v" data-ph-line="">+${fmtN(x.excess)}${x.thin_base && cv ? _spikeThinMk(vsBase) : ''}</div>`
+    + `<div class="sp-perday" data-ph-line="">${fmtN(x.today)} · ${normW} ${fmtN(x.expected)}</div></td>`;
+  const xTd = x => `<td class="sp-num">${x.x != null ? `<div class="sp-v" data-ph-line="${x.spike ? 'hi' : ''}" style="color:${x.spike ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${_spikePct(x.x, 2)}${x.thin_base ? _spikeThinMk(vsBase) : ''}</div>`
+    + (x.pct != null ? `<div class="sp-perday" data-ph-line="">${x.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(x.pct))}%</div>` : '') : '<div class="sp-v" data-ph-line="" style="color:var(--text-muted)">—</div>'}</td>`;
+  const allBtn = (id, on, n, fn, onTxt) => `<button type="button" class="sp-all" id="${id}" aria-expanded="${on ? 'true' : 'false'}" onclick="${fn}()">${on ? onTxt : `ดูทั้งหมด (${fmtN(n)})`}</button>`;
+  const oldBtn = dsAll.length > dMat.slice(0, top).length ? allBtn('spikeAllBtn', _spikeAll, nDish, 'spikeToggleAll', 'แสดงเฉพาะที่ถึงเกณฑ์') : '';
+  const oldHtml = !dsAll.length
+    ? `<p class="sp-empty">ไม่พบเมนูเดิมที่สูงกว่า${normW}ใน${nowW}</p>`
+    : (!ds.length ? `<p class="sp-empty" id="spikeNoMat">ไม่มีเมนูที่ถึงเกณฑ์ (${esc(floorTxt)})</p>`
+      : `<div class="sp-box sp-box-top"><table class="sp-tbl sp-fixed w-full${cv ? ' sp-costed' : ''}" id="spikeTable" data-view="${chain ? 'chain' : 'branch'}">${_spikeCols(cv ? [3, 47, 20, 10, 20] : [3, 47, 20, 15, 15])}${thead(cv
+        ? `<th class="sp-rn">#</th><th class="sp-name-h">เมนู</th><th class="text-right">ต้นทุนเพิ่มสุทธิ</th><th class="text-right">สะสม</th><th class="text-right">+จาน <span class="sp-unit">(สุทธิ)</span></th>`
+        : `<th class="sp-rn">#</th><th class="sp-name-h">เมนู</th><th class="text-right">+จาน <span class="sp-unit">(สุทธิ)</span></th><th class="text-right">สูงกว่า</th><th class="text-right">สะสม</th>`)}<tbody>`
+        + ds.map((x, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40${x.material ? '' : ' sp-under'}">
       <td class="sp-rn tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
-      ${nameTd(s.menu, s.branch, hiChip(s))}
-      ${tierCell(s)}
-      ${rateCell(s)}
-      ${normTd(s)}
-      <td class="sp-num">${s.x != null
-        ? `<div class="sp-v" data-ph-line="${_spHi(s) ? 'hi' : ''}" style="color:${_spHi(s) ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${s.x}${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>${s.pct != null ? `<div class="sp-perday" data-ph-line="">${s.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(s.pct))}%</div>` : ''}`
-        : `<div class="sp-v" data-ph-line="" style="color:var(--text-muted)">—${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>`}${s.thin_base ? _spikeThinLine(vsBase) : ''}</td>
-      ${cv ? costTd(s) : ''}
-    </tr>`).join('') + `</tbody></table></div>` + (spAll.length > top
-      ? `<button type="button" class="sp-all" id="spikeAllBtn" aria-expanded="${_spikeAll ? 'true' : 'false'}" onclick="spikeToggleAll()">${_spikeAll ? `แสดง ${fmtN(top)} รายการแรก`
-        : nSp > spAll.length ? `ดู ${fmtN(spAll.length)} รายการแรก (จาก ${fmtN(nSp)})` : `ดูทั้งหมด (${fmtN(spAll.length)})`}</button>` : '');
-  const trendCell = t => {
-    if (!t || t.pct == null) return '<span style="color:var(--text-muted)">—</span>';
-    const up = t.pct > 0, dn = t.pct < 0;
-    const ink = up ? 'var(--good-ink)' : dn ? 'var(--bad-ink)' : 'var(--text-secondary)';
-    const sub = t.first_rate != null ? `${num1(t.first_rate)} → ${num1(t.latest_rate)} ต่อ 100 ลูกค้า` : `${num1(t.first_per_day)} → ${num1(t.latest_per_day)} ต่อวัน`;
-    return `<div class="sp-v" style="color:${ink};font-weight:700">${up ? '▲ +' : dn ? '▼ −' : ''}${fmtN(Math.abs(t.pct))}%</div><div class="sp-perday">${sub}</div>`;
+      ${nameTd(x)}
+      ${cv ? netTd(x) + cumTd(x) + platesTd(x) : platesTd(x) + xTd(x) + cumTd(x)}
+    </tr>`).join('') + '</tbody></table></div>') + oldBtn;
+  // ── เมนูใหม่ · by dish, folded ──
+  const nd = d.new_dishes || [], ndMat = nd.filter(x => x.material);
+  const nNewD = d.new_dish_count != null ? d.new_dish_count : nd.length, nNewMat = d.new_dish_material_count != null ? d.new_dish_material_count : ndMat.length;
+  const nds = _spikeNewAll ? nd : ndMat.slice(0, top);
+  // PR-SX · more than half the listed new dishes without a dish cost: no ต้นทุน column (a wall of ยังไม่มีต้นทุน), a chip in the header
+  const ndCosted = nds.filter(x => !x.uncosted).length;
+  const ndCostCol = cv && nds.length > 0 && (nds.length - ndCosted) * 2 <= nds.length;
+  const ndCostChip = cv && nds.length > 0 && !ndCostCol
+    ? ` <span class="sp-gap-chip" id="spikeNewCostChip" title="${esc(`มีต้นทุน ${fmtN(ndCosted)} จาก ${fmtN(nds.length)} รายการ · ดูต้นทุนรายเมนูได้ในไฟล์ CSV`)}">ต้นทุนเมนูใหม่ยังไม่ครบ (${fmtN(ndCosted)}/${fmtN(nds.length)})</span>` : '';
+  const backChip = x => !x.returning ? '' : chain
+    ? ` <span class="sp-back-chip" title="${esc(`เมนูเดิมที่กลับมาขายที่ ${fmtN(x.returning)} สาขา · นับเป็นเมนูใหม่ 28 วันนับจากวันที่กลับมาขาย`)}">กลับมาขาย ${fmtN(x.returning)} สาขา</span>`
+    : _spikeBackChip({ returning: true, returned_on: x.returned_on || x.first_sold, first_sold_ever: x.first_sold_ever });
+  const newSub = x => chain
+    ? `<div class="sp-push" data-ph-line="">ขาย ${fmtN(x.branches)} สาขา: ${esc(_spikeSoldTxt(x))}</div>`
+    : `<div class="sp-push" data-ph-line="">เริ่มขาย ${esc(x.first_sold_th || fmtDateTh(x.first_sold))} · ${fmtN(x.age_days)} วัน</div>`;
+  const trendTd = x => {
+    const t = x.trend_pct;
+    if (t == null) return '<td class="sp-num"><span style="color:var(--text-muted)">—</span></td>';
+    const ink = t > 0 ? 'var(--good-ink)' : t < 0 ? 'var(--bad-ink)' : 'var(--text-secondary)';
+    return `<td class="sp-num"><span class="sp-v" style="color:${ink};font-weight:700">${t > 0 ? '▲ +' : t < 0 ? '▼ −' : ''}${fmtN(Math.abs(t))}%</span></td>`;
   };
-  // PR-SX (owner 2026-10-25) · more than half the listed new menus without a dish cost: no ต้นทุน column (a wall of ยังไม่มีต้นทุน), a chip in the header
-  const nmCosted = nm.filter(m => !_spikeCostNote(m)).length;
-  const nmCostCol = cv && nm.length > 0 && (nm.length - nmCosted) * 2 <= nm.length;
-  const nmCostChip = cv && nm.length > 0 && !nmCostCol
-    ? ` <span class="sp-gap-chip" id="spikeNewCostChip" title="${esc(`มีต้นทุน ${fmtN(nmCosted)} จาก ${fmtN(nm.length)} รายการ · ดูต้นทุนรายเมนูได้ในไฟล์ CSV`)}">ต้นทุนเมนูใหม่ยังไม่ครบ (${fmtN(nmCosted)}/${fmtN(nm.length)})</span>` : '';
-  const newHtml = !nm.length
-    ? `<p class="sp-empty">ไม่มีเมนูใหม่ที่ขายใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
-    : `<div class="sp-box"><table class="sp-tbl sp-fixed w-full" id="spikeNewTable">${_spikeCols(nmCostCol ? [3, 28, 9, 10, 9, 8, 10, 11, 12] : [3, 30, 10, 11, 10, 9, 12, 15])}${thead(`
-    <th class="sp-rn">#</th><th class="sp-name-h">เมนู</th>
-    <th class="text-right">เริ่มขาย</th><th class="text-right">ขายมาแล้ว (วัน)</th>
-    <th class="text-right">${hNow} (จาน)</th><th class="text-right">ต่อวัน</th>
-    <th class="text-right">ต่อ 100 ลูกค้า</th>${nmCostCol ? '<th class="text-right">ต้นทุน (ช่วงนี้)</th>' : ''}<th class="text-right">แนวโน้ม</th>`)}<tbody>` +
-    nm.map((m, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40${m.returning ? ' sp-back-row' : ''}">
+  const newBtn = nd.length > ndMat.slice(0, top).length ? allBtn('spikeNewAllBtn', _spikeNewAll, nNewD, 'spikeNewToggleAll', 'แสดงเฉพาะที่ถึงเกณฑ์') : '';
+  const newHtml = !nd.length
+    ? `<p class="sp-empty">ไม่มีเมนูใหม่ที่ขายใน${nowW}</p>`
+    : (!nds.length ? `<p class="sp-empty">ไม่มีเมนูใหม่ที่ถึงเกณฑ์ (${esc(_spikeNewFloorTxt(d))})</p>`
+      : `<div class="sp-box sp-box-top"><table class="sp-tbl sp-fixed w-full${ndCostCol ? ' sp-costed' : ''}" id="spikeNewTable">${_spikeCols(ndCostCol ? [3, 41, 14, 10, 10, 11, 11] : [3, 45, 12, 13, 14, 13])}${thead(`
+    <th class="sp-rn">#</th><th class="sp-name-h">เมนู</th>${ndCostCol ? '<th class="text-right">ต้นทุน <span class="sp-unit">(ช่วงนี้)</span></th>' : ''}
+    <th class="text-right">จาน/วัน</th><th class="text-right">${nowW} <span class="sp-unit">(จาน)</span></th><th class="text-right">ต่อ 100 ลูกค้า</th><th class="text-right">แนวโน้ม</th>`)}<tbody>`
+        + nds.map((x, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40${x.returning ? ' sp-back-row' : ''}">
       <td class="sp-rn tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
-      ${nameTd(m.menu, m.branch, _spikeBackChip(m))}
-      <td class="sp-num"><span class="sp-v2">${esc(m.first_sold_th || '')}</span></td>
-      <td class="sp-num"><span class="sp-v2">${fmtN(m.age_days)}</span></td>
-      <td class="sp-num"><span class="sp-v">${fmtN(m.qty)}</span></td>
-      <td class="sp-num"><span class="sp-v2">${num1(m.per_day)}</span></td>
-      <td class="sp-num" title="${esc(m.basis ? basisTip(m) : '')}"><span class="sp-v">${num1(m.rate)}</span></td>
-      ${nmCostCol ? (_spikeCostNote(m) ? `<td class="sp-num"><span class="sp-nocost">${_spikeCostNote(m)}</span></td>`
-        : `<td class="sp-num" title="${esc(`${fmtN(m.qty)} จาน × ${_spikeBaht(m.unit_cost)} ต่อจาน`)}"><span class="sp-v">${_spikeBaht(m.period_cost)}</span></td>`) : ''}
-      <td class="sp-num">${trendCell(m.trend)}</td>
-    </tr>`).join('') + `</tbody></table></div>`;
-  // PR-TD · แบบเดิม: raw plates vs the normal plates (or the chosen base), the simple old view, the very bottom of the card
-  const plRaw = d.spikes_plates || [], nPl = d.plates_count != null ? d.plates_count : plRaw.length;
-  const nPlOnly = d.plates_only_count != null ? d.plates_only_count : plRaw.filter(r => !r.in_per_head).length;
-  const plAll = _spikePlOnly ? plRaw.filter(r => !r.in_per_head) : plRaw, nPlList = _spikePlOnly ? nPlOnly : nPl;
-  const pl = _spikePlAll ? plAll : plAll.slice(0, top);
-  const dupChip = s => s.in_per_head ? ` <span class="sp-dup-chip" title="${esc(`เมนูนี้พุ่ง ≥${thr}× แบบต่อหัวด้วย (มีป้าย พุ่ง ในส่วนเมนูเดิม)`)}">อยู่ในส่วนต่อหัวด้วย</span>` : '';
-  const plHtml = !pl.length
-    ? `<p class="sp-empty">${_spikePlOnly && plRaw.length ? 'ทุกเมนูในส่วนนี้อยู่ในส่วนต่อหัวแล้ว' : `ไม่พบเมนูเดิมที่จำนวนจานสูงกว่า${vsBase ? 'ช่วงเทียบ' : 'ปกติ'} ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}`}</p>`
-    : `<div class="sp-box sp-box-top"><table class="sp-tbl sp-fixed w-full" id="spikePlatesTable">${_spikeCols([3, 32, 15, 15, 15, 20])}${thead(`
-    <th class="sp-rn">#</th><th class="sp-name-h">เมนู</th><th class="text-right">${hNow} <span class="sp-unit">(จาน)</span></th>
-    <th class="text-right">${vsBase ? 'ช่วงเทียบ' : 'ปกติ'} <span class="sp-unit">(จาน)</span></th><th class="text-right">+จาน</th><th class="text-right">สูงกว่า</th>`)}<tbody>` +
-    pl.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
-      <td class="sp-rn tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
-      ${nameTd(s.menu, s.branch, dupChip(s))}
-      <td class="sp-num"><span class="sp-v">${fmtN(s.today)}</span></td>
-      <td class="sp-num"><span class="sp-v2">${fmtN(s.expected)}</span></td>
-      <td class="sp-num"><span class="sp-v">+${fmtN(s.excess)}</span></td>
-      <td class="sp-num">${s.x != null ? `<div class="sp-v" data-ph-line="hi" style="color:var(--bad-ink);font-weight:700">×${s.x}${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>${s.pct != null ? `<div class="sp-perday" data-ph-line="">+${fmtN(s.pct)}%</div>` : ''}`
-        : `<div class="sp-v" data-ph-line="" style="color:var(--text-muted)">—${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>`}${s.thin_base ? _spikeThinLine(vsBase) : ''}</td>
-    </tr>`).join('') + '</tbody></table></div>' + (plAll.length > top
-      ? `<button type="button" class="sp-all" id="spikePlatesAll" aria-expanded="${_spikePlAll ? 'true' : 'false'}" onclick="spikePlatesAll()">${_spikePlAll ? `แสดง ${fmtN(top)} รายการแรก`
-        : nPlList > plAll.length ? `ดู ${fmtN(plAll.length)} รายการแรก (จาก ${fmtN(nPlList)})` : `ดูทั้งหมด (${fmtN(plAll.length)})`}</button>` : '');
-  // PR-RK (owner 2026-10-25, "เรียงผิด"): every existing menu above its normal, ranked by the cost of its extra plates (by extra plates
-  // without cost); the rows of the old 1.5x rule carry the พุ่ง chip
-  const oldTitle = cv ? 'เมนูเดิม · ดันต้นทุนเพิ่มสูงสุด' : 'เมนูเดิม · จานเพิ่มสูงสุด';
-  const nHi = d.spike_count != null ? d.spike_count : spAll.filter(s => s.spike).length;
+      <td class="sp-name"><span class="sp-menu" title="${esc(x.menu)}">${esc(x.menu)}</span>${backChip(x)}${newSub(x)}</td>
+      ${ndCostCol ? (x.uncosted ? '<td class="sp-num"><span class="sp-nocost">ยังไม่มีต้นทุน</span></td>'
+        : `<td class="sp-num"><span class="sp-v">${_spikeBaht(Math.round(x.period_cost))}</span></td>`) : ''}
+      <td class="sp-num"><span class="sp-v">${num1(x.per_day)}</span></td>
+      <td class="sp-num"><span class="sp-v2">${fmtN(x.qty)}</span></td>
+      <td class="sp-num"><span class="sp-v2">${num1(x.rate)}</span></td>
+      ${trendTd(x)}
+    </tr>`).join('') + '</tbody></table></div>') + newBtn;
+  const oldTitle = cv ? 'เมนูเดิม · ดันต้นทุนเพิ่มสุทธิ' : 'เมนูเดิม · จานเพิ่มสุทธิ';
   el.innerHTML = `<section class="sp-sec sp-sec-old" aria-label="${oldTitle}">
-      <h3 class="sp-h">${oldTitle} <span class="sp-n" id="spikeOldN" title="${esc(`ทั้งหมด ${fmtN(nSp)} รายการ · พุ่ง ≥${thr}× ${fmtN(nHi)} รายการ`)}">(${fmtN(nSp)} · พุ่ง ${fmtN(nHi)}${shown(nSp, sp.length)})</span>${cv ? '<span class="sp-sort">เรียงตามต้นทุนเพิ่ม</span>' : ''}</h3>${oldHtml}</section>
+      <h3 class="sp-h">${oldTitle}${chain ? ' <span class="sp-scope">รวมทุกสาขา</span>' : ''} <span class="sp-n" id="spikeOldN" title="${esc(`เกณฑ์ ${floorTxt} · ทั้งหมด ${fmtN(nDish)} เมนูที่สูงกว่า${normW}`)}">(${fmtN(nMat)} ถึงเกณฑ์ · ทั้งหมด ${fmtN(nDish)})</span>${cv ? '<span class="sp-sort">เรียงตามต้นทุนเพิ่มสุทธิ</span>' : '<span class="sp-sort">เรียงตามจานเพิ่มสุทธิ</span>'}</h3>${oldHtml}</section>
     <section class="sp-sec sp-sec-new" aria-label="เมนูใหม่">
-      <h3 class="sp-h"><span class="sp-long">เมนูใหม่และเมนูที่กลับมาขาย · ครบ 4 สัปดาห์แล้วย้ายเป็นเมนูเดิม</span><span class="sp-short">เมนูใหม่ (ไม่เกิน 4 สัปดาห์)</span>
+      <h3 class="sp-h"><span class="sp-long">เมนูใหม่และเมนูที่กลับมาขาย</span><span class="sp-short">เมนูใหม่</span>
         <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-new" title="คำอธิบาย">?</button>
-        <span class="sp-n">(${fmtN(nNew)}${shown(nNew, nm.length)})</span>${nmCostChip}</h3>${newHtml}</section>
-    <section class="sp-sec sp-sec-hv" id="spikeHvSec" aria-label="วัตถุดิบมูลค่าสูง จำนวนจาน">${spikeHvHtml()}</section>
-    <section class="sp-sec sp-sec-plates" aria-label="เมนูพุ่ง นับจำนวนจาน แบบเดิม">
-      <h3 class="sp-h">เมนูพุ่ง · นับจำนวนจาน (แบบเดิม)
-        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-plates" title="คำอธิบาย">?</button>
-        <span class="sp-n" id="spikePlatesN" title="${esc(`ทั้งหมด ${fmtN(nPl)} รายการ · ไม่อยู่ในส่วนต่อหัว ${fmtN(nPlOnly)} รายการ`)}">(${fmtN(nPl)} · ไม่ซ้ำ ${fmtN(nPlOnly)}${shown(nPlList, pl.length)})</span>
-        <button type="button" class="sp-flt" id="spikePlatesOnly" aria-pressed="${_spikePlOnly ? 'true' : 'false'}" onclick="spikePlatesOnly()">เฉพาะที่ไม่อยู่ในส่วนต่อหัว</button>
-        <button type="button" class="sp-fold" id="spikePlatesFold" aria-controls="spikePlatesBody" aria-expanded="${_spikePlOpen ? 'true' : 'false'}" onclick="spikePlatesFold()">${_spikePlOpen ? 'ซ่อน' : 'แสดง'}</button></h3>
-      <div id="spikePlatesBody"${_spikePlOpen ? '' : ' hidden'}>${plHtml}</div></section>`;
+        <span class="sp-n" id="spikeNewN" title="${esc(`เกณฑ์ ${_spikeNewFloorTxt(d)} · ทั้งหมด ${fmtN(nNewD)} เมนู`)}">(${fmtN(nNewMat)} ถึงเกณฑ์ · ทั้งหมด ${fmtN(nNewD)})</span>${ndCostChip}
+        <button type="button" class="sp-fold" id="spikeNewFold" aria-controls="spikeNewBody" aria-expanded="${_spikeNewOpen ? 'true' : 'false'}" onclick="spikeNewFold()">${_spikeNewOpen ? 'ซ่อน' : 'แสดง'}</button></h3>
+      <div id="spikeNewBody"${_spikeNewOpen ? '' : ' hidden'}>${newHtml}</div></section>`;
   if (typeof phCardsSchedule === 'function') phCardsSchedule();
 }
 
