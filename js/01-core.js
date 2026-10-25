@@ -2906,13 +2906,28 @@ function gPeriodForTab(tab) {
   gPeriodRender();
 }
 // the range chip beside the page title: '1–19 ต.ค. 2569 · ถึงวันที่ปิดยอดล่าสุด' (a period object with label_th / complete)
+// Owner 2026-10-25 ("ทำให้เลือกช่วงเวลาได้ด้วยนะครับ"): on a phone the chip is a one-line button ("1–24 ต.ค. 69 ▾", the year in two
+// digits) that opens the top bar's own period control in a bottom sheet (phPeriodOpen, js/09c-mobile.js) - the same #gPeriod, moved
+// into the sheet while it is open, so there is no second period state. A desktop shows the full span as before.
+// a button on a phone only (role, focus, label); a desktop keeps the plain chip
+function periodChipRole() {
+  const el = document.getElementById('gpRangeChip'); if (!el) return;
+  const on = phOn() && !!el.title;
+  if (on) { el.setAttribute('role', 'button'); el.tabIndex = 0; el.setAttribute('aria-haspopup', 'dialog'); el.setAttribute('aria-label', `ช่วงเวลา ${el.title} · แตะเพื่อเปลี่ยน`); }
+  else ['role', 'tabindex', 'aria-haspopup', 'aria-label'].forEach(a => el.removeAttribute(a));
+}
+function periodChipShort(r) { return r && r.label_th ? String(r.label_th).replace(/\b25(\d\d)\b/g, '$1') : ''; }
 function periodChip(r, fromServer) {
   const el = document.getElementById('gpRangeChip');
   if (!el) return;
   if (fromServer) _gpChipServer = true;
   const txt = (_gpChipOn && r && r.label_th) ? periodSpan(r) : '';
-  el.textContent = txt;
+  el.innerHTML = txt ? `<span class="gp-rc-l">${esc(txt)}</span><span class="gp-rc-s" aria-hidden="true">${esc(periodChipShort(r))}</span><span class="gp-rc-v" aria-hidden="true">▾</span>` : '';
+  el.title = txt;
+  periodChipRole();
   el.hidden = !txt;
+  const sh = document.getElementById('phpRange');
+  if (sh) sh.textContent = txt;
 }
 // the bar's period as the one a page asks the server for: kind + a day of it (the end of the period on screen)
 function gPeriodPick() {

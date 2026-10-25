@@ -2544,7 +2544,44 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .pkpi-cmp { margin-top: 6px; }
 .gp-range-chip { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-secondary); }
 .gp-range-chip[hidden], .gp .gran-btn[hidden] { display: none !important; }
-@media (max-width: 700px) { .gp-range-chip { white-space: normal; max-width: 100%; } }
+.gp-rc-s, .gp-rc-v { display: none; }
+/* owner 2026-10-25 · the phone: the chip is ONE line ("1–24 ต.ค. 69 ▾", ellipsis), a button that opens the period sheet (js/09c-mobile.js
+   "THE PERIOD SHEET"); drawn 28 px, 44 px to tap through an ::after */
+body.ph-on .gp-range-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important; min-width: 0 !important; max-width: 46vw;
+  padding: 0 10px; white-space: nowrap; overflow: hidden; font-size: 12px; cursor: pointer; color: var(--accent); border-color: var(--accent); background: var(--bg-card); }
+body.ph-on .gp-range-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+body.ph-on .gp-range-chip .gp-rc-l { display: none; }
+body.ph-on .gp-range-chip .gp-rc-s { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.ph-on .gp-range-chip .gp-rc-v { display: inline; flex: 0 0 auto; font-size: 12px; }
+body.ph-on .gp-range-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the sheet: the top bar's #gPeriod moved in while open, laid out as stacked rows (kinds, the stepper, จาก–ถึง) */
+.php-back { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 23, 42, .45); }
+.php-back[hidden] { display: none; }
+.php-box { width: 100%; max-width: 560px; box-sizing: border-box; max-height: 86vh; overflow-y: auto; background: var(--bg-card); color: var(--text-primary);
+  border-radius: 16px 16px 0 0; padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 24px rgba(15, 23, 42, .25); }
+.php-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 2px auto 8px; }
+.php-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.php-ht { flex: 1; min-width: 0; }
+.php-title { font-size: 16px; font-weight: 700; line-height: 1.3; }
+.php-range { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+.php-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--text-secondary); font-size: 18px; cursor: pointer; border-radius: var(--r-md); }
+.php-done { display: block; width: 100%; min-height: 44px; margin-top: 16px; border: 1px solid var(--accent); border-radius: var(--r-md); background: var(--accent);
+  color: var(--on-accent, #fff); font-size: 15px; font-weight: 700; cursor: pointer; }
+body.php-open { overflow: hidden; }
+.php-slot .gp { display: flex; flex-direction: column; align-items: stretch; gap: 12px; width: auto; max-width: none; overflow: visible; flex-wrap: nowrap; padding: 0; }
+.php-slot .gp > * { flex: 0 0 auto; }
+.php-slot .gp-step, .php-slot .gp-range { order: 0; }
+.php-slot .gp .pbar { display: flex; width: 100%; max-width: none; flex-wrap: nowrap; overflow: visible; }
+.php-slot .gp .pbar .gran-btn { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; font-size: 14px; }
+.php-slot .gp-step { display: flex; justify-content: space-between; }
+.php-slot .gp-step[hidden], .php-slot .gp-range[hidden], .php-slot .gp-chart[hidden] { display: none; }
+.php-slot .gp-arrow { min-width: 48px; min-height: 44px; font-size: 22px; }
+.php-slot .gp-label { flex: 1; font-size: 15px; }
+.php-slot .gp-range { display: flex; flex-wrap: wrap; gap: 8px; font-size: 14px; }
+.php-slot .gp-range input { flex: 1 1 130px; min-height: 44px; font-size: 14px; }
+.php-slot .gp-apply { flex: 1 1 100%; min-height: 44px; font-size: 14px; }
+.php-slot .gp-chart { min-height: 44px; font-size: 14px; }
+.php-slot .gp-chart select { min-height: 44px; font-size: 14px; }
 .pkpi-cmp .pcmp { font-size: 12px; padding: 1px 7px; }   /* PR-PP3: the 12 px text floor (phone-modes e2e) */
 .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .prow-span { font-size: 12px; color: var(--text-secondary); }
@@ -3255,7 +3292,9 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <!-- Data coverage note (populated by initDataCoverageNote) -->
       <span id="dataCoverageNote" class="flex-shrink-0" style="display:none;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap" title=""></span>
       <!-- PR-PP2: the period this page shows, once (periodChip, js/01-core.js) - the top bar is the only period control -->
-      <span id="gpRangeChip" class="gp-range-chip flex-shrink-0" hidden></span>
+      <!-- owner 2026-10-25: on a phone the chip is a one-line button that opens this top bar's period control in a sheet (phPeriodOpen) -->
+      <span id="gpRangeChip" class="gp-range-chip flex-shrink-0" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
+        onkeydown="if (typeof phPeriodChipKey === 'function') phPeriodChipKey(event)"></span>
       <select id="selBranch" onchange="onFilterChange()" aria-label="เลือกสาขา — กรองข้อมูลทุกหน้า" title="เลือกสาขา (ทุกหน้าจะกรองตามนี้)"
         style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:160px;font-weight:600">
         <option value="">ทุกสาขา</option>
