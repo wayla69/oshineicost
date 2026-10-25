@@ -58,7 +58,7 @@ function hvmRenderChips() {
   el.innerHTML = opts.map(([k, l]) => `<button type="button" class="gran-btn${_hvm.slug === k ? ' gran-active' : ''}" data-g="${esc(k)}" aria-pressed="${_hvm.slug === k}" onclick="hvmSetGroup('${esc(k)}')">${esc(l)}</button>`).join('');
   hvChipsInView(el);
 }
-// a phone scrolls the chip row sideways (one row): keep the chosen chip in view (shared with the plates section on ยอดขายรายวัน)
+// a phone scrolls the chip row sideways (one row): keep the chosen chip in view
 function hvChipsInView(track) {
   const sc = track && track.parentElement, on = track && track.querySelector('.gran-active');
   if (!sc || !on || sc.scrollWidth <= sc.clientWidth + 1) return;
