@@ -16,13 +16,13 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <!-- การกระจาย SPH (tier-based 100% stacked bar + percentile markers) -->
     <div class="card p-5">
-      <h2 class="section-title mb-1">การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-guest-1" title="คำอธิบาย">?</button></h2><template id="hlp-guest-1" data-title="การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว"><p>สัดส่วนบิลในแต่ละช่วงยอด/หัว (ถอด VAT และ service charge แล้ว) — เป็น<b>ช่วงยอดจริง ไม่ใช่ชื่อ tier</b> จึงอ่านได้ทั้งเมนูเก่าและเมนูใหม่ตั้งแต่ 1 ก.ย. 2026 · เคลื่อนเมาส์ดูจำนวนบิลแต่ละช่วง</p></template>
+      <h2 class="section-title mb-1">การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-guest-1" title="คำอธิบาย">?</button></h2><template id="hlp-guest-1" data-title="การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว"><p>สัดส่วนบิลในแต่ละช่วงยอด/หัว (ถอด VAT และ service charge แล้ว) — เป็น<b>ช่วงยอดจริง ไม่ใช่ชื่อ tier</b> จึงอ่านได้ทั้งเมนูเก่าและเมนูใหม่ตั้งแต่ 1 ก.ย. 2026 · เคลื่อนเมาส์ดูจำนวนบิลแต่ละช่วง</p><p>ขีดใต้แถบวางตามสัดส่วนบิล: P10 อยู่ที่ 10% ของแถบ มัธยฐานอยู่กึ่งกลาง P90 อยู่ที่ 90% ตัวเลขใต้ชื่อคือยอดต่อหัวของบิลที่ตำแหน่งนั้น (มัธยฐานคือยอดที่ครึ่งหนึ่งของบิลจ่ายต่ำกว่า)</p></template>
       <!-- Percentile KPI strip -->
       <div id="sphKpiStrip" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-xs"></div>
       <!-- 100% stacked horizontal bar — much easier to read than vertical histogram -->
       <div class="rounded-lg overflow-hidden border border-slate-200" style="height:38px;display:flex" id="sphStackBar"></div>
       <!-- Percentile ruler -->
-      <div class="relative mt-1 mb-3" style="height:18px" id="sphRuler"></div>
+      <div class="relative mt-1 mb-3" style="height:42px" id="sphRuler"></div>
       <!-- Tier legend / breakdown -->
       <div id="sphTierLegend" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]"></div>
     </div>
