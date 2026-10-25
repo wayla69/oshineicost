@@ -12,7 +12,7 @@ from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
 from core import (
-    _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
+    _FOOD_CATEGORY_FILTER, _cogs_case, get_db, ttl_cache,
 )
 
 from fastapi import APIRouter
