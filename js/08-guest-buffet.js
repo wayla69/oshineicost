@@ -27,12 +27,13 @@ async function loadGuest(force) {
   periodHeadline('phd-guest', 'guest');   // PR-PP2
   _populateGuestMonthPicker();
   const localMonth = _guestLocalMonth();
-  const _fk = _filterKey() + '|gm=' + localMonth;
+  const _fk = _filterKey() + '|gm=' + localMonth + '|grp=' + (getGroup() || '');
   if (!force && _tabLastKey.guest === _fk) return;
   _tabLastKey.guest = _fk;
 
   const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
+  if (getGroup())     params.set('group',  getGroup());
   if (localMonth) {
     params.set('month_from', localMonth);
     params.set('month_to',   localMonth);
@@ -66,6 +67,7 @@ async function loadGuest(force) {
 
   // SPH distribution — tier-based 100% stacked bar with percentile ruler
   renderSphDistribution(sph);
+  renderSphGrandTiers(sph);   // PR-SPHT: by Grand Menu price tier
 
   // SPH by branch — sorted high→low, with avg/median/covers in the tooltip
   const byBranch = (sph.by_branch || []).slice().sort((a, b) => (b.avg_sph || 0) - (a.avg_sph || 0));

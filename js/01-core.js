@@ -3982,8 +3982,10 @@ const PAGE_CARDS = {
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
   dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
-    { sel: '#spikeTable', title: 'เมนู', sub: ['สาขา'], keyCols: [['วันนี้', 'ช่วงนี้'], ['เฉลี่ย', 'ปกติ'], 'สูงกว่า'] },
-    { sel: '#spikeNewTable', title: 'เมนู', sub: ['สาขา'], keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อวัน', 'ขายมาแล้ว'] }],
+    // PR-SC: a role that sees cost gets the ต้นทุนเพิ่ม column (table.sp-costed) and it leads the card's figures
+    { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], keyCols: ['ต้นทุนเพิ่ม', ['ช่วงนี้', 'วันนี้'], 'สูงกว่า'], labels: ['ต้นทุนเพิ่ม', 'ต่อ 100 ลูกค้า', 'สูงกว่า'] },
+    { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], keyCols: [['ช่วงนี้', 'วันนี้'], 'ปกติ', 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
+    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] }],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],

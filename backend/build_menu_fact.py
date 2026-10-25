@@ -198,6 +198,7 @@ def main():
         ent_cogs REAL, ent_hc REAL, cogs REAL, rev REAL, hc REAL,
         PRIMARY KEY(branch_id, day, tier, ent));
       CREATE INDEX IF NOT EXISTS ix_mfd_ent ON menu_fact_day(ent, day);
+      CREATE INDEX IF NOT EXISTS ix_mfd_be ON menu_fact_day(branch_id, ent, day, tier, qty);
       CREATE TABLE IF NOT EXISTS menu_fact_meta(
         ent TEXT PRIMARY KEY, label TEXT, kind TEXT, unit_cost REAL, members TEXT);
       CREATE TABLE IF NOT EXISTS menu_fact_state(k TEXT PRIMARY KEY, v TEXT);
