@@ -2891,6 +2891,10 @@ async function loadPriceZone(force) {
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/extra/price-zone?${p}`); } catch (e) { return; }
   document.getElementById('pzCount').textContent = `แก้ราคา ${fmtN(d.change_count || 0)} ครั้ง${(d.changes || []).length >= 200 ? ' (แสดง 200 ล่าสุด)' : ''}`;
+  // DV2: no price change in the period -> one line, not an empty table
+  const pzNone = !(d.changes || []).length, pzE = document.getElementById('pzEmpty'), pzW = document.getElementById('pzTableWrap');
+  if (pzE) pzE.style.display = pzNone ? '' : 'none';
+  if (pzW) pzW.style.display = pzNone ? 'none' : '';
   document.getElementById('pzBody').innerHTML = (d.changes || []).map(r => {
     const dn = (r.delta || 0) < 0;
     const qp = r.qty_pct;
@@ -2908,9 +2912,21 @@ async function loadPriceZone(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.elasticity != null ? r.elasticity.toFixed(2) : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 text-[11px]">${esc(r.user || '')}</td></tr>`;
   }).join('') || '<tr><td colspan="10" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('pzZones').innerHTML = (d.zones || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+  _pzZonesHtml(d.zones);
+}
+// DV2: โซนโต๊ะรายสาขา lives in ตั้งค่า → สาขา (reference data); loadSettingsSubtab('branches') calls loadPzZonesRef
+function _pzZonesHtml(zones) {
+  const el = document.getElementById('pzZones');
+  if (!el) return;
+  el.innerHTML = (zones || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${r.zones}</td>
     <td class="py-1.5 text-right tabular-nums">${fmtN(r.tables)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+async function loadPzZonesRef() {
+  if (!document.getElementById('pzZones') || (typeof pathAllowedForMe === 'function' && !pathAllowedForMe('/api/extra/price-zone'))) return;
+  const p = new URLSearchParams(); p.set('limit', '1');
+  if (getGroup()) p.set('group', getGroup());
+  try { const d = await api(`${API}/api/extra/price-zone?${p}`); _pzZonesHtml(d.zones); } catch (e) { /* the card keeps its last rows */ }
 }
 
 // บิลยกเลิก/ลบ (whole-bill voids)

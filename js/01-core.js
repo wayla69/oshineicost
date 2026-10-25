@@ -4750,7 +4750,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'targets')    loadTargets();
   if (activeSettingsTab === 'costs')      { renderMenuPresetSelect(); loadCosts(); loadBomAudit(); }
   if (activeSettingsTab === 'fixedcosts') loadFixedCosts();
-  if (activeSettingsTab === 'branches')   loadBranchConfig();
+  if (activeSettingsTab === 'branches')   { loadBranchConfig(); if (typeof loadPzZonesRef === 'function') loadPzZonesRef(); }
   if (activeSettingsTab === 'deactivate') loadDeactivate();
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();
