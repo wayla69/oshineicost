@@ -485,7 +485,8 @@ function phUnlockWrites() { unlockWrites().then(phMeRender).catch(() => {}); }
 // A tap on a table row opens the row sheet; a double tap on a table or a chart shows it at 100 % (again: back). The choice is remembered per page
 // on this device (localStorage, oshinei_phmode).
 const _PH_FIT_MIN = 760, _PH_FIT_MAX = 900, _PH_FIT_DEF = 820, _PH_FIT_TEXT = 12, _PH_FIT_FLOOR = 5.5, _PH_MODE_KEY = 'oshinei_phmode';
-const _PH_TZ_SEL = '.ui-q, select, input[type="month"], input[type="date"], input[type="search"], input[type="text"], input:not([type]), .subtab-btn, .gran-btn, .wt-seg button, [role="tab"], .wt-find, .bmc-pager button';
+// .ph-tz-unit (PR-TD): a card's own control row counter-zoomed as ONE unit, so its period track, its select and its buttons keep one height
+const _PH_TZ_SEL = '.ph-tz-unit, .ui-q, select, input[type="month"], input[type="date"], input[type="search"], input[type="text"], input:not([type]), .subtab-btn, .gran-btn, .wt-seg button, [role="tab"], .wt-find, .bmc-pager button';
 let _phFitT = null, _phFitPanel = null, _phFitObs = null, _phFitKey = '';
 const _phZoomOK = (() => { try { return CSS.supports('zoom', '0.5'); } catch (e) { return false; } })();
 // the page on screen: its tab, its pane (a supply tab) and, for a page with two views, which one is showing
@@ -738,6 +739,18 @@ document.addEventListener('click', e => {
   if (row) tap.timer = setTimeout(() => { if (_phTap === tap) _phTap = null; phRowSheet(row); }, 350);
   _phTap = tap;
 }, true);
+// PR-TD · a cell drawn as lines: each [data-ph-line] element is one line (k = its first part, v = its last part when it has two;
+// data-ph-line="hi" = bad ink). The row sheet and the card's grey lines draw them one per line instead of one run of text.
+function _phKvLines(td) {
+  if (!td || !td.querySelector('[data-ph-line]')) return [];
+  return [...td.querySelectorAll('[data-ph-line]')].map(el => {
+    const parts = [...el.children].map(x => _phNorm(x.textContent)).filter(Boolean);
+    return parts.length === 2 ? { k: parts[0], v: parts[1], hi: el.dataset.phLine === 'hi' } : { k: _phNorm(el.textContent), v: '', hi: el.dataset.phLine === 'hi' };
+  }).filter(l => l.k || l.v);
+}
+function _phKvHtml(lines, cls) {
+  return `<span class="${cls}">${lines.map(l => `<span class="${cls}-r${l.hi ? ' ph-kv-hi' : ''}"><span>${esc(l.k)}</span>${l.v ? ` <span class="${cls}-v">${esc(l.v)}</span>` : ''}</span>`).join('')}</span>`;
+}
 function _phCellText(td) {
   const fields = [...td.querySelectorAll('input:not([type="hidden"]), select, textarea')];
   const own = (td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim();
@@ -761,7 +774,7 @@ function phRowSheet(tr, title) {
   const pairs = []; let i = 0;
   // a cell that only holds a selection box (the row's tick) is not a value of the row; nor is a row number (#, ลำดับ - PR-MB)
   const tickOnly = c => !(c.innerText || c.textContent || '').trim() && c.querySelector('input[type="checkbox"], input[type="radio"]') && !c.querySelector('input:not([type="checkbox"]):not([type="radio"]), select, textarea');
-  cells.forEach(c => { const rn = c.classList.contains('ph-rn') || _PH_RN_RE.test(_phNorm(heads[i])); const v = tickOnly(c) || rn ? '' : _phCellText(c); if (v) pairs.push([heads[i] || '', v]); i += c.colSpan || 1; });
+  cells.forEach(c => { const rn = c.classList.contains('ph-rn') || _PH_RN_RE.test(_phNorm(heads[i])); const v = tickOnly(c) || rn ? '' : _phCellText(c); if (v) pairs.push([heads[i] || '', v, _phKvLines(c)]); i += c.colSpan || 1; });
   const pill = tr.querySelector('.bmc-chip, .wt-tag, .pill, .ms-chip, .frc-pill, .fm-chip, .badge-up, .badge-down, [class*="chip"], [class*="tag-"]');
   _phRowActs = [...tr.querySelectorAll('button, a[href], a[onclick], [role="button"]')].filter(b => (b.innerText || b.getAttribute('aria-label') || b.title || '').trim());
   const own = tr.hasAttribute('onclick') || [...tr.cells].some(c => c.hasAttribute('onclick'));
@@ -771,7 +784,7 @@ function phRowSheet(tr, title) {
   document.getElementById('msSheetTitle').textContent = (title || (pairs.length ? pairs[0][1] : '') || 'รายการ').slice(0, 80);
   document.getElementById('msSheetSub').textContent = (document.getElementById('pageTitle') || {}).textContent || '';
   body.innerHTML = `<div class="ph-rs">${pill ? `<div class="ph-rs-pill">${pill.outerHTML}</div>` : ''}<dl class="ph-rs-list">`
-    + pairs.map(([h, v]) => `<div class="ph-rs-row"><dt>${esc(h || '—')}</dt><dd>${esc(v)}</dd></div>`).join('') + '</dl>'
+    + pairs.map(([h, v, kv]) => `<div class="ph-rs-row"><dt>${esc(h || '—')}</dt><dd>${kv.length ? _phKvHtml(kv, 'ph-rs-kv') : esc(v)}</dd></div>`).join('') + '</dl>'
     + (acts.length ? `<div class="ph-rs-act">${acts.join('')}</div>` : '') + '</div>';
   sh.classList.add('open', 'ph-rowsheet'); sh.scrollTop = 0;
   const back = document.getElementById('phSheetBack'); if (back) back.hidden = false;
@@ -869,6 +882,7 @@ function phCardList(spec) {
   const card = (r, i, tot) => `<li class="ph-cl-card${tot || r.grp ? ' ph-cl-tot' : ''}${r.tick ? ' ph-cl-hastick' : ''}">${tick(r)}<button type="button" class="ph-cl-hit" onclick="phCardOpen('${id}',${r.i})" aria-label="${esc(r.title)} · ดูทุกคอลัมน์">`
     + `<span class="ph-cl-main">${pillHtml(r.pill)}<span class="ph-cl-t">${esc(r.title || '—')}</span>`
     + (() => { const sb = [(ordered || filter) && r.group ? r.group : '', r.sub].filter(Boolean).join(' · '); return sb ? `<span class="ph-cl-s">${esc(sb)}</span>` : ''; })()
+    + (r.kv && r.kv.length ? _phKvHtml(r.kv, 'ph-cl-kv') : '')
     + `<span class="ph-cl-figs">${(r.figs || []).filter(f => f.v || !r.grp).map(f => `<span class="ph-cl-f"><span class="ph-cl-fl">${esc(f.l)}</span><span class="ph-cl-fv"${f.ink ? ` style="color:${esc(f.ink)}"` : ''}>${esc(f.v || '—')}</span></span>`).join('')}</span>`
     + (r.spark ? `<span class="ph-cl-spark">${r.spark}</span>` : '') + `</span><span class="ph-cl-chev" aria-hidden="true">›</span></button></li>`;
   const lim = Math.max(_PH_CL_PAGE, spec.limit || 0);
@@ -902,7 +916,8 @@ function _phInk(td) {
 }
 const _PH_CHIP_SEL = '.bmc-chip, .wt-tag, .pill, .ms-chip, .frc-pill, .fm-chip, .badge-up, .badge-down, .ohb-st, [class*="chip"], [class*="tag-"], [class*="badge"]';
 // The card spec of one table as it is drawn: its header texts, its body rows (a message row such as "ไม่มีข้อมูล" is the empty state),
-// the columns PAGE_CARDS names. cfg = { title, sub, keyCols, pill, tones, done, spark, empty, total }.
+// the columns PAGE_CARDS names. cfg = { title, sub, keyCols, pill, tones, done, spark, empty, total, subLines }.
+// subLines (PR-TD): a sub column drawn as lines (data-ph-line, _phKvLines) shows one line each under the grey line instead of one run of text.
 // the lines of a cell as it is drawn (a <br>, a <div>, a <p> start a line) - read from a copy, so a hidden table reads the same as a shown one
 function _phLines(el) {
   const c = /** @type {Element} */ (el.cloneNode(true));
@@ -950,8 +965,9 @@ function _phCardSpec(table, cfg, id) {
     }
     tl = tl.map(_phTidy).filter(Boolean);
     const title = tl[0] || '';
+    const kv = cfg.subLines ? si.flatMap(i => (i >= 0 && cs[i] && cs[i] !== tcell ? _phKvLines(cs[i]) : [])) : [];
     const sub = [...tl.slice(1), ...si.map((i, k) => {
-      if (i < 0 || !cs[i] || cs[i] === tcell) return '';
+      if (i < 0 || !cs[i] || cs[i] === tcell || kv.length) return '';
       const v = _phTidy(lines(cs[i]).join(' · '));
       return v && cfg.subL ? `${(cfg.subLabels && cfg.subLabels[k]) || _phNorm(heads[i])} ${v}` : v;
     })].filter(Boolean);
@@ -977,7 +993,7 @@ function _phCardSpec(table, cfg, id) {
     const sp = spi.length >= 3 ? spi.map(i => _phNum(txt(cs[i]))) : null;
     const svg = sci >= 0 && cs[sci] ? cs[sci].querySelector('svg') : null;
     const total = cfg.total !== false && /^(รวม|ทั้งหมด|เฉลี่ยเครือ|ทั้งเครือ|ค่ากลาง)/.test(title);
-    rows.push({ i: rows.length, tr, title, sub: _phDateTh(sub.join(' · ')), group: isGrp ? '' : group, grp: isGrp, figs, pill, total,
+    rows.push({ i: rows.length, tr, title, sub: _phDateTh(sub.join(' · ')), kv, group: isGrp ? '' : group, grp: isGrp, figs, pill, total,
       tick: tick ? { on: !!tick.checked, l: tick.getAttribute('aria-label') || 'เลือก', dis: !!tick.disabled } : null,
       done: !!(doneRe && (doneRe.test(ptxt) || doneRe.test(tr.getAttribute('data-state') || ''))),
       spark: sp && sp.filter(v => v != null).length >= 3 && typeof msColumns === 'function' ? msColumns(sp, { height: 46, fmt: v => fmt(v), aria: 'แนวโน้ม' })

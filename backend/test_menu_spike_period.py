@@ -323,16 +323,21 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
     # เมนูเล็ก first sold 1 Jul (old), then only on 3 baseline days (2 plates each) before a 30-plate day: the old code
     # called it "เมนูใหม่"; now it is an existing menu with a thin baseline: listed from 20 plates, marked thin_base,
     # "ปกติ" counting the branch's trading days without a sale as zero
+    # PR-TD: the two thin menus that sold a little in the baseline also sold every 10-14 days before it (1, 12, 22 Jul: before both
+    # baselines), so they never went 21 days without a sale - they stay here; the two with no baseline sale at all came back after
+    # 50 days and are in the new-menu part ("กลับมาขาย", see section 10)
+    sparse = (dt.date(2026, 7, 1), dt.date(2026, 7, 12), dt.date(2026, 7, 22))
+
     def plan(d):
         p = {1: 10}
-        if d == dt.date(2026, 7, 1) or d in (dt.date(2026, 8, 5), dt.date(2026, 8, 10), dt.date(2026, 8, 15)):
+        if d in sparse or d in (dt.date(2026, 8, 5), dt.date(2026, 8, 10), dt.date(2026, 8, 15)):
             p[5] = 2
         if d == dt.date(2026, 8, 20):
             p[5] = 30
         if d in (dt.date(2026, 7, 1), dt.date(2026, 8, 20)):
             p[6] = 25                                            # เมนูใหม่น้อย: old, no baseline sale at all
             p[2] = 1 if d.month == 7 else 19                     # ซาชิมิ: old, thin, 19 plates < 20 -> not listed
-        if d == dt.date(2026, 7, 1) or dt.date(2026, 8, 6) <= d <= dt.date(2026, 8, 8):
+        if d in sparse or dt.date(2026, 8, 6) <= d <= dt.date(2026, 8, 8):
             p[3] = 4                                             # เมนูใหม่ (sku 3): old, thin, 3 days x 4 = 12 -> 0.57 a day
         if d == dt.date(2026, 8, 20):
             p[3] = 22
@@ -344,19 +349,20 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
                                    "expected": 0, "x": None, "pct": None, "excess": 30, "is_new": False, "thin_base": True,
                                    "kind": "alc", "basis": "days", "customers": None, "rate": None, "normal_rate": None,
                                    "tiers": None, "tier_note": "ยังไม่มีข้อมูลแยก tier"}
-    s = _row(r, "เมนูใหม่น้อย")
-    assert (s["today"], s["avg"], s["x"], s["pct"], s["excess"], s["thin_base"]) == (25, 0.0, None, None, 25, True)
-    assert _row(r, "ซาชิมิ") is None and r["new_menus"] == []
+    # เมนูใหม่น้อย / ซาชิมิ: no sale from 2 Jul to 19 Aug -> back on 20 Aug: the new-menu part (PR-TD), whatever the plates
+    assert _row(r, "เมนูใหม่น้อย") is None and _row(r, "ซาชิมิ") is None
+    assert sorted((m["menu"], m["qty"], m["returning"], m["returned_on"]) for m in r["new_menus"]) == [
+        ("ซาชิมิ", 19, True, "2026-08-20"), ("เมนูใหม่น้อย", 25, True, "2026-08-20")]
     assert _row(r, "เมนูใหม่")["x"] == 16.5                      # thin, 22 plates vs Thursdays 0 + 4 + 0 = 1.33: listed
     # thin with a baseline but under the threshold: not listed (the same threshold as every spike); no baseline: listed, x "—"
     r3 = _call(con, monkeypatch, date="2026-08-20", threshold=20.0)
-    assert _row(r3, "เมนูใหม่") is None and _row(r3, "เมนูเล็ก") is not None and _row(r3, "เมนูใหม่น้อย")["x"] is None
+    assert _row(r3, "เมนูใหม่") is None and _row(r3, "เมนูเล็ก") is not None
     assert _row(_call(con, monkeypatch, date="2026-08-20", threshold=16.0), "เมนูใหม่")["x"] == 16.5
     # week of 17 Aug (to Thu 20): weekday-fair "ปกติ" = Mon 2/3 + Wed 2/3 = 1.33 plates
     r = _call(con, monkeypatch, period="week", date="2026-08-20")
     s = _row(r, "เมนูเล็ก")
     assert (s["today"], s["avg"], s["expected"], s["x"], s["excess"], s["thin_base"]) == (30, 1.3, 1, 22.5, 29, True)
-    assert _row(r, "เมนูใหม่น้อย")["x"] is None and _row(r, "เมนูใหม่น้อย")["excess"] == 25
+    assert _row(r, "เมนูใหม่น้อย") is None and _nm(r, "เมนูใหม่น้อย")["returning"] is True
     assert _row(r, "ซาชิมิ") is None and _nm(r, "เมนูเล็ก") is None
 
     # with >= 5 baseline days the same old menu is a plain spike, no thin_base key
@@ -437,7 +443,8 @@ def test_the_first_sold_map_is_kept_per_db_and_follows_new_rows(monkeypatch, tmp
         r = _call(con, monkeypatch, period="mtd", date="2026-08-20")
         assert _nm(r, "เมนูใหม่") is not None and sales._FIRST_SOLD["key"][0].endswith("spike.db")
         assert _call(con, monkeypatch, period="mtd", date="2026-08-20") == r          # served from the kept map
-        con.execute("INSERT INTO sales_sku_daily VALUES (1, '2026-07-01', 3, 1, 0)")   # an older sale appears (a sync)
+        # an older sale appears (a sync); 20 Jul: less than 21 days before the launch, so not a menu that came back (PR-TD)
+        con.execute("INSERT INTO sales_sku_daily VALUES (1, '2026-07-20', 3, 1, 0)")
         con.commit()
         r = _call(con, monkeypatch, period="mtd", date="2026-08-20")
         assert _nm(r, "เมนูใหม่") is None and r["new_count"] == 0
@@ -775,3 +782,175 @@ def test_roles_without_cost_get_no_cost_key(client, app_db, auth_on, monkeypatch
         key = lambda r: sorted((s["menu"], s["branch"], s["today"], s["excess"]) for s in r["spikes"])
         assert key(a) == key(b)
         assert [x["menu"] for x in b["spikes"]][:2] == ["แซลมอน", "หมึก"]
+
+
+# ── 10. PR-TD · an existing menu that came back goes to the new-menu part ("กลับมาขาย", owner 2026-10-25) ────────────────────────
+# A menu first sold >= 28 days before the period end that sold again after >= 21 days without a sale at the branch (the branch itself
+# open on >= 14 of those days) is a new menu again from the day it came back (returned_on = first_sold), for 28 days.
+def _back_plan(gap_from, back_on, closed=False):
+    """เมนูเล็ก (sku 5): 10 a day 1 Jul .. gap_from - 1, nothing to back_on - 1, 10 a day from back_on; BASE 10 a day. closed: the
+    branch has no row at all during the gap (a branch shut for three weeks is not a menu that stopped)."""
+    def plan(d):
+        if closed and gap_from <= d < back_on:
+            return {}
+        p = {1: 10}
+        if d < gap_from or d >= back_on:
+            p[5] = 10
+        return p
+    return plan
+
+
+def test_a_menu_back_after_21_days_is_a_new_menu_from_that_day(monkeypatch):
+    # no sale 6 .. 27 Jul (22 days), back on Tue 28 Jul
+    con = _db(_back_plan(dt.date(2026, 7, 6), dt.date(2026, 7, 28)))
+    for kw in ({"date": "2026-08-20"}, {"period": "week", "date": "2026-08-20"}, {"period": "mtd", "date": "2026-08-20"}):
+        r = _call(con, monkeypatch, threshold=1.0, **kw)
+        m = _nm(r, "เมนูเล็ก")
+        assert m is not None and _row(r, "เมนูเล็ก") is None, kw
+        assert (m["returning"], m["returned_on"], m["first_sold"], m["first_sold_th"], m["first_sold_ever"], m["age_days"]) == (
+            True, "2026-07-28", "2026-07-28", "28 ก.ค.", "2026-07-01", 24), kw
+        assert r["new_count"] == 1, kw
+    # a range from 1 Jul: the plates are the ones since it came back (24 days x 10), not the 50 before the gap
+    r = _call(con, monkeypatch, period="range", date_from="2026-07-01", date_to="2026-08-20")
+    m = _nm(r, "เมนูเล็ก")
+    assert (m["qty"], m["per_day"]) == (240, 10.0)
+    # 28 days after it came back (24 Aug = day 28: still new; 25 Aug: existing, the spike rule)
+    assert _nm(_call(con, monkeypatch, threshold=1.0, date="2026-08-24"), "เมนูเล็ก")["age_days"] == 28
+    r = _call(con, monkeypatch, threshold=1.0, date="2026-08-25")
+    assert _nm(r, "เมนูเล็ก") is None and _row(r, "เมนูเล็ก")["is_new"] is False
+    assert all("returning" not in s for s in r["spikes"])
+
+
+def test_a_20_day_gap_or_a_closed_branch_is_not_a_return(monkeypatch):
+    # 20 days without a sale (6 .. 25 Jul): an existing menu
+    r = _call(_db(_back_plan(dt.date(2026, 7, 6), dt.date(2026, 7, 26))), monkeypatch, threshold=1.0, date="2026-08-10")
+    assert _nm(r, "เมนูเล็ก") is None and _row(r, "เมนูเล็ก") is not None
+    # 22 days, but the branch itself was shut (no rows at all): not a return either
+    r = _call(_db(_back_plan(dt.date(2026, 7, 6), dt.date(2026, 7, 28), closed=True)), monkeypatch, threshold=1.0, date="2026-08-10")
+    assert _nm(r, "เมนูเล็ก") is None and _row(r, "เมนูเล็ก") is not None
+    # a brand-new menu is never "returning"
+    r = _call(_db(_launch_plan), monkeypatch, date="2026-08-20")
+    assert all("returning" not in m for m in r["new_menus"]) and r["new_menus"]
+
+
+# ── 11. PR-TD · กำหนดเอง เทียบกับ a chosen period (base_from / base_to, owner 2026-10-25) ────────────────────────────────────
+# The period is Mon 17 .. Sun 23 Aug (_P0.._P1). The base week is Mon 3 .. Sun 9 Aug: its per-head rate is the normal, over the whole of
+# it (not per weekday), and the period and the base may differ in length.
+_B0, _B1 = dt.date(2026, 8, 3), dt.date(2026, 8, 9)
+
+
+def _in_base(d):
+    return _B0 <= d <= _B1
+
+
+def test_compare_with_a_week_doubled_customers_and_plates_is_not_a_spike(monkeypatch):
+    # customers x2 in the period; ข้าวปั้น 0.5 a head in the base week and in the period, 0.2 a head on every other day:
+    # against ปกติ (the 3 weeks before, mostly 0.2 a head) the period spikes; against the base week it is x1.0
+    k = lambda d: 2 if _in(d) else 1
+    head = lambda d: 0.5 if _in(d) or _in_base(d) else 0.2
+    con = _db_pax(lambda d: {"799": 60 * k(d), "599": 40 * k(d), "nb": 0},
+                  lambda d: {1: {"799": round(60 * k(d) * head(d)), "599": round(40 * k(d) * head(d))}})
+    assert _row(_spike_range(con, monkeypatch), "ข้าวปั้น") is not None          # ปกติ: flagged
+    r = _spike_range(con, monkeypatch, base_from=_B0.isoformat(), base_to=_B1.isoformat())
+    assert r["count"] == 0 and r["base"] == {"kind": "range", "from": "2026-08-03", "to": "2026-08-09"}
+    assert (r["baseline_from"], r["baseline_to"]) == ("2026-08-03", "2026-08-09")
+    s = _row(_spike_range(con, monkeypatch, threshold=1.0, base_from=_B0.isoformat(), base_to=_B1.isoformat()), "ข้าวปั้น")
+    assert (s["customers"], s["today"], s["rate"], s["normal_rate"], s["x"], s["excess"]) == (1400, 700, 50.0, 50.0, 1.0, 0)
+    assert all(abs(g["excess"]) < 0.5 for g in s["tiers"])
+    # the strip: customers per day of the period vs the base week
+    sm = r["summary"]
+    assert (sm["customers"], sm["customers_per_day"], sm["base_customers_per_day"], sm["customers_vs_base_pct"]) == (1400, 200.0, 100.0, 100.0)
+    # a 3-day base (3 .. 5 Aug) against the 7-day period: per head, the same answer
+    s3 = _row(_spike_range(con, monkeypatch, threshold=1.0, base_from="2026-08-03", base_to="2026-08-05"), "ข้าวปั้น")
+    assert (s3["normal_rate"], s3["x"], s3["excess"]) == (50.0, 1.0, 0)
+
+
+def test_compare_with_a_week_the_math_and_the_tiers(monkeypatch):
+    # 100 customers a day everywhere; the base week 0.5 a head, the period 1.0 a head -> x2.0, +350 plates (799: +210, 599: +140)
+    head = lambda d: 1.0 if _in(d) else 0.5 if _in_base(d) else 0.8
+    con = _db_pax(lambda d: {"799": 60, "599": 40, "nb": 0},
+                  lambda d: {1: {"799": round(60 * head(d)), "599": round(40 * head(d))}})
+    r = _spike_range(con, monkeypatch, base_from=_B0.isoformat(), base_to=_B1.isoformat())
+    s = _row(r, "ข้าวปั้น")
+    assert (s["today"], s["rate"], s["normal_rate"], s["x"], s["excess"], s["expected"]) == (700, 100.0, 50.0, 2.0, 350, 350)
+    assert sorted((g["label"], g["excess"]) for g in s["tiers"]) == [("฿599", 140.0), ("฿799", 210.0)]
+    assert r["summary"]["tier_top"] == {"label": "฿799", "excess": 210} and r["summary"]["top_excess"] == 350
+    assert r["summary"]["customers_vs_base_pct"] == 0.0
+    # ปกติ (27 Jul .. 16 Aug: 0.8 a head on 14 days, 0.5 on 7) -> a smaller x than against the base week
+    n = _row(_spike_range(con, monkeypatch, threshold=1.0), "ข้าวปั้น")
+    assert n["x"] < s["x"] and r["base"]["kind"] == "range" and _spike_range(con, monkeypatch)["base"]["kind"] == "normal"
+
+
+@pytest.mark.parametrize("base, word", [
+    ({"base_from": "2026-08-03"}, "ต้องระบุ"),
+    ({"base_from": "2026-08-09", "base_to": "2026-08-03"}, "ไม่อยู่หลัง"),
+    ({"base_from": "2026-08-10", "base_to": "2026-08-17"}, "สิ้นสุดก่อนวันเริ่มต้น"),          # touches the period
+    ({"base_from": "2026-08-18", "base_to": "2026-08-20"}, "สิ้นสุดก่อนวันเริ่มต้น"),          # inside it
+    ({"base_from": "2026-03-01", "base_to": "2026-08-09"}, "92"),
+    ({"base_from": "2026-08-03", "base_to": "2026/08/09"}, "ไม่ถูกต้อง"),
+])
+def test_compare_validation_answers_400_in_formal_thai(monkeypatch, base, word):
+    from fastapi import HTTPException
+    con = _db(_weekend_plan)
+    with pytest.raises(HTTPException) as e:
+        _spike_range(con, monkeypatch, **base)
+    assert e.value.status_code == 400
+    msg = e.value.detail
+    assert word in msg and "กรุณา" not in msg and "ระบบจะ" not in msg, msg
+
+
+def test_compare_base_must_be_finished_days(client):
+    d = client.get("/api/sales/menu-spike", params={"period": "range", "date_from": "2026-06-01", "date_to": "2026-06-03"}).json()
+    r = client.get("/api/sales/menu-spike", params={"period": "range", "date_from": "2026-05-25", "date_to": "2026-05-31",
+                                                     "base_from": "2026-05-30", "base_to": "2026-06-10"})
+    assert r.status_code == 400 and d["latest_day"] in r.json()["detail"]
+    ok = client.get("/api/sales/menu-spike", params={"period": "range", "date_from": "2026-05-25", "date_to": "2026-05-31",
+                                                      "base_from": "2026-05-18", "base_to": "2026-05-24"}).json()
+    assert ok["base"] == {"kind": "range", "from": "2026-05-18", "to": "2026-05-24"} and "summary" in ok
+
+
+# ── 12. PR-TD · แบบเดิม: the raw-plates list at the bottom of the card (owner 2026-10-25) ──────────────────────────────────────
+_PLATE_KEYS = {"branch", "menu", "today", "per_day", "avg", "expected", "x", "pct", "excess", "is_new", "kind"}
+
+
+def test_raw_plates_flag_a_busy_week_that_per_head_does_not(monkeypatch):
+    # customers x2 and plates x2 in the period: per head x1.0 (not a spike); raw plates x2.0 (listed in spikes_plates)
+    k = lambda d: 2 if _in(d) else 1
+    con = _db_pax(lambda d: {"799": 60 * k(d), "599": 40 * k(d), "nb": 20},
+                  lambda d: {1: {"799": 30 * k(d), "599": 20 * k(d)}})
+    r = _spike_range(con, monkeypatch)
+    assert r["count"] == 0 and _row(r, "ข้าวปั้น") is None
+    assert r["plates_count"] == 1
+    s = r["spikes_plates"][0]
+    assert set(s) == _PLATE_KEYS
+    assert (s["menu"], s["today"], s["expected"], s["x"], s["pct"], s["excess"]) == ("ข้าวปั้น", 700, 350, 2.0, 100, 350)
+    # against a chosen base week with the same busy customers it is a plain x2.0 too (plates per trading day)
+    rb = _spike_range(con, monkeypatch, base_from=_B0.isoformat(), base_to=_B1.isoformat())
+    assert rb["count"] == 0 and rb["spikes_plates"][0]["x"] == 2.0
+
+
+def test_raw_plates_keep_the_rules_new_and_returning_menus_excluded(monkeypatch):
+    # day mode on the PR-SP plate standard: the weekday-fair "ปกติ" plates; a new menu and a returning menu are never in the list
+    def plan(d):
+        p = {1: 10, 2: 30 if d.weekday() in SAT_SUN else 2}
+        if d == dt.date(2026, 8, 20):
+            p.update({1: 40, 3: 25, 6: 30})              # ข้าวปั้น x4; เมนูใหม่ new; เมนูใหม่น้อย back after 50 days
+        if d == dt.date(2026, 7, 1):
+            p[6] = 1
+        if d == dt.date(2026, 8, 19):
+            p[3] = 5
+        return p
+    r = _call(_db(plan), monkeypatch, date="2026-08-20")
+    menus = [s["menu"] for s in r["spikes_plates"]]
+    assert menus == ["ข้าวปั้น"] and r["spikes_plates"][0]["x"] == 4.0 and r["plates_count"] == 1
+    assert _nm(r, "เมนูใหม่") is not None and _nm(r, "เมนูใหม่น้อย")["returning"] is True
+    # sorted by +จาน, every row, the limit applies
+    def many(d):
+        p = {1: 10, 5: 10, 2: 10}
+        if _in(d):
+            p.update({1: 40, 5: 30, 2: 50})
+        return p
+    r = _call(_db(many), monkeypatch, period="range", date_from=_P0.isoformat(), date_to=_P1.isoformat())
+    assert [s["menu"] for s in r["spikes_plates"]] == ["ซาชิมิ", "ข้าวปั้น", "เมนูเล็ก"] and r["plates_count"] == 3
+    r = _call(_db(many), monkeypatch, period="range", date_from=_P0.isoformat(), date_to=_P1.isoformat(), limit=2)
+    assert len(r["spikes_plates"]) == 2 and r["plates_count"] == 3

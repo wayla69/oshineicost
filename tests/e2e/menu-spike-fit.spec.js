@@ -5,6 +5,8 @@
 //   * one branch chosen: no branch line under the menus, the branch shows once in the header chip; ทุกสาขา: a grey branch line under each menu.
 // PR-ST (owner 2026-10-25): the สาขา column became "เพิ่มจาก tier" (the buffet tiers behind the increase, as chips); the branch moved under the
 // menu name; the figures are per head (จาน/100 ลูกค้า) with the plates small under them.
+// PR-TD (owner 2026-10-25): the tiers are one per line (label left, +จาน right), up to 4 lines then "+N tier"; in the touch cards each tier
+// is its own grey line too.
 // The menu-spike answer is mocked (60 spiking menus, 8 new ones) so the tall table exists whatever the fixture holds.
 const { test, expect } = require('@playwright/test');
 
@@ -17,7 +19,8 @@ function spikeAnswer(url) {
   const tiers = i => i % 7 === 6 ? null : [{ tier: '789', label: '฿789', plates: 60, customers: 140, rate: 42.9, normal_rate: 20, excess: 32 - (i % 5), x: 2.1, high: true },
     { tier: '999', label: '฿999', plates: 20, customers: 40, rate: 50, normal_rate: 30, excess: 8, x: 1.7, high: true },
     { tier: 'nonbuffet', label: 'ไม่ใช่บุฟเฟ่ต์', plates: 10, customers: 30, rate: 33.3, normal_rate: 30, excess: 1, x: 1.1, high: false },
-    { tier: '1299', label: '฿1,299', plates: 5, customers: 10, rate: 50, normal_rate: 40, excess: 1, x: 1.3, high: false }];
+    { tier: '1299', label: '฿1,299', plates: 5, customers: 10, rate: 50, normal_rate: 40, excess: 1, x: 1.3, high: false },
+    { tier: '599', label: '฿599', plates: 4, customers: 10, rate: 40, normal_rate: 30, excess: 1, x: 1.3, high: false }];
   const spikes = Array.from({ length: 60 }, (_, i) => ({ branch: names[i % names.length], menu: `เมนูเดิม ${i + 1}`, today: 120 - i, per_day: 120 - i,
     expected: 50, excess: 70 - i, x: 2.4, pct: 140, thin_base: false, kind: 'buffet', basis: 'buffet', customers: 220, rate: 54.5, normal_rate: 22.7,
     tiers: tiers(i), tier_note: tiers(i) ? undefined : 'ข้อมูลแยก tier มีถึง 18 ต.ค. ไม่ครอบคลุมช่วงนี้', tier_rest: 0 }));
@@ -78,8 +81,9 @@ const READ = () => {
   const heads = id => [...document.querySelectorAll(`#${id} thead th`)].map(th => th.textContent.trim());
   return { old: box('#spikeTable') || box('.sp-sec-old'), neu: box('#spikeNewTable') || box('.sp-sec-new'), oldHeads: heads('spikeTable'), newHeads: heads('spikeNewTable'),
     chip: (document.getElementById('spikeRange') || {}).textContent || '', fit: document.body.classList.contains('ph-fit'),
-    brLines: document.querySelectorAll('#dsSpike .sp-br').length, tierChips: document.querySelectorAll('#spikeTable .sp-tr').length,
-    tierMore: document.querySelectorAll('#spikeTable .sp-tr-more').length };
+    brLines: document.querySelectorAll('#dsSpike .sp-br').length, tierChips: document.querySelectorAll('#spikeTable .sp-tl').length,
+    tierMore: [...document.querySelectorAll('#spikeTable .sp-tl-more')].map(e => e.textContent.trim()),
+    maxPerCell: Math.max(0, ...[...document.querySelectorAll('#spikeTable .sp-tls')].map(e => e.querySelectorAll('.sp-tl').length)) };
 };
 
 for (const [name, opts, mode] of [['พอดีจอ 390', PHONE, 'fit'], ['แตะง่าย 390', PHONE, 'touch'], ['desktop', { viewport: { width: 1440, height: 900 } }, 'fit']]) {
@@ -100,8 +104,9 @@ for (const [name, opts, mode] of [['พอดีจอ 390', PHONE, 'fit'], ['�
       expect(m.newHeads).toContain('ต่อ 100 ลูกค้า');
       if (!name.startsWith('แตะง่าย')) {
         expect(m.tierChips).toBeGreaterThan(0);
-        expect(m.tierChips).toBeLessThanOrEqual(3 * 60);
-        expect(m.tierMore).toBeGreaterThan(0);
+        expect(m.maxPerCell).toBe(4);
+        expect(m.tierMore.length).toBeGreaterThan(0);
+        expect(m.tierMore.every(t => t === '+1 tier')).toBe(true);
       }
       if (which) {
         expect(m.brLines).toBe(0);
@@ -110,12 +115,15 @@ for (const [name, opts, mode] of [['พอดีจอ 390', PHONE, 'fit'], ['�
         if (!name.startsWith('แตะง่าย')) expect(m.brLines).toBeGreaterThan(0);
         expect(m.chip).not.toContain(' · ');
       }
-      if (name.startsWith('แตะง่าย')) {           // the cards: the branch sub-line only for ทุกสาขา; the tier chips in the grey line
-        const sub = await page.evaluate(() => (document.querySelector('#dsSpike .ph-cl') || { innerText: '' }).innerText);
-        if (sub) {
-          expect(/สาขาเอ|สาขาบี|สาขาซี/.test(sub)).toBe(!which);
-          expect(sub).toContain('฿789 +');
-          expect(sub).toContain('ต่อ 100 ลูกค้า');
+      if (name.startsWith('แตะง่าย')) {           // the cards: the branch sub-line only for ทุกสาขา; one grey line per tier
+        const c = await page.evaluate(() => { const l = document.querySelector('#dsSpike .ph-cl'); const card = l && l.querySelector('.ph-cl-card');
+          return { sub: l ? l.innerText : '', kv: card ? [...card.querySelectorAll('.ph-cl-kv-r')].map(r => [...r.children].map(x => x.textContent.trim())) : [] }; });
+        if (c.sub) {
+          expect(/สาขาเอ|สาขาบี|สาขาซี/.test(c.sub)).toBe(!which);
+          expect(c.kv[0]).toEqual(['฿789', '+32']);
+          expect(c.kv.length).toBe(5);                    // 4 tiers + "+1 tier"
+          expect(c.kv[4]).toEqual(['+1 tier']);
+          expect(c.sub).toContain('ต่อ 100 ลูกค้า');
         }
       }
     }
