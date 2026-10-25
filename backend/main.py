@@ -2184,6 +2184,9 @@ _PERF_INDEXES = (
     # every row; adding qty makes it an index-ONLY scan. 2,016ms → 120ms, and the
     # endpoint as a whole 8.8s → 163ms.
     "CREATE INDEX IF NOT EXISTS ix_mfd_ent_qty ON menu_fact_day(ent, qty)",
+    # menu spike "เพิ่มจาก tier" (PR-ST): the tier plates of the listed (branch, menu) pairs over 7 weeks as index-only
+    # range seeks - 300 pairs ~35 ms, against ~0.9 s for a grouped read of every row of the window.
+    "CREATE INDEX IF NOT EXISTS ix_mfd_be ON menu_fact_day(branch_id, ent, day, tier, qty)",
 )
 
 
