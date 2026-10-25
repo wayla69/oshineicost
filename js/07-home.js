@@ -626,6 +626,15 @@ function dvMoreToggle(btn) {
   btn.setAttribute('aria-expanded', String(open));
   btn.textContent = open ? 'ย่อ' : `ดูทั้งหมด (${fmtN(+btn.getAttribute('data-n'))})`;
 }
+// an editor on a phone (.desk-only, index.html): "แสดงบนโทรศัพท์" shows it for this visit
+function deskShow(btn) {
+  const note = btn.closest('.desk-note'); if (!note) return;
+  note.classList.add('desk-force');
+  const ed = note.nextElementSibling; if (ed && ed.classList.contains('desk-only')) ed.classList.add('desk-force');
+}
+function deskNoteHtml() {
+  return '<div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>';
+}
 // a signed baht figure: +฿193.0K / −฿537.0K
 function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
 

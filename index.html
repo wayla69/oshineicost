@@ -1649,6 +1649,15 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .shm-showall { min-height: 44px; margin-left: 8px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--r-sm); background: transparent; color: var(--accent);
   font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 :is(.tskf-btn, .shm-showall):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* DV2 (phone table review 2026-10-25) · "ดูทั้งหมด (N)" under a capped list (dvMoreBtn, js/07-home.js); an editor's phone notice: on a phone a
+   .desk-only block is replaced by the .desk-note before it ("ใช้งานบนคอมพิวเตอร์") until the person asks for it (deskShow) */
+.dv-more-wrap { margin-top: 8px; }
+.dv-more-wrap .shm-showall { margin-left: 0; }
+.desk-note { display: none; }
+body.ph-on .desk-note:not(.desk-force) { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 14px; margin-bottom: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-subtle); color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+body.ph-on .desk-note .shm-showall { margin-left: 0; }
+body.ph-on .desk-only:not(.desk-force) { display: none !important; }
 /* a card heading with its "?": title + at most one short line; the explanation is behind the button */
 .ui-cardhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ui-cardhead > :first-child { min-width: 0; }
