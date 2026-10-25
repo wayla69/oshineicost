@@ -786,7 +786,7 @@ function renderKpiHero(trendData, gpb, disc) {
   const HP = (_heroPeriod && _heroPeriod.cur) ? _heroPeriod : null, HR = HP ? HP.period : null;
   const mEl = document.getElementById('kpiHeroMonth');
   if (mEl) {
-    if (HR) mEl.innerHTML = esc(periodSpan(HR)) + ' ' + periodQ(HR);
+    if (HR) { mEl.innerHTML = periodQ(HR); periodChip(HR, true); }   // the range shows once, beside the page title
     else if (mtd) {
       mEl.textContent = `${fmtMonth(mtd.cur_month)} (1–${mtd.cutoff_day}) · เทียบ ${fmtMonth(mtd.prev_month)} (1–${mtd.cutoff_day}) · เทียบช่วงวันเท่ากัน (MTD)`;
     } else {
@@ -958,7 +958,7 @@ async function loadSummaryKpis() {
   const txClass  = txDelta  == null ? 'kpi-neu' : txDelta  >= 0 ? 'kpi-up' : 'kpi-down';
   const _useDates = currentGranularity === 'daily' || currentGranularity === 'weekly';
   let _periodScope;
-  if (HR) _periodScope = periodSpan(HR);
+  if (HR) _periodScope = '';                       // the range is the chip beside the page title
   else if (_useDates) {
     const _df = document.getElementById('selDateFrom')?.value;
     const _dt = document.getElementById('selDateTo')?.value;
@@ -977,7 +977,7 @@ async function loadSummaryKpis() {
       <div class="kpi-card-top"><p class="kpi-label">รายได้รวม <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p>${trendBadge(revDelta)}</div>
       <p class="kpi-value" style="color:var(--accent)">${fmt(revShown)}</p>${gCmp('revenue', '%')}
       <div class="kpi-card-bottom">
-        <p class="kpi-sub">${_periodScope} · รวม VAT ${fmt(d.revenue)}</p>
+        <p class="kpi-sub">${_periodScope ? _periodScope + ' · ' : ''}รวม VAT ${fmt(d.revenue)}</p>
         ${mkSparkline(revSpark, '#4a70b0')}
       </div>
     </div>
@@ -1965,7 +1965,7 @@ function _renderTop60Sales(d) {
     sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
     // PR-PP2: เทียบช่วงก่อน on top, เทียบปีก่อน under it (— without a year-ago base)
     const momCell = (mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true))
-      + `<div class="text-xs" title="เทียบปีก่อน">ปีก่อน ${_momSpan(r.qty_yoy_pct, true)}</div>`;
+      + `<div class="text-xs" title="เทียบปีก่อน" aria-label="เทียบปีก่อน">${_momSpan(r.qty_yoy_pct, true)}</div>`;   // narrow: the column header names the line
     const cogs = r.cogs || 0; sumCogs += cogs;
     cumCogs += r.cogs_share_pct || 0;                                // running Pareto of COGS share
     const costCell = cogs > 0 ? fmtN(cogs) : '<span class="text-slate-300">—</span>';  // TOTAL cost (BoM)
@@ -2392,7 +2392,13 @@ async function loadTrend() {
   // the page opens on its defaults (latest month vs the one before) even when the pickers were not filled yet - a phone's first visit
   if (!document.getElementById('cmpMonth')?.value) { if (allMonths.length) populateCmpDropdowns(); else await loadMonths(); }
   const month = document.getElementById('cmpMonth')?.value;
-  const vs    = document.getElementById('cmpVs')?.value;
+  const vsSel = /** @type {HTMLSelectElement|null} */ (document.getElementById('cmpVs'));
+  // PR-PP2: A follows the top bar's month; a B that is not before it moves to the month before A
+  if (vsSel && month && (!vsSel.value || vsSel.value >= month)) {
+    const before = [...vsSel.options].map(o => o.value).filter(v => v && v < month).sort().pop();
+    if (before) vsSel.value = before;
+  }
+  const vs    = vsSel?.value;
   if (!month || !vs || month === vs) return;
 
   const branch = getBranch();

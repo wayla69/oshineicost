@@ -586,6 +586,10 @@ function _phNatural(panel) {
 }
 function phFitLayout(panel) {
   if (!panel || !panel.isConnected) return;
+  // a table / chart shown at 100 % (phZoomToggle) holds its zoom against the frame's scale of that moment: re-fitting the frame
+  // under it (a late part of the page drawing) measured the zoomed element too, widened the frame (799 -> 833 px on วิเคราะห์เมนู)
+  // and left the 100 % view at 96 % - 12 px text drawn at 11.5 px. The frame is fitted again when the 100 % view closes.
+  if (panel.querySelector('.ph-z100')) return;
   _phRowNums(panel);                                                                // PR-MB: no row-number column on a phone (before the width is read)
   const avail = _phAvail();
   const cap = Math.floor(avail * _PH_FIT_TEXT / _PH_FIT_FLOOR);                 // wider than this, 12 px text would read under 5.5 px

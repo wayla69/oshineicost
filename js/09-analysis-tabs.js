@@ -536,7 +536,7 @@ async function loadChildBuffet() {
       <p class="text-2xl font-bold" style="color:${textInk(accent)}">${value}</p>
       <p class="text-[11px] text-slate-400">${sub||''}</p></div>`;
   document.getElementById('childKpiRow').innerHTML =
-    periodKpi({ l: 'covers เด็ก', v: fmtN(totCovers), c: '#ec4899', cur: totCovers, prev: T.prev && T.prev.covers, ly: T.ly && T.ly.covers, range: R, sub: esc(periodSpan(R)) }) +
+    periodKpi({ l: 'covers เด็ก', v: fmtN(totCovers), c: '#ec4899', cur: totCovers, prev: T.prev && T.prev.covers, ly: T.ly && T.ly.covers, range: R }) +
     periodKpi({ l: 'รายได้บุฟเฟ่ต์เด็ก', v: fmt(totRev), c: '#7a66b8', cur: totRev, prev: T.prev && T.prev.revenue, ly: T.ly && T.ly.revenue, range: R, q: false, sub: 'ex-VAT' }) +
     kpi('% ของบุฟเฟ่ต์', wPct.toFixed(1) + '%', '#0891b2', 'covers เด็ก ÷ covers บุฟเฟ่ต์รวม') +
     kpi('สาขาที่มีเด็กมากสุด', bb[0] ? esc(bb[0].branch) : '—', '#f59e0b', bb[0] ? fmtN(bb[0].covers) + ' covers' : '');
@@ -570,7 +570,8 @@ async function loadChildBuffet() {
   });
 
   // Per-branch boxes (latest month)
-  document.getElementById('childBranchSub').innerHTML = `${bb.length} สาขา · ${esc(periodSpan(R))} ${periodQ(R)}`;
+  document.getElementById('childBranchSub').innerHTML = `${bb.length} สาขา ${periodQ(R)}`;
+  periodChip(R, true);                             // the range shows once, beside the page title
   document.getElementById('childBranchBoxes').innerHTML = bb.map(b => `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:var(--pink-ink)">${fmtN(b.covers)}</p>
@@ -972,9 +973,12 @@ async function loadDiscountLeakage(params, gen) {
 }
 
 async function loadDiscountsTab() {
-  // Day/range filter: from+to → range; only one set → that single day; none → global month.
-  const fromV = (document.getElementById('disc-day-from') || {}).value || '';
-  const toV   = (document.getElementById('disc-day-to')   || {}).value || '';
+  // PR-PP2: the top bar is the page's one period control - a week or a custom range reads its days, a month / year its months
+  // (the page's own ดูช่วงวัน pickers are hidden; the endpoints keep date_from / date_to)
+  const _g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  const _byDay = _g === 'daily' || _g === 'weekly';
+  const fromV = _byDay ? ((document.getElementById('selDateFrom') || {}).value || '') : '';
+  const toV   = _byDay ? ((document.getElementById('selDateTo')   || {}).value || '') : '';
   let dFrom = '', dTo = '';
   if (fromV && toV)   { dFrom = (fromV <= toV) ? fromV : toV; dTo = (fromV <= toV) ? toV : fromV; }
   else if (fromV)     { dFrom = dTo = fromV; }

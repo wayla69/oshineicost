@@ -649,22 +649,16 @@ async function renderHomeScorecard(focusDate) {
 }
 
 // ── ยอดขายรายวัน (Daily Sales) tab ──
-// PR-PP2: one period chip track (periodBar: วัน · สัปดาห์ · เดือน · ปี) + the date = any day of the period wanted. A period
-// not finished is to date through the last closed day; every figure shows เทียบช่วงก่อน + เทียบปีก่อน (periods.resolve).
-let _dsBar = null;
-function _dsEnsureBar() {
-  if (_dsBar && document.getElementById('dsPeriod')?.querySelector('.pbar')) return _dsBar;
-  _dsBar = periodBar('dsPeriod', { kinds: ['day', 'week', 'month', 'year'], value: 'month', key: 'dailysales',
-    onChange: () => loadDailySales(true) });
-  // the top bar moves this page's kind only when the top bar itself changes (TABS follow.period)
-  if (typeof _extraLastGlobal === 'object' && !('period|dailysales' in _extraLastGlobal)) _extraLastGlobal['period|dailysales'] = getPeriodKind();
-  return _dsBar;
-}
-function _dsGran() { const b = _dsEnsureBar(); return b ? b.get().kind : 'month'; }
-function dsSetGran(g) { const b = _dsEnsureBar(); if (b) b.set({ kind: g }); }   // the older entry point (deep links)
+// PR-PP2: the period is the top bar's (วัน · สัปดาห์ · เดือน · ปี on this page, TABS follow.period.kinds; the stepper moves the
+// day / week / month / year). A period not finished is to date through the last closed day; every figure shows เทียบช่วงก่อน +
+// เทียบปีก่อน (periods.resolve). The page's own date picker and chip track are gone: one period control per page.
+// the older entry points (a deep link, a drill) move the top bar: dsSetGran('week'), dsSetDate('2026-10-14')
+function dsSetGran(g) { if (['day', 'week', 'month', 'year'].includes(g)) gPeriodSet({ kind: g, pick: gPeriodPick().pick }); }
+function dsSetDate(iso) { if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) gPeriodSet({ kind: 'day', pick: iso }); }
 async function loadDailySales(force) {
-  const gran = _dsGran();
-  const dv = document.getElementById('dsDate')?.value || '';
+  const G = gPeriodPick();
+  const gran = ['day', 'week', 'month', 'year'].includes(G.kind) ? G.kind : 'month';
+  const dv = G.pick || '';
   const _fk = _filterKey() + '|' + gran + '|' + dv;
   if (!force && _tabLastKey.dailysales === _fk) return;
   _tabLastKey.dailysales = _fk;
@@ -675,9 +669,8 @@ async function loadDailySales(force) {
   let d;
   try { d = await api(`${API}/api/sales/daily?${p}`); }
   catch (e) { return; }
-  if (d.focus && !dv) { const el = document.getElementById('dsDate'); if (el) el.value = d.focus; }
   const r = periodOf(d);
-  document.getElementById('dsRange').textContent = periodSpan(r);
+  periodChip(r, true);                                   // the range, once, beside the page title
   document.getElementById('dsCmpNote').innerHTML = periodQ(r);
   const t = d.total || {}, tp = t.prev || null, tl = t.ly || null;
   document.getElementById('dsKpis').innerHTML = [
@@ -1147,7 +1140,7 @@ async function _opFillMonths() {
 async function loadOpsReport(force) {
   const sel = document.getElementById('opMonth');
   await _opFillMonths();
-  periodHeadline('phd-opsreport', 'opsreport', { pick: () => _phMonthPick('opMonth') });   // PR-PP2
+  periodHeadline('phd-opsreport', 'opsreport');   // PR-PP2: the top bar's period
   // Follow the global period filter: in Day/Week granularity pass the global date range
   // (→ backend aggregates the daily tables); in Month granularity use the month picker.
   const gran = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
@@ -2248,16 +2241,10 @@ function _syncExtraPeriod(barKey, tabKey) {
   _extraLastGlobal[k] = gk;
 }
 
-// PR-PP2 · the day of the period a page's own month picker asks for: that month's last day ('' = the top bar's period)
-function _phMonthPick(selId) {
-  const v = /** @type {HTMLSelectElement|null} */ (document.getElementById(selId))?.value || '';
-  return /^\d{4}-\d{2}$/.test(v) ? _lastDayOfMonth(v) : '';
-}
-
 // เงินสดขาด/เกิน
 async function loadCashCtl(force) {
   await _extraMonths('ccMonth');
-  periodHeadline('phd-cashctl', 'cashctl', { pick: () => _phMonthPick('ccMonth') });   // PR-PP2
+  periodHeadline('phd-cashctl', 'cashctl');   // PR-PP2: the top bar's month
   const mv = document.getElementById('ccMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
@@ -2290,7 +2277,7 @@ async function loadCashCtl(force) {
 
 // ประเภทลูกค้า
 async function loadCustType(force) {
-  periodHeadline('phd-custtype', 'custtype', { kinds: ['month', 'year'], pick: () => _phMonthPick('ctMonth') });   // PR-PP2: a month-grain source
+  periodHeadline('phd-custtype', 'custtype');   // PR-PP2: the top bar's month (a month-grain source)
   await _extraMonths('ctMonth');
   const mv = document.getElementById('ctMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
@@ -2357,7 +2344,7 @@ async function loadModifiers(force) {
 
 // ราคา & โซนโต๊ะ
 async function loadPriceZone(force) {
-  periodHeadline('phd-pricezone', 'pricezone', { pick: () => _phMonthPick('pzMonth') });   // PR-PP2
+  periodHeadline('phd-pricezone', 'pricezone');   // PR-PP2: the top bar's month
   await _extraMonths('pzMonth');
   const mv = document.getElementById('pzMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
@@ -2390,7 +2377,7 @@ async function loadPriceZone(force) {
 
 // บิลยกเลิก/ลบ (whole-bill voids)
 async function loadCancelBill(force) {
-  periodHeadline('phd-cancelbill', 'cancelbill', { pick: () => _phMonthPick('cbMonth') });   // PR-PP2
+  periodHeadline('phd-cancelbill', 'cancelbill');   // PR-PP2: the top bar's month
   await _extraMonths('cbMonth');
   const mv = document.getElementById('cbMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;

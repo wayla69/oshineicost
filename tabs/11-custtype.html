@@ -1,9 +1,9 @@
 <!-- ══ EXTRA: ประเภทลูกค้า & Delivery ══ -->
 <div id="tab-custtype" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
-    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
-    <select id="ctMonth" onchange="loadCustType(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
-    <span id="ctRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-xs font-semibold hidden" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="ctMonth" class="hidden" aria-hidden="true" tabindex="-1" onchange="loadCustType(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span id="ctRange" class="hidden text-[11px]" style="color:var(--text-muted)"></span>
     <span class="text-[11px] ml-auto" style="color:var(--text-muted)">walk-in vs Grab / Line Man / ห่อกลับ / เครดิต</span>
   </div>
   <div id="phd-custtype" class="ph-host"></div>

@@ -156,8 +156,8 @@ async function loadGuest(force) {
         if (!items.length) return;
         const ym = _sphTrendData.labels[items[0].index];
         if (!ym) return;
-        const sel = document.getElementById('guestMonthPicker');
-        if (sel) { sel.value = ym; loadGuest(true); }
+        // PR-PP2: a tapped month moves the top bar (the page has one period control, not a picker of its own)
+        if (/^\d{4}-\d{2}$/.test(ym)) gPeriodSet({ kind: 'month', pick: ym + '-01' });
       },
       plugins: {
         legend: { display: false }, datalabels: { display: false },
@@ -2959,7 +2959,8 @@ async function loadBenchmark() {
     };
   });
   const lbl = document.getElementById('benchCompareLabel');
-  if (lbl) lbl.innerHTML = R ? `${esc(periodSpan(R))} · ตัวเลขเล็กใต้ค่า = เทียบช่วงก่อน · เทียบปีก่อน ${periodQ(R)}` : '';
+  if (lbl) lbl.innerHTML = R ? `ตัวเลขเล็กใต้ค่า = เทียบช่วงก่อน · เทียบปีก่อน ${periodQ(R)}` : '';
+  if (R) periodChip(R, true);
   renderBenchTable();
   // the KPI row on the same period with its two comparisons
   if (hp && hp.cur) {

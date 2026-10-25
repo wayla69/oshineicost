@@ -142,9 +142,18 @@ gPeriodGet(), gPeriodSet(v, silent), gPeriodResolve()       // the top bar's per
   oshinei_period_<key>`, try/catch); returns `{get(), set(value, silent), kinds}`. A month-only figure passes
   `kinds: ['month', 'year']` — the week chip is not drawn.
 - `periodCmpHtml`: good / bad ink by direction and by whether up is good (`upGood: false` for a cost).
-- A page that follows the top bar declares `follow: { period: '<bar key>' }` in `TABS` (`_syncExtraPeriod`).
-  PR-PP2: a page mounts its bar on its first load and records the top bar's kind then, so only a later change of the
-  top bar moves it (a page keeps its own default, e.g. ยอดขายรายวัน on เดือน while the top bar opens on ปี).
+- PR-PP2 (owner 2026-10-24: "ถ้ามีสองอันแบบนี้จะซ้ำซ้อนไหมครับ"): **the top bar is the ONLY period control of a page.** A page
+  declares the kinds it can show in `TABS[tab].follow.period = { kinds: [...] }` (default สัปดาห์ · เดือน · ปี · กำหนดเอง).
+  The top bar draws only those chips: **วัน** appears on a page that draws one day (ยอดขายรายวัน), a month-grain page
+  (cashctl · custtype · pricezone · cancelbill) shows **เดือน** only, opsreport สัปดาห์ · เดือน · กำหนดเอง, the
+  month-range pages (guest · buffetperf · timeflow · staff · engineering) เดือน · ปี. Opening a page whose kinds exclude the
+  bar's kind moves the bar to the nearest kind it has (`gPeriodForTab`, in `switchTab`; the period that holds the end of
+  the one on screen). The stepper ‹ › moves the day / week / month / year. The page-own pickers are gone or hidden and
+  follow the bar (ยอดขายรายวัน's date and chip track, guest's มุมมอง month, the month selects of the month pages).
+  The resolved range shows ONCE, as the chip beside the page title (`#gpRangeChip`, `periodChip(r, fromServer)`): the bar's
+  own range, replaced by the server's `period` when the page loads. รายงานผู้บริหาร has no top-bar period (its cover
+  toggle is its control). The string form `follow: { period: '<bar key>' }` (`_syncExtraPeriod`) is kept for a future
+  page-own bar but no page uses it.
 
 PR-PP2 helpers (`js/01-core.js`, after `periodCmpHtml`):
 
@@ -154,13 +163,15 @@ periodSpan(r)                   // '1–19 ต.ค. 2569 · ถึงวัน�
 periodQ(r, unit)                // the "?" alone (beside a table heading)
 periodKpi({l, v, c, cur, prev, ly, unit, upGood, range, q, sub})   // a KPI tile with its two chips
 periodDelta(cur, base, opt) / periodPctDelta(pct, opt)             // one compact change for a table cell
-periodHeadline(hostId, page, {kinds, kind, pick})                  // /api/period/headline as a chip track + tiles
+periodHeadline(hostId, page)                                       // /api/period/headline on the top bar's period: tiles
 gPeriodQuery(extra)             // the top bar's period as kind + pick (or date_from / date_to) + the branch scope
+gPeriodPick()                   // {kind, pick (the end of the period on screen), from, to}
+gPeriodForTab(tab), gPeriodKindsOf(tab), periodChip(r, fromServer)  // the kinds of a page; the range chip by the title
 ```
 
-Pages: ยอดขายรายวัน (`periodBar` วัน · สัปดาห์ · เดือน · ปี, `follow.period`); the overall hero, KPI cards and best /
-needs-attention branch, เทียบสาขา, บุฟเฟ่ต์เด็ก and the headline pages follow the top bar; รายงานผู้บริหาร keeps its
-own cover toggle (รายวัน · รายสัปดาห์ · รายเดือน · **รายปี**) and pickers. The menu-spike card keeps its own period
+Pages: ยอดขายรายวัน, the overall hero, KPI cards and best / needs-attention branch, เทียบสาขา, บุฟเฟ่ต์เด็ก and the
+headline pages all read the top bar (one control per page); รายงานผู้บริหาร keeps its own cover toggle (รายวัน ·
+รายสัปดาห์ · รายเดือน · **รายปี**) and pickers, and the top bar's period is hidden there. The menu-spike card keeps its own period
 chips (PR-SP; its "vs normal" baseline is not a period comparison). ความต้องการพิเศษ (`pos_modifier`) has no date
 column: all-time counts, no period.
 
