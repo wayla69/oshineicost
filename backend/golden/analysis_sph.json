@@ -97,6 +97,8 @@
   "sph_min": 237.5,
   "total_tx": 12
  },
+ "tiers": null,
+ "tiers_reason": "no_facts",
  "trend": [
   {
    "avg_sph": 237.5,

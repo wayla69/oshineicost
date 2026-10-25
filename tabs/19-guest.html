@@ -17,7 +17,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <!-- การกระจาย SPH (tier-based 100% stacked bar + percentile markers) -->
     <div class="card p-5">
-      <h2 class="section-title mb-1">การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-guest-1" title="คำอธิบาย">?</button></h2><template id="hlp-guest-1" data-title="การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว"><p>สัดส่วนบิลในแต่ละช่วงยอด/หัว (ถอด VAT และ service charge แล้ว) — เป็น<b>ช่วงยอดจริง ไม่ใช่ชื่อ tier</b> จึงอ่านได้ทั้งเมนูเก่าและเมนูใหม่ตั้งแต่ 1 ก.ย. 2026 · เคลื่อนเมาส์ดูจำนวนบิลแต่ละช่วง</p><p>ขีดใต้แถบวางตามสัดส่วนบิล: P10 อยู่ที่ 10% ของแถบ มัธยฐานอยู่กึ่งกลาง P90 อยู่ที่ 90% ตัวเลขใต้ชื่อคือยอดต่อหัวของบิลที่ตำแหน่งนั้น (มัธยฐานคือยอดที่ครึ่งหนึ่งของบิลจ่ายต่ำกว่า)</p></template>
+      <h2 class="section-title mb-1">การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-guest-1" title="คำอธิบาย">?</button></h2><template id="hlp-guest-1" data-title="การกระจาย SPH ตามช่วงยอดใช้จ่าย/หัว"><p>สัดส่วนบิลในแต่ละช่วงยอด/หัว (ถอด VAT และ service charge แล้ว) — เป็น<b>ช่วงยอดจริง ไม่ใช่ชื่อ tier</b> จึงอ่านได้ทั้งเมนูเก่าและเมนูใหม่ตั้งแต่ 1 ก.ย. 2026 · เคลื่อนเมาส์ดูจำนวนบิลแต่ละช่วง</p><p>ขีดใต้แถบวางตามสัดส่วนบิล: P10 อยู่ที่ 10% ของแถบ มัธยฐานอยู่กึ่งกลาง P90 อยู่ที่ 90% ตัวเลขใต้ชื่อคือยอดต่อหัวของบิลที่ตำแหน่งนั้น (มัธยฐานคือยอดที่ครึ่งหนึ่งของบิลจ่ายต่ำกว่า)</p><p><b>ตาม tier ราคาเมนูใหม่</b>: สัดส่วนลูกค้าตาม tier บุฟเฟ่ต์ของเมนูใหม่ (฿459 · ฿629 · ฿789 · ฿999 · ฿1,299 ราคารวม VAT และ service charge) นับเฉพาะวันตั้งแต่ 1 ก.ย. 2569 เมื่อช่วงที่เลือกเริ่มก่อนวันนั้น ส่วนที่ไม่ตรงราคา tier ใดอยู่ใน "โปรฯ/ราคาอื่น" บิลที่มีแต่ลูกค้าเด็กอยู่ใน "เด็กล้วน/อื่นๆ" และบิลที่ไม่มีบุฟเฟ่ต์อยู่ใน "ไม่ใช่บุฟเฟ่ต์" (ลูกค้าและบิลทั้งหมดหักบุฟเฟ่ต์)</p><p>ยอด/หัว ใช้ฐานเดียวกับ SPH ของการ์ดนี้ (ถอด VAT และ service charge) ยอดของบุฟเฟ่ต์มาจากยอดบิลถอด VAT แล้วหาร 1.05 เพื่อถอด service charge 5% แบบประมาณ บิลที่ไม่มี service charge จึงต่ำกว่าจริงเล็กน้อย ตัวเลข "+฿ / −฿ จากราคา tier" เทียบกับราคา tier ที่ถอด VAT และ service charge แล้ว (เช่น ฿789 = ฿702) ลูกค้าเด็กที่นับรวมในจำนวนลูกค้าและส่วนลดทำให้ยอด/หัวต่ำกว่าราคา tier ได้ ข้อมูล tier ปรับหลังการซิงก์แต่ละรอบ จึงอาจช้ากว่ายอดขายหนึ่งรอบ</p></template>
       <!-- Percentile KPI strip -->
       <div id="sphKpiStrip" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-xs"></div>
       <!-- 100% stacked horizontal bar — much easier to read than vertical histogram -->
@@ -26,6 +26,8 @@
       <div class="relative mt-1 mb-3" style="height:42px" id="sphRuler"></div>
       <!-- Tier legend / breakdown -->
       <div id="sphTierLegend" class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]"></div>
+      <!-- PR-SPHT: customers by Grand Menu price tier (from 1 Sep 2026) -->
+      <div id="sphGrandTiers" class="mt-4 pt-3" style="border-top:1px solid var(--border)"></div>
     </div>
     <!-- SPH by Branch -->
     <div class="card p-5">

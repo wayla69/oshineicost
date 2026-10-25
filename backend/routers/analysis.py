@@ -9,10 +9,12 @@ registered by main.py right after this one). URLs unchanged.
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import HTTPException, Query, Request, Response
+import datetime as _sph_dt
 from typing import Dict, List, Optional
 from rules import avg_ticket_sql, net_revenue_row, net_revenue_sum
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price)
+from rules import SERVICE_CHARGE_MULT, net_to_base, tier_codes_between, tier_label
 from core import (
     _FOOD_CATEGORY_FILTER,
     _cogs_case,
@@ -1923,6 +1925,138 @@ def analysis_percentiles(
 # ---------------------------------------------------------------------------
 # /api/analysis/sph  — Spend-per-Head distribution
 # ---------------------------------------------------------------------------
+# Customers by Grand Menu price tier (PR-SPHT, owner 2026-10-25). Fixed per tier
+# and categorical (which package), never good/bad.
+SPH_TIER_COLORS = {
+    "459": "#0ea5e9", "629": "#14b8a6", "789": "#6366f1", "999": "#f59e0b",
+    "1299": "#c026d3", "promo": "#8b5cf6", "child": "#ec4899", "alacarte": "#94a3b8",
+}
+
+
+def _sph_last_day(month: str) -> str:
+    y, m = int(month[:4]), int(month[5:7])
+    nxt = _sph_dt.date(y + (m == 12), m % 12 + 1, 1)
+    return (nxt - _sph_dt.timedelta(days=1)).isoformat()
+
+
+def _sph_next_day(day: str) -> str:
+    return (_sph_dt.date.fromisoformat(day[:10]) + _sph_dt.timedelta(days=1)).isoformat()
+
+
+def _sph_tiers(con, month_from=None, month_to=None, month=None, branch=None, group=None):
+    """(tiers, reason) — customers and bills by Grand Menu price tier over the
+    requested months, clipped to on/after GRAND_MENU_FROM.
+
+    Revenue basis = the card's SPH (ex VAT, ex service charge): menu_fact_total.rev
+    is Sale.Total / 1.07 and still carries the 5 % service charge, so it is divided
+    by SERVICE_CHARGE_MULT (owner option A, 2026-10-25) — an approximation that
+    slightly understates bills that carried no service charge. The 'alacarte' row
+    is every bill/customer of the card minus the buffet tiers, floored at 0.
+    """
+    mf, mt = month_from or month, month_to or month
+    req_from = f"{mf[:7]}-01" if mf else None
+    req_to = _sph_last_day(mt[:7]) if mt else None
+    if req_to and req_to < GRAND_MENU_FROM:
+        return None, "before_grand_menu"
+    lo = max(req_from or GRAND_MENU_FROM, GRAND_MENU_FROM)
+    hi = req_to or "9999-12-31"
+    clipped = req_from is None or req_from < GRAND_MENU_FROM
+
+    bf = ["b.name != 'ALL'"]
+    bp: dict = {}
+    if branch:
+        bf.append("b.name = :branch")
+        bp["branch"] = branch
+    _group_filter(bf, bp, group)
+    bids = [r[0] for r in con.execute(
+        f"SELECT b.branch_id FROM branches b WHERE {' AND '.join(bf)}", bp).fetchall()]
+    if not bids:
+        return None, "no_data"
+    ph = ",".join("?" * len(bids))
+    try:
+        facts_to = con.execute(
+            f"SELECT MAX(day) FROM menu_fact_total WHERE day BETWEEN ? AND ? AND branch_id IN ({ph})",
+            [lo, hi] + bids).fetchone()[0]
+    except Exception:
+        facts_to = None                       # menu_fact_total not built yet (DB copy)
+    if not facts_to:
+        return None, "no_facts"
+
+    sf = ["st.customer_count > 0", "st.source = 'Easy'", "st.sold_at >= :t_lo",
+          "st.sold_at < :t_hi"] + bf
+    sp = dict(bp, t_lo=lo, t_hi=_sph_next_day(hi) if req_to else hi)
+    sales_to = con.execute(
+        f"""SELECT MAX(DATE(st.sold_at)) FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id WHERE {' AND '.join(sf)}""", sp).fetchone()[0]
+    data_to = facts_to
+    sp["t_hi"] = _sph_next_day(data_to)
+    card = con.execute(
+        f"""SELECT COUNT(*), COALESCE(SUM(st.customer_count), 0),
+                   COALESCE(SUM({net_revenue_row('st')}), 0)
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            WHERE {' AND '.join(sf)}""", sp).fetchone()
+    card_bills, card_pax, card_rev = int(card[0] or 0), float(card[1] or 0), float(card[2] or 0)
+
+    codes = tier_codes_between(lo, data_to)
+    prices = sorted((c for c in codes if c.isdigit()), key=int)          # ฿459 → ฿1,299
+    order = prices + [c for c in codes if not c.isdigit()]
+    agg = {c: [0, 0.0, 0.0] for c in order}
+    for t, nb, px, rv in con.execute(
+            f"""SELECT tier, SUM(bills), SUM(pax), SUM(rev) FROM menu_fact_total
+                WHERE day BETWEEN ? AND ? AND branch_id IN ({ph}) GROUP BY tier""",
+            [lo, data_to] + bids):
+        k = str(t or "promo")
+        k = k if k in agg else "promo"        # a code not sold in the window = other price
+        a = agg[k]
+        a[0] += int(nb or 0)
+        a[1] += float(px or 0)
+        a[2] += float(rv or 0) / SERVICE_CHARGE_MULT
+
+    bf_bills = sum(a[0] for a in agg.values())
+    bf_pax = sum(a[1] for a in agg.values())
+    bf_rev = sum(a[2] for a in agg.values())
+    agg["alacarte"] = [max(0, card_bills - bf_bills), max(0.0, card_pax - bf_pax),
+                       max(0.0, card_rev - bf_rev)]
+    order = order + ["alacarte"]
+    tot_bills = sum(agg[k][0] for k in order)
+    tot_pax = sum(agg[k][1] for k in order)
+
+    rows = []
+    for k in order:
+        nb, px, rv = agg[k]
+        price = int(k) if k.isdigit() else None
+        base = round(net_to_base(price), 2) if price else None
+        rph = round(rv / px, 2) if px else None
+        rows.append({
+            "tier": k,
+            "label": "ไม่ใช่บุฟเฟ่ต์" if k == "alacarte" else tier_label(k),
+            "price": price,
+            "base_price": base,
+            "color": SPH_TIER_COLORS.get(k, "#94a3b8"),
+            "bills": nb,
+            "pax": round(px),
+            "revenue": round(rv, 2),
+            "bill_share": round(nb / tot_bills * 100, 2) if tot_bills else 0.0,
+            "pax_share": round(px / tot_pax * 100, 2) if tot_pax else 0.0,
+            "rev_per_head": rph,
+            "sph_vs_price": round(rph / base, 3) if (rph is not None and base) else None,
+            "over_price": round(rph - base, 2) if (rph is not None and base) else None,
+        })
+    period_to = min(hi, sales_to) if sales_to else data_to
+    return {
+        "from": lo,
+        "to": period_to,
+        "clipped": clipped,
+        "data_to": data_to,
+        "lagging": data_to < period_to,
+        "grand_menu_from": GRAND_MENU_FROM,
+        "revenue_basis": "ex_vat_ex_service_charge_approx",
+        "total_bills": tot_bills,
+        "total_pax": round(tot_pax),
+        "rows": rows,
+    }, None
+
+
 @router.get("/api/analysis/sph")
 @ttl_cache
 def analysis_sph(
@@ -1930,17 +2064,20 @@ def analysis_sph(
     month_from: Optional[str] = Query(None),
     month_to: Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
+    group: Optional[str] = Query(None, description="master | franchise"),
 ):
     filters = ["st.customer_count > 0", "st.source = 'Easy'", "b.name != 'ALL'"]
     params: dict = {}
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month,
                         col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
 
     with get_db() as con:
+        tiers, tiers_reason = _sph_tiers(con, month_from, month_to, month, branch, group)
         rows = con.execute(f"""
             SELECT ({net_revenue_row('st')}) / st.customer_count AS sph,
                    b.name                               AS branch,
@@ -1951,7 +2088,8 @@ def analysis_sph(
         """, params).fetchall()
 
     if not rows:
-        return {"by_branch": [], "distribution": [], "overall": {}, "by_daypart": [], "trend": []}
+        return {"by_branch": [], "distribution": [], "overall": {}, "by_daypart": [], "trend": [],
+                "tiers": tiers, "tiers_reason": tiers_reason}
 
     sphs = [r["sph"] for r in rows if r["sph"] is not None]
     sphs.sort()
@@ -2035,6 +2173,7 @@ def analysis_sph(
     if branch:
         filters2.append("b.name = :branch")
         params2["branch"] = branch
+    _group_filter(filters2, params2, group)
     _month_range_filter(filters2, params2, month_from, month_to, month,
                         col="strftime('%Y-%m', st.sold_at)")
     where2 = "WHERE " + " AND ".join(filters2)
@@ -2087,6 +2226,9 @@ def analysis_sph(
         },
         "by_daypart": by_daypart,
         "trend": trend,
+        # PR-SPHT: customers by Grand Menu price tier (null + reason before 1 Sep 2026)
+        "tiers": tiers,
+        "tiers_reason": tiers_reason,
     }
 
 

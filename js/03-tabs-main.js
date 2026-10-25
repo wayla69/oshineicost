@@ -2240,6 +2240,73 @@ function _sphRulerFit(rulerEl) {
   all.forEach(m => { if (m.classList.contains('sph-mk-edge')) m.querySelector('.sph-lbl').style.visibility = 'hidden'; });
 }
 
+// PR-SPHT (owner 2026-10-25): customers by the Grand Menu price tier (from 1 Sep 2026), under the spend bands.
+// The answer's sph.tiers = {from, to, clipped, data_to, lagging, rows:[{tier,label,price,base_price,color,bills,pax,
+// pax_share,bill_share,rev_per_head,over_price}]} or null (sph.tiers_reason). Tier colours are categorical.
+function renderSphGrandTiers(sph) {
+  const el = document.getElementById('sphGrandTiers');
+  if (!el) return;
+  const t = sph && sph.tiers;
+  const head = chips => `<div class="flex flex-wrap items-center gap-2 mb-2">
+      <h3 class="text-sm font-semibold" style="color:var(--text-primary)">ตาม tier ราคาเมนูใหม่ (ตั้งแต่ 1 ก.ย. 2569)</h3>${chips || ''}</div>`;
+  const chip = txt => `<span class="sph-gt-chip text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-subtle);color:var(--text-secondary);border:1px solid var(--border)">${txt}</span>`;
+  if (!t || !(t.rows || []).length) {
+    const msg = sph && sph.tiers_reason === 'before_grand_menu'
+      ? 'เมนูใหม่เริ่ม 1 ก.ย. 2569 · เลือกช่วงตั้งแต่ ก.ย. 2569'
+      : 'ยังไม่มีข้อมูล tier ของช่วงนี้';
+    el.innerHTML = head() + `<p class="sph-gt-empty text-xs py-2" style="color:var(--text-muted)">${msg}</p>`;
+    return;
+  }
+  const rows = t.rows.filter(r => (r.pax || 0) > 0 || (r.bills || 0) > 0);
+  const chips = (t.clipped ? chip('นับตั้งแต่ 1 ก.ย. 2569') : '')
+    + (t.lagging && t.data_to ? chip('ข้อมูล tier ถึง ' + esc(fmtDateTh(t.data_to))) : '');
+  const ph = document.body.classList.contains('ph-on');
+  const fs = ph ? 12 : 11;
+  const bar = rows.map(r => {
+    const pct = r.pax_share || 0;
+    if (pct < 0.1) return '';
+    const inner = pct > 4 ? `<span style="font-size:${fs}px;font-weight:600;color:${inkOn(r.color)}">${pct.toFixed(1)}%</span>` : '';
+    return `<div class="sph-gt-seg" data-tier="${esc(r.tier)}" title="${esc(r.label)} — ${fmtN(r.pax)} ลูกค้า · ${fmtN(r.bills)} บิล (${pct.toFixed(1)}%)"
+      style="flex:${pct};background:${r.color};display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:help">${inner}</div>`;
+  }).join('');
+  const tiles = rows.map(r => {
+    const over = r.over_price == null ? null : Math.round(r.over_price);
+    const diff = (over == null || over === 0) ? ''
+      : over > 0 ? `<div style="font-size:${fs}px;color:var(--good-ink);font-weight:600">+฿${fmtN(over)} จากราคา tier</div>`
+      : `<div style="font-size:${fs}px;color:var(--text-muted)">−฿${fmtN(-over)} จากราคา tier</div>`;
+    return `<div class="sph-gt-tile flex items-start gap-2 px-2 py-1.5 rounded border border-slate-200" data-tier="${esc(r.tier)}" style="min-height:44px">
+      <span style="width:10px;height:10px;border-radius:3px;background:${r.color};flex-shrink:0;margin-top:4px"></span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-baseline justify-between gap-1">
+          <span class="font-medium truncate" style="font-size:${fs + 1}px;color:var(--text-primary)">${esc(r.label)}</span>
+          <span class="font-bold" style="font-size:${fs + 2}px;color:var(--text-primary)">${(r.pax_share || 0).toFixed(1)}%</span>
+        </div>
+        <div style="font-size:${fs}px;color:var(--text-secondary)">${fmtN(r.pax)} ลูกค้า · ${fmtN(r.bills)} บิล</div>
+        <div style="font-size:${fs}px;color:var(--text-secondary)">ยอด/หัว ${r.rev_per_head == null ? '—' : '฿' + fmtN(r.rev_per_head)}</div>
+        ${diff}
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = head(chips)
+    + `<div class="rounded-lg overflow-hidden border border-slate-200 mb-2" style="height:38px;display:flex" id="sphGrandBar">${bar}</div>`
+    + `<div id="sphGrandLegend" class="grid grid-cols-2 md:grid-cols-3 gap-2">${tiles}</div>`;
+  const barEl = document.getElementById('sphGrandBar');
+  _sphGrandFit(barEl);
+  if (barEl && typeof ResizeObserver === 'function') new ResizeObserver(() => _sphGrandFit(barEl)).observe(barEl);
+}
+
+// A share label stays only where it fits inside its segment (a narrow phone bar hides the label of a ~5 % segment;
+// the tile below carries the number and the segment keeps its tooltip).
+function _sphGrandFit(barEl) {
+  if (!barEl || !barEl.offsetWidth) return;
+  barEl.querySelectorAll('.sph-gt-seg').forEach(seg => {
+    const l = seg.querySelector('span');
+    if (!l) return;
+    l.style.visibility = '';
+    if (l.offsetWidth > seg.clientWidth - 4) l.style.visibility = 'hidden';
+  });
+}
+
 async function loadPersona() {
   const data = await api(`${API}/api/analysis/persona${qp()}`);
   const o = data.overall;
