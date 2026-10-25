@@ -11,6 +11,9 @@
     </div>
   </div>
 
+  <!-- DV2: the simulators are editors - on a phone a notice first -->
+  <div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>
+  <div class="desk-only">
   <!-- Mode switcher -->
   <div class="flex flex-wrap gap-1 mb-5" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:4px;width:fit-content">
     <button onclick="simhubSetMode('bomcost')"     id="sh-mode-bomcost"     class="subtab-btn active text-sm px-4 py-1.5">ต้นทุน BoM</button>
@@ -24,4 +27,5 @@
   <div id="sh-host-sensitivity" class="sh-pane hidden"></div>
   <div id="sh-host-tier"        class="sh-pane hidden"></div>
   <div id="sh-host-whatif"      class="sh-pane hidden"></div>
+  </div>
 </div>

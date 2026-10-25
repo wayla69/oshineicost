@@ -326,8 +326,8 @@
       </div>
     </div>
 
-    <!-- Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate) -->
-    <div class="card p-5 mt-5">
+    <!-- Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate) · DV2: hidden while it has no bills -->
+    <div class="card p-5 mt-5" id="hetCard">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
         <h2 class="section-title mb-0">กลุ่มกินหนัก · กำไรต่อหัวจริง (จ่าย − กินจริง) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b3" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b3" data-title="กลุ่มกินหนัก · กำไรต่อหัวจริง"><p>ต้นทุน BoM ต่อบิลจริง (ไม่เฉลี่ยตามยอด) เทียบกับเงินที่จ่าย → หา <b>ลูกค้าที่กินจนขาดทุน</b> · แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (คำนวณจากบิลที่มีต้นทุน ~31 วัน)</p></template>
         <span id="hetWindow" class="text-[11px]" style="color:var(--text-muted)"></span>
@@ -355,8 +355,8 @@
       </div>
     </div>
 
-    <!-- Turn-Time & Table Throughput Efficiency -->
-    <div class="card p-5 mt-5">
+    <!-- Turn-Time & Table Throughput Efficiency · DV2: hidden while it has no tables -->
+    <div class="card p-5 mt-5" id="turnCard">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
         <h2 class="section-title mb-0">เวลานั่งและรอบโต๊ะ · ประสิทธิภาพการหมุนโต๊ะ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf-b4" title="คำอธิบาย">?</button></h2><template id="hlp-buffetperf-b4" data-title="เวลานั่งและรอบโต๊ะ · ประสิทธิภาพการหมุนโต๊ะ"><p>โต๊ะที่นั่งนาน = เสียโอกาสรอบถัดไป · <b>GP/นาที-โต๊ะ</b> = กำไรที่โต๊ะสร้างต่อ 1 นาทีที่ถูกใช้ · = นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (เสียสองต่อ) · ที่นั่งไม่มีในข้อมูล จึงวัดต่อ "โต๊ะ"</p></template>
         <span id="turnChain" class="text-[11px]" style="color:var(--text-muted)"></span>
@@ -480,33 +480,8 @@
       <div style="height:260px"><canvas id="bperfCohort"></canvas></div>
     </div>
 
-    <!-- Portion Velocity -->
-    <div class="card p-5 mb-5" style="border:1px solid var(--accent)">
-      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h2 class="text-base font-bold text-violet-900">อัตราการเสิร์ฟ — จำนวนต่อหัว</h2>
-          <p class="text-xs text-slate-500 mt-0.5">รายการไหนกดสั่งมากขึ้น/น้อยลง เมื่อ normalize ด้วยจำนวน cover</p>
-        </div>
-        <div class="flex gap-2 text-xs">
-          <button onclick="setPvFilter('all')"  id="pvFilter-all"  class="px-3 py-1.5 bg-violet-600 text-white rounded-lg font-medium">ทั้งหมด</button>
-          <button onclick="setPvFilter('up')"   id="pvFilter-up"   class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-violet-50">เพิ่ม</button>
-          <button onclick="setPvFilter('down')" id="pvFilter-down" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-violet-50">ลด</button>
-        </div>
-      </div>
-      <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
-        <table class="text-xs w-full">
-          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
-            <th class="py-2 pr-3">SKU</th>
-            <th class="py-2 pr-3">รายละเอียด</th>
-            <th class="py-2 pr-3">หมวด</th>
-            <th class="py-2 pr-3 text-right">จำนวน/หัว (ล่าสุด)</th>
-            <th class="py-2 pr-3 text-right">แนวโน้ม</th>
-            <th class="py-2 text-right">% เปลี่ยนแปลง</th>
-          </tr></thead>
-          <tbody id="pvBody"><tr><td colspan="6" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+    <!-- DV2 (phone table review 2026-10-25): อัตราการเสิร์ฟ (+0.0 % on every row) is removed - the per-head change of a dish is on
+         ต้นทุนต่อหัว · Top 60 and the menu-spike card -->
 
     <!-- Plate Cost Distribution -->
     <div class="card p-5 mb-5" style="border:1px solid #ec4899">
@@ -523,37 +498,7 @@
       </div>
     </div>
 
-    <!-- SKU Lifecycle -->
-    <div class="card p-5" style="border:1px solid #10b981">
-      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h2 class="text-base font-bold text-emerald-900">วงจรชีวิตเมนู SKU</h2>
-          <p class="text-xs text-slate-500 mt-0.5">จำแนก SKU ตาม trend ของ qty: new / growing / stable / declining / dead</p>
-        </div>
-        <div class="flex flex-wrap gap-2 text-xs">
-          <button onclick="setLcFilter('all')"       id="lcFilter-all"       class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-medium">ทั้งหมด</button>
-          <button onclick="setLcFilter('new')"       id="lcFilter-new"       class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">ใหม่</button>
-          <button onclick="setLcFilter('growing')"   id="lcFilter-growing"   class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">เติบโต</button>
-          <button onclick="setLcFilter('stable')"    id="lcFilter-stable"    class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">คงที่</button>
-          <button onclick="setLcFilter('declining')" id="lcFilter-declining" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">ลดลง</button>
-          <button onclick="setLcFilter('dead')"      id="lcFilter-dead"      class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">ไม่มียอดขาย</button>
-        </div>
-      </div>
-      <div id="lcKpis" class="flex flex-wrap gap-3 mb-4"></div>
-      <div class="overflow-x-auto" style="max-height:400px;overflow-y:auto">
-        <table class="text-xs w-full">
-          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
-            <th class="py-2 pr-3">SKU</th>
-            <th class="py-2 pr-3">รายละเอียด</th>
-            <th class="py-2 pr-3">หมวด</th>
-            <th class="py-2 pr-3 text-right">จำนวนล่าสุด</th>
-            <th class="py-2 pr-3 text-right">แนวโน้ม %/เดือน</th>
-            <th class="py-2 text-right">สถานะ</th>
-          </tr></thead>
-          <tbody id="lcBody"><tr><td colspan="6" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+    <!-- DV2: วงจรชีวิตเมนู SKU (833 rows, "new +0.0 %" on every row) is removed -->
 
   </div><!-- /bperftab-bomdeep -->
 

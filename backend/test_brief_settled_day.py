@@ -25,7 +25,8 @@ import main  # noqa: E402
 import conftest as _cf  # noqa: E402
 import rules  # noqa: E402
 
-TH_TODAY = (dt.datetime.utcnow() + dt.timedelta(hours=7)).date()
+TH_TODAY = _cf.bkk_today()   # the app's Bangkok day (rules.TH_TODAY_SQL) at the session's instant
+pytestmark = pytest.mark.usefixtures("bkk_frozen")   # SQLite 'now' = the instant TH_TODAY is built from
 YESTERDAY = (TH_TODAY - dt.timedelta(days=1)).isoformat()
 DAY_BEFORE = (TH_TODAY - dt.timedelta(days=2)).isoformat()
 

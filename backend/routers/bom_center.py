@@ -994,7 +994,7 @@ def bc_prices(month: Optional[str] = Query(None)):
     month = month if month and _MONTH.match(month) else _this_month()
     with get_db() as con:
         _ensure(con)
-        return {"month": month, "rows": _p.month_table(con, month)}
+        return {"month": month, "rows": _p.month_table(con, month, with_change=True)}
 
 
 @router.get("/api/bom-center/prices/history")

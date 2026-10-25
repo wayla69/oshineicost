@@ -7,12 +7,11 @@ days plus a few hours of the fourth over four days — understating the run rate
 the projection built on it, and the weekday-fair MoM baseline sized by
 days_elapsed.
 
-The fixture is built relative to the real Thai today because the anchor is
-chosen by SQL date('now','+7 hours'), which a test cannot move.
+The fixture is built relative to the Thai today because the anchor is chosen by
+SQL date('now','+7 hours'); conftest pins that clock for the session (bkk_frozen).
 """
 import os
 os.environ["OSHINEI_NO_SWAP"] = "1"
-import datetime as dt
 import sqlite3
 import sys
 from pathlib import Path
@@ -25,7 +24,8 @@ sys.path.insert(0, str(HERE))
 import main  # noqa: E402
 import conftest as _cf  # noqa: E402
 
-TH_TODAY = dt.datetime.utcnow() + dt.timedelta(hours=7)
+TH_TODAY = _cf.bkk_today()   # the app's Bangkok day (rules.TH_TODAY_SQL) at the session's instant
+pytestmark = pytest.mark.usefixtures("bkk_frozen")   # SQLite 'now' = the instant TH_TODAY is built from
 
 
 @pytest.fixture(scope="module")
