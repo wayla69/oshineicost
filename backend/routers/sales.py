@@ -1734,7 +1734,8 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     base's days. The base must end before the period starts, <= 92 days, finished days only (400 in formal Thai otherwise).
     spikes_plates / plates_count (PR-TD, owner 2026-10-25, "แบบเดิม") = the same rule on raw plates - period plates vs the weekday-fair normal
     plates of the base (the chosen base: its plates per trading day x the period's trading days), >= 1.5x and >= 5 plates (thin from 20),
-    existing menus only (new and returning menus excluded the same way), sorted by +จาน; no per-head, tier or cost key.
+    existing menus only (new and returning menus excluded the same way), sorted by +จาน; no per-head, tier or cost key; in_per_head (PR-SX) =
+    the same branch x SKU is also in spikes (per head), plates_only_count = the rows without it. A buffet package line is in no list (PR-SX).
     base = {kind: normal | range, from, to}. summary = the strip of the card: customers of the period and of the base per day
     (customers_vs_base_pct), the tier with the largest summed extra plates over the listed rows (tier_top), the extra plates of
     the first `top` rows (top_excess)."""
@@ -1784,7 +1785,10 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
           FROM sales_sku_daily d {scan} {bjoin}
           WHERE d.day BETWEEN :ps AND :pe {bfilt} GROUP BY d.branch_id, d.sku_id) a
         JOIN branches b ON b.branch_id=a.bid JOIN skus s ON s.sku_id=a.sid
-        WHERE a.q > 0 AND UPPER(COALESCE(s.sku_code,'')) NOT IN ('SERVICECHARGE','SERVICE')""", q).fetchall()
+        WHERE a.q > 0 AND UPPER(COALESCE(s.sku_code,'')) NOT IN ('SERVICECHARGE','SERVICE')
+          AND NOT {tier_code_sql("COALESCE(s.sku_code,'')")}""", q).fetchall()
+    # PR-SX (owner 2026-10-25, "แก้เลย"): a buffet package line (rules.tier_code_sql - BUFFET*, BUFFETCHILD, the legacy tier codes) is the
+    # ticket, not a dish: never a spike, a new menu or a raw-plates row, so never in the counts, the strip or the CSV either
     # 2 - the baseline, one pass: qty and days sold per branch x SKU x weekday
     #     (one row per branch x day x SKU, so SUM(qty > 0) = days sold)
     base: dict = {}
@@ -1872,7 +1876,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             prow_ = {"branch": branch_name, "menu": name, "today": round(pq), "per_day": round(pq / days, 1), "avg": round(pexp, 1),
                      "expected": round(pexp), "x": round(px, 1) if px is not None else None,
                      "pct": round((px - 1) * 100) if px is not None else None, "excess": round(pq - pexp), "is_new": False,
-                     "kind": kind, "_ex": pq - pexp}
+                     "kind": kind, "_ex": pq - pexp, "_k": (bid, sid)}
             if pthin:
                 prow_["thin_base"] = True
             plates.append(prow_)
@@ -1929,6 +1933,11 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         cost_out = {"food_cost_total": round(sc.food_cost, 2), "revenue_total": round(sc.revenue, 2),
                     "revenue_basis": sc.revenue_basis, "top_extra_cost": round(tx, 2), "top_cost_share": sc.share(tx),
                     "top_pp": sc.pp(tx), "uncosted_count": sum(1 for s in spikes if s["uncosted"])}
+    # PR-SX (owner 2026-10-25) · a raw-plates row whose menu is also a per-head spike (same branch x SKU) carries in_per_head: true; the
+    # card hides those by default, so แบบเดิม lists what spiked only because more customers came (plates_only_count = the rest)
+    phk = {(s["_bid"], s["_sid"]) for s in spikes}
+    for r in plates:
+        r["in_per_head"] = r.pop("_k") in phk
     for s in spikes:
         for k in ("_bid", "_sid", "_pq", "_exp", "_cp", "_ex"):
             s.pop(k, None)
@@ -1965,7 +1974,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             "window_days": _SPIKE_BASE_DAYS, "threshold": threshold, "rate_per": _SPIKE_PER,
             "tier_data_to": fh.isoformat() if fh else None,
             "count": len(spikes), "spikes": shown,
-            "plates_count": len(plates), "spikes_plates": [{k: v for k, v in r.items() if k != "_ex"} for r in
+            "plates_count": len(plates), "plates_only_count": sum(1 for r in plates if not r["in_per_head"]), "spikes_plates": [{k: v for k, v in r.items() if k != "_ex"} for r in
                                                            sorted(plates, key=lambda r: (-r["_ex"], r["menu"], r["branch"]))[:limit]],
             "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
 

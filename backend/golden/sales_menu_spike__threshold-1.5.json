@@ -19,6 +19,7 @@
  "new_menus": [],
  "period": "day",
  "plates_count": 0,
+ "plates_only_count": 0,
  "rate_per": 100,
  "revenue_basis": "net",
  "revenue_total": 1900.0,

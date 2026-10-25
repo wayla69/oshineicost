@@ -316,9 +316,13 @@ for (const [name, mode] of [['แตะง่าย', 'touch'], ['พอดี�
 }
 
 for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่าย 390', PHONE, 'touch'], ['พอดีจอ 390', PHONE, 'fit']]) {
-  test(`เมนูพุ่ง แบบเดิม (${name}): the raw-plates section is the last one, 15 rows + ดูทั้งหมด, folds and remembers`, async ({ browser }) => {
+  test(`เมนูพุ่ง แบบเดิม (${name}): the raw-plates section is the last one, folded at first, 15 rows + ดูทั้งหมด, opens and remembers`, async ({ browser }) => {
     test.setTimeout(150_000);
     const { ctx, page, errors } = await open(browser, opts, mode);
+    // PR-SX: folded until opened; the rows carry no in_per_head, so the per-head filter (on) keeps all 18
+    expect(await page.evaluate(() => document.getElementById('spikePlatesBody').hidden)).toBe(true);
+    await page.evaluate(() => document.getElementById('spikePlatesFold').click());
+    expect(await page.evaluate(() => localStorage.getItem('oshinei_spike_plates_open_v2'))).toBe('1');
     const m = await page.evaluate(() => {
       const secs = [...document.querySelectorAll('#dsSpike > section')].map(x => x.className);
       const t = document.getElementById('spikePlatesTable');
@@ -336,13 +340,12 @@ for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่า
     expect(m.btn).toBe('ดูทั้งหมด (18)');
     await page.evaluate(() => document.getElementById('spikePlatesAll').click());
     expect(await page.evaluate(() => document.getElementById('spikePlatesTable').tBodies[0].rows.length)).toBe(18);
-    // fold it: remembered on this device
+    // fold it again: remembered on this device
     await page.evaluate(() => document.getElementById('spikePlatesFold').click());
     expect(await page.evaluate(() => { const b = document.getElementById('spikePlatesBody'); return !!b && b.hidden; })).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('oshinei_spike_plates_open'))).toBe('0');
+    expect(await page.evaluate(() => localStorage.getItem('oshinei_spike_plates_open_v2'))).toBe('0');
     await page.evaluate(() => _spikeDraw(_spikeLast, _spikeOneBr));
     expect(await page.evaluate(() => document.getElementById('spikePlatesBody').hidden)).toBe(true);
-    await page.evaluate(() => document.getElementById('spikePlatesFold').click());
     expect(errors).toEqual([]);
     await ctx.close();
   });

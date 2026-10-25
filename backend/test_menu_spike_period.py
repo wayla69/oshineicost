@@ -620,7 +620,7 @@ def test_day_mode_per_head(monkeypatch):
 #   แซลมอน 10 -> 30 (excess 140)  dish cost: the analyst's list ฿50 in Sep, ฿60 in Oct (weighted (90x50 + 120x60) / 210)
 #   หมึก   20 -> 60 (excess 280)  ฿10 from the cost-management table (no list row)
 #   ไม่มีต้นทุน 10 -> 30 (excess 140) no cost anywhere -> last, uncosted
-#   BUFFET799 10 -> 30 (excess 140) a tier PACKAGE: a sku_cost row of ฿999 that must never be used -> last, package
+#   BUFFET799 10 -> 30 (excess 140) a tier PACKAGE: a sku_cost row of ฿999 that must never be used; PR-SX: in no list at all
 #   ข้าว 50 -> 50 (no spike, ฿5 in the food cost) · เมนูใหม่ from 25 Sep, 5 a day, list ฿20 (new menu: period_cost 35 x 20)
 _PC0, _PC1 = dt.date(2026, 9, 28), dt.date(2026, 10, 4)
 _COST_ROW = {"unit_cost", "extra_cost", "cost_share", "extra_cost_per_head_pp", "uncosted", "package", "period_cost"}
@@ -691,17 +691,15 @@ def test_extra_cost_and_cost_share_two_months_of_dish_cost(monkeypatch):
     assert (nm["unit_cost"], nm["period_cost"]) == (20.0, 700.0)
 
 
-def test_sorted_by_extra_cost_uncosted_and_package_last(monkeypatch):
+def test_sorted_by_extra_cost_uncosted_last_and_no_package(monkeypatch):
     r = _cost_range(_db_cost(), monkeypatch)
     assert [s["menu"] for s in r["spikes"]][:2] == ["แซลมอน", "หมึก"]          # by ฿, although หมึก has twice the extra plates
     tail = r["spikes"][2:]
-    assert len(tail) == 2 and all(s["unit_cost"] == 0 and s["extra_cost"] == 0 for s in tail)
-    nc = next(s for s in tail if s["uncosted"])
-    assert nc["menu"] == "ไม่มีต้นทุน" and nc["package"] is False and r["uncosted_count"] == 1
-    # the buffet tier package code is never costed: its ฿999 sku_cost row is not used, not in the food cost, and not "uncosted"
-    pk = next(s for s in tail if s["package"])
-    assert pk["menu"] == "บุฟเฟ่ต์ 799"
-    assert pk["uncosted"] is False and pk["unit_cost"] == 0
+    assert len(tail) == 1 and all(s["unit_cost"] == 0 and s["extra_cost"] == 0 for s in tail)
+    nc = tail[0]
+    assert nc["menu"] == "ไม่มีต้นทุน" and nc["uncosted"] is True and nc["package"] is False and r["uncosted_count"] == 1
+    # PR-SX: the buffet tier package code is not a menu - in no list; its ฿999 sku_cost row is not in the food cost either
+    assert all(s["menu"] != "บุฟเฟ่ต์ 799" for s in r["spikes"] + r["spikes_plates"] + r["new_menus"])
     assert r["food_cost_total"] == 18350                                 # 210 x ฿999 would add ฿209,790
 
 
@@ -717,7 +715,7 @@ def test_no_cost_view_keeps_the_excess_order_and_no_cost_key(monkeypatch):
 
 def test_top_param_sums_the_first_rows(monkeypatch):
     r = _cost_range(_db_cost(), monkeypatch, top=1)
-    assert r["top"] == 1 and r["top_extra_cost"] == 7800.0 and len(r["spikes"]) == 4      # every row still comes; the card cuts
+    assert r["top"] == 1 and r["top_extra_cost"] == 7800.0 and len(r["spikes"]) == 3      # every row still comes; the card cuts
 
 
 def test_the_food_cost_is_the_cogs_expression_on_the_fixture(client, app_db):
@@ -766,7 +764,7 @@ def test_roles_without_cost_get_no_cost_key(client, app_db, auth_on, monkeypatch
     a = mk.json()
     assert a.get("cost_view") is False and a["sort"] == "excess" and a["top"] == 15, a
     assert not (_COST_TOP & set(a))
-    assert len(a["spikes"]) == 4 and a["new_menus"]
+    assert len(a["spikes"]) == 3 and a["new_menus"]
     for s in a["spikes"] + a["new_menus"]:
         assert not (_COST_ROW & set(s)), s
     assert a["spikes"][0]["menu"] == "หมึก"
@@ -910,7 +908,7 @@ def test_compare_base_must_be_finished_days(client):
 
 
 # ── 12. PR-TD · แบบเดิม: the raw-plates list at the bottom of the card (owner 2026-10-25) ──────────────────────────────────────
-_PLATE_KEYS = {"branch", "menu", "today", "per_day", "avg", "expected", "x", "pct", "excess", "is_new", "kind"}
+_PLATE_KEYS = {"branch", "menu", "today", "per_day", "avg", "expected", "x", "pct", "excess", "is_new", "kind", "in_per_head"}
 
 
 def test_raw_plates_flag_a_busy_week_that_per_head_does_not(monkeypatch):
@@ -954,3 +952,58 @@ def test_raw_plates_keep_the_rules_new_and_returning_menus_excluded(monkeypatch)
     assert [s["menu"] for s in r["spikes_plates"]] == ["ซาชิมิ", "ข้าวปั้น", "เมนูเล็ก"] and r["plates_count"] == 3
     r = _call(_db(many), monkeypatch, period="range", date_from=_P0.isoformat(), date_to=_P1.isoformat(), limit=2)
     assert len(r["spikes_plates"]) == 2 and r["plates_count"] == 3
+
+
+# ── 13. PR-SX (owner 2026-10-25, "แก้เลย") · no buffet package in any list; raw-plates rows say whether per head lists them too ─────────
+def _db_pkg():
+    """One branch, 1 Jul .. 31 Aug, no customer counts (basis "days"). In the period Mon 17 .. Sun 23 Aug every line below x3:
+    the package lines BUFFET (adult), BUFFETCHILD, BUFFETCHILDFREE and the legacy tier code B01; a real dish B0101 (not a tier
+    code); and BUFFETNEW, a package variant first sold on 18 Aug (it would be a new menu)."""
+    con = _db(lambda d: {1: 30 if _in(d) else 10})
+    con.executescript("""
+      INSERT INTO skus VALUES (20, 'BUFFET', 'บุฟเฟ่ต์ (ผู้ใหญ่)'), (21, 'BUFFETCHILD', 'บุฟเฟ่ต์ (เด็ก)'),
+                              (22, 'BUFFETCHILDFREE', 'BUFFETCHILD_FREE'), (23, 'B01', 'บุฟเฟ่ต์ 299'),
+                              (24, 'B0101', '(B) ปลาหมึกย่าง'), (25, 'BUFFETNEW', 'บุฟเฟ่ต์ 999');
+    """)
+    d = dt.date(2026, 7, 1)
+    while d <= dt.date(2026, 8, 31):
+        for sid in (20, 21, 22, 23, 24):
+            con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, ?, ?, 0)", (d.isoformat(), sid, 30 if _in(d) else 10))
+        if d >= dt.date(2026, 8, 18):
+            con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, 25, 40, 0)", (d.isoformat(),))
+        d += dt.timedelta(days=1)
+    return con
+
+
+_PKG_NAMES = {"บุฟเฟ่ต์ (ผู้ใหญ่)", "บุฟเฟ่ต์ (เด็ก)", "BUFFETCHILD_FREE", "บุฟเฟ่ต์ 299", "บุฟเฟ่ต์ 999"}
+
+
+@pytest.mark.parametrize("cost", [True, False])
+def test_buffet_packages_are_in_no_list_and_no_count(monkeypatch, cost):
+    con = _db_pkg()
+    r = sales._menu_spike_period(con, "range", None, _P0.isoformat(), _P1.isoformat(), "", {}, 300, 1.5, with_cost=cost)
+    names = [x["menu"] for x in r["spikes"] + r["spikes_plates"] + r["new_menus"]]
+    assert not (_PKG_NAMES & set(names)), names
+    # the real dishes stay: ข้าวปั้น and the (B) dish whose code starts with B01 but is not the tier code B01
+    assert {s["menu"] for s in r["spikes"]} == {"ข้าวปั้น", "ปลาหมึกย่าง"}
+    assert (r["count"], r["plates_count"], r["new_count"]) == (2, 2, 0)
+    assert r["summary"]["top_excess"] == 2 * (210 - 70)
+    # the same answer through the endpoint, the day mode too
+    d = _call(con, monkeypatch, date="2026-08-20")
+    assert not (_PKG_NAMES & {x["menu"] for x in d["spikes"] + d["spikes_plates"] + d["new_menus"]})
+
+
+def test_raw_plates_rows_say_whether_per_head_lists_them_too(monkeypatch):
+    # customers x2 in the period: ข้าวปั้น plates x2 (per head x1.0 - only in แบบเดิม); ซาชิมิ plates x4 (per head x2.0 - in both)
+    k = lambda d: 2 if _in(d) else 1
+    con = _db_pax(lambda d: {"799": 60 * k(d), "599": 40 * k(d), "nb": 20},
+                  lambda d: {1: {"799": 30 * k(d), "599": 20 * k(d)}})
+    d = dt.date(2026, 7, 1)
+    while d <= dt.date(2026, 8, 31):
+        con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, 7, ?, 0)", (d.isoformat(), 40 if _in(d) else 10))
+        d += dt.timedelta(days=1)
+    r = _spike_range(con, monkeypatch)
+    assert [s["menu"] for s in r["spikes"]] == ["(AL) ราเมง"]
+    by = {s["menu"]: s["in_per_head"] for s in r["spikes_plates"]}
+    assert by == {"(AL) ราเมง": True, "ข้าวปั้น": False}
+    assert (r["plates_count"], r["plates_only_count"]) == (2, 1)
