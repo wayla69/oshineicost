@@ -10,37 +10,17 @@
 //   * (owner, later the same day) กำหนดเอง: ช่วงนี้ a week เทียบกับ a week (two week pickers, both ranges in the header chip, base_from /
 //     base_to sent), compact pickers on the control row; the summary strip (4 tiles, 2-up on a phone); ต้นทุนเพิ่ม is the LAST column and
 //     the last figure of a touch card; a third section at the bottom counts raw plates (แบบเดิม), top 15 + ดูทั้งหมด, folds and remembers.
+// DV3 (2026-10-25): the card is by dish (tests/e2e/menu-spike-dish.spec.js has the rows); the raw-plates section left the card (CSV only), so
+// the checks here keep the controls, the "?", the font floors, กลับมาขาย, กำหนดเอง and the strip on the dish answer (tests/e2e/spike-mock.js).
 // The menu-spike answer is mocked so the test does not depend on what the fixture holds.
 const { test, expect } = require('@playwright/test');
+const { dishAnswer } = require('./spike-mock');
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 const DESK = { viewport: { width: 1440, height: 900 } };
 const IGNORE = [/favicon/i, /Failed to load resource/i, /net::ERR_ABORTED/i, /cdn\.tailwindcss/i];
 
-function answer(url) {
-  const u = new URL(url || 'http://x/'), q = k => u.searchParams.get(k);
-  const tiers = [{ tier: '789', label: '฿789', plates: 60, customers: 140, rate: 42.9, normal_rate: 20, excess: 32, x: 2.1, high: true },
-    { tier: '999', label: '฿999', plates: 20, customers: 40, rate: 50, normal_rate: 40, excess: 4, x: 1.2, high: false }];
-  const spikes = Array.from({ length: 20 }, (_, i) => ({ branch: 'สาขาเอ', menu: `ปลาแซลมอนย่างเทริยากิ (1 ชิ้น ต่อ 1 เสิร์ฟ) ${i + 1}`, today: 200 - i, per_day: 30,
-    expected: 80, excess: 120 - i, x: 2.5, pct: 150, kind: 'buffet', basis: 'buffet', customers: 400, rate: 50, normal_rate: 20, tiers, tier_rest: 0,
-    unit_cost: 50, extra_cost: (120 - i) * 50, cost_share: 0.1, extra_cost_per_head_pp: 0.04, uncosted: false, package: false }));
-  const new_menus = [
-    { branch: 'สาขาเอ', menu: '(BF) กุ้งลายเสือย่างกระเทียม (1 ตัว)(Buffet)', first_sold: '2026-10-01', first_sold_th: '1 ต.ค.', age_days: 19, qty: 1515, per_day: 79.7,
-      kind: 'buffet', basis: 'buffet', customers: 2623, rate: 57.8, trend: null, returning: true, returned_on: '2026-10-01', first_sold_ever: '2026-03-22',
-      unit_cost: 25, period_cost: 37875, uncosted: false, package: false },
-    { branch: 'สาขาเอ', menu: 'เมนูใหม่ 1', first_sold: '2026-10-15', first_sold_th: '15 ต.ค.', age_days: 5, qty: 40, per_day: 8, kind: 'alc', basis: 'all',
-      customers: 300, rate: 13.3, trend: null, unit_cost: 30, period_cost: 1200, uncosted: false, package: false }];
-  const range = q('period') === 'range', vs = !!q('base_from');
-  const spikes_plates = Array.from({ length: 18 }, (_, i) => ({ branch: 'สาขาเอ', menu: `เมนูจานเยอะ ${i + 1}`, today: 300 - i, per_day: 40, avg: 100, expected: 100,
-    excess: 200 - i, x: 3.0, pct: 200, is_new: false, kind: 'buffet' }));
-  return { period: range ? 'range' : 'mtd', date_from: range ? q('date_from') : '2026-10-01', date_to: range ? q('date_to') : '2026-10-19',
-    latest_day: '2026-10-19', spikes, count: 20, new_menus, new_count: 2, spikes_plates, plates_count: 18,
-    base: vs ? { kind: 'range', from: q('base_from'), to: q('base_to') } : { kind: 'normal', from: '2026-09-10', to: '2026-09-30' },
-    summary: { customers: 52340, customers_per_day: 2754.7, base_customers_per_day: 2500, customers_vs_base_pct: 10.2,
-      tier_top: { label: '฿789', excess: 640 }, top_excess: 1695 },
-    top: 15, cost_view: true, sort: 'extra_cost', food_cost_total: 1e6, revenue_total: 2e6, revenue_basis: 'net', top_extra_cost: 61000,
-    top_cost_share: 6.1, top_pp: 3.05, uncosted_count: 0 };
-}
+const answer = url => dishAnswer(url);
 
 async function login(ctx) {
   if (process.env.E2E_USER && process.env.E2E_PASS) {
@@ -54,8 +34,8 @@ async function open(browser, opts, mode, tab = 'dailysales', sm = { m: 'mtd', f:
   await login(ctx);
   await ctx.addInitScript(([m, t, sp]) => { try {
     localStorage.setItem('oshinei_phmode', JSON.stringify({ [t]: m }));
-    localStorage.setItem('oshinei_spike_period', JSON.stringify(sp));
-    localStorage.setItem('oshinei_spike_all', '0');
+    localStorage.setItem('oshinei_spike_period_v2', JSON.stringify(sp));
+    localStorage.setItem('oshinei_spike_all', '0'); localStorage.setItem('oshinei_spike_new_open', '1');
   } catch (e) { /* none */ } }, [mode, tab, sm]);
   const urls = [];
   await ctx.route('**/api/sales/menu-spike?*', r => { urls.push(r.request().url());
@@ -159,50 +139,40 @@ test('เมนูพุ่ง (แตะง่าย 390): the "?" is compact w
   }
 });
 
-test('เมนูพุ่ง (desktop): one tier per line, ต้นทุนเพิ่ม on three unbroken lines, larger figures, กลับมาขาย in เมนูใหม่ and the CSV', async ({ browser }) => {
+test('เมนูพุ่ง (desktop): ต้นทุนเพิ่มสุทธิ on two unbroken lines, larger figures, กลับมาขาย in เมนูใหม่ and the CSV', async ({ browser }) => {
   test.setTimeout(150_000);
   const { ctx, page, errors } = await open(browser, DESK, 'fit');
   const m = await page.evaluate(() => {
     const tr = document.querySelector('#spikeTable tbody tr');
-    const lines = [...tr.querySelectorAll('.sp-tl')].map(l => { const r = l.getBoundingClientRect(), k = l.querySelector('.sp-tl-k').getBoundingClientRect(),
-      v = l.querySelector('.sp-tl-v').getBoundingClientRect(); return { top: r.top, h: r.height, lh: parseFloat(getComputedStyle(l).lineHeight) || 18,
-      kLeft: k.left, vLeft: v.left, kTop: k.top, vTop: v.top, hi: l.classList.contains('sp-tl-hi'), txt: l.textContent.replace(/\s+/g, ' ').trim() }; });
     const cost = [...tr.querySelector('.sp-cost-td').children].map(d => ({ t: d.textContent.trim(), h: d.getBoundingClientRect().height,
       fs: parseFloat(getComputedStyle(d).fontSize), fw: +getComputedStyle(d).fontWeight }));
     const fs = sel => [...document.querySelectorAll(sel)].map(e => parseFloat(getComputedStyle(e).fontSize));
     const back = document.querySelector('#spikeNewTable tbody tr .sp-back-chip');
-    return { lines, cost, v: fs('#spikeTable .sp-v'), sub: fs('#spikeTable .sp-perday'), names: fs('#dsSpike .sp-menu'),
-      back: back ? back.textContent.trim() : '', backTip: back ? back.title : '', oldMenus: [...document.querySelectorAll('#spikeTable .sp-menu')].map(e => e.textContent) };
+    return { cost, v: fs('#spikeTable .sp-v'), sub: fs('#spikeTable .sp-perday, #spikeTable .sp-push'), names: fs('#dsSpike .sp-menu'),
+      back: back ? back.textContent.trim() : '', backTip: back ? back.title : '' };
   });
-  // two tiers, two lines stacked; on each, the label left and +จาน right on the same line; the high one in bad ink
-  expect(m.lines.map(l => l.txt)).toEqual(['฿789 +32', '฿999 +4']);
-  expect(m.lines[1].top).toBeGreaterThan(m.lines[0].top + m.lines[0].h - 1);
-  for (const l of m.lines) {
-    expect(l.h).toBeLessThan(l.lh * 1.6);
-    expect(l.vLeft).toBeGreaterThan(l.kLeft);
-    expect(Math.abs(l.vTop - l.kTop)).toBeLessThan(4);
-  }
-  expect(m.lines.map(l => l.hi)).toEqual([true, false]);
-  // ฿ (bold) / % ของต้นทุนอาหาร / จุด: three lines, each one line tall
-  expect(m.cost.map(c => c.t)).toEqual(['฿6,000', '0.1% ของต้นทุนอาหาร', '+0.04 จุด']);
+  // ฿ (bold, bad ink) / % ของต้นทุนอาหาร: two lines, each one line tall
+  expect(m.cost.map(c => c.t)).toEqual(['฿6,000', '0.6% ของต้นทุนอาหาร']);
   for (const c of m.cost) expect(c.h).toBeLessThan(c.fs * 1.6 + 1);
   expect(m.cost[0].fw).toBeGreaterThanOrEqual(700);
   expect(Math.min(...m.v)).toBeGreaterThanOrEqual(14);
   expect(Math.min(...m.sub)).toBeGreaterThanOrEqual(12);
   expect(Math.min(...m.names)).toBeGreaterThanOrEqual(13);
-  expect(m.back).toBe('กลับมาขาย');
-  expect(m.backTip).toContain('21 วัน');
-  expect(m.oldMenus.some(t => t.includes('กุ้งลายเสือ'))).toBe(false);
-  // the CSV carries the flag
+  expect(m.back).toBe('กลับมาขาย 2 สาขา');
+  expect(m.backTip).toContain('กลับมาขาย');
+  // the CSV carries the flag on the per-branch new-menu rows and the count on the dish row
   const csv = await page.evaluate(() => { let out = ''; const keep = window.downloadCSV; window.downloadCSV = t => { out = t; };
     try { spikeExport(); } finally { window.downloadCSV = keep; } return out; });
   const rows = csv.split('\n').map(r => r.split('","').map(c => c.replace(/^"|"$/g, '')));
-  const ci = rows[0].indexOf('กลับมาขาย');
+  const h2 = rows.findIndex((r, i) => i > 0 && r[0] === 'ส่วน');
+  const ci = rows[h2].indexOf('กลับมาขาย');
   expect(ci).toBeGreaterThan(0);
-  const shrimp = rows.find(r => r[1] && r[1].includes('กุ้งลายเสือ'));
-  expect(shrimp && shrimp[0]).toBe('เมนูใหม่');
+  const shrimp = rows.slice(h2).find(r => r[1] && r[1].includes('กุ้งลายเสือ'));
+  expect(shrimp && shrimp[0]).toBe('รายสาขา · เมนูใหม่');
   expect(shrimp && shrimp[ci]).toBe('ใช่');
-  expect(rows.find(r => r[1] === 'เมนูใหม่ 1')[ci]).toBe('');
+  expect(rows.slice(h2).find(r => r[1] === 'เมนูใหม่ 2')[ci]).toBe('');
+  const d0 = rows.slice(0, h2).find(r => r[1] && r[1].includes('กุ้งลายเสือ'));
+  expect(d0 && d0[rows[0].indexOf('กลับมาขาย (สาขา)')]).toBe('2');
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -222,36 +192,32 @@ test('เมนูพุ่ง (พอดีจอ 390): every figure is >= 12 p
   await ctx.close();
 });
 
-test('เมนูพุ่ง (แตะง่าย 390): the card shows one tier per line, the row sheet keeps the lines, a returning menu carries its chip', async ({ browser }) => {
+test('เมนูพุ่ง (แตะง่าย 390): the card leads with ต้นทุนเพิ่มสุทธิ, the row sheet keeps its two lines, a returning dish carries its chip', async ({ browser }) => {
   test.setTimeout(150_000);
   const { ctx, page, errors } = await open(browser, PHONE, 'touch');
   await page.waitForFunction(() => document.querySelectorAll('#dsSpike .ph-cl').length >= 2, null, { timeout: 30_000 });
   const c = await page.evaluate(() => {
     const [old, neu] = document.querySelectorAll('#dsSpike .ph-cl');
     const card = old.querySelector('.ph-cl-card');
-    const kv = [...card.querySelectorAll('.ph-cl-kv-r')].map(r => ({ parts: [...r.children].map(x => x.textContent.trim()), top: r.getBoundingClientRect().top,
-      hi: r.classList.contains('ph-kv-hi') }));
     const pill = (neu.querySelector('.ph-cl-card') || document.createElement('i')).querySelector('.sp-back-chip');
-    return { kv, pill: pill ? pill.textContent.trim() : '' };
+    return { labels: [...card.querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()), pill: pill ? pill.textContent.trim() : '' };
   });
-  expect(c.kv.map(k => k.parts)).toEqual([['฿789', '+32'], ['฿999', '+4']]);
-  expect(c.kv[1].top).toBeGreaterThan(c.kv[0].top);
-  expect(c.kv.map(k => k.hi)).toEqual([true, false]);
-  expect(c.pill).toBe('กลับมาขาย');
-  // the row sheet: ต้นทุนเพิ่ม on three lines, the tiers one per line
+  expect(c.labels).toEqual(['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
+  expect(c.pill).toBe('กลับมาขาย 2 สาขา');
   await page.locator('#dsSpike .ph-cl .ph-cl-hit').first().click();
   await page.waitForFunction(() => document.getElementById('msSheet').classList.contains('open'), null, { timeout: 10_000 });
   const sh = await page.evaluate(() => [...document.querySelectorAll('#msSheetBody .ph-rs-row')].map(r => ({ dt: r.querySelector('dt').textContent.trim(),
-    lines: [...r.querySelectorAll('.ph-rs-kv-r')].map(l => l.textContent.replace(/\s+/g, ' ').trim()) })));
-  expect(sh.find(r => r.dt === 'ต้นทุนเพิ่ม').lines).toEqual(['฿6,000', '0.1% ของต้นทุนอาหาร', '+0.04 จุด']);
-  expect(sh.find(r => /เพิ่มจาก tier/i.test(r.dt)).lines).toEqual(['฿789 +32', '฿999 +4']);
+    lines: [...r.querySelectorAll('.ph-rs-kv-r')].map(l => l.textContent.replace(/\s+/g, ' ').trim()), txt: r.textContent.replace(/\s+/g, ' ').trim() })));
+  const net = sh.find(r => r.dt === 'ต้นทุนเพิ่มสุทธิ');
+  expect(net && net.txt).toContain('฿6,000');
+  expect(net && net.txt).toContain('0.6% ของต้นทุนอาหาร');
   expect(errors).toEqual([]);
   await ctx.close();
 });
 
 const WEEKS = { m: 'range', f: '2026-10-12', t: '2026-10-18', pk: 'week', bk: 'week', bf: '2026-10-05', bt: '2026-10-11' };
 
-test('เมนูพุ่ง กำหนดเอง (desktop): a week vs a week - two week pickers, both ranges in the chip, the strip, ต้นทุนเพิ่ม last', async ({ browser }) => {
+test('เมนูพุ่ง กำหนดเอง (desktop): a week vs a week - two week pickers, both ranges in the chip, the strip, the dish table', async ({ browser }) => {
   test.setTimeout(150_000);
   const { ctx, page, errors, urls } = await open(browser, DESK, 'fit', 'dailysales', WEEKS);
   const last = new URL(urls[urls.length - 1]);
@@ -273,9 +239,9 @@ test('เมนูพุ่ง กำหนดเอง (desktop): a week vs a w
   expect(m.baseOpt).toEqual(['2026-10-05', 'สัปดาห์ 5–11 ต.ค.']);
   expect(m.chip).toBe('12–18 ต.ค. เทียบ 5–11 ต.ค.');
   expect(m.sub).toContain('5–11 ต.ค.');
-  expect(m.heads).toEqual(['#', 'เมนู', 'เพิ่มจาก', 'ช่วงนี้', 'ช่วงเทียบ', 'สูงกว่า', 'ต้นทุนเพิ่ม']);
-  expect(m.tiles.map(t => t.l)).toEqual(['ลูกค้า ช่วงนี้', 'เมนูพุ่ง', 'ต้นทุนเพิ่มรวม', 'tier ที่ดันมากสุด']);
-  expect(m.tiles.map(t => t.v)).toEqual(['52,340', '20 รายการ', '฿61,000', '฿789']);
+  expect(m.heads).toEqual(['#', 'เมนู', 'ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
+  expect(m.tiles.map(t => t.l)).toEqual(['ลูกค้า ช่วงนี้', 'เมนูที่ถึงเกณฑ์', 'ต้นทุนเพิ่มสุทธิ', 'tier ที่ดันมากสุด']);
+  expect(m.tiles.map(t => t.v)).toEqual(['52,340', '12 เมนู', '+฿34.2K', '฿789']);
   for (const t of m.tiles) { expect(t.fs).toBeGreaterThanOrEqual(16); expect(t.fs).toBeLessThanOrEqual(18); expect(t.lfs).toBe(12); }
   for (const x of m.hs) expect(x).toBe(32);                      // one height for the track, the branch and the pickers
   // a week that does not end before ช่วงนี้ is refused in the card, in formal Thai, before any request
@@ -306,9 +272,9 @@ for (const [name, mode] of [['แตะง่าย', 'touch'], ['พอดี�
     expect(m.rows).toBe(2);
     expect(m.chip).toBe('12–18 ต.ค. เทียบ 5–11 ต.ค.');
     expect(m.sw).toBeLessThanOrEqual(390);
-    if (mode === 'touch') {               // the card: ต้นทุนเพิ่ม is the last key figure
+    if (mode === 'touch') {               // DV3: the card leads with ต้นทุนเพิ่มสุทธิ
       const labels = await page.evaluate(() => [...document.querySelector('#dsSpike .ph-cl .ph-cl-card').querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()));
-      expect(labels).toEqual(['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม']);
+      expect(labels).toEqual(['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
     }
     expect(errors).toEqual([]);
     await ctx.close();
@@ -316,37 +282,19 @@ for (const [name, mode] of [['แตะง่าย', 'touch'], ['พอดี�
 }
 
 for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่าย 390', PHONE, 'touch'], ['พอดีจอ 390', PHONE, 'fit']]) {
-  test(`เมนูพุ่ง แบบเดิม (${name}): the raw-plates section is the last one, folded at first, 15 rows + ดูทั้งหมด, opens and remembers`, async ({ browser }) => {
+  test(`เมนูพุ่ง แบบเดิม (${name}): DV3 - the raw-plates section is no longer on the card, its rows stay in the CSV`, async ({ browser }) => {
     test.setTimeout(150_000);
     const { ctx, page, errors } = await open(browser, opts, mode);
-    // PR-SX: folded until opened; the rows carry no in_per_head, so the per-head filter (on) keeps all 18
-    expect(await page.evaluate(() => document.getElementById('spikePlatesBody').hidden)).toBe(true);
-    await page.evaluate(() => document.getElementById('spikePlatesFold').click());
-    expect(await page.evaluate(() => localStorage.getItem('oshinei_spike_plates_open_v2'))).toBe('1');
-    const m = await page.evaluate(() => {
-      const secs = [...document.querySelectorAll('#dsSpike > section')].map(x => x.className);
-      const t = document.getElementById('spikePlatesTable');
-      return { secs, last: secs[secs.length - 1], rows: t ? t.tBodies[0].rows.length : 0,
-        heads: t ? [...t.tHead.rows[0].cells].map(c => c.textContent.trim().split(' ')[0]) : [],
-        btn: (document.getElementById('spikePlatesAll') || { textContent: '' }).textContent.trim(),
-        top: (document.querySelector('.sp-sec-plates') || document.body).getBoundingClientRect().top,
-        newBottom: (document.querySelector('.sp-sec-new') || document.body).getBoundingClientRect().bottom };
-    });
-    expect(m.secs.length).toBe(4);                    // + วัตถุดิบมูลค่าสูง · จำนวนจาน after เมนูใหม่ (owner 2026-10-25)
-    expect(m.secs[2]).toContain('sp-sec-hv');
-    expect(m.last).toContain('sp-sec-plates');
-    expect(m.top).toBeGreaterThanOrEqual(m.newBottom - 0.5);
-    expect(m.rows).toBe(15);
-    expect(m.heads).toEqual(['#', 'เมนู', 'ช่วงนี้', 'ปกติ', '+จาน', 'สูงกว่า']);
-    expect(m.btn).toBe('ดูทั้งหมด (18)');
-    await page.evaluate(() => document.getElementById('spikePlatesAll').click());
-    expect(await page.evaluate(() => document.getElementById('spikePlatesTable').tBodies[0].rows.length)).toBe(18);
-    // fold it again: remembered on this device
-    await page.evaluate(() => document.getElementById('spikePlatesFold').click());
-    expect(await page.evaluate(() => { const b = document.getElementById('spikePlatesBody'); return !!b && b.hidden; })).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('oshinei_spike_plates_open_v2'))).toBe('0');
-    await page.evaluate(() => _spikeDraw(_spikeLast, _spikeOneBr));
-    expect(await page.evaluate(() => document.getElementById('spikePlatesBody').hidden)).toBe(true);
+    const m = await page.evaluate(() => ({ secs: [...document.querySelectorAll('#dsSpike > section')].map(x => x.className),
+      plates: !!document.getElementById('spikePlatesTable') || !!document.getElementById('spikePlatesBody'), hv: !!document.getElementById('spikeHvSec') }));
+    expect(m.secs.length).toBe(2);
+    expect(m.secs[0]).toContain('sp-sec-old');
+    expect(m.secs[1]).toContain('sp-sec-new');
+    expect(m.plates).toBe(false);
+    expect(m.hv).toBe(false);
+    const csv = await page.evaluate(() => { let out = ''; const keep = window.downloadCSV; window.downloadCSV = t => { out = t; };
+      try { spikeExport(); } finally { window.downloadCSV = keep; } return out; });
+    expect(csv.split('\n').filter(r => r.startsWith('"เมนูพุ่ง · นับจำนวนจาน (แบบเดิม)"')).length).toBe(3);
     expect(errors).toEqual([]);
     await ctx.close();
   });

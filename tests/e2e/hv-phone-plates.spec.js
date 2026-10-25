@@ -102,7 +102,7 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user =
     await page.waitForFunction(() => typeof switchTab === 'function', null, { timeout: 60_000 });
     await page.evaluate(t => switchTab(t), tab);
   }
-  if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#spikeHvSec #spikeHvTable, #spikeHvSec #spikeHvMatrix, #spikeHvSec .sp-hv-empty:not(:empty)'), null, { timeout: 60_000 });
+  if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
   if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmMatrix'), null, { timeout: 60_000 });
   await page.waitForFunction(() => { const c = document.getElementById('gpRangeChip'); return !!c && !c.hidden; }, null, { timeout: 60_000 }).catch(() => {});
   await page.waitForTimeout(900);
@@ -230,7 +230,9 @@ for (const mode of ['touch', 'fit']) {
 const CASES = [['desktop', DESK, 'fit'], ['390 แตะง่าย', PHONE, 'touch'], ['390 พอดีจอ', PHONE, 'fit']];
 for (const [name, opts, mode] of CASES) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    test(`dailysales · ${name} · ${scheme}: the plates section after เมนูใหม่, one group and ทั้งหมด`, async ({ browser }) => {
+    // DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
+    // and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
+    test.skip(`dailysales · ${name} · ${scheme}: the plates section after เมนูใหม่, one group and ทั้งหมด`, async ({ browser }) => {
       test.setTimeout(120_000);
       const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'dailysales', mode, scheme });
       const tag = `${name.replace(/\s+/g, '_')}_${scheme}`;
@@ -316,7 +318,9 @@ for (const [name, opts, mode] of CASES) {
   }
 }
 
-test('marketing: the plates section is there, no baht anywhere on the card, no cost request', async ({ browser }) => {
+// DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
+// and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
+test.skip('marketing: the plates section is there, no baht anywhere on the card, no cost request', async ({ browser }) => {
   test.setTimeout(120_000);
   const { ctx, page, errors, urls } = await open(browser, DESK, { tab: 'dailysales', user: 'marketing' });
   expect(await page.evaluate(() => window.AUTH && window.AUTH.role)).toBe('marketing');
