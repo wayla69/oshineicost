@@ -1127,7 +1127,7 @@ function bmcDcRender() {
   const rows = d.rows.filter(r => (_bmcDcView === 'all' || (_bmcDcView === 'changed30' ? r.changed30 : r.source_kind === _bmcDcView))
     && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)))
     .map(r => Object.assign({}, r, { impact: dcImp(r) }))
-    .sort((a, b) => Math.abs(b.impact || 0) - Math.abs(a.impact || 0) || (b.plates || 0) - (a.plates || 0));
+    .sort((a, b) => Math.abs(b.impact || 0) - Math.abs(a.impact || 0) || Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) || (b.plates || 0) - (a.plates || 0));
   const dcShown = rows.slice(0, 800);
   const dcKeep = q || _bmcDcView === 'none' ? dcShown.length : dcShown.filter(r => r.change_pct || r.impact).length;
   document.getElementById('bmcDcSummary').textContent = `${c.all} เมนู` + (d.last_import_at ? ` · นำเข้าล่าสุด ${fmtDay(d.last_import_day || d.last_import_at.slice(0, 10))} โดย ${whoTh(d.last_import_by || '')}` : '');
