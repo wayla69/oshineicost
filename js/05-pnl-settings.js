@@ -2171,8 +2171,13 @@ function _insTile(i) {
   const go = tabAllowed('dailysales');
   const rg = i.ranges || {};
   const tip = rg.current ? `${_insRange(rg.current)} เทียบ ${_insRange(rg.previous)} และ ${_insRange(rg.last_year)}` : '';
+  // DV2: a branch tile leads with the baht change (the ranking key); the % is the secondary figure below; the next two branches by baht follow
+  const bd = v => (v >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(v));
+  const chg = !isRev && i.change_baht != null
+    ? `<span class="ins-amt"><span class="ins-${_insTone(i.change_baht, true)}">${bd(i.change_baht)}</span> · ยอด ฿${fmtN(i.amount)}</span>` : (isRev ? '' : `<span class="ins-amt">฿${fmtN(i.amount)}</span>`);
+  const oth = !isRev && (i.others || []).length ? `<span class="ins-sub">ถัดไป ${i.others.map(o => `${esc(o.branch)} ${bd(o.change_baht)}`).join(' · ')}</span>` : '';
   const inner = `<span class="ins-lbl">${esc(i.label || '')}</span>
-    <span class="ins-big${isRev ? '' : ' ins-name'}">${big}</span>${isRev ? '' : `<span class="ins-amt">฿${fmtN(i.amount)}</span>`}
+    <span class="ins-big${isRev ? '' : ' ins-name'}">${big}</span>${chg}${oth}
     ${_insCmp('เทียบเดือนก่อน', i.delta)}${_insCmp('เทียบปีก่อน', i.delta_yoy)}
     <span class="ins-sub">${base}</span>${go ? '<span class="ins-go" aria-hidden="true">›</span>' : ''}`;
   return go
@@ -2231,7 +2236,7 @@ function renderInsightBox(box, data) {
   const chip = meta.period_th ? `<span class="ins-chip">${esc(meta.period_th)} · ${esc(basis)}</span>` : '';
   const help = uiQ('overall:insights', 'ข้อสังเกต',
     `<p><b>รายได้และสาขา</b>: ${meta.ranges ? `${esc(_insRange(meta.ranges.current))} เทียบ ${esc(_insRange(meta.ranges.previous))} (เดือนก่อน) และ ${esc(_insRange(meta.ranges.last_year))} (ปีก่อน)` : `${esc(meta.period_th || 'เดือนล่าสุด')} เทียบเดือนก่อนและปีก่อน`}${meta.mtd_day ? ' · เดือนที่ยังไม่จบเทียบจำนวนวันเท่ากัน' : ''} · รายได้ไม่รวม VAT · ไม่มีข้อมูลปีก่อน แสดง —</p>
-     <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · เติบโตเร็วสุด / ลดมากสุด = สาขาที่ยอดเปลี่ยนมากที่สุดเทียบเดือนก่อนของสาขานั้น · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
+     <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · ยอดเพิ่มมากสุด / ยอดลดมากสุด = สาขาที่ยอดเปลี่ยนเป็นบาทมากที่สุดเทียบเดือนก่อนของสาขานั้น (บรรทัด "ถัดไป" = อันดับ 2–3) · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
      ${series.length ? `<p><b>${esc(costWord)} % ของรายได้</b>: ${esc(costWord)}ของจานที่ขาย ÷ รายได้ของจานเดียวกัน · ตัวเลขใหญ่ = เดือนเดียวกับการ์ดด้านบน (เดือนที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด) เทียบจำนวนวันเท่ากันของเดือนก่อนและปีก่อน เป็นจุด · ไม่มีต้นทุนของช่วงฐาน แสดง —${data.cost_now && data.cost_now.reasons && Object.values(data.cost_now.reasons).length ? ' (' + esc(Object.values(data.cost_now.reasons).join(' · ')) + ')' : ''}</p><p>กราฟนับเฉพาะเดือนที่จบแล้ว · แท่งสีแดง = สูงขึ้นจากเดือนก่อน · สีเขียว = ลดลง · ตัวเลขบนแท่ง = เดือนล่าสุด สูงสุด และต่ำสุด · ดูทุกเดือนได้ที่ "ดูทุกเดือน"</p>` : ''}`);
   const head = `<div class="ins-head"><span class="ins-title">ข้อสังเกต</span>${chip}<span class="ins-sp"></span>${help}
     <button type="button" class="ins-x" aria-label="ปิดข้อสังเกต" onclick="this.closest('#anomalyBanner').classList.add('hidden')">✕</button></div>`;
