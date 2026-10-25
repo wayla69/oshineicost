@@ -1552,12 +1552,11 @@ let _gpbSortDir = 'desc';
 let _gpbExpanded = new Set();
 window.gpbGranularity = window.gpbGranularity || 'month';
 
-function _gpbStatusBucket(foodPct, lo, hi) {
+// ONE food-cost target (owner 2026-10-25): at or below it = ในเป้า, above it = เกินเป้า x.x จุด
+function _gpbStatusBucket(foodPct, fct = fcTarget()) {
   if (foodPct == null) return { label:'—', cls:'text-slate-400', emoji:'·', color:'#94a3b8' };
-  const band = (hi - lo); // typically 10
-  if (foodPct >= lo && foodPct <= hi) return { label:'ในเป้า', cls:'text-emerald-600', emoji:'✓', color:'#10b981' };
-  if (foodPct >= lo - band*0.4 && foodPct <= hi + band*0.4) return { label:'ใกล้ขอบ', cls:'text-amber-600', emoji:'⚠', color:'#f59e0b' };
-  return { label:'นอกเป้า', cls:'text-rose-600', emoji:'●', color:'#ef4444' };
+  if (foodPct <= fct) return { label:'ในเป้า', cls:'text-emerald-600', emoji:'✓', color:'#10b981' };
+  return { label: fcStatusText(foodPct, fct), cls:'text-rose-600', emoji:'●', color:'#ef4444' };
 }
 
 // PR-PP3: the top bar is the period (สัปดาห์ · เดือน · ปี · กำหนดเอง). The months of the table are the bar's months; a week
@@ -1583,7 +1582,7 @@ async function loadGpBranch() {
     if (data && data.rows && getBranch()) data.rows = data.rows.filter(x => x.branch === getBranch());
     _gpbData = data; _gpbCost = pc;
     if (pc && pc.period) { periodChip(pc.period, true); const q = document.getElementById('gpbPeriodQ'); if (q) q.innerHTML = periodQ(pc.period, 'pp'); }
-    tplById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
+    tplById('gpbTargetText').textContent = `${fcTargetTxt(fcTargetSet(data.food_cost_target))}%`;
     _gpbRenderSummary(data);
     _gpbRenderNarrative(data);
     _gpbRenderBoxes();
@@ -1599,7 +1598,8 @@ async function loadGpBranch() {
 
 function _gpbRenderSummary(data) {
   const g = data.grand_total || {};
-  const bucket = _gpbStatusBucket(g.food_cost_pct, data.target_lo, data.target_hi);
+  const fct = fcTargetSet(data.food_cost_target);
+  const bucket = _gpbStatusBucket(g.food_cost_pct, fct);
   const card = (label, value, sub, color) => `
     <div class="card p-4" style="border-top:3px solid ${color || '#10b981'}">
       <div class="text-xs text-slate-500 mb-1">${label}</div>
@@ -1610,14 +1610,15 @@ function _gpbRenderSummary(data) {
   const fmtPct = n => (n == null) ? '—' : n.toFixed(1) + '%';
   const P = (_gpbCost && _gpbCost.cur) ? _gpbCost : null;
   if (P) {   // PR-PP3: the bar's period with its two comparisons
-    const c = P.cur, R = P.period, v = (o, k) => o ? o[k] : null, bk = _gpbStatusBucket(c.food_cost_pct, data.target_lo, data.target_hi);
+    const c = P.cur, R = P.period, v = (o, k) => o ? o[k] : null, bk = _gpbStatusBucket(c.food_cost_pct, fct);
     const K = (l, val, k, col, unit, upGood, i) => periodKpi({ l, v: val, c: col, cur: c[k], prev: v(P.prev, k), ly: v(P.ly, k), unit, upGood, range: R, q: i === 0 });
     document.getElementById('gpbSummary').innerHTML = [
       K('รายได้รวม (ex VAT)', fmtB(c.revenue), 'revenue', '#0ea5e9', '%', true, 0),
       K('BoM Cost รวม', fmtB(c.cogs), 'cogs', '#f59e0b', '%', false),
       K('GP รวม', fmtB(c.gp), 'gp', c.gp >= 0 ? '#10b981' : '#ef4444', '%', true),
       K('GP %', fmtPct(c.gp_pct), 'gp_pct', '#7a66b8', 'pp', true),
-      K('ต้นทุนอาหาร %', `${bk.emoji} ${fmtPct(c.food_cost_pct)}`, 'food_cost_pct', bk.color, 'pp', false),
+      periodKpi({ l: 'ต้นทุนอาหาร %', v: `${bk.emoji} ${fmtPct(c.food_cost_pct)}`, c: bk.color, cur: c.food_cost_pct, prev: v(P.prev, 'food_cost_pct'), ly: v(P.ly, 'food_cost_pct'),
+                  unit: 'pp', upGood: false, range: R, sub: `<span id="gpbFcBadge" data-ok="${bk.color === '#10b981' ? 1 : 0}">เป้า ${fcTargetTxt(fct)}% · ${bk.label}</span>` }),
     ].join('');
     return;
   }
@@ -1625,8 +1626,8 @@ function _gpbRenderSummary(data) {
     card('รายได้รวม (ex VAT)', fmtB(g.revenue), `${data.rows.length} สาขา`, '#0ea5e9'),
     card('BoM Cost รวม',       fmtB(g.cogs),    'ตามสูตร BoM ใหม่',           '#f59e0b'),
     card('GP รวม',             fmtB(g.gp),      (g.gp >= 0 ? 'กำไร' : 'ขาดทุน'), g.gp >= 0 ? '#10b981' : '#ef4444'),
-    card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#7a66b8'),
-    card('ต้นทุนอาหาร %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
+    card('GP %',               fmtPct(g.gp_pct), `เป้า GP ${fcTargetTxt(100 - fct)}%`, '#7a66b8'),
+    card('ต้นทุนอาหาร %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, `<span id="gpbFcBadge" data-ok="${bucket.color === '#10b981' ? 1 : 0}">เป้า ${fcTargetTxt(fct)}% · ${bucket.label}</span>`, bucket.color),
   ].join('');
 }
 
@@ -1634,7 +1635,7 @@ function _gpbRenderSummary(data) {
 function _gpbRenderNarrative(data) {
   const el = document.getElementById('gpbNarrative'); if (!el) return;
   const g = data.grand_total || {};
-  const lo = data.target_lo, hi = data.target_hi;
+  const fct = fcTargetSet(data.food_cost_target);
   const rows = (data.rows || []).map(r => {
     const rev = r.total_revenue || 0, cogs = r.total_cogs || 0;
     return { branch: r.branch, rev, gpp: rev ? (rev - cogs) / rev * 100 : null, fc: rev ? cogs / rev * 100 : null };
@@ -1642,18 +1643,18 @@ function _gpbRenderNarrative(data) {
   if (!rows.length) { el.innerHTML = ''; return; }
   const byGp = [...rows].sort((a, b) => b.gpp - a.gpp);
   const best = byGp[0], worst = byGp[byGp.length - 1];
-  const overFc = rows.filter(r => r.fc > hi);             // food cost over target = margin risk
-  const inBand = rows.filter(r => r.fc >= lo && r.fc <= hi);
+  const overFc = rows.filter(r => r.fc > fct);            // food cost over target = margin risk
+  const inBand = rows.filter(r => r.fc <= fct);
   const gap = best.gpp - worst.gpp;
-  const fcCol = (g.food_cost_pct > hi) ? 'var(--bad-ink)' : (g.food_cost_pct < lo) ? '#0ea5e9' : 'var(--good-ink)';
+  const fcCol = (g.food_cost_pct > fct) ? 'var(--bad-ink)' : 'var(--good-ink)';
   const fmtB = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
   const lines = [
-    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · ต้นทุนอาหาร <b style="color:${textInk(fcCol)}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
+    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · ต้นทุนอาหาร <b style="color:${textInk(fcCol)}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(g.food_cost_pct, fct)})`,
     `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
     overFc.length
       ? `⚠ <b style="color:var(--bad-ink)">${overFc.length} สาขา</b> ต้นทุนอาหาร เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
-      : `ทุกสาขา ต้นทุนอาหาร อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
-    `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
+      : `ทุกสาขา ต้นทุนอาหาร ในเป้า — มาร์จินสุขภาพดี`,
+    `${inBand.length}/${rows.length} สาขาในเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
   ];
   // PL3 (RV3 F20): no explanatory block on the page - the summary is behind the "?" of its heading
   el.innerHTML = uiQ('gpb:narr', 'สรุปอ่านง่าย — ภาพรวม GP รายสาขา', `<div class="text-xs space-y-1.5" style="line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`);
@@ -1663,7 +1664,6 @@ function _gpbRenderBoxes() {
   if (!_gpbData) return;
   const el = document.getElementById('gpbBoxes');
   if (!el) return;
-  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
   // PR-PP3: the bar's period per branch (to date) against the same days of the period before and of the year before, in จุด
   // (the boxes set the month in progress against the whole month before)
   const PB = (_gpbCost && Array.isArray(_gpbCost.branches) && _gpbCost.branches.length) ? _gpbCost : null;
@@ -1753,10 +1753,10 @@ function _gpbRenderTable() {
   });
   const fmtB = n => (n == null) ? '—' : Number(n).toLocaleString('th-TH', {maximumFractionDigits:0});
   const fmtPct = n => (n == null) ? '—' : n.toFixed(1) + '%';
-  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
+  const fct = fcTargetSet(_gpbData.food_cost_target);
 
   const html = rows.map(r => {
-    const bucket = _gpbStatusBucket(r.total_food_cost_pct, lo, hi);
+    const bucket = _gpbStatusBucket(r.total_food_cost_pct, fct);
     const expanded = _gpbExpanded.has(r.branch_id);
     const arrow = expanded ? '▾' : '▸';
     const main = `
@@ -1776,7 +1776,7 @@ function _gpbRenderTable() {
       ? r.trend.slice().sort((a, b) => String(a.bucket).localeCompare(String(b.bucket)))
       : (r.monthly || []).slice().sort((a, b) => a.month.localeCompare(b.month));
     const sub = buckets.map(m => {
-      const bk = _gpbStatusBucket(m.food_cost_pct, lo, hi);
+      const bk = _gpbStatusBucket(m.food_cost_pct, fct);
       const label = useTrend ? `${m.bucket} · ประมาณการ` : `${m.month} · ${m.source || ''}`;   // PR-PP3: a week is pro-rated from its month
       return `
         <tr style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
@@ -1809,9 +1809,9 @@ function _gpbRenderBarChart() {
   const rows = _gpbData.rows.slice().sort((a, b) => (b.total_gp_pct || -999) - (a.total_gp_pct || -999));
   const labels = rows.map(r => r.branch);
   const values = rows.map(r => r.total_gp_pct == null ? 0 : r.total_gp_pct);
-  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
-  // GP-side band: if food cost target is 45-55%, then GP target band is 45-55% too
-  const colors = rows.map(r => _gpbStatusBucket(r.total_food_cost_pct, lo, hi).color);
+  const fct = fcTargetSet(_gpbData.food_cost_target);
+  // ONE target line: food cost 58% of revenue = GP 42% (the bars are GP %)
+  const colors = rows.map(r => _gpbStatusBucket(r.total_food_cost_pct, fct).color);
 
   chartInstances['gpbBar'] = new Chart(ctx, {
     type: 'bar',
@@ -1846,12 +1846,13 @@ function _gpbRenderBarChart() {
         },
         annotation: {
           annotations: {
-            band: {
-              type: 'box',
-              xMin: lo, xMax: hi,
-              backgroundColor: 'rgba(16,185,129,0.10)',
-              borderColor: 'rgba(16,185,129,0.40)',
-              borderWidth: 1,
+            target: {
+              type: 'line',
+              xMin: 100 - fct, xMax: 100 - fct,
+              borderColor: 'rgba(16,185,129,0.85)',
+              borderDash: [4, 3],
+              borderWidth: 1.5,
+              label: { display: true, content: `เป้า ${fcTargetTxt(fct)}% = GP ${fcTargetTxt(100 - fct)}%`, position: 'start', font: { size: 10 } },
             },
           },
         },
@@ -1874,11 +1875,11 @@ function _gpbRenderHeatmap() {
   const months = Array.from(monthSet).sort();
   if (months.length === 0) { wrap.innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
 
-  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
-  // Color scale by food cost % vs target
+  const fct = fcTargetSet(_gpbData.food_cost_target);
+  // Color by food cost % vs the one target
   const cellColor = (fcPct) => {
     if (fcPct == null) return '#f1f5f9';
-    return _gpbStatusBucket(fcPct, lo, hi).color;
+    return _gpbStatusBucket(fcPct, fct).color;
   };
 
   const fmtB = n => Number(n||0).toLocaleString('th-TH', {maximumFractionDigits:0});
@@ -1914,7 +1915,7 @@ function _gpbRenderHeatmap() {
         html += `<td title="${tip}" style="padding:4px 6px;text-align:center;background:${bg};color:${inkOn(bg)};font-weight:600;min-width:48px">${gpPct == null ? '—' : gpPct.toFixed(0) + '%'}</td>`;
       }
     });
-    const totBucket = _gpbStatusBucket(r.total_food_cost_pct, lo, hi);
+    const totBucket = _gpbStatusBucket(r.total_food_cost_pct, fct);
     html += `<td style="padding:4px 8px;text-align:center;background:${totBucket.color};color:${inkOn(totBucket.color)};font-weight:700">${r.total_gp_pct == null ? '—' : r.total_gp_pct.toFixed(0)+'%'}</td>`;
     html += '</tr>';
   });
@@ -2176,7 +2177,7 @@ function _bbomRenderBranchSummary() {
     if (typeof av === 'string') return _bbsumSortDir==='asc' ? String(av).localeCompare(bv) : String(bv).localeCompare(av);
     av=av||0; bv=bv||0; return _bbsumSortDir==='asc' ? av-bv : bv-av;
   });
-  const fcColor = p => p==null?'#94a3b8' : (p<=70 && p>=40)?'#10b981' : p>70?'#ef4444':'#f59e0b';
+  const fcColor = p => fcTargetCol(p);   // ONE food-cost target (owner 2026-10-25)
   document.getElementById('bbomBranchSummaryBody').innerHTML = rows.map(b=>`
     <tr class="border-b border-slate-50 hover:bg-fuchsia-50">
       <td class="py-1.5 pr-3 font-medium">${esc(b.branch)}</td>
@@ -2206,11 +2207,8 @@ function _bbomFmtPct(n) {
 
 function _bbomRenderSummary(d) {
   const t = d.totals || {};
-  const lo = 55, hi = 70;
-  const fcInRange = t.food_cost_pct != null && t.food_cost_pct >= lo && t.food_cost_pct <= hi;
-  const fcColor   = (t.food_cost_pct == null) ? '#64748b' :
-                    fcInRange ? '#10b981' :
-                    t.food_cost_pct > hi ? '#ef4444' : '#f59e0b';
+  const fct = fcTarget();
+  const fcColor   = (t.food_cost_pct == null) ? '#64748b' : fcTargetCol(t.food_cost_pct, fct);
   const gpColor   = (t.gp_pct == null) ? '#64748b' :
                     t.gp_pct >= 30 ? '#10b981' :
                     t.gp_pct >= 15 ? '#f59e0b' : '#ef4444';
@@ -2224,7 +2222,7 @@ function _bbomRenderSummary(d) {
     card('รายได้',            _bbomFmtB(t.revenue),    `${d.period.months || 0} เดือน · ${esc(d.branch)}`, '#4a70b0'),
     card('ต้นทุนรวม',          _bbomFmtB(t.cogs),       `${(t.menus_with_cost||0).toLocaleString('th-TH')} เมนูมีต้นทุน`, '#0891b2'),
     card('Gross Profit',      _bbomFmtB(t.gp),         `GP ${_bbomFmtPct(t.gp_pct)}`, gpColor),
-    card('ต้นทุนอาหาร %',       _bbomFmtPct(t.food_cost_pct), `เป้า ${lo}-${hi}%`, fcColor),
+    card('ต้นทุนอาหาร %',       _bbomFmtPct(t.food_cost_pct), `เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(t.food_cost_pct, fct)}`, fcColor),
     card('เมนูที่มีสูตร BoM', `${(t.menus_with_bom_recipe||0).toLocaleString('th-TH')}`, `จากทั้งหมด ${(t.menus_in_period||0).toLocaleString('th-TH')} เมนู`, '#d946ef'),
   ].join('');
 }

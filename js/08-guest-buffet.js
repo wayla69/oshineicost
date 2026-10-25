@@ -539,7 +539,7 @@ function renderMce2Table(col, dir) {
     // FC% = cost / revenue * 100. RV-M: a buffet item has almost no revenue of its own (a few ฿ of à-la-carte sales), so the ratio ran to
     // 859,642 % - a number that reads as data and is not. Above 999 % the cell shows "—" (the cost columns still rank it).
     const fcPct = mceFcPct(r.cost, r.revenue);
-    const fcColor = fcPct == null ? 'var(--text-muted)' : fcPct > 60 ? 'var(--bad-ink)' : fcPct > 40 ? '#f59e0b' : '#10b981';
+    const fcColor = fcPct == null ? 'var(--text-muted)' : fcTargetCol(fcPct);   // ONE food-cost target (owner 2026-10-25)
     const fcCell = fcPct != null ? `<span style="color:${textInk(fcColor)}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
 
     return `<tr class="border-b hover:bg-indigo-50/30" style="border-color:var(--border);${rowBg}">
@@ -926,7 +926,7 @@ function renderMce2CategoryRollup() {
 
   // Table
   if (bodyEl) bodyEl.innerHTML = cats.map((c, i) => {
-    const fcColor = c.fc_rate == null ? 'var(--text-muted)' : c.fc_rate > 60 ? 'var(--bad-ink)' : c.fc_rate > 40 ? '#f59e0b' : '#10b981';
+    const fcColor = c.fc_rate == null ? 'var(--text-muted)' : fcTargetCol(c.fc_rate);   // ONE food-cost target (owner 2026-10-25)
     return `<tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(14,165,233,0.04)' : ''}">
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${i < 3 ? '★ ' : ''}${esc(c.name)}</td>
@@ -1217,8 +1217,8 @@ async function loadBuffetPerformance() {
   const cRev     = k.combined_revenue_ex_vat || 0;
   const cCogs    = k.combined_cogs           || 0;
   const cGp      = k.combined_gross_profit   || 0;
-  const fcInRange = cFoodPct >= k.food_cost_target_lo && cFoodPct <= k.food_cost_target_hi;
-  const fcColor   = fcInRange ? '#10b981' : cFoodPct > k.food_cost_target_hi ? '#ef4444' : '#f59e0b';
+  const fct       = fcTargetSet(k.food_cost_target);   // ONE food-cost target (owner 2026-10-25)
+  const fcColor   = fcTargetCol(cFoodPct, fct);
   const gpColor   = (cGpPct == null) ? '#64748b' : cGpPct >= 30 ? '#10b981' : cGpPct >= 15 ? '#f59e0b' : '#ef4444';
   const premColor = k.premium_tier_pct >= 30 ? '#10b981' : k.premium_tier_pct >= 15 ? '#f59e0b' : '#ef4444';
   const wasteColor = k.over_consumption_pct < 2 ? '#10b981' : k.over_consumption_pct < 5 ? '#f59e0b' : '#ef4444';
@@ -1234,7 +1234,7 @@ async function loadBuffetPerformance() {
   document.getElementById('bperfKpiRow').innerHTML = [
     kpiCard('รายได้รวม',         _fmtBaht(cRev),                            `รวมทุก SKU (บุฟเฟ่ต์ + อลาคาท)`,                '#4a70b0'),
     kpiCard('ต้นทุน (COGS)',      _fmtBaht(cCogs),                           `ทั้งร้าน · ใช้สูตร BoM`,                       '#0891b2'),
-    kpiCard('ต้นทุนอาหาร รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${k.food_cost_target_lo}-${k.food_cost_target_hi}% · ภาพรวม`, fcColor),
+    kpiCard('ต้นทุนอาหาร รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(cFoodPct, fct)}`, fcColor),
     kpiCard('GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${_fmtBaht(cGp)} · ทั้งร้าน`,                    gpColor),
     kpiCard('Pax / บิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `${(Number(k.total_pax)||0).toLocaleString()} pax · เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#7a66b8'),
     kpiCard('บิลที่สั่งดื่ม',  (Number(k.beverage_bill_attach_pct)||0).toFixed(0) + '%',  `เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้`, (k.beverage_bill_attach_pct>=60?'#10b981':k.beverage_bill_attach_pct>=40?'#f59e0b':'#ef4444')),
@@ -1382,15 +1382,14 @@ async function loadBuffetPerformance() {
     }
   });
 
-  // ── Food cost vs target band ────────────────────────────────────────
+  // ── Food cost vs the one target ─────────────────────────────────────
   const fc = d.food_cost_trend;
   mkChart('bperfFoodCost', {
     data: {
       labels: fc.map(r => r.period),
       datasets: [
         { type:'line', label:'ต้นทุนอาหาร % จริง', data: fc.map(r => r.cost_pct), borderColor:'#ec4899', backgroundColor:'rgba(236,72,153,0.15)', tension:0.3, fill:true, pointRadius:3, borderWidth:2.5 },
-        { type:'line', label:`เป้าล่าง ${k.food_cost_target_lo}%`, data: fc.map(() => k.food_cost_target_lo), borderColor:'#10b981', borderDash:[3,3], borderWidth:1.5, pointRadius:0 },
-        { type:'line', label:`เป้าบน ${k.food_cost_target_hi}%`,  data: fc.map(() => k.food_cost_target_hi), borderColor:'#ef4444', borderDash:[3,3], borderWidth:1.5, pointRadius:0 },
+        { type:'line', label:`เป้า ${fcTargetTxt(fct)}%`, data: fc.map(() => fct), borderColor:'#ef4444', borderDash:[3,3], borderWidth:1.5, pointRadius:0 },
       ]
     },
     options: {
@@ -1577,10 +1576,8 @@ async function loadBuffetPerformance() {
 
   // ── Auto-generated action items ─────────────────────────────────────
   const actions = [];
-  if (k.food_cost_pct > k.food_cost_target_hi) {
-    actions.push({ icon:'⚠', tone:'red', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% เกินเป้าสูงสุด ${k.food_cost_target_hi}%</b> — ตรวจสอบ BoM, เจรจาซัพพลายเออร์, ปรับ portion control` });
-  } else if (k.food_cost_pct < k.food_cost_target_lo) {
-    actions.push({ icon:'✓', tone:'green', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> ${uiQ('guest:food-low', 'ต้นทุนอาหารต่ำกว่าเป้า', '<p>อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ</p>')}` });
+  if (k.food_cost_pct > fct) {
+    actions.push({ icon:'⚠', tone:'red', html:`<b>ต้นทุนอาหาร ${k.food_cost_pct.toFixed(1)}% ${fcStatusText(k.food_cost_pct, fct)} (เป้า ${fcTargetTxt(fct)}%)</b> — ตรวจสอบ BoM, เจรจาซัพพลายเออร์, ปรับ portion control` });
   }
   if (k.beverage_attach_pct < 10) {
     actions.push({ icon:'', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> · ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม — ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) ${uiQ('guest:bev', 'เครื่องดื่ม', '<p>แม้บิลส่วนใหญ่สั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</p>')}` });
@@ -2352,7 +2349,8 @@ async function loadBuffetGP() {
   const noC = pt.bom_cost === 0;
 
   // ── KPI strip ───────────────────────────────────────────────────────
-  const gpColor = !noC ? (pt.margin_pct >= 55 ? '#10b981' : pt.margin_pct >= 45 ? '#f59e0b' : '#ef4444') : '#94a3b8';
+  // ONE food-cost target (owner 2026-10-25): GP margin at or above 100 − target is ในเป้า
+  const gpColor = !noC ? fcTargetCol(100 - pt.margin_pct) : '#94a3b8';
   const kpi = (lbl, val, sub, clr) =>
     `<div class="rounded-lg p-3 border" style="background:${clr}10;border-color:${clr}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${lbl}</p>
@@ -2363,7 +2361,7 @@ async function loadBuffetGP() {
     kpi('Revenue (period)',    fmt(pt.revenue),                       'ex-VAT · ช่วงที่เลือก',          '#4a70b0'),
     kpi('BoM Cost',            noC ? 'ไม่มีต้นทุน' : fmt(pt.bom_cost), 'ต้นทุนตามรายการกดสั่ง',           '#f97316'),
     kpi('Gross Profit',        noC ? '—' : fmt(pt.gp),               'Revenue − BoM Cost',              gpColor),
-    kpi('GP Margin %',         noC ? '—' : pt.margin_pct.toFixed(1)+'%', 'เป้า 55-65%',                gpColor),
+    kpi('GP Margin %',         noC ? '—' : pt.margin_pct.toFixed(1)+'%', `เป้า GP ${fcTargetTxt(100 - fcTarget())}% (ต้นทุนอาหาร ${fcTargetTxt()}%)`, gpColor),
     kpi('Covers (period)',     fmtN(pt.covers),                       'จาก transaction',                 '#0891b2'),
     kpi('Cost/Cover',          noC ? '—' : (pt.cost_per_cover ? fmt(pt.cost_per_cover) : '—'), 'BoM ÷ covers', '#f59e0b'),
   ].join('');
@@ -2905,7 +2903,7 @@ async function saveFixedCosts() {
   _lastPnlKey = null; _primeKey = null;   // force P&L + Prime-cost reload
 }
 
-// Food-cost benchmark: rank branches vs the chain peer median + the target band.
+// Food-cost benchmark: rank branches vs the chain peer median + the one food-cost target.
 async function renderBenchFoodCost(params) {
   const body = document.getElementById('benchFoodCostBody'); if (!body) return;
   body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
@@ -2913,22 +2911,22 @@ async function renderBenchFoodCost(params) {
   catch (e) { body.innerHTML = '<p class="text-sm text-red-400 py-4 text-center">โหลดไม่สำเร็จ</p>'; return; }
   const rows = (d.rows || []).filter(b => b.total_food_cost_pct != null && (b.total_revenue || 0) > 0);
   if (!rows.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีข้อมูลในช่วงนี้</p>'; return; }
-  const lo = d.target_lo ?? 55, hi = d.target_hi ?? 70;
+  const fct = fcTargetSet(d.food_cost_target);
   const fcs = rows.map(b => b.total_food_cost_pct).sort((a, b) => a - b);
   const pctile = q => { const i = (fcs.length - 1) * q, a = Math.floor(i), b = Math.ceil(i); return fcs[a] + (fcs[b] - fcs[a]) * (i - a); };
   const median = pctile(0.5), q1 = pctile(0.25), q3 = pctile(0.75);
   const sorted = [...rows].sort((a, b) => a.total_food_cost_pct - b.total_food_cost_pct);  // best (low) first
-  const maxFc = Math.max(...fcs, hi) * 1.08;
+  const maxFc = Math.max(...fcs, fct) * 1.08;
   const color = fc => fc <= q1 ? '#059669' : fc >= q3 ? '#dc2626' : '#f59e0b';
   const sumEl = document.getElementById('benchFcSummary');
-  if (sumEl) sumEl.textContent = `ค่ากลางเครือ ${median.toFixed(1)}% · เป้า ${lo}-${hi}% · ดีสุด ${sorted[0].branch} ${sorted[0].total_food_cost_pct.toFixed(1)}% · แย่สุด ${sorted[sorted.length-1].branch} ${sorted[sorted.length-1].total_food_cost_pct.toFixed(1)}%`;
-  const medPct = median / maxFc * 100, loPct = lo / maxFc * 100, hiPct = hi / maxFc * 100;
+  if (sumEl) sumEl.textContent = `ค่ากลางเครือ ${median.toFixed(1)}% · เป้า ${fcTargetTxt(fct)}% · ดีสุด ${sorted[0].branch} ${sorted[0].total_food_cost_pct.toFixed(1)}% · แย่สุด ${sorted[sorted.length-1].branch} ${sorted[sorted.length-1].total_food_cost_pct.toFixed(1)}%`;
+  const medPct = median / maxFc * 100, tgtPct = fct / maxFc * 100;
   body.innerHTML = sorted.map(b => {
     const fc = b.total_food_cost_pct, w = fc / maxFc * 100, c = color(fc), vs = fc - median;
     return `<div class="flex items-center gap-2 mb-1.5 text-xs">
       <div style="width:130px" class="truncate font-medium" title="${esc(b.branch)}">${esc(b.branch)}</div>
       <div style="flex:1;position:relative;height:18px;background:var(--bg-subtle);border-radius:var(--r-md);overflow:hidden">
-        <div style="position:absolute;left:${loPct}%;width:${Math.max(0,hiPct-loPct)}%;height:100%;background:rgba(16,185,129,0.12)"></div>
+        <div style="position:absolute;left:${tgtPct}%;top:0;bottom:0;border-left:2px solid #ef4444;opacity:.7"></div>
         <div style="height:100%;width:${w}%;background:${c};opacity:.85"></div>
         <div style="position:absolute;left:${medPct}%;top:0;bottom:0;border-left:2px dashed #475569"></div>
       </div>
@@ -2937,7 +2935,7 @@ async function renderBenchFoodCost(params) {
     </div>`;
   }).join('') + `<div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-400">
       <span>quartile บน (ดีกว่าเพื่อน)</span><span>กลาง</span><span>quartile ล่าง (ต้องแก้ก่อน)</span>
-      <span>┊ ค่ากลางเครือ ${median.toFixed(1)}%</span><span>▮ แถบเขียวจาง = ช่วงเป้า ${lo}-${hi}%</span>
+      <span>┊ ค่ากลางเครือ ${median.toFixed(1)}%</span><span>│ เส้นแดง = เป้า ${fcTargetTxt(fct)}%</span>
       <span>คอลัมน์ขวา = เทียบค่ากลาง (− ดีกว่า)</span></div>`;
 }
 

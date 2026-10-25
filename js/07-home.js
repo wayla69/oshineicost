@@ -90,7 +90,7 @@ function _homeStatus(brief, sd, scorecard) {
   const worstDrift = branches.reduce((m, b) => (b.vs_avg_pct != null && b.vs_avg_pct < m ? b.vs_avg_pct : m), 0);
   const downCount = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8)).length;
   // Food cost colours the whole page only when it is genuinely off: above THIS business's
-  // band (red), or climbing / not yet trustworthy (amber). The old bars (45% / 38%) are
+  // one target (red; Settings → ค่าเริ่มต้น, 58%), or climbing / not yet trustworthy (amber). The old bars (45% / 38%) are
   // à-la-carte norms — for a buffet they were true every day, so the band at the top of
   // the first screen anyone opens said "ต้องรีบดู" all year and meant nothing.
   const H = _homeCostHealth(brief);
@@ -117,7 +117,7 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
   const line1 = `เมื่อวาน (${fmtDateTh(brief.yesterday)}) ทำได้ <b>${fmt(brief.revenue_yesterday || 0)}</b> ${wowTxt} · เดือนนี้ทำไป <b>${fmt(brief.mtd_revenue || 0)}</b> ใน ${brief.mtd_days || 0} วัน${projTxt}${skipNote}`;
   const bits = [];
   if (s.downCount) bits.push(`${s.downCount} สาขาต่ำกว่าปกติ`);
-  if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% สูงกว่าแถบเป้า ${s.H.hi}%`);
+  if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% ${fcStatusText(brief.food_cost_pct_mtd, s.H.t)} (เป้า ${fcTargetTxt(s.H.t)}%)`);
   else if (s.fcAmber && s.H.c.delta_pp >= 3) bits.push(`ต้นทุนอาหารขึ้น ${s.H.c.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน`);
   else if (s.fcAmber) bits.push(`ต้นทุนครบแค่ ${s.H.c.coverage_pct.toFixed(0)}% ของจาน`);
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3) bits.push(`ยอดขายเดือนนี้ต่ำกว่าช่วงเดียวกันของเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}%`);
@@ -137,25 +137,25 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
 function _homeCostHealth(brief) {
   const c = (brief && brief.cost_health) || {};
   const fcp = brief ? brief.food_cost_pct_mtd : null;
-  const lo = c.band_lo ?? 55, hi = c.band_hi ?? 70;
-  const above = fcp != null && fcp > hi, below = fcp != null && fcp < lo;
+  const t = fcTargetSet(c.food_cost_target);   // ONE target (owner 2026-10-25): ≤ target ในเป้า, above it เกินเป้า x.x จุด
+  const above = fcp != null && fcp > t;
   const d = c.delta_pp, moved = d != null && Math.abs(d) >= 2;
   const lowCov = c.coverage_pct != null && c.coverage_pct < 98;
-  const color = fcp == null ? '#94a3b8' : above ? '#ef4444' : below ? '#64748b' : '#10b981';
+  const color = fcp == null ? '#94a3b8' : above ? '#ef4444' : '#10b981';
   const cov = c.coverage_pct != null ? ` · ต้นทุนครบ ${c.coverage_pct.toFixed(1)}% ของจาน` : '';
   let foot, footColor;
   if (lowCov && c.est_food_pct != null) {
     foot = `ตัวเลขนี้เป็นค่าต่ำสุด — รวมจานที่ยังไม่มีต้นทุนแล้วราว ${c.est_food_pct.toFixed(1)}%`; footColor = '#d97706';
   } else if (above) {
-    foot = `สูงกว่าแถบเป้า ${hi}%${moved ? ` · ${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน` : ''}`; footColor = '#dc2626';
+    foot = `${fcStatusText(fcp, t)}${moved ? ` · ${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน` : ''}`; footColor = '#dc2626';
   } else if (moved) {
-    foot = `${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน${below ? ' · ต่ำกว่าแถบเป้า' : ' · ยังอยู่ในแถบเป้า'}`;
+    foot = `${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน · ในเป้า`;
     footColor = d > 0 ? '#d97706' : '#059669';
   } else {
-    foot = below ? 'ต่ำกว่าแถบเป้า — มักแปลว่าต้นทุนยังไม่ครบ หรือเสิร์ฟน้อยกว่าสูตร' : 'อยู่ในแถบเป้า · นิ่งเทียบช่วงเดียวกันเดือนก่อน';
-    footColor = below ? '#64748b' : '#059669';
+    foot = 'ในเป้า · นิ่งเทียบช่วงเดียวกันเดือนก่อน';
+    footColor = '#059669';
   }
-  return { c, lo, hi, above, below, moved, lowCov, color, foot, footColor, sub: `แถบเป้า ${lo}–${hi}%${cov}` };
+  return { c, t, above, moved, lowCov, color, foot, footColor, sub: `เป้า ${fcTargetTxt(t)}%${cov}` };
 }
 
 function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
@@ -165,8 +165,8 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
                        .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
   const mom = sd && sd.total ? sd.total.mom_pct : null;
   const momColor = mom == null ? '#64748b' : mom >= 0 ? '#059669' : mom <= -5 ? '#dc2626' : '#f59e0b';
-  // Food cost is judged against THIS business's band (Settings → ค่าเริ่มต้น; 55-70% for a
-  // buffet), not the à-la-carte 38/45 this tile used to hard-code — that left it red
+  // Food cost is judged against THIS business's one target (Settings → ค่าเริ่มต้น; 58%, owner
+  // 2026-10-25), not the à-la-carte 38/45 this tile used to hard-code — that left it red
   // every day and taught everyone to ignore it. What earns colour now: outside the band,
   // or a real move against last month. And the figure says how complete its costing is.
   const fcp = brief.food_cost_pct_mtd;
@@ -241,9 +241,9 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   const fcp = canSeeCost() ? brief.food_cost_pct_mtd : null;   // PL3: no cost sentences for a role without a cost or profit module
   const H = _homeCostHealth(brief), CH = canSeeCost() ? H.c : {};
   if (fcp != null && H.above)
-    A.push({ p: 0, sev: 'red', icon: '', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — สูงกว่าแถบเป้า ${H.lo}–${H.hi}%${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+    A.push({ p: 0, sev: 'red', icon: '', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — เป้า ${fcTargetTxt(H.t)}% · ${fcStatusText(fcp, H.t)}${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   else if (fcp != null && CH.delta_pp != null && CH.delta_pp >= 3)
-    A.push({ p: 2, sev: 'amber', icon: '', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังอยู่ในแถบเป้า แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+    A.push({ p: 2, sev: 'amber', icon: '', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังในเป้า ${fcTargetTxt(H.t)}% แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   if (CH.coverage_pct != null && CH.coverage_pct < 95)
     A.push({ p: 3, sev: 'amber', icon: '', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: (BC_MODE === 'stock' && tabAllowed('bomcenter')) ? "supplyGo({tab:'bomcenter',pane:'dishcost'})" : "switchTab('coverage')" });   // PL1: stock mode fills the cost on the ต้นทุนต่อจาน page
   // the requisition-against-recipe items belong to the recipe pages, which stock mode does not offer (PL1 #4)
@@ -1362,7 +1362,7 @@ async function loadCostHead(force) {
   document.getElementById('chCmpNote').innerHTML = periodQ(r, '%');
   const t = d.total || {};
   const avgCostPct = t.cost_pct;   // chain food-cost ratio = benchmark
-  const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
+  const cpColor = cp => fcTargetCol(cp);   // ONE food-cost target (owner 2026-10-25)
   const prevOf = k => k === 'cost_per_head' ? t.prev_cost_per_head : k === 'cost_pct' ? t.prev_cost_pct : null;
   const lyOf = k => k === 'cost_per_head' ? t.ly_cost_per_head : k === 'cost_pct' ? t.ly_cost_pct : null;
   document.getElementById('chKpis').innerHTML = [

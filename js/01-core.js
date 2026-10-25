@@ -3089,6 +3089,30 @@ const _INK_OF = [[_GOOD_HEX, '--good-ink'], [_BAD_HEX, '--bad-ink'], [_TEAL_HEX,
                  [_ORANGE_HEX, '--orange-ink'], [_MUTED_HEX, '--text-muted']];
 const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); return k ? `var(${k[1]})` : c; };
 
+// ── ONE food-cost target (owner 2026-10-25: "food-cost target 58%") ──────────
+// Settings → ค่าเริ่มต้น writes app_settings food_cost_target (backend rules.food_cost_target). Food cost % at or below it is
+// good (ในเป้า), above it is bad (เกินเป้า x.x จุด). Every page, badge and chart reads it from here: startApp loads it from
+// /api/settings, and a payload that carries `food_cost_target` refreshes it (fcTargetSet).
+const FC_TARGET_DEFAULT = 58;
+let _fcTarget = FC_TARGET_DEFAULT;
+function fcTargetSet(v) { const n = Number(v); if (v != null && v !== '' && isFinite(n) && n >= 20 && n <= 90) _fcTarget = n; return _fcTarget; }
+function fcTarget() { return _fcTarget; }
+async function fcTargetLoad() {
+  try { const s = await api(`${API}/api/settings`); fcTargetSet(s && s.food_cost_target); } catch (e) { /* the default stands */ }
+  return _fcTarget;
+}
+// '58%' → '58', 57.5 → '57.5'
+const fcTargetTxt = (t = _fcTarget) => `${+Number(t).toFixed(1)}`;
+// is a food cost % within the target? (null when there is no figure)
+const fcOk = (p, t = _fcTarget) => p == null || !isFinite(p) ? null : Number(p) <= t;
+// 'ในเป้า' | 'เกินเป้า 5.5 จุด' | '—'
+function fcStatusText(p, t = _fcTarget) {
+  const ok = fcOk(p, t);
+  return ok == null ? '—' : ok ? 'ในเป้า' : `เกินเป้า ${(Number(p) - t).toFixed(1)} จุด`;
+}
+// green within the target, red above it, grey without a figure
+const fcTargetCol = (p, t = _fcTarget) => { const ok = fcOk(p, t); return ok == null ? '#94a3b8' : ok ? '#10b981' : '#ef4444'; };
+
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
 // PL3 (RV3 F25): one number format - a negative figure is shortened the same way as a positive one (it was printed whole: "-155931" beside "170.8K")
@@ -3128,7 +3152,8 @@ async function loadTabFragments() {
 }
 
 function api(url, opts) {
-  return fetch(url, opts).then(r => r.json());
+  // a payload that carries the ONE food-cost target (Settings → ค่าเริ่มต้น) keeps fcTarget() current
+  return fetch(url, opts).then(r => r.json()).then(j => { if (j && typeof j === 'object' && 'food_cost_target' in j) fcTargetSet(j.food_cost_target); return j; });
 }
 
 async function getJSON(path, { gen = null, signal } = {}) {
@@ -4047,7 +4072,7 @@ const PAGE_CARDS = {
   profit: [{ sel: '#profitBandTable', title: 'ช่วง', sub: ['บิล', 'ลูกค้า'], subL: true, keyCols: ['รายได้ไม่รวม VAT', 'กำไร', 'อัตรากำไร %'], labels: ['รายได้', 'กำไร', 'อัตรากำไร'] }],
   benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', 'คะแนน'] }],
   gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['รายได้', 'GP (', 'GP %'], labels: ['รายได้', 'GP', 'GP %'], pill: 'สถานะ',
-    tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
+    tones: { 'ในเป้า': 'good', 'เกินเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
   dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['ยอดขาย', 'ลูกค้า', 'ยอด/หัว'] },
     // PR-SC: a role that sees cost gets the ต้นทุนเพิ่ม column (table.sp-costed); PR-TD (owner 2026-10-25): it is the LAST column and the last figure

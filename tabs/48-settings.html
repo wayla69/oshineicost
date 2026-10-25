@@ -228,7 +228,7 @@
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <label class="text-xs text-amber-900 font-semibold">เป้าต้นทุนอาหาร:</label>
-          <input id="recalibTarget" type="number" min="20" max="100" step="1" value="65"
+          <input id="recalibTarget" type="number" min="20" max="100" step="1"
             class="border border-amber-300 rounded-lg px-2 py-1.5 text-sm w-16 text-right">
           <span class="text-xs text-amber-900">%</span>
           <select id="recalibLimit" class="border border-amber-300 rounded-lg px-2 py-1.5 text-xs">
@@ -573,14 +573,12 @@
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
           <div>
-            <p class="text-sm font-medium text-slate-700">แถบเป้าต้นทุนอาหาร (%) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb12" title="คำอธิบาย">?</button></p><template id="hlp-settings-mb12" data-title="แถบเป้าต้นทุนอาหาร"><p>ช่วงที่ถือว่าปกติของธุรกิจนี้ — หน้าแรกจะขึ้นสีแดงเมื่อสูงกว่าค่าบน และเตือนเมื่อขยับผิดปกติเทียบเดือนก่อน (บุฟเฟ่ต์: 55–70)</p></template>
+            <p class="text-sm font-medium text-slate-700"><label for="prefFoodCostTarget">เป้าต้นทุนอาหาร (% ของรายได้)</label> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-settings-mb12" title="คำอธิบาย">?</button></p><template id="hlp-settings-mb12" data-title="เป้าต้นทุนอาหาร"><p>เป้าเดียวของทั้งระบบ ค่าเริ่มต้น 58% ต้นทุนอาหารไม่เกินเป้าแสดงว่า ในเป้า ส่วนที่สูงกว่าแสดงว่า เกินเป้า พร้อมจำนวนจุดที่เกิน ใช้ในหน้าแรก GP รายสาขา สรุปผู้บริหาร รายงานผู้บริหาร หน้าต้นทุน และเส้นเป้าในกราฟ รับค่า 20–90</p></template>
           </div>
           <div class="flex items-center gap-2">
-            <input id="prefFoodBandLo" type="number" min="1" max="99" step="1" placeholder="55"
-              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-            <span class="text-slate-400">–</span>
-            <input id="prefFoodBandHi" type="number" min="2" max="100" step="1" placeholder="70"
-              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <input id="prefFoodCostTarget" type="number" min="20" max="90" step="0.5" placeholder="58"
+              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <span class="text-slate-400">%</span>
           </div>
         </div>
         <div class="border-t border-slate-100 pt-5 flex items-center gap-3">

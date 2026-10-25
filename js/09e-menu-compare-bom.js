@@ -513,8 +513,8 @@ async function bcLoadOverview() {
       ${bcKpiCard('Total COGS',     bcFmtN(t.cogs),          'BoM/Unit Cost',          '#dc2626', chip('cogs', '%', false))}
       ${bcKpiCard('Total GP',       bcFmtN(t.gp),            `${bcFmtPct(t.gp_pct)}`,  t.gp>=0?'#10b981':'#ef4444', chip('gp', '%', true))}
       ${bcKpiCard('GP %',           bcFmtPct(t.gp_pct),      '',                        '#10b981', chip('gp_pct', 'pp', true))}
-      ${bcKpiCard('ต้นทุนอาหาร %',    bcFmtPct(PC ? PC.cur.food_cost_pct : t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
-                                    (fc!=null && fc>70)?'#dc2626':(fc!=null && fc>=55)?'#10b981':'#f59e0b', chip('food_cost_pct', 'pp', false))}
+      ${bcKpiCard('ต้นทุนอาหาร %',    bcFmtPct(PC ? PC.cur.food_cost_pct : t.food_cost_pct), `(เป้า ${fcTargetTxt()}%${svcOn ? ' · รวม service' : ''}${fc != null ? ' · ' + fcStatusText(fc) : ''})`,
+                                    fcTargetCol(fc), chip('food_cost_pct', 'pp', false))}
     </div>`;
 
   // Top 60 cost-driver table (shared renderer · total row · MTD MoM)
@@ -530,10 +530,8 @@ async function bcLoadOverview() {
   hm.forEach(r => { cellMap[`${r.branch}|${r.month}`] = r; });
   const cellColor = (fcv) => {
     if (fcv == null) return '#f1f5f9';
-    if (fcv < 55)  return '#dbeafe';
-    if (fcv <= 70) return '#bbf7d0';
-    if (fcv <= 85) return '#fde68a';
-    if (fcv <= 100) return '#fdba74';
+    if (fcv <= fcTarget()) return '#bbf7d0';   // ในเป้า (ONE food-cost target, owner 2026-10-25)
+    if (fcv <= 100) return '#fdba74';          // เกินเป้า
     return '#fca5a5';
   };
   const heatmapHtml = `
@@ -557,7 +555,7 @@ async function bcLoadOverview() {
         </tbody>
       </table>
       </div>
-      <p class="text-[10px] text-slate-400 mt-2">เขียว 55–70% (เป้า) · เหลือง/ส้ม > เป้า · แดง > 100% (ขาดทุน)</p>
+      <p class="text-[10px] text-slate-400 mt-2">เขียว ในเป้า (≤ ${fcTargetTxt()}%) · ส้ม เกินเป้า · แดง > 100% (ขาดทุน)</p>
     </div>`;
 
   // Branch breakdown — colored KPI boxes (latest month + MoM, click to drill down)
@@ -569,10 +567,7 @@ async function bcLoadOverview() {
 // Hex color for the Food-Cost zone (matches bcFoodPctColor zones)
 function bcFoodPctHex(p) {
   if (p == null)  return '#94a3b8';
-  if (p < 55)     return '#2563eb';   // below target (too low)
-  if (p <= 70)    return '#059669';   // on target
-  if (p <= 85)    return '#d97706';   // above target
-  return '#dc2626';                   // far above target
+  return p <= fcTarget() ? '#059669' : '#dc2626';   // ONE food-cost target: ในเป้า / เกินเป้า
 }
 
 // Renders the per-branch Food-Cost KPI grid + a shared drill-down panel.
@@ -614,14 +609,12 @@ function bcRenderFoodCostBoxes(mom) {
 
   return `<div class="card p-4 mb-5">
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
-      <h3 class="font-semibold">แยกสาขา · ต้นทุนอาหาร % <span class="text-xs font-normal text-slate-400">(เป้า 55–70%)</span></h3>
+      <h3 class="font-semibold">แยกสาขา · ต้นทุนอาหาร % <span class="text-xs font-normal text-slate-400">(เป้า ${fcTargetTxt()}%)</span></h3>
       <span class="text-xs text-slate-500">${monLbl}${prevLbl?` เทียบ ${prevLbl}`:''} · คลิกสาขาเพื่อดูรายละเอียด</span>
     </div>
     <p class="text-[10px] text-slate-400 mb-3">
-      <span style="color:#2563eb">◼</span> ต่ำกว่าเป้า ·
-      <span style="color:#059669">◼</span> ตามเป้า 55–70% ·
-      <span style="color:#d97706">◼</span> สูงกว่าเป้า ·
-      <span style="color:#dc2626">◼</span> สูงมาก · ▼ ลด = ดี · ▲ เพิ่ม = ต้องระวัง
+      <span style="color:#059669">◼</span> ในเป้า (≤ ${fcTargetTxt()}%) ·
+      <span style="color:#dc2626">◼</span> เกินเป้า · ▼ ลด = ดี · ▲ เพิ่ม = ต้องระวัง
     </p>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">${boxes}</div>
     <div id="bcFoodDrill" class="mt-4"></div>
@@ -681,7 +674,7 @@ function bcDrillBranch(idx) {
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">เทียบเดือนก่อน</div>
           <div class="text-lg font-bold" style="color:${textInk(dpCol)}">${dpTxt}</div>
-          <div class="text-[10px] text-slate-400">เป้า 55–70%</div>
+          <div class="text-[10px] text-slate-400">เป้า ${fcTargetTxt()}% · ${fcStatusText(r.food_cost_pct)}</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">ต้นทุนขาย</div>
@@ -762,7 +755,7 @@ async function bcLoadBranch() {
       ${bcKpiCard('Revenue',      bcFmtN(t.revenue),       'ex-VAT', '#0284c7')}
       ${bcKpiCard('COGS',         bcFmtN(t.cogs),          '',        '#dc2626')}
       ${bcKpiCard('GP',           bcFmtN(t.gp),            bcFmtPct(t.gp_pct), t.gp>=0?'#10b981':'#ef4444')}
-      ${bcKpiCard('ต้นทุนอาหาร %',  bcFmtPct(t.food_cost_pct), '(เป้า 55–70%)', '#f59e0b')}
+      ${bcKpiCard('ต้นทุนอาหาร %',  bcFmtPct(t.food_cost_pct), `(เป้า ${fcTargetTxt()}% · ${fcStatusText(t.food_cost_pct)})`, fcTargetCol(t.food_cost_pct))}
       ${bcKpiCard('Menus',        bcFmtN(t.menus_with_cost), `/ ${bcFmtN(t.menus_total)} ทั้งหมด`, '#4a70b0')}
     </div>
     ${cd ? bcCostDriverTable(cd, '· ' + esc(useBranch)) : '<div class="card p-4 mb-5 text-sm text-slate-400">ไม่มีข้อมูล cost-driver</div>'}
@@ -982,7 +975,7 @@ async function bcLoadSimulator() {
           <button onclick="bcApplyPct(-10)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−10% ทั้งหมด</button>
           <button onclick="bcApplyPct(10)" class="px-2 py-1 bg-rose-100 text-rose-700 rounded">+10% ทั้งหมด</button>
           <button onclick="bcApplyTargetFood()" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded">ตั้งเป้าต้นทุนอาหาร % =
-            <input id="bcTargetFood" type="number" value="65" class="w-12 border border-indigo-300 rounded px-1" onclick="event.stopPropagation()"></button>
+            <input id="bcTargetFood" type="number" value="${fcTargetTxt()}" class="w-12 border border-indigo-300 rounded px-1" onclick="event.stopPropagation()"></button>
         </div>
         <div id="bcSimEditor" style="max-height:520px;overflow-y:auto"></div>
       </div>

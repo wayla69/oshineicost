@@ -372,7 +372,7 @@ async function loadPrimeCost() {
   document.getElementById('primeBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.rev)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? 'var(--bad-ink)' : r.food_pct > 50 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${textInk(fcTargetCol(r.food_pct))}" title="เป้า ${fcTargetTxt()}% · ${fcStatusText(r.food_pct)}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.labor_pct != null ? r.labor_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(pcCol(r.prime_pct))}">${r.prime_pct != null ? r.prime_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? 'var(--text-muted)' : r.operating_pct < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
