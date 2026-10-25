@@ -1,7 +1,10 @@
-"""PR-SP · /api/sales/menu-spike by period: day (unchanged), this week, MTD, a custom range.
+"""PR-SP / PR-ST · /api/sales/menu-spike by period: day, this week, MTD, a custom range.
 
-- day mode returns what the code before PR-SP returned (a frozen copy of it is below), except that new menus
-  left `spikes` for their own list (PR-SN, owner 2026-10-24: new = period end - first day sold < 28 days);
+- PR-ST (owner 2026-10-25): per head - plates per 100 customers (buffet menus on buffet customers, the rest on all
+  customers) against the weekday-fair normal of the 3 weeks before, in every period INCLUDING the day mode (the frozen
+  copy of the old day mode is gone: the day mode now equals a one-day range); a branch without customer counts keeps the
+  plate standard (basis "days"), which is what the constructed DB of sections 1-7 has - so their numbers are PR-SP's;
+  section 8 builds customers and the buffet-tier fact tables (rate math, the tier split, a-la-carte, stale facts);
 - week / mtd bounds (Monday / the 1st -> the anchor, never past the last finished day);
 - the weekday-fair "ปกติ": a weekend-heavy menu is not flagged in a period that is mostly weekend;
 - custom range validation answers 400 in formal Thai;
@@ -20,51 +23,6 @@ import pytest
 
 from routers import sales
 from test_bom_center_batch2 import needs_node, NODE
-
-
-# ── a frozen copy of the day mode before PR-SP (the reference the day mode must still match) ──
-def _day_reference(con, date=None, branch=None, group=None, limit=300, threshold=1.5):
-    maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
-    if not maxd:
-        return {"date": None, "spikes": []}
-    focus = (date or maxd)[:10]
-    fy, fm, fd = (int(x) for x in focus.split("-"))
-    wstart = (dt.date(fy, fm, fd) - dt.timedelta(days=21)).isoformat()
-    bfilt = ""; params = {"focus": focus, "ws": wstart}
-    if branch:
-        bfilt += " AND b.name=:branch"; params["branch"] = branch
-    if group:
-        bfilt += " AND COALESCE(b.branch_type,'master')=:grp"; params["grp"] = group
-    rows = con.execute(f"""
-        WITH today AS (
-          SELECT d.branch_id, d.sku_id, SUM(d.qty) q
-          FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
-          WHERE d.day=:focus {bfilt} GROUP BY d.branch_id, d.sku_id),
-        hist AS (
-          SELECT branch_id, sku_id, AVG(qty) avgq, COUNT(*) n
-          FROM v_sales_sku_daily WHERE day>=:ws AND day<:focus GROUP BY branch_id, sku_id)
-        SELECT b.name branch, s.description, s.sku_code, t.q today,
-               COALESCE(h.avgq,0) avgq, COALESCE(h.n,0) n
-        FROM today t JOIN branches b ON b.branch_id=t.branch_id
-        JOIN skus s ON s.sku_id=t.sku_id
-        LEFT JOIN hist h ON h.branch_id=t.branch_id AND h.sku_id=t.sku_id
-        WHERE t.q>0""", params).fetchall()
-    spikes = []
-    for r in rows:
-        today = r["today"] or 0; avg = r["avgq"] or 0; n = r["n"] or 0
-        name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
-        if avg > 0 and n >= 5:
-            x = today / avg
-            if x >= threshold and today >= 5:
-                spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
-                               "avg": round(avg, 1), "x": round(x, 1), "pct": round((x - 1) * 100),
-                               "excess": round(today - avg), "is_new": False})
-        elif n < 5 and today >= 20:
-            spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
-                           "avg": 0, "x": None, "pct": None, "excess": round(today), "is_new": True})
-    spikes.sort(key=lambda s: -s["excess"])
-    return {"date": focus, "window_days": 21, "threshold": threshold,
-            "count": len(spikes), "spikes": spikes[:limit]}
 
 
 # ── a constructed DB: one branch, 2026-07-01 .. 2026-08-31 (all finished days) ──
@@ -117,59 +75,36 @@ def _row(res, menu, branch="สาขาทดสอบ"):
     return next((s for s in res["spikes"] if s["menu"] == menu and s["branch"] == branch), None)
 
 
-# ── 1. day mode unchanged ─────────────────────────────────────────────────────────────────────────
+# ── 1. day mode = the per-head, weekday-fair standard on one day (PR-ST, owner 2026-10-25) ───────────────────────────
+# Before PR-ST the day mode compared the day with the 21-day average of the days the menu sold (a frozen copy of that code
+# stood here). Owner decision 2 (2026-10-25): the day mode uses the same standard as every period - the same weekday of
+# the 3 weeks before, per head - so the day mode now equals a one-day custom range.
+_PERIOD_KEYS = ("period", "latest_day")
+
+
+def _same_as_range(day_res, range_res):
+    strip = lambda r: {k: v for k, v in r.items() if k not in _PERIOD_KEYS}
+    assert strip(day_res) == strip(range_res)
+
+
 @pytest.mark.parametrize("params", [{}, {"date": "2026-06-02"}, {"branch": "BranchA"}, {"group": "franchise"}])
-def test_day_mode_on_the_fixture_matches_the_code_before(client, app_db, params):
-    old = sqlite3.connect(str(app_db)); old.row_factory = sqlite3.Row
-    try:
-        want = _day_reference(old, **params)
-    finally:
-        old.close()
-    for extra in ({}, {"period": "day"}):
-        r = client.get("/api/sales/menu-spike", params={"threshold": 1.5, "limit": 300, **params, **extra})
-        assert r.status_code == 200, (params, extra)
-        got = r.json()
-        _assert_day_matches_without_new(got, want, str(app_db))
+def test_day_mode_on_the_fixture_is_the_one_day_range(client, params):
+    for thr in (1.5, 1.0):
+        for extra in ({}, {"period": "day"}):
+            r = client.get("/api/sales/menu-spike", params={"threshold": thr, "limit": 300, **params, **extra})
+            assert r.status_code == 200, (params, extra)
+            d = r.json()
+            assert d["period"] == "day" and d["date_from"] == d["date_to"] == d["date"] and d["days"] == 1
+            assert (d["baseline_from"], d["baseline_to"]) == (
+                (dt.date.fromisoformat(d["date"]) - dt.timedelta(days=21)).isoformat(),
+                (dt.date.fromisoformat(d["date"]) - dt.timedelta(days=1)).isoformat())
+            rp = {k: v for k, v in params.items() if k != "date"}
+            g = client.get("/api/sales/menu-spike", params={"threshold": thr, "limit": 300, **rp, "period": "range",
+                                                            "date_from": d["date"], "date_to": d["date"]}).json()
+            _same_as_range(d, g)
 
 
-def _first_by_name(con):
-    """(branch name, menu name as the card prints it) -> the first day sold, as a date."""
-    out = {}
-    for b, desc, code, d in con.execute("""
-            SELECT b.name, s.description, s.sku_code, MIN(x.day) FROM sales_sku_daily x
-            JOIN branches b ON b.branch_id=x.branch_id JOIN skus s ON s.sku_id=x.sku_id
-            WHERE x.qty > 0 GROUP BY x.branch_id, x.sku_id""").fetchall():
-        name = (desc or code or "").replace("(B) ", "").replace("(A) ", "")
-        out[(b, name)] = min(out.get((b, name), d[:10]), d[:10])
-    return {k: dt.date.fromisoformat(v) for k, v in out.items()}
-
-
-def _assert_day_matches_without_new(got, want, db):
-    """PR-SN: the day mode = the frozen reference, except that (1) its rows of menus first sold < 28 days ago left for
-    new_menus and (2) its old is_new rows (n < 5 baseline days, >= 20 plates) of menus older than that stay in spikes
-    as thin_base rows ("ปกติ" over the branch's trading days, not the days sold); every other row and key unchanged."""
-    con = sqlite3.connect(db) if isinstance(db, str) else db
-    first = _first_by_name(con)
-    focus = dt.date.fromisoformat(want["date"]) if want.get("date") else None
-
-    def is_new(s):
-        f = first.get((s["branch"], s["menu"]))
-        return f is not None and (focus - f).days < 28
-    keep = [s for s in want["spikes"] if not s["is_new"] and not is_new(s)]
-    thin_old = {(s["branch"], s["menu"]) for s in want["spikes"] if s["is_new"] and not is_new(s)}
-    thin_got = [s for s in got["spikes"] if s.get("thin_base")]
-    # a thin row is one of those old is_new rows that also clears the threshold (or has no baseline)
-    assert {(s["branch"], s["menu"]) for s in thin_got} <= thin_old
-    assert all(s["x"] is None or s["x"] >= want["threshold"] for s in thin_got)
-    assert all(s["is_new"] is False and s["today"] >= 20 for s in thin_got)
-    rest = [s for s in got["spikes"] if not s.get("thin_base")]
-    exp = {**want, "spikes": keep, "count": len(keep) + len(thin_got)} if want.get("date") else want
-    assert {**{k: v for k, v in got.items() if k not in ("new_menus", "new_count", "new_days")}, "spikes": rest} == exp
-    assert got["new_count"] == len(got["new_menus"]) and all(m["age_days"] <= 28 for m in got["new_menus"])
-    assert all(not s["is_new"] for s in got["spikes"])
-
-
-def test_day_mode_with_spikes_matches_the_code_before(monkeypatch):
+def test_day_mode_with_spikes(monkeypatch):
     def plan(d):
         p = _weekend_plan(d)
         if d == dt.date(2026, 8, 20):
@@ -178,13 +113,25 @@ def test_day_mode_with_spikes_matches_the_code_before(monkeypatch):
             p[3] = p.get(3, 25)
         return p
     con = _db(plan)
-    for kw in ({}, {"date": "2026-08-20"}, {"date": "2026-08-20", "branch": "สาขาทดสอบ"}, {"date": "2026-08-20", "threshold": 3.0}):
-        got = _call(con, monkeypatch, **kw)
-        _assert_day_matches_without_new(got, _day_reference(con, **kw), con)
     got = _call(con, monkeypatch, date="2026-08-20")
-    assert _day_reference(con, date="2026-08-20")["count"] == got["count"] + 1      # the old list held the new menu
-    assert _row(got, "ข้าวปั้น")["x"] == 4.0 and _row(got, "เมนูใหม่") is None and "period" not in got
+    s = _row(got, "ข้าวปั้น")
+    assert (s["today"], s["expected"], s["x"], s["excess"], s["basis"]) == (40, 10, 4.0, 30, "days")
+    assert _row(got, "เมนูใหม่") is None and got["period"] == "day" and got["count"] == 1
     assert [(m["menu"], m["qty"]) for m in got["new_menus"]] == [("เมนูใหม่", 25), ("เมนูใหม่น้อย", 12)]
+    for kw in ({"date": "2026-08-20", "branch": "สาขาทดสอบ"}, {"date": "2026-08-20", "threshold": 3.0}):
+        rng = _call(con, monkeypatch, period="range", date_from="2026-08-20", date_to="2026-08-20",
+                    **{k: v for k, v in kw.items() if k != "date"})
+        _same_as_range(_call(con, monkeypatch, **kw), rng)
+    assert _call(con, monkeypatch, date="2026-08-20", threshold=5.0)["count"] == 0
+
+
+def test_day_mode_is_weekday_fair(monkeypatch):
+    # ซาชิมิ 30 on a Saturday, 2 on weekdays: Sat 22 Aug at its usual 30 is normal (the old 21-day average, ~10, said x3)
+    con = _db(_weekend_plan)
+    r = _call(con, monkeypatch, date="2026-08-22", threshold=1.0)
+    s = _row(r, "ซาชิมิ")
+    assert (s["today"], s["expected"], s["x"]) == (30, 30, 1.0)
+    assert _call(con, monkeypatch, date="2026-08-22")["count"] == 0
 
 
 # ── 2. bounds ─────────────────────────────────────────────────────────────────────────────────────
@@ -236,8 +183,10 @@ def test_a_real_weekend_spike_is_flagged_with_its_fields(monkeypatch):
     con = _db(plan)
     r = _call(con, monkeypatch, period="mtd", date="2026-08-02")
     s = _row(r, "ซาชิมิ")
+    # no customer counts in this DB: basis "days" = one per trading day, the plate standard of PR-SP (rate None)
     assert s == {"branch": "สาขาทดสอบ", "menu": "ซาชิมิ", "today": 150, "per_day": 75.0, "avg": 60.0, "expected": 60,
-                 "x": 2.5, "pct": 150, "excess": 90, "is_new": False}
+                 "x": 2.5, "pct": 150, "excess": 90, "is_new": False, "kind": "buffet", "basis": "days", "customers": None,
+                 "rate": None, "normal_rate": None, "tiers": None, "tier_note": "ยังไม่มีข้อมูลแยก tier"}
     assert _row(r, "ข้าวปั้น") is None                          # flat menu
 
 
@@ -386,22 +335,20 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
             p[3] = 22
         return p
     con = _db(plan)
-    old = _day_reference(con, date="2026-08-20")
-    assert next(s for s in old["spikes"] if s["menu"] == "เมนูเล็ก")["is_new"] is True    # the old rule
     r = _call(con, monkeypatch, date="2026-08-20")
-    # day mode: 6 plates over the 21 trading days = 0.29 a day
-    assert _row(r, "เมนูเล็ก") == {"branch": "สาขาทดสอบ", "menu": "เมนูเล็ก", "today": 30, "avg": 0.3, "x": 105.0,
-                                   "pct": 10400, "excess": 30, "is_new": False, "thin_base": True}
-    assert _row(r, "เมนูใหม่น้อย") == {"branch": "สาขาทดสอบ", "menu": "เมนูใหม่น้อย", "today": 25, "avg": 0.0, "x": None,
-                                        "pct": None, "excess": 25, "is_new": False, "thin_base": True}
+    # day mode (PR-ST: weekday-fair): Thu 20 Aug vs the Thursdays 30 Jul, 6 and 13 Aug, none of which sold เมนูเล็ก -> "ปกติ" 0
+    assert _row(r, "เมนูเล็ก") == {"branch": "สาขาทดสอบ", "menu": "เมนูเล็ก", "today": 30, "per_day": 30.0, "avg": 0.0,
+                                   "expected": 0, "x": None, "pct": None, "excess": 30, "is_new": False, "thin_base": True,
+                                   "kind": "alc", "basis": "days", "customers": None, "rate": None, "normal_rate": None,
+                                   "tiers": None, "tier_note": "ยังไม่มีข้อมูลแยก tier"}
+    s = _row(r, "เมนูใหม่น้อย")
+    assert (s["today"], s["avg"], s["x"], s["pct"], s["excess"], s["thin_base"]) == (25, 0.0, None, None, 25, True)
     assert _row(r, "ซาชิมิ") is None and r["new_menus"] == []
-    assert _row(r, "เมนูใหม่")["x"] == 38.5                      # thin, 22 plates vs 0.57: listed (>= 1.5x)
-    # thin with a baseline but under 1.5x: not listed (the same threshold as every spike)
-    r3 = _call(con, monkeypatch, date="2026-08-20", threshold=50.0)
-    assert _row(r3, "เมนูใหม่") is None and _row(r3, "เมนูเล็ก") is not None   # x 38.5 < 50, x 105 >= 50
-    assert _row(r3, "เมนูใหม่น้อย")["x"] is None                 # no baseline: listed from 20 plates, x "—"
-    r3 = _call(con, monkeypatch, date="2026-08-20", threshold=200.0)
-    assert _row(r3, "เมนูเล็ก") is None and _row(r3, "เมนูใหม่น้อย") is not None
+    assert _row(r, "เมนูใหม่")["x"] == 16.5                      # thin, 22 plates vs Thursdays 0 + 4 + 0 = 1.33: listed
+    # thin with a baseline but under the threshold: not listed (the same threshold as every spike); no baseline: listed, x "—"
+    r3 = _call(con, monkeypatch, date="2026-08-20", threshold=20.0)
+    assert _row(r3, "เมนูใหม่") is None and _row(r3, "เมนูเล็ก") is not None and _row(r3, "เมนูใหม่น้อย")["x"] is None
+    assert _row(_call(con, monkeypatch, date="2026-08-20", threshold=16.0), "เมนูใหม่")["x"] == 16.5
     # week of 17 Aug (to Thu 20): weekday-fair "ปกติ" = Mon 2/3 + Wed 2/3 = 1.33 plates
     r = _call(con, monkeypatch, period="week", date="2026-08-20")
     s = _row(r, "เมนูเล็ก")
@@ -417,7 +364,8 @@ def test_an_old_menu_with_a_thin_baseline_stays_in_the_existing_part(monkeypatch
         return p
     r = _call(_db(plan2), monkeypatch, date="2026-08-20")
     s = _row(r, "เมนูเล็ก")
-    assert s is not None and s["is_new"] is False and s["x"] == 15.0 and "thin_base" not in s and _nm(r, "เมนูเล็ก") is None
+    # Thursdays 30 Jul (none), 6 and 13 Aug (2 each) = 1.33 -> 30 / 1.33
+    assert s is not None and s["is_new"] is False and s["x"] == 22.5 and "thin_base" not in s and _nm(r, "เมนูเล็ก") is None
 
 
 def _launch_plan(d):
@@ -492,3 +440,165 @@ def test_the_first_sold_map_is_kept_per_db_and_follows_new_rows(monkeypatch, tmp
         assert _nm(r, "เมนูใหม่") is None and r["new_count"] == 0
     finally:
         con.close()
+
+
+# ── 8. PR-ST · per head (จาน/100 ลูกค้า) and the buffet tiers behind the increase (owner 2026-10-25) ─────────────────────
+# A DB with customers: one branch, every day 1 Jul .. 31 Aug. cust(d) -> {"799": n, "599": n, "nb": n} (buffet customers per tier,
+# non-buffet customers); plates(d) -> {sku_id: {"799": q, "599": q, "nb": q}} (plates on the bills of that tier / on non-buffet
+# bills). sales_transaction holds all customers (source Easy), menu_fact_total / menu_fact_day the buffet bills up to fact_to.
+def _db_pax(cust, plates, fact_to="2026-08-31", first=None):
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.executescript("""
+      CREATE TABLE branches(branch_id INTEGER PRIMARY KEY, name TEXT, branch_type TEXT);
+      CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT);
+      CREATE TABLE sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
+      CREATE INDEX ix_ssd ON sales_sku_daily(branch_id, day, sku_id);
+      CREATE TABLE sales_transaction(branch_id INT, receipt_no TEXT, sold_at TEXT, customer_count INT, source TEXT);
+      CREATE TABLE menu_fact_total(branch_id INT, day TEXT, tier TEXT, bills INT, pax REAL, cogs REAL, rev REAL, hc REAL,
+        PRIMARY KEY(branch_id, day, tier));
+      CREATE TABLE menu_fact_day(branch_id INT, day TEXT, tier TEXT, ent TEXT, bills INT, pax REAL, qty REAL,
+        ent_cogs REAL, ent_hc REAL, cogs REAL, rev REAL, hc REAL, PRIMARY KEY(branch_id, day, tier, ent));
+      CREATE INDEX ix_mfd_be ON menu_fact_day(branch_id, ent, day, tier, qty);
+      INSERT INTO branches VALUES (1, 'สาขาทดสอบ', 'master');
+      INSERT INTO skus VALUES (1, 'BASE', '(B) ข้าวปั้น'), (3, 'NEW1', '(A) เมนูใหม่'), (7, 'RAMEN', '(AL) ราเมง');
+    """)
+    d = dt.date(2026, 7, 1)
+    while d <= dt.date(2026, 8, 31):
+        day = d.isoformat()
+        c = cust(d)
+        con.execute("INSERT INTO sales_transaction VALUES (1, ?, ?, ?, 'Easy')", (f"R{day}", day + " 12:00:00", sum(c.values())))
+        for sid, by in plates(d).items():
+            if sum(by.values()):
+                con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, ?, ?, 0)", (day, sid, sum(by.values())))
+            if day <= fact_to:
+                for t, q in by.items():
+                    if t != "nb" and q:
+                        con.execute("INSERT INTO menu_fact_day VALUES (1, ?, ?, ?, 1, ?, ?, 0, 0, 0, 0, 0)", (day, t, f"s:{sid}", c[t], q))
+        if day <= fact_to:
+            for t, n in c.items():
+                if t != "nb" and n:
+                    con.execute("INSERT INTO menu_fact_total VALUES (1, ?, ?, 1, ?, 0, 0, 0)", (day, t, n))
+        d += dt.timedelta(days=1)
+    return con
+
+
+_P0, _P1 = dt.date(2026, 8, 17), dt.date(2026, 8, 23)           # the period: Mon 17 .. Sun 23 Aug; baseline 27 Jul .. 16 Aug
+
+
+def _in(d):
+    return _P0 <= d <= _P1
+
+
+def _spike_range(con, monkeypatch, **kw):
+    return _call(con, monkeypatch, period="range", date_from=_P0.isoformat(), date_to=_P1.isoformat(), **kw)
+
+
+def test_customers_double_and_plates_double_is_not_a_spike(monkeypatch):
+    # the owner's case: a busy week. 100 buffet customers a day (60 at 799, 40 at 599), ข้าวปั้น 0.5 a head; the period has
+    # twice the customers and twice the plates - the plate standard said x2.0, per head it is x1.0
+    k = lambda d: 2 if _in(d) else 1
+    con = _db_pax(lambda d: {"799": 60 * k(d), "599": 40 * k(d), "nb": 20},
+                  lambda d: {1: {"799": 30 * k(d), "599": 20 * k(d)}})
+    r = _spike_range(con, monkeypatch, threshold=1.0)
+    s = _row(r, "ข้าวปั้น")
+    assert (s["kind"], s["basis"], s["customers"], s["today"]) == ("buffet", "buffet", 1400, 700)
+    assert (s["rate"], s["normal_rate"], s["x"], s["excess"]) == (50.0, 50.0, 1.0, 0)
+    assert _spike_range(con, monkeypatch)["count"] == 0
+    assert r["rate_per"] == 100 and r["tier_data_to"] == "2026-08-31"
+
+
+def test_customers_halve_and_plates_stay_is_a_spike(monkeypatch):
+    k = lambda d: 0.5 if _in(d) else 1
+    con = _db_pax(lambda d: {"799": 60 * k(d), "599": 40 * k(d), "nb": 20},
+                  lambda d: {1: {"799": 30, "599": 20}})
+    s = _row(_spike_range(con, monkeypatch), "ข้าวปั้น")
+    assert (s["customers"], s["today"], s["rate"], s["normal_rate"], s["x"], s["pct"]) == (350, 350, 100.0, 50.0, 2.0, 100)
+    assert s["excess"] == 175                                        # 350 - 0.5 x 350 customers ("+จาน" at the normal rate)
+
+
+def test_the_tier_split_sums_to_the_excess(monkeypatch):
+    # the same customers and mix every day; in the period 799 eats 1.0 a head (0.5 before), 599 0.6 (0.5 before)
+    con = _db_pax(lambda d: {"799": 60, "599": 40, "nb": 20},
+                  lambda d: {1: {"799": 60 if _in(d) else 30, "599": 24 if _in(d) else 20}})
+    s = _row(_spike_range(con, monkeypatch), "ข้าวปั้น")
+    assert (s["today"], s["expected"], s["excess"]) == (588, 350, 238)
+    t = {g["tier"]: g for g in s["tiers"]}
+    assert [g["tier"] for g in s["tiers"]] == ["799", "599"]         # largest excess first; no non-buffet plates -> no group
+    assert t["799"] == {"tier": "799", "label": "฿799", "plates": 420, "customers": 420, "rate": 100.0, "normal_rate": 50.0,
+                        "excess": 210.0, "x": 2.0, "high": True}
+    assert (t["599"]["excess"], t["599"]["x"], t["599"]["high"]) == (28.0, 1.2, False)
+    assert abs(sum(g["excess"] for g in s["tiers"]) - s["excess"]) <= 1 and s["tier_rest"] == 0.0
+    assert "tier_to" not in s and "tier_note" not in s
+
+
+def test_a_tier_mix_shift_is_reported_as_the_rest(monkeypatch):
+    # every tier eats as usual, but customers moved from 599 (0.25 a head) to 799 (0.75 a head): the menu is up per head,
+    # no tier is - the excess is the mix, reported as tier_rest, never pinned on a tier
+    con = _db_pax(lambda d: {"799": 90 if _in(d) else 50, "599": 10 if _in(d) else 50, "nb": 0},
+                  lambda d: {1: {"799": (90 if _in(d) else 50) * 0.75, "599": (10 if _in(d) else 50) * 0.25}})
+    s = _row(_spike_range(con, monkeypatch, threshold=1.0), "ข้าวปั้น")
+    assert s["x"] == 1.4 and all(abs(g["excess"]) < 0.01 for g in s["tiers"])
+    assert s["tier_rest"] == s["excess"] == 140
+
+
+def test_a_la_carte_on_all_customers_with_a_non_buffet_group(monkeypatch):
+    # ราเมง: 6 a day on 799 buffet bills (0.1 a head), 10 a day on non-buffet bills (20 customers); in the period the
+    # non-buffet bills order 30 a day
+    con = _db_pax(lambda d: {"799": 60, "599": 40, "nb": 20},
+                  lambda d: {1: {"799": 30, "599": 20}, 7: {"799": 6, "nb": 30 if _in(d) else 10}})
+    s = _row(_spike_range(con, monkeypatch), "(AL) ราเมง")         # only the (B) / (A) prefixes are cut from a name
+    assert (s["kind"], s["basis"], s["customers"]) == ("alc", "all", 840)      # 120 customers a day, every bill
+    assert (s["today"], s["rate"], s["normal_rate"], s["x"]) == (252, 30.0, 13.3, 2.2)
+    assert [(g["label"], g["excess"], g["high"]) for g in s["tiers"]] == [("ไม่ใช่บุฟเฟ่ต์", 140.0, True), ("฿799", 0.0, False)]
+    nb = s["tiers"][0]
+    assert (nb["tier"], nb["plates"], nb["customers"], nb["rate"], nb["normal_rate"]) == ("nonbuffet", 210, 140, 150.0, 50.0)
+    assert s["tier_rest"] == 0.0
+
+
+def test_stale_fact_tables_give_no_split(monkeypatch):
+    # the fact tables end on 10 Aug, inside the baseline: no tier split ("—" with the reason), and the buffet menu is measured
+    # on all customers (its buffet customers are not known for the whole window)
+    con = _db_pax(lambda d: {"799": 60, "599": 40, "nb": 20},
+                  lambda d: {1: {"799": 60 if _in(d) else 30, "599": 20}}, fact_to="2026-08-10")
+    s = _row(_spike_range(con, monkeypatch), "ข้าวปั้น")
+    assert s["tiers"] is None and "10 ส.ค." in s["tier_note"] and s["basis"] == "all" and s["customers"] == 840
+    assert (s["rate"], s["normal_rate"]) == (66.7, 41.7)
+
+
+def test_fact_tables_one_sync_behind_split_the_covered_days(monkeypatch):
+    con = _db_pax(lambda d: {"799": 60, "599": 40, "nb": 20},
+                  lambda d: {1: {"799": 60 if _in(d) else 30, "599": 20}}, fact_to="2026-08-20")
+    s = _row(_spike_range(con, monkeypatch), "ข้าวปั้น")
+    assert s["basis"] == "all" and s["tier_to"] == "2026-08-20" and "tier_rest" not in s
+    t = {g["tier"]: g for g in s["tiers"]}
+    assert (t["799"]["plates"], t["799"]["customers"], t["799"]["excess"]) == (240, 240, 120.0)   # 17-20 Aug only
+    assert t["599"]["excess"] == 0.0 and set(t) == {"799", "599"}
+
+
+def test_new_menu_rate_and_a_per_head_trend(monkeypatch):
+    # เมนูใหม่ launched Sat 1 Aug: 10 plates a day on 100 customers the first week, 20 on 200 from 14 Aug - twice the plates
+    # a day, the same per head: the trend is 0 %, not +100 %
+    busy = lambda d: d >= dt.date(2026, 8, 14)
+    con = _db_pax(lambda d: {"799": 100 if busy(d) else 50, "599": 0, "nb": 100 if busy(d) else 50},
+                  lambda d: {1: {"799": 25}, 3: {"nb": 0 if d < dt.date(2026, 8, 1) else 20 if busy(d) else 10}})
+    r = _call(con, monkeypatch, period="mtd", date="2026-08-20")
+    m = _nm(r, "เมนูใหม่")
+    assert (m["kind"], m["basis"], m["qty"], m["age_days"]) == ("alc", "all", 270, 20)
+    assert m["trend"] == {"first_per_day": 10.0, "latest_per_day": 20.0, "pct": 0, "first_rate": 10.0, "latest_rate": 10.0}
+    assert (m["customers"], m["rate"]) == (2700, 10.0)
+    # day mode: the same fields
+    m = _nm(_call(con, monkeypatch, date="2026-08-20"), "เมนูใหม่")
+    assert (m["qty"], m["customers"], m["rate"], m["trend"]["pct"]) == (20, 200, 10.0, 0)
+
+
+def test_day_mode_per_head(monkeypatch):
+    # Thu 20 Aug: twice the usual customers and plates -> not a spike; the same plates on half the customers -> x2.0
+    con = _db_pax(lambda d: {"799": 120 if d == dt.date(2026, 8, 20) else 60, "599": 0, "nb": 0},
+                  lambda d: {1: {"799": 60 if d == dt.date(2026, 8, 20) else 30}})
+    assert _call(con, monkeypatch, date="2026-08-20")["count"] == 0
+    con = _db_pax(lambda d: {"799": 30 if d == dt.date(2026, 8, 20) else 60, "599": 0, "nb": 0},
+                  lambda d: {1: {"799": 30}})
+    s = _row(_call(con, monkeypatch, date="2026-08-20"), "ข้าวปั้น")
+    assert (s["rate"], s["normal_rate"], s["x"], s["basis"]) == (100.0, 50.0, 2.0, "buffet")
+    assert [(g["label"], g["excess"]) for g in s["tiers"]] == [("฿799", 15.0)]
