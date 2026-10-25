@@ -24,6 +24,7 @@
  "revenue_basis": "net",
  "revenue_total": 1900.0,
  "sort": "extra_cost",
+ "spike_count": 0,
  "spikes": [],
  "spikes_plates": [],
  "summary": {
