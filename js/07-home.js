@@ -791,8 +791,9 @@ async function renderMenuSpike(focusDate) {
   if (mode === 'range') { p.set('date_from', _spikeMode.f); p.set('date_to', _spikeMode.t); }
   else if (_spikeFocus) p.set('date', _spikeFocus);
   const localBr = bsel?.value || '';
-  if (localBr) p.set('branch', localBr);
-  else if (getBranch()) p.set('branch', getBranch());
+  // one branch chosen (this card's picker or the page's branch filter): no สาขา column, the name once in the header chip
+  const oneBr = localBr || getBranch() || '';
+  if (oneBr) p.set('branch', oneBr);
   if (getGroup()) p.set('group', getGroup());
   const seq = ++_spikeSeq;
   let d;
@@ -811,7 +812,7 @@ async function renderMenuSpike(focusDate) {
   if (per && d.latest_day) { const f = document.getElementById('spikeFrom'), t = document.getElementById('spikeTo'); if (f) f.max = d.latest_day; if (t) t.max = d.latest_day; }
   if (rangeEl) {
     const pr = per ? periodRange('range', { from: d.date_from, to: d.date_to }) : periodRange('day', d.date);
-    const txt = pr ? pr.label : ''; rangeEl.textContent = txt; rangeEl.hidden = !txt;
+    const txt = [oneBr, pr ? pr.label : ''].filter(Boolean).join(' · '); rangeEl.textContent = txt; rangeEl.hidden = !txt;
   }
   const sp = d.spikes || [], nm = d.new_menus || [];
   const nSp = d.count || 0, nNew = d.new_count != null ? d.new_count : nm.length;
@@ -819,19 +820,21 @@ async function renderMenuSpike(focusDate) {
   const shown = (n, k) => n > k ? ` · แสดง ${fmtN(k)}` : '';
   const hQty = per ? 'ช่วงนี้ (จาน)' : 'วันนี้ (จาน)', hBase = per ? 'ปกติ (จาน)' : 'เฉลี่ย 21 วัน';
   const num1 = v => v == null ? '—' : Number(v).toLocaleString('th-TH', { maximumFractionDigits: 1 });
+  const brTh = oneBr ? '' : '<th class="py-1.5 pr-2">สาขา</th>';
+  const brTd = b => oneBr ? '' : `<td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(b)}</td>`;
   const thead = cols => `<thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">${cols}</tr></thead>`;
   // PR-SN (owner 2026-10-24) · two parts: existing menus that spiked, then new menus (first sold at the branch < 4 weeks before the
   // period end; after 4 weeks a menu moves to the existing part and the spike rule)
   const oldHtml = !sp.length
     ? `<p class="sp-empty">ไม่พบเมนูเดิมที่สูงกว่าปกติ ≥1.5× ใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
     : `<div class="sp-box"><table class="text-xs w-full" id="spikeTable">${thead(`
-    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
+    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th>${brTh}
     <th class="py-1.5 pr-2 text-right">${hQty}</th><th class="py-1.5 pr-2 text-right">${hBase}</th>
     <th class="py-1.5 pr-2 text-right">+จาน</th><th class="py-1.5 text-right">สูงกว่า</th>`)}<tbody>` +
     sp.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(s.menu)}</td>
-      <td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(s.branch)}</td>
+      ${brTd(s.branch)}
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}${per && s.per_day != null ? `<div class="sp-perday">${num1(s.per_day)} ต่อวัน</div>` : ''}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${fmtN(per ? s.expected : s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--amber-ink)">+${fmtN(s.excess)}</td>
@@ -849,13 +852,13 @@ async function renderMenuSpike(focusDate) {
   const newHtml = !nm.length
     ? `<p class="sp-empty">ไม่มีเมนูใหม่ที่ขายใน${per ? 'ช่วงนี้' : 'วันนี้'}</p>`
     : `<div class="sp-box"><table class="text-xs w-full" id="spikeNewTable">${thead(`
-    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
+    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th>${brTh}
     <th class="py-1.5 pr-2 text-right">เริ่มขาย</th><th class="py-1.5 pr-2 text-right">ขายมาแล้ว (วัน)</th>
     <th class="py-1.5 pr-2 text-right">${hQty}</th><th class="py-1.5 pr-2 text-right">ต่อวัน</th><th class="py-1.5 text-right">แนวโน้ม</th>`)}<tbody>` +
     nm.map((m, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(m.menu)}</td>
-      <td class="py-1.5 pr-2" style="color:var(--text-secondary)">${esc(m.branch)}</td>
+      ${brTd(m.branch)}
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-secondary)">${esc(m.first_sold_th || '')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(m.age_days)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(m.qty)}</td>

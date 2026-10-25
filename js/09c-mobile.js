@@ -555,7 +555,7 @@ function _phFitOff(panel) {
   ['width', 'zoom', 'transform', 'transform-origin', 'margin-bottom', 'margin-right'].forEach(k => panel.style.removeProperty(k));
   panel.querySelectorAll('[data-phf]').forEach(el => { el.style.removeProperty('font-size'); delete el.dataset.phf; });
   panel.querySelectorAll('.ph-tz').forEach(el => { el.classList.remove('ph-tz'); el.style.removeProperty('zoom'); });
-  panel.querySelectorAll('.ph-xs, .ph-xv').forEach(el => { el.classList.remove('ph-xs', 'ph-xv'); el.style.removeProperty('max-height'); });
+  panel.querySelectorAll('.ph-xs, .ph-xv').forEach(el => { el.classList.remove('ph-xs', 'ph-xv'); el.style.removeProperty('max-height'); delete el.dataset.phcap; });
   panel.querySelectorAll('.ph-z100').forEach(_phZoomOff);
   delete panel._phS;
   _phChartsCrisp(panel, 0);                       // PR-MB: the charts go back to the browser's own pixel ratio
@@ -634,7 +634,9 @@ function _phFitTouch(panel, s) {
     el.classList.add('ph-tz'); el.style.zoom = String(1 / s);
   });
 }
-// a table that fits its box keeps the page's scroll (its header pins under the top bar); a wider one scrolls inside its box, header and first column pinned
+// a table that fits its box keeps the page's scroll (its header pins under the top bar); a wider one scrolls inside its box, header and first column pinned.
+// A box with its own height cap (max-height + overflow, e.g. เมนูพุ่งผิดปกติ 380 px) taller than the cap keeps scrolling inside that cap, as on a
+// desktop; let go, its table would run over the next block of the page (owner 2026-10-24). The cap is read once, before the frame styles the box.
 function _phFitTables(panel, s) {
   const ca = document.querySelector('.content-area');
   const h = Math.max(240, Math.floor(((ca ? ca.clientHeight : window.innerHeight) - 16) / s));
@@ -646,9 +648,14 @@ function _phFitTables(panel, s) {
       if (tb.offsetWidth <= panel.clientWidth + 1) return;
       box = tb.parentElement;
     }
+    if (!box.dataset.phcap && !box.classList.contains('ph-xs') && !box.classList.contains('ph-xv')) {   // no class yet: any max-height is the page's own
+      const mh = parseFloat(getComputedStyle(box).maxHeight); box.dataset.phcap = mh > 0 ? String(mh) : '0';
+    }
+    const cap = +box.dataset.phcap || 0;
     const wide = tb.scrollWidth > box.clientWidth + 1 || box.classList.contains('ph-xs') && tb.scrollWidth > box.clientWidth - 1;
-    box.classList.toggle('ph-xs', wide); box.classList.toggle('ph-xv', !wide);
-    if (wide) box.style.maxHeight = h + 'px'; else box.style.removeProperty('max-height');
+    const tall = cap > 0 && tb.offsetHeight > cap + 1;
+    box.classList.toggle('ph-xs', wide || tall); box.classList.toggle('ph-xv', !wide && !tall);
+    if (wide || tall) box.style.maxHeight = (cap > 0 ? Math.min(cap, h) : h) + 'px'; else box.style.removeProperty('max-height');
   });
 }
 // the text floor: every text inside the frame is at least 12 px (so >= 5.5 px at rest, >= 12 px at 100 %); SVG text by its drawn size

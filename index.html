@@ -2339,7 +2339,9 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on.ph-fit .ph-frame { box-sizing: border-box; max-width: none; overflow-x: clip; }
   body.ph-on.ph-fit .ph-frame .card { overflow: visible; }
   body.ph-on.ph-fit .ph-frame .ph-xs { overflow: auto !important; overscroll-behavior: contain; }
-  body.ph-on.ph-fit .ph-frame .ph-xv { overflow: visible !important; }
+  /* a box that no longer scrolls drops its own height cap too (e.g. max-height + overflow:auto): kept, its table would paint over the
+     next block of the page (owner 2026-10-24, เมนูพุ่งผิดปกติ: the new-menu table drawn over the existing-menu one) */
+  body.ph-on.ph-fit .ph-frame .ph-xv { overflow: visible !important; max-height: none !important; }
   /* the header row and the first column stay pinned while the frame or its table scrolls */
   body.ph-on.ph-fit .ph-frame thead th { position: sticky; top: 0; z-index: 3; }
   body.ph-on.ph-fit .ph-frame table :is(tbody td, tfoot td, tfoot th):first-child { position: sticky; left: 0; z-index: 2; background: var(--bg-card); }
