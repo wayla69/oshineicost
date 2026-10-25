@@ -1618,10 +1618,8 @@ function _observeBuffetPanels() {
     { id: 'chartForecastPax',      fn: loadForecast },
     { id: 'chartGpBomMain',        fn: loadBuffetGP },           // was gpBomKpis (empty div) → canvas has height
     { id: 'pnlBody',               fn: loadBomPnl },
-    { id: 'pvBody',                fn: () => loadPortionVelocity() },
     { id: 'chartPlateDist',        fn: loadPlateCostDist },
     { id: 'simSliders',            fn: loadCostSensitivity },
-    { id: 'lcBody',                fn: () => loadSkuLifecycle() },
   ];
   // Create observer once; subsequent calls just add newly-unobserved elements
   if (!_bperfObserver) {
@@ -2265,6 +2263,11 @@ async function loadHeavyEaterTail() {
   if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/buffet/heavy-eater-tail?${p}`); } catch (e) { return; }
   const s = d.summary || {};
+  // DV2: no bill with a cost in the window (the per-bill cost covers ~31 days) -> the card hides instead of drawing empty tables
+  const hetCard = document.getElementById('hetCard');
+  const hetEmpty = !(d.by_party_size || []).length && !(d.by_branch || []).length && !(d.distribution || []).some(x => x.covers);
+  if (hetCard) hetCard.style.display = hetEmpty ? 'none' : '';
+  if (hetEmpty) return;
   const wEl = document.getElementById('hetWindow');
   if (wEl) wEl.textContent = d.window ? `ช่วงข้อมูล ${d.window[0]} → ${d.window[1]}` : '';
   document.getElementById('hetKpis').innerHTML = [
@@ -2312,6 +2315,9 @@ async function loadTurnEfficiency() {
   if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/buffet/turn-efficiency?${p}`); } catch (e) { return; }
   const ch = d.chain || {}; const rows = d.branches || [];
+  const turnCard = document.getElementById('turnCard');                  // DV2: an empty table is not drawn
+  if (turnCard) turnCard.style.display = rows.length ? '' : 'none';
+  if (!rows.length) return;
   const cw = document.getElementById('turnChain');
   if (cw) cw.textContent = ch.turn_min ? `เฉลี่ยเครือ: นั่ง ${ch.turn_min} นาที · กำไร/หัว ${fmt(ch.gp_cover)} · GP/นาที-โต๊ะ ${ch.gp_per_table_min}` : '';
   const ineff = rows.filter(r => r.inefficient);
@@ -2588,55 +2594,7 @@ async function loadBomPnl() {
   }).join('');
 }
 
-// ── Portion Velocity ──────────────────────────────────────────────────────
-let _pvData = [];
-let _pvFilter = 'all';
-let _lastPvKey = null;
-function setPvFilter(f) {
-  _pvFilter = f;
-  const base = 'px-3 py-1.5 rounded-lg font-medium';
-  const on   = base + ' bg-violet-600 text-white';
-  const off  = base + ' bg-white border border-slate-200 text-slate-600 hover:bg-violet-50';
-  ['all','up','down'].forEach(x => {
-    const b = document.getElementById('pvFilter-'+x);
-    if (b) b.className = x === f ? on : off;
-  });
-  _renderPv();
-}
-function _renderPv() {
-  const rows = _pvFilter === 'all' ? _pvData
-             : _pvFilter === 'up'  ? _pvData.filter(r => (r.trend_pct||0) > 0)
-             :                       _pvData.filter(r => (r.trend_pct||0) < 0);
-  if (!rows.length) {
-    document.getElementById('pvBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-    return;
-  }
-  document.getElementById('pvBody').innerHTML = rows.map(r => {
-    const up = (r.trend_pct||0) >= 0;
-    const clr = up ? '#10b981' : '#ef4444';
-    return `<tr class="border-t border-slate-100 hover:bg-slate-50">
-      <td class="py-1.5 pr-3 font-mono text-slate-700">${r.sku_code}</td>
-      <td class="py-1.5 pr-3 text-slate-600 max-w-[120px] truncate" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
-      <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
-      <td class="py-1.5 pr-3 text-right tabular-nums">${r.avg_ratio != null ? r.avg_ratio.toFixed(3) : '—'}</td>
-      <td class="py-1.5 pr-3 text-right">${up ? '▲' : '▼'}</td>
-      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${textInk(clr)}">${r.trend_pct != null ? (r.trend_pct >= 0 ? '+' : '') + r.trend_pct.toFixed(1)+'%' : '—'}</td>
-    </tr>`;
-  }).join('');
-}
-async function loadPortionVelocity() {
-  const _fk = _filterKey();
-  if (_lastPvKey === _fk) return;
-  _lastPvKey = _fk;
-  const params = new URLSearchParams();
-  if (getBranch())    params.set('branch', getBranch());
-  if (getMonthFrom()) params.set('month_from', getMonthFrom());
-  if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await api(`${API}/api/buffet/portion-velocity?${params}`).catch(() => null);
-  if (!d || !d.skus) { document.getElementById('pvBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
-  _pvData = d.skus;
-  _renderPv();
-}
+// DV2: Portion Velocity (อัตราการเสิร์ฟ) removed from ลูกค้าและบุฟเฟ่ต์ - +0.0 % on every row; /api/buffet/portion-velocity stays for the API
 
 // ── Plate Cost Distribution ───────────────────────────────────────────────
 let _lastPlateKey = null;
@@ -2751,60 +2709,7 @@ function _updateSimResult() {
   </div>`).join('');
 }
 
-// ── SKU Lifecycle ─────────────────────────────────────────────────────────
-let _lcData = [];
-let _lcFilter = 'all';
-let _lastLcKey = null;
-const _lcColors = { new:'#3b82f6', growing:'#10b981', stable:'#64748b', declining:'#f59e0b', dead:'#ef4444' };
-const _lcEmoji  = { new:'', growing:'▲', stable:'→', declining:'▼', dead:'' };
-function setLcFilter(f) {
-  _lcFilter = f;
-  const base = 'px-3 py-1.5 rounded-lg font-medium';
-  const on   = base + ' bg-emerald-600 text-white';
-  const off  = base + ' bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50';
-  ['all','new','growing','stable','declining','dead'].forEach(x => {
-    const b = document.getElementById('lcFilter-'+x);
-    if (b) b.className = x === f ? on : off;
-  });
-  _renderLc();
-}
-function _renderLc() {
-  const rows = _lcFilter === 'all' ? _lcData : _lcData.filter(r => r.stage === _lcFilter);
-  if (!rows.length) {
-    document.getElementById('lcBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-    return;
-  }
-  document.getElementById('lcBody').innerHTML = rows.map(r => {
-    const clr = _lcColors[r.stage] || '#64748b';
-    const emoji = _lcEmoji[r.stage] || '';
-    return `<tr class="border-t border-slate-100 hover:bg-slate-50">
-      <td class="py-1.5 pr-3 font-mono text-slate-700">${r.sku_code}</td>
-      <td class="py-1.5 pr-3 text-slate-600 max-w-[120px] truncate" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
-      <td class="py-1.5 pr-3 text-slate-400">${r.category||'—'}</td>
-      <td class="py-1.5 pr-3 text-right tabular-nums">${r.avg_monthly != null ? fmtN(Math.round(r.avg_monthly)) : '—'}</td>
-      <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${textInk(clr)}">${r.slope_pct != null ? (r.slope_pct >= 0 ? '+' : '') + r.slope_pct.toFixed(1)+'%' : '—'}</td>
-      <td class="py-1.5 text-right"><span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:${clr}18;color:${textInk(clr)}">${emoji} ${r.stage}</span></td>
-    </tr>`;
-  }).join('');
-}
-async function loadSkuLifecycle(force) {
-  const _fk = _filterKey();
-  if (!force && _lastLcKey === _fk) return;
-  _lastLcKey = _fk;
-  const params = new URLSearchParams();
-  if (getBranch())    params.set('branch', getBranch());
-  if (getMonthFrom()) params.set('month_from', getMonthFrom());
-  if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await api(`${API}/api/menu/lifecycle?${params}`).catch(() => null);
-  if (!d || !d.skus) { document.getElementById('lcBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
-  _lcData = d.skus;
-  const counts = d.summary || {};
-  document.getElementById('lcKpis').innerHTML = Object.entries(counts).map(([st, cnt]) => {
-    const clr = _lcColors[st] || '#64748b';
-    return `<span class="px-3 py-1.5 rounded-full text-xs font-semibold" style="background:${clr}18;color:${textInk(clr)}">${_lcEmoji[st]||''} ${st}: ${cnt}</span>`;
-  }).join('');
-  _renderLc();
-}
+// DV2: SKU Lifecycle (วงจรชีวิตเมนู) removed from the page - 833 rows of "new +0.0 %"; /api/menu/lifecycle stays (ปรับเมนู reads it)
 
 // ── BoM Cost Audit ────────────────────────────────────────────────────────
 let _bomAuditLoaded = false;
