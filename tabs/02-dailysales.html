@@ -132,14 +132,21 @@
          card's period. Chips like the menu-spike track (28 px; one sideways row on a phone, 44 px to tap through an ::after); figures 15 px, the
          change under them 12 px; the cause lines 12 px, one part per line; the chain row bold. Teal = this section (a sales view, not a cost one). */
       .sp-sec-hv .sp-h { border-left-color: var(--teal-ink, var(--accent)); }
-      .sp-hv-ctl { margin: 0 0 8px 11px; }
+      .sp-hv-ctl { margin: 0 0 8px 11px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
       .sp-hv-sc { min-width: 0; max-width: 100%; }
       .sp-hv-chips { display: inline-flex; flex-wrap: wrap; align-items: stretch; box-sizing: border-box; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--r-md); padding: 2px; gap: 2px; max-width: 100%; }
       .sp-hv-chips .gran-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 28px; min-height: 0; padding: 0 11px; font-size: 13px; line-height: 1; border-left: 0; white-space: nowrap; }
-      .sp-hv-tbl .sp-hv-name { font-weight: 600; white-space: nowrap; color: var(--text-primary); }
+      /* owner 2026-10-25 · W vs W: สัปดาห์ [W43 · 19–25 ต.ค.] เทียบ [W42 · 12–18 ต.ค.] (ตามช่วงของการ์ด = the card's period) */
+      .sp-hv-wk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+      .sp-hv-wg { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+      .sp-hv-wl { font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+      .sp-hv-sel { box-sizing: border-box; height: 32px; min-height: 0; padding: 0 6px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); color: var(--text-primary); max-width: 100%; min-width: 0; }
+      .sp-hv-tbl .sp-hv-name { font-weight: 600; white-space: nowrap; color: var(--text-primary); font-size: 14px; }
+      .sp-hv-tbl .sp-v { font-size: 15px; font-weight: 600; }
       .sp-hv-tbl .sp-hv-chain td { font-weight: 700; background: var(--bg-subtle); }
       .sp-hv-tbl .sp-hv-chain .sp-v { font-weight: 800; }
       .sp-hv-d { font-size: 12px; font-weight: 600; white-space: nowrap; line-height: 1.35; }
+      .sp-hv-b { font-weight: 500; color: var(--text-secondary); font-variant-numeric: tabular-nums; }   /* the base value ("· เดิม 193,477") */
       .sp-hv-cause { min-width: 168px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); text-align: left; white-space: nowrap; }
       .sp-hv-main { font-weight: 700; color: var(--text-primary); }
       .sp-hv-tot { font-weight: 700; font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
@@ -149,13 +156,23 @@
       .sp-hv-mx td:first-child, .sp-hv-mx th:first-child { text-align: left; }
       .sp-hv-empty { font-size: 12px; color: var(--text-muted); padding: 4px 0 4px 11px; margin: 0; }
       @media (max-width: 700px) {
-        .sp-hv-ctl { margin: 0 0 8px; padding-top: 14px; }   /* clear of the heading "?" tap area above (padding: a margin would collapse into the heading's) */
-        .sp-hv-sc { overflow-x: auto; overflow-y: hidden; padding: 8px 0; margin: -8px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-        .sp-hv-sc::-webkit-scrollbar { display: none; }
-        .sp-hv-chips { flex-wrap: nowrap; max-width: none; }
-        .sp-hv-chips .gran-btn { flex: 0 0 auto; padding: 0 10px; }
-        body.ph-on .sp-hv-chips .gran-btn { min-height: 0 !important; min-width: 44px; }
-        body.ph-on .sp-hv-chips .gran-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+        .sp-hv-ctl { display: block; margin: 0 0 8px; padding-top: 14px; }   /* clear of the heading "?" tap area above (padding: a margin would collapse into the heading's) */
+        /* the week pair: one line each (สัปดาห์ / เทียบ), the select fills the line; 44 px to tap in แตะง่าย */
+        .sp-hv-wk { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 14px; }
+        .sp-hv-wg { display: contents; }
+        .sp-hv-sel { width: 100%; height: 36px; font-size: 14px; }
+        body.ph-on:not(.ph-fit) .sp-hv-sel, body.ph-on:not(.ph-fit) .sp-hv-sel:hover, body.ph-on:not(.ph-fit) .sp-hv-sel:focus { height: 44px; min-height: 44px !important; }
+        /* the 9 chips (ทั้งหมด + 8 groups) wrap into 5 + 4 on the screen: no sideways scroll; 32 px drawn, 44 px to tap (an ::after into the 12 px gap) */
+        .sp-hv-sc { overflow: visible; padding: 0; margin: 0; }
+        .sp-hv-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 4px; width: 100%; max-width: none; padding: 0; border: 0; background: none; }
+        .sp-hv-chips .gran-btn { height: 32px; min-width: 0; padding: 0 2px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; text-overflow: ellipsis; }
+        .sp-hv-chips .gran-btn:not(.gran-active) { background: var(--bg-input); }
+        body.ph-on .sp-hv-chips .gran-btn { min-height: 0 !important; min-width: 0; }
+        body.ph-on .sp-hv-chips .gran-btn::after { content: ''; position: absolute; left: -2px; right: -2px; top: -6px; bottom: -6px; }
+        /* bigger figures: 17 px (16 px in พอดีจอ, a 12 px floor at 100 %), the change and base under them 13 px, names 14 px */
+        .sp-hv-tbl .sp-v, body.ph-on:not(.ph-fit) .sp-tbl.sp-hv-tbl .sp-v { font-size: 17px; }
+        body.ph-fit .sp-hv-tbl .sp-v { font-size: 16px; }
+        .sp-hv-d { font-size: 13px; }
       }
       @media (max-width: 700px) {
         /* 12 px above the row: the tap areas of the heading's "?" and of the chips never overlap */

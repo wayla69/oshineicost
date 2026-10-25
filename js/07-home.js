@@ -887,26 +887,66 @@ function _spikeBackChip(m) {
 // เมนูใหม่ section, on the card's own period (its chips, กำหนดเอง and เทียบกับ: base_from / base_to) and branch select
 // (/api/sales/ingredient-groups-plates - no cost key, the card's gate: every role that sees the card sees it). One group = the table
 // สาขา · จานที่ออก · จาน/หัว · ลูกค้า · สาเหตุที่เปลี่ยน (the change in plates split ลูกค้า · กินต่อหัว, LMDI); ทั้งหมด = branches x groups.
-const _SPHV_LS = 'oshinei_sphv_slug';
+// Owner 2026-10-25 (390 px, week mode): every figure shows its base under it ("▲0.9% · เดิม 193,477"); the section's own week pair
+// ("w1 vs w7", Monday–Sunday weeks, ISO numbers W1…W53) beside the card's period; the 9 chips wrap on a phone (no sideways scroll); bigger figures.
+const _SPHV_LS = 'oshinei_sphv_slug', _SPHV_WLS = 'oshinei_sphv_weeks';
 const _SPHV_CAUSE = { customers: 'ลูกค้า', plates_per_head: 'กินต่อหัว' };
 const _SPHV_SHORT = { customers: 'ลูกค้า', plates_per_head: 'กิน' };
-let _spHv = { slug: 'salmon', d: null, key: '', seq: 0, err: '' };
+const _SPHV_WD = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+let _spHv = { slug: 'salmon', d: null, key: '', seq: 0, err: '', p: null, weeks: [], latest: '' };
+// the week pair: a = the Monday of the chosen week, b = the Monday of the week it is compared with; a = '' -> ตามช่วงของการ์ด
+let _spHvW = { a: '', b: '' };
 try { const s = localStorage.getItem(_SPHV_LS); if (s) _spHv.slug = s; } catch (e) { /* no storage */ }
+try {
+  const w = JSON.parse(localStorage.getItem(_SPHV_WLS) || 'null'), ok = x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  if (w && ok(w.a) && ok(w.b) && w.a !== w.b) _spHvW = { a: w.a, b: w.b };
+} catch (e) { /* no storage */ }
 const _spHvH = v => v == null || !isFinite(Number(v)) ? '—' : Number(v).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _spHvS = v => v == null || !isFinite(Number(v)) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : '±'}${fmtN(Math.abs(v))} จาน`;
-// one change under a figure: up = 'good' (customers) | 'bad' (plates per head of a costly ingredient) | '' (plates: neither)
-function _spHvDelta(v, up, title) {
+// one change under a figure, then the base value ("▲0.9% · เดิม 193,477"; เทียบ when the base week is the later one):
+// up = 'good' (customers) | 'bad' (plates per head of a costly ingredient) | '' (plates: neither). Two parts = two children (the phone sheet's k / v).
+function _spHvDelta(v, up, title, was, word) {
   const t = title ? ` title="${esc(title)}"` : '';
-  if (v == null || !isFinite(Number(v))) return `<div class="sp-hv-d" data-ph-line="" style="color:var(--text-muted)"${t}>—</div>`;
+  const b = was == null ? '' : `<span class="sp-hv-b"> · ${word || 'เดิม'} ${was}</span>`;
+  if (v == null || !isFinite(Number(v))) return `<div class="sp-hv-d" data-ph-line=""${t}><span style="color:var(--text-muted)">—</span>${b}</div>`;
   v = Number(v);
   const ink = v === 0 || !up ? 'var(--text-secondary)' : (v > 0) === (up === 'good') ? 'var(--good-ink)' : 'var(--bad-ink)';
-  return `<div class="sp-hv-d" data-ph-line="" style="color:${ink}"${t}>${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</div>`;
+  return `<div class="sp-hv-d" data-ph-line=""${t}><span style="color:${ink}">${v > 0 ? '▲' : v < 0 ? '▼' : ''}${Math.abs(v).toFixed(1)}%</span>${b}</div>`;
 }
-// the card's query (renderMenuSpike) -> this section's; loads once per period / branch / base
+// ISO-style week number of a day (W1 = the week with the year's first Thursday; Monday–Sunday) - the backend's periods.iso_weeks
+function _spHvIsoWeek(iso) {
+  const d = _spikeD(iso), day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const y = d.getUTCFullYear(), j4 = new Date(Date.UTC(y, 0, 4));
+  return { y, w: 1 + Math.round(((d.getTime() - j4.getTime()) / 864e5 - 3 + (j4.getUTCDay() + 6) % 7) / 7) };
+}
+function _spHvLatest() { return _spHv.latest || (_spikeLast && _spikeLast.latest_day) || _spikeFocus || ''; }
+// the pair's windows: the closed days of the chosen week; a week still running compares the SAME weekdays of the other one (to date)
+function _spHvPair() {
+  const { a, b } = _spHvW, la = _spHvLatest();
+  if (!a || !b || a === b || !la) return null;
+  const days = m => Math.min(7, Math.round((_spikeD(la).getTime() - _spikeD(m).getTime()) / 864e5) + 1);
+  const n = Math.min(days(a), days(b));
+  if (n < 1) return null;
+  return { f: a, t: _spikeAdd(a, n - 1), bf: b, bt: _spikeAdd(b, n - 1), n, toDate: n < 7, wa: _spHvIsoWeek(a).w, wb: _spHvIsoWeek(b).w, after: b > a };
+}
+// "W43 (จ.–ศ.) เทียบ W42 (จ.–ศ.)" (to date) · "W43 (19–25 ต.ค.) เทียบ W37 (7–13 ก.ย.)"
+function _spHvPairLabel(pr) {
+  const tag = (w, s, e) => `W${w} (${pr.toDate ? (pr.n > 1 ? `จ.–${_SPHV_WD[pr.n - 1]}` : 'จ.') : _spikeSpan(s, e)})`;
+  return `${tag(pr.wa, pr.f, pr.t)} เทียบ ${tag(pr.wb, pr.bf, pr.bt)}`;
+}
+// the card's query (renderMenuSpike) -> this section's; loads once per period / branch / base. A week pair replaces the card's period.
 function spikeHvLoad(p) {
-  const q = new URLSearchParams();
-  q.set('period', p.get('period') || 'day');
-  ['date', 'date_from', 'date_to', 'base_from', 'base_to', 'branch', 'group'].forEach(k => { const v = p.get(k); if (v) q.set(k, v); });
+  if (p) _spHv.p = p;
+  p = _spHv.p; if (!p) return;
+  const q = new URLSearchParams(), pr = _spHvPair();
+  if (pr) {
+    q.set('period', 'range'); q.set('date_from', pr.f); q.set('date_to', pr.t); q.set('base_from', pr.bf); q.set('base_to', pr.bt);
+    ['branch', 'group'].forEach(k => { const v = p.get(k); if (v) q.set(k, v); });
+  } else {
+    q.set('period', p.get('period') || 'day');
+    ['date', 'date_from', 'date_to', 'base_from', 'base_to', 'branch', 'group'].forEach(k => { const v = p.get(k); if (v) q.set(k, v); });
+  }
   const key = q.toString();
   if (key === _spHv.key && (_spHv.d || _spHv.err)) { spikeHvRender(); return; }
   _spHv.key = key; _spHv.d = null; _spHv.err = '';
@@ -914,9 +954,40 @@ function spikeHvLoad(p) {
   spikeHvRender();
   api(`${API}/api/sales/ingredient-groups-plates?${q}`).then(d => {
     if (seq !== _spHv.seq) return;
+    if (d && Array.isArray(d.weeks) && d.weeks.length) _spHv.weeks = d.weeks;
+    const first = !_spHv.latest;
+    if (d && d.latest_day) _spHv.latest = d.latest_day;
+    // the first answer names the last closed day: a pair guessed from the page's focus day is asked again on the right days
+    const np = first && _spHvW.a ? _spHvPair() : null;
+    if (np && (!pr || np.t !== pr.t || np.bt !== pr.bt)) { spikeHvLoad(); return; }
     if (!d || typeof d.detail === 'string') _spHv.err = (d && d.detail) || 'โหลดไม่สำเร็จ'; else _spHv.d = d;
     spikeHvRender();
   }).catch(() => { if (seq === _spHv.seq) { _spHv.err = 'โหลดไม่สำเร็จ'; spikeHvRender(); } });
+}
+// the week before the chosen one (else the one after) as its first base
+function _spHvDefB(a) {
+  const ws = _spHv.weeks || [], i = ws.findIndex(w => w.from === a);
+  if (i >= 0 && ws[i + 1]) return ws[i + 1].from;
+  if (i > 0) return ws[i - 1].from;
+  return _spikeAdd(a, -7);
+}
+function spikeHvWeek(which, v) {
+  if (which === 'a') _spHvW = v ? { a: v, b: _spHvW.b && _spHvW.b !== v ? _spHvW.b : _spHvDefB(v) } : { a: '', b: '' };
+  else if (v && v !== _spHvW.a) _spHvW.b = v;
+  try { localStorage.setItem(_SPHV_WLS, JSON.stringify(_spHvW)); } catch (e) { /* no storage */ }
+  spikeHvLoad();
+}
+// สัปดาห์ [W43 · 19–25 ต.ค. ▾] เทียบ [W42 · 12–18 ต.ค. ▾]; the first option ตามช่วงของการ์ด keeps the card's period and compare
+function _spHvWeekCtl() {
+  const ws = (_spHv.weeks || []).slice(), { a, b } = _spHvW;
+  [a, b].forEach(m => { if (m && !ws.some(w => w.from === m)) ws.push({ from: m, label: `W${_spHvIsoWeek(m).w} · ${_spikeSpan(m, _spikeAdd(m, 6))}` }); });
+  ws.sort((x, y) => y.from.localeCompare(x.from));
+  const opt = (w, sel, dis) => `<option value="${esc(w.from)}"${sel ? ' selected' : ''}${dis ? ' disabled' : ''}>${esc(w.label)}</option>`;
+  const sa = `<select id="spikeHvWa" class="sp-hv-sel" aria-label="สัปดาห์" onchange="spikeHvWeek('a', this.value)"><option value=""${a ? '' : ' selected'}>ตามช่วงของการ์ด</option>`
+    + ws.map(w => opt(w, w.from === a, false)).join('') + '</select>';
+  const sb = a ? `<label class="sp-hv-wg"><span class="sp-hv-wl">เทียบ</span><select id="spikeHvWb" class="sp-hv-sel" aria-label="เทียบกับสัปดาห์" onchange="spikeHvWeek('b', this.value)">`
+    + ws.map(w => opt(w, w.from === b, w.from === a)).join('') + '</select></label>' : '';
+  return `<div class="sp-hv-wk ph-tz-unit" id="spikeHvWeeks"><label class="sp-hv-wg"><span class="sp-hv-wl">สัปดาห์</span>${sa}</label>${sb}</div>`;
 }
 function spikeHvSet(slug) {
   _spHv.slug = slug;
@@ -948,38 +1019,41 @@ function _spHvCause(c) {
 function spikeHvHtml() {
   const d = _spHv.d, groups = (d && d.groups) || [];
   const slug = _spHv.slug === 'all' || groups.some(g => g.slug === _spHv.slug) ? _spHv.slug : 'salmon';
-  const per = d && d.period, base = d && d.base;
-  const vs = per && base ? `${per.label_th} เทียบ ${base.label_th}` : '';
+  const per = d && d.period, base = d && d.base, pr = _spHvPair();
+  const full = per && base ? `${per.label_th} เทียบ ${base.label_th}` : '';
+  const vs = pr ? _spHvPairLabel(pr) : full;
   const why = per && per.reasons && per.reasons.prev ? ` · ${per.reasons.prev}` : '';
   const head = `<h3 class="sp-h">วัตถุดิบมูลค่าสูง · จำนวนจาน
       <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-hv" title="คำอธิบาย">?</button>
-      ${vs ? `<span class="sp-n" id="spikeHvVs">(${esc(vs + why)})</span>` : ''}</h3>`;
+      ${vs ? `<span class="sp-n" id="spikeHvVs"${pr && full ? ` title="${esc(full)}"` : ''}>(${esc(vs + why)})</span>` : ''}</h3>`;
   const opts = [['all', 'ทั้งหมด']].concat((groups.length ? groups : [{ slug: 'salmon', label: 'แซลมอน' }]).map(g => [g.slug, g.label]));
-  const chips = `<div class="sp-hv-ctl ph-tz-unit"><div class="sp-hv-sc"><div id="spikeHvChips" class="sp-hv-chips" role="group" aria-label="วัตถุดิบ">`
+  const chips = `<div class="sp-hv-ctl ph-tz-unit">${_spHvWeekCtl()}<div class="sp-hv-sc"><div id="spikeHvChips" class="sp-hv-chips" role="group" aria-label="วัตถุดิบ">`
     + opts.map(([k, l]) => `<button type="button" class="gran-btn${slug === k ? ' gran-active' : ''}" data-g="${esc(k)}" aria-pressed="${slug === k}" onclick="spikeHvSet('${esc(k)}')">${esc(l)}</button>`).join('')
     + '</div></div></div>';
-  if (_spHv.err) return head + `<p class="sp-hv-empty" style="color:var(--bad-ink)">${esc(_spHv.err)}</p>`;
+  if (_spHv.err) return head + chips + `<p class="sp-hv-empty" style="color:var(--bad-ink)">${esc(_spHv.err)}</p>`;
   if (!d) return head + chips + '<p class="sp-hv-empty">กำลังโหลด…</p>';
   if (!d.chain || !(d.branches || []).length) return head + chips + `<p class="sp-hv-empty">${esc((d.reasons || {}).cur || 'ไม่มีข้อมูลในช่วงที่เลือก')}</p>`;
   const rows = _spHvRows(d, slug);
   const bvs = `เทียบ ${base.label_th}`;
+  // the base is the later week (W vs W in any order): its value reads "เทียบ", not "เดิม"
+  const bw = base && per && per.cur && base.from > per.cur[1] ? 'เทียบ' : 'เดิม';
   const nameTd = r => `<td class="sp-hv-name">${esc(r.branch)}</td>`;
-  const custTd = r => `<td class="sp-num" title="${esc(`${bvs}: ${r.prev_customers == null ? '—' : fmtN(r.prev_customers) + ' คน'}`)}"><div class="sp-v" data-ph-line="">${fmtN(r.customers)}</div>${_spHvDelta((r.change || {}).customers, 'good', bvs)}</td>`;
+  const custTd = r => `<td class="sp-num" title="${esc(bvs)}"><div class="sp-v" data-ph-line="">${fmtN(r.customers)}</div>${_spHvDelta((r.change || {}).customers, 'good', bvs, r.prev_customers == null ? null : fmtN(r.prev_customers), bw)}</td>`;
   const cls = r => r._chain ? ' class="sp-hv-chain"' : '';
   if (slug === 'all') {
     const word = c => c && c.cause && c.cause.main ? `<span class="sp-hv-cw" data-ph-line="">${_SPHV_SHORT[c.cause.main]}</span>` : '';
     return head + chips + `<div class="sp-hv-wrap" style="overflow-x:auto"><table class="sp-tbl sp-hv-tbl sp-hv-mx w-full" id="spikeHvMatrix"><thead><tr style="color:var(--text-muted)">
       <th>สาขา</th>${groups.map(g => `<th>${esc(g.label)} <span class="sp-unit">(จาน/หัว)</span></th>`).join('')}<th>ลูกค้า</th></tr></thead><tbody>`
       + rows.map(r => `<tr${cls(r)}>${nameTd(r)}${groups.map(g => { const c = r.cells[g.slug] || {};
-        return `<td class="sp-num" title="${esc(`${g.label} · ${fmtN(c.plates)} จาน · ${bvs}: ${c.prev ? _spHvH(c.prev.plates_per_head) + ' จาน/หัว' : '—'}`)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs)}${word(c)}</td>`; }).join('')}${custTd(r)}</tr>`).join('')
+        return `<td class="sp-num" title="${esc(`${g.label} · ${fmtN(c.plates)} จาน · ${bvs}`)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs, c.prev ? _spHvH(c.prev.plates_per_head) : null, bw)}${word(c)}</td>`; }).join('')}${custTd(r)}</tr>`).join('')
       + '</tbody></table></div>';
   }
   return head + chips + `<div class="sp-hv-wrap" style="overflow-x:auto"><table class="sp-tbl sp-hv-tbl w-full" id="spikeHvTable"><thead><tr style="color:var(--text-muted)">
     <th>สาขา</th><th class="text-right">จานที่ออก</th><th class="text-right">จาน/หัว</th><th class="text-right">ลูกค้า</th><th>สาเหตุที่เปลี่ยน</th></tr></thead><tbody>`
     + rows.map(r => { const c = r.cells[slug] || {}; const p = c.prev || {};
       return `<tr${cls(r)}>${nameTd(r)}
-        <td class="sp-num" title="${esc(`${bvs}: ${c.prev ? fmtN(p.plates) + ' จาน' : '—'}`)}"><div class="sp-v" data-ph-line="">${fmtN(c.plates)}</div>${_spHvDelta((c.change || {}).plates, '', bvs)}</td>
-        <td class="sp-num" title="${esc(`${bvs}: ${c.prev ? _spHvH(p.plates_per_head) : '—'}`)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs)}</td>
+        <td class="sp-num" title="${esc(bvs)}"><div class="sp-v" data-ph-line="">${fmtN(c.plates)}</div>${_spHvDelta((c.change || {}).plates, '', bvs, c.prev ? fmtN(p.plates) : null, bw)}</td>
+        <td class="sp-num" title="${esc(bvs)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs, c.prev ? _spHvH(p.plates_per_head) : null, bw)}</td>
         ${custTd(r)}<td class="sp-hv-cause">${_spHvCause(c)}</td></tr>`; }).join('')
     + '</tbody></table></div>';
 }
