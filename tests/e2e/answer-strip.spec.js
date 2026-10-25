@@ -1,6 +1,7 @@
 // @ts-check
 // DV5 (phone table review 2026-10-25) · the answer on the first screen, on a 390 x 844 phone:
-//   * an analytics page in แตะง่าย shows the ANSWER STRIP (up to three lines) above its first card list; พอดีจอ and the desktop show none;
+//   * an analytics page shows the ANSWER STRIP (up to three lines): in แตะง่าย above its first card list, in พอดีจอ directly above the
+//     scaled frame (outside it, touch size); the desktop shows none;
 //   * the strip follows the top bar: a period change and a branch change reload the page with the new params and the strip is redrawn
 //     for them (a push counts only for the filters it was made for);
 //   * a ranked card list shows 10 cards (or the 5 first + the 5 last of a two-sided list) and "ดูทั้งหมด (N)";
@@ -53,7 +54,7 @@ const strip = (page, tab) => page.evaluate((t) => {
     doc: document.documentElement.scrollWidth, vw: innerWidth };
 }, tab);
 
-test('ยอดขายรายวัน: the answer strip in แตะง่าย follows the period and the branch; none in พอดีจอ', async ({ browser }) => {
+test('ยอดขายรายวัน: the answer strip in แตะง่าย follows the period and the branch; in พอดีจอ it sits above the frame', async ({ browser }) => {
   test.setTimeout(180_000);
   const { ctx, page, errors } = await phoneShell(browser);
   await openPage(page, { tab: 'dailysales' }, 'touch');
@@ -88,11 +89,35 @@ test('ยอดขายรายวัน: the answer strip in แตะง่�
   await page.evaluate(() => { phBranchPick(''); });
   await page.waitForFunction(() => { const a = _pageAns.dailysales; return !!a && a.fk === ansFilterKey(); }, null, { timeout: 60_000 });
 
-  // พอดีจอ: no strip
+  // พอดีจอ: the strip sits directly above the scaled frame, outside it, at the touch size (>= 12 px text, 44 px taps), not over the frame
   await page.evaluate(() => phModeToggle());
   await page.waitForFunction(() => document.body.classList.contains('ph-fit'), null, { timeout: 30_000 });
-  await page.waitForTimeout(800);
-  expect(await strip(page, 'dailysales')).toBeNull();
+  await page.waitForFunction(() => { const p = document.getElementById('tab-dailysales'), s = p && p.previousElementSibling;
+    return !!s && s.matches('.ph-ans') && !!s.querySelector('.ph-ans-i'); }, null, { timeout: 60_000 });
+  const f = await page.evaluate(() => {
+    const p = document.getElementById('tab-dailysales'), s = /** @type {HTMLElement} */ (p.previousElementSibling);
+    const zoomOf = e => { let z = 1; for (let q = e; q && q.nodeType === 1; q = q.parentElement) { const v = parseFloat(getComputedStyle(q).zoom); if (v && isFinite(v)) z *= v; } return z; };
+    let min = 99;
+    s.querySelectorAll('*').forEach(e => { if ([...e.childNodes].some(x => x.nodeType === 3 && x.textContent.trim())) min = Math.min(min, parseFloat(getComputedStyle(e).fontSize) * zoomOf(e)); });
+    return { frame: p.classList.contains('ph-frame'), inside: p.contains(s), n: document.querySelectorAll('.ph-ans').length, min,
+      hitH: Math.min(...[...s.querySelectorAll('.ph-ans-hit')].map(h => h.getBoundingClientRect().height)),
+      gap: p.getBoundingClientRect().top - s.getBoundingClientRect().bottom, top: s.getBoundingClientRect().top,
+      doc: document.documentElement.scrollWidth, vw: innerWidth };
+  });
+  expect(f.frame).toBe(true);
+  expect(f.inside, 'the strip is outside the scaled frame').toBe(false);
+  expect(f.n, 'one strip per page').toBe(1);
+  expect(f.min, 'strip text is at least 12 px in fit').toBeGreaterThanOrEqual(12);
+  expect(f.hitH).toBeGreaterThanOrEqual(44);
+  expect(f.gap, 'the strip does not overlap the frame').toBeGreaterThanOrEqual(0);
+  expect(f.top).toBeLessThan(844);
+  expect(f.doc).toBeLessThanOrEqual(f.vw);
+  // the cards stay touch-only: fit keeps the table
+  expect(await page.evaluate(() => document.querySelectorAll('#tab-dailysales .ph-cl').length)).toBe(0);
+  // a provider page in fit (no cards drawn) still answers from its table: บิลยกเลิก
+  await openPage(page, { tab: 'cancelbill' }, 'fit');
+  await page.waitForFunction(() => { const p = document.getElementById('tab-cancelbill'), s = p && p.previousElementSibling;
+    return document.body.classList.contains('ph-fit') && !!s && s.matches('.ph-ans') && document.querySelectorAll('.ph-ans').length === 1; }, null, { timeout: 60_000 });
   expect(errors, errors.join('\n')).toEqual([]);
   await ctx.close();
 });

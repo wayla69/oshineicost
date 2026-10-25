@@ -709,7 +709,7 @@ function _phFitOff(panel) {
 function _phFitWatch(panel) {
   if (_phFitObs) _phFitObs.disconnect();
   let t = null;
-  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) phFitLayout(panel); }, 250); });
+  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) { phFitLayout(panel); phAnswerSchedule(); } }, 250); });
   _phFitObs.observe(panel, { childList: true, subtree: true, characterData: true });
 }
 function _phAvail() {
@@ -1309,12 +1309,21 @@ function _phClCap(pg, cfg, spec) {
 }
 // 2) the answer strip (PAGE_ANSWERS / pageAnswer, js/01-core.js): three lines at the top of the page in แตะง่าย, above its first card. A pushed
 //    answer counts only while the filters it was made for are on; a provider is read from the page as drawn, so both follow the top bar's
-//    period and branch. พอดีจอ (the desktop layout) and the desktop have no strip.
+//    period and branch. In พอดีจอ it sits above the scaled frame at the touch size (coordinator 2026-10-26); the desktop has none.
 let _phAnsT = null;
 function phAnswerSchedule() { clearTimeout(_phAnsT); _phAnsT = setTimeout(phAnswerApply, 0); }
 function _phAnsCtx(pg, panel) {
   const id = k => `${pg.tab}${pg.pane ? '-' + pg.pane : ''}-${k}-0`;
-  const spec = k => { const st = _phCl[id(k)]; return st && st.spec && st.table && st.table.isConnected ? st.spec : null; };
+  // the k-th card list of the page as parsed: the drawn cards' spec when they show this very table (แตะง่าย), else read from the table now
+  // (พอดีจอ keeps the table and draws no cards)
+  const spec = k => {
+    const cfg = phCardsOf(pg.tab, pg.pane)[k]; if (!cfg) return null;
+    const ts = [...panel.querySelectorAll(cfg.sel)].filter(t => t.tagName === 'TABLE' && !t.closest('.ph-cl'));
+    const t = ts.find(x => { const src = x.closest('.ph-cl-src'); return (src ? src.parentElement : x).getClientRects().length > 0; }) || ts[0];
+    if (!t) return null;
+    const st = _phCl[id(k)], sig = t.tBodies.length + ':' + t.rows.length + ':' + (t.textContent || '').length;
+    return st && st.spec && st.table === t && st.sig === sig ? st.spec : _phCardSpec(t, cfg, id(k));
+  };
   return { tab: pg.tab, pane: pg.pane, panel,
     rows: k => { const s = spec(k); return s ? s.rows.filter(r => !r.total && !r.grp) : []; },
     total: k => { const s = spec(k); return s ? s.rows.find(r => r.total) || null : null; } };
@@ -1338,22 +1347,30 @@ function phAnswerHtml(lines) {
   };
   return `<ol class="ph-ans-l">${lines.map(li).join('')}</ol>`;
 }
+// แตะง่าย: the strip is the first block of the page (under its sub-tab bar); พอดีจอ: it sits directly ABOVE the scaled frame, outside it, at the
+// touch size (like the top bar and the chips) - one strip per page either way
 function phAnswerApply() {
-  const pg = phCurPage(), on = !!pg && _phClOn();
-  document.querySelectorAll('.ph-ans').forEach(el => { if (!on || el.getAttribute('data-tab') !== (pg && pg.tab)) el.remove(); });
-  if (!on) return;
-  const panel = document.getElementById('tab-' + pg.tab); if (!panel) return;
+  const pg = phCurPage(), on = !!pg && phOn() && _phView === 'page';
+  const fit = document.body.classList.contains('ph-fit');
+  const panel = on ? document.getElementById('tab-' + pg.tab) : null;
+  const placed = el => fit ? el.nextElementSibling === panel : el.parentElement === panel;
+  document.querySelectorAll('.ph-ans').forEach(el => { if (!panel || el.getAttribute('data-tab') !== pg.tab || !placed(el)) el.remove(); });
+  if (!panel) return;
   const lines = phAnswerLines(pg, panel).filter(l => l && l.v).slice(0, 3);
-  let el = /** @type {HTMLElement|null} */ (panel.querySelector(':scope > .ph-ans'));
+  let el = /** @type {HTMLElement|null} */ (fit ? (panel.previousElementSibling && panel.previousElementSibling.matches('.ph-ans') ? panel.previousElementSibling : null)
+    : panel.querySelector(':scope > .ph-ans'));
   if (!lines.length) { if (el) el.remove(); return; }
   const html = phAnswerHtml(lines);
   if (el && el.getAttribute('data-sig') === html) return;
   if (!el) {
     el = document.createElement('section');
     el.className = 'ph-ans'; el.setAttribute('aria-label', 'คำตอบของหน้านี้'); el.setAttribute('data-tab', pg.tab);
+    if (fit) panel.parentElement.insertBefore(el, panel);
+    else {
     let at = panel.firstElementChild;                                     // under the page's own sub-tab bar (and a [data-ans-after] head), above the rest
     while (at && (at.matches('.subtab-bar, [data-ans-after]') || at.tagName === 'TEMPLATE' || at.tagName === 'SCRIPT')) at = at.nextElementSibling;
     panel.insertBefore(el, at);
+    }
   }
   el.setAttribute('data-sig', html);
   el.innerHTML = html;
@@ -1387,7 +1404,7 @@ PAGE_ANSWERS.gpbranch = c => {
     t && ansLine(getBranch() ? 'GP ของสาขา' : 'GP ทั้งเครือ', `${_ansB(t, 1)} · ${_ansF(t, 2)}`, '', '', '#gpbTable')];
 };
 function phAnswerGo(i) {
-  const pg = phCurPage(), panel = pg && document.getElementById('tab-' + pg.tab), strip = panel && panel.querySelector('.ph-ans');
+  const pg = phCurPage(), panel = pg && document.getElementById('tab-' + pg.tab), strip = pg && document.querySelector(`.ph-ans[data-tab="${pg.tab}"]`);
   const l = strip && strip._lines && strip._lines[i]; if (!l || !l.go) return;
   if (l.go.charAt(0) === '@') { switchTab(l.go.slice(1)); return; }        // '@tab' = the page that answers the line in full
   let t = panel.querySelector(l.go); if (!t) return;
