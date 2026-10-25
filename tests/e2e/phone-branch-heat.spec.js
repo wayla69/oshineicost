@@ -73,7 +73,7 @@ async function open(browser, opts, { tab = 'overall', mode = 'fit', scheme = 'li
 
 async function shot(page, name, sel) {
   if (!SHOTS) return;
-  if (sel) { await page.locator(sel).first().evaluate(e => e.scrollIntoView({ block: 'start' })); await page.waitForTimeout(300); await page.screenshot({ path: `${SHOTS}/${name}.png` }); }
+  if (sel) { await page.locator(sel).first().evaluate(e => { e.scrollIntoView({ block: 'start' }); window.scrollBy(0, -(document.querySelector('.top-bar')?.getBoundingClientRect().height || 0) - 8); }); await page.waitForTimeout(300); await page.screenshot({ path: `${SHOTS}/${name}.png` }); }
   else await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
 }
 
