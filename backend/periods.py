@@ -287,3 +287,39 @@ def public(w: Optional[Dict]) -> Optional[Dict]:
     if r:
         out["reasons"] = r
     return out
+
+
+# ── owner 2026-10-25 · W vs W: the Monday–Sunday weeks of the year, numbered ISO-style (W1 = the week with the year's first Thursday) ──
+def week_span_th(a: _D, b: _D, year: bool = False) -> str:
+    """'19–25 ต.ค.' · '29 ธ.ค.–4 ม.ค.' (+ ' 69' with year=True: the 2-digit Buddhist year of the last day)."""
+    a, b = _d(a), _d(b)
+    yy = f" {(b.year + 543) % 100:02d}" if year else ""
+    if a == b:
+        return f"{a.day} {_MON_TH[a.month - 1]}{yy}"
+    if (a.year, a.month) == (b.year, b.month):
+        return f"{a.day}–{b.day} {_MON_TH[b.month - 1]}{yy}"
+    return f"{a.day} {_MON_TH[a.month - 1]}–{b.day} {_MON_TH[b.month - 1]}{yy}"
+
+
+def iso_weeks(first: Optional[_D], last: Optional[_D]) -> list:
+    """The Monday–Sunday weeks whose Monday is on or after `first` (the first day with day-level data: a week that starts before
+    it has no whole data) and on or before `last` (the last closed day), newest first. A week still running (its Sunday after
+    `last`) is to date: closed_to = last, partial = True. The label names the ISO week number and its days
+    ('W43 · 19–25 ต.ค.', 'W43 · 19–24 ต.ค. (ถึงวันที่ปิด)'); a week of another ISO year than `last`'s adds its year
+    ('W52 · 22–28 ธ.ค. 68'). -> [{key, year, week, from, to, closed_to, days, partial, label}]"""
+    if not first or not last:
+        return []
+    f, la = _d(first), _d(last)
+    mon = la - timedelta(days=la.weekday())
+    ly = la.isocalendar()[0]
+    out = []
+    while mon >= f:
+        sun = mon + timedelta(days=6)
+        iy, iw = mon.isocalendar()[0], mon.isocalendar()[1]
+        ct = min(sun, la)
+        part = sun > la
+        lab = f"W{iw} · {week_span_th(mon, ct, year=iy != ly)}" + (" (ถึงวันที่ปิด)" if part else "")
+        out.append({"key": f"{iy}-W{iw:02d}", "year": iy, "week": iw, "from": mon.isoformat(), "to": sun.isoformat(),
+                    "closed_to": ct.isoformat(), "days": (ct - mon).days + 1, "partial": part, "label": lab})
+        mon -= timedelta(days=7)
+    return out

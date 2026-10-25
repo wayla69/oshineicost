@@ -940,7 +940,8 @@ function phCardList(spec) {
     + `<span class="ph-cl-main">${pillHtml(r.pill)}<span class="ph-cl-t">${esc(r.title || '—')}</span>`
     + (() => { const sb = [(ordered || filter) && r.group ? r.group : '', r.sub].filter(Boolean).join(' · '); return sb ? `<span class="ph-cl-s">${esc(sb)}</span>` : ''; })()
     + (r.kv && r.kv.length ? _phKvHtml(r.kv, 'ph-cl-kv') : '')
-    + `<span class="ph-cl-figs">${(r.figs || []).filter(f => f.v || !r.grp).map(f => `<span class="ph-cl-f"><span class="ph-cl-fl">${esc(f.l)}</span><span class="ph-cl-fv"${f.ink ? ` style="color:${esc(f.ink)}"` : ''}>${esc(f.v || '—')}</span></span>`).join('')}</span>`
+    + `<span class="ph-cl-figs">${(r.figs || []).filter(f => f.v || !r.grp).map(f => `<span class="ph-cl-f"><span class="ph-cl-fl">${esc(f.l)}</span><span class="ph-cl-fv"${f.ink ? ` style="color:${esc(f.ink)}"` : ''}>${esc(f.v || '—')}</span>`
+      + (f.sub ? `<span class="ph-cl-fs">${f.sub.a ? `<span style="color:${esc(f.sub.ink || 'inherit')}">${esc(f.sub.a)}</span>` : ''}${f.sub.b ? `<span class="ph-cl-fb">${esc(f.sub.b)}</span>` : ''}</span>` : '') + '</span>').join('')}</span>`
     + (r.spark ? `<span class="ph-cl-spark">${r.spark}</span>` : '') + `</span><span class="ph-cl-chev" aria-hidden="true">›</span></button></li>`;
   const lim = Math.max(_PH_CL_PAGE, spec.limit || 0);
   const shown = rows.slice(0, lim);
@@ -1028,9 +1029,18 @@ function _phCardSpec(table, cfg, id) {
       const v = _phTidy(lines(cs[i]).join(' · '));
       return v && cfg.subL ? `${(cfg.subLabels && cfg.subLabels[k]) || _phNorm(heads[i])} ${v}` : v;
     })].filter(Boolean);
+    // figSub (owner 2026-10-25): a figure cell drawn as [data-ph-line] lines shows its second line under the figure (the change and the
+    // base value, "▲0.9% · เดิม 193,477"): its first part keeps its own ink, the figure takes only the first line's ink
     const figs = ki.map((i, k) => {
       const td = cs[i] && cs[i] !== tcell ? cs[i] : null, v = td ? (lines(td)[0] || '') || _phCellText(td) : '';
-      return { l: (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]), v: _phDateTh(v), n: v ? _phNum(v) : null, ink: td ? _phInk(td) : '' };
+      const ls = cfg.figSub && td ? [...td.querySelectorAll('[data-ph-line]')] : [];
+      let sub = null;
+      if (ls[1]) {
+        const ch = [...ls[1].children], a = ch[0] && /** @type {HTMLElement} */ (ch[0]).style.color ? /** @type {HTMLElement} */ (ch[0]) : null;
+        sub = a ? { a: _phNorm(a.textContent), ink: a.style.color, b: _phNorm(ch.slice(1).map(x => x.textContent).join(' ')).replace(/^·\s*/, '') } : { a: '', ink: '', b: _phNorm(ls[1].textContent) };
+      }
+      return { l: (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]), v: _phDateTh(v), n: v ? _phNum(v) : null,
+        ink: td ? (ls[0] ? _phInk(ls[0]) || td.style.color || '' : _phInk(td)) : '', sub };
     });
     let pill = null;
     const pcell = pi >= 0 ? cs[pi] : null;

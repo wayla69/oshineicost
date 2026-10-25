@@ -347,14 +347,41 @@ def ingredient_groups_plates(period: str = Query("day"), date: Optional[str] = Q
         w = _win(con, k, date, date_from, date_to, where, params)
         if not w:
             return {"period": None, "base": None, "groups": [{"slug": s, "label": IG.LABELS[s]} for s in IG.SLUGS],
-                    "chain": None, "branches": [], "reasons": {}}
+                    "chain": None, "branches": [], "reasons": {}, "weeks": [], "latest_day": None}
         base = None
         if base_from or base_to:
-            from routers.sales import _spike_base
-            bs, be = _spike_base(base_from, base_to, _dt.date.fromisoformat(w["cur"][0][:10]),
-                                 _dt.date.fromisoformat(w["anchor"][:10]))
+            bs, be = _plates_base(base_from, base_to, w["cur"], w["anchor"])
             base = (bs.isoformat(), be.isoformat())
-        return IG.compute_plates(con, w, branch, group, base=base)
+        out = IG.compute_plates(con, w, branch, group, base=base)
+        # the section's own week picker (W vs W): the Mon–Sun weeks the day-level data holds, up to the last closed day
+        out["weeks"] = P.iso_weeks(_day_floor(con), w["anchor"])
+        out["latest_day"] = w["anchor"]
+        return out
+
+
+def _day_floor(con):
+    import period_cost as PC
+    return PC.cost_floor(con)
+
+
+def _plates_base(base_from, base_to, cur, latest):
+    """The section's comparison period: the menu-spike card's checks (both dates, start <= end, <= 92 days, closed days only) but it
+    may sit before OR after the current period (W vs W in any order); only an overlap is refused. HTTP 400 in formal Thai."""
+    from .sales import _SPIKE_MAX_RANGE_DAYS, _spike_iso   # relative: one module however the app starts
+    if not base_from or not base_to:
+        raise HTTPException(400, "ช่วงที่ใช้เทียบต้องระบุทั้งวันเริ่มต้น (base_from) และวันสิ้นสุด (base_to)")
+    s, e = _spike_iso(base_from, "วันเริ่มต้นของช่วงที่ใช้เทียบ"), _spike_iso(base_to, "วันสิ้นสุดของช่วงที่ใช้เทียบ")
+    if s > e:
+        raise HTTPException(400, "วันเริ่มต้นของช่วงที่ใช้เทียบต้องไม่อยู่หลังวันสิ้นสุด")
+    if (e - s).days + 1 > _SPIKE_MAX_RANGE_DAYS:
+        raise HTTPException(400, f"ช่วงที่ใช้เทียบยาวได้ไม่เกิน {_SPIKE_MAX_RANGE_DAYS} วัน")
+    la = _dt.date.fromisoformat(str(latest)[:10])
+    if e > la:
+        raise HTTPException(400, f"ช่วงที่ใช้เทียบต้องไม่เกินวันล่าสุดที่มีข้อมูลครบ ({la.isoformat()})")
+    cs, ce = _dt.date.fromisoformat(str(cur[0])[:10]), _dt.date.fromisoformat(str(cur[1])[:10])
+    if s <= ce and e >= cs:
+        raise HTTPException(400, "ช่วงที่ใช้เทียบต้องไม่ซ้อนทับกับช่วงที่เลือก")
+    return s, e
 
 
 @router.get("/api/cost/ingredient-groups/menus")

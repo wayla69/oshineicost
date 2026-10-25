@@ -127,3 +127,69 @@ def test_the_two_parts_add_up_to_the_change(p1, n1, p0, n0):
 def test_no_base_gives_no_parts_and_a_reason():
     s = IG.split_plates(100, 50, 0, 0)
     assert s["customers"] is None and s["main"] is None and s["reason"] and s["total"] == 100 and s["total_pct"] is None
+
+
+# ── owner 2026-10-25 · W vs W: the section's own week picker ("w1 vs w7", Monday–Sunday weeks) ─────────────────────────────────
+def test_weeks_are_monday_to_sunday_with_iso_numbers_across_the_year_boundary():
+    import datetime as dt
+    ws = P.iso_weeks("2025-12-15", "2026-01-07")
+    assert [w["key"] for w in ws] == ["2026-W02", "2026-W01", "2025-W52", "2025-W51"]
+    for w in ws:
+        a, b = dt.date.fromisoformat(w["from"]), dt.date.fromisoformat(w["to"])
+        assert a.weekday() == 0 and (b - a).days == 6
+    now, w1, w52 = ws[0], ws[1], ws[2]
+    assert now["partial"] and now["closed_to"] == "2026-01-07" and now["days"] == 3
+    assert now["label"] == "W2 · 5–7 ม.ค. (ถึงวันที่ปิด)"
+    assert w1["from"] == "2025-12-29" and w1["week"] == 1 and w1["year"] == 2026 and not w1["partial"]
+    assert w1["label"] == "W1 · 29 ธ.ค.–4 ม.ค."                         # W1 starts in the old calendar year
+    assert w52["label"] == "W52 · 22–28 ธ.ค. 68"                          # another ISO year: its year is named
+    # a 53-week year (2026: 1 Jan is a Thursday); a week whose Monday is before the first day is not offered
+    assert P.iso_weeks("2026-12-28", "2027-01-03")[0]["key"] == "2026-W53"
+    assert [w["from"] for w in P.iso_weeks("2026-10-14", "2026-10-25")] == ["2026-10-19"]
+    assert P.iso_weeks(None, "2026-10-25") == [] and P.iso_weeks("2026-10-26", "2026-10-25") == []
+
+
+def test_the_answer_lists_the_weeks_the_day_data_holds(ig):  # noqa: F811
+    from test_ingredient_groups import FLOOR
+    d = ig.get(URL, params={"period": "week", "date": YESTERDAY}).json()
+    assert d["latest_day"] == YESTERDAY
+    ws = d["weeks"]
+    assert ws and ws[0]["closed_to"] == YESTERDAY and ws[0]["from"] <= YESTERDAY <= ws[0]["to"]
+    assert all(w["from"] >= FLOOR.isoformat() for w in ws) and len(ws) >= 13
+    assert [w["from"] for w in ws] == sorted((w["from"] for w in ws), reverse=True)
+
+
+def test_a_week_in_progress_compares_the_same_weekdays_of_the_other_week(ig):  # noqa: F811
+    import datetime as dt
+    ws = ig.get(URL, params={"period": "week"}).json()["weeks"]
+    a, b = ws[0], ws[6]                                                   # "w1 vs w7"
+    n = a["days"]
+    bt = (dt.date.fromisoformat(b["from"]) + dt.timedelta(days=n - 1)).isoformat()
+    d = ig.get(URL, params={"period": "range", "date_from": a["from"], "date_to": a["closed_to"],
+                            "base_from": b["from"], "base_to": bt}).json()
+    assert d["period"]["cur"] == [a["from"], a["closed_to"]] and d["base"]["from"] == b["from"] and d["base"]["to"] == bt
+    ch = d["chain"]
+    assert ch["customers"] == ch["prev_customers"] == COVERS * n * 2       # the same weekdays: the same days on both sides
+    assert ch["cells"]["salmon"]["prev"]["plates"] == pytest.approx(5 * n * 2)
+    assert ch["cells"]["salmon"]["change"] == {"plates": 0.0, "plates_per_head": 0.0}
+
+
+def test_the_base_may_be_after_the_chosen_week_but_never_overlap_it(ig):  # noqa: F811
+    import datetime as dt
+    ws = ig.get(URL, params={"period": "week"}).json()["weeks"]
+    early, late = ws[6], ws[1]                                            # the base is the LATER week
+    r = ig.get(URL, params={"period": "range", "date_from": early["from"], "date_to": early["to"],
+                            "base_from": late["from"], "base_to": late["to"]})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["base"]["kind"] == "range" and d["base"]["from"] == late["from"] and d["period"]["cur"] == [early["from"], early["to"]]
+    assert d["chain"]["prev_customers"] == COVERS * 7 * 2
+    # an overlap is refused in formal Thai, from either side
+    mid = (dt.date.fromisoformat(early["from"]) + dt.timedelta(days=3)).isoformat()
+    for bf, bt in ((mid, late["to"]), (ws[7]["from"], mid), (early["from"], early["to"])):
+        r = ig.get(URL, params={"period": "range", "date_from": early["from"], "date_to": early["to"], "base_from": bf, "base_to": bt})
+        assert r.status_code == 400 and r.json()["detail"] == "ช่วงที่ใช้เทียบต้องไม่ซ้อนทับกับช่วงที่เลือก"
+    # a base past the last closed day is still refused
+    r = ig.get(URL, params={"period": "range", "date_from": early["from"], "date_to": early["to"],
+                            "base_from": YESTERDAY, "base_to": (dt.date.fromisoformat(YESTERDAY) + dt.timedelta(days=1)).isoformat()})
+    assert r.status_code == 400 and "วันล่าสุดที่มีข้อมูลครบ" in r.json()["detail"]

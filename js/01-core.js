@@ -4007,8 +4007,8 @@ const PAGE_CARDS = {
     { sel: '#spikePlatesTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], '+จาน', 'สูงกว่า'], labels: ['จาน', '+จาน', 'สูงกว่า'] },
     { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] },
     // owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน: one group (plates only) and the branches x groups matrix
-    { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'] },
-    { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'] }],
+    { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'], figSub: true },
+    { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true }],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
@@ -4020,8 +4020,8 @@ const PAGE_CARDS = {
     { sel: 'table:has(#ccBody)', title: 'สาขา', keyCols: ['ขาด/เกิน', 'วันที่ขาด', '% ของยอด'] },
     { sel: 'table:has(#ccWorst)', title: 'สาขา', sub: ['วันที่'], keyCols: ['ขาด/เกิน', 'ยอดขาย', 'ลูกค้า'] }],
   costhead: [{ sel: 'table:has(#chBody)', title: 'สาขา', sub: ['vs เฉลี่ย'], subL: true, keyCols: ['ต้นทุน/หัว', 'ต้นทุน%', 'GP/หัว'] }],
-  hvmonitor: [{ sel: '#hvmTable', title: 'สาขา', keyCols: ['ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน'] },
-    { sel: '#hvmMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ต้นทุนอาหาร/หัว'] }],
+  hvmonitor: [{ sel: '#hvmTable', title: 'สาขา', keyCols: ['ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน'], figSub: true },
+    { sel: '#hvmMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ต้นทุนอาหาร/หัว'], figSub: true }],
   coverage: [
     { sel: 'table:has(#cov-branches)', title: 'สาขา', sub: ['SKU ค้าง'], subL: true, keyCols: ['รายได้', 'ไม่มีต้นทุน', '% ไม่มี'] },
     { sel: 'table:has(#cov-review)', rows: 'tr[onclick]', title: 'เมนู', keyCols: ['ต้นทุน/ที่', 'จานเดือนนี้', 'ต้นทุนรวม/เดือน'], pill: 'สถานะ',
