@@ -2,6 +2,7 @@
  "branch_growth": [
   {
    "branch": "BranchA",
+   "change_baht": 0.0,
    "growth_pct": 0.0,
    "last_month": "2026-06",
    "last_revenue": 2850.0,
