@@ -1,28 +1,65 @@
-<!-- ══ โอกาสเมนู (Menu Opportunities) ══ -->
+<!-- ══ โอกาสเมนู (DV7, owner 2026-10-25: buffet = eat less where a branch eats above the others; à la carte = sell more; backend/menu_board.py) ══ -->
 <div id="tab-menuopportunities" style="display:none">
-  <div class="card p-4 mb-4" style="background:#fef9c3;border:1px solid #ca8a04">
-    <h2 class="text-base font-bold" style="color:var(--amber-ink)">โอกาสเมนู — ขยายเมนูจากข้อมูลจริง <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuopportunities-1" data-title="โอกาสเมนู"><p>อิงยอดขาย/สัดส่วน/แนวโน้มเท่านั้น (ไม่ใช้ข้อมูลต้นทุน). <b>ไม่มีการเดา “เมนูที่ควรจับคู่ขาย”</b> เพราะข้อมูลระดับใบเสร็จยังไม่ครบ — จึงเน้น 3 สัญญาณที่เชื่อถือได้</p></template>
+  <style>
+    .opp-status { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+    .opp-ans { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); }
+    .opp-ans-l { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; color: var(--text-secondary); }
+    .opp-ans-v { font-size: 18px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .opp-sec { margin-top: 14px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); }
+    .opp-sec-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+    .opp-sec-t { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .opp-sec-s { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .opp-wrap { overflow-x: auto; }
+    .opp-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .opp-tbl th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .opp-tbl td { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--text-primary); vertical-align: top; font-variant-numeric: tabular-nums; }
+    .opp-tbl .opp-num { text-align: right; white-space: nowrap; }
+    .opp-v { font-weight: 800; font-size: 15px; }
+    .opp-bad { color: var(--bad-ink); }
+    .opp-good { color: var(--good-ink); }
+    .opp-name { font-weight: 700; }
+    .opp-sub { font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin-top: 2px; }
+    .opp-more { position: relative; margin-top: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); color: var(--accent); cursor: pointer; }
+    .opp-empty { font-size: 13px; color: var(--text-secondary); padding: 10px 0; }
+    .opp-fold summary { cursor: pointer; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .opp-pill { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; font-weight: 600; background: var(--bg-subtle); }
+    @media (max-width: 700px) {
+      body.ph-on .opp-more { min-height: 0; }
+      body.ph-on .opp-more::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+    }
+  </style>
+  <div class="card p-4 mb-3">
+    <h2 class="text-base font-bold mb-2" style="color:var(--amber-ink)">โอกาสเมนู <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-1" title="คำอธิบาย">?</button></h2>
+    <template id="hlp-menuopportunities-1" data-title="โอกาสเมนู"><p>บุฟเฟ่ต์: ลูกค้ากินมากขึ้นหมายถึงต้นทุนสูงขึ้น โอกาสของบุฟเฟ่ต์จึงเป็นการลดส่วนที่สาขากินเกินสาขาอื่น · à la carte: ลูกค้าจ่ายรายจาน โอกาสจึงเป็นรายได้ที่เพิ่มได้</p><p>ทุกตารางตามช่วงเวลาและสาขาที่เลือกด้านบน แสดงก่อนเฉพาะรายการที่ถึงเกณฑ์ (0.1% ของต้นทุนอาหารหรือรายได้ อย่างน้อย ฿1,000)</p></template>
+    <div id="oppStatus" class="opp-status"></div>
+    <div id="oppAnswer"></div>
   </div>
-  <div id="oppStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
 
-  <div class="card p-5 mb-4" style="border:1px solid #0ea5e9">
-    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-2" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-2" data-title="เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี"><p>เมนูที่นิยมทั้งเครือ (ขายใน ≥5 สาขา) แต่บางสาขาขายต่ำกว่าค่ากลางมาก — โอกาสเพิ่มยอด</p></template>
-    <div id="oppGaps" class="overflow-x-auto"></div>
+  <div class="opp-sec">
+    <div class="opp-sec-h"><span class="opp-sec-t">บุฟเฟ่ต์ · สาขาที่กินต่อหัวเกินสาขาอื่น</span><span id="oppOverSum" class="opp-sec-s"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-2" title="คำอธิบาย">?</button></div>
+    <template id="hlp-menuopportunities-2" data-title="บุฟเฟ่ต์ · สาขาที่กินต่อหัวเกินสาขาอื่น"><p>ค่ากลาง = ค่ามัธยฐานของจานต่อลูกค้าในระดับราคาเดียวกันของสาขาที่ขายเมนูนั้น (อย่างน้อย 5 สาขา) สาขาที่กินตั้งแต่ 1.2 เท่าของค่ากลางขึ้นไปถูกนับ</p><p>จานที่เกิน = จานจริง − จานตามค่ากลาง · ลดได้ = จานที่เกิน × ต้นทุนต่อจานของสาขา</p><p>ช่วงที่ยาวกว่า 92 วัน หรือช่วงที่ยังไม่มีข้อมูลแยกระดับราคา เทียบต่อลูกค้าทั้งหมดของสาขา</p></template>
+    <div id="oppOver" class="opp-wrap"></div>
   </div>
 
-  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
-    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">หมวดที่ยังขยายได้ / ควรลด <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-3" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-3" data-title="หมวดที่ยังขยายได้ / ควรลด"><p>รายได้ต่อเมนูสูง + แนวโน้มทรงตัว/โต = มีที่ว่างให้เพิ่มเมนู · หมวดที่หดตัว = ควรทบทวน</p></template>
-    <div id="oppWhitespace" class="overflow-x-auto"></div>
+  <div class="opp-sec">
+    <div class="opp-sec-h"><span class="opp-sec-t">à la carte · เมนูที่สาขาขายน้อยกว่าสาขาอื่น</span><span id="oppGapSum" class="opp-sec-s"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-3" title="คำอธิบาย">?</button></div>
+    <template id="hlp-menuopportunities-3" data-title="à la carte · เมนูที่สาขาขายน้อยกว่าสาขาอื่น"><p>เมนูที่ขายอย่างน้อย 5 สาขา สาขาที่ขายต่อลูกค้าต่ำกว่า 0.4 เท่าของค่ากลาง (หรือยังไม่ขาย) ถูกนับ</p><p>รายได้ที่เพิ่มได้ = (ค่ากลาง − ที่ขายจริง) × ลูกค้าของสาขา × ราคาเฉลี่ยต่อจาน (ไม่รวม VAT)</p></template>
+    <div id="oppGaps" class="opp-wrap"></div>
   </div>
 
-  <div class="card p-5 mb-4" style="border:1px solid #f59e0b">
-    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">เมนูที่เคยขายดีแต่หยุดขาย (ควรรื้อฟื้น)</h3>
-    <div id="oppRevive" class="overflow-x-auto"></div>
-  </div>
+  <details id="oppReviveWrap" class="opp-sec opp-fold">
+    <summary>à la carte · เมนูที่หยุดขาย <span id="oppReviveN" class="opp-sec-s"></span></summary>
+    <div id="oppRevive" class="opp-wrap mt-2"></div>
+  </details>
 
-  <div class="card p-5 mb-4" style="border:1px solid #ec4899">
+  <details id="oppWhitespaceWrap" class="opp-sec opp-fold" style="display:none">
+    <summary>à la carte · หมวดเมนู <span id="oppWsN" class="opp-sec-s"></span></summary>
+    <div id="oppWhitespace" class="opp-wrap mt-2"></div>
+  </details>
+
+  <div class="opp-sec">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h3 class="text-base font-bold" style="color:var(--text-primary)">สร้างไอเดียเมนู/โปรโมชันด้วย AI <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-mb1" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-mb1" data-title="ไอเดียเมนูจาก AI"><p>⚠ ไอเดียจาก AI เป็นข้อเสนอเชิงสร้างสรรค์ <b>ยังไม่ได้พิสูจน์ด้วยยอดขายจริง</b> — ใช้เป็นจุดเริ่มต้นในการระดมความคิด</p></template>
+      <h3 class="text-base font-bold" style="color:var(--text-primary)">ไอเดียเมนูและโปรโมชันจาก AI <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuopportunities-mb1" title="คำอธิบาย">?</button></h3><template id="hlp-menuopportunities-mb1" data-title="ไอเดียเมนูจาก AI"><p>ไอเดียจาก AI อิงสัญญาณ à la carte ของช่วงและสาขาที่เลือก <b>ยังไม่ได้พิสูจน์ด้วยยอดขายจริง</b> ใช้เป็นจุดเริ่มต้นของการคิดเมนู</p></template>
       <button id="oppAiBtn" onclick="genMenuIdeas()" class="text-xs font-semibold rounded px-3 py-1 text-white" style="background:#be185d">สร้างไอเดียด้วย AI</button>
     </div>
     <div id="oppAiIdeas" class="space-y-2 mt-2"></div>

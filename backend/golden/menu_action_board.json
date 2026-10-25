@@ -1,40 +1,103 @@
 {
- "buckets": {
-  "feature": [],
-  "fix_margin": [],
-  "market": [],
-  "needs_cost": [],
-  "review_cut": [
+ "alc": {
+  "count": 1,
+  "floor_baht": 1000.0,
+  "gp": 2700.0,
+  "revenue": 3000.0,
+  "revenue_share": 100.0,
+  "rows": [
    {
-    "action": "review_cut",
-    "category": "A La Carte",
-    "description": "(A) สเต๊ก",
-    "margin_pct": 90.0,
-    "popularity_pct": 100.0,
-    "priority_score": 28000.0,
-    "qty": 280.0,
-    "quadrant": "dog",
-    "reason": "ขายน้อย กำไรบาง และกำลังลดลง (มาร์จิ้น 90.0% · ส่วนแบ่ง 100.0%) → ทบทวน/พิจารณาตัด",
-    "revenue": 28000.0,
-    "sku_code": "A0001",
-    "slope_pct": -10.7,
-    "stage": "declining"
+    "above_floor": true,
+    "cost": 300.0,
+    "cum_share": 100.0,
+    "gp": 2700.0,
+    "gp_change": 0.0,
+    "gp_pct": 90.0,
+    "name": "สเต๊ก",
+    "plates": 30.0,
+    "prev_gp": 2700.0,
+    "revenue": 3000.0,
+    "share": 100.0,
+    "sku_code": "A0001"
    }
-  ]
+  ],
+  "uncosted": [],
+  "uncosted_count": 0
  },
- "costed_skus": 1,
- "counts": {
-  "feature": 0,
-  "fix_margin": 0,
-  "market": 0,
-  "needs_cost": 0,
-  "review_cut": 1
+ "branch": null,
+ "buffet": {
+  "buckets": {
+   "down": [],
+   "eat": [],
+   "price": []
+  },
+  "counts": {
+   "down": 0,
+   "eat": 0,
+   "price": 0
+  },
+  "net": 0,
+  "totals": {
+   "down": 0,
+   "eat": 0,
+   "price": 0
+  },
+  "uncosted": [],
+  "uncosted_count": 0
  },
- "median_margin": 90.0,
- "median_popularity_pct": 100.0,
- "month_range": [
-  null,
-  null
- ],
- "total_skus": 1
+ "floor": {
+  "baht": 1000.0,
+  "min_baht": 1000.0,
+  "share_pct": 0.1
+ },
+ "group": null,
+ "headline": {
+  "cost_per_head": 112.5,
+  "cost_per_head_change": 0.0,
+  "customers": 24.0,
+  "food_cost": 2700.0,
+  "food_cost_pct": 90.0,
+  "per_head_effect": 0.0,
+  "prev": {
+   "cost_per_head": 112.5,
+   "customers": 24.0,
+   "food_cost": 2700.0,
+   "food_cost_pct": 90.0,
+   "rev_per_head": 125.0,
+   "revenue": 3000.0
+  },
+  "rev_per_head": 125.0,
+  "rev_per_head_change": 0.0,
+  "revenue": 3000.0
+ },
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": false,
+  "cur": [
+   "2026-06-01",
+   "2026-06-03"
+  ],
+  "days": 3,
+  "has_ly": false,
+  "has_prev": true,
+  "kind": "month",
+  "label_th": "1–3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-01",
+   "2025-06-03"
+  ],
+  "ly_label_th": "1–3 มิ.ย. 2568",
+  "prev": [
+   "2026-05-01",
+   "2026-05-03"
+  ],
+  "prev_label_th": "1–3 พ.ค. 2569",
+  "reasons": {
+   "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569"
+  }
+ },
+ "reasons": {
+  "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569"
+ },
+ "tier_note": null
 }
