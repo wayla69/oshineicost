@@ -202,15 +202,16 @@ def test_js_parity():
     assert js["p"] == [P.pct(110, 100), P.pct(5, 0), P.pct(5, None), P.pct(5, -3), P.pp(42.5, 40.25), P.pp(None, 1)]
 
 
-def test_top_bar_default_is_year_until_pp3():
-    """Until PP2/PP3 move the pages, the ONE period bar opens on year to date (1 Jan -> the anchor), so a page that still reads
-    selMonthFrom / selMonthTo keeps Jan -> latest; a device's own choice (oshinei_gperiod) still wins. PP3 switches it to 'month'."""
+def test_top_bar_default_is_month_since_pp3():
+    """PR-PP3: every sales and cost page reads the bar's period, so the ONE period bar opens on the month to date (day 1 -> the
+    anchor; it was year to date through PP1/PP2); a device's own choice (oshinei_gperiod) still wins."""
     import re
-    assert re.search(r"^const PERIOD_DEFAULT_KIND = 'year';", CORE, re.M)
+    assert re.search(r"^const PERIOD_DEFAULT_KIND = 'month';", CORE, re.M)
     boot = CORE[CORE.index("let _gp = (() => {"):CORE.index("let _gpChartWin")]
     assert "localStorage.getItem(_GP_LS)" in boot and "return { kind: PERIOD_DEFAULT_KIND," in boot
     html = (HERE.parent / "index.html").read_text(encoding="utf-8")
-    assert 'class="gran-btn gran-active" data-k="year" aria-pressed="true"' in html
+    assert 'class="gran-btn gran-active" data-k="month" aria-pressed="true"' in html
+    assert 'class="gran-btn" data-k="year" aria-pressed="false"' in html
 
 
 def test_sp_call_shape_kept():

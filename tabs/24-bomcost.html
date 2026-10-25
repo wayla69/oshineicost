@@ -12,9 +12,11 @@
 
   <!-- Period + granularity controls -->
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3 text-xs">
-    <label>จาก <input type="month" id="bcMonthFrom" class="border border-slate-300 rounded-lg px-2 py-1"></label>
-    <label>To <input type="month" id="bcMonthTo" class="border border-slate-300 rounded-lg px-2 py-1"></label>
-    <label>ระดับรายละเอียด
+    <!-- PR-PP3: the period is the top bar's; these fields follow it (hidden; the simulators hub still reads them) -->
+    <label class="hidden">จาก <input type="month" id="bcMonthFrom" class="border border-slate-300 rounded-lg px-2 py-1"></label>
+    <label class="hidden">To <input type="month" id="bcMonthTo" class="border border-slate-300 rounded-lg px-2 py-1"></label>
+    <span id="bcPeriodQ"></span>
+    <label class="hidden">ระดับรายละเอียด
       <select id="bcGranularity" class="border border-slate-300 rounded-lg px-2 py-1">
         <option value="month">เดือน</option>
         <option value="week">สัปดาห์</option>

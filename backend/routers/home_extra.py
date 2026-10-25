@@ -593,14 +593,6 @@ def home_brief(branch: Optional[str] = Query(None)):
               AND b.name != 'ALL'
               {'AND b.name = :branch' if branch else ''}
         """, mtd_params).fetchone()
-        # the food-cost % below keeps its month-to-now revenue until PR-PP3 moves the cost figures
-        mtd_cost_rev = con.execute(f"""
-            SELECT ROUND({net_revenue_sum('st')}, 2) FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
-            WHERE strftime('%Y-%m', st.sold_at) = :month AND st.source = 'Easy' AND b.name != 'ALL'
-              {'AND b.name = :branch' if branch else ''}
-        """, {k: v for k, v in mtd_params.items() if k != "upto"}).fetchone()[0] or 0
-
         # Revenue by branch yesterday (top 3)
         yest_branch_rows = con.execute(f"""
             SELECT b.name AS branch,
@@ -645,28 +637,20 @@ def home_brief(branch: Optional[str] = Query(None)):
                 "revenue_target": target_map.get(br),
             })
 
-        # MTD BoM food cost % (tier SKUs excluded to avoid double-count)
-        # Phase 18d: migrated to _cogs_case helper — unified tier exclusion (incl. plain
-        # BUFFET) + monthly cost overrides; was leaking ~825M phantom COGS before.
-        bom_params: dict = {"month": current_month}
-        if branch:
-            bom_params["branch"] = branch
-        mtd_bom_row = con.execute(f"""
-            SELECT ROUND(SUM({_cogs_case('s','sk','c')}), 2) AS bom_cost
-            FROM v_sales_sku_monthly s
-            JOIN skus sk     ON sk.sku_id = s.sku_id
-            LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
-            JOIN branches b  ON b.branch_id = s.branch_id
-            WHERE s.period_month = :month
-              AND b.name != 'ALL'
-              {'AND b.name = :branch' if branch else ''}
-        """, bom_params).fetchone()
-        food_cost_pct_mtd = None
-        mtd_bom_cost = mtd_bom_row["bom_cost"] if mtd_bom_row else None
-        mtd_rev_val  = mtd_cost_rev
-        if mtd_bom_cost and mtd_rev_val and mtd_rev_val > 0:
-            food_cost_pct_mtd = round(mtd_bom_cost / mtd_rev_val * 100, 1)
-        cost_health = _cost_health(con, current_month, branch, food_cost_pct_mtd, mtd_rev_val)
+        # MTD BoM food cost % - PR-PP3: the one period pattern (period_cost.compare on the month to date through the
+        # settled day): COGS over the same table's dish revenue, day 1..the settled day, against the same days of last
+        # month and of the month a year back (it was the whole month table - today's lines included - over the bills'
+        # revenue, and the movement compared it with the WHOLE previous month).
+        import periods as _P
+        import period_cost as _PC
+        _fw = ["t.source='Easy'", "b.name!='ALL'"] + (["b.name=:branch"] if branch else [])
+        _w = _P.windows(con, "month", " AND ".join(_fw), {"branch": branch} if branch else {}, anchor_day=yesterday)
+        _fc = _PC.compare(con, _w, branch, None) if _w else None
+        _cur = (_fc or {}).get("cur") or None
+        food_cost_pct_mtd = round(_cur["food_cost_pct"], 1) if _cur and _cur["food_cost_pct"] is not None else None
+        mtd_bom_cost = _cur["cogs"] if _cur else None
+        mtd_rev_val = _cur["revenue"] if _cur else None
+        cost_health = _cost_health(con, current_month, branch, food_cost_pct_mtd, mtd_rev_val, _fc)
 
     return {
         "yesterday": yesterday,
@@ -715,7 +699,7 @@ def _prev_month(m: str) -> str:
     return f"{y - 1}-12" if mo == 1 else f"{y}-{mo - 1:02d}"
 
 
-def _cost_health(con, month, branch, food_pct, mtd_rev):
+def _cost_health(con, month, branch, food_pct, mtd_rev, fc=None):
     """Everything the home page needs to say something TRUE about food cost.
 
     A bare percentage against a fixed bar told the owner nothing: the bar was an
@@ -732,22 +716,33 @@ def _cost_health(con, month, branch, food_pct, mtd_rev):
     bf = "AND b.name = :branch" if branch else ""
     p = {"m": month, "pm": _prev_month(month), **({"branch": branch} if branch else {})}
     cogs = _cogs_case("s", "sk", "c")
-    try:
-        # movement: both months on ONE basis (cogs over the same table's revenue), so
-        # the delta is a change in the business, not a change of denominator
-        rows = {r["period_month"]: r for r in con.execute(f"""
-            SELECT s.period_month, SUM({cogs}) AS cg, SUM(s.subtotal_ex_vat) AS rev
-              FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
-              LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
-              JOIN branches b ON b.branch_id = s.branch_id
-             WHERE s.period_month IN (:m, :pm) AND b.name != 'ALL' {bf}
-             GROUP BY s.period_month""", p).fetchall()}
-        cur, prev = rows.get(month), rows.get(p["pm"])
-        if cur and prev and cur["rev"] and prev["rev"]:
-            a, b_ = cur["cg"] / cur["rev"] * 100, prev["cg"] / prev["rev"] * 100
-            out["prev_food_pct"], out["delta_pp"] = round(b_, 1), round(a - b_, 1)
-    except Exception:
-        pass
+    # movement - PR-PP3: the month to date against the same days of last month (เทียบช่วงก่อน) and of the month a year
+    # back (เทียบปีก่อน), both on ONE basis (cogs over the same table's revenue); a base with no cost source is None and
+    # its reason rides along (`reasons`), so the card says "—" instead of comparing a part month with a whole one
+    if fc:
+        fp, fl = (fc.get("prev") or {}).get("food_cost_pct"), (fc.get("ly") or {}).get("food_cost_pct")
+        out["prev_food_pct"] = round(fp, 1) if fp is not None else None
+        out["ly_food_pct"] = round(fl, 1) if fl is not None else None
+        out["delta_pp"] = (fc.get("change") or {}).get("prev", {}).get("food_cost_pct")
+        out["ly_delta_pp"] = (fc.get("change") or {}).get("ly", {}).get("food_cost_pct")
+        out["period"] = fc.get("period")
+        out["reasons"] = {k: v for k, v in (fc.get("reasons") or {}).items() if v}
+    else:
+        # no period comparison handed in (a direct call): both whole months on ONE basis, as before PR-PP3
+        try:
+            rows = {r["period_month"]: r for r in con.execute(f"""
+                SELECT s.period_month, SUM({cogs}) AS cg, SUM(s.subtotal_ex_vat) AS rev
+                  FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
+                  LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
+                  JOIN branches b ON b.branch_id = s.branch_id
+                 WHERE s.period_month IN (:m, :pm) AND b.name != 'ALL' {bf}
+                 GROUP BY s.period_month""", p).fetchall()}
+            cur, prev = rows.get(month), rows.get(p["pm"])
+            if cur and prev and cur["rev"] and prev["rev"]:
+                a, b_ = cur["cg"] / cur["rev"] * 100, prev["cg"] / prev["rev"] * 100
+                out["prev_food_pct"], out["delta_pp"] = round(b_, 1), round(a - b_, 1)
+        except Exception:
+            pass
     try:
         # coverage by PLATES (buffet dishes carry ~฿0 revenue, so a revenue-weighted
         # figure always says "fine"), on the app-wide definition in rules.py

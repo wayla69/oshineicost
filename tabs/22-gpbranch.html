@@ -17,17 +17,9 @@
   </div>
 
   <!-- Filters -->
+  <!-- PR-PP3: the period is the top bar's (สัปดาห์ · เดือน · ปี · กำหนดเอง); no period control on the page -->
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
-    <label class="text-xs text-slate-500">เดือนเริ่ม</label>
-    <select id="gpbMonthFrom" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
-    <label class="text-xs text-slate-500">ถึง</label>
-    <select id="gpbMonthTo" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
-    <label class="text-xs text-slate-500 ml-3">ความถี่</label>
-    <div class="inline-flex" role="group" aria-label="ความถี่">
-      <button type="button" class="subtab-btn text-xs px-3 py-1" id="gpbGran-day"   onclick="setGpbGranularity('day')">วัน</button>
-      <button type="button" class="subtab-btn text-xs px-3 py-1" id="gpbGran-week"  onclick="setGpbGranularity('week')">สัปดาห์</button>
-      <button type="button" class="subtab-btn active text-xs px-3 py-1" id="gpbGran-month" onclick="setGpbGranularity('month')">เดือน</button>
-    </div>
+    <span id="gpbPeriodQ"></span>
     <button onclick="loadGpBranch()" class="ml-2" style="background:#047857;color:white;border:none;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">รีเฟรช</button>
     <span id="gpbStatus" class="text-xs text-slate-400 ml-auto"></span>
   </div>
@@ -45,7 +37,7 @@
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <h2 class="section-title mb-0">GP% รายสาขา — กล่องรายสาขา</h2>
-      <span class="text-xs text-slate-400">เรียงตาม GP% เดือนล่าสุด · ▲/▼ = พัฒนาการเทียบเดือนก่อนหน้า (pp)</span>
+      <span class="text-xs text-slate-400">เรียงตาม GP% ของช่วงที่เลือก · เทียบช่วงก่อน / ปีก่อน เป็นจุด</span>
     </div>
     <div id="gpbBoxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3"></div>
   </div>

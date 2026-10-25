@@ -528,6 +528,7 @@ def gp_by_branch_month(
                     "gp":            round(gpv, 2),
                     "gp_pct":        round(gpv / v["rev"] * 100, 2) if v["rev"] > 0 else None,
                     "food_cost_pct": round(v["cogs"] / v["rev"] * 100, 2) if v["rev"] > 0 else None,
+                    "estimate": True,   # PR-PP3: pro-rated from the month by the day's bill revenue (ประมาณการ)
                 })
             b["trend"] = trend
 
@@ -668,6 +669,40 @@ def _add_gp_fields(rows_out: list) -> list:
     return rows_out
 
 
+def _to_date_mom(rows_out: list, branch=None, group=None) -> list:
+    """PR-PP3 · the one period pattern on the P&L series: every row says how its mom_pct was taken (`mom_basis`
+    'full' = a finished month against the whole month before). The month still in progress (the month of the last closed
+    day, not at its end) is set against the same days of last month instead - GP to date from the day-level dish cost
+    (period_cost) - 'to_date', with `period` (the windows) and `gp_ly_pct` (the same days a year back). Without a cost
+    source for a base the % is None ("—") and `reasons` says why. It was a part month's GP against a whole month's."""
+    import periods as _P
+    import period_cost as _PC
+    for d in rows_out:
+        d["mom_basis"] = "full"
+    if not rows_out:
+        return rows_out
+    f = ["t.source='Easy'", "b.name!='ALL'"]; prm: dict = {}
+    if branch:
+        f.append("b.name=:branch"); prm["branch"] = branch
+    if group:
+        f.append("COALESCE(b.branch_type,'master') = :branch_group"); prm["branch_group"] = group
+    with get_db() as con:
+        w = _P.windows(con, "month", " AND ".join(f), prm)
+        if not w or w["complete"]:
+            return rows_out
+        last = next((d for d in rows_out if d.get("period_month") == w["cur"][0][:7]), None)
+        if not last:
+            return rows_out
+        c = _PC.compare(con, w, branch, group)
+    cur, prev, ly = c.get("cur"), c.get("prev"), c.get("ly")
+    last.update({"mom_basis": "to_date", "period": c.get("period"), "reasons": {k: v for k, v in c["reasons"].items() if v},
+                 "gp_to_date": cur["gp"] if cur else None,
+                 "mom_pct": _P.pct(cur["gp"], prev["gp"]) if (cur and prev) else None,
+                 "gp_ly_pct": _P.pct(cur["gp"], ly["gp"]) if (cur and ly) else None,
+                 "margin_prev_pp": c["change"]["prev"]["gp_pct"], "margin_ly_pp": c["change"]["ly"]["gp_pct"]})
+    return rows_out
+
+
 @router.get("/api/pnl/monthly")
 @ttl_cache
 def pnl_monthly(
@@ -695,6 +730,7 @@ def pnl_monthly(
 
     tx_map = {r["period_month"]: dict(r) for r in tx_rows}
     out = _add_gp_fields([dict(r) for r in sku_rows])
+    _to_date_mom(out, branch, group)
     for d in out:
         tx = tx_map.get(d["period_month"], {})
         tx_count = tx.get("tx_count") or 0
@@ -996,8 +1032,31 @@ def pnl_branch_month_detail(
 ):
     prev = _month_add(month, -1)
     cogs_x = _unified_cogs_expr("ssm")
+    # PR-PP3 · the one period pattern: the month in progress is to date through the branch's last closed day and is set
+    # against the same days of last month (and of the month a year back) from the day-level dish table - it was set
+    # against the WHOLE last month. A finished month is whole vs whole from the month table, as before.
+    import periods as _P
+    import period_cost as _PC
+    with get_db() as con:
+        _w = _P.windows(con, "month", "t.source='Easy' AND b.name=:branch", {"branch": branch}, pick=f"{month[:7]}-01")
+        _floor = _PC.cost_floor(con)
+    if _w and _w["cur"][0][:7] != month[:7]:
+        _w = None                                    # the month asked for is not the anchor's period: keep the month table
 
-    def _dishes(mon: str) -> dict:
+    def _dishes_src(s_: str, e_: str):
+        """the month table for a whole month, the day table for a part month (None without a source)"""
+        pl, _why = _PC.plan(s_, e_, _floor)
+        if pl is None:
+            return None, {}
+        if pl["src"] == "month":
+            return ("v_sales_sku_monthly ssm", "ssm.period_month IN (" + ",".join(f"'{m}'" for m in pl["months"]) + ")"), {}
+        return (("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source, substr(day, 1, 7) AS period_month "
+                 "FROM v_sales_sku_daily WHERE day BETWEEN :_s AND :_e) ssm"), "1=1"), {"_s": s_, "_e": e_}
+
+    def _dishes_win(s_: str, e_: str) -> Optional[dict]:
+        src, extra = _dishes_src(s_, e_)
+        if src is None:
+            return None
         with get_db() as con:
             rows = con.execute(f"""
                 SELECT sk.sku_code,
@@ -1006,18 +1065,35 @@ def pnl_branch_month_detail(
                        SUM(ssm.qty)             AS servings,
                        SUM({cogs_x})            AS cogs,
                        SUM(ssm.subtotal_ex_vat) AS revenue
-                FROM v_sales_sku_monthly ssm
+                FROM {src[0]}
                 JOIN branches b   ON b.branch_id   = ssm.branch_id
                 JOIN skus sk      ON sk.sku_id      = ssm.sku_id
                 JOIN categories c ON c.category_id  = sk.category_id
-                WHERE b.name = :branch AND ssm.period_month = :m
+                WHERE b.name = :branch AND {src[1]}
                 GROUP BY sk.sku_id
                 HAVING SUM(ssm.qty) > 0
-            """, {"branch": branch, "m": mon}).fetchall()
+            """, {"branch": branch, **extra}).fetchall()
         return {r["sku_code"]: dict(r) for r in rows}
 
-    cur = _dishes(month)
-    pre = _dishes(prev)
+    def _dishes(mon: str) -> dict:
+        import calendar as _cal
+        y, m = int(mon[:4]), int(mon[5:7])
+        return _dishes_win(f"{mon[:7]}-01", f"{mon[:7]}-{_cal.monthrange(y, m)[1]:02d}") or {}
+
+    reasons: dict = {}
+    if _w and not _w["complete"]:
+        cur = _dishes_win(*_w["cur"]) or {}
+        pre = _dishes_win(*_w["prev"]) if _w["has_prev"] else None
+        if pre is None:
+            reasons["prev"] = _P.reasons(_w).get("prev") or _PC.floor_reason(_floor)
+            pre = {}
+        _ly = _dishes_win(*_w["ly"]) if _w["has_ly"] else None
+        if _ly is None:
+            reasons["ly"] = _P.reasons(_w).get("ly") or _PC.floor_reason(_floor)
+    else:
+        cur = _dishes(month)
+        pre = _dishes(prev)
+        _ly = _dishes(_month_add(month, -12)) or None
 
     tot_cogs = sum((d["cogs"] or 0) for d in cur.values())
     tot_rev  = sum((d["revenue"] or 0) for d in cur.values())
@@ -1067,8 +1143,17 @@ def pnl_branch_month_detail(
 
     prev_cogs = sum((d["cogs"] or 0) for d in pre.values())
     prev_rev  = sum((d["revenue"] or 0) for d in pre.values())
+    ly_cogs = sum((d["cogs"] or 0) for d in (_ly or {}).values()) if _ly else None
+    ly_rev = sum((d["revenue"] or 0) for d in (_ly or {}).values()) if _ly else None
+    _gm = lambda r_, c_: round((r_ - c_) / r_ * 100, 1) if r_ else None   # noqa: E731
+    _per = None
+    if _w and not _w["complete"]:
+        _per = _P.public(_w)
+        if reasons:
+            _per["reasons"] = reasons
     return {
-        "branch": branch, "month": month, "prev_month": prev,
+        "branch": branch, "month": month, "prev_month": prev, "period": _per,
+        "to_date": bool(_w and not _w["complete"]),
         "summary": {
             "revenue": round(tot_rev, 2), "cogs": round(tot_cogs, 2),
             "gross_profit": round(tot_rev - tot_cogs, 2),
@@ -1076,6 +1161,11 @@ def pnl_branch_month_detail(
             "food_cost_pct": round(tot_cogs/tot_rev*100, 1) if tot_rev > 0 else None,
             "prev_revenue": round(prev_rev, 2), "prev_cogs": round(prev_cogs, 2),
             "rev_delta_pct": round((tot_rev-prev_rev)/prev_rev*100, 1) if prev_rev > 0 else None,
+            "ly_revenue": round(ly_rev, 2) if ly_rev else None,
+            "rev_ly_delta_pct": round((tot_rev-ly_rev)/ly_rev*100, 1) if ly_rev else None,
+            "gp_margin_prev_pp": (round(_gm(tot_rev, tot_cogs) - _gm(prev_rev, prev_cogs), 1)
+                                  if tot_rev and prev_rev else None),
+            "gp_margin_ly_pp": (round(_gm(tot_rev, tot_cogs) - _gm(ly_rev, ly_cogs), 1) if tot_rev and ly_rev else None),
             "dish_count": len(cur),
         },
         "cost_breakdown": cost_breakdown,
@@ -1195,6 +1285,23 @@ def pnl_branch(
         fc_row = con.execute(
             "SELECT value FROM app_settings WHERE key='branch_fixed_costs'"
         ).fetchone()
+        # PR-PP3: the fixed cost of a month still in progress is pro-rated by its days through the last closed day (it was
+        # a whole month's fixed cost against a part month's gross profit)
+        import periods as _P
+        _anchor = _P.anchor(con)
+        _bm: dict = {}
+        for _r in con.execute(f"""SELECT b.name AS branch, ssm.period_month AS m FROM v_sales_sku_monthly ssm
+                                  JOIN branches b ON b.branch_id = ssm.branch_id {where}
+                                  GROUP BY b.name, ssm.period_month""", params).fetchall():
+            _bm.setdefault(_r["branch"], []).append(_r["m"])
+
+    def _month_share(m: str) -> float:
+        """the share of month `m` that has closed: 1 for a finished month, days to the anchor ÷ days in the month else"""
+        import calendar as _cal
+        if not _anchor or _anchor[:7] != m[:7]:
+            return 1.0
+        n = _cal.monthrange(int(m[:4]), int(m[5:7]))[1]
+        return min(1.0, int(_anchor[8:10]) / n)
 
     fixed = {}
     if fc_row:
@@ -1214,7 +1321,8 @@ def pnl_branch(
         gp      = round(rev - cogs_v, 2)
         months  = r["months"] or 1
         fcm     = float(fixed.get(br, 0) or 0)
-        fcp     = round(fcm * months, 2)
+        months_eff = sum(_month_share(m) for m in _bm.get(br, [])) or months
+        fcp     = round(fcm * months_eff, 2)
         op      = round(gp - fcp, 2)
         covers  = covmap.get(br, 0)
         gp_per_cover = (gp / covers) if covers else None
@@ -1223,6 +1331,7 @@ def pnl_branch(
         out.append({
             "branch":            br,
             "months":            months,
+            "months_prorated":   round(months_eff, 3),   # PR-PP3: the month in progress counts its closed days only
             "revenue":           rev,
             "cogs":              cogs_v,
             "gross_profit":      gp,

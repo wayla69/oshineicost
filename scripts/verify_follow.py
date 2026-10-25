@@ -12,11 +12,13 @@ import os, sys, json
 from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get('MGT_BASE', 'http://localhost:8020/')
+# PR-PP2/PP3: ยอดขายรายวัน, ต้นทุน/หัว, P&L ต่อบิล, P&L รายสาขา and วิเคราะห์ BoM รายสาขา read the top bar's period
+# (TABS[tab].follow.period) - their local pickers are gone or hidden, so they are not checked here
 MONTH_TABS = [('cashctl', 'ccMonth'), ('custtype', 'ctMonth'), ('pricezone', 'pzMonth'),
-              ('cancelbill', 'cbMonth'), ('opsreport', 'opMonth'), ('pnlbranch', 'pnlMonthSel')]
-DATE_TABS = [('dailysales', 'dsDate'), ('costhead', 'chDate'), ('pnlbill', 'pbDate'), ('closetime', 'ctmDate')]
+              ('cancelbill', 'cbMonth'), ('opsreport', 'opMonth')]
+DATE_TABS = [('closetime', 'ctmDate')]
 RANGE_TABS = [('heavyeater', 'heFrom', 'heTo')]
-MRANGE_TABS = [('branchbom', 'bbomMonthFrom', 'bbomMonthTo')]
+MRANGE_TABS = []
 
 out = []
 def say(*a):
