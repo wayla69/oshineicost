@@ -55,6 +55,7 @@
         <button onclick="exportTable('pbLossTable','loss_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
     </div>
+    <div id="pbLossCauses" class="pb-causes"></div>
     <div style="max-height:520px;overflow-y:auto">
       <table class="text-xs w-full" id="pbLossTable">
         <thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -64,5 +65,6 @@
           <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right" title="เวลาตั้งแต่เปิดโต๊ะถึงปิดบิล (จาก POS)">นั่ง</th><th class="py-1.5 text-right" id="pbLossMetric">GM%</th>
         </tr></thead><tbody id="pbLoss"></tbody></table>
     </div>
+    <div id="pbLossMore"></div>
   </div>
 </div>

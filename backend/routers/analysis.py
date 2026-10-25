@@ -1132,35 +1132,42 @@ def analysis_anomalies(
                     "branch": name, "growth_pct": round((last - prev) / prev * 100, 1),
                     "last_revenue": last, "prev_revenue": prev,
                     "last_month": recs[-1]["month"], "prev_month": recs[-2]["month"],
+                    "change_baht": round(last - prev, 2),
                 })
-    growths.sort(key=lambda x: -x["growth_pct"])
+    # DV2 (phone table review 2026-10-25): the branch tiles rank by the baht change, not the %: a small branch at -24.8 % (-฿196K)
+    # is not the branch to call when a large one lost -฿537K. The % threshold still decides what counts as a change.
+    growths.sort(key=lambda x: -x["change_baht"])
 
     def _branch_fields(kind, label, g):
         ly_month = _ym_back(g["last_month"], 12)
         ly = (bgrowth_map.get(g["branch"]) or {}).get(ly_month)
         return {"kind": kind, "label": label, "unit": "%", "delta": g["growth_pct"], "delta_unit": "%",
-                "prev": g["prev_revenue"], "amount": g["last_revenue"], "period": g["last_month"],
+                "prev": g["prev_revenue"], "amount": g["last_revenue"], "change_baht": g["change_baht"], "period": g["last_month"],
                 "period_th": _th_ym_short(g["last_month"]), "prev_period": g["prev_month"],
                 "prev_period_th": _th_ym_short(g["prev_month"]), "basis_note": basis_note,
                 "prev_year": ly or None, "delta_yoy": _yoy(g["last_revenue"], ly), "prev_year_period": ly_month,
                 "prev_year_period_th": _th_ym_short(ly_month), "ranges": _ranges(g["last_month"])}
-    if growths:
-        top = growths[0]
-        if top["growth_pct"] > _thr:
-            insights.append({
-                "type": "growth", "severity": "good", "metric": "branch_mom",
-                "branch": top["branch"], "value": top["growth_pct"],
-                **_branch_fields("branch_top", "เติบโตเร็วสุด", top),
-                "message": f"เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% เทียบเดือนก่อน (฿{top['last_revenue']:,.0f}){mtd_note}",
-            })
-        worst = growths[-1]
-        if worst["growth_pct"] < -_thr:
-            insights.append({
-                "type": "drop", "severity": "bad", "metric": "branch_mom",
-                "branch": worst["branch"], "value": worst["growth_pct"],
-                **_branch_fields("branch_drop", "ลดมากสุด", worst),
-                "message": f"⚠ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% เทียบเดือนก่อน (฿{worst['last_revenue']:,.0f}){mtd_note}",
-            })
+    ups = [g for g in growths if g["growth_pct"] > _thr]                       # largest baht gain first
+    downs = sorted((g for g in growths if g["growth_pct"] < -_thr), key=lambda x: x["change_baht"])   # largest baht loss first
+    _oth = lambda gs: [{"branch": g["branch"], "change_baht": g["change_baht"], "delta": g["growth_pct"]} for g in gs[1:3]]
+    if ups:
+        top = ups[0]
+        insights.append({
+            "type": "growth", "severity": "good", "metric": "branch_mom",
+            "branch": top["branch"], "value": top["growth_pct"],
+            **_branch_fields("branch_top", "ยอดเพิ่มมากสุด", top),
+            "others": _oth(ups),
+            "message": f"ยอดเพิ่มมากสุด: {top['branch']} {'+' if top['change_baht'] >= 0 else '−'}฿{abs(top['change_baht']):,.0f} ({top['growth_pct']:+.1f}%) เทียบเดือนก่อน (฿{top['last_revenue']:,.0f}){mtd_note}",
+        })
+    if downs:
+        worst = downs[0]
+        insights.append({
+            "type": "drop", "severity": "bad", "metric": "branch_mom",
+            "branch": worst["branch"], "value": worst["growth_pct"],
+            **_branch_fields("branch_drop", "ยอดลดมากสุด", worst),
+            "others": _oth(downs),
+            "message": f"⚠ ยอดลดมากสุด: {worst['branch']} {'+' if worst['change_baht'] >= 0 else '−'}฿{abs(worst['change_baht']):,.0f} ({worst['growth_pct']:.1f}%) เทียบเดือนก่อน (฿{worst['last_revenue']:,.0f}){mtd_note}",
+        })
 
     # BoM cost % spike / dip detection (MoM delta >= 5 pp)
     cost_months: List[dict] = []

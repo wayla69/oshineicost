@@ -17,6 +17,27 @@
 
   <div id="disc-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
+  <!-- Discount reason / type (Sale.DiscountReasonId → DiscountSaleReason) · DV2: the page's first table ("ไม่ระบุ" is the answer) -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">ประเภทส่วนลด (เหตุผลที่เลือกใน POS) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-b2" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-b2" data-title="ประเภทส่วนลด"><p>เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p></template>
+      <div class="flex items-center gap-2">
+        <span id="disc-reason-note" class="text-xs text-slate-400"></span>
+        <button onclick="exportDiscountReasons()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
+      </div>
+    </div>
+    
+    <div id="disc-reason-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e"></div>
+    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3"></div>
+    <div id="disc-reason-split" class="mb-4"></div>
+    <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
+      <thead><tr>
+        <th>เหตุผล</th><th class="num">บิล</th><th class="num">มูลค่าลด</th><th class="num">% ของเงินลด</th><th>สัดส่วน</th>
+      </tr></thead>
+      <tbody id="disc-reason-body"></tbody>
+    </table></div>
+  </div>
+
   <!-- Discount risk Alert Center -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
@@ -92,27 +113,6 @@
     </div>
   </div>
 
-  <!-- Discount reason / type (Sale.DiscountReasonId → DiscountSaleReason) -->
-  <div class="card p-5 mb-5">
-    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">ประเภทส่วนลด (เหตุผลที่เลือกใน POS) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-discounts-b2" title="คำอธิบาย">?</button></h2><template id="hlp-discounts-b2" data-title="ประเภทส่วนลด"><p>เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p></template>
-      <div class="flex items-center gap-2">
-        <span id="disc-reason-note" class="text-xs text-slate-400"></span>
-        <button onclick="exportDiscountReasons()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
-      </div>
-    </div>
-    
-    <div id="disc-reason-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e"></div>
-    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3"></div>
-    <div id="disc-reason-split" class="mb-4"></div>
-    <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
-      <thead><tr>
-        <th>เหตุผล</th><th class="num">บิล</th><th class="num">มูลค่าลด</th><th class="num">% ของเงินลด</th><th>สัดส่วน</th>
-      </tr></thead>
-      <tbody id="disc-reason-body"></tbody>
-    </table></div>
-  </div>
-
   <!-- Coupon / promotion by SERIES (CouponSeries name) -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
@@ -129,7 +129,7 @@
       <thead><tr>
         <th class="num">#</th><th>ชุดคูปอง</th><th class="num">ครั้งที่ใช้</th>
         <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th>
-        <th class="num">เทียบช่วงก่อน · ปีก่อน</th><th>สัดส่วน</th><th></th>
+        <th class="num">เปลี่ยน (฿) · ช่วงก่อน · ปีก่อน</th><th>สัดส่วน</th><th></th>
       </tr></thead>
       <tbody id="coupon-series-body"></tbody>
     </table></div>
@@ -138,27 +138,22 @@
 
   <div class="card p-5 mb-5 overflow-x-auto">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="section-title mb-0">แคชเชียร์ส่วนลดสูงสุด</h2>
-      <div class="flex items-center gap-1 text-xs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px">
-        <button id="discGrpFlat"   onclick="setDiscGroup(false)" class="subtab-btn px-3 py-1">รวม</button>
-        <button id="discGrpBranch" onclick="setDiscGroup(true)"  class="subtab-btn active px-3 py-1">จัดกลุ่มรายสาขา</button>
-      </div>
+      <h2 class="section-title mb-0">สาขาที่ให้ส่วนลดเกินเพดาน <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-disc-cashier" title="คำอธิบาย">?</button></h2>
+      <template id="hlp-disc-cashier" data-title="สาขาที่ให้ส่วนลดเกินเพดาน"><p>บัญชีแคชเชียร์ของ Easy POS ใช้ร่วมกันหลายคน จึงระบุตัวบุคคลไม่ได้ ตารางนี้จึงแสดงรายสาขา</p><p>เกินเพดาน = ส่วนลดที่ให้เกินเพดานนโยบาย (% ของยอดขายก่อนลด) เป็นบาท · สาขาที่ไม่เกินเพดานอยู่ใน "ดูทั้งหมด" · แตะแถวเพื่อดูบิลส่วนลดของสาขา</p></template>
     </div>
     <div id="disc-outlier-note" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fef2f2;border:1px solid #ef4444;color:#991b1b"></div>
     <table class="text-xs w-full">
       <thead>
         <tr class="text-left border-b border-slate-200">
-          <th class="py-2 pr-3">แคชเชียร์</th>
           <th class="py-2 pr-3">สาขา</th>
-          <th class="py-2 pr-3 text-right">Tx</th>
-          <th class="py-2 pr-3 text-right">บิลส่วนลด</th>
-          <th class="py-2 pr-3 text-right">อัตรา</th>
+          <th class="py-2 pr-3 text-right">เกินเพดาน (฿)</th>
           <th class="py-2 pr-3 text-right">% ยอดขาย</th>
           <th class="py-2 pr-3 text-right">ส่วนลดรวม</th>
-          <th class="py-2 text-right">ส่วนลดเฉลี่ย</th>
+          <th class="py-2 text-right">บิลส่วนลด</th>
         </tr>
       </thead>
       <tbody id="discCashierBody"></tbody>
     </table>
+    <div id="discCashierMore"></div>
   </div>
 </div>

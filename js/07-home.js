@@ -612,41 +612,46 @@ function renderHomeTrend7(sd) {
 }
 
 // ── Branch scorecard for Home (yesterday performance, richer than a bar) ──
+// DV2: ranked by the baht below the branch's own normal (the trailing 7-day average), most below first; "ต่างจากปกติ" is column 2 with the %
+// under it; the 5 lowest and the 5 highest show, the rest behind "ดูทั้งหมด"; the top bar's branch narrows the list.
 async function renderHomeScorecard(focusDate) {
   const el = document.getElementById('home-branch-scorecard');
   if (!el) return;
   el.innerHTML = '<p class="text-xs text-slate-400 py-3">กำลังโหลด…</p>';
   const p = new URLSearchParams();
   if (focusDate) p.set('date', focusDate);
+  if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
   try { d = await api(`${API}/api/home/branch-scorecard?${p}`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-red-500 py-3">โหลดไม่สำเร็จ</p>'; return null; }
-  // Leaderboard order: highest yesterday revenue first.
-  const rows = (d.branches || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+  const rows = (d.branches || []).slice().sort((a, b) => (a.vs_avg_baht ?? Infinity) - (b.vs_avg_baht ?? Infinity) || (b.revenue || 0) - (a.revenue || 0));
   if (!rows.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-3">ไม่มีข้อมูล</p>'; return d; }
   const dot = s => s === 'up' ? '<span title="เหนือปกติ">●</span>'
                  : s === 'down' ? '<span title="ต่ำกว่าปกติ">●</span>'
                  : '<span title="ปกติ">●</span>';
   const pctCell = (v, hb = true) => v == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${(v >= 0) === hb ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(0)}%</span>`;
-  el.innerHTML = `<table class="text-xs w-full">
+  const vsCell = r => r.vs_avg_baht == null ? '<span class="text-slate-300">—</span>'
+    : `<span data-ph-line class="font-semibold" style="color:${r.vs_avg_baht >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(r.vs_avg_baht)}</span><span data-ph-line class="block" style="color:var(--text-muted)">${r.vs_avg_pct != null ? (r.vs_avg_pct > 0 ? '+' : '') + r.vs_avg_pct.toFixed(0) + '%' : ''} · ปกติ ${fmt(r.avg7)}</span>`;
+  const n = rows.length, TOP = 5, BOT = 5;
+  el.innerHTML = `<table class="text-xs w-full" id="homeScoreTable">
     <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2"></th><th class="py-1.5 pr-2">สาขา</th>
-      <th class="py-1.5 pr-2 text-right">ยอดเมื่อวาน</th><th class="py-1.5 pr-2 text-center">7 วัน</th>
-      <th class="py-1.5 pr-2 text-right">vs ปกติ</th><th class="py-1.5 pr-2 text-right">vs สัปดาห์ก่อน</th>
+      <th class="py-1.5 pr-2 text-right">ต่างจากปกติ</th><th class="py-1.5 pr-2 text-right">ยอดเมื่อวาน</th>
+      <th class="py-1.5 pr-2 text-center">7 วัน</th><th class="py-1.5 pr-2 text-right">vs สัปดาห์ก่อน</th>
       <th class="py-1.5 pr-2 text-right">ยอด/หัว</th><th class="py-1.5 text-right">บิล</th>
     </tr></thead><tbody>` +
-    rows.map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40 cursor-pointer" onclick="homeDrillBranch('${(r.branch || '').replace(/'/g, "\\'")}')" title="เจาะดูสาขา ${esc(r.branch)}">
+    rows.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40 cursor-pointer"${dvMoreAttr('homeScore', i, n, TOP, BOT)} onclick="homeDrillBranch('${(r.branch || '').replace(/'/g, "\\'")}')" title="เจาะดูสาขา ${esc(r.branch)}">
       <td class="py-1.5 pr-2">${dot(r.status)}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmt(r.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${vsCell(r)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.revenue)}</td>
       <td class="py-1.5 pr-2 text-center">${_sparkSvg(r.spark, r.status === 'down' ? '#ef4444' : '#10b981')}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${pctCell(r.vs_avg_pct)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${pctCell(r.vs_wow_pct)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.rev_per_head != null ? fmt(r.rev_per_head) : '—'}</td>
       <td class="py-1.5 text-right tabular-nums">${fmtN(r.bills)}</td>
-    </tr>`).join('') + `</tbody></table>`;
+    </tr>`).join('') + `</tbody></table>` + dvMoreBtn('homeScore', n, TOP, BOT);
   return d;
 }
 
@@ -689,14 +694,23 @@ async function loadDailySales(force) {
   const sameBase = r && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
   if (thP) { thP.title = r ? r.prev_label_th : ''; thP.hidden = !!sameBase; }
   if (thL) thL.title = r ? r.ly_label_th : '';
-  document.getElementById('dsBody').innerHTML = (d.branches || []).map(b => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+  // DV2: column 2 = the baht change against the period before (the year before when the two bases are the same); the rows rank by it,
+  // the largest loss first; the 5 largest losses and the 5 largest gains show, the rest behind "ดูทั้งหมด"
+  const chgOf = b => sameBase ? b.yoy_delta : b.mom_delta;
+  const thC = document.getElementById('dsThChg');
+  if (thC) thC.title = r ? `${r.label_th} เทียบ ${sameBase ? r.ly_label_th : r.prev_label_th}` : '';
+  const dsRows = (d.branches || []).slice().sort((a, b) => (chgOf(a) ?? Infinity) - (chgOf(b) ?? Infinity) || (b.revenue || 0) - (a.revenue || 0));
+  const dsN = dsRows.length;
+  document.getElementById('dsMore').innerHTML = dvMoreBtn('dsBody', dsN, 5, 5);
+  document.getElementById('dsBody').innerHTML = dsRows.map((b, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40"${dvMoreAttr('dsBody', i, dsN, 5, 5)}>
       <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmt(b.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums"${chgOf(b) != null ? ` style="color:${chgOf(b) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}"` : ''}>${chgOf(b) != null ? dvBaht(chgOf(b)) : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(b.revenue)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(b.customers)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}</td>
       ${sameBase ? '' : `<td class="py-1.5 pr-2 text-right tabular-nums">${periodPctDelta(b.mom_pct, { title: r ? `${r.label_th} เทียบ ${r.prev_label_th}${b.mom_rev != null ? ' · ฿' + fmt(b.mom_rev) : ''}` : '' })}</td>`}
       <td class="py-1.5 text-right tabular-nums">${periodPctDelta(b.yoy_pct, { title: r ? `${r.label_th} เทียบ ${r.ly_label_th}${b.yoy_rev != null ? ' · ฿' + fmt(b.yoy_rev) : ''}` : '' })}</td>
-    </tr>`).join('') || `<tr><td colspan="${sameBase ? 5 : 6}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="${sameBase ? 6 : 7}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
   const tr = d.trend || [];
   const tLab = x => gran === 'year' ? String(+x.start.slice(0, 4) + 543)
     : gran === 'month' ? `${_PR_MON[+x.start.slice(5, 7) - 1]} ${(+x.start.slice(0, 4) + 543) % 100}` : periodLabelTh(x.start, x.start).replace(/ \d{4}$/, '');
@@ -1588,13 +1602,31 @@ function renderPnlBill(d) {
       <td class="py-1.5 text-right tabular-nums" style="color:${r.loss_bills > 0 ? 'var(--bad-ink)' : 'var(--text-muted)'}">${r.loss_bills > 0 ? fmtN(r.loss_bills) : '0'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  // ALL loss-making bills
-  const loss = d.loss || [];
+  // ALL loss-making bills · DV2: the cause lines first (a bill can carry more than one cause), then the 20 largest losses; the rest behind
+  // "ดูทั้งหมด" (the CSV keeps every row)
+  const loss = (d.loss || []).slice().sort((a, b) => (b.cogs - b.rev) - (a.cogs - a.rev));
+  const lossOf = r => Math.max(0, (r.cogs || 0) - (r.rev || 0));
+  const causes = [
+    { l: 'ลูกค้า 1 คน', f: r => (r.cust || 0) <= 1 },
+    { l: 'นั่งนาน 2 ชั่วโมงขึ้นไป', f: r => r.dwell_min != null && r.dwell_min >= 120 },
+    { l: 'มีส่วนลด', f: r => (r.disc || 0) > 0 },
+  ].map(c => { const xs = loss.filter(c.f); return { l: c.l, n: xs.length, v: xs.reduce((a, r) => a + lossOf(r), 0) }; });
+  const other = loss.filter(r => !((r.cust || 0) <= 1 || (r.dwell_min != null && r.dwell_min >= 120) || (r.disc || 0) > 0));
+  const lossAll = loss.reduce((a, r) => a + lossOf(r), 0) || 1;
+  const pcEl = document.getElementById('pbLossCauses');
+  if (pcEl) pcEl.innerHTML = loss.length ? `<table class="text-xs w-full mb-3" id="pbCauseTable"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาเหตุ</th><th class="py-1.5 pr-2 text-right">ขาดทุน</th><th class="py-1.5 pr-2 text-right">สัดส่วน</th><th class="py-1.5 text-right">บิล</th></tr></thead><tbody>`
+    + causes.concat([{ l: 'อื่น ๆ', n: other.length, v: other.reduce((a, r) => a + lossOf(r), 0) }]).map(c => `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 font-medium">${esc(c.l)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(c.v)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${(c.v / lossAll * 100).toFixed(0)}%</td><td class="py-1.5 text-right tabular-nums">${fmtN(c.n)}</td></tr>`).join('')
+    + `</tbody></table>` : '';
+  const PB_TOP = 20;
+  document.getElementById('pbLossMore').innerHTML = dvMoreBtn('pbLoss', loss.length, PB_TOP);
   const ls = document.getElementById('pbLossSummary');
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
     ? `ขาดทุน <b style="color:var(--bad-ink)">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:var(--bad-ink)">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
     : 'ไม่มีบิลขาดทุนในช่วงนี้';
-  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
+  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('pbLoss', i, loss.length, PB_TOP)} title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
     <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
@@ -1684,7 +1716,8 @@ async function loadOpsReport(force) {
     || (d.void_pending
       ? '<tr><td colspan="4" class="py-4 text-center text-amber-600 text-xs">Void รายวันจะแสดงหลัง sync รอบถัดไป</td></tr>'
       : '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>');
-  document.getElementById('opPromo').innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
+  const opPromo = document.getElementById('opPromo');   // DV2: the list moved to ส่วนลด (null on this page)
+  if (opPromo) opPromo.innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
     <td class="py-1.5 pr-2">${esc(x.name || ('Series ' + x.series))}${x.code && x.code !== x.name ? ` <span class="text-[10px] text-slate-400">${esc(x.code)}</span>` : ''}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:var(--amber-ink)">${fmt(x.discount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
@@ -2747,9 +2780,16 @@ async function loadCashCtl(force) {
     _extKpi('ระเบียบเงินสด', ((s.day_branch ? (1 - (s.short_days || 0) / s.day_branch) * 100 : 100)).toFixed(0) + '%', 'วัน-สาขาที่ไม่ขาด', '#0891b2'),
   ].join('');
   const ccMon = d.month || '';
-  document.getElementById('ccBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cashDayDrill('${jsAttr(r.branch)}','${ccMon}')" title="คลิกดูรายวันของ ${esc(r.branch)}">
+  // DV2: by the size of the difference either way (a large over is a control or data signal too); branches under ฿1,000 either way are
+  // folded behind "ดูทั้งหมด"; an over from ฿1,000 is amber, a short red
+  const ccRows = (d.branches || []).slice().sort((a, b) => Math.abs(b.over_short || 0) - Math.abs(a.over_short || 0));
+  const ccKeep = getBranch() ? ccRows.length : ccRows.filter(r => Math.abs(r.over_short || 0) >= 1000).length;   // one branch: no fold
+  const ccInk = v => v < 0 ? 'var(--bad-ink)' : v >= 1000 ? 'var(--amber-ink)' : 'var(--text-secondary)';
+  document.getElementById('ccMore').innerHTML = ccRows.length > ccKeep
+    ? (ccKeep ? '' : `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีสาขาที่ขาดหรือเกินตั้งแต่ ฿1,000</p>`) + dvMoreBtn('ccBody', ccRows.length, ccKeep) : '';
+  document.getElementById('ccBody').innerHTML = ccRows.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('ccBody', i, ccRows.length, ccKeep)} onclick="cashDayDrill('${jsAttr(r.branch)}','${ccMon}')" title="คลิกดูรายวันของ ${esc(r.branch)}">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(r.over_short)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${ccInk(r.over_short || 0)}">${(r.over_short || 0) < 0 ? 'ขาด ' : (r.over_short || 0) > 0 ? 'เกิน ' : ''}${fmt(Math.abs(r.over_short || 0))}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.short_days || 0}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td>
     <td class="py-1.5 text-right tabular-nums">${r.sales ? (r.over_short / r.sales * 100).toFixed(2) + '%' : '—'}</td>
@@ -2796,7 +2836,11 @@ async function loadCustType(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${t.cust_pct}%</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmt(t.net)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold">${t.net_pct}%</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('ctByBranch').innerHTML = (d.by_branch || []).map(r => {
+  // DV2: the by-branch table answers "which branch sells through delivery"; with delivery at 0 % in every branch it answers nothing and hides
+  const ctRows = d.by_branch || [];
+  const ctCard = document.getElementById('ctBranchCard');
+  if (ctCard) ctCard.style.display = ctRows.length && ctRows.every(r => (r.delivery_pct || 0) < 0.5) ? 'none' : '';
+  document.getElementById('ctByBranch').innerHTML = ctRows.map(r => {
     const dCol = r.delivery_pct >= 25 ? '#f59e0b' : r.delivery_pct >= 10 ? '#0891b2' : '#94a3b8';
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
@@ -2839,6 +2883,10 @@ async function loadPriceZone(force) {
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/extra/price-zone?${p}`); } catch (e) { return; }
   document.getElementById('pzCount').textContent = `แก้ราคา ${fmtN(d.change_count || 0)} ครั้ง${(d.changes || []).length >= 200 ? ' (แสดง 200 ล่าสุด)' : ''}`;
+  // DV2: no price change in the period -> one line, not an empty table
+  const pzNone = !(d.changes || []).length, pzE = document.getElementById('pzEmpty'), pzW = document.getElementById('pzTableWrap');
+  if (pzE) pzE.style.display = pzNone ? '' : 'none';
+  if (pzW) pzW.style.display = pzNone ? 'none' : '';
   document.getElementById('pzBody').innerHTML = (d.changes || []).map(r => {
     const dn = (r.delta || 0) < 0;
     const qp = r.qty_pct;
@@ -2856,9 +2904,21 @@ async function loadPriceZone(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.elasticity != null ? r.elasticity.toFixed(2) : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 text-[11px]">${esc(r.user || '')}</td></tr>`;
   }).join('') || '<tr><td colspan="10" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('pzZones').innerHTML = (d.zones || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+  _pzZonesHtml(d.zones);
+}
+// DV2: โซนโต๊ะรายสาขา lives in ตั้งค่า → สาขา (reference data); loadSettingsSubtab('branches') calls loadPzZonesRef
+function _pzZonesHtml(zones) {
+  const el = document.getElementById('pzZones');
+  if (!el) return;
+  el.innerHTML = (zones || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${r.zones}</td>
     <td class="py-1.5 text-right tabular-nums">${fmtN(r.tables)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+async function loadPzZonesRef() {
+  if (!document.getElementById('pzZones') || (typeof pathAllowedForMe === 'function' && !pathAllowedForMe('/api/extra/price-zone'))) return;
+  const p = new URLSearchParams(); p.set('limit', '1');
+  if (getGroup()) p.set('group', getGroup());
+  try { const d = await api(`${API}/api/extra/price-zone?${p}`); _pzZonesHtml(d.zones); } catch (e) { /* the card keeps its last rows */ }
 }
 
 // บิลยกเลิก/ลบ (whole-bill voids)
@@ -2896,10 +2956,17 @@ async function loadCancelBill(force) {
     <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   const cbMon = d.month || '';
-  document.getElementById('cbBranches').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cancelBillDrill('${jsAttr(r.branch)}','${cbMon}')" title="คลิกดูบิลที่ถูกยกเลิกของ ${esc(r.branch)}">
-    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.amount)}</td></tr>`).join('')
-    || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  // DV2: by value with each branch's share of the chain's cancelled value; branches from ฿50,000 (at least 5) show, the rest behind "ดูทั้งหมด"
+  const cbRows = (d.branches || []).slice().sort((a, b) => (b.amount || 0) - (a.amount || 0) || (b.bills || 0) - (a.bills || 0));
+  const cbTot = cbRows.reduce((a, r) => a + (r.amount || 0), 0) || 0;
+  const cbKeep = Math.max(5, cbRows.filter(r => (r.amount || 0) >= 50000).length);
+  document.getElementById('cbBranches').innerHTML = cbRows.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('cbBranches', i, cbRows.length, cbKeep)} onclick="cancelBillDrill('${jsAttr(r.branch)}','${cbMon}')" title="คลิกดูบิลที่ถูกยกเลิกของ ${esc(r.branch)}">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(r.amount)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${cbTot ? ((r.amount || 0) / cbTot * 100).toFixed(1) + '%' : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums">${fmtN(r.bills)}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  document.getElementById('cbBranchMore').innerHTML = dvMoreBtn('cbBranches', cbRows.length, cbKeep);
 }
 
 // Drill: per-DAY cash over/short for one branch (from the cash by-branch table).

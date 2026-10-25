@@ -1669,6 +1669,16 @@ function renderMenuFinder() {
     return (`${r.description||''} ${r.sku_code||''}`).toLowerCase().includes(q);
   });
   rows.sort((a,b) => (b[sort]??-Infinity) - (a[sort]??-Infinity));
+  // DV2 (phone table review 2026-10-25): the finder is a search box - no list until a name, a code or a category is given
+  // (the 100 rows it printed repeated the ranked tables below it)
+  const wrap = document.getElementById('menuFindWrap');
+  if (!q && !cat) {
+    document.getElementById('menuFindCount').textContent = `${fmtN(_menuFinderData.length)} เมนู`;
+    if (wrap) wrap.style.display = 'none';
+    body.innerHTML = '';
+    return;
+  }
+  if (wrap) wrap.style.display = '';
   document.getElementById('menuFindCount').textContent = `${rows.length} เมนู`;
   body.innerHTML = rows.slice(0, 100).map(r => {
     const priced = _hasMenuPrice(r);                 // buffet (B) has no per-dish price

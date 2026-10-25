@@ -9,7 +9,9 @@
 const { test, expect } = require('@playwright/test');
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
-const PAGES = [{ tab: 'menu' }, { tab: 'gpbranch' }, { tab: 'orderhub', pane: 'queue' }, { tab: 'bomcenter', pane: 'dishcost' }];
+// DV2: วิเคราะห์เมนู's menu finder lists nothing until a name is typed - the row checks there read the TOP 60 table (always on the page),
+// on its menu-name cell (column 4): the table's row-number column is only marked .ph-rn (hidden on a phone) a moment after it draws
+const PAGES = [{ tab: 'menu', cell: '#orderedTable tbody tr:visible td:nth-child(4)' }, { tab: 'gpbranch' }, { tab: 'orderhub', pane: 'queue' }, { tab: 'bomcenter', pane: 'dishcost' }];
 const IGNORE = [/favicon/i, /Failed to load resource/i, /net::ERR_ABORTED/i, /cdn\.tailwindcss/i];
 
 // the drawn size of every visible text inside `scope` (CSS px of the screen) - the smallest one, and how many were read
@@ -82,7 +84,7 @@ for (const p of PAGES) {
     expect(outside.min, 'the top bar, the chips and the bottom bar stay at touch size').toBeGreaterThanOrEqual(12);
 
     // a row: its sheet (header text -> value), closed by a tap on the dim
-    const cell = page.locator('.ph-frame tbody tr:visible td:not(:has(button, a, input, select, textarea))').filter({ hasText: /\S/ }).first();
+    const cell = page.locator('.ph-frame ' + (p.cell || 'tbody tr:visible td:not(.ph-rn):not(:has(button, a, input, select, textarea))')).filter({ hasText: /\S/ }).first();
     await expect(cell, `${name} shows a table row`).toBeVisible({ timeout: 30_000 });
     await cell.scrollIntoViewIfNeeded();
     await cell.tap();
@@ -95,6 +97,8 @@ for (const p of PAGES) {
     await expect(page.locator('#msSheet')).not.toHaveClass(/open/);
 
     // a double tap: that table at 100 % (text >= 12 px drawn, as wide as the screen), no sheet; again: back
+    await expect(cell).toBeVisible();                                  // a page that redraws its rows (a second load) has settled again
+    await cell.scrollIntoViewIfNeeded();
     const box = await cell.boundingBox();
     await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
     await expect(page.locator('.ph-z100')).toHaveCount(1);
@@ -106,7 +110,7 @@ for (const p of PAGES) {
     expect(zr.right).toBeLessThanOrEqual(zr.vw + 0.5);
     expect(zr.doc).toBeLessThanOrEqual(zr.vw);
     await expect(page.locator('#msSheet')).not.toHaveClass(/open/);
-    const zc = page.locator('.ph-z100 tbody td:not(:has(button, a, input, select, textarea))').filter({ hasText: /\S/ }).first();
+    const zc = page.locator('.ph-z100 tbody td:not(.ph-rn):not(:has(button, a, input, select, textarea))').filter({ hasText: /\S/ }).first();
     const zb = await zc.boundingBox();
     await page.mouse.dblclick(zb.x + Math.min(20, zb.width / 2), zb.y + zb.height / 2);
     await expect(page.locator('.ph-z100')).toHaveCount(0);

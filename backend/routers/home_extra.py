@@ -12,7 +12,7 @@ from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
 from core import (
-    _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
+    _FOOD_CATEGORY_FILTER, _cogs_case, get_db, ttl_cache,
 )
 
 from fastapi import APIRouter
@@ -23,13 +23,16 @@ router = APIRouter()
 
 @router.get("/api/home/branch-scorecard")
 @ttl_cache
-def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                          branch: Optional[str] = Query(None)):
     """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head,
     7-day sparkline, vs trailing-7-day average %, vs same-weekday-last-week %, and
-    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 − service_charge)."""
+    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 − service_charge).
+    DV2: vs_avg_baht = the focus day minus the 7-day normal in baht; branches are ranked by it (most below normal first)
+    and the top bar's branch narrows the list."""
     import datetime as _dt
     base = ["t.source='Easy'", "b.name!='ALL'"]; params: dict = {}
-    _group_filter(base, params, group)
+    scope_filter(base, params, branch, group)
     where = " AND ".join(base)
     with get_db() as con:
         # the latest FINISHED day whose bills have arrived (rules.latest_settled_day) —
@@ -69,8 +72,9 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
             out.append({"branch": nm, "revenue": trev, "customers": tcust, "bills": tbills,
                         "rev_per_head": round(trev / tcust, 1) if tcust else None,
                         "spark": spark, "avg7": round(avg7, 0),
+                        "vs_avg_baht": round(trev - avg7, 0) if avg7 else None,
                         "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status})
-        out.sort(key=lambda r: -r["revenue"])
+        out.sort(key=lambda r: (r["vs_avg_baht"] is None, r["vs_avg_baht"] if r["vs_avg_baht"] is not None else 0, -r["revenue"]))
     return {"date": focus, "days": days, "branches": out,
             "skipped_day": None if date else settled["skipped_day"], "skipped_bills": None if date else settled["skipped_bills"]}
 
@@ -266,7 +270,7 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         JN = "FROM pos_cancel_bill x JOIN branches b ON b.branch_id=x.branch_id WHERE " + tw + " AND x.period_month=:m"
         branches = [dict(r) for r in con.execute(
             f"SELECT b.name branch, SUM(x.bills) bills, ROUND(SUM(x.amount)) amount {JN} "
-            f"GROUP BY b.name ORDER BY bills DESC", pm).fetchall()]
+            f"GROUP BY b.name ORDER BY amount DESC, bills DESC", pm).fetchall()]   # DV2: by value, not by count
         reasons = [dict(r) for r in con.execute(
             f"""SELECT CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
                          ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason,
