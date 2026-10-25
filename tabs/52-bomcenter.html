@@ -507,13 +507,16 @@
     <div class="card p-4 overflow-x-auto">
       <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
         <thead><tr class="text-left border-b" style="color:var(--text-muted)">
-          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2">หน่วยฐาน</th>
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th>
+          <th class="py-1.5 pr-2 text-right" title="(ราคาเดือนนี้ − ราคาเดือนก่อน) × ปริมาณที่ซื้อ (เดือนนี้ หรือเดือนก่อนเมื่อเดือนนี้ยังไม่มีการซื้อ)">ผลเป็นบาท</th>
+          <th class="py-1.5 pr-2 text-right">เปลี่ยน</th><th class="py-1.5 pr-2">หน่วยฐาน</th>
           <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2">แหล่ง</th>
           <th class="py-1.5 pr-2">ราคาของเดือน</th><th class="py-1.5 pr-2 text-right">อายุ (เดือน)</th>
           <th class="py-1.5 pr-2 text-right">สาขาที่ซื้อ</th><th class="py-1.5"></th>
         </tr></thead>
         <tbody id="bmcPriceBody"></tbody>
       </table>
+      <div id="bmcPriceMore"></div>
     </div>
     <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
     <template id="hlp-bomcenter-price" data-title="ราคารายเดือน">      <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = <span data-recipe>หน่วยในสูตร</span><span data-stock>หน่วยฐานของวัตถุดิบในทะเบียน</span> · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>

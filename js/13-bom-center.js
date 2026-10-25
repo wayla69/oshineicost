@@ -905,16 +905,27 @@ async function bmcLoadPrices(force) {
       btn.style.opacity = months.length ? 1 : 0.5;
     }
   } catch (e) {
-    document.getElementById('bmcPriceBody').innerHTML = `<tr><td colspan="9" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
+    document.getElementById('bmcPriceBody').innerHTML = `<tr><td colspan="11" style="color:var(--bad-ink)">${esc(String(e.message || e))}</td></tr>`;
   }
 }
 function bmcRenderPrices() {
   const q = (document.getElementById('bmcPriceQ').value || '').toLowerCase();
   const src = document.getElementById('bmcPriceSrc').value;
-  const rows = _bmcPrices.filter(r => (!src || (r.source || 'none') === src) && (!q || `${r.code} ${r.name || ''}`.toLowerCase().includes(q)));
-  const w = _bmcCanPrices();
-  document.getElementById('bmcPriceBody').innerHTML = rows.slice(0, 800).map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
+  // DV2: ranked by the baht effect of the price change (change x quantity bought), then by the size of the change; items whose price did
+  // not change are folded behind "ดูทั้งหมด" unless a search or a source filter is set
+  const rows = _bmcPrices.filter(r => (!src || (r.source || 'none') === src) && (!q || `${r.code} ${r.name || ''}`.toLowerCase().includes(q)))
+    .sort((a, b) => Math.abs(b.impact_baht || 0) - Math.abs(a.impact_baht || 0) || Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) || String(a.code).localeCompare(String(b.code)));
+  const moved = r => !!(r.change_pct || r.impact_baht);
+  const keep = q || src ? rows.length : rows.filter(moved).length;
+  const shown = rows.slice(0, 800), w = _bmcCanPrices();
+  const pm = document.getElementById('bmcPriceMore');
+  if (pm) pm.innerHTML = keep < shown.length ? (keep ? '' : '<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีวัตถุดิบที่ราคาเปลี่ยนจากเดือนก่อน</p>') + dvMoreBtn('bmcPriceBody', shown.length, keep) : '';
+  const chg = r => r.change_pct == null ? '<span style="color:var(--text-muted)">—</span>'
+    : `<span style="color:${r.change_pct > 0 ? 'var(--bad-ink)' : r.change_pct < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.change_pct > 0 ? '+' : ''}${r.change_pct.toFixed(1)}%</span>`;
+  document.getElementById('bmcPriceBody').innerHTML = shown.map((r, i) => `<tr class="border-b" style="border-color:var(--border-soft)"${dvMoreAttr('bmcPriceBody', i, shown.length, keep)}>
       <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}</td><td class="py-1 pr-2">${esc(r.name || '')}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:${(r.impact_baht || 0) > 0 ? 'var(--bad-ink)' : (r.impact_baht || 0) < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}" title="${r.qty ? `ปริมาณ ${_bmcNum(r.qty, 0)} ${esc(r.base_unit || '')} (${esc(r.qty_month || '')})` : 'ไม่มีปริมาณที่ซื้อ'}">${r.impact_baht ? dvBaht(r.impact_baht) : '—'}</td>
+      <td class="py-1 pr-2 text-right">${chg(r)}</td>
       <td class="py-1 pr-2">${esc(r.base_unit || '')}</td>
       <td class="py-1 pr-2 text-right font-semibold">${_bmcPrice(r.price_per_base)}</td>
       <td class="py-1 pr-2">${r.source ? _bmcChip(_BMC_SRC[r.source] || r.source, _BMC_SRC_INK[r.source] || 'var(--text-muted)') : _bmcChip('ไม่มีราคา', 'var(--bad-ink)')}</td>
@@ -923,7 +934,7 @@ function bmcRenderPrices() {
       <td class="py-1 pr-2 text-right">${r.branches || ''}</td>
       <td class="py-1 whitespace-nowrap"><button onclick="bmcHistory('${esc(r.code)}')" style="font-size:11px;color:var(--accent);background:none;border:0;cursor:pointer">ประวัติ</button>
         ${w ? `<button onclick="bmcManual('${esc(r.code)}')" style="font-size:11px;color:var(--accent);background:none;border:0;cursor:pointer">แก้ราคา</button>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="9" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="11" class="py-3" style="color:var(--text-muted)">ไม่มีรายการ</td></tr>';
   const by = {};
   _bmcPrices.forEach(r => { const k = r.source || 'none'; by[k] = (by[k] || 0) + 1; });
   _bmcStatus('bmcPriceSummary', `${rows.length} รายการ · ` + Object.entries(by).map(([k, n]) => `${_BMC_SRC[k] || (k === 'none' ? 'ไม่มีราคา' : k)} ${n}`).join(' · '));
@@ -1110,18 +1121,27 @@ function bmcDcRender() {
   const c = d.counts;
   uiStateFilter.bar('bmcDcChips', { counts: c, f: _bmcDcView, pick: 'bmcDcView', opts: _BMC_DC_CHIPS });
   const q = (document.getElementById('bmcDcQ').value || '').trim().toLowerCase();
+  // DV2: ranked by the baht effect of the cost change on the plates sold ((cost - month before) x plates); in the lists of costed menus
+  // the menus whose cost did not change are folded behind "ดูทั้งหมด" (the gaps list "ไม่มีในตาราง" and a search keep every row)
+  const dcImp = r => r.unit_cost > 0 && r.prev_cost > 0 && r.plates ? (r.unit_cost - r.prev_cost) * r.plates : null;
   const rows = d.rows.filter(r => (_bmcDcView === 'all' || (_bmcDcView === 'changed30' ? r.changed30 : r.source_kind === _bmcDcView))
-    && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)));
+    && (!q || (r.code + ' ' + r.name).toLowerCase().includes(q)))
+    .map(r => Object.assign({}, r, { impact: dcImp(r) }))
+    .sort((a, b) => Math.abs(b.impact || 0) - Math.abs(a.impact || 0) || (b.plates || 0) - (a.plates || 0));
+  const dcShown = rows.slice(0, 800);
+  const dcKeep = q || _bmcDcView === 'none' ? dcShown.length : dcShown.filter(r => r.change_pct || r.impact).length;
   document.getElementById('bmcDcSummary').textContent = `${c.all} เมนู` + (d.last_import_at ? ` · นำเข้าล่าสุด ${fmtDay(d.last_import_day || d.last_import_at.slice(0, 10))} โดย ${whoTh(d.last_import_by || '')}` : '');
   const w = _bmcCanPrices();
   document.getElementById('bmcDcList').innerHTML = rows.length ? `<div class="wt-wrap" style="max-height:640px"><table class="wt"><thead><tr>
-      <th>รหัส POS</th><th>เมนู</th><th class="wt-num">ต้นทุนต่อจาน</th><th class="wt-num">เดือนก่อน</th><th class="wt-num">เปลี่ยน</th><th class="wt-num">จานที่ขาย</th><th>ที่มา</th>${w ? '<th></th>' : ''}</tr></thead><tbody>${rows.slice(0, 800).map(r => `<tr>
+      <th>รหัส POS</th><th>เมนู</th><th class="wt-num" title="(ต้นทุนต่อจาน − เดือนก่อน) × จานที่ขาย">ผลเป็นบาท</th><th class="wt-num">ต้นทุนต่อจาน</th><th class="wt-num">เดือนก่อน</th><th class="wt-num">เปลี่ยน</th><th class="wt-num">จานที่ขาย</th><th>ที่มา</th>${w ? '<th></th>' : ''}</tr></thead><tbody id="bmcDcBody">${dcShown.map((r, i) => `<tr${dvMoreAttr('bmcDcBody', i, dcShown.length, dcKeep)}>
       <td class="wt-code" data-l="รหัส POS">${esc(r.code)}</td><td data-l="เมนู">${esc(r.name)}</td>
+      <td class="wt-num" data-l="ผลเป็นบาท" style="font-weight:600;color:${(r.impact || 0) > 0 ? 'var(--bad-ink)' : (r.impact || 0) < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${r.impact ? dvBaht(r.impact) : '—'}</td>
       <td class="wt-num" data-l="ต้นทุนต่อจาน" style="font-weight:600">${r.unit_cost > 0 ? _bmcDcBaht(r.unit_cost) : '<span class="wt-muted">ไม่มีต้นทุน</span>'}</td>
       <td class="wt-num" data-l="เดือนก่อน">${_bmcDcBaht(r.prev_cost)}</td><td class="wt-num" data-l="เปลี่ยน" title="${r.ly_change_pct != null ? `เทียบเดือนเดียวกันปีก่อน ${r.ly_change_pct > 0 ? '+' : ''}${r.ly_change_pct}%` : 'เทียบเดือนเดียวกันปีก่อน — ยังไม่มีต้นทุนปีก่อน'}">${_bmcDcPct(r.change_pct)}</td>
       <td class="wt-num" data-l="จานที่ขาย">${_bmcNum(r.plates, 0)}</td>
       <td data-l="ที่มา">${_bmcChip(r.source, _BMC_DC_INK[r.source_kind])}${r.cost_source ? ` <span class="wt-muted">${esc(r.cost_source)}</span>` : ''}</td>
       ${w ? `<td class="wt-act">${_bmcBtn('แก้ไข', `bmcDcEdit(${_bmcQ(r.code)})`)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
+    + (dcKeep < dcShown.length ? (dcKeep ? '' : '<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีเมนูที่ต้นทุนเปลี่ยนจากเดือนก่อน</p>') + dvMoreBtn('bmcDcBody', dcShown.length, dcKeep) : '')
     + (rows.length > 800 ? `<div class="wt-note">แสดง 800 จาก ${rows.length} เมนู ค้นหาเพื่อดูที่เหลือ</div>` : '')
     : (_bmcDcView === 'all' ? '<div class="wt-empty">ไม่มีเมนู</div>' : `<div class="wt-empty">ไม่มีเมนูในกลุ่มนี้ <button type="button" class="shm-showall" onclick="bmcDcView('all')">ดูทั้งหมด</button></div>`);
 }

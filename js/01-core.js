@@ -4088,8 +4088,8 @@ const PAGE_CARDS = {
     { sel: '#ohbPsBranches > .overflow-x-auto > table', title: 'สาขา', keyCols: ['ยอดขาย', 'มูลค่าวัตถุดิบต่อยอดขาย', 'การใช้เทียบค่ากลาง'], labels: ['ยอดขาย ฿', 'วัตถุดิบต่อ ฿100,000', 'เทียบค่ากลาง'] },
     { sel: '#ohbPsList table', title: 'วัตถุดิบ', sub: ['หน่วย'], keyCols: ['ต่อยอดขาย', 'เปลี่ยนแปลง', 'มูลค่า'], labels: ['ต่อ ฿100,000', 'เปลี่ยน', 'มูลค่า ฿'] }],
   'bomcenter|fc': [{ sel: '#bmcFcTable table', title: 'วัตถุดิบ', sub: ['รหัส'], keyCols: ['แนะนำสั่ง', 'มูลค่า', 'ใช้/วัน'], labels: ['แนะนำสั่ง', 'มูลค่า ฿', 'ใช้/วัน'], pill: 'กลุ่ม', sparkCell: 'แนวโน้ม' }],
-  'bomcenter|price': [{ sel: 'table:has(#bmcPriceBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'อายุ', 'สาขาที่ซื้อ'], labels: ['ราคา/หน่วยฐาน', 'อายุ (เดือน)', 'สาขาที่ซื้อ'], pill: 'แหล่ง' }],
-  'bomcenter|dishcost': [{ sel: '#bmcDcList table', title: 'เมนู', sub: ['รหัส POS'], keyCols: ['ต้นทุนต่อจาน', 'เปลี่ยน', 'จานที่ขาย'], pill: 'ที่มา' }],
+  'bomcenter|price': [{ sel: 'table:has(#bmcPriceBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ผลเป็นบาท', 'เปลี่ยน', 'ราคา/หน่วยฐาน'], labels: ['ผลเป็นบาท', 'เปลี่ยน', 'ราคา/หน่วยฐาน'], pill: 'แหล่ง' }],
+  'bomcenter|dishcost': [{ sel: '#bmcDcList table', title: 'เมนู', sub: ['รหัส POS'], keyCols: ['ผลเป็นบาท', 'ต้นทุนต่อจาน', 'เปลี่ยน'], pill: 'ที่มา' }],
   'bomcenter|ing': [{ sel: 'table:has(#bmcIngBody)', title: 'วัตถุดิบ', sub: ['รหัส', 'หน่วยฐาน'], keyCols: ['ราคา/หน่วยฐาน', 'ราคา/หน่วยรับ', 'ใช้ในเมนู'], pill: 'สถานะ', fields: 'table' }],
   'bomcenter|issue': [{ sel: '#bmcIssList table', title: 'สาขา', sub: ['งวด'], keyCols: ['มูลค่าตัดเบิก', 'ไม่มีราคา'], pill: 'สถานะ' }],
   feedback: [
