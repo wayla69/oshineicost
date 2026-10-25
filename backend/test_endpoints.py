@@ -535,60 +535,31 @@ def test_gp_identical_across_tabs(client, params):
         assert close(gp, rev - cogs), f"{name}: gp {gp} != rev-cogs {rev - cogs}"
 
 
-# ── Menu Action Board ──────────────────────────────────────────────────────
-_ACTION_BUCKETS = ("feature", "market", "fix_margin", "review_cut", "needs_cost")
-
-
-def test_action_board_buckets_partition_and_shape(client):
+# ── ปรับเมนู / โอกาสเมนู (DV7: the buffet cost per head on the top bar's period; numbers in test_menu_board.py) ──────────
+def test_action_board_shape_follows_the_top_bar(client):
     d = client.get("/api/menu/action-board").json()
-    assert set(d["buckets"]) == set(_ACTION_BUCKETS)
-    assert d["counts"] == {k: len(v) for k, v in d["buckets"].items()}
-    # Every classified dish lands in EXACTLY one bucket; counts sum to total placed.
-    placed = sum(d["counts"].values())
-    assert placed == d["total_skus"], f"placed {placed} != total_skus {d['total_skus']}"
-    # No dish appears in two buckets.
-    seen = {}
-    for bucket, rows in d["buckets"].items():
+    assert set(d["buffet"]["buckets"]) == {"price", "eat", "down"}
+    assert d["buffet"]["counts"] == {k: len(v) for k, v in d["buffet"]["buckets"].items()}
+    assert d["period"]["kind"] == "month" and d["headline"]["customers"] > 0
+    seen = set()
+    for k, rows in d["buffet"]["buckets"].items():
         for r in rows:
-            assert r["sku_code"] not in seen, f"{r['sku_code']} in {bucket} and {seen.get(r['sku_code'])}"
-            seen[r["sku_code"]] = bucket
-            assert r["action"] == bucket
-            assert r["reason"], "every action row carries a human reason"
-    # review_cut never holds a still-healthy (non-declining/dead) dish.
-    assert all(r["stage"] in ("declining", "dead") for r in d["buckets"]["review_cut"])
+            assert r["name"] not in seen, r["name"]                 # one row per dish, in one list
+            seen.add(r["name"])
+            assert (r["impact"] < 0) == (k == "down")
+    for r in d["alc"]["rows"]:
+        assert r["gp"] == round(r["revenue"] - r["cost"], 2)
+    b = client.get("/api/menu/action-board", params={"branch": "BranchA"}).json()
+    assert b["branch"] == "BranchA" and b["headline"]["customers"] < d["headline"]["customers"]
 
 
-def test_action_board_quadrants_match_engineering(client):
-    """Cross-check: the board reuses _menu_engineering_compute, so every dish's
-    quadrant MUST equal the Menu Engineering tab's — guards against drift."""
-    eng = client.get("/api/menu/engineering").json()
-    eng_quad = {i["sku_code"]: i["quadrant"] for i in eng["items"] if i.get("quadrant")}
-    board = client.get("/api/menu/action-board").json()
-    board_quad = {}
-    for rows in board["buckets"].values():
-        for r in rows:
-            if r.get("quadrant"):
-                board_quad[r["sku_code"]] = r["quadrant"]
-    assert board_quad, "no costed/quadranted dishes in fixture"
-    for code, q in eng_quad.items():
-        assert board_quad.get(code) == q, f"{code}: board {board_quad.get(code)} != engineering {q}"
-
-
-# ── Menu Opportunities ─────────────────────────────────────────────────────
-def test_opportunities_shape_and_no_cost_leak(client):
+def test_opportunities_shape_without_fact_tables(client):
     d = client.get("/api/menu/opportunities").json()
-    assert set(("cross_branch_gaps", "category_whitespace", "revive")) <= set(d)
-    assert all(isinstance(d[k], list) for k in ("cross_branch_gaps", "category_whitespace", "revive"))
-    # RBAC contract: this endpoint is menu.analysis-gated, so NO COGS/margin fields
-    # may leak into any row (those belong to cost.analysis).
-    forbidden = {"cogs", "margin", "margin_pct", "margin_per_unit", "unit_cost"}
-    for k in ("cross_branch_gaps", "category_whitespace", "revive"):
-        for row in d[k]:
-            assert not (forbidden & set(row)), f"cost field leaked into {k}: {row}"
-    # whitespace rows are labelled and carry per-SKU demand metrics
+    assert {"buffet_over", "alc_gaps", "revive", "category_whitespace", "months", "period"} <= set(d)
+    # the fixture has no per-tier fact tables: the comparison is per customer of the branch, and says so
+    assert d["buffet_over"]["basis"] == "all" and d["buffet_over"]["basis_note"]
     for w in d["category_whitespace"]:
-        assert w.get("label") in ("expand", "trim", "watch")
-        assert "revenue_per_sku" in w and "n_skus" in w
+        assert w.get("label") in ("expand", "trim", "watch") and "revenue_per_sku" in w and "n_skus" in w
 
 
 # ── AI idea generator (fallback path — tests never hit the real API) ─────────
