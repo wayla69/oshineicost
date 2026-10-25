@@ -1038,6 +1038,8 @@ function stripBranchPickers() {
     g.replaceWith(h);
   }
   document.getElementById('msBranch')?.remove();                  // the owner's phone summary picker
+  document.getElementById('gpBranchChip')?.remove();              // the phone's branch chip by the page title (and so its sheet)
+  document.getElementById('phBranchSheet')?.remove();
   const nm = document.getElementById('brnBranchName');
   if (nm && !nm.textContent) nm.textContent = name;
 }
@@ -2946,6 +2948,22 @@ function periodChipRole() {
   if (on) { el.setAttribute('role', 'button'); el.tabIndex = 0; el.setAttribute('aria-haspopup', 'dialog'); el.setAttribute('aria-label', `ช่วงเวลา ${el.title} · แตะเพื่อเปลี่ยน`); }
   else ['role', 'tabindex', 'aria-haspopup', 'aria-label'].forEach(a => el.removeAttribute(a));
 }
+// Owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): beside the range chip, a phone shows the branch of the page as a one-line chip
+// ("ทุกสาขา ▾" / "นครปฐม ▾", ellipsis) that opens the top bar's branch filter in a sheet (phBranchOpen, js/09c-mobile.js). The chip only
+// READS #selBranch - the one branch state; a pinned login (PR-K) never gets it: stripBranchPickers takes it out of the DOM.
+function branchChipRender() {
+  const el = document.getElementById('gpBranchChip'); if (!el) return;
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch'));
+  const ok = typeof phOn === 'function' && phOn() && !isPinnedSession() && !!sel && sel.tagName === 'SELECT';
+  el.hidden = !ok;
+  if (!ok) return;
+  const v = sel.value, g = getGroup();
+  const name = v || (g === 'master' ? 'สาขาหลักทั้งหมด' : g === 'franchise' ? 'แฟรนไชส์ทั้งหมด' : 'ทุกสาขา');
+  const l = el.querySelector('.gb-l'); if (l) l.textContent = name;
+  el.classList.toggle('gb-on', !!v);
+  el.title = `สาขา: ${name}`;
+  el.setAttribute('aria-label', `สาขา ${name} · แตะเพื่อเปลี่ยน`);
+}
 function periodChipShort(r) { return r && r.label_th ? String(r.label_th).replace(/\b25(\d\d)\b/g, '$1') : ''; }
 function periodChip(r, fromServer) {
   const el = document.getElementById('gpRangeChip');
@@ -3479,7 +3497,7 @@ async function onGroupChange() {
   const sel = document.getElementById('selBranch');
   const prev = sel.value;
   sel.innerHTML = '<option value="">ทุกสาขา</option>' +
-    data.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+    data.map(b => `<option value="${esc(b.name)}" data-type="${esc(b.branch_type || '')}">${esc(b.name)}</option>`).join('');
   // keep existing branch if still valid; else reset
   sel.value = data.some(b => b.name === prev) ? prev : '';
   onFilterChange();
@@ -3643,6 +3661,7 @@ function switchTab(name, direct) {
   const hidePeriod = (name === 'home' || name === 'mgtreport');
   document.getElementById('gPeriod')?.classList.toggle('invisible', hidePeriod);
   gPeriodForTab(name);                                             // PR-PP2: the kinds of this page; the range chip
+  branchChipRender();                                              // the phone's branch chip (owner 2026-10-25)
   const _gc = document.getElementById('gpChart');                 // ช่วงกราฟ: only the page whose trend chart reads it (PR-PP1)
   if (_gc) _gc.hidden = name !== 'overall';
   // Pages with their own branch / month controls (TABS[].ownFilters) get no chain filters at all,

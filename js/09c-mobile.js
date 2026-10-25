@@ -80,11 +80,11 @@ async function phBoot() {
 function phOpenFranchise() { _phDept = ''; return phOpenPage(() => switchTab('franchise')); }
 // the width crossed 700 px (a turned phone, a dragged window): the shell comes or goes
 function phViewportChanged() {
-  if (_phoneApp()) { if (!phOn()) { phBoot(); periodChipRole(); } return; }
+  if (_phoneApp()) { if (!phOn()) { phBoot(); periodChipRole(); branchChipRender(); } return; }
   if (!phOn()) return;
-  phPeriodClose();
+  phPeriodClose(); phBranchClose();
   document.body.classList.remove('ph-on', 'ph-home');
-  periodChipRole();
+  periodChipRole(); branchChipRender();
   phNavRender();
   if (!_desktopBooted) ensureDesktopBooted(); else if (activeTab === 'launcher' || !activeTab) switchTab(_landingTab());
 }
@@ -100,7 +100,7 @@ function _phSetView(v) {
   cl.toggle('ph-home', _PH_HOME_VIEWS.includes(v));
   if (v === 'summary') cl.remove('force-desktop'); else if (v === 'page') cl.add('force-desktop');
   if (v !== 'summary') { try { msCloseSheet(); } catch (e) { /* the sheet is not open */ } }
-  phPeriodClose();
+  phPeriodClose(); phBranchClose();
   if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
   _PH_HOME_VIEWS.forEach(x => { const el = document.getElementById('phv-' + x); if (el) el.hidden = x !== v; });
   phNavRender();
@@ -506,6 +506,7 @@ function _phpEnsure() {
 function phPeriodOpen() {
   const chip = document.getElementById('gpRangeChip'), gp = document.getElementById('gPeriod');
   if (!phOn() || !gp || !chip || chip.hidden) return;
+  phBranchClose();
   const sh = _phpEnsure(), slot = document.getElementById('phpSlot');
   if (!slot) return;
   if (!_phpHome) { _phpHome = document.createComment('gPeriod'); gp.parentNode.insertBefore(_phpHome, gp); }
@@ -527,6 +528,90 @@ function phPeriodClose() {
   _phpBack = null;
 }
 function phPeriodChipKey(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); phPeriodOpen(); } }
+
+// ════════════════════════════════════════════════════════════════
+// THE BRANCH SHEET (owner 2026-10-25: "หน้านี้อยากให้ filter รายสาขาได้ด้วย")
+// ════════════════════════════════════════════════════════════════
+// The branch chip by the page title (#gpBranchChip, "ทุกสาขา ▾", branchChipRender in js/01-core.js) opens a bottom sheet over the top
+// bar's own branch filter: a search box and the options of #selBranch (by group, สาขาหลัก / แฟรนไชส์, when both are there). Picking one
+// sets #selBranch and fires its change event - the same onFilterChange() the top bar runs, so the page reloads with branch= exactly as
+// from the top bar. The sheet keeps no branch of its own (the list is drawn from #selBranch each time). A pinned login (PR-K) has no
+// chip and no sheet (stripBranchPickers). Closes on ✕, the backdrop, Esc, a swipe down, a pick, leaving the page or the phone width.
+let _phbBack = null;
+function _phbEnsure() {
+  let sh = document.getElementById('phBranchSheet');
+  if (sh) return sh;
+  sh = document.createElement('div');
+  sh.id = 'phBranchSheet'; sh.className = 'php-back'; sh.hidden = true;
+  sh.innerHTML = `<div class="php-box" role="dialog" aria-modal="true" aria-labelledby="phbTitle">
+      <div class="php-grip" aria-hidden="true"></div>
+      <div class="php-head"><div class="php-ht"><p id="phbTitle" class="php-title">สาขา</p><p id="phbCur" class="php-range"></p></div>
+        <button type="button" class="php-x" onclick="phBranchClose()" aria-label="ปิด">✕</button></div>
+      <label for="phbSearch" class="sr-only">ค้นหาสาขา</label>
+      <input id="phbSearch" class="phb-search" type="search" placeholder="ค้นหาสาขา" autocomplete="off" oninput="_phbDraw()">
+      <div id="phbList" class="phb-list" role="radiogroup" aria-labelledby="phbTitle"></div>
+    </div>`;
+  sh.addEventListener('click', e => {
+    if (e.target === sh) { phBranchClose(); return; }
+    const b = e.target.closest && e.target.closest('.phb-item');
+    if (b) phBranchPick(b.getAttribute('data-v') || '');
+  });
+  sh.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); phBranchClose(); } });
+  let y0 = null;
+  sh.addEventListener('touchstart', e => { y0 = e.target.closest && e.target.closest('input, .phb-list') ? null : e.touches[0].clientY; }, { passive: true });
+  sh.addEventListener('touchend', e => { if (y0 != null && e.changedTouches[0].clientY - y0 > 80) phBranchClose(); y0 = null; }, { passive: true });
+  document.body.appendChild(sh);
+  return sh;
+}
+// the list: ทุกสาขา first, then the branches (by group when the list holds both), filtered by the search text
+function _phbDraw() {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch')), list = document.getElementById('phbList');
+  if (!sel || sel.tagName !== 'SELECT' || !list) return;
+  const inp = /** @type {HTMLInputElement|null} */ (document.getElementById('phbSearch'));
+  const norm = s => (typeof pgNorm === 'function' ? pgNorm(s) : String(s || '').toLowerCase().replace(/\s+/g, ''));
+  const q = norm(inp ? inp.value : ''), cur = sel.value;
+  const opts = [...sel.options], all = opts.find(o => !o.value), rows = opts.filter(o => o.value && (!q || norm(o.value).includes(q)));
+  const item = (v, label) => `<button type="button" class="phb-item" role="radio" aria-checked="${v === cur}" data-v="${esc(v)}">${esc(label)}</button>`;
+  const types = new Set(opts.filter(o => o.value).map(o => o.dataset.type || 'master'));
+  let html = !q && all ? item('', all.textContent || 'ทุกสาขา') : '';
+  if (types.size > 1) {
+    [['master', 'สาขาหลัก'], ['franchise', 'แฟรนไชส์']].forEach(([t, h]) => {
+      const g = rows.filter(o => (o.dataset.type || 'master') === t);
+      if (g.length) html += `<p class="phb-gh">${h}</p>` + g.map(o => item(o.value, o.textContent || o.value)).join('');
+    });
+  } else html += rows.map(o => item(o.value, o.textContent || o.value)).join('');
+  list.innerHTML = html || '<p class="phb-empty">ไม่พบสาขาที่ค้นหา</p>';
+}
+function phBranchOpen() {
+  const chip = document.getElementById('gpBranchChip'), sel = document.getElementById('selBranch');
+  if (!phOn() || isPinnedSession() || !chip || chip.hidden || !sel || sel.tagName !== 'SELECT') return;
+  phPeriodClose();
+  const sh = _phbEnsure();
+  const inp = /** @type {HTMLInputElement|null} */ (document.getElementById('phbSearch')); if (inp) inp.value = '';
+  const cur = document.getElementById('phbCur'); if (cur) cur.textContent = (chip.title || '').replace(/^สาขา: /, 'ตอนนี้: ');
+  _phbDraw();
+  _phbBack = document.activeElement;
+  sh.hidden = false; document.body.classList.add('php-open');
+  chip.setAttribute('aria-expanded', 'true');
+  const on = sh.querySelector('.phb-item[aria-checked="true"]') || sh.querySelector('.phb-item');
+  try { if (on) /** @type {HTMLElement} */ (on).focus({ preventScroll: true }); } catch (e) { /* no focus */ }
+}
+function phBranchClose() {
+  const sh = document.getElementById('phBranchSheet');
+  if (!sh || sh.hidden) return;
+  sh.hidden = true; document.body.classList.remove('php-open');
+  const chip = document.getElementById('gpBranchChip'); if (chip) chip.setAttribute('aria-expanded', 'false');
+  try { if (_phbBack && _phbBack.isConnected) _phbBack.focus({ preventScroll: true }); } catch (e) { /* no focus */ }
+  _phbBack = null;
+}
+// a pick: the top bar's own select takes it and runs its own change handler (onFilterChange), as a tap there would
+function phBranchPick(v) {
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch'));
+  phBranchClose();
+  if (!sel || sel.tagName !== 'SELECT' || ![...sel.options].some(o => o.value === v) || sel.value === v) return;
+  sel.value = v;
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
 
 // ════════════════════════════════════════════════════════════════
 // PHONE DISPLAY MODES (PR-MA, 2026-10-24)

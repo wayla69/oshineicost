@@ -1463,7 +1463,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .top-bar .tb-fold { display: inline-flex; align-self: flex-start; margin-left: auto; }
   .topbar-actions { flex-basis: 100%; }
   body.role-branch .top-bar .tb-fold, body.role-franchise .top-bar .tb-fold { display: none; }
-  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(#gpRangeChip),
+  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(#gpRangeChip):not(#gpBranchChip),
   body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-actions,
   body.tb-folded:not(.role-branch):not(.role-franchise) #presetBar { display: none !important; }
   /* a page that blanks a control (visibility, switchTab) must not hold an empty row here */
@@ -2579,6 +2579,26 @@ body.ph-on .gp-range-chip .gp-rc-l { display: none; }
 body.ph-on .gp-range-chip .gp-rc-s { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body.ph-on .gp-range-chip .gp-rc-v { display: inline; flex: 0 0 auto; font-size: 12px; }
 body.ph-on .gp-range-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* owner 2026-10-25 · the branch chip beside it (a phone only): "ทุกสาขา ▾" one line, ellipsis; 28 px drawn, 44 px to tap; opens the branch sheet */
+.gp-branch-chip { display: none; }
+body.ph-on .gp-branch-chip:not([hidden]) { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important;
+  min-width: 0 !important; max-width: 30vw; padding: 0 10px; border-radius: 999px; border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
+  font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer; }
+body.ph-on .gp-branch-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+body.ph-on .gp-branch-chip .gb-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.ph-on .gp-branch-chip .gb-v { flex: 0 0 auto; }
+body.ph-on .gp-branch-chip.gb-on { background: var(--accent); color: var(--on-accent, #fff); }
+body.ph-on .gp-branch-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* the branch sheet: a search box and the list of the top bar's #selBranch options, by group (สาขาหลัก / แฟรนไชส์) */
+.phb-search { display: block; width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-control, var(--border)); border-radius: var(--r-md);
+  background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 15px; }
+.phb-list { margin-top: 10px; }
+.phb-gh { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.phb-item { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--border);
+  background: transparent; color: var(--text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.phb-item[aria-checked="true"] { font-weight: 700; color: var(--accent); }
+.phb-item[aria-checked="true"]::after { content: '✓'; font-size: 16px; }
+.phb-empty { padding: 12px; font-size: 14px; color: var(--text-secondary); }
 /* the sheet: the top bar's #gPeriod moved in while open, laid out as stacked rows (kinds, the stepper, จาก–ถึง) */
 .php-back { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 23, 42, .45); }
 .php-back[hidden] { display: none; }
@@ -3320,6 +3340,10 @@ body.php-open { overflow: hidden; }
       <!-- owner 2026-10-25: on a phone the chip is a one-line button that opens this top bar's period control in a sheet (phPeriodOpen) -->
       <span id="gpRangeChip" class="gp-range-chip flex-shrink-0" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
         onkeydown="if (typeof phPeriodChipKey === 'function') phPeriodChipKey(event)"></span>
+      <!-- owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): a phone only - the branch of this page ("ทุกสาขา ▾"), opens the top bar's
+           branch filter (#selBranch) in a sheet (phBranchOpen, js/09c-mobile.js). A pinned login never gets it (stripBranchPickers). -->
+      <button id="gpBranchChip" type="button" class="gp-branch-chip flex-shrink-0" hidden onclick="if (typeof phBranchOpen === 'function') phBranchOpen()"
+        aria-haspopup="dialog" aria-expanded="false"><span class="gb-l"></span><span class="gb-v" aria-hidden="true">▾</span></button>
       <select id="selBranch" onchange="onFilterChange()" aria-label="เลือกสาขา — กรองข้อมูลทุกหน้า" title="เลือกสาขา (ทุกหน้าจะกรองตามนี้)"
         style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:160px;font-weight:600">
         <option value="">ทุกสาขา</option>

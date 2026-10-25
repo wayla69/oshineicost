@@ -448,11 +448,13 @@ async function loadBranches() {
     data.forEach(b => {
       const opt = document.createElement('option');
       opt.value = b.name; opt.textContent = b.name;
+      opt.dataset.type = b.branch_type || '';        // สาขาหลัก / แฟรนไชส์: the phone's branch sheet groups by it
       sel.appendChild(opt);
     });
     // Restore previous selection if still valid; otherwise show all branches
     if (prev && data.some(b => b.name === prev)) sel.value = prev;
     else sel.value = '';
+    branchChipRender();
   } catch(err) {
     console.warn('loadBranches failed:', err);
   }
@@ -583,6 +585,7 @@ function fmtPeriod(period) {
 
 async function onFilterChange() {
   Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]); // bust cache on filter change
+  branchChipRender();                                            // the phone's branch chip shows the new branch at once
   await loadMonths();
   loadActiveTab();
 }
