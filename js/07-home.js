@@ -611,30 +611,6 @@ function renderHomeTrend7(sd) {
   });
 }
 
-// ── DV2 (phone table review 2026-10-25) · a ranked list shows its first rows (and, for a two-sided list, its last rows); the rest are
-// behind "ดูทั้งหมด (N)". The rows beyond the cap carry `hidden` + data-dv-more="<key>", so the phone cards (which skip hidden rows) follow;
-// the button toggles every row of its key. dvMoreHidden(i, n, top, bottom): true when row i of n is folded.
-function dvMoreHidden(i, n, top, bottom) { return n > top + (bottom || 0) && i >= top && i < n - (bottom || 0); }
-function dvMoreAttr(key, i, n, top, bottom) { return dvMoreHidden(i, n, top, bottom) ? ` hidden data-dv-more="${esc(key)}"` : ''; }
-function dvMoreBtn(key, n, top, bottom) {
-  return n > top + (bottom || 0)
-    ? `<div class="dv-more-wrap"><button type="button" class="shm-showall dv-more" data-dv-for="${esc(key)}" data-n="${n}" aria-expanded="false" onclick="dvMoreToggle(this)">ดูทั้งหมด (${fmtN(n)})</button></div>` : '';
-}
-function dvMoreToggle(btn) {
-  const key = btn.getAttribute('data-dv-for'), open = btn.getAttribute('aria-expanded') !== 'true';
-  document.querySelectorAll(`[data-dv-more="${CSS.escape(key)}"]`).forEach(r => { /** @type {HTMLElement} */ (r).hidden = !open; });
-  btn.setAttribute('aria-expanded', String(open));
-  btn.textContent = open ? 'ย่อ' : `ดูทั้งหมด (${fmtN(+btn.getAttribute('data-n'))})`;
-}
-// an editor on a phone (.desk-only, index.html): "แสดงบนโทรศัพท์" shows it for this visit
-function deskShow(btn) {
-  const note = btn.closest('.desk-note'); if (!note) return;
-  note.classList.add('desk-force');
-  const ed = note.nextElementSibling; if (ed && ed.classList.contains('desk-only')) ed.classList.add('desk-force');
-}
-// a signed baht figure: +฿193.0K / −฿537.0K
-function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
-
 // ── Branch scorecard for Home (yesterday performance, richer than a bar) ──
 // DV2: ranked by the baht below the branch's own normal (the trailing 7-day average), most below first; "ต่างจากปกติ" is column 2 with the %
 // under it; the 5 lowest and the 5 highest show, the rest behind "ดูทั้งหมด"; the top bar's branch narrows the list.
