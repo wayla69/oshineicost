@@ -80,9 +80,11 @@ async function phBoot() {
 function phOpenFranchise() { _phDept = ''; return phOpenPage(() => switchTab('franchise')); }
 // the width crossed 700 px (a turned phone, a dragged window): the shell comes or goes
 function phViewportChanged() {
-  if (_phoneApp()) { if (!phOn()) phBoot(); return; }
+  if (_phoneApp()) { if (!phOn()) { phBoot(); periodChipRole(); } return; }
   if (!phOn()) return;
+  phPeriodClose();
   document.body.classList.remove('ph-on', 'ph-home');
+  periodChipRole();
   phNavRender();
   if (!_desktopBooted) ensureDesktopBooted(); else if (activeTab === 'launcher' || !activeTab) switchTab(_landingTab());
 }
@@ -98,6 +100,7 @@ function _phSetView(v) {
   cl.toggle('ph-home', _PH_HOME_VIEWS.includes(v));
   if (v === 'summary') cl.remove('force-desktop'); else if (v === 'page') cl.add('force-desktop');
   if (v !== 'summary') { try { msCloseSheet(); } catch (e) { /* the sheet is not open */ } }
+  phPeriodClose();
   if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
   _PH_HOME_VIEWS.forEach(x => { const el = document.getElementById('phv-' + x); if (el) el.hidden = x !== v; });
   phNavRender();
@@ -470,6 +473,60 @@ function phUnlockWrites() { unlockWrites().then(phMeRender).catch(() => {}); }
     y0 = null; dist = 0; pulling = false; ind.classList.remove('ready');
   }, { passive: true });
 })();
+
+// ════════════════════════════════════════════════════════════════
+// THE PERIOD SHEET (owner 2026-10-25: "ทำให้เลือกช่วงเวลาได้ด้วยนะครับ")
+// ════════════════════════════════════════════════════════════════
+// On a phone the top bar's period control sits in the folded tools. The range chip by the page title (#gpRangeChip, a one-line
+// button here: "1–24 ต.ค. 69 ▾") opens a bottom sheet that HOLDS the top bar's own control: #gPeriod is moved into the sheet while it
+// is open and put back where it was when it closes - the same buttons, the same state (_gp), the same gPeriod* handlers, so a page
+// still has ONE period control (backend/test_period_one_control.py). Every page that follows the period (TABS[tab].follow.period) has
+// the chip, so this works on all of them. Closes on ✕ / เสร็จ, the backdrop, Esc, a swipe down, leaving the page or the phone width.
+let _phpHome = null, _phpBack = null;
+function _phpEnsure() {
+  let sh = document.getElementById('phPeriodSheet');
+  if (sh) return sh;
+  sh = document.createElement('div');
+  sh.id = 'phPeriodSheet'; sh.className = 'php-back'; sh.hidden = true;
+  sh.innerHTML = `<div class="php-box" role="dialog" aria-modal="true" aria-labelledby="phpTitle">
+      <div class="php-grip" aria-hidden="true"></div>
+      <div class="php-head"><div class="php-ht"><p id="phpTitle" class="php-title">ช่วงเวลา</p><p id="phpRange" class="php-range"></p></div>
+        <button type="button" class="php-x" onclick="phPeriodClose()" aria-label="ปิด">✕</button></div>
+      <div id="phpSlot" class="php-slot"></div>
+      <button type="button" class="php-done" onclick="phPeriodClose()">เสร็จ</button>
+    </div>`;
+  sh.addEventListener('click', e => { if (e.target === sh) phPeriodClose(); });
+  sh.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); phPeriodClose(); } });
+  let y0 = null;
+  sh.addEventListener('touchstart', e => { y0 = e.target.closest && e.target.closest('input, select') ? null : e.touches[0].clientY; }, { passive: true });
+  sh.addEventListener('touchend', e => { if (y0 != null && e.changedTouches[0].clientY - y0 > 80) phPeriodClose(); y0 = null; }, { passive: true });
+  document.body.appendChild(sh);
+  return sh;
+}
+function phPeriodOpen() {
+  const chip = document.getElementById('gpRangeChip'), gp = document.getElementById('gPeriod');
+  if (!phOn() || !gp || !chip || chip.hidden) return;
+  const sh = _phpEnsure(), slot = document.getElementById('phpSlot');
+  if (!slot) return;
+  if (!_phpHome) { _phpHome = document.createComment('gPeriod'); gp.parentNode.insertBefore(_phpHome, gp); }
+  slot.appendChild(gp);
+  const rg = document.getElementById('phpRange'); if (rg) rg.textContent = chip.title || '';
+  _phpBack = document.activeElement;
+  sh.hidden = false; document.body.classList.add('php-open');
+  chip.setAttribute('aria-expanded', 'true');
+  const on = gp.querySelector('.gp-kinds .gran-active') || gp.querySelector('button:not([hidden])');
+  try { if (on) /** @type {HTMLElement} */ (on).focus({ preventScroll: true }); } catch (e) { /* no focus */ }
+}
+function phPeriodClose() {
+  const sh = document.getElementById('phPeriodSheet'), gp = document.getElementById('gPeriod');
+  if (_phpHome && gp) { _phpHome.parentNode.insertBefore(gp, _phpHome); _phpHome.remove(); _phpHome = null; }
+  if (!sh || sh.hidden) return;
+  sh.hidden = true; document.body.classList.remove('php-open');
+  const chip = document.getElementById('gpRangeChip'); if (chip) chip.setAttribute('aria-expanded', 'false');
+  try { if (_phpBack && _phpBack.isConnected) _phpBack.focus({ preventScroll: true }); } catch (e) { /* no focus */ }
+  _phpBack = null;
+}
+function phPeriodChipKey(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); phPeriodOpen(); } }
 
 // ════════════════════════════════════════════════════════════════
 // PHONE DISPLAY MODES (PR-MA, 2026-10-24)

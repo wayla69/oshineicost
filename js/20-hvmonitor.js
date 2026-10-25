@@ -56,6 +56,14 @@ function hvmRenderChips() {
   const el = document.getElementById('hvmChips'); if (!el) return;
   const opts = [['all', 'ทั้งหมด']].concat(_hvmGroups().map(g => [g.slug, g.label]));
   el.innerHTML = opts.map(([k, l]) => `<button type="button" class="gran-btn${_hvm.slug === k ? ' gran-active' : ''}" data-g="${esc(k)}" aria-pressed="${_hvm.slug === k}" onclick="hvmSetGroup('${esc(k)}')">${esc(l)}</button>`).join('');
+  hvChipsInView(el);
+}
+// a phone scrolls the chip row sideways (one row): keep the chosen chip in view
+function hvChipsInView(track) {
+  const sc = track && track.parentElement, on = track && track.querySelector('.gran-active');
+  if (!sc || !on || sc.scrollWidth <= sc.clientWidth + 1) return;
+  const l = /** @type {HTMLElement} */ (on).offsetLeft - track.offsetLeft;
+  if (l < sc.scrollLeft || l + /** @type {HTMLElement} */ (on).offsetWidth > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = Math.max(0, l - 8);
 }
 
 function hvmRender() {

@@ -293,6 +293,7 @@ MODULE_RULES = [
     ("GET", "/api/sales/top_ordered",        {"menu.analysis", "cost.analysis"}),
     ("GET", "/api/sales/menu-compare",       {"menu.analysis"}),
     ("GET", "/api/sales/menu-spike",         {"menu.analysis", "customer.buffet"}),
+    ("GET", "/api/sales/ingredient-groups-plates", {"menu.analysis", "customer.buffet"}),   # the card's plates section: no cost
     ("GET", "/api/analysis/affinity",        {"menu.analysis"}),
     ("GET", "/api/analysis/persona",         {"menu.analysis", "customer.buffet"}),
     # ── writes (also write-token gated in main.py — defense in depth) ───────

@@ -322,6 +322,41 @@ def ingredient_groups_cost(kind: str = Query("month"), pick: Optional[str] = Que
         return IG.compute(con, w, branch, group)
 
 
+_SPIKE_KIND = {"day": "day", "week": "week", "mtd": "month", "month": "month", "range": "range"}
+
+
+@router.get("/api/sales/ingredient-groups-plates")
+@ttl_cache
+def ingredient_groups_plates(period: str = Query("day"), date: Optional[str] = Query(None),
+                             date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                             base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None),
+                             branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """วัตถุดิบมูลค่าสูง · จำนวนจาน (owner 2026-10-25): the plates of the 8 ingredient groups (backend/ingredient_groups.py - the same
+    dishes as /api/cost/ingredient-groups) per branch and the chain, plates per head, customers, and why the plates moved (ลูกค้า ·
+    กินต่อหัว, LMDI, in plates). The menu-spike card's period: period = day | week | mtd | range (date = the focus day; date_from /
+    date_to for range), compared with the period before to date (periods.windows) or with base_from / base_to (the card's เทียบกับ).
+    No cost is read or returned, so it has the menu-spike card's gate (auth.MODULE_RULES), not a cost one."""
+    import ingredient_groups as IG
+    k = _SPIKE_KIND.get(period)
+    if not k:
+        raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
+    if k == "range" and not (date_from and date_to):
+        raise HTTPException(400, "ช่วงที่กำหนดเองต้องระบุทั้งวันเริ่มต้น (date_from) และวันสิ้นสุด (date_to)")
+    where, params = _scope(branch, group)
+    with get_db() as con:
+        w = _win(con, k, date, date_from, date_to, where, params)
+        if not w:
+            return {"period": None, "base": None, "groups": [{"slug": s, "label": IG.LABELS[s]} for s in IG.SLUGS],
+                    "chain": None, "branches": [], "reasons": {}}
+        base = None
+        if base_from or base_to:
+            from routers.sales import _spike_base
+            bs, be = _spike_base(base_from, base_to, _dt.date.fromisoformat(w["cur"][0][:10]),
+                                 _dt.date.fromisoformat(w["anchor"][:10]))
+            base = (bs.isoformat(), be.isoformat())
+        return IG.compute_plates(con, w, branch, group, base=base)
+
+
 @router.get("/api/cost/ingredient-groups/menus")
 @ttl_cache
 def ingredient_groups_menus(branch: Optional[str] = Query(None), slug: str = Query(...), kind: str = Query("month"),

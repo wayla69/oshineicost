@@ -54,6 +54,12 @@ pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the �
   anchor. Through PP1/PP2 it was `'year'` so that no page still reading the month fields shrank on deploy; with PP3 every sales and
   cost page reads the bar. A device that chose a kind keeps it.
 - Phone: one sideways-scrolling row inside the folded tools, the period (stepper) first, 44 px targets.
+- Phone, from the page (owner 2026-10-25, "ทำให้เลือกช่วงเวลาได้ด้วยนะครับ"): the range chip by the title is a one-line button
+  (`1–24 ต.ค. 69 ▾`, the year in two digits, ellipsis) that opens a bottom sheet (`phPeriodOpen`, js/09c-mobile.js "THE PERIOD
+  SHEET"). The sheet HOLDS the top bar's own `#gPeriod` - moved in while it is open, put back where it was on ✕ / เสร็จ / the
+  backdrop / Esc / a swipe down / leaving the page - so its kinds (the page's `follow.period.kinds`), ‹ › and จาก–ถึง are the same
+  buttons on the same state (`_gp`, `gPeriod*`): still ONE period control (`backend/test_period_one_control.py`). Every page that
+  follows the period on a phone has it; a desktop keeps the plain full-span chip.
 - API: `gPeriodGet()`, `gPeriodSet({kind, pick, from, to}, silent)`, `gPeriodResolve()` (a `periodRange` result),
   `gPeriodAnchor()`, `getPeriodKind()`; remembered on the device (`oshinei_gperiod`, `oshinei_chartwin`).
 
@@ -122,6 +128,7 @@ guard(spans, anchor, first_day, lead=('a', 'b'))    # the free compare pages: ev
 | `/api/analysis/yoy` | the month of the anchor, not finished, is month to date on both sides | no raw % when the year-ago month starts before the data |
 | `/api/analysis/health` · `/api/menu/lifecycle` | closed months only | — |
 | `/api/sales/top_ordered` · `/api/sales/dish-movers` · `/api/analysis/coupon-series` | the month in progress to date from the day tables, on the scope's last closed day | + `qty_yoy_pct` / `delta_ly_pct` / `yoy_pct` |
+| `/api/sales/ingredient-groups-plates?period=day\|week\|mtd\|range&date=&date_from=&date_to=&base_from=&base_to=` (ยอดขายรายวัน · เมนูพุ่ง card: วัตถุดิบมูลค่าสูง · จำนวนจาน, after เมนูใหม่) | the card's own chips (mtd = month), `windows` on the scope | เทียบช่วงก่อน, or base_from / base_to (the card's เทียบกับ); the 8 groups of `ingredient_groups` (same dishes, `_rows(with_cost=False)`), plates only - no cost key, the menu-spike gate (marketing sees it); plates · plates / head · customers in %, the plates change split ลูกค้า · กินต่อหัว (LMDI, two parts) |
 | `/api/buffet/child` | follows the top bar (`kind`, `pick`); it was the latest month whatever the filter | cur / prev / ly per branch and chain |
 | `/api/home/brief` (`mtd_revenue`), `/api/meta/data-window`, `/api/overall/latest-month-mtd` | end on the last closed day (the day still trading was in them) | — |
 

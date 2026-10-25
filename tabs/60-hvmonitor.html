@@ -57,15 +57,22 @@
     .hvm-mixed, .hvm-unc { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 12px; background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border); }
     .hvm-unc { color: var(--bad-ink); }
     .hvm-link { position: relative; padding: 0; border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--accent); text-decoration: underline; cursor: pointer; }
+    .hvm-chips-sc { display: contents; }
     @media (max-width: 700px) {
-      .hvm-ctl { width: 100%; row-gap: 10px; }
-      .hvm-chips .gran-btn { height: 32px; font-size: 13px; padding: 0 9px; }
+      /* owner 2026-10-25 (the 390 px screenshot: two rows of giant pills): ONE row that scrolls sideways, chips the size of the other chip
+         tracks (28 px drawn, 13 px text), CSV 32 px beside it; 44 px to tap through an ::after inside the scroller's 8 px padding */
+      .hvm-ctl { width: 100%; flex-wrap: nowrap; gap: 8px; margin-bottom: 12px; padding-top: 12px; }   /* the tap areas of the heading "?" above and the sort buttons below stay clear of the chips */
+      #hvmRangeQ:not(:empty) { margin-right: 10px; }   /* two "?" side by side: 22 px apart, their 44 px tap areas never overlap */
+      body.ph-fit #hvmRangeQ:not(:empty) { margin-right: 40px; }   /* the frame is scaled ~0.46: about the same gap on screen */
+      .hvm-chips-sc { display: block; flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 8px 0; margin: -8px 0; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+      .hvm-chips-sc::-webkit-scrollbar { display: none; }
+      .hvm-chips { flex-wrap: nowrap; max-width: none; }
+      .hvm-chips .gran-btn { flex: 0 0 auto; height: 28px; font-size: 13px; padding: 0 10px; white-space: nowrap; }
       body.ph-on .hvm-chips .gran-btn { min-height: 0 !important; min-width: 44px; }
-      body.ph-on .hvm-chips .gran-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
-      body.ph-on .hvm-chips { row-gap: 12px; }
-      .hvm-csv { height: 36px; font-size: 14px; margin-left: auto; }
+      body.ph-on .hvm-chips .gran-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+      .hvm-csv { flex: 0 0 auto; height: 32px; font-size: 13px; }
       body.ph-on .hvm-csv { min-height: 0 !important; min-width: 44px; }
-      body.ph-on .hvm-csv::after { content: ''; position: absolute; left: 0; right: 0; top: -4px; bottom: -4px; }
+      body.ph-on .hvm-csv::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
       body.ph-on .hvm-sort::after { content: ''; position: absolute; left: -4px; right: -4px; top: -12px; bottom: -12px; }
       body.ph-on .hvm-link::after { content: ''; position: absolute; left: -6px; right: -6px; top: -12px; bottom: -12px; }
       body.ph-on:not(.ph-fit) .hvm-v { font-size: 15px; }
@@ -75,7 +82,7 @@
     <div class="hvm-head">
       <h2 class="section-title mb-0">ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา <span id="hvmRangeQ"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-hvmonitor" title="คำอธิบาย">?</button></h2><template id="hlp-hvmonitor" data-title="High Value Product Monitor"><p><b>ช่วงเวลา</b> · ตามแถบด้านบน (สัปดาห์ · เดือน · ปี · กำหนดเอง) · ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบจำนวนวันเท่ากันของช่วงก่อน · ช่วงที่เทียบดูได้ที่ปุ่ม ? ข้างหัวข้อ · ไม่มีข้อมูลฐานแสดง —</p><p><b>กลุ่มวัตถุดิบ</b> · นับจากชื่อเมนู: แซลมอน (แซลมอน, แซลม่อน) · ทูน่า (ทูน่า, มากุโระ, โทโร่) · ฮามาจิ · กุ้งหวาน (กุ้งหวาน, อามะเอบิ, กุ้งแดงอาร์เจนติน่า, กุ้งอาร์เจนติน่า) · หอยเชลล์ (หอยเชลล์, โฮตาเตะ) · ปลาไหล (ปลาไหล, อูนางิ, อูนากิ) · หอยนางรม · เนื้อ (เนื้อ, วากิว, ลิ้นวัว ไม่รวมปลาเนื้อขาว เนื้อปู เนื้อปลา) · ไม่นับแพ็กเกจบุฟเฟ่ต์ · เมนูที่ชื่อตรงหลายกลุ่ม (เช่น ซาชิมิรวม) นับในทุกกลุ่มที่ตรงด้วยต้นทุนเต็มจาน และมีป้าย <b>หลายกลุ่ม</b> ในรายการเมนู</p><p><b>ต้นทุน/หัว</b> = ต้นทุนของกลุ่ม ÷ ลูกค้าทั้งหมดของสาขา · <b>จาน/หัว</b> = จานของกลุ่ม ÷ ลูกค้า · <b>ต้นทุน/จาน</b> = ต้นทุน ÷ จานที่มีต้นทุน · <b>สัดส่วนในต้นทุนอาหาร</b> = ต้นทุนของกลุ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขา · ต้นทุนต่อจานใช้ต้นทุนเดียวกับ P&amp;L และ GP (รายการต้นทุนต่อจานของเดือนนั้น) · เมนูที่ไม่มีต้นทุนนับจานแต่ไม่นับต้นทุน (ดูจำนวนในรายละเอียดของแถว)</p><p><b>ตัวแดงหนา</b> · ต้นทุน/หัวสูงกว่าทั้งเครือตั้งแต่ 20% · ▲ = เพิ่มขึ้น (ต้นทุนสูงขึ้นเป็นสีแดง) · มุมมอง <b>ทั้งหมด</b> แรเงาตามอัตราส่วนกับทั้งเครือของคอลัมน์นั้น สีแดงเข้มขึ้นเมื่อสูงกว่า สีเขียวเมื่อต่ำกว่าตั้งแต่ 10%</p><p><b>สาเหตุที่เปลี่ยน</b> · ต้นทุนของกลุ่ม = ลูกค้า × จานต่อหัว × ต้นทุนต่อจาน จึงแยกต้นทุนที่เปลี่ยนเทียบช่วงก่อนเป็นสามส่วนเป็นบาท (ลูกค้า · กินต่อหัว · ต้นทุน/จาน) ที่รวมกันเท่ากับส่วนที่เปลี่ยนพอดี ด้วยวิธีลอการิทึม (LMDI) · ในการแยกนี้นับเฉพาะจานที่มีต้นทุน · <b>สาเหตุหลัก</b> = ส่วนที่มีค่ามากที่สุด ส่วนที่เพิ่มมากที่สุดเป็นตัวแดง · ในมุมมองทั้งหมดแสดงเป็นคำสั้น ลูกค้า · กิน · ราคา</p><p>แตะแถวเพื่อดูทุกตัวเลข ช่วงนี้ · ช่วงก่อน · ปีก่อน และเมนูของกลุ่มที่สาขานั้น · CSV = ตารางที่แสดงอยู่</p></template>
       <div class="hvm-ctl ph-tz-unit">
-        <div id="hvmChips" class="hvm-chips" role="group" aria-label="วัตถุดิบ"></div>
+        <div class="hvm-chips-sc"><div id="hvmChips" class="hvm-chips" role="group" aria-label="วัตถุดิบ"></div></div>
         <button type="button" onclick="hvmExport()" class="hvm-csv">CSV</button>
       </div>
     </div>

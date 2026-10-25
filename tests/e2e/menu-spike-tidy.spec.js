@@ -332,7 +332,8 @@ for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่า
         top: (document.querySelector('.sp-sec-plates') || document.body).getBoundingClientRect().top,
         newBottom: (document.querySelector('.sp-sec-new') || document.body).getBoundingClientRect().bottom };
     });
-    expect(m.secs.length).toBe(3);
+    expect(m.secs.length).toBe(4);                    // + วัตถุดิบมูลค่าสูง · จำนวนจาน after เมนูใหม่ (owner 2026-10-25)
+    expect(m.secs[2]).toContain('sp-sec-hv');
     expect(m.last).toContain('sp-sec-plates');
     expect(m.top).toBeGreaterThanOrEqual(m.newBottom - 0.5);
     expect(m.rows).toBe(15);

@@ -2906,13 +2906,28 @@ function gPeriodForTab(tab) {
   gPeriodRender();
 }
 // the range chip beside the page title: '1–19 ต.ค. 2569 · ถึงวันที่ปิดยอดล่าสุด' (a period object with label_th / complete)
+// Owner 2026-10-25 ("ทำให้เลือกช่วงเวลาได้ด้วยนะครับ"): on a phone the chip is a one-line button ("1–24 ต.ค. 69 ▾", the year in two
+// digits) that opens the top bar's own period control in a bottom sheet (phPeriodOpen, js/09c-mobile.js) - the same #gPeriod, moved
+// into the sheet while it is open, so there is no second period state. A desktop shows the full span as before.
+// a button on a phone only (role, focus, label); a desktop keeps the plain chip
+function periodChipRole() {
+  const el = document.getElementById('gpRangeChip'); if (!el) return;
+  const on = phOn() && !!el.title;
+  if (on) { el.setAttribute('role', 'button'); el.tabIndex = 0; el.setAttribute('aria-haspopup', 'dialog'); el.setAttribute('aria-label', `ช่วงเวลา ${el.title} · แตะเพื่อเปลี่ยน`); }
+  else ['role', 'tabindex', 'aria-haspopup', 'aria-label'].forEach(a => el.removeAttribute(a));
+}
+function periodChipShort(r) { return r && r.label_th ? String(r.label_th).replace(/\b25(\d\d)\b/g, '$1') : ''; }
 function periodChip(r, fromServer) {
   const el = document.getElementById('gpRangeChip');
   if (!el) return;
   if (fromServer) _gpChipServer = true;
   const txt = (_gpChipOn && r && r.label_th) ? periodSpan(r) : '';
-  el.textContent = txt;
+  el.innerHTML = txt ? `<span class="gp-rc-l">${esc(txt)}</span><span class="gp-rc-s" aria-hidden="true">${esc(periodChipShort(r))}</span><span class="gp-rc-v" aria-hidden="true">▾</span>` : '';
+  el.title = txt;
+  periodChipRole();
   el.hidden = !txt;
+  const sh = document.getElementById('phpRange');
+  if (sh) sh.textContent = txt;
 }
 // the bar's period as the one a page asks the server for: kind + a day of it (the end of the period on screen)
 function gPeriodPick() {
@@ -3990,7 +4005,10 @@ const PAGE_CARDS = {
     { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], 'สูงกว่า', 'ต้นทุนเพิ่ม'], labels: ['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม'] },
     { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], ['ปกติ', 'ช่วงเทียบ'], 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
     { sel: '#spikePlatesTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], '+จาน', 'สูงกว่า'], labels: ['จาน', '+จาน', 'สูงกว่า'] },
-    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] }],
+    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] },
+    // owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน: one group (plates only) and the branches x groups matrix
+    { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'] },
+    { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'] }],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
@@ -4142,7 +4160,7 @@ function _updateClusterBar(name) {
     const on = t === name || (alias || []).includes(name);
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
     // the active chip wears the group colour (theme-groups.css); without that sheet the fallbacks are the old navy
-    return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+    return `<button onclick="switchTab('${t}')"${title}${on ? ' aria-current="page"' : ''} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
       ? 'background:var(--group-soft, var(--indigo));color:var(--group-ink, var(--on-indigo));border:1px solid var(--group, var(--indigo));font-weight:600'
       : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${_noEmoji(lbl)}</button>`;
   };
@@ -4152,6 +4170,9 @@ function _updateClusterBar(name) {
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--group-ink, var(--text-muted))">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
+  // the phone shell draws the bar as one sideways row (index.html): keep the open page's chip in view
+  const cur = phOn() ? /** @type {HTMLElement|null} */ (bar.querySelector('[aria-current="page"]')) : null;
+  if (cur && bar.scrollWidth > bar.clientWidth + 1) bar.scrollLeft = Math.max(0, bar.scrollLeft + cur.getBoundingClientRect().left - bar.getBoundingClientRect().left - 24);
 }
 
 // ── วัตถุดิบและใบสั่งซื้อ: the two-level bar, deep links and the shared context ──

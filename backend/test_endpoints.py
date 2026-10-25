@@ -17,6 +17,7 @@ SMOKE = [
     ("/api/sales/category", {}),
     ("/api/sales/daily", {}),
     ("/api/sales/menu-spike", {"threshold": 1.5}),
+    ("/api/sales/ingredient-groups-plates", {"period": "mtd"}),
     ("/api/sales/cost-per-head", {}),
     ("/api/analysis/anomalies", {}),
     ("/api/overall/latest-month-mtd", {}),
