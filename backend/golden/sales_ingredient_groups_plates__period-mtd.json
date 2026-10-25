@@ -1,0 +1,627 @@
+{
+ "base": {
+  "from": "2026-05-01",
+  "kind": "prev",
+  "label_th": "1–3 พ.ค. 2569",
+  "to": "2026-05-03"
+ },
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cells": {
+    "amaebi": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "beef": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "eel": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "hamachi": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "oyster": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "salmon": {
+     "cause": {
+      "customers": 0.0,
+      "main": null,
+      "plates_per_head": 0.0,
+      "total": 0.0,
+      "total_pct": 0.0
+     },
+     "change": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     },
+     "plates": 150.0,
+     "plates_per_head": 12.5,
+     "prev": {
+      "plates": 150.0,
+      "plates_per_head": 12.5
+     }
+    },
+    "scallop": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "tuna": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    }
+   },
+   "change": {
+    "customers": 0.0
+   },
+   "customers": 12,
+   "prev_customers": 12
+  },
+  {
+   "branch": "BranchB",
+   "cells": {
+    "amaebi": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "beef": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "eel": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "hamachi": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "oyster": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "salmon": {
+     "cause": {
+      "customers": 0.0,
+      "main": null,
+      "plates_per_head": 0.0,
+      "total": 0.0,
+      "total_pct": 0.0
+     },
+     "change": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     },
+     "plates": 150.0,
+     "plates_per_head": 12.5,
+     "prev": {
+      "plates": 150.0,
+      "plates_per_head": 12.5
+     }
+    },
+    "scallop": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    },
+    "tuna": {
+     "cause": {
+      "customers": null,
+      "main": null,
+      "plates_per_head": null,
+      "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+      "total": null,
+      "total_pct": null
+     },
+     "change": {
+      "plates": null,
+      "plates_per_head": null
+     },
+     "plates": 0.0,
+     "plates_per_head": 0.0,
+     "prev": {
+      "plates": 0.0,
+      "plates_per_head": 0.0
+     }
+    }
+   },
+   "change": {
+    "customers": 0.0
+   },
+   "customers": 12,
+   "prev_customers": 12
+  }
+ ],
+ "chain": {
+  "cells": {
+   "amaebi": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "beef": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "eel": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "hamachi": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "oyster": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "salmon": {
+    "cause": {
+     "customers": 0.0,
+     "main": null,
+     "plates_per_head": 0.0,
+     "total": 0.0,
+     "total_pct": 0.0
+    },
+    "change": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    },
+    "plates": 300.0,
+    "plates_per_head": 12.5,
+    "prev": {
+     "plates": 300.0,
+     "plates_per_head": 12.5
+    }
+   },
+   "scallop": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   },
+   "tuna": {
+    "cause": {
+     "customers": null,
+     "main": null,
+     "plates_per_head": null,
+     "reason": "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า",
+     "total": null,
+     "total_pct": null
+    },
+    "change": {
+     "plates": null,
+     "plates_per_head": null
+    },
+    "plates": 0.0,
+    "plates_per_head": 0.0,
+    "prev": {
+     "plates": 0.0,
+     "plates_per_head": 0.0
+    }
+   }
+  },
+  "change": {
+   "customers": 0.0
+  },
+  "customers": 24,
+  "prev_customers": 24
+ },
+ "groups": [
+  {
+   "label": "กุ้งหวาน",
+   "slug": "amaebi"
+  },
+  {
+   "label": "ทูน่า",
+   "slug": "tuna"
+  },
+  {
+   "label": "ปลาไหล",
+   "slug": "eel"
+  },
+  {
+   "label": "หอยนางรม",
+   "slug": "oyster"
+  },
+  {
+   "label": "หอยเชลล์",
+   "slug": "scallop"
+  },
+  {
+   "label": "ฮามาจิ",
+   "slug": "hamachi"
+  },
+  {
+   "label": "เนื้อ",
+   "slug": "beef"
+  },
+  {
+   "label": "แซลมอน",
+   "slug": "salmon"
+  }
+ ],
+ "latest_day": "2026-06-03",
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": false,
+  "cur": [
+   "2026-06-01",
+   "2026-06-03"
+  ],
+  "days": 3,
+  "has_prev": true,
+  "kind": "month",
+  "label_th": "1–3 มิ.ย. 2569",
+  "prev": [
+   "2026-05-01",
+   "2026-05-03"
+  ],
+  "prev_label_th": "1–3 พ.ค. 2569",
+  "reasons": {}
+ },
+ "reasons": {},
+ "weeks": [
+  {
+   "closed_to": "2026-05-10",
+   "days": 7,
+   "from": "2026-05-04",
+   "key": "2026-W19",
+   "label": "W19 · 4–10 พ.ค.",
+   "partial": false,
+   "to": "2026-05-10",
+   "week": 19,
+   "year": 2026
+  },
+  {
+   "closed_to": "2026-05-17",
+   "days": 7,
+   "from": "2026-05-11",
+   "key": "2026-W20",
+   "label": "W20 · 11–17 พ.ค.",
+   "partial": false,
+   "to": "2026-05-17",
+   "week": 20,
+   "year": 2026
+  },
+  {
+   "closed_to": "2026-05-24",
+   "days": 7,
+   "from": "2026-05-18",
+   "key": "2026-W21",
+   "label": "W21 · 18–24 พ.ค.",
+   "partial": false,
+   "to": "2026-05-24",
+   "week": 21,
+   "year": 2026
+  },
+  {
+   "closed_to": "2026-05-31",
+   "days": 7,
+   "from": "2026-05-25",
+   "key": "2026-W22",
+   "label": "W22 · 25–31 พ.ค.",
+   "partial": false,
+   "to": "2026-05-31",
+   "week": 22,
+   "year": 2026
+  },
+  {
+   "closed_to": "2026-06-03",
+   "days": 3,
+   "from": "2026-06-01",
+   "key": "2026-W23",
+   "label": "W23 · 1–3 มิ.ย. (ถึงวันที่ปิด)",
+   "partial": true,
+   "to": "2026-06-07",
+   "week": 23,
+   "year": 2026
+  }
+ ]
+}

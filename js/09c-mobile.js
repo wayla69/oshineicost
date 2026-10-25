@@ -1040,7 +1040,7 @@ function _phCardSpec(table, cfg, id) {
         sub = a ? { a: _phNorm(a.textContent), ink: a.style.color, b: _phNorm(ch.slice(1).map(x => x.textContent).join(' ')).replace(/^·\s*/, '') } : { a: '', ink: '', b: _phNorm(ls[1].textContent) };
       }
       return { l: (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]), v: _phDateTh(v), n: v ? _phNum(v) : null,
-        ink: td ? (ls[0] ? _phInk(ls[0]) : _phInk(td)) : '', sub };
+        ink: td ? (ls[0] ? _phInk(ls[0]) || td.style.color || '' : _phInk(td)) : '', sub };
     });
     let pill = null;
     const pcell = pi >= 0 ? cs[pi] : null;
