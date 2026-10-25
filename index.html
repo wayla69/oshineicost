@@ -1463,7 +1463,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .top-bar .tb-fold { display: inline-flex; align-self: flex-start; margin-left: auto; }
   .topbar-actions { flex-basis: 100%; }
   body.role-branch .top-bar .tb-fold, body.role-franchise .top-bar .tb-fold { display: none; }
-  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(#gpRangeChip):not(#gpBranchChip),
+  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(.gp-chips),
   body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-actions,
   body.tb-folded:not(.role-branch):not(.role-franchise) #presetBar { display: none !important; }
   /* a page that blanks a control (visibility, switchTab) must not hold an empty row here */
@@ -2589,10 +2589,18 @@ body.ph-on .gp-branch-chip .gb-l { min-width: 0; overflow: hidden; text-overflow
 body.ph-on .gp-branch-chip .gb-v { flex: 0 0 auto; }
 body.ph-on .gp-branch-chip.gb-on { background: var(--accent); color: var(--on-accent, #fff); }
 body.ph-on .gp-branch-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* ONE row for both chips (coordinator 2026-10-25: no third header row): each is capped at half the scope's width (less half the 6 px
-   gap) and ellipsises its own label, so the pair never wraps apart; side by side their tap areas (::after, vertical only) cannot overlap.
-   Without the branch chip (a pinned login) the period chip keeps its own width. */
-body.ph-on .topbar-scope .gp-range-chip:has(+ .gp-branch-chip:not([hidden])), body.ph-on .topbar-scope .gp-branch-chip:not([hidden]) { max-width: calc(50% - 3px); padding: 0 8px; }
+/* ONE row for both chips (coordinator 2026-10-25: no third header row, and the date must read): .gp-chips is a no-wrap row; the period
+   chip keeps its natural width ("1–19 ต.ค. 69 ▾", never cut), the branch chip takes the rest and ellipsises (branch names are the long
+   part). Side by side their tap areas (::after, vertical only) cannot overlap. A desktop never sees the row (display: contents). */
+.gp-chips { display: contents; }
+body.ph-on .gp-chips { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+body.ph-on .gp-chips .gp-range-chip { flex: 0 0 auto; max-width: none; padding: 0 8px; }
+body.ph-on .gp-chips .gp-branch-chip:not([hidden]) { flex: 0 1 auto; min-width: 0 !important; max-width: none; padding: 0 8px; }
+/* the mode button is the icon alone on a phone up to 430 px (its label stays as text for the reader, the aria-label and the title) */
+@media (max-width: 430px) {
+  body.ph-on #phModeBtn #phModeL { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  body.ph-on #phModeBtn { padding: 0; width: 44px; }
+}
 /* the branch sheet: a search box and the list of the top bar's #selBranch options, by group (สาขาหลัก / แฟรนไชส์) */
 .phb-search { display: block; width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-control, var(--border)); border-radius: var(--r-md);
   background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 15px; }
@@ -3342,12 +3350,15 @@ body.php-open { overflow: hidden; }
       <span id="dataCoverageNote" class="flex-shrink-0" style="display:none;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap" title=""></span>
       <!-- PR-PP2: the period this page shows, once (periodChip, js/01-core.js) - the top bar is the only period control -->
       <!-- owner 2026-10-25: on a phone the chip is a one-line button that opens this top bar's period control in a sheet (phPeriodOpen) -->
+      <!-- the two chips ride ONE row on a phone (.gp-chips: a no-wrap row there, display: contents on a desktop) -->
+      <span class="gp-chips">
       <span id="gpRangeChip" class="gp-range-chip flex-shrink-0" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
         onkeydown="if (typeof phPeriodChipKey === 'function') phPeriodChipKey(event)"></span>
       <!-- owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): a phone only - the branch of this page ("ทุกสาขา ▾"), opens the top bar's
            branch filter (#selBranch) in a sheet (phBranchOpen, js/09c-mobile.js). A pinned login never gets it (stripBranchPickers). -->
       <button id="gpBranchChip" type="button" class="gp-branch-chip flex-shrink-0" hidden onclick="if (typeof phBranchOpen === 'function') phBranchOpen()"
         aria-haspopup="dialog" aria-expanded="false"><span class="gb-l"></span><span class="gb-v" aria-hidden="true">▾</span></button>
+      </span>
       <select id="selBranch" onchange="onFilterChange()" aria-label="เลือกสาขา — กรองข้อมูลทุกหน้า" title="เลือกสาขา (ทุกหน้าจะกรองตามนี้)"
         style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:160px;font-weight:600">
         <option value="">ทุกสาขา</option>

@@ -88,6 +88,40 @@ const CELLS = () => {
   });
 };
 
+// is each chip's label drawn whole (no ellipsis)? The period's short label must always be; a long branch name may be cut
+const CHIPS_FULL = () => {
+  const whole = el => !!el && el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().width > 0;
+  return { period: whole(document.querySelector('#gpRangeChip .gp-rc-s')), branch: whole(document.querySelector('#gpBranchChip .gb-l')) };
+};
+
+// ── 0 · 390 and 360: the period chip reads whole beside the branch chip, on one row (the mode button is its icon alone) ──
+for (const width of [390, 360]) {
+  for (const mode of ['touch', 'fit']) {
+    test(`${width} ${mode} · the period chip reads whole on one row with the branch chip`, async ({ browser }) => {
+      test.setTimeout(120_000);
+      const { ctx, page, errors } = await open(browser, { ...PHONE, viewport: { width, height: 800 } }, { mode });
+      await expect(page.locator('#gpBranchChip')).toBeVisible();
+      const f = await page.evaluate(() => {
+        const a = document.getElementById('gpRangeChip').getBoundingClientRect(), b = document.getElementById('gpBranchChip').getBoundingClientRect();
+        const m = document.getElementById('phModeBtn').getBoundingClientRect();
+        return { same: Math.abs(a.top - b.top) < 2, apart: a.right <= b.left, right: b.right, modeW: m.width,
+          short: (document.querySelector('#gpRangeChip .gp-rc-s') || {}).textContent || '', modeTitle: document.getElementById('phModeBtn').title };
+      });
+      expect(f.same && f.apart).toBe(true);
+      expect(f.right).toBeLessThanOrEqual(width);
+      expect(f.modeW, 'the mode button is its icon alone').toBeLessThanOrEqual(46);
+      expect(f.modeTitle).toMatch(/แตะง่าย|พอดีจอ/);
+      expect(f.short).toMatch(/^\d{1,2}(–\d{1,2})? \S+ \d\d$/);
+      const full = await page.evaluate(CHIPS_FULL);
+      expect(full.period, `"${f.short}" drawn whole`).toBe(true);
+      if (width === 390) expect(full.branch, '"ทุกสาขา" drawn whole at 390').toBe(true);
+      await shot(page, `chip${width}_${mode}`);
+      expect(errors).toEqual([]);
+      await ctx.close();
+    });
+  }
+}
+
 // ── 1 · the branch chip and its sheet: 390 both modes, light and dark ──
 for (const mode of ['touch', 'fit']) {
   for (const scheme of ['light', 'dark']) {
@@ -115,6 +149,7 @@ for (const mode of ['touch', 'fit']) {
       expect(c.rspan, 'the period chip: 44 px to tap').toBeGreaterThanOrEqual(43);
       expect(c.sameRow, 'period and branch chips on ONE row (no third header row)').toBe(true);
       expect(c.apart, 'side by side, no overlap').toBe(true);
+      expect(await page.evaluate(CHIPS_FULL)).toEqual({ period: true, branch: true });   // "1–19 ต.ค. 69 ▾" and "ทุกสาขา ▾" both whole
       expect(c.fs).toBeGreaterThanOrEqual(12);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
       await shot(page, `chip_${mode}_${scheme}`);
@@ -147,6 +182,7 @@ for (const mode of ['touch', 'fit']) {
         return { same: Math.abs(a.top - b.top) < 2, apart: a.right <= b.left, right: b.right }; });
       expect(after).toMatchObject({ same: true, apart: true });          // a long branch name ellipsises, it never pushes the pair apart
       expect(after.right).toBeLessThanOrEqual(390);
+      expect((await page.evaluate(CHIPS_FULL)).period, 'the date still reads whole beside a branch name').toBe(true);
       await shot(page, `picked_${mode}_${scheme}`);
       // and back to ทุกสาขา the same way
       await chip.click();

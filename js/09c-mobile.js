@@ -690,6 +690,7 @@ function _phModeBtnSync(pg, fit) {
   b.setAttribute('aria-pressed', fit ? 'true' : 'false');
   b.setAttribute('aria-label', fit ? 'โหมดแสดงผล พอดีจอ (แตะเพื่อเปลี่ยนเป็นแตะง่าย)' : 'โหมดแสดงผล แตะง่าย (แตะเพื่อเปลี่ยนเป็นพอดีจอ)');
   if (l) l.textContent = fit ? 'พอดีจอ' : 'แตะง่าย';
+  b.title = `โหมดแสดงผล: ${fit ? 'พอดีจอ' : 'แตะง่าย'}`;    // up to 430 px the button is the icon alone (index.html): the mode reads here
   const av = document.getElementById('phTbAv'); if (av) av.textContent = _phInitial();
 }
 function _phFitOff(panel) {
