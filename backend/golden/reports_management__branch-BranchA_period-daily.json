@@ -344,6 +344,7 @@
  ],
  "selected_month": null,
  "selected_week": null,
+ "selected_year": null,
  "stock_variance": null,
  "table": {
   "available": true,
@@ -368,6 +369,7 @@
   "tables": 30
  },
  "tier": null,
+ "to_date": false,
  "trend": [
   {
    "label": "1 Jun 2026",
@@ -411,5 +413,6 @@
   }
  ],
  "weeks": [],
+ "years": [],
  "yoy_range": null
 }

@@ -3,7 +3,8 @@
 One call returns the last N closed months plus the month in progress (month-to-date).
 It adds no formula of its own: every figure must equal what /api/reports/management
 prints for the same month and scope (the one-answer-per-question rule), and the month in
-progress is compared on the report's weekday-fair baseline, never against a whole month.
+progress is compared to date - days 1..n against days 1..n of last month (PR-PP2, the one period
+pattern) - never against a whole month. The weekday-fair baseline stays on the report's §3 pace.
 
 Built relative to the real Thai today (the report anchors on SQL date('now','+7 hours'),
 which cannot be frozen), so the month in progress exists only from the 2nd of a month.
@@ -183,9 +184,13 @@ def _equal_to_report(c, **scope):
         assert m["gp_pct"] == G["gp_pct"], m["month"]
         if m["mtd"]:
             assert r["partial"] is True
-            # the month in progress: the report's weekday-fair baseline (§3), not a whole month
-            assert m["mom"]["basis"] == P["mom_basis"] == "dow"
-            assert m["mom"]["revenue"] == P["mom_pct"], m["month"]
+            # PR-PP2: the month in progress is to date on the calendar, as the report headline; the §3 pace keeps
+            # its weekday-fair baseline (P), so the two are separate figures now
+            assert m["mom"]["basis"] == H["mom_basis"] == "to_date"
+            assert P["mom_basis"] == "dow"
+            assert m["mom"]["revenue"] == H["rev_wow_pct"], m["month"]
+            assert m["mom"]["customers"] == H["cust_wow_pct"], m["month"]
+            assert m["mom"]["rev_per_head"] == H["rph_wow_pct"], m["month"]
             assert m["mom"]["range"] == r["comp_range"]
         else:
             assert m["mom"]["basis"] == "month"
@@ -225,13 +230,13 @@ def test_branch_filter_matches_the_report(mm):
 
 
 @pytest.mark.skipif(TH_TODAY.day < 2, reason="the month in progress exists only from the 2nd")
-def test_month_in_progress_is_weekday_fair_for_covers_and_spend_too(mm):
-    """Revenue, covers and spend per head all use the same baseline as the daily-sales tile."""
+def test_month_in_progress_is_to_date_for_covers_and_spend_too(mm):
+    """Revenue, covers and spend per head all use the same windows as the daily-sales tile (PR-PP2: to date)."""
     s = _series(mm)
     cur = s["months"][-1]
-    assert cur["mtd"] and cur["mom"]["basis"] == "dow"
+    assert cur["mtd"] and cur["mom"]["basis"] == "to_date"
     d = mm.get("/api/sales/daily", params={"gran": "month"}).json()
-    if d.get("mom_basis") == "dow" and d["cur_range"] == cur["range"]:
+    if d.get("mom_basis") == "to_date" and d["cur_range"] == cur["range"]:
         t = d["total"]
         assert cur["mom"]["revenue"] == t["mom_pct"]
         assert cur["mom"]["customers"] == t["cust_mom_pct"]

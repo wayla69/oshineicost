@@ -1,6 +1,6 @@
 <div id="tab-discounts" style="display:none">
-  <!-- Day/range filter — overrides global month picker for this tab only -->
-  <div class="card p-4 mb-5 flex items-center gap-3 flex-wrap">
+  <!-- PR-PP2: the old day/range filter is hidden - the top bar (สัปดาห์ · กำหนดเอง) is the page's one period control -->
+  <div class="card p-4 mb-5 flex items-center gap-3 flex-wrap hidden" aria-hidden="true">
     <span class="text-sm font-semibold" style="color:var(--text-main)">ดูช่วงวัน</span>
     <input type="date" id="disc-day-from" class="border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
            oninput="_tabLastKey.discounts=null;loadDiscountsTab()">
@@ -129,7 +129,7 @@
       <thead><tr>
         <th class="num">#</th><th>ชุดคูปอง</th><th class="num">ครั้งที่ใช้</th>
         <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th>
-        <th class="num">เทียบเดือนก่อน</th><th>สัดส่วน</th><th></th>
+        <th class="num">เทียบช่วงก่อน · ปีก่อน</th><th>สัดส่วน</th><th></th>
       </tr></thead>
       <tbody id="coupon-series-body"></tbody>
     </table></div>

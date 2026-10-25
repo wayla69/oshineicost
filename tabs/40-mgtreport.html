@@ -33,6 +33,7 @@
         <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">รายวัน</button>
         <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">รายสัปดาห์</button>
         <button id="mgtTabMonthly" onclick="setMgtPeriod('monthly')" class="px-6 py-2 text-sm font-semibold transition">รายเดือน</button>
+        <button id="mgtTabYearly" onclick="setMgtPeriod('yearly')" class="px-6 py-2 text-sm font-semibold transition">รายปี</button>
       </div>
       <input id="mgtDayPicker" type="date" onchange="onMgtDayChange(this.value)"
              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
@@ -41,6 +42,9 @@
               class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
               style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
       <select id="mgtMonthPicker" onchange="onMgtMonthChange(this.value)"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+              style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
+      <select id="mgtYearPicker" onchange="onMgtYearChange(this.value)" aria-label="ปี"
               class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
               style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
       <!-- monthly-only escape hatch back to the legacy full Monthly Report pack -->

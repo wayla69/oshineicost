@@ -1,94 +1,94 @@
 {
  "all_months": [
+  "2025-12",
   "2026-01",
   "2026-02",
   "2026-03",
   "2026-04",
-  "2026-05",
-  "2026-06"
+  "2026-05"
  ],
  "skus": [
   {
-   "avg_monthly": 46.7,
+   "avg_monthly": 33.3,
    "category": "A La Carte",
    "description": "(A) สเต๊ก",
    "months": [
+    "2025-12",
     "2026-01",
     "2026-02",
     "2026-03",
     "2026-04",
-    "2026-05",
-    "2026-06"
+    "2026-05"
    ],
    "series": [
     0,
     0,
     0,
+    0,
     100.0,
-    100.0,
-    80.0
+    100.0
    ],
    "sku_code": "A0001",
-   "slope_pct": -10.7,
-   "stage": "declining",
-   "total_qty": 280.0
+   "slope_pct": 0,
+   "stage": "new",
+   "total_qty": 200.0
   },
   {
-   "avg_monthly": 466.7,
+   "avg_monthly": 333.3,
    "category": "Sashimi",
    "description": "(B) แซลมอน",
    "months": [
+    "2025-12",
     "2026-01",
     "2026-02",
     "2026-03",
     "2026-04",
-    "2026-05",
-    "2026-06"
+    "2026-05"
    ],
    "series": [
     0,
     0,
     0,
+    0,
     1000.0,
-    1000.0,
-    800.0
+    1000.0
    ],
    "sku_code": "B0001",
-   "slope_pct": -10.7,
-   "stage": "declining",
-   "total_qty": 2800.0
+   "slope_pct": 0,
+   "stage": "new",
+   "total_qty": 2000.0
   },
   {
-   "avg_monthly": 93.3,
+   "avg_monthly": 66.7,
    "category": "BUFFET",
    "description": "ค่าบุฟเฟ่ต์",
    "months": [
+    "2025-12",
     "2026-01",
     "2026-02",
     "2026-03",
     "2026-04",
-    "2026-05",
-    "2026-06"
+    "2026-05"
    ],
    "series": [
     0,
     0,
     0,
+    0,
     200.0,
-    200.0,
-    160.0
+    200.0
    ],
    "sku_code": "BUFFET",
-   "slope_pct": -10.7,
-   "stage": "declining",
-   "total_qty": 560.0
+   "slope_pct": 0,
+   "stage": "new",
+   "total_qty": 400.0
   }
  ],
  "summary": {
   "dead": 0,
-  "declining": 3,
+  "declining": 0,
   "growing": 0,
-  "new": 0,
+  "new": 3,
   "stable": 0
  }
 }

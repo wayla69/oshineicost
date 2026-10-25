@@ -1,10 +1,9 @@
 """One answer per question - two inconsistencies found while building the phone month view.
 
-A. A month in progress is compared on the weekday-fair baseline (owner rule, report §3). The
-   phone summary chips (revenue, customers, spend per head) and the branch league used the
-   raw same-days figure (customers +32.9 % while the month-by-month card and the daily tile
-   said -1.6 %). The report's headline must now equal the months series, the §3 line and the
-   daily tile; a closed month is untouched.
+A. A month in progress: the phone summary chips, the branch league, the month-by-month card and the
+   daily tile must give ONE answer. PR-PP2 (owner 2026-10-24, the one period pattern): that answer is
+   the calendar to-date rule - days 1..n against days 1..n of last month; the weekday-fair baseline
+   stays on the report's §3 pace only. A closed month is untouched.
 
 B. September 2026 gross profit read 40.24 % on the P&L page and 43.3 % in the management
    report. The P&L multiplies by the RELEASED cost of a month from the Grand Menu cut-over
@@ -62,14 +61,16 @@ def test_headline_chips_of_the_month_in_progress_equal_series_pace_and_daily_til
     cur_m = TH_TODAY.strftime("%Y-%m")
     r = _report(c, cur_m)
     H, P = r["headline"], r["pace"]
-    assert r["partial"] is True and H["mom_basis"] == "dow" and P["mom_basis"] == "dow"
+    assert r["partial"] is True and H["mom_basis"] == "to_date" and P["mom_basis"] == "dow"
     cur = _series(c)["months"][-1]
-    assert cur["month"] == cur_m and cur["mom"]["basis"] == "dow"
-    assert H["rev_wow_pct"] == cur["mom"]["revenue"] == P["mom_pct"]
+    assert cur["month"] == cur_m and cur["mom"]["basis"] == "to_date"
+    assert H["rev_wow_pct"] == cur["mom"]["revenue"]
+    # the same days of last month, from the report's own comparison window
+    assert H["rev_wow_pct"] == round((H["revenue"] - H["prev"]["revenue"]) / H["prev"]["revenue"] * 100, 1)
     assert H["cust_wow_pct"] == cur["mom"]["customers"]
     assert H["rph_wow_pct"] == cur["mom"]["rev_per_head"]
     d = c.get("/api/sales/daily", params={"gran": "month"}).json()
-    assert d["mom_basis"] == "dow" and d["cur_range"] == r["range"]
+    assert d["mom_basis"] == "to_date" and d["cur_range"] == r["range"]
     t = d["total"]
     assert (H["rev_wow_pct"], H["cust_wow_pct"], H["rph_wow_pct"]) == (t["mom_pct"], t["cust_mom_pct"], t["rph_mom_pct"])
 
@@ -79,7 +80,7 @@ def test_branch_league_of_the_month_in_progress_equals_the_daily_tile(oa):
     c, _ = oa
     r = _report(c, TH_TODAY.strftime("%Y-%m"))
     d = c.get("/api/sales/daily", params={"gran": "month"}).json()
-    assert d["mom_basis"] == "dow"
+    assert d["mom_basis"] == "to_date"
     tile = {b["branch"]: b["mom_pct"] for b in d["branches"]}
     assert r["branches"]
     for b in r["branches"]:
@@ -91,7 +92,7 @@ def test_a_scoped_month_in_progress_keeps_the_same_rule(oa):
     c, _ = oa
     r = _report(c, TH_TODAY.strftime("%Y-%m"), branch="BranchA")
     cur = _series(c, branch="BranchA")["months"][-1]
-    assert r["headline"]["mom_basis"] == "dow"
+    assert r["headline"]["mom_basis"] == "to_date"
     assert r["headline"]["rev_wow_pct"] == cur["mom"]["revenue"]
     assert r["headline"]["cust_wow_pct"] == cur["mom"]["customers"]
 

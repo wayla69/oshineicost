@@ -24,6 +24,7 @@ function _guestLocalMonth() {
 }
 
 async function loadGuest(force) {
+  periodHeadline('phd-guest', 'guest');   // PR-PP2
   _populateGuestMonthPicker();
   const localMonth = _guestLocalMonth();
   const _fk = _filterKey() + '|gm=' + localMonth;
@@ -155,8 +156,8 @@ async function loadGuest(force) {
         if (!items.length) return;
         const ym = _sphTrendData.labels[items[0].index];
         if (!ym) return;
-        const sel = document.getElementById('guestMonthPicker');
-        if (sel) { sel.value = ym; loadGuest(true); }
+        // PR-PP2: a tapped month moves the top bar (the page has one period control, not a picker of its own)
+        if (/^\d{4}-\d{2}$/.test(ym)) gPeriodSet({ kind: 'month', pick: ym + '-01' });
       },
       plugins: {
         legend: { display: false }, datalabels: { display: false },
@@ -1151,6 +1152,7 @@ function _setChartHeight(canvasId, rowCount, perRow = 22, min = 220) {
 }
 
 async function loadBuffetPerformance() {
+  periodHeadline('phd-buffetperf', 'buffetperf');   // PR-PP2
   const _fk = _filterKey(); if (_tabLastKey.buffetperf === _fk) return; _tabLastKey.buffetperf = _fk;
   const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
@@ -2925,28 +2927,31 @@ async function loadBenchmark() {
 
   renderBenchFoodCost(params);
 
-  // ── Branch KPI table: latest month vs previous month (MoM), sortable ──
-  const curMonth = getMonthTo() || await api(`${API}/api/months`)
-    .then(ms => Array.isArray(ms) && ms.length ? ms[ms.length - 1] : '').catch(() => '');
-  const prevMonth = curMonth ? monthAdd(curMonth, -1) : '';
+  // ── Branch KPI table: PR-PP2 - the top bar's period (to date through the last closed day when it is not finished)
+  // against the same days of the period before and of the year before (/api/period/sales resolves the windows), sortable ──
+  const hp = await api(`${API}/api/period/sales?${gPeriodQuery()}`).catch(() => null);
+  const R = hp && hp.period;
   const grp = getGroup() ? `&group=${encodeURIComponent(getGroup())}` : '';
-  const snap = m => m
-    ? api(`${API}/api/analysis/branches?month_from=${m}&month_to=${m}${grp}`).catch(() => [])
+  const snap = (w, ok) => (w && ok !== false)
+    ? api(`${API}/api/analysis/branches?date_from=${w[0]}&date_to=${w[1]}${grp}`).catch(() => [])
     : Promise.resolve([]);
-  const [curB, prevB] = await Promise.all([snap(curMonth), snap(prevMonth)]);
+  const [curB, prevB, lyB] = await Promise.all([snap(R && R.cur), snap(R && R.prev, R && R.has_prev), snap(R && R.ly, R && R.has_ly)]);
   const prevMap = {}; (prevB || []).forEach(b => prevMap[b.branch] = b);
-  const baseRows = (curB && curB.length) ? curB : branches;   // fallback to range if no month resolved
+  const lyMap = {}; (lyB || []).forEach(b => lyMap[b.branch] = b);
+  const baseRows = (curB && curB.length) ? curB : branches;   // fallback to range if no period resolved
+  _benchRange = R;
   _benchRows = baseRows.map(b => {
     const h = healthMap[b.branch] || {};
-    const p = prevMap[b.branch];
+    const p = prevMap[b.branch], y = lyMap[b.branch];
     return {
       branch: b.branch,
-      revenue: b.revenue,         prev_revenue: p ? p.revenue : null,
-      tx_count: b.tx_count,       prev_tx_count: p ? p.tx_count : null,
-      avg_ticket: b.avg_ticket,   prev_avg_ticket: p ? p.avg_ticket : null,
-      discount_rate: b.discount_rate, prev_discount_rate: p ? p.discount_rate : null,
+      revenue: b.revenue,         prev_revenue: p ? p.revenue : null, ly_revenue: y ? y.revenue : null,
+      tx_count: b.tx_count,       prev_tx_count: p ? p.tx_count : null, ly_tx_count: y ? y.tx_count : null,
+      avg_ticket: b.avg_ticket,   prev_avg_ticket: p ? p.avg_ticket : null, ly_avg_ticket: y ? y.avg_ticket : null,
+      discount_rate: b.discount_rate, prev_discount_rate: p ? p.discount_rate : null, ly_discount_rate: y ? y.discount_rate : null,
       cust_per_tx: b.tx_count > 0 ? b.customer_count / b.tx_count : null,
       prev_cust_per_tx: (p && p.tx_count > 0) ? p.customer_count / p.tx_count : null,
+      ly_cust_per_tx: (y && y.tx_count > 0) ? y.customer_count / y.tx_count : null,
       revenue_score: h.revenue_score ?? null, growth_score: h.growth_score ?? null,
       consistency_score: h.consistency_score ?? null, momentum_score: h.momentum_score ?? null,
       score: h.score ?? null,
@@ -2954,10 +2959,20 @@ async function loadBenchmark() {
     };
   });
   const lbl = document.getElementById('benchCompareLabel');
-  if (lbl) lbl.textContent = curMonth
-    ? `เทียบ ${curMonth} กับเดือนก่อน ${prevMonth || '—'} · คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่า = MoM`
-    : 'คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่า = MoM';
+  if (lbl) lbl.innerHTML = R ? `ตัวเลขเล็กใต้ค่า = เทียบช่วงก่อน · เทียบปีก่อน ${periodQ(R)}` : '';
+  if (R) periodChip(R, true);
   renderBenchTable();
+  // the KPI row on the same period with its two comparisons
+  if (hp && hp.cur) {
+    const c = hp.cur, pv = hp.prev || {}, ly = hp.ly || {};
+    const top = [...baseRows].sort((a, b) => (b.revenue || 0) - (a.revenue || 0))[0];
+    document.getElementById('benchmark-kpi-row').innerHTML = [
+      periodKpi({ l: 'รายได้รวมเครือข่าย', v: fmt(c.revenue), c: '#4a70b0', cur: c.revenue, prev: pv.revenue, ly: ly.revenue, range: R, sub: `จาก ${baseRows.length} สาขา` }),
+      `<div class="card p-4 pkpi" style="border-top:3px solid #059669"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">สาขาที่ทำได้สูงสุด</p><p class="text-2xl font-bold" style="color:var(--good-ink)">${esc(top ? top.branch : '—')}</p><p class="text-[11px] mt-1" style="color:var(--text-muted)">${top ? fmt(top.revenue) : ''}</p></div>`,
+      periodKpi({ l: 'ยอดบิลเฉลี่ยเครือข่าย', v: fmt(c.avg_ticket || 0), c: '#0891b2', cur: c.avg_ticket, prev: pv.avg_ticket, ly: ly.avg_ticket, range: R, q: false, sub: 'ต่อใบเสร็จ' }),
+      periodKpi({ l: '% ส่วนลดเครือข่าย', v: c.discount_pct != null ? c.discount_pct.toFixed(1) + '%' : '—', c: '#f59e0b', cur: c.discount_pct, prev: pv.discount_pct, ly: ly.discount_pct, unit: 'pp', upGood: false, range: R, q: false, sub: 'ของยอดขายก่อนส่วนลด' }),
+    ].join('');
+  }
 
   // Revenue bar chart
   mkChart('chartBenchRevenue', {
@@ -2999,8 +3014,9 @@ async function loadBenchmark() {
   });
 }
 
-// ── Branch KPI table: sortable + MoM (vs previous month) ──
+// ── Branch KPI table: sortable + เทียบช่วงก่อน · เทียบปีก่อน (PR-PP2) ──
 let _benchRows = [];
+let _benchRange = null;
 let _benchSort = { key: 'revenue', dir: -1 };
 function monthAdd(ym, delta) {
   const [y, m] = ym.split('-').map(Number);
@@ -3014,9 +3030,10 @@ function _benchMom(cur, prev, opt) {
   const d = pp ? (cur - prev) : (cur - prev) / prev * 100;
   if (!isFinite(d)) return '';
   const good = hb ? d >= 0 : d <= 0;
-  const col = Math.abs(d) < 0.05 ? '#94a3b8' : (good ? '#10b981' : '#ef4444');
   const ar = d > 0 ? '▲' : (d < 0 ? '▼' : '▬');
-  return `<div class="text-[10px] tabular-nums" style="color:${textInk(col)}">${ar} ${Math.abs(d).toFixed(1)}${pp ? 'pp' : '%'}</div>`;
+  const tip = opt.tip ? ` title="${String(opt.tip).replace(/"/g, '&quot;')}"` : '';
+  const ink = Math.abs(d) < 0.05 ? 'var(--text-muted)' : (good ? 'var(--good-ink)' : 'var(--bad-ink)');
+  return `<div class="text-[10px] tabular-nums" style="color:${ink}"${tip}>${ar} ${Math.abs(d).toFixed(1)}${pp ? ' จุด' : '%'}</div>`;
 }
 function _benchScoreCell(v, accent) {
   if (v == null) return '<td class="py-2 pr-3 text-right text-slate-300">—</td>';
@@ -3047,15 +3064,18 @@ function renderBenchTable() {
   body.innerHTML = rows.map(r => {
     const scoreColor = r.score != null ? (r.score >= 70 ? 'var(--good-ink)' : r.score >= 50 ? '#f59e0b' : '#ef4444') : '#94a3b8';
     const cpt = r.cust_per_tx != null ? r.cust_per_tx.toFixed(1) : '—';
+    const R = _benchRange, same = R && R.prev[0] === R.ly[0] && R.prev[1] === R.ly[1];
+    const two = (c, p, y, o) => (same ? '' : _benchMom(c, p, Object.assign({ tip: R ? 'เทียบ ' + R.prev_label_th : '' }, o))) +
+      _benchMom(c, y, Object.assign({ tip: R ? 'เทียบ ' + R.ly_label_th : '' }, o));
     const cell = (val, mom) => `<td class="py-2 pr-3 text-right tabular-nums"><div>${val}</div>${mom}</td>`;
     const discCls = (r.discount_rate || 0) > 15 ? 'text-red-500 font-medium' : '';
     return `<tr class="border-t border-slate-100 hover:bg-slate-50">
       <td class="py-2 pr-3 font-medium">${esc(r.branch)}</td>
-      ${cell(fmt(r.revenue), _benchMom(r.revenue, r.prev_revenue, { hb: true }))}
-      ${cell(fmtN(r.tx_count), _benchMom(r.tx_count, r.prev_tx_count, { hb: true }))}
-      ${cell(fmt(r.avg_ticket), _benchMom(r.avg_ticket, r.prev_avg_ticket, { hb: true }))}
-      ${cell(`<span class="${discCls}">${(r.discount_rate || 0).toFixed(1)}%</span>`, _benchMom(r.discount_rate, r.prev_discount_rate, { hb: false, pp: true }))}
-      ${cell(cpt, _benchMom(r.cust_per_tx, r.prev_cust_per_tx, { hb: true }))}
+      ${cell(fmt(r.revenue), two(r.revenue, r.prev_revenue, r.ly_revenue, { hb: true }))}
+      ${cell(fmtN(r.tx_count), two(r.tx_count, r.prev_tx_count, r.ly_tx_count, { hb: true }))}
+      ${cell(fmt(r.avg_ticket), two(r.avg_ticket, r.prev_avg_ticket, r.ly_avg_ticket, { hb: true }))}
+      ${cell(`<span class="${discCls}">${(r.discount_rate || 0).toFixed(1)}%</span>`, two(r.discount_rate, r.prev_discount_rate, r.ly_discount_rate, { hb: false, pp: true }))}
+      ${cell(cpt, two(r.cust_per_tx, r.prev_cust_per_tx, r.ly_cust_per_tx, { hb: true }))}
       ${_benchScoreCell(r.revenue_score, '#4a70b0')}
       ${_benchScoreCell(r.growth_score, '#10b981')}
       ${_benchScoreCell(r.consistency_score, '#06b6d4')}

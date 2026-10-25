@@ -432,22 +432,30 @@ def top_skus(
     return result
 
 
-def _mtd_window(con):
+def _mtd_window(con, branch: Optional[str] = None, group: Optional[str] = None):
     """Equal-period (MTD) comparison window when the latest month is incomplete.
     Returns None when the latest month is complete (use normal monthly MoM).
     STANDING RULE: never compare a partial month against a full month.
-    The windows come from periods.resolve('month', ...) - the one period pattern."""
+    The windows come from periods.resolve('month', ...) - the one period pattern.
+    PR-PP2: the latest day is the last CLOSED one (the day still trading never enters a to-date window) of the
+    branch / group asked for (a branch whose data stops earlier is cut on its own last day). Adds the year-ago window."""
     from periods import resolve
-    row = con.execute("SELECT MAX(day) m FROM sales_sku_daily").fetchone()
+    f, p = ["1=1"], {}
+    if branch or group:
+        f, p = [], {}
+        scope_filter(f, p, branch, group)
+    row = con.execute(f"SELECT MAX(d.day) m FROM sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id "
+                      f"WHERE {' AND '.join(f)} AND {closed_day_clause('d.day')}", p).fetchone() if (branch or group) else \
+        con.execute(f"SELECT MAX(day) m FROM sales_sku_daily WHERE {closed_day_clause('day')}").fetchone()
     dmax = row["m"] if row else None
     if not dmax:
         return None
     r = resolve("month", dmax)
     if r["complete"]:
         return None
-    (cs, ce), (ps, pe) = r["cur"], r["prev"]
+    (cs, ce), (ps, pe), (ys, ye) = r["cur"], r["prev"], r["ly"]
     return {"cutoff_day": r["days"], "latest_month": cs[:7], "prev_month": ps[:7],
-            "cur_s": cs, "cur_e": ce, "prev_s": ps, "prev_e": pe}
+            "cur_s": cs, "cur_e": ce, "prev_s": ps, "prev_e": pe, "ly_s": ys, "ly_e": ye}
 
 
 @router.get("/api/sales/top_ordered")
@@ -558,13 +566,15 @@ def top_ordered(
 
         mom_map: dict = {}
         rev_mom_map: dict = {}
+        yoy_map: dict = {}
         mom_basis = "month"
         mtd_cut = None
         ids = [r["sku_id"] for r in rows]
         if latest and ids:
             ph  = ",".join(f":id{i}" for i in range(len(ids)))
             idp = {f"id{i}": v for i, v in enumerate(ids)}
-            mom_params = {**idp, "lm": latest, "pm": prev or "__none__"}
+            ly_m = _month_add(latest, -12)
+            mom_params = {**idp, "lm": latest, "pm": prev or "__none__", "ym": ly_m}
             branch_clause = ""
             if branch:
                 branch_clause = "AND b.name = :branch"
@@ -581,7 +591,7 @@ def top_ordered(
                 FROM v_sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 WHERE sm.sku_id IN ({ph})
-                  AND sm.period_month IN (:lm, :pm) {branch_clause}
+                  AND sm.period_month IN (:lm, :pm, :ym) {branch_clause}
                 GROUP BY sm.sku_id, sm.period_month
             """, mom_params).fetchall()
             tmp: dict = {}; tmpR: dict = {}
@@ -596,16 +606,23 @@ def top_ordered(
                 cur = mm.get(latest, 0)
                 pr  = mm.get(prev) if prev else None
                 rev_mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
+            # PR-PP2: เทียบปีก่อน - the same month a year back (whole vs whole; the month in progress is redone below)
+            for sid, mm in tmp.items():
+                yq = mm.get(ly_m)
+                yoy_map[sid] = ((mm.get(latest, 0) - yq) / yq * 100) if (yq and yq > 0) else None
 
         # MTD override (STANDING RULE): if the latest month is incomplete, recompute
         # MoM from sales_sku_daily over the SAME day-range of both months.
-        mtd = _mtd_window(con)
+        mtd = _mtd_window(con, branch, group)       # PR-PP2: this scope's last closed day
         if mtd and latest == mtd["latest_month"] and ids:
             mom_basis = "mtd"; mtd_cut = mtd["cutoff_day"]
             phd = ",".join(f":mid{i}" for i in range(len(ids)))
             dparams = {f"mid{i}": v for i, v in enumerate(ids)}
-            dparams.update({"cs": mtd["cur_s"], "ce": mtd["cur_e"], "ps": mtd["prev_s"], "pe": mtd["prev_e"]})
-            dwhere = [f"d.sku_id IN ({phd})", "(d.day BETWEEN :cs AND :ce OR d.day BETWEEN :ps AND :pe)"]
+            dparams.update({"cs": mtd["cur_s"], "ce": mtd["cur_e"], "ps": mtd["prev_s"], "pe": mtd["prev_e"],
+                            "ys": mtd["ly_s"], "ye": mtd["ly_e"]})
+            dwhere = [f"d.sku_id IN ({phd})", "(d.day BETWEEN :cs AND :ce OR d.day BETWEEN :ps AND :pe OR d.day BETWEEN :ys AND :ye)"]
+            _dfirst = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0]
+            _ly_ok = bool(_dfirst) and _dfirst <= mtd["ly_s"]          # the daily table reaches the year-ago days
             if branch:
                 dwhere.append("b.name = :dbranch"); dparams["dbranch"] = branch
             gf: list = []; _group_filter(gf, dparams, group)
@@ -615,13 +632,15 @@ def top_ordered(
                   SUM(CASE WHEN d.day BETWEEN :cs AND :ce THEN d.qty ELSE 0 END) cq,
                   SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.qty ELSE 0 END) pq,
                   SUM(CASE WHEN d.day BETWEEN :cs AND :ce THEN d.subtotal_ex_vat ELSE 0 END) cr,
-                  SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.subtotal_ex_vat ELSE 0 END) pr
+                  SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.subtotal_ex_vat ELSE 0 END) pr,
+                  SUM(CASE WHEN d.day BETWEEN :ys AND :ye THEN d.qty ELSE 0 END) yq
                 FROM v_sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
                 WHERE {' AND '.join(dwhere)} GROUP BY d.sku_id""", dparams).fetchall()
-            mom_map = {}; rev_mom_map = {}
+            mom_map = {}; rev_mom_map = {}; yoy_map = {}
             for dr in drows:
                 mom_map[dr["sku_id"]]     = ((dr["cq"] - dr["pq"]) / dr["pq"] * 100) if dr["pq"] else None
                 rev_mom_map[dr["sku_id"]] = ((dr["cr"] - dr["pr"]) / dr["pr"] * 100) if dr["pr"] else None
+                yoy_map[dr["sku_id"]]     = ((dr["cq"] - dr["yq"]) / dr["yq"] * 100) if (_ly_ok and dr["yq"]) else None
             latest = mtd["latest_month"]; prev = mtd["prev_month"]
 
         # Covers over the SAME comparison windows used for MoM (MTD-fair when the latest
@@ -704,6 +723,7 @@ def top_ordered(
             "cogs":          cogs,
             "qty_share_pct": round(q / total_qty * 100, 1) if total_qty else None,
             "qty_mom_pct":   round(mom, 1) if mom is not None else None,
+            "qty_yoy_pct":   round(yoy_map[r["sku_id"]], 1) if yoy_map.get(r["sku_id"]) is not None else None,
             "rev_share_pct": round(rev / total_rev * 100, 1) if total_rev else None,
             "rev_mom_pct":   round(rmom, 1) if rmom is not None else None,
             "cogs_share_pct": round(cogs / total_cogs * 100, 1) if total_cogs else None,
@@ -714,6 +734,10 @@ def top_ordered(
             "cmp_covers_cur": cmp_covers_cur, "cmp_covers_prev": cmp_covers_prev,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
+            # PR-PP2: the compared windows (the "?" of the page)
+            "cmp_range": ([mtd["cur_s"], mtd["cur_e"]] if mom_basis == "mtd" else None),
+            "cmp_prev_range": ([mtd["prev_s"], mtd["prev_e"]] if mom_basis == "mtd" else None),
+            "cmp_ly_range": ([mtd["ly_s"], mtd["ly_e"]] if mom_basis == "mtd" else None),
             "spark_months": spark_months, "items": items}
 
 
@@ -825,7 +849,17 @@ def menu_compare(
         ew.append("b.name=:br"); pb["br"] = branch
     _group_filter(ew, pb, group)
     sel = "sk.sku_id sku_id, sk.sku_code sku_code, sk.description description, c.name category"
+    import periods as _P
     with get_db() as con:
+        # PR-PP2 guard (periods.guard): both periods end by the last closed day; a period running past it is to date
+        # and the other is cut to its own first n days - never a part month against a whole one
+        _g = _P.guard({x: sp for x, sp in (("a", _P.span_of(a_from, a_to, a_date_from, a_date_to)),
+                                           ("b", _P.span_of(b_from, b_to, b_date_from, b_date_to))) if sp},
+                      _P.anchor(con), None)
+        if "a" in _g["windows"]:
+            a_from = a_to = None; a_date_from, a_date_to = _g["windows"]["a"]
+        if "b" in _g["windows"]:
+            b_from = b_to = None; b_date_from, b_date_to = _g["windows"]["b"]
         A = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, a_from, a_to, a_date_from, a_date_to)}
         B = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, b_from, b_to, b_date_from, b_date_to)}
         covers_a = _covers_total(con, a_from, a_to, a_date_from, a_date_to, branch, group)
@@ -852,6 +886,7 @@ def menu_compare(
               "qty_delta_pct": _cmp_pct(s("qty_a"), s("qty_b")), "rev_delta_pct": _cmp_pct(s("rev_a"), s("rev_b"))}
     return {"a_range": [a_from or a_date_from, a_to or a_date_to],
             "b_range": [b_from or b_date_from, b_to or b_date_to],
+            "to_date": _g["to_date"], "n_days": _g["n_days"],      # PR-PP2: the periods were cut to the same days
             "covers_a": covers_a, "covers_b": covers_b,
             "n": len(items), "items": items, "totals": totals}
 
@@ -870,7 +905,15 @@ def menu_compare_drill(
     /api/bom-cost/recipe/{sku_code}."""
     ew = ["b.name!='ALL'", "sk.sku_code=:sc"]; pb = {"sc": sku_code}
     _group_filter(ew, pb, group)
+    import periods as _P
     with get_db() as con:
+        _g = _P.guard({x: sp for x, sp in (("a", _P.span_of(a_from, a_to, a_date_from, a_date_to)),
+                                           ("b", _P.span_of(b_from, b_to, b_date_from, b_date_to))) if sp},
+                      _P.anchor(con), None)                       # PR-PP2: the same windows as the compare table
+        if "a" in _g["windows"]:
+            a_from = a_to = None; a_date_from, a_date_to = _g["windows"]["a"]
+        if "b" in _g["windows"]:
+            b_from = b_to = None; b_date_from, b_date_to = _g["windows"]["b"]
         A = {r["br"]: r for r in _menucmp_agg(con, "b.name br", "b.name", ew, pb, a_from, a_to, a_date_from, a_date_to)}
         B = {r["br"]: r for r in _menucmp_agg(con, "b.name br", "b.name", ew, pb, b_from, b_to, b_date_from, b_date_to)}
         covA = _covers_by_branch(con, a_from, a_to, a_date_from, a_date_to, group)
@@ -1008,61 +1051,32 @@ def sales_daily(
     date:   Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
-    gran:   str           = Query("day"),     # day | week | month
+    gran:   str           = Query("day"),     # day | week | month | year
     trend:  int           = Query(8, ge=2, le=26),
 ):
-    """Per-branch sales for a day/week/month with same-period MoM & YoY deltas,
-    revenue/head, a trailing trend, and anomaly flags. REVENUE ONLY (ex-VAT
-    goods = food+drink+other) — no cost here; COGS stays on BoM elsewhere."""
-    import datetime as _dt, calendar as _cal
-    if gran not in ("day", "week", "month"):
+    """Per-branch sales for a day / week / month / year with the two comparisons of the one period
+    pattern (periods.resolve, docs/PERIOD_PATTERN.md): เทียบช่วงก่อน + เทียบปีก่อน. A period not finished
+    is to-date through the last closed day and both bases are their first n days (week: the same weekdays
+    last week, not 28 days back; month: days 1..n of last month; year: 1 Jan..the same date last year).
+    revenue/head, a trailing trend, and anomaly flags. REVENUE ONLY (ex-VAT goods = food+drink+other) —
+    no cost here; COGS stays on BoM elsewhere."""
+    import datetime as _dt
+    import periods as _P
+    gran = _P.kind_of(gran, "day")
+    if gran == "range":
         gran = "day"
     base = ["t.source='Easy'", "b.name!='ALL'"]
     params: dict = {}
     scope_filter(base, params, branch, group)
     where = " AND ".join(base)
-
-    mtd_cut_day = None   # set below when the latest month is partial → MTD-fair month compare
-    def bounds(d):
-        if gran == "day":
-            return d, d
-        if gran == "week":
-            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
-        s = d.replace(day=1)
-        last = _cal.monthrange(s.year, s.month)[1]
-        # When the latest month is still partial, clamp EVERY month period (current /
-        # prev / YoY) to the same elapsed days so month-vs-month is MTD-vs-MTD fair.
-        end_day = min(last, mtd_cut_day) if mtd_cut_day else last
-        return s, s.replace(day=end_day)
-
-    def minus_month(d, n=1):
-        idx = d.year * 12 + (d.month - 1) - n
-        y, m = idx // 12, idx % 12 + 1
-        return _dt.date(y, m, min(d.day, _cal.monthrange(y, m)[1]))
-
-    def comp(fdate, back):       # back = 'month' | 'year'
-        if gran == "day":
-            if back == "month":
-                return minus_month(fdate, 1)
-            try:    return fdate.replace(year=fdate.year - 1)
-            except ValueError: return fdate.replace(year=fdate.year - 1, day=28)
-        if gran == "week":
-            return fdate - _dt.timedelta(days=28 if back == "month" else 364)
-        if back == "month":
-            return minus_month(fdate.replace(day=1), 1)
-        return fdate.replace(year=fdate.year - 1, day=1)
-
-    def pct(c, p):
-        return round((c - p) / p * 100, 1) if p else None
+    pct = _P.pct
 
     with get_db() as con:
-        # The default focus is the latest FINISHED day (rules.closed_day_clause): from
-        # the noon sync the newest day is today with a few hours of bills, and a
-        # day/MTD tile built on it read as -99.9% (owner 2026-10-02). An explicit
+        # The default focus is the latest FINISHED day with its bills in (periods.anchor =
+        # rules.latest_settled_day): from the noon sync the newest day is today with a few hours
+        # of bills, and a day/MTD tile built on it read as -99.9% (owner 2026-10-02). An explicit
         # `date` still reaches today.
-        maxd = con.execute(
-            f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
-            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where} AND {closed_day_clause('t.sold_at')}", params).fetchone()[0]
+        maxd = _P.anchor(con, where, params)
         if not maxd and date:
             maxd = date[:10]
         if not maxd:
@@ -1082,17 +1096,12 @@ def sales_daily(
                 if _rd:
                     maxd = _rd
         focus = (date or maxd)[:10]
-        fy, fm, fd = (int(x) for x in focus.split("-"))
-        fdate = _dt.date(fy, fm, fd)
-        # MTD-fair month compare: if the focus month is the latest, still-partial month,
-        # clamp every month period to the same elapsed days (set the closure's cutoff).
-        if gran == "month":
-            my, mm, mdd = (int(x) for x in maxd[:10].split("-"))
-            if (fy, fm) == (my, mm) and mdd < _cal.monthrange(my, mm)[1]:
-                mtd_cut_day = mdd
+        anchor_day = focus if focus > maxd else maxd        # an explicit later day is honoured (it is asked for)
+        w = _P.windows(con, gran, where, params, pick=focus, anchor_day=anchor_day)
+        (cs, ce), (pms, pme), (pys, pye) = ((_dt.date.fromisoformat(a), _dt.date.fromisoformat(b))
+                                            for a, b in (w["cur"], w["prev"], w["ly"]))
 
-        def fetch(d):
-            s, e = bounds(d)
+        def fetch(s, e):
             # revenue ex-VAT ex-service-charge = total_inc_vat/1.07 − service_charge (matches
             # accounting & sales_sku_monthly). NOT food+drink+other — those double-count
             # buffet (buffet dishes duplicated in food + the package in other → +~50%).
@@ -1103,68 +1112,13 @@ def sales_daily(
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
                 GROUP BY b.name""", {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-            return {r["branch"]: {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]} for r in rows}, (s, e)
+            return {r["branch"]: {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]} for r in rows}
 
-        cur, (cs, ce) = fetch(fdate)
-        pm,  (pms, pme) = fetch(comp(fdate, "month"))
-        py,  (pys, pye) = fetch(comp(fdate, "year"))
-
-        # Guard partial coverage: if a comparison period starts before our data
-        # begins, it's incomplete → drop it (avoids bogus deltas like YoY +472%
-        # vs the partial first month). Same idea as the benchmark guard.
-        mind = con.execute(
-            f"SELECT MIN(date(t.sold_at)) FROM sales_transaction t "
-            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0] or "9999-99"
-        if pms.isoformat() < mind:
-            pm = {}
-        if pys.isoformat() < mind:
-            py = {}
-
-        # Weekday-fair MoM (mirrors the Management report §3): a raw same-elapsed-
-        # days compare misleads early in the month (1–2 Jul = Wed+Thu vs 1–2 Jun =
-        # holiday Mon+Tue read as "-44%"), so while the focus month is partial the
-        # previous-month side of every MoM number (per-branch and total, revenue
-        # and customers) is rebuilt from that month's per-weekday daily averages
-        # summed over the same elapsed dates. YoY keeps the plain same-days clamp.
-        mom_basis = "same_days" if mtd_cut_day else "month"
-        dow_tot = None
-        if mtd_cut_day and pm:
-            elapsed_wd = [int((cs + _dt.timedelta(days=i)).strftime("%w"))
-                          for i in range(mtd_cut_day)]
-
-            def dow_base(rows_):
-                avg = {r["wd"]: ((r["rev"] or 0) / r["days"], (r["cust"] or 0) / r["days"])
-                       for r in rows_ if r["days"]}
-                if not avg:
-                    return None
-                fb = (sum(v[0] for v in avg.values()) / len(avg),
-                      sum(v[1] for v in avg.values()) / len(avg))
-                return {"rev":  round(sum(avg.get(w, fb)[0] for w in elapsed_wd), 2),
-                        "cust": round(sum(avg.get(w, fb)[1] for w in elapsed_wd), 1),
-                        "bills": 0}
-
-            dow_sel = f"""CAST(strftime('%w', t.sold_at) AS INT) wd,
-                       {net_revenue_sum('t')} rev, SUM(t.customer_count) cust,
-                       COUNT(DISTINCT date(t.sold_at)) days
-                FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id"""
-            dow_prm = {**params, "pmm": pms.strftime("%Y-%m")}
-            by_branch: dict = {}
-            for r in con.execute(f"""
-                SELECT b.name branch, {dow_sel}
-                WHERE {where} AND strftime('%Y-%m', t.sold_at)=:pmm
-                GROUP BY b.name, wd""", dow_prm).fetchall():
-                by_branch.setdefault(r["branch"], []).append(r)
-            pm_dow = {nm: base for nm, rs in by_branch.items() if (base := dow_base(rs))}
-            # chain-level baseline over the whole scope (NOT the sum of per-branch
-            # baselines) so the total MoM ties out with the Management report §3.
-            dow_tot = dow_base(con.execute(f"""
-                SELECT {dow_sel}
-                WHERE {where} AND strftime('%Y-%m', t.sold_at)=:pmm
-                GROUP BY wd""", dow_prm).fetchall())
-            if pm_dow and dow_tot:
-                pm, mom_basis = pm_dow, "dow"
-            else:
-                dow_tot = None
+        cur = fetch(cs, ce)
+        # Guard partial coverage: a base that starts before our data begins is incomplete
+        # → dropped (no bogus deltas like YoY +472% vs the partial first month).
+        pm = fetch(pms, pme) if w["has_prev"] else {}
+        py = fetch(pys, pye) if w["has_ly"] else {}
 
         out = []
         for nm in sorted(set(cur) | set(pm) | set(py)):
@@ -1180,54 +1134,66 @@ def sales_daily(
                 "yoy_rev": (y or {}).get("rev"),
                 "yoy_delta": round(crev - (y or {}).get("rev", 0), 2) if y else None,
                 "yoy_pct": pct(crev, (y or {}).get("rev", 0)) if y else None,
+                "prev_customers": (p or {}).get("cust"), "ly_customers": (y or {}).get("cust"),
+                "prev_rev_per_head": round(p["rev"] / p["cust"], 1) if p and p["cust"] else None,
+                "ly_rev_per_head": round(y["rev"] / y["cust"], 1) if y and y["cust"] else None,
             })
         out.sort(key=lambda r: -r["revenue"])
 
-        def tot(d): return sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values())
-        crv, ccu = tot(cur); prv, pcu = tot(pm); yrv, ycu = tot(py)
-        if dow_tot:   # total MoM against the scope-level weekday baseline
-            prv, pcu = dow_tot["rev"], dow_tot["cust"]
-        cur_rph  = crv / ccu if ccu else None
-        prev_rph = prv / pcu if pcu else None
-        yoy_rph  = yrv / ycu if ycu else None
-        total = {"revenue": round(crv, 2), "customers": ccu,
+        def tot(d): return (sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values()),
+                            sum(x["bills"] for x in d.values()))
+        crv, ccu, cbi = tot(cur); prv, pcu, pbi = tot(pm); yrv, ycu, ybi = tot(py)
+        # per head to 1 decimal before the change, as the management report and its month series do (one answer)
+        cur_rph = round(crv / ccu, 1) if ccu else None
+        prev_rph = round(prv / pcu, 1) if pcu else None
+        yoy_rph = round(yrv / ycu, 1) if ycu else None
+        total = {"revenue": round(crv, 2), "customers": ccu, "bills": cbi,
                  "rev_per_head": round(crv / ccu, 1) if ccu else None,
-                 "mom_delta": round(crv - prv, 2), "mom_pct": pct(crv, prv),
-                 "yoy_delta": round(crv - yrv, 2), "yoy_pct": pct(crv, yrv),
-                 # customer-count + revenue/head deltas over the SAME MTD-fair periods as revenue
-                 "cust_mom_pct": pct(ccu, pcu), "cust_yoy_pct": pct(ccu, ycu),
-                 "rph_mom_pct": pct(cur_rph, prev_rph) if cur_rph is not None else None,
-                 "rph_yoy_pct": pct(cur_rph, yoy_rph) if cur_rph is not None else None}
+                 "prev": {"revenue": round(prv, 2), "customers": pcu, "bills": pbi,
+                          "rev_per_head": round(prev_rph, 1) if prev_rph else None} if pm else None,
+                 "ly": {"revenue": round(yrv, 2), "customers": ycu, "bills": ybi,
+                        "rev_per_head": round(yoy_rph, 1) if yoy_rph else None} if py else None,
+                 "mom_delta": round(crv - prv, 2) if pm else None, "mom_pct": pct(crv, prv) if pm else None,
+                 "yoy_delta": round(crv - yrv, 2) if py else None, "yoy_pct": pct(crv, yrv) if py else None,
+                 # customer-count + revenue/head deltas over the SAME windows as revenue
+                 "cust_mom_pct": pct(ccu, pcu) if pm else None, "cust_yoy_pct": pct(ccu, ycu) if py else None,
+                 "rph_mom_pct": pct(cur_rph, prev_rph) if (pm and cur_rph is not None) else None,
+                 "rph_yoy_pct": pct(cur_rph, yoy_rph) if (py and cur_rph is not None) else None}
 
-        # trailing trend (chain total rev), `trend` periods ending at focus
-        tr = []; d = fdate
-        for _ in range(trend):
-            data, (s, e) = fetch(d)
+        # trailing trend (chain total rev): `trend` periods ending at the current one (to date); the
+        # earlier periods are whole calendar periods
+        tr = []
+        for i in range(trend - 1, -1, -1):
+            s = _dt.date.fromisoformat(_P.shift(gran, cs, -i))
+            e = ce if i == 0 else _dt.date.fromisoformat(_P.shift(gran, s, 1)) - _dt.timedelta(days=1)
+            if w["first_day"] and e.isoformat() < w["first_day"]:
+                continue                                     # before the first day with bills: no bar
             tr.append({"start": s.isoformat(), "end": e.isoformat(),
-                       "revenue": round(sum(x["rev"] for x in data.values()), 2)})
-            d = d - _dt.timedelta(days=1) if gran == "day" else \
-                d - _dt.timedelta(days=7) if gran == "week" else minus_month(d.replace(day=1), 1)
-        tr.reverse()
+                       "revenue": round(sum(x["rev"] for x in fetch(s, e).values()), 2),
+                       "partial": (i == 0 and not w["complete"])})
 
-        # anomaly: chain total vs trailing average + big per-branch MoM movers
-        prior = [x["revenue"] for x in tr[:-1]]
+        # anomaly: chain total vs trailing average (per day, so a to-date period is fair) + big per-branch movers
+        prior = [x["revenue"] / (((_dt.date.fromisoformat(x["end"]) - _dt.date.fromisoformat(x["start"])).days + 1) or 1)
+                 for x in tr[:-1] if x["revenue"]]
         avg = sum(prior) / len(prior) if prior else 0
         anomalies = []
-        ap = pct(crv, avg)
+        ap = pct(crv / (w["days"] or 1), avg) if avg else None
         if ap is not None and abs(ap) >= 20:
             anomalies.append({"scope": "chain", "pct": ap,
-                              "msg": f"ยอดรวม{'สูง' if ap > 0 else 'ต่ำ'}กว่าค่าเฉลี่ย {abs(ap):.0f}%"})
+                              "msg": f"ยอดรวมต่อวัน{'สูง' if ap > 0 else 'ต่ำ'}กว่าค่าเฉลี่ย {abs(ap):.0f}%"})
         for r in out:
             if r["mom_pct"] is not None and abs(r["mom_pct"]) >= 30:
                 anomalies.append({"scope": r["branch"], "pct": r["mom_pct"],
-                                  "msg": f"{r['branch']} {'พุ่ง' if r['mom_pct'] > 0 else 'ตก'} {abs(r['mom_pct']):.0f}% vs ช่วงก่อน"})
+                                  "msg": f"{r['branch']} {'พุ่ง' if r['mom_pct'] > 0 else 'ตก'} {abs(r['mom_pct']):.0f}% เทียบช่วงก่อน"})
 
-    return {"gran": gran, "focus": focus,
-            "cur_range": [cs.isoformat(), ce.isoformat()],
-            "prev_range": [pms.isoformat(), pme.isoformat()],
-            "yoy_range": [pys.isoformat(), pye.isoformat()],
-            "mtd": mtd_cut_day is not None, "mtd_cutoff_day": mtd_cut_day,
-            "mom_basis": mom_basis,
+    mtd = (gran == "month" and not w["complete"])
+    return {"gran": gran, "focus": focus, "anchor": w["anchor"],
+            "cur_range": list(w["cur"]), "prev_range": list(w["prev"]), "yoy_range": list(w["ly"]),
+            "has_prev": w["has_prev"], "has_ly": w["has_ly"],
+            "period": _P.public(w),
+            "mtd": mtd, "mtd_cutoff_day": w["days"] if mtd else None,
+            # PR-PP2: the headline % is the calendar to-date rule (the weekday-fair baseline stays on the report §3)
+            "mom_basis": "full" if w["complete"] else "to_date",
             "branches": out, "total": total, "trend": tr, "anomalies": anomalies}
 
 
@@ -1769,7 +1735,10 @@ def latest_month_mtd(request: Request, branch: Optional[str] = Query(None), grou
     dbp.update(_gcond_params2)
 
     with get_db() as con:
-        maxday = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        # PR-PP2: the window ends on the scope's last CLOSED day (periods.anchor) - the day still trading never enters
+        # a to-date window (MAX(sold_at) was today after the noon sync)
+        import periods as _P
+        maxday = _P.anchor(con, twhere, tp)
         if not maxday:
             return {"available": False}
         y, m, d = (int(x) for x in maxday.split("-"))
@@ -2182,8 +2151,63 @@ def sales_dish_movers(
         return {r["code"]: {"name": r["name"], "category": r["category"],
                             "val": r["val"] or 0} for r in rows}
 
-    cur_v  = _dish_vals(cur_from, cur_to)
-    prev_v = _dish_vals(prev_from, prev_to)
+    # PR-PP2 · the one period pattern: a window that ends in the month in progress (the month of the last closed day,
+    # not yet at its end) is to date, and its bases are their first n days (the previous month 1..n, or the chosen
+    # month 1..n; the same days a year back) from the daily table - never a part month against a whole one.
+    import calendar as _cal
+    import periods as _P
+    val_d = "d.qty" if metric == "qty" else "d.subtotal_ex_vat"
+
+    def _dish_days(s: str, e: str) -> dict:
+        filters = ["b.name != 'ALL'", "d.day BETWEEN :s AND :e", _FOOD_CATEGORY_FILTER]
+        params = {"s": s, "e": e}
+        if branch:
+            filters.append("b.name = :branch"); params["branch"] = branch
+        with get_db() as con:
+            rows = con.execute(
+                f"""SELECT sk.sku_code AS code, COALESCE(sk.description, sk.sku_code) AS name, c.name AS category,
+                           SUM({val_d}) AS val
+                    FROM v_sales_sku_daily d
+                    JOIN branches b   ON b.branch_id   = d.branch_id
+                    JOIN skus sk      ON sk.sku_id      = d.sku_id
+                    JOIN categories c ON c.category_id  = sk.category_id
+                    WHERE {" AND ".join(filters)} GROUP BY sk.sku_id""", params).fetchall()
+        return {r["code"]: {"name": r["name"], "category": r["category"], "val": r["val"] or 0} for r in rows}
+
+    with get_db() as con:
+        _sw = "t.source='Easy' AND b.name!='ALL'" + (" AND b.name = :branch" if branch else "")
+        _anchor = _P.anchor(con, _sw, {"branch": branch} if branch else None)
+        _dfirst = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0]
+    to_date = None
+    ly_v = None
+    ly_from = ly_to = None
+    if _anchor and cur_to == _anchor[:7] and not _P.resolve("month", _anchor)["complete"]:
+        _ty, _tm = _ym_parts(cur_to)
+        if vs_month or span == 0:
+            w = _P.resolve("month", _anchor, date_from=f"{cur_from}-01")
+            cs, ce = w["cur"]
+            if vs_month:
+                _vy, _vm = _ym_parts(vs_month)
+                ps, pe = f"{vs_month}-01", f"{vs_month}-{min(w['days'], _cal.monthrange(_vy, _vm)[1]):02d}"
+            else:
+                ps, pe = w["prev"]
+        else:
+            w = _P.resolve("range", _anchor, date_from=f"{cur_from}-01", date_to=f"{cur_to}-{_cal.monthrange(_ty, _tm)[1]:02d}")
+            cs, ce = w["cur"]
+            ps, pe = w["prev"]
+        ly_from, ly_to = w["ly"]
+        if _dfirst and ps >= _dfirst:
+            to_date = {"cur": [cs, ce], "prev": [ps, pe], "ly": [ly_from, ly_to], "days": w["days"],
+                       "label_th": _P.label_th(cs, ce), "prev_label_th": _P.label_th(ps, pe), "ly_label_th": _P.label_th(ly_from, ly_to)}
+    if to_date:
+        cur_v, prev_v = _dish_days(*to_date["cur"]), _dish_days(*to_date["prev"])
+        ly_v = _dish_days(ly_from, ly_to) if (_dfirst and ly_from >= _dfirst) else None
+    else:
+        cur_v  = _dish_vals(cur_from, cur_to)
+        prev_v = _dish_vals(prev_from, prev_to)
+        if not vs_month:                       # the same months a year back (whole vs whole)
+            ly_from, ly_to = _month_add(cur_from, -12), _month_add(cur_to, -12)
+            ly_v = _dish_vals(ly_from, ly_to) or None
 
     movers = []
     for code in set(cur_v) | set(prev_v):
@@ -2194,10 +2218,13 @@ def sales_dish_movers(
         if delta == 0:
             continue
         pct = round(delta / was * 100, 1) if was > 0 else None
+        ly_was = (ly_v.get(code, {}).get("val", 0) if ly_v is not None else None)
         movers.append({
             "code": code, "name": meta["name"], "category": meta["category"],
             "now": round(now, 2), "was": round(was, 2),
             "delta": delta, "delta_pct": pct, "is_new": was == 0 and now > 0,
+            "was_ly": round(ly_was, 2) if ly_was is not None else None,
+            "delta_ly_pct": _P.pct(now, ly_was) if ly_was else None,
         })
 
     movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
@@ -2209,6 +2236,8 @@ def sales_dish_movers(
         "metric":   metric,
         "current":  {"from": cur_from, "to": cur_to},
         "previous": {"from": prev_from, "to": prev_to},
+        "year_ago": {"from": ly_from, "to": ly_to} if ly_from else None,
+        "to_date":  to_date,                 # PR-PP2: the day windows when the current month is not finished
         "gainers":   gainers,
         "decliners": decliners,
     }

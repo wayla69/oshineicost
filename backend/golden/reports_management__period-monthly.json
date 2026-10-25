@@ -195,6 +195,12 @@
  "min_day": "2026-05-01",
  "months": [
   {
+   "label": "Jun 2026 (to day 3)",
+   "month": "2026-06",
+   "mtd": true,
+   "through": "2026-06-03"
+  },
+  {
    "label": "May 2026",
    "month": "2026-05"
   }
@@ -339,11 +345,13 @@
  ],
  "selected_month": "2026-05",
  "selected_week": null,
+ "selected_year": null,
  "stock_variance": null,
  "table": {
   "available": false
  },
  "tier": null,
+ "to_date": false,
  "trend": [
   {
    "label": "Apr 26",
@@ -387,5 +395,6 @@
   }
  ],
  "weeks": [],
+ "years": [],
  "yoy_range": null
 }

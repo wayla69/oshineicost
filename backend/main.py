@@ -1535,9 +1535,15 @@ def data_window():
     UI the last COMPLETE month (use it for headline/ranking comparisons) and the
     partial month (label it MTD / exclude from like-for-like)."""
     import calendar as _cal
+    try:
+        from . import periods as _P
+    except ImportError:
+        import periods as _P
     with get_db() as con:
         row = con.execute("SELECT MIN(sold_at) mn, MAX(sold_at) mx FROM sales_transaction").fetchone()
-    mx = (row["mx"] or "")[:10] if row else ""
+        # PR-PP2: the window ends on the last CLOSED day (periods.anchor): the day still trading is never the data's end
+        closed = _P.anchor(con)
+    mx = (closed or (row["mx"] or "")[:10] if row else "") or ""
     mn = (row["mn"] or "")[:10] if row else ""
     last_complete = partial = None
     if mx:
@@ -2368,6 +2374,11 @@ if __package__:
 else:
     from routers.home_extra import router as _home_extra_router
 app.include_router(_home_extra_router)
+if __package__:
+    from .routers.period_api import router as _period_api_router
+else:
+    from routers.period_api import router as _period_api_router
+app.include_router(_period_api_router)     # PR-PP2: /api/period/sales + /api/period/headline (docs/PERIOD_PATTERN.md)
 if __package__:
     from .routers import push_api as _push_api
 else:
