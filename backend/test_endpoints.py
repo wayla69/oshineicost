@@ -287,12 +287,11 @@ def test_management_report_xlsx(client):
         assert "Summary" in wb.sheetnames and "Branch League" in wb.sheetnames
 
 
-def test_management_daily_never_defaults_to_current_partial_day(client):
+def test_management_daily_never_defaults_to_current_partial_day(client, bkk_frozen):
     """Regression: the daily report must NOT default to the in-progress current day
     (its handful of today's sales would read as a chain-wide ~-100% collapse).
     Default anchors on the latest COMPLETE day; an explicit today is flagged partial."""
-    import datetime as _dt
-    today = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).date().isoformat()  # Thai 'today'
+    today = bkk_frozen.isoformat()   # Thai 'today' as the app's SQLite clock reads it
     d = client.get("/api/reports/management", params={"period": "daily"}).json()
     assert d["available"]
     assert d["focus"] < today, f"daily default focus {d['focus']} must be before today {today}"
