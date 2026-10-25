@@ -14,7 +14,7 @@
     .hvm-tbl th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: bottom; }
     .hvm-tbl td { padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: top; color: var(--text-primary); }
     .hvm-tbl tbody tr { cursor: pointer; }
-    .hvm-tbl tbody tr:hover td { background: var(--bg-hover); }
+    #tab-hvmonitor .hvm-tbl tbody tr:hover td { background: var(--bg-hover); }
     .hvm-tbl .hvm-num { text-align: right; }
     .hvm-tbl th.hvm-num .hvm-sort { justify-content: flex-end; }
     .hvm-sort { position: relative; display: inline-flex; width: 100%; align-items: center; gap: 2px; padding: 0; border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
@@ -23,7 +23,7 @@
     .hvm-v { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .hvm-d { line-height: 1.3; white-space: nowrap; }
     .hvm-d .text-xs { font-size: 12px; }
-    .hvm-chain td { font-weight: 700; background: var(--bg-subtle); }
+    #tab-hvmonitor .hvm-chain td { font-weight: 700; background: var(--bg-subtle); }
     .hvm-chain .hvm-v { font-weight: 800; }
     .hvm-hot .hvm-v { color: var(--bad-ink); font-weight: 800; }
     .hvm-cause { min-width: 168px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
@@ -34,13 +34,13 @@
     .hvm-muted, .hvm-empty { color: var(--text-muted); font-size: 13px; }
     .hvm-empty { padding: 16px 0; }
     .hvm-cw { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
-    .hvm-stick { position: sticky; left: 0; z-index: 1; background: var(--bg-card); }
-    .hvm-chain .hvm-stick { background: var(--bg-subtle); }
-    .hvm-mx td.hvm-h1 { background: color-mix(in srgb, var(--bad-ink) 8%, var(--bg-card)); }
-    .hvm-mx td.hvm-h2 { background: color-mix(in srgb, var(--bad-ink) 15%, var(--bg-card)); }
-    .hvm-mx td.hvm-h3 { background: color-mix(in srgb, var(--bad-ink) 24%, var(--bg-card)); }
-    .hvm-mx td.hvm-h3 .hvm-v { color: var(--bad-ink); font-weight: 800; }
-    .hvm-mx td.hvm-g1 { background: color-mix(in srgb, var(--good-ink) 10%, var(--bg-card)); }
+    #tab-hvmonitor .hvm-stick { position: sticky; left: 0; z-index: 1; background: var(--bg-card); }
+    #tab-hvmonitor .hvm-chain .hvm-stick { background: var(--bg-subtle); }
+    #hvmMatrix tbody td.hvm-h1 { background: color-mix(in srgb, var(--bad-ink) 8%, var(--bg-card)); }
+    #hvmMatrix tbody td.hvm-h2 { background: color-mix(in srgb, var(--bad-ink) 15%, var(--bg-card)); }
+    #hvmMatrix tbody td.hvm-h3 { background: color-mix(in srgb, var(--bad-ink) 24%, var(--bg-card)); }
+    #hvmMatrix tbody td.hvm-h3 .hvm-v { color: var(--bad-ink); font-weight: 800; }
+    #hvmMatrix tbody td.hvm-g1 { background: color-mix(in srgb, var(--good-ink) 10%, var(--bg-card)); }
     /* the sheet: the in-app dialog (uiHelp) anchored to the bottom */
     .ui-help-back.hvm-sheet { align-items: flex-end; padding: 0; }
     .ui-help-back.hvm-sheet .ui-help-box { max-width: 760px; max-height: 86vh; border-radius: 16px 16px 0 0; }
@@ -73,7 +73,7 @@
   <div class="card p-5 mb-5" data-needs="/api/cost/ingredient-groups">
     <div class="hvm-head">
       <h2 class="section-title mb-0">ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา <span id="hvmRangeQ"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-hvmonitor" title="คำอธิบาย">?</button></h2><template id="hlp-hvmonitor" data-title="High Value Product Monitor"><p><b>ช่วงเวลา</b> · ตามแถบด้านบน (สัปดาห์ · เดือน · ปี · กำหนดเอง) · ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบจำนวนวันเท่ากันของช่วงก่อน · ช่วงที่เทียบดูได้ที่ปุ่ม ? ข้างหัวข้อ · ไม่มีข้อมูลฐานแสดง —</p><p><b>กลุ่มวัตถุดิบ</b> · นับจากชื่อเมนู: แซลมอน (แซลมอน, แซลม่อน) · ทูน่า (ทูน่า, มากุโระ, โทโร่) · ฮามาจิ · กุ้งหวาน (กุ้งหวาน, อามะเอบิ, กุ้งแดงอาร์เจนติน่า, กุ้งอาร์เจนติน่า) · หอยเชลล์ (หอยเชลล์, โฮตาเตะ) · ปลาไหล (ปลาไหล, อูนางิ, อูนากิ) · หอยนางรม · เนื้อ (เนื้อ, วากิว, ลิ้นวัว ไม่รวมปลาเนื้อขาว เนื้อปู เนื้อปลา) · ไม่นับแพ็กเกจบุฟเฟ่ต์ · เมนูที่ชื่อตรงหลายกลุ่ม (เช่น ซาชิมิรวม) นับในทุกกลุ่มที่ตรงด้วยต้นทุนเต็มจาน และมีป้าย <b>หลายกลุ่ม</b> ในรายการเมนู</p><p><b>ต้นทุน/หัว</b> = ต้นทุนของกลุ่ม ÷ ลูกค้าทั้งหมดของสาขา · <b>จาน/หัว</b> = จานของกลุ่ม ÷ ลูกค้า · <b>ต้นทุน/จาน</b> = ต้นทุน ÷ จานที่มีต้นทุน · <b>สัดส่วนในต้นทุนอาหาร</b> = ต้นทุนของกลุ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขา · ต้นทุนต่อจานใช้ต้นทุนเดียวกับ P&amp;L และ GP (รายการต้นทุนต่อจานของเดือนนั้น) · เมนูที่ไม่มีต้นทุนนับจานแต่ไม่นับต้นทุน (ดูจำนวนในรายละเอียดของแถว)</p><p><b>ตัวแดงหนา</b> · ต้นทุน/หัวสูงกว่าทั้งเครือตั้งแต่ 20% · ▲ = เพิ่มขึ้น (ต้นทุนสูงขึ้นเป็นสีแดง) · มุมมอง <b>ทั้งหมด</b> แรเงาตามอัตราส่วนกับทั้งเครือของคอลัมน์นั้น สีแดงเข้มขึ้นเมื่อสูงกว่า สีเขียวเมื่อต่ำกว่าตั้งแต่ 10%</p><p><b>สาเหตุที่เปลี่ยน</b> · ต้นทุนของกลุ่ม = ลูกค้า × จานต่อหัว × ต้นทุนต่อจาน จึงแยกต้นทุนที่เปลี่ยนเทียบช่วงก่อนเป็นสามส่วนเป็นบาท (ลูกค้า · กินต่อหัว · ต้นทุน/จาน) ที่รวมกันเท่ากับส่วนที่เปลี่ยนพอดี ด้วยวิธีลอการิทึม (LMDI) · ในการแยกนี้นับเฉพาะจานที่มีต้นทุน · <b>สาเหตุหลัก</b> = ส่วนที่มีค่ามากที่สุด ส่วนที่เพิ่มมากที่สุดเป็นตัวแดง · ในมุมมองทั้งหมดแสดงเป็นคำสั้น ลูกค้า · กิน · ราคา</p><p>แตะแถวเพื่อดูทุกตัวเลข ช่วงนี้ · ช่วงก่อน · ปีก่อน และเมนูของกลุ่มที่สาขานั้น · CSV = ตารางที่แสดงอยู่</p></template>
-      <div class="hvm-ctl">
+      <div class="hvm-ctl ph-tz-unit">
         <div id="hvmChips" class="hvm-chips" role="group" aria-label="วัตถุดิบ"></div>
         <button type="button" onclick="hvmExport()" class="hvm-csv">CSV</button>
       </div>

@@ -129,11 +129,11 @@ function hvmTableHtml(d, slug) {
     const unc = c.uncosted_plates ? ` title="จานที่ไม่มีต้นทุน ${fmtN(c.uncosted_plates)} จาน"` : '';
     return `<tr class="${isChain ? 'hvm-chain' : ''}" onclick="hvmOpenRow(${isChain ? -1 : i})">
       <td class="hvm-name">${isChain ? 'ทั้งเครือ' : esc(row.branch)}</td>
-      <td class="hvm-num${hot ? ' hvm-hot' : ''}"${hot ? ` title="สูงกว่าทั้งเครือ ${((c.cost_per_head / chainCph - 1) * 100).toFixed(0)}%"` : ''}>${val(c.cost_per_head, _hvmB, _hvmDelta(chg.cost_per_head))}</td>
-      <td class="hvm-num">${val(c.plates_per_head, _hvmN1, _hvmDelta(chg.plates_per_head))}</td>
-      <td class="hvm-num"${unc}>${val(c.cost_per_plate, _hvmB, _hvmDelta(chg.cost_per_plate))}</td>
+      <td class="hvm-num${hot ? ' hvm-hot' : ''}" style="color:${hot ? 'var(--bad-ink)' : 'var(--text-primary)'}"${hot ? ` title="สูงกว่าทั้งเครือ ${((c.cost_per_head / chainCph - 1) * 100).toFixed(0)}%"` : ''}>${val(c.cost_per_head, _hvmB, _hvmDelta(chg.cost_per_head))}</td>
+      <td class="hvm-num" style="color:var(--text-primary)">${val(c.plates_per_head, _hvmN1, _hvmDelta(chg.plates_per_head))}</td>
+      <td class="hvm-num" style="color:var(--text-primary)"${unc}>${val(c.cost_per_plate, _hvmB, _hvmDelta(chg.cost_per_plate))}</td>
       <td class="hvm-num"><div class="hvm-v">${_hvmPct(c.share_of_food_cost)}</div></td>
-      <td class="hvm-num">${val(row.food_cost_per_head, _hvmB, _hvmDelta((row.food_change || {}).prev))}</td>
+      <td class="hvm-num" style="color:var(--text-primary)">${val(row.food_cost_per_head, _hvmB, _hvmDelta((row.food_change || {}).prev))}</td>
       <td class="hvm-cause">${hvmCauseHtml(c)}</td>
     </tr>`;
   };
@@ -168,7 +168,8 @@ function hvmMatrixHtml(d) {
   const idx = new Map(d.branches.map((b, i) => [b, i]));
   const cell = (row, slug, isChain) => {
     const c = row.cells[slug] || {}, base = (ch.cells[slug] || {}).cost_per_head;
-    return `<td class="hvm-num ${isChain ? '' : _hvmHeat(c.cost_per_head, base)}"><div class="hvm-v">${_hvmB(c.cost_per_head)}</div><div class="hvm-d">${_hvmDelta((c.change && c.change.prev || {}).cost_per_head)}</div>${_hvmCauseWord(c)}</td>`;
+    const h = isChain ? '' : _hvmHeat(c.cost_per_head, base);
+    return `<td class="hvm-num ${h}" style="color:${h === 'hvm-h3' ? 'var(--bad-ink)' : 'var(--text-primary)'}"><div class="hvm-v">${_hvmB(c.cost_per_head)}</div><div class="hvm-d">${_hvmDelta((c.change && c.change.prev || {}).cost_per_head)}</div>${_hvmCauseWord(c)}</td>`;
   };
   const tr = (row, isChain, i) => `<tr class="${isChain ? 'hvm-chain' : ''}" onclick="hvmOpenRow(${isChain ? -1 : i}, true)">
       <td class="hvm-name hvm-stick">${isChain ? 'ทั้งเครือ' : esc(row.branch)}</td>${gs.map(g => cell(row, g.slug, isChain)).join('')}
@@ -208,7 +209,7 @@ function hvmOpenCell(i, slug) {
     ['ต้นทุนรวม', _hvmB(c.cost), _hvmB(p.cost), _hvmB(y.cost)],
     ['จานที่ไม่มีต้นทุน', fmtN(c.uncosted_plates), fmtN(p.uncosted_plates), fmtN(y.uncosted_plates)],
     ['ต้นทุนอาหาร/หัว', _hvmB(row.food_cost_per_head), _hvmB(row.prev_food_cost_per_head), _hvmB(row.ly_food_cost_per_head)],
-    ['ลูกค้า', fmtN(row.customers), '', ''],
+    ['ลูกค้า', fmtN(row.customers), fmtN(row.prev_customers), fmtN(row.ly_customers)],
   ]);
   const why = r.reasons || {};
   const notes = ['prev', 'ly'].filter(k => why[k]).map(k => `<p class="hvm-muted">${k === 'prev' ? 'ช่วงก่อน' : 'ปีก่อน'} · ${esc(why[k])}</p>`).join('');
@@ -239,7 +240,7 @@ function hvmOpenBranch(i) {
     `<button type="button" class="hvm-link" onclick="hvmOpenCell(${i}, '${g.slug}')">${esc(g.label)}</button>`,
     _hvmB(c.cost_per_head), _hvmB((c.prev || {}).cost_per_head), _hvmB((c.ly || {}).cost_per_head)]; })
     .concat([['ต้นทุนอาหาร/หัว', _hvmB(row.food_cost_per_head), _hvmB(row.prev_food_cost_per_head), _hvmB(row.ly_food_cost_per_head)],
-      ['ลูกค้า', fmtN(row.customers), '', '']]));
+      ['ลูกค้า', fmtN(row.customers), fmtN(row.prev_customers), fmtN(row.ly_customers)]]));
   _hvmSheet(`${name} · ต้นทุน/หัว`, `<p class="hvm-sh-range">${esc(periodSpan(_hvmRange()))}</p>${figs}`);
 }
 

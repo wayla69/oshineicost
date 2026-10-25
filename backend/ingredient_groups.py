@@ -213,6 +213,7 @@ def _scope_figs(data: Optional[Dict], groups, names) -> Optional[Dict]:
 def _merge(cur: Optional[Dict], prev: Optional[Dict], ly: Optional[Dict]) -> Dict:
     """One row: the current figures with prev / ly of each and the change in %."""
     out = {"customers": (cur or {}).get("customers"), "food_cost": (cur or {}).get("food_cost"),
+           "prev_customers": (prev or {}).get("customers"), "ly_customers": (ly or {}).get("customers"),
            "food_cost_per_head": (cur or {}).get("food_cost_per_head"),
            "prev_food_cost_per_head": (prev or {}).get("food_cost_per_head"),
            "ly_food_cost_per_head": (ly or {}).get("food_cost_per_head"),
