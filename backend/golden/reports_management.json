@@ -101,6 +101,8 @@
   "bridge": null,
   "bridge_yoy": null,
   "cost_basis": "daily",
+  "cost_per_head": 112.5,
+  "cost_per_head_prev": null,
   "food_cost": 900,
   "gp": 1000.0,
   "gp_pct": 52.6,

@@ -11,7 +11,8 @@ registered by main.py right after this one). URLs unchanged.
 from fastapi import HTTPException, Query, Request, Response
 import datetime as _sph_dt
 from typing import Dict, List, Optional
-from rules import avg_ticket_sql, net_revenue_row, net_revenue_sum
+from rules import avg_ticket_sql, month_projection, net_revenue_row, net_revenue_sum
+from targets import attainment
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price)
 from rules import SERVICE_CHARGE_MULT, net_to_base, tier_codes_between, tier_label
@@ -1602,14 +1603,22 @@ def analysis_forecast(
             GROUP BY day ORDER BY day
             """, params
         ).fetchall()
-    if not daily:
-        return {"available": False}
-    days_in_month = monthrange(d.year, d.month)[1]
-    days_elapsed = d.day
-    revs = [r["rev"] or 0 for r in daily]
-    mtd = sum(revs)
-    avg_daily = mtd / max(1, days_elapsed)
-    projected = avg_daily * days_in_month
+        if not daily:
+            return {"available": False}
+        days_in_month = monthrange(d.year, d.month)[1]
+        days_elapsed = d.day
+        revs = [r["rev"] or 0 for r in daily]
+        mtd = sum(revs)
+        avg_daily = mtd / max(1, days_elapsed)
+        # DV1: the one month-end projection (rules.month_projection, weekday-fair) - the management summary's figure
+        mp = month_projection(con, " AND ".join(filters), {k: v for k, v in params.items() if k != "period"},
+                              d.date().replace(day=1), days_elapsed, days_in_month, mtd)
+        projected = mp["projected"] if mp["projected"] is not None else avg_daily * days_in_month
+        # DV1: % of target like for like (targets.attainment) - the management summary's figure
+        by_b = {r[0]: r[1] for r in con.execute(
+            f"SELECT b.name, {net_revenue_sum('st')} FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id "
+            f"{where_p} GROUP BY b.name", params).fetchall()}
+        att = attainment(con, period, by_b, projected / mtd if mtd else 1.0, branch, group)
     # Confidence band Â±1 SD of daily revenue projected over remaining days
     if len(revs) >= 2:
         mean = sum(revs)/len(revs)
@@ -1626,6 +1635,10 @@ def analysis_forecast(
         "mtd":          round(mtd, 2),
         "avg_daily":    round(avg_daily, 2),
         "projected":    round(projected, 2),
+        "method":       mp["method"],
+        "target":       att["target"],
+        "proj_vs_target_pct": att["pct"],
+        "target_scope": att,
         "lo":           round(projected - band, 2),
         "hi":           round(projected + band, 2),
         "daily":        [{"day": r["day"], "revenue": r["rev"] or 0} for r in daily],

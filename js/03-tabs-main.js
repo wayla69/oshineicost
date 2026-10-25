@@ -634,7 +634,8 @@ async function renderExecSummary() {
     api(`${API}/api/targets?month=${fc.period}`).catch(() => []),
   ]);
   const tgtTotal = (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
-  const projVsTgt = tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null;
+  // DV1: the one % of target (/api/forecast, like for like = the management summary's); the old sum is a fallback only
+  const projVsTgt = fc.target_scope ? fc.proj_vs_target_pct : (tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null);
   const gp = prof && prof.margin_pct != null ? prof.margin_pct : null;
   const gpColor = gp == null ? 'var(--text-muted)' : gp >= 40 ? 'var(--good-ink)' : gp >= 30 ? '#f59e0b' : 'var(--bad-ink)';
   const tgtColor = projVsTgt == null ? 'var(--text-muted)' : projVsTgt >= 100 ? 'var(--good-ink)' : projVsTgt >= 90 ? '#f59e0b' : 'var(--bad-ink)';

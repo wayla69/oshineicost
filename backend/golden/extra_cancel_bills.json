@@ -9,6 +9,7 @@
  "month": "2026-06",
  "reasons": [
   {
+   "abnormal": false,
    "amount": 6000.0,
    "bills": 5,
    "reason": "คีย์ข้อมูลผิด"

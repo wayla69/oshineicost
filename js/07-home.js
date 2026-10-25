@@ -2882,7 +2882,7 @@ async function loadCancelBill(force) {
     : '';
   const tb = (s.bills || 1);
   document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
-    <td class="py-1.5 pr-2">${esc(r.reason)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
+    <td class="py-1.5 pr-2">${esc(r.reason)}${r.abnormal ? ' <span class="pill pill-warn" title="รหัสนี้ไม่มีในรายการเหตุผลของ POS">ข้อมูลผิดปกติ</span>' : ''}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${(r.bills / tb * 100).toFixed(1)}%</td>
     <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
