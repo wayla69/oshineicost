@@ -10,6 +10,10 @@ from core import invalidate_cache
 from core import require_write_token
 from targets import targets_for_month
 from rules import FOOD_COST_TARGET_MAX, FOOD_COST_TARGET_MIN, valid_food_cost_target
+
+# the @ttl_cache endpoints whose answer carries or uses rules.food_cost_target (besides home_brief / report_management)
+FOOD_COST_TARGET_CACHED = ("gp_by_branch_month", "buffet_performance", "food_cost_trend", "cost_recalibration",
+                           "bom_cost_branch_foodcost_mom")
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
@@ -159,9 +163,9 @@ def put_settings(body: Dict[str, str]):
     invalidate_cache("analysis_discount_alerts", "analysis_discounts", "report_management",
                      "home_brief")
     if "food_cost_target" in body:
-        # the target is read by many cached endpoints (GP รายสาขา, buffet, cost trend, home, reports): drop every
-        # cached response; no cost source changed, so the effective-cost table is not rebuilt
-        invalidate_cache(rebuild_cost=False)
+        # the cached endpoints that carry the target (home_brief and report_management are dropped above); only these,
+        # so a target change does not make every heavy report recompute at once
+        invalidate_cache(*FOOD_COST_TARGET_CACHED, rebuild_cost=False)
     return {"ok": True}
 
 
