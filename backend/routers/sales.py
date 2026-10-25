@@ -1867,8 +1867,11 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         back = rets.get((bid, sid))
         if back is not None and first is not None and first < back[0]:
             # PR-TD: an existing menu back on sale after >= 21 days without one: a new menu again from the day it came back, for 28 days
-            if back[1] >= 1:
-                newc.append((bid, branch_name, name, code, sid, back[1], back[0], kind, first))
+            # DV1 (review 2026-10-25): the plates are counted over the same window as the divisor (days / customers of
+            # max(ps, returned_on)..pe) - a return before the period start keeps the period's plates, not the total since the return
+            bq = back[1] if back[0] > ps else pq
+            if bq >= 1:
+                newc.append((bid, branch_name, name, code, sid, bq, back[0], kind, first))
             continue
         e = base.get((bid, sid))
         n = e[7] if e else 0
