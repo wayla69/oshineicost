@@ -173,7 +173,7 @@ function hvmMatrixHtml(d) {
   };
   const tr = (row, isChain, i) => `<tr class="${isChain ? 'hvm-chain' : ''}" onclick="hvmOpenRow(${isChain ? -1 : i}, true)">
       <td class="hvm-name hvm-stick">${isChain ? 'ทั้งเครือ' : esc(row.branch)}</td>${gs.map(g => cell(row, g.slug, isChain)).join('')}
-      <td class="hvm-num ${isChain ? '' : _hvmHeat(row.food_cost_per_head, ch.food_cost_per_head)}"><div class="hvm-v">${_hvmB(row.food_cost_per_head)}</div><div class="hvm-d">${_hvmDelta((row.food_change || {}).prev)}</div></td></tr>`;
+      <td class="hvm-num ${isChain ? '' : _hvmHeat(row.food_cost_per_head, ch.food_cost_per_head)}" style="color:var(--text-primary)"><div class="hvm-v">${_hvmB(row.food_cost_per_head)}</div><div class="hvm-d">${_hvmDelta((row.food_change || {}).prev)}</div></td></tr>`;
   return `<div class="hvm-wrap hvm-mx-wrap"><table id="hvmMatrix" class="hvm-tbl hvm-mx wt"><thead><tr>
       ${_hvmTh('name', 'สาขา', 'hvm-name hvm-stick')}${gs.map(g => _hvmTh(g.slug, esc(g.label), 'hvm-num')).join('')}${_hvmTh('food', 'ต้นทุนอาหาร/หัว', 'hvm-num')}
     </tr></thead><tbody>${tr(ch, true, -1)}${rows.map(b => tr(b, false, idx.get(b))).join('')}</tbody></table></div>`;

@@ -162,6 +162,18 @@ for (const [name, opts, mode] of CASES) {
       expect(mx.th).toEqual(['สาขา', 'แซลมอน', 'ทูน่า', 'ฮามาจิ', 'กุ้งหวาน', 'หอยเชลล์', 'ปลาไหล', 'หอยนางรม', 'เนื้อ', 'ต้นทุนอาหาร/หัว']);
       expect(mx.stick).toBe('sticky');
       expect(mx.words).toBeGreaterThan(0);
+      // contrast >= 4.5:1 for the figures on a heat tint and the cause lines (light and dark)
+      const worst = await page.evaluate(() => {
+        const rgb = s => { const m = String(s).match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/); if (m) return [+m[1] * 255, +m[2] * 255, +m[3] * 255];
+          const n = String(s).match(/[\d.]+/g) || ['0', '0', '0', '0']; return [+n[0], +n[1], +n[2], n[3] == null ? 1 : +n[3]]; };
+        const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+        const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c.length < 4 || c[3] >= 0.5) return c; } return [255, 255, 255]; };
+        const els = [...document.querySelectorAll('#hvmMatrix td[class*="hvm-h"] .hvm-v, #hvmMatrix td[class*="hvm-g"] .hvm-v, #hvmMatrix .hvm-cw')];
+        const r = els.map(e => { const a = lum(rgb(getComputedStyle(e).color)), b = lum(bgOf(e));
+          return { k: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), d: `${e.className} ${getComputedStyle(e).color} on ${bgOf(e).join(',')}` }; });
+        return r.sort((x, y) => x.k - y.k)[0] || { k: 99, d: '' };
+      });
+      expect(worst.k, worst.d).toBeGreaterThanOrEqual(4.5);
       await page.waitForTimeout(400);
       await shot(page, `hvm_all_${tag}`);
       // a group chip switches back
