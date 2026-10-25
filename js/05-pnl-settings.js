@@ -2486,8 +2486,26 @@ function downloadCSV(text, filename) {
 // vs ก่อนหน้า column too.
 // Rows run by the latest complete period; the period still in progress is
 // marked MTD and kept out of every average and comparison.
-let _heatMode = 'value', _heatData = null;
+let _heatMode = 'value', _heatData = null, _heatSpan = { from: '', to: '' };
 function setHeatMode(m) { _heatMode = m; _renderBranchHeatmap(); }
+// ISO weeks ('2026-W43') the span [from, to] (YYYY-MM-DD) does not hold whole: the indices of periods. `to` is also capped at the
+// last day with data (window.__dataLastDate), so the week in progress counts as cut.
+function heatPartialWeeks(periods, span) {
+  const out = new Set();
+  const last = (typeof _glanceLastDate === 'function') ? _glanceLastDate() : null;
+  const lastIso = last ? `${last.y}-${String(last.m).padStart(2, '0')}-${String(last.d).padStart(2, '0')}` : '';
+  const to = [span && span.to, lastIso].filter(Boolean).sort()[0] || '';
+  const from = (span && span.from) || '';
+  const iso = d => d.toISOString().slice(0, 10);
+  periods.forEach((p, i) => {
+    const m = /^(\d{4})-W(\d{2})$/.exec(p);
+    if (!m) return;
+    const j4 = new Date(Date.UTC(+m[1], 0, 4)), mon = new Date(j4.getTime() - ((j4.getUTCDay() + 6) % 7) * 864e5 + (+m[2] - 1) * 7 * 864e5);
+    const sun = new Date(mon.getTime() + 6 * 864e5);
+    if ((from && iso(mon) < from) || (to && iso(sun) > to)) out.add(i);
+  });
+  return out;
+}
 async function loadBranchHeatmap() {
   const wrap = document.getElementById('heatmapWrap');
   if (!wrap) return;
@@ -2495,6 +2513,9 @@ async function loadBranchHeatmap() {
   const params = new URLSearchParams({ granularity });
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
+  const mt = getMonthTo();
+  const endOf = ym => { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`; };
+  _heatSpan = { from: getMonthFrom() ? `${getMonthFrom()}-01` : '', to: mt ? endOf(mt) : '' };
   _heatData = await api(`${API}/api/analysis/heatmap_branch?${params}`);
   _renderBranchHeatmap();
 }
@@ -2509,12 +2530,16 @@ function _renderBranchHeatmap() {
   data.forEach(r => { (map[r.branch] = map[r.branch] || {})[r.period] = r; });
   const rev = (br, p) => (map[br] && map[br][p] && map[br][p].revenue) || 0;
   const pi = glancePeriods(periods).partial;                 // the period still in progress, or -1
-  const done = periods.filter((p, i) => i !== pi);
+  // the weeks the range only partly covers (the first one cut by the 1st of the month, the last one by the last day with data): a
+  // red cell on a two-day week says nothing - they are marked ไม่ครบ and kept out of every average and comparison like the MTD period
+  const cut = heatPartialWeeks(periods, _heatSpan);
+  const isPart = i => i === pi || cut.has(i);
+  const done = periods.filter((p, i) => !isPart(i));
   const L = done[done.length - 1], Pv = done[done.length - 2];
   const branches = [...new Set(data.map(r => r.branch))]
     .sort((a, b) => (rev(b, L) - rev(a, L)) || a.localeCompare(b, 'th'));
   // A branch's opening month is a part-month (อยุธยา opened on 51K): it is kept
-  // out of the branch's normal and not scored. A normal needs >= 3 full periods.
+  // out of the branch's normal and not scored. A normal needs >= 2 full periods.
   const opening = {};
   branches.forEach(br => {
     const live = done.filter(p => rev(br, p) > 0);
@@ -2522,8 +2547,10 @@ function _renderBranchHeatmap() {
     const rest = live.slice(1).map(p => rev(br, p)).sort((a, b) => a - b), med = rest[Math.floor(rest.length / 2)];
     if (rev(br, live[0]) < 0.3 * med) opening[br] = live[0];
   });
-  const avgOf = br => { const v = done.filter(p => p !== opening[br]).map(p => rev(br, p)).filter(x => x > 0); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
-  const avg = Object.fromEntries(branches.map(b => [b, avgOf(b)]));
+  const avgOf = (br, min) => { const v = done.filter(p => p !== opening[br]).map(p => rev(br, p)).filter(x => x > 0); return v.length >= min ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
+  // the branch's own average of the shown full columns (both readings): two are enough to say which was the weaker one - a month seen
+  // by week holds only two or three full weeks once the cut ones are out
+  const avg = Object.fromEntries(branches.map(b => [b, avgOf(b, 2)]));
   const fmtPer = p => fmtPeriod(p);
   const vs = (br, p) => { const a = avg[br], v = rev(br, p); return a > 0 && v > 0 && p !== opening[br] ? (v / a - 1) * 100 : null; };
   const pctTxt = x => `${x > 0 ? '+' : ''}${x.toFixed(0)}%`;
@@ -2549,10 +2576,11 @@ function _renderBranchHeatmap() {
   const seg = (m, label) => `<button onclick="setHeatMode('${m}')" class="text-xs px-2.5 py-1" style="border:1px solid ${_heatMode === m ? 'var(--accent)' : 'var(--border)'};background:${_heatMode === m ? 'var(--accent)' : 'transparent'};color:${_heatMode === m ? 'var(--on-accent)' : 'var(--text-secondary)'};border-radius:3px">${label}</button>`;
 
   const cell = (br, p, i) => {
-    const r = map[br] && map[br][p], v = rev(br, p), inProg = i === pi;
+    const r = map[br] && map[br][p], v = rev(br, p), inProg = isPart(i);
+    const byRow = _heatMode !== 'vsnorm', base = avg[br];
     const x0 = inProg ? null : vs(br, p);
-    const tip = `${br} · ${fmtPer(p)}${inProg ? ' (ยังไม่ครบ)' : ''} — ${fmtN(v)} · ${r?.tx_count || 0} tx` + (avg[br] ? ` · ค่าปกติ ${fmt(avg[br])}` : '')
-      + (x0 != null ? ` · ${pctTxt(x0)} จากค่าปกติ` : '');
+    const tip = `${br} · ${fmtPer(p)}${inProg ? ' (ยังไม่ครบ)' : ''} — ${fmtN(v)} · ${r?.tx_count || 0} tx` + (base ? ` · ${byRow ? 'ค่าเฉลี่ย' : 'ค่าปกติ'} ${fmt(base)}` : '')
+      + (x0 != null ? ` · ${pctTxt(x0)} จาก${byRow ? 'ค่าเฉลี่ย' : 'ค่าปกติ'}` : '');
     if (!v) return `<td><div class="heatmap-cell" style="background:transparent;color:var(--text-muted);font-weight:400" title="${esc(tip)}">–</div></td>`;
     if (inProg) return `<td><div class="heatmap-cell" style="background:transparent;border:1px dashed var(--border-control,#7d8aa0);color:var(--text-secondary);font-weight:500" title="${esc(tip)}">${fmt(v)}</div></td>`;
     if (p === opening[br]) return `<td><div class="heatmap-cell" style="background:transparent;color:var(--text-muted);font-weight:500" title="${esc(tip)} · เดือนเปิดสาขา (ไม่ครบเดือน)">เปิด</div></td>`;
@@ -2579,7 +2607,7 @@ function _renderBranchHeatmap() {
     <table id="heatmapTable" class="heatmap-table">
       <thead><tr>
         <th></th>
-        ${periods.map((p, i) => `<th>${fmtPer(p)}${i === pi ? '<br><span style="font-weight:600">MTD</span>' : ''}</th>`).join('')}
+        ${periods.map((p, i) => `<th>${fmtPer(p)}${i === pi ? '<br><span style="font-weight:600">MTD</span>' : cut.has(i) ? '<br><span style="font-weight:600">ไม่ครบ</span>' : ''}</th>`).join('')}
         ${L && Pv ? `<th style="padding-left:8px">${esc(fmtPer(L))}<br>vs ก่อนหน้า</th>` : ''}
       </tr></thead>
       <tbody>
@@ -2590,7 +2618,7 @@ function _renderBranchHeatmap() {
         </tr>`).join('')}
       </tbody>
     </table>
-    <p style="font-size:10.5px;color:var(--text-muted);margin-top:6px">เรียงตามยอด${L ? ' ' + esc(fmtPer(L)) : ''} · ${_heatMode === 'vsnorm' ? 'ค่าปกติ = ค่าเฉลี่ยของสาขานั้นเองในช่วงที่เลือก (ไม่รวมช่วงที่ยังไม่ครบ)' : 'สี = เทียบค่าเฉลี่ยของสาขานั้นเองในช่วงที่เลือก (แดง ต่ำกว่า · เขียว สูงกว่า)'}${pi >= 0 ? ' · MTD = ยังไม่ครบ ไม่นำมาเทียบ' : ''} · – = ไม่มียอด${Object.keys(opening).length ? ' · เปิด = เดือนที่เปิดสาขา (ไม่ครบเดือน)' : ''}</p>`;
+    <p style="font-size:10.5px;color:var(--text-muted);margin-top:6px">เรียงตามยอด${L ? ' ' + esc(fmtPer(L)) : ''} · ${_heatMode === 'vsnorm' ? 'ค่าปกติ = ค่าเฉลี่ยของสาขานั้นเองในช่วงที่เลือก (ไม่รวมช่วงที่ยังไม่ครบ)' : 'สี = เทียบค่าเฉลี่ยของสาขานั้นเองในช่วงที่เลือก (แดง ต่ำกว่า · เขียว สูงกว่า)'}${pi >= 0 ? ' · MTD = ยังไม่ครบ ไม่นำมาเทียบ' : ''}${cut.size ? ' · ไม่ครบ = สัปดาห์ที่ช่วงที่เลือกมีไม่ครบ 7 วัน ไม่นำมาเทียบ' : ''} · – = ไม่มียอด${Object.keys(opening).length ? ' · เปิด = เดือนที่เปิดสาขา (ไม่ครบเดือน)' : ''}</p>`;
 }
 
 function closeDrill() {}  // legacy no-op (old cached callers)

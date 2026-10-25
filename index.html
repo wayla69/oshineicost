@@ -2365,7 +2365,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
   body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
   body.ph-on .top-bar { gap: 6px; padding: 6px 8px; align-items: center; }
-  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; }
+  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; row-gap: 10px; }   /* 10 px between the chip rows: each chip keeps its own 44 px tap area (owner 2026-10-25) */
   body.ph-on .topbar-scope .page-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
   body.ph-on #dataCoverageNote { font-size: 12px !important; padding: 2px 8px !important; }
   body.ph-on #dataCoverageNote .dcn-x { display: none; }
@@ -2573,7 +2573,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 /* owner 2026-10-25 · the phone: the chip is ONE line ("1–24 ต.ค. 69 ▾", ellipsis), a button that opens the period sheet (js/09c-mobile.js
    "THE PERIOD SHEET"); drawn 28 px, 44 px to tap through an ::after */
 body.ph-on .gp-range-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important; min-width: 0 !important; max-width: 46vw;
-  padding: 0 10px; white-space: nowrap; overflow: hidden; font-size: 12px; cursor: pointer; color: var(--accent); border-color: var(--accent); background: var(--bg-card); }
+  padding: 0 10px; white-space: nowrap; font-size: 12px; cursor: pointer; color: var(--accent); border-color: var(--accent); background: var(--bg-card); }
 body.ph-on .gp-range-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
 body.ph-on .gp-range-chip .gp-rc-l { display: none; }
 body.ph-on .gp-range-chip .gp-rc-s { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -2583,7 +2583,7 @@ body.ph-on .gp-range-chip:focus-visible { outline: 2px solid var(--accent); outl
 .gp-branch-chip { display: none; }
 body.ph-on .gp-branch-chip:not([hidden]) { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important;
   min-width: 0 !important; max-width: 30vw; padding: 0 10px; border-radius: 999px; border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
-  font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer; }
+  font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 body.ph-on .gp-branch-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
 body.ph-on .gp-branch-chip .gb-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body.ph-on .gp-branch-chip .gb-v { flex: 0 0 auto; }
