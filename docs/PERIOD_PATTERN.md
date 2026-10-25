@@ -60,6 +60,11 @@ pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the �
   backdrop / Esc / a swipe down / leaving the page - so its kinds (the page's `follow.period.kinds`), ‹ › and จาก–ถึง are the same
   buttons on the same state (`_gp`, `gPeriod*`): still ONE period control (`backend/test_period_one_control.py`). Every page that
   follows the period on a phone has it; a desktop keeps the plain full-span chip.
+- Phone, the branch (owner 2026-10-25, "หน้านี้อยากให้ filter รายสาขาได้ด้วย"): beside it a one-line branch chip (`ทุกสาขา ▾` / `นครปฐม ▾`,
+  `#gpBranchChip`, `branchChipRender` in js/01-core.js) opens a bottom sheet (`phBranchOpen`, js/09c-mobile.js "THE BRANCH SHEET"): a search
+  box and the options of the top bar's `#selBranch` (by สาขาหลัก / แฟรนไชส์ when both are listed). A pick sets `#selBranch` and fires its change
+  (`onFilterChange`), so the page reloads with `branch=` exactly as from the top bar - still ONE branch state. Shown on every page whose
+  top-bar filters are shown; a pinned login (branch / franchise, PR-K) has no chip and no sheet (`stripBranchPickers`); a desktop has no chip.
 - API: `gPeriodGet()`, `gPeriodSet({kind, pick, from, to}, silent)`, `gPeriodResolve()` (a `periodRange` result),
   `gPeriodAnchor()`, `getPeriodKind()`; remembered on the device (`oshinei_gperiod`, `oshinei_chartwin`).
 

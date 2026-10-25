@@ -211,12 +211,17 @@ body.dark .ins-bar-flat { background: linear-gradient(to top, color-mix(in srgb,
   --heat-s1-ink:#0f172a; --heat-s2-ink:#fff; --heat-s3-ink:#fff; --heat-s4-ink:#fff; --heat-s5-ink:#fff;
   --heat-d1:#d9625c; --heat-d2:#f3c4c0; --heat-d3:#e6eaf0; --heat-d4:#bfe3cc; --heat-d5:#3e9c69;
   --heat-d1-ink:#0f172a; --heat-d2-ink:#0f172a; --heat-d3-ink:#0f172a; --heat-d4-ink:#0f172a; --heat-d5-ink:#0f172a;
+  /* owner 2026-10-25 · the red → neutral → green heat scale (heatRG, js/01-core.js): m4..m1 below, 0 = ±3 %, p1..p4 above; every ink >= 4.9:1 */
+  --heat-rgm4:#b42318; --heat-rgm3:#e35a50; --heat-rgm2:#f2948d; --heat-rgm1:#fbd0cc; --heat-rg0:#eef1f5; --heat-rgp1:#cdeed8; --heat-rgp2:#8fd6a8; --heat-rgp3:#3fae6e; --heat-rgp4:#157a46;
+  --heat-rgm4-ink:#fff; --heat-rgm3-ink:#0f172a; --heat-rgm2-ink:#0f172a; --heat-rgm1-ink:#0f172a; --heat-rg0-ink:#0f172a; --heat-rgp1-ink:#0f172a; --heat-rgp2-ink:#0f172a; --heat-rgp3-ink:#0f172a; --heat-rgp4-ink:#fff;
 }
 body.dark {
   --heat-s1:#5c6bc0; --heat-s2:#7d86d8; --heat-s3:#9d98e8; --heat-s4:#c0b8f6; --heat-s5:#e6e0ff;
   --heat-s1-ink:#fff; --heat-s2-ink:#0f172a; --heat-s3-ink:#0f172a; --heat-s4-ink:#0f172a; --heat-s5-ink:#0f172a;
   --heat-d1:#b9524d; --heat-d2:#5a2f33; --heat-d3:#2b3446; --heat-d4:#27493a; --heat-d5:#3e9c69;
   --heat-d1-ink:#fff; --heat-d2-ink:#fff; --heat-d3-ink:#fff; --heat-d4-ink:#fff; --heat-d5-ink:#0f172a;
+  --heat-rgm4:#f0645a; --heat-rgm3:#b8443d; --heat-rgm2:#7a2e2c; --heat-rgm1:#4a2628; --heat-rg0:#2b3446; --heat-rgp1:#1d3d2e; --heat-rgp2:#22603f; --heat-rgp3:#27804f; --heat-rgp4:#4cc786;
+  --heat-rgm4-ink:#0f172a; --heat-rgm3-ink:#fff; --heat-rgm2-ink:#fff; --heat-rgm1-ink:#fff; --heat-rg0-ink:#fff; --heat-rgp1-ink:#fff; --heat-rgp2-ink:#fff; --heat-rgp3-ink:#fff; --heat-rgp4-ink:#0f172a;
 }
 .heatmap-wrap { overflow-x: auto; }
 .heatmap-table { border-collapse: separate; border-spacing: 2px; }
@@ -224,6 +229,16 @@ body.dark {
 .heatmap-table td { padding: 0; }
 .heatmap-cell { width: 52px; height: 28px; border-radius:var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #0f172a;   /* white fails on the whole heat scale (2.2-3.8:1); navy clears it */ cursor: pointer; transition: transform 0.1s; }
 .heatmap-cell:hover { transform: scale(1.15); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+/* owner 2026-10-25 · the red → neutral → green cells (heatRG) and their legend strip; the vs ก่อนหน้า column is a cell on the same scale */
+.heatmap-cell.hrg { font-size: 11px; font-weight: 700; }
+.heatmap-cell.hrg-mom { width: 64px; white-space: nowrap; }
+.heatmap-table td.hrg-mom-td { padding-left: 8px; }
+.hrg-legend { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--text-secondary); }
+.hrg-end { font-weight: 600; white-space: nowrap; }
+.hrg-sws { display: inline-flex; gap: 2px; }
+.hrg-sw { width: 16px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+.hrg-note { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+@media (max-width: 700px) { .heatmap-cell.hrg { font-size: 12px; } .hrg-sw { width: 14px; } }
 .heatmap-branch-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); padding-right: 8px; text-align: right; white-space: nowrap;
   position: sticky; left: 0; background: var(--bg-card); z-index: 1; }   /* stays put while the months scroll */
 .heatmap-table tr:hover .heatmap-branch-label { color: var(--text-primary); }
@@ -1448,7 +1463,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .top-bar .tb-fold { display: inline-flex; align-self: flex-start; margin-left: auto; }
   .topbar-actions { flex-basis: 100%; }
   body.role-branch .top-bar .tb-fold, body.role-franchise .top-bar .tb-fold { display: none; }
-  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(#gpRangeChip),
+  body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-scope > :not(.page-title):not(#dataCoverageNote):not(.gp-chips),
   body.tb-folded:not(.role-branch):not(.role-franchise) .topbar-actions,
   body.tb-folded:not(.role-branch):not(.role-franchise) #presetBar { display: none !important; }
   /* a page that blanks a control (visibility, switchTab) must not hold an empty row here */
@@ -2350,7 +2365,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
   body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
   body.ph-on .top-bar { gap: 6px; padding: 6px 8px; align-items: center; }
-  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; }
+  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; row-gap: 10px; }   /* 10 px between the chip rows: each chip keeps its own 44 px tap area (owner 2026-10-25) */
   body.ph-on .topbar-scope .page-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
   body.ph-on #dataCoverageNote { font-size: 12px !important; padding: 2px 8px !important; }
   body.ph-on #dataCoverageNote .dcn-x { display: none; }
@@ -2558,12 +2573,44 @@ body.mgt-reading .content-area { padding-top: 10px; }
 /* owner 2026-10-25 · the phone: the chip is ONE line ("1–24 ต.ค. 69 ▾", ellipsis), a button that opens the period sheet (js/09c-mobile.js
    "THE PERIOD SHEET"); drawn 28 px, 44 px to tap through an ::after */
 body.ph-on .gp-range-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important; min-width: 0 !important; max-width: 46vw;
-  padding: 0 10px; white-space: nowrap; overflow: hidden; font-size: 12px; cursor: pointer; color: var(--accent); border-color: var(--accent); background: var(--bg-card); }
+  padding: 0 10px; white-space: nowrap; font-size: 12px; cursor: pointer; color: var(--accent); border-color: var(--accent); background: var(--bg-card); }
 body.ph-on .gp-range-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
 body.ph-on .gp-range-chip .gp-rc-l { display: none; }
 body.ph-on .gp-range-chip .gp-rc-s { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body.ph-on .gp-range-chip .gp-rc-v { display: inline; flex: 0 0 auto; font-size: 12px; }
 body.ph-on .gp-range-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* owner 2026-10-25 · the branch chip beside it (a phone only): "ทุกสาขา ▾" one line, ellipsis; 28 px drawn, 44 px to tap; opens the branch sheet */
+.gp-branch-chip { display: none; }
+body.ph-on .gp-branch-chip:not([hidden]) { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 28px; min-height: 0 !important;
+  min-width: 0 !important; max-width: 30vw; padding: 0 10px; border-radius: 999px; border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
+  font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+body.ph-on .gp-branch-chip::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
+body.ph-on .gp-branch-chip .gb-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.ph-on .gp-branch-chip .gb-v { flex: 0 0 auto; }
+body.ph-on .gp-branch-chip.gb-on { background: var(--accent); color: var(--on-accent, #fff); }
+body.ph-on .gp-branch-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* ONE row for both chips (coordinator 2026-10-25: no third header row, and the date must read): .gp-chips is a no-wrap row; the period
+   chip keeps its natural width ("1–19 ต.ค. 69 ▾", never cut), the branch chip takes the rest and ellipsises (branch names are the long
+   part). Side by side their tap areas (::after, vertical only) cannot overlap. A desktop never sees the row (display: contents). */
+.gp-chips { display: contents; }
+body.ph-on .gp-chips { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+body.ph-on .gp-chips .gp-range-chip { flex: 0 0 auto; max-width: none; padding: 0 8px; }
+body.ph-on .gp-chips .gp-branch-chip:not([hidden]) { flex: 0 1 auto; min-width: 0 !important; max-width: none; padding: 0 8px; }
+/* the mode button is the icon alone on a phone up to 430 px (its label stays as text for the reader, the aria-label and the title) */
+@media (max-width: 430px) {
+  body.ph-on #phModeBtn #phModeL { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  body.ph-on #phModeBtn { padding: 0; width: 44px; }
+}
+/* the branch sheet: a search box and the list of the top bar's #selBranch options, by group (สาขาหลัก / แฟรนไชส์) */
+.phb-search { display: block; width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-control, var(--border)); border-radius: var(--r-md);
+  background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 15px; }
+.phb-list { margin-top: 10px; }
+.phb-gh { margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.phb-item { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--border);
+  background: transparent; color: var(--text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.phb-item[aria-checked="true"] { font-weight: 700; color: var(--accent); }
+.phb-item[aria-checked="true"]::after { content: '✓'; font-size: 16px; }
+.phb-empty { padding: 12px; font-size: 14px; color: var(--text-secondary); }
 /* the sheet: the top bar's #gPeriod moved in while open, laid out as stacked rows (kinds, the stepper, จาก–ถึง) */
 .php-back { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 23, 42, .45); }
 .php-back[hidden] { display: none; }
@@ -3303,8 +3350,15 @@ body.php-open { overflow: hidden; }
       <span id="dataCoverageNote" class="flex-shrink-0" style="display:none;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap" title=""></span>
       <!-- PR-PP2: the period this page shows, once (periodChip, js/01-core.js) - the top bar is the only period control -->
       <!-- owner 2026-10-25: on a phone the chip is a one-line button that opens this top bar's period control in a sheet (phPeriodOpen) -->
+      <!-- the two chips ride ONE row on a phone (.gp-chips: a no-wrap row there, display: contents on a desktop) -->
+      <span class="gp-chips">
       <span id="gpRangeChip" class="gp-range-chip flex-shrink-0" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
         onkeydown="if (typeof phPeriodChipKey === 'function') phPeriodChipKey(event)"></span>
+      <!-- owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): a phone only - the branch of this page ("ทุกสาขา ▾"), opens the top bar's
+           branch filter (#selBranch) in a sheet (phBranchOpen, js/09c-mobile.js). A pinned login never gets it (stripBranchPickers). -->
+      <button id="gpBranchChip" type="button" class="gp-branch-chip flex-shrink-0" hidden onclick="if (typeof phBranchOpen === 'function') phBranchOpen()"
+        aria-haspopup="dialog" aria-expanded="false"><span class="gb-l"></span><span class="gb-v" aria-hidden="true">▾</span></button>
+      </span>
       <select id="selBranch" onchange="onFilterChange()" aria-label="เลือกสาขา — กรองข้อมูลทุกหน้า" title="เลือกสาขา (ทุกหน้าจะกรองตามนี้)"
         style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:160px;font-weight:600">
         <option value="">ทุกสาขา</option>

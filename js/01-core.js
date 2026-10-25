@@ -1038,6 +1038,8 @@ function stripBranchPickers() {
     g.replaceWith(h);
   }
   document.getElementById('msBranch')?.remove();                  // the owner's phone summary picker
+  document.getElementById('gpBranchChip')?.remove();              // the phone's branch chip by the page title (and so its sheet)
+  document.getElementById('phBranchSheet')?.remove();
   const nm = document.getElementById('brnBranchName');
   if (nm && !nm.textContent) nm.textContent = name;
 }
@@ -1420,11 +1422,41 @@ function heatLegend(kind, labels) {
   return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text-muted)">${cols.map((c, i) =>
     `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:${c};border:1px solid var(--border)"></span>${labels[i] || ''}</span>`).join('')}</div>`;
 }
+// Owner 2026-10-25 ("heat map ทำให้เป็น heat map จริงๆแดงเขียวเลย"): a real red → neutral → green scale for a % against a baseline
+// (a cell vs its own branch's normal, a change vs the period before). Symmetric, four steps a side, capped at ±30 %:
+//   |pct| < 3 neutral · 3–10 · 10–20 · 20–30 · >= 30 (the darkest red / green). The fills are theme tokens --heat-rgm4..m1, --heat-rg0,
+//   --heat-rgp1..p4 (index.html, each with an -ink token >= 4.9:1 in light and dark), so inkOn() gives the label colour.
+const HEAT_RG_EDGES = [3, 10, 20, 30];
+function heatRGStep(pct) {
+  if (pct == null || !isFinite(pct)) return null;
+  const a = Math.abs(pct), s = HEAT_RG_EDGES.filter(e => a >= e).length;
+  return pct < 0 ? -s : s;
+}
+function heatRGToken(s) { return `var(--heat-rg${s < 0 ? 'm' + -s : s > 0 ? 'p' + s : '0'})`; }
+function heatRG(pct) {
+  const s = heatRGStep(pct);
+  return s == null ? null : heatRGToken(s);
+}
+// the legend strip: ต่ำกว่าปกติ ← nine swatches → สูงกว่าปกติ, each swatch titled with its band
+function heatRGLegend() {
+  const E = HEAT_RG_EDGES, n = E.length;
+  const band = s => {
+    const a = Math.abs(s);
+    if (!s) return `ปกติ ±${E[0]}%`;
+    return (s < 0 ? 'ต่ำกว่า ' : 'สูงกว่า ') + (a === n ? `${E[a - 1]}% ขึ้นไป` : `${E[a - 1]}–${E[a]}%`);
+  };
+  const steps = [];
+  for (let s = -n; s <= n; s++) steps.push(s);
+  const sw = steps.map(s => `<span class="hrg-sw" title="${band(s)}" style="background:${heatRGToken(s)}"></span>`).join('');
+  return `<div class="hrg-legend" role="img" aria-label="สีแดง ต่ำกว่าปกติ · สีเขียว สูงกว่าปกติ · ปกติ ±${E[0]}% · สีเข้มสุด ±${E[n - 1]}% ขึ้นไป">`
+    + `<span class="hrg-end">ต่ำกว่าปกติ ←</span><span class="hrg-sws" aria-hidden="true">${sw}</span><span class="hrg-end">→ สูงกว่าปกติ</span>`
+    + `<span class="hrg-note">±${E[0]}% = ปกติ · เข้มสุด ±${E[n - 1]}%</span></div>`;
+}
 // Label colour for text ON a data-driven fill (heat cells, bar segments, badges): white or
 // the light-theme primary ink, whichever contrasts more. Fixed hex both themes, like the fill.
 // White fails on the whole heat scale (#ef4444 3.76, #f59e0b 2.15, #16a34a 3.30); #0f172a clears it.
 function inkOn(bg) {
-  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5])\)$/);
+  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5]|rg(?:[mp][1-4]|0))\)$/);
   if (tok) return `var(--heat-${tok[1]}-ink)`;   // heat fills are theme tokens with their own ink
   const m = String(bg || '').trim().match(/^#(?:([0-9a-f]{6})(?:[0-9a-f]{2})?|([0-9a-f]{3}))(?![0-9a-f])|^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
   if (!m) return '#fff';
@@ -2916,6 +2948,22 @@ function periodChipRole() {
   if (on) { el.setAttribute('role', 'button'); el.tabIndex = 0; el.setAttribute('aria-haspopup', 'dialog'); el.setAttribute('aria-label', `ช่วงเวลา ${el.title} · แตะเพื่อเปลี่ยน`); }
   else ['role', 'tabindex', 'aria-haspopup', 'aria-label'].forEach(a => el.removeAttribute(a));
 }
+// Owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): beside the range chip, a phone shows the branch of the page as a one-line chip
+// ("ทุกสาขา ▾" / "นครปฐม ▾", ellipsis) that opens the top bar's branch filter in a sheet (phBranchOpen, js/09c-mobile.js). The chip only
+// READS #selBranch - the one branch state; a pinned login (PR-K) never gets it: stripBranchPickers takes it out of the DOM.
+function branchChipRender() {
+  const el = document.getElementById('gpBranchChip'); if (!el) return;
+  const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch'));
+  const ok = typeof phOn === 'function' && phOn() && !isPinnedSession() && !!sel && sel.tagName === 'SELECT';
+  el.hidden = !ok;
+  if (!ok) return;
+  const v = sel.value, g = getGroup();
+  const name = v || (g === 'master' ? 'สาขาหลักทั้งหมด' : g === 'franchise' ? 'แฟรนไชส์ทั้งหมด' : 'ทุกสาขา');
+  const l = el.querySelector('.gb-l'); if (l) l.textContent = name;
+  el.classList.toggle('gb-on', !!v);
+  el.title = `สาขา: ${name}`;
+  el.setAttribute('aria-label', `สาขา ${name} · แตะเพื่อเปลี่ยน`);
+}
 function periodChipShort(r) { return r && r.label_th ? String(r.label_th).replace(/\b25(\d\d)\b/g, '$1') : ''; }
 function periodChip(r, fromServer) {
   const el = document.getElementById('gpRangeChip');
@@ -3449,7 +3497,7 @@ async function onGroupChange() {
   const sel = document.getElementById('selBranch');
   const prev = sel.value;
   sel.innerHTML = '<option value="">ทุกสาขา</option>' +
-    data.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+    data.map(b => `<option value="${esc(b.name)}" data-type="${esc(b.branch_type || '')}">${esc(b.name)}</option>`).join('');
   // keep existing branch if still valid; else reset
   sel.value = data.some(b => b.name === prev) ? prev : '';
   onFilterChange();
@@ -3613,6 +3661,7 @@ function switchTab(name, direct) {
   const hidePeriod = (name === 'home' || name === 'mgtreport');
   document.getElementById('gPeriod')?.classList.toggle('invisible', hidePeriod);
   gPeriodForTab(name);                                             // PR-PP2: the kinds of this page; the range chip
+  branchChipRender();                                              // the phone's branch chip (owner 2026-10-25)
   const _gc = document.getElementById('gpChart');                 // ช่วงกราฟ: only the page whose trend chart reads it (PR-PP1)
   if (_gc) _gc.hidden = name !== 'overall';
   // Pages with their own branch / month controls (TABS[].ownFilters) get no chain filters at all,

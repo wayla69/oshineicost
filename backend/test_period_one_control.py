@@ -68,3 +68,22 @@ def test_the_old_page_pickers_are_gone_or_hidden():
     assert re.search(r'<div class="card [^"]*\bhidden\b[^"]*"[^>]*>\s*<span[^>]*>ดูช่วงวัน', d)       # ส่วนลด: the top bar's days
     o = (REPO / "tabs" / "37-overall.html").read_text(encoding="utf-8")
     assert re.search(r'flex-wrap hidden"[^>]*>.*\n\s*<span class="text-slate-400">เทียบเดือน:', o)   # the movers' month pair
+
+
+def test_the_phone_branch_sheet_is_the_top_bars_own_filter():
+    """Owner 2026-10-25 ("หน้านี้อยากให้ filter รายสาขาได้ด้วย"): on a phone the branch chip by the title opens a sheet over the top bar's
+    #selBranch - the list is drawn from its options and a pick sets it and fires its own change (onFilterChange): no second branch state.
+    A pinned login never gets the chip or the sheet (PR-K, stripBranchPickers)."""
+    mob = JS["09c-mobile.js"]
+    sheet = mob[mob.index("function _phbEnsure("):mob.index("function phBranchPick(")]
+    pick = mob[mob.index("function phBranchPick("):].split("\n}\n")[0]
+    assert "sel.options" in sheet and "getElementById('selBranch')" in sheet          # the list IS the top bar's options
+    assert "sel.value = v;" in pick and "dispatchEvent(new Event('change'" in pick   # a pick runs the top bar's own handler
+    assert not re.search(r"\blet _phb(?!Back)\w*\s*=", mob)                          # the sheet keeps no branch of its own
+    assert "isPinnedSession()" in sheet
+    assert re.search(r'id="gpBranchChip"[^>]*onclick="if \(typeof phBranchOpen', INDEX, re.S)
+    strip = CORE[CORE.index("function stripBranchPickers("):].split("\n}\n")[0]
+    assert "getElementById('gpBranchChip')?.remove()" in strip and "getElementById('phBranchSheet')?.remove()" in strip
+    chip = CORE[CORE.index("function branchChipRender("):].split("\n}\n")[0]
+    assert "!isPinnedSession()" in chip and "phOn()" in chip                          # a phone, an unpinned login only
+    assert ".gp-branch-chip { display: none; }" in INDEX                               # a desktop never shows it
