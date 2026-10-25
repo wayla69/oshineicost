@@ -676,7 +676,7 @@ async function loadCouponSeries(params, gen) {
   COUPON_DRILL_PARAMS = params.toString();   // remember filter for the drill modal
   // ── leakage alert: coupon series whose discount spiked MoM (≥+50%, material) ──
   const alertEl = document.getElementById('coupon-series-alert');
-  const spikes = s.filter(r => r.mom_pct != null && r.mom_pct >= 50 && (r.pct || 0) >= 1)
+  const spikes = s.filter(r => r.mom_pct != null && r.mom_pct >= 50 && (r.pct || 0) >= 1 && r.mom_pct > -100 && (r.amount || 0) / (1 + r.mom_pct / 100) >= 1000)
                   .sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 4);
   if (alertEl) {
     if (spikes.length) {
@@ -698,8 +698,13 @@ async function loadCouponSeries(params, gen) {
   ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
   // a discount: up = bad ink (periodPctDelta upGood false); เทียบช่วงก่อน on top, เทียบปีก่อน under it
-  const momCell = (v, y) => `<div>${periodPctDelta(v, { upGood: false, title: 'เทียบช่วงก่อน' })}</div>` +
-    `<div>${periodPctDelta(y, { upGood: false, title: 'เทียบปีก่อน' })}</div>`;
+  // DV2: the baht change first; a % shows only on a base of ฿1,000 or more (a near-zero base printed +37,199 %)
+  const baseOf = (amt, p) => p != null && p > -100 ? amt / (1 + p / 100) : null;
+  const pctOk = (amt, p) => { const b = baseOf(amt || 0, p); return b != null && b >= 1000; };
+  const bahtLine = (amt, p, lbl) => { const b = baseOf(amt || 0, p); if (b == null) return `<div class="text-[10px]" style="color:var(--text-muted)">${lbl} —</div>`;
+    const dlt = (amt || 0) - b;
+    return `<div class="text-[10px] tabular-nums" title="${lbl} ฿${fmtN(Math.round(b))}"><span style="color:${dlt > 0 ? 'var(--bad-ink)' : dlt < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${dvBaht(dlt)}</span>${pctOk(amt, p) ? ` <span style="color:var(--text-muted)">(${p > 0 ? '+' : ''}${p.toFixed(0)}%)</span>` : ` <span style="color:var(--text-muted)">${lbl}</span>`}</div>`; };
+  const momCell = (v, y, amt) => bahtLine(amt, v, 'ช่วงก่อน') + bahtLine(amt, y, 'ปีก่อน');
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
@@ -710,7 +715,7 @@ async function loadCouponSeries(params, gen) {
       <td class="num tabular font-semibold" style="color:var(--amber-ink)">${fmt(r.amount)}</td>
       <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
       <td class="num tabular">${r.pct}%</td>
-      <td class="num tabular">${momCell(r.mom_pct, r.yoy_pct)}</td>
+      <td class="num tabular">${momCell(r.mom_pct, r.yoy_pct, r.amount)}</td>
       <td style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
       <td class="text-slate-300">›</td>
     </tr>`;
@@ -1149,8 +1154,6 @@ let _discGroupByBranch = true;   // default: split by branch (don't merge cashie
 
 function setDiscGroup(on) {
   _discGroupByBranch = on;
-  document.getElementById('discGrpFlat').classList.toggle('active', !on);
-  document.getElementById('discGrpBranch').classList.toggle('active', on);
   renderDiscCashiers();
 }
 
@@ -1170,7 +1173,28 @@ function _discCashierRow(r) {
     </tr>`;
 }
 
+// DV2 (phone table review 2026-10-25): the cashier logins of Easy POS are shared, so a row per cashier names nobody. The table is one row
+// per branch: the baht over the policy ceiling first (column 2), then the branch's discount; branches inside the ceiling are folded behind
+// "ดูทั้งหมด". A row opens the branch's discounted bills. (The per-cashier rows stay in the CSV of the bills drill.)
 function renderDiscCashiers() {
+  const body = document.getElementById('discCashierBody');
+  if (!body || !_discData) return;
+  const rows = (_discData.by_branch || []).filter(b => !getBranch() || b.branch === getBranch()).slice()
+    .sort((a, b) => (b.over_policy ? 1 : 0) - (a.over_policy ? 1 : 0) || (b.excess_baht || 0) - (a.excess_baht || 0) || (b.total_discount || 0) - (a.total_discount || 0));
+  const keep = rows.filter(b => b.over_policy).length;
+  body.innerHTML = rows.map((b, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50 cursor-pointer"${dvMoreAttr('discCashierBody', i, rows.length, keep)} onclick="openDiscountBills({branch:'${jsAttr(b.branch || '')}', title:'บิลส่วนลด · ${jsAttr(b.branch || '')}'})" title="คลิกดูบิลส่วนลด">
+      <td class="py-2 pr-3 font-medium">${b.over_policy ? '⚑ ' : ''}${esc(b.branch || '—')}</td>
+      <td class="py-2 pr-3 text-right font-semibold" style="color:${b.over_policy ? 'var(--bad-ink)' : 'var(--text-muted)'}">${b.over_policy ? fmt(b.excess_baht || 0) : '0'}</td>
+      <td class="py-2 pr-3 text-right">${b.disc_pct_of_sales != null ? b.disc_pct_of_sales.toFixed(1) + '%' : '—'}</td>
+      <td class="py-2 pr-3 text-right">${fmt(b.total_discount || 0)}</td>
+      <td class="py-2 text-right">${b.discount_tx != null ? fmtN(b.discount_tx) : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">—</td></tr>';
+  const more = document.getElementById('discCashierMore');
+  if (more) more.innerHTML = rows.length > keep
+    ? (keep ? '' : `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีสาขาที่ให้ส่วนลดเกินเพดาน${_discData.policy_pct != null ? ' ' + _discData.policy_pct + '%' : ''}</p>`) + dvMoreBtn('discCashierBody', rows.length, keep) : '';
+}
+// the older per-cashier rendering (the "รวม" / "จัดกลุ่มรายสาขา" toggle), kept for a deep link that still calls it
+function _discCashiersByPerson() {
   const body = document.getElementById('discCashierBody');
   if (!body || !_discData) return;
   const cashiers = _discData.top_cashiers || [];

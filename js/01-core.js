@@ -4059,7 +4059,7 @@ const PAGE_CARDS = {
     { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'], figSub: true },
     { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'], figSub: true }],
   discounts: [
-    { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
+    { sel: 'table:has(#discCashierBody)', title: 'สาขา', keyCols: ['เกินเพดาน', '% ยอดขาย', 'ส่วนลดรวม'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
   staff: [{ sel: '#staffTable', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', '% ส่วนลด'] }],
   cancelbill: [
