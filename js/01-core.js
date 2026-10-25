@@ -4085,7 +4085,7 @@ const PAGE_CARDS = {
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'สาขา', keyCols: ['เกินเพดาน', '% ยอดขาย', 'ส่วนลดรวม'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],
-  staff: [{ sel: '#staffAnomTable', title: 'บิล', sub: ['สาขา'], keyCols: ['ส่วนลด', '% ของบิล'] }],
+  staff: [{ sel: '#staffAnomTable', title: 'บิล', keyCols: ['ส่วนลด', '% ของบิล', 'สาขา'] }],
   cancelbill: [
     { sel: 'table:has(#cbBranches)', title: 'สาขา', keyCols: ['มูลค่า', 'สัดส่วน', 'บิลยกเลิก'] },
     { sel: 'table:has(#cbReasons)', title: 'เหตุผล', keyCols: ['บิล', '%', 'มูลค่า'] }],
