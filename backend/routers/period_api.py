@@ -298,3 +298,45 @@ def period_cost(kind: str = Query("month"), pick: Optional[str] = Query(None),
         if not w:
             return {"period": None, "cur": None, "prev": None, "ly": None, "branches": [], "reasons": {}}
         return PC.compare(con, w, branch, group, by_branch=bool(by_branch))
+
+
+# ── High Value Product Monitor (owner 2026-10-25): key-ingredient cost per head by branch ─────────────────────────
+@router.get("/api/cost/ingredient-groups")
+@ttl_cache
+def ingredient_groups_cost(kind: str = Query("month"), pick: Optional[str] = Query(None),
+                           date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                           branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Per branch x ingredient group (backend/ingredient_groups.py GROUPS): plates, cost, cost / head, plates / head,
+    cost / plate, share of food cost - current window, prev to date and a year back (periods.windows) with the change in %.
+    Cost is the one COGS engine (period_cost's month / day plan); a window without a cost source has no figure and a
+    reason. cost.analysis / profit.pnl only (auth.MODULE_RULES)."""
+    import ingredient_groups as IG
+    if P.kind_of(kind, "") not in _KINDS:
+        raise HTTPException(400, "ช่วงเวลาไม่ถูกต้อง")
+    where, params = _scope(branch, group)
+    with get_db() as con:
+        w = _win(con, kind, pick, date_from, date_to, where, params)
+        if not w:
+            return {"period": None, "groups": [{"slug": s, "label": IG.LABELS[s]} for s in IG.SLUGS],
+                    "chain": None, "branches": [], "reasons": {}}
+        return IG.compute(con, w, branch, group)
+
+
+@router.get("/api/cost/ingredient-groups/menus")
+@ttl_cache
+def ingredient_groups_menus(branch: Optional[str] = Query(None), slug: str = Query(...), kind: str = Query("month"),
+                            pick: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
+                            date_to: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """The dishes of one group at one branch on the current window: plates, cost, cost / plate, prev plates; `mixed` =
+    the dish also counts in another group (at its full cost)."""
+    import ingredient_groups as IG
+    if slug not in IG.SLUGS:
+        raise HTTPException(400, "กลุ่มวัตถุดิบไม่ถูกต้อง")
+    if P.kind_of(kind, "") not in _KINDS:
+        raise HTTPException(400, "ช่วงเวลาไม่ถูกต้อง")
+    where, params = _scope(None, group)
+    with get_db() as con:
+        w = _win(con, kind, pick, date_from, date_to, where, params)
+        if not w:
+            return {"period": None, "branch": branch, "slug": slug, "label": IG.LABELS[slug], "menus": [], "reasons": {}}
+        return IG.menus(con, w, branch, slug, group)
