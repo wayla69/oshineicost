@@ -132,7 +132,7 @@ function hvmCauseHtml(cell) {
 function hvmTableHtml(d, slug) {
   const ch = d.chain, chainCph = (ch.cells[slug] || {}).cost_per_head;
   const rows = _hvmSorted(d.branches, x => _hvmSortVal(x, slug, _hvm.sort));
-  const val = (v, f, delta, was) => `<div class="hvm-v">${f(v)}</div><div class="hvm-d">${delta}${_hvmWas(was, f)}</div>`;
+  const val = (v, f, delta, was) => `<div class="hvm-v" data-ph-line="">${f(v)}</div><div class="hvm-d" data-ph-line="">${delta}${_hvmWas(was, f)}</div>`;
   const tr = (row, isChain, i) => {
     const c = row.cells[slug] || {}, chg = (c.change && c.change.prev) || {}, p = c.prev || {};
     const hot = !isChain && c.cost_per_head != null && chainCph ? c.cost_per_head >= chainCph * HVM_HOT : false;
@@ -142,7 +142,7 @@ function hvmTableHtml(d, slug) {
       <td class="hvm-num${hot ? ' hvm-hot' : ''}" style="color:${hot ? 'var(--bad-ink)' : 'var(--text-primary)'}"${hot ? ` title="สูงกว่าทั้งเครือ ${((c.cost_per_head / chainCph - 1) * 100).toFixed(0)}%"` : ''}>${val(c.cost_per_head, _hvmB, _hvmDelta(chg.cost_per_head), p.cost_per_head)}</td>
       <td class="hvm-num" style="color:var(--text-primary)">${val(c.plates_per_head, _hvmN1, _hvmDelta(chg.plates_per_head), p.plates_per_head)}</td>
       <td class="hvm-num" style="color:var(--text-primary)"${unc}>${val(c.cost_per_plate, _hvmB, _hvmDelta(chg.cost_per_plate), p.cost_per_plate)}</td>
-      <td class="hvm-num"><div class="hvm-v">${_hvmPct(c.share_of_food_cost)}</div></td>
+      <td class="hvm-num"><div class="hvm-v" data-ph-line="">${_hvmPct(c.share_of_food_cost)}</div></td>
       <td class="hvm-num" style="color:var(--text-primary)">${val(row.food_cost_per_head, _hvmB, _hvmDelta((row.food_change || {}).prev), row.prev_food_cost_per_head)}</td>
       <td class="hvm-cause">${hvmCauseHtml(c)}</td>
     </tr>`;
@@ -179,11 +179,11 @@ function hvmMatrixHtml(d) {
   const cell = (row, slug, isChain) => {
     const c = row.cells[slug] || {}, base = (ch.cells[slug] || {}).cost_per_head;
     const h = isChain ? '' : _hvmHeat(c.cost_per_head, base);
-    return `<td class="hvm-num ${h}" style="color:${h === 'hvm-h3' ? 'var(--bad-ink)' : 'var(--text-primary)'}"><div class="hvm-v">${_hvmB(c.cost_per_head)}</div><div class="hvm-d">${_hvmDelta((c.change && c.change.prev || {}).cost_per_head)}${_hvmWas((c.prev || {}).cost_per_head, _hvmB)}</div>${_hvmCauseWord(c)}</td>`;
+    return `<td class="hvm-num ${h}" style="color:${h === 'hvm-h3' ? 'var(--bad-ink)' : 'var(--text-primary)'}"><div class="hvm-v" data-ph-line="">${_hvmB(c.cost_per_head)}</div><div class="hvm-d" data-ph-line="">${_hvmDelta((c.change && c.change.prev || {}).cost_per_head)}${_hvmWas((c.prev || {}).cost_per_head, _hvmB)}</div>${_hvmCauseWord(c)}</td>`;
   };
   const tr = (row, isChain, i) => `<tr class="${isChain ? 'hvm-chain' : ''}" onclick="hvmOpenRow(${isChain ? -1 : i}, true)">
       <td class="hvm-name hvm-stick">${isChain ? 'ทั้งเครือ' : esc(row.branch)}</td>${gs.map(g => cell(row, g.slug, isChain)).join('')}
-      <td class="hvm-num ${isChain ? '' : _hvmHeat(row.food_cost_per_head, ch.food_cost_per_head)}" style="color:var(--text-primary)"><div class="hvm-v">${_hvmB(row.food_cost_per_head)}</div><div class="hvm-d">${_hvmDelta((row.food_change || {}).prev)}${_hvmWas(row.prev_food_cost_per_head, _hvmB)}</div></td></tr>`;
+      <td class="hvm-num ${isChain ? '' : _hvmHeat(row.food_cost_per_head, ch.food_cost_per_head)}" style="color:var(--text-primary)"><div class="hvm-v" data-ph-line="">${_hvmB(row.food_cost_per_head)}</div><div class="hvm-d" data-ph-line="">${_hvmDelta((row.food_change || {}).prev)}${_hvmWas(row.prev_food_cost_per_head, _hvmB)}</div></td></tr>`;
   return `<div class="hvm-wrap hvm-mx-wrap"><table id="hvmMatrix" class="hvm-tbl hvm-mx wt"><thead><tr>
       ${_hvmTh('name', 'สาขา', 'hvm-name hvm-stick')}${gs.map(g => _hvmTh(g.slug, esc(g.label), 'hvm-num')).join('')}${_hvmTh('food', 'ต้นทุนอาหาร/หัว', 'hvm-num')}
     </tr></thead><tbody>${tr(ch, true, -1)}${rows.map(b => tr(b, false, idx.get(b))).join('')}</tbody></table></div>`;

@@ -66,16 +66,18 @@
       #hvmRangeQ:not(:empty) { margin-right: 10px; }   /* two "?" side by side: 22 px apart, their 44 px tap areas never overlap */
       body.ph-fit #hvmRangeQ:not(:empty) { margin-right: 40px; }   /* the frame is scaled ~0.46: about the same gap on screen */
       .hvm-chips-sc, .hvm-chips { display: contents; }
-      .hvm-chips .gran-btn, .hvm-csv { height: 32px; min-width: 0; padding: 0 2px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      .hvm-chips .gran-btn, .hvm-csv { height: 32px; min-width: 0; padding: 0 2px; font-size: 13px; white-space: nowrap;
         border: 1px solid var(--border); border-radius: var(--r-md); }
       .hvm-chips .gran-btn:not(.gran-active) { background: var(--bg-input); }
       body.ph-on .hvm-chips .gran-btn, body.ph-on .hvm-csv { min-height: 0 !important; min-width: 0; }
-      body.ph-on .hvm-chips .gran-btn::after, body.ph-on .hvm-csv::after { content: ''; position: absolute; left: -2px; right: -2px; top: -6px; bottom: -6px; }
+      body.ph-on .hvm-chips .gran-btn::after, body.ph-on .hvm-csv::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
       body.ph-on .hvm-sort::after { content: ''; position: absolute; left: -4px; right: -4px; top: -12px; bottom: -12px; }
       body.ph-on .hvm-link::after { content: ''; position: absolute; left: -6px; right: -6px; top: -12px; bottom: -12px; }
       /* bigger figures: 17 px (16 px in พอดีจอ: a 12 px floor at 100 %), the change and base 13 px */
       .hvm-v, body.ph-on:not(.ph-fit) .hvm-v { font-size: 17px; }
       body.ph-fit .hvm-v { font-size: 16px; }
+      body.ph-on #tab-hvmonitor .ph-cl-fv { font-size: 17px; }
+      body.ph-on #tab-hvmonitor .ph-cl-fs { font-size: 13px; }
       .hvm-d, .hvm-d .text-xs { font-size: 13px; }
     }
   </style>

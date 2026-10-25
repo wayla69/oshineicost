@@ -2,7 +2,7 @@
 // Owner 2026-10-25 (phone screenshot of High Value Product Monitor at 390 px, พอดีจอ):
 //   1. "ทำให้เลือกช่วงเวลาได้ด้วยนะครับ" - on a phone the range chip by the title is ONE line ("1–19 ต.ค. 69 ▾") and opens a bottom sheet that
 //      holds the top bar's own period control (#gPeriod moved in): changing the kind there reloads the page (HVM, ยอดขายรายวัน, ต้นทุน/หัว);
-//      the HVM group chips are one compact row (28 px drawn, 44 px to tap), CSV beside them;
+//      the HVM group chips (+ CSV) wrap into a 5-column grid, 5 + 5 (32 px drawn, 44 px to tap; owner 2026-10-25: "ไม่ต้องเลื่อน");
 //   2. "เอาไปโชว์ในเมนูยอดขาย ต่อท้าย เมนูใหม่ แต่โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน และให้เลือกช่วงเวลาได้" - ยอดขายรายวัน · the menu-spike
 //      card has วัตถุดิบมูลค่าสูง · จำนวนจาน right after เมนูใหม่: the 8 groups (+ ทั้งหมด), plates only, on the card's own period; desktop and
 //      390 both modes, light / dark; marketing sees it and no baht.
@@ -182,9 +182,9 @@ test('desktop: the range chip stays the full span and opens nothing', async ({ b
   await ctx.close();
 });
 
-// ── 1b · HVM group chips: one compact row on a phone, CSV beside it ──
+// ── 1b · HVM group chips: a 5-column grid on a phone (5 + 5 with CSV), no sideways scroll ──
 for (const mode of ['touch', 'fit']) {
-  test(`390 ${mode} · HVM chips one row, compact, 44 px to tap`, async ({ browser }) => {
+  test(`390 ${mode} · HVM chips wrap (no scroll), compact, 44 px to tap`, async ({ browser }) => {
     test.setTimeout(90_000);
     const { ctx, page, errors } = await open(browser, PHONE, { tab: 'hvmonitor', mode });
     const f = await page.evaluate(() => {
@@ -194,15 +194,16 @@ for (const mode of ['touch', 'fit']) {
       const b0 = bs[1], r = b0.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const hit = dy => { const e = document.elementFromPoint(cx, cy + dy); return !!e && e.closest('.gran-btn') === b0; };
       return { n: bs.length, tops: [...new Set(rs.map(x => Math.round(x.top)))].length, h: Math.max(...rs.map(x => x.height)),
-        fs: Math.min(...bs.map(b => parseFloat(getComputedStyle(b).fontSize))), csvH: csv.height, csvMid: csv.top + csv.height / 2, mid: r.top + r.height / 2,
+        fs: Math.min(...bs.map(b => parseFloat(getComputedStyle(b).fontSize))), csvH: csv.height, csvMid: csv.top + csv.height / 2,
+        mid: (() => { const r5 = bs[5].getBoundingClientRect(); return r5.top + r5.height / 2; })(),
         tap: hit(-21) && hit(21), sw: document.documentElement.scrollWidth };
     });
     expect(f.n).toBe(9);
-    expect(f.tops, 'one row').toBe(1);
-    expect(f.h, 'compact: 28 px drawn').toBeLessThanOrEqual(30);
+    expect(f.tops, 'two rows: 5 + 4 chips').toBe(2);
+    expect(f.h, 'compact: 32 px drawn').toBeLessThanOrEqual(34);
     expect(f.fs).toBeGreaterThanOrEqual(12);
     expect(f.csvH).toBeLessThanOrEqual(34);
-    expect(Math.abs(f.csvMid - f.mid), 'CSV on the same row').toBeLessThanOrEqual(4);
+    expect(Math.abs(f.csvMid - f.mid), 'CSV closes the second row').toBeLessThanOrEqual(4);
     expect(f.tap, 'a chip is 44 px to tap').toBe(true);
     expect(f.sw).toBeLessThanOrEqual(390);
     // the "?" by the title: the compact ui-q (#466): <= 30 px drawn on screen, a tap 21 px off its centre still lands on it
@@ -241,9 +242,9 @@ for (const [name, opts, mode] of CASES) {
       expect(hvU.searchParams.get('period')).toBe(spU.searchParams.get('period') || 'day');
       const chips = page.locator('#spikeHvChips .gran-btn');
       await expect(chips).toHaveCount(9);
-      expect((await chips.first().boundingBox() || { height: 99 }).height).toBeLessThanOrEqual(30);
+      expect((await chips.first().boundingBox() || { height: 99 }).height).toBeLessThanOrEqual(34);
       await page.locator('#spikeHvSec').scrollIntoViewIfNeeded();
-      if (opts.isMobile) {                                    // one row, 44 px to tap (an ::after inside the scroller's padding)
+      if (opts.isMobile) {                                    // 5 + 4 (owner 2026-10-25: no sideways scroll), 44 px to tap (an ::after into the row gap)
         const c = await page.evaluate(() => {
           const bs = [...document.querySelectorAll('#spikeHvChips .gran-btn')], b = bs[2];
           b.scrollIntoView({ block: 'center' });
@@ -252,7 +253,7 @@ for (const [name, opts, mode] of CASES) {
           return { rows: new Set(bs.map(x => Math.round(x.getBoundingClientRect().top))).size, miss: [hit(-21), hit(21)].filter(Boolean).join(' | '),
             sw: document.documentElement.scrollWidth };
         });
-        expect(c.rows, 'one row').toBe(1);
+        expect(c.rows, 'two rows').toBe(2);
         expect(c.miss, 'a chip is 44 px to tap').toBe('');
         expect(c.sw).toBeLessThanOrEqual(390);
       }
