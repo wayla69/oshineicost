@@ -1611,13 +1611,31 @@ function renderPnlBill(d) {
       <td class="py-1.5 text-right tabular-nums" style="color:${r.loss_bills > 0 ? 'var(--bad-ink)' : 'var(--text-muted)'}">${r.loss_bills > 0 ? fmtN(r.loss_bills) : '0'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  // ALL loss-making bills
-  const loss = d.loss || [];
+  // ALL loss-making bills · DV2: the cause lines first (a bill can carry more than one cause), then the 20 largest losses; the rest behind
+  // "ดูทั้งหมด" (the CSV keeps every row)
+  const loss = (d.loss || []).slice().sort((a, b) => (b.cogs - b.rev) - (a.cogs - a.rev));
+  const lossOf = r => Math.max(0, (r.cogs || 0) - (r.rev || 0));
+  const causes = [
+    { l: 'ลูกค้า 1 คน', f: r => (r.cust || 0) <= 1 },
+    { l: 'นั่งนาน 2 ชั่วโมงขึ้นไป', f: r => r.dwell_min != null && r.dwell_min >= 120 },
+    { l: 'มีส่วนลด', f: r => (r.disc || 0) > 0 },
+  ].map(c => { const xs = loss.filter(c.f); return { l: c.l, n: xs.length, v: xs.reduce((a, r) => a + lossOf(r), 0) }; });
+  const other = loss.filter(r => !((r.cust || 0) <= 1 || (r.dwell_min != null && r.dwell_min >= 120) || (r.disc || 0) > 0));
+  const lossAll = loss.reduce((a, r) => a + lossOf(r), 0) || 1;
+  const pcEl = document.getElementById('pbLossCauses');
+  if (pcEl) pcEl.innerHTML = loss.length ? `<table class="text-xs w-full mb-3" id="pbCauseTable"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาเหตุ</th><th class="py-1.5 pr-2 text-right">ขาดทุน</th><th class="py-1.5 pr-2 text-right">สัดส่วน</th><th class="py-1.5 text-right">บิล</th></tr></thead><tbody>`
+    + causes.concat([{ l: 'อื่น ๆ', n: other.length, v: other.reduce((a, r) => a + lossOf(r), 0) }]).map(c => `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 font-medium">${esc(c.l)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(c.v)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${(c.v / lossAll * 100).toFixed(0)}%</td><td class="py-1.5 text-right tabular-nums">${fmtN(c.n)}</td></tr>`).join('')
+    + `</tbody></table>` : '';
+  const PB_TOP = 20;
+  document.getElementById('pbLossMore').innerHTML = dvMoreBtn('pbLoss', loss.length, PB_TOP);
   const ls = document.getElementById('pbLossSummary');
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
     ? `ขาดทุน <b style="color:var(--bad-ink)">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:var(--bad-ink)">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
     : 'ไม่มีบิลขาดทุนในช่วงนี้';
-  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
+  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('pbLoss', i, loss.length, PB_TOP)} title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
     <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>

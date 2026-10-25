@@ -7,8 +7,8 @@
 // ════════════════════════════════════════════════════════════════
 let pnlDeepBranch = '';
 let pnlBranchRows = [];
-let pnlSortCol = 'gross_profit';
-let pnlSortAsc = false;
+let pnlSortCol = 'gp_delta';   // DV2: the GP change in baht against the period before, the largest fall first
+let pnlSortAsc = true;
 
 async function loadPnlTab() {
   const params = new URLSearchParams();
@@ -26,7 +26,7 @@ async function loadPnlTab() {
     api(`${API}/api/profit/summary?${params}`),
     api(`${API}/api/pnl/monthly?${params}`),
     api(`${API}/api/pnl/branches?${branchParams}`),
-    api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null),   // PR-PP3: the two comparisons of the top bar's period
+    api(`${API}/api/period/cost?${gPeriodQuery({ by_branch: 1 })}`).catch(() => null),   // PR-PP3: the two comparisons of the top bar's period (DV2: per branch too)
   ]);
 
   renderPnlKpis(summary);
@@ -44,7 +44,14 @@ async function loadPnlTab() {
   });
   renderPnlTrend(monthly);
 
-  pnlBranchRows = branchRows;
+  // DV2: Δ GP per branch in baht against the period before (the bar's period to date, /api/period/cost by branch); the table follows
+  // the top bar's branch
+  const gpPrev = {};
+  ((PC && PC.branches) || []).forEach(b => { if (b.cur && b.prev && b.cur.gp != null && b.prev.gp != null) gpPrev[b.branch] = b.cur.gp - b.prev.gp; });
+  pnlBranchRows = (branchRows || []).filter(r => !getBranch() || r.branch === getBranch())
+    .map(r => Object.assign({}, r, { gp_delta: gpPrev[r.branch] != null ? gpPrev[r.branch] : null }));
+  const thD = document.getElementById('pnlThDelta');
+  if (thD) thD.title = PC && PC.period ? `${PC.period.label_th} เทียบ ${PC.period.prev_label_th}` : '';
   renderPnlBranchTable();
   populatePnlDeepBranchSelector(branchRows);
 
@@ -155,7 +162,7 @@ function renderPnlBranchTable() {
       : (pnlSortAsc ? va - vb : vb - va);
   });
   // Update sort indicator
-  ['branch','revenue_ex_vat','cogs','gross_profit','margin_pct','tx_count','avg_ticket','profit_per_bill'].forEach(c => {
+  ['branch','gp_delta','revenue_ex_vat','cogs','gross_profit','margin_pct','tx_count','avg_ticket','profit_per_bill'].forEach(c => {
     const el = document.getElementById('pnlSort' + c.charAt(0).toUpperCase() + c.slice(1));
     if (el) el.textContent = c === pnlSortCol ? (pnlSortAsc ? '▲' : '▼') : '↕';
   });
@@ -166,6 +173,7 @@ function renderPnlBranchTable() {
     const mColor = (r.margin_pct||0) > 40 ? '#10b981' : (r.margin_pct||0) > 20 ? '#f59e0b' : '#ef4444';
     return `<tr class="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onclick="clickPnlBranchRow('${jsAttr(r.branch)}')">
       <td class="py-1.5 pr-3 font-medium text-indigo-600">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold"${r.gp_delta != null ? ` style="color:${r.gp_delta >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}"` : ''}>${r.gp_delta != null ? dvBaht(r.gp_delta) : '—'}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.revenue_ex_vat||0)}</td>
       <td class="py-1.5 pr-3 text-right text-red-500">${fmtN(r.cogs||0)}</td>
       <td class="py-1.5 pr-3 text-right">

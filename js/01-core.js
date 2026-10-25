@@ -4045,7 +4045,7 @@ const PAGE_CARDS = {
       tones: { 'ขยาย': 'good', 'ควรลด': 'bad', 'เฝ้าดู': 'warn' } },
     { sel: '#oppRevive table', keyCols: [1, 2, 3] }],
   profit: [{ sel: '#profitBandTable', title: 'ช่วง', sub: ['บิล', 'ลูกค้า'], subL: true, keyCols: ['รายได้ไม่รวม VAT', 'กำไร', 'อัตรากำไร %'], labels: ['รายได้', 'กำไร', 'อัตรากำไร'] }],
-  benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['รายได้', 'ยอดบิลเฉลี่ย', 'คะแนน'] }],
+  benchmark: [{ sel: '#benchmarkTable', title: 'สาขา', keyCols: ['คะแนน', 'รายได้', 'ยอดบิลเฉลี่ย'] }],
   gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['เกินเป้า', 'GP (', 'GP %'], labels: ['เกินเป้า ฿', 'GP', 'GP %'], pill: 'สถานะ',
     tones: { 'ในเป้า': 'good', 'ใกล้ขอบ': 'warn', 'นอกเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],

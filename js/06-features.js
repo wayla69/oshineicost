@@ -2462,7 +2462,7 @@ function _bbomRenderCoverage(d) {
 // header row; the table is left alone when a body row does not have one cell per header cell.
 const _WIDE_TABLES = {
   pnlbTable:       { key: [6] },                    // P&L รายสาขา · กำไรดำเนินงาน
-  benchmarkTable:  { key: [10], fold: [6, 7, 8, 9] },  // เทียบสาขา · คะแนน; its 4 weighted parts fold
+  benchmarkTable:  { key: [1], fold: [7, 8, 9, 10] },  // เทียบสาขา · คะแนน (column 2, DV2); its 4 weighted parts fold
   orderedTable:    { key: [5], fold: [7, 9], stick: [3] },   // เมนู · จำนวนขาย; the two running % fold; the menu name stays
   costItemTable:   { key: [9], fold: [5, 7] },        // ต้นทุน · อัตรากำไร; the two mix % fold
   profitBandTable: { key: [5], fold: [8] },           // กำไร · กำไร; BoM per bill folds

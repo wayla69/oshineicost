@@ -3059,7 +3059,7 @@ async function loadBenchmark() {
 // ── Branch KPI table: sortable + เทียบช่วงก่อน · เทียบปีก่อน (PR-PP2) ──
 let _benchRows = [];
 let _benchRange = null;
-let _benchSort = { key: 'revenue', dir: -1 };
+let _benchSort = { key: 'score', dir: -1 };   // DV2: ranked by the score (column 2)
 function monthAdd(ym, delta) {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(y, (m - 1) + delta, 1);
@@ -3111,9 +3111,13 @@ function renderBenchTable() {
       _benchMom(c, y, Object.assign({ tip: R ? 'เทียบ ' + R.ly_label_th : '' }, o));
     const cell = (val, mom) => `<td class="py-2 pr-3 text-right tabular-nums"><div>${val}</div>${mom}</td>`;
     const discCls = (r.discount_rate || 0) > 15 ? 'text-red-500 font-medium' : '';
+    // DV2: the revenue cell also prints the baht change against the period before
+    const revB = !same && r.prev_revenue != null && r.revenue != null ? r.revenue - r.prev_revenue : (r.ly_revenue != null && r.revenue != null ? r.revenue - r.ly_revenue : null);
+    const revBaht = revB != null ? `<div class="text-[10px] tabular-nums" style="color:${revB >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(revB)}</div>` : '';
     return `<tr class="border-t border-slate-100 hover:bg-slate-50">
       <td class="py-2 pr-3 font-medium">${esc(r.branch)}</td>
-      ${cell(fmt(r.revenue), two(r.revenue, r.prev_revenue, r.ly_revenue, { hb: true }))}
+      <td class="py-2 pr-3 text-right" title="${r.breakdown || ''}"><span style="color:${textInk(scoreColor)};font-weight:700;font-size:13px">${r.score != null ? r.score.toFixed(0) : '—'}</span></td>
+      ${cell(fmt(r.revenue), revBaht + two(r.revenue, r.prev_revenue, r.ly_revenue, { hb: true }))}
       ${cell(fmtN(r.tx_count), two(r.tx_count, r.prev_tx_count, r.ly_tx_count, { hb: true }))}
       ${cell(fmt(r.avg_ticket), two(r.avg_ticket, r.prev_avg_ticket, r.ly_avg_ticket, { hb: true }))}
       ${cell(`<span class="${discCls}">${(r.discount_rate || 0).toFixed(1)}%</span>`, two(r.discount_rate, r.prev_discount_rate, r.ly_discount_rate, { hb: false, pp: true }))}
@@ -3122,7 +3126,6 @@ function renderBenchTable() {
       ${_benchScoreCell(r.growth_score, '#10b981')}
       ${_benchScoreCell(r.consistency_score, '#06b6d4')}
       ${_benchScoreCell(r.momentum_score, '#f59e0b')}
-      <td class="py-2 text-right" title="${r.breakdown || ''}"><span style="color:${textInk(scoreColor)};font-weight:700;font-size:13px">${r.score != null ? r.score.toFixed(0) : '—'}</span></td>
     </tr>`;
   }).join('');
 }
