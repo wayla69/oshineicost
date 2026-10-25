@@ -1,39 +1,35 @@
 {
- "by_branch": [
-  {
-   "branch": "BranchA",
-   "covers": 0,
-   "mom_pct": null,
-   "pct_of_buffet": 0.0,
-   "prev_covers": 0,
-   "revenue": 0.0
-  },
-  {
-   "branch": "BranchB",
-   "covers": 0,
-   "mom_pct": null,
-   "pct_of_buffet": 0.0,
-   "prev_covers": 0,
-   "revenue": 0.0
-  }
- ],
+ "by_branch": [],
  "latest_month": "2026-06",
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": false,
+  "cur": [
+   "2026-06-01",
+   "2026-06-03"
+  ],
+  "days": 3,
+  "has_ly": false,
+  "has_prev": true,
+  "kind": "month",
+  "label_th": "1–3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-01",
+   "2025-06-03"
+  ],
+  "ly_label_th": "1–3 มิ.ย. 2568",
+  "prev": [
+   "2026-05-01",
+   "2026-05-03"
+  ],
+  "prev_label_th": "1–3 พ.ค. 2569"
+ },
  "prev_month": "2026-05",
- "trend": [
-  {
-   "covers": 0,
-   "month": "2026-04",
-   "revenue": 0.0
-  },
-  {
-   "covers": 0,
-   "month": "2026-05",
-   "revenue": 0.0
-  },
-  {
-   "covers": 0,
-   "month": "2026-06",
-   "revenue": 0.0
-  }
- ]
+ "total": {
+  "covers": 0,
+  "ly": null,
+  "prev": null,
+  "revenue": 0
+ },
+ "trend": []
 }

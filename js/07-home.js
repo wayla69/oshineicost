@@ -120,7 +120,7 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
   if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% สูงกว่าแถบเป้า ${s.H.hi}%`);
   else if (s.fcAmber && s.H.c.delta_pp >= 3) bits.push(`ต้นทุนอาหารขึ้น ${s.H.c.delta_pp.toFixed(1)} จุดจากเดือนก่อน`);
   else if (s.fcAmber) bits.push(`ต้นทุนครบแค่ ${s.H.c.coverage_pct.toFixed(0)}% ของจาน`);
-  if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3) bits.push(`ยอดขายต่อวันต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}%`);
+  if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3) bits.push(`ยอดขายเดือนนี้ต่ำกว่าช่วงเดียวกันของเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}%`);
   const line2 = bits.length ? bits.join(' · ') : 'ทุกตัวชี้วัดอยู่ในเกณฑ์ปกติ';
   el.innerHTML = `<div class="flex items-center gap-3 p-4 rounded-xl" style="background:${palette.bg};border:1px solid ${palette.bd}33">
     <span style="width:11px;height:11px;border-radius:50%;background:${palette.bd};flex-shrink:0"></span>
@@ -176,7 +176,8 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
       icon: '', label: 'จังหวะเดือนนี้',
       value: fc && fc.available ? fmt(fc.projected) : (brief.mtd_revenue ? fmt(brief.mtd_revenue) : '—'),
       sub: fc && fc.available ? `วิ่ง ${fmt(fc.avg_daily)}/วัน · ${fc.days_elapsed}/${fc.days_total} วัน` : 'คาดการณ์ไม่ได้',
-      foot: mom != null ? `${mom >= 0 ? '▲' : '▼'} ${Math.abs(mom).toFixed(0)}% ${sd && sd.mom_basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน' : 'เทียบเดือนก่อน (ช่วงวันเท่ากัน)'}` : '',
+      // PR-PP2: เดือนนี้ to date vs days 1..n of last month and of the month a year back (the two chips)
+      footHtml: sd && sd.total ? periodCmpHtml(sd.total.revenue, sd.total.prev && sd.total.prev.revenue, sd.total.ly && sd.total.ly.revenue, { range: periodOf(sd) }) : '',
       footColor: momColor, valColor: '#4a70b0', go: "switchTab('dailysales')",
     },
     {
@@ -204,6 +205,7 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
       </div>
       <p class="text-2xl font-bold" style="color:${textInk(t.valColor)}">${t.value}</p>
       <p class="text-[11px] mt-0.5" style="color:var(--text-muted)">${t.sub}</p>
+      ${t.footHtml ? `<div class="mt-1.5" onclick="event.stopPropagation()">${t.footHtml}</div>` : ''}
       ${t.foot ? `<p class="text-[11px] mt-1.5 font-medium" style="color:${textInk(t.footColor)}">${t.foot}</p>` : ''}
     </div>`).join('');
 }
@@ -260,7 +262,7 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
       act: 'เจาะสาขา', go: `homeDrillBranch('${(b.branch || '').replace(/'/g, "\\'")}')` });
   });
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3)
-    A.push({ p: 3, sev: 'amber', icon: '▼', text: `เดือนนี้ยอดขายต่อวันต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% ${sd.mom_basis === 'dow' ? '(เทียบฐานปกติตามวันในสัปดาห์)' : '(เทียบช่วงวันเท่ากัน)'}`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
+    A.push({ p: 3, sev: 'amber', icon: '▼', text: `เดือนนี้ยอดขายต่ำกว่าช่วงเดียวกันของเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% (${(periodOf(sd) || {}).label_th || ''} เทียบ ${(periodOf(sd) || {}).prev_label_th || ''})`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
   // /api/analysis/anomalies scans the WHOLE history (its own panel wants that), and its
   // BoM-cost rule flags every month that ever jumped — so a spike from June 2025 sat in
   // "สิ่งที่ต้องทำวันนี้" in September 2026. Today's list takes only what is still news:
@@ -647,65 +649,61 @@ async function renderHomeScorecard(focusDate) {
 }
 
 // ── ยอดขายรายวัน (Daily Sales) tab ──
-let _dsGran = 'month';   // default to MTD (month view is MTD-fair when the month is partial)
-function dsSetGran(g) {
-  _dsGran = g;
-  document.querySelectorAll('#dsGranTrack .gran-btn').forEach(b => b.classList.toggle('gran-active', b.dataset.g === g));
-  loadDailySales(true);
-}
+// PR-PP2: the period is the top bar's (วัน · สัปดาห์ · เดือน · ปี on this page, TABS follow.period.kinds; the stepper moves the
+// day / week / month / year). A period not finished is to date through the last closed day; every figure shows เทียบช่วงก่อน +
+// เทียบปีก่อน (periods.resolve). The page's own date picker and chip track are gone: one period control per page.
+// the older entry points (a deep link, a drill) move the top bar: dsSetGran('week'), dsSetDate('2026-10-14')
+function dsSetGran(g) { if (['day', 'week', 'month', 'year'].includes(g)) gPeriodSet({ kind: g, pick: gPeriodPick().pick }); }
+function dsSetDate(iso) { if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) gPeriodSet({ kind: 'day', pick: iso }); }
 async function loadDailySales(force) {
-  const dv = document.getElementById('dsDate')?.value || '';
-  const _fk = _filterKey() + '|' + _dsGran + '|' + dv;
+  const G = gPeriodPick();
+  const gran = ['day', 'week', 'month', 'year'].includes(G.kind) ? G.kind : 'month';
+  const dv = G.pick || '';
+  const _fk = _filterKey() + '|' + gran + '|' + dv;
   if (!force && _tabLastKey.dailysales === _fk) return;
   _tabLastKey.dailysales = _fk;
-  const p = new URLSearchParams(); p.set('gran', _dsGran);
+  const p = new URLSearchParams(); p.set('gran', gran);
   if (dv) p.set('date', dv);
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
   try { d = await api(`${API}/api/sales/daily?${p}`); }
   catch (e) { return; }
-  if (d.focus && !dv) { const el = document.getElementById('dsDate'); if (el) el.value = d.focus; }
-  const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_dsGran];
-  const cr = d.cur_range || ['', ''];
-  const isMtd = !!d.mtd;
-  const cutTxt = isMtd ? `MTD 1–${d.mtd_cutoff_day} (เดือนยังไม่จบ)` : lbl;
-  document.getElementById('dsRange').textContent = `${cutTxt}: ${cr[0]}${cr[0] !== cr[1] ? ' – ' + cr[1] : ''}`;
-  document.getElementById('dsCmpNote').textContent = isMtd
-    ? (d.mom_basis === 'dow'
-        ? `· เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน (weekday-fair, 1–${d.mtd_cutoff_day}) · ปีก่อน (${(d.yoy_range || [''])[0]}) เทียบช่วงวันเท่ากัน`
-        : `· เทียบ MTD เดือนก่อน (${(d.prev_range || [''])[0]} – วันเท่ากัน) · ปีก่อน (${(d.yoy_range || [''])[0]}) · เทียบช่วงวันเท่ากัน ไม่เอาเดือนเต็มมาเทียบเดือนไม่จบ`)
-    : `· เทียบ${lbl}ก่อน (${(d.prev_range || [''])[0]}) · ปีก่อน (${(d.yoy_range || [''])[0]})`;
-  const t = d.total || {};
-  const badge = (v, hb = true) => v == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${(v >= 0) === hb ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
-  const cmpLbl = isMtd ? (d.mom_basis === 'dow' ? 'ฐานวันในสัปดาห์เดือนก่อน' : 'MTD เดือนก่อน') : (lbl + 'ก่อน');
-  // signed "vs <prev period> ±x%" sub-line — shared by every KPI box for a consistent MTD-fair comparison
-  const cmpSub = (v) => 'vs ' + cmpLbl + ' ' + (v != null ? (v >= 0 ? '+' : '') + v + '%' : '—');
+  const r = periodOf(d);
+  periodChip(r, true);                                   // the range, once, beside the page title
+  document.getElementById('dsCmpNote').innerHTML = periodQ(r);
+  const t = d.total || {}, tp = t.prev || null, tl = t.ly || null;
   document.getElementById('dsKpis').innerHTML = [
-    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), s: cmpSub(t.mom_pct), c: '#4a70b0' },
-    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: cmpSub(t.cust_mom_pct), c: '#0891b2' },
-    { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), s: cmpSub(t.rph_mom_pct), c: '#7a66b8' },
-    { l: 'เทียบปีก่อน (YoY)', v: t.yoy_pct != null ? (t.yoy_pct >= 0 ? '+' : '') + t.yoy_pct + '%' : '—', s: 'รายได้ vs ปีก่อน', c: t.yoy_pct == null ? '#94a3b8' : t.yoy_pct >= 0 ? '#059669' : '#ef4444' },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), c: '#4a70b0', cur: t.revenue, prev: tp && tp.revenue, ly: tl && tl.revenue },
+    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), c: '#0891b2', cur: t.customers, prev: tp && tp.customers, ly: tl && tl.customers },
+    { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), c: '#7a66b8', cur: t.rev_per_head, prev: tp && tp.rev_per_head, ly: tl && tl.rev_per_head },
+    { l: 'บิล', v: fmtN(t.bills || 0), c: '#0d9488', cur: t.bills, prev: tp && tp.bills, ly: tl && tl.bills },
+  ].map((k, i) => periodKpi(Object.assign(k, { range: r, q: i === 0 }))).join('');
   const an = d.anomalies || [];
   document.getElementById('dsAnomaly').innerHTML = an.length
     ? `<div class="card p-4 notice-warn"><p class="text-xs font-semibold mb-2">ผิดปกติ (เทียบค่าปกติ)</p>` + an.slice(0, 8).map(a => `<div class="text-xs">• ${esc(a.msg)}</div>`).join('') + `</div>`
     : '';
-  document.getElementById('dsBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
-      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmt(r.revenue)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.customers)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${r.rev_per_head != null ? fmt(r.rev_per_head) : '—'}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${badge(r.mom_pct)}</td>
-      <td class="py-1.5 text-right tabular-nums">${badge(r.yoy_pct)}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  const thP = document.getElementById('dsThPrev'), thL = document.getElementById('dsThLy');
+  const sameBase = r && r.prev[0] === r.ly[0] && r.prev[1] === r.ly[1];
+  if (thP) { thP.title = r ? r.prev_label_th : ''; thP.hidden = !!sameBase; }
+  if (thL) thL.title = r ? r.ly_label_th : '';
+  document.getElementById('dsBody').innerHTML = (d.branches || []).map(b => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+      <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmt(b.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(b.customers)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}</td>
+      ${sameBase ? '' : `<td class="py-1.5 pr-2 text-right tabular-nums">${periodPctDelta(b.mom_pct, { title: r ? `${r.label_th} เทียบ ${r.prev_label_th}${b.mom_rev != null ? ' · ฿' + fmt(b.mom_rev) : ''}` : '' })}</td>`}
+      <td class="py-1.5 text-right tabular-nums">${periodPctDelta(b.yoy_pct, { title: r ? `${r.label_th} เทียบ ${r.ly_label_th}${b.yoy_rev != null ? ' · ฿' + fmt(b.yoy_rev) : ''}` : '' })}</td>
+    </tr>`).join('') || `<tr><td colspan="${sameBase ? 5 : 6}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
   const tr = d.trend || [];
+  const tLab = x => gran === 'year' ? String(+x.start.slice(0, 4) + 543)
+    : gran === 'month' ? `${_PR_MON[+x.start.slice(5, 7) - 1]} ${(+x.start.slice(0, 4) + 543) % 100}` : periodLabelTh(x.start, x.start).replace(/ \d{4}$/, '');
   mkChart('dsTrend', { type: 'bar',
-    data: { labels: tr.map(x => x.start.slice(5)), datasets: [{ data: tr.map(x => x.revenue),
+    data: { labels: tr.map(tLab), datasets: [{ data: tr.map(x => x.revenue),
       backgroundColor: tr.map((x, i) => i === tr.length - 1 ? '#4a70b0' : 'rgba(31,58,107,0.4)'), borderRadius: 4 }] },
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, datalabels: { display: false } },
+      plugins: { legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { title: items => { const x = tr[items[0].dataIndex]; return x ? periodLabelTh(x.start, x.end) + (x.partial ? ' (ถึงวันที่ปิดยอดล่าสุด)' : '') : ''; } } } },
       scales: { y: { ticks: { callback: v => fmt(v) } }, x: { ticks: { font: { size: 9 } } } } } });
   renderMenuSpike(d.focus);
 }
@@ -1176,6 +1174,7 @@ async function _opFillMonths() {
 async function loadOpsReport(force) {
   const sel = document.getElementById('opMonth');
   await _opFillMonths();
+  periodHeadline('phd-opsreport', 'opsreport');   // PR-PP2: the top bar's period
   // Follow the global period filter: in Day/Week granularity pass the global date range
   // (→ backend aggregates the daily tables); in Month granularity use the month picker.
   const gran = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
@@ -2279,6 +2278,7 @@ function _syncExtraPeriod(barKey, tabKey) {
 // เงินสดขาด/เกิน
 async function loadCashCtl(force) {
   await _extraMonths('ccMonth');
+  periodHeadline('phd-cashctl', 'cashctl');   // PR-PP2: the top bar's month
   const mv = document.getElementById('ccMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
@@ -2311,6 +2311,7 @@ async function loadCashCtl(force) {
 
 // ประเภทลูกค้า
 async function loadCustType(force) {
+  periodHeadline('phd-custtype', 'custtype');   // PR-PP2: the top bar's month (a month-grain source)
   await _extraMonths('ctMonth');
   const mv = document.getElementById('ctMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
@@ -2377,6 +2378,7 @@ async function loadModifiers(force) {
 
 // ราคา & โซนโต๊ะ
 async function loadPriceZone(force) {
+  periodHeadline('phd-pricezone', 'pricezone');   // PR-PP2: the top bar's month
   await _extraMonths('pzMonth');
   const mv = document.getElementById('pzMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
@@ -2409,6 +2411,7 @@ async function loadPriceZone(force) {
 
 // บิลยกเลิก/ลบ (whole-bill voids)
 async function loadCancelBill(force) {
+  periodHeadline('phd-cancelbill', 'cancelbill');   // PR-PP2: the top bar's month
   await _extraMonths('cbMonth');
   const mv = document.getElementById('cbMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;

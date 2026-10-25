@@ -342,7 +342,8 @@ def analysis_compare(
         if mtd_cut:
             # MTD-fair: compare the SAME elapsed days, all from sales_transaction
             # (day-capable) so a partial current month isn't matched to a full month.
-            p["s"] = f"{period}-01"; p["e"] = f"{period}-{mtd_cut:02d}"
+            _py, _pm = (int(x) for x in period.split("-")[:2])
+            p["s"] = f"{period}-01"; p["e"] = f"{period}-{min(mtd_cut, _cal.monthrange(_py, _pm)[1]):02d}"
             r = con.execute(f"""
                 SELECT ROUND({net_revenue_sum('st')}, 2) revenue, COUNT(*) tx_count,
                        SUM(st.customer_count) customer_count, ROUND({avg_ticket_sql('st')}, 2) avg_ticket
@@ -423,30 +424,38 @@ def analysis_compare(
             "discounts":    (sms["discounts"]   or 0) if sms else 0,
         }
 
+    _base_ok = [True]                         # PR-PP2: False when the base month starts before the data
+
     def pct_change(a, b):
-        if b == 0:
+        if b == 0 or not _base_ok[0]:
             return None
         return round((a - b) / b * 100, 1)
 
+    import periods as _P
     with get_db() as con:
-        # MTD-fair when the PRIMARY month is the latest, still-partial month.
-        maxd = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        # MTD-fair when EITHER month is the month of the last closed day and it is not finished (PR-PP2: B in progress
+        # was a whole A against a part B). The anchor is the last CLOSED day (periods.anchor): the day still trading
+        # never enters the window.
+        maxd = _P.anchor(con)
         mtd_cut = None
         if maxd:
             my, mm, mdd = (int(x) for x in maxd.split("-"))
             try:
-                py, pm = (int(x) for x in month.split("-")[:2])
-                if (py, pm) == (my, mm) and mdd < _cal.monthrange(my, mm)[1]:
-                    mtd_cut = mdd
+                for _m in (month, vs):
+                    py, pm = (int(x) for x in _m.split("-")[:2])
+                    if (py, pm) == (my, mm) and mdd < _cal.monthrange(my, mm)[1]:
+                        mtd_cut = mdd
             except Exception:
                 mtd_cut = None
         current = fetch_kpis(month, con, mtd_cut)
         prior   = fetch_kpis(vs, con, mtd_cut)
+        _first = con.execute("SELECT MIN(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        _base_ok[0] = _P.covered((f"{vs[:7]}-01",), _first)   # a base month that starts before the data: a part month
 
     return {
         "current": current,
         "prior":   prior,
-        "mtd": mtd_cut is not None, "mtd_cutoff_day": mtd_cut,
+        "mtd": mtd_cut is not None, "mtd_cutoff_day": mtd_cut, "anchor": maxd,
         "delta": {
             "revenue":        pct_change(current["revenue"],        prior["revenue"]),
             "tx_count":       pct_change(current["tx_count"],       prior["tx_count"]),
@@ -596,12 +605,18 @@ def analysis_branches(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     group:      Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),     # PR-PP2: a day window (the benchmark's period and its two bases)
+    date_to:    Optional[str] = Query(None),
 ):
-    """KPIs for every branch side-by-side (Easy transaction-level data)."""
+    """KPIs for every branch side-by-side (Easy transaction-level data). date_from/date_to (both) win over the months."""
     filters_tx = ["b.name != 'ALL'"]
     params_tx: dict = {}
     _group_filter(filters_tx, params_tx, group)
-    _month_range_filter(filters_tx, params_tx, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    if date_from and date_to:
+        filters_tx.append("date(st.sold_at) BETWEEN :_df AND :_dt")
+        params_tx.update(_df=date_from[:10], _dt=date_to[:10])
+    else:
+        _month_range_filter(filters_tx, params_tx, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
 
     with get_db() as con:
@@ -795,12 +810,30 @@ def period_compare(
         return next((x["revenue"] for x in period_data["top_branches"] if x["branch"] == name), 0)
 
     with get_db() as con:
-        a = _fetch_period_kpis(con, branch, a_month_from, a_month_to, a_date_from, a_date_to)
-        b = _fetch_period_kpis(con, branch, b_month_from, b_month_to, b_date_from, b_date_to)
-        c = _fetch_period_kpis(con, branch, c_month_from, c_month_to, c_date_from, c_date_to) \
+        # PR-PP2 guard (the one period pattern): every period ends by the last CLOSED day; when A (or B) runs past it,
+        # it is to date (n days) and every other period is cut to its own first n days - a part period is never set
+        # against a whole one. A base that starts before the first day with bills is not compared.
+        g = _pc_guard(con, {"a": (a_month_from, a_month_to, a_date_from, a_date_to),
+                            "b": (b_month_from, b_month_to, b_date_from, b_date_to),
+                            "c": (c_month_from, c_month_to, c_date_from, c_date_to),
+                            "d": (d_month_from, d_month_to, d_date_from, d_date_to)})
+        W = g["windows"]
+
+        def _k(x, mf, mt, df, dt):
+            if x in W:
+                return _fetch_period_kpis(con, branch, None, None, *W[x])
+            return _fetch_period_kpis(con, branch, mf, mt, df, dt)
+        a = _k("a", a_month_from, a_month_to, a_date_from, a_date_to)
+        b = _k("b", b_month_from, b_month_to, b_date_from, b_date_to)
+        c = _k("c", c_month_from, c_month_to, c_date_from, c_date_to) \
             if _has(c_month_from, c_month_to, c_date_from, c_date_to) else None
-        d = _fetch_period_kpis(con, branch, d_month_from, d_month_to, d_date_from, d_date_to) \
+        d = _k("d", d_month_from, d_month_to, d_date_from, d_date_to) \
             if _has(d_month_from, d_month_to, d_date_from, d_date_to) else None
+    _no_base = g["no_base"]
+    _pct0 = pct
+
+    def pct(x, y, _w="b"):                       # noqa: F811 - the guarded change
+        return None if _w in _no_base else _pct0(x, y)
 
     # Collect all branch names across active periods
     # sorted: a set iterates in hash order, which differs between processes
@@ -828,8 +861,8 @@ def period_compare(
             "revenue_a":  rev_a, "revenue_b": rev_b,
             "revenue_c":  rev_c, "revenue_d": rev_d,
             "delta_b_pct": pct(rev_a, rev_b),
-            "delta_c_pct": pct(rev_a, rev_c) if c else None,
-            "delta_d_pct": pct(rev_a, rev_d) if d else None,
+            "delta_c_pct": pct(rev_a, rev_c, "c") if c else None,
+            "delta_d_pct": pct(rev_a, rev_d, "d") if d else None,
             "rank_a": rank_a.get(name), "rank_b": rank_b.get(name),
             "rank_c": rank_c.get(name), "rank_d": rank_d.get(name),
             "rank_shift": (rank_b.get(name, 99) - rank_a.get(name, 99)),
@@ -849,7 +882,20 @@ def period_compare(
             "discount":       pct(a["discount"],       b["discount"]),
         },
         "branch_changes": branch_changes,
+        "to_date": g["to_date"], "n_days": g["n_days"], "anchor": g["anchor"], "windows": W,
     }
+
+
+def _pc_guard(con, periods_in):
+    """The windows of /api/analysis/period_compare under the one period pattern (PR-PP2, periods.guard).
+    -> {windows: {x: (from, to)} for the periods that had to be cut, to_date, n_days, anchor, no_base: {x}}"""
+    import periods as _P
+    anchor = _P.anchor(con)
+    first = con.execute("SELECT MIN(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+    spans = {x: sp for x, args in periods_in.items() if (sp := _P.span_of(*args))}
+    g = _P.guard(spans, anchor, first)
+    return {"windows": g["windows"], "to_date": g["to_date"], "n_days": g["n_days"], "anchor": anchor,
+            "no_base": set(g["no_base"])}
 
 
 def _period_label(mf, mt, df, dt):
@@ -1240,9 +1286,17 @@ def analysis_health(
     # and zeroed the score). We still honour month_to as an "as-of" cutoff.
     _month_range_filter(filters_tx, params_tx, None, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
-    where_tx = "WHERE " + " AND ".join(filters_tx)
 
     with get_db() as con:
+        # PR-PP2: closed months only - the month in progress (the last closed day short of its month end) read as a
+        # collapse in the growth, consistency and momentum scores (a part month against whole ones)
+        import periods as _P
+        _a = _P.anchor(con)
+        if _a:
+            _last_closed = _a[:7] if _P.resolve("month", _a)["complete"] else _P.shift("month", _a, -1)[:7]
+            filters_tx.append("strftime('%Y-%m', st.sold_at) <= :_lcm")
+            params_tx["_lcm"] = _last_closed
+        where_tx = "WHERE " + " AND ".join(filters_tx)
         easy_rows = con.execute(
             f"""
             SELECT b.name AS branch,
@@ -1400,13 +1454,36 @@ def analysis_yoy(
                 e["branches"].add(x["br"])
                 e["days"] = max(e["days"], x["days"] or 0)
 
+        # PR-PP2 · the one period pattern: the month of the last closed day, not yet finished, is month to date and
+        # its year-ago base is days 1..n of the same month last year (periods.resolve); a base month that starts before
+        # the first day with bills is a part month - no raw % (it read +1991 % on the 9-day first month).
+        import periods as _P
+        _sw = " AND ".join(["t.source='Easy'"] + filters)
+        _anchor = _P.anchor(con, _sw, params)
+        _first = con.execute(f"SELECT MIN(date(t.sold_at)) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id "
+                             f"WHERE {_sw}", params).fetchone()[0]
+
+        def _rev_between(s, e):
+            return con.execute(f"""SELECT ROUND({net_revenue_sum('t')}, 2) FROM sales_transaction t
+                                    JOIN branches b ON b.branch_id=t.branch_id
+                                    WHERE {_sw} AND date(t.sold_at) BETWEEN :s AND :e""", {**params, "s": s, "e": e}).fetchone()[0] or 0
+
         out = []
         for r in rng:
             cur_mo = r["period_month"]
             yr, mo = cur_mo.split("-")
             ly_mo  = f"{int(yr)-1}-{mo}"
             ly_rev = ly_rev_map.get(ly_mo, 0)
-            yoy_pct = ((r["revenue"] - ly_rev) / ly_rev * 100) if ly_rev > 0 else None
+            cur_rev = r["revenue"]
+            _w = None
+            if _anchor and cur_mo == _anchor[:7]:
+                _w = _P.resolve("month", _anchor, date_from=f"{cur_mo}-01")
+                if not _w["complete"]:                   # month to date, both sides through day n
+                    cur_rev = _rev_between(*_w["cur"])
+                    ly_rev = _rev_between(*_w["ly"])
+            ly_win = (f"{ly_mo}-01", None)
+            base_ok = _P.covered(ly_win, _first)
+            yoy_pct = ((cur_rev - ly_rev) / ly_rev * 100) if (ly_rev > 0 and base_ok) else None
             # LIKE-FOR-LIKE guard. The chain grew 7 → 27 branches and the first
             # data month (2025-05) holds only 9 days, so a raw month-vs-month YoY
             # reported +1991% — branch roll-out and partial coverage, not growth.
@@ -1435,12 +1512,15 @@ def analysis_yoy(
                 sm = {x["m"]: (x["rev"] or 0) for x in ss}
                 if sm.get(ly_mo, 0) > 0:
                     ss_pct = round((sm.get(cur_mo, 0) - sm[ly_mo]) / sm[ly_mo] * 100, 1)
-            comparable = bool(both) and ly_days >= 20 and abs(len(cur_brs) - len(ly_brs)) <= 2
+            comparable = bool(both) and base_ok and ly_days >= 20 and abs(len(cur_brs) - len(ly_brs)) <= 2
             out.append({
                 "period_month": cur_mo,
-                "revenue":      r["revenue"],
+                "revenue":      cur_rev,
                 "ly_period":    ly_mo,
                 "ly_revenue":   ly_rev,
+                "to_date":      bool(_w and not _w["complete"]),
+                "range":        list(_w["cur"]) if (_w and not _w["complete"]) else None,
+                "ly_range":     list(_w["ly"]) if (_w and not _w["complete"]) else None,
                 "yoy_pct":      round(yoy_pct, 1) if yoy_pct is not None else None,
                 # comparability context
                 "comparable":       comparable,

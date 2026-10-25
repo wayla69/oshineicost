@@ -2,26 +2,17 @@
      TAB: GUEST & SPH
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-dailysales" style="display:none">
-  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
-    <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
-    <input type="date" id="dsDate" onchange="loadDailySales(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
-    <div id="dsGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
-      <button class="gran-btn"             data-g="day"   onclick="dsSetGran('day')">วัน</button>
-      <button class="gran-btn"             data-g="week"  onclick="dsSetGran('week')">สัปดาห์</button>
-      <button class="gran-btn gran-active" data-g="month" onclick="dsSetGran('month')">เดือน</button>
-    </div>
-    <span id="dsRange" class="text-[11px]" style="color:var(--text-muted)"></span>
-  </div>
+  <!-- PR-PP2: the period is the top bar's (one control per page); the range shows beside the page title -->
   <div id="dsKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div id="dsAnomaly" class="mb-4"></div>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
     <div class="card p-5 lg:col-span-2 overflow-x-auto">
-      <h2 class="section-title mb-3">ยอดขายรายสาขา <span id="dsCmpNote" class="font-normal normal-case" style="color:var(--text-muted);font-size:11px"></span></h2>
+      <h2 class="section-title mb-3">ยอดขายรายสาขา <span id="dsCmpNote" class="font-normal normal-case"></span></h2>
       <table class="text-xs w-full">
         <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
           <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ยอดขาย</th>
           <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right">ยอด/หัว</th>
-          <th class="py-1.5 pr-2 text-right">เทียบเดือนก่อน</th><th class="py-1.5 text-right">เทียบปีก่อน</th>
+          <th class="py-1.5 pr-2 text-right" id="dsThPrev">เทียบช่วงก่อน</th><th class="py-1.5 text-right" id="dsThLy">เทียบปีก่อน</th>
         </tr></thead><tbody id="dsBody"></tbody></table>
     </div>
     <div class="card p-5">

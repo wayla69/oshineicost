@@ -1,24 +1,24 @@
 [
  {
   "branch": "BranchA",
-  "consistency_score": 100,
+  "consistency_score": 50.0,
   "growth_pct": 0.0,
   "growth_score": 50.0,
   "last_month_revenue": 2850.0,
   "momentum_score": 50.0,
   "revenue_score": 100,
-  "score": 80.0,
-  "total_revenue": 5700.0
+  "score": 70.0,
+  "total_revenue": 2850.0
  },
  {
   "branch": "BranchB",
-  "consistency_score": 100,
+  "consistency_score": 50.0,
   "growth_pct": 0.0,
   "growth_score": 50.0,
   "last_month_revenue": 2850.0,
   "momentum_score": 50.0,
   "revenue_score": 100,
-  "score": 80.0,
-  "total_revenue": 5700.0
+  "score": 70.0,
+  "total_revenue": 2850.0
  }
 ]

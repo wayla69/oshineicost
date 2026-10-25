@@ -157,3 +157,112 @@ def anchor(con, where: str = "t.source='Easy' AND b.name!='ALL'", params: Option
     except ImportError:
         from rules import latest_settled_day
     return latest_settled_day(con, where, params).get("day")
+
+
+# ── PR-PP2 · the request side: one call per endpoint ───────────────────────────────────────────────────────────
+_GRAN = {"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year", "mtd": "month", "custom": "range"}
+
+
+def kind_of(g: Optional[str], default: str = "month") -> str:
+    """'daily' / 'weekly' / 'monthly' / 'yearly' / 'mtd' / a kind -> the kind; anything else -> `default`."""
+    k = _GRAN.get(str(g or "").lower(), str(g or "").lower())
+    return k if k in KINDS else default
+
+
+def covered(win, first_day: Optional[str]) -> bool:
+    """A base window counts only when the data reaches back to its first day (a window that starts before the
+    first day with bills is a part window: its % would be made up)."""
+    return bool(first_day) and bool(win) and str(win[0]) >= str(first_day)[:10]
+
+
+def shift(kind: str, d: _D, n: int) -> str:
+    """The first day of the period `n` steps from the one that holds `d` (n < 0 = back). day / week / month / year."""
+    s, _ = _bounds(kind, _d(d))
+    if kind == "day":
+        return (s + timedelta(days=n)).isoformat()
+    if kind == "week":
+        return (s + timedelta(days=7 * n)).isoformat()
+    if kind == "month":
+        i = s.year * 12 + s.month - 1 + n
+        return date(i // 12, i % 12 + 1, 1).isoformat()
+    return date(s.year + n, 1, 1).isoformat()
+
+
+def windows(con, kind: str, where: str = "t.source='Easy' AND b.name!='ALL'", params: Optional[dict] = None,
+            pick: Optional[_D] = None, date_from: Optional[_D] = None, date_to: Optional[_D] = None,
+            anchor_day: Optional[_D] = None) -> Optional[Dict]:
+    """resolve() on the data of one scope: the anchor is the scope's last closed day (or `anchor_day`), `pick` any
+    day of the period wanted (day / week / month / year), date_from..date_to the range. Adds
+    {anchor, first_day, has_prev, has_ly}: a base that starts before the scope's first day with bills is not compared.
+    A pick after the anchor falls back to the anchor's own period. None when the scope has no data.
+    `where` uses the aliases t (sales_transaction) and b (branches)."""
+    a = str(anchor_day)[:10] if anchor_day else anchor(con, where, params)
+    if not a:
+        return None
+    first = con.execute(f"SELECT MIN(date(t.sold_at)) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id "
+                        f"WHERE {where}", params or {}).fetchone()[0]
+    k = kind_of(kind)
+    try:
+        if k == "range":
+            r = resolve("range", a, date_from=date_from, date_to=date_to)
+        else:
+            r = resolve(k, a, date_from=pick if pick else None)
+    except ValueError:
+        r = resolve(k if k != "range" else "month", a)
+    r.update({"anchor": a, "first_day": first, "has_prev": covered(r["prev"], first), "has_ly": covered(r["ly"], first)})
+    return r
+
+
+def span_of(month_from: Optional[str] = None, month_to: Optional[str] = None,
+            date_from: Optional[str] = None, date_to: Optional[str] = None) -> Optional[Tuple[str, str]]:
+    """A free A/B period as days: a day range wins; a month range runs from its first month's 1st to its last
+    month's last day. None when it is open-ended."""
+    if date_from or date_to:
+        s, e = (date_from or "")[:10], (date_to or "")[:10]
+    elif month_from or month_to:
+        s = f"{(month_from or month_to)[:7]}-01"
+        m2 = (month_to or month_from)[:7]
+        e = f"{m2}-{_mlen(int(m2[:4]), int(m2[5:7])):02d}"
+    else:
+        return None
+    return (s, e) if s and e else None
+
+
+def guard(spans: Dict[str, Tuple[str, str]], anchor_day: Optional[str], first_day: Optional[str],
+          lead: Tuple[str, ...] = ("a", "b")) -> Dict:
+    """The free-period compare pages (trend A/B, compare A-D, menu A/B) under the one pattern: every period ends by
+    the anchor (the last closed day); when the first of `lead` that runs past it is cut to date (n days), every other
+    period is cut to its own first n days - a part period is never set against a whole one. A period that starts
+    before `first_day` is a part base: no %.
+    -> {windows: {x: (from, to)} for the periods that were cut, to_date, n_days, no_base: [x, ...]}"""
+    out: Dict = {"windows": {}, "to_date": False, "n_days": None, "no_base": []}
+    if not anchor_day:
+        return out
+    a = str(anchor_day)[:10]
+    sp = {x: [s, e] for x, (s, e) in spans.items() if s and e}
+    days = lambda s, e: (_d(e) - _d(s)).days + 1   # noqa: E731
+    first_lead = next((x for x in lead if x in sp and sp[x][1] > a >= sp[x][0]), None)
+    for x in sp:
+        if sp[x][1] > a:
+            sp[x][1] = a
+            out["windows"][x] = tuple(sp[x])
+    if first_lead:
+        n = days(*sp[first_lead])
+        out.update(to_date=True, n_days=n)
+        for x, (s, e) in sp.items():
+            if s <= e and days(s, e) > n:
+                sp[x][1] = (_d(s) + timedelta(days=n - 1)).isoformat()
+                out["windows"][x] = tuple(sp[x])
+    out["no_base"] = [x for x in sp if x not in lead[:1] and not covered(sp[x], first_day)]
+    return out
+
+
+_PUBLIC = ("kind", "cur", "prev", "ly", "days", "complete", "label_th", "prev_label_th", "ly_label_th",
+           "anchor", "has_prev", "has_ly")
+
+
+def public(w: Optional[Dict]) -> Optional[Dict]:
+    """The `period` object an endpoint returns (the JS periodCmpHtml reads it as its `range`)."""
+    if not w:
+        return None
+    return {k: (list(w[k]) if isinstance(w.get(k), tuple) else w.get(k)) for k in _PUBLIC if k in w}

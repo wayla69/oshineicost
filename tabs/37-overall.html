@@ -12,7 +12,7 @@
   <!-- Latest-month hero — leads with the latest month + MoM (not a cumulative sum) -->
   <div id="kpiHeroWrap" class="mb-5 hidden">
     <div class="flex items-baseline gap-2 mb-2">
-      <h2 class="section-title mb-0">ภาพรวมเดือนล่าสุด</h2>
+      <h2 class="section-title mb-0">ภาพรวมช่วงที่เลือก</h2>
       <span id="kpiHeroMonth" class="text-xs text-slate-400"></span>
     </div>
     <div id="kpiHero" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"></div>
@@ -104,7 +104,7 @@
     <div class="px-5 py-4 border-b border-slate-100">
       <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">เมนูมาแรง / ตก</h2>
       <p id="moversPeriod" class="text-xs text-slate-400 mt-1"></p>
-      <div class="flex items-center gap-2 mt-2 text-xs flex-wrap">
+      <div class="flex items-center gap-2 mt-2 text-xs flex-wrap hidden" aria-hidden="true"><!-- PR-PP2: hidden - the movers follow the top bar (one period control) -->
         <span class="text-slate-400">เทียบเดือน:</span>
         <select id="moversCurMonth" onchange="loadMovers()" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)"></select>
         <span class="text-slate-400">vs</span>

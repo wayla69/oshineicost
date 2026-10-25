@@ -73,11 +73,15 @@ def mtd_client(tmp_path_factory):
 
 
 def test_without_flag_the_report_keeps_the_closed_month(mtd_client):
+    # PR-PP2: the month in progress is OFFERED to date in the picker (it was the phone's mtd=1 only), but the
+    # report still opens on the latest closed month without the flag
     j = mtd_client.get("/api/reports/management?period=monthly").json()
     pm = _prev_month(TH_TODAY).strftime("%Y-%m")
     assert j["available"] and j["selected_month"] == pm
-    assert all(not m.get("mtd") for m in j["months"])
-    assert j["partial"] is False
+    in_progress = [m for m in j["months"] if m.get("mtd")]
+    assert in_progress == [] or (len(in_progress) == 1 and in_progress[0]["month"] == TH_TODAY.strftime("%Y-%m")
+                                 and j["months"][0] is not None and j["months"][0]["mtd"] is True)
+    assert j["partial"] is False and j["to_date"] is False
 
 
 def test_mtd_flag_adds_the_month_in_progress_month_to_date(mtd_client):

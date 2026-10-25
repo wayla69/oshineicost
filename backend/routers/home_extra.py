@@ -577,8 +577,9 @@ def home_brief(branch: Optional[str] = Query(None)):
                   {branch_filter}
             """, wow_params).fetchone()
 
-        # MTD revenue
-        mtd_params: dict = {"month": current_month}
+        # MTD revenue: day 1 .. the settled day (PR-PP2 - the day still trading never enters a to-date window;
+        # this summed the whole calendar month, today's first bills included)
+        mtd_params: dict = {"month": current_month, "upto": yesterday}
         if branch:
             mtd_params["branch"] = branch
         mtd_row = con.execute(f"""
@@ -587,11 +588,18 @@ def home_brief(branch: Optional[str] = Query(None)):
                 COUNT(DISTINCT DATE(st.sold_at))    AS mtd_days
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
-            WHERE strftime('%Y-%m', st.sold_at) = :month
+            WHERE strftime('%Y-%m', st.sold_at) = :month AND DATE(st.sold_at) <= :upto
               AND st.source = 'Easy'
               AND b.name != 'ALL'
               {'AND b.name = :branch' if branch else ''}
         """, mtd_params).fetchone()
+        # the food-cost % below keeps its month-to-now revenue until PR-PP3 moves the cost figures
+        mtd_cost_rev = con.execute(f"""
+            SELECT ROUND({net_revenue_sum('st')}, 2) FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            WHERE strftime('%Y-%m', st.sold_at) = :month AND st.source = 'Easy' AND b.name != 'ALL'
+              {'AND b.name = :branch' if branch else ''}
+        """, {k: v for k, v in mtd_params.items() if k != "upto"}).fetchone()[0] or 0
 
         # Revenue by branch yesterday (top 3)
         yest_branch_rows = con.execute(f"""
@@ -614,7 +622,7 @@ def home_brief(branch: Optional[str] = Query(None)):
                    ROUND({net_revenue_sum('st')}, 2) AS mtd_revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
-            WHERE strftime('%Y-%m', st.sold_at) = :month
+            WHERE strftime('%Y-%m', st.sold_at) = :month AND DATE(st.sold_at) <= :upto
               AND st.source = 'Easy'
               AND b.name != 'ALL'
               {'AND b.name = :branch' if branch else ''}
@@ -655,7 +663,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         """, bom_params).fetchone()
         food_cost_pct_mtd = None
         mtd_bom_cost = mtd_bom_row["bom_cost"] if mtd_bom_row else None
-        mtd_rev_val  = mtd_row["mtd_revenue"] if mtd_row else 0
+        mtd_rev_val  = mtd_cost_rev
         if mtd_bom_cost and mtd_rev_val and mtd_rev_val > 0:
             food_cost_pct_mtd = round(mtd_bom_cost / mtd_rev_val * 100, 1)
         cost_health = _cost_health(con, current_month, branch, food_cost_pct_mtd, mtd_rev_val)

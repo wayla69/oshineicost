@@ -11,6 +11,7 @@ let mgtPeriod = 'daily';
 let mgtWeek = null;          // selected week (Monday ISO date); null = latest completed week
 let mgtDay = null;           // selected day (ISO date); null = latest day in data
 let mgtMonth = null;         // selected month ('YYYY-MM'); null = latest complete month
+let mgtYear = null;          // PR-PP2: selected year ('YYYY'); null = the year of the latest complete day, to date
 // PL3 (RV3 F10): the report opens in Thai - English only when someone chose it (the toggle remembers the choice)
 let mgtLang = (() => { try { return localStorage.getItem('mgtLang') === 'en' ? 'en' : 'th'; } catch (e) { return 'th'; } })();
 
@@ -23,6 +24,8 @@ function _mgtToggleUI() {
   if (d) d.setAttribute('style', mgtPeriod === 'daily'   ? on : off);
   if (w) w.setAttribute('style', mgtPeriod === 'weekly'  ? on : off);
   if (m) m.setAttribute('style', mgtPeriod === 'monthly' ? on : off);
+  const yb = document.getElementById('mgtTabYearly');
+  if (yb) yb.setAttribute('style', mgtPeriod === 'yearly' ? on : off);
   const le = document.getElementById('mgtLangEn');
   const lt = document.getElementById('mgtLangTh');
   if (le) le.setAttribute('style', mgtLang === 'en' ? on : off);
@@ -34,6 +37,8 @@ function _mgtToggleUI() {
   if (dp && mgtPeriod !== 'daily') dp.classList.add('hidden');
   const mp = document.getElementById('mgtMonthPicker');
   if (mp && mgtPeriod !== 'monthly') mp.classList.add('hidden');
+  const yp = document.getElementById('mgtYearPicker');
+  if (yp && mgtPeriod !== 'yearly') yp.classList.add('hidden');
   // legacy full-report shortcut is monthly-only
   const lb = document.getElementById('mgtLegacyBtn');
   if (lb) lb.classList.toggle('hidden', mgtPeriod !== 'monthly');
@@ -85,6 +90,25 @@ function renderMgtMonthPicker(j) {
   sel.classList.remove('hidden');
 }
 
+// PR-PP2: the year picker (yearly mode): the year in progress to date, and each finished year
+function renderMgtYearPicker(j) {
+  const sel = document.getElementById('mgtYearPicker');
+  if (!sel) return;
+  if (j.period !== 'yearly' || !(j.years && j.years.length)) {
+    sel.classList.add('hidden'); sel.innerHTML = ''; return;
+  }
+  sel.innerHTML = j.years.map(y =>
+    `<option value="${y.year}"${y.year === j.selected_year ? ' selected' : ''}>${esc(y.label)}</option>`
+  ).join('');
+  sel.classList.remove('hidden');
+}
+
+function onMgtYearChange(v) {
+  mgtYear = v || null;
+  _tabLastKey.mgtreport = null;     // force a refetch for the chosen year
+  loadMgtReport();
+}
+
 function onMgtWeekChange(v) {
   mgtWeek = v || null;
   _tabLastKey.mgtreport = null;     // force a refetch for the chosen week
@@ -125,7 +149,8 @@ function _mgtReadingOff() {
 }
 
 function setMgtPeriod(p) {
-  mgtPeriod = (p === 'weekly' || p === 'monthly') ? p : 'daily';
+  mgtPeriod = (p === 'weekly' || p === 'monthly' || p === 'yearly') ? p : 'daily';
+  mgtYear = null;                   // reset to the year in progress on mode switch
   mgtWeek = null;                   // reset to the latest completed week on mode switch
   mgtDay = null;                    // reset to the latest day on mode switch
   mgtMonth = null;                  // reset to the latest complete month on mode switch
@@ -196,6 +221,7 @@ function exportMgtReport() {
   if (mgtPeriod === 'weekly'  && mgtWeek)  qs.set('week',  mgtWeek);
   if (mgtPeriod === 'daily'   && mgtDay)   qs.set('date',  mgtDay);
   if (mgtPeriod === 'monthly' && mgtMonth) qs.set('month', mgtMonth);
+  if (mgtPeriod === 'yearly'  && mgtYear)  qs.set('year',  mgtYear);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   qs.set('lang', mgtLang);                                             // export in the on-screen language
@@ -210,7 +236,7 @@ let _mgtGen = 0;
 async function loadMgtReport() {
   _mgtCoverInit();
   const _gen = ++_mgtGen;
-  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + (mgtMonth || '') + '|' + mgtLang;
+  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + (mgtMonth || '') + '|' + (mgtYear || '') + '|' + mgtLang;
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
   _mgtToggleUI();
@@ -222,6 +248,7 @@ async function loadMgtReport() {
   if (mgtPeriod === 'weekly'  && mgtWeek)  qs.set('week',  mgtWeek);
   if (mgtPeriod === 'daily'   && mgtDay)   qs.set('date',  mgtDay);
   if (mgtPeriod === 'monthly' && mgtMonth) qs.set('month', mgtMonth);
+  if (mgtPeriod === 'yearly'  && mgtYear)  qs.set('year',  mgtYear);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   // Fire master & franchise splits in parallel — only when no specific branch/type filter is active
@@ -295,7 +322,9 @@ function renderMgtMarket(m, j) {
 // on the client is keyed here so the EN ⇄ ไทย toggle re-skins the whole report.
 const MGT_I18N = {
   en: {
-    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', monthlyReport:'Monthly report · ',
+    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', monthlyReport:'Monthly report · ', yearlyReport:'Yearly report · ',
+    ytdTag:'  (year-to-date — partial)', compYearly:'vs last year', year:'year', yearWord:'year', s1y:'Selected Year', yearly:'Yearly',
+    thisYear:'this year', thisYearP:'This Year', yoyLbl:' YoY',
     wtd:'  (week-to-date)', dtd:'  (so far today — partial)', mtdTag:'  (month-to-date — partial)',
     scope:'Scope: ', comparedWith:'   ·   compared with ', allBranches:'All branches', groupPfx:'Group: ',
     title:'Management Summary Report', generated:'Generated:', exportExcel:'Export Excel',
@@ -434,7 +463,9 @@ const MGT_I18N = {
     numLocale:'en-US',
   },
   th: {
-    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', monthlyReport:'รายงานรายเดือน · ',
+    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', monthlyReport:'รายงานรายเดือน · ', yearlyReport:'รายงานรายปี · ',
+    ytdTag:'  (ถึงปัจจุบันในปี — ยังไม่ครบปี)', compYearly:'เทียบปีก่อน', year:'ปี', yearWord:'ปี', s1y:'ปีที่เลือก', yearly:'รายปี',
+    thisYear:'ปีนี้', thisYearP:'ปีนี้', yoyLbl:' YoY',
     wtd:'  (ถึงปัจจุบันในสัปดาห์)', dtd:'  (เฉพาะวันนี้ — ยังไม่ครบวัน)', mtdTag:'  (ถึงปัจจุบันในเดือน — ยังไม่ครบเดือน)',
     scope:'ขอบเขต: ', comparedWith:'   ·   เทียบกับ ', allBranches:'ทุกสาขา', groupPfx:'กลุ่ม: ',
     title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'ส่งออก Excel',
@@ -589,7 +620,7 @@ function renderMgtReport(j, jM, jF) {
   // YoY is only trustworthy once the year-ago period sits inside our data window
   // (sales history reliably starts ~mid-May 2025). Before ~mid-May 2026 the year-ago
   // side is empty/partial and YoY balloons — suppress it there. [[no-cumulative-totals-rule]]
-  const _pDate = (j.period === 'monthly' && j.range && j.range[1])
+  const _pDate = ((j.period === 'monthly' || j.period === 'yearly') && j.range && j.range[1])
     ? j.range[1]
     : (j.selected_week || j.focus || j.date || j.latest_day || null);
   const yoyOk = _pDate ? (new Date(_pDate) >= new Date('2026-05-15')) : true;
@@ -614,9 +645,11 @@ function renderMgtReport(j, jM, jF) {
        </div></div>`;
   const isDaily = j.period === 'daily';
   const isMonthly = j.period === 'monthly';
-  const compShort = isDaily ? T.compDaily : isMonthly ? T.compMonthly : T.compWeekly;
-  // Delta badge label: daily & weekly compare week-over-week; monthly is month-over-month.
-  const dLbl = isMonthly ? 'MoM' : 'WoW';
+  const isYearly = j.period === 'yearly';          // PR-PP2: its comparison is the year before; its trend is monthly
+  const isMonthTrend = isMonthly || isYearly;
+  const compShort = isDaily ? T.compDaily : isYearly ? T.compYearly : isMonthly ? T.compMonthly : T.compWeekly;
+  // Delta badge label: daily & weekly compare week-over-week; monthly is month-over-month; yearly year-over-year.
+  const dLbl = isYearly ? 'YoY' : isMonthly ? 'MoM' : 'WoW';
   // WoW badge straight from current/prev values (the §6/§8/§9/§10 sections whose
   // backend supplies a prev figure rather than a precomputed %). prev=0 → "—".
   const wowVal = (cur, prev) => (prev == null) ? '' : wow(prev ? (cur - prev) / prev * 100 : null);
@@ -633,8 +666,8 @@ function renderMgtReport(j, jM, jF) {
 
   // Header band labels
   const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
-  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : isMonthly ? T.monthlyReport : T.weeklyReport) + j.label
-    + (j.partial ? (isDaily ? T.dtd : isMonthly ? T.mtdTag : T.wtd) : ''));
+  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : isYearly ? T.yearlyReport : isMonthly ? T.monthlyReport : T.weeklyReport) + j.label
+    + (j.partial ? (isDaily ? T.dtd : isYearly ? T.ytdTag : isMonthly ? T.mtdTag : T.wtd) : ''));
   setTxt('mgtSlimLabel', document.getElementById('mgtPeriodLabel')?.textContent || T.title);
   setTxt('mgtBranchLabel', T.scope + scopeLabel(j.branch_scope) + T.comparedWith + j.comp_label);
   // Static cover-band chrome (title / brand / buttons) follows the language toggle too.
@@ -651,6 +684,7 @@ function renderMgtReport(j, jM, jF) {
   renderMgtWeekPicker(j);
   renderMgtDayPicker(j);
   renderMgtMonthPicker(j);
+  renderMgtYearPicker(j);
 
   const H = j.headline || {};
   // Each section carries a distinct accent (top bar + heading) so the report reads
@@ -791,7 +825,7 @@ function renderMgtReport(j, jM, jF) {
   const C_FRN_H = '#d8b4fe', C_FRN_C = '#9333ea';     // split Franchise (purple)
   const _sw = c => `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${c}"></span>`;
   const _lg = (c, t) => `<span class="flex items-center gap-1.5">${_sw(c)} ${t}</span>`;
-  const _period = isDaily ? T.day : isMonthly ? T.month : T.week;
+  const _period = isDaily ? T.day : isYearly ? T.year : isMonthly ? T.month : T.week;
   // Split → 3 separate charts (one per series), each self-labelled, so the legend only
   // carries the shared hints. Single → one chart with the amber moving-average trend line.
   const trendLegend = hasSplit
@@ -920,7 +954,7 @@ function renderMgtReport(j, jM, jF) {
   const leakTotalBanner = `<div class="rounded-xl p-4 mb-3" style="border:1px solid var(--border);border:1px solid ${_sevCol};background:#f8fafc">
       <div class="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : isMonthly ? T.monthWord : T.weekWord}</p>
+          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : isYearly ? T.yearWord : isMonthly ? T.monthWord : T.weekWord}</p>
           <p class="text-2xl font-bold" style="color:${textInk(_sevCol)}" title="${baht(lt.baht || 0)}">${bigBaht(lt.baht || 0)}</p>
         </div>
         <div class="text-right text-xs text-slate-500">
@@ -1111,9 +1145,9 @@ function renderMgtReport(j, jM, jF) {
   const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
   const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
-  const compW  = isTH ? (isDaily ? 'วันเดียวกันสัปดาห์ก่อน' : isMonthly ? 'เดือนก่อนหน้า' : 'สัปดาห์ก่อนหน้า')
-                      : (isDaily ? 'the same weekday last week' : isMonthly ? 'the previous month' : 'the previous week');
-  const pNoun  = isTH ? (isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์') : (isDaily ? 'day' : isMonthly ? 'month' : 'week');
+  const compW  = isTH ? (isDaily ? 'วันเดียวกันสัปดาห์ก่อน' : isYearly ? 'ปีก่อน' : isMonthly ? 'เดือนก่อนหน้า' : 'สัปดาห์ก่อนหน้า')
+                      : (isDaily ? 'the same weekday last week' : isYearly ? 'the previous year' : isMonthly ? 'the previous month' : 'the previous week');
+  const pNoun  = isTH ? (isDaily ? 'วัน' : isYearly ? 'ปี' : isMonthly ? 'เดือน' : 'สัปดาห์') : (isDaily ? 'day' : isYearly ? 'year' : isMonthly ? 'month' : 'week');
   const brs    = j.branches || [];
   const ex     = [];
 
@@ -1282,11 +1316,11 @@ function renderMgtReport(j, jM, jF) {
     const avg = trv.reduce((a, b) => a + b, 0) / trv.length, last = trv[trv.length - 1];
     if (isTH) {
       const td  = last > avg * 1.05 ? 'กำลังเพิ่มขึ้น' : last < avg * 0.95 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
-      ex.push({c:'#0284c7', lead:'แนวโน้ม', body:'ในช่วง ' + trv.length + ' ' + (isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด') + ' ยอดขาย <b>' + td +
+      ex.push({c:'#0284c7', lead:'แนวโน้ม', body:'ในช่วง ' + trv.length + ' ' + (isDaily ? 'วันล่าสุด' : isMonthTrend ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด') + ' ยอดขาย <b>' + td +
               '</b> — ' + pNoun + 'ล่าสุดอยู่' + (last >= avg ? 'เหนือ' : 'ต่ำกว่า') + 'ค่าเฉลี่ยของช่วง'});
     } else {
       const td  = last > avg * 1.05 ? 'rising' : last < avg * 0.95 ? 'softening' : 'holding steady';
-      ex.push({c:'#0284c7', lead:'Trend.', body:'Across the last ' + trv.length + ' ' + (isDaily ? 'days' : isMonthly ? 'months' : 'weeks') + ', revenue is <b>' + td +
+      ex.push({c:'#0284c7', lead:'Trend.', body:'Across the last ' + trv.length + ' ' + (isDaily ? 'days' : isMonthTrend ? 'months' : 'weeks') + ', revenue is <b>' + td +
               '</b> — the latest ' + pNoun + ' sits ' + (last >= avg ? 'above' : 'below') + ' the period average.'});
     }
   }
@@ -1459,7 +1493,7 @@ function renderMgtReport(j, jM, jF) {
       ${cols.map(c => { const pv = (_prevCh[c.code] || {}).amount;
         return `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${textInk(colColor[c.code])}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%${pv != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(c.amount, pv)}</div>` : ''}</td>`; }).join('')}
       <td class="py-1.5 pl-2 text-right tabular-nums font-bold text-slate-800">${baht(_payPD.total)}${_payPrev.total != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(_payPD.total, _payPrev.total)}</div>` : ''}</td></tr>`;
-    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} ${T.branchesWord} · ${cols.length} ${T.channels} · ${T.total} <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? T.thisDay : isMonthly ? T.thisMonth : T.thisWeek} · ${T.payCaption2}${compShort})</p>
+    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} ${T.branchesWord} · ${cols.length} ${T.channels} · ${T.total} <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? T.thisDay : isYearly ? T.thisYear : isMonthly ? T.thisMonth : T.thisWeek} · ${T.payCaption2}${compShort})</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">${th}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table></div>`;
   })();
@@ -1556,8 +1590,8 @@ function renderMgtReport(j, jM, jF) {
   const footnote = isTH
     // RV-M: the report is a light sheet in both themes - its foot takes the sheet's own muted ink (the theme's dark-mode grey read 3.1:1 on it),
     // and stock mode names no BoM
-    ? `<p class="text-[11px] px-1 mgt-foot" style="color:#5f6c80">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว ${stkWord('(อิงสูตร BoM)', '(อิงต้นทุนต่อจาน)')}, ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % ${stkWord('เป็นตัวเลขอิง BoM ของ', 'อิงต้นทุนต่อจานของ')} ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
-    : `<p class="text-[11px] text-slate-400 px-1 mgt-foot">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
+    ? `<p class="text-[11px] px-1 mgt-foot" style="color:#5f6c80">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว ${stkWord('(อิงสูตร BoM)', '(อิงต้นทุนต่อจาน)')}, ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isYearly ? 'ปีนี้เทียบปีก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % ${stkWord('เป็นตัวเลขอิง BoM ของ', 'อิงต้นทุนต่อจานของ')} ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
+    : `<p class="text-[11px] text-slate-400 px-1 mgt-foot">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isYearly ? 'year' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
   // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
   // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.
   const vLine = (col, txt) => `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2"><span style="color:${textInk(col)};line-height:1.5">●</span><span class="text-slate-600">${txt}</span></p>`;
@@ -1583,7 +1617,7 @@ function renderMgtReport(j, jM, jF) {
     const gap = avg ? (latest - avg) / avg * 100 : 0;
     const col = gap >= 3 ? '#059669' : gap <= -3 ? '#dc2626' : '#d97706';
     const dir = isTH ? (gap >= 3 ? 'สูงกว่า' : gap <= -3 ? 'ต่ำกว่า' : 'ใกล้เคียง') : (gap >= 3 ? 'above' : gap <= -3 ? 'below' : 'near');
-    const u = isDaily ? (isTH ? 'วัน' : 'day') : isMonthly ? (isTH ? 'เดือน' : 'month') : (isTH ? 'สัปดาห์' : 'week');
+    const u = isDaily ? (isTH ? 'วัน' : 'day') : isYearly ? (isTH ? 'ปี' : 'year') : isMonthly ? (isTH ? 'เดือน' : 'month') : (isTH ? 'สัปดาห์' : 'week');
     return vLine(col, isTH
       ? `ล่าสุด <b>${bigBaht(latest)}</b> — <b style="color:${textInk(col)}">${dir}</b>ค่าเฉลี่ย ${tr.length} ${u} ${_sg(gap)}`
       : `Latest <b>${bigBaht(latest)}</b> — <b style="color:${textInk(col)}">${dir}</b> the ${tr.length}-${u} average by ${_sg(gap)}`);
@@ -1803,11 +1837,11 @@ function renderMgtReport(j, jM, jF) {
   //   brk -> forced page break before the section
   const SECTIONS = [
     { id:'mgt-s0',  c:'#0f172a', t:T.execSummary, h:execInner },   // shares the cover sheet; prose may flow
-    { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
+    { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isYearly ? T.s1y : isMonthly ? T.s1m : T.s1w), h:kpis },
     { id:'mgt-s2',  c:'#d97706', keep:true, t:T.s2, h:actsWithSplit },   // short; split it left its panels alone overleaf
     { id:'mgt-s3',  c:'#4a70b0', keep:true, t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
     { id:'mgt-s4b', c:'#1f7a4d', keep:true, t:T.s4b, h:bridgeHtml || naBox(T.naBridge) },
-    { id:'mgt-s4',  c:'#0891b2', keep:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
+    { id:'mgt-s4',  c:'#0891b2', keep:true, t:T.s4pre + (isDaily ? T.s4d : isMonthTrend ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
     // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
     // page of its own anyway, and letting it begin at the foot of §4's page
     // stranded four rows there and carried the other twenty-four over — a table
@@ -1838,7 +1872,7 @@ function renderMgtReport(j, jM, jF) {
   // jump-nav on screen.
   const _rangeTxt = (j.range && j.range.length === 2) ? `${j.range[0]} &rarr; ${j.range[1]}` : (j.focus || '&mdash;');
   const _ri = [
-    [T.riType,  (isDaily ? T.daily : isMonthly ? T.monthly : T.weekly) + ' &middot; ' + (j.label || '')],
+    [T.riType,  (isDaily ? T.daily : isYearly ? T.yearly : isMonthly ? T.monthly : T.weekly) + ' &middot; ' + (j.label || '')],
     [T.riRange, _rangeTxt + (j.partial ? ` <span style="color:var(--amber-ink)">&middot; ${T.riPartial}</span>` : '')],
     [T.riComp,  (j.comp_label || '&mdash;')],
     [T.riScope, scopeLabel(j.branch_scope)],
@@ -2189,11 +2223,11 @@ function renderMgtReport(j, jM, jF) {
       : '';
     // Period-aware labels — Day in daily mode, Week in weekly mode (so the two
     // reports stay consistent and the daily strip no longer mislabels days as weeks).
-    const _pThis = isDaily ? T.thisDayP : isMonthly ? T.thisMonthP : T.thisWeekP;
-    const _pAv = isDaily ? T.avg8d : isMonthly ? T.avg8m : T.avg8w;
-    const _pDl = isDaily ? T.dod : isMonthly ? T.mom : T.wow;
-    const _pBest = isDaily ? T.bestDayP : isMonthly ? T.bestMonthP : T.bestWeekP;
-    const _pWeak = isDaily ? T.weakDayP : isMonthly ? T.weakMonthP : T.weakWeekP;
+    const _pThis = isDaily ? T.thisDayP : isMonthTrend ? T.thisMonthP : T.thisWeekP;     // the strip reads the trend bars
+    const _pAv = isDaily ? T.avg8d : isMonthTrend ? T.avg8m : T.avg8w;
+    const _pDl = isDaily ? T.dod : isMonthTrend ? T.mom : T.wow;
+    const _pBest = isDaily ? T.bestDayP : isMonthTrend ? T.bestMonthP : T.bestWeekP;
+    const _pWeak = isDaily ? T.weakDayP : isMonthTrend ? T.weakMonthP : T.weakWeekP;
     summaryEl.innerHTML =
       `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
          ${pill(_pThis, fmtM(cur), af(wowP) + _pDl, ac(wowP))}
@@ -2221,7 +2255,7 @@ function renderMgtReport(j, jM, jF) {
       const vsAvgTxt = vsAvg != null ? (vsAvg >= 0 ? '+' : '') + vsAvg.toFixed(1) + '%' : '—';
       let s1, s2, s3 = '';
       if (isTH) {
-        const noun = isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด';
+        const noun = isDaily ? 'วัน' : isMonthTrend ? 'เดือน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : isMonthTrend ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด';
         const dir = vsAvg == null ? 'ทรงตัว' : vsAvg > 5 ? 'กำลังเพิ่มขึ้น' : vsAvg < -5 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'ขาขึ้น' : maNow < maPrev * 0.98 ? 'ขาลง' : 'ทรงตัว') : 'ทรงตัว';
         s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${textInk(dirCol)}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${textInk(ac(vsAvg))}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
@@ -2237,7 +2271,7 @@ function renderMgtReport(j, jM, jF) {
           s3 = ` สาขาบริษัทอยู่ <b style="color:${(mVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(mVs)}ค่าเฉลี่ยตัวเอง</b> และแฟรนไชส์อยู่ <b style="color:${(fVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(fVs)}ค่าเฉลี่ยตัวเอง</b>`;
         }
       } else {
-        const noun = isDaily ? 'day' : isMonthly ? 'month' : 'week', nounP = isDaily ? 'days' : isMonthly ? 'months' : 'weeks';
+        const noun = isDaily ? 'day' : isMonthTrend ? 'month' : 'week', nounP = isDaily ? 'days' : isMonthTrend ? 'months' : 'weeks';
         const dir = vsAvg == null ? 'holding steady' : vsAvg > 5 ? 'rising' : vsAvg < -5 ? 'softening' : 'holding steady';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'upward' : maNow < maPrev * 0.98 ? 'downward' : 'flat') : 'flat';
         s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${textInk(dirCol)}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${textInk(ac(vsAvg))}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;

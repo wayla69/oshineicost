@@ -619,14 +619,23 @@ def menu_lifecycle(
         if not max_month_row or not max_month_row["m"]:
             return {"skus": [], "summary": {}}
         max_month = max_month_row["m"]
+        # PR-PP2: closed months only - the month in progress (its last closed day short of the month end) read as a
+        # drop in every dish's trend and as "dead" for a slow seller (a part month at the end of a monthly series)
+        import periods as _P
+        _a = _P.anchor(con)
+        _lcm = (_a[:7] if _P.resolve("month", _a)["complete"] else _P.shift("month", _a, -1)[:7]) if _a else None
+        if _lcm and max_month > _lcm:
+            max_month = _lcm
 
         from datetime import date as _date
         import datetime as _dtt
+        if month_to and _lcm and month_to[:7] > _lcm:
+            month_to = _lcm
         if month_from and month_to:
-            cutoff_month = month_from
+            cutoff_month = min(month_from, month_to)
             max_month    = month_to
         elif month_from:
-            cutoff_month = month_from
+            cutoff_month = min(month_from, max_month)
         elif month_to:
             max_month = month_to
             y, mo = int(max_month[:4]), int(max_month[5:7])

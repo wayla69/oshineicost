@@ -1,19 +1,18 @@
 {
- "anomalies": [
-  {
-   "msg": "ยอดรวมสูงกว่าค่าเฉลี่ย 250%",
-   "pct": 250.0,
-   "scope": "chain"
-  }
- ],
+ "anchor": "2026-06-03",
+ "anomalies": [],
  "branches": [
   {
    "bills": 1,
    "branch": "BranchA",
    "customers": 4,
-   "mom_delta": 0.0,
-   "mom_pct": 0.0,
-   "mom_rev": 950.0,
+   "ly_customers": null,
+   "ly_rev_per_head": null,
+   "mom_delta": null,
+   "mom_pct": null,
+   "mom_rev": null,
+   "prev_customers": null,
+   "prev_rev_per_head": null,
    "rev_per_head": 237.5,
    "revenue": 950.0,
    "yoy_delta": null,
@@ -24,9 +23,13 @@
    "bills": 1,
    "branch": "BranchB",
    "customers": 4,
-   "mom_delta": 0.0,
-   "mom_pct": 0.0,
-   "mom_rev": 950.0,
+   "ly_customers": null,
+   "ly_rev_per_head": null,
+   "mom_delta": null,
+   "mom_pct": null,
+   "mom_rev": null,
+   "prev_customers": null,
+   "prev_rev_per_head": null,
    "rev_per_head": 237.5,
    "revenue": 950.0,
    "yoy_delta": null,
@@ -40,70 +43,106 @@
  ],
  "focus": "2026-06-03",
  "gran": "day",
- "mom_basis": "month",
+ "has_ly": false,
+ "has_prev": true,
+ "mom_basis": "full",
  "mtd": false,
  "mtd_cutoff_day": null,
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": true,
+  "cur": [
+   "2026-06-03",
+   "2026-06-03"
+  ],
+  "days": 1,
+  "has_ly": false,
+  "has_prev": true,
+  "kind": "day",
+  "label_th": "3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-04",
+   "2025-06-04"
+  ],
+  "ly_label_th": "4 มิ.ย. 2568",
+  "prev": [
+   "2026-05-27",
+   "2026-05-27"
+  ],
+  "prev_label_th": "27 พ.ค. 2569"
+ },
  "prev_range": [
-  "2026-05-03",
-  "2026-05-03"
+  "2026-05-27",
+  "2026-05-27"
  ],
  "total": {
-  "cust_mom_pct": 0.0,
+  "bills": 2,
+  "cust_mom_pct": null,
   "cust_yoy_pct": null,
   "customers": 8,
-  "mom_delta": 0.0,
-  "mom_pct": 0.0,
+  "ly": null,
+  "mom_delta": null,
+  "mom_pct": null,
+  "prev": null,
   "rev_per_head": 237.5,
   "revenue": 1900.0,
-  "rph_mom_pct": 0.0,
+  "rph_mom_pct": null,
   "rph_yoy_pct": null,
-  "yoy_delta": 1900.0,
+  "yoy_delta": null,
   "yoy_pct": null
  },
  "trend": [
   {
    "end": "2026-05-27",
+   "partial": false,
    "revenue": 0,
    "start": "2026-05-27"
   },
   {
    "end": "2026-05-28",
+   "partial": false,
    "revenue": 0,
    "start": "2026-05-28"
   },
   {
    "end": "2026-05-29",
+   "partial": false,
    "revenue": 0,
    "start": "2026-05-29"
   },
   {
    "end": "2026-05-30",
+   "partial": false,
    "revenue": 0,
    "start": "2026-05-30"
   },
   {
    "end": "2026-05-31",
+   "partial": false,
    "revenue": 0,
    "start": "2026-05-31"
   },
   {
    "end": "2026-06-01",
+   "partial": false,
    "revenue": 1900.0,
    "start": "2026-06-01"
   },
   {
    "end": "2026-06-02",
+   "partial": false,
    "revenue": 1900.0,
    "start": "2026-06-02"
   },
   {
    "end": "2026-06-03",
+   "partial": false,
    "revenue": 1900.0,
    "start": "2026-06-03"
   }
  ],
  "yoy_range": [
-  "2025-06-03",
-  "2025-06-03"
+  "2025-06-04",
+  "2025-06-04"
  ]
 }

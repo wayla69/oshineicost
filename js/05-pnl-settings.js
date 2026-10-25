@@ -1914,7 +1914,10 @@ async function runComparison() {
   document.getElementById('cmpStatus').textContent = 'กำลังโหลด…';
   try {
     const data = await api(`${API}/api/analysis/period_compare?${params}`);
-    document.getElementById('cmpStatus').textContent = '';
+    // PR-PP2: a period that runs past the last closed day is to date, and the others are cut to the same first n days
+    document.getElementById('cmpStatus').textContent = data && data.to_date
+      ? `ช่วงที่ยังไม่จบ: ทุกช่วงเทียบ ${data.n_days} วันแรกเท่ากัน (ข้อมูลถึง ${fmtDateTh(data.anchor)})` : '';
+    Object.entries((data && data.windows) || {}).forEach(([k, w]) => { if (data[k]) data[k].label = periodLabelTh(w[0], w[1]); });
     renderComparison(data);
   } catch(e) {
     document.getElementById('cmpStatus').textContent = '✗ ' + e.message;
