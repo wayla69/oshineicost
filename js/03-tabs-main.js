@@ -2289,7 +2289,22 @@ function renderSphGrandTiers(sph) {
   }).join('');
   el.innerHTML = head(chips)
     + `<div class="rounded-lg overflow-hidden border border-slate-200 mb-2" style="height:38px;display:flex" id="sphGrandBar">${bar}</div>`
-    + `<div id="sphGrandLegend" class="grid grid-cols-2 md:grid-cols-4 gap-2">${tiles}</div>`;
+    + `<div id="sphGrandLegend" class="grid grid-cols-2 md:grid-cols-3 gap-2">${tiles}</div>`;
+  const barEl = document.getElementById('sphGrandBar');
+  _sphGrandFit(barEl);
+  if (barEl && typeof ResizeObserver === 'function') new ResizeObserver(() => _sphGrandFit(barEl)).observe(barEl);
+}
+
+// A share label stays only where it fits inside its segment (a narrow phone bar hides the label of a ~5 % segment;
+// the tile below carries the number and the segment keeps its tooltip).
+function _sphGrandFit(barEl) {
+  if (!barEl || !barEl.offsetWidth) return;
+  barEl.querySelectorAll('.sph-gt-seg').forEach(seg => {
+    const l = seg.querySelector('span');
+    if (!l) return;
+    l.style.visibility = '';
+    if (l.offsetWidth > seg.clientWidth - 4) l.style.visibility = 'hidden';
+  });
 }
 
 async function loadPersona() {
