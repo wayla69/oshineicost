@@ -1420,11 +1420,41 @@ function heatLegend(kind, labels) {
   return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--text-muted)">${cols.map((c, i) =>
     `<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:10px;border-radius:2px;background:${c};border:1px solid var(--border)"></span>${labels[i] || ''}</span>`).join('')}</div>`;
 }
+// Owner 2026-10-25 ("heat map ทำให้เป็น heat map จริงๆแดงเขียวเลย"): a real red → neutral → green scale for a % against a baseline
+// (a cell vs its own branch's normal, a change vs the period before). Symmetric, four steps a side, capped at ±30 %:
+//   |pct| < 3 neutral · 3–10 · 10–20 · 20–30 · >= 30 (the darkest red / green). The fills are theme tokens --heat-rgm4..m1, --heat-rg0,
+//   --heat-rgp1..p4 (index.html, each with an -ink token >= 4.9:1 in light and dark), so inkOn() gives the label colour.
+const HEAT_RG_EDGES = [3, 10, 20, 30];
+function heatRGStep(pct) {
+  if (pct == null || !isFinite(pct)) return null;
+  const a = Math.abs(pct), s = HEAT_RG_EDGES.filter(e => a >= e).length;
+  return pct < 0 ? -s : s;
+}
+function heatRGToken(s) { return `var(--heat-rg${s < 0 ? 'm' + -s : s > 0 ? 'p' + s : '0'})`; }
+function heatRG(pct) {
+  const s = heatRGStep(pct);
+  return s == null ? null : heatRGToken(s);
+}
+// the legend strip: ต่ำกว่าปกติ ← nine swatches → สูงกว่าปกติ, each swatch titled with its band
+function heatRGLegend() {
+  const E = HEAT_RG_EDGES, n = E.length;
+  const band = s => {
+    const a = Math.abs(s);
+    if (!s) return `ปกติ ±${E[0]}%`;
+    return (s < 0 ? 'ต่ำกว่า ' : 'สูงกว่า ') + (a === n ? `${E[a - 1]}% ขึ้นไป` : `${E[a - 1]}–${E[a]}%`);
+  };
+  const steps = [];
+  for (let s = -n; s <= n; s++) steps.push(s);
+  const sw = steps.map(s => `<span class="hrg-sw" title="${band(s)}" style="background:${heatRGToken(s)}"></span>`).join('');
+  return `<div class="hrg-legend" role="img" aria-label="สีแดง ต่ำกว่าปกติ · สีเขียว สูงกว่าปกติ · ปกติ ±${E[0]}% · สีเข้มสุด ±${E[n - 1]}% ขึ้นไป">`
+    + `<span class="hrg-end">ต่ำกว่าปกติ ←</span><span class="hrg-sws" aria-hidden="true">${sw}</span><span class="hrg-end">→ สูงกว่าปกติ</span>`
+    + `<span class="hrg-note">±${E[0]}% = ปกติ · เข้มสุด ±${E[n - 1]}%</span></div>`;
+}
 // Label colour for text ON a data-driven fill (heat cells, bar segments, badges): white or
 // the light-theme primary ink, whichever contrasts more. Fixed hex both themes, like the fill.
 // White fails on the whole heat scale (#ef4444 3.76, #f59e0b 2.15, #16a34a 3.30); #0f172a clears it.
 function inkOn(bg) {
-  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5])\)$/);
+  const tok = String(bg || '').match(/^var\(--heat-([sd][1-5]|rg(?:[mp][1-4]|0))\)$/);
   if (tok) return `var(--heat-${tok[1]}-ink)`;   // heat fills are theme tokens with their own ink
   const m = String(bg || '').trim().match(/^#(?:([0-9a-f]{6})(?:[0-9a-f]{2})?|([0-9a-f]{3}))(?![0-9a-f])|^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
   if (!m) return '#fff';
