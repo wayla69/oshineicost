@@ -1235,6 +1235,24 @@ def _spike_window(period: str, anchor, date_from: Optional[str], date_to: Option
     return s, e
 
 
+def _spike_base(base_from, base_to, ps, latest):
+    """PR-TD · (start, end) of a chosen comparison period: both dates, start <= end, <= 92 days, finished days only, ending
+    before the period starts. HTTP 400 in formal Thai otherwise."""
+    from fastapi import HTTPException
+    if not base_from or not base_to:
+        raise HTTPException(400, "ช่วงที่ใช้เทียบต้องระบุทั้งวันเริ่มต้น (base_from) และวันสิ้นสุด (base_to)")
+    s, e = _spike_iso(base_from, "วันเริ่มต้นของช่วงที่ใช้เทียบ"), _spike_iso(base_to, "วันสิ้นสุดของช่วงที่ใช้เทียบ")
+    if s > e:
+        raise HTTPException(400, "วันเริ่มต้นของช่วงที่ใช้เทียบต้องไม่อยู่หลังวันสิ้นสุด")
+    if (e - s).days + 1 > _SPIKE_MAX_RANGE_DAYS:
+        raise HTTPException(400, f"ช่วงที่ใช้เทียบยาวได้ไม่เกิน {_SPIKE_MAX_RANGE_DAYS} วัน")
+    if e > latest:
+        raise HTTPException(400, f"ช่วงที่ใช้เทียบต้องไม่เกินวันล่าสุดที่มีข้อมูลครบ ({latest.isoformat()})")
+    if e >= ps:
+        raise HTTPException(400, "ช่วงที่ใช้เทียบต้องสิ้นสุดก่อนวันเริ่มต้นของช่วงที่เลือก")
+    return s, e
+
+
 def _jd7(d) -> int:
     """Weekday key of a date, equal to SQLite CAST(julianday(day) AS INTEGER) % 7."""
     return (d.toordinal() + 1721424) % 7
@@ -1245,6 +1263,8 @@ _SPIKE_NEW_DAYS = 28
 _SPIKE_TREND_MIN_AGE = 14
 _SPIKE_THIN_DAYS = 5            # an existing menu sold on fewer baseline days than this has a "thin" baseline
 _SPIKE_THIN_MIN_QTY = 20        # ... and is listed from this many plates (the old new-menu floor), marked thin_base       # the trend compares the first 7 days with the latest 7: needs two full weeks
+_SPIKE_GAP_DAYS = 21            # PR-TD: an existing menu that came back after this many days without a sale at the branch ...
+_SPIKE_GAP_OPEN = 14            # ... on which the branch itself traded on at least this many days (a closed branch is not a gap) = "กลับมาขาย"
 _TH_MON_SPIKE = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
 _FIRST_SOLD: dict = {"key": None, "map": {}, "full": False, "bids": set()}
 _FIRST_SOLD_LOCK = _threading.Lock()
@@ -1450,7 +1470,9 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
     (anchor - first_sold < 28 days) and sold in the period ps..anchor. tdays = {bid: set(dates the branch traded)}
     covering anchor-27..anchor (read here when None). per_day = period plates / days the branch traded within
     max(ps, first_sold)..anchor; rate = the same plates per 100 customers of those days (PR-ST, basis as the spike part);
-    trend = the latest 7 days vs the first 7 days, from age 14: on the rate when the branch has customers, else per day."""
+    trend = the latest 7 days vs the first 7 days, from age 14: on the rate when the branch has customers, else per day.
+    PR-TD: a 9th item = the menu's first day ever when it is an existing menu that came back (_spike_returns): first_sold = the day it
+    came back (= returned_on), qty = plates from that day, returning: true, first_sold_ever."""
     import datetime as _dt
     if not cands:
         return []
@@ -1472,6 +1494,7 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
     if need:
         nb = sorted({c[0] for c in need}); sids = sorted({c[4] for c in need})
         f6 = {(c[0], c[4]): (c[6] + _dt.timedelta(days=6)).isoformat() for c in need}
+        f0 = {(c[0], c[4]): c[6].isoformat() for c in need}      # PR-TD: a menu that came back counts from that day only
         # rows only (no GROUP BY), summed here; a chain-wide window reads faster as a plain scan (as the period query)
         bsql = f"AND branch_id IN ({','.join('?' * len(nb))})" if len(nb) <= 2 else ""
         scan = "" if bsql else "NOT INDEXED"
@@ -1483,6 +1506,8 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
             if e is None or not q:
                 continue
             day = day[:10]
+            if day < f0[(bid, sid)]:
+                continue
             acc = sums.get((bid, sid))
             if acc is None:
                 acc = sums[(bid, sid)] = [0.0, 0.0]
@@ -1495,7 +1520,9 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
         return [d for d in (tdays.get(bid) or ()) if a <= d <= b]
 
     out = []
-    for bid, branch_name, menu, code, sid, pq, first, kind in cands:
+    for cand in cands:
+        bid, branch_name, menu, code, sid, pq, first, kind = cand[:8]
+        ever = cand[8] if len(cand) > 8 else None          # PR-TD: a menu that came back - first = the day it came back
         age = (anchor - first).days + 1
         win = tdays_in(bid, max(ps, first), anchor)
         n = len(win)
@@ -1524,11 +1551,13 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
                     "kind": kind, "basis": basis, "customers": round(c) if basis != "days" else None,
                     "rate": round(pq / c * _SPIKE_PER, 1) if c > 0 else None, "trend": trend,
                     "_bid": bid, "_sid": sid, "_q": pq})
+        if ever is not None:
+            out[-1].update({"returning": True, "returned_on": first.isoformat(), "first_sold_ever": ever.isoformat()})
     out.sort(key=lambda r: (-r["qty"], r["menu"], r["branch"]))
     return out
 
 
-def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> None:
+def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold, pooled=False) -> None:
     """เพิ่มจาก tier (PR-ST): for each listed row, the plates of every buffet tier (menu_fact_day, buffet bills) and the
     rest of its plates ("ไม่ใช่บุฟเฟ่ต์" = sales_sku_daily plates - the fact plates, floored at 0, on non-buffet customers =
     all customers - buffet customers, floored at 1). Per group g, with g's own weekday-fair normal from the same 3 weeks:
@@ -1537,11 +1566,15 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
     the row's own normal per customer). Only the days the fact tables cover: none of the baseline uncovered -> no split
     (tiers None, tier_note); the period covered up to d -> the split of ps..d (tier_to). tier_rest = the row's excess -
     the sum of the groups' excess (customers moving between tiers), when the whole period is covered. Sets the keys
-    in place. Rows carry their private keys _bid / _sid / _pq / _exp / _cp."""
+    in place. Rows carry their private keys _bid / _sid / _pq / _exp / _cp.
+    PR-TD · pooled (a chosen comparison period, base_from / base_to): expected_g = (base plates_g / base customers_g) x period
+    customers_g over the whole base, not per weekday; the base may end days before the period starts (the days between count
+    on neither side)."""
     import datetime as _dt
     from rules import tier_label
     if not rows:
         return
+    pooled_all = pooled
     hi = cust.fact_hi
     ce = min(pe, hi) if hi else None
     if hi is None or not cust.covers(bs, be) or ce < ps:
@@ -1568,7 +1601,7 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
         dd = _dt.date.fromisoformat(day[:10])
         if dd <= be:
             fb.setdefault(k, {}).setdefault(t, [0.0] * 7)[_jd7(dd)] += q
-        else:
+        elif dd >= ps:
             g = fp.setdefault(k, {})
             g[t] = g.get(t, 0.0) + q
     # sales_sku_daily plates of the covered part of the period (the whole period = the row's own plates)
@@ -1588,7 +1621,7 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
         out: dict = {}
         has_all = bool(cust.all.get(bid))
         for d in tdays.get(bid) or ():
-            if not (bs <= d <= ce):
+            if not (bs <= d <= ce) or be < d < ps:
                 continue
             side = 0 if d <= be else 1
             ts = cust.tier.get(bid, {}).get(d, {})
@@ -1620,7 +1653,7 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
             cb, cp = cw.get(t, ([0.0] * 7, [0.0] * 7))
             sb, sc = sum(pb), sum(cb)
             pooled = sb / sc if sc > 0 else rf
-            exp = sum((pb[w] / cb[w] if cb[w] > 0 else pooled) * cp[w] for w in range(7))
+            exp = pooled * sum(cp) if pooled_all else sum((pb[w] / cb[w] if cb[w] > 0 else pooled) * cp[w] for w in range(7))
             c = sum(cp)
             if pp <= 0 and exp <= 0:
                 continue
@@ -1640,8 +1673,42 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
             r["tier_rest"] = round(r["_pq"] - r["_exp"] - sum(g["excess"] for g in tiers), 1)
 
 
+def _spike_returns(cur, scan, bjoin, bfilt, q, tdays) -> dict:
+    """PR-TD (owner 2026-10-25) · existing menus that came back. {(branch_id, sku_id): (returned_on date, plates from that day to the
+    period end)} for the latest day r in ns..pe (ns = pe - 27, the new-menu window) on which the SKU sold at the branch after no sale
+    there on the _SPIKE_GAP_DAYS (21) days before r (r - 21 .. r - 1), while the branch itself traded on at least _SPIKE_GAP_OPEN (14) of
+    them. One pass over pe - 48 .. pe (sale days only, LAG per branch x SKU). The caller keeps only menus first sold before r (an
+    existing menu); a brand-new menu is never "returning"."""
+    import datetime as _dt
+    hits: dict = {}
+    for bid, sid, day in cur.execute(f"""
+        SELECT bid, sid, MAX(day) FROM (
+          SELECT d.branch_id bid, d.sku_id sid, d.day day, LAG(d.day) OVER (PARTITION BY d.branch_id, d.sku_id ORDER BY d.day) prev
+          FROM sales_sku_daily d {scan} {bjoin}
+          WHERE d.day BETWEEN :rs0 AND :pe AND d.qty > 0 {bfilt})
+        WHERE day >= :ns AND (prev IS NULL OR julianday(day) - julianday(prev) >= {_SPIKE_GAP_DAYS + 1})
+        GROUP BY bid, sid""", q):
+        r = _dt.date.fromisoformat(day[:10])
+        g0 = r - _dt.timedelta(days=_SPIKE_GAP_DAYS)
+        if sum(1 for d in (tdays.get(bid) or ()) if g0 <= d < r) >= _SPIKE_GAP_OPEN:
+            hits[(bid, sid)] = r
+    if not hits:
+        return {}
+    out: dict = {}
+    sids = sorted({k[1] for k in hits})
+    bids = sorted({k[0] for k in hits})
+    lo = min(hits.values()).isoformat()
+    for bid, sid, day, qq in cur.execute(
+            f"SELECT branch_id, sku_id, day, qty FROM sales_sku_daily WHERE branch_id IN ({','.join('?' * len(bids))}) "
+            f"AND day BETWEEN ? AND ? AND qty > 0 AND sku_id IN ({','.join('?' * len(sids))})", (*bids, lo, q["pe"], *sids)):
+        r = hits.get((bid, sid))
+        if r is not None and day[:10] >= r.isoformat():
+            out[(bid, sid)] = (r, out.get((bid, sid), (r, 0.0))[1] + (qq or 0))
+    return out
+
+
 def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold, with_cost=False,
-                       top=_SPIKE_TOP):
+                       top=_SPIKE_TOP, base_from=None, base_to=None):
     """Day / week / MTD / custom-range spike, per head and weekday-fair (memory rule 'MTD weekday-fair baseline';
     PR-ST owner 2026-10-25: the day mode too). Per branch x SKU: plates = sum of qty over the period; customers = the
     row's basis over the period's trading days (see _SPIKE_PER above); expected = sum over weekdays of (the SKU's
@@ -1659,7 +1726,18 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     points of food-cost %); the list is then sorted by extra_cost, a row without a cost last (uncosted: true, or
     package: true for a buffet tier package code, never costed); new menus carry unit_cost and period_cost = plates x
     unit_cost. Without with_cost not one cost key is in the answer (PL3) and the order stays by excess plates.
-    top = how many rows the card shows first (top_* = the sums over those rows)."""
+    top = how many rows the card shows first (top_* = the sums over those rows).
+
+    PR-TD (owner 2026-10-25) · base_from / base_to = a chosen comparison period instead of "ปกติ" (the 3 weeks before): the normal
+    is that period's per-head rate over the whole of it (plates / customers x 100; per tier likewise), so periods of different
+    lengths compare; expected = base rate x the period's customers, x = rate / base rate, the thin rule (< 5 days sold) counts the
+    base's days. The base must end before the period starts, <= 92 days, finished days only (400 in formal Thai otherwise).
+    spikes_plates / plates_count (PR-TD, owner 2026-10-25, "แบบเดิม") = the same rule on raw plates - period plates vs the weekday-fair normal
+    plates of the base (the chosen base: its plates per trading day x the period's trading days), >= 1.5x and >= 5 plates (thin from 20),
+    existing menus only (new and returning menus excluded the same way), sorted by +จาน; no per-head, tier or cost key.
+    base = {kind: normal | range, from, to}. summary = the strip of the card: customers of the period and of the base per day
+    (customers_vs_base_pct), the tier with the largest summed extra plates over the listed rows (tier_top), the extra plates of
+    the first `top` rows (top_excess)."""
     import datetime as _dt
     from rules import TH_TODAY_SQL
     # the last finished day; MAX through the (branch, day) index, not a table scan
@@ -1680,10 +1758,14 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         anchor = latest
     ps, pe = (anchor, anchor) if period == "day" else _spike_window(period, anchor, date_from, date_to, latest)
     bs, be = ps - _dt.timedelta(days=_SPIKE_BASE_DAYS), ps - _dt.timedelta(days=1)
+    pooled = bool(base_from or base_to)
+    if pooled:
+        bs, be = _spike_base(base_from, base_to, ps, latest)
     ns = pe - _dt.timedelta(days=_SPIKE_NEW_DAYS - 1)       # first_sold on/after ns = a new menu
-    ts0 = min(bs, ns)
+    rs0 = ns - _dt.timedelta(days=_SPIKE_GAP_DAYS)          # PR-TD: the gap before a return on/after ns starts here at the earliest
+    ts0 = min(bs, rs0)
     q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat(), "bs": bs.isoformat(), "be": be.isoformat(),
-         "ts0": ts0.isoformat()}
+         "ts0": ts0.isoformat(), "ns": ns.isoformat(), "rs0": rs0.isoformat()}
     # Speed (live-size DB, MTD all branches): a whole-chain window reads most of the
     # table, so a plain scan beats ~200k (branch, day) index lookups; one branch keeps
     # the index. Rows come back as tuples. Weekday key = CAST(julianday(day) AS INT) % 7
@@ -1741,6 +1823,9 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             for d in tper.get(bid, ()):
                 cp[_jd7(d)] += cust.of(bid, basis, d)
             tot = sum(cb)
+            if pooled:                    # a chosen base: its per-head rate over the whole of it, not per weekday
+                wts[k] = ([sum(cp) / tot if tot else 0.0] * 7, sum(cp))
+                return wts[k]
             fb = sum(cp[w] for w in range(7) if not cb[w]) / tot if tot else 0.0
             wts[k] = ([(cp[w] / cb[w] if cb[w] else 0.0) + fb for w in range(7)], sum(cp))
         return wts[k]
@@ -1754,7 +1839,9 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         return bases[k]
 
     spikes = []
+    plates: list = []                       # PR-TD · แบบเดิม (raw plates)
     fsm = _first_sold_map(con, {r[0] for r in prow}) if prow else {}
+    rets = _spike_returns(cur, scan, bjoin, bfilt, q, tdays) if prow else {}
     newc = []
     for bid, branch_name, desc, code, sid, pq in prow:
         pq = pq or 0
@@ -1766,8 +1853,29 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             if pq >= 1:
                 newc.append((bid, branch_name, name, code, sid, pq, first, kind))
             continue
+        back = rets.get((bid, sid))
+        if back is not None and first is not None and first < back[0]:
+            # PR-TD: an existing menu back on sale after >= 21 days without one: a new menu again from the day it came back, for 28 days
+            if back[1] >= 1:
+                newc.append((bid, branch_name, name, code, sid, back[1], back[0], kind, first))
+            continue
         e = base.get((bid, sid))
         n = e[7] if e else 0
+        # PR-TD (owner 2026-10-25) · แบบเดิม: the same rule on raw plates (the "days" basis = the weekday-fair plate standard of PR-SP,
+        # or the chosen base's plates per trading day), its own list at the bottom of the card
+        wd, _ = weights(bid, "days")
+        pexp = sum(e[w] * wd[w] for w in range(7)) if e else 0.0
+        pthin = n < _SPIKE_THIN_DAYS
+        if (pexp > 0 and not pthin and pq / pexp >= threshold and pq >= 5) or \
+                (pthin and pq >= _SPIKE_THIN_MIN_QTY and (pexp <= 0 or pq / pexp >= threshold)):
+            px = pq / pexp if pexp > 0 else None
+            prow_ = {"branch": branch_name, "menu": name, "today": round(pq), "per_day": round(pq / days, 1), "avg": round(pexp, 1),
+                     "expected": round(pexp), "x": round(px, 1) if px is not None else None,
+                     "pct": round((px - 1) * 100) if px is not None else None, "excess": round(pq - pexp), "is_new": False,
+                     "kind": kind, "_ex": pq - pexp}
+            if pthin:
+                prow_["thin_base"] = True
+            plates.append(prow_)
         basis = basis_of(bid, kind)
         wt, cp = weights(bid, basis)
         expected = sum(e[w] * wt[w] for w in range(7)) if e else 0.0
@@ -1813,7 +1921,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     else:
         spikes.sort(key=lambda s: (-(s["_pq"] - s["_exp"]), s["menu"], s["branch"]))
     shown = spikes[:limit]
-    _spike_tiers(con, shown, cust, tdays, base, ps, pe, bs, be, threshold)
+    _spike_tiers(con, shown, cust, tdays, base, ps, pe, bs, be, threshold, pooled=pooled)
     top = max(1, int(top or _SPIKE_TOP))
     cost_out: dict = {}
     if sc is not None:
@@ -1834,13 +1942,31 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         for k in ("_bid", "_sid", "_q"):
             m.pop(k, None)
     fh = cust.fact_hi
+    # PR-TD · the strip: customers per day of the period vs the base, the tier that adds the most plates, the extra plates of the top rows
+    cpd = sum(cust.of(b, "all", d) for b, ds in tper.items() for d in ds)
+    cbd = sum(cust.of(b, "all", d) for b, ds in tbase.items() for d in ds)
+    bdays = (be - bs).days + 1
+    tsum: dict = {}
+    for r in shown:
+        for g in r.get("tiers") or ():
+            if g["excess"] > 0:
+                tsum[g["label"]] = tsum.get(g["label"], 0.0) + g["excess"]
+    tt = max(tsum.items(), key=lambda kv: (kv[1], kv[0])) if tsum else None
+    summary = {"customers": round(cpd), "customers_per_day": round(cpd / days, 1) if cpd else None,
+               "base_customers_per_day": round(cbd / bdays, 1) if cbd else None,
+               "customers_vs_base_pct": round(((cpd / days) / (cbd / bdays) - 1) * 100, 1) if cpd and cbd else None,
+               "tier_top": {"label": tt[0], "excess": round(tt[1])} if tt else None,
+               "top_excess": round(sum(max(0, s["excess"]) for s in spikes[:top]))}
     return {**cost_out, "sort": "extra_cost" if sc is not None else "excess", "top": top,
             "cost_view": sc is not None, "date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
             "days": days, "baseline_from": bs.isoformat(), "baseline_to": be.isoformat(),
+            "base": {"kind": "range" if pooled else "normal", "from": bs.isoformat(), "to": be.isoformat()}, "summary": summary,
             "latest_day": latest.isoformat(),
             "window_days": _SPIKE_BASE_DAYS, "threshold": threshold, "rate_per": _SPIKE_PER,
             "tier_data_to": fh.isoformat() if fh else None,
             "count": len(spikes), "spikes": shown,
+            "plates_count": len(plates), "spikes_plates": [{k: v for k, v in r.items() if k != "_ex"} for r in
+                                                           sorted(plates, key=lambda r: (-r["_ex"], r["menu"], r["branch"]))[:limit]],
             "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
 
 
@@ -1849,7 +1975,8 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
                group: Optional[str] = Query(None), limit: int = Query(300, ge=1, le=1000),
                threshold: float = Query(1.5, ge=1.0), period: str = Query("day"),
                date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
-               top: int = Query(_SPIKE_TOP, ge=1, le=1000)):
+               top: int = Query(_SPIKE_TOP, ge=1, le=1000),
+               base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None)):
     """Menus whose plates PER HEAD spiked, per branch (answers '#5: which menu was abnormally high'). Shows ALL items
     above `threshold`x (default 1.5x).
 
@@ -1873,7 +2000,11 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
     high}] (None + tier_note when the fact tables do not cover the window; tier_to when they cover only part of the
     period; tier_rest = the excess no tier explains). `new_menus` = every NEW menu sold in the period (no threshold),
     new = period end - first day sold at the branch < 28 days - see _spike_new_menus (first_sold, age_days, qty,
-    per_day, rate, trend)."""
+    per_day, rate, trend).
+
+    PR-TD (owner 2026-10-25): base_from + base_to = compare with that period instead of ปกติ (see _menu_spike_period); every
+    answer carries base {kind, from, to} and summary (the card's strip); new menus that are an existing menu back on sale after
+    >= 21 days without one carry returning: true, returned_on, first_sold_ever (_spike_returns)."""
     from fastapi import HTTPException
     if period not in _SPIKE_PERIODS:
         raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
@@ -1889,87 +2020,128 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
         if request is not None:
             import auth as _auth
             with_cost = bool(_auth.request_modules(request) & _SPIKE_COST_MODULES)
+        bf = base_from if isinstance(base_from, str) else None          # a direct call leaves the Query default
+        bt = base_to if isinstance(base_to, str) else None
         return _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
-                                  with_cost=with_cost, top=top)
+                                  with_cost=with_cost, top=top, base_from=bf, base_to=bt)
 
 
 @router.get("/api/sales/cost-per-head")
 def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
-                  group: Optional[str] = Query(None), gran: str = Query("day"),
-                  kind: Optional[str] = Query(None), pick: Optional[str] = Query(None),
-                  date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
-    """#10 — BoM cost per head per branch. PR-PP3: on the one period pattern (periods.windows): day · week · month ·
-    year (· range), to date through the last closed day when the period is not finished, compared with the same days
-    of the period before AND of the year before (prev_* / ly_*). COGS = the one engine (period_cost.cost_sum): a whole
-    month reads the month table, a part month the day-level dish cost; a window with no cost source (a day / week
-    before the day table) has cost None ("—", reason in `reasons`), never ฿0 against real covers.
-    `date` / `pick` = any day of the period wanted (default: the period of the last closed day)."""
-    import periods as _P
-    import period_cost as _PC
-    k = _P.kind_of(kind or gran, "day")
+                  group: Optional[str] = Query(None), gran: str = Query("day")):
+    """#10 — BoM cost per head per branch, with previous-period comparison.
+    COGS via our BoM only (_unified_cogs_expr). Daily grain from sales_sku_daily
+    (rolling window), customers from sales_transaction."""
+    import datetime as _dt, calendar as _cal
+    if gran not in ("day", "week", "month"):
+        gran = "day"
+    cogs_expr = _unified_cogs_expr("ssm")
+
+    def bounds(d):
+        if gran == "day": return d, d
+        if gran == "week":
+            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
+        s = d.replace(day=1)
+        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
+        return s, nxt - _dt.timedelta(days=1)
+
+    def prev_focus(d):
+        if gran == "day":  return d - _dt.timedelta(days=1)
+        if gran == "week": return d - _dt.timedelta(days=7)
+        idx = d.year * 12 + (d.month - 1) - 1
+        y, m = idx // 12, idx % 12 + 1
+        return _dt.date(y, m, min(d.day, _cal.monthrange(y, m)[1]))
+
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
     scope_filter(tfilt, tp, branch, group)
     twhere = " AND ".join(tfilt)
+    dbf = ""  # branch filter for the daily-sku side (by name via join)
+    if branch: dbf = " AND b.name=:branch"
+    # fix A1: build group condition for the COGS/revenue query so it matches the customer query scope
+    _gcond_list: list = []; _gcond_params: dict = {}
+    _group_filter(_gcond_list, _gcond_params, group)
+    gcond = (" AND " + " AND ".join(_gcond_list)) if _gcond_list else ""
+
     with get_db() as con:
-        floor = _PC.cost_floor(con)
-        w = _P.windows(con, k, twhere, tp, pick=(pick or date), date_from=date_from, date_to=date_to)
-        if not w:
-            return {"gran": k, "focus": None, "branches": [], "total": {}}
+        maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        if not maxd:
+            return {"gran": gran, "focus": None, "branches": [], "total": {}}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        fdate = _dt.date(fy, fm, fd)
+        # sales_sku_daily is a rolling window. A period that starts before it used
+        # to read cost ฿0 against real covers — "฿0.0/head" instead of "no data".
+        # A whole month falls back to the monthly table (same COGS expression, as
+        # the management report does); a day or week before the window has no
+        # cost source at all and says so (cost None -> "—").
+        daily_min = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0] or "9999-99-99"
 
-        def side(win, ok):
-            if not ok:
-                return None, None, None, None
-            tot, why = _PC.cost_sum(con, *win, branch, group, floor)
-            byb = _PC.cost_sum(con, *win, branch, group, floor, by_branch=True)[0] if tot else None
-            cust = {r["branch"]: r["c"] or 0 for r in con.execute(
-                f"""SELECT b.name branch, SUM(t.customer_count) c FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {twhere} AND date(t.sold_at) BETWEEN :_s AND :_e GROUP BY b.name""",
-                {**tp, "_s": win[0], "_e": win[1]}).fetchall()}
-            return tot, byb, cust, why
+        def fetch(d):
+            s, e = bounds(d)
+            if s.isoformat() >= daily_min:
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source,"
+                       " substr(day, 1, 7) AS period_month"
+                       " FROM v_sales_sku_daily WHERE day BETWEEN :s AND :e)")
+                sp_ = {"s": s.isoformat(), "e": e.isoformat()}
+            elif gran == "month":
+                src = ("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source, period_month"
+                       " FROM v_sales_sku_monthly WHERE period_month = :m)")
+                sp_ = {"m": s.strftime("%Y-%m")}
+            else:
+                src = None
+            cust = {r["branch"]: r["cust"] or 0 for r in con.execute(
+                f"""SELECT b.name branch, SUM(t.customer_count) cust
+                    FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e
+                    GROUP BY b.name""", {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()}
+            if src is None:
+                return cust, None, None, (s, e)
+            cogs, rev = {}, {}
+            for r in con.execute(
+                f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs,
+                           ROUND(SUM(ssm.subtotal_ex_vat),2) rev
+                    FROM {src} ssm
+                    JOIN branches b ON b.branch_id=ssm.branch_id
+                    WHERE b.name!='ALL'{dbf}{gcond} GROUP BY b.name""",
+                {**sp_, **({"branch": branch} if branch else {}), **_gcond_params}).fetchall():
+                cogs[r["branch"]] = r["cogs"] or 0
+                rev[r["branch"]]  = r["rev"] or 0
+            return cust, cogs, rev, (s, e)
 
-        cur, bc, cc, why_c = side(w["cur"], True)
-        prv, bp, _pcust, why_p = side(w["prev"], w["has_prev"])
-        ly, bl, _lcust, why_l = side(w["ly"], w["has_ly"])
-    reasons = _P.reasons(w)
-    if why_p and "prev" not in reasons: reasons["prev"] = why_p
-    if why_l and "ly" not in reasons: reasons["ly"] = why_l
-    if why_c: reasons["cur"] = why_c
-    cost_known = cur is not None
-    pctf = lambda c, b: _P.pct(c, b) if (c is not None and b) else None   # noqa: E731
-    ppf = lambda c, b: _P.pp(c, b) if (c is not None and b is not None) else None   # noqa: E731
+        cust, cogs, rev, (cs, ce) = fetch(fdate)
+        pcust, pcogs, _prev_rev, (ps, pe) = fetch(prev_focus(fdate))
+        cost_known, prev_known = cogs is not None, pcogs is not None
+        cogs, rev, pcogs = cogs or {}, rev or {}, pcogs or {}
 
-    def _r1(v):
-        return round(v, 1) if v is not None else None
-
-    def row(nm, c, cu, p_, y_):
-        c = dict(c or {}); p_ = dict(p_) if p_ else None; y_ = dict(y_) if y_ else None
-        for o in (c, p_, y_):                      # the page prints food-cost % with 1 decimal, as before
-            if o and "food_cost_pct" in o:
-                o["food_cost_pct"] = _r1(o["food_cost_pct"])
-        ch = c.get("cost_per_head") if cost_known else None
-        pch = (p_ or {}).get("cost_per_head"); lch = (y_ or {}).get("cost_per_head")
-        return {"branch": nm, "customers": cu, "cogs": c.get("cogs", 0) if cost_known else 0,
-                "revenue": c.get("revenue", 0) if cost_known else 0,
-                "cost_per_head": ch, "prev_cost_per_head": pch, "ly_cost_per_head": lch,
-                "delta_pct": pctf(ch, pch), "ly_delta_pct": pctf(ch, lch),
-                "rev_per_head": c.get("rev_per_head") if cost_known else None,
-                "cost_pct": c.get("food_cost_pct") if cost_known else None,
-                "prev_cost_pct": (p_ or {}).get("food_cost_pct"), "ly_cost_pct": (y_ or {}).get("food_cost_pct"),
-                "cost_pct_prev_pp": ppf(c.get("food_cost_pct") if cost_known else None, (p_ or {}).get("food_cost_pct")),
-                "cost_pct_ly_pp": ppf(c.get("food_cost_pct") if cost_known else None, (y_ or {}).get("food_cost_pct")),
-                "gp_per_head": c.get("gp_per_head") if cost_known else None}
-    out = [row(nm, (bc or {}).get(nm), cc.get(nm, 0), (bp or {}).get(nm), (bl or {}).get(nm))
-           for nm in sorted(set(cc) | set(bc or {}))]
-    out.sort(key=lambda r: -(r["cost_pct"] if r["cost_pct"] is not None else -1))
-    total = row(None, cur, sum(cc.values()), prv, ly)
-    total.pop("branch")
-    if not cost_known:
-        total["cogs"] = total["revenue"] = None
-    return {"gran": k, "focus": w["cur"][1], "cost_known": cost_known, "cost_from": floor,
-            "period": _P.public(w) and dict(_P.public(w), reasons={x: v for x, v in reasons.items() if x in ("prev", "ly")}),
-            "reasons": reasons,
-            "cur_range": list(w["cur"]), "prev_range": list(w["prev"]), "ly_range": list(w["ly"]),
-            "branches": out, "total": total}
+        def pct(c, p): return round((c - p) / p * 100, 1) if p else None
+        out = []
+        for nm in sorted(set(cust) | set(cogs)):
+            cu, co, re = cust.get(nm, 0), cogs.get(nm, 0), rev.get(nm, 0)
+            pcu, pco = pcust.get(nm, 0), pcogs.get(nm, 0)
+            ch  = round(co / cu, 1) if (cu and cost_known) else None    # cost / head
+            pch = round(pco / pcu, 1) if (pcu and prev_known) else None # prev cost / head
+            rph = round(re / cu, 1) if (cu and cost_known) else None    # revenue / head (spend)
+            cost_pct = round(co / re * 100, 1) if re else None   # food-cost ratio
+            gph = round((re - co) / cu, 1) if (cu and cost_known) else None   # GP / head
+            out.append({"branch": nm, "customers": cu, "cogs": round(co, 2),
+                        "revenue": round(re, 2), "cost_per_head": ch, "prev_cost_per_head": pch,
+                        "delta_pct": pct(ch or 0, pch or 0) if (pch and ch is not None) else None,
+                        "rev_per_head": rph, "cost_pct": cost_pct, "gp_per_head": gph})
+        out.sort(key=lambda r: -(r["cost_pct"] if r["cost_pct"] is not None else -1))
+        tcu = sum(cust.values()); tco = sum(cogs.values()); tre = sum(rev.values())
+        ptcu = sum(pcust.values()); ptco = sum(pcogs.values())
+        tch = round(tco / tcu, 1) if (tcu and cost_known) else None
+        ptch = round(ptco / ptcu, 1) if (ptcu and prev_known) else None
+        total = {"customers": tcu, "cogs": round(tco, 2) if cost_known else None,
+                 "revenue": round(tre, 2) if cost_known else None,
+                 "cost_per_head": tch, "prev_cost_per_head": ptch,
+                 "delta_pct": pct(tch or 0, ptch or 0) if (ptch and tch is not None) else None,
+                 "rev_per_head": round(tre / tcu, 1) if (tcu and cost_known) else None,
+                 "cost_pct": round(tco / tre * 100, 1) if tre else None,
+                 "gp_per_head": round((tre - tco) / tcu, 1) if (tcu and cost_known) else None}
+    return {"gran": gran, "focus": focus, "cost_known": cost_known, "cost_from": daily_min,
+            "cur_range": [cs.isoformat(), ce.isoformat()],
+            "prev_range": [ps.isoformat(), pe.isoformat()], "branches": out, "total": total}
 
 
 @router.get("/api/overall/latest-month-mtd")

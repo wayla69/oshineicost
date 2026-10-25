@@ -345,9 +345,6 @@ def month_table(con, month: str) -> dict:
     ids = [i for i in ids if i in info and not rules.is_tier_code(info[i][0])]
     now_c = _effective(con, ids, month)
     prev_c = _effective(con, ids, _prev(month))
-    # PR-PP3 · the one period pattern on a month-grain list: the month before AND the same month a year back
-    ly_month = f"{int(month[:4]) - 1:04d}{month[4:7]}"
-    ly_c = _effective(con, ids, ly_month) if ly_month >= MIN_MONTH else {}
     label = _source_of(con, month)
     rows = []
     for sid in ids:
@@ -359,11 +356,8 @@ def month_table(con, month: str) -> dict:
         else:
             kind, src = "none", SRC_NONE
         pct = round((cost - prev) / prev * 100.0, 1) if prev > 0 else None
-        ly = ly_c.get(sid, 0.0)
         rows.append({"code": code, "name": name, "unit_cost": round(cost, 4), "prev_cost": round(prev, 4) if prev > 0 else None,
                      "change_pct": pct, "changed30": bool(pct is not None and abs(pct) > CHANGE_PCT),
-                     "ly_cost": round(ly, 4) if ly > 0 else None,
-                     "ly_change_pct": round((cost - ly) / ly * 100.0, 1) if (ly > 0 and cost > 0) else None,
                      "plates": round(sold.get(sid, 0.0), 1), "source": src, "source_kind": kind,
                      "cost_source": label(sid, cost) if kind == "none" else None})
     rows.sort(key=lambda r: (r["source_kind"] != "none", -r["plates"], r["code"]))

@@ -212,49 +212,11 @@
  "loss_count": 0,
  "loss_total": 0,
  "out_of_window": false,
- "period": {
-  "anchor": "2026-06-03",
-  "complete": false,
-  "cur": [
-   "2026-06-01",
-   "2026-06-03"
-  ],
-  "days": 3,
-  "has_ly": false,
-  "has_prev": true,
-  "kind": "month",
-  "label_th": "1–3 มิ.ย. 2569",
-  "ly": [
-   "2025-06-01",
-   "2025-06-03"
-  ],
-  "ly_label_th": "1–3 มิ.ย. 2568",
-  "prev": [
-   "2026-05-01",
-   "2026-05-03"
-  ],
-  "prev_label_th": "1–3 พ.ค. 2569",
-  "reasons": {
-   "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569"
-  }
- },
  "range": [
   "2026-06-01",
-  "2026-06-03"
+  "2026-06-30"
  ],
  "summary": {
-  "bills": 6,
-  "cogs": 3120.0,
-  "customers": 24,
-  "discount": 120.0,
-  "gp_pct": 45.3,
-  "gp_per_bill": 430,
-  "gp_per_head": 108,
-  "gross_profit": 2580.0,
-  "revenue": 5700.0
- },
- "summary_ly": null,
- "summary_prev": {
   "bills": 6,
   "cogs": 3120.0,
   "customers": 24,

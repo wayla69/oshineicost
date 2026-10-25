@@ -1106,28 +1106,16 @@ def _purchase_ratio(con, bid: int, name: str, month: str, rep: Optional[dict] = 
     pct = _num(100.0 * got / sales) if sales else None
     prev = _prev_month(month)
     p_pct = p_got = p_sales = None
-    p_range = None
     if _bc_started(con, bid, prev)[0]:
         p_rounds = _supply_rounds(con, bid, prev)
-        if upto:
-            # PR-PP3 · the one period pattern: an open month (to its last finished day, n days) is set against the first n
-            # days of last month - its deliveries on those days over its net sales of those days (it was the WHOLE last month)
-            import periods as _P
-            from .period_api import _sales as _period_sales   # a neighbour: relative (test_franchise_f2)
-            ps, pe = _P.resolve("month", upto)["prev"]
-            p_range = [ps, pe]
-            p_got = round(sum(r["delivered"] for r in p_rounds if r["delivered"] is not None and ps <= r["delivery"] <= pe), 2)
-            p_sales = (_period_sales(con, "t.source='Easy' AND b.branch_id=:_bid", {"_bid": bid}, ps, pe) or {}).get("revenue")
-        else:
-            p_sales, _, _ = _month_sales(name, prev)
-            p_got = round(sum(r["delivered"] for r in p_rounds if r["delivered"] is not None), 2)
+        p_sales, _, _ = _month_sales(name, prev)
+        p_got = round(sum(r["delivered"] for r in p_rounds if r["delivered"] is not None), 2)
         p_pct = _num(100.0 * p_got / p_sales) if p_sales else None
     first, _ = _month_bounds(month)
     days = (date.fromisoformat(through) - first).days + 1 if through else 0
     return {"pct": pct, "delivered_to_date": round(got, 2), "sales_to_date": _num(sales, 2), "through": through,
             "month_complete": bool(complete), "days": days,
             "pct_prev": p_pct, "delivered_prev": p_got, "sales_prev": _num(p_sales, 2), "month_prev": prev,
-            "prev_range": p_range, "basis": "to_date" if upto else "full",
             "change_pp": _num(pct - p_pct) if pct is not None and p_pct is not None else None}
 
 

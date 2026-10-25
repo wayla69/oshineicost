@@ -276,25 +276,3 @@ def period_headline(page: str = Query(...), kind: str = Query("month"), pick: Op
                      "cur": c, "prev": p, "ly": y,
                      "prev_change": ch(c, p) if p is not None else None, "ly_change": ch(c, y) if y is not None else None})
     return {"page": page, "period": P.public(shown), "figures": figs, "kinds": PAGE_KINDS[page], "grain_note": note}
-
-
-# ── PR-PP3 · /api/period/cost: the cost figures of one period ──────────────────────────────────────────────────────
-@router.get("/api/period/cost")
-@ttl_cache
-def period_cost(kind: str = Query("month"), pick: Optional[str] = Query(None),
-                date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
-                branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
-                by_branch: int = Query(0)):
-    """COGS · GP · GP % · food-cost % · cost per head for the current window and its two bases (period_cost.compare):
-    a whole month reads the month table, a part month the day-level dish cost; a base without a cost source (before the
-    day table, or before the first day with bills) has no figure and its reason in `reasons`. % for baht and per head,
-    จุด for GP % and food-cost %."""
-    import period_cost as PC
-    if P.kind_of(kind, "") not in _KINDS:
-        raise HTTPException(400, "ช่วงเวลาไม่ถูกต้อง")
-    where, params = _scope(branch, group)
-    with get_db() as con:
-        w = _win(con, kind, pick, date_from, date_to, where, params)
-        if not w:
-            return {"period": None, "cur": None, "prev": None, "ly": None, "branches": [], "reasons": {}}
-        return PC.compare(con, w, branch, group, by_branch=bool(by_branch))

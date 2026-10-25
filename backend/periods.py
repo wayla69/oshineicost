@@ -261,29 +261,8 @@ _PUBLIC = ("kind", "cur", "prev", "ly", "days", "complete", "label_th", "prev_la
            "anchor", "has_prev", "has_ly")
 
 
-def reasons(w: Optional[Dict]) -> Dict[str, str]:
-    """PR-PP3 · why a base of `w` is not compared (the "?" says it instead of a bare "—"): the base starts before the
-    first day with bills. A year names the month the data starts ('ข้อมูลปีก่อนเริ่ม พ.ค. 2568' - live data starts
-    2025-05, so a year to date has no whole year-ago base until 2027); other kinds the first day."""
-    out: Dict[str, str] = {}
-    if not w or not w.get("first_day"):
-        return out
-    f = _d(w["first_day"])
-    txt = (f"ข้อมูลปีก่อนเริ่ม {_MON_TH[f.month - 1]} {f.year + 543}" if w.get("kind") == "year"
-           else f"ข้อมูลเริ่ม {_th(f)}")
-    for k in ("prev", "ly"):
-        if w.get(f"has_{k}") is False:
-            out[k] = txt
-    return out
-
-
 def public(w: Optional[Dict]) -> Optional[Dict]:
-    """The `period` object an endpoint returns (the JS periodCmpHtml reads it as its `range`); `reasons` says why a
-    base is not compared (periodQ shows it)."""
+    """The `period` object an endpoint returns (the JS periodCmpHtml reads it as its `range`)."""
     if not w:
         return None
-    out = {k: (list(w[k]) if isinstance(w.get(k), tuple) else w.get(k)) for k in _PUBLIC if k in w}
-    r = reasons(w)
-    if r:
-        out["reasons"] = r
-    return out
+    return {k: (list(w[k]) if isinstance(w.get(k), tuple) else w.get(k)) for k in _PUBLIC if k in w}

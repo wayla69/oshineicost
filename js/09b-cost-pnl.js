@@ -53,20 +53,14 @@ async function loadCostCoverage() {
   if (gen !== loadGen) return;
   const ch = d.chain || {};
   const pct = v => v != null ? v.toFixed(1) + '%' : '—';
-  // PR-PP3: the plate coverage of the top bar's period (to date) with เทียบช่วงก่อน + เทียบปีก่อน in จุด (/api/period/cost)
-  const pc = await api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null);
-  if (gen !== loadGen) return;
-  const PC = pc && pc.cur && pc.cur.cost_coverage_pct != null ? pc : null;
-  if (PC) periodChip(PC.period, true);
-  const covCmp = PC ? `<div class="pkpi-cmp">${periodCmpHtml(PC.cur.cost_coverage_pct, PC.prev && PC.prev.cost_coverage_pct, PC.ly && PC.ly.cost_coverage_pct, { unit: 'pp', range: PC.period })}</div>` : '';
   document.getElementById('cov-kpis').innerHTML = [
-    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0', '', ''],
-    ['รายได้ที่ยังไม่มีต้นทุน', fmt(ch.uncosted_revenue), '#ef4444', `${pct(ch.pct_uncosted)} ของรายได้อาหารตามสั่ง/เดลิเวอรี/เครื่องดื่ม`, ''],
-    ['จานที่ยังไม่มีต้นทุน', fmtN(ch.uncosted_plates || 0), '#f59e0b', `${pct(ch.pct_uncosted_plates)} ของจานที่เสิร์ฟ (รวมบุฟเฟ่ต์)`, ''],
-    ['ต้นทุนครบ (จาน)', PC ? PC.cur.cost_coverage_pct.toFixed(1) + '%' : (ch.pct_uncosted_plates != null ? (100 - ch.pct_uncosted_plates).toFixed(1) + '%' : '—'), '#10b981', 'ตัวเลขเดียวกับหน้าแรกและ P&L', covCmp],
-  ].map(([l,v,c,sub,cmp]) => `<div class="card p-4" style="border-top:3px solid ${c}">
+    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0', ''],
+    ['รายได้ที่ยังไม่มีต้นทุน', fmt(ch.uncosted_revenue), '#ef4444', `${pct(ch.pct_uncosted)} ของรายได้อาหารตามสั่ง/เดลิเวอรี/เครื่องดื่ม`],
+    ['จานที่ยังไม่มีต้นทุน', fmtN(ch.uncosted_plates || 0), '#f59e0b', `${pct(ch.pct_uncosted_plates)} ของจานที่เสิร์ฟ (รวมบุฟเฟ่ต์)`],
+    ['ต้นทุนครบ (จาน)', ch.pct_uncosted_plates != null ? (100 - ch.pct_uncosted_plates).toFixed(1) + '%' : '—', '#10b981', 'ตัวเลขเดียวกับหน้าแรกและ P&L'],
+  ].map(([l,v,c,sub]) => `<div class="card p-4" style="border-top:3px solid ${c}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
-      <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div>${cmp}
+      <div class="text-2xl font-bold" style="color:${textInk(c)}">${v}</div>
       ${sub ? `<div class="text-xs text-slate-400 mt-1">${esc(sub)}</div>` : ''}</div>`).join('');
   const defEl = document.getElementById('cov-definition');
   // PR-MB: the definition of "มีต้นทุน" is behind a "?" (the line keeps only the button)
@@ -409,20 +403,14 @@ async function loadPnlBranch() {
   catch(e){ if (e === STALE) return; throw e; }
   if (gen !== loadGen) return;
   const c = d.chain || {};
-  // PR-PP3: the top bar's period (to date when it is not finished) with เทียบช่วงก่อน + เทียบปีก่อน on revenue / COGS / GP
-  const pc = await api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null);
-  if (gen !== loadGen) return;
-  const PC = pc && pc.cur ? pc : null, v = (o, k) => o ? o[k] : null;
-  if (PC) periodChip(PC.period, true);
-  const cmp = (k, unit, upGood, i) => PC ? `<div class="pkpi-cmp">${periodCmpHtml(PC.cur[k], v(PC.prev, k), v(PC.ly, k), { unit, upGood, range: PC.period, q: i === 0 })}</div>` : '';
   document.getElementById('pnl-kpis').innerHTML = [
-    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4a70b0', cmp('revenue', '%', true, 0)],
-    ['ต้นทุน BoM',           fmt(c.cogs),             '#f59e0b', cmp('cogs', '%', false)],
-    ['กำไรขั้นต้น',          fmt(c.gross_profit) + (c.gp_margin_pct!=null?` · ${c.gp_margin_pct}%`:''), '#10b981', cmp('gp', '%', true)],
-    ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444'), ''],
-  ].map(([l,val,col,ch]) => `<div class="card p-4" style="border-top:3px solid ${col}">
+    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4a70b0'],
+    ['ต้นทุน BoM',           fmt(c.cogs),             '#f59e0b'],
+    ['กำไรขั้นต้น',          fmt(c.gross_profit) + (c.gp_margin_pct!=null?` · ${c.gp_margin_pct}%`:''), '#10b981'],
+    ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444')],
+  ].map(([l,v,col]) => `<div class="card p-4" style="border-top:3px solid ${col}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
-      <div class="text-xl font-bold" style="color:${textInk(col)}">${val}</div>${ch}</div>`).join('');
+      <div class="text-xl font-bold" style="color:${textInk(col)}">${v}</div></div>`).join('');
   const note = document.getElementById('pnl-note');
   if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
     note.classList.remove('hidden');
@@ -506,12 +494,8 @@ async function openPnlDrill(branch) {
   } catch(e){ body.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ' + esc(String(e.message||e)) + '</p>'; return; }
   const s = d.summary || {};
   const revDelta = s.rev_delta_pct;
-  // PR-PP3: the month in progress is to date against the same days of last month (d.period); a finished month whole vs whole
-  const _prevLbl = d.period ? d.period.prev_label_th : fmtPeriod(d.prev_month);
-  const deltaChip = (revDelta==null ? '' :
-    `<span style="color:${revDelta>=0?'var(--good-ink)':'var(--bad-ink)'}">${revDelta>=0?'▲':'▼'} ${Math.abs(revDelta)}% vs ${esc(_prevLbl)}</span>`)
-    + (s.rev_ly_delta_pct==null ? '' : ` <span style="color:${s.rev_ly_delta_pct>=0?'var(--good-ink)':'var(--bad-ink)'}">${s.rev_ly_delta_pct>=0?'▲':'▼'} ${Math.abs(s.rev_ly_delta_pct)}% ปีก่อน</span>`);
-  if (d.period) title.textContent = `${branch} · ${periodSpan(d.period)}`;
+  const deltaChip = revDelta==null ? '' :
+    `<span style="color:${revDelta>=0?'var(--good-ink)':'var(--bad-ink)'}">${revDelta>=0?'▲':'▼'} ${Math.abs(revDelta)}% vs ${fmtPeriod(d.prev_month)}</span>`;
   const kpi = (l,v,c)=>`<div class="card p-3" style="border-top:3px solid ${c}"><div class="text-[11px] text-slate-500">${l}</div><div class="text-lg font-bold" style="color:${textInk(c)}">${v}</div></div>`;
   const costRows = (d.cost_breakdown||[]).slice(0,40).map((r,i)=>`
     <tr class="border-b border-slate-50">
@@ -558,7 +542,7 @@ async function openPnlDrill(branch) {
         <h4 class="text-sm font-semibold text-slate-700 mb-2">วัตถุดิบหลักที่ขับต้นทุน</h4>
         <div style="max-height:150px;overflow:auto;margin-bottom:14px"><table class="w-full text-xs">
           <tbody>${ingRows||'<tr><td class="py-3 text-center text-slate-400">—</td></tr>'}</tbody></table></div>
-        <h4 class="text-sm font-semibold text-emerald-700 mb-2">เมนูคนนิยมมากขึ้น (vs ${esc(_prevLbl)})</h4>
+        <h4 class="text-sm font-semibold text-emerald-700 mb-2">เมนูคนนิยมมากขึ้น (vs ${fmtPeriod(d.prev_month)})</h4>
         <div class="text-xs mb-3">${(d.rising_dishes||[]).slice(0,8).map(m=>moverRow(m,true)).join('')||'<span class="text-slate-400">—</span>'}</div>
         <h4 class="text-sm font-semibold text-red-600 mb-2">เมนูคนนิยมน้อยลง</h4>
         <div class="text-xs">${(d.falling_dishes||[]).slice(0,6).map(m=>moverRow(m,false)).join('')||'<span class="text-slate-400">—</span>'}</div>

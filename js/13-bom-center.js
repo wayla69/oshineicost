@@ -980,7 +980,7 @@ function _bmcPvBodyHtml(p, list, f) {
       <tbody>${top.map(r => `<tr class="border-b" style="border-color:var(--border-soft)"><td class="pr-2">${esc(r.code)}</td><td class="pr-2">${esc(r.name || '')}</td>
         <td class="pr-2 text-right">${_bmcNum(r.qty_base)} ${esc(r.base_unit || '')}</td><td class="pr-2 text-right">${_bmcNum(r.value, 0)}</td>
         <td class="pr-2 text-right font-semibold">${_bmcPrice(r.price_per_base)}</td><td class="pr-2 text-right">${_bmcPrice(r.prev_price)}</td>
-        <td class="pr-2 text-right" style="color:${flagInk[r.flag]}" title="${r.ly_change_pct != null ? `เทียบเดือนเดียวกันปีก่อน ${r.ly_change_pct > 0 ? '+' : ''}${r.ly_change_pct}%` : 'เทียบเดือนเดียวกันปีก่อน — ยังไม่มีราคาปีก่อน'}">${r.change_pct == null ? '' : (r.change_pct > 0 ? '+' : '') + r.change_pct + '%'}</td>
+        <td class="pr-2 text-right" style="color:${flagInk[r.flag]}">${r.change_pct == null ? '' : (r.change_pct > 0 ? '+' : '') + r.change_pct + '%'}</td>
         <td class="pr-2 text-[10.5px]" style="color:var(--text-muted)">${esc(r.converted_by.join(' / '))}</td>
         <td>${_bmcChip(flagTh[r.flag], flagInk[r.flag])}${r.manual_kept ? ' ' + _bmcChip('คงราคาที่กำหนดเอง', 'var(--navy-ink)') : ''}</td></tr>`).join('')}</tbody></table></div>
     ${list.length > top.length ? `<div class="text-[11px] mt-1" style="color:var(--text-muted)" title="เรียงจากรายการที่เปลี่ยนมากที่สุด">แสดง ${top.length} จาก ${list.length} รายการ</div>` : ''}`;
@@ -1118,7 +1118,7 @@ function bmcDcRender() {
       <th>รหัส POS</th><th>เมนู</th><th class="wt-num">ต้นทุนต่อจาน</th><th class="wt-num">เดือนก่อน</th><th class="wt-num">เปลี่ยน</th><th class="wt-num">จานที่ขาย</th><th>ที่มา</th>${w ? '<th></th>' : ''}</tr></thead><tbody>${rows.slice(0, 800).map(r => `<tr>
       <td class="wt-code" data-l="รหัส POS">${esc(r.code)}</td><td data-l="เมนู">${esc(r.name)}</td>
       <td class="wt-num" data-l="ต้นทุนต่อจาน" style="font-weight:600">${r.unit_cost > 0 ? _bmcDcBaht(r.unit_cost) : '<span class="wt-muted">ไม่มีต้นทุน</span>'}</td>
-      <td class="wt-num" data-l="เดือนก่อน">${_bmcDcBaht(r.prev_cost)}</td><td class="wt-num" data-l="เปลี่ยน" title="${r.ly_change_pct != null ? `เทียบเดือนเดียวกันปีก่อน ${r.ly_change_pct > 0 ? '+' : ''}${r.ly_change_pct}%` : 'เทียบเดือนเดียวกันปีก่อน — ยังไม่มีต้นทุนปีก่อน'}">${_bmcDcPct(r.change_pct)}</td>
+      <td class="wt-num" data-l="เดือนก่อน">${_bmcDcBaht(r.prev_cost)}</td><td class="wt-num" data-l="เปลี่ยน">${_bmcDcPct(r.change_pct)}</td>
       <td class="wt-num" data-l="จานที่ขาย">${_bmcNum(r.plates, 0)}</td>
       <td data-l="ที่มา">${_bmcChip(r.source, _BMC_DC_INK[r.source_kind])}${r.cost_source ? ` <span class="wt-muted">${esc(r.cost_source)}</span>` : ''}</td>
       ${w ? `<td class="wt-act">${_bmcBtn('แก้ไข', `bmcDcEdit(${_bmcQ(r.code)})`)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`

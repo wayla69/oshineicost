@@ -1230,32 +1230,7 @@ def analysis_anomalies(
         meta.update(period=_lm, period_th=_th_ym_short(_lm),
                     prev_period=monthly[-2]["month"], prev_period_th=_th_ym_short(monthly[-2]["month"]),
                     prev_year_period=_ym_back(_lm, 12), prev_year_period_th=_th_ym_short(_ym_back(_lm, 12)), ranges=_ranges(_lm))
-    # PR-PP3 · the cost block's headline on the one period pattern: the month of the tiles above (to date when it is not
-    # finished) against the same days of the month before and of the month a year back, in จุด (period_cost.compare).
-    # The bar chart keeps the whole closed months.
-    cost_now = None
-    if meta.get("ranges"):
-        try:
-            import periods as _P
-            import period_cost as _PC
-            _cw = ["t.source='Easy'", "b.name!='ALL'"]; _cp: dict = {}
-            if branch:
-                _cw.append("b.name=:branch"); _cp["branch"] = branch
-            if group:
-                _cw.append("COALESCE(b.branch_type,'master') = :branch_group"); _cp["branch_group"] = group
-            with get_db() as con3:
-                _a = _P.anchor(con3, " AND ".join(_cw), _cp)          # never the day still trading
-                _end = min(meta["ranges"]["current"][1], _a) if _a else meta["ranges"]["current"][1]
-                _w = _P.windows(con3, "month", " AND ".join(_cw), _cp, pick=meta["ranges"]["current"][0], anchor_day=_end)
-                if _w:
-                    _c = _PC.compare(con3, _w, branch, group)
-                    if _c.get("cur"):
-                        cost_now = {"period": _c["period"], "pct": _c["cur"]["food_cost_pct"],
-                                    "prev": (_c.get("prev") or {}).get("food_cost_pct"), "ly": (_c.get("ly") or {}).get("food_cost_pct"),
-                                    "reasons": {k: v for k, v in _c["reasons"].items() if v}}
-        except Exception as e:
-            print(f"[anomalies] cost headline skipped: {e}")
-    return {"insights": insights, "branch_growth": growths[:10], "cost_series": cost_months, "cost_now": cost_now, "meta": meta}
+    return {"insights": insights, "branch_growth": growths[:10], "cost_series": cost_months, "meta": meta}
 
 
 # insight types that are cost / margin figures: a role with neither cost.analysis nor profit.pnl does not receive them (PL3)
@@ -1284,7 +1259,6 @@ def analysis_anomalies_route(
         return resp
     data["insights"] = [i for i in data.get("insights", []) if i.get("type") not in _ANOMALY_COST_TYPES]
     data["cost_series"] = []   # PR-OB: the month-by-month food-cost % is a cost figure too
-    data["cost_now"] = None    # PR-PP3: and so is its headline
     return Response(content=_j.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), media_type="application/json")
 
 

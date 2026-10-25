@@ -292,7 +292,7 @@ function ensureDesktopBooted(opts) {
     populateTargetMonths();
     try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
     try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
-    // PR-PP1: the period is the ONE period bar's (PERIOD_DEFAULT_KIND to date - the month since PP3 - unless this device chose another)
+    // PR-PP1: the period is the ONE period bar's (PERIOD_DEFAULT_KIND to date - year until PP3 - unless this device chose another)
     gPeriodWrite(); gPeriodRender();
     _desktopBooted = true;
     // PR-D1: the sidebar's department entries (js/18-launcher.js), then land: the department launcher on a desktop, the Daily Brief
@@ -661,9 +661,8 @@ async function renderExecSummary() {
   </div>`;
 }
 
-let _heroMtd = null;   // fair MTD-vs-MTD payload for the latest (partial) month (the fallback when /api/period/* fails)
+let _heroMtd = null;   // fair MTD-vs-MTD payload for the latest (partial) month (the GP / COGS tiles until PR-PP3)
 let _heroPeriod = null;   // PR-PP2: /api/period/sales for the top bar's period (the sales tiles, the KPI cards, best / worst branch)
-let _heroCost = null;     // PR-PP3: /api/period/cost for the same period (the GP / COGS tiles)
 function renderKpiHero(trendData, gpb, disc) {
   const wrap = document.getElementById('kpiHeroWrap');
   const el   = document.getElementById('kpiHero');
@@ -784,7 +783,7 @@ function renderKpiHero(trendData, gpb, disc) {
   }
 
   // PR-PP2: the sales tiles follow the top bar's period (to date when it is not finished) with เทียบช่วงก่อน + เทียบปีก่อน
-  // (/api/period/sales); the GP / COGS tiles the same period from /api/period/cost (PR-PP3, below).
+  // (/api/period/sales). The GP / COGS tiles keep their month basis until PR-PP3 moves the cost figures.
   const HP = (_heroPeriod && _heroPeriod.cur) ? _heroPeriod : null, HR = HP ? HP.period : null;
   const mEl = document.getElementById('kpiHeroMonth');
   if (mEl) {
@@ -799,19 +798,6 @@ function renderKpiHero(trendData, gpb, disc) {
   if (HP) {
     discTile = tile('% ส่วนลด', HP.cur.discount_pct != null ? HP.cur.discount_pct.toFixed(1) + '%' : '—', '', '#f43f5e',
       'ของยอดขาย · ต่ำ = ดี', spark(dtr ? dtr.map(x => x.rate || 0) : [], '#f43f5e'), hpCmp('discount_pct', 'pp', false));
-  }
-
-  // PR-PP3: the GP / COGS tiles follow the same top-bar period as the sales tiles (/api/period/cost: to date through the
-  // last closed day, the same days of the period before and of the year before; COGS down = good). A base with no cost
-  // source shows "—" with its reason in the "?" of the period.
-  const HC = (_heroCost && _heroCost.cur) ? _heroCost : null;
-  if (HC) {
-    const c = HC.cur, cp = HC.prev || {}, cl = HC.ly || {}, CR = HC.period || HR;
-    const cc = (f, unit, upGood) => periodCmpHtml(c[f], HC.prev ? cp[f] : null, HC.ly ? cl[f] : null, { unit, upGood, range: CR, q: false });
-    gpTile = tile('กำไรขั้นต้น (GP)', fmt(c.gp), '', '#059669',
-      `Margin ${c.gp_pct != null ? c.gp_pct.toFixed(1) + '%' : '—'}`, spark(gpSeriesM, '#059669'), cc('gp', '%', true));
-    cogsTile = tile('ต้นทุน (COGS)', fmt(c.cogs), '', '#ef4444',
-      `${c.food_cost_pct != null ? c.food_cost_pct.toFixed(1) + '% ของรายได้ · ' : ''}BoM`, spark(cogsSeriesM, '#ef4444'), cc('cogs', '%', false));
   }
 
   function tile(label, value, deltaHtml, accent, sub, sparkHtml, cmpHtml) {
@@ -904,17 +890,16 @@ async function loadSummaryKpis() {
       <div class="skeleton" style="height:10px;width:50%"></div>
     </div>`).join('');
 
-  let d, trendData, mtd = null, hp = null, hc = null;
+  let d, trendData, mtd = null, hp = null;
   try {
     const mtdP = new URLSearchParams();
     if (getBranch()) mtdP.set('branch', getBranch());
     if (getGroup()) mtdP.set('group', getGroup());
-    [d, trendData, mtd, hp, hc] = await Promise.all([
+    [d, trendData, mtd, hp] = await Promise.all([
       getJSON(`/api/summary${summaryParams()}`, { gen }),
       getJSON(`/api/sales/monthly${getTrendParams()}`, { gen }),
       api(`${API}/api/overall/latest-month-mtd?${mtdP}`).catch(() => null),
       api(`${API}/api/period/sales?${gPeriodQuery({ by_branch: 1 })}`).catch(() => null),   // PR-PP2: the top bar's period
-      canSeeCost() ? api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null) : Promise.resolve(null),   // PR-PP3
     ]);
   } catch(err) {
     if (err === STALE) return;   // a newer tab/filter load superseded this one
@@ -923,7 +908,6 @@ async function loadSummaryKpis() {
   }
   _heroMtd = mtd;   // fair MTD-vs-MTD comparison when the latest month is incomplete
   _heroPeriod = (loadGen === gen) ? hp : _heroPeriod;
-  _heroCost = (loadGen === gen) ? hc : _heroCost;
 
   renderTrendAnalysisBar(trendData);
   renderKpiHero(trendData);

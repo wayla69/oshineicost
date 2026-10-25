@@ -149,8 +149,7 @@ def test_the_payload_has_the_agreed_shape(f3data, world):
     for r in d["rounds"]:
         assert set(r) == {"delivery", "round_th", "ordered", "delivered", "status", "status_th", "late"}
     assert {"ordered", "delivered", "rounds", "rounds_delivered", "pct", "pct_prev", "change_pp", "through",
-            "month_complete", "delivered_to_date", "sales_to_date", "delivered_prev", "sales_prev", "month_prev", "days",
-            "prev_range", "basis"} == set(d["purchases"])                     # PR-PP3: the base window and its basis
+            "month_complete", "delivered_to_date", "sales_to_date", "delivered_prev", "sales_prev", "month_prev", "days"} == set(d["purchases"])
     assert set(d["claims"]) == {"count", "by_status", "approved_value", "latest"}
     assert [x["status_th"] for x in d["claims"]["by_status"]] == ["รอพิจารณา", "อนุมัติ", "ไม่อนุมัติ"]
     for x in d["claims"]["latest"]:
@@ -189,15 +188,9 @@ def test_purchases_against_sales_is_the_same_window_and_last_month(f3data, world
     # the month is open: deliveries up to the report's last finished day only (5 June is after it)
     assert p["delivered_to_date"] == 1050.0 and p["sales_to_date"] == round(sales, 2)
     assert p["pct"] == round(100.0 * 1050.0 / sales, 1)
-    # PR-PP3 · the one period pattern: the open month (1-3 June) is set against the first 3 days of May - its deliveries on
-    # those days (the May round arrives on the 12th: none) over its net sales of those days (it was the whole of May)
-    import main
-    from routers.period_api import _sales
-    with main.get_db() as con:
-        may3 = (_sales(con, "t.source='Easy' AND b.name='BranchB'", {}, "2026-05-01", "2026-05-03") or {}).get("revenue")
-    assert p["month_prev"] == "2026-05" and p["basis"] == "to_date" and p["prev_range"] == ["2026-05-01", "2026-05-03"]
-    assert p["delivered_prev"] == 0.0 and p["sales_prev"] == (round(may3, 2) if may3 else None)
-    assert p["pct_prev"] == (0.0 if may3 else None)
+    may, _, _ = _report_sales("2026-05")
+    assert p["month_prev"] == "2026-05" and p["delivered_prev"] == 2000.0 and p["sales_prev"] == round(may, 2)
+    assert p["pct_prev"] == round(100.0 * 2000.0 / may, 1)
     assert p["change_pp"] == round(p["pct"] - p["pct_prev"], 1)
     # the summary carries the same ratio for its verdict
     s = world["b"].get("/api/franchise/summary", params={"month": MONTH}).json()

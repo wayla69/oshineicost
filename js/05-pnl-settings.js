@@ -22,26 +22,13 @@ async function loadPnlTab() {
   if (getMonthTo())   branchParams.set('month_to',   getMonthTo());
   if (getGroup())     branchParams.set('group',      getGroup());
 
-  const [summary, monthly, branchRows, pc] = await Promise.all([
+  const [summary, monthly, branchRows] = await Promise.all([
     api(`${API}/api/profit/summary?${params}`),
     api(`${API}/api/pnl/monthly?${params}`),
     api(`${API}/api/pnl/branches?${branchParams}`),
-    api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null),   // PR-PP3: the two comparisons of the top bar's period
   ]);
 
   renderPnlKpis(summary);
-  const PC = pc && pc.cur ? pc : null, v = (o, k) => o ? o[k] : null;
-  if (PC) {   // the tiles show the same windows their chips compare (to date through the last closed day)
-    periodChip(PC.period, true);
-    const set = (id, x) => { const el = document.getElementById(id); if (el) el.textContent = x; };
-    set('pnlRev', fmtN(PC.cur.revenue || 0)); set('pnlCogs', fmtN(PC.cur.cogs || 0)); set('pnlGp', fmtN(PC.cur.gp || 0));
-    set('pnlMargin', PC.cur.gp_pct != null ? PC.cur.gp_pct.toFixed(1) + '%' : '—');
-  }
-  [{ id: 'pnlRevC', k: 'revenue', unit: '%', up: true }, { id: 'pnlCogsC', k: 'cogs', unit: '%', up: false },
-   { id: 'pnlGpC', k: 'gp', unit: '%', up: true }, { id: 'pnlMarginC', k: 'gp_pct', unit: 'pp', up: true }].forEach((f, i) => {
-    const el = document.getElementById(f.id);
-    if (el) el.innerHTML = PC ? periodCmpHtml(PC.cur[f.k], v(PC.prev, f.k), v(PC.ly, f.k), { unit: f.unit, upGood: f.up, range: PC.period, q: i === 0 }) : '';
-  });
   renderPnlTrend(monthly);
 
   pnlBranchRows = branchRows;
@@ -331,10 +318,8 @@ function renderPnlDeepMonthTable(monthly) {
   document.getElementById('pnlDeepMonthBody').innerHTML = monthly.map(m => {
     const gp = m.gross_profit || 0;
     const gpColor = gp > 0 ? 'text-emerald-600' : 'text-red-500';
-    // PR-PP3: the month in progress compares its GP to date with the same days of last month (mom_basis 'to_date')
-    const _tip = m.mom_basis === 'to_date' && m.period ? ` title="${esc(m.period.label_th + ' เทียบ ' + m.period.prev_label_th)}"` : '';
     const momHtml = m.mom_pct != null
-      ? `<span class="${m.mom_pct>=0?'text-emerald-500':'text-red-500'} ml-1"${_tip}>(${m.mom_pct>0?'+':''}${m.mom_pct}%${m.mom_basis === 'to_date' ? ' ถึงวันที่' : ''})</span>` : '';
+      ? `<span class="${m.mom_pct>=0?'text-emerald-500':'text-red-500'} ml-1">(${m.mom_pct>0?'+':''}${m.mom_pct}%)</span>` : '';
     return `<tr class="border-b border-slate-100 hover:bg-slate-50">
       <td class="py-1 pr-2 font-medium">${fmtPeriod(m.period_month)}</td>
       <td class="py-1 pr-2 text-right">${fmtN(m.revenue_ex_vat||0)}</td>
@@ -419,19 +404,23 @@ async function loadCostAnalysis() {
 }
 
 // Branch cost/head comparison — reuses the enriched cost-per-head endpoint.
-// PR-PP3: on the top bar's period (เดือน · ปี), to date through the last closed day when it is not finished (it was the
-// selected end month, or the last complete month).
+// Uses the selected end month (or the last COMPLETE month, to avoid a 3-day
+// partial month) so cost/head is a fair full-month figure.
 async function renderCphCompare() {
-  const G = gPeriodPick();
-  const p = new URLSearchParams(); p.set('gran', G.kind === 'year' ? 'year' : 'month');
-  if (G.pick) p.set('date', G.pick);
+  let month = getMonthTo() || getMonthFrom() || '';
+  if (!month) {
+    try { const w = await api(`${API}/api/meta/data-window`); month = w.last_complete_month || w.max_month || ''; }
+    catch (e) {}
+  }
+  const p = new URLSearchParams(); p.set('gran', 'month');
+  if (month) p.set('date', month + '-15');
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/sales/cost-per-head?${p}`); } catch (e) { return; }
   const branches = (d.branches || []).filter(b => b.cost_per_head != null).sort((a,b)=>b.cost_per_head - a.cost_per_head);
   const avg = (d.total || {}).cost_per_head;
-  const R = periodOf(d);
-  const mEl = document.getElementById('cphCompareMonth'); if (mEl) mEl.textContent = `${R ? periodSpan(R) : ''}${avg!=null?` · เฉลี่ยเครือ ${fmt(avg)}/หัว`:''}`;
+  const mLabel = (d.cur_range && d.cur_range[0]) ? (typeof fmtMonth==='function'?fmtMonth((d.cur_range[0]||'').slice(0,7)):(d.cur_range[0]||'').slice(0,7)) : (month||'');
+  const mEl = document.getElementById('cphCompareMonth'); if (mEl) mEl.textContent = `เดือน ${mLabel}${avg!=null?` · เฉลี่ยเครือ ${fmt(avg)}/หัว`:''}`;
   const ins = document.getElementById('cphCompareInsight');
   if (ins && branches.length >= 2 && avg != null) {
     const hi = branches[0], lo = branches[branches.length-1];
@@ -522,23 +511,11 @@ async function loadFoodCostTrend() {
     }
   });
 
-  // Insight strip below the chart. PR-PP3: the top bar's period (to date when it is not finished) against the same days of
-  // the period before and of the year before (/api/period/cost); it set the month in progress against a whole month.
+  // Insight strip below the chart — latest period focus
   const last = overall[overall.length - 1];
+  const prev = overall[overall.length - 2];
   const insightEl = document.getElementById('foodCostInsight');
-  const pc = await api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null);
-  if (insightEl && pc && pc.cur) {
-    const c = pc.cur, R = pc.period, v = (o, k) => o ? o[k] : null;
-    const thr = parseFloat(threshold), hot = (c.food_cost_pct || 0) > thr;
-    periodChip(R, true);
-    insightEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-2">` +
-      periodKpi({ l: 'รายได้ (ไม่รวม VAT)', v: fmt(c.revenue), c: '#4a70b0', cur: c.revenue, prev: v(pc.prev, 'revenue'), ly: v(pc.ly, 'revenue'), range: R }) +
-      periodKpi({ l: 'ต้นทุนขาย (BoM)', v: fmt(c.cogs), c: '#ef4444', cur: c.cogs, prev: v(pc.prev, 'cogs'), ly: v(pc.ly, 'cogs'), upGood: false, range: R, q: false }) +
-      periodKpi({ l: 'ต้นทุน/หัว', v: c.cost_per_head != null ? fmt(c.cost_per_head) : '—', c: '#7a66b8', cur: c.cost_per_head, prev: v(pc.prev, 'cost_per_head'), ly: v(pc.ly, 'cost_per_head'), upGood: false, range: R, q: false }) +
-      periodKpi({ l: 'ต้นทุนอาหาร %', v: c.food_cost_pct != null ? c.food_cost_pct.toFixed(1) + '%' : '—', c: hot ? '#b91c1c' : '#047857', cur: c.food_cost_pct, prev: v(pc.prev, 'food_cost_pct'), ly: v(pc.ly, 'food_cost_pct'), unit: 'pp', upGood: false, range: R, q: false }) +
-      `</div>`;
-  } else if (insightEl && last) {
-    const prev = overall[overall.length - 2];
+  if (insightEl && last) {
     const dPct  = (prev && last.cost_pct != null && prev.cost_pct != null) ? (last.cost_pct - prev.cost_pct) : null;
     const trendIcon = dPct == null ? '→' : dPct > 0 ? '▲' : '▼';
     const trendColor = dPct == null ? '#64748b' : dPct > 0 ? '#ef4444' : '#10b981';
@@ -2232,7 +2209,7 @@ function renderInsightBox(box, data) {
   const help = uiQ('overall:insights', 'ข้อสังเกต',
     `<p><b>รายได้และสาขา</b>: ${meta.ranges ? `${esc(_insRange(meta.ranges.current))} เทียบ ${esc(_insRange(meta.ranges.previous))} (เดือนก่อน) และ ${esc(_insRange(meta.ranges.last_year))} (ปีก่อน)` : `${esc(meta.period_th || 'เดือนล่าสุด')} เทียบเดือนก่อนและปีก่อน`}${meta.mtd_day ? ' · เดือนที่ยังไม่จบเทียบจำนวนวันเท่ากัน' : ''} · รายได้ไม่รวม VAT · ไม่มีข้อมูลปีก่อน แสดง —</p>
      <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · เติบโตเร็วสุด / ลดมากสุด = สาขาที่ยอดเปลี่ยนมากที่สุดเทียบเดือนก่อนของสาขานั้น · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
-     ${series.length ? `<p><b>${esc(costWord)} % ของรายได้</b>: ${esc(costWord)}ของจานที่ขาย ÷ รายได้ของจานเดียวกัน · ตัวเลขใหญ่ = เดือนเดียวกับการ์ดด้านบน (เดือนที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด) เทียบจำนวนวันเท่ากันของเดือนก่อนและปีก่อน เป็นจุด · ไม่มีต้นทุนของช่วงฐาน แสดง —${data.cost_now && data.cost_now.reasons && Object.values(data.cost_now.reasons).length ? ' (' + esc(Object.values(data.cost_now.reasons).join(' · ')) + ')' : ''}</p><p>กราฟนับเฉพาะเดือนที่จบแล้ว · แท่งสีแดง = สูงขึ้นจากเดือนก่อน · สีเขียว = ลดลง · ตัวเลขบนแท่ง = เดือนล่าสุด สูงสุด และต่ำสุด · ดูทุกเดือนได้ที่ "ดูทุกเดือน"</p>` : ''}`);
+     ${series.length ? `<p><b>${esc(costWord)} % ของรายได้</b>: ${esc(costWord)}ของจานที่ขาย ÷ รายได้ของเดือนนั้น นับเฉพาะเดือนที่จบแล้ว · แท่งสีแดง = สูงขึ้นจากเดือนก่อน · สีเขียว = ลดลง · ตัวเลขบนแท่ง = เดือนล่าสุด สูงสุด และต่ำสุด · ดูทุกเดือนได้ที่ "ดูทุกเดือน"</p>` : ''}`);
   const head = `<div class="ins-head"><span class="ins-title">ข้อสังเกต</span>${chip}<span class="ins-sp"></span>${help}
     <button type="button" class="ins-x" aria-label="ปิดข้อสังเกต" onclick="this.closest('#anomalyBanner').classList.add('hidden')">✕</button></div>`;
   const kpis = tiles.length ? `<div class="ins-kpis">${tiles.map(_insTile).join('')}</div>` : '';
@@ -2240,19 +2217,12 @@ function renderInsightBox(box, data) {
   if (series.length) {
     const last = series[series.length - 1], prev = series.length > 1 ? series[series.length - 2] : null;
     const tone = _insTone(last.delta, false);
-    // PR-PP3: the headline is the month of the tiles above (to date when not finished) with เทียบเดือนก่อน + เทียบปีก่อน in จุด
-    // (cost_now, the one period pattern); without it, the latest closed month against the one before, as before
-    const cn = data.cost_now && data.cost_now.pct != null ? data.cost_now : null;
-    const cmpPp = (lbl, d) => `<span class="ins-cmp"><span class="ins-cmp-l">${lbl}</span>${d != null ? `<span class="ins-delta ins-${_insTone(d, false)}">${_insArrow(d)} ${_insSign(d)} จุด</span>` : '<span class="ins-delta ins-flat">—</span>'}</span>`;
-    const ppOf = (a, b) => (a != null && b != null) ? Math.round((a - b) * 10) / 10 : null;
-    const cnTip = cn && cn.period ? `${cn.period.label_th} เทียบ ${cn.period.prev_label_th} และ ${cn.period.ly_label_th}${Object.values(cn.reasons || {}).length ? ' · ' + Object.values(cn.reasons).join(' · ') : ''}` : '';
     cost = `<div class="ins-cost">
-      <div class="ins-cost-l"${cnTip ? ` title="${esc(cnTip)}"` : ''}>
+      <div class="ins-cost-l">
         <span class="ins-lbl">${esc(costWord)} % ของรายได้</span>
-        <span class="ins-big">${(cn ? cn.pct : last.pct).toFixed(1)}%</span>
-        ${cn ? cmpPp('เทียบเดือนก่อน', ppOf(cn.pct, cn.prev)) + cmpPp('เทียบปีก่อน', ppOf(cn.pct, cn.ly))
-             : (last.delta != null ? `<span class="ins-delta ins-${tone}">${_insArrow(last.delta)} ${_insSign(last.delta)} จุด</span>` : '')}
-        <span class="ins-sub">${cn && cn.period ? esc(cn.period.label_th) : `${esc(last.month_th)}${prev ? ` · เทียบ ${esc(prev.month_th)} (${prev.pct.toFixed(1)}%)` : ''}`}</span>
+        <span class="ins-big">${last.pct.toFixed(1)}%</span>
+        ${last.delta != null ? `<span class="ins-delta ins-${tone}">${_insArrow(last.delta)} ${_insSign(last.delta)} จุด</span>` : ''}
+        <span class="ins-sub">${esc(last.month_th)}${prev ? ` · เทียบ ${esc(prev.month_th)} (${prev.pct.toFixed(1)}%)` : ''}</span>
       </div>
       <div class="ins-cost-r" data-ins-chart="1"></div>
       <div class="ins-all-wrap">

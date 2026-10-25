@@ -26,12 +26,12 @@
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
     <label class="text-xs text-slate-500" id="bbomBranchLabel">สาขา</label>
     <select id="bbomBranch" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:180px"></select>
-    <!-- PR-PP3: the period is the top bar's (สัปดาห์ · เดือน · ปี · กำหนดเอง); these fields follow it (hidden) -->
-    <span class="hidden">
+    <label class="text-xs text-slate-500 ml-3">เดือนเริ่ม</label>
     <select id="bbomMonthFrom" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    <label class="text-xs text-slate-500">ถึง</label>
     <select id="bbomMonthTo" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
-    </span>
-    <div class="inline-flex hidden" role="group" aria-label="ความถี่">
+    <label class="text-xs text-slate-500 ml-3">ความถี่</label>
+    <div class="inline-flex" role="group" aria-label="ความถี่">
       <button type="button" class="subtab-btn text-xs px-3 py-1" id="bbomGran-day"   onclick="setBbomGranularity('day')">วัน</button>
       <button type="button" class="subtab-btn text-xs px-3 py-1" id="bbomGran-week"  onclick="setBbomGranularity('week')">สัปดาห์</button>
       <button type="button" class="subtab-btn active text-xs px-3 py-1" id="bbomGran-month" onclick="setBbomGranularity('month')">เดือน</button>
@@ -122,9 +122,9 @@
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
       <div class="text-sm font-semibold text-slate-700">เบิกจริง vs ต้นทุนตามสูตร — ช่องว่างที่บริหารได้ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-branchbom-mb1" title="คำอธิบาย">?</button></div><template id="hlp-branchbom-mb1" data-title="เบิกจริงเทียบต้นทุนตามสูตร"><p>ต้นทุนในแอปคิดจาก<b>สูตรอาหาร</b> ส่วนฝ่ายปฏิบัติการดูจาก<b>ใบเบิกวัตถุดิบ</b> — สองตัวเลขนี้ไม่มีวันเท่ากัน ส่วนต่างคือของที่เบิกออกจากคลังแล้วไม่กลายเป็นยอดขาย (ตักเกินสูตร · ของเสีย · ตุนสต๊อก · เมนูที่ยังไม่มีสูตร) · ไฟล์ที่ใช้: <b>รายงานจ่ายสินค้าภายใน</b> จากระบบบัญชี (ชีตละสาขา)</p></template>
       <div class="flex items-center gap-2 text-xs">
-        <span class="hidden"><select id="reqMonthFrom" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
-        <select id="reqMonthTo" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select></span>
-        <span id="reqPeriod" class="text-slate-500"></span>
+        <select id="reqMonthFrom" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
+        <span class="text-slate-400">ถึง</span>
+        <select id="reqMonthTo" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
         <label class="px-3 py-1.5 rounded-lg font-semibold cursor-pointer" style="background:#c2410c;color:#fff">
           อัปโหลดใบเบิก (.xlsx)
           <input id="reqFile" type="file" accept=".xlsx" style="display:none" onchange="uploadRequisition(this)">

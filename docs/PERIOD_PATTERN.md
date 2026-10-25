@@ -50,9 +50,8 @@ pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the �
 - **Compatibility until PP2/PP3**: the bar writes the hidden `selMonthFrom` / `selMonthTo` / `selDateFrom` / `selDateTo`
   (`#gPeriodState`) and `currentGranularity` (week → weekly, กำหนดเอง → daily, month / year → monthly), so `getMonthFrom`,
   `getMonthTo`, `qp()`, `summaryParams()`, `_filterKey`, `onFilterChange` and `TABS[].follow` keep working unchanged.
-  The default kind is the constant `PERIOD_DEFAULT_KIND = 'month'` (js/01-core.js, since PR-PP3): the month to date, day 1 … the
-  anchor. Through PP1/PP2 it was `'year'` so that no page still reading the month fields shrank on deploy; with PP3 every sales and
-  cost page reads the bar. A device that chose a kind keeps it.
+  The default kind is the constant `PERIOD_DEFAULT_KIND = 'year'` (js/01-core.js): year to date, 1 Jan … the anchor, so every page
+  that still reads the month fields keeps showing Jan … latest as before. PP3 switches it to `'month'`. A device that chose a kind keeps it.
 - Phone: one sideways-scrolling row inside the folded tools, the period (stepper) first, 44 px targets.
 - API: `gPeriodGet()`, `gPeriodSet({kind, pick, from, to}, silent)`, `gPeriodResolve()` (a `periodRange` result),
   `gPeriodAnchor()`, `getPeriodKind()`; remembered on the device (`oshinei_gperiod`, `oshinei_chartwin`).
@@ -64,7 +63,7 @@ pickers, the two month pickers with 3ด./6ด./ปีนี้/12ด. and the �
 | Sales: `sales_transaction`, `sales_sku_daily`, `sale_payment`, daily `pos_*` | day · week · month · year · range | `sales_sku_daily` starts 2026-03-22 |
 | Sales: `sales_month_summary`, `pos_*_month` (customer type, payment, channel, void, coupon, cancel) | month · year | the week chip is hidden, not disabled |
 | Cost: price list (`bom_center/prices.py`), dish-cost list (`bom_center/dish_cost.py`), requisitions, month-end counts / variance | month · year | |
-| Cost: day-level dish cost (`sales_sku_daily` cost) | day · week from its first day (`period_cost.cost_floor`) | the sync keeps a rolling 120 days (2026-03-22 on the live data at the time of the brief; 2026-06-22 on the deck28 copy), so a part month / week / day before it, and cost YoY on the day / week grain, show "—" with the reason in "?" (`ต้นทุนรายวันมีตั้งแต่ …`) |
+| Cost: day-level dish cost (`sales_sku_daily` cost) | day · week from 2026-03-22 | before that, and cost YoY on the week grain, show "—" with the reason in "?" (sync keeps 120 days: day/week cost YoY is not possible before ~2027-03) |
 | Cost: gpbranch, buffet/gp day / week COGS | day · week, pro-rated | labelled `ประมาณการ` |
 | Purchases (`ingpurchase`) | week (native) · month · year | weekly import |
 | Per-bill COGS | rolling window only | |
@@ -125,59 +124,7 @@ guard(spans, anchor, first_day, lead=('a', 'b'))    # the free compare pages: ev
 | `/api/buffet/child` | follows the top bar (`kind`, `pick`); it was the latest month whatever the filter | cur / prev / ly per branch and chain |
 | `/api/home/brief` (`mtd_revenue`), `/api/meta/data-window`, `/api/overall/latest-month-mtd` | end on the last closed day (the day still trading was in them) | — |
 
-### The cost figures (PR-PP3)
-
-`backend/period_cost.py` - ONE engine for COGS on a period (the app-wide COGS expression, `core._unified_cogs_expr`):
-
-```python
-cost_floor(con)                        # the first day of the day-level dish table
-segments(s, e) / plan(s, e, floor)     # the window cut at month ends: a whole month -> the month table, a part month -> the
-                                       # day table; (None, reason) when a part month starts before the day table
-cost_sum(con, s, e, branch, group, floor, by_branch)   # -> ({revenue, cogs, gp, gp_pct, food_cost_pct, customers,
-                                       #   cost_per_head, gp_per_head, rev_per_head, cost_coverage_pct, src}, reason)
-compare(con, w, branch, group, by_branch)              # cur / prev / ly of one periods.windows result + change + reasons
-```
-
-Revenue for GP and food-cost % is the same table's ex-VAT dish revenue (GP = revenue − COGS on one base); covers are the bills of
-the same days. Baht and per head compare in %, GP % · food-cost % · plate coverage in จุด; COGS: down = good.
-
-`periods.reasons(w)` / `public(w)["reasons"]`: why a base is not compared. A year names the month the data starts
-(`ข้อมูลปีก่อนเริ่ม พ.ค. 2568` - live data starts 2025-05, so a year to date has no whole year-ago base until 2027), other kinds the
-first day (`ข้อมูลเริ่ม 23 พ.ค. 2568`); `period_cost` adds `ต้นทุนรายวันมีตั้งแต่ …`. `periodQ` / `periodCmpHtml` show it in the "?"
-and the chip's tooltip, so "—" is never bare.
-
-| Endpoint | Period | Comparisons |
-|---|---|---|
-| `/api/period/cost?kind=&pick=&date_from=&date_to=&by_branch=1` (new; cost.analysis / profit.pnl) | `windows` + `period_cost.compare` | cur / prev / ly + `change.prev` / `change.ly` + `reasons`; per branch |
-| `/api/sales/cost-per-head?gran=day\|week\|month\|year&date=` | `windows` (was full calendar bounds, the day still trading in the focus) | `prev_*` and new `ly_*` per branch and total; `period`, `reasons`; cost unknown before the day table = None |
-| `/api/reports/pnl-bill` (+ `-drill`) | `windows` on the per-bill table's window (was full bounds) | `summary_prev` / `summary_ly` where the rolling per-bill window holds them, else None + reason |
-| `/api/pnl/monthly` | the month in progress: `mom_basis = 'to_date'` (GP to date vs the same days of last month, `period`, `gp_ly_pct`); the others `'full'` | was a part month's GP against a whole month's |
-| `/api/pnl/branch-month-detail` | the month in progress to date from the day table (summary + rising / falling dishes) | `rev_ly_delta_pct`, `gp_margin_prev_pp` / `_ly_pp`, `period` |
-| `/api/pnl/branch` | fixed cost of the month in progress × its closed days ÷ its days (`months_prorated`) | — |
-| `/api/bom-cost/branch-foodcost-mom` | the month in progress to date (boxes and movers on the same days), a finished month whole | `ly_food_cost_pct`, `ly_delta_pp`, `mom_basis`, `period` |
-| `/api/bom-cost/cost-drivers` | the to-date basis only when the window's last month is the month in progress | — |
-| `/api/home/brief` (`food_cost_pct_mtd`, `cost_health`) | the month to date on the dish table (it was the whole month table over the bills' revenue, moved against the whole last month) | `delta_pp` / `ly_delta_pp`, `prev_food_pct` / `ly_food_pct`, `period`, `reasons` |
-| `/api/analysis/anomalies` (`cost_now`) | the insight box's cost headline: the month of the tiles, to date | prev / ly in จุด; the bar chart keeps closed months |
-| `/api/gp/by-branch-month?granularity=week` | the weekly trend is pro-rated from the month (`estimate: true`, shown `ประมาณการ`) | — |
-| `/api/franchise/supply` (`purchases`) | an open month against the first n days of last month (`basis = 'to_date'`, `prev_range`) | was the whole last month |
-| bom-center price preview, dish-cost month table | month-grain lists (their own month picker on an `ownFilters` page) | + `ly_price` / `ly_change_pct`, `ly_cost` / `ly_change_pct` (tooltip of the change cell) |
-
-Cost pages (all on the top bar, no page-level period control; the old pickers are gone or hidden and follow it):
-
-| Page | Kinds | Notes |
-|---|---|---|
-| ต้นทุน/หัว (costhead) | วัน · สัปดาห์ · เดือน · ปี | KPI tiles with chips; table: ต้นทุน/หัว เทียบช่วงก่อน · เทียบปีก่อน |
-| P&L ต่อบิล (pnlbill) | วัน · สัปดาห์ · เดือน | per-bill COGS is a rolling ~31 days |
-| ต้นทุน (cost) | เดือน · ปี | branch cost / head on the bar's period; the food-cost strip from /api/period/cost |
-| GP รายสาขา (gpbranch) | สัปดาห์ · เดือน · ปี · กำหนดเอง | summary + branch boxes from /api/period/cost; a week's rows `ประมาณการ` |
-| ต้นทุน BoM (bomcost) | สัปดาห์ · เดือน · ปี · กำหนดเอง | KPI chips; branch boxes on the same days |
-| P&L (pnl), P&L รายสาขา (pnlbranch) | เดือน · ปี · กำหนดเอง | tiles = the bar's period with chips; the month select is hidden |
-| Top 60 ต้นทุน/หัว (costheadtop60) | เดือน | month-grain report; no period comparison (branch vs chain) |
-| ต้นทุนครบ (coverage) | เดือน · ปี | plate coverage with chips (จุด) |
-| ประสิทธิภาพต้นทุนเมนู (menuefficiency) | เดือน · ปี | month-grain: the total cost vs the month before / a year back over closed months; the month in progress "—" |
-| ยอดซื้อวัตถุดิบ (ingpurchase) | สัปดาห์ · เดือน · ปี · กำหนดเอง | weekly import; chips on purchases, sales, % (จุด) |
-| วิเคราะห์ BoM รายสาขา (branchbom) | สัปดาห์ · เดือน · ปี · กำหนดเอง | the requisition block reads closed months only |
-| home food-cost card, overall GP / COGS tiles, the report's cost card, the insight box cost block | the bar's period / the headline month | moved here from PP2 |
+Cost figures (the overall GP / COGS tiles, the home food-cost card, the report's cost card) keep their basis until PR-PP3.
 
 ### Frontend — `js/01-core.js`
 
@@ -208,7 +155,7 @@ gPeriodGet(), gPeriodSet(v, silent), gPeriodResolve()       // the top bar's per
   toggle is its control). The string form `follow: { period: '<bar key>' }` (`_syncExtraPeriod`) is kept for a future
   page-own bar but no page uses it.
 
-PR-PP2 helpers (`js/01-core.js`, after `periodCmpHtml`; PR-PP3: `periodQ` / `periodCmpHtml` show `range.reasons`):
+PR-PP2 helpers (`js/01-core.js`, after `periodCmpHtml`):
 
 ```js
 periodOf(d)                     // the server's `period` object (or the older cur_range / prev_range / yoy_range trio)

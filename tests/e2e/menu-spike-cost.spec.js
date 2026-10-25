@@ -76,7 +76,9 @@ const READ = () => ({
   newHeads: [...document.querySelectorAll('#spikeNewTable thead th')].map(th => th.textContent.trim()),
   btn: (document.getElementById('spikeAllBtn') || { textContent: '' }).textContent.trim(),
   chip: (() => { const c = document.getElementById('spikeCost'); return c && !c.hidden ? c.textContent.trim() : ''; })(),
-  first: (document.querySelector('#spikeTable tbody tr td:nth-child(3)') || { textContent: '' }).textContent.trim(),
+  // PR-TD (owner 2026-10-25): ต้นทุนเพิ่ม is the LAST column
+  first: (document.querySelector('#spikeTable tbody tr td:last-child') || { textContent: '' }).textContent.trim(),
+  lastHead: (document.querySelector('#spikeTable thead th:last-child') || { textContent: '' }).textContent.trim(),
   nocost: document.querySelectorAll('#spikeTable .sp-nocost').length,
 });
 
@@ -89,7 +91,9 @@ for (const [name, opts, mode] of [['desktop', { viewport: { width: 1440, height:
     expect(m.heads).toContain('ต้นทุนเพิ่ม');
     expect(m.newHeads).toContain('ต้นทุน (ช่วงนี้)');
     expect(m.btn).toBe(`ดูทั้งหมด (${N})`);
-    expect(m.chip).toContain('ต้นทุนเพิ่มรวม ฿61,000');
+    expect(m.chip).toContain('ต้นทุนเพิ่มรวม');                  // PR-TD: the strip's tile
+    expect(m.chip).toContain('฿61,000');
+    expect(m.lastHead).toBe('ต้นทุนเพิ่ม');
     expect(m.chip).toContain('6.1% ของต้นทุนอาหาร');
     expect(m.first).toContain('฿6,000');
     expect(m.first).toContain('% ของต้นทุนอาหาร');

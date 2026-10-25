@@ -2463,12 +2463,6 @@ def bom_cost_drivers(
         mom_map: dict = {}; mom_basis = "month"; cutoff = None
         cur_tot = prev_tot = 0.0
         mtd = _mtd_window(con)
-        if mtd:
-            # PR-PP3: the to-date basis belongs to the month in progress only - an older window selected on the page
-            # (its last month already closed) compares whole months
-            _wl = con.execute(f"SELECT MAX(ssm.period_month) m {JOINS} {where}", params).fetchone()
-            if not _wl or _wl["m"] != mtd["latest_month"]:
-                mtd = None
         if ids:
             phd = ",".join(f":k{i}" for i in range(len(ids)))
             kp = {f"k{i}": v for i, v in enumerate(ids)}
@@ -2497,10 +2491,6 @@ def bom_cost_drivers(
                 mrows = con.execute(f"""SELECT DISTINCT ssm.period_month m {JOINS} {where} ORDER BY m DESC LIMIT 2""", params).fetchall()
                 lm = mrows[0]["m"] if mrows else None
                 pm = mrows[1]["m"] if len(mrows) > 1 else None
-                if lm and not pm:
-                    # PR-PP3: a one-month window compares with the month before it (it had no base: "—" whatever the data)
-                    _pm = con.execute("SELECT MAX(period_month) FROM v_sales_sku_monthly WHERE period_month < ?", (lm,)).fetchone()
-                    pm = _pm[0] if _pm and _pm[0] else None
                 if lm:
                     kp2 = {**kp, "lm": lm, "pm": pm or "__none__"}
                     mrows2 = con.execute(f"""
@@ -2546,13 +2536,7 @@ def bom_cost_branch_foodcost_mom(
 ):
     """Per-branch Food Cost % for the latest month vs the previous month (MoM),
     plus the top menu cost movers (increase/decrease) that drove each branch's change.
-    Powers the Branch Food-Cost KPI boxes + drill-down.
-    PR-PP3 · the one period pattern: the month still in progress is to date through the last closed day and is set
-    against the same days of last month (and of the month a year back) from the day-level dish cost - the boxes and the
-    movers' baht set a part month against a whole one. A finished month is whole vs whole from the month table, as
-    before. A base with no cost source has no figure (None) and its reason in `reasons`."""
-    import periods as _P
-    import period_cost as _PC
+    Powers the Branch Food-Cost KPI boxes + drill-down."""
     cogs_expr       = _cogs_case('ssm', 'sk', 'sc')
     costed_rev_expr = _costed_rev_case('ssm', 'sk', 'sc')
     movers_n = max(1, min(20, int(movers_n)))
@@ -2567,111 +2551,96 @@ def bom_cost_branch_foodcost_mom(
         cur_m  = month if (month and month in months) else months[0]
         idx    = months.index(cur_m)
         prev_m = months[idx + 1] if idx + 1 < len(months) else None
-        floor = _PC.cost_floor(con)
-        w = _P.windows(con, "month", "t.source='Easy' AND b.name!='ALL' AND COALESCE(b.active,1) = 1", {},
-                       pick=f"{cur_m}-01")
-        to_date = bool(w and w["cur"][0][:7] == cur_m and not w["complete"])
-        reasons: dict = {}
-        if to_date:
-            wins = {"cur": w["cur"], "prev": w["prev"] if w["has_prev"] else None, "ly": w["ly"] if w["has_ly"] else None}
-            reasons.update(_P.reasons(w))
-        else:
-            import calendar as _cal
-            def _whole(m):
-                return (f"{m}-01", f"{m}-{_cal.monthrange(int(m[:4]), int(m[5:7]))[1]:02d}") if m else None
-            ly_m = f"{int(cur_m[:4]) - 1}{cur_m[4:]}"
-            wins = {"cur": _whole(cur_m), "prev": _whole(prev_m), "ly": _whole(ly_m) if ly_m in months else None}
 
-        def _src(win):
-            """the FROM clause of a window: the month table for whole months, the day table for a part month"""
-            pl, why = _PC.plan(win[0], win[1], floor)
-            if pl is None:
-                return None, None, why
-            if pl["src"] == "month":
-                ph = ",".join(f":_m{i}" for i in range(len(pl["months"])))
-                return ("v_sales_sku_monthly ssm", f"ssm.period_month IN ({ph})",
-                        {f"_m{i}": m for i, m in enumerate(pl["months"])}), None, None
-            return (("(SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source, substr(day, 1, 7) AS period_month "
-                     "FROM v_sales_sku_daily WHERE day BETWEEN :_s AND :_e) ssm"), "1=1", {"_s": win[0], "_e": win[1]}), None, None
+        ms = [cur_m] + ([prev_m] if prev_m else [])
+        ph = ",".join(f":m{i}" for i in range(len(ms)))
+        params = {f"m{i}": m for i, m in enumerate(ms)}
 
-        def _agg(win):
-            if not win:
-                return None, None, None
-            src, _x, why = _src(win)
-            if src is None:
-                return None, None, why
-            frm, cond, prm = src
-            ag = {r["branch"]: {"rev": float(r["rev"] or 0), "cogs": float(r["cogs"] or 0), "costed": float(r["costed"] or 0)}
-                  for r in con.execute(f"""
-                SELECT b.name AS branch, COALESCE(SUM(ssm.subtotal_ex_vat), 0) AS rev,
-                       COALESCE(SUM({cogs_expr}), 0) AS cogs, COALESCE(SUM({costed_rev_expr}), 0) AS costed
-                  FROM {frm} JOIN branches b ON b.branch_id = ssm.branch_id
-                  JOIN skus sk ON sk.sku_id = ssm.sku_id LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
-                 WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1 AND {cond}
-                 GROUP BY b.name""", prm).fetchall()}
-            mv_: Dict[str, Dict[int, dict]] = {}
-            for r in con.execute(f"""
-                SELECT b.name AS branch, ssm.sku_id AS sku_id, sk.sku_code AS sku_code,
-                       COALESCE(sk.description,'') AS description,
-                       COALESCE(SUM({cogs_expr}), 0) AS cogs, COALESCE(SUM(ssm.qty), 0) AS qty
-                  FROM {frm} JOIN branches b ON b.branch_id = ssm.branch_id
-                  JOIN skus sk ON sk.sku_id = ssm.sku_id LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
-                 WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1 AND {cond}
-                 GROUP BY b.name, ssm.sku_id""", prm).fetchall():
-                mv_.setdefault(r["branch"], {})[r["sku_id"]] = {"sku_code": r["sku_code"], "description": r["description"],
-                                                               "cogs": float(r["cogs"] or 0), "qty": float(r["qty"] or 0)}
-            if incl_service:
-                for r in con.execute("""
-                    SELECT b.name AS branch, COALESCE(SUM(st.service_charge), 0) AS svc FROM sales_transaction st
-                      JOIN branches b ON b.branch_id = st.branch_id
-                     WHERE st.source = 'Easy' AND b.name != 'ALL' AND COALESCE(b.active,1) = 1
-                       AND date(st.sold_at) BETWEEN :s AND :e GROUP BY b.name""", {"s": win[0], "e": win[1]}).fetchall():
-                    if r["branch"] in ag:
-                        ag[r["branch"]]["rev"] += float(r["svc"] or 0)
-                        ag[r["branch"]]["costed"] += float(r["svc"] or 0)   # service = revenue with no COGS
-            return ag, mv_, None
+        agg_rows = con.execute(f"""
+            SELECT b.name AS branch, ssm.period_month AS m,
+                   COALESCE(SUM(ssm.subtotal_ex_vat), 0) AS rev,
+                   COALESCE(SUM({cogs_expr}), 0)         AS cogs,
+                   COALESCE(SUM({costed_rev_expr}), 0)   AS costed
+              FROM v_sales_sku_monthly ssm
+              JOIN branches b   ON b.branch_id = ssm.branch_id
+              JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
+              LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+             WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+               AND ssm.period_month IN ({ph})
+             GROUP BY b.name, ssm.period_month
+        """, params).fetchall()
 
-        a_cur, mv_cur, _ = _agg(wins["cur"])
-        a_prev, mv_prev, why_p = _agg(wins["prev"])
-        a_ly, _mly, why_l = _agg(wins["ly"])
-        if wins["prev"] and a_prev is None:
-            reasons["prev"] = reasons.get("prev") or why_p
-        if wins["ly"] and a_ly is None:
-            reasons["ly"] = reasons.get("ly") or why_l
-        a_cur = a_cur or {}
+        mover_rows = con.execute(f"""
+            SELECT b.name AS branch, ssm.sku_id AS sku_id,
+                   sk.sku_code AS sku_code,
+                   COALESCE(sk.description,'') AS description,
+                   ssm.period_month AS m,
+                   COALESCE(SUM({cogs_expr}), 0) AS cogs,
+                   COALESCE(SUM(ssm.qty), 0)     AS qty
+              FROM v_sales_sku_monthly ssm
+              JOIN branches b   ON b.branch_id = ssm.branch_id
+              JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
+              LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+             WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+               AND ssm.period_month IN ({ph})
+             GROUP BY b.name, ssm.sku_id, ssm.period_month
+        """, params).fetchall()
+
+        svc_map = _service_charge_map(con, prev_m or cur_m, cur_m) if incl_service else {}
+
+    # ── assemble per-branch aggregates (service charge folded into rev + costed) ──
+    agg: Dict[str, dict] = {}
+    for r in agg_rows:
+        svc = svc_map.get((r["branch"], r["m"]), 0.0)
+        d = agg.setdefault(r["branch"], {})
+        d[r["m"]] = {
+            "rev":    float(r["rev"]    or 0) + svc,
+            "cogs":   float(r["cogs"]   or 0),
+            "costed": float(r["costed"] or 0) + svc,   # service = revenue with no COGS
+        }
+
+    # ── per-branch menu movers (cur_cogs - prev_cogs) ───────────────────
+    mv: Dict[str, Dict[int, dict]] = {}
+    for r in mover_rows:
+        bm = mv.setdefault(r["branch"], {})
+        s  = bm.setdefault(r["sku_id"], {
+            "sku_code": r["sku_code"], "description": r["description"],
+            "cur": 0.0, "prev": 0.0, "cur_qty": 0.0, "prev_qty": 0.0,
+        })
+        if r["m"] == cur_m:
+            s["cur"]      = float(r["cogs"] or 0)
+            s["cur_qty"]  = float(r["qty"] or 0)
+        elif prev_m and r["m"] == prev_m:
+            s["prev"]     = float(r["cogs"] or 0)
+            s["prev_qty"] = float(r["qty"] or 0)
 
     def _fc(v):
-        return (v["cogs"] / v["rev"] * 100) if (v and v.get("rev", 0) > 0) else None
+        return (v["cogs"] / v["rev"] * 100) if v.get("rev", 0) > 0 else None
 
     out = []
-    for branch, cur in a_cur.items():
-        prev = (a_prev or {}).get(branch) if a_prev is not None else None
-        ly = (a_ly or {}).get(branch) if a_ly is not None else None
+    for branch, d in agg.items():
+        cur  = d.get(cur_m, {"rev": 0, "cogs": 0, "costed": 0})
+        prev = d.get(prev_m, {"rev": 0, "cogs": 0, "costed": 0}) if prev_m else None
         fc      = _fc(cur)
         prev_fc = _fc(prev) if prev else None
-        ly_fc   = _fc(ly) if ly else None
         delta_pp = round(fc - prev_fc, 1) if (fc is not None and prev_fc is not None) else None
 
-        # menu movers for this branch - the same windows on both sides (never a part month against a whole one)
+        # menu movers for this branch
         movers = []
-        cm, pmv = (mv_cur or {}).get(branch, {}), ((mv_prev or {}).get(branch, {}) if a_prev is not None else {})
-        for sid in set(cm) | set(pmv):
-            c_, p_ = cm.get(sid), pmv.get(sid)
-            meta = c_ or p_
-            cc, pc = (c_ or {}).get("cogs", 0.0), (p_ or {}).get("cogs", 0.0)
-            delta = cc - pc
-            if a_prev is None or abs(delta) < 1:    # no base: no mover · ignore noise under ฿1
+        for sid, s in mv.get(branch, {}).items():
+            delta = s["cur"] - s["prev"]
+            if abs(delta) < 1:    # ignore noise under ฿1
                 continue
             movers.append({
-                "sku_code":    meta["sku_code"],
-                "description": meta["description"],
-                "cogs":        round(cc, 2),
-                "prev_cogs":   round(pc, 2),
+                "sku_code":    s["sku_code"],
+                "description": s["description"],
+                "cogs":        round(s["cur"], 2),
+                "prev_cogs":   round(s["prev"], 2),
                 "delta":       round(delta, 2),
-                "qty":         round((c_ or {}).get("qty", 0.0), 2),
-                "prev_qty":    round((p_ or {}).get("qty", 0.0), 2),
-                "is_new":      pc <= 0 and cc > 0,
-                "is_gone":     cc <= 0 and pc > 0,
+                "qty":         round(s["cur_qty"], 2),
+                "prev_qty":    round(s["prev_qty"], 2),
+                "is_new":      s["prev"] <= 0 and s["cur"] > 0,
+                "is_gone":     s["cur"] <= 0 and s["prev"] > 0,
             })
         ups   = sorted([m for m in movers if m["delta"] > 0], key=lambda x: -x["delta"])[:movers_n]
         downs = sorted([m for m in movers if m["delta"] < 0], key=lambda x: x["delta"])[:movers_n]
@@ -2686,27 +2655,15 @@ def bom_cost_branch_foodcost_mom(
             "prev_revenue":       round(prev["rev"], 2)  if prev else None,
             "prev_cogs":          round(prev["cogs"], 2) if prev else None,
             "prev_food_cost_pct": round(prev_fc, 1) if prev_fc is not None else None,
-            "ly_food_cost_pct":   round(ly_fc, 1) if ly_fc is not None else None,
             "delta_pp":           delta_pp,
-            "ly_delta_pp":        round(fc - ly_fc, 1) if (fc is not None and ly_fc is not None) else None,
-            "cogs_delta":         round(cur["cogs"] - (prev["cogs"] if prev else 0), 2) if prev else None,
+            "cogs_delta":         round(cur["cogs"] - (prev["cogs"] if prev else 0), 2),
             "movers_up":          ups,
             "movers_down":        downs,
         })
 
     # worst (highest food cost %) first; None food-cost sinks to the bottom
     out.sort(key=lambda x: (x["food_cost_pct"] is None, -(x["food_cost_pct"] or 0)))
-    per = None
-    if wins.get("cur"):
-        cs_, ce_ = wins["cur"]
-        pv, lv = wins.get("prev") or (None, None), wins.get("ly") or (None, None)
-        per = {"kind": "month", "cur": list(wins["cur"]), "prev": list(pv), "ly": list(lv), "complete": not to_date,
-               "label_th": _P.label_th(cs_, ce_), "prev_label_th": _P.label_th(*pv) if pv[0] else "",
-               "ly_label_th": _P.label_th(*lv) if lv[0] else "", "has_prev": a_prev is not None, "has_ly": a_ly is not None}
-        if reasons:
-            per["reasons"] = {k: v for k, v in reasons.items() if v}
-    return {"month": cur_m, "prev_month": prev_m, "incl_service": bool(incl_service), "branches": out,
-            "mom_basis": "to_date" if to_date else "month", "period": per}
+    return {"month": cur_m, "prev_month": prev_m, "incl_service": bool(incl_service), "branches": out}
 
 
 @router.get("/api/bom-cost/compare")

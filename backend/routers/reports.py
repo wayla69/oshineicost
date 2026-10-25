@@ -1180,14 +1180,14 @@ def _build_gm_buckets():
 _PNL_GM_BUCKETS = _build_gm_buckets()
 
 
-def _pnl_win(con, gran, date, tw, tp, maxd):
-    """PR-PP3 · the per-bill window on the one period pattern: the period of `date` (default: of the last closed day),
-    to date through the scope's last closed day when it is not finished (periods.windows). The per-bill COGS table is a
-    rolling window, so the anchor is never after its last day."""
-    import periods as _P
-    a = _P.anchor(con, tw, tp)
-    a = min(a, maxd) if a and maxd else (a or maxd)
-    return _P.windows(con, gran, tw, tp, pick=(date or a), anchor_day=a)
+def _pnl_bounds(d, gran):
+    import datetime as _dt
+    if gran == "day": return d, d
+    if gran == "week":
+        sd = d - _dt.timedelta(days=d.weekday()); return sd, sd + _dt.timedelta(days=6)
+    sd = d.replace(day=1)
+    nxt = sd.replace(year=sd.year + 1, month=1) if sd.month == 12 else sd.replace(month=sd.month + 1)
+    return sd, nxt - _dt.timedelta(days=1)
 
 
 @router.get("/api/reports/pnl-bill-drill")
@@ -1210,10 +1210,9 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
         maxd = con.execute("SELECT MAX(day) FROM sale_bill_cogs").fetchone()[0]
         if not maxd:
             return {"idx": idx, "label": label, "bills": [], "stat": {}}
-        w = _pnl_win(con, gran, date, tw, tp, maxd)
-        if not w:
-            return {"idx": idx, "label": label, "bills": [], "stat": {}}
-        s, e = (_dt.date.fromisoformat(x) for x in w["cur"])
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        s, e = _pnl_bounds(_dt.date(fy, fm, fd), gran)
         JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
               "JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
@@ -1242,17 +1241,21 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
              group: Optional[str] = Query(None), gran: str = Query("day")):
     """Per-bill P&L for a day/week/month: revenue − BoM COGS = gross profit, gp/bill,
     gp/head, gp% distribution, and worst (lowest-margin / heavy-discount) bills.
-    COGS via our BoM only (sale_bill_cogs). Limited to the costed rolling window.
-    PR-PP3: the period is to date through the last closed day when it is not finished (periods.windows), and the
-    summary compares with the same days of the period before / the year before where the rolling window holds them
-    (summary_prev / summary_ly; otherwise None with the reason in `reasons`)."""
+    COGS via our BoM only (sale_bill_cogs). Limited to the costed rolling window."""
     import datetime as _dt
-    import periods as _P
     if gran not in ("day", "week", "month"):
         gran = "day"
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
     scope_filter(tfilt, tp, branch, group)
     tw = " AND ".join(tfilt)
+
+    def bounds(d):
+        if gran == "day": return d, d
+        if gran == "week":
+            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
+        s = d.replace(day=1)
+        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
+        return s, nxt - _dt.timedelta(days=1)
 
     with get_db() as con:
         try:
@@ -1263,37 +1266,22 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
             return {"focus": None, "note": "no per-bill cost data", "summary": {}, "dist": [], "worst": []}
         if not maxd:
             return {"focus": None, "summary": {}, "dist": [], "worst": []}
-        w = _pnl_win(con, gran, date, tw, tp, maxd)
-        if not w:
-            return {"focus": None, "summary": {}, "dist": [], "worst": []}
-        s, e = (_dt.date.fromisoformat(x) for x in w["cur"])
-        focus = w["cur"][1]
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-")); fdate = _dt.date(fy, fm, fd)
+        s, e = bounds(fdate)
         JN = (f"FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
               f"JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
-
-        def summ(a, b):
-            r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM({net_revenue_row('t')}),2) rev, "
-                            f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
-                            f"ROUND(SUM(t.discount),2) disc {JN}", {**tp, "s": a, "e": b}).fetchone()
-            bills = r["bills"] or 0; rev = r["rev"] or 0; cogs = r["cogs"] or 0; cust = r["cust"] or 0
-            gp = round(rev - cogs, 2); gpp = round(gp / rev * 100, 1) if rev else None
-            return {"bills": bills, "revenue": rev, "cogs": cogs, "gross_profit": gp, "gp_pct": gpp,
-                    "discount": r["disc"] or 0, "customers": cust,
-                    "gp_per_bill": round(gp / bills) if bills else None,
-                    "gp_per_head": round(gp / cust) if cust else None}
-        summary = summ(*w["cur"])
-        reasons = _P.reasons(w)
-        bases = {}
-        for k in ("prev", "ly"):
-            if k in reasons:
-                bases[k] = None
-            elif mind and w[k][0] < mind:            # the per-bill COGS table is a rolling window
-                bases[k] = None
-                reasons[k] = f"ต้นทุนรายบิลมีตั้งแต่ {_P.label_th(mind, mind)}"
-            else:
-                bases[k] = summ(*w[k])
+        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM({net_revenue_row('t')}),2) rev, "
+                        f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
+                        f"ROUND(SUM(t.discount),2) disc {JN}", params).fetchone()
+        bills = r["bills"] or 0; rev = r["rev"] or 0; cogs = r["cogs"] or 0; cust = r["cust"] or 0
+        gp = round(rev - cogs, 2); gpp = round(gp / rev * 100, 1) if rev else None
+        summary = {"bills": bills, "revenue": rev, "cogs": cogs, "gross_profit": gp, "gp_pct": gpp,
+                   "discount": r["disc"] or 0, "customers": cust,
+                   "gp_per_bill": round(gp / bills) if bills else None,
+                   "gp_per_head": round(gp / cust) if cust else None}
         # Fine-grained gross-margin distribution: 5% bands across 0–50%, 10% above.
         # bkt = -1 loss · 0..9 = 0–5..45–50 · 10..14 = 50–60..90–100.
         gm_expr = f"({net_revenue_row('t')} - c.cogs_bom)/({net_revenue_row('t')})*100"
@@ -1348,12 +1336,8 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
     # tab rendered an all-zero table with no explanation — numerically honest but
     # indistinguishable from "the page is broken", which is exactly how it was
     # reported. Ship the window so the UI can say why instead of showing nothing.
-    per = _P.public(w)
-    if reasons:
-        per["reasons"] = reasons
-    return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()], "period": per,
-            "summary": summary, "summary_prev": bases.get("prev"), "summary_ly": bases.get("ly"),
-            "dist": dist, "worst": worst, "by_branch": by_branch,
+    return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()],
+            "summary": summary, "dist": dist, "worst": worst, "by_branch": by_branch,
             "loss": loss, "loss_count": (ls["n"] or 0) if ls else 0,
             "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000,
             "data_window": [mind, maxd],

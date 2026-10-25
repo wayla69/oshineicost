@@ -252,7 +252,6 @@ MODULE_RULES = [
     ("*",   "/api/feedback",                 {"customer.feedback"}),  # reviews: read + upload/delete (+ write-token)
     ("*",   "/api/checklist",                {"customer.feedback"}),  # go-live checklist ticks (who = the session)
     ("GET", "/api/finance/prime-cost",       {"cost.analysis", "profit.pnl"}),
-    ("GET", "/api/period/cost",              {"cost.analysis", "profit.pnl"}),   # PR-PP3: COGS / GP of one period
     ("GET", "/api/branches/fixed-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
     ("GET", "/api/branches/labor-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
     ("GET", "/api/export/monthly-pack",      {"cost.analysis", "profit.pnl"}),  # bundles P&L + cost drivers

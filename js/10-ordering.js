@@ -963,20 +963,11 @@ function _ipParams() {
   const br = document.getElementById('ipBranch')?.value || '';
   if (br) p.set('branch', br);
   if (!br && typeof getGroup === 'function' && getGroup()) p.set('group', getGroup());
-  // PR-PP3: the top bar's period (to date through the last closed day); purchases are imported per week
-  const r = gPeriodResolve();
-  const f = r ? r.cur[0] : (document.getElementById('ipFrom')?.value || '');
-  const t = r ? r.cur[1] : (document.getElementById('ipTo')?.value || '');
+  const f = document.getElementById('ipFrom')?.value || '';
+  const t = document.getElementById('ipTo')?.value || '';
   if (f) p.set('date_from', f);
   if (t) p.set('date_to', t);
   return p;
-}
-// the totals of the period before and of the year before (the same number of days), for the two comparison chips
-async function _ipBases() {
-  const r = gPeriodResolve(); if (!r) return [null, null, null];
-  const q = w => { const p = _ipParams(); p.set('date_from', w[0]); p.set('date_to', w[1]); return api(`${API}/api/ingredients/purchases?${p}`).catch(() => null); };
-  const [pv, ly] = await Promise.all([q(r.prev), q(r.ly)]);
-  return [r, pv && pv.totals, ly && ly.totals];
 }
 
 async function loadIngPurchase(force) {
@@ -995,21 +986,18 @@ async function loadIngPurchase(force) {
   // Seed the pickers from the window the server resolved, so they show the same
   // range the numbers are for instead of staying blank.
   const fEl = document.getElementById('ipFrom'), tEl = document.getElementById('ipTo');
-  if (fEl) fEl.value = m.date_from || '';
-  if (tEl) tEl.value = m.date_to || '';
-  const [R, TP, TL] = await _ipBases();
-  if (R) periodChip(R);
+  if (fEl && !fEl.value) fEl.value = m.date_from;
+  if (tEl && !tEl.value) tEl.value = m.date_to;
   if (st) st.textContent = `สัปดาห์ ${fmtDay(m.week_from)} → ${fmtDay(m.week_to)} · ${m.branch || 'ทุกสาขา'} · `
     + `นำเข้าแล้ว ${fmtN(m.imported_weeks || 0)} ช่อง · ยังไม่นำเข้า ${fmtN(m.missing_weeks || 0)} ช่อง`;
 
   const pctCol = v => v == null ? '#94a3b8' : v >= 40 ? '#dc2626' : v >= 33 ? '#f59e0b' : '#059669';
-  const cmp = (k, unit, upGood, i) => R ? periodCmpHtml(t[k], TP && TP[k], TL && TL[k], { unit, upGood, range: R, q: i === 0 }) : '';
   document.getElementById('ipKpis').innerHTML = [
-    { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7a66b8', x: cmp('amount', '%', false, 0) },
-    { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2', x: cmp('revenue', '%', true) },
-    { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct), x: cmp('pct', 'pp', false) },
-    { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981'), x: '' },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p>${k.x ? `<div class="pkpi-cmp">${k.x}</div>` : ''}<p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
+    { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7a66b8' },
+    { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2' },
+    { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct) },
+    { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981') },
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
 
   // The gaps ARE the finding: a ratio computed over half the weeks is not a
   // small ratio, it is an unknown one.

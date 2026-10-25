@@ -538,7 +538,7 @@ function _frcSupply(d) {
   const P = d.purchases || {}, L = d.late || {}, C = d.claims || {};
   const ch = P.change_pp;
   const ratioSub = P.pct_prev != null
-    ? `${ch != null && ch !== 0 ? msPchip(Math.round(ch * 10) / 10, false, ' จุด') + ' ' : ''}<span style="font-size:12px;${_FRC_MUTED}"${P.prev_range ? ` title="${esc(periodLabelTh(P.prev_range[0], P.prev_range[1]))}"` : ''}>${P.basis === 'to_date' ? 'ช่วงเดียวกันเดือนก่อน' : 'เดือนก่อน'} ${_frcPctText(P.pct_prev)}</span>`
+    ? `${ch != null && ch !== 0 ? msPchip(Math.round(ch * 10) / 10, false, ' จุด') + ' ' : ''}<span style="font-size:12px;${_FRC_MUTED}">เดือนก่อน ${_frcPctText(P.pct_prev)}</span>`
     : `<span style="font-size:12px;${_FRC_MUTED}">เดือนก่อนยังไม่มีข้อมูล</span>`;
   const upto = P.month_complete ? 'ทั้งเดือน' : (P.through ? 'ถึง ' + _frcDay(P.through) : '');
   const tiles = `<div style="${_FRC_TILES};margin-top:0">`

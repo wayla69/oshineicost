@@ -397,14 +397,16 @@ function bcFoodPctColor(p) {
 }
 
 async function loadBomCostTab() {
-  // PR-PP3: the top bar is the period (one control per page): its months fill the hidden bcMonthFrom / bcMonthTo, and its
-  // kind the detail (สัปดาห์ -> week, a short กำหนดเอง -> day, else month)
+  // Follow the GLOBAL month range (bcMonthFrom/To are <input type=month>, so set the
+  // value directly; a manual local pick still wins until the global range changes).
   (function () {
-    const r = gPeriodResolve(), bf = document.getElementById('bcMonthFrom'), bt = document.getElementById('bcMonthTo');
-    const g = /** @type {HTMLSelectElement|null} */ (document.getElementById('bcGranularity'));
-    if (r) { if (bf) bf.value = r.cur[0].slice(0, 7); if (bt) bt.value = r.cur[1].slice(0, 7); }
-    const k = getPeriodKind();
-    if (g) g.value = k === 'week' ? 'week' : (k === 'range' && r && r.days <= 62) ? 'day' : 'month';
+    const gf = getMonthFrom() || '', gt = getMonthTo() || '', key = gf + '|' + gt;
+    if (key !== _extraLastGlobal['bomcost_r']) {
+      const bf = document.getElementById('bcMonthFrom'), bt = document.getElementById('bcMonthTo');
+      if (bf) bf.value = gf;
+      if (bt) bt.value = gt;
+      _extraLastGlobal['bomcost_r'] = key;
+    }
   })();
   const el = document.getElementById('bcStatus');
   if (el) el.textContent = 'กำลังโหลด...';
@@ -480,28 +482,17 @@ async function bcLoadOverview() {
   if (mf) qp.set('month_from', mf);
   if (mt) qp.set('month_to',   mt);
   if (svc) qp.set('incl_service', 'true');
-  // PR-PP3: the branch boxes are the bar's last month (to date while it is in progress) against the same days of the month
-  // before and of the month a year back
-  const momP = new URLSearchParams(); if (svc) momP.set('incl_service', 'true'); if (mt) momP.set('month', mt);
-  const momQp = momP.toString() ? '?' + momP.toString() : '';
+  const momQp = svc ? '?incl_service=true' : '';
   const cdQp = new URLSearchParams({ scope: 'chain', limit: 60 });
   if (mf) cdQp.set('month_from', mf); if (mt) cdQp.set('month_to', mt);
-  const [data, mom, cd, pc] = await Promise.all([
+  const [data, mom, cd] = await Promise.all([
     api(`${API}/api/bom-cost/overview?${qp}`),
     api(`${API}/api/bom-cost/branch-foodcost-mom${momQp}`).catch(() => ({branches:[]})),
     api(`${API}/api/bom-cost/cost-drivers?${cdQp}`).catch(() => null),
-    api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null),
   ]);
   bcOverviewData = data;
   bcFoodMomData  = mom;
-  const t = Object.assign({}, data.totals || {});
-  const PC = (pc && pc.cur && !svc) ? pc : null, pv = (o, k) => o ? o[k] : null;
-  const chip = (k, unit, upGood, i) => PC ? `<div class="pkpi-cmp">${periodCmpHtml(PC.cur[k], pv(PC.prev, k), pv(PC.ly, k), { unit, upGood, range: PC.period, q: i === 0 })}</div>` : '';
-  if (PC) {   // the tiles show the windows their chips compare (to date through the last closed day)
-    periodChip(PC.period, true);
-    const q = document.getElementById('bcPeriodQ'); if (q) q.innerHTML = periodQ(PC.period, 'pp');
-    Object.assign(t, { revenue: PC.cur.revenue, cogs: PC.cur.cogs, gp: PC.cur.gp, gp_pct: PC.cur.gp_pct, food_cost_pct: PC.cur.food_cost_pct });
-  }
+  const t = data.totals || {};
   const pane = document.getElementById('bc-pane-overview');
   const fc = t.food_cost_pct;
   const con = data.concentration || {};
@@ -509,12 +500,12 @@ async function bcLoadOverview() {
   const revSub = svcOn ? `ex-VAT + service ${bcFmtN(t.service_charge)}` : 'ex-VAT';
   const kpis = `
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-      ${bcKpiCard('Total Revenue',  bcFmtN(t.revenue),       revSub,                   '#0284c7', chip('revenue', '%', true, 0))}
-      ${bcKpiCard('Total COGS',     bcFmtN(t.cogs),          'BoM/Unit Cost',          '#dc2626', chip('cogs', '%', false))}
-      ${bcKpiCard('Total GP',       bcFmtN(t.gp),            `${bcFmtPct(t.gp_pct)}`,  t.gp>=0?'#10b981':'#ef4444', chip('gp', '%', true))}
-      ${bcKpiCard('GP %',           bcFmtPct(t.gp_pct),      '',                        '#10b981', chip('gp_pct', 'pp', true))}
-      ${bcKpiCard('ต้นทุนอาหาร %',    bcFmtPct(PC ? PC.cur.food_cost_pct : t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
-                                    (fc!=null && fc>70)?'#dc2626':(fc!=null && fc>=55)?'#10b981':'#f59e0b', chip('food_cost_pct', 'pp', false))}
+      ${bcKpiCard('Total Revenue',  bcFmtN(t.revenue),       revSub,                   '#0284c7')}
+      ${bcKpiCard('Total COGS',     bcFmtN(t.cogs),          'BoM/Unit Cost',          '#dc2626')}
+      ${bcKpiCard('Total GP',       bcFmtN(t.gp),            `${bcFmtPct(t.gp_pct)}`,  t.gp>=0?'#10b981':'#ef4444')}
+      ${bcKpiCard('GP %',           bcFmtPct(t.gp_pct),      '',                        '#10b981')}
+      ${bcKpiCard('ต้นทุนอาหาร %',    bcFmtPct(t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
+                                    (fc!=null && fc>70)?'#dc2626':(fc!=null && fc>=55)?'#10b981':'#f59e0b')}
     </div>`;
 
   // Top 60 cost-driver table (shared renderer · total row · MTD MoM)
@@ -590,9 +581,7 @@ function bcRenderFoodCostBoxes(mom) {
     const hex  = bcFoodPctHex(fcv);
     const dp   = r.delta_pp;
     let momHtml = '<span class="text-[10px] text-slate-400">— ไม่มีเดือนก่อน</span>';
-    if (mom && mom.period) {   // PR-PP3: เทียบช่วงก่อน + เทียบปีก่อน in จุด on the same days (a cost: down = good)
-      momHtml = `<span onclick="event.stopPropagation()">${periodCmpHtml(fcv, r.prev_food_cost_pct, r.ly_food_cost_pct, { unit: 'pp', upGood: false, range: mom.period, q: i === 0 })}</span>`;
-    } else if (dp != null) {
+    if (dp != null) {
       // ต้นทุนอาหาร: lower = better → a drop is good (green), a rise is bad (red)
       const good = dp < 0;
       const col  = dp === 0 ? '#64748b' : (good ? 'var(--good-ink)' : 'var(--bad-ink)');
@@ -608,7 +597,7 @@ function bcRenderFoodCostBoxes(mom) {
         <span class="text-2xl font-bold" style="color:${textInk(hex)}">${bcFmtPct(fcv)}</span>
       </div>
       <div class="mt-0.5">${momHtml}</div>
-      <div class="text-[10px] text-slate-400 mt-1">COGS ${bcFmtN(r.cogs)} · ${mom && mom.period ? esc(mom.period.label_th) : monLbl}</div>
+      <div class="text-[10px] text-slate-400 mt-1">COGS ${bcFmtN(r.cogs)} · ${monLbl}</div>
     </button>`;
   }).join('');
 
@@ -715,11 +704,11 @@ function _bcHighlightBox(idx) {
   });
 }
 
-function bcKpiCard(label, val, sub, color, cmpHtml) {
+function bcKpiCard(label, val, sub, color) {
   return `<div class="card p-3" style="border:1px solid ${color}">
     <div class="text-[10px] text-slate-500 font-medium uppercase">${label}</div>
     <div class="text-xl font-bold mt-0.5" style="color:${textInk(color)}">${val}</div>
-    <div class="text-[10px] text-slate-400 mt-0.5">${sub||''}</div>${cmpHtml || ''}
+    <div class="text-[10px] text-slate-400 mt-0.5">${sub||''}</div>
   </div>`;
 }
 

@@ -53,7 +53,8 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
         34px) must not win over the floor ───────────────────────────────────────────────────────────────────────────────────── */
   /* PR-MA: :where(:not(.ph-frame *)) - a page in พอดีจอ keeps its desktop controls inside the scaled frame (js/09c-mobile.js); its filters and
         its "?" keep their 44px from the frame's own rule (index.html, PHONE DISPLAY MODES) */
-  body :is(button, select, summary, [role="button"], textarea,
+  /* PR-TD: not the "?" - a 28 px circle whose ::after is its 44 px tap area (index.html .ui-q) */
+  body :is(button:not(.ui-q), select, summary, [role="button"], textarea,
            input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="file"])):where(:not(.ph-frame *)) { min-height: 44px !important; }
   /* a check box or radio on its own is a 44px target too: the box is drawn 24px inside it (no label of its own to tap) */
   body :is(input[type="checkbox"], input[type="radio"]):where(:not(.ph-frame *)) { -webkit-appearance: none; appearance: none; width: 44px !important; height: 44px !important; padding: 10px; box-sizing: border-box;
@@ -75,7 +76,7 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   body.dark .content-area table thead th:first-child:not(.tbl-top60 th, .heatmap-table th, .frc-tbl th, [style*="background"],
       :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: #3a3590; }
   body .ms-toggle { min-width: 44px !important; }
-  body :is(.dive-btn, .ui-q, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn):where(:not(.ph-frame *)) { min-width: 44px; }
+  body :is(.dive-btn, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn):where(:not(.ph-frame *)) { min-width: 44px; }
   #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }
   body a.see-full { display: inline-flex; align-items: center; min-height: 44px; }
   body label:has(> input[type="checkbox"], > input[type="radio"]):where(:not(.ph-frame *)) { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
@@ -83,7 +84,7 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
   /* ── the branch strip (สาขาของฉัน · ชื่อสาขา · ตัวอักษรใหญ่ · ?) grows to its 44px controls instead of letting them spill out of a 32px bar,
         and its one-line counters wrap instead of ending in "…"; the day chips wrap (F18, F27) ─────────────────────────────────────── */
   body #tab-branchstock > .brn-cluster { height: auto !important; min-height: 52px; overflow: visible !important; padding-top: 4px !important; padding-bottom: 4px !important; flex-wrap: wrap; }
-  body #tab-branchstock > .brn-cluster .ui-q { width: 44px !important; height: 44px !important; min-width: 44px !important; min-height: 44px !important; }
+  body #tab-branchstock > .brn-cluster .ui-q { width: 28px !important; height: 28px !important; min-width: 28px !important; min-height: 28px !important; }   /* PR-TD: 44 px tap area = its ::after */
   body #tab-branchstock > .brn-cluster .brn-big-btn { min-height: 44px !important; }
   body .brn-filterrow { flex-wrap: wrap; }
   body .brn-filterrow > span { flex: 1 1 100%; white-space: normal; overflow: visible; text-overflow: clip; font-size: 12px; }
@@ -133,7 +134,7 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
         [style*="font-size:11"], [style*="font-size: 9"], [style*="font-size: 10"], [style*="font-size: 11"]) { font-size: 12px !important; }
   }
   /* a short button is still 44px wide (F8) */
-  body :is(button, [role="button"], summary):where(:not(.ph-frame *)) { min-width: 44px; }
+  body :is(button:not(.ui-q), [role="button"], summary):where(:not(.ph-frame *)) { min-width: 44px; }   /* PR-TD: the "?" is 28 px, its ::after the 44 px tap area */
   /* RV-M: 44px targets in แตะง่าย that the floor above does not reach: a clickable table row or cell (the branch rows of สรุปประจำวัน, the
      heat-map branch names, the sortable heads of P&L), a clickable row built of divs (the branch rows of ส่วนลด, the bands of P&L ต่อบิล),
      a file picker, and a link standing on its own (เสียงลูกค้า, เวลาปิดร้าน). Inside the พอดีจอ frame the desktop sizes stay. */

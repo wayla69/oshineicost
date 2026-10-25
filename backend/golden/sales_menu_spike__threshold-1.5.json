@@ -1,4 +1,9 @@
 {
+ "base": {
+  "from": "2026-05-13",
+  "kind": "normal",
+  "to": "2026-06-02"
+ },
  "baseline_from": "2026-05-13",
  "baseline_to": "2026-06-02",
  "cost_view": true,
@@ -13,11 +18,21 @@
  "new_days": 28,
  "new_menus": [],
  "period": "day",
+ "plates_count": 0,
  "rate_per": 100,
  "revenue_basis": "net",
  "revenue_total": 1900.0,
  "sort": "extra_cost",
  "spikes": [],
+ "spikes_plates": [],
+ "summary": {
+  "base_customers_per_day": 0.8,
+  "customers": 8,
+  "customers_per_day": 8.0,
+  "customers_vs_base_pct": 950.0,
+  "tier_top": null,
+  "top_excess": 0
+ },
  "threshold": 1.5,
  "tier_data_to": null,
  "top": 15,

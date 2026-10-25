@@ -251,10 +251,10 @@ async function loadReport() {
   // Every report query is forced to the current scope (all / master / franchise)
   // via _rptScopeQp, independent of the global top-bar group filter.
   const qpStr = _rptScopeQp(qp());
-  // Fetch all in parallel. PR-PP3: the cost card no longer sets the range's cost against ONE prior month (it reads
-  // /api/period/cost on the headline month below); the prior-month cost fetch is gone. The prior month stays for §9's
-  // discount composition.
+  // Fetch all in parallel
+  // Compute prior-month params for MoM cost comparison
   const _curTo   = monthTo   || monthFrom || '';
+  const _curFrom = monthFrom || '';
   let priorQpStr = qpStr;
   if (_curTo) {
     const [py, pm] = _curTo.split('-').map(Number);
@@ -264,9 +264,10 @@ async function loadReport() {
     priorP.set('month_from', pp); priorP.set('month_to', pp);
     priorQpStr = _rptScopeQp('?' + priorP.toString());
   }
+
   const [
     summary, trend, skus, cats, persona,
-    branches, yoy, costAnalysis,
+    branches, yoy, costAnalysis, costPrior,
     timeHourly, timeDow, discounts, anomalies, forecast, forecastBranches,
     costHead,
     // Bounded concurrency (≤4): firing all 16 at once put ~6 heavy queries on
@@ -281,6 +282,7 @@ async function loadReport() {
     () => api(`${API}/api/analysis/branches${qpStr}`).catch(()=>[]),
     () => api(`${API}/api/analysis/yoy${qpStr}`).catch(()=>[]),
     () => api(`${API}/api/cost/analysis${qpStr}`).catch(()=>({items:[],summary:{}})),
+    () => api(`${API}/api/cost/analysis${priorQpStr}`).catch(()=>({items:[],summary:{}})),
     () => api(`${API}/api/analysis/hourly_open${qpStr}`).catch(()=>[]),
     () => api(`${API}/api/analysis/dow${qpStr}`).catch(()=>[]),
     () => api(`${API}/api/analysis/discounts${qpStr}`).catch(()=>[]),
@@ -351,14 +353,6 @@ async function loadReport() {
     : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const yoyForMonth = m => { const y = yoy.find(x => x.period_month === m); return (y && y.yoy_pct != null) ? y.yoy_pct : null; };
   const _cs0 = costAnalysis.summary || {};
-  // PR-PP3 · the cost card on the one period pattern: the headline month (to date when it is the month in progress) against
-  // the same days of the month before and of the month a year back, GP % in จุด (/api/period/cost)
-  let _rc = null;
-  if (mLast.period_month && typeof canSeeCost === 'function' && canSeeCost()) {
-    const u = new URLSearchParams({ kind: 'month', pick: mLast.period_month + '-01' }); if (branch) u.set('branch', branch);
-    _rc = await api(`${API}/api/period/cost${_rptScopeQp('?' + u.toString())}`).catch(() => null);
-  }
-  const _rcC = (_rc && _rc.cur) ? _rc.cur : null;
   const lastAov = mLast.tx_count ? Math.round(mLast.revenue / mLast.tx_count) : 0;
   const prevAov = (mPrev && mPrev.tx_count) ? Math.round(mPrev.revenue / mPrev.tx_count) : 0;
 
@@ -380,9 +374,7 @@ async function loadReport() {
   // ── KPI hero band — latest month at-a-glance (+ period margin)
   const heroCards = [
     { label:`รายได้ · ${mLastLabel}`, value:fmt(mLast.revenue||0), accent:'#4a70b0', mom:pctDelta(mLast.revenue, mPrev?.revenue) },
-    _rcC ? { label:`Gross Margin · ${mLastLabel}`, value:_rcC.gp_pct!=null?_rcC.gp_pct.toFixed(1)+'%':'—', accent:'#059669',
-             cmp: periodCmpHtml(_rcC.gp_pct, _rc.prev && _rc.prev.gp_pct, _rc.ly && _rc.ly.gp_pct, { unit: 'pp', range: _rc.period }) }
-         : { label:'Gross Margin', value:_cs0.overall_margin_pct!=null?_cs0.overall_margin_pct.toFixed(1)+'%':'—', accent:'#059669' },
+    { label:'Gross Margin', value:_cs0.overall_margin_pct!=null?_cs0.overall_margin_pct.toFixed(1)+'%':'—', accent:'#059669' },
     { label:`บิล · ${mLastLabel}`, value:fmtN(mLast.tx_count||0), accent:'#0891b2', mom:pctDelta(mLast.tx_count, mPrev?.tx_count) },
     { label:`ลูกค้า · ${mLastLabel}`, value:fmtN(mLast.customer_count||0), accent:'#7a66b8', mom:pctDelta(mLast.customer_count, mPrev?.customer_count) },
     { label:`ยอดบิลเฉลี่ย · ${mLastLabel}`, value:fmtN(lastAov), accent:'#d97706', mom:pctDelta(lastAov, prevAov) },
@@ -392,7 +384,6 @@ async function loadReport() {
       <p class="text-[11px] text-slate-500 uppercase tracking-wide mb-1">${h.label}</p>
       <p class="text-2xl font-bold" style="color:${textInk(h.accent)}">${h.value}</p>
       ${h.mom!=null?`<p class="text-[11px] mt-0.5">MoM ${momChip(h.mom)}</p>`:''}
-      ${h.cmp ? `<div class="pkpi-cmp">${h.cmp}</div>` : ''}
     </div>`).join('');
 
   // Alerts
@@ -409,10 +400,7 @@ async function loadReport() {
         : `<b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
   }
   const cs = costAnalysis.summary || {};
-  if (_rcC && _rcC.gp_pct != null) {
-    const _d = _rc.change && _rc.change.prev ? _rc.change.prev.gp_pct : null;
-    alerts.push(`<b>Gross margin ${mLastLabel}:</b> ${_rcC.gp_pct.toFixed(1)}%${_d != null ? ` (${_d >= 0 ? '+' : ''}${_d.toFixed(1)} จุด เทียบ ${esc(_rc.period.prev_label_th)})` : ''}`);
-  } else if (cs.overall_margin_pct != null) {
+  if (cs.overall_margin_pct != null) {
     alerts.push(`<b>Gross margin:</b> ${cs.overall_margin_pct.toFixed(1)}% (on ${cs.costed_skus||0}/${cs.total_skus||0} costed SKUs)`);
   } else {
     alerts.push(`⚠ <b>No SKU costs uploaded.</b> Profit & margin analysis are unavailable.`);

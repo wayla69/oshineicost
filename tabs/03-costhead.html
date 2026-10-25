@@ -4,10 +4,21 @@
     <button class="subtab-btn active" onclick="switchTab('costhead')">ต้นทุน/หัว รายสาขา</button>
     <button class="subtab-btn" onclick="switchTab('costheadtop60')">Top 60 เมนู ต้นทุน/หัว</button>
   </div>
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
+    <input type="date" id="chDate" onchange="loadCostHead(true)" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <div id="chGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
+      <button class="gran-btn gran-active" data-g="day"   onclick="chSetGran('day')">วัน</button>
+      <button class="gran-btn"             data-g="week"  onclick="chSetGran('week')">สัปดาห์</button>
+      <button class="gran-btn"             data-g="month" onclick="chSetGran('month')">เดือน</button>
+    </div>
+    <span id="chRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-[11px]" style="color:var(--amber-ink)">ต้นทุนใช้สูตร BoM เท่านั้น</span>
+  </div>
   <div id="chKpis" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4"></div>
   <div id="chInsight" class="mb-3"></div>
   <div class="card p-5 overflow-x-auto">
-    <h2 class="section-title mb-3">ต้นทุน/หัว รายสาขา (BoM) <span id="chCmpNote" class="font-normal normal-case" style="color:var(--text-muted);font-size:11px"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-costhead-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-costhead-mb1" data-title="ต้นทุน/หัว รายสาขา"><p>ช่วงเวลาตามแถบด้านบน (วัน · สัปดาห์ · เดือน · ปี) · ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด เทียบจำนวนวันเท่ากันของช่วงก่อนและปีก่อน · ต้นทุนใช้สูตร BoM เท่านั้น · ต้นทุนรายวันมีเฉพาะช่วงที่ระบบเก็บไว้ ช่วงที่ไม่มีแสดง —</p><p>เรียงตาม <b>ต้นทุน%</b> (food-cost ratio) มาก→น้อย · แดง = ใช้ต้นทุนต่อยอดขายสูงกว่าค่าเฉลี่ยเครือ (margin เสี่ยง) · ต้นทุน% สูงทั้งที่ รายได้/หัว ต่ำ = ปัญหากำไร</p></template>
+    <h2 class="section-title mb-3">ต้นทุน/หัว รายสาขา (BoM) <span id="chCmpNote" class="font-normal normal-case" style="color:var(--text-muted);font-size:11px"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-costhead-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-costhead-mb1" data-title="ต้นทุน/หัว รายสาขา"><p>เรียงตาม <b>ต้นทุน%</b> (food-cost ratio) มาก→น้อย · แดง = ใช้ต้นทุนต่อยอดขายสูงกว่าค่าเฉลี่ยเครือ (margin เสี่ยง) · ต้นทุน% สูงทั้งที่ รายได้/หัว ต่ำ = ปัญหากำไร</p></template>
     <table class="text-xs w-full">
       <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">สาขา</th>
@@ -16,8 +27,7 @@
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th>
         <th class="py-1.5 pr-2 text-right">ต้นทุน%</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th>
-        <th id="chThPrev" class="py-1.5 pr-2 text-right">ต้นทุน/หัว เทียบช่วงก่อน</th>
-        <th id="chThLy" class="py-1.5 pr-2 text-right">ต้นทุน/หัว เทียบปีก่อน</th>
+        <th class="py-1.5 pr-2 text-right">Δ ต้นทุน/หัว</th>
         <th class="py-1.5 text-right">vs เฉลี่ย (ต้นทุน%)</th>
       </tr></thead><tbody id="chBody"></tbody></table>
   </div>

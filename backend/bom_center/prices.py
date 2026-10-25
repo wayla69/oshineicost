@@ -257,9 +257,6 @@ def preview(con, month: str, agg: dict) -> dict:
         pct = None
         if prev and prev[0] > 0:
             pct = round(100.0 * (a["avg"] - prev[0]) / prev[0], 1)
-        # PR-PP3 · the one period pattern on a month-grain list: the price in force the same month a year back
-        ly = price_for(con, code, f"{int(month[:4]) - 1:04d}{month[4:7]}")
-        ly_pct = round(100.0 * (a["avg"] - ly[0]) / ly[0], 1) if (ly and ly[0] > 0) else None
         flag = "flag" if pct is not None and abs(pct) >= FLAG_PCT else \
                "warn" if pct is not None and abs(pct) >= WARN_PCT else ("new" if prev is None else "ok")
         rows.append({"code": code, "name": names.get(code), "base_unit": base.get(code),
@@ -268,8 +265,7 @@ def preview(con, month: str, agg: dict) -> dict:
                      "converted_by": a["hows"],
                      "prev_price": round(prev[0], 6) if prev else None,
                      "prev_source": prev[1] if prev else None, "prev_month": prev[2] if prev else None,
-                     "change_pct": pct, "flag": flag, "manual_kept": code in manual,
-                     "ly_price": round(ly[0], 6) if ly else None, "ly_change_pct": ly_pct})
+                     "change_pct": pct, "flag": flag, "manual_kept": code in manual})
     rows.sort(key=lambda r: -r["value"])
     carried = [c for (c,) in con.execute(
         "SELECT code FROM bc_ingredient WHERE active=1") if c not in agg["codes"]]

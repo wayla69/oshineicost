@@ -1594,7 +1594,15 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   background: var(--bg-card); color: var(--accent); font: inherit; font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer; vertical-align: middle; }
 .ui-q:hover { background: var(--bg-hover); }
 .ui-q:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 700px) { .ui-q { width: 44px; height: 44px; font-size: 16px; } }
+/* PR-TD (owner 2026-10-25, "? ใหญ่มาก"): on a phone the "?" stays a 28 px circle; its 44 px tap area is the invisible ::after 8 px around it.
+   It used to BE a 44 px circle (this rule, the theme's 44 px floor for every button and, in พอดีจอ, the counter-zoomed .ph-tz floor): next to
+   12 px text it read as a huge button (~90 device px on the owner's phone). */
+@media (max-width: 700px) {
+  .ui-q { position: relative; width: 28px; height: 28px; min-width: 28px; font-size: 15px; }
+  .ui-q::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+  body.ph-fit .ph-frame .ui-q { width: 24px; height: 24px; min-width: 24px; min-height: 24px; font-size: 13px; }   /* beside the frame's scaled text */
+  body.ph-fit .ph-frame .ui-q::after { inset: -10px; }
+}
 .ui-help-back { position: fixed; inset: 0; z-index: 10000; background: var(--help-back, rgba(15,23,42,.45)); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .ui-help-box { width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
   border-radius: var(--r-md, 12px); box-shadow: 0 10px 30px rgba(0,0,0,.25); outline: 0; }
@@ -1915,9 +1923,9 @@ body.dark .wt tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); 
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is([class*="text-[10px]"], [class*="text-[10.5px]"], [class*="text-[11px]"],
       [style*="font-size:10px"], [style*="font-size:10.5px"], [style*="font-size:11px"], [style*="font-size:11.5px"], [style*="font-size: 11px"],
       #brnIssProgress, #brnProgress, #brnIssProgress b, #brnProgress b) { font-size: 12px !important; }
-  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, textarea, summary, [role="button"],
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button:not(.ui-q), select, textarea, summary, [role="button"],
       input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])):where(:not(.ph-frame *)) { min-height: 44px; }
-  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button, select, [role="button"]):where(:not(.ph-frame *)) { min-width: 44px; }
+  :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) :is(button:not(.ui-q), select, [role="button"]):where(:not(.ph-frame *)) { min-width: 44px; }
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) label:has(> input[type="file"]) { display: inline-flex; align-items: center; min-height: 44px; }
   /* every link: a 44 px box (a long link may wrap, so no negative margin) ... */
   :is(#tab-supplyhome, #tab-branchstock, #tab-orderhub, #tab-bomcenter) a[href]:not(.ohb-claimrow):not(.nav-item):where(:not(.ph-frame *)) { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; box-sizing: border-box; }
@@ -2271,6 +2279,12 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-rs-row:first-child { border-top: 0; }
 .ph-rs-row dt { flex: 0 0 42%; min-width: 0; font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .ph-rs-row dd { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 15px; color: var(--text-primary); text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+/* PR-TD · a cell drawn as lines (data-ph-line): one line each, a two-part line = label left, value right; ph-kv-hi = bad ink */
+.ph-rs-kv { display: grid; gap: 2px; justify-items: stretch; }
+.ph-rs-kv-r { display: flex; justify-content: flex-end; gap: 12px; white-space: nowrap; }
+.ph-rs-kv-r:has(> .ph-rs-kv-v) { justify-content: space-between; }
+.ph-rs-kv-v, .ph-cl-kv-v { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ph-kv-hi, .ph-kv-hi .ph-rs-kv-v, .ph-kv-hi .ph-cl-kv-v { color: var(--bad-ink); font-weight: 700; }
 .ph-rs-act { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
 .ph-rs-act button { min-height: 44px; padding: 8px 16px; font: inherit; font-size: 14px; font-weight: 600; border-radius: var(--r-md, 12px); border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card, #fff); color: var(--text-primary); cursor: pointer; }
 .ph-rs-act button:disabled { opacity: .55; cursor: not-allowed; }
@@ -2305,6 +2319,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on .ph-cl-pill.ph-cl-own { padding: 0; border-radius: 0; background: transparent; white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; }
   body.ph-on .ph-cl-t { font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); overflow-wrap: anywhere; }
   body.ph-on .ph-cl-s { font-size: 13px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  body.ph-on .ph-cl-kv { display: grid; gap: 2px; max-width: 260px; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
+  body.ph-on .ph-cl-kv-r { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; }
   body.ph-on .ph-cl-figs { display: flex; gap: 8px; margin-top: 6px; }
   body.ph-on .ph-cl-f { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
   body.ph-on .ph-cl-fl { font-size: 12px; line-height: 1.35; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2349,7 +2365,9 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on.ph-fit .ph-frame :is(table, canvas) { touch-action: manipulation; }
   body.ph-on.ph-fit .ph-frame tbody tr { cursor: pointer; }
   /* the filters, the period pickers, the chips and the "?" inside the frame keep their touch size (counter-zoomed by phFitLayout) */
-  body.ph-on.ph-fit .ph-frame .ph-tz { min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  /* PR-TD: the "?" keeps its 28 px circle (its ::after is the 44 px tap area); a .ph-tz-unit row (a card's own control row, counter-zoomed as one
+     so its controls share one height) sizes its own controls */
+  body.ph-on.ph-fit .ph-frame .ph-tz:not(.ui-q, .ph-tz-unit) { min-height: 44px; min-width: 44px; box-sizing: border-box; }
   /* the desktop layout at the frame's width: Tailwind's sm: and md: columns (keyed to the viewport, so off on a phone) apply in the frame */
   body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-2, .md\:grid-cols-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-3, .md\:grid-cols-3) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -2527,7 +2545,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .gp-range-chip { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text-secondary); }
 .gp-range-chip[hidden], .gp .gran-btn[hidden] { display: none !important; }
 @media (max-width: 700px) { .gp-range-chip { white-space: normal; max-width: 100%; } }
-.pkpi-cmp .pcmp { font-size: 12px; padding: 1px 7px; }   /* PR-PP3: the 12 px text floor (phone-modes e2e) */
+.pkpi-cmp .pcmp { font-size: 11.5px; padding: 1px 7px; }
 .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .prow-span { font-size: 12px; color: var(--text-secondary); }
 /* the ONE period bar of the top bar (#gPeriod, gPeriod* in js/01-core.js) and the ★ saved-range menu */
@@ -2569,7 +2587,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   .pbar::-webkit-scrollbar { display: none; }
   .pbar .gran-btn { flex: 0 0 auto; min-height: 44px; min-width: 44px; font-size: 14px; }
   .pbar-range input, .pbar-apply { min-height: 44px; font-size: 14px; }
-  .pcmp-row .pcmp-q { width: 44px; height: 44px; }
+  .pcmp-row .pcmp-q { width: 24px; height: 24px; min-width: 24px; }   /* PR-TD: a 24 px circle, its 44 px tap area the ::after */
+  .pcmp-row .pcmp-q::after { inset: -10px; }
 }
 </style>
 <style>
@@ -3246,8 +3265,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
         <div class="pbar gp-kinds" role="group" aria-label="ประเภทช่วงเวลา">
           <button type="button" class="gran-btn" data-k="day" aria-pressed="false" onclick="gPeriodKind('day')" hidden>วัน</button>
           <button type="button" class="gran-btn" data-k="week" aria-pressed="false" onclick="gPeriodKind('week')">สัปดาห์</button>
-          <button type="button" class="gran-btn gran-active" data-k="month" aria-pressed="true" onclick="gPeriodKind('month')">เดือน</button>
-          <button type="button" class="gran-btn" data-k="year" aria-pressed="false" onclick="gPeriodKind('year')">ปี</button>
+          <button type="button" class="gran-btn" data-k="month" aria-pressed="false" onclick="gPeriodKind('month')">เดือน</button>
+          <button type="button" class="gran-btn gran-active" data-k="year" aria-pressed="true" onclick="gPeriodKind('year')">ปี</button>
           <button type="button" class="gran-btn" data-k="range" aria-pressed="false" onclick="gPeriodKind('range')">กำหนดเอง</button>
         </div>
         <div class="gp-step" id="gpStep">
