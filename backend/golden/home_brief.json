@@ -1,11 +1,10 @@
 {
  "avg_ticket_yesterday": 950.0,
  "cost_health": {
-  "band_hi": 70.0,
-  "band_lo": 55.0,
   "coverage_pct": 100.0,
   "delta_pp": 0.0,
   "est_food_pct": 90.0,
+  "food_cost_target": 58.0,
   "food_pct": 90.0,
   "giveaways": null,
   "ly_delta_pp": null,

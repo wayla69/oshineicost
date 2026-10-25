@@ -1,5 +1,5 @@
 {
- "cogs_reduction_needed": -29400.0,
+ "cogs_reduction_needed": -23520.0,
  "current_cogs": 25200.0,
  "current_food_cost_pct": 30.0,
  "current_revenue": 84000.0,
@@ -25,7 +25,7 @@
    "revenue": 30000.0
   }
  ],
- "scale_factor": 2.1667,
+ "scale_factor": 1.9333,
  "skus": [
   {
    "avg_sell_per_unit": 0,
@@ -35,7 +35,7 @@
    "pct_of_total_cogs": 88.89,
    "qty": 2800,
    "sku_code": "B0001",
-   "suggested_unit_cost": 17.33,
+   "suggested_unit_cost": 15.47,
    "total_cogs": 22400.0,
    "total_rev": 0
   },
@@ -47,12 +47,12 @@
    "pct_of_total_cogs": 11.11,
    "qty": 280,
    "sku_code": "A0001",
-   "suggested_unit_cost": 21.67,
+   "suggested_unit_cost": 19.33,
    "total_cogs": 2800.0,
    "total_rev": 28000.0
   }
  ],
- "target_cogs": 54600.0,
- "target_food_cost_pct": 65.0,
+ "target_cogs": 48720.0,
+ "target_food_cost_pct": 58.0,
  "top_n_covers_pct": 100.0
 }

@@ -35,6 +35,7 @@
    "revenue": 1500.0
   }
  ],
+ "food_cost_target": 58.0,
  "incl_service": false,
  "mom_basis": "to_date",
  "month": "2026-06",
