@@ -1212,6 +1212,26 @@ function renderDiscCashiers() {
   if (more) more.innerHTML = rows.length > keep
     ? (keep ? '' : `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีสาขาที่ให้ส่วนลดเกินเพดาน${_discData.policy_pct != null ? ' ' + _discData.policy_pct + '%' : ''}</p>`) + dvMoreBtn('discCashierBody', rows.length, keep) : '';
 }
+// DV5 · the answer strip of ส่วนลด (js/09c-mobile.js): the discount given with no reason, the branch furthest over the ceiling, the total
+PAGE_ANSWERS.discounts = () => {
+  const D = _discData, o = (D && D.overall) || {}, out = [];
+  const R = DISC_REASON_DATA || [], tot = R.reduce((a, r) => a + (r.amount || 0), 0), u = R.find(r => r.reason_id === 0);
+  if (u && tot > 0) {
+    const pct = u.amount / tot * 100;
+    out.push(ansLine('ส่วนลดที่ไม่ระบุเหตุผล', `฿${fmt(u.amount)} · ${pct.toFixed(0)}% ของส่วนลด`, `${fmtN(u.bills)} บิล`, pct >= 15 ? 'bad' : '', '#disc-reason-body'));
+  }
+  if (D) {
+    const over = (D.by_branch || []).filter(b => b.over_policy && (!getBranch() || b.branch === getBranch())).sort((a, b) => (b.excess_baht || 0) - (a.excess_baht || 0));
+    const ceil = o.policy_pct != null ? o.policy_pct : D.policy_pct;
+    out.push(over.length
+      ? ansLine(`เกินเพดาน${ceil != null ? ' ' + ceil + '%' : ''} มากสุด`, `${over[0].branch} ฿${fmt(over[0].excess_baht || 0)}`,
+        `${over.length} สาขาเกินเพดาน · รวม ฿${fmt(over.reduce((a, b) => a + (b.excess_baht || 0), 0))}`, 'bad', '#discCashierBody')
+      : ansLine('เกินเพดานส่วนลด', 'ไม่มีสาขาเกินเพดาน', ceil != null ? `เพดาน ${ceil}% ของยอดขาย` : '', 'good', '#discCashierBody'));
+    if (o.total_discount != null) out.push(ansLine('ส่วนลดรวม', `฿${fmt(o.total_discount)}`,
+      o.total_tx ? `${fmtN(o.discount_tx || 0)} บิล · ${(o.discount_tx / o.total_tx * 100).toFixed(1)}% ของบิลทั้งหมด` : '', '', '#chartDiscTrend'));
+  }
+  return out;
+};
 // the older per-cashier rendering (the "รวม" / "จัดกลุ่มรายสาขา" toggle), kept for a deep link that still calls it
 function _discCashiersByPerson() {
   const body = document.getElementById('discCashierBody');

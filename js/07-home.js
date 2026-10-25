@@ -652,6 +652,17 @@ async function renderHomeScorecard(focusDate) {
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.rev_per_head != null ? fmt(r.rev_per_head) : '—'}</td>
       <td class="py-1.5 text-right tabular-nums">${fmtN(r.bills)}</td>
     </tr>`).join('') + `</tbody></table>` + dvMoreBtn('homeScore', n, TOP, BOT);
+  // DV5 · the answer strip: the two branches furthest below their normal in baht, and the chain against its normal
+  const below = rows.filter(r => r.vs_avg_baht != null && r.vs_avg_baht < 0);
+  const pctS = r => r.vs_avg_pct != null ? `${ansPct(r.vs_avg_pct, 0)} · ปกติ ฿${fmt(r.avg7)}` : '';
+  const sumR = rows.reduce((a, r) => a + (r.revenue || 0), 0), sumV = rows.reduce((a, r) => a + (r.vs_avg_baht || 0), 0);
+  const base = sumR - sumV;
+  pageAnswer('home', [
+    below[0] && ansLine('ต่ำกว่าปกติมากสุด', `${below[0].branch} ${dvBaht(below[0].vs_avg_baht)}`, pctS(below[0]), 'bad', '#homeScoreTable'),
+    below[1] && ansLine('อันดับถัดไป', `${below[1].branch} ${dvBaht(below[1].vs_avg_baht)}`, pctS(below[1]), 'bad', '#homeScoreTable'),
+    rows.length && ansLine(getBranch() ? 'ยอดของสาขาเทียบปกติ' : 'ทั้งเครือเทียบปกติ', `฿${fmt(sumR)} · ${dvBaht(sumV)}`,
+      base > 0 ? `${ansPct(sumV / base * 100)} · ปกติ = เฉลี่ย 7 วันก่อนหน้า` : '', ansTone(sumV), '#homeScoreTable'),
+  ]);
   return d;
 }
 
@@ -662,6 +673,26 @@ async function renderHomeScorecard(focusDate) {
 // the older entry points (a deep link, a drill) move the top bar: dsSetGran('week'), dsSetDate('2026-10-14')
 function dsSetGran(g) { if (['day', 'week', 'month', 'year'].includes(g)) gPeriodSet({ kind: g, pick: gPeriodPick().pick }); }
 function dsSetDate(iso) { if (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) gPeriodSet({ kind: 'day', pick: iso }); }
+// DV5 · the answer strip of ยอดขายรายวัน: the branch that lost the most baht, the one that gained the most, and the chain's trend
+// (rows = the branches ranked by the baht change, the largest loss first; chgOf = that change; t = the chain's total)
+function _dsAnswer(rows, chgOf, t, sameBase) {
+  const vs = sameBase ? 'ปีก่อน' : 'ช่วงก่อน', base = t ? (sameBase ? t.ly : t.prev) : null;
+  const ch = rows.filter(b => chgOf(b) != null);
+  const lo = ch.filter(b => chgOf(b) < 0), hi = ch.filter(b => chgOf(b) > 0).reverse();
+  const next = (xs) => xs.length > 1 ? 'ถัดไป ' + xs.slice(1, 3).map(b => `${b.branch} ${dvBaht(chgOf(b))}`).join(' · ') : '';
+  const pct = b => ansPct(sameBase ? b.yoy_pct : b.mom_pct);
+  const out = [];
+  if (ch.length > 1) {
+    if (lo.length) out.push(ansLine(`ยอดลดมากสุด เทียบ${vs}`, `${lo[0].branch} ${dvBaht(chgOf(lo[0]))}`, [pct(lo[0]), next(lo)].filter(Boolean).join(' · '), 'bad', '#dsBody'));
+    if (hi.length) out.push(ansLine(`ยอดเพิ่มมากสุด เทียบ${vs}`, `${hi[0].branch} ${dvBaht(chgOf(hi[0]))}`, [pct(hi[0]), next(hi)].filter(Boolean).join(' · '), 'good', '#dsBody'));
+  }
+  if (t && t.revenue != null) {
+    const d = base && base.revenue != null ? t.revenue - base.revenue : null, p = base && base.revenue ? d / base.revenue * 100 : null;
+    out.push(ansLine(getBranch() ? 'ยอดขายของสาขา' : 'ยอดขายทั้งเครือ', `฿${fmt(t.revenue)}${d != null ? ' · ' + dvBaht(d) : ''}`,
+      p != null ? `${ansPct(p)} เทียบ${vs}` : '', ansTone(d), '#dsTrend'));
+  }
+  return out;
+}
 async function loadDailySales(force) {
   const G = gPeriodPick();
   const gran = ['day', 'week', 'month', 'year'].includes(G.kind) ? G.kind : 'month';
@@ -711,6 +742,7 @@ async function loadDailySales(force) {
       ${sameBase ? '' : `<td class="py-1.5 pr-2 text-right tabular-nums">${periodPctDelta(b.mom_pct, { title: r ? `${r.label_th} เทียบ ${r.prev_label_th}${b.mom_rev != null ? ' · ฿' + fmt(b.mom_rev) : ''}` : '' })}</td>`}
       <td class="py-1.5 text-right tabular-nums">${periodPctDelta(b.yoy_pct, { title: r ? `${r.label_th} เทียบ ${r.ly_label_th}${b.yoy_rev != null ? ' · ฿' + fmt(b.yoy_rev) : ''}` : '' })}</td>
     </tr>`).join('') || `<tr><td colspan="${sameBase ? 6 : 7}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
+  pageAnswer('dailysales', _dsAnswer(dsRows, chgOf, t, sameBase));         // DV5: the answer strip on a phone
   const tr = d.trend || [];
   const tLab = x => gran === 'year' ? String(+x.start.slice(0, 4) + 543)
     : gran === 'month' ? `${_PR_MON[+x.start.slice(5, 7) - 1]} ${(+x.start.slice(0, 4) + 543) % 100}` : periodLabelTh(x.start, x.start).replace(/ \d{4}$/, '');
@@ -1425,6 +1457,17 @@ async function loadCostHead(force) {
       <td class="py-1.5 text-right tabular-nums">${devHtml}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="${sameBase ? 8 : 9}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
+  // DV5 · the answer strip: the branches whose cost per head above the chain's costs the most baht (the gap × their customers), and the
+  // chain's cost per head against the period before; a line opens the Top 60 ranking (the dishes that push each branch up)
+  const cph0 = t.cost_per_head, excess = x => x.cost_per_head != null && cph0 != null ? (x.cost_per_head - cph0) * (x.customers || 0) : null;
+  const hot = branches.filter(x => (excess(x) || 0) > 0).sort((a, b) => excess(b) - excess(a));
+  const hotLine = (x, k) => x && ansLine(k, `${x.branch} ${dvBaht(excess(x))}`, `ต้นทุน/หัว ฿${fmt(x.cost_per_head)} · ${dvBaht(x.cost_per_head - cph0)}/หัว เทียบเฉลี่ย`, 'bad', '#chBody');
+  const pv = sameBase ? t.ly_cost_per_head : t.prev_cost_per_head;
+  pageAnswer('costhead', [
+    !getBranch() && hotLine(hot[0], 'ต้นทุน/หัวเกินเฉลี่ยมากสุด (บาท)'), !getBranch() && hotLine(hot[1], 'อันดับถัดไป'),
+    cph0 != null && ansLine(getBranch() ? 'ต้นทุน/หัวของสาขา' : 'ต้นทุน/หัวทั้งเครือ', `฿${fmt(cph0)}${pv ? ' · ' + ansPct((cph0 - pv) / pv * 100) : ''}`,
+      `${pv ? `เทียบ${sameBase ? 'ปีก่อน' : 'ช่วงก่อน'} ฿${fmt(pv)} · ` : ''}เมนูที่ดันต้นทุน: Top 60`, pv ? ansTone(cph0 - pv, false) : '', '@costheadtop60'),
+  ]);
 }
 
 // ══ P&L ต่อบิล (per-bill profit, COGS = BoM) ══
@@ -2442,6 +2485,8 @@ _DIVE_ENHANCERS.miChart = _diveMenuImpact;
 _DIVE_ENHANCERS.ptChartMix = _divePtMix;
 _DIVE_ENHANCERS.ptChartCogs = _divePtCogs;
 
+// DV5: on a phone in แตะง่าย the ranking is the page's first card list (the branch, its gap to the chain and the dishes that push it)
+PAGE_CARDS.costheadtop60 = [{ sel: '#chtRankTable', title: 'สาขา', sub: ['เมนูที่ดันต้นทุนขึ้น'], keyCols: ['Δ vs ภาพรวม', 'ต้นทุน/หัว', 'หัวลูกค้า'], labels: ['Δ/หัว เทียบภาพรวม', 'ต้นทุน/หัว', 'หัวลูกค้า'] }];
 async function loadCostHeadTop60(force) {
   const sel = document.getElementById('chtMonth');
   if (!_chtMonthsLoaded && sel) {
@@ -2509,7 +2554,7 @@ async function loadCostHeadTop60(force) {
   }).join('');
   const rankTbl = `<div class="card p-5 mb-4 overflow-x-auto">
     <h2 class="section-title mb-3">จัดอันดับสาขา — ต้นทุน/หัว เทียบภาพรวม</h2>
-    <table class="text-xs w-full"><thead><tr class="text-left border-b-2 border-slate-300" style="color:var(--text-muted)">
+    <table class="text-xs w-full" id="chtRankTable"><thead><tr class="text-left border-b-2 border-slate-300" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">หัวลูกค้า</th>
       <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">Δ vs ภาพรวม</th>
       <th class="py-1.5 pr-2 text-right">ต้นทุนอาหาร %</th><th class="py-1.5">เมนูที่ดันต้นทุนขึ้น (บาท/หัว)</th>
@@ -2532,7 +2577,9 @@ async function loadCostHeadTop60(force) {
   }
 
   // ── menu table builders ──
-  const ovRows = ov.menus.map(r => `<tr>
+  // DV5: the chain's Top 60 shows its first 10 rows (with สะสม% the reader sees where to stop); the rest behind "ดูทั้งหมด"
+  const ovN = ov.menus.length;
+  const ovRows = ov.menus.map((r, i) => `<tr${dvMoreAttr('chtOvTable', i, ovN, 10)}>
     <td class="num text-slate-400">${r.rank}</td>
     <td>${dot(r.prem)}${esc(r.desc)} <span class="text-slate-400 text-[10px]">[${esc(r.code)}]</span></td>
     <td class="num">${n0(r.qty)}</td><td class="num">${q2(r.qph)}</td>
@@ -2545,7 +2592,7 @@ async function loadCostHeadTop60(force) {
     <div class="overflow-auto" style="max-height:560px"><table class="tbl-top60 w-full" id="chtOvTable"><thead><tr>
       <th class="num">#</th><th>เมนู</th><th class="num">จำนวน</th><th class="num">/หัว</th>
       <th class="num">ต้นทุนรวม</th><th class="num">ต้นทุน/หัว</th><th class="num">% ต้นทุน</th><th class="num">สะสม%</th>
-    </tr></thead><tbody>${ovRows}</tbody></table></div></div>`;
+    </tr></thead><tbody>${ovRows}</tbody></table></div>${dvMoreBtn('chtOvTable', ovN, 10)}</div>`;
 
   // ── per-branch sections ──
   const branchHtml = d.branches.map(b => {
@@ -2603,7 +2650,18 @@ async function loadCostHeadTop60(force) {
       <div style="height:300px"><canvas id="chtChartMenus"></canvas></div></div>
   </div>`;
 
-  body.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>` + chartsRow + rankTbl + headline + ovTable + branchHtml + action;
+  // DV5 (phone table review 2026-10-25): the answer first - the branch furthest above the chain and the ranking with "เมนูที่ดันต้นทุนขึ้น",
+  // then the figures, the charts and the Top 60 lists
+  body.innerHTML = headline + rankTbl + `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>` + chartsRow + ovTable + branchHtml + action;
+  const rk0 = (A.ranked || []).filter(b => b.gap > 0);
+  const exc = b => b.gap * (b.covers || 0);
+  pageAnswer('costheadtop60', [
+    A.hottest && ansLine('ต้นทุน/หัวสูงกว่าภาพรวมมากสุด', `${A.hottest} ${dvBaht(A.hottest_excess_month)}`,
+      `${sgn(A.hottest_gap)} ฿/หัว × ${n0(A.hottest_covers)} หัว${(A.hottest_drivers || [])[0] ? ' · ' + A.hottest_drivers[0].desc + ' +฿' + q2(A.hottest_drivers[0].d) + '/หัว' : ''}`, 'bad', '#chtRankTable'),
+    rk0.filter(b => b.name !== A.hottest).sort((a, b) => exc(b) - exc(a)).slice(0, 1).map(b => ansLine('อันดับถัดไป', `${b.name} ${dvBaht(exc(b))}`,
+      `${sgn(b.gap)} ฿/หัว × ${n0(b.covers)} หัว`, 'bad', '#chtRankTable'))[0],
+    ansLine('ต้นทุนอาหาร/หัว เฉลี่ย', `${b2(ov.cph_total)} · ${ov.food_pct.toFixed(1)}%`, `${n0(ov.covers)} หัว · ${d.branches.length} สาขา ${sl}`, '', '#chtOvTable'),
+  ]);
 
   // Chart 1 — branch cost/head bars (red=above overview, green=below) + overview average line
   const rk = A.ranked || [];

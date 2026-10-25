@@ -27,14 +27,14 @@
   <div id="mcInsights" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
 
   <div class="card p-5">
-    <h3 class="text-sm font-bold mb-1" style="color:var(--text-primary)">ตารางที่ 1 · เทียบเมนู A vs B — ยอดรวม
+    <h3 class="text-sm font-bold mb-1" style="color:var(--text-primary)">เทียบเมนู A vs B
       <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-mc-t1" title="คำอธิบาย">?</button>
-      <template id="hlp-mc-t1" data-title="ตารางที่ 1 · ยอดรวม"><p>เฉพาะเมนูบุฟเฟ่ต์ แสดงจำนวนชิ้นรวม สัดส่วน และต้นทุนของแต่ละช่วง กดหัวคอลัมน์เพื่อเรียง</p></template></h3>
+      <template id="hlp-mc-t1" data-title="เทียบเมนู A vs B"><p>เฉพาะเมนูบุฟเฟ่ต์ · ต่อหัว = จำนวนและต้นทุนหารด้วยจำนวนลูกค้าของแต่ละช่วง (ตัดผลของจำนวนลูกค้าที่เปลี่ยน) · ยอดรวม = จำนวนชิ้นและต้นทุนรวม</p><p>ทุกคอลัมน์ที่เปลี่ยนอ่าน B เทียบกับ A (B − A) · เรียงตามต้นทุนที่ต่างกันเป็นบาท มากไปน้อย ไม่ว่าขึ้นหรือลง · กดหัวคอลัมน์เพื่อเรียงแบบอื่น</p></template></h3>
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
       <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px;gap:2px">
-        <button class="gran-btn gran-active" id="mcModeTotal" onclick="mcSetCostMode(false)">ต้นทุนรวม</button>
-        <button class="gran-btn" id="mcModeHead" onclick="mcSetCostMode(true)">ต้นทุน/หัว</button>
+        <button class="gran-btn gran-active" id="mcModeHead" onclick="mcSetCostMode(true)">ต่อหัว</button>
+        <button class="gran-btn" id="mcModeTotal" onclick="mcSetCostMode(false)">ยอดรวม</button>
       </div>
       <span class="text-xs text-slate-500 ml-2">หมวด:</span>
       <select id="mcCatFilter" onchange="mcSetCat(this.value)" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)"><option value="">ทั้งหมด</option></select>
@@ -49,23 +49,8 @@
     </div>
   </div>
 
-  <!-- ตารางที่ 2 — เกณฑ์ "ต่อหัว" เสมอ (เพิ่มเติม ไม่ทับตารางที่ 1) -->
-  <div class="card p-5 mt-4">
-    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
-      <h3 class="text-sm font-bold" style="color:var(--text-primary)">ตารางที่ 2 · เทียบเมนู A vs B — ต่อหัว
-        <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-mc-t2" title="คำอธิบาย">?</button>
-        <template id="hlp-mc-t2" data-title="ตารางที่ 2 · ต่อหัว"><p>เฉพาะเมนูบุฟเฟ่ต์ จำนวนต่อคนและต้นทุนต่อหัว คิดโดยหารด้วยจำนวนลูกค้าของแต่ละช่วง</p></template></h3>
-      <button onclick="exportTable('mcTable2','menu_compare_per_head.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
-    </div>
-    <div class="mb-3"><span id="mcCoversNote2" class="text-[11px] text-slate-400"></span></div>
-    <div class="overflow-auto" style="max-height:640px">
-      <table class="tbl-top60 w-full" id="mcTable2">
-        <thead id="mcHead2"></thead>
-        <tbody id="mcBody2"></tbody>
-        <tfoot id="mcFoot2"></tfoot>
-      </table>
-    </div>
-  </div>
+  <!-- DV5 (phone table review 2026-10-25): ตารางที่ 2 (always per head) answered the question of ตารางที่ 1 - one table with the
+       ต่อหัว | ยอดรวม toggle above it (ต่อหัว by default), ranked by the change in cost in baht -->
 
   <!-- Pareto สะสม — cost concentration A vs B -->
   <div class="card p-5 mt-4" id="mcParetoCard" style="display:none">

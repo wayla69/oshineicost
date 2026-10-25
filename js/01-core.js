@@ -3144,6 +3144,27 @@ function deskShow(btn) {
 // a signed baht figure: +฿193.0K / −฿537.0K
 function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
 
+// ── DV5 (phone table review 2026-10-25) · the ANSWER STRIP: three lines at the top of an analytics page on a phone in แตะง่าย - the
+// largest item in baht, the second, and the trend. A page gives its lines one of two ways:
+//   pageAnswer(key, lines)   its loader pushes them when it has drawn (key = tab, or 'tab|pane'); the push is stamped with the top bar's
+//                            filters of that moment (qp()), so a period or branch change never shows the lines of the filters before
+//   PAGE_ANSWERS[key] = ctx => lines   a provider, read after the page's card lists are drawn (ctx.rows(k) = the body rows of the page's
+//                            k-th card list as parsed: { title, sub, figs: [{ l, v, n }] }; ctx.total(k) = its total row; ctx.panel)
+// A line: ansLine(k, v, s, tone, go) = { k: the question in 2-4 words, v: the answer (name + baht), s: one short line under it,
+// tone: 'bad' | 'good' | 'warn' | '' (colour = meaning), go: a selector in the page the line scrolls to }. js/09c-mobile.js draws it.
+const PAGE_ANSWERS = {};
+const _pageAns = {};
+function ansLine(k, v, s, tone, go) { return v ? { k: k || '', v: String(v), s: s || '', tone: tone || '', go: go || '' } : null; }
+// a signed % for a line: +6.9% / −17.5%
+function ansPct(v, d) { const x = _num(v); return x == null ? '' : (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d == null ? 1 : d) + '%'; }
+function ansTone(x, upGood) { const v = _num(x); return v == null || v === 0 ? '' : (v > 0) === (upGood !== false) ? 'good' : 'bad'; }
+// the filters a push is valid for: the whole top bar, or (follow: 'branch') the branch alone - a page with its own period pickers (เทียบเมนู A/B)
+function ansFilterKey(follow) { try { return follow === 'branch' ? `${getBranch()}|${getGroup()}` : qp(); } catch (e) { return ''; } }
+function pageAnswer(key, lines, follow) {
+  _pageAns[key] = { lines: (lines || []).filter(Boolean).slice(0, 3), follow: follow || '', fk: ansFilterKey(follow) };
+  if (typeof phAnswerSchedule === 'function') phAnswerSchedule();
+}
+
 
 // ── Fetch robustness (D3) + stale-response guard (D4) ───────────────────────
 // loadGen increments on every tab switch / filter change. A loader captures the
@@ -4049,9 +4070,10 @@ const PAGE_KEYWORDS = {
 // 760-900 px wide scaled to the screen width (js/09c-mobile.js, "PHONE DISPLAY MODES"). The person may switch per page (the ⤢ button of the
 // phone top bar, remembered on the device). scripts/check-departments.js fails when a page of a department or of หน้ารายงานทั้งหมด has no entry.
 // Analytics, reports and read-only tables: fit. Branch pages, หน้างาน, the launcher, ฉัน, ค้นหา, editors and import forms: touch.
+// DV5 (phone table review 2026-10-25): รายงานผู้บริหาร opens in touch - its answer strip, the PDF and the owner's summary (the printed report on demand).
 const PAGE_PHONE = {
   launcher: 'touch', allpages: 'touch', home: 'touch', supplyhome: 'touch', franchise: 'touch', manual: 'touch', settings: 'touch',
-  mgtreport: 'fit', report: 'fit', overall: 'fit', dailysales: 'fit', trend: 'fit', compare: 'fit', more: 'fit', action: 'fit', checklist: 'fit',
+  mgtreport: 'touch', report: 'fit', overall: 'fit', dailysales: 'fit', trend: 'fit', compare: 'fit', more: 'fit', action: 'fit', checklist: 'fit',
   gpbranch: 'fit', pnlbranch: 'fit', pnlbill: 'fit', profit: 'fit', benchmark: 'fit', pnl: 'fit',
   cost: 'fit', bomcost: 'fit', costhead: 'fit', hvmonitor: 'fit', coverage: 'fit', menuimpact: 'fit', menuefficiency: 'fit', branchbom: 'fit', simhub: 'fit', heavyeater: 'fit',
   buffetperf: 'fit', childbuffet: 'fit', guest: 'fit', custtype: 'fit', timeflow: 'fit', feedback: 'fit',

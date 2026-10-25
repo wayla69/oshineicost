@@ -2369,7 +2369,44 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on .ph-cl-act, body.ph-on .ph-cl-more { min-height: 44px; padding: 0 16px; border-radius: var(--r-md, 12px); border: 1px solid var(--accent); background: var(--bg-card, #fff); color: var(--accent);
     font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
   body.ph-on .ph-cl-more { width: 100%; margin-top: 8px; }
+  /* DV5 · the cap of a card list ("··· อีก N รายการ ···" between the first and the last cards) and the ANSWER STRIP (phAnswerApply,
+     js/09c-mobile.js): three lines at the top of the page in แตะง่าย, the colour of the left edge = the meaning (bad / good / watch) */
+  body.ph-on .ph-cl-gap { text-align: center; font-size: 13px; color: var(--text-secondary); padding: 2px 0; }
+  body.ph-on .ph-cl .dv-more-wrap .shm-showall { width: 100%; }
+  body.ph-on:not(.ph-fit) .ph-ans { display: block; margin: 0 0 12px; }
+  body.ph-on .ph-ans-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  body.ph-on .ph-ans-i { --ans: var(--text-secondary); background: var(--bg-card, #fff); border: 1px solid var(--border, #d5dbe3); border-left: 4px solid var(--ans);
+    border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); overflow: hidden; }
+  body.ph-on .ph-ans-i[data-tone="bad"] { --ans: var(--bad-ink); }
+  body.ph-on .ph-ans-i[data-tone="good"] { --ans: var(--good-ink); }
+  body.ph-on .ph-ans-i[data-tone="warn"] { --ans: var(--amber-ink); }
+  body.ph-on .ph-ans-hit { width: 100%; min-height: 44px; display: grid; grid-template-columns: 1fr auto; column-gap: 8px; align-items: center; padding: 8px 10px 8px 12px; margin: 0;
+    background: transparent; border: 0; text-align: left; font: inherit; color: inherit; }
+  body.ph-on button.ph-ans-hit { cursor: pointer; }
+  body.ph-on .ph-ans-hit > :not(.ph-ans-go) { grid-column: 1; }
+  body.ph-on .ph-ans-go { grid-column: 2; grid-row: 1 / span 3; font-size: 22px; line-height: 1; color: var(--text-secondary); }
+  body.ph-on .ph-ans-k { font-size: 12px; line-height: 1.35; font-weight: 600; color: var(--text-secondary); }
+  body.ph-on .ph-ans-v { font-size: 16px; line-height: 1.35; font-weight: 800; color: var(--ans); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  body.ph-on .ph-ans-i[data-tone="neu"] .ph-ans-v { color: var(--text-primary); }
+  body.ph-on .ph-ans-s { font-size: 13px; line-height: 1.4; color: var(--text-secondary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  body.ph-on button.ph-ans-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 }
+.ph-ans { display: none; }
+/* DV5 · รายงานผู้บริหาร on a phone in แตะง่าย: the strip, the PDF and the summary; the printed report shows on demand (mgtPhFull). Screen only:
+   the print of the PDF always has the whole report. */
+.mgt-ph-gate, .mgt-ph-back { display: none; }
+@media screen and (max-width: 700px) {
+  body.ph-on:not(.ph-fit) #tab-mgtreport:not(.mgt-ph-full) .mgt-ph-gate { display: block; }
+  body.ph-on:not(.ph-fit) #tab-mgtreport:not(.mgt-ph-full) #mgtRptBody { display: none !important; }
+  body.ph-on:not(.ph-fit) #tab-mgtreport.mgt-ph-full .mgt-ph-back { display: inline-flex; align-items: center; margin: 0 0 12px; }
+  body.ph-on .mgt-ph-t { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin: 0 0 10px; }
+  body.ph-on .mgt-ph-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  body.ph-on .mgt-ph-acts .shm-showall { margin-left: 0; flex: 1 1 140px; }
+  body.ph-on .mgt-ph-acts .mgt-ph-pdf { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
+}
+/* DV5 · ภาพรวม: ข้อสังเกต names the branches that gained and lost the most in baht; สาขาเด่น / ต้องดู (ranked by %) repeated it with another
+   answer - one highlights box: the two cards show only when ข้อสังเกต is closed or empty */
+#anomalyBanner:not(.hidden):not(:empty) ~ #kpiHeroWrap #kpiBranchHilite { display: none; }
 @media (max-width: 700px) {
   /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
   body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
