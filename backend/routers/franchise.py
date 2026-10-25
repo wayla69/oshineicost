@@ -157,10 +157,13 @@ def _sales_and_gp(rep: dict, branch: str):
     """-> (sales, gp, discount_pct, discount_policy, last_day_date)"""
     if not rep.get("available"):
         return None, None, None, None, None
-    H, G, P = rep.get("headline") or {}, rep.get("gp") or {}, rep.get("pace") or {}
+    H, G = rep.get("headline") or {}, rep.get("gp") or {}
     last = (rep.get("range") or [None, None])[1]
     sales = {"mtd": _num(H.get("revenue"), 2), "bills": H.get("bills"), "per_bill": _num(H.get("avg_ticket"), 0),
-             "mtd_vs_last_month_pct": _num(P.get("mom_pct")), "mom_basis": P.get("mom_basis"),
+             # PR-PP2: the headline change is the calendar to-date rule (days 1..n vs days 1..n of last month);
+             # the weekday-fair figure stays on the target pace (P)
+             "mtd_vs_last_month_pct": _num(H.get("rev_wow_pct")),
+             "mom_basis": H.get("mom_basis") or ("to_date" if rep.get("partial") else "month"),
              "mtd_vs_last_year_pct": _num(H.get("rev_yoy_pct")), "customers": H.get("customers"),
              "month_complete": not rep.get("partial"), "through": last, "days": rep.get("days_in_period"),
              "last_day": None, "series_30d": []}
@@ -229,8 +232,9 @@ def _daily(con, sales: dict, bid: int, last_day: Optional[str]):
 
 def _trend_12m(branch: str) -> dict:
     """The last 12 closed months and the month in progress, each on its own (never a sum over months), from the phone's
-    month-by-month series (reports.report_management_months): the report's sums, its weekday-fair MoM for the part month
-    and its GP basis, so a month reads here as it does in the management report."""
+    month-by-month series (reports.report_management_months): the report's sums, its to-date MoM for the part month
+    (PR-PP2: days 1..n against days 1..n of last month) and its GP basis, so a month reads here as it does in the
+    management report."""
     from .reports import report_management_months
     raw = report_management_months(branch=branch, group=None, lang="th", closed=12)
     d = json.loads(raw.body) if hasattr(raw, "body") else raw

@@ -1,10 +1,19 @@
 {
+ "baseline_from": "2026-05-13",
+ "baseline_to": "2026-06-02",
  "count": 0,
  "date": "2026-06-03",
+ "date_from": "2026-06-03",
+ "date_to": "2026-06-03",
+ "days": 1,
+ "latest_day": "2026-06-03",
  "new_count": 0,
  "new_days": 28,
  "new_menus": [],
+ "period": "day",
+ "rate_per": 100,
  "spikes": [],
  "threshold": 1.5,
+ "tier_data_to": null,
  "window_days": 21
 }

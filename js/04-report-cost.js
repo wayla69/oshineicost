@@ -332,8 +332,19 @@ async function loadReport() {
   let mPrev = _rowFor(_prevMonthStr(mLast.period_month));
   if (!mPrev && trend.length >= 2 && !completeMonth) mPrev = trend[trend.length-2];
   // Partial (MTD) month, for a separate note.
-  const mPartial = partialMonth ? _rowFor(partialMonth) : null;
+  let mPartial = partialMonth ? _rowFor(partialMonth) : null;
   const _isMtdHeadline = mLast.period_month && mLast.period_month === partialMonth;
+  // PR-PP2 · the one period pattern: the month in progress is to date (1 .. the last closed day) and compared with days
+  // 1..n of last month and of the same month a year back; the year is to date the same way (/api/period/sales).
+  const _rp = (kind, pick) => { const u = new URLSearchParams({ kind, pick }); if (branch) u.set('branch', branch);
+    return api(`${API}/api/period/sales${_rptScopeQp('?' + u.toString())}`).catch(() => null); };
+  const _ytdYear = (mLast.period_month || partialMonth || '').slice(0, 4);
+  const [_rpMtd, _rpYtd] = await Promise.all([partialMonth ? _rp('month', partialMonth + '-01') : null, _ytdYear ? _rp('year', _ytdYear + '-01-01') : null]);
+  const _ov = (row, v, pm) => v ? Object.assign({}, row || { period_month: pm }, { revenue: v.revenue, revenue_ex_vat: v.revenue, tx_count: v.bills, customer_count: v.customers }) : null;
+  if (_rpMtd && _rpMtd.cur) {
+    mPartial = _ov(mPartial, _rpMtd.cur, partialMonth);
+    if (_isMtdHeadline) { mLast = _ov(mLast, _rpMtd.cur, partialMonth); mPrev = _ov(mPrev, _rpMtd.prev, _prevMonthStr(partialMonth)); }
+  }
   const mLastLabel = mLast.period_month
     ? fmtMonth(mLast.period_month) + (_isMtdHeadline ? ' (MTD)' : '')
     : '—';
@@ -378,7 +389,7 @@ async function loadReport() {
   // Alerts
   const alerts = [];
   const periodTotalRev = trend.reduce((a,r)=>a+(r.revenue||0),0);
-  alerts.push(`<b>เดือนล่าสุดที่จบแล้ว:</b> ${mLastLabel} · สรุปด้านบนเป็น<b>รายเดือนเต็ม</b> (MoM/YoY เทียบเดือนเต็มต่อเดือนเต็ม)${(partialMonth && mPartial) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) แสดงเป็น MTD ใน §2 ไม่นำมาเทียบ` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
+  alerts.push(`<b>${_isMtdHeadline ? 'เดือนที่ยังไม่จบ' : 'เดือนล่าสุดที่จบแล้ว'}:</b> ${mLastLabel}${(partialMonth && mPartial && !_isMtdHeadline) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) เทียบช่วงวันเท่ากันใน §2` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
   const latestYoy = yoy[yoy.length-1];
   if (latestYoy && latestYoy.yoy_pct != null) {
     // Prefer the like-for-like figure when the raw one is structurally unfair
@@ -415,6 +426,10 @@ async function loadReport() {
   });
   const ytdComparable = ytdMonths.length > 0 && matched === ytdMonths.length && priorYtd > 0;
   let ytdGrowth = ytdComparable ? ((ytdRev - priorYtd)/priorYtd*100) : null;
+  // PR-PP2: the year to date through the last closed day against 1 Jan .. the same date last year (never a part month
+  // against a whole one); no year-ago data from 1 Jan -> no %.
+  let ytdShown = ytdRev;
+  if (_rpYtd && _rpYtd.cur) { ytdShown = _rpYtd.cur.revenue; ytdGrowth = _rpYtd.ly ? periodPct(_rpYtd.cur.revenue, _rpYtd.ly.revenue) : null; }
   // Sanity: an extreme swing means the base year was still ramping up — don't mislead.
   if (ytdGrowth != null && Math.abs(ytdGrowth) > 300) ytdGrowth = null;
   const bestMonth = trend.length ? trend.reduce((mx,r)=>(r.revenue||0)>(mx.revenue||0)?r:mx, trend[0]) : null;
@@ -424,10 +439,10 @@ async function loadReport() {
   document.getElementById('rptRevHeadline').innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
       ${(partialMonth && mPartial) ? `
-      <div class="p-3 rounded-lg" style="background:#fffbeb;border:1px solid #fde68a">
-        <p class="text-xs text-slate-500">MTD ${fmtMonth(partialMonth)} <span class="text-amber-600">(${dataWin.max_day||'?'} วันแรก)</span></p>
-        <p class="text-lg font-bold text-amber-700">${fmt(mPartial.revenue||0)}</p>
-        <p class="text-[11px] text-slate-400">เดือนยังไม่จบ — ไม่นำมาเทียบ MoM</p>
+      <div class="p-3 rounded-lg" style="background:var(--bg-subtle);border:1px solid var(--border)">
+        <p class="text-xs" style="color:var(--text-muted)">${esc(_rpMtd && _rpMtd.period ? _rpMtd.period.label_th : fmtMonth(partialMonth))} <span style="color:var(--text-secondary)">(ถึงวันที่ปิดยอดล่าสุด)</span></p>
+        <p class="text-lg font-bold" style="color:var(--text-primary)">${fmt(mPartial.revenue||0)}</p>
+        ${_rpMtd && _rpMtd.cur ? periodCmpHtml(_rpMtd.cur.revenue, _rpMtd.prev && _rpMtd.prev.revenue, _rpMtd.ly && _rpMtd.ly.revenue, { range: _rpMtd.period }) : ''}
       </div>` : `
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">เดือนล่าสุด (${mLastLabel})</p>
@@ -436,7 +451,7 @@ async function loadReport() {
       </div>`}
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">YTD ${curYear} (${ytdMonths.length} เดือน)</p>
-        <p class="text-lg font-bold text-emerald-700">${fmt(ytdRev)}</p>
+        <p class="text-lg font-bold text-emerald-700">${fmt(ytdShown)}</p>
         <p class="text-[11px]">${ytdGrowth!=null?`vs YTD ${(+curYear)-1} ${momChip(ytdGrowth)}`:'<span class="text-slate-400">ไม่มีปีก่อนเทียบ</span>'}</p>
       </div>
       <div class="p-3 rounded-lg bg-slate-50">

@@ -110,19 +110,42 @@ def coupon_series_breakdown(month_from: Optional[str] = Query(None), month_to: O
             yy, mm = int(cur_m[:4]), int(cur_m[5:7]); mm -= 1
             if mm == 0: yy -= 1; mm = 12
             prev_m = f"{yy:04d}-{mm:02d}"
-            mom_label = {"cur": cur_m, "prev": prev_m}
-            cur_amt, prev_amt = {}, {}
-            for r in con.execute(
-                f"SELECT cm.coupon_series_id id, cm.period_month ym, SUM(cm.discount_amount) amt "
-                f"FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id "
-                f"WHERE {' AND '.join(bbase)} AND cm.period_month IN (:cur,:prev) "
-                f"GROUP BY cm.coupon_series_id, cm.period_month",
-                {**bp, "cur": cur_m, "prev": prev_m}):
-                (cur_amt if r["ym"] == cur_m else prev_amt)[r["id"]] = float(r["amt"] or 0)
+            ly_m = f"{int(cur_m[:4]) - 1:04d}-{cur_m[5:7]}"
+            mom_label = {"cur": cur_m, "prev": prev_m, "ly": ly_m}
+            cur_amt, prev_amt, ly_amt = {}, {}, {}
+            # PR-PP2 · the one period pattern: the month of the last closed day, not yet finished, is to date and both
+            # bases are days 1..n (pos_coupon_day); a whole month is compared whole (pos_coupon_month)
+            import periods as _P
+            _sw = " AND ".join(["t.source='Easy'"] + bbase)
+            _a = _P.anchor(con, _sw, bp)
+            _w = _P.resolve("month", _a, date_from=f"{cur_m}-01") if (_a and _a[:7] == cur_m) else None
+            _has_day = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pos_coupon_day'").fetchone()
+            _dfirst = con.execute("SELECT MIN(day) FROM pos_coupon_day").fetchone()[0] if _has_day else None
+            if _w and not _w["complete"] and _dfirst:
+                wins = {"c": _w["cur"], "p": _w["prev"], "y": _w["ly"]}
+                for key, (s, e) in wins.items():
+                    if s < _dfirst:
+                        continue                      # the day table does not reach this base: no %
+                    for r in con.execute(
+                        f"SELECT cd.coupon_series_id id, SUM(cd.discount_amount) amt FROM pos_coupon_day cd "
+                        f"JOIN branches b ON b.branch_id=cd.branch_id WHERE {' AND '.join(bbase)} "
+                        f"AND cd.day BETWEEN :s AND :e GROUP BY cd.coupon_series_id", {**bp, "s": s, "e": e}):
+                        {"c": cur_amt, "p": prev_amt, "y": ly_amt}[key][r["id"]] = float(r["amt"] or 0)
+                mom_label.update(to_date=True, range=list(_w["cur"]), prev_range=list(_w["prev"]), ly_range=list(_w["ly"]),
+                                 label_th=_w["label_th"], prev_label_th=_w["prev_label_th"], ly_label_th=_w["ly_label_th"])
+            else:
+                for r in con.execute(
+                    f"SELECT cm.coupon_series_id id, cm.period_month ym, SUM(cm.discount_amount) amt "
+                    f"FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id "
+                    f"WHERE {' AND '.join(bbase)} AND cm.period_month IN (:cur,:prev,:ly) "
+                    f"GROUP BY cm.coupon_series_id, cm.period_month",
+                    {**bp, "cur": cur_m, "prev": prev_m, "ly": ly_m}):
+                    {cur_m: cur_amt, prev_m: prev_amt, ly_m: ly_amt}[r["ym"]][r["id"]] = float(r["amt"] or 0)
             for r in series:
-                c, pv = cur_amt.get(r["id"], 0.0), prev_amt.get(r["id"], 0.0)
+                c, pv, ly = cur_amt.get(r["id"], 0.0), prev_amt.get(r["id"], 0.0), ly_amt.get(r["id"], 0.0)
                 r["cur_amount"] = round(c)
-                r["mom_pct"] = round((c - pv) / pv * 100, 1) if pv > 0 else (None if c == 0 else None)
+                r["mom_pct"] = round((c - pv) / pv * 100, 1) if pv > 0 else None
+                r["yoy_pct"] = round((c - ly) / ly * 100, 1) if ly > 0 else None
         return {"series": series, "total_uses": tot_uses, "total_amount": tot_amt,
                 "series_count": len(series), "mom": mom_label, "staged": True}
 

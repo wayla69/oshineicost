@@ -1,25 +1,25 @@
 {
  "a_range": [
-  "2026-05",
-  "2026-05"
+  "2026-05-01",
+  "2026-05-03"
  ],
  "b_range": [
-  "2026-06",
-  "2026-06"
+  "2026-06-01",
+  "2026-06-03"
  ],
  "covers_a": 24,
  "covers_b": 24,
  "items": [
   {
    "category": "Sashimi",
-   "cogs_a": 8000.0,
-   "cogs_b": 6400.0,
+   "cogs_a": 2400.0,
+   "cogs_b": 2400.0,
    "description": "(B) แซลมอน",
    "only_in_a": false,
    "only_in_b": false,
-   "qty_a": 1000.0,
-   "qty_b": 800.0,
-   "qty_delta_pct": 25.0,
+   "qty_a": 300.0,
+   "qty_b": 300.0,
+   "qty_delta_pct": 0.0,
    "rev_a": 0,
    "rev_b": 0,
    "rev_delta_pct": null,
@@ -28,14 +28,16 @@
   }
  ],
  "n": 1,
+ "n_days": 3,
+ "to_date": true,
  "totals": {
-  "cogs_a": 8000.0,
-  "cogs_b": 6400.0,
+  "cogs_a": 2400.0,
+  "cogs_b": 2400.0,
   "covers_a": 24,
   "covers_b": 24,
-  "qty_a": 1000.0,
-  "qty_b": 800.0,
-  "qty_delta_pct": 25.0,
+  "qty_a": 300.0,
+  "qty_b": 300.0,
+  "qty_delta_pct": 0.0,
   "rev_a": 0,
   "rev_b": 0,
   "rev_delta_pct": null

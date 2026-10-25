@@ -41,7 +41,8 @@ async function loadMenuCompare() {
   catch (e) { if (st) st.textContent = 'ผิดพลาด'; return; }
   _mcLast = { items: d.items || [], totals: d.totals || {}, covers_a: d.covers_a || 0,
               covers_b: d.covers_b || 0, a_range: d.a_range, b_range: d.b_range, qp };
-  if (st) st.textContent = `A: ${(d.a_range || []).filter(Boolean).join(' – ') || '—'}   ·   B: ${(d.b_range || []).filter(Boolean).join(' – ') || '—'}`;
+  if (st) st.textContent = `A: ${(d.a_range || []).filter(Boolean).join(' – ') || '—'}   ·   B: ${(d.b_range || []).filter(Boolean).join(' – ') || '—'}`
+    + (d.to_date ? `   ·   ช่วงที่ยังไม่จบ เทียบ ${d.n_days} วันแรกเท่ากัน` : '');   // PR-PP2 guard
   mcRenderTable();
   mcRenderPareto();
 }
